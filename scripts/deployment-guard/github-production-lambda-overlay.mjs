@@ -33,7 +33,68 @@ export function loadPlan(root = repoRoot) {
   if (plan.function_name !== FUNCTION_NAME) {
     throw new GuardError(CODES.UNRELATED_MUTATION, 'production overlay plan targets a different function');
   }
+  validatePlanOptionalImports(plan);
   return plan;
+}
+
+const OPTIONAL_IMPORT_RE = /^(?!\.{0,2}\/)(?!.*(?:^|\/)\.{1,2}(?:\/|$))[A-Za-z0-9._/-]+\.mjs$/;
+
+/**
+ * Shape of the reviewed optional_imports list on a plan member: an array of
+ * distinct ZIP member paths (as localImports resolves them: relative to the ZIP
+ * root, no leading ./ or ../ or /, ending .mjs). The member-specific checks (the
+ * member imports it, only by a dynamic import, and handles ERR_MODULE_NOT_FOUND)
+ * run in optionalImportProblems against the member's bytes.
+ */
+export function validatePlanOptionalImports(plan) {
+  for (const [name, row] of Object.entries(plan?.members || {})) {
+    if (!Object.hasOwn(row, 'optional_imports')) continue;
+    const list = row.optional_imports;
+    const bad = (reason) => new GuardError(CODES.INVALID_MANIFEST, 'optional_imports must be a reviewed list of relative .mjs ZIP member paths', { member: name, reason });
+    if (!Array.isArray(list) || list.length === 0) throw bad('not_a_non_empty_array');
+    if (new Set(list).size !== list.length) throw bad('duplicate_entry');
+    for (const entry of list) {
+      if (typeof entry !== 'string' || !OPTIONAL_IMPORT_RE.test(entry) || path.posix.normalize(entry) !== entry) throw bad('invalid_path');
+      if (entry === name) throw bad('self_import');
+    }
+  }
+}
+
+/** Relative specifiers in `source` that resolve to ZIP member `target`, by import form. */
+function importForms(source, fromMember, target) {
+  const dir = path.posix.dirname(fromMember);
+  const resolves = (spec) => path.posix.normalize(path.posix.join(dir, spec)) === target;
+  const forms = { static: 0, dynamic: 0, destructured: 0 };
+  for (const m of String(source).matchAll(/(?:\bfrom\s*|\bimport\s+)['"](\.{1,2}\/[^'"]+\.mjs)['"]/g)) if (resolves(m[1])) forms.static += 1;
+  for (const m of String(source).matchAll(/\bimport\s*\(\s*['"](\.{1,2}\/[^'"]+\.mjs)['"]\s*\)/g)) if (resolves(m[1])) forms.dynamic += 1;
+  for (const m of String(source).matchAll(/\}\s*=\s*await\s+import\(\s*['"](\.{1,2}\/[^'"]+\.mjs)['"]\s*\)/g)) if (resolves(m[1])) forms.destructured += 1;
+  return forms;
+}
+
+/**
+ * Reviewed exemption from the live module-presence check: a module listed in the
+ * member's optional_imports may be missing from the live ZIP only if the member's
+ * bytes import it, only by a whole-module dynamic import(), never statically
+ * (from / bare import) and never destructured, and handle a missing module
+ * (ERR_MODULE_NOT_FOUND). Returns the problems (empty when the exemption holds).
+ */
+export function optionalImportProblems(memberName, source, optionalImports = [], imports = localImports(source, memberName)) {
+  const problems = [];
+  const text = String(source || '');
+  if (optionalImports.length && !text.includes('ERR_MODULE_NOT_FOUND')) {
+    problems.push(`${memberName} does not handle ERR_MODULE_NOT_FOUND`);
+  }
+  for (const module of optionalImports) {
+    if (!imports.includes(module)) {
+      problems.push(`${module} is not imported by ${memberName}`);
+      continue;
+    }
+    const forms = importForms(text, memberName, module);
+    if (forms.static) problems.push(`${module} is imported statically by ${memberName}`);
+    if (forms.destructured) problems.push(`${module} is imported by a destructured dynamic import in ${memberName}`);
+    if (!forms.dynamic) problems.push(`${module} is not imported by a dynamic import() in ${memberName}`);
+  }
+  return problems;
 }
 
 export function approvalPhrase(member) {
@@ -56,6 +117,11 @@ export function resolvePlannedMember(member, { root = repoRoot, plan = loadPlan(
   }
   const bytes = fs.readFileSync(source);
   const sourceSha256 = sha256(bytes);
+  try {
+    validatePlanOptionalImports({ members: { [name]: row } });
+  } catch (error) {
+    return { ok: false, code: error.code, message: error.message, details: error.details };
+  }
   if (sourceSha256 !== row.accepted_sha256) {
     return {
       ok: false,
@@ -63,6 +129,15 @@ export function resolvePlannedMember(member, { root = repoRoot, plan = loadPlan(
       message: "main's member bytes are not the accepted production bytes",
       details: { member: name, source_sha256: sourceSha256, accepted_sha256: row.accepted_sha256 },
     };
+  }
+  const text = bytes.toString('utf8');
+  const imports = localImports(text, name);
+  const optionalImports = row.optional_imports || [];
+  // Every listed module must be one this member imports (no unknown modules), by a
+  // whole-module dynamic import only, in bytes that handle ERR_MODULE_NOT_FOUND.
+  const problems = optionalImportProblems(name, text, optionalImports, imports);
+  if (problems.length) {
+    return { ok: false, code: CODES.INVALID_MANIFEST, message: 'optional_imports is not handled by the accepted member bytes', details: { member: name, problems } };
   }
   return {
     ok: true,
@@ -73,8 +148,9 @@ export function resolvePlannedMember(member, { root = repoRoot, plan = loadPlan(
       expectedLiveSha256: row.expected_live_sha256 || null,
       sqlBefore: row.sql_before || null,
       sourceRelative,
-      imports: localImports(bytes.toString('utf8'), name),
-      source: bytes.toString('utf8'),
+      imports,
+      optionalImports,
+      source: text,
     },
   };
 }
@@ -207,7 +283,18 @@ export function classifyLive(planned, live, { plan, expectedLiveSha256 = null, m
     }
   }
   if (mode === 'apply') {
-    const missing = planned.imports.filter((name) => !live.members.includes(name));
+    const absent = planned.imports.filter((name) => !live.members.includes(name));
+    // Reviewed exemption (plan optional_imports): re-checked against the bytes being
+    // deployed, so a planned member built by hand cannot skip the check either.
+    const optional = Array.isArray(planned.optionalImports) ? planned.optionalImports : [];
+    const exempt = absent.filter((name) => optional.includes(name));
+    if (exempt.length) {
+      const problems = optionalImportProblems(planned.member, planned.source, exempt, planned.imports);
+      if (problems.length) {
+        throw new GuardError(CODES.DEPLOYMENT_COLLISION, 'member imports modules that are not in the live production ZIP yet', { member: planned.member, missing: absent, problems });
+      }
+    }
+    const missing = absent.filter((name) => !exempt.includes(name));
     if (missing.length) {
       throw new GuardError(CODES.DEPLOYMENT_COLLISION, 'member imports modules that are not in the live production ZIP yet', { member: planned.member, missing });
     }

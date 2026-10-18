@@ -1170,7 +1170,14 @@ export const sweepConfig = {
 
 const INVOICE_API_VERSION = 'v2026.07.00';
 
-export const invoice = {
+const isModuleNotFound = (error) => error?.code === 'ERR_MODULE_NOT_FOUND';
+
+/**
+ * Original moov-invoice port (create / list only). Kept as the fallback for a
+ * bundle without invoice-actions.mjs / invoice-provider.mjs (production until
+ * a rebuilt ZIP), so that bundle keeps today's behavior.
+ */
+export const legacyInvoice = {
   run: async ({ client, body, ctx, fetchImpl }) => {
     const account = await loadMoovAccount(client, ctx.tenantId, 'sandbox');
     if (!account?.provider_account_id) return fail('Set up your payment account first.', 409);
@@ -1206,6 +1213,402 @@ export const invoice = {
   },
 };
 
+const LEGACY_INVOICE_ACTIONS = new Set(['create', 'list']);
+
+/**
+ * Invoice lifecycle (create, create_and_send, send, resend, cancel, delete,
+ * sync, recover; persisted to moov_invoices / moov_invoice_customers) through
+ * invoice-actions.mjs → invoice-provider.mjs. Any tenant member may act; the
+ * identity and tenant checks stay in moovParityContext.
+ */
+export const invoice = {
+  run: async (args) => {
+    const { client, body, ctx, fetchImpl } = args;
+    try {
+      // Optional module (absent from the production bundle until a rebuilt ZIP):
+      // a missing module is handled below, so it is not a destructured import.
+      const invoiceActions = await import('../../invoice-actions.mjs');
+      return await invoiceActions.runInvoiceAction({
+        client,
+        body,
+        tenantId: ctx.tenantId,
+        userId: ctx.userId,
+        environment: ctx.environment || 'sandbox',
+        liveProvider: false,
+        fetchImpl,
+      });
+    } catch (error) {
+      if (!isModuleNotFound(error)) throw error;
+    }
+    // The lifecycle modules are not in this bundle: only create and list exist.
+    const action = body?.action || 'create';
+    if (!LEGACY_INVOICE_ACTIONS.has(action)) {
+      return fail('invoice_lifecycle_unavailable', 503, {
+        message: 'This invoice action is not available yet.',
+        action: String(action),
+        liveProviderCalled: false,
+      });
+    }
+    return legacyInvoice.run(args);
+  },
+};
+
+/*
+ * Platform Finance read views (ported from the live-only platform-finance.mjs
+ * read model): status / overview / wallet / pnl on the platform's own Moov
+ * account. Read-only; every write is refused. The platform-owner gate stays
+ * in platformBank / platformTreasury.
+ */
+const PLATFORM_FINANCE_READ_ACTIONS = new Set(['status', 'overview', 'wallet', 'pnl']);
+
+const platformFinanceWriteBlocked = (action) => fail(
+  'Platform Finance writes are disabled. Bank attach, verification, ACH, and fee collection are not available in this phase.',
+  403,
+  {
+    write_blocked: true,
+    action: String(action || ''),
+    liveProviderCalled: false,
+    ach_initiated: false,
+    fee_pull: false,
+    bankAccountAddInvoked: false,
+  },
+);
+
+const centsFromBalance = (balance) => {
+  if (!balance) return 0;
+  if (balance.valueDecimal != null) return Math.round(Number(balance.valueDecimal) * 100);
+  return Number(balance.value ?? 0);
+};
+
+const walletIdOf = (wallet) => wallet?.walletID ?? wallet?.walletId ?? wallet?.id ?? null;
+
+const isOperatingWallet = (wallet) => {
+  const type = String(wallet?.walletType ?? wallet?.wallet_type ?? wallet?.name ?? '').toLowerCase();
+  return type === 'operating' || type === 'default' || type.includes('operating') || type === 'moov-wallet';
+};
+
+/** Deterministic platform wallet selection; never wallets[0] when more than one candidate remains. */
+const selectPlatformWallet = (wallets, { environment, platformAccountId }) => {
+  const rows = Array.isArray(wallets) ? wallets.filter(Boolean) : [];
+  const accountFiltered = rows.filter((wallet) => {
+    const accountId = wallet?.accountID ?? wallet?.accountId ?? wallet?.provider_account_id ?? null;
+    if (!platformAccountId || !accountId) return true;
+    return String(accountId) === String(platformAccountId);
+  });
+  const operating = accountFiltered.filter(isOperatingWallet);
+  const pool = operating.length > 0 ? operating : accountFiltered;
+  if (pool.length === 0) return { wallet: null, reason: 'not_found', warning: null };
+  if (pool.length > 1) {
+    return {
+      wallet: null,
+      reason: 'ambiguous_wallet',
+      warning: `Multiple ${environment} platform wallets for the ChecksOps facilitator.`,
+    };
+  }
+  return { wallet: pool[0], reason: 'selected', warning: null };
+};
+
+const publicProviderBanks = (banks) => (Array.isArray(banks) ? banks : []).map((bank) => ({
+  bank_account_id: bank.bankAccountID ?? bank.bankAccountId ?? null,
+  bank_name: bank.bankName ?? null,
+  last_four: bank.lastFourAccountNumber ?? null,
+  bank_account_type: bank.bankAccountType ?? null,
+  holder_name: bank.holderName ?? null,
+  status: bank.status ?? null,
+}));
+
+const composePlatformBankDisplay = ({ providerBanks = [], localMethods = [] }) => {
+  const byId = new Map();
+  for (const bank of providerBanks) {
+    const bankAccountId = bank.bank_account_id;
+    if (!bankAccountId) continue;
+    byId.set(String(bankAccountId), {
+      id: bankAccountId,
+      bank_account_id: bankAccountId,
+      bank_name: bank.bank_name,
+      last_four: bank.last_four,
+      account_type: bank.bank_account_type,
+      holder_name: bank.holder_name,
+      verification_status: String(bank.status ?? 'unknown').toLowerCase(),
+      connection_status: String(bank.status || '').toLowerCase() === 'verified' ? 'connected' : 'pending',
+      is_default: false,
+      connected_at: null,
+      micro_deposit: null,
+      source: 'moov',
+    });
+  }
+  for (const method of localMethods) {
+    const bankAccountId = method.bank_account_id || method.id;
+    if (!bankAccountId) continue;
+    const key = String(bankAccountId);
+    const existing = byId.get(key);
+    byId.set(key, {
+      id: method.id || existing?.id || bankAccountId,
+      bank_account_id: key,
+      bank_name: existing?.bank_name || method.bank_name || null,
+      last_four: existing?.last_four || method.last_four || null,
+      account_type: existing?.account_type || method.account_type || null,
+      holder_name: existing?.holder_name || method.holder_name || null,
+      verification_status: String(existing?.verification_status || method.verification_status || 'unknown').toLowerCase(),
+      connection_status: existing?.connection_status || method.connection_status || 'pending',
+      is_default: Boolean(method.is_default || existing?.is_default),
+      connected_at: method.connected_at || existing?.connected_at || null,
+      micro_deposit: method.micro_deposit || existing?.micro_deposit || null,
+      source: existing ? 'moov+local' : 'local',
+    });
+  }
+  return [...byId.values()];
+};
+
+const loadLocalPlatformMethods = async (client, environment, accountId) => {
+  if (!accountId) return [];
+  try {
+    const { rows } = await client.query(
+      `SELECT id, provider_bank_account_id, bank_name, last_four, account_type, holder_name,
+              verification_status, connection_status, is_default, connected_at, provider_metadata
+         FROM public.payment_provider_methods
+        WHERE provider = 'moov'
+          AND environment = $1
+          AND provider_account_id = $2
+          AND is_platform = true
+          AND tenant_id IS NULL
+          AND external_recipient_id IS NULL
+        ORDER BY created_at DESC NULLS LAST`,
+      [environment, accountId],
+    );
+    return (rows || []).map((row) => ({
+      id: row.id,
+      bank_account_id: row.provider_bank_account_id,
+      bank_name: row.bank_name,
+      last_four: row.last_four,
+      account_type: row.account_type,
+      holder_name: row.holder_name,
+      verification_status: row.verification_status,
+      connection_status: row.connection_status,
+      is_default: row.is_default,
+      connected_at: row.connected_at,
+      micro_deposit: row.provider_metadata?.micro_deposit ?? null,
+    }));
+  } catch {
+    return [];
+  }
+};
+
+const platformStatusPayload = async ({ client, accountId, environment, fetchImpl }) => {
+  const warnings = [];
+  let profile = null;
+  let capabilities = [];
+  let providerBanks = [];
+  try {
+    profile = await moovFetch(`/accounts/${accountId}`, { scopes: scopes.accountRead(accountId), fetchImpl });
+  } catch (error) {
+    warnings.push(`profile: ${error.message}`);
+  }
+  try {
+    capabilities = await moovFetch(`/accounts/${accountId}/capabilities`, {
+      scopes: scopes.capabilitiesRead(accountId), fetchImpl,
+    });
+  } catch (error) {
+    warnings.push(`capabilities: ${error.message}`);
+  }
+  try {
+    providerBanks = await moovFetch(`/accounts/${accountId}/bank-accounts`, {
+      scopes: scopes.bankAccountsRead(accountId), fetchImpl,
+    });
+  } catch (error) {
+    warnings.push(`bank-accounts: ${error.message}`);
+  }
+  const provider_bank_accounts = publicProviderBanks(providerBanks);
+  const localMethods = await loadLocalPlatformMethods(client, environment, accountId);
+  return {
+    success: true,
+    environment,
+    platform_account_id: accountId,
+    identity: 'checksops_facilitator',
+    tenant_context_used: false,
+    profile: {
+      displayName: profile?.profile?.business?.name ?? profile?.displayName ?? null,
+      accountType: profile?.accountType ?? null,
+      verificationStatus: profile?.verificationStatus ?? profile?.verification?.status ?? null,
+    },
+    capabilities: (Array.isArray(capabilities) ? capabilities : []).map((item) => ({
+      capability: item.capability,
+      status: item.status,
+    })),
+    provider_bank_accounts,
+    methods: composePlatformBankDisplay({ providerBanks: provider_bank_accounts, localMethods }),
+    warnings,
+    liveProviderCalled: true,
+    ach_initiated: false,
+    fee_pull: false,
+    bankAccountAddInvoked: false,
+  };
+};
+
+// Wallet and wallet-transaction reads need the wallets read scope (as moov-wallet.mjs),
+// not profile.read.
+const walletsReadScopes = (id) => [`/accounts/${id}/wallets.read`];
+
+const platformWalletPayload = async ({ accountId, environment, fetchImpl }) => {
+  const warnings = [];
+  let wallets = [];
+  try {
+    wallets = await moovFetch(`/accounts/${accountId}/wallets`, { scopes: walletsReadScopes(accountId), fetchImpl });
+  } catch (error) {
+    warnings.push(`wallets: ${error.message}`);
+  }
+  const selected = selectPlatformWallet(wallets, { environment, platformAccountId: accountId });
+  if (selected.warning) warnings.push(selected.warning);
+  const wallet = selected.wallet;
+  const walletId = walletIdOf(wallet);
+  let transactions = [];
+  if (walletId) {
+    try {
+      transactions = await moovFetch(`/accounts/${accountId}/wallets/${walletId}/transactions?count=25`, {
+        scopes: walletsReadScopes(accountId), fetchImpl,
+      });
+    } catch (error) {
+      warnings.push(`transactions: ${error.message}`);
+    }
+  }
+  return {
+    wallet_id: walletId,
+    available_cents: centsFromBalance(wallet?.availableBalance),
+    pending_cents: centsFromBalance(wallet?.pendingBalance),
+    currency: wallet?.availableBalance?.currency ?? 'USD',
+    setup_required: !walletId,
+    selection_reason: selected.reason,
+    transactions: (Array.isArray(transactions) ? transactions : []).map((item) => ({
+      id: item.walletTransactionID ?? item.transactionID ?? null,
+      type: item.transactionType ?? null,
+      status: item.status ?? null,
+      amount_cents: Number(item.grossAmount ?? item.netAmount ?? 0),
+      available_balance_cents: Number(item.availableBalance ?? 0),
+      created_at: item.createdOn ?? item.completedOn ?? null,
+      memo: item.memo ?? item.sourceType ?? null,
+    })),
+    warnings,
+  };
+};
+
+const platformPnlPayload = async (client) => {
+  const empty = () => ({
+    fees_cents: 0, transfer_fees_cents: 0, provider_cost_cents: 0, volume_cents: 0, transfer_count: 0,
+  });
+  const since = new Date();
+  since.setMonth(since.getMonth() - 11);
+  since.setDate(1);
+  const sinceIso = new Date(Date.UTC(since.getUTCFullYear(), since.getUTCMonth(), 1)).toISOString();
+  let tenants = [];
+  let fees = [];
+  let transfers = [];
+  try {
+    tenants = (await client.query('SELECT id, name FROM public.tenants')).rows;
+  } catch { /* optional */ }
+  try {
+    fees = (await client.query(
+      `SELECT tenant_id, amount_cents, occurred_at, fee_code, status
+         FROM public.platform_fee_line_items
+        WHERE occurred_at >= $1`,
+      [sinceIso],
+    )).rows;
+  } catch { /* optional */ }
+  try {
+    transfers = (await client.query(
+      `SELECT tenant_id, amount_cents, provider_fee_cents, platform_fee_cents, status, created_at
+         FROM public.payment_transfers
+        WHERE created_at >= $1`,
+      [sinceIso],
+    )).rows;
+  } catch { /* optional */ }
+
+  const nameById = new Map((tenants || []).map((row) => [row.id, row.name]));
+  // pg returns timestamptz as Date; String(Date) does not start with YYYY-MM.
+  const monthOf = (value) => {
+    const at = value ? new Date(value) : null;
+    return at && !Number.isNaN(at.getTime()) ? at.toISOString().slice(0, 7) : 'unknown';
+  };
+  const byMonth = new Map();
+  const byTenant = new Map();
+  const bump = (map, key) => {
+    if (!map.has(key)) map.set(key, empty());
+    return map.get(key);
+  };
+  for (const fee of fees || []) {
+    if (String(fee.status || '').toLowerCase() === 'void') continue;
+    const amount = Number(fee.amount_cents || 0);
+    bump(byMonth, monthOf(fee.occurred_at)).fees_cents += amount;
+    bump(byTenant, fee.tenant_id || 'unassigned').fees_cents += amount;
+  }
+  for (const transfer of transfers || []) {
+    const status = String(transfer.status || '').toLowerCase();
+    if (['failed', 'cancelled', 'canceled'].includes(status)) continue;
+    for (const bucket of [bump(byMonth, monthOf(transfer.created_at)), bump(byTenant, transfer.tenant_id || 'unassigned')]) {
+      bucket.transfer_fees_cents += Number(transfer.platform_fee_cents || 0);
+      bucket.provider_cost_cents += Number(transfer.provider_fee_cents || 0);
+      bucket.volume_cents += Number(transfer.amount_cents || 0);
+      bucket.transfer_count += 1;
+    }
+  }
+  const shape = (bucket) => {
+    const revenue = bucket.fees_cents + bucket.transfer_fees_cents;
+    return { ...bucket, revenue_cents: revenue, profit_cents: revenue - bucket.provider_cost_cents };
+  };
+  const months = [...byMonth.entries()]
+    .filter(([key]) => key !== 'unknown')
+    .sort(([left], [right]) => (left < right ? -1 : 1))
+    .map(([month, bucket]) => ({ month, ...shape(bucket) }));
+  const tenantRows = [...byTenant.entries()]
+    .map(([id, bucket]) => ({ tenant_id: id, tenant_name: nameById.get(id) ?? 'Unassigned', ...shape(bucket) }))
+    .sort((left, right) => right.revenue_cents - left.revenue_cents);
+  const totals = shape([...byTenant.values()].reduce((acc, bucket) => {
+    acc.fees_cents += bucket.fees_cents;
+    acc.transfer_fees_cents += bucket.transfer_fees_cents;
+    acc.provider_cost_cents += bucket.provider_cost_cents;
+    acc.volume_cents += bucket.volume_cents;
+    acc.transfer_count += bucket.transfer_count;
+    return acc;
+  }, empty()));
+  return { since: sinceIso, totals, months, tenants: tenantRows };
+};
+
+/** Read-only Platform Finance view for an authorized platform owner. */
+const runPlatformFinanceRead = async ({ client, action, ctx, platformId, fetchImpl }) => {
+  const environment = ctx.environment || 'sandbox';
+  const base = {
+    success: true,
+    environment,
+    identity: 'checksops_facilitator',
+    tenant_context_used: false,
+    ach_initiated: false,
+    fee_pull: false,
+  };
+  if (action === 'status') {
+    return jsonResult(await platformStatusPayload({ client, accountId: platformId, environment, fetchImpl }));
+  }
+  if (action === 'wallet') {
+    return jsonResult({
+      ...base,
+      platform_account_id: platformId,
+      wallet: await platformWalletPayload({ accountId: platformId, environment, fetchImpl }),
+      liveProviderCalled: true,
+    });
+  }
+  if (action === 'pnl') {
+    return jsonResult({ ...base, pnl: await platformPnlPayload(client), liveProviderCalled: false });
+  }
+  const wallet = await platformWalletPayload({ accountId: platformId, environment, fetchImpl });
+  const pnl = await platformPnlPayload(client);
+  return jsonResult({
+    ...base,
+    platform_account_id: platformId,
+    wallet,
+    pnl,
+    liveProviderCalled: true,
+    bankAccountAddInvoked: false,
+  });
+};
+
 export const platformBank = {
   requireAdmin: true,
   // Platform-level: the platform owner (is_platform_owner(), by identity)
@@ -1217,6 +1620,9 @@ export const platformBank = {
     const platformId = ctx.moovContext.sandboxPlatformAccountId;
     if (!platformId) return fail('Facilitator account id is not configured.', 409);
     const action = body.action || 'list';
+    if (PLATFORM_FINANCE_READ_ACTIONS.has(action)) {
+      return runPlatformFinanceRead({ client, action, ctx, platformId, fetchImpl });
+    }
     if (action === 'list' || action === 'get') {
       const banks = await moovFetch(`/accounts/${platformId}/bank-accounts`, {
         scopes: scopes.bankAccountsRead(platformId), fetchImpl,
@@ -1233,7 +1639,7 @@ export const platformBank = {
       }
       return fail('Adding the platform settlement bank is not available here', 409, { error: 'platform_bank_add_unavailable' });
     }
-    return fail('Unknown platform-bank action', 400);
+    return platformFinanceWriteBlocked(action);
   },
 };
 
@@ -1306,13 +1712,18 @@ export const platformTreasury = {
   requireAdmin: true,
   // Platform-level: the platform owner only (see platformBank).
   platformOwnerOnly: true,
-  run: async ({ client, ctx, fetchImpl }) => {
+  run: async ({ client, body, ctx, fetchImpl }) => {
     const owner = (await client.query('SELECT public.is_platform_owner() AS is_owner')).rows[0];
     if (owner?.is_owner !== true) return fail('Platform owner access required', 403);
     const platformId = ctx.moovContext.sandboxPlatformAccountId;
     if (!platformId) return fail('Facilitator account id is not configured.', 409);
+    const action = body?.action || 'list';
+    if (PLATFORM_FINANCE_READ_ACTIONS.has(action)) {
+      return runPlatformFinanceRead({ client, action, ctx, platformId, fetchImpl });
+    }
+    if (action !== 'list' && action !== 'get') return platformFinanceWriteBlocked(action);
     const wallets = await moovFetch(`/accounts/${platformId}/wallets`, {
-      scopes: scopes.accountRead(platformId), fetchImpl,
+      scopes: walletsReadScopes(platformId), fetchImpl,
     }).catch((e) => ({ error: e.message }));
     return jsonResult({ success: true, wallets, liveProviderCalled: true });
   },
@@ -1447,16 +1858,22 @@ export const stakeholderResendVerification = {
   },
 };
 
+/**
+ * Token-only lookup (UUID v4, exact match on moov_invoices.public_token,
+ * sanitized response). Never by invoice id. The route itself is answered
+ * before identity in moov-functions.mjs wrap.
+ */
 export const publicInvoice = {
-  run: async ({ client, body, fetchImpl }) => {
-    const token = body.token || body.invoice_id;
-    if (!token) return fail('token is required', 400);
-    const row = (await client.query(
-      `SELECT * FROM public.payment_invoices WHERE public_token = $1 OR id::text = $1 LIMIT 1`,
-      [token],
-    )).rows[0];
-    if (!row) return fail('Invoice not found.', 404);
-    return jsonResult({ success: true, invoice: sanitize(row), liveProviderCalled: false });
+  run: async ({ client, body }) => {
+    let invoiceActions;
+    try {
+      // Optional module, as in invoice.run.
+      invoiceActions = await import('../../invoice-actions.mjs');
+    } catch (error) {
+      if (!isModuleNotFound(error)) throw error;
+      return fail('public_invoice_unavailable', 503, { message: 'Public invoice lookup is not available.' });
+    }
+    return invoiceActions.loadPublicInvoiceByToken(client, body?.token);
   },
 };
 
