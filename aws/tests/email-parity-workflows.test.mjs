@@ -533,6 +533,7 @@ test('hire-mortgage-agent and tenant invite stay SUPPRESS and never leak passwor
   console.warn = (...args) => logs.push(args.map(String).join(' '));
   let issuedHire = null;
   let issuedInvite = null;
+  let confirmedInvite = null;
   try {
     const hire = await runHireMortgageAgent({
       mapping,
@@ -587,6 +588,10 @@ test('hire-mortgage-agent and tenant invite stay SUPPRESS and never leak passwor
           assert.equal(payload.MessageAction, 'SUPPRESS');
           return { User: { Username: 'cog2', Attributes: [{ Name: 'sub', Value: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' }] } };
         }
+        if (target === 'AdminSetUserPassword') {
+          confirmedInvite = payload.Password;
+          return {};
+        }
         throw new Error(`unexpected ${target}`);
       },
       client: sqlClient([
@@ -618,6 +623,10 @@ test('hire-mortgage-agent and tenant invite stay SUPPRESS and never leak passwor
     assert.equal(JSON.stringify(sent[1]).includes(issuedInvite), false);
     assert.doesNotMatch(sent[1].html, /TemporaryPassword|temp_password|tempPassword/);
     assert.equal(logs.some((line) => line.includes(issuedHire) || line.includes(issuedInvite)), false);
+    assert.ok(confirmedInvite);
+    assert.equal(JSON.stringify(invite).includes(confirmedInvite), false);
+    assert.equal(JSON.stringify(sent[1]).includes(confirmedInvite), false);
+    assert.equal(logs.some((line) => line.includes(confirmedInvite)), false);
   } finally {
     console.log = origLog;
     console.info = origInfo;

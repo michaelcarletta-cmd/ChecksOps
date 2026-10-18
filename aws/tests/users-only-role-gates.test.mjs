@@ -255,7 +255,9 @@ const teamClient = ({
 };
 
 const COGNITO_SUB = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
-const invite = (client, body = {}, { mailer, cognitoCalls = [], existingLogin = false } = {}) => runTenantInviteUser({
+const invite = (client, body = {}, {
+  mailer, cognitoCalls = [], existingLogin = false, existingStatus = 'CONFIRMED', passwords = [], failConfirm = false,
+} = {}) => runTenantInviteUser({
   client,
   mapping,
   spoof: {},
@@ -267,8 +269,13 @@ const invite = (client, body = {}, { mailer, cognitoCalls = [], existingLogin = 
       if (existingLogin) throw Object.assign(new Error('exists'), { name: 'UsernameExistsException' });
       return { User: { Username: 'cog', Attributes: [{ Name: 'sub', Value: COGNITO_SUB }] } };
     }
-    if (target === 'AdminGetUser') return { Username: 'cog', UserAttributes: [{ Name: 'sub', Value: COGNITO_SUB }] };
+    if (target === 'AdminGetUser') return { Username: 'cog', UserStatus: existingStatus, UserAttributes: [{ Name: 'sub', Value: COGNITO_SUB }] };
     if (target === 'AdminDeleteUser') return {};
+    if (target === 'AdminSetUserPassword') {
+      if (failConfirm) throw Object.assign(new Error('denied'), { name: 'AccessDeniedException' });
+      passwords.push(payload);
+      return {};
+    }
     throw new Error(`unexpected ${target}`);
   },
 });
@@ -658,4 +665,43 @@ test('remove member: the last member of a tenant is protected (counted under the
   const unreadable = teamClient({ memberships: [{ tenant_id: TENANT, role: 'owner' }], tenantMemberCount: null });
   const closed = await runDeleteUser({ client: unreadable, mapping, spoof: {}, body: { user_id: TEAMMATE, tenant_id: TENANT } });
   assert.equal(closed.error, 'last_member_protected');
+});
+
+test('invite: the login is confirmed with an unseen permanent password so email-code sign-in works', async () => {
+  const member = () => teamClient({ memberships: [{ tenant_id: TENANT, role: 'viewer' }] });
+  const sent = [];
+  const passwords = [];
+  const cognitoCalls = [];
+  const created = await invite(member(), {}, { cognitoCalls, passwords, mailer: async (m) => { sent.push(m); } });
+  assert.equal(created.ok, true);
+  assert.equal(created.login_ready, true);
+  assert.deepEqual(cognitoCalls.map(([target]) => target), ['AdminCreateUser', 'AdminSetUserPassword']);
+  assert.equal(passwords.length, 1);
+  assert.equal(passwords[0].Permanent, true);
+  assert.equal(passwords[0].Username, 'new@example.com');
+  assert.ok(passwords[0].Password.length >= 32);
+  assert.equal(JSON.stringify(created).includes(passwords[0].Password), false);
+  assert.equal(JSON.stringify(sent).includes(passwords[0].Password), false);
+
+  // An existing login still waiting on its temporary password is confirmed; a
+  // confirmed one is left alone.
+  const pending = [];
+  const stuck = await invite(member(), {}, { existingLogin: true, existingStatus: 'FORCE_CHANGE_PASSWORD', passwords: pending });
+  assert.equal(stuck.ok, true);
+  assert.equal(stuck.login_ready, true);
+  assert.equal(pending.length, 1);
+  const untouched = [];
+  const confirmed = await invite(member(), {}, { existingLogin: true, cognitoCalls: untouched });
+  assert.equal(confirmed.login_ready, true);
+  assert.equal(untouched.some(([target]) => target === 'AdminSetUserPassword'), false);
+
+  // A refused confirm keeps the invite and reports the login as not ready.
+  const refused = await invite(member(), {}, { failConfirm: true });
+  assert.equal(refused.ok, true);
+  assert.equal(refused.login_ready, false);
+
+  // A failed invite never confirms the login.
+  const failedCalls = [];
+  await invite(teamClient({ memberships: [{ tenant_id: TENANT, role: 'viewer' }], failMembershipInsert: true }), {}, { cognitoCalls: failedCalls });
+  assert.equal(failedCalls.some(([target]) => target === 'AdminSetUserPassword'), false);
 });

@@ -113,7 +113,7 @@
     },
     "tenant-admin.mjs": {
       "live_sha256": "8fc1f049860979387ff83ca3a4c7fdaa384a7dc2aa6eabd620cdf1c40c950bff",
-      "accepted_sha256": "be053c68517050621b621d0cc8ba2d86c1a4b109bf8d33f8679727b99ce678ab",
+      "accepted_sha256": "5d8fd36ddcf9f36c3ad023529dff276b5640af4a792a9c51b4e57a6095259359",
       "operation": "replace"
     },
     "workflow-rpc.mjs": {
