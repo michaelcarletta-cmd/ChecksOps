@@ -94,7 +94,9 @@ const store = ({ invoices = [], claims = [], failInsert = null, failUpdateFor = 
       }
       if (/FROM public\.tenants/.test(text)) return { rows: [{ invoice_footer_note: null }] };
       if (/FROM public\.claims/.test(text)) {
-        return { rows: claims.filter((c) => c.id === params[0] && c.tenant_id === params[1]).map((c) => ({ id: c.id })) };
+        assert.match(text, /c\.org_id = \$2::uuid/);
+        assert.doesNotMatch(text, /c\.tenant_id|WHERE id = \$1::uuid AND tenant_id/);
+        return { rows: claims.filter((c) => c.id === params[0] && c.org_id === params[1]).map(() => ({ '?column?': 1 })) };
       }
       if (/FROM public\.moov_invoice_customers/.test(text)) return { rows: [] };
       if (/INSERT INTO public\.moov_invoice_customers/.test(text)) return { rows: [{ id: '77777777-7777-4777-8777-777777777777' }] };
@@ -265,7 +267,13 @@ test('M2: send refuses an invoice that was already sent (resend is the path for 
     const { fetchImpl, calls } = provider();
     const result = await act(client, { action: 'send', invoice_id: INVOICE_ROW }, fetchImpl);
     assert.equal(result.success, true, JSON.stringify(result));
-    assert.equal(calls.filter((c) => c.method === 'PATCH').length, 1);
+    const patches = calls.filter((c) => c.method === 'PATCH');
+    assert.equal(patches.length, 1);
+    // A first send carries a key per invoice, so two racing sends are one provider send.
+    assert.ok(patches[0].idempotencyKey, 'send PATCH has an idempotency key');
+    const again = provider();
+    await act(store({ invoices: [{ ...sentRow, status: 'draft', sent_at: null }] }), { action: 'send', invoice_id: INVOICE_ROW }, again.fetchImpl);
+    assert.equal(again.calls.find((c) => c.method === 'PATCH').idempotencyKey, patches[0].idempotencyKey);
   }
 });
 
@@ -308,7 +316,7 @@ test('L3: a persist failure returns a fixed code, not the DB error text', async 
 });
 
 test('L4: claim_id must belong to the caller tenant before anything is created', async () => {
-  const claims = [{ id: CLAIM, tenant_id: OTHER_TENANT }];
+  const claims = [{ id: CLAIM, org_id: OTHER_TENANT }];
   for (const claimId of [CLAIM, 'not-a-uuid']) {
     const client = store({ claims });
     const { fetchImpl, calls } = provider();
@@ -317,7 +325,7 @@ test('L4: claim_id must belong to the caller tenant before anything is created',
     assert.equal(calls.length, 0);
     assert.equal(client.rows.length, 0);
   }
-  const client = store({ claims: [{ id: CLAIM, tenant_id: TENANT }] });
+  const client = store({ claims: [{ id: CLAIM, org_id: TENANT }] });
   const { fetchImpl } = provider();
   const result = await act(client, { action: 'create', claim_id: CLAIM, ...CREATE }, fetchImpl);
   assert.equal(result.success, true, JSON.stringify(result));

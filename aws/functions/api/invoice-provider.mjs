@@ -78,9 +78,17 @@ const loadInvoiceByRequestRef = async (client, tenantId, environment, requestRef
   )
 ).rows[0] || null;
 
+// claims.org_id is the tenant, or org_id IS NULL and one of the tenant's checks
+// references the claim (the tenant-library.mjs claimBelongsToTenant rule).
 const claimBelongsToTenant = async (client, tenantId, claimId) => Boolean((
   await client.query(
-    'SELECT id FROM public.claims WHERE id = $1::uuid AND tenant_id = $2::uuid LIMIT 1',
+    `SELECT 1 FROM public.claims c
+      WHERE c.id = $1::uuid
+        AND (c.org_id = $2::uuid
+          OR (c.org_id IS NULL AND EXISTS (
+            SELECT 1 FROM public.check_intake_items i
+             WHERE i.claim_id = c.id AND i.tenant_id = $2::uuid)))
+      LIMIT 1`,
     [claimId, tenantId],
   )
 ).rows[0]);
@@ -603,6 +611,8 @@ export async function runProviderInvoiceAction({ client, body = {}, ctx = {}, fe
           scopes: invoiceScopes(merchantAccountId, true),
           apiVersion: INVOICE_API_VERSION,
           fetchImpl,
+          // A first send is one provider send even when two requests race past the sent_at check.
+          ...(action === 'send' ? { idempotencyKey: `invoice-send:${row.tenant_id}:${row.id}` } : {}),
           body: { status: 'unpaid' },
         },
       );

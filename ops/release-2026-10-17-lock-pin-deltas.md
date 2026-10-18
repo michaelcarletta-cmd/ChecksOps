@@ -193,7 +193,7 @@ planning only, nothing live or verified. Staging live API carries features from 
   `805ac24edd951ac8cbe207b21e9c5593863c239e82a55353ee385a0d09b690cf`, then (security review follow-ups) to
   `4c04ce4c78d26152bf56984a40b8df7a550af13fd71a31d1bf6f235cc3ad454f`; expected live unchanged.
 - `invoice-provider.mjs` (new file; `1b219a8a24ef8faf4b5db888dd6f772a9f04b3eb0ec2b869b76cd3b0b7d54e24` were the
-  `150da36eb` bytes, now `3cbabefbdfc3bac99c261e89811bb92f0cbd6a428c21f41aff4336116100a4aa` after the security review
+  `150da36eb` bytes, now `e6ef5db0f418d473af630a9b0f44d4d38452f7bb37eacc9d14b106a6cea7f8da` after the security review
   follow-ups below) is not a plan member: like `invoice-actions.mjs` and `public-invoice.mjs` it is absent from the
   production bundle and reaches production only with a rebuilt ZIP. Until then the production overlay of
   `moov-onboard.mjs` / `moov-functions.mjs` serves the fallbacks above. Module link: both files load
