@@ -88,7 +88,8 @@ function manifest(key, pin) {
 const consumedPath = () => path.join(os.tmpdir(), `sql98100-prod-consumed-${process.pid}-${Math.random().toString(16).slice(2)}.json`);
 
 test('pins: the reconciled SQL 98 / SQL 99 pins keep their recorded hashes and notes; SQL 100 is new; all have the SQL 90-97 shape and stay pending', () => {
-  const shape = new Set(keyPaths(SQL96_PIN));
+  // SQL 96's pin is the engine pin shape without its record-only applied / production_evidence sections.
+  const shape = new Set(keyPaths(SQL96_PIN).filter((k) => !/^(applied|production_evidence)(\.|$)/.test(k)));
   for (const key of KEYS) {
     const pin = COMMITTED[key];
     const staging = STAGING[key];

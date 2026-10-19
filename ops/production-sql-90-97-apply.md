@@ -23,12 +23,11 @@ applied to production on 2026-10-19 (see "Production apply of SQL 93" below) and
 retired; it had been execute-authorized by the owner-approved pin change of 2026-10-19 (the
 read-only production inspect after SQL 90 / SQL 101, SSM `d3753ba4-0338-4649-8997-2135376b6743`,
 live `ef2ce6ba…`, and its guarded staging apply run `39080438659` from the same pre-state). Never
-re-run SQL 93 after SQL 96. SQL 96's production pin is `execute: true` (owner approved 2026-10-19:
-the read-only production inspect of 2026-10-19 after SQL 93, SSM
-`73b4bd93-b91b-44c9-b18d-287625e5f4c6` from main `36955c413`, live `275400ff…`, recorded as its
-pre-state; its staging acceptance is its guarded staging apply run `39082957003` from the same
-pre-state); its apply still needs the owner's run-time approval, before SQL 98 / SQL 102 and
-before `tenant-billing-engine.mjs` / `tenant-billing-handlers.mjs`. Every other
+re-run SQL 93 after SQL 96. SQL 96 was applied to production on 2026-10-19
+(see "Production apply of SQL 96" below) and its pin is retired; it had been execute-authorized
+by the owner-approved pin change of 2026-10-19 (#1063: the read-only production inspect after
+SQL 93, SSM `73b4bd93-b91b-44c9-b18d-287625e5f4c6`, live `275400ff…`, and its guarded staging
+apply run `39082957003` from the same pre-state). Every other
 production pin is `execute: false`, `authorization: "pending"`, with no recorded pre-state and
 no staging acceptance, so its production apply refuses before connecting; staging pins are authorized only in reviewed waves ("Staging apply waves"). SQL 100
 is a strict no-op on production: its production tool only inspects (see "SQL 100 on
@@ -499,3 +498,18 @@ tenant-isolation 6/6, financial-write-protections 43/43; manifest `851c1dd1…`;
 true, precondition_failures []. No later read-only inspect was run. The pin is `execute: false`
 again; a re-apply needs a new reviewed pin change. `write-allowlist.mjs` and
 `write-app-metadata.mjs` may follow in their Lambda batch; SQL 96 is next in the database.
+
+## Production apply of SQL 96 (2026-10-19)
+
+One owner-approved run ("approve 1063 and apply SQL 96 into production") of
+`production-sql-one-shot.mjs` on `i-0c35557c4e5385406` from main `b9a1591f9` (tarball
+`6edc5ede…`), after a read-only `--phase inspect` run of the same one-shot (SSM
+`70c6b6a0-6f92-4a99-b2ef-f58a286c49fd`) that reported the recorded pre-state: SSM
+`df0acdce-9d1f-401c-a0f6-f6232e5d3f74`, run_id `6de41c7e-81c2-45a4-b92c-e4dc7f2950f9`, one_use_id
+`sql96-prod-69b5b3c5-de65-4d63-8614-65a709b70950` (spent), migration source `18109fed…` (== pin).
+Every step was ok; contracts claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections
+43/43; manifest `ea6ea07e…`; receipt `275400ff…` -> `ea844355…`, unrelated catalog `975cfaa9…`;
+post-apply inspect already_applied true, precondition_failures []. No later read-only inspect was
+run. The pin is `execute: false` again; a re-apply needs a new reviewed pin change, and SQL 93
+must never be re-run now. SQL 98 and SQL 102 are next in the database;
+`tenant-billing-engine.mjs` / `tenant-billing-handlers.mjs` may follow in their Lambda batch.
