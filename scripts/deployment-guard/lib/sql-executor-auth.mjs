@@ -2284,9 +2284,12 @@ export const AUTHORIZED_SQL104_PAYMENT_IDEMPOTENCY_KEYS_GRANT = Object.freeze({
   // The commit that last authored the file bytes.
   commit: '6a44600fd4fe05afbe749042a98edde56e5fa8c1',
   source_sha256: 'e8831083266b546deac5e2502e94f27ca353a13ed89ce5b8cca21ad18d523c8f',
-  authorization: 'pending',
-  execute: false,
-  expected_live_definition_sha256: null,
+  // Owner's words 2026-10-19: "do the SQL 104 staging pin".
+  authorization: 'Owner approved 2026-10-19: staging apply (wave 7) from staging read-live run 39296513948',
+  execute: true,
+  // Staging read-live run 39296513948 (2026-10-19, main 4e7c78905, executor 22ZCkh6t...):
+  // payment_idempotency_keys held only checksops SELECT (no hand grant), already_applied false.
+  expected_live_definition_sha256: '22b2d47df43b9fc831143e018022d0e94790cbd1e0406f0ab03443cd14652577',
   // Code-derived: releaseIntendedHash('sql104', file bytes) (release-sql-state.mjs); re-derived by the tests.
   intended_replacement_sha256: 'e5b35104ca9c3f68fd03298354c5d6e1e48218f0871a3f216539999931a291a6',
   // The file creates, replaces and sets the ACL of no function.

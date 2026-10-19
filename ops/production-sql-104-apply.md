@@ -19,8 +19,16 @@ as its own migration. SQL 91's file, pins and fingerprint are unchanged.
 guard. GRANT of a held privilege is a no-op, so staging's read-live is expected to report
 `already_applied` true (step 1).
 
-**Status:** pending. Both pins are `execute: false`, `authorization: "pending"`, with no recorded
-pre-state; nothing is applied by this change.
+**Staging read-live (2026-10-19).** The staging executor was refreshed to carry SQL 104 (run
+39296205973, main `4e7c78905`, CodeSha256 `jJioB/Xf…` -> `22ZCkh6t…`), then read-live run 39296513948
+found `payment_idempotency_keys` holding only `checksops SELECT`: no INSERT or UPDATE for
+`checksops`, nothing for `authenticated`. The hand grant #1062 describes is not present.
+`already_applied` false, live `22b2d47d…`, predecessor SQL 91 true, `precondition_failures` [].
+So step 1 takes the apply path, not the read-live-only path.
+
+**Status:** the staging pin is execute-authorized (wave 7, owner approved 2026-10-19, "do the SQL
+104 staging pin", pre-state `22b2d47d…`); the staging apply still needs its own run. The production
+pin is pending (`execute: false`, no recorded pre-state).
 
 ## Fingerprint
 

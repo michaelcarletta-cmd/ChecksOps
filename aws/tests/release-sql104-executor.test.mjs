@@ -112,7 +112,7 @@ function handlerFor(connect, { pins = {} } = {}) {
   return createHandler({ connect, now: () => Date.parse(NOW), releaseSqlFiles: FILES, releaseSqlPins: { ...PINS, ...pins } });
 }
 
-test('pin: SQL 104 pending, code-derived, selectable, packed, in step with the production pin; after SQL 91', () => {
+test('pin: SQL 104 staging-authorized from its read-live, code-derived, selectable, packed, in step with the production pin; after SQL 91', () => {
   const pin = PINS[KEY];
   const spec = RELEASE_SQL_SPECS[KEY];
   const packed = Object.fromEntries(EXECUTOR_PACK_MEMBERS);
@@ -122,11 +122,13 @@ test('pin: SQL 104 pending, code-derived, selectable, packed, in step with the p
   assert.equal(pin.migration_id, '104_payment_idempotency_keys_grant');
   assert.equal(spec.choice, 'sql104-payment-idempotency-keys-grant');
   assert.equal(sha(TEXT), pin.source_sha256);
-  // Pending: no staging read-live recorded yet (and no apply authorized).
+  // Staging apply authorized (owner approved 2026-10-19) from staging read-live run 39296513948:
+  // the table held only checksops SELECT, so SQL 104 was not yet applied there.
   assertStagingPinState(assert, KEY, pin);
-  assert.equal(pin.execute, false);
-  assert.equal(pin.authorization, 'pending');
-  assert.equal(pin.expected_live_definition_sha256, null);
+  assert.equal(pin.execute, true);
+  assert.equal(pin.authorization, 'Owner approved 2026-10-19: staging apply (wave 7) from staging read-live run 39296513948');
+  assert.equal(pin.expected_live_definition_sha256, '22b2d47df43b9fc831143e018022d0e94790cbd1e0406f0ab03443cd14652577');
+  assert.notEqual(pin.expected_live_definition_sha256, pin.intended_replacement_sha256);
   assert.equal(releaseIntendedHash(KEY, TEXT), pin.intended_replacement_sha256);
   assert.equal(pin.intended_replacement_sha256, 'e5b35104ca9c3f68fd03298354c5d6e1e48218f0871a3f216539999931a291a6');
   assert.equal(pin.superseded_intended_sha256, undefined);
