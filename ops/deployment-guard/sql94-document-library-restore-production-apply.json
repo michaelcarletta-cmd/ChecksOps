@@ -1,8 +1,8 @@
 {
   "id": "sql94-document-library-restore-production-apply",
   "migration": "sql94",
-  "authorization": "pending",
-  "execute": false,
+  "authorization": "Owner approved 2026-10-19 (the owner approved preparing this SQL 94 production pin change in the words \"do the SQL 94 pin\"; the change itself is reviewed and merge-approved by the owner separately): production apply of SQL 94 after SQL 29 and SQL 90 (both applied to production 2026-10-19) on the staging acceptance below (production 724115983687d882d8240e8d06e4670bc6e24dbb16540d3134cc1ccc47d66af1 -> 1cdc503275592900e9bf4ef49f7f5eadba573cab5f46dda3f4da9190dbe6ea57), before the document library Lambda members it holds (sql_before); execute true takes effect only when the owner reviews and merges this change. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
+  "execute": true,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -17,7 +17,7 @@
     "public.aws_public_homeowner_shared_documents(text)",
     "public.aws_public_homeowner_shared_document(text, uuid)"
   ],
-  "expected_live_definition_sha256": null,
+  "expected_live_definition_sha256": "724115983687d882d8240e8d06e4670bc6e24dbb16540d3134cc1ccc47d66af1",
   "intended_replacement_sha256": "1cdc503275592900e9bf4ef49f7f5eadba573cab5f46dda3f4da9190dbe6ea57",
   "authorization_phrase": "APPLY_DOCUMENT_LIBRARY_RESTORE",
   "predecessors": [
@@ -45,24 +45,24 @@
     "note": "Guarded tooling for SQL 94: sql94-document-library-restore-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql94-document-library-restore); production-sql-one-shot.mjs --migration sql94. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's). The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
   },
   "production_inspect": {
-    "status": "pending",
-    "date": null,
-    "ssm_command_id": null,
-    "source_commit": null,
+    "status": "recorded",
+    "date": "2026-10-19",
+    "ssm_command_id": "70abaca3-3ec3-4cbc-aae3-6542563080f2",
+    "source_commit": "fecb0b3af85b7a4a13d005a04fb42dd54c6172d1",
     "read_only": true,
     "connected_as": "checksops_admin",
-    "live_definition_sha256": null,
-    "apply_preconditions_met": null,
-    "precondition_failures": null,
-    "note": "Pending: the read-only inspect tool exists (scripts/deployment-guard/sql94-document-library-restore-production-apply.mjs --inspect), but no production inspect has been run for SQL 94 yet. Record its date, SSM command id, source commit, live_definition_sha256, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. If precondition_failures is not [] stop: that needs its own reviewed change."
+    "live_definition_sha256": "724115983687d882d8240e8d06e4670bc6e24dbb16540d3134cc1ccc47d66af1",
+    "apply_preconditions_met": false,
+    "precondition_failures": [],
+    "note": "Recorded from the read-only production inspect of 2026-10-19 after SQL 29, SQL 30, SQL 90 and SQL 103 were applied to production (SSM command 70abaca3-3ec3-4cbc-aae3-6542563080f2, node scripts/deployment-guard/sql94-document-library-restore-production-apply.mjs --inspect on the SQL53 runner i-0c35557c4e5385406 from main fecb0b3af (tarball sha256 7da7cb2b6b3790d02f4968bbbf774dff0a4724ff49c7528cef51bc5bb29c399a), BEGIN READ ONLY ... ROLLBACK, connected as checksops_admin). live_definition_sha256 724115983687d882d8240e8d06e4670bc6e24dbb16540d3134cc1ccc47d66af1 (not the intended 1cdc503275592900e9bf4ef49f7f5eadba573cab5f46dda3f4da9190dbe6ea57: already_applied false); precondition_failures [], prerequisites_missing [], missing_dependencies [], predecessors sql29 and sql90 applied, successors_applied [], doc_type_check_shape sql30, rows_outside_sql94_rule 0. The five functions, homeowner_shared_documents with its three policies and guard trigger are absent; tenant_documents_doc_type_check is SQL 30's. apply_preconditions_met was false at inspect time only because no pre-state was recorded yet (expected_live_definition_sha256 null). This reviewed change copies live_definition_sha256 into expected_live_definition_sha256 and, in the same change, sets authorization, execute true and staging_acceptance. A fresh --inspect immediately before apply (the one-shot's inspect step) must still report this live_definition_sha256 and precondition_failures []; if not, stop."
   },
   "intended_post_state": {
     "fingerprint": "1cdc503275592900e9bf4ef49f7f5eadba573cab5f46dda3f4da9190dbe6ea57",
     "note": "Creates homeowner_shared_documents with its guard trigger and the homeowner share helpers and public token readers. The fingerprint is releaseIntendedHash('sql94', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): 1cdc503275592900e9bf4ef49f7f5eadba573cab5f46dda3f4da9190dbe6ea57."
   },
   "staging_acceptance": {
-    "ok": false,
-    "reference": null,
-    "basis": "Pending: record the guarded staging SQL executor read-live and apply runs of SQL 94 here in the reviewed change that sets execute true. The staging executor handler and the production tool (scripts/deployment-guard/sql94-document-library-restore-production-apply.mjs) exist; the staging read-live, apply and acceptance are still pending. Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+    "ok": true,
+    "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39082817752",
+    "basis": "Guarded staging SQL executor apply of sql94-document-library-restore on 2026-10-18 (run 39082817752, wave 2): receipt before 724115983687d882d8240e8d06e4670bc6e24dbb16540d3134cc1ccc47d66af1, after 1cdc503275592900e9bf4ef49f7f5eadba573cab5f46dda3f4da9190dbe6ea57 = intended_replacement_sha256; precondition_failures [], prerequisites_missing []. Its staging read-live (run 39080904425) recorded the same pre-state 724115983687d882d8240e8d06e4670bc6e24dbb16540d3134cc1ccc47d66af1 that production reports now (ops/deployment-guard/staging-sql-live.json, aws/tests/helpers/staging-sql-wave1.mjs). Same pre-state: staging before its apply and production (production_inspect, 2026-10-19) both report 724115983687d882d8240e8d06e4670bc6e24dbb16540d3134cc1ccc47d66af1; the same file bytes (source_sha256) are pinned in both."
   }
 }

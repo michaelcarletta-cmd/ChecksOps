@@ -1,8 +1,8 @@
 {
   "id": "sql104-payment-idempotency-keys-grant-production-apply",
   "migration": "sql104",
-  "authorization": "pending",
-  "execute": false,
+  "authorization": "Owner approved 2026-10-19 (the owner approved preparing this SQL 104 production pin change and accepted the staging evidence below in the words \"accept the SQL 104 staging apply as substitute evidence and do the SQL 104 pin\"; the change itself is reviewed and merge-approved by the owner separately): production apply of SQL 104 after SQL 91 (applied to production 2026-10-19) on the staging acceptance below (production 57443d0a26c26859f2e939fb00fef51b554108b20f28aa6f262b9906cad1cfc6 -> e5b35104ca9c3f68fd03298354c5d6e1e48218f0871a3f216539999931a291a6), before the Moov onboarding Lambda members; execute true takes effect only when the owner reviews and merges this change. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
+  "execute": true,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -11,7 +11,7 @@
   "staging_pin_commit": "6a44600fd4fe05afbe749042a98edde56e5fa8c1",
   "source_sha256": "e8831083266b546deac5e2502e94f27ca353a13ed89ce5b8cca21ad18d523c8f",
   "function_identities": [],
-  "expected_live_definition_sha256": null,
+  "expected_live_definition_sha256": "57443d0a26c26859f2e939fb00fef51b554108b20f28aa6f262b9906cad1cfc6",
   "intended_replacement_sha256": "e5b35104ca9c3f68fd03298354c5d6e1e48218f0871a3f216539999931a291a6",
   "authorization_phrase": "APPLY_PAYMENT_IDEMPOTENCY_KEYS_GRANT",
   "predecessors": [
@@ -41,24 +41,24 @@
     "note": "Guarded tooling for SQL 104: sql104-payment-idempotency-keys-grant-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql104-payment-idempotency-keys-grant); production-sql-one-shot.mjs --migration sql104. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): the SELECT, INSERT and UPDATE grants of checksops and authenticated on public.payment_idempotency_keys (spec table_privileges). The post-conditions also require every other grant on the table unchanged (other_table_privileges_unchanged) and the rest of the catalog unchanged. The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
   },
   "production_inspect": {
-    "status": "pending",
-    "date": null,
-    "ssm_command_id": null,
-    "source_commit": null,
+    "status": "recorded",
+    "date": "2026-10-19",
+    "ssm_command_id": "70abaca3-3ec3-4cbc-aae3-6542563080f2",
+    "source_commit": "fecb0b3af85b7a4a13d005a04fb42dd54c6172d1",
     "read_only": true,
     "connected_as": "checksops_admin",
-    "live_definition_sha256": null,
-    "apply_preconditions_met": null,
-    "precondition_failures": null,
-    "note": "Pending: no read-only production inspect has been run for SQL 104 yet. Expected: SQL 91 applied (predecessor sql91 true), the table present and owned by checksops_admin, and none of the six grant lines held (SQL 91 granted none; #1062's hand grant was staging only). Record its date, SSM command id, source commit, live_definition_sha256, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. If precondition_failures is not [] stop: that needs its own reviewed change."
+    "live_definition_sha256": "57443d0a26c26859f2e939fb00fef51b554108b20f28aa6f262b9906cad1cfc6",
+    "apply_preconditions_met": false,
+    "precondition_failures": [],
+    "note": "Recorded from the read-only production inspect of 2026-10-19 (SSM command 70abaca3-3ec3-4cbc-aae3-6542563080f2, node scripts/deployment-guard/sql104-payment-idempotency-keys-grant-production-apply.mjs --inspect on the SQL53 runner i-0c35557c4e5385406 from main fecb0b3af (tarball sha256 7da7cb2b6b3790d02f4968bbbf774dff0a4724ff49c7528cef51bc5bb29c399a), BEGIN READ ONLY ... ROLLBACK, connected as checksops_admin). live_definition_sha256 57443d0a26c26859f2e939fb00fef51b554108b20f28aa6f262b9906cad1cfc6 (not the intended e5b35104ca9c3f68fd03298354c5d6e1e48218f0871a3f216539999931a291a6: already_applied false); precondition_failures [], prerequisites_missing [], missing_dependencies [], predecessor sql91 applied, successors_applied []. Unlike the pending expectation, checksops already holds SELECT, INSERT and UPDATE on payment_idempotency_keys in production (plus DELETE, outside the fingerprint, which other_table_privileges_unchanged keeps); authenticated holds none of the three, so SQL 104 adds only authenticated SELECT, INSERT and UPDATE here. apply_preconditions_met was false at inspect time only because no pre-state was recorded yet (expected_live_definition_sha256 null). This reviewed change copies live_definition_sha256 into expected_live_definition_sha256 and, in the same change, sets authorization, execute true and staging_acceptance. A fresh --inspect immediately before apply (the one-shot's inspect step) must still report this live_definition_sha256 and precondition_failures []; if not, stop."
   },
   "intended_post_state": {
     "fingerprint": "e5b35104ca9c3f68fd03298354c5d6e1e48218f0871a3f216539999931a291a6",
     "note": "public.payment_idempotency_keys: checksops and authenticated each hold SELECT, INSERT and UPDATE (no DELETE, TRUNCATE, REFERENCES or TRIGGER from this file). Every other grant on the table (service_role's, the owner's), its RLS flags and SQL 91's policies are unchanged; no other table, function, policy, column or row changes. The fingerprint is releaseIntendedHash('sql104', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): e5b35104ca9c3f68fd03298354c5d6e1e48218f0871a3f216539999931a291a6."
   },
   "staging_acceptance": {
-    "ok": false,
-    "reference": null,
-    "basis": "Pending: record the guarded staging SQL executor read-live run of SQL 104 (choice sql104-payment-idempotency-keys-grant), and the staging apply run if one is needed, here in the reviewed change that sets execute true. #1062 reports the same grant applied to staging by hand, outside the guard, so the read-live is expected to report already_applied true (live == intended) and the tools to refuse a staging apply as already in place; in that case the read-live is the staging evidence and the grant path itself is covered on PostgreSQL 16 by aws/tests/sql104-payment-idempotency-keys-grant-pg.test.mjs (from the table's original grants, SQL 104 through its production tool). If the read-live shows a different state, stop and record it in its own reviewed change. Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+    "ok": true,
+    "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39298919537",
+    "basis": "Owner-accepted substitute evidence (the owner's words: \"accept the SQL 104 staging apply as substitute evidence and do the SQL 104 pin\"). Guarded staging SQL executor apply of sql104-payment-idempotency-keys-grant on 2026-10-19 (run 39298919537, main fecb0b3af, wave 7, executor yQHFBtq2...): receipt before 22b2d47df43b9fc831143e018022d0e94790cbd1e0406f0ab03443cd14652577, after e5b35104ca9c3f68fd03298354c5d6e1e48218f0871a3f216539999931a291a6 = intended_replacement_sha256; precondition_failures [], prerequisites_missing []. Its staging read-live (run 39296513948) recorded that pre-state, and read-live run 39299161133 confirmed already_applied true afterwards. The pre-states differ: staging held only checksops SELECT (22b2d47df43b9fc831143e018022d0e94790cbd1e0406f0ab03443cd14652577) while production holds checksops SELECT, INSERT and UPDATE (57443d0a26c26859f2e939fb00fef51b554108b20f28aa6f262b9906cad1cfc6); both reach the intended e5b35104ca9c3f68fd03298354c5d6e1e48218f0871a3f216539999931a291a6 from the same pinned file bytes, and GRANT of a held privilege is a no-op. Also accepted: aws/tests/sql104-payment-idempotency-keys-grant-pg.test.mjs (pre-granted and partly granted cases)."
   }
 }
