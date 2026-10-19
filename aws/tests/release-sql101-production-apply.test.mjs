@@ -106,7 +106,8 @@ const consumedPath = () => path.join(os.tmpdir(), `sql101-prod-consumed-${proces
 test('pin: the SQL 90-97 pin shape, applied and retired (owner approved 2026-10-19), in step with the staging pin, the one-shot and the inventory', () => {
   const pin = COMMITTED;
   const staging = STAGING[KEY];
-  const shape = new Set(keyPaths(SQL96_PIN));
+  // SQL 96's pin is the engine pin shape without its record-only applied / production_evidence sections.
+  const shape = new Set(keyPaths(SQL96_PIN).filter((k) => !/^(applied|production_evidence)(\.|$)/.test(k)));
   assert.deepEqual([...shape].filter((k) => !keyPaths(pin).includes(k)), [], 'lacks the engine pin shape');
   // The record-and-retire change adds applied and production_evidence on top of the engine pin shape.
   assert.deepEqual(keyPaths(pin).filter((k) => !shape.has(k) && !/^(applied|production_evidence)\./.test(k)), []);
