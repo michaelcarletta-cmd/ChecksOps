@@ -109,6 +109,12 @@ production pin before the matching production step (deltas report
    production (`sql_prerequisites[...98...].verified_live`) and now in staging too
    (`staging-sql-live.json`). **Never re-run SQL 96 after SQL 98**: the SQL 96 tools refuse once
    SQL 98's `aws_platform_owner_set_tenant_deposits_enabled` exists (`successors_not_applied`).
+   Production pin: `execute: true` (owner approved 2026-10-19, "accept the SQL 98 staging apply
+   as substitute evidence and do the SQL 98 pin"). The read-only production inspect of 2026-10-19
+   (SSM `0c34e957-68f5-4ea5-9e2e-dd5639b7a67e`, main `b59b4520c`) recorded live `d64218dc…` with
+   SQL 96 applied and precondition_failures []; staging's apply (run `39085677318`) went
+   `296c3d6a…` -> `abcb8f21…` from a different pre-state, accepted as substitute evidence. The
+   apply still needs the owner's run-time approval.
 10. **SQL 99** after SQL 90, as the login that owns `check_messages` (no FORCE RLS) and
    `mortgage_handling_requests`; before or with the SPA build that stops the Mortgage Desk
    client posts (`MortgageOpsQueue.tsx`). No Lambda dependency.

@@ -53,7 +53,10 @@ const COMMITTED = Object.freeze(Object.fromEntries(RELEASE_SQL_KEYS.map((key) =>
 // (SQL 101's, SQL 103's and SQL 104's own checks are in release-sql101-production-apply.test.mjs,
 // release-sql103-production-apply.test.mjs and release-sql104-production-apply.test.mjs). Every other release pin is pending. The
 // locked-state checks below run on an explicit pre-authorization copy of an applied pin.
-const EXECUTE_AUTHORIZED = Object.freeze([]);
+// SQL 98's production pin is execute-authorized (owner approved 2026-10-19, owner-accepted
+// substitute staging evidence; its own checks are in release-sql98-100-production-apply.test.mjs)
+// until its record-and-retire change.
+const EXECUTE_AUTHORIZED = Object.freeze(['sql98']);
 // SQL 94's recorded production pre-state (read-only inspect of 2026-10-19 after SQL 29 / SQL 90 / SQL 103,
 // SSM 70abaca3, main fecb0b3af): the same pre-state staging recorded before its apply.
 const SQL94_PRODUCTION_PRE = '724115983687d882d8240e8d06e4670bc6e24dbb16540d3134cc1ccc47d66af1';
