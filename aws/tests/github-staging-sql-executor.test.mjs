@@ -138,7 +138,7 @@ test('environment check refuses any changed executor variable', () => {
 });
 
 test('only reviewed pins are selectable and candidate members mirror the ensure pack list', () => {
-  assert.deepEqual(Object.keys(MIGRATIONS), ['ledger-20261007193200', 'sql71-review-amount-grant', 'sql72-member-payment-writes', 'sql76-tenant-partnership-consent', 'sql77-check-stakeholders-grant', 'sql78-check-partner-stakeholder-removals', 'sql79-member-stakeholder-writes', 'sql80-checkalt-member-auto-deposit', 'sql81-checkalt-depositor-register', 'sql82-homeowner-ledger-view', 'sql83-homeowner-signing-capabilities', 'sql84-mortgage-return-to-queue', 'sql85-mortgage-compensation-adjust', 'sql86-mortgage-compensation-owner-only', 'sql87-resolve-check-case-tenant-scope', 'sql88-claim-id-assign-case-tenant-scope', 'sql89-check-intake-column-update', 'sql29-mortgage-ops-library-parity', 'sql30-tenant-documents-doc-type', 'sql90-users-only-tenant-roles', 'sql91-moov-onboarding', 'sql92-signature-request-check-files-link-grant', 'sql93-tenant-company-info', 'sql94-document-library-restore', 'sql95-remove-freedom-claims-bridge', 'sql96-platform-owner-tenant-pricing', 'sql97-financial-stepup-log-server-writer', 'sql98-tenant-fee-collection', 'sql99-mortgage-desk-completion-messages', 'sql100-mortgage-desk-live-access', 'sql101-invite-identity-insert-order', 'sql102-platform-owner-tenant-profile', 'sql103-share-library-trigger-acl']);
+  assert.deepEqual(Object.keys(MIGRATIONS), ['ledger-20261007193200', 'sql71-review-amount-grant', 'sql72-member-payment-writes', 'sql76-tenant-partnership-consent', 'sql77-check-stakeholders-grant', 'sql78-check-partner-stakeholder-removals', 'sql79-member-stakeholder-writes', 'sql80-checkalt-member-auto-deposit', 'sql81-checkalt-depositor-register', 'sql82-homeowner-ledger-view', 'sql83-homeowner-signing-capabilities', 'sql84-mortgage-return-to-queue', 'sql85-mortgage-compensation-adjust', 'sql86-mortgage-compensation-owner-only', 'sql87-resolve-check-case-tenant-scope', 'sql88-claim-id-assign-case-tenant-scope', 'sql89-check-intake-column-update', 'sql29-mortgage-ops-library-parity', 'sql30-tenant-documents-doc-type', 'sql90-users-only-tenant-roles', 'sql91-moov-onboarding', 'sql92-signature-request-check-files-link-grant', 'sql93-tenant-company-info', 'sql94-document-library-restore', 'sql95-remove-freedom-claims-bridge', 'sql96-platform-owner-tenant-pricing', 'sql97-financial-stepup-log-server-writer', 'sql98-tenant-fee-collection', 'sql99-mortgage-desk-completion-messages', 'sql100-mortgage-desk-live-access', 'sql101-invite-identity-insert-order', 'sql102-platform-owner-tenant-profile', 'sql103-share-library-trigger-acl', 'sql104-payment-idempotency-keys-grant']);
   assert.ok(Object.values(MIGRATIONS).every((pin) => AUTHORIZED_STAGING_SQL.includes(pin)));
   const { members, sourceOf } = candidateMembers(REPO_ROOT);
   assert.deepEqual(Object.keys(members).sort(), EXECUTOR_PACK_MEMBERS.map(([, to]) => to).sort());
@@ -518,8 +518,8 @@ test('every selectable pin refuses apply with the read-live sentinel before conn
     sqlFile89: file(MIGRATIONS['sql89-check-intake-column-update']),
     sqlFile29: file(MIGRATIONS['sql29-mortgage-ops-library-parity']),
     sqlFile30: file(MIGRATIONS['sql30-tenant-documents-doc-type']),
-    // SQL 90-103, by migration key.
-    releaseSqlFiles: Object.fromEntries(Object.values(MIGRATIONS).filter((pin) => /^sql(9[0-9]|10[0-3])$/.test(String(pin.key))).map((pin) => [pin.key, file(pin)])),
+    // SQL 90-104, by migration key.
+    releaseSqlFiles: Object.fromEntries(Object.values(MIGRATIONS).filter((pin) => /^sql(9[0-9]|10[0-4])$/.test(String(pin.key))).map((pin) => [pin.key, file(pin)])),
   });
   for (const [key, pin] of Object.entries(MIGRATIONS)) {
     const event = {
