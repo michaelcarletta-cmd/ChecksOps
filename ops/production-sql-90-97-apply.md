@@ -10,6 +10,11 @@ connecting; staging pins are authorized only in reviewed waves ("Staging apply w
 is a strict no-op on production: its production tool only inspects (see "SQL 100 on
 production").
 
+SQL 103 (`aws/workflows/sql/103_share_library_trigger_acl.sql`: EXECUTE on SQL 29's trigger
+function for its owner only) uses the same engine and tools but runs first, immediately
+before SQL 29: production order SQL 103 → SQL 29 → SQL 30 → SQL 90 → … → SQL 102
+(`ops/production-sql-103-apply.md`).
+
 | key | file (sha256) | what it does | predecessors |
 |---|---|---|---|
 | `sql90` | `90_users_only_tenant_roles.sql` (`488b2ec4…`) | Users only, no tenant role tiers: `aws_is_tenant_member(uuid)` and the membership-rule helpers; `aws_can_write_tenant/check/claim`, tax-profile access, the SQL 35 manager helper and view, SQL 29's `aws_can_manage_mortgage_library` and SQL 80's Auto-Deposit save replaced; members-only write policies; platform-owner-only tenant create, first invite (`aws_first_invite_allowed`, `aws_invite_create_user_identity`) and `user_roles` writes. | SQL 29, SQL 30 |
@@ -156,6 +161,7 @@ from the pinned file's bytes; renderings from the reviewed constants in
 | `sql100` | `52c00e3a3fb401107fd6a0316685a7e7d40b4ebdd42b82899acf7a16831ef777` |
 | `sql101` | `4383ef98de0b86d159ac7795b8cef1cc4d998d3540099dafed8078994d4c281b` |
 | `sql102` | `6e1346af3dee0bcdc0dc6269299de63e9e2804568e5bdecbd51ff062669700fd` |
+| `sql103` | `4b909c5929f0357ef442a1b2ebcb6bf8312e93be257010ed8a32072accf02aae` (its own runbook: `ops/production-sql-103-apply.md`) |
 
 SQL 98's fingerprint also has a line for `tenant_maintenance_payments_tenant_period_uidx` (an
 index on an existing table) and one for whether a unique index covers `check_billing_events
