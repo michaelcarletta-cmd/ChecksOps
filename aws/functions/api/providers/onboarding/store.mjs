@@ -101,10 +101,14 @@ const splitName = (rep) => {
   let first = str(rep.first_name ?? rep.firstName, 60);
   let last = str(rep.last_name ?? rep.lastName, 60);
   if ((!first || !last) && str(rep.name, 120)) {
-    const parts = str(rep.name, 120).split(/\s+/);
+    const parts = str(rep.name, 120).trim().split(/\s+/).filter(Boolean);
     if (parts.length >= 2) {
       last = last || parts.pop().slice(0, 60);
       first = first || parts.join(' ').slice(0, 60);
+    } else if (parts.length === 1) {
+      // Single-word name: use it as first name, set last to "." so Moov accepts it.
+      first = first || parts[0].slice(0, 60);
+      last = last || '.';
     }
   }
   return { first, last };
