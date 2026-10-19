@@ -527,11 +527,11 @@ test('only the apply child gets the apply variables, and its receipt is the one 
 
 // --- stop conditions ---------------------------------------------------------------------
 
-// SQL 82's to 86's pins are execute-authorized (owner approved 2026-10-16) and SQL 91's and
-// SQL 92's (owner approved 2026-10-19) until their record-and-retire changes; every other pin is
-// execute false (SQL 87, SQL 88 and SQL 89 retired after their 2026-10-16 applies, SQL 103,
-// SQL 29 and SQL 30 after their 2026-10-19 applies).
-const EXECUTE_AUTHORIZED = Object.freeze(['sql82', 'sql83', 'sql84', 'sql85', 'sql86', 'sql91', 'sql92']);
+// SQL 82's to 86's pins are execute-authorized (owner approved 2026-10-16) until their
+// record-and-retire changes; every other pin is execute false (SQL 87, SQL 88 and SQL 89
+// retired after their 2026-10-16 applies, SQL 103, SQL 29, SQL 30, SQL 91 and SQL 92 after
+// their 2026-10-19 applies).
+const EXECUTE_AUTHORIZED = Object.freeze(['sql82', 'sql83', 'sql84', 'sql85', 'sql86']);
 
 test('every real production pin with execute false is refused before any child', async () => {
   // Every other pin is retired or pending (execute false): SQL 81's since its 2026-10-15 record-and-retire change, SQL 87's, SQL 88's and SQL 89's since their 2026-10-16 applies, SQL 103's, SQL 29's and SQL 30's since their 2026-10-19 applies, SQL 71's pending.
@@ -564,8 +564,8 @@ test('a pin without staging acceptance or phrase is refused', async () => {
   assert.equal(result.code, CODES.PRODUCTION_APPROVAL_REQUIRED);
   assert.equal(result.details.stopped_at, 'pin');
   assert.equal(runner.calls.length, 0);
-  // SQL 82's to 86's, SQL 91's and SQL 92's committed pins are execute-authorized, and SQL 87's, SQL 88's, SQL 89's,
-  // SQL 103's, SQL 29's and SQL 30's are retired after their applies; their pre-authorization state (no staging
+  // SQL 82's to 86's committed pins are execute-authorized, and SQL 87's, SQL 88's, SQL 89's,
+  // SQL 103's, SQL 29's, SQL 30's, SQL 91's and SQL 92's are retired after their applies; their pre-authorization state (no staging
   // acceptance, authorization "pending") is an explicit copy here. SQL 71's committed pin is
   // still pending, with no recorded pre-state (null). Even with execute flipped that state
   // stops at the pin, and the evaluators refuse a null pre-state (explicit copy) and the
@@ -616,23 +616,18 @@ test('a pin without staging acceptance or phrase is refused', async () => {
   }
 });
 
-test('the committed execute-authorized pins (SQL 82 to SQL 86, SQL 91, SQL 92) pass the pin stage, and their evaluators allow the manifest built from them', async () => {
+test('the committed execute-authorized pins (SQL 82 to SQL 86) pass the pin stage, and their evaluators allow the manifest built from them', async () => {
   const STAGING_REFERENCE = {
     sql82: 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38837281138',
     sql83: 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38837509160',
     sql84: 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38894893179',
     sql85: 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38895045712',
     sql86: 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38895163945',
-    // SQL 91: the guarded staging apply from the same pre-state production reports.
-    sql91: 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39080306273',
-    // SQL 92: the owner-accepted substitute evidence (staging read-live; staging already had SQL 92).
-    sql92: 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39075498539',
   };
-  const APPROVED_ON = { sql91: '2026-10-19', sql92: '2026-10-19' };
   for (const key of EXECUTE_AUTHORIZED) {
     const committed = realPin(key);
     assert.equal(committed.execute, true);
-    assert.ok(committed.authorization.startsWith(`Owner approved ${APPROVED_ON[key] || '2026-10-16'} `), key);
+    assert.match(committed.authorization, /^Owner approved 2026-10-16 /, key);
     assert.equal(committed.staging_acceptance.ok, true);
     assert.equal(committed.staging_acceptance.reference, STAGING_REFERENCE[key]);
     for (const phase of ['inspect', 'apply']) {
