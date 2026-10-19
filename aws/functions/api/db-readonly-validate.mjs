@@ -52,13 +52,19 @@ export const EXPECTED_ROW_COUNTS = {
 
 export const EXPECTED_DATABASE = 'checksops';
 export const EXPECTED_SKIPPED_AUTH_USERS_FKS = 47;
-export const EXPECTED_PUBLIC_TRIGGERS = 173;
+export const EXPECTED_PUBLIC_TRIGGERS = 180;
 
 export const SUPERSEDED_PUBLIC_TRIGGERS = Object.freeze([
   Object.freeze({
     table: 'check_endorsements',
     trigger: 'trg_advance_on_endorsement_complete',
     functionName: 'advance_check_on_endorsement_complete',
+  }),
+  // SQL 95 (95_remove_freedom_claims_bridge.sql) drops the Freedom bridge trigger.
+  Object.freeze({
+    table: 'check_intake_items',
+    trigger: 'trg_notify_freedom_status_change',
+    functionName: 'notify_freedom_status_change',
   }),
 ]);
 
@@ -109,6 +115,47 @@ export const POST_RESTORE_PUBLIC_TRIGGERS = Object.freeze([
     table: 'tenant_partnerships',
     trigger: 'aws_tenant_partnership_consent_guard',
     functionName: 'aws_tenant_partnership_consent_guard',
+  }),
+  // Release migrations 94-102 (aws/workflows/sql/), applied to staging.
+  Object.freeze({
+    table: 'financial_stepup_log',
+    trigger: 'aws_financial_stepup_log_writer_guard',
+    functionName: 'aws_financial_stepup_log_writer_guard',
+  }),
+  Object.freeze({
+    table: 'homeowner_shared_documents',
+    trigger: 'homeowner_shared_documents_guard',
+    functionName: 'aws_homeowner_shared_documents_guard',
+  }),
+  Object.freeze({
+    table: 'mortgage_handling_requests',
+    trigger: 'tr_mortgage_desk_completion_messages',
+    functionName: 'aws_mortgage_desk_completion_messages',
+  }),
+  Object.freeze({
+    table: 'platform_billing_destination',
+    trigger: 'aws_platform_billing_destination_audit',
+    functionName: 'aws_platform_billing_destination_audit_row',
+  }),
+  Object.freeze({
+    table: 'tenants',
+    trigger: 'aws_tenant_deposits_enabled_audit',
+    functionName: 'aws_tenant_deposits_enabled_audit_row',
+  }),
+  Object.freeze({
+    table: 'tenants',
+    trigger: 'aws_tenant_pricing_audit',
+    functionName: 'aws_tenant_pricing_audit_row',
+  }),
+  Object.freeze({
+    table: 'tenants',
+    trigger: 'aws_tenant_profile_audit',
+    functionName: 'aws_tenant_profile_audit_row',
+  }),
+  Object.freeze({
+    table: 'tenants',
+    trigger: 'aws_tenants_member_column_guard',
+    functionName: 'aws_tenants_member_column_guard',
   }),
 ]);
 
