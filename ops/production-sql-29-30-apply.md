@@ -26,9 +26,10 @@ apply in `applied` and is `execute: false` again, so a re-apply needs a new revi
 It had been execute-authorized by the reviewed change of 2026-10-19 (owner-approved
 `authorization`, `execute: true`, the production pre-state after SQL 103 and the
 owner-accepted substitute staging evidence, staging read-live run `39188780526`). SQL 30 is
-not applied anywhere: its production pin is pending (`expected_live_definition_sha256: null`,
-`execute: false`, `authorization: "pending"`, no staging acceptance), so its apply refuses
-before connecting. The staging executor pins `sql29-mortgage-ops-library-parity` and
+not applied anywhere: its production pin is execute-authorized by the reviewed change of
+2026-10-19 (owner-approved `authorization`, `execute: true`, the production pre-state
+`37f22340…` after SQL 29 and the owner-accepted substitute staging evidence, staging
+read-live run `39188780526`); its apply still needs the owner's run-time approval. The staging executor pins `sql29-mortgage-ops-library-parity` and
 `sql30-tenant-documents-doc-type` stay pending (staging's SQL 29 state is superseded by SQL
 90, so no staging SQL 29 apply was run).
 
@@ -71,8 +72,7 @@ read-only run (SSM `f8fc5eca-5c56-46eb-a7fa-f1e893dd3d9b`) reported for SQL 30:
 `sql90_applied` false; CHECK shape `predecessor_6` (6 values, validated,
 `check_definition_sha256`
 `24faa402b16ace084d16a69c19266fd89002b50cb84d1c1b515159048b76125c`), `doc_type` text NOT
-NULL, `rows_outside_sql30_values` 0. This note does not change SQL 30's pin: it stays pending
-until its own reviewed pin change.
+NULL, `rows_outside_sql30_values` 0. SQL 30's pin records this inspect as its pre-state.
 
 ## Order
 

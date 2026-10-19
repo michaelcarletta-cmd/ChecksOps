@@ -527,10 +527,11 @@ test('only the apply child gets the apply variables, and its receipt is the one 
 
 // --- stop conditions ---------------------------------------------------------------------
 
-// SQL 82's to 86's pins are execute-authorized (owner approved 2026-10-16) until their
-// record-and-retire changes; every other pin is execute false (SQL 87, SQL 88 and SQL 89
-// retired after their 2026-10-16 applies, SQL 103 and SQL 29 after their 2026-10-19 applies).
-const EXECUTE_AUTHORIZED = Object.freeze(['sql82', 'sql83', 'sql84', 'sql85', 'sql86']);
+// SQL 82's to 86's pins are execute-authorized (owner approved 2026-10-16) and SQL 30's
+// (owner approved 2026-10-19) until their record-and-retire changes; every other pin is
+// execute false (SQL 87, SQL 88 and SQL 89 retired after their 2026-10-16 applies, SQL 103
+// and SQL 29 after their 2026-10-19 applies).
+const EXECUTE_AUTHORIZED = Object.freeze(['sql30', 'sql82', 'sql83', 'sql84', 'sql85', 'sql86']);
 
 test('every real production pin with execute false is refused before any child', async () => {
   // Every other pin is retired or pending (execute false): SQL 81's since its 2026-10-15 record-and-retire change, SQL 87's, SQL 88's and SQL 89's since their 2026-10-16 applies, SQL 103's and SQL 29's since their 2026-10-19 applies, SQL 71's pending.
@@ -563,8 +564,8 @@ test('a pin without staging acceptance or phrase is refused', async () => {
   assert.equal(result.code, CODES.PRODUCTION_APPROVAL_REQUIRED);
   assert.equal(result.details.stopped_at, 'pin');
   assert.equal(runner.calls.length, 0);
-  // SQL 82's to 86's committed pins are execute-authorized, and SQL 87's, SQL 88's, SQL 89's,
-  // SQL 103's and SQL 29's are retired after their applies; their pre-authorization state (no staging
+  // SQL 82's to 86's and SQL 30's committed pins are execute-authorized, and SQL 87's, SQL 88's,
+  // SQL 89's, SQL 103's and SQL 29's are retired after their applies; their pre-authorization state (no staging
   // acceptance, authorization "pending") is an explicit copy here. SQL 71's committed pin is
   // still pending, with no recorded pre-state (null). Even with execute flipped that state
   // stops at the pin, and the evaluators refuse a null pre-state (explicit copy) and the
@@ -581,8 +582,9 @@ test('a pin without staging acceptance or phrase is refused', async () => {
     sql86: 'c982ece2661a85293c2122c3aaf8226050d3c6670c436c94e34b870292289d0b',
     sql103: 'bade6813d689c91e3c8e39e33203e64eca23cc363f557062a7669407a01d5b9c',
     sql29: 'd8247ab9a31a7c1c57a464a768a650397059e67519f9e1522f881293e28e0079',
+    sql30: '37f22340383b1a5e1b1350fc602b2953c2bb72d32234456888616fd749cbf504',
   };
-  for (const key of ['sql71', 'sql87', 'sql88', 'sql89', 'sql82', 'sql83', 'sql84', 'sql85', 'sql86', 'sql103', 'sql29']) {
+  for (const key of ['sql71', 'sql87', 'sql88', 'sql89', 'sql82', 'sql83', 'sql84', 'sql85', 'sql86', 'sql103', 'sql29', 'sql30']) {
     const real = realPin(key);
     assert.equal(real.expected_live_definition_sha256, RECORDED_PRODUCTION_PRE[key]);
     // Execute-authorized and applied (retired) pins get an explicit pre-authorization copy; SQL 71's committed pin is still pending.
@@ -612,18 +614,21 @@ test('a pin without staging acceptance or phrase is refused', async () => {
   }
 });
 
-test('the committed execute-authorized pins (SQL 82 to SQL 86) pass the pin stage, and their evaluators allow the manifest built from them', async () => {
+test('the committed execute-authorized pins (SQL 82 to SQL 86, SQL 30) pass the pin stage, and their evaluators allow the manifest built from them', async () => {
   const STAGING_REFERENCE = {
     sql82: 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38837281138',
     sql83: 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38837509160',
     sql84: 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38894893179',
     sql85: 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38895045712',
     sql86: 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38895163945',
+    // SQL 30: the owner-accepted substitute evidence (staging read-live; SQL 94 on top in staging).
+    sql30: 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39188780526',
   };
+  const APPROVED_ON = { sql30: '2026-10-19' };
   for (const key of EXECUTE_AUTHORIZED) {
     const committed = realPin(key);
     assert.equal(committed.execute, true);
-    assert.match(committed.authorization, /^Owner approved 2026-10-16 /, key);
+    assert.ok(committed.authorization.startsWith(`Owner approved ${APPROVED_ON[key] || '2026-10-16'} `), key);
     assert.equal(committed.staging_acceptance.ok, true);
     assert.equal(committed.staging_acceptance.reference, STAGING_REFERENCE[key]);
     for (const phase of ['inspect', 'apply']) {
@@ -1221,19 +1226,21 @@ test('SQL 29 and SQL 30 are registered with their own tools, pins and allowed ke
   }
 });
 
-test('the committed SQL 30 pin and SQL 29\'s pre-authorization copy (execute false) are refused before any child, in both phases', async () => {
-  // SQL 29's committed pin was execute-authorized (owner approved 2026-10-19) and is applied
-  // and retired (execute false) since its 2026-10-19 apply; its pre-authorization state is an
-  // explicit copy here. SQL 30's committed pin is still pending.
+test('the SQL 29 and SQL 30 pre-authorization copies (execute false) are refused before any child, in both phases', async () => {
+  // SQL 29's committed pin is applied and retired (execute false) since its 2026-10-19 apply and
+  // SQL 30's is execute-authorized (owner approved 2026-10-19); their pre-authorization state is
+  // an explicit copy here.
   assert.equal(realPin('sql29').execute, false);
   assert.equal(realPin('sql29').expected_live_definition_sha256, 'd8247ab9a31a7c1c57a464a768a650397059e67519f9e1522f881293e28e0079');
-  const preAuthorization = (key) => (key === 'sql29'
+  assert.equal(realPin('sql30').execute, true);
+  assert.equal(realPin('sql30').expected_live_definition_sha256, '37f22340383b1a5e1b1350fc602b2953c2bb72d32234456888616fd749cbf504');
+  const preAuthorization = (key) => (['sql29', 'sql30'].includes(key)
     ? { ...realPin(key), execute: false, authorization: 'pending', expected_live_definition_sha256: null, staging_acceptance: { ok: false, reference: null, basis: 'Pending' } }
     : realPin(key));
   for (const key of LIBRARY_KEYS) {
     assert.equal(preAuthorization(key).execute, false, key);
     for (const phase of ['inspect', 'apply']) {
-      const { result, runner } = await oneShot({ key, pin: key === 'sql29' ? preAuthorization(key) : null, o: { phase, 'workstream-id': `prod-${key}-committed-pin-test` } });
+      const { result, runner } = await oneShot({ key, pin: ['sql29', 'sql30'].includes(key) ? preAuthorization(key) : null, o: { phase, 'workstream-id': `prod-${key}-committed-pin-test` } });
       assert.equal(result.ok, false, key);
       assert.equal(result.code, CODES.GUARD_APPLY_FORBIDDEN, key);
       assert.equal(result.details.stopped_at, 'pin', key);
@@ -1265,9 +1272,9 @@ test('the committed SQL 29 pin is applied and retired (execute false); it and it
   assert.equal(committed.applied.one_use_id, 'sql29-prod-238d917c-fdc1-4f3b-8909-a89cf8d74e8f');
   assert.deepEqual(committed.applied.receipt.before_hash, committed.expected_live_definition_sha256);
   assert.deepEqual(committed.applied.receipt.after_hash, committed.intended_replacement_sha256);
-  // SQL 30's pin is untouched: still pending.
-  assert.equal(realPin('sql30').execute, false);
-  assert.equal(realPin('sql30').authorization, 'pending');
+  // SQL 30's pin is execute-authorized by its own reviewed change (owner approved 2026-10-19) and not applied.
+  assert.equal(realPin('sql30').execute, true);
+  assert.equal(realPin('sql30').applied, undefined);
   // The execute-authorized state before the record-and-retire change, with execute false again.
   const executeFalse = { ...committed, authorization: 'Owner approved 2026-10-19 (test copy of the execute-authorized pin before its record-and-retire change)', execute: false };
   for (const pin of [null, executeFalse]) {

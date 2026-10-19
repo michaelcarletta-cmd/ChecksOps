@@ -1,8 +1,8 @@
 {
   "id": "sql30-tenant-documents-doc-type-production-apply",
   "migration": "sql30",
-  "authorization": "pending",
-  "execute": false,
+  "authorization": "Owner approved 2026-10-19 (the owner approved preparing this SQL 30 production pin change and accepted its substitute staging evidence in the words \"accept that evidence for SQL 30\"; the change itself is reviewed and merge-approved by the owner separately): production apply of SQL 30 after SQL 29 (applied to production 2026-10-19) on the staging acceptance below (production 37f22340383b1a5e1b1350fc602b2953c2bb72d32234456888616fd749cbf504 -> e573962eb3d7a427d6b4a2fe1fc48fa3c49f4ad22c6ae66372fb236017ca2556), before SQL 94 and SQL 90; execute true takes effect only when the owner reviews and merges this change. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
+  "execute": true,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -11,7 +11,7 @@
   "staging_pin_commit": "0d2f1b021829f0a2f52856d59cbe95b0ff2674c1",
   "source_sha256": "d30c7cafb232387e174eb5a3938af9e0942a006fa8b775c2d6eac490d84c7d5a",
   "constraint": "public.tenant_documents.tenant_documents_doc_type_check",
-  "expected_live_definition_sha256": null,
+  "expected_live_definition_sha256": "37f22340383b1a5e1b1350fc602b2953c2bb72d32234456888616fd749cbf504",
   "intended_replacement_sha256": "e573962eb3d7a427d6b4a2fe1fc48fa3c49f4ad22c6ae66372fb236017ca2556",
   "authorization_phrase": "APPLY_TENANT_DOCUMENTS_MORTGAGE_DOC_TYPE_CHECK",
   "predecessors": [],
@@ -21,26 +21,64 @@
   "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
   "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
   "production_inspect": {
-    "status": "pending",
-    "date": null,
-    "ssm_command_id": null,
-    "source_commit": null,
+    "status": "recorded",
+    "date": "2026-10-19",
+    "ssm_command_id": "f8fc5eca-5c56-46eb-a7fa-f1e893dd3d9b",
+    "source_commit": "c765e926bac217cdbd7bf84535fc1def6498c686",
+    "source_tarball_sha256": "69070d7b795b46b307e93a3842edbffa38a86668baf4eda5e1915f378af6d76b",
+    "runner": "i-0c35557c4e5385406",
     "read_only": true,
     "connected_as": "checksops_admin",
-    "live_definition_sha256": null,
-    "counts": null,
-    "sql30": null,
-    "precondition_failures": null,
-    "apply_preconditions_met": null,
-    "note": "Pending: no read-only production inspect has been run for SQL 30. Run node scripts/deployment-guard/sql30-tenant-documents-doc-type-production-apply.mjs --inspect on the runner and record its date, SSM command id, source commit, counts (aggregate COUNT(*) only, including rows_outside_sql30_values), sql30 (check_shape, check_definition_sha256, doc_type), precondition_failures, apply_preconditions_met and live_definition_sha256 here, and copy live_definition_sha256 into expected_live_definition_sha256, in the reviewed change that sets execute true. If precondition_failures is not [] stop."
+    "live_definition_sha256": "37f22340383b1a5e1b1350fc602b2953c2bb72d32234456888616fd749cbf504",
+    "counts": {
+      "tenant_documents_by_category": {
+        "legacy": 1,
+        "mortgage": 0,
+        "template": 0,
+        "shingle": 0,
+        "siding": 0,
+        "catalog": 0,
+        "letterhead": 0,
+        "library_other": 0,
+        "other": 0
+      },
+      "tenant_documents_by_path_form": {
+        "aws_library": 0,
+        "url": 0,
+        "bucket_prefixed": 0,
+        "other_tenant_library": 0,
+        "other": 1
+      },
+      "rows_outside_sql30_values": 0,
+      "shared_with_homeowners_true": 0,
+      "mortgage_request_library_documents": 0
+    },
+    "sql30": {
+      "live_definition_sha256": "37f22340383b1a5e1b1350fc602b2953c2bb72d32234456888616fd749cbf504",
+      "table_present": true,
+      "doc_type": "text/NO",
+      "check_shape": "predecessor_6",
+      "check_validated": true,
+      "check_value_count": 6,
+      "check_definition_sha256": "24faa402b16ace084d16a69c19266fd89002b50cb84d1c1b515159048b76125c"
+    },
+    "sql29_live_definition_sha256": "1271ea9b61ec983f88e911b23c569403979fb5f560880021b58d3b1e57243c79",
+    "sql29_already_applied": true,
+    "sql90_applied": false,
+    "already_applied": false,
+    "prerequisites_missing": [],
+    "precondition_failures": [],
+    "apply_preconditions_met": false,
+    "note": "Recorded from the read-only production inspect of 2026-10-19 after SQL 29 was applied to production (SQL 29's apply: SSM 64604f67...; this inspect: SSM command f8fc5eca-5c56-46eb-a7fa-f1e893dd3d9b, node scripts/deployment-guard/sql30-tenant-documents-doc-type-production-apply.mjs --inspect on the SQL53 runner i-0c35557c4e5385406 from main c765e926b (tarball sha256 69070d7b...), BEGIN READ ONLY ... ROLLBACK, connected as checksops_admin). live_definition_sha256 37f22340383b1a5e1b1350fc602b2953c2bb72d32234456888616fd749cbf504 (not the intended e573962eb3d7a427d6b4a2fe1fc48fa3c49f4ad22c6ae66372fb236017ca2556: already_applied false); precondition_failures [], prerequisites_missing [], sql90_applied false. sql30: tenant_documents present, doc_type text NOT NULL, tenant_documents_doc_type_check the validated 6-value predecessor (check_shape predecessor_6, check_definition_sha256 24faa402b16ace084d16a69c19266fd89002b50cb84d1c1b515159048b76125c). counts are aggregate COUNT(*)s only (no ids, names or paths); rows_outside_sql30_values 0, so no row blocks SQL 30's CHECK. sql29_live_definition_sha256 and sql29_already_applied are informational (SQL 29's live hash equals its intended 1271ea9b61ec983f88e911b23c569403979fb5f560880021b58d3b1e57243c79; SQL 29's pin is unchanged by this change). apply_preconditions_met was false at inspect time only because no pre-state was recorded yet (expected_live_definition_sha256 null). This reviewed change copies live_definition_sha256 into expected_live_definition_sha256 and, in the same change, sets authorization, execute true and staging_acceptance. A fresh --inspect immediately before apply (the one-shot's inspect step) must still report this live_definition_sha256 and precondition_failures []; if not, stop."
   },
   "intended_post_state": {
     "fingerprint": "sha256(sql30StateText(SQL30_INTENDED_STATE)) in scripts/deployment-guard/lib/sql-executor-auth.mjs",
     "note": "After the SQL 30 bytes: tenant_documents_doc_type_check is a validated IN list of exactly the 13 values (w9, license, insurance, saas_agreement, terms_of_service, privacy_policy and the 7 canonical library:mortgage:* values). No row changes. Template, shingle, siding, catalog and letterhead library rows still need SQL 94."
   },
   "staging_acceptance": {
-    "ok": false,
-    "reference": null,
-    "basis": "Pending: record the guarded staging SQL executor read-live and apply runs of sql30-tenant-documents-doc-type here in the reviewed change that sets execute true. Until then evaluate and apply refuse."
+    "ok": true,
+    "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39188780526",
+    "basis": "Owner-accepted substitute evidence (the owner's words: \"accept that evidence for SQL 30\"). Staging SQL 30 cannot be applied or verified directly because SQL 94 is applied on top of it in staging (SQL 30 refuses SQL 94's CHECK), so the staging pin stays pending (execute false) and no staging apply was run. The accepted evidence is: (1) the guarded staging SQL executor read-live of sql29-mortgage-ops-library-parity, run 39188780526 (executor from main 03e238af), whose library inspect also reports SQL 30's table: tenant_documents present, doc_type column present, check_shape sql94 (validated, check_definition_sha256 4ff37c4f18b5102b9f51f7cc0bb8fbd1e23d69e23926da14e29eeafdb4e69143), staging sql30 live 82d768184da8c496fe56731d8557cfc452bea856939f78c80bb2e2383302cd22 (superseded by SQL 94), rows_outside_sql30_values 0, sql90_applied true; and (2) the repository's PostgreSQL 16 tests of SQL 30 from the 6-value predecessor CHECK: aws/tests/sql29-sql30-library-production-apply.test.mjs (test \"PostgreSQL 16: inspect is read-only and counts only; an authorized copy applies once as checksops_admin; the superuser is refused\": from check_shape predecessor_6, SQL 30 through its production tool (executeLibraryProductionApply as checksops_admin) reaches e573962eb3d7a427d6b4a2fe1fc48fa3c49f4ad22c6ae66372fb236017ca2556, then already_applied true and a replay is refused) and aws/tests/tenant-documents-mortgage-doc-type-pg.test.mjs (the unchanged SQL 30 file bytes take the 6-value CHECK to the validated 13-value list: the 7 canonical library:mortgage:* values accepted, other library and unknown values rejected, a second apply idempotent).",
+    "production_differs": "The pre-states differ: staging has SQL 30 with SQL 94 on top (82d768184da8c496fe56731d8557cfc452bea856939f78c80bb2e2383302cd22, check_shape sql94, sql90_applied true) and production (production_inspect, 2026-10-19, after SQL 29) is 37f22340383b1a5e1b1350fc602b2953c2bb72d32234456888616fd749cbf504 (check_shape predecessor_6, sql90_applied false). Each environment's state is recorded separately; the same file bytes (source_sha256) are pinned in both."
   }
 }
