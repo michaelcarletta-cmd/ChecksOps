@@ -4,12 +4,14 @@ Guarded apply tooling for the thirteen release 2026-10-17 migrations in `aws/wor
 SQL 90 to SQL 97, SQL 98 (tenant fee collection and the deposits switch), SQL 99 / SQL 100
 (Mortgage Desk), SQL 101 (the invite's identity-first insert, a fix to SQL 90) and SQL 102 (the
 platform owner's tenant profile and member removal). This runbook
-covers staging and production and the order between them. It authorizes nothing itself. SQL 91's and SQL 92's production pins are `execute: true` (owner
-approved 2026-10-19: the read-only production inspect of 2026-10-19, SSM
+covers staging and production and the order between them. It authorizes nothing itself. SQL 91 and SQL 92 were applied to production on 2026-10-19 (see
+"Production applies of SQL 91 and SQL 92" below) and their pins are retired (`execute: false`
+again, the apply recorded in `applied`); they had been execute-authorized by the owner-approved
+pin change of 2026-10-19 (the read-only production inspect, SSM
 `433d5e4e-51ec-4d82-8220-87ac9f04d8d7` from main `f51863bbd`, recorded as their pre-state; SQL
-91's staging acceptance is its guarded staging apply run `39080306273` from the same pre-state,
-SQL 92's the owner-accepted substitute staging read-live run `39075498539`); each apply still
-needs the owner's run-time approval. SQL 103's pin is retired after its apply. Every other
+91's staging acceptance its guarded staging apply run `39080306273` from the same pre-state,
+SQL 92's the owner-accepted substitute staging read-live run `39075498539`). SQL 103's pin is
+retired after its apply. Every other
 production pin is `execute: false`, `authorization: "pending"`, with no recorded pre-state and
 no staging acceptance, so its production apply refuses before connecting; staging pins are authorized only in reviewed waves ("Staging apply waves"). SQL 100
 is a strict no-op on production: its production tool only inspects (see "SQL 100 on
@@ -417,3 +419,28 @@ only if no earlier migration changes that migration's objects. From the specs, t
 Each apply refuses unless the live pre-state still equals its pin (`DEPLOYMENT_COLLISION`),
 and records its post-state receipt. Record each in `ops/deployment-guard/staging-sql-live.json`
 in a reviewed change.
+
+## Production applies of SQL 91 and SQL 92 (2026-10-19)
+
+One owner-approved run each ("approve 1055, apply SQL 91 in production and apply SQL 92 in
+production") of `production-sql-one-shot.mjs` on `i-0c35557c4e5385406` from main `c62872827`
+(tarball `a1f6a7b93a311069a9e0f0b3fc80d8aa6b739d50f9bb31e72d8e8cad13b53244`), SQL 91 first.
+Every step was ok (pin, source, inspect, contracts, manifest, the two source rechecks,
+preflight, evaluate, apply, post-apply inspect); contracts claim-ledger 4/4, tenant-isolation
+6/6, financial-write-protections 43/43 for both.
+
+| | SQL 91 | SQL 92 |
+|---|---|---|
+| SSM / run_id | `ed86d22d-d505-4479-b4ed-0402ab6ac349` / `d199f5d1-f17e-465e-a624-79564517bfb9` | `bf59603e-3b45-4229-bfb2-89a9d219a5f6` / `ad1efd53-8fdc-485c-8f8f-10e8d63befd5` |
+| one_use_id (spent) | `sql91-prod-8e792cdc-48e2-40ce-97f2-79baea22ae3b` | `sql92-prod-eb132e5b-bfba-46e3-a3cc-52320cd64acf` |
+| Migration source (== pin) | `199bfa1a…` | `ceef6482…` |
+| Receipt | `bdbc697f…` -> `f8611dcc…` | `3cfbd32c…` -> `805deb65…` |
+| Manifest | `7c4fe52e…` | `261bc3fd…` |
+| Unrelated catalog | `d7f9a115…` | `79411e14…` (includes SQL 91's new objects) |
+| Post-apply inspect | already_applied true, precondition_failures [] | already_applied true, precondition_failures [] |
+
+SSM reported SQL 91's command as Failed (exit 1) only because the operator's trailing output
+filter (a `grep` over the empty stderr) matched nothing after the one-shot had exited 0 with
+every step ok. No later read-only inspect was run. Both pins are `execute: false` again; a
+re-apply needs a new reviewed pin change. SQL 91's Lambdas (`providers/onboarding/*`) and
+`esign.mjs` (SQL 92) may follow in their Lambda batches.

@@ -1,8 +1,8 @@
 {
   "id": "sql92-signature-request-check-files-link-grant-production-apply",
   "migration": "sql92",
-  "authorization": "Owner approved 2026-10-19 (the owner approved preparing this SQL 92 production pin change and accepted its substitute staging evidence in the words \"open the SQL 91/92 one-shot and pin PRs and accept that evidence for SQL 92\"; the change itself is reviewed and merge-approved by the owner separately): production apply of SQL 92 on the staging acceptance below (production 3cfbd32cde289775073221e99404b8b0ce82ff8d7e365cbf14d9e3e7fc6edb9f -> 805deb65c877f9a2ff1ed9cd7f4b72b7643524dd7a94fbf5d1efc516b8b75762), before esign.mjs; execute true takes effect only when the owner reviews and merges this change. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
-  "execute": true,
+  "authorization": "Applied to production on 2026-10-19; execute is false again, so this pin is no longer a standing authorization and a re-apply needs a new reviewed pin change. The owner approved the SQL 92 production pin (3cfbd32c -> 805deb65), the read-only production inspect and the execute change on 2026-10-19, accepted its substitute staging evidence, and approved the one apply run recorded in applied (workstream prod-sql92-signature-request-check-files-link-grant-20261019) on 2026-10-19 with \"approve 1055, apply SQL 91 in production and apply SQL 92 in production\". That approval covered that run only",
+  "execute": false,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -52,7 +52,7 @@
     "missing_dependencies": [],
     "predecessors_applied": true,
     "successors_applied": [],
-    "note": "Recorded from the read-only production inspect of 2026-10-19 (SSM command 433d5e4e-51ec-4d82-8220-87ac9f04d8d7, node scripts/deployment-guard/sql92-signature-request-check-files-link-grant-production-apply.mjs --inspect on the SQL53 runner i-0c35557c4e5385406 from main f51863bbd (tarball sha256 52e3f4aa...), BEGIN READ ONLY ... ROLLBACK, connected as checksops_admin). live_definition_sha256 3cfbd32cde289775073221e99404b8b0ce82ff8d7e365cbf14d9e3e7fc6edb9f (not the intended 805deb65c877f9a2ff1ed9cd7f4b72b7643524dd7a94fbf5d1efc516b8b75762: already_applied false); precondition_failures [], prerequisites_missing [], missing_dependencies [], predecessors {}, successors_applied []. check_files.signature_request_id has no column UPDATE grant yet (acl state different, acl []). apply_preconditions_met was false at inspect time only because no pre-state was recorded yet (expected_live_definition_sha256 null). This reviewed change copies live_definition_sha256 into expected_live_definition_sha256 and, in the same change, sets authorization, execute true and staging_acceptance. A fresh --inspect immediately before apply (the one-shot's inspect step) must still report this live_definition_sha256 and precondition_failures []; if not, stop."
+    "note": "Recorded from the read-only production inspect of 2026-10-19 (SSM command 433d5e4e-51ec-4d82-8220-87ac9f04d8d7, node scripts/deployment-guard/sql92-signature-request-check-files-link-grant-production-apply.mjs --inspect on the SQL53 runner i-0c35557c4e5385406 from main f51863bbd (tarball sha256 52e3f4aa...), BEGIN READ ONLY ... ROLLBACK, connected as checksops_admin). live_definition_sha256 3cfbd32cde289775073221e99404b8b0ce82ff8d7e365cbf14d9e3e7fc6edb9f (not the intended 805deb65c877f9a2ff1ed9cd7f4b72b7643524dd7a94fbf5d1efc516b8b75762: already_applied false); precondition_failures [], prerequisites_missing [], missing_dependencies [], predecessors {}, successors_applied []. check_files.signature_request_id has no column UPDATE grant yet (acl state different, acl []). apply_preconditions_met was false at inspect time only because no pre-state was recorded yet (expected_live_definition_sha256 null). This reviewed change copies live_definition_sha256 into expected_live_definition_sha256 and, in the same change, sets authorization, execute true and staging_acceptance. A fresh --inspect immediately before apply (the one-shot's inspect step) must still report this live_definition_sha256 and precondition_failures []; if not, stop. The apply of 2026-10-19 is recorded in applied; the record-and-retire change set execute false again."
   },
   "intended_post_state": {
     "fingerprint": "805deb65c877f9a2ff1ed9cd7f4b72b7643524dd7a94fbf5d1efc516b8b75762",
@@ -63,5 +63,105 @@
     "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39075498539",
     "basis": "Owner-accepted substitute evidence (the owner's words: \"open the SQL 91/92 one-shot and pin PRs and accept that evidence for SQL 92\"). Staging already had SQL 92 before the guarded tooling, so no guarded staging apply from production's pre-state exists and the staging pin stays pending. The accepted evidence is: (1) the guarded staging SQL executor read-live of sql92-signature-request-check-files-link-grant, run 39075498539, already_applied true (live == intended 805deb65c877f9a2ff1ed9cd7f4b72b7643524dd7a94fbf5d1efc516b8b75762); and (2) the repository tests of SQL 92: aws/tests/release-sql90-97-executor.test.mjs, aws/tests/release-sql90-97-production-apply.test.mjs and aws/tests/signature-sql-source.test.mjs.",
     "production_differs": "The pre-states differ: staging already has SQL 92 (805deb65c877f9a2ff1ed9cd7f4b72b7643524dd7a94fbf5d1efc516b8b75762) and production (production_inspect, 2026-10-19) is 3cfbd32cde289775073221e99404b8b0ce82ff8d7e365cbf14d9e3e7fc6edb9f (no column UPDATE grant on check_files.signature_request_id). Each environment's state is recorded separately; the same file bytes (source_sha256) are pinned in both."
+  },
+  "applied": {
+    "date": "2026-10-19",
+    "result": "applied",
+    "source_commit": "c628728273f0d54c901e3526b46d23e7cef4f411",
+    "source_tarball": {
+      "file": "source-c628728273f0d54c901e3526b46d23e7cef4f411.tar.gz",
+      "sha256": "a1f6a7b93a311069a9e0f0b3fc80d8aa6b739d50f9bb31e72d8e8cad13b53244"
+    },
+    "migration_source_sha256": "ceef6482271f5572db20f5a6db3b4bbcf77e29ada2290f03f53af7fb6e725e17",
+    "migration_source_sha256_note": "The one-shot source step hashed aws/workflows/sql/92_signature_request_check_files_link_grant.sql in the transfer tarball: equal to source_sha256 (the pin).",
+    "runner": "i-0c35557c4e5385406",
+    "workstream_id": "prod-sql92-signature-request-check-files-link-grant-20261019",
+    "one_use_id": "sql92-prod-eb132e5b-bfba-46e3-a3cc-52320cd64acf",
+    "one_use_id_consumed": true,
+    "one_use_id_consumed_basis": "Inferred from the successful apply (the tool records the one_use_id after COMMIT and only warns if that write fails); the consumed-registry entry was not read back separately.",
+    "owner_approval": "approve 1055, apply SQL 91 in production and apply SQL 92 in production",
+    "owner_approval_basis": "As passed in --approval-statement for --approval-scope sql92; the one-shot cannot verify who said it.",
+    "operator": "michaelcarletta-cmd",
+    "apply_ssm_command_id": "bf59603e-3b45-4229-bfb2-89a9d219a5f6",
+    "one_shot_run_id": "ad1efd53-8fdc-485c-8f8f-10e8d63befd5",
+    "one_shot_note": "One guarded production-sql-one-shot run (SSM bf59603e-3b45-4229-bfb2-89a9d219a5f6, run_id ad1efd53-8fdc-485c-8f8f-10e8d63befd5) from main c62872827 applied SQL 92: steps pin, source, inspect, contracts, manifest, source-recheck-before-preflight, preflight, evaluate, source-recheck-before-apply, apply (applied) and post-apply-inspect all ok; runner contracts, manifest, receipt and inspects as recorded below. Start and finish times were not carried into this record. Run after SQL 91's apply in the same session; the unrelated catalog counts are higher than SQL 91's because they include SQL 91's new objects.",
+    "steps": [
+      "pin",
+      "source",
+      "inspect",
+      "contracts",
+      "manifest",
+      "source-recheck-before-preflight",
+      "preflight",
+      "evaluate",
+      "source-recheck-before-apply",
+      "apply",
+      "post-apply-inspect"
+    ],
+    "contract_results": {
+      "claim-ledger": {
+        "ok": true,
+        "passed": "4/4"
+      },
+      "tenant-isolation": {
+        "ok": true,
+        "passed": "6/6"
+      },
+      "financial-write-protections": {
+        "ok": true,
+        "passed": "43/43"
+      }
+    },
+    "pre_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "3cfbd32cde289775073221e99404b8b0ce82ff8d7e365cbf14d9e3e7fc6edb9f",
+      "live_matches_expected": true,
+      "already_applied": false,
+      "precondition_failures": [],
+      "missing_dependencies": [],
+      "predecessors_applied": true,
+      "successors_applied": [],
+      "note": "The one-shot inspect step (read-only --inspect) immediately before the apply: live == the recorded pre-state 3cfbd32c..., precondition_failures [], missing_dependencies [], predecessors_applied true."
+    },
+    "manifest_sha256": "261bc3fd7806845c962023e0f0081e6d5e91e6dc6bef2084234f2617a6a878d4",
+    "receipt": {
+      "migration": "sql92",
+      "workstream": "prod-sql92-signature-request-check-files-link-grant-20261019",
+      "commit": "c628728273f0d54c901e3526b46d23e7cef4f411",
+      "sql_file": "aws/workflows/sql/92_signature_request_check_files_link_grant.sql",
+      "before_hash": "3cfbd32cde289775073221e99404b8b0ce82ff8d7e365cbf14d9e3e7fc6edb9f",
+      "after_hash": "805deb65c877f9a2ff1ed9cd7f4b72b7643524dd7a94fbf5d1efc516b8b75762",
+      "unrelated_catalog_sha256": "79411e14d01351e3a3a851853f3e0f6327f43c09e9770a0ba00c29c9218e10b7",
+      "unrelated_catalog_counts": {
+        "relations": 877,
+        "columns": 3493,
+        "constraints": 2201,
+        "policies": 394,
+        "functions": 1286,
+        "indexes": 645,
+        "default_acl": 0,
+        "role_memberships": 15,
+        "roles": 29,
+        "triggers": 173,
+        "views": 25,
+        "types": 18,
+        "schema": 2
+      },
+      "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39075498539",
+      "result": "applied"
+    },
+    "post_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "805deb65c877f9a2ff1ed9cd7f4b72b7643524dd7a94fbf5d1efc516b8b75762",
+      "already_applied": true,
+      "precondition_failures": [],
+      "missing_dependencies": [],
+      "predecessors_applied": true,
+      "successors_applied": [],
+      "note": "The one-shot post-apply read-only --inspect: already_applied true (live == intended 805deb65...), precondition_failures []."
+    }
+  },
+  "production_evidence": {
+    "2026-10-19 apply": "Guarded production SQL one-shot on i-0c35557c4e5385406, workstream prod-sql92-signature-request-check-files-link-grant-20261019, main c62872827 (tarball a1f6a7b9…, migration source ceef6482… == pin), owner-approved run (\"approve 1055, apply SQL 91 in production and apply SQL 92 in production\"), SSM bf59603e-3b45-4229-bfb2-89a9d219a5f6, run_id ad1efd53-8fdc-485c-8f8f-10e8d63befd5, one_use_id sql92-prod-eb132e5b-bfba-46e3-a3cc-52320cd64acf (spent): every step ok; contracts claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43; pre-apply inspect live 3cfbd32c… (live_matches_expected true, precondition_failures []); manifest 261bc3fd…; 3cfbd32c… -> 805deb65…, result applied, unrelated catalog 79411e14…; post-apply inspect already_applied true, precondition_failures []. No later inspect was run. execute is false so the pin is no longer a standing authorization."
   }
 }
