@@ -262,6 +262,10 @@ change in this section.
 - IAM target: `aws/production/api-execution-cognito-admin-policy.json` adds `AdminDisableUser` and
   `AdminDeleteUser`, same pool-only resource. Apply it (owner approval) before the `tenant-admin.mjs` overlay;
   until then the fixed code reports the failure instead of hiding it.
+- **Applied 2026-10-19 (owner-approved):** `iam:PutRolePolicy` with exactly that document. Before: Create, Get,
+  SetUserPassword. Post-apply `SimulatePrincipalPolicy`: all five actions `allowed` on `us-east-1_h00WorYMT`;
+  `AdminDisableUser` / `AdminDeleteUser` `implicitDeny` on any other pool; `AdminUpdateUserAttributes` still
+  `implicitDeny`. Rollback: put the three-action document back.
 
 The original inventory follows.
 

@@ -1,5 +1,5 @@
 {
-  "_comment": "Target document for the inline policy TenantInviteUserProductionCognito on role checksops-production-api-execution (created by hand, not in any template). 2026-10-18: AdminDisableUser (platform-owner Disable login) and AdminDeleteUser (failed-invite login cleanup) added; the live policy had only Create/Get/SetUserPassword, so both calls were denied. Scoped to the production user pool only. Apply only with owner approval; record the apply in ops/release-2026-10-17-lock-pin-deltas.md section 0d.",
+  "_comment": "Target document for the inline policy TenantInviteUserProductionCognito on role checksops-production-api-execution (created by hand, not in any template). 2026-10-18: AdminDisableUser (platform-owner Disable login) and AdminDeleteUser (failed-invite login cleanup) added; the live policy had only Create/Get/SetUserPassword, so both calls were denied. Scoped to the production user pool only. Applied 2026-10-19 with owner approval; see ops/release-2026-10-17-lock-pin-deltas.md section 0d.",
   "role": "checksops-production-api-execution",
   "policy_name": "TenantInviteUserProductionCognito",
   "document": {
