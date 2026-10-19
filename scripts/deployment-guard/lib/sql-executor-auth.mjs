@@ -2255,6 +2255,25 @@ export const AUTHORIZED_SQL102_PLATFORM_OWNER_TENANT_PROFILE = Object.freeze({
     'public.aws_tenants_member_column_guard()',
   ]),
 });
+// Mortgage Ops library 2026-10-19 staging pin: SQL 103 (EXECUTE on SQL 29's trigger function
+// share_library_docs_to_mortgage_request() for its owner only; PUBLIC, checksops and
+// authenticated revoked). Runs before SQL 29 in production so SQL 29's guard passes; no
+// predecessor. Pending until a reviewed pin change records a staging read-live.
+export const AUTHORIZED_SQL103_SHARE_LIBRARY_TRIGGER_ACL = Object.freeze({
+  key: 'sql103',
+  filename: 'aws/workflows/sql/103_share_library_trigger_acl.sql',
+  migration_id: '103_share_library_trigger_acl',
+  // The commit that last authored the file bytes.
+  commit: '0bc3d05556dde2bfb94a7bd216b2aa6aee07d56b',
+  source_sha256: 'e018a9e7c8d0b00220bec8a5ebb5606232ff26d56c3012e3f1d64d5a25f0d43b',
+  authorization: 'pending',
+  execute: false,
+  expected_live_definition_sha256: null,
+  // Code-derived: releaseIntendedHash('sql103', file bytes) (release-sql-state.mjs); re-derived by the tests.
+  intended_replacement_sha256: '4b909c5929f0357ef442a1b2ebcb6bf8312e93be257010ed8a32072accf02aae',
+  // The function whose ACL the file sets (spec acl_functions); it creates or replaces none.
+  function_identities: Object.freeze(['public.share_library_docs_to_mortgage_request()']),
+});
 
 export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql90: AUTHORIZED_SQL90_USERS_ONLY_TENANT_ROLES,
@@ -2270,6 +2289,7 @@ export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql100: AUTHORIZED_SQL100_MORTGAGE_DESK_LIVE_ACCESS,
   sql101: AUTHORIZED_SQL101_INVITE_IDENTITY_INSERT_ORDER,
   sql102: AUTHORIZED_SQL102_PLATFORM_OWNER_TENANT_PROFILE,
+  sql103: AUTHORIZED_SQL103_SHARE_LIBRARY_TRIGGER_ACL,
 });
 
 // The fee collection pin under its earlier map name (the same object as the release map's sql98).
@@ -2285,7 +2305,7 @@ export function isSql30TenantDocumentsDocType(input = {}) {
   return pinIdentifiersMatch(input, AUTHORIZED_SQL30_TENANT_DOCUMENTS_DOC_TYPE);
 }
 
-/** The release 2026-10-17 migration key (sql90 ... sql102) an input names, or null. */
+/** The release 2026-10-17 migration key (sql90 ... sql103) an input names, or null. */
 export function releaseSqlMigrationKey(input = {}) {
   return Object.keys(RELEASE_2026_10_17_PENDING_SQL_PINS)
     .find((key) => pinIdentifiersMatch(input, RELEASE_2026_10_17_PENDING_SQL_PINS[key])) || null;

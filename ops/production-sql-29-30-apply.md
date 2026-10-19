@@ -22,6 +22,12 @@ staging acceptance), so every apply refuses before connecting.
 
 ## Order
 
+0. **SQL 103 immediately before SQL 29** (`aws/workflows/sql/103_share_library_trigger_acl.sql`,
+   `ops/production-sql-103-apply.md`). Production (inspect 2026-10-19) holds `checksops`
+   EXECUTE on `share_library_docs_to_mortgage_request()`, which SQL 29 does not revoke, so
+   SQL 29's guard refuses with `function_acl_replaceable` until SQL 103 leaves the owner as the
+   only grantee. SQL 29's file and intended fingerprint are unchanged. Production run order:
+   SQL 103 → SQL 29 → SQL 30 → SQL 90 → … → SQL 102.
 1. **SQL 29 before SQL 90** (`aws/workflows/sql/90_users_only_tenant_roles.sql`). SQL 29's
    `aws_can_manage_mortgage_library` still has the tenant owner/admin tier; SQL 90 replaces it
    with the membership rule (owner policy: every member is an equal user). Re-applying SQL 29
