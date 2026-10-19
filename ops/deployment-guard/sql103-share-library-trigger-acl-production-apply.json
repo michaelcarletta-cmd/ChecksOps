@@ -1,8 +1,8 @@
 {
   "id": "sql103-share-library-trigger-acl-production-apply",
   "migration": "sql103",
-  "authorization": "pending",
-  "execute": false,
+  "authorization": "Owner approved 2026-10-19 (the owner approved preparing this SQL 103 production pin change; the change itself is reviewed and merge-approved by the owner separately): production apply of SQL 103 after the staging acceptance below (production bade6813d689c91e3c8e39e33203e64eca23cc363f557062a7669407a01d5b9c -> 4b909c5929f0357ef442a1b2ebcb6bf8312e93be257010ed8a32072accf02aae), immediately before SQL 29; execute true takes effect only when the owner reviews and merges this change. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
+  "execute": true,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -13,7 +13,7 @@
   "function_identities": [
     "public.share_library_docs_to_mortgage_request()"
   ],
-  "expected_live_definition_sha256": null,
+  "expected_live_definition_sha256": "bade6813d689c91e3c8e39e33203e64eca23cc363f557062a7669407a01d5b9c",
   "intended_replacement_sha256": "4b909c5929f0357ef442a1b2ebcb6bf8312e93be257010ed8a32072accf02aae",
   "authorization_phrase": "APPLY_SHARE_LIBRARY_TRIGGER_ACL",
   "predecessors": [],
@@ -38,27 +38,33 @@
       "aws/tests/release-sql90-97-production-apply.test.mjs",
       "aws/tests/sql103-share-library-trigger-acl-pg.test.mjs"
     ],
-    "note": "Guarded tooling for SQL 103: sql103-share-library-trigger-acl-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql103-share-library-trigger-acl); production-sql-one-shot.mjs --migration sql103 (runs_before sql29). intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): the function's EXECUTE ACL with grantors (spec acl_functions, render.grantors), owner only. The post-conditions also require the function's body, attributes and owner unchanged. The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
+    "note": "Guarded tooling for SQL 103: sql103-share-library-trigger-acl-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql103-share-library-trigger-acl); production-sql-one-shot.mjs --migration sql103 (runs_before sql29). intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): the function's EXECUTE ACL with grantors (spec acl_functions, render.grantors), owner only. The post-conditions also require the function's body, attributes and owner unchanged. The tooling does not authorize anything: the reviewed change of 2026-10-19 (\"SQL 103 production pin: pre-state recorded and execute-authorized after staging acceptance\") recorded the production inspect, the staging acceptance and the owner approval and set execute true; the record-and-retire change after the apply sets it false again."
   },
   "production_inspect": {
-    "status": "pending",
-    "date": null,
-    "ssm_command_id": null,
-    "source_commit": null,
+    "status": "recorded",
+    "date": "2026-10-19",
+    "ssm_command_id": "1b740312-6e58-4412-9464-feac28e6bdf1",
+    "source_commit": "03e238afb0fab0be09b6c09f1bd3c812375c3717",
+    "source_tarball_sha256": "1493cf711bb233c6fefc273d93aff0bf28b3c1b34ecf4e4247d161410f1ea4ff",
+    "runner": "i-0c35557c4e5385406",
     "read_only": true,
     "connected_as": "checksops_admin",
-    "live_definition_sha256": null,
-    "apply_preconditions_met": null,
-    "precondition_failures": null,
-    "note": "Pending: no read-only production inspect has been run for SQL 103 yet. Expected from the SQL 29 inspect of 2026-10-19 (main bf6b7555e): the function present, owned by checksops_admin, ACL PUBLIC, checksops and owner EXECUTE; the next inspect's release_sql_inspect.acl_functions shows each entry's grantor, and precondition_failures is [] only if every entry is owner-granted. Record its date, SSM command id, source commit, live_definition_sha256, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. If precondition_failures is not [] (acl_functions_acl_replaceable: an entry granted by another role or with grant option) stop: that needs its own reviewed change."
+    "live_definition_sha256": "bade6813d689c91e3c8e39e33203e64eca23cc363f557062a7669407a01d5b9c",
+    "already_applied": false,
+    "prerequisites_missing": [],
+    "successors_applied": [],
+    "apply_preconditions_met": false,
+    "precondition_failures": [],
+    "note": "Recorded from the read-only production inspect of 2026-10-19 (SSM command 1b740312-6e58-4412-9464-feac28e6bdf1, node scripts/deployment-guard/sql103-share-library-trigger-acl-production-apply.mjs --inspect on the SQL53 runner i-0c35557c4e5385406 from main 03e238afb (tarball sha256 1493cf71...), BEGIN READ ONLY ... ROLLBACK, connected as checksops_admin). live_definition_sha256 bade6813d689c91e3c8e39e33203e64eca23cc363f557062a7669407a01d5b9c (not the intended 4b909c5929f0357ef442a1b2ebcb6bf8312e93be257010ed8a32072accf02aae: already_applied false); precondition_failures [] (every live EXECUTE entry is one the owner can revoke), prerequisites_missing [], successors_applied []. apply_preconditions_met was false at inspect time only because no pre-state was recorded yet (expected_live_definition_sha256 null). The same inspect run showed SQL 29 still refused only by function_acl_replaceable (live 848277b1..., intended 1271ea9b...), which SQL 103 resolves. This reviewed change copies live_definition_sha256 into expected_live_definition_sha256 and, in the same change, sets authorization, execute true and staging_acceptance. A fresh --inspect immediately before apply (the one-shot's inspect step) must still report this live_definition_sha256 and precondition_failures []; if not, stop."
   },
   "intended_post_state": {
     "fingerprint": "4b909c5929f0357ef442a1b2ebcb6bf8312e93be257010ed8a32072accf02aae",
     "note": "public.share_library_docs_to_mortgage_request(): EXECUTE for its owner only (owner EXECUTE grantor=owner); PUBLIC, checksops and authenticated hold nothing on it. Its body, language, SECURITY DEFINER, search_path, result type and owner (checksops_admin) are unchanged, and so is its trigger on mortgage_handling_requests. No other function, policy, grant, table, column or row change. That ACL is the one SQL 29's intended state has (owner EXECUTE), so SQL 29 then passes function_acl_replaceable and reaches 1271ea9b61ec983f88e911b23c569403979fb5f560880021b58d3b1e57243c79. The fingerprint is releaseIntendedHash('sql103', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): 4b909c5929f0357ef442a1b2ebcb6bf8312e93be257010ed8a32072accf02aae."
   },
   "staging_acceptance": {
-    "ok": false,
-    "reference": null,
-    "basis": "Pending: record the guarded staging SQL executor read-live run of SQL 103 (choice sql103-share-library-trigger-acl) here in the reviewed change that sets execute true. Staging already has SQL 29 (read-live already_applied true, staging wave 1), so the read-live is expected to report already_applied true (the owner the only grantee) and no staging apply is needed; the revoke path itself is covered on PostgreSQL 16 by aws/tests/sql103-share-library-trigger-acl-pg.test.mjs (production-like ACL, SQL 103, then SQL 29 through its production tool). Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+    "ok": true,
+    "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39188618156",
+    "basis": "Guarded staging SQL executor read-live of sql103-share-library-trigger-acl, run 39188618156, on the executor deployed from main 03e238afb (deploy run 39188486411, executor package CodeSha256 jJioB/XfKHPR0FgWuzGcah3QpYTa64h4Frue6QsQYQ8=): live_definition_sha256 4b909c5929f0357ef442a1b2ebcb6bf8312e93be257010ed8a32072accf02aae == intended, already_applied true, precondition_failures []. Staging's share_library_docs_to_mortgage_request() EXECUTE ACL is already owner-only (also shown by the staging SQL 29 read-live run 39188780526), so no staging apply was needed or run (ops/production-sql-103-apply.md step 1: the read-live run is the staging acceptance); the staging pin stays pending (execute false). The revoke path itself is covered on PostgreSQL 16 by aws/tests/sql103-share-library-trigger-acl-pg.test.mjs (production-like ACL, SQL 103, then SQL 29 through its production tool).",
+    "production_differs": "The pre-states differ: staging is already the intended state (4b909c5929f0357ef442a1b2ebcb6bf8312e93be257010ed8a32072accf02aae, owner-only EXECUTE) and production (production_inspect, 2026-10-19) is bade6813d689c91e3c8e39e33203e64eca23cc363f557062a7669407a01d5b9c (EXECUTE also for PUBLIC and checksops, per SQL 29's inspect). Each environment's state is recorded separately. The post-state fingerprint is the same in both (owner names are not part of it); the same file bytes (source_sha256) are pinned in both."
   }
 }
