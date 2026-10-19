@@ -110,6 +110,7 @@ export const MIGRATIONS = Object.freeze({
   'sql101-invite-identity-insert-order': RELEASE_2026_10_17_PENDING_SQL_PINS.sql101,
   'sql102-platform-owner-tenant-profile': RELEASE_2026_10_17_PENDING_SQL_PINS.sql102,
   'sql103-share-library-trigger-acl': RELEASE_2026_10_17_PENDING_SQL_PINS.sql103,
+  'sql104-payment-idempotency-keys-grant': RELEASE_2026_10_17_PENDING_SQL_PINS.sql104,
 });
 
 const LAMBDA_CODE_SHA_RE = /^[A-Za-z0-9+/]{43}=$/;

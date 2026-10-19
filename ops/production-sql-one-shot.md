@@ -28,6 +28,7 @@ that connects to the database:
 | `sql101` | `scripts/deployment-guard/sql101-invite-identity-insert-order-production-apply.mjs` (same runbook; after SQL 90, before `tenant-admin.mjs`) |
 | `sql102` | `scripts/deployment-guard/sql102-platform-owner-tenant-profile-production-apply.mjs` (same runbook; after SQL 98, before `tenant-billing-handlers.mjs`) |
 | `sql103` | `scripts/deployment-guard/sql103-share-library-trigger-acl-production-apply.mjs` (`ops/production-sql-103-apply.md`; immediately before SQL 29, `runs_before: ['sql29']`: SQL 29's guard refuses the trigger function's live `checksops` EXECUTE until SQL 103 ran; no predecessor, already in place after SQL 29) |
+| `sql104` | `scripts/deployment-guard/sql104-payment-idempotency-keys-grant-production-apply.mjs` (`ops/production-sql-104-apply.md`; any time after SQL 91: the `payment_idempotency_keys` table grant SQL 91 omitted, #1062) |
 
 To add a migration, register its reviewed tool in `ONE_SHOT_TOOLS`
 (`scripts/deployment-guard/lib/production-sql-one-shot.mjs`). An entry names only the tool,
@@ -42,7 +43,7 @@ a migration file touches its pin, not the registry. An entry may add `inspect_re
 
 | flag | |
 |---|---|
-| `--migration <key>` | a registered key (`sql29`, `sql30`, `sql71`, `sql77`…`sql89`, `sql90`…`sql103`) |
+| `--migration <key>` | a registered key (`sql29`, `sql30`, `sql71`, `sql77`…`sql89`, `sql90`…`sql104`) |
 | `--approval-scope <key>` | the migration the owner approved; must equal `--migration` |
 | `--approval-statement "<words>"` or `--approval-statement-b64 <base64>` | the owner's exact words, recorded verbatim. Pass exactly one of the two. Use the base64 form when the words contain quotes or newlines. Must be non-empty. |
 | `--commit <sha>` | the full main commit the tarball was built from |

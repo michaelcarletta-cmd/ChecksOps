@@ -1,5 +1,5 @@
 /**
- * Specs of the release 2026-10-17 SQL (SQL 90 to SQL 103) for the shared engine in
+ * Specs of the release 2026-10-17 SQL (SQL 90 to SQL 104) for the shared engine in
  * release-sql-state.mjs: what each pinned file creates, replaces or drops, the reviewed
  * EXECUTE ACLs, the prerequisites and predecessors, and the PostgreSQL renderings the file
  * leaves (policy expressions, view, column, constraint, index and trigger definitions as
@@ -56,7 +56,7 @@
  *   runs_before        informational production order (SQL 103 before SQL 29, which is not on
  *                      this engine): the production one-shot and the runbook
  *
- * SQL 104 and later: add a spec here, its staging pin in sql-executor-auth.mjs
+ * SQL 105 and later: add a spec here, its staging pin in sql-executor-auth.mjs
  * (RELEASE_2026_10_17_PENDING_SQL_PINS or a successor map) and its production pin; the
  * engine, the executor handler and the production tool are generic.
  */
@@ -3311,6 +3311,51 @@ export const RELEASE_SQL_SPECS = deepFreeze({
     },
     "runs_before": [
       "sql29"
+    ]
+  },
+  // SQL 104: the table grant SQL 91 omitted (#1062). Its fingerprint is the SELECT / INSERT /
+  // UPDATE lines of checksops and authenticated only; every other grant on the table must stay
+  // as it was (other_table_privileges_unchanged). GRANT of a held privilege is a no-op, so a
+  // table that already holds them (staging, granted by hand) reads as already applied.
+  sql104: {
+    "key": "sql104",
+    "label": "SQL 104",
+    "choice": "sql104-payment-idempotency-keys-grant",
+    "production_pin_rel": "ops/deployment-guard/sql104-payment-idempotency-keys-grant-production-apply.json",
+    "script": "sql104-payment-idempotency-keys-grant-production-apply",
+    "prerequisites": [
+      "public.payment_idempotency_keys",
+      "role checksops",
+      "role authenticated"
+    ],
+    "predecessors": [
+      "sql91"
+    ],
+    "functions": [],
+    "table_privileges": [
+      {
+        "table": "public.payment_idempotency_keys",
+        "grantees": [
+          "authenticated",
+          "checksops"
+        ],
+        "privileges": [
+          "SELECT",
+          "INSERT",
+          "UPDATE"
+        ],
+        "intended": [
+          "authenticated INSERT",
+          "authenticated SELECT",
+          "authenticated UPDATE",
+          "checksops INSERT",
+          "checksops SELECT",
+          "checksops UPDATE"
+        ]
+      }
+    ],
+    "altered_relations": [
+      "public.payment_idempotency_keys"
     ]
   },
 });
