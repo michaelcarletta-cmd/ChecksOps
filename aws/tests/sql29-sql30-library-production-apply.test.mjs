@@ -4,12 +4,15 @@
  * scripts/deployment-guard/sql30-tenant-documents-doc-type-production-apply.mjs; lib
  * sql29-sql30-library-production-apply.mjs), mirroring the SQL 88/89 tool tests:
  *
- *   - SQL 29's committed pin is execute-authorized (owner approved 2026-10-19: the production
- *     pre-state of the read-only inspect of 2026-10-19 and the owner-accepted substitute
- *     staging evidence) and allows only the manifest bound to it; SQL 30's is pending
- *     (authorization "pending", execute false, no pre-state, no staging acceptance); the
- *     locked-state refusals run on SQL 30's pin and an explicit pending copy of SQL 29's;
- *     both are bound to the staging pins and the production RDS;
+ *   - SQL 29's committed pin records the production pre-state of the read-only inspect of
+ *     2026-10-19, the owner-accepted substitute staging evidence and the production apply of
+ *     2026-10-19 in applied; it is retired (execute false, authorization "Applied to
+ *     production …") and refuses before connecting, also with execute flipped and with the
+ *     spent one_use_id; the execute-authorized state it had before the apply (unlocked29()
+ *     copy) allows only the manifest bound to it; SQL 30's is pending (authorization
+ *     "pending", execute false, no pre-state, no staging acceptance); the locked-state
+ *     refusals run on SQL 30's pin and an explicit pending copy of SQL 29's; both are bound
+ *     to the staging pins and the production RDS;
  *   - evaluate / precheck / apply refuse before connecting (no pre-state, no approval, the
  *     staging acceptance, execute false, the phrase, the single-use id, replay, binding);
  *   - the CLI refuses credential flags and arbitrary SQL, and never spends a receipt or
@@ -56,6 +59,23 @@ const COMMITTED = Object.freeze({ sql29: loadLibraryProductionPin('sql29', ROOT)
 const SQL29_PRODUCTION_PRE = 'd8247ab9a31a7c1c57a464a768a650397059e67519f9e1522f881293e28e0079';
 // SQL 29's owner-accepted substitute staging evidence: the guarded staging read-live (SQL 90 on top in staging).
 const SQL29_STAGING_ACCEPTANCE_REF = 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39188780526';
+// SQL 29's production apply of 2026-10-19 recorded in applied (its one_use_id is spent).
+const SQL29_APPLIED = Object.freeze({
+  apply_ssm_command_id: '64604f67-e7f0-4152-a9a8-208543d41937',
+  one_shot_run_id: '6f2461fa-dfa2-4e63-abad-00409f1facd3',
+  later_inspect_ssm_command_id: 'f8fc5eca-5c56-46eb-a7fa-f1e893dd3d9b',
+  one_use_id: 'sql29-prod-238d917c-fdc1-4f3b-8909-a89cf8d74e8f',
+  workstream_id: 'prod-sql29-mortgage-ops-library-parity-20261019',
+  source_commit: 'c765e926bac217cdbd7bf84535fc1def6498c686',
+  tarball_sha256: '69070d7b795b46b307e93a3842edbffa38a86668baf4eda5e1915f378af6d76b',
+  manifest_sha256: 'fa284e7bb5131b5a5a6d424e640e7888178b3dd91f7e397a7cf8170e9dab51f5',
+  unrelated_catalog_sha256: 'dcfbdb2aec3fa8372e52a7ca680e87cb6a460d170f9955e2cc451e8ee2fbc2d1',
+});
+// SQL 30's live hash at the later read-only inspect (a runbook note only; its pin is unchanged).
+const SQL30_PRODUCTION_LIVE = '37f22340383b1a5e1b1350fc602b2953c2bb72d32234456888616fd749cbf504';
+/** SQL 29's execute-authorized state before the apply (PR #1049), as an explicit copy of the retired pin. */
+const SQL29_UNLOCKED_AUTHORIZATION = 'Owner approved 2026-10-19 (test copy of the execute-authorized pin before its record-and-retire change)';
+const unlocked29 = (extra = {}) => Object.freeze({ ...COMMITTED.sql29, authorization: SQL29_UNLOCKED_AUTHORIZATION, execute: true, ...extra });
 /** The pre-authorization state of a committed pin (explicit copy; SQL 30's committed pin is still that state). */
 const pendingCopy = (pin) => Object.freeze({
   ...pin,
@@ -140,7 +160,7 @@ async function runCli(key, argv, { env = { CHECKSOPS_DEPLOYMENT_GUARD_APPLY: '1'
   return { out: writes.join(''), spent };
 }
 
-test('committed pins: SQL 29 execute-authorized, SQL 30 pending; both bound to the staging pins and the production RDS', () => {
+test('committed pins: SQL 29 applied and retired, SQL 30 pending; both bound to the staging pins and the production RDS', () => {
   for (const key of KEYS) {
     const pin = COMMITTED[key];
     const staging = LIBRARY_SQL_PINS[key];
@@ -153,13 +173,64 @@ test('committed pins: SQL 29 execute-authorized, SQL 30 pending; both bound to t
       assert.equal(pin.staging_acceptance.reference, null);
       assert.equal(pin.production_inspect.status, 'pending');
     } else {
-      // Execute-authorized by the owner-approved, reviewed pin change of 2026-10-19.
-      assert.equal(pin.execute, true);
-      assert.match(pin.authorization, /^Owner approved 2026-10-19 /);
+      // Retired after the 2026-10-19 apply: execute false, the authorization no longer an owner approval.
+      assert.equal(pin.execute, false);
+      assert.match(pin.authorization, /^Applied to production on 2026-10-19; execute is false again/);
+      assert.doesNotMatch(pin.authorization, /^Owner approved/);
       assert.ok(pin.authorization.includes('"accept that evidence for SQL 29"'));
-      assert.ok(pin.authorization.includes(`${SQL29_PRODUCTION_PRE} -> ${pin.intended_replacement_sha256}`));
-      assert.match(pin.authorization, /each apply still needs the owner's run-time approval/);
+      assert.ok(pin.authorization.includes(`workstream ${SQL29_APPLIED.workstream_id}`));
+      assert.ok(pin.authorization.includes('"apply SQL 29 in production"'));
+      assert.match(pin.authorization, /That approval covered that run only$/);
       assert.equal(pin.expected_live_definition_sha256, SQL29_PRODUCTION_PRE);
+      // The production apply of 2026-10-19 (guarded production SQL one-shot).
+      const applied = pin.applied;
+      assert.equal(applied.date, '2026-10-19');
+      assert.equal(applied.result, 'applied');
+      assert.equal(applied.runner, 'i-0c35557c4e5385406');
+      assert.equal(applied.apply_ssm_command_id, SQL29_APPLIED.apply_ssm_command_id);
+      assert.equal(applied.one_shot_run_id, SQL29_APPLIED.one_shot_run_id);
+      assert.equal(applied.source_commit, SQL29_APPLIED.source_commit);
+      assert.deepEqual(applied.source_tarball, { file: `source-${SQL29_APPLIED.source_commit}.tar.gz`, sha256: SQL29_APPLIED.tarball_sha256 });
+      assert.equal(applied.migration_source_sha256, pin.source_sha256);
+      assert.equal(applied.workstream_id, SQL29_APPLIED.workstream_id);
+      assert.equal(applied.operator, 'michaelcarletta-cmd');
+      assert.equal(applied.owner_approval, 'apply SQL 29 in production');
+      assert.equal(applied.one_use_id, SQL29_APPLIED.one_use_id);
+      assert.equal(applied.one_use_id_consumed, true);
+      assert.equal(applied.manifest_sha256, SQL29_APPLIED.manifest_sha256);
+      assert.deepEqual(applied.steps, ['pin', 'source', 'inspect', 'contracts', 'manifest', 'source-recheck-before-preflight', 'preflight', 'evaluate', 'source-recheck-before-apply', 'apply', 'post-apply-inspect']);
+      assert.deepEqual(Object.fromEntries(Object.entries(applied.contract_results).map(([id, r]) => [id, [r.ok, r.passed]])), {
+        'claim-ledger': [true, '4/4'],
+        'tenant-isolation': [true, '6/6'],
+        'financial-write-protections': [true, '43/43'],
+      });
+      assert.equal(applied.pre_apply_inspect.read_only, true);
+      assert.equal(applied.pre_apply_inspect.live_definition_sha256, SQL29_PRODUCTION_PRE);
+      assert.equal(applied.pre_apply_inspect.live_matches_expected, true);
+      assert.deepEqual(applied.pre_apply_inspect.precondition_failures, []);
+      assert.equal(applied.pre_apply_inspect.sql90_applied, false);
+      assert.equal(applied.receipt.result, 'applied');
+      assert.equal(applied.receipt.migration, 'sql29');
+      assert.equal(applied.receipt.workstream, SQL29_APPLIED.workstream_id);
+      assert.equal(applied.receipt.commit, SQL29_APPLIED.source_commit);
+      assert.equal(applied.receipt.sql_file, pin.filename);
+      assert.equal(applied.receipt.before_hash, SQL29_PRODUCTION_PRE);
+      assert.equal(applied.receipt.after_hash, pin.intended_replacement_sha256);
+      assert.equal(applied.receipt.unrelated_catalog_sha256, SQL29_APPLIED.unrelated_catalog_sha256);
+      assert.deepEqual(applied.receipt.unrelated_catalog_counts, { relations: 861, columns: 3409, constraints: 2125, policies: 366, functions: 1277, triggers: 173, schema: 2 });
+      assert.equal(applied.receipt.staging_acceptance, SQL29_STAGING_ACCEPTANCE_REF);
+      assert.equal(applied.post_apply_inspect.read_only, true);
+      assert.equal(applied.post_apply_inspect.already_applied, true);
+      assert.equal(applied.post_apply_inspect.live_definition_sha256, pin.intended_replacement_sha256);
+      assert.deepEqual(applied.post_apply_inspect.precondition_failures, []);
+      assert.equal(applied.post_apply_inspect.sql90_applied, false);
+      assert.equal(applied.later_inspect.ssm_command_id, SQL29_APPLIED.later_inspect_ssm_command_id);
+      assert.equal(applied.later_inspect.read_only, true);
+      assert.equal(applied.later_inspect.source_commit, SQL29_APPLIED.source_commit);
+      assert.equal(applied.later_inspect.source_tarball_sha256, SQL29_APPLIED.tarball_sha256);
+      assert.equal(applied.later_inspect.live_definition_sha256, pin.intended_replacement_sha256);
+      assert.equal(applied.later_inspect.already_applied, true);
+      assert.match(pin.production_evidence['2026-10-19 apply'], /execute is false/);
       assert.notEqual(pin.expected_live_definition_sha256, pin.intended_replacement_sha256);
       assert.equal(pin.authorization_phrase, 'APPLY_MORTGAGE_OPS_LIBRARY_PARITY');
       const inspect = pin.production_inspect;
@@ -196,8 +267,11 @@ test('committed pins: SQL 29 execute-authorized, SQL 30 pending; both bound to t
       assert.ok(pin.staging_acceptance.basis.includes('aws/tests/sql103-share-library-trigger-acl-pg.test.mjs'));
       assert.ok(pin.staging_acceptance.basis.includes(pin.intended_replacement_sha256));
       assert.ok(pin.staging_acceptance.production_differs.includes(SQL29_PRODUCTION_PRE));
-      // SQL 30's pin is untouched: still pending.
+      // SQL 30's pin is untouched: still pending (its later inspect is a runbook note only).
       assert.equal(COMMITTED.sql30.execute, false);
+      assert.equal(COMMITTED.sql30.authorization, 'pending');
+      assert.equal(COMMITTED.sql30.expected_live_definition_sha256, null);
+      assert.equal(COMMITTED.sql30.applied, undefined);
     }
     assert.equal(pin.filename, staging.filename);
     assert.equal(pin.migration_id, staging.migration_id);
@@ -269,22 +343,65 @@ test('evaluate, precheck and apply refuse before connecting', async () => {
   }
 });
 
-test('the committed SQL 29 pin allows only the manifest bound to it; the cheap prechecks pass without connecting', async () => {
+test('the committed (retired) SQL 29 pin refuses before connecting, also with the spent one_use_id; flipping execute alone does not revive it; SQL 30 is still pending', async () => {
   const pin = COMMITTED.sql29;
-  const allowed = await evaluateLibraryProductionApply('sql29', manifest('sql29', pin), { root: ROOT });
+  for (const opts of [{ root: ROOT }, { root: ROOT, pin }]) {
+    const refused = await evaluateLibraryProductionApply('sql29', manifest('sql29', pin), opts);
+    assert.equal(refused.code, CODES.PRODUCTION_APPROVAL_REQUIRED);
+    assert.match(refused.message, /authorization is not an owner approval/);
+    assert.equal((await executeLibraryProductionApply('sql29', manifest('sql29', pin), { ...opts, connect: neverConnect, consumedPath: consumedPath() })).code, CODES.PRODUCTION_APPROVAL_REQUIRED);
+  }
+  // execute true on the retired pin is still refused: its authorization records the spent run.
+  const flipped = { ...pin, execute: true };
+  assert.equal((await evaluateLibraryProductionApply('sql29', manifest('sql29', pin), { root: ROOT, pin: flipped })).code, CODES.PRODUCTION_APPROVAL_REQUIRED);
+  assert.equal((await precheckLibraryProductionApply('sql29', manifest('sql29', pin), { root: ROOT, pin: flipped, connect: neverConnect, consumedPath: consumedPath() })).code, CODES.PRODUCTION_APPROVAL_REQUIRED);
+  assert.equal((await executeLibraryProductionApply('sql29', manifest('sql29', pin), { root: ROOT, pin: flipped, connect: neverConnect, consumedPath: consumedPath() })).code, CODES.PRODUCTION_APPROVAL_REQUIRED);
+  // An owner approval with execute false (the retired pin's execute) refuses the apply.
+  assert.equal((await executeLibraryProductionApply('sql29', manifest('sql29', pin), { root: ROOT, pin: unlocked29({ execute: false }), connect: neverConnect, consumedPath: consumedPath() })).code, CODES.GUARD_APPLY_FORBIDDEN);
+  // The spent one_use_id is refused as a replay, even on an execute-authorized copy.
+  const spentFile = consumedPath();
+  fs.writeFileSync(spentFile, JSON.stringify({ consumed: [SQL29_APPLIED.one_use_id] }));
+  try {
+    const spent = manifest('sql29', pin, { one_use_id: SQL29_APPLIED.one_use_id });
+    assert.equal((await precheckLibraryProductionApply('sql29', spent, { root: ROOT, pin: unlocked29(), connect: neverConnect, consumedPath: spentFile })).code, CODES.RECEIPT_REUSED);
+    assert.equal((await executeLibraryProductionApply('sql29', spent, { root: ROOT, pin: unlocked29(), connect: neverConnect, consumedPath: spentFile })).code, CODES.RECEIPT_REUSED);
+    assert.equal((await executeLibraryProductionApply('sql29', spent, { root: ROOT, connect: neverConnect, consumedPath: spentFile })).code, CODES.PRODUCTION_APPROVAL_REQUIRED);
+  } finally {
+    fs.rmSync(spentFile, { force: true });
+  }
+  // CLI: --apply with the committed (retired) pin, read from disk, refuses without connecting or
+  // calling the guard (no receipt spent).
+  const cli = await runCli('sql29', ['--apply'], { input: manifest('sql29', pin), deps: { enforceScriptGuard: () => { throw new Error('guard-called'); } } });
+  assert.equal(cli.spent, 0);
+  assert.match(cli.out, /PRODUCTION_APPROVAL_REQUIRED/);
+  assert.doesNotMatch(cli.out, /guard-called|should-not-connect/);
+  // SQL 30 is still pending: its committed pin refuses (no recorded pre-state) and is unchanged.
+  const sql30 = COMMITTED.sql30;
+  assert.equal(sql30.execute, false);
+  assert.equal(sql30.authorization, 'pending');
+  assert.equal(sql30.production_inspect.status, 'pending');
+  assert.notEqual(sql30.intended_replacement_sha256, SQL30_PRODUCTION_LIVE);
+  const refused30 = await evaluateLibraryProductionApply('sql30', manifest('sql30', { ...sql30, expected_live_definition_sha256: SQL30_PRODUCTION_LIVE }), { root: ROOT });
+  assert.equal(refused30.code, CODES.SQL_COLLISION);
+  assert.match(refused30.message, /no recorded pre-apply live definition hash/);
+});
+
+test('SQL 29\'s execute-authorized copy (before the record-and-retire change) allows only the manifest bound to it; the cheap prechecks pass without connecting', async () => {
+  const pin = unlocked29();
+  const allowed = await evaluateLibraryProductionApply('sql29', manifest('sql29', pin), { root: ROOT, pin });
   assert.equal(allowed.ok, true, JSON.stringify(allowed));
   assert.equal(allowed.details.sql29_production_apply_allowed, true);
   assert.equal(allowed.details.expected_live_definition_sha256, SQL29_PRODUCTION_PRE);
   assert.equal(allowed.details.staging_acceptance, SQL29_STAGING_ACCEPTANCE_REF);
-  const prechecked = await precheckLibraryProductionApply('sql29', manifest('sql29', pin), { root: ROOT, consumedPath: consumedPath() });
+  const prechecked = await precheckLibraryProductionApply('sql29', manifest('sql29', pin), { root: ROOT, pin, consumedPath: consumedPath() });
   assert.equal(prechecked.ok, true, JSON.stringify(prechecked));
-  const wrongLive = await evaluateLibraryProductionApply('sql29', manifest('sql29', pin, { live_definition_sha256: 'f'.repeat(64) }), { root: ROOT });
+  const wrongLive = await evaluateLibraryProductionApply('sql29', manifest('sql29', pin, { live_definition_sha256: 'f'.repeat(64) }), { root: ROOT, pin });
   assert.equal(wrongLive.code, CODES.SQL_COLLISION);
-  const wrongStaging = await evaluateLibraryProductionApply('sql29', manifest('sql29', pin, { staging_acceptance: { ok: true, reference: 'https://example.invalid/x' } }), { root: ROOT });
+  const wrongStaging = await evaluateLibraryProductionApply('sql29', manifest('sql29', pin, { staging_acceptance: { ok: true, reference: 'https://example.invalid/x' } }), { root: ROOT, pin });
   assert.equal(wrongStaging.code, CODES.PRODUCTION_APPROVAL_REQUIRED);
   const executeFalse = await executeLibraryProductionApply('sql29', manifest('sql29', pin), { root: ROOT, pin: { ...pin, execute: false }, consumedPath: consumedPath(), connect: neverConnect });
   assert.equal(executeFalse.code, CODES.GUARD_APPLY_FORBIDDEN);
-  const wrongPhrase = await executeLibraryProductionApply('sql29', manifest('sql29', pin, { authorization_phrase: 'APPLY' }), { root: ROOT, consumedPath: consumedPath(), connect: neverConnect });
+  const wrongPhrase = await executeLibraryProductionApply('sql29', manifest('sql29', pin, { authorization_phrase: 'APPLY' }), { root: ROOT, pin, consumedPath: consumedPath(), connect: neverConnect });
   assert.equal(wrongPhrase.code, CODES.PRODUCTION_APPROVAL_REQUIRED);
 });
 
