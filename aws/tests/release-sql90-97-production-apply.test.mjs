@@ -47,7 +47,8 @@ const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const CLIS = Object.freeze(Object.fromEntries(RELEASE_SQL_KEYS.map((key) => [key, path.join(ROOT, RELEASE_PRODUCTION[key].cli)])));
 const MAINS = Object.freeze(Object.fromEntries(await Promise.all(RELEASE_SQL_KEYS.map(async (key) => [key, (await import(CLIS[key])).main]))));
 const COMMITTED = Object.freeze(Object.fromEntries(RELEASE_SQL_KEYS.map((key) => [key, loadReleaseProductionPin(key, ROOT)])));
-// No release pin is execute-authorized now. SQL 90's, SQL 91's, SQL 92's, SQL 93's, SQL 94's, SQL 96's,
+// SQL 102's production pin is execute-authorized (owner approved 2026-10-19, on its guarded staging
+// apply from the same pre-state) until its record-and-retire change. SQL 90's, SQL 91's, SQL 92's, SQL 93's, SQL 94's, SQL 96's,
 // SQL 101's, SQL 103's and SQL 104's production pins were (owner approved 2026-10-19) until their record-and-retire changes
 // after their 2026-10-19 applies: they record the apply in applied and are execute false again
 // (SQL 101's, SQL 103's and SQL 104's own checks are in release-sql101-production-apply.test.mjs,
@@ -56,7 +57,11 @@ const COMMITTED = Object.freeze(Object.fromEntries(RELEASE_SQL_KEYS.map((key) =>
 // SQL 98's production pin was execute-authorized (owner approved 2026-10-19, owner-accepted
 // substitute staging evidence) until its record-and-retire change after its 2026-10-19 apply; its
 // own checks are in release-sql98-100-production-apply.test.mjs.
-const EXECUTE_AUTHORIZED = Object.freeze([]);
+const EXECUTE_AUTHORIZED = Object.freeze(['sql102']);
+// SQL 102's recorded production pre-state (read-only inspect of 2026-10-19 after SQL 98,
+// SSM 3ff30ee9, main 96fb17821): the same pre-state staging recorded before its apply.
+const SQL102_PRODUCTION_PRE = 'd3b2cd30d9b06347c4a08febac3fce49732bd0babcacfeea0a2b49dbdc9cb752';
+const SQL102_STAGING_REFERENCE = 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39162625974';
 // SQL 94's recorded production pre-state (read-only inspect of 2026-10-19 after SQL 29 / SQL 90 / SQL 103,
 // SSM 70abaca3, main fecb0b3af): the same pre-state staging recorded before its apply.
 const SQL94_PRODUCTION_PRE = '724115983687d882d8240e8d06e4670bc6e24dbb16540d3134cc1ccc47d66af1';
@@ -189,7 +194,7 @@ async function runCli(key, argv, { env = { CHECKSOPS_DEPLOYMENT_GUARD_APPLY: '1'
   return { out: writes.join(''), spent };
 }
 
-test('committed pins are pending (SQL 90, SQL 91, SQL 92, SQL 93, SQL 94, SQL 96, SQL 101, SQL 103 and SQL 104 applied and retired), bound to the staging pins, predecessors and the production RDS, and name the built tooling', () => {
+test('committed pins are pending (SQL 102 execute-authorized; SQL 90, SQL 91, SQL 92, SQL 93, SQL 94, SQL 96, SQL 101, SQL 103 and SQL 104 applied and retired), bound to the staging pins, predecessors and the production RDS, and name the built tooling', () => {
   const inventory = JSON.stringify(JSON.parse(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/bypass-inventory.json'), 'utf8')));
   assert.deepEqual(RELEASE_SQL_KEYS.filter((key) => COMMITTED[key].execute !== false), [...EXECUTE_AUTHORIZED]);
   assert.deepEqual(RELEASE_SQL_KEYS.filter((key) => COMMITTED[key].applied !== undefined), [...APPLIED_RETIRED]);
@@ -350,6 +355,21 @@ test('committed pins are pending (SQL 90, SQL 91, SQL 92, SQL 93, SQL 94, SQL 96
       assert.match(pin.authorization, /each apply still needs the owner's run-time approval/, key);
       assert.deepEqual(Object.keys(pin.staging_acceptance).sort(), ['basis', 'ok', 'reference'], key);
       assert.deepEqual(pin.production_inspect.precondition_failures, [], key);
+      if (key === 'sql102') {
+        // SQL 102: owner approved 2026-10-19; its guarded staging apply from the same pre-state.
+        assert.ok(pin.authorization.includes('"approve the SQL 102 pin"'), key);
+        assert.ok(pin.authorization.includes(`${SQL102_PRODUCTION_PRE} -> ${pin.intended_replacement_sha256}`), key);
+        assert.equal(pin.expected_live_definition_sha256, SQL102_PRODUCTION_PRE, key);
+        assert.notEqual(pin.expected_live_definition_sha256, pin.intended_replacement_sha256, key);
+        assert.equal(pin.staging_acceptance.reference, SQL102_STAGING_REFERENCE, key);
+        assert.ok(pin.staging_acceptance.basis.includes(`receipt before ${SQL102_PRODUCTION_PRE}, after ${pin.intended_replacement_sha256}`), key);
+        assert.match(pin.staging_acceptance.basis, /read-live \(run 39161620576\)/, key);
+        assert.match(pin.staging_acceptance.basis, /Same pre-state/, key);
+        assert.equal(pin.production_inspect.ssm_command_id, '3ff30ee9-031d-4122-9ee1-370a2645cbca', key);
+        assert.equal(pin.production_inspect.source_commit, '96fb178215beff8d30c0adfebae27d62ad04de79', key);
+        assert.equal(pin.production_inspect.read_only, true, key);
+        assert.ok(pin.production_inspect.note.includes('10092ef21749d0a9f298450129a2fd7359e63912853bf48edfd2c2f0093352fb'), key);
+      }
     } else {
       assert.equal(pin.authorization, 'pending', key);
       assert.equal(pin.execute, false, key);
