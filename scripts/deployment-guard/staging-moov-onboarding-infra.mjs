@@ -311,11 +311,21 @@ export function main(ctx = {}) {
   const out = ctx.out || ((s) => process.stdout.write(s));
   const err = ctx.err || ((s) => process.stderr.write(s));
   const secrets = [];
-  // Every env value except the three onboarding keys (public ARNs / "false") is masked in any output.
+  // Env values (except the three onboarding keys: public ARNs / "false") to mask in free text.
   const collectSecrets = (vars) => {
     for (const [k, v] of Object.entries(vars || {})) if (!ONBOARDING_ENV_KEYS.includes(k)) secrets.push(String(v));
   };
-  const emit = (writer, obj) => writer(`${redactSecrets(JSON.stringify(obj), secrets)}\n`);
+  /**
+   * Every output object is built from known-safe structured fields only (codes,
+   * step names, ARNs, target names, fingerprints, fixed error codes); those are
+   * printed verbatim so the fingerprint can be pasted into the manifest. Only
+   * the free-text `message` (which may carry AWS CLI stderr) is redacted.
+   */
+  const emit = (writer, obj) => {
+    const safe = { ...obj };
+    if (typeof safe.message === 'string') safe.message = redactSecrets(safe.message, secrets);
+    writer(`${JSON.stringify(safe)}\n`);
+  };
   const flags = readFlags(argv);
   const unknown = [...flags].filter((f) => !['--plan'].includes(f));
   if (unknown.length) {

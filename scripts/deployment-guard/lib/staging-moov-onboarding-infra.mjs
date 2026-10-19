@@ -458,10 +458,25 @@ export function diffEnvKeyNames(before = {}, after = {}) {
   return { added, removed, changed };
 }
 
-/** Replaces any listed secret value (length >= 6) found in text. */
+export const REDACT_MIN_LENGTH = 16;
+
+/** False for values that cannot plausibly be secrets: short, booleans, numbers. */
+export function isPlausibleSecret(value) {
+  const s = String(value);
+  if (s.length < REDACT_MIN_LENGTH) return false;
+  if (/^(true|false)$/i.test(s)) return false;
+  if (/^-?\d+(\.\d+)?$/.test(s)) return false;
+  return true;
+}
+
+/**
+ * Replaces any plausible secret value found in FREE TEXT (error messages).
+ * Structured output (fingerprint, step names, ARNs, target names) must never
+ * pass through here: masking a short value such as "staging" would corrupt it.
+ */
 export function redactSecrets(text, values = []) {
   let out = String(text);
-  for (const v of [...new Set(values.map(String))].filter((s) => s.length >= 6).sort((a, b) => b.length - a.length)) {
+  for (const v of [...new Set(values.map(String))].filter(isPlausibleSecret).sort((a, b) => b.length - a.length)) {
     out = out.split(v).join('[REDACTED]');
   }
   return out;

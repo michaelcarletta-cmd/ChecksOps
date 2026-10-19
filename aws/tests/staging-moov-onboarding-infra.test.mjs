@@ -605,6 +605,73 @@ test('a secret leaked into an AWS error message is redacted from the output', ()
   assert.match(cap.text(), /\[REDACTED\]/);
 });
 
+test('short non-secret env values (staging, checksops) never alter the printed fingerprint; apply recomputes the same one', () => {
+  const withShortValues = () => {
+    const fake = fakeAws();
+    Object.assign(fake.state.lambda.Environment.Variables, {
+      CHECKSOPS_ENV: 'staging',
+      DATABASE_NAME: 'checksops',
+      FEATURE_ON: 'true',
+      POOL_SIZE: '10',
+    });
+    return fake;
+  };
+  const planCap = capture();
+  assert.equal(main({ argv: ['--plan'], env: {}, adapter: withShortValues().adapter, ...planCap.ctx }), 2);
+  const printedLine = planCap.out.join('');
+  assert.ok(!printedLine.includes('[REDACTED]'), printedLine);
+  const printed = parseLast(planCap.out);
+  assert.equal(printed.target_environment, 'staging');
+  assert.equal(printed.target_component, COMPONENT);
+  assert.equal(printed.preflight_live_fingerprint.component, COMPONENT);
+  assert.equal(printed.preflight_live_fingerprint.function_name, FUNCTION_NAME);
+  assert.deepEqual(printed.preflight_live_fingerprint, liveFingerprint(readLive(withShortValues().adapter).snapshot));
+
+  // The operator pastes the printed object into the manifest: the guard must be
+  // asked for exactly that object (same JSON, same key order) at apply time.
+  const pasted = JSON.parse(JSON.stringify(printed.preflight_live_fingerprint));
+  const authorize = stubAuthorize();
+  const fake = withShortValues();
+  const { code, cap } = apply(fake, { authorize });
+  assert.equal(code, 0, cap.err.join(''));
+  assert.equal(JSON.stringify(authorize.seen[0].preflight_live_fingerprint), JSON.stringify(pasted));
+  const done = parseLast(cap.out);
+  assert.equal(JSON.stringify(done.before_fingerprint), JSON.stringify(pasted));
+  assert.equal(done.target_environment, 'staging');
+  assert.ok(!cap.text().includes('[REDACTED]'));
+  assert.equal(fake.state.lambda.Environment.Variables.CHECKSOPS_ENV, 'staging');
+});
+
+test('redactSecrets masks long values only; booleans, numbers and short values pass through', () => {
+  const values = ['staging', 'checksops', 'true', 'false', '10', '1234567890123456789', 'fifteen-chars-x', SECRET];
+  const text = `staging checksops true false 10 1234567890123456789 fifteen-chars-x ${SECRET}`;
+  assert.equal(redactSecrets(text, values), 'staging checksops true false 10 1234567890123456789 fifteen-chars-x [REDACTED]');
+  assert.equal(redactSecrets('sixteen-chars-xx', ['sixteen-chars-xx']), '[REDACTED]');
+});
+
+test('a long secret is never printed: plan, apply, and inside an error message at every failure point', () => {
+  const plan = capture();
+  main({ argv: [], env: {}, adapter: fakeAws().adapter, ...plan.ctx });
+  assert.ok(!plan.text().includes(SECRET) && !plan.text().includes(SECRET_2));
+
+  for (const method of ['getBucketCors', 'putRolePolicy', 'updateFunctionEnvironment', 'createKey']) {
+    const fake = fakeAws();
+    let n = 0;
+    const original = fake.adapter[method];
+    fake.adapter[method] = (...args) => {
+      n += 1;
+      // Fail at apply time (not during the plan reads) with stderr that echoes secrets.
+      if (method !== 'getBucketCors' || n === 3) throw new Error(`aws_cli_failed:x:${SECRET} and ${SECRET_2}`);
+      return original(...args);
+    };
+    const { code, cap } = apply(fake);
+    assert.equal(code, 2, method);
+    assert.ok(!cap.text().includes(SECRET), method);
+    assert.ok(!cap.text().includes(SECRET_2), method);
+    assert.match(parseLast(cap.err).message, /\[REDACTED\] and \[REDACTED\]/, method);
+  }
+});
+
 // ------------------------------------------------------------------ resume
 
 test('resume after keys + aliases exist: key steps are done, no second key is created', () => {
