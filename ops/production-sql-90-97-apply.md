@@ -17,9 +17,15 @@ the read-only production inspect of 2026-10-19 after SQL 29 / SQL 30, SSM
 pre-state; its staging acceptance is the owner-accepted substitute evidence of the guarded
 staging apply run `39080157856`, which started from a different pre-state `1af4b3ac…`); its
 apply still needs the owner's run-time approval, and should be timed with SQL 101 and the
-step-6 Lambdas because invites break between SQL 90 and the new `tenant-admin.mjs`. SQL 101
-cannot be pinned before SQL 90 is live (its inspect of 2026-10-19 refuses with
-`prerequisites_present` and `predecessors_applied`: SQL 90's helpers are absent). Every other
+step-6 Lambdas because invites break between SQL 90 and the new `tenant-admin.mjs`. SQL 90 was
+applied to production on 2026-10-19 (owner approval "apply SQL 90 in production"; SSM
+`216d9a7e-8d5a-4c44-9d2f-e68370cc773a`, run_id `8a427f65-58bc-4a1b-8aac-f5161017df60`,
+`b5a1998d…` -> `1351f1d5…`; recorded in its pin by the record-and-retire change). SQL 101's
+production pin is `execute: true` (owner approved 2026-10-19 on the agreed SQL 90 -> SQL 101 ->
+step-6 Lambdas plan: the read-only inspect right after SQL 90's apply, same SSM command, live
+`1c7e1d52…`, precondition_failures [], recorded as its pre-state; its staging acceptance is its
+guarded staging apply run `39143679543` from the same pre-state); its apply still needs the
+owner's run-time approval and must come before the `tenant-admin.mjs` production overlay. Every other
 production pin is `execute: false`, `authorization: "pending"`, with no recorded pre-state and
 no staging acceptance, so its production apply refuses before connecting; staging pins are authorized only in reviewed waves ("Staging apply waves"). SQL 100
 is a strict no-op on production: its production tool only inspects (see "SQL 100 on

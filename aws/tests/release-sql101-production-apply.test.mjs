@@ -26,9 +26,11 @@ import { RELEASE_2026_10_17_PENDING_SQL_PINS as STAGING } from '../../scripts/de
 import { RELEASE_SQL_SPECS } from '../../scripts/deployment-guard/lib/release-sql-state.mjs';
 import {
   RELEASE_PRODUCTION,
+  evaluateReleaseProductionApply,
   executeReleaseProductionApply,
   inspectReleaseProduction,
   loadReleaseProductionPin,
+  precheckReleaseProductionApply,
   readPinnedReleaseSql,
 } from '../../scripts/deployment-guard/lib/release-sql-production-apply.mjs';
 import { pgSkipReason, releaseFixture } from './helpers/release-sql-pg.mjs';
@@ -37,6 +39,19 @@ const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const KEY = 'sql101';
 const SQL101_FILE = 'aws/workflows/sql/101_invite_identity_insert_order.sql';
 const COMMITTED = loadReleaseProductionPin(KEY, ROOT);
+// SQL 101's production pre-state (read-only inspect of 2026-10-19 right after SQL 90's apply,
+// SSM 216d9a7e, main ba9ff4261): the same pre-state staging recorded before its apply (run 39143679543).
+const SQL101_PRODUCTION_PRE = '1c7e1d52a88e4ddb93b751ec972eebfe17600a156d6e56968c9026aa41425c1a';
+const SQL101_STAGING_REFERENCE = 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39143679543';
+/** The pre-authorization state of the committed pin (explicit copy). */
+const PENDING = Object.freeze({
+  ...COMMITTED,
+  authorization: 'pending',
+  execute: false,
+  expected_live_definition_sha256: null,
+  staging_acceptance: { ok: false, reference: null, basis: 'Pending' },
+  production_inspect: { ...COMMITTED.production_inspect, status: 'pending' },
+});
 const SQL96_PIN = loadReleaseProductionPin('sql96', ROOT);
 const STAGING_REF = 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/0000000000';
 const COMMIT = 'a'.repeat(40);
@@ -84,7 +99,7 @@ function manifest(pin) {
 }
 const consumedPath = () => path.join(os.tmpdir(), `sql101-prod-consumed-${process.pid}-${Math.random().toString(16).slice(2)}.json`);
 
-test('pin: the SQL 90-97 pin shape, pending, in step with the staging pin, the one-shot and the inventory', () => {
+test('pin: the SQL 90-97 pin shape, execute-authorized (owner approved 2026-10-19), in step with the staging pin, the one-shot and the inventory', () => {
   const pin = COMMITTED;
   const staging = STAGING[KEY];
   const shape = new Set(keyPaths(SQL96_PIN));
@@ -92,11 +107,24 @@ test('pin: the SQL 90-97 pin shape, pending, in step with the staging pin, the o
   assert.deepEqual(keyPaths(pin).filter((k) => !shape.has(k)), []);
   assert.equal(pin.id, RELEASE_SQL_SPECS[KEY].production_pin_rel.split('/').pop().replace(/\.json$/, ''));
   assert.equal(pin.migration, KEY);
-  assert.equal(pin.execute, false);
-  assert.equal(pin.authorization, 'pending');
-  assert.equal(pin.expected_live_definition_sha256, null);
-  assert.equal(pin.staging_acceptance.ok, false);
-  assert.equal(pin.production_inspect.status, 'pending');
+  assert.equal(pin.execute, true);
+  assert.match(pin.authorization, /^Owner approved 2026-10-19 /);
+  assert.ok(pin.authorization.includes('"apply SQL 90 in production"'));
+  assert.ok(pin.authorization.includes(`${SQL101_PRODUCTION_PRE} -> ${pin.intended_replacement_sha256}`));
+  assert.match(pin.authorization, /before the tenant-admin\.mjs production overlay/);
+  assert.match(pin.authorization, /each apply still needs the owner's run-time approval/);
+  assert.equal(pin.expected_live_definition_sha256, SQL101_PRODUCTION_PRE);
+  assert.notEqual(pin.expected_live_definition_sha256, pin.intended_replacement_sha256);
+  assert.equal(pin.staging_acceptance.ok, true);
+  assert.equal(pin.staging_acceptance.reference, SQL101_STAGING_REFERENCE);
+  assert.ok(pin.staging_acceptance.basis.includes(`receipt before ${SQL101_PRODUCTION_PRE}, after ${pin.intended_replacement_sha256}`));
+  assert.match(pin.staging_acceptance.basis, /read-live \(run 39142701783/);
+  assert.equal(pin.production_inspect.status, 'recorded');
+  assert.equal(pin.production_inspect.ssm_command_id, '216d9a7e-8d5a-4c44-9d2f-e68370cc773a');
+  assert.equal(pin.production_inspect.source_commit, 'ba9ff4261411b4c24a856fac4a627841d0c61430');
+  assert.equal(pin.production_inspect.live_definition_sha256, SQL101_PRODUCTION_PRE);
+  assert.equal(pin.production_inspect.read_only, true);
+  assert.deepEqual(pin.production_inspect.precondition_failures, []);
   assert.equal(pin.filename, SQL101_FILE);
   assert.equal(pin.source_sha256, staging.source_sha256);
   assert.equal(pin.staging_pin_commit, staging.commit);
@@ -162,6 +190,25 @@ async function withPg(t, prefix, port, fn) {
   }
 }
 
+test('the committed SQL 101 pin allows only the manifest bound to it; the cheap prechecks pass without connecting', async () => {
+  const pin = COMMITTED;
+  const bound = manifest(pin);
+  const allowed = await evaluateReleaseProductionApply(KEY, bound, { root: ROOT });
+  assert.equal(allowed.ok, true, JSON.stringify(allowed));
+  assert.equal(allowed.details[RELEASE_PRODUCTION[KEY].allowed_key], true);
+  const prechecked = await precheckReleaseProductionApply(KEY, bound, { root: ROOT, consumedPath: consumedPath() });
+  assert.equal(prechecked.ok, true, JSON.stringify(prechecked));
+  const wrongLive = await evaluateReleaseProductionApply(KEY, { ...bound, live_definition_sha256: 'f'.repeat(64) }, { root: ROOT });
+  assert.equal(wrongLive.code, CODES.SQL_COLLISION);
+  const wrongStaging = await evaluateReleaseProductionApply(KEY, { ...bound, staging_acceptance: { ok: true, reference: 'https://example.invalid/x' } }, { root: ROOT });
+  assert.equal(wrongStaging.code, CODES.PRODUCTION_APPROVAL_REQUIRED);
+  const executeFalse = await executeReleaseProductionApply(KEY, bound, { root: ROOT, pin: { ...pin, execute: false }, consumedPath: consumedPath(), connect: async () => { throw new Error('should-not-connect'); } });
+  assert.equal(executeFalse.code, CODES.GUARD_APPLY_FORBIDDEN);
+  // The pending state (explicit copy) refuses: no recorded pre-state.
+  const pending = await evaluateReleaseProductionApply(KEY, manifest({ ...PENDING, expected_live_definition_sha256: 'e'.repeat(64) }), { root: ROOT, pin: PENDING });
+  assert.equal(pending.code, CODES.SQL_COLLISION);
+});
+
 test('PostgreSQL 16: read-only inspect; refused before SQL 90; one apply as checksops_admin, then already in place', { timeout: 600000 }, async (t) => withPg(t, 'pg-sql101-prod-', 63500, async ({ connectAs, applyPredecessors }) => {
   await applyPredecessors();
   const seen = [];
@@ -172,7 +219,7 @@ test('PostgreSQL 16: read-only inspect; refused before SQL 90; one apply as chec
     return client;
   };
   const connect = connectWith('checksops_admin');
-  const inspect = async (pin = COMMITTED) => {
+  const inspect = async (pin = PENDING) => {
     seen.length = 0;
     const inspected = await inspectReleaseProduction(KEY, { connect, pin, root: ROOT });
     assert.equal(inspected.ok, true, JSON.stringify(inspected));

@@ -88,8 +88,10 @@ An unexpected exception also ends in one failure summary:
    (`ok: true` plus a reference) and an authorization phrase. SQL 82's to 86's pins are
    `execute: true` (owner approved 2026-10-16, staging acceptance recorded, see
    `ops/production-sql-82-83-apply.md` and `ops/production-sql-84-86-apply.md`) until their
-   record-and-retire changes, and SQL 90's (owner approved 2026-10-19, production pre-state and
-   the owner-accepted substitute staging evidence recorded in its pin) until its own. SQL 91's
+   record-and-retire changes, SQL 90's (owner approved 2026-10-19, production pre-state and
+   the owner-accepted substitute staging evidence recorded in its pin) and SQL 101's (owner
+   approved 2026-10-19, production pre-state after SQL 90 and its same-pre-state staging apply
+   recorded in its pin) until their own. SQL 91's
    and SQL 92's are `execute: false` again since their 2026-10-19 applies (see
    `ops/production-sql-90-97-apply.md`). Every other pin is `execute: false` (SQL 81's since its
    2026-10-15 record-and-retire change; SQL 87's, SQL 88's and SQL 89's since their
