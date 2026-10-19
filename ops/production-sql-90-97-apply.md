@@ -27,11 +27,11 @@ re-run SQL 93 after SQL 96. SQL 96 was applied to production on 2026-10-19
 (see "Production apply of SQL 96" below) and its pin is retired; it had been execute-authorized
 by the owner-approved pin change of 2026-10-19 (#1063: the read-only production inspect after
 SQL 93, SSM `73b4bd93-b91b-44c9-b18d-287625e5f4c6`, live `275400ff…`, and its guarded staging
-apply run `39082957003` from the same pre-state). SQL 94's production pin is `execute: true`
-(owner approved 2026-10-19, "do the SQL 94 pin": the read-only production inspect of 2026-10-19,
-SSM `70abaca3-3ec3-4cbc-aae3-6542563080f2` from main `fecb0b3af`, live `72411598…`, recorded as its
-pre-state; its staging acceptance is its guarded staging apply run `39082817752` from the same
-pre-state); its apply still needs the owner's run-time approval, before the library Lambdas.
+apply run `39082957003` from the same pre-state). SQL 94 was applied to production on 2026-10-19
+(see "Production apply of SQL 94" below) and its pin is retired; it had been execute-authorized by
+the owner-approved pin change of 2026-10-19 (#1068, "do the SQL 94 pin": the read-only production
+inspect, SSM `70abaca3-3ec3-4cbc-aae3-6542563080f2`, live `72411598…`, and its guarded staging apply
+run `39082817752` from the same pre-state).
 Every other
 production pin is `execute: false`, `authorization: "pending"`, with no recorded pre-state and
 no staging acceptance, so its production apply refuses before connecting; staging pins are authorized only in reviewed waves ("Staging apply waves"). SQL 100
@@ -518,3 +518,16 @@ post-apply inspect already_applied true, precondition_failures []. No later read
 run. The pin is `execute: false` again; a re-apply needs a new reviewed pin change, and SQL 93
 must never be re-run now. SQL 98 and SQL 102 are next in the database;
 `tenant-billing-engine.mjs` / `tenant-billing-handlers.mjs` may follow in their Lambda batch.
+
+## Production apply of SQL 94 (2026-10-19)
+
+One owner-approved run ( + APPROVAL + ) of `production-sql-one-shot.mjs`
+on `i-0c35557c4e5385406` from main `ef26f7357` (tarball `5dba0f6b…`): SSM
+`d2cf26f4-f240-497a-9293-5ca70c094d68`, run_id `ca95e688-664e-43f3-97b1-9699bdab9a88`, one_use_id
+`sql94-prod-a4968361-4a21-409d-9448-42ffe30f5274` (spent), migration source `ef865f65…` (== pin).
+Every step was ok; contracts claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections
+43/43; manifest `2f2603e9…`; receipt `72411598…` -> `1cdc5032…`, unrelated catalog `1d547fe3…`;
+post-apply inspect already_applied true, precondition_failures []. No later read-only inspect was
+run. The pin is `execute: false` again; a re-apply needs a new reviewed pin change. The document
+library Lambda members it holds (sql_before) may follow in their batch once the plan records SQL 94
+verified live in its own reviewed change.

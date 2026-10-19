@@ -27,14 +27,15 @@ found `payment_idempotency_keys` holding only `checksops SELECT`: no INSERT or U
 So step 1 takes the apply path, not the read-live-only path.
 
 **Status:** the staging pin is execute-authorized (wave 7, owner approved 2026-10-19, "do the SQL
-104 staging pin", pre-state `22b2d47d…`); the staging apply still needs its own run. The production
-pin is execute-authorized (owner approved 2026-10-19, "accept the SQL 104 staging apply as
-substitute evidence and do the SQL 104 pin"): staging apply run 39298919537 went `22b2d47d…` ->
-`e5b35104…` and read-live run 39299161133 confirmed `already_applied` true. The read-only production
-inspect (SSM `70abaca3-3ec3-4cbc-aae3-6542563080f2`, main `fecb0b3af`) recorded live `57443d0a…`:
-in production `checksops` already holds SELECT, INSERT and UPDATE (plus DELETE, outside the
-fingerprint), and `authenticated` holds none, so SQL 104 adds only the `authenticated` grants there.
-The apply still needs the owner's run-time approval.
+104 staging pin", pre-state `22b2d47d…`); the staging apply still needs its own run. Staging apply
+run 39298919537 went `22b2d47d…` -> `e5b35104…` and read-live run 39299161133 confirmed
+`already_applied` true. SQL 104 was applied to production on 2026-10-19 (below) and its production
+pin is retired; it had been execute-authorized by the owner-approved pin change of 2026-10-19
+(#1068, "accept the SQL 104 staging apply as substitute evidence and do the SQL 104 pin"). The
+read-only production inspect (SSM `70abaca3-3ec3-4cbc-aae3-6542563080f2`, main `fecb0b3af`) had
+recorded live `57443d0a…`: in production `checksops` already held SELECT, INSERT and UPDATE (plus
+DELETE, outside the fingerprint), and `authenticated` held none, so SQL 104 added only the
+`authenticated` grants there.
 
 ## Fingerprint
 
@@ -89,3 +90,17 @@ before onboarding saves work.
    --migration sql104 --approval-scope sql104 … --phase inspect`, then the owner-named
    `--phase apply`.
 4. Record the apply and retire the pin (`execute: false`).
+
+## Production apply of SQL 104 (2026-10-19)
+
+One owner-approved run ( + APPROVAL + ) of `production-sql-one-shot.mjs`
+on `i-0c35557c4e5385406` from main `ef26f7357` (tarball `5dba0f6b…`), after SQL 94 in the same
+session: SSM `a97d4326-31b1-4aff-a6cb-206ff0d8e6f9`, run_id `32965a3e-f28d-4e53-914e-d1be902165a4`,
+one_use_id `sql104-prod-7fb5b396-0420-433c-9088-3b1d7db42b19` (spent), migration source `e8831083…`
+(== pin). Every step was ok; contracts claim-ledger 4/4, tenant-isolation 6/6,
+financial-write-protections 43/43; manifest `545d9ef1…`; receipt `57443d0a…` -> `e5b35104…`,
+unrelated catalog `1166c814…`; post-apply inspect already_applied true, precondition_failures [].
+`payment_idempotency_keys` now grants `authenticated` and `checksops` SELECT, INSERT and UPDATE;
+`checksops` DELETE is unchanged. No later read-only inspect was run. The pin is `execute: false`
+again; a re-apply needs a new reviewed pin change. The onboarding Lambda members' `sql_before`
+should name SQL 104 next to SQL 91 in their own reviewed plan change.

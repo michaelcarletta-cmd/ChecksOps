@@ -1,8 +1,8 @@
 {
   "id": "sql104-payment-idempotency-keys-grant-production-apply",
   "migration": "sql104",
-  "authorization": "Owner approved 2026-10-19 (the owner approved preparing this SQL 104 production pin change and accepted the staging evidence below in the words \"accept the SQL 104 staging apply as substitute evidence and do the SQL 104 pin\"; the change itself is reviewed and merge-approved by the owner separately): production apply of SQL 104 after SQL 91 (applied to production 2026-10-19) on the staging acceptance below (production 57443d0a26c26859f2e939fb00fef51b554108b20f28aa6f262b9906cad1cfc6 -> e5b35104ca9c3f68fd03298354c5d6e1e48218f0871a3f216539999931a291a6), before the Moov onboarding Lambda members; execute true takes effect only when the owner reviews and merges this change. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
-  "execute": true,
+  "authorization": "Applied to production on 2026-10-19; execute is false again, so this pin is no longer a standing authorization and a re-apply needs a new reviewed pin change. The owner approved the SQL 104 production pin (57443d0a -> e5b35104), the read-only production inspect and the execute change on 2026-10-19 (\"accept the SQL 104 staging apply as substitute evidence and do the SQL 104 pin\", #1068), and approved the one apply run recorded in applied (workstream prod-sql104-payment-idempotency-keys-grant-20261019) on 2026-10-19 with \"approve 1068, apply SQL 94 in production and apply SQL 104 in production\". That approval covered that run only",
+  "execute": false,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -50,7 +50,7 @@
     "live_definition_sha256": "57443d0a26c26859f2e939fb00fef51b554108b20f28aa6f262b9906cad1cfc6",
     "apply_preconditions_met": false,
     "precondition_failures": [],
-    "note": "Recorded from the read-only production inspect of 2026-10-19 (SSM command 70abaca3-3ec3-4cbc-aae3-6542563080f2, node scripts/deployment-guard/sql104-payment-idempotency-keys-grant-production-apply.mjs --inspect on the SQL53 runner i-0c35557c4e5385406 from main fecb0b3af (tarball sha256 7da7cb2b6b3790d02f4968bbbf774dff0a4724ff49c7528cef51bc5bb29c399a), BEGIN READ ONLY ... ROLLBACK, connected as checksops_admin). live_definition_sha256 57443d0a26c26859f2e939fb00fef51b554108b20f28aa6f262b9906cad1cfc6 (not the intended e5b35104ca9c3f68fd03298354c5d6e1e48218f0871a3f216539999931a291a6: already_applied false); precondition_failures [], prerequisites_missing [], missing_dependencies [], predecessor sql91 applied, successors_applied []. Unlike the pending expectation, checksops already holds SELECT, INSERT and UPDATE on payment_idempotency_keys in production (plus DELETE, outside the fingerprint, which other_table_privileges_unchanged keeps); authenticated holds none of the three, so SQL 104 adds only authenticated SELECT, INSERT and UPDATE here. apply_preconditions_met was false at inspect time only because no pre-state was recorded yet (expected_live_definition_sha256 null). This reviewed change copies live_definition_sha256 into expected_live_definition_sha256 and, in the same change, sets authorization, execute true and staging_acceptance. A fresh --inspect immediately before apply (the one-shot's inspect step) must still report this live_definition_sha256 and precondition_failures []; if not, stop."
+    "note": "Recorded from the read-only production inspect of 2026-10-19 (SSM command 70abaca3-3ec3-4cbc-aae3-6542563080f2, node scripts/deployment-guard/sql104-payment-idempotency-keys-grant-production-apply.mjs --inspect on the SQL53 runner i-0c35557c4e5385406 from main fecb0b3af (tarball sha256 7da7cb2b6b3790d02f4968bbbf774dff0a4724ff49c7528cef51bc5bb29c399a), BEGIN READ ONLY ... ROLLBACK, connected as checksops_admin). live_definition_sha256 57443d0a26c26859f2e939fb00fef51b554108b20f28aa6f262b9906cad1cfc6 (not the intended e5b35104ca9c3f68fd03298354c5d6e1e48218f0871a3f216539999931a291a6: already_applied false); precondition_failures [], prerequisites_missing [], missing_dependencies [], predecessor sql91 applied, successors_applied []. Unlike the pending expectation, checksops already holds SELECT, INSERT and UPDATE on payment_idempotency_keys in production (plus DELETE, outside the fingerprint, which other_table_privileges_unchanged keeps); authenticated holds none of the three, so SQL 104 adds only authenticated SELECT, INSERT and UPDATE here. apply_preconditions_met was false at inspect time only because no pre-state was recorded yet (expected_live_definition_sha256 null). This reviewed change copies live_definition_sha256 into expected_live_definition_sha256 and, in the same change, sets authorization, execute true and staging_acceptance. A fresh --inspect immediately before apply (the one-shot's inspect step) must still report this live_definition_sha256 and precondition_failures []; if not, stop. The apply of 2026-10-19 is recorded in applied; the record-and-retire change set execute false again."
   },
   "intended_post_state": {
     "fingerprint": "e5b35104ca9c3f68fd03298354c5d6e1e48218f0871a3f216539999931a291a6",
@@ -60,5 +60,105 @@
     "ok": true,
     "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39298919537",
     "basis": "Owner-accepted substitute evidence (the owner's words: \"accept the SQL 104 staging apply as substitute evidence and do the SQL 104 pin\"). Guarded staging SQL executor apply of sql104-payment-idempotency-keys-grant on 2026-10-19 (run 39298919537, main fecb0b3af, wave 7, executor yQHFBtq2...): receipt before 22b2d47df43b9fc831143e018022d0e94790cbd1e0406f0ab03443cd14652577, after e5b35104ca9c3f68fd03298354c5d6e1e48218f0871a3f216539999931a291a6 = intended_replacement_sha256; precondition_failures [], prerequisites_missing []. Its staging read-live (run 39296513948) recorded that pre-state, and read-live run 39299161133 confirmed already_applied true afterwards. The pre-states differ: staging held only checksops SELECT (22b2d47df43b9fc831143e018022d0e94790cbd1e0406f0ab03443cd14652577) while production holds checksops SELECT, INSERT and UPDATE (57443d0a26c26859f2e939fb00fef51b554108b20f28aa6f262b9906cad1cfc6); both reach the intended e5b35104ca9c3f68fd03298354c5d6e1e48218f0871a3f216539999931a291a6 from the same pinned file bytes, and GRANT of a held privilege is a no-op. Also accepted: aws/tests/sql104-payment-idempotency-keys-grant-pg.test.mjs (pre-granted and partly granted cases)."
+  },
+  "applied": {
+    "date": "2026-10-19",
+    "result": "applied",
+    "source_commit": "ef26f7357b19748a977eec668755d10319944373",
+    "source_tarball": {
+      "file": "source-ef26f7357b19748a977eec668755d10319944373.tar.gz",
+      "sha256": "5dba0f6bf2ea274980857d6dfd9acb4ac0f3eb78b80207cd0c1270798e3e480a"
+    },
+    "migration_source_sha256": "e8831083266b546deac5e2502e94f27ca353a13ed89ce5b8cca21ad18d523c8f",
+    "migration_source_sha256_note": "The one-shot source step hashed aws/workflows/sql/104_payment_idempotency_keys_grant.sql in the transfer tarball: equal to source_sha256 (the pin).",
+    "runner": "i-0c35557c4e5385406",
+    "workstream_id": "prod-sql104-payment-idempotency-keys-grant-20261019",
+    "one_use_id": "sql104-prod-7fb5b396-0420-433c-9088-3b1d7db42b19",
+    "one_use_id_consumed": true,
+    "one_use_id_consumed_basis": "Inferred from the successful apply (the tool records the one_use_id after COMMIT and only warns if that write fails); the consumed-registry entry was not read back separately.",
+    "owner_approval": "approve 1068, apply SQL 94 in production and apply SQL 104 in production",
+    "owner_approval_basis": "As passed in --approval-statement for --approval-scope sql104; the one-shot cannot verify who said it.",
+    "operator": "michaelcarletta-cmd",
+    "apply_ssm_command_id": "a97d4326-31b1-4aff-a6cb-206ff0d8e6f9",
+    "one_shot_run_id": "32965a3e-f28d-4e53-914e-d1be902165a4",
+    "one_shot_note": "One guarded production-sql-one-shot run (SSM a97d4326-31b1-4aff-a6cb-206ff0d8e6f9, run_id 32965a3e-f28d-4e53-914e-d1be902165a4) from main ef26f7357 applied SQL 104: steps pin, source, inspect, contracts, manifest, source-recheck-before-preflight, preflight, evaluate, source-recheck-before-apply, apply (applied) and post-apply-inspect all ok; runner contracts, manifest, receipt and inspects as recorded below. The one-shot JSON was summarised on the runner (no console truncation). Start and finish times were not carried into this record. Applied after SQL 91 (and after SQL 94 in the same session); before the Moov onboarding Lambda members.",
+    "steps": [
+      "pin",
+      "source",
+      "inspect",
+      "contracts",
+      "manifest",
+      "source-recheck-before-preflight",
+      "preflight",
+      "evaluate",
+      "source-recheck-before-apply",
+      "apply",
+      "post-apply-inspect"
+    ],
+    "contract_results": {
+      "claim-ledger": {
+        "ok": true,
+        "passed": "4/4"
+      },
+      "tenant-isolation": {
+        "ok": true,
+        "passed": "6/6"
+      },
+      "financial-write-protections": {
+        "ok": true,
+        "passed": "43/43"
+      }
+    },
+    "pre_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "57443d0a26c26859f2e939fb00fef51b554108b20f28aa6f262b9906cad1cfc6",
+      "live_matches_expected": true,
+      "already_applied": false,
+      "precondition_failures": [],
+      "missing_dependencies": [],
+      "predecessors_applied": true,
+      "successors_applied": [],
+      "note": "The one-shot inspect step (read-only --inspect) immediately before the apply: live == the recorded pre-state 57443d0a..., precondition_failures [], missing_dependencies [], predecessor sql91 applied."
+    },
+    "manifest_sha256": "545d9ef1deaaee66ae38fdc1be6acec1925a7486242c6fc2712ac81b990f4153",
+    "receipt": {
+      "migration": "sql104",
+      "workstream": "prod-sql104-payment-idempotency-keys-grant-20261019",
+      "commit": "ef26f7357b19748a977eec668755d10319944373",
+      "sql_file": "aws/workflows/sql/104_payment_idempotency_keys_grant.sql",
+      "before_hash": "57443d0a26c26859f2e939fb00fef51b554108b20f28aa6f262b9906cad1cfc6",
+      "after_hash": "e5b35104ca9c3f68fd03298354c5d6e1e48218f0871a3f216539999931a291a6",
+      "unrelated_catalog_sha256": "1166c814dbca2ab5bb9deb186e60ced5b1bdd4b829b0bbaa00b07337b382d298",
+      "unrelated_catalog_counts": {
+        "relations": 884,
+        "columns": 3513,
+        "constraints": 2215,
+        "policies": 402,
+        "functions": 1303,
+        "indexes": 650,
+        "default_acl": 0,
+        "role_memberships": 15,
+        "roles": 29,
+        "triggers": 176,
+        "views": 25,
+        "types": 18,
+        "schema": 2
+      },
+      "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39298919537",
+      "result": "applied"
+    },
+    "post_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "e5b35104ca9c3f68fd03298354c5d6e1e48218f0871a3f216539999931a291a6",
+      "already_applied": true,
+      "precondition_failures": [],
+      "missing_dependencies": [],
+      "predecessors_applied": true,
+      "successors_applied": [],
+      "note": "The one-shot post-apply read-only --inspect: already_applied true (live == intended e5b35104...), precondition_failures []. payment_idempotency_keys now grants authenticated INSERT, SELECT, UPDATE and checksops INSERT, SELECT, UPDATE; other_write_grants [checksops DELETE], unchanged."
+    }
+  },
+  "production_evidence": {
+    "2026-10-19 apply": "Guarded production SQL one-shot on i-0c35557c4e5385406, workstream prod-sql104-payment-idempotency-keys-grant-20261019, main ef26f7357 (tarball 5dba0f6b…, migration source e8831083… == pin), owner-approved run (\"approve 1068, apply SQL 94 in production and apply SQL 104 in production\"), SSM a97d4326-31b1-4aff-a6cb-206ff0d8e6f9, run_id 32965a3e-f28d-4e53-914e-d1be902165a4, one_use_id sql104-prod-7fb5b396-0420-433c-9088-3b1d7db42b19 (spent): every step ok; contracts claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43; pre-apply inspect live 57443d0a… (live_matches_expected true, precondition_failures []); manifest 545d9ef1…; 57443d0a… -> e5b35104…, result applied, unrelated catalog 1166c814…; post-apply inspect already_applied true, precondition_failures []. Privileges after: authenticated and checksops SELECT/INSERT/UPDATE; checksops DELETE unchanged. No later inspect was run. execute is false so the pin is no longer a standing authorization."
   }
 }
