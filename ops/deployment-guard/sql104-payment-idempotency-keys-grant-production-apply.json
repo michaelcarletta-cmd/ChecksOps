@@ -1,0 +1,64 @@
+{
+  "id": "sql104-payment-idempotency-keys-grant-production-apply",
+  "migration": "sql104",
+  "authorization": "pending",
+  "execute": false,
+  "target_environment": "production",
+  "target_component": "production-sql",
+  "deployment_type": "sql-apply",
+  "filename": "aws/workflows/sql/104_payment_idempotency_keys_grant.sql",
+  "migration_id": "104_payment_idempotency_keys_grant",
+  "staging_pin_commit": "6a44600fd4fe05afbe749042a98edde56e5fa8c1",
+  "source_sha256": "e8831083266b546deac5e2502e94f27ca353a13ed89ce5b8cca21ad18d523c8f",
+  "function_identities": [],
+  "expected_live_definition_sha256": null,
+  "intended_replacement_sha256": "e5b35104ca9c3f68fd03298354c5d6e1e48218f0871a3f216539999931a291a6",
+  "authorization_phrase": "APPLY_PAYMENT_IDEMPOTENCY_KEYS_GRANT",
+  "predecessors": [
+    "sql91"
+  ],
+  "order_note": "Any time after SQL 91 (aws/workflows/sql/91_moov_onboarding.sql, applied to production 2026-10-19), and before Moov onboarding is used in production: SQL 91 added the policies aws_onboarding_insert_payment_idempotency_keys and aws_onboarding_update_payment_idempotency_keys but no table grant, so checksops gets \"permission denied for table payment_idempotency_keys\" before the policies are evaluated (#1062). SQL 104 grants SELECT, INSERT and UPDATE to checksops and authenticated and changes nothing else; SQL 91's file, pins and fingerprint (f8611dcc...) are unchanged. No later migration revokes these grants, so it is not re-run. Staging was granted by hand outside the guard per #1062, so its read-live is expected to report already_applied true (ops/production-sql-104-apply.md).",
+  "admin_login": "checksops_admin",
+  "rds_identifier": "checksops-production",
+  "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
+  "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
+  "tooling": {
+    "status": "built",
+    "production_tool": "scripts/deployment-guard/sql104-payment-idempotency-keys-grant-production-apply.mjs",
+    "production_lib": "scripts/deployment-guard/lib/release-sql-production-apply.mjs",
+    "staging_executor_handler": "aws/write-path/guarded-sql-executor/index.mjs handleReleaseSqlMigration",
+    "staging_workflow_choice": "sql104-payment-idempotency-keys-grant",
+    "one_shot_migration": "sql104",
+    "fingerprint_engine": "scripts/deployment-guard/lib/release-sql-state.mjs",
+    "runbook": "ops/production-sql-104-apply.md",
+    "tests": [
+      "aws/tests/release-sql104-executor.test.mjs",
+      "aws/tests/release-sql104-production-apply.test.mjs",
+      "aws/tests/release-sql90-97-executor.test.mjs",
+      "aws/tests/release-sql90-97-production-apply.test.mjs",
+      "aws/tests/sql104-payment-idempotency-keys-grant-pg.test.mjs"
+    ],
+    "note": "Guarded tooling for SQL 104: sql104-payment-idempotency-keys-grant-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql104-payment-idempotency-keys-grant); production-sql-one-shot.mjs --migration sql104. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): the SELECT, INSERT and UPDATE grants of checksops and authenticated on public.payment_idempotency_keys (spec table_privileges). The post-conditions also require every other grant on the table unchanged (other_table_privileges_unchanged) and the rest of the catalog unchanged. The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
+  },
+  "production_inspect": {
+    "status": "pending",
+    "date": null,
+    "ssm_command_id": null,
+    "source_commit": null,
+    "read_only": true,
+    "connected_as": "checksops_admin",
+    "live_definition_sha256": null,
+    "apply_preconditions_met": null,
+    "precondition_failures": null,
+    "note": "Pending: no read-only production inspect has been run for SQL 104 yet. Expected: SQL 91 applied (predecessor sql91 true), the table present and owned by checksops_admin, and none of the six grant lines held (SQL 91 granted none; #1062's hand grant was staging only). Record its date, SSM command id, source commit, live_definition_sha256, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. If precondition_failures is not [] stop: that needs its own reviewed change."
+  },
+  "intended_post_state": {
+    "fingerprint": "e5b35104ca9c3f68fd03298354c5d6e1e48218f0871a3f216539999931a291a6",
+    "note": "public.payment_idempotency_keys: checksops and authenticated each hold SELECT, INSERT and UPDATE (no DELETE, TRUNCATE, REFERENCES or TRIGGER from this file). Every other grant on the table (service_role's, the owner's), its RLS flags and SQL 91's policies are unchanged; no other table, function, policy, column or row changes. The fingerprint is releaseIntendedHash('sql104', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): e5b35104ca9c3f68fd03298354c5d6e1e48218f0871a3f216539999931a291a6."
+  },
+  "staging_acceptance": {
+    "ok": false,
+    "reference": null,
+    "basis": "Pending: record the guarded staging SQL executor read-live run of SQL 104 (choice sql104-payment-idempotency-keys-grant), and the staging apply run if one is needed, here in the reviewed change that sets execute true. #1062 reports the same grant applied to staging by hand, outside the guard, so the read-live is expected to report already_applied true (live == intended) and the tools to refuse a staging apply as already in place; in that case the read-live is the staging evidence and the grant path itself is covered on PostgreSQL 16 by aws/tests/sql104-payment-idempotency-keys-grant-pg.test.mjs (from the table's original grants, SQL 104 through its production tool). If the read-live shows a different state, stop and record it in its own reviewed change. Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+  }
+}

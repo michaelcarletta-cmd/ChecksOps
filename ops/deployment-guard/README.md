@@ -65,6 +65,7 @@ node scripts/deployment-guard/sql100-mortgage-desk-live-access-production-apply.
 node scripts/deployment-guard/sql101-invite-identity-insert-order-production-apply.mjs --inspect   # after SQL 90, before tenant-admin.mjs
 node scripts/deployment-guard/sql102-platform-owner-tenant-profile-production-apply.mjs --inspect   # after SQL 98, before tenant-billing-handlers.mjs
 node scripts/deployment-guard/sql103-share-library-trigger-acl-production-apply.mjs --inspect   # immediately before SQL 29 (ops/production-sql-103-apply.md)
+node scripts/deployment-guard/sql104-payment-idempotency-keys-grant-production-apply.mjs --inspect   # any time after SQL 91 (ops/production-sql-104-apply.md)
 # Production SQL 71, 77-89 and 90-102 on the runner, one invocation (ops/production-sql-one-shot.md)
 node scripts/deployment-guard/production-sql-one-shot.mjs --migration sql80 --phase inspect ...
 node scripts/deployment-guard/verify-live.mjs --input path/to/live.json

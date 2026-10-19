@@ -61,8 +61,8 @@ test('SQL 53 pin matches current source bytes and does not broaden other migrati
   assert.ok(PIN.forbidden_owned_components.includes('aws/write-path/sql/44_claim_ledger_link_or_create.sql'));
   assert.ok(PIN.forbidden_owned_components.includes('supabase/migrations/20261007193200_skip_claim_ledger_event_for_endorsement_stage.sql'));
   assert.ok(PIN.forbidden_owned_components.includes('supabase/migrations/20260918170040_one_check_received_writer.sql'));
-  // 24 reviewed pins plus the fourteen release 2026-10-17 pins (SQL 90-103).
-  assert.equal(AUTHORIZED_STAGING_SQL.length, 38);
+  // 24 reviewed pins plus the fifteen release 2026-10-17 pins (SQL 90-104).
+  assert.equal(AUTHORIZED_STAGING_SQL.length, 39);
   assert.equal(AUTHORIZED_STAGING_SQL.some((row) => row.filename === PIN.filename), true);
 });
 

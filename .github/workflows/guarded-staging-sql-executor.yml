@@ -52,6 +52,7 @@ on:
           - sql101-invite-identity-insert-order
           - sql102-platform-owner-tenant-profile
           - sql103-share-library-trigger-acl
+          - sql104-payment-idempotency-keys-grant
       approved_commit:
         description: "Required for deploy/apply/read-live: exact main commit approved for this run"
         required: false
@@ -157,6 +158,7 @@ jobs:
           node --test aws/tests/release-sql101-executor.test.mjs
           node --test aws/tests/release-sql102-executor.test.mjs
           node --test aws/tests/release-sql103-executor.test.mjs
+          node --test aws/tests/release-sql104-executor.test.mjs
           node --test aws/tests/mortgage-executor-commit-outcome.test.mjs
           node --test aws/tests/deployment-guard-kms-receipt.test.mjs
           node --test aws/tests/deployment-guard-signed-receipt.test.mjs
