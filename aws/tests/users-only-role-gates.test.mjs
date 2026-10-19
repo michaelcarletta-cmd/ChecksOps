@@ -490,6 +490,27 @@ test('remove member: any member removes only from its own tenants; disabling the
   assert.equal(viaIdentity.disabled, true);
   assert.deepEqual(byId, [['AdminDisableUser', 'mate@example.com']]);
 
+  // A Cognito refusal (missing IAM permission, throttling) is reported, never
+  // shown as disabled; only a login that does not exist counts as disabled.
+  const cognitoError = (name) => async () => { const e = new Error(name); e.name = name; throw e; };
+  for (const name of ['AccessDeniedException', 'TooManyRequestsException', 'CognitoError']) {
+    const failed = await runDeleteUser({
+      client: teamClient({ platformOwner: true }), mapping, spoof: {}, body: { email: 'mate@example.com' },
+      cognitoJson: cognitoError(name),
+    });
+    assert.equal(failed.ok, false, name);
+    assert.equal(failed.statusCode, 502, name);
+    assert.equal(failed.error, 'login_disable_failed', name);
+    assert.equal(failed.reason, name);
+    assert.equal(failed.disabled, false, name);
+  }
+  const missing = await runDeleteUser({
+    client: teamClient({ platformOwner: true }), mapping, spoof: {}, body: { email: 'gone@example.com' },
+    cognitoJson: cognitoError('UserNotFoundException'),
+  });
+  assert.equal(missing.ok, true);
+  assert.equal(missing.disabled, true);
+
   // The platform owner's own login is never disabled here.
   const own = await runDeleteUser({
     client: teamClient({ platformOwner: true }), mapping, spoof: {}, body: { email: PLATFORM_OWNER_EMAIL },
