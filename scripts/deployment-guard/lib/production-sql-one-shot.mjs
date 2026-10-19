@@ -46,6 +46,7 @@ import { SQL86_PRODUCTION_PIN_REL } from './sql86-mortgage-compensation-owner-on
 import { SQL87_PRODUCTION_PIN_REL } from './sql87-resolve-check-case-tenant-scope-production-apply.mjs';
 import { SQL88_PRODUCTION_PIN_REL } from './sql88-claim-id-assign-case-tenant-scope-production-apply.mjs';
 import { SQL89_PRODUCTION_PIN_REL } from './sql89-check-intake-column-update-production-apply.mjs';
+import { LIBRARY_PRODUCTION } from './sql29-sql30-library-production-apply.mjs';
 import { RELEASE_PRODUCTION } from './release-sql-production-apply.mjs';
 
 export const ONE_SHOT_COMPONENT = 'production-sql';
@@ -132,6 +133,8 @@ const SQL86_TOOL = 'scripts/deployment-guard/sql86-mortgage-compensation-owner-o
 const SQL87_TOOL = 'scripts/deployment-guard/sql87-resolve-check-case-tenant-scope-production-apply.mjs';
 const SQL88_TOOL = 'scripts/deployment-guard/sql88-claim-id-assign-case-tenant-scope-production-apply.mjs';
 const SQL89_TOOL = 'scripts/deployment-guard/sql89-check-intake-column-update-production-apply.mjs';
+const SQL29_TOOL = 'scripts/deployment-guard/sql29-mortgage-ops-library-parity-production-apply.mjs';
+const SQL30_TOOL = 'scripts/deployment-guard/sql30-tenant-documents-doc-type-production-apply.mjs';
 const PREFLIGHT = 'scripts/deployment-guard/preflight.mjs';
 
 const memberTool = (key) => Object.freeze({
@@ -147,6 +150,34 @@ const memberTool = (key) => Object.freeze({
  * reviewed tool here; the one-shot never applies SQL itself.
  */
 export const ONE_SHOT_TOOLS = Object.freeze({
+  // SQL 29 and SQL 30 (Mortgage Ops library parity, tenant_documents doc_type CHECK;
+  // ops/production-sql-29-30-apply.md). Pin, file hash and fingerprints come from the pin
+  // (source_sha256 included), so a reviewed change to either file only touches its pin and
+  // the tool's staging binding, never this registry.
+  //   Order (runs_before, informational; each tool and successor enforces it itself):
+  //   SQL 29 before SQL 90 and SQL 94: the tool refuses with sql90_not_applied once SQL 90's
+  //   aws_is_tenant_member(uuid) exists, and the one-shot also requires the inspect's
+  //   sql90_applied to be false (inspect_requires). SQL 30 before SQL 90 (a SQL 90
+  //   predecessor) and SQL 94 (the tool refuses SQL 94's CHECK with
+  //   check_is_supported_predecessor). SQL 29 and SQL 30 are independent of each other;
+  //   release order runs SQL 29, then SQL 30.
+  sql29: Object.freeze({
+    key: 'sql29',
+    script: SQL29_TOOL,
+    args: Object.freeze([]),
+    pin_rel: LIBRARY_PRODUCTION.sql29.pin_rel,
+    allowed_key: LIBRARY_PRODUCTION.sql29.allowed_key,
+    runs_before: Object.freeze(['sql90', 'sql94']),
+    inspect_requires: Object.freeze([Object.freeze(['sql90_applied', false])]),
+  }),
+  sql30: Object.freeze({
+    key: 'sql30',
+    script: SQL30_TOOL,
+    args: Object.freeze([]),
+    pin_rel: LIBRARY_PRODUCTION.sql30.pin_rel,
+    allowed_key: LIBRARY_PRODUCTION.sql30.allowed_key,
+    runs_before: Object.freeze(['sql90', 'sql94']),
+  }),
   sql71: Object.freeze({
     key: 'sql71',
     script: SQL71_TOOL,
@@ -289,6 +320,11 @@ export const INSPECT_RECORD_KEYS = Object.freeze([
   'sql89_columns_missing',
   'unsafe_update_functions',
   'ingest_function_security_definer',
+  // SQL 29 / SQL 30: prerequisites, the SQL 90 marker and the catalog state reports (no rows).
+  'prerequisites_missing',
+  'sql90_applied',
+  'sql29',
+  'sql30',
   // SQL 90-102: aggregate counts, successor markers and the per-object state report (no rows).
   'counts',
   'successors_applied',
@@ -745,6 +781,8 @@ export function preApplyInspectFailures(details, pin, tool) {
     ['already_applied', d.already_applied === false],
     ['precondition_failures', Array.isArray(d.precondition_failures) && d.precondition_failures.length === 0],
     ['apply_preconditions_met', d.apply_preconditions_met === true],
+    // Tool-specific ordering gates, e.g. SQL 29: sql90_applied must be false.
+    ...(tool.inspect_requires || []).map(([field, value]) => [field, d[field] === value]),
   ].filter(([, passed]) => !passed).map(([name]) => name);
 }
 

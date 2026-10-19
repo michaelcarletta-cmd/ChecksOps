@@ -9,6 +9,8 @@ that connects to the database:
 
 | `--migration` | tool it runs |
 |---|---|
+| `sql29` | `scripts/deployment-guard/sql29-mortgage-ops-library-parity-production-apply.mjs` (`ops/production-sql-29-30-apply.md`; before SQL 90 and SQL 94: the tool refuses with `sql90_not_applied` once SQL 90 is in place, and the one-shot also requires the inspect's `sql90_applied` to be `false`) |
+| `sql30` | `scripts/deployment-guard/sql30-tenant-documents-doc-type-production-apply.mjs` (same runbook; before SQL 90, a SQL 90 predecessor, and before SQL 94, whose CHECK it refuses; independent of SQL 29, release order runs SQL 29 first) |
 | `sql71` | `scripts/deployment-guard/sql71-review-amount-production-apply.mjs` (`ops/production-sql-71-apply.md`) |
 | `sql77`, `sql78`, `sql79` | `scripts/deployment-guard/sql-member-stakeholder-production-apply.mjs --migration <key>` |
 | `sql80` | `scripts/deployment-guard/sql80-checkalt-production-apply.mjs` |
@@ -27,14 +29,19 @@ that connects to the database:
 | `sql102` | `scripts/deployment-guard/sql102-platform-owner-tenant-profile-production-apply.mjs` (same runbook; after SQL 98, before `tenant-billing-handlers.mjs`) |
 
 To add a migration, register its reviewed tool in `ONE_SHOT_TOOLS`
-(`scripts/deployment-guard/lib/production-sql-one-shot.mjs`). Tests:
+(`scripts/deployment-guard/lib/production-sql-one-shot.mjs`). An entry names only the tool,
+its arguments, the pin file and the tool's `<key>_production_apply_allowed`; the file hash
+(`source_sha256`) and the fingerprints are always read from the pin, so a reviewed change to
+a migration file touches its pin, not the registry. An entry may add `inspect_requires`
+(inspect fields that must hold an exact value, e.g. SQL 29's `sql90_applied: false`) and
+`runs_before` (informational order). Tests:
 `aws/tests/production-sql-one-shot.test.mjs` (in `npm run test:deployment-guard`).
 
 ## Flags
 
 | flag | |
 |---|---|
-| `--migration <key>` | a registered key (`sql71`, `sql77`…`sql89`, `sql90`…`sql102`) |
+| `--migration <key>` | a registered key (`sql29`, `sql30`, `sql71`, `sql77`…`sql89`, `sql90`…`sql102`) |
 | `--approval-scope <key>` | the migration the owner approved; must equal `--migration` |
 | `--approval-statement "<words>"` or `--approval-statement-b64 <base64>` | the owner's exact words, recorded verbatim. Pass exactly one of the two. Use the base64 form when the words contain quotes or newlines. Must be non-empty. |
 | `--commit <sha>` | the full main commit the tarball was built from |
@@ -83,7 +90,7 @@ An unexpected exception also ends in one failure summary:
    record-and-retire changes. Every other pin is `execute: false` (SQL 81's since its
    2026-10-15 record-and-retire change; SQL 87's, SQL 88's and SQL 89's since their
    2026-10-16 applies, see `ops/production-sql-87-apply.md`, `ops/production-sql-88-apply.md`
-   and `ops/production-sql-89-apply.md`; SQL 71's still pending), so a run of it refuses until an owner-merged
+   and `ops/production-sql-89-apply.md`; SQL 71's, SQL 29's and SQL 30's still pending), so a run of it refuses until an owner-merged
    change sets it to true. For a read-only inspect before that change, run the tool's own `--inspect`.
 2. **Source.** All of these must hold:
    - The tarball's name is `source-<--commit>.tar.gz`.
@@ -107,7 +114,9 @@ An unexpected exception also ends in one failure summary:
    - no dependencies are missing, and the predecessors are applied;
    - the live hash equals the pin's expected hash, and `live_matches_expected` is true;
    - `already_applied` is false;
-   - `precondition_failures` is `[]` and `apply_preconditions_met` is true.
+   - `precondition_failures` is `[]` and `apply_preconditions_met` is true;
+   - every `inspect_requires` field of the registry entry holds its value (SQL 29:
+     `sql90_applied` is `false`).
 4. **Contracts.** The one-shot runs, on this tree, the test of every accepted contract in
    `ops/deployment-guard/accepted-contracts.json` that applies to a production
    `sql-apply`. Today that is `claim-ledger`, `tenant-isolation` and
@@ -137,7 +146,9 @@ An unexpected exception also ends in one failure summary:
    `sql83_production_apply_allowed` / `sql84_production_apply_allowed` /
    `sql85_production_apply_allowed` / `sql86_production_apply_allowed` /
    `sql87_production_apply_allowed` / `sql88_production_apply_allowed` /
-   `sql89_production_apply_allowed` true.
+   `sql89_production_apply_allowed` / `sql29_production_apply_allowed` /
+   `sql30_production_apply_allowed` / `sql90_production_apply_allowed` … true (the
+   registry entry's `allowed_key`).
 8. **Apply.** Runs `<tool> --apply --input <manifest>`.
    - This is the only child that gets `CHECKSOPS_DEPLOYMENT_GUARD_APPLY=1` and
      `CHECKSOPS_DEPLOYMENT_GUARD_RECEIPT`.

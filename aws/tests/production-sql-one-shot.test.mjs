@@ -43,6 +43,7 @@ import { evaluateSql87ProductionApply } from '../../scripts/deployment-guard/lib
 import { evaluateSql88ProductionApply } from '../../scripts/deployment-guard/lib/sql88-claim-id-assign-case-tenant-scope-production-apply.mjs';
 import { evaluateSql89ProductionApply } from '../../scripts/deployment-guard/lib/sql89-check-intake-column-update-production-apply.mjs';
 import { RELEASE_PRODUCTION, evaluateReleaseProductionApply } from '../../scripts/deployment-guard/lib/release-sql-production-apply.mjs';
+import { LIBRARY_PRODUCTION, evaluateLibraryProductionApply } from '../../scripts/deployment-guard/lib/sql29-sql30-library-production-apply.mjs';
 import { main as oneShotMain } from '../../scripts/deployment-guard/production-sql-one-shot.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -53,6 +54,8 @@ const RECEIPT = path.join(receiptDir(ROOT), 'production::production-sql.json');
 
 // The registered tools with their own evaluator (sql77-79 share the member-stakeholder one).
 const EVALUATORS = Object.freeze({
+  // SQL 29 and SQL 30 share the library evaluator.
+  ...Object.fromEntries(Object.keys(LIBRARY_PRODUCTION).map((key) => [key, (input, opts) => evaluateLibraryProductionApply(key, input, opts)])),
   sql71: evaluateSql71ProductionApply,
   sql80: evaluateSql80ProductionApply,
   sql81: evaluateSql81ProductionApply,
@@ -96,7 +99,39 @@ const { file: TARBALL, sha: TARBALL_SHA } = tarballFixture();
 const tap = (n, { fail = 0, skipped = 0 } = {}) => `TAP version 13\n1..${n}\n# tests ${n}\n# suites 0\n# pass ${n - fail - skipped}\n# fail ${fail}\n# cancelled 0\n# skipped ${skipped}\n# todo 0\n`;
 const json = (value) => `${JSON.stringify(value, null, 2)}\n`;
 
+/**
+ * The SQL 29 / SQL 30 tools' --inspect shape (inspectLibraryProduction): no
+ * missing_dependencies or predecessors fields; prerequisites_missing, sql90_applied and
+ * the sql29 / sql30 catalog reports instead.
+ */
+function libraryInspectDetails(key, pin, overrides = {}) {
+  return {
+    read_only: true,
+    migration: key,
+    filename: pin.filename,
+    counts: { mortgage_request_library_documents: 0, rows_outside_sql30_values: 0 },
+    source_ok: true,
+    pin_execute: true,
+    current_user: 'checksops_admin',
+    session_user: 'checksops_admin',
+    admin_login: 'checksops_admin',
+    prerequisites_missing: [],
+    sql90_applied: false,
+    sql29: { live_definition_sha256: key === 'sql29' ? pin.expected_live_definition_sha256 : 'f'.repeat(64), functions_present: 0 },
+    sql30: { live_definition_sha256: key === 'sql30' ? pin.expected_live_definition_sha256 : 'f'.repeat(64), check_shape: 'predecessor_6' },
+    live_definition_sha256: pin.expected_live_definition_sha256,
+    expected_live_definition_sha256: pin.expected_live_definition_sha256 ?? null,
+    intended_replacement_sha256: pin.intended_replacement_sha256,
+    live_matches_expected: true,
+    already_applied: false,
+    precondition_failures: [],
+    apply_preconditions_met: true,
+    ...overrides,
+  };
+}
+
 function inspectDetails(key, pin, overrides = {}) {
+  if (Object.hasOwn(LIBRARY_PRODUCTION, key)) return libraryInspectDetails(key, pin, overrides);
   return {
     read_only: true,
     migration: key,
@@ -1152,4 +1187,150 @@ test('a failing post-apply inspect after a failed apply records only picked fiel
   assert.equal(result.details.post_apply_inspect.error.ok, false);
   assert.deepEqual(result.details.post_apply_inspect.error.details.billing_duplicates, { readable: true, groups: 1, extra_events: 1 });
   assert.doesNotMatch(JSON.stringify(result), new RegExp(`${DUP_CHECK_ID}|check_ids|not copied`));
+});
+
+// --- SQL 29 and SQL 30 (ops/production-sql-29-30-apply.md) -------------------------------
+
+const LIBRARY_KEYS = Object.freeze(['sql29', 'sql30']);
+
+test('SQL 29 and SQL 30 are registered with their own tools, pins and allowed keys', () => {
+  const expected = {
+    sql29: 'scripts/deployment-guard/sql29-mortgage-ops-library-parity-production-apply.mjs',
+    sql30: 'scripts/deployment-guard/sql30-tenant-documents-doc-type-production-apply.mjs',
+  };
+  for (const key of LIBRARY_KEYS) {
+    const tool = ONE_SHOT_TOOLS[key];
+    assert.equal(tool.key, key);
+    assert.equal(tool.script, expected[key]);
+    assert.deepEqual([...tool.args], []);
+    assert.equal(tool.pin_rel, LIBRARY_PRODUCTION[key].pin_rel);
+    assert.equal(tool.allowed_key, `${key}_production_apply_allowed`);
+    assert.equal(tool.allowed_key, LIBRARY_PRODUCTION[key].allowed_key);
+    // The CLI entry runs the shared library tool for this key (--inspect / --input / --apply --input).
+    const cli = fs.readFileSync(path.join(ROOT, tool.script), 'utf8');
+    assert.match(cli, new RegExp(`runLibraryProductionTool\\(\\s*\\{ key: '${key}'`));
+    // No hash is hard-coded in the registry: source_sha256 and the fingerprints come from the pin.
+    assert.doesNotMatch(JSON.stringify(tool), /[0-9a-f]{64}/);
+    const pin = realPin(key);
+    assert.equal(pin.migration, key);
+    assert.equal(pin.target_environment, 'production');
+    assert.equal(pin.target_component, 'production-sql');
+    assert.equal(pin.deployment_type, 'sql-apply');
+  }
+});
+
+test('the committed SQL 29 and SQL 30 pins (execute false) are refused before any child, in both phases', async () => {
+  for (const key of LIBRARY_KEYS) {
+    assert.equal(realPin(key).execute, false, key);
+    for (const phase of ['inspect', 'apply']) {
+      const { result, runner } = await oneShot({ key, pin: null, o: { phase, 'workstream-id': `prod-${key}-committed-pin-test` } });
+      assert.equal(result.ok, false, key);
+      assert.equal(result.code, CODES.GUARD_APPLY_FORBIDDEN, key);
+      assert.equal(result.details.stopped_at, 'pin', key);
+      assert.equal(runner.calls.length, 0, key);
+    }
+    // Pending authorization and no staging acceptance stop at the pin even with execute flipped.
+    const flipped = { ...realPin(key), execute: true };
+    const stopped = await oneShot({ key, pin: flipped, o: { 'workstream-id': `prod-${key}-pending-test` } });
+    assert.equal(stopped.result.code, CODES.PRODUCTION_APPROVAL_REQUIRED, key);
+    assert.equal(stopped.result.details.stopped_at, 'pin', key);
+    assert.equal(stopped.runner.calls.length, 0, key);
+    // The tool's evaluator still refuses the unrecorded pre-state and the pending authorization.
+    const pending = realPin(key);
+    const noPre = await EVALUATORS[key]({ ...pending, live_definition_sha256: null, staging_acceptance: FIXTURE_STAGING_ACCEPTANCE }, { root: ROOT, pin: { ...pending, execute: true, staging_acceptance: FIXTURE_STAGING_ACCEPTANCE } });
+    assert.equal(noPre.code, CODES.SQL_COLLISION, key);
+    const withPre = { ...pending, execute: true, expected_live_definition_sha256: FIXTURE_EXPECTED_LIVE, staging_acceptance: FIXTURE_STAGING_ACCEPTANCE };
+    const notApproved = await EVALUATORS[key]({ ...withPre, live_definition_sha256: FIXTURE_EXPECTED_LIVE }, { root: ROOT, pin: withPre });
+    assert.equal(notApproved.code, CODES.PRODUCTION_APPROVAL_REQUIRED, key);
+  }
+});
+
+test('SQL 29 / SQL 30 inspect phase runs the tool --inspect, records its report and writes nothing', async () => {
+  for (const key of LIBRARY_KEYS) {
+    const { result, runner, tmpDir } = await oneShot({ key, o: { phase: 'inspect', 'workstream-id': `prod-${key}-inspect-test` } });
+    assert.equal(result.ok, true, `${key}: ${JSON.stringify(result.details.error)}`);
+    assert.deepEqual(runner.steps(), ['inspect', ...CONTRACT_STEPS]);
+    assert.deepEqual(runner.calls[0].args, [ONE_SHOT_TOOLS[key].script, '--inspect']);
+    assert.deepEqual(fs.readdirSync(tmpDir), []);
+    const recorded = result.details.pre_apply_inspect;
+    assert.equal(recorded.sql90_applied, false);
+    assert.deepEqual(recorded.prerequisites_missing, []);
+    assert.equal(recorded.sql29.functions_present, 0);
+    assert.equal(recorded.sql30.check_shape, 'predecessor_6');
+    assert.equal(recorded.counts.rows_outside_sql30_values, 0);
+    assert.equal(recorded.admin_login, undefined, 'only the picked fields are recorded');
+  }
+});
+
+test('SQL 29 / SQL 30 apply phase: evaluate, apply and post-apply inspect use the tool flags and the pin hashes', async () => {
+  for (const key of LIBRARY_KEYS) {
+    const pin = executePin(key);
+    const { result, runner } = await oneShot({ key, o: { 'workstream-id': `prod-${key}-apply-test` } });
+    assert.equal(result.ok, true, `${key}: ${JSON.stringify(result.details.error)}`);
+    assert.deepEqual(runner.steps(), FULL);
+    const script = ONE_SHOT_TOOLS[key].script;
+    const byStep = Object.fromEntries(runner.calls.map((c) => [c.step, c]));
+    assert.deepEqual(byStep.evaluate.args.slice(0, 2), [script, '--input']);
+    assert.deepEqual(byStep.apply.args.slice(0, 3), [script, '--apply', '--input']);
+    assert.deepEqual(byStep['post-apply-inspect'].args, [script, '--inspect']);
+    assert.equal(result.details.applied.receipt.before_hash, pin.expected_live_definition_sha256);
+    assert.equal(result.details.applied.receipt.after_hash, pin.intended_replacement_sha256);
+    assert.match(result.details.one_use_id, new RegExp(`^${key}-prod-`));
+  }
+});
+
+test('SQL 29 / SQL 30 source_sha256 is read from the pin: a changed pin hash is a reconciliation stop', async () => {
+  for (const key of LIBRARY_KEYS) {
+    const { result, runner } = await oneShot({ key, pin: executePin(key, { source_sha256: 'f'.repeat(64) }), o: { 'workstream-id': `prod-${key}-source-test` } });
+    assert.equal(result.code, CODES.SOURCE_RECONCILIATION_REQUIRED, key);
+    assert.equal(result.details.stopped_at, 'source', key);
+    assert.equal(runner.calls.length, 0, key);
+    assert.equal(result.details.error.details.pinned_source_sha256, 'f'.repeat(64));
+  }
+});
+
+test('ordering: SQL 29 stops at the inspect once SQL 90 is applied (or the marker is missing)', async () => {
+  const pin = executePin('sql29');
+  const cases = [
+    [{ sql90_applied: true, precondition_failures: ['sql90_not_applied'], apply_preconditions_met: false }, ['sql90_applied', 'precondition_failures', 'apply_preconditions_met']],
+    // The one-shot's own gate holds even if a tool output claimed preconditions met.
+    [{ sql90_applied: true }, ['sql90_applied']],
+    [{ sql90_applied: undefined }, ['sql90_applied']],
+  ];
+  for (const [overrides, failed] of cases) {
+    const { result, runner } = await oneShot({
+      key: 'sql29',
+      o: { 'workstream-id': 'prod-sql29-order-test' },
+      responses: { inspect: () => ({ status: 0, stdout: json({ ok: true, details: libraryInspectDetails('sql29', pin, overrides) }), stderr: '' }) },
+    });
+    assert.equal(result.ok, false);
+    assert.equal(result.code, CODES.DEPLOYMENT_COLLISION);
+    assert.equal(result.details.stopped_at, 'inspect');
+    for (const name of failed) assert.ok(result.details.error.details.failed.includes(name), `${name}: ${result.details.error.details.failed}`);
+    assert.deepEqual(runner.steps(), ['inspect']);
+  }
+  // SQL 30 has no SQL 90 gate: its order against SQL 94 is the tool's check_is_supported_predecessor.
+  assert.equal(ONE_SHOT_TOOLS.sql30.inspect_requires, undefined);
+  const sql30 = executePin('sql30');
+  const { result } = await oneShot({
+    key: 'sql30',
+    o: { 'workstream-id': 'prod-sql30-order-test' },
+    responses: { inspect: () => ({ status: 0, stdout: json({ ok: true, details: libraryInspectDetails('sql30', sql30, { precondition_failures: ['check_is_supported_predecessor'], apply_preconditions_met: false }) }), stderr: '' }) },
+  });
+  assert.equal(result.details.stopped_at, 'inspect');
+  assert.ok(result.details.error.details.failed.includes('precondition_failures'));
+});
+
+test('ordering: SQL 29 and SQL 30 run before SQL 90 and SQL 94, which list them as predecessors', () => {
+  for (const key of LIBRARY_KEYS) {
+    assert.deepEqual([...ONE_SHOT_TOOLS[key].runs_before], ['sql90', 'sql94']);
+    for (const successor of ONE_SHOT_TOOLS[key].runs_before) assert.ok(Object.hasOwn(ONE_SHOT_TOOLS, successor), successor);
+  }
+  assert.ok(realPin('sql90').predecessors.includes('sql29'));
+  assert.ok(realPin('sql90').predecessors.includes('sql30'));
+  assert.ok(realPin('sql94').predecessors.includes('sql29'));
+  // SQL 30 is optional for SQL 94 (it accepts SQL 30's CHECK or the predecessors), but SQL 30 refuses SQL 94's.
+  assert.match(realPin('sql94').order_note, /SQL 30 \(optional/);
+  assert.match(realPin('sql29').order_note, /^Before SQL 90/);
+  assert.match(realPin('sql30').order_note, /^Before SQL 94/);
 });
