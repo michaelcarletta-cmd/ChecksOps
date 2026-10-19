@@ -269,7 +269,7 @@
     },
     "providers/onboarding/store.mjs": {
       "live_sha256": null,
-      "accepted_sha256": "a6f53cc0fa2feceaba7479e0a81afed84836186f34d32f967da17dc7992b3b6e",
+      "accepted_sha256": "f73f0b8a01621bbddd64c6a50c126779e587ac4b712afe452ae82c3625df968e",
       "operation": "add"
     },
     "providers/onboarding/context.mjs": {
