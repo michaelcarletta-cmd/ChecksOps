@@ -84,7 +84,7 @@ function manifest(pin) {
 }
 const consumedPath = () => path.join(os.tmpdir(), `sql102-prod-consumed-${process.pid}-${Math.random().toString(16).slice(2)}.json`);
 
-test('pin: the SQL 90-97 pin shape, pending, in step with the staging pin, the one-shot and the inventory', () => {
+test('pin: the SQL 90-97 pin shape, execute-authorized, in step with the staging pin, the one-shot and the inventory', () => {
   const pin = COMMITTED;
   const staging = STAGING[KEY];
   // SQL 96's pin is the engine pin shape without its record-only applied / production_evidence sections.
@@ -93,11 +93,11 @@ test('pin: the SQL 90-97 pin shape, pending, in step with the staging pin, the o
   assert.deepEqual(keyPaths(pin).filter((k) => !shape.has(k)), []);
   assert.equal(pin.id, RELEASE_SQL_SPECS[KEY].production_pin_rel.split('/').pop().replace(/\.json$/, ''));
   assert.equal(pin.migration, KEY);
-  assert.equal(pin.execute, false);
-  assert.equal(pin.authorization, 'pending');
-  assert.equal(pin.expected_live_definition_sha256, null);
-  assert.equal(pin.staging_acceptance.ok, false);
-  assert.equal(pin.production_inspect.status, 'pending');
+  assert.equal(pin.execute, true);
+  assert.match(pin.authorization, /Owner approved/);
+  assert.equal(pin.expected_live_definition_sha256, 'd3b2cd30d9b06347c4a08febac3fce49732bd0babcacfeea0a2b49dbdc9cb752');
+  assert.equal(pin.staging_acceptance.ok, true);
+  assert.equal(pin.production_inspect.status, 'recorded');
   assert.equal(pin.filename, SQL102_FILE);
   assert.equal(pin.source_sha256, staging.source_sha256);
   assert.equal(pin.staging_pin_commit, staging.commit);
