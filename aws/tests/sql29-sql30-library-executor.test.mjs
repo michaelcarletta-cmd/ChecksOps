@@ -10,6 +10,7 @@
  * open or assigned requests (the SQL 29 design).
  */
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -109,6 +110,10 @@ const neverConnect = async () => { throw new Error('should-not-connect'); };
 
 test('pins: the unchanged files, pending pre-states, code-derived post-states, selectable and packed', () => {
   assert.equal(sha(TEXT29), PIN29.source_sha256);
+  // The pin's commit authored these bytes.
+  const atCommit = spawnSync('git', ['show', `${PIN29.commit}:${PIN29.filename}`], { cwd: ROOT, maxBuffer: 1024 * 1024 });
+  assert.equal(atCommit.status, 0, String(atCommit.stderr));
+  assert.equal(sha(atCommit.stdout), PIN29.source_sha256);
   assert.equal(sha(TEXT30), PIN30.source_sha256);
   assertStagingPinState(assert, 'sql29', PIN29);
   assertStagingPinState(assert, 'sql30', PIN30);

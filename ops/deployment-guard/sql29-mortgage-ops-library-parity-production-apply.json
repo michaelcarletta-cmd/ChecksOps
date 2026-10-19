@@ -8,7 +8,7 @@
   "deployment_type": "sql-apply",
   "filename": "aws/rls/sql/29_mortgage_ops_library_parity.sql",
   "migration_id": "29_mortgage_ops_library_parity",
-  "staging_pin_commit": "48c16079dbad30368bc916484144e370f3441f26",
+  "staging_pin_commit": "cff8f5a6db072baf34a6fcaec3b442c8d1a07489",
   "source_sha256": "ff174c482dce495564bcb1cb7bdf484b689395575017b8a8d985c84ebff63cdb",
   "function_identities": [
     "public.aws_mortgage_agent_can_read_library_document(uuid)",

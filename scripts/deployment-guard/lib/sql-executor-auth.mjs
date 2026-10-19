@@ -2001,8 +2001,9 @@ export const AUTHORIZED_SQL29_MORTGAGE_OPS_LIBRARY_PARITY = Object.freeze({
   key: 'sql29',
   filename: 'aws/rls/sql/29_mortgage_ops_library_parity.sql',
   migration_id: '29_mortgage_ops_library_parity',
-  // The commit that last authored the file bytes (release lock mortgage-ops records the same sha256).
-  commit: '48c16079dbad30368bc916484144e370f3441f26',
+  // The commit that last authored the file bytes (the trigger-ACL revoke; release lock
+  // mortgage-ops must record the same sha256).
+  commit: 'cff8f5a6db072baf34a6fcaec3b442c8d1a07489',
   source_sha256: 'ff174c482dce495564bcb1cb7bdf484b689395575017b8a8d985c84ebff63cdb',
   // Pending: no staging read-live has been recorded; apply refuses until a reviewed pin change records it.
   expected_live_definition_sha256: null,
