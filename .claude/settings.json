@@ -1,0 +1,31 @@
+{
+  "permissions": {
+    "deny": [
+      "Bash(sam deploy:*)",
+      "Bash(sam build:*)",
+      "Bash(sam sync:*)",
+      "Bash(sam package:*)",
+      "Bash(sam delete:*)",
+      "Bash(aws lambda update-function-code:*)",
+      "Bash(aws lambda update-function-configuration:*)",
+      "Bash(aws lambda publish-version:*)",
+      "Bash(aws cloudformation deploy:*)",
+      "Bash(aws cloudformation create-stack:*)",
+      "Bash(aws cloudformation update-stack:*)",
+      "Bash(aws cloudformation delete-stack:*)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|MultiEdit|Write|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/checksops-guard.mjs\""
+          }
+        ]
+      }
+    ]
+  }
+}

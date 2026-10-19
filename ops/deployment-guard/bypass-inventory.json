@@ -336,6 +336,13 @@
       "note": "Scanner only. Never writes AWS."
     },
     {
+      "path": ".claude/hooks/checksops-guard.mjs",
+      "classification": "SAFE",
+      "capabilities": ["agent-deploy-refusal"],
+      "scanner_allow_mention": true,
+      "note": "Claude Code PreToolUse hook. Names direct-deploy commands only to refuse them; runs no AWS or database command."
+    },
+    {
       "path": "aws/cutover/scripts/hardening-batch3-apply.mjs",
       "classification": "MUST_REFUSE_DIRECT",
       "capabilities": ["lambda-update-function-code", "cognito-config"],
