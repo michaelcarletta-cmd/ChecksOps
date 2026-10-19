@@ -2056,13 +2056,13 @@ export const AUTHORIZED_SQL91_MOOV_ONBOARDING = Object.freeze({
   migration_id: '91_moov_onboarding',
   // The commit that last authored the file bytes on the release branch.
   commit: 'b0f219a90a34d87b5fbf10e5632f408f364bf0b1',
-  source_sha256: '199bfa1a528d219a8683b61ae6264d84dd5b08caa74564691374c8c6c42b71e3',
+  source_sha256: '3bb1ba44ef8f36585e76444e068adab15b59acf8afc17bd934949c40364fd33e',
   authorization: 'Owner approved 2026-10-17: staging apply (wave 1) from staging read-live run 39075362413',
   execute: true,
   // Staging read-live run 39075362413 (2026-10-17).
   expected_live_definition_sha256: 'bdbc697f75e7a9c57c91c9ce12956800e92417a93acfbbaa0c2d1cf69542972e',
   // Code-derived: releaseIntendedHash('sql91', file bytes) (release-sql-state.mjs); re-derived by the tests.
-  intended_replacement_sha256: 'f8611dcca3397f684a247de454c8737074b3d2fb03c52e28fba665d0f297967d',
+  intended_replacement_sha256: '4916ff91cef358a049f5c7f4428550807e3602e65a475dd9b839d076c5eab47d',
   function_identities: Object.freeze(['public.aws_moov_onboarding_active()', 'public.aws_can_submit_moov_onboarding(uuid)', 'public.aws_moov_onboarding_writer(uuid)', 'public.aws_moov_webhook_apply_active()']),
 });
 export const AUTHORIZED_SQL92_SIGNATURE_REQUEST_CHECK_FILES_LINK_GRANT = Object.freeze({

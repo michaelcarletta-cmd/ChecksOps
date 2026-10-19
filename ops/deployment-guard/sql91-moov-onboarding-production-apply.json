@@ -9,7 +9,7 @@
   "filename": "aws/workflows/sql/91_moov_onboarding.sql",
   "migration_id": "91_moov_onboarding",
   "staging_pin_commit": "b0f219a90a34d87b5fbf10e5632f408f364bf0b1",
-  "source_sha256": "199bfa1a528d219a8683b61ae6264d84dd5b08caa74564691374c8c6c42b71e3",
+  "source_sha256": "3bb1ba44ef8f36585e76444e068adab15b59acf8afc17bd934949c40364fd33e",
   "function_identities": [
     "public.aws_moov_onboarding_active()",
     "public.aws_can_submit_moov_onboarding(uuid)",
@@ -17,7 +17,7 @@
     "public.aws_moov_webhook_apply_active()"
   ],
   "expected_live_definition_sha256": "bdbc697f75e7a9c57c91c9ce12956800e92417a93acfbbaa0c2d1cf69542972e",
-  "intended_replacement_sha256": "f8611dcca3397f684a247de454c8737074b3d2fb03c52e28fba665d0f297967d",
+  "intended_replacement_sha256": "4916ff91cef358a049f5c7f4428550807e3602e65a475dd9b839d076c5eab47d",
   "authorization_phrase": "APPLY_MOOV_ONBOARDING",
   "predecessors": [],
   "order_note": "Any time before the providers/onboarding/*.mjs ADD members (plan sql_before). Production onboarding also needs aws/template.yaml (KMS keys, VPC endpoint, AWS_MOOV_ONBOARDING_PRODUCTION_ENABLED=\"false\") and a full rebuilt Lambda ZIP (@aws-sdk/client-kms).",
@@ -77,7 +77,7 @@
       "file": "source-c628728273f0d54c901e3526b46d23e7cef4f411.tar.gz",
       "sha256": "a1f6a7b93a311069a9e0f0b3fc80d8aa6b739d50f9bb31e72d8e8cad13b53244"
     },
-    "migration_source_sha256": "199bfa1a528d219a8683b61ae6264d84dd5b08caa74564691374c8c6c42b71e3",
+    "migration_source_sha256": "3bb1ba44ef8f36585e76444e068adab15b59acf8afc17bd934949c40364fd33e",
     "migration_source_sha256_note": "The one-shot source step hashed aws/workflows/sql/91_moov_onboarding.sql in the transfer tarball: equal to source_sha256 (the pin).",
     "runner": "i-0c35557c4e5385406",
     "workstream_id": "prod-sql91-moov-onboarding-20261019",
