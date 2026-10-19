@@ -1,0 +1,22 @@
+{
+  "_comment": "Target document for the inline policy TenantInviteUserProductionCognito on role checksops-production-api-execution (created by hand, not in any template). 2026-10-18: AdminDisableUser (platform-owner Disable login) and AdminDeleteUser (failed-invite login cleanup) added; the live policy had only Create/Get/SetUserPassword, so both calls were denied. Scoped to the production user pool only. Apply only with owner approval; record the apply in ops/release-2026-10-17-lock-pin-deltas.md section 0d.",
+  "role": "checksops-production-api-execution",
+  "policy_name": "TenantInviteUserProductionCognito",
+  "document": {
+    "Version": "2012-10-17",
+    "Statement": [
+      {
+        "Sid": "TenantInviteUserProductionCognito",
+        "Effect": "Allow",
+        "Action": [
+          "cognito-idp:AdminCreateUser",
+          "cognito-idp:AdminGetUser",
+          "cognito-idp:AdminSetUserPassword",
+          "cognito-idp:AdminDisableUser",
+          "cognito-idp:AdminDeleteUser"
+        ],
+        "Resource": "arn:aws:cognito-idp:us-east-1:806168576068:userpool/us-east-1_h00WorYMT"
+      }
+    ]
+  }
+}
