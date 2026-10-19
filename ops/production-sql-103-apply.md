@@ -19,15 +19,17 @@ default `PUBLIC` + owner, or owner only after SQL 29), so its tools can verify t
 exactly, and the end state is SQL 29's intended one either way. A trigger function needs no
 EXECUTE grant to fire.
 
-**Status:** not applied by the tooling anywhere. The production pin
-(`ops/deployment-guard/sql103-share-library-trigger-acl-production-apply.json`) is
-execute-authorized by the reviewed change of 2026-10-19 (owner-approved `authorization`,
-`execute: true`, the recorded production pre-state and the staging read-live acceptance below);
-`execute: true` takes effect only when the owner merges that change, and each apply still needs
-the owner's run-time approval for its workstream, a production-sql receipt, the authorization
-phrase `APPLY_SHARE_LIBRARY_TRIGGER_ACL` and a new `one_use_id`. The staging pin
-(`sql103-share-library-trigger-acl`) stays pending (`execute: false`): staging is already in
-the intended state, so no staging apply is needed.
+**Status:** applied to production on 2026-10-19 (guarded one-shot, SSM
+`805556fa-9e70-45d3-b20b-5e68ce64db7d`, main `dbaa93c90`, one_use_id
+`sql103-prod-25bd6177-69b4-445c-bc10-686248723e0b`): `bade6813…` -> `4b909c59…`, post-apply
+inspect `already_applied` true, owner-only EXECUTE, `precondition_failures` `[]` (Evidence
+below). The production pin
+(`ops/deployment-guard/sql103-share-library-trigger-acl-production-apply.json`) records the
+apply in `applied` and is `execute: false` again, so a re-apply needs a new reviewed change.
+It had been execute-authorized by the reviewed change of 2026-10-19 (owner-approved
+`authorization`, `execute: true`, the recorded production pre-state and the staging read-live
+acceptance below). The staging pin (`sql103-share-library-trigger-acl`) stays pending
+(`execute: false`): staging is already in the intended state, so no staging apply is needed.
 
 ## Evidence (2026-10-19)
 
@@ -53,7 +55,29 @@ package CodeSha256 `jJioB/XfKHPR0FgWuzGcah3QpYTa64h4Frue6QsQYQ8=`), `read-live` 
 `39188618156` for `sql103-share-library-trigger-acl`: live == intended `4b909c59…`,
 `already_applied` true, `precondition_failures` []. No staging apply was needed or run (step 1
 below: the read-live run is the staging acceptance). The revoke path itself is covered on
-PostgreSQL 16 by `aws/tests/sql103-share-library-trigger-acl-pg.test.mjs`.
+PostgreSQL 16 by `aws/tests/sql103-share-library-trigger-acl-pg.test.mjs`. Staging's SQL 29
+state is present but superseded by SQL 90 (staging SQL 29 read-live run `39188780526`: live
+`711fb084…`, not SQL 29's intended `1271ea9b…`; `sql90_applied` true), so staging's owner-only
+ACL is not evidence that SQL 29 is `already_applied` there.
+
+**Production apply** (`production-sql-one-shot.mjs --migration sql103 --approval-scope sql103
+--phase apply`, approval statement "apply SQL 103 in production", operator
+`michaelcarletta-cmd`):
+
+| field | value |
+|---|---|
+| source | main `dbaa93c90e1dd4c60b276d1eee2690652352fc97`, transfer tarball sha256 `94d7499a9fd3eadb867bd3e89412872e0c6cb8e8cacb3a3fe116f327059ed8e3` |
+| SSM command / runner | `805556fa-9e70-45d3-b20b-5e68ce64db7d` on `i-0c35557c4e5385406` |
+| one-shot run_id / workstream | `f8625a3b-0ade-48f2-a234-5581e8498327` / `prod-sql103-share-library-trigger-acl-20261019` |
+| one_use_id | `sql103-prod-25bd6177-69b4-445c-bc10-686248723e0b` (spent) |
+| contracts | claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43 |
+| manifest_sha256 | `825d924796c69e0d297a822ad91f5e1c272c9f8ae5a5b4e5a1e28cabd0759abf` |
+| receipt | `bade6813…` -> `4b909c5929f0357ef442a1b2ebcb6bf8312e93be257010ed8a32072accf02aae`, result applied; unrelated catalog `373d503c6073d3d2c902d6f41c205ecfb47d32fca73de6b3ca9ae46674d8f1ca` (relations 861, functions 1281, policies 368, triggers 173, …) |
+| post-apply inspect | `already_applied` true, ACL `owner EXECUTE grantor=owner` only, `precondition_failures` [] |
+
+**Later read-only inspect** (SSM `45639f6b-68cf-4502-a127-458d99865ae8`, same main and
+tarball; the same run inspected SQL 29, `ops/production-sql-29-30-apply.md`): SQL 103 live ==
+intended `4b909c59…`, `already_applied` true.
 
 ## Run order (production)
 
@@ -103,9 +127,10 @@ schema `public` (and the functions of `auth`) unchanged. The tools roll back oth
 1. Staging: the staging executor must carry SQL 103 and the engine change first (executor
    package refresh through `sql-executor-ensure.mjs` / the guarded staging executor `deploy`
    mode, its own reviewed run). Then run the guarded staging SQL executor with `read-live` for
-   `sql103-share-library-trigger-acl`. Staging already has SQL 29 (read-live
-   `already_applied` true), so SQL 103's read-live is expected to report `already_applied`
-   true: no staging apply, and the read-live run is the staging acceptance. If it reports
+   `sql103-share-library-trigger-acl`. Staging's function ACL is already owner-only (its SQL 29
+   state is present but superseded by SQL 90: SQL 29 read-live run `39188780526`, live
+   `711fb084…`, `sql90_applied` true), so SQL 103's read-live is expected to report
+   `already_applied` true: no staging apply, and the read-live run is the staging acceptance. If it reports
    anything else, record `LIVE_DEFINITION_SHA256` in the staging pin
    (`expected_live_definition_sha256`, owner-approved `authorization`, `execute: true`) in a
    reviewed change, `apply`, then `read-live` again. Done 2026-10-19: read-live run
@@ -119,5 +144,7 @@ schema `public` (and the functions of `auth`) unchanged. The tools roll back oth
    separate change and is still pending.
 3. Apply with the one-shot (`ops/production-sql-one-shot.md`): `production-sql-one-shot.mjs
    --migration sql103 --approval-scope sql103 … --phase inspect`, then the owner-named
-   `--phase apply`; then SQL 29's runs (`--migration sql29`), then SQL 30's.
-4. Record the apply and retire the pin (`execute: false`).
+   `--phase apply`; then SQL 29's runs (`--migration sql29`), then SQL 30's. SQL 103 done
+   2026-10-19 (SSM `805556fa-…`, Evidence above).
+4. Record the apply and retire the pin (`execute: false`). Done: the pin records the
+   2026-10-19 apply in `applied` and is `execute: false`.

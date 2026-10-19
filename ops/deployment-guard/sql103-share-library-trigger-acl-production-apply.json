@@ -1,8 +1,8 @@
 {
   "id": "sql103-share-library-trigger-acl-production-apply",
   "migration": "sql103",
-  "authorization": "Owner approved 2026-10-19 (the owner approved preparing this SQL 103 production pin change; the change itself is reviewed and merge-approved by the owner separately): production apply of SQL 103 after the staging acceptance below (production bade6813d689c91e3c8e39e33203e64eca23cc363f557062a7669407a01d5b9c -> 4b909c5929f0357ef442a1b2ebcb6bf8312e93be257010ed8a32072accf02aae), immediately before SQL 29; execute true takes effect only when the owner reviews and merges this change. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
-  "execute": true,
+  "authorization": "Applied to production on 2026-10-19; execute is false again, so this pin is no longer a standing authorization and a re-apply needs a new reviewed pin change. The owner approved the SQL 103 production pin (bade6813 -> 4b909c59), the read-only production inspect and the execute change on 2026-10-19, and approved the one apply run recorded in applied (workstream prod-sql103-share-library-trigger-acl-20261019) on 2026-10-19 with \"apply SQL 103 in production\". That approval covered that run only",
+  "execute": false,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -17,7 +17,7 @@
   "intended_replacement_sha256": "4b909c5929f0357ef442a1b2ebcb6bf8312e93be257010ed8a32072accf02aae",
   "authorization_phrase": "APPLY_SHARE_LIBRARY_TRIGGER_ACL",
   "predecessors": [],
-  "order_note": "Immediately before SQL 29 (aws/rls/sql/29_mortgage_ops_library_parity.sql; production run order SQL 103, SQL 29, SQL 30, then SQL 90 and the rest of the release, ops/production-sql-103-apply.md). Production inspect 2026-10-19 (main bf6b7555e): share_library_docs_to_mortgage_request() holds EXECUTE for PUBLIC, checksops and the owner; SQL 29 revokes PUBLIC only, so its guard refuses (function_acl_replaceable) until SQL 103 has left the owner as the only grantee. SQL 29's file and its intended fingerprint 1271ea9b61ec983f88e911b23c569403979fb5f560880021b58d3b1e57243c79 are unchanged. No predecessor: SQL 103 does not need SQL 29, is a no-op once the owner is the only grantee (staging after SQL 29: the tools refuse it as already in place) and is safe before or after SQL 90. Nothing in the repository grants the function to checksops or authenticated again, so it is not re-run after SQL 29.",
+  "order_note": "Immediately before SQL 29 (aws/rls/sql/29_mortgage_ops_library_parity.sql; production run order SQL 103, SQL 29, SQL 30, then SQL 90 and the rest of the release, ops/production-sql-103-apply.md). Production inspect 2026-10-19 (main bf6b7555e): share_library_docs_to_mortgage_request() holds EXECUTE for PUBLIC, checksops and the owner; SQL 29 revokes PUBLIC only, so its guard refuses (function_acl_replaceable) until SQL 103 has left the owner as the only grantee. SQL 29's file and its intended fingerprint 1271ea9b61ec983f88e911b23c569403979fb5f560880021b58d3b1e57243c79 are unchanged. No predecessor: SQL 103 does not need SQL 29, is a no-op once the owner is the only grantee (staging: the owner is already the only grantee, SQL 103 read-live run 39188618156 already_applied true, so the tools refuse it as already in place there; staging's SQL 29 state is present but superseded by SQL 90, SQL 29 read-live run 39188780526: live 711fb084..., sql90_applied true) and is safe before or after SQL 90. Nothing in the repository grants the function to checksops or authenticated again, so it is not re-run after SQL 29.",
   "admin_login": "checksops_admin",
   "rds_identifier": "checksops-production",
   "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
@@ -38,7 +38,7 @@
       "aws/tests/release-sql90-97-production-apply.test.mjs",
       "aws/tests/sql103-share-library-trigger-acl-pg.test.mjs"
     ],
-    "note": "Guarded tooling for SQL 103: sql103-share-library-trigger-acl-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql103-share-library-trigger-acl); production-sql-one-shot.mjs --migration sql103 (runs_before sql29). intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): the function's EXECUTE ACL with grantors (spec acl_functions, render.grantors), owner only. The post-conditions also require the function's body, attributes and owner unchanged. The tooling does not authorize anything: the reviewed change of 2026-10-19 (\"SQL 103 production pin: pre-state recorded and execute-authorized after staging acceptance\") recorded the production inspect, the staging acceptance and the owner approval and set execute true; the record-and-retire change after the apply sets it false again."
+    "note": "Guarded tooling for SQL 103: sql103-share-library-trigger-acl-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql103-share-library-trigger-acl); production-sql-one-shot.mjs --migration sql103 (runs_before sql29). intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): the function's EXECUTE ACL with grantors (spec acl_functions, render.grantors), owner only. The post-conditions also require the function's body, attributes and owner unchanged. The tooling does not authorize anything: the reviewed change of 2026-10-19 (\"SQL 103 production pin: pre-state recorded and execute-authorized after staging acceptance\") recorded the production inspect, the staging acceptance and the owner approval and set execute true; the record-and-retire change after the apply of 2026-10-19 (recorded in applied) set it false again."
   },
   "production_inspect": {
     "status": "recorded",
@@ -55,7 +55,7 @@
     "successors_applied": [],
     "apply_preconditions_met": false,
     "precondition_failures": [],
-    "note": "Recorded from the read-only production inspect of 2026-10-19 (SSM command 1b740312-6e58-4412-9464-feac28e6bdf1, node scripts/deployment-guard/sql103-share-library-trigger-acl-production-apply.mjs --inspect on the SQL53 runner i-0c35557c4e5385406 from main 03e238afb (tarball sha256 1493cf71...), BEGIN READ ONLY ... ROLLBACK, connected as checksops_admin). live_definition_sha256 bade6813d689c91e3c8e39e33203e64eca23cc363f557062a7669407a01d5b9c (not the intended 4b909c5929f0357ef442a1b2ebcb6bf8312e93be257010ed8a32072accf02aae: already_applied false); precondition_failures [] (every live EXECUTE entry is one the owner can revoke), prerequisites_missing [], successors_applied []. apply_preconditions_met was false at inspect time only because no pre-state was recorded yet (expected_live_definition_sha256 null). The same inspect run showed SQL 29 still refused only by function_acl_replaceable (live 848277b1..., intended 1271ea9b...), which SQL 103 resolves. This reviewed change copies live_definition_sha256 into expected_live_definition_sha256 and, in the same change, sets authorization, execute true and staging_acceptance. A fresh --inspect immediately before apply (the one-shot's inspect step) must still report this live_definition_sha256 and precondition_failures []; if not, stop."
+    "note": "Recorded from the read-only production inspect of 2026-10-19 (SSM command 1b740312-6e58-4412-9464-feac28e6bdf1, node scripts/deployment-guard/sql103-share-library-trigger-acl-production-apply.mjs --inspect on the SQL53 runner i-0c35557c4e5385406 from main 03e238afb (tarball sha256 1493cf71...), BEGIN READ ONLY ... ROLLBACK, connected as checksops_admin). live_definition_sha256 bade6813d689c91e3c8e39e33203e64eca23cc363f557062a7669407a01d5b9c (not the intended 4b909c5929f0357ef442a1b2ebcb6bf8312e93be257010ed8a32072accf02aae: already_applied false); precondition_failures [] (every live EXECUTE entry is one the owner can revoke), prerequisites_missing [], successors_applied []. apply_preconditions_met was false at inspect time only because no pre-state was recorded yet (expected_live_definition_sha256 null). The same inspect run showed SQL 29 still refused only by function_acl_replaceable (live 848277b1..., intended 1271ea9b...), which SQL 103 resolves. This reviewed change copies live_definition_sha256 into expected_live_definition_sha256 and, in the same change, sets authorization, execute true and staging_acceptance. A fresh --inspect immediately before apply (the one-shot's inspect step) must still report this live_definition_sha256 and precondition_failures []; if not, stop. The apply of 2026-10-19 is recorded in applied; the record-and-retire change set execute false again."
   },
   "intended_post_state": {
     "fingerprint": "4b909c5929f0357ef442a1b2ebcb6bf8312e93be257010ed8a32072accf02aae",
@@ -66,5 +66,80 @@
     "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39188618156",
     "basis": "Guarded staging SQL executor read-live of sql103-share-library-trigger-acl, run 39188618156, on the executor deployed from main 03e238afb (deploy run 39188486411, executor package CodeSha256 jJioB/XfKHPR0FgWuzGcah3QpYTa64h4Frue6QsQYQ8=): live_definition_sha256 4b909c5929f0357ef442a1b2ebcb6bf8312e93be257010ed8a32072accf02aae == intended, already_applied true, precondition_failures []. Staging's share_library_docs_to_mortgage_request() EXECUTE ACL is already owner-only (also shown by the staging SQL 29 read-live run 39188780526), so no staging apply was needed or run (ops/production-sql-103-apply.md step 1: the read-live run is the staging acceptance); the staging pin stays pending (execute false). The revoke path itself is covered on PostgreSQL 16 by aws/tests/sql103-share-library-trigger-acl-pg.test.mjs (production-like ACL, SQL 103, then SQL 29 through its production tool).",
     "production_differs": "The pre-states differ: staging is already the intended state (4b909c5929f0357ef442a1b2ebcb6bf8312e93be257010ed8a32072accf02aae, owner-only EXECUTE) and production (production_inspect, 2026-10-19) is bade6813d689c91e3c8e39e33203e64eca23cc363f557062a7669407a01d5b9c (EXECUTE also for PUBLIC and checksops, per SQL 29's inspect). Each environment's state is recorded separately. The post-state fingerprint is the same in both (owner names are not part of it); the same file bytes (source_sha256) are pinned in both."
+  },
+  "applied": {
+    "date": "2026-10-19",
+    "result": "applied",
+    "source_commit": "dbaa93c90e1dd4c60b276d1eee2690652352fc97",
+    "source_tarball": {
+      "file": "source-dbaa93c90e1dd4c60b276d1eee2690652352fc97.tar.gz",
+      "sha256": "94d7499a9fd3eadb867bd3e89412872e0c6cb8e8cacb3a3fe116f327059ed8e3"
+    },
+    "runner": "i-0c35557c4e5385406",
+    "workstream_id": "prod-sql103-share-library-trigger-acl-20261019",
+    "one_use_id": "sql103-prod-25bd6177-69b4-445c-bc10-686248723e0b",
+    "one_use_id_consumed": true,
+    "one_use_id_consumed_basis": "Inferred from the successful apply (the tool records the one_use_id after COMMIT and only warns if that write fails); the consumed-registry entry was not read back separately.",
+    "owner_approval": "apply SQL 103 in production",
+    "owner_approval_basis": "As passed in --approval-statement for --approval-scope sql103; the one-shot cannot verify who said it.",
+    "operator": "michaelcarletta-cmd",
+    "apply_ssm_command_id": "805556fa-9e70-45d3-b20b-5e68ce64db7d",
+    "one_shot_run_id": "f8625a3b-0ade-48f2-a234-5581e8498327",
+    "one_shot_note": "One guarded production-sql-one-shot run (SSM 805556fa-9e70-45d3-b20b-5e68ce64db7d, run_id f8625a3b-0ade-48f2-a234-5581e8498327) from main dbaa93c90 applied SQL 103: runner contracts, manifest, receipt and post-apply inspect as recorded below. Start and finish times were not carried into this record.",
+    "contract_results": {
+      "claim-ledger": {
+        "ok": true,
+        "passed": "4/4"
+      },
+      "tenant-isolation": {
+        "ok": true,
+        "passed": "6/6"
+      },
+      "financial-write-protections": {
+        "ok": true,
+        "passed": "43/43"
+      }
+    },
+    "manifest_sha256": "825d924796c69e0d297a822ad91f5e1c272c9f8ae5a5b4e5a1e28cabd0759abf",
+    "receipt": {
+      "migration": "sql103",
+      "workstream": "prod-sql103-share-library-trigger-acl-20261019",
+      "commit": "dbaa93c90e1dd4c60b276d1eee2690652352fc97",
+      "sql_file": "aws/workflows/sql/103_share_library_trigger_acl.sql",
+      "before_hash": "bade6813d689c91e3c8e39e33203e64eca23cc363f557062a7669407a01d5b9c",
+      "after_hash": "4b909c5929f0357ef442a1b2ebcb6bf8312e93be257010ed8a32072accf02aae",
+      "unrelated_catalog_sha256": "373d503c6073d3d2c902d6f41c205ecfb47d32fca73de6b3ca9ae46674d8f1ca",
+      "unrelated_catalog_counts": {
+        "relations": 861,
+        "functions": 1281,
+        "policies": 368,
+        "triggers": 173
+      },
+      "unrelated_catalog_counts_note": "Only these counts of the receipt were carried into this record; its other counts are not recorded here.",
+      "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39188618156",
+      "result": "applied"
+    },
+    "post_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "4b909c5929f0357ef442a1b2ebcb6bf8312e93be257010ed8a32072accf02aae",
+      "already_applied": true,
+      "precondition_failures": [],
+      "acl_functions": {
+        "public.share_library_docs_to_mortgage_request()": "owner EXECUTE grantor=owner"
+      },
+      "note": "The one-shot post-apply read-only --inspect: already_applied true (live == intended 4b909c59...), the function's EXECUTE ACL the owner only (owner EXECUTE grantor=owner), precondition_failures []."
+    },
+    "later_inspect": {
+      "ssm_command_id": "45639f6b-68cf-4502-a127-458d99865ae8",
+      "read_only": true,
+      "source_commit": "dbaa93c90e1dd4c60b276d1eee2690652352fc97",
+      "source_tarball_sha256": "94d7499a9fd3eadb867bd3e89412872e0c6cb8e8cacb3a3fe116f327059ed8e3",
+      "live_definition_sha256": "4b909c5929f0357ef442a1b2ebcb6bf8312e93be257010ed8a32072accf02aae",
+      "already_applied": true,
+      "note": "A follow-up read-only --inspect (the same SSM command ran the SQL 29 production inspect recorded in ops/production-sql-29-30-apply.md) from the same main and tarball: SQL 103 live == intended 4b909c59..., already_applied true."
+    }
+  },
+  "production_evidence": {
+    "2026-10-19 apply": "Guarded production SQL one-shot on i-0c35557c4e5385406, workstream prod-sql103-share-library-trigger-acl-20261019, main dbaa93c90 (tarball 94d7499a…), owner-approved run (\"apply SQL 103 in production\"), SSM 805556fa-9e70-45d3-b20b-5e68ce64db7d, run_id f8625a3b-0ade-48f2-a234-5581e8498327: contracts claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43; manifest 825d9247…; bade6813… -> 4b909c59…, result applied, unrelated catalog 373d503c…; post-apply inspect already_applied true, owner-only EXECUTE (grantor owner), precondition_failures []. Later read-only inspect SSM 45639f6b-68cf-4502-a127-458d99865ae8 (same main and tarball): live == intended 4b909c59…, already_applied true. execute is false so the pin is no longer a standing authorization."
   }
 }
