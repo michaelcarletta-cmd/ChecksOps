@@ -22,7 +22,7 @@ import { authorizeObject } from '../functions/api/storage.mjs';
 import { APP_BUCKET_SET, s3KeyFor } from '../functions/api/storage-paths.mjs';
 import { sanitizeWebhookPayload } from '../functions/api/providers/webhooks.mjs';
 import { FUNCTION_BY_NAME } from '../functions/api/providers/catalog.mjs';
-import { redactText } from '../functions/api/providers/onboarding/redact.mjs';
+import { moovRejectedFields, redactText } from '../functions/api/providers/onboarding/redact.mjs';
 
 const TENANT = '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a';
 const OTHER_TENANT = '9b1f7a52-1c0e-4d5a-9a3f-5d6e7f8a9b0c';
@@ -896,6 +896,42 @@ test('Moov failure after save returns saved+pending, flags SSN re-entry, and moo
     assert.equal(fixed.representatives[0].ssn_resubmit_required, false);
     assert.equal(db.state.reps[0].moov_representative_id, 'rep_1');
   });
+});
+
+test('Moov 422 after save names the failed step and rejected field paths, never Moov messages or values', async () => {
+  await withEnv(BASE_ENV, async () => {
+    resetMoovTokenCache();
+    const db = makeDb();
+    const rejecting = moovFetch([{
+      match: `/accounts/${MOOV_ACCOUNT}`,
+      method: 'PATCH',
+      status: 422,
+      body: { error: { profile: { business: { website: `bad value ${EIN}`, phone: { number: 'must be 10 digits' } } } } },
+    }]);
+    const { result, lines } = await captureConsole(() => run('moov-onboarding-save', saveBody(), USERS.owner, { db, fetch: rejecting }));
+    assert.equal(result.saved, true);
+    assert.equal(result.moov_synced, false);
+    assert.equal(result.error_code, 'moov_rejected');
+    assert.deepEqual(result.rejected_fields, ['profile.business.website', 'profile.business.phone.number']);
+    const log = lines.find((line) => line.includes('moov_onboarding_sync_failed'));
+    assert.ok(log, 'failure logged');
+    const parsed = JSON.parse(log);
+    assert.equal(parsed.step, 'business_profile');
+    assert.deepEqual(parsed.rejected_fields, ['profile.business.website', 'profile.business.phone.number']);
+    assert.equal(log.includes('must be 10 digits'), false);
+    assert.equal(log.includes(EIN), false);
+    assert.equal(JSON.stringify(result).includes(EIN), false);
+  });
+});
+
+test('moovRejectedFields keeps only identifier-shaped keys from 400/422 bodies', () => {
+  assert.deepEqual(moovRejectedFields({ status: 503, body: { error: { website: 'x' } } }), []);
+  assert.deepEqual(moovRejectedFields({ status: 422, body: 'not json' }), []);
+  assert.deepEqual(moovRejectedFields({ status: 400, body: JSON.stringify({ error: 'bad', message: 'nope' }) }), []);
+  assert.deepEqual(
+    moovRejectedFields({ status: 422, body: { error: { representatives: { 0: { email: 'x' } }, '123-45-6789': 'x', 'a b': 'x' } } }),
+    ['representatives.0.email'],
+  );
 });
 
 test('re-entering a person without an SSN after a failed send is refused (SSN must be re-entered)', async () => {
