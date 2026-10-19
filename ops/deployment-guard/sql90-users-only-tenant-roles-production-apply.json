@@ -1,8 +1,8 @@
 {
   "id": "sql90-users-only-tenant-roles-production-apply",
   "migration": "sql90",
-  "authorization": "Owner approved 2026-10-19 (the owner approved preparing this SQL 90 production pin change and accepted its substitute staging evidence in the words \"do the SQL 90 pin and accept that evidence for SQL 90\"; the change itself is reviewed and merge-approved by the owner separately): production apply of SQL 90 after SQL 29 and SQL 30 (both applied to production 2026-10-19) on the staging acceptance below (production b5a1998de14922c26b9d829909fada17d3994cf8d0757d410c3e04f6c1f5d9fe -> 1351f1d5d7f802640a61b95198248f88561ed58b667192ebdf3f1b615b00105c), right before SQL 101 and the step-6 Lambdas (tenant-admin.mjs, workflow-rpc.mjs): invites break between SQL 90 and the new tenant-admin.mjs, so its run-time approval should come with SQL 101 and those Lambdas ready; execute true takes effect only when the owner reviews and merges this change. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
-  "execute": true,
+  "authorization": "Applied to production on 2026-10-19; execute is false again, so this pin is no longer a standing authorization and a re-apply needs a new reviewed pin change. The owner approved the SQL 90 production pin (b5a1998d -> 1351f1d5), the read-only production inspect and the execute change on 2026-10-19, accepted its substitute staging evidence, and approved the one apply run recorded in applied (workstream prod-sql90-users-only-tenant-roles-20261019) on 2026-10-19 with \"apply SQL 90 in production\". That approval covered that run only",
+  "execute": false,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -76,7 +76,7 @@
     "predecessors_applied": true,
     "successors_applied": [],
     "doc_type_check_shape": "sql30",
-    "note": "Recorded from the read-only production inspect of 2026-10-19 after SQL 29 and SQL 30 were applied to production (SSM command 9e68e829-7ca0-4499-89ad-8cd691e3cdb8, node scripts/deployment-guard/sql90-users-only-tenant-roles-production-apply.mjs --inspect on the SQL53 runner i-0c35557c4e5385406 from main 45d6dbebd (tarball sha256 19e5dbc4...), BEGIN READ ONLY ... ROLLBACK, connected as checksops_admin). live_definition_sha256 b5a1998de14922c26b9d829909fada17d3994cf8d0757d410c3e04f6c1f5d9fe (not the intended 1351f1d5d7f802640a61b95198248f88561ed58b667192ebdf3f1b615b00105c: already_applied false); precondition_failures [], prerequisites_missing [], missing_dependencies [], predecessors sql29 and sql30 applied, successors_applied [], doc_type CHECK shape sql30. The new helpers (aws_is_tenant_member(uuid), aws_tenant_has_no_members(uuid), aws_is_platform_owner_user(uuid), aws_has_any_tenant_membership(), aws_can_access_tax_profiles(uuid), aws_first_invite_allowed(uuid), aws_invite_create_user_identity(uuid, text, text, text), aws_create_deposit_batch_for_item(uuid, text)) and the new policies are absent; the replaced helpers, policies and the deposit_provider_config_public view differ from the file's. apply_preconditions_met was false at inspect time only because no pre-state was recorded yet (expected_live_definition_sha256 null). This reviewed change copies live_definition_sha256 into expected_live_definition_sha256 and, in the same change, sets authorization, execute true and staging_acceptance. A fresh --inspect immediately before apply (the one-shot's inspect step) must still report this live_definition_sha256 and precondition_failures []; if not, stop. Earlier history: Pending: the read-only inspect tool exists (scripts/deployment-guard/sql90-users-only-tenant-roles-production-apply.mjs --inspect), but no production inspect has been run for SQL 90 yet. Record its date, SSM command id, source commit, live_definition_sha256, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. If precondition_failures is not [] stop: that needs its own reviewed change. Run 2026-10-17 at source commit ecb8647b0 (SSM fba11df4-63f0-4fad-b089-efbae962c6dd, read-only, checksops_admin): live_definition_sha256 7fa8c36a...; precondition_failures prerequisites_present (public.aws_can_access_tax_profiles(uuid) absent in production), predecessors_applied (SQL 30 not applied; SQL 29 is), function_acl_replaceable (aws_is_tenant_manager_admin() and aws_can_manage_mortgage_library(uuid) have EXECUTE for PUBLIC, checksops and the owner, which the file did not revoke). The first and third are reconciled in a reviewed change (owner approval 2026-10-17); SQL 30 stays outstanding (it is applied first, in release order): the file creates the tax helper when absent (no longer a prerequisite) and gives the two replaced helpers the SQL 90 helper ACL (checksops, authenticated, no PUBLIC). The intended fingerprint is unchanged. Re-run the inspect at the merged commit."
+    "note": "Recorded from the read-only production inspect of 2026-10-19 after SQL 29 and SQL 30 were applied to production (SSM command 9e68e829-7ca0-4499-89ad-8cd691e3cdb8, node scripts/deployment-guard/sql90-users-only-tenant-roles-production-apply.mjs --inspect on the SQL53 runner i-0c35557c4e5385406 from main 45d6dbebd (tarball sha256 19e5dbc4...), BEGIN READ ONLY ... ROLLBACK, connected as checksops_admin). live_definition_sha256 b5a1998de14922c26b9d829909fada17d3994cf8d0757d410c3e04f6c1f5d9fe (not the intended 1351f1d5d7f802640a61b95198248f88561ed58b667192ebdf3f1b615b00105c: already_applied false); precondition_failures [], prerequisites_missing [], missing_dependencies [], predecessors sql29 and sql30 applied, successors_applied [], doc_type CHECK shape sql30. The new helpers (aws_is_tenant_member(uuid), aws_tenant_has_no_members(uuid), aws_is_platform_owner_user(uuid), aws_has_any_tenant_membership(), aws_can_access_tax_profiles(uuid), aws_first_invite_allowed(uuid), aws_invite_create_user_identity(uuid, text, text, text), aws_create_deposit_batch_for_item(uuid, text)) and the new policies are absent; the replaced helpers, policies and the deposit_provider_config_public view differ from the file's. apply_preconditions_met was false at inspect time only because no pre-state was recorded yet (expected_live_definition_sha256 null). This reviewed change copies live_definition_sha256 into expected_live_definition_sha256 and, in the same change, sets authorization, execute true and staging_acceptance. A fresh --inspect immediately before apply (the one-shot's inspect step) must still report this live_definition_sha256 and precondition_failures []; if not, stop. Earlier history: Pending: the read-only inspect tool exists (scripts/deployment-guard/sql90-users-only-tenant-roles-production-apply.mjs --inspect), but no production inspect has been run for SQL 90 yet. Record its date, SSM command id, source commit, live_definition_sha256, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. If precondition_failures is not [] stop: that needs its own reviewed change. Run 2026-10-17 at source commit ecb8647b0 (SSM fba11df4-63f0-4fad-b089-efbae962c6dd, read-only, checksops_admin): live_definition_sha256 7fa8c36a...; precondition_failures prerequisites_present (public.aws_can_access_tax_profiles(uuid) absent in production), predecessors_applied (SQL 30 not applied; SQL 29 is), function_acl_replaceable (aws_is_tenant_manager_admin() and aws_can_manage_mortgage_library(uuid) have EXECUTE for PUBLIC, checksops and the owner, which the file did not revoke). The first and third are reconciled in a reviewed change (owner approval 2026-10-17); SQL 30 stays outstanding (it is applied first, in release order): the file creates the tax helper when absent (no longer a prerequisite) and gives the two replaced helpers the SQL 90 helper ACL (checksops, authenticated, no PUBLIC). The intended fingerprint is unchanged. Re-run the inspect at the merged commit. The apply of 2026-10-19 is recorded in applied; the record-and-retire change set execute false again."
   },
   "intended_post_state": {
     "fingerprint": "1351f1d5d7f802640a61b95198248f88561ed58b667192ebdf3f1b615b00105c",
@@ -87,5 +87,105 @@
     "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39080157856",
     "basis": "Owner-accepted substitute evidence (the owner's words: \"do the SQL 90 pin and accept that evidence for SQL 90\"). The guarded staging SQL executor applied sql90-users-only-tenant-roles on 2026-10-17 (run 39080157856, main c8a79d554, wave 1 owner approved 2026-10-17): receipt before 1af4b3ac3d933fa3e05e938853d93edc196d89c5e2f0b82bbd98a1843d65781c, after 1351f1d5d7f802640a61b95198248f88561ed58b667192ebdf3f1b615b00105c = intended_replacement_sha256, precondition_failures [], prerequisites_missing [] (staging read-live run 39078340362 recorded that pre-state; ops/deployment-guard/staging-sql-live.json, aws/tests/helpers/staging-sql-wave1.mjs). The same file bytes (source_sha256) reach the same intended state; staging's pre-state differs from production's (below), so this is not a same-pre-state staging apply. Also accepted: the repository's PostgreSQL tests of SQL 90: aws/tests/sql90-users-only-tenant-roles-pg.test.mjs, aws/tests/release-sql90-97-production-apply.test.mjs and aws/tests/users-only-role-gates.test.mjs.",
     "production_differs": "The pre-states differ: staging before its apply was 1af4b3ac3d933fa3e05e938853d93edc196d89c5e2f0b82bbd98a1843d65781c and production (production_inspect, 2026-10-19, after SQL 29 and SQL 30) is b5a1998de14922c26b9d829909fada17d3994cf8d0757d410c3e04f6c1f5d9fe. Both reach the intended 1351f1d5d7f802640a61b95198248f88561ed58b667192ebdf3f1b615b00105c from the same pinned file bytes; each environment's state is recorded separately."
+  },
+  "applied": {
+    "date": "2026-10-19",
+    "result": "applied",
+    "source_commit": "ba9ff4261411b4c24a856fac4a627841d0c61430",
+    "source_tarball": {
+      "file": "source-ba9ff4261411b4c24a856fac4a627841d0c61430.tar.gz",
+      "sha256": "94983f0ebbe5f9cb008551b159c8c44a5f16fc9f564ddb080bac45dc14da745b"
+    },
+    "migration_source_sha256": "488b2ec455fcfd11c9d1c4ea9b33f3f9323cea8e69934e98938994730b1e07bd",
+    "migration_source_sha256_note": "The one-shot source step hashed aws/workflows/sql/90_users_only_tenant_roles.sql in the transfer tarball: equal to source_sha256 (the pin).",
+    "runner": "i-0c35557c4e5385406",
+    "workstream_id": "prod-sql90-users-only-tenant-roles-20261019",
+    "one_use_id": "sql90-prod-840d729b-39a5-4dbf-8e66-7aec6f4a3555",
+    "one_use_id_consumed": true,
+    "one_use_id_consumed_basis": "Inferred from the successful apply (the tool records the one_use_id after COMMIT and only warns if that write fails); the consumed-registry entry was not read back separately.",
+    "owner_approval": "apply SQL 90 in production",
+    "owner_approval_basis": "As passed in --approval-statement for --approval-scope sql90; the one-shot cannot verify who said it.",
+    "operator": "michaelcarletta-cmd",
+    "apply_ssm_command_id": "216d9a7e-8d5a-4c44-9d2f-e68370cc773a",
+    "one_shot_run_id": "8a427f65-58bc-4a1b-8aac-f5161017df60",
+    "one_shot_note": "One guarded production-sql-one-shot run (SSM 216d9a7e-8d5a-4c44-9d2f-e68370cc773a, run_id 8a427f65-58bc-4a1b-8aac-f5161017df60) from main ba9ff4261 applied SQL 90: steps pin, source, inspect, contracts, manifest, source-recheck-before-preflight, preflight, evaluate, source-recheck-before-apply, apply (applied) and post-apply-inspect all ok; runner contracts, manifest, receipt and inspects as recorded below. Start and finish times were not carried into this record. The same SSM command then ran SQL 101's read-only production inspect (recorded in SQL 101's pin). SQL 101 was applied after it (SSM 680fd3f7-c586-4bb8-819e-cd4d7759d71b) and supersedes SQL 90's aws_invite_create_user_identity: never re-run SQL 90 after SQL 101.",
+    "steps": [
+      "pin",
+      "source",
+      "inspect",
+      "contracts",
+      "manifest",
+      "source-recheck-before-preflight",
+      "preflight",
+      "evaluate",
+      "source-recheck-before-apply",
+      "apply",
+      "post-apply-inspect"
+    ],
+    "contract_results": {
+      "claim-ledger": {
+        "ok": true,
+        "passed": "4/4"
+      },
+      "tenant-isolation": {
+        "ok": true,
+        "passed": "6/6"
+      },
+      "financial-write-protections": {
+        "ok": true,
+        "passed": "43/43"
+      }
+    },
+    "pre_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "b5a1998de14922c26b9d829909fada17d3994cf8d0757d410c3e04f6c1f5d9fe",
+      "live_matches_expected": true,
+      "already_applied": false,
+      "precondition_failures": [],
+      "missing_dependencies": [],
+      "predecessors_applied": true,
+      "successors_applied": [],
+      "note": "The one-shot inspect step (read-only --inspect) immediately before the apply: live == the recorded pre-state b5a1998d..., precondition_failures [], missing_dependencies [], predecessors_applied true."
+    },
+    "manifest_sha256": "b25796efc86cd7c683c438bf730b20f7363e6c994561615374a92b39e0de28c4",
+    "receipt": {
+      "migration": "sql90",
+      "workstream": "prod-sql90-users-only-tenant-roles-20261019",
+      "commit": "ba9ff4261411b4c24a856fac4a627841d0c61430",
+      "sql_file": "aws/workflows/sql/90_users_only_tenant_roles.sql",
+      "before_hash": "b5a1998de14922c26b9d829909fada17d3994cf8d0757d410c3e04f6c1f5d9fe",
+      "after_hash": "1351f1d5d7f802640a61b95198248f88561ed58b667192ebdf3f1b615b00105c",
+      "unrelated_catalog_sha256": "d110205bb2d1161edc5761e2ef918d1c8e21707aa8b3f0d1b7acb3d9b81f62dd",
+      "unrelated_catalog_counts": {
+        "relations": 877,
+        "columns": 3494,
+        "constraints": 2201,
+        "policies": 385,
+        "functions": 1279,
+        "indexes": 645,
+        "default_acl": 0,
+        "role_memberships": 15,
+        "roles": 29,
+        "triggers": 173,
+        "views": 24,
+        "types": 18,
+        "schema": 2
+      },
+      "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39080157856",
+      "result": "applied"
+    },
+    "post_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "1351f1d5d7f802640a61b95198248f88561ed58b667192ebdf3f1b615b00105c",
+      "already_applied": true,
+      "precondition_failures": [],
+      "missing_dependencies": [],
+      "predecessors_applied": true,
+      "successors_applied": [],
+      "note": "The one-shot post-apply read-only --inspect: already_applied true (live == intended 1351f1d5...), precondition_failures []."
+    }
+  },
+  "production_evidence": {
+    "2026-10-19 apply": "Guarded production SQL one-shot on i-0c35557c4e5385406, workstream prod-sql90-users-only-tenant-roles-20261019, main ba9ff4261 (tarball 94983f0e…, migration source 488b2ec4… == pin), owner-approved run (\"apply SQL 90 in production\"), SSM 216d9a7e-8d5a-4c44-9d2f-e68370cc773a, run_id 8a427f65-58bc-4a1b-8aac-f5161017df60, one_use_id sql90-prod-840d729b-39a5-4dbf-8e66-7aec6f4a3555 (spent): every step ok; contracts claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43; pre-apply inspect live b5a1998d… (live_matches_expected true, precondition_failures []); manifest b25796ef…; b5a1998d… -> 1351f1d5…, result applied, unrelated catalog d110205b…; post-apply inspect already_applied true, precondition_failures []. No later inspect was run. execute is false so the pin is no longer a standing authorization."
   }
 }
