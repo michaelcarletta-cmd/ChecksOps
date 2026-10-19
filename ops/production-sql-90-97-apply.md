@@ -18,12 +18,12 @@ read-only production inspect after SQL 29 / SQL 30, SSM `9e68e829-7ca0-4499-89ad
 live `b5a1998d…`, and the owner-accepted substitute staging evidence of the guarded staging apply
 run `39080157856` from a different pre-state; SQL 101: the read-only inspect right after SQL
 90's apply, live `1c7e1d52…`, and its guarded staging apply run `39143679543` from the same
-pre-state). Invites of new users need the `tenant-admin.mjs` production overlay as well. SQL 93's
-production pin is `execute: true` (owner approved 2026-10-19: the read-only production inspect
-of 2026-10-19 after SQL 90 / SQL 101, SSM `d3753ba4-0338-4649-8997-2135376b6743` from main
-`ea8f3dc73`, live `ef2ce6ba…`, recorded as its pre-state; its staging acceptance is its guarded
-staging apply run `39080438659` from the same pre-state); its apply still needs the owner's
-run-time approval, before `write-allowlist.mjs` / `write-app-metadata.mjs` and before SQL 96. Every other
+pre-state). Invites of new users need the `tenant-admin.mjs` production overlay as well. SQL 93 was
+applied to production on 2026-10-19 (see "Production apply of SQL 93" below) and its pin is
+retired; it had been execute-authorized by the owner-approved pin change of 2026-10-19 (the
+read-only production inspect after SQL 90 / SQL 101, SSM `d3753ba4-0338-4649-8997-2135376b6743`,
+live `ef2ce6ba…`, and its guarded staging apply run `39080438659` from the same pre-state). Never
+re-run SQL 93 after SQL 96. Every other
 production pin is `execute: false`, `authorization: "pending"`, with no recorded pre-state and
 no staging acceptance, so its production apply refuses before connecting; staging pins are authorized only in reviewed waves ("Staging apply waves"). SQL 100
 is a strict no-op on production: its production tool only inspects (see "SQL 100 on
@@ -481,3 +481,16 @@ inspect was run. Both pins are `execute: false` again; a re-apply needs a new re
 change, and SQL 90 must never be re-run after SQL 101. Invites of new users stay broken until the
 `tenant-admin.mjs` (and `workflow-rpc.mjs`) production overlay, which needs the staging
 acceptance reference.
+
+## Production apply of SQL 93 (2026-10-19)
+
+One owner-approved run ("approve #1060 and apply SQL 93 in production") of
+`production-sql-one-shot.mjs` on `i-0c35557c4e5385406` from main `4864023611` (tarball
+`795d1274…`): SSM `a3696b55-52c2-4674-bd11-35153197191c`, run_id
+`885c6403-0a2e-482b-920e-05e917897bc7`, one_use_id `sql93-prod-9956de5f-c4d5-4b14-9215-04ec7147f131`
+(spent), migration source `d90ec7f9…` (== pin). Every step was ok; contracts claim-ledger 4/4,
+tenant-isolation 6/6, financial-write-protections 43/43; manifest `851c1dd1…`; receipt
+`ef2ce6ba…` -> `1032695c…`, unrelated catalog `0b6e6247…`; post-apply inspect already_applied
+true, precondition_failures []. No later read-only inspect was run. The pin is `execute: false`
+again; a re-apply needs a new reviewed pin change. `write-allowlist.mjs` and
+`write-app-metadata.mjs` may follow in their Lambda batch; SQL 96 is next in the database.
