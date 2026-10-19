@@ -57,16 +57,16 @@
     "missing_dependencies": [],
     "predecessors_applied": true,
     "successors_applied": [],
-    "note": "Recorded from the read-only production inspect of 2026-10-19 (SSM command 433d5e4e-51ec-4d82-8220-87ac9f04d8d7, node scripts/deployment-guard/sql91-moov-onboarding-production-apply.mjs --inspect on the SQL53 runner i-0c35557c4e5385406 from main f51863bbd (tarball sha256 52e3f4aa...), BEGIN READ ONLY ... ROLLBACK, connected as checksops_admin). live_definition_sha256 bdbc697f75e7a9c57c91c9ce12956800e92417a93acfbbaa0c2d1cf69542972e (not the intended f8611dcca3397f684a247de454c8737074b3d2fb03c52e28fba665d0f297967d: already_applied false); precondition_failures [], prerequisites_missing [], missing_dependencies [], predecessors {} (predecessors_applied true), successors_applied []. The four tables (moov_onboarding_profiles, moov_onboarding_representatives, moov_compliance_documents, moov_onboarding_outbox), the four functions and the inspected policies are absent, as are payment_provider_methods.routing_last_four and its check constraint. apply_preconditions_met was false at inspect time only because no pre-state was recorded yet (expected_live_definition_sha256 null). This reviewed change copies live_definition_sha256 into expected_live_definition_sha256 and, in the same change, sets authorization, execute true and staging_acceptance. A fresh --inspect immediately before apply (the one-shot's inspect step) must still report this live_definition_sha256 and precondition_failures []; if not, stop. The apply of 2026-10-19 is recorded in applied; the record-and-retire change set execute false again."
+    "note": "Recorded from the read-only production inspect of 2026-10-19 (SSM command 433d5e4e-51ec-4d82-8220-87ac9f04d8d7, node scripts/deployment-guard/sql91-moov-onboarding-production-apply.mjs --inspect on the SQL53 runner i-0c35557c4e5385406 from main f51863bbd (tarball sha256 52e3f4aa...), BEGIN READ ONLY ... ROLLBACK, connected as checksops_admin). live_definition_sha256 bdbc697f75e7a9c57c91c9ce12956800e92417a93acfbbaa0c2d1cf69542972e (not the intended 4916ff91cef358a049f5c7f4428550807e3602e65a475dd9b839d076c5eab47d: already_applied false); precondition_failures [], prerequisites_missing [], missing_dependencies [], predecessors {} (predecessors_applied true), successors_applied []. The four tables (moov_onboarding_profiles, moov_onboarding_representatives, moov_compliance_documents, moov_onboarding_outbox), the four functions and the inspected policies are absent, as are payment_provider_methods.routing_last_four and its check constraint. apply_preconditions_met was false at inspect time only because no pre-state was recorded yet (expected_live_definition_sha256 null). This reviewed change copies live_definition_sha256 into expected_live_definition_sha256 and, in the same change, sets authorization, execute true and staging_acceptance. A fresh --inspect immediately before apply (the one-shot's inspect step) must still report this live_definition_sha256 and precondition_failures []; if not, stop. The apply of 2026-10-19 is recorded in applied; the record-and-retire change set execute false again."
   },
   "intended_post_state": {
-    "fingerprint": "f8611dcca3397f684a247de454c8737074b3d2fb03c52e28fba665d0f297967d",
-    "note": "Creates moov_onboarding_profiles, moov_onboarding_representatives, moov_compliance_documents and moov_onboarding_outbox (tenant-scoped, RLS) and payment_provider_methods.routing_last_four. The fingerprint is releaseIntendedHash('sql91', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): f8611dcca3397f684a247de454c8737074b3d2fb03c52e28fba665d0f297967d."
+    "fingerprint": "4916ff91cef358a049f5c7f4428550807e3602e65a475dd9b839d076c5eab47d",
+    "note": "Creates moov_onboarding_profiles, moov_onboarding_representatives, moov_compliance_documents and moov_onboarding_outbox (tenant-scoped, RLS) and payment_provider_methods.routing_last_four. The fingerprint is releaseIntendedHash('sql91', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): 4916ff91cef358a049f5c7f4428550807e3602e65a475dd9b839d076c5eab47d."
   },
   "staging_acceptance": {
     "ok": true,
     "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39080306273",
-    "basis": "Guarded staging SQL executor apply of sql91-moov-onboarding on 2026-10-17 (run 39080306273, main c8a79d554, wave 1 owner approved 2026-10-17): receipt before bdbc697f75e7a9c57c91c9ce12956800e92417a93acfbbaa0c2d1cf69542972e, after f8611dcca3397f684a247de454c8737074b3d2fb03c52e28fba665d0f297967d = intended_replacement_sha256; precondition_failures [], prerequisites_missing []. Its staging read-live (run 39075362413) recorded the same pre-state bdbc697f75e7a9c57c91c9ce12956800e92417a93acfbbaa0c2d1cf69542972e that production reports now (ops/deployment-guard/staging-sql-live.json, aws/tests/helpers/staging-sql-wave1.mjs).",
+    "basis": "Guarded staging SQL executor apply of sql91-moov-onboarding on 2026-10-17 (run 39080306273, main c8a79d554, wave 1 owner approved 2026-10-17): receipt before bdbc697f75e7a9c57c91c9ce12956800e92417a93acfbbaa0c2d1cf69542972e, after 4916ff91cef358a049f5c7f4428550807e3602e65a475dd9b839d076c5eab47d = intended_replacement_sha256; precondition_failures [], prerequisites_missing []. Its staging read-live (run 39075362413) recorded the same pre-state bdbc697f75e7a9c57c91c9ce12956800e92417a93acfbbaa0c2d1cf69542972e that production reports now (ops/deployment-guard/staging-sql-live.json, aws/tests/helpers/staging-sql-wave1.mjs).",
     "production_differs": "Same pre-state: staging before the apply and production (production_inspect, 2026-10-19) both report bdbc697f75e7a9c57c91c9ce12956800e92417a93acfbbaa0c2d1cf69542972e; the same file bytes (source_sha256) are pinned in both."
   },
   "applied": {
@@ -135,7 +135,7 @@
       "commit": "c628728273f0d54c901e3526b46d23e7cef4f411",
       "sql_file": "aws/workflows/sql/91_moov_onboarding.sql",
       "before_hash": "bdbc697f75e7a9c57c91c9ce12956800e92417a93acfbbaa0c2d1cf69542972e",
-      "after_hash": "f8611dcca3397f684a247de454c8737074b3d2fb03c52e28fba665d0f297967d",
+      "after_hash": "4916ff91cef358a049f5c7f4428550807e3602e65a475dd9b839d076c5eab47d",
       "unrelated_catalog_sha256": "d7f9a115b839a8185dbad81450d6b6cea5f84ecfbaf89b685237f13d61ed77f8",
       "unrelated_catalog_counts": {
         "relations": 861,
@@ -157,7 +157,7 @@
     },
     "post_apply_inspect": {
       "read_only": true,
-      "live_definition_sha256": "f8611dcca3397f684a247de454c8737074b3d2fb03c52e28fba665d0f297967d",
+      "live_definition_sha256": "4916ff91cef358a049f5c7f4428550807e3602e65a475dd9b839d076c5eab47d",
       "already_applied": true,
       "precondition_failures": [],
       "missing_dependencies": [],

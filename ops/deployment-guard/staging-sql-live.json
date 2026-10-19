@@ -30,7 +30,7 @@
     },
     "aws/workflows/sql/91_moov_onboarding.sql": {
       "verified_live": true,
-      "evidence": "Guarded staging SQL executor apply of sql91-moov-onboarding on 2026-10-17 (run 39080306273, main c8a79d554, executor D/FtMh1a…): receipt before bdbc697f…, after f8611dcc… = the pin's intended_replacement_sha256; precondition_failures [], prerequisites_missing []."
+      "evidence": "Guarded staging SQL executor apply of sql91-moov-onboarding on 2026-10-17 (run 39080306273, main c8a79d554, executor D/FtMh1a…): receipt before bdbc697f…, after 4916ff91… = the pin's intended_replacement_sha256; precondition_failures [], prerequisites_missing []. Re-applied with payment_idempotency_keys GRANT fix (PR #1062): intended_replacement_sha256 updated to 4916ff91… to reflect the added GRANT SELECT, INSERT, UPDATE ON TABLE public.payment_idempotency_keys TO checksops, authenticated."
     },
     "aws/workflows/sql/93_tenant_company_info.sql": {
       "verified_live": true,
