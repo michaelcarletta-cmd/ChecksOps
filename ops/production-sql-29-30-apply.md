@@ -10,15 +10,27 @@ Applies only the two unchanged operator packages (release lock `mortgage-ops`,
 
 **Why.** MortgageOps sync of the Document Library works in the API code
 (`aws/functions/api/mortgage-library-docs.mjs`) but needs SQL 29's functions and policies
-and SQL 30's CHECK in the database. Neither has ever been applied on AWS (release lock
-`mortgage-ops`: `applied: false`). Production evidence (2026-10-16, read-only): zero objects
+and SQL 30's CHECK in the database. Neither had been applied on AWS when this runbook was
+written (release lock `mortgage-ops`: `applied: false`; SQL 29 has since been applied to
+production, see Status; the release lock is its own reviewed change). Production evidence (2026-10-16, read-only): zero objects
 under `files/tenant-documents/*/library/`; row counts and the SQL 29/30 state are unknown —
 the first `--inspect` reports them.
 
-**Status:** not applied anywhere. Staging executor pins `sql29-mortgage-ops-library-parity`
-and `sql30-tenant-documents-doc-type` and both production pins are pending
-(`expected_live_definition_sha256: null`, `execute: false`, `authorization: "pending"`, no
-staging acceptance), so every apply refuses before connecting.
+**Status:** SQL 29 applied to production on 2026-10-19 (guarded one-shot, SSM
+`64604f67-e7f0-4152-a9a8-208543d41937`, main `c765e926b`, one_use_id
+`sql29-prod-238d917c-fdc1-4f3b-8909-a89cf8d74e8f`): `d8247ab9…` -> `1271ea9b…`, post-apply
+inspect `already_applied` true, `precondition_failures` `[]`, `sql90_applied` false (Production
+apply of SQL 29 below). The SQL 29 production pin
+(`ops/deployment-guard/sql29-mortgage-ops-library-parity-production-apply.json`) records the
+apply in `applied` and is `execute: false` again, so a re-apply needs a new reviewed change.
+It had been execute-authorized by the reviewed change of 2026-10-19 (owner-approved
+`authorization`, `execute: true`, the production pre-state after SQL 103 and the
+owner-accepted substitute staging evidence, staging read-live run `39188780526`). SQL 30 is
+not applied anywhere: its production pin is pending (`expected_live_definition_sha256: null`,
+`execute: false`, `authorization: "pending"`, no staging acceptance), so its apply refuses
+before connecting. The staging executor pins `sql29-mortgage-ops-library-parity` and
+`sql30-tenant-documents-doc-type` stay pending (staging's SQL 29 state is superseded by SQL
+90, so no staging SQL 29 apply was run).
 
 **Production inspect after SQL 103 (2026-10-19, read-only, record only).** After SQL 103 was
 applied to production (`ops/production-sql-103-apply.md`, SSM `805556fa-…`), a read-only
@@ -27,8 +39,40 @@ reported for SQL 29: `live_definition_sha256`
 `d8247ab9a31a7c1c57a464a768a650397059e67519f9e1522f881293e28e0079` (intended `1271ea9b…`),
 `already_applied` false, `precondition_failures` `[]`, `prerequisites_missing` `[]`,
 `sql90_applied` false (the earlier `function_acl_replaceable` refusal is gone); and for SQL 30:
-live `37f22340383b1a5e1b1350fc602b2953c2bb72d32234456888616fd749cbf504`. This note does not
-change either pin: both stay pending until their own reviewed pin changes.
+live `37f22340383b1a5e1b1350fc602b2953c2bb72d32234456888616fd749cbf504`. This note did not
+change either pin; SQL 29's was then recorded and execute-authorized in its own reviewed
+change (see Status).
+
+**Production apply of SQL 29 (2026-10-19)** (`production-sql-one-shot.mjs --migration sql29
+--approval-scope sql29 --phase apply`, approval statement "apply SQL 29 in production",
+operator `michaelcarletta-cmd`):
+
+| field | value |
+|---|---|
+| source | main `c765e926bac217cdbd7bf84535fc1def6498c686`, transfer tarball sha256 `69070d7b795b46b307e93a3842edbffa38a86668baf4eda5e1915f378af6d76b`; migration source sha256 `e8d416a58e1920cff27d5d744f0b1b4ff414a866a7eb483bb299bb794c0849be` (matches the pin) |
+| SSM command / runner | `64604f67-e7f0-4152-a9a8-208543d41937` on `i-0c35557c4e5385406` |
+| one-shot run_id / workstream | `6f2461fa-dfa2-4e63-abad-00409f1facd3` / `prod-sql29-mortgage-ops-library-parity-20261019` |
+| one_use_id | `sql29-prod-238d917c-fdc1-4f3b-8909-a89cf8d74e8f` (spent) |
+| steps | pin, source, inspect, contracts, manifest, source-recheck-before-preflight, preflight, evaluate, source-recheck-before-apply, apply (applied), post-apply-inspect: all ok |
+| contracts | claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43 |
+| pre-apply inspect | live `d8247ab9…` (`live_matches_expected` true), `precondition_failures` [], `sql90_applied` false |
+| manifest_sha256 | `fa284e7bb5131b5a5a6d424e640e7888178b3dd91f7e397a7cf8170e9dab51f5` |
+| receipt | `d8247ab9…` -> `1271ea9b61ec983f88e911b23c569403979fb5f560880021b58d3b1e57243c79`, result applied; unrelated catalog `dcfbdb2aec3fa8372e52a7ca680e87cb6a460d170f9955e2cc451e8ee2fbc2d1` (relations 861, columns 3409, constraints 2125, policies 366, functions 1277, triggers 173, schema 2) |
+| post-apply inspect | live `1271ea9b…`, `already_applied` true, `precondition_failures` [], `sql90_applied` false |
+
+**Later read-only inspect** (SSM `f8fc5eca-5c56-46eb-a7fa-f1e893dd3d9b`, same main and
+tarball): SQL 29 live == intended `1271ea9b…`, `already_applied` true.
+
+**Production inspect of SQL 30 after SQL 29 (2026-10-19, read-only, record only).** The same
+read-only run (SSM `f8fc5eca-5c56-46eb-a7fa-f1e893dd3d9b`) reported for SQL 30:
+`live_definition_sha256` `37f22340383b1a5e1b1350fc602b2953c2bb72d32234456888616fd749cbf504`
+(intended `e573962eb3d7a427d6b4a2fe1fc48fa3c49f4ad22c6ae66372fb236017ca2556`),
+`already_applied` false, `precondition_failures` `[]`, `prerequisites_missing` `[]`,
+`sql90_applied` false; CHECK shape `predecessor_6` (6 values, validated,
+`check_definition_sha256`
+`24faa402b16ace084d16a69c19266fd89002b50cb84d1c1b515159048b76125c`), `doc_type` text NOT
+NULL, `rows_outside_sql30_values` 0. This note does not change SQL 30's pin: it stays pending
+until its own reviewed pin change.
 
 ## Order
 
@@ -126,9 +170,11 @@ paths or row data.
    before SQL 90. The one-shot runs the tool's `--inspect`, builds the manifest from the pin
    (`source_sha256`, expected and intended hashes, `authorization_phrase`), issues the receipt
    with `preflight.mjs --acquire-lease --receipt`, runs the tool's `--input` (evaluate) and
-   `--apply --input` with a fresh `one_use_id`, then `--inspect` again.
+   `--apply --input` with a fresh `one_use_id`, then `--inspect` again. SQL 29 done
+   2026-10-19 (SSM `64604f67-…`, Production apply of SQL 29 above); SQL 30 still pending.
 4. Record the apply and retire the pin (`execute: false`). Do not edit the release lock
-   `mortgage-ops` from this runbook; that is its own reviewed change.
+   `mortgage-ops` from this runbook; that is its own reviewed change. SQL 29 done: its pin
+   records the 2026-10-19 apply in `applied` and is `execute: false`.
 
 The one-shot orchestrator (`production-sql-one-shot.mjs`) registers `sql29` and `sql30`
 (`ONE_SHOT_TOOLS` in `scripts/deployment-guard/lib/production-sql-one-shot.mjs`). It refuses
