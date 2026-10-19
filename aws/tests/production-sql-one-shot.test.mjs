@@ -1334,3 +1334,56 @@ test('ordering: SQL 29 and SQL 30 run before SQL 90 and SQL 94, which list them 
   assert.match(realPin('sql29').order_note, /^Before SQL 90/);
   assert.match(realPin('sql30').order_note, /^Before SQL 94/);
 });
+
+// --- SQL 103 (ops/production-sql-103-apply.md) ----------------------------------------------
+
+test('SQL 103 is registered with the release tool, its pin and allowed key, and runs before SQL 29', () => {
+  const tool = ONE_SHOT_TOOLS.sql103;
+  assert.equal(tool.key, 'sql103');
+  assert.equal(tool.script, 'scripts/deployment-guard/sql103-share-library-trigger-acl-production-apply.mjs');
+  assert.equal(tool.script, RELEASE_PRODUCTION.sql103.cli);
+  assert.deepEqual([...tool.args], []);
+  assert.equal(tool.pin_rel, RELEASE_PRODUCTION.sql103.pin_rel);
+  assert.equal(tool.allowed_key, 'sql103_production_apply_allowed');
+  assert.deepEqual([...tool.runs_before], ['sql29']);
+  assert.ok(Object.hasOwn(ONE_SHOT_TOOLS, 'sql29'));
+  assert.equal(tool.inspect_requires, undefined);
+  assert.doesNotMatch(JSON.stringify(tool), /[0-9a-f]{64}/);
+  const cli = fs.readFileSync(path.join(ROOT, tool.script), 'utf8');
+  assert.match(cli, /runReleaseProductionTool\(\s*\{ key: 'sql103'/);
+  const pin = realPin('sql103');
+  assert.equal(pin.migration, 'sql103');
+  assert.deepEqual(pin.predecessors, []);
+  assert.match(pin.order_note, /^Immediately before SQL 29/);
+  assert.match(realPin('sql29').order_note, /^Before SQL 90/);
+});
+
+test('the committed SQL 103 pin (execute false) is refused before any child, in both phases', async () => {
+  assert.equal(realPin('sql103').execute, false);
+  for (const phase of ['inspect', 'apply']) {
+    const { result, runner } = await oneShot({ key: 'sql103', pin: null, o: { phase, 'workstream-id': 'prod-sql103-committed-pin-test' } });
+    assert.equal(result.ok, false);
+    assert.equal(result.code, CODES.GUARD_APPLY_FORBIDDEN);
+    assert.equal(result.details.stopped_at, 'pin');
+    assert.equal(runner.calls.length, 0);
+  }
+  const stopped = await oneShot({ key: 'sql103', pin: { ...realPin('sql103'), execute: true }, o: { 'workstream-id': 'prod-sql103-pending-test' } });
+  assert.equal(stopped.result.code, CODES.PRODUCTION_APPROVAL_REQUIRED);
+  assert.equal(stopped.runner.calls.length, 0);
+});
+
+test('SQL 103 apply phase: evaluate, apply and post-apply inspect use the tool flags and the pin hashes', async () => {
+  const pin = executePin('sql103');
+  const { result, runner } = await oneShot({ key: 'sql103', o: { 'workstream-id': 'prod-sql103-apply-test' } });
+  assert.equal(result.ok, true, JSON.stringify(result.details.error));
+  assert.deepEqual(runner.steps(), FULL);
+  const script = ONE_SHOT_TOOLS.sql103.script;
+  const byStep = Object.fromEntries(runner.calls.map((c) => [c.step, c]));
+  assert.deepEqual(byStep.inspect.args, [script, '--inspect']);
+  assert.deepEqual(byStep.evaluate.args.slice(0, 2), [script, '--input']);
+  assert.deepEqual(byStep.apply.args.slice(0, 3), [script, '--apply', '--input']);
+  assert.equal(result.details.applied.receipt.before_hash, pin.expected_live_definition_sha256);
+  assert.equal(result.details.applied.receipt.after_hash, pin.intended_replacement_sha256);
+  assert.equal(pin.intended_replacement_sha256, '4b909c5929f0357ef442a1b2ebcb6bf8312e93be257010ed8a32072accf02aae');
+  assert.match(result.details.one_use_id, /^sql103-prod-/);
+});

@@ -75,6 +75,7 @@ export const EXECUTOR_PACK_MEMBERS = Object.freeze([
   ['aws/workflows/sql/100_mortgage_desk_live_access.sql', 'sql/100_mortgage_desk_live_access.sql'],
   ['aws/workflows/sql/101_invite_identity_insert_order.sql', 'sql/101_invite_identity_insert_order.sql'],
   ['aws/workflows/sql/102_platform_owner_tenant_profile.sql', 'sql/102_platform_owner_tenant_profile.sql'],
+  ['aws/workflows/sql/103_share_library_trigger_acl.sql', 'sql/103_share_library_trigger_acl.sql'],
   ['aws/functions/api/rds-global-bundle.pem', 'rds-global-bundle.pem'],
   ['scripts/deployment-guard/lib/sql-apply.mjs', 'lib/sql-apply.mjs'],
   ['scripts/deployment-guard/lib/sql-executor-auth.mjs', 'lib/sql-executor-auth.mjs'],

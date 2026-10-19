@@ -1,5 +1,5 @@
 /**
- * Specs of the release 2026-10-17 SQL (SQL 90 to SQL 102) for the shared engine in
+ * Specs of the release 2026-10-17 SQL (SQL 90 to SQL 103) for the shared engine in
  * release-sql-state.mjs: what each pinned file creates, replaces or drops, the reviewed
  * EXECUTE ACLs, the prerequisites and predecessors, and the PostgreSQL renderings the file
  * leaves (policy expressions, view, column, constraint, index and trigger definitions as
@@ -50,8 +50,13 @@
  *                      in the fingerprint (SQL 100)
  *   production_noop    on production the state must already be the intended one (SQL 100);
  *                      the production tool never runs the file
+ *   acl_functions      existing functions the file neither creates nor replaces, only sets the
+ *                      EXECUTE ACL of (SQL 103): identity, final ACL, revokes (the entries it
+ *                      removes); fingerprinted by presence and ACL only
+ *   runs_before        informational production order (SQL 103 before SQL 29, which is not on
+ *                      this engine): the production one-shot and the runbook
  *
- * SQL 103 and later: add a spec here, its staging pin in sql-executor-auth.mjs
+ * SQL 104 and later: add a spec here, its staging pin in sql-executor-auth.mjs
  * (RELEASE_2026_10_17_PENDING_SQL_PINS or a successor map) and its production pin; the
  * engine, the executor handler and the production tool are generic.
  */
@@ -3269,6 +3274,43 @@ export const RELEASE_SQL_SPECS = deepFreeze({
     ],
     "altered_relations": [
       "public.tenants"
+    ]
+  },
+  // SQL 103: only the EXECUTE ACL of SQL 29's trigger function (owner only), so SQL 29's guard
+  // (function_acl_replaceable) passes in production. No predecessor: it runs before SQL 29 in
+  // production (pin order_note, ops/production-sql-103-apply.md) and is a no-op after it.
+  // render.grantors: only the owner's own entries are revocable by the owner.
+  sql103: {
+    "key": "sql103",
+    "label": "SQL 103",
+    "choice": "sql103-share-library-trigger-acl",
+    "production_pin_rel": "ops/deployment-guard/sql103-share-library-trigger-acl-production-apply.json",
+    "script": "sql103-share-library-trigger-acl-production-apply",
+    "prerequisites": [
+      "public.share_library_docs_to_mortgage_request()",
+      "role checksops",
+      "role authenticated"
+    ],
+    "predecessors": [],
+    "functions": [],
+    "acl_functions": [
+      {
+        "identity": "public.share_library_docs_to_mortgage_request()",
+        "acl": [
+          "owner EXECUTE grantor=owner"
+        ],
+        "revokes": [
+          "PUBLIC EXECUTE grantor=owner",
+          "authenticated EXECUTE grantor=owner",
+          "checksops EXECUTE grantor=owner"
+        ]
+      }
+    ],
+    "render": {
+      "grantors": true
+    },
+    "runs_before": [
+      "sql29"
     ]
   },
 });

@@ -1,5 +1,5 @@
 /**
- * One engine for the release 2026-10-17 SQL (SQL 90 to SQL 102), shared by the staging
+ * One engine for the release 2026-10-17 SQL (SQL 90 to SQL 103), shared by the staging
  * guarded executor (aws/write-path/guarded-sql-executor/index.mjs) and the production tools
  * (release-sql-production-apply.mjs): the catalog state reader, the code-derived
  * fingerprints, the pre- and post-conditions, the predecessor rules and the unrelated-catalog
@@ -23,6 +23,10 @@
  *   index      (created on an existing table) absent, or the collapsed pg_get_indexdef (SQL 98)
  *   unique     whether a unique index covers the named columns (SQL 98: the file adds one only
  *              when none does)
+ *   function_acl
+ *              (an existing function the file neither creates nor replaces, spec acl_functions,
+ *              SQL 103) absent, or its EXECUTE ACL only; the post-conditions require every other
+ *              attribute (body, language, SECURITY DEFINER, config, result, owner) unchanged
  *
  * A spec may ask for more detail (spec.render, SQL 100): `grantors` adds each ACL entry's
  * grantor (the object owner read as `owner`) to the function, column and table privilege
@@ -373,6 +377,10 @@ async function readObjects(q, spec, login) {
   const functions = {};
   for (const fn of spec.functions) functions[fn.identity] = await readFunction(q, fn.identity, login, spec);
   for (const identity of spec.dropped_functions || []) functions[identity] = await readFunction(q, identity, login, spec);
+  // spec.acl_functions (SQL 103): existing functions whose ACL the file sets; read in full so the
+  // post-conditions can tell that nothing but the ACL changed.
+  const aclFunctions = {};
+  for (const fn of spec.acl_functions || []) aclFunctions[fn.identity] = await readFunction(q, fn.identity, login, spec);
   const policies = {};
   const policyRows = new Map();
   const rowsFor = async (table) => {
@@ -464,7 +472,7 @@ async function readObjects(q, spec, login) {
         .flatMap((c) => columnAcl(spec, c).map((line) => `${c.name} ${line}`)).sort(),
     };
   }
-  return { functions, policies, views, tables, columns, constraints, triggers, privileges, altered, indexes, covers, definer, whole };
+  return { functions, acl_functions: aclFunctions, policies, views, tables, columns, constraints, triggers, privileges, altered, indexes, covers, definer, whole };
 }
 
 // --- state text --------------------------------------------------------------------
@@ -498,6 +506,10 @@ export function releaseStateText(key, state = {}) {
   const lines = [`release ${key} ${spec.state_version || 'v1'}`];
   for (const fn of spec.functions) lines.push(fnLine(fn.identity, s.functions?.[fn.identity]));
   for (const identity of spec.dropped_functions || []) lines.push(fnLine(identity, s.functions?.[identity]));
+  for (const fn of spec.acl_functions || []) {
+    const row = s.acl_functions?.[fn.identity];
+    lines.push(row?.exists ? `function_acl ${fn.identity}: acl=${list(row.acl)}` : `function_acl ${fn.identity}: absent`);
+  }
   for (const p of [...(spec.policies || []), ...(spec.dropped_policies || [])]) {
     const k = objKey(p.table, p.name);
     lines.push(policyLine(k, s.policies?.[k], spec));
@@ -574,6 +586,7 @@ export function releaseIntendedState(key, text) {
     };
   }
   for (const identity of spec.dropped_functions || []) functions[identity] = { exists: false };
+  const aclFunctions = Object.fromEntries((spec.acl_functions || []).map((fn) => [fn.identity, { exists: true, acl: [...fn.acl].sort() }]));
   const policies = {};
   for (const p of spec.policies || []) {
     policies[objKey(p.table, p.name)] = {
@@ -622,7 +635,7 @@ export function releaseIntendedState(key, text) {
     acl: (spec.table_privileges || []).filter((p) => p.table === w.table).flatMap((p) => p.intended).sort(),
     other_column_acl: [],
   }]));
-  return { functions, policies, views, tables, columns, constraints, triggers, privileges, indexes, covers, whole };
+  return { functions, acl_functions: aclFunctions, policies, views, tables, columns, constraints, triggers, privileges, indexes, covers, whole };
 }
 
 export function releaseIntendedHash(key, text) {
@@ -783,6 +796,7 @@ export function releaseSharedPreconditionFailures(key, state, text, { environmen
   const s = state || {};
   const intended = text != null ? releaseIntendedState(key, text) : null;
   const fnRows = spec.functions.map((fn) => [fn, s.functions?.[fn.identity] || { exists: false }]);
+  const aclRows = (spec.acl_functions || []).map((fn) => [fn, s.acl_functions?.[fn.identity] || { exists: false }]);
   const tableOk = (t) => {
     const live = s.tables?.[t.name];
     if (!live?.exists) return true;
@@ -801,6 +815,12 @@ export function releaseSharedPreconditionFailures(key, state, text, { environmen
     ['successors_not_applied', Array.isArray(s.successors_applied) && s.successors_applied.length === 0],
     ['altered_relations_owned_by_login', Object.values(s.altered || {}).every((r) => r.exists && r.owner_is_login === true)],
     ['functions_owned_by_login', fnRows.every(([, row]) => !row.exists || row.owner_is_login === true)],
+    // SQL 103: the function whose ACL the file sets must exist and be owned by the login (only the
+    // owner's own entries can be revoked), and hold only entries the file keeps or revokes.
+    ['acl_functions_present', aclRows.every(([, row]) => row.exists === true)],
+    ['acl_functions_owned_by_login', aclRows.every(([, row]) => !row.exists || row.owner_is_login === true)],
+    ['acl_functions_acl_replaceable', aclRows.every(([fn, row]) => !row.exists || (row.acl || []).every((line) => (
+      fn.acl.includes(line) || (fn.revokes || []).includes(line))))],
     ['dropped_functions_owned_by_login', (spec.dropped_functions || []).every((identity) => !s.functions?.[identity]?.exists || s.functions[identity].owner_is_login === true)],
     ['function_results_match', fnRows.every(([fn, row]) => !row.exists || !intended || row.result === intended.functions[fn.identity].result)],
     // An EXECUTE grant the file neither keeps nor revokes would survive CREATE OR REPLACE.
@@ -869,6 +889,15 @@ export function releaseSharedPostconditionFailures(key, before, after, pin) {
   return failed([
     ['intended_state', a.live_definition_sha256 === pin?.intended_replacement_sha256],
     ['functions_owned_by_login', spec.functions.every((fn) => a.functions?.[fn.identity]?.owner_is_login === true)],
+    // SQL 103: only the ACL of an acl_functions entry changes (body, attributes and owner as before).
+    ['acl_functions_otherwise_unchanged', (spec.acl_functions || []).every((fn) => {
+      const was = b.acl_functions?.[fn.identity];
+      const now = a.acl_functions?.[fn.identity];
+      if (!was?.exists || !now?.exists) return false;
+      const { acl: _wasAcl, ...wasRest } = was;
+      const { acl: _nowAcl, ...nowRest } = now;
+      return same(wasRest, nowRest) && now.owner_is_login === true;
+    })],
     ['created_tables_owned_by_login', (spec.tables || []).every((t) => a.tables?.[t.name]?.owner_is_login === true)],
     ['altered_relations_owner_unchanged', Object.entries(b.altered || {}).every(([name, row]) => a.altered?.[name]?.owner_is_login === row.owner_is_login)],
     // Table privileges the file does not name are unchanged (SQL 97).
@@ -891,7 +920,9 @@ export function releaseUnrelatedScope(key) {
     // column the migration adds is that column's change (SQL 98: tenants.deposits_enabled).
     skip_not_null_columns: (spec.added_columns || []).map((c) => objectName(c.table, c.column)),
     skip_policies: [...(spec.policies || []), ...(spec.dropped_policies || [])].map((p) => objectName(p.table, p.name)),
-    skip_functions: [...spec.functions.map((fn) => fn.identity), ...(spec.dropped_functions || [])],
+    // An acl_functions entry is skipped too (its ACL changes); acl_functions_otherwise_unchanged
+    // covers the rest of it.
+    skip_functions: [...spec.functions.map((fn) => fn.identity), ...(spec.dropped_functions || []), ...(spec.acl_functions || []).map((fn) => fn.identity)],
     skip_triggers: [...(spec.triggers || []), ...(spec.dropped_triggers || [])].map((t) => objectName(t.table, t.name)),
     skip_views: (spec.views || []).map((v) => v.name),
     // Indexes a migration creates on an existing table (SQL 98: the tenant period index and the
@@ -1078,6 +1109,15 @@ export function releaseSqlReport(key, state, text) {
         .filter((line) => !line.startsWith('owner ') && ['UPDATE', 'DELETE', 'TRUNCATE'].includes(line.split(' ')[1])),
     })),
     function_acl: spec.functions.map((fn) => ({ name: fn.identity.replace(/^public\./, ''), acl: [...(s.functions?.[fn.identity]?.acl || [])] })),
+    // SQL 103: functions whose ACL only the file sets ('intended' | 'different' | 'absent', and the ACL).
+    acl_functions: (spec.acl_functions || []).map((fn) => {
+      const live = s.acl_functions?.[fn.identity];
+      return {
+        name: fn.identity.replace(/^public\./, ''),
+        state: !live?.exists ? 'absent' : (same(live.acl, want?.acl_functions?.[fn.identity]?.acl ?? [...fn.acl].sort()) ? 'intended' : 'different'),
+        acl: [...(live?.acl || [])],
+      };
+    }),
     indexes: objectLabels((spec.indexes || []).map((i) => [objKey(i.table, i.name).replace(/^public\./, ''), s.indexes?.[objKey(i.table, i.name)], want?.indexes?.[objKey(i.table, i.name)]])),
     unique_covers: (spec.unique_covers || []).map((u) => ({
       name: objKey(u.table, u.name).replace(/^public\./, ''), columns: [...u.contains], covered: s.covers?.[objKey(u.table, u.name)]?.covered === true,

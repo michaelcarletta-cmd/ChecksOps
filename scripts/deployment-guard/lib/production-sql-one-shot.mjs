@@ -258,7 +258,7 @@ export const ONE_SHOT_TOOLS = Object.freeze({
     pin_rel: SQL89_PRODUCTION_PIN_REL,
     allowed_key: 'sql89_production_apply_allowed',
   }),
-  // SQL 90-102 (release 2026-10-17): one tool per migration on the shared release engine.
+  // SQL 90-103 (release 2026-10-17): one tool per migration on the shared release engine.
   ...Object.fromEntries(Object.values(RELEASE_PRODUCTION).map((tool) => [tool.key, Object.freeze({
     key: tool.key,
     script: tool.cli,
@@ -266,6 +266,20 @@ export const ONE_SHOT_TOOLS = Object.freeze({
     pin_rel: tool.pin_rel,
     allowed_key: tool.allowed_key,
   })])),
+  // SQL 103 (ops/production-sql-103-apply.md): the shared release tool, like SQL 90-102, with
+  // its order. Pin, file hash and fingerprints come from the pin, never this registry.
+  //   Order (runs_before, informational): SQL 103 immediately before SQL 29. SQL 29's guard
+  //   (function_acl_replaceable) refuses the trigger function's live checksops EXECUTE entry
+  //   until SQL 103 has left the owner as the only grantee; SQL 103 itself has no predecessor
+  //   and is refused as already in place once the owner is the only grantee (after SQL 29).
+  sql103: Object.freeze({
+    key: 'sql103',
+    script: RELEASE_PRODUCTION.sql103.cli,
+    args: Object.freeze([]),
+    pin_rel: RELEASE_PRODUCTION.sql103.pin_rel,
+    allowed_key: RELEASE_PRODUCTION.sql103.allowed_key,
+    runs_before: Object.freeze(['sql29']),
+  }),
 });
 
 /** Inspect fields copied into the summary and the `applied` block when the tool prints them. */

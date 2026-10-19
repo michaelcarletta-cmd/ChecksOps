@@ -51,6 +51,7 @@ on:
           - sql100-mortgage-desk-live-access
           - sql101-invite-identity-insert-order
           - sql102-platform-owner-tenant-profile
+          - sql103-share-library-trigger-acl
       approved_commit:
         description: "Required for deploy/apply/read-live: exact main commit approved for this run"
         required: false
@@ -155,6 +156,7 @@ jobs:
           node --test aws/tests/release-sql98-100-executor.test.mjs
           node --test aws/tests/release-sql101-executor.test.mjs
           node --test aws/tests/release-sql102-executor.test.mjs
+          node --test aws/tests/release-sql103-executor.test.mjs
           node --test aws/tests/mortgage-executor-commit-outcome.test.mjs
           node --test aws/tests/deployment-guard-kms-receipt.test.mjs
           node --test aws/tests/deployment-guard-signed-receipt.test.mjs
