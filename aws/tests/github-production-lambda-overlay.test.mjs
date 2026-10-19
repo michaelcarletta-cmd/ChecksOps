@@ -549,9 +549,14 @@ test('#901 Review financial edits: write-allowlist.mjs, then write-check-workflo
     assert.equal(applied.applied?.result, 'applied', record);
   }
 
-  // write-allowlist.mjs is held for SQL 93 (release 2026-10-17) ...
+  // write-allowlist.mjs is held for SQL 93 (release 2026-10-17): SQL 93 is recorded live in
+  // production since 2026-10-19 (#1061); its pre-record copy (SQL 93 not live) still refuses ...
+  assert.equal(PLAN.sql_prerequisites[SQL93].verified_live, true);
+  assert.match(PLAN.sql_prerequisites[SQL93].evidence, /SSM a3696b55-52c2-4674-bd11-35153197191c/);
+  const without93 = structuredClone(PLAN);
+  without93.sql_prerequisites[SQL93] = { verified_live: false, evidence: null };
   await assert.rejects(
-    run(applyEnv(ALLOWLIST), applyDeps(ALLOWLIST).deps),
+    run(applyEnv(ALLOWLIST), { ...applyDeps(ALLOWLIST).deps, plan: without93 }),
     (error) => error.code === CODES.PRODUCTION_APPROVAL_REQUIRED && error.details.sql_before === SQL93,
   );
   // ... and, once SQL 93 is recorded live, applies while write-check-workflow.mjs is still on its live bytes.
@@ -698,7 +703,9 @@ test('fee collection: eleven members on the fee manifest, collection-v2 then des
   const pre = PLAN.sql_prerequisites[SQL98];
   assert.equal(pre.verified_live, false);
   assert.equal(pre.evidence, null);
-  assert.equal(PLAN.sql_prerequisites[SQL96].verified_live, false);
+  // SQL 96 is recorded live in production since 2026-10-19 (#1064); SQL 98 and SQL 102 are not.
+  assert.equal(PLAN.sql_prerequisites[SQL96].verified_live, true);
+  assert.match(PLAN.sql_prerequisites[SQL96].evidence, /SSM df0acdce-9d1f-401c-a0f6-f6232e5d3f74/);
   const pin = JSON.parse(fs.readFileSync(path.join(ROOT, pre.pin), 'utf8'));
   // SQL 98's production pin is execute-authorized (owner approved 2026-10-19) but not applied, so
   // the plan still holds the fee members on it (verified_live false above).

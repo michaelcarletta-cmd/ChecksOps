@@ -47,6 +47,10 @@
     "aws/workflows/sql/102_platform_owner_tenant_profile.sql": {
       "verified_live": true,
       "evidence": "Guarded staging SQL executor apply of sql102-platform-owner-tenant-profile on 2026-10-18 (run 39162625974, main 0ea950b0b, executor WT6J2LvT…): receipt before d3b2cd30…, after 6e1346af… = the pin's intended_replacement_sha256; precondition_failures [], prerequisites_missing []."
+    },
+    "aws/workflows/sql/104_payment_idempotency_keys_grant.sql": {
+      "verified_live": true,
+      "evidence": "Guarded staging SQL executor apply of sql104-payment-idempotency-keys-grant on 2026-10-19 (run 39298919537, main fecb0b3af, executor yQHFBtq2…): receipt before 22b2d47d…, after e5b35104… = the pin's intended_replacement_sha256; precondition_failures [], prerequisites_missing []; read-live run 39299161133 already_applied true."
     }
   }
 }

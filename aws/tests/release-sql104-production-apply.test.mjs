@@ -180,7 +180,7 @@ test('pin: the release pin shape, applied and retired (owner approved 2026-10-19
   }
 });
 
-test('order: after SQL 91, whose file, pins and fingerprint are unchanged; no plan entry; the runbook and one-shot doc name it', () => {
+test('order: after SQL 91, whose file, pins and fingerprint are unchanged; recorded live in the plan, holding moov-sync.mjs; the runbook and one-shot doc name it', () => {
   const sql91 = loadReleaseProductionPin('sql91', ROOT);
   // SQL 91 as applied (staging 2026-10-17, production 2026-10-19): #1062's edit is not on main.
   assert.equal(sql91.source_sha256, '199bfa1a528d219a8683b61ae6264d84dd5b08caa74564691374c8c6c42b71e3');
@@ -192,8 +192,14 @@ test('order: after SQL 91, whose file, pins and fingerprint are unchanged; no pl
   assert.match(COMMITTED.order_note, /^Any time after SQL 91/);
   assert.match(COMMITTED.order_note, /#1062/);
   const plan = readJson('ops/deployment-guard/production-api-overlay-plan.json');
-  assert.equal((plan.sql_prerequisites || {})[SQL104_FILE], undefined);
-  assert.ok(!JSON.stringify(plan.members).includes(SQL104_FILE));
+  // Recorded live in production (2026-10-19, #1069); it holds the onboarding member that writes
+  // payment_idempotency_keys (moov-sync.mjs, sql_before SQL 104; SQL 104 requires SQL 91).
+  const prerequisite = plan.sql_prerequisites[SQL104_FILE];
+  assert.equal(prerequisite.verified_live, true);
+  assert.equal(prerequisite.pin, COMMITTED.tooling ? 'ops/deployment-guard/sql104-payment-idempotency-keys-grant-production-apply.json' : prerequisite.pin);
+  assert.ok(prerequisite.evidence.includes(COMMITTED.applied.apply_ssm_command_id));
+  assert.deepEqual(Object.entries(plan.members).filter(([, m]) => m.sql_before === SQL104_FILE).map(([name]) => name), ['providers/onboarding/moov-sync.mjs']);
+  assert.equal(plan.sql_prerequisites[SQL91_FILE].verified_live, true);
   const runbook = fs.readFileSync(path.join(ROOT, COMMITTED.tooling.runbook), 'utf8');
   assert.ok(runbook.includes(COMMITTED.intended_replacement_sha256));
   assert.ok(runbook.includes(COMMITTED.source_sha256));
