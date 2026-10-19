@@ -1,8 +1,8 @@
 {
   "id": "sql98-tenant-fee-collection-production-apply",
   "migration": "sql98",
-  "authorization": "Owner approved 2026-10-19 (the owner approved preparing this SQL 98 production pin change and accepted the staging evidence below in the words \"accept the SQL 98 staging apply as substitute evidence and do the SQL 98 pin\"; the change itself is reviewed and merge-approved by the owner separately): production apply of SQL 98 after SQL 96 (applied to production 2026-10-19) on the staging acceptance below (production d64218dc145fc7b55632c7d5cfdef3fdbbb02592a79f6ff339c4814fc4ae6dbc -> abcb8f21b5a3840e6aa1dfd6639302ae82927b6fa66cf7b13351fa39c63ab603), before tenant-billing-engine.mjs, tenant-billing-handlers.mjs, workflow-rpc.mjs and providers.mjs and before SQL 102 (which replaces SQL 98's column guard); execute true takes effect only when the owner reviews and merges this change. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
-  "execute": true,
+  "authorization": "Applied to production on 2026-10-19; execute is false again, so this pin is no longer a standing authorization and a re-apply needs a new reviewed pin change. The owner approved the SQL 98 production pin (d64218dc -> abcb8f21) on owner-accepted substitute staging evidence, the read-only production inspect and the execute change on 2026-10-19 (\"accept the SQL 98 staging apply as substitute evidence and do the SQL 98 pin\", #1071), and approved the one apply run recorded in applied (workstream prod-sql98-tenant-fee-collection-20261019) on 2026-10-19 with \"approve #1071 and apply SQL 98 in production\". That approval covered that run only",
+  "execute": false,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -62,7 +62,7 @@
     "live_definition_sha256": "d64218dc145fc7b55632c7d5cfdef3fdbbb02592a79f6ff339c4814fc4ae6dbc",
     "apply_preconditions_met": false,
     "precondition_failures": [],
-    "note": "Recorded from the read-only production inspect of 2026-10-19 after SQL 96 was applied to production (SSM command 0c34e957-68f5-4ea5-9e2e-dd5639b7a67e, node scripts/deployment-guard/sql98-tenant-fee-collection-production-apply.mjs --inspect on the SQL53 runner i-0c35557c4e5385406 from main b59b4520c (tarball sha256 189924e188d294868d8a999758a4744cff087a16ba7cd833998a8a5a3544b8f3), BEGIN READ ONLY ... ROLLBACK, connected as checksops_admin). live_definition_sha256 d64218dc145fc7b55632c7d5cfdef3fdbbb02592a79f6ff339c4814fc4ae6dbc (not the intended abcb8f21b5a3840e6aa1dfd6639302ae82927b6fa66cf7b13351fa39c63ab603: already_applied false); precondition_failures [], prerequisites_missing [], missing_dependencies [], predecessor sql96 applied, successors_applied []. Counts: platform_billing_destination_rows 1 (production 1, sandbox 0, reviewed_account 1, production_reviewed_account 1, payment_method 1, verified 1), duplicate_billing_periods 0, check_billing_event_duplicates 0, check_billing_config_rows 1 (active 1). aws_check_billing_default_price_cents(), aws_check_billing_charges_when_per_check_off(), aws_platform_owner_record_billing_audit(jsonb), aws_platform_billing_destination_audit_row(), aws_tenant_deposits_enabled(uuid), aws_tenant_deposits_enabled_audit_row() and aws_platform_owner_set_tenant_deposits_enabled(uuid, boolean) are absent; record_check_billing_event() and aws_tenants_member_column_guard() differ; the tables platform_billing_audit and tenant_fee_invoice_outbox and the column tenants.deposits_enabled are absent, platform_billing_destination differs; the trigger check_intake_items trg_record_check_billing_event and the index tenant_maintenance_payments_tenant_period_uidx are already as the file leaves them. apply_preconditions_met was false at inspect time only because no pre-state was recorded yet (expected_live_definition_sha256 null). This reviewed change copies live_definition_sha256 into expected_live_definition_sha256 and, in the same change, sets authorization, execute true and staging_acceptance. A fresh --inspect immediately before apply (the one-shot's inspect step) must still report this live_definition_sha256 and precondition_failures []; if not, stop. Earlier: Pending: no read-only production inspect has been run for SQL 98. It must record (ops/fee-collection-deltas.md section 3): the active check_billing_config row (the live per-check default), duplicate (tenant_id, billing_period) rows in tenant_maintenance_payments (SQL 98 refuses on any), the unique index on check_billing_events (check_intake_item_id, event_type), the live record_check_billing_event() body and trigger, and every policy and grant on platform_billing_destination (SQL 98 drops all but its two platform-owner policies and resets checksops to SELECT, INSERT, UPDATE). Copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. If precondition_failures is not [] stop: that needs its own reviewed change. Update (guarded tooling built): the read-only inspect is scripts/deployment-guard/sql98-tenant-fee-collection-production-apply.mjs --inspect; it reports counts.duplicate_billing_periods, counts.check_billing_event_duplicates, counts.check_billing_config_rows and counts.check_billing_config_active_rows (aggregate COUNT(*)s), release_sql_inspect.unique_covers (whether a unique index already covers check_billing_events (check_intake_item_id, event_type)), release_sql_inspect.indexes (tenant_maintenance_payments_tenant_period_uidx), the function ACLs (record_check_billing_event() included) and the platform_billing_destination table state (intended / different / absent, policy count). It does not print the record_check_billing_event() body or the destination policies; their fingerprints are in live_definition_sha256. Run 2026-10-17 at source commit 969e2b2b1 (SSM 24b9f38c-d721-4b82-b3a5-056c6c84d37a, read-only, checksops_admin): live_definition_sha256 edcbdf86cf44381efe7d5dbb70b157a8ed881b17c5be040b5544d35caefa3708; precondition_failures prerequisites_present and predecessors_applied (SQL 96 not applied), function_acl_replaceable (record_check_billing_event() has EXECUTE for PUBLIC, checksops and the owner; the file only revokes PUBLIC), created_tables_absent_or_intended and platform_billing_destination_absent_empty_or_reviewed: platform_billing_destination already exists (RLS on, 7 columns, the two policies by SQL 98's names but different) with 1 row. counts: check_billing_config 1 row, 1 active; no duplicate periods; check_billing_events (check, event) already covered by a unique index. The next inspect also reports, as counts only, whether that row is production or sandbox, on the reviewed platform account 41cb5d67-4911-4bef-aad5-d8ee9c582208, has a payment method and is verified; SQL 98 is changed to keep it only in a reviewed change after that (owner decision 2026-10-17). Runs at 0b9fc70e2 (SSM f6419152-a6ad-44fd-8e5f-faa03c7b06b2) and 22dbb4b02 (SSM 2693cdef-f5d0-4fa8-bd06-bf4b9df6b948): the destination row is 1 production row on the reviewed account, with a payment method, verified, no sandbox row; the take-over shape differed only by PostgreSQL 18's six named NOT NULL constraints (now left out of the fingerprint, the column notnull carries them). Reconciled (owner decision 2026-10-17): the reviewed row is kept (platform_billing_destination_absent_empty_or_reviewed) and the file grants checksops EXECUTE on record_check_billing_event() as live. Re-run the inspect at the merged commit; prerequisites_present and predecessors_applied stay false until SQL 96 is applied."
+    "note": "Recorded from the read-only production inspect of 2026-10-19 after SQL 96 was applied to production (SSM command 0c34e957-68f5-4ea5-9e2e-dd5639b7a67e, node scripts/deployment-guard/sql98-tenant-fee-collection-production-apply.mjs --inspect on the SQL53 runner i-0c35557c4e5385406 from main b59b4520c (tarball sha256 189924e188d294868d8a999758a4744cff087a16ba7cd833998a8a5a3544b8f3), BEGIN READ ONLY ... ROLLBACK, connected as checksops_admin). live_definition_sha256 d64218dc145fc7b55632c7d5cfdef3fdbbb02592a79f6ff339c4814fc4ae6dbc (not the intended abcb8f21b5a3840e6aa1dfd6639302ae82927b6fa66cf7b13351fa39c63ab603: already_applied false); precondition_failures [], prerequisites_missing [], missing_dependencies [], predecessor sql96 applied, successors_applied []. Counts: platform_billing_destination_rows 1 (production 1, sandbox 0, reviewed_account 1, production_reviewed_account 1, payment_method 1, verified 1), duplicate_billing_periods 0, check_billing_event_duplicates 0, check_billing_config_rows 1 (active 1). aws_check_billing_default_price_cents(), aws_check_billing_charges_when_per_check_off(), aws_platform_owner_record_billing_audit(jsonb), aws_platform_billing_destination_audit_row(), aws_tenant_deposits_enabled(uuid), aws_tenant_deposits_enabled_audit_row() and aws_platform_owner_set_tenant_deposits_enabled(uuid, boolean) are absent; record_check_billing_event() and aws_tenants_member_column_guard() differ; the tables platform_billing_audit and tenant_fee_invoice_outbox and the column tenants.deposits_enabled are absent, platform_billing_destination differs; the trigger check_intake_items trg_record_check_billing_event and the index tenant_maintenance_payments_tenant_period_uidx are already as the file leaves them. apply_preconditions_met was false at inspect time only because no pre-state was recorded yet (expected_live_definition_sha256 null). This reviewed change copies live_definition_sha256 into expected_live_definition_sha256 and, in the same change, sets authorization, execute true and staging_acceptance. A fresh --inspect immediately before apply (the one-shot's inspect step) must still report this live_definition_sha256 and precondition_failures []; if not, stop. Earlier: Pending: no read-only production inspect has been run for SQL 98. It must record (ops/fee-collection-deltas.md section 3): the active check_billing_config row (the live per-check default), duplicate (tenant_id, billing_period) rows in tenant_maintenance_payments (SQL 98 refuses on any), the unique index on check_billing_events (check_intake_item_id, event_type), the live record_check_billing_event() body and trigger, and every policy and grant on platform_billing_destination (SQL 98 drops all but its two platform-owner policies and resets checksops to SELECT, INSERT, UPDATE). Copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. If precondition_failures is not [] stop: that needs its own reviewed change. Update (guarded tooling built): the read-only inspect is scripts/deployment-guard/sql98-tenant-fee-collection-production-apply.mjs --inspect; it reports counts.duplicate_billing_periods, counts.check_billing_event_duplicates, counts.check_billing_config_rows and counts.check_billing_config_active_rows (aggregate COUNT(*)s), release_sql_inspect.unique_covers (whether a unique index already covers check_billing_events (check_intake_item_id, event_type)), release_sql_inspect.indexes (tenant_maintenance_payments_tenant_period_uidx), the function ACLs (record_check_billing_event() included) and the platform_billing_destination table state (intended / different / absent, policy count). It does not print the record_check_billing_event() body or the destination policies; their fingerprints are in live_definition_sha256. Run 2026-10-17 at source commit 969e2b2b1 (SSM 24b9f38c-d721-4b82-b3a5-056c6c84d37a, read-only, checksops_admin): live_definition_sha256 edcbdf86cf44381efe7d5dbb70b157a8ed881b17c5be040b5544d35caefa3708; precondition_failures prerequisites_present and predecessors_applied (SQL 96 not applied), function_acl_replaceable (record_check_billing_event() has EXECUTE for PUBLIC, checksops and the owner; the file only revokes PUBLIC), created_tables_absent_or_intended and platform_billing_destination_absent_empty_or_reviewed: platform_billing_destination already exists (RLS on, 7 columns, the two policies by SQL 98's names but different) with 1 row. counts: check_billing_config 1 row, 1 active; no duplicate periods; check_billing_events (check, event) already covered by a unique index. The next inspect also reports, as counts only, whether that row is production or sandbox, on the reviewed platform account 41cb5d67-4911-4bef-aad5-d8ee9c582208, has a payment method and is verified; SQL 98 is changed to keep it only in a reviewed change after that (owner decision 2026-10-17). Runs at 0b9fc70e2 (SSM f6419152-a6ad-44fd-8e5f-faa03c7b06b2) and 22dbb4b02 (SSM 2693cdef-f5d0-4fa8-bd06-bf4b9df6b948): the destination row is 1 production row on the reviewed account, with a payment method, verified, no sandbox row; the take-over shape differed only by PostgreSQL 18's six named NOT NULL constraints (now left out of the fingerprint, the column notnull carries them). Reconciled (owner decision 2026-10-17): the reviewed row is kept (platform_billing_destination_absent_empty_or_reviewed) and the file grants checksops EXECUTE on record_check_billing_event() as live. Re-run the inspect at the merged commit; prerequisites_present and predecessors_applied stay false until SQL 96 is applied. The apply of 2026-10-19 is recorded in applied; the record-and-retire change set execute false again."
   },
   "intended_post_state": {
     "fingerprint": "abcb8f21b5a3840e6aa1dfd6639302ae82927b6fa66cf7b13351fa39c63ab603",
@@ -72,5 +72,105 @@
     "ok": true,
     "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39085677318",
     "basis": "Owner-accepted substitute evidence (the owner's words: \"accept the SQL 98 staging apply as substitute evidence and do the SQL 98 pin\"). Guarded staging SQL executor apply of sql98-tenant-fee-collection on 2026-10-18 (run 39085677318, main 2176f73ae, wave 3): receipt before 296c3d6a274e10f66005fb9eaecf93fa17b81bd8db3607037ca07698fddd3275, after abcb8f21b5a3840e6aa1dfd6639302ae82927b6fa66cf7b13351fa39c63ab603 = intended_replacement_sha256; precondition_failures [], prerequisites_missing []. Its staging read-live (run 39083278136) recorded that pre-state (ops/deployment-guard/staging-sql-live.json, aws/tests/helpers/staging-sql-wave1.mjs). The pre-states differ: staging before its apply was 296c3d6a274e10f66005fb9eaecf93fa17b81bd8db3607037ca07698fddd3275 and production (production_inspect, 2026-10-19, after SQL 96) is d64218dc145fc7b55632c7d5cfdef3fdbbb02592a79f6ff339c4814fc4ae6dbc; both reach the intended abcb8f21b5a3840e6aa1dfd6639302ae82927b6fa66cf7b13351fa39c63ab603 from the same pinned file bytes (source_sha256)."
+  },
+  "applied": {
+    "date": "2026-10-19",
+    "result": "applied",
+    "source_commit": "ce212b5aa296125bfde3fbab7617263a68539b34",
+    "source_tarball": {
+      "file": "source-ce212b5aa296125bfde3fbab7617263a68539b34.tar.gz",
+      "sha256": "756cf4fa143f9fb7d1384dc7e2c8dd223d70390489bc938ba8dd4a23e629805c"
+    },
+    "migration_source_sha256": "5a42e485c84f7c9976390d12c275cdf32612fbba7656b66f553110c0ae697c2a",
+    "migration_source_sha256_note": "The one-shot source step hashed aws/workflows/sql/98_tenant_fee_collection.sql in the transfer tarball: equal to source_sha256 (the pin).",
+    "runner": "i-0c35557c4e5385406",
+    "workstream_id": "prod-sql98-tenant-fee-collection-20261019",
+    "one_use_id": "sql98-prod-5a067c1d-8c6b-44b5-b646-2f7175d7b66e",
+    "one_use_id_consumed": true,
+    "one_use_id_consumed_basis": "Inferred from the successful apply (the tool records the one_use_id after COMMIT and only warns if that write fails); the consumed-registry entry was not read back separately.",
+    "owner_approval": "approve #1071 and apply SQL 98 in production",
+    "owner_approval_basis": "As passed in --approval-statement for --approval-scope sql98; the one-shot cannot verify who said it.",
+    "operator": "michaelcarletta-cmd",
+    "apply_ssm_command_id": "817865e7-2684-4f87-9f56-e57ed5386add",
+    "one_shot_run_id": "bef29dcf-c1fa-48d8-8c5f-0511b90e3403",
+    "one_shot_note": "One guarded production-sql-one-shot run (SSM 817865e7-2684-4f87-9f56-e57ed5386add, run_id bef29dcf-c1fa-48d8-8c5f-0511b90e3403) from main ce212b5aa applied SQL 98: steps pin, source, inspect, contracts, manifest, source-recheck-before-preflight, preflight, evaluate, source-recheck-before-apply, apply (applied) and post-apply-inspect all ok; runner contracts, manifest, receipt and inspects as recorded below. The one-shot JSON was summarised on the runner (no console truncation). The AWS tool call that sent the command returned an error on the tool side after SendCommand succeeded; the command was not resent, and its result (status Success, exit 0) was read back read-only with GetCommandInvocation once the tool was reconnected. Start and finish times were not carried into this record. Applied after SQL 96 and before tenant-billing-engine.mjs, tenant-billing-handlers.mjs, workflow-rpc.mjs and providers.mjs (sql_before) and before SQL 102.",
+    "steps": [
+      "pin",
+      "source",
+      "inspect",
+      "contracts",
+      "manifest",
+      "source-recheck-before-preflight",
+      "preflight",
+      "evaluate",
+      "source-recheck-before-apply",
+      "apply",
+      "post-apply-inspect"
+    ],
+    "contract_results": {
+      "claim-ledger": {
+        "ok": true,
+        "passed": "4/4"
+      },
+      "tenant-isolation": {
+        "ok": true,
+        "passed": "6/6"
+      },
+      "financial-write-protections": {
+        "ok": true,
+        "passed": "43/43"
+      }
+    },
+    "pre_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "d64218dc145fc7b55632c7d5cfdef3fdbbb02592a79f6ff339c4814fc4ae6dbc",
+      "live_matches_expected": true,
+      "already_applied": false,
+      "precondition_failures": [],
+      "missing_dependencies": [],
+      "predecessors_applied": true,
+      "successors_applied": [],
+      "note": "The one-shot inspect step (read-only --inspect) immediately before the apply: live == the recorded pre-state d64218dc..., precondition_failures [], missing_dependencies [], predecessor sql96 applied; billing counts unchanged before and after (platform_billing_destination 1 row: production, reviewed account, payment method, verified; 0 sandbox; duplicate_billing_periods 0; check_billing_event_duplicates 0; check_billing_config 1 row, 1 active)."
+    },
+    "manifest_sha256": "a198b8327451278c2fcf72ebf7bfdebb94754f320d4b6013ea44fdaf754998bf",
+    "receipt": {
+      "migration": "sql98",
+      "workstream": "prod-sql98-tenant-fee-collection-20261019",
+      "commit": "ce212b5aa296125bfde3fbab7617263a68539b34",
+      "sql_file": "aws/workflows/sql/98_tenant_fee_collection.sql",
+      "before_hash": "d64218dc145fc7b55632c7d5cfdef3fdbbb02592a79f6ff339c4814fc4ae6dbc",
+      "after_hash": "abcb8f21b5a3840e6aa1dfd6639302ae82927b6fa66cf7b13351fa39c63ab603",
+      "unrelated_catalog_sha256": "9b6ffc5c21b307e1859af4069d433ac05d6282309f318b5aa5bffdd846eea318",
+      "unrelated_catalog_counts": {
+        "relations": 881,
+        "columns": 3506,
+        "constraints": 2207,
+        "policies": 400,
+        "functions": 1301,
+        "indexes": 648,
+        "default_acl": 0,
+        "role_memberships": 15,
+        "roles": 29,
+        "triggers": 175,
+        "views": 25,
+        "types": 18,
+        "schema": 2
+      },
+      "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39085677318",
+      "result": "applied"
+    },
+    "post_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "abcb8f21b5a3840e6aa1dfd6639302ae82927b6fa66cf7b13351fa39c63ab603",
+      "already_applied": true,
+      "precondition_failures": [],
+      "missing_dependencies": [],
+      "predecessors_applied": true,
+      "successors_applied": [],
+      "note": "The one-shot post-apply read-only --inspect: already_applied true (live == intended abcb8f21...), precondition_failures []; the nine functions (aws_check_billing_default_price_cents(), aws_check_billing_charges_when_per_check_off(), record_check_billing_event(), aws_platform_owner_record_billing_audit(jsonb), aws_platform_billing_destination_audit_row(), aws_tenant_deposits_enabled(uuid), aws_tenant_deposits_enabled_audit_row(), aws_platform_owner_set_tenant_deposits_enabled(uuid, boolean), aws_tenants_member_column_guard()), the four policies, the tables platform_billing_audit, tenant_fee_invoice_outbox and platform_billing_destination, tenants.deposits_enabled and the three triggers all intended; billing counts unchanged before and after (platform_billing_destination 1 row: production, reviewed account, payment method, verified; 0 sandbox; duplicate_billing_periods 0; check_billing_event_duplicates 0; check_billing_config 1 row, 1 active)."
+    }
+  },
+  "production_evidence": {
+    "2026-10-19 apply": "Guarded production SQL one-shot on i-0c35557c4e5385406, workstream prod-sql98-tenant-fee-collection-20261019, main ce212b5aa (tarball 756cf4fa…, migration source 5a42e485… == pin), owner-approved run (\"approve #1071 and apply SQL 98 in production\"), SSM 817865e7-2684-4f87-9f56-e57ed5386add, run_id bef29dcf-c1fa-48d8-8c5f-0511b90e3403, one_use_id sql98-prod-5a067c1d-8c6b-44b5-b646-2f7175d7b66e (spent): every step ok; contracts claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43; pre-apply inspect live d64218dc… (live_matches_expected true, precondition_failures []); manifest a198b832…; d64218dc… -> abcb8f21…, result applied, unrelated catalog 9b6ffc5c…; post-apply inspect already_applied true, precondition_failures []; billing counts unchanged before and after (platform_billing_destination 1 row: production, reviewed account, payment method, verified; 0 sandbox; duplicate_billing_periods 0; check_billing_event_duplicates 0; check_billing_config 1 row, 1 active). Result read back with GetCommandInvocation (the sending tool call errored after SendCommand succeeded; not resent). No later inspect was run. execute is false so the pin is no longer a standing authorization."
   }
 }
