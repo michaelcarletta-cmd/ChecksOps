@@ -19,10 +19,41 @@ default `PUBLIC` + owner, or owner only after SQL 29), so its tools can verify t
 exactly, and the end state is SQL 29's intended one either way. A trigger function needs no
 EXECUTE grant to fire.
 
-**Status:** not applied anywhere. The staging pin (`sql103-share-library-trigger-acl`) and the
-production pin (`ops/deployment-guard/sql103-share-library-trigger-acl-production-apply.json`)
-are pending (`execute: false`, `authorization: "pending"`, no recorded pre-state, no staging
-acceptance), so every apply refuses before connecting.
+**Status:** not applied by the tooling anywhere. The production pin
+(`ops/deployment-guard/sql103-share-library-trigger-acl-production-apply.json`) is
+execute-authorized by the reviewed change of 2026-10-19 (owner-approved `authorization`,
+`execute: true`, the recorded production pre-state and the staging read-live acceptance below);
+`execute: true` takes effect only when the owner merges that change, and each apply still needs
+the owner's run-time approval for its workstream, a production-sql receipt, the authorization
+phrase `APPLY_SHARE_LIBRARY_TRIGGER_ACL` and a new `one_use_id`. The staging pin
+(`sql103-share-library-trigger-acl`) stays pending (`execute: false`): staging is already in
+the intended state, so no staging apply is needed.
+
+## Evidence (2026-10-19)
+
+**Production read-only inspect** (`sql103-share-library-trigger-acl-production-apply.mjs
+--inspect`, `BEGIN READ ONLY … ROLLBACK`, connected as `checksops_admin`):
+
+| field | value |
+|---|---|
+| source | main `03e238afb0fab0be09b6c09f1bd3c812375c3717`, transfer tarball sha256 `1493cf711bb233c6fefc273d93aff0bf28b3c1b34ecf4e4247d161410f1ea4ff` |
+| SSM command / runner | `1b740312-6e58-4412-9464-feac28e6bdf1` on `i-0c35557c4e5385406` |
+| `live_definition_sha256` | `bade6813d689c91e3c8e39e33203e64eca23cc363f557062a7669407a01d5b9c` (pinned as `expected_live_definition_sha256`) |
+| `intended_replacement_sha256` | `4b909c5929f0357ef442a1b2ebcb6bf8312e93be257010ed8a32072accf02aae` |
+| `already_applied` | `false` |
+| `precondition_failures` / `prerequisites_missing` / `successors_applied` | `[]` / `[]` / `[]` |
+
+The same inspect run showed SQL 29 still refused only by `function_acl_replaceable` (live
+`848277b1…`, intended `1271ea9b…`), which SQL 103 resolves.
+
+**Staging acceptance** (`staging_acceptance.reference`
+`https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39188618156`): the guarded
+staging SQL executor, deployed from main `03e238af` (deploy run `39188486411`, executor
+package CodeSha256 `jJioB/XfKHPR0FgWuzGcah3QpYTa64h4Frue6QsQYQ8=`), `read-live` run
+`39188618156` for `sql103-share-library-trigger-acl`: live == intended `4b909c59…`,
+`already_applied` true, `precondition_failures` []. No staging apply was needed or run (step 1
+below: the read-live run is the staging acceptance). The revoke path itself is covered on
+PostgreSQL 16 by `aws/tests/sql103-share-library-trigger-acl-pg.test.mjs`.
 
 ## Run order (production)
 
@@ -77,13 +108,15 @@ schema `public` (and the functions of `auth`) unchanged. The tools roll back oth
    true: no staging apply, and the read-live run is the staging acceptance. If it reports
    anything else, record `LIVE_DEFINITION_SHA256` in the staging pin
    (`expected_live_definition_sha256`, owner-approved `authorization`, `execute: true`) in a
-   reviewed change, `apply`, then `read-live` again.
+   reviewed change, `apply`, then `read-live` again. Done 2026-10-19: read-live run
+   `39188618156` reported `already_applied` true (Evidence above).
 2. Production: run the read-only inspect on the runner
    (`node scripts/deployment-guard/sql103-share-library-trigger-acl-production-apply.mjs --inspect`);
    record `production_inspect` and copy `live_definition_sha256` into
    `expected_live_definition_sha256`; record the staging run in `staging_acceptance`; set an
    owner-approved `authorization` and `execute: true`, in one reviewed change, together with (or
-   just before) SQL 29's pin change.
+   just before) SQL 29's pin change. Done 2026-10-19 (Evidence above); SQL 29's pin is a
+   separate change and is still pending.
 3. Apply with the one-shot (`ops/production-sql-one-shot.md`): `production-sql-one-shot.mjs
    --migration sql103 --approval-scope sql103 … --phase inspect`, then the owner-named
    `--phase apply`; then SQL 29's runs (`--migration sql29`), then SQL 30's.

@@ -4,7 +4,8 @@
  * and release-sql-production-cli.mjs), mirroring the SQL 29 / 30 / 88 / 89 tool tests:
  *
  *   - the committed pins are pending (authorization "pending", execute false, no pre-state,
- *     no staging acceptance), bound to the staging pins, the predecessors and the production
+ *     no staging acceptance; SQL 103's is execute-authorized, and its locked-state checks run
+ *     on an explicit pre-authorization copy), bound to the staging pins, the predecessors and the production
  *     RDS, and name the built tooling; the tools are inventoried and registered in the one-shot;
  *   - evaluate / precheck / apply refuse before connecting (no pre-state, no approval, the
  *     staging acceptance, execute false, the phrase, the single-use id, replay, binding);
@@ -46,6 +47,21 @@ const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const CLIS = Object.freeze(Object.fromEntries(RELEASE_SQL_KEYS.map((key) => [key, path.join(ROOT, RELEASE_PRODUCTION[key].cli)])));
 const MAINS = Object.freeze(Object.fromEntries(await Promise.all(RELEASE_SQL_KEYS.map(async (key) => [key, (await import(CLIS[key])).main]))));
 const COMMITTED = Object.freeze(Object.fromEntries(RELEASE_SQL_KEYS.map((key) => [key, loadReleaseProductionPin(key, ROOT)])));
+// SQL 103's production pin is execute-authorized (owner approved 2026-10-19; its own checks are
+// in release-sql103-production-apply.test.mjs) until its record-and-retire change; every other
+// release pin is pending. The locked-state checks below run on an explicit pre-authorization
+// copy of an authorized pin.
+const EXECUTE_AUTHORIZED = Object.freeze(['sql103']);
+const LOCKED = Object.freeze(Object.fromEntries(RELEASE_SQL_KEYS.map((key) => [key, EXECUTE_AUTHORIZED.includes(key)
+  ? Object.freeze({
+    ...COMMITTED[key],
+    authorization: 'pending',
+    execute: false,
+    expected_live_definition_sha256: null,
+    staging_acceptance: { ok: false, reference: null, basis: 'Pending' },
+    production_inspect: { ...COMMITTED[key].production_inspect, status: 'pending' },
+  })
+  : COMMITTED[key]])));
 const ORDER = Object.freeze(['sql90', 'sql91', 'sql92', 'sql93', 'sql94', 'sql96', 'sql97', 'sql95']);
 const STAGING_REF = 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/0000000000';
 const COMMIT = 'a'.repeat(40);
@@ -123,18 +139,29 @@ async function runCli(key, argv, { env = { CHECKSOPS_DEPLOYMENT_GUARD_APPLY: '1'
   return { out: writes.join(''), spent };
 }
 
-test('committed pins are pending, bound to the staging pins, predecessors and the production RDS, and name the built tooling', () => {
+test('committed pins are pending (SQL 103 execute-authorized), bound to the staging pins, predecessors and the production RDS, and name the built tooling', () => {
   const inventory = JSON.stringify(JSON.parse(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/bypass-inventory.json'), 'utf8')));
+  assert.deepEqual(RELEASE_SQL_KEYS.filter((key) => COMMITTED[key].execute !== false), [...EXECUTE_AUTHORIZED]);
   for (const key of RELEASE_SQL_KEYS) {
     const pin = COMMITTED[key];
     const staging = STAGING[key];
     assert.equal(pin.migration, key);
-    assert.equal(pin.authorization, 'pending', key);
-    assert.equal(pin.execute, false, key);
-    assert.equal(pin.expected_live_definition_sha256, null, key);
-    assert.equal(pin.staging_acceptance.ok, false, key);
-    assert.equal(pin.staging_acceptance.reference, null, key);
-    assert.equal(pin.production_inspect.status, 'pending', key);
+    if (EXECUTE_AUTHORIZED.includes(key)) {
+      assert.equal(pin.execute, true, key);
+      assert.match(pin.authorization, /^Owner approved /, key);
+      assert.match(pin.expected_live_definition_sha256, /^[0-9a-f]{64}$/, key);
+      assert.equal(pin.staging_acceptance.ok, true, key);
+      assert.match(pin.staging_acceptance.reference, /^https:\/\/github\.com\/michaelcarletta-cmd\/ChecksOps\/actions\/runs\/\d+$/, key);
+      assert.equal(pin.production_inspect.status, 'recorded', key);
+      assert.equal(pin.production_inspect.live_definition_sha256, pin.expected_live_definition_sha256, key);
+    } else {
+      assert.equal(pin.authorization, 'pending', key);
+      assert.equal(pin.execute, false, key);
+      assert.equal(pin.expected_live_definition_sha256, null, key);
+      assert.equal(pin.staging_acceptance.ok, false, key);
+      assert.equal(pin.staging_acceptance.reference, null, key);
+      assert.equal(pin.production_inspect.status, 'pending', key);
+    }
     assert.notEqual(pin.verified_live, true, key);
     assert.equal(pin.filename, staging.filename);
     assert.equal(pin.migration_id, staging.migration_id);
@@ -181,10 +208,11 @@ test('a tampered pin or file is refused', () => {
 
 test('evaluate, precheck and apply refuse before connecting', async () => {
   for (const key of RELEASE_SQL_KEYS) {
-    const committed = await evaluateReleaseProductionApply(key, manifest(key, { ...COMMITTED[key], expected_live_definition_sha256: PRE }), { root: ROOT, pin: COMMITTED[key] });
+    // The pending state (for an execute-authorized pin, its explicit pre-authorization copy).
+    const committed = await evaluateReleaseProductionApply(key, manifest(key, { ...LOCKED[key], expected_live_definition_sha256: PRE }), { root: ROOT, pin: LOCKED[key] });
     assert.equal(committed.code, CODES.SQL_COLLISION, key);
     assert.match(committed.message, /no recorded pre-apply live definition hash/);
-    const pendingWithPre = { ...COMMITTED[key], expected_live_definition_sha256: PRE };
+    const pendingWithPre = { ...LOCKED[key], expected_live_definition_sha256: PRE };
     const notApproved = await evaluateReleaseProductionApply(key, manifest(key, pendingWithPre), { root: ROOT, pin: pendingWithPre });
     assert.equal(notApproved.code, CODES.PRODUCTION_APPROVAL_REQUIRED, key);
     const pin = authorized(key);
