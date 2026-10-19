@@ -140,8 +140,14 @@ test('pin: SQL 103 pending, code-derived, selectable, packed, in step with the p
   assert.equal(prod.staging_pin_commit, pin.commit);
   assert.equal(prod.source_sha256, pin.source_sha256);
   assert.deepEqual(prod.predecessors, []);
+  // The production pin was execute-authorized (owner approved 2026-10-19, production pre-state
+  // recorded, staging read-live acceptance), then applied on 2026-10-19 and retired (execute
+  // false, applied recorded); the staging pin above stays pending (no staging apply).
   assert.equal(prod.execute, false);
-  assert.equal(prod.authorization, 'pending');
+  assert.match(prod.authorization, /^Applied to production on 2026-10-19; execute is false again/);
+  assert.equal(prod.applied.receipt.after_hash, pin.intended_replacement_sha256);
+  assert.equal(prod.expected_live_definition_sha256, 'bade6813d689c91e3c8e39e33203e64eca23cc363f557062a7669407a01d5b9c');
+  assert.notEqual(prod.expected_live_definition_sha256, pin.expected_live_definition_sha256);
   let bytes = null;
   if (/^[0-9a-f]{40}$/.test(pin.commit)) {
     try {

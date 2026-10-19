@@ -13,7 +13,8 @@ production").
 SQL 103 (`aws/workflows/sql/103_share_library_trigger_acl.sql`: EXECUTE on SQL 29's trigger
 function for its owner only) uses the same engine and tools but runs first, immediately
 before SQL 29: production order SQL 103 → SQL 29 → SQL 30 → SQL 90 → … → SQL 102
-(`ops/production-sql-103-apply.md`).
+(`ops/production-sql-103-apply.md`). SQL 103 was applied to production on 2026-10-19 and its
+pin records the apply and is `execute: false` again.
 
 | key | file (sha256) | what it does | predecessors |
 |---|---|---|---|
