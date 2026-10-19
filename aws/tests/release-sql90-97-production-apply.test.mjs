@@ -53,10 +53,10 @@ const COMMITTED = Object.freeze(Object.fromEntries(RELEASE_SQL_KEYS.map((key) =>
 // (SQL 101's, SQL 103's and SQL 104's own checks are in release-sql101-production-apply.test.mjs,
 // release-sql103-production-apply.test.mjs and release-sql104-production-apply.test.mjs). Every other release pin is pending. The
 // locked-state checks below run on an explicit pre-authorization copy of an applied pin.
-// SQL 98's production pin is execute-authorized (owner approved 2026-10-19, owner-accepted
-// substitute staging evidence; its own checks are in release-sql98-100-production-apply.test.mjs)
-// until its record-and-retire change.
-const EXECUTE_AUTHORIZED = Object.freeze(['sql98']);
+// SQL 98's production pin was execute-authorized (owner approved 2026-10-19, owner-accepted
+// substitute staging evidence) until its record-and-retire change after its 2026-10-19 apply; its
+// own checks are in release-sql98-100-production-apply.test.mjs.
+const EXECUTE_AUTHORIZED = Object.freeze([]);
 // SQL 94's recorded production pre-state (read-only inspect of 2026-10-19 after SQL 29 / SQL 90 / SQL 103,
 // SSM 70abaca3, main fecb0b3af): the same pre-state staging recorded before its apply.
 const SQL94_PRODUCTION_PRE = '724115983687d882d8240e8d06e4670bc6e24dbb16540d3134cc1ccc47d66af1';
@@ -74,9 +74,10 @@ const SQL93_STAGING_REFERENCE = 'https://github.com/michaelcarletta-cmd/ChecksOp
 // 2026-10-17 from a different pre-state, accepted by the owner as substitute evidence).
 const SQL90_PRODUCTION_PRE = 'b5a1998de14922c26b9d829909fada17d3994cf8d0757d410c3e04f6c1f5d9fe';
 const SQL90_STAGING_REFERENCE = 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39080157856';
-const APPLIED_RETIRED = Object.freeze(['sql90', 'sql91', 'sql92', 'sql93', 'sql94', 'sql96', 'sql101', 'sql103', 'sql104']);
+const APPLIED_RETIRED = Object.freeze(['sql90', 'sql91', 'sql92', 'sql93', 'sql94', 'sql96', 'sql98', 'sql101', 'sql103', 'sql104']);
 // SQL 90's and SQL 101's production applies of 2026-10-19, recorded in applied.
 const SQL90_SQL101_APPLIED = Object.freeze({
+  sql98: Object.freeze({ ssm: '817865e7-2684-4f87-9f56-e57ed5386add', run: 'bef29dcf-c1fa-48d8-8c5f-0511b90e3403', one_use_id: 'sql98-prod-5a067c1d-8c6b-44b5-b646-2f7175d7b66e', commit: 'ce212b5aa296125bfde3fbab7617263a68539b34', approval: 'approve #1071 and apply SQL 98 in production' }),
   sql94: Object.freeze({ ssm: 'd2cf26f4-f240-497a-9293-5ca70c094d68', run: 'ca95e688-664e-43f3-97b1-9699bdab9a88', one_use_id: 'sql94-prod-a4968361-4a21-409d-9448-42ffe30f5274', commit: 'ef26f7357b19748a977eec668755d10319944373', approval: 'approve 1068, apply SQL 94 in production and apply SQL 104 in production' }),
   sql104: Object.freeze({ ssm: 'a97d4326-31b1-4aff-a6cb-206ff0d8e6f9', run: '32965a3e-f28d-4e53-914e-d1be902165a4', one_use_id: 'sql104-prod-7fb5b396-0420-433c-9088-3b1d7db42b19', commit: 'ef26f7357b19748a977eec668755d10319944373', approval: 'approve 1068, apply SQL 94 in production and apply SQL 104 in production' }),
   sql96: Object.freeze({ ssm: 'df0acdce-9d1f-401c-a0f6-f6232e5d3f74', run: '6de41c7e-81c2-45a4-b92c-e4dc7f2950f9', one_use_id: 'sql96-prod-69b5b3c5-de65-4d63-8614-65a709b70950', commit: 'b9a1591f91a437101d4ca61e18437864e6ed1f9a', approval: 'approve 1063 and apply SQL 96 into production' }),

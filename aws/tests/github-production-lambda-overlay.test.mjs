@@ -707,11 +707,11 @@ test('fee collection: eleven members on the fee manifest, collection-v2 then des
   assert.equal(PLAN.sql_prerequisites[SQL96].verified_live, true);
   assert.match(PLAN.sql_prerequisites[SQL96].evidence, /SSM df0acdce-9d1f-401c-a0f6-f6232e5d3f74/);
   const pin = JSON.parse(fs.readFileSync(path.join(ROOT, pre.pin), 'utf8'));
-  // SQL 98's production pin is execute-authorized (owner approved 2026-10-19) but not applied, so
-  // the plan still holds the fee members on it (verified_live false above).
-  assert.equal(pin.execute, true);
-  assert.match(pin.authorization, /^Owner approved 2026-10-19 /);
-  assert.equal(pin.applied, undefined);
+  // SQL 98's production pin is applied (2026-10-19, #1071) and retired; the plan records it
+  // verified live only in its own reviewed change, so until then the fee members stay held.
+  assert.equal(pin.execute, false);
+  assert.match(pin.authorization, /^Applied to production on 2026-10-19; execute is false again/);
+  assert.equal(pin.applied.result, 'applied');
   assert.equal(pin.filename, SQL98);
   assert.equal(pin.source_sha256, sha(SQL98));
   assert.deepEqual(pin.predecessors, ['sql96']);
@@ -720,7 +720,7 @@ test('fee collection: eleven members on the fee manifest, collection-v2 then des
   assert.equal(pin.staging_acceptance.reference, 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39085677318');
   const { AUTHORIZED_SQL98_TENANT_FEE_COLLECTION: reg, FEE_COLLECTION_PENDING_SQL_PINS } = await import('../../scripts/deployment-guard/lib/sql-executor-auth.mjs');
   assert.equal(FEE_COLLECTION_PENDING_SQL_PINS.sql98, reg);
-  // The staging pin is wave 3 (owner approved); the production pin above is execute-authorized, not applied.
+  // The staging pin is wave 3 (owner approved); the production pin above is applied and retired.
   const { assertStagingPinState } = await import('./helpers/staging-sql-wave1.mjs');
   assertStagingPinState(assert, 'sql98', reg);
   assert.equal(reg.source_sha256, pin.source_sha256);

@@ -109,12 +109,12 @@ production pin before the matching production step (deltas report
    production (`sql_prerequisites[...98...].verified_live`) and now in staging too
    (`staging-sql-live.json`). **Never re-run SQL 96 after SQL 98**: the SQL 96 tools refuse once
    SQL 98's `aws_platform_owner_set_tenant_deposits_enabled` exists (`successors_not_applied`).
-   Production pin: `execute: true` (owner approved 2026-10-19, "accept the SQL 98 staging apply
-   as substitute evidence and do the SQL 98 pin"). The read-only production inspect of 2026-10-19
-   (SSM `0c34e957-68f5-4ea5-9e2e-dd5639b7a67e`, main `b59b4520c`) recorded live `d64218dc…` with
-   SQL 96 applied and precondition_failures []; staging's apply (run `39085677318`) went
-   `296c3d6a…` -> `abcb8f21…` from a different pre-state, accepted as substitute evidence. The
-   apply still needs the owner's run-time approval.
+   Applied to production on 2026-10-19 (see "Production apply of SQL 98" below) and its pin is
+   retired. It had been execute-authorized by the owner-approved pin change of 2026-10-19 (#1071,
+   "accept the SQL 98 staging apply as substitute evidence and do the SQL 98 pin": the read-only
+   production inspect, SSM `0c34e957-68f5-4ea5-9e2e-dd5639b7a67e` from main `b59b4520c`, live
+   `d64218dc…`; staging's apply, run `39085677318`, went `296c3d6a…` -> `abcb8f21…` from a
+   different pre-state, accepted as substitute evidence).
 10. **SQL 99** after SQL 90, as the login that owns `check_messages` (no FORCE RLS) and
    `mortgage_handling_requests`; before or with the SPA build that stops the Mortgage Desk
    client posts (`MortgageOpsQueue.tsx`). No Lambda dependency.
@@ -537,3 +537,23 @@ post-apply inspect already_applied true, precondition_failures []. No later read
 run. The pin is `execute: false` again; a re-apply needs a new reviewed pin change. The document
 library Lambda members it holds (sql_before) may follow in their batch once the plan records SQL 94
 verified live in its own reviewed change.
+
+## Production apply of SQL 98 (2026-10-19)
+
+One owner-approved run ("approve #1071 and apply SQL 98 in production") of
+`production-sql-one-shot.mjs` on `i-0c35557c4e5385406` from main `ce212b5aa` (tarball
+`756cf4fa…`): SSM `817865e7-2684-4f87-9f56-e57ed5386add`, run_id
+`bef29dcf-c1fa-48d8-8c5f-0511b90e3403`, one_use_id `sql98-prod-5a067c1d-8c6b-44b5-b646-2f7175d7b66e`
+(spent), migration source `5a42e485…` (== pin). Every step was ok; contracts claim-ledger 4/4,
+tenant-isolation 6/6, financial-write-protections 43/43; manifest `a198b832…`; receipt
+`d64218dc…` -> `abcb8f21…`, unrelated catalog `9b6ffc5c…`; post-apply inspect already_applied
+true, precondition_failures [], every function, policy, table, column and trigger intended. The
+billing counts were the same before and after (one production platform billing destination,
+reviewed and verified; no sandbox rows; no duplicate billing periods or check billing events; one
+active check billing config). The AWS tool call that sent the command returned an error after
+SendCommand succeeded; the command was not resent, and its result (Success, exit 0) was read back
+read-only with GetCommandInvocation. No later read-only inspect was run. The pin is
+`execute: false` again; a re-apply needs a new reviewed pin change, and SQL 96 must never be re-run
+now. The fee members (`tenant-billing-engine.mjs`, `tenant-billing-handlers.mjs`,
+`workflow-rpc.mjs`, `providers.mjs`) stay held until the plan records SQL 98 verified live in its
+own reviewed change; `tenant-billing-handlers.mjs` also waits for SQL 102.
