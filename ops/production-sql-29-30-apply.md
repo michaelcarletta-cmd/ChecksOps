@@ -104,10 +104,21 @@ paths or row data.
    `live_definition_sha256` into `expected_live_definition_sha256`; record the staging runs in
    `staging_acceptance`; set an owner-approved `authorization` and `execute: true` in one
    reviewed change.
-3. Apply with `preflight.mjs --acquire-lease --receipt`, then the tool's `--apply --input`
-   with the pin's `authorization_phrase` and a fresh `one_use_id`, then `--inspect` again.
+3. Apply with the one-shot (`ops/production-sql-one-shot.md`), one run per migration, SQL 29
+   first: `production-sql-one-shot.mjs --migration sql29 --approval-scope sql29 … --phase
+   inspect`, then the owner-named `--phase apply` run; the same for `sql30`. Both runs come
+   before SQL 90. The one-shot runs the tool's `--inspect`, builds the manifest from the pin
+   (`source_sha256`, expected and intended hashes, `authorization_phrase`), issues the receipt
+   with `preflight.mjs --acquire-lease --receipt`, runs the tool's `--input` (evaluate) and
+   `--apply --input` with a fresh `one_use_id`, then `--inspect` again.
 4. Record the apply and retire the pin (`execute: false`). Do not edit the release lock
    `mortgage-ops` from this runbook; that is its own reviewed change.
 
-The one-shot orchestrator (`production-sql-one-shot.mjs`) does not register SQL 29 / SQL 30
-yet; registering them is a follow-up.
+The one-shot orchestrator (`production-sql-one-shot.mjs`) registers `sql29` and `sql30`
+(`ONE_SHOT_TOOLS` in `scripts/deployment-guard/lib/production-sql-one-shot.mjs`). It refuses
+both while their pins are `execute: false`; for a read-only inspect before the pin change, run
+the tool's own `--inspect`. The registry entries hold no hashes: a reviewed change to either
+file updates its production pin (and the tool's staging binding in
+`scripts/deployment-guard/lib/sql-executor-auth.mjs`), not the registry. Besides the tool's
+own `sql90_not_applied`, the one-shot refuses SQL 29 unless the inspect reports
+`sql90_applied: false`.
