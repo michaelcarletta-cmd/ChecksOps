@@ -26,6 +26,7 @@ export const DEPLOYMENT_TYPES = Object.freeze([
   'sql53-production-apply',
   'apigateway-update',
   'infra-mutate',
+  'staging-onboarding-infra',
   'verify-only',
 ]);
 

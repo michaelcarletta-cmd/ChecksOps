@@ -100,6 +100,22 @@
       "kind": "infra",
       "environment": "staging",
       "vpc_id": "vpc-09f2268778966ce97"
+    },
+    {
+      "id": "staging-moov-onboarding-infra",
+      "kind": "infra",
+      "environment": "staging",
+      "region": "us-east-1",
+      "function_name": "checksops-staging-api",
+      "role_name": "checksops-staging-ApiFunctionRole-7E7XRyLe3nyi",
+      "bucket": "checksops-staging-privatefilesbucket-erzqsolpucjp",
+      "kms_aliases": [
+        "alias/checksops-staging-moov-onboarding-pii",
+        "alias/checksops-staging-compliance-documents"
+      ],
+      "writer": "scripts/deployment-guard/staging-moov-onboarding-infra.mjs",
+      "revision_id_cas": true,
+      "outside_cloudformation": true
     }
   ]
 }

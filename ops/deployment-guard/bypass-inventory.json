@@ -308,6 +308,13 @@
       "note": "Official production CORS-only writer. Requires production-http-api receipt + active lease; pins API/routes/authorizer/CloudFront/Lambda and re-reads immediately before UpdateApi."
     },
     {
+      "path": "scripts/deployment-guard/staging-moov-onboarding-infra.mjs",
+      "classification": "GUARDED",
+      "capabilities": ["kms-create-key", "kms-create-alias", "kms-enable-key-rotation", "iam-put-role-policy", "s3-put-bucket-policy", "s3-put-bucket-cors", "s3-put-bucket-lifecycle", "lambda-update-function-configuration"],
+      "shared_target": true,
+      "note": "Official staging-only Moov onboarding infra writer (ops/deployment-guard/STAGING_MOOV_ONBOARDING_INFRA.md). Plan-only by default; apply needs CHECKSOPS_STAGING_ONBOARDING_INFRA_EXECUTE=1 plus a staging-moov-onboarding-infra / staging-onboarding-infra receipt bound to the plan fingerprint, consumed once after a TOCTOU re-read. Creates only the two onboarding KMS keys/aliases, inline role policy MoovOnboardingKms, the private files bucket policy (refuses if one exists), the CORS PUT-rule and lifecycle additions (existing rules kept), and three Lambda env keys last with RevisionId CAS (existing keys kept, values never printed). Resumable; never creates a second key. Never targets production; never runs sam deploy."
+    },
+    {
       "path": "scripts/deployment-guard/lease.mjs",
       "classification": "GUARDED",
       "capabilities": ["lease"]

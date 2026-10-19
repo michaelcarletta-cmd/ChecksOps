@@ -68,6 +68,8 @@ node scripts/deployment-guard/sql103-share-library-trigger-acl-production-apply.
 # Production SQL 71, 77-89 and 90-102 on the runner, one invocation (ops/production-sql-one-shot.md)
 node scripts/deployment-guard/production-sql-one-shot.mjs --migration sql80 --phase inspect ...
 node scripts/deployment-guard/verify-live.mjs --input path/to/live.json
+# Staging-only Moov onboarding KMS/IAM/S3/env infra (ops/deployment-guard/STAGING_MOOV_ONBOARDING_INFRA.md)
+node scripts/deployment-guard/staging-moov-onboarding-infra.mjs --plan
 node scripts/deployment-guard/scan-bypass.mjs
 
 # Legacy script (must not be invoked directly against a shared target)

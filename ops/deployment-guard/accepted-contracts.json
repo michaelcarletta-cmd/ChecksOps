@@ -166,6 +166,24 @@
         "deployment publishes only an immutable version ARN and code fingerprint",
         "create-only deploy stays disabled until independently administered AWS KMS approval is evidenced"
       ]
+    },
+    {
+      "id": "staging-moov-onboarding-infra",
+      "title": "Staging Moov onboarding infrastructure writer",
+      "accepted": true,
+      "enabled": true,
+      "environments": ["staging"],
+      "components": ["staging-moov-onboarding-infra"],
+      "deployment_types": ["staging-onboarding-infra"],
+      "test": "aws/tests/staging-moov-onboarding-infra.test.mjs",
+      "invariants": [
+        "staging only: fixed account, region, Lambda, role and bucket; plan-only by default",
+        "apply needs a receipt bound to the plan fingerprint and a matching TOCTOU re-read",
+        "existing CORS rules, lifecycle rules, inline role policies and Lambda env keys are preserved",
+        "an existing bucket policy is never merged or overwritten",
+        "resume never creates a second key for an existing alias",
+        "Lambda env values are never printed"
+      ]
     }
   ]
 }
