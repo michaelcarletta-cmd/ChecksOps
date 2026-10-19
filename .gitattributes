@@ -1,0 +1,4 @@
+# Keep LF in every checkout. The deployment guard pins sha256 hashes of file
+# bytes (migrations, Lambda sources); a CRLF checkout (Windows core.autocrlf)
+# changes those bytes locally and every hash stops matching CI.
+* text=auto eol=lf

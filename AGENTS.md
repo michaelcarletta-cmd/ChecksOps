@@ -32,3 +32,28 @@ Rules:
 Inventoried `MUST_REFUSE_DIRECT` scripts fail closed with `DEPLOYMENT_GUARD_REQUIRED` unless a valid short-lived receipt exists. Issue one via `preflight.mjs --acquire-lease --receipt` or `wrap-legacy.mjs`. Hand-written receipt JSON is `RECEIPT_FORGED`. A staging receipt cannot authorize production. An environment variable cannot bypass the guard.
 
 See `.cursor/rules/deployment-guard.mdc` and `ops/deployment-guard/README.md`.
+
+## Migrations and pins are append-only
+
+- Never edit a migration in `aws/workflows/sql/` that already exists on main. Applied or
+  pinned bytes are history. A fix (a missing GRANT, a policy, a column) is a **new numbered
+  migration** taken through the guarded staging and production path, as SQL 103 was for
+  SQL 29 and SQL 104 is for SQL 91.
+- Never change the recorded evidence of an applied pin (`applied`, `production_evidence`,
+  `source_sha256`, the expected/intended hashes, `staging_acceptance`, `production_inspect`).
+  A record-and-retire change only adds the `applied` record and sets `execute: false`.
+- Never apply SQL to staging or production by hand (psql, the console, a one-off script).
+
+## When CI fails
+
+- Find the root cause. Never edit expected hashes, fingerprints or recorded evidence to make
+  a test pass: those checks exist to catch the change you just made.
+- Hashes come from the code (`releaseIntendedHash`, sha256 of the file bytes on an LF
+  checkout), never from a value copied out of a failing test.
+- Re-run a failed job at most once, and only when the failure is not in code this change
+  touches. A second failure is real.
+
+## Checkout
+
+- Work on an LF checkout (`.gitattributes` enforces it; on Windows also
+  `git config core.autocrlf false`). A CRLF checkout changes every pinned hash locally.
