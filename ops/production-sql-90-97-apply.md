@@ -18,7 +18,12 @@ read-only production inspect after SQL 29 / SQL 30, SSM `9e68e829-7ca0-4499-89ad
 live `b5a1998d…`, and the owner-accepted substitute staging evidence of the guarded staging apply
 run `39080157856` from a different pre-state; SQL 101: the read-only inspect right after SQL
 90's apply, live `1c7e1d52…`, and its guarded staging apply run `39143679543` from the same
-pre-state). Invites of new users need the `tenant-admin.mjs` production overlay as well. Every other
+pre-state). Invites of new users need the `tenant-admin.mjs` production overlay as well. SQL 93's
+production pin is `execute: true` (owner approved 2026-10-19: the read-only production inspect
+of 2026-10-19 after SQL 90 / SQL 101, SSM `d3753ba4-0338-4649-8997-2135376b6743` from main
+`ea8f3dc73`, live `ef2ce6ba…`, recorded as its pre-state; its staging acceptance is its guarded
+staging apply run `39080438659` from the same pre-state); its apply still needs the owner's
+run-time approval, before `write-allowlist.mjs` / `write-app-metadata.mjs` and before SQL 96. Every other
 production pin is `execute: false`, `authorization: "pending"`, with no recorded pre-state and
 no staging acceptance, so its production apply refuses before connecting; staging pins are authorized only in reviewed waves ("Staging apply waves"). SQL 100
 is a strict no-op on production: its production tool only inspects (see "SQL 100 on
