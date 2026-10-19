@@ -692,7 +692,7 @@
     },
     "providers/onboarding/redact.mjs": {
       "operation": "add",
-      "accepted_sha256": "962017211bd33f7af8a53423f84f5bbef45cbd2c71dbbde3e2299ecca20a4cf9",
+      "accepted_sha256": "2e8ab6b561114fb83e3811702fe889dc0e6c98db91cbcf8d90dc27e68a33ea6e",
       "expected_live_sha256": null,
       "sql_before": "aws/workflows/sql/91_moov_onboarding.sql",
       "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
@@ -720,7 +720,7 @@
     },
     "providers/onboarding/moov-sync.mjs": {
       "operation": "add",
-      "accepted_sha256": "1352cd5a3ef3b6c89242cd69ffd7d855fca64bccf3a2b1573dddfa7fa940ea57",
+      "accepted_sha256": "95a42040bf85c775bbf8f0402c7afd2237fbab69f6f48756f24cd40c3ef08b40",
       "expected_live_sha256": null,
       "sql_before": "aws/workflows/sql/104_payment_idempotency_keys_grant.sql",
       "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
@@ -734,7 +734,7 @@
     },
     "providers/onboarding/handlers.mjs": {
       "operation": "add",
-      "accepted_sha256": "708cb33ef86724126d0b93f7b9574cc5372a891c6d6ff9ffa9a096d3da49d5b7",
+      "accepted_sha256": "c024afec1c868ba5d7fc4dd2dd769e6835e0fba748a368b473933c0a3aabbd2d",
       "expected_live_sha256": null,
       "sql_before": "aws/workflows/sql/91_moov_onboarding.sql",
       "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"

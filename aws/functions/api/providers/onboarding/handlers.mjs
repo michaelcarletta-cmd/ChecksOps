@@ -113,6 +113,7 @@ async function saveOnboarding(client, ctx, { business, representatives }, { deps
     moov_synced: false,
     pending: true,
     error_code: sync.error_code,
+    ...(sync.rejected_fields ? { rejected_fields: sync.rejected_fields } : {}),
     liveProviderCalled: true,
   };
 }

@@ -14,7 +14,7 @@ import { MoovError, moovFetch, scopes } from '../parity/moov-client.mjs';
 import { MERCHANT_CAPABILITIES, MOOV_CAPABILITIES_API_VERSION } from '../parity/moov-capabilities.mjs';
 import { logPaymentEvent } from '../parity/db.mjs';
 import { OnboardingError } from './crypto.mjs';
-import { isNetworkError, moovErrorCode, onboardingLog } from './redact.mjs';
+import { isNetworkError, moovErrorCode, moovRejectedFields, onboardingLog } from './redact.mjs';
 import {
   completeOutbox,
   decryptProfileEin,
@@ -158,10 +158,13 @@ export async function syncOnboardingToMoov(client, ctx, {
   const reps = await loadRepresentatives(client, tenantId, environment);
   const delivered = new Set();
   let accountId = null;
+  // Which Moov call failed, for the redacted failure log.
+  let step = 'account';
   try {
     const ein = await decryptProfileEin(deps, profile);
     const { account } = await ensureMoovAccount(client, ctx, { profile, ein, fetchImpl });
     accountId = account.provider_account_id;
+    step = 'business_profile';
     await moovFetch(`/accounts/${accountId}`, {
       method: 'PATCH',
       scopes: scopes.accountWrite(accountId),
@@ -176,6 +179,7 @@ export async function syncOnboardingToMoov(client, ctx, {
          AND removed_at IS NOT NULL AND moov_representative_id IS NOT NULL`,
       [tenantId, environment],
     )).rows;
+    step = 'representative_remove';
     for (const gone of removed) {
       await moovFetch(`/accounts/${accountId}/representatives/${gone.moov_representative_id}`, {
         method: 'DELETE', scopes: scopes.representativesWrite(accountId), fetchImpl,
@@ -191,6 +195,7 @@ export async function syncOnboardingToMoov(client, ctx, {
       );
     }
 
+    step = 'representative';
     for (const rep of reps) {
       const ssn = ssnByRepresentativeId.get(rep.id) || null;
       if (!rep.moov_representative_id && !ssn) {
@@ -222,6 +227,7 @@ export async function syncOnboardingToMoov(client, ctx, {
     }
 
     if (reps.length > 0) {
+      step = 'owners_provided';
       await moovFetch(`/accounts/${accountId}`, {
         method: 'PATCH',
         scopes: scopes.accountWrite(accountId),
@@ -230,6 +236,7 @@ export async function syncOnboardingToMoov(client, ctx, {
       });
     }
 
+    step = 'capabilities';
     await moovFetch(`/accounts/${accountId}/capabilities`, {
       method: 'POST',
       scopes: scopes.capabilitiesWrite(accountId),
@@ -264,9 +271,11 @@ export async function syncOnboardingToMoov(client, ctx, {
     }
     await setProfileSyncState(client, { tenantId, environment, pending: true, errorCode: code, moovAccountId: accountId });
     if (outboxId) await failOutboxAttempt(client, { id: outboxId, errorCode: code });
+    const rejectedFields = moovRejectedFields(error);
     onboardingLog('moov_onboarding_sync_failed', {
       tenant: tenantId, environment, error_code: code, status: error?.status ?? null,
+      step, rejected_fields: rejectedFields,
     });
-    return { synced: false, error_code: code, accountId };
+    return { synced: false, error_code: code, accountId, ...(rejectedFields.length ? { rejected_fields: rejectedFields } : {}) };
   }
 }

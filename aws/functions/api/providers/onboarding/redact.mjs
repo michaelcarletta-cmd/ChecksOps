@@ -52,6 +52,37 @@ export const moovErrorCode = (error) => {
   return 'moov_failed';
 };
 
+const FIELD_SEGMENT = /^(?:[A-Za-z][A-Za-z0-9_]{0,40}|\d{1,2})$/;
+
+/**
+ * Field paths a Moov 400/422 body names (e.g. "profile.business.website"). Keys
+ * only: messages and values are dropped because Moov can echo submitted data.
+ */
+export const moovRejectedFields = (error, max = 20) => {
+  const status = Number(error?.status || 0);
+  if (status !== 400 && status !== 422) return [];
+  let body = error?.body;
+  if (typeof body === 'string') {
+    try { body = JSON.parse(body); } catch { return []; }
+  }
+  if (!body || typeof body !== 'object') return [];
+  if (body.error && typeof body.error === 'object') body = body.error;
+  const paths = [];
+  const walk = (node, prefix, depth) => {
+    if (paths.length >= max || depth > 6) return;
+    if (node === null || typeof node !== 'object') {
+      if (prefix) paths.push(prefix);
+      return;
+    }
+    for (const [key, nested] of Object.entries(node)) {
+      if (!FIELD_SEGMENT.test(key)) continue;
+      walk(nested, prefix ? `${prefix}.${key}` : key, depth + 1);
+    }
+  };
+  walk(body, '', 0);
+  return paths.filter((path) => path !== 'error' && path !== 'message' && path !== 'code');
+};
+
 export const isNetworkError = (error) => {
   const code = String(error?.cause?.code || error?.code || '');
   return /ECONNREFUSED|ENOTFOUND|ETIMEDOUT|ECONNRESET|EAI_AGAIN|UND_ERR/.test(code)
