@@ -25,10 +25,15 @@ const SQL_RE = /(^|\/)(aws\/workflows\/sql\/[^/]+\.sql)$/;
 const PIN_RE = /(^|\/)(ops\/deployment-guard\/[^/]+-production-apply\.json)$/;
 const PROTECTED_PIN_KEYS = ['source_sha256', 'expected_live_definition_sha256', 'intended_replacement_sha256', 'applied', 'production_evidence', 'staging_acceptance', 'production_inspect'];
 
+// Match deploy commands only at a command position: start of the string, or
+// immediately after ; && || | (with optional whitespace). This prevents false
+// positives from read-only commands that merely mention these words (e.g.
+// grep -r "sam deploy" docs/).
+const CMD_POS = '(?:^|(?<=[;&|]\\s*))';
 const DIRECT_DEPLOY = [
-  [/\bsam\s+(deploy|build|sync|package|delete)\b/, 'SAM'],
-  [/\baws\s+lambda\s+(update-function-code|update-function-configuration|publish-version|create-function|delete-function|update-alias)\b/, 'aws lambda write'],
-  [/\baws\s+cloudformation\s+(deploy|create-stack|update-stack|delete-stack|execute-change-set)\b/, 'aws cloudformation write'],
+  [new RegExp(`${CMD_POS}\\bsam\\s+(deploy|build|sync|package|delete)\\b`), 'SAM'],
+  [new RegExp(`${CMD_POS}\\baws\\s+lambda\\s+(update-function-code|update-function-configuration|publish-version|create-function|delete-function|update-alias)\\b`), 'aws lambda write'],
+  [new RegExp(`${CMD_POS}\\baws\\s+cloudformation\\s+(deploy|create-stack|update-stack|delete-stack|execute-change-set)\\b`), 'aws cloudformation write'],
 ];
 
 // psql to anything but a local socket directory or localhost (the disposable test

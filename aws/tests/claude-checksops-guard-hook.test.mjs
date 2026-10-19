@@ -95,3 +95,30 @@ test('shell writes to an existing migration are refused', () => {
   }
   assert.equal(bash(`cp ${SQL91} /tmp/sql91-copy.sql`).code, 0);
 });
+
+test('deploy patterns match only at command positions; grep and mentions are allowed', () => {
+  // These must still be refused (command at start or after shell operators).
+  for (const cmd of [
+    'sam deploy --guided',
+    'sam build',
+    'aws cloudformation deploy --template-file t.yaml',
+    'aws lambda update-function-code --function-name x --zip-file fileb://x.zip',
+    'echo ready && sam deploy',
+    'echo ready || aws cloudformation deploy --template-file t.yaml',
+    'true ; sam build',
+    'true | aws lambda update-function-code --function-name x --zip-file fileb://x.zip',
+  ]) {
+    assert.equal(bash(cmd).code, 2, `should refuse: ${cmd}`);
+  }
+  // These merely mention the deploy words and must be allowed.
+  for (const cmd of [
+    'grep -r "sam deploy" docs/',
+    'grep "aws cloudformation deploy" README.md',
+    'rg "sam build" --type md',
+    'echo "do not run sam deploy"',
+    'cat notes.txt | grep "aws lambda update-function-code"',
+    'awk "/sam deploy/" log.txt',
+  ]) {
+    assert.equal(bash(cmd).code, 0, `should allow: ${cmd}`);
+  }
+});
