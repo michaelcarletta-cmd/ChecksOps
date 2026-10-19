@@ -1,8 +1,8 @@
 {
   "id": "sql29-mortgage-ops-library-parity-production-apply",
   "migration": "sql29",
-  "authorization": "pending",
-  "execute": false,
+  "authorization": "Owner approved 2026-10-19 (the owner approved preparing this SQL 29 production pin change and accepted its substitute staging evidence in the words \"accept that evidence for SQL 29\"; the change itself is reviewed and merge-approved by the owner separately): production apply of SQL 29 after SQL 103 (applied to production 2026-10-19) on the staging acceptance below (production d8247ab9a31a7c1c57a464a768a650397059e67519f9e1522f881293e28e0079 -> 1271ea9b61ec983f88e911b23c569403979fb5f560880021b58d3b1e57243c79), before SQL 30 and SQL 90; execute true takes effect only when the owner reviews and merges this change. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
+  "execute": true,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -17,7 +17,7 @@
     "public.aws_can_insert_mortgage_library_document(uuid, uuid, uuid, text)",
     "public.share_library_docs_to_mortgage_request()"
   ],
-  "expected_live_definition_sha256": null,
+  "expected_live_definition_sha256": "d8247ab9a31a7c1c57a464a768a650397059e67519f9e1522f881293e28e0079",
   "intended_replacement_sha256": "1271ea9b61ec983f88e911b23c569403979fb5f560880021b58d3b1e57243c79",
   "authorization_phrase": "APPLY_MORTGAGE_OPS_LIBRARY_PARITY",
   "predecessors": [],
@@ -27,27 +27,65 @@
   "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
   "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
   "production_inspect": {
-    "status": "pending",
-    "date": null,
-    "ssm_command_id": null,
-    "source_commit": null,
+    "status": "recorded",
+    "date": "2026-10-19",
+    "ssm_command_id": "45639f6b-68cf-4502-a127-458d99865ae8",
+    "source_commit": "dbaa93c90e1dd4c60b276d1eee2690652352fc97",
+    "source_tarball_sha256": "94d7499a9fd3eadb867bd3e89412872e0c6cb8e8cacb3a3fe116f327059ed8e3",
+    "runner": "i-0c35557c4e5385406",
     "read_only": true,
     "connected_as": "checksops_admin",
-    "live_definition_sha256": null,
-    "counts": null,
-    "sql29": null,
-    "sql90_applied": null,
-    "precondition_failures": null,
-    "apply_preconditions_met": null,
-    "note": "Pending: no read-only production inspect has been run for SQL 29. Run node scripts/deployment-guard/sql29-mortgage-ops-library-parity-production-apply.mjs --inspect on the runner and record its date, SSM command id, source commit, counts (aggregate COUNT(*) only), sql29 (functions, policies, table_acl, share_triggers), sql90_applied, precondition_failures, apply_preconditions_met and live_definition_sha256 here, and copy live_definition_sha256 into expected_live_definition_sha256, in the reviewed change that sets execute true. If precondition_failures is not [] stop: that needs its own reviewed change."
+    "live_definition_sha256": "d8247ab9a31a7c1c57a464a768a650397059e67519f9e1522f881293e28e0079",
+    "counts": {
+      "tenant_documents_by_category": {
+        "legacy": 1,
+        "mortgage": 0,
+        "template": 0,
+        "shingle": 0,
+        "siding": 0,
+        "catalog": 0,
+        "letterhead": 0,
+        "library_other": 0,
+        "other": 0
+      },
+      "tenant_documents_by_path_form": {
+        "aws_library": 0,
+        "url": 0,
+        "bucket_prefixed": 0,
+        "other_tenant_library": 0,
+        "other": 1
+      },
+      "rows_outside_sql30_values": 0,
+      "shared_with_homeowners_true": 0,
+      "mortgage_request_library_documents": 0
+    },
+    "sql29": {
+      "live_definition_sha256": "d8247ab9a31a7c1c57a464a768a650397059e67519f9e1522f881293e28e0079",
+      "api_functions_acl": [
+        "PUBLIC EXECUTE",
+        "checksops EXECUTE",
+        "owner EXECUTE"
+      ],
+      "trigger_function_acl": [
+        "owner EXECUTE"
+      ]
+    },
+    "sql30_live_definition_sha256": "37f22340383b1a5e1b1350fc602b2953c2bb72d32234456888616fd749cbf504",
+    "sql90_applied": false,
+    "already_applied": false,
+    "prerequisites_missing": [],
+    "precondition_failures": [],
+    "apply_preconditions_met": false,
+    "note": "Recorded from the read-only production inspect of 2026-10-19 after SQL 103 was applied to production (SSM command 45639f6b-68cf-4502-a127-458d99865ae8, node scripts/deployment-guard/sql29-mortgage-ops-library-parity-production-apply.mjs --inspect on the SQL53 runner i-0c35557c4e5385406 from main dbaa93c90 (tarball sha256 94d7499a...), BEGIN READ ONLY ... ROLLBACK, connected as checksops_admin). live_definition_sha256 d8247ab9a31a7c1c57a464a768a650397059e67519f9e1522f881293e28e0079 (not the intended 1271ea9b61ec983f88e911b23c569403979fb5f560880021b58d3b1e57243c79: already_applied false); precondition_failures [] (SQL 103 left share_library_docs_to_mortgage_request() EXECUTE for its owner only, so function_acl_replaceable passes), prerequisites_missing [], sql90_applied false. counts are aggregate COUNT(*)s only (no ids, names or paths). sql29 records the function EXECUTE ACLs the inspect reported: the four aws_ API functions PUBLIC, checksops and owner EXECUTE, the trigger function owner EXECUTE only. sql30_live_definition_sha256 is informational (SQL 30's pin is unchanged). apply_preconditions_met was false at inspect time only because no pre-state was recorded yet (expected_live_definition_sha256 null). This reviewed change copies live_definition_sha256 into expected_live_definition_sha256 and, in the same change, sets authorization, execute true and staging_acceptance. A fresh --inspect immediately before apply (the one-shot's inspect step) must still report this live_definition_sha256, precondition_failures [] and sql90_applied false; if not, stop."
   },
   "intended_post_state": {
     "fingerprint": "sha256(sql29StateText(sql29IntendedState(file bytes))) in scripts/deployment-guard/lib/sql-executor-auth.mjs",
     "note": "After the unchanged SQL 29 file run as checksops_admin: the five functions hold the file's bodies (prosrc), SECURITY DEFINER, search_path=public (and row_security=off for the four aws_ helpers); EXECUTE for their owner, checksops and authenticated (the trigger function: owner only); policies aws_select_mortgage_request_library_documents (SELECT TO authenticated: cross-tenant reader, tenant access, or the desk-agent attached-document read) and aws_write_mortgage_request_library_documents (INSERT TO authenticated WITH CHECK aws_can_insert_mortgage_library_document); no other policy; PUBLIC holds nothing and authenticated / checksops hold SELECT and INSERT (no UPDATE / DELETE) on mortgage_request_library_documents. No row changes. Owner names are not part of the fingerprint; the first inspect confirms the owner is checksops_admin."
   },
   "staging_acceptance": {
-    "ok": false,
-    "reference": null,
-    "basis": "Pending: record the guarded staging SQL executor read-live and apply runs of sql29-mortgage-ops-library-parity here in the reviewed change that sets execute true. Until then evaluate and apply refuse with SQL_COLLISION (no pre-state) and PRODUCTION_APPROVAL_REQUIRED."
+    "ok": true,
+    "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39188780526",
+    "basis": "Owner-accepted substitute evidence (the owner's words: \"accept that evidence for SQL 29\"). Staging SQL 29 cannot be applied or verified directly because SQL 90 is applied on top of it in staging, so the staging pin stays pending (execute false) and no staging apply was run. The accepted evidence is: (1) the guarded staging SQL executor read-live of sql29-mortgage-ops-library-parity, run 39188780526 (executor from main 03e238af): SQL 29's objects present (the five functions, both policies, the share trigger enabled, the trigger function's EXECUTE ACL owner-only), sql90_applied true (superseded by SQL 90), live 711fb084edbcb25d18657df0a9dc82923fc8f50697ca7c6669fabe2957e34a7d != intended 1271ea9b61ec983f88e911b23c569403979fb5f560880021b58d3b1e57243c79; and (2) the PostgreSQL 16 test aws/tests/sql103-share-library-trigger-acl-pg.test.mjs (production-like ACL, then SQL 103, then SQL 29 through its production tool reaches 1271ea9b61ec983f88e911b23c569403979fb5f560880021b58d3b1e57243c79).",
+    "production_differs": "The pre-states differ: staging has SQL 29 with SQL 90 on top (711fb084edbcb25d18657df0a9dc82923fc8f50697ca7c6669fabe2957e34a7d, sql90_applied true) and production (production_inspect, 2026-10-19, after SQL 103) is d8247ab9a31a7c1c57a464a768a650397059e67519f9e1522f881293e28e0079 (sql90_applied false). Each environment's state is recorded separately; the same file bytes (source_sha256) are pinned in both."
   }
 }
