@@ -325,6 +325,7 @@ GRANT SELECT, INSERT, UPDATE ON TABLE public.moov_onboarding_profiles TO checkso
 GRANT SELECT, INSERT, UPDATE ON TABLE public.moov_onboarding_representatives TO checksops, authenticated;
 GRANT SELECT, INSERT, UPDATE ON TABLE public.moov_compliance_documents TO checksops, authenticated;
 GRANT SELECT, INSERT, UPDATE ON TABLE public.moov_onboarding_outbox TO checksops, authenticated;
+GRANT SELECT, INSERT, UPDATE ON TABLE public.payment_idempotency_keys TO checksops, authenticated;
 
 -- ---------------------------------------------------------------- RLS: existing payment tables
 -- Additional permissive policies (as in SQL 72): onboarding writes by a
