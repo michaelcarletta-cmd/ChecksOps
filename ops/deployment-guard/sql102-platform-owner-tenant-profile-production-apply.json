@@ -1,8 +1,8 @@
 {
   "id": "sql102-platform-owner-tenant-profile-production-apply",
   "migration": "sql102",
-  "authorization": "pending",
-  "execute": false,
+  "authorization": "Owner approved 2026-10-19 (the owner approved preparing this SQL 102 production pin change in the words \"approve the SQL 102 pin\"; the change itself is reviewed and merge-approved by the owner separately): production apply of SQL 102 after SQL 98 (applied to production 2026-10-19) on the staging acceptance below (production d3b2cd30d9b06347c4a08febac3fce49732bd0babcacfeea0a2b49dbdc9cb752 -> 6e1346af3dee0bcdc0dc6269299de63e9e2804568e5bdecbd51ff062669700fd), before the tenant-billing-handlers.mjs member it holds (sql_before); execute true takes effect only when the owner reviews and merges this change. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
+  "execute": true,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -18,7 +18,7 @@
     "public.aws_tenant_has_moov_account(uuid)",
     "public.aws_tenants_member_column_guard()"
   ],
-  "expected_live_definition_sha256": null,
+  "expected_live_definition_sha256": "d3b2cd30d9b06347c4a08febac3fce49732bd0babcacfeea0a2b49dbdc9cb752",
   "intended_replacement_sha256": "6e1346af3dee0bcdc0dc6269299de63e9e2804568e5bdecbd51ff062669700fd",
   "authorization_phrase": "APPLY_PLATFORM_OWNER_TENANT_PROFILE",
   "predecessors": [
@@ -48,24 +48,24 @@
     "note": "Guarded tooling for SQL 102: sql102-platform-owner-tenant-profile-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql102-platform-owner-tenant-profile); production-sql-one-shot.mjs --migration sql102. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's). SQL 102 supersedes SQL 98 (release-sql-specs.mjs; staging pin superseded_intended_sha256.sql98): once SQL 102 is in place SQL 98 (and through it SQL 96 and SQL 93) counts as applied only while every other SQL 98 object still matches. The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
   },
   "production_inspect": {
-    "status": "pending",
-    "date": null,
-    "ssm_command_id": null,
-    "source_commit": null,
+    "status": "recorded",
+    "date": "2026-10-19",
+    "ssm_command_id": "3ff30ee9-031d-4122-9ee1-370a2645cbca",
+    "source_commit": "96fb178215beff8d30c0adfebae27d62ad04de79",
     "read_only": true,
     "connected_as": "checksops_admin",
-    "live_definition_sha256": null,
-    "apply_preconditions_met": null,
-    "precondition_failures": null,
-    "note": "Pending: the read-only inspect tool exists (scripts/deployment-guard/sql102-platform-owner-tenant-profile-production-apply.mjs --inspect), but no production inspect has been run for SQL 102 yet; its preconditions can only pass once SQL 98 is applied (predecessors_applied). Record its date, SSM command id, source commit, live_definition_sha256, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. If precondition_failures is not [] stop: that needs its own reviewed change."
+    "live_definition_sha256": "d3b2cd30d9b06347c4a08febac3fce49732bd0babcacfeea0a2b49dbdc9cb752",
+    "apply_preconditions_met": false,
+    "precondition_failures": [],
+    "note": "Recorded from the read-only production inspect of 2026-10-19 after SQL 98 was applied to production (SSM command 3ff30ee9-031d-4122-9ee1-370a2645cbca, node scripts/deployment-guard/sql102-platform-owner-tenant-profile-production-apply.mjs --inspect on the SQL53 runner i-0c35557c4e5385406 from main 96fb17821 (tarball sha256 10092ef21749d0a9f298450129a2fd7359e63912853bf48edfd2c2f0093352fb), BEGIN READ ONLY ... ROLLBACK, connected as checksops_admin). live_definition_sha256 d3b2cd30d9b06347c4a08febac3fce49732bd0babcacfeea0a2b49dbdc9cb752 (not the intended 6e1346af3dee0bcdc0dc6269299de63e9e2804568e5bdecbd51ff062669700fd: already_applied false); precondition_failures [], prerequisites_missing [], missing_dependencies [], predecessors sql98 applied, successors_applied []. aws_tenant_profile_columns(), aws_platform_owner_set_tenant_profile(uuid, jsonb), aws_platform_owner_remove_tenant_member(uuid, uuid), aws_tenant_profile_audit_row(), aws_tenant_has_moov_account(uuid) and the trigger aws_tenant_profile_audit are absent; aws_tenants_member_column_guard() is SQL 98's (different). apply_preconditions_met was false at inspect time only because no pre-state was recorded yet (expected_live_definition_sha256 null). This reviewed change copies live_definition_sha256 into expected_live_definition_sha256 and, in the same change, sets authorization, execute true and staging_acceptance. A fresh --inspect immediately before apply (the one-shot's inspect step) must still report this live_definition_sha256 and precondition_failures []; if not, stop."
   },
   "intended_post_state": {
     "fingerprint": "6e1346af3dee0bcdc0dc6269299de63e9e2804568e5bdecbd51ff062669700fd",
     "note": "public.aws_tenant_profile_columns() (sql, IMMUTABLE), public.aws_platform_owner_set_tenant_profile(uuid, jsonb) and public.aws_platform_owner_remove_tenant_member(uuid, uuid) (plpgsql, VOLATILE, SECURITY DEFINER, search_path public, pg_temp, row_security off, returns jsonb) and public.aws_tenant_has_moov_account(uuid) (plpgsql, STABLE, SECURITY DEFINER, returns boolean), each EXECUTE for checksops and authenticated (revoked from PUBLIC); the SECURITY DEFINER trigger function public.aws_tenant_profile_audit_row() (owner only) and trigger aws_tenant_profile_audit (AFTER UPDATE ON public.tenants); public.aws_tenants_member_column_guard() replaced (SQL 98's body plus the profile fields and moov_environment for the platform owner, moov_environment only together with is_test_account and neither once the tenant has a Moov account; ACL unchanged: PUBLIC EXECUTE), all owned by checksops_admin. No policy, grant, table, column or row change. The fingerprint is releaseIntendedHash('sql102', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): 6e1346af3dee0bcdc0dc6269299de63e9e2804568e5bdecbd51ff062669700fd."
   },
   "staging_acceptance": {
-    "ok": false,
-    "reference": null,
-    "basis": "Pending: record the guarded staging SQL executor read-live and apply runs of SQL 102 (choice sql102-platform-owner-tenant-profile) here in the reviewed change that sets execute true, with the platform owner saving a tenant profile and removing a member through Admin -> Tenants on staging afterwards. Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+    "ok": true,
+    "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39162625974",
+    "basis": "Guarded staging SQL executor apply of sql102-platform-owner-tenant-profile (run 39162625974, wave 6): receipt before d3b2cd30d9b06347c4a08febac3fce49732bd0babcacfeea0a2b49dbdc9cb752, after 6e1346af3dee0bcdc0dc6269299de63e9e2804568e5bdecbd51ff062669700fd = intended_replacement_sha256; precondition_failures [], prerequisites_missing []. Its staging read-live (run 39161620576) recorded the same pre-state d3b2cd30d9b06347c4a08febac3fce49732bd0babcacfeea0a2b49dbdc9cb752 that production reports now (ops/deployment-guard/staging-sql-live.json, aws/tests/helpers/staging-sql-wave1.mjs). Same pre-state: staging before its apply and production (production_inspect, 2026-10-19) both report d3b2cd30d9b06347c4a08febac3fce49732bd0babcacfeea0a2b49dbdc9cb752; the same file bytes (source_sha256) are pinned in both."
   }
 }

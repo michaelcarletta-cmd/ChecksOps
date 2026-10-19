@@ -31,7 +31,11 @@ apply run `39082957003` from the same pre-state). SQL 94 was applied to producti
 (see "Production apply of SQL 94" below) and its pin is retired; it had been execute-authorized by
 the owner-approved pin change of 2026-10-19 (#1068, "do the SQL 94 pin": the read-only production
 inspect, SSM `70abaca3-3ec3-4cbc-aae3-6542563080f2`, live `72411598…`, and its guarded staging apply
-run `39082817752` from the same pre-state).
+run `39082817752` from the same pre-state). SQL 102's production pin is `execute: true`
+(owner approved 2026-10-19, "approve the SQL 102 pin": the read-only production inspect of 2026-10-19,
+SSM `3ff30ee9-031d-4122-9ee1-370a2645cbca` from main `96fb17821`, live `d3b2cd30…`, recorded as its
+pre-state; its staging acceptance is its guarded staging apply run `39162625974` from the same
+pre-state); its apply still needs the owner's run-time approval, before `tenant-billing-handlers.mjs`.
 Every other
 production pin is `execute: false`, `authorization: "pending"`, with no recorded pre-state and
 no staging acceptance, so its production apply refuses before connecting; staging pins are authorized only in reviewed waves ("Staging apply waves"). SQL 100

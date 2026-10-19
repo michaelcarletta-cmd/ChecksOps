@@ -5,8 +5,9 @@
  * release key (SQL 102 included) through the shared refusals (pending pins, binding, evaluate /
  * precheck, the CLI, the real guard); this file covers SQL 102's own:
  *
- *   - the pin has the SQL 90-97 pin shape and stays execute false / pending; it is in step with
- *     the staging pin, the one-shot and the bypass inventory;
+ *   - the pin has the SQL 90-97 pin shape and is execute-authorized (owner approved 2026-10-19 on
+ *     the read-only production inspect and its guarded staging apply from the same pre-state); it
+ *     is in step with the staging pin, the one-shot and the bypass inventory;
  *   - SQL 102 before tenant-billing-handlers.mjs is an operator gate (pin order_note, runbook):
  *     the plan's sql_before still holds that member on SQL 98 only;
  *   - on PostgreSQL 16: --inspect is read-only; refused before SQL 98; once SQL 98 is in, one
@@ -37,6 +38,10 @@ const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const KEY = 'sql102';
 const SQL102_FILE = 'aws/workflows/sql/102_platform_owner_tenant_profile.sql';
 const COMMITTED = loadReleaseProductionPin(KEY, ROOT);
+// SQL 102's recorded production pre-state (read-only inspect of 2026-10-19, SSM 3ff30ee9).
+const PRODUCTION_PRE = 'd3b2cd30d9b06347c4a08febac3fce49732bd0babcacfeea0a2b49dbdc9cb752';
+// The pin before its owner-approved change: no pre-state, no owner approval, no staging acceptance.
+const PENDING = Object.freeze({ ...COMMITTED, authorization: 'pending', execute: false, expected_live_definition_sha256: null, staging_acceptance: { ok: false, reference: null, basis: 'Pending' } });
 const SQL96_PIN = loadReleaseProductionPin('sql96', ROOT);
 const STAGING_REF = 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/0000000000';
 const COMMIT = 'a'.repeat(40);
@@ -84,7 +89,7 @@ function manifest(pin) {
 }
 const consumedPath = () => path.join(os.tmpdir(), `sql102-prod-consumed-${process.pid}-${Math.random().toString(16).slice(2)}.json`);
 
-test('pin: the SQL 90-97 pin shape, pending, in step with the staging pin, the one-shot and the inventory', () => {
+test('pin: the SQL 90-97 pin shape, execute-authorized, in step with the staging pin, the one-shot and the inventory', () => {
   const pin = COMMITTED;
   const staging = STAGING[KEY];
   // SQL 96's pin is the engine pin shape without its record-only applied / production_evidence sections.
@@ -93,11 +98,26 @@ test('pin: the SQL 90-97 pin shape, pending, in step with the staging pin, the o
   assert.deepEqual(keyPaths(pin).filter((k) => !shape.has(k)), []);
   assert.equal(pin.id, RELEASE_SQL_SPECS[KEY].production_pin_rel.split('/').pop().replace(/\.json$/, ''));
   assert.equal(pin.migration, KEY);
-  assert.equal(pin.execute, false);
-  assert.equal(pin.authorization, 'pending');
-  assert.equal(pin.expected_live_definition_sha256, null);
-  assert.equal(pin.staging_acceptance.ok, false);
-  assert.equal(pin.production_inspect.status, 'pending');
+  // Owner approved 2026-10-19: the read-only production inspect (SSM 3ff30ee9, main 96fb17821)
+  // recorded as the pre-state; its guarded staging apply (run 39162625974) from the same pre-state.
+  assert.equal(pin.execute, true);
+  assert.match(pin.authorization, /^Owner approved 2026-10-19 /);
+  assert.ok(pin.authorization.includes('"approve the SQL 102 pin"'));
+  assert.ok(pin.authorization.includes(`${PRODUCTION_PRE} -> ${pin.intended_replacement_sha256}`));
+  assert.match(pin.authorization, /each apply still needs the owner's run-time approval/);
+  assert.equal(pin.expected_live_definition_sha256, PRODUCTION_PRE);
+  assert.notEqual(pin.expected_live_definition_sha256, pin.intended_replacement_sha256);
+  assert.equal(pin.production_inspect.status, 'recorded');
+  assert.equal(pin.production_inspect.live_definition_sha256, PRODUCTION_PRE);
+  assert.equal(pin.production_inspect.ssm_command_id, '3ff30ee9-031d-4122-9ee1-370a2645cbca');
+  assert.equal(pin.production_inspect.source_commit, '96fb178215beff8d30c0adfebae27d62ad04de79');
+  assert.deepEqual(pin.production_inspect.precondition_failures, []);
+  assert.deepEqual([pin.staging_acceptance.ok, pin.staging_acceptance.reference], [true, 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39162625974']);
+  assert.ok(pin.staging_acceptance.basis.includes(`receipt before ${PRODUCTION_PRE}, after ${pin.intended_replacement_sha256}`));
+  assert.match(pin.staging_acceptance.basis, /read-live \(run 39161620576\)/);
+  assert.match(pin.staging_acceptance.basis, /wave 6/);
+  assert.match(pin.staging_acceptance.basis, /Same pre-state/);
+  assert.deepEqual(Object.keys(pin.staging_acceptance).sort(), ['basis', 'ok', 'reference']);
   assert.equal(pin.filename, SQL102_FILE);
   assert.equal(pin.source_sha256, staging.source_sha256);
   assert.equal(pin.staging_pin_commit, staging.commit);
@@ -187,7 +207,8 @@ test('PostgreSQL 16: read-only inspect; refused before SQL 98; one apply as chec
     return client;
   };
   const connect = connectWith('checksops_admin');
-  const inspect = async (pin = COMMITTED, key = KEY) => {
+  // The pending (pre-authorization) copy: the fixture's live state is not production's recorded pre-state.
+  const inspect = async (pin = PENDING, key = KEY) => {
     seen.length = 0;
     const inspected = await inspectReleaseProduction(key, { connect, pin, root: ROOT });
     assert.equal(inspected.ok, true, JSON.stringify(inspected));

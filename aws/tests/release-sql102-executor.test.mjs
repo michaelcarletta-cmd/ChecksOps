@@ -147,8 +147,11 @@ test('pin: SQL 102 staging wave 6, code-derived, selectable, packed, in step wit
   assert.equal(prod.staging_pin_commit, pin.commit);
   assert.equal(prod.source_sha256, pin.source_sha256);
   assert.deepEqual(prod.predecessors, ['sql98']);
-  assert.equal(prod.execute, false);
-  assert.equal(prod.authorization, 'pending');
+  // Production pin execute-authorized (owner approved 2026-10-19); production's pre-state equals
+  // the one staging recorded before its apply.
+  assert.equal(prod.execute, true);
+  assert.match(prod.authorization, /^Owner approved 2026-10-19 /);
+  assert.equal(prod.expected_live_definition_sha256, 'd3b2cd30d9b06347c4a08febac3fce49732bd0babcacfeea0a2b49dbdc9cb752');
   // The pinned commit authored these bytes (skipped while the commit is pending or without that history).
   let bytes = null;
   if (/^[0-9a-f]{40}$/.test(pin.commit)) {

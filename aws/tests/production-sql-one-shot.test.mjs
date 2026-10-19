@@ -527,11 +527,11 @@ test('only the apply child gets the apply variables, and its receipt is the one 
 
 // --- stop conditions ---------------------------------------------------------------------
 
-// SQL 82's to 86's pins are execute-authorized (owner approved 2026-10-16) until their
-// record-and-retire changes; every other pin is execute false (SQL 87, SQL 88 and SQL 89 retired
+// SQL 82's to 86's pins are execute-authorized (owner approved 2026-10-16), and SQL 102's (owner
+// approved 2026-10-19), until their record-and-retire changes; every other pin is execute false (SQL 87, SQL 88 and SQL 89 retired
 // after their 2026-10-16 applies, SQL 103, SQL 29, SQL 30, SQL 91, SQL 92, SQL 90, SQL 101, SQL 93,
 // SQL 96, SQL 94, SQL 104 and SQL 98 after their 2026-10-19 applies).
-const EXECUTE_AUTHORIZED = Object.freeze(['sql82', 'sql83', 'sql84', 'sql85', 'sql86']);
+const EXECUTE_AUTHORIZED = Object.freeze(['sql82', 'sql83', 'sql84', 'sql85', 'sql86', 'sql102']);
 
 test('every real production pin with execute false is refused before any child', async () => {
   // Every other pin is retired or pending (execute false): SQL 81's since its 2026-10-15 record-and-retire change, SQL 87's, SQL 88's and SQL 89's since their 2026-10-16 applies, SQL 103's, SQL 29's and SQL 30's since their 2026-10-19 applies, SQL 71's pending.
@@ -592,8 +592,9 @@ test('a pin without staging acceptance or phrase is refused', async () => {
     sql94: '724115983687d882d8240e8d06e4670bc6e24dbb16540d3134cc1ccc47d66af1',
     sql104: '57443d0a26c26859f2e939fb00fef51b554108b20f28aa6f262b9906cad1cfc6',
     sql98: 'd64218dc145fc7b55632c7d5cfdef3fdbbb02592a79f6ff339c4814fc4ae6dbc',
+    sql102: 'd3b2cd30d9b06347c4a08febac3fce49732bd0babcacfeea0a2b49dbdc9cb752',
   };
-  for (const key of ['sql71', 'sql87', 'sql88', 'sql89', 'sql82', 'sql83', 'sql84', 'sql85', 'sql86', 'sql103', 'sql29', 'sql30', 'sql91', 'sql92', 'sql90', 'sql101', 'sql93', 'sql96', 'sql94', 'sql104', 'sql98']) {
+  for (const key of ['sql71', 'sql87', 'sql88', 'sql89', 'sql82', 'sql83', 'sql84', 'sql85', 'sql86', 'sql103', 'sql29', 'sql30', 'sql91', 'sql92', 'sql90', 'sql101', 'sql93', 'sql96', 'sql94', 'sql104', 'sql98', 'sql102']) {
     const real = realPin(key);
     assert.equal(real.expected_live_definition_sha256, RECORDED_PRODUCTION_PRE[key]);
     // Execute-authorized and applied (retired) pins get an explicit pre-authorization copy; SQL 71's committed pin is still pending.
@@ -623,18 +624,21 @@ test('a pin without staging acceptance or phrase is refused', async () => {
   }
 });
 
-test('the committed execute-authorized pins (SQL 82 to SQL 86) pass the pin stage, and their evaluators allow the manifest built from them', async () => {
+test('the committed execute-authorized pins (SQL 82 to SQL 86, SQL 102) pass the pin stage, and their evaluators allow the manifest built from them', async () => {
   const STAGING_REFERENCE = {
     sql82: 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38837281138',
     sql83: 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38837509160',
     sql84: 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38894893179',
     sql85: 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38895045712',
     sql86: 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38895163945',
+    // SQL 102: its guarded staging apply from the same pre-state.
+    sql102: 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39162625974',
   };
+  const APPROVED_ON = { sql102: '2026-10-19' };
   for (const key of EXECUTE_AUTHORIZED) {
     const committed = realPin(key);
     assert.equal(committed.execute, true);
-    assert.match(committed.authorization, /^Owner approved 2026-10-16 /, key);
+    assert.ok(committed.authorization.startsWith(`Owner approved ${APPROVED_ON[key] || '2026-10-16'} `), key);
     assert.equal(committed.staging_acceptance.ok, true);
     assert.equal(committed.staging_acceptance.reference, STAGING_REFERENCE[key]);
     for (const phase of ['inspect', 'apply']) {
