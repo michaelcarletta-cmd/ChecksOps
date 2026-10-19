@@ -20,6 +20,16 @@ and `sql30-tenant-documents-doc-type` and both production pins are pending
 (`expected_live_definition_sha256: null`, `execute: false`, `authorization: "pending"`, no
 staging acceptance), so every apply refuses before connecting.
 
+**Production inspect after SQL 103 (2026-10-19, read-only, record only).** After SQL 103 was
+applied to production (`ops/production-sql-103-apply.md`, SSM `805556fa-…`), a read-only
+inspect (SSM `45639f6b-68cf-4502-a127-458d99865ae8`, main `dbaa93c90`, tarball `94d7499a…`)
+reported for SQL 29: `live_definition_sha256`
+`d8247ab9a31a7c1c57a464a768a650397059e67519f9e1522f881293e28e0079` (intended `1271ea9b…`),
+`already_applied` false, `precondition_failures` `[]`, `prerequisites_missing` `[]`,
+`sql90_applied` false (the earlier `function_acl_replaceable` refusal is gone); and for SQL 30:
+live `37f22340383b1a5e1b1350fc602b2953c2bb72d32234456888616fd749cbf504`. This note does not
+change either pin: both stay pending until their own reviewed pin changes.
+
 ## Order
 
 0. **SQL 103 immediately before SQL 29** (`aws/workflows/sql/103_share_library_trigger_acl.sql`,

@@ -4,8 +4,8 @@
  * and release-sql-production-cli.mjs), mirroring the SQL 29 / 30 / 88 / 89 tool tests:
  *
  *   - the committed pins are pending (authorization "pending", execute false, no pre-state,
- *     no staging acceptance; SQL 103's is execute-authorized, and its locked-state checks run
- *     on an explicit pre-authorization copy), bound to the staging pins, the predecessors and the production
+ *     no staging acceptance; SQL 103's is applied and retired (execute false, applied
+ *     recorded), and its locked-state checks run on an explicit pre-authorization copy), bound to the staging pins, the predecessors and the production
  *     RDS, and name the built tooling; the tools are inventoried and registered in the one-shot;
  *   - evaluate / precheck / apply refuse before connecting (no pre-state, no approval, the
  *     staging acceptance, execute false, the phrase, the single-use id, replay, binding);
@@ -47,12 +47,14 @@ const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const CLIS = Object.freeze(Object.fromEntries(RELEASE_SQL_KEYS.map((key) => [key, path.join(ROOT, RELEASE_PRODUCTION[key].cli)])));
 const MAINS = Object.freeze(Object.fromEntries(await Promise.all(RELEASE_SQL_KEYS.map(async (key) => [key, (await import(CLIS[key])).main]))));
 const COMMITTED = Object.freeze(Object.fromEntries(RELEASE_SQL_KEYS.map((key) => [key, loadReleaseProductionPin(key, ROOT)])));
-// SQL 103's production pin is execute-authorized (owner approved 2026-10-19; its own checks are
-// in release-sql103-production-apply.test.mjs) until its record-and-retire change; every other
-// release pin is pending. The locked-state checks below run on an explicit pre-authorization
-// copy of an authorized pin.
-const EXECUTE_AUTHORIZED = Object.freeze(['sql103']);
-const LOCKED = Object.freeze(Object.fromEntries(RELEASE_SQL_KEYS.map((key) => [key, EXECUTE_AUTHORIZED.includes(key)
+// No release pin is execute-authorized now. SQL 103's production pin was (owner approved
+// 2026-10-19) until its record-and-retire change after the 2026-10-19 apply: it records the
+// apply in applied and is execute false again (its own checks are in
+// release-sql103-production-apply.test.mjs). Every other release pin is pending. The
+// locked-state checks below run on an explicit pre-authorization copy of an applied pin.
+const EXECUTE_AUTHORIZED = Object.freeze([]);
+const APPLIED_RETIRED = Object.freeze(['sql103']);
+const LOCKED = Object.freeze(Object.fromEntries(RELEASE_SQL_KEYS.map((key) => [key, [...EXECUTE_AUTHORIZED, ...APPLIED_RETIRED].includes(key)
   ? Object.freeze({
     ...COMMITTED[key],
     authorization: 'pending',
@@ -139,14 +141,26 @@ async function runCli(key, argv, { env = { CHECKSOPS_DEPLOYMENT_GUARD_APPLY: '1'
   return { out: writes.join(''), spent };
 }
 
-test('committed pins are pending (SQL 103 execute-authorized), bound to the staging pins, predecessors and the production RDS, and name the built tooling', () => {
+test('committed pins are pending (SQL 103 applied and retired), bound to the staging pins, predecessors and the production RDS, and name the built tooling', () => {
   const inventory = JSON.stringify(JSON.parse(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/bypass-inventory.json'), 'utf8')));
   assert.deepEqual(RELEASE_SQL_KEYS.filter((key) => COMMITTED[key].execute !== false), [...EXECUTE_AUTHORIZED]);
+  assert.deepEqual(RELEASE_SQL_KEYS.filter((key) => COMMITTED[key].applied !== undefined), [...APPLIED_RETIRED]);
   for (const key of RELEASE_SQL_KEYS) {
     const pin = COMMITTED[key];
     const staging = STAGING[key];
     assert.equal(pin.migration, key);
-    if (EXECUTE_AUTHORIZED.includes(key)) {
+    if (APPLIED_RETIRED.includes(key)) {
+      // Applied to production and retired: execute false, the apply recorded in applied.
+      assert.equal(pin.execute, false, key);
+      assert.match(pin.authorization, /^Applied to production on \d{4}-\d{2}-\d{2}; execute is false again/, key);
+      assert.match(pin.expected_live_definition_sha256, /^[0-9a-f]{64}$/, key);
+      assert.equal(pin.staging_acceptance.ok, true, key);
+      assert.equal(pin.production_inspect.status, 'recorded', key);
+      assert.equal(pin.applied.result, 'applied', key);
+      assert.equal(pin.applied.receipt.before_hash, pin.expected_live_definition_sha256, key);
+      assert.equal(pin.applied.receipt.after_hash, pin.intended_replacement_sha256, key);
+      assert.equal(pin.applied.post_apply_inspect.already_applied, true, key);
+    } else if (EXECUTE_AUTHORIZED.includes(key)) {
       assert.equal(pin.execute, true, key);
       assert.match(pin.authorization, /^Owner approved /, key);
       assert.match(pin.expected_live_definition_sha256, /^[0-9a-f]{64}$/, key);
@@ -208,7 +222,7 @@ test('a tampered pin or file is refused', () => {
 
 test('evaluate, precheck and apply refuse before connecting', async () => {
   for (const key of RELEASE_SQL_KEYS) {
-    // The pending state (for an execute-authorized pin, its explicit pre-authorization copy).
+    // The pending state (for an execute-authorized or applied pin, its explicit pre-authorization copy).
     const committed = await evaluateReleaseProductionApply(key, manifest(key, { ...LOCKED[key], expected_live_definition_sha256: PRE }), { root: ROOT, pin: LOCKED[key] });
     assert.equal(committed.code, CODES.SQL_COLLISION, key);
     assert.match(committed.message, /no recorded pre-apply live definition hash/);
@@ -252,7 +266,9 @@ test('CLI: credential flags and arbitrary SQL are refused; pending pins stop bef
       }
       const committed = await runCli(key, ['--apply'], { input: manifest(key, { ...COMMITTED[key], expected_live_definition_sha256: PRE }), deps: { enforceScriptGuard: () => { throw new Error('guard-called'); } } });
       assert.equal(committed.spent, 0);
-      assert.match(committed.out, /SQL_COLLISION/);
+      // A pending pin has no pre-state (SQL_COLLISION); an applied, retired pin's authorization
+      // is no longer an owner approval (PRODUCTION_APPROVAL_REQUIRED).
+      assert.match(committed.out, APPLIED_RETIRED.includes(key) ? /PRODUCTION_APPROVAL_REQUIRED/ : /SQL_COLLISION/, key);
       assert.doesNotMatch(committed.out, /guard-called|should-not-connect/);
       const sqlText = await runCli(key, ['--apply'], { input: { ...manifest(key, authorized(key)), sql_text: 'DROP TABLE x' }, deps: { pin: authorized(key) } });
       assert.match(sqlText.out, /arbitrary SQL text is forbidden/);

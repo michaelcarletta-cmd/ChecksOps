@@ -527,13 +527,14 @@ test('only the apply child gets the apply variables, and its receipt is the one 
 
 // --- stop conditions ---------------------------------------------------------------------
 
-// SQL 82's to 86's pins are execute-authorized (owner approved 2026-10-16) and SQL 103's
-// and SQL 29's (owner approved 2026-10-19) until their record-and-retire changes; every other pin is
-// execute false (SQL 87, SQL 88 and SQL 89 retired after their 2026-10-16 applies).
-const EXECUTE_AUTHORIZED = Object.freeze(['sql29', 'sql82', 'sql83', 'sql84', 'sql85', 'sql86', 'sql103']);
+// SQL 82's to 86's pins are execute-authorized (owner approved 2026-10-16) and SQL 29's
+// (owner approved 2026-10-19) until their record-and-retire changes; every other pin is
+// execute false (SQL 87, SQL 88 and SQL 89 retired after their 2026-10-16 applies, SQL 103
+// after its 2026-10-19 apply).
+const EXECUTE_AUTHORIZED = Object.freeze(['sql29', 'sql82', 'sql83', 'sql84', 'sql85', 'sql86']);
 
 test('every real production pin with execute false is refused before any child', async () => {
-  // Every other pin is retired or pending (execute false): SQL 81's since its 2026-10-15 record-and-retire change, SQL 87's, SQL 88's and SQL 89's since their 2026-10-16 applies, SQL 71's pending.
+  // Every other pin is retired or pending (execute false): SQL 81's since its 2026-10-15 record-and-retire change, SQL 87's, SQL 88's and SQL 89's since their 2026-10-16 applies, SQL 103's since its 2026-10-19 apply, SQL 71's pending.
   assert.deepEqual(Object.keys(ONE_SHOT_TOOLS).filter((key) => realPin(key).execute !== false), [...EXECUTE_AUTHORIZED]);
   for (const key of Object.keys(ONE_SHOT_TOOLS).filter((k) => realPin(k).execute === false)) {
     for (const phase of ['inspect', 'apply']) {
@@ -563,8 +564,8 @@ test('a pin without staging acceptance or phrase is refused', async () => {
   assert.equal(result.code, CODES.PRODUCTION_APPROVAL_REQUIRED);
   assert.equal(result.details.stopped_at, 'pin');
   assert.equal(runner.calls.length, 0);
-  // SQL 82's to 86's, SQL 103's and SQL 29's committed pins are execute-authorized, and SQL 87's, SQL 88's and
-  // SQL 89's are retired after their applies; their pre-authorization state (no staging
+  // SQL 82's to 86's and SQL 29's committed pins are execute-authorized, and SQL 87's, SQL 88's,
+  // SQL 89's and SQL 103's are retired after their applies; their pre-authorization state (no staging
   // acceptance, authorization "pending") is an explicit copy here. SQL 71's committed pin is
   // still pending, with no recorded pre-state (null). Even with execute flipped that state
   // stops at the pin, and the evaluators refuse a null pre-state (explicit copy) and the
@@ -612,19 +613,17 @@ test('a pin without staging acceptance or phrase is refused', async () => {
   }
 });
 
-test('the committed execute-authorized pins (SQL 82 to SQL 86, SQL 103, SQL 29) pass the pin stage, and their evaluators allow the manifest built from them', async () => {
+test('the committed execute-authorized pins (SQL 82 to SQL 86, SQL 29) pass the pin stage, and their evaluators allow the manifest built from them', async () => {
   const STAGING_REFERENCE = {
     sql82: 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38837281138',
     sql83: 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38837509160',
     sql84: 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38894893179',
     sql85: 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38895045712',
     sql86: 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38895163945',
-    // SQL 103: the staging read-live (already in place there; no staging apply).
-    sql103: 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39188618156',
     // SQL 29: the owner-accepted substitute evidence (staging read-live; SQL 90 on top in staging).
     sql29: 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39188780526',
   };
-  const APPROVED_ON = { sql103: '2026-10-19', sql29: '2026-10-19' };
+  const APPROVED_ON = { sql29: '2026-10-19' };
   for (const key of EXECUTE_AUTHORIZED) {
     const committed = realPin(key);
     assert.equal(committed.execute, true);
@@ -1372,18 +1371,26 @@ test('SQL 103 is registered with the release tool, its pin and allowed key, and 
   assert.match(realPin('sql29').order_note, /^Before SQL 90/);
 });
 
-test('the committed SQL 103 pin is execute-authorized; its execute-false and pre-authorization copies are refused before any child, in both phases', async () => {
+test('the committed SQL 103 pin is applied and retired (execute false); it, its execute-authorized copy with execute false and its pre-authorization copy are refused before any child, in both phases', async () => {
   const committed = realPin('sql103');
-  assert.equal(committed.execute, true);
+  assert.equal(committed.execute, false);
+  assert.match(committed.authorization, /^Applied to production on 2026-10-19; execute is false again/);
   assert.equal(committed.expected_live_definition_sha256, 'bade6813d689c91e3c8e39e33203e64eca23cc363f557062a7669407a01d5b9c');
   assert.equal(committed.staging_acceptance.reference, 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39188618156');
-  const executeFalse = { ...committed, execute: false };
-  for (const phase of ['inspect', 'apply']) {
-    const { result, runner } = await oneShot({ key: 'sql103', pin: executeFalse, o: { phase, 'workstream-id': 'prod-sql103-execute-false-test' } });
-    assert.equal(result.ok, false);
-    assert.equal(result.code, CODES.GUARD_APPLY_FORBIDDEN);
-    assert.equal(result.details.stopped_at, 'pin');
-    assert.equal(runner.calls.length, 0);
+  assert.equal(committed.applied.apply_ssm_command_id, '805556fa-9e70-45d3-b20b-5e68ce64db7d');
+  assert.equal(committed.applied.one_use_id, 'sql103-prod-25bd6177-69b4-445c-bc10-686248723e0b');
+  assert.deepEqual(committed.applied.receipt.before_hash, committed.expected_live_definition_sha256);
+  assert.deepEqual(committed.applied.receipt.after_hash, committed.intended_replacement_sha256);
+  // The execute-authorized state before the record-and-retire change, with execute false again.
+  const executeFalse = { ...committed, authorization: 'Owner approved 2026-10-19 (test copy of the execute-authorized pin before its record-and-retire change)', execute: false };
+  for (const pin of [null, executeFalse]) {
+    for (const phase of ['inspect', 'apply']) {
+      const { result, runner } = await oneShot({ key: 'sql103', pin, o: { phase, 'workstream-id': 'prod-sql103-execute-false-test' } });
+      assert.equal(result.ok, false);
+      assert.equal(result.code, CODES.GUARD_APPLY_FORBIDDEN);
+      assert.equal(result.details.stopped_at, 'pin');
+      assert.equal(runner.calls.length, 0);
+    }
   }
   const preAuthorization = { ...committed, execute: true, authorization: 'pending', staging_acceptance: { ok: false, reference: null, basis: 'Pending' } };
   const stopped = await oneShot({ key: 'sql103', pin: preAuthorization, o: { 'workstream-id': 'prod-sql103-pending-test' } });
