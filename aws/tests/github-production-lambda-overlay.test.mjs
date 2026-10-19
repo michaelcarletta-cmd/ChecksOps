@@ -508,12 +508,16 @@ test('#901 Review financial edits: write-allowlist.mjs, then write-check-workflo
   ]) {
     assert.equal(manifest901.members[member].accepted_sha256, accepted, member);
     assert.equal(manifest901.members[member].live_sha256, live, member);
-    // Release 2026-10-17 supersedes the unapplied #901 bytes: same live bytes, the branch's accepted bytes.
+    // #901 was applied in production (inspect run 39179890402, 2026-10-19): release 2026-10-17 builds on
+    // it, so its live bytes are #901's accepted bytes and the branch's bytes are accepted.
     const row = PLAN.members[member];
     assert.equal(row.operation, 'replace', member);
     assert.equal(row.manifest, MANIFEST_RELEASE, member);
-    assert.equal(release.members[member].supersedes_unapplied_manifest, MANIFEST_901, member);
-    assert.equal(row.expected_live_sha256, live, member);
+    assert.equal(release.members[member].previous_manifest, MANIFEST_901, member);
+    assert.equal(release.members[member].supersedes_unapplied_manifest, undefined, member);
+    assert.equal(release.members[member].live_sha256, accepted, member);
+    assert.equal(row.expected_live_sha256, accepted, member);
+    assert.notEqual(row.expected_live_sha256, live, member);
     assert.equal(sha(`aws/functions/api/${member}`), row.accepted_sha256, member);
     assert.equal(resolvePlannedMember(member, { root: ROOT, plan: PLAN }).ok, true, member);
   }
@@ -781,4 +785,64 @@ test('namedImports fails closed on a binding it cannot read', async () => {
     assert.throws(() => namedImports(src, 'm.mjs'), (error) => error.code === CODES.DEPLOYMENT_COLLISION && /cannot verify imported names/.test(error.message), src);
   }
   assert.deepEqual(namedImports("import { a, b as c } from './x.mjs';", 'm.mjs'), [{ module: 'x.mjs', names: ['a', 'b'] }]);
+});
+
+test('live reconciliation 2026-10-19: ten members expect the bytes inspect run 39179890402 recorded live', async () => {
+  const FX = 'aws/tests/fixtures';
+  const RELEASE = `${FX}/production-release-lock-pin-manifest-2026-10-17.json`;
+  const FEES = `${FX}/production-fee-collection-pin-manifest-2026-10-17.json`;
+  const ONBOARDING = `${FX}/production-checkalt-onboarding-manifest-2026-10-15.json`;
+  const REGISTER = 'providers/production/checkalt-register.mjs';
+  // member -> [pre-apply bytes the plan expected, live bytes (2026-10-19), plan manifest, manifest that applied them]
+  const RECONCILED = {
+    'workflow-rpc.mjs': ['9a630bdb5d3b42a411e7fe4043d4e4d5eb1f2e3f59b4ed1066e72351333cd075', '37cab8d6aac8ee1d9af70481b29dcda1e108904b68a2bc8e525d444e60ddf907', FEES, `${FX}/production-check-case-tenant-scope-manifest-2026-10-16.json`],
+    'providers/parity/checkalt-functions.mjs': ['3d6a0495dbd797ce59ef8b553a074acdff6fd6c557a27a502587f0fa728954a7', '31e08908e587aa21552f2f6dd1a2a7bbacca88e08d4febbaf64f3368f3511357', RELEASE, `${FX}/production-checkalt-parity-functions-manifest-2026-10-15.json`],
+    'homeowner.mjs': ['f9f993a71ea55f98681931e6d51ae283c0da84cde8e39e659db52b08a3c11897', '0cb700f158e01e8bf8ef5d02808fd8dd96c3710a2eebcee650db01dcc6717a95', RELEASE, `${FX}/production-review-followups-manifest-2026-10-16.json`],
+    'write-signature.mjs': ['dee6b7d507d25853cc95a3de104c0c2b60bd0a87595c0976beb7fa23bc52db26', '867ab4e06cb1cda29802f1463f9af6c731898738e42d748da14b1780f7ad8b9c', RELEASE, `${FX}/production-signature-request-repairs-manifest-2026-10-15.json`],
+    'email-branding.mjs': ['54cb79d1a62e9b62618d54c0f1e86e8ec43d9e1860a77bec32adde171a7b88cb', 'f248bc3fa04fdaa5221275c5812567dd701c19fd5b834e6ea391e84655d49fc0', RELEASE, `${FX}/production-signature-request-repairs-manifest-2026-10-15.json`],
+    'esign.mjs': ['7c60b6462f7e0caa21800481a68735a44fc38bde19d74f78c64bc5ca97956b74', '953ef45cb9f79e4cec5309feb971490162ac23df1b5721c025da6f7a63f40b83', RELEASE, `${FX}/production-signature-request-repairs-manifest-2026-10-15.json`],
+    'app-services.mjs': ['cce9d0ff48ce7644083e5aa04aec77c5100246b93a440c20ddb1ba5701bcc0c5', '51b2b4dc86b009dac49fc24ecbb412fe66a6e470f0173b4e5249fb3eaf7907fa', RELEASE, `${FX}/production-homeowner-signing-links-manifest-2026-10-15.json`],
+    'write-allowlist.mjs': ['0fdc95bd7be8137d87f581ba3468d04c9581edf20933fec39dc4872076d4fea0', '9fdce9c64e5750de88a0dc2360a1383168c3f79fe20c90312689d9f74ed655b7', RELEASE, `${FX}/production-review-financial-edits-manifest-2026-10-16.json`],
+    'write-check-workflow.mjs': ['d9a9ce68d10691fdb21e5050de532d918017497d69e5c4278d6ecd3b06634c76', '1f5e9444afc2bf193110e48c05447af4a26346d69445abc8f96e8e1e29be787d', RELEASE, `${FX}/production-review-financial-edits-manifest-2026-10-16.json`],
+    // ADD accepted and applied by the Check Alt production onboarding (6f1c77c18); now a REPLACE.
+    [REGISTER]: [null, '2264e34cc1d824d5f1c3a89c822a489bb35f90fc85b0ed90f68ebdbd1117b501', ONBOARDING, null],
+  };
+  const readJson = (rel) => JSON.parse(fs.readFileSync(path.join(ROOT, rel), 'utf8'));
+  assert.match(PLAN.notes, /inspect run 39179890402/);
+  assert.equal(Object.keys(RECONCILED).length, 10);
+  for (const [member, [before, live, manifestRel, appliedRel]] of Object.entries(RECONCILED)) {
+    const row = PLAN.members[member];
+    assert.equal(row.operation, 'replace', member);
+    assert.equal(row.expected_live_sha256, live, member);
+    assert.notEqual(row.accepted_sha256, live, member);
+    assert.equal(sha(`aws/functions/api/${member}`), row.accepted_sha256, member);
+    assert.equal(row.manifest, manifestRel, member);
+    const manifestRow = readJson(manifestRel).members[member];
+    assert.equal(manifestRow.live_sha256, live, member);
+    assert.equal(manifestRow.operation, 'replace', member);
+    if (appliedRel) {
+      // The live bytes are exactly what the earlier guarded production deploy accepted.
+      const applied = readJson(appliedRel).members[member];
+      assert.equal(applied.accepted_sha256, live, member);
+      assert.equal(applied.live_sha256, before, member);
+      const releaseRow = readJson(RELEASE).members[member];
+      assert.equal(releaseRow.live_sha256, live, member);
+      assert.equal(releaseRow.previous_manifest, appliedRel, member);
+      assert.equal(releaseRow.supersedes_unapplied_manifest, undefined, member);
+    }
+    // Inspect accepts the recorded live bytes and refuses the stale pre-apply bytes.
+    const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: member };
+    const ready = await run(inspect, { root: ROOT, inspectLive: liveFor(member) });
+    assert.equal(ready.state, 'READY', member);
+    assert.equal(ready.mutation, false, member);
+    if (before) {
+      await assert.rejects(
+        run(inspect, { root: ROOT, inspectLive: liveFor(member, { sha256: before }) }),
+        (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+        member,
+      );
+    }
+  }
+  assert.equal(PLAN.members[REGISTER].sql_before, 'aws/workflows/sql/81_checkalt_production_register.sql');
+  assert.equal(PLAN.members[REGISTER].accepted_sha256, '8f06c079293a5e495043e87ad0d5aa6c01aa3fda182957efb745efa3c855f870');
 });

@@ -54,7 +54,7 @@
       "live_source": "new file: absent from the 2026-10-11 live bundle snapshot (f78e16d99) and from main"
     },
     "workflow-rpc.mjs": {
-      "live_sha256": "9a630bdb5d3b42a411e7fe4043d4e4d5eb1f2e3f59b4ed1066e72351333cd075",
+      "live_sha256": "37cab8d6aac8ee1d9af70481b29dcda1e108904b68a2bc8e525d444e60ddf907",
       "accepted_sha256": "79b7e4de653eb9d391afca9d27769b3b7c8e3d10d67af43e829ee32398797485",
       "operation": "replace",
       "supersedes_unapplied_manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
