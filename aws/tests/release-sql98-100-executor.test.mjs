@@ -107,7 +107,7 @@ function handlerFor(connect, { pins = {} } = {}) {
   return createHandler({ connect, now: () => Date.parse(NOW), releaseSqlFiles: FILES, releaseSqlPins: { ...PINS, ...pins } });
 }
 
-test('pins: SQL 98-100 pending and code-derived, selectable, packed, in step with the production pins; the predecessors and the SQL 96 / SQL 98 rule', () => {
+test('pins: SQL 98-100 code-derived (the SQL 98 production pin authorized, SQL 99 and SQL 100 pending), selectable, packed, in step with the production pins; the predecessors and the SQL 96 / SQL 98 rule', () => {
   const packed = Object.fromEntries(EXECUTOR_PACK_MEMBERS);
   const workflow = fs.readFileSync(path.join(ROOT, '.github/workflows/guarded-staging-sql-executor.yml'), 'utf8');
   const choices = { sql98: 'sql98-tenant-fee-collection', sql99: 'sql99-mortgage-desk-completion-messages', sql100: 'sql100-mortgage-desk-live-access' };
@@ -127,8 +127,16 @@ test('pins: SQL 98-100 pending and code-derived, selectable, packed, in step wit
     assert.equal(prod.intended_post_state.fingerprint, pin.intended_replacement_sha256, key);
     assert.equal(prod.staging_pin_commit, pin.commit, key);
     assert.equal(prod.source_sha256, pin.source_sha256, key);
-    assert.equal(prod.execute, false, key);
-    assert.equal(prod.authorization, 'pending', key);
+    if (key === 'sql98') {
+      // Production pin execute-authorized (owner approved 2026-10-19, substitute staging evidence).
+      assert.equal(prod.execute, true, key);
+      assert.match(prod.authorization, /^Owner approved 2026-10-19 /, key);
+      assert.equal(prod.expected_live_definition_sha256, 'd64218dc145fc7b55632c7d5cfdef3fdbbb02592a79f6ff339c4814fc4ae6dbc', key);
+      assert.notEqual(prod.expected_live_definition_sha256, pin.expected_live_definition_sha256, key);
+    } else {
+      assert.equal(prod.execute, false, key);
+      assert.equal(prod.authorization, 'pending', key);
+    }
   }
   assert.match(workflow, /node --test aws\/tests\/release-sql98-100-executor\.test\.mjs/);
   // The fee collection map keeps naming the same SQL 98 pin.
