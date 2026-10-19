@@ -1865,7 +1865,7 @@ export const SQL29_FUNCTIONS = Object.freeze([
   Object.freeze({ name: 'aws_mortgage_agent_can_read_library_path', identity: 'public.aws_mortgage_agent_can_read_library_path(text[], text, uuid)', result: 'boolean', config: Object.freeze(['row_security=off', 'search_path=public']), acl: SQL29_API_EXECUTE }),
   Object.freeze({ name: 'aws_can_manage_mortgage_library', identity: 'public.aws_can_manage_mortgage_library(uuid)', result: 'boolean', config: Object.freeze(['row_security=off', 'search_path=public']), acl: SQL29_API_EXECUTE }),
   Object.freeze({ name: 'aws_can_insert_mortgage_library_document', identity: 'public.aws_can_insert_mortgage_library_document(uuid, uuid, uuid, text)', result: 'boolean', config: Object.freeze(['row_security=off', 'search_path=public']), acl: SQL29_API_EXECUTE }),
-  // The trigger function: REVOKE ALL FROM PUBLIC, no grant.
+  // The trigger function: REVOKE ALL FROM PUBLIC, authenticated, checksops; no grant.
   Object.freeze({ name: 'share_library_docs_to_mortgage_request', identity: 'public.share_library_docs_to_mortgage_request()', result: 'trigger', config: Object.freeze(['search_path=public']), acl: Object.freeze(['owner EXECUTE']) }),
 ]);
 export const SQL29_FUNCTION_IDENTITIES = Object.freeze(SQL29_FUNCTIONS.map((fn) => fn.identity));
@@ -2003,7 +2003,7 @@ export const AUTHORIZED_SQL29_MORTGAGE_OPS_LIBRARY_PARITY = Object.freeze({
   migration_id: '29_mortgage_ops_library_parity',
   // The commit that last authored the file bytes (release lock mortgage-ops records the same sha256).
   commit: '48c16079dbad30368bc916484144e370f3441f26',
-  source_sha256: 'e8d416a58e1920cff27d5d744f0b1b4ff414a866a7eb483bb299bb794c0849be',
+  source_sha256: 'ff174c482dce495564bcb1cb7bdf484b689395575017b8a8d985c84ebff63cdb',
   // Pending: no staging read-live has been recorded; apply refuses until a reviewed pin change records it.
   expected_live_definition_sha256: null,
   // sha256(sql29StateText(sql29IntendedState(file bytes))); re-derived by the tests.
@@ -2557,7 +2557,8 @@ export async function readLibrarySqlState(client, { counts = true } = {}) {
 export const librarySqlLiveHash = (key, state) => state?.[key]?.live_definition_sha256 ?? null;
 
 const SQL29_API_ACL_LINES = new Set(['owner EXECUTE', 'PUBLIC EXECUTE', 'authenticated EXECUTE', 'checksops EXECUTE']);
-const SQL29_TRIGGER_ACL_LINES = new Set(['owner EXECUTE', 'PUBLIC EXECUTE']);
+// The trigger function's REVOKE ALL ... FROM PUBLIC, authenticated, checksops.
+const SQL29_TRIGGER_ACL_LINES = new Set(['owner EXECUTE', 'PUBLIC EXECUTE', 'authenticated EXECUTE', 'checksops EXECUTE']);
 
 /** Rules both environments apply before SQL 29 / SQL 30 run. */
 export function librarySharedPreconditionFailures(key, state) {

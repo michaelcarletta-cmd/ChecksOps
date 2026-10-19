@@ -268,4 +268,7 @@ BEGIN
   RETURN NEW;
 END;
 $$;
-REVOKE ALL ON FUNCTION public.share_library_docs_to_mortgage_request() FROM PUBLIC;
+-- Trigger function: EXECUTE for its owner only. Default privileges can hand EXECUTE to
+-- checksops / authenticated at CREATE (production 2026-10-19 holds checksops EXECUTE),
+-- so revoke those too; idempotent when absent.
+REVOKE ALL ON FUNCTION public.share_library_docs_to_mortgage_request() FROM PUBLIC, authenticated, checksops;

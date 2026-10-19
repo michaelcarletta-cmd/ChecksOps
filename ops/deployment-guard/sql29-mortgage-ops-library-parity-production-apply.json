@@ -9,7 +9,7 @@
   "filename": "aws/rls/sql/29_mortgage_ops_library_parity.sql",
   "migration_id": "29_mortgage_ops_library_parity",
   "staging_pin_commit": "48c16079dbad30368bc916484144e370f3441f26",
-  "source_sha256": "e8d416a58e1920cff27d5d744f0b1b4ff414a866a7eb483bb299bb794c0849be",
+  "source_sha256": "ff174c482dce495564bcb1cb7bdf484b689395575017b8a8d985c84ebff63cdb",
   "function_identities": [
     "public.aws_mortgage_agent_can_read_library_document(uuid)",
     "public.aws_mortgage_agent_can_read_library_path(text[], text, uuid)",

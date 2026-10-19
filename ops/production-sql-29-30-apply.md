@@ -5,7 +5,7 @@ Applies only the two unchanged operator packages (release lock `mortgage-ops`,
 
 | key | file | what it does |
 |---|---|---|
-| `sql29` | `aws/rls/sql/29_mortgage_ops_library_parity.sql` (sha256 `e8d416a5…`) | Five SECURITY DEFINER helpers (desk-agent read of attached `library:mortgage:%` rows on an open or assigned request; the storage-sign path check; the library manage check; the attach INSERT check; the auto-share trigger function `share_library_docs_to_mortgage_request()`), the two policies on `public.mortgage_request_library_documents` (`aws_select_…` SELECT, `aws_write_…` INSERT), the three Lovable policies dropped, and SELECT/INSERT-only grants for `authenticated` and `checksops`. |
+| `sql29` | `aws/rls/sql/29_mortgage_ops_library_parity.sql` (sha256 `ff174c48…`) | Five SECURITY DEFINER helpers (desk-agent read of attached `library:mortgage:%` rows on an open or assigned request; the storage-sign path check; the library manage check; the attach INSERT check; the auto-share trigger function `share_library_docs_to_mortgage_request()`, EXECUTE revoked from PUBLIC, `authenticated` and `checksops` so only its owner keeps it), the two policies on `public.mortgage_request_library_documents` (`aws_select_…` SELECT, `aws_write_…` INSERT), the three Lovable policies dropped, and SELECT/INSERT-only grants for `authenticated` and `checksops`. |
 | `sql30` | `aws/rls/sql/30_tenant_documents_mortgage_doc_type.sql` (sha256 `d30c7caf…`) | `tenant_documents_doc_type_check` from the 3- or 6-value Supabase predecessor to the 13-value list: the 6 legacy values plus the 7 canonical `library:mortgage:*` values. Template, shingle, siding, catalog and letterhead still need SQL 94. |
 
 **Why.** MortgageOps sync of the Document Library works in the API code

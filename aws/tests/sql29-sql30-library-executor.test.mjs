@@ -22,8 +22,10 @@ import {
   AUTHORIZED_SQL29_MORTGAGE_OPS_LIBRARY_PARITY as PIN29,
   AUTHORIZED_SQL30_TENANT_DOCUMENTS_DOC_TYPE as PIN30,
   AUTHORIZED_STAGING_SQL,
+  SQL29_FUNCTIONS,
   SQL30_INTENDED_STATE,
   authorizationFingerprint,
+  librarySharedPreconditionFailures,
   librarySqlExecutableText,
   resolveAuthorizedMigration,
   sql29FunctionBodies,
@@ -124,6 +126,33 @@ test('pins: the unchanged files, pending pre-states, code-derived post-states, s
   const workflow = fs.readFileSync(path.join(ROOT, '.github/workflows/guarded-staging-sql-executor.yml'), 'utf8');
   assert.match(workflow, /- sql29-mortgage-ops-library-parity\n/);
   assert.match(workflow, /- sql30-tenant-documents-doc-type\n/);
+});
+
+test('SQL 29 function_acl_replaceable: the trigger function accepts exactly the grantees the file revokes', () => {
+  // The file revokes the trigger function FROM PUBLIC, authenticated, checksops.
+  assert.match(TEXT29, /^REVOKE ALL ON FUNCTION public\.share_library_docs_to_mortgage_request\(\) FROM PUBLIC, authenticated, checksops;$/m);
+  const API = ['PUBLIC EXECUTE', 'checksops EXECUTE', 'owner EXECUTE'];
+  const stateWith = (triggerAcl) => ({
+    prerequisites_missing: [],
+    sql90_applied: false,
+    sql29: {
+      table_owner_is_login: true,
+      rls_enabled: true,
+      table_acl_entries: [],
+      other_policies: [],
+      functions: Object.fromEntries(SQL29_FUNCTIONS.map((fn) => [fn.identity, {
+        exists: true, owner_is_login: true, result: fn.result, acl: fn.result === 'trigger' ? triggerAcl : API,
+      }])),
+    },
+  });
+  // Production 2026-10-19 (read-only inspect at main bf6b7555): the trigger function also holds checksops EXECUTE.
+  assert.deepEqual(librarySharedPreconditionFailures('sql29', stateWith(['PUBLIC EXECUTE', 'checksops EXECUTE', 'owner EXECUTE'])), []);
+  assert.deepEqual(librarySharedPreconditionFailures('sql29', stateWith(['authenticated EXECUTE', 'owner EXECUTE'])), []);
+  assert.deepEqual(librarySharedPreconditionFailures('sql29', stateWith(['owner EXECUTE'])), []);
+  // A grantee the file does not revoke would survive it.
+  for (const acl of [['PUBLIC EXECUTE', 'anon EXECUTE', 'owner EXECUTE'], ['owner EXECUTE', 'checksops_admin EXECUTE'], ['service_role EXECUTE']]) {
+    assert.ok(librarySharedPreconditionFailures('sql29', stateWith(acl)).includes('function_acl_replaceable'), JSON.stringify(acl));
+  }
 });
 
 test('reviewed package: SQL 29 bodies parsed; SQL 30 runs without its own BEGIN/COMMIT; tampering refuses', () => {
@@ -261,7 +290,10 @@ test('PostgreSQL 16: SQL 30 then SQL 29 through the executor: inspect read-only,
   const again30 = await handlerFor(connect, { sql30Pin: pin30 })(libraryEvent('sql30', { pin: pin30 }));
   assert.equal(again30.code, CODES.UNRELATED_MUTATION);
 
-  // SQL 29: pre-state, apply, the intended fingerprint, replay refused.
+  // SQL 29: pre-state, apply, the intended fingerprint, replay refused. Like production
+  // (2026-10-19), the trigger function also holds checksops (and here authenticated) EXECUTE;
+  // the file revokes both, so the post-state is still the intended owner-only ACL.
+  await admin.query('GRANT EXECUTE ON FUNCTION public.share_library_docs_to_mortgage_request() TO checksops, authenticated');
   const inspected29 = await handlerFor(connect)(inspectEvent('sql29'));
   const r29 = inspected29.details.receipt;
   assert.deepEqual(r29.precondition_failures, [], JSON.stringify(r29.library_inspect));
@@ -276,6 +308,10 @@ test('PostgreSQL 16: SQL 30 then SQL 29 through the executor: inspect read-only,
   const applied29 = await handlerFor(connect, { sql29Pin: pin29 })(libraryEvent('sql29', { pin: pin29 }));
   assert.equal(applied29.ok, true, JSON.stringify(applied29));
   assert.equal(applied29.details.receipt.after_hash, PIN29.intended_replacement_sha256);
+  const triggerAcl = (await admin.query(`SELECT
+    has_function_privilege('checksops', 'public.share_library_docs_to_mortgage_request()', 'EXECUTE') AS checksops,
+    has_function_privilege('authenticated', 'public.share_library_docs_to_mortgage_request()', 'EXECUTE') AS authenticated`)).rows[0];
+  assert.deepEqual(triggerAcl, { checksops: false, authenticated: false });
   const after = await catalog();
   assert.equal(after.policies, '2');
   assert.doesNotMatch(after.acl, /authenticated=[a-zA-Z]*[wd]/, 'authenticated has no UPDATE / DELETE');
