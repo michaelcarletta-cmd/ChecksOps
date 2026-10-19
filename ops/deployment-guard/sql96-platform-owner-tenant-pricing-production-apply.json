@@ -1,8 +1,8 @@
 {
   "id": "sql96-platform-owner-tenant-pricing-production-apply",
   "migration": "sql96",
-  "authorization": "pending",
-  "execute": false,
+  "authorization": "Owner approved 2026-10-19 (the owner approved preparing this SQL 96 production pin change in the words \"do the SQL 96 pin\"; the change itself is reviewed and merge-approved by the owner separately): production apply of SQL 96 after SQL 93 (applied to production 2026-10-19; never re-run SQL 93 afterwards) on the staging acceptance below (production 275400ff40caf1ff9d036e62f8bab687f82e9302622afef91f77a314c0f40f7f -> ea844355e6854ad56f7e4058b5967591ff6c49b79748babc217f0321a47e7767), before SQL 98 and SQL 102 and before tenant-billing-engine.mjs and tenant-billing-handlers.mjs; execute true takes effect only when the owner reviews and merges this change. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
+  "execute": true,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -16,7 +16,7 @@
     "public.aws_tenants_member_column_guard()",
     "public.aws_platform_owner_set_tenant_pricing(uuid, jsonb)"
   ],
-  "expected_live_definition_sha256": null,
+  "expected_live_definition_sha256": "275400ff40caf1ff9d036e62f8bab687f82e9302622afef91f77a314c0f40f7f",
   "intended_replacement_sha256": "ea844355e6854ad56f7e4058b5967591ff6c49b79748babc217f0321a47e7767",
   "authorization_phrase": "APPLY_PLATFORM_OWNER_TENANT_PRICING",
   "predecessors": [
@@ -43,24 +43,24 @@
     "note": "Guarded tooling for SQL 96: sql96-platform-owner-tenant-pricing-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql96-platform-owner-tenant-pricing); production-sql-one-shot.mjs --migration sql96. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's). The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
   },
   "production_inspect": {
-    "status": "pending",
-    "date": null,
-    "ssm_command_id": null,
-    "source_commit": null,
+    "status": "recorded",
+    "date": "2026-10-19",
+    "ssm_command_id": "73b4bd93-b91b-44c9-b18d-287625e5f4c6",
+    "source_commit": "36955c413a013ca365357548d0ffae26f84b817b",
     "read_only": true,
     "connected_as": "checksops_admin",
-    "live_definition_sha256": null,
-    "apply_preconditions_met": null,
-    "precondition_failures": null,
-    "note": "Pending: the read-only inspect tool exists (scripts/deployment-guard/sql96-platform-owner-tenant-pricing-production-apply.mjs --inspect), but no production inspect has been run for SQL 96 yet. Record its date, SSM command id, source commit, live_definition_sha256, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. If precondition_failures is not [] stop: that needs its own reviewed change."
+    "live_definition_sha256": "275400ff40caf1ff9d036e62f8bab687f82e9302622afef91f77a314c0f40f7f",
+    "apply_preconditions_met": false,
+    "precondition_failures": [],
+    "note": "Recorded from the read-only production inspect of 2026-10-19 after SQL 93 was applied to production (SSM command 73b4bd93-b91b-44c9-b18d-287625e5f4c6, node scripts/deployment-guard/sql96-platform-owner-tenant-pricing-production-apply.mjs --inspect on the SQL53 runner i-0c35557c4e5385406 from main 36955c413 (tarball sha256 b124732a87345daceb21207744e8b529bcae984b144aefc13e31e3cf7b066428), BEGIN READ ONLY ... ROLLBACK, connected as checksops_admin). live_definition_sha256 275400ff40caf1ff9d036e62f8bab687f82e9302622afef91f77a314c0f40f7f (not the intended ea844355e6854ad56f7e4058b5967591ff6c49b79748babc217f0321a47e7767: already_applied false); precondition_failures [], prerequisites_missing [], missing_dependencies [], predecessor sql93 applied, successors_applied []. aws_tenant_pricing_columns(), aws_tenant_pricing_audit_row(), aws_platform_owner_set_tenant_pricing(uuid, jsonb), the tenant_pricing_audit table, its select policy and the tenants aws_tenant_pricing_audit trigger are absent; aws_tenants_member_column_guard() (SQL 93's) and the platform_fee_schedules write policy differ from the file's. apply_preconditions_met was false at inspect time only because no pre-state was recorded yet (expected_live_definition_sha256 null). This reviewed change copies live_definition_sha256 into expected_live_definition_sha256 and, in the same change, sets authorization, execute true and staging_acceptance. A fresh --inspect immediately before apply (the one-shot's inspect step) must still report this live_definition_sha256 and precondition_failures []; if not, stop. Earlier: Pending: the read-only inspect tool exists (scripts/deployment-guard/sql96-platform-owner-tenant-pricing-production-apply.mjs --inspect), but no production inspect has been run for SQL 96 yet. Record its date, SSM command id, source commit, live_definition_sha256, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. If precondition_failures is not [] stop: that needs its own reviewed change."
   },
   "intended_post_state": {
     "fingerprint": "ea844355e6854ad56f7e4058b5967591ff6c49b79748babc217f0321a47e7767",
     "note": "Platform-owner-only pricing columns on public.tenants, tenant_pricing_audit with its trigger, aws_platform_owner_set_tenant_pricing(uuid, jsonb), a replaced aws_tenants_member_column_guard(); platform_fee_schedules writes become platform owner only. The fingerprint is releaseIntendedHash('sql96', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): ea844355e6854ad56f7e4058b5967591ff6c49b79748babc217f0321a47e7767."
   },
   "staging_acceptance": {
-    "ok": false,
-    "reference": null,
-    "basis": "Pending: record the guarded staging SQL executor read-live and apply runs of SQL 96 here in the reviewed change that sets execute true. The staging executor handler and the production tool (scripts/deployment-guard/sql96-platform-owner-tenant-pricing-production-apply.mjs) exist; the staging read-live, apply and acceptance are still pending. Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+    "ok": true,
+    "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39082957003",
+    "basis": "Guarded staging SQL executor apply of sql96-platform-owner-tenant-pricing on 2026-10-18 (run 39082957003, main 02fb97d5a, wave 2): receipt before 275400ff40caf1ff9d036e62f8bab687f82e9302622afef91f77a314c0f40f7f, after ea844355e6854ad56f7e4058b5967591ff6c49b79748babc217f0321a47e7767 = intended_replacement_sha256; precondition_failures [], prerequisites_missing []. Its staging read-live (run 39081015501) recorded the same pre-state 275400ff40caf1ff9d036e62f8bab687f82e9302622afef91f77a314c0f40f7f that production reports now (ops/deployment-guard/staging-sql-live.json, aws/tests/helpers/staging-sql-wave1.mjs). Same pre-state: staging before its apply and production (production_inspect, 2026-10-19, after SQL 93) both report 275400ff40caf1ff9d036e62f8bab687f82e9302622afef91f77a314c0f40f7f; the same file bytes (source_sha256) are pinned in both."
   }
 }
