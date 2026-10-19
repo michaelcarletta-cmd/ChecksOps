@@ -245,6 +245,28 @@ Owner-approved lock and pin update for the release-PR #1015 review findings. No 
   check cannot be overwritten. Repository bytes `2152c7c2…` -> `1b816845da972648b54aec9e2191caf9d617fbef38415897cc35ad00dd6be339`.
   `check-deposited.mjs` is unchanged (its bytes stay pinned by the 2026-10-08 reconciliation test).
 
+## 0d. Disable login fails closed (2026-10-18, owner-approved)
+
+A read-only production IAM check (`SimulatePrincipalPolicy` on `checksops-production-api-execution`, pool
+`us-east-1_h00WorYMT`) found `AdminDisableUser` and `AdminDeleteUser` denied: the hand-made inline policy
+`TenantInviteUserProductionCognito` grants only `AdminCreateUser`, `AdminGetUser` and `AdminSetUserPassword`.
+`runDeleteUser` swallowed every `AdminDisableUser` error and returned `disabled: true`, so in production the
+platform owner's Disable login would report success while the login still worked. No deploy, SQL apply or IAM
+change in this section.
+
+- `tenant-admin.mjs`: only `UserNotFoundException` counts as disabled; any other Cognito error returns 502
+  `login_disable_failed` with `disabled: false`. Overlay plan and
+  `production-release-lock-pin-manifest-2026-10-17.json` `accepted_sha256`:
+  `f7bed9fb6a57ab9310dbbd0c72a5bc3d36c8425c2a90d7acf03f92fbfc2c0584` ->
+  `e111223d673e26e27a91b24620dc8e97576b5f2a012d349e02ad3e666e35c906`. `expected_live_sha256` unchanged.
+- IAM target: `aws/production/api-execution-cognito-admin-policy.json` adds `AdminDisableUser` and
+  `AdminDeleteUser`, same pool-only resource. Apply it (owner approval) before the `tenant-admin.mjs` overlay;
+  until then the fixed code reports the failure instead of hiding it.
+- **Applied 2026-10-19 (owner-approved):** `iam:PutRolePolicy` with exactly that document. Before: Create, Get,
+  SetUserPassword. Post-apply `SimulatePrincipalPolicy`: all five actions `allowed` on `us-east-1_h00WorYMT`;
+  `AdminDisableUser` / `AdminDeleteUser` `implicitDeny` on any other pool; `AdminUpdateUserAttributes` still
+  `implicitDeny`. Rollback: put the three-action document back.
+
 The original inventory follows.
 
 Values were computed on the branch tree with `node scripts/validate-release-locks.mjs` (locks) and
@@ -343,7 +365,7 @@ the ZIP or keep live bytes until the route is gone).
 | `storage.mjs` | modified (REPLACE) | `d92f34ca0dbba5b7b5b4c406d1a7cdf4b2e9c0a900ceddd1217dbebf3cd017d1` |
 | `tax-profiles.mjs` | modified (REPLACE) | `cb49cc567d017dbf732ed6743ee57c71ba12541b161fa927eb8bf8763e518a42` |
 | `tax-secrets.mjs` | modified (REPLACE) | `4a44531115a2789a5d6a921633d759143fceaa258156402585c25b1d64098d4d` |
-| `tenant-admin.mjs` | modified (REPLACE) | `f7bed9fb6a57ab9310dbbd0c72a5bc3d36c8425c2a90d7acf03f92fbfc2c0584` (0b; was `348e4fef…`) |
+| `tenant-admin.mjs` | modified (REPLACE) | `e111223d673e26e27a91b24620dc8e97576b5f2a012d349e02ad3e666e35c906` (0d; was `f7bed9fb…`, 0b; was `348e4fef…`) |
 | `tenant-billing-engine.mjs` | modified (REPLACE) | `3397c65d89122f706b182970d12e83b98de461b72acba5c32c8e8d1e60944557` |
 | `tenant-billing-handlers.mjs` | modified (REPLACE) | `2866356c3bf82a04d04c834fadbf94faed026a7f119e73bd8cc6f42dc2098298` |
 | `tenant-check-user.mjs` | modified (REPLACE) | `f25e165ea08312ddbde6e67d5f522171368043be43a7875926e859f7c15931df` |

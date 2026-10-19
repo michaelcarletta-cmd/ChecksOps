@@ -563,10 +563,22 @@ export const runDeleteUser = async ({
   if (loginEmail === PLATFORM_OWNER_EMAIL) {
     return { ok: false, statusCode: 403, error: 'platform_owner_protected', spoofFieldsIgnored: spoof };
   }
+  // Only a login that does not exist counts as disabled. Any other Cognito
+  // error (AccessDenied, throttling) fails loudly: reporting "disabled" while
+  // the person can still sign in is worse than reporting the failure.
   try {
     await adminCognito('AdminDisableUser', { UserPoolId: POOL_ID(), Username: loginEmail });
-  } catch {
-    /* ignore missing user */
+  } catch (error) {
+    if (error?.name !== 'UserNotFoundException') {
+      return {
+        ok: false,
+        statusCode: 502,
+        error: 'login_disable_failed',
+        reason: String(error?.name || 'CognitoError').slice(0, 80),
+        disabled: false,
+        spoofFieldsIgnored: spoof,
+      };
+    }
   }
   return { ok: true, statusCode: 200, disabled: true, spoofFieldsIgnored: spoof };
 };
