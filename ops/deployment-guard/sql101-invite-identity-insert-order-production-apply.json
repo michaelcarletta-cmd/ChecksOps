@@ -1,8 +1,8 @@
 {
   "id": "sql101-invite-identity-insert-order-production-apply",
   "migration": "sql101",
-  "authorization": "Owner approved 2026-10-19 (the owner approved applying SQL 90 in production in the words \"apply SQL 90 in production\" on the agreed plan SQL 90 -> SQL 101 -> the step-6 Lambdas, which has this SQL 101 pin change follow SQL 90's apply; the change itself is reviewed and merge-approved by the owner separately): production apply of SQL 101 right after SQL 90 (applied to production 2026-10-19) and before the tenant-admin.mjs production overlay, on the staging acceptance below (production 1c7e1d52a88e4ddb93b751ec972eebfe17600a156d6e56968c9026aa41425c1a -> 4383ef98de0b86d159ac7795b8cef1cc4d998d3540099dafed8078994d4c281b); execute true takes effect only when the owner reviews and merges this change. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
-  "execute": true,
+  "authorization": "Applied to production on 2026-10-19; execute is false again, so this pin is no longer a standing authorization and a re-apply needs a new reviewed pin change. The owner approved the SQL 101 production pin (1c7e1d52 -> 4383ef98), the read-only production inspect and the execute change on 2026-10-19, and approved the one apply run recorded in applied (workstream prod-sql101-invite-identity-insert-order-20261019) on 2026-10-19 with \"approve #1058 and apply SQL 101 in production\". That approval covered that run only",
+  "execute": false,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -52,7 +52,7 @@
     "live_definition_sha256": "1c7e1d52a88e4ddb93b751ec972eebfe17600a156d6e56968c9026aa41425c1a",
     "apply_preconditions_met": false,
     "precondition_failures": [],
-    "note": "Recorded from the read-only production inspect of 2026-10-19 run right after SQL 90's production apply, in the same SSM command as that apply (SSM 216d9a7e-8d5a-4c44-9d2f-e68370cc773a, node scripts/deployment-guard/sql101-invite-identity-insert-order-production-apply.mjs --inspect on the SQL53 runner i-0c35557c4e5385406 from main ba9ff4261 (tarball sha256 94983f0ebbe5f9cb008551b159c8c44a5f16fc9f564ddb080bac45dc14da745b), BEGIN READ ONLY ... ROLLBACK, connected as checksops_admin). live_definition_sha256 1c7e1d52a88e4ddb93b751ec972eebfe17600a156d6e56968c9026aa41425c1a (not the intended 4383ef98de0b86d159ac7795b8cef1cc4d998d3540099dafed8078994d4c281b: already_applied false); precondition_failures [], prerequisites_missing [], missing_dependencies [], predecessor sql90 applied, successors_applied []; aws_invite_create_user_identity(uuid, text, text, text) is SQL 90's (state different), EXECUTE for authenticated, checksops and the owner. The same pre-state staging recorded before its SQL 101 apply. apply_preconditions_met was false at inspect time only because no pre-state was recorded yet (expected_live_definition_sha256 null). This reviewed change copies live_definition_sha256 into expected_live_definition_sha256 and, in the same change, sets authorization, execute true and staging_acceptance. A fresh --inspect immediately before apply (the one-shot's inspect step) must still report this live_definition_sha256 and precondition_failures []; if not, stop. Earlier: Pending: the read-only inspect tool exists (scripts/deployment-guard/sql101-invite-identity-insert-order-production-apply.mjs --inspect), but no production inspect has been run for SQL 101 yet; its preconditions can only pass once SQL 90 is applied (predecessors_applied). Record its date, SSM command id, source commit, live_definition_sha256, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. If precondition_failures is not [] stop: that needs its own reviewed change."
+    "note": "Recorded from the read-only production inspect of 2026-10-19 run right after SQL 90's production apply, in the same SSM command as that apply (SSM 216d9a7e-8d5a-4c44-9d2f-e68370cc773a, node scripts/deployment-guard/sql101-invite-identity-insert-order-production-apply.mjs --inspect on the SQL53 runner i-0c35557c4e5385406 from main ba9ff4261 (tarball sha256 94983f0ebbe5f9cb008551b159c8c44a5f16fc9f564ddb080bac45dc14da745b), BEGIN READ ONLY ... ROLLBACK, connected as checksops_admin). live_definition_sha256 1c7e1d52a88e4ddb93b751ec972eebfe17600a156d6e56968c9026aa41425c1a (not the intended 4383ef98de0b86d159ac7795b8cef1cc4d998d3540099dafed8078994d4c281b: already_applied false); precondition_failures [], prerequisites_missing [], missing_dependencies [], predecessor sql90 applied, successors_applied []; aws_invite_create_user_identity(uuid, text, text, text) is SQL 90's (state different), EXECUTE for authenticated, checksops and the owner. The same pre-state staging recorded before its SQL 101 apply. apply_preconditions_met was false at inspect time only because no pre-state was recorded yet (expected_live_definition_sha256 null). This reviewed change copies live_definition_sha256 into expected_live_definition_sha256 and, in the same change, sets authorization, execute true and staging_acceptance. A fresh --inspect immediately before apply (the one-shot's inspect step) must still report this live_definition_sha256 and precondition_failures []; if not, stop. Earlier: Pending: the read-only inspect tool exists (scripts/deployment-guard/sql101-invite-identity-insert-order-production-apply.mjs --inspect), but no production inspect has been run for SQL 101 yet; its preconditions can only pass once SQL 90 is applied (predecessors_applied). Record its date, SSM command id, source commit, live_definition_sha256, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. If precondition_failures is not [] stop: that needs its own reviewed change. The apply of 2026-10-19 is recorded in applied; the record-and-retire change set execute false again."
   },
   "intended_post_state": {
     "fingerprint": "4383ef98de0b86d159ac7795b8cef1cc4d998d3540099dafed8078994d4c281b",
@@ -62,5 +62,105 @@
     "ok": true,
     "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39143679543",
     "basis": "Guarded staging SQL executor apply of sql101-invite-identity-insert-order on 2026-10-18 (run 39143679543, wave 5 owner approved 2026-10-18): receipt before 1c7e1d52a88e4ddb93b751ec972eebfe17600a156d6e56968c9026aa41425c1a, after 4383ef98de0b86d159ac7795b8cef1cc4d998d3540099dafed8078994d4c281b = intended_replacement_sha256. Its staging read-live (run 39142701783, main 0d4a7b8a8) recorded the same pre-state 1c7e1d52a88e4ddb93b751ec972eebfe17600a156d6e56968c9026aa41425c1a that production reports now (aws/tests/helpers/staging-sql-wave1.mjs). After it, invites of brand-new emails succeeded on staging (they had failed with 23503 on profiles_id_identity_fkey under SQL 90 alone). Same pre-state: staging before its apply and production (production_inspect, 2026-10-19, after SQL 90) both report 1c7e1d52a88e4ddb93b751ec972eebfe17600a156d6e56968c9026aa41425c1a; the same file bytes (source_sha256) are pinned in both."
+  },
+  "applied": {
+    "date": "2026-10-19",
+    "result": "applied",
+    "source_commit": "20e3826da4f21cf84c7f28515da1a3bcb1902c73",
+    "source_tarball": {
+      "file": "source-20e3826da4f21cf84c7f28515da1a3bcb1902c73.tar.gz",
+      "sha256": "1f389eb5ff21b19808b7da7238282f128447fa3502209dd6f9324f109f2237e6"
+    },
+    "migration_source_sha256": "5a5e2617b8f4f6757758a34559e621a41cc65090b1127a9414eae51b94a5da87",
+    "migration_source_sha256_note": "The one-shot source step hashed aws/workflows/sql/101_invite_identity_insert_order.sql in the transfer tarball: equal to source_sha256 (the pin).",
+    "runner": "i-0c35557c4e5385406",
+    "workstream_id": "prod-sql101-invite-identity-insert-order-20261019",
+    "one_use_id": "sql101-prod-9217d797-e85e-4d04-84d8-679f99aa6f00",
+    "one_use_id_consumed": true,
+    "one_use_id_consumed_basis": "Inferred from the successful apply (the tool records the one_use_id after COMMIT and only warns if that write fails); the consumed-registry entry was not read back separately.",
+    "owner_approval": "approve #1058 and apply SQL 101 in production",
+    "owner_approval_basis": "As passed in --approval-statement for --approval-scope sql101; the one-shot cannot verify who said it.",
+    "operator": "michaelcarletta-cmd",
+    "apply_ssm_command_id": "680fd3f7-c586-4bb8-819e-cd4d7759d71b",
+    "one_shot_run_id": "9fd22ea1-d936-44a0-b33b-049a2257f601",
+    "one_shot_note": "One guarded production-sql-one-shot run (SSM 680fd3f7-c586-4bb8-819e-cd4d7759d71b, run_id 9fd22ea1-d936-44a0-b33b-049a2257f601) from main 20e3826da applied SQL 101: steps pin, source, inspect, contracts, manifest, source-recheck-before-preflight, preflight, evaluate, source-recheck-before-apply, apply (applied) and post-apply-inspect all ok; runner contracts, manifest, receipt and inspects as recorded below. Start and finish times were not carried into this record. Applied after SQL 90 (SSM 216d9a7e-8d5a-4c44-9d2f-e68370cc773a) and before the tenant-admin.mjs production overlay, as the operator's gate requires; invites of new users need that overlay too.",
+    "steps": [
+      "pin",
+      "source",
+      "inspect",
+      "contracts",
+      "manifest",
+      "source-recheck-before-preflight",
+      "preflight",
+      "evaluate",
+      "source-recheck-before-apply",
+      "apply",
+      "post-apply-inspect"
+    ],
+    "contract_results": {
+      "claim-ledger": {
+        "ok": true,
+        "passed": "4/4"
+      },
+      "tenant-isolation": {
+        "ok": true,
+        "passed": "6/6"
+      },
+      "financial-write-protections": {
+        "ok": true,
+        "passed": "43/43"
+      }
+    },
+    "pre_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "1c7e1d52a88e4ddb93b751ec972eebfe17600a156d6e56968c9026aa41425c1a",
+      "live_matches_expected": true,
+      "already_applied": false,
+      "precondition_failures": [],
+      "missing_dependencies": [],
+      "predecessors_applied": true,
+      "successors_applied": [],
+      "note": "The one-shot inspect step (read-only --inspect) immediately before the apply: live == the recorded pre-state 1c7e1d52..., precondition_failures [], missing_dependencies [], predecessors_applied true."
+    },
+    "manifest_sha256": "d32a3c714b2430413cfcad428d996e489c50118f73f6a5f081fe3146dd0f0cfa",
+    "receipt": {
+      "migration": "sql101",
+      "workstream": "prod-sql101-invite-identity-insert-order-20261019",
+      "commit": "20e3826da4f21cf84c7f28515da1a3bcb1902c73",
+      "sql_file": "aws/workflows/sql/101_invite_identity_insert_order.sql",
+      "before_hash": "1c7e1d52a88e4ddb93b751ec972eebfe17600a156d6e56968c9026aa41425c1a",
+      "after_hash": "4383ef98de0b86d159ac7795b8cef1cc4d998d3540099dafed8078994d4c281b",
+      "unrelated_catalog_sha256": "7ba4bfca946fc756b974778895ce41295f26f43ecca29e8cc4996679c3b66004",
+      "unrelated_catalog_counts": {
+        "relations": 877,
+        "columns": 3494,
+        "constraints": 2201,
+        "policies": 398,
+        "functions": 1293,
+        "indexes": 645,
+        "default_acl": 0,
+        "role_memberships": 15,
+        "roles": 29,
+        "triggers": 173,
+        "views": 25,
+        "types": 18,
+        "schema": 2
+      },
+      "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39143679543",
+      "result": "applied"
+    },
+    "post_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "4383ef98de0b86d159ac7795b8cef1cc4d998d3540099dafed8078994d4c281b",
+      "already_applied": true,
+      "precondition_failures": [],
+      "missing_dependencies": [],
+      "predecessors_applied": true,
+      "successors_applied": [],
+      "note": "The one-shot post-apply read-only --inspect: already_applied true (live == intended 4383ef98...), precondition_failures []."
+    }
+  },
+  "production_evidence": {
+    "2026-10-19 apply": "Guarded production SQL one-shot on i-0c35557c4e5385406, workstream prod-sql101-invite-identity-insert-order-20261019, main 20e3826da (tarball 1f389eb5…, migration source 5a5e2617… == pin), owner-approved run (\"approve #1058 and apply SQL 101 in production\"), SSM 680fd3f7-c586-4bb8-819e-cd4d7759d71b, run_id 9fd22ea1-d936-44a0-b33b-049a2257f601, one_use_id sql101-prod-9217d797-e85e-4d04-84d8-679f99aa6f00 (spent): every step ok; contracts claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43; pre-apply inspect live 1c7e1d52… (live_matches_expected true, precondition_failures []); manifest d32a3c71…; 1c7e1d52… -> 4383ef98…, result applied, unrelated catalog 7ba4bfca…; post-apply inspect already_applied true, precondition_failures []. No later inspect was run. execute is false so the pin is no longer a standing authorization."
   }
 }

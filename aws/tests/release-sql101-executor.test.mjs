@@ -136,9 +136,10 @@ test('pin: SQL 101 staging wave 5, code-derived, selectable, packed, in step wit
   assert.equal(prod.staging_pin_commit, pin.commit);
   assert.equal(prod.source_sha256, pin.source_sha256);
   assert.deepEqual(prod.predecessors, ['sql90']);
-  // The production pin is execute-authorized (owner approved 2026-10-19) on this staging pin's apply.
-  assert.equal(prod.execute, true);
-  assert.match(prod.authorization, /^Owner approved 2026-10-19 /);
+  // The production pin was execute-authorized (owner approved 2026-10-19) on this staging pin's
+  // apply and is retired after its 2026-10-19 production apply.
+  assert.equal(prod.execute, false);
+  assert.match(prod.authorization, /^Applied to production on 2026-10-19; execute is false again/);
   assert.equal(prod.staging_acceptance.reference, 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39143679543');
   // The pinned commit authored these bytes (skipped in a checkout without that history).
   let bytes = null;

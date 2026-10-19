@@ -11,21 +11,14 @@ pin change of 2026-10-19 (the read-only production inspect, SSM
 `433d5e4e-51ec-4d82-8220-87ac9f04d8d7` from main `f51863bbd`, recorded as their pre-state; SQL
 91's staging acceptance its guarded staging apply run `39080306273` from the same pre-state,
 SQL 92's the owner-accepted substitute staging read-live run `39075498539`). SQL 103's pin is
-retired after its apply. SQL 90's production pin is `execute: true` (owner approved 2026-10-19:
-the read-only production inspect of 2026-10-19 after SQL 29 / SQL 30, SSM
-`9e68e829-7ca0-4499-89ad-8cd691e3cdb8` from main `45d6dbebd`, live `b5a1998d…`, recorded as its
-pre-state; its staging acceptance is the owner-accepted substitute evidence of the guarded
-staging apply run `39080157856`, which started from a different pre-state `1af4b3ac…`); its
-apply still needs the owner's run-time approval, and should be timed with SQL 101 and the
-step-6 Lambdas because invites break between SQL 90 and the new `tenant-admin.mjs`. SQL 90 was
-applied to production on 2026-10-19 (owner approval "apply SQL 90 in production"; SSM
-`216d9a7e-8d5a-4c44-9d2f-e68370cc773a`, run_id `8a427f65-58bc-4a1b-8aac-f5161017df60`,
-`b5a1998d…` -> `1351f1d5…`; recorded in its pin by the record-and-retire change). SQL 101's
-production pin is `execute: true` (owner approved 2026-10-19 on the agreed SQL 90 -> SQL 101 ->
-step-6 Lambdas plan: the read-only inspect right after SQL 90's apply, same SSM command, live
-`1c7e1d52…`, precondition_failures [], recorded as its pre-state; its staging acceptance is its
-guarded staging apply run `39143679543` from the same pre-state); its apply still needs the
-owner's run-time approval and must come before the `tenant-admin.mjs` production overlay. Every other
+retired after its apply. SQL 90 and SQL 101 were applied to production on 2026-10-19, in that
+order (see "Production applies of SQL 90 and SQL 101" below), and their pins are retired; they
+had been execute-authorized by the owner-approved pin changes of 2026-10-19 (SQL 90: the
+read-only production inspect after SQL 29 / SQL 30, SSM `9e68e829-7ca0-4499-89ad-8cd691e3cdb8`,
+live `b5a1998d…`, and the owner-accepted substitute staging evidence of the guarded staging apply
+run `39080157856` from a different pre-state; SQL 101: the read-only inspect right after SQL
+90's apply, live `1c7e1d52…`, and its guarded staging apply run `39143679543` from the same
+pre-state). Invites of new users need the `tenant-admin.mjs` production overlay as well. Every other
 production pin is `execute: false`, `authorization: "pending"`, with no recorded pre-state and
 no staging acceptance, so its production apply refuses before connecting; staging pins are authorized only in reviewed waves ("Staging apply waves"). SQL 100
 is a strict no-op on production: its production tool only inspects (see "SQL 100 on
@@ -458,3 +451,28 @@ filter (a `grep` over the empty stderr) matched nothing after the one-shot had e
 every step ok. No later read-only inspect was run. Both pins are `execute: false` again; a
 re-apply needs a new reviewed pin change. SQL 91's Lambdas (`providers/onboarding/*`) and
 `esign.mjs` (SQL 92) may follow in their Lambda batches.
+
+## Production applies of SQL 90 and SQL 101 (2026-10-19)
+
+Two owner-approved runs of `production-sql-one-shot.mjs` on `i-0c35557c4e5385406`, SQL 90 first
+and SQL 101 right after it (SQL 101's pin change was reviewed and merged in between). Every step
+was ok for both; contracts claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections
+43/43.
+
+| | SQL 90 | SQL 101 |
+|---|---|---|
+| Owner approval | "apply SQL 90 in production" | "approve #1058 and apply SQL 101 in production" |
+| Main / tarball | `ba9ff4261` / `94983f0e…` | `20e3826da` / `1f389eb5…` |
+| SSM / run_id | `216d9a7e-8d5a-4c44-9d2f-e68370cc773a` / `8a427f65-58bc-4a1b-8aac-f5161017df60` | `680fd3f7-c586-4bb8-819e-cd4d7759d71b` / `9fd22ea1-d936-44a0-b33b-049a2257f601` |
+| one_use_id (spent) | `sql90-prod-840d729b-39a5-4dbf-8e66-7aec6f4a3555` | `sql101-prod-9217d797-e85e-4d04-84d8-679f99aa6f00` |
+| Migration source (== pin) | `488b2ec4…` | `5a5e2617…` |
+| Receipt | `b5a1998d…` -> `1351f1d5…` | `1c7e1d52…` -> `4383ef98…` |
+| Manifest | `b25796ef…` | `d32a3c71…` |
+| Unrelated catalog | `d110205b…` | `7ba4bfca…` |
+| Post-apply inspect | already_applied true, precondition_failures [] | already_applied true, precondition_failures [] |
+
+SQL 101's pre-state was read in the same SSM command as SQL 90's apply. No later read-only
+inspect was run. Both pins are `execute: false` again; a re-apply needs a new reviewed pin
+change, and SQL 90 must never be re-run after SQL 101. Invites of new users stay broken until the
+`tenant-admin.mjs` (and `workflow-rpc.mjs`) production overlay, which needs the staging
+acceptance reference.
