@@ -1,8 +1,8 @@
 {
   "id": "sql94-document-library-restore-production-apply",
   "migration": "sql94",
-  "authorization": "Owner approved 2026-10-19 (the owner approved preparing this SQL 94 production pin change in the words \"do the SQL 94 pin\"; the change itself is reviewed and merge-approved by the owner separately): production apply of SQL 94 after SQL 29 and SQL 90 (both applied to production 2026-10-19) on the staging acceptance below (production 724115983687d882d8240e8d06e4670bc6e24dbb16540d3134cc1ccc47d66af1 -> 1cdc503275592900e9bf4ef49f7f5eadba573cab5f46dda3f4da9190dbe6ea57), before the document library Lambda members it holds (sql_before); execute true takes effect only when the owner reviews and merges this change. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
-  "execute": true,
+  "authorization": "Applied to production on 2026-10-19; execute is false again, so this pin is no longer a standing authorization and a re-apply needs a new reviewed pin change. The owner approved the SQL 94 production pin (72411598 -> 1cdc5032), the read-only production inspect and the execute change on 2026-10-19 (\"do the SQL 94 pin\", #1068), and approved the one apply run recorded in applied (workstream prod-sql94-document-library-restore-20261019) on 2026-10-19 with \"approve 1068, apply SQL 94 in production and apply SQL 104 in production\". That approval covered that run only",
+  "execute": false,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -54,7 +54,7 @@
     "live_definition_sha256": "724115983687d882d8240e8d06e4670bc6e24dbb16540d3134cc1ccc47d66af1",
     "apply_preconditions_met": false,
     "precondition_failures": [],
-    "note": "Recorded from the read-only production inspect of 2026-10-19 after SQL 29, SQL 30, SQL 90 and SQL 103 were applied to production (SSM command 70abaca3-3ec3-4cbc-aae3-6542563080f2, node scripts/deployment-guard/sql94-document-library-restore-production-apply.mjs --inspect on the SQL53 runner i-0c35557c4e5385406 from main fecb0b3af (tarball sha256 7da7cb2b6b3790d02f4968bbbf774dff0a4724ff49c7528cef51bc5bb29c399a), BEGIN READ ONLY ... ROLLBACK, connected as checksops_admin). live_definition_sha256 724115983687d882d8240e8d06e4670bc6e24dbb16540d3134cc1ccc47d66af1 (not the intended 1cdc503275592900e9bf4ef49f7f5eadba573cab5f46dda3f4da9190dbe6ea57: already_applied false); precondition_failures [], prerequisites_missing [], missing_dependencies [], predecessors sql29 and sql90 applied, successors_applied [], doc_type_check_shape sql30, rows_outside_sql94_rule 0. The five functions, homeowner_shared_documents with its three policies and guard trigger are absent; tenant_documents_doc_type_check is SQL 30's. apply_preconditions_met was false at inspect time only because no pre-state was recorded yet (expected_live_definition_sha256 null). This reviewed change copies live_definition_sha256 into expected_live_definition_sha256 and, in the same change, sets authorization, execute true and staging_acceptance. A fresh --inspect immediately before apply (the one-shot's inspect step) must still report this live_definition_sha256 and precondition_failures []; if not, stop."
+    "note": "Recorded from the read-only production inspect of 2026-10-19 after SQL 29, SQL 30, SQL 90 and SQL 103 were applied to production (SSM command 70abaca3-3ec3-4cbc-aae3-6542563080f2, node scripts/deployment-guard/sql94-document-library-restore-production-apply.mjs --inspect on the SQL53 runner i-0c35557c4e5385406 from main fecb0b3af (tarball sha256 7da7cb2b6b3790d02f4968bbbf774dff0a4724ff49c7528cef51bc5bb29c399a), BEGIN READ ONLY ... ROLLBACK, connected as checksops_admin). live_definition_sha256 724115983687d882d8240e8d06e4670bc6e24dbb16540d3134cc1ccc47d66af1 (not the intended 1cdc503275592900e9bf4ef49f7f5eadba573cab5f46dda3f4da9190dbe6ea57: already_applied false); precondition_failures [], prerequisites_missing [], missing_dependencies [], predecessors sql29 and sql90 applied, successors_applied [], doc_type_check_shape sql30, rows_outside_sql94_rule 0. The five functions, homeowner_shared_documents with its three policies and guard trigger are absent; tenant_documents_doc_type_check is SQL 30's. apply_preconditions_met was false at inspect time only because no pre-state was recorded yet (expected_live_definition_sha256 null). This reviewed change copies live_definition_sha256 into expected_live_definition_sha256 and, in the same change, sets authorization, execute true and staging_acceptance. A fresh --inspect immediately before apply (the one-shot's inspect step) must still report this live_definition_sha256 and precondition_failures []; if not, stop. The apply of 2026-10-19 is recorded in applied; the record-and-retire change set execute false again."
   },
   "intended_post_state": {
     "fingerprint": "1cdc503275592900e9bf4ef49f7f5eadba573cab5f46dda3f4da9190dbe6ea57",
@@ -64,5 +64,105 @@
     "ok": true,
     "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39082817752",
     "basis": "Guarded staging SQL executor apply of sql94-document-library-restore on 2026-10-18 (run 39082817752, wave 2): receipt before 724115983687d882d8240e8d06e4670bc6e24dbb16540d3134cc1ccc47d66af1, after 1cdc503275592900e9bf4ef49f7f5eadba573cab5f46dda3f4da9190dbe6ea57 = intended_replacement_sha256; precondition_failures [], prerequisites_missing []. Its staging read-live (run 39080904425) recorded the same pre-state 724115983687d882d8240e8d06e4670bc6e24dbb16540d3134cc1ccc47d66af1 that production reports now (ops/deployment-guard/staging-sql-live.json, aws/tests/helpers/staging-sql-wave1.mjs). Same pre-state: staging before its apply and production (production_inspect, 2026-10-19) both report 724115983687d882d8240e8d06e4670bc6e24dbb16540d3134cc1ccc47d66af1; the same file bytes (source_sha256) are pinned in both."
+  },
+  "applied": {
+    "date": "2026-10-19",
+    "result": "applied",
+    "source_commit": "ef26f7357b19748a977eec668755d10319944373",
+    "source_tarball": {
+      "file": "source-ef26f7357b19748a977eec668755d10319944373.tar.gz",
+      "sha256": "5dba0f6bf2ea274980857d6dfd9acb4ac0f3eb78b80207cd0c1270798e3e480a"
+    },
+    "migration_source_sha256": "ef865f65c8ccdfda51e1b6f65a828f9d6bed16bdbd1879a1a85cf4ba30a990a2",
+    "migration_source_sha256_note": "The one-shot source step hashed aws/workflows/sql/94_document_library_restore.sql in the transfer tarball: equal to source_sha256 (the pin).",
+    "runner": "i-0c35557c4e5385406",
+    "workstream_id": "prod-sql94-document-library-restore-20261019",
+    "one_use_id": "sql94-prod-a4968361-4a21-409d-9448-42ffe30f5274",
+    "one_use_id_consumed": true,
+    "one_use_id_consumed_basis": "Inferred from the successful apply (the tool records the one_use_id after COMMIT and only warns if that write fails); the consumed-registry entry was not read back separately.",
+    "owner_approval": "approve 1068, apply SQL 94 in production and apply SQL 104 in production",
+    "owner_approval_basis": "As passed in --approval-statement for --approval-scope sql94; the one-shot cannot verify who said it.",
+    "operator": "michaelcarletta-cmd",
+    "apply_ssm_command_id": "d2cf26f4-f240-497a-9293-5ca70c094d68",
+    "one_shot_run_id": "ca95e688-664e-43f3-97b1-9699bdab9a88",
+    "one_shot_note": "One guarded production-sql-one-shot run (SSM d2cf26f4-f240-497a-9293-5ca70c094d68, run_id ca95e688-664e-43f3-97b1-9699bdab9a88) from main ef26f7357 applied SQL 94: steps pin, source, inspect, contracts, manifest, source-recheck-before-preflight, preflight, evaluate, source-recheck-before-apply, apply (applied) and post-apply-inspect all ok; runner contracts, manifest, receipt and inspects as recorded below. The one-shot JSON was summarised on the runner (no console truncation). Start and finish times were not carried into this record. Applied after SQL 29, SQL 30, SQL 90 and SQL 103 and before the document library Lambda members it holds (sql_before).",
+    "steps": [
+      "pin",
+      "source",
+      "inspect",
+      "contracts",
+      "manifest",
+      "source-recheck-before-preflight",
+      "preflight",
+      "evaluate",
+      "source-recheck-before-apply",
+      "apply",
+      "post-apply-inspect"
+    ],
+    "contract_results": {
+      "claim-ledger": {
+        "ok": true,
+        "passed": "4/4"
+      },
+      "tenant-isolation": {
+        "ok": true,
+        "passed": "6/6"
+      },
+      "financial-write-protections": {
+        "ok": true,
+        "passed": "43/43"
+      }
+    },
+    "pre_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "724115983687d882d8240e8d06e4670bc6e24dbb16540d3134cc1ccc47d66af1",
+      "live_matches_expected": true,
+      "already_applied": false,
+      "precondition_failures": [],
+      "missing_dependencies": [],
+      "predecessors_applied": true,
+      "successors_applied": [],
+      "note": "The one-shot inspect step (read-only --inspect) immediately before the apply: live == the recorded pre-state 72411598..., precondition_failures [], missing_dependencies [], predecessors sql29 and sql90 applied."
+    },
+    "manifest_sha256": "2f2603e9d23437bef8f7bc53049bcda5e1f3a3305f0f3ac64a4120dbd4300ca9",
+    "receipt": {
+      "migration": "sql94",
+      "workstream": "prod-sql94-document-library-restore-20261019",
+      "commit": "ef26f7357b19748a977eec668755d10319944373",
+      "sql_file": "aws/workflows/sql/94_document_library_restore.sql",
+      "before_hash": "724115983687d882d8240e8d06e4670bc6e24dbb16540d3134cc1ccc47d66af1",
+      "after_hash": "1cdc503275592900e9bf4ef49f7f5eadba573cab5f46dda3f4da9190dbe6ea57",
+      "unrelated_catalog_sha256": "1d547fe3b97a3449dec3e5dd07f17f9da723501d39258b4b5d77f95d8328b72d",
+      "unrelated_catalog_counts": {
+        "relations": 880,
+        "columns": 3505,
+        "constraints": 2205,
+        "policies": 399,
+        "functions": 1298,
+        "indexes": 647,
+        "default_acl": 0,
+        "role_memberships": 15,
+        "roles": 29,
+        "triggers": 175,
+        "views": 25,
+        "types": 18,
+        "schema": 2
+      },
+      "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39082817752",
+      "result": "applied"
+    },
+    "post_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "1cdc503275592900e9bf4ef49f7f5eadba573cab5f46dda3f4da9190dbe6ea57",
+      "already_applied": true,
+      "precondition_failures": [],
+      "missing_dependencies": [],
+      "predecessors_applied": true,
+      "successors_applied": [],
+      "note": "The one-shot post-apply read-only --inspect: already_applied true (live == intended 1cdc5032...), precondition_failures []."
+    }
+  },
+  "production_evidence": {
+    "2026-10-19 apply": "Guarded production SQL one-shot on i-0c35557c4e5385406, workstream prod-sql94-document-library-restore-20261019, main ef26f7357 (tarball 5dba0f6b…, migration source ef865f65… == pin), owner-approved run (\"approve 1068, apply SQL 94 in production and apply SQL 104 in production\"), SSM d2cf26f4-f240-497a-9293-5ca70c094d68, run_id ca95e688-664e-43f3-97b1-9699bdab9a88, one_use_id sql94-prod-a4968361-4a21-409d-9448-42ffe30f5274 (spent): every step ok; contracts claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43; pre-apply inspect live 72411598… (live_matches_expected true, precondition_failures []); manifest 2f2603e9…; 72411598… -> 1cdc5032…, result applied, unrelated catalog 1d547fe3…; post-apply inspect already_applied true, precondition_failures []. No later inspect was run. execute is false so the pin is no longer a standing authorization."
   }
 }
