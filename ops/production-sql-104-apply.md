@@ -28,7 +28,13 @@ So step 1 takes the apply path, not the read-live-only path.
 
 **Status:** the staging pin is execute-authorized (wave 7, owner approved 2026-10-19, "do the SQL
 104 staging pin", pre-state `22b2d47d…`); the staging apply still needs its own run. The production
-pin is pending (`execute: false`, no recorded pre-state).
+pin is execute-authorized (owner approved 2026-10-19, "accept the SQL 104 staging apply as
+substitute evidence and do the SQL 104 pin"): staging apply run 39298919537 went `22b2d47d…` ->
+`e5b35104…` and read-live run 39299161133 confirmed `already_applied` true. The read-only production
+inspect (SSM `70abaca3-3ec3-4cbc-aae3-6542563080f2`, main `fecb0b3af`) recorded live `57443d0a…`:
+in production `checksops` already holds SELECT, INSERT and UPDATE (plus DELETE, outside the
+fingerprint), and `authenticated` holds none, so SQL 104 adds only the `authenticated` grants there.
+The apply still needs the owner's run-time approval.
 
 ## Fingerprint
 

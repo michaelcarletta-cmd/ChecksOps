@@ -27,7 +27,12 @@ re-run SQL 93 after SQL 96. SQL 96 was applied to production on 2026-10-19
 (see "Production apply of SQL 96" below) and its pin is retired; it had been execute-authorized
 by the owner-approved pin change of 2026-10-19 (#1063: the read-only production inspect after
 SQL 93, SSM `73b4bd93-b91b-44c9-b18d-287625e5f4c6`, live `275400ff…`, and its guarded staging
-apply run `39082957003` from the same pre-state). Every other
+apply run `39082957003` from the same pre-state). SQL 94's production pin is `execute: true`
+(owner approved 2026-10-19, "do the SQL 94 pin": the read-only production inspect of 2026-10-19,
+SSM `70abaca3-3ec3-4cbc-aae3-6542563080f2` from main `fecb0b3af`, live `72411598…`, recorded as its
+pre-state; its staging acceptance is its guarded staging apply run `39082817752` from the same
+pre-state); its apply still needs the owner's run-time approval, before the library Lambdas.
+Every other
 production pin is `execute: false`, `authorization: "pending"`, with no recorded pre-state and
 no staging acceptance, so its production apply refuses before connecting; staging pins are authorized only in reviewed waves ("Staging apply waves"). SQL 100
 is a strict no-op on production: its production tool only inspects (see "SQL 100 on
