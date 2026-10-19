@@ -11,9 +11,9 @@
       "operation": "add"
     },
     "providers/production/checkalt-register.mjs": {
-      "live_sha256": null,
+      "live_sha256": "2264e34cc1d824d5f1c3a89c822a489bb35f90fc85b0ed90f68ebdbd1117b501",
       "accepted_sha256": "8f06c079293a5e495043e87ad0d5aa6c01aa3fda182957efb745efa3c855f870",
-      "operation": "add"
+      "operation": "replace"
     },
     "data.mjs": {
       "live_sha256": "965f5ed94e6d901bd26335199d82039cc5676f8eb83f182803efc2f45167d349",

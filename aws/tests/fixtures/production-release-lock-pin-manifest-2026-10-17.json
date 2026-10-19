@@ -31,10 +31,10 @@
       "operation": "replace"
     },
     "providers/parity/checkalt-functions.mjs": {
-      "live_sha256": "3d6a0495dbd797ce59ef8b553a074acdff6fd6c557a27a502587f0fa728954a7",
+      "live_sha256": "31e08908e587aa21552f2f6dd1a2a7bbacca88e08d4febbaf64f3368f3511357",
       "accepted_sha256": "e794dda662db6bf26413a9744390ac67f0e2aa70687240e5dbd298784cc8007e",
       "operation": "replace",
-      "supersedes_unapplied_manifest": "aws/tests/fixtures/production-checkalt-parity-functions-manifest-2026-10-15.json"
+      "previous_manifest": "aws/tests/fixtures/production-checkalt-parity-functions-manifest-2026-10-15.json"
     },
     "providers/parity/db.mjs": {
       "live_sha256": "db24ae19e5cfff9cc418da99c4f0a81a7426385c450ecfee1ecc41b9f9148e3b",
@@ -67,10 +67,10 @@
       "operation": "replace"
     },
     "write-allowlist.mjs": {
-      "live_sha256": "0fdc95bd7be8137d87f581ba3468d04c9581edf20933fec39dc4872076d4fea0",
+      "live_sha256": "9fdce9c64e5750de88a0dc2360a1383168c3f79fe20c90312689d9f74ed655b7",
       "accepted_sha256": "9a2fae181b33fea46eb8c99a9ba4fdade3af05044f114662b65dc01a2d226ec1",
       "operation": "replace",
-      "supersedes_unapplied_manifest": "aws/tests/fixtures/production-review-financial-edits-manifest-2026-10-16.json"
+      "previous_manifest": "aws/tests/fixtures/production-review-financial-edits-manifest-2026-10-16.json"
     },
     "admin-reset-totp.mjs": {
       "live_sha256": "a1d8a54a0f686be926498cf823cfd55bfc1fe4caf919ab66ce49810d63bcb450",
@@ -117,10 +117,10 @@
       "operation": "replace"
     },
     "workflow-rpc.mjs": {
-      "live_sha256": "9a630bdb5d3b42a411e7fe4043d4e4d5eb1f2e3f59b4ed1066e72351333cd075",
+      "live_sha256": "37cab8d6aac8ee1d9af70481b29dcda1e108904b68a2bc8e525d444e60ddf907",
       "accepted_sha256": "9eda29f177a97896d6b0d564e4ceac1aa24f9ba2c41ae7f90621c470852221f7",
       "operation": "replace",
-      "supersedes_unapplied_manifest": "aws/tests/fixtures/production-check-case-tenant-scope-manifest-2026-10-16.json"
+      "previous_manifest": "aws/tests/fixtures/production-check-case-tenant-scope-manifest-2026-10-16.json"
     },
     "tenant-check-user.mjs": {
       "live_sha256": "27f477de81c555ff8cf44e12d3a191d5c1a2d0a4c16c01f7f4c881a74e16f1db",
@@ -178,22 +178,22 @@
       "operation": "replace"
     },
     "email-branding.mjs": {
-      "live_sha256": "54cb79d1a62e9b62618d54c0f1e86e8ec43d9e1860a77bec32adde171a7b88cb",
+      "live_sha256": "f248bc3fa04fdaa5221275c5812567dd701c19fd5b834e6ea391e84655d49fc0",
       "accepted_sha256": "fea68bc0c3f42193a13f5daaa60cfb831dce926ec150bd7b97df6675f0430b22",
       "operation": "replace",
-      "supersedes_unapplied_manifest": "aws/tests/fixtures/production-signature-request-repairs-manifest-2026-10-15.json"
+      "previous_manifest": "aws/tests/fixtures/production-signature-request-repairs-manifest-2026-10-15.json"
     },
     "write-signature.mjs": {
-      "live_sha256": "dee6b7d507d25853cc95a3de104c0c2b60bd0a87595c0976beb7fa23bc52db26",
+      "live_sha256": "867ab4e06cb1cda29802f1463f9af6c731898738e42d748da14b1780f7ad8b9c",
       "accepted_sha256": "14340acadf5af027646acbd636f7bde5efaae9d7ae337ffd2e4f2c17aaaf68bc",
       "operation": "replace",
-      "supersedes_unapplied_manifest": "aws/tests/fixtures/production-signature-request-repairs-manifest-2026-10-15.json"
+      "previous_manifest": "aws/tests/fixtures/production-signature-request-repairs-manifest-2026-10-15.json"
     },
     "esign.mjs": {
-      "live_sha256": "7c60b6462f7e0caa21800481a68735a44fc38bde19d74f78c64bc5ca97956b74",
+      "live_sha256": "953ef45cb9f79e4cec5309feb971490162ac23df1b5721c025da6f7a63f40b83",
       "accepted_sha256": "5e2c5f48913d12b0b1916aec63d6bf9a209e5bd516ec61c5ceba01ca4754ca70",
       "operation": "replace",
-      "supersedes_unapplied_manifest": "aws/tests/fixtures/production-signature-request-repairs-manifest-2026-10-15.json"
+      "previous_manifest": "aws/tests/fixtures/production-signature-request-repairs-manifest-2026-10-15.json"
     },
     "endorsement-composite.mjs": {
       "live_sha256": "9fc79f57dbbbcba134fd8e0c7d7936415fd6c1c83f98fcf18bf50e73def25a80",
@@ -211,10 +211,10 @@
       "operation": "replace"
     },
     "homeowner.mjs": {
-      "live_sha256": "f9f993a71ea55f98681931e6d51ae283c0da84cde8e39e659db52b08a3c11897",
+      "live_sha256": "0cb700f158e01e8bf8ef5d02808fd8dd96c3710a2eebcee650db01dcc6717a95",
       "accepted_sha256": "c51ea27a37a72b18aed7881ae349212257b790e6ff400cbe675949574504a80c",
       "operation": "replace",
-      "supersedes_unapplied_manifest": "aws/tests/fixtures/production-review-followups-manifest-2026-10-16.json"
+      "previous_manifest": "aws/tests/fixtures/production-review-followups-manifest-2026-10-16.json"
     },
     "tax-secrets.mjs": {
       "live_sha256": "978d9b7e1e92ca41fe0e31978b02cd45d313d8e60eb81b4e6f99c02f2eabc402",
@@ -237,10 +237,10 @@
       "operation": "add"
     },
     "app-services.mjs": {
-      "live_sha256": "cce9d0ff48ce7644083e5aa04aec77c5100246b93a440c20ddb1ba5701bcc0c5",
+      "live_sha256": "51b2b4dc86b009dac49fc24ecbb412fe66a6e470f0173b4e5249fb3eaf7907fa",
       "accepted_sha256": "daab02f7199fef3a66b727ed0ac4ebc8315c675ea9b5025f18c1a53b197555f7",
       "operation": "replace",
-      "supersedes_unapplied_manifest": "aws/tests/fixtures/production-homeowner-signing-links-manifest-2026-10-15.json"
+      "previous_manifest": "aws/tests/fixtures/production-homeowner-signing-links-manifest-2026-10-15.json"
     },
     "tenant-settings-handlers.mjs": {
       "live_sha256": "ac373ce37d5faac73fae8c17ed2cde7cf1c81e762e427eb3933335fa88644322",
@@ -323,10 +323,10 @@
       "operation": "replace"
     },
     "write-check-workflow.mjs": {
-      "live_sha256": "d9a9ce68d10691fdb21e5050de532d918017497d69e5c4278d6ecd3b06634c76",
+      "live_sha256": "1f5e9444afc2bf193110e48c05447af4a26346d69445abc8f96e8e1e29be787d",
       "accepted_sha256": "fa2c6aef0e4e6c8713f60a24804309b4cf7f9e4b9d69a379498ef9acaf621fc2",
       "operation": "replace",
-      "supersedes_unapplied_manifest": "aws/tests/fixtures/production-review-financial-edits-manifest-2026-10-16.json"
+      "previous_manifest": "aws/tests/fixtures/production-review-financial-edits-manifest-2026-10-16.json"
     },
     "providers.mjs": {
       "live_sha256": "6ad4c7ec0ba58e8906f85fc7f8d8fef21194920fc53f253ddfed6e46bf006b9c",
