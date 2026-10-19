@@ -558,6 +558,24 @@ test('SSN never persisted: Moov gets it once; DB writes, outbox and logs only se
   });
 });
 
+test('single-word representative name is accepted (mononym stored as first + ".")', async () => {
+  await withEnv(BASE_ENV, async () => {
+    resetMoovTokenCache();
+    const db = makeDb();
+    const fetch = moovFetch();
+    const { result } = await captureConsole(() => run('moov-onboarding-save', saveBody({
+      representatives: [{ ...REP, name: 'Madonna' }],
+    }), USERS.owner, { db, fetch }));
+    assert.equal(result.ok, true);
+    assert.equal(result.representatives[0].name, 'Madonna .');
+    const posts = fetch.calls.filter((c) => /\/representatives$/.test(c.url) && c.method === 'POST');
+    assert.equal(posts.length, 1);
+    const body = JSON.parse(posts[0].body);
+    assert.equal(body.name.firstName, 'Madonna');
+    assert.equal(body.name.lastName, '.');
+  });
+});
+
 test('EIN encrypted at rest, masked in every read, revealed only through moov-ein-reveal to tenant members with an audit row', async () => {
   await withEnv(BASE_ENV, async () => {
     resetMoovTokenCache();
