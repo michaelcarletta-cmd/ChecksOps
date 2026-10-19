@@ -89,12 +89,14 @@ An unexpected exception also ends in one failure summary:
    `execute: true` (owner approved 2026-10-16, staging acceptance recorded, see
    `ops/production-sql-82-83-apply.md` and `ops/production-sql-84-86-apply.md`), and SQL 29's
    (owner approved 2026-10-19, production pre-state after SQL 103 and the owner-accepted
-   substitute staging evidence recorded, see `ops/production-sql-29-30-apply.md`), until their
+   substitute staging evidence recorded, see `ops/production-sql-29-30-apply.md`), and SQL 30's
+   (owner approved 2026-10-19, production pre-state after SQL 29 and the owner-accepted
+   substitute staging evidence recorded in its pin), until their
    record-and-retire changes. Every other pin is `execute: false` (SQL 81's since its
    2026-10-15 record-and-retire change; SQL 87's, SQL 88's and SQL 89's since their
    2026-10-16 applies, see `ops/production-sql-87-apply.md`, `ops/production-sql-88-apply.md`
    and `ops/production-sql-89-apply.md`; SQL 103's since its 2026-10-19 apply, see
-   `ops/production-sql-103-apply.md`; SQL 71's and SQL 30's still pending), so a run of it refuses until an owner-merged
+   `ops/production-sql-103-apply.md`; SQL 71's still pending), so a run of it refuses until an owner-merged
    change sets it to true. For a read-only inspect before that change, run the tool's own `--inspect`.
 2. **Source.** All of these must hold:
    - The tarball's name is `source-<--commit>.tar.gz`.
