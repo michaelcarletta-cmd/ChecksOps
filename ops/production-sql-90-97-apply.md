@@ -4,9 +4,14 @@ Guarded apply tooling for the thirteen release 2026-10-17 migrations in `aws/wor
 SQL 90 to SQL 97, SQL 98 (tenant fee collection and the deposits switch), SQL 99 / SQL 100
 (Mortgage Desk), SQL 101 (the invite's identity-first insert, a fix to SQL 90) and SQL 102 (the
 platform owner's tenant profile and member removal). This runbook
-covers staging and production and the order between them. It authorizes nothing itself. Every production pin is `execute: false`, `authorization: "pending"`,
-with no recorded pre-state and no staging acceptance, so every production apply refuses before
-connecting; staging pins are authorized only in reviewed waves ("Staging apply waves"). SQL 100
+covers staging and production and the order between them. It authorizes nothing itself. SQL 91's and SQL 92's production pins are `execute: true` (owner
+approved 2026-10-19: the read-only production inspect of 2026-10-19, SSM
+`433d5e4e-51ec-4d82-8220-87ac9f04d8d7` from main `f51863bbd`, recorded as their pre-state; SQL
+91's staging acceptance is its guarded staging apply run `39080306273` from the same pre-state,
+SQL 92's the owner-accepted substitute staging read-live run `39075498539`); each apply still
+needs the owner's run-time approval. SQL 103's pin is retired after its apply. Every other
+production pin is `execute: false`, `authorization: "pending"`, with no recorded pre-state and
+no staging acceptance, so its production apply refuses before connecting; staging pins are authorized only in reviewed waves ("Staging apply waves"). SQL 100
 is a strict no-op on production: its production tool only inspects (see "SQL 100 on
 production").
 

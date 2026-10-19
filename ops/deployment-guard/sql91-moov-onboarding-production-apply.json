@@ -1,8 +1,8 @@
 {
   "id": "sql91-moov-onboarding-production-apply",
   "migration": "sql91",
-  "authorization": "pending",
-  "execute": false,
+  "authorization": "Owner approved 2026-10-19 (the owner approved preparing this SQL 91 production pin change in the words \"open the SQL 91/92 one-shot and pin PRs and accept that evidence for SQL 92\"; the change itself is reviewed and merge-approved by the owner separately): production apply of SQL 91 on the staging acceptance below (production bdbc697f75e7a9c57c91c9ce12956800e92417a93acfbbaa0c2d1cf69542972e -> f8611dcca3397f684a247de454c8737074b3d2fb03c52e28fba665d0f297967d), before the providers/onboarding/*.mjs members; execute true takes effect only when the owner reviews and merges this change. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
+  "execute": true,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -16,7 +16,7 @@
     "public.aws_moov_onboarding_writer(uuid)",
     "public.aws_moov_webhook_apply_active()"
   ],
-  "expected_live_definition_sha256": null,
+  "expected_live_definition_sha256": "bdbc697f75e7a9c57c91c9ce12956800e92417a93acfbbaa0c2d1cf69542972e",
   "intended_replacement_sha256": "f8611dcca3397f684a247de454c8737074b3d2fb03c52e28fba665d0f297967d",
   "authorization_phrase": "APPLY_MOOV_ONBOARDING",
   "predecessors": [],
@@ -41,24 +41,32 @@
     "note": "Guarded tooling for SQL 91: sql91-moov-onboarding-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql91-moov-onboarding); production-sql-one-shot.mjs --migration sql91. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's). The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
   },
   "production_inspect": {
-    "status": "pending",
-    "date": null,
-    "ssm_command_id": null,
-    "source_commit": null,
+    "status": "recorded",
+    "date": "2026-10-19",
+    "ssm_command_id": "433d5e4e-51ec-4d82-8220-87ac9f04d8d7",
+    "source_commit": "f51863bbdc60b6d371bf2b28a1165fc00216b6fb",
+    "source_tarball_sha256": "52e3f4aa3bcbd14c54fdcc9b92810312657fbcb6ca181158d4de0b2477c12cd9",
+    "runner": "i-0c35557c4e5385406",
     "read_only": true,
     "connected_as": "checksops_admin",
-    "live_definition_sha256": null,
-    "apply_preconditions_met": null,
-    "precondition_failures": null,
-    "note": "Pending: the read-only inspect tool exists (scripts/deployment-guard/sql91-moov-onboarding-production-apply.mjs --inspect), but no production inspect has been run for SQL 91 yet. Record its date, SSM command id, source commit, live_definition_sha256, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. If precondition_failures is not [] stop: that needs its own reviewed change."
+    "live_definition_sha256": "bdbc697f75e7a9c57c91c9ce12956800e92417a93acfbbaa0c2d1cf69542972e",
+    "already_applied": false,
+    "apply_preconditions_met": false,
+    "precondition_failures": [],
+    "prerequisites_missing": [],
+    "missing_dependencies": [],
+    "predecessors_applied": true,
+    "successors_applied": [],
+    "note": "Recorded from the read-only production inspect of 2026-10-19 (SSM command 433d5e4e-51ec-4d82-8220-87ac9f04d8d7, node scripts/deployment-guard/sql91-moov-onboarding-production-apply.mjs --inspect on the SQL53 runner i-0c35557c4e5385406 from main f51863bbd (tarball sha256 52e3f4aa...), BEGIN READ ONLY ... ROLLBACK, connected as checksops_admin). live_definition_sha256 bdbc697f75e7a9c57c91c9ce12956800e92417a93acfbbaa0c2d1cf69542972e (not the intended f8611dcca3397f684a247de454c8737074b3d2fb03c52e28fba665d0f297967d: already_applied false); precondition_failures [], prerequisites_missing [], missing_dependencies [], predecessors {} (predecessors_applied true), successors_applied []. The four tables (moov_onboarding_profiles, moov_onboarding_representatives, moov_compliance_documents, moov_onboarding_outbox), the four functions and the inspected policies are absent, as are payment_provider_methods.routing_last_four and its check constraint. apply_preconditions_met was false at inspect time only because no pre-state was recorded yet (expected_live_definition_sha256 null). This reviewed change copies live_definition_sha256 into expected_live_definition_sha256 and, in the same change, sets authorization, execute true and staging_acceptance. A fresh --inspect immediately before apply (the one-shot's inspect step) must still report this live_definition_sha256 and precondition_failures []; if not, stop."
   },
   "intended_post_state": {
     "fingerprint": "f8611dcca3397f684a247de454c8737074b3d2fb03c52e28fba665d0f297967d",
     "note": "Creates moov_onboarding_profiles, moov_onboarding_representatives, moov_compliance_documents and moov_onboarding_outbox (tenant-scoped, RLS) and payment_provider_methods.routing_last_four. The fingerprint is releaseIntendedHash('sql91', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): f8611dcca3397f684a247de454c8737074b3d2fb03c52e28fba665d0f297967d."
   },
   "staging_acceptance": {
-    "ok": false,
-    "reference": null,
-    "basis": "Pending: record the guarded staging SQL executor read-live and apply runs of SQL 91 here in the reviewed change that sets execute true. The staging executor handler and the production tool (scripts/deployment-guard/sql91-moov-onboarding-production-apply.mjs) exist; the staging read-live, apply and acceptance are still pending. Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+    "ok": true,
+    "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39080306273",
+    "basis": "Guarded staging SQL executor apply of sql91-moov-onboarding on 2026-10-17 (run 39080306273, main c8a79d554, wave 1 owner approved 2026-10-17): receipt before bdbc697f75e7a9c57c91c9ce12956800e92417a93acfbbaa0c2d1cf69542972e, after f8611dcca3397f684a247de454c8737074b3d2fb03c52e28fba665d0f297967d = intended_replacement_sha256; precondition_failures [], prerequisites_missing []. Its staging read-live (run 39075362413) recorded the same pre-state bdbc697f75e7a9c57c91c9ce12956800e92417a93acfbbaa0c2d1cf69542972e that production reports now (ops/deployment-guard/staging-sql-live.json, aws/tests/helpers/staging-sql-wave1.mjs).",
+    "production_differs": "Same pre-state: staging before the apply and production (production_inspect, 2026-10-19) both report bdbc697f75e7a9c57c91c9ce12956800e92417a93acfbbaa0c2d1cf69542972e; the same file bytes (source_sha256) are pinned in both."
   }
 }
