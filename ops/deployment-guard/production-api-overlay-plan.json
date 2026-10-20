@@ -699,7 +699,7 @@
     },
     "providers/onboarding/store.mjs": {
       "operation": "add",
-      "accepted_sha256": "f73f0b8a01621bbddd64c6a50c126779e587ac4b712afe452ae82c3625df968e",
+      "accepted_sha256": "ec1b5df82b3b32e17d8da0e8396aadb393f9f105720a4fa2aef51bf786bd6d25",
       "expected_live_sha256": null,
       "sql_before": "aws/workflows/sql/91_moov_onboarding.sql",
       "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"

@@ -924,6 +924,50 @@ test('Moov 422 after save names the failed step and rejected field paths, never 
   });
 });
 
+test('business website is checked before Moov sees it: bare domains get https://, bad values fail on business.website', async () => {
+  const { normalizeWebsite, WEBSITE_MAX } = await import('../functions/api/providers/onboarding/store.mjs');
+  assert.equal(WEBSITE_MAX, 100);
+  assert.equal(normalizeWebsite('freedom.test'), 'https://freedom.test');
+  assert.equal(normalizeWebsite('  www.Freedom-Adjusting.com/claims?x=1  '), 'https://www.Freedom-Adjusting.com/claims?x=1');
+  assert.equal(normalizeWebsite('http://freedom.test'), 'http://freedom.test');
+  assert.equal(normalizeWebsite(''), null);
+  assert.equal(normalizeWebsite(undefined), null);
+  for (const bad of [
+    'Freedom Adjusting',           // spaces, no host
+    'freedom',                     // no dot
+    'localhost',
+    'freedom.',                    // empty label
+    '.freedom.test',
+    'freedom.t3st',                // TLD with a digit
+    'ftp://freedom.test',          // not http(s)
+    'https://user:pw@freedom.test',
+    'https://freedom.test:8443',
+    'https://freedom test.com',
+    'not a url at all',
+    `https://${'a'.repeat(95)}.com`, // over 100 characters
+  ]) {
+    assert.throws(() => normalizeWebsite(bad), (e) => e.code === 'validation_failed' && e.extra?.field === 'business.website', bad);
+  }
+
+  await withEnv(BASE_ENV, async () => {
+    resetMoovTokenCache();
+    const db = makeDb();
+    const fetch = moovFetch();
+    const r = await run('moov-onboarding-save', saveBody({ business: { ...BUSINESS, website: 'Freedom Adjusting' } }), USERS.owner, { db, fetch });
+    assert.equal(r.statusCode, 400);
+    assert.equal(r.error, 'validation_failed');
+    assert.match(JSON.stringify(r), /business\.website/);
+    assert.equal(fetch.calls.length, 0, 'nothing reaches Moov');
+    assert.equal(db.state.profiles.length, 0, 'nothing is saved');
+
+    const ok = await run('moov-onboarding-save', saveBody(), USERS.owner, { db, fetch });
+    assert.equal(ok.moov_synced, true);
+    const sent = fetch.calls.find((c) => String(c.body).includes('legalBusinessName'));
+    assert.ok(sent, 'business profile reaches Moov');
+    assert.equal(JSON.parse(sent.body).profile.business.website, 'https://freedom.test');
+  });
+});
+
 test('moovRejectedFields keeps only identifier-shaped keys from 400/422 bodies', () => {
   assert.deepEqual(moovRejectedFields({ status: 503, body: { error: { website: 'x' } } }), []);
   assert.deepEqual(moovRejectedFields({ status: 422, body: 'not json' }), []);

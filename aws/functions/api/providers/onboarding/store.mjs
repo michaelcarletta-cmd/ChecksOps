@@ -28,6 +28,27 @@ const bool = (v) => v === true || v === 'true';
 
 const invalid = (field, message) => new OnboardingError('validation_failed', 400, { field, message });
 
+// Moov keeps a business website only as an http(s) URL with a real host name
+// (a dot-separated name, no spaces or credentials) of at most 100 characters.
+// A bare domain gets https://; anything else fails here, not at Moov.
+export const WEBSITE_MAX = 100;
+export function normalizeWebsite(value) {
+  const raw = str(value, 200);
+  if (!raw) return null;
+  const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(raw) ? raw : `https://${raw}`;
+  if (/\s/.test(withScheme) || withScheme.length > WEBSITE_MAX) throw invalid('business.website', WEBSITE_MESSAGE);
+  let url;
+  try { url = new URL(withScheme); } catch { throw invalid('business.website', WEBSITE_MESSAGE); }
+  const host = url.hostname;
+  if (!/^https?:$/.test(url.protocol) || url.username || url.password || url.port
+      || !/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i.test(host)
+      || !/^[a-z]{2,}$/i.test(host.slice(host.lastIndexOf('.') + 1))) {
+    throw invalid('business.website', WEBSITE_MESSAGE);
+  }
+  return withScheme;
+}
+const WEBSITE_MESSAGE = 'Provide a website address such as https://yourcompany.com (no spaces, 100 characters or fewer), or leave it blank and give a short description.';
+
 export const maskLast4 = (last4) => (last4 ? `*****${last4}` : null);
 
 /** Accepts snake_case (contract) or Moov camelCase. Returns the contract shape or null. */
@@ -76,8 +97,7 @@ export function validateBusiness(input = {}, stored = null) {
   if (type !== 'soleProprietorship' && !ein && !stored?.ein_ciphertext) {
     throw invalid('business.ein', 'Provide a valid 9-digit EIN.');
   }
-  const websiteRaw = str(input.website, 200);
-  const website = websiteRaw ? (/^https?:\/\//i.test(websiteRaw) ? websiteRaw : `https://${websiteRaw}`) : null;
+  const website = normalizeWebsite(input.website);
   const description = str(input.description, 300);
   if (!website && !description) {
     throw invalid('business.website', 'Provide a website or a short business description.');
