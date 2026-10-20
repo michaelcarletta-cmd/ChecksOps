@@ -32,9 +32,25 @@ failed on); `payment_event_log` already held all four pinned lines; `authenticat
 the pinned lines on the first three tables. `already_applied` false, live `fbbdae18…`, predecessor
 SQL 91 true, `precondition_failures` []. So step 1 takes the apply path.
 
+**Staging apply (2026-10-20).** After the staging pin (#1088, main `11a2971dc`) and an executor
+refresh (run 39432857116, `s7LStUnq…` -> `OS8rWhVG…`), apply run 39433193531 went `fbbdae18…` ->
+`a67bc0a6…` (`applied`, precondition_failures []) and read-live run 39433431805 confirmed
+`already_applied` true.
+
+**Production inspect (2026-10-20).** The read-only inspect (SSM
+`5b58f183-617b-46b8-8624-47151fe78ef3`, main `11a2971dc`, tarball `ad3f9a5e…`) recorded live
+`06579587…`: in production `checksops` already holds SELECT, INSERT and UPDATE on the three
+onboarding tables (plus DELETE, outside the fingerprint) and `authenticated` holds none of them;
+`payment_event_log` already holds all four pinned lines. So SQL 105 adds only the `authenticated`
+grants on the first three tables there. `already_applied` false, predecessor SQL 91 true,
+`precondition_failures` [].
+
 **Status:** the staging pin is execute-authorized (wave 8, owner approved 2026-10-20, "approve SQL
-105 staging", pre-state `fbbdae18…`); the staging apply still needs its own run. The production
-pin is pending (`execute: false`, no recorded pre-state). Production has not been inspected yet.
+105 staging") and applied. The production pin is execute-authorized (owner approved 2026-10-20,
+"accept the SQL 105 staging apply as substitute evidence and do the SQL 105 pin"): the pre-states
+differ (staging `fbbdae18…` lacked `checksops INSERT`; production `06579587…` lacks only the
+`authenticated` lines), both reach `a67bc0a6…` from the same bytes, and GRANT of a held privilege
+is a no-op. The apply still needs the owner's run-time approval.
 
 ## Fingerprint
 
