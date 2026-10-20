@@ -68,7 +68,8 @@ test('disposable PostgreSQL tenant_documents mortgage doc_type constraint', { ti
   const sql29Before = fs.readFileSync(SQL29, 'utf8');
 
   const stamp = `${new Date().toISOString().replace(/[-:TZ.]/g, '').slice(0, 14)}_${process.pid}`;
-  const pgData = fs.mkdtempSync(path.join(os.tmpdir(), `pg-sql30-${stamp}-`));
+  const pgDataPrefix = path.join(os.tmpdir(), `pg-sql30-${stamp}-`);
+  const pgData = fs.mkdtempSync(pgDataPrefix);
   const port = 55100 + (process.pid % 1000);
   const dbName = `sql30_${stamp}`;
   const logPath = path.join(pgData, 'pg.log');
@@ -140,7 +141,11 @@ SELECT json_build_object(
   assert.equal(target.is_rds, false);
   assert.equal(target.supabase_admin, false);
   assert.match(target.version, /PostgreSQL 16/);
-  assert.doesNotMatch(pgData, /supabase|rds|staging|prod/i);
+  // mkdtempSync appends six random letters and digits, which can spell "rds" or "prod": check only
+  // the part this test chose, and that the directory is that prefix plus the six-character suffix.
+  assert.equal(path.dirname(pgData), path.dirname(pgDataPrefix));
+  assert.ok(pgData.startsWith(pgDataPrefix) && pgData.length === pgDataPrefix.length + 6, pgData);
+  assert.doesNotMatch(pgDataPrefix, /supabase|rds|staging|prod/i);
 
   psql(['-d', 'postgres', '-c', `CREATE DATABASE ${dbName}`]);
 
