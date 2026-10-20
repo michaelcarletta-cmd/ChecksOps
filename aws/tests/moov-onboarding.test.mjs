@@ -419,7 +419,7 @@ const moovFetch = (routes = []) => {
     const method = init.method || 'GET';
     const u = String(url);
     calls.push({ url: u, method, headers: init.headers || {}, body: init.body });
-    const hit = routes.find((r) => u.includes(r.match) && (!r.method || r.method === method));
+    const hit = routes.find((r) => (r.match instanceof RegExp ? r.match.test(u) : u.includes(r.match)) && (!r.method || r.method === method));
     let status = hit?.status || 200;
     let payload = hit?.body;
     if (!hit) {
@@ -965,6 +965,64 @@ test('business website is checked before Moov sees it: bare domains get https://
     const sent = fetch.calls.find((c) => String(c.body).includes('legalBusinessName'));
     assert.ok(sent, 'business profile reaches Moov');
     assert.equal(JSON.parse(sent.body).profile.business.website, 'https://freedom.test');
+  });
+});
+
+test('account creation uses one idempotency key per distinct payload, so a corrected payload is not a Moov 409', async () => {
+  const { accountIdempotencyKey, accountBodyDigest } = await import('../functions/api/providers/onboarding/moov-sync.mjs');
+  assert.equal(accountIdempotencyKey('sandbox', TENANT), `checksops-account-sandbox-${TENANT}`);
+  assert.equal(accountBodyDigest({ a: 1 }), accountBodyDigest({ a: 1 }));
+  assert.notEqual(accountBodyDigest({ a: 1 }), accountBodyDigest({ a: 2 }));
+  assert.match(accountBodyDigest({ a: 1 }), /^[0-9a-f]{16}$/);
+
+  await withEnv(BASE_ENV, async () => {
+    const keyOf = (fetch) => fetch.calls.find((c) => c.method === 'POST' && /\/accounts$/.test(c.url))?.headers['X-Idempotency-Key'];
+    resetMoovTokenCache();
+    const first = moovFetch();
+    const r1 = await run('moov-onboarding-save', saveBody({ business: { ...BUSINESS, website: 'Freedom Adjusting' } }), USERS.owner, { db: makeDb({ account: false }), fetch: first });
+    assert.equal(r1.statusCode, 400, 'the bad website never reaches Moov');
+    assert.equal(keyOf(first), undefined);
+
+    const a = moovFetch();
+    await run('moov-onboarding-save', saveBody(), USERS.owner, { db: makeDb({ account: false }), fetch: a });
+    const b = moovFetch();
+    await run('moov-onboarding-save', saveBody(), USERS.owner, { db: makeDb({ account: false }), fetch: b });
+    const c = moovFetch();
+    await run('moov-onboarding-save', saveBody({ business: { ...BUSINESS, website: 'other.test' } }), USERS.owner, { db: makeDb({ account: false }), fetch: c });
+    assert.ok(keyOf(a));
+    assert.equal(keyOf(a), keyOf(b), 'same payload, same key');
+    assert.notEqual(keyOf(a), keyOf(c), 'different payload, different key');
+  });
+});
+
+test('a Moov 409 on account creation adopts the account Moov already holds for the tenant, else stays moov_conflict', async () => {
+  await withEnv(BASE_ENV, async () => {
+    resetMoovTokenCache();
+    const db = makeDb({ account: false });
+    const adopting = moovFetch([
+      { match: /\/accounts$/, method: 'POST', status: 409, body: { error: 'conflict' } },
+      { match: /\/accounts\?foreignID=/, method: 'GET', body: [{ accountID: MOOV_ACCOUNT, foreignID: TENANT }] },
+    ]);
+    const { result, lines } = await captureConsole(() => run('moov-onboarding-save', saveBody(), USERS.owner, { db, fetch: adopting }));
+    assert.equal(result.saved, true);
+    assert.equal(result.moov_synced, true, JSON.stringify(result));
+    assert.equal(result.account.connected, true);
+    assert.equal(lines.join('\n').includes('moov_onboarding_sync_failed'), false);
+    const lookup = adopting.calls.find((c) => c.method === 'GET' && /\/accounts\?foreignID=/.test(c.url));
+    assert.ok(lookup, 'looked the account up by foreignID');
+    assert.equal(decodeURIComponent(lookup.url.split('foreignID=')[1]), TENANT);
+    assert.ok(adopting.calls.some((c) => c.method === 'PATCH' && c.url.endsWith(`/accounts/${MOOV_ACCOUNT}`)), 'profile synced to the adopted account');
+
+    resetMoovTokenCache();
+    const orphan = moovFetch([
+      { match: /\/accounts$/, method: 'POST', status: 409, body: { error: 'conflict' } },
+      { match: /\/accounts\?foreignID=/, method: 'GET', body: [] },
+    ]);
+    const { result: r2 } = await captureConsole(() => run('moov-onboarding-save', saveBody(), USERS.owner, { db: makeDb({ account: false }), fetch: orphan }));
+    assert.equal(r2.saved, true);
+    assert.equal(r2.moov_synced, false);
+    assert.equal(r2.error_code, 'moov_conflict');
+    assert.equal(orphan.calls.filter((c) => c.method === 'POST' && /\/accounts$/.test(c.url)).length, 1, 'no blind retry');
   });
 });
 
