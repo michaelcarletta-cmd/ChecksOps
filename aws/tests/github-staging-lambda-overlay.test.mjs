@@ -539,9 +539,9 @@ test('staging SQL record: every sql_before of the plan has an entry; the pending
   for (const [file, record] of Object.entries(PLAN.sql_prerequisites)) {
     if (record.verified_live === true && Object.hasOwn(STAGING_SQL.sql, file)) assert.equal(STAGING_SQL.sql[file].verified_live, true, file);
   }
-  // Production records SQL 90, 91, 93, 94, 96, 98, 102 and 104 live from their guarded production
-  // applies (2026-10-19 and, for SQL 102, 2026-10-20, each citing its production pin's applied record).
-  for (const n of ['90_users_only_tenant_roles', '91_moov_onboarding', '93_tenant_company_info', '94_document_library_restore', '96_platform_owner_tenant_pricing', '98_tenant_fee_collection', '102_platform_owner_tenant_profile', '104_payment_idempotency_keys_grant']) {
+  // Production records SQL 90, 91, 93, 94, 96, 98, 102, 104 and 105 live from their guarded production
+  // applies (2026-10-19 and, for SQL 102 and SQL 105, 2026-10-20, each citing its production pin's applied record).
+  for (const n of ['90_users_only_tenant_roles', '91_moov_onboarding', '93_tenant_company_info', '94_document_library_restore', '96_platform_owner_tenant_pricing', '98_tenant_fee_collection', '102_platform_owner_tenant_profile', '104_payment_idempotency_keys_grant', '105_onboarding_payment_table_grants']) {
     const record = PLAN.sql_prerequisites[`aws/workflows/sql/${n}.sql`];
     assert.equal(record?.verified_live, true, n);
     const pin = record.evidence.match(/ops\/deployment-guard\/(sql\d+-[a-z0-9-]+-production-apply\.json)/)[1];

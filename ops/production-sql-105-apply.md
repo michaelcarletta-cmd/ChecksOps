@@ -105,9 +105,11 @@ tools roll back otherwise.
 ## Order
 
 Any time after SQL 91, and before Moov onboarding is used in production. No later migration
-revokes these grants, so SQL 105 is not re-run. `production-api-overlay-plan.json` has no entry
-for SQL 105 yet; the onboarding Lambda members name SQL 91 (and SQL 104) in `sql_before`, and
-need SQL 105 too before onboarding saves work.
+revokes these grants, so SQL 105 is not re-run. `production-api-overlay-plan.json` records SQL
+105 verified live in production (2026-10-20 plan change) and `staging-sql-live.json` in staging;
+the onboarding members that write the four tables (`store.mjs`, `handlers.mjs`,
+`webhook-status.mjs`) name SQL 105 in `sql_before`, `moov-sync.mjs` stays on SQL 104, and the
+other onboarding members stay on SQL 91.
 
 ## Steps
 

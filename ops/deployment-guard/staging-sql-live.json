@@ -51,6 +51,10 @@
     "aws/workflows/sql/104_payment_idempotency_keys_grant.sql": {
       "verified_live": true,
       "evidence": "Guarded staging SQL executor apply of sql104-payment-idempotency-keys-grant on 2026-10-19 (run 39298919537, main fecb0b3af, executor yQHFBtq2…): receipt before 22b2d47d…, after e5b35104… = the pin's intended_replacement_sha256; precondition_failures [], prerequisites_missing []; read-live run 39299161133 already_applied true."
+    },
+    "aws/workflows/sql/105_onboarding_payment_table_grants.sql": {
+      "verified_live": true,
+      "evidence": "Guarded staging SQL executor apply of sql105-onboarding-payment-table-grants on 2026-10-20 (run 39433193531, main 11a2971dc, executor OS8rWhVG…): receipt before fbbdae18…, after a67bc0a6… = the pin's intended_replacement_sha256; precondition_failures [], prerequisites_missing []; read-live run 39433431805 already_applied true."
     }
   }
 }

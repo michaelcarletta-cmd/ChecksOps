@@ -99,6 +99,12 @@
       "evidence": "2026-10-19 guarded production SQL one-shot on i-0c35557c4e5385406 (SSM a97d4326-31b1-4aff-a6cb-206ff0d8e6f9, workstream prod-sql104-payment-idempotency-keys-grant-20261019, main ef26f7357, one_use_id sql104-prod-7fb5b396-0420-433c-9088-3b1d7db42b19): 57443d0a… -> e5b35104…; post-apply read-only inspect already_applied true (authenticated and checksops SELECT, INSERT, UPDATE on payment_idempotency_keys); owner-accepted substitute staging evidence run 39298919537; recorded in ops/deployment-guard/sql104-payment-idempotency-keys-grant-production-apply.json (applied, #1069)",
       "pin": "ops/deployment-guard/sql104-payment-idempotency-keys-grant-production-apply.json",
       "note": "The payment_idempotency_keys table grant SQL 91 omitted (successor of SQL 91). Holds providers/onboarding/moov-sync.mjs (sql_before), the onboarding member that writes payment_idempotency_keys; the onboarding members after it in order wait for it too."
+    },
+    "aws/workflows/sql/105_onboarding_payment_table_grants.sql": {
+      "verified_live": true,
+      "evidence": "2026-10-20 guarded production SQL one-shot on i-0c35557c4e5385406 (SSM 5896b901-2b8d-44da-91cf-65b6038c2907, workstream prod-sql105-onboarding-payment-table-grants-20261020, main 139600a45, one_use_id sql105-prod-841a42c3-2bcb-4709-bc31-64fe71b2a9cb): 06579587… -> a67bc0a6…; post-apply read-only inspect already_applied true (authenticated and checksops SELECT, INSERT, UPDATE on payment_provider_accounts, payment_provider_methods and payment_method_verifications; SELECT, INSERT on payment_event_log); owner-accepted substitute staging evidence run 39433193531; recorded in ops/deployment-guard/sql105-onboarding-payment-table-grants-production-apply.json (applied, #1091)",
+      "pin": "ops/deployment-guard/sql105-onboarding-payment-table-grants-production-apply.json",
+      "note": "The table grants SQL 91 omitted on payment_provider_accounts, payment_provider_methods, payment_method_verifications and payment_event_log (successor of SQL 91; the same gap SQL 104 closed for payment_idempotency_keys). Holds providers/onboarding/store.mjs, providers/onboarding/handlers.mjs and providers/onboarding/webhook-status.mjs (sql_before), the onboarding members that write those tables; providers/onboarding/moov-sync.mjs (which also writes payment_provider_accounts) stays held by SQL 104, and the onboarding members after each in order wait for it too."
     }
   },
   "order": [
@@ -701,7 +707,7 @@
       "operation": "add",
       "accepted_sha256": "ec1b5df82b3b32e17d8da0e8396aadb393f9f105720a4fa2aef51bf786bd6d25",
       "expected_live_sha256": null,
-      "sql_before": "aws/workflows/sql/91_moov_onboarding.sql",
+      "sql_before": "aws/workflows/sql/105_onboarding_payment_table_grants.sql",
       "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
     },
     "providers/onboarding/context.mjs": {
@@ -729,14 +735,14 @@
       "operation": "add",
       "accepted_sha256": "45ac151c468ade3ed161ddd279545ffd58dd4b7dbe52f6769137f8fc51b4237f",
       "expected_live_sha256": null,
-      "sql_before": "aws/workflows/sql/91_moov_onboarding.sql",
+      "sql_before": "aws/workflows/sql/105_onboarding_payment_table_grants.sql",
       "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
     },
     "providers/onboarding/handlers.mjs": {
       "operation": "add",
       "accepted_sha256": "c024afec1c868ba5d7fc4dd2dd769e6835e0fba748a368b473933c0a3aabbd2d",
       "expected_live_sha256": null,
-      "sql_before": "aws/workflows/sql/91_moov_onboarding.sql",
+      "sql_before": "aws/workflows/sql/105_onboarding_payment_table_grants.sql",
       "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
     },
     "providers/catalog.mjs": {

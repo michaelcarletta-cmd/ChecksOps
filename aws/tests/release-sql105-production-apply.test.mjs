@@ -10,7 +10,8 @@
  *     (execute false again); it is in step with the staging pin, the one-shot (no runs_before),
  *     the bypass inventory and the test lists;
  *   - the order: after SQL 91 (predecessor), whose file, pins and fingerprint are unchanged;
- *     no plan entry;
+ *     recorded live in the plan (production and staging), holding the onboarding members that
+ *     write its tables;
  *   - the committed pin refuses before connecting; an approved, accepted copy evaluates for the
  *     manifest built from it, and refuses with execute false, another live hash, another
  *     staging reference or a wrong phrase; the CLI spends no receipt.
@@ -185,7 +186,7 @@ test('pin: the release pin shape, applied and retired (owner approved 2026-10-20
   }
 });
 
-test('order: after SQL 91, whose file, pins and fingerprint are unchanged; no plan entry; the runbook and one-shot doc name it', () => {
+test('order: after SQL 91, whose file, pins and fingerprint are unchanged; recorded live in the plan, holding the onboarding members that write its tables; the runbook and one-shot doc name it', () => {
   const sql91 = loadReleaseProductionPin('sql91', ROOT);
   // SQL 91 as applied (staging 2026-10-17, production 2026-10-19).
   assert.equal(sql91.source_sha256, '199bfa1a528d219a8683b61ae6264d84dd5b08caa74564691374c8c6c42b71e3');
@@ -201,8 +202,21 @@ test('order: after SQL 91, whose file, pins and fingerprint are unchanged; no pl
   assert.match(COMMITTED.order_note, /2026-10-20 12:18:20Z/);
   assert.match(COMMITTED.order_note, /SQL 104/);
   const plan = readJson('ops/deployment-guard/production-api-overlay-plan.json');
-  assert.equal((plan.sql_prerequisites || {})[SQL105_FILE], undefined);
-  assert.ok(!JSON.stringify(plan.members).includes(SQL105_FILE));
+  // Recorded live in production (2026-10-20, #1091); it holds the onboarding members that write the
+  // four tables (store.mjs, handlers.mjs, webhook-status.mjs; sql_before SQL 105, which requires
+  // SQL 91). moov-sync.mjs stays held by SQL 104.
+  const prerequisite = plan.sql_prerequisites[SQL105_FILE];
+  assert.equal(prerequisite.verified_live, true);
+  assert.equal(prerequisite.pin, 'ops/deployment-guard/sql105-onboarding-payment-table-grants-production-apply.json');
+  assert.ok(prerequisite.evidence.includes(COMMITTED.applied.apply_ssm_command_id));
+  assert.ok(prerequisite.evidence.includes(COMMITTED.applied.one_use_id));
+  assert.match(prerequisite.evidence, /#1091/);
+  assert.deepEqual(Object.entries(plan.members).filter(([, m]) => m.sql_before === SQL105_FILE).map(([name]) => name).sort(), ['providers/onboarding/handlers.mjs', 'providers/onboarding/store.mjs', 'providers/onboarding/webhook-status.mjs']);
+  assert.equal(plan.members['providers/onboarding/moov-sync.mjs'].sql_before, 'aws/workflows/sql/104_payment_idempotency_keys_grant.sql');
+  assert.equal(plan.sql_prerequisites[SQL91_FILE].verified_live, true);
+  const stagingLive = readJson('ops/deployment-guard/staging-sql-live.json');
+  assert.equal(stagingLive.sql[SQL105_FILE].verified_live, true);
+  assert.match(stagingLive.sql[SQL105_FILE].evidence, /run 39433193531/);
   const runbook = fs.readFileSync(path.join(ROOT, COMMITTED.tooling.runbook), 'utf8');
   assert.ok(runbook.includes(COMMITTED.intended_replacement_sha256));
   assert.ok(runbook.includes(COMMITTED.source_sha256));
