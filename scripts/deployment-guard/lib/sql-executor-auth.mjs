@@ -2299,8 +2299,8 @@ export const AUTHORIZED_SQL104_PAYMENT_IDEMPOTENCY_KEYS_GRANT = Object.freeze({
 // payment_provider_accounts, payment_provider_methods and payment_method_verifications, and
 // SELECT, INSERT on payment_event_log, for checksops and authenticated: the table grants SQL 91
 // omitted on the four tables its onboarding policies cover; staging 2026-10-20 12:18:20Z
-// "permission denied for table payment_provider_accounts"). After SQL 91. Pending until a
-// reviewed pin change records a staging read-live.
+// "permission denied for table payment_provider_accounts"). After SQL 91. Staging apply
+// authorized (wave 8) from staging read-live run 39429083380.
 export const AUTHORIZED_SQL105_ONBOARDING_PAYMENT_TABLE_GRANTS = Object.freeze({
   key: 'sql105',
   filename: 'aws/workflows/sql/105_onboarding_payment_table_grants.sql',
@@ -2308,9 +2308,14 @@ export const AUTHORIZED_SQL105_ONBOARDING_PAYMENT_TABLE_GRANTS = Object.freeze({
   // The commit that last authored the file bytes.
   commit: '45ae21f2198acdc76724ac2ca5d441b553b114f9',
   source_sha256: '79c7bbfc0802836f165b12044cba949efbe1698f4f93906a98e7089de851f420',
-  authorization: 'pending',
-  execute: false,
-  expected_live_definition_sha256: null,
+  // Owner's words 2026-10-20: "approve SQL 105 staging".
+  authorization: 'Owner approved 2026-10-20: staging apply (wave 8) from staging read-live run 39429083380',
+  execute: true,
+  // Staging read-live run 39429083380 (2026-10-20, main 4c13059bb, executor s7LStUnq...): checksops
+  // held SELECT and UPDATE on payment_provider_accounts and payment_provider_methods, SELECT only on
+  // payment_method_verifications; payment_event_log already held all four lines; authenticated held
+  // nothing on the first three tables. already_applied false, predecessor sql91 true.
+  expected_live_definition_sha256: 'fbbdae18762d3d8e2cbd43c070720cf5b04ef6344b5a956ee0fb1c3b4c1fc27a',
   // Code-derived: releaseIntendedHash('sql105', file bytes) (release-sql-state.mjs); re-derived by the tests.
   intended_replacement_sha256: 'a67bc0a6faa4cf60500946c4a1a980180cec9ff44980a6cf9b5f05846e7e7127',
   // The file creates, replaces and sets the ACL of no function.

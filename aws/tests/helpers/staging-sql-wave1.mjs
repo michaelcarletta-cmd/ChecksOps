@@ -31,6 +31,10 @@ export const STAGING_WAVE1 = Object.freeze({
   // payment_idempotency_keys to checksops and authenticated (the grant SQL 91 omitted). Read at
   // main 4e7c78905 after the executor carried it: only checksops SELECT was held, so not applied.
   sql104: Object.freeze({ wave: 7, approved: '2026-10-19', run: '39296513948', live: '22b2d47df43b9fc831143e018022d0e94790cbd1e0406f0ab03443cd14652577' }),
+  // Wave 8 (owner approved 2026-10-20, "approve SQL 105 staging"): SQL 105 grants the four
+  // onboarding payment tables to checksops and authenticated (the grants SQL 91 omitted). Read at
+  // main 4c13059bb after the executor carried it: checksops INSERT was missing on three tables.
+  sql105: Object.freeze({ wave: 8, approved: '2026-10-20', run: '39429083380', live: 'fbbdae18762d3d8e2cbd43c070720cf5b04ef6344b5a956ee0fb1c3b4c1fc27a' }),
   sql98: Object.freeze({ wave: 3, approved: '2026-10-18', run: '39083278136', live: '296c3d6a274e10f66005fb9eaecf93fa17b81bd8db3607037ca07698fddd3275', apply_run: '39085677318' }),
 });
 
@@ -42,7 +46,7 @@ export const pendingPin = (pin) => Object.freeze({
 });
 
 /**
- * The committed staging pin's apply state: waves 1-7 recorded and approved, wave 6 approved with
+ * The committed staging pin's apply state: waves 1-8 recorded and approved, wave 6 approved with
  * its read-live still to record (pending until then), the rest pending.
  */
 export function assertStagingPinState(assert, key, pin) {
