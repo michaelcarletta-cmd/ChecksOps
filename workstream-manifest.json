@@ -9,6 +9,31 @@
   "owned_components": [
     "src/pages/CheckCommandCenter.tsx"
   ],
-  "preflight_live_fingerprint": "",
-  "clean_build": true
+  "preflight": {
+    "index_html_sha256": "baad19ac4dc8c55a79c5ec28b2d85896a8c8429890d9c5fbd60c01efca413387",
+    "entry_bundle": "index-DiCjpRpb.js"
+  },
+  "immediately_before": {
+    "index_html_sha256": "baad19ac4dc8c55a79c5ec28b2d85896a8c8429890d9c5fbd60c01efca413387",
+    "entry_bundle": "index-DiCjpRpb.js"
+  },
+  "source_composition_manifest": {
+    "workstreams": ["checkcommandcenter-tab-persistence"],
+    "accepted_composition": true
+  },
+  "clean_build": true,
+  "dist": {
+    "index_html_sha256": "a3d9e02c65ad2767f039f8d7da965392942eb3bc4e55d5d38e78de54e6a98950",
+    "entry_bundle": "index-DblxM8o2.js",
+    "clean_build": true
+  },
+  "contract_results": {
+    "review-claim-save": true,
+    "claim-ledger": true,
+    "signature-requests": true,
+    "check-files": true,
+    "moov": true,
+    "checkalt": true,
+    "tenant-isolation": true
+  }
 }

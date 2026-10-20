@@ -1,0 +1,30 @@
+{
+  "workstream_id": "checkcommandcenter-tab-persistence",
+  "branch": "kilo/candid-lark-dcq",
+  "commit": "985e4ddbb85b0bfcc8f3277b21984cfbaaa96a59",
+  "operator": "kilo-agent",
+  "target_environment": "staging",
+  "target_component": "checksops-production-frontend",
+  "deployment_type": "spa-promote",
+  "owned_components": [
+    "src/pages/CheckCommandCenter.tsx"
+  ],
+  "preflight": {
+    "index_html_sha256": "baad19ac4dc8c55a79c5ec28b2d85896a8c8429890d9c5fbd60c01efca413387",
+    "entry_bundle": "index-DiCjpRpb.js"
+  },
+  "immediately_before": {
+    "index_html_sha256": "baad19ac4dc8c55a79c5ec28b2d85896a8c8429890d9c5fbd60c01efca413387",
+    "entry_bundle": "index-DiCjpRpb.js"
+  },
+  "source_composition_manifest": {
+    "workstreams": ["checkcommandcenter-tab-persistence"],
+    "accepted_composition": true
+  },
+  "dist": {
+    "index_html_sha256": "a3d9e02c65ad2767f039f8d7da965392942eb3bc4e55d5d38e78de54e6a98950",
+    "entry_bundle": "index-DblxM8o2.js",
+    "clean_build": true
+  },
+  "build_timestamp": "2026-10-20T12:58:26.775Z"
+}
