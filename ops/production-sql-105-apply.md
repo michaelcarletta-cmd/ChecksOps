@@ -46,11 +46,27 @@ grants on the first three tables there. `already_applied` false, predecessor SQL
 `precondition_failures` [].
 
 **Status:** the staging pin is execute-authorized (wave 8, owner approved 2026-10-20, "approve SQL
-105 staging") and applied. The production pin is execute-authorized (owner approved 2026-10-20,
-"accept the SQL 105 staging apply as substitute evidence and do the SQL 105 pin"): the pre-states
-differ (staging `fbbdae18…` lacked `checksops INSERT`; production `06579587…` lacks only the
-`authenticated` lines), both reach `a67bc0a6…` from the same bytes, and GRANT of a held privilege
-is a no-op. The apply still needs the owner's run-time approval.
+105 staging") and applied. SQL 105 was applied to production on 2026-10-20 (below) and its
+production pin is retired; it had been execute-authorized by the owner-approved pin change of
+2026-10-20 (#1090, "accept the SQL 105 staging apply as substitute evidence and do the SQL 105
+pin"): the pre-states differed (staging `fbbdae18…` lacked `checksops INSERT`; production
+`06579587…` lacked only the `authenticated` lines), both reach `a67bc0a6…` from the same bytes,
+and GRANT of a held privilege is a no-op.
+
+## Production apply of SQL 105 (2026-10-20)
+
+One owner-approved run ("apply SQL 105 in production") of `production-sql-one-shot.mjs` on
+`i-0c35557c4e5385406` from main `139600a45` (tarball `6718fbd1…`, transfer run 39435596311):
+SSM `5896b901-2b8d-44da-91cf-65b6038c2907`, run_id `7ee1ca20-c72c-4be6-891a-b618e869cd29`,
+one_use_id `sql105-prod-841a42c3-2bcb-4709-bc31-64fe71b2a9cb` (spent), migration source
+`79c7bbfc…` (== pin). Every step was ok; contracts claim-ledger 4/4, tenant-isolation 6/6,
+financial-write-protections 43/43; manifest `f4c2a675…`; receipt `06579587…` -> `a67bc0a6…`,
+unrelated catalog `4a5ed91f…`; post-apply inspect already_applied true, precondition_failures [].
+The three onboarding tables now grant `authenticated` and `checksops` SELECT, INSERT and UPDATE,
+and `payment_event_log` grants both SELECT and INSERT; `checksops` DELETE (and UPDATE on
+`payment_event_log`) is unchanged. No later read-only inspect was run. The pin is `execute: false`
+again; a re-apply needs a new reviewed pin change. The onboarding Lambda members' `sql_before`
+should name SQL 105 next to SQL 91 and SQL 104 in their own reviewed plan change.
 
 ## Fingerprint
 
