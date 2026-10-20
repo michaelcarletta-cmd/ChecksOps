@@ -284,7 +284,7 @@
     },
     "providers/onboarding/moov-sync.mjs": {
       "live_sha256": null,
-      "accepted_sha256": "95a42040bf85c775bbf8f0402c7afd2237fbab69f6f48756f24cd40c3ef08b40",
+      "accepted_sha256": "caea3962067181c62a59cb9a8c69050a820827066543be266c9c3d508018ea87",
       "operation": "add"
     },
     "providers/onboarding/webhook-status.mjs": {

@@ -10,6 +10,7 @@
  * retry from the outbox re-sends everything except SSNs; a representative that
  * still needs one is flagged ssn_resubmit_required so the tenant re-enters it.
  */
+import { createHash } from 'node:crypto';
 import { MoovError, moovFetch, scopes } from '../parity/moov-client.mjs';
 import { MERCHANT_CAPABILITIES, MOOV_CAPABILITIES_API_VERSION } from '../parity/moov-capabilities.mjs';
 import { logPaymentEvent } from '../parity/db.mjs';
@@ -29,7 +30,23 @@ import {
   setProfileSyncState,
 } from './store.mjs';
 
-export const accountIdempotencyKey = (environment, tenantId) => `checksops-account-${environment}-${tenantId}`;
+// One key per distinct account request: Moov answers 409 when a key is reused
+// with a different body, which happened after a rejected payload was corrected.
+// The same payload keeps the same key, so a retry stays idempotent.
+export const accountIdempotencyKey = (environment, tenantId, bodyDigest = '') => (
+  `checksops-account-${environment}-${tenantId}${bodyDigest ? `-${bodyDigest}` : ''}`
+);
+export const accountBodyDigest = (body) => createHash('sha256').update(JSON.stringify(body)).digest('hex').slice(0, 16);
+
+/** The Moov account already filed under this tenant's foreignID, or null. */
+async function findMoovAccountByForeignId(tenantId, fetchImpl) {
+  const found = await moovFetch(`/accounts?foreignID=${encodeURIComponent(tenantId)}`, {
+    method: 'GET', scopes: scopes.accountsRead(), fetchImpl,
+  });
+  const list = Array.isArray(found) ? found : [];
+  const match = list.find((a) => String(a?.foreignID ?? '') === String(tenantId));
+  return match?.accountID ?? match?.accountId ?? null;
+}
 
 export function businessProfileBody(profile, ein) {
   if (!profile) return null;
@@ -75,35 +92,45 @@ export async function ensureMoovAccount(client, ctx, { profile = null, ein = nul
     [ctx.tenantId],
   )).rows[0];
   if (!tenant) throw new OnboardingError('tenant_not_found', 404);
-  const key = accountIdempotencyKey(ctx.environment, ctx.tenantId);
+  const business = businessProfileBody(profile, ein) || {
+    legalBusinessName: tenant.legal_business_name ?? tenant.name ?? 'ChecksOps Organization',
+    ...(tenant.email_reply_to || tenant.email_from_address ? { email: tenant.email_reply_to ?? tenant.email_from_address } : {}),
+    ...(tenant.business_phone ? { phone: { number: String(tenant.business_phone).replace(/\D/g, '').slice(-10), countryCode: '1' } } : {}),
+  };
+  const body = {
+    accountType: 'business',
+    profile: { business },
+    capabilities: [...MERCHANT_CAPABILITIES],
+    // Members only (defense in depth; the handler already drops a non-member's token).
+    ...(tosToken && ctx.member === true ? { termsOfService: { token: tosToken } } : {}),
+    foreignID: ctx.tenantId,
+    metadata: { checksops_tenant_id: ctx.tenantId },
+  };
+  const key = accountIdempotencyKey(ctx.environment, ctx.tenantId, accountBodyDigest(body));
   await client.query(
     `INSERT INTO public.payment_idempotency_keys (tenant_id, provider, scope, idempotency_key, status)
      VALUES ($1::uuid, 'moov', 'account_create', $2, 'in_progress')
      ON CONFLICT DO NOTHING`,
     [ctx.tenantId, key],
   );
-  const business = businessProfileBody(profile, ein) || {
-    legalBusinessName: tenant.legal_business_name ?? tenant.name ?? 'ChecksOps Organization',
-    ...(tenant.email_reply_to || tenant.email_from_address ? { email: tenant.email_reply_to ?? tenant.email_from_address } : {}),
-    ...(tenant.business_phone ? { phone: { number: String(tenant.business_phone).replace(/\D/g, '').slice(-10), countryCode: '1' } } : {}),
-  };
-  const created = await moovFetch('/accounts', {
-    method: 'POST',
-    scopes: scopes.accountsWrite(),
-    idempotencyKey: key,
-    apiVersion: MOOV_CAPABILITIES_API_VERSION,
-    fetchImpl,
-    body: {
-      accountType: 'business',
-      profile: { business },
-      capabilities: [...MERCHANT_CAPABILITIES],
-      // Members only (defense in depth; the handler already drops a non-member's token).
-      ...(tosToken && ctx.member === true ? { termsOfService: { token: tosToken } } : {}),
-      foreignID: ctx.tenantId,
-      metadata: { checksops_tenant_id: ctx.tenantId },
-    },
-  });
-  const accountId = created?.accountID ?? created?.accountId ?? null;
+  let accountId = null;
+  try {
+    const created = await moovFetch('/accounts', {
+      method: 'POST',
+      scopes: scopes.accountsWrite(),
+      idempotencyKey: key,
+      apiVersion: MOOV_CAPABILITIES_API_VERSION,
+      fetchImpl,
+      body,
+    });
+    accountId = created?.accountID ?? created?.accountId ?? null;
+  } catch (error) {
+    // 409: Moov already holds an account for this tenant (an earlier create whose
+    // record never landed here). Adopt it; anything else is a real failure.
+    if (!(error instanceof MoovError) || error.status !== 409) throw error;
+    accountId = await findMoovAccountByForeignId(ctx.tenantId, fetchImpl);
+    if (!accountId) throw error;
+  }
   if (!accountId) throw new OnboardingError('moov_account_id_missing', 502);
   const saved = (await client.query(
     `INSERT INTO public.payment_provider_accounts
