@@ -4,7 +4,7 @@
  * release-sql90-97-executor.test.mjs runs what every release key shares (SQL 105 included); this
  * file covers what is new:
  *
- *   - the pin: pending (execute false, no recorded pre-state), code-derived, selectable, packed,
+ *   - the pin: staging-authorized from its read-live (wave 8), code-derived, selectable, packed,
  *     in step with the production pin; the pinned commit authored the bytes; after SQL 91;
  *   - the spec's four table_privileges entries (SQL 105 creates or replaces no function): the
  *     fingerprint is the SELECT / INSERT / UPDATE lines of checksops and authenticated on
@@ -127,7 +127,7 @@ function handlerFor(connect, { pins = {} } = {}) {
   return createHandler({ connect, now: () => Date.parse(NOW), releaseSqlFiles: FILES, releaseSqlPins: { ...PINS, ...pins } });
 }
 
-test('pin: SQL 105 pending, code-derived, selectable, packed, in step with the production pin; after SQL 91', () => {
+test('pin: SQL 105 staging-authorized from its read-live, code-derived, selectable, packed, in step with the production pin; after SQL 91', () => {
   const pin = PINS[KEY];
   const spec = RELEASE_SQL_SPECS[KEY];
   const packed = Object.fromEntries(EXECUTOR_PACK_MEMBERS);
@@ -137,11 +137,13 @@ test('pin: SQL 105 pending, code-derived, selectable, packed, in step with the p
   assert.equal(pin.migration_id, '105_onboarding_payment_table_grants');
   assert.equal(spec.choice, 'sql105-onboarding-payment-table-grants');
   assert.equal(sha(TEXT), pin.source_sha256);
-  // Pending: no staging read-live recorded yet (and no apply authorized).
+  // Staging apply authorized (owner approved 2026-10-20) from staging read-live run 39429083380:
+  // checksops INSERT was missing on three of the four tables, so SQL 105 was not yet applied there.
   assertStagingPinState(assert, KEY, pin);
-  assert.equal(pin.execute, false);
-  assert.equal(pin.authorization, 'pending');
-  assert.equal(pin.expected_live_definition_sha256, null);
+  assert.equal(pin.execute, true);
+  assert.equal(pin.authorization, 'Owner approved 2026-10-20: staging apply (wave 8) from staging read-live run 39429083380');
+  assert.equal(pin.expected_live_definition_sha256, 'fbbdae18762d3d8e2cbd43c070720cf5b04ef6344b5a956ee0fb1c3b4c1fc27a');
+  assert.notEqual(pin.expected_live_definition_sha256, pin.intended_replacement_sha256);
   assert.equal(releaseIntendedHash(KEY, TEXT), pin.intended_replacement_sha256);
   assert.equal(pin.intended_replacement_sha256, 'a67bc0a6faa4cf60500946c4a1a980180cec9ff44980a6cf9b5f05846e7e7127');
   assert.equal(pin.superseded_intended_sha256, undefined);

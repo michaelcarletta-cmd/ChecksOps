@@ -22,8 +22,19 @@ fingerprint `f8611dcc…`); SQL 91's file, pins and fingerprint are unchanged.
 outside the guard, so staging's read-live is expected to report `already_applied` false (the
 `checksops` lines absent on all four tables) and a guarded staging apply is needed (step 1).
 
-**Status:** pending. Both pins are `execute: false`, `authorization: "pending"`, with no recorded
-pre-state; nothing is applied by this change. Production has not been inspected yet.
+**Staging read-live (2026-10-20).** The staging executor was refreshed to carry SQL 105 (deploy
+run 39428753154 after inspect run 39428308260, main `4c13059bb`, CodeSha256 `yQHFBtq2…` ->
+`s7LStUnq…`; it added SQL 105's file and the three updated engine files, nothing dropped, no
+collisions). Read-live run 39429083380 then found `checksops` holding `SELECT` and `UPDATE` on
+`payment_provider_accounts` and `payment_provider_methods` and `SELECT` only on
+`payment_method_verifications` (no `INSERT` on any of the three, which is the write the save
+failed on); `payment_event_log` already held all four pinned lines; `authenticated` held none of
+the pinned lines on the first three tables. `already_applied` false, live `fbbdae18…`, predecessor
+SQL 91 true, `precondition_failures` []. So step 1 takes the apply path.
+
+**Status:** the staging pin is execute-authorized (wave 8, owner approved 2026-10-20, "approve SQL
+105 staging", pre-state `fbbdae18…`); the staging apply still needs its own run. The production
+pin is pending (`execute: false`, no recorded pre-state). Production has not been inspected yet.
 
 ## Fingerprint
 
