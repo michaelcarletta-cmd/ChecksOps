@@ -1,8 +1,8 @@
 {
   "id": "sql105-onboarding-payment-table-grants-production-apply",
   "migration": "sql105",
-  "authorization": "pending",
-  "execute": false,
+  "authorization": "Owner approved 2026-10-20 (the owner approved preparing this SQL 105 production pin change and accepted the staging evidence below in the words \"accept the SQL 105 staging apply as substitute evidence and do the SQL 105 pin\"; the change itself is reviewed and merge-approved by the owner separately): production apply of SQL 105 after SQL 91 (applied to production 2026-10-19) on the staging acceptance below (production 065795875078407c8b607fc8b8018a7d76354e4bf5d776e8962b0613137520bb -> a67bc0a6faa4cf60500946c4a1a980180cec9ff44980a6cf9b5f05846e7e7127), before Moov onboarding is used in production; execute true takes effect only when the owner reviews and merges this change. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
+  "execute": true,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -11,7 +11,7 @@
   "staging_pin_commit": "45ae21f2198acdc76724ac2ca5d441b553b114f9",
   "source_sha256": "79c7bbfc0802836f165b12044cba949efbe1698f4f93906a98e7089de851f420",
   "function_identities": [],
-  "expected_live_definition_sha256": null,
+  "expected_live_definition_sha256": "065795875078407c8b607fc8b8018a7d76354e4bf5d776e8962b0613137520bb",
   "intended_replacement_sha256": "a67bc0a6faa4cf60500946c4a1a980180cec9ff44980a6cf9b5f05846e7e7127",
   "authorization_phrase": "APPLY_ONBOARDING_PAYMENT_TABLE_GRANTS",
   "predecessors": [
@@ -41,24 +41,24 @@
     "note": "Guarded tooling for SQL 105: sql105-onboarding-payment-table-grants-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql105-onboarding-payment-table-grants); production-sql-one-shot.mjs --migration sql105. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): the SELECT, INSERT and UPDATE grants of checksops and authenticated on public.payment_provider_accounts, public.payment_provider_methods and public.payment_method_verifications, and their SELECT and INSERT grants on public.payment_event_log (spec table_privileges). The post-conditions also require every other grant on each of the four tables unchanged (other_table_privileges_unchanged) and the rest of the catalog unchanged. The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
   },
   "production_inspect": {
-    "status": "pending",
-    "date": null,
-    "ssm_command_id": null,
-    "source_commit": null,
+    "status": "recorded",
+    "date": "2026-10-20",
+    "ssm_command_id": "5b58f183-617b-46b8-8624-47151fe78ef3",
+    "source_commit": "11a2971dcb0ee92eea7c29c27cb65ed5f40d9b06",
     "read_only": true,
     "connected_as": "checksops_admin",
-    "live_definition_sha256": null,
-    "apply_preconditions_met": null,
-    "precondition_failures": null,
-    "note": "Pending: no read-only production inspect has been run for SQL 105 yet. Expected: SQL 91 applied (predecessor sql91 true), the four tables present and owned by checksops_admin, and none of the checksops lines held (SQL 91 granted none; staging refused checksops on 2026-10-20). Which authenticated lines are held is what the inspect records (supabase's migrations grant authenticated, but staging's refusal of checksops, a member of authenticated, says those grants may not be in place on RDS); any subset passes the pre-conditions. Record its date, SSM command id, source commit, live_definition_sha256, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. If precondition_failures is not [] stop: that needs its own reviewed change."
+    "live_definition_sha256": "065795875078407c8b607fc8b8018a7d76354e4bf5d776e8962b0613137520bb",
+    "apply_preconditions_met": false,
+    "precondition_failures": [],
+    "note": "Recorded from the read-only production inspect of 2026-10-20 (SSM command 5b58f183-617b-46b8-8624-47151fe78ef3, node scripts/deployment-guard/sql105-onboarding-payment-table-grants-production-apply.mjs --inspect on the SQL53 runner i-0c35557c4e5385406 from main 11a2971dc (tarball sha256 ad3f9a5e4310b45df5d48912b209ed5467cdc4372faf16363d888acda01ee358, transfer run 39433796458), BEGIN READ ONLY ... ROLLBACK, connected as checksops_admin). live_definition_sha256 065795875078407c8b607fc8b8018a7d76354e4bf5d776e8962b0613137520bb (not the intended a67bc0a6faa4cf60500946c4a1a980180cec9ff44980a6cf9b5f05846e7e7127: already_applied false); precondition_failures [], prerequisites_missing [], missing_dependencies [], predecessor sql91 applied, successors_applied []. Unlike the pending expectation, checksops already holds SELECT, INSERT and UPDATE on payment_provider_accounts, payment_provider_methods and payment_method_verifications in production (plus DELETE on each, outside the fingerprint, which other_table_privileges_unchanged keeps), and authenticated holds none of the three on those tables; payment_event_log already holds all four pinned lines (authenticated INSERT, SELECT; checksops INSERT, SELECT; plus checksops DELETE and UPDATE, outside the fingerprint). So SQL 105 adds only authenticated SELECT, INSERT and UPDATE on the first three tables here. apply_preconditions_met was false at inspect time only because no pre-state was recorded yet (expected_live_definition_sha256 null). This reviewed change copies live_definition_sha256 into expected_live_definition_sha256 and, in the same change, sets authorization, execute true and staging_acceptance. A fresh --inspect immediately before apply (the one-shot's inspect step) must still report this live_definition_sha256 and precondition_failures []; if not, stop."
   },
   "intended_post_state": {
     "fingerprint": "a67bc0a6faa4cf60500946c4a1a980180cec9ff44980a6cf9b5f05846e7e7127",
     "note": "public.payment_provider_accounts, public.payment_provider_methods and public.payment_method_verifications: checksops and authenticated each hold SELECT, INSERT and UPDATE; public.payment_event_log: checksops and authenticated each hold SELECT and INSERT (no DELETE, TRUNCATE, REFERENCES or TRIGGER from this file). Every other grant on each table (service_role's, authenticated's DELETE where supabase granted it, the owner's), its RLS flags and SQL 91's policies are unchanged; no other table, function, policy, column or row changes. The fingerprint is releaseIntendedHash('sql105', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): a67bc0a6faa4cf60500946c4a1a980180cec9ff44980a6cf9b5f05846e7e7127."
   },
   "staging_acceptance": {
-    "ok": false,
-    "reference": null,
-    "basis": "Pending: record the guarded staging SQL executor read-live run of SQL 105 (choice sql105-onboarding-payment-table-grants) and its staging apply run here in the reviewed change that sets execute true. Staging has not been granted by hand: the read-live is expected to report already_applied false (the checksops lines absent on all four tables), the staging pin then records that pre-state and the owner approves the staging apply, and the apply run (receipt before == the recorded pre-state, after == intended) is the staging evidence; the grant path itself is also covered on PostgreSQL 16 by aws/tests/sql105-onboarding-payment-table-grants-pg.test.mjs (from the tables' original supabase grants, SQL 105 through its production tool). If the read-live shows a different state, stop and record it in its own reviewed change. Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+    "ok": true,
+    "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39433193531",
+    "basis": "Owner-accepted substitute evidence (the owner's words: \"accept the SQL 105 staging apply as substitute evidence and do the SQL 105 pin\"). Guarded staging SQL executor apply of sql105-onboarding-payment-table-grants on 2026-10-20 (run 39433193531, main 11a2971dc, wave 8, executor OS8rWhVG...): receipt before fbbdae18762d3d8e2cbd43c070720cf5b04ef6344b5a956ee0fb1c3b4c1fc27a, after a67bc0a6faa4cf60500946c4a1a980180cec9ff44980a6cf9b5f05846e7e7127 = intended_replacement_sha256; precondition_failures [], prerequisites_missing []. Its staging read-live (run 39429083380) recorded that pre-state, and read-live run 39433431805 confirmed already_applied true afterwards. The pre-states differ: staging held checksops SELECT and UPDATE on payment_provider_accounts and payment_provider_methods and checksops SELECT on payment_method_verifications, with no checksops INSERT on any of the three (fbbdae18762d3d8e2cbd43c070720cf5b04ef6344b5a956ee0fb1c3b4c1fc27a), while production holds checksops SELECT, INSERT and UPDATE on all three (065795875078407c8b607fc8b8018a7d76354e4bf5d776e8962b0613137520bb); neither held the authenticated lines on those tables, and both held all four lines on payment_event_log. Both reach the intended a67bc0a6faa4cf60500946c4a1a980180cec9ff44980a6cf9b5f05846e7e7127 from the same pinned file bytes, and GRANT of a held privilege is a no-op. Also accepted: aws/tests/sql105-onboarding-payment-table-grants-pg.test.mjs (pre-granted and partly granted cases)."
   }
 }
