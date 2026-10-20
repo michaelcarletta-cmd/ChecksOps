@@ -31,6 +31,27 @@ const DIRECT_DEPLOY = [
   [/\baws\s+cloudformation\s+(deploy|create-stack|update-stack|delete-stack|execute-change-set)\b/, 'aws cloudformation write'],
 ];
 
+// The text the deploy patterns run over: the command with quoted strings removed,
+// so `grep "sam deploy" docs/` or a commit message mentioning a deploy is allowed,
+// plus every quoted string the shell would run: the argument of bash/sh -c or eval,
+// and $(...) or backticks inside double quotes.
+const QUOTED_RE = /\\.|'[^']*'|"(?:\\.|[^"\\])*"/g;
+const RUNS_NEXT_QUOTE_RE = /(\b(?:ba|z|da|k)?sh\b[^;&|\n]*\s-[a-zA-Z]*c[a-zA-Z]*|\beval)\s*$/;
+function deployTexts(command, depth = 0) {
+  // A backslash-escaped character outside quotes is kept: it does not open a quote.
+  const texts = [command.replace(QUOTED_RE, (q) => (q[0] === '\\' ? q : q[0] + q[0]))];
+  if (depth > 3) return texts;
+  for (const m of command.matchAll(QUOTED_RE)) {
+    if (m[0][0] === '\\') continue;
+    const inner = m[0].slice(1, -1);
+    if (RUNS_NEXT_QUOTE_RE.test(command.slice(0, m.index))) texts.push(...deployTexts(inner, depth + 1));
+    if (m[0][0] === '"') {
+      for (const sub of inner.matchAll(/\$\(([^)]*)\)|`([^`]*)`/g)) texts.push(...deployTexts(sub[1] ?? sub[2], depth + 1));
+    }
+  }
+  return texts;
+}
+
 // psql to anything but a local socket directory or localhost (the disposable test
 // databases) would be a direct write path to staging or production.
 function remotePsql(command) {
@@ -112,8 +133,9 @@ function checkFile(tool, input) {
 }
 
 function checkBash(command) {
+  const texts = deployTexts(command);
   for (const [re, what] of DIRECT_DEPLOY) {
-    if (re.test(command)) block(`direct deploy refused (${what}). Use scripts/deployment-guard and the reviewed workflows (ops/), never deploy directly.`);
+    if (texts.some((text) => re.test(text))) block(`direct deploy refused (${what}). Use scripts/deployment-guard and the reviewed workflows (ops/), never deploy directly.`);
   }
   if (remotePsql(command)) block('direct deploy refused (psql against a remote database). Database changes go through the guarded SQL path (ops/production-sql-one-shot.md), never by hand.');
   // Shell writes to an existing migration: a redirect or tee into it, an in-place

@@ -89,6 +89,46 @@ test('direct deploys are refused; the guarded tooling and read-only commands are
   }
 });
 
+test('a deploy is refused wherever the shell would run it; a quoted mention is allowed', () => {
+  for (const cmd of [
+    '  sam deploy',
+    'echo ok\nsam deploy',
+    'cd aws && sam deploy',
+    'echo ready || sam build',
+    'true; sam sync',
+    'cat x | sam package',
+    '(sam deploy)',
+    'echo $(sam deploy)',
+    'echo "$(sam deploy)"',
+    'echo "`sam deploy`"',
+    '{ sam deploy; }',
+    'FOO=1 sam deploy',
+    'env AWS_PROFILE=x sam deploy',
+    'AWS_PROFILE=checksops aws cloudformation deploy --template-file t.yaml',
+    'sudo sam deploy',
+    'time sam build',
+    "bash -c 'sam deploy'",
+    'sh -c "aws lambda update-function-code --function-name x --zip-file fileb://x.zip"',
+    "bash -lc 'cd aws && sam deploy'",
+    "eval 'sam deploy'",
+    'bash <<EOF\nsam deploy\nEOF',
+    "echo \\'; sam deploy; echo \\'",
+  ]) {
+    assert.equal(bash(cmd).code, 2, JSON.stringify(cmd));
+  }
+  for (const cmd of [
+    'grep -r "sam deploy" docs/',
+    "rg 'aws lambda update-function-code' aws/",
+    'echo "never run sam deploy here"',
+    'cat README.md | grep "aws cloudformation deploy"',
+    "awk '/sam build/' notes.txt",
+    'git commit -m "Docs: never sam deploy or aws lambda update-function-code"',
+    'git log --grep="sam deploy"',
+  ]) {
+    assert.equal(bash(cmd).code, 0, JSON.stringify(cmd));
+  }
+});
+
 test('shell writes to an existing migration are refused', () => {
   for (const cmd of [`sed -i 's/a/b/' ${SQL91}`, `echo x >> ${SQL91}`, `printf x > ./${SQL91}`, `echo x | tee ${SQL91}`, `rm ${SQL91}`, `mv ${SQL91} /tmp/x`, `cp /tmp/x ${SQL91}`, `git checkout HEAD~1 -- ${SQL91}`]) {
     assert.equal(bash(cmd).code, 2, cmd);
