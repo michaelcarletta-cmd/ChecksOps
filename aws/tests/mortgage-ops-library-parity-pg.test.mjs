@@ -60,7 +60,8 @@ test('disposable PostgreSQL mortgage library RLS matrix', { timeout: 180000 }, a
   assert.equal(fs.existsSync(AUTH_UID_SQL), true);
 
   const stamp = `${new Date().toISOString().replace(/[-:TZ.]/g, '').slice(0, 14)}_${process.pid}`;
-  const pgData = fs.mkdtempSync(path.join(os.tmpdir(), `pg-hotfix-rls-${stamp}-`));
+  const pgDataPrefix = path.join(os.tmpdir(), `pg-hotfix-rls-${stamp}-`);
+  const pgData = fs.mkdtempSync(pgDataPrefix);
   const port = 55000 + (process.pid % 1000);
   const dbName = `hotfix_rls_${stamp}`;
   const logPath = path.join(pgData, 'pg.log');
@@ -149,7 +150,11 @@ SELECT json_build_object(
   assert.equal(target.authenticator, false);
   assert.match(target.version, /PostgreSQL 16/);
   assert.doesNotMatch(target.data_directory, /\/var\/lib\/postgresql/);
-  assert.doesNotMatch(pgData, /supabase|rds|staging|prod/i);
+  // mkdtempSync appends six random letters and digits, which can spell "rds" or "prod": check only
+  // the part this test chose, and that the directory is that prefix plus the six-character suffix.
+  assert.equal(path.dirname(pgData), path.dirname(pgDataPrefix));
+  assert.ok(pgData.startsWith(pgDataPrefix) && pgData.length === pgDataPrefix.length + 6, pgData);
+  assert.doesNotMatch(pgDataPrefix, /supabase|rds|staging|prod/i);
 
   psql(['-d', 'postgres', '-c', `CREATE DATABASE ${dbName}`]);
   note(`database ${dbName}`);
