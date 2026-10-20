@@ -31,11 +31,11 @@ apply run `39082957003` from the same pre-state). SQL 94 was applied to producti
 (see "Production apply of SQL 94" below) and its pin is retired; it had been execute-authorized by
 the owner-approved pin change of 2026-10-19 (#1068, "do the SQL 94 pin": the read-only production
 inspect, SSM `70abaca3-3ec3-4cbc-aae3-6542563080f2`, live `72411598…`, and its guarded staging apply
-run `39082817752` from the same pre-state). SQL 102's production pin is `execute: true`
-(owner approved 2026-10-19, "approve the SQL 102 pin": the read-only production inspect of 2026-10-19,
-SSM `3ff30ee9-031d-4122-9ee1-370a2645cbca` from main `96fb17821`, live `d3b2cd30…`, recorded as its
-pre-state; its staging acceptance is its guarded staging apply run `39162625974` from the same
-pre-state); its apply still needs the owner's run-time approval, before `tenant-billing-handlers.mjs`.
+run `39082817752` from the same pre-state). SQL 102 was applied to production on 2026-10-20
+(see "Production apply of SQL 102" below) and its pin is retired; it had been execute-authorized by
+the owner-approved pin change of 2026-10-19 (#1078, "approve the SQL 102 pin": the read-only
+production inspect, SSM `3ff30ee9-031d-4122-9ee1-370a2645cbca` from main `96fb17821`, live
+`d3b2cd30…`, and its guarded staging apply run `39162625974` from the same pre-state).
 Every other
 production pin is `execute: false`, `authorization: "pending"`, with no recorded pre-state and
 no staging acceptance, so its production apply refuses before connecting; staging pins are authorized only in reviewed waves ("Staging apply waves"). SQL 100
@@ -561,3 +561,22 @@ read-only with GetCommandInvocation. No later read-only inspect was run. The pin
 now. The fee members (`tenant-billing-engine.mjs`, `tenant-billing-handlers.mjs`,
 `workflow-rpc.mjs`, `providers.mjs`) stay held until the plan records SQL 98 verified live in its
 own reviewed change; `tenant-billing-handlers.mjs` also waits for SQL 102.
+
+## Production apply of SQL 102 (2026-10-20)
+
+One owner-approved run ("apply SQL 102 in production") of `production-sql-one-shot.mjs` on
+`i-0c35557c4e5385406` from main `be79a8199` (tarball `97d98c51…`, transfer run `39350123741`),
+after a read-only `--phase inspect` from the same commit and tarball (SSM
+`50bc3e42-ff4c-4200-bef6-0006007382ce`: live `d3b2cd30…`, precondition_failures []). Apply: SSM
+`fdf84b2e-8f53-4e9f-b6a4-37a56054175b`, run_id `f3f1d49f-9579-4b7b-a0de-731f05250158`, one_use_id
+`sql102-prod-b4d3462c-ff00-463b-86df-58b711b4e141` (spent), migration source `7ef8736b…` (== pin).
+Every step was ok; contracts claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections
+43/43; manifest `56794491…`; receipt `d3b2cd30…` -> `6e1346af…`, unrelated catalog `ae8817ff…`;
+post-apply inspect already_applied true, precondition_failures [], the five new functions,
+`aws_tenants_member_column_guard()` and the `aws_tenant_profile_audit` trigger intended. The command
+was sent once and its result (Success, exit 0) read back read-only with GetCommandInvocation; SSM
+cut the console output off at 24,000 characters, and every recorded value comes from the part it
+kept. The date is the runner's UTC date (the evening of 2026-10-19, US Eastern). No later read-only
+inspect was run. The pin is `execute: false` again; a re-apply needs a new reviewed pin change, and
+SQL 98 must never be re-run now. `tenant-billing-handlers.mjs` stays held until the plan records
+SQL 102 verified live in its own reviewed change.

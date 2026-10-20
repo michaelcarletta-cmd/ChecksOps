@@ -1,8 +1,8 @@
 {
   "id": "sql102-platform-owner-tenant-profile-production-apply",
   "migration": "sql102",
-  "authorization": "Owner approved 2026-10-19 (the owner approved preparing this SQL 102 production pin change in the words \"approve the SQL 102 pin\"; the change itself is reviewed and merge-approved by the owner separately): production apply of SQL 102 after SQL 98 (applied to production 2026-10-19) on the staging acceptance below (production d3b2cd30d9b06347c4a08febac3fce49732bd0babcacfeea0a2b49dbdc9cb752 -> 6e1346af3dee0bcdc0dc6269299de63e9e2804568e5bdecbd51ff062669700fd), before the tenant-billing-handlers.mjs member it holds (sql_before); execute true takes effect only when the owner reviews and merges this change. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
-  "execute": true,
+  "authorization": "Applied to production on 2026-10-20; execute is false again, so this pin is no longer a standing authorization and a re-apply needs a new reviewed pin change. The owner approved the SQL 102 production pin (d3b2cd30 -> 6e1346af) on its guarded staging apply from the same pre-state, the read-only production inspect and the execute change on 2026-10-19 (\"approve the SQL 102 pin\", #1078), and approved the one apply run recorded in applied (workstream prod-sql102-platform-owner-tenant-profile-20261019) with \"apply SQL 102 in production\". That approval covered that run only",
+  "execute": false,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -57,7 +57,7 @@
     "live_definition_sha256": "d3b2cd30d9b06347c4a08febac3fce49732bd0babcacfeea0a2b49dbdc9cb752",
     "apply_preconditions_met": false,
     "precondition_failures": [],
-    "note": "Recorded from the read-only production inspect of 2026-10-19 after SQL 98 was applied to production (SSM command 3ff30ee9-031d-4122-9ee1-370a2645cbca, node scripts/deployment-guard/sql102-platform-owner-tenant-profile-production-apply.mjs --inspect on the SQL53 runner i-0c35557c4e5385406 from main 96fb17821 (tarball sha256 10092ef21749d0a9f298450129a2fd7359e63912853bf48edfd2c2f0093352fb), BEGIN READ ONLY ... ROLLBACK, connected as checksops_admin). live_definition_sha256 d3b2cd30d9b06347c4a08febac3fce49732bd0babcacfeea0a2b49dbdc9cb752 (not the intended 6e1346af3dee0bcdc0dc6269299de63e9e2804568e5bdecbd51ff062669700fd: already_applied false); precondition_failures [], prerequisites_missing [], missing_dependencies [], predecessors sql98 applied, successors_applied []. aws_tenant_profile_columns(), aws_platform_owner_set_tenant_profile(uuid, jsonb), aws_platform_owner_remove_tenant_member(uuid, uuid), aws_tenant_profile_audit_row(), aws_tenant_has_moov_account(uuid) and the trigger aws_tenant_profile_audit are absent; aws_tenants_member_column_guard() is SQL 98's (different). apply_preconditions_met was false at inspect time only because no pre-state was recorded yet (expected_live_definition_sha256 null). This reviewed change copies live_definition_sha256 into expected_live_definition_sha256 and, in the same change, sets authorization, execute true and staging_acceptance. A fresh --inspect immediately before apply (the one-shot's inspect step) must still report this live_definition_sha256 and precondition_failures []; if not, stop."
+    "note": "Recorded from the read-only production inspect of 2026-10-19 after SQL 98 was applied to production (SSM command 3ff30ee9-031d-4122-9ee1-370a2645cbca, node scripts/deployment-guard/sql102-platform-owner-tenant-profile-production-apply.mjs --inspect on the SQL53 runner i-0c35557c4e5385406 from main 96fb17821 (tarball sha256 10092ef21749d0a9f298450129a2fd7359e63912853bf48edfd2c2f0093352fb), BEGIN READ ONLY ... ROLLBACK, connected as checksops_admin). live_definition_sha256 d3b2cd30d9b06347c4a08febac3fce49732bd0babcacfeea0a2b49dbdc9cb752 (not the intended 6e1346af3dee0bcdc0dc6269299de63e9e2804568e5bdecbd51ff062669700fd: already_applied false); precondition_failures [], prerequisites_missing [], missing_dependencies [], predecessors sql98 applied, successors_applied []. aws_tenant_profile_columns(), aws_platform_owner_set_tenant_profile(uuid, jsonb), aws_platform_owner_remove_tenant_member(uuid, uuid), aws_tenant_profile_audit_row(), aws_tenant_has_moov_account(uuid) and the trigger aws_tenant_profile_audit are absent; aws_tenants_member_column_guard() is SQL 98's (different). apply_preconditions_met was false at inspect time only because no pre-state was recorded yet (expected_live_definition_sha256 null). This reviewed change copies live_definition_sha256 into expected_live_definition_sha256 and, in the same change, sets authorization, execute true and staging_acceptance. A fresh --inspect immediately before apply (the one-shot's inspect step) must still report this live_definition_sha256 and precondition_failures []; if not, stop. The apply of 2026-10-20 is recorded in applied; the record-and-retire change set execute false again."
   },
   "intended_post_state": {
     "fingerprint": "6e1346af3dee0bcdc0dc6269299de63e9e2804568e5bdecbd51ff062669700fd",
@@ -67,5 +67,105 @@
     "ok": true,
     "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39162625974",
     "basis": "Guarded staging SQL executor apply of sql102-platform-owner-tenant-profile (run 39162625974, wave 6): receipt before d3b2cd30d9b06347c4a08febac3fce49732bd0babcacfeea0a2b49dbdc9cb752, after 6e1346af3dee0bcdc0dc6269299de63e9e2804568e5bdecbd51ff062669700fd = intended_replacement_sha256; precondition_failures [], prerequisites_missing []. Its staging read-live (run 39161620576) recorded the same pre-state d3b2cd30d9b06347c4a08febac3fce49732bd0babcacfeea0a2b49dbdc9cb752 that production reports now (ops/deployment-guard/staging-sql-live.json, aws/tests/helpers/staging-sql-wave1.mjs). Same pre-state: staging before its apply and production (production_inspect, 2026-10-19) both report d3b2cd30d9b06347c4a08febac3fce49732bd0babcacfeea0a2b49dbdc9cb752; the same file bytes (source_sha256) are pinned in both."
+  },
+  "applied": {
+    "date": "2026-10-20",
+    "result": "applied",
+    "source_commit": "be79a819970dea9ac1f098bf185765b75f8b1d4f",
+    "source_tarball": {
+      "file": "source-be79a819970dea9ac1f098bf185765b75f8b1d4f.tar.gz",
+      "sha256": "97d98c51b3b1ce74da45cf01f38a4ea29ce3cc9bb82418cff1947765969744a5"
+    },
+    "migration_source_sha256": "7ef8736baf2d610b36dbf93104f543eb7951e2228704f26f21366a3f1621f35a",
+    "migration_source_sha256_note": "The one-shot source step hashed aws/workflows/sql/102_platform_owner_tenant_profile.sql in the transfer tarball: equal to source_sha256 (the pin).",
+    "runner": "i-0c35557c4e5385406",
+    "workstream_id": "prod-sql102-platform-owner-tenant-profile-20261019",
+    "one_use_id": "sql102-prod-b4d3462c-ff00-463b-86df-58b711b4e141",
+    "one_use_id_consumed": true,
+    "one_use_id_consumed_basis": "Inferred from the successful apply (the tool records the one_use_id after COMMIT and only warns if that write fails); the consumed-registry entry was not read back separately.",
+    "owner_approval": "apply SQL 102 in production",
+    "owner_approval_basis": "As passed in --approval-statement for --approval-scope sql102; the one-shot cannot verify who said it.",
+    "operator": "michaelcarletta-cmd",
+    "apply_ssm_command_id": "fdf84b2e-8f53-4e9f-b6a4-37a56054175b",
+    "one_shot_run_id": "f3f1d49f-9579-4b7b-a0de-731f05250158",
+    "one_shot_note": "One guarded production-sql-one-shot run (SSM fdf84b2e-8f53-4e9f-b6a4-37a56054175b, run_id f3f1d49f-9579-4b7b-a0de-731f05250158) from main be79a8199 applied SQL 102: steps pin, source, inspect, contracts, manifest, source-recheck-before-preflight, preflight, evaluate, source-recheck-before-apply, apply (applied) and post-apply-inspect all ok; runner contracts, manifest, receipt and inspects as recorded below. A read-only one-shot --phase inspect ran first from the same commit and tarball (SSM 50bc3e42-ff4c-4200-bef6-0006007382ce, run_id 359b66cc-a969-49c5-9192-a85bd0e81bf9): live d3b2cd30..., precondition_failures []. The send returned the command id without error; the command was sent once and its result (Success, exit 0) read back read-only with GetCommandInvocation. SSM cut the console output off at 24,000 characters (the tail of details.applied and details.not_observed_by_this_run); every value recorded here comes from the part SSM kept. The applied date is the runner's UTC date (2026-10-19 evening, US Eastern). Start and finish times were not carried into this record. Applied after SQL 98 and before tenant-billing-handlers.mjs (sql_before).",
+    "steps": [
+      "pin",
+      "source",
+      "inspect",
+      "contracts",
+      "manifest",
+      "source-recheck-before-preflight",
+      "preflight",
+      "evaluate",
+      "source-recheck-before-apply",
+      "apply",
+      "post-apply-inspect"
+    ],
+    "contract_results": {
+      "claim-ledger": {
+        "ok": true,
+        "passed": "4/4"
+      },
+      "tenant-isolation": {
+        "ok": true,
+        "passed": "6/6"
+      },
+      "financial-write-protections": {
+        "ok": true,
+        "passed": "43/43"
+      }
+    },
+    "pre_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "d3b2cd30d9b06347c4a08febac3fce49732bd0babcacfeea0a2b49dbdc9cb752",
+      "live_matches_expected": true,
+      "already_applied": false,
+      "precondition_failures": [],
+      "missing_dependencies": [],
+      "predecessors_applied": true,
+      "successors_applied": [],
+      "note": "The one-shot inspect step (read-only --inspect) immediately before the apply: live == the recorded pre-state d3b2cd30..., precondition_failures [], missing_dependencies [], predecessor sql98 applied, apply_preconditions_met true."
+    },
+    "manifest_sha256": "567944910178396e6177bc8d43b0e91ce58554fcaf34970a759b959397030bde",
+    "receipt": {
+      "migration": "sql102",
+      "workstream": "prod-sql102-platform-owner-tenant-profile-20261019",
+      "commit": "be79a819970dea9ac1f098bf185765b75f8b1d4f",
+      "sql_file": "aws/workflows/sql/102_platform_owner_tenant_profile.sql",
+      "before_hash": "d3b2cd30d9b06347c4a08febac3fce49732bd0babcacfeea0a2b49dbdc9cb752",
+      "after_hash": "6e1346af3dee0bcdc0dc6269299de63e9e2804568e5bdecbd51ff062669700fd",
+      "unrelated_catalog_sha256": "ae8817ff71f77045a89d65da80a5c5328b61f4a4147aea9c40b618c85ab7d3bd",
+      "unrelated_catalog_counts": {
+        "relations": 890,
+        "columns": 3535,
+        "constraints": 2233,
+        "policies": 404,
+        "functions": 1309,
+        "indexes": 654,
+        "default_acl": 0,
+        "role_memberships": 15,
+        "roles": 29,
+        "triggers": 178,
+        "views": 25,
+        "types": 18,
+        "schema": 2
+      },
+      "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39162625974",
+      "result": "applied"
+    },
+    "post_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "6e1346af3dee0bcdc0dc6269299de63e9e2804568e5bdecbd51ff062669700fd",
+      "already_applied": true,
+      "precondition_failures": [],
+      "missing_dependencies": [],
+      "predecessors_applied": true,
+      "successors_applied": [],
+      "note": "The one-shot post-apply read-only --inspect: already_applied true (live == intended 6e1346af...), precondition_failures []; the five new functions, aws_tenants_member_column_guard() and the trigger aws_tenant_profile_audit are intended; aws_tenant_profile_columns(), aws_platform_owner_set_tenant_profile(uuid, jsonb), aws_platform_owner_remove_tenant_member(uuid, uuid) and aws_tenant_has_moov_account(uuid) are EXECUTE for authenticated, checksops and the owner; aws_tenant_profile_audit_row() for the owner only; aws_tenants_member_column_guard() PUBLIC and the owner."
+    }
+  },
+  "production_evidence": {
+    "2026-10-20 apply": "Guarded production SQL one-shot on i-0c35557c4e5385406, workstream prod-sql102-platform-owner-tenant-profile-20261019, main be79a8199 (tarball 97d98c51…, migration source 7ef8736b… == pin), owner-approved run (\"apply SQL 102 in production\"), SSM fdf84b2e-8f53-4e9f-b6a4-37a56054175b, run_id f3f1d49f-9579-4b7b-a0de-731f05250158, one_use_id sql102-prod-b4d3462c-ff00-463b-86df-58b711b4e141 (spent): every step ok; contracts claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43; pre-apply inspect live d3b2cd30… (live_matches_expected true, precondition_failures []); manifest 56794491…; d3b2cd30… -> 6e1346af…, result applied, unrelated catalog ae8817ff…; post-apply inspect already_applied true, precondition_failures []. Preceded by a read-only one-shot inspect (SSM 50bc3e42-ff4c-4200-bef6-0006007382ce). Sent once; result read back with GetCommandInvocation; console output cut at 24,000 characters by SSM. No later inspect was run. execute is false so the pin is no longer a standing authorization."
   }
 }
