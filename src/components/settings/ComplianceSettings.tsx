@@ -33,6 +33,7 @@ import {
   businessFormFrom,
   buildSavePayload,
   clearSecrets,
+  describeRejectedFields,
   describeSyncStatus,
   normalizeOnboardingState,
   representativeFormFrom,
@@ -142,9 +143,12 @@ export function ComplianceSettings({
       setDirty(false);
       const status = describeSyncStatus({ saving: false, lastSave: res });
       const resubmit = (res.representatives ?? []).some((r) => r.ssn_resubmit_required);
+      const rejected = describeRejectedFields(res.rejected_fields);
       toast({
         title: status.label,
-        description: resubmit
+        description: rejected
+          ? `${rejected}${resubmit ? " Moov also needs the SSN re-entered for one representative." : ""}`
+          : resubmit
           ? "Moov needs an SSN re-entered for one representative."
           : res.moov_synced
           ? "Your details are saved in ChecksOps and with Moov."

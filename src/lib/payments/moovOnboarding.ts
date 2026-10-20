@@ -109,6 +109,8 @@ export interface SaveResult extends Partial<OnboardingState> {
   moov_synced: boolean;
   pending: boolean;
   error_code: string | null;
+  /** Field paths Moov refused (e.g. "profile.business.website"); only on moov_rejected. */
+  rejected_fields?: string[];
 }
 
 export interface UploadUrlResult {
@@ -261,6 +263,9 @@ export function createOnboardingApi(invoke: InvokeFn) {
         moov_synced: !!res?.moov_synced,
         pending: !!res?.pending,
         error_code: res?.error_code ?? null,
+        rejected_fields: Array.isArray(res?.rejected_fields)
+          ? res.rejected_fields.filter((f): f is string => typeof f === "string")
+          : undefined,
       };
     },
 
@@ -669,9 +674,42 @@ export type SyncTone = "idle" | "working" | "ok" | "warn" | "error";
  *  - "Saved, Moov retry pending (code)" when the Moov call failed but the data is saved
  *  - "Synced" only when Moov confirmed
  */
+/** Plain-language names for the Moov field paths the API reports in rejected_fields. */
+const MOOV_FIELD_LABELS: Array<[RegExp, string]> = [
+  [/^profile\.business\.website$/, "Website"],
+  [/^profile\.business\.legalBusinessName$/, "Legal business name"],
+  [/^profile\.business\.doingBusinessAs$/, "DBA"],
+  [/^profile\.business\.businessType$/, "Business type"],
+  [/^profile\.business\.email$/, "Business email"],
+  [/^profile\.business\.phone(\..*)?$/, "Business phone"],
+  [/^profile\.business\.address(\..*)?$/, "Business address"],
+  [/^profile\.business\.description$/, "Description"],
+  [/^profile\.business\.taxID(\..*)?$/, "EIN"],
+  [/^(representatives\.\d+\.)?name(\..*)?$/, "Representative name"],
+  [/^(representatives\.\d+\.)?email$/, "Representative email"],
+  [/^(representatives\.\d+\.)?phone(\..*)?$/, "Representative phone"],
+  [/^(representatives\.\d+\.)?address(\..*)?$/, "Representative home address"],
+  [/^(representatives\.\d+\.)?birthDate(\..*)?$/, "Representative date of birth"],
+  [/^(representatives\.\d+\.)?governmentID(\..*)?$/, "Representative SSN"],
+  [/^(representatives\.\d+\.)?responsibilities(\..*)?$/, "Representative role or ownership"],
+];
+
+/** "Website" for "profile.business.website"; the raw path when unknown. */
+export function moovFieldLabel(path: string): string {
+  for (const [re, label] of MOOV_FIELD_LABELS) if (re.test(path)) return label;
+  return path;
+}
+
+/** One sentence naming what Moov refused, or null when nothing was reported. */
+export function describeRejectedFields(fields: string[] | null | undefined): string | null {
+  const labels = Array.from(new Set((fields ?? []).map(moovFieldLabel)));
+  if (labels.length === 0) return null;
+  return `Moov rejected: ${labels.join(", ")}. Correct ${labels.length === 1 ? "it" : "them"} and save again.`;
+}
+
 export function describeSyncStatus(args: {
   saving: boolean;
-  lastSave?: Pick<SaveResult, "saved" | "moov_synced" | "pending" | "error_code"> | null;
+  lastSave?: Pick<SaveResult, "saved" | "moov_synced" | "pending" | "error_code" | "rejected_fields"> | null;
   sync?: OnboardingSync | null;
   accountConnected?: boolean;
 }): { tone: SyncTone; label: string } {
@@ -680,6 +718,9 @@ export function describeSyncStatus(args: {
   if (s) {
     if (!s.saved) return { tone: "error", label: `Not saved${s.error_code ? ` (${s.error_code})` : ""}` };
     if (s.moov_synced && !s.pending) return { tone: "ok", label: "Synced" };
+    if (s.error_code === "moov_rejected" && s.rejected_fields?.length) {
+      return { tone: "error", label: `Saved, but ${describeRejectedFields(s.rejected_fields)}` };
+    }
     if (s.error_code) return { tone: "warn", label: `Saved, Moov retry pending (${s.error_code})` };
     return { tone: "working", label: "Saved, sending to Moov…" };
   }
