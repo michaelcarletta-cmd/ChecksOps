@@ -2295,6 +2295,27 @@ export const AUTHORIZED_SQL104_PAYMENT_IDEMPOTENCY_KEYS_GRANT = Object.freeze({
   // The file creates, replaces and sets the ACL of no function.
   function_identities: Object.freeze([]),
 });
+// Moov onboarding 2026-10-20 staging pin: SQL 105 (SELECT, INSERT, UPDATE on
+// payment_provider_accounts, payment_provider_methods and payment_method_verifications, and
+// SELECT, INSERT on payment_event_log, for checksops and authenticated: the table grants SQL 91
+// omitted on the four tables its onboarding policies cover; staging 2026-10-20 12:18:20Z
+// "permission denied for table payment_provider_accounts"). After SQL 91. Pending until a
+// reviewed pin change records a staging read-live.
+export const AUTHORIZED_SQL105_ONBOARDING_PAYMENT_TABLE_GRANTS = Object.freeze({
+  key: 'sql105',
+  filename: 'aws/workflows/sql/105_onboarding_payment_table_grants.sql',
+  migration_id: '105_onboarding_payment_table_grants',
+  // The commit that last authored the file bytes.
+  commit: '45ae21f2198acdc76724ac2ca5d441b553b114f9',
+  source_sha256: '79c7bbfc0802836f165b12044cba949efbe1698f4f93906a98e7089de851f420',
+  authorization: 'pending',
+  execute: false,
+  expected_live_definition_sha256: null,
+  // Code-derived: releaseIntendedHash('sql105', file bytes) (release-sql-state.mjs); re-derived by the tests.
+  intended_replacement_sha256: 'a67bc0a6faa4cf60500946c4a1a980180cec9ff44980a6cf9b5f05846e7e7127',
+  // The file creates, replaces and sets the ACL of no function.
+  function_identities: Object.freeze([]),
+});
 
 export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql90: AUTHORIZED_SQL90_USERS_ONLY_TENANT_ROLES,
@@ -2312,6 +2333,7 @@ export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql102: AUTHORIZED_SQL102_PLATFORM_OWNER_TENANT_PROFILE,
   sql103: AUTHORIZED_SQL103_SHARE_LIBRARY_TRIGGER_ACL,
   sql104: AUTHORIZED_SQL104_PAYMENT_IDEMPOTENCY_KEYS_GRANT,
+  sql105: AUTHORIZED_SQL105_ONBOARDING_PAYMENT_TABLE_GRANTS,
 });
 
 // The fee collection pin under its earlier map name (the same object as the release map's sql98).
@@ -2327,7 +2349,7 @@ export function isSql30TenantDocumentsDocType(input = {}) {
   return pinIdentifiersMatch(input, AUTHORIZED_SQL30_TENANT_DOCUMENTS_DOC_TYPE);
 }
 
-/** The release 2026-10-17 migration key (sql90 ... sql104) an input names, or null. */
+/** The release 2026-10-17 migration key (sql90 ... sql105) an input names, or null. */
 export function releaseSqlMigrationKey(input = {}) {
   return Object.keys(RELEASE_2026_10_17_PENDING_SQL_PINS)
     .find((key) => pinIdentifiersMatch(input, RELEASE_2026_10_17_PENDING_SQL_PINS[key])) || null;

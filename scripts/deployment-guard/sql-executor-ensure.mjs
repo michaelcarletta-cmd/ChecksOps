@@ -77,6 +77,7 @@ export const EXECUTOR_PACK_MEMBERS = Object.freeze([
   ['aws/workflows/sql/102_platform_owner_tenant_profile.sql', 'sql/102_platform_owner_tenant_profile.sql'],
   ['aws/workflows/sql/103_share_library_trigger_acl.sql', 'sql/103_share_library_trigger_acl.sql'],
   ['aws/workflows/sql/104_payment_idempotency_keys_grant.sql', 'sql/104_payment_idempotency_keys_grant.sql'],
+  ['aws/workflows/sql/105_onboarding_payment_table_grants.sql', 'sql/105_onboarding_payment_table_grants.sql'],
   ['aws/functions/api/rds-global-bundle.pem', 'rds-global-bundle.pem'],
   ['scripts/deployment-guard/lib/sql-apply.mjs', 'lib/sql-apply.mjs'],
   ['scripts/deployment-guard/lib/sql-executor-auth.mjs', 'lib/sql-executor-auth.mjs'],

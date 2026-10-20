@@ -1,5 +1,5 @@
 /**
- * Specs of the release 2026-10-17 SQL (SQL 90 to SQL 104) for the shared engine in
+ * Specs of the release 2026-10-17 SQL (SQL 90 to SQL 105) for the shared engine in
  * release-sql-state.mjs: what each pinned file creates, replaces or drops, the reviewed
  * EXECUTE ACLs, the prerequisites and predecessors, and the PostgreSQL renderings the file
  * leaves (policy expressions, view, column, constraint, index and trigger definitions as
@@ -56,7 +56,7 @@
  *   runs_before        informational production order (SQL 103 before SQL 29, which is not on
  *                      this engine): the production one-shot and the runbook
  *
- * SQL 105 and later: add a spec here, its staging pin in sql-executor-auth.mjs
+ * SQL 106 and later: add a spec here, its staging pin in sql-executor-auth.mjs
  * (RELEASE_2026_10_17_PENDING_SQL_PINS or a successor map) and its production pin; the
  * engine, the executor handler and the production tool are generic.
  */
@@ -3356,6 +3356,117 @@ export const RELEASE_SQL_SPECS = deepFreeze({
     ],
     "altered_relations": [
       "public.payment_idempotency_keys"
+    ]
+  },
+  // SQL 105: the table grants SQL 91 omitted on the four onboarding payment tables its policies
+  // cover (staging 2026-10-20 12:18:20Z: moov-onboarding-save, "permission denied for table
+  // payment_provider_accounts"; SQL 104 fixed the same gap for payment_idempotency_keys). Its
+  // fingerprint is the pinned lines of checksops and authenticated on each table only (SELECT /
+  // INSERT / UPDATE, and SELECT / INSERT on payment_event_log); every other grant on each table
+  // must stay as it was (other_table_privileges_unchanged). GRANT of a held privilege is a no-op,
+  // so a table that already holds some of them passes the pre-conditions.
+  sql105: {
+    "key": "sql105",
+    "label": "SQL 105",
+    "choice": "sql105-onboarding-payment-table-grants",
+    "production_pin_rel": "ops/deployment-guard/sql105-onboarding-payment-table-grants-production-apply.json",
+    "script": "sql105-onboarding-payment-table-grants-production-apply",
+    "prerequisites": [
+      "public.payment_provider_accounts",
+      "public.payment_provider_methods",
+      "public.payment_method_verifications",
+      "public.payment_event_log",
+      "role checksops",
+      "role authenticated"
+    ],
+    "predecessors": [
+      "sql91"
+    ],
+    "functions": [],
+    "table_privileges": [
+      {
+        "table": "public.payment_provider_accounts",
+        "grantees": [
+          "authenticated",
+          "checksops"
+        ],
+        "privileges": [
+          "SELECT",
+          "INSERT",
+          "UPDATE"
+        ],
+        "intended": [
+          "authenticated INSERT",
+          "authenticated SELECT",
+          "authenticated UPDATE",
+          "checksops INSERT",
+          "checksops SELECT",
+          "checksops UPDATE"
+        ]
+      },
+      {
+        "table": "public.payment_provider_methods",
+        "grantees": [
+          "authenticated",
+          "checksops"
+        ],
+        "privileges": [
+          "SELECT",
+          "INSERT",
+          "UPDATE"
+        ],
+        "intended": [
+          "authenticated INSERT",
+          "authenticated SELECT",
+          "authenticated UPDATE",
+          "checksops INSERT",
+          "checksops SELECT",
+          "checksops UPDATE"
+        ]
+      },
+      {
+        "table": "public.payment_method_verifications",
+        "grantees": [
+          "authenticated",
+          "checksops"
+        ],
+        "privileges": [
+          "SELECT",
+          "INSERT",
+          "UPDATE"
+        ],
+        "intended": [
+          "authenticated INSERT",
+          "authenticated SELECT",
+          "authenticated UPDATE",
+          "checksops INSERT",
+          "checksops SELECT",
+          "checksops UPDATE"
+        ]
+      },
+      {
+        "table": "public.payment_event_log",
+        "grantees": [
+          "authenticated",
+          "checksops"
+        ],
+        "privileges": [
+          "SELECT",
+          "INSERT"
+        ],
+        "intended": [
+          "authenticated INSERT",
+          "authenticated SELECT",
+          "checksops INSERT",
+          "checksops SELECT"
+        ]
+      }
+    ],
+    "altered_relations": [
+      "public.payment_provider_accounts",
+      "public.payment_provider_methods",
+      "public.payment_method_verifications",
+      "public.payment_event_log"
     ]
   },
 });
