@@ -505,6 +505,75 @@ test('sql-executor-ensure packs the non-throwing function-def lookup and SQL 53'
   assert.equal(src.includes('::regprocedure'), false);
 });
 
+// A fake Lambda for deployExecutor: records every call, answers from `live`.
+function fakeLambda({ live = { CodeSha256: 'LIVE=', RevisionId: 'rev-1' }, readError = null, after = null, updateError = null } = {}) {
+  const calls = [];
+  let reads = 0;
+  const run = (args) => {
+    calls.push(args.slice(0, 2).join(' '));
+    const op = args[1];
+    if (op === 'get-function-configuration') {
+      reads += 1;
+      if (reads === 1 && readError) throw readError;
+      return reads === 1 ? live : (after ?? { CodeSha256: 'NEW=', RevisionId: 'rev-3' });
+    }
+    if (op === 'update-function-code') {
+      if (updateError) throw updateError;
+      return { CodeSha256: 'NEW=', RevisionId: 'rev-2' };
+    }
+    return {};
+  };
+  return { run, calls };
+}
+const deployArgs = (run, extra = {}) => ({
+  functionName: 'checksops-staging-guarded-sql-executor', zip: '/tmp/x.zip', environment: { Variables: {} },
+  roleArn: 'arn:aws:iam::806168576068:role/r', vpcConfig: 'SubnetIds=a,SecurityGroupIds=b', run, ...extra,
+});
+
+test('deployExecutor updates in place pinned to the inspected code and RevisionId; never creates', async () => {
+  const { deployExecutor } = await import('../../scripts/deployment-guard/sql-executor-ensure.mjs');
+  const seen = [];
+  const lambda = fakeLambda();
+  const run = (args) => { seen.push(args); return lambda.run(args); };
+  assert.deepEqual(deployExecutor(deployArgs(run, { expectedCodeSha256: 'LIVE=' })), { created: false });
+  const code = seen.find((a) => a[1] === 'update-function-code');
+  assert.equal(code[code.indexOf('--revision-id') + 1], 'rev-1');
+  const config = seen.find((a) => a[1] === 'update-function-configuration');
+  assert.equal(config[config.indexOf('--revision-id') + 1], 'rev-3');
+  assert.equal(lambda.calls.includes('lambda create-function'), false);
+});
+
+test('deployExecutor refuses when the live executor is not the inspected code or changes mid-deploy', async () => {
+  const { deployExecutor } = await import('../../scripts/deployment-guard/sql-executor-ensure.mjs');
+  const drifted = fakeLambda({ live: { CodeSha256: 'OTHER=', RevisionId: 'rev-1' } });
+  assert.throws(() => deployExecutor(deployArgs(drifted.run, { expectedCodeSha256: 'LIVE=' })), (e) => e.code === CODES.DEPLOYMENT_COLLISION);
+  assert.equal(drifted.calls.some((c) => c.startsWith('lambda update') || c === 'lambda create-function'), false);
+
+  const raced = fakeLambda({ after: { CodeSha256: 'SOMEONE-ELSE=', RevisionId: 'rev-9' } });
+  assert.throws(() => deployExecutor(deployArgs(raced.run, { expectedCodeSha256: 'LIVE=' })), (e) => e.code === CODES.DEPLOYMENT_COLLISION);
+  assert.equal(raced.calls.includes('lambda update-function-configuration'), false);
+});
+
+test('deployExecutor creates only when Lambda reports the executor absent; other errors stop it', async () => {
+  const { deployExecutor } = await import('../../scripts/deployment-guard/sql-executor-ensure.mjs');
+  const notFound = Object.assign(new Error('x'), { stderr: 'An error occurred (ResourceNotFoundException) when calling GetFunctionConfiguration' });
+  const absent = fakeLambda({ readError: notFound });
+  assert.deepEqual(deployExecutor(deployArgs(absent.run)), { created: true });
+  assert.ok(absent.calls.includes('lambda create-function'));
+
+  const absentButInspected = fakeLambda({ readError: notFound });
+  assert.throws(() => deployExecutor(deployArgs(absentButInspected.run, { expectedCodeSha256: 'LIVE=' })), (e) => e.code === CODES.DEPLOYMENT_COLLISION);
+  assert.equal(absentButInspected.calls.includes('lambda create-function'), false);
+
+  const denied = fakeLambda({ readError: Object.assign(new Error('x'), { stderr: 'AccessDeniedException' }) });
+  assert.throws(() => deployExecutor(deployArgs(denied.run)), /x/);
+  assert.equal(denied.calls.includes('lambda create-function'), false);
+
+  const conflict = fakeLambda({ updateError: Object.assign(new Error('PreconditionFailedException'), { stderr: 'PreconditionFailedException: RevisionId' }) });
+  assert.throws(() => deployExecutor(deployArgs(conflict.run, { expectedCodeSha256: 'LIVE=' })), /PreconditionFailed/);
+  assert.equal(conflict.calls.includes('lambda create-function'), false);
+});
+
 test('sql-executor-ensure refuses shared API and billing sql44 retarget before AWS', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'checksops-sql-ens-'));
   const log = path.join(dir, 'aws-calls.log');

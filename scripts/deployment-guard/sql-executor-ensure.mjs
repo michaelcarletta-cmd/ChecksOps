@@ -10,7 +10,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs, printResult } from './lib/cli.mjs';
-import { CODES, fail, ok } from './lib/errors.mjs';
+import { CODES, GuardError, fail, ok } from './lib/errors.mjs';
 import { enforceSharedLambdaTarget } from './require-guard.mjs';
 import { SQL_EXECUTOR_FUNCTION } from './lib/sql-executor-auth.mjs';
 import { repoRootFrom } from './lib/paths.mjs';
@@ -144,6 +144,71 @@ function installExecutorDependencies(staging) {
   throw new Error(`executor package install failed: ${detail}`);
 }
 
+// Only these mean the executor does not exist yet; any other read or update error
+// stops the deploy instead of falling through to create-function.
+const NOT_FOUND_RE = /ResourceNotFoundException|Function not found/;
+const errorText = (error) => String(error?.stderr || error?.stdout || error?.message || '');
+
+/**
+ * Update the executor in place, or create it only when Lambda reports it absent.
+ * Each update carries the RevisionId read just before it, so Lambda refuses it if
+ * the function changed after that read; with expectedCodeSha256 (the deploy workflow's
+ * inspected CodeSha256) the live code must also still be the inspected code.
+ */
+export function deployExecutor({ functionName, zip, environment, roleArn, vpcConfig, expectedCodeSha256 = '', run }) {
+  let live = null;
+  try {
+    live = run(['lambda', 'get-function-configuration', '--function-name', functionName]);
+  } catch (error) {
+    if (!NOT_FOUND_RE.test(errorText(error))) throw error;
+  }
+  if (!live) {
+    if (expectedCodeSha256) {
+      throw new GuardError(CODES.DEPLOYMENT_COLLISION, 'executor is absent but an inspected CodeSha256 was given', { function_name: functionName });
+    }
+    run([
+      'lambda', 'create-function',
+      '--function-name', functionName,
+      '--runtime', 'nodejs20.x',
+      '--role', roleArn,
+      '--handler', 'index.handler',
+      '--timeout', '120',
+      '--memory-size', '256',
+      '--zip-file', `fileb://${zip}`,
+      '--environment', JSON.stringify(environment),
+      '--vpc-config', vpcConfig,
+    ]);
+    return { created: true };
+  }
+  if (expectedCodeSha256 && live.CodeSha256 !== expectedCodeSha256) {
+    throw new GuardError(CODES.DEPLOYMENT_COLLISION, 'live executor code changed since it was inspected', {
+      function_name: functionName, expected_code_sha256: expectedCodeSha256, live_code_sha256: live.CodeSha256,
+    });
+  }
+  const updated = run([
+    'lambda', 'update-function-code',
+    '--function-name', functionName,
+    '--zip-file', `fileb://${zip}`,
+    '--revision-id', live.RevisionId,
+  ]);
+  try { run(['lambda', 'wait', 'function-updated', '--function-name', functionName]); } catch { /* checked below */ }
+  const afterCode = run(['lambda', 'get-function-configuration', '--function-name', functionName]);
+  if (afterCode.CodeSha256 !== updated.CodeSha256) {
+    throw new GuardError(CODES.DEPLOYMENT_COLLISION, 'executor code changed after its code update', {
+      function_name: functionName, deployed_code_sha256: updated.CodeSha256, live_code_sha256: afterCode.CodeSha256,
+    });
+  }
+  run([
+    'lambda', 'update-function-configuration',
+    '--function-name', functionName,
+    '--timeout', '120',
+    '--memory-size', '256',
+    '--environment', JSON.stringify(environment),
+    '--revision-id', afterCode.RevisionId,
+  ]);
+  return { created: false };
+}
+
 export function main(argv = process.argv.slice(2), env = process.env, root = repoRootFrom(import.meta.url)) {
   const { opts } = parseArgs(argv);
   const functionName = opts['function-name'] || SQL_EXECUTOR_FUNCTION;
@@ -169,38 +234,20 @@ export function main(argv = process.argv.slice(2), env = process.env, root = rep
   const environment = executorEnvironment(rehearsal);
   const vpcConfig = `SubnetIds=${(vpc.SubnetIds || []).join(',')},SecurityGroupIds=${(vpc.SecurityGroupIds || []).join(',')}`;
 
-  let created = false;
+  let created;
   try {
-    awsJson(['lambda', 'get-function', '--function-name', functionName], env);
-    execFileSync(AWS, [
-      '--region', REGION, 'lambda', 'update-function-code',
-      '--function-name', functionName,
-      '--zip-file', `fileb://${packed.zip}`,
-    ], { encoding: 'utf8', env });
-    try {
-      execFileSync(AWS, ['--region', REGION, 'lambda', 'wait', 'function-updated', '--function-name', functionName], { env });
-    } catch { /* ok */ }
-    awsJson([
-      'lambda', 'update-function-configuration',
-      '--function-name', functionName,
-      '--timeout', '120',
-      '--memory-size', '256',
-      '--environment', JSON.stringify(environment),
-    ], env);
-  } catch {
-    created = true;
-    awsJson([
-      'lambda', 'create-function',
-      '--function-name', functionName,
-      '--runtime', 'nodejs20.x',
-      '--role', roleArn,
-      '--handler', 'index.handler',
-      '--timeout', '120',
-      '--memory-size', '256',
-      '--zip-file', `fileb://${packed.zip}`,
-      '--environment', JSON.stringify(environment),
-      '--vpc-config', vpcConfig,
-    ], env);
+    ({ created } = deployExecutor({
+      functionName,
+      zip: packed.zip,
+      environment,
+      roleArn,
+      vpcConfig,
+      expectedCodeSha256: opts['expected-code-sha256'] || '',
+      run: (args) => awsJson(args, env),
+    }));
+  } catch (error) {
+    if (error instanceof GuardError) return printResult(fail(error.code, error.message, error.details));
+    throw error;
   }
   try {
     execFileSync(AWS, ['--region', REGION, 'lambda', 'wait', 'function-active', '--function-name', functionName], { env });
