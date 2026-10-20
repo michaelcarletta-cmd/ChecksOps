@@ -177,15 +177,18 @@ test('pin: the SQL 90-97 pin shape, applied and retired, in step with the stagin
   assert.match(runbook, new RegExp(`\\| \`sql102\` \\| \`${pin.intended_replacement_sha256}\` \\|`));
 });
 
-test('plan: SQL 102 holds tenant-billing-handlers.mjs (sql_before); live in staging, pending in production', () => {
+test('plan: SQL 102 holds tenant-billing-handlers.mjs (sql_before); live in staging and in production', () => {
   const plan = readJson('ops/deployment-guard/production-api-overlay-plan.json');
   const stagingLive = readJson('ops/deployment-guard/staging-sql-live.json');
   // tenant-billing-handlers.mjs (profile-update and member-remove call SQL 102's functions) waits
   // on SQL 102, which requires SQL 98; the guarded overlays enforce it (production: this plan's
-  // record; staging: staging-sql-live.json, applied in run 39162625974).
+  // record, verified live from the 2026-10-20 apply, #1079; staging: staging-sql-live.json, applied
+  // in run 39162625974).
   assert.equal(plan.members['tenant-billing-handlers.mjs'].sql_before, SQL102_FILE);
-  assert.equal(plan.sql_prerequisites[SQL102_FILE].verified_live, false);
-  assert.equal(plan.sql_prerequisites[SQL102_FILE].evidence, null);
+  assert.equal(plan.sql_prerequisites[SQL102_FILE].verified_live, true);
+  assert.ok(plan.sql_prerequisites[SQL102_FILE].evidence.includes(SQL102_APPLIED.ssm));
+  assert.ok(plan.sql_prerequisites[SQL102_FILE].evidence.includes(SQL102_APPLIED.one_use_id));
+  assert.match(plan.sql_prerequisites[SQL102_FILE].evidence, /#1079/);
   assert.equal(plan.sql_prerequisites[SQL102_FILE].pin, 'ops/deployment-guard/sql102-platform-owner-tenant-profile-production-apply.json');
   assert.equal(stagingLive.sql[SQL102_FILE].verified_live, true);
   assert.match(stagingLive.sql[SQL102_FILE].evidence, /run 39162625974/);

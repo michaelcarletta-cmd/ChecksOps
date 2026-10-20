@@ -701,13 +701,23 @@ test('fee collection: eleven members on the fee manifest, collection-v2 then des
   assert.equal(PLAN.members[DEPOSITS_GATE].sql_before, null);
   assert.equal((await run(applyEnv(DEPOSITS_GATE), applyDeps(DEPOSITS_GATE).deps)).mutation, false);
   // SQL 98 holds the engine; the handlers (profile-update, member-remove) wait on SQL 102, which
-  // requires SQL 98. Both are pending pins (SQL 98 itself requires SQL 96).
+  // requires SQL 98 (SQL 98 itself requires SQL 96).
   assert.equal(PLAN.members[ENGINE].sql_before, SQL98);
   assert.equal(PLAN.members[HANDLERS].sql_before, SQL102);
-  assert.equal(PLAN.sql_prerequisites[SQL102].verified_live, false);
+  // SQL 102 is recorded live in production since its guarded apply of 2026-10-20 (#1079).
+  const pre102 = PLAN.sql_prerequisites[SQL102];
+  assert.equal(pre102.verified_live, true);
+  assert.match(pre102.evidence, /SSM fdf84b2e-8f53-4e9f-b6a4-37a56054175b/);
+  assert.match(pre102.evidence, /#1079/);
+  const pin102 = JSON.parse(fs.readFileSync(path.join(ROOT, pre102.pin), 'utf8'));
+  assert.equal(pin102.execute, false);
+  assert.match(pin102.authorization, /^Applied to production on 2026-10-20; execute is false again/);
+  assert.equal(pin102.applied.result, 'applied');
+  assert.equal(pin102.applied.apply_ssm_command_id, 'fdf84b2e-8f53-4e9f-b6a4-37a56054175b');
+  assert.equal(pin102.filename, SQL102);
   for (const member of [COLLECTION, DESTINATION]) assert.equal(PLAN.members[member].sql_before, null, member);
   const pre = PLAN.sql_prerequisites[SQL98];
-  // SQL 98 is recorded live in production since its guarded apply of 2026-10-19 (#1072); SQL 102 is not.
+  // SQL 98 is recorded live in production since its guarded apply of 2026-10-19 (#1072).
   assert.equal(pre.verified_live, true);
   assert.match(pre.evidence, /SSM 817865e7-2684-4f87-9f56-e57ed5386add/);
   assert.match(pre.evidence, /#1072/);
@@ -735,10 +745,13 @@ test('fee collection: eleven members on the fee manifest, collection-v2 then des
   assert.deepEqual([...reg.function_identities], pin.function_identities);
   assert.match(fs.readFileSync(path.join(ROOT, SQL98), 'utf8'), /to_regprocedure\('public\.aws_platform_owner_set_tenant_pricing\(uuid, jsonb\)'\) IS NULL/);
 
-  // Held while SQL 98 (the engine; the plan before its 2026-10-19 record) or SQL 102 (the handlers) is not recorded live ...
+  // Held while SQL 98 (the engine) or SQL 102 (the handlers) is not recorded live (the plan before
+  // their 2026-10-19 and 2026-10-20 records) ...
+  const plan102Pending = structuredClone(PLAN_SQL98_PENDING);
+  plan102Pending.sql_prerequisites[SQL102] = { ...plan102Pending.sql_prerequisites[SQL102], verified_live: false, evidence: null };
   for (const [member, sqlBefore] of [[ENGINE, SQL98], [HANDLERS, SQL102]]) {
     await assert.rejects(
-      run(applyEnv(member), { ...applyDeps(member).deps, plan: PLAN_SQL98_PENDING }),
+      run(applyEnv(member), { ...applyDeps(member).deps, plan: plan102Pending }),
       (error) => error.code === CODES.PRODUCTION_APPROVAL_REQUIRED && error.details.sql_before === sqlBefore,
       member,
     );
