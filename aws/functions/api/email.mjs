@@ -102,31 +102,81 @@ export const sendViaSesOrSink = async ({
   };
 };
 
-const logEmail = async (client, row) => {
+// email_send_log.status allows pending | sent | suppressed | failed | bounced | complained | dlq
+// (supabase/migrations/20260430101148_email_infra.sql). A sink delivery is not a status of its
+// own: it is logged as 'sent' with metadata.delivery 'sink'.
+const logStatus = (status, metadata = {}) => (status === 'sunk'
+  ? { status: 'sent', metadata: { ...metadata, delivery: 'sink' } }
+  : { status: status || 'sent', metadata });
+
+// Runs one log write inside a savepoint. A failed statement otherwise aborts the request's
+// transaction: its COMMIT then rolls back and the request fails after the mail was sent.
+const inLogSavepoint = async (client, write) => {
+  await client.query('SAVEPOINT email_send_log_write');
   try {
-    await client.query(
-      `INSERT INTO public.email_send_log (
-         id, template_name, recipient_email, tenant_id, status, provider, provider_message_id,
-         idempotency_key, error_message, metadata, created_at
-       ) VALUES (
-         $1::uuid, $2, $3, $4::uuid, $5, $6, $7, $8, $9, $10::jsonb, now()
-       )`,
-      [
-        row.id || randomUUID(),
-        row.template_name || null,
-        row.recipient_email,
-        row.tenant_id || null,
-        row.status || 'sent',
-        row.provider || 'aws_staging',
-        row.provider_message_id || null,
-        row.idempotency_key || null,
-        row.error_message || null,
-        JSON.stringify(row.metadata || {}),
-      ],
-    );
+    await write();
+    await client.query('RELEASE SAVEPOINT email_send_log_write');
+    return true;
   } catch {
     // Logging must not break send path; schema variants exist across dumps.
+    try {
+      await client.query('ROLLBACK TO SAVEPOINT email_send_log_write');
+      await client.query('RELEASE SAVEPOINT email_send_log_write');
+    } catch { /* the transaction itself is gone; COMMIT will report it */ }
+    return false;
   }
+};
+
+const logEmail = async (client, row) => {
+  const logged = logStatus(row.status, row.metadata);
+  return inLogSavepoint(client, () => client.query(
+    `INSERT INTO public.email_send_log (
+       id, template_name, recipient_email, tenant_id, status, provider, provider_message_id,
+       idempotency_key, error_message, metadata, created_at
+     ) VALUES (
+       $1::uuid, $2, $3, $4::uuid, $5, $6, $7, $8, $9, $10::jsonb, now()
+     )`,
+    [
+      row.id || randomUUID(),
+      row.template_name || null,
+      row.recipient_email,
+      row.tenant_id || null,
+      logged.status,
+      row.provider || 'aws_staging',
+      row.provider_message_id || null,
+      row.idempotency_key || null,
+      row.error_message || null,
+      JSON.stringify(logged.metadata || {}),
+    ],
+  ));
+};
+
+const finishLoggedEmail = async (client, id, row) => {
+  const logged = logStatus(row.status, row.metadata);
+  return inLogSavepoint(client, () => client.query(
+    `UPDATE public.email_send_log
+     SET status = $2, provider_message_id = $3, error_message = $4, metadata = $5::jsonb
+     WHERE id = $1::uuid`,
+    [id, logged.status, row.provider_message_id || null, row.error_message || null, JSON.stringify(logged.metadata || {})],
+  ));
+};
+
+// The latest logged send for an idempotency key, or null. Read inside a savepoint so a schema
+// without the column refuses the keyed send instead of aborting the transaction.
+const findLoggedSend = async (client, idempotencyKey) => {
+  let row = null;
+  const ok = await inLogSavepoint(client, async () => {
+    const { rows } = await client.query(
+      `SELECT id, template_name, recipient_email, status, provider_message_id
+       FROM public.email_send_log
+       WHERE idempotency_key = $1
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [idempotencyKey],
+    );
+    row = rows[0] || null;
+  });
+  return { ok, row };
 };
 
 const isSuppressed = async (client, email, tenantId) => {
@@ -141,15 +191,29 @@ const isSuppressed = async (client, email, tenantId) => {
   return rows.length > 0;
 };
 
-export const handleSendTransactionalEmail = async (event) => withIdentity(event, async ({
+/**
+ * Double-send protection for a caller-supplied idempotency key (the request runs in one
+ * transaction, see withIdentity):
+ *   1. a transaction-scoped advisory lock on the key, so a concurrent request with the same key
+ *      waits until this one commits or rolls back;
+ *   2. an earlier logged send for the key is returned instead of sending again (a 'failed' one,
+ *      which delivered nothing, may be retried; a 'pending' one has an unknown outcome and is
+ *      never re-sent);
+ *   3. a 'pending' reservation row is written before the mailer and finished after it, each in
+ *      its own savepoint so a log failure cannot abort the request.
+ * Without a caller key nothing is locked or looked up, as before.
+ */
+export const handleSendTransactionalEmail = async (event, deps = {}) => withIdentity(event, async ({
   client, mapping, body, spoof,
 }) => {
   const templateName = body.templateName || body.template_name;
   const recipientEmail = normalizeEmail(body.recipientEmail || body.recipient_email);
   const tenantId = body.tenantId || body.tenant_id || null;
   const templateData = body.templateData || body.template_data || {};
-  const idempotencyKey = body.idempotencyKey || body.idempotency_key || randomUUID();
+  const callerKey = body.idempotencyKey || body.idempotency_key || null;
+  const idempotencyKey = callerKey ? String(callerKey) : randomUUID();
   const messageId = randomUUID();
+  const mailer = deps.sendViaSesOrSink || sendViaSesOrSink;
 
   if (!templateName || !TEMPLATE_NAMES.has(templateName)) {
     return {
@@ -163,6 +227,37 @@ export const handleSendTransactionalEmail = async (event) => withIdentity(event,
   }
   if (!recipientEmail) {
     return { ok: false, statusCode: 400, success: false, error: 'missing_recipient', spoofFieldsIgnored: spoof };
+  }
+
+  if (callerKey) {
+    await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`email_send_log:${idempotencyKey}`]);
+    const prior = await findLoggedSend(client, idempotencyKey);
+    if (!prior.ok) {
+      return {
+        ok: false, statusCode: 503, success: false, error: 'idempotency_unavailable', spoofFieldsIgnored: spoof,
+      };
+    }
+    if (prior.row && (prior.row.template_name !== templateName
+      || normalizeEmail(prior.row.recipient_email) !== recipientEmail)) {
+      return {
+        ok: false, statusCode: 409, success: false, error: 'idempotency_key_conflict', spoofFieldsIgnored: spoof,
+      };
+    }
+    if (prior.row && prior.row.status !== 'failed') {
+      return {
+        ok: true,
+        statusCode: 200,
+        success: prior.row.status === 'sent',
+        idempotentReplay: true,
+        status: prior.row.status,
+        ...(prior.row.status === 'suppressed' ? { reason: 'email_suppressed' } : {}),
+        sent: false,
+        queued: false,
+        provider: 'aws_staging',
+        id: prior.row.provider_message_id || prior.row.id,
+        spoofFieldsIgnored: spoof,
+      };
+    }
   }
 
   if (await isSuppressed(client, recipientEmail, tenantId)) {
@@ -190,7 +285,25 @@ export const handleSendTransactionalEmail = async (event) => withIdentity(event,
     senderOverride: body.senderOverride || body.sender_override || null,
   });
   const rendered = renderTransactionalTemplate(templateName, { ...templateData, branding });
-  const send = await sendViaSesOrSink({
+
+  const reserved = await logEmail(client, {
+    id: messageId,
+    template_name: templateName,
+    recipient_email: recipientEmail,
+    tenant_id: tenantId,
+    status: 'pending',
+    provider: 'aws_staging',
+    idempotency_key: idempotencyKey,
+    metadata: { application_user_id: mapping.application_user_id },
+  });
+  if (!reserved && callerKey) {
+    // Without the reservation a retry could not see this send: refuse rather than risk a second one.
+    return {
+      ok: false, statusCode: 503, success: false, error: 'idempotency_reservation_failed', spoofFieldsIgnored: spoof,
+    };
+  }
+
+  const send = await mailer({
     to: recipientEmail,
     subject: rendered.subject,
     html: rendered.html,
@@ -200,15 +313,9 @@ export const handleSendTransactionalEmail = async (event) => withIdentity(event,
   });
 
   const primary = send.results[0] || {};
-  await logEmail(client, {
-    id: messageId,
-    template_name: templateName,
-    recipient_email: recipientEmail,
-    tenant_id: tenantId,
+  const outcome = {
     status: primary.status === 'failed' ? 'failed' : (primary.delivery === 'ses' ? 'sent' : 'sunk'),
-    provider: 'aws_staging',
     provider_message_id: primary.messageId || null,
-    idempotency_key: idempotencyKey,
     error_message: primary.error || null,
     metadata: {
       application_user_id: mapping.application_user_id,
@@ -216,7 +323,20 @@ export const handleSendTransactionalEmail = async (event) => withIdentity(event,
       originalTo: primary.originalTo,
       mode: send.mode,
     },
-  });
+  };
+  if (reserved) {
+    await finishLoggedEmail(client, messageId, outcome);
+  } else {
+    await logEmail(client, {
+      id: messageId,
+      template_name: templateName,
+      recipient_email: recipientEmail,
+      tenant_id: tenantId,
+      provider: 'aws_staging',
+      idempotency_key: idempotencyKey,
+      ...outcome,
+    });
+  }
 
   return {
     ok: true,
@@ -230,9 +350,11 @@ export const handleSendTransactionalEmail = async (event) => withIdentity(event,
     stagingPolicy: primary.policy,
     spoofFieldsIgnored: spoof,
   };
-}, { write: true, commit: true });
+}, { write: true, commit: true, ...deps });
 
-export const handleSendEmail = async (event) => withIdentity(event, async ({
+// No idempotency key here: the shared logEmail (savepoint, no 'sunk' status) keeps a log failure
+// from rolling back the request after the mail went out, which made clients retry.
+export const handleSendEmail = async (event, deps = {}) => withIdentity(event, async ({
   client, mapping, body, spoof,
 }) => {
   const recipients = [];
@@ -257,7 +379,7 @@ export const handleSendEmail = async (event) => withIdentity(event, async ({
     tenantId: body.tenantId || body.tenant_id || null,
     senderOverride: body.senderOverride || body.sender_override || null,
   });
-  const send = await sendViaSesOrSink({
+  const send = await (deps.sendViaSesOrSink || sendViaSesOrSink)({
     to: recipients,
     subject: String(body.subject),
     html: String(htmlBody),
@@ -294,7 +416,7 @@ export const handleSendEmail = async (event) => withIdentity(event, async ({
     stagingMode: send.mode,
     spoofFieldsIgnored: spoof,
   };
-}, { write: true, commit: true });
+}, { write: true, commit: true, ...deps });
 
 export const handleEmailUnsubscribe = async (event) => {
   const body = parseBody(event);
