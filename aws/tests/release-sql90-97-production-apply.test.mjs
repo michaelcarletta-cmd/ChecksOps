@@ -47,6 +47,9 @@ const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const CLIS = Object.freeze(Object.fromEntries(RELEASE_SQL_KEYS.map((key) => [key, path.join(ROOT, RELEASE_PRODUCTION[key].cli)])));
 const MAINS = Object.freeze(Object.fromEntries(await Promise.all(RELEASE_SQL_KEYS.map(async (key) => [key, (await import(CLIS[key])).main]))));
 const COMMITTED = Object.freeze(Object.fromEntries(RELEASE_SQL_KEYS.map((key) => [key, loadReleaseProductionPin(key, ROOT)])));
+// SQL 106's production pin is execute-authorized (owner-approved pin change of 2026-10-21 on
+// owner-accepted substitute staging evidence, checked in release-sql106-production-apply.test.mjs)
+// until its record-and-retire change.
 // SQL 97's production pin is execute-authorized (owner approved 2026-10-21, "Everything else should
 // be pushed live no exceptions") until its record-and-retire change: it was not applied on 2026-10-21
 // (its pre-apply inspect reported other_write_grants [checksops DELETE, checksops UPDATE] on
@@ -66,7 +69,7 @@ const COMMITTED = Object.freeze(Object.fromEntries(RELEASE_SQL_KEYS.map((key) =>
 // SQL 98's production pin was execute-authorized (owner approved 2026-10-19, owner-accepted
 // substitute staging evidence) until its record-and-retire change after its 2026-10-19 apply; its
 // own checks are in release-sql98-100-production-apply.test.mjs.
-const EXECUTE_AUTHORIZED = Object.freeze(['sql97']);
+const EXECUTE_AUTHORIZED = Object.freeze(['sql97', 'sql106']);
 // SQL 95's and SQL 97's recorded production pre-states (read-only inspect of 2026-10-21, SSM
 // 43cb1d1f, main 69dbe9b01) and their staging references: the guarded staging read-live runs of
 // 2026-10-21 that report the intended state (their wave 4 apply runs are not recorded), accepted as
@@ -217,7 +220,7 @@ async function runCli(key, argv, { env = { CHECKSOPS_DEPLOYMENT_GUARD_APPLY: '1'
   return { out: writes.join(''), spent };
 }
 
-test('committed pins are pending (SQL 97 execute-authorized; SQL 90, SQL 91, SQL 92, SQL 93, SQL 94, SQL 95, SQL 96, SQL 99, SQL 101, SQL 102, SQL 103, SQL 104 and SQL 105 applied and retired), bound to the staging pins, predecessors and the production RDS, and name the built tooling', () => {
+test('committed pins are pending (SQL 97 and SQL 106 execute-authorized; SQL 90, SQL 91, SQL 92, SQL 93, SQL 94, SQL 95, SQL 96, SQL 99, SQL 101, SQL 102, SQL 103, SQL 104 and SQL 105 applied and retired), bound to the staging pins, predecessors and the production RDS, and name the built tooling', () => {
   const inventory = JSON.stringify(JSON.parse(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/bypass-inventory.json'), 'utf8')));
   assert.deepEqual(RELEASE_SQL_KEYS.filter((key) => COMMITTED[key].execute !== false), [...EXECUTE_AUTHORIZED]);
   assert.deepEqual(RELEASE_SQL_KEYS.filter((key) => COMMITTED[key].applied !== undefined), [...APPLIED_RETIRED]);

@@ -4,7 +4,8 @@
  * release-sql90-97-executor.test.mjs runs what every release key shares (SQL 106 included); this
  * file covers what is new:
  *
- *   - the pin: pending, code-derived, selectable, packed, in step with the production pin; the
+ *   - the pin: pending, code-derived, selectable, packed, in step with the production pin (which is
+ *     execute-authorized on owner-accepted substitute staging evidence); the
  *     pinned commit authored the bytes; no predecessor, runs before SQL 97 (whose file, pins and
  *     fingerprints are unchanged);
  *   - the spec's one table_privileges entry (SQL 106 creates or replaces no function): the
@@ -177,8 +178,13 @@ test('pin: SQL 106 pending, code-derived, selectable, packed, in step with the p
   assert.equal(prod.staging_pin_commit, pin.commit);
   assert.equal(prod.source_sha256, pin.source_sha256);
   assert.deepEqual(prod.predecessors, []);
-  assert.equal(prod.execute, false);
-  assert.equal(prod.authorization, 'pending');
+  // Production pin execute-authorized (owner-approved pin change of 2026-10-21, substitute staging
+  // evidence: SQL 106 was already in effect in staging); production's pre-state (checksops DELETE and
+  // UPDATE) differs from staging's.
+  assert.equal(prod.execute, true);
+  assert.match(prod.authorization, /^Owner approved 2026-10-21 /);
+  assert.equal(prod.expected_live_definition_sha256, '56b5e4bb1a2db3133c32c9cc3cca02c1e7fb876839544dbdfd0717aad8f25880');
+  assert.notEqual(prod.expected_live_definition_sha256, prod.intended_replacement_sha256);
   let bytes = null;
   if (/^[0-9a-f]{40}$/.test(pin.commit)) {
     try {
