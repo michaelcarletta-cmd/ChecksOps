@@ -1,8 +1,8 @@
 {
   "id": "sql95-remove-freedom-claims-bridge-production-apply",
   "migration": "sql95",
-  "authorization": "Owner approved 2026-10-21 (the owner approved pushing the remaining release live in the words \"Everything else should be pushed live no exceptions\"; that covers preparing this SQL 95 production pin change, and the change itself is reviewed and merge-approved by the owner separately): production apply of SQL 95 after SQL 97, once app-services.mjs and the ingest-shared-check.mjs 410 stub are live (the Lambda gate below), on the staging acceptance below (production 48535b69b1a2f9b1ad69584f677dae78c830a482f58b9380c881205f91d8e05f -> a737e4ecdc114a456aa698b71f41cac7182218995c8e17517dd6162cafc1f9c2); execute true takes effect only when the owner reviews and merges this change. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
-  "execute": true,
+  "authorization": "Applied to production on 2026-10-21; execute is false again, so this pin is no longer a standing authorization and a re-apply needs a new reviewed pin change. The owner approved the SQL 95 production pin (48535b69 -> a737e4ec), the read-only production inspect and the execute change on 2026-10-21 (\"Everything else should be pushed live no exceptions\", #1112), and approved the one apply run recorded in applied (workstream prod-sql95-remove-freedom-claims-bridge-20261021) on 2026-10-21 with \"apply SQL 97, 95 and 99 in production\". That approval covered that run only",
+  "execute": false,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -55,5 +55,105 @@
     "ok": true,
     "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39616185934",
     "basis": "Owner-accepted substitute evidence (the owner's words for the remaining release: \"Everything else should be pushed live no exceptions\"). SQL 95 is already applied in staging (wave 4, owner approved 2026-10-18, pinned at main 23953055e and merged in #1034 (a96b610d8); staging read-live run 39121392809 recorded the staging pre-state 4e8f37453b8d6678ed067b8b24bf6b200c5000700742e62871941b2748ba1588). The guarded staging apply run of that wave is not recorded in the repository (the guarded staging executor runs at main a96b610d8 on 2026-10-18, 39122051823 to 39122531714, are the likely redeploy, applies and read-lives of wave 4, but their logs were not read for this change, so none is cited), so the reference is the guarded staging SQL executor read-live of sql95-remove-freedom-claims-bridge on 2026-10-21 (run 39616185934), which reported the staging live definition equal to the intended a737e4ecdc114a456aa698b71f41cac7182218995c8e17517dd6162cafc1f9c2 = intended_replacement_sha256. The pre-states differ: staging before its apply was 4e8f37453b8d6678ed067b8b24bf6b200c5000700742e62871941b2748ba1588 and production (production_inspect, 2026-10-21) is 48535b69b1a2f9b1ad69584f677dae78c830a482f58b9380c881205f91d8e05f; both reach the intended a737e4ecdc114a456aa698b71f41cac7182218995c8e17517dd6162cafc1f9c2 from the same pinned file bytes (source_sha256), and the production apply refuses unless the live state still equals this pin's expected_live_definition_sha256."
+  },
+  "applied": {
+    "date": "2026-10-21",
+    "result": "applied",
+    "source_commit": "dcd86525690e0732691ab7bf0723dc25167d89e9",
+    "source_tarball": {
+      "file": "source-dcd86525690e0732691ab7bf0723dc25167d89e9.tar.gz",
+      "sha256": "2c0c0fac5b042df8657cf553b630c572a1f9bb02f23541f9384b024a1f31487e"
+    },
+    "migration_source_sha256": "0cf0dafdcd06afc5d6993d06668fb8d56b5812ad6c1aa0bfda437a1bcb8f4137",
+    "migration_source_sha256_note": "The one-shot source step hashed aws/workflows/sql/95_remove_freedom_claims_bridge.sql in the transfer tarball: equal to source_sha256 (the pin).",
+    "runner": "i-0c35557c4e5385406",
+    "workstream_id": "prod-sql95-remove-freedom-claims-bridge-20261021",
+    "one_use_id": "sql95-prod-d04849eb-31b3-4657-a622-d0ffa030207d",
+    "one_use_id_consumed": true,
+    "one_use_id_consumed_basis": "Inferred from the successful apply (the tool records the one_use_id after COMMIT and only warns if that write fails); the consumed-registry entry was not read back separately.",
+    "owner_approval": "apply SQL 97, 95 and 99 in production",
+    "owner_approval_basis": "As passed (base64, --approval-statement-b64) for --approval-scope sql95; the one-shot cannot verify who said it. The same statement also named SQL 97, which was not applied (see one_shot_note and ops/production-sql-90-97-apply.md).",
+    "operator": "michaelcarletta-cmd",
+    "apply_ssm_command_id": "2f1530c2-0cf9-42a9-8fef-685b5e83589a",
+    "one_shot_run_id": "3b4fe182-94bd-494f-b411-af75f4f3ce92",
+    "one_shot_note": "One guarded production-sql-one-shot run (SSM 2f1530c2-0cf9-42a9-8fef-685b5e83589a, run_id 3b4fe182-94bd-494f-b411-af75f4f3ce92) from main dcd865256 (transfer run 39624539833, sql53-temporary-transfer.yml dispatched on main at 2026-10-21T15:19:15Z) applied SQL 95: steps pin, source, inspect, contracts, manifest, source-recheck-before-preflight, preflight, evaluate, source-recheck-before-apply, apply (applied) and post-apply-inspect all ok; runner contracts, manifest, receipt and inspects as recorded below. Start and finish times were not captured. Applied after its Lambda gate (app-services.mjs and the ingest-shared-check.mjs 410 stub, live since rebuild run 39588578627). Not after SQL 97, as the pin's authorization text and the runbook's Apply order (steps 7 then 8) set out: SQL 97 was not applied under the same approval: its one-shot was not run because its pre-apply read-only inspect (SSM 16bcba87-7ad4-48b1-a63b-a2de20d25eee, main dcd865256) reported table_privileges financial_stepup_log lines [\"checksops INSERT\"] with other_write_grants [\"checksops DELETE\", \"checksops UPDATE\"], so per the runbook rule (Apply order step 7: stop if other_write_grants is not []) it stopped; the owner decided to build SQL 106 (revoke UPDATE/DELETE/TRUNCATE) to apply before SQL 97. SQL 97 is not a predecessor of SQL 95 (predecessors []; the order came from the two Lambda gates), and the one-shot's pre-apply inspect reported predecessors_applied true, missing_dependencies [] and precondition_failures [].",
+    "steps": [
+      "pin",
+      "source",
+      "inspect",
+      "contracts",
+      "manifest",
+      "source-recheck-before-preflight",
+      "preflight",
+      "evaluate",
+      "source-recheck-before-apply",
+      "apply",
+      "post-apply-inspect"
+    ],
+    "contract_results": {
+      "claim-ledger": {
+        "ok": true,
+        "passed": "4/4"
+      },
+      "tenant-isolation": {
+        "ok": true,
+        "passed": "6/6"
+      },
+      "financial-write-protections": {
+        "ok": true,
+        "passed": "43/43"
+      }
+    },
+    "pre_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "48535b69b1a2f9b1ad69584f677dae78c830a482f58b9380c881205f91d8e05f",
+      "live_matches_expected": true,
+      "already_applied": false,
+      "precondition_failures": [],
+      "missing_dependencies": [],
+      "predecessors_applied": true,
+      "successors_applied": [],
+      "note": "The one-shot inspect step (read-only --inspect) immediately before the apply: live == the recorded pre-state 48535b69..., live_matches_expected true, already_applied false, precondition_failures [], missing_dependencies [], successors_applied []. The dropped-function dependents / callers counts were not carried into this record; both are precondition rules and precondition_failures was []."
+    },
+    "manifest_sha256": "6c7551a02c3ddea5d54e76446ffd2774924ec0375980f67ecd2c3cb26387e857",
+    "receipt": {
+      "migration": "sql95",
+      "workstream": "prod-sql95-remove-freedom-claims-bridge-20261021",
+      "commit": "dcd86525690e0732691ab7bf0723dc25167d89e9",
+      "sql_file": "aws/workflows/sql/95_remove_freedom_claims_bridge.sql",
+      "before_hash": "48535b69b1a2f9b1ad69584f677dae78c830a482f58b9380c881205f91d8e05f",
+      "after_hash": "a737e4ecdc114a456aa698b71f41cac7182218995c8e17517dd6162cafc1f9c2",
+      "unrelated_catalog_sha256": "8a56ccd66383f7551f612d70f220982c1e1297c29eeaad2446b57e6c29072df6",
+      "unrelated_catalog_counts": {
+        "relations": 890,
+        "columns": 3535,
+        "constraints": 2233,
+        "policies": 404,
+        "functions": 1310,
+        "indexes": 654,
+        "default_acl": 0,
+        "role_memberships": 15,
+        "roles": 29,
+        "triggers": 178,
+        "views": 25,
+        "types": 18,
+        "schema": 2
+      },
+      "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39616185934",
+      "result": "applied"
+    },
+    "post_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "a737e4ecdc114a456aa698b71f41cac7182218995c8e17517dd6162cafc1f9c2",
+      "already_applied": true,
+      "precondition_failures": [],
+      "missing_dependencies": [],
+      "predecessors_applied": true,
+      "successors_applied": [],
+      "note": "The one-shot post-apply read-only --inspect: already_applied true (live == intended a737e4ec...), precondition_failures []. The intended state drops trg_notify_freedom_status_change, notify_freedom_status_change(), list_checks_by_freedom_claim(text, uuid), aws_ingest_shared_check(jsonb), vault_create_bridge_secret(text) and vault_update_bridge_secret(text); the objects were not listed one by one in this record."
+    }
+  },
+  "production_evidence": {
+    "2026-10-21 apply": "Guarded production SQL one-shot on i-0c35557c4e5385406, workstream prod-sql95-remove-freedom-claims-bridge-20261021, main dcd865256 (tarball 2c0c0fac…, transfer run 39624539833, migration source 0cf0dafd… == pin), owner-approved run (\"apply SQL 97, 95 and 99 in production\"), SSM 2f1530c2-0cf9-42a9-8fef-685b5e83589a, run_id 3b4fe182-94bd-494f-b411-af75f4f3ce92, one_use_id sql95-prod-d04849eb-31b3-4657-a622-d0ffa030207d (spent): every step ok; contracts claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43; pre-apply inspect live 48535b69… (live_matches_expected true, precondition_failures []); manifest 6c7551a0…; 48535b69… -> a737e4ec…, result applied, unrelated catalog 8a56ccd6…; post-apply inspect already_applied true, precondition_failures []. Start and finish times were not captured. No later inspect was run. execute is false so the pin is no longer a standing authorization."
   }
 }

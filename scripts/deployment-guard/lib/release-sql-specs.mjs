@@ -1,5 +1,5 @@
 /**
- * Specs of the release 2026-10-17 SQL (SQL 90 to SQL 105) for the shared engine in
+ * Specs of the release 2026-10-17 SQL (SQL 90 to SQL 106) for the shared engine in
  * release-sql-state.mjs: what each pinned file creates, replaces or drops, the reviewed
  * EXECUTE ACLs, the prerequisites and predecessors, and the PostgreSQL renderings the file
  * leaves (policy expressions, view, column, constraint, index and trigger definitions as
@@ -54,9 +54,10 @@
  *                      EXECUTE ACL of (SQL 103): identity, final ACL, revokes (the entries it
  *                      removes); fingerprinted by presence and ACL only
  *   runs_before        informational production order (SQL 103 before SQL 29, which is not on
- *                      this engine): the production one-shot and the runbook
+ *                      this engine; SQL 106 before SQL 97): the production one-shot and the
+ *                      runbook
  *
- * SQL 106 and later: add a spec here, its staging pin in sql-executor-auth.mjs
+ * SQL 107 and later: add a spec here, its staging pin in sql-executor-auth.mjs
  * (RELEASE_2026_10_17_PENDING_SQL_PINS or a successor map) and its production pin; the
  * engine, the executor handler and the production tool are generic.
  */
@@ -3467,6 +3468,52 @@ export const RELEASE_SQL_SPECS = deepFreeze({
       "public.payment_provider_methods",
       "public.payment_method_verifications",
       "public.payment_event_log"
+    ]
+  },
+  // SQL 106: financial_stepup_log append-only for every role but its owner (UPDATE, DELETE and
+  // TRUNCATE revoked from PUBLIC, checksops, authenticated and anon). SQL 97's guard is BEFORE
+  // INSERT only; the production inspect of SQL 97 (2026-10-21, SSM 16bcba87) reported
+  // other_write_grants ["checksops DELETE", "checksops UPDATE"]. Its fingerprint is those roles'
+  // UPDATE / DELETE / TRUNCATE lines on the table, which must be none; every other grant on the
+  // table (SELECT, INSERT, service_role's, the owner's) must stay as it was
+  // (other_table_privileges_unchanged). No predecessor: it runs before SQL 97 in production and
+  // after it in staging (runs_before, informational; SQL 97's fingerprint covers only INSERT,
+  // its function and its trigger, so SQL 106 leaves it unchanged either way).
+  sql106: {
+    "key": "sql106",
+    "label": "SQL 106",
+    "choice": "sql106-financial-stepup-log-append-only",
+    "production_pin_rel": "ops/deployment-guard/sql106-financial-stepup-log-append-only-production-apply.json",
+    "script": "sql106-financial-stepup-log-append-only-production-apply",
+    "prerequisites": [
+      "public.financial_stepup_log",
+      "role checksops",
+      "role authenticated"
+    ],
+    "predecessors": [],
+    "functions": [],
+    "table_privileges": [
+      {
+        "table": "public.financial_stepup_log",
+        "grantees": [
+          "PUBLIC",
+          "anon",
+          "authenticated",
+          "checksops"
+        ],
+        "privileges": [
+          "UPDATE",
+          "DELETE",
+          "TRUNCATE"
+        ],
+        "intended": []
+      }
+    ],
+    "altered_relations": [
+      "public.financial_stepup_log"
+    ],
+    "runs_before": [
+      "sql97"
     ]
   },
 });

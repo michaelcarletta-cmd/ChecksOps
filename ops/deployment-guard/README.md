@@ -67,6 +67,7 @@ node scripts/deployment-guard/sql102-platform-owner-tenant-profile-production-ap
 node scripts/deployment-guard/sql103-share-library-trigger-acl-production-apply.mjs --inspect   # immediately before SQL 29 (ops/production-sql-103-apply.md)
 node scripts/deployment-guard/sql104-payment-idempotency-keys-grant-production-apply.mjs --inspect   # any time after SQL 91 (ops/production-sql-104-apply.md)
 node scripts/deployment-guard/sql105-onboarding-payment-table-grants-production-apply.mjs --inspect   # any time after SQL 91 (ops/production-sql-105-apply.md)
+node scripts/deployment-guard/sql106-financial-stepup-log-append-only-production-apply.mjs --inspect   # before SQL 97 (ops/production-sql-106-apply.md)
 # Production SQL 71, 77-89 and 90-102 on the runner, one invocation (ops/production-sql-one-shot.md)
 node scripts/deployment-guard/production-sql-one-shot.mjs --migration sql80 --phase inspect ...
 node scripts/deployment-guard/verify-live.mjs --input path/to/live.json
