@@ -4,15 +4,45 @@
   "environments": {
     "staging": {
       "function_name": "checksops-staging-api",
-      "status": "pending_inspect",
-      "set": {},
-      "unset": {}
+      "status": "accepted",
+      "set": {
+        "AWS_MOOV_ONBOARDING_PRODUCTION_ENABLED": {
+          "from": "false",
+          "to": "true"
+        }
+      },
+      "unset": {},
+      "inspect": {
+        "run_id": "39592453966",
+        "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39592453966",
+        "main_commit": "41612c462bf51e3d545633ff7783a74ce73ccd7d",
+        "live_code_sha256": "sxodWyRpUr0LbETU0YhBayaqYe1VsfNBQi1OoMZpd4U=",
+        "live_revision_id": "8503779d-4d63-4448-b8d5-9ad258cd7475",
+        "live_configuration_sha256": "dcafc84ec7fd1ffefba04e30b943104bc02515a2c5d46185013753037a14aafd",
+        "live_variable_count": 44,
+        "notes": "Staging holds AWS_MOOV_ONBOARDING_PRODUCTION_ENABLED=\"false\" (template default) and AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED=\"true\". On staging executionAllowed('moov') is false, so onboarding runs against the Moov sandbox and this flag is never consulted (providers/onboarding/flags.mjs onboardingDeployment). The change has no functional effect on staging; it exercises the guarded configuration writer end to end before production and is the staging acceptance for the production change."
+      }
     },
     "production": {
       "function_name": "checksops-production-prep-api",
-      "status": "pending_inspect",
-      "set": {},
-      "unset": {}
+      "status": "accepted",
+      "set": {
+        "AWS_MOOV_ONBOARDING_PRODUCTION_ENABLED": {
+          "from": null,
+          "to": "true"
+        }
+      },
+      "unset": {},
+      "inspect": {
+        "run_id": "39592458904",
+        "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39592458904",
+        "main_commit": "41612c462bf51e3d545633ff7783a74ce73ccd7d",
+        "live_code_sha256": "sxodWyRpUr0LbETU0YhBayaqYe1VsfNBQi1OoMZpd4U=",
+        "live_revision_id": "e7d6c9ec-d4f8-4f93-bdff-fb51c3284497",
+        "live_configuration_sha256": "9ecb1363ab976bd40f971777914bec22014e255347414b6fcfdf3e4109a526a3",
+        "live_variable_count": 49,
+        "notes": "Production does not carry the AWS_MOOV_ONBOARDING_PRODUCTION_ENABLED key at all (the live stack predates the template line; the inspect's live variable names list omits it and a read-only GetFunctionConfiguration through the owner's AWS connector on 2026-10-21 confirmed it absent), so from is null. With the key absent, moovOnboardingProductionEnabled() is false and every onboarding function answers production_execution_blocked. Setting it to the string \"true\" opens onboarding only (Compliance & Docs + bank setup, and the onboarding webhook apply); it never opens money movement. The rebuilt package (run 39588578627) carries @aws-sdk/client-kms and the onboarding modules the flag needs."
+      }
     }
   }
 }
