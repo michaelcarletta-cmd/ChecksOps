@@ -56,31 +56,32 @@ test('lambda-config is a registered deployment type and the component carries th
   assert.notEqual(changeSha256({ ...PLAN, set: { ...PLAN.set, NEW_KEY: { from: null, to: 'v2' } } }), hash);
 });
 
-test('the committed plan records the Moov onboarding flag change from inspect runs 39592453966 and 39592458904', () => {
+test('the committed plan records the Moov onboarding flag applies (runs 39594167097, 39594352935) and starts the next change empty', () => {
   const raw = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, CONFIG_PLAN_REL), 'utf8'));
   const expected = {
-    staging: { run: '39592453966', revision: '8503779d-4d63-4448-b8d5-9ad258cd7475', from: 'false' },
-    production: { run: '39592458904', revision: 'e7d6c9ec-d4f8-4f93-bdff-fb51c3284497', from: null },
+    staging: { inspect: '39592453966', run: '39594167097', before: '8503779d-4d63-4448-b8d5-9ad258cd7475', after: 'b9c2981e-51f7-432b-a8e2-286e4bdaa9af', from: 'false' },
+    production: { inspect: '39592458904', run: '39594352935', before: 'e7d6c9ec-d4f8-4f93-bdff-fb51c3284497', after: '58733b08-ef0a-4ab9-a47a-30fc15ebeafb', from: null },
   };
   for (const [environment, want] of Object.entries(expected)) {
     const section = loadConfigPlan(REPO_ROOT, environment);
     assert.ok(section.function_name.startsWith('checksops-'));
-    assert.deepEqual(section.set, { AWS_MOOV_ONBOARDING_PRODUCTION_ENABLED: { from: want.from, to: 'true' } });
+    assert.deepEqual(section.set, {});
     assert.deepEqual(section.unset, {});
-    assert.equal(raw.environments[environment].status, 'accepted');
-    assert.equal(raw.environments[environment].inspect.run_id, want.run);
-    assert.equal(raw.environments[environment].inspect.live_revision_id, want.revision);
-    // The inspected live state (key absent in production, "false" in staging) makes the section READY.
-    const live = want.from === null ? { OTHER: 'x' } : { OTHER: 'x', AWS_MOOV_ONBOARDING_PRODUCTION_ENABLED: want.from };
-    const result = evaluateConfigChange({ plan: raw, environment, liveVariables: live });
-    assert.equal(result.ok, true, result.message);
-    assert.equal(result.details.state, 'READY');
-    assert.deepEqual(result.details.target, { OTHER: 'x', AWS_MOOV_ONBOARDING_PRODUCTION_ENABLED: 'true' });
-    // Production's recorded live state ("false") would be a collision: the plan is pinned to the key being absent.
-    if (want.from === null) {
-      assert.equal(evaluateConfigChange({ plan: raw, environment, liveVariables: { AWS_MOOV_ONBOARDING_PRODUCTION_ENABLED: 'false' } }).code, CODES.DEPLOYMENT_COLLISION);
-    }
+    const row = raw.environments[environment];
+    assert.equal(row.status, 'applied');
+    assert.equal(row.inspect.run_id, want.inspect);
+    assert.equal(row.applied.run_id, want.run);
+    assert.equal(row.applied.state, 'VERIFIED');
+    assert.equal(row.applied.revision_id_before, row.inspect.live_revision_id);
+    assert.equal(row.applied.revision_id_before, want.before);
+    assert.equal(row.applied.revision_id_after, want.after);
+    assert.equal(row.applied.code_sha256, row.inspect.live_code_sha256);
+    const applied = { function_name: row.function_name, ...row.applied.applied_change };
+    assert.deepEqual(applied.set, { AWS_MOOV_ONBOARDING_PRODUCTION_ENABLED: { from: want.from, to: 'true' } });
+    // The recorded change hash is the one the run's receipt owned.
+    assert.equal(changeSha256(applied), row.applied.change_sha256);
   }
+  assert.equal(raw.environments.production.applied.staging_acceptance, raw.environments.staging.applied.run_url);
 });
 
 test('the plan refuses credential-like keys, invalid keys, non-string values and no-op entries', () => {
