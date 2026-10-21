@@ -37,6 +37,9 @@ import { logAudit } from "@/hooks/useAuditLog";
 import { displayCase } from "@/lib/displayCase";
 import { SIGNATURE_FONT_FAMILY } from "@/lib/signatureFont";
 
+/** Max height of the source viewer at 100% zoom (matches CheckImageCropper's 70vh). */
+const VIEWER_FIT_HEIGHT_VH = 70;
+
 interface SignedEndorsementAsset extends SignatureAsset {
   payee_type: string;
   status: string;
@@ -128,6 +131,20 @@ export function EndorsementAdjuster({
     const frame = requestAnimationFrame(() => setViewerLayoutTick((tick) => tick + 1));
     return () => cancelAnimationFrame(frame);
   }, [viewerZoom]);
+  // Re-lay out the overlay whenever the viewer's box changes size (dialog
+  // resize, window resize), not only after a zoom step. The viewer unmounts
+  // while the deposit preview shows, so observe whichever node is mounted.
+  const [viewerEl, setViewerEl] = useState<HTMLDivElement | null>(null);
+  const setWrapNode = useCallback((node: HTMLDivElement | null) => {
+    wrapRef.current = node;
+    setViewerEl(node);
+  }, []);
+  useEffect(() => {
+    if (!viewerEl || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => setViewerLayoutTick((tick) => tick + 1));
+    observer.observe(viewerEl);
+    return () => observer.disconnect();
+  }, [viewerEl]);
 
   const [signedEndorsements, setSignedEndorsements] = useState<SignedEndorsementAsset[]>([]);
   const [endorsementsLoading, setEndorsementsLoading] = useState(true);
@@ -692,11 +709,19 @@ export function EndorsementAdjuster({
   };
 
   // --- Preview geometry -----------------------------------------------------
-  const domRect = wrapRef.current?.getBoundingClientRect();
-  const containerWidthPx = domRect?.width ?? imageWidth;
+  // Layout size (offsetWidth/offsetHeight), not getBoundingClientRect: the
+  // dialog's open animation scales its content, which would skew the overlay.
+  const wrapEl = wrapRef.current;
+  const containerWidthPx = wrapEl?.offsetWidth || imageWidth;
   const containerHeightPx =
-    domRect?.height ??
+    wrapEl?.offsetHeight ||
     (imageWidth > 0 ? containerWidthPx * imageHeight / imageWidth : imageHeight);
+  // At 100% zoom the whole back image fits the viewer: full width, but never
+  // taller than VIEWER_FIT_HEIGHT_VH (same 70vh bound as CheckImageCropper).
+  // Zoom multiplies the fitted width; the aspect ratio is always kept.
+  const imageAspect = imageWidth > 0 && imageHeight > 0 ? imageWidth / imageHeight : 1;
+  const viewerFitWidth = `min(100%, ${(VIEWER_FIT_HEIGHT_VH * imageAspect).toFixed(3)}vh)`;
+  const viewerWidth = `calc(${viewerFitWidth} * ${viewerZoom})`;
   const displayScale = containerWidthPx / imageWidth;
 
   const safeZoneTopPx = ZONE_TOP_PCT * containerHeightPx;
@@ -830,7 +855,7 @@ export function EndorsementAdjuster({
       {/* Preview */}
       <div className="flex flex-wrap items-center justify-end gap-2">
         <span className="mr-auto text-[10px] text-muted-foreground">
-          Scroll to inspect details. Zoom keeps the aspect ratio.
+          The whole image fits at 100%. Zoom in and scroll to inspect details; zoom keeps the aspect ratio.
         </span>
         <Button
           size="sm"
@@ -864,9 +889,9 @@ export function EndorsementAdjuster({
       </div>
       <div className="overflow-auto rounded border bg-white" style={{ maxHeight: "72vh" }}>
       <div
-        ref={wrapRef}
+        ref={setWrapNode}
         className="relative mx-auto overflow-hidden bg-white"
-        style={{ width: `${Math.round(viewerZoom * 100)}%`, minWidth: "100%", touchAction: "none" }}
+        style={{ width: viewerWidth, touchAction: "none" }}
       >
         <img
           src={originalImageUrl}
