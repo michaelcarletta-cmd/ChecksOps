@@ -42,7 +42,7 @@ git diff --name-only origin/main...HEAD
 | anything under `aws/`, `scripts/`, `src/`, `package.json`, `bun.lock` | `node --experimental-strip-types --test aws/tests/*.test.mjs` (the whole suite; it is what `aws-migration-guards` runs) |
 | a migration, pin, spec or production tool | the pin's `tooling.tests` list, `aws/tests/production-sql-one-shot.test.mjs`, `aws/tests/production-sql-inspect-hygiene.test.mjs`, plus the whole suite |
 | `ops/release-locks/**`, `scripts/lib/release-locks.mjs`, the lock scripts | `node --test ops/release-locks/tests/*.test.mjs`, `node scripts/production-deploy-guard.mjs` |
-| `.claude/**`, `CLAUDE.md`, `AGENTS.md`, `.gitattributes` | `node --test aws/tests/claude-checksops-guard-hook.test.mjs aws/tests/hash-report.test.mjs` |
+| `.claude/**`, `CLAUDE.md`, `AGENTS.md`, `.gitattributes` | `node --test aws/tests/claude-checksops-guard-hook.test.mjs aws/tests/claude-session-brief.test.mjs aws/tests/hash-report.test.mjs` |
 | `supabase/security/**`, tax-profile migrations | `npm run check:tax-profile-migrations` and the three `supabase/security` test scripts in `package.json` |
 | frontend (`src/**`) | `bun run lint`, `bun run build:aws` |
 

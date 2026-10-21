@@ -57,7 +57,7 @@ jobs:
         run: git fetch --no-tags --depth=1 origin main
 
       - name: Claude Code guard hook and hash report tests
-        run: node --test aws/tests/claude-checksops-guard-hook.test.mjs aws/tests/hash-report.test.mjs
+        run: node --test aws/tests/claude-checksops-guard-hook.test.mjs aws/tests/claude-session-brief.test.mjs aws/tests/hash-report.test.mjs
 
       - name: Scan for unregistered shared-target writers
         run: node scripts/deployment-guard/scan-bypass.mjs
