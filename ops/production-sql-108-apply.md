@@ -79,8 +79,11 @@ no SPA change). The SPA already sends the nine values.
   (the same five-value pre-state as staging), `already_applied` false, `precondition_failures` `[]`.
   Recorded in the pin as `expected_live_definition_sha256`, with the staging apply run 39662760919
   as `staging_acceptance`.
-- **Pin `execute: true`** once that change is merged, under the owner's statement of 2026-10-21
-  quoted above. Nothing is applied by it; the apply (step 3) passes the owner's words for that run.
+- **Pin `execute: true`** once that change is merged (#1132), under the owner's statement of
+  2026-10-21 quoted above. Nothing is applied by it; the apply (step 3) passes the owner's words for
+  that run.
+- **Applied to production (2026-10-21)** and the pin retired (`execute: false` again; see
+  "Production apply of SQL 108" below).
 
 ## Steps
 
@@ -104,3 +107,34 @@ no SPA change). The SPA already sends the nine values.
    --migration sql108 --approval-scope sql108 … --phase inspect`, then the owner-named
    `--phase apply`.
 4. Record the apply and retire the pin (`execute: false`).
+
+## Production apply of SQL 108 (2026-10-21)
+
+The owner's statement of 2026-10-21 was "apply SQL 108 in production then DEPLOY WEBSITE TO
+PRODUCTION then APPLY API CONFIGURATION TO PRODUCTION". Its SQL 108 part was passed verbatim
+(base64, `--approval-statement-b64`) as "apply SQL 108 in production". The one-shot cannot verify
+who said it, and the statement covered this run only. `production-sql-one-shot.mjs --migration sql108 --approval-scope sql108` on
+`i-0c35557c4e5385406`, operator `michaelcarletta-cmd`, workstream
+`prod-sql108-check-intake-items-funds-type-values-20261021`, from main `970d514bc` (tarball
+`source-970d514bc2f697b58c86e23c319cb938c00ff558.tar.gz`, sha256 `38c84a61…`, transfer run
+`39664745181`, `sql53-temporary-transfer.yml` dispatched on main at 2026-10-21T19:47:52Z; its
+upload job printed `TARBALL_SHA256 38c84a61093961caedc52bf85c1dd9c782a4014e7d20ef1220dd0f37d10bb35b`).
+
+- **Inspect phase:** SSM `b3a5002b-027d-4db3-9a09-6862efd17473`, run_id
+  `d06565f9-8bf2-4d9e-9136-6a5f054c7290`: pin, source, inspect and contracts ok, nothing written;
+  live `c83dcc9b…` (live_matches_expected true), constraint `different`, precondition_failures [].
+- **Apply phase:** SSM `9b6a1df3-6146-464e-9f37-995faaf739e0` (2026-10-21T19:50:00Z to 19:50:10Z),
+  run_id `ee45c3a0-71d6-4821-952b-5c92c0e706b5`, one_use_id
+  `sql108-prod-aa304e1f-6e2d-4e90-900d-99207be30bd6` (spent): every step ok (pin, source, inspect,
+  contracts, manifest, source-recheck-before-preflight, preflight, evaluate,
+  source-recheck-before-apply, apply (applied), post-apply-inspect); migration source `89cea9c9…`
+  (== pin); contracts claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43;
+  pre-apply inspect live `c83dcc9b…`, precondition_failures []; manifest `a8711366…`; receipt
+  `c83dcc9b…` -> `a796a396…`, result applied, unrelated catalog `ed533ca6…` (relations 890, columns
+  3535, constraints 2232, policies 404, functions 1313, indexes 654, triggers 180, views 25, types
+  18, roles 29, role memberships 15); post-apply inspect live `a796a396…`, already_applied true,
+  precondition_failures [], constraint `intended`.
+
+No later read-only inspect was run, and no save of the four added values was tried in production
+after the apply. The pin is `execute: false` again; a re-apply needs a new reviewed pin change (and
+SQL 108 is not re-run: no later migration changes the constraint).
