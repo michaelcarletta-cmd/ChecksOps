@@ -64,7 +64,8 @@ const CHANGED_SINCE_APPLIED_REBUILD = {
 // longer main's bytes. Each environment takes the new bytes through the overlay plan (where they are
 // members) or a new inspect and plan section. checkalt-eligibility.mjs reached staging and production
 // through the #1124 overlay runs (staging 39662525342, production 39663019340); the third staging
-// section (inspect 39663300105) accepts providers/webhooks.mjs and adds providers/moov-transfer-webhook.mjs.
+// section (inspect 39663300105) and the third production section (inspect 39666717878) accept
+// providers/webhooks.mjs and add providers/moov-transfer-webhook.mjs.
 const CHANGED_SINCE_SECOND_REBUILD = {
   // Check Alt eligibility SELECT without front_image_deposit_path (an overlay plan REPLACE member).
   'providers/production/checkalt-eligibility.mjs': 'changed',
@@ -158,7 +159,7 @@ test('the committed plan loads for both environments', () => {
 
 test('the production history keeps the first rebuild (inspect 39587583692, apply 39588578627) and every accepted hash is the bytes on main or a listed later change', () => {
   const raw = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'ops/deployment-guard/lambda-rebuild-plan.json'), 'utf8'));
-  assert.equal(raw.environments.production.history.length, 1);
+  assert.equal(raw.environments.production.history.length, 2);
   const production = raw.environments.production.history[0];
   assert.equal(production.status, 'applied');
   assert.equal(production.applied.run_id, '39588578627');
@@ -191,11 +192,11 @@ test('the production history keeps the first rebuild (inspect 39587583692, apply
   assert.equal(result.details.state, 'READY');
 });
 
-test('the production plan section accepts inspect run 39633975144: the Plaid/Actum/QuickBooks removal, the same 19 changed and 4 removed as staging', () => {
+test('the production history keeps the second rebuild (inspect 39633975144, apply 39636816351): the Plaid/Actum/QuickBooks removal, the same 19 changed and 4 removed as staging', () => {
   const raw = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'ops/deployment-guard/lambda-rebuild-plan.json'), 'utf8'));
-  const production = raw.environments.production;
+  const production = raw.environments.production.history[1];
   const staging = raw.environments.staging;
-  const first = production.history[0];
+  const first = raw.environments.production.history[0];
   assert.equal(production.status, 'applied');
   assert.equal(production.applied.run_id, '39636816351');
   assert.equal(production.applied.code_sha256_after, 'Bh/f7zaIFGDECA1jTWgMeR/2qRMOUaABRWP1lQbREOc=');
@@ -210,7 +211,7 @@ test('the production plan section accepts inspect run 39633975144: the Plaid/Act
   // the ZIP staging accepted.
   assert.equal(production.inspect.live_code_sha256, first.applied.code_sha256_after);
   assert.equal(production.inspect.candidate_zip_sha256, staging.history[1].inspect.candidate_zip_sha256);
-  const section = loadRebuildPlan(REPO_ROOT, 'production');
+  const section = production;
   assert.equal(Object.keys(section.members).length, 19);
   assert.deepEqual(section.added, {});
   assert.deepEqual(Object.keys(section.removed).sort(), ['providers/actum.mjs', 'providers/plaid-sandbox.mjs', 'providers/plaid.mjs', 'providers/quickbooks.mjs']);
@@ -248,6 +249,62 @@ test('the production plan section accepts inspect run 39633975144: the Plaid/Act
   const candidate = {};
   for (const [name, entry] of Object.entries(section.members)) { live[name] = entry.live_sha256; candidate[name] = entry.accepted_sha256; }
   for (const [name, hash] of Object.entries(section.removed)) live[name] = hash;
+  // The recorded section still made the second inspected live package READY, not BLOCKED.
+  const plan = { environments: { production: { function_name: raw.environments.production.function_name, ...production } } };
+  const result = evaluateRebuild({ plan, environment: 'production', liveMemberHashes: live, candidateMemberHashes: candidate, liveInventory: {}, candidateInventory: {} });
+  assert.equal(result.ok, true, result.message);
+  assert.equal(result.details.state, 'READY');
+});
+
+test('the production plan section accepts inspect run 39666717878: Moov transfer returns, the same 1 changed and 1 added as staging', () => {
+  const raw = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'ops/deployment-guard/lambda-rebuild-plan.json'), 'utf8'));
+  const production = raw.environments.production;
+  const staging = raw.environments.staging;
+  const second = production.history[1];
+  assert.equal(production.status, 'accepted');
+  assert.equal(production.applied, undefined);
+  assert.equal(production.inspect.run_id, '39666717878');
+  assert.equal(production.inspect.main_commit, '96361081c5458bf4de46330b87285fa954b25bbb');
+  assert.equal(production.inspect.live_code_sha256, '+cyvVRtA46woHP4FwFBBZoN80aXR4A8Vo6adu5E1/NE=');
+  assert.equal(production.inspect.live_revision_id, 'e8820705-bb70-45ab-ae84-8cc43ee8fd86');
+  assert.equal(production.inspect.candidate_zip_sha256, 'a4d09ec006855355b523a176669028ec4970127d6f145997bdfb7d8fabecaff7');
+  assert.equal(production.inspect.staging_acceptance, 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39666390516');
+  // The package the rebuild starts from is the second rebuild's plus the #1124 overlay (production
+  // overlay run 39663019340): the same package staging inspected before its third rebuild. The
+  // candidate is the ZIP staging accepted.
+  assert.notEqual(production.inspect.live_code_sha256, second.applied.code_sha256_after);
+  assert.equal(production.inspect.live_code_sha256, staging.inspect.live_code_sha256);
+  assert.equal(production.inspect.candidate_zip_sha256, staging.inspect.candidate_zip_sha256);
+  const section = loadRebuildPlan(REPO_ROOT, 'production');
+  assert.deepEqual(Object.keys(section.members), ['providers/webhooks.mjs']);
+  assert.deepEqual(Object.keys(section.added), ['providers/moov-transfer-webhook.mjs']);
+  assert.deepEqual(section.removed, {});
+  assert.deepEqual(section.dependencies, { added: {}, removed: {}, changed: {} });
+  assert.equal(production.inspect.changed, 1);
+  assert.equal(production.inspect.added, 1);
+  assert.equal(production.inspect.removed, 0);
+  assert.deepEqual(production.inspect.dependency_counts, { live: 54, candidate: 54 });
+  // Production and staging ran the same package before this rebuild, so the differences match.
+  assert.deepEqual(section.members, staging.members);
+  assert.deepEqual(section.added, staging.added);
+  const apiRoot = path.join(REPO_ROOT, 'aws/functions/api');
+  for (const [name, entry] of Object.entries(section.members)) {
+    assert.equal(sha256(fs.readFileSync(path.join(apiRoot, name))), entry.accepted_sha256, name);
+    assert.equal(entry.live_sha256, second.members[name].accepted_sha256, name);
+  }
+  for (const [name, hash] of Object.entries(section.added)) {
+    assert.equal(sha256(fs.readFileSync(path.join(apiRoot, name))), hash, name);
+    assert.equal(second.members[name] || second.added[name], undefined, name);
+  }
+  for (const name of Object.keys(CHANGED_SINCE_SECOND_REBUILD)) {
+    if (name === 'providers/production/checkalt-eligibility.mjs') assert.equal(section.members[name], undefined, name);
+    else assert.ok(section.members[name], `${name} changed on main but is not a production member`);
+  }
+  // The plan as committed makes the inspected live package READY, not BLOCKED.
+  const live = {};
+  const candidate = {};
+  for (const [name, entry] of Object.entries(section.members)) { live[name] = entry.live_sha256; candidate[name] = entry.accepted_sha256; }
+  for (const [name, hash] of Object.entries(section.added)) candidate[name] = hash;
   const result = evaluateRebuild({ plan: raw, environment: 'production', liveMemberHashes: live, candidateMemberHashes: candidate, liveInventory: {}, candidateInventory: {} });
   assert.equal(result.ok, true, result.message);
   assert.equal(result.details.state, 'READY');
