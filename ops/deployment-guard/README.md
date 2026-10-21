@@ -92,7 +92,10 @@ difference is not listed there. Runbook: `ops/production-lambda-rebuild.md`.
 Environment-variable changes (one reviewed key at a time, never code, never role/memory/timeout/VPC)
 go through `guarded-staging-lambda-config.yml` and `guarded-production-lambda-config.yml`, gated by
 `ops/deployment-guard/lambda-config-plan.json`: apply is refused unless every listed key still holds
-its recorded live value. Runbook: `ops/lambda-configuration-change.md`.
+its recorded live value. Credential-like keys are never set; a removal is recorded as
+`{ "from_sha256": "<sha256 of the live value>" }` (copied from the inspect's
+`live_credential_sha256`), so the value never reaches git or a log. Runbook:
+`ops/lambda-configuration-change.md`.
 
 The production HTTP API CORS allow-list (`*` to checksops.com and www.checksops.com, nothing else)
 goes through `guarded-production-cors.yml`. Runbook: `ops/production-cors-allowlist.md`.
