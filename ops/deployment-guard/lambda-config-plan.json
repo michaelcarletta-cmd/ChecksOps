@@ -4,63 +4,22 @@
   "environments": {
     "staging": {
       "function_name": "checksops-staging-api",
-      "status": "applied",
+      "status": "accepted",
       "set": {},
-      "unset": {},
-      "inspect": {
-        "run_id": "39613470170",
-        "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39613470170",
-        "main_commit": "69dbe9b01cbcd8f04847cab248e243105c85f022",
-        "live_code_sha256": "sxodWyRpUr0LbETU0YhBayaqYe1VsfNBQi1OoMZpd4U=",
-        "live_revision_id": "b9c2981e-51f7-432b-a8e2-286e4bdaa9af",
-        "live_configuration_sha256": "b5f6446a6f135cd97d54d6e1301bbbb6a424e7272f27af070eb394d5a00aff49",
-        "live_variable_count": 44,
-        "notes": "Owner decision 2026-10-21: every tested feature live; Plaid, Actum and QuickBooks removed. Staging carries none of the four set keys (read-only GetFunctionConfiguration through the owner's AWS connector, 2026-10-21), so each from is null; it carries AWS_PLAID_ENABLED, AWS_ACTUM_ENABLED and AWS_QUICKBOOKS_ENABLED as \"false\". Staging is the sandbox runtime (CHECKSOPS_ENV staging): endorsement resend, CheckAlt status refresh, the $1 billing verification and manual monthly collection run against the provider sandboxes. AWS_PLAID_WEBHOOK_SECRET is credential-like, so this writer cannot remove it; it goes with the staging template change that removes the parameter. Absent provider flags read as false (provider-flags.mjs), so the unsets change no behaviour."
-      },
-      "applied": {
-        "run_id": "39616453836",
-        "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39616453836",
-        "main_commit": "9a19d2a16067eb27b695748648174cbfbde8e4ae",
-        "approval_phrase": "APPLY API CONFIGURATION TO STAGING",
-        "change_sha256": "1047ea2e3dd7062e059c23d6ff593cc1eb74dbe3c2fe11e18abf58c6f2da30db",
-        "revision_id_before": "b9c2981e-51f7-432b-a8e2-286e4bdaa9af",
-        "revision_id_after": "b2e6a162-79ad-4c8e-9177-6f33080a9ded",
-        "configuration_sha256_before": "b5f6446a6f135cd97d54d6e1301bbbb6a424e7272f27af070eb394d5a00aff49",
-        "configuration_sha256_after": "1cfbf6aa9a501c08f6dae3a506c096e359e4cf3d64526ab178b802da2895244f",
-        "applied_at": "2026-10-21T14:29:47.001Z",
-        "smoke": [
-          "/health",
-          "/db-health",
-          "/db-readonly-validate"
-        ],
-        "code_sha256": "sxodWyRpUr0LbETU0YhBayaqYe1VsfNBQi1OoMZpd4U=",
-        "state": "VERIFIED",
-        "notes": "Verify step VERIFIED (45 variables: 44 + 4 set - 3 unset); live read-back through the owner's AWS connector after the apply: the four flags \"true\", the three provider flags absent, RevisionId b2e6a162, CodeSha256 unchanged, LastUpdateStatus Successful.",
-        "applied_change": {
-          "set": {
-            "AWS_ENDORSEMENT_RESEND_ENABLED": {
-              "from": null,
-              "to": "true"
-            },
-            "AWS_CHECKALT_STATUS_RECONCILE_ENABLED": {
-              "from": null,
-              "to": "true"
-            },
-            "AWS_MOOV_BILLING_VERIFICATION_POST_ENABLED": {
-              "from": null,
-              "to": "true"
-            },
-            "AWS_MOOV_MONTHLY_BILLING_ENABLED": {
-              "from": null,
-              "to": "true"
-            }
-          },
-          "unset": {
-            "AWS_PLAID_ENABLED": "false",
-            "AWS_ACTUM_ENABLED": "false",
-            "AWS_QUICKBOOKS_ENABLED": "false"
-          }
+      "unset": {
+        "AWS_PLAID_WEBHOOK_SECRET": {
+          "from_sha256": "a4084a76e7c01b4719f2c6949825b02ec308d093242ebe7ad9397df55b0a6326"
         }
+      },
+      "inspect": {
+        "run_id": "39654673295",
+        "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39654673295",
+        "main_commit": "5e7b95838ea1beef93871e34d5ee6474c565612b",
+        "live_code_sha256": "Bh/f7zaIFGDECA1jTWgMeR/2qRMOUaABRWP1lQbREOc=",
+        "live_revision_id": "b317d571-f4ce-40d2-a180-e6a00f5a7185",
+        "live_configuration_sha256": "653ec35b78f0b20a66e36c68597c9b43578c185d18aa6a890e9038fbfc1fbc39",
+        "live_variable_count": 45,
+        "notes": "Plaid was removed by #1109 (owner decision 2026-10-21); no code on main reads AWS_PLAID_WEBHOOK_SECRET (provider-secrets.mjs no longer maps plaid). The key is credential-like, so the plan records only the SHA-256 of its live value, copied from this inspect live_credential_sha256; the value is never recorded. The same hash is reported for AWS_MOOV_WEBHOOK_SECRET and AWS_CHECKALT_WEBHOOK_SECRET (one shared staging sandbox fixture value); those two keys are not touched. Live CodeSha256 and RevisionId moved since the previous apply through other workstreams code changes; the variable count (45) is unchanged."
       },
       "history": [
         {
@@ -103,74 +62,84 @@
               "unset": {}
             }
           }
+        },
+        {
+          "inspect": {
+            "run_id": "39613470170",
+            "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39613470170",
+            "main_commit": "69dbe9b01cbcd8f04847cab248e243105c85f022",
+            "live_code_sha256": "sxodWyRpUr0LbETU0YhBayaqYe1VsfNBQi1OoMZpd4U=",
+            "live_revision_id": "b9c2981e-51f7-432b-a8e2-286e4bdaa9af",
+            "live_configuration_sha256": "b5f6446a6f135cd97d54d6e1301bbbb6a424e7272f27af070eb394d5a00aff49",
+            "live_variable_count": 44,
+            "notes": "Owner decision 2026-10-21: every tested feature live; Plaid, Actum and QuickBooks removed. Staging carries none of the four set keys (read-only GetFunctionConfiguration through the owner's AWS connector, 2026-10-21), so each from is null; it carries AWS_PLAID_ENABLED, AWS_ACTUM_ENABLED and AWS_QUICKBOOKS_ENABLED as \"false\". Staging is the sandbox runtime (CHECKSOPS_ENV staging): endorsement resend, CheckAlt status refresh, the $1 billing verification and manual monthly collection run against the provider sandboxes. AWS_PLAID_WEBHOOK_SECRET is credential-like, so this writer cannot remove it; it goes with the staging template change that removes the parameter. Absent provider flags read as false (provider-flags.mjs), so the unsets change no behaviour."
+          },
+          "applied": {
+            "run_id": "39616453836",
+            "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39616453836",
+            "main_commit": "9a19d2a16067eb27b695748648174cbfbde8e4ae",
+            "approval_phrase": "APPLY API CONFIGURATION TO STAGING",
+            "change_sha256": "1047ea2e3dd7062e059c23d6ff593cc1eb74dbe3c2fe11e18abf58c6f2da30db",
+            "revision_id_before": "b9c2981e-51f7-432b-a8e2-286e4bdaa9af",
+            "revision_id_after": "b2e6a162-79ad-4c8e-9177-6f33080a9ded",
+            "configuration_sha256_before": "b5f6446a6f135cd97d54d6e1301bbbb6a424e7272f27af070eb394d5a00aff49",
+            "configuration_sha256_after": "1cfbf6aa9a501c08f6dae3a506c096e359e4cf3d64526ab178b802da2895244f",
+            "applied_at": "2026-10-21T14:29:47.001Z",
+            "smoke": [
+              "/health",
+              "/db-health",
+              "/db-readonly-validate"
+            ],
+            "code_sha256": "sxodWyRpUr0LbETU0YhBayaqYe1VsfNBQi1OoMZpd4U=",
+            "state": "VERIFIED",
+            "notes": "Verify step VERIFIED (45 variables: 44 + 4 set - 3 unset); live read-back through the owner's AWS connector after the apply: the four flags \"true\", the three provider flags absent, RevisionId b2e6a162, CodeSha256 unchanged, LastUpdateStatus Successful.",
+            "applied_change": {
+              "set": {
+                "AWS_ENDORSEMENT_RESEND_ENABLED": {
+                  "from": null,
+                  "to": "true"
+                },
+                "AWS_CHECKALT_STATUS_RECONCILE_ENABLED": {
+                  "from": null,
+                  "to": "true"
+                },
+                "AWS_MOOV_BILLING_VERIFICATION_POST_ENABLED": {
+                  "from": null,
+                  "to": "true"
+                },
+                "AWS_MOOV_MONTHLY_BILLING_ENABLED": {
+                  "from": null,
+                  "to": "true"
+                }
+              },
+              "unset": {
+                "AWS_PLAID_ENABLED": "false",
+                "AWS_ACTUM_ENABLED": "false",
+                "AWS_QUICKBOOKS_ENABLED": "false"
+              }
+            }
+          }
         }
       ]
     },
     "production": {
       "function_name": "checksops-production-prep-api",
-      "status": "applied",
+      "status": "accepted",
       "set": {},
-      "unset": {},
-      "inspect": {
-        "run_id": "39613475228",
-        "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39613475228",
-        "main_commit": "69dbe9b01cbcd8f04847cab248e243105c85f022",
-        "live_code_sha256": "sxodWyRpUr0LbETU0YhBayaqYe1VsfNBQi1OoMZpd4U=",
-        "live_revision_id": "58733b08-ef0a-4ab9-a47a-30fc15ebeafb",
-        "live_configuration_sha256": "132e311f0e2d81e40db99726beeb64819a6f7f3fadb9abbb5cf8cde48bf4220f",
-        "live_variable_count": 50,
-        "notes": "Owner decision 2026-10-21: every tested feature live; Plaid, Actum and QuickBooks removed. Live values read through the owner's AWS connector on 2026-10-21. Effects: endorsement resend opens (AWS_ENDORSEMENT_RESEND_ALLOW_ANY_RECIPIENT stays \"false\": resends go to the recorded signer only); CheckAlt status refresh opens the status read and reconciliation (no new deposits); the isolated $1 billing verification debit and the platform owner's manual monthly fee collection post real Moov transfers (there is no scheduled pull: runMonthlyBillingScheduler refuses with manual_billing_only since 2026-10-17); fee invoice emails go to the ACH-authorizing member. AWS_PROVIDER_RECIPIENT_BANK_VERIFY_WRITES_ENABLED and AWS_PROVIDER_RECIPIENT_KYC_TOS_WRITES_ENABLED are read by no code on main and are removed; the three provider flags read as false when absent. Kept on purpose (safety guards, not features): AWS_ENDORSEMENT_RESEND_ALLOW_ANY_RECIPIENT, AWS_MOOV_SANDBOX_TRANSFER_POST_ENABLED, AWS_FINANCIAL_SANDBOX_SIMULATION_ENABLED, AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED and AWS_PROVIDER_WEBHOOK_DRY_RUN stay \"false\"."
-      },
-      "applied": {
-        "run_id": "39617806126",
-        "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39617806126",
-        "main_commit": "9a19d2a16067eb27b695748648174cbfbde8e4ae",
-        "approval_phrase": "APPLY API CONFIGURATION TO PRODUCTION",
-        "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39616453836",
-        "change_sha256": "4e48bb446b5c9eb7ff09adb20df5412ae6f812eebb8f904c1d995c2f5977ccdf",
-        "revision_id_before": "58733b08-ef0a-4ab9-a47a-30fc15ebeafb",
-        "revision_id_after": "6cb46f3a-e10d-4645-b18d-6e5b156d65d9",
-        "configuration_sha256_before": "132e311f0e2d81e40db99726beeb64819a6f7f3fadb9abbb5cf8cde48bf4220f",
-        "configuration_sha256_after": "60b8ecdfa051af1d2613dc13ddc8ad53cfe26b449cee6847d0fb81978653e8d4",
-        "applied_at": "2026-10-21T14:33:55.638Z",
-        "smoke": [
-          "/health",
-          "/db-health"
-        ],
-        "code_sha256": "sxodWyRpUr0LbETU0YhBayaqYe1VsfNBQi1OoMZpd4U=",
-        "state": "VERIFIED",
-        "notes": "Verify step VERIFIED (46 variables: 50 + 1 new - 5 unset); live read-back through the owner's AWS connector after the apply: the five set keys \"true\", the five unset keys absent, AWS_ENDORSEMENT_RESEND_ALLOW_ANY_RECIPIENT and AWS_MOOV_SANDBOX_TRANSFER_POST_ENABLED still \"false\", AWS_MOOV_ONBOARDING_PRODUCTION_ENABLED still \"true\", RevisionId 6cb46f3a, CodeSha256 unchanged, LastUpdateStatus Successful.",
-        "applied_change": {
-          "set": {
-            "AWS_ENDORSEMENT_RESEND_ENABLED": {
-              "from": "false",
-              "to": "true"
-            },
-            "AWS_CHECKALT_STATUS_RECONCILE_ENABLED": {
-              "from": "false",
-              "to": "true"
-            },
-            "AWS_MOOV_BILLING_VERIFICATION_POST_ENABLED": {
-              "from": "false",
-              "to": "true"
-            },
-            "AWS_MOOV_MONTHLY_BILLING_PRODUCTION_POST": {
-              "from": "false",
-              "to": "true"
-            },
-            "AWS_TENANT_FEE_INVOICE_EMAIL_ENABLED": {
-              "from": null,
-              "to": "true"
-            }
-          },
-          "unset": {
-            "AWS_PROVIDER_RECIPIENT_BANK_VERIFY_WRITES_ENABLED": "false",
-            "AWS_PROVIDER_RECIPIENT_KYC_TOS_WRITES_ENABLED": "false",
-            "AWS_PLAID_ENABLED": "false",
-            "AWS_ACTUM_ENABLED": "false",
-            "AWS_QUICKBOOKS_ENABLED": "false"
-          }
+      "unset": {
+        "CHECKSOPS_DB_BRIDGE_TOKEN": {
+          "from_sha256": "2de2f69eb2c4890fdc3630f6ddc58865778cc0cd5c4a404f063d7898e3ae15ba"
         }
+      },
+      "inspect": {
+        "run_id": "39654936003",
+        "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39654936003",
+        "main_commit": "5e7b95838ea1beef93871e34d5ee6474c565612b",
+        "live_code_sha256": "Bh/f7zaIFGDECA1jTWgMeR/2qRMOUaABRWP1lQbREOc=",
+        "live_revision_id": "4945c256-37ff-49b1-b7d9-adffea1a51bf",
+        "live_configuration_sha256": "0d0e4dd57e17155b7da9127b560dd9fc4cd28e09d56ac762b82cbf34be2dd50c",
+        "live_variable_count": 46,
+        "notes": "The Supabase bridge functions that accepted CHECKSOPS_DB_BRIDGE_TOKEN were deleted by the owner (teardown recorded in #1126, aws/cutover/BRIDGE_TEARDOWN.md); no code on main reads the key. It is credential-like, so the plan records only the SHA-256 of its live value, copied from this inspect live_credential_sha256; the value is never recorded. Live CodeSha256 and RevisionId moved since the previous apply through other workstreams code changes; the variable count (46) is unchanged."
       },
       "history": [
         {
@@ -211,6 +180,69 @@
                 }
               },
               "unset": {}
+            }
+          }
+        },
+        {
+          "inspect": {
+            "run_id": "39613475228",
+            "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39613475228",
+            "main_commit": "69dbe9b01cbcd8f04847cab248e243105c85f022",
+            "live_code_sha256": "sxodWyRpUr0LbETU0YhBayaqYe1VsfNBQi1OoMZpd4U=",
+            "live_revision_id": "58733b08-ef0a-4ab9-a47a-30fc15ebeafb",
+            "live_configuration_sha256": "132e311f0e2d81e40db99726beeb64819a6f7f3fadb9abbb5cf8cde48bf4220f",
+            "live_variable_count": 50,
+            "notes": "Owner decision 2026-10-21: every tested feature live; Plaid, Actum and QuickBooks removed. Live values read through the owner's AWS connector on 2026-10-21. Effects: endorsement resend opens (AWS_ENDORSEMENT_RESEND_ALLOW_ANY_RECIPIENT stays \"false\": resends go to the recorded signer only); CheckAlt status refresh opens the status read and reconciliation (no new deposits); the isolated $1 billing verification debit and the platform owner's manual monthly fee collection post real Moov transfers (there is no scheduled pull: runMonthlyBillingScheduler refuses with manual_billing_only since 2026-10-17); fee invoice emails go to the ACH-authorizing member. AWS_PROVIDER_RECIPIENT_BANK_VERIFY_WRITES_ENABLED and AWS_PROVIDER_RECIPIENT_KYC_TOS_WRITES_ENABLED are read by no code on main and are removed; the three provider flags read as false when absent. Kept on purpose (safety guards, not features): AWS_ENDORSEMENT_RESEND_ALLOW_ANY_RECIPIENT, AWS_MOOV_SANDBOX_TRANSFER_POST_ENABLED, AWS_FINANCIAL_SANDBOX_SIMULATION_ENABLED, AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED and AWS_PROVIDER_WEBHOOK_DRY_RUN stay \"false\"."
+          },
+          "applied": {
+            "run_id": "39617806126",
+            "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39617806126",
+            "main_commit": "9a19d2a16067eb27b695748648174cbfbde8e4ae",
+            "approval_phrase": "APPLY API CONFIGURATION TO PRODUCTION",
+            "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39616453836",
+            "change_sha256": "4e48bb446b5c9eb7ff09adb20df5412ae6f812eebb8f904c1d995c2f5977ccdf",
+            "revision_id_before": "58733b08-ef0a-4ab9-a47a-30fc15ebeafb",
+            "revision_id_after": "6cb46f3a-e10d-4645-b18d-6e5b156d65d9",
+            "configuration_sha256_before": "132e311f0e2d81e40db99726beeb64819a6f7f3fadb9abbb5cf8cde48bf4220f",
+            "configuration_sha256_after": "60b8ecdfa051af1d2613dc13ddc8ad53cfe26b449cee6847d0fb81978653e8d4",
+            "applied_at": "2026-10-21T14:33:55.638Z",
+            "smoke": [
+              "/health",
+              "/db-health"
+            ],
+            "code_sha256": "sxodWyRpUr0LbETU0YhBayaqYe1VsfNBQi1OoMZpd4U=",
+            "state": "VERIFIED",
+            "notes": "Verify step VERIFIED (46 variables: 50 + 1 new - 5 unset); live read-back through the owner's AWS connector after the apply: the five set keys \"true\", the five unset keys absent, AWS_ENDORSEMENT_RESEND_ALLOW_ANY_RECIPIENT and AWS_MOOV_SANDBOX_TRANSFER_POST_ENABLED still \"false\", AWS_MOOV_ONBOARDING_PRODUCTION_ENABLED still \"true\", RevisionId 6cb46f3a, CodeSha256 unchanged, LastUpdateStatus Successful.",
+            "applied_change": {
+              "set": {
+                "AWS_ENDORSEMENT_RESEND_ENABLED": {
+                  "from": "false",
+                  "to": "true"
+                },
+                "AWS_CHECKALT_STATUS_RECONCILE_ENABLED": {
+                  "from": "false",
+                  "to": "true"
+                },
+                "AWS_MOOV_BILLING_VERIFICATION_POST_ENABLED": {
+                  "from": "false",
+                  "to": "true"
+                },
+                "AWS_MOOV_MONTHLY_BILLING_PRODUCTION_POST": {
+                  "from": "false",
+                  "to": "true"
+                },
+                "AWS_TENANT_FEE_INVOICE_EMAIL_ENABLED": {
+                  "from": null,
+                  "to": "true"
+                }
+              },
+              "unset": {
+                "AWS_PROVIDER_RECIPIENT_BANK_VERIFY_WRITES_ENABLED": "false",
+                "AWS_PROVIDER_RECIPIENT_KYC_TOS_WRITES_ENABLED": "false",
+                "AWS_PLAID_ENABLED": "false",
+                "AWS_ACTUM_ENABLED": "false",
+                "AWS_QUICKBOOKS_ENABLED": "false"
+              }
             }
           }
         }
