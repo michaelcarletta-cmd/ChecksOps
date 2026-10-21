@@ -2,7 +2,7 @@
   "id": "sql85-mortgage-compensation-adjust-production-apply",
   "migration": "sql85",
   "authorization": "Owner approved 2026-10-16 (\"Yes\"; \"approve the SQL 84-86 production unlock and apply\"): production apply of SQL 84, then SQL 85, then SQL 86 after the staging acceptance below (SQL 85: production 7d5e766cf30a46e2925af225e9c2c19ee3cdb9a84ccf2685c23393f7cc06ee2d -> 051e82285f54c40b4af289956cf537e79123de5e5dad7e6b8d83dd528e778908); execute true takes effect only when the owner reviews and merges this change. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
-  "execute": true,
+  "execute": false,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -70,5 +70,46 @@
     "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38895045712",
     "basis": "Guarded staging SQL executor apply of sql85-mortgage-compensation-adjust, run #64 (38895045712) on main 97b981b9d, executor package CodeSha256 wA29pCAXWeGwvQfHU1FWOGzA4yUm4xqjmhG4Sr2csZU= (deploy run #62, 38894717631): staging 7d5e766cf30a46e2925af225e9c2c19ee3cdb9a84ccf2685c23393f7cc06ee2d -> 051e82285f54c40b4af289956cf537e79123de5e5dad7e6b8d83dd528e778908, result applied; read-live run #67 (38895440060) already_applied true, precondition_failures [], six-argument adjust_mortgage_agent_compensation intended (matches_migration and body_matches_migration true, EXECUTE authenticated and checksops only), five-argument Cursor SQL 49 function absent.",
     "production_differs": "The pre-states are the same: staging (pin AUTHORIZED_SQL85_MORTGAGE_COMPENSATION_ADJUST, read-live run 59, run id 38892111590) and production (production_inspect, 2026-10-16) are both 7d5e766cf30a46e2925af225e9c2c19ee3cdb9a84ccf2685c23393f7cc06ee2d: the six-argument function absent, Cursor SQL 49's five-argument one present, idempotency_key absent. Owner names are not part of the fingerprint. Each environment's pre-state is still recorded separately. The post-state fingerprint is the same in both; the same file bytes (source_sha256) run in both."
+  },
+  "applied": {
+    "result": "verified_live",
+    "verified_on": "2026-10-21",
+    "original_apply": {
+      "date": "2026-10-16",
+      "result": "applied",
+      "runner": "i-0c35557c4e5385406",
+      "workstream_id": "prod-sql84-86-mortgage-20261016",
+      "source_commit_short": "079d19356",
+      "apply_ssm_command_id": "da16269a-0aee-4196-87c4-90c554178be6",
+      "one_use_id": "sql85-prod-2b18a6da-7903-43b1-9e29-83cd47e58b3d",
+      "before_hash": "7d5e766cf30a46e2925af225e9c2c19ee3cdb9a84ccf2685c23393f7cc06ee2d",
+      "after_hash": "051e82285f54c40b4af289956cf537e79123de5e5dad7e6b8d83dd528e778908",
+      "post_apply_inspect": "already_applied true, six-argument adjust_mortgage_agent_compensation intended, five-argument function absent",
+      "source": "ops/deployment-guard/production-api-overlay-plan.json sql_prerequisites[\"aws/workflows/sql/85_mortgage_compensation_adjust.sql\"] (commit 3f68ebe95)",
+      "not_recorded": "The full source commit sha, the one-shot run id, the tarball sha256, the runner contracts, the manifest and receipt hashes and the owner's run-time approval words for this run are not recorded in the repository."
+    },
+    "verified_live_inspect": {
+      "date": "2026-10-21",
+      "ssm_command_id": "ab678be8-7fd3-4f7d-a6d0-ed905cfed9aa",
+      "command": "node scripts/deployment-guard/sql85-mortgage-compensation-adjust-production-apply.mjs --inspect",
+      "runner": "i-0c35557c4e5385406",
+      "source_commit": "69dbe9b01cbcd8f04847cab248e243105c85f022",
+      "source_tarball": {
+        "file": "source-69dbe9b01cbcd8f04847cab248e243105c85f022.tar.gz",
+        "sha256": "1424a8c418324c7c520b385c96dbdca79b869478a076a7802ec7ae2a560ff4b4"
+      },
+      "transfer_run": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39615612355",
+      "read_only": true,
+      "connected_as": "checksops_admin",
+      "already_applied": true,
+      "live_definition_sha256": "051e82285f54c40b4af289956cf537e79123de5e5dad7e6b8d83dd528e778908",
+      "live_matches_intended": true,
+      "function_states": {
+        "adjust_mortgage_agent_compensation": "intended",
+        "adjust_mortgage_agent_compensation_five_arg": "absent"
+      },
+      "precondition_failures": []
+    },
+    "note": "SQL 85's original apply is recorded in original_apply (copied from ops/deployment-guard/production-api-overlay-plan.json sql_prerequisites); the read-only production inspect of 2026-10-21 (SSM ab678be8-7fd3-4f7d-a6d0-ed905cfed9aa, main 69dbe9b01) confirms the state still holds: already_applied true, live == intended_replacement_sha256, precondition_failures []. This record-and-retire change only adds this applied record and sets execute false; it applies nothing and runs no SQL. With execute false the pin is no longer a standing authorization, and a re-apply needs a new reviewed pin change."
   }
 }

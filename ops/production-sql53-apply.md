@@ -82,6 +82,20 @@ DROP FUNCTION IF EXISTS public.save_claim_settlement_breakdown(uuid, uuid, jsonb
 
 Do not drop tables, columns, triggers, or the other SQL53 functions.
 
+## Status (2026-10-21): verified live, pin retired
+
+The read-only production inspect of 2026-10-21 (SSM
+`43cb1d1f-f589-43b2-9315-7cad80fffb5c`, runner `i-0c35557c4e5385406`, main
+`69dbe9b01`) found `public.save_claim_settlement_breakdown(uuid,uuid,jsonb)`
+present with the intended definition `6542c3f6…`, 17/17 settlement columns and
+3/3 ledger triggers; `evaluateSql53ProductionCatalog` refuses a replace
+(`UNRELATED_MUTATION`). The repository holds no record of when or how the
+function was created in production. The pin's `applied` record (result
+`verified_live`) holds that evidence, and `execute` is `false` again, so a
+re-apply needs a new reviewed pin change. Two of the three preserved function
+hashes now differ from the pin (`sync_homeowner_ledger_from_check` after the
+2026-10-12 ledger apply, `aws_can_write_claim` after SQL 90); see the record.
+
 ## Remaining blocker for live execute
 
 `execute: false` on the production apply pin. Independent execute
