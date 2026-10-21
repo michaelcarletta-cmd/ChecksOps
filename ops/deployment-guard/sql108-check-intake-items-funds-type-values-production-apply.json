@@ -1,8 +1,8 @@
 {
   "id": "sql108-check-intake-items-funds-type-values-production-apply",
   "migration": "sql108",
-  "authorization": "pending",
-  "execute": false,
+  "authorization": "Owner approved 2026-10-21 (the owner's words, verbatim: \"apply SQL 108 in production then DEPLOY WEBSITE TO PRODUCTION then APPLY API CONFIGURATION TO PRODUCTION\"; this pin change is bound to that approval, of which it covers only the SQL 108 part: the website deploy and the API configuration are separate workstreams; the owner's statement also authorizes merging this change once CI is green): production apply of SQL 108 on the staging acceptance below (production c83dcc9b97b84d294a743063adb0c1f5231f5c37ade2f00d65dc134a1d55cf00 -> a796a3966009ceb9db4bcc43c4a75cc1a15753954e4f469abe77174eaccceaa5); execute true takes effect only once this change is merged. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
+  "execute": true,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -11,7 +11,7 @@
   "staging_pin_commit": "20b09344e531cf74f833abcf659c57423e2d7927",
   "source_sha256": "89cea9c9bac16ebddbfb32aeff55e46a630b87bf28a011ba894b33d0d2412a49",
   "function_identities": [],
-  "expected_live_definition_sha256": null,
+  "expected_live_definition_sha256": "c83dcc9b97b84d294a743063adb0c1f5231f5c37ade2f00d65dc134a1d55cf00",
   "intended_replacement_sha256": "a796a3966009ceb9db4bcc43c4a75cc1a15753954e4f469abe77174eaccceaa5",
   "authorization_phrase": "APPLY_CHECK_INTAKE_FUNDS_TYPE_VALUES",
   "predecessors": [],
@@ -39,24 +39,24 @@
     "note": "Guarded tooling for SQL 108: sql108-check-intake-items-funds-type-values-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql108-check-intake-items-funds-type-values); production-sql-one-shot.mjs --migration sql108. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): check_intake_items_funds_type_check with the nine-value definition, validated (spec constraints). The post-conditions also require the rest of the catalog unchanged. The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
   },
   "production_inspect": {
-    "status": "pending",
-    "date": null,
-    "ssm_command_id": null,
-    "source_commit": null,
+    "status": "recorded",
+    "date": "2026-10-21",
+    "ssm_command_id": "6d0fb8ce-441f-42d0-a239-f6c670c027ec",
+    "source_commit": "fdde89459b5fb3a6669427677141ce955eaa9aac",
     "read_only": true,
     "connected_as": "checksops_admin",
-    "live_definition_sha256": null,
-    "apply_preconditions_met": null,
-    "precondition_failures": null,
-    "note": "Pending: no read-only production inspect has been run for SQL 108 yet. Expected: check_intake_items present and owned by checksops_admin (SQL 95 altered it in production on 2026-10-21), the constraint present with the five Supabase values (the production refusals of 2026-10-21 name it), already_applied false, precondition_failures []. Record its date, SSM command id, source commit, live_definition_sha256, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. If precondition_failures is not [] or the constraint is absent or has another definition, stop: that needs its own reviewed change."
+    "live_definition_sha256": "c83dcc9b97b84d294a743063adb0c1f5231f5c37ade2f00d65dc134a1d55cf00",
+    "apply_preconditions_met": false,
+    "precondition_failures": [],
+    "note": "Recorded from the read-only production inspect of 2026-10-21 (SSM command 6d0fb8ce-441f-42d0-a239-f6c670c027ec, 19:15:26Z-19:15:28Z, node scripts/deployment-guard/sql108-check-intake-items-funds-type-values-production-apply.mjs --inspect on the SQL53 runner i-0c35557c4e5385406 from main fdde89459 (tarball source-fdde89459b5fb3a6669427677141ce955eaa9aac.tar.gz sha256 06544da4d2bfb51e8ff18b08a01c083a85e641f214d6c469431daaea932334ce, transfer run 39659758977), read_only true, source_ok true). live_definition_sha256 c83dcc9b97b84d294a743063adb0c1f5231f5c37ade2f00d65dc134a1d55cf00 (not the intended a796a3966009ceb9db4bcc43c4a75cc1a15753954e4f469abe77174eaccceaa5: already_applied false; live_matches_expected false because the pin had no recorded pre-state); release_sql_inspect.constraints[0] (check_intake_items check_intake_items_funds_type_check) state different, prerequisites_missing []. The live hash equals releaseStateText('sql108') of exactly the Supabase five-value definition, validated, and the staging pre-state of the same day (read-live run 39657370816). predecessors_applied true, missing dependencies [], precondition_failures [], successors_applied []. The inspect output's connected_as field was not printed by the summary line; the tool connects only as the pinned admin_login checksops_admin. apply_preconditions_met was false at inspect time only because no pre-state was recorded yet (expected_live_definition_sha256 null). This reviewed change copies live_definition_sha256 into expected_live_definition_sha256 and, in the same change, sets authorization, execute true and staging_acceptance. A fresh --inspect immediately before apply (the one-shot's inspect step) must still report this live_definition_sha256 and precondition_failures []; if not, stop. Earlier: Pending: no read-only production inspect has been run for SQL 108 yet. Expected: check_intake_items present and owned by checksops_admin (SQL 95 altered it in production on 2026-10-21), the constraint present with the five Supabase values (the production refusals of 2026-10-21 name it), already_applied false, precondition_failures []. Record its date, SSM command id, source commit, live_definition_sha256, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. If precondition_failures is not [] or the constraint is absent or has another definition, stop: that needs its own reviewed change."
   },
   "intended_post_state": {
     "fingerprint": "a796a3966009ceb9db4bcc43c4a75cc1a15753954e4f469abe77174eaccceaa5",
     "note": "public.check_intake_items_funds_type_check is CHECK (((funds_type IS NULL) OR (funds_type = ANY (ARRAY['acv'::text, 'rcv'::text, 'recoverable_depreciation'::text, 'supplement'::text, 'overhead_and_profit'::text, 'deductible'::text, 'other_structures'::text, 'personal_property'::text, 'additional_living_expenses'::text])))) and validated. No other constraint, column, grant, policy, trigger or row changes. The fingerprint is releaseIntendedHash('sql108', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): a796a3966009ceb9db4bcc43c4a75cc1a15753954e4f469abe77174eaccceaa5."
   },
   "staging_acceptance": {
-    "ok": false,
-    "reference": null,
-    "basis": "Pending: record the guarded staging SQL executor read-live run of SQL 108 (choice sql108-check-intake-items-funds-type-values) and its staging apply run here in the reviewed change that sets execute true. Staging logged the same constraint refusal on 2026-09-12 and 2026-10-01, so its read-live is expected to report already_applied false. The replace path is covered on PostgreSQL 16 by aws/tests/sql108-check-intake-items-funds-type-values-pg.test.mjs (the five-value predecessor, SQL 108 through its production tools). Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+    "ok": true,
+    "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39662760919",
+    "basis": "Guarded staging apply from the same pre-state as production. The guarded staging SQL executor (choice sql108-check-intake-items-funds-type-values) carried SQL 108 from deploy run 39657106517 (inspect run 39656814885) and, after the staging pin change (#1130), deploy run 39662422486 (inspect run 39662152816; executor +GbJNvIAyTGXIpmulXWvNi0OwdCX6P6SP+vHVgjOz9s=). Read-live run 39657370816 (2026-10-21, main 20059c9d33583d09af41a28e9b5f047e4349d45e) reported already_applied false, precondition_failures [] and live c83dcc9b97b84d294a743063adb0c1f5231f5c37ade2f00d65dc134a1d55cf00, which is this pin's expected_live_definition_sha256 (production_inspect). The staging apply run 39662760919 (2026-10-21, main c185844a6900eadda2a579b9b34b1127d15f9cec, staging pin commit 20b09344e531cf74f833abcf659c57423e2d7927) reported result applied, before c83dcc9b97b84d294a743063adb0c1f5231f5c37ade2f00d65dc134a1d55cf00, after a796a3966009ceb9db4bcc43c4a75cc1a15753954e4f469abe77174eaccceaa5 = intended_replacement_sha256, constraint state intended. The read-live after it (run 39663051691, main c185844a6) reported already_applied true, precondition_failures [] and live a796a3966009ceb9db4bcc43c4a75cc1a15753954e4f469abe77174eaccceaa5. Staging and production had the same pre-state. The production apply refuses unless the live state still equals this pin's expected_live_definition_sha256, and its post-conditions roll back unless the intended fingerprint is reached with the rest of the catalog unchanged."
   }
 }
