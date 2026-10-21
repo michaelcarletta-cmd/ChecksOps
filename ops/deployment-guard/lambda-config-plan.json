@@ -1,0 +1,18 @@
+{
+  "id": "lambda-config-plan",
+  "notes": "Reviewed environment-variable changes for the shared API Lambdas, one section per environment. guarded-{staging,production}-lambda-config.yml inspect reports the state of every listed key against the live configuration; apply is refused unless every listed key still holds its recorded live value (or already holds the intended one). set: keys to write, each with the exact live value (from; null when the key is absent) and the intended value (to). unset: keys to remove, each with the exact live value. Keys the section does not list are carried over untouched; nothing outside Environment.Variables is ever sent. Credential-like keys (SECRET, PASSWORD, TOKEN, KEY, CREDENTIAL) are refused: those stay in NoEcho template parameters. status pending_inspect means the section has not been filled from an inspect run yet; a filled section is a reviewed plan change. Filling a section never deploys. After a verified apply the section is recorded applied and emptied by a record PR so the next change starts from a fresh inspect.",
+  "environments": {
+    "staging": {
+      "function_name": "checksops-staging-api",
+      "status": "pending_inspect",
+      "set": {},
+      "unset": {}
+    },
+    "production": {
+      "function_name": "checksops-production-prep-api",
+      "status": "pending_inspect",
+      "set": {},
+      "unset": {}
+    }
+  }
+}
