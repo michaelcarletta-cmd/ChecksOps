@@ -89,12 +89,41 @@ test('lambda-rebuild is a registered deployment type and the component carries t
   assert.throws(() => fullPackageComponent('short'), /candidate ZIP SHA-256/);
 });
 
-test('the committed plan loads for both environments and starts pending', () => {
+test('the committed plan loads for both environments; production is still pending', () => {
   for (const environment of ['staging', 'production']) {
     const section = loadRebuildPlan(REPO_ROOT, environment);
     assert.ok(section.function_name.startsWith('checksops-'));
-    assert.deepEqual(Object.keys(section.members), []);
   }
+  assert.deepEqual(Object.keys(loadRebuildPlan(REPO_ROOT, 'production').members), []);
+});
+
+test('the staging plan section records inspect run 39585059839 and every accepted hash is the bytes on main', () => {
+  const raw = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'ops/deployment-guard/lambda-rebuild-plan.json'), 'utf8'));
+  const staging = raw.environments.staging;
+  assert.equal(staging.status, 'accepted');
+  assert.equal(staging.inspect.run_id, '39585059839');
+  assert.equal(staging.inspect.live_code_sha256, 'nKVEeB8BhnflTfCenx7eUKXBpYoF/dkF6eKZthJ7B1k=');
+  assert.equal(staging.inspect.candidate_zip_sha256, 'b31a1d5b246952bd0b6c44d4d188416b26aa61ed55b1f341422d4ea0c6697785');
+  const section = loadRebuildPlan(REPO_ROOT, 'staging');
+  assert.equal(Object.keys(section.members).length, 122);
+  assert.equal(Object.keys(section.added).length, 4);
+  assert.deepEqual(section.removed, {});
+  assert.deepEqual(section.dependencies, { added: {}, removed: {}, changed: {} });
+  const apiRoot = path.join(REPO_ROOT, 'aws/functions/api');
+  for (const [name, entry] of Object.entries(section.members)) {
+    assert.equal(sha256(fs.readFileSync(path.join(apiRoot, name))), entry.accepted_sha256, name);
+  }
+  for (const [name, hash] of Object.entries(section.added)) {
+    assert.equal(sha256(fs.readFileSync(path.join(apiRoot, name))), hash, name);
+  }
+  // The plan as committed makes the inspected live package READY, not BLOCKED.
+  const live = {};
+  const candidate = {};
+  for (const [name, entry] of Object.entries(section.members)) { live[name] = entry.live_sha256; candidate[name] = entry.accepted_sha256; }
+  for (const [name, hash] of Object.entries(section.added)) candidate[name] = hash;
+  const result = evaluateRebuild({ plan: raw, environment: 'staging', liveMemberHashes: live, candidateMemberHashes: candidate, liveInventory: {}, candidateInventory: {} });
+  assert.equal(result.ok, true);
+  assert.equal(result.details.state, 'READY');
 });
 
 test('member and dependency diffs classify every live-vs-candidate difference', () => {
