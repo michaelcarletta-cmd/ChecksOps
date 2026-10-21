@@ -27,7 +27,7 @@ Staging pool `us-east-1_vPmQ7cL1F` **must not** be reused. `prep-stack.yaml` tak
 | Stack | Template | What it creates | DNS / auth |
 |---|---|---|---|
 | `checksops-production-prep` | `prep-stack.yaml` | Cognito **client** on existing pool, frontend bucket, CloudFront **without** apex/www aliases, API log group | Unchanged |
-| `checksops-production-prep-api` | `api-cfn.yaml` (live) / `api-template.yaml` (SAM) | Flags-off Lambda + HTTP API using existing staging execution role, **no VPC** | Unchanged. URL `https://kiqojucc02.execute-api.us-east-1.amazonaws.com/prep` |
+| `checksops-production-prep-api` | `api-cfn.yaml` / `api-template.yaml` (**retired, do not deploy**; see below) | Created the prep Lambda + HTTP API; live has diverged on purpose | URL `https://kiqojucc02.execute-api.us-east-1.amazonaws.com/prep`, served at `https://checksops.com/prep` |
 
 Leftover OAC name `checksops-production-frontend-oac` exists outside CloudFormation. This stack uses `checksops-production-frontend-oac-prep2`.
 
@@ -38,24 +38,51 @@ aws cloudformation deploy \
   --region us-east-1 \
   --stack-name checksops-production-prep \
   --template-file aws/production/prep-stack.yaml
-
-# After client id exists (pool must remain us-east-1_h00WorYMT).
-# Live stack already uses ExistingExecutionRoleArn (staging SAM role) and EnableErrorsAlarm=false.
-# Do not deploy aws/production/api-template.yaml from this agent (it still creates an IAM role).
-aws cloudformation deploy \
-  --stack-name checksops-production-prep-api \
-  --template-file aws/production/api-cfn.yaml \
-  --parameter-overrides \
-    CognitoClientId=3ja9fqaq2fjkv3i6up2varcqpe \
-    CodeS3Bucket=checksops-production-prep-artifacts-806168576068 \
-    CodeS3Key=checksops-production-prep-api.zip \
-    ExistingExecutionRoleArn=arn:aws:iam::806168576068:role/checksops-staging-ApiFunctionRole-7E7XRyLe3nyi \
-    EnableErrorsAlarm=false
 ```
+
+The production API stack (`checksops-production-prep-api`) has **no** operator deploy: its
+templates are retired (next section).
 
 WebAuthn RP ID `checksops.com` is **already set** on `us-east-1_h00WorYMT` (`SetUserPoolMfaConfig`, MFA OFF). Staging `us-east-1_vPmQ7cL1F` stays `staging.checksops.com`. Do not invite users.
 
-The prep API is deployed at `https://kiqojucc02.execute-api.us-east-1.amazonaws.com/prep` using the existing staging Lambda role **without VPC**. Do **not** overlay `checksops-staging-api`.
+## Retired stack templates (do not deploy)
+
+`api-cfn.yaml` and `api-template.yaml` are **retired**. They describe the flags-off prep API that
+`checksops-production-prep-api` was created from (2026-09-05, last stack update 2026-09-24).
+Live production has diverged on purpose since then. A read-only comparison on 2026-10-21
+(CloudFormation drift detection `7a4e0970-cd48-11f1-867c-0affeceb3cc5`, `DRIFTED`) found:
+
+| | Templates | Live `checksops-production-prep-api` |
+|---|---|---|
+| Role | staging SAM role / stack parameter `checksops-production-prep-api-role` | `checksops-production-api-execution` |
+| Network | no VPC | 2 private subnets, 2 security groups (`vpc-09f2268778966ce97`) |
+| Timeout | 29 s | 45 s |
+| Environment | 22 variables, every provider and write flag `false` | 50 variables: writes, Moov, CheckAlt, financial permissions, Moov onboarding and fee collection on; database, files, provider and webhook secret references; email settings |
+| HTTP API | CORS allow-list `checksops.com`, `www.checksops.com` | CORS `*`; a custom authorizer, an `OPTIONS /{proxy+}` route, access logs and throttling managed outside the stack |
+
+A stack update from either file would replace the function's role, network and whole
+environment map and take production down. Both files therefore carry a CloudFormation `Rules`
+assertion that always fails, so a change set built from them is refused before anything changes,
+and the deployment guard refuses the stack (`RETIRED_STACKS` in
+`scripts/deployment-guard/lib/shared-targets.mjs`). The guardrail tests that keep these files
+flags-off, on the staging role and on the CORS allow-list stay in force: the files record the prep
+baseline, not live state.
+
+Live production changes only through the guarded paths:
+
+| Change | Path |
+|---|---|
+| One API source member | `guarded-production-lambda-overlay.yml` |
+| Whole API package (dependencies, new modules) | `guarded-production-lambda-rebuild.yml`, `ops/production-lambda-rebuild.md` |
+| Environment variables | `guarded-production-lambda-config.yml`, `ops/lambda-configuration-change.md` |
+| Website | `guarded-production-spa-upload.yml` |
+| Database | `production-sql-one-shot.mjs`, `ops/production-sql-one-shot.md` |
+
+The CORS allow-list in these files was never deployed; live still allows `*`. Tightening it is a
+separate, reviewed change through the production CORS writer, not a stack deploy. Bringing the
+stack back under CloudFormation (importing the live state) would be its own reviewed workstream.
+
+Do **not** overlay `checksops-staging-api` from production work.
 
 ## ACM (checksops.com + www)
 

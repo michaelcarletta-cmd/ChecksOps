@@ -1,3 +1,11 @@
+# RETIRED. DO NOT DEPLOY. This template is a historical flags-off baseline for the
+# checksops-production-prep-api stack. Live production has diverged on purpose (VPC, the
+# checksops-production-api-execution role, a 45 s timeout, 50 environment variables, provider and
+# fee-collection flags on). A stack update from this file would replace the function's role,
+# network and whole environment map. Live production changes only through the guarded paths:
+# guarded-production-lambda-{overlay,rebuild,config}.yml and the guarded SPA upload.
+# See aws/production/README.md ("Retired stack templates"). The Rules block below makes
+# CloudFormation refuse any change set built from this file.
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >
   ChecksOps production-prep API without SAM transform. Separate from staging.
@@ -30,6 +38,15 @@ Parameters:
     Default: 'false'
     AllowedValues: ['true', 'false']
     Description: Keep false unless an ops role can cloudwatch:PutMetricAlarm. Live deploy used false.
+
+Rules:
+  RetiredTemplateMustNotDeploy:
+    Assertions:
+      - Assert: !Equals ['retired', 'deployable']
+        AssertDescription: >-
+          RETIRED template. checksops-production-prep-api is managed through the guarded
+          overlay, rebuild and configuration workflows; deploying this file would overwrite live
+          production. See aws/production/README.md.
 
 Conditions:
   CreateErrorsAlarm: !Equals [!Ref EnableErrorsAlarm, 'true']

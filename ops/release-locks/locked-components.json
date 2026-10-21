@@ -65,7 +65,7 @@
       "environment": "unknown",
       "source": {
         "git_sha": "d5418ab63cb9af8024c746c4393c0f801f15fd1d",
-        "tree_hash": "9259bd2d4f699ffbb30ab130b658b52423a919d20739d4f31c3c6b1c0c37dcbd",
+        "tree_hash": "254af6c3f0839ba32d6609b76fd13aee6fa8ca0f7a51c9574198caef3c088970",
         "merged": true,
         "merged_pr": null
       },

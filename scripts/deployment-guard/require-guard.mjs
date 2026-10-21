@@ -11,6 +11,7 @@ import { CODES, GuardError, fail, ok } from './lib/errors.mjs';
 import { loadReceipt, validateReceipt } from './lib/receipt.mjs';
 import {
   lookupSharedBucket,
+  lookupRetiredStack,
   lookupSharedLambda,
   lookupSharedStack,
 } from './lib/shared-targets.mjs';
@@ -149,6 +150,14 @@ export function enforceS3Target(spec = {}, ctx = {}) {
 }
 
 export function enforceSharedStackTarget(spec = {}, ctx = {}) {
+  const retired = lookupRetiredStack(spec.stackName);
+  if (retired) {
+    return fail(
+      CODES.UNRELATED_MUTATION,
+      'CloudFormation write to a retired stack is refused; its templates would overwrite live state',
+      { stack_name: spec.stackName, templates: retired.templates, reason: retired.reason },
+    );
+  }
   const shared = lookupSharedStack(spec.stackName);
   if (!shared || shared.deployment_type !== 'cloudformation') {
     return fail(
