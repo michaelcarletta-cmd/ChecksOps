@@ -6,7 +6,10 @@
  * inspect: read the live configuration and report the state of every key the plan
  *          section lists (ops/deployment-guard/lambda-config-plan.json). Never writes
  *          AWS. With an empty section it reports PENDING_PLAN and the live variable
- *          names (never values), which is what the plan author needs.
+ *          names (never values), which is what the plan author needs. Every inspect
+ *          also reports live_credential_sha256: name -> SHA-256 of the value for each
+ *          credential-like live key, so a removal can be planned as from_sha256
+ *          without the value ever being read into git or a log.
  * apply:   same checks, then requires the live RevisionId from a prior inspect, the
  *          exact approval phrase (and for production a staging acceptance reference),
  *          takes the lease and issues a KMS-signed receipt owning the plan change's
@@ -26,6 +29,7 @@ import {
   changeCount,
   changeSha256,
   configurationSha256,
+  credentialSha256Map,
   environmentComponent,
   evaluateConfigChange,
   liveVariablesOf,
@@ -142,9 +146,10 @@ export async function run(env = process.env, deps = {}) {
       throw new GuardError(CODES.INVALID_MANIFEST, 'config plan section lists no change; fill it from an inspect run first', { environment });
     }
     const names = Object.keys(live.variables).sort();
-    const diffFile = writeState(root, `config-diff-${environment}.json`, `${JSON.stringify({ ...summary, state: 'PENDING_PLAN', live_variable_names: names, changes: [] }, null, 2)}\n`);
+    const credentials = credentialSha256Map(live.variables);
+    const diffFile = writeState(root, `config-diff-${environment}.json`, `${JSON.stringify({ ...summary, state: 'PENDING_PLAN', live_variable_names: names, live_credential_sha256: credentials, changes: [] }, null, 2)}\n`);
     appendGithubOutput({ ...summary, state: 'PENDING_PLAN', diff_file: diffFile, problem_count: 0 }, env);
-    return { ok: true, mode, identity, ...summary, state: 'PENDING_PLAN', live_variable_names: names, changes: [], mutation: false };
+    return { ok: true, mode, identity, ...summary, state: 'PENDING_PLAN', live_variable_names: names, live_credential_sha256: credentials, changes: [], mutation: false };
   }
 
   const evaluation = evaluateConfigChange({ plan, environment, liveVariables: live.variables });
@@ -164,11 +169,13 @@ export async function run(env = process.env, deps = {}) {
     return { ok: true, mode, identity, ...summary, state, changes, mutation: false };
   }
 
-  const diffFile = writeState(root, `config-diff-${environment}.json`, `${JSON.stringify({ ...summary, state, problems, changes }, null, 2)}\n`);
+  // changes and problems come from evaluateConfigChange: a credential-like row carries hashes only.
+  const credentials = mode === 'inspect' ? { live_credential_sha256: credentialSha256Map(live.variables) } : {};
+  const diffFile = writeState(root, `config-diff-${environment}.json`, `${JSON.stringify({ ...summary, state, problems, changes, ...credentials }, null, 2)}\n`);
   appendGithubOutput({ ...summary, state, diff_file: diffFile, problem_count: problems.length }, env);
 
   if (mode === 'inspect') {
-    return { ok: true, mode, identity, ...summary, state, problems, changes, mutation: false };
+    return { ok: true, mode, identity, ...summary, state, problems, changes, ...credentials, mutation: false };
   }
   if (!evaluation.ok) throw new GuardError(evaluation.code, evaluation.message, evaluation.details);
   if (state === 'ALREADY_ACCEPTED') {

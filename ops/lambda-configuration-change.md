@@ -25,8 +25,30 @@ an owner action outside this repository.
 
 One section per environment. `set` lists keys to write with the exact live value (`from`, `null`
 when the key is absent) and the intended value (`to`). `unset` lists keys to remove with their
-exact live value. Keys not listed are carried over untouched. Credential-like keys (`SECRET`,
-`PASSWORD`, `TOKEN`, `KEY`, `CREDENTIAL`) are refused: those stay in NoEcho template parameters.
+exact live value. Keys not listed are carried over untouched.
+
+Credential-like keys (names containing `SECRET`, `PASSWORD`, `PASSWD`, `PRIVATE_KEY`, `API_KEY`,
+`ACCESS_KEY`, `TOKEN` or `CREDENTIAL`) are refused in `set`: those stay in NoEcho template
+parameters. They may be **removed** (for example a dead bridge token), but the plan never carries
+their value. A credential-like `unset` entry is exactly
+
+```json
+"unset": { "CHECKSOPS_DB_BRIDGE_TOKEN": { "from_sha256": "<64 lowercase hex>" } }
+```
+
+where the hash is the SHA-256 of the exact live value (UTF-8 bytes). Copy it from the inspect run:
+every inspect reports `live_credential_sha256` (name to SHA-256, for each credential-like live key)
+in its JSON output and the `config-diff-<environment>-<run>` artifact. Never read or paste the value
+itself. A plain string value for a credential-like `unset` is refused (`UNRELATED_MUTATION`); if one
+was ever committed, treat the value as exposed and rotate it.
+
+The evaluation hashes the live value and compares: equal is `READY`, key absent is
+`ALREADY_ACCEPTED`, anything else is `DEPLOYMENT_COLLISION`. For these keys every output (inspect and
+verify JSON, the diff artifact, problems, the writer's result) carries only the name, `op`, status
+and the hashes (`from_sha256`, `live_sha256`), never `from`, `live` or `to`. The change SHA-256 the
+receipt owns covers the `from_sha256` entries like any other. A SHA-256 of a long random token
+reveals nothing useful; it is not a safe disguise for a short or guessable value, which should be
+rotated rather than recorded.
 
 ## Steps (each needs owner approval)
 
@@ -62,4 +84,6 @@ exact live value. Keys not listed are carried over untouched. Credential-like ke
 
 ## Rollback
 
-A reviewed plan section with `from` and `to` swapped, taken through the same steps.
+A reviewed plan section with `from` and `to` swapped, taken through the same steps. A removed
+credential-like key cannot be restored through this path (`set` refuses it); it comes back only
+through its NoEcho template parameter.
