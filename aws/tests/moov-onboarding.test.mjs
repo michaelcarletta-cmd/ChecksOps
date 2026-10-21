@@ -1303,12 +1303,14 @@ test('SQL 91: tenant-scoped tables with RLS, member/platform-owner writers, no S
   assert.doesNotMatch(allowlist, /moov_onboarding|moov_compliance/);
 });
 
-test('template: dedicated KMS keys, SSE-KMS enforcement on the verification prefix, production onboarding flag off', () => {
+test('template: dedicated KMS keys, SSE-KMS enforcement on the verification prefix, onboarding flag matches the live functions', () => {
   const t = readFileSync(new URL('../template.yaml', import.meta.url), 'utf8');
   assert.match(t, /MoovOnboardingPiiKey:\n\s+Type: AWS::KMS::Key/);
   assert.match(t, /ComplianceDocumentsKey:\n\s+Type: AWS::KMS::Key/);
   assert.match(t, /EnableKeyRotation: true/);
-  assert.match(t, /AWS_MOOV_ONBOARDING_PRODUCTION_ENABLED: "false"/);
+  // On since the guarded configuration applies of 2026-10-21; staging still uses the sandbox path.
+  assert.match(t, /AWS_MOOV_ONBOARDING_PRODUCTION_ENABLED: "true"/);
+  assert.match(t, /AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED: "true"/);
   assert.match(t, /MOOV_ONBOARDING_PII_KMS_KEY_ARN: !GetAtt MoovOnboardingPiiKey\.Arn/);
   assert.match(t, /COMPLIANCE_DOCUMENTS_KMS_KEY_ARN: !GetAtt ComplianceDocumentsKey\.Arn/);
   assert.match(t, /Resource: !Sub \$\{PrivateFilesBucket\.Arn\}\/files\/verification-docs\/\*/);

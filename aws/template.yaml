@@ -131,9 +131,12 @@ Globals:
         AWS_PROVIDER_WEBHOOK_DRY_RUN: "true"
         AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED: "true"
         AWS_FINANCIAL_PERMISSIONS_ACTIVATED: "false"
-        # Moov onboarding (Compliance & Docs). Production onboarding stays off;
-        # staging uses Moov sandbox through AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED.
-        AWS_MOOV_ONBOARDING_PRODUCTION_ENABLED: "false"
+        # Moov onboarding (Compliance & Docs). Matches the live functions since the guarded
+        # configuration applies of 2026-10-21 (ops/deployment-guard/lambda-config-plan.json).
+        # Staging still runs onboarding against the Moov sandbox through
+        # AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED; this flag is only read when production
+        # provider execution is allowed, and it never opens money movement.
+        AWS_MOOV_ONBOARDING_PRODUCTION_ENABLED: "true"
         MOOV_ONBOARDING_PII_KMS_KEY_ARN: !GetAtt MoovOnboardingPiiKey.Arn
         COMPLIANCE_DOCUMENTS_KMS_KEY_ARN: !GetAtt ComplianceDocumentsKey.Arn
         # Webhook HMAC / sandbox epoch preserved via NoEcho parameters (not stored in git).
