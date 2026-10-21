@@ -1,5 +1,5 @@
 /**
- * Specs of the release 2026-10-17 SQL (SQL 90 to SQL 109) for the shared engine in
+ * Specs of the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108, SQL 109) for the shared engine in
  * release-sql-state.mjs: what each pinned file creates, replaces or drops, the reviewed
  * EXECUTE ACLs, the prerequisites and predecessors, and the PostgreSQL renderings the file
  * leaves (policy expressions, view, column, constraint, index and trigger definitions as
@@ -3514,6 +3514,33 @@ export const RELEASE_SQL_SPECS = deepFreeze({
     ],
     "runs_before": [
       "sql97"
+    ]
+  },
+  // SQL 108: check_intake_items_funds_type_check allows NULL or the nine funds_type values the
+  // SPA offers (the Supabase five plus deductible, other_structures, personal_property and
+  // additional_living_expenses). The file replaces the constraint only from the exact five-value
+  // predecessor and refuses rows that would violate the new one. Its fingerprint is the
+  // constraint's definition and validated flag; nothing else on the table changes. No predecessor.
+  sql108: {
+    "key": "sql108",
+    "label": "SQL 108",
+    "choice": "sql108-check-intake-items-funds-type-values",
+    "production_pin_rel": "ops/deployment-guard/sql108-check-intake-items-funds-type-values-production-apply.json",
+    "script": "sql108-check-intake-items-funds-type-values-production-apply",
+    "prerequisites": [
+      "public.check_intake_items"
+    ],
+    "predecessors": [],
+    "functions": [],
+    "constraints": [
+      {
+        "table": "public.check_intake_items",
+        "name": "check_intake_items_funds_type_check",
+        "def": "CHECK (((funds_type IS NULL) OR (funds_type = ANY (ARRAY['acv'::text, 'rcv'::text, 'recoverable_depreciation'::text, 'supplement'::text, 'overhead_and_profit'::text, 'deductible'::text, 'other_structures'::text, 'personal_property'::text, 'additional_living_expenses'::text]))))"
+      }
+    ],
+    "altered_relations": [
+      "public.check_intake_items"
     ]
   },
   // SQL 109: the Moov transfer webhook writer (status, ACH return, NOC of a funding or send leg),
