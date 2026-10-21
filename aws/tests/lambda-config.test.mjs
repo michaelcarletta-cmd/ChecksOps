@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -19,7 +20,9 @@ import {
   evaluateConfigChange,
   loadConfigPlan,
   parseEnvironmentComponent,
+  planSection,
   targetVariables,
+  valueSha256,
 } from '../../scripts/deployment-guard/lib/lambda-config.mjs';
 import { acquireLease } from '../../scripts/deployment-guard/lib/lease.mjs';
 import { issueReceipt } from '../../scripts/deployment-guard/lib/receipt.mjs';
@@ -28,7 +31,7 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
 const SHA = 'a'.repeat(40);
 const NOW = Date.parse('2026-10-21T12:00:00.000Z');
 
-const LIVE_VARS = { KEEP: '1', AWS_MOOV_ONBOARDING_PRODUCTION_ENABLED: 'false', OLD_FLAG: 'yes', SOME_API_TOKEN: 'x' };
+const LIVE_VARS = { KEEP: '1', AWS_MOOV_ONBOARDING_PRODUCTION_ENABLED: 'false', OLD_FLAG: 'yes' };
 const PLAN = {
   function_name: 'checksops-staging-api',
   status: 'accepted',
@@ -143,16 +146,11 @@ test('the committed plan records the remaining-features applies (runs 3961645383
   assert.equal(raw.environments.production.applied.staging_acceptance, raw.environments.staging.applied.run_url);
 });
 
-test('the plan refuses credential-like keys in set, allows them in unset for teardown, and refuses invalid keys, non-string values and no-op entries', () => {
+test('the plan refuses credential-like keys in set or as a plain unset value, invalid keys, non-string values and no-op entries', () => {
   const bad = (section) => evaluateConfigChange({ plan: planFor({ ...EMPTY, ...section }), environment: 'staging', liveVariables: LIVE_VARS });
-  // Credential-like keys are still refused in set (they stay in NoEcho parameters).
   assert.equal(bad({ set: { AWS_MOOV_WEBHOOK_SECRET: { from: 'a', to: 'b' } } }).code, CODES.UNRELATED_MUTATION);
   assert.equal(bad({ set: { DB_PASSWORD: { from: null, to: 'x' } } }).code, CODES.UNRELATED_MUTATION);
-  // Credential-like keys may be removed via unset for legacy-secret teardown.
-  const removal = bad({ unset: { SOME_API_TOKEN: 'x' } });
-  assert.equal(removal.ok, true, removal.message);
-  assert.equal(removal.details.state, 'READY');
-  assert.deepEqual(removal.details.changes.map((row) => [row.key, row.op]), [['SOME_API_TOKEN', 'unset']]);
+  assert.equal(bad({ unset: { SOME_API_TOKEN: 'x' } }).code, CODES.UNRELATED_MUTATION);
   assert.equal(bad({ set: { 'bad-key': { from: null, to: 'x' } } }).code, CODES.INVALID_MANIFEST);
   assert.equal(bad({ set: { FLAG: { from: 1, to: '2' } } }).code, CODES.INVALID_MANIFEST);
   assert.equal(bad({ set: { FLAG: { from: 'x', to: 'x' } } }).code, CODES.INVALID_MANIFEST);
@@ -164,7 +162,7 @@ test('a plan is READY when every listed key holds its recorded live value, ALREA
   const ready = evaluateConfigChange({ plan: planFor(PLAN), environment: 'staging', liveVariables: LIVE_VARS });
   assert.equal(ready.ok, true, ready.message);
   assert.equal(ready.details.state, 'READY');
-  assert.deepEqual(ready.details.target, { KEEP: '1', AWS_MOOV_ONBOARDING_PRODUCTION_ENABLED: 'true', SOME_API_TOKEN: 'x', NEW_KEY: 'v1' });
+  assert.deepEqual(ready.details.target, { KEEP: '1', AWS_MOOV_ONBOARDING_PRODUCTION_ENABLED: 'true', NEW_KEY: 'v1' });
   assert.deepEqual(ready.details.target, targetVariables(LIVE_VARS, PLAN));
 
   const done = evaluateConfigChange({ plan: planFor(PLAN), environment: 'staging', liveVariables: ready.details.target });
@@ -347,7 +345,7 @@ test('preflight inspect with an empty plan reports PENDING_PLAN with live key na
   const result = await preflight({ ...ENV, CHECKSOPS_CONFIG_MODE: 'inspect' }, { root, ...liveDeps() });
   assert.equal(result.state, 'PENDING_PLAN');
   assert.equal(result.mutation, false);
-  assert.deepEqual(result.live_variable_names, ['AWS_MOOV_ONBOARDING_PRODUCTION_ENABLED', 'KEEP', 'OLD_FLAG', 'SOME_API_TOKEN']);
+  assert.deepEqual(result.live_variable_names, ['AWS_MOOV_ONBOARDING_PRODUCTION_ENABLED', 'KEEP', 'OLD_FLAG']);
   const diff = fs.readFileSync(path.join(root, '.deployment-guard/config-diff-staging.json'), 'utf8');
   assert.ok(!diff.includes('"false"') && !diff.includes('"yes"'));
   await assert.rejects(preflight({ ...ENV, CHECKSOPS_CONFIG_MODE: 'apply', CHECKSOPS_EXPECTED_LIVE_REVISION_ID: 'rev-1', CHECKSOPS_CONFIG_APPROVAL: approvalPhrase('staging') }, { root, ...liveDeps() }), (error) => error.code === CODES.INVALID_MANIFEST);
@@ -397,4 +395,158 @@ test('production apply needs a staging acceptance reference; verify passes only 
   await assert.rejects(preflight({ ...ENV, CHECKSOPS_CONFIG_MODE: 'verify' }, { root, ...liveDeps() }), (error) => error.code === CODES.DEPLOYMENT_COLLISION);
   const verified = await preflight({ ...ENV, CHECKSOPS_CONFIG_MODE: 'verify' }, { root, ...liveDeps(targetVariables(LIVE_VARS, PLAN)) });
   assert.equal(verified.state, 'VERIFIED');
+});
+
+// ---- Credential-like removal: the plan and every output carry hashes only. ----
+
+const SECRET_VALUE = 'sekret-VALUE-123';
+const OTHER_SECRET = 'other-KEEP-secret-456';
+const SECRET_SHA = createHash('sha256').update(Buffer.from(SECRET_VALUE, 'utf8')).digest('hex');
+const SECRET_LIVE = { ...LIVE_VARS, CHECKSOPS_DB_BRIDGE_TOKEN: SECRET_VALUE, OTHER_API_KEY: OTHER_SECRET };
+const SECRET_PLAN = {
+  function_name: 'checksops-staging-api',
+  status: 'accepted',
+  set: { AWS_MOOV_ONBOARDING_PRODUCTION_ENABLED: { from: 'false', to: 'true' } },
+  unset: { OLD_FLAG: 'yes', CHECKSOPS_DB_BRIDGE_TOKEN: { from_sha256: SECRET_SHA } },
+};
+const leaks = (value) => {
+  const text = typeof value === 'string' ? value : JSON.stringify(value);
+  return text.includes(SECRET_VALUE) || text.includes(OTHER_SECRET);
+};
+const CREDENTIAL_ROW_KEYS = ['credential', 'from_sha256', 'key', 'live_sha256', 'op', 'status'];
+
+test('a credential-like unset with from_sha256 is READY on a matching live hash, ALREADY_ACCEPTED when absent, and a hash-only collision otherwise', () => {
+  assert.equal(valueSha256(SECRET_VALUE), SECRET_SHA);
+  const ready = evaluateConfigChange({ plan: planFor(SECRET_PLAN), environment: 'staging', liveVariables: SECRET_LIVE });
+  assert.equal(ready.ok, true, ready.message);
+  assert.equal(ready.details.state, 'READY');
+  const row = ready.details.changes.find((change) => change.key === 'CHECKSOPS_DB_BRIDGE_TOKEN');
+  assert.deepEqual(Object.keys(row).sort(), CREDENTIAL_ROW_KEYS);
+  assert.deepEqual(row, { key: 'CHECKSOPS_DB_BRIDGE_TOKEN', op: 'unset', credential: true, from_sha256: SECRET_SHA, live_sha256: SECRET_SHA, status: 'ready' });
+  // The writer still gets the full intended map: the token is gone, the unrelated credential is carried over.
+  assert.equal(Object.hasOwn(ready.details.target, 'CHECKSOPS_DB_BRIDGE_TOKEN'), false);
+  assert.equal(ready.details.target.OTHER_API_KEY, OTHER_SECRET);
+  assert.deepEqual(ready.details.target, targetVariables(SECRET_LIVE, planSection(planFor(SECRET_PLAN), 'staging')));
+  // ...but the map is not enumerable, so no serialization of the evaluation carries it.
+  assert.equal(leaks(ready), false);
+  assert.equal(leaks({ ...ready.details }), false);
+
+  const done = evaluateConfigChange({ plan: planFor(SECRET_PLAN), environment: 'staging', liveVariables: ready.details.target });
+  assert.equal(done.ok, true, done.message);
+  assert.equal(done.details.state, 'ALREADY_ACCEPTED');
+  assert.deepEqual(done.details.changes.find((change) => change.key === 'CHECKSOPS_DB_BRIDGE_TOKEN'),
+    { key: 'CHECKSOPS_DB_BRIDGE_TOKEN', op: 'unset', credential: true, from_sha256: SECRET_SHA, live_sha256: null, status: 'already_accepted' });
+  assert.equal(leaks(done), false);
+
+  const rotated = evaluateConfigChange({ plan: planFor(SECRET_PLAN), environment: 'staging', liveVariables: { ...SECRET_LIVE, CHECKSOPS_DB_BRIDGE_TOKEN: 'sekret-ROTATED-999' } });
+  assert.equal(rotated.code, CODES.DEPLOYMENT_COLLISION);
+  assert.deepEqual(rotated.details.problems, [{
+    code: CODES.DEPLOYMENT_COLLISION, reason: 'live_value_mismatch', key: 'CHECKSOPS_DB_BRIDGE_TOKEN', credential: true,
+    expected_live_sha256: SECRET_SHA, live_sha256: valueSha256('sekret-ROTATED-999'),
+  }]);
+  assert.ok(!JSON.stringify(rotated).includes('sekret-ROTATED-999'));
+  assert.equal(leaks(rotated), false);
+});
+
+test('a credential-like unset must be exactly { from_sha256 }: a plain value is refused without echoing it', () => {
+  const evaluate = (unset) => evaluateConfigChange({ plan: planFor({ ...EMPTY, unset }), environment: 'staging', liveVariables: SECRET_LIVE });
+  const plain = evaluate({ CHECKSOPS_DB_BRIDGE_TOKEN: SECRET_VALUE });
+  assert.equal(plain.code, CODES.UNRELATED_MUTATION);
+  assert.match(plain.message, /from_sha256/);
+  assert.deepEqual(plain.details, { environment: 'staging', key: 'CHECKSOPS_DB_BRIDGE_TOKEN' });
+  assert.equal(leaks(plain), false);
+  assert.throws(() => planSection(planFor({ ...EMPTY, unset: { AWS_PLAID_WEBHOOK_SECRET: 'whsec' } }), 'staging'), (error) => error.code === CODES.UNRELATED_MUTATION && !JSON.stringify(error.details).includes('whsec'));
+  for (const entry of [{ from_sha256: 'abc' }, { from_sha256: SECRET_SHA.toUpperCase() }, { from_sha256: SECRET_SHA, from: SECRET_VALUE }, {}, null, [SECRET_SHA], 7]) {
+    const result = evaluate({ CHECKSOPS_DB_BRIDGE_TOKEN: entry });
+    assert.equal(result.code, CODES.INVALID_MANIFEST, JSON.stringify(entry));
+    assert.equal(leaks(result), false);
+  }
+  // The hashed form is for credential-like keys only; ordinary keys keep the exact string.
+  assert.equal(evaluate({ OLD_FLAG: { from_sha256: SECRET_SHA } }).code, CODES.INVALID_MANIFEST);
+  // set still refuses credential-like keys, with or without a hash.
+  assert.equal(evaluateConfigChange({ plan: planFor({ ...EMPTY, set: { CHECKSOPS_DB_BRIDGE_TOKEN: { from: null, to: 'x' } } }), environment: 'staging', liveVariables: SECRET_LIVE }).code, CODES.UNRELATED_MUTATION);
+});
+
+test('the change SHA-256 the receipt owns covers from_sha256; ordinary unsets keep their exact-value form and hash', () => {
+  const base = changeSha256(planSection(planFor(SECRET_PLAN), 'staging'));
+  const other = { ...SECRET_PLAN, unset: { ...SECRET_PLAN.unset, CHECKSOPS_DB_BRIDGE_TOKEN: { from_sha256: 'f'.repeat(64) } } };
+  assert.notEqual(changeSha256(planSection(planFor(other), 'staging')), base);
+  const without = { ...SECRET_PLAN, unset: { OLD_FLAG: 'yes' } };
+  assert.notEqual(changeSha256(planSection(planFor(without), 'staging')), base);
+  // An ordinary unset row is unchanged: exact from and live, compared as strings.
+  const plainRow = evaluateConfigChange({ plan: planFor(PLAN), environment: 'staging', liveVariables: LIVE_VARS }).details.changes.find((change) => change.key === 'OLD_FLAG');
+  assert.deepEqual(plainRow, { key: 'OLD_FLAG', op: 'unset', from: 'yes', to: null, live: 'yes', status: 'ready' });
+  assert.deepEqual(planSection(planFor(PLAN), 'staging').unset, { OLD_FLAG: 'yes' });
+});
+
+test('with a credential in the live environment, no inspect, diff file, apply, writer or verify output carries its value', async () => {
+  // Empty plan: names, plus a SHA-256 per credential-like key for the plan author to copy.
+  const emptyRoot = tmpRepo(EMPTY);
+  const pending = await preflight({ ...ENV, CHECKSOPS_CONFIG_MODE: 'inspect' }, { root: emptyRoot, ...liveDeps(SECRET_LIVE) });
+  assert.equal(pending.state, 'PENDING_PLAN');
+  assert.deepEqual(pending.live_credential_sha256, { CHECKSOPS_DB_BRIDGE_TOKEN: SECRET_SHA, OTHER_API_KEY: valueSha256(OTHER_SECRET) });
+  const pendingDiff = fs.readFileSync(path.join(emptyRoot, '.deployment-guard/config-diff-staging.json'), 'utf8');
+  assert.ok(pendingDiff.includes(SECRET_SHA));
+  assert.equal(leaks(pending), false);
+  assert.equal(leaks(pendingDiff), false);
+
+  // Filled plan: inspect READY, the diff file and the result carry hashes only.
+  const root = tmpRepo(SECRET_PLAN);
+  const inspected = await preflight({ ...ENV, CHECKSOPS_CONFIG_MODE: 'inspect' }, { root, ...liveDeps(SECRET_LIVE) });
+  assert.equal(inspected.state, 'READY');
+  assert.equal(inspected.live_credential_sha256.CHECKSOPS_DB_BRIDGE_TOKEN, SECRET_SHA);
+  assert.deepEqual(Object.keys(inspected.changes.find((change) => change.key === 'CHECKSOPS_DB_BRIDGE_TOKEN')).sort(), CREDENTIAL_ROW_KEYS);
+  assert.equal(leaks(inspected), false);
+  assert.equal(leaks(fs.readFileSync(path.join(root, '.deployment-guard/config-diff-staging.json'), 'utf8')), false);
+
+  // Drift: BLOCKED inspect and the collision diff carry hashes only.
+  const drifted = await preflight({ ...ENV, CHECKSOPS_CONFIG_MODE: 'inspect' }, { root, ...liveDeps({ ...SECRET_LIVE, CHECKSOPS_DB_BRIDGE_TOKEN: 'sekret-VALUE-1234' }) });
+  assert.equal(drifted.state, 'BLOCKED');
+  assert.ok(!JSON.stringify(drifted).includes('sekret-VALUE-1234'));
+  assert.equal(leaks(drifted), false);
+
+  // Verify before the change: the thrown error's details are hash-only.
+  await assert.rejects(preflight({ ...ENV, CHECKSOPS_CONFIG_MODE: 'verify' }, { root, ...liveDeps(SECRET_LIVE) }), (error) => {
+    assert.equal(error.code, CODES.DEPLOYMENT_COLLISION);
+    assert.equal(leaks({ message: error.message, details: error.details }), false);
+    return true;
+  });
+
+  // Apply: receipt, config input and the writer's result never carry the value.
+  const authorized = await preflight({ ...ENV, CHECKSOPS_CONFIG_MODE: 'apply', CHECKSOPS_EXPECTED_LIVE_REVISION_ID: 'rev-1', CHECKSOPS_CONFIG_APPROVAL: approvalPhrase('staging') }, { root, ...liveDeps(SECRET_LIVE) });
+  assert.equal(authorized.state, 'READY');
+  assert.equal(leaks(authorized), false);
+  const input = JSON.parse(fs.readFileSync(authorized.authorization.configInput, 'utf8'));
+  assert.equal(leaks(input), false);
+  assert.equal(leaks(fs.readFileSync(authorized.authorization.receiptFile, 'utf8')), false);
+  const aws = fakeLambda({ variables: SECRET_LIVE });
+  const applied = await applyLambdaConfig({ ...input, apply: true }, { ...applyCtx(root, aws, input.receipt_path), now: Date.now() });
+  assert.equal(applied.ok, true, JSON.stringify(applied));
+  assert.equal(Object.hasOwn(aws.state.variables, 'CHECKSOPS_DB_BRIDGE_TOKEN'), false);
+  assert.equal(aws.state.variables.OTHER_API_KEY, OTHER_SECRET);
+  assert.deepEqual(applied.details.changes.map((row) => [row.key, row.op, row.status]), [
+    ['AWS_MOOV_ONBOARDING_PRODUCTION_ENABLED', 'set', 'ready'], ['OLD_FLAG', 'unset', 'ready'], ['CHECKSOPS_DB_BRIDGE_TOKEN', 'unset', 'ready'],
+  ]);
+  assert.equal(leaks(applied), false);
+
+  // Verify after the change passes and carries hashes only.
+  const verified = await preflight({ ...ENV, CHECKSOPS_CONFIG_MODE: 'verify' }, { root, ...liveDeps(aws.state.variables) });
+  assert.equal(verified.state, 'VERIFIED');
+  assert.equal(leaks(verified), false);
+});
+
+test('the writer refuses a credential that changed since the plan, and its failure carries hashes only', async () => {
+  const root = tmpRepo(SECRET_PLAN);
+  const receipt = issueConfigReceipt(root, { section: planSection(planFor(SECRET_PLAN), 'staging') });
+  const aws = fakeLambda({ variables: { ...SECRET_LIVE, CHECKSOPS_DB_BRIDGE_TOKEN: 'sekret-ROTATED-999' } });
+  const result = await applyLambdaConfig(applyInput(receipt), applyCtx(root, aws, receipt.file));
+  assert.equal(result.code, CODES.DEPLOYMENT_COLLISION);
+  assert.ok(!JSON.stringify(result).includes('sekret-ROTATED-999'));
+  assert.equal(leaks(result), false);
+  assert.equal(aws.state.calls.some(([name]) => name === 'updateFunctionConfiguration'), false);
+  // A hand-built plan that carries the plain value is refused before anything is read or written.
+  const plain = { ...SECRET_PLAN, unset: { ...SECRET_PLAN.unset, CHECKSOPS_DB_BRIDGE_TOKEN: SECRET_VALUE } };
+  const plainResult = await applyLambdaConfig(applyInput(receipt, { plan: plain }), applyCtx(root, fakeLambda({ variables: SECRET_LIVE }), receipt.file));
+  assert.equal(plainResult.code, CODES.UNRELATED_MUTATION);
+  assert.equal(leaks(plainResult), false);
 });

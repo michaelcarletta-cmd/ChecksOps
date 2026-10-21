@@ -9,6 +9,11 @@
  * not list are carried over untouched; nothing else in the configuration
  * (role, runtime, handler, memory, timeout, VPC) is ever sent.
  *
+ * Credential-like keys are never set. They may be removed: the plan then records
+ * { "from_sha256": "<sha256 of the exact live value>" } instead of the value, the
+ * evaluation compares hashes, and every change row and problem for such a key
+ * carries only its name, op, status and hashes, never a value.
+ *
  * Pure functions only: no AWS, no network.
  */
 import { createHash } from 'node:crypto';
@@ -30,6 +35,7 @@ const HEX64 = /^[0-9a-f]{64}$/;
 // reviewed plan committed to git.
 const SECRET_KEY_RE = /(SECRET|PASSWORD|PASSWD|PRIVATE_KEY|API_KEY|ACCESS_KEY|TOKEN|CREDENTIAL)/i;
 const MAX_VALUE_LENGTH = 4096;
+const CREDENTIAL_UNSET_HINT = 'record a credential-like removal as { "from_sha256": "<sha256 of the exact live value>" } (copy it from the inspect live_credential_sha256), never the value';
 
 const TRANSIENT_CONFIGURATION_KEYS = new Set([
   'LastModified',
@@ -45,6 +51,11 @@ const TRANSIENT_CONFIGURATION_KEYS = new Set([
 ]);
 
 export const sha256 = (buf) => createHash('sha256').update(buf).digest('hex');
+
+/** SHA-256 of a variable value (UTF-8); the only form a credential-like value ever leaves the process in. */
+export function valueSha256(value) {
+  return sha256(Buffer.from(String(value), 'utf8'));
+}
 
 function stableValue(value) {
   if (Array.isArray(value)) return value.map(stableValue);
@@ -86,6 +97,18 @@ export function isSecretLikeKey(key) {
   return SECRET_KEY_RE.test(String(key));
 }
 
+/** Name -> SHA-256 of the value for every credential-like live key; what a plan author copies into from_sha256. */
+export function credentialSha256Map(liveVariables = {}) {
+  return Object.fromEntries(Object.keys(liveVariables)
+    .filter((key) => isSecretLikeKey(key))
+    .sort()
+    .map((key) => [key, valueSha256(liveVariables[key])]));
+}
+
+function isHashedUnset(from) {
+  return Boolean(from) && typeof from === 'object' && typeof from.from_sha256 === 'string';
+}
+
 function validateValue(value, label) {
   if (typeof value !== 'string' || value.length > MAX_VALUE_LENGTH) {
     throw new GuardError(CODES.INVALID_MANIFEST, `${label} must be a string of at most ${MAX_VALUE_LENGTH} characters`);
@@ -115,10 +138,22 @@ function section(plan, environment) {
   const unset = {};
   for (const [key, from] of Object.entries(obj(row.unset, 'unset'))) {
     if (!isConfigKey(key)) throw new GuardError(CODES.INVALID_MANIFEST, 'config plan unset key is invalid', { environment, key });
-    // Credential-like keys may be removed (unset) but never added or changed (set).
-    // The set path above still refuses them; this path allows teardown of legacy secrets.
-    validateValue(from, `config plan unset.${key}`);
     if (set[key]) throw new GuardError(CODES.INVALID_MANIFEST, `config plan lists ${key} both in set and unset`, { environment });
+    if (isSecretLikeKey(key)) {
+      // A credential-like key may be removed, never added or changed (set refuses it above).
+      // The plan is committed to git, so it carries only the hash of the live value.
+      // Error details name the key only: a mistakenly committed value is never echoed.
+      if (typeof from === 'string') {
+        throw new GuardError(CODES.UNRELATED_MUTATION, `config plan must not carry the value of a credential-like key; ${CREDENTIAL_UNSET_HINT}`, { environment, key });
+      }
+      if (!from || typeof from !== 'object' || Array.isArray(from)
+        || Object.keys(from).length !== 1 || !HEX64.test(String(from.from_sha256 || ''))) {
+        throw new GuardError(CODES.INVALID_MANIFEST, `config plan unset.${key} must be exactly { "from_sha256": "<64 lowercase hex>" }`, { environment, key });
+      }
+      unset[key] = { from_sha256: from.from_sha256 };
+      continue;
+    }
+    validateValue(from, `config plan unset.${key}`);
     unset[key] = from;
   }
   return { function_name: row.function_name, status: row.status || null, set, unset };
@@ -201,6 +236,19 @@ export function evaluateConfigChange({ plan, environment, liveVariables }) {
   }
   for (const [key, from] of Object.entries(row.unset)) {
     const present = Object.prototype.hasOwnProperty.call(liveVariables, key);
+    if (isHashedUnset(from)) {
+      // Credential-like removal: compare hashes; the row and any problem carry hashes only.
+      const liveSha256 = present ? valueSha256(liveVariables[key]) : null;
+      let status;
+      if (!present) status = 'already_accepted';
+      else if (liveSha256 === from.from_sha256) { status = 'ready'; pending += 1; }
+      else status = 'collision';
+      changes.push({ key, op: 'unset', credential: true, from_sha256: from.from_sha256, live_sha256: liveSha256, status });
+      if (status === 'collision') {
+        problems.push({ code: CODES.DEPLOYMENT_COLLISION, reason: 'live_value_mismatch', key, credential: true, expected_live_sha256: from.from_sha256, live_sha256: liveSha256 });
+      }
+      continue;
+    }
     const live = present ? liveVariables[key] : null;
     let status;
     if (!present) status = 'already_accepted';
@@ -212,11 +260,14 @@ export function evaluateConfigChange({ plan, environment, liveVariables }) {
   if (problems.length) {
     return fail(CODES.DEPLOYMENT_COLLISION, 'a listed key no longer holds its recorded live value; re-inspect and review the plan', { environment, problems, changes });
   }
-  return ok({
+  const details = {
     environment,
     state: pending === 0 ? 'ALREADY_ACCEPTED' : 'READY',
     change_sha256: changeSha256(row),
     changes,
-    target: targetVariables(liveVariables, row),
-  });
+  };
+  // The full intended map holds every other live value, credentials included. The writer
+  // needs it; no output may carry it, so it is not enumerable (JSON.stringify and spreads skip it).
+  Object.defineProperty(details, 'target', { value: targetVariables(liveVariables, row), enumerable: false });
+  return ok(details);
 }
