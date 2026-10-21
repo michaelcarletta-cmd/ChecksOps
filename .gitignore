@@ -37,3 +37,7 @@ aws/.aws-sam/
 
 # Packed copies of guard libs for the VPC SQL executor (created by tests/pack)
 aws/write-path/guarded-sql-executor/lib/
+
+# Claude Code scratch space and personal settings (never commit)
+.claude/tmp/
+.claude/settings.local.json
