@@ -74,7 +74,10 @@ const COMMITTED = Object.freeze(Object.fromEntries(RELEASE_SQL_KEYS.map((key) =>
 // "apply SQL 108 in production then ...", on its guarded staging apply from the same pre-state,
 // checked in release-sql108-production-apply.test.mjs) until its record-and-retire change after its
 // 2026-10-21 apply.
-const EXECUTE_AUTHORIZED = Object.freeze([]);
+// SQL 109's production pin is execute-authorized (owner-approved pin change of 2026-10-21, "apply SQL
+// 109 in production", on its guarded staging apply from the same pre-state, checked in
+// release-sql109-production-apply.test.mjs) until its record-and-retire change.
+const EXECUTE_AUTHORIZED = Object.freeze(['sql109']);
 // SQL 95's and SQL 97's recorded production pre-states (read-only inspect of 2026-10-21, SSM
 // 43cb1d1f, main 69dbe9b01) and their staging references: the guarded staging read-live runs of
 // 2026-10-21 that report the intended state (their wave 4 apply runs are not recorded), accepted as
@@ -230,7 +233,7 @@ async function runCli(key, argv, { env = { CHECKSOPS_DEPLOYMENT_GUARD_APPLY: '1'
   return { out: writes.join(''), spent };
 }
 
-test('committed pins are pending (none execute-authorized; SQL 90, SQL 91, SQL 92, SQL 93, SQL 94, SQL 95, SQL 96, SQL 97, SQL 99, SQL 101, SQL 102, SQL 103, SQL 104, SQL 105, SQL 106 and SQL 108 applied and retired), bound to the staging pins, predecessors and the production RDS, and name the built tooling', () => {
+test('committed pins are pending (SQL 109 execute-authorized; SQL 90, SQL 91, SQL 92, SQL 93, SQL 94, SQL 95, SQL 96, SQL 97, SQL 99, SQL 101, SQL 102, SQL 103, SQL 104, SQL 105, SQL 106 and SQL 108 applied and retired), bound to the staging pins, predecessors and the production RDS, and name the built tooling', () => {
   const inventory = JSON.stringify(JSON.parse(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/bypass-inventory.json'), 'utf8')));
   assert.deepEqual(RELEASE_SQL_KEYS.filter((key) => COMMITTED[key].execute !== false), [...EXECUTE_AUTHORIZED]);
   assert.deepEqual(RELEASE_SQL_KEYS.filter((key) => COMMITTED[key].applied !== undefined), [...APPLIED_RETIRED]);
