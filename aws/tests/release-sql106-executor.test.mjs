@@ -127,7 +127,7 @@ function handlerFor(connect, { pins = {} } = {}) {
   return createHandler({ connect, now: () => Date.parse(NOW), releaseSqlFiles: FILES, releaseSqlPins: { ...PINS, ...pins } });
 }
 
-test('pin: SQL 106 pending, code-derived, selectable, packed, in step with the production pin; no predecessor, before SQL 97', () => {
+test('pin: SQL 106 pending in staging (the production pin applied and retired), code-derived, selectable, packed, in step with the production pin; no predecessor, before SQL 97', () => {
   const pin = PINS[KEY];
   const spec = RELEASE_SQL_SPECS[KEY];
   const packed = Object.fromEntries(EXECUTOR_PACK_MEMBERS);
@@ -178,11 +178,12 @@ test('pin: SQL 106 pending, code-derived, selectable, packed, in step with the p
   assert.equal(prod.staging_pin_commit, pin.commit);
   assert.equal(prod.source_sha256, pin.source_sha256);
   assert.deepEqual(prod.predecessors, []);
-  // Production pin execute-authorized (owner-approved pin change of 2026-10-21, substitute staging
+  // Production pin applied 2026-10-21 and retired (owner approved #1120, substitute staging
   // evidence: SQL 106 was already in effect in staging); production's pre-state (checksops DELETE and
   // UPDATE) differs from staging's.
-  assert.equal(prod.execute, true);
-  assert.match(prod.authorization, /^Owner approved 2026-10-21 /);
+  assert.equal(prod.execute, false);
+  assert.match(prod.authorization, /^Applied to production on 2026-10-21; execute is false again/);
+  assert.equal(prod.applied.receipt.after_hash, pin.intended_replacement_sha256);
   assert.equal(prod.expected_live_definition_sha256, '56b5e4bb1a2db3133c32c9cc3cca02c1e7fb876839544dbdfd0717aad8f25880');
   assert.notEqual(prod.expected_live_definition_sha256, prod.intended_replacement_sha256);
   let bytes = null;
