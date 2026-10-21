@@ -86,6 +86,11 @@ dependency or a module the overlay cannot carry must reach a Lambda) go through
 `guarded-staging-lambda-rebuild.yml` and `guarded-production-lambda-rebuild.yml`, gated by
 `ops/deployment-guard/lambda-rebuild-plan.json`: apply is refused while any live-vs-candidate
 difference is not listed there. Runbook: `ops/production-lambda-rebuild.md`.
+
+Environment-variable changes (one reviewed key at a time, never code, never role/memory/timeout/VPC)
+go through `guarded-staging-lambda-config.yml` and `guarded-production-lambda-config.yml`, gated by
+`ops/deployment-guard/lambda-config-plan.json`: apply is refused unless every listed key still holds
+its recorded live value. Runbook: `ops/lambda-configuration-change.md`.
 It reports the requested repository member as `PRESENT` (with its SHA-256) or
 `ABSENT`, alongside the live Lambda CodeSha256 and RevisionId. Absence is not
 deployment authorization. For `apply`, explicitly select `add` for an absent

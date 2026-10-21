@@ -112,6 +112,9 @@ export function createLiveAwsAdapter({
   fetchImpl = null,
   authorized = false,
   loadSdkImpl = loadSdk,
+  // Only the receipt-gated config writer (lambda-config-apply.mjs) opens this. It permits
+  // UpdateFunctionConfiguration carrying Environment.Variables and RevisionId, nothing else.
+  environmentWrites = false,
 } = {}) {
   const adapter = {
     kind: 'live',
@@ -152,6 +155,7 @@ export function createLiveAwsAdapter({
       GetFunction: mod.GetFunctionCommand,
       GetFunctionConfiguration: mod.GetFunctionConfigurationCommand,
       UpdateFunctionCode: mod.UpdateFunctionCodeCommand,
+      UpdateFunctionConfiguration: mod.UpdateFunctionConfigurationCommand,
     }[operation];
     if (!Command) throw new Error(`unsupported Lambda operation ${operation}`);
     return lazy.lambda.send(new Command(params));
@@ -301,14 +305,43 @@ export function createLiveAwsAdapter({
   };
 
   adapter.updateFunctionConfiguration = async (input = {}) => {
-    record('updateFunctionConfiguration', [input]);
+    record('updateFunctionConfiguration', [{ functionName: input.functionName, revisionId: input.revisionId || null, keys: Object.keys(input.environment || {}).length }]);
     const blocked = requireWriteAuth('updateFunctionConfiguration');
     if (blocked) return blocked;
-    return fail(
-      CODES.UNRELATED_MUTATION,
-      'live adapter refuses UpdateFunctionConfiguration; overlay apply must not replace environment/configuration',
-      { functionName: input.functionName || null },
-    );
+    if (environmentWrites !== true) {
+      return fail(
+        CODES.UNRELATED_MUTATION,
+        'live adapter refuses UpdateFunctionConfiguration; overlay apply must not replace environment/configuration',
+        { functionName: input.functionName || null },
+      );
+    }
+    if (!input.revisionId) {
+      return fail(CODES.DEPLOYMENT_COLLISION, 'UpdateFunctionConfiguration requires RevisionId CAS');
+    }
+    const variables = input.environment;
+    if (!variables || typeof variables !== 'object' || Array.isArray(variables)
+      || Object.values(variables).some((value) => typeof value !== 'string')) {
+      return fail(CODES.INVALID_MANIFEST, 'UpdateFunctionConfiguration requires a string map of environment variables');
+    }
+    const extra = Object.keys(input).filter((key) => !['functionName', 'environment', 'revisionId'].includes(key));
+    if (extra.length) {
+      return fail(CODES.UNRELATED_MUTATION, 'live adapter sends only Environment.Variables; other configuration fields are refused', { fields: extra });
+    }
+    try {
+      const res = await sendLambda('UpdateFunctionConfiguration', {
+        FunctionName: input.functionName,
+        Environment: { Variables: { ...variables } },
+        RevisionId: input.revisionId,
+      });
+      return asResult({
+        function_name: input.functionName,
+        codeSha256: res?.CodeSha256 || null,
+        revisionId: res?.RevisionId || null,
+        lastUpdateStatus: res?.LastUpdateStatus || null,
+      });
+    } catch (error) {
+      return wrapError('updateFunctionConfiguration', error);
+    }
   };
 
   adapter.createFunction = async (input = {}) => {

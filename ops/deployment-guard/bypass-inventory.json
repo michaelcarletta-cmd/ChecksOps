@@ -512,6 +512,23 @@
       "note": "GitHub-hosted full-package rebuild preflight for checksops-staging-api / checksops-production-prep-api. Builds the candidate ZIP from main, reads the live package, requires every difference to be listed in ops/deployment-guard/lambda-rebuild-plan.json, the inspect CodeSha256, the exact approval phrase (production: plus a staging acceptance reference), then takes the lease and issues a KMS-signed receipt owning the candidate SHA-256. Never writes AWS; lambda-rebuild-apply.mjs is the only writer."
     },
     {
+      "path": "scripts/deployment-guard/github-lambda-config.mjs",
+      "classification": "SAFE",
+      "capabilities": [
+        "lambda-config-preflight"
+      ],
+      "note": "GitHub-hosted environment-variable preflight for checksops-staging-api / checksops-production-prep-api. Reads the live configuration, requires every key listed in ops/deployment-guard/lambda-config-plan.json to hold its recorded live value, the inspect RevisionId, the exact approval phrase (production: plus a staging acceptance reference), then takes the lease and issues a KMS-signed receipt owning the plan change's SHA-256. Never writes AWS; lambda-config-apply.mjs is the only writer."
+    },
+    {
+      "path": "scripts/deployment-guard/lambda-config-apply.mjs",
+      "classification": "GUARDED",
+      "capabilities": [
+        "lambda-config-apply",
+        "lambda-update-function-configuration"
+      ],
+      "note": "Official receipt-gated environment-variable writer. Sends only FunctionName, Environment.Variables and RevisionId (CAS); changes only the keys the lambda-config receipt's plan change owns, re-evaluated against the live variables immediately before the write; verifies the live variables equal the intended ones and every other configuration field is unchanged. Never changes code, role, runtime, memory, timeout or VPC; never restores."
+    },
+    {
       "path": "scripts/deployment-guard/lambda-rebuild-apply.mjs",
       "classification": "GUARDED",
       "capabilities": [
