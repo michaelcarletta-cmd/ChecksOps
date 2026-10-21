@@ -507,6 +507,39 @@ test('mortgage-agent-compensation.mjs expected_live records the bytes production
   );
 });
 
+test('checkalt-eligibility.mjs expected_live records the bytes production run 39663019340 applied', async () => {
+  const ELIGIBILITY = 'providers/production/checkalt-eligibility.mjs';
+  const LIVE = 'e681b0a02736d45a1984a6c61805e92f5966aae8060079630ef35d5226015329';
+  const BEFORE = '7c3a1eb9b75c8dcea1fbad9e2862bda8cb5eb82d42241ab7f89349a450a02e57';
+  const MANIFEST_REL = 'aws/tests/fixtures/production-checkalt-eligibility-select-manifest-2026-10-21.json';
+  // Staging apply run 39662525342 (the staging acceptance), production inspect run 39662846247
+  // (READY on the pre-apply bytes), production apply run 39663019340 (VERIFIED).
+  assert.match(PLAN.notes, /staging apply run 39662525342/);
+  assert.match(PLAN.notes, /inspect run 39662846247/);
+  assert.match(PLAN.notes, /production apply run 39663019340/);
+  assert.equal(PLAN.order[0], ELIGIBILITY);
+  const row = PLAN.members[ELIGIBILITY];
+  assert.equal(row.operation, 'replace');
+  assert.equal(row.manifest, MANIFEST_REL);
+  assert.equal(row.sql_before, null);
+  assert.equal(row.expected_live_sha256, LIVE);
+  assert.equal(row.accepted_sha256, LIVE);
+  assert.equal(sha(`aws/functions/api/${ELIGIBILITY}`), LIVE);
+  const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, MANIFEST_REL), 'utf8'));
+  assert.equal(manifest.members[ELIGIBILITY].live_sha256, LIVE);
+  assert.equal(manifest.members[ELIGIBILITY].accepted_sha256, LIVE);
+  assert.match(manifest.notes, /run 39663019340/);
+  assert.equal(resolvePlannedMember(ELIGIBILITY, { root: ROOT, plan: PLAN }).ok, true);
+  const done = await run({ ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: ELIGIBILITY }, { root: ROOT, inspectLive: liveFor(ELIGIBILITY) });
+  assert.equal(done.state, 'ALREADY_ACCEPTED');
+  assert.equal(done.mutation, false);
+  // The pre-apply bytes are no longer an accepted live state.
+  await assert.rejects(
+    run({ ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: ELIGIBILITY }, { root: ROOT, inspectLive: liveFor(ELIGIBILITY, { sha256: BEFORE }) }),
+    (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+  );
+});
+
 test('tenant-management-v2.mjs is added just before app-services.mjs, which imports it statically', async () => {
   const TMV2 = 'tenant-management-v2.mjs';
   const ROUTER = 'app-services.mjs';
