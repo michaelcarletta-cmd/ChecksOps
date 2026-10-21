@@ -36,6 +36,15 @@ run `39082817752` from the same pre-state). SQL 102 was applied to production on
 the owner-approved pin change of 2026-10-19 (#1078, "approve the SQL 102 pin": the read-only
 production inspect, SSM `3ff30ee9-031d-4122-9ee1-370a2645cbca` from main `96fb17821`, live
 `d3b2cd30…`, and its guarded staging apply run `39162625974` from the same pre-state).
+SQL 95's, SQL 97's and SQL 99's production pins are `execute: true` (owner approved 2026-10-21,
+"Everything else should be pushed live no exceptions"): the read-only production inspect of
+2026-10-21 (SSM `43cb1d1f-f589-43b2-9315-7cad80fffb5c` from main `69dbe9b01`, precondition_failures
+[] for each) is recorded as each pre-state (SQL 95 `48535b69…`, SQL 97 `56b1f631…`, SQL 99
+`4d174e86…`). SQL 99's staging acceptance is its wave 1 apply run `39080577323` from the same
+pre-state; SQL 95's and SQL 97's are the guarded staging read-live runs of 2026-10-21
+(`39616185934`, `39618586101`, live = intended), owner-accepted substitute evidence from a different
+pre-state (their wave 4 apply runs are not recorded). Each apply still needs the owner's run-time
+approval, SQL 97 before SQL 95 (steps 7 and 8 below).
 Every other
 production pin is `execute: false`, `authorization: "pending"`, with no recorded pre-state and
 no staging acceptance, so its production apply refuses before connecting; staging pins are authorized only in reviewed waves ("Staging apply waves"). SQL 100
@@ -102,8 +111,19 @@ production pin before the matching production step (deltas report
    (`successors_not_applied`).
 7. **SQL 97** only after `auth-financial-totp.mjs` and `admin-reset-totp.mjs` are live (both set
    `app.stepup_writer`); before then the server's step-up insert would be refused.
+   Production pin: `execute: true` (owner approved 2026-10-21). Gate evidence recorded in the pin:
+   production runs the full main API package since the guarded production rebuild run
+   `39588578627` (main `2168be9a1`, CodeSha256 `sxodWyRp…`, still live on 2026-10-21), and on main
+   both files set `app.stepup_writer`. Not captured from the production inspect:
+   `table_privileges[0].other_write_grants` (informational, not a precondition): read it in the
+   one-shot's inspect step before the apply and stop if it is not `[]`.
 8. **SQL 95** only after `app-services.mjs` and the `ingest-shared-check.mjs` 410 stub are live
    (plan step 8); it drops SQL 70's `aws_ingest_shared_check`.
+   Production pin: `execute: true` (owner approved 2026-10-21). Gate evidence recorded in the pin:
+   the same rebuild run `39588578627`; on main `ingest-shared-check.mjs` is the 410 stub and
+   `app-services.mjs` no longer calls `aws_ingest_shared_check`. The dropped-function dependents
+   and callers counts were not captured; both are precondition rules, and precondition_failures
+   was `[]`.
 9. **SQL 98** after SQL 96 (SQL 98 requires SQL 96's pricing setter and replaces its column
    guard), **before** `tenant-billing-engine.mjs`, `tenant-billing-handlers.mjs`,
    `workflow-rpc.mjs` and `providers.mjs` (`ops/fee-collection-deltas.md` sections 2 and 4: the
@@ -122,6 +142,8 @@ production pin before the matching production step (deltas report
 10. **SQL 99** after SQL 90, as the login that owns `check_messages` (no FORCE RLS) and
    `mortgage_handling_requests`; before or with the SPA build that stops the Mortgage Desk
    client posts (`MortgageOpsQueue.tsx`). No Lambda dependency.
+   Production pin: `execute: true` (owner approved 2026-10-21): production live `4d174e86…`, the
+   same pre-state staging applied from (run `39080577323`).
 11. **SQL 100** after SQL 90 (and 12 / 24 / SQL 50, already live). Staging only: on production it
    is a strict no-op and is recorded by the read-only inspect (below). In staging it brings
    the Mortgage Desk access to production's.
