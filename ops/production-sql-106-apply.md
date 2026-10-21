@@ -60,9 +60,9 @@ roll back otherwise.
 
 ## Order
 
-**Before SQL 97 in production.** SQL 97's production pin is `execute: true` but SQL 97 is not
-applied; it follows SQL 106, with its own run-time approval, once its inspect reports
-`other_write_grants` `[]` (its runbook step 7). This is recorded in the pin (`order_note`), the
+**Before SQL 97 in production.** SQL 97 follows SQL 106, with its own run-time approval, once its
+inspect reports `other_write_grants` `[]` (its runbook step 7). Both were applied to production on
+2026-10-21 in that order (see "Production apply of SQL 106" below). This is recorded in the pin (`order_note`), the
 spec (`runs_before: ["sql97"]`) and the one-shot registry (`ONE_SHOT_TOOLS.sql106.runs_before`),
 as SQL 103 → SQL 29 was. It is informational: SQL 97's tooling does not refuse on
 `other_write_grants` (not a precondition rule), so the operator reads it in SQL 97's one-shot
@@ -82,8 +82,10 @@ re-run. No Lambda member waits on SQL 106 (no `sql_before`, no plan entry).
 - **Staging: substitute evidence.** SQL 106 was already in effect in staging: read-live run
   39633390440 (main `588bda34`) reported `already_applied` true, live = intended, `lines` `[]`. The
   owner accepts it as substitute evidence by reviewing and merging the pin change.
-- **Pin `execute: true`** once that change is merged. Nothing is applied by it; the apply (step 3)
-  needs the owner's own approval statement for that run.
+- **Pin `execute: true`** once that change is merged (#1120). Nothing is applied by it; the apply
+  (step 3) needs the owner's own approval statement for that run.
+- **Applied to production (2026-10-21)** and the pin retired (`execute: false` again; see
+  "Production apply of SQL 106" below). SQL 97 followed (step 5).
 
 ## Steps
 
@@ -116,3 +118,34 @@ re-run. No Lambda member waits on SQL 106 (no `sql_before`, no plan entry).
 5. Then SQL 97 (`ops/production-sql-90-97-apply.md` step 7): its one-shot inspect must report
    `other_write_grants` `[]` and the same `live_definition_sha256` its pin records
    (`56b1f631…`), and its apply needs the owner's run-time approval for SQL 97.
+
+## Production apply of SQL 106 (2026-10-21)
+
+One owner approval statement, passed verbatim (base64, `--approval-statement-b64`) to the SQL 106
+and the SQL 97 runs: "apply SQL 106 and SQL 97 in production" (the one-shot cannot verify who said
+it; it covered those runs only). `production-sql-one-shot.mjs --migration sql106 --approval-scope
+sql106` on `i-0c35557c4e5385406`, operator `michaelcarletta-cmd`, workstream
+`prod-sql106-financial-stepup-log-append-only-20261021`, from main `7124a160b` (tarball
+`source-7124a160b9848d6334bc4328d69e9404aebddff3.tar.gz`, sha256 `48713c46…`, transfer run
+`39640540760`, `sql53-temporary-transfer.yml` dispatched on main at 2026-10-21T17:04:43Z; its
+upload job printed `TARBALL_SHA256 48713c464437e21c91dd63360fe33c27495918c332a32951ac8f3ec692089dde`).
+
+- **Inspect phase:** SSM `78e335e7-b844-4fbe-8c81-ebccdcd737c2`, run_id
+  `458bd072-8cdf-4611-91ff-1bbdf5aebd2b`: pin, source, inspect and contracts ok, nothing written;
+  live `56b5e4bb…` (live_matches_expected true), `lines` `["checksops DELETE", "checksops UPDATE"]`.
+- **Apply phase:** SSM `43070c9e-2bb5-4e49-80f3-97fe6f35e3d0` (2026-10-21T17:18:15Z to 17:18:25Z),
+  run_id `0ae3e5dc-a34f-4799-ba75-d79a9b2ade28`, one_use_id
+  `sql106-prod-c994fcc1-bbff-414b-bfad-3b864d96d4a6` (spent): every step ok (pin, source, inspect,
+  contracts, manifest, source-recheck-before-preflight, preflight, evaluate,
+  source-recheck-before-apply, apply (applied), post-apply-inspect); migration source `b7b4f3f3…`
+  (== pin); contracts claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43;
+  pre-apply inspect live `56b5e4bb…`, precondition_failures []; manifest `8ca15d2d…`; receipt
+  `56b5e4bb…` -> `0a159961…`, result applied, unrelated catalog `22332dfc…` (relations 890, columns
+  3535, constraints 2233, policies 404, functions 1312, indexes 654, triggers 179, views 25, types
+  18, roles 29, role memberships 15); post-apply inspect live `0a159961…`, already_applied true,
+  precondition_failures [], `lines` `[]`, `other_write_grants` `[]`.
+
+No later read-only inspect was run. The pin is `execute: false` again; a re-apply needs a new
+reviewed pin change (and SQL 106 is not re-run: no later migration grants these privileges back).
+SQL 97 followed under the same statement (`ops/production-sql-90-97-apply.md`, "Production apply
+of SQL 97").

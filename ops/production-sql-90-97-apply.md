@@ -45,11 +45,11 @@ SQL 97 `56b1f631…`, SQL 99 `4d174e86…`). SQL 99's staging acceptance is its 
 of 2026-10-21 (`39616185934`, `39618586101`, live = intended), owner-accepted substitute evidence
 from a different pre-state (their wave 4 apply runs are not recorded). SQL 95 and SQL 99 were
 applied to production on 2026-10-21 (see "Production applies of SQL 95 and SQL 99" below) and their
-pins are retired (`execute: false`). SQL 97 was **not** applied: its pre-apply read-only inspect
-reported `other_write_grants` on `financial_stepup_log`, so its one-shot was not run (see "SQL 97 not
-applied" below). Its pin stays `execute: true` and unchanged; SQL 106 (revoke UPDATE/DELETE/TRUNCATE)
-is to be applied first, and any SQL 97 apply still needs a fresh read-only inspect and the owner's
-own run-time approval for that run.
+pins are retired (`execute: false`). SQL 97 was not applied with them: its pre-apply read-only
+inspect reported `other_write_grants` on `financial_stepup_log`, so its one-shot was not run then
+(see "SQL 97 not applied" below). SQL 106 (revoke UPDATE/DELETE/TRUNCATE) was applied to production
+later on 2026-10-21, and SQL 97 right after it (see "Production apply of SQL 97" below); both pins
+are retired (`execute: false`).
 Every other
 production pin is `execute: false`, `authorization: "pending"`, with no recorded pre-state and
 no staging acceptance, so its production apply refuses before connecting; staging pins are authorized only in reviewed waves ("Staging apply waves"). SQL 100
@@ -130,9 +130,11 @@ production pin before the matching production step (deltas report
    both files set `app.stepup_writer`. Not captured from the production inspect:
    `table_privileges[0].other_write_grants` (informational, not a precondition): read it in the
    one-shot's inspect step before the apply and stop if it is not `[]`.
-   Not applied on 2026-10-21: the pre-apply read-only inspect reported `other_write_grants`
+   Not applied at first on 2026-10-21: the pre-apply read-only inspect reported `other_write_grants`
    `["checksops DELETE", "checksops UPDATE"]`, so it stopped by this rule (see "SQL 97 not applied"
-   below). The pin keeps `execute: true`; SQL 106 comes first.
+   below). Applied to production later on 2026-10-21 after SQL 106, when its one-shot inspect
+   reported `other_write_grants` `[]` (see "Production apply of SQL 97" below), and its pin is
+   retired. It went after SQL 95, not before it (SQL 97 is not a predecessor of SQL 95).
 8. **SQL 95** only after `app-services.mjs` and the `ingest-shared-check.mjs` 410 stub are live
    (plan step 8); it drops SQL 70's `aws_ingest_shared_check`.
    Production pin: `execute: true` (owner approved 2026-10-21). Gate evidence recorded in the pin:
@@ -400,7 +402,9 @@ node scripts/deployment-guard/sql102-platform-owner-tenant-profile-production-ap
   `ops/production-sql-106-apply.md`): UPDATE, DELETE and TRUNCATE revoked from `PUBLIC`,
   `checksops`, `authenticated` and `anon`, run before SQL 97 (`runs_before: ["sql97"]`). After it
   this list is `[]`; SQL 97's file, pins and fingerprints are unchanged, and SQL 106 does not move
-  SQL 97's live fingerprint (`56b1f631…` stays the pre-state its pin records).
+  SQL 97's live fingerprint (`56b1f631…` stays the pre-state its pin records). Both held on
+  2026-10-21: after SQL 106's apply, SQL 97's one-shot inspect reported `other_write_grants` `[]`
+  and live `56b1f631…` (see "Production apply of SQL 97").
 - SQL 92 skips silently when `check_files.signature_request_id` is missing; the tooling makes
   that a prerequisite instead.
 - SQL 94 drops and re-adds `tenant_documents_doc_type_check` (ACCESS EXCLUSIVE on
@@ -680,3 +684,42 @@ applied before SQL 97; that is a separate PR, in progress. SQL 97's pin has no `
 keeps `execute: true` unchanged. Its recorded pre-state `56b1f631…` is from the inspect of
 2026-10-21 (SSM `43cb1d1f`); after SQL 106 the live fingerprint may differ, so a fresh read-only
 inspect decides whether the pin needs a new reviewed change before any SQL 97 apply.
+
+Update (2026-10-21, later): SQL 106 was applied first (`ops/production-sql-106-apply.md`), then
+SQL 97 from a fresh inspect that reported the same pre-state `56b1f631…`, so the pin needed no new
+reviewed change before its apply (see "Production apply of SQL 97" below). The text above is the
+record of the first stop and is kept.
+
+## Production apply of SQL 97 (2026-10-21)
+
+One owner approval statement, passed verbatim (base64, `--approval-statement-b64`) to the SQL 106
+and the SQL 97 runs: "apply SQL 106 and SQL 97 in production" (the one-shot cannot verify who said
+it; it covered those runs only). `production-sql-one-shot.mjs --migration sql97 --approval-scope
+sql97` on `i-0c35557c4e5385406`, operator `michaelcarletta-cmd`, from main `7124a160b` (tarball
+`source-7124a160b9848d6334bc4328d69e9404aebddff3.tar.gz`, sha256 `48713c46…`, transfer run
+`39640540760`, `sql53-temporary-transfer.yml` dispatched on main at 2026-10-21T17:04:43Z), after
+SQL 106's apply (SSM `43070c9e-2bb5-4e49-80f3-97fe6f35e3d0`, see `ops/production-sql-106-apply.md`).
+Workstream: both SQL 97 runs passed `--workstream-id
+prod-sql106-financial-stepup-log-append-only-20261021`, the SQL 106 run's id, not one named after
+SQL 97; the lease and receipt were issued for that id and recorded as passed.
+
+- **Inspect phase:** SSM `b47ff47a-068c-4b13-9c32-b36b8e9e7581`, run_id
+  `095bfd73-4fd6-4ab3-9491-62f7e6ffcd00`: pin, source, inspect and contracts ok, nothing written;
+  live `56b1f631…` (live_matches_expected true), `table_privileges[0]` lines
+  `["checksops INSERT"]`, `other_write_grants` `[]` (the step 7 stop rule no longer applied).
+- **Apply phase:** SSM `0a7a1b66-47c4-4fa8-8380-9b60296360f5` (2026-10-21T17:22:03Z to 17:22:15Z),
+  run_id `9834d407-6758-486d-9f3f-bc85ec6e129f`, one_use_id
+  `sql97-prod-87263eb2-8523-4646-9a28-d7a4d22e38c8` (spent): every step ok (pin, source, inspect,
+  contracts, manifest, source-recheck-before-preflight, preflight, evaluate,
+  source-recheck-before-apply, apply (applied), post-apply-inspect); migration source `e3c8fd41…`
+  (== pin); contracts claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43;
+  pre-apply inspect live `56b1f631…`, precondition_failures [], `other_write_grants` `[]`; manifest
+  `db5b551f…`; receipt `56b1f631…` -> `5d9b50f5…`, result applied, unrelated catalog `22332dfc…`
+  (functions 1312, triggers 179; the other counts as for SQL 95); post-apply inspect live
+  `5d9b50f5…`, already_applied true, precondition_failures [], the guard function and trigger in
+  the intended state.
+
+Order: after SQL 106 (step 7) and after SQL 95, not before SQL 95 as steps 7 and 8 had it (SQL 97 is
+not a predecessor of SQL 95). Lambda gate: as recorded in the pin's production inspect (rebuild run
+`39588578627`); the live Lambda code was not re-read for this record. No later read-only inspect was
+run. The pin is `execute: false` again; a re-apply needs a new reviewed pin change.
