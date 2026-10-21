@@ -2375,6 +2375,41 @@
       "reason": "PR #1109 removes Plaid, Actum and QuickBooks (owner decision 2026-10-21) and drops the PLAID_*, ACTUM_*, QUICKBOOKS_* keys and AWS_PLAID_WEBHOOK_SECRET in aws/functions/api/provider-secrets.mjs; it overlaps the still-open Cursor-era PR #321 (opened 2026-09-14, last updated 2026-09-14, based on the stacked branch cursor/prod-cutover-lock-c48b), which predates the current main and must rebase before any merge. Allow review while that PR remains open. It does not merge, edit or deploy PR #321.",
       "expires": "2026-12-31",
       "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 432,
+      "path": "aws/functions/api/providers/production/checkalt-eligibility.mjs",
+      "reason": "The Check Alt eligibility SELECT fix drops front_image_deposit_path (a column check_intake_items does not have) from CHECK_ELIGIBILITY_SELECT in aws/functions/api/providers/production/checkalt-eligibility.mjs, which made every production checkalt-deposit-preflight and checkalt-submit-deposit fail; it overlaps the still-open draft Cursor-era PR #432 (opened 2026-09-22, last updated 2026-09-23, branch cursor/checkalt-first-deposit-7084), which predates the current main and must rebase before any merge. Allow review while that PR remains open. It does not merge, edit or deploy PR #432.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 379,
+      "path": "aws/functions/api/providers/production/checkalt-eligibility.mjs",
+      "reason": "The Check Alt eligibility SELECT fix drops front_image_deposit_path (a column check_intake_items does not have) from CHECK_ELIGIBILITY_SELECT in aws/functions/api/providers/production/checkalt-eligibility.mjs, which made every production checkalt-deposit-preflight and checkalt-submit-deposit fail; it overlaps the still-open draft Cursor-era PR #379 (opened 2026-09-18, last updated 2026-09-18, branch cursor/adjust-endorsement-parity-staging-b26c), which predates the current main and must rebase before any merge. Allow review while that PR remains open. It does not merge, edit or deploy PR #379.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 323,
+      "path": "aws/functions/api/providers/production/checkalt-eligibility.mjs",
+      "reason": "The Check Alt eligibility SELECT fix drops front_image_deposit_path (a column check_intake_items does not have) from CHECK_ELIGIBILITY_SELECT in aws/functions/api/providers/production/checkalt-eligibility.mjs, which made every production checkalt-deposit-preflight and checkalt-submit-deposit fail; it overlaps the still-open Cursor-era PR #323 (opened 2026-09-14, last updated 2026-09-14, branch cursor/checkalt-rear-rebind-8b74), which predates the current main and must rebase before any merge. Allow review while that PR remains open. It does not merge, edit or deploy PR #323.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 322,
+      "path": "aws/functions/api/providers/production/checkalt-eligibility.mjs",
+      "reason": "The Check Alt eligibility SELECT fix drops front_image_deposit_path (a column check_intake_items does not have) from CHECK_ELIGIBILITY_SELECT in aws/functions/api/providers/production/checkalt-eligibility.mjs, which made every production checkalt-deposit-preflight and checkalt-submit-deposit fail; it overlaps the still-open Cursor-era PR #322 (opened 2026-09-14, last updated 2026-09-14, branch cursor/checkalt-golive-gate-c48b), which predates the current main and must rebase before any merge. Allow review while that PR remains open. It does not merge, edit or deploy PR #322.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 1116,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "The Check Alt eligibility SELECT fix moves only the checkalt-submission component's source.tree_hash in ops/release-locks/locked-components.json; open PR #1116 (Moov transfer returns) moves another component's tree_hash in the same file. The two edits are to different entries; whichever PR merges second must rebase onto main and re-run validate-release-locks.mjs. It does not merge, edit or deploy PR #1116.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
     }
   ]
 }
