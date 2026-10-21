@@ -703,5 +703,8 @@ test('Command Center cannot bypass official artifacts or the compliance card', a
   const card = fs.readFileSync(path.join(ROOT, 'src/components/checks/CheckAltImageComplianceCard.tsx'), 'utf8');
   assert.doesNotMatch(card, /Prepare official 1920/);
   assert.doesNotMatch(card, /prepareCheckAltDeposit/);
-  assert.match(card, /Deposit will prepare the front and back images automatically/);
+  // Per-side hints now say the bank-ready image is created on Deposit.
+  const display = fs.readFileSync(path.join(ROOT, 'src/lib/checkaltComplianceDisplay.ts'), 'utf8');
+  assert.match(card, /describeCheckAltSide/);
+  assert.match(display, /The bank-ready image is created when you press Deposit\./);
 });

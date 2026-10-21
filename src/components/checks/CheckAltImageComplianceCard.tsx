@@ -1,15 +1,16 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { CHECK_IMAGES_BUCKET } from "@/lib/storageBuckets";
+import { measureBlob, type CheckAltComplianceStatus } from "@/lib/checkaltImageCompliance";
 import {
-  combineCheckAltCompliance,
-  emptySide,
-  evaluateCheckAltImageCompliance,
-  measureBlob,
-  toCheckAltPath,
-  type CheckAltComplianceStatus,
-  type CheckAltSideReport,
-} from "@/lib/checkaltImageCompliance";
+  checkAltCardHeading,
+  describeCheckAltSide,
+  loadCheckAltCardState,
+  toCheckAltComplianceStatus,
+  type CheckAltCardState,
+  type CheckAltSideState,
+  type CheckAltTone,
+} from "@/lib/checkaltComplianceDisplay";
 
 type Props = {
   checkId: string;
@@ -18,39 +19,52 @@ type Props = {
   onStatusChange?: (status: CheckAltComplianceStatus) => void;
 };
 
-const inspectPath = async (path: string | null | undefined, side: "front" | "rear"): Promise<CheckAltSideReport> => {
-  const artifact = toCheckAltPath(path);
-  if (!artifact) return emptySide(side);
-  const { data, error } = await supabase.storage.from(CHECK_IMAGES_BUCKET).download(artifact);
-  if (error || !data) return emptySide(side);
-  const info = await measureBlob(data);
-  return evaluateCheckAltImageCompliance({ ...info, jpeg: true }, side);
+const storageDeps = {
+  download: (path: string) => supabase.storage.from(CHECK_IMAGES_BUCKET).download(path),
+  measure: measureBlob,
 };
+
+const loadCardState = (input: { frontImagePath?: string | null; backImageDepositPath?: string | null }) =>
+  loadCheckAltCardState(input, storageDeps);
 
 export async function loadCheckAltComplianceStatus(input: {
   frontImagePath?: string | null;
   backImageDepositPath?: string | null;
 }): Promise<CheckAltComplianceStatus> {
-  const [front, rear] = await Promise.all([
-    inspectPath(input.frontImagePath, "front"),
-    inspectPath(input.backImageDepositPath, "rear"),
-  ]);
-  return combineCheckAltCompliance(front, rear);
+  return toCheckAltComplianceStatus(await loadCardState(input));
 }
 
-const SideRow = ({ label, report }: { label: string; report: CheckAltSideReport }) => (
-  <div className="flex items-center justify-between gap-3 text-xs">
-    <span className="text-muted-foreground">{label}</span>
-    <span className={report.pass ? "font-medium text-emerald-400" : "font-medium text-red-300"}>
-      {report.pass ? "Pass" : "Fail"}
-      {!report.pass && report.reason ? ` · ${report.reason}` : ""}
-    </span>
-    <span className="text-muted-foreground tabular-nums">
-      {report.width && report.height ? `${report.width}×${report.height}` : "—"}
-      {report.bytes ? ` · ${Math.round(report.bytes / 1024)} KB` : ""}
-    </span>
-  </div>
-);
+const TONE_CLASS: Record<CheckAltTone, string> = {
+  good: "text-emerald-400",
+  bad: "text-red-300",
+  neutral: "text-muted-foreground",
+};
+
+const unknownState = (side: "front" | "rear"): CheckAltSideState => ({
+  side,
+  kind: "unknown",
+  code: `${side}_check_unavailable`,
+  report: null,
+});
+
+const SideRow = ({ state }: { state: CheckAltSideState }) => {
+  const display = describeCheckAltSide(state);
+  const report = state.report;
+  return (
+    <div className="text-xs" data-checkalt-side={state.side} data-checkalt-code={display.code ?? undefined}>
+      <div className="flex items-center justify-between gap-3">
+        <span className={`font-medium ${TONE_CLASS[display.tone]}`}>{display.label}</span>
+        {report?.width && report?.height ? (
+          <span className="text-muted-foreground tabular-nums">
+            {`${report.width}×${report.height}`}
+            {report.bytes ? ` · ${Math.round(report.bytes / 1024)} KB` : ""}
+          </span>
+        ) : null}
+      </div>
+      {display.hint && <p className="text-[10px] text-muted-foreground">{display.hint}</p>}
+    </div>
+  );
+};
 
 export function CheckAltImageComplianceCard({
   checkId,
@@ -60,30 +74,28 @@ export function CheckAltImageComplianceCard({
 }: Props) {
   const query = useQuery({
     queryKey: ["checkalt-image-compliance", checkId, frontImagePath, backImageDepositPath],
-    queryFn: async () => {
-      const status = await loadCheckAltComplianceStatus({ frontImagePath, backImageDepositPath });
-      onStatusChange?.(status);
-      return status;
+    queryFn: async (): Promise<CheckAltCardState> => {
+      const state = await loadCardState({ frontImagePath, backImageDepositPath });
+      onStatusChange?.(toCheckAltComplianceStatus(state));
+      return state;
     },
     enabled: Boolean(checkId),
   });
-  const status = query.data;
-  const overall = status?.overall ?? "FAIL";
+  const state: CheckAltCardState | null = query.data
+    ?? (query.isError ? { front: unknownState("front"), rear: unknownState("rear") } : null);
+  const heading = state ? checkAltCardHeading(state) : { text: "Checking images…", tone: "neutral" as const };
 
   return (
     <div className="rounded-md border border-border/60 bg-background/40 p-2 mt-1 space-y-1">
       <div className="flex items-center justify-between text-xs font-medium">
         <span>Deposit image check</span>
-        <span className={overall === "PASS" ? "text-emerald-400" : "text-red-300"}>
-          {overall === "PASS" ? "Ready" : "Needs attention"}
-        </span>
+        <span className={TONE_CLASS[heading.tone]}>{heading.text}</span>
       </div>
-      <SideRow label="Front" report={status?.front ?? emptySide("front")} />
-      <SideRow label="Back" report={status?.rear ?? emptySide("rear")} />
-      {overall !== "PASS" && (
-        <p className="text-[10px] text-muted-foreground">
-          Deposit will prepare the front and back images automatically.
-        </p>
+      {state && (
+        <>
+          <SideRow state={state.front} />
+          <SideRow state={state.rear} />
+        </>
       )}
     </div>
   );

@@ -85,6 +85,72 @@ const userFacingPrepFailure = (attention: DepositClickResult["attention"]) => {
   return "Check image preparation failed. Please retake the front or back image.";
 };
 
+/**
+ * Plain-language reason for an image-preparation failure. The thrown error is
+ * only matched against known shapes; its text (paths, storage keys, API
+ * details) is never shown to the user. Unknown errors keep the generic message.
+ */
+export const describeCheckAltPrepFailure = (
+  error: unknown,
+  attention: DepositClickResult["attention"] = null,
+): string => {
+  const raw = error instanceof Error ? error.message : typeof error === "string" ? error : "";
+  const text = String(raw || "");
+  const side: "front" | "back" | null = /(^|\b)front(_|\b)/i.test(text)
+    ? "front"
+    : /(^|\b)(rear|back)(_|\b)/i.test(text)
+      ? "back"
+      : attention === "front" || attention === "back"
+        ? attention
+        : null;
+  const of = side === "front" ? "the front of the check" : side === "back" ? "the back of the check" : "the check";
+  const photo = side ? `${side} photo` : "check photo";
+  const retake = side === "back"
+    ? "Redo the endorsement or upload a new photo of the back."
+    : side === "front"
+      ? "Upload a new photo of the front."
+      : "Upload a new photo of the front or back.";
+
+  if (!text) return userFacingPrepFailure(attention);
+  if (/Check not found for CheckAlt image preparation/i.test(text)) {
+    return "We couldn't find this check. Refresh the page and try again.";
+  }
+  if (/front_missing/i.test(text)) {
+    return "The front photo of the check is missing or isn't a JPG, PNG or WebP. Upload the front of the check.";
+  }
+  if (/rear_missing/i.test(text)) {
+    return "The endorsed back image is missing. Complete the endorsement before depositing.";
+  }
+  if (/too small to build a readable/i.test(text)) {
+    return `The ${photo} is too small to make a bank-ready image. Upload a clearer, higher-resolution photo of ${of}.`;
+  }
+  if (/under 25KB/i.test(text)) {
+    return `The bank-ready image of ${of} came out too small to be readable. ${retake}`;
+  }
+  if (/exceeds 300KB|Minimum approved JPEG quality reached/i.test(text)) {
+    return `The bank-ready image of ${of} is too large (over 300 KB) even at the lowest allowed quality. ${retake}`;
+  }
+  if (/CheckAlt image upload failed/i.test(text)) {
+    return "The bank-ready image couldn't be saved. Check your connection and press Deposit again.";
+  }
+  if (/object_not_in_s3|not present in .*S3|Object not found|NoSuchKey/i.test(text)) {
+    return `The ${photo} file couldn't be found in storage. ${retake}`;
+  }
+  if (/JWT expired|not_authenticated/i.test(text)) {
+    return "Your session has expired. Sign in again, then press Deposit.";
+  }
+  if (/^Could not download |download_failed|Failed to fetch|NetworkError|network/i.test(text)) {
+    return `The ${photo} couldn't be loaded. Check your connection and press Deposit again.`;
+  }
+  if (/could not be decoded|InvalidStateError|decode/i.test(text)) {
+    return `The ${photo} file is damaged or isn't a supported image. ${retake}`;
+  }
+  if (/canvas_unavailable|Could not prepare the CheckAlt image|jpeg_encode_failed|Could not encode/i.test(text)) {
+    return "This browser couldn't prepare the image. Press Deposit again, or try another browser.";
+  }
+  return userFacingPrepFailure(attention);
+};
+
 export async function fetchCheckAltDepositPreflight(
   checkId: string,
   deps: {
@@ -186,8 +252,8 @@ export async function runCheckAltDepositClick(
           forceFront: preflight.needFrontPrep === true,
           forceRear: preflight.needRearPrep === true,
         });
-      } catch {
-        return fail(userFacingPrepFailure(preflight.attention), {
+      } catch (prepError) {
+        return fail(describeCheckAltPrepFailure(prepError, preflight.attention), {
           attention: preflight.attention,
           error: "image_prep_failed",
         });
