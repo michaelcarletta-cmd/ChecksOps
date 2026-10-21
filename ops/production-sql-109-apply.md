@@ -79,7 +79,20 @@ No later migration replaces the function.
   ok for both tables, `already_applied` false, `precondition_failures` `[]`. Recorded in the
   staging pin (`expected_live_definition_sha256`, `execute: true`, wave 10) under the owner's
   statement of 2026-10-21, "apply SQL 109 in production", which covers SQL 109's whole guarded path.
-- Staging apply and the second read-live: not run yet. The production pin stays pending.
+- **Staging apply (2026-10-21).** After the staging pin change merged (#1137, main `74e4753fe`),
+  executor inspect run 39672879013 and deploy run 39673164727 (executor
+  `ueLvAc0a+7gZzOTGlfQurzX3ZbhOeeaNWVCKccOpI5o=`), then apply run 39673516794: `applied`,
+  `e0f02501…` -> `925e018f0262556b8c43f872dc13ace4eeb36b411773189dc68592a37efb1982`. Read-live run
+  39673878120: `already_applied` true, live = intended, `precondition_failures` `[]`.
+- **Production inspect recorded (2026-10-21).** Read-only `--inspect` through SSM
+  `57c033fc-62fe-4254-8fcd-02010fe92de5` on `i-0c35557c4e5385406`, main `74e4753fe` (tarball sha256
+  `3d304c934c615533b8e20fa9c21514c7b5d576031d6ee459e937b9bf6d81ca3b`, transfer run 39674205877):
+  function `absent`, live `e0f02501f167f4bee2bbb8bc32c1e19b23deb5425a650c63102030531aa9a077` (the
+  same pre-state as staging), SQL 91 applied, `definer_writes` ok, `already_applied` false,
+  `precondition_failures` `[]`. Recorded in the pin as `expected_live_definition_sha256`, with the
+  staging apply run 39673516794 as `staging_acceptance`.
+- **Pin `execute: true`** once that change is merged, under the owner's statement of 2026-10-21
+  quoted above. Nothing is applied by it; the apply (step 3) passes the owner's words for that run.
 
 ## Steps
 
