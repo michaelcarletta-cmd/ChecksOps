@@ -110,8 +110,10 @@ export function checkoutReport(root) {
   const problems = [];
   if (autocrlf === 'true') problems.push('core.autocrlf=true: every pinned hash differs locally; set `git config core.autocrlf false` and re-checkout');
   if (crlfFiles.length) problems.push(`${crlfFiles.length} tracked file(s) have CRLF in the working tree; hashes computed from them are wrong`);
-  if (!hasMain) problems.push('origin/main is not fetched: comparisons against main are skipped (`git fetch origin main`)');
-  return { branch, head, autocrlf, shallow, crlf_files: crlfFiles, dirty_files: dirty, origin_main: hasMain, behind_main: behind, ahead_of_main: ahead, problems };
+  // Not an error in the bytes: the comparisons against main are skipped, and the report says so.
+  const notes = [];
+  if (!hasMain) notes.push('origin/main is not fetched: comparisons against main are skipped (`git fetch origin main`)');
+  return { branch, head, autocrlf, shallow, crlf_files: crlfFiles, dirty_files: dirty, origin_main: hasMain, behind_main: behind, ahead_of_main: ahead, problems, notes };
 }
 
 function listPins(root) {
@@ -380,6 +382,7 @@ function printText(result) {
     const c = result.checkout;
     lines.push(`checkout: ${c.branch} @ ${c.head.slice(0, 12)}  core.autocrlf=${c.autocrlf}  crlf files=${c.crlf_files.length}  dirty=${c.dirty_files.length}${c.origin_main ? `  behind main=${c.behind_main} ahead=${c.ahead_of_main}` : '  (origin/main not fetched)'}${c.shallow ? '  shallow clone (pinned commits may be absent)' : ''}`);
     for (const p of c.problems) lines.push(`  ${levelMark('error')} ${p}`);
+    for (const n of c.notes || []) lines.push(`  ${levelMark('info')} ${n}`);
   }
   if (result.file) {
     const f = result.file;
