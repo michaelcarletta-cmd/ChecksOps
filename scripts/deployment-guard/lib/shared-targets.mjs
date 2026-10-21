@@ -63,6 +63,19 @@ export const SHARED_STACKS = Object.freeze({
   },
 });
 
+// Stacks whose templates are retired: live state has diverged on purpose and a stack update
+// would overwrite it. They are refused even if someone later adds them to SHARED_STACKS.
+export const RETIRED_STACKS = Object.freeze({
+  'checksops-production-prep-api': {
+    templates: ['aws/production/api-cfn.yaml', 'aws/production/api-template.yaml'],
+    reason: 'templates are a retired flags-off baseline; live production (role, VPC, timeout, 50 variables) changes only through the guarded overlay, rebuild and configuration workflows',
+  },
+});
+
+export function lookupRetiredStack(name) {
+  return RETIRED_STACKS[String(name || '').trim()] || null;
+}
+
 export function lookupSharedLambda(name) {
   return SHARED_LAMBDAS[String(name || '').trim()] || null;
 }
