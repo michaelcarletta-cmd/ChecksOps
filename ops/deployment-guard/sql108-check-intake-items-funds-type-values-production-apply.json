@@ -1,8 +1,8 @@
 {
   "id": "sql108-check-intake-items-funds-type-values-production-apply",
   "migration": "sql108",
-  "authorization": "Owner approved 2026-10-21 (the owner's words, verbatim: \"apply SQL 108 in production then DEPLOY WEBSITE TO PRODUCTION then APPLY API CONFIGURATION TO PRODUCTION\"; this pin change is bound to that approval, of which it covers only the SQL 108 part: the website deploy and the API configuration are separate workstreams; the owner's statement also authorizes merging this change once CI is green): production apply of SQL 108 on the staging acceptance below (production c83dcc9b97b84d294a743063adb0c1f5231f5c37ade2f00d65dc134a1d55cf00 -> a796a3966009ceb9db4bcc43c4a75cc1a15753954e4f469abe77174eaccceaa5); execute true takes effect only once this change is merged. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
-  "execute": true,
+  "authorization": "Applied to production on 2026-10-21; execute is false again, so this pin is no longer a standing authorization and a re-apply needs a new reviewed pin change. The owner approved SQL 108's guarded path to production on 2026-10-21 in the words \"apply SQL 108 in production then DEPLOY WEBSITE TO PRODUCTION then APPLY API CONFIGURATION TO PRODUCTION\" (only its SQL 108 part applies to this pin), which covered the SQL 108 production pin (c83dcc9b -> a796a396), the read-only production inspect, the staging acceptance and the execute change (#1132), and the one apply run recorded in applied (workstream prod-sql108-check-intake-items-funds-type-values-20261021), passed to it as \"apply SQL 108 in production\". That approval covered that run only",
+  "execute": false,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -58,5 +58,105 @@
     "ok": true,
     "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39662760919",
     "basis": "Guarded staging apply from the same pre-state as production. The guarded staging SQL executor (choice sql108-check-intake-items-funds-type-values) carried SQL 108 from deploy run 39657106517 (inspect run 39656814885) and, after the staging pin change (#1130), deploy run 39662422486 (inspect run 39662152816; executor +GbJNvIAyTGXIpmulXWvNi0OwdCX6P6SP+vHVgjOz9s=). Read-live run 39657370816 (2026-10-21, main 20059c9d33583d09af41a28e9b5f047e4349d45e) reported already_applied false, precondition_failures [] and live c83dcc9b97b84d294a743063adb0c1f5231f5c37ade2f00d65dc134a1d55cf00, which is this pin's expected_live_definition_sha256 (production_inspect). The staging apply run 39662760919 (2026-10-21, main c185844a6900eadda2a579b9b34b1127d15f9cec, staging pin commit 20b09344e531cf74f833abcf659c57423e2d7927) reported result applied, before c83dcc9b97b84d294a743063adb0c1f5231f5c37ade2f00d65dc134a1d55cf00, after a796a3966009ceb9db4bcc43c4a75cc1a15753954e4f469abe77174eaccceaa5 = intended_replacement_sha256, constraint state intended. The read-live after it (run 39663051691, main c185844a6) reported already_applied true, precondition_failures [] and live a796a3966009ceb9db4bcc43c4a75cc1a15753954e4f469abe77174eaccceaa5. Staging and production had the same pre-state. The production apply refuses unless the live state still equals this pin's expected_live_definition_sha256, and its post-conditions roll back unless the intended fingerprint is reached with the rest of the catalog unchanged."
+  },
+  "applied": {
+    "date": "2026-10-21",
+    "result": "applied",
+    "source_commit": "970d514bc2f697b58c86e23c319cb938c00ff558",
+    "source_tarball": {
+      "file": "source-970d514bc2f697b58c86e23c319cb938c00ff558.tar.gz",
+      "sha256": "38c84a61093961caedc52bf85c1dd9c782a4014e7d20ef1220dd0f37d10bb35b"
+    },
+    "migration_source_sha256": "89cea9c9bac16ebddbfb32aeff55e46a630b87bf28a011ba894b33d0d2412a49",
+    "migration_source_sha256_note": "The one-shot source step hashed aws/workflows/sql/108_check_intake_items_funds_type_values.sql in the transfer tarball: equal to source_sha256 (the pin).",
+    "runner": "i-0c35557c4e5385406",
+    "workstream_id": "prod-sql108-check-intake-items-funds-type-values-20261021",
+    "one_use_id": "sql108-prod-aa304e1f-6e2d-4e90-900d-99207be30bd6",
+    "one_use_id_consumed": true,
+    "one_use_id_consumed_basis": "Inferred from the successful apply (the tool records the one_use_id after COMMIT and only warns if that write fails); the consumed-registry entry was not read back separately.",
+    "owner_approval": "apply SQL 108 in production",
+    "owner_approval_basis": "As passed (base64, --approval-statement-b64) for --approval-scope sql108; the one-shot cannot verify who said it. The owner's full statement of 2026-10-21 was \"apply SQL 108 in production then DEPLOY WEBSITE TO PRODUCTION then APPLY API CONFIGURATION TO PRODUCTION\"; its website deploy and API configuration parts are other workstreams.",
+    "operator": "michaelcarletta-cmd",
+    "apply_ssm_command_id": "9b6a1df3-6146-464e-9f37-995faaf739e0",
+    "one_shot_run_id": "ee45c3a0-71d6-4821-952b-5c92c0e706b5",
+    "one_shot_note": "One guarded production-sql-one-shot run (SSM 9b6a1df3-6146-464e-9f37-995faaf739e0, run_id ee45c3a0-71d6-4821-952b-5c92c0e706b5) from main 970d514bc (transfer run 39664745181, sql53-temporary-transfer.yml dispatched on main at 2026-10-21T19:47:52Z) applied SQL 108: steps pin, source, inspect, contracts, manifest, source-recheck-before-preflight, preflight, evaluate (sql108_production_apply_allowed true), source-recheck-before-apply, apply (applied) and post-apply-inspect all ok; runner contracts, manifest, receipt and inspects as recorded below. SSM invocation 2026-10-21T19:50:00.033Z to 19:50:10.033Z (ExecutionStartDateTime to ExecutionEndDateTime). Before it, a read-only --phase inspect of the same one-shot (SSM b3a5002b-027d-4db3-9a09-6862efd17473, run_id d06565f9-8bf2-4d9e-9136-6a5f054c7290, 2026-10-21T19:49:36Z, same commit, tarball, workstream and approval statement) completed pin, source, inspect and contracts ok and wrote nothing. No predecessor and no order; the pre-apply inspect reported predecessors_applied true, missing_dependencies [] and precondition_failures [].",
+    "steps": [
+      "pin",
+      "source",
+      "inspect",
+      "contracts",
+      "manifest",
+      "source-recheck-before-preflight",
+      "preflight",
+      "evaluate",
+      "source-recheck-before-apply",
+      "apply",
+      "post-apply-inspect"
+    ],
+    "contract_results": {
+      "claim-ledger": {
+        "ok": true,
+        "passed": "4/4"
+      },
+      "tenant-isolation": {
+        "ok": true,
+        "passed": "6/6"
+      },
+      "financial-write-protections": {
+        "ok": true,
+        "passed": "43/43"
+      }
+    },
+    "pre_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "c83dcc9b97b84d294a743063adb0c1f5231f5c37ade2f00d65dc134a1d55cf00",
+      "live_matches_expected": true,
+      "already_applied": false,
+      "precondition_failures": [],
+      "missing_dependencies": [],
+      "predecessors_applied": true,
+      "successors_applied": [],
+      "note": "The one-shot inspect step (read-only --inspect) immediately before the apply: live == the recorded pre-state c83dcc9b..., live_matches_expected true, already_applied false, apply_preconditions_met true, precondition_failures [], missing_dependencies [], successors_applied []; release_sql_inspect.constraints[0] (check_intake_items check_intake_items_funds_type_check) state different, prerequisites_missing []; current_user and session_user checksops_admin."
+    },
+    "manifest_sha256": "a871136673194c7c315ea4cec2b5ec8da5c1b55a2b39085499cbc1287bb3c838",
+    "receipt": {
+      "migration": "sql108",
+      "workstream": "prod-sql108-check-intake-items-funds-type-values-20261021",
+      "commit": "970d514bc2f697b58c86e23c319cb938c00ff558",
+      "sql_file": "aws/workflows/sql/108_check_intake_items_funds_type_values.sql",
+      "before_hash": "c83dcc9b97b84d294a743063adb0c1f5231f5c37ade2f00d65dc134a1d55cf00",
+      "after_hash": "a796a3966009ceb9db4bcc43c4a75cc1a15753954e4f469abe77174eaccceaa5",
+      "unrelated_catalog_sha256": "ed533ca619e1fd223e458b1b793f85f53679a1a78400fdd1fe17a5bba6b6890c",
+      "unrelated_catalog_counts": {
+        "relations": 890,
+        "columns": 3535,
+        "constraints": 2232,
+        "policies": 404,
+        "functions": 1313,
+        "indexes": 654,
+        "default_acl": 0,
+        "role_memberships": 15,
+        "roles": 29,
+        "triggers": 180,
+        "views": 25,
+        "types": 18,
+        "schema": 2
+      },
+      "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39662760919",
+      "result": "applied"
+    },
+    "post_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "a796a3966009ceb9db4bcc43c4a75cc1a15753954e4f469abe77174eaccceaa5",
+      "already_applied": true,
+      "precondition_failures": [],
+      "missing_dependencies": [],
+      "predecessors_applied": true,
+      "successors_applied": [],
+      "note": "The one-shot post-apply read-only --inspect: already_applied true (live == intended a796a396...), precondition_failures []; release_sql_inspect.constraints[0] (check_intake_items check_intake_items_funds_type_check) state intended: CHECK (funds_type IS NULL OR funds_type IN the nine values), validated. The constraint definition itself was not printed by the inspect; the fingerprint equals releaseIntendedHash('sql108', file bytes). current_user and session_user checksops_admin."
+    }
+  },
+  "production_evidence": {
+    "2026-10-21 apply": "Guarded production SQL one-shot on i-0c35557c4e5385406, workstream prod-sql108-check-intake-items-funds-type-values-20261021, main 970d514bc (tarball 38c84a61…, transfer run 39664745181, migration source 89cea9c9… == pin), owner-approved run (\"apply SQL 108 in production\"), SSM 9b6a1df3-6146-464e-9f37-995faaf739e0, run_id ee45c3a0-71d6-4821-952b-5c92c0e706b5, one_use_id sql108-prod-aa304e1f-6e2d-4e90-900d-99207be30bd6 (spent): every step ok; contracts claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43; pre-apply inspect live c83dcc9b… (live_matches_expected true, precondition_failures []); manifest a8711366…; c83dcc9b… -> a796a396…, result applied, unrelated catalog ed533ca6…; post-apply inspect already_applied true, precondition_failures []. Preceded by the read-only --phase inspect SSM b3a5002b-027d-4db3-9a09-6862efd17473. No later inspect was run. execute is false so the pin is no longer a standing authorization."
   }
 }
