@@ -48,9 +48,15 @@ const eol = run('git', ['ls-files', '--eol', '--', 'aws', 'ops', 'scripts', 'sup
 const crlf = eol.split('\n').filter((l) => /\sw\/crlf\s/.test(l)).length;
 if (crlf) warn(`${crlf} tracked file(s) under aws/, ops/, scripts/ or supabase/ have CRLF in the working tree; hashes computed from them are wrong.`);
 
-// Working tree state.
-const status = (run('git', ['status', '--porcelain']) || '').split('\n').filter(Boolean);
-if (status.length) lines.push(`  working tree: ${status.length} uncommitted path(s)`);
+// Working tree state: changes to tracked files are work in progress; untracked files are
+// leftovers or new files that git does not know about yet. Ignored files are not counted.
+const changed = (run('git', ['status', '--porcelain', '--untracked-files=no']) || '').split('\n').filter(Boolean);
+const untracked = (run('git', ['ls-files', '--others', '--exclude-standard', '--directory']) || '').split('\n').filter(Boolean);
+if (changed.length) lines.push(`  working tree: ${changed.length} tracked file(s) with uncommitted changes`);
+if (untracked.length) {
+  const shown = untracked.slice(0, 3).join(', ');
+  lines.push(`  untracked, not in git (leftovers or new files, never committed unless added): ${shown}${untracked.length > 3 ? `, and ${untracked.length - 3} more` : ''}`);
+}
 
 // Open PR for this branch (best effort; gh may be absent or signed out).
 if (branch !== 'main' && branch !== '(detached)') {
