@@ -2345,8 +2345,8 @@ export const AUTHORIZED_SQL106_FINANCIAL_STEPUP_LOG_APPEND_ONLY = Object.freeze(
 // Funds type 2026-10-21 staging pin: SQL 108 (check_intake_items_funds_type_check allows NULL
 // or the nine funds_type values the SPA offers; the Supabase constraint allowed five, so saving
 // deductible, other_structures, personal_property or additional_living_expenses failed,
-// production /prep/data/write 2026-10-21 15:57-15:58 UTC). No predecessor. Pending until a
-// reviewed pin change records a staging read-live.
+// production /prep/data/write 2026-10-21 15:57-15:58 UTC). No predecessor. Staging apply
+// authorized (wave 9) from staging read-live run 39657370816.
 export const AUTHORIZED_SQL108_CHECK_INTAKE_ITEMS_FUNDS_TYPE_VALUES = Object.freeze({
   key: 'sql108',
   filename: 'aws/workflows/sql/108_check_intake_items_funds_type_values.sql',
@@ -2354,9 +2354,14 @@ export const AUTHORIZED_SQL108_CHECK_INTAKE_ITEMS_FUNDS_TYPE_VALUES = Object.fre
   // The commit that last authored the file bytes.
   commit: '20b09344e531cf74f833abcf659c57423e2d7927',
   source_sha256: '89cea9c9bac16ebddbfb32aeff55e46a630b87bf28a011ba894b33d0d2412a49',
-  authorization: 'pending',
-  execute: false,
-  expected_live_definition_sha256: null,
+  // Owner's words 2026-10-21: "apply SQL 108 in production then DEPLOY WEBSITE TO PRODUCTION then
+  // APPLY API CONFIGURATION TO PRODUCTION" (SQL 108 through the whole guarded path, staging first).
+  authorization: 'Owner approved 2026-10-21: staging apply (wave 9) from staging read-live run 39657370816',
+  execute: true,
+  // Staging read-live run 39657370816 (2026-10-21, main 20059c9d3, executor KR/KUKLC...): the
+  // constraint is the Supabase five-value definition, validated (c83dcc9b... is the release engine's
+  // fingerprint of exactly that definition). already_applied false, precondition_failures [].
+  expected_live_definition_sha256: 'c83dcc9b97b84d294a743063adb0c1f5231f5c37ade2f00d65dc134a1d55cf00',
   // Code-derived: releaseIntendedHash('sql108', file bytes) (release-sql-state.mjs); re-derived by the tests.
   intended_replacement_sha256: 'a796a3966009ceb9db4bcc43c4a75cc1a15753954e4f469abe77174eaccceaa5',
   // The file creates, replaces and sets the ACL of no function.
