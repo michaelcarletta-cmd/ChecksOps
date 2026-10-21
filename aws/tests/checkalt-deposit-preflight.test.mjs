@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 import { test } from 'node:test';
+import { fileURLToPath } from 'node:url';
 import { CLASS_A_FUNCTIONS } from '../functions/api/app-services.mjs';
 import {
+  CHECK_ELIGIBILITY_SELECT,
   endorsementStateFingerprint,
   ERROR_ENDORSEMENTS_INCOMPLETE,
   ERROR_PROVIDER_FRONT_IMAGE_MISSING,
@@ -213,4 +217,38 @@ test('compliant current images are ready for verification', async () => {
   assert.equal(result.needFrontPrep, false);
   assert.equal(result.needRearPrep, false);
   assert.equal(result.liveProviderCalled, false);
+});
+
+test('the eligibility SELECT names only columns check_intake_items has (no front_image_deposit_path)', () => {
+  // Production 2026-10-21 16:02:52 UTC (/prep/functions/v1/checkalt-deposit-preflight) and
+  // 2026-10-02 (checkalt-submit-deposit): 'column "front_image_deposit_path" does not exist'.
+  // No migration adds that column; the official front is derived from front_image_path.
+  const columns = CHECK_ELIGIBILITY_SELECT.split(',').map((c) => c.trim());
+  assert.deepEqual(columns, [
+    'id', 'tenant_id', 'amount', 'check_number',
+    'front_image_path', 'back_image_path', 'back_image_deposit_path',
+    'status', 'check_stage', 'endorsement_render_meta',
+  ]);
+  assert.ok(!columns.includes('front_image_deposit_path'));
+  const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const migrations = [
+    ...fs.readdirSync(path.join(root, 'workflows/sql')).map((f) => path.join(root, 'workflows/sql', f)),
+    ...fs.readdirSync(path.join(root, '../supabase/migrations')).map((f) => path.join(root, '../supabase/migrations', f)),
+  ].filter((f) => f.endsWith('.sql'));
+  assert.ok(!migrations.some((f) => /front_image_deposit_path/.test(fs.readFileSync(f, 'utf8'))), 'no migration adds front_image_deposit_path');
+  // back_image_deposit_path is real: Supabase 20260721185233 adds it and SQL 89 (applied in
+  // production 2026-10-16) grants UPDATE on it.
+  assert.match(fs.readFileSync(path.join(root, '../supabase/migrations/20260721185233_2246c54c-4d64-42f9-8028-d97d83aed956.sql'), 'utf8'), /ADD COLUMN IF NOT EXISTS back_image_deposit_path text/);
+  assert.match(fs.readFileSync(path.join(root, 'workflows/sql/89_check_intake_items_column_update.sql'), 'utf8'), /\bback_image_deposit_path,/);
+});
+
+test('preflight reads the check with the eligibility SELECT', async () => {
+  const seen = [];
+  const base = mockClient({ check: { id: CHECK_ID, tenant_id: TENANT, amount: 1 }, payees: [payee()], endorsements: [endorsement()] });
+  const client = { query: async (sql, params) => { seen.push(String(sql)); return base.query(sql, params); } };
+  await evaluateCheckAltDepositPreflight({ client, mapping, checkId: CHECK_ID, spoof: {}, deps: { downloadClaimFile: async () => null } });
+  const read = seen.find((text) => text.includes('FROM public.check_intake_items'));
+  assert.ok(read, 'the check row is read');
+  assert.ok(read.includes(CHECK_ELIGIBILITY_SELECT));
+  assert.doesNotMatch(read, /front_image_deposit_path/);
 });

@@ -57,14 +57,15 @@ const CHANGED_SINCE_APPLIED_REBUILD = {
   'sandbox-credentials.mjs': 'changed',
   'sandbox.mjs': 'changed',
 };
-
 // Files main changed after the second rebuilds were applied (staging run 39633656412 of main fd1e059b5,
 // production run 39636816351 of main e4daedefe, both live at CodeSha256 Bh/f7zaI...), one reviewed
-// entry each. The applied sections keep their accepted hashes as recorded evidence (the bytes those
-// rebuilds put live), so a listed member's accepted hash is no longer main's bytes; each environment
-// takes the new bytes through the overlay plan (where they are members) or a new inspect and plan
-// section.
+// entry each. The applied sections keep their recorded hashes as evidence: a listed file is either
+// absent from a section, or a member whose accepted hash (the bytes those rebuilds put live) is no
+// longer main's bytes. Each environment takes the new bytes through the overlay plan (where they are
+// members) or a new inspect and plan section.
 const CHANGED_SINCE_SECOND_REBUILD = {
+  // Check Alt eligibility SELECT without front_image_deposit_path (an overlay plan REPLACE member).
+  'providers/production/checkalt-eligibility.mjs': 'changed',
   // Moov transfer returns (#1116): production transfer.* events go to providers/moov-transfer-webhook.mjs.
   'providers/webhooks.mjs': 'changed',
 };
@@ -76,7 +77,7 @@ const assertSectionAcceptedIsMain = (apiRoot, name, accepted) => {
 
 const assertAcceptedIsMainUnlessChangedSince = (apiRoot, name, accepted) => {
   const abs = path.join(apiRoot, name);
-  const listed = CHANGED_SINCE_APPLIED_REBUILD[name];
+  const listed = CHANGED_SINCE_APPLIED_REBUILD[name] || CHANGED_SINCE_SECOND_REBUILD[name];
   if (!fs.existsSync(abs)) {
     assert.equal(listed, 'deleted', `${name} is gone from main but not listed as deleted`);
     return;
@@ -235,6 +236,11 @@ test('the production plan section accepts inspect run 39633975144: the Plaid/Act
     if (kind === 'deleted') assert.ok(section.removed[name], `${name} is deleted on main but not listed as removed`);
     else assert.ok(section.members[name], `${name} changed on main but is not a production member`);
   }
+  // Files changed after the applied second rebuild are either not in its section (a new inspect moves
+  // them into its own section) or members whose recorded accepted hash is not main's bytes (checked above).
+  for (const name of Object.keys(CHANGED_SINCE_SECOND_REBUILD)) {
+    if (!section.members[name]) assert.equal(section.removed[name] || section.added[name], undefined, name);
+  }
   // The plan as committed makes the inspected live package READY, not BLOCKED.
   const live = {};
   const candidate = {};
@@ -316,6 +322,11 @@ test('the staging plan section accepts inspect run 39630308266: the Plaid/Actum/
   for (const [name, kind] of Object.entries(CHANGED_SINCE_APPLIED_REBUILD)) {
     if (kind === 'deleted') assert.ok(section.removed[name], `${name} is deleted on main but not listed as removed`);
     else assert.ok(section.members[name], `${name} changed on main but is not a staging member`);
+  }
+  // Files changed after the applied second rebuild are either not in its section (a new inspect moves
+  // them into its own section) or members whose recorded accepted hash is not main's bytes (checked above).
+  for (const name of Object.keys(CHANGED_SINCE_SECOND_REBUILD)) {
+    if (!section.members[name]) assert.equal(section.removed[name] || section.added[name], undefined, name);
   }
   // The plan as committed makes the inspected live package READY, not BLOCKED.
   const live = {};

@@ -82,7 +82,7 @@ test('the committed plan keeps the Moov onboarding flag applies (runs 3959416709
   assert.equal(raw.environments.production.history[0].applied.staging_acceptance, raw.environments.staging.history[0].applied.run_url);
 });
 
-test('the committed plan records the remaining-features applies (runs 39616453836, 39617806126) and starts the next change empty', () => {
+test('the committed plan keeps the remaining-features applies (runs 39616453836, 39617806126) in history', () => {
   const raw = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, CONFIG_PLAN_REL), 'utf8'));
   const on = (from) => ({ from, to: 'true' });
   const providerFlags = { AWS_PLAID_ENABLED: 'false', AWS_ACTUM_ENABLED: 'false', AWS_QUICKBOOKS_ENABLED: 'false' };
@@ -120,15 +120,12 @@ test('the committed plan records the remaining-features applies (runs 3961645383
     },
   };
   for (const [environment, want] of Object.entries(expected)) {
-    const section = loadConfigPlan(REPO_ROOT, environment);
-    assert.equal(section.status, 'applied');
-    assert.deepEqual(section.set, {});
-    assert.deepEqual(section.unset, {});
-    const row = raw.environments[environment];
+    const section = raw.environments[environment];
+    const row = section.history[1];
     assert.equal(row.inspect.run_id, want.inspect);
     assert.equal(row.inspect.live_revision_id, want.revision);
     // The revision the change starts from is the one the previous apply left behind.
-    assert.equal(row.inspect.live_revision_id, row.history[0].applied.revision_id_after);
+    assert.equal(row.inspect.live_revision_id, section.history[0].applied.revision_id_after);
     assert.equal(row.applied.run_id, want.run);
     assert.equal(row.applied.state, 'VERIFIED');
     assert.equal(row.applied.revision_id_before, row.inspect.live_revision_id);
@@ -136,14 +133,47 @@ test('the committed plan records the remaining-features applies (runs 3961645383
     assert.equal(row.applied.code_sha256, row.inspect.live_code_sha256);
     assert.deepEqual(row.applied.applied_change, { set: want.set, unset: want.unset });
     // The recorded change hash is the one the run's receipt owned.
-    assert.equal(changeSha256({ function_name: row.function_name, ...row.applied.applied_change }), row.applied.change_sha256);
+    assert.equal(changeSha256({ function_name: section.function_name, ...row.applied.applied_change }), row.applied.change_sha256);
     // Safety guards are not features: the change never opened them.
     for (const key of ['AWS_ENDORSEMENT_RESEND_ALLOW_ANY_RECIPIENT', 'AWS_MOOV_SANDBOX_TRANSFER_POST_ENABLED', 'AWS_FINANCIAL_SANDBOX_SIMULATION_ENABLED', 'AWS_PROVIDER_WEBHOOK_DRY_RUN']) {
       assert.equal(Object.hasOwn(want.set, key), false, key);
       assert.equal(Object.hasOwn(want.unset, key), false, key);
     }
   }
-  assert.equal(raw.environments.production.applied.staging_acceptance, raw.environments.staging.applied.run_url);
+  assert.equal(raw.environments.production.history[1].applied.staging_acceptance, raw.environments.staging.history[1].applied.run_url);
+});
+
+test('the committed plan removes the dead credential-like keys by hash from the 2026-10-21 inspects (39654673295, 39654936003)', () => {
+  const raw = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, CONFIG_PLAN_REL), 'utf8'));
+  const expected = {
+    staging: {
+      inspect: '39654673295',
+      revision: 'b317d571-f4ce-40d2-a180-e6a00f5a7185',
+      count: 45,
+      unset: { AWS_PLAID_WEBHOOK_SECRET: { from_sha256: 'a4084a76e7c01b4719f2c6949825b02ec308d093242ebe7ad9397df55b0a6326' } },
+    },
+    production: {
+      inspect: '39654936003',
+      revision: '4945c256-37ff-49b1-b7d9-adffea1a51bf',
+      count: 46,
+      unset: { CHECKSOPS_DB_BRIDGE_TOKEN: { from_sha256: '2de2f69eb2c4890fdc3630f6ddc58865778cc0cd5c4a404f063d7898e3ae15ba' } },
+    },
+  };
+  for (const [environment, want] of Object.entries(expected)) {
+    const section = loadConfigPlan(REPO_ROOT, environment);
+    assert.equal(section.status, 'accepted');
+    assert.deepEqual(section.set, {});
+    assert.deepEqual(section.unset, want.unset);
+    const row = raw.environments[environment];
+    assert.equal(row.inspect.run_id, want.inspect);
+    assert.equal(row.inspect.main_commit, '5e7b95838ea1beef93871e34d5ee6474c565612b');
+    assert.equal(row.inspect.live_revision_id, want.revision);
+    assert.equal(row.inspect.live_variable_count, want.count);
+    // Both earlier changes stay in history, oldest first.
+    assert.deepEqual(row.history.map((entry) => entry.applied.run_id), environment === 'staging' ? ['39594167097', '39616453836'] : ['39594352935', '39617806126']);
+    // The plan never carries a credential value: every entry is exactly { from_sha256 }.
+    for (const entry of Object.values(row.unset)) assert.deepEqual(Object.keys(entry), ['from_sha256']);
+  }
 });
 
 test('the plan refuses credential-like keys in set or as a plain unset value, invalid keys, non-string values and no-op entries', () => {
