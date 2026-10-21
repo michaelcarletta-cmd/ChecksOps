@@ -89,6 +89,23 @@ test('--file and --hash explain where a value is recorded and what produces it',
   assert.equal(quietMain(['--file']).code, 2);
 });
 
+test('without origin/main (a CI pull_request checkout) the report notes it and still exits 0', () => {
+  const dir = scratchClone();
+  try {
+    execFileSync('git', ['-C', dir, 'update-ref', '-d', 'refs/remotes/origin/main'], { stdio: 'ignore' });
+    const { result } = buildReport(dir, ['--json']);
+    assert.equal(result.checkout.origin_main, false);
+    assert.deepEqual(result.checkout.problems, []);
+    assert.match(result.checkout.notes[0], /origin\/main is not fetched/);
+    assert.equal(result.summary.errors, 0, JSON.stringify(findings(result), null, 2));
+    const pin = result.pins.find((p) => p.release_key === 'sql109');
+    assert.equal(pin.actual['origin/main'], undefined);
+    assert.equal(pin.actual.HEAD, pin.recorded.source_sha256);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('a changed migration, a CRLF checkout and a touched protected file are each named by kind', () => {
   const dir = scratchClone();
   try {
@@ -128,9 +145,10 @@ test('a changed migration, a CRLF checkout and a touched protected file are each
     assert.match(component.findings[0].text, /source\.tree_hash/);
     assert.equal(result.summary.warnings, 1);
     assert.equal(result.summary.errors, 0);
-    // Nothing else moved.
-    assert.ok(result.release_locks.components.filter((c) => c.component !== 'moov-production-read').every((c) => c.findings.length === 0));
-    assert.ok(result.pins.every((p) => p.findings.length === 0));
+    // Nothing else moved (info notes, such as a pinned commit absent from a short history, are not drift).
+    const drift = (list) => list.filter((f) => f.level !== 'info');
+    assert.ok(result.release_locks.components.filter((c) => c.component !== 'moov-production-read').every((c) => drift(c.findings).length === 0));
+    assert.ok(result.pins.every((p) => drift(p.findings).length === 0));
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
