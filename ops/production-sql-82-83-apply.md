@@ -11,7 +11,15 @@
 | Staging | guarded staging SQL executor, migration `sql82-homeowner-ledger-view` | migration `sql83-homeowner-signing-capabilities` |
 | Tests | `aws/tests/sql82-sql83-homeowner-production-apply.test.mjs`, `aws/tests/sql82-sql83-homeowner-executor.test.mjs` | (same) |
 
-**Status:** applied to staging (2026-10-16, guarded staging SQL executor apply runs 52 and
+**Status (2026-10-21):** verified live in production; both pins are `execute: false` again.
+The read-only production `--inspect` of 2026-10-21 (SSM `65da22f4-495e-4186-8860-ef052c255243`,
+runner `i-0c35557c4e5385406`, main `69dbe9b01`) reports `already_applied` true for both
+(SQL 82 live `04e41eed…`, SQL 83 live `78da4219…`, each equal to `intended_replacement_sha256`;
+every function `intended`; `precondition_failures` []). The original production apply run (SSM
+command id, run id, one_use_id) is not recorded in the repository. Each pin's `applied` record
+(result `verified_live`) holds this evidence; a re-apply needs a new reviewed pin change.
+
+**Earlier status:** applied to staging (2026-10-16, guarded staging SQL executor apply runs 52 and
 54); not applied to production. Both production pins are execute-authorized (step 6) and
 wait for the owner's review and merge, then the one-shot run (step 7). Both pre-states are
 recorded, from read-only inspects only (nothing here is code-derived except the post-state):
@@ -50,7 +58,7 @@ main `f60eb2484` with the executor package `CodeSha256`
   `body_matches_migration` true, config `search_path=public,row_security=off`, non-owner
   ACL `checksops` EXECUTE only, `row_security_off_supported` true.
 
-**Production pins:** `execute: true`; `authorization` records the owner's approval of
+**Production pins:** `execute: false` since the 2026-10-21 record-and-retire change (it was `execute: true`); `authorization` records the owner's approval of
 2026-10-16 ("approve 1 and 2"; "go ahead and make the SQL 82/83 production unlock change"):
 production apply of SQL 82, then SQL 83, after the staging acceptance above. It takes
 effect only when the owner reviews and merges that change, and it does not itself run or

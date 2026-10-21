@@ -2,7 +2,7 @@
   "id": "sql53-production-apply",
   "authorization": "execute-authorized",
   "apply_authorized": true,
-  "execute": true,
+  "execute": false,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql53-production-apply",
@@ -103,5 +103,58 @@
       "DROP FUNCTION public.hle_on_check_intake_insert()"
     ]
   },
-  "notes": "Dedicated production SQL 53 apply path. Reuses the approved settlement file and create-only gates. Does not weaken the staging executor. This pin does not execute production SQL until an independent execute authorization sets execute=true and a single-use receipt is issued."
+  "notes": "Dedicated production SQL 53 apply path. Reuses the approved settlement file and create-only gates. Does not weaken the staging executor. This pin does not execute production SQL until an independent execute authorization sets execute=true and a single-use receipt is issued.",
+  "applied": {
+    "result": "verified_live",
+    "verified_on": "2026-10-21",
+    "original_apply_evidence": "The repository holds no record of when or how public.save_claim_settlement_breakdown(uuid,uuid,jsonb) was created in production: no apply date, SSM command id, run id or one_use_id. production_inspect (2026-10-11T02:16:36Z, PR #874) found it absent; ops/deployment-guard/production-api-overlay-plan.json sql_prerequisites notes a 2026-10-12 read-only catalog inspect on i-0c35557c4e5385406 that found it present with the intended definition 6542c3f6..., without an SSM command id. Production state verified live by the read-only inspect recorded in verified_live_inspect.",
+    "verified_live_inspect": {
+      "date": "2026-10-21",
+      "ssm_command_id": "43cb1d1f-f589-43b2-9315-7cad80fffb5c",
+      "command": "inspectSql53ProductionCatalog (scripts/deployment-guard/lib/sql53-production-apply.mjs) inside BEGIN READ ONLY (transaction_read_only on), then evaluateSql53ProductionCatalog against this pin",
+      "runner": "i-0c35557c4e5385406",
+      "source_commit": "69dbe9b01cbcd8f04847cab248e243105c85f022",
+      "source_tarball": {
+        "file": "source-69dbe9b01cbcd8f04847cab248e243105c85f022.tar.gz",
+        "sha256": "1424a8c418324c7c520b385c96dbdca79b869478a076a7802ec7ae2a560ff4b4"
+      },
+      "transfer_run": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39615612355",
+      "read_only": true,
+      "connected_as": "checksops_admin",
+      "function_identity": "public.save_claim_settlement_breakdown(uuid,uuid,jsonb)",
+      "exists": true,
+      "definition_sha256": "6542c3f6fb3f7d50b758b3d7352fe6fb49cbe8cd2bd5c6061dbc35a6e9fccf52",
+      "definition_matches_intended": true,
+      "preserved_functions_live_definition_sha256": {
+        "public.sync_homeowner_ledger_from_check()": "03fcea3c87b8ed087222b4071cbe36542df00dfca5c21ea44d20dc113a1047a2",
+        "public.aws_can_write_claim(uuid)": "661d85cca333866fb21138df5af55266961591a17204b0e360db2a7c3c431d95",
+        "public.hle_on_check_intake_insert()": "bdd9ec4b45b79ef3b3b21c5f18c2785d901edc606695fbc84f0daedecff5ff48"
+      },
+      "preserved_functions_match_pin": {
+        "public.sync_homeowner_ledger_from_check()": false,
+        "public.aws_can_write_claim(uuid)": false,
+        "public.hle_on_check_intake_insert()": true
+      },
+      "preserved_functions_note": "All three are present. hle_on_check_intake_insert() equals preserved_function_definition_sha256 (bdd9ec4b...). The other two differ from it: sync_homeowner_ledger_from_check() is 03fcea3c..., the post-state of the guarded ledger-20261007193200 production apply of 2026-10-12 (9f6ec2dc... -> 03fcea3c..., ops/deployment-guard/ledger-20261007193200-production-apply.json); aws_can_write_claim(uuid) is 661d85cc... (pin 0a7e62b2...), and SQL 90 (applied to production 2026-10-19) replaces that function, but the repository records no per-function hash for it, so 661d85cc... is not cross-checked against a recorded value.",
+      "settlement_columns_found": 17,
+      "settlement_columns_missing": 0,
+      "ledger_triggers_found": 3,
+      "ledger_triggers_missing": 0,
+      "preserved_row_counts": {
+        "claim_settlements": 64,
+        "check_intake_items": 197,
+        "homeowner_ledger_events": 766,
+        "claim_payments": 18,
+        "claim_check_payments": 0,
+        "payment_wallet_ledger": 0,
+        "payment_transfers": 3
+      },
+      "evaluate": {
+        "ok": false,
+        "code": "UNRELATED_MUTATION",
+        "message": "settlement function already matches the intended definition; refuse replace"
+      }
+    },
+    "note": "Production state verified live by the read-only inspect of 2026-10-21 (SSM 43cb1d1f-f589-43b2-9315-7cad80fffb5c, main 69dbe9b01): the settlement function exists with the intended definition and the create-only evaluator refuses a replace. The repository holds no record of the apply itself, so result is verified_live, not applied. This record-and-retire change only adds this applied record and sets execute false; it applies nothing and runs no SQL. With execute false the pin is no longer a standing authorization, and a re-apply needs a new reviewed pin change."
+  }
 }

@@ -4,6 +4,12 @@
 
 Source-only. Do not merge or deploy until independently authorized.
 
+**Status (2026-10-21):** the function is present in production with the intended
+definition `6542c3f6…` (read-only inspect, SSM `43cb1d1f-f589-43b2-9315-7cad80fffb5c`);
+recorded as `verified_live` in `ops/deployment-guard/sql53-production-apply.json`
+`applied`, which is `execute: false` again. The repository holds no record of when or
+how it was created. The root cause below describes the state before that.
+
 ## Root cause
 
 Production has the 17 `claim_settlements` amount columns and the three `check_intake_items` ledger triggers, but it does not have `public.save_claim_settlement_breakdown(uuid,uuid,jsonb)`. The AWS Claim Settlement editor routes `claim_settlements` insert/update through that RPC. A missing function makes that save path fail. Columns and ledger triggers are not the gap.

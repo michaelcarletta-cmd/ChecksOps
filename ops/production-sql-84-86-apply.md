@@ -11,7 +11,18 @@
 | Staging | guarded staging SQL executor, migration `sql84-mortgage-return-to-queue` | `sql85-mortgage-compensation-adjust` | `sql86-mortgage-compensation-owner-only` |
 | Tests | `aws/tests/sql84-sql86-mortgage-production-apply.test.mjs`, `aws/tests/sql84-sql86-mortgage-executor.test.mjs` | (same) | (same) |
 
-**Status:** applied to staging (2026-10-16, guarded staging SQL executor apply runs 63, 64
+**Status (2026-10-21):** verified live in production; all three pins are `execute: false`
+again. The read-only production `--inspect` of 2026-10-21 (SSM
+`ab678be8-7fd3-4f7d-a6d0-ed905cfed9aa`, runner `i-0c35557c4e5385406`, main `69dbe9b01`)
+reports `already_applied` true for each (SQL 84 live `ff920f54…`, SQL 85 `051e8228…`,
+SQL 86 `fb7e8229…`, each equal to `intended_replacement_sha256`; `precondition_failures` []).
+SQL 85's apply is recorded: the 2026-10-16 one-shot (SSM `da16269a-0aee-4196-87c4-90c554178be6`,
+workstream `prod-sql84-86-mortgage-20261016`, main `079d19356`, one_use_id
+`sql85-prod-2b18a6da-7903-43b1-9e29-83cd47e58b3d`, `7d5e766c…` -> `051e8228…`). SQL 84's and
+SQL 86's original apply runs are not recorded in the repository. Each pin's `applied` record
+(result `verified_live`) holds this evidence; a re-apply needs a new reviewed pin change.
+
+**Earlier status:** applied to staging (2026-10-16, guarded staging SQL executor apply runs 63, 64
 and 65); not applied to production. All three production pins are execute-authorized
 (step 6) and wait for the owner's review and merge, then the one-shot run (step 7). All
 pre-states are recorded, from read-only inspects only (nothing here is code-derived except
@@ -76,7 +87,7 @@ main `97b981b9d` with the executor package `CodeSha256`
   `body_matches_migration` true), `earn_mortgage_agent_compensation` non-owner EXECUTE
   empty, `earn_owner_safe` true.
 
-**Production pins:** `execute: true`; `authorization` records the owner's approval of
+**Production pins:** `execute: false` since the 2026-10-21 record-and-retire change (it was `execute: true`); `authorization` records the owner's approval of
 2026-10-16 ("Yes"; "approve the SQL 84-86 production unlock and apply"): production apply
 of SQL 84, then SQL 85, then SQL 86, after the staging acceptance above. It takes effect
 only when the owner reviews and merges that change, and it does not itself run or approve
