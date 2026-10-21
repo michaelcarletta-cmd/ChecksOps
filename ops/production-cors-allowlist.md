@@ -48,3 +48,16 @@ policy carries them, inspect fails with `AccessDeniedException` and nothing chan
 
 The writer never restores. Reverting to `*` would be a reviewed change with its own writer; the
 allow-list is the state the repository's CORS tests already require.
+
+## Applied (2026-10-21)
+
+| | |
+|---|---|
+| Staging acceptance | [`cors-staging-live-probe.yml` run 39600331863](https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39600331863): staging origin allowed, protected probe 401 without auth, health 200 |
+| Production inspect | [run 39601929209](https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39601929209), main `c18e7b0c1`: `READY`, snapshot `5c7e907382ee58f6abab59bd41e8d58099ff29a3041a193a9b19de08c7fef0e4` |
+| Production apply | [run 39602211635](https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39602211635), main `c18e7b0c1`, owner's words `TIGHTEN PRODUCTION CORS` |
+| Change | `AllowOrigins` `["*"]` → `["https://checksops.com", "https://www.checksops.com"]`; snapshot `5c7e9073…` → `9dffd25a5442455640710ba1603dcab8e152dc0137085b4f1804d2fac192bd25`; only `AllowOrigins` differs |
+| Verify and smoke | `VERIFIED`; preflight from `checksops.com` and `www.checksops.com` answered with their own origin, an untrusted origin got no `Access-Control-Allow-Origin`, `https://checksops.com/prep/health` 200 |
+
+The IAM statements the role needed were applied the same day and read back; every other
+statement in the role policy is unchanged. A later inspect reports `ALREADY_ACCEPTED`.
