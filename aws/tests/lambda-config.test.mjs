@@ -79,14 +79,16 @@ test('the committed plan keeps the Moov onboarding flag applies (runs 3959416709
   assert.equal(raw.environments.production.history[0].applied.staging_acceptance, raw.environments.staging.history[0].applied.run_url);
 });
 
-test('the committed plan turns the remaining features on from the 2026-10-21 inspects (39613470170, 39613475228)', () => {
+test('the committed plan records the remaining-features applies (runs 39616453836, 39617806126) and starts the next change empty', () => {
   const raw = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, CONFIG_PLAN_REL), 'utf8'));
   const on = (from) => ({ from, to: 'true' });
   const providerFlags = { AWS_PLAID_ENABLED: 'false', AWS_ACTUM_ENABLED: 'false', AWS_QUICKBOOKS_ENABLED: 'false' };
   const expected = {
     staging: {
       inspect: '39613470170',
+      run: '39616453836',
       revision: 'b9c2981e-51f7-432b-a8e2-286e4bdaa9af',
+      after: 'b2e6a162-79ad-4c8e-9177-6f33080a9ded',
       set: {
         AWS_ENDORSEMENT_RESEND_ENABLED: on(null),
         AWS_CHECKALT_STATUS_RECONCILE_ENABLED: on(null),
@@ -97,7 +99,9 @@ test('the committed plan turns the remaining features on from the 2026-10-21 ins
     },
     production: {
       inspect: '39613475228',
+      run: '39617806126',
       revision: '58733b08-ef0a-4ab9-a47a-30fc15ebeafb',
+      after: '6cb46f3a-e10d-4645-b18d-6e5b156d65d9',
       set: {
         AWS_ENDORSEMENT_RESEND_ENABLED: on('false'),
         AWS_CHECKALT_STATUS_RECONCILE_ENABLED: on('false'),
@@ -114,20 +118,29 @@ test('the committed plan turns the remaining features on from the 2026-10-21 ins
   };
   for (const [environment, want] of Object.entries(expected)) {
     const section = loadConfigPlan(REPO_ROOT, environment);
-    assert.equal(section.status, 'accepted');
-    assert.deepEqual(section.set, want.set);
-    assert.deepEqual(section.unset, want.unset);
+    assert.equal(section.status, 'applied');
+    assert.deepEqual(section.set, {});
+    assert.deepEqual(section.unset, {});
     const row = raw.environments[environment];
     assert.equal(row.inspect.run_id, want.inspect);
     assert.equal(row.inspect.live_revision_id, want.revision);
     // The revision the change starts from is the one the previous apply left behind.
     assert.equal(row.inspect.live_revision_id, row.history[0].applied.revision_id_after);
-    // Safety guards are not features: the plan never opens them.
+    assert.equal(row.applied.run_id, want.run);
+    assert.equal(row.applied.state, 'VERIFIED');
+    assert.equal(row.applied.revision_id_before, row.inspect.live_revision_id);
+    assert.equal(row.applied.revision_id_after, want.after);
+    assert.equal(row.applied.code_sha256, row.inspect.live_code_sha256);
+    assert.deepEqual(row.applied.applied_change, { set: want.set, unset: want.unset });
+    // The recorded change hash is the one the run's receipt owned.
+    assert.equal(changeSha256({ function_name: row.function_name, ...row.applied.applied_change }), row.applied.change_sha256);
+    // Safety guards are not features: the change never opened them.
     for (const key of ['AWS_ENDORSEMENT_RESEND_ALLOW_ANY_RECIPIENT', 'AWS_MOOV_SANDBOX_TRANSFER_POST_ENABLED', 'AWS_FINANCIAL_SANDBOX_SIMULATION_ENABLED', 'AWS_PROVIDER_WEBHOOK_DRY_RUN']) {
-      assert.equal(Object.hasOwn(section.set, key), false, key);
-      assert.equal(Object.hasOwn(section.unset, key), false, key);
+      assert.equal(Object.hasOwn(want.set, key), false, key);
+      assert.equal(Object.hasOwn(want.unset, key), false, key);
     }
   }
+  assert.equal(raw.environments.production.applied.staging_acceptance, raw.environments.staging.applied.run_url);
 });
 
 test('the plan refuses credential-like keys, invalid keys, non-string values and no-op entries', () => {
