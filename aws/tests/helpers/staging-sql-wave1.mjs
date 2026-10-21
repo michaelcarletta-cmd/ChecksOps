@@ -35,6 +35,10 @@ export const STAGING_WAVE1 = Object.freeze({
   // onboarding payment tables to checksops and authenticated (the grants SQL 91 omitted). Read at
   // main 4c13059bb after the executor carried it: checksops INSERT was missing on three tables.
   sql105: Object.freeze({ wave: 8, approved: '2026-10-20', run: '39429083380', live: 'fbbdae18762d3d8e2cbd43c070720cf5b04ef6344b5a956ee0fb1c3b4c1fc27a' }),
+  // Wave 9 (owner approved 2026-10-21, "apply SQL 108 in production then ..."): SQL 108 lets
+  // check_intake_items_funds_type_check accept the nine SPA funds_type values. Read at main
+  // 20059c9d3 after the executor carried it: the Supabase five-value constraint, validated.
+  sql108: Object.freeze({ wave: 9, approved: '2026-10-21', run: '39657370816', live: 'c83dcc9b97b84d294a743063adb0c1f5231f5c37ade2f00d65dc134a1d55cf00' }),
   sql98: Object.freeze({ wave: 3, approved: '2026-10-18', run: '39083278136', live: '296c3d6a274e10f66005fb9eaecf93fa17b81bd8db3607037ca07698fddd3275', apply_run: '39085677318' }),
 });
 
@@ -46,7 +50,7 @@ export const pendingPin = (pin) => Object.freeze({
 });
 
 /**
- * The committed staging pin's apply state: waves 1-8 recorded and approved, wave 6 approved with
+ * The committed staging pin's apply state: waves 1-9 recorded and approved, wave 6 approved with
  * its read-live still to record (pending until then), the rest pending.
  */
 export function assertStagingPinState(assert, key, pin) {
