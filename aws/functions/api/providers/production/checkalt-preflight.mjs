@@ -1,6 +1,8 @@
 /**
  * Dark-safe CheckAlt deposit preflight. No provider HTTP. No money movement.
  * Does not require AWS_CHECKALT_ENABLED or financial permission lifts.
+ * Uses a write-capable identity transaction so a proven existing official
+ * rear JPEG can persist checkalt_rear_fingerprint without rewriting S3.
  */
 import { membershipForTenant } from '../../financial-ownership.mjs';
 import { TENANT_MEMBERSHIP_SQL } from '../../identity.mjs';
@@ -17,6 +19,7 @@ import {
   evaluateEndorsementEligibility,
   evaluateOfficialImagePaths,
   evaluateRearImageFreshness,
+  bindExistingOfficialRearFingerprintIfEligible,
   loadCheckEndorsements,
   loadCheckPayees,
   mapCheckAltImageGateError,
@@ -130,7 +133,7 @@ export async function evaluateCheckAltDepositPreflight({
   }
 
   const paths = evaluateOfficialImagePaths(check);
-  const freshness = evaluateRearImageFreshness(check, payees, endorsements);
+  let freshness = evaluateRearImageFreshness(check, payees, endorsements);
 
   let images = { ok: false, error: ERROR_CHECKALT_IMAGE_NONCOMPLIANT, reason: 'official_images_unavailable' };
   if (paths.ok) {
@@ -142,6 +145,26 @@ export async function evaluateCheckAltDepositPreflight({
         error: ERROR_CHECKALT_IMAGE_NONCOMPLIANT,
         reason: 'official_images_unavailable',
       };
+    }
+  }
+
+  let rearRebound = false;
+  if (
+    paths.ok
+    && images.ok
+    && !freshness.ok
+    && freshness.reason === 'rear_fingerprint_missing'
+  ) {
+    const bound = await bindExistingOfficialRearFingerprintIfEligible(
+      client,
+      check,
+      payees,
+      endorsements,
+      images,
+    );
+    if (bound.ok) {
+      freshness = { ok: true, fingerprint: bound.fingerprint };
+      rearRebound = bound.stamped === true;
     }
   }
 
@@ -184,14 +207,15 @@ export async function evaluateCheckAltDepositPreflight({
     liveProviderCalled: false,
     productionExecution: false,
     providerHttpAttempted: false,
+    rearRebound,
     spoofFieldsIgnored: spoof,
     applicationUserId: mapping.application_user_id,
   };
 }
 
 export const handleCheckAltDepositPreflight = async (event, deps = {}) => {
-  const { withIdentity } = await import('../../data.mjs');
-  return withIdentity(event, async ({ client, mapping, body, spoof }) => {
+  const { withIdentityWrite } = await import('../../data.mjs');
+  return withIdentityWrite(event, async ({ client, mapping, body, spoof }) => {
     const checkId = body.check_intake_item_id || body.checkId || body.check_id || null;
     return evaluateCheckAltDepositPreflight({
       client,
