@@ -1,5 +1,37 @@
 {
   "permissions": {
+    "allow": [
+      "Bash(git status:*)",
+      "Bash(git log:*)",
+      "Bash(git diff:*)",
+      "Bash(git show:*)",
+      "Bash(git fetch:*)",
+      "Bash(git branch:*)",
+      "Bash(git rev-parse:*)",
+      "Bash(git rev-list:*)",
+      "Bash(git ls-files:*)",
+      "Bash(git merge-base:*)",
+      "Bash(git blame:*)",
+      "Bash(sha256sum:*)",
+      "Bash(node scripts/validate-release-locks.mjs:*)",
+      "Bash(node scripts/hash-report.mjs:*)",
+      "Bash(node scripts/check-pr-path-overlap.mjs:*)",
+      "Bash(node scripts/production-deploy-guard.mjs:*)",
+      "Bash(node --test:*)",
+      "Bash(node --experimental-strip-types --test:*)",
+      "Bash(npm run test:*)",
+      "Bash(bun run test:*)",
+      "Bash(bun run check:*)",
+      "Bash(bun run lint:*)",
+      "Bash(gh pr view:*)",
+      "Bash(gh pr checks:*)",
+      "Bash(gh pr list:*)",
+      "Bash(gh pr diff:*)",
+      "Bash(gh run view:*)",
+      "Bash(gh run list:*)",
+      "Bash(gh api repos/michaelcarletta-cmd/ChecksOps/pulls:*)",
+      "Bash(gh api repos/michaelcarletta-cmd/ChecksOps/commits:*)"
+    ],
     "deny": [
       "Bash(sam deploy:*)",
       "Bash(sam build:*)",
@@ -16,6 +48,17 @@
     ]
   },
   "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/session-brief.mjs\"",
+            "timeout": 45
+          }
+        ]
+      }
+    ],
     "PreToolUse": [
       {
         "matcher": "Edit|MultiEdit|Write|Bash",
