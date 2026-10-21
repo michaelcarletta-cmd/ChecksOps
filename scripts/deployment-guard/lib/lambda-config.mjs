@@ -115,7 +115,8 @@ function section(plan, environment) {
   const unset = {};
   for (const [key, from] of Object.entries(obj(row.unset, 'unset'))) {
     if (!isConfigKey(key)) throw new GuardError(CODES.INVALID_MANIFEST, 'config plan unset key is invalid', { environment, key });
-    if (isSecretLikeKey(key)) throw new GuardError(CODES.UNRELATED_MUTATION, 'config plan must not carry a credential-like key', { environment, key });
+    // Credential-like keys may be removed (unset) but never added or changed (set).
+    // The set path above still refuses them; this path allows teardown of legacy secrets.
     validateValue(from, `config plan unset.${key}`);
     if (set[key]) throw new GuardError(CODES.INVALID_MANIFEST, `config plan lists ${key} both in set and unset`, { environment });
     unset[key] = from;

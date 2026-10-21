@@ -28,7 +28,7 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
 const SHA = 'a'.repeat(40);
 const NOW = Date.parse('2026-10-21T12:00:00.000Z');
 
-const LIVE_VARS = { KEEP: '1', AWS_MOOV_ONBOARDING_PRODUCTION_ENABLED: 'false', OLD_FLAG: 'yes' };
+const LIVE_VARS = { KEEP: '1', AWS_MOOV_ONBOARDING_PRODUCTION_ENABLED: 'false', OLD_FLAG: 'yes', SOME_API_TOKEN: 'x' };
 const PLAN = {
   function_name: 'checksops-staging-api',
   status: 'accepted',
@@ -143,11 +143,16 @@ test('the committed plan records the remaining-features applies (runs 3961645383
   assert.equal(raw.environments.production.applied.staging_acceptance, raw.environments.staging.applied.run_url);
 });
 
-test('the plan refuses credential-like keys, invalid keys, non-string values and no-op entries', () => {
+test('the plan refuses credential-like keys in set, allows them in unset for teardown, and refuses invalid keys, non-string values and no-op entries', () => {
   const bad = (section) => evaluateConfigChange({ plan: planFor({ ...EMPTY, ...section }), environment: 'staging', liveVariables: LIVE_VARS });
+  // Credential-like keys are still refused in set (they stay in NoEcho parameters).
   assert.equal(bad({ set: { AWS_MOOV_WEBHOOK_SECRET: { from: 'a', to: 'b' } } }).code, CODES.UNRELATED_MUTATION);
   assert.equal(bad({ set: { DB_PASSWORD: { from: null, to: 'x' } } }).code, CODES.UNRELATED_MUTATION);
-  assert.equal(bad({ unset: { SOME_API_TOKEN: 'x' } }).code, CODES.UNRELATED_MUTATION);
+  // Credential-like keys may be removed via unset for legacy-secret teardown.
+  const removal = bad({ unset: { SOME_API_TOKEN: 'x' } });
+  assert.equal(removal.ok, true, removal.message);
+  assert.equal(removal.details.state, 'READY');
+  assert.deepEqual(removal.details.changes.map((row) => [row.key, row.op]), [['SOME_API_TOKEN', 'unset']]);
   assert.equal(bad({ set: { 'bad-key': { from: null, to: 'x' } } }).code, CODES.INVALID_MANIFEST);
   assert.equal(bad({ set: { FLAG: { from: 1, to: '2' } } }).code, CODES.INVALID_MANIFEST);
   assert.equal(bad({ set: { FLAG: { from: 'x', to: 'x' } } }).code, CODES.INVALID_MANIFEST);
@@ -159,7 +164,7 @@ test('a plan is READY when every listed key holds its recorded live value, ALREA
   const ready = evaluateConfigChange({ plan: planFor(PLAN), environment: 'staging', liveVariables: LIVE_VARS });
   assert.equal(ready.ok, true, ready.message);
   assert.equal(ready.details.state, 'READY');
-  assert.deepEqual(ready.details.target, { KEEP: '1', AWS_MOOV_ONBOARDING_PRODUCTION_ENABLED: 'true', NEW_KEY: 'v1' });
+  assert.deepEqual(ready.details.target, { KEEP: '1', AWS_MOOV_ONBOARDING_PRODUCTION_ENABLED: 'true', SOME_API_TOKEN: 'x', NEW_KEY: 'v1' });
   assert.deepEqual(ready.details.target, targetVariables(LIVE_VARS, PLAN));
 
   const done = evaluateConfigChange({ plan: planFor(PLAN), environment: 'staging', liveVariables: ready.details.target });
@@ -342,7 +347,7 @@ test('preflight inspect with an empty plan reports PENDING_PLAN with live key na
   const result = await preflight({ ...ENV, CHECKSOPS_CONFIG_MODE: 'inspect' }, { root, ...liveDeps() });
   assert.equal(result.state, 'PENDING_PLAN');
   assert.equal(result.mutation, false);
-  assert.deepEqual(result.live_variable_names, ['AWS_MOOV_ONBOARDING_PRODUCTION_ENABLED', 'KEEP', 'OLD_FLAG']);
+  assert.deepEqual(result.live_variable_names, ['AWS_MOOV_ONBOARDING_PRODUCTION_ENABLED', 'KEEP', 'OLD_FLAG', 'SOME_API_TOKEN']);
   const diff = fs.readFileSync(path.join(root, '.deployment-guard/config-diff-staging.json'), 'utf8');
   assert.ok(!diff.includes('"false"') && !diff.includes('"yes"'));
   await assert.rejects(preflight({ ...ENV, CHECKSOPS_CONFIG_MODE: 'apply', CHECKSOPS_EXPECTED_LIVE_REVISION_ID: 'rev-1', CHECKSOPS_CONFIG_APPROVAL: approvalPhrase('staging') }, { root, ...liveDeps() }), (error) => error.code === CODES.INVALID_MANIFEST);
