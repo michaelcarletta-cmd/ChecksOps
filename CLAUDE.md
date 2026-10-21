@@ -3,8 +3,11 @@
 # How ChecksOps ships (Claude Code)
 
 The rules above are enforced for Claude Code by `.claude/settings.json` and
-`.claude/hooks/checksops-guard.mjs`: direct deploys are denied, and edits to an
-existing migration or to an applied pin's recorded evidence are refused.
+`.claude/hooks/checksops-guard.mjs`: direct deploys are denied, edits to an existing
+migration or to an applied pin's recorded evidence are refused, and so are pushes to
+`main` and force pushes. `.claude/hooks/session-brief.mjs` prints the branch, its distance
+from `origin/main`, the line-ending state and the installed test dependencies at the start
+of every session, so a desktop session starts from the same facts a cloud session is given.
 
 Every database or Lambda change goes through the guarded path, one reviewed PR
 per step, and each production step waits for the owner's explicit approval of
@@ -21,10 +24,41 @@ that run:
 Runbooks: `ops/production-sql-one-shot.md`, `ops/production-sql-90-97-apply.md`,
 `ops/deployment-guard/README.md`.
 
+## Skills (the same procedures in every session)
+
+These live in `.claude/skills/` and load on demand, by name on the desktop (`/hashes`) or
+when the task matches. Use them instead of improvising:
+
+| skill | use it when |
+|---|---|
+| `/guarded-step` | starting any migration, pin, inspect, apply or record work: which step, which files, which template, when to stop |
+| `/hashes` | a test, validator, pin or review mentions a hash; before editing any file that records one (`node scripts/hash-report.mjs`) |
+| `/ci-triage` | a check is red: root cause from the log to the bytes, and the fix the rules allow |
+| `/verify` | before every push and before saying "done": run what CI runs, with the dependencies it needs |
+| `/steward` | driving a PR to mergeable: conflicts, red CI, review comments, status with evidence |
+| `/merge-pr` | asked to merge or to say whether a PR can be merged: the readiness lines and the merge itself |
+
+## How to think here
+
+- **Read, then act.** The runbook for the step, the last PR of the same kind (it is the
+  template), the live state through a read-only inspect, and `node scripts/hash-report.mjs`.
+  Form the theory from the bytes and the logs, not from memory of a similar case.
+- **Derive, never copy.** Every hash is derived from bytes, computed by the repo's own
+  functions, or observed by a run you can cite. A value out of a failing assertion is never
+  typed into a pin, a test or a lock.
+- **One step, one PR, one approval.** A PR does one thing and says what it does not do.
+  Approval is per PR and per run, verbatim; it never carries over.
+- **Stop on the first surprise.** A differing hash, a guard refusal, a failed precondition, a
+  step that is not on the approved list: report it with the evidence and return to the
+  owner. Never work around, retry with different inputs, or fix forward.
+- **Done means verified.** Report exit codes, test counts, run ids, SSM command ids and
+  hashes. Say plainly what was not verified. Never present a guess as a result.
+
 ## Working habits
 
 - Start from a fresh `origin/main` in a new branch or worktree; never stack work on a merged
-  branch or on another workstream's branch.
+  branch or on another workstream's branch. Merge `origin/main` into a pushed branch; never
+  rebase or force-push it.
 - Read before you act: the runbook for the step, the last record of the same kind (the
   previous pin or record PR is the template), and the live state through a read-only
   inspect. Never assume production matches staging.
@@ -38,7 +72,7 @@ Runbooks: `ops/production-sql-one-shot.md`, `ops/production-sql-90-97-apply.md`,
 - Keep each PR to one step, and say in its body what it does not do (nothing applied, no
   release-lock change).
 
-Before pushing, run what CI runs:
-`node scripts/validate-release-locks.mjs` and
+Before pushing, run what CI runs (`/verify`):
+`node scripts/validate-release-locks.mjs`, `node scripts/hash-report.mjs` and
 `node --experimental-strip-types --test aws/tests/*.test.mjs`
 (the `*-pg` tests need PostgreSQL 16 and a non-root user).

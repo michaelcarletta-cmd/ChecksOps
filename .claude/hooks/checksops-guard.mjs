@@ -8,7 +8,10 @@
 //      (source_sha256, expected/intended hashes, applied, production_evidence,
 //      staging_acceptance, production_inspect);
 //   3. direct deploys that bypass scripts/deployment-guard (sam, aws lambda /
-//      cloudformation writes, psql against a remote host).
+//      cloudformation writes, psql against a remote host);
+//   4. git pushes to main and force pushes: main changes only through a reviewed PR the
+//      owner merges, and nobody's pushed branch gets its history rewritten
+//      (--force-with-lease on the agent's own branch stays allowed).
 //
 // Exit 2 blocks the call and shows stderr to the agent. Anything unexpected
 // (bad input, no git) allows the call: this hook is a guardrail, not the guard.
@@ -59,6 +62,33 @@ function remotePsql(command) {
   const hosts = [...command.matchAll(/(?:\s-h\s*|--host[=\s]|\bhost=)['"]?([^\s'"]+)/g)].map((m) => m[1]);
   for (const m of command.matchAll(/postgres(?:ql)?:\/\/(?:[^@\s/]*@)?([^/:\s?'"]*)/g)) hosts.push(m[1] || 'localhost');
   return hosts.some((h) => !(h.startsWith('/') || ['localhost', '127.0.0.1', '::1'].includes(h)));
+}
+
+// A `git push` that targets main, deletes it, or forces over a remote branch.
+function gitPushRefusal(command, cwd = process.cwd()) {
+  for (const seg of command.split(/&&|\|\||;|\n|\|/)) {
+    const m = seg.match(/\bgit\b((?:\s+(?:-C\s+\S+|-c\s+\S+|--git-dir=\S+|--work-tree=\S+))*)\s+push\b(.*)$/);
+    if (!m) continue;
+    const args = m[2].trim().split(/\s+/).filter(Boolean);
+    const flags = args.filter((a) => a.startsWith('-'));
+    const positional = args.filter((a) => !a.startsWith('-'));
+    if (flags.some((f) => f === '--force' || (/^-[a-zA-Z]+$/.test(f) && f.includes('f')))) return 'force push';
+    const deleting = flags.some((f) => f === '--delete' || f === '-d');
+    for (const spec of positional.slice(1)) {
+      if (spec.startsWith('+')) return 'force push';
+      const dst = spec.includes(':') ? spec.split(':').pop() : spec;
+      if (dst === 'main' || dst === 'refs/heads/main') return deleting ? 'delete main' : 'push to main';
+      if (spec.endsWith(':') || spec.startsWith(':')) return 'delete a remote branch by refspec';
+    }
+    if (positional.length <= 1 || positional.slice(1).some((spec) => spec === 'HEAD' || spec.startsWith('HEAD:'))) {
+      let branch = '';
+      try {
+        branch = execFileSync('git', ['-C', cwd, 'branch', '--show-current'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+      } catch { /* no git: nothing to decide */ }
+      if (branch === 'main') return 'push to main (the current branch is main)';
+    }
+  }
+  return null;
 }
 
 function block(reason) {
@@ -138,6 +168,8 @@ function checkBash(command) {
     if (texts.some((text) => re.test(text))) block(`direct deploy refused (${what}). Use scripts/deployment-guard and the reviewed workflows (ops/), never deploy directly.`);
   }
   if (remotePsql(command)) block('direct deploy refused (psql against a remote database). Database changes go through the guarded SQL path (ops/production-sql-one-shot.md), never by hand.');
+  const push = gitPushRefusal(command);
+  if (push) block(`git push refused (${push}). main changes only through a reviewed PR the owner merges with green CI; a pushed branch never gets its history rewritten. Push your own branch with \`git push -u origin <branch>\` (\`--force-with-lease\` only on a branch you created).`);
   // Shell writes to an existing migration: a redirect or tee into it, an in-place
   // editor, rm/mv/truncate on it, or cp/git checkout/git restore onto it.
   const files = [...new Set((command.match(/aws\/workflows\/sql\/[^\s'"`;|&<>()]+\.sql/g) || []).map((f) => f.replace(/^.*?(aws\/workflows\/sql\/)/, '$1')))];

@@ -31,6 +31,8 @@ test('settings wire the hook for Edit, MultiEdit, Write and Bash and deny direct
   assert.equal(pre.length, 1);
   assert.equal(pre[0].matcher, 'Edit|MultiEdit|Write|Bash');
   assert.match(pre[0].hooks[0].command, /\.claude\/hooks\/checksops-guard\.mjs/);
+  assert.match(settings.hooks.SessionStart[0].hooks[0].command, /\.claude\/hooks\/session-brief\.mjs/);
+  for (const allowed of settings.permissions.allow) assert.doesNotMatch(allowed, /sam |aws lambda|cloudformation|psql|git push|gh pr merge/, allowed);
   for (const d of ['Bash(sam deploy:*)', 'Bash(sam build:*)', 'Bash(aws lambda update-function-code:*)', 'Bash(aws cloudformation deploy:*)']) {
     assert.ok(settings.permissions.deny.includes(d), d);
   }
@@ -126,6 +128,36 @@ test('a deploy is refused wherever the shell would run it; a quoted mention is a
     'git log --grep="sam deploy"',
   ]) {
     assert.equal(bash(cmd).code, 0, JSON.stringify(cmd));
+  }
+});
+
+test('pushes to main and force pushes are refused; pushing a feature branch is not', () => {
+  for (const cmd of [
+    'git push origin main',
+    'git push -u origin HEAD:main',
+    'git push origin feature:refs/heads/main',
+    'git push --force origin claude/x',
+    'git push -f origin claude/x',
+    'git push -fu origin claude/x',
+    'git push origin +claude/x',
+    'git push origin --delete main',
+    'git -C /tmp/repo push origin main',
+    'git fetch origin && git push origin main',
+    'git push origin :claude/x',
+  ]) {
+    const r = bash(cmd);
+    assert.equal(r.code, 2, cmd);
+    assert.match(r.err, /git push refused/);
+  }
+  for (const cmd of [
+    'git push -u origin claude/tender-allen-03lom8',
+    'git push --force-with-lease origin claude/x',
+    'git push origin HEAD',
+    'git push --dry-run origin claude/x',
+    'git log origin/main..HEAD',
+    'grep "git push origin main" docs/',
+  ]) {
+    assert.equal(bash(cmd).code, 0, cmd);
   }
 });
 
