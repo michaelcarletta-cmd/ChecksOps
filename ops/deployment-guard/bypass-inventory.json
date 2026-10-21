@@ -313,11 +313,19 @@
       "note": "Official production SPA writer. Requires a production-spa spa-promote receipt + active lease and fails on any drift."
     },
     {
+      "path": "scripts/deployment-guard/github-production-cors.mjs",
+      "classification": "SAFE",
+      "capabilities": [
+        "production-cors-preflight"
+      ],
+      "note": "GitHub-hosted preflight for the production HTTP API CORS allow-list. Reads the API, routes, authorizer, CloudFront and prep Lambda; requires the inspect snapshot SHA-256, the exact approval phrase and a staging acceptance reference, then takes the production-http-api lease and issues a KMS-signed apigateway-cors-update receipt whose preflight fingerprint is the whole snapshot. Never writes AWS; production-cors-update.mjs is the only writer."
+    },
+    {
       "path": "scripts/deployment-guard/production-cors-update.mjs",
       "classification": "GUARDED",
       "capabilities": ["apigateway-update-api", "cors-allow-origins"],
       "shared_target": true,
-      "note": "Official production CORS-only writer. Requires production-http-api receipt + active lease; pins API/routes/authorizer/CloudFront/Lambda and re-reads immediately before UpdateApi."
+      "note": "Official production CORS-only writer, run from guarded-production-cors.yml. Requires a production-http-api apigateway-cors-update receipt owning cors:AllowOrigins + active lease + the production gate; pins API/routes/authorizer/CloudFront shape, CAS-checks the whole signed snapshot (including the Lambda and CloudFront fingerprints) before and immediately before UpdateApi, and verifies only AllowOrigins changed."
     },
     {
       "path": "scripts/deployment-guard/lease.mjs",

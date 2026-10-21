@@ -1,0 +1,236 @@
+name: Guarded production CORS allow-list
+
+# CORS-only change on the production HTTP API kiqojucc02: AllowOrigins "*" ->
+# https://checksops.com, https://www.checksops.com. inspect only reads the API, routes, authorizer,
+# CloudFront and prep Lambda; apply is refused unless the live snapshot still matches the inspect,
+# the exact approval phrase and a staging acceptance reference are given, and the production
+# environment reviewer approves the job. Nothing but the CORS configuration is ever sent.
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "inspect the live production API, or apply the CORS allow-list"
+        required: true
+        default: inspect
+        type: choice
+        options:
+          - inspect
+          - apply
+      approved_commit:
+        description: "Required for apply: exact main commit approved for deployment"
+        required: false
+        default: ""
+        type: string
+      expected_snapshot_sha256:
+        description: "Required for apply: snapshot SHA-256 from a prior inspect run"
+        required: false
+        default: ""
+        type: string
+      staging_acceptance_reference:
+        description: "Required for apply: ChecksOps GitHub run or PR URL recording the staging CORS acceptance"
+        required: false
+        default: ""
+        type: string
+      approval_phrase:
+        description: "Required for apply: exactly TIGHTEN PRODUCTION CORS"
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: guarded-production-http-api
+  cancel-in-progress: false
+
+jobs:
+  production-cors:
+    environment: production
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out exact workflow commit
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Refuse non-main or incomplete apply
+        shell: bash
+        env:
+          INPUT_MODE: ${{ inputs.mode }}
+          INPUT_APPROVED_COMMIT: ${{ inputs.approved_commit }}
+          INPUT_EXPECTED_SNAPSHOT_SHA256: ${{ inputs.expected_snapshot_sha256 }}
+          INPUT_STAGING_ACCEPTANCE: ${{ inputs.staging_acceptance_reference }}
+          INPUT_APPROVAL_PHRASE: ${{ inputs.approval_phrase }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/main" || { echo "Guarded production CORS change only runs from main"; exit 2; }
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA" || { echo "Checkout SHA mismatch"; exit 2; }
+          case "$INPUT_MODE" in
+            inspect|apply) ;;
+            *) echo "mode must be inspect or apply"; exit 2 ;;
+          esac
+          if [ "$INPUT_MODE" = "apply" ]; then
+            [[ "$INPUT_APPROVED_COMMIT" =~ ^[0-9a-f]{40}$ ]] || { echo "apply requires a 40-character approved_commit"; exit 2; }
+            test "$INPUT_APPROVED_COMMIT" = "$GITHUB_SHA" || { echo "main moved or approved commit does not match workflow SHA"; exit 2; }
+            [[ "$INPUT_EXPECTED_SNAPSHOT_SHA256" =~ ^[0-9a-f]{64}$ ]] || { echo "apply requires expected_snapshot_sha256 from inspect"; exit 2; }
+            test "$INPUT_APPROVAL_PHRASE" = "TIGHTEN PRODUCTION CORS" || { echo "approval_phrase must be exactly: TIGHTEN PRODUCTION CORS"; exit 2; }
+            test -n "$INPUT_STAGING_ACCEPTANCE" || { echo "apply requires staging_acceptance_reference"; exit 2; }
+          fi
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "22"
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: "1.4.2"
+
+      - name: Install locked dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run deployment safety tests
+        run: |
+          node --test aws/tests/production-cors-writer.test.mjs
+          node --test aws/tests/production-cors-allowlist.test.mjs
+          node --test aws/tests/deployment-guard-kms-receipt.test.mjs
+          node --test aws/tests/deployment-guard-signed-receipt.test.mjs
+          node scripts/deployment-guard/scan-bypass.mjs
+
+      - name: Validate production OIDC inputs
+        shell: bash
+        env:
+          PRODUCTION_DEPLOY_ROLE_ARN: ${{ vars.CHECKSOPS_PRODUCTION_DEPLOY_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          EXPECTED_ROLE_ARN="arn:aws:iam::806168576068:role/ChecksOpsGitHubProductionLambdaOverlay"
+          test "$PRODUCTION_DEPLOY_ROLE_ARN" = "$EXPECTED_ROLE_ARN" || { echo "CHECKSOPS_PRODUCTION_DEPLOY_ROLE_ARN must be the dedicated production deploy role"; exit 2; }
+          test -n "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" || { echo "GitHub did not provide an OIDC request URL"; exit 2; }
+
+      - name: Configure AWS credentials through GitHub OIDC
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a
+        with:
+          role-to-assume: ${{ vars.CHECKSOPS_PRODUCTION_DEPLOY_ROLE_ARN }}
+          aws-region: us-east-1
+          role-session-name: checksops-production-cors-${{ github.run_id }}
+
+      - name: Verify AWS identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          ARN="$(aws sts get-caller-identity --query Arn --output text)"
+          test "$ARN" = "arn:aws:sts::806168576068:assumed-role/ChecksOpsGitHubProductionLambdaOverlay/checksops-production-cors-$GITHUB_RUN_ID" || { echo "Unexpected AWS role identity"; exit 2; }
+
+      - name: Load production KMS verifier
+        if: ${{ inputs.mode == 'apply' }}
+        shell: bash
+        env:
+          KMS_KEY_ARN: ${{ vars.CHECKSOPS_PRODUCTION_DEPLOYMENT_GUARD_KMS_KEY_ARN }}
+        run: |
+          set -euo pipefail
+          case "$KMS_KEY_ARN" in
+            arn:aws:kms:us-east-1:806168576068:key/*) ;;
+            *) echo "invalid production deployment-guard KMS key ARN"; exit 2 ;;
+          esac
+          PUBLIC_KEY_B64="$(aws kms get-public-key --region us-east-1 --key-id "$KMS_KEY_ARN" --query PublicKey --output text)"
+          test -n "$PUBLIC_KEY_B64" || { echo "KMS public key is missing"; exit 2; }
+          {
+            echo "CHECKSOPS_DEPLOYMENT_GUARD_KMS_KEY_ARN=$KMS_KEY_ARN"
+            echo "CHECKSOPS_DEPLOYMENT_GUARD_KMS_PUBLIC_KEY_DER_B64=$PUBLIC_KEY_B64"
+          } >> "$GITHUB_ENV"
+
+      - name: Inspect the live production API
+        id: preflight
+        shell: bash
+        env:
+          CHECKSOPS_CORS_MODE: ${{ inputs.mode }}
+          CHECKSOPS_EXPECTED_SNAPSHOT_SHA256: ${{ inputs.expected_snapshot_sha256 }}
+          CHECKSOPS_STAGING_ACCEPTANCE_REFERENCE: ${{ inputs.staging_acceptance_reference }}
+          CHECKSOPS_CORS_APPROVAL: ${{ inputs.approval_phrase }}
+        run: node scripts/deployment-guard/github-production-cors.mjs
+
+      - name: Record inspected live state
+        if: ${{ always() }}
+        shell: bash
+        env:
+          INPUT_MODE: ${{ inputs.mode }}
+          STATE: ${{ steps.preflight.outputs.state }}
+          SNAPSHOT_SHA256: ${{ steps.preflight.outputs.snapshot_sha256 }}
+          ALLOW_ORIGINS: ${{ steps.preflight.outputs.allow_origins }}
+          LAMBDA_REVISION_ID: ${{ steps.preflight.outputs.lambda_revision_id }}
+          CLOUDFRONT_ETAG: ${{ steps.preflight.outputs.cloudfront_etag }}
+          PROBLEMS: ${{ steps.preflight.outputs.problems }}
+        run: |
+          {
+            echo "### Production CORS preflight"
+            echo "- Mode: \`$INPUT_MODE\` / state: \`$STATE\`"
+            echo "- Commit: \`$GITHUB_SHA\`"
+            echo "- Snapshot SHA-256: \`$SNAPSHOT_SHA256\`"
+            echo "- Live AllowOrigins: \`$ALLOW_ORIGINS\` / Lambda RevisionId: \`$LAMBDA_REVISION_ID\` / CloudFront ETag: \`$CLOUDFRONT_ETAG\`"
+            echo "- Drift: \`${PROBLEMS:-none}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Apply through the official receipt-gated CORS writer
+        if: ${{ inputs.mode == 'apply' }}
+        shell: bash
+        env:
+          CHECKSOPS_PRODUCTION_CORS_EXECUTE: "1"
+          CHECKSOPS_DEPLOYMENT_GUARD_APPLY: "1"
+          CHECKSOPS_DEPLOYMENT_GUARD_RECEIPT: ${{ steps.preflight.outputs.receipt_path }}
+          CHECKSOPS_WORKSTREAM_ID: ${{ steps.preflight.outputs.workstream_id }}
+          CHECKSOPS_COMMIT: ${{ github.sha }}
+          CHECKSOPS_BRANCH: main
+          CHECKSOPS_OPERATOR: ${{ github.actor }}
+          CHECKSOPS_CORS_INPUT: ${{ steps.preflight.outputs.cors_input }}
+        run: |
+          set -euo pipefail
+          node scripts/deployment-guard/production-cors-update.mjs
+
+      - name: Verify the allow-list is live and nothing else moved
+        if: ${{ inputs.mode == 'apply' }}
+        shell: bash
+        env:
+          CHECKSOPS_CORS_MODE: verify
+        run: node scripts/deployment-guard/github-production-cors.mjs
+
+      - name: Public production smoke
+        shell: bash
+        env:
+          INPUT_MODE: ${{ inputs.mode }}
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          const mode = process.env.INPUT_MODE;
+          const raw = 'https://kiqojucc02.execute-api.us-east-1.amazonaws.com/prep/health';
+          async function preflight(origin) {
+            const res = await fetch(raw, { method: 'OPTIONS', redirect: 'manual', signal: AbortSignal.timeout(20000), headers: {
+              Origin: origin, 'Access-Control-Request-Method': 'GET', 'Access-Control-Request-Headers': 'authorization,content-type',
+            } });
+            return { origin, status: res.status, allowOrigin: res.headers.get('access-control-allow-origin') };
+          }
+          const allowed = await preflight('https://checksops.com');
+          const www = await preflight('https://www.checksops.com');
+          const untrusted = await preflight('https://cors-probe.invalid');
+          console.log(JSON.stringify({ allowed, www, untrusted }));
+          if (mode === 'apply') {
+            if (allowed.allowOrigin !== 'https://checksops.com') throw new Error('checksops.com is not allowed after apply');
+            if (www.allowOrigin !== 'https://www.checksops.com') throw new Error('www.checksops.com is not allowed after apply');
+            if (untrusted.allowOrigin) throw new Error('an untrusted origin is still allowed after apply');
+          }
+          // The website calls the API same-origin through CloudFront; it must keep working.
+          const res = await fetch('https://checksops.com/prep/health', { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(20000) });
+          let body = {};
+          try { body = JSON.parse(await res.text()); } catch {}
+          console.log(JSON.stringify({ path: '/prep/health', httpStatus: res.status, status: body?.status === 'ok' ? 'ok' : 'unexpected' }));
+          if (res.status !== 200 || body?.status !== 'ok') throw new Error('/prep/health is not healthy');
+          NODE
+
+      - name: Cleanup ephemeral deployment-guard state
+        if: ${{ always() }}
+        shell: bash
+        run: rm -rf .deployment-guard
