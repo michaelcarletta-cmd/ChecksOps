@@ -366,9 +366,9 @@ test('the candidate build is deterministic, needs node_modules, and refuses syml
   assert.throws(() => buildCandidatePackage(api, { requireNodeModules: false }), /symlink/);
 });
 
-function fakeLambda({ zip, codeSha256 = 'live-code', revisionId = 'rev-1', updateStatus = 'Successful' }) {
-  const state = { zip, codeSha256, revisionId, calls: [] };
-  const configuration = () => ({ Role: 'arn:role', Runtime: 'nodejs22.x', Handler: 'index.handler', MemorySize: 1024, Timeout: 30, Environment: { Variables: { KEEP: '1' } }, VpcConfig: { SubnetIds: ['a'], SecurityGroupIds: ['b'] } });
+function fakeLambda({ zip, codeSha256 = 'live-code', revisionId = 'rev-1', updateStatus = 'Successful', variables = { KEEP: '1' } }) {
+  const state = { zip, codeSha256, revisionId, calls: [], variables: { ...variables } };
+  const configuration = () => ({ Role: 'arn:role', Runtime: 'nodejs22.x', Handler: 'index.handler', MemorySize: 1024, Timeout: 30, Environment: { Variables: { ...state.variables } }, VpcConfig: { SubnetIds: ['a'], SecurityGroupIds: ['b'] } });
   const adapter = {
     state,
     authorizeWrites: (details) => { state.calls.push(['authorizeWrites', details]); return { ok: true }; },
@@ -448,6 +448,47 @@ test('the writer uploads the receipt-owned candidate, verifies every member and 
   // The receipt is consumed: a second apply with the same receipt is refused.
   const again = await applyLambdaRebuild(applyInput(root, receipt, file), applyCtx(root, fakeLambda({ zip: liveZip }), receipt.file));
   assert.equal(again.ok, false);
+});
+
+// The rebuild result is printed to the GitHub Actions log: production rebuild run 39636816351
+// printed the live CHECKSOPS_DB_BRIDGE_TOKEN through before/after.configuration.
+const SECRET_VALUE = 'cobt_live_0d9e8f7a6b5c4d3e2f1a0b9c8d7e6f5a4b3c2d1e';
+
+test('the writer result names environment variables and hashes them, never printing a value', async () => {
+  const root = tmpRepo();
+  const candidate = buildCandidatePackage(path.join(root, 'aws/functions/api'));
+  const aws = fakeLambda({ zip: writeZipMembers(LIVE_FILES), variables: { KEEP: '1', CHECKSOPS_DB_BRIDGE_TOKEN: SECRET_VALUE } });
+  const receipt = issueRebuildReceipt(root, { candidateSha256: candidate.zipSha256 });
+  const file = stageCandidate(root, candidate.zip);
+  const result = await applyLambdaRebuild(applyInput(root, receipt, file), applyCtx(root, aws, receipt.file));
+  assert.equal(result.ok, true, result.message);
+  assert.equal(JSON.stringify(result, null, 2).includes(SECRET_VALUE), false);
+  assert.deepEqual(result.details.before.configuration.Environment.variable_names, ['CHECKSOPS_DB_BRIDGE_TOKEN', 'KEEP']);
+  assert.match(result.details.before.configuration.Environment.variables_sha256, /^[0-9a-f]{64}$/);
+  assert.deepEqual(result.details.after.configuration, result.details.before.configuration);
+});
+
+test('a value-only environment change after the upload fails with key names, never values', async () => {
+  const root = tmpRepo();
+  const candidate = buildCandidatePackage(path.join(root, 'aws/functions/api'));
+  const aws = fakeLambda({ zip: writeZipMembers(LIVE_FILES), variables: { KEEP: '1', CHECKSOPS_DB_BRIDGE_TOKEN: SECRET_VALUE } });
+  const rotated = `${SECRET_VALUE}-rotated`;
+  const update = aws.updateFunctionCode;
+  aws.updateFunctionCode = async (input) => {
+    const res = await update(input);
+    aws.state.variables.CHECKSOPS_DB_BRIDGE_TOKEN = rotated;
+    return res;
+  };
+  const receipt = issueRebuildReceipt(root, { candidateSha256: candidate.zipSha256 });
+  const file = stageCandidate(root, candidate.zip);
+  const result = await applyLambdaRebuild(applyInput(root, receipt, file), applyCtx(root, aws, receipt.file));
+  assert.equal(result.ok, false);
+  assert.equal(result.code, CODES.UNRELATED_MUTATION);
+  assert.deepEqual(result.details.changed_environment_keys, ['CHECKSOPS_DB_BRIDGE_TOKEN']);
+  assert.deepEqual(result.details.before.Environment.variable_names, result.details.after.Environment.variable_names);
+  const printed = JSON.stringify(result, null, 2);
+  assert.equal(printed.includes(SECRET_VALUE), false);
+  assert.equal(printed.includes(rotated), false);
 });
 
 test('the writer refuses a candidate the receipt does not own, a candidate outside the guard state, and live drift', async () => {
