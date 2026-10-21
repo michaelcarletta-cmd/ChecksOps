@@ -4,8 +4,8 @@
  * release-sql90-97-executor.test.mjs runs what every release key shares (SQL 109 included); this
  * file covers what is new:
  *
- *   - the pin: pending (no read-live yet), code-derived, selectable, packed, in step with the
- *     production pin; the pinned commit authored the bytes; after SQL 91;
+ *   - the pin: staging-authorized from its read-live (wave 10), code-derived, selectable, packed,
+ *     in step with the production pin; the pinned commit authored the bytes; after SQL 91;
  *   - the file and spec: one guarded prerequisite block and one SECURITY DEFINER function, EXECUTE
  *     checksops only, writing payment_transfers and payment_event_log (definer_writes); no table,
  *     policy or grant DDL; the definer-write pre-condition refuses a login that cannot write them;
@@ -37,13 +37,14 @@ import {
   releaseIntendedState,
   releaseSharedPreconditionFailures,
   releaseSqlExecutableText,
+  releaseStateHash,
   releaseStateText,
 } from '../../scripts/deployment-guard/lib/release-sql-state.mjs';
 import { EXECUTOR_PACK_MEMBERS } from '../../scripts/deployment-guard/sql-executor-ensure.mjs';
 import { MIGRATIONS } from '../../scripts/deployment-guard/github-staging-sql-executor.mjs';
 import { READ_LIVE_EXPECTED_SENTINEL } from '../../scripts/deployment-guard/lib/sql-executor-read-live.mjs';
 import { importGuardedSqlExecutor } from './helpers/import-guarded-sql-executor.mjs';
-import { assertStagingPinState } from './helpers/staging-sql-wave1.mjs';
+import { assertStagingPinState, pendingPin } from './helpers/staging-sql-wave1.mjs';
 import { pgSkipReason, releaseFixture } from './helpers/release-sql-pg.mjs';
 import { PAYMENT_SCHEMA } from './helpers/sql109-payment-schema.mjs';
 
@@ -97,7 +98,7 @@ function handlerFor(connect, { pins = {} } = {}) {
   return createHandler({ connect, now: () => Date.parse(NOW), releaseSqlFiles: FILES, releaseSqlPins: { ...PINS, ...pins } });
 }
 
-test('pin: SQL 109 pending, code-derived, selectable, packed, in step with the production pin; after SQL 91', () => {
+test('pin: SQL 109 staging-authorized from its read-live, code-derived, selectable, packed, in step with the production pin; after SQL 91', () => {
   const pin = PINS[KEY];
   const spec = RELEASE_SQL_SPECS[KEY];
   const packed = Object.fromEntries(EXECUTOR_PACK_MEMBERS);
@@ -107,10 +108,16 @@ test('pin: SQL 109 pending, code-derived, selectable, packed, in step with the p
   assert.equal(pin.migration_id, '109_moov_transfer_webhook_status');
   assert.equal(spec.choice, 'sql109-moov-transfer-webhook-status');
   assert.equal(sha(TEXT), pin.source_sha256);
+  // Staging apply authorized (owner approved 2026-10-21) from staging read-live run 39663914111:
+  // the function was absent, so SQL 109 was not yet applied.
   assertStagingPinState(assert, KEY, pin);
-  assert.equal(pin.execute, false);
-  assert.equal(pin.authorization, 'pending');
-  assert.equal(pin.expected_live_definition_sha256, null);
+  assert.equal(pin.execute, true);
+  assert.equal(pin.authorization, 'Owner approved 2026-10-21: staging apply (wave 10) from staging read-live run 39663914111');
+  assert.equal(pin.expected_live_definition_sha256, 'e0f02501f167f4bee2bbb8bc32c1e19b23deb5425a650c63102030531aa9a077');
+  assert.notEqual(pin.expected_live_definition_sha256, pin.intended_replacement_sha256);
+  // The recorded pre-state is the engine's fingerprint of exactly the absent function.
+  assert.equal(releaseStateText(KEY, {}), `release sql109 v1\nfunction ${WRITER}: absent`);
+  assert.equal(releaseStateHash(KEY, {}), pin.expected_live_definition_sha256);
   assert.equal(releaseIntendedHash(KEY, TEXT), pin.intended_replacement_sha256);
   assert.equal(pin.superseded_intended_sha256, undefined);
   assert.ok(AUTHORIZED_STAGING_SQL.includes(pin));
@@ -248,7 +255,11 @@ test('PostgreSQL 16: SQL 109 through the executor: refused before SQL 91, a pend
     assert.deepEqual(r.precondition_failures, [], JSON.stringify(r.release_sql_inspect));
     assert.deepEqual(r.release_sql_inspect.predecessors, { sql91: true });
     assert.equal(r.already_applied, false);
-    const pending = await handlerFor(connect)(releaseEvent({ expected_live_definition_sha256: r.live_definition_sha256 }));
+    // The local absent function has the recorded staging pre-state's fingerprint.
+    assert.equal(r.live_definition_sha256, PINS[KEY].expected_live_definition_sha256);
+    // A pending pin cannot apply (the committed pin is staging-authorized, so pend a copy).
+    const pendingCopy = pendingPin(PINS[KEY]);
+    const pending = await handlerFor(connect, { pins: { [KEY]: pendingCopy } })(releaseEvent({ pin: pendingCopy, expected_live_definition_sha256: r.live_definition_sha256 }));
     assert.equal(pending.ok, false);
 
     const applied = await apply(r.live_definition_sha256);
