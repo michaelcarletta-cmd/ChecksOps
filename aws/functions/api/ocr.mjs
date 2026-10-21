@@ -13,6 +13,7 @@ import { emptyAzureMicr } from './ocr-normalize-azure.mjs';
 import { azureDiAnalyzeSecretLoader } from './azure-di-secret.mjs';
 import { safeOcrLog } from './azure-check-ocr.mjs';
 import { persistOcrDescriptiveHandoff } from './ocr-descriptive-persist.mjs';
+import { resolveWritablePayeeLine } from './check-deposited.mjs';
 
 const s3 = () => new S3Client({ region: process.env.AWS_REGION || 'us-east-1' });
 const filesBucket = () => process.env.FILES_BUCKET || '';
@@ -371,6 +372,7 @@ export const handleCheckOcrIntake = async (event, injected = {}) => {
     await client.query('SAVEPOINT ocr_descriptive_commit');
     // Only columns granted to checksops for T2 intake updates (33_tranche2_write_grants.sql).
     // Do not touch ocr_status/amount/detected_claim_number (no column grant / ledger safety).
+    const writablePayee = await resolveWritablePayeeLine(client, checkId, parsed.payee_line);
     await client.query(
       `UPDATE public.check_intake_items SET
          carrier_name = COALESCE($2, carrier_name),
@@ -382,7 +384,7 @@ export const handleCheckOcrIntake = async (event, injected = {}) => {
         checkId,
         parsed.carrier_name,
         parsed.check_number,
-        parsed.payee_line,
+        writablePayee.value,
       ],
     );
     await client.query('RELEASE SAVEPOINT ocr_descriptive_commit');

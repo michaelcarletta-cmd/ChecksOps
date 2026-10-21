@@ -153,6 +153,24 @@ test('deposited remains a financial destination', async () => {
   assert.equal(client.queries.some((q) => /UPDATE public.check_intake_items/.test(q.sql)), false);
 });
 
+test('an already-deposited check cannot be moved (#601, the live production rule)', async () => {
+  for (const check of [
+    { id: CHECK_ID, tenant_id: FREEDOM, status: 'deposited', check_stage: 'deposited', deposited_at: null },
+    { id: CHECK_ID, tenant_id: FREEDOM, status: 'endorsements_in_progress', check_stage: 'endorsing', deposited_at: '2026-10-20T00:00:00Z' },
+  ]) {
+    const client = mockClient({ check });
+    const result = await executeAdminOverrideCheckStatus({
+      client,
+      mapping: { application_user_id: APP_ID },
+      args: { p_check_id: CHECK_ID, p_new_status: 'needs_review' },
+    });
+    assert.equal(result.error, 'rpc_financial_disabled');
+    assert.equal(result.status, check.status);
+    assert.equal(client.queries.some((q) => /UPDATE public.check_intake_items/.test(q.sql)), false);
+    assert.equal(client.queries.some((q) => /check_audit_log/.test(q.sql)), false);
+  }
+});
+
 test('staff outside the tenant cannot override', async () => {
   const client = mockClient({
     roles: [{ role: 'staff' }],
