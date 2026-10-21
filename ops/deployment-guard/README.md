@@ -80,6 +80,12 @@ npm run test:deployment-guard
 ```
 
 The `guarded-staging-lambda-overlay.yml` workflow defaults to read-only `inspect`.
+
+Full-package rebuilds (the whole `aws/functions/api` tree plus a lockfile install, needed when a
+dependency or a module the overlay cannot carry must reach a Lambda) go through
+`guarded-staging-lambda-rebuild.yml` and `guarded-production-lambda-rebuild.yml`, gated by
+`ops/deployment-guard/lambda-rebuild-plan.json`: apply is refused while any live-vs-candidate
+difference is not listed there. Runbook: `ops/production-lambda-rebuild.md`.
 It reports the requested repository member as `PRESENT` (with its SHA-256) or
 `ABSENT`, alongside the live Lambda CodeSha256 and RevisionId. Absence is not
 deployment authorization. For `apply`, explicitly select `add` for an absent

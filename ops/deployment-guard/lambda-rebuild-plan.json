@@ -1,0 +1,22 @@
+{
+  "id": "lambda-rebuild-plan",
+  "notes": "Accepted differences between the live API Lambda package and a fresh full-package build of main (aws/functions/api plus npm ci --omit=dev from its lockfile), one section per environment. guarded-{staging,production}-lambda-rebuild.yml inspect reports every live-vs-candidate difference; apply is refused while any difference is not listed here. members: source files whose bytes change (exact live and accepted SHA-256). added: files absent live (accepted SHA-256). removed: live files the build drops (live SHA-256). dependencies: node_modules packages added, removed or re-versioned, keyed by package path. status pending_inspect means the section has not been filled from an inspect run yet; a filled section is a reviewed plan change. Filling a section never deploys. Node modules are compared by package path and version, not byte for byte: the install is reproducible from the lockfile but the live package was built by other tooling.",
+  "environments": {
+    "staging": {
+      "function_name": "checksops-staging-api",
+      "status": "pending_inspect",
+      "members": {},
+      "added": {},
+      "removed": {},
+      "dependencies": { "added": {}, "removed": {}, "changed": {} }
+    },
+    "production": {
+      "function_name": "checksops-production-prep-api",
+      "status": "pending_inspect",
+      "members": {},
+      "added": {},
+      "removed": {},
+      "dependencies": { "added": {}, "removed": {}, "changed": {} }
+    }
+  }
+}
