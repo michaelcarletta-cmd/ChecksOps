@@ -68,6 +68,16 @@ and the deployment guard refuses the stack (`RETIRED_STACKS` in
 flags-off, on the staging role and on the CORS allow-list stay in force: the files record the prep
 baseline, not live state.
 
+AWS enforces the same on the stack itself since 2026-10-21 (applied by the owner's decision
+through the AWS connector and read back):
+
+- **Stack policy** `{"Statement":[{"Effect":"Deny","Action":"Update:*","Principal":"*","Resource":"*"}]}`:
+  CloudFormation refuses any stack update that would modify, replace or delete a resource, from
+  any template, tool or console. Direct Lambda and API Gateway calls (the guarded workflows) are not
+  stack updates and are unaffected. Someone with full CloudFormation permissions can still pass a
+  temporary override policy or replace this one; a stack policy cannot be removed, only replaced.
+- **Termination protection** on: the stack cannot be deleted until it is turned off.
+
 Live production changes only through the guarded paths:
 
 | Change | Path |
