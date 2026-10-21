@@ -9,6 +9,11 @@ import { applyCheckAltWebhook, applyMoovWebhook, sandboxWebhookApplyEnabled } fr
 import { productionOnboardingWebhookApplyEnabled } from './onboarding/flags.mjs';
 import { applyProductionOnboardingWebhook } from './onboarding/webhook-status.mjs';
 import { applyCollectionV2ProviderCompletion } from '../tenant-collection-v2-settlement.mjs';
+import {
+  applyProductionMoovTransferWebhook,
+  isMoovTransferEvent,
+  productionTransferWebhookApplyEnabled,
+} from './moov-transfer-webhook.mjs';
 
 const { Client } = pg;
 
@@ -203,6 +208,15 @@ export const handleProviderWebhook = async (event, provider, deps = {}) => {
       } else if (provider === 'checkalt') {
         applyResult = await applyCheckAltWebhook(client, parsed.payload);
       }
+    } else if (
+      !stored.duplicate && provider === 'moov'
+      && isMoovTransferEvent(eventTypeOf(parsed.payload)) && productionTransferWebhookApplyEnabled()
+    ) {
+      // Production: status, ACH return and NOC of a funding or send leg (SQL 109 writer).
+      // Records only; never moves money.
+      applyResult = await applyProductionMoovTransferWebhook(client, parsed.payload, {
+        eventId: String(externalEventId),
+      });
     } else if (!stored.duplicate && provider === 'moov' && productionOnboardingWebhookApplyEnabled()) {
       // Production: onboarding status only (account / capability / verification),
       // behind AWS_MOOV_ONBOARDING_PRODUCTION_ENABLED. Money movement is never applied here.

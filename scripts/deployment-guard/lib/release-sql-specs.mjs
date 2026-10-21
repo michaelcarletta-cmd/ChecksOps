@@ -1,5 +1,5 @@
 /**
- * Specs of the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108) for the shared engine in
+ * Specs of the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108, SQL 109) for the shared engine in
  * release-sql-state.mjs: what each pinned file creates, replaces or drops, the reviewed
  * EXECUTE ACLs, the prerequisites and predecessors, and the PostgreSQL renderings the file
  * leaves (policy expressions, view, column, constraint, index and trigger definitions as
@@ -3541,6 +3541,60 @@ export const RELEASE_SQL_SPECS = deepFreeze({
     ],
     "altered_relations": [
       "public.check_intake_items"
+    ]
+  },
+  // SQL 109: the Moov transfer webhook writer (status, ACH return, NOC of a funding or send leg),
+  // one SECURITY DEFINER function gated on SQL 91's aws_moov_webhook_apply_active(). EXECUTE:
+  // checksops and the owner only. It writes payment_transfers and payment_event_log under RLS
+  // (definer_writes); no table, column, policy or grant changes.
+  sql109: {
+    "key": "sql109",
+    "label": "SQL 109",
+    "choice": "sql109-moov-transfer-webhook-status",
+    "production_pin_rel": "ops/deployment-guard/sql109-moov-transfer-webhook-status-production-apply.json",
+    "script": "sql109-moov-transfer-webhook-status-production-apply",
+    "prerequisites": [
+      "public.aws_moov_webhook_apply_active()",
+      "public.payment_transfers",
+      "public.payment_event_log",
+      "role checksops",
+      "column public.payment_transfers.id",
+      "column public.payment_transfers.tenant_id",
+      "column public.payment_transfers.provider",
+      "column public.payment_transfers.environment",
+      "column public.payment_transfers.provider_transfer_id",
+      "column public.payment_transfers.provider_status",
+      "column public.payment_transfers.status",
+      "column public.payment_transfers.leg_role",
+      "column public.payment_transfers.failure_reason",
+      "column public.payment_transfers.provider_metadata",
+      "column public.payment_transfers.completed_at",
+      "column public.payment_transfers.updated_at",
+      "column public.payment_event_log.provider",
+      "column public.payment_event_log.environment",
+      "column public.payment_event_log.tenant_id",
+      "column public.payment_event_log.transfer_id",
+      "column public.payment_event_log.provider_transfer_id",
+      "column public.payment_event_log.event_type",
+      "column public.payment_event_log.previous_status",
+      "column public.payment_event_log.new_status",
+      "column public.payment_event_log.provider_metadata"
+    ],
+    "predecessors": [
+      "sql91"
+    ],
+    "functions": [
+      {
+        "identity": "public.aws_moov_webhook_apply_transfer_status(text, text, text, text, text, text, text, text, text, text, timestamp with time zone)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ]
+      }
+    ],
+    "definer_writes": [
+      "public.payment_transfers",
+      "public.payment_event_log"
     ]
   },
 });

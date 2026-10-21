@@ -96,6 +96,7 @@ on:
           - providers/onboarding/handlers.mjs
           - providers/catalog.mjs
           - providers/webhook-apply.mjs
+          - providers/moov-transfer-webhook.mjs
           - providers/webhooks.mjs
           - tenant-collection-v2.mjs
           - tenant-billing-destination.mjs
