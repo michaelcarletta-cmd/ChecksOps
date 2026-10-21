@@ -1,4 +1,4 @@
--- SQL 106: Moov transfer status, returns and NOCs written back from the verified webhook.
+-- SQL 107: Moov transfer status, returns and NOCs written back from the verified webhook.
 --
 -- Why: production Moov webhooks are verified and logged (aws_provider_webhook_receipts), but
 -- the API writes back only onboarding status and tenant fee-collection outcomes. A wallet
@@ -60,15 +60,15 @@
 -- leg_role. Browsers cannot set request.provider_webhook_apply and checksops alone may call
 -- the function.
 --
--- Refuses to run (55000 sql106_prerequisite_missing) without SQL 91's
+-- Refuses to run (55000 sql107_prerequisite_missing) without SQL 91's
 -- aws_moov_webhook_apply_active(), the two tables and the columns it uses, and (55000
--- sql106_definer_cannot_write) unless the applying login owns public.payment_transfers and
+-- sql107_definer_cannot_write) unless the applying login owns public.payment_transfers and
 -- public.payment_event_log without FORCE ROW LEVEL SECURITY (or is a superuser or BYPASSRLS).
 --
 -- Transactions: no BEGIN/COMMIT; the guarded SQL executor runs it inside one transaction.
 -- Idempotent: safe to run more than once. Not applied by this change.
 
-DO $sql106_prereq$
+DO $sql107_prereq$
 DECLARE
   v_missing text[];
 BEGIN
@@ -102,7 +102,7 @@ BEGIN
        WHERE c.table_schema = 'public' AND c.table_name = want.tbl AND c.column_name = want.col);
   END IF;
   IF v_missing IS NOT NULL THEN
-    RAISE EXCEPTION 'sql106_prerequisite_missing: SQL 106 needs SQL 91 and the payment tables applied first; missing %',
+    RAISE EXCEPTION 'sql107_prerequisite_missing: SQL 107 needs SQL 91 and the payment tables applied first; missing %',
       array_to_string(v_missing, ', ')
       USING ERRCODE = '55000';
   END IF;
@@ -115,11 +115,11 @@ BEGIN
       AND NOT (me.rolsuper OR me.rolbypassrls
                OR (pg_catalog.pg_has_role(current_user, t.relowner, 'USAGE') AND NOT t.relforcerowsecurity))
   ) THEN
-    RAISE EXCEPTION 'sql106_definer_cannot_write: the applying login must own public.payment_transfers and public.payment_event_log (no FORCE ROW LEVEL SECURITY), or be a superuser or BYPASSRLS'
+    RAISE EXCEPTION 'sql107_definer_cannot_write: the applying login must own public.payment_transfers and public.payment_event_log (no FORCE ROW LEVEL SECURITY), or be a superuser or BYPASSRLS'
       USING ERRCODE = '55000';
   END IF;
 END
-$sql106_prereq$;
+$sql107_prereq$;
 
 CREATE OR REPLACE FUNCTION public.aws_moov_webhook_apply_transfer_status(
   _environment text,
@@ -310,4 +310,4 @@ $$;
 REVOKE ALL ON FUNCTION public.aws_moov_webhook_apply_transfer_status(text, text, text, text, text, text, text, text, text, text, timestamptz) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.aws_moov_webhook_apply_transfer_status(text, text, text, text, text, text, text, text, text, text, timestamptz) TO checksops;
 COMMENT ON FUNCTION public.aws_moov_webhook_apply_transfer_status(text, text, text, text, text, text, text, text, text, text, timestamptz) IS
-  'SQL 106: Moov webhook write-back of a funding or send leg''s status, ACH return code and NOC. Webhook route only (request.provider_webhook_apply = 1); never moves money.';
+  'SQL 107: Moov webhook write-back of a funding or send leg''s status, ACH return code and NOC. Webhook route only (request.provider_webhook_apply = 1); never moves money.';
