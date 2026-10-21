@@ -53,14 +53,12 @@ const externalIdOf = (payload, verifiedId) => (
 const providerAccountOf = (provider, payload) => {
   if (provider === 'moov') return payload?.accountID || payload?.data?.accountID || payload?.accountId || null;
   if (provider === 'checkalt') return payload?.ssoUserId || payload?.userAccountId || null;
-  if (provider === 'plaid') return payload?.item_id || payload?.itemId || null;
   return null;
 };
 
 const resourceIdOf = (provider, payload) => {
   if (provider === 'moov') return payload?.data?.transferID || payload?.data?.bankAccountID || payload?.transferID || null;
   if (provider === 'checkalt') return payload?.referenceNumber || payload?.checkalt_reference || null;
-  if (provider === 'plaid') return payload?.transfer_id || payload?.item_id || null;
   return null;
 };
 

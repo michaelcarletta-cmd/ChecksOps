@@ -53,7 +53,7 @@ Important functional domains include:
 3. Preserve identifiers used by checks, tenants, payments, Moov, CheckAlt, endorsements, and webhooks.
 4. Preserve audit records and provider event history.
 5. Do not expose RDS directly to the browser.
-6. Do not place Moov, CheckAlt, Resend, Plaid, or other private credentials in Vite environment variables.
+6. Do not place Moov, CheckAlt, Resend, or other private credentials in Vite environment variables.
 7. Every payment/webhook write path must retain idempotency protection.
 8. Tenant isolation must be enforced in the AWS API layer and database.
 9. Storage migration must preserve a durable mapping from existing object path/key to the new S3 key.
@@ -154,7 +154,7 @@ Frontend migration should happen domain-by-domain, not with a single all-or-noth
 
 Convert Supabase Edge Functions to Lambda/API routes. Payment-related functions are highest priority.
 
-Examples already referenced by the application include Moov readiness, transfers, sweep configuration, account verification/files, invoices, payment direction requests, email unsubscribe, QuickBooks payment, and public directory endpoints.
+Examples already referenced by the application include Moov readiness, transfers, sweep configuration, account verification/files, invoices, payment direction requests, email unsubscribe, and public directory endpoints.
 
 All provider webhook routes must validate signatures where supported and store provider event IDs before processing to prevent duplicate execution.
 

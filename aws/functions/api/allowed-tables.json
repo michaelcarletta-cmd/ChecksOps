@@ -1,6 +1,5 @@
 [
   "ach_authorizations",
-  "actum_transactions",
   "ai_response_cache",
   "audit_logs",
   "aws_partner_check_endorsements",
@@ -132,8 +131,6 @@
   "payment_webhook_events",
   "payroll_runs",
   "pii_reveal_logs",
-  "plaid_transfer_events",
-  "plaid_webhook_cursors",
   "platform_announcements",
   "platform_billing_destination",
   "platform_fee_line_items",

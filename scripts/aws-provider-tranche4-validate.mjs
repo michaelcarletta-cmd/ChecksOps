@@ -2,7 +2,7 @@
 /**
  * Live Tranche 4 provider validation against staging API + Cognito.
  * Uses local DB snapshots and synthetic webhook fixtures only.
- * Does not call Moov, CheckAlt, Plaid, Actum, or QuickBooks.
+ * Does not call Moov or CheckAlt.
  * Does not touch production Supabase.
  */
 import fs from 'node:fs';
@@ -123,18 +123,6 @@ const main = async () => {
   const deposit = await api('/functions/v1/checkalt-submit-deposit', { token: freedom, body: {} });
   record('CheckAlt submit disabled', deposit.status === 403 && deposit.json.error === 'provider_disabled', {
     detail: `status=${deposit.status}`,
-  });
-  const plaid = await api('/functions/v1/plaid-disburse', { token: freedom, body: {} });
-  record('Plaid disburse disabled', plaid.status === 403 && plaid.json.error === 'provider_disabled', {
-    detail: `status=${plaid.status}`,
-  });
-  const actum = await api('/functions/v1/actum-charge', { token: freedom, body: {} });
-  record('unknown Actum charge disabled', actum.status === 403 && actum.json.error === 'provider_disabled', {
-    detail: `status=${actum.status}`,
-  });
-  const qb = await api('/functions/v1/quickbooks-payment', { token: freedom, body: {} });
-  record('QuickBooks payment disabled', qb.status === 403 && qb.json.error === 'provider_disabled', {
-    detail: `status=${qb.status}`,
   });
 
   const malformed = await api('/webhooks/moov', { method: 'POST', body: '{not-json' });

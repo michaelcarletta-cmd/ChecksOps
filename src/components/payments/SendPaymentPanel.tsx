@@ -177,9 +177,6 @@ export function SendPaymentPanel({
               {existingPayment.status}
               {existingPayment.return_code && ` · ${existingPayment.return_code}`}
             </Badge>
-            {existingPayment.actum_order_id && (
-              <span className="text-xs text-muted-foreground font-mono">Order #{existingPayment.actum_order_id}</span>
-            )}
           </div>
         </CardContent>
       </Card>

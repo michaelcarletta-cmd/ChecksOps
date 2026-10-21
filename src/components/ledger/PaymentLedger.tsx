@@ -91,7 +91,7 @@ export function PaymentLedger() {
         .from("disbursement_splits")
         .select(`
           id, amount, status, submitted_at, settled_at, returned_at,
-          return_code, return_desc, actum_order_id, created_at,
+          return_code, return_desc, created_at,
           method, recipient_name, recipient_type, external_check_number,
           stakeholder_accounts (
             id, nickname, custname, account_type, chk_acct
@@ -154,7 +154,7 @@ export function PaymentLedger() {
   }, [filtered]);
 
   const exportCSV = () => {
-    const headers = ["Date", "Recipient", "Type", "Account (last 4)", "Check #", "Carrier", "Amount", "Status", "Order ID", "Return Code"];
+    const headers = ["Date", "Recipient", "Type", "Account (last 4)", "Check #", "Carrier", "Amount", "Status", "Return Code"];
     const rows = filtered.map((p: any) => {
       const acct = p.stakeholder_accounts;
       const check = p.disbursement_batches?.check_intake_items;
@@ -167,7 +167,6 @@ export function PaymentLedger() {
         check?.carrier_name ?? "—",
         Number(p.amount).toFixed(2),
         p.status,
-        p.actum_order_id ?? "—",
         p.return_code ?? "—",
       ];
     });

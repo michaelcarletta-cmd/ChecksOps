@@ -15,8 +15,8 @@ import type {
 /**
  * Provider-agnostic payment service.
  *
- * Business logic and UI call these functions only. Which rail actually runs —
- * Plaid or Moov — is resolved per tenant from the tenant row plus the
+ * Business logic and UI call these functions only. Which rail actually runs
+ * (Moov today) is resolved per tenant from the tenant row plus the
  * payment feature flags, and never leaks upward.
  */
 

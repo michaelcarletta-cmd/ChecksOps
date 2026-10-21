@@ -145,7 +145,7 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("disbursement_batches")
-        .select(`id, created_at, status, disbursement_splits(id, amount, status, return_code, created_at, method, external_check_number, recipient_name, external_notes, stakeholder_accounts(nickname), actum_transactions(auth_code, response_reason))`)
+        .select(`id, created_at, status, disbursement_splits(id, amount, status, return_code, created_at, method, external_check_number, recipient_name, external_notes, stakeholder_accounts(nickname))`)
         .eq("check_intake_item_id", checkIntakeItemId)
         .eq("tenant_id", tenant!.id)
         .order("created_at", { ascending: false });

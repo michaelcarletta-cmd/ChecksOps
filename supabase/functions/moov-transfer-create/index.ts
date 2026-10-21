@@ -13,8 +13,7 @@ import { facilitatorAccountId } from "../_shared/moovClient.ts";
 // initiating tenant's own connected account. There is no global ChecksOps or
 // Freedom Adjustment funding account — Freedom Adjustment is just a tenant.
 //
-// Actum and Plaid disbursement paths are untouched; this only runs for tenants
-// resolved to the Moov rail and on the allowlist.
+// This only runs for tenants resolved to the Moov rail and on the allowlist.
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });

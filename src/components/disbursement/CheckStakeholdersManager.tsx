@@ -18,9 +18,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Plus, X, Users, Handshake, ShieldCheck, MailCheck, Lock, Home, Link2, Loader2, Search, UserPlus, Send } from "lucide-react";
+import { Plus, X, Users, Handshake, ShieldCheck, MailCheck, Lock, Home, Search, UserPlus, Send } from "lucide-react";
 import { VERIFICATION_BADGE_CLASS, VERIFICATION_LABEL, type VerificationStatus } from "@/lib/banking";
-import { PAYMENT_FLAGS } from "@/lib/payments/featureFlags";
 import { SendHomeownerBankLinkDialog } from "./SendHomeownerBankLinkDialog";
 import { AddExternalStakeholderDialog } from "./AddExternalStakeholderDialog";
 import { SendCheckTrackingLinkButton } from "@/components/homeowner-ledger/SendCheckTrackingLinkButton";
@@ -90,7 +89,7 @@ export function CheckStakeholdersManager({ checkIntakeItemId, onPay, payableKeys
     queryFn: async () => {
       const { data, error } = await supabase
         .from("stakeholder_accounts")
-        .select("id, nickname, account_type, chk_acct, custname, homeowner_name, authentecheck_bank_name")
+        .select("id, nickname, account_type, chk_acct, custname, homeowner_name")
         .eq("tenant_id", tenant!.id)
         .eq("is_active", true)
         .order("nickname");
@@ -189,37 +188,6 @@ export function CheckStakeholdersManager({ checkIntakeItemId, onPay, payableKeys
     onError: (e: any) => toast({ title: "Couldn't add stakeholder", description: e.message, variant: "destructive" }),
   });
 
-  const bridgeMut = useMutation({
-    mutationFn: async (stakeholderAccountId: string) => {
-      const { data, error } = await supabase.functions.invoke("moov-plaid-bridge", {
-        body: { tenant_id: tenant!.id, stakeholder_account_id: stakeholderAccountId, mode: "recipient" },
-      });
-      if (error) {
-        let message = error.message ?? "Bridge failed";
-        try {
-          const parsed = await (error as any).context?.json?.();
-          if (parsed?.error) message = parsed.error;
-        } catch { /* keep original */ }
-        throw new Error(message);
-      }
-      if ((data as any)?.error) throw new Error((data as any).error);
-      return data as any;
-    },
-    onSuccess: (data: any) => {
-      toast({
-        title: "Payout account ready",
-        description:
-          data?.status === "verified"
-            ? "Their linked bank is now set up to receive payments."
-            : "Their linked bank was attached and is being verified.",
-      });
-      qc.invalidateQueries({ queryKey: ["check-stakeholders", checkIntakeItemId] });
-      qc.invalidateQueries({ queryKey: ["disbursement-accounts", checkIntakeItemId] });
-    },
-    onError: (e: any) =>
-      toast({ title: "Couldn't set up payouts", description: e.message, variant: "destructive" }),
-  });
-
   const removeMut = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase.from("check_stakeholders").delete().eq("id", id);
@@ -247,8 +215,6 @@ export function CheckStakeholdersManager({ checkIntakeItemId, onPay, payableKeys
   };
 
   const removing = removeMut.isPending;
-
-  const moovAllowed = PAYMENT_FLAGS.USE_MOOV;
 
 
   return (
@@ -403,13 +369,6 @@ export function CheckStakeholdersManager({ checkIntakeItemId, onPay, payableKeys
           {activeRows.map((row) => {
             const acct = row.account;
             const vStatus = (acct?.verification_status ?? "unverified") as VerificationStatus;
-            const canBridge =
-              !!acct &&
-              moovAllowed &&
-              acct.verification_source === "plaid" &&
-              !!acct.plaid_account_id &&
-              !acct.provider_account_id;
-            const bridging = !!acct && bridgeMut.isPending && bridgeMut.variables === acct.id;
             const canPay = !!onPay && (!payableKeys || payableKeys.has(row.key.toLowerCase()));
             return (
               <div key={row.key} className="flex items-center justify-between gap-2 rounded-md border p-2 text-xs">
@@ -441,21 +400,6 @@ export function CheckStakeholdersManager({ checkIntakeItemId, onPay, payableKeys
                   </span>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
-                  {canBridge && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-6 text-[10px] px-2"
-                      onClick={() => bridgeMut.mutate(acct.id)}
-                      disabled={bridgeMut.isPending}
-                      title="Reuse the bank they already linked so they can be paid on this rail"
-                    >
-                      {bridging
-                        ? <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                        : <Link2 className="h-3 w-3 mr-1" />}
-                      Enable payouts
-                    </Button>
-                  )}
                   {canPay && (
                     <Button
                       size="sm"

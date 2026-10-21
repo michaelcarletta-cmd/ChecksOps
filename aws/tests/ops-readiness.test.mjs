@@ -8,9 +8,10 @@ test('staging safety holds when execution flags are unset', () => {
   const holds = stagingSafetyHolds(snap);
   assert.equal(holds.ok, true);
   assert.equal(snap.productionCutoverForbidden, true);
-  assert.equal(snap.plaidRequired, false);
   assert.equal(snap.flags.AWS_FINANCIAL_PERMISSIONS_ACTIVATED, false);
-  assert.equal(snap.flags.AWS_PLAID_ENABLED, false);
+  for (const removed of ['AWS_PLAID_ENABLED', 'AWS_ACTUM_ENABLED', 'AWS_QUICKBOOKS_ENABLED']) {
+    assert.equal(Object.hasOwn(snap.flags, removed), false, removed);
+  }
   assert.equal(snap.bridgesMustRemainDeployed, true);
   assert.equal(snap.checkAltHandledSeparately, true);
   assert.equal(snap.classA.stripeFailClosed, true);
@@ -25,6 +26,6 @@ test('GET /ops/readiness reports holds without requiring a database', async () =
   const body = JSON.parse(result.body);
   assert.equal(body.productionCutoverForbidden, true);
   assert.equal(body.holds.ok, true);
-  assert.equal(body.plaidRequired, false);
+  assert.equal(Object.hasOwn(body, 'plaidRequired'), false);
   assert.equal(body.flags.AWS_PROVIDER_EXECUTION_ENABLED, false);
 });

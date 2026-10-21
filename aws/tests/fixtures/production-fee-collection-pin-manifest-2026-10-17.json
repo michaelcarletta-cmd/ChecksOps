@@ -7,7 +7,7 @@
   "members": {
     "providers/parity/moov-functions.mjs": {
       "live_sha256": "2dff151e470aabf74f905d4f6af51c9ac7dd1d13696eeffa585ca43cf00302ee",
-      "accepted_sha256": "fbefc70eac342dc2bcb495501643b932ea370a228713b08349517031ff15b094",
+      "accepted_sha256": "3d17efb4f680a675a97231709e4379a4478641a46c744bf2fee5796c24fcd6be",
       "operation": "replace",
       "supersedes_unapplied_manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
     },
@@ -19,7 +19,7 @@
     },
     "providers/catalog.mjs": {
       "live_sha256": "ae78899274a1dfe93835d2e8fc4856f5d47d84fde18de688ed1f533a800fb521",
-      "accepted_sha256": "5aa2538f78aa5199f2615c68bd64bbbe3243fa3726ba0e99d12fcf6242f8b3a9",
+      "accepted_sha256": "43ada7ec092497fabfcd127db37d7ca25dbfe9063a61a8be713e2b62167dd561",
       "operation": "replace",
       "supersedes_unapplied_manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
     },
@@ -61,7 +61,7 @@
     },
     "providers.mjs": {
       "live_sha256": "6ad4c7ec0ba58e8906f85fc7f8d8fef21194920fc53f253ddfed6e46bf006b9c",
-      "accepted_sha256": "af6309a083b6c4f7805c13489caa036339ca3523f4a425c001eaf32c2fa6bacc",
+      "accepted_sha256": "51fa3109f06470c09fc9598c5b29c92085c0833a5dd0894a1478e30db5f6423a",
       "operation": "replace",
       "supersedes_unapplied_manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
     },

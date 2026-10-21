@@ -701,10 +701,12 @@ test('fee collection: eleven members on the fee manifest, collection-v2 then des
   // New to the plan: the 2026-10-11 live snapshot values.
   assert.equal(PLAN.members[COLLECTION].expected_live_sha256, '8a66f54d3c2785162a1643218e18b4d3c251230cf2a7f98a1ecb4ede8939fb66');
   assert.equal(PLAN.members[DESTINATION].expected_live_sha256, '7f9f24569d8d3112bcb829380de17b56ac5076fe8a8b38fd6a7633b44bcdfd80');
-  // provider-flags.mjs (locked) is main's bytes and never a member: live carries moovTransferPostEnabled,
-  // which main's bytes would drop. identity-env.mjs is not a member either: the destination imports only
-  // names it already exports live and on main.
-  assert.equal(sha('aws/functions/api/provider-flags.mjs'), '122b8769080851312d7e4ffde87bdbde060aed8004e20362d28956b70004c7ec');
+  // provider-flags.mjs (locked) is main's bytes and never an overlay member. The 2026-10-21 full-package
+  // rebuilds (lambda-rebuild-plan.json) put main's 122b8769... bytes live in both environments; the
+  // Plaid/Actum/QuickBooks removal changes it again and ships through the next rebuild, not an overlay.
+  // identity-env.mjs is not a member either: the destination imports only names it already exports live
+  // and on main.
+  assert.equal(sha('aws/functions/api/provider-flags.mjs'), '0c903e5442cc3987e3727d51e4b61bbb4e12bcddbe7e21c2bff6058ea349b1c8');
   assert.ok(!PLAN.order.includes('identity-env.mjs'));
   assert.ok(!PLAN.order.includes('provider-flags.mjs'));
   assert.equal(PLAN.members['provider-flags.mjs'], undefined);

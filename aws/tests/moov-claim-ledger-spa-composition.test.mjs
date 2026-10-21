@@ -32,7 +32,8 @@ test('combined SPA source keeps Moov GA frontend behavior', () => {
   assert.match(tenants, /\.\.\.tenantMoovDefaults\(\)/);
 
   const stakeholders = read('src/components/disbursement/CheckStakeholdersManager.tsx');
-  assert.match(stakeholders, /PAYMENT_FLAGS\.USE_MOOV/);
+  // The only Moov gate in this file was the Plaid-to-Moov bridge button, removed with Plaid.
+  assert.doesNotMatch(stakeholders, /moov-plaid-bridge/);
   assert.doesNotMatch(stakeholders, /isMoovAllowedForTenant\(\(tenant as any\)\?\.moov_allowlisted\)/);
 });
 
