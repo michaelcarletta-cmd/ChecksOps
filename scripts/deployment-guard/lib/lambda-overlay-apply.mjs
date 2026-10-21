@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { consumeReceiptOnce } from './consumed-receipts.mjs';
@@ -18,6 +19,43 @@ function iso(now) {
   return new Date(now).toISOString();
 }
 
+function stableValue(value) {
+  if (Array.isArray(value)) return value.map(stableValue);
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.keys(value).sort().map((key) => [key, stableValue(value[key])]));
+  }
+  return value;
+}
+
+function environmentVariables(configuration = {}) {
+  const variables = configuration.Environment?.Variables || configuration.Environment || {};
+  return variables && typeof variables === 'object' && !Array.isArray(variables) ? variables : {};
+}
+
+/**
+ * Environment.Variables as names plus one SHA-256 of the canonical name->value map.
+ * Raw values never leave this function: every writer prints its result to the
+ * GitHub Actions log, and the live environments hold literal credentials.
+ * Equality of the hash is equality of the map, so comparisons stay exact.
+ */
+export function environmentFingerprint(configuration = {}) {
+  const variables = environmentVariables(configuration);
+  return {
+    variable_names: Object.keys(variables).sort(),
+    variables_sha256: createHash('sha256').update(JSON.stringify(stableValue(variables))).digest('hex'),
+  };
+}
+
+/** Names of the variables whose value differs between two configurations (names only, never values). */
+export function changedEnvironmentKeys(before = {}, after = {}) {
+  const a = environmentVariables(before);
+  const b = environmentVariables(after);
+  const names = [...new Set([...Object.keys(a), ...Object.keys(b)])].sort();
+  return names.filter((name) => !Object.prototype.hasOwnProperty.call(a, name)
+    || !Object.prototype.hasOwnProperty.call(b, name)
+    || JSON.stringify(stableValue(a[name])) !== JSON.stringify(stableValue(b[name])));
+}
+
 export function configFingerprint(configuration = {}) {
   return {
     Role: configuration.Role || null,
@@ -25,7 +63,7 @@ export function configFingerprint(configuration = {}) {
     Handler: configuration.Handler || null,
     MemorySize: configuration.MemorySize ?? null,
     Timeout: configuration.Timeout ?? null,
-    Environment: configuration.Environment?.Variables || configuration.Environment || {},
+    Environment: environmentFingerprint(configuration),
     VpcConfig: {
       SubnetIds: [...(configuration.VpcConfig?.SubnetIds || [])].sort(),
       SecurityGroupIds: [...(configuration.VpcConfig?.SecurityGroupIds || [])].sort(),
@@ -302,7 +340,8 @@ export async function applyLambdaOverlay(input = {}, ctx = {}) {
   });
   if (!firstCas.ok) return firstCas;
 
-  const configBefore = configFingerprint(liveCfg.details.configuration || liveCfg.details);
+  const liveConfiguration = liveCfg.details.configuration || liveCfg.details;
+  const configBefore = configFingerprint(liveConfiguration);
 
   const downloaded = await aws.downloadFunctionCode({
     functionName,
@@ -457,11 +496,13 @@ export async function applyLambdaOverlay(input = {}, ctx = {}) {
     }
   }
 
-  const configAfter = configFingerprint(afterCfg.details.configuration || afterCfg.details);
+  const afterConfiguration = afterCfg.details.configuration || afterCfg.details;
+  const configAfter = configFingerprint(afterConfiguration);
   if (!fingerprintsEqual(configBefore, configAfter)) {
     return fail(CODES.UNRELATED_MUTATION, 'Lambda environment/configuration changed; stopping without restore', {
       before: configBefore,
       after: configAfter,
+      changed_environment_keys: changedEnvironmentKeys(liveConfiguration, afterConfiguration),
     });
   }
 
