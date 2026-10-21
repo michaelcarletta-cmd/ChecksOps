@@ -5,7 +5,7 @@
  * file covers what is new:
  *
  *   - the pin: staging-authorized from its read-live (wave 10), code-derived, selectable, packed,
- *     in step with the production pin (execute-authorized on the staging apply); the pinned
+ *     in step with the production pin (applied 2026-10-21 and retired); the pinned
  *     commit authored the bytes; after SQL 91;
  *   - the file and spec: one guarded prerequisite block and one SECURITY DEFINER function, EXECUTE
  *     checksops only, writing payment_transfers and payment_event_log (definer_writes); no table,
@@ -144,10 +144,12 @@ test('pin: SQL 109 staging-authorized from its read-live, code-derived, selectab
   assert.equal(prod.staging_pin_commit, pin.commit);
   assert.equal(prod.source_sha256, pin.source_sha256);
   assert.deepEqual(prod.predecessors, ['sql91']);
-  // Production pin execute-authorized (owner-approved pin change of 2026-10-21) on the staging apply
-  // from the same pre-state: production's recorded pre-state is this pin's.
-  assert.equal(prod.execute, true);
-  assert.match(prod.authorization, /^Owner approved 2026-10-21 /);
+  // Production pin applied 2026-10-21 and retired (owner approved #1143, on the staging apply from
+  // the same pre-state): production's recorded pre-state is this pin's.
+  assert.equal(prod.execute, false);
+  assert.match(prod.authorization, /^Applied to production on 2026-10-21; execute is false again/);
+  assert.equal(prod.applied.receipt.before_hash, pin.expected_live_definition_sha256);
+  assert.equal(prod.applied.receipt.after_hash, pin.intended_replacement_sha256);
   assert.equal(prod.expected_live_definition_sha256, pin.expected_live_definition_sha256);
   assert.notEqual(prod.expected_live_definition_sha256, prod.intended_replacement_sha256);
   let bytes = null;

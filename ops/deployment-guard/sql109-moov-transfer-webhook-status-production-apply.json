@@ -1,8 +1,8 @@
 {
   "id": "sql109-moov-transfer-webhook-status-production-apply",
   "migration": "sql109",
-  "authorization": "Owner approved 2026-10-21 (the owner's words, verbatim: \"apply SQL 109 in production\"; this pin change is bound to that approval, which covers SQL 109's whole guarded path, and the owner also approved merging this change once CI is green (\"merge all if green\")): production apply of SQL 109 on the staging acceptance below (production e0f02501f167f4bee2bbb8bc32c1e19b23deb5425a650c63102030531aa9a077 -> 925e018f0262556b8c43f872dc13ace4eeb36b411773189dc68592a37efb1982); execute true takes effect only once this change is merged. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
-  "execute": true,
+  "authorization": "Applied to production on 2026-10-21; execute is false again, so this pin is no longer a standing authorization and a re-apply needs a new reviewed pin change. The owner approved SQL 109's guarded path to production on 2026-10-21 in the words \"apply SQL 109 in production\", which covered the SQL 109 production pin (e0f02501 -> 925e018f), the read-only production inspect, the staging acceptance and the execute change (#1143), and the one apply run recorded in applied (workstream prod-sql109-moov-transfer-webhook-status-20261021), passed to it as \"apply SQL 109 in production\". That approval covered that run only",
+  "execute": false,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -62,5 +62,105 @@
     "ok": true,
     "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39673516794",
     "basis": "Guarded staging apply from the same pre-state as production. The guarded staging SQL executor (choice sql109-moov-transfer-webhook-status) carried SQL 109 from deploy run 39663572406 (inspect run 39663331529) and, after the staging pin change (#1137), deploy run 39673164727 (inspect run 39672879013; executor ueLvAc0a+7gZzOTGlfQurzX3ZbhOeeaNWVCKccOpI5o=). Read-live run 39663914111 (2026-10-21, main c92fe457b13ca49340dfbd0239f0cf72f029f6fb) reported already_applied false, precondition_failures [] and live e0f02501f167f4bee2bbb8bc32c1e19b23deb5425a650c63102030531aa9a077, which is this pin's expected_live_definition_sha256 (production_inspect). The staging apply run 39673516794 (2026-10-21, main 74e4753fe87aa781a28bda59a9945e0cf1d55fc0, staging pin commit f8695e8b16dd73753fa0600891e6eb99e842dd9e) reported result applied, before e0f02501f167f4bee2bbb8bc32c1e19b23deb5425a650c63102030531aa9a077, after 925e018f0262556b8c43f872dc13ace4eeb36b411773189dc68592a37efb1982 = intended_replacement_sha256, function state intended, function_acl [checksops EXECUTE, owner EXECUTE]. The read-live after it (run 39673878120, main 74e4753fe) reported already_applied true, precondition_failures [] and live 925e018f0262556b8c43f872dc13ace4eeb36b411773189dc68592a37efb1982. Staging and production had the same pre-state. Staging's webhook route uses the sandbox apply path and does not call the function; the writer itself is covered on PostgreSQL 16 by aws/tests/sql109-moov-transfer-webhook-status-pg.test.mjs. The production apply refuses unless the live state still equals this pin's expected_live_definition_sha256, and its post-conditions roll back unless the intended fingerprint is reached with the rest of the catalog unchanged."
+  },
+  "applied": {
+    "date": "2026-10-21",
+    "result": "applied",
+    "source_commit": "513585432dcd15a19d404a3da715e928937d5ea7",
+    "source_tarball": {
+      "file": "source-513585432dcd15a19d404a3da715e928937d5ea7.tar.gz",
+      "sha256": "1197146b2387f7c35119fd5cbc23ac97716b7759ef03577781541ba1991a5172"
+    },
+    "migration_source_sha256": "228725d8ebb81803e0fd172d92d677640eaefd51c62616c691bf3bb8775662ea",
+    "migration_source_sha256_note": "The one-shot source step hashed aws/workflows/sql/109_moov_transfer_webhook_status.sql in the transfer tarball: equal to source_sha256 (the pin).",
+    "runner": "i-0c35557c4e5385406",
+    "workstream_id": "prod-sql109-moov-transfer-webhook-status-20261021",
+    "one_use_id": "sql109-prod-40ec7c00-60a0-4825-9129-66f43914c3ba",
+    "one_use_id_consumed": true,
+    "one_use_id_consumed_basis": "Inferred from the successful apply (the tool records the one_use_id after COMMIT and only warns if that write fails); the consumed-registry entry was not read back separately.",
+    "owner_approval": "apply SQL 109 in production",
+    "owner_approval_basis": "As passed (base64, --approval-statement-b64) for --approval-scope sql109; the one-shot cannot verify who said it. The owner's statement of 2026-10-21 was exactly \"apply SQL 109 in production\".",
+    "operator": "michaelcarletta-cmd",
+    "apply_ssm_command_id": "5da87122-dc6b-4e08-b799-1abc17ee14eb",
+    "one_shot_run_id": "6a7ba5c9-98f6-44e8-958d-fd3292a3f96d",
+    "one_shot_note": "One guarded production-sql-one-shot run (SSM 5da87122-dc6b-4e08-b799-1abc17ee14eb, run_id 6a7ba5c9-98f6-44e8-958d-fd3292a3f96d) from main 513585432 (transfer run 39676973493, sql53-temporary-transfer.yml dispatched on main after the #1143 merge) applied SQL 109: steps pin, source, inspect, contracts, manifest, source-recheck-before-preflight, preflight, evaluate (sql109_production_apply_allowed true), source-recheck-before-apply, apply (applied) and post-apply-inspect all ok; runner contracts, manifest, receipt and inspects as recorded below. SSM invocation 2026-10-21T21:15:15.433Z to 21:15:25.433Z (ExecutionStartDateTime to ExecutionEndDateTime). Before it, a read-only --phase inspect of the same one-shot (SSM 9ac87d67-4841-4116-acd4-54514ba5f4a2, run_id 67302f32-78ab-478c-ae8b-383f9945ff6a, 2026-10-21T21:14:41Z, same commit, tarball, workstream and approval statement) completed pin, source, inspect and contracts ok and wrote nothing. Predecessor SQL 91; the pre-apply inspect reported predecessors {\"sql91\": true}, predecessors_applied true, missing_dependencies [] and precondition_failures [].",
+    "steps": [
+      "pin",
+      "source",
+      "inspect",
+      "contracts",
+      "manifest",
+      "source-recheck-before-preflight",
+      "preflight",
+      "evaluate",
+      "source-recheck-before-apply",
+      "apply",
+      "post-apply-inspect"
+    ],
+    "contract_results": {
+      "claim-ledger": {
+        "ok": true,
+        "passed": "4/4"
+      },
+      "tenant-isolation": {
+        "ok": true,
+        "passed": "6/6"
+      },
+      "financial-write-protections": {
+        "ok": true,
+        "passed": "43/43"
+      }
+    },
+    "pre_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "e0f02501f167f4bee2bbb8bc32c1e19b23deb5425a650c63102030531aa9a077",
+      "live_matches_expected": true,
+      "already_applied": false,
+      "precondition_failures": [],
+      "missing_dependencies": [],
+      "predecessors_applied": true,
+      "successors_applied": [],
+      "note": "The one-shot inspect step (read-only --inspect) immediately before the apply: live == the recorded pre-state e0f02501..., live_matches_expected true, already_applied false, apply_preconditions_met true, precondition_failures [], missing_dependencies [], successors_applied []; release_sql_inspect.functions[0] (public.aws_moov_webhook_apply_transfer_status(text, text, text, text, text, text, text, text, text, text, timestamp with time zone)) state absent, function_acl [], prerequisites_missing [], predecessors {\"sql91\": true}, definer_writes payment_transfers ok and payment_event_log ok; current_user and session_user checksops_admin."
+    },
+    "manifest_sha256": "07b8b371848cb082b87227b7f6d1c49b118d3568b1dbee5b7fcc5d0325474ce9",
+    "receipt": {
+      "migration": "sql109",
+      "workstream": "prod-sql109-moov-transfer-webhook-status-20261021",
+      "commit": "513585432dcd15a19d404a3da715e928937d5ea7",
+      "sql_file": "aws/workflows/sql/109_moov_transfer_webhook_status.sql",
+      "before_hash": "e0f02501f167f4bee2bbb8bc32c1e19b23deb5425a650c63102030531aa9a077",
+      "after_hash": "925e018f0262556b8c43f872dc13ace4eeb36b411773189dc68592a37efb1982",
+      "unrelated_catalog_sha256": "a52edf390b783a32603ee800d48055f116aeac17c3105e6b7b7cd8e3dfb5460b",
+      "unrelated_catalog_counts": {
+        "relations": 890,
+        "columns": 3535,
+        "constraints": 2233,
+        "policies": 404,
+        "functions": 1313,
+        "indexes": 654,
+        "default_acl": 0,
+        "role_memberships": 15,
+        "roles": 29,
+        "triggers": 180,
+        "views": 25,
+        "types": 18,
+        "schema": 2
+      },
+      "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39673516794",
+      "result": "applied"
+    },
+    "post_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "925e018f0262556b8c43f872dc13ace4eeb36b411773189dc68592a37efb1982",
+      "already_applied": true,
+      "precondition_failures": [],
+      "missing_dependencies": [],
+      "predecessors_applied": true,
+      "successors_applied": [],
+      "note": "The one-shot post-apply read-only --inspect: already_applied true (live == intended 925e018f...), precondition_failures []; release_sql_inspect.functions[0] (public.aws_moov_webhook_apply_transfer_status(text, text, text, text, text, text, text, text, text, text, timestamp with time zone)) state intended, function_acl [checksops EXECUTE, owner EXECUTE], definer_writes payment_transfers ok and payment_event_log ok. The function body itself was not printed by the inspect; the fingerprint equals releaseIntendedHash('sql109', file bytes). current_user and session_user checksops_admin."
+    }
+  },
+  "production_evidence": {
+    "2026-10-21 apply": "Guarded production SQL one-shot on i-0c35557c4e5385406, workstream prod-sql109-moov-transfer-webhook-status-20261021, main 513585432 (tarball 1197146b…, transfer run 39676973493, migration source 228725d8… == pin), owner-approved run (\"apply SQL 109 in production\"), SSM 5da87122-dc6b-4e08-b799-1abc17ee14eb, run_id 6a7ba5c9-98f6-44e8-958d-fd3292a3f96d, one_use_id sql109-prod-40ec7c00-60a0-4825-9129-66f43914c3ba (spent): every step ok; contracts claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43; pre-apply inspect live e0f02501… (live_matches_expected true, precondition_failures []); manifest 07b8b371…; e0f02501… -> 925e018f…, result applied, unrelated catalog a52edf39…; post-apply inspect already_applied true, precondition_failures []. Preceded by the read-only --phase inspect SSM 9ac87d67-4841-4116-acd4-54514ba5f4a2. No later inspect was run. execute is false so the pin is no longer a standing authorization."
   }
 }
