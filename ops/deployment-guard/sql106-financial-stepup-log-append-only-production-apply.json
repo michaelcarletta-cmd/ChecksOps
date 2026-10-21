@@ -1,8 +1,8 @@
 {
   "id": "sql106-financial-stepup-log-append-only-production-apply",
   "migration": "sql106",
-  "authorization": "Owner approved 2026-10-21 (the owner approved pushing the remaining release live in the words \"Everything else should be pushed live no exceptions\" and decided to close SQL 97's other_write_grants with this new migration in the words \"build SQL 106 and merge when green\"; that covers preparing this SQL 106 production pin change, and the change itself is reviewed and merge-approved by the owner separately, who also accepts the substitute staging evidence below at that review): production apply of SQL 106 before SQL 97, on the staging acceptance below (production 56b5e4bb1a2db3133c32c9cc3cca02c1e7fb876839544dbdfd0717aad8f25880 -> 0a159961b80a1887b551d7bc9f187811f62614ef352c00b12bbfe621f109088f); execute true takes effect only when the owner reviews and merges this change. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
-  "execute": true,
+  "authorization": "Applied to production on 2026-10-21; execute is false again, so this pin is no longer a standing authorization and a re-apply needs a new reviewed pin change. The owner approved the SQL 106 production pin (56b5e4bb -> 0a159961), the read-only production inspect, the substitute staging evidence and the execute change on 2026-10-21 (\"Everything else should be pushed live no exceptions\", \"build SQL 106 and merge when green\", #1120), and approved the one apply run recorded in applied (workstream prod-sql106-financial-stepup-log-append-only-20261021) on 2026-10-21 with \"apply SQL 106 and SQL 97 in production\". That approval covered that run only",
+  "execute": false,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -58,5 +58,105 @@
     "ok": true,
     "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39633390440",
     "basis": "Owner-accepted substitute evidence (the owner accepts it by reviewing and merging this change; the precedent is SQL 29's, SQL 92's, SQL 95's and SQL 97's production pins). SQL 106 was already in effect in staging: staging holds none of the revoked lines, so there was nothing to apply there. The reference is the guarded staging SQL executor read-live of sql106-financial-stepup-log-append-only on 2026-10-21 (run 39633390440, main 588bda34de2094a7664b5e6fe5de8e4f402f52f0, staging pin commit 950e76d87c70325647a58085030f561dfd48d076), which reported already_applied true, precondition_failures [], table_privileges[0] lines [] and other_write_grants [], and the staging live definition equal to the intended 0a159961b80a1887b551d7bc9f187811f62614ef352c00b12bbfe621f109088f = intended_replacement_sha256. The executor carried SQL 106 through the guarded staging executor deploy run 39632285430 (inspect run 39633115012). The pre-states differ: staging's read-live shows only the intended state (which UPDATE, DELETE or TRUNCATE grants staging held before is not recorded), while production (production_inspect, 2026-10-21) is 56b5e4bb1a2db3133c32c9cc3cca02c1e7fb876839544dbdfd0717aad8f25880 (checksops DELETE and UPDATE); no staging apply of these REVOKEs exists, so the revoke path itself is covered only by aws/tests/sql106-financial-stepup-log-append-only-pg.test.mjs on PostgreSQL 16 (production-like grants, SQL 106 then SQL 97 through their production tools). The production apply refuses unless the live state still equals this pin's expected_live_definition_sha256, and its post-conditions roll back unless the intended fingerprint is reached with every other grant on the table unchanged."
+  },
+  "applied": {
+    "date": "2026-10-21",
+    "result": "applied",
+    "source_commit": "7124a160b9848d6334bc4328d69e9404aebddff3",
+    "source_tarball": {
+      "file": "source-7124a160b9848d6334bc4328d69e9404aebddff3.tar.gz",
+      "sha256": "48713c464437e21c91dd63360fe33c27495918c332a32951ac8f3ec692089dde"
+    },
+    "migration_source_sha256": "b7b4f3f3cb0293a1c95f9ae87ad7e6b12375dd6336630f1d0c834b5e55f68f2c",
+    "migration_source_sha256_note": "The one-shot source step hashed aws/workflows/sql/106_financial_stepup_log_append_only.sql in the transfer tarball: equal to source_sha256 (the pin).",
+    "runner": "i-0c35557c4e5385406",
+    "workstream_id": "prod-sql106-financial-stepup-log-append-only-20261021",
+    "one_use_id": "sql106-prod-c994fcc1-bbff-414b-bfad-3b864d96d4a6",
+    "one_use_id_consumed": true,
+    "one_use_id_consumed_basis": "Inferred from the successful apply (the tool records the one_use_id after COMMIT and only warns if that write fails); the consumed-registry entry was not read back separately.",
+    "owner_approval": "apply SQL 106 and SQL 97 in production",
+    "owner_approval_basis": "As passed (base64, --approval-statement-b64) for --approval-scope sql106; the one-shot cannot verify who said it. The same statement covered the SQL 97 run (see ops/production-sql-90-97-apply.md).",
+    "operator": "michaelcarletta-cmd",
+    "apply_ssm_command_id": "43070c9e-2bb5-4e49-80f3-97fe6f35e3d0",
+    "one_shot_run_id": "0ae3e5dc-a34f-4799-ba75-d79a9b2ade28",
+    "one_shot_note": "One guarded production-sql-one-shot run (SSM 43070c9e-2bb5-4e49-80f3-97fe6f35e3d0, run_id 0ae3e5dc-a34f-4799-ba75-d79a9b2ade28) from main 7124a160b (transfer run 39640540760, sql53-temporary-transfer.yml dispatched on main at 2026-10-21T17:04:43Z) applied SQL 106: steps pin, source, inspect, contracts, manifest, source-recheck-before-preflight, preflight, evaluate, source-recheck-before-apply, apply (applied) and post-apply-inspect all ok; runner contracts, manifest, receipt and inspects as recorded below. SSM invocation 2026-10-21T17:18:15.225Z to 17:18:25.225Z (ExecutionStartDateTime to ExecutionEndDateTime). Before it, a read-only --phase inspect of the same one-shot (SSM 78e335e7-b844-4fbe-8c81-ebccdcd737c2, run_id 458bd072-8cdf-4611-91ff-1bbdf5aebd2b, 2026-10-21T17:14:57Z, same commit, tarball, workstream and approval statement) completed pin, source, inspect and contracts ok and wrote nothing. Applied before SQL 97, as the pin's order_note and runs_before [\"sql97\"] set out: SQL 97's one-shot (SSM 0a7a1b66-47c4-4fa8-8380-9b60296360f5) ran after it under the same owner statement. No predecessor; the pre-apply inspect reported predecessors_applied true, missing_dependencies [] and precondition_failures [].",
+    "steps": [
+      "pin",
+      "source",
+      "inspect",
+      "contracts",
+      "manifest",
+      "source-recheck-before-preflight",
+      "preflight",
+      "evaluate",
+      "source-recheck-before-apply",
+      "apply",
+      "post-apply-inspect"
+    ],
+    "contract_results": {
+      "claim-ledger": {
+        "ok": true,
+        "passed": "4/4"
+      },
+      "tenant-isolation": {
+        "ok": true,
+        "passed": "6/6"
+      },
+      "financial-write-protections": {
+        "ok": true,
+        "passed": "43/43"
+      }
+    },
+    "pre_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "56b5e4bb1a2db3133c32c9cc3cca02c1e7fb876839544dbdfd0717aad8f25880",
+      "live_matches_expected": true,
+      "already_applied": false,
+      "precondition_failures": [],
+      "missing_dependencies": [],
+      "predecessors_applied": true,
+      "successors_applied": [],
+      "note": "The one-shot inspect step (read-only --inspect) immediately before the apply: live == the recorded pre-state 56b5e4bb..., live_matches_expected true, already_applied false, precondition_failures [], missing_dependencies [], successors_applied []; release_sql_inspect.table_privileges[0] (financial_stepup_log) lines [\"checksops DELETE\", \"checksops UPDATE\"], other_write_grants []; current_user and session_user checksops_admin."
+    },
+    "manifest_sha256": "8ca15d2dd526629cc3bdfbfcd5091f6a8a6c29c003cfe7ec31fa11414c8a9c07",
+    "receipt": {
+      "migration": "sql106",
+      "workstream": "prod-sql106-financial-stepup-log-append-only-20261021",
+      "commit": "7124a160b9848d6334bc4328d69e9404aebddff3",
+      "sql_file": "aws/workflows/sql/106_financial_stepup_log_append_only.sql",
+      "before_hash": "56b5e4bb1a2db3133c32c9cc3cca02c1e7fb876839544dbdfd0717aad8f25880",
+      "after_hash": "0a159961b80a1887b551d7bc9f187811f62614ef352c00b12bbfe621f109088f",
+      "unrelated_catalog_sha256": "22332dfcb6056258de39f047dd67ea32d65112ce93e14b744f18afbc33b208d3",
+      "unrelated_catalog_counts": {
+        "relations": 890,
+        "columns": 3535,
+        "constraints": 2233,
+        "policies": 404,
+        "functions": 1312,
+        "indexes": 654,
+        "default_acl": 0,
+        "role_memberships": 15,
+        "roles": 29,
+        "triggers": 179,
+        "views": 25,
+        "types": 18,
+        "schema": 2
+      },
+      "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39633390440",
+      "result": "applied"
+    },
+    "post_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "0a159961b80a1887b551d7bc9f187811f62614ef352c00b12bbfe621f109088f",
+      "already_applied": true,
+      "precondition_failures": [],
+      "missing_dependencies": [],
+      "predecessors_applied": true,
+      "successors_applied": [],
+      "note": "The one-shot post-apply read-only --inspect: already_applied true (live == intended 0a159961...), precondition_failures []; release_sql_inspect.table_privileges[0] (financial_stepup_log) lines [] and other_write_grants []: PUBLIC, anon, authenticated and checksops hold no UPDATE, DELETE or TRUNCATE on the table. The other_table_privileges_unchanged post-condition passed (the apply committed); the other grants were not listed one by one in this record."
+    }
+  },
+  "production_evidence": {
+    "2026-10-21 apply": "Guarded production SQL one-shot on i-0c35557c4e5385406, workstream prod-sql106-financial-stepup-log-append-only-20261021, main 7124a160b (tarball 48713c46…, transfer run 39640540760, migration source b7b4f3f3… == pin), owner-approved run (\"apply SQL 106 and SQL 97 in production\"), SSM 43070c9e-2bb5-4e49-80f3-97fe6f35e3d0, run_id 0ae3e5dc-a34f-4799-ba75-d79a9b2ade28, one_use_id sql106-prod-c994fcc1-bbff-414b-bfad-3b864d96d4a6 (spent): every step ok; contracts claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43; pre-apply inspect live 56b5e4bb… (live_matches_expected true, precondition_failures []); manifest 8ca15d2d…; 56b5e4bb… -> 0a159961…, result applied, unrelated catalog 22332dfc…; post-apply inspect already_applied true, precondition_failures []. Preceded by the read-only --phase inspect SSM 78e335e7-b844-4fbe-8c81-ebccdcd737c2. No later inspect was run. execute is false so the pin is no longer a standing authorization."
   }
 }
