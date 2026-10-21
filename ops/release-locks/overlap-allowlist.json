@@ -2375,6 +2375,48 @@
       "reason": "PR #1109 removes Plaid, Actum and QuickBooks (owner decision 2026-10-21) and drops the PLAID_*, ACTUM_*, QUICKBOOKS_* keys and AWS_PLAID_WEBHOOK_SECRET in aws/functions/api/provider-secrets.mjs; it overlaps the still-open Cursor-era PR #321 (opened 2026-09-14, last updated 2026-09-14, based on the stacked branch cursor/prod-cutover-lock-c48b), which predates the current main and must rebase before any merge. Allow review while that PR remains open. It does not merge, edit or deploy PR #321.",
       "expires": "2026-12-31",
       "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 1116,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "PR #1123 advances the production-spa release lock after the owner-approved production website deploy of 2026-10-21 (run 39635581928) and recomputes the production-release tree hash; PR #1116 (Moov transfer returns) also edits locked-components.json (moov-webhooks tree hash) and is being renumbered and rebased onto current main. This exception is limited to that single file. It does not merge, edit or deploy PR #1116; #1116 must rebase and recompute its tree hash after #1123 merges.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 1116,
+      "path": "ops/release-locks/overlap-allowlist.json",
+      "reason": "PR #1123 records the production-spa release lock after the owner-approved production website deploy of 2026-10-21 (run 39635581928) and recomputes the production-release tree hash; PR #1116 (Moov transfer returns) also edits overlap-allowlist.json for its own release-lock entries. #1123 merges first; the other PR merges main and recomputes its hashes afterwards. This exception is limited to that single file. It does not merge, edit or deploy PR #1116.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 1121,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "PR #1123 records the production-spa release lock after the owner-approved production website deploy of 2026-10-21 (run 39635581928) and recomputes the production-release tree hash; PR #1121 (SQL 108 funds-type values) also edits locked-components.json for its own release-lock entries. #1123 merges first; the other PR merges main and recomputes its hashes afterwards. This exception is limited to that single file. It does not merge, edit or deploy PR #1121.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 1121,
+      "path": "ops/release-locks/overlap-allowlist.json",
+      "reason": "PR #1123 records the production-spa release lock after the owner-approved production website deploy of 2026-10-21 (run 39635581928) and recomputes the production-release tree hash; PR #1121 (SQL 108 funds-type values) also edits overlap-allowlist.json for its own release-lock entries. #1123 merges first; the other PR merges main and recomputes its hashes afterwards. This exception is limited to that single file. It does not merge, edit or deploy PR #1121.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 1124,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "PR #1123 records the production-spa release lock after the owner-approved production website deploy of 2026-10-21 (run 39635581928) and recomputes the production-release tree hash; PR #1124 (Check Alt eligibility SELECT fix) also edits locked-components.json for its own release-lock entries. #1123 merges first; the other PR merges main and recomputes its hashes afterwards. This exception is limited to that single file. It does not merge, edit or deploy PR #1124.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 1124,
+      "path": "ops/release-locks/overlap-allowlist.json",
+      "reason": "PR #1123 records the production-spa release lock after the owner-approved production website deploy of 2026-10-21 (run 39635581928) and recomputes the production-release tree hash; PR #1124 (Check Alt eligibility SELECT fix) also edits overlap-allowlist.json for its own release-lock entries. #1123 merges first; the other PR merges main and recomputes its hashes afterwards. This exception is limited to that single file. It does not merge, edit or deploy PR #1124.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
     }
   ]
 }
