@@ -89,17 +89,10 @@ An unexpected exception also ends in one failure summary:
   before anything else.
 
 1. **Pin.** Refuses unless the pin has `execute: true`, a staging acceptance
-   (`ok: true` plus a reference) and an authorization phrase. SQL 106's pin is `execute: true`
-   (owner-reviewed pin change of 2026-10-21: the read-only production inspect of 2026-10-21, SSM
-   `4539d0f0-b715-42f6-ba19-ef03252e87c7`, recorded as its pre-state, on owner-accepted substitute
-   staging evidence; see `ops/production-sql-106-apply.md`) until its record-and-retire change; any
-   apply still needs the owner's own approval statement for that run. SQL 97's pin is `execute: true`
-   (owner approved 2026-10-21, "Everything else should be pushed live no exceptions": the read-only
-   production inspect of 2026-10-21 recorded as its pre-state, the staging acceptance and the Lambda
-   gate evidence recorded in the pin; see `ops/production-sql-90-97-apply.md`) until its
-   record-and-retire change. It was not applied on 2026-10-21 (its pre-apply inspect reported
-   `other_write_grants` on `financial_stepup_log`; SQL 106 comes first), and any apply still needs
-   the owner's own approval statement for that run. SQL 95's and SQL 99's pins are `execute: false`
+   (`ok: true` plus a reference) and an authorization phrase. SQL 106's and SQL 97's pins are
+   `execute: false` again since their 2026-10-21 applies (SQL 106 first, then SQL 97, one owner
+   statement "apply SQL 106 and SQL 97 in production"; see `ops/production-sql-106-apply.md` and
+   `ops/production-sql-90-97-apply.md`). SQL 95's and SQL 99's pins are `execute: false`
    again since their 2026-10-21 applies (see `ops/production-sql-90-97-apply.md`). SQL 82's to 86's pins are `execute: false` again since their 2026-10-21 record-and-retire
    change (`applied` result `verified_live`: production state verified by read-only inspects,
    see `ops/production-sql-82-83-apply.md` and `ops/production-sql-84-86-apply.md`). SQL 91's, SQL 92's, SQL 90's, SQL 101's, SQL 93's, SQL 96's, SQL 94's,
