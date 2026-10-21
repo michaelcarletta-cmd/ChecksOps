@@ -4,8 +4,9 @@
  * release-sql90-97-executor.test.mjs runs what every release key shares (SQL 108 included); this
  * file covers what is new:
  *
- *   - the pin: pending, code-derived, selectable, packed, in step with the production pin; the
- *     pinned commit authored the bytes; no predecessor, no order;
+ *   - the pin: staging-authorized from its read-live (wave 9), code-derived, selectable, packed,
+ *     in step with the production pin; the pinned commit authored the bytes; no predecessor,
+ *     no order;
  *   - the spec's one constraints entry (SQL 108 creates or replaces no function): the fingerprint
  *     is check_intake_items_funds_type_check's definition and validated flag; the nine values are
  *     exactly the SPA's FUNDS_TYPE_OPTIONS and the Check Classification select's;
@@ -47,7 +48,7 @@ import { EXECUTOR_PACK_MEMBERS } from '../../scripts/deployment-guard/sql-execut
 import { MIGRATIONS } from '../../scripts/deployment-guard/github-staging-sql-executor.mjs';
 import { READ_LIVE_EXPECTED_SENTINEL } from '../../scripts/deployment-guard/lib/sql-executor-read-live.mjs';
 import { importGuardedSqlExecutor } from './helpers/import-guarded-sql-executor.mjs';
-import { assertStagingPinState } from './helpers/staging-sql-wave1.mjs';
+import { assertStagingPinState, pendingPin } from './helpers/staging-sql-wave1.mjs';
 import { CHECK_A, pgSkipReason, releaseFixture } from './helpers/release-sql-pg.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -60,6 +61,7 @@ const CKEY = `${TABLE} ${CONSTRAINT}`;
 const SUPABASE_FIVE = Object.freeze(['acv', 'rcv', 'recoverable_depreciation', 'supplement', 'overhead_and_profit']);
 const ADDED = Object.freeze(['deductible', 'other_structures', 'personal_property', 'additional_living_expenses']);
 const NINE = Object.freeze([...SUPABASE_FIVE, ...ADDED]);
+const SUPABASE_FIVE_DEF = `CHECK (((funds_type IS NULL) OR (funds_type = ANY (ARRAY[${SUPABASE_FIVE.map((v) => `'${v}'::text`).join(', ')}]))))`;
 const NINE_DEF = `CHECK (((funds_type IS NULL) OR (funds_type = ANY (ARRAY[${NINE.map((v) => `'${v}'::text`).join(', ')}]))))`;
 const sha = (text) => createHash('sha256').update(text).digest('hex');
 const TEXT = fs.readFileSync(path.join(ROOT, PINS[KEY].filename), 'utf8');
@@ -112,7 +114,7 @@ function handlerFor(connect, { pins = {} } = {}) {
   return createHandler({ connect, now: () => Date.parse(NOW), releaseSqlFiles: FILES, releaseSqlPins: { ...PINS, ...pins } });
 }
 
-test('pin: SQL 108 pending, code-derived, selectable, packed, in step with the production pin; no predecessor, no order', () => {
+test('pin: SQL 108 staging-authorized from its read-live, code-derived, selectable, packed, in step with the production pin; no predecessor, no order', () => {
   const pin = PINS[KEY];
   const spec = RELEASE_SQL_SPECS[KEY];
   const packed = Object.fromEntries(EXECUTOR_PACK_MEMBERS);
@@ -122,11 +124,15 @@ test('pin: SQL 108 pending, code-derived, selectable, packed, in step with the p
   assert.equal(pin.migration_id, '108_check_intake_items_funds_type_values');
   assert.equal(spec.choice, 'sql108-check-intake-items-funds-type-values');
   assert.equal(sha(TEXT), pin.source_sha256);
-  // Pending: no staging read-live recorded yet (and no apply authorized).
+  // Staging apply authorized (owner approved 2026-10-21) from staging read-live run 39657370816:
+  // the constraint was the Supabase five-value definition, validated, so SQL 108 was not yet applied.
   assertStagingPinState(assert, KEY, pin);
-  assert.equal(pin.execute, false);
-  assert.equal(pin.authorization, 'pending');
-  assert.equal(pin.expected_live_definition_sha256, null);
+  assert.equal(pin.execute, true);
+  assert.equal(pin.authorization, 'Owner approved 2026-10-21: staging apply (wave 9) from staging read-live run 39657370816');
+  assert.equal(pin.expected_live_definition_sha256, 'c83dcc9b97b84d294a743063adb0c1f5231f5c37ade2f00d65dc134a1d55cf00');
+  assert.notEqual(pin.expected_live_definition_sha256, pin.intended_replacement_sha256);
+  // The recorded pre-state is the engine's fingerprint of exactly the Supabase five-value constraint.
+  assert.equal(releaseStateHash(KEY, { constraints: { [CKEY]: { exists: true, def: SUPABASE_FIVE_DEF, validated: true } } }), pin.expected_live_definition_sha256);
   assert.equal(releaseIntendedHash(KEY, TEXT), pin.intended_replacement_sha256);
   assert.equal(pin.intended_replacement_sha256, 'a796a3966009ceb9db4bcc43c4a75cc1a15753954e4f469abe77174eaccceaa5');
   assert.equal(pin.superseded_intended_sha256, undefined);
@@ -296,8 +302,9 @@ test('PostgreSQL 16: SQL 108 through the executor from the Supabase constraint: 
   assert.deepEqual(r.precondition_failures, [], JSON.stringify(r.release_sql_inspect));
   assert.equal(r.already_applied, false);
   assert.notEqual(r.live_definition_sha256, PINS[KEY].intended_replacement_sha256);
-  // A pending pin cannot apply.
-  const pending = await handlerFor(connect)(releaseEvent({ expected_live_definition_sha256: r.live_definition_sha256 }));
+  // A pending pin cannot apply (the committed pin is staging-authorized, so pend a copy).
+  const pendingCopy = pendingPin(PINS[KEY]);
+  const pending = await handlerFor(connect, { pins: { [KEY]: pendingCopy } })(releaseEvent({ pin: pendingCopy, expected_live_definition_sha256: r.live_definition_sha256 }));
   assert.equal(pending.ok, false);
   // Drift between the recorded pre-state and the apply refuses.
   await admin.query(`ALTER TABLE ${TABLE} DROP CONSTRAINT ${CONSTRAINT}`);

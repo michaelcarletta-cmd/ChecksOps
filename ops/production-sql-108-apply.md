@@ -53,6 +53,22 @@ constraint or any definition other than the five-value list
 Independent of every other migration (no predecessor, nothing waits on it, no Lambda member and
 no SPA change). The SPA already sends the nine values.
 
+## Status
+
+- **Staging executor refreshed (2026-10-21).** Inspect run 39656814885 (main `20059c9d3`) found the
+  live executor at CodeSha256 `cRNuRg2R…` without SQL 108 (adds only
+  `sql/108_check_intake_items_funds_type_values.sql`, supersedes the three engine files, nothing
+  dropped, no collisions). Deploy run 39657106517 updated it to
+  `KR/KUKLCKc0zrSAHtvIlc5wr+JBVGW/MFXJmhaUqVc8=`.
+- **Staging read-live (2026-10-21).** Run 39657370816 (main `20059c9d3`, executor `KR/KUKLC…`):
+  constraint `different`, live `c83dcc9b97b84d294a743063adb0c1f5231f5c37ade2f00d65dc134a1d55cf00`
+  (the release engine's fingerprint of exactly the Supabase five-value definition, validated),
+  `already_applied` false, `precondition_failures` `[]`. Recorded in the staging pin
+  (`expected_live_definition_sha256`, `execute: true`, wave 9) under the owner's statement of
+  2026-10-21, "apply SQL 108 in production then DEPLOY WEBSITE TO PRODUCTION then APPLY API
+  CONFIGURATION TO PRODUCTION", which covers SQL 108's whole guarded path.
+- Staging apply and the second read-live: not run yet. The production pin stays pending.
+
 ## Steps
 
 1. Staging: the staging executor must carry SQL 108 first (executor package refresh through
