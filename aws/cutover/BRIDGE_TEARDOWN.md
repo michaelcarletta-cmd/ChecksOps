@@ -45,3 +45,17 @@ If cutover **failed**, keep both functions deployed.
 - Not an S3 bucket empty
 - Not RDS `DROP DATABASE`
 - Not DNS rollback
+
+## Teardown executed (2026-10-21)
+
+Owner deleted both Supabase Edge Functions in project `nbcqwpysqgyxrrbgtmkw`. Project retained.
+
+| Function | POST health status | Verified at |
+|---|---|---|
+| `aws-staging-db-bridge` | 404 | 2026-10-21 |
+| `aws-staging-storage-bridge` | 404 | 2026-10-21 |
+
+Remaining cleanup (guarded config path, separate PRs):
+- Remove `CHECKSOPS_DB_BRIDGE_TOKEN` from `checksops-production-prep-api` (staging no-op, then production with owner phrase).
+- Remove `AWS_PLAID_WEBHOOK_SECRET` from `checksops-staging-api`.
+- Owner may delete unused secret `checksops/staging/storage-migration-token` in Secrets Manager.
