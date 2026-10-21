@@ -67,7 +67,20 @@ no SPA change). The SPA already sends the nine values.
   (`expected_live_definition_sha256`, `execute: true`, wave 9) under the owner's statement of
   2026-10-21, "apply SQL 108 in production then DEPLOY WEBSITE TO PRODUCTION then APPLY API
   CONFIGURATION TO PRODUCTION", which covers SQL 108's whole guarded path.
-- Staging apply and the second read-live: not run yet. The production pin stays pending.
+- **Staging apply (2026-10-21).** After the staging pin change merged (#1130, main `c185844a6`),
+  executor inspect run 39662152816 and deploy run 39662422486 (executor
+  `+GbJNvIAyTGXIpmulXWvNi0OwdCX6P6SP+vHVgjOz9s=`), then apply run 39662760919: `applied`,
+  `c83dcc9b…` -> `a796a3966009ceb9db4bcc43c4a75cc1a15753954e4f469abe77174eaccceaa5`. Read-live run
+  39663051691: `already_applied` true, live = intended, `precondition_failures` `[]`.
+- **Production inspect recorded (2026-10-21).** Read-only `--inspect` through SSM
+  `6d0fb8ce-441f-42d0-a239-f6c670c027ec` on `i-0c35557c4e5385406`, main `fdde89459` (tarball sha256
+  `06544da4d2bfb51e8ff18b08a01c083a85e641f214d6c469431daaea932334ce`, transfer run 39659758977):
+  constraint `different`, live `c83dcc9b97b84d294a743063adb0c1f5231f5c37ade2f00d65dc134a1d55cf00`
+  (the same five-value pre-state as staging), `already_applied` false, `precondition_failures` `[]`.
+  Recorded in the pin as `expected_live_definition_sha256`, with the staging apply run 39662760919
+  as `staging_acceptance`.
+- **Pin `execute: true`** once that change is merged, under the owner's statement of 2026-10-21
+  quoted above. Nothing is applied by it; the apply (step 3) passes the owner's words for that run.
 
 ## Steps
 
