@@ -437,29 +437,74 @@ test('the SQL 85 hold on mortgage-agent-compensation.mjs does not block homeowne
   const SQL85 = 'aws/workflows/sql/85_mortgage_compensation_adjust.sql';
   assert.equal(PLAN.members[MORTGAGE].sql_before, SQL85);
   assert.equal(PLAN.sql_prerequisites[SQL85]?.verified_live, true, 'SQL 85 is recorded live in production (2026-10-16 one-shot)');
-  const unverified = structuredClone(PLAN);
+  // Simulate the plan as it stood before run 38901611978 applied the member: expected_live on the
+  // pre-SQL 85 bytes (c3898615). The committed plan records the applied bytes (see the next test).
+  const PRE_SQL85 = 'c38986152765e1d43443c82a779627bd55f96b3c2c246988f4697a3565166512';
+  const preApply = structuredClone(PLAN);
+  preApply.members[MORTGAGE].expected_live_sha256 = PRE_SQL85;
+  const unverified = structuredClone(preApply);
   unverified.sql_prerequisites[SQL85] = { verified_live: false, evidence: null };
   // Held members sit after every member they must not block; providers.mjs stays last.
   assert.ok(PLAN.order.indexOf(MORTGAGE) > PLAN.order.indexOf('app-services.mjs'));
   assert.ok(PLAN.order.indexOf(MORTGAGE) > PLAN.order.indexOf('homeowner.mjs'));
   assert.equal(PLAN.order.at(-1), 'providers.mjs');
 
-  // The mortgage member is still on its live (pre-SQL 85) bytes: homeowner.mjs applies anyway.
+  // The mortgage member is still on its pre-SQL 85 bytes: homeowner.mjs applies anyway.
   const { deps, calls } = applyDeps('homeowner.mjs', { pending: [MORTGAGE] });
   const live = await deps.inspectLive();
-  assert.equal(live.memberHashes[MORTGAGE], PLAN.members[MORTGAGE].expected_live_sha256);
-  const result = await run(applyEnv('homeowner.mjs'), deps);
+  live.memberHashes[MORTGAGE] = PRE_SQL85;
+  deps.inspectLive = async () => live;
+  const result = await run(applyEnv('homeowner.mjs'), { ...deps, plan: preApply });
   assert.equal(result.mutation, false);
   assert.deepEqual(calls.receipt.owned_member_ops, { replace: ['homeowner.mjs'], add: [] });
 
   // The mortgage member is refused while SQL 85 is not recorded verified live ...
   await assert.rejects(
-    run(applyEnv(MORTGAGE), { ...applyDeps(MORTGAGE).deps, plan: unverified }),
+    run(applyEnv(MORTGAGE, { CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: PRE_SQL85 }), { ...applyDeps(MORTGAGE, { sha256: PRE_SQL85 }).deps, plan: unverified }),
     (error) => error.code === CODES.PRODUCTION_APPROVAL_REQUIRED && error.details.sql_before === SQL85,
   );
-  // ... and allowed with the committed plan, where SQL 85 is verified live.
-  const mortgage = await run(applyEnv(MORTGAGE), applyDeps(MORTGAGE).deps);
+  // ... and allowed once SQL 85 is verified live (as run 38901611978 did).
+  const mortgage = await run(applyEnv(MORTGAGE, { CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: PRE_SQL85 }), { ...applyDeps(MORTGAGE, { sha256: PRE_SQL85 }).deps, plan: preApply });
   assert.equal(mortgage.mutation, false);
+  // With the committed plan the live member already holds the accepted bytes: nothing to apply.
+  await assert.rejects(
+    run(applyEnv(MORTGAGE), applyDeps(MORTGAGE).deps),
+    (error) => error.code === CODES.UNRELATED_MUTATION,
+  );
+});
+
+test('mortgage-agent-compensation.mjs expected_live records the bytes production run 38901611978 applied', async () => {
+  const MORTGAGE = 'mortgage-agent-compensation.mjs';
+  const LIVE = 'efc4ae28488b3c9fccb7d8e76d3becd9789e129a6f6b04c434f9c01c08f873d6';
+  const BEFORE = 'c38986152765e1d43443c82a779627bd55f96b3c2c246988f4697a3565166512';
+  const APPLIED = 'aws/tests/fixtures/production-review-followups-manifest-2026-10-16.json';
+  const PLATFORM_OWNER = 'aws/tests/fixtures/production-mortgage-compensation-platform-owner-manifest-2026-10-15.json';
+  const readJson = (rel) => JSON.parse(fs.readFileSync(path.join(ROOT, rel), 'utf8'));
+  // Applied 2026-10-16 (run 38901611978, VERIFIED) and found still live by the read-only inspect
+  // run 39488779934 (ALREADY_ACCEPTED), so the ordered rollout skipped it without an apply.
+  assert.match(PLAN.notes, /run 38901611978/);
+  assert.match(PLAN.notes, /inspect run 39488779934/);
+  const row = PLAN.members[MORTGAGE];
+  assert.equal(row.operation, 'replace');
+  assert.equal(row.manifest, APPLIED);
+  assert.equal(row.expected_live_sha256, LIVE);
+  assert.equal(row.accepted_sha256, LIVE);
+  assert.equal(sha(`aws/functions/api/${MORTGAGE}`), LIVE);
+  const applied = readJson(APPLIED).members[MORTGAGE];
+  assert.equal(applied.live_sha256, LIVE);
+  assert.equal(applied.accepted_sha256, LIVE);
+  assert.equal(applied.previous_manifest, PLATFORM_OWNER);
+  // The pre-apply bytes stay recorded as the platform-owner manifest's accepted value.
+  assert.equal(readJson(PLATFORM_OWNER).members[MORTGAGE].accepted_sha256, BEFORE);
+  assert.equal(resolvePlannedMember(MORTGAGE, { root: ROOT, plan: PLAN }).ok, true);
+  const done = await run({ ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MORTGAGE }, { root: ROOT, inspectLive: liveFor(MORTGAGE) });
+  assert.equal(done.state, 'ALREADY_ACCEPTED');
+  assert.equal(done.mutation, false);
+  // The stale pre-apply bytes are no longer an accepted live state.
+  await assert.rejects(
+    run({ ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MORTGAGE }, { root: ROOT, inspectLive: liveFor(MORTGAGE, { sha256: BEFORE }) }),
+    (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+  );
 });
 
 test('tenant-management-v2.mjs is added just before app-services.mjs, which imports it statically', async () => {
@@ -607,10 +652,15 @@ test('#901 Review financial edits: write-allowlist.mjs, then write-check-workflo
   assert.equal(result.mutation, false);
   assert.deepEqual(writes.calls.receipt.owned_member_ops, { replace: [WORKFLOW_WRITES], add: [] });
 
-  // The SQL 89 hold does not block members before it (homeowner.mjs, mortgage-agent-compensation.mjs).
+  // The SQL 89 hold does not block members before it (homeowner.mjs, mortgage-agent-compensation.mjs;
+  // the latter simulated on its pre-apply bytes, since its committed expected_live is already accepted).
+  const PRE_APPLY = { 'mortgage-agent-compensation.mjs': 'c38986152765e1d43443c82a779627bd55f96b3c2c246988f4697a3565166512' };
   for (const member of ['homeowner.mjs', 'mortgage-agent-compensation.mjs']) {
     assert.ok(PLAN.order.indexOf(member) < PLAN.order.indexOf(WORKFLOW_WRITES), member);
-    const ahead = await run(applyEnv(member), applyDeps(member, { pending: [WORKFLOW_WRITES] }).deps);
+    const plan = structuredClone(PLAN);
+    if (PRE_APPLY[member]) plan.members[member].expected_live_sha256 = PRE_APPLY[member];
+    const env = PRE_APPLY[member] ? applyEnv(member, { CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: PRE_APPLY[member] }) : applyEnv(member);
+    const ahead = await run(env, { ...applyDeps(member, { pending: [WORKFLOW_WRITES], sha256: PRE_APPLY[member] }).deps, plan });
     assert.equal(ahead.mutation, false, member);
   }
 });
