@@ -2370,8 +2370,8 @@ export const AUTHORIZED_SQL108_CHECK_INTAKE_ITEMS_FUNDS_TYPE_VALUES = Object.fre
 
 // Moov transfer returns 2026-10-21 staging pin: SQL 109 (public.aws_moov_webhook_apply_transfer_status,
 // the SECURITY DEFINER webhook writer of a funding or send leg's status, ACH return and NOC; EXECUTE
-// checksops only; gated on SQL 91's aws_moov_webhook_apply_active()). After SQL 91. Pending until a
-// reviewed pin change records a staging read-live.
+// checksops only; gated on SQL 91's aws_moov_webhook_apply_active()). After SQL 91. Staging apply
+// authorized (wave 10) from staging read-live run 39663914111.
 export const AUTHORIZED_SQL109_MOOV_TRANSFER_WEBHOOK_STATUS = Object.freeze({
   key: 'sql109',
   filename: 'aws/workflows/sql/109_moov_transfer_webhook_status.sql',
@@ -2379,9 +2379,14 @@ export const AUTHORIZED_SQL109_MOOV_TRANSFER_WEBHOOK_STATUS = Object.freeze({
   // The commit that last authored the file bytes.
   commit: 'f8695e8b16dd73753fa0600891e6eb99e842dd9e',
   source_sha256: '228725d8ebb81803e0fd172d92d677640eaefd51c62616c691bf3bb8775662ea',
-  authorization: 'pending',
-  execute: false,
-  expected_live_definition_sha256: null,
+  // Owner's words 2026-10-21: "apply SQL 109 in production" (SQL 109 through the whole guarded
+  // path, staging first).
+  authorization: 'Owner approved 2026-10-21: staging apply (wave 10) from staging read-live run 39663914111',
+  execute: true,
+  // Staging read-live run 39663914111 (2026-10-21, main c92fe457b, executor UMqsKj8X...): the
+  // function is absent (e0f02501... is the release engine's fingerprint of exactly that state).
+  // SQL 91 applied, definer_writes ok, already_applied false, precondition_failures [].
+  expected_live_definition_sha256: 'e0f02501f167f4bee2bbb8bc32c1e19b23deb5425a650c63102030531aa9a077',
   // Code-derived: releaseIntendedHash('sql109', file bytes) (release-sql-state.mjs); re-derived by the tests.
   intended_replacement_sha256: '925e018f0262556b8c43f872dc13ace4eeb36b411773189dc68592a37efb1982',
   function_identities: Object.freeze(['public.aws_moov_webhook_apply_transfer_status(text, text, text, text, text, text, text, text, text, text, timestamp with time zone)']),
