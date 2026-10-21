@@ -1,8 +1,8 @@
 {
   "id": "sql95-remove-freedom-claims-bridge-production-apply",
   "migration": "sql95",
-  "authorization": "pending",
-  "execute": false,
+  "authorization": "Owner approved 2026-10-21 (the owner approved pushing the remaining release live in the words \"Everything else should be pushed live no exceptions\"; that covers preparing this SQL 95 production pin change, and the change itself is reviewed and merge-approved by the owner separately): production apply of SQL 95 after SQL 97, once app-services.mjs and the ingest-shared-check.mjs 410 stub are live (the Lambda gate below), on the staging acceptance below (production 48535b69b1a2f9b1ad69584f677dae78c830a482f58b9380c881205f91d8e05f -> a737e4ecdc114a456aa698b71f41cac7182218995c8e17517dd6162cafc1f9c2); execute true takes effect only when the owner reviews and merges this change. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
+  "execute": true,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -11,7 +11,7 @@
   "staging_pin_commit": "f50bf7d0d687b188b427263fbb79a8b8360acfc1",
   "source_sha256": "0cf0dafdcd06afc5d6993d06668fb8d56b5812ad6c1aa0bfda437a1bcb8f4137",
   "function_identities": [],
-  "expected_live_definition_sha256": null,
+  "expected_live_definition_sha256": "48535b69b1a2f9b1ad69584f677dae78c830a482f58b9380c881205f91d8e05f",
   "intended_replacement_sha256": "a737e4ecdc114a456aa698b71f41cac7182218995c8e17517dd6162cafc1f9c2",
   "authorization_phrase": "APPLY_REMOVE_FREEDOM_CLAIMS_BRIDGE",
   "predecessors": [],
@@ -36,24 +36,24 @@
     "note": "Guarded tooling for SQL 95: sql95-remove-freedom-claims-bridge-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql95-remove-freedom-claims-bridge); production-sql-one-shot.mjs --migration sql95. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's). The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
   },
   "production_inspect": {
-    "status": "pending",
-    "date": null,
-    "ssm_command_id": null,
-    "source_commit": null,
+    "status": "recorded",
+    "date": "2026-10-21",
+    "ssm_command_id": "43cb1d1f-f589-43b2-9315-7cad80fffb5c",
+    "source_commit": "69dbe9b01cbcd8f04847cab248e243105c85f022",
     "read_only": true,
     "connected_as": "checksops_admin",
-    "live_definition_sha256": null,
-    "apply_preconditions_met": null,
-    "precondition_failures": null,
-    "note": "Pending: the read-only inspect tool exists (scripts/deployment-guard/sql95-remove-freedom-claims-bridge-production-apply.mjs --inspect), but no production inspect has been run for SQL 95 yet. Record its date, SSM command id, source commit, live_definition_sha256, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. If precondition_failures is not [] stop: that needs its own reviewed change."
+    "live_definition_sha256": "48535b69b1a2f9b1ad69584f677dae78c830a482f58b9380c881205f91d8e05f",
+    "apply_preconditions_met": false,
+    "precondition_failures": [],
+    "note": "Recorded from the read-only production inspect of 2026-10-21 (SSM command 43cb1d1f-f589-43b2-9315-7cad80fffb5c, node scripts/deployment-guard/sql95-remove-freedom-claims-bridge-production-apply.mjs --inspect on the SQL53 runner i-0c35557c4e5385406 from main 69dbe9b01 (tarball source-69dbe9b01cbcd8f04847cab248e243105c85f022.tar.gz sha256 1424a8c418324c7c520b385c96dbdca79b869478a076a7802ec7ae2a560ff4b4, transfer run 39615612355), BEGIN READ ONLY ... ROLLBACK, connected as checksops_admin, read_only true). live_definition_sha256 48535b69b1a2f9b1ad69584f677dae78c830a482f58b9380c881205f91d8e05f (not the intended a737e4ecdc114a456aa698b71f41cac7182218995c8e17517dd6162cafc1f9c2: already_applied false; live_matches_expected false because the pin had no recorded pre-state); predecessors_applied true, precondition_failures [], successors_applied []. Not captured from this production inspect: the release_sql_inspect counts dropped_function_dependents, dropped_function_callers and dropped_function_caller_count for the objects SQL 95 drops (staging reported none at its wave 4 re-read, run 39121392809). Both are precondition rules (dropped_functions_have_no_other_dependents, dropped_functions_not_called_by_other_functions), so precondition_failures [] means they passed at inspect time; the one-shot apply re-runs the full --inspect as its step 3 and refuses on any precondition failure. apply_preconditions_met was false at inspect time only because no pre-state was recorded yet (expected_live_definition_sha256 null). This reviewed change copies live_definition_sha256 into expected_live_definition_sha256 and, in the same change, sets authorization, execute true and staging_acceptance. A fresh --inspect immediately before apply (the one-shot's inspect step) must still report this live_definition_sha256 and precondition_failures []; if not, stop. Lambda gate (runbook Apply order step 8): app-services.mjs and the ingest-shared-check.mjs 410 stub are live in production. Production runs the full main API package since the guarded production rebuild run 39588578627 (main 2168be9a1, CodeSha256 sxodWyRpUr0LbETU0YhBayaqYe1VsfNBQi1OoMZpd4U=, still the live CodeSha256 on 2026-10-21 after the config applies; no file under aws/functions changed on main between 2168be9a1 and 69dbe9b01 or f6ab17129). On main, aws/functions/api/ingest-shared-check.mjs (sha256 a4149a0fff4b4770867da317605a35e3167b1f9daf6aafa477d79cffb17c5634) is the retired stub (handleIngestSharedCheck answers 410 route_retired, every helper throws, no SQL) and aws/functions/api/app-services.mjs (sha256 daab02f7199fef3a66b727ed0ac4ebc8315c675ea9b5025f18c1a53b197555f7) no longer names aws_ingest_shared_check or the ingest-shared-check route. Earlier: Pending: the read-only inspect tool exists (scripts/deployment-guard/sql95-remove-freedom-claims-bridge-production-apply.mjs --inspect), but no production inspect has been run for SQL 95 yet. Record its date, SSM command id, source commit, live_definition_sha256, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. If precondition_failures is not [] stop: that needs its own reviewed change."
   },
   "intended_post_state": {
     "fingerprint": "a737e4ecdc114a456aa698b71f41cac7182218995c8e17517dd6162cafc1f9c2",
     "note": "Drops trg_notify_freedom_status_change, notify_freedom_status_change(), list_checks_by_freedom_claim(text, uuid), aws_ingest_shared_check(jsonb), vault_create_bridge_secret(text) and vault_update_bridge_secret(text). The fingerprint is releaseIntendedHash('sql95', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): a737e4ecdc114a456aa698b71f41cac7182218995c8e17517dd6162cafc1f9c2."
   },
   "staging_acceptance": {
-    "ok": false,
-    "reference": null,
-    "basis": "Pending: record the guarded staging SQL executor read-live and apply runs of SQL 95 here in the reviewed change that sets execute true. The staging executor handler and the production tool (scripts/deployment-guard/sql95-remove-freedom-claims-bridge-production-apply.mjs) exist; the staging read-live, apply and acceptance are still pending. Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+    "ok": true,
+    "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39616185934",
+    "basis": "Owner-accepted substitute evidence (the owner's words for the remaining release: \"Everything else should be pushed live no exceptions\"). SQL 95 is already applied in staging (wave 4, owner approved 2026-10-18, pinned at main 23953055e and merged in #1034 (a96b610d8); staging read-live run 39121392809 recorded the staging pre-state 4e8f37453b8d6678ed067b8b24bf6b200c5000700742e62871941b2748ba1588). The guarded staging apply run of that wave is not recorded in the repository (the guarded staging executor runs at main a96b610d8 on 2026-10-18, 39122051823 to 39122531714, are the likely redeploy, applies and read-lives of wave 4, but their logs were not read for this change, so none is cited), so the reference is the guarded staging SQL executor read-live of sql95-remove-freedom-claims-bridge on 2026-10-21 (run 39616185934), which reported the staging live definition equal to the intended a737e4ecdc114a456aa698b71f41cac7182218995c8e17517dd6162cafc1f9c2 = intended_replacement_sha256. The pre-states differ: staging before its apply was 4e8f37453b8d6678ed067b8b24bf6b200c5000700742e62871941b2748ba1588 and production (production_inspect, 2026-10-21) is 48535b69b1a2f9b1ad69584f677dae78c830a482f58b9380c881205f91d8e05f; both reach the intended a737e4ecdc114a456aa698b71f41cac7182218995c8e17517dd6162cafc1f9c2 from the same pinned file bytes (source_sha256), and the production apply refuses unless the live state still equals this pin's expected_live_definition_sha256."
   }
 }

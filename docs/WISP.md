@@ -2,7 +2,7 @@
 
 **Effective date:** 2026-01-01  
 **Owner / Qualified Individual:** [Name, Title] — security@checksops.com  
-**Last reviewed:** 2026-06-13  
+**Last reviewed:** 2026-10-21 (payment providers: Moov and CheckAlt only)  
 **Review cadence:** Annually, or after any material change
 
 This document satisfies the FTC Safeguards Rule (16 CFR Part 314) and Gramm-Leach-Bliley Act (15 U.S.C. §§ 6801–6809) obligations for ChecksOps.
@@ -34,7 +34,9 @@ A written risk assessment is performed at least annually and after any material 
 ### 3.2 Data Inventory and Classification
 - All consumer PII fields enumerated in `src/hooks/useEncryption.tsx` (`PII_FIELDS`)
 - Sensitive fields masked by default via `MaskedField`; reveals logged to `pii_reveal_logs`
-- Bank account numbers stored only via pgsodium-encrypted `stakeholder_accounts`
+- Full bank routing and account numbers entered for Moov are sent to Moov and not kept by ChecksOps; ChecksOps keeps the bank name and last four digits (`payment_provider_methods`, `stakeholder_accounts.provider_last_four`) (`aws/functions/api/providers/onboarding/handlers.mjs`)
+- Moov onboarding PII: EIN and representative date of birth are stored KMS-encrypted; the SSN is sent to Moov and only its last four digits are kept (`aws/functions/api/providers/onboarding/crypto.mjs`, `store.mjs`)
+- CheckAlt deposit account numbers are kept in `checkalt_tenant_accounts` and returned to browsers as the last four digits only (`aws/functions/api/providers/checkalt-account-mask.mjs`)
 
 ### 3.3 Encryption
 - **In transit:** TLS 1.2+ enforced by Supabase Edge and Lovable CDN
@@ -56,17 +58,24 @@ Written addenda and annual security review on file for each:
 | Vendor | Purpose | Data |
 |---|---|---|
 | Supabase / Lovable | Database, auth, storage, edge | All PII |
-| CheckAlt (FinCapture) | Remote check deposit | Check images, amounts, account fragments |
-| Actum Processing | ACH disbursement | Recipient bank info |
+| CheckAlt (FinCapture) | Remote check deposit | Check front/rear images, deposit amounts, tenant deposit account number, depositor name and email |
+| Moov | ACH payments (wallet funding, disbursements, fee collection), bank verification, tenant KYC/KYB | Business profile and EIN; representative name, address, DOB, SSN, contact details; compliance documents; bank routing/account numbers; recipient names and emails; transfer amounts; IP address and user agent at terms acceptance |
 | OpenAI | AI inference | Redacted claim text |
 | Tavily | Web search | Non-PII queries |
 | Resend / Mailgun | Email delivery | Recipient email + content |
+
+Actum Processing, Plaid and QuickBooks were retired in October 2026 and are no longer vendors; their historical tables remain in the database (`docs/ACH_RISK_FRAUD_MONITORING.md` §1).
+
+> **OWNER TO CONFIRM:** Are written addenda and an annual security review on file for Moov and CheckAlt? The other rows (Supabase / Lovable, Resend / Mailgun, OpenAI, Tavily) were not reviewed in this payment-provider update; the backend is moving to AWS (`docs/AWS_MIGRATION.md`), so should AWS be added and those rows revised?
 
 ### 3.7 Logging and Monitoring
 - `audit_logs` — all privileged actions
 - `pii_reveal_logs` — every masked-field reveal
 - `glba_security_events` — admin overrides, exports, retention purges, incidents
 - `check_audit_log`, `check_status_audit`, `deposit_audit_log` — financial workflow
+- `payment_event_log`, `payment_transfers` — Moov account, bank and transfer events; `checkalt_deposits` — CheckAlt deposit attempts and status
+- `financial_stepup_log` — financial two-factor step-ups (server-written only, SQL 97)
+- `aws_provider_webhook_receipts` — every signature-verified Moov and CheckAlt webhook, once per event
 - Logs retained 7 years
 
 ### 3.8 Secure Disposal
@@ -115,12 +124,13 @@ The Qualified Individual delivers a written report to the CEO at least annually 
 
 ## 9. Payments Compliance (ACH / AML / WEB Debit)
 
-ChecksOps originates ACH transactions through Actum Processing under a documented risk-based framework:
+ChecksOps moves ACH payments through Moov and deposits checks through CheckAlt, under a documented risk-based framework:
 
 - **ACH Risk and Fraud Monitoring Policy** — `docs/ACH_RISK_FRAUD_MONITORING.md` (satisfies the NACHA rule effective 2026-06-22).
 - **AML / BSA Program** — `docs/AML_PROGRAM.md` (KYC, monitoring, SAR filing, training, independent review).
-- **WEB Debit Rule compliance** — micro-deposit account validation via the `actum-verify-account` edge function and `micro_deposit_verifications` table. Documented in ACH policy §2.
-- **Non-custodial model** — ChecksOps never holds, pools, or routes funds through a ChecksOps-owned account; this is the basis for the current money-transmitter-license position and must be preserved.
+- **WEB Debit Rule compliance** — Moov bank verification (micro-deposit code, at most 3 attempts) through the `moov-micro-deposit-initiate` / `moov-micro-deposit-confirm` handlers, recorded in `payment_method_verifications`; debits use only Moov's `ach-debit-fund` method for verified banks. The older `micro_deposit_verifications` table is dormant. Documented in ACH policy §2.
+- **Financial two-factor** — wallet funding, disbursements, bank changes and CheckAlt deposit submit/approve need a financial TOTP code once per login, recorded in `financial_stepup_log` (ACH policy §3.2).
+- **Non-custodial model** — ChecksOps never holds, pools, or routes customer funds through a ChecksOps-owned account (only ChecksOps' own fees reach the ChecksOps platform Moov wallet); this is the basis for the current money-transmitter-license position and must be preserved (ACH policy §7).
 
 ---
 
