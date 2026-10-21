@@ -52,3 +52,21 @@ byte streams were recovered from git history (every live SHA-256 matches a blob 
   until then.
 - `public.ocr_persist_extracted_amount` is called by the live (now main) bytes inside a savepoint
   with an `rpc_unavailable` fallback; its definition is not in the repository.
+
+## Full-package rebuild applied (2026-10-21)
+
+The rebuilt ZIP shipped through the guarded rebuild path (#1096 tooling, #1097 and #1098 plan
+sections), with the owner's exact words per environment:
+
+| Environment | Run | CodeSha256 before → after | RevisionId after | State |
+|---|---|---|---|---|
+| staging (`checksops-staging-api`) | [39587414391](https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39587414391), main `4d37692d6` | `nKVEeB8B…` → `sxodWyRp…` | `8503779d-4d63-4448-b8d5-9ad258cd7475` | VERIFIED |
+| production (`checksops-production-prep-api`) | [39588578627](https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39588578627), main `2168be9a1` | `ephceZY0…` → `sxodWyRp…` | `e7d6c9ec-d4f8-4f93-bdff-fb51c3284497` | VERIFIED |
+
+Both environments now run the same package bytes (candidate ZIP `b31a1d5b2469…`), which is the
+deterministic build of `aws/functions/api` on main plus `@aws-sdk/client-kms` 3.1124.0. The 13
+files the overlay path never carried and the 9 main-only modules are now live in production.
+`AWS_MOOV_ONBOARDING_PRODUCTION_ENABLED` is still `false`; turning it on is a separate guarded
+configuration change. The `production-spa` release lock still records the pre-rebuild API revision
+`719ea3ae…` as the API state at that SPA release; the read-only inspect reports
+`revision_matches_release_lock: false` until the next SPA release records the new revision.

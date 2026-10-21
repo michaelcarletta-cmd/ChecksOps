@@ -99,7 +99,10 @@ test('the committed plan loads for both environments', () => {
 test('the production plan section records inspect run 39587583692, the staging acceptance, and every accepted hash is the bytes on main', () => {
   const raw = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'ops/deployment-guard/lambda-rebuild-plan.json'), 'utf8'));
   const production = raw.environments.production;
-  assert.equal(production.status, 'accepted');
+  assert.equal(production.status, 'applied');
+  assert.equal(production.applied.run_id, '39588578627');
+  assert.equal(production.applied.code_sha256_after, 'sxodWyRpUr0LbETU0YhBayaqYe1VsfNBQi1OoMZpd4U=');
+  assert.equal(production.applied.candidate_zip_sha256, production.inspect.candidate_zip_sha256);
   assert.equal(production.inspect.run_id, '39587583692');
   assert.equal(production.inspect.live_code_sha256, 'ephceZY0Zjg7Dscil3D2cdtZzzAWellnHprPDYZ/50w=');
   assert.equal(production.inspect.candidate_zip_sha256, raw.environments.staging.inspect.candidate_zip_sha256);
@@ -128,7 +131,9 @@ test('the production plan section records inspect run 39587583692, the staging a
 test('the staging plan section records inspect run 39585059839 and every accepted hash is the bytes on main', () => {
   const raw = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'ops/deployment-guard/lambda-rebuild-plan.json'), 'utf8'));
   const staging = raw.environments.staging;
-  assert.equal(staging.status, 'accepted');
+  assert.equal(staging.status, 'applied');
+  assert.equal(staging.applied.run_id, '39587414391');
+  assert.equal(staging.applied.code_sha256_after, 'sxodWyRpUr0LbETU0YhBayaqYe1VsfNBQi1OoMZpd4U=');
   assert.equal(staging.inspect.run_id, '39585059839');
   assert.equal(staging.inspect.live_code_sha256, 'nKVEeB8BhnflTfCenx7eUKXBpYoF/dkF6eKZthJ7B1k=');
   assert.equal(staging.inspect.candidate_zip_sha256, 'b31a1d5b246952bd0b6c44d4d188416b26aa61ed55b1f341422d4ea0c6697785');
