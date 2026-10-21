@@ -4,93 +4,169 @@
   "environments": {
     "staging": {
       "function_name": "checksops-staging-api",
-      "status": "applied",
-      "set": {},
-      "unset": {},
-      "inspect": {
-        "run_id": "39592453966",
-        "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39592453966",
-        "main_commit": "41612c462bf51e3d545633ff7783a74ce73ccd7d",
-        "live_code_sha256": "sxodWyRpUr0LbETU0YhBayaqYe1VsfNBQi1OoMZpd4U=",
-        "live_revision_id": "8503779d-4d63-4448-b8d5-9ad258cd7475",
-        "live_configuration_sha256": "dcafc84ec7fd1ffefba04e30b943104bc02515a2c5d46185013753037a14aafd",
-        "live_variable_count": 44,
-        "notes": "Staging holds AWS_MOOV_ONBOARDING_PRODUCTION_ENABLED=\"false\" (template default) and AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED=\"true\". On staging executionAllowed('moov') is false, so onboarding runs against the Moov sandbox and this flag is never consulted (providers/onboarding/flags.mjs onboardingDeployment). The change has no functional effect on staging; it exercises the guarded configuration writer end to end before production and is the staging acceptance for the production change."
-      },
-      "applied": {
-        "run_id": "39594167097",
-        "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39594167097",
-        "main_commit": "d9a90d25a78dfae9429739ffbdb73873ce18d755",
-        "approval_phrase": "APPLY API CONFIGURATION TO STAGING",
-        "change_sha256": "38bd43200cad6a6e1ec9bf98a69eab0b95ba823a421d53d30b5fcbcc2a49cf9c",
-        "revision_id_before": "8503779d-4d63-4448-b8d5-9ad258cd7475",
-        "revision_id_after": "b9c2981e-51f7-432b-a8e2-286e4bdaa9af",
-        "configuration_sha256_before": "dcafc84ec7fd1ffefba04e30b943104bc02515a2c5d46185013753037a14aafd",
-        "configuration_sha256_after": "b5f6446a6f135cd97d54d6e1301bbbb6a424e7272f27af070eb394d5a00aff49",
-        "code_sha256": "sxodWyRpUr0LbETU0YhBayaqYe1VsfNBQi1OoMZpd4U=",
-        "applied_at": "2026-10-21T11:44:49.417Z",
-        "state": "VERIFIED",
-        "smoke": [
-          "/health",
-          "/db-health",
-          "/db-readonly-validate"
-        ],
-        "notes": "Live read-back through the owner's AWS connector after both applies: flag \"true\", 44 variables, RevisionId b9c2981e, CodeSha256 unchanged, LastUpdateStatus Successful.",
-        "applied_change": {
-          "set": {
-            "AWS_MOOV_ONBOARDING_PRODUCTION_ENABLED": {
-              "from": "false",
-              "to": "true"
-            }
-          },
-          "unset": {}
+      "status": "accepted",
+      "set": {
+        "AWS_ENDORSEMENT_RESEND_ENABLED": {
+          "from": null,
+          "to": "true"
+        },
+        "AWS_CHECKALT_STATUS_RECONCILE_ENABLED": {
+          "from": null,
+          "to": "true"
+        },
+        "AWS_MOOV_BILLING_VERIFICATION_POST_ENABLED": {
+          "from": null,
+          "to": "true"
+        },
+        "AWS_MOOV_MONTHLY_BILLING_ENABLED": {
+          "from": null,
+          "to": "true"
         }
-      }
+      },
+      "unset": {
+        "AWS_PLAID_ENABLED": "false",
+        "AWS_ACTUM_ENABLED": "false",
+        "AWS_QUICKBOOKS_ENABLED": "false"
+      },
+      "inspect": {
+        "run_id": "39613470170",
+        "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39613470170",
+        "main_commit": "69dbe9b01cbcd8f04847cab248e243105c85f022",
+        "live_code_sha256": "sxodWyRpUr0LbETU0YhBayaqYe1VsfNBQi1OoMZpd4U=",
+        "live_revision_id": "b9c2981e-51f7-432b-a8e2-286e4bdaa9af",
+        "live_configuration_sha256": "b5f6446a6f135cd97d54d6e1301bbbb6a424e7272f27af070eb394d5a00aff49",
+        "live_variable_count": 44,
+        "notes": "Owner decision 2026-10-21: every tested feature live; Plaid, Actum and QuickBooks removed. Staging carries none of the four set keys (read-only GetFunctionConfiguration through the owner's AWS connector, 2026-10-21), so each from is null; it carries AWS_PLAID_ENABLED, AWS_ACTUM_ENABLED and AWS_QUICKBOOKS_ENABLED as \"false\". Staging is the sandbox runtime (CHECKSOPS_ENV staging): endorsement resend, CheckAlt status refresh, the $1 billing verification and manual monthly collection run against the provider sandboxes. AWS_PLAID_WEBHOOK_SECRET is credential-like, so this writer cannot remove it; it goes with the staging template change that removes the parameter. Absent provider flags read as false (provider-flags.mjs), so the unsets change no behaviour."
+      },
+      "history": [
+        {
+          "inspect": {
+            "run_id": "39592453966",
+            "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39592453966",
+            "main_commit": "41612c462bf51e3d545633ff7783a74ce73ccd7d",
+            "live_code_sha256": "sxodWyRpUr0LbETU0YhBayaqYe1VsfNBQi1OoMZpd4U=",
+            "live_revision_id": "8503779d-4d63-4448-b8d5-9ad258cd7475",
+            "live_configuration_sha256": "dcafc84ec7fd1ffefba04e30b943104bc02515a2c5d46185013753037a14aafd",
+            "live_variable_count": 44,
+            "notes": "Staging holds AWS_MOOV_ONBOARDING_PRODUCTION_ENABLED=\"false\" (template default) and AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED=\"true\". On staging executionAllowed('moov') is false, so onboarding runs against the Moov sandbox and this flag is never consulted (providers/onboarding/flags.mjs onboardingDeployment). The change has no functional effect on staging; it exercises the guarded configuration writer end to end before production and is the staging acceptance for the production change."
+          },
+          "applied": {
+            "run_id": "39594167097",
+            "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39594167097",
+            "main_commit": "d9a90d25a78dfae9429739ffbdb73873ce18d755",
+            "approval_phrase": "APPLY API CONFIGURATION TO STAGING",
+            "change_sha256": "38bd43200cad6a6e1ec9bf98a69eab0b95ba823a421d53d30b5fcbcc2a49cf9c",
+            "revision_id_before": "8503779d-4d63-4448-b8d5-9ad258cd7475",
+            "revision_id_after": "b9c2981e-51f7-432b-a8e2-286e4bdaa9af",
+            "configuration_sha256_before": "dcafc84ec7fd1ffefba04e30b943104bc02515a2c5d46185013753037a14aafd",
+            "configuration_sha256_after": "b5f6446a6f135cd97d54d6e1301bbbb6a424e7272f27af070eb394d5a00aff49",
+            "code_sha256": "sxodWyRpUr0LbETU0YhBayaqYe1VsfNBQi1OoMZpd4U=",
+            "applied_at": "2026-10-21T11:44:49.417Z",
+            "state": "VERIFIED",
+            "smoke": [
+              "/health",
+              "/db-health",
+              "/db-readonly-validate"
+            ],
+            "notes": "Live read-back through the owner's AWS connector after both applies: flag \"true\", 44 variables, RevisionId b9c2981e, CodeSha256 unchanged, LastUpdateStatus Successful.",
+            "applied_change": {
+              "set": {
+                "AWS_MOOV_ONBOARDING_PRODUCTION_ENABLED": {
+                  "from": "false",
+                  "to": "true"
+                }
+              },
+              "unset": {}
+            }
+          }
+        }
+      ]
     },
     "production": {
       "function_name": "checksops-production-prep-api",
-      "status": "applied",
-      "set": {},
-      "unset": {},
-      "inspect": {
-        "run_id": "39592458904",
-        "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39592458904",
-        "main_commit": "41612c462bf51e3d545633ff7783a74ce73ccd7d",
-        "live_code_sha256": "sxodWyRpUr0LbETU0YhBayaqYe1VsfNBQi1OoMZpd4U=",
-        "live_revision_id": "e7d6c9ec-d4f8-4f93-bdff-fb51c3284497",
-        "live_configuration_sha256": "9ecb1363ab976bd40f971777914bec22014e255347414b6fcfdf3e4109a526a3",
-        "live_variable_count": 49,
-        "notes": "Production does not carry the AWS_MOOV_ONBOARDING_PRODUCTION_ENABLED key at all (the live stack predates the template line; the inspect's live variable names list omits it and a read-only GetFunctionConfiguration through the owner's AWS connector on 2026-10-21 confirmed it absent), so from is null. With the key absent, moovOnboardingProductionEnabled() is false and every onboarding function answers production_execution_blocked. Setting it to the string \"true\" opens onboarding only (Compliance & Docs + bank setup, and the onboarding webhook apply); it never opens money movement. The rebuilt package (run 39588578627) carries @aws-sdk/client-kms and the onboarding modules the flag needs."
-      },
-      "applied": {
-        "run_id": "39594352935",
-        "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39594352935",
-        "main_commit": "d9a90d25a78dfae9429739ffbdb73873ce18d755",
-        "approval_phrase": "APPLY API CONFIGURATION TO PRODUCTION",
-        "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39594167097",
-        "change_sha256": "10d88dafc48dc74c2f1c7073c69991d8f6e068ef3a747a7146f455f31e1594de",
-        "revision_id_before": "e7d6c9ec-d4f8-4f93-bdff-fb51c3284497",
-        "revision_id_after": "58733b08-ef0a-4ab9-a47a-30fc15ebeafb",
-        "configuration_sha256_before": "9ecb1363ab976bd40f971777914bec22014e255347414b6fcfdf3e4109a526a3",
-        "configuration_sha256_after": "132e311f0e2d81e40db99726beeb64819a6f7f3fadb9abbb5cf8cde48bf4220f",
-        "code_sha256": "sxodWyRpUr0LbETU0YhBayaqYe1VsfNBQi1OoMZpd4U=",
-        "applied_at": "2026-10-21T11:46:08.214Z",
-        "state": "VERIFIED",
-        "smoke": [
-          "/health",
-          "/db-health"
-        ],
-        "notes": "Live read-back through the owner's AWS connector after the apply: flag \"true\", 50 variables (49 plus the new key), RevisionId 58733b08, CodeSha256 unchanged, LastUpdateStatus Successful. Production Moov onboarding (Compliance & Docs, bank setup, onboarding webhook apply) is now open; money movement is not affected by this flag.",
-        "applied_change": {
-          "set": {
-            "AWS_MOOV_ONBOARDING_PRODUCTION_ENABLED": {
-              "from": null,
-              "to": "true"
-            }
-          },
-          "unset": {}
+      "status": "accepted",
+      "set": {
+        "AWS_ENDORSEMENT_RESEND_ENABLED": {
+          "from": "false",
+          "to": "true"
+        },
+        "AWS_CHECKALT_STATUS_RECONCILE_ENABLED": {
+          "from": "false",
+          "to": "true"
+        },
+        "AWS_MOOV_BILLING_VERIFICATION_POST_ENABLED": {
+          "from": "false",
+          "to": "true"
+        },
+        "AWS_MOOV_MONTHLY_BILLING_PRODUCTION_POST": {
+          "from": "false",
+          "to": "true"
+        },
+        "AWS_TENANT_FEE_INVOICE_EMAIL_ENABLED": {
+          "from": null,
+          "to": "true"
         }
-      }
+      },
+      "unset": {
+        "AWS_PROVIDER_RECIPIENT_BANK_VERIFY_WRITES_ENABLED": "false",
+        "AWS_PROVIDER_RECIPIENT_KYC_TOS_WRITES_ENABLED": "false",
+        "AWS_PLAID_ENABLED": "false",
+        "AWS_ACTUM_ENABLED": "false",
+        "AWS_QUICKBOOKS_ENABLED": "false"
+      },
+      "inspect": {
+        "run_id": "39613475228",
+        "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39613475228",
+        "main_commit": "69dbe9b01cbcd8f04847cab248e243105c85f022",
+        "live_code_sha256": "sxodWyRpUr0LbETU0YhBayaqYe1VsfNBQi1OoMZpd4U=",
+        "live_revision_id": "58733b08-ef0a-4ab9-a47a-30fc15ebeafb",
+        "live_configuration_sha256": "132e311f0e2d81e40db99726beeb64819a6f7f3fadb9abbb5cf8cde48bf4220f",
+        "live_variable_count": 50,
+        "notes": "Owner decision 2026-10-21: every tested feature live; Plaid, Actum and QuickBooks removed. Live values read through the owner's AWS connector on 2026-10-21. Effects: endorsement resend opens (AWS_ENDORSEMENT_RESEND_ALLOW_ANY_RECIPIENT stays \"false\": resends go to the recorded signer only); CheckAlt status refresh opens the status read and reconciliation (no new deposits); the isolated $1 billing verification debit and the platform owner's manual monthly fee collection post real Moov transfers (there is no scheduled pull: runMonthlyBillingScheduler refuses with manual_billing_only since 2026-10-17); fee invoice emails go to the ACH-authorizing member. AWS_PROVIDER_RECIPIENT_BANK_VERIFY_WRITES_ENABLED and AWS_PROVIDER_RECIPIENT_KYC_TOS_WRITES_ENABLED are read by no code on main and are removed; the three provider flags read as false when absent. Kept on purpose (safety guards, not features): AWS_ENDORSEMENT_RESEND_ALLOW_ANY_RECIPIENT, AWS_MOOV_SANDBOX_TRANSFER_POST_ENABLED, AWS_FINANCIAL_SANDBOX_SIMULATION_ENABLED, AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED and AWS_PROVIDER_WEBHOOK_DRY_RUN stay \"false\"."
+      },
+      "history": [
+        {
+          "inspect": {
+            "run_id": "39592458904",
+            "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39592458904",
+            "main_commit": "41612c462bf51e3d545633ff7783a74ce73ccd7d",
+            "live_code_sha256": "sxodWyRpUr0LbETU0YhBayaqYe1VsfNBQi1OoMZpd4U=",
+            "live_revision_id": "e7d6c9ec-d4f8-4f93-bdff-fb51c3284497",
+            "live_configuration_sha256": "9ecb1363ab976bd40f971777914bec22014e255347414b6fcfdf3e4109a526a3",
+            "live_variable_count": 49,
+            "notes": "Production does not carry the AWS_MOOV_ONBOARDING_PRODUCTION_ENABLED key at all (the live stack predates the template line; the inspect's live variable names list omits it and a read-only GetFunctionConfiguration through the owner's AWS connector on 2026-10-21 confirmed it absent), so from is null. With the key absent, moovOnboardingProductionEnabled() is false and every onboarding function answers production_execution_blocked. Setting it to the string \"true\" opens onboarding only (Compliance & Docs + bank setup, and the onboarding webhook apply); it never opens money movement. The rebuilt package (run 39588578627) carries @aws-sdk/client-kms and the onboarding modules the flag needs."
+          },
+          "applied": {
+            "run_id": "39594352935",
+            "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39594352935",
+            "main_commit": "d9a90d25a78dfae9429739ffbdb73873ce18d755",
+            "approval_phrase": "APPLY API CONFIGURATION TO PRODUCTION",
+            "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39594167097",
+            "change_sha256": "10d88dafc48dc74c2f1c7073c69991d8f6e068ef3a747a7146f455f31e1594de",
+            "revision_id_before": "e7d6c9ec-d4f8-4f93-bdff-fb51c3284497",
+            "revision_id_after": "58733b08-ef0a-4ab9-a47a-30fc15ebeafb",
+            "configuration_sha256_before": "9ecb1363ab976bd40f971777914bec22014e255347414b6fcfdf3e4109a526a3",
+            "configuration_sha256_after": "132e311f0e2d81e40db99726beeb64819a6f7f3fadb9abbb5cf8cde48bf4220f",
+            "code_sha256": "sxodWyRpUr0LbETU0YhBayaqYe1VsfNBQi1OoMZpd4U=",
+            "applied_at": "2026-10-21T11:46:08.214Z",
+            "state": "VERIFIED",
+            "smoke": [
+              "/health",
+              "/db-health"
+            ],
+            "notes": "Live read-back through the owner's AWS connector after the apply: flag \"true\", 50 variables (49 plus the new key), RevisionId 58733b08, CodeSha256 unchanged, LastUpdateStatus Successful. Production Moov onboarding (Compliance & Docs, bank setup, onboarding webhook apply) is now open; money movement is not affected by this flag.",
+            "applied_change": {
+              "set": {
+                "AWS_MOOV_ONBOARDING_PRODUCTION_ENABLED": {
+                  "from": null,
+                  "to": "true"
+                }
+              },
+              "unset": {}
+            }
+          }
+        }
+      ]
     }
   }
 }
