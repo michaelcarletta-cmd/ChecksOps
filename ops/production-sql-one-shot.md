@@ -31,7 +31,7 @@ that connects to the database:
 | `sql104` | `scripts/deployment-guard/sql104-payment-idempotency-keys-grant-production-apply.mjs` (`ops/production-sql-104-apply.md`; any time after SQL 91: the `payment_idempotency_keys` table grant SQL 91 omitted, #1062) |
 | `sql105` | `scripts/deployment-guard/sql105-onboarding-payment-table-grants-production-apply.mjs` (`ops/production-sql-105-apply.md`; any time after SQL 91: the table grants SQL 91 omitted on `payment_provider_accounts`, `payment_provider_methods`, `payment_method_verifications` and `payment_event_log`) |
 | `sql106` | `scripts/deployment-guard/sql106-financial-stepup-log-append-only-production-apply.mjs` (`ops/production-sql-106-apply.md`; before SQL 97, `runs_before: ['sql97']`: SQL 97's runbook stops its apply unless its inspect's `other_write_grants` is `[]`, which SQL 106 makes it; no predecessor) |
-| `sql107` | `scripts/deployment-guard/sql107-moov-transfer-webhook-status-production-apply.mjs` (`ops/production-sql-107-apply.md`; any time after SQL 91: the SECURITY DEFINER Moov transfer webhook writer, status / ACH return / NOC of a funding or send leg) |
+| `sql109` | `scripts/deployment-guard/sql109-moov-transfer-webhook-status-production-apply.mjs` (`ops/production-sql-109-apply.md`; any time after SQL 91: the SECURITY DEFINER Moov transfer webhook writer, status / ACH return / NOC of a funding or send leg) |
 
 To add a migration, register its reviewed tool in `ONE_SHOT_TOOLS`
 (`scripts/deployment-guard/lib/production-sql-one-shot.mjs`). An entry names only the tool,
@@ -46,7 +46,7 @@ a migration file touches its pin, not the registry. An entry may add `inspect_re
 
 | flag | |
 |---|---|
-| `--migration <key>` | a registered key (`sql29`, `sql30`, `sql71`, `sql77`…`sql89`, `sql90`…`sql107`) |
+| `--migration <key>` | a registered key (`sql29`, `sql30`, `sql71`, `sql77`…`sql89`, `sql90`…`sql109`) |
 | `--approval-scope <key>` | the migration the owner approved; must equal `--migration` |
 | `--approval-statement "<words>"` or `--approval-statement-b64 <base64>` | the owner's exact words, recorded verbatim. Pass exactly one of the two. Use the base64 form when the words contain quotes or newlines. Must be non-empty. |
 | `--commit <sha>` | the full main commit the tarball was built from |

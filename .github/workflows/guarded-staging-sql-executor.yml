@@ -55,7 +55,7 @@ on:
           - sql104-payment-idempotency-keys-grant
           - sql105-onboarding-payment-table-grants
           - sql106-financial-stepup-log-append-only
-          - sql107-moov-transfer-webhook-status
+          - sql109-moov-transfer-webhook-status
       approved_commit:
         description: "Required for deploy/apply/read-live: exact main commit approved for this run"
         required: false
@@ -164,7 +164,7 @@ jobs:
           node --test aws/tests/release-sql104-executor.test.mjs
           node --test aws/tests/release-sql105-executor.test.mjs
           node --test aws/tests/release-sql106-executor.test.mjs
-          node --test aws/tests/release-sql107-executor.test.mjs
+          node --test aws/tests/release-sql109-executor.test.mjs
           node --test aws/tests/mortgage-executor-commit-outcome.test.mjs
           node --test aws/tests/deployment-guard-kms-receipt.test.mjs
           node --test aws/tests/deployment-guard-signed-receipt.test.mjs

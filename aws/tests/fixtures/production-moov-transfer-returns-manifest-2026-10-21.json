@@ -7,12 +7,12 @@
   "members": {
     "providers/moov-transfer-webhook.mjs": {
       "live_sha256": null,
-      "accepted_sha256": "beaaa008e9411b4629ba8cd79732d978ee943b95b973c2a9102725862e204261",
+      "accepted_sha256": "90772a9202ad5df12de5564fd89f0cd7f0f4a3f2da03f5ecd5b205fdedd2de39",
       "operation": "add"
     },
     "providers/webhooks.mjs": {
       "live_sha256": "479cedf8fc6989bf713d61d452dd9f68eca03e45faa1143a3dd049c3b67bafb0",
-      "accepted_sha256": "a1421623fdf7a46ae2411ff5519f4da46ddf08e0440f3b2f17005d9452deba76",
+      "accepted_sha256": "f7353ee1673364d45ce564dd8b7f102273e9a871c63f8398d03bd7226360d97f",
       "operation": "replace"
     }
   }

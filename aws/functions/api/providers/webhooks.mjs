@@ -212,7 +212,7 @@ export const handleProviderWebhook = async (event, provider, deps = {}) => {
       !stored.duplicate && provider === 'moov'
       && isMoovTransferEvent(eventTypeOf(parsed.payload)) && productionTransferWebhookApplyEnabled()
     ) {
-      // Production: status, ACH return and NOC of a funding or send leg (SQL 107 writer).
+      // Production: status, ACH return and NOC of a funding or send leg (SQL 109 writer).
       // Records only; never moves money.
       applyResult = await applyProductionMoovTransferWebhook(client, parsed.payload, {
         eventId: String(externalEventId),

@@ -58,6 +58,22 @@ const CHANGED_SINCE_APPLIED_REBUILD = {
   'sandbox.mjs': 'changed',
 };
 
+// Files main changed after the second rebuilds were applied (staging run 39633656412 of main fd1e059b5,
+// production run 39636816351 of main e4daedefe, both live at CodeSha256 Bh/f7zaI...), one reviewed
+// entry each. The applied sections keep their accepted hashes as recorded evidence (the bytes those
+// rebuilds put live), so a listed member's accepted hash is no longer main's bytes; each environment
+// takes the new bytes through the overlay plan (where they are members) or a new inspect and plan
+// section.
+const CHANGED_SINCE_SECOND_REBUILD = {
+  // Moov transfer returns (#1116): production transfer.* events go to providers/moov-transfer-webhook.mjs.
+  'providers/webhooks.mjs': 'changed',
+};
+const assertSectionAcceptedIsMain = (apiRoot, name, accepted) => {
+  const onMain = sha256(fs.readFileSync(path.join(apiRoot, name)));
+  if (CHANGED_SINCE_SECOND_REBUILD[name]) assert.notEqual(onMain, accepted, `${name} is listed as changed but main still has the accepted bytes`);
+  else assert.equal(onMain, accepted, name);
+};
+
 const assertAcceptedIsMainUnlessChangedSince = (apiRoot, name, accepted) => {
   const abs = path.join(apiRoot, name);
   const listed = CHANGED_SINCE_APPLIED_REBUILD[name];
@@ -207,7 +223,7 @@ test('the production plan section accepts inspect run 39633975144: the Plaid/Act
   const firstAccepted = (name) => first.members[name]?.accepted_sha256 || first.added[name]
     || staging.history[0].members[name]?.accepted_sha256 || staging.history[0].added[name] || null;
   for (const [name, entry] of Object.entries(section.members)) {
-    assert.equal(sha256(fs.readFileSync(path.join(apiRoot, name))), entry.accepted_sha256, name);
+    assertSectionAcceptedIsMain(apiRoot, name, entry.accepted_sha256);
     const before = firstAccepted(name);
     if (before) assert.equal(entry.live_sha256, before, name);
   }
@@ -288,7 +304,7 @@ test('the staging plan section accepts inspect run 39630308266: the Plaid/Actum/
   const firstAccepted = (name) => first.members[name]?.accepted_sha256 || first.added[name] || null;
   for (const [name, entry] of Object.entries(section.members)) {
     // Accepted is main's bytes; live is what the first rebuild accepted wherever it listed the file.
-    assert.equal(sha256(fs.readFileSync(path.join(apiRoot, name))), entry.accepted_sha256, name);
+    assertSectionAcceptedIsMain(apiRoot, name, entry.accepted_sha256);
     const before = firstAccepted(name);
     if (before) assert.equal(entry.live_sha256, before, name);
   }

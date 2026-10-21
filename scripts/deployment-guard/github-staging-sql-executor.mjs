@@ -113,7 +113,7 @@ export const MIGRATIONS = Object.freeze({
   'sql104-payment-idempotency-keys-grant': RELEASE_2026_10_17_PENDING_SQL_PINS.sql104,
   'sql105-onboarding-payment-table-grants': RELEASE_2026_10_17_PENDING_SQL_PINS.sql105,
   'sql106-financial-stepup-log-append-only': RELEASE_2026_10_17_PENDING_SQL_PINS.sql106,
-  'sql107-moov-transfer-webhook-status': RELEASE_2026_10_17_PENDING_SQL_PINS.sql107,
+  'sql109-moov-transfer-webhook-status': RELEASE_2026_10_17_PENDING_SQL_PINS.sql109,
 });
 
 const LAMBDA_CODE_SHA_RE = /^[A-Za-z0-9+/]{43}=$/;

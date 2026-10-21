@@ -1,5 +1,5 @@
 /**
- * Specs of the release 2026-10-17 SQL (SQL 90 to SQL 107) for the shared engine in
+ * Specs of the release 2026-10-17 SQL (SQL 90 to SQL 109) for the shared engine in
  * release-sql-state.mjs: what each pinned file creates, replaces or drops, the reviewed
  * EXECUTE ACLs, the prerequisites and predecessors, and the PostgreSQL renderings the file
  * leaves (policy expressions, view, column, constraint, index and trigger definitions as
@@ -3516,16 +3516,16 @@ export const RELEASE_SQL_SPECS = deepFreeze({
       "sql97"
     ]
   },
-  // SQL 107: the Moov transfer webhook writer (status, ACH return, NOC of a funding or send leg),
+  // SQL 109: the Moov transfer webhook writer (status, ACH return, NOC of a funding or send leg),
   // one SECURITY DEFINER function gated on SQL 91's aws_moov_webhook_apply_active(). EXECUTE:
   // checksops and the owner only. It writes payment_transfers and payment_event_log under RLS
   // (definer_writes); no table, column, policy or grant changes.
-  sql107: {
-    "key": "sql107",
-    "label": "SQL 107",
-    "choice": "sql107-moov-transfer-webhook-status",
-    "production_pin_rel": "ops/deployment-guard/sql107-moov-transfer-webhook-status-production-apply.json",
-    "script": "sql107-moov-transfer-webhook-status-production-apply",
+  sql109: {
+    "key": "sql109",
+    "label": "SQL 109",
+    "choice": "sql109-moov-transfer-webhook-status",
+    "production_pin_rel": "ops/deployment-guard/sql109-moov-transfer-webhook-status-production-apply.json",
+    "script": "sql109-moov-transfer-webhook-status-production-apply",
     "prerequisites": [
       "public.aws_moov_webhook_apply_active()",
       "public.payment_transfers",

@@ -1,8 +1,8 @@
-# Production SQL 107 (the Moov transfer webhook writer), after SQL 91
+# Production SQL 109 (the Moov transfer webhook writer), after SQL 91
 
 | key | file | what it does |
 |---|---|---|
-| `sql107` | `aws/workflows/sql/107_moov_transfer_webhook_status.sql` (sha256 `4b1be57dd4b5441f665205b5c8d61844c91072eb7adb0e1a6e1aa733f8ebecc1`) | `CREATE OR REPLACE FUNCTION public.aws_moov_webhook_apply_transfer_status(...)`: SECURITY DEFINER, `search_path = public`, EXECUTE `checksops` only (PUBLIC revoked). Writes one `payment_transfers` row (a `wallet_funding`, `send_wallet` or `send_bank` leg) and one `payment_event_log` row per handled Moov transfer event, only while the webhook route has set `request.provider_webhook_apply = '1'` (SQL 91's `aws_moov_webhook_apply_active()`). No table, column, policy, grant or trigger change. |
+| `sql109` | `aws/workflows/sql/109_moov_transfer_webhook_status.sql` (sha256 `228725d8ebb81803e0fd172d92d677640eaefd51c62616c691bf3bb8775662ea`) | `CREATE OR REPLACE FUNCTION public.aws_moov_webhook_apply_transfer_status(...)`: SECURITY DEFINER, `search_path = public`, EXECUTE `checksops` only (PUBLIC revoked). Writes one `payment_transfers` row (a `wallet_funding`, `send_wallet` or `send_bank` leg) and one `payment_event_log` row per handled Moov transfer event, only while the webhook route has set `request.provider_webhook_apply = '1'` (SQL 91's `aws_moov_webhook_apply_active()`). No table, column, policy, grant or trigger change. |
 
 **Why.** Production Moov webhooks are verified and logged (`aws_provider_webhook_receipts`) but
 only onboarding status and tenant fee-collection outcomes were written back. A funding or send
@@ -40,10 +40,10 @@ pre-state; nothing is applied by this change. Neither staging nor production has
 Code-derived on the release engine (`scripts/deployment-guard/lib/release-sql-state.mjs`, spec
 `functions` in `release-sql-specs.mjs`): the function's language, volatility, SECURITY DEFINER,
 result, `search_path`, body hash and EXECUTE ACL, or `absent`. Intended
-`50f85fd12ed0f9d542f4b96cc8eb44bc216054ff6e611f2a3eba4d8dcc5768b7`:
+`925e018f0262556b8c43f872dc13ace4eeb36b411773189dc68592a37efb1982`:
 
 ```
-release sql107 v1
+release sql109 v1
 function public.aws_moov_webhook_apply_transfer_status(text, text, text, text, text, text, text, text, text, text, timestamp with time zone): lang=plpgsql vol=v parallel=u secdef=true result=jsonb config=search_path=public prosrc=9d428fd93b9128395f6a82ec30e8228e038e258fd6ec104d83cfa5036e769884 acl=checksops EXECUTE;owner EXECUTE
 ```
 
@@ -53,7 +53,7 @@ function public.aws_moov_webhook_apply_transfer_status(text, text, text, text, t
 columns the writer uses, role `checksops`); `predecessors_applied` (SQL 91 at its intended
 fingerprint `f8611dcc…`); `definer_can_write_relations` (the login owns `payment_transfers` and
 `payment_event_log` without FORCE ROW LEVEL SECURITY, or is a superuser or BYPASSRLS). The file
-itself refuses with `55000 sql107_prerequisite_missing` / `sql107_definer_cannot_write`.
+itself refuses with `55000 sql109_prerequisite_missing` / `sql109_definer_cannot_write`.
 
 Post-conditions: the intended fingerprint; everything else in schema `public` (and the functions
 of `auth`) unchanged. The tools roll back otherwise.
@@ -68,23 +68,23 @@ No later migration replaces the function.
 
 ## Steps
 
-1. Staging: the staging executor must carry SQL 107 first (executor package refresh through
+1. Staging: the staging executor must carry SQL 109 first (executor package refresh through
    `sql-executor-ensure.mjs` / the guarded staging executor `deploy` mode, its own reviewed run).
-   Then `read-live` for `sql107-moov-transfer-webhook-status`. Expected `already_applied` false and
+   Then `read-live` for `sql109-moov-transfer-webhook-status`. Expected `already_applied` false and
    `precondition_failures` `[]`. Record `LIVE_DEFINITION_SHA256` in the staging pin
    (`expected_live_definition_sha256`, owner-approved `authorization`, `execute: true`) in a
    reviewed change, `apply` with the owner's approval of that run, then `read-live` again
    (expected `already_applied` true). Staging's webhook route runs the sandbox apply path and does
    not call this function; the writer is covered on PostgreSQL 16 by
-   `aws/tests/sql107-moov-transfer-webhook-status-pg.test.mjs`.
+   `aws/tests/sql109-moov-transfer-webhook-status-pg.test.mjs`.
 2. Production: run the read-only inspect on the runner
-   (`node scripts/deployment-guard/sql107-moov-transfer-webhook-status-production-apply.mjs --inspect`,
+   (`node scripts/deployment-guard/sql109-moov-transfer-webhook-status-production-apply.mjs --inspect`,
    or the one-shot's `--phase inspect`); record `production_inspect` and copy
    `live_definition_sha256` into `expected_live_definition_sha256`; record the staging runs in
    `staging_acceptance`; set an owner-approved `authorization` and `execute: true`, in one
    reviewed change. Expected: `already_applied` false, `precondition_failures` [].
 3. Apply with the one-shot (`ops/production-sql-one-shot.md`): `production-sql-one-shot.mjs
-   --migration sql107 --approval-scope sql107 … --phase inspect`, then the owner-named
+   --migration sql109 --approval-scope sql109 … --phase inspect`, then the owner-named
    `--phase apply`.
-4. Record the apply and retire the pin (`execute: false`); record SQL 107 verified live in the
+4. Record the apply and retire the pin (`execute: false`); record SQL 109 verified live in the
    overlay plan's `sql_prerequisites` before overlaying the API members.

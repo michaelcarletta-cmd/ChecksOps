@@ -1,5 +1,5 @@
 /**
- * How a bounced Moov transfer reads in the UI. The webhook write-back (SQL 107,
+ * How a bounced Moov transfer reads in the UI. The webhook write-back (SQL 109,
  * aws/functions/api/providers/moov-transfer-webhook.mjs) sets the ChecksOps status to failed,
  * returned or canceled and records the ACH return or NOC in provider_metadata; Moov's own
  * status (provider_status) can still read "completed" after a return, so a bounced status wins.

@@ -1,5 +1,5 @@
 /**
- * payment_transfers / payment_event_log for the SQL 107 PostgreSQL 16 tests, as
+ * payment_transfers / payment_event_log for the SQL 109 PostgreSQL 16 tests, as
  * supabase/migrations/20260727224957_*.sql created them (plus the leg_role / wallet_id columns
  * later migrations added), with their grants and the aws/rls policies; the release fixture's
  * minimal payment_event_log is replaced. Run as the superuser before ownership

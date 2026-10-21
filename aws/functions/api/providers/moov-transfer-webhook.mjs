@@ -7,7 +7,7 @@
  * The SPA reads payment_transfers, so WalletOps and the check's payment list show the bounce,
  * and a returned or failed send no longer counts as paid on the check.
  *
- * The write is one call to public.aws_moov_webhook_apply_transfer_status (SQL 107), a
+ * The write is one call to public.aws_moov_webhook_apply_transfer_status (SQL 109), a
  * SECURITY DEFINER writer gated on request.provider_webhook_apply = '1'. It finds the row by
  * provider_transfer_id in the given environment (the tenant is the row's own), touches only
  * wallet_funding / send_wallet / send_bank legs, never moves a status backwards (a late
@@ -22,8 +22,8 @@
  * display and logged as moov_transfer_returned for operators).
  *
  * Runs in production when the existing production switches are on (AWS_PROVIDER_EXECUTION_ENABLED
- * and AWS_MOOV_ENABLED, webhook dry-run off, sandbox execution off) and SQL 107 is applied.
- * Until SQL 107 is applied the call fails inside a savepoint and the webhook is still
+ * and AWS_MOOV_ENABLED, webhook dry-run off, sandbox execution off) and SQL 109 is applied.
+ * Until SQL 109 is applied the call fails inside a savepoint and the webhook is still
  * accepted and logged, exactly as before.
  */
 import { executionAllowed, providerWebhookDryRun } from '../provider-flags.mjs';
@@ -150,7 +150,7 @@ export function interpretMoovTransferEvent(payload = {}) {
 
 /**
  * Apply one verified, not-yet-seen transfer.* webhook to a production transfer. Runs inside
- * the webhook transaction; the writer call is isolated in a savepoint so a missing SQL 107
+ * the webhook transaction; the writer call is isolated in a savepoint so a missing SQL 109
  * (or any refusal) never aborts the receipt.
  */
 export async function applyProductionMoovTransferWebhook(client, payload, { eventId, environment = 'production', log = console } = {}) {

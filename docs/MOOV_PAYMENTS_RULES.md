@@ -64,7 +64,7 @@ retried automatically. Each click is one request, so a retry never pays twice.
 Sends use the same two-factor confirmation as funding (once per login) and are
 held while `AWS_MOOV_SEND_POST_ENABLED` is off (nothing is recorded or sent).
 
-**When a payment bounces (built; needs SQL 107 in production).** Moov tells ChecksOps
+**When a payment bounces (built; needs SQL 109 in production).** Moov tells ChecksOps
 when a funding or a send later fails, is returned by the bank (an ACH return such as R01
 insufficient funds or R10 not authorized) or is reversed. The webhook marks that transfer
 `failed` or `returned`, records the return code and reason, and flags it for follow-up;

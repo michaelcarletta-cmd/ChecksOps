@@ -1,7 +1,7 @@
 /**
  * Production Moov transfer status write-back (aws/functions/api/providers/moov-transfer-webhook.mjs
  * and its dispatch in providers/webhooks.mjs). Fake database clients only; no provider call.
- * The real SQL 107 writer on PostgreSQL 16 is aws/tests/sql107-moov-transfer-webhook-status-pg.test.mjs.
+ * The real SQL 109 writer on PostgreSQL 16 is aws/tests/sql109-moov-transfer-webhook-status-pg.test.mjs.
  */
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
@@ -205,7 +205,7 @@ test('apply: idempotency and out-of-order outcomes are reported, not re-logged; 
   assert.deepEqual(unknown.mutations, []);
 });
 
-test('apply: a missing or refusing writer (SQL 107 not applied) rolls back to the savepoint, resets the GUC and never throws', async () => {
+test('apply: a missing or refusing writer (SQL 109 not applied) rolls back to the savepoint, resets the GUC and never throws', async () => {
   const log = silent();
   const error = Object.assign(new Error('function public.aws_moov_webhook_apply_transfer_status(...) does not exist'), { code: '42883' });
   const client = fakeClient({ writerError: error });

@@ -170,7 +170,7 @@ test('pin: the release pin shape, execute-authorized on substitute staging evide
   assert.match(cli, /runReleaseProductionTool\(\s*\{ key: 'sql106'/);
   const rows = JSON.stringify(readJson('ops/deployment-guard/bypass-inventory.json'));
   assert.match(rows, /"path":"scripts\/deployment-guard\/sql106-financial-stepup-log-append-only-production-apply\.mjs","classification":"GUARDED","capabilities":\["sql106-production-apply"\]/);
-  assert.match(rows, /sql104, sql105, sql106, sql107\)/);
+  assert.match(rows, /sql104, sql105, sql106, sql109\)/);
   const scripts = readJson('package.json').scripts;
   const workflow = fs.readFileSync(path.join(ROOT, '.github/workflows/deployment-guard.yml'), 'utf8');
   for (const name of ['aws/tests/release-sql106-executor.test.mjs', 'aws/tests/release-sql106-production-apply.test.mjs']) {
