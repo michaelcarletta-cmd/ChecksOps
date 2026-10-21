@@ -32,11 +32,13 @@ const SHA = 'a'.repeat(40);
 const NOW = Date.parse('2026-10-21T12:00:00.000Z');
 const sha256 = (buf) => createHash('sha256').update(buf).digest('hex');
 
-// Both plan sections are applied: their accepted hashes are the bytes the 2026-10-21 rebuilds put live
-// (sha256 at the inspect's main_commit) and stay as recorded evidence. Files main changed after those
-// rebuilds are listed here, one reviewed entry each; the next rebuild accepts them from a new inspect
-// and a new plan section (ops/production-lambda-rebuild.md). Every other accepted hash must still be
-// the bytes on main. A listed path that no longer exists must be marked deleted.
+// The first 2026-10-21 rebuilds are applied: the history[0] of each section records them, and their
+// accepted hashes are the bytes those rebuilds put live (sha256 at the inspect's main_commit) and stay
+// as recorded evidence. Files main changed after those rebuilds are listed here, one reviewed entry
+// each; every other accepted hash must still be the bytes on main. A listed path that no longer exists
+// must be marked deleted. The staging section accepts every one of them from inspect 39630308266 and
+// the production section from inspect 39633975144 (members or removed); see
+// ops/production-lambda-rebuild.md.
 const CHANGED_SINCE_APPLIED_REBUILD = {
   // Plaid/Actum/QuickBooks removal.
   'allowed-tables.json': 'changed',
@@ -135,18 +137,19 @@ test('the committed plan loads for both environments', () => {
   }
 });
 
-test('the production plan section records inspect run 39587583692, the staging acceptance, and every accepted hash is the bytes on main or a listed later change', () => {
+test('the production history keeps the first rebuild (inspect 39587583692, apply 39588578627) and every accepted hash is the bytes on main or a listed later change', () => {
   const raw = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'ops/deployment-guard/lambda-rebuild-plan.json'), 'utf8'));
-  const production = raw.environments.production;
+  assert.equal(raw.environments.production.history.length, 1);
+  const production = raw.environments.production.history[0];
   assert.equal(production.status, 'applied');
   assert.equal(production.applied.run_id, '39588578627');
   assert.equal(production.applied.code_sha256_after, 'sxodWyRpUr0LbETU0YhBayaqYe1VsfNBQi1OoMZpd4U=');
   assert.equal(production.applied.candidate_zip_sha256, production.inspect.candidate_zip_sha256);
   assert.equal(production.inspect.run_id, '39587583692');
   assert.equal(production.inspect.live_code_sha256, 'ephceZY0Zjg7Dscil3D2cdtZzzAWellnHprPDYZ/50w=');
-  assert.equal(production.inspect.candidate_zip_sha256, raw.environments.staging.inspect.candidate_zip_sha256);
+  assert.equal(production.inspect.candidate_zip_sha256, raw.environments.staging.history[0].inspect.candidate_zip_sha256);
   assert.equal(production.inspect.staging_acceptance, 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39587414391');
-  const section = loadRebuildPlan(REPO_ROOT, 'production');
+  const section = production;
   assert.equal(Object.keys(section.members).length, 13);
   assert.equal(Object.keys(section.added).length, 9);
   assert.deepEqual(section.removed, {});
@@ -162,39 +165,146 @@ test('the production plan section records inspect run 39587583692, the staging a
   const candidate = {};
   for (const [name, entry] of Object.entries(section.members)) { live[name] = entry.live_sha256; candidate[name] = entry.accepted_sha256; }
   for (const [name, hash] of Object.entries(section.added)) candidate[name] = hash;
-  const result = evaluateRebuild({ plan: raw, environment: 'production', liveMemberHashes: live, candidateMemberHashes: candidate, liveInventory: {}, candidateInventory: { 'node_modules/@aws-sdk/client-kms': '3.1124.0' } });
+  // The recorded section still made the first inspected live package READY, not BLOCKED.
+  const plan = { environments: { production: { function_name: raw.environments.production.function_name, ...production } } };
+  const result = evaluateRebuild({ plan, environment: 'production', liveMemberHashes: live, candidateMemberHashes: candidate, liveInventory: {}, candidateInventory: { 'node_modules/@aws-sdk/client-kms': '3.1124.0' } });
   assert.equal(result.ok, true);
   assert.equal(result.details.state, 'READY');
 });
 
-test('the staging plan section records inspect run 39585059839 and every accepted hash is the bytes on main or a listed later change', () => {
+test('the production plan section accepts inspect run 39633975144: the Plaid/Actum/QuickBooks removal, the same 19 changed and 4 removed as staging', () => {
   const raw = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'ops/deployment-guard/lambda-rebuild-plan.json'), 'utf8'));
+  const production = raw.environments.production;
   const staging = raw.environments.staging;
-  assert.equal(staging.status, 'applied');
-  assert.equal(staging.applied.run_id, '39587414391');
-  assert.equal(staging.applied.code_sha256_after, 'sxodWyRpUr0LbETU0YhBayaqYe1VsfNBQi1OoMZpd4U=');
-  assert.equal(staging.inspect.run_id, '39585059839');
-  assert.equal(staging.inspect.live_code_sha256, 'nKVEeB8BhnflTfCenx7eUKXBpYoF/dkF6eKZthJ7B1k=');
-  assert.equal(staging.inspect.candidate_zip_sha256, 'b31a1d5b246952bd0b6c44d4d188416b26aa61ed55b1f341422d4ea0c6697785');
-  const section = loadRebuildPlan(REPO_ROOT, 'staging');
-  assert.equal(Object.keys(section.members).length, 122);
-  assert.equal(Object.keys(section.added).length, 4);
-  assert.deepEqual(section.removed, {});
+  const first = production.history[0];
+  assert.equal(production.status, 'accepted');
+  assert.equal(production.applied, undefined);
+  assert.equal(production.inspect.run_id, '39633975144');
+  assert.equal(production.inspect.main_commit, 'fd1e059b573ce16dfe51c07c37827aad2fb9bd04');
+  assert.equal(production.inspect.live_code_sha256, 'sxodWyRpUr0LbETU0YhBayaqYe1VsfNBQi1OoMZpd4U=');
+  assert.equal(production.inspect.live_revision_id, '6cb46f3a-e10d-4645-b18d-6e5b156d65d9');
+  assert.equal(production.inspect.candidate_zip_sha256, '061fdfef36881460c4080d634d680c791ff6a9130e51a0014563f59506d110e7');
+  assert.equal(production.inspect.staging_acceptance, 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39633656412');
+  // The package the rebuild starts from is the one the first rebuild left live, and the candidate is
+  // the ZIP staging accepted.
+  assert.equal(production.inspect.live_code_sha256, first.applied.code_sha256_after);
+  assert.equal(production.inspect.candidate_zip_sha256, staging.inspect.candidate_zip_sha256);
+  const section = loadRebuildPlan(REPO_ROOT, 'production');
+  assert.equal(Object.keys(section.members).length, 19);
+  assert.deepEqual(section.added, {});
+  assert.deepEqual(Object.keys(section.removed).sort(), ['providers/actum.mjs', 'providers/plaid-sandbox.mjs', 'providers/plaid.mjs', 'providers/quickbooks.mjs']);
   assert.deepEqual(section.dependencies, { added: {}, removed: {}, changed: {} });
+  assert.equal(production.inspect.changed, 19);
+  assert.equal(production.inspect.added, 0);
+  assert.equal(production.inspect.removed, 4);
+  // Production and staging ran the same package after the first rebuild, so the differences match.
+  assert.deepEqual(section.members, staging.members);
+  assert.deepEqual(section.removed, staging.removed);
   const apiRoot = path.join(REPO_ROOT, 'aws/functions/api');
+  // Both first rebuilds put the same ZIP live; a file either section listed has those accepted bytes.
+  const firstAccepted = (name) => first.members[name]?.accepted_sha256 || first.added[name]
+    || staging.history[0].members[name]?.accepted_sha256 || staging.history[0].added[name] || null;
   for (const [name, entry] of Object.entries(section.members)) {
-    assertAcceptedIsMainUnlessChangedSince(apiRoot, name, entry.accepted_sha256);
+    assert.equal(sha256(fs.readFileSync(path.join(apiRoot, name))), entry.accepted_sha256, name);
+    const before = firstAccepted(name);
+    if (before) assert.equal(entry.live_sha256, before, name);
   }
-  for (const [name, hash] of Object.entries(section.added)) {
-    assertAcceptedIsMainUnlessChangedSince(apiRoot, name, hash);
+  for (const [name, hash] of Object.entries(section.removed)) {
+    assert.equal(fs.existsSync(path.join(apiRoot, name)), false, `${name} is listed as removed but main still has it`);
+    assert.equal(hash, firstAccepted(name), name);
+  }
+  for (const [name, kind] of Object.entries(CHANGED_SINCE_APPLIED_REBUILD)) {
+    if (kind === 'deleted') assert.ok(section.removed[name], `${name} is deleted on main but not listed as removed`);
+    else assert.ok(section.members[name], `${name} changed on main but is not a production member`);
   }
   // The plan as committed makes the inspected live package READY, not BLOCKED.
   const live = {};
   const candidate = {};
   for (const [name, entry] of Object.entries(section.members)) { live[name] = entry.live_sha256; candidate[name] = entry.accepted_sha256; }
-  for (const [name, hash] of Object.entries(section.added)) candidate[name] = hash;
-  const result = evaluateRebuild({ plan: raw, environment: 'staging', liveMemberHashes: live, candidateMemberHashes: candidate, liveInventory: {}, candidateInventory: {} });
+  for (const [name, hash] of Object.entries(section.removed)) live[name] = hash;
+  const result = evaluateRebuild({ plan: raw, environment: 'production', liveMemberHashes: live, candidateMemberHashes: candidate, liveInventory: {}, candidateInventory: {} });
+  assert.equal(result.ok, true, result.message);
+  assert.equal(result.details.state, 'READY');
+});
+
+test('the staging history keeps the first rebuild (inspect 39585059839, apply 39587414391) and every accepted hash is the bytes on main or a listed later change', () => {
+  const raw = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'ops/deployment-guard/lambda-rebuild-plan.json'), 'utf8'));
+  const staging = raw.environments.staging;
+  assert.equal(staging.history.length, 1);
+  const first = staging.history[0];
+  assert.equal(first.status, 'applied');
+  assert.equal(first.applied.run_id, '39587414391');
+  assert.equal(first.applied.code_sha256_after, 'sxodWyRpUr0LbETU0YhBayaqYe1VsfNBQi1OoMZpd4U=');
+  assert.equal(first.inspect.run_id, '39585059839');
+  assert.equal(first.inspect.live_code_sha256, 'nKVEeB8BhnflTfCenx7eUKXBpYoF/dkF6eKZthJ7B1k=');
+  assert.equal(first.inspect.candidate_zip_sha256, 'b31a1d5b246952bd0b6c44d4d188416b26aa61ed55b1f341422d4ea0c6697785');
+  assert.equal(Object.keys(first.members).length, 122);
+  assert.equal(Object.keys(first.added).length, 4);
+  assert.deepEqual(first.removed, {});
+  assert.deepEqual(first.dependencies, { added: {}, removed: {}, changed: {} });
+  const apiRoot = path.join(REPO_ROOT, 'aws/functions/api');
+  for (const [name, entry] of Object.entries(first.members)) {
+    assertAcceptedIsMainUnlessChangedSince(apiRoot, name, entry.accepted_sha256);
+  }
+  for (const [name, hash] of Object.entries(first.added)) {
+    assertAcceptedIsMainUnlessChangedSince(apiRoot, name, hash);
+  }
+  // The recorded section still made the first inspected live package READY, not BLOCKED.
+  const plan = { environments: { staging: { function_name: staging.function_name, ...first } } };
+  const live = {};
+  const candidate = {};
+  for (const [name, entry] of Object.entries(first.members)) { live[name] = entry.live_sha256; candidate[name] = entry.accepted_sha256; }
+  for (const [name, hash] of Object.entries(first.added)) candidate[name] = hash;
+  const result = evaluateRebuild({ plan, environment: 'staging', liveMemberHashes: live, candidateMemberHashes: candidate, liveInventory: {}, candidateInventory: {} });
   assert.equal(result.ok, true);
+  assert.equal(result.details.state, 'READY');
+});
+
+test('the staging plan section accepts inspect run 39630308266: the Plaid/Actum/QuickBooks removal (19 changed, 0 added, 4 removed)', () => {
+  const raw = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'ops/deployment-guard/lambda-rebuild-plan.json'), 'utf8'));
+  const staging = raw.environments.staging;
+  const first = staging.history[0];
+  assert.equal(staging.status, 'accepted');
+  assert.equal(staging.applied, undefined);
+  assert.equal(staging.inspect.run_id, '39630308266');
+  assert.equal(staging.inspect.main_commit, '333b54576f3405cdbe5de6bd1503c9be8e7a4b5e');
+  assert.equal(staging.inspect.live_code_sha256, 'sxodWyRpUr0LbETU0YhBayaqYe1VsfNBQi1OoMZpd4U=');
+  assert.equal(staging.inspect.live_revision_id, 'b2e6a162-79ad-4c8e-9177-6f33080a9ded');
+  assert.equal(staging.inspect.candidate_zip_sha256, '061fdfef36881460c4080d634d680c791ff6a9130e51a0014563f59506d110e7');
+  // The package the rebuild starts from is the one the first rebuild left live.
+  assert.equal(staging.inspect.live_code_sha256, first.applied.code_sha256_after);
+  const section = loadRebuildPlan(REPO_ROOT, 'staging');
+  assert.equal(Object.keys(section.members).length, 19);
+  assert.deepEqual(section.added, {});
+  assert.deepEqual(Object.keys(section.removed).sort(), ['providers/actum.mjs', 'providers/plaid-sandbox.mjs', 'providers/plaid.mjs', 'providers/quickbooks.mjs']);
+  assert.deepEqual(section.dependencies, { added: {}, removed: {}, changed: {} });
+  assert.equal(staging.inspect.changed, 19);
+  assert.equal(staging.inspect.added, 0);
+  assert.equal(staging.inspect.removed, 4);
+  const apiRoot = path.join(REPO_ROOT, 'aws/functions/api');
+  const firstAccepted = (name) => first.members[name]?.accepted_sha256 || first.added[name] || null;
+  for (const [name, entry] of Object.entries(section.members)) {
+    // Accepted is main's bytes; live is what the first rebuild accepted wherever it listed the file.
+    assert.equal(sha256(fs.readFileSync(path.join(apiRoot, name))), entry.accepted_sha256, name);
+    const before = firstAccepted(name);
+    if (before) assert.equal(entry.live_sha256, before, name);
+  }
+  for (const [name, hash] of Object.entries(section.removed)) {
+    assert.equal(fs.existsSync(path.join(apiRoot, name)), false, `${name} is listed as removed but main still has it`);
+    assert.equal(hash, firstAccepted(name), name);
+  }
+  // Every reviewed post-rebuild change is now covered by the section.
+  for (const [name, kind] of Object.entries(CHANGED_SINCE_APPLIED_REBUILD)) {
+    if (kind === 'deleted') assert.ok(section.removed[name], `${name} is deleted on main but not listed as removed`);
+    else assert.ok(section.members[name], `${name} changed on main but is not a staging member`);
+  }
+  // The plan as committed makes the inspected live package READY, not BLOCKED.
+  const live = {};
+  const candidate = {};
+  for (const [name, entry] of Object.entries(section.members)) { live[name] = entry.live_sha256; candidate[name] = entry.accepted_sha256; }
+  for (const [name, hash] of Object.entries(section.removed)) live[name] = hash;
+  const result = evaluateRebuild({ plan: raw, environment: 'staging', liveMemberHashes: live, candidateMemberHashes: candidate, liveInventory: {}, candidateInventory: {} });
+  assert.equal(result.ok, true, result.message);
   assert.equal(result.details.state, 'READY');
 });
 

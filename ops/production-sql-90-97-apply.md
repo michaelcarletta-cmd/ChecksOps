@@ -36,15 +36,20 @@ run `39082817752` from the same pre-state). SQL 102 was applied to production on
 the owner-approved pin change of 2026-10-19 (#1078, "approve the SQL 102 pin": the read-only
 production inspect, SSM `3ff30ee9-031d-4122-9ee1-370a2645cbca` from main `96fb17821`, live
 `d3b2cd30…`, and its guarded staging apply run `39162625974` from the same pre-state).
-SQL 95's, SQL 97's and SQL 99's production pins are `execute: true` (owner approved 2026-10-21,
-"Everything else should be pushed live no exceptions"): the read-only production inspect of
-2026-10-21 (SSM `43cb1d1f-f589-43b2-9315-7cad80fffb5c` from main `69dbe9b01`, precondition_failures
-[] for each) is recorded as each pre-state (SQL 95 `48535b69…`, SQL 97 `56b1f631…`, SQL 99
-`4d174e86…`). SQL 99's staging acceptance is its wave 1 apply run `39080577323` from the same
-pre-state; SQL 95's and SQL 97's are the guarded staging read-live runs of 2026-10-21
-(`39616185934`, `39618586101`, live = intended), owner-accepted substitute evidence from a different
-pre-state (their wave 4 apply runs are not recorded). Each apply still needs the owner's run-time
-approval, SQL 97 before SQL 95 (steps 7 and 8 below).
+SQL 95's, SQL 97's and SQL 99's production pins were made `execute: true` by the owner-approved
+pin change of 2026-10-21 (#1112, "Everything else should be pushed live no exceptions"): the
+read-only production inspect of 2026-10-21 (SSM `43cb1d1f-f589-43b2-9315-7cad80fffb5c` from main
+`69dbe9b01`, precondition_failures [] for each) is recorded as each pre-state (SQL 95 `48535b69…`,
+SQL 97 `56b1f631…`, SQL 99 `4d174e86…`). SQL 99's staging acceptance is its wave 1 apply run
+`39080577323` from the same pre-state; SQL 95's and SQL 97's are the guarded staging read-live runs
+of 2026-10-21 (`39616185934`, `39618586101`, live = intended), owner-accepted substitute evidence
+from a different pre-state (their wave 4 apply runs are not recorded). SQL 95 and SQL 99 were
+applied to production on 2026-10-21 (see "Production applies of SQL 95 and SQL 99" below) and their
+pins are retired (`execute: false`). SQL 97 was **not** applied: its pre-apply read-only inspect
+reported `other_write_grants` on `financial_stepup_log`, so its one-shot was not run (see "SQL 97 not
+applied" below). Its pin stays `execute: true` and unchanged; SQL 106 (revoke UPDATE/DELETE/TRUNCATE)
+is to be applied first, and any SQL 97 apply still needs a fresh read-only inspect and the owner's
+own run-time approval for that run.
 Every other
 production pin is `execute: false`, `authorization: "pending"`, with no recorded pre-state and
 no staging acceptance, so its production apply refuses before connecting; staging pins are authorized only in reviewed waves ("Staging apply waves"). SQL 100
@@ -125,6 +130,9 @@ production pin before the matching production step (deltas report
    both files set `app.stepup_writer`. Not captured from the production inspect:
    `table_privileges[0].other_write_grants` (informational, not a precondition): read it in the
    one-shot's inspect step before the apply and stop if it is not `[]`.
+   Not applied on 2026-10-21: the pre-apply read-only inspect reported `other_write_grants`
+   `["checksops DELETE", "checksops UPDATE"]`, so it stopped by this rule (see "SQL 97 not applied"
+   below). The pin keeps `execute: true`; SQL 106 comes first.
 8. **SQL 95** only after `app-services.mjs` and the `ingest-shared-check.mjs` 410 stub are live
    (plan step 8); it drops SQL 70's `aws_ingest_shared_check`.
    Production pin: `execute: true` (owner approved 2026-10-21). Gate evidence recorded in the pin:
@@ -132,6 +140,10 @@ production pin before the matching production step (deltas report
    `app-services.mjs` no longer calls `aws_ingest_shared_check`. The dropped-function dependents
    and callers counts were not captured; both are precondition rules, and precondition_failures
    was `[]`.
+   Applied to production on 2026-10-21 (see "Production applies of SQL 95 and SQL 99" below) and
+   its pin is retired. It went **before** SQL 97, not after it: SQL 97 stopped at its inspect, and
+   SQL 97 is not a predecessor of SQL 95 (`predecessors: []`; the order came from the two Lambda
+   gates, both live since run `39588578627`).
 9. **SQL 98** after SQL 96 (SQL 98 requires SQL 96's pricing setter and replaces its column
    guard), **before** `tenant-billing-engine.mjs`, `tenant-billing-handlers.mjs`,
    `workflow-rpc.mjs` and `providers.mjs` (`ops/fee-collection-deltas.md` sections 2 and 4: the
@@ -150,8 +162,9 @@ production pin before the matching production step (deltas report
 10. **SQL 99** after SQL 90, as the login that owns `check_messages` (no FORCE RLS) and
    `mortgage_handling_requests`; before or with the SPA build that stops the Mortgage Desk
    client posts (`MortgageOpsQueue.tsx`). No Lambda dependency.
-   Production pin: `execute: true` (owner approved 2026-10-21): production live `4d174e86…`, the
-   same pre-state staging applied from (run `39080577323`).
+   Production pin: owner approved 2026-10-21 (#1112): production live `4d174e86…`, the same
+   pre-state staging applied from (run `39080577323`). Applied to production on 2026-10-21 (see
+   "Production applies of SQL 95 and SQL 99" below) and its pin is retired.
 11. **SQL 100** after SQL 90 (and 12 / 24 / SQL 50, already live). Staging only: on production it
    is a strict no-op and is recorded by the read-only inspect (below). In staging it brings
    the Mortgage Desk access to production's.
@@ -617,3 +630,53 @@ kept. The date is the runner's UTC date (the evening of 2026-10-19, US Eastern).
 inspect was run. The pin is `execute: false` again; a re-apply needs a new reviewed pin change, and
 SQL 98 must never be re-run now. `tenant-billing-handlers.mjs` stays held until the plan records
 SQL 102 verified live in its own reviewed change.
+
+## Production applies of SQL 95 and SQL 99 (2026-10-21)
+
+One owner approval statement, passed verbatim (base64, `--approval-statement-b64`) to each run:
+"apply SQL 97, 95 and 99 in production" (the one-shot cannot verify who said it; it covered these
+runs only). Both runs used `production-sql-one-shot.mjs` on `i-0c35557c4e5385406`, operator
+`michaelcarletta-cmd`, from main `dcd865256` (tarball
+`source-dcd86525690e0732691ab7bf0723dc25167d89e9.tar.gz`, sha256 `2c0c0fac…`, transfer run
+`39624539833`, `sql53-temporary-transfer.yml` dispatched on main at 2026-10-21T15:19:15Z). In each,
+every step was ok (pin, source, inspect, contracts, manifest, source-recheck-before-preflight,
+preflight, evaluate, source-recheck-before-apply, apply (applied), post-apply-inspect); contracts
+claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43; unrelated catalog
+`8a56ccd6…` (relations 890, columns 3535, constraints 2233, policies 404, functions 1310, indexes
+654, triggers 178, views 25, types 18, roles 29, role memberships 15). Start and finish times were
+not captured.
+
+- **SQL 95:** SSM `2f1530c2-0cf9-42a9-8fef-685b5e83589a`, run_id
+  `3b4fe182-94bd-494f-b411-af75f4f3ce92`, workstream
+  `prod-sql95-remove-freedom-claims-bridge-20261021`, one_use_id
+  `sql95-prod-d04849eb-31b3-4657-a622-d0ffa030207d` (spent), migration source `0cf0dafd…` (== pin);
+  pre-apply inspect live `48535b69…` (live_matches_expected true, already_applied false,
+  precondition_failures [], missing_dependencies [], successors_applied []); manifest `6c7551a0…`;
+  receipt `48535b69…` -> `a737e4ec…`, result applied; post-apply inspect live `a737e4ec…`,
+  already_applied true, precondition_failures []. Applied before SQL 97 (see step 8 and "SQL 97 not
+  applied").
+- **SQL 99:** SSM `fa655042-6ae1-41e6-96cc-a5b3ed61f4a8`, run_id
+  `bfb0c630-87a6-46f8-819d-4155a7b54640`, workstream
+  `prod-sql99-mortgage-desk-completion-messages-20261021`, one_use_id
+  `sql99-prod-56ce276e-16ea-49c5-9d44-7746a5a9c673` (spent), migration source `0c079fe4…` (== pin);
+  pre-apply inspect live `4d174e86…` (matches expected, predecessor sql90 applied,
+  precondition_failures []); manifest `2ba74dca…`; receipt `4d174e86…` -> `481ac0f1…`, result
+  applied; post-apply inspect live `481ac0f1…`, already_applied true. Whether the SPA build that
+  stops the Mortgage Desk client posts (`MortgageOpsQueue.tsx`) is live was not checked here.
+
+No later read-only inspect was run. Both pins are `execute: false` again; a re-apply needs a new
+reviewed pin change. Neither file is a `sql_before` of any overlay member or listed in
+`sql_prerequisites` / `staging-sql-live.json`, so no plan change follows from these applies.
+
+## SQL 97 not applied (2026-10-21)
+
+The same owner statement named SQL 97, but its one-shot was not run. Its pre-apply read-only
+inspect (SSM `16bcba87-7ad4-48b1-a63b-a2de20d25eee`, main `dcd86525690e0732691ab7bf0723dc25167d89e9`)
+reported `table_privileges` for `financial_stepup_log` with lines `["checksops INSERT"]` and
+`other_write_grants` `["checksops DELETE", "checksops UPDATE"]`. By the rule in step 7 and the review
+note on SQL 97's BEFORE INSERT guard (stop when `other_write_grants` is not `[]`), it stopped. The
+owner decided to build SQL 106 (revoke UPDATE, DELETE and TRUNCATE on `financial_stepup_log`) to be
+applied before SQL 97; that is a separate PR, in progress. SQL 97's pin has no `applied` record and
+keeps `execute: true` unchanged. Its recorded pre-state `56b1f631…` is from the inspect of
+2026-10-21 (SSM `43cb1d1f`); after SQL 106 the live fingerprint may differ, so a fresh read-only
+inspect decides whether the pin needs a new reviewed change before any SQL 97 apply.
