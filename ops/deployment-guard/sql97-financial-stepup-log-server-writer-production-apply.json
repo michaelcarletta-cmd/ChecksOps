@@ -2,7 +2,7 @@
   "id": "sql97-financial-stepup-log-server-writer-production-apply",
   "migration": "sql97",
   "authorization": "Owner approved 2026-10-21 (the owner approved pushing the remaining release live in the words \"Everything else should be pushed live no exceptions\"; that covers preparing this SQL 97 production pin change, and the change itself is reviewed and merge-approved by the owner separately): production apply of SQL 97 once auth-financial-totp.mjs and admin-reset-totp.mjs are live (the Lambda gate below), before SQL 95, on the staging acceptance below (production 56b1f63192df1147fbbdd0206226129aeea35467d13c8bf0c8bc399316d06079 -> 5d9b50f5c71da4ca06810c229a67ff1dfd3839ecba83ba4e1829da15eb28edef); execute true takes effect only when the owner reviews and merges this change. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
-  "execute": true,
+  "execute": false,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -57,5 +57,17 @@
     "ok": true,
     "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39618586101",
     "basis": "Owner-accepted substitute evidence (the owner's words for the remaining release: \"Everything else should be pushed live no exceptions\"). SQL 97 is already applied in staging (wave 4, owner approved 2026-10-18, pinned at main 23953055e and merged in #1034 (a96b610d8); staging read-live run 39121540941 recorded the staging pre-state 80bbcae1bea54fd57035fa802ecf6940314681f0ce73f2bfd9a5d8514f8986f5). The guarded staging apply run of that wave is not recorded in the repository (the guarded staging executor runs at main a96b610d8 on 2026-10-18, 39122051823 to 39122531714, are the likely redeploy, applies and read-lives of wave 4, but their logs were not read for this change, so none is cited), so the reference is the guarded staging SQL executor read-live of sql97-financial-stepup-log-server-writer on 2026-10-21 (run 39618586101), which reported the staging live definition equal to the intended 5d9b50f5c71da4ca06810c229a67ff1dfd3839ecba83ba4e1829da15eb28edef = intended_replacement_sha256. The pre-states differ: staging before its apply was 80bbcae1bea54fd57035fa802ecf6940314681f0ce73f2bfd9a5d8514f8986f5 and production (production_inspect, 2026-10-21) is 56b1f63192df1147fbbdd0206226129aeea35467d13c8bf0c8bc399316d06079; both reach the intended 5d9b50f5c71da4ca06810c229a67ff1dfd3839ecba83ba4e1829da15eb28edef from the same pinned file bytes (source_sha256), and the production apply refuses unless the live state still equals this pin's expected_live_definition_sha256."
-  }
+  },
+  "production_evidence": {
+    "ssm_command_id_inspect": "b47ff47a-068c-4b13-9c32-b36b8e9e7581",
+    "ssm_command_id_apply": "0a7a1b66-47c4-4fa8-8380-9b60296360f5",
+    "source_commit": "7124a160b9848d6334bc4328d69e9404aebddff3",
+    "tarball_sha256": "48713c464437e21c91dd63360fe33c27495918c332a32951ac8f3ec692089dde",
+    "before_hash": "56b1f63192df1147fbbdd0206226129aeea35467d13c8bf0c8bc399316d06079",
+    "after_hash": "5d9b50f5c71da4ca06810c229a67ff1dfd3839ecba83ba4e1829da15eb28edef",
+    "workstream_id": "prod-sql106-financial-stepup-log-append-only-20261021",
+    "runner": "i-0c35557c4e5385406",
+    "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39618586101"
+  },
+  "applied": true
 }

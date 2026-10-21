@@ -2,7 +2,7 @@
   "id": "sql106-financial-stepup-log-append-only-production-apply",
   "migration": "sql106",
   "authorization": "Owner approved 2026-10-21 (the owner approved pushing the remaining release live in the words \"Everything else should be pushed live no exceptions\" and decided to close SQL 97's other_write_grants with this new migration in the words \"build SQL 106 and merge when green\"; that covers preparing this SQL 106 production pin change, and the change itself is reviewed and merge-approved by the owner separately, who also accepts the substitute staging evidence below at that review): production apply of SQL 106 before SQL 97, on the staging acceptance below (production 56b5e4bb1a2db3133c32c9cc3cca02c1e7fb876839544dbdfd0717aad8f25880 -> 0a159961b80a1887b551d7bc9f187811f62614ef352c00b12bbfe621f109088f); execute true takes effect only when the owner reviews and merges this change. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
-  "execute": true,
+  "execute": false,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -58,5 +58,17 @@
     "ok": true,
     "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39633390440",
     "basis": "Owner-accepted substitute evidence (the owner accepts it by reviewing and merging this change; the precedent is SQL 29's, SQL 92's, SQL 95's and SQL 97's production pins). SQL 106 was already in effect in staging: staging holds none of the revoked lines, so there was nothing to apply there. The reference is the guarded staging SQL executor read-live of sql106-financial-stepup-log-append-only on 2026-10-21 (run 39633390440, main 588bda34de2094a7664b5e6fe5de8e4f402f52f0, staging pin commit 950e76d87c70325647a58085030f561dfd48d076), which reported already_applied true, precondition_failures [], table_privileges[0] lines [] and other_write_grants [], and the staging live definition equal to the intended 0a159961b80a1887b551d7bc9f187811f62614ef352c00b12bbfe621f109088f = intended_replacement_sha256. The executor carried SQL 106 through the guarded staging executor deploy run 39632285430 (inspect run 39633115012). The pre-states differ: staging's read-live shows only the intended state (which UPDATE, DELETE or TRUNCATE grants staging held before is not recorded), while production (production_inspect, 2026-10-21) is 56b5e4bb1a2db3133c32c9cc3cca02c1e7fb876839544dbdfd0717aad8f25880 (checksops DELETE and UPDATE); no staging apply of these REVOKEs exists, so the revoke path itself is covered only by aws/tests/sql106-financial-stepup-log-append-only-pg.test.mjs on PostgreSQL 16 (production-like grants, SQL 106 then SQL 97 through their production tools). The production apply refuses unless the live state still equals this pin's expected_live_definition_sha256, and its post-conditions roll back unless the intended fingerprint is reached with every other grant on the table unchanged."
-  }
+  },
+  "production_evidence": {
+    "ssm_command_id_inspect": "78e335e7-b844-4fbe-8c81-ebccdcd737c2",
+    "ssm_command_id_apply": "43070c9e-2bb5-4e49-80f3-97fe6f35e3d0",
+    "source_commit": "7124a160b9848d6334bc4328d69e9404aebddff3",
+    "tarball_sha256": "48713c464437e21c91dd63360fe33c27495918c332a32951ac8f3ec692089dde",
+    "before_hash": "56b5e4bb1a2db3133c32c9cc3cca02c1e7fb876839544dbdfd0717aad8f25880",
+    "after_hash": "0a159961b80a1887b551d7bc9f187811f62614ef352c00b12bbfe621f109088f",
+    "workstream_id": "prod-sql106-financial-stepup-log-append-only-20261021",
+    "runner": "i-0c35557c4e5385406",
+    "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39633390440"
+  },
+  "applied": true
 }
