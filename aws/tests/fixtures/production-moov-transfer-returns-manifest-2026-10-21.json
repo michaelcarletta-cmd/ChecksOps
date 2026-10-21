@@ -1,0 +1,19 @@
+{
+  "workstream_id": "moov-transfer-returns",
+  "authorization": "Pending owner review (2026-10-21). Planning only: nothing is live or verified. Each production apply still needs its own owner approval and staging acceptance.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Moov transfer returns (#1116): ADD providers/moov-transfer-webhook.mjs, then REPLACE providers/webhooks.mjs, whose new bytes route production transfer.* events to it. webhooks.mjs live_sha256 is main's bytes at fd1e059b5 and e4daedefe, which the second full-package rebuilds recorded by #1122 in ops/deployment-guard/lambda-rebuild-plan.json put live (staging run 39633656412, production run 39636816351, live CodeSha256 Bh/f7zaIFGDECA1jTWgMeR/2qRMOUaABRWP1lQbREOc= in both); confirm it with a read-only production inspect before any apply. moov-transfer-webhook.mjs is new, so it has no live bytes. The database writer is SQL 109 (aws_moov_webhook_apply_transfer_status); the module degrades safely without it.",
+  "members": {
+    "providers/moov-transfer-webhook.mjs": {
+      "live_sha256": null,
+      "accepted_sha256": "90772a9202ad5df12de5564fd89f0cd7f0f4a3f2da03f5ecd5b205fdedd2de39",
+      "operation": "add"
+    },
+    "providers/webhooks.mjs": {
+      "live_sha256": "479cedf8fc6989bf713d61d452dd9f68eca03e45faa1143a3dd049c3b67bafb0",
+      "accepted_sha256": "f7353ee1673364d45ce564dd8b7f102273e9a871c63f8398d03bd7226360d97f",
+      "operation": "replace"
+    }
+  }
+}

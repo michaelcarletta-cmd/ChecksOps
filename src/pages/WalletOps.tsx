@@ -48,6 +48,7 @@ import { MoovTreasuryPanel } from "@/components/payments/MoovTreasuryPanel";
 
 import { isCheckOpsHost } from "@/lib/checkopsHost";
 import { displayCaseOrNull } from "@/lib/displayCase";
+import { transferDisplayStatus, transferIssueText } from "@/lib/payments/transferReturn";
 
 const money = (cents: number) =>
   (Number(cents || 0) / 100).toLocaleString("en-US", {
@@ -196,6 +197,7 @@ export default function WalletOps() {
       amountCents: bill.amount_cents,
       balanceCents: null as number | null,
       status: bill.status,
+      issue: null as string | null,
       walletCents: bill.wallet_cents,
       bankCents: bill.bank_cents,
     })),
@@ -216,7 +218,8 @@ export default function WalletOps() {
         credit: row.isWalletDestination && !row.isWalletSource,
         amountCents: row.amountCents,
         balanceCents: null as number | null,
-        status: row.transfer.provider_status || row.transfer.status || null,
+        status: transferDisplayStatus(row.transfer),
+        issue: transferIssueText(row.transfer),
         walletCents: null as number | null,
         bankCents: null as number | null,
       })),
@@ -232,6 +235,7 @@ export default function WalletOps() {
       amountCents: entry.amount_cents,
       balanceCents: entry.balance_after_cents,
       status: null as string | null,
+      issue: null as string | null,
       walletCents: null as number | null,
       bankCents: null as number | null,
     })),
@@ -247,6 +251,7 @@ export default function WalletOps() {
       amountCents: row.amountCents,
       balanceCents: null as number | null,
       status: row.status,
+      issue: null as string | null,
       walletCents: null as number | null,
       bankCents: null as number | null,
     })),
@@ -625,6 +630,9 @@ export default function WalletOps() {
                       <p className="text-xs text-muted-foreground">{item.subtitle}</p>
                       {item.detail && (
                         <p className="text-xs text-muted-foreground">{item.detail}</p>
+                      )}
+                      {item.issue && (
+                        <p className="text-xs text-destructive">{item.issue}</p>
                       )}
                       {item.kind === "billing" && item.walletCents != null && item.bankCents != null && (
                         <p className="text-xs text-muted-foreground">

@@ -32,6 +32,7 @@ that connects to the database:
 | `sql105` | `scripts/deployment-guard/sql105-onboarding-payment-table-grants-production-apply.mjs` (`ops/production-sql-105-apply.md`; any time after SQL 91: the table grants SQL 91 omitted on `payment_provider_accounts`, `payment_provider_methods`, `payment_method_verifications` and `payment_event_log`) |
 | `sql106` | `scripts/deployment-guard/sql106-financial-stepup-log-append-only-production-apply.mjs` (`ops/production-sql-106-apply.md`; before SQL 97, `runs_before: ['sql97']`: SQL 97's runbook stops its apply unless its inspect's `other_write_grants` is `[]`, which SQL 106 makes it; no predecessor) |
 | `sql108` | `scripts/deployment-guard/sql108-check-intake-items-funds-type-values-production-apply.mjs` (`ops/production-sql-108-apply.md`; `check_intake_items_funds_type_check` with the nine SPA funds_type values; no predecessor, no order) |
+| `sql109` | `scripts/deployment-guard/sql109-moov-transfer-webhook-status-production-apply.mjs` (`ops/production-sql-109-apply.md`; any time after SQL 91: the SECURITY DEFINER Moov transfer webhook writer, status / ACH return / NOC of a funding or send leg) |
 
 To add a migration, register its reviewed tool in `ONE_SHOT_TOOLS`
 (`scripts/deployment-guard/lib/production-sql-one-shot.mjs`). An entry names only the tool,
@@ -46,7 +47,7 @@ a migration file touches its pin, not the registry. An entry may add `inspect_re
 
 | flag | |
 |---|---|
-| `--migration <key>` | a registered key (`sql29`, `sql30`, `sql71`, `sql77`…`sql89`, `sql90`…`sql106`, `sql108`) |
+| `--migration <key>` | a registered key (`sql29`, `sql30`, `sql71`, `sql77`…`sql89`, `sql90`…`sql106`, `sql108`, `sql109`) |
 | `--approval-scope <key>` | the migration the owner approved; must equal `--migration` |
 | `--approval-statement "<words>"` or `--approval-statement-b64 <base64>` | the owner's exact words, recorded verbatim. Pass exactly one of the two. Use the base64 form when the words contain quotes or newlines. Must be non-empty. |
 | `--commit <sha>` | the full main commit the tarball was built from |
@@ -89,7 +90,12 @@ An unexpected exception also ends in one failure summary:
   before anything else.
 
 1. **Pin.** Refuses unless the pin has `execute: true`, a staging acceptance
-   (`ok: true` plus a reference) and an authorization phrase. SQL 106's and SQL 97's pins are
+   (`ok: true` plus a reference) and an authorization phrase. SQL 108's pin is `execute: true`
+   (owner-approved pin change of 2026-10-21, "apply SQL 108 in production then DEPLOY WEBSITE TO
+   PRODUCTION then APPLY API CONFIGURATION TO PRODUCTION": the read-only production inspect of
+   2026-10-21, SSM `6d0fb8ce-441f-42d0-a239-f6c670c027ec`, recorded as its pre-state, on its guarded
+   staging apply run 39662760919 from the same pre-state; see `ops/production-sql-108-apply.md`)
+   until its record-and-retire change. SQL 106's and SQL 97's pins are
    `execute: false` again since their 2026-10-21 applies (SQL 106 first, then SQL 97, one owner
    statement "apply SQL 106 and SQL 97 in production"; see `ops/production-sql-106-apply.md` and
    `ops/production-sql-90-97-apply.md`). SQL 95's and SQL 99's pins are `execute: false`
