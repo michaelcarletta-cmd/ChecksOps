@@ -91,8 +91,11 @@ No later migration replaces the function.
   same pre-state as staging), SQL 91 applied, `definer_writes` ok, `already_applied` false,
   `precondition_failures` `[]`. Recorded in the pin as `expected_live_definition_sha256`, with the
   staging apply run 39673516794 as `staging_acceptance`.
-- **Pin `execute: true`** once that change is merged, under the owner's statement of 2026-10-21
-  quoted above. Nothing is applied by it; the apply (step 3) passes the owner's words for that run.
+- **Pin `execute: true`** once that change is merged (#1143), under the owner's statement of
+  2026-10-21 quoted above. Nothing is applied by it; the apply (step 3) passes the owner's words for
+  that run.
+- **Applied to production (2026-10-21)** and the pin retired (`execute: false` again; see
+  "Production apply of SQL 109" below).
 
 ## Steps
 
@@ -116,3 +119,38 @@ No later migration replaces the function.
    `--phase apply`.
 4. Record the apply and retire the pin (`execute: false`); record SQL 109 verified live in the
    overlay plan's `sql_prerequisites` before overlaying the API members.
+
+## Production apply of SQL 109 (2026-10-21)
+
+The owner's statement of 2026-10-21 was "apply SQL 109 in production", passed verbatim (base64,
+`--approval-statement-b64`). The one-shot cannot verify who said it, and the statement covered this
+run only. `production-sql-one-shot.mjs --migration sql109 --approval-scope sql109` on
+`i-0c35557c4e5385406`, operator `michaelcarletta-cmd`, workstream
+`prod-sql109-moov-transfer-webhook-status-20261021`, from main `513585432` (tarball
+`source-513585432dcd15a19d404a3da715e928937d5ea7.tar.gz`, sha256 `1197146b…`, transfer run
+`39676973493`, `sql53-temporary-transfer.yml` dispatched on main after the #1143 merge; its package
+job printed `TARBALL_SHA256 1197146b2387f7c35119fd5cbc23ac97716b7759ef03577781541ba1991a5172`, equal
+to the uploaded `.sha256` sidecar).
+
+- **Inspect phase:** SSM `9ac87d67-4841-4116-acd4-54514ba5f4a2`, run_id
+  `67302f32-78ab-478c-ae8b-383f9945ff6a`: pin, source, inspect and contracts ok, nothing written;
+  live `e0f02501…` (live_matches_expected true), function `absent`, precondition_failures [].
+- **Apply phase:** SSM `5da87122-dc6b-4e08-b799-1abc17ee14eb` (2026-10-21T21:15:15Z to 21:15:25Z),
+  run_id `6a7ba5c9-98f6-44e8-958d-fd3292a3f96d`, one_use_id
+  `sql109-prod-40ec7c00-60a0-4825-9129-66f43914c3ba` (spent): every step ok (pin, source, inspect,
+  contracts, manifest, source-recheck-before-preflight, preflight, evaluate,
+  source-recheck-before-apply, apply (applied), post-apply-inspect); migration source `228725d8…`
+  (== pin); contracts claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43;
+  pre-apply inspect live `e0f02501…`, predecessors `{sql91: true}`, precondition_failures [];
+  manifest `07b8b371…`; receipt `e0f02501…` -> `925e018f…`, result applied, unrelated catalog
+  `a52edf39…` (relations 890, columns 3535, constraints 2233, policies 404, functions 1313, indexes
+  654, triggers 180, views 25, types 18, roles 29, role memberships 15); post-apply inspect live
+  `925e018f…`, already_applied true, precondition_failures [], function `intended`, ACL `checksops
+  EXECUTE`, `owner EXECUTE`.
+
+No later read-only inspect was run, and no production Moov transfer event has been observed through
+the writer since the apply. The pin is `execute: false` again; a re-apply needs a new reviewed pin
+change. Step 4's overlay-plan record (SQL 109 `verified_live` in
+`production-api-overlay-plan.json` `sql_prerequisites`) is not part of this record: the API members
+already went live with the third full-package rebuild (run 39669873076), and that plan is updated by
+its own reviewed change.
