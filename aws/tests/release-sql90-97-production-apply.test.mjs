@@ -74,10 +74,11 @@ const COMMITTED = Object.freeze(Object.fromEntries(RELEASE_SQL_KEYS.map((key) =>
 // "apply SQL 108 in production then ...", on its guarded staging apply from the same pre-state,
 // checked in release-sql108-production-apply.test.mjs) until its record-and-retire change after its
 // 2026-10-21 apply.
-// SQL 109's production pin is execute-authorized (owner-approved pin change of 2026-10-21, "apply SQL
-// 109 in production", on its guarded staging apply from the same pre-state, checked in
-// release-sql109-production-apply.test.mjs) until its record-and-retire change.
-const EXECUTE_AUTHORIZED = Object.freeze(['sql109']);
+// SQL 109's production pin was execute-authorized (owner-approved pin change of 2026-10-21, #1143,
+// "apply SQL 109 in production", on its guarded staging apply from the same pre-state, checked in
+// release-sql109-production-apply.test.mjs) until its record-and-retire change after its 2026-10-21
+// apply.
+const EXECUTE_AUTHORIZED = Object.freeze([]);
 // SQL 95's and SQL 97's recorded production pre-states (read-only inspect of 2026-10-21, SSM
 // 43cb1d1f, main 69dbe9b01) and their staging references: the guarded staging read-live runs of
 // 2026-10-21 that report the intended state (their wave 4 apply runs are not recorded), accepted as
@@ -107,9 +108,11 @@ const SQL93_STAGING_REFERENCE = 'https://github.com/michaelcarletta-cmd/ChecksOp
 // 2026-10-17 from a different pre-state, accepted by the owner as substitute evidence).
 const SQL90_PRODUCTION_PRE = 'b5a1998de14922c26b9d829909fada17d3994cf8d0757d410c3e04f6c1f5d9fe';
 const SQL90_STAGING_REFERENCE = 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39080157856';
-const APPLIED_RETIRED = Object.freeze(['sql90', 'sql91', 'sql92', 'sql93', 'sql94', 'sql95', 'sql96', 'sql97', 'sql98', 'sql99', 'sql101', 'sql102', 'sql103', 'sql104', 'sql105', 'sql106', 'sql108']);
+const APPLIED_RETIRED = Object.freeze(['sql90', 'sql91', 'sql92', 'sql93', 'sql94', 'sql95', 'sql96', 'sql97', 'sql98', 'sql99', 'sql101', 'sql102', 'sql103', 'sql104', 'sql105', 'sql106', 'sql108', 'sql109']);
 // SQL 90's and SQL 101's production applies of 2026-10-19, recorded in applied.
 const SQL90_SQL101_APPLIED = Object.freeze({
+  // SQL 109's production apply of 2026-10-21 (main 513585432).
+  sql109: Object.freeze({ ssm: '5da87122-dc6b-4e08-b799-1abc17ee14eb', run: '6a7ba5c9-98f6-44e8-958d-fd3292a3f96d', one_use_id: 'sql109-prod-40ec7c00-60a0-4825-9129-66f43914c3ba', commit: '513585432dcd15a19d404a3da715e928937d5ea7', approval: 'apply SQL 109 in production' }),
   // SQL 108's production apply of 2026-10-21 (main 970d514bc).
   sql108: Object.freeze({ ssm: '9b6a1df3-6146-464e-9f37-995faaf739e0', run: 'ee45c3a0-71d6-4821-952b-5c92c0e706b5', one_use_id: 'sql108-prod-aa304e1f-6e2d-4e90-900d-99207be30bd6', commit: '970d514bc2f697b58c86e23c319cb938c00ff558', approval: 'apply SQL 108 in production' }),
   // SQL 106's and SQL 97's production applies of 2026-10-21 (main 7124a160b), one owner statement for
@@ -233,7 +236,7 @@ async function runCli(key, argv, { env = { CHECKSOPS_DEPLOYMENT_GUARD_APPLY: '1'
   return { out: writes.join(''), spent };
 }
 
-test('committed pins are pending (SQL 109 execute-authorized; SQL 90, SQL 91, SQL 92, SQL 93, SQL 94, SQL 95, SQL 96, SQL 97, SQL 99, SQL 101, SQL 102, SQL 103, SQL 104, SQL 105, SQL 106 and SQL 108 applied and retired), bound to the staging pins, predecessors and the production RDS, and name the built tooling', () => {
+test('committed pins are pending (none execute-authorized; SQL 90, SQL 91, SQL 92, SQL 93, SQL 94, SQL 95, SQL 96, SQL 97, SQL 99, SQL 101, SQL 102, SQL 103, SQL 104, SQL 105, SQL 106, SQL 108 and SQL 109 applied and retired), bound to the staging pins, predecessors and the production RDS, and name the built tooling', () => {
   const inventory = JSON.stringify(JSON.parse(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/bypass-inventory.json'), 'utf8')));
   assert.deepEqual(RELEASE_SQL_KEYS.filter((key) => COMMITTED[key].execute !== false), [...EXECUTE_AUTHORIZED]);
   assert.deepEqual(RELEASE_SQL_KEYS.filter((key) => COMMITTED[key].applied !== undefined), [...APPLIED_RETIRED]);
