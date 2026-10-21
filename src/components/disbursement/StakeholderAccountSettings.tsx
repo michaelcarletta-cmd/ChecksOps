@@ -17,7 +17,6 @@ import { isValidRoutingNumber, VERIFICATION_LABEL, VERIFICATION_BADGE_CLASS, typ
 import { AchAuthorizationForm } from "./AchAuthorizationForm";
 import { BankVerification } from "./BankVerification";
 import { useCurrentTenantMembership } from "@/hooks/useCurrentTenantMembership";
-import { usePaymentRail } from "@/hooks/usePaymentRail";
 
 
 const ACCOUNT_TYPE_LABELS: Record<string, string> = {
@@ -65,7 +64,6 @@ export function StakeholderAccountSettings() {
   const { user } = useAuth();
   const { tenant } = useTenant();
   const { toast } = useToast();
-  const { isPlaid } = usePaymentRail();
   const qc = useQueryClient();
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyForm);
@@ -163,11 +161,6 @@ export function StakeholderAccountSettings() {
           return { url: null, emailed: true };
         }
 
-        // Plaid rail: no hosted redirect — the inline Plaid Link widget on the
-        // new account card completes verification.
-        if (isPlaid) return { url: null, emailed: false };
-
-        // Actum rail is hidden/disabled globally.
         return { url: null, emailed: false };
       } catch (e: any) {
         if (insertedId) {
@@ -189,7 +182,7 @@ export function StakeholderAccountSettings() {
         });
       } else if (url) {
         // Open as a normal full-size tab, not a constrained popup — OAuth-based
-        // bank redirects (Wells Fargo, Chase, etc. via Plaid) can lose session
+        // bank redirects (Wells Fargo, Chase, etc.) can lose session
         // state inside small fixed-size popup windows, especially on mobile.
         const win = window.open(url, "_blank", "noopener,noreferrer");
         if (!win) {

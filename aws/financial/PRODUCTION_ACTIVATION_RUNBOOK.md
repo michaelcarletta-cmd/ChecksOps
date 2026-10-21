@@ -83,7 +83,7 @@ Record the value at cutover time. Leave unchecked until a human fills it.
 ### Webhook activation order
 
 1. [ ] Production webhooks still point at current Supabase URLs
-2. [ ] AWS `/webhooks/{moov,checkalt,plaid}` deployed and signature-verified in dry-run
+2. [ ] AWS `/webhooks/{moov,checkalt}` deployed and signature-verified in dry-run
 3. [ ] Tenant mapping from **provider account id**, payload `tenant_id` ignored
 4. [ ] Duplicate event id does not mutate a second time
 5. [ ] Dual-delivery (additional AWS subscriber) clean for a defined window
@@ -103,9 +103,8 @@ Record the value at cutover time. Leave unchecked until a human fills it.
 2. [ ] `AWS_PROVIDER_LIVE_READS_ENABLED=true` (read-only)
 3. [ ] `AWS_CHECKALT_ENABLED=true` only if CheckAlt exception is signed
 4. [ ] `AWS_MOOV_ENABLED=true`
-5. [ ] `AWS_PLAID_ENABLED` only if Link cutover is in scope (usually later)
-6. [ ] `AWS_PROVIDER_EXECUTION_ENABLED=true` **last**, production only
-7. [ ] Never set the production master flag to enable sandbox tests (`AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED` is staging-only)
+5. [ ] `AWS_PROVIDER_EXECUTION_ENABLED=true` **last**, production only
+6. [ ] Never set the production master flag to enable sandbox tests (`AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED` is staging-only)
 
 ### Frontend deployment order
 

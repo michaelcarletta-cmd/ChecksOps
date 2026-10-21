@@ -8,8 +8,6 @@ import { bindMoovEnvironment, moovConfigured, moovEnvironment } from "./moovClie
  *   1. MOOV_ENABLED === "true"        (global internal-test switch)
  *   2. tenants.moov_allowlisted       (per-tenant allowlist)
  *   3. Moov API credentials exist for the configured environment
- *
- * Actum and Plaid never reach this code path.
  */
 
 export const corsHeaders: Record<string, string> = {

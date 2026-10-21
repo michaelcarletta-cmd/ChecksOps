@@ -116,6 +116,6 @@ export const publicMoovTransfer = (transfer) => {
 };
 
 export const moovExecutionStub = (operation) => denyProviderExecution('moov', operation, {
-  createsOrChangesMoovAccount: /account|onboard|recipient|tos|kyc|underwriting|bank|micro|plaid-bridge|sync/i.test(operation),
+  createsOrChangesMoovAccount: /account|onboard|recipient|tos|kyc|underwriting|bank|micro|sync/i.test(operation),
   movesMoney: /transfer|disburse|fund|fee-charge|wallet-fund/i.test(operation),
 });

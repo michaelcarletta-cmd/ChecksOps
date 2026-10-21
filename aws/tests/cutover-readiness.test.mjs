@@ -13,7 +13,7 @@ test('production provider flags stay false and SAM forbids Environment=productio
   assert.match(template, /AWS_PROVIDER_EXECUTION_ENABLED: "false"/);
   assert.match(template, /AWS_MOOV_ENABLED: "false"/);
   assert.match(template, /AWS_CHECKALT_ENABLED: "false"/);
-  assert.match(template, /AWS_PLAID_ENABLED: "false"/);
+  assert.doesNotMatch(template, /AWS_(PLAID|ACTUM|QUICKBOOKS)_|PlaidWebhookSecret/);
   assert.match(template, /AWS_FINANCIAL_PERMISSIONS_ACTIVATED: "false"/);
   assert.match(template, /COGNITO_WEBAUTHN_ORIGIN: "https:\/\/staging\.checksops\.com"/);
   assert.match(template, /COGNITO_WEBAUTHN_RP_ID: "staging\.checksops\.com"/);
@@ -39,7 +39,7 @@ test('live production frontend env stays Supabase-only', () => {
   const example = read('.env.production.aws.example');
   assert.match(example, /DO NOT USE YET/);
   assert.match(example, /us-east-1_vPmQ7cL1F/);
-  assert.match(example, /Plaid is not required/);
+  assert.doesNotMatch(example, /plaid|actum|quickbooks/i);
 });
 
 test('cutover runbook is STOP / BLOCKED and keeps bridges; Plaid is not required', () => {

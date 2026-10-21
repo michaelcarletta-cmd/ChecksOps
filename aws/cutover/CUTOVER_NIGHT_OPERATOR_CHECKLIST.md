@@ -11,7 +11,6 @@ Date: __________  Approver: __________  Git SHA: __________
 - [ ] `AWS_PROVIDER_EXECUTION_ENABLED=false`
 - [ ] `AWS_MOOV_ENABLED=false`
 - [ ] `AWS_CHECKALT_ENABLED=false`
-- [ ] `AWS_PLAID_ENABLED=false` (Plaid is not required)
 - [ ] `AWS_FINANCIAL_PERMISSIONS_ACTIVATED=false`
 - [ ] `64_financial_activation_grants.sql` not applied
 - [ ] DB + Storage Lovable bridges still deployed and read-only / COPY-only

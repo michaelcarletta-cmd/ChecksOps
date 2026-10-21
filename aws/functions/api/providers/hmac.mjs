@@ -83,7 +83,7 @@ export const verifyMoovSignature = ({ event, rawBody, secret, nowMs = Date.now()
   return { ok: false, reason: 'invalid_signature', eventId: webhookId };
 };
 
-/** Staging fixture HMAC used for CheckAlt and Plaid until production cutover. */
+/** Staging fixture HMAC used for CheckAlt until production cutover. */
 export const verifyHmacBodySignature = ({ event, rawBody, secret, nowMs = Date.now(), maxSkewMs = 5 * 60 * 1000 }) => {
   if (!secret) return { ok: false, reason: 'missing_webhook_secret', eventId: null };
   const webhookId = header(event, 'x-webhook-id') || header(event, 'webhook-id');

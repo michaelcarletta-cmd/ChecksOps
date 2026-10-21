@@ -234,7 +234,11 @@ test('inventory classifies every provider function', () => {
   assert.equal(classifyFunction('moov-readiness').aws, 'sandbox_parity');
   assert.equal(classifyFunction('moov-transfer-create').aws, 'sandbox_parity');
   assert.equal(classifyFunction('checkalt-submit-deposit').class, 5);
-  assert.equal(classifyFunction('plaid-disburse').class, 7);
+  for (const removed of ['plaid-disburse', 'plaid-exchange', 'plaid-link-token-create', 'plaid-link-token-create-public', 'plaid-transfer-webhook', 'moov-plaid-bridge', 'quickbooks-auth', 'quickbooks-payment', 'actum']) {
+    assert.equal(classifyFunction(removed), null, removed);
+  }
+  assert.equal(classifyFunction('homeowner-bank-link-send').provider, 'moov');
+  assert.ok(PROVIDER_FUNCTIONS.every((item) => ['moov', 'checkalt'].includes(item.provider)));
   assert.equal(FUNCTION_BY_NAME['moov-webhook'].aws, 'webhook');
   for (const name of ['deposit_submission', 'disbursement', 'ach', 'rtp', 'wallet_transfer', 'stakeholder_payment', 'provider_configuration']) {
     assert.equal(PROVIDER_EXECUTION_PERMISSIONS[name].activated, false);
@@ -328,7 +332,7 @@ test('Moov webhook signature accepts SHA512 and rejects invalid/replay', () => {
 
 test('generic HMAC webhook rejects missing headers', () => {
   const result = verifyHmacBodySignature({
-    event: jwtEvent('/webhooks/plaid', 'POST', { webhook_code: 'TRANSFER_EVENTS_UPDATE' }, { auth: null }),
+    event: jwtEvent('/webhooks/checkalt', 'POST', { referenceNumber: 'r1' }, { auth: null }),
     rawBody: '{}',
     secret: 's',
   });
@@ -514,31 +518,37 @@ test('malformed webhook and invalid signature are rejected', async () => {
   assert.equal(JSON.parse(malformed.body).error, 'malformed_webhook');
 
   const invalid = await handler({
-    rawPath: '/webhooks/plaid',
-    body: JSON.stringify({ webhook_code: 'TRANSFER_EVENTS_UPDATE', event_id: 'e1' }),
+    rawPath: '/webhooks/checkalt',
+    body: JSON.stringify({ referenceNumber: 'r1', event_id: 'e1' }),
     headers: {
       'x-webhook-id': 'e1',
       'x-timestamp': String(Math.floor(Date.now() / 1000)),
       'x-signature': '00'.repeat(32),
     },
-    requestContext: { stage: 'staging', http: { method: 'POST', path: '/webhooks/plaid' } },
+    requestContext: { stage: 'staging', http: { method: 'POST', path: '/webhooks/checkalt' } },
   });
-  process.env.AWS_PLAID_WEBHOOK_SECRET = 'plaid-secret';
+  process.env.AWS_CHECKALT_WEBHOOK_SECRET = 'checkalt-secret';
   const invalid2 = await handleProviderRequest({
-    rawPath: '/webhooks/plaid',
-    body: JSON.stringify({ webhook_code: 'TRANSFER_EVENTS_UPDATE', event_id: 'e1' }),
+    rawPath: '/webhooks/checkalt',
+    body: JSON.stringify({ referenceNumber: 'r1', event_id: 'e1' }),
     headers: {
       'x-webhook-id': 'e1',
       'x-timestamp': String(Math.floor(Date.now() / 1000)),
       'x-signature': '00'.repeat(32),
     },
-    requestContext: { stage: 'staging', http: { method: 'POST', path: '/webhooks/plaid' } },
-  }, '/webhooks/plaid', 'POST', {
-    loadProviderSecrets: async () => ({ PLAID_WEBHOOK_SECRET: 'plaid-secret' }),
+    requestContext: { stage: 'staging', http: { method: 'POST', path: '/webhooks/checkalt' } },
+  }, '/webhooks/checkalt', 'POST', {
+    loadProviderSecrets: async () => ({ CHECKALT_WEBHOOK_SECRET: 'checkalt-secret' }),
   });
   assert.equal(invalid2.statusCode, 401);
   assert.equal(invalid2.error, 'invalid_signature');
   assert.ok(invalid.statusCode === 401 || invalid.statusCode === 400);
+});
+
+test('Plaid, Actum and QuickBooks routes are removed', async () => {
+  for (const path of ['/providers/plaid/status', '/providers/actum/status', '/providers/quickbooks/status', '/webhooks/plaid']) {
+    assert.equal(await handleProviderRequest({ rawPath: path }, path, 'POST'), null, path);
+  }
 });
 
 test('provider failure rolls back and does not persist a receipt', async () => {

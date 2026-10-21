@@ -27,19 +27,6 @@ const SECRET_KEYS = [
   'CHECKALT_SANDBOX_BASE_URL',
   'CHECKALT_SANDBOX_MERCHANT',
   'CHECKALT_SANDBOX_WEBHOOK_SECRET',
-  'PLAID_CLIENT_ID',
-  'PLAID_SECRET',
-  'PLAID_WEBHOOK_SECRET',
-  'PLAID_ENV',
-  'PLAID_SANDBOX_CLIENT_ID',
-  'PLAID_SANDBOX_SECRET',
-  'PLAID_SANDBOX_WEBHOOK_SECRET',
-  'ACTUM_USERNAME',
-  'ACTUM_PASSWORD',
-  'ACTUM_PARENT_ID',
-  'QUICKBOOKS_CLIENT_ID',
-  'QUICKBOOKS_CLIENT_SECRET',
-  'QUICKBOOKS_REDIRECT_URI',
   'RESEND_API_KEY',
   'RESEND_FROM_EMAIL',
 ];
@@ -47,13 +34,11 @@ const SECRET_KEYS = [
 const ENV_WEBHOOK_FALLBACK = {
   moov: 'AWS_MOOV_WEBHOOK_SECRET',
   checkalt: 'AWS_CHECKALT_WEBHOOK_SECRET',
-  plaid: 'AWS_PLAID_WEBHOOK_SECRET',
 };
 
 const SECRET_KEY_BY_PROVIDER = {
   moov: 'MOOV_WEBHOOK_SECRET',
   checkalt: 'CHECKALT_WEBHOOK_SECRET',
-  plaid: 'PLAID_WEBHOOK_SECRET',
 };
 
 const SECRET_VALUE_RE = /(secret|password|token|key|authorization|bearer|sk_|pk_live)/i;
@@ -146,6 +131,5 @@ export const providerSecretsConfigured = async () => {
     ...configuredFlags(secrets),
     moovWebhookSecretConfigured: Boolean(webhookSecret(secrets, 'moov')),
     checkaltWebhookSecretConfigured: Boolean(webhookSecret(secrets, 'checkalt')),
-    plaidWebhookSecretConfigured: Boolean(webhookSecret(secrets, 'plaid')),
   };
 };

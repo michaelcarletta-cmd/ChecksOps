@@ -6,7 +6,7 @@
  *  - tenants.monthly_rate_cents        → $100 / tenant / month
  *  - tenants.per_check_rate_cents      → $4.00 per check
  *  - founding partners                 → $75 / month locked
- *  - disbursements                     → $1.00 pass-through (Actum/Moov cost $1.00)
+ *  - disbursements                     → $1.00 pass-through (Moov cost $1.00)
  *  - CheckAlt (FinCapture) RDC deposit → $0.68 per check cost
  *
  * MortgageOps handling is billed at cost (pass-through) and therefore does not

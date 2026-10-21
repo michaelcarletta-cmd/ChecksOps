@@ -17,7 +17,6 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { CheckStakeholdersManager } from "./CheckStakeholdersManager";
 
-import { usePaymentRail } from "@/hooks/usePaymentRail";
 import { usePaymentProviderEligibility } from "@/hooks/usePaymentProviderEligibility";
 import { useWallet } from "@/hooks/useWallet";
 import { useStepUp } from "@/hooks/useStepUp";
@@ -96,9 +95,7 @@ export function DisbursementConsole({
   const SPEED_LABELS: Record<string, string> = { next_day: "Next Day", same_day: "Same Day", external: "External / Manual" };
   const [adminOverride, setAdminOverride] = useState(false);
   const { isAdmin } = usePermissions();
-  const { isPlaid } = usePaymentRail();
-  // Moov is the primary disbursement rail. Actum/Plaid remain as the fallback
-  // whenever a recipient has not connected a bank on the Moov rail yet.
+  // Moov is the disbursement rail.
   const { enabled: moovEnabled } = usePaymentProviderEligibility();
   // Sends are paid from the balance first; any shortfall comes straight from the linked bank.
   const { wallet } = useWallet("operating");
@@ -681,12 +678,6 @@ export function DisbursementConsole({
                         {split.status}{split.return_code && ` · ${split.return_code}`}
                       </Badge>
                     </div>
-                    {split.actum_transactions?.[0]?.auth_code && (
-                      <span className="text-[9px] text-muted-foreground font-mono">
-                        Auth: {split.actum_transactions[0].auth_code}
-                        {split.actum_transactions[0].response_reason && ` · ${split.actum_transactions[0].response_reason}`}
-                      </span>
-                    )}
                   </div>
                 </div>
               ))}

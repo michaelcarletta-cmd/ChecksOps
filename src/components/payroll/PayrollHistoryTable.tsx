@@ -25,8 +25,7 @@ export function PayrollHistoryTable() {
         .from("payroll_runs")
         .select(`
           id, amount, speed, memo, status, error, created_at,
-          stakeholder_accounts(nickname, custname),
-          disbursement_batches(debit_actum_order_id, disbursement_splits(actum_order_id, status))
+          stakeholder_accounts(nickname, custname)
         `)
         .eq("tenant_id", tenant!.id)
         .order("created_at", { ascending: false })

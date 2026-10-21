@@ -1,9 +1,7 @@
 // Shared Moov REST client for edge functions.
 //
 // ChecksOps is the Moov *platform*: every tenant gets its own connected Moov
-// account and its own linked bank. Nothing here touches Actum or Plaid — those
-// rails keep their own clients (`_shared/plaidClient.ts`, actum helpers) and
-// keep working exactly as before.
+// account and its own linked bank.
 //
 // `MOOV_ENVIRONMENT` selects which credential set is live: "sandbox" or
 // "production". Production is enabled — the keys themselves decide the ledger.

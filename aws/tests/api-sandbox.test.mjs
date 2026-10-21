@@ -7,7 +7,6 @@ import {
   CHECKALT_UAT_HOST,
   classifyCheckAltSandbox,
   classifyMoovSandbox,
-  classifyPlaidSandbox,
   isApprovedCheckAltMerchant,
   isApprovedCheckAltUatUrl,
   isProviderNetworkError,
@@ -309,16 +308,12 @@ test('CheckAlt userAmount is integer cents for 0.01, 1.00, and 123.45', () => {
   assert.equal(CHECKALT_USER_AMOUNT.scale, 'integer_cents');
 });
 
-test('Plaid sandbox is not the money path', () => {
-  const missing = classifyPlaidSandbox({});
-  assert.equal(missing.available, false);
-  assert.equal(missing.relevantToMoneyPath, false);
-  const sandbox = classifyPlaidSandbox({
-    PLAID_SANDBOX_CLIENT_ID: 'id',
-    PLAID_SANDBOX_SECRET: 'secret',
-  });
-  assert.equal(sandbox.available, true);
-  assert.equal(sandbox.host, 'https://sandbox.plaid.com');
+test('sandbox snapshot and routes carry no Plaid capability', async () => {
+  const snap = sandboxCredentialSnapshot({ PLAID_SANDBOX_CLIENT_ID: 'id', PLAID_SANDBOX_SECRET: 'secret' });
+  assert.equal(Object.hasOwn(snap, 'plaid'), false);
+  for (const path of ['/sandbox/plaid/probe', '/sandbox/webhooks/plaid']) {
+    assert.equal(await handleSandboxRequest({ rawPath: path }, path, 'POST'), null, path);
+  }
 });
 
 test('sandbox credential snapshot never returns secret values', () => {
@@ -425,11 +420,9 @@ test('missing sandbox credentials fail closed and stay idempotent', async () => 
     const creds = async () => ({
       moov: null,
       checkalt: null,
-      plaid: null,
       snapshot: {
         moov: classifyMoovSandbox({}),
         checkalt: classifyCheckAltSandbox({}),
-        plaid: classifyPlaidSandbox({}),
       },
     });
     const first = await handleSandboxRequest(
@@ -578,7 +571,6 @@ test('sandbox webhook verifies signature, ignores payload tenant, and is idempot
     const creds = async () => ({
       moov: { webhookSecret: secret },
       checkalt: null,
-      plaid: null,
       snapshot: {},
     });
     const first = await handleSandboxRequest(event, '/sandbox/webhooks/moov', 'POST', depsFor(client, {

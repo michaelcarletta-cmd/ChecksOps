@@ -108,7 +108,7 @@ const report = {
   holdsOk: readiness.json?.holds?.ok === true,
   productionExecution: financial.json?.productionExecution === false,
   providerFinancialFlagsFalse: Object.entries(flags)
-    .filter(([k]) => /MOOV|CHECKALT|PLAID|ACTUM|QUICKBOOKS|PROVIDER_EXECUTION|PROVIDER_LIVE|FINANCIAL_PERMISSIONS|FINANCIAL_SANDBOX|SANDBOX_EXECUTION|FINANCIAL_EXECUTION/.test(k))
+    .filter(([k]) => /MOOV|CHECKALT|PROVIDER_EXECUTION|PROVIDER_LIVE|FINANCIAL_PERMISSIONS|FINANCIAL_SANDBOX|SANDBOX_EXECUTION|FINANCIAL_EXECUTION/.test(k))
     .every(([, v]) => v === false),
   financialActivationSqlApplied: readiness.json?.financialActivationSqlApplied === false,
 };

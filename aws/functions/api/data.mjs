@@ -1192,7 +1192,7 @@ export const handleFunctionsDisabled = async (event) => {
     ok: false,
     statusCode: 403,
     error: 'provider_disabled',
-    message: 'Moov, CheckAlt, Plaid, Resend, and other provider functions are disabled on AWS staging',
+    message: 'Moov, CheckAlt, Resend, and other provider functions are disabled on AWS staging',
     name: body.name || null,
   };
 };
