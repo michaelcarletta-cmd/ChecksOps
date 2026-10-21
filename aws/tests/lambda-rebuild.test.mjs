@@ -89,12 +89,40 @@ test('lambda-rebuild is a registered deployment type and the component carries t
   assert.throws(() => fullPackageComponent('short'), /candidate ZIP SHA-256/);
 });
 
-test('the committed plan loads for both environments; production is still pending', () => {
+test('the committed plan loads for both environments', () => {
   for (const environment of ['staging', 'production']) {
     const section = loadRebuildPlan(REPO_ROOT, environment);
     assert.ok(section.function_name.startsWith('checksops-'));
   }
-  assert.deepEqual(Object.keys(loadRebuildPlan(REPO_ROOT, 'production').members), []);
+});
+
+test('the production plan section records inspect run 39587583692, the staging acceptance, and every accepted hash is the bytes on main', () => {
+  const raw = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'ops/deployment-guard/lambda-rebuild-plan.json'), 'utf8'));
+  const production = raw.environments.production;
+  assert.equal(production.status, 'accepted');
+  assert.equal(production.inspect.run_id, '39587583692');
+  assert.equal(production.inspect.live_code_sha256, 'ephceZY0Zjg7Dscil3D2cdtZzzAWellnHprPDYZ/50w=');
+  assert.equal(production.inspect.candidate_zip_sha256, raw.environments.staging.inspect.candidate_zip_sha256);
+  assert.equal(production.inspect.staging_acceptance, 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39587414391');
+  const section = loadRebuildPlan(REPO_ROOT, 'production');
+  assert.equal(Object.keys(section.members).length, 13);
+  assert.equal(Object.keys(section.added).length, 9);
+  assert.deepEqual(section.removed, {});
+  assert.deepEqual(section.dependencies, { added: { 'node_modules/@aws-sdk/client-kms': '3.1124.0' }, removed: {}, changed: {} });
+  const apiRoot = path.join(REPO_ROOT, 'aws/functions/api');
+  for (const [name, entry] of Object.entries(section.members)) {
+    assert.equal(sha256(fs.readFileSync(path.join(apiRoot, name))), entry.accepted_sha256, name);
+  }
+  for (const [name, hash] of Object.entries(section.added)) {
+    assert.equal(sha256(fs.readFileSync(path.join(apiRoot, name))), hash, name);
+  }
+  const live = {};
+  const candidate = {};
+  for (const [name, entry] of Object.entries(section.members)) { live[name] = entry.live_sha256; candidate[name] = entry.accepted_sha256; }
+  for (const [name, hash] of Object.entries(section.added)) candidate[name] = hash;
+  const result = evaluateRebuild({ plan: raw, environment: 'production', liveMemberHashes: live, candidateMemberHashes: candidate, liveInventory: {}, candidateInventory: { 'node_modules/@aws-sdk/client-kms': '3.1124.0' } });
+  assert.equal(result.ok, true);
+  assert.equal(result.details.state, 'READY');
 });
 
 test('the staging plan section records inspect run 39585059839 and every accepted hash is the bytes on main', () => {
