@@ -1,7 +1,7 @@
 /**
- * SQL 106 (aws/workflows/sql/106_moov_transfer_webhook_status.sql) in the staging guarded
+ * SQL 107 (aws/workflows/sql/107_moov_transfer_webhook_status.sql) in the staging guarded
  * executor, on the release engine shared with SQL 90-105 (scripts/deployment-guard/lib/release-sql-state.mjs).
- * release-sql90-97-executor.test.mjs runs what every release key shares (SQL 106 included); this
+ * release-sql90-97-executor.test.mjs runs what every release key shares (SQL 107 included); this
  * file covers what is new:
  *
  *   - the pin: pending (no read-live yet), code-derived, selectable, packed, in step with the
@@ -23,7 +23,7 @@ import { fileURLToPath } from 'node:url';
 
 import { CODES } from '../../scripts/deployment-guard/lib/errors.mjs';
 import {
-  AUTHORIZED_SQL106_MOOV_TRANSFER_WEBHOOK_STATUS,
+  AUTHORIZED_SQL107_MOOV_TRANSFER_WEBHOOK_STATUS,
   AUTHORIZED_STAGING_SQL,
   RELEASE_2026_10_17_PENDING_SQL_PINS as PINS,
   authorizationFingerprint,
@@ -45,11 +45,11 @@ import { READ_LIVE_EXPECTED_SENTINEL } from '../../scripts/deployment-guard/lib/
 import { importGuardedSqlExecutor } from './helpers/import-guarded-sql-executor.mjs';
 import { assertStagingPinState } from './helpers/staging-sql-wave1.mjs';
 import { pgSkipReason, releaseFixture } from './helpers/release-sql-pg.mjs';
-import { PAYMENT_SCHEMA } from './helpers/sql106-payment-schema.mjs';
+import { PAYMENT_SCHEMA } from './helpers/sql107-payment-schema.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const NOW = '2026-10-21T12:00:00.000Z';
-const KEY = 'sql106';
+const KEY = 'sql107';
 const WRITER = 'public.aws_moov_webhook_apply_transfer_status(text, text, text, text, text, text, text, text, text, text, timestamp with time zone)';
 const sha = (text) => createHash('sha256').update(text).digest('hex');
 const TEXT = fs.readFileSync(path.join(ROOT, PINS[KEY].filename), 'utf8');
@@ -92,20 +92,20 @@ function releaseEvent(overrides = {}) {
 const inspectEvent = () => releaseEvent({ action: 'inspect', expected_live_definition_sha256: READ_LIVE_EXPECTED_SENTINEL });
 
 function handlerFor(connect, { pins = {} } = {}) {
-  process.env.SQL_EXECUTOR_CONSUMED_PATH = path.join(os.tmpdir(), `sql106-exec-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}.json`);
+  process.env.SQL_EXECUTOR_CONSUMED_PATH = path.join(os.tmpdir(), `sql107-exec-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}.json`);
   process.env.EXECUTOR_IDENTITY = 'checksops-staging-guarded-sql-executor';
   return createHandler({ connect, now: () => Date.parse(NOW), releaseSqlFiles: FILES, releaseSqlPins: { ...PINS, ...pins } });
 }
 
-test('pin: SQL 106 pending, code-derived, selectable, packed, in step with the production pin; after SQL 91', () => {
+test('pin: SQL 107 pending, code-derived, selectable, packed, in step with the production pin; after SQL 91', () => {
   const pin = PINS[KEY];
   const spec = RELEASE_SQL_SPECS[KEY];
   const packed = Object.fromEntries(EXECUTOR_PACK_MEMBERS);
   const workflow = fs.readFileSync(path.join(ROOT, '.github/workflows/guarded-staging-sql-executor.yml'), 'utf8');
-  assert.equal(AUTHORIZED_SQL106_MOOV_TRANSFER_WEBHOOK_STATUS, pin);
-  assert.equal(pin.filename, 'aws/workflows/sql/106_moov_transfer_webhook_status.sql');
-  assert.equal(pin.migration_id, '106_moov_transfer_webhook_status');
-  assert.equal(spec.choice, 'sql106-moov-transfer-webhook-status');
+  assert.equal(AUTHORIZED_SQL107_MOOV_TRANSFER_WEBHOOK_STATUS, pin);
+  assert.equal(pin.filename, 'aws/workflows/sql/107_moov_transfer_webhook_status.sql');
+  assert.equal(pin.migration_id, '107_moov_transfer_webhook_status');
+  assert.equal(spec.choice, 'sql107-moov-transfer-webhook-status');
   assert.equal(sha(TEXT), pin.source_sha256);
   assertStagingPinState(assert, KEY, pin);
   assert.equal(pin.execute, false);
@@ -118,7 +118,7 @@ test('pin: SQL 106 pending, code-derived, selectable, packed, in step with the p
   assert.equal(MIGRATIONS[spec.choice], pin);
   assert.equal(packed[pin.filename], `sql/${path.basename(pin.filename)}`);
   assert.match(workflow, new RegExp(`- ${spec.choice}\\n`));
-  assert.match(workflow, /node --test aws\/tests\/release-sql106-executor\.test\.mjs/);
+  assert.match(workflow, /node --test aws\/tests\/release-sql107-executor\.test\.mjs/);
   assert.deepEqual([...pin.function_identities], [WRITER]);
   assert.deepEqual(spec.predecessors, ['sql91']);
   assert.equal(spec.runs_before, undefined);
@@ -185,7 +185,7 @@ test('reviewed file and spec: one guarded block and one SECURITY DEFINER writer,
   assert.equal(spec.policies, undefined);
   assert.equal(spec.altered_relations, undefined);
   const intended = releaseIntendedState(KEY, TEXT);
-  assert.match(releaseStateText(KEY, intended), /^release sql106 v1\nfunction public\.aws_moov_webhook_apply_transfer_status\(.*\): lang=plpgsql vol=v parallel=u secdef=true result=jsonb config=search_path=public prosrc=[0-9a-f]{64} acl=checksops EXECUTE;owner EXECUTE$/);
+  assert.match(releaseStateText(KEY, intended), /^release sql107 v1\nfunction public\.aws_moov_webhook_apply_transfer_status\(.*\): lang=plpgsql vol=v parallel=u secdef=true result=jsonb config=search_path=public prosrc=[0-9a-f]{64} acl=checksops EXECUTE;owner EXECUTE$/);
   // The definer-write pre-condition: a login that cannot write a table refuses.
   const base = {
     prerequisites_missing: [], predecessors_applied: true, successors_applied: [], dropped_function_callers: [],
@@ -197,7 +197,7 @@ test('reviewed file and spec: one guarded block and one SECURITY DEFINER writer,
   assert.ok(pre({ predecessors_applied: false }).includes('predecessors_applied'));
 });
 
-test('PostgreSQL 16: SQL 106 through the executor: refused before SQL 91, a pending pin cannot apply, one apply on the intended fingerprint, then already in place', { timeout: 600000 }, async (t) => {
+test('PostgreSQL 16: SQL 107 through the executor: refused before SQL 91, a pending pin cannot apply, one apply on the intended fingerprint, then already in place', { timeout: 600000 }, async (t) => {
   const reason = pgSkipReason();
   if (reason) {
     t.skip(reason);
@@ -210,7 +210,7 @@ test('PostgreSQL 16: SQL 106 through the executor: refused before SQL 91, a pend
     t.skip('pg module is not installed');
     return;
   }
-  const fx = await releaseFixture(pg, 'pg-sql106-exec-', 59310, { extra: [PAYMENT_SCHEMA] });
+  const fx = await releaseFixture(pg, 'pg-sql107-exec-', 59310, { extra: [PAYMENT_SCHEMA] });
   const { connectAs } = fx;
   try {
     const seen = [];

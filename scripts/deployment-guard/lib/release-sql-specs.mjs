@@ -1,5 +1,5 @@
 /**
- * Specs of the release 2026-10-17 SQL (SQL 90 to SQL 106) for the shared engine in
+ * Specs of the release 2026-10-17 SQL (SQL 90 to SQL 107) for the shared engine in
  * release-sql-state.mjs: what each pinned file creates, replaces or drops, the reviewed
  * EXECUTE ACLs, the prerequisites and predecessors, and the PostgreSQL renderings the file
  * leaves (policy expressions, view, column, constraint, index and trigger definitions as
@@ -56,7 +56,7 @@
  *   runs_before        informational production order (SQL 103 before SQL 29, which is not on
  *                      this engine): the production one-shot and the runbook
  *
- * SQL 106 and later: add a spec here, its staging pin in sql-executor-auth.mjs
+ * SQL 107 and later: add a spec here, its staging pin in sql-executor-auth.mjs
  * (RELEASE_2026_10_17_PENDING_SQL_PINS or a successor map) and its production pin; the
  * engine, the executor handler and the production tool are generic.
  */
@@ -3469,16 +3469,16 @@ export const RELEASE_SQL_SPECS = deepFreeze({
       "public.payment_event_log"
     ]
   },
-  // SQL 106: the Moov transfer webhook writer (status, ACH return, NOC of a funding or send leg),
+  // SQL 107: the Moov transfer webhook writer (status, ACH return, NOC of a funding or send leg),
   // one SECURITY DEFINER function gated on SQL 91's aws_moov_webhook_apply_active(). EXECUTE:
   // checksops and the owner only. It writes payment_transfers and payment_event_log under RLS
   // (definer_writes); no table, column, policy or grant changes.
-  sql106: {
-    "key": "sql106",
-    "label": "SQL 106",
-    "choice": "sql106-moov-transfer-webhook-status",
-    "production_pin_rel": "ops/deployment-guard/sql106-moov-transfer-webhook-status-production-apply.json",
-    "script": "sql106-moov-transfer-webhook-status-production-apply",
+  sql107: {
+    "key": "sql107",
+    "label": "SQL 107",
+    "choice": "sql107-moov-transfer-webhook-status",
+    "production_pin_rel": "ops/deployment-guard/sql107-moov-transfer-webhook-status-production-apply.json",
+    "script": "sql107-moov-transfer-webhook-status-production-apply",
     "prerequisites": [
       "public.aws_moov_webhook_apply_active()",
       "public.payment_transfers",

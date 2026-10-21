@@ -1,10 +1,10 @@
 /**
- * SQL 106 (aws/workflows/sql/106_moov_transfer_webhook_status.sql) on PostgreSQL 16, through its
+ * SQL 107 (aws/workflows/sql/107_moov_transfer_webhook_status.sql) on PostgreSQL 16, through its
  * production tool, after the real SQL 91, the owner the non-superuser checksops_admin login, with
  * payment_transfers and payment_event_log shaped as the supabase migration created them and the
  * real aws_select_ / aws_write_ policies of aws/rls/sql 12 and 24:
  *
- *   - before SQL 106 the webhook login (checksops, no user) can neither see nor update another
+ *   - before SQL 107 the webhook login (checksops, no user) can neither see nor update another
  *     tenant's transfer under RLS: the gap the file closes;
  *   - one apply reaches the intended fingerprint; the writer refuses without
  *     request.provider_webhook_apply = '1', refuses authenticated (EXECUTE is checksops only),
@@ -17,7 +17,7 @@
  *   - tenant isolation: every row written carries the transfer's own tenant; members still see
  *     only their own tenant's transfers and events.
  *
- * Run: node --test aws/tests/sql106-moov-transfer-webhook-status-pg.test.mjs (as root the PG
+ * Run: node --test aws/tests/sql107-moov-transfer-webhook-status-pg.test.mjs (as root the PG
  * helpers run the server as the ubuntu account).
  */
 import assert from 'node:assert/strict';
@@ -35,11 +35,11 @@ import {
 } from '../../scripts/deployment-guard/lib/release-sql-production-apply.mjs';
 import { applyProductionMoovTransferWebhook, TRANSFER_STATUS_WRITER_SQL } from '../functions/api/providers/moov-transfer-webhook.mjs';
 import { MEMBER_A, MEMBER_B, TENANT_A, TENANT_B, pgSkipReason, releaseFixture } from './helpers/release-sql-pg.mjs';
-import { COLLECT_A, FUND_B, PAYMENT_SCHEMA, SANDBOX_A, SEND_A } from './helpers/sql106-payment-schema.mjs';
+import { COLLECT_A, FUND_B, PAYMENT_SCHEMA, SANDBOX_A, SEND_A } from './helpers/sql107-payment-schema.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const STAGING_REF = 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/0000000000';
-const PIN = loadReleaseProductionPin('sql106', ROOT);
+const PIN = loadReleaseProductionPin('sql107', ROOT);
 const PIN91 = loadReleaseProductionPin('sql91', ROOT);
 const TEXT = fs.readFileSync(path.join(ROOT, PIN.filename), 'utf8');
 const SQL91_TEXT = fs.readFileSync(path.join(ROOT, PIN91.filename), 'utf8');
@@ -54,7 +54,7 @@ const authorized = (live) => Object.freeze({
 function manifest(pin) {
   const live = pin.expected_live_definition_sha256;
   const fingerprint = { sql: live };
-  const workstream = 'prod-sql106-pg-test';
+  const workstream = 'prod-sql107-pg-test';
   return {
     workstream_id: workstream,
     branch: 'main',
@@ -76,11 +76,11 @@ function manifest(pin) {
     staging_acceptance: pin.staging_acceptance,
     approval: { approved: true, workstream_id: workstream },
     authorization_phrase: pin.authorization_phrase,
-    one_use_id: `sql106-prod-${process.pid}-${Math.random().toString(16).slice(2)}`,
+    one_use_id: `sql107-prod-${process.pid}-${Math.random().toString(16).slice(2)}`,
     build_timestamp: '2026-10-21T20:00:00.000Z',
   };
 }
-const consumedPath = () => path.join(os.tmpdir(), `sql106-pg-consumed-${process.pid}-${Math.random().toString(16).slice(2)}.json`);
+const consumedPath = () => path.join(os.tmpdir(), `sql107-pg-consumed-${process.pid}-${Math.random().toString(16).slice(2)}.json`);
 const quietLog = { warn() {} };
 
 /** One webhook transaction as the API login (checksops, no user), like handleProviderWebhook. */
@@ -143,7 +143,7 @@ async function visibleAs(connectAs, userId) {
 }
 const moovEvent = (eventId, data) => ({ eventID: eventId, type: 'transfer.updated', data });
 
-test('PostgreSQL 16: SQL 106 through its production tool; the webhook write-back of status, ACH return and NOC is idempotent, never backwards, tenant-scoped', { timeout: 600000 }, async (t) => {
+test('PostgreSQL 16: SQL 107 through its production tool; the webhook write-back of status, ACH return and NOC is idempotent, never backwards, tenant-scoped', { timeout: 600000 }, async (t) => {
   const reason = pgSkipReason();
   if (reason) {
     t.skip(reason);
@@ -156,7 +156,7 @@ test('PostgreSQL 16: SQL 106 through its production tool; the webhook write-back
     t.skip('pg module is not installed');
     return;
   }
-  const fx = await releaseFixture(pg, 'pg-sql106-', 59910, { extra: [PAYMENT_SCHEMA] });
+  const fx = await releaseFixture(pg, 'pg-sql107-', 59910, { extra: [PAYMENT_SCHEMA] });
   const { admin, connectAs } = fx;
   try {
     const owner = await connectAs('checksops_admin');
@@ -166,7 +166,7 @@ test('PostgreSQL 16: SQL 106 through its production tool; the webhook write-back
       await owner.end();
     }
 
-    // Before SQL 106: the webhook login sees no transfer and updates nothing (RLS), so a
+    // Before SQL 107: the webhook login sees no transfer and updates nothing (RLS), so a
     // return could never be written back; the writer does not exist yet.
     const blind = await asWebhook(connectAs, async (c) => {
       await c.query("SELECT set_config('request.provider_webhook_apply', '1', true)");
@@ -183,12 +183,12 @@ test('PostgreSQL 16: SQL 106 through its production tool; the webhook write-back
 
     // Apply through the production tool.
     const connect = () => connectAs('checksops_admin');
-    const s = (await inspectReleaseProduction('sql106', { connect, pin: PIN, root: ROOT })).details;
+    const s = (await inspectReleaseProduction('sql107', { connect, pin: PIN, root: ROOT })).details;
     assert.deepEqual(s.precondition_failures, [], JSON.stringify(s.release_sql_inspect));
     assert.equal(s.already_applied, false);
     assert.deepEqual(s.predecessors, { sql91: true });
     const pin = authorized(s.live_definition_sha256);
-    const applied = await executeReleaseProductionApply('sql106', manifest(pin), { root: ROOT, pin, connect, consumedPath: consumedPath() });
+    const applied = await executeReleaseProductionApply('sql107', manifest(pin), { root: ROOT, pin, connect, consumedPath: consumedPath() });
     assert.equal(applied.ok, true, JSON.stringify(applied));
     assert.equal(applied.details.receipt.after_hash, PIN.intended_replacement_sha256);
 
@@ -310,9 +310,9 @@ test('PostgreSQL 16: SQL 106 through its production tool; the webhook write-back
     } finally {
       await again.end();
     }
-    const inspect2 = (await inspectReleaseProduction('sql106', { connect, pin, root: ROOT })).details;
+    const inspect2 = (await inspectReleaseProduction('sql107', { connect, pin, root: ROOT })).details;
     assert.equal(inspect2.already_applied, true);
-    const replay = await executeReleaseProductionApply('sql106', manifest(pin), { root: ROOT, pin, connect, consumedPath: consumedPath() });
+    const replay = await executeReleaseProductionApply('sql107', manifest(pin), { root: ROOT, pin, connect, consumedPath: consumedPath() });
     assert.equal(replay.code, CODES.UNRELATED_MUTATION);
     const s91 = (await inspectReleaseProduction('sql91', { connect, pin: PIN91, root: ROOT })).details;
     assert.equal(s91.live_definition_sha256, PIN91.intended_replacement_sha256);

@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 /**
- * Official production entry for SQL 106 (aws/workflows/sql/106_moov_transfer_webhook_status.sql):
+ * Official production entry for SQL 107 (aws/workflows/sql/107_moov_transfer_webhook_status.sql):
  * public.aws_moov_webhook_apply_transfer_status, the SECURITY DEFINER webhook writer of a
  * funding or send leg's status, ACH return and NOC (EXECUTE checksops only, gated on SQL 91's
- * aws_moov_webhook_apply_active()). Run any time after SQL 91; see ops/production-sql-106-apply.md.
+ * aws_moov_webhook_apply_active()). Run any time after SQL 91; see ops/production-sql-107-apply.md.
  *
  *   --inspect                 read-only (BEGIN READ ONLY ... ROLLBACK): catalog state, the
  *                             fingerprint, prerequisites and preconditions; reads no table rows
  *   --apply --input <file>    receipt-gated apply (see lib/release-sql-production-cli.mjs and
- *                             ops/production-sql-106-apply.md)
+ *                             ops/production-sql-107-apply.md)
  *
  * Credentials come only from the pinned production admin secret. Run only on a host with
  * private reachability into the production VPC; never from GitHub-hosted runners or Lambda.
@@ -21,7 +21,7 @@ import { enforceScriptGuard } from './require-guard.mjs';
 
 export async function main(argv = process.argv.slice(2), env = process.env, deps = {}) {
   return runReleaseProductionTool(
-    { key: 'sql106', scriptUrl: import.meta.url, enforceScriptGuard },
+    { key: 'sql107', scriptUrl: import.meta.url, enforceScriptGuard },
     argv,
     env,
     { root: repoRootFrom(import.meta.url), ...deps },

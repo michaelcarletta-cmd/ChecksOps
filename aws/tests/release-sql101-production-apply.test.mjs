@@ -160,7 +160,7 @@ test('pin: the SQL 90-97 pin shape, applied and retired (owner approved 2026-10-
   assert.equal(ONE_SHOT_TOOLS[KEY].script, RELEASE_PRODUCTION[KEY].cli);
   const rows = JSON.stringify(readJson('ops/deployment-guard/bypass-inventory.json'));
   assert.match(rows, /"path":"scripts\/deployment-guard\/sql101-invite-identity-insert-order-production-apply\.mjs","classification":"GUARDED","capabilities":\["sql101-production-apply"\]/);
-  assert.match(rows, /sql98, sql99, sql100, sql101, sql102, sql103, sql104, sql105, sql106\)/);
+  assert.match(rows, /sql98, sql99, sql100, sql101, sql102, sql103, sql104, sql105, sql107\)/);
   const scripts = readJson('package.json').scripts;
   const workflow = fs.readFileSync(path.join(ROOT, '.github/workflows/deployment-guard.yml'), 'utf8');
   for (const name of ['aws/tests/release-sql101-executor.test.mjs', 'aws/tests/release-sql101-production-apply.test.mjs']) {

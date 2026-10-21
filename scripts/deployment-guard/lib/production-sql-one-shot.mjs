@@ -258,7 +258,7 @@ export const ONE_SHOT_TOOLS = Object.freeze({
     pin_rel: SQL89_PRODUCTION_PIN_REL,
     allowed_key: 'sql89_production_apply_allowed',
   }),
-  // SQL 90-106 (release 2026-10-17): one tool per migration on the shared release engine.
+  // SQL 90-107 (release 2026-10-17): one tool per migration on the shared release engine.
   ...Object.fromEntries(Object.values(RELEASE_PRODUCTION).map((tool) => [tool.key, Object.freeze({
     key: tool.key,
     script: tool.cli,

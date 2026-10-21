@@ -1,8 +1,8 @@
 /**
- * Production tool for SQL 106 (scripts/deployment-guard/sql106-moov-transfer-webhook-status-
+ * Production tool for SQL 107 (scripts/deployment-guard/sql107-moov-transfer-webhook-status-
  * production-apply.mjs on lib/release-sql-production-apply.mjs and
  * lib/release-sql-production-cli.mjs). release-sql90-97-production-apply.test.mjs runs every
- * release key (SQL 106 included) through the shared refusals; this file covers SQL 106's own:
+ * release key (SQL 107 included) through the shared refusals; this file covers SQL 107's own:
  *
  *   - the pin has the release pin shape, is pending (execute false, no pre-state, no approval, no
  *     staging acceptance), and is in step with the staging pin, the one-shot (no runs_before), the
@@ -13,7 +13,7 @@
  *   - the committed pin refuses before connecting; an approved, accepted copy evaluates for the
  *     manifest built from it, and refuses with execute false, another live hash, another staging
  *     reference or a wrong phrase; the CLI spends no receipt.
- * The PostgreSQL 16 inspect / apply is aws/tests/sql106-moov-transfer-webhook-status-pg.test.mjs.
+ * The PostgreSQL 16 inspect / apply is aws/tests/sql107-moov-transfer-webhook-status-pg.test.mjs.
  */
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -34,11 +34,11 @@ import {
   precheckReleaseProductionApply,
   readPinnedReleaseSql,
 } from '../../scripts/deployment-guard/lib/release-sql-production-apply.mjs';
-import { main } from '../../scripts/deployment-guard/sql106-moov-transfer-webhook-status-production-apply.mjs';
+import { main } from '../../scripts/deployment-guard/sql107-moov-transfer-webhook-status-production-apply.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const KEY = 'sql106';
-const SQL106_FILE = 'aws/workflows/sql/106_moov_transfer_webhook_status.sql';
+const KEY = 'sql107';
+const SQL107_FILE = 'aws/workflows/sql/107_moov_transfer_webhook_status.sql';
 const SQL91_FILE = 'aws/workflows/sql/91_moov_onboarding.sql';
 const WRITER = 'public.aws_moov_webhook_apply_transfer_status(text, text, text, text, text, text, text, text, text, text, timestamp with time zone)';
 const COMMITTED = loadReleaseProductionPin(KEY, ROOT);
@@ -48,7 +48,7 @@ const PRE = 'e'.repeat(64);
 const readJson = (rel) => JSON.parse(fs.readFileSync(path.join(ROOT, rel), 'utf8'));
 const keyPaths = (o, p = '') => Object.entries(o).flatMap(([k, v]) => (v && typeof v === 'object' && !Array.isArray(v) ? keyPaths(v, `${p}${k}.`) : [`${p}${k}`]));
 const neverConnect = async () => { throw new Error('should-not-connect'); };
-const consumedPath = () => path.join(os.tmpdir(), `sql106-prod-consumed-${process.pid}-${Math.random().toString(16).slice(2)}.json`);
+const consumedPath = () => path.join(os.tmpdir(), `sql107-prod-consumed-${process.pid}-${Math.random().toString(16).slice(2)}.json`);
 
 function manifest(pin) {
   const live = pin.expected_live_definition_sha256;
@@ -104,7 +104,7 @@ test('pin: the release pin shape, pending, in step with the staging pin, the one
   assert.equal(pin.production_inspect.live_definition_sha256, null);
   assert.deepEqual([pin.staging_acceptance.ok, pin.staging_acceptance.reference], [false, null]);
   assert.match(pin.staging_acceptance.basis, /already_applied false/);
-  assert.equal(pin.filename, SQL106_FILE);
+  assert.equal(pin.filename, SQL107_FILE);
   assert.equal(pin.source_sha256, staging.source_sha256);
   assert.equal(pin.staging_pin_commit, staging.commit);
   assert.equal(pin.intended_replacement_sha256, staging.intended_replacement_sha256);
@@ -117,10 +117,10 @@ test('pin: the release pin shape, pending, in step with the staging pin, the one
   for (const k of ['admin_login', 'rds_identifier', 'rds_host', 'admin_secret_arn']) assert.equal(pin[k], SQL96_PIN[k], k);
   assert.equal(pin.tooling.status, 'built');
   assert.equal(pin.tooling.production_tool, RELEASE_PRODUCTION[KEY].cli);
-  assert.equal(pin.tooling.production_tool, 'scripts/deployment-guard/sql106-moov-transfer-webhook-status-production-apply.mjs');
+  assert.equal(pin.tooling.production_tool, 'scripts/deployment-guard/sql107-moov-transfer-webhook-status-production-apply.mjs');
   assert.equal(pin.tooling.staging_workflow_choice, RELEASE_SQL_SPECS[KEY].choice);
   assert.equal(pin.tooling.one_shot_migration, KEY);
-  assert.equal(pin.tooling.runbook, 'ops/production-sql-106-apply.md');
+  assert.equal(pin.tooling.runbook, 'ops/production-sql-107-apply.md');
   for (const file of [pin.tooling.production_tool, pin.tooling.runbook, pin.tooling.fingerprint_engine, pin.tooling.production_lib, ...pin.tooling.tests]) {
     assert.ok(fs.existsSync(path.join(ROOT, file)), file);
   }
@@ -130,16 +130,16 @@ test('pin: the release pin shape, pending, in step with the staging pin, the one
   assert.equal(tool.script, RELEASE_PRODUCTION[KEY].cli);
   assert.deepEqual([...tool.args], []);
   assert.equal(tool.pin_rel, RELEASE_PRODUCTION[KEY].pin_rel);
-  assert.equal(tool.allowed_key, 'sql106_production_apply_allowed');
+  assert.equal(tool.allowed_key, 'sql107_production_apply_allowed');
   assert.equal(tool.runs_before, undefined);
   assert.equal(tool.inspect_requires, undefined);
   assert.doesNotMatch(JSON.stringify(tool), /[0-9a-f]{64}/);
   const rows = JSON.stringify(readJson('ops/deployment-guard/bypass-inventory.json'));
-  assert.match(rows, /"path":"scripts\/deployment-guard\/sql106-moov-transfer-webhook-status-production-apply\.mjs","classification":"GUARDED","capabilities":\["sql106-production-apply"\]/);
-  assert.match(rows, /sql103, sql104, sql105, sql106\)/);
+  assert.match(rows, /"path":"scripts\/deployment-guard\/sql107-moov-transfer-webhook-status-production-apply\.mjs","classification":"GUARDED","capabilities":\["sql107-production-apply"\]/);
+  assert.match(rows, /sql103, sql104, sql105, sql107\)/);
   const scripts = readJson('package.json').scripts;
   const workflow = fs.readFileSync(path.join(ROOT, '.github/workflows/deployment-guard.yml'), 'utf8');
-  for (const name of ['aws/tests/release-sql106-executor.test.mjs', 'aws/tests/release-sql106-production-apply.test.mjs']) {
+  for (const name of ['aws/tests/release-sql107-executor.test.mjs', 'aws/tests/release-sql107-production-apply.test.mjs']) {
     assert.ok(scripts['test:deployment-guard'].includes(name), name);
     assert.ok(workflow.includes(name), name);
   }
@@ -154,16 +154,16 @@ test('order: after SQL 91 (unchanged); the overlay plan adds the API member that
   assert.match(COMMITTED.order_note, /^Any time after SQL 91/);
   assert.match(COMMITTED.order_note, /status_writer_unavailable/);
   const plan = readJson('ops/deployment-guard/production-api-overlay-plan.json');
-  assert.equal((plan.sql_prerequisites || {})[SQL106_FILE], undefined, 'not recorded live yet');
+  assert.equal((plan.sql_prerequisites || {})[SQL107_FILE], undefined, 'not recorded live yet');
   assert.equal(plan.members['providers/moov-transfer-webhook.mjs'].operation, 'add');
-  // No sql_before: the module degrades safely until SQL 106 is applied (the writer call runs in a savepoint).
+  // No sql_before: the module degrades safely until SQL 107 is applied (the writer call runs in a savepoint).
   assert.equal(plan.members['providers/moov-transfer-webhook.mjs'].sql_before, null);
-  assert.match(plan.notes, /degrades safely without SQL 106/);
+  assert.match(plan.notes, /degrades safely without SQL 107/);
   const runbook = fs.readFileSync(path.join(ROOT, COMMITTED.tooling.runbook), 'utf8');
   assert.ok(runbook.includes(COMMITTED.intended_replacement_sha256));
   assert.ok(runbook.includes(COMMITTED.source_sha256));
-  assert.match(fs.readFileSync(path.join(ROOT, 'ops/production-sql-one-shot.md'), 'utf8'), /\| `sql106` \|/);
-  assert.match(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/README.md'), 'utf8'), /sql106-moov-transfer-webhook-status-production-apply\.mjs --inspect/);
+  assert.match(fs.readFileSync(path.join(ROOT, 'ops/production-sql-one-shot.md'), 'utf8'), /\| `sql107` \|/);
+  assert.match(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/README.md'), 'utf8'), /sql107-moov-transfer-webhook-status-production-apply\.mjs --inspect/);
 });
 
 test('the committed (pending) pin refuses before connecting; an approved copy allows only its own manifest; execute false, other hashes and phrases refuse', async () => {
@@ -178,7 +178,7 @@ test('the committed (pending) pin refuses before connecting; an approved copy al
   const pin = approved();
   const allowed = await evaluateReleaseProductionApply(KEY, manifest(pin), { root: ROOT, pin });
   assert.equal(allowed.ok, true, JSON.stringify(allowed));
-  assert.equal(allowed.details.sql106_production_apply_allowed, true);
+  assert.equal(allowed.details.sql107_production_apply_allowed, true);
   assert.equal((await precheckReleaseProductionApply(KEY, manifest(pin), { root: ROOT, pin, connect: neverConnect, consumedPath: consumedPath() })).ok, true);
   const otherLive = { ...manifest(pin), expected_live_definition_sha256: 'f'.repeat(64), live_definition_sha256: 'f'.repeat(64) };
   assert.equal((await evaluateReleaseProductionApply(KEY, otherLive, { root: ROOT, pin })).code, CODES.SQL_COLLISION);
@@ -191,7 +191,7 @@ test('the committed (pending) pin refuses before connecting; an approved copy al
   assert.equal((await executeReleaseProductionApply(KEY, manifest(off), ctx)).code, CODES.GUARD_APPLY_FORBIDDEN);
   assert.equal(readPinnedReleaseSql(KEY, ROOT, { ...COMMITTED, source_sha256: 'f'.repeat(64) }).code, CODES.SQL_COLLISION);
 
-  const file = path.join(os.tmpdir(), `sql106-cli-${process.pid}.json`);
+  const file = path.join(os.tmpdir(), `sql107-cli-${process.pid}.json`);
   fs.writeFileSync(file, JSON.stringify(manifest(pin)));
   const writes = [];
   let spent = 0;
