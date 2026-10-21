@@ -66,6 +66,21 @@ if the Lambda is deployed first nothing breaks (the call fails inside a savepoin
 and the webhook is accepted and logged as before, `apply_skipped: status_writer_unavailable`).
 No later migration replaces the function.
 
+## Status
+
+- **Staging executor refreshed (2026-10-21).** Inspect run 39663331529 (main `c92fe457b`) found the
+  live executor at CodeSha256 `+GbJNvIA…` without SQL 109 (adds only
+  `sql/109_moov_transfer_webhook_status.sql`, supersedes the three engine files, nothing dropped,
+  no collisions). Deploy run 39663572406 updated it to
+  `UMqsKj8X1zp5UqWIZRHp9ZrzARJm3eQH/Zk8iKpOhps=`.
+- **Staging read-live (2026-10-21).** Run 39663914111 (main `c92fe457b`, executor `UMqsKj8X…`):
+  the function `absent`, live `e0f02501f167f4bee2bbb8bc32c1e19b23deb5425a650c63102030531aa9a077`
+  (the release engine's fingerprint of exactly the absent function), SQL 91 applied, `definer_writes`
+  ok for both tables, `already_applied` false, `precondition_failures` `[]`. Recorded in the
+  staging pin (`expected_live_definition_sha256`, `execute: true`, wave 10) under the owner's
+  statement of 2026-10-21, "apply SQL 109 in production", which covers SQL 109's whole guarded path.
+- Staging apply and the second read-live: not run yet. The production pin stays pending.
+
 ## Steps
 
 1. Staging: the staging executor must carry SQL 109 first (executor package refresh through
