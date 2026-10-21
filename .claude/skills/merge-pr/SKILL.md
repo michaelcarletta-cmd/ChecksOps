@@ -55,6 +55,21 @@ Do not squash or rebase-merge: the staging pins record the commit that last auth
 migration's bytes, and squashing rewrites it. Do not delete the branch until the merge is
 confirmed on `origin/main`.
 
+**Auto-merge is not "merge when CI is green."** GitHub's auto-merge waits only for the
+checks branch protection marks required, and today that is `release-locks` alone. On
+2026-10-21, PR #1135 auto-merged while `aws-migration-guards` was still running on its head.
+When the owner says "merge when CI is green", wait until `gh pr checks <n>` shows every check
+passing on `headRefOid`, then merge with that head pinned:
+
+```bash
+gh pr merge <n> --merge --match-head-commit <headRefOid>
+```
+
+**Behind main.** When main moves first, bring the branch up to date with a merge, either
+`git merge origin/main` and a push, or GitHub's "Update branch" button. Re-run `/verify` on
+the new head, and wait for CI on that head before merging. A busy main can move several
+times; each update needs its own green run.
+
 Confirm:
 
 ```bash

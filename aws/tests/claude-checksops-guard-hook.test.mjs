@@ -4,8 +4,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -13,17 +14,25 @@ const HOOK = path.join(ROOT, '.claude/hooks/checksops-guard.mjs');
 const SQL91 = 'aws/workflows/sql/91_moov_onboarding.sql';
 const PIN91 = 'ops/deployment-guard/sql91-moov-onboarding-production-apply.json';
 
-function run(payload, env = {}) {
+function run(payload, env = {}, cwd = ROOT) {
   const r = spawnSync(process.execPath, [HOOK], {
     input: JSON.stringify(payload),
-    cwd: ROOT,
+    cwd,
     encoding: 'utf8',
     env: { ...process.env, CHECKSOPS_OWNER_ALLOW_SQL_EDIT: '', ...env },
   });
   return { code: r.status, err: r.stderr };
 }
 const edit = (rel, old_string, new_string) => run({ tool_name: 'Edit', tool_input: { file_path: path.join(ROOT, rel), old_string, new_string } });
-const bash = (command) => run({ tool_name: 'Bash', tool_input: { command } });
+const bash = (command, cwd = ROOT) => run({ tool_name: 'Bash', tool_input: { command } }, {}, cwd);
+
+// A throwaway repository on a branch the test chooses: the push rules depend on the current
+// branch, and this checkout may be on main (CI's push run, an owner's desktop) or detached.
+function repoOnBranch(branch) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'checksops-guard-push-'));
+  execFileSync('git', ['-C', dir, 'init', '-q', '-b', branch], { stdio: 'ignore' });
+  return dir;
+}
 
 test('settings wire the hook for Edit, MultiEdit, Write and Bash and deny direct deploys', () => {
   const settings = JSON.parse(fs.readFileSync(path.join(ROOT, '.claude/settings.json'), 'utf8'));
@@ -132,6 +141,9 @@ test('a deploy is refused wherever the shell would run it; a quoted mention is a
 });
 
 test('pushes to main and force pushes are refused; pushing a feature branch is not', () => {
+  const feature = repoOnBranch('claude/x');
+  const onMain = repoOnBranch('main');
+  try {
   for (const cmd of [
     'git push origin main',
     'git push -u origin HEAD:main',
@@ -145,19 +157,36 @@ test('pushes to main and force pushes are refused; pushing a feature branch is n
     'git fetch origin && git push origin main',
     'git push origin :claude/x',
   ]) {
-    const r = bash(cmd);
-    assert.equal(r.code, 2, cmd);
-    assert.match(r.err, /git push refused/);
+    // Refused whatever branch is checked out.
+    for (const cwd of [feature, onMain]) {
+      const r = bash(cmd, cwd);
+      assert.equal(r.code, 2, `${cmd} (on ${cwd === onMain ? 'main' : 'claude/x'})`);
+      assert.match(r.err, /git push refused/);
+    }
   }
+  // On a feature branch these push that branch, or nothing.
   for (const cmd of [
     'git push -u origin claude/tender-allen-03lom8',
     'git push --force-with-lease origin claude/x',
     'git push origin HEAD',
+    'git push',
     'git push --dry-run origin claude/x',
     'git log origin/main..HEAD',
     'grep "git push origin main" docs/',
   ]) {
-    assert.equal(bash(cmd).code, 0, cmd);
+    assert.equal(bash(cmd, feature).code, 0, cmd);
+  }
+  // On main, a bare push or a push of HEAD is a push to main.
+  for (const cmd of ['git push', 'git push origin', 'git push origin HEAD', 'git push -u origin HEAD']) {
+    const r = bash(cmd, onMain);
+    assert.equal(r.code, 2, `${cmd} (on main)`);
+    assert.match(r.err, /the current branch is main/);
+  }
+  // An explicit feature branch is still allowed from main.
+  assert.equal(bash('git push -u origin claude/x', onMain).code, 0);
+  } finally {
+    fs.rmSync(feature, { recursive: true, force: true });
+    fs.rmSync(onMain, { recursive: true, force: true });
   }
 });
 
