@@ -51,6 +51,11 @@ no staging acceptance, so its production apply refuses before connecting; stagin
 is a strict no-op on production: its production tool only inspects (see "SQL 100 on
 production").
 
+SQL 106 (`aws/workflows/sql/106_financial_stepup_log_append_only.sql`: UPDATE, DELETE and
+TRUNCATE on `financial_stepup_log` revoked from `PUBLIC`, `checksops`, `authenticated` and
+`anon`) uses the same engine and tools and runs before SQL 97 (`ops/production-sql-106-apply.md`;
+review notes below).
+
 SQL 103 (`aws/workflows/sql/103_share_library_trigger_acl.sql`: EXECUTE on SQL 29's trigger
 function for its owner only) uses the same engine and tools but runs first, immediately
 before SQL 29: production order SQL 103 → SQL 29 → SQL 30 → SQL 90 → … → SQL 102
@@ -110,7 +115,10 @@ production pin before the matching production step (deltas report
    **Never re-run SQL 93 after SQL 96**: the SQL 93 tools refuse once SQL 96's setter exists
    (`successors_not_applied`).
 7. **SQL 97** only after `auth-financial-totp.mjs` and `admin-reset-totp.mjs` are live (both set
-   `app.stepup_writer`); before then the server's step-up insert would be refused.
+   `app.stepup_writer`); before then the server's step-up insert would be refused. And only
+   after **SQL 106** (`ops/production-sql-106-apply.md`): the inspect of 2026-10-21 (SSM
+   `16bcba87-7ad4-48b1-a63b-a2de20d25eee`) reported `other_write_grants`
+   `["checksops DELETE", "checksops UPDATE"]` (review notes below), which SQL 106 revokes.
    Production pin: `execute: true` (owner approved 2026-10-21). Gate evidence recorded in the pin:
    production runs the full main API package since the guarded production rebuild run
    `39588578627` (main `2168be9a1`, CodeSha256 `sxodWyRp…`, still live on 2026-10-21), and on main
@@ -373,6 +381,13 @@ node scripts/deployment-guard/sql102-platform-owner-tenant-profile-production-ap
   DELETE or TRUNCATE grant on the table in
   `release_sql_inspect.table_privileges[0].other_write_grants`; if it is not `[]` (for example
   `authenticated UPDATE`), stop and decide in a reviewed change before applying SQL 97.
+  Production's inspect of 2026-10-21 (SSM `16bcba87-7ad4-48b1-a63b-a2de20d25eee`, main
+  `dcd865256`) reported `["checksops DELETE", "checksops UPDATE"]`, so SQL 97 was not applied.
+  The reviewed decision is SQL 106 (`aws/workflows/sql/106_financial_stepup_log_append_only.sql`,
+  `ops/production-sql-106-apply.md`): UPDATE, DELETE and TRUNCATE revoked from `PUBLIC`,
+  `checksops`, `authenticated` and `anon`, run before SQL 97 (`runs_before: ["sql97"]`). After it
+  this list is `[]`; SQL 97's file, pins and fingerprints are unchanged, and SQL 106 does not move
+  SQL 97's live fingerprint (`56b1f631…` stays the pre-state its pin records).
 - SQL 92 skips silently when `check_files.signature_request_id` is missing; the tooling makes
   that a prerequisite instead.
 - SQL 94 drops and re-adds `tenant_documents_doc_type_check` (ACCESS EXCLUSIVE on
