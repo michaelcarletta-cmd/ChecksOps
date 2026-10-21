@@ -1,0 +1,62 @@
+{
+  "id": "sql106-financial-stepup-log-append-only-production-apply",
+  "migration": "sql106",
+  "authorization": "pending",
+  "execute": false,
+  "target_environment": "production",
+  "target_component": "production-sql",
+  "deployment_type": "sql-apply",
+  "filename": "aws/workflows/sql/106_financial_stepup_log_append_only.sql",
+  "migration_id": "106_financial_stepup_log_append_only",
+  "staging_pin_commit": "950e76d87c70325647a58085030f561dfd48d076",
+  "source_sha256": "b7b4f3f3cb0293a1c95f9ae87ad7e6b12375dd6336630f1d0c834b5e55f68f2c",
+  "function_identities": [],
+  "expected_live_definition_sha256": null,
+  "intended_replacement_sha256": "0a159961b80a1887b551d7bc9f187811f62614ef352c00b12bbfe621f109088f",
+  "authorization_phrase": "APPLY_FINANCIAL_STEPUP_LOG_APPEND_ONLY",
+  "predecessors": [],
+  "order_note": "Before SQL 97 (aws/workflows/sql/97_financial_stepup_log_server_writer.sql), whose production pin is execute true but which was not applied: SQL 97's guard is BEFORE INSERT only, and the read-only production inspect of SQL 97 (2026-10-21, SSM 16bcba87-7ad4-48b1-a63b-a2de20d25eee, main dcd86525690e0732691ab7bf0723dc25167d89e9) reported release_sql_inspect.table_privileges[0].other_write_grants [\"checksops DELETE\", \"checksops UPDATE\"], so its runbook stopped the apply (ops/production-sql-90-97-apply.md, review notes). SQL 106 revokes UPDATE, DELETE and TRUNCATE on public.financial_stepup_log from PUBLIC, checksops, authenticated and anon and changes nothing else; after it SQL 97's inspect reports other_write_grants [] and SQL 97 may follow with its own run-time approval. No predecessor: SQL 97's fingerprint covers only INSERT, its guard function and its trigger, so SQL 106 leaves it unchanged and also runs where SQL 97 is already applied (staging). SQL 97's file, pins and fingerprints are unchanged. No later migration grants these privileges back, so SQL 106 is not re-run.",
+  "admin_login": "checksops_admin",
+  "rds_identifier": "checksops-production",
+  "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
+  "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
+  "tooling": {
+    "status": "built",
+    "production_tool": "scripts/deployment-guard/sql106-financial-stepup-log-append-only-production-apply.mjs",
+    "production_lib": "scripts/deployment-guard/lib/release-sql-production-apply.mjs",
+    "staging_executor_handler": "aws/write-path/guarded-sql-executor/index.mjs handleReleaseSqlMigration",
+    "staging_workflow_choice": "sql106-financial-stepup-log-append-only",
+    "one_shot_migration": "sql106",
+    "fingerprint_engine": "scripts/deployment-guard/lib/release-sql-state.mjs",
+    "runbook": "ops/production-sql-106-apply.md",
+    "tests": [
+      "aws/tests/release-sql106-executor.test.mjs",
+      "aws/tests/release-sql106-production-apply.test.mjs",
+      "aws/tests/release-sql90-97-executor.test.mjs",
+      "aws/tests/release-sql90-97-production-apply.test.mjs",
+      "aws/tests/sql106-financial-stepup-log-append-only-pg.test.mjs"
+    ],
+    "note": "Guarded tooling for SQL 106: sql106-financial-stepup-log-append-only-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql106-financial-stepup-log-append-only); production-sql-one-shot.mjs --migration sql106 (runs_before sql97). intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): no UPDATE, DELETE or TRUNCATE line of PUBLIC, anon, authenticated or checksops on public.financial_stepup_log (spec table_privileges, intended []). The post-conditions also require every other grant on the table (SELECT, INSERT, service_role's, the owner's) unchanged (other_table_privileges_unchanged) and the rest of the catalog unchanged. The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
+  },
+  "production_inspect": {
+    "status": "pending",
+    "date": null,
+    "ssm_command_id": null,
+    "source_commit": null,
+    "read_only": true,
+    "connected_as": "checksops_admin",
+    "live_definition_sha256": null,
+    "apply_preconditions_met": null,
+    "precondition_failures": null,
+    "note": "Pending: no read-only production inspect has been run for SQL 106 yet. Expected from SQL 97's inspect of 2026-10-21 (SSM 16bcba87-7ad4-48b1-a63b-a2de20d25eee): the table present and owned by checksops_admin, release_sql_inspect.table_privileges[0].lines [\"checksops DELETE\", \"checksops UPDATE\"] (no PUBLIC, anon or authenticated UPDATE, DELETE or TRUNCATE), already_applied false. Record its date, SSM command id, source commit, live_definition_sha256, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. If precondition_failures is not [] or the lines name another grantee, stop: that needs its own reviewed change."
+  },
+  "intended_post_state": {
+    "fingerprint": "0a159961b80a1887b551d7bc9f187811f62614ef352c00b12bbfe621f109088f",
+    "note": "public.financial_stepup_log: PUBLIC, anon, authenticated and checksops hold no UPDATE, DELETE or TRUNCATE. Every other grant on the table (SELECT and INSERT of every role, service_role's, the owner's), its RLS flags, policies and triggers (aws_financial_stepup_log_writer_guard where SQL 97 ran, trg_financial_stepup_log_updated_at) are unchanged; no other table, function, policy, column or row changes. The fingerprint is releaseIntendedHash('sql106', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): 0a159961b80a1887b551d7bc9f187811f62614ef352c00b12bbfe621f109088f."
+  },
+  "staging_acceptance": {
+    "ok": false,
+    "reference": null,
+    "basis": "Pending: record the guarded staging SQL executor read-live run of SQL 106 (choice sql106-financial-stepup-log-append-only) and, when it reports already_applied false, its staging apply run here in the reviewed change that sets execute true. Staging already has SQL 97 (wave 4); which UPDATE, DELETE or TRUNCATE grants it holds on financial_stepup_log is what its read-live records. If staging already holds none (already_applied true), that read-live is the staging evidence and needs the owner's acceptance as substitute evidence. The revoke path itself is covered on PostgreSQL 16 by aws/tests/sql106-financial-stepup-log-append-only-pg.test.mjs (production-like grants, SQL 106 then SQL 97 through their production tools). Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+  }
+}

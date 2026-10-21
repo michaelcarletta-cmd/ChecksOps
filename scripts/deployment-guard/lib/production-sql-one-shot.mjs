@@ -258,7 +258,7 @@ export const ONE_SHOT_TOOLS = Object.freeze({
     pin_rel: SQL89_PRODUCTION_PIN_REL,
     allowed_key: 'sql89_production_apply_allowed',
   }),
-  // SQL 90-105 (release 2026-10-17): one tool per migration on the shared release engine.
+  // SQL 90-106 (release 2026-10-17): one tool per migration on the shared release engine.
   ...Object.fromEntries(Object.values(RELEASE_PRODUCTION).map((tool) => [tool.key, Object.freeze({
     key: tool.key,
     script: tool.cli,
@@ -279,6 +279,21 @@ export const ONE_SHOT_TOOLS = Object.freeze({
     pin_rel: RELEASE_PRODUCTION.sql103.pin_rel,
     allowed_key: RELEASE_PRODUCTION.sql103.allowed_key,
     runs_before: Object.freeze(['sql29']),
+  }),
+  // SQL 106 (ops/production-sql-106-apply.md): the shared release tool, with its order. Pin, file
+  // hash and fingerprints come from the pin, never this registry.
+  //   Order (runs_before, informational): SQL 106 before SQL 97. SQL 97's guard is BEFORE INSERT
+  //   only; its inspect lists any non-owner UPDATE / DELETE / TRUNCATE grant on financial_stepup_log
+  //   (release_sql_inspect.table_privileges[0].other_write_grants) and its runbook stops the apply
+  //   unless that is [], which it is once SQL 106 ran. SQL 106 has no predecessor and leaves SQL
+  //   97's fingerprint unchanged, so it also runs where SQL 97 is already applied (staging).
+  sql106: Object.freeze({
+    key: 'sql106',
+    script: RELEASE_PRODUCTION.sql106.cli,
+    args: Object.freeze([]),
+    pin_rel: RELEASE_PRODUCTION.sql106.pin_rel,
+    allowed_key: RELEASE_PRODUCTION.sql106.allowed_key,
+    runs_before: Object.freeze(['sql97']),
   }),
 });
 
