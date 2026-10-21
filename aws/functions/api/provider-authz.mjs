@@ -22,7 +22,7 @@ export const PROVIDER_EXECUTION_PERMISSIONS = {
   },
   disbursement: {
     operation: 'disbursement',
-    providers: ['moov', 'plaid'],
+    providers: ['moov'],
     required: [
       'Authenticated tenant member',
       'Tenant owns the disbursement batch/splits',
@@ -80,7 +80,7 @@ export const PROVIDER_EXECUTION_PERMISSIONS = {
   },
   provider_configuration: {
     operation: 'provider_configuration',
-    providers: ['moov', 'checkalt', 'plaid', 'actum', 'quickbooks'],
+    providers: ['moov', 'checkalt'],
     required: [
       'Platform admin (user_roles.admin) or tenant admin — NOT ACTIVATED on AWS',
       'AWS_PROVIDER_EXECUTION_ENABLED=true AND matching provider flag',

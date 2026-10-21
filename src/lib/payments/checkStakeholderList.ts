@@ -28,7 +28,6 @@ export interface StakeholderAccountEmbed {
   is_active?: boolean | null;
   verification_status?: string | null;
   verification_source?: string | null;
-  plaid_account_id?: string | null;
   provider_account_id?: string | null;
   [field: string]: unknown;
 }

@@ -11,12 +11,10 @@ import {
 import { providerPermissionSnapshot } from './provider-authz.mjs';
 import { providerSecretsConfigured } from './provider-secrets.mjs';
 import {
-  ACTUM_BOUNDARY,
   FUNCTION_BY_NAME,
   PROVIDER_FUNCTIONS,
   classifyFunction,
 } from './providers/catalog.mjs';
-import { actumExecutionStub, actumInterface } from './providers/actum.mjs';
 import {
   checkAltAmountPreview,
   checkaltExecutionStub,
@@ -30,8 +28,6 @@ import {
   publicMoovTransfer,
   publicMoovWallet,
 } from './providers/moov.mjs';
-import { plaidExecutionStub, publicPlaidStatus } from './providers/plaid.mjs';
-import { quickbooksExecutionStub, quickbooksInterface } from './providers/quickbooks.mjs';
 import { handleProviderWebhook } from './providers/webhooks.mjs';
 import { handleProviderEgress } from './providers/egress.mjs';
 import { providerSandboxExecutionEnabled } from './sandbox-flags.mjs';
@@ -118,8 +114,7 @@ export const handleProviderFlags = async () => ({
   flags: flagSnapshot(),
   permissions: providerPermissionSnapshot(),
   secrets: await providerSecretsConfigured(),
-  inventoryCount: PROVIDER_FUNCTIONS.length + 1,
-  actum: ACTUM_BOUNDARY,
+  inventoryCount: PROVIDER_FUNCTIONS.length,
 });
 
 const loadMoovAccount = async (client, { providerAccountId } = {}) => {
@@ -276,63 +271,6 @@ export const handleCheckAltStatus = async (event, deps = {}) => withIdentity(eve
   });
 }, deps);
 
-export const handlePlaidStatus = async (event, deps = {}) => withIdentity(event, async ({ client, mapping, claims, body, spoof }) => {
-  const memberships = await membershipsOf(client, mapping.application_user_id);
-  const tenantError = denyIfSpoofedTenant(claimedTenant(body), memberships);
-  if (tenantError) return { ...tenantError, spoofFieldsIgnored: spoof };
-
-  let splits = [];
-  try {
-    const transferId = body.plaid_transfer_id || body.transfer_id || null;
-    const params = [];
-    let sql = `SELECT id, tenant_id, amount, status, plaid_transfer_id
-      FROM public.disbursement_splits`;
-    if (transferId) {
-      params.push(transferId);
-      sql += ` WHERE plaid_transfer_id = $${params.length}`;
-    }
-    sql += ' ORDER BY created_at DESC NULLS LAST LIMIT 10';
-    splits = (await client.query(sql, params)).rows;
-    if (transferId) {
-      const denied = requireOwnedRow(splits[0], 'plaid_transfer_id');
-      if (denied) return { ...denied, spoofFieldsIgnored: spoof };
-    }
-  } catch {
-    splits = [];
-  }
-
-  return okStatus({
-    mapping,
-    claims,
-    spoof,
-    provider: 'plaid',
-    data: {
-      memberships,
-      ...publicPlaidStatus({ transfers: splits }),
-    },
-  });
-}, deps);
-
-export const handleActumStatus = async (event, deps = {}) => withIdentity(event, async ({ mapping, claims, spoof }) => (
-  okStatus({
-    mapping,
-    claims,
-    spoof,
-    provider: 'actum',
-    data: actumInterface(),
-  })
-), deps);
-
-export const handleQuickBooksStatus = async (event, deps = {}) => withIdentity(event, async ({ mapping, claims, spoof }) => (
-  okStatus({
-    mapping,
-    claims,
-    spoof,
-    provider: 'quickbooks',
-    data: quickbooksInterface(),
-  })
-), deps);
-
 const dispatchKnownFunction = (spec, body) => {
   if (!spec) {
     return denyProviderExecution(null, 'unknown_function', { error: 'provider_disabled' });
@@ -342,9 +280,6 @@ const dispatchKnownFunction = (spec, body) => {
   }
   if (spec.provider === 'moov') return moovExecutionStub(spec.name);
   if (spec.provider === 'checkalt') return checkaltExecutionStub(spec.name);
-  if (spec.provider === 'plaid') return plaidExecutionStub(spec.name);
-  if (spec.provider === 'quickbooks') return quickbooksExecutionStub(spec.name);
-  if (spec.provider === 'actum') return actumExecutionStub(spec.name);
   return denyProviderExecution(spec.provider, spec.name);
 };
 
@@ -382,7 +317,7 @@ export const handleFunctionInvoke = async (event, name, deps = {}) => {
   }
 
   const body = parseBody(event);
-  const spec = classifyFunction(name) || (name === 'actum' ? ACTUM_BOUNDARY : null);
+  const spec = classifyFunction(name);
   if (!spec) {
     return denyProviderExecution(null, name, {
       message: 'Unknown or disabled provider function',
@@ -465,7 +400,6 @@ export const handleFunctionInvoke = async (event, name, deps = {}) => {
   if (spec.aws === 'db_status') {
     if (spec.provider === 'moov') return handleMoovStatus(event, deps);
     if (spec.provider === 'checkalt') return handleCheckAltStatus(event, deps);
-    if (spec.provider === 'plaid') return handlePlaidStatus(event, deps);
   }
 
   if (spec.aws === 'webhook') {
@@ -493,12 +427,8 @@ export const providerRoute = (path, method) => {
   if (method === 'GET' && path === '/providers/egress') return { kind: 'egress' };
   if (method === 'POST' && path === '/providers/moov/status') return { kind: 'moov' };
   if (method === 'POST' && path === '/providers/checkalt/status') return { kind: 'checkalt' };
-  if (method === 'POST' && path === '/providers/plaid/status') return { kind: 'plaid' };
-  if (method === 'POST' && path === '/providers/actum/status') return { kind: 'actum' };
-  if (method === 'POST' && path === '/providers/quickbooks/status') return { kind: 'quickbooks' };
   if (method === 'POST' && path === '/webhooks/moov') return { kind: 'webhook', provider: 'moov' };
   if (method === 'POST' && path === '/webhooks/checkalt') return { kind: 'webhook', provider: 'checkalt' };
-  if (method === 'POST' && path === '/webhooks/plaid') return { kind: 'webhook', provider: 'plaid' };
   const fnName = functionNameFromPath(path);
   if (fnName && (method === 'POST' || method === 'GET')) return { kind: 'function', name: fnName };
   return null;
@@ -511,9 +441,6 @@ export const handleProviderRequest = async (event, path, method, deps = {}) => {
   if (route.kind === 'egress') return handleProviderEgress(event, deps);
   if (route.kind === 'moov') return handleMoovStatus(event, deps);
   if (route.kind === 'checkalt') return handleCheckAltStatus(event, deps);
-  if (route.kind === 'plaid') return handlePlaidStatus(event, deps);
-  if (route.kind === 'actum') return handleActumStatus(event, deps);
-  if (route.kind === 'quickbooks') return handleQuickBooksStatus(event, deps);
   if (route.kind === 'webhook') return handleWebhookRoute(event, route.provider, deps);
   if (route.kind === 'function') return handleFunctionInvoke(event, route.name, deps);
   return null;

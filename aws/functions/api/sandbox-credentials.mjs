@@ -1,8 +1,6 @@
 import { configuredFlags, loadProviderSecrets } from './provider-secrets.mjs';
 
 export const MOOV_SANDBOX_HOST = 'https://api.moov.io';
-export const PLAID_SANDBOX_HOST = 'https://sandbox.plaid.com';
-export const PLAID_PRODUCTION_HOST = 'https://production.plaid.com';
 export const CHECKALT_UAT_HOST = 'https://uatapi.checkalt.com';
 export const CHECKALT_UAT_MERCHANT_EXPECTED = 'lockbox5';
 export const CHECKALT_UAT_AUTH_PATH = '/public/fincapture/authenticate';
@@ -26,9 +24,6 @@ export const SANDBOX_SECRET_KEYS = [
   'CHECKALT_SANDBOX_BASE_URL',
   'CHECKALT_SANDBOX_MERCHANT',
   'CHECKALT_SANDBOX_WEBHOOK_SECRET',
-  'PLAID_SANDBOX_CLIENT_ID',
-  'PLAID_SANDBOX_SECRET',
-  'PLAID_SANDBOX_WEBHOOK_SECRET',
 ];
 
 const PRODUCTION_KEY_NAMES = [
@@ -41,9 +36,6 @@ const PRODUCTION_KEY_NAMES = [
   'CHECKALT_FI_KEY',
   'CHECKALT_WEBHOOK_SECRET',
   'CHECKALT_BASE_URL',
-  'PLAID_CLIENT_ID',
-  'PLAID_SECRET',
-  'PLAID_WEBHOOK_SECRET',
 ];
 
 const SANDBOX_HOST_RE = /(^|\.)(sandbox|uat|test|staging|qa|dev)(-|\.|$)|sandbox|uat|fincapture-test/;
@@ -198,36 +190,9 @@ export const classifyCheckAltSandbox = (secrets = {}) => {
   };
 };
 
-export const classifyPlaidSandbox = (secrets = {}) => {
-  const sandboxKeys = (present(secrets, 'PLAID_SANDBOX_CLIENT_ID') && present(secrets, 'PLAID_SANDBOX_SECRET'))
-    || (String(secrets.PLAID_ENV || '').toLowerCase() === 'sandbox'
-      && present(secrets, 'PLAID_CLIENT_ID')
-      && present(secrets, 'PLAID_SECRET')
-      && !present(secrets, 'PLAID_SANDBOX_CLIENT_ID'));
-  const dedicated = present(secrets, 'PLAID_SANDBOX_CLIENT_ID') && present(secrets, 'PLAID_SANDBOX_SECRET');
-  const env = String(secrets.PLAID_ENV || '').toLowerCase();
-  const productionEnv = env === 'production';
-  return {
-    provider: 'plaid',
-    available: Boolean(dedicated || (sandboxKeys && env === 'sandbox')),
-    reason: dedicated
-      ? 'sandbox_keys_configured'
-      : (sandboxKeys && env === 'sandbox')
-        ? 'plaid_env_sandbox'
-        : 'sandbox_keys_missing',
-    host: PLAID_SANDBOX_HOST,
-    productionHost: PLAID_PRODUCTION_HOST,
-    plaidEnv: env || null,
-    productionEnvBlocked: productionEnv,
-    relevantToMoneyPath: false,
-    note: 'Plaid Link is account-connection, not the ChecksOps deposit→disburse money path. Only sandbox.plaid.com is allowed. Do not initiate real financial movement.',
-  };
-};
-
 export const sandboxCredentialSnapshot = (secrets = {}) => ({
   moov: classifyMoovSandbox(secrets),
   checkalt: classifyCheckAltSandbox(secrets),
-  plaid: classifyPlaidSandbox(secrets),
   configured: configuredFlags({
     ...Object.fromEntries(SANDBOX_SECRET_KEYS.map((key) => [key, secrets[key]])),
   }),
@@ -266,21 +231,11 @@ export const loadSandboxCredentials = async (getSecrets = loadProviderSecrets) =
         authPath: CHECKALT_UAT_AUTH_PATH,
       }
       : null,
-    plaid: snapshot.plaid.available
-      ? {
-        environment: 'sandbox',
-        host: PLAID_SANDBOX_HOST,
-        clientId: secrets.PLAID_SANDBOX_CLIENT_ID || secrets.PLAID_CLIENT_ID,
-        secret: secrets.PLAID_SANDBOX_SECRET || secrets.PLAID_SECRET,
-        webhookSecret: secrets.PLAID_SANDBOX_WEBHOOK_SECRET || secrets.PLAID_WEBHOOK_SECRET || null,
-      }
-      : null,
   };
 };
 
 export const publicSandboxCapability = (loaded) => ({
   moov: loaded.snapshot.moov,
   checkalt: loaded.snapshot.checkalt,
-  plaid: loaded.snapshot.plaid,
   productionKeyNamesPresent: loaded.snapshot.productionKeyNamesPresent,
 });

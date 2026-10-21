@@ -17,7 +17,7 @@
     },
     "data.mjs": {
       "live_sha256": "965f5ed94e6d901bd26335199d82039cc5676f8eb83f182803efc2f45167d349",
-      "accepted_sha256": "f81055b8ab46f4293c79d213e3a9ceb8742ce7676d41f079fc86a5be10953449",
+      "accepted_sha256": "75fe96fc3a3f782a0e69e30f7dd4c4f5a1c5f64a93915bd40a0eaf6bd3ddde31",
       "operation": "replace"
     },
     "workflow-rpc.mjs": {

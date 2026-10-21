@@ -55,7 +55,6 @@ export const PROVIDER_FUNCTIONS = [
   fn('moov-bank-link-token', 'moov', OP_CLASS.BANK_CONNECTION, 'sandbox_parity', 'Creates a bank-link token.'),
   fn('moov-micro-deposit-initiate', 'moov', OP_CLASS.BANK_CONNECTION, 'sandbox_parity', 'Initiates micro-deposits (money movement).'),
   fn('moov-micro-deposit-confirm', 'moov', OP_CLASS.BANK_CONNECTION, 'sandbox_parity', 'Confirms micro-deposits.'),
-  fn('moov-plaid-bridge', 'moov', OP_CLASS.BANK_CONNECTION, 'sandbox_parity', 'Links Plaid items into Moov.'),
   fn('moov-platform-bank', 'moov', OP_CLASS.CONFIG_ADMIN, 'sandbox_parity', 'Platform treasury bank admin.'),
   fn('moov-tos-token', 'moov', OP_CLASS.IDENTITY_KYC, 'sandbox_parity', 'Creates Platform Agreement / TOS token at Moov.'),
   fn('moov-tos-accept', 'moov', OP_CLASS.IDENTITY_KYC, 'sandbox_parity', 'Records TOS acceptance at Moov.'),
@@ -90,15 +89,6 @@ export const PROVIDER_FUNCTIONS = [
   fn('checkalt-verify-account', 'checkalt', OP_CLASS.BANK_CONNECTION, 'sandbox_parity', 'Platform owner. action status (stored registration, no provider call), user (getUserAccountInformation) or account (getDepositAccountInformation) with the tenant sso_user_id, never the API login. Live answer shown masked; nothing persisted.'),
   fn('checkalt-prepare-image', 'checkalt', OP_CLASS.DEPOSIT, 'sandbox_parity', 'Fast-path prepared_path when source is under 450KB. ImageScript re-encode not ported.'),
 
-  fn('plaid-link-token-create', 'plaid', OP_CLASS.BANK_CONNECTION, 'disabled', 'Creates a Plaid Link token.'),
-  fn('plaid-link-token-create-public', 'plaid', OP_CLASS.BANK_CONNECTION, 'disabled', 'Public/homeowner Link token.'),
-  fn('plaid-exchange', 'plaid', OP_CLASS.BANK_CONNECTION, 'disabled', 'Exchanges a public token for an Item.'),
-  fn('plaid-disburse', 'plaid', OP_CLASS.DISBURSEMENT, 'disabled', 'Plaid Transfer disbursement.'),
-  fn('plaid-transfer-webhook', 'plaid', OP_CLASS.WEBHOOK, 'webhook', 'AWS POST /webhooks/plaid. Dry-run default.'),
-
-  fn('quickbooks-auth', 'quickbooks', OP_CLASS.CONFIG_ADMIN, 'disabled', 'OAuth connect/refresh only. Interface + secrets.'),
-  fn('quickbooks-payment', 'quickbooks', OP_CLASS.MONEY_MOVEMENT, 'disabled', 'Creates QuickBooks payments.'),
-
   fn('initiate-wallet-funding', 'moov', OP_CLASS.MONEY_MOVEMENT, 'sandbox_parity', 'Queues/creates wallet funding.'),
   fn('cancel-wallet-funding', 'moov', OP_CLASS.MONEY_MOVEMENT, 'sandbox_parity', 'Cancels funding; provider-adjacent.'),
   fn('calculate-payment-funding', 'moov', OP_CLASS.MONEY_MOVEMENT, 'sandbox_parity', 'Funding plan used immediately before execution.'),
@@ -106,18 +96,10 @@ export const PROVIDER_FUNCTIONS = [
   fn('wallet-fund-on-clear', 'moov', OP_CLASS.MONEY_MOVEMENT, 'sandbox_parity', 'Auto-fund after check clear.'),
   fn('platform-treasury', 'moov', OP_CLASS.CONFIG_ADMIN, 'sandbox_parity', 'Platform treasury operations.'),
   fn('homeowner-deductible-pay', 'moov', OP_CLASS.MONEY_MOVEMENT, 'sandbox_parity', 'Charges a homeowner deductible.'),
-  fn('homeowner-bank-link-send', 'plaid', OP_CLASS.NOTIFICATION, 'disabled', 'Sends bank-link email + Plaid setup.'),
+  fn('homeowner-bank-link-send', 'moov', OP_CLASS.NOTIFICATION, 'disabled', 'Emails a homeowner the Moov hosted recipient setup link (/pay-setup/:token). Not ported to AWS.'),
   fn('stakeholder-resend-verification', 'moov', OP_CLASS.NOTIFICATION, 'sandbox_parity', 'Resends stakeholder KYC/verification email.'),
   fn('public-invoice', 'moov', OP_CLASS.NOTIFICATION, 'sandbox_parity', 'Public invoice fetch/pay.'),
 ];
-
-export const ACTUM_BOUNDARY = {
-  name: 'actum',
-  provider: 'actum',
-  class: OP_CLASS.MONEY_MOVEMENT,
-  aws: 'interface_only',
-  notes: 'No dedicated supabase/functions/actum-* on current main. actum_transactions table + frontend remnants only. AWS exposes config/health boundary. No live charges.',
-};
 
 export const FUNCTION_BY_NAME = Object.fromEntries(PROVIDER_FUNCTIONS.map((item) => [item.name, item]));
 

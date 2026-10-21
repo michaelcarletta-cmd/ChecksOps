@@ -32,6 +32,45 @@ const SHA = 'a'.repeat(40);
 const NOW = Date.parse('2026-10-21T12:00:00.000Z');
 const sha256 = (buf) => createHash('sha256').update(buf).digest('hex');
 
+// Both plan sections are applied: their accepted hashes are the bytes the 2026-10-21 rebuilds put live
+// (sha256 at the inspect's main_commit) and stay as recorded evidence. Files main changed after those
+// rebuilds are listed here, one reviewed entry each; the next rebuild accepts them from a new inspect
+// and a new plan section (ops/production-lambda-rebuild.md). Every other accepted hash must still be
+// the bytes on main. A listed path that no longer exists must be marked deleted.
+const CHANGED_SINCE_APPLIED_REBUILD = {
+  // Plaid/Actum/QuickBooks removal.
+  'allowed-tables.json': 'changed',
+  'data.mjs': 'changed',
+  'financial-flags.mjs': 'changed',
+  'index.mjs': 'changed',
+  'provider-authz.mjs': 'changed',
+  'provider-flags.mjs': 'changed',
+  'provider-secrets.mjs': 'changed',
+  'providers/actum.mjs': 'deleted',
+  'providers/hmac.mjs': 'changed',
+  'providers/moov.mjs': 'changed',
+  'providers/plaid-sandbox.mjs': 'deleted',
+  'providers/plaid.mjs': 'deleted',
+  'providers/quickbooks.mjs': 'deleted',
+  'sandbox-credentials.mjs': 'changed',
+  'sandbox.mjs': 'changed',
+};
+
+const assertAcceptedIsMainUnlessChangedSince = (apiRoot, name, accepted) => {
+  const abs = path.join(apiRoot, name);
+  const listed = CHANGED_SINCE_APPLIED_REBUILD[name];
+  if (!fs.existsSync(abs)) {
+    assert.equal(listed, 'deleted', `${name} is gone from main but not listed as deleted`);
+    return;
+  }
+  const onMain = sha256(fs.readFileSync(abs));
+  if (onMain === accepted) {
+    assert.equal(listed, undefined, `${name} is listed as changed but main still has the accepted bytes`);
+    return;
+  }
+  assert.equal(listed, 'changed', `${name}: main's bytes are not the accepted bytes and the file is not listed`);
+};
+
 const LIVE_FILES = {
   'index.mjs': 'export const handler = "live";\n',
   'package.json': '{"name":"api","version":"0.1.0"}\n',
@@ -96,7 +135,7 @@ test('the committed plan loads for both environments', () => {
   }
 });
 
-test('the production plan section records inspect run 39587583692, the staging acceptance, and every accepted hash is the bytes on main', () => {
+test('the production plan section records inspect run 39587583692, the staging acceptance, and every accepted hash is the bytes on main or a listed later change', () => {
   const raw = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'ops/deployment-guard/lambda-rebuild-plan.json'), 'utf8'));
   const production = raw.environments.production;
   assert.equal(production.status, 'applied');
@@ -114,10 +153,10 @@ test('the production plan section records inspect run 39587583692, the staging a
   assert.deepEqual(section.dependencies, { added: { 'node_modules/@aws-sdk/client-kms': '3.1124.0' }, removed: {}, changed: {} });
   const apiRoot = path.join(REPO_ROOT, 'aws/functions/api');
   for (const [name, entry] of Object.entries(section.members)) {
-    assert.equal(sha256(fs.readFileSync(path.join(apiRoot, name))), entry.accepted_sha256, name);
+    assertAcceptedIsMainUnlessChangedSince(apiRoot, name, entry.accepted_sha256);
   }
   for (const [name, hash] of Object.entries(section.added)) {
-    assert.equal(sha256(fs.readFileSync(path.join(apiRoot, name))), hash, name);
+    assertAcceptedIsMainUnlessChangedSince(apiRoot, name, hash);
   }
   const live = {};
   const candidate = {};
@@ -128,7 +167,7 @@ test('the production plan section records inspect run 39587583692, the staging a
   assert.equal(result.details.state, 'READY');
 });
 
-test('the staging plan section records inspect run 39585059839 and every accepted hash is the bytes on main', () => {
+test('the staging plan section records inspect run 39585059839 and every accepted hash is the bytes on main or a listed later change', () => {
   const raw = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'ops/deployment-guard/lambda-rebuild-plan.json'), 'utf8'));
   const staging = raw.environments.staging;
   assert.equal(staging.status, 'applied');
@@ -144,10 +183,10 @@ test('the staging plan section records inspect run 39585059839 and every accepte
   assert.deepEqual(section.dependencies, { added: {}, removed: {}, changed: {} });
   const apiRoot = path.join(REPO_ROOT, 'aws/functions/api');
   for (const [name, entry] of Object.entries(section.members)) {
-    assert.equal(sha256(fs.readFileSync(path.join(apiRoot, name))), entry.accepted_sha256, name);
+    assertAcceptedIsMainUnlessChangedSince(apiRoot, name, entry.accepted_sha256);
   }
   for (const [name, hash] of Object.entries(section.added)) {
-    assert.equal(sha256(fs.readFileSync(path.join(apiRoot, name))), hash, name);
+    assertAcceptedIsMainUnlessChangedSince(apiRoot, name, hash);
   }
   // The plan as committed makes the inspected live package READY, not BLOCKED.
   const live = {};
