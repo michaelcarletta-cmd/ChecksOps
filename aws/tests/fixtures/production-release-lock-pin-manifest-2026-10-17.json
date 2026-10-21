@@ -7,7 +7,7 @@
   "members": {
     "ops-readiness.mjs": {
       "live_sha256": "614add851b4c85a7b79dcdf540a3167d04b944d986523810f4c59274010aa448",
-      "accepted_sha256": "2785381cd8a9e0f23f50453c81ad905e259eac0299b98790776d629cc442de6d",
+      "accepted_sha256": "79c87a10512a10a3065c17962ddc0eecf03f8ba36972a574e4aa41758ded6249",
       "operation": "replace"
     },
     "privileged-auth.mjs": {
@@ -53,7 +53,7 @@
     },
     "providers/parity/moov-onboard.mjs": {
       "live_sha256": "86127db01e4918ed72e8ca3ed56a378a53a000a9c046dde986aa2afc525f2f89",
-      "accepted_sha256": "4c04ce4c78d26152bf56984a40b8df7a550af13fd71a31d1bf6f235cc3ad454f",
+      "accepted_sha256": "dc60dc48707b100ec4df18dee087453ba503fc713a7833498bc1cddd34edb80d",
       "operation": "replace"
     },
     "providers/parity/moov-client.mjs": {
@@ -68,7 +68,7 @@
     },
     "write-allowlist.mjs": {
       "live_sha256": "9fdce9c64e5750de88a0dc2360a1383168c3f79fe20c90312689d9f74ed655b7",
-      "accepted_sha256": "9a2fae181b33fea46eb8c99a9ba4fdade3af05044f114662b65dc01a2d226ec1",
+      "accepted_sha256": "5f84c5634190ebade1ee6ae10d3420e09548efac78f2a72eb98886d2f0341189",
       "operation": "replace",
       "previous_manifest": "aws/tests/fixtures/production-review-financial-edits-manifest-2026-10-16.json"
     },
@@ -103,7 +103,7 @@
     },
     "financial-authz.mjs": {
       "live_sha256": "1b5b56efb782822862077825e85ef9f21781dbd9c6db7ced9110ee248ba6b2bf",
-      "accepted_sha256": "0f7873199bb3a815e9afdad494d4d1afa0bc7a70454b1e04a1c36f4fecd039a8",
+      "accepted_sha256": "b1322f0b6d78a933ca409c5c2379e58060ca801f38ac984301fb04940f973b5e",
       "operation": "replace"
     },
     "financial.mjs": {
@@ -309,7 +309,7 @@
     },
     "providers/webhooks.mjs": {
       "live_sha256": "4bd776a7766b0bd63e17ba18e790e28bb0b4fb8a7c9cceb271bf4f84280e7681",
-      "accepted_sha256": "3420ef809a2b7e07eb786afe311962d3472a0f027bb4a06a882841b8763df9c5",
+      "accepted_sha256": "479cedf8fc6989bf713d61d452dd9f68eca03e45faa1143a3dd049c3b67bafb0",
       "operation": "replace"
     },
     "tenant-billing-engine.mjs": {

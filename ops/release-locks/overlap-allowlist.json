@@ -2284,6 +2284,97 @@
       "reason": "PR #1095 reconciles the live production bytes of write.mjs onto main (ops/live-api-reconciliation-2026-10-21.md, owner decision item 4 of the 2026-10-17 release notes) and overlaps the still-open PR #277 on this file; allow review while that PR remains open. It does not merge, edit or deploy PR #277.",
       "expires": "2026-12-31",
       "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 428,
+      "path": ".env.production.aws.example",
+      "reason": "PR #1109 removes Plaid, Actum and QuickBooks (owner decision 2026-10-21) and drops the \"Plaid is not required\" line in .env.production.aws.example; it overlaps the still-open draft Cursor-era PR #428 (opened 2026-09-22, last updated 2026-09-22, based on main at 0075b5a4a), which predates the current main and must rebase before any merge. Allow review while that PR remains open. It does not merge, edit or deploy PR #428.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 319,
+      "path": ".env.production.aws.example",
+      "reason": "PR #1109 removes Plaid, Actum and QuickBooks (owner decision 2026-10-21) and drops the \"Plaid is not required\" line in .env.production.aws.example; it overlaps the still-open Cursor-era PR #319 (opened 2026-09-14, last updated 2026-09-14, based on the stacked branch cursor/prod-spa-final-cutover-c48b), which predates the current main and must rebase before any merge. Allow review while that PR remains open. It does not merge, edit or deploy PR #319.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 316,
+      "path": ".env.production.aws.example",
+      "reason": "PR #1109 removes Plaid, Actum and QuickBooks (owner decision 2026-10-21) and drops the \"Plaid is not required\" line in .env.production.aws.example; it overlaps the still-open Cursor-era PR #316 (opened 2026-09-14, last updated 2026-09-14, based on the stacked branch cursor/prod-spa-cutover-preflight-c48b), which predates the current main and must rebase before any merge. Allow review while that PR remains open. It does not merge, edit or deploy PR #316.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 237,
+      "path": ".env.production.aws.example",
+      "reason": "PR #1109 removes Plaid, Actum and QuickBooks (owner decision 2026-10-21) and drops the \"Plaid is not required\" line in .env.production.aws.example; it overlaps the still-open Cursor-era PR #237 (opened 2026-09-11, last updated 2026-09-12, based on main at a11bc2fc5), which predates the current main and must rebase before any merge. Allow review while that PR remains open. It does not merge, edit or deploy PR #237.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 234,
+      "path": ".env.production.aws.example",
+      "reason": "PR #1109 removes Plaid, Actum and QuickBooks (owner decision 2026-10-21) and drops the \"Plaid is not required\" line in .env.production.aws.example; it overlaps the still-open draft Cursor-era PR #234 (opened 2026-09-11, last updated 2026-09-11, based on main at 8dfdebdb5), which predates the current main and must rebase before any merge. Allow review while that PR remains open. It does not merge, edit or deploy PR #234.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 545,
+      "path": "aws/functions/api/provider-flags.mjs",
+      "reason": "PR #1109 removes Plaid, Actum and QuickBooks (owner decision 2026-10-21) and drops the AWS_PLAID_ENABLED, AWS_ACTUM_ENABLED and AWS_QUICKBOOKS_ENABLED flags in aws/functions/api/provider-flags.mjs; it overlaps the still-open draft Cursor-era PR #545 (opened 2026-09-29, last updated 2026-09-29, based on main at d5418ab63), which predates the current main and must rebase before any merge. Allow review while that PR remains open. It does not merge, edit or deploy PR #545.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 469,
+      "path": "aws/functions/api/provider-flags.mjs",
+      "reason": "PR #1109 removes Plaid, Actum and QuickBooks (owner decision 2026-10-21) and drops the AWS_PLAID_ENABLED, AWS_ACTUM_ENABLED and AWS_QUICKBOOKS_ENABLED flags in aws/functions/api/provider-flags.mjs; it overlaps the still-open draft Cursor-era PR #469 (opened 2026-09-24, last updated 2026-09-24, based on main at 9c5cec020), which predates the current main and must rebase before any merge. Allow review while that PR remains open. It does not merge, edit or deploy PR #469.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 448,
+      "path": "aws/functions/api/provider-flags.mjs",
+      "reason": "PR #1109 removes Plaid, Actum and QuickBooks (owner decision 2026-10-21) and drops the AWS_PLAID_ENABLED, AWS_ACTUM_ENABLED and AWS_QUICKBOOKS_ENABLED flags in aws/functions/api/provider-flags.mjs; it overlaps the still-open draft Cursor-era PR #448 (opened 2026-09-23, last updated 2026-09-23, based on main at 0075b5a4a), which predates the current main and must rebase before any merge. Allow review while that PR remains open. It does not merge, edit or deploy PR #448.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 390,
+      "path": "aws/functions/api/provider-flags.mjs",
+      "reason": "PR #1109 removes Plaid, Actum and QuickBooks (owner decision 2026-10-21) and drops the AWS_PLAID_ENABLED, AWS_ACTUM_ENABLED and AWS_QUICKBOOKS_ENABLED flags in aws/functions/api/provider-flags.mjs; it overlaps the still-open draft Cursor-era PR #390 (opened 2026-09-19, last updated 2026-09-19, based on the stacked branch cursor/moov-m78-tenant-env-switch-b844), which predates the current main and must rebase before any merge. Allow review while that PR remains open. It does not merge, edit or deploy PR #390.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 388,
+      "path": "aws/functions/api/provider-flags.mjs",
+      "reason": "PR #1109 removes Plaid, Actum and QuickBooks (owner decision 2026-10-21) and drops the AWS_PLAID_ENABLED, AWS_ACTUM_ENABLED and AWS_QUICKBOOKS_ENABLED flags in aws/functions/api/provider-flags.mjs; it overlaps the still-open draft Cursor-era PR #388 (opened 2026-09-19, last updated 2026-10-07, based on the stacked branch cursor/moov-m77-shortfall-payout-b844), which predates the current main and must rebase before any merge. Allow review while that PR remains open. It does not merge, edit or deploy PR #388.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 388,
+      "path": "aws/functions/api/provider-secrets.mjs",
+      "reason": "PR #1109 removes Plaid, Actum and QuickBooks (owner decision 2026-10-21) and drops the PLAID_*, ACTUM_*, QUICKBOOKS_* keys and AWS_PLAID_WEBHOOK_SECRET in aws/functions/api/provider-secrets.mjs; it overlaps the still-open draft Cursor-era PR #388 (opened 2026-09-19, last updated 2026-10-07, based on the stacked branch cursor/moov-m77-shortfall-payout-b844), which predates the current main and must rebase before any merge. Allow review while that PR remains open. It does not merge, edit or deploy PR #388.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 386,
+      "path": "aws/functions/api/provider-secrets.mjs",
+      "reason": "PR #1109 removes Plaid, Actum and QuickBooks (owner decision 2026-10-21) and drops the PLAID_*, ACTUM_*, QUICKBOOKS_* keys and AWS_PLAID_WEBHOOK_SECRET in aws/functions/api/provider-secrets.mjs; it overlaps the still-open draft Cursor-era PR #386 (opened 2026-09-19, last updated 2026-10-07, based on the stacked branch cursor/moov-m64e1-dark-integrate-b844), which predates the current main and must rebase before any merge. Allow review while that PR remains open. It does not merge, edit or deploy PR #386.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 321,
+      "path": "aws/functions/api/provider-secrets.mjs",
+      "reason": "PR #1109 removes Plaid, Actum and QuickBooks (owner decision 2026-10-21) and drops the PLAID_*, ACTUM_*, QUICKBOOKS_* keys and AWS_PLAID_WEBHOOK_SECRET in aws/functions/api/provider-secrets.mjs; it overlaps the still-open Cursor-era PR #321 (opened 2026-09-14, last updated 2026-09-14, based on the stacked branch cursor/prod-cutover-lock-c48b), which predates the current main and must rebase before any merge. Allow review while that PR remains open. It does not merge, edit or deploy PR #321.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
     }
   ]
 }

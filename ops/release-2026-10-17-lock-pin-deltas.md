@@ -177,7 +177,8 @@ planning only, nothing live or verified. Staging live API carries features from 
   (and before the retired check) through `public-invoice.mjs` `handlePublicInvoice`, as staging live does. If
   `public-invoice.mjs` / `invoice-actions.mjs` cannot be loaded (`ERR_MODULE_NOT_FOUND`, the production bundle),
   it answers 503 `public_invoice_unavailable`. Accepted re-pinned to
-  `fbefc70eac342dc2bcb495501643b932ea370a228713b08349517031ff15b094`; expected live unchanged.
+  `fbefc70eac342dc2bcb495501643b932ea370a228713b08349517031ff15b094`, then (Plaid/Actum/QuickBooks removal) to
+  `3d17efb4f680a675a97231709e4379a4478641a46c744bf2fee5796c24fcd6be`; expected live unchanged.
 - `providers/parity/moov-onboard.mjs`: `publicInvoice` uses `invoice-actions.mjs` `loadPublicInvoiceByToken`
   (UUID v4 token only, exact `public_token` match on `moov_invoices`, sanitized response; no id lookup, no
   `payment_invoices`). `invoice` delegates to `invoice-actions.mjs` `runInvoiceAction` (provider lifecycle in
@@ -191,7 +192,8 @@ planning only, nothing live or verified. Staging live API carries features from 
   and treasury `list` reads use the wallets read scope (`/accounts/{id}/wallets.read`, as `moov-wallet.mjs`), not
   `profile.read` (security review M1). Accepted re-pinned to
   `805ac24edd951ac8cbe207b21e9c5593863c239e82a55353ee385a0d09b690cf`, then (security review follow-ups) to
-  `4c04ce4c78d26152bf56984a40b8df7a550af13fd71a31d1bf6f235cc3ad454f`; expected live unchanged.
+  `4c04ce4c78d26152bf56984a40b8df7a550af13fd71a31d1bf6f235cc3ad454f`, then (Plaid/Actum/QuickBooks removal) to
+  `dc60dc48707b100ec4df18dee087453ba503fc713a7833498bc1cddd34edb80d`; expected live unchanged.
 - `invoice-provider.mjs` (new file; `1b219a8a24ef8faf4b5db888dd6f772a9f04b3eb0ec2b869b76cd3b0b7d54e24` were the
   `150da36eb` bytes, now `e6ef5db0f418d473af630a9b0f44d4d38452f7bb37eacc9d14b106a6cea7f8da` after the security review
   follow-ups below) is not a plan member: like `invoice-actions.mjs` and `public-invoice.mjs` it is absent from the
@@ -313,7 +315,7 @@ to `aws/functions/api/`). On `origin/main` every one of these equals its accepte
 | `email-branding.mjs` | replace | `f248bc3fa04fdaa5221275c5812567dd701c19fd5b834e6ea391e84655d49fc0` | `fea68bc0c3f42193a13f5daaa60cfb831dce926ec150bd7b97df6675f0430b22` |
 | `esign.mjs` | replace | `953ef45cb9f79e4cec5309feb971490162ac23df1b5721c025da6f7a63f40b83` | `5e2c5f48913d12b0b1916aec63d6bf9a209e5bd516ec61c5ceba01ca4754ca70` |
 | `app-services.mjs` | replace | `51b2b4dc86b009dac49fc24ecbb412fe66a6e470f0173b4e5249fb3eaf7907fa` | `daab02f7199fef3a66b727ed0ac4ebc8315c675ea9b5025f18c1a53b197555f7` |
-| `write-allowlist.mjs` | replace | `9fdce9c64e5750de88a0dc2360a1383168c3f79fe20c90312689d9f74ed655b7` | `9a2fae181b33fea46eb8c99a9ba4fdade3af05044f114662b65dc01a2d226ec1` |
+| `write-allowlist.mjs` | replace | `9fdce9c64e5750de88a0dc2360a1383168c3f79fe20c90312689d9f74ed655b7` | `5f84c5634190ebade1ee6ae10d3420e09548efac78f2a72eb98886d2f0341189` |
 | `write-check-workflow.mjs` | replace | `1f5e9444afc2bf193110e48c05447af4a26346d69445abc8f96e8e1e29be787d` | `fa2c6aef0e4e6c8713f60a24804309b4cf7f9e4b9d69a379498ef9acaf621fc2` |
 
 ## 3. Files that would need to become plan members
@@ -329,14 +331,14 @@ the ZIP or keep live bytes until the route is gone).
 | `check-endorsement.mjs` | modified (REPLACE) | `85f4bec43620e574498a289e6d245ddd02301603fd6698a1d6bacb915e922677` |
 | `documents.mjs` | modified (REPLACE) | `7cc8dd90241cffef3466117357cc47c8e3387e14869568a3411d4cad64bf795c` |
 | `endorsement-composite.mjs` | modified (REPLACE) | `9fc79f57dbbbcba134fd8e0c7d7936415fd6c1c83f98fcf18bf50e73def25a80` |
-| `financial-authz.mjs` | modified (REPLACE) | `0f7873199bb3a815e9afdad494d4d1afa0bc7a70454b1e04a1c36f4fecd039a8` |
+| `financial-authz.mjs` | modified (REPLACE) | `b1322f0b6d78a933ca409c5c2379e58060ca801f38ac984301fb04940f973b5e` |
 | `financial.mjs` | modified (REPLACE) | `d94dd79fac8075627cb3775264dcdddffc31436c59267607d7087e2768cc54ef` (0b; was `332da536…`) |
 | `identity.mjs` | modified (REPLACE) | `36797f5fa77d2171b2ad3f451d071cbafbca2c82bfb68ab9102783ff3c6551af` (0b; was `0a5ad4c0…`) |
 | `ingest-shared-check.mjs` | DELETED on the branch | `a4149a0fff4b4770867da317605a35e3167b1f9daf6aafa477d79cffb17c5634` |
 | `invoice-actions.mjs` | modified (REPLACE) | `866032c6f972a1d02a1c3e9649b21990d91ba62b6a5a49ac4e1f1274e2045507` |
 | `mortgage-library-doc-types.mjs` | modified (REPLACE) | `8e31c5c906c1a2f05012297296a4f14be788d7462a5fd9dfb0d5c47f0f381c7a` |
 | `mortgage-library-docs.mjs` | modified (REPLACE) | `16204986c7ca7b3f533bafb2e6f72f9600a5d986e41c1c260d8c310ab9dd044c` |
-| `ops-readiness.mjs` | modified (REPLACE) | `2785381cd8a9e0f23f50453c81ad905e259eac0299b98790776d629cc442de6d` |
+| `ops-readiness.mjs` | modified (REPLACE) | `79c87a10512a10a3065c17962ddc0eecf03f8ba36972a574e4aa41758ded6249` |
 | `package-lock.json` | modified (REPLACE) | `0f901adbe95830e228a5d515c37f9e2607c0627ed9551b6de6101b85c9abc6e5` |
 | `package.json` | modified (REPLACE) | `d03dd31c3ad0b915438281380593caab92bdd1a82544c0cdff6c9a81b3e88ac2` |
 | `platform-announcements.mjs` | ADD (new file) | `8141775a7e75a1d2b28426f250da6e5b81eb6d33a1baea55c248a87c38b4e76c` |
@@ -356,9 +358,9 @@ the ZIP or keep live bytes until the route is gone).
 | `providers/parity/moov-client.mjs` | modified (REPLACE) | `56928d66128c4a60141ef6d7392749ebad5211acef9bce6516411f1a2420612a` |
 | `providers/parity/moov-functions.mjs` | modified (REPLACE) | `7b0cde12ff969f7bfc5d83204cde77e2f322e42fe67399ca1a1e4a867eea6e75` |
 | `providers/parity/moov-money.mjs` | modified (REPLACE) | `b35beaa7fe50d25941dc277056c133a67f9393e1a249e1027c32f16ec60f5e37` |
-| `providers/parity/moov-onboard.mjs` | modified (REPLACE) | `4c04ce4c78d26152bf56984a40b8df7a550af13fd71a31d1bf6f235cc3ad454f` |
+| `providers/parity/moov-onboard.mjs` | modified (REPLACE) | `dc60dc48707b100ec4df18dee087453ba503fc713a7833498bc1cddd34edb80d` |
 | `providers/webhook-apply.mjs` | modified (REPLACE) | `28e9d27f14e9c1bd1de43b3f893705fa44b74dc0071eaa3b1895120438cd5300` |
-| `providers/webhooks.mjs` | modified (REPLACE) | `3420ef809a2b7e07eb786afe311962d3472a0f027bb4a06a882841b8763df9c5` |
+| `providers/webhooks.mjs` | modified (REPLACE) | `479cedf8fc6989bf713d61d452dd9f68eca03e45faa1143a3dd049c3b67bafb0` |
 | `signature-library-source.mjs` | ADD (new file) | `f4eccc99e4c3af3d3b6b6b229f0d2408da682fc9176695acffa0e53486c7970f` |
 | `storage-write-auth.mjs` | modified (REPLACE) | `593afcd11f9bcd50d0cef9ee5abdec5dea2ec9493d81e514aad46cfd19e461b8` |
 | `storage-write.mjs` | modified (REPLACE) | `c397c52202b564917cd9d2b62853566c765b92aa6a8cd2304b6a09e74a3ed73f` |

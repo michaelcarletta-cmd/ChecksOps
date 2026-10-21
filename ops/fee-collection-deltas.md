@@ -35,9 +35,9 @@ Planning only: `deploy_authorized` is false and nothing is live or verified.
 
 | Member (under `aws/functions/api/`) | expected live | accepted (branch) | sql_before | Live provenance |
 |---|---|---|---|---|
-| `providers/parity/moov-functions.mjs` | `2dff151e…` | `fbefc70eac342dc2bcb495501643b932ea370a228713b08349517031ff15b094` | – | release manifest (unapplied) |
+| `providers/parity/moov-functions.mjs` | `2dff151e…` | `3d17efb4f680a675a97231709e4379a4478641a46c744bf2fee5796c24fcd6be` | – | release manifest (unapplied) |
 | `providers/parity/moov-money.mjs` | `1cd405ca…` | `0ac52dbde62187d8e93ba229b0f5e4fa3428e84c7f3ba6538c4202242ca68e98` | – | release manifest (unapplied) |
-| `providers/catalog.mjs` | `ae788992…` | `5aa2538f78aa5199f2615c68bd64bbbe3243fa3726ba0e99d12fcf6242f8b3a9` | – | release manifest (unapplied) |
+| `providers/catalog.mjs` | `ae788992…` | `43ada7ec092497fabfcd127db37d7ca25dbfe9063a61a8be713e2b62167dd561` | – | release manifest (unapplied) |
 | `tenant-collection-v2.mjs` (new member) | `8a66f54d3c2785162a1643218e18b4d3c251230cf2a7f98a1ecb4ede8939fb66` | `6b4a415fe38a49243f31a2ab9495ab72bc62e1f1e69afae37c48d67147e2a20a` | – | 2026-10-11 snapshot `f78e16d99` |
 | `tenant-billing-destination.mjs` (new member) | `7f9f24569d8d3112bcb829380de17b56ac5076fe8a8b38fd6a7633b44bcdfd80` | `aaa94a0751d58927cc6b581570ca17a971e33417c5ec9cc6e4f45ddc062de634` | – | 2026-10-11 snapshot (= main) |
 | `tenant-fee-invoice-email.mjs` (new file, ADD) | – (absent) | `c7c1921bd6be6d311f1d81235911f79a55f0d1bbd1f7b4f9a5365d1324052dc2` | – | not in the live bundle or main |
@@ -45,7 +45,7 @@ Planning only: `deploy_authorized` is false and nothing is live or verified.
 | `tenant-billing-handlers.mjs` | `8aeb8b7f…` | `2f8ca3c53b3e3a125b6bb8c6e61e09a593388450274c320978498af78643937e` | SQL 98 (was 96) | release manifest (unapplied) |
 | `tenant-deposits-gate.mjs` (new file, ADD) | – (absent) | `0b9942462b5d78a5cff9f5f78145b0a15fc398b3d2b8160966004f4fa9f60b95` | – | not in the live bundle or main |
 | `workflow-rpc.mjs` (moved from the release manifest) | `9a630bdb…` | `79b7e4de653eb9d391afca9d27769b3b7c8e3d10d67af43e829ee32398797485` | SQL 98 (was 90) | release manifest (unapplied) |
-| `providers.mjs` (moved from the release manifest) | `6ad4c7ec…` | `af6309a083b6c4f7805c13489caa036339ca3523f4a425c001eaf32c2fa6bacc` | SQL 98 (was none) | release manifest (unapplied) |
+| `providers.mjs` (moved from the release manifest) | `6ad4c7ec…` | `51fa3109f06470c09fc9598c5b29c92085c0833a5dd0894a1478e30db5f6423a` | SQL 98 (was none) | release manifest (unapplied) |
 
 `providers/parity/moov-functions.mjs` (accepted `fbefc70e…`, unchanged by the 2026-10-18 security review follow-ups)
 carries the reviewed plan exemption `optional_imports: ["public-invoice.mjs"]`: `public-invoice.mjs` is not in the

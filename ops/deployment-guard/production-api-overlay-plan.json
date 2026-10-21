@@ -237,7 +237,7 @@
     },
     "data.mjs": {
       "operation": "replace",
-      "accepted_sha256": "f81055b8ab46f4293c79d213e3a9ceb8742ce7676d41f079fc86a5be10953449",
+      "accepted_sha256": "75fe96fc3a3f782a0e69e30f7dd4c4f5a1c5f64a93915bd40a0eaf6bd3ddde31",
       "expected_live_sha256": "965f5ed94e6d901bd26335199d82039cc5676f8eb83f182803efc2f45167d349",
       "sql_before": "aws/workflows/sql/53_claim_settlement_breakdown.sql",
       "manifest": "aws/tests/fixtures/production-checkalt-onboarding-manifest-2026-10-15.json"
@@ -328,7 +328,7 @@
     },
     "providers.mjs": {
       "operation": "replace",
-      "accepted_sha256": "af6309a083b6c4f7805c13489caa036339ca3523f4a425c001eaf32c2fa6bacc",
+      "accepted_sha256": "51fa3109f06470c09fc9598c5b29c92085c0833a5dd0894a1478e30db5f6423a",
       "expected_live_sha256": "6ad4c7ec0ba58e8906f85fc7f8d8fef21194920fc53f253ddfed6e46bf006b9c",
       "sql_before": "aws/workflows/sql/98_tenant_fee_collection.sql",
       "manifest": "aws/tests/fixtures/production-fee-collection-pin-manifest-2026-10-17.json"
@@ -440,7 +440,7 @@
     },
     "write-allowlist.mjs": {
       "operation": "replace",
-      "accepted_sha256": "9a2fae181b33fea46eb8c99a9ba4fdade3af05044f114662b65dc01a2d226ec1",
+      "accepted_sha256": "5f84c5634190ebade1ee6ae10d3420e09548efac78f2a72eb98886d2f0341189",
       "expected_live_sha256": "9fdce9c64e5750de88a0dc2360a1383168c3f79fe20c90312689d9f74ed655b7",
       "sql_before": "aws/workflows/sql/93_tenant_company_info.sql",
       "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
@@ -454,7 +454,7 @@
     },
     "ops-readiness.mjs": {
       "operation": "replace",
-      "accepted_sha256": "2785381cd8a9e0f23f50453c81ad905e259eac0299b98790776d629cc442de6d",
+      "accepted_sha256": "79c87a10512a10a3065c17962ddc0eecf03f8ba36972a574e4aa41758ded6249",
       "expected_live_sha256": "614add851b4c85a7b79dcdf540a3167d04b944d986523810f4c59274010aa448",
       "sql_before": null,
       "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
@@ -482,7 +482,7 @@
     },
     "providers/parity/moov-functions.mjs": {
       "operation": "replace",
-      "accepted_sha256": "fbefc70eac342dc2bcb495501643b932ea370a228713b08349517031ff15b094",
+      "accepted_sha256": "3d17efb4f680a675a97231709e4379a4478641a46c744bf2fee5796c24fcd6be",
       "expected_live_sha256": "2dff151e470aabf74f905d4f6af51c9ac7dd1d13696eeffa585ca43cf00302ee",
       "sql_before": null,
       "manifest": "aws/tests/fixtures/production-fee-collection-pin-manifest-2026-10-17.json",
@@ -499,7 +499,7 @@
     },
     "providers/parity/moov-onboard.mjs": {
       "operation": "replace",
-      "accepted_sha256": "4c04ce4c78d26152bf56984a40b8df7a550af13fd71a31d1bf6f235cc3ad454f",
+      "accepted_sha256": "dc60dc48707b100ec4df18dee087453ba503fc713a7833498bc1cddd34edb80d",
       "expected_live_sha256": "86127db01e4918ed72e8ca3ed56a378a53a000a9c046dde986aa2afc525f2f89",
       "sql_before": null,
       "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json",
@@ -530,7 +530,7 @@
     },
     "financial-authz.mjs": {
       "operation": "replace",
-      "accepted_sha256": "0f7873199bb3a815e9afdad494d4d1afa0bc7a70454b1e04a1c36f4fecd039a8",
+      "accepted_sha256": "b1322f0b6d78a933ca409c5c2379e58060ca801f38ac984301fb04940f973b5e",
       "expected_live_sha256": "1b5b56efb782822862077825e85ef9f21781dbd9c6db7ced9110ee248ba6b2bf",
       "sql_before": null,
       "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
@@ -747,7 +747,7 @@
     },
     "providers/catalog.mjs": {
       "operation": "replace",
-      "accepted_sha256": "5aa2538f78aa5199f2615c68bd64bbbe3243fa3726ba0e99d12fcf6242f8b3a9",
+      "accepted_sha256": "43ada7ec092497fabfcd127db37d7ca25dbfe9063a61a8be713e2b62167dd561",
       "expected_live_sha256": "ae78899274a1dfe93835d2e8fc4856f5d47d84fde18de688ed1f533a800fb521",
       "sql_before": null,
       "manifest": "aws/tests/fixtures/production-fee-collection-pin-manifest-2026-10-17.json"
@@ -761,7 +761,7 @@
     },
     "providers/webhooks.mjs": {
       "operation": "replace",
-      "accepted_sha256": "3420ef809a2b7e07eb786afe311962d3472a0f027bb4a06a882841b8763df9c5",
+      "accepted_sha256": "479cedf8fc6989bf713d61d452dd9f68eca03e45faa1143a3dd049c3b67bafb0",
       "expected_live_sha256": "4bd776a7766b0bd63e17ba18e790e28bb0b4fb8a7c9cceb271bf4f84280e7681",
       "sql_before": null,
       "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
