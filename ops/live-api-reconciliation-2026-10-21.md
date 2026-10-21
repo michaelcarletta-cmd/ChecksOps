@@ -70,3 +70,21 @@ files the overlay path never carried and the 9 main-only modules are now live in
 configuration change. The `production-spa` release lock still records the pre-rebuild API revision
 `719ea3ae…` as the API state at that SPA release; the read-only inspect reports
 `revision_matches_release_lock: false` until the next SPA release records the new revision.
+
+## Second full-package rebuild applied (2026-10-21)
+
+The Plaid/Actum/QuickBooks removal (#1109) shipped through the same guarded rebuild path (#1117
+and #1119 plan sections), with the owner's exact words per environment:
+
+| Environment | Run | CodeSha256 before → after | RevisionId after | State |
+|---|---|---|---|---|
+| staging (`checksops-staging-api`) | [39633656412](https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39633656412), main `fd1e059b5` | `sxodWyRp…` → `Bh/f7zaI…` | `b317d571-f4ce-40d2-a180-e6a00f5a7185` | VERIFIED |
+| production (`checksops-production-prep-api`) | [39636816351](https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39636816351), main `e4daedefe` | `sxodWyRp…` → `Bh/f7zaI…` | `4945c256-37ff-49b1-b7d9-adffea1a51bf` | VERIFIED |
+
+Both environments again run the same package bytes (candidate ZIP `061fdfef3688…`, 6770 members):
+the 19 changed source files are main's bytes, and `providers/actum.mjs`, `providers/plaid.mjs`,
+`providers/plaid-sandbox.mjs` and `providers/quickbooks.mjs` are gone. Dependencies are unchanged
+(54 packages). Configuration is unchanged (45 variables on staging, 46 on production);
+`AWS_MOOV_ONBOARDING_PRODUCTION_ENABLED` is `"true"` in production since the guarded configuration
+apply run 39594352935, not through this rebuild. The `production-spa` release lock still records the
+API revision `719ea3ae…`; that is unchanged by this record.

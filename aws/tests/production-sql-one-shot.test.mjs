@@ -527,6 +527,9 @@ test('only the apply child gets the apply variables, and its receipt is the one 
 
 // --- stop conditions ---------------------------------------------------------------------
 
+// SQL 106's pin is execute-authorized (owner-approved pin change of 2026-10-21: the read-only production
+// inspect SSM 4539d0f0 recorded as its pre-state, owner-accepted substitute staging evidence) until its
+// record-and-retire change.
 // SQL 97's pin is execute-authorized (owner approved 2026-10-21) until its record-and-retire change:
 // it was not applied on 2026-10-21 (its pre-apply inspect reported other_write_grants on
 // financial_stepup_log; SQL 106 is to come first). SQL 95's and SQL 99's pins were (owner approved
@@ -537,7 +540,7 @@ test('only the apply child gets the apply variables, and its receipt is the one 
 // after their 2026-10-16 applies, SQL 103, SQL 29, SQL 30, SQL 91, SQL 92, SQL 90, SQL 101, SQL 93,
 // SQL 96, SQL 94, SQL 104 and SQL 98 after their 2026-10-19 applies, SQL 102 and SQL 105 after their
 // 2026-10-20 applies, SQL 95 and SQL 99 after their 2026-10-21 applies).
-const EXECUTE_AUTHORIZED = Object.freeze(['sql97']);
+const EXECUTE_AUTHORIZED = Object.freeze(['sql97', 'sql106']);
 // SQL 95's and SQL 99's production applies of 2026-10-21 (main dcd865256), recorded in applied.
 const APPLIED_2026_10_21 = Object.freeze({
   sql95: Object.freeze({ ssm: '2f1530c2-0cf9-42a9-8fef-685b5e83589a', run: '3b4fe182-94bd-494f-b411-af75f4f3ce92', one_use_id: 'sql95-prod-d04849eb-31b3-4657-a622-d0ffa030207d', workstream: 'prod-sql95-remove-freedom-claims-bridge-20261021' }),
@@ -616,8 +619,9 @@ test('a pin without staging acceptance or phrase is refused', async () => {
     sql95: '48535b69b1a2f9b1ad69584f677dae78c830a482f58b9380c881205f91d8e05f',
     sql97: '56b1f63192df1147fbbdd0206226129aeea35467d13c8bf0c8bc399316d06079',
     sql99: '4d174e86d8c9f0940a0d38da3e432676143dc34946e8d1619cfc36d8a9a834e9',
+    sql106: '56b5e4bb1a2db3133c32c9cc3cca02c1e7fb876839544dbdfd0717aad8f25880',
   };
-  for (const key of ['sql71', 'sql87', 'sql88', 'sql89', 'sql82', 'sql83', 'sql84', 'sql85', 'sql86', 'sql103', 'sql29', 'sql30', 'sql91', 'sql92', 'sql90', 'sql101', 'sql93', 'sql96', 'sql94', 'sql104', 'sql98', 'sql102', 'sql105', 'sql95', 'sql97', 'sql99']) {
+  for (const key of ['sql71', 'sql87', 'sql88', 'sql89', 'sql82', 'sql83', 'sql84', 'sql85', 'sql86', 'sql103', 'sql29', 'sql30', 'sql91', 'sql92', 'sql90', 'sql101', 'sql93', 'sql96', 'sql94', 'sql104', 'sql98', 'sql102', 'sql105', 'sql95', 'sql97', 'sql99', 'sql106']) {
     const real = realPin(key);
     assert.equal(real.expected_live_definition_sha256, RECORDED_PRODUCTION_PRE[key]);
     // Execute-authorized and applied (retired) pins get an explicit pre-authorization copy; SQL 71's committed pin is still pending.
@@ -693,7 +697,7 @@ test('SQL 82 to SQL 86 are retired with a verified_live record; their execute-au
   }
 });
 
-test('the committed execute-authorized pin (SQL 97) and the execute-authorized copies of the retired SQL 95 and SQL 99 pins pass the pin stage, and their evaluators allow the manifest built from them', async () => {
+test('the committed execute-authorized pins (SQL 97, SQL 106) and the execute-authorized copies of the retired SQL 95 and SQL 99 pins pass the pin stage, and their evaluators allow the manifest built from them', async () => {
   const STAGING_REFERENCE = {
     // SQL 95 / SQL 97: the guarded staging read-live of 2026-10-21 (intended state), owner-accepted
     // substitute evidence (different pre-state; their wave 4 apply runs are not recorded).
@@ -701,8 +705,11 @@ test('the committed execute-authorized pin (SQL 97) and the execute-authorized c
     sql97: 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39618586101',
     // SQL 99: its guarded staging wave 1 apply from the same pre-state.
     sql99: 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39080577323',
+    // SQL 106: the guarded staging read-live of 2026-10-21 (already in effect in staging, live =
+    // intended), owner-accepted substitute evidence.
+    sql106: 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39633390440',
   };
-  for (const key of ['sql95', 'sql97', 'sql99']) {
+  for (const key of ['sql95', 'sql97', 'sql99', 'sql106']) {
     const real = realPin(key);
     let committed = real;
     if (APPLIED_2026_10_21[key]) {
