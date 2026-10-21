@@ -58,7 +58,7 @@ Live production has diverged on purpose since then. A read-only comparison on 20
 | Network | no VPC | 2 private subnets, 2 security groups (`vpc-09f2268778966ce97`) |
 | Timeout | 29 s | 45 s |
 | Environment | 22 variables, every provider and write flag `false` | 50 variables: writes, Moov, CheckAlt, financial permissions, Moov onboarding and fee collection on; database, files, provider and webhook secret references; email settings |
-| HTTP API | CORS allow-list `checksops.com`, `www.checksops.com` | CORS `*`; a custom authorizer, an `OPTIONS /{proxy+}` route, access logs and throttling managed outside the stack |
+| HTTP API | CORS allow-list `checksops.com`, `www.checksops.com` | CORS `*` at the comparison (allow-list applied later the same day, see below); a custom authorizer, an `OPTIONS /{proxy+}` route, access logs and throttling managed outside the stack |
 
 A stack update from either file would replace the function's role, network and whole
 environment map and take production down. Both files therefore carry a CloudFormation `Rules`
@@ -78,9 +78,11 @@ Live production changes only through the guarded paths:
 | Website | `guarded-production-spa-upload.yml` |
 | Database | `production-sql-one-shot.mjs`, `ops/production-sql-one-shot.md` |
 
-The CORS allow-list in these files was never deployed; live still allows `*`. Tightening it is a
-separate, reviewed change through the production CORS writer, not a stack deploy. Bringing the
-stack back under CloudFormation (importing the live state) would be its own reviewed workstream.
+The CORS allow-list is live since 2026-10-21: the guarded production CORS writer
+(`guarded-production-cors.yml`, run 39602211635) changed `AllowOrigins` from `*` to
+`https://checksops.com`, `https://www.checksops.com` and nothing else; see
+`ops/production-cors-allowlist.md`. Bringing the stack back under CloudFormation (importing the
+live state) would be its own reviewed workstream.
 
 Do **not** overlay `checksops-staging-api` from production work.
 
