@@ -4,547 +4,661 @@
   "environments": {
     "staging": {
       "function_name": "checksops-staging-api",
-      "status": "applied",
+      "status": "accepted",
       "members": {
-        "admin-override-check-status.mjs": {
-          "live_sha256": "ccf1204cb03ab7c243057e5179330252b820039255f0cf91b511f863af34985b",
-          "accepted_sha256": "fd514ad8e822ed7d7d3648a336f4b44d51b56dda6a662cf692ad2bd032954650"
-        },
         "allowed-tables.json": {
-          "live_sha256": "2ecf359ea6e7c2cb7957b75d0e4f604da81497e0663e3de282c4e86b7cbbbaf3",
-          "accepted_sha256": "e34a1c418056b4e6f3a28c416fdfd2e32854160ab9624c98c97c6c908544ec9a"
-        },
-        "auth-cognito.mjs": {
-          "live_sha256": "796a59f044a044b31e67d45e6d3c9a436ebefc99d5641d03d6a974d9707aa117",
-          "accepted_sha256": "5478b83b467c2f46d578ddbe9bfd1091a69b54a32e3009cddf8a97ffa7344d1d"
-        },
-        "auth-mfa.mjs": {
-          "live_sha256": "dd45a14345438e9dffd64919c58e8cda05ef2a585fb9db26dd9b9f67da9dace0",
-          "accepted_sha256": "28903e4f5af4d698a1b96ffd23b1bd7f9b711330cdb3da12701a4214affe4e8b"
-        },
-        "auth-totp-code.mjs": {
-          "live_sha256": "c17b5016710a3a54821932fc8507202a9ddcd531754c5916dfc3cce04b6eca34",
-          "accepted_sha256": "3517e470fe6a65c3fff47881a639e08984411ac2832db4f1fb334f6d2aba64ca"
-        },
-        "auth-webauthn.mjs": {
-          "live_sha256": "6a305e4ce0f432edb861d7440b566eb5d2d3110a8ab717ff364ddb35cc1aba17",
-          "accepted_sha256": "38b5071b3f242060c945ca25da0b2f25c371acf2e6951e097e60816fabcdaffd"
-        },
-        "authorization.mjs": {
-          "live_sha256": "7766cc5974292c4a73103961d94cac5006be20a6b687646fcd6560161a91066f",
-          "accepted_sha256": "2555f1f22b83049291eaecc3c32d8da36bf78a1ae2e9a6efb6424134ccd6b646"
-        },
-        "azure-check-ocr.mjs": {
-          "live_sha256": "bcf7f0b98e480acefda6eaeb69728e15d7e60fd71fbd043aa98dfd50a4108a53",
-          "accepted_sha256": "14495caeab071f512fe3c1a89b73a9b108862977aa4e1c3bebf6cf87b2860629"
-        },
-        "azure-di-secret.mjs": {
-          "live_sha256": "e9037cc309f7f47096e839f38f4adf4ad0bdd8a7ad977a32d7b2b4e87a633ed9",
-          "accepted_sha256": "59127ddb75253887f076abd13f6de73a1037b81069d313915fe7910be03a6eb8"
-        },
-        "bill-mortgage-handling.mjs": {
-          "live_sha256": "a456e30fb96a2a1e3faf667eb5eb3dc8e6d4d797195306864c1f4f1f08915c71",
-          "accepted_sha256": "59d9d375bb736a747e9748f06d36fc57a2c7191664d937b672b3d79f0b8d8fc8"
-        },
-        "check-deposited.mjs": {
-          "live_sha256": "411be6304d685bb52c4bf32f4bfede9b044f7513e91f2750ceda37b397f12835",
-          "accepted_sha256": "395ddec5c88e2290fc72f2ab86ef2c934fe7654c7f2309a8176e1147ce32edf1"
-        },
-        "check-ocr-provider.mjs": {
-          "live_sha256": "3b5ef2025ba289028c0223f534f19f52668b4d4a93c15475870270ff66abd53a",
-          "accepted_sha256": "2d2eaa6a4deb02b257f2928d71cc6b6d3f501ee480adb479266bd0930f41e2dc"
-        },
-        "check-reconciliation.mjs": {
-          "live_sha256": "7fae2579473b09263c962014fdde68d7ec4ea2c6e7b9375185b4e26d0ad5322c",
-          "accepted_sha256": "eae0171e282c879b49f9756715c0096fc6d2aea65c57826dcf0910410e56720f"
-        },
-        "claim-settlement-rpc.mjs": {
-          "live_sha256": "24c42fbc31e7a7645557b9c98dfa32368be33939ce4ed38e549a0f44e6ece708",
-          "accepted_sha256": "4d0b312cadaeffb7bff2d96eea9c4815a1f23815c9c9dcbdbceea4e4d3203d64"
-        },
-        "cognito.mjs": {
-          "live_sha256": "14e4bc0067e1359b1506e684bc078d4fda983235356db5946b0d651b71dab3fd",
-          "accepted_sha256": "4328f1e771718c40407a3754c1747c605d81213a5fcd377604561e035cd3f749"
+          "live_sha256": "e34a1c418056b4e6f3a28c416fdfd2e32854160ab9624c98c97c6c908544ec9a",
+          "accepted_sha256": "9ef983c56131c06191b1960860eeb1e455ae406ac1cc423e78735bb31397a958"
         },
         "data.mjs": {
-          "live_sha256": "855dfd17f32ec2d83cf12b7a0f88efc0c29a4fe7c66a74ae7e56d2ba904bb47f",
-          "accepted_sha256": "f81055b8ab46f4293c79d213e3a9ceb8742ce7676d41f079fc86a5be10953449"
+          "live_sha256": "f81055b8ab46f4293c79d213e3a9ceb8742ce7676d41f079fc86a5be10953449",
+          "accepted_sha256": "75fe96fc3a3f782a0e69e30f7dd4c4f5a1c5f64a93915bd40a0eaf6bd3ddde31"
         },
-        "db-health.mjs": {
-          "live_sha256": "d7f7705541a09623454b1f5c52e6076a9a44af7458883cbcbd6659ce8de755b4",
-          "accepted_sha256": "0eb66cecc0db49941a3d0a59789c7b16529d56794de739825b5577f51e3eac8b"
-        },
-        "db-validator-access.mjs": {
-          "live_sha256": "cb43cbf45dd7a3fd507d3ac0ac430a4d4f87e4c5fbcd824dcc78de4b544b0820",
-          "accepted_sha256": "dc8a29849ed5dc2558f6329fed47cd9646734f6fc943bdb8ed84bfad27128787"
-        },
-        "email-layout.mjs": {
-          "live_sha256": "5b1d6ad460772481d9854df645bc359c17a8dd655753e37ff5b6cec3993f4dec",
-          "accepted_sha256": "2780057147a85426028052951be52d3b73e2ba39e479078e04e3438ca7a09dec"
-        },
-        "email-policy.mjs": {
-          "live_sha256": "6f195bbe23e9d5f5ce5ad905b1eb81a278d42bb550312849d10c195540231991",
-          "accepted_sha256": "83d73511e751130a939c2e92c0b995b45d5f9d3bdaa02d5ac04c5322a39fd3a6"
-        },
-        "email-queue.mjs": {
-          "live_sha256": "54af098b08e2545654ed000455ae69b4e1a26ce51894ac92f25b2e25252ffc01",
-          "accepted_sha256": "8692a190aeafd50bd9485e9a93c1425206e79b43c9404d0428fb3fb4d38e760a"
-        },
-        "email-ses.mjs": {
-          "live_sha256": "dc56f203b564865ef74995703a4b28020de0950a9de1cc34eebba854fe73681d",
-          "accepted_sha256": "79fceb7e86339b2cad1fd80410266984380e90841550abc961f7b5a5413dd62c"
-        },
-        "email-templates.mjs": {
-          "live_sha256": "8bea9bceadf3c77632a1c1fab080ec0b735733b8bbbe7b33f95f2815fe5812a0",
-          "accepted_sha256": "f7f79f6d270e3d2e738ee9c54190dd1de1f972437721c839f025520afaa26ef0"
-        },
-        "email.mjs": {
-          "live_sha256": "5f7b308f2ad83c218601de331ed2b58bf7618f19c932f76f1318dc0af58703af",
-          "accepted_sha256": "66149c42d5aa77aa5b64c09f9bb08c3105317ca7cc0191de9e3ae6610c6e5b16"
-        },
-        "endorsement-completion.mjs": {
-          "live_sha256": "232ebf6ce9fd6421f60e3c52414ac127cac1b5e31415a892a92c4e125511d71f",
-          "accepted_sha256": "e0a162cea41e1c6a4e86eb77c2d127a968f69f5e918749bfc6deea2559c0827c"
-        },
-        "endorsement-material-invalidation.mjs": {
-          "live_sha256": "fa3621abd0b242209aef264ea72792b5fca2bb4770f6aa105f0b4b1caaee4888",
-          "accepted_sha256": "8a345898d19ed791f9a5c2e94f7c9bfb95f05508d1cce514b82ea165e2f32af1"
-        },
-        "endorsement-parity.mjs": {
-          "live_sha256": "0877f8383e52ca25453fdb8f6ccb33d08e51ea7c8628ad0b71bf632483d6cf81",
-          "accepted_sha256": "db2d5448ab1d3e0bdf107ce21c9ecd55af4339e7369de0ecfd75124e55ded1ea"
-        },
-        "financial-audit.mjs": {
-          "live_sha256": "e40c1d5a648ad35f4ab633da27c2ebc12f8085a2df5ed49c9c8edaf4566c7bc0",
-          "accepted_sha256": "51c540797b775e3be4dead02fd73bc047ad0d103aeca7ec2b37d78fcfaddd659"
+        "financial-authz.mjs": {
+          "live_sha256": "0f7873199bb3a815e9afdad494d4d1afa0bc7a70454b1e04a1c36f4fecd039a8",
+          "accepted_sha256": "b1322f0b6d78a933ca409c5c2379e58060ca801f38ac984301fb04940f973b5e"
         },
         "financial-flags.mjs": {
-          "live_sha256": "b683f0b70b27409e8b7a8d7c967230dfb7ca02d76d80c3a8068f8b213a914d9a",
-          "accepted_sha256": "0f8c1394864be3faf133a1c33db5fc9e434cc076b44f242915bf61bbc713ad0a"
-        },
-        "financial-idempotency.mjs": {
-          "live_sha256": "1f8b90ed336784fa6a62125950bfcbed1d53698c6fe32329a84eb64d970f8dd0",
-          "accepted_sha256": "14c6ca7a4bd5ea18b681d1cb83921b83b1a933255d0ef1a60546ad1fffe2f96e"
-        },
-        "financial-ownership.mjs": {
-          "live_sha256": "b4c74581930f44be66e5e3ddc6a24d4138df6cb91f86f029c5d5e593ae4af7c2",
-          "accepted_sha256": "53a1d5ab621246bc2a03913914deddacf9219d511a7ce724edb6132e1f227ed5"
-        },
-        "financial-reconciliation.mjs": {
-          "live_sha256": "4cc5c83804b56a8bbedd4e86e4cb509a4e88784a2c86641921ba3ec7e4c69463",
-          "accepted_sha256": "492a2df18e8e6802544099fca01326773fef02a248430a193d52b529c7d22393"
-        },
-        "financial-remaining.mjs": {
-          "live_sha256": "63153526144a805187c8e2760e21d5ed45f8c1a596be0ad031665345ff25d3ee",
-          "accepted_sha256": "e608c00f65623bfc226eecd7d216d64141e610f2a2c1b0cb841f9736d5397989"
-        },
-        "financial-state.mjs": {
-          "live_sha256": "7dd1462a22f669508be903edeae251e07f774def55492d1961a5395b9ef78bcb",
-          "accepted_sha256": "23f65eeb352dc9cf112b08dcc1efb0688476709544f4f811b6b37573de650fd2"
-        },
-        "financial-totp.mjs": {
-          "live_sha256": "84514e94bf5bf9e5478bca65280309747d17f3541e2d01040351fa9580aeb243",
-          "accepted_sha256": "763c9f93084f10caba6166427530175018bb9d57ea0124d070abe4ad5a305b71"
-        },
-        "homeowner-otp.mjs": {
-          "live_sha256": "9382d0ae755abd8affe448e18347312a9d1978fe0fed33344962f9b6df646794",
-          "accepted_sha256": "df74bfb09ca847b407dbd2e5edf51315be51fb8aef55480836703fc1218457b3"
-        },
-        "homeowner-signing-integration.mjs": {
-          "live_sha256": "41f0dbbbf1f1e013f4f0afa9671342fc8fb10299564f208d459eb4d1a5f553ca",
-          "accepted_sha256": "4deac31f61ebf797a4123d99ae4a2166da81c54dbdad0faccc5cafdb3dbbf7c3"
-        },
-        "identity-env.mjs": {
-          "live_sha256": "35ffaecaed6e34460d77105939cf09d0836bcffb9652a6ff8fc6d4ad0b8aaa71",
-          "accepted_sha256": "e814546feded3a323461b3a7a8369e3d8a09f9a5d306d68973e15389b871f443"
+          "live_sha256": "0f8c1394864be3faf133a1c33db5fc9e434cc076b44f242915bf61bbc713ad0a",
+          "accepted_sha256": "4fe83de59a70002598b1832792b544e1cbca642f4e25cf9c25cd4e3d064b8822"
         },
         "index.mjs": {
-          "live_sha256": "0d5c81111223352b28a84698d3dfa264809cfae17a6fe21dd69937fd23d7b362",
-          "accepted_sha256": "6a1993e13d8efdd3d99704c82b9dab446a0ae567f55af688f15f5a0ca8d3e652"
+          "live_sha256": "6a1993e13d8efdd3d99704c82b9dab446a0ae567f55af688f15f5a0ca8d3e652",
+          "accepted_sha256": "ec092b24bae29c4a0243f9f6fa36dc05942fe082051104e63b1201f1b8f699e1"
         },
-        "invoice-actions.mjs": {
-          "live_sha256": "25ee0810c1401cfd4d57d2da31b00fbcd158e08faa8c1de1ecb21c355d781d23",
-          "accepted_sha256": "866032c6f972a1d02a1c3e9649b21990d91ba62b6a5a49ac4e1f1274e2045507"
-        },
-        "invoice-provider.mjs": {
-          "live_sha256": "665a5c756827260a3b0333d5ac1abe057eaefd3560009dc563cffebbe68c5e4c",
-          "accepted_sha256": "e6ef5db0f418d473af630a9b0f44d4d38452f7bb37eacc9d14b106a6cea7f8da"
-        },
-        "jwks.mjs": {
-          "live_sha256": "68f8337f67de1b82330bf4ce90d42cb3bbfa5f7f214699d459a8d7abad23a342",
-          "accepted_sha256": "e1c05e8bd938ef3c2ee477ac7f141b9c11936e69b4ed30cdf5ba8835fb0b5b98"
-        },
-        "mortgage-ops-usage.mjs": {
-          "live_sha256": "f52daac5668265fd8768edeac0f7ddda437d2e38890e8721cc4f8783c765a3be",
-          "accepted_sha256": "9856f51fa1a71a909689b7420001c6f7f4bb7eff3711ea4dedbefda6b68dadb2"
-        },
-        "ocr-azure-image.mjs": {
-          "live_sha256": "5e4288b4eaf23593454177101b49863b60235c31d1fdb69c352bb71d2565d7bf",
-          "accepted_sha256": "39517129a1859e47f141bbf0a9c08940336e7b2a9e3f00dee703e1758c64f0a8"
-        },
-        "ocr-descriptive-persist.mjs": {
-          "live_sha256": "428768cf1d2bda3edd5b1111343a7b0e86695e01459da6f76fdd5ed6003d0787",
-          "accepted_sha256": "ba38a287cd5d0ef01fd828e9ca796e7027821ac91bf73fcef98671088aaf43fd"
-        },
-        "ocr-descriptive-text.mjs": {
-          "live_sha256": "d17dc9f7d38f10ce64ce600d01d80d552f88d15c30d4797a42ec12a644c07d5d",
-          "accepted_sha256": "4f0860bd9ed1f60399422bfb1f177394fadab87bb4b974d43add9140117ee136"
-        },
-        "ocr-normalize-azure.mjs": {
-          "live_sha256": "f14cf0e9594bf9a026c3f602374b51f1a1f4ccce23ce0659f3c3dc62a5661b41",
-          "accepted_sha256": "32713f13bc2af1afa5e6d1416402d17474ad02e6352cdf9120be5555a8be75d4"
-        },
-        "ocr-parse.mjs": {
-          "live_sha256": "846590bd7db7f2ee483714ea09eb5f60aace50916205d4574d3d0ccfd72db39a",
-          "accepted_sha256": "29e224f5cec8f29f9d19a9eba115e2ca340b78cc5f53444f4ada4382140070e5"
-        },
-        "ocr.mjs": {
-          "live_sha256": "50a4779d7a9dab94ab8c426956fe752fcacb099d20ed5e4d878c9e5ee1b9fe9f",
-          "accepted_sha256": "ecd3b253c111921ee62f21bab214bd346ab19819a9c764cdef33b07524c6221f"
-        },
-        "package-lock.json": {
-          "live_sha256": "542059229f9f868f2480fc6355c081f261534ade67f0f0073bc6ab0b1e30f414",
-          "accepted_sha256": "0f901adbe95830e228a5d515c37f9e2607c0627ed9551b6de6101b85c9abc6e5"
-        },
-        "package.json": {
-          "live_sha256": "8cabd8000fd23b7573351d5fde446b36cdac21de39204d5b66d355af352f5170",
-          "accepted_sha256": "d03dd31c3ad0b915438281380593caab92bdd1a82544c0cdff6c9a81b3e88ac2"
-        },
-        "partner-share-lifecycle.mjs": {
-          "live_sha256": "f1279e935edb8e42fade93ea92523c49189ff405ece1a06df92e7b34a6708682",
-          "accepted_sha256": "3aa62d8895c4a004a815ed76e362f6e3e46be516f63c47d1e058affb23f4e05e"
-        },
-        "payment-direction-email.mjs": {
-          "live_sha256": "f5f002dbd8a347289a034536e7f180f03580e571ab5c929245e33dcd851ccb56",
-          "accepted_sha256": "e72aa1d5a9e6956378a91470803a6b8f63f9cc7518dd4d5307795acd60350560"
+        "ops-readiness.mjs": {
+          "live_sha256": "2785381cd8a9e0f23f50453c81ad905e259eac0299b98790776d629cc442de6d",
+          "accepted_sha256": "79c87a10512a10a3065c17962ddc0eecf03f8ba36972a574e4aa41758ded6249"
         },
         "provider-authz.mjs": {
-          "live_sha256": "8636365b6e3c6e32053ac32c40d8da23dd118151a7db7c611d5342ebdf43e702",
-          "accepted_sha256": "4964ea7942abae49a3f14fce6eaa5eb3f936ee4936c85d8b46888414151e24b7"
+          "live_sha256": "4964ea7942abae49a3f14fce6eaa5eb3f936ee4936c85d8b46888414151e24b7",
+          "accepted_sha256": "bc00de4fe4a51d446e7547172a6dd62446678f9cac20af1b1901d797459aea45"
         },
         "provider-flags.mjs": {
-          "live_sha256": "2ccf076ecdf1808aea3a9dca054ba88e7ea58eb1088e7421451c005d4815f885",
-          "accepted_sha256": "122b8769080851312d7e4ffde87bdbde060aed8004e20362d28956b70004c7ec"
+          "live_sha256": "122b8769080851312d7e4ffde87bdbde060aed8004e20362d28956b70004c7ec",
+          "accepted_sha256": "0c903e5442cc3987e3727d51e4b61bbb4e12bcddbe7e21c2bff6058ea349b1c8"
         },
         "provider-secrets.mjs": {
-          "live_sha256": "9b2baddc8dc148d8c07e7e7c5793976ac63cfc6c2cc3dd6a3d03e63958265ce5",
-          "accepted_sha256": "7cfe3b03faea47c4e40a089c00d5841a3a45be17477b1116dcf6752b1d5d2909"
+          "live_sha256": "7cfe3b03faea47c4e40a089c00d5841a3a45be17477b1116dcf6752b1d5d2909",
+          "accepted_sha256": "a2961d9d8e8b1ddc7269948fbdb8fffdd018c1be14d3b1084b2fc8690e2111ae"
         },
-        "providers/actum.mjs": {
-          "live_sha256": "7bca1b4c9b93f6dfc6265c4e964ae296c82894b66e86ed4833543200c631532d",
-          "accepted_sha256": "5c6e43d426fc024a88b6ece28f2b204cc1a195f69532a4a5e3b851cbe307c3c6"
+        "providers.mjs": {
+          "live_sha256": "af6309a083b6c4f7805c13489caa036339ca3523f4a425c001eaf32c2fa6bacc",
+          "accepted_sha256": "51fa3109f06470c09fc9598c5b29c92085c0833a5dd0894a1478e30db5f6423a"
         },
-        "providers/amounts.mjs": {
-          "live_sha256": "224162478d1b6e6a6d4f95889c724617a5d2b4bf0ae44536f07a874413204dba",
-          "accepted_sha256": "1281646a88cdc68155d425eccade39946b13bf25ef58e50aa61e9284441a2a5d"
-        },
-        "providers/checkalt-account-mask.mjs": {
-          "live_sha256": "e203d6f98bde67c6e13cf4c60c09b888e5646912916317c6e0f3981dbd83f8a1",
-          "accepted_sha256": "f0671e1e352dda9f8f0bcc98a43016e730a05cea26ab1626ae8774eec57e31f9"
-        },
-        "providers/checkalt-sandbox.mjs": {
-          "live_sha256": "a3a63b181fb2b310226a78de85d641b173a5d36f7b7b4225d4d01f205d2b59dc",
-          "accepted_sha256": "d1919f61d0d97762bcc8866f009709de262723304fb7b2169ae68503ac773b85"
-        },
-        "providers/checkalt.mjs": {
-          "live_sha256": "287c366ac658d5e160d480e8fe39c9ee93d8f93942163e955d513dc9b1eacc9d",
-          "accepted_sha256": "f65a4450f71c4f9835620bbb0205737335cabe1e238f3ad8c2c11905dcee5dca"
-        },
-        "providers/egress.mjs": {
-          "live_sha256": "ec163c4ec848b7190ec160ea7df3ba7285c942467b3695f1a922019c013b596b",
-          "accepted_sha256": "6acab55650ad749ace69a68d11b957087e13a54799e8ffd10ccb65cea5371368"
+        "providers/catalog.mjs": {
+          "live_sha256": "5aa2538f78aa5199f2615c68bd64bbbe3243fa3726ba0e99d12fcf6242f8b3a9",
+          "accepted_sha256": "43ada7ec092497fabfcd127db37d7ca25dbfe9063a61a8be713e2b62167dd561"
         },
         "providers/hmac.mjs": {
-          "live_sha256": "40d7106e08a335a63732d19c3868d0749d9ead9d86baefa1a87f746b4f917781",
-          "accepted_sha256": "a75f13a4e9e80880ea12bd5fd9a979e44f80231ffb23cab4da435846ed42fccf"
-        },
-        "providers/moov-recipient-tos-policy.mjs": {
-          "live_sha256": "466a8966f48be9a963d291f2f70f9b6ccee0543ffeefde2dc988eae658cc7fc4",
-          "accepted_sha256": "668ba971ff34277a883716acaf22fbe48203ccc0fbc8b95e142c4321bd7ac3f1"
-        },
-        "providers/moov-sandbox.mjs": {
-          "live_sha256": "729899810722da07dced1ff0d6d3d6b7aa65b40931d09c5155c68317cb3c6e0d",
-          "accepted_sha256": "fbb4ff7677e183040c04f9597a6c5a1bbf993ba760381294c94ca592be14d3ef"
+          "live_sha256": "a75f13a4e9e80880ea12bd5fd9a979e44f80231ffb23cab4da435846ed42fccf",
+          "accepted_sha256": "5481a443f64698253b3d11c2c0bcbd49ec14e8c7ac21ad6fb40a51e7c9cd028d"
         },
         "providers/moov.mjs": {
-          "live_sha256": "be55afc03c0f69fb108ef52256a8031f1b892cb1c511cb5187ad987644b3724f",
-          "accepted_sha256": "251004ab9d9953d3a320eb5429e8351eba5f51b3f69002acded891b2671a8e75"
+          "live_sha256": "251004ab9d9953d3a320eb5429e8351eba5f51b3f69002acded891b2671a8e75",
+          "accepted_sha256": "8a44a8ed8fa1b23870abc522ebec882bbb8d97b4c88e43a4dda2b60e4b5b56fd"
         },
-        "providers/parity/checkalt-client.mjs": {
-          "live_sha256": "6df7a78ea4d7537507e3059db5ff4785c26f691778cfe31d3aa99d95e98a527e",
-          "accepted_sha256": "07bd22fb025fb30cc8bab16aa24894b6af3129cc30c32d0a6ff6c03bbd04cd08"
+        "providers/parity/moov-functions.mjs": {
+          "live_sha256": "fbefc70eac342dc2bcb495501643b932ea370a228713b08349517031ff15b094",
+          "accepted_sha256": "3d17efb4f680a675a97231709e4379a4478641a46c744bf2fee5796c24fcd6be"
         },
-        "providers/parity/checkalt-image.mjs": {
-          "live_sha256": "29ab4c5ecc6e2445ceda9899523ee91df5418ac47a11d21241201c0e97990466",
-          "accepted_sha256": "b67d990593914624ae7ba8cb6dc0812a2e67920fba7e58ca7e1d8ae7fe84fd2d"
+        "providers/parity/moov-onboard.mjs": {
+          "live_sha256": "4c04ce4c78d26152bf56984a40b8df7a550af13fd71a31d1bf6f235cc3ad454f",
+          "accepted_sha256": "dc60dc48707b100ec4df18dee087453ba503fc713a7833498bc1cddd34edb80d"
         },
-        "providers/parity/dispatch.mjs": {
-          "live_sha256": "41414da314751b735f32c7004e010b0b36c13f583d99855e06973d2f35629f39",
-          "accepted_sha256": "aac59c9f11605bc74c83065f2bb72857fe637795c047081c65185c49ed565298"
-        },
-        "providers/parity/moov-capabilities.mjs": {
-          "live_sha256": "41ef558f0aeb49a6a112582a8c0f066bc97eaffa5ddb8b6d97bcd1ef834b2ca2",
-          "accepted_sha256": "35467356e9e7c0109da6fabcb27219a2cf61fc58601d5db0ae5439fc2b072665"
-        },
-        "providers/parity/moov-provider-env.mjs": {
-          "live_sha256": "4827ac2abd16050aea7dd21e9380ef503fc2547b9ce0b7a4949d05a986fcab87",
-          "accepted_sha256": "a56009bf85246ed575c0a4c87f5ee0b7ed1cef3e5f54d7c6ea624379e82b75bf"
-        },
-        "providers/parity/moov-rails.mjs": {
-          "live_sha256": "3eb42afcebaa0451bef49daab6b44c28b781f9a3c43654c8361a423f97868f2d",
-          "accepted_sha256": "0626ce76084f29d1337f7638a3c3e76bff25604e0356c6d41e83235946288f4e"
-        },
-        "providers/parity/moov-wallet.mjs": {
-          "live_sha256": "1ea49156b9db40cc9921fe0556b8e1c0a8b5a7e4ea0e60039f4bce73e39e8ad1",
-          "accepted_sha256": "100d7214ecab2860158654b9e52b5f430c2cb53f2794b690a9cfd3247bff6882"
-        },
-        "providers/parity/rail-router.mjs": {
-          "live_sha256": "f33b872ba74bd3d7f311a60f7ced7ccc781fad578c1c514ae0fabba9b5a974ff",
-          "accepted_sha256": "1f5fce2809b9c8455724fe9384d79bf63b312af73324ae35d275d4fa4a11da09"
-        },
-        "providers/parity/sweep-read.mjs": {
-          "live_sha256": "87e3975b431980090df166893a95262ec3d426090a48643405f363523e3eaabf",
-          "accepted_sha256": "4da8e0c0e1b3bb6c78248cde67738f953044b065dde75cfc4885d6fac2bae02f"
-        },
-        "providers/parity/wallet-funding.mjs": {
-          "live_sha256": "d55e4e87221d874e9fa8da70046a505c3edc49be67a8fe389a9b7f2c82760865",
-          "accepted_sha256": "967f67e042ac8330bfdf12557ff132db8b6e98aee95b32355c4be3308b2fdbbf"
-        },
-        "providers/plaid-sandbox.mjs": {
-          "live_sha256": "ea3bef8260116d1b8e303408738984fad0924ef9b9fa2347a917e11174d3378a",
-          "accepted_sha256": "51268363ea1c725b193c64dc70722c90638a2de4a8cfcaba3888c1b9598f10ff"
-        },
-        "providers/plaid.mjs": {
-          "live_sha256": "f558a9cdaf3f7cdbf40d2b364bd542b7054c9886c729445ae1ca4cb26f8abb5c",
-          "accepted_sha256": "86bb82a85b2de80b71e835420aa2b995882f2b2cc9f995011dcadb70a76fb41a"
-        },
-        "providers/production/checkalt-config.mjs": {
-          "live_sha256": "b50bb26e0a3f236668a010db15fc7bf0e9f6105cb1f471755ad33fd1eba8eb07",
-          "accepted_sha256": "3b9cbe272c70958f468342c4fc64bdddd02a4707acb7eec78afdb4092b2ec9b3"
-        },
-        "providers/production/checkalt-dispatch.mjs": {
-          "live_sha256": "77580af2594d18b0c83b0d2e421ef3b4c4c4d1c4be8333dfe102dea3aa8cfaf7",
-          "accepted_sha256": "319794183df8d17fbb8dbddef24e812711c01d3463979e3112c0207fb49e4120"
-        },
-        "providers/production/checkalt-dual-control.mjs": {
-          "live_sha256": "28525f82ca32d8834ad81f01dd66de13d3d1355f59fbce126366401bb6be18d1",
-          "accepted_sha256": "b26f9c084a53fe6179449aa16415951cdf88c42c64eafc824f8d3c0301d3dadc"
-        },
-        "providers/production/checkalt-eligibility.mjs": {
-          "live_sha256": "3c4e5b9ae2150ce11e8d86629662d2558a281bc833a73a8ef7247f8cad1efd18",
-          "accepted_sha256": "7c3a1eb9b75c8dcea1fbad9e2862bda8cb5eb82d42241ab7f89349a450a02e57"
-        },
-        "providers/production/checkalt-holds.mjs": {
-          "live_sha256": "46b16f95438210352a53209f855f488e7016159d8de40e6e624de01de72bbd11",
-          "accepted_sha256": "ba43e6f29bf2e4f9918f35f9c46a18421521325bda9915c5cd31fa9c2cf5f078"
-        },
-        "providers/production/checkalt-idempotency.mjs": {
-          "live_sha256": "20cd07a48c2fa9ff3838c293efaf4014345b290fd235c05ca4625215bd503e65",
-          "accepted_sha256": "bc216669d3b98ff03984d9999dea8de80d9c7f51655da496e7ddf7957b0c5577"
-        },
-        "providers/production/checkalt-image-compliance.mjs": {
-          "live_sha256": "a238fa5cfa3abd62e55e133222cca5cfc7d1a7033d941e870dcd9b8a049b3d4f",
-          "accepted_sha256": "7e8b4cce9e55dd617f083cacb56185f6f0bf98cf08d9edbec2adf7b6d196936d"
-        },
-        "providers/production/checkalt-images.mjs": {
-          "live_sha256": "36284d91efbf00e2bdc1dbd8f0b01bd693ff1b4be545679179db1b17347e24f8",
-          "accepted_sha256": "ccfd2577337100a90737826061e2e70e919b6aee5166180855840f431c69b4b9"
-        },
-        "providers/production/checkalt-poll.mjs": {
-          "live_sha256": "71741a344f564dd8569bfa0fe5f69ae0a16ba1c92dab71c2422d746fa2dbc013",
-          "accepted_sha256": "cd083282e328caadb1b38598aa5f15ae7eda41708978afd06094ff62a24e4e56"
-        },
-        "providers/production/checkalt-preflight.mjs": {
-          "live_sha256": "8732f3781c2341ae1a05d1f56420d9132a6930fd49df4bcf6ca007eafed29e37",
-          "accepted_sha256": "25a4a9aa929dc8092e6a4459dc38362ffe01149a79773fd6aa0d75732480802d"
-        },
-        "providers/production/checkalt-secrets.mjs": {
-          "live_sha256": "03f4a625e40d280e79ccf677e1014ec004be8c74b20ab989574ab4328826b908",
-          "accepted_sha256": "a4118d12716466127faf639a8b0379fe1c04c7ee2a0f4d1c886106d183a57e6b"
-        },
-        "providers/production/checkalt-status-read.mjs": {
-          "live_sha256": "293db0e94ca2fab3208d614bf860f2f1f9fee846d77448d4863d09476842e613",
-          "accepted_sha256": "10ac13a3c6c58df43d1a1dafbd8e0415c487125b2132b1cbc1caf9c3a0d18dee"
-        },
-        "providers/production/checkalt-status-reconcile.mjs": {
-          "live_sha256": "6614d6ace4d30a84de0a26910e3079ff3964f174da4da95ccea2ee77f8b04b3a",
-          "accepted_sha256": "e3ee3d433b5fae826311709b6cb142fdee308e2770047e532c450d16675785b5"
-        },
-        "providers/production/moov-fund-authz.mjs": {
-          "live_sha256": "fc38a3cf5ff8c2e728ef7b248fd48cafd6a3e9caab2ba806732ad96caca7045a",
-          "accepted_sha256": "290da0d4c085cfc93b849d33ec8606f61f48f128c14a17ddf484f69b9c7c7afb"
-        },
-        "providers/production/moov-wallet-sync.mjs": {
-          "live_sha256": "0864aad539a13368ee6ec845deda41c9d753942138c210bd4161888041675558",
-          "accepted_sha256": "812c9dfd3af0a0dfc945ea320118a8a86362d8e98165e0045b158f4743f18c5e"
-        },
-        "providers/quickbooks.mjs": {
-          "live_sha256": "86ef27c50841dcb8a6ac505ca4706511ec5664c9ddc5f377764a3f141a5c3632",
-          "accepted_sha256": "fd77eed878af26e55fed1885f0ceeae99be88d23b96b42a49de48dcaaa2818ed"
-        },
-        "providers/readiness.mjs": {
-          "live_sha256": "1a13b2a5e0d4c7cd90cc3e6a2d6480ab2b18ee3971fb2d03f3390fa60a4d0871",
-          "accepted_sha256": "540170e7603edf6294d0ffc26ca6e3c6cad6a1f879dcafbced062694a9eb93f9"
-        },
-        "public-invoice.mjs": {
-          "live_sha256": "785335a8b233d3947725690ff67eba927b259b3a6170ffa1a2564c59ff025797",
-          "accepted_sha256": "e2d5ea84d231608775e34660051a5a5a6f119d331f4b3ae5fcd60e24fceff389"
-        },
-        "rds-global-bundle.pem": {
-          "live_sha256": "e7313252144e47a7529121ccc148f3b206b238f800fc73f83f0bb28b3b687ff5",
-          "accepted_sha256": "e5bb2084ccf45087bda1c9bffdea0eb15ee67f0b91646106e466714f9de3c7e3"
-        },
-        "rls-audit.mjs": {
-          "live_sha256": "b572443c438d8d819ce4601102bd1fc6e0b9bdff9b6b12cd4315a0ac921752ee",
-          "accepted_sha256": "203c161bc8b98ad7d1b473eb8795f57ae07fa6f6548121e65ede79d8597687ce"
+        "providers/webhooks.mjs": {
+          "live_sha256": "3420ef809a2b7e07eb786afe311962d3472a0f027bb4a06a882841b8763df9c5",
+          "accepted_sha256": "479cedf8fc6989bf713d61d452dd9f68eca03e45faa1143a3dd049c3b67bafb0"
         },
         "sandbox-credentials.mjs": {
-          "live_sha256": "eeb5a891e7bc5d864e7dec8c2efb24ac91954e6492f01982c0ff6925f2b0f29e",
-          "accepted_sha256": "3fd38358b2a55ce7acaa69f1070acc880d65aa4f20a89b56a6fbae597e5fca7e"
-        },
-        "sandbox-flags.mjs": {
-          "live_sha256": "06dd82c7703cab95307d9ffdcce76b87f7e52f7ce2b2e9ad6acdfb9efd5ccfcc",
-          "accepted_sha256": "28e98700e3875b2400440bf3e664e5b2197093c16ec5e01bc4ea34f1be29bcf7"
+          "live_sha256": "3fd38358b2a55ce7acaa69f1070acc880d65aa4f20a89b56a6fbae597e5fca7e",
+          "accepted_sha256": "a4bd8e7b1e41472c735f066c34df34f602f057bbb396eb70363e80c16f862c21"
         },
         "sandbox.mjs": {
-          "live_sha256": "abe2169e9e9b7f25c093ef12a25c13fecc2296fc3d066bc5a3c5da9ca35b7668",
-          "accepted_sha256": "e28aa2685ac4cf5172b6a5536a1b4eb0e9cc5f421bc68d366c45f8ac84d5f945"
+          "live_sha256": "e28aa2685ac4cf5172b6a5536a1b4eb0e9cc5f421bc68d366c45f8ac84d5f945",
+          "accepted_sha256": "2c329a654d33d6b6571bce760210471c22802f63b141a177aa6477c4b0fc6c42"
         },
-        "scheduled.mjs": {
-          "live_sha256": "0a585d78b9091ebc40f5fb2b427a4982e1f27496d06a9c665a4e4b495a84696c",
-          "accepted_sha256": "4b06d4cd578720a3996dc090cc396bda273c8de07e80cd7064d755af2b214abb"
-        },
-        "secrets.mjs": {
-          "live_sha256": "6d82654ebb5f2b3cb421de2caf16b7d0b58dffee69067d2842dfa46184f742b7",
-          "accepted_sha256": "f8fa9ee63cb56bd0de49a746afbb18322c9376b0277aaf057a748f0c1ba0dba3"
-        },
-        "signature-submit.mjs": {
-          "live_sha256": "7ed91b77ba589f9745fab986b993a7f3eb22d10327b90c063490a8c84654c2d3",
-          "accepted_sha256": "24845b4cfbce74de6163a7f94174d5c56af2e5828cfbdeca99c791175150f38d"
-        },
-        "sms-policy.mjs": {
-          "live_sha256": "6910d50b8416674255dbd6d948f41268faab209a673bcb4633cbf88df29b01ef",
-          "accepted_sha256": "7ced168e9b88e7e61b068117a430346d7460f44e454bc4e11e330e27db936182"
-        },
-        "sms.mjs": {
-          "live_sha256": "02565fabc8f8c06002949874e01a9c4c72fcd777a61bc6ea1c24db350eb1fde4",
-          "accepted_sha256": "dd63d5f226b09e0887e1e897735fc2f6b8b7a2fd919a65a3874b935925db6daa"
-        },
-        "sql53-production-readonly-inspect.mjs": {
-          "live_sha256": "112efa8ee65b3200f3a4ab3475e6b50ad0c82cfd49c7aaaca7990bc80b746a14",
-          "accepted_sha256": "4e356350e4abdf58fdb6ba3ab4e62efbe1aa21f7720a49f1f0128860870edb68"
-        },
-        "staging-db-readonly-diagnostic-output.mjs": {
-          "live_sha256": "7ffa1cff649dcb78dc7f0da348defb38cbd237c004e2d4155e4c3bf2a8b1847c",
-          "accepted_sha256": "0d114d2f8ae6cc825fd5a435abdefe7f5dc35d4efc1358ba309acc9f4269c4d1"
-        },
-        "staging-db-readonly-diagnostic.mjs": {
-          "live_sha256": "16f69882be631cc96f40437f0fa4e96cfdb108eadcde340983130c6c4f59f45b",
-          "accepted_sha256": "aaaece7a9a8e05e975286a7e371955db47ca656e47ff5c25344cee4d585022d3"
-        },
-        "storage-paths.mjs": {
-          "live_sha256": "aa247b2f177559b1df0d8987ee8443e6d61130b0ce93243b027f22f21e1f7929",
-          "accepted_sha256": "278329e5230b2ddd6675e4cad9839d2193da8655ca4676573702dca3f90e9d09"
-        },
-        "tenant-collection-v2-settlement.mjs": {
-          "live_sha256": "b4613048c654228dc255ab4aa597da9d095a5743823a1912f6588f3ef0e412f7",
-          "accepted_sha256": "075d96d0826beb55a36261a799b80aa4898486b6322949b705017769151d7b40"
-        },
-        "tenant-collection-v2-uat.mjs": {
-          "live_sha256": "3a338c257cf99904a5878551999f3cf9ec692269bf2738da60a73bc4c00daecb",
-          "accepted_sha256": "7a0c9bc1a7e23647a9834ab7b5735e7323fcd16a7911624f8f45fb967bdb1d49"
-        },
-        "tenant-email-domain-handlers.mjs": {
-          "live_sha256": "10254bc9be3f5b4893a7acfae642be57f090850b5f622ac5947ed1a9ffe285ac",
-          "accepted_sha256": "b915a549316cae843854d80c488bc5adee956a85170824b17e436474d269edf4"
-        },
-        "tenant-logo-path.mjs": {
-          "live_sha256": "70455d6707cb288a01d0219b47fb9ee800fd7ea84ead44718a9827ef7064507d",
-          "accepted_sha256": "533a9463e46477b37b539267df8da30f9008fdbba2bf39c3c4783992a84a689d"
-        },
-        "tenant-maintenance-payments-catalog-inspect.mjs": {
-          "live_sha256": "1628becae7231ab65d976e271e23ad14db9099b06878d61c24dac17a36adeaf7",
-          "accepted_sha256": "c7b83fed089ceec3656de2a4976a3e084fa7305c5cd7275ee26cc17c03da78fe"
-        },
-        "tenant-moov-defaults.mjs": {
-          "live_sha256": "c373c11334603d45ff053d123a41c5f0cec632f89e5d0d548bce0c5e72f19994",
-          "accepted_sha256": "23f896681f2ac22778924310cf8f76c74017047b3de769a1fe261f300256d5fa"
-        },
-        "tenant-security-compliance.mjs": {
-          "live_sha256": "9d7e279af6ede707e898a854f9e9212a9338eec9654eccee7a164246e2e6a62b",
-          "accepted_sha256": "1432a1e0550f5b1cbfcc821265db4e4de68202e38357f862d42f1f4342bc9fc5"
-        },
-        "textract-check-ocr.mjs": {
-          "live_sha256": "713c06dcec4139815b74b009c558ff9bbffdb24b822a35628ff064769b2747de",
-          "accepted_sha256": "7d40a9fb299991da022b4f14f621a941bf2c93706f7bb73d02c14d053741a465"
-        },
-        "workflow-delete-check.mjs": {
-          "live_sha256": "2b7a55958a4c5b88928d9dbd0d1d091a31bf19badcbb21f82e8606d0f7629ab8",
-          "accepted_sha256": "bdfd5f3a380a81bc192959b59541a6cf98c82da5b04dd64b670cb8166e0ada9f"
-        },
-        "workflow-flags.mjs": {
-          "live_sha256": "2f85e422a9a0c441a7b4d5593a21aa1047ed642c16607f549c25001fbfcb9607",
-          "accepted_sha256": "a5c05d84ca847dc09c8f35e143a033f9af881e5f4491cf278810bb45857f1892"
-        },
-        "write-claim-settlement.mjs": {
-          "live_sha256": "14cbe9e2049ef5ae682e67e3e513de625b02e398f9dcc4a9feae926f98373b98",
-          "accepted_sha256": "ce53b3683504081fb6ab3f52559a4c6fcad8856cadd078bbf635359f2cc8779d"
-        },
-        "write.mjs": {
-          "live_sha256": "649d30f13344ce65fe2585833b80031bcc4c357b2260b054e8d99b42e1367a90",
-          "accepted_sha256": "24dbccf4d0b0aaf9b95b233efd66b44aadfd9eda6e7bf5d30c869cedb64c1f37"
+        "write-allowlist.mjs": {
+          "live_sha256": "9a2fae181b33fea46eb8c99a9ba4fdade3af05044f114662b65dc01a2d226ec1",
+          "accepted_sha256": "5f84c5634190ebade1ee6ae10d3420e09548efac78f2a72eb98886d2f0341189"
         }
       },
-      "added": {
-        "providers/parity/moov-stakeholder-status.mjs": "bb20915730dccd792c774de13661b888176aef08168c933eea25a47509954d5e",
-        "providers/parity/platform-finance.mjs": "746c89a69077463abd97f3f1a0beed23ba2d0eb17462c19ca75defd6e6fed0fb",
-        "providers/parity/tenant-receivables.mjs": "0d8f8f20f4939e79551b4a1aa5b3305bb791cea7ca684f4428594ad359179477",
-        "tenant-collection-contract-v2.mjs": "9ec5ae45db34c0795570f401cc2b1c3fa78f04764870bf6b651c21278433ed5d"
+      "added": {},
+      "removed": {
+        "providers/actum.mjs": "5c6e43d426fc024a88b6ece28f2b204cc1a195f69532a4a5e3b851cbe307c3c6",
+        "providers/plaid-sandbox.mjs": "51268363ea1c725b193c64dc70722c90638a2de4a8cfcaba3888c1b9598f10ff",
+        "providers/plaid.mjs": "86bb82a85b2de80b71e835420aa2b995882f2b2cc9f995011dcadb70a76fb41a",
+        "providers/quickbooks.mjs": "fd77eed878af26e55fed1885f0ceeae99be88d23b96b42a49de48dcaaa2818ed"
       },
-      "removed": {},
       "dependencies": {
         "added": {},
         "removed": {},
         "changed": {}
       },
       "inspect": {
-        "run_id": "39585059839",
-        "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39585059839",
-        "main_commit": "07a75fa01379b55b227f18b4e25de3049134367c",
-        "live_code_sha256": "nKVEeB8BhnflTfCenx7eUKXBpYoF/dkF6eKZthJ7B1k=",
-        "live_revision_id": "1ef85cf4-f3de-4676-a246-3f1d40e94573",
-        "live_member_count": 6770,
-        "candidate_zip_sha256": "b31a1d5b246952bd0b6c44d4d188416b26aa61ed55b1f341422d4ea0c6697785",
-        "candidate_member_count": 6774,
-        "same": 72,
-        "changed": 122,
-        "added": 4,
-        "removed": 0,
+        "run_id": "39630308266",
+        "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39630308266",
+        "main_commit": "333b54576f3405cdbe5de6bd1503c9be8e7a4b5e",
+        "live_code_sha256": "sxodWyRpUr0LbETU0YhBayaqYe1VsfNBQi1OoMZpd4U=",
+        "live_revision_id": "b2e6a162-79ad-4c8e-9177-6f33080a9ded",
+        "live_member_count": 6774,
+        "candidate_zip_sha256": "061fdfef36881460c4080d634d680c791ff6a9130e51a0014563f59506d110e7",
+        "candidate_member_count": 6770,
+        "same": 175,
+        "changed": 19,
+        "added": 0,
+        "removed": 4,
         "dependency_counts": {
           "live": 54,
           "candidate": 54
         },
-        "notes": "Every candidate hash equals sha256 of the same path in aws/functions/api at main_commit on an LF checkout. Dependencies are identical by package path and version (54 live, 54 candidate). The live staging package predates the 2026-10 overlays and the #1095 reconciliation; main wins for every listed member. Nothing is removed."
+        "notes": "Second staging rebuild, for the Plaid/Actum/QuickBooks removal (#1109, merged at main_commit). The live CodeSha256 is the one the first rebuild left behind (history[0].applied, run 39587414391); the RevisionId differs only through the configuration applies since (lambda-config-plan.json). Every live hash equals sha256 of the same path in aws/functions/api at 4d37692d6 (the bytes the first rebuild put live) and every accepted hash equals sha256 of the same path at main_commit on an LF checkout. The 19 changed and 4 removed members are exactly the files #1109 changed or deleted under aws/functions/api; nothing else differs (no live drift). The removed files are the deleted provider modules (actum, plaid, plaid-sandbox, quickbooks). Nothing is added. Dependencies are identical by package path and version (54 live, 54 candidate). The first rebuild's plan section moves verbatim into history."
       },
-      "applied": {
-        "run_id": "39587414391",
-        "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39587414391",
-        "main_commit": "4d37692d6ff105a74ea6aac2898a117fe0cf9757",
-        "approval_phrase": "DEPLOY FULL API PACKAGE TO STAGING",
-        "code_sha256_before": "nKVEeB8BhnflTfCenx7eUKXBpYoF/dkF6eKZthJ7B1k=",
-        "revision_id_before": "1ef85cf4-f3de-4676-a246-3f1d40e94573",
-        "code_sha256_after": "sxodWyRpUr0LbETU0YhBayaqYe1VsfNBQi1OoMZpd4U=",
-        "revision_id_after": "8503779d-4d63-4448-b8d5-9ad258cd7475",
-        "candidate_zip_sha256": "b31a1d5b246952bd0b6c44d4d188416b26aa61ed55b1f341422d4ea0c6697785",
-        "applied_at": "2026-10-21T10:50:07.413Z",
-        "state": "VERIFIED",
-        "smoke": [
-          "/health",
-          "/db-health",
-          "/db-readonly-validate"
-        ],
-        "notes": "Pre-inspect run 39586809414 on main 4d37692d6 reported READY with 0 unlisted differences. The apply re-downloaded the package and found it equal to the candidate member for member; configuration unchanged."
-      }
+      "history": [
+        {
+          "status": "applied",
+          "members": {
+            "admin-override-check-status.mjs": {
+              "live_sha256": "ccf1204cb03ab7c243057e5179330252b820039255f0cf91b511f863af34985b",
+              "accepted_sha256": "fd514ad8e822ed7d7d3648a336f4b44d51b56dda6a662cf692ad2bd032954650"
+            },
+            "allowed-tables.json": {
+              "live_sha256": "2ecf359ea6e7c2cb7957b75d0e4f604da81497e0663e3de282c4e86b7cbbbaf3",
+              "accepted_sha256": "e34a1c418056b4e6f3a28c416fdfd2e32854160ab9624c98c97c6c908544ec9a"
+            },
+            "auth-cognito.mjs": {
+              "live_sha256": "796a59f044a044b31e67d45e6d3c9a436ebefc99d5641d03d6a974d9707aa117",
+              "accepted_sha256": "5478b83b467c2f46d578ddbe9bfd1091a69b54a32e3009cddf8a97ffa7344d1d"
+            },
+            "auth-mfa.mjs": {
+              "live_sha256": "dd45a14345438e9dffd64919c58e8cda05ef2a585fb9db26dd9b9f67da9dace0",
+              "accepted_sha256": "28903e4f5af4d698a1b96ffd23b1bd7f9b711330cdb3da12701a4214affe4e8b"
+            },
+            "auth-totp-code.mjs": {
+              "live_sha256": "c17b5016710a3a54821932fc8507202a9ddcd531754c5916dfc3cce04b6eca34",
+              "accepted_sha256": "3517e470fe6a65c3fff47881a639e08984411ac2832db4f1fb334f6d2aba64ca"
+            },
+            "auth-webauthn.mjs": {
+              "live_sha256": "6a305e4ce0f432edb861d7440b566eb5d2d3110a8ab717ff364ddb35cc1aba17",
+              "accepted_sha256": "38b5071b3f242060c945ca25da0b2f25c371acf2e6951e097e60816fabcdaffd"
+            },
+            "authorization.mjs": {
+              "live_sha256": "7766cc5974292c4a73103961d94cac5006be20a6b687646fcd6560161a91066f",
+              "accepted_sha256": "2555f1f22b83049291eaecc3c32d8da36bf78a1ae2e9a6efb6424134ccd6b646"
+            },
+            "azure-check-ocr.mjs": {
+              "live_sha256": "bcf7f0b98e480acefda6eaeb69728e15d7e60fd71fbd043aa98dfd50a4108a53",
+              "accepted_sha256": "14495caeab071f512fe3c1a89b73a9b108862977aa4e1c3bebf6cf87b2860629"
+            },
+            "azure-di-secret.mjs": {
+              "live_sha256": "e9037cc309f7f47096e839f38f4adf4ad0bdd8a7ad977a32d7b2b4e87a633ed9",
+              "accepted_sha256": "59127ddb75253887f076abd13f6de73a1037b81069d313915fe7910be03a6eb8"
+            },
+            "bill-mortgage-handling.mjs": {
+              "live_sha256": "a456e30fb96a2a1e3faf667eb5eb3dc8e6d4d797195306864c1f4f1f08915c71",
+              "accepted_sha256": "59d9d375bb736a747e9748f06d36fc57a2c7191664d937b672b3d79f0b8d8fc8"
+            },
+            "check-deposited.mjs": {
+              "live_sha256": "411be6304d685bb52c4bf32f4bfede9b044f7513e91f2750ceda37b397f12835",
+              "accepted_sha256": "395ddec5c88e2290fc72f2ab86ef2c934fe7654c7f2309a8176e1147ce32edf1"
+            },
+            "check-ocr-provider.mjs": {
+              "live_sha256": "3b5ef2025ba289028c0223f534f19f52668b4d4a93c15475870270ff66abd53a",
+              "accepted_sha256": "2d2eaa6a4deb02b257f2928d71cc6b6d3f501ee480adb479266bd0930f41e2dc"
+            },
+            "check-reconciliation.mjs": {
+              "live_sha256": "7fae2579473b09263c962014fdde68d7ec4ea2c6e7b9375185b4e26d0ad5322c",
+              "accepted_sha256": "eae0171e282c879b49f9756715c0096fc6d2aea65c57826dcf0910410e56720f"
+            },
+            "claim-settlement-rpc.mjs": {
+              "live_sha256": "24c42fbc31e7a7645557b9c98dfa32368be33939ce4ed38e549a0f44e6ece708",
+              "accepted_sha256": "4d0b312cadaeffb7bff2d96eea9c4815a1f23815c9c9dcbdbceea4e4d3203d64"
+            },
+            "cognito.mjs": {
+              "live_sha256": "14e4bc0067e1359b1506e684bc078d4fda983235356db5946b0d651b71dab3fd",
+              "accepted_sha256": "4328f1e771718c40407a3754c1747c605d81213a5fcd377604561e035cd3f749"
+            },
+            "data.mjs": {
+              "live_sha256": "855dfd17f32ec2d83cf12b7a0f88efc0c29a4fe7c66a74ae7e56d2ba904bb47f",
+              "accepted_sha256": "f81055b8ab46f4293c79d213e3a9ceb8742ce7676d41f079fc86a5be10953449"
+            },
+            "db-health.mjs": {
+              "live_sha256": "d7f7705541a09623454b1f5c52e6076a9a44af7458883cbcbd6659ce8de755b4",
+              "accepted_sha256": "0eb66cecc0db49941a3d0a59789c7b16529d56794de739825b5577f51e3eac8b"
+            },
+            "db-validator-access.mjs": {
+              "live_sha256": "cb43cbf45dd7a3fd507d3ac0ac430a4d4f87e4c5fbcd824dcc78de4b544b0820",
+              "accepted_sha256": "dc8a29849ed5dc2558f6329fed47cd9646734f6fc943bdb8ed84bfad27128787"
+            },
+            "email-layout.mjs": {
+              "live_sha256": "5b1d6ad460772481d9854df645bc359c17a8dd655753e37ff5b6cec3993f4dec",
+              "accepted_sha256": "2780057147a85426028052951be52d3b73e2ba39e479078e04e3438ca7a09dec"
+            },
+            "email-policy.mjs": {
+              "live_sha256": "6f195bbe23e9d5f5ce5ad905b1eb81a278d42bb550312849d10c195540231991",
+              "accepted_sha256": "83d73511e751130a939c2e92c0b995b45d5f9d3bdaa02d5ac04c5322a39fd3a6"
+            },
+            "email-queue.mjs": {
+              "live_sha256": "54af098b08e2545654ed000455ae69b4e1a26ce51894ac92f25b2e25252ffc01",
+              "accepted_sha256": "8692a190aeafd50bd9485e9a93c1425206e79b43c9404d0428fb3fb4d38e760a"
+            },
+            "email-ses.mjs": {
+              "live_sha256": "dc56f203b564865ef74995703a4b28020de0950a9de1cc34eebba854fe73681d",
+              "accepted_sha256": "79fceb7e86339b2cad1fd80410266984380e90841550abc961f7b5a5413dd62c"
+            },
+            "email-templates.mjs": {
+              "live_sha256": "8bea9bceadf3c77632a1c1fab080ec0b735733b8bbbe7b33f95f2815fe5812a0",
+              "accepted_sha256": "f7f79f6d270e3d2e738ee9c54190dd1de1f972437721c839f025520afaa26ef0"
+            },
+            "email.mjs": {
+              "live_sha256": "5f7b308f2ad83c218601de331ed2b58bf7618f19c932f76f1318dc0af58703af",
+              "accepted_sha256": "66149c42d5aa77aa5b64c09f9bb08c3105317ca7cc0191de9e3ae6610c6e5b16"
+            },
+            "endorsement-completion.mjs": {
+              "live_sha256": "232ebf6ce9fd6421f60e3c52414ac127cac1b5e31415a892a92c4e125511d71f",
+              "accepted_sha256": "e0a162cea41e1c6a4e86eb77c2d127a968f69f5e918749bfc6deea2559c0827c"
+            },
+            "endorsement-material-invalidation.mjs": {
+              "live_sha256": "fa3621abd0b242209aef264ea72792b5fca2bb4770f6aa105f0b4b1caaee4888",
+              "accepted_sha256": "8a345898d19ed791f9a5c2e94f7c9bfb95f05508d1cce514b82ea165e2f32af1"
+            },
+            "endorsement-parity.mjs": {
+              "live_sha256": "0877f8383e52ca25453fdb8f6ccb33d08e51ea7c8628ad0b71bf632483d6cf81",
+              "accepted_sha256": "db2d5448ab1d3e0bdf107ce21c9ecd55af4339e7369de0ecfd75124e55ded1ea"
+            },
+            "financial-audit.mjs": {
+              "live_sha256": "e40c1d5a648ad35f4ab633da27c2ebc12f8085a2df5ed49c9c8edaf4566c7bc0",
+              "accepted_sha256": "51c540797b775e3be4dead02fd73bc047ad0d103aeca7ec2b37d78fcfaddd659"
+            },
+            "financial-flags.mjs": {
+              "live_sha256": "b683f0b70b27409e8b7a8d7c967230dfb7ca02d76d80c3a8068f8b213a914d9a",
+              "accepted_sha256": "0f8c1394864be3faf133a1c33db5fc9e434cc076b44f242915bf61bbc713ad0a"
+            },
+            "financial-idempotency.mjs": {
+              "live_sha256": "1f8b90ed336784fa6a62125950bfcbed1d53698c6fe32329a84eb64d970f8dd0",
+              "accepted_sha256": "14c6ca7a4bd5ea18b681d1cb83921b83b1a933255d0ef1a60546ad1fffe2f96e"
+            },
+            "financial-ownership.mjs": {
+              "live_sha256": "b4c74581930f44be66e5e3ddc6a24d4138df6cb91f86f029c5d5e593ae4af7c2",
+              "accepted_sha256": "53a1d5ab621246bc2a03913914deddacf9219d511a7ce724edb6132e1f227ed5"
+            },
+            "financial-reconciliation.mjs": {
+              "live_sha256": "4cc5c83804b56a8bbedd4e86e4cb509a4e88784a2c86641921ba3ec7e4c69463",
+              "accepted_sha256": "492a2df18e8e6802544099fca01326773fef02a248430a193d52b529c7d22393"
+            },
+            "financial-remaining.mjs": {
+              "live_sha256": "63153526144a805187c8e2760e21d5ed45f8c1a596be0ad031665345ff25d3ee",
+              "accepted_sha256": "e608c00f65623bfc226eecd7d216d64141e610f2a2c1b0cb841f9736d5397989"
+            },
+            "financial-state.mjs": {
+              "live_sha256": "7dd1462a22f669508be903edeae251e07f774def55492d1961a5395b9ef78bcb",
+              "accepted_sha256": "23f65eeb352dc9cf112b08dcc1efb0688476709544f4f811b6b37573de650fd2"
+            },
+            "financial-totp.mjs": {
+              "live_sha256": "84514e94bf5bf9e5478bca65280309747d17f3541e2d01040351fa9580aeb243",
+              "accepted_sha256": "763c9f93084f10caba6166427530175018bb9d57ea0124d070abe4ad5a305b71"
+            },
+            "homeowner-otp.mjs": {
+              "live_sha256": "9382d0ae755abd8affe448e18347312a9d1978fe0fed33344962f9b6df646794",
+              "accepted_sha256": "df74bfb09ca847b407dbd2e5edf51315be51fb8aef55480836703fc1218457b3"
+            },
+            "homeowner-signing-integration.mjs": {
+              "live_sha256": "41f0dbbbf1f1e013f4f0afa9671342fc8fb10299564f208d459eb4d1a5f553ca",
+              "accepted_sha256": "4deac31f61ebf797a4123d99ae4a2166da81c54dbdad0faccc5cafdb3dbbf7c3"
+            },
+            "identity-env.mjs": {
+              "live_sha256": "35ffaecaed6e34460d77105939cf09d0836bcffb9652a6ff8fc6d4ad0b8aaa71",
+              "accepted_sha256": "e814546feded3a323461b3a7a8369e3d8a09f9a5d306d68973e15389b871f443"
+            },
+            "index.mjs": {
+              "live_sha256": "0d5c81111223352b28a84698d3dfa264809cfae17a6fe21dd69937fd23d7b362",
+              "accepted_sha256": "6a1993e13d8efdd3d99704c82b9dab446a0ae567f55af688f15f5a0ca8d3e652"
+            },
+            "invoice-actions.mjs": {
+              "live_sha256": "25ee0810c1401cfd4d57d2da31b00fbcd158e08faa8c1de1ecb21c355d781d23",
+              "accepted_sha256": "866032c6f972a1d02a1c3e9649b21990d91ba62b6a5a49ac4e1f1274e2045507"
+            },
+            "invoice-provider.mjs": {
+              "live_sha256": "665a5c756827260a3b0333d5ac1abe057eaefd3560009dc563cffebbe68c5e4c",
+              "accepted_sha256": "e6ef5db0f418d473af630a9b0f44d4d38452f7bb37eacc9d14b106a6cea7f8da"
+            },
+            "jwks.mjs": {
+              "live_sha256": "68f8337f67de1b82330bf4ce90d42cb3bbfa5f7f214699d459a8d7abad23a342",
+              "accepted_sha256": "e1c05e8bd938ef3c2ee477ac7f141b9c11936e69b4ed30cdf5ba8835fb0b5b98"
+            },
+            "mortgage-ops-usage.mjs": {
+              "live_sha256": "f52daac5668265fd8768edeac0f7ddda437d2e38890e8721cc4f8783c765a3be",
+              "accepted_sha256": "9856f51fa1a71a909689b7420001c6f7f4bb7eff3711ea4dedbefda6b68dadb2"
+            },
+            "ocr-azure-image.mjs": {
+              "live_sha256": "5e4288b4eaf23593454177101b49863b60235c31d1fdb69c352bb71d2565d7bf",
+              "accepted_sha256": "39517129a1859e47f141bbf0a9c08940336e7b2a9e3f00dee703e1758c64f0a8"
+            },
+            "ocr-descriptive-persist.mjs": {
+              "live_sha256": "428768cf1d2bda3edd5b1111343a7b0e86695e01459da6f76fdd5ed6003d0787",
+              "accepted_sha256": "ba38a287cd5d0ef01fd828e9ca796e7027821ac91bf73fcef98671088aaf43fd"
+            },
+            "ocr-descriptive-text.mjs": {
+              "live_sha256": "d17dc9f7d38f10ce64ce600d01d80d552f88d15c30d4797a42ec12a644c07d5d",
+              "accepted_sha256": "4f0860bd9ed1f60399422bfb1f177394fadab87bb4b974d43add9140117ee136"
+            },
+            "ocr-normalize-azure.mjs": {
+              "live_sha256": "f14cf0e9594bf9a026c3f602374b51f1a1f4ccce23ce0659f3c3dc62a5661b41",
+              "accepted_sha256": "32713f13bc2af1afa5e6d1416402d17474ad02e6352cdf9120be5555a8be75d4"
+            },
+            "ocr-parse.mjs": {
+              "live_sha256": "846590bd7db7f2ee483714ea09eb5f60aace50916205d4574d3d0ccfd72db39a",
+              "accepted_sha256": "29e224f5cec8f29f9d19a9eba115e2ca340b78cc5f53444f4ada4382140070e5"
+            },
+            "ocr.mjs": {
+              "live_sha256": "50a4779d7a9dab94ab8c426956fe752fcacb099d20ed5e4d878c9e5ee1b9fe9f",
+              "accepted_sha256": "ecd3b253c111921ee62f21bab214bd346ab19819a9c764cdef33b07524c6221f"
+            },
+            "package-lock.json": {
+              "live_sha256": "542059229f9f868f2480fc6355c081f261534ade67f0f0073bc6ab0b1e30f414",
+              "accepted_sha256": "0f901adbe95830e228a5d515c37f9e2607c0627ed9551b6de6101b85c9abc6e5"
+            },
+            "package.json": {
+              "live_sha256": "8cabd8000fd23b7573351d5fde446b36cdac21de39204d5b66d355af352f5170",
+              "accepted_sha256": "d03dd31c3ad0b915438281380593caab92bdd1a82544c0cdff6c9a81b3e88ac2"
+            },
+            "partner-share-lifecycle.mjs": {
+              "live_sha256": "f1279e935edb8e42fade93ea92523c49189ff405ece1a06df92e7b34a6708682",
+              "accepted_sha256": "3aa62d8895c4a004a815ed76e362f6e3e46be516f63c47d1e058affb23f4e05e"
+            },
+            "payment-direction-email.mjs": {
+              "live_sha256": "f5f002dbd8a347289a034536e7f180f03580e571ab5c929245e33dcd851ccb56",
+              "accepted_sha256": "e72aa1d5a9e6956378a91470803a6b8f63f9cc7518dd4d5307795acd60350560"
+            },
+            "provider-authz.mjs": {
+              "live_sha256": "8636365b6e3c6e32053ac32c40d8da23dd118151a7db7c611d5342ebdf43e702",
+              "accepted_sha256": "4964ea7942abae49a3f14fce6eaa5eb3f936ee4936c85d8b46888414151e24b7"
+            },
+            "provider-flags.mjs": {
+              "live_sha256": "2ccf076ecdf1808aea3a9dca054ba88e7ea58eb1088e7421451c005d4815f885",
+              "accepted_sha256": "122b8769080851312d7e4ffde87bdbde060aed8004e20362d28956b70004c7ec"
+            },
+            "provider-secrets.mjs": {
+              "live_sha256": "9b2baddc8dc148d8c07e7e7c5793976ac63cfc6c2cc3dd6a3d03e63958265ce5",
+              "accepted_sha256": "7cfe3b03faea47c4e40a089c00d5841a3a45be17477b1116dcf6752b1d5d2909"
+            },
+            "providers/actum.mjs": {
+              "live_sha256": "7bca1b4c9b93f6dfc6265c4e964ae296c82894b66e86ed4833543200c631532d",
+              "accepted_sha256": "5c6e43d426fc024a88b6ece28f2b204cc1a195f69532a4a5e3b851cbe307c3c6"
+            },
+            "providers/amounts.mjs": {
+              "live_sha256": "224162478d1b6e6a6d4f95889c724617a5d2b4bf0ae44536f07a874413204dba",
+              "accepted_sha256": "1281646a88cdc68155d425eccade39946b13bf25ef58e50aa61e9284441a2a5d"
+            },
+            "providers/checkalt-account-mask.mjs": {
+              "live_sha256": "e203d6f98bde67c6e13cf4c60c09b888e5646912916317c6e0f3981dbd83f8a1",
+              "accepted_sha256": "f0671e1e352dda9f8f0bcc98a43016e730a05cea26ab1626ae8774eec57e31f9"
+            },
+            "providers/checkalt-sandbox.mjs": {
+              "live_sha256": "a3a63b181fb2b310226a78de85d641b173a5d36f7b7b4225d4d01f205d2b59dc",
+              "accepted_sha256": "d1919f61d0d97762bcc8866f009709de262723304fb7b2169ae68503ac773b85"
+            },
+            "providers/checkalt.mjs": {
+              "live_sha256": "287c366ac658d5e160d480e8fe39c9ee93d8f93942163e955d513dc9b1eacc9d",
+              "accepted_sha256": "f65a4450f71c4f9835620bbb0205737335cabe1e238f3ad8c2c11905dcee5dca"
+            },
+            "providers/egress.mjs": {
+              "live_sha256": "ec163c4ec848b7190ec160ea7df3ba7285c942467b3695f1a922019c013b596b",
+              "accepted_sha256": "6acab55650ad749ace69a68d11b957087e13a54799e8ffd10ccb65cea5371368"
+            },
+            "providers/hmac.mjs": {
+              "live_sha256": "40d7106e08a335a63732d19c3868d0749d9ead9d86baefa1a87f746b4f917781",
+              "accepted_sha256": "a75f13a4e9e80880ea12bd5fd9a979e44f80231ffb23cab4da435846ed42fccf"
+            },
+            "providers/moov-recipient-tos-policy.mjs": {
+              "live_sha256": "466a8966f48be9a963d291f2f70f9b6ccee0543ffeefde2dc988eae658cc7fc4",
+              "accepted_sha256": "668ba971ff34277a883716acaf22fbe48203ccc0fbc8b95e142c4321bd7ac3f1"
+            },
+            "providers/moov-sandbox.mjs": {
+              "live_sha256": "729899810722da07dced1ff0d6d3d6b7aa65b40931d09c5155c68317cb3c6e0d",
+              "accepted_sha256": "fbb4ff7677e183040c04f9597a6c5a1bbf993ba760381294c94ca592be14d3ef"
+            },
+            "providers/moov.mjs": {
+              "live_sha256": "be55afc03c0f69fb108ef52256a8031f1b892cb1c511cb5187ad987644b3724f",
+              "accepted_sha256": "251004ab9d9953d3a320eb5429e8351eba5f51b3f69002acded891b2671a8e75"
+            },
+            "providers/parity/checkalt-client.mjs": {
+              "live_sha256": "6df7a78ea4d7537507e3059db5ff4785c26f691778cfe31d3aa99d95e98a527e",
+              "accepted_sha256": "07bd22fb025fb30cc8bab16aa24894b6af3129cc30c32d0a6ff6c03bbd04cd08"
+            },
+            "providers/parity/checkalt-image.mjs": {
+              "live_sha256": "29ab4c5ecc6e2445ceda9899523ee91df5418ac47a11d21241201c0e97990466",
+              "accepted_sha256": "b67d990593914624ae7ba8cb6dc0812a2e67920fba7e58ca7e1d8ae7fe84fd2d"
+            },
+            "providers/parity/dispatch.mjs": {
+              "live_sha256": "41414da314751b735f32c7004e010b0b36c13f583d99855e06973d2f35629f39",
+              "accepted_sha256": "aac59c9f11605bc74c83065f2bb72857fe637795c047081c65185c49ed565298"
+            },
+            "providers/parity/moov-capabilities.mjs": {
+              "live_sha256": "41ef558f0aeb49a6a112582a8c0f066bc97eaffa5ddb8b6d97bcd1ef834b2ca2",
+              "accepted_sha256": "35467356e9e7c0109da6fabcb27219a2cf61fc58601d5db0ae5439fc2b072665"
+            },
+            "providers/parity/moov-provider-env.mjs": {
+              "live_sha256": "4827ac2abd16050aea7dd21e9380ef503fc2547b9ce0b7a4949d05a986fcab87",
+              "accepted_sha256": "a56009bf85246ed575c0a4c87f5ee0b7ed1cef3e5f54d7c6ea624379e82b75bf"
+            },
+            "providers/parity/moov-rails.mjs": {
+              "live_sha256": "3eb42afcebaa0451bef49daab6b44c28b781f9a3c43654c8361a423f97868f2d",
+              "accepted_sha256": "0626ce76084f29d1337f7638a3c3e76bff25604e0356c6d41e83235946288f4e"
+            },
+            "providers/parity/moov-wallet.mjs": {
+              "live_sha256": "1ea49156b9db40cc9921fe0556b8e1c0a8b5a7e4ea0e60039f4bce73e39e8ad1",
+              "accepted_sha256": "100d7214ecab2860158654b9e52b5f430c2cb53f2794b690a9cfd3247bff6882"
+            },
+            "providers/parity/rail-router.mjs": {
+              "live_sha256": "f33b872ba74bd3d7f311a60f7ced7ccc781fad578c1c514ae0fabba9b5a974ff",
+              "accepted_sha256": "1f5fce2809b9c8455724fe9384d79bf63b312af73324ae35d275d4fa4a11da09"
+            },
+            "providers/parity/sweep-read.mjs": {
+              "live_sha256": "87e3975b431980090df166893a95262ec3d426090a48643405f363523e3eaabf",
+              "accepted_sha256": "4da8e0c0e1b3bb6c78248cde67738f953044b065dde75cfc4885d6fac2bae02f"
+            },
+            "providers/parity/wallet-funding.mjs": {
+              "live_sha256": "d55e4e87221d874e9fa8da70046a505c3edc49be67a8fe389a9b7f2c82760865",
+              "accepted_sha256": "967f67e042ac8330bfdf12557ff132db8b6e98aee95b32355c4be3308b2fdbbf"
+            },
+            "providers/plaid-sandbox.mjs": {
+              "live_sha256": "ea3bef8260116d1b8e303408738984fad0924ef9b9fa2347a917e11174d3378a",
+              "accepted_sha256": "51268363ea1c725b193c64dc70722c90638a2de4a8cfcaba3888c1b9598f10ff"
+            },
+            "providers/plaid.mjs": {
+              "live_sha256": "f558a9cdaf3f7cdbf40d2b364bd542b7054c9886c729445ae1ca4cb26f8abb5c",
+              "accepted_sha256": "86bb82a85b2de80b71e835420aa2b995882f2b2cc9f995011dcadb70a76fb41a"
+            },
+            "providers/production/checkalt-config.mjs": {
+              "live_sha256": "b50bb26e0a3f236668a010db15fc7bf0e9f6105cb1f471755ad33fd1eba8eb07",
+              "accepted_sha256": "3b9cbe272c70958f468342c4fc64bdddd02a4707acb7eec78afdb4092b2ec9b3"
+            },
+            "providers/production/checkalt-dispatch.mjs": {
+              "live_sha256": "77580af2594d18b0c83b0d2e421ef3b4c4c4d1c4be8333dfe102dea3aa8cfaf7",
+              "accepted_sha256": "319794183df8d17fbb8dbddef24e812711c01d3463979e3112c0207fb49e4120"
+            },
+            "providers/production/checkalt-dual-control.mjs": {
+              "live_sha256": "28525f82ca32d8834ad81f01dd66de13d3d1355f59fbce126366401bb6be18d1",
+              "accepted_sha256": "b26f9c084a53fe6179449aa16415951cdf88c42c64eafc824f8d3c0301d3dadc"
+            },
+            "providers/production/checkalt-eligibility.mjs": {
+              "live_sha256": "3c4e5b9ae2150ce11e8d86629662d2558a281bc833a73a8ef7247f8cad1efd18",
+              "accepted_sha256": "7c3a1eb9b75c8dcea1fbad9e2862bda8cb5eb82d42241ab7f89349a450a02e57"
+            },
+            "providers/production/checkalt-holds.mjs": {
+              "live_sha256": "46b16f95438210352a53209f855f488e7016159d8de40e6e624de01de72bbd11",
+              "accepted_sha256": "ba43e6f29bf2e4f9918f35f9c46a18421521325bda9915c5cd31fa9c2cf5f078"
+            },
+            "providers/production/checkalt-idempotency.mjs": {
+              "live_sha256": "20cd07a48c2fa9ff3838c293efaf4014345b290fd235c05ca4625215bd503e65",
+              "accepted_sha256": "bc216669d3b98ff03984d9999dea8de80d9c7f51655da496e7ddf7957b0c5577"
+            },
+            "providers/production/checkalt-image-compliance.mjs": {
+              "live_sha256": "a238fa5cfa3abd62e55e133222cca5cfc7d1a7033d941e870dcd9b8a049b3d4f",
+              "accepted_sha256": "7e8b4cce9e55dd617f083cacb56185f6f0bf98cf08d9edbec2adf7b6d196936d"
+            },
+            "providers/production/checkalt-images.mjs": {
+              "live_sha256": "36284d91efbf00e2bdc1dbd8f0b01bd693ff1b4be545679179db1b17347e24f8",
+              "accepted_sha256": "ccfd2577337100a90737826061e2e70e919b6aee5166180855840f431c69b4b9"
+            },
+            "providers/production/checkalt-poll.mjs": {
+              "live_sha256": "71741a344f564dd8569bfa0fe5f69ae0a16ba1c92dab71c2422d746fa2dbc013",
+              "accepted_sha256": "cd083282e328caadb1b38598aa5f15ae7eda41708978afd06094ff62a24e4e56"
+            },
+            "providers/production/checkalt-preflight.mjs": {
+              "live_sha256": "8732f3781c2341ae1a05d1f56420d9132a6930fd49df4bcf6ca007eafed29e37",
+              "accepted_sha256": "25a4a9aa929dc8092e6a4459dc38362ffe01149a79773fd6aa0d75732480802d"
+            },
+            "providers/production/checkalt-secrets.mjs": {
+              "live_sha256": "03f4a625e40d280e79ccf677e1014ec004be8c74b20ab989574ab4328826b908",
+              "accepted_sha256": "a4118d12716466127faf639a8b0379fe1c04c7ee2a0f4d1c886106d183a57e6b"
+            },
+            "providers/production/checkalt-status-read.mjs": {
+              "live_sha256": "293db0e94ca2fab3208d614bf860f2f1f9fee846d77448d4863d09476842e613",
+              "accepted_sha256": "10ac13a3c6c58df43d1a1dafbd8e0415c487125b2132b1cbc1caf9c3a0d18dee"
+            },
+            "providers/production/checkalt-status-reconcile.mjs": {
+              "live_sha256": "6614d6ace4d30a84de0a26910e3079ff3964f174da4da95ccea2ee77f8b04b3a",
+              "accepted_sha256": "e3ee3d433b5fae826311709b6cb142fdee308e2770047e532c450d16675785b5"
+            },
+            "providers/production/moov-fund-authz.mjs": {
+              "live_sha256": "fc38a3cf5ff8c2e728ef7b248fd48cafd6a3e9caab2ba806732ad96caca7045a",
+              "accepted_sha256": "290da0d4c085cfc93b849d33ec8606f61f48f128c14a17ddf484f69b9c7c7afb"
+            },
+            "providers/production/moov-wallet-sync.mjs": {
+              "live_sha256": "0864aad539a13368ee6ec845deda41c9d753942138c210bd4161888041675558",
+              "accepted_sha256": "812c9dfd3af0a0dfc945ea320118a8a86362d8e98165e0045b158f4743f18c5e"
+            },
+            "providers/quickbooks.mjs": {
+              "live_sha256": "86ef27c50841dcb8a6ac505ca4706511ec5664c9ddc5f377764a3f141a5c3632",
+              "accepted_sha256": "fd77eed878af26e55fed1885f0ceeae99be88d23b96b42a49de48dcaaa2818ed"
+            },
+            "providers/readiness.mjs": {
+              "live_sha256": "1a13b2a5e0d4c7cd90cc3e6a2d6480ab2b18ee3971fb2d03f3390fa60a4d0871",
+              "accepted_sha256": "540170e7603edf6294d0ffc26ca6e3c6cad6a1f879dcafbced062694a9eb93f9"
+            },
+            "public-invoice.mjs": {
+              "live_sha256": "785335a8b233d3947725690ff67eba927b259b3a6170ffa1a2564c59ff025797",
+              "accepted_sha256": "e2d5ea84d231608775e34660051a5a5a6f119d331f4b3ae5fcd60e24fceff389"
+            },
+            "rds-global-bundle.pem": {
+              "live_sha256": "e7313252144e47a7529121ccc148f3b206b238f800fc73f83f0bb28b3b687ff5",
+              "accepted_sha256": "e5bb2084ccf45087bda1c9bffdea0eb15ee67f0b91646106e466714f9de3c7e3"
+            },
+            "rls-audit.mjs": {
+              "live_sha256": "b572443c438d8d819ce4601102bd1fc6e0b9bdff9b6b12cd4315a0ac921752ee",
+              "accepted_sha256": "203c161bc8b98ad7d1b473eb8795f57ae07fa6f6548121e65ede79d8597687ce"
+            },
+            "sandbox-credentials.mjs": {
+              "live_sha256": "eeb5a891e7bc5d864e7dec8c2efb24ac91954e6492f01982c0ff6925f2b0f29e",
+              "accepted_sha256": "3fd38358b2a55ce7acaa69f1070acc880d65aa4f20a89b56a6fbae597e5fca7e"
+            },
+            "sandbox-flags.mjs": {
+              "live_sha256": "06dd82c7703cab95307d9ffdcce76b87f7e52f7ce2b2e9ad6acdfb9efd5ccfcc",
+              "accepted_sha256": "28e98700e3875b2400440bf3e664e5b2197093c16ec5e01bc4ea34f1be29bcf7"
+            },
+            "sandbox.mjs": {
+              "live_sha256": "abe2169e9e9b7f25c093ef12a25c13fecc2296fc3d066bc5a3c5da9ca35b7668",
+              "accepted_sha256": "e28aa2685ac4cf5172b6a5536a1b4eb0e9cc5f421bc68d366c45f8ac84d5f945"
+            },
+            "scheduled.mjs": {
+              "live_sha256": "0a585d78b9091ebc40f5fb2b427a4982e1f27496d06a9c665a4e4b495a84696c",
+              "accepted_sha256": "4b06d4cd578720a3996dc090cc396bda273c8de07e80cd7064d755af2b214abb"
+            },
+            "secrets.mjs": {
+              "live_sha256": "6d82654ebb5f2b3cb421de2caf16b7d0b58dffee69067d2842dfa46184f742b7",
+              "accepted_sha256": "f8fa9ee63cb56bd0de49a746afbb18322c9376b0277aaf057a748f0c1ba0dba3"
+            },
+            "signature-submit.mjs": {
+              "live_sha256": "7ed91b77ba589f9745fab986b993a7f3eb22d10327b90c063490a8c84654c2d3",
+              "accepted_sha256": "24845b4cfbce74de6163a7f94174d5c56af2e5828cfbdeca99c791175150f38d"
+            },
+            "sms-policy.mjs": {
+              "live_sha256": "6910d50b8416674255dbd6d948f41268faab209a673bcb4633cbf88df29b01ef",
+              "accepted_sha256": "7ced168e9b88e7e61b068117a430346d7460f44e454bc4e11e330e27db936182"
+            },
+            "sms.mjs": {
+              "live_sha256": "02565fabc8f8c06002949874e01a9c4c72fcd777a61bc6ea1c24db350eb1fde4",
+              "accepted_sha256": "dd63d5f226b09e0887e1e897735fc2f6b8b7a2fd919a65a3874b935925db6daa"
+            },
+            "sql53-production-readonly-inspect.mjs": {
+              "live_sha256": "112efa8ee65b3200f3a4ab3475e6b50ad0c82cfd49c7aaaca7990bc80b746a14",
+              "accepted_sha256": "4e356350e4abdf58fdb6ba3ab4e62efbe1aa21f7720a49f1f0128860870edb68"
+            },
+            "staging-db-readonly-diagnostic-output.mjs": {
+              "live_sha256": "7ffa1cff649dcb78dc7f0da348defb38cbd237c004e2d4155e4c3bf2a8b1847c",
+              "accepted_sha256": "0d114d2f8ae6cc825fd5a435abdefe7f5dc35d4efc1358ba309acc9f4269c4d1"
+            },
+            "staging-db-readonly-diagnostic.mjs": {
+              "live_sha256": "16f69882be631cc96f40437f0fa4e96cfdb108eadcde340983130c6c4f59f45b",
+              "accepted_sha256": "aaaece7a9a8e05e975286a7e371955db47ca656e47ff5c25344cee4d585022d3"
+            },
+            "storage-paths.mjs": {
+              "live_sha256": "aa247b2f177559b1df0d8987ee8443e6d61130b0ce93243b027f22f21e1f7929",
+              "accepted_sha256": "278329e5230b2ddd6675e4cad9839d2193da8655ca4676573702dca3f90e9d09"
+            },
+            "tenant-collection-v2-settlement.mjs": {
+              "live_sha256": "b4613048c654228dc255ab4aa597da9d095a5743823a1912f6588f3ef0e412f7",
+              "accepted_sha256": "075d96d0826beb55a36261a799b80aa4898486b6322949b705017769151d7b40"
+            },
+            "tenant-collection-v2-uat.mjs": {
+              "live_sha256": "3a338c257cf99904a5878551999f3cf9ec692269bf2738da60a73bc4c00daecb",
+              "accepted_sha256": "7a0c9bc1a7e23647a9834ab7b5735e7323fcd16a7911624f8f45fb967bdb1d49"
+            },
+            "tenant-email-domain-handlers.mjs": {
+              "live_sha256": "10254bc9be3f5b4893a7acfae642be57f090850b5f622ac5947ed1a9ffe285ac",
+              "accepted_sha256": "b915a549316cae843854d80c488bc5adee956a85170824b17e436474d269edf4"
+            },
+            "tenant-logo-path.mjs": {
+              "live_sha256": "70455d6707cb288a01d0219b47fb9ee800fd7ea84ead44718a9827ef7064507d",
+              "accepted_sha256": "533a9463e46477b37b539267df8da30f9008fdbba2bf39c3c4783992a84a689d"
+            },
+            "tenant-maintenance-payments-catalog-inspect.mjs": {
+              "live_sha256": "1628becae7231ab65d976e271e23ad14db9099b06878d61c24dac17a36adeaf7",
+              "accepted_sha256": "c7b83fed089ceec3656de2a4976a3e084fa7305c5cd7275ee26cc17c03da78fe"
+            },
+            "tenant-moov-defaults.mjs": {
+              "live_sha256": "c373c11334603d45ff053d123a41c5f0cec632f89e5d0d548bce0c5e72f19994",
+              "accepted_sha256": "23f896681f2ac22778924310cf8f76c74017047b3de769a1fe261f300256d5fa"
+            },
+            "tenant-security-compliance.mjs": {
+              "live_sha256": "9d7e279af6ede707e898a854f9e9212a9338eec9654eccee7a164246e2e6a62b",
+              "accepted_sha256": "1432a1e0550f5b1cbfcc821265db4e4de68202e38357f862d42f1f4342bc9fc5"
+            },
+            "textract-check-ocr.mjs": {
+              "live_sha256": "713c06dcec4139815b74b009c558ff9bbffdb24b822a35628ff064769b2747de",
+              "accepted_sha256": "7d40a9fb299991da022b4f14f621a941bf2c93706f7bb73d02c14d053741a465"
+            },
+            "workflow-delete-check.mjs": {
+              "live_sha256": "2b7a55958a4c5b88928d9dbd0d1d091a31bf19badcbb21f82e8606d0f7629ab8",
+              "accepted_sha256": "bdfd5f3a380a81bc192959b59541a6cf98c82da5b04dd64b670cb8166e0ada9f"
+            },
+            "workflow-flags.mjs": {
+              "live_sha256": "2f85e422a9a0c441a7b4d5593a21aa1047ed642c16607f549c25001fbfcb9607",
+              "accepted_sha256": "a5c05d84ca847dc09c8f35e143a033f9af881e5f4491cf278810bb45857f1892"
+            },
+            "write-claim-settlement.mjs": {
+              "live_sha256": "14cbe9e2049ef5ae682e67e3e513de625b02e398f9dcc4a9feae926f98373b98",
+              "accepted_sha256": "ce53b3683504081fb6ab3f52559a4c6fcad8856cadd078bbf635359f2cc8779d"
+            },
+            "write.mjs": {
+              "live_sha256": "649d30f13344ce65fe2585833b80031bcc4c357b2260b054e8d99b42e1367a90",
+              "accepted_sha256": "24dbccf4d0b0aaf9b95b233efd66b44aadfd9eda6e7bf5d30c869cedb64c1f37"
+            }
+          },
+          "added": {
+            "providers/parity/moov-stakeholder-status.mjs": "bb20915730dccd792c774de13661b888176aef08168c933eea25a47509954d5e",
+            "providers/parity/platform-finance.mjs": "746c89a69077463abd97f3f1a0beed23ba2d0eb17462c19ca75defd6e6fed0fb",
+            "providers/parity/tenant-receivables.mjs": "0d8f8f20f4939e79551b4a1aa5b3305bb791cea7ca684f4428594ad359179477",
+            "tenant-collection-contract-v2.mjs": "9ec5ae45db34c0795570f401cc2b1c3fa78f04764870bf6b651c21278433ed5d"
+          },
+          "removed": {},
+          "dependencies": {
+            "added": {},
+            "removed": {},
+            "changed": {}
+          },
+          "inspect": {
+            "run_id": "39585059839",
+            "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39585059839",
+            "main_commit": "07a75fa01379b55b227f18b4e25de3049134367c",
+            "live_code_sha256": "nKVEeB8BhnflTfCenx7eUKXBpYoF/dkF6eKZthJ7B1k=",
+            "live_revision_id": "1ef85cf4-f3de-4676-a246-3f1d40e94573",
+            "live_member_count": 6770,
+            "candidate_zip_sha256": "b31a1d5b246952bd0b6c44d4d188416b26aa61ed55b1f341422d4ea0c6697785",
+            "candidate_member_count": 6774,
+            "same": 72,
+            "changed": 122,
+            "added": 4,
+            "removed": 0,
+            "dependency_counts": {
+              "live": 54,
+              "candidate": 54
+            },
+            "notes": "Every candidate hash equals sha256 of the same path in aws/functions/api at main_commit on an LF checkout. Dependencies are identical by package path and version (54 live, 54 candidate). The live staging package predates the 2026-10 overlays and the #1095 reconciliation; main wins for every listed member. Nothing is removed."
+          },
+          "applied": {
+            "run_id": "39587414391",
+            "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39587414391",
+            "main_commit": "4d37692d6ff105a74ea6aac2898a117fe0cf9757",
+            "approval_phrase": "DEPLOY FULL API PACKAGE TO STAGING",
+            "code_sha256_before": "nKVEeB8BhnflTfCenx7eUKXBpYoF/dkF6eKZthJ7B1k=",
+            "revision_id_before": "1ef85cf4-f3de-4676-a246-3f1d40e94573",
+            "code_sha256_after": "sxodWyRpUr0LbETU0YhBayaqYe1VsfNBQi1OoMZpd4U=",
+            "revision_id_after": "8503779d-4d63-4448-b8d5-9ad258cd7475",
+            "candidate_zip_sha256": "b31a1d5b246952bd0b6c44d4d188416b26aa61ed55b1f341422d4ea0c6697785",
+            "applied_at": "2026-10-21T10:50:07.413Z",
+            "state": "VERIFIED",
+            "smoke": [
+              "/health",
+              "/db-health",
+              "/db-readonly-validate"
+            ],
+            "notes": "Pre-inspect run 39586809414 on main 4d37692d6 reported READY with 0 unlisted differences. The apply re-downloaded the package and found it equal to the candidate member for member; configuration unchanged."
+          }
+        }
+      ]
     },
     "production": {
       "function_name": "checksops-production-prep-api",
