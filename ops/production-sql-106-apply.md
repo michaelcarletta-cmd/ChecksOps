@@ -70,6 +70,21 @@ inspect step and stops if it is not `[]`. In staging SQL 97 is already applied (
 106 runs after it there; no later migration grants these privileges back, so SQL 106 is not
 re-run. No Lambda member waits on SQL 106 (no `sql_before`, no plan entry).
 
+## Status
+
+- **Production inspect recorded (2026-10-21).** Read-only `--inspect` through SSM
+  `4539d0f0-b715-42f6-ba19-ef03252e87c7` on `i-0c35557c4e5385406`, main `fd1e059b5`
+  (tarball sha256 `72a7355b26183e3621eec75a09b8b54eeef7a9f507ed23eacd2731775df64238`, transfer
+  run 39633912868): `table_privileges[0].lines` `["checksops DELETE", "checksops UPDATE"]`,
+  `other_write_grants` `[]`, live `56b5e4bb1a2db3133c32c9cc3cca02c1e7fb876839544dbdfd0717aad8f25880`,
+  `already_applied` false, `precondition_failures` `[]`. Recorded in the pin as
+  `expected_live_definition_sha256`.
+- **Staging: substitute evidence.** SQL 106 was already in effect in staging: read-live run
+  39633390440 (main `588bda34`) reported `already_applied` true, live = intended, `lines` `[]`. The
+  owner accepts it as substitute evidence by reviewing and merging the pin change.
+- **Pin `execute: true`** once that change is merged. Nothing is applied by it; the apply (step 3)
+  needs the owner's own approval statement for that run.
+
 ## Steps
 
 1. Staging: the staging executor must carry SQL 106 first (executor package refresh through
