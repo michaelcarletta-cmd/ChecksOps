@@ -91,6 +91,9 @@ Environment-variable changes (one reviewed key at a time, never code, never role
 go through `guarded-staging-lambda-config.yml` and `guarded-production-lambda-config.yml`, gated by
 `ops/deployment-guard/lambda-config-plan.json`: apply is refused unless every listed key still holds
 its recorded live value. Runbook: `ops/lambda-configuration-change.md`.
+
+The production HTTP API CORS allow-list (`*` to checksops.com and www.checksops.com, nothing else)
+goes through `guarded-production-cors.yml`. Runbook: `ops/production-cors-allowlist.md`.
 It reports the requested repository member as `PRESENT` (with its SHA-256) or
 `ABSENT`, alongside the live Lambda CodeSha256 and RevisionId. Absence is not
 deployment authorization. For `apply`, explicitly select `add` for an absent

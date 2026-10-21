@@ -5,22 +5,33 @@
  * Exact permitted mutation:
  *   AllowOrigins: ["*"] -> ["https://checksops.com","https://www.checksops.com"]
  *
- * Everything else is pinned and re-read immediately before UpdateApi.
- * No Lambda, CloudFront, route, authorizer, integration, stage, SQL, Cognito,
- * WAF, provider, financial, or SPA mutation is performed.
+ * The security-relevant shape (API id, execute-api state, CORS baseline, routes, authorizer,
+ * CloudFront status and WAF) is pinned here. Values that move on every deploy (the Lambda
+ * CodeSha256/RevisionId and the CloudFront ETag) are pinned through the receipt: the signed
+ * preflight fingerprint is the whole normalized snapshot, the writer re-reads it before and
+ * immediately before UpdateApi, and the post-write snapshot must differ only in AllowOrigins.
+ * No Lambda, CloudFront, route, authorizer, integration, stage, SQL, Cognito, WAF, provider,
+ * financial, or SPA mutation is performed.
+ *
+ * Run only from guarded-production-cors.yml after github-production-cors.mjs issued the receipt.
  */
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { enforceScriptGuard, resolveGuardRoot } from './require-guard.mjs';
+import { refuseUnguardedDeploy, resolveGuardRoot } from './require-guard.mjs';
 import { consumeReceiptOnce } from './lib/consumed-receipts.mjs';
+import { evaluateProductionGate } from './lib/production.mjs';
 
 const AWS = process.env.AWS_CLI || process.env.AWS || 'aws';
 const REGION = process.env.AWS_REGION || 'us-east-1';
 export const API_ID = 'kiqojucc02';
 export const CF_ID = 'E1B0ZWWO5559U5';
 export const PREP_LAMBDA = 'checksops-production-prep-api';
+export const CORS_DEPLOYMENT_TYPE = 'apigateway-cors-update';
+export const CORS_TARGET_COMPONENT = 'production-http-api';
+export const CORS_OWNED_COMPONENT = 'cors:AllowOrigins';
 export const EXPECTED = Object.freeze({
   cors: {
     AllowHeaders: ['authorization','content-type','x-request-id','x-bridge-secret'],
@@ -35,19 +46,14 @@ export const EXPECTED = Object.freeze({
   authorizer: { AuthorizerId: '0dwrwx', Name: 'checksops-production-origin-verify' },
   cloudfront: {
     Status: 'Deployed',
-    ETag: 'E1VC38T7YXB528',
     WebACLId: 'arn:aws:wafv2:us-east-1:806168576068:global/webacl/checksops-production-cloudfront-waf/cc8aadde-2bab-4d5e-8144-7d8981f44ad7',
-  },
-  lambda: {
-    CodeSha256: 'RUOC6wUAE9eCkhbhF8h8FAfUyegj9KCrvZt5vCojOlw=',
-    RevisionId: '48b8b0da-7448-435b-b9ea-d068a4497f1e',
   },
 });
 export const TARGET_ORIGINS = Object.freeze(['https://checksops.com','https://www.checksops.com']);
 
-const stable = (v) => JSON.stringify(v, Object.keys(v || {}).sort());
 const hash = (v) => createHash('sha256').update(JSON.stringify(v)).digest('hex');
 const eq = (a,b) => JSON.stringify(a) === JSON.stringify(b);
+export const snapshotFingerprint = (snapshot) => hash(snapshot);
 
 function awsJson(args, env=process.env) {
   const out=execFileSync(AWS,['--region',REGION,'--output','json',...args],{encoding:'utf8',env});
@@ -78,15 +84,30 @@ export function normalizeSnapshot({api,routes,authorizers,cloudfront,lambda}) {
   };
 }
 
-export function validatePinnedSnapshot(s) {
-  const errors=[];
+/** Everything except AllowOrigins must hold the pinned shape; the volatile values must be present. */
+function validateShape(s, errors) {
   if(s.api.ApiId!==API_ID) errors.push('api_id_drift');
   if(s.api.DisableExecuteApiEndpoint!==false) errors.push('execute_api_state_drift');
-  if(!eq(s.api.CorsConfiguration,EXPECTED.cors)) errors.push('cors_baseline_drift');
   if(!eq(s.routes,EXPECTED.routes)) errors.push('routes_drift');
   if(!eq(s.authorizer,EXPECTED.authorizer)) errors.push('authorizer_drift');
-  if(!eq(s.cloudfront,EXPECTED.cloudfront)) errors.push('cloudfront_drift');
-  if(!eq(s.lambda,EXPECTED.lambda)) errors.push('lambda_drift');
+  if(s.cloudfront.Status!==EXPECTED.cloudfront.Status || s.cloudfront.WebACLId!==EXPECTED.cloudfront.WebACLId) errors.push('cloudfront_drift');
+  if(!s.cloudfront.ETag) errors.push('cloudfront_etag_missing');
+  if(!s.lambda.CodeSha256 || !s.lambda.RevisionId) errors.push('lambda_fingerprint_missing');
+}
+
+/** The live API is ready for the change: shape pinned and CORS still the exact baseline. */
+export function validatePinnedSnapshot(s) {
+  const errors=[];
+  validateShape(s, errors);
+  if(!eq(s.api.CorsConfiguration,EXPECTED.cors)) errors.push('cors_baseline_drift');
+  return {ok:errors.length===0,errors,fingerprint:hash(s)};
+}
+
+/** The change is live: shape pinned and CORS the baseline with only AllowOrigins replaced. */
+export function validateTightenedSnapshot(s) {
+  const errors=[];
+  validateShape(s, errors);
+  if(!eq(s.api.CorsConfiguration,{...EXPECTED.cors,AllowOrigins:[...TARGET_ORIGINS]})) errors.push('cors_not_tightened');
   return {ok:errors.length===0,errors,fingerprint:hash(s)};
 }
 
@@ -97,7 +118,7 @@ export function desiredCors(current) {
   return {...current,AllowOrigins:[...TARGET_ORIGINS]};
 }
 
-function readSnapshot(env=process.env) {
+export function readSnapshot(env=process.env) {
   return normalizeSnapshot({
     api:awsJson(['apigatewayv2','get-api','--api-id',API_ID],env),
     routes:awsJson(['apigatewayv2','get-routes','--api-id',API_ID],env),
@@ -107,49 +128,78 @@ function readSnapshot(env=process.env) {
   });
 }
 
+function updateApiCors(cors, env=process.env) {
+  awsJson(['apigatewayv2','update-api','--api-id',API_ID,'--cors-configuration',JSON.stringify(cors)],env);
+}
+
 export function assertOnlyCorsDelta(before,after) {
   const expected=structuredClone(before);
   expected.api.CorsConfiguration=desiredCors(before.api.CorsConfiguration);
   if(!eq(after,expected)) throw new Error('post_write_non_cors_drift');
 }
 
-export function main(env=process.env) {
+function readInput(env) {
+  const file=env.CHECKSOPS_CORS_INPUT;
+  if(!file) throw new Error('cors_input_missing');
+  return JSON.parse(fs.readFileSync(file,'utf8'));
+}
+
+export function main(env=process.env, deps={}) {
+  const read=deps.readSnapshot||readSnapshot;
+  const update=deps.updateApiCors||updateApiCors;
   if(env.CHECKSOPS_PRODUCTION_CORS_EXECUTE!=='1') {
     process.stdout.write(JSON.stringify({ok:false,plan_only:true,api_id:API_ID,allowed_delta:{AllowOrigins:TARGET_ORIGINS}})+'\n');
     return 2;
   }
+  const input=readInput(env);
+  if(input.restore===true||input.cors||input.origins) throw new Error('caller_supplied_cors_forbidden');
 
-  const first=readSnapshot(env);
+  const first=read(env);
   const checked=validatePinnedSnapshot(first);
   if(!checked.ok) throw new Error('preflight_drift:'+checked.errors.join(','));
 
-  const authorized=enforceScriptGuard({
-    script:import.meta.url,
+  const authorized=refuseUnguardedDeploy({
     target_environment:'production',
-    target_component:'production-http-api',
-    deployment_type:'apigateway-cors-update',
+    target_component:CORS_TARGET_COMPONENT,
+    deployment_type:CORS_DEPLOYMENT_TYPE,
     preflight_live_fingerprint:first,
-    workstream_id:env.CHECKSOPS_WORKSTREAM_ID,
-    commit:env.CHECKSOPS_COMMIT,
-  },{env});
+    workstream_id:input.workstream_id||env.CHECKSOPS_WORKSTREAM_ID,
+    commit:input.commit||env.CHECKSOPS_COMMIT,
+    receipt_path:input.receipt_path,
+  },{env,now:deps.now,root:deps.guardRoot});
+  if(!authorized.ok) throw new Error('guard_refused:'+(authorized.code||'DEPLOYMENT_GUARD_REQUIRED'));
+  const receipt=authorized.details.receipt;
+  if(receipt.deployment_type!==CORS_DEPLOYMENT_TYPE) throw new Error('receipt_type_mismatch');
+  if(!eq(receipt.owned_components,[CORS_OWNED_COMPONENT])||Object.hasOwn(receipt,'owned_member_ops')) throw new Error('receipt_component_mismatch');
 
   // Mandatory TOCTOU read immediately before the only mutation.
-  const second=readSnapshot(env);
+  const second=read(env);
   const rechecked=validatePinnedSnapshot(second);
   if(!rechecked.ok || rechecked.fingerprint!==checked.fingerprint) {
     throw new Error('toctou_drift:'+(rechecked.errors||[]).join(','));
   }
 
-  const consumed=consumeReceiptOnce(resolveGuardRoot({},env),authorized.details.receipt,{
+  const gate=evaluateProductionGate({
+    target_environment:'production',
+    deployment_type:CORS_DEPLOYMENT_TYPE,
+    workstream_id:receipt.workstream_id,
+    production_fingerprint:{snapshot_sha256:checked.fingerprint},
+    immediately_before_fingerprint:{snapshot_sha256:rechecked.fingerprint},
+    staging_acceptance:input.staging_acceptance,
+    approval:input.approval,
+  });
+  if(!gate.ok) throw new Error('production_gate:'+(gate.code||'refused'));
+
+  const consumed=consumeReceiptOnce(deps.guardRoot||resolveGuardRoot({},env),receipt,{
+    now:deps.now,
     actor:env.CHECKSOPS_OPERATOR||env.USER||null,
     script:'production-cors-update',
   });
   if(!consumed.ok) throw new Error('receipt_consumption_failed:'+(consumed.code||'unknown'));
 
-  const desired=desiredCors(second.api.CorsConfiguration);
-  awsJson(['apigatewayv2','update-api','--api-id',API_ID,'--cors-configuration',JSON.stringify(desired)],env);
+  update(desiredCors(second.api.CorsConfiguration),env);
 
-  const after=readSnapshot(env);
+  const after=read(env);
   assertOnlyCorsDelta(second,after);
   if(!eq(after.api.CorsConfiguration.AllowOrigins,TARGET_ORIGINS)) throw new Error('cors_post_verify_failed');
   process.stdout.write(JSON.stringify({ok:true,api_id:API_ID,before_fingerprint:checked.fingerprint,after_fingerprint:hash(after),AllowOrigins:after.api.CorsConfiguration.AllowOrigins})+'\n');

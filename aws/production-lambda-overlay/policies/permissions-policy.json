@@ -4,7 +4,10 @@
     {
       "Sid": "InspectExactProductionApiLambda",
       "Effect": "Allow",
-      "Action": ["lambda:GetFunction", "lambda:GetFunctionConfiguration"],
+      "Action": [
+        "lambda:GetFunction",
+        "lambda:GetFunctionConfiguration"
+      ],
       "Resource": "arn:aws:lambda:us-east-1:806168576068:function:checksops-production-prep-api"
     },
     {
@@ -20,9 +23,34 @@
       "Resource": "arn:aws:lambda:us-east-1:806168576068:function:checksops-production-prep-api"
     },
     {
+      "Sid": "InspectExactProductionHttpApiCors",
+      "Effect": "Allow",
+      "Action": "apigateway:GET",
+      "Resource": [
+        "arn:aws:apigateway:us-east-1::/apis/kiqojucc02",
+        "arn:aws:apigateway:us-east-1::/apis/kiqojucc02/routes",
+        "arn:aws:apigateway:us-east-1::/apis/kiqojucc02/authorizers"
+      ]
+    },
+    {
+      "Sid": "UpdateCorsOnlyExactProductionHttpApi",
+      "Effect": "Allow",
+      "Action": "apigateway:PATCH",
+      "Resource": "arn:aws:apigateway:us-east-1::/apis/kiqojucc02"
+    },
+    {
+      "Sid": "InspectExactProductionDistribution",
+      "Effect": "Allow",
+      "Action": "cloudfront:GetDistribution",
+      "Resource": "arn:aws:cloudfront::806168576068:distribution/E1B0ZWWO5559U5"
+    },
+    {
       "Sid": "SignDeploymentGuardReceiptsExactProductionKey",
       "Effect": "Allow",
-      "Action": ["kms:Sign", "kms:GetPublicKey"],
+      "Action": [
+        "kms:Sign",
+        "kms:GetPublicKey"
+      ],
       "Resource": "arn:aws:kms:us-east-1:806168576068:key/REPLACE_WITH_PRODUCTION_DEPLOYMENT_GUARD_KEY_ID"
     }
   ]
