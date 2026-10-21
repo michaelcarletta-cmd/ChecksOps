@@ -21,9 +21,7 @@ import { facilitatorAccountId } from "../_shared/moovClient.ts";
  * every recipient is resolved to a connected bank account BEFORE any money
  * moves. If even one recipient has not linked a bank on the platform rail the
  * function returns 409 `recipient_setup_required` with the list of names and
- * touches nothing, so the caller can fall back to the legacy Actum rail.
- *
- * The Actum and Plaid disbursement functions are untouched.
+ * touches nothing.
  */
 
 serve(async (req) => {

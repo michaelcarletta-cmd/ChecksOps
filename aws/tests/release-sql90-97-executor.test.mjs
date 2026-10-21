@@ -110,7 +110,7 @@ const neverConnect = async () => { throw new Error('should-not-connect'); };
 test('pins: the reviewed bytes, pending pre-states, code-derived post-states, selectable, packed and in step with the production pins', () => {
   const packed = Object.fromEntries(EXECUTOR_PACK_MEMBERS);
   const workflow = fs.readFileSync(path.join(ROOT, '.github/workflows/guarded-staging-sql-executor.yml'), 'utf8');
-  assert.deepEqual(RELEASE_SQL_KEYS, ['sql90', 'sql91', 'sql92', 'sql93', 'sql94', 'sql95', 'sql96', 'sql97', 'sql98', 'sql99', 'sql100', 'sql101', 'sql102', 'sql103', 'sql104', 'sql105', 'sql107']);
+  assert.deepEqual(RELEASE_SQL_KEYS, ['sql90', 'sql91', 'sql92', 'sql93', 'sql94', 'sql95', 'sql96', 'sql97', 'sql98', 'sql99', 'sql100', 'sql101', 'sql102', 'sql103', 'sql104', 'sql105', 'sql106', 'sql107']);
   for (const key of RELEASE_SQL_KEYS) {
     const pin = PINS[key];
     const spec = RELEASE_SQL_SPECS[key];

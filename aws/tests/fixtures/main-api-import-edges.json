@@ -1,6 +1,6 @@
 {
-  "base": "307417cbe0050db0d151a01b81bbc1eef53302da",
-  "generated_by": "release 2026-10-17 reverse-import fixture (static and destructured dynamic imports under aws/functions/api)",
+  "base": "f6ab17129a55a4438e547979bbb5fb88f4d1d545",
+  "generated_by": "origin/main f6ab17129 reverse-import fixture (static and destructured dynamic imports under aws/functions/api, aws/tests/helpers/module-exports.mjs scanner; one edge per import statement, names main does not export left out, sorted by importer then target). Plaid/Actum/QuickBooks removal: the 7 main edges whose names the branch no longer exports are replaced by the branch edge for the same importer and target, or dropped where the branch importer no longer imports it (deleted providers/plaid-sandbox.mjs; providers.mjs and sandbox.mjs imports of the deleted actum/plaid/quickbooks/plaid-sandbox modules); both sides change together and ship in one full-package rebuild.",
   "edges": [
     {
       "importer": "aws/functions/api/admin-override-check-status.mjs",
@@ -25,9 +25,9 @@
     },
     {
       "importer": "aws/functions/api/admin-reset-totp.mjs",
-      "target": "aws/functions/api/identity.mjs",
+      "target": "aws/functions/api/providers/production/moov-fund-authz.mjs",
       "names": [
-        "USER_ROLES_SQL"
+        "loginSessionBinding"
       ]
     },
     {
@@ -132,17 +132,9 @@
         "handleHomeownerLedgerUpload",
         "handleHomeownerLedgerView",
         "handleHomeownerUploadCheck",
-        "handleLookupPartnerCodePublic",
         "handlePublicContractorDirectory",
         "handleSendFileToHomeowner",
         "handleSendPortalInvite"
-      ]
-    },
-    {
-      "importer": "aws/functions/api/app-services.mjs",
-      "target": "aws/functions/api/ingest-shared-check.mjs",
-      "names": [
-        "handleIngestSharedCheck"
       ]
     },
     {
@@ -170,9 +162,23 @@
     },
     {
       "importer": "aws/functions/api/app-services.mjs",
+      "target": "aws/functions/api/platform-announcements.mjs",
+      "names": [
+        "handlePlatformAnnouncements"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/app-services.mjs",
       "target": "aws/functions/api/providers/production/checkalt-preflight.mjs",
       "names": [
         "handleCheckAltDepositPreflight"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/app-services.mjs",
+      "target": "aws/functions/api/signature-library-source.mjs",
+      "names": [
+        "handleSignatureLibraryDocumentCopy"
       ]
     },
     {
@@ -201,6 +207,7 @@
         "handleTenantDomainCheck",
         "handleTenantDomainRecheckCron",
         "handleTenantDomainVerify",
+        "handleTenantInviteResend",
         "handleTenantInviteUser",
         "handleTenantRemoveOpenaiKey",
         "handleTenantSetOpenaiKey",
@@ -228,10 +235,27 @@
     },
     {
       "importer": "aws/functions/api/app-services.mjs",
+      "target": "aws/functions/api/tenant-library.mjs",
+      "names": [
+        "handleClaimLibraryDocuments",
+        "handleHomeownerRevokeLibraryDocument",
+        "handleHomeownerShareLibraryDocument",
+        "handleHomeownerSharedDocumentUrl",
+        "handleTenantLibraryDocumentCreate"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/app-services.mjs",
+      "target": "aws/functions/api/tenant-management-v2.mjs",
+      "names": [
+        "handleTenantManagementV2"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/app-services.mjs",
       "target": "aws/functions/api/tenant-settings-handlers.mjs",
       "names": [
-        "handleSaveTenantBillingAccount",
-        "handleSaveTenantCompanyBranding"
+        "handleSaveTenantBillingAccount"
       ]
     },
     {
@@ -247,6 +271,13 @@
       "names": [
         "WEBAUTHN_AUTH_ROUTES",
         "WEBAUTHN_STAGING"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/auth-financial-totp.mjs",
+      "target": "aws/functions/api/admin-reset-totp.mjs",
+      "names": [
+        "TEAM_RESET_TOTP_ACTION"
       ]
     },
     {
@@ -344,8 +375,14 @@
       "importer": "aws/functions/api/auth-financial-totp.mjs",
       "target": "aws/functions/api/providers/production/moov-fund-authz.mjs",
       "names": [
-        "WALLET_FUND_TOTP_ACTION",
         "loginSessionBinding"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/auth-financial-totp.mjs",
+      "target": "aws/functions/api/providers/production/moov-fund-authz.mjs",
+      "names": [
+        "WALLET_FUND_TOTP_ACTION"
       ]
     },
     {
@@ -551,6 +588,29 @@
     },
     {
       "importer": "aws/functions/api/check-endorsement.mjs",
+      "target": "aws/functions/api/providers/production/checkalt-eligibility.mjs",
+      "names": [
+        "evaluateRearImageFreshness",
+        "loadCheckEndorsements",
+        "loadCheckPayees"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/check-endorsement.mjs",
+      "target": "aws/functions/api/providers/production/checkalt-image-compliance.mjs",
+      "names": [
+        "isCheckAltArtifactPath"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/check-endorsement.mjs",
+      "target": "aws/functions/api/providers/production/checkalt-images.mjs",
+      "names": [
+        "downloadClaimFileBytes"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/check-endorsement.mjs",
       "target": "aws/functions/api/secrets.mjs",
       "names": [
         "loadDatabaseCredentials"
@@ -583,8 +643,11 @@
       "importer": "aws/functions/api/check-ocr-provider.mjs",
       "target": "aws/functions/api/ocr-parse.mjs",
       "names": [
+        "cleanPayeeLine",
         "digitsOnly",
-        "parseCheckFields"
+        "parseCheckFields",
+        "sanitizeCarrierName",
+        "splitPayees"
       ]
     },
     {
@@ -751,6 +814,23 @@
       "target": "aws/functions/api/endorsement-composite.mjs",
       "names": [
         "compositeEndorsementSignatures"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/documents.mjs",
+      "target": "aws/functions/api/esign.mjs",
+      "names": [
+        "requireSignatureRequestActor"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/documents.mjs",
+      "target": "aws/functions/api/signature-submit.mjs",
+      "names": [
+        "attachCompletedSignatureDocument",
+        "isSupportedSignatureImage",
+        "mapSubmittedFieldValues",
+        "signedDocumentPath"
       ]
     },
     {
@@ -965,7 +1045,6 @@
       "importer": "aws/functions/api/esign.mjs",
       "target": "aws/functions/api/data.mjs",
       "names": [
-        "IS_PLATFORM_OWNER_SQL",
         "withIdentityWrite"
       ]
     },
@@ -973,7 +1052,8 @@
       "importer": "aws/functions/api/esign.mjs",
       "target": "aws/functions/api/email-branding.mjs",
       "names": [
-        "resolveEmailBranding"
+        "resolveEmailBranding",
+        "resolveTenantDocumentBranding"
       ]
     },
     {
@@ -1074,6 +1154,21 @@
     },
     {
       "importer": "aws/functions/api/financial.mjs",
+      "target": "aws/functions/api/financial-remaining.mjs",
+      "names": [
+        "findOperationBySequence",
+        "findReservedRemainingDraw",
+        "isMoneyOutOperation",
+        "loadCheckOperations",
+        "lockCheckMoney",
+        "nextDisbursementSequence",
+        "parseDisbursementSequence",
+        "parseRequestedPartialCents",
+        "summarizeCheckMoney"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/financial.mjs",
       "target": "aws/functions/api/financial-state.mjs",
       "names": [
         "FINANCIAL_STATES",
@@ -1086,8 +1181,7 @@
       "importer": "aws/functions/api/financial.mjs",
       "target": "aws/functions/api/identity.mjs",
       "names": [
-        "TENANT_MEMBERSHIP_SQL",
-        "USER_ROLES_SQL"
+        "TENANT_MEMBERSHIP_SQL"
       ]
     },
     {
@@ -1262,6 +1356,13 @@
       ]
     },
     {
+      "importer": "aws/functions/api/homeowner.mjs",
+      "target": "aws/functions/api/tenant-library.mjs",
+      "names": [
+        "loadSharedDocumentsSafely"
+      ]
+    },
+    {
       "importer": "aws/functions/api/identity.mjs",
       "target": "aws/functions/api/cognito.mjs",
       "names": [
@@ -1297,7 +1398,7 @@
       "importer": "aws/functions/api/identity.mjs",
       "target": "aws/functions/api/privileged-auth.mjs",
       "names": [
-        "isPrivilegedRoleList",
+        "isPrivilegedIdentity",
         "privilegedAuthPolicy"
       ]
     },
@@ -1503,41 +1604,10 @@
       ]
     },
     {
-      "importer": "aws/functions/api/ingest-shared-check.mjs",
-      "target": "aws/functions/api/data.mjs",
+      "importer": "aws/functions/api/invoice-actions.mjs",
+      "target": "aws/functions/api/invoice-provider.mjs",
       "names": [
-        "ignoredSpoof",
-        "parseBody"
-      ]
-    },
-    {
-      "importer": "aws/functions/api/ingest-shared-check.mjs",
-      "target": "aws/functions/api/db-health.mjs",
-      "names": [
-        "buildWriteClientConfig",
-        "sanitizePublicError"
-      ]
-    },
-    {
-      "importer": "aws/functions/api/ingest-shared-check.mjs",
-      "target": "aws/functions/api/providers/hmac.mjs",
-      "names": [
-        "header",
-        "safeEqual"
-      ]
-    },
-    {
-      "importer": "aws/functions/api/ingest-shared-check.mjs",
-      "target": "aws/functions/api/secrets.mjs",
-      "names": [
-        "loadDatabaseCredentials"
-      ]
-    },
-    {
-      "importer": "aws/functions/api/ingest-shared-check.mjs",
-      "target": "aws/functions/api/storage-paths.mjs",
-      "names": [
-        "s3KeyFor"
+        "runProviderInvoiceAction"
       ]
     },
     {
@@ -1548,6 +1618,46 @@
         "jsonResult",
         "membershipsOf",
         "resolveTenant"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/invoice-provider.mjs",
+      "target": "aws/functions/api/invoice-actions.mjs",
+      "names": [
+        "generatePublicToken"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/invoice-provider.mjs",
+      "target": "aws/functions/api/providers/parity/caller.mjs",
+      "names": [
+        "fail",
+        "jsonResult"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/invoice-provider.mjs",
+      "target": "aws/functions/api/providers/parity/db.mjs",
+      "names": [
+        "loadMoovAccount",
+        "logPaymentEvent",
+        "sanitize"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/invoice-provider.mjs",
+      "target": "aws/functions/api/providers/parity/moov-client.mjs",
+      "names": [
+        "MoovError",
+        "moovFetch"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/invoice-provider.mjs",
+      "target": "aws/functions/api/providers/parity/moov-provider-env.mjs",
+      "names": [
+        "failClosedMissingAccount",
+        "requireMoovProviderEnvironment"
       ]
     },
     {
@@ -1590,10 +1700,29 @@
     },
     {
       "importer": "aws/functions/api/ocr-descriptive-persist.mjs",
+      "target": "aws/functions/api/check-deposited.mjs",
+      "names": [
+        "resolveWritablePayeeLine"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/ocr-descriptive-persist.mjs",
       "target": "aws/functions/api/ocr-descriptive-text.mjs",
       "names": [
         "normalizeClaimNumber",
         "normalizeDescriptiveText"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/ocr-descriptive-persist.mjs",
+      "target": "aws/functions/api/ocr-parse.mjs",
+      "names": [
+        "cleanPayeeLine",
+        "looksLikeBankName",
+        "looksLikeSecurityDisclaimer",
+        "matchKnownCarrier",
+        "normalizeAmount",
+        "sanitizeCarrierName"
       ]
     },
     {
@@ -1617,6 +1746,13 @@
       "target": "aws/functions/api/azure-di-secret.mjs",
       "names": [
         "azureDiAnalyzeSecretLoader"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/ocr.mjs",
+      "target": "aws/functions/api/check-deposited.mjs",
+      "names": [
+        "resolveWritablePayeeLine"
       ]
     },
     {
@@ -1731,6 +1867,16 @@
       ]
     },
     {
+      "importer": "aws/functions/api/platform-announcements.mjs",
+      "target": "aws/functions/api/data.mjs",
+      "names": [
+        "IS_PLATFORM_OWNER_SQL",
+        "parseBody",
+        "withIdentity",
+        "withIdentityWrite"
+      ]
+    },
+    {
       "importer": "aws/functions/api/privileged-auth.mjs",
       "target": "aws/functions/api/ops-readiness.mjs",
       "names": [
@@ -1795,17 +1941,8 @@
     },
     {
       "importer": "aws/functions/api/providers.mjs",
-      "target": "aws/functions/api/providers/actum.mjs",
-      "names": [
-        "actumExecutionStub",
-        "actumInterface"
-      ]
-    },
-    {
-      "importer": "aws/functions/api/providers.mjs",
       "target": "aws/functions/api/providers/catalog.mjs",
       "names": [
-        "ACTUM_BOUNDARY",
         "FUNCTION_BY_NAME",
         "PROVIDER_FUNCTIONS",
         "classifyFunction"
@@ -1841,6 +1978,21 @@
     },
     {
       "importer": "aws/functions/api/providers.mjs",
+      "target": "aws/functions/api/providers/onboarding/flags.mjs",
+      "names": [
+        "moovOnboardingProductionEnabled"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers.mjs",
+      "target": "aws/functions/api/providers/onboarding/handlers.mjs",
+      "names": [
+        "handleMoovOnboarding",
+        "isOnboardingFunction"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers.mjs",
       "target": "aws/functions/api/providers/parity/dispatch.mjs",
       "names": [
         "hasParityHandler",
@@ -1849,18 +2001,18 @@
     },
     {
       "importer": "aws/functions/api/providers.mjs",
-      "target": "aws/functions/api/providers/plaid.mjs",
-      "names": [
-        "plaidExecutionStub",
-        "publicPlaidStatus"
-      ]
-    },
-    {
-      "importer": "aws/functions/api/providers.mjs",
       "target": "aws/functions/api/providers/production/checkalt-dispatch.mjs",
       "names": [
         "hasProductionCheckAltHandler",
         "runProductionCheckAltHandler"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers.mjs",
+      "target": "aws/functions/api/providers/production/checkalt-holds.mjs",
+      "names": [
+        "productionCheckAltAmbiguousMode",
+        "productionCheckAltExecutionAllowed"
       ]
     },
     {
@@ -1896,14 +2048,6 @@
     },
     {
       "importer": "aws/functions/api/providers.mjs",
-      "target": "aws/functions/api/providers/quickbooks.mjs",
-      "names": [
-        "quickbooksExecutionStub",
-        "quickbooksInterface"
-      ]
-    },
-    {
-      "importer": "aws/functions/api/providers.mjs",
       "target": "aws/functions/api/providers/webhooks.mjs",
       "names": [
         "handleProviderWebhook"
@@ -1914,6 +2058,13 @@
       "target": "aws/functions/api/sandbox-flags.mjs",
       "names": [
         "providerSandboxExecutionEnabled"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers.mjs",
+      "target": "aws/functions/api/tenant-deposits-gate.mjs",
+      "names": [
+        "gateProviderDeposit"
       ]
     },
     {
@@ -2008,6 +2159,310 @@
       ]
     },
     {
+      "importer": "aws/functions/api/providers/onboarding/context.mjs",
+      "target": "aws/functions/api/providers/onboarding/flags.mjs",
+      "names": [
+        "onboardingDeployment"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/onboarding/context.mjs",
+      "target": "aws/functions/api/providers/parity/caller.mjs",
+      "names": [
+        "fail",
+        "membershipsOf"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/onboarding/context.mjs",
+      "target": "aws/functions/api/providers/parity/moov-client.mjs",
+      "names": [
+        "MOOV_PINNED_VERSION"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/onboarding/context.mjs",
+      "target": "aws/functions/api/sandbox-credentials.mjs",
+      "names": [
+        "loadSandboxCredentials"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/onboarding/documents.mjs",
+      "target": "aws/functions/api/providers/onboarding/crypto.mjs",
+      "names": [
+        "OnboardingError"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/onboarding/documents.mjs",
+      "target": "aws/functions/api/providers/onboarding/redact.mjs",
+      "names": [
+        "isNetworkError",
+        "moovErrorCode",
+        "onboardingLog"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/onboarding/documents.mjs",
+      "target": "aws/functions/api/providers/onboarding/store.mjs",
+      "names": [
+        "completeOutbox",
+        "enqueueOutbox",
+        "failOutboxAttempt",
+        "loadAccount",
+        "publicDocument"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/onboarding/documents.mjs",
+      "target": "aws/functions/api/providers/parity/moov-client.mjs",
+      "names": [
+        "MoovError",
+        "moovFetch",
+        "scopes"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/onboarding/flags.mjs",
+      "target": "aws/functions/api/provider-flags.mjs",
+      "names": [
+        "executionAllowed"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/onboarding/flags.mjs",
+      "target": "aws/functions/api/provider-flags.mjs",
+      "names": [
+        "providerWebhookDryRun"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/onboarding/flags.mjs",
+      "target": "aws/functions/api/sandbox-flags.mjs",
+      "names": [
+        "providerSandboxExecutionEnabled"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/onboarding/handlers.mjs",
+      "target": "aws/functions/api/cognito.mjs",
+      "names": [
+        "APP_USER_EMAIL_GUC",
+        "APP_USER_ID_GUC"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/onboarding/handlers.mjs",
+      "target": "aws/functions/api/data.mjs",
+      "names": [
+        "withIdentityWrite"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/onboarding/handlers.mjs",
+      "target": "aws/functions/api/providers/onboarding/context.mjs",
+      "names": [
+        "isUuid",
+        "loadOnboardingMoovContext",
+        "resolveOnboardingAccess",
+        "resolveOnboardingEnvironment"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/onboarding/handlers.mjs",
+      "target": "aws/functions/api/providers/onboarding/crypto.mjs",
+      "names": [
+        "OnboardingError"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/onboarding/handlers.mjs",
+      "target": "aws/functions/api/providers/onboarding/documents.mjs",
+      "names": [
+        "createUploadUrl",
+        "finalizeDocument",
+        "viewUrl"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/onboarding/handlers.mjs",
+      "target": "aws/functions/api/providers/onboarding/flags.mjs",
+      "names": [
+        "onboardingDeployment"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/onboarding/handlers.mjs",
+      "target": "aws/functions/api/providers/onboarding/moov-sync.mjs",
+      "names": [
+        "ensureMoovAccount",
+        "syncOnboardingToMoov"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/onboarding/handlers.mjs",
+      "target": "aws/functions/api/providers/onboarding/redact.mjs",
+      "names": [
+        "isNetworkError",
+        "moovErrorCode",
+        "onboardingLog",
+        "redact"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/onboarding/handlers.mjs",
+      "target": "aws/functions/api/providers/onboarding/store.mjs",
+      "names": [
+        "buildOnboardingView",
+        "decryptProfileEin",
+        "enqueueOutbox",
+        "loadAccount",
+        "loadDocument",
+        "loadDocuments",
+        "loadDueOutbox",
+        "loadProfile",
+        "loadRepresentatives",
+        "lockTenantOnboarding",
+        "maskLast4",
+        "publicRepresentative",
+        "removeRepresentative",
+        "upsertProfile",
+        "upsertRepresentative",
+        "validateBusiness",
+        "validateRepresentatives"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/onboarding/handlers.mjs",
+      "target": "aws/functions/api/providers/parity/caller.mjs",
+      "names": [
+        "fail",
+        "jsonResult"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/onboarding/handlers.mjs",
+      "target": "aws/functions/api/providers/parity/db.mjs",
+      "names": [
+        "logPaymentEvent"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/onboarding/handlers.mjs",
+      "target": "aws/functions/api/providers/parity/moov-capabilities.mjs",
+      "names": [
+        "MERCHANT_CAPABILITIES",
+        "MOOV_CAPABILITIES_API_VERSION",
+        "missingRequestedCapabilities"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/onboarding/handlers.mjs",
+      "target": "aws/functions/api/providers/parity/moov-client.mjs",
+      "names": [
+        "MoovError",
+        "capabilityFlags",
+        "moovFetch",
+        "moovToken",
+        "normalizeOnboardingStatus",
+        "safeLastFour",
+        "scopes",
+        "withMoovContext"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/onboarding/handlers.mjs",
+      "target": "aws/functions/api/providers/production/moov-fund-authz.mjs",
+      "names": [
+        "WALLET_FUND_TOTP_ACTION",
+        "loadSessionFundStepUp",
+        "loginSessionBinding"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/onboarding/handlers.mjs",
+      "target": "aws/functions/api/providers/readiness.mjs",
+      "names": [
+        "evaluateReadiness"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/onboarding/moov-sync.mjs",
+      "target": "aws/functions/api/providers/onboarding/crypto.mjs",
+      "names": [
+        "OnboardingError"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/onboarding/moov-sync.mjs",
+      "target": "aws/functions/api/providers/onboarding/redact.mjs",
+      "names": [
+        "isNetworkError",
+        "moovErrorCode",
+        "moovRejectedFields",
+        "onboardingLog"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/onboarding/moov-sync.mjs",
+      "target": "aws/functions/api/providers/onboarding/store.mjs",
+      "names": [
+        "completeOutbox",
+        "decryptProfileEin",
+        "decryptRepresentativeDob",
+        "failOutboxAttempt",
+        "loadAccount",
+        "loadProfile",
+        "loadRepresentatives",
+        "markRepresentativeSsnResubmit",
+        "markRepresentativeSynced",
+        "moovAddress",
+        "setProfileSyncState"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/onboarding/moov-sync.mjs",
+      "target": "aws/functions/api/providers/parity/db.mjs",
+      "names": [
+        "logPaymentEvent"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/onboarding/moov-sync.mjs",
+      "target": "aws/functions/api/providers/parity/moov-capabilities.mjs",
+      "names": [
+        "MERCHANT_CAPABILITIES",
+        "MOOV_CAPABILITIES_API_VERSION"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/onboarding/moov-sync.mjs",
+      "target": "aws/functions/api/providers/parity/moov-client.mjs",
+      "names": [
+        "MoovError",
+        "moovFetch",
+        "scopes"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/onboarding/store.mjs",
+      "target": "aws/functions/api/providers/onboarding/crypto.mjs",
+      "names": [
+        "OnboardingError",
+        "decryptPii",
+        "encryptPii"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/onboarding/webhook-status.mjs",
+      "target": "aws/functions/api/providers/parity/moov-client.mjs",
+      "names": [
+        "capabilityFlags",
+        "normalizeOnboardingStatus"
+      ]
+    },
+    {
       "importer": "aws/functions/api/providers/parity/caller.mjs",
       "target": "aws/functions/api/identity.mjs",
       "names": [
@@ -2088,7 +2543,6 @@
       "names": [
         "checkAltParityContext",
         "fail",
-        "isPlatformAdmin",
         "jsonResult"
       ]
     },
@@ -2147,13 +2601,6 @@
       "target": "aws/functions/api/storage-paths.mjs",
       "names": [
         "s3KeyFor"
-      ]
-    },
-    {
-      "importer": "aws/functions/api/providers/parity/db.mjs",
-      "target": "aws/functions/api/providers/parity/caller.mjs",
-      "names": [
-        "isPlatformAdmin"
       ]
     },
     {
@@ -2272,7 +2719,6 @@
         "microDepositConfirm",
         "microDepositInitiate",
         "onboardingLink",
-        "plaidBridge",
         "platformBank",
         "platformTreasury",
         "publicInvoice",
@@ -2512,10 +2958,50 @@
       ]
     },
     {
+      "importer": "aws/functions/api/providers/parity/moov-stakeholder-status.mjs",
+      "target": "aws/functions/api/providers/moov-recipient-tos-policy.mjs",
+      "names": [
+        "liveBankVerified"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/parity/moov-stakeholder-status.mjs",
+      "target": "aws/functions/api/providers/parity/moov-client.mjs",
+      "names": [
+        "moovFetch",
+        "scopes"
+      ]
+    },
+    {
       "importer": "aws/functions/api/providers/parity/moov-wallet.mjs",
       "target": "aws/functions/api/providers/parity/moov-client.mjs",
       "names": [
         "moovFetch"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/parity/platform-finance.mjs",
+      "target": "aws/functions/api/data.mjs",
+      "names": [
+        "parseBody",
+        "withIdentity"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/parity/platform-finance.mjs",
+      "target": "aws/functions/api/providers/parity/caller.mjs",
+      "names": [
+        "fail",
+        "jsonResult"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/parity/platform-finance.mjs",
+      "target": "aws/functions/api/providers/parity/moov-client.mjs",
+      "names": [
+        "moovFetch",
+        "scopes",
+        "withMoovContext"
       ]
     },
     {
@@ -2550,10 +3036,10 @@
       ]
     },
     {
-      "importer": "aws/functions/api/providers/plaid-sandbox.mjs",
-      "target": "aws/functions/api/sandbox-credentials.mjs",
+      "importer": "aws/functions/api/providers/parity/tenant-receivables.mjs",
+      "target": "aws/functions/api/tenant-collection-v2.mjs",
       "names": [
-        "PLAID_SANDBOX_HOST"
+        "collectionRowFields"
       ]
     },
     {
@@ -2588,7 +3074,6 @@
       "importer": "aws/functions/api/providers/production/checkalt-approve.mjs",
       "target": "aws/functions/api/providers/production/checkalt-authz.mjs",
       "names": [
-        "CHECKALT_APPROVE_ACTION",
         "authorizeCheckAltProduction",
         "serverAmountCentsFromCheck"
       ]
@@ -2625,13 +3110,6 @@
     },
     {
       "importer": "aws/functions/api/providers/production/checkalt-authz.mjs",
-      "target": "aws/functions/api/financial-authz.mjs",
-      "names": [
-        "FINANCIAL_ROLES"
-      ]
-    },
-    {
-      "importer": "aws/functions/api/providers/production/checkalt-authz.mjs",
       "target": "aws/functions/api/financial-flags.mjs",
       "names": [
         "financialPermissionsActivated"
@@ -2656,6 +3134,13 @@
       "target": "aws/functions/api/providers/production/checkalt-holds.mjs",
       "names": [
         "productionCheckAltExecutionAllowed"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/production/checkalt-authz.mjs",
+      "target": "aws/functions/api/providers/production/moov-fund-authz.mjs",
+      "names": [
+        "loginSessionBinding"
       ]
     },
     {
@@ -3493,6 +3978,13 @@
     },
     {
       "importer": "aws/functions/api/providers/webhook-apply.mjs",
+      "target": "aws/functions/api/providers/onboarding/webhook-status.mjs",
+      "names": [
+        "applyOnboardingWebhookStatus"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/webhook-apply.mjs",
       "target": "aws/functions/api/providers/parity/db.mjs",
       "names": [
         "sanitize"
@@ -3548,6 +4040,20 @@
         "rawEventBody",
         "verifyHmacBodySignature",
         "verifyMoovSignature"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/webhooks.mjs",
+      "target": "aws/functions/api/providers/onboarding/flags.mjs",
+      "names": [
+        "productionOnboardingWebhookApplyEnabled"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/providers/webhooks.mjs",
+      "target": "aws/functions/api/providers/onboarding/webhook-status.mjs",
+      "names": [
+        "applyProductionOnboardingWebhook"
       ]
     },
     {
@@ -3733,15 +4239,6 @@
     },
     {
       "importer": "aws/functions/api/sandbox.mjs",
-      "target": "aws/functions/api/providers/plaid-sandbox.mjs",
-      "names": [
-        "assertPlaidSandboxCredentials",
-        "buildPlaidLinkTokenBody",
-        "plaidSandboxFetch"
-      ]
-    },
-    {
-      "importer": "aws/functions/api/sandbox.mjs",
       "target": "aws/functions/api/providers/webhooks.mjs",
       "names": [
         "sanitizeWebhookPayload"
@@ -3807,6 +4304,55 @@
       "target": "aws/functions/api/tenant-email-domain-handlers.mjs",
       "names": [
         "handleTenantDomainRecheckCron"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/signature-library-source.mjs",
+      "target": "aws/functions/api/data.mjs",
+      "names": [
+        "ignoredSpoof",
+        "parseBody",
+        "withIdentityWrite"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/signature-library-source.mjs",
+      "target": "aws/functions/api/storage-paths.mjs",
+      "names": [
+        "s3KeyFor"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/signature-library-source.mjs",
+      "target": "aws/functions/api/tenant-library-rules.mjs",
+      "names": [
+        "LIBRARY_BUCKET",
+        "LIBRARY_MAX_BYTES",
+        "normalizeContentType"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/signature-library-source.mjs",
+      "target": "aws/functions/api/tenant-library.mjs",
+      "names": [
+        "claimBelongsToTenant",
+        "isTenantMember",
+        "shareableLibraryDocument"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/signature-library-source.mjs",
+      "target": "aws/functions/api/write-allowlist.mjs",
+      "names": [
+        "storageWritesEnabled",
+        "writesEnabled"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/signature-library-source.mjs",
+      "target": "aws/functions/api/write-signature.mjs",
+      "names": [
+        "authorizeSignatureDocumentPath"
       ]
     },
     {
@@ -3941,6 +4487,13 @@
       ]
     },
     {
+      "importer": "aws/functions/api/storage-write-auth.mjs",
+      "target": "aws/functions/api/tenant-library-rules.mjs",
+      "names": [
+        "libraryObjectPath"
+      ]
+    },
+    {
       "importer": "aws/functions/api/storage-write.mjs",
       "target": "aws/functions/api/data.mjs",
       "names": [
@@ -3978,6 +4531,15 @@
       "target": "aws/functions/api/storage.mjs",
       "names": [
         "authorizeObject"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/storage-write.mjs",
+      "target": "aws/functions/api/tenant-library-rules.mjs",
+      "names": [
+        "LIBRARY_BUCKET",
+        "isLibraryContentType",
+        "isLibrarySize"
       ]
     },
     {
@@ -4098,10 +4660,33 @@
       ]
     },
     {
+      "importer": "aws/functions/api/tenant-admin.mjs",
+      "target": "aws/functions/api/identity-env.mjs",
+      "names": [
+        "bindProductionCognitoLock"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/tenant-billing-destination.mjs",
+      "target": "aws/functions/api/identity-env.mjs",
+      "names": [
+        "IDENTITY_ENV_PRODUCTION",
+        "identityEnvFromChecksopsEnv"
+      ]
+    },
+    {
       "importer": "aws/functions/api/tenant-billing-destination.mjs",
       "target": "aws/functions/api/sandbox-credentials.mjs",
       "names": [
         "loadSandboxCredentials"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/tenant-billing-destination.mjs",
+      "target": "aws/functions/api/tenant-collection-v2.mjs",
+      "names": [
+        "PRODUCTION_FEE_DESTINATION",
+        "assertExplicitDestination"
       ]
     },
     {
@@ -4139,9 +4724,18 @@
       "importer": "aws/functions/api/tenant-billing-engine.mjs",
       "target": "aws/functions/api/tenant-collection-v2.mjs",
       "names": [
+        "COLLECTION_CONTRACT_ID",
+        "assertTenantBankSource",
         "classifyCollectionStatus",
         "collectTenantObligation",
         "receivedCentsFromLegs"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/tenant-billing-engine.mjs",
+      "target": "aws/functions/api/tenant-fee-invoice-email.mjs",
+      "names": [
+        "queueFeeInvoiceEmail"
       ]
     },
     {
@@ -4155,45 +4749,60 @@
     },
     {
       "importer": "aws/functions/api/tenant-billing-handlers.mjs",
-      "target": "aws/functions/api/db-health.mjs",
-      "names": [
-        "buildWriteClientConfig",
-        "sanitizePublicError"
-      ]
-    },
-    {
-      "importer": "aws/functions/api/tenant-billing-handlers.mjs",
-      "target": "aws/functions/api/secrets.mjs",
-      "names": [
-        "loadDatabaseCredentials"
-      ]
-    },
-    {
-      "importer": "aws/functions/api/tenant-billing-handlers.mjs",
       "target": "aws/functions/api/tenant-billing-destination.mjs",
       "names": [
+        "billingDestinationStatus",
         "billingEnvironment",
-        "monthlyBillingEnabled",
-        "resolveBillingDestination"
+        "resolveBillingDestination",
+        "setBillingDestination"
       ]
     },
     {
       "importer": "aws/functions/api/tenant-billing-handlers.mjs",
       "target": "aws/functions/api/tenant-billing-engine.mjs",
       "names": [
+        "MANUAL_BILLING_ONLY",
         "actorIsPlatformOwner",
         "applyBillingProviderEvent",
         "billingIdempotencyKey",
+        "billingNotReadyMessage",
         "buildTenantBillingSnapshot",
         "canAuthorizeTenantBilling",
         "canViewTenantBilling",
         "chargeTenantPeriod",
         "defaultPullPeriodKey",
         "loadTenantBillingContext",
-        "runMonthlyBillingScheduler",
+        "previewTenantPeriodCharge",
+        "recordBillingAudit",
+        "resendTenantFeeInvoice",
         "saveBillingAuthorization",
         "saveBillingSettings",
         "verifyTenantBillingDebit"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/tenant-billing-handlers.mjs",
+      "target": "aws/functions/api/tenant-fee-invoice-email.mjs",
+      "names": [
+        "deliverFeeInvoiceEmail"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/tenant-collection-contract-v2.mjs",
+      "target": "aws/functions/api/tenant-collection-v2.mjs",
+      "names": [
+        "CHECKSOPS_PLATFORM_ACCOUNT_ID",
+        "CHECKSOPS_PLATFORM_WALLET_PM_ID",
+        "CHECKSOPS_SANDBOX_MERCHANT_ACCOUNT_ID",
+        "COLLECTION_CONTRACT_ID",
+        "COLLECTION_CONTRACT_STATUS",
+        "COLLECTION_CONTRACT_VERSION",
+        "FALLBACK_SELECTIONS",
+        "LEG_TYPE",
+        "isSettlementReceived",
+        "receivedCentsFromLegs",
+        "remainingUnpaidCents",
+        "splitCollectionAmounts"
       ]
     },
     {
@@ -4215,13 +4824,6 @@
       "names": [
         "parseBody",
         "withIdentityWrite"
-      ]
-    },
-    {
-      "importer": "aws/functions/api/tenant-collection-v2-uat.mjs",
-      "target": "aws/functions/api/identity.mjs",
-      "names": [
-        "USER_ROLES_SQL"
       ]
     },
     {
@@ -4257,7 +4859,10 @@
       "target": "aws/functions/api/email-branding.mjs",
       "names": [
         "brandingForTemplate",
-        "resolveEmailBranding"
+        "isSafeHexColor",
+        "isSafeHttpUrl",
+        "resolveEmailBranding",
+        "safeHttpUrl"
       ]
     },
     {
@@ -4322,6 +4927,118 @@
       ]
     },
     {
+      "importer": "aws/functions/api/tenant-fee-invoice-email.mjs",
+      "target": "aws/functions/api/email-branding.mjs",
+      "names": [
+        "platformBranding",
+        "resolveEmailBranding"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/tenant-fee-invoice-email.mjs",
+      "target": "aws/functions/api/email-layout.mjs",
+      "names": [
+        "renderChecksOpsEmail"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/tenant-fee-invoice-email.mjs",
+      "target": "aws/functions/api/email-policy.mjs",
+      "names": [
+        "normalizeEmail"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/tenant-fee-invoice-email.mjs",
+      "target": "aws/functions/api/email.mjs",
+      "names": [
+        "sendViaSesOrSink"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/tenant-fee-invoice-email.mjs",
+      "target": "aws/functions/api/tenant-billing-destination.mjs",
+      "names": [
+        "isProductionChecksOpsRuntime"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/tenant-library-rules.mjs",
+      "target": "aws/functions/api/mortgage-library-doc-types.mjs",
+      "names": [
+        "LIBRARY_CATEGORIES",
+        "libraryCategoryOf"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/tenant-library-rules.mjs",
+      "target": "aws/functions/api/storage-paths.mjs",
+      "names": [
+        "MAX_UPLOAD_BYTES",
+        "matchTenantDocumentPath",
+        "normalizePath"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/tenant-library.mjs",
+      "target": "aws/functions/api/data.mjs",
+      "names": [
+        "ignoredSpoof",
+        "parseBody",
+        "withIdentity",
+        "withIdentityWrite"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/tenant-library.mjs",
+      "target": "aws/functions/api/db-health.mjs",
+      "names": [
+        "buildClientConfig",
+        "sanitizePublicError"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/tenant-library.mjs",
+      "target": "aws/functions/api/mortgage-library-doc-types.mjs",
+      "names": [
+        "isAllowedTenantDocumentDocType",
+        "libraryCategoryOf"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/tenant-library.mjs",
+      "target": "aws/functions/api/secrets.mjs",
+      "names": [
+        "loadDatabaseCredentials"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/tenant-library.mjs",
+      "target": "aws/functions/api/storage-paths.mjs",
+      "names": [
+        "s3KeyFor"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/tenant-library.mjs",
+      "target": "aws/functions/api/tenant-library-rules.mjs",
+      "names": [
+        "LIBRARY_BUCKET",
+        "isLibraryContentType",
+        "isLibrarySize",
+        "libraryObjectPath",
+        "normalizeContentType"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/tenant-library.mjs",
+      "target": "aws/functions/api/write-allowlist.mjs",
+      "names": [
+        "storageWritesEnabled",
+        "writesEnabled"
+      ]
+    },
+    {
       "importer": "aws/functions/api/tenant-maintenance-payments-catalog-inspect.mjs",
       "target": "aws/functions/api/data.mjs",
       "names": [
@@ -4375,15 +5092,6 @@
     },
     {
       "importer": "aws/functions/api/tenant-settings-handlers.mjs",
-      "target": "aws/functions/api/email-branding.mjs",
-      "names": [
-        "isSafeHexColor",
-        "isSafeHttpUrl",
-        "safeHttpUrl"
-      ]
-    },
-    {
-      "importer": "aws/functions/api/tenant-settings-handlers.mjs",
       "target": "aws/functions/api/tenant-email-domain.mjs",
       "names": [
         "resolveTenantAccess"
@@ -4397,13 +5105,6 @@
         "parseBody",
         "withIdentity",
         "withIdentityWrite"
-      ]
-    },
-    {
-      "importer": "aws/functions/api/workflow-delete-check.mjs",
-      "target": "aws/functions/api/identity.mjs",
-      "names": [
-        "USER_ROLES_SQL"
       ]
     },
     {
@@ -4426,6 +5127,7 @@
       "importer": "aws/functions/api/workflow-delete-check.mjs",
       "target": "aws/functions/api/workflow-transitions.mjs",
       "names": [
+        "TENANT_MEMBER_SQL",
         "isPartnerLinked",
         "isTerminalFinancial"
       ]
@@ -4478,6 +5180,13 @@
     },
     {
       "importer": "aws/functions/api/workflow-rpc.mjs",
+      "target": "aws/functions/api/tenant-deposits-gate.mjs",
+      "names": [
+        "checkTenantDepositsEnabled"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/workflow-rpc.mjs",
       "target": "aws/functions/api/workflow-flags.mjs",
       "names": [
         "applicationWorkflowWritesEnabled"
@@ -4512,8 +5221,7 @@
       "importer": "aws/functions/api/workflow.mjs",
       "target": "aws/functions/api/identity.mjs",
       "names": [
-        "TENANT_MEMBERSHIP_SQL",
-        "USER_ROLES_SQL"
+        "TENANT_MEMBERSHIP_SQL"
       ]
     },
     {
@@ -4555,6 +5263,7 @@
       "names": [
         "INTERNAL_CREATE_STAGE",
         "INTERNAL_CREATE_STATUS",
+        "TENANT_MEMBER_SQL",
         "TRANSITIONS",
         "evaluateTransition",
         "isPartnerLinked",
@@ -4607,6 +5316,16 @@
         "matchLossDraftDocumentPath",
         "matchTenantDocumentPath",
         "normalizePath"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/write-app-metadata.mjs",
+      "target": "aws/functions/api/tenant-library-rules.mjs",
+      "names": [
+        "isLibraryContentType",
+        "isLibrarySize",
+        "libraryFolderFor",
+        "libraryObjectPath"
       ]
     },
     {
@@ -4708,6 +5427,13 @@
         "denyTableReason",
         "pickAllowlistedValues",
         "writesEnabled"
+      ]
+    },
+    {
+      "importer": "aws/functions/api/write.mjs",
+      "target": "aws/functions/api/write-app-metadata.mjs",
+      "names": [
+        "executeAppMetadataWrite"
       ]
     },
     {

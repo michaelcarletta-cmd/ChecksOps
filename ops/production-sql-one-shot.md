@@ -30,6 +30,7 @@ that connects to the database:
 | `sql103` | `scripts/deployment-guard/sql103-share-library-trigger-acl-production-apply.mjs` (`ops/production-sql-103-apply.md`; immediately before SQL 29, `runs_before: ['sql29']`: SQL 29's guard refuses the trigger function's live `checksops` EXECUTE until SQL 103 ran; no predecessor, already in place after SQL 29) |
 | `sql104` | `scripts/deployment-guard/sql104-payment-idempotency-keys-grant-production-apply.mjs` (`ops/production-sql-104-apply.md`; any time after SQL 91: the `payment_idempotency_keys` table grant SQL 91 omitted, #1062) |
 | `sql105` | `scripts/deployment-guard/sql105-onboarding-payment-table-grants-production-apply.mjs` (`ops/production-sql-105-apply.md`; any time after SQL 91: the table grants SQL 91 omitted on `payment_provider_accounts`, `payment_provider_methods`, `payment_method_verifications` and `payment_event_log`) |
+| `sql106` | `scripts/deployment-guard/sql106-financial-stepup-log-append-only-production-apply.mjs` (`ops/production-sql-106-apply.md`; before SQL 97, `runs_before: ['sql97']`: SQL 97's runbook stops its apply unless its inspect's `other_write_grants` is `[]`, which SQL 106 makes it; no predecessor) |
 | `sql107` | `scripts/deployment-guard/sql107-moov-transfer-webhook-status-production-apply.mjs` (`ops/production-sql-107-apply.md`; any time after SQL 91: the SECURITY DEFINER Moov transfer webhook writer, status / ACH return / NOC of a funding or send leg) |
 
 To add a migration, register its reviewed tool in `ONE_SHOT_TOOLS`

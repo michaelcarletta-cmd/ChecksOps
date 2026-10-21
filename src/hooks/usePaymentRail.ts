@@ -7,8 +7,7 @@ export type PaymentRail = "moov";
 /**
  * Per-tenant money-movement rail.
  *
- * Moov is the only supported rail. The legacy Actum/Authentecheck rail has
- * been removed and Plaid is not exposed, so this hook always reports Moov.
+ * Moov is the only supported rail, so this hook always reports Moov.
  * It is kept so existing call sites keep a single place to read rail state.
  */
 export function usePaymentRail() {
@@ -31,8 +30,6 @@ export function usePaymentRail() {
 
   return {
     rail: "moov" as PaymentRail,
-    /** Plaid is hidden globally. */
-    isPlaid: false,
     isLoading,
   };
 }

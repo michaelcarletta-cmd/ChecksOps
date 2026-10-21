@@ -5,9 +5,6 @@ const isTrue = (value) => String(value || '') === 'true';
 export const PROVIDER_FLAG_ENV = {
   moov: 'AWS_MOOV_ENABLED',
   checkalt: 'AWS_CHECKALT_ENABLED',
-  plaid: 'AWS_PLAID_ENABLED',
-  actum: 'AWS_ACTUM_ENABLED',
-  quickbooks: 'AWS_QUICKBOOKS_ENABLED',
 };
 
 export const providerExecutionEnabled = () => isTrue(process.env.AWS_PROVIDER_EXECUTION_ENABLED);
@@ -50,9 +47,6 @@ export const flagSnapshot = () => ({
   AWS_PROVIDER_EXECUTION_ENABLED: providerExecutionEnabled(),
   AWS_MOOV_ENABLED: providerEnabled('moov'),
   AWS_CHECKALT_ENABLED: providerEnabled('checkalt'),
-  AWS_PLAID_ENABLED: providerEnabled('plaid'),
-  AWS_ACTUM_ENABLED: providerEnabled('actum'),
-  AWS_QUICKBOOKS_ENABLED: providerEnabled('quickbooks'),
   AWS_PROVIDER_LIVE_READS_ENABLED: providerLiveReadsEnabled(),
   AWS_PROVIDER_WEBHOOK_DRY_RUN: providerWebhookDryRun(),
 });

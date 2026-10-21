@@ -15,7 +15,6 @@ import { isValidRoutingNumber, VERIFICATION_LABEL, VERIFICATION_BADGE_CLASS, typ
 import { AchAuthorizationForm } from "@/components/disbursement/AchAuthorizationForm";
 import { BankVerification } from "@/components/disbursement/BankVerification";
 import { usePermissions } from "@/hooks/usePermissions";
-import { usePaymentRail } from "@/hooks/usePaymentRail";
 import { SettingsHero } from "./SettingsHero";
 import { SectionCard } from "./SectionCard";
 
@@ -25,7 +24,6 @@ export function TenantBankAccountSettings() {
   const { tenant } = useTenant();
   const { toast } = useToast();
   const { isAdmin } = usePermissions();
-  const { isPlaid } = usePaymentRail();
   const qc = useQueryClient();
   const [isStarting, setIsStarting] = useState(false);
 

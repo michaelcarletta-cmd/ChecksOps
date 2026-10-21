@@ -53,11 +53,6 @@ Parameters:
     NoEcho: true
     Default: ''
     Description: Staging AWS_CHECKALT_WEBHOOK_SECRET. Provide from live Lambda env at deploy; do not commit the value.
-  PlaidWebhookSecret:
-    Type: String
-    NoEcho: true
-    Default: ''
-    Description: Staging AWS_PLAID_WEBHOOK_SECRET. Provide from live Lambda env at deploy; do not commit the value.
   SandboxSecretEpoch:
     Type: String
     NoEcho: true
@@ -124,9 +119,6 @@ Globals:
         AWS_PROVIDER_EXECUTION_ENABLED: "false"
         AWS_MOOV_ENABLED: "false"
         AWS_CHECKALT_ENABLED: "false"
-        AWS_PLAID_ENABLED: "false"
-        AWS_ACTUM_ENABLED: "false"
-        AWS_QUICKBOOKS_ENABLED: "false"
         AWS_PROVIDER_LIVE_READS_ENABLED: "false"
         AWS_PROVIDER_WEBHOOK_DRY_RUN: "true"
         AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED: "true"
@@ -142,7 +134,6 @@ Globals:
         # Webhook HMAC / sandbox epoch preserved via NoEcho parameters (not stored in git).
         AWS_MOOV_WEBHOOK_SECRET: !Ref MoovWebhookSecret
         AWS_CHECKALT_WEBHOOK_SECRET: !Ref CheckAltWebhookSecret
-        AWS_PLAID_WEBHOOK_SECRET: !Ref PlaidWebhookSecret
         CHECKSOPS_SANDBOX_SECRET_EPOCH: !Ref SandboxSecretEpoch
 
 Resources:

@@ -136,7 +136,7 @@ test('pin: the release pin shape, pending, in step with the staging pin, the one
   assert.doesNotMatch(JSON.stringify(tool), /[0-9a-f]{64}/);
   const rows = JSON.stringify(readJson('ops/deployment-guard/bypass-inventory.json'));
   assert.match(rows, /"path":"scripts\/deployment-guard\/sql107-moov-transfer-webhook-status-production-apply\.mjs","classification":"GUARDED","capabilities":\["sql107-production-apply"\]/);
-  assert.match(rows, /sql103, sql104, sql105, sql107\)/);
+  assert.match(rows, /sql104, sql105, sql106, sql107\)/);
   const scripts = readJson('package.json').scripts;
   const workflow = fs.readFileSync(path.join(ROOT, '.github/workflows/deployment-guard.yml'), 'utf8');
   for (const name of ['aws/tests/release-sql107-executor.test.mjs', 'aws/tests/release-sql107-production-apply.test.mjs']) {

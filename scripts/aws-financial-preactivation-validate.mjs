@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
  * Live financial pre-activation validation against staging API + Cognito.
- * Uses sandbox simulation only. Does not call CheckAlt, Moov, Plaid, Actum,
- * or QuickBooks. Does not touch production Supabase, DNS, or webhooks.
+ * Uses sandbox simulation only. Does not call CheckAlt or Moov.
+ * Does not touch production Supabase, DNS, or webhooks.
  */
 import fs from 'node:fs';
 

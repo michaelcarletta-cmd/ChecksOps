@@ -3,11 +3,9 @@ import type { PaymentProviderId } from "./types";
 /**
  * Payment feature flags.
  *
- * Moov is the money-movement rail. Plaid remains available only as a legacy
- * fallback flag; the Actum/Authentecheck rail has been removed entirely.
+ * Moov is the money-movement rail.
  */
 export interface PaymentFeatureFlags {
-  USE_PLAID: boolean;
   USE_MOOV: boolean;
   SHOW_PAYMENT_SETTINGS: boolean;
   /** Internal-only admin tooling for the platform payment provider. */
@@ -21,7 +19,6 @@ function envFlag(name: string, fallback: boolean): boolean {
 }
 
 export const PAYMENT_FLAGS: PaymentFeatureFlags = {
-  USE_PLAID: envFlag("USE_PLAID", false),
   // Moov is generally available for every tenant. Identity/KYB, ToS, bank
   // verification, wallet, and capability checks still gate money movement.
   USE_MOOV: envFlag("USE_MOOV", true),
@@ -40,8 +37,6 @@ export function isMoovAllowedForTenant(_tenantAllowlisted?: boolean | null): boo
 
 export function isProviderEnabled(provider: PaymentProviderId): boolean {
   switch (provider) {
-    case "plaid":
-      return PAYMENT_FLAGS.USE_PLAID;
     case "moov":
       return PAYMENT_FLAGS.USE_MOOV;
     default:
@@ -51,7 +46,7 @@ export function isProviderEnabled(provider: PaymentProviderId): boolean {
 
 /** The provider used when a tenant has no explicit (or no enabled) preference. */
 export function defaultProvider(): PaymentProviderId {
-  return PAYMENT_FLAGS.USE_MOOV ? "moov" : "plaid";
+  return "moov";
 }
 
 /**

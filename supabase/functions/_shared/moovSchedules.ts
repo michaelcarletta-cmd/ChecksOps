@@ -5,7 +5,7 @@
 // the tenant's own connected bank account into the ChecksOps platform account.
 //
 // Fees that ARE attached to a payout keep using facilitator fees on the
-// transfer itself; nothing here touches that path, Actum, or Plaid.
+// transfer itself; nothing here touches that path.
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 

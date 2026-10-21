@@ -32,7 +32,6 @@ const report = {
   liveReadinessDeployed: Boolean(liveReadinessDeployed),
   environment: health.body?.environment || local.environment,
   productionCutoverForbidden: local.productionCutoverForbidden,
-  plaidRequired: local.plaidRequired,
   localFlags: local.flags,
   localHolds,
   liveHolds,

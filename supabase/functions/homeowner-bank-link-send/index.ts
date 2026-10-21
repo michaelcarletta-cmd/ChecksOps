@@ -1,9 +1,9 @@
-// Send a homeowner an AuthenteCheck bank-verification link.
+// Send a homeowner a bank-setup link.
 // Creates a shell stakeholder_accounts row (origin='homeowner_link') + a
-// homeowner_bank_link_tokens row scoped to a check or the whole claim, then
-// emails the homeowner the existing /verify-account/:token link. When they
-// finish verification, the DB trigger auto-attaches the account as a
-// stakeholder on the target check(s). No changes to the AuthenteCheck flow.
+// homeowner_bank_link_tokens row scoped to a check or the whole claim, creates
+// the homeowner's Moov recipient, then emails the homeowner Moov's hosted
+// recipient setup link (/pay-setup/:token). When they finish, the DB trigger
+// auto-attaches the account as a stakeholder on the target check(s).
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -81,7 +81,7 @@ serve(async (req) => {
         if (!share) throw new Error("Check not accessible");
       }
 
-      // Enforce ONE homeowner AuthenteCheck per check file.
+      // Enforce ONE homeowner bank link per check file.
       // Reject if there's already a non-expired link OR a homeowner stakeholder
       // already attached to this check.
       const nowIso = new Date().toISOString();
@@ -95,7 +95,7 @@ serve(async (req) => {
         .maybeSingle();
       if (existingLink) {
         return new Response(JSON.stringify({
-          error: "A homeowner bank-link has already been sent for this check. Only one homeowner AuthenteCheck is allowed per check file.",
+          error: "A homeowner bank-link has already been sent for this check. Only one homeowner bank link is allowed per check file.",
         }), { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
       const { data: existingHomeownerStakeholder } = await supabase
@@ -106,7 +106,7 @@ serve(async (req) => {
         .maybeSingle();
       if (existingHomeownerStakeholder) {
         return new Response(JSON.stringify({
-          error: "A homeowner is already linked to this check. Only one homeowner AuthenteCheck is allowed per check file.",
+          error: "A homeowner is already linked to this check. Only one homeowner bank link is allowed per check file.",
         }), { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
     }
@@ -143,9 +143,8 @@ serve(async (req) => {
     }
 
     const verificationToken = crypto.randomUUID();
-    // Homeowner-facing bank link: give them plenty of time to open it. Actum's
-    // AuthenteCheck session (short-lived) is minted lazily when they click, so
-    // this expiry only gates our wrapper URL. 30 days keeps casual delays from
+    // Homeowner-facing bank link: give them plenty of time to open it. This
+    // expiry only gates our wrapper URL. 30 days keeps casual delays from
     // turning into "expired link" support tickets.
     const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
 
@@ -159,7 +158,7 @@ serve(async (req) => {
         created_by: userData.user.id,
         nickname,
         account_type: "homeowner",
-        chk_aba: "000000000",         // placeholders — AuthenteCheck fills in on postback
+        chk_aba: "000000000",         // placeholders — bank details are collected by the hosted setup
         chk_acct: "PENDING",
         acct_type: "C",
         custname: homeowner_name,
@@ -204,7 +203,7 @@ serve(async (req) => {
 
     // 2b. Immediately attach the homeowner as a stakeholder on the target
     // check(s), so the disbursement console shows them right away with an
-    // "Awaiting verification" badge. Once AuthenteCheck completes, the
+    // "Awaiting verification" badge. Once bank setup completes, the
     // account flips to verified and disbursement is unblocked — no need to
     // wait for the postback to make them visible.
     if (scope === "check") {
@@ -235,7 +234,7 @@ serve(async (req) => {
 
     // 2c. Moov recipient — REQUIRED. Homeowners receiving claim funds are paid
     // on the Moov rail only, so their bank details are collected through Moov's
-    // hosted recipient setup (/pay-setup/:token). No AuthenteCheck/Plaid fallback.
+    // hosted recipient setup (/pay-setup/:token).
     let payoutUrl: string | null = null;
     try {
       const { data: rec, error: recErr } = await authClient.functions.invoke("moov-recipient-create", {

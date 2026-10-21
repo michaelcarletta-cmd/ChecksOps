@@ -571,7 +571,7 @@ export const handler = async (event) => {
   }
 
   // Provider / financial Edge Function stubs (staging: execution disabled).
-  // Real Moov/CheckAlt/Plaid money movement stays off until a later controlled phase.
+  // Real Moov/CheckAlt money movement stays off until a later controlled phase.
   const provider = await handleProviderRequest(event, path, method);
   if (provider) {
     return json(provider.statusCode || (provider.ok ? 200 : 403), {

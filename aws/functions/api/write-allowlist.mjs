@@ -843,7 +843,6 @@ export const WRITE_ALLOWLIST = {
 };
 
 export const FINANCIAL_OR_PROVIDER_TABLES = new Set([
-  'actum_transactions',
   'cash_job_payments',
   'checkalt_config',
   'checkalt_deposits',
@@ -871,8 +870,6 @@ export const FINANCIAL_OR_PROVIDER_TABLES = new Set([
   'payment_webhook_events',
   'payroll_runs',
   'recipient_tax_profiles',
-  'plaid_transfer_events',
-  'plaid_webhook_cursors',
   'platform_fee_line_items',
   'platform_fee_occurrences',
   'platform_fee_schedules',

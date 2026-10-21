@@ -54,7 +54,7 @@ export const FINANCIAL_OPERATIONS = {
   disbursement: {
     operation: 'disbursement',
     permission: 'disbursement.send',
-    providers: ['moov', 'plaid'],
+    providers: ['moov'],
     who: 'Tenant member + disbursement.send + step-up. NOT activated.',
     canRetry: true,
     canCancel: true,
@@ -99,7 +99,7 @@ export const FINANCIAL_OPERATIONS = {
   pay_contractor: {
     operation: 'pay_contractor',
     permission: 'contractor.pay',
-    providers: ['moov', 'plaid'],
+    providers: ['moov'],
     who: 'Tenant member + contractor.pay / disbursement.send. NOT activated.',
     canRetry: true,
     canCancel: true,
@@ -117,7 +117,7 @@ export const FINANCIAL_OPERATIONS = {
   retry_failed: {
     operation: 'retry_failed',
     permission: '(same as original operation)',
-    providers: ['checkalt', 'moov', 'plaid'],
+    providers: ['checkalt', 'moov'],
     who: 'Requires the original operation permission. NOT activated.',
     canRetry: false,
     canCancel: false,
