@@ -14,6 +14,7 @@ export const REQUIRED_MANIFEST_FIELDS = Object.freeze([
 
 export const DEPLOYMENT_TYPES = Object.freeze([
   'lambda-overlay',
+  'lambda-rebuild',
   'spa-promote',
   'sql-apply',
   'sql-executor-invoke',

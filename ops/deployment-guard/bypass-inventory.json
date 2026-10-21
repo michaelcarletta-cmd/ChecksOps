@@ -502,6 +502,23 @@
       "capabilities": ["cloudformation", "lambda-publish-version"],
       "shared_target": true,
       "note": "Creates only the registered new staging DB diagnostic stack; requires independently administered AWS KMS create-approval plus a Deployment Guard receipt and publishes an immutable diagnostic version. Workflow remains disabled."
+    },
+    {
+      "path": "scripts/deployment-guard/github-lambda-rebuild.mjs",
+      "classification": "SAFE",
+      "capabilities": [
+        "lambda-rebuild-preflight"
+      ],
+      "note": "GitHub-hosted full-package rebuild preflight for checksops-staging-api / checksops-production-prep-api. Builds the candidate ZIP from main, reads the live package, requires every difference to be listed in ops/deployment-guard/lambda-rebuild-plan.json, the inspect CodeSha256, the exact approval phrase (production: plus a staging acceptance reference), then takes the lease and issues a KMS-signed receipt owning the candidate SHA-256. Never writes AWS; lambda-rebuild-apply.mjs is the only writer."
+    },
+    {
+      "path": "scripts/deployment-guard/lambda-rebuild-apply.mjs",
+      "classification": "GUARDED",
+      "capabilities": [
+        "lambda-rebuild-apply",
+        "lambda-update-function-code"
+      ],
+      "note": "Official receipt-gated full-package rebuild writer. Uploads only the candidate ZIP the lambda-rebuild receipt owns, RevisionId CAS, re-evaluates the rebuild plan against the live bytes immediately before the write, verifies the live package equals the candidate member for member. Never restores an old ZIP or changes configuration."
     }
   ],
   "migration": {
