@@ -307,9 +307,14 @@
       "accepted_sha256": "28e9d27f14e9c1bd1de43b3f893705fa44b74dc0071eaa3b1895120438cd5300",
       "operation": "replace"
     },
+    "providers/moov-transfer-webhook.mjs": {
+      "live_sha256": null,
+      "accepted_sha256": "28069f5da369560d0f49e950ac393074003a667df4d74f3b154fbad7a4a049c6",
+      "operation": "add"
+    },
     "providers/webhooks.mjs": {
       "live_sha256": "4bd776a7766b0bd63e17ba18e790e28bb0b4fb8a7c9cceb271bf4f84280e7681",
-      "accepted_sha256": "3420ef809a2b7e07eb786afe311962d3472a0f027bb4a06a882841b8763df9c5",
+      "accepted_sha256": "0a834f6fdb4ea16c7c3be6ae9769e4f94b4654a7ba683838457f7fc2ab0e3d2b",
       "operation": "replace"
     },
     "tenant-billing-engine.mjs": {

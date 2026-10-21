@@ -1,0 +1,90 @@
+# Production SQL 106 (the Moov transfer webhook writer), after SQL 91
+
+| key | file | what it does |
+|---|---|---|
+| `sql106` | `aws/workflows/sql/106_moov_transfer_webhook_status.sql` (sha256 `cb823fd2d7055abfa6427d2bdda85fe97731a8e78d1415526a0123343afcd4d8`) | `CREATE OR REPLACE FUNCTION public.aws_moov_webhook_apply_transfer_status(...)`: SECURITY DEFINER, `search_path = public`, EXECUTE `checksops` only (PUBLIC revoked). Writes one `payment_transfers` row (a `wallet_funding`, `send_wallet` or `send_bank` leg) and one `payment_event_log` row per handled Moov transfer event, only while the webhook route has set `request.provider_webhook_apply = '1'` (SQL 91's `aws_moov_webhook_apply_active()`). No table, column, policy, grant or trigger change. |
+
+**Why.** Production Moov webhooks are verified and logged (`aws_provider_webhook_receipts`) but
+only onboarding status and tenant fee-collection outcomes were written back. A funding or send
+leg kept the status Moov gave when it was created, so a later failure, an ACH return (R01, R10,
+…), a reversal or a notification of change (NOC) never reached ChecksOps. The webhook runs as
+`checksops` with no signed-in user; under RLS (`aws_select_payment_transfers`,
+`aws_write_payment_transfers`, SQL 72's member policies) it can neither read nor update the row,
+so the write needs one narrow definer writer, as SQL 99 did for `check_messages`.
+
+**What the writer does** (the API side is `aws/functions/api/providers/moov-transfer-webhook.mjs`,
+called from `providers/webhooks.mjs`):
+
+- finds the row by `(provider 'moov', environment, provider_transfer_id)` and locks it; the
+  tenant is the row's own `tenant_id`, never a payload field;
+- answers `not_owned` for any other `leg_role` (fee collection stays with
+  `tenant-collection-v2-settlement.mjs`) and `unknown_transfer` when no row matches;
+- records each Moov event id once (`duplicate_event` on a replay);
+- moves the status only to a higher rank (submitted 1, pending/processing 2, completed 3,
+  failed/canceled 4, returned 5), so a late or replayed `pending` / `completed` never overwrites a
+  failure or a return (`stale`), and a return after completion is applied;
+- records an R code as `failure_reason` `ACH return R01: <reason>` and `provider_metadata.moov_return`,
+  a C code (NOC) as `provider_metadata.moov_correction` without changing the status, and flags
+  `provider_metadata.manual_follow_up` for a person (no payment method is edited);
+- appends one `payment_event_log` row per handled event (outcome, codes, Moov event id);
+- returns `notify` true once, on the move into `failed` or `returned`.
+
+It never posts a wallet ledger entry and never moves money: the production funding and send
+paths post no ledger entries (the balance shown is Moov's, which already reflects a return).
+
+**Status:** pending. Both pins are `execute: false`, `authorization: "pending"`, with no recorded
+pre-state; nothing is applied by this change. Neither staging nor production has been inspected.
+
+## Fingerprint
+
+Code-derived on the release engine (`scripts/deployment-guard/lib/release-sql-state.mjs`, spec
+`functions` in `release-sql-specs.mjs`): the function's language, volatility, SECURITY DEFINER,
+result, `search_path`, body hash and EXECUTE ACL, or `absent`. Intended
+`8b907851736629e48e47b575794c2f5ddfcfd1917ab22b468b9ab32fdc44a35f`:
+
+```
+release sql106 v1
+function public.aws_moov_webhook_apply_transfer_status(text, text, text, text, text, text, text, text, text, text, timestamp with time zone): lang=plpgsql vol=v parallel=u secdef=true result=jsonb config=search_path=public prosrc=9d428fd93b9128395f6a82ec30e8228e038e258fd6ec104d83cfa5036e769884 acl=checksops EXECUTE;owner EXECUTE
+```
+
+## Preconditions (both environments; production adds the pinned `checksops_admin` login)
+
+`prerequisites_present` (SQL 91's `aws_moov_webhook_apply_active()`, the two tables and the
+columns the writer uses, role `checksops`); `predecessors_applied` (SQL 91 at its intended
+fingerprint `f8611dcc…`); `definer_can_write_relations` (the login owns `payment_transfers` and
+`payment_event_log` without FORCE ROW LEVEL SECURITY, or is a superuser or BYPASSRLS). The file
+itself refuses with `55000 sql106_prerequisite_missing` / `sql106_definer_cannot_write`.
+
+Post-conditions: the intended fingerprint; everything else in schema `public` (and the functions
+of `auth`) unchanged. The tools roll back otherwise.
+
+## Order
+
+Any time after SQL 91. The API members (`providers/moov-transfer-webhook.mjs` ADD,
+`providers/webhooks.mjs` REPLACE in `production-api-overlay-plan.json`) carry no `sql_before`:
+if the Lambda is deployed first nothing breaks (the call fails inside a savepoint
+and the webhook is accepted and logged as before, `apply_skipped: status_writer_unavailable`).
+No later migration replaces the function.
+
+## Steps
+
+1. Staging: the staging executor must carry SQL 106 first (executor package refresh through
+   `sql-executor-ensure.mjs` / the guarded staging executor `deploy` mode, its own reviewed run).
+   Then `read-live` for `sql106-moov-transfer-webhook-status`. Expected `already_applied` false and
+   `precondition_failures` `[]`. Record `LIVE_DEFINITION_SHA256` in the staging pin
+   (`expected_live_definition_sha256`, owner-approved `authorization`, `execute: true`) in a
+   reviewed change, `apply` with the owner's approval of that run, then `read-live` again
+   (expected `already_applied` true). Staging's webhook route runs the sandbox apply path and does
+   not call this function; the writer is covered on PostgreSQL 16 by
+   `aws/tests/sql106-moov-transfer-webhook-status-pg.test.mjs`.
+2. Production: run the read-only inspect on the runner
+   (`node scripts/deployment-guard/sql106-moov-transfer-webhook-status-production-apply.mjs --inspect`,
+   or the one-shot's `--phase inspect`); record `production_inspect` and copy
+   `live_definition_sha256` into `expected_live_definition_sha256`; record the staging runs in
+   `staging_acceptance`; set an owner-approved `authorization` and `execute: true`, in one
+   reviewed change. Expected: `already_applied` false, `precondition_failures` [].
+3. Apply with the one-shot (`ops/production-sql-one-shot.md`): `production-sql-one-shot.mjs
+   --migration sql106 --approval-scope sql106 … --phase inspect`, then the owner-named
+   `--phase apply`.
+4. Record the apply and retire the pin (`execute: false`); record SQL 106 verified live in the
+   overlay plan's `sql_prerequisites` before overlaying the API members.

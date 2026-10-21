@@ -64,6 +64,16 @@ retried automatically. Each click is one request, so a retry never pays twice.
 Sends use the same two-factor confirmation as funding (once per login) and are
 held while `AWS_MOOV_SEND_POST_ENABLED` is off (nothing is recorded or sent).
 
+**When a payment bounces (built; needs SQL 106 in production).** Moov tells ChecksOps
+when a funding or a send later fails, is returned by the bank (an ACH return such as R01
+insufficient funds or R10 not authorized) or is reversed. The webhook marks that transfer
+`failed` or `returned`, records the return code and reason, and flags it for follow-up;
+WalletOps shows the reason, and a returned or failed send no longer counts as paid on the
+check, so the amount can be sent again. A bank's notification of change (NOC, a C code) is
+recorded for a person to update the bank details; ChecksOps never edits them itself.
+Nothing is sent or reversed automatically and no email goes out (there is no payment email
+yet). A late or repeated message from Moov never undoes a return.
+
 - **Sweeps** in WalletOps keep the wallet funded.
 - **Auto payouts are not used** at this time.
 

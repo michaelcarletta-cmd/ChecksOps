@@ -1,0 +1,66 @@
+{
+  "id": "sql106-moov-transfer-webhook-status-production-apply",
+  "migration": "sql106",
+  "authorization": "pending",
+  "execute": false,
+  "target_environment": "production",
+  "target_component": "production-sql",
+  "deployment_type": "sql-apply",
+  "filename": "aws/workflows/sql/106_moov_transfer_webhook_status.sql",
+  "migration_id": "106_moov_transfer_webhook_status",
+  "staging_pin_commit": "5868ecd98469ec425093a1d63238325c6b4de5fa",
+  "source_sha256": "cb823fd2d7055abfa6427d2bdda85fe97731a8e78d1415526a0123343afcd4d8",
+  "function_identities": [
+    "public.aws_moov_webhook_apply_transfer_status(text, text, text, text, text, text, text, text, text, text, timestamp with time zone)"
+  ],
+  "expected_live_definition_sha256": null,
+  "intended_replacement_sha256": "8b907851736629e48e47b575794c2f5ddfcfd1917ab22b468b9ab32fdc44a35f",
+  "authorization_phrase": "APPLY_MOOV_TRANSFER_WEBHOOK_STATUS",
+  "predecessors": [
+    "sql91"
+  ],
+  "order_note": "Any time after SQL 91 (aws/workflows/sql/91_moov_onboarding.sql, applied to production 2026-10-19; its aws_moov_webhook_apply_active() gates the writer). Before or after the API members that call it (providers/moov-transfer-webhook.mjs, providers/webhooks.mjs): until SQL 106 is applied the webhook's call fails inside a savepoint and the webhook is accepted and logged as before (apply_skipped status_writer_unavailable). SQL 106 creates one SECURITY DEFINER function, public.aws_moov_webhook_apply_transfer_status, EXECUTE checksops only, which writes one payment_transfers row (leg_role wallet_funding, send_wallet or send_bank) and one payment_event_log row per handled Moov transfer event; no table, policy or grant changes. No later migration replaces it.",
+  "admin_login": "checksops_admin",
+  "rds_identifier": "checksops-production",
+  "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
+  "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
+  "tooling": {
+    "status": "built",
+    "production_tool": "scripts/deployment-guard/sql106-moov-transfer-webhook-status-production-apply.mjs",
+    "production_lib": "scripts/deployment-guard/lib/release-sql-production-apply.mjs",
+    "staging_executor_handler": "aws/write-path/guarded-sql-executor/index.mjs handleReleaseSqlMigration",
+    "staging_workflow_choice": "sql106-moov-transfer-webhook-status",
+    "one_shot_migration": "sql106",
+    "fingerprint_engine": "scripts/deployment-guard/lib/release-sql-state.mjs",
+    "runbook": "ops/production-sql-106-apply.md",
+    "tests": [
+      "aws/tests/release-sql106-executor.test.mjs",
+      "aws/tests/release-sql106-production-apply.test.mjs",
+      "aws/tests/release-sql90-97-executor.test.mjs",
+      "aws/tests/release-sql90-97-production-apply.test.mjs",
+      "aws/tests/sql106-moov-transfer-webhook-status-pg.test.mjs"
+    ],
+    "note": "Guarded tooling for SQL 106: sql106-moov-transfer-webhook-status-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql106-moov-transfer-webhook-status); production-sql-one-shot.mjs --migration sql106. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): the function's language, volatility, SECURITY DEFINER, result, search_path, body hash and EXECUTE ACL (checksops and the owner). The pre-conditions also require that the applying login can write public.payment_transfers and public.payment_event_log as a definer (definer_can_write_relations). The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
+  },
+  "production_inspect": {
+    "status": "pending",
+    "date": null,
+    "ssm_command_id": null,
+    "source_commit": null,
+    "read_only": true,
+    "connected_as": "checksops_admin",
+    "live_definition_sha256": null,
+    "apply_preconditions_met": null,
+    "precondition_failures": null,
+    "note": "Pending: no read-only production inspect has been run for SQL 106 yet. Expected: SQL 91 applied (predecessor sql91 true), payment_transfers and payment_event_log present and owned by checksops_admin without FORCE ROW LEVEL SECURITY, and the function absent. Record its date, SSM command id, source commit, live_definition_sha256, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. If precondition_failures is not [] stop: that needs its own reviewed change."
+  },
+  "intended_post_state": {
+    "fingerprint": "8b907851736629e48e47b575794c2f5ddfcfd1917ab22b468b9ab32fdc44a35f",
+    "note": "public.aws_moov_webhook_apply_transfer_status(text, text, text, text, text, text, text, text, text, text, timestamptz) exists: plpgsql, VOLATILE, SECURITY DEFINER, search_path=public, owned by checksops_admin, EXECUTE checksops and the owner only (PUBLIC revoked). No table, column, policy, grant, trigger or row changes. The fingerprint is releaseIntendedHash('sql106', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): 8b907851736629e48e47b575794c2f5ddfcfd1917ab22b468b9ab32fdc44a35f."
+  },
+  "staging_acceptance": {
+    "ok": false,
+    "reference": null,
+    "basis": "Pending: record the guarded staging SQL executor read-live run of SQL 106 (choice sql106-moov-transfer-webhook-status) and its staging apply run here in the reviewed change that sets execute true. The read-live is expected to report already_applied false (the function absent); the staging pin then records that pre-state and the owner approves the staging apply, and the apply run (receipt before == the recorded pre-state, after == intended) is the staging evidence. The writer itself is covered on PostgreSQL 16 by aws/tests/sql106-moov-transfer-webhook-status-pg.test.mjs (the real SQL 91 and SQL 106 through its production tool, the real webhook module against the function). Staging's webhook route uses the sandbox apply path (providers/webhook-apply.mjs) and does not call this function, so a staging webhook does not exercise it. Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+  }
+}
