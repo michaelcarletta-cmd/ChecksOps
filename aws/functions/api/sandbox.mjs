@@ -41,11 +41,6 @@ import {
   extractCheckAltSsoAndAccount,
   extractCheckAltStatus,
 } from './providers/checkalt-sandbox.mjs';
-import {
-  assertPlaidSandboxCredentials,
-  buildPlaidLinkTokenBody,
-  plaidSandboxFetch,
-} from './providers/plaid-sandbox.mjs';
 import { rawEventBody, verifyHmacBodySignature, verifyMoovSignature } from './providers/hmac.mjs';
 import { sanitizeWebhookPayload } from './providers/webhooks.mjs';
 import { reconcileOperations } from './financial-reconciliation.mjs';
@@ -285,7 +280,6 @@ export const handleSandboxStatus = async (deps = {}) => {
       httpAllowed: {
         moov: Boolean(loaded.snapshot.moov.available) && !providerExecutionEnabled(),
         checkalt: Boolean(loaded.snapshot.checkalt.available) && loaded.snapshot.checkalt.dedicatedUatUrlApproved,
-        plaid: false,
       },
     },
     cutover: {
@@ -1408,56 +1402,6 @@ const handleCheckAltApprove = async (event, deps) => handleAuthenticated(event, 
   };
 }, deps);
 
-const handlePlaidProbe = async (event, deps) => handleAuthenticated(event, async ({ client, mapping, claims, body, spoof }) => {
-  const gate = requireSandboxGate({ spoof });
-  if (gate.ok !== true) return gate;
-  const memberships = await membershipsOf(client, mapping.application_user_id);
-  const tenantId = memberships[0]?.tenant_id;
-  if (!tenantId) return denied(spoof, { error: 'no_tenant_membership' });
-  const loaded = await (deps.loadSandboxCredentials || loadSandboxCredentials)();
-  const gateCreds = assertPlaidSandboxCredentials(loaded.plaid);
-  if (!gateCreds.ok) {
-    await insertAudit(client, {
-      applicationUserId: mapping.application_user_id,
-      tenantId,
-      operationType: 'plaid_probe',
-      provider: 'plaid',
-      outcome: gateCreds.error,
-    });
-    return denied(spoof, { ...gateCreds, capability: loaded.snapshot.plaid });
-  }
-  const created = await plaidSandboxFetch({
-    credentials: loaded.plaid,
-    path: '/link/token/create',
-    body: buildPlaidLinkTokenBody({
-      applicationUserId: mapping.application_user_id,
-      tenantId,
-    }),
-    fetchImpl: deps.fetchImpl || fetch,
-  });
-  await insertAudit(client, {
-    applicationUserId: mapping.application_user_id,
-    tenantId,
-    operationType: 'plaid_probe',
-    provider: 'plaid',
-    outcome: created.ok ? 'plaid_link_token' : 'plaid_sandbox_http_failed',
-  });
-  return {
-    ok: created.ok,
-    statusCode: created.ok ? 200 : created.statusCode || 502,
-    provider: 'plaid',
-    sandboxHttpCalled: true,
-    productionExecution: false,
-    moneyMovement: false,
-    relevantToMoneyPath: false,
-    applicationUserId: mapping.application_user_id,
-    cognitoSub: claims.sub,
-    spoofFieldsIgnored: spoof,
-    linkTokenPresent: Boolean(created.data?.link_token),
-    expiration: created.data?.expiration || null,
-  };
-}, deps);
-
 const handleReconcile = async (event, deps) => handleAuthenticated(event, async ({ client, mapping, claims, body, spoof }) => {
   const gate = requireSandboxGate({ spoof });
   if (gate.ok !== true) return gate;
@@ -1548,7 +1492,7 @@ const handleSandboxWebhook = async (event, provider, deps = {}) => {
     ? loaded.moov?.webhookSecret
     : provider === 'checkalt'
       ? loaded.checkalt?.webhookSecret
-      : loaded.plaid?.webhookSecret;
+      : null;
   if (!secret) {
     return {
       ok: false,
@@ -1691,12 +1635,10 @@ export const sandboxRoute = (path, method) => {
   if (method === 'POST' && path === '/sandbox/checkalt/deposit') return { kind: 'checkalt-deposit' };
   if (method === 'POST' && path === '/sandbox/checkalt/status') return { kind: 'checkalt-status' };
   if (method === 'POST' && path === '/sandbox/checkalt/approve') return { kind: 'checkalt-approve' };
-  if (method === 'POST' && path === '/sandbox/plaid/probe') return { kind: 'plaid-probe' };
   if (method === 'POST' && path === '/sandbox/reconcile') return { kind: 'reconcile' };
   if (method === 'POST' && path === '/sandbox/cleanup') return { kind: 'cleanup' };
   if (method === 'POST' && path === '/sandbox/webhooks/moov') return { kind: 'webhook', provider: 'moov' };
   if (method === 'POST' && path === '/sandbox/webhooks/checkalt') return { kind: 'webhook', provider: 'checkalt' };
-  if (method === 'POST' && path === '/sandbox/webhooks/plaid') return { kind: 'webhook', provider: 'plaid' };
   return null;
 };
 
@@ -1713,7 +1655,6 @@ export const handleSandboxRequest = async (event, path, method, deps = {}) => {
   if (route.kind === 'checkalt-deposit') return handleCheckAltDeposit(event, deps);
   if (route.kind === 'checkalt-status') return handleCheckAltStatus(event, deps);
   if (route.kind === 'checkalt-approve') return handleCheckAltApprove(event, deps);
-  if (route.kind === 'plaid-probe') return handlePlaidProbe(event, deps);
   if (route.kind === 'reconcile') return handleReconcile(event, deps);
   if (route.kind === 'cleanup') return handleCleanup(event, deps);
   if (route.kind === 'webhook') {

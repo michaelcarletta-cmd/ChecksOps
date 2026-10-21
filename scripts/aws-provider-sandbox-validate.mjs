@@ -73,10 +73,6 @@ const main = async () => {
     && status.json.amountUnits?.checkalt?.examples?.[2]?.userAmount === 12345, {
     detail: `scale=${status.json.amountUnits?.checkalt?.scale}`,
   });
-  record('Plaid sandbox not configured and not on money path', status.json.capability?.plaid?.available === false
-    && status.json.capability?.plaid?.relevantToMoneyPath === false, {
-    detail: status.json.capability?.plaid?.reason,
-  });
   record('sandbox min amount is 1 cent', status.json.amountUnits?.sandboxMinCents === 1
     && status.json.amountUnits?.moov?.scale === 'integer_cents', {
     detail: `min=${status.json.amountUnits?.sandboxMinCents}`,
@@ -286,12 +282,6 @@ const main = async () => {
       detail: `status=${history.status} providerStatus=${history.json.providerStatus}`,
     });
   }
-
-  const plaid = await api('/sandbox/plaid/probe', { token: freedom, body: {} });
-  record('Plaid probe fail-closed, no money movement', [403, 409].includes(plaid.status)
-    && plaid.json.moneyMovement !== true, {
-    detail: `status=${plaid.status} error=${plaid.json.error}`,
-  });
 
   const c1cTransfer = await api('/sandbox/moov/retrieve', {
     token: c1c,

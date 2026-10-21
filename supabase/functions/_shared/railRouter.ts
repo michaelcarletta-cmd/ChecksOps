@@ -9,7 +9,7 @@
  * Nothing here performs I/O, so it is exercised directly by
  * `scripts/test-rail-router.mjs`.
  *
- * Actum and Plaid are untouched: this only chooses among Moov rails.
+ * This only chooses among Moov rails.
  */
 
 export type PaymentSpeed = "standard" | "same_day" | "instant";

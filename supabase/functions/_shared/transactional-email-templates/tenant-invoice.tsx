@@ -108,7 +108,7 @@ export const template = {
     invoice_number: 'INV-2026-07-001',
     line_items: [
       { label: 'Check processing', detail: '17 checks × $4.00', amount_cents: 6800 },
-      { label: 'Actum disbursements', detail: '9 splits × $1.00', amount_cents: 900 },
+      { label: 'Disbursements', detail: '9 splits × $1.00', amount_cents: 900 },
       { label: 'Monthly maintenance', detail: 'July 2026', amount_cents: 10000 },
     ],
     discount_cents: 500,

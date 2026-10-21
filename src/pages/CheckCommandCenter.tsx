@@ -1141,7 +1141,7 @@ export default function CheckCommandCenter() {
     refetchInterval: 15_000,
   });
 
-  // Realtime: when a disbursement is recorded (Actum or external check), advance
+  // Realtime: when a disbursement is recorded (Moov or external check), advance
   // the check stage and move it into the Funds Released bucket without a refresh.
   const pollCheckOpsRealtime = useCallback(() => {
     if (!tenantId) return;

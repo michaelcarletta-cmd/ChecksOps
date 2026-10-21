@@ -1,7 +1,7 @@
 /**
  * Production onboarding, bank, recipient, file, and admin Moov functions.
  * Source: supabase/functions/moov-account-onboard, moov-bank-*, moov-micro-deposit-*,
- * moov-recipient-*, moov-account-file-*, moov-onboarding-link, moov-plaid-bridge,
+ * moov-recipient-*, moov-account-file-*, moov-onboarding-link,
  * moov-sweep-config, moov-invoice, moov-platform-bank, fee schedules, public-invoice,
  * homeowner-deductible-pay, stakeholder-resend-verification.
  */
@@ -1011,52 +1011,6 @@ export const accountFileView = {
       url: null, storage_path: row.storage_path,
       message: 'AWS file view returns the stored path. Signed S3 URLs are an INTENTIONAL AWS storage improvement pending the storage bridge.',
       liveProviderCalled: false,
-    });
-  },
-};
-
-export const plaidBridge = {
-  run: async ({ client, mapping, body, ctx, fetchImpl }) => {
-    const isRecipientMode = body.mode === 'recipient';
-    const account = await loadMoovAccount(client, ctx.tenantId, 'sandbox');
-    if (!account?.provider_account_id) return fail('Set up your payment account first.', 409);
-    const stakeholderId = body.stakeholder_account_id;
-    if (!stakeholderId) return fail('stakeholder_account_id is required', 400);
-    const stake = (await client.query(
-      `SELECT * FROM public.stakeholder_accounts WHERE id = $1::uuid AND tenant_id = $2::uuid`,
-      [stakeholderId, ctx.tenantId],
-    )).rows[0];
-    if (!stake) return fail('Stakeholder account not found.', 404);
-    const processorToken = stake.plaid_processor_token || body.processor_token;
-    if (!processorToken) return fail('A Plaid processor token is required to bridge this bank.', 409);
-    const moovAccountId = isRecipientMode
-      ? (stake.provider_account_id || account.provider_account_id)
-      : account.provider_account_id;
-    let created;
-    try {
-      created = await moovFetch(`/accounts/${moovAccountId}/bank-accounts`, {
-        method: 'POST', scopes: scopes.bankAccountsWrite(moovAccountId), fetchImpl,
-        body: { plaid: { token: processorToken } },
-      });
-    } catch {
-      created = await moovFetch(`/accounts/${moovAccountId}/bank-accounts`, {
-        method: 'POST', scopes: scopes.bankAccountsWrite(moovAccountId), fetchImpl,
-        body: { plaidToken: processorToken },
-      });
-    }
-    const bankAccountId = created?.bankAccountID ?? created?.bankAccountId;
-    await client.query(
-      `UPDATE public.stakeholder_accounts
-       SET provider = 'moov', provider_environment = 'sandbox', provider_account_id = $2,
-           provider_bank_account_id = $3, moov_status = $4
-       WHERE id = $1::uuid`,
-      [stakeholderId, moovAccountId, bankAccountId, created?.status ?? 'new'],
-    );
-    return jsonResult({
-      success: true, mode: isRecipientMode ? 'recipient' : 'tenant',
-      provider_account_id: moovAccountId, bank_name: created?.bankName ?? null,
-      last_four: created?.lastFourAccountNumber ?? null, status: created?.status,
-      liveProviderCalled: true,
     });
   },
 };

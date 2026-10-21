@@ -50,7 +50,7 @@ export const checkStakeholdersQuery = (checkId: string) => ({
       .from("check_stakeholders")
       .select(`
         id, added_via, partner_tenant_id, stakeholder_account_id,
-        stakeholder_accounts:stakeholder_account_id (id, nickname, account_type, chk_acct, is_active, verification_status, verification_source, plaid_account_id, custname, homeowner_name, authentecheck_bank_name, provider, provider_account_id, provider_bank_name, provider_last_four),
+        stakeholder_accounts:stakeholder_account_id (id, nickname, account_type, chk_acct, is_active, verification_status, verification_source, custname, homeowner_name, provider, provider_account_id, provider_bank_name, provider_last_four),
         partner:partner_tenant_id (id, name)
       `)
       .eq("check_intake_item_id", checkId);
@@ -114,7 +114,7 @@ export const batchHistoryQuery = (checkIntakeItemId: string | undefined, deposit
   queryFn: async () => {
     const query = supabase
       .from("disbursement_batches")
-      .select(`id, status, created_at, delivery_speed, disbursement_splits(id, amount, status, return_code, stakeholder_account_id, stakeholder_accounts(nickname, account_type), actum_transactions(auth_code, response_reason))`)
+      .select(`id, status, created_at, delivery_speed, disbursement_splits(id, amount, status, return_code, stakeholder_account_id, stakeholder_accounts(nickname, account_type))`)
       .order("created_at", { ascending: false });
     if (checkIntakeItemId) query.eq("check_intake_item_id", checkIntakeItemId);
     else if (depositItemId) query.eq("deposit_item_id", depositItemId);

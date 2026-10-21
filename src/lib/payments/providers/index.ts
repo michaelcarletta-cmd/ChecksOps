@@ -1,9 +1,7 @@
 import type { PaymentProvider, PaymentProviderId } from "../types";
-import { plaidProvider } from "./plaidProvider";
 import { moovProvider } from "./moovProvider";
 
 const REGISTRY: Record<PaymentProviderId, PaymentProvider> = {
-  plaid: plaidProvider,
   moov: moovProvider,
 };
 
@@ -13,4 +11,4 @@ export function getProvider(id: PaymentProviderId): PaymentProvider {
   return provider;
 }
 
-export { plaidProvider, moovProvider };
+export { moovProvider };

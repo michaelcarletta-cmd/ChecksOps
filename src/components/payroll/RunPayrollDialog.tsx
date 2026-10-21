@@ -14,7 +14,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Loader2, Zap, Clock, AlertTriangle } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { usePaymentRail } from "@/hooks/usePaymentRail";
 import { usePaymentProviderEligibility } from "@/hooks/usePaymentProviderEligibility";
 
 type Speed = "next_day" | "same_day";
@@ -33,7 +32,6 @@ export function RunPayrollDialog({ open, onOpenChange, onDone }: Props) {
   const { user } = useAuth();
   const { tenant } = useTenant();
   const { toast } = useToast();
-  const { isPlaid } = usePaymentRail();
   const { enabled: moovEnabled } = usePaymentProviderEligibility();
   const qc = useQueryClient();
 
@@ -157,7 +155,6 @@ export function RunPayrollDialog({ open, onOpenChange, onDone }: Props) {
           throw new Error(msg);
         }
         
-        // Fallback rail logic removed — Actum is disabled globally.
         const msg = reason?.message ?? "Recipient not ready for Moov payroll. Please connect their bank account via Moov first.";
         await supabase.from("payroll_runs").update({ status: "failed", error: msg }).eq("id", runRow.id);
         throw new Error(msg);

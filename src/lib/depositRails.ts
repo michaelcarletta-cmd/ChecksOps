@@ -2,10 +2,10 @@
  * Deposit rail visibility.
  *
  * CheckAlt (FinCapture RDC) is the DEPOSIT rail. It is deliberately
- * independent of the disbursement rail/provider (Actum, Plaid, Moov):
+ * independent of the disbursement rail/provider (Moov):
  * money coming IN via mobile deposit has nothing to do with how money
- * goes OUT. CheckAlt must therefore NEVER be hidden because a tenant is
- * on Actum (or any other disbursement provider).
+ * goes OUT. CheckAlt must therefore NEVER be hidden because of a tenant's
+ * disbursement provider.
  *
  * This flag exists only as a platform kill-switch and stays `true`.
  * Never gate CheckAlt UI on `usePaymentRail()` / `payment_provider`.

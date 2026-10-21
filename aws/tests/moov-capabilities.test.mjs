@@ -22,7 +22,6 @@ const REQUEST_SITES = [
   'supabase/functions/moov-sync/index.ts',
   'supabase/functions/moov-recipient-create/index.ts',
   'supabase/functions/moov-recipient-bank-add/index.ts',
-  'supabase/functions/_shared/moovPlaidBridge.ts',
   'supabase/functions/homeowner-deductible-pay/index.ts',
 ];
 

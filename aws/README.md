@@ -6,7 +6,7 @@ This directory contains the AWS migration infrastructure for ChecksOps.
 
 The staging stack does not change the current Supabase/Lovable production application. It creates parallel AWS services.
 
-Do not commit AWS credentials, RDS passwords, Moov credentials, CheckAlt credentials, Plaid credentials, Resend credentials, or cross-app secrets.
+Do not commit AWS credentials, RDS passwords, Moov credentials, CheckAlt credentials, Resend credentials, or cross-app secrets.
 
 Do not paste those values into chat. Store them in AWS Secrets Manager or your password manager only.
 

@@ -6,7 +6,7 @@ const isTrue = (value) => String(value || '') === 'true';
 
 /**
  * Staging-only simulation of the financial architecture.
- * Writes aws_financial_* certification tables. Never calls CheckAlt/Moov/Plaid.
+ * Writes aws_financial_* certification tables. Never calls CheckAlt/Moov.
  */
 export const financialSandboxSimulationEnabled = () =>
   isTrue(process.env.AWS_FINANCIAL_SANDBOX_SIMULATION_ENABLED);
