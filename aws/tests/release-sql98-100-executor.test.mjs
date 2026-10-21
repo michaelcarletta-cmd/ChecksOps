@@ -107,7 +107,7 @@ function handlerFor(connect, { pins = {} } = {}) {
   return createHandler({ connect, now: () => Date.parse(NOW), releaseSqlFiles: FILES, releaseSqlPins: { ...PINS, ...pins } });
 }
 
-test('pins: SQL 98-100 code-derived (the SQL 98 production pin applied and retired, SQL 99 execute-authorized, SQL 100 pending), selectable, packed, in step with the production pins; the predecessors and the SQL 96 / SQL 98 rule', () => {
+test('pins: SQL 98-100 code-derived (the SQL 98 and SQL 99 production pins applied and retired, SQL 100 pending), selectable, packed, in step with the production pins; the predecessors and the SQL 96 / SQL 98 rule', () => {
   const packed = Object.fromEntries(EXECUTOR_PACK_MEMBERS);
   const workflow = fs.readFileSync(path.join(ROOT, '.github/workflows/guarded-staging-sql-executor.yml'), 'utf8');
   const choices = { sql98: 'sql98-tenant-fee-collection', sql99: 'sql99-mortgage-desk-completion-messages', sql100: 'sql100-mortgage-desk-live-access' };
@@ -135,13 +135,13 @@ test('pins: SQL 98-100 code-derived (the SQL 98 production pin applied and retir
       assert.equal(prod.expected_live_definition_sha256, 'd64218dc145fc7b55632c7d5cfdef3fdbbb02592a79f6ff339c4814fc4ae6dbc', key);
       assert.notEqual(prod.expected_live_definition_sha256, pin.expected_live_definition_sha256, key);
     } else if (key === 'sql99') {
-      // Production pin execute-authorized (owner approved 2026-10-21), from the same pre-state
-      // staging recorded before its wave 1 apply.
-      assert.equal(prod.execute, true, key);
-      assert.match(prod.authorization, /^Owner approved 2026-10-21 /, key);
+      // Production pin applied 2026-10-21 and retired (owner approved #1112), from the same
+      // pre-state staging recorded before its wave 1 apply.
+      assert.equal(prod.execute, false, key);
+      assert.match(prod.authorization, /^Applied to production on 2026-10-21; execute is false again/, key);
+      assert.equal(prod.applied.result, 'applied', key);
       assert.equal(prod.expected_live_definition_sha256, '4d174e86d8c9f0940a0d38da3e432676143dc34946e8d1619cfc36d8a9a834e9', key);
       assert.equal(prod.expected_live_definition_sha256, pin.expected_live_definition_sha256, key);
-      assert.equal(prod.applied, undefined, key);
     } else {
       assert.equal(prod.execute, false, key);
       assert.equal(prod.authorization, 'pending', key);

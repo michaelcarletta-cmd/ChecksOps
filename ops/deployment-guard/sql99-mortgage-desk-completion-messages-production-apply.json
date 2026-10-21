@@ -1,8 +1,8 @@
 {
   "id": "sql99-mortgage-desk-completion-messages-production-apply",
   "migration": "sql99",
-  "authorization": "Owner approved 2026-10-21 (the owner approved pushing the remaining release live in the words \"Everything else should be pushed live no exceptions\"; that covers preparing this SQL 99 production pin change, and the change itself is reviewed and merge-approved by the owner separately): production apply of SQL 99 after SQL 90 (applied to production 2026-10-19), before or with the SPA build that stops the Mortgage Desk client posts (MortgageOpsQueue.tsx); no Lambda dependency, on the staging acceptance below (production 4d174e86d8c9f0940a0d38da3e432676143dc34946e8d1619cfc36d8a9a834e9 -> 481ac0f1f368459d2695fba81bcb301d66dd82a420d8b7fcd956f2610e459fb4); execute true takes effect only when the owner reviews and merges this change. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
-  "execute": true,
+  "authorization": "Applied to production on 2026-10-21; execute is false again, so this pin is no longer a standing authorization and a re-apply needs a new reviewed pin change. The owner approved the SQL 99 production pin (4d174e86 -> 481ac0f1), the read-only production inspect and the execute change on 2026-10-21 (\"Everything else should be pushed live no exceptions\", #1112), and approved the one apply run recorded in applied (workstream prod-sql99-mortgage-desk-completion-messages-20261021) on 2026-10-21 with \"apply SQL 97, 95 and 99 in production\". That approval covered that run only",
+  "execute": false,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -64,5 +64,105 @@
     "ok": true,
     "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39080577323",
     "basis": "Guarded staging SQL executor apply of sql99-mortgage-desk-completion-messages on 2026-10-17 (run 39080577323, wave 1, owner approved 2026-10-17, applied at main c8a79d554): receipt before 4d174e86d8c9f0940a0d38da3e432676143dc34946e8d1619cfc36d8a9a834e9, after 481ac0f1f368459d2695fba81bcb301d66dd82a420d8b7fcd956f2610e459fb4 = intended_replacement_sha256 (runbook \"Staging apply waves\"; aws/tests/helpers/staging-sql-wave1.mjs apply_run). Its staging read-live (run 39076376639) recorded that pre-state, and the guarded staging read-live of 2026-10-21 (run 39619293510) reported the live definition equal to the intended 481ac0f1f368459d2695fba81bcb301d66dd82a420d8b7fcd956f2610e459fb4. Same pre-state: staging before its apply and production (production_inspect, 2026-10-21) are both 4d174e86d8c9f0940a0d38da3e432676143dc34946e8d1619cfc36d8a9a834e9, and both reach the intended 481ac0f1f368459d2695fba81bcb301d66dd82a420d8b7fcd956f2610e459fb4 from the same pinned file bytes (source_sha256). The owner's words for the remaining release: \"Everything else should be pushed live no exceptions\"."
+  },
+  "applied": {
+    "date": "2026-10-21",
+    "result": "applied",
+    "source_commit": "dcd86525690e0732691ab7bf0723dc25167d89e9",
+    "source_tarball": {
+      "file": "source-dcd86525690e0732691ab7bf0723dc25167d89e9.tar.gz",
+      "sha256": "2c0c0fac5b042df8657cf553b630c572a1f9bb02f23541f9384b024a1f31487e"
+    },
+    "migration_source_sha256": "0c079fe41c932f34f33262ba00a17f3201f99960c89a944750f5312bd97f8b15",
+    "migration_source_sha256_note": "The one-shot source step hashed aws/workflows/sql/99_mortgage_desk_completion_messages.sql in the transfer tarball: equal to source_sha256 (the pin).",
+    "runner": "i-0c35557c4e5385406",
+    "workstream_id": "prod-sql99-mortgage-desk-completion-messages-20261021",
+    "one_use_id": "sql99-prod-56ce276e-16ea-49c5-9d44-7746a5a9c673",
+    "one_use_id_consumed": true,
+    "one_use_id_consumed_basis": "Inferred from the successful apply (the tool records the one_use_id after COMMIT and only warns if that write fails); the consumed-registry entry was not read back separately.",
+    "owner_approval": "apply SQL 97, 95 and 99 in production",
+    "owner_approval_basis": "As passed (base64, --approval-statement-b64) for --approval-scope sql99; the one-shot cannot verify who said it. The same statement also named SQL 97, which was not applied (see one_shot_note and ops/production-sql-90-97-apply.md).",
+    "operator": "michaelcarletta-cmd",
+    "apply_ssm_command_id": "fa655042-6ae1-41e6-96cc-a5b3ed61f4a8",
+    "one_shot_run_id": "bfb0c630-87a6-46f8-819d-4155a7b54640",
+    "one_shot_note": "One guarded production-sql-one-shot run (SSM fa655042-6ae1-41e6-96cc-a5b3ed61f4a8, run_id bfb0c630-87a6-46f8-819d-4155a7b54640) from main dcd865256 (transfer run 39624539833, sql53-temporary-transfer.yml dispatched on main at 2026-10-21T15:19:15Z) applied SQL 99: steps pin, source, inspect, contracts, manifest, source-recheck-before-preflight, preflight, evaluate, source-recheck-before-apply, apply (applied) and post-apply-inspect all ok; runner contracts, manifest, receipt and inspects as recorded below. Start and finish times were not captured. Applied after SQL 90 (applied to production 2026-10-19; the pre-apply inspect reported predecessor sql90 applied). No Lambda dependency. Whether the SPA build that stops the Mortgage Desk client posts (MortgageOpsQueue.tsx) is live was not checked for this record.",
+    "steps": [
+      "pin",
+      "source",
+      "inspect",
+      "contracts",
+      "manifest",
+      "source-recheck-before-preflight",
+      "preflight",
+      "evaluate",
+      "source-recheck-before-apply",
+      "apply",
+      "post-apply-inspect"
+    ],
+    "contract_results": {
+      "claim-ledger": {
+        "ok": true,
+        "passed": "4/4"
+      },
+      "tenant-isolation": {
+        "ok": true,
+        "passed": "6/6"
+      },
+      "financial-write-protections": {
+        "ok": true,
+        "passed": "43/43"
+      }
+    },
+    "pre_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "4d174e86d8c9f0940a0d38da3e432676143dc34946e8d1619cfc36d8a9a834e9",
+      "live_matches_expected": true,
+      "already_applied": false,
+      "precondition_failures": [],
+      "missing_dependencies": [],
+      "predecessors_applied": true,
+      "successors_applied": [],
+      "note": "The one-shot inspect step (read-only --inspect) immediately before the apply: live == the recorded pre-state 4d174e86..., live_matches_expected true, already_applied false, precondition_failures [], predecessor sql90 applied."
+    },
+    "manifest_sha256": "2ba74dca48ec9f8926a6266757a59c0b16fa920314884722c75249df4dcad437",
+    "receipt": {
+      "migration": "sql99",
+      "workstream": "prod-sql99-mortgage-desk-completion-messages-20261021",
+      "commit": "dcd86525690e0732691ab7bf0723dc25167d89e9",
+      "sql_file": "aws/workflows/sql/99_mortgage_desk_completion_messages.sql",
+      "before_hash": "4d174e86d8c9f0940a0d38da3e432676143dc34946e8d1619cfc36d8a9a834e9",
+      "after_hash": "481ac0f1f368459d2695fba81bcb301d66dd82a420d8b7fcd956f2610e459fb4",
+      "unrelated_catalog_sha256": "8a56ccd66383f7551f612d70f220982c1e1297c29eeaad2446b57e6c29072df6",
+      "unrelated_catalog_counts": {
+        "relations": 890,
+        "columns": 3535,
+        "constraints": 2233,
+        "policies": 404,
+        "functions": 1310,
+        "indexes": 654,
+        "default_acl": 0,
+        "role_memberships": 15,
+        "roles": 29,
+        "triggers": 178,
+        "views": 25,
+        "types": 18,
+        "schema": 2
+      },
+      "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39080577323",
+      "result": "applied"
+    },
+    "post_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "481ac0f1f368459d2695fba81bcb301d66dd82a420d8b7fcd956f2610e459fb4",
+      "already_applied": true,
+      "precondition_failures": [],
+      "missing_dependencies": [],
+      "predecessors_applied": true,
+      "successors_applied": [],
+      "note": "The one-shot post-apply read-only --inspect: already_applied true (live == intended 481ac0f1...), precondition_failures []."
+    }
+  },
+  "production_evidence": {
+    "2026-10-21 apply": "Guarded production SQL one-shot on i-0c35557c4e5385406, workstream prod-sql99-mortgage-desk-completion-messages-20261021, main dcd865256 (tarball 2c0c0fac…, transfer run 39624539833, migration source 0c079fe4… == pin), owner-approved run (\"apply SQL 97, 95 and 99 in production\"), SSM fa655042-6ae1-41e6-96cc-a5b3ed61f4a8, run_id bfb0c630-87a6-46f8-819d-4155a7b54640, one_use_id sql99-prod-56ce276e-16ea-49c5-9d44-7746a5a9c673 (spent): every step ok; contracts claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43; pre-apply inspect live 4d174e86… (live_matches_expected true, precondition_failures []); manifest 2ba74dca…; 4d174e86… -> 481ac0f1…, result applied, unrelated catalog 8a56ccd6…; post-apply inspect already_applied true, precondition_failures []. Start and finish times were not captured. No later inspect was run. execute is false so the pin is no longer a standing authorization."
   }
 }

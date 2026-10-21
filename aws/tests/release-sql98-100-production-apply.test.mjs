@@ -7,8 +7,8 @@
  * guard); this file covers what is new:
  *
  *   - the reconciled SQL 98 / SQL 99 pins keep their recorded hashes and notes and now have the
- *     SQL 90-97 pins' shape; the new SQL 100 pin has it too (SQL 98 applied and retired, SQL 99
- *     execute-authorized on 2026-10-21, SQL 100 pending);
+ *     SQL 90-97 pins' shape; the new SQL 100 pin has it too (SQL 98 applied and retired on
+ *     2026-10-19, SQL 99 applied and retired on 2026-10-21, SQL 100 pending);
  *   - SQL 100 is production_noop: the production precondition production_state_already_intended;
  *   - on PostgreSQL 16: --inspect is read-only for all three; SQL 98 and SQL 99 apply once each as
  *     checksops_admin (the superuser login refused); SQL 100's tool never runs the file: it
@@ -55,6 +55,8 @@ const SQL98_PRODUCTION_PRE = 'd64218dc145fc7b55632c7d5cfdef3fdbbb02592a79f6ff339
 // 69dbe9b01): the same pre-state staging recorded before its wave 1 apply (run 39080577323).
 const SQL99_PRODUCTION_PRE = '4d174e86d8c9f0940a0d38da3e432676143dc34946e8d1619cfc36d8a9a834e9';
 const SQL99_STAGING_REFERENCE = 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39080577323';
+// SQL 99's production apply of 2026-10-21 (main dcd865256), recorded in applied.
+const SQL99_APPLIED = Object.freeze({ ssm: 'fa655042-6ae1-41e6-96cc-a5b3ed61f4a8', run: 'bfb0c630-87a6-46f8-819d-4155a7b54640', one_use_id: 'sql99-prod-56ce276e-16ea-49c5-9d44-7746a5a9c673', commit: 'dcd86525690e0732691ab7bf0723dc25167d89e9', approval: 'apply SQL 97, 95 and 99 in production' });
 // SQL 98's production apply of 2026-10-19 (#1071), recorded in applied.
 const SQL98_APPLIED = Object.freeze({ ssm: '817865e7-2684-4f87-9f56-e57ed5386add', run: 'bef29dcf-c1fa-48d8-8c5f-0511b90e3403', one_use_id: 'sql98-prod-5a067c1d-8c6b-44b5-b646-2f7175d7b66e', commit: 'ce212b5aa296125bfde3fbab7617263a68539b34', approval: 'approve #1071 and apply SQL 98 in production' });
 const STAGING_REF = 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/0000000000';
@@ -102,7 +104,7 @@ function manifest(key, pin) {
 }
 const consumedPath = () => path.join(os.tmpdir(), `sql98100-prod-consumed-${process.pid}-${Math.random().toString(16).slice(2)}.json`);
 
-test('pins: the reconciled SQL 98 / SQL 99 pins keep their recorded hashes and notes; SQL 100 is new; all have the SQL 90-97 shape; SQL 98 is applied and retired, SQL 99 is execute-authorized, SQL 100 stays pending', () => {
+test('pins: the reconciled SQL 98 / SQL 99 pins keep their recorded hashes and notes; SQL 100 is new; all have the SQL 90-97 shape; SQL 98 and SQL 99 are applied and retired, SQL 100 stays pending', () => {
   // SQL 96's pin is the engine pin shape without its record-only applied / production_evidence sections.
   const shape = new Set(keyPaths(SQL96_PIN).filter((k) => !/^(applied|production_evidence)(\.|$)/.test(k)));
   for (const key of KEYS) {
@@ -156,15 +158,35 @@ test('pins: the reconciled SQL 98 / SQL 99 pins keep their recorded hashes and n
       assert.match(pin.staging_acceptance.basis, /The pre-states differ/, key);
       assert.deepEqual(Object.keys(pin.staging_acceptance).sort(), ['basis', 'ok', 'reference'], key);
     } else if (key === 'sql99') {
-      // Owner approved 2026-10-21 ("Everything else should be pushed live no exceptions"): the
-      // read-only production inspect recorded as the pre-state; the staging wave 1 apply from the
-      // same pre-state as the staging acceptance. Not applied: no applied record.
-      assert.equal(pin.execute, true, key);
-      assert.match(pin.authorization, /^Owner approved 2026-10-21 /, key);
+      // Applied to production 2026-10-21 and retired: the owner approved the pin (#1112, "Everything
+      // else should be pushed live no exceptions") on the read-only production inspect and the
+      // staging wave 1 apply from the same pre-state, then the one apply run recorded in applied.
+      assert.equal(pin.execute, false, key);
+      assert.match(pin.authorization, /^Applied to production on 2026-10-21; execute is false again/, key);
+      assert.doesNotMatch(pin.authorization, /^Owner approved/, key);
       assert.ok(pin.authorization.includes('"Everything else should be pushed live no exceptions"'), key);
-      assert.ok(pin.authorization.includes(`${SQL99_PRODUCTION_PRE} -> ${pin.intended_replacement_sha256}`), key);
-      assert.match(pin.authorization, /each apply still needs the owner's run-time approval/, key);
-      assert.equal(pin.applied, undefined, key);
+      assert.ok(pin.authorization.includes(`"${SQL99_APPLIED.approval}"`), key);
+      assert.ok(pin.authorization.includes('#1112'), key);
+      assert.equal(pin.applied.result, 'applied', key);
+      assert.equal(pin.applied.apply_ssm_command_id, SQL99_APPLIED.ssm, key);
+      assert.equal(pin.applied.one_shot_run_id, SQL99_APPLIED.run, key);
+      assert.equal(pin.applied.one_use_id, SQL99_APPLIED.one_use_id, key);
+      assert.equal(pin.applied.one_use_id_consumed, true, key);
+      assert.equal(pin.applied.source_commit, SQL99_APPLIED.commit, key);
+      assert.equal(pin.applied.source_tarball.sha256, '2c0c0fac5b042df8657cf553b630c572a1f9bb02f23541f9384b024a1f31487e', key);
+      assert.equal(pin.applied.owner_approval, SQL99_APPLIED.approval, key);
+      assert.equal(pin.applied.migration_source_sha256, pin.source_sha256, key);
+      assert.equal(pin.applied.manifest_sha256, '2ba74dca48ec9f8926a6266757a59c0b16fa920314884722c75249df4dcad437', key);
+      assert.equal(pin.applied.pre_apply_inspect.live_definition_sha256, SQL99_PRODUCTION_PRE, key);
+      assert.equal(pin.applied.receipt.before_hash, SQL99_PRODUCTION_PRE, key);
+      assert.equal(pin.applied.receipt.after_hash, pin.intended_replacement_sha256, key);
+      assert.equal(pin.applied.receipt.unrelated_catalog_sha256, '8a56ccd66383f7551f612d70f220982c1e1297c29eeaad2446b57e6c29072df6', key);
+      assert.equal(pin.applied.receipt.staging_acceptance, pin.staging_acceptance.reference, key);
+      assert.equal(pin.applied.post_apply_inspect.already_applied, true, key);
+      assert.equal(pin.applied.post_apply_inspect.live_definition_sha256, pin.intended_replacement_sha256, key);
+      assert.deepEqual(pin.applied.post_apply_inspect.precondition_failures, [], key);
+      assert.equal(pin.applied.later_inspect, undefined, key);
+      assert.ok(pin.production_evidence['2026-10-21 apply'].includes(SQL99_APPLIED.ssm), key);
       assert.equal(pin.expected_live_definition_sha256, SQL99_PRODUCTION_PRE, key);
       assert.equal(pin.expected_live_definition_sha256, STAGING[key].expected_live_definition_sha256, key);
       assert.notEqual(pin.expected_live_definition_sha256, pin.intended_replacement_sha256, key);
@@ -246,23 +268,35 @@ test('SQL 98\'s committed (retired) pin refuses; its execute-authorized copy (be
   }
 });
 
-test('the committed SQL 99 pin (execute-authorized 2026-10-21) allows only the manifest bound to it; the cheap prechecks pass without connecting', async () => {
-  const pin = COMMITTED.sql99;
+test('SQL 99\'s committed (retired) pin refuses; its execute-authorized copy (before the record-and-retire change) allows only the manifest bound to it, the cheap prechecks pass without connecting, and the spent one_use_id is refused as a replay', async () => {
+  const retired = COMMITTED.sql99;
+  const pin = Object.freeze({ ...retired, authorization: 'Owner approved 2026-10-21 (test copy of the execute-authorized pin before its record-and-retire change)', execute: true });
   const neverConnect = async () => { throw new Error('should-not-connect'); };
   const bound = manifest('sql99', pin);
-  const allowed = await evaluateReleaseProductionApply('sql99', bound, { root: ROOT });
+  // The committed pin, read from disk, is no longer an owner approval.
+  const refused = await evaluateReleaseProductionApply('sql99', bound, { root: ROOT });
+  assert.equal(refused.code, CODES.PRODUCTION_APPROVAL_REQUIRED);
+  const allowed = await evaluateReleaseProductionApply('sql99', bound, { root: ROOT, pin });
   assert.equal(allowed.ok, true, JSON.stringify(allowed));
   assert.equal(allowed.details[RELEASE_PRODUCTION.sql99.allowed_key], true);
-  const prechecked = await precheckReleaseProductionApply('sql99', bound, { root: ROOT, consumedPath: consumedPath() });
+  const prechecked = await precheckReleaseProductionApply('sql99', bound, { root: ROOT, pin, consumedPath: consumedPath() });
   assert.equal(prechecked.ok, true, JSON.stringify(prechecked));
-  const wrongLive = await evaluateReleaseProductionApply('sql99', { ...bound, live_definition_sha256: 'f'.repeat(64) }, { root: ROOT });
+  const wrongLive = await evaluateReleaseProductionApply('sql99', { ...bound, live_definition_sha256: 'f'.repeat(64) }, { root: ROOT, pin });
   assert.equal(wrongLive.code, CODES.SQL_COLLISION);
-  const wrongStaging = await evaluateReleaseProductionApply('sql99', { ...bound, staging_acceptance: { ok: true, reference: 'https://example.invalid/x' } }, { root: ROOT });
+  const wrongStaging = await evaluateReleaseProductionApply('sql99', { ...bound, staging_acceptance: { ok: true, reference: 'https://example.invalid/x' } }, { root: ROOT, pin });
   assert.equal(wrongStaging.code, CODES.PRODUCTION_APPROVAL_REQUIRED);
   const executeFalse = await executeReleaseProductionApply('sql99', bound, { root: ROOT, pin: { ...pin, execute: false }, consumedPath: consumedPath(), connect: neverConnect });
   assert.equal(executeFalse.code, CODES.GUARD_APPLY_FORBIDDEN);
-  const wrongPhrase = await executeReleaseProductionApply('sql99', { ...bound, authorization_phrase: 'APPLY' }, { root: ROOT, consumedPath: consumedPath(), connect: neverConnect });
+  const wrongPhrase = await executeReleaseProductionApply('sql99', { ...bound, authorization_phrase: 'APPLY' }, { root: ROOT, pin, consumedPath: consumedPath(), connect: neverConnect });
   assert.equal(wrongPhrase.code, CODES.PRODUCTION_APPROVAL_REQUIRED);
+  const spentPath = consumedPath();
+  fs.writeFileSync(spentPath, JSON.stringify({ consumed: [SQL99_APPLIED.one_use_id] }));
+  try {
+    const replay = await precheckReleaseProductionApply('sql99', { ...bound, one_use_id: SQL99_APPLIED.one_use_id }, { root: ROOT, pin, consumedPath: spentPath });
+    assert.equal(replay.code, CODES.RECEIPT_REUSED);
+  } finally {
+    fs.rmSync(spentPath, { force: true });
+  }
 });
 
 test('the production tool applies the production fee-destination rule: a sandbox-only row (staging\'s shape) is refused, the reviewed row is not', () => {
