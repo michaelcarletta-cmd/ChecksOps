@@ -57,10 +57,18 @@ const CHANGED_SINCE_APPLIED_REBUILD = {
   'sandbox-credentials.mjs': 'changed',
   'sandbox.mjs': 'changed',
 };
+// Files main changed after staging inspect 39630308266 (main 333b54576), one reviewed entry each. The
+// accepted staging section does not list them, so the staging rebuild it accepts is BLOCKED on them
+// until a new staging inspect and plan section accept them; production takes them from its own
+// inspect and plan section, or through the overlay plan where they are members.
+const CHANGED_SINCE_STAGING_INSPECT = {
+  // Check Alt eligibility SELECT without front_image_deposit_path (an overlay plan REPLACE member).
+  'providers/production/checkalt-eligibility.mjs': 'changed',
+};
 
 const assertAcceptedIsMainUnlessChangedSince = (apiRoot, name, accepted) => {
   const abs = path.join(apiRoot, name);
-  const listed = CHANGED_SINCE_APPLIED_REBUILD[name];
+  const listed = CHANGED_SINCE_APPLIED_REBUILD[name] || CHANGED_SINCE_STAGING_INSPECT[name];
   if (!fs.existsSync(abs)) {
     assert.equal(listed, 'deleted', `${name} is gone from main but not listed as deleted`);
     return;
@@ -239,6 +247,10 @@ test('the staging plan section accepts inspect run 39630308266: the Plaid/Actum/
   for (const [name, kind] of Object.entries(CHANGED_SINCE_APPLIED_REBUILD)) {
     if (kind === 'deleted') assert.ok(section.removed[name], `${name} is deleted on main but not listed as removed`);
     else assert.ok(section.members[name], `${name} changed on main but is not a staging member`);
+  }
+  // Files changed after this inspect are not in it (a new inspect moves them into its own section).
+  for (const name of Object.keys(CHANGED_SINCE_STAGING_INSPECT)) {
+    assert.equal(section.members[name] || section.removed[name] || section.added[name], undefined, name);
   }
   // The plan as committed makes the inspected live package READY, not BLOCKED.
   const live = {};

@@ -28,8 +28,12 @@ export const ERROR_CHECKALT_IMAGE_NONCOMPLIANT = 'checkalt_image_noncompliant';
 export const CHECKALT_IMAGE_ERROR = 'CHECKALT_IMAGE_COMPLIANCE_FAILED';
 export const FINGERPRINT_META_KEY = 'checkalt_rear_fingerprint';
 
+// Only columns public.check_intake_items has. There is no front_image_deposit_path column (only
+// back_image_deposit_path, Supabase 20260721185233): the official front is derived from
+// front_image_path (officialCheckAltFrontPath), so selecting it failed every preflight and
+// submit with 'column "front_image_deposit_path" does not exist'.
 export const CHECK_ELIGIBILITY_SELECT = `id, tenant_id, amount, check_number,
-         front_image_path, back_image_path, front_image_deposit_path, back_image_deposit_path,
+         front_image_path, back_image_path, back_image_deposit_path,
          status, check_stage, endorsement_render_meta`;
 
 export const PAYEES_ELIGIBILITY_SQL = `SELECT id, check_id, tenant_id, payee_type, endorsement_status, endorsed_at
