@@ -4,7 +4,7 @@
   "environments": {
     "staging": {
       "function_name": "checksops-staging-api",
-      "status": "accepted",
+      "status": "applied",
       "members": {
         "allowed-tables.json": {
           "live_sha256": "e34a1c418056b4e6f3a28c416fdfd2e32854160ab9624c98c97c6c908544ec9a",
@@ -113,6 +113,25 @@
           "candidate": 54
         },
         "notes": "Second staging rebuild, for the Plaid/Actum/QuickBooks removal (#1109, merged at main_commit). The live CodeSha256 is the one the first rebuild left behind (history[0].applied, run 39587414391); the RevisionId differs only through the configuration applies since (lambda-config-plan.json). Every live hash equals sha256 of the same path in aws/functions/api at 4d37692d6 (the bytes the first rebuild put live) and every accepted hash equals sha256 of the same path at main_commit on an LF checkout. The 19 changed and 4 removed members are exactly the files #1109 changed or deleted under aws/functions/api; nothing else differs (no live drift). The removed files are the deleted provider modules (actum, plaid, plaid-sandbox, quickbooks). Nothing is added. Dependencies are identical by package path and version (54 live, 54 candidate). The first rebuild's plan section moves verbatim into history."
+      },
+      "applied": {
+        "run_id": "39633656412",
+        "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39633656412",
+        "main_commit": "fd1e059b573ce16dfe51c07c37827aad2fb9bd04",
+        "approval_phrase": "DEPLOY FULL API PACKAGE TO STAGING",
+        "code_sha256_before": "sxodWyRpUr0LbETU0YhBayaqYe1VsfNBQi1OoMZpd4U=",
+        "revision_id_before": "b2e6a162-79ad-4c8e-9177-6f33080a9ded",
+        "code_sha256_after": "Bh/f7zaIFGDECA1jTWgMeR/2qRMOUaABRWP1lQbREOc=",
+        "revision_id_after": "b317d571-f4ce-40d2-a180-e6a00f5a7185",
+        "candidate_zip_sha256": "061fdfef36881460c4080d634d680c791ff6a9130e51a0014563f59506d110e7",
+        "applied_at": "2026-10-21T16:19:35.084Z",
+        "state": "VERIFIED",
+        "smoke": [
+          "/health",
+          "/db-health",
+          "/db-readonly-validate"
+        ],
+        "notes": "No separate pre-inspect run: the apply job's own inspect step on main fd1e059b5 reported READY (19 changed, 0 added, 4 removed, 0 unlisted problems; live 6774 members, candidate 6770). The apply re-downloaded the package and found it equal to the candidate member for member (6770 members); configuration unchanged (the writer's before and after configuration are the same 45 variables). Live read-back through the owner's AWS connector (GetFunctionConfiguration) after the apply: CodeSha256 Bh/f7zaI..., RevisionId b317d571, LastModified 2026-10-21T16:19:37Z, 45 variables."
       },
       "history": [
         {
@@ -662,7 +681,7 @@
     },
     "production": {
       "function_name": "checksops-production-prep-api",
-      "status": "accepted",
+      "status": "applied",
       "members": {
         "allowed-tables.json": {
           "live_sha256": "e34a1c418056b4e6f3a28c416fdfd2e32854160ab9624c98c97c6c908544ec9a",
@@ -772,6 +791,25 @@
         },
         "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39633656412",
         "notes": "Second production rebuild, for the Plaid/Actum/QuickBooks removal (#1109). The live CodeSha256 is the one the first rebuild left behind (history[0].applied, run 39588578627); the RevisionId differs only through the configuration apply since (lambda-config-plan.json production applied, run 39617806126, revision_id_after 6cb46f3a). Every live hash equals sha256 of the same path in aws/functions/api at 2168be9a1 (the bytes the first production rebuild put live) and every accepted hash equals sha256 of the same path at main_commit on an LF checkout. The 19 changed and 4 removed members are exactly the files #1109 changed or deleted under aws/functions/api, with the same live and accepted hashes as the staging section; nothing else differs (no live drift). The removed files are the deleted provider modules (actum, plaid, plaid-sandbox, quickbooks). Nothing is added. Dependencies are identical by package path and version (54 live, 54 candidate). The candidate ZIP is byte-identical to the one staging run 39633656412 applied and verified (061fdfef...). The first rebuild's plan section moves verbatim into history."
+      },
+      "applied": {
+        "run_id": "39636816351",
+        "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39636816351",
+        "main_commit": "e4daedefee2d33f3209219a06171bb39e1860803",
+        "approval_phrase": "DEPLOY FULL API PACKAGE TO PRODUCTION",
+        "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39633656412",
+        "code_sha256_before": "sxodWyRpUr0LbETU0YhBayaqYe1VsfNBQi1OoMZpd4U=",
+        "revision_id_before": "6cb46f3a-e10d-4645-b18d-6e5b156d65d9",
+        "code_sha256_after": "Bh/f7zaIFGDECA1jTWgMeR/2qRMOUaABRWP1lQbREOc=",
+        "revision_id_after": "4945c256-37ff-49b1-b7d9-adffea1a51bf",
+        "candidate_zip_sha256": "061fdfef36881460c4080d634d680c791ff6a9130e51a0014563f59506d110e7",
+        "applied_at": "2026-10-21T16:40:41.000Z",
+        "state": "VERIFIED",
+        "smoke": [
+          "/health",
+          "/db-health"
+        ],
+        "notes": "No separate pre-inspect run: the apply job's own inspect step on main e4daedefe reported READY (19 changed, 0 added, 4 removed, 0 unlisted problems; live 6774 members, candidate 6770). The apply re-downloaded the package and found it equal to the candidate member for member (6770 members); configuration unchanged (the writer's before and after configuration are the same 46 variables). Live read-back through the owner's AWS connector (GetFunctionConfiguration) after the apply: CodeSha256 Bh/f7zaI..., RevisionId 4945c256, LastModified 2026-10-21T16:40:44Z, LastUpdateStatus Successful, 46 variables. Production and staging again run the same package bytes (CodeSha256 Bh/f7zaI...). A later inspect against an unchanged main reports ALREADY_ACCEPTED; the next rebuild starts from a new inspect and a new reviewed plan section."
       },
       "history": [
         {
