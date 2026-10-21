@@ -177,8 +177,10 @@ test('the production plan section accepts inspect run 39633975144: the Plaid/Act
   const production = raw.environments.production;
   const staging = raw.environments.staging;
   const first = production.history[0];
-  assert.equal(production.status, 'accepted');
-  assert.equal(production.applied, undefined);
+  assert.equal(production.status, 'applied');
+  assert.equal(production.applied.run_id, '39636816351');
+  assert.equal(production.applied.code_sha256_after, 'Bh/f7zaIFGDECA1jTWgMeR/2qRMOUaABRWP1lQbREOc=');
+  assert.equal(production.applied.candidate_zip_sha256, production.inspect.candidate_zip_sha256);
   assert.equal(production.inspect.run_id, '39633975144');
   assert.equal(production.inspect.main_commit, 'fd1e059b573ce16dfe51c07c37827aad2fb9bd04');
   assert.equal(production.inspect.live_code_sha256, 'sxodWyRpUr0LbETU0YhBayaqYe1VsfNBQi1OoMZpd4U=');
@@ -264,8 +266,9 @@ test('the staging plan section accepts inspect run 39630308266: the Plaid/Actum/
   const raw = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'ops/deployment-guard/lambda-rebuild-plan.json'), 'utf8'));
   const staging = raw.environments.staging;
   const first = staging.history[0];
-  assert.equal(staging.status, 'accepted');
-  assert.equal(staging.applied, undefined);
+  assert.equal(staging.status, 'applied');
+  assert.equal(staging.applied.run_id, '39633656412');
+  assert.equal(staging.applied.code_sha256_after, 'Bh/f7zaIFGDECA1jTWgMeR/2qRMOUaABRWP1lQbREOc=');
   assert.equal(staging.inspect.run_id, '39630308266');
   assert.equal(staging.inspect.main_commit, '333b54576f3405cdbe5de6bd1503c9be8e7a4b5e');
   assert.equal(staging.inspect.live_code_sha256, 'sxodWyRpUr0LbETU0YhBayaqYe1VsfNBQi1OoMZpd4U=');
