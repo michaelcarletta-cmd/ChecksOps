@@ -527,15 +527,25 @@ test('only the apply child gets the apply variables, and its receipt is the one 
 
 // --- stop conditions ---------------------------------------------------------------------
 
-// SQL 82's to 86's pins are execute-authorized (owner approved 2026-10-16) until their
-// record-and-retire changes; every other pin is execute false (SQL 87, SQL 88 and SQL 89 retired
+// SQL 95's, SQL 97's and SQL 99's pins are execute-authorized (owner approved 2026-10-21) until their
+// record-and-retire changes. SQL 82's to 86's pins were (owner approved 2026-10-16) until
+// their record-and-retire change of 2026-10-21 (result verified_live: production state verified by
+// read-only inspects of 2026-10-21); every other pin is execute false (SQL 87, SQL 88 and SQL 89 retired
 // after their 2026-10-16 applies, SQL 103, SQL 29, SQL 30, SQL 91, SQL 92, SQL 90, SQL 101, SQL 93,
 // SQL 96, SQL 94, SQL 104 and SQL 98 after their 2026-10-19 applies, SQL 102 and SQL 105 after their
 // 2026-10-20 applies).
-const EXECUTE_AUTHORIZED = Object.freeze(['sql82', 'sql83', 'sql84', 'sql85', 'sql86']);
+const EXECUTE_AUTHORIZED = Object.freeze(['sql95', 'sql97', 'sql99']);
+const VERIFIED_LIVE_RETIRED = Object.freeze(['sql82', 'sql83', 'sql84', 'sql85', 'sql86']);
+const VERIFIED_LIVE_SSM = Object.freeze({
+  sql82: '65da22f4-495e-4186-8860-ef052c255243',
+  sql83: '65da22f4-495e-4186-8860-ef052c255243',
+  sql84: 'ab678be8-7fd3-4f7d-a6d0-ed905cfed9aa',
+  sql85: 'ab678be8-7fd3-4f7d-a6d0-ed905cfed9aa',
+  sql86: 'ab678be8-7fd3-4f7d-a6d0-ed905cfed9aa',
+});
 
 test('every real production pin with execute false is refused before any child', async () => {
-  // Every other pin is retired or pending (execute false): SQL 81's since its 2026-10-15 record-and-retire change, SQL 87's, SQL 88's and SQL 89's since their 2026-10-16 applies, SQL 103's, SQL 29's and SQL 30's since their 2026-10-19 applies, SQL 71's pending.
+  // Every pin is retired or pending (execute false): SQL 82's to 86's since their 2026-10-21 record-and-retire change, SQL 81's since its 2026-10-15 record-and-retire change, SQL 87's, SQL 88's and SQL 89's since their 2026-10-16 applies, SQL 103's, SQL 29's and SQL 30's since their 2026-10-19 applies, SQL 71's pending.
   assert.deepEqual(Object.keys(ONE_SHOT_TOOLS).filter((key) => realPin(key).execute !== false), [...EXECUTE_AUTHORIZED]);
   for (const key of Object.keys(ONE_SHOT_TOOLS).filter((k) => realPin(k).execute === false)) {
     for (const phase of ['inspect', 'apply']) {
@@ -565,7 +575,7 @@ test('a pin without staging acceptance or phrase is refused', async () => {
   assert.equal(result.code, CODES.PRODUCTION_APPROVAL_REQUIRED);
   assert.equal(result.details.stopped_at, 'pin');
   assert.equal(runner.calls.length, 0);
-  // SQL 82's to 86's committed pins are execute-authorized, and SQL 90's, SQL 101's, SQL 93's and SQL 96's are retired, and SQL 87's, SQL 88's, SQL 89's,
+  // SQL 82's to 86's committed pins are retired (verified_live), and SQL 90's, SQL 101's, SQL 93's and SQL 96's are retired, and SQL 87's, SQL 88's, SQL 89's,
   // SQL 103's, SQL 29's, SQL 30's, SQL 91's and SQL 92's are retired after their applies; their pre-authorization state (no staging
   // acceptance, authorization "pending") is an explicit copy here. SQL 71's committed pin is
   // still pending, with no recorded pre-state (null). Even with execute flipped that state
@@ -595,8 +605,11 @@ test('a pin without staging acceptance or phrase is refused', async () => {
     sql98: 'd64218dc145fc7b55632c7d5cfdef3fdbbb02592a79f6ff339c4814fc4ae6dbc',
     sql102: 'd3b2cd30d9b06347c4a08febac3fce49732bd0babcacfeea0a2b49dbdc9cb752',
     sql105: '065795875078407c8b607fc8b8018a7d76354e4bf5d776e8962b0613137520bb',
+    sql95: '48535b69b1a2f9b1ad69584f677dae78c830a482f58b9380c881205f91d8e05f',
+    sql97: '56b1f63192df1147fbbdd0206226129aeea35467d13c8bf0c8bc399316d06079',
+    sql99: '4d174e86d8c9f0940a0d38da3e432676143dc34946e8d1619cfc36d8a9a834e9',
   };
-  for (const key of ['sql71', 'sql87', 'sql88', 'sql89', 'sql82', 'sql83', 'sql84', 'sql85', 'sql86', 'sql103', 'sql29', 'sql30', 'sql91', 'sql92', 'sql90', 'sql101', 'sql93', 'sql96', 'sql94', 'sql104', 'sql98', 'sql102', 'sql105']) {
+  for (const key of ['sql71', 'sql87', 'sql88', 'sql89', 'sql82', 'sql83', 'sql84', 'sql85', 'sql86', 'sql103', 'sql29', 'sql30', 'sql91', 'sql92', 'sql90', 'sql101', 'sql93', 'sql96', 'sql94', 'sql104', 'sql98', 'sql102', 'sql105', 'sql95', 'sql97', 'sql99']) {
     const real = realPin(key);
     assert.equal(real.expected_live_definition_sha256, RECORDED_PRODUCTION_PRE[key]);
     // Execute-authorized and applied (retired) pins get an explicit pre-authorization copy; SQL 71's committed pin is still pending.
@@ -626,7 +639,7 @@ test('a pin without staging acceptance or phrase is refused', async () => {
   }
 });
 
-test('the committed execute-authorized pins (SQL 82 to SQL 86) pass the pin stage, and their evaluators allow the manifest built from them', async () => {
+test('SQL 82 to SQL 86 are retired with a verified_live record; their execute-authorized state (an explicit copy) passes the pin stage, and their evaluators allow the manifest built from it', async () => {
   const STAGING_REFERENCE = {
     sql82: 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38837281138',
     sql83: 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38837509160',
@@ -634,15 +647,23 @@ test('the committed execute-authorized pins (SQL 82 to SQL 86) pass the pin stag
     sql85: 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38895045712',
     sql86: 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38895163945',
   };
-  for (const key of EXECUTE_AUTHORIZED) {
-    const committed = realPin(key);
-    assert.equal(committed.execute, true);
+  for (const key of VERIFIED_LIVE_RETIRED) {
+    const retired = realPin(key);
+    assert.equal(retired.execute, false, key);
+    assert.equal(retired.applied.result, 'verified_live', key);
+    assert.equal(retired.applied.verified_live_inspect.ssm_command_id, VERIFIED_LIVE_SSM[key], key);
+    assert.equal(retired.applied.verified_live_inspect.read_only, true, key);
+    assert.equal(retired.applied.verified_live_inspect.already_applied, true, key);
+    assert.equal(retired.applied.verified_live_inspect.live_definition_sha256, retired.intended_replacement_sha256, key);
+    assert.deepEqual(retired.applied.verified_live_inspect.precondition_failures, [], key);
+    // The execute-authorized state before the record-and-retire change, as an explicit copy.
+    const committed = { ...retired, execute: true };
+    delete committed.applied;
     assert.match(committed.authorization, /^Owner approved 2026-10-16 /, key);
     assert.equal(committed.staging_acceptance.ok, true);
     assert.equal(committed.staging_acceptance.reference, STAGING_REFERENCE[key]);
     for (const phase of ['inspect', 'apply']) {
-      // pin: null makes the one-shot read the committed pin from disk.
-      const { result, runner } = await oneShot({ key, pin: null, o: { phase, 'workstream-id': `prod-${key}-committed-pin-test` } });
+      const { result, runner } = await oneShot({ key, pin: committed, o: { phase, 'workstream-id': `prod-${key}-committed-pin-test` } });
       assert.equal(result.ok, true, `${key} ${phase}: ${JSON.stringify(result)}`);
       assert.deepEqual(result.details.steps[0], { step: 'pin', ok: true, pin: ONE_SHOT_TOOLS[key].pin_rel, execute: true, staging_acceptance: STAGING_REFERENCE[key] });
       assert.equal(runner.steps()[0], 'inspect');
@@ -655,8 +676,46 @@ test('the committed execute-authorized pins (SQL 82 to SQL 86) pass the pin stag
         assert.equal(manifest[field], committed[field], `${key} ${field}`);
       }
       assert.deepEqual(manifest.staging_acceptance, committed.staging_acceptance);
-      // The tool's own evaluator, with the committed pin loaded from disk, allows it.
-      const allowed = await EVALUATORS[key](manifest, { root: ROOT });
+      // The tool's own evaluator, with the execute-authorized copy, allows it.
+      const allowed = await EVALUATORS[key](manifest, { root: ROOT, pin: committed });
+      assert.equal(allowed.ok, true, `${key}: ${JSON.stringify(allowed)}`);
+      assert.equal(allowed.details[ONE_SHOT_TOOLS[key].allowed_key], true);
+      assert.equal(allowed.details.staging_acceptance, STAGING_REFERENCE[key]);
+    }
+  }
+});
+
+test('the committed execute-authorized pins (SQL 95, SQL 97, SQL 99) pass the pin stage, and their evaluators allow the manifest built from them', async () => {
+  const STAGING_REFERENCE = {
+    // SQL 95 / SQL 97: the guarded staging read-live of 2026-10-21 (intended state), owner-accepted
+    // substitute evidence (different pre-state; their wave 4 apply runs are not recorded).
+    sql95: 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39616185934',
+    sql97: 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39618586101',
+    // SQL 99: its guarded staging wave 1 apply from the same pre-state.
+    sql99: 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39080577323',
+  };
+  for (const key of EXECUTE_AUTHORIZED) {
+    const committed = realPin(key);
+    assert.equal(committed.execute, true);
+    assert.ok(committed.authorization.startsWith('Owner approved 2026-10-21 '), key);
+    assert.equal(committed.applied, undefined, key);
+    assert.equal(committed.staging_acceptance.ok, true);
+    assert.equal(committed.staging_acceptance.reference, STAGING_REFERENCE[key]);
+    for (const phase of ['inspect', 'apply']) {
+      const { result, runner } = await oneShot({ key, pin: committed, o: { phase, 'workstream-id': `prod-${key}-committed-pin-test` } });
+      assert.equal(result.ok, true, `${key} ${phase}: ${JSON.stringify(result)}`);
+      assert.deepEqual(result.details.steps[0], { step: 'pin', ok: true, pin: ONE_SHOT_TOOLS[key].pin_rel, execute: true, staging_acceptance: STAGING_REFERENCE[key] });
+      assert.equal(runner.steps()[0], 'inspect');
+      if (phase === 'inspect') {
+        assert.ok(!runner.steps().includes('apply'), key);
+        continue;
+      }
+      const manifest = lastManifest(runner);
+      for (const field of ['filename', 'migration_id', 'source_sha256', 'expected_live_definition_sha256', 'intended_replacement_sha256', 'authorization_phrase']) {
+        assert.equal(manifest[field], committed[field], `${key} ${field}`);
+      }
+      assert.deepEqual(manifest.staging_acceptance, committed.staging_acceptance);
+      const allowed = await EVALUATORS[key](manifest, { root: ROOT, pin: committed });
       assert.equal(allowed.ok, true, `${key}: ${JSON.stringify(allowed)}`);
       assert.equal(allowed.details[ONE_SHOT_TOOLS[key].allowed_key], true);
       assert.equal(allowed.details.staging_acceptance, STAGING_REFERENCE[key]);

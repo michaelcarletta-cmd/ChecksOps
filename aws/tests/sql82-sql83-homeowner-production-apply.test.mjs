@@ -3,9 +3,13 @@
  * signing capabilities), each its own tool and pin.
  *
  * Both committed pins record the pre-state read by the production --inspect of
- * 2026-10-16 (expected_live_definition_sha256) and are execute-authorized: the
- * owner's approval of 2026-10-16 in authorization, execute true and the guarded
- * staging executor apply run in staging_acceptance. The refusals of the earlier
+ * 2026-10-16 (expected_live_definition_sha256), the owner's approval of 2026-10-16
+ * in authorization and the guarded staging executor apply run in staging_acceptance.
+ * They were execute-authorized until their record-and-retire change of 2026-10-21:
+ * execute false and an applied record with result verified_live (production state
+ * verified by the read-only --inspect of 2026-10-21, SSM 65da22f4; the original apply
+ * run is not recorded in the repository). The execute-authorized state is tested with
+ * an explicit copy (unlocked()). The refusals of the earlier
  * locked state (authorization "pending", execute false, no staging acceptance) stay
  * tested with an explicit copy (pending()); the no-pre-state refusals use an
  * explicit copy with the hash null (unrecorded()). The apply tests use an
@@ -106,6 +110,21 @@ const pending = (key, extra = {}) => Object.freeze({
   staging_acceptance: { ...M[key].committed.staging_acceptance, ...PENDING_ACCEPTANCE },
   ...extra,
 });
+/** The execute-authorized state before the record-and-retire change, as an explicit copy of the retired pin. */
+const unlocked = (key) => {
+  const copy = { ...M[key].committed, execute: true };
+  delete copy.applied;
+  return Object.freeze(copy);
+};
+// The read-only production --inspect of 2026-10-21 recorded in applied.verified_live_inspect.
+const VERIFIED_LIVE = {
+  sql82: { aws_public_homeowner_ledger_by_token: 'intended' },
+  sql83: {
+    aws_public_homeowner_ledger_endorse_capability: 'intended',
+    aws_public_homeowner_pending_signatures: 'intended',
+    aws_public_homeowner_document_sign_capability: 'intended',
+  },
+};
 /** The committed pin (or another) with no recorded pre-state, for the no-pre-state refusals. */
 const unrecorded = (key, pin = M[key].committed) => Object.freeze({ ...pin, expected_live_definition_sha256: null });
 // The production --inspect of 2026-10-16 (SSM command f1430894-0783-46cf-bbab-e7137c10ece3, source eb540ee98).
@@ -205,11 +224,27 @@ async function runCli(key, argv, { env = { CHECKSOPS_DEPLOYMENT_GUARD_APPLY: '1'
   return { out: writes.join(''), spent };
 }
 
-test('production pins: execute-authorized after staging acceptance, the recorded production pre-state, the staging post-state, production RDS, one-shot registered', () => {
+test('production pins: retired with a verified_live record after the owner-approved execute authorization, the recorded production pre-state, the staging post-state, production RDS, one-shot registered', () => {
   for (const key of KEYS) {
     const { committed: pin, staging } = M[key];
     assert.equal(pin.migration, key);
-    assert.equal(pin.execute, true);
+    assert.equal(pin.execute, false);
+    // The record-and-retire change of 2026-10-21: production state verified live, apply run not recorded.
+    const { applied } = pin;
+    assert.equal(applied.result, 'verified_live');
+    assert.equal(applied.verified_on, '2026-10-21');
+    assert.match(applied.original_apply_evidence, /not recorded in the repository/);
+    const live = applied.verified_live_inspect;
+    assert.equal(live.ssm_command_id, '65da22f4-495e-4186-8860-ef052c255243');
+    assert.equal(live.source_commit, '69dbe9b01cbcd8f04847cab248e243105c85f022');
+    assert.equal(live.source_tarball.sha256, '1424a8c418324c7c520b385c96dbdca79b869478a076a7802ec7ae2a560ff4b4');
+    assert.equal(live.runner, 'i-0c35557c4e5385406');
+    assert.equal(live.read_only, true);
+    assert.equal(live.connected_as, 'checksops_admin');
+    assert.equal(live.already_applied, true);
+    assert.equal(live.live_definition_sha256, pin.intended_replacement_sha256, key);
+    assert.deepEqual(live.function_states, VERIFIED_LIVE[key], key);
+    assert.deepEqual(live.precondition_failures, []);
     // The owner's approval of 2026-10-16, in the "Owner approved …" convention the tools require.
     assert.match(pin.authorization, /^Owner approved 2026-10-16 /);
     assert.equal(homeownerAuthorizationApproved(pin), true);
@@ -319,11 +354,11 @@ test('the pre-authorization (pending) pin is refused: execute false and authoriz
   }
 });
 
-test('the committed (execute-authorized) pins evaluate with a matching manifest and reach the connection only after every pre-connect check', async () => {
+test('the committed pins evaluate with a matching manifest; the execute-authorized copy reaches the connection only after every pre-connect check, the retired pin refuses the apply', async () => {
   for (const key of KEYS) {
     const { committed } = M[key];
     // Loaded from disk (no pin passed) and passed explicitly.
-    for (const opts of [{ root: ROOT }, { root: ROOT, pin: committed }]) {
+    for (const opts of [{ root: ROOT }, { root: ROOT, pin: committed }, { root: ROOT, pin: unlocked(key) }]) {
       const allowed = await M[key].evaluate(manifest(key, committed), opts);
       assert.equal(allowed.ok, true, JSON.stringify(allowed));
       assert.equal(allowed.details[M[key].allowed], true);
@@ -339,8 +374,11 @@ test('the committed (execute-authorized) pins evaluate with a matching manifest 
     assert.equal((await M[key].evaluate(manifest(key, authorized(key)), { root: ROOT })).code, CODES.SQL_COLLISION, key);
     assert.equal((await M[key].evaluate(manifest(key, committed, { live_definition_sha256: committed.intended_replacement_sha256 }), { root: ROOT })).code, CODES.SQL_COLLISION, key);
     assert.equal((await M[key].evaluate(manifest(key, committed, { approval: { approved: true, workstream_id: 'another' } }), { root: ROOT })).ok, false, key);
-    // The apply passes its pre-connect checks on the committed pin and stops only at the (test) connection.
-    const passes = await M[key].execute(manifest(key, committed), { root: ROOT, connect: neverConnect, consumedPath: consumedPath() }).catch((error) => error);
+    // The retired committed pin (execute false) refuses the apply before any connection.
+    const retired = await M[key].execute(manifest(key, committed), { root: ROOT, connect: neverConnect, consumedPath: consumedPath() });
+    assert.equal(retired.code, CODES.GUARD_APPLY_FORBIDDEN, key);
+    // The apply passes its pre-connect checks on the execute-authorized copy and stops only at the (test) connection.
+    const passes = await M[key].execute(manifest(key, committed), { root: ROOT, pin: unlocked(key), connect: neverConnect, consumedPath: consumedPath() }).catch((error) => error);
     assert.match(String(passes?.message || ''), /should-not-connect/, key);
   }
 });
@@ -518,7 +556,7 @@ test('evaluation needs a recorded pre-state, the exact pin, a recorded staging a
   }
 });
 
-test('CLI with the committed (execute-authorized) pin and no receipt refuses at the guard; a pending pin refuses before the guard; neither connects', async () => {
+test('CLI with the committed (retired) pin and no receipt refuses at the guard; a pending pin refuses before the guard; neither connects', async () => {
   for (const key of KEYS) {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sql8283-prod-noreceipt-'));
     try {

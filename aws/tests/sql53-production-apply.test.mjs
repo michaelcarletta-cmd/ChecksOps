@@ -38,6 +38,14 @@ import {
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const PIN = loadSql53ProductionApplyPin(ROOT);
+// The committed pin is retired (execute false, applied.result verified_live: the read-only production
+// inspect of 2026-10-21 found the function with the intended definition). The execute-authorized state
+// before that record-and-retire change is tested with this explicit copy.
+const UNLOCKED = (() => {
+  const copy = { ...PIN, execute: true };
+  delete copy.applied;
+  return Object.freeze(copy);
+})();
 const PG_BIN = '/usr/lib/postgresql/16/bin';
 const SQL_PATH = path.join(ROOT, PIN.filename);
 const ABSENT = PIN.absent_live_definition_sha256;
@@ -104,10 +112,31 @@ function catalog({
   };
 }
 
-test('production apply pin reuses the approved SQL 53 file and is execute-authorized', () => {
+test('production apply pin reuses the approved SQL 53 file and is retired with a verified_live record', () => {
   assert.equal(PIN.authorization, 'execute-authorized');
   assert.equal(PIN.apply_authorized, true);
-  assert.equal(PIN.execute, true);
+  assert.equal(PIN.execute, false);
+  // The record-and-retire change of 2026-10-21: verified live, the apply itself is not recorded.
+  assert.equal(PIN.applied.result, 'verified_live');
+  assert.equal(PIN.applied.verified_on, '2026-10-21');
+  assert.match(PIN.applied.original_apply_evidence, /no record of when or how/);
+  const live = PIN.applied.verified_live_inspect;
+  assert.equal(live.ssm_command_id, '43cb1d1f-f589-43b2-9315-7cad80fffb5c');
+  assert.equal(live.source_commit, '69dbe9b01cbcd8f04847cab248e243105c85f022');
+  assert.equal(live.source_tarball.sha256, '1424a8c418324c7c520b385c96dbdca79b869478a076a7802ec7ae2a560ff4b4');
+  assert.equal(live.read_only, true);
+  assert.equal(live.connected_as, 'checksops_admin');
+  assert.equal(live.function_identity, PIN.function_identity);
+  assert.equal(live.exists, true);
+  assert.equal(live.definition_sha256, PIN.intended_definition_sha256);
+  assert.deepEqual(Object.keys(live.preserved_functions_live_definition_sha256), PIN.preserved_function_identities);
+  for (const identity of PIN.preserved_function_identities) {
+    assert.equal(live.preserved_functions_match_pin[identity], live.preserved_functions_live_definition_sha256[identity] === PIN.preserved_function_definition_sha256[identity], identity);
+  }
+  assert.equal(live.settlement_columns_found, PIN.preserved_settlement_columns.length);
+  assert.equal(live.ledger_triggers_found, PIN.preserved_ledger_triggers.length);
+  assert.deepEqual(Object.keys(live.preserved_row_counts), PIN.preserved_row_counts.map((table) => table.replace(/^public\./, '')));
+  assert.equal(live.evaluate.code, 'UNRELATED_MUTATION');
   assert.equal(PIN.deployment_type, SQL53_PRODUCTION_APPLY_DEPLOYMENT_TYPE);
   assert.equal(PIN.source_sha256, '5a8f8bc35c69f2b339c78f3637d6bb1c606117967e3ab9d83b5dec1d37561197');
   assert.equal(hashSqlDefinition.length > 0, true);
@@ -152,9 +181,19 @@ test('staging paths still refuse production and the repair pin stays evaluate-on
 });
 
 test('evaluateSql53ProductionApply accepts a complete production package when the pin is execute-authorized', () => {
+  // The retired committed pin refuses the apply.
+  const retired = evaluateSql53ProductionApply(productionInput({
+    action: 'apply',
+    execute: true,
+    inspect: catalog(),
+    authorization_phrase: SQL53_PRODUCTION_APPLY_PHRASE,
+  }), { root: ROOT });
+  assert.equal(retired.ok, false);
+  assert.equal(retired.code, CODES.GUARD_APPLY_FORBIDDEN);
+
   const ready = evaluateSql53ProductionApply(productionInput({
     inspect: catalog(),
-  }), { root: ROOT });
+  }), { root: ROOT, pin: UNLOCKED });
   assert.equal(ready.ok, true, ready.message);
   assert.equal(ready.details.sql53_production_executor_ready, true);
   assert.equal(ready.details.apply_authorized, true);
@@ -166,7 +205,7 @@ test('evaluateSql53ProductionApply accepts a complete production package when th
     execute: true,
     inspect: catalog(),
     authorization_phrase: SQL53_PRODUCTION_APPLY_PHRASE,
-  }), { root: ROOT });
+  }), { root: ROOT, pin: UNLOCKED });
   assert.equal(apply.ok, true, apply.message);
   assert.equal(apply.details.execute, true);
   assert.equal(apply.details.apply_executed, false);
@@ -301,9 +340,14 @@ test('trusted runner and GitHub evaluate stay off Lambda and do not apply', () =
   assert.equal(runner.details.github_can_apply, false);
   assert.equal(runner.details.lambda_executor_forbidden, true);
   assert.equal(runner.details.issuer_key_stays_off_lambda, true);
-  assert.equal(runner.details.pin_execute, true);
+  // The retired committed pin needs a new independent execute authorization.
+  assert.equal(runner.details.pin_execute, false);
   assert.equal(runner.details.pin_apply_authorized, true);
-  assert.equal(runner.details.independent_execute_authorization_required, false);
+  assert.equal(runner.details.independent_execute_authorization_required, true);
+  const unlockedRunner = evaluateSql53TrustedRunner({}, { root: ROOT, pin: UNLOCKED });
+  assert.equal(unlockedRunner.ok, true, unlockedRunner.message);
+  assert.equal(unlockedRunner.details.pin_execute, true);
+  assert.equal(unlockedRunner.details.independent_execute_authorization_required, false);
 
   const github = evaluateGithubSql53ProductionApply({
     GITHUB_SHA: '0e586b8510d2c509586d67648818f8848d24a84f',

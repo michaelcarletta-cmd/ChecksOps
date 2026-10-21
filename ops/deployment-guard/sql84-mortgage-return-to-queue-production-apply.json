@@ -2,7 +2,7 @@
   "id": "sql84-mortgage-return-to-queue-production-apply",
   "migration": "sql84",
   "authorization": "Owner approved 2026-10-16 (\"Yes\"; \"approve the SQL 84-86 production unlock and apply\"): production apply of SQL 84, then SQL 85, then SQL 86 after the staging acceptance below (SQL 84: production 53a0fa9f2b9cb126b3852a8b0595504fb74947c46a5a8390d67b46d7d67ad496 -> ff920f5453283e9ca550bb8a191905386832f44e2e35567522530b806cb0e983); execute true takes effect only when the owner reviews and merges this change. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
-  "execute": true,
+  "execute": false,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -85,5 +85,32 @@
     "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38894893179",
     "basis": "Guarded staging SQL executor apply of sql84-mortgage-return-to-queue, run #63 (38894893179) on main 97b981b9d, executor package CodeSha256 wA29pCAXWeGwvQfHU1FWOGzA4yUm4xqjmhG4Sr2csZU= (deploy run #62, 38894717631): staging 53a0fa9f2b9cb126b3852a8b0595504fb74947c46a5a8390d67b46d7d67ad496 -> ff920f5453283e9ca550bb8a191905386832f44e2e35567522530b806cb0e983, result applied; read-live run #66 (38895313068) already_applied true, precondition_failures [], return_mortgage_handling_request_to_queue intended, matches_migration and body_matches_migration true, EXECUTE authenticated and checksops only (PUBLIC revoked).",
     "production_differs": "The pre-states are the same: staging (pin AUTHORIZED_SQL84_MORTGAGE_RETURN_TO_QUEUE, read-live run 58, run id 38892001098) and production (production_inspect, 2026-10-16) are both 53a0fa9f2b9cb126b3852a8b0595504fb74947c46a5a8390d67b46d7d67ad496: Cursor SQL 48's return_mortgage_handling_request_to_queue, the audit table present and check_billing_events_mortgage_ops_check_uidx satisfying GATE 0. Owner names are not part of the fingerprint. Each environment's pre-state is still recorded separately. The post-state fingerprint is the same in both; the same file bytes (source_sha256) run in both."
+  },
+  "applied": {
+    "result": "verified_live",
+    "verified_on": "2026-10-21",
+    "original_apply_evidence": "The original production apply evidence (date, SSM command id, one-shot run id, one_use_id, the owner's run-time approval words) is not recorded in the repository; production state verified live by the read-only inspect recorded in verified_live_inspect. SQL 85's recorded 2026-10-16 apply (SSM da16269a-0aee-4196-87c4-90c554178be6) ran under workstream prod-sql84-86-mortgage-20261016, but the repository does not record whether that run or another applied this migration.",
+    "verified_live_inspect": {
+      "date": "2026-10-21",
+      "ssm_command_id": "ab678be8-7fd3-4f7d-a6d0-ed905cfed9aa",
+      "command": "node scripts/deployment-guard/sql84-mortgage-return-to-queue-production-apply.mjs --inspect",
+      "runner": "i-0c35557c4e5385406",
+      "source_commit": "69dbe9b01cbcd8f04847cab248e243105c85f022",
+      "source_tarball": {
+        "file": "source-69dbe9b01cbcd8f04847cab248e243105c85f022.tar.gz",
+        "sha256": "1424a8c418324c7c520b385c96dbdca79b869478a076a7802ec7ae2a560ff4b4"
+      },
+      "transfer_run": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39615612355",
+      "read_only": true,
+      "connected_as": "checksops_admin",
+      "already_applied": true,
+      "live_definition_sha256": "ff920f5453283e9ca550bb8a191905386832f44e2e35567522530b806cb0e983",
+      "live_matches_intended": true,
+      "function_states": {
+        "return_mortgage_handling_request_to_queue": "intended"
+      },
+      "precondition_failures": []
+    },
+    "note": "Production state verified live by the read-only production inspect of 2026-10-21 (SSM ab678be8-7fd3-4f7d-a6d0-ed905cfed9aa, main 69dbe9b01, BEGIN READ ONLY ... ROLLBACK): already_applied true, live == intended_replacement_sha256, precondition_failures []. The repository holds no record of the apply run itself, so result is verified_live, not applied. This record-and-retire change only adds this applied record and sets execute false; it applies nothing and runs no SQL. With execute false the pin is no longer a standing authorization, and a re-apply needs a new reviewed pin change."
   }
 }
