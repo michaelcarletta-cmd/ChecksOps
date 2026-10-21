@@ -87,8 +87,12 @@ An unexpected exception also ends in one failure summary:
   before anything else.
 
 1. **Pin.** Refuses unless the pin has `execute: true`, a staging acceptance
-   (`ok: true` plus a reference) and an authorization phrase. No pin is `execute: true` now.
-   SQL 82's to 86's pins are `execute: false` again since their 2026-10-21 record-and-retire
+   (`ok: true` plus a reference) and an authorization phrase. SQL 95's, SQL 97's and SQL 99's
+   pins are `execute: true` (owner approved 2026-10-21, "Everything else should be pushed live no
+   exceptions": the read-only production inspect of 2026-10-21 recorded as each pre-state, the
+   staging acceptance and, for SQL 95 / SQL 97, the Lambda gate evidence recorded in the pin; see
+   `ops/production-sql-90-97-apply.md`) until their record-and-retire changes; each apply still
+   needs the owner's own approval statement for that run. SQL 82's to 86's pins are `execute: false` again since their 2026-10-21 record-and-retire
    change (`applied` result `verified_live`: production state verified by read-only inspects,
    see `ops/production-sql-82-83-apply.md` and `ops/production-sql-84-86-apply.md`). SQL 91's, SQL 92's, SQL 90's, SQL 101's, SQL 93's, SQL 96's, SQL 94's,
    SQL 104's and SQL 98's are `execute: false`
