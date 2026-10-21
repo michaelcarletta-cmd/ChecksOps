@@ -14,7 +14,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { consumeReceiptOnce } from './consumed-receipts.mjs';
 import { CODES, fail, ok } from './errors.mjs';
-import { configFingerprint } from './lambda-overlay-apply.mjs';
+import { changedEnvironmentKeys, configFingerprint } from './lambda-overlay-apply.mjs';
 import { evaluateApplyFingerprintCas, requireLambdaApplyFingerprint } from './lambda-overlay.mjs';
 import {
   REBUILD_DEPLOYMENT_TYPE,
@@ -183,7 +183,8 @@ export async function applyLambdaRebuild(input = {}, ctx = {}) {
     label: 'receipt-to-first-live',
   });
   if (!firstCas.ok) return firstCas;
-  const configBefore = configFingerprint(liveCfg.details.configuration || liveCfg.details);
+  const liveConfiguration = liveCfg.details.configuration || liveCfg.details;
+  const configBefore = configFingerprint(liveConfiguration);
 
   const downloaded = await aws.downloadFunctionCode({ functionName, location: liveFn.details.code_location });
   if (!downloaded?.ok) return downloaded || fail(CODES.DEPLOYMENT_COLLISION, 'failed to download CURRENT live Lambda ZIP');
@@ -264,9 +265,14 @@ export async function applyLambdaRebuild(input = {}, ctx = {}) {
   if (mismatched.length) {
     return fail(CODES.DEPLOYMENT_COLLISION, 'live package after update does not equal the candidate member for member', { mismatched: mismatched.slice(0, 50), count: mismatched.length });
   }
-  const configAfter = configFingerprint(afterCfg.details.configuration || afterCfg.details);
+  const afterConfiguration = afterCfg.details.configuration || afterCfg.details;
+  const configAfter = configFingerprint(afterConfiguration);
   if (!fingerprintsEqual(configBefore, configAfter)) {
-    return fail(CODES.UNRELATED_MUTATION, 'Lambda environment/configuration changed; stopping without restore', { before: configBefore, after: configAfter });
+    return fail(CODES.UNRELATED_MUTATION, 'Lambda environment/configuration changed; stopping without restore', {
+      before: configBefore,
+      after: configAfter,
+      changed_environment_keys: changedEnvironmentKeys(liveConfiguration, afterConfiguration),
+    });
   }
 
   return ok({
