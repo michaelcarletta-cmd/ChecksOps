@@ -455,7 +455,8 @@ test('happy path overlays only owned members and preserves env/config', async ()
   assert.equal(afterMembers['index.mjs'], beforeMembers['index.mjs']);
   assert.notEqual(afterMembers['admin-override-check-status.mjs'], beforeMembers['admin-override-check-status.mjs']);
   assert.notEqual(afterMembers['tenant-check-user.mjs'], beforeMembers['tenant-check-user.mjs']);
-  assert.equal(result.details.after.configuration.Environment.KEEP, '1');
+  assert.deepEqual(result.details.after.configuration.Environment.variable_names, ['KEEP']);
+  assert.match(result.details.after.configuration.Environment.variables_sha256, /^[0-9a-f]{64}$/);
   assert.deepEqual(result.details.after.configuration.Environment, result.details.before.configuration.Environment);
 });
 
@@ -1401,4 +1402,59 @@ test('duplicate live ZIP member names fail closed before overlay/rebuild', async
   assert.match(result.message, /duplicate member names/);
   assert.equal(state.updates.length, 0);
   assert.equal(receiptConsumed(root, issued.receipt), false);
+});
+
+// Every writer result is printed to the GitHub Actions log (printResult), and the live
+// environments hold literal credentials: no raw environment value may appear in it.
+const SECRET_VALUE = 'cobt_live_7f3c9a1e5b2d4f6a8c0e1b3d5f7a9c2e4b6d8f0a';
+const SECRET_ENVIRONMENT = { KEEP: '1', CHECKSOPS_DB_BRIDGE_TOKEN: SECRET_VALUE };
+
+test('overlay result carries environment names and a hash, never a raw value', async () => {
+  const root = tmpRootWithOps();
+  const issued = issueOverlayReceipt(root);
+  const state = createLambdaState({ zip: liveZip(), environment: SECRET_ENVIRONMENT });
+  const aws = createMockAws(state);
+  const result = await applyLambdaOverlay(applyOpts(root, { receipt: issued.receipt }), {
+    env: APPLY_ENV,
+    guardRoot: root,
+    repoRoot: root,
+    aws,
+    now: NOW,
+  });
+  assert.equal(result.ok, true, result.message);
+  const printed = JSON.stringify(result, null, 2);
+  assert.equal(printed.includes(SECRET_VALUE), false);
+  assert.deepEqual(result.details.before.configuration.Environment.variable_names, ['CHECKSOPS_DB_BRIDGE_TOKEN', 'KEEP']);
+  assert.deepEqual(result.details.after.configuration.Environment, result.details.before.configuration.Environment);
+});
+
+test('overlay environment drift fails with changed key names only, never values', async () => {
+  const root = tmpRootWithOps();
+  const issued = issueOverlayReceipt(root);
+  const state = createLambdaState({ zip: liveZip(), environment: SECRET_ENVIRONMENT });
+  const aws = createMockAws(state);
+  const rotated = `${SECRET_VALUE}-rotated`;
+  const update = aws.updateFunctionCode;
+  aws.updateFunctionCode = async (input) => {
+    const res = await update(input);
+    state.configuration = {
+      ...state.configuration,
+      Environment: { Variables: { ...SECRET_ENVIRONMENT, CHECKSOPS_DB_BRIDGE_TOKEN: rotated } },
+    };
+    return res;
+  };
+  const result = await applyLambdaOverlay(applyOpts(root, { receipt: issued.receipt }), {
+    env: APPLY_ENV,
+    guardRoot: root,
+    repoRoot: root,
+    aws,
+    now: NOW,
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.code, CODES.UNRELATED_MUTATION);
+  assert.deepEqual(result.details.changed_environment_keys, ['CHECKSOPS_DB_BRIDGE_TOKEN']);
+  assert.notEqual(result.details.before.Environment.variables_sha256, result.details.after.Environment.variables_sha256);
+  const printed = JSON.stringify(result, null, 2);
+  assert.equal(printed.includes(SECRET_VALUE), false);
+  assert.equal(printed.includes(rotated), false);
 });
