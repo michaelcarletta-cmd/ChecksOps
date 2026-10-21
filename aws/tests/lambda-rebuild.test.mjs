@@ -261,8 +261,12 @@ test('the production plan section accepts inspect run 39666717878: Moov transfer
   const production = raw.environments.production;
   const staging = raw.environments.staging;
   const second = production.history[1];
-  assert.equal(production.status, 'accepted');
-  assert.equal(production.applied, undefined);
+  assert.equal(production.status, 'applied');
+  assert.equal(production.applied.run_id, '39669873076');
+  assert.equal(production.applied.staging_acceptance, staging.applied.run_url);
+  assert.equal(production.applied.code_sha256_before, production.inspect.live_code_sha256);
+  assert.equal(production.applied.code_sha256_after, staging.applied.code_sha256_after);
+  assert.equal(production.applied.candidate_zip_sha256, production.inspect.candidate_zip_sha256);
   assert.equal(production.inspect.run_id, '39666717878');
   assert.equal(production.inspect.main_commit, '96361081c5458bf4de46330b87285fa954b25bbb');
   assert.equal(production.inspect.live_code_sha256, '+cyvVRtA46woHP4FwFBBZoN80aXR4A8Vo6adu5E1/NE=');
@@ -404,8 +408,11 @@ test('the staging plan section accepts inspect run 39663300105: Moov transfer re
   const raw = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'ops/deployment-guard/lambda-rebuild-plan.json'), 'utf8'));
   const staging = raw.environments.staging;
   const second = staging.history[1];
-  assert.equal(staging.status, 'accepted');
-  assert.equal(staging.applied, undefined);
+  assert.equal(staging.status, 'applied');
+  assert.equal(staging.applied.run_id, '39666390516');
+  assert.equal(staging.applied.code_sha256_before, staging.inspect.live_code_sha256);
+  assert.equal(staging.applied.code_sha256_after, 'pNCewAaFU1W1I6F2ZpAo7ElwEn1vFFmXvft9j6vsr/c=');
+  assert.equal(staging.applied.candidate_zip_sha256, staging.inspect.candidate_zip_sha256);
   assert.equal(staging.inspect.run_id, '39663300105');
   assert.equal(staging.inspect.main_commit, 'c92fe457b13ca49340dfbd0239f0cf72f029f6fb');
   assert.equal(staging.inspect.live_code_sha256, '+cyvVRtA46woHP4FwFBBZoN80aXR4A8Vo6adu5E1/NE=');

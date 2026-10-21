@@ -88,3 +88,24 @@ the 19 changed source files are main's bytes, and `providers/actum.mjs`, `provid
 `AWS_MOOV_ONBOARDING_PRODUCTION_ENABLED` is `"true"` in production since the guarded configuration
 apply run 39594352935, not through this rebuild. The `production-spa` release lock still records the
 API revision `719ea3ae…`; that is unchanged by this record.
+
+## Third full-package rebuild applied (2026-10-21)
+
+Moov transfer returns (#1116) shipped through the same guarded rebuild path (#1134 and #1138 plan
+sections), with the owner's exact words per environment:
+
+| Environment | Run | CodeSha256 before → after | RevisionId after | State |
+|---|---|---|---|---|
+| staging (`checksops-staging-api`) | [39666390516](https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39666390516), main `96361081c` | `+cyvVRtA…` → `pNCewAaF…` | `74b36b3d-ee3f-4229-b02c-00d9b80148d2` | VERIFIED |
+| production (`checksops-production-prep-api`) | [39669873076](https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39669873076), main `008af40e2` | `+cyvVRtA…` → `pNCewAaF…` | `945817bb-5075-46b1-a1bf-38657adb3f8a` | VERIFIED |
+
+The starting package in both environments was the second rebuild's (`Bh/f7zaI…`) plus the #1124
+overlay of `providers/production/checkalt-eligibility.mjs` (staging run 39662525342, production run
+39663019340), which left `+cyvVRtA…`. Both environments again run the same package bytes (candidate
+ZIP `a4d09ec00685…`, 6771 members). `providers/webhooks.mjs` is main's bytes (`f7353ee1…`) and
+`providers/moov-transfer-webhook.mjs` (`90772a92…`) is new. Dependencies are unchanged (54
+packages). Configuration is unchanged (44 variables on staging, 45 on production).
+
+SQL 109 is not part of this rebuild. Until it is applied in an environment, the transfer status
+writer fails inside its savepoint, answers `status_writer_unavailable`, and the webhook is accepted
+and logged as before. The `production-spa` release lock is unchanged by this record.
