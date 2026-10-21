@@ -61,7 +61,7 @@
     "ocr.mjs": {
       "live_sha256": "ecd3b253c111921ee62f21bab214bd346ab19819a9c764cdef33b07524c6221f",
       "accepted_sha256": "ecd3b253c111921ee62f21bab214bd346ab19819a9c764cdef33b07524c6221f",
-      "repo_sha256": "2e69e2eace4c555036606565c35f4e76d3169ab5a36110269389f7387979cac8",
+      "repo_sha256": "ecd3b253c111921ee62f21bab214bd346ab19819a9c764cdef33b07524c6221f",
       "operation": "keep",
       "reason": "Live production already has the accepted persist and deposited payee lock. This PR does not rewrite the ocr-azure protected file. Do not overlay main ocr.mjs over live."
     },

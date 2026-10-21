@@ -79,8 +79,10 @@ const createClient = ({ existingPayees = [] } = {}) => {
         store.issue_date = params[1];
         return { rows: [{ id: CHECK_ID, issue_date: store.issue_date }] };
       }
-      if (/UPDATE public\.check_intake_items/.test(text) && /carrier_name = COALESCE/.test(text)) {
-        if (params[1] != null) store.carrier_name = params[1];
+      if (/UPDATE public\.check_intake_items/.test(text) && /COALESCE\(\$2, carrier_name\)/.test(text)) {
+        // Live production SQL: carrier_name = CASE WHEN $4 (bad carrier) THEN NULL ELSE COALESCE($2, carrier_name) END.
+        if (params[3] === true) store.carrier_name = null;
+        else if (params[1] != null) store.carrier_name = params[1];
         // Model the SQL as written: payee_line only moves when the UPDATE
         // itself guards on deposited_at IS NULL and the row is not deposited.
         const guarded = /payee_line = CASE[\s\S]*deposited_at IS NULL[\s\S]*END/.test(text);
@@ -155,9 +157,9 @@ test('2) absent date does not overwrite existing date', async () => {
   assert.equal(client.statements.some((row) => /issue_date = \$2/.test(row.sql)), false);
 });
 
-test('3) no amount persistence occurs', async () => {
+test('3) amount persists only through the ocr_persist_extracted_amount RPC, never a column write', async () => {
   const client = createClient();
-  await persistOcrDescriptiveHandoff({
+  const out = await persistOcrDescriptiveHandoff({
     client,
     checkId: CHECK_ID,
     tenantId: TENANT_ID,
@@ -169,8 +171,15 @@ test('3) no amount persistence occurs', async () => {
       payees: [{ name: 'One Payee' }],
     },
   });
-  const blob = JSON.stringify(client.statements.map((row) => row.sql));
-  assert.equal(blob.includes('amount'), false);
+  // Live production bytes (reconciled 2026-10-21): the extracted amount goes to the
+  // SECURITY DEFINER RPC inside a savepoint; no UPDATE ever names the amount column.
+  const updates = client.statements.filter((row) => /UPDATE public\.check_intake_items/.test(row.sql));
+  assert.equal(updates.some((row) => /\bamount\b/.test(row.sql)), false);
+  const rpc = client.statements.find((row) => /ocr_persist_extracted_amount/.test(row.sql));
+  assert.ok(rpc, 'amount RPC called');
+  assert.equal(rpc.params[1], '1500.00');
+  assert.ok(client.statements.some((row) => /SAVEPOINT ocr_extracted_amount/.test(row.sql)));
+  assert.equal(out.amount_persisted, false);
   assert.equal(client.store.amount, null);
   assert.equal(REVIEW_FINANCIAL_COLUMNS.includes('amount'), true);
 });
@@ -626,7 +635,7 @@ test('OCR descriptive persist keeps payee_line when a deposit lands after the S1
   assert.equal(client.store.deposited_at, '2026-10-17T12:00:00Z');
   assert.equal(client.store.payee_line, 'Original Payee Line');
   assert.equal(client.store.carrier_name, 'Still Writable Carrier');
-  const update = client.statements.find((row) => /carrier_name = COALESCE/.test(row.sql));
+  const update = client.statements.find((row) => /COALESCE\(\$2, carrier_name\)/.test(row.sql));
   assert.ok(update, 'descriptive UPDATE ran');
   assert.match(update.sql, /payee_line = CASE[\s\S]*deposited_at IS NULL[\s\S]*ELSE payee_line[\s\S]*END/);
 });

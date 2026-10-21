@@ -384,6 +384,17 @@ export const executeAllowlistedWrite = async ({
       table,
     };
   }
+  if (table === 'claims') {
+    const { executeAppMetadataWrite } = await import('./write-app-metadata.mjs');
+    return executeAppMetadataWrite({
+      client,
+      mapping,
+      table,
+      op,
+      values: picked.values,
+      filters: body.filters || [],
+    });
+  }
   if (spec.tranche === 2 || spec.tranche === 3 || spec.tranche === 5 || spec.tranche === 6
     || table === 'audit_logs' || table === 'user_sessions') {
     return executeCheckWorkflowWrite({

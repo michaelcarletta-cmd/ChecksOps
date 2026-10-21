@@ -2025,6 +2025,265 @@
       "reason": "PR #986 (owner-approved 2026-10-15) restores signature_requests and signature_signers to the browser write tables and overlaps review-only PR #891 on this file. #891 must rebase onto main before any later merge.",
       "expires": "2026-12-31",
       "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 486,
+      "path": "aws/functions/api/check-ocr-provider.mjs",
+      "reason": "PR #1095 reconciles the live production bytes of check-ocr-provider.mjs onto main (ops/live-api-reconciliation-2026-10-21.md, owner decision item 4 of the 2026-10-17 release notes) and overlaps the still-open PR #486 on this file; allow review while that PR remains open. It does not merge, edit or deploy PR #486.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 482,
+      "path": "aws/functions/api/check-ocr-provider.mjs",
+      "reason": "PR #1095 reconciles the live production bytes of check-ocr-provider.mjs onto main (ops/live-api-reconciliation-2026-10-21.md, owner decision item 4 of the 2026-10-17 release notes) and overlaps the still-open PR #482 on this file; allow review while that PR remains open. It does not merge, edit or deploy PR #482.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 455,
+      "path": "aws/functions/api/check-ocr-provider.mjs",
+      "reason": "PR #1095 reconciles the live production bytes of check-ocr-provider.mjs onto main (ops/live-api-reconciliation-2026-10-21.md, owner decision item 4 of the 2026-10-17 release notes) and overlaps the still-open PR #455 on this file; allow review while that PR remains open. It does not merge, edit or deploy PR #455.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 381,
+      "path": "aws/functions/api/check-ocr-provider.mjs",
+      "reason": "PR #1095 reconciles the live production bytes of check-ocr-provider.mjs onto main (ops/live-api-reconciliation-2026-10-21.md, owner decision item 4 of the 2026-10-17 release notes) and overlaps the still-open PR #381 on this file; allow review while that PR remains open. It does not merge, edit or deploy PR #381.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 582,
+      "path": "aws/functions/api/ocr-parse.mjs",
+      "reason": "PR #1095 reconciles the live production bytes of ocr-parse.mjs onto main (ops/live-api-reconciliation-2026-10-21.md, owner decision item 4 of the 2026-10-17 release notes) and overlaps the still-open PR #582 on this file; allow review while that PR remains open. It does not merge, edit or deploy PR #582.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 566,
+      "path": "aws/functions/api/ocr-parse.mjs",
+      "reason": "PR #1095 reconciles the live production bytes of ocr-parse.mjs onto main (ops/live-api-reconciliation-2026-10-21.md, owner decision item 4 of the 2026-10-17 release notes) and overlaps the still-open PR #566 on this file; allow review while that PR remains open. It does not merge, edit or deploy PR #566.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 565,
+      "path": "aws/functions/api/ocr-parse.mjs",
+      "reason": "PR #1095 reconciles the live production bytes of ocr-parse.mjs onto main (ops/live-api-reconciliation-2026-10-21.md, owner decision item 4 of the 2026-10-17 release notes) and overlaps the still-open PR #565 on this file; allow review while that PR remains open. It does not merge, edit or deploy PR #565.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 566,
+      "path": "aws/functions/api/ocr.mjs",
+      "reason": "PR #1095 reconciles the live production bytes of ocr.mjs onto main (ops/live-api-reconciliation-2026-10-21.md, owner decision item 4 of the 2026-10-17 release notes) and overlaps the still-open PR #566 on this file; allow review while that PR remains open. It does not merge, edit or deploy PR #566.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 565,
+      "path": "aws/functions/api/ocr.mjs",
+      "reason": "PR #1095 reconciles the live production bytes of ocr.mjs onto main (ops/live-api-reconciliation-2026-10-21.md, owner decision item 4 of the 2026-10-17 release notes) and overlaps the still-open PR #565 on this file; allow review while that PR remains open. It does not merge, edit or deploy PR #565.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 482,
+      "path": "aws/functions/api/ocr.mjs",
+      "reason": "PR #1095 reconciles the live production bytes of ocr.mjs onto main (ops/live-api-reconciliation-2026-10-21.md, owner decision item 4 of the 2026-10-17 release notes) and overlaps the still-open PR #482 on this file; allow review while that PR remains open. It does not merge, edit or deploy PR #482.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 455,
+      "path": "aws/functions/api/ocr.mjs",
+      "reason": "PR #1095 reconciles the live production bytes of ocr.mjs onto main (ops/live-api-reconciliation-2026-10-21.md, owner decision item 4 of the 2026-10-17 release notes) and overlaps the still-open PR #455 on this file; allow review while that PR remains open. It does not merge, edit or deploy PR #455.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 588,
+      "path": "aws/functions/api/tenant-email-domain-handlers.mjs",
+      "reason": "PR #1095 reconciles the live production bytes of tenant-email-domain-handlers.mjs onto main (ops/live-api-reconciliation-2026-10-21.md, owner decision item 4 of the 2026-10-17 release notes) and overlaps the still-open PR #588 on this file; allow review while that PR remains open. It does not merge, edit or deploy PR #588.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 584,
+      "path": "aws/functions/api/tenant-email-domain-handlers.mjs",
+      "reason": "PR #1095 reconciles the live production bytes of tenant-email-domain-handlers.mjs onto main (ops/live-api-reconciliation-2026-10-21.md, owner decision item 4 of the 2026-10-17 release notes) and overlaps the still-open PR #584 on this file; allow review while that PR remains open. It does not merge, edit or deploy PR #584.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 583,
+      "path": "aws/functions/api/tenant-email-domain-handlers.mjs",
+      "reason": "PR #1095 reconciles the live production bytes of tenant-email-domain-handlers.mjs onto main (ops/live-api-reconciliation-2026-10-21.md, owner decision item 4 of the 2026-10-17 release notes) and overlaps the still-open PR #583 on this file; allow review while that PR remains open. It does not merge, edit or deploy PR #583.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 570,
+      "path": "aws/functions/api/tenant-email-domain-handlers.mjs",
+      "reason": "PR #1095 reconciles the live production bytes of tenant-email-domain-handlers.mjs onto main (ops/live-api-reconciliation-2026-10-21.md, owner decision item 4 of the 2026-10-17 release notes) and overlaps the still-open PR #570 on this file; allow review while that PR remains open. It does not merge, edit or deploy PR #570.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 567,
+      "path": "aws/functions/api/tenant-email-domain-handlers.mjs",
+      "reason": "PR #1095 reconciles the live production bytes of tenant-email-domain-handlers.mjs onto main (ops/live-api-reconciliation-2026-10-21.md, owner decision item 4 of the 2026-10-17 release notes) and overlaps the still-open PR #567 on this file; allow review while that PR remains open. It does not merge, edit or deploy PR #567.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 448,
+      "path": "aws/functions/api/tenant-email-domain-handlers.mjs",
+      "reason": "PR #1095 reconciles the live production bytes of tenant-email-domain-handlers.mjs onto main (ops/live-api-reconciliation-2026-10-21.md, owner decision item 4 of the 2026-10-17 release notes) and overlaps the still-open PR #448 on this file; allow review while that PR remains open. It does not merge, edit or deploy PR #448.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 447,
+      "path": "aws/functions/api/tenant-email-domain-handlers.mjs",
+      "reason": "PR #1095 reconciles the live production bytes of tenant-email-domain-handlers.mjs onto main (ops/live-api-reconciliation-2026-10-21.md, owner decision item 4 of the 2026-10-17 release notes) and overlaps the still-open PR #447 on this file; allow review while that PR remains open. It does not merge, edit or deploy PR #447.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 446,
+      "path": "aws/functions/api/tenant-email-domain-handlers.mjs",
+      "reason": "PR #1095 reconciles the live production bytes of tenant-email-domain-handlers.mjs onto main (ops/live-api-reconciliation-2026-10-21.md, owner decision item 4 of the 2026-10-17 release notes) and overlaps the still-open PR #446 on this file; allow review while that PR remains open. It does not merge, edit or deploy PR #446.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 445,
+      "path": "aws/functions/api/tenant-email-domain-handlers.mjs",
+      "reason": "PR #1095 reconciles the live production bytes of tenant-email-domain-handlers.mjs onto main (ops/live-api-reconciliation-2026-10-21.md, owner decision item 4 of the 2026-10-17 release notes) and overlaps the still-open PR #445 on this file; allow review while that PR remains open. It does not merge, edit or deploy PR #445.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 444,
+      "path": "aws/functions/api/tenant-email-domain-handlers.mjs",
+      "reason": "PR #1095 reconciles the live production bytes of tenant-email-domain-handlers.mjs onto main (ops/live-api-reconciliation-2026-10-21.md, owner decision item 4 of the 2026-10-17 release notes) and overlaps the still-open PR #444 on this file; allow review while that PR remains open. It does not merge, edit or deploy PR #444.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 443,
+      "path": "aws/functions/api/tenant-email-domain-handlers.mjs",
+      "reason": "PR #1095 reconciles the live production bytes of tenant-email-domain-handlers.mjs onto main (ops/live-api-reconciliation-2026-10-21.md, owner decision item 4 of the 2026-10-17 release notes) and overlaps the still-open PR #443 on this file; allow review while that PR remains open. It does not merge, edit or deploy PR #443.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 442,
+      "path": "aws/functions/api/tenant-email-domain-handlers.mjs",
+      "reason": "PR #1095 reconciles the live production bytes of tenant-email-domain-handlers.mjs onto main (ops/live-api-reconciliation-2026-10-21.md, owner decision item 4 of the 2026-10-17 release notes) and overlaps the still-open PR #442 on this file; allow review while that PR remains open. It does not merge, edit or deploy PR #442.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 441,
+      "path": "aws/functions/api/tenant-email-domain-handlers.mjs",
+      "reason": "PR #1095 reconciles the live production bytes of tenant-email-domain-handlers.mjs onto main (ops/live-api-reconciliation-2026-10-21.md, owner decision item 4 of the 2026-10-17 release notes) and overlaps the still-open PR #441 on this file; allow review while that PR remains open. It does not merge, edit or deploy PR #441.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 439,
+      "path": "aws/functions/api/tenant-email-domain-handlers.mjs",
+      "reason": "PR #1095 reconciles the live production bytes of tenant-email-domain-handlers.mjs onto main (ops/live-api-reconciliation-2026-10-21.md, owner decision item 4 of the 2026-10-17 release notes) and overlaps the still-open PR #439 on this file; allow review while that PR remains open. It does not merge, edit or deploy PR #439.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 369,
+      "path": "aws/functions/api/tenant-email-domain-handlers.mjs",
+      "reason": "PR #1095 reconciles the live production bytes of tenant-email-domain-handlers.mjs onto main (ops/live-api-reconciliation-2026-10-21.md, owner decision item 4 of the 2026-10-17 release notes) and overlaps the still-open PR #369 on this file; allow review while that PR remains open. It does not merge, edit or deploy PR #369.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 210,
+      "path": "aws/functions/api/tenant-email-domain-handlers.mjs",
+      "reason": "PR #1095 reconciles the live production bytes of tenant-email-domain-handlers.mjs onto main (ops/live-api-reconciliation-2026-10-21.md, owner decision item 4 of the 2026-10-17 release notes) and overlaps the still-open PR #210 on this file; allow review while that PR remains open. It does not merge, edit or deploy PR #210.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 582,
+      "path": "aws/functions/api/write.mjs",
+      "reason": "PR #1095 reconciles the live production bytes of write.mjs onto main (ops/live-api-reconciliation-2026-10-21.md, owner decision item 4 of the 2026-10-17 release notes) and overlaps the still-open PR #582 on this file; allow review while that PR remains open. It does not merge, edit or deploy PR #582.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 566,
+      "path": "aws/functions/api/write.mjs",
+      "reason": "PR #1095 reconciles the live production bytes of write.mjs onto main (ops/live-api-reconciliation-2026-10-21.md, owner decision item 4 of the 2026-10-17 release notes) and overlaps the still-open PR #566 on this file; allow review while that PR remains open. It does not merge, edit or deploy PR #566.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 565,
+      "path": "aws/functions/api/write.mjs",
+      "reason": "PR #1095 reconciles the live production bytes of write.mjs onto main (ops/live-api-reconciliation-2026-10-21.md, owner decision item 4 of the 2026-10-17 release notes) and overlaps the still-open PR #565 on this file; allow review while that PR remains open. It does not merge, edit or deploy PR #565.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 532,
+      "path": "aws/functions/api/write.mjs",
+      "reason": "PR #1095 reconciles the live production bytes of write.mjs onto main (ops/live-api-reconciliation-2026-10-21.md, owner decision item 4 of the 2026-10-17 release notes) and overlaps the still-open PR #532 on this file; allow review while that PR remains open. It does not merge, edit or deploy PR #532.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 455,
+      "path": "aws/functions/api/write.mjs",
+      "reason": "PR #1095 reconciles the live production bytes of write.mjs onto main (ops/live-api-reconciliation-2026-10-21.md, owner decision item 4 of the 2026-10-17 release notes) and overlaps the still-open PR #455 on this file; allow review while that PR remains open. It does not merge, edit or deploy PR #455.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 432,
+      "path": "aws/functions/api/write.mjs",
+      "reason": "PR #1095 reconciles the live production bytes of write.mjs onto main (ops/live-api-reconciliation-2026-10-21.md, owner decision item 4 of the 2026-10-17 release notes) and overlaps the still-open PR #432 on this file; allow review while that PR remains open. It does not merge, edit or deploy PR #432.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 430,
+      "path": "aws/functions/api/write.mjs",
+      "reason": "PR #1095 reconciles the live production bytes of write.mjs onto main (ops/live-api-reconciliation-2026-10-21.md, owner decision item 4 of the 2026-10-17 release notes) and overlaps the still-open PR #430 on this file; allow review while that PR remains open. It does not merge, edit or deploy PR #430.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 332,
+      "path": "aws/functions/api/write.mjs",
+      "reason": "PR #1095 reconciles the live production bytes of write.mjs onto main (ops/live-api-reconciliation-2026-10-21.md, owner decision item 4 of the 2026-10-17 release notes) and overlaps the still-open PR #332 on this file; allow review while that PR remains open. It does not merge, edit or deploy PR #332.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 283,
+      "path": "aws/functions/api/write.mjs",
+      "reason": "PR #1095 reconciles the live production bytes of write.mjs onto main (ops/live-api-reconciliation-2026-10-21.md, owner decision item 4 of the 2026-10-17 release notes) and overlaps the still-open PR #283 on this file; allow review while that PR remains open. It does not merge, edit or deploy PR #283.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 277,
+      "path": "aws/functions/api/write.mjs",
+      "reason": "PR #1095 reconciles the live production bytes of write.mjs onto main (ops/live-api-reconciliation-2026-10-21.md, owner decision item 4 of the 2026-10-17 release notes) and overlaps the still-open PR #277 on this file; allow review while that PR remains open. It does not merge, edit or deploy PR #277.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
     }
   ]
 }

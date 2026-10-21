@@ -146,12 +146,16 @@ test('data.mjs early-routes settlement RPC before the generic write path', () =>
   assert.match(src, /claim-settlement-rpc\.mjs/);
 });
 
-test('ocr.mjs is not rewritten; live bytes stay KEEP and payee-lock deps remain live', () => {
+test('ocr.mjs carries the live S14 bytes (reconciled 2026-10-21); live stays KEEP and payee-lock deps remain live', () => {
   const src = read('ocr.mjs');
   assert.equal(sha256('ocr.mjs'), proof.members['ocr.mjs'].repo_sha256);
   assert.equal(proof.members['ocr.mjs'].live_sha256, 'ecd3b253c111921ee62f21bab214bd346ab19819a9c764cdef33b07524c6221f');
+  // The repository file is now byte-identical to production (live-only reconciliation, task #26),
+  // so a full ZIP rebuild keeps the S14 payee-line lock. keep_live still holds: nothing to overlay.
+  assert.equal(proof.members['ocr.mjs'].repo_sha256, proof.members['ocr.mjs'].live_sha256);
   assert.equal(proof.members['ocr.mjs'].overlay, 'keep_live');
-  assert.doesNotMatch(src, /check-deposited\.mjs/);
+  assert.match(src, /resolveWritablePayeeLine/);
+  assert.match(src, /check-deposited\.mjs/);
   assert.match(src, /persistOcrDescriptiveHandoff/);
   assert.match(src, /parsed\.micr_routing_state === 'VERIFIED' \? parsed\.routing_number : null/);
   assert.equal(sha256('check-deposited.mjs'), '395ddec5c88e2290fc72f2ab86ef2c934fe7654c7f2309a8176e1147ce32edf1');
