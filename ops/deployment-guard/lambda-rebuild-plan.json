@@ -662,119 +662,234 @@
     },
     "production": {
       "function_name": "checksops-production-prep-api",
-      "status": "applied",
+      "status": "accepted",
       "members": {
-        "admin-override-check-status.mjs": {
-          "live_sha256": "166e0e640b782faf21ca884fba75ebcd3cba5965f6f64ed4e2f98271759c3c00",
-          "accepted_sha256": "fd514ad8e822ed7d7d3648a336f4b44d51b56dda6a662cf692ad2bd032954650"
-        },
         "allowed-tables.json": {
-          "live_sha256": "a1772c723bc07fbc0d02bda2fd02a4915b1a41944ca2f7b368602117634868cb",
-          "accepted_sha256": "e34a1c418056b4e6f3a28c416fdfd2e32854160ab9624c98c97c6c908544ec9a"
+          "live_sha256": "e34a1c418056b4e6f3a28c416fdfd2e32854160ab9624c98c97c6c908544ec9a",
+          "accepted_sha256": "9ef983c56131c06191b1960860eeb1e455ae406ac1cc423e78735bb31397a958"
         },
-        "db-readonly-validate.mjs": {
-          "live_sha256": "ee58fd0a2ea5a4fd554012c1c331cdf369f12c82b64fb81dbc3e39e3b9161606",
-          "accepted_sha256": "71cc313ed9e4156be1bf2513bd8829621ffa63579c445563e1a12eb056bc1147"
+        "data.mjs": {
+          "live_sha256": "f81055b8ab46f4293c79d213e3a9ceb8742ce7676d41f079fc86a5be10953449",
+          "accepted_sha256": "75fe96fc3a3f782a0e69e30f7dd4c4f5a1c5f64a93915bd40a0eaf6bd3ddde31"
         },
-        "email.mjs": {
-          "live_sha256": "e7ff4c1aa46cfd90d188e3ed56a7a066f62b5c79a3a77b45be013d9bf384adac",
-          "accepted_sha256": "66149c42d5aa77aa5b64c09f9bb08c3105317ca7cc0191de9e3ae6610c6e5b16"
+        "financial-authz.mjs": {
+          "live_sha256": "0f7873199bb3a815e9afdad494d4d1afa0bc7a70454b1e04a1c36f4fecd039a8",
+          "accepted_sha256": "b1322f0b6d78a933ca409c5c2379e58060ca801f38ac984301fb04940f973b5e"
+        },
+        "financial-flags.mjs": {
+          "live_sha256": "0f8c1394864be3faf133a1c33db5fc9e434cc076b44f242915bf61bbc713ad0a",
+          "accepted_sha256": "4fe83de59a70002598b1832792b544e1cbca642f4e25cf9c25cd4e3d064b8822"
         },
         "index.mjs": {
-          "live_sha256": "77836ef63e6fbca6fb3e49f5970e705cf38b2af653c1be2c4a728be04caf3a9f",
-          "accepted_sha256": "6a1993e13d8efdd3d99704c82b9dab446a0ae567f55af688f15f5a0ca8d3e652"
+          "live_sha256": "6a1993e13d8efdd3d99704c82b9dab446a0ae567f55af688f15f5a0ca8d3e652",
+          "accepted_sha256": "ec092b24bae29c4a0243f9f6fa36dc05942fe082051104e63b1201f1b8f699e1"
         },
-        "ocr-descriptive-persist.mjs": {
-          "live_sha256": "32c2cecc723ad4253558d39fdbba13aa20e6e4a04b1886e9e7e6e7e1f66748ae",
-          "accepted_sha256": "ba38a287cd5d0ef01fd828e9ca796e7027821ac91bf73fcef98671088aaf43fd"
+        "ops-readiness.mjs": {
+          "live_sha256": "2785381cd8a9e0f23f50453c81ad905e259eac0299b98790776d629cc442de6d",
+          "accepted_sha256": "79c87a10512a10a3065c17962ddc0eecf03f8ba36972a574e4aa41758ded6249"
         },
-        "package-lock.json": {
-          "live_sha256": "1e856d3a0002f202f8ef01472d5c988cac43263d68ce57a04d94f538f9631e77",
-          "accepted_sha256": "0f901adbe95830e228a5d515c37f9e2607c0627ed9551b6de6101b85c9abc6e5"
-        },
-        "package.json": {
-          "live_sha256": "3725acaadd7dc026d4bb776706b84a318d3d8228bc404f3df169e1e8752a7d0d",
-          "accepted_sha256": "d03dd31c3ad0b915438281380593caab92bdd1a82544c0cdff6c9a81b3e88ac2"
-        },
-        "partner-share-lifecycle.mjs": {
-          "live_sha256": "f25017c7759aac7adb6bd5355e81df53d34e87ce2b9f01502f2da3e0187f590d",
-          "accepted_sha256": "3aa62d8895c4a004a815ed76e362f6e3e46be516f63c47d1e058affb23f4e05e"
+        "provider-authz.mjs": {
+          "live_sha256": "4964ea7942abae49a3f14fce6eaa5eb3f936ee4936c85d8b46888414151e24b7",
+          "accepted_sha256": "bc00de4fe4a51d446e7547172a6dd62446678f9cac20af1b1901d797459aea45"
         },
         "provider-flags.mjs": {
-          "live_sha256": "29f5a7487fb6b911e6ca46780a3a991293efd19b1d1ee8b6199af8915196f622",
-          "accepted_sha256": "122b8769080851312d7e4ffde87bdbde060aed8004e20362d28956b70004c7ec"
+          "live_sha256": "122b8769080851312d7e4ffde87bdbde060aed8004e20362d28956b70004c7ec",
+          "accepted_sha256": "0c903e5442cc3987e3727d51e4b61bbb4e12bcddbe7e21c2bff6058ea349b1c8"
         },
-        "providers/readiness.mjs": {
-          "live_sha256": "59f384db3de59bf11e7266df9c31ce5eb5cdc3033565d2aace1558b1a0e4969d",
-          "accepted_sha256": "540170e7603edf6294d0ffc26ca6e3c6cad6a1f879dcafbced062694a9eb93f9"
+        "provider-secrets.mjs": {
+          "live_sha256": "7cfe3b03faea47c4e40a089c00d5841a3a45be17477b1116dcf6752b1d5d2909",
+          "accepted_sha256": "a2961d9d8e8b1ddc7269948fbdb8fffdd018c1be14d3b1084b2fc8690e2111ae"
         },
-        "scheduled.mjs": {
-          "live_sha256": "78daabb298f187b180e1435cc75c3bd519179aab82a0b83a9632a5f41c577090",
-          "accepted_sha256": "4b06d4cd578720a3996dc090cc396bda273c8de07e80cd7064d755af2b214abb"
+        "providers.mjs": {
+          "live_sha256": "af6309a083b6c4f7805c13489caa036339ca3523f4a425c001eaf32c2fa6bacc",
+          "accepted_sha256": "51fa3109f06470c09fc9598c5b29c92085c0833a5dd0894a1478e30db5f6423a"
         },
-        "write.mjs": {
-          "live_sha256": "37d17af66db337953e4dc444a51717b70cdca1a1be84b32df442acd290c11cda",
-          "accepted_sha256": "24dbccf4d0b0aaf9b95b233efd66b44aadfd9eda6e7bf5d30c869cedb64c1f37"
+        "providers/catalog.mjs": {
+          "live_sha256": "5aa2538f78aa5199f2615c68bd64bbbe3243fa3726ba0e99d12fcf6242f8b3a9",
+          "accepted_sha256": "43ada7ec092497fabfcd127db37d7ca25dbfe9063a61a8be713e2b62167dd561"
+        },
+        "providers/hmac.mjs": {
+          "live_sha256": "a75f13a4e9e80880ea12bd5fd9a979e44f80231ffb23cab4da435846ed42fccf",
+          "accepted_sha256": "5481a443f64698253b3d11c2c0bcbd49ec14e8c7ac21ad6fb40a51e7c9cd028d"
+        },
+        "providers/moov.mjs": {
+          "live_sha256": "251004ab9d9953d3a320eb5429e8351eba5f51b3f69002acded891b2671a8e75",
+          "accepted_sha256": "8a44a8ed8fa1b23870abc522ebec882bbb8d97b4c88e43a4dda2b60e4b5b56fd"
+        },
+        "providers/parity/moov-functions.mjs": {
+          "live_sha256": "fbefc70eac342dc2bcb495501643b932ea370a228713b08349517031ff15b094",
+          "accepted_sha256": "3d17efb4f680a675a97231709e4379a4478641a46c744bf2fee5796c24fcd6be"
+        },
+        "providers/parity/moov-onboard.mjs": {
+          "live_sha256": "4c04ce4c78d26152bf56984a40b8df7a550af13fd71a31d1bf6f235cc3ad454f",
+          "accepted_sha256": "dc60dc48707b100ec4df18dee087453ba503fc713a7833498bc1cddd34edb80d"
+        },
+        "providers/webhooks.mjs": {
+          "live_sha256": "3420ef809a2b7e07eb786afe311962d3472a0f027bb4a06a882841b8763df9c5",
+          "accepted_sha256": "479cedf8fc6989bf713d61d452dd9f68eca03e45faa1143a3dd049c3b67bafb0"
+        },
+        "sandbox-credentials.mjs": {
+          "live_sha256": "3fd38358b2a55ce7acaa69f1070acc880d65aa4f20a89b56a6fbae597e5fca7e",
+          "accepted_sha256": "a4bd8e7b1e41472c735f066c34df34f602f057bbb396eb70363e80c16f862c21"
+        },
+        "sandbox.mjs": {
+          "live_sha256": "e28aa2685ac4cf5172b6a5536a1b4eb0e9cc5f421bc68d366c45f8ac84d5f945",
+          "accepted_sha256": "2c329a654d33d6b6571bce760210471c22802f63b141a177aa6477c4b0fc6c42"
+        },
+        "write-allowlist.mjs": {
+          "live_sha256": "9a2fae181b33fea46eb8c99a9ba4fdade3af05044f114662b65dc01a2d226ec1",
+          "accepted_sha256": "5f84c5634190ebade1ee6ae10d3420e09548efac78f2a72eb98886d2f0341189"
         }
       },
-      "added": {
-        "db-validator-access.mjs": "dc8a29849ed5dc2558f6329fed47cd9646734f6fc943bdb8ed84bfad27128787",
-        "invoice-actions.mjs": "866032c6f972a1d02a1c3e9649b21990d91ba62b6a5a49ac4e1f1274e2045507",
-        "invoice-provider.mjs": "e6ef5db0f418d473af630a9b0f44d4d38452f7bb37eacc9d14b106a6cea7f8da",
-        "public-invoice.mjs": "e2d5ea84d231608775e34660051a5a5a6f119d331f4b3ae5fcd60e24fceff389",
-        "staging-db-readonly-diagnostic-output.mjs": "0d114d2f8ae6cc825fd5a435abdefe7f5dc35d4efc1358ba309acc9f4269c4d1",
-        "staging-db-readonly-diagnostic.mjs": "aaaece7a9a8e05e975286a7e371955db47ca656e47ff5c25344cee4d585022d3",
-        "tenant-collection-v2-uat.mjs": "7a0c9bc1a7e23647a9834ab7b5735e7323fcd16a7911624f8f45fb967bdb1d49",
-        "tenant-maintenance-payments-catalog-inspect.mjs": "c7b83fed089ceec3656de2a4976a3e084fa7305c5cd7275ee26cc17c03da78fe",
-        "workflow-delete-check.mjs": "bdfd5f3a380a81bc192959b59541a6cf98c82da5b04dd64b670cb8166e0ada9f"
+      "added": {},
+      "removed": {
+        "providers/actum.mjs": "5c6e43d426fc024a88b6ece28f2b204cc1a195f69532a4a5e3b851cbe307c3c6",
+        "providers/plaid-sandbox.mjs": "51268363ea1c725b193c64dc70722c90638a2de4a8cfcaba3888c1b9598f10ff",
+        "providers/plaid.mjs": "86bb82a85b2de80b71e835420aa2b995882f2b2cc9f995011dcadb70a76fb41a",
+        "providers/quickbooks.mjs": "fd77eed878af26e55fed1885f0ceeae99be88d23b96b42a49de48dcaaa2818ed"
       },
-      "removed": {},
       "dependencies": {
-        "added": {
-          "node_modules/@aws-sdk/client-kms": "3.1124.0"
-        },
+        "added": {},
         "removed": {},
         "changed": {}
       },
       "inspect": {
-        "run_id": "39587583692",
-        "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39587583692",
-        "main_commit": "4d37692d6ff105a74ea6aac2898a117fe0cf9757",
-        "live_code_sha256": "ephceZY0Zjg7Dscil3D2cdtZzzAWellnHprPDYZ/50w=",
-        "live_revision_id": "719ea3ae-4ff5-4777-a34e-ba04d69ffcec",
-        "live_member_count": 6506,
-        "candidate_zip_sha256": "b31a1d5b246952bd0b6c44d4d188416b26aa61ed55b1f341422d4ea0c6697785",
-        "candidate_member_count": 6774,
-        "same": 176,
-        "changed": 13,
-        "added": 9,
-        "removed": 0,
+        "run_id": "39633975144",
+        "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39633975144",
+        "main_commit": "fd1e059b573ce16dfe51c07c37827aad2fb9bd04",
+        "live_code_sha256": "sxodWyRpUr0LbETU0YhBayaqYe1VsfNBQi1OoMZpd4U=",
+        "live_revision_id": "6cb46f3a-e10d-4645-b18d-6e5b156d65d9",
+        "live_member_count": 6774,
+        "candidate_zip_sha256": "061fdfef36881460c4080d634d680c791ff6a9130e51a0014563f59506d110e7",
+        "candidate_member_count": 6770,
+        "same": 175,
+        "changed": 19,
+        "added": 0,
+        "removed": 4,
         "dependency_counts": {
-          "live": 53,
+          "live": 54,
           "candidate": 54
         },
-        "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39587414391",
-        "notes": "Every candidate hash equals sha256 of the same path in aws/functions/api at main_commit on an LF checkout; the candidate ZIP is byte-identical to the one staging run 39587414391 applied and verified. The 13 changed members are exactly the files the overlay path never carried (package.json/lock, index.mjs and the modules reconciled onto main in #1095); the 9 added members are main modules production never had (invoice, public-invoice, db-validator-access, diagnostics, uat and delete-check); the only dependency delta is @aws-sdk/client-kms 3.1124.0, needed for production Moov onboarding. The four live-only modules from #1095 are byte-identical and are not listed. Nothing is removed."
+        "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39633656412",
+        "notes": "Second production rebuild, for the Plaid/Actum/QuickBooks removal (#1109). The live CodeSha256 is the one the first rebuild left behind (history[0].applied, run 39588578627); the RevisionId differs only through the configuration apply since (lambda-config-plan.json production applied, run 39617806126, revision_id_after 6cb46f3a). Every live hash equals sha256 of the same path in aws/functions/api at 2168be9a1 (the bytes the first production rebuild put live) and every accepted hash equals sha256 of the same path at main_commit on an LF checkout. The 19 changed and 4 removed members are exactly the files #1109 changed or deleted under aws/functions/api, with the same live and accepted hashes as the staging section; nothing else differs (no live drift). The removed files are the deleted provider modules (actum, plaid, plaid-sandbox, quickbooks). Nothing is added. Dependencies are identical by package path and version (54 live, 54 candidate). The candidate ZIP is byte-identical to the one staging run 39633656412 applied and verified (061fdfef...). The first rebuild's plan section moves verbatim into history."
       },
-      "applied": {
-        "run_id": "39588578627",
-        "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39588578627",
-        "main_commit": "2168be9a181050bfce8fd3af3fe632c8c73bc888",
-        "approval_phrase": "DEPLOY FULL API PACKAGE TO PRODUCTION",
-        "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39587414391",
-        "code_sha256_before": "ephceZY0Zjg7Dscil3D2cdtZzzAWellnHprPDYZ/50w=",
-        "revision_id_before": "719ea3ae-4ff5-4777-a34e-ba04d69ffcec",
-        "code_sha256_after": "sxodWyRpUr0LbETU0YhBayaqYe1VsfNBQi1OoMZpd4U=",
-        "revision_id_after": "e7d6c9ec-d4f8-4f93-bdff-fb51c3284497",
-        "candidate_zip_sha256": "b31a1d5b246952bd0b6c44d4d188416b26aa61ed55b1f341422d4ea0c6697785",
-        "applied_at": "2026-10-21T10:59:49.794Z",
-        "state": "VERIFIED",
-        "smoke": [
-          "/health",
-          "/db-health"
-        ],
-        "notes": "Pre-inspect run 39588458930 on main 2168be9a1 reported READY with 0 unlisted differences. Production and staging now run the same package bytes (CodeSha256 sxodWyRp...). A later inspect against an unchanged main reports ALREADY_ACCEPTED; the next rebuild starts from a new inspect and a new reviewed plan section."
-      }
+      "history": [
+        {
+          "status": "applied",
+          "members": {
+            "admin-override-check-status.mjs": {
+              "live_sha256": "166e0e640b782faf21ca884fba75ebcd3cba5965f6f64ed4e2f98271759c3c00",
+              "accepted_sha256": "fd514ad8e822ed7d7d3648a336f4b44d51b56dda6a662cf692ad2bd032954650"
+            },
+            "allowed-tables.json": {
+              "live_sha256": "a1772c723bc07fbc0d02bda2fd02a4915b1a41944ca2f7b368602117634868cb",
+              "accepted_sha256": "e34a1c418056b4e6f3a28c416fdfd2e32854160ab9624c98c97c6c908544ec9a"
+            },
+            "db-readonly-validate.mjs": {
+              "live_sha256": "ee58fd0a2ea5a4fd554012c1c331cdf369f12c82b64fb81dbc3e39e3b9161606",
+              "accepted_sha256": "71cc313ed9e4156be1bf2513bd8829621ffa63579c445563e1a12eb056bc1147"
+            },
+            "email.mjs": {
+              "live_sha256": "e7ff4c1aa46cfd90d188e3ed56a7a066f62b5c79a3a77b45be013d9bf384adac",
+              "accepted_sha256": "66149c42d5aa77aa5b64c09f9bb08c3105317ca7cc0191de9e3ae6610c6e5b16"
+            },
+            "index.mjs": {
+              "live_sha256": "77836ef63e6fbca6fb3e49f5970e705cf38b2af653c1be2c4a728be04caf3a9f",
+              "accepted_sha256": "6a1993e13d8efdd3d99704c82b9dab446a0ae567f55af688f15f5a0ca8d3e652"
+            },
+            "ocr-descriptive-persist.mjs": {
+              "live_sha256": "32c2cecc723ad4253558d39fdbba13aa20e6e4a04b1886e9e7e6e7e1f66748ae",
+              "accepted_sha256": "ba38a287cd5d0ef01fd828e9ca796e7027821ac91bf73fcef98671088aaf43fd"
+            },
+            "package-lock.json": {
+              "live_sha256": "1e856d3a0002f202f8ef01472d5c988cac43263d68ce57a04d94f538f9631e77",
+              "accepted_sha256": "0f901adbe95830e228a5d515c37f9e2607c0627ed9551b6de6101b85c9abc6e5"
+            },
+            "package.json": {
+              "live_sha256": "3725acaadd7dc026d4bb776706b84a318d3d8228bc404f3df169e1e8752a7d0d",
+              "accepted_sha256": "d03dd31c3ad0b915438281380593caab92bdd1a82544c0cdff6c9a81b3e88ac2"
+            },
+            "partner-share-lifecycle.mjs": {
+              "live_sha256": "f25017c7759aac7adb6bd5355e81df53d34e87ce2b9f01502f2da3e0187f590d",
+              "accepted_sha256": "3aa62d8895c4a004a815ed76e362f6e3e46be516f63c47d1e058affb23f4e05e"
+            },
+            "provider-flags.mjs": {
+              "live_sha256": "29f5a7487fb6b911e6ca46780a3a991293efd19b1d1ee8b6199af8915196f622",
+              "accepted_sha256": "122b8769080851312d7e4ffde87bdbde060aed8004e20362d28956b70004c7ec"
+            },
+            "providers/readiness.mjs": {
+              "live_sha256": "59f384db3de59bf11e7266df9c31ce5eb5cdc3033565d2aace1558b1a0e4969d",
+              "accepted_sha256": "540170e7603edf6294d0ffc26ca6e3c6cad6a1f879dcafbced062694a9eb93f9"
+            },
+            "scheduled.mjs": {
+              "live_sha256": "78daabb298f187b180e1435cc75c3bd519179aab82a0b83a9632a5f41c577090",
+              "accepted_sha256": "4b06d4cd578720a3996dc090cc396bda273c8de07e80cd7064d755af2b214abb"
+            },
+            "write.mjs": {
+              "live_sha256": "37d17af66db337953e4dc444a51717b70cdca1a1be84b32df442acd290c11cda",
+              "accepted_sha256": "24dbccf4d0b0aaf9b95b233efd66b44aadfd9eda6e7bf5d30c869cedb64c1f37"
+            }
+          },
+          "added": {
+            "db-validator-access.mjs": "dc8a29849ed5dc2558f6329fed47cd9646734f6fc943bdb8ed84bfad27128787",
+            "invoice-actions.mjs": "866032c6f972a1d02a1c3e9649b21990d91ba62b6a5a49ac4e1f1274e2045507",
+            "invoice-provider.mjs": "e6ef5db0f418d473af630a9b0f44d4d38452f7bb37eacc9d14b106a6cea7f8da",
+            "public-invoice.mjs": "e2d5ea84d231608775e34660051a5a5a6f119d331f4b3ae5fcd60e24fceff389",
+            "staging-db-readonly-diagnostic-output.mjs": "0d114d2f8ae6cc825fd5a435abdefe7f5dc35d4efc1358ba309acc9f4269c4d1",
+            "staging-db-readonly-diagnostic.mjs": "aaaece7a9a8e05e975286a7e371955db47ca656e47ff5c25344cee4d585022d3",
+            "tenant-collection-v2-uat.mjs": "7a0c9bc1a7e23647a9834ab7b5735e7323fcd16a7911624f8f45fb967bdb1d49",
+            "tenant-maintenance-payments-catalog-inspect.mjs": "c7b83fed089ceec3656de2a4976a3e084fa7305c5cd7275ee26cc17c03da78fe",
+            "workflow-delete-check.mjs": "bdfd5f3a380a81bc192959b59541a6cf98c82da5b04dd64b670cb8166e0ada9f"
+          },
+          "removed": {},
+          "dependencies": {
+            "added": {
+              "node_modules/@aws-sdk/client-kms": "3.1124.0"
+            },
+            "removed": {},
+            "changed": {}
+          },
+          "inspect": {
+            "run_id": "39587583692",
+            "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39587583692",
+            "main_commit": "4d37692d6ff105a74ea6aac2898a117fe0cf9757",
+            "live_code_sha256": "ephceZY0Zjg7Dscil3D2cdtZzzAWellnHprPDYZ/50w=",
+            "live_revision_id": "719ea3ae-4ff5-4777-a34e-ba04d69ffcec",
+            "live_member_count": 6506,
+            "candidate_zip_sha256": "b31a1d5b246952bd0b6c44d4d188416b26aa61ed55b1f341422d4ea0c6697785",
+            "candidate_member_count": 6774,
+            "same": 176,
+            "changed": 13,
+            "added": 9,
+            "removed": 0,
+            "dependency_counts": {
+              "live": 53,
+              "candidate": 54
+            },
+            "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39587414391",
+            "notes": "Every candidate hash equals sha256 of the same path in aws/functions/api at main_commit on an LF checkout; the candidate ZIP is byte-identical to the one staging run 39587414391 applied and verified. The 13 changed members are exactly the files the overlay path never carried (package.json/lock, index.mjs and the modules reconciled onto main in #1095); the 9 added members are main modules production never had (invoice, public-invoice, db-validator-access, diagnostics, uat and delete-check); the only dependency delta is @aws-sdk/client-kms 3.1124.0, needed for production Moov onboarding. The four live-only modules from #1095 are byte-identical and are not listed. Nothing is removed."
+          },
+          "applied": {
+            "run_id": "39588578627",
+            "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39588578627",
+            "main_commit": "2168be9a181050bfce8fd3af3fe632c8c73bc888",
+            "approval_phrase": "DEPLOY FULL API PACKAGE TO PRODUCTION",
+            "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39587414391",
+            "code_sha256_before": "ephceZY0Zjg7Dscil3D2cdtZzzAWellnHprPDYZ/50w=",
+            "revision_id_before": "719ea3ae-4ff5-4777-a34e-ba04d69ffcec",
+            "code_sha256_after": "sxodWyRpUr0LbETU0YhBayaqYe1VsfNBQi1OoMZpd4U=",
+            "revision_id_after": "e7d6c9ec-d4f8-4f93-bdff-fb51c3284497",
+            "candidate_zip_sha256": "b31a1d5b246952bd0b6c44d4d188416b26aa61ed55b1f341422d4ea0c6697785",
+            "applied_at": "2026-10-21T10:59:49.794Z",
+            "state": "VERIFIED",
+            "smoke": [
+              "/health",
+              "/db-health"
+            ],
+            "notes": "Pre-inspect run 39588458930 on main 2168be9a1 reported READY with 0 unlisted differences. Production and staging now run the same package bytes (CodeSha256 sxodWyRp...). A later inspect against an unchanged main reports ALREADY_ACCEPTED; the next rebuild starts from a new inspect and a new reviewed plan section."
+          }
+        }
+      ]
     }
   }
 }
