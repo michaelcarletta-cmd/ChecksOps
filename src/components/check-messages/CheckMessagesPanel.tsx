@@ -23,6 +23,7 @@ interface CheckSummary {
   amount: number | null;
   status: string | null;
   payee_line: string | null;
+  case_id: string | null;
   claims: { claim_number: string | null; policyholder_name: string | null } | null;
   check_payees: { payee_name: string | null; payee_type: string | null }[] | null;
 }
@@ -35,12 +36,16 @@ function claimFromEmbed(
   return claims;
 }
 
-function threadTitleForCheck(check: CheckSummary): string | null {
+type CaseInsuredNames = Map<string, string | null>;
+const EMPTY_CASE_NAMES: CaseInsuredNames = new Map();
+
+// Subject is the insured name, never the payee line (see messageThreadTitle).
+function threadTitleForCheck(check: CheckSummary, caseNames: CaseInsuredNames): string | null {
   const claim = claimFromEmbed(check.claims);
   return resolveMessageThreadTitle({
     payees: check.check_payees,
+    caseInsuredName: check.case_id ? caseNames.get(check.case_id) : null,
     policyholderName: claim?.policyholder_name,
-    fallbackTitle: check.payee_line,
   });
 }
 
@@ -116,12 +121,34 @@ export function CheckMessagesPanel({ onOpenCheck }: CheckMessagesPanelProps = {}
       if (checkIds.length === 0) return [] as CheckSummary[];
       const { data, error } = await supabase
         .from("check_intake_items")
-        .select("id, check_number, carrier_name, amount, status, payee_line, claims(claim_number, policyholder_name), check_payees(payee_name, payee_type)")
+        .select("id, check_number, carrier_name, amount, status, payee_line, case_id, claims(claim_number, policyholder_name), check_payees(payee_name, payee_type)")
         .in("id", checkIds);
       if (error) throw error;
       return (data ?? []) as unknown as CheckSummary[];
     },
     enabled: checkIds.length > 0,
+  });
+
+  const caseIds = Array.from(
+    new Set(checks.map((c) => c.case_id).filter((id): id is string => Boolean(id))),
+  ).sort();
+
+  // Insured name from the check's case, for checks whose payees are untyped.
+  const { data: caseNames = EMPTY_CASE_NAMES } = useQuery({
+    queryKey: ["check-messages-case-insured", caseIds.join(",")],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("check_cases")
+        .select("id, insured_name")
+        .in("id", caseIds);
+      if (error) throw error;
+      const map: CaseInsuredNames = new Map();
+      for (const row of (data ?? []) as { id: string; insured_name: string | null }[]) {
+        map.set(row.id, row.insured_name);
+      }
+      return map;
+    },
+    enabled: caseIds.length > 0,
   });
 
   const rows = useMemo(() => {
@@ -133,7 +160,7 @@ export function CheckMessagesPanel({ onOpenCheck }: CheckMessagesPanelProps = {}
         if (!search.trim()) return true;
         const q = search.toLowerCase();
         const c = r.check!;
-        const threadTitle = threadTitleForCheck(c) ?? "";
+        const threadTitle = threadTitleForCheck(c, caseNames) ?? "";
         const claim = claimFromEmbed(c.claims);
         return (
           (c.check_number ?? "").toLowerCase().includes(q) ||
@@ -154,7 +181,7 @@ export function CheckMessagesPanel({ onOpenCheck }: CheckMessagesPanelProps = {}
         const bt = b.last_message_at ? new Date(b.last_message_at).getTime() : 0;
         return bt - at;
       });
-  }, [mergedRows, checks, search]);
+  }, [mergedRows, checks, caseNames, search]);
 
   const isLoading = unreadLoading || sharedLoading || checksLoading;
   const selected = rows.find((r) => r.check_id === selectedId) ?? rows[0];
@@ -171,7 +198,7 @@ export function CheckMessagesPanel({ onOpenCheck }: CheckMessagesPanelProps = {}
           <div className="relative mt-2">
             <Search className="h-3.5 w-3.5 absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <Input
-              placeholder="Search check #, payee, carrier, claim…"
+              placeholder="Search check #, insured, payee, carrier, claim…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="h-8 pl-7 text-xs"
@@ -191,7 +218,7 @@ export function CheckMessagesPanel({ onOpenCheck }: CheckMessagesPanelProps = {}
             rows.map((r) => {
               const c = r.check!;
               const isActive = (selected?.check_id ?? "") === r.check_id;
-              const threadTitle = displayCaseOrNull(threadTitleForCheck(c));
+              const threadTitle = displayCaseOrNull(threadTitleForCheck(c, caseNames));
               const claimNumber = claimFromEmbed(c.claims)?.claim_number;
               return (
                 <button
@@ -257,7 +284,7 @@ export function CheckMessagesPanel({ onOpenCheck }: CheckMessagesPanelProps = {}
                 {selected?.check
                   ? [
                       `Check #${selected.check.check_number || "—"}`,
-                      displayCaseOrNull(threadTitleForCheck(selected.check)),
+                      displayCaseOrNull(threadTitleForCheck(selected.check, caseNames)),
                     ].filter(Boolean).join(" • ")
                   : "Select a conversation"}
               </CardTitle>
