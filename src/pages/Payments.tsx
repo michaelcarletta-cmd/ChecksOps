@@ -52,8 +52,19 @@ const SectionCard = ({
 );
 
 const Payments = () => {
-  const [searchParams] = useSearchParams();
-  const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "ledger");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [activeTab, setActiveTabState] = useState(searchParams.get("tab") || "ledger");
+  // Write the tab to ?tab= so a refresh stays on it (the URL was read on load
+  // but never updated, so every refresh fell back to Ledger).
+  const setActiveTab = (tab: string) => {
+    setActiveTabState(tab);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (tab === "ledger") next.delete("tab");
+      else next.set("tab", tab);
+      return next;
+    }, { replace: true });
+  };
 
   // Owner policy: every member of the tenant is a user with the same rights
   // (payroll and tax included). Platform roles give no shortcut.
@@ -62,9 +73,7 @@ const Payments = () => {
 
   useEffect(() => {
     const tab = searchParams.get("tab");
-    if (tab) {
-      setActiveTab(tab);
-    }
+    setActiveTabState(tab || "ledger");
   }, [searchParams]);
 
   return (

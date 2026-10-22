@@ -18,6 +18,7 @@ import { signInWithAwsPasskey } from "@/lib/awsPasskeys";
 import { passkeysSupported, sendMagicLink, signInWithPasskey } from "@/lib/passkeys";
 import { startAwsEmailOtp, verifyAwsEmailOtp } from "@/lib/awsPasswordless";
 import { TenantLogo } from "@/components/branding/TenantLogo";
+import { postLoginPath } from "@/lib/loginReturnPath";
 
 /**
  * Tenant-branded sign-in. Passwords are retired platform-wide: users sign in
@@ -40,10 +41,12 @@ export function WhiteLabelLogin() {
     ? awsHttpsPasskeys && passkeysSupported()
     : passkeysSupported();
 
+  // Carries ?next= (the page the user was on before sign-in) through the
+  // full-page reload after a passkey / email-code sign-in.
   const loginReturnPath = () => {
-    if (isCheckOpsHost() && tenant?.slug) return `/${tenant.slug}/login`;
-    if (location.pathname.startsWith(`/wl/${tenant?.slug}`)) return `/wl/${tenant.slug}/login`;
-    return location.pathname || "/login";
+    if (isCheckOpsHost() && tenant?.slug) return `/${tenant.slug}/login${location.search}`;
+    if (location.pathname.startsWith(`/wl/${tenant?.slug}`)) return `/wl/${tenant.slug}/login${location.search}`;
+    return `${location.pathname || "/login"}${location.search}`;
   };
 
   const resolveAndRedirect = async (userId: string, emailHint?: string | null) => {
@@ -74,7 +77,7 @@ export function WhiteLabelLogin() {
       : location.pathname.startsWith(`/wl/${tenant.slug}`)
         ? `/wl/${tenant.slug}`
         : "";
-    navigate(basePath ? `${basePath}/checks` : "/checks", { replace: true });
+    navigate(postLoginPath(basePath, location.search), { replace: true });
   };
 
   const handlePasskey = async () => {

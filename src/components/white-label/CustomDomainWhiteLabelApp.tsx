@@ -13,9 +13,11 @@ import { Routes, Route, Navigate, useLocation, Link } from "react-router-dom";
 import { ArrowLeft, Home } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { isMasterMerchant } from "@/lib/masterMerchant";
+import { loginPathWithNext, postLoginPath } from "@/lib/loginReturnPath";
 
 const Payments = lazy(() => import("@/pages/Payments"));
 const CashJobs = lazy(() => import("@/pages/CashJobs"));
+const WalletOps = lazy(() => import("@/pages/WalletOps"));
 
 function SubPageHeader() {
   return (
@@ -104,9 +106,11 @@ function CustomDomainRoutes() {
     );
   }
 
+  // Keep the page (path + ?tab=...) through a signed-out / expired-session
+  // redirect so sign-in returns there instead of to /checks.
   const requireAuth = (node: React.ReactNode) =>
     !user
-      ? <Navigate to="/login" replace />
+      ? <Navigate to={loginPathWithNext("", location)} replace />
       : isMember
         ? <>{node}</>
         : <Navigate to="/login" replace />;
@@ -116,10 +120,10 @@ function CustomDomainRoutes() {
       <Route
         path="/login"
         element={
-          user && isMember ? <Navigate to="/checks" replace /> : <WhiteLabelLogin />
+          user && isMember ? <Navigate to={postLoginPath("", location.search)} replace /> : <WhiteLabelLogin />
         }
       />
-      <Route path="/checks" element={requireAuth(<WhiteLabelCheckCenter />)} />
+      <Route path="/checks" element={requireAuth(<WhiteLabelCheckCenter basePath="" />)} />
       <Route
         path="/payments"
         element={requireAuth(
@@ -138,6 +142,19 @@ function CustomDomainRoutes() {
             <SubPageHeader />
             <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">Loading…</div>}>
               <CashJobs />
+            </Suspense>
+          </div>
+        )}
+      />
+      {/* The Check Center header links to WalletOps; without this route a
+          custom-domain refresh on /wallet-ops fell through to /checks. */}
+      <Route
+        path="/wallet-ops"
+        element={requireAuth(
+          <div className="min-h-screen bg-background p-2 sm:p-3 md:p-6 max-w-full overflow-x-hidden">
+            <SubPageHeader />
+            <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">Loading…</div>}>
+              <WalletOps />
             </Suspense>
           </div>
         )}
