@@ -2392,6 +2392,25 @@ export const AUTHORIZED_SQL109_MOOV_TRANSFER_WEBHOOK_STATUS = Object.freeze({
   function_identities: Object.freeze(['public.aws_moov_webhook_apply_transfer_status(text, text, text, text, text, text, text, text, text, text, timestamp with time zone)']),
 });
 
+// Homeowner pre-claim links 2026-10-22 staging pin: SQL 110 (DELETE on homeowner_ledger_tokens
+// for checksops, under aws_write_homeowner_ledger_tokens; and the SECURITY DEFINER public
+// homeowner upload writer public.aws_public_homeowner_ledger_upload, EXECUTE checksops only).
+// No predecessor. Pending until a reviewed pin change records a staging read-live.
+export const AUTHORIZED_SQL110_HOMEOWNER_PRECLAIM_LINKS = Object.freeze({
+  key: 'sql110',
+  filename: 'aws/workflows/sql/110_homeowner_preclaim_links.sql',
+  migration_id: '110_homeowner_preclaim_links',
+  // The commit that last authored the file bytes.
+  commit: '810dde9b754cc752922ce9169b4f0fa893036ba4',
+  source_sha256: '17055748984218ae646ea0de138626318a6c4de4c1c575be1e23fc8dd0422db4',
+  authorization: 'pending',
+  execute: false,
+  expected_live_definition_sha256: null,
+  // Code-derived: releaseIntendedHash('sql110', file bytes) (release-sql-state.mjs); re-derived by the tests.
+  intended_replacement_sha256: 'ae039876920fde43cba6c3d01ed9443f2d129ad11d23825ec3c120256fc21ac3',
+  function_identities: Object.freeze(['public.aws_public_homeowner_ledger_upload(text, text, text, text, numeric, text)']),
+});
+
 export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql90: AUTHORIZED_SQL90_USERS_ONLY_TENANT_ROLES,
   sql91: AUTHORIZED_SQL91_MOOV_ONBOARDING,
@@ -2412,6 +2431,7 @@ export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql106: AUTHORIZED_SQL106_FINANCIAL_STEPUP_LOG_APPEND_ONLY,
   sql108: AUTHORIZED_SQL108_CHECK_INTAKE_ITEMS_FUNDS_TYPE_VALUES,
   sql109: AUTHORIZED_SQL109_MOOV_TRANSFER_WEBHOOK_STATUS,
+  sql110: AUTHORIZED_SQL110_HOMEOWNER_PRECLAIM_LINKS,
 });
 
 // The fee collection pin under its earlier map name (the same object as the release map's sql98).
@@ -2427,7 +2447,7 @@ export function isSql30TenantDocumentsDocType(input = {}) {
   return pinIdentifiersMatch(input, AUTHORIZED_SQL30_TENANT_DOCUMENTS_DOC_TYPE);
 }
 
-/** The release 2026-10-17 migration key (sql90 ... sql106, sql108, sql109) an input names, or null. */
+/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql110) an input names, or null. */
 export function releaseSqlMigrationKey(input = {}) {
   return Object.keys(RELEASE_2026_10_17_PENDING_SQL_PINS)
     .find((key) => pinIdentifiersMatch(input, RELEASE_2026_10_17_PENDING_SQL_PINS[key])) || null;
