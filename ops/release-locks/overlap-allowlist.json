@@ -2536,6 +2536,13 @@
       "reason": "PR #1154 (Check Alt scheduled status check, 2026-10-22) adds an EventBridge Scheduler direct-invocation path to scheduled.mjs for the read-only checkalt-poll-deposits job only (isSchedulerDirectInvocation); the Class A and financial job routing is unchanged. Open PR #547 (Tenant Collection v2) changes other parts of the same file. Whichever PR merges second must rebase onto main. It does not merge, edit or deploy PR #547.",
       "expires": "2026-12-31",
       "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 1165,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "PR #1169 records the live production-spa lock (index-B8Oknfyx) and the production-release tree_hash; PR #1165 edits the partner-sharing tree_hash in the same file. This exception is limited to that single file; whichever merges second must rebase and recompute hashes.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
     }
   ]
 }
