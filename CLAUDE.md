@@ -72,6 +72,33 @@ when the task matches. Use them instead of improvising:
 - Keep each PR to one step, and say in its body what it does not do (nothing applied, no
   release-lock change).
 
+## Windows desktop on the Ubuntu (WSL) copy
+
+If the working directory starts with `\\wsl.localhost\` or `\\wsl$\`, Claude Desktop on
+Windows has opened the copy that lives inside WSL. The files are Linux files; your shell,
+git and node are Windows ones. Then:
+
+- Read and edit files directly through that path.
+- Run every shell command inside the distribution, never Windows git, node, npm or bun on
+  this folder. Windows git can rewrite line endings (every pinned hash then differs), and
+  Windows node fails hundreds of tests on backslash paths. Take the distribution and the
+  Linux path from the working directory (`\\wsl.localhost\Ubuntu\home\carle\ChecksOps` is
+  `Ubuntu` and `/home/carle/ChecksOps`):
+
+  ```bash
+  wsl -d Ubuntu -- bash -ic 'cd /home/carle/ChecksOps && <command>'
+  ```
+
+  `bash -ic` loads `~/.bashrc`, which puts node (nvm), bun and claude on PATH; `bash -lc`
+  does not. Quote the inner command in single quotes and use double quotes inside it. Some
+  `wsl` versions have no `--cd`, so `cd` goes inside the command.
+- `sudo` needs the owner's password: ask the owner to run `apt` installs in the Ubuntu
+  terminal.
+- Inside the distribution the full test suite is a real signal, as in CI, apart from the
+  `*-pg` tests when PostgreSQL 16 is not installed there. Run on Windows paths, it is not.
+- The guard hook checks wrapped commands too: a push to main or a deploy inside
+  `bash -ic '...'` is refused like an unwrapped one.
+
 Before pushing, run what CI runs (`/verify`):
 `node scripts/validate-release-locks.mjs`, `node scripts/hash-report.mjs` and
 `node --experimental-strip-types --test aws/tests/*.test.mjs`

@@ -40,16 +40,22 @@ const DIRECT_DEPLOY = [
 // and $(...) or backticks inside double quotes.
 const QUOTED_RE = /\\.|'[^']*'|"(?:\\.|[^"\\])*"/g;
 const RUNS_NEXT_QUOTE_RE = /(\b(?:ba|z|da|k)?sh\b[^;&|\n]*\s-[a-zA-Z]*c[a-zA-Z]*|\beval)\s*$/;
-function deployTexts(command, depth = 0) {
+// keepWords: a quoted string without whitespace (`"main"`, `'HEAD:main'`) is kept as the word
+// it is, because the shell passes it as one argument; a quoted phrase is still a mention.
+function deployTexts(command, depth = 0, { keepWords = false } = {}) {
   // A backslash-escaped character outside quotes is kept: it does not open a quote.
-  const texts = [command.replace(QUOTED_RE, (q) => (q[0] === '\\' ? q : q[0] + q[0]))];
+  const texts = [command.replace(QUOTED_RE, (q) => {
+    if (q[0] === '\\') return q;
+    const inner = q.slice(1, -1);
+    return keepWords && inner && !/\s/.test(inner) ? inner : q[0] + q[0];
+  })];
   if (depth > 3) return texts;
   for (const m of command.matchAll(QUOTED_RE)) {
     if (m[0][0] === '\\') continue;
     const inner = m[0].slice(1, -1);
-    if (RUNS_NEXT_QUOTE_RE.test(command.slice(0, m.index))) texts.push(...deployTexts(inner, depth + 1));
+    if (RUNS_NEXT_QUOTE_RE.test(command.slice(0, m.index))) texts.push(...deployTexts(inner, depth + 1, { keepWords }));
     if (m[0][0] === '"') {
-      for (const sub of inner.matchAll(/\$\(([^)]*)\)|`([^`]*)`/g)) texts.push(...deployTexts(sub[1] ?? sub[2], depth + 1));
+      for (const sub of inner.matchAll(/\$\(([^)]*)\)|`([^`]*)`/g)) texts.push(...deployTexts(sub[1] ?? sub[2], depth + 1, { keepWords }));
     }
   }
   return texts;
@@ -168,7 +174,9 @@ function checkBash(command) {
     if (texts.some((text) => re.test(text))) block(`direct deploy refused (${what}). Use scripts/deployment-guard and the reviewed workflows (ops/), never deploy directly.`);
   }
   if (remotePsql(command)) block('direct deploy refused (psql against a remote database). Database changes go through the guarded SQL path (ops/production-sql-one-shot.md), never by hand.');
-  const push = gitPushRefusal(command);
+  // The push rules run over what the shell would execute, as the deploy rules do: a push
+  // wrapped in `wsl ... bash -ic '...'` or `sh -c` is checked, a quoted mention is not.
+  const push = deployTexts(command, 0, { keepWords: true }).map((text) => gitPushRefusal(text)).find(Boolean);
   if (push) block(`git push refused (${push}). main changes only through a reviewed PR the owner merges with green CI; a pushed branch never gets its history rewritten. Push your own branch with \`git push -u origin <branch>\` (\`--force-with-lease\` only on a branch you created).`);
   // Shell writes to an existing migration: a redirect or tee into it, an in-place
   // editor, rm/mv/truncate on it, or cp/git checkout/git restore onto it.

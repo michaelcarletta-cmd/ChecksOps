@@ -156,6 +156,12 @@ test('pushes to main and force pushes are refused; pushing a feature branch is n
     'git -C /tmp/repo push origin main',
     'git fetch origin && git push origin main',
     'git push origin :claude/x',
+    // Wrapped the way a Windows desktop session runs commands in the Ubuntu (WSL) copy.
+    "wsl -d Ubuntu -- bash -ic 'cd ~/ChecksOps && git push origin main'",
+    "wsl -d Ubuntu -- bash -ic 'cd ~/ChecksOps && git push --force origin claude/x'",
+    'bash -c "git push origin HEAD:main"',
+    'git push origin "main"',
+    "git push origin 'HEAD:main'",
   ]) {
     // Refused whatever branch is checked out.
     for (const cwd of [feature, onMain]) {
@@ -173,6 +179,9 @@ test('pushes to main and force pushes are refused; pushing a feature branch is n
     'git push --dry-run origin claude/x',
     'git log origin/main..HEAD',
     'grep "git push origin main" docs/',
+    "git commit -m 'never git push origin main'",
+    "python3 - <<'EOF'\nlist = ['git push origin :claude/x', 'git push origin main']\nEOF",
+    "wsl -d Ubuntu -- bash -ic 'cd ~/ChecksOps && git push -u origin claude/x'",
   ]) {
     assert.equal(bash(cmd, feature).code, 0, cmd);
   }
