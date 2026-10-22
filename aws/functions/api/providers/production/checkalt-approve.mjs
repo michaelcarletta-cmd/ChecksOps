@@ -200,6 +200,7 @@ export async function handleProductionCheckAltApprove({
       spoofFieldsIgnored: spoof,
       deposit_id: row.id,
       status: refreshed.status || row.status,
+      ...(refreshed.diagnostics ? { diagnostics: refreshed.diagnostics } : {}),
     });
   }
   if (refreshed.status !== 'pending_approval') {

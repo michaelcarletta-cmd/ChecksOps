@@ -1,7 +1,12 @@
 import { TENANT_MEMBERSHIP_SQL } from '../../identity.mjs';
 import { membershipForTenant } from '../../financial-ownership.mjs';
 import { CHECKALT_STATUS_REFRESH_STATUSES, resolveCheckAltProviderStatus } from '../amounts.mjs';
-import { checkAltFetch, getDepositItemStatus } from '../parity/checkalt-client.mjs';
+import {
+  checkAltFetch,
+  extractSsoKey,
+  getDepositItemStatus,
+  getUserAccountInfo,
+} from '../parity/checkalt-client.mjs';
 import { loadProductionCheckAltConfig, loadProductionTenantAccount } from './checkalt-config.mjs';
 import { persistPollOutcome } from './checkalt-idempotency.mjs';
 import { loadProductionCheckAltSecrets } from './checkalt-secrets.mjs';
@@ -63,17 +68,201 @@ const parseJson = async (resp) => {
   return json;
 };
 
+/**
+ * The FinCapture ssoKey for a tenant depositor, resolved exactly as submit
+ * sends it on /deposit/process: the stored CheckAlt-issued sso_key when it
+ * differs from sso_user_id, else the ssoKey getUserAccountInformation lists
+ * for the deposit account, else sso_key / sso_user_id. Submit, poll and
+ * approve share it so item and history lookups name the same depositor as
+ * the deposit (CheckAlt answers history with "no records" otherwise).
+ * getUserAccountInformation is a read; poll and approve call it through the
+ * status-read fetch guard.
+ */
+export async function resolveSsoKeyWithSource({
+  cfg,
+  credentials,
+  acct,
+  fetchImpl = fetch,
+  jwtCache: cache = jwtCache,
+}) {
+  if (!acct) return { ssoKey: null, source: 'none' };
+  if (acct.sso_key && acct.sso_key !== acct.sso_user_id) return { ssoKey: acct.sso_key, source: 'stored' };
+  try {
+    const info = await getUserAccountInfo({
+      cfg,
+      credentials,
+      ssoUserId: acct.sso_user_id,
+      fetchImpl,
+      jwtCache: cache,
+    });
+    const extracted = extractSsoKey(info.json, acct.deposit_account_number);
+    if (extracted) return { ssoKey: extracted, source: 'lookup' };
+  } catch {
+    /* depositor lookup is best-effort; sso_user_id is the production fallback */
+  }
+  return { ssoKey: acct.sso_key || acct.sso_user_id, source: 'fallback' };
+}
+
+export async function resolveSsoKey(args) {
+  return (await resolveSsoKeyWithSource(args)).ssoKey;
+}
+
+// One lookup per tenant account object (the scheduled reconcile and the
+// batch poll reuse one acct per tenant).
+const resolvedSsoKeys = new WeakMap();
+const resolveSsoKeyOnce = async (args) => {
+  if (!args.acct || typeof args.acct !== 'object') return resolveSsoKeyWithSource(args);
+  if (!resolvedSsoKeys.has(args.acct)) resolvedSsoKeys.set(args.acct, resolveSsoKeyWithSource(args));
+  return resolvedSsoKeys.get(args.acct);
+};
+
+const DAY_MS = 86_400_000;
+export const HISTORY_LOOKBACK_DAYS = 30;
+export const HISTORY_SUBMITTED_MARGIN_DAYS = 3;
+
+const isoDay = (ms) => new Date(ms).toISOString().slice(0, 10);
+
+/**
+ * /fincapture/deposit/history window, in the YYYY-MM-DD form the last working
+ * Supabase poll and checkalt-deposit-history sent: from a few days before the
+ * deposit was submitted (30 days back when that is unknown) to today.
+ */
+export const historyWindow = (submittedAt, now = Date.now()) => {
+  const nowMs = now instanceof Date ? now.getTime() : Number(now);
+  const submittedMs = submittedAt ? Date.parse(String(submittedAt)) : NaN;
+  const startMs = Number.isFinite(submittedMs)
+    ? Math.min(submittedMs - HISTORY_SUBMITTED_MARGIN_DAYS * DAY_MS, nowMs)
+    : nowMs - HISTORY_LOOKBACK_DAYS * DAY_MS;
+  return { startDate: isoDay(startMs), endDate: isoDay(nowMs) };
+};
+
+/** Same fields as the last working Supabase history call. */
+export const buildHistoryRequestBody = ({ cfg, acct, ssoKey, submittedAt, now = Date.now() }) => {
+  const { startDate, endDate } = historyWindow(submittedAt, now);
+  return {
+    fiKey: cfg.fi_key,
+    ...(acct?.sso_user_id ? { userId: acct.sso_user_id } : {}),
+    ...(ssoKey ? { ssoKey } : {}),
+    ...(acct?.deposit_account_number ? { accountNumber: acct.deposit_account_number } : {}),
+    startDate,
+    endDate,
+  };
+};
+
+const HISTORY_ENVELOPES = ['depositHistoryList', 'depositList', 'history', 'items', 'data', 'deposits'];
+
 /** Known history envelopes from Lovable poll + AWS parity. Do not invent item fields. */
 export const historyListOf = (json) => {
   if (Array.isArray(json)) return json;
   if (!json || typeof json !== 'object') return [];
-  if (Array.isArray(json.depositHistoryList)) return json.depositHistoryList;
-  if (Array.isArray(json.depositList)) return json.depositList;
-  if (Array.isArray(json.history)) return json.history;
-  if (Array.isArray(json.items)) return json.items;
-  if (Array.isArray(json.data)) return json.data;
-  if (Array.isArray(json.deposits)) return json.deposits;
+  for (const key of HISTORY_ENVELOPES) {
+    if (Array.isArray(json[key])) return json[key];
+  }
   return [];
+};
+
+const historyEnvelopeOf = (json) => {
+  if (Array.isArray(json)) return '[array]';
+  if (!json || typeof json !== 'object') return null;
+  return HISTORY_ENVELOPES.find((key) => Array.isArray(json[key])) || null;
+};
+
+const STATUS_FIELDS = ['status', 'statusCode', 'statusDescription', 'itemStatus'];
+
+const redactor = (secrets) => {
+  const values = secrets.filter((value) => value != null && String(value).length >= 4).map(String);
+  return (text) => values.reduce((out, value) => out.split(value).join('[redacted]'), text);
+};
+
+const scalarOf = (value, redact) => {
+  if (value === null || typeof value === 'number' || typeof value === 'boolean') return value;
+  if (typeof value === 'string') return redact(value).slice(0, 80);
+  return Array.isArray(value) ? '[array]' : `[${typeof value}]`;
+};
+
+const keysOf = (json) => {
+  if (Array.isArray(json)) return ['[array]'];
+  return json && typeof json === 'object' ? Object.keys(json).slice(0, 40) : [];
+};
+
+const statusFieldsOf = (json, redact) => {
+  const out = {};
+  if (!json || typeof json !== 'object' || Array.isArray(json)) return out;
+  for (const key of STATUS_FIELDS) {
+    if (Object.prototype.hasOwnProperty.call(json, key)) out[key] = scalarOf(json[key], redact);
+  }
+  return out;
+};
+
+const countReferenceMatches = (items, reference) => (items || []).filter((item) => {
+  const value = item?.referenceNumber ?? item?.reference;
+  return value != null && String(value) === String(reference);
+}).length;
+
+/**
+ * Non-secret evidence for a reconciliation_required answer: HTTP statuses,
+ * response key names and status-like values only. Never tokens, fiKey,
+ * ssoKey, userId or account numbers (any of those values echoed inside a
+ * status string is redacted).
+ */
+export const reconcileDiagnostics = ({
+  item,
+  hist,
+  histJson,
+  reference,
+  window,
+  ssoKeySource,
+  secrets = [],
+}) => {
+  const redact = redactor(secrets);
+  const list = historyListOf(histJson);
+  const matches = countReferenceMatches(list, reference);
+  return {
+    item_http_status: Number.isInteger(item?.status) ? item.status : null,
+    item_keys: keysOf(item?.json),
+    item_status_fields: statusFieldsOf(item?.json, redact),
+    history_http_status: Number.isInteger(hist?.status) ? hist.status : null,
+    history_keys: keysOf(histJson),
+    history_status_fields: statusFieldsOf(histJson, redact),
+    history_envelope: historyEnvelopeOf(histJson),
+    history_list_length: list.length,
+    history_reference_matches: matches,
+    history_matched: matches === 1,
+    history_window: window || null,
+    sso_key_source: ssoKeySource || null,
+  };
+};
+
+/**
+ * Keep the evidence on the deposit without changing its status: merge it into
+ * last_status_payload (UPDATE on checkalt_deposits is already granted by SQL
+ * 65; persistPollOutcome writes the same column). A savepoint keeps a refused
+ * write from aborting the caller's transaction. Approve answers 409 here, so
+ * its transaction rolls back and the evidence only reaches its response.
+ */
+const persistReconcileDiagnostics = async (client, rowId, diagnostics) => {
+  if (!client || typeof client.query !== 'function' || !rowId) return false;
+  const payload = JSON.stringify({
+    last_reconcile_unresolved: { ...diagnostics, at: new Date().toISOString() },
+  });
+  try {
+    await client.query('SAVEPOINT checkalt_reconcile_diagnostics');
+  } catch {
+    return false;
+  }
+  try {
+    await client.query(
+      `UPDATE public.checkalt_deposits
+       SET last_status_payload = COALESCE(last_status_payload, '{}'::jsonb) || $1::jsonb
+       WHERE id = $2::uuid`,
+      [payload, rowId],
+    );
+    await client.query('RELEASE SAVEPOINT checkalt_reconcile_diagnostics');
+    return true;
+  } catch {
+    try { await client.query('ROLLBACK TO SAVEPOINT checkalt_reconcile_diagnostics'); } catch { /* ignore */ }
+    return false;
+  }
 };
 
 export const matchHistoryByReference = (items, reference) => {
@@ -102,6 +291,8 @@ export const reconciliationRequired = (row, extra = {}) => ({
   uncertain: true,
   message: extra.message || 'CheckAlt history cannot be tied to this check without checkalt_reference. Amount is not unique. Do not POST again.',
   applicationUserId: extra.applicationUserId || null,
+  ...(extra.diagnostics ? { diagnostics: extra.diagnostics } : {}),
+  ...(extra.diagnostics ? { diagnosticsPersisted: extra.diagnosticsPersisted === true } : {}),
 });
 
 export async function loadExistingProductionDeposit(client, { depositId, reference, tenantId }) {
@@ -139,8 +330,8 @@ export async function reconcileProductionCheckAltDeposit({
   credentials,
   acct,
   fetchImpl = fetch,
+  now = Date.now(),
 } = {}) {
-  const ssoKey = acct?.sso_key || acct?.sso_user_id || null;
   const reference = row.checkalt_reference;
   if (!reference) {
     return reconciliationRequired(row, {
@@ -152,7 +343,23 @@ export async function reconcileProductionCheckAltDeposit({
     });
   }
 
-  const safeFetch = statusReadOnlyFetch(fetchImpl);
+  const guardedFetch = statusReadOnlyFetch(fetchImpl);
+  // HTTP status per path, for diagnostics only (getDepositItemStatus does not return it).
+  const httpStatusByPath = {};
+  const safeFetch = async (url, options) => {
+    const resp = await guardedFetch(url, options);
+    const text = String(url || '');
+    const at = text.indexOf('/fincapture/');
+    if (at >= 0) httpStatusByPath[text.slice(at).split('?')[0]] = resp?.status;
+    return resp;
+  };
+  const { ssoKey, source: ssoKeySource } = await resolveSsoKeyOnce({
+    cfg,
+    credentials,
+    acct,
+    fetchImpl: safeFetch,
+    jwtCache,
+  });
   const item = await getDepositItemStatus({
     cfg,
     credentials,
@@ -164,23 +371,57 @@ export async function reconcileProductionCheckAltDeposit({
   let json = item.json;
   let status = resolvePollStatus(json);
   if (!status) {
+    const historyBody = buildHistoryRequestBody({
+      cfg,
+      acct,
+      ssoKey,
+      submittedAt: row.submitted_at,
+      now,
+    });
     const hist = await checkAltFetch({
       cfg,
       credentials,
       path: '/fincapture/deposit/history',
-      body: { fiKey: cfg.fi_key, ...(ssoKey ? { ssoKey } : {}) },
+      body: historyBody,
       fetchImpl: safeFetch,
       jwtCache,
     });
     const histJson = await parseJson(hist);
     const match = matchHistoryByReference(historyListOf(histJson), reference);
     if (!match) {
+      const diagnostics = reconcileDiagnostics({
+        item: { status: httpStatusByPath['/fincapture/deposit/item'], json: item.json },
+        hist,
+        histJson,
+        reference,
+        window: { startDate: historyBody.startDate, endDate: historyBody.endDate },
+        ssoKeySource,
+        secrets: [
+          cfg?.fi_key,
+          ssoKey,
+          acct?.sso_key,
+          acct?.sso_user_id,
+          acct?.deposit_account_number,
+          credentials?.username,
+          credentials?.password,
+        ],
+      });
+      const diagnosticsPersisted = await persistReconcileDiagnostics(client, row.id, diagnostics);
+      console.warn(JSON.stringify({
+        service: 'checksops-api',
+        event: 'checkalt_reconcile_unresolved',
+        deposit_id: row.id,
+        diagnostics_persisted: diagnosticsPersisted,
+        ...diagnostics,
+      }));
       return reconciliationRequired(row, {
         liveProviderCalled: true,
         productionExecution: true,
         productionRecordsMutated: false,
         applicationUserId: mapping?.application_user_id,
         message: 'CheckAlt history has no unique referenceNumber match for this deposit. Amount is not a transaction id. Manual reconciliation required. A second process POST was not sent.',
+        diagnostics,
+        diagnosticsPersisted,
       });
     }
     json = { ...json, history: match };
@@ -303,13 +544,18 @@ export async function handleProductionCheckAltPoll({
     let updated = 0;
     let errors = 0;
     const deposits = [];
+    const acctCache = new Map();
     for (const row of rows) {
       const authz = await authorizePollRow({ client, mapping, memberships, row });
       if (!authz.ok) {
         errors += 1;
         continue;
       }
-      const acct = await loadProductionTenantAccount(client, row.tenant_id);
+      let acct = acctCache.get(row.tenant_id);
+      if (!acct) {
+        acct = await loadProductionTenantAccount(client, row.tenant_id);
+        acctCache.set(row.tenant_id, acct);
+      }
       const result = await reconcileProductionCheckAltDeposit({
         client,
         mapping,

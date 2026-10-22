@@ -1,0 +1,29 @@
+{
+  "workstream_id": "checkalt-approve-reconcile-history",
+  "authorization": "Pending owner review (2026-10-22). Planning only: nothing is live or verified. Each production apply still needs its own owner approval and staging acceptance.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Production 2026-10-22 10:08:33Z: approve on a pending Check Alt deposit (check #00001831, reference 127491751, $5.00, submitted through AWS at 01:53:56Z) answered reconciliation_required and approve was not sent. reconcileProductionCheckAltDeposit (checkalt-poll.mjs) found no status on /fincapture/deposit/item (the item endpoint can answer ruleDetails with no status, supabase/migrations/20260702140028) and fell back to /fincapture/deposit/history with only { fiKey, ssoKey }, using acct.sso_key || acct.sso_user_id with no lookup, and matched nothing. The accepted bytes send history the fields the last working Supabase calls sent (5d52ee38f checkalt-poll-status, f88586b0c checkalt-deposit-history): fiKey, userId (sso_user_id), ssoKey, accountNumber (checkalt_tenant_accounts.deposit_account_number), startDate and endDate as YYYY-MM-DD (from three days before submitted_at, or 30 days back, to today); resolve the ssoKey with the same resolveSsoKey submit uses (moved from checkalt-submit.mjs into checkalt-poll.mjs, which submit already imports); and return (and, on poll, merge into last_status_payload.last_reconcile_unresolved without a status change) non-secret diagnostics when reconciliation is still required. checkalt-status-read.mjs adds /fincapture/useraccount/getUserAccountInformation (a read) to the status-read allow-list; process, approve, register and every other path stay refused. Order: checkalt-status-read.mjs, then checkalt-poll.mjs (exports resolveSsoKey), then checkalt-submit.mjs (imports resolveSsoKey from checkalt-poll.mjs, so it must not go live before it), then checkalt-approve.mjs (returns the diagnostics). live_sha256 for all four is main's bytes at 008af40e2, live since the third full-package rebuild (production run 39669873076, VERIFIED 2026-10-21T20:24Z, CodeSha256 pNCewAaF...); no later production overlay touched them. checkalt-submit.mjs and checkalt-approve.mjs were release 2026-10-17 members (aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json, which stays as evidence); checkalt-status-read.mjs and checkalt-poll.mjs were not overlay plan members. A read-only production overlay inspect must confirm each live hash before any apply. No SQL prerequisite: UPDATE on checkalt_deposits is granted by SQL 65.",
+  "members": {
+    "providers/production/checkalt-status-read.mjs": {
+      "live_sha256": "10ac13a3c6c58df43d1a1dafbd8e0415c487125b2132b1cbc1caf9c3a0d18dee",
+      "accepted_sha256": "462e6011753c8554179f518af82ccd581bc3cd41316f67c9dba84903d66d254e",
+      "operation": "replace"
+    },
+    "providers/production/checkalt-poll.mjs": {
+      "live_sha256": "cd083282e328caadb1b38598aa5f15ae7eda41708978afd06094ff62a24e4e56",
+      "accepted_sha256": "b7a2a7f9b33913625d454630939e1df3c2fe44aebbaca77f944f22e6a95af51e",
+      "operation": "replace"
+    },
+    "providers/production/checkalt-submit.mjs": {
+      "live_sha256": "68b0b9a8406ac1ea6ee39641eefc4fc3522d2ca6f4de0f5d8f2b46f1bff67f7d",
+      "accepted_sha256": "955b27e43eea1a1aea38fc888e9e8152a248306458fd70a6d02c2cda4232e2ba",
+      "operation": "replace"
+    },
+    "providers/production/checkalt-approve.mjs": {
+      "live_sha256": "d2aec271955373ec24cace5bf3b08116b26511aed30810499e5e15d439f9b161",
+      "accepted_sha256": "f8805b18076619fc52c2fb210fe200407a9d6891307262047f7c9b3742d6ce5b",
+      "operation": "replace"
+    }
+  }
+}

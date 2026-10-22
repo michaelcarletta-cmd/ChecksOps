@@ -51,6 +51,8 @@ on:
           - write-allowlist.mjs
           - admin-reset-totp.mjs
           - auth-financial-totp.mjs
+          - providers/production/checkalt-status-read.mjs
+          - providers/production/checkalt-poll.mjs
           - providers/production/checkalt-submit.mjs
           - providers/production/checkalt-approve.mjs
           - providers/production/checkalt-authz.mjs

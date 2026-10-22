@@ -2,7 +2,7 @@ import { formatCheckAltUserAmount, rejectUntrustedAmountFields, validateProvider
 import { ignoredOwnershipSpoof, verifyOwnershipChain } from '../../financial-ownership.mjs';
 import { TENANT_MEMBERSHIP_SQL } from '../../identity.mjs';
 import { isProviderNetworkError } from '../../sandbox-credentials.mjs';
-import { buildDepositProcessBody, checkAltFetch, extractSsoKey, getCheckAltJwt, getUserAccountInfo } from '../parity/checkalt-client.mjs';
+import { buildDepositProcessBody, checkAltFetch, getCheckAltJwt } from '../parity/checkalt-client.mjs';
 import { authorizeCheckAltProduction } from './checkalt-authz.mjs';
 import { loadProductionCheckAltConfig, loadProductionTenantAccount } from './checkalt-config.mjs';
 import {
@@ -27,7 +27,7 @@ import {
 } from './checkalt-eligibility.mjs';
 import { loadProductionDepositImages } from './checkalt-images.mjs';
 import { loadProductionCheckAltSecrets } from './checkalt-secrets.mjs';
-import { reconcileProductionCheckAltDeposit } from './checkalt-poll.mjs';
+import { reconcileProductionCheckAltDeposit, resolveSsoKey } from './checkalt-poll.mjs';
 
 const jwtCache = { token: null, expiresAt: null };
 
@@ -397,24 +397,6 @@ export const autoApproveDeadline = ({ startedAt, now = Date.now, deps = {} } = {
   return deadline;
 };
 
-async function resolveSsoKey({ cfg, credentials, acct, fetchImpl }) {
-  if (acct.sso_key && acct.sso_key !== acct.sso_user_id) return acct.sso_key;
-  try {
-    const info = await getUserAccountInfo({
-      cfg,
-      credentials,
-      ssoUserId: acct.sso_user_id,
-      fetchImpl,
-      jwtCache,
-    });
-    const extracted = extractSsoKey(info.json, acct.deposit_account_number);
-    if (extracted) return extracted;
-  } catch {
-    /* depositor lookup is best-effort; sso_user_id is the production fallback */
-  }
-  return acct.sso_key || acct.sso_user_id;
-}
-
 export async function handleProductionCheckAltSubmit({
   client,
   mapping,
@@ -695,6 +677,7 @@ export async function handleProductionCheckAltSubmit({
       credentials: loadedCfg.credentials,
       acct,
       fetchImpl,
+      jwtCache,
     });
     const processBody = buildDepositProcessBody({
       fiKey: loadedCfg.cfg.fi_key,
