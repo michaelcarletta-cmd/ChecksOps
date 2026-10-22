@@ -16,9 +16,38 @@
 - *No discount follows a code.* The billing engine subtracts only `tenants.referral_discount_cents`,
   which the platform owner types by hand (SQL 96).
 
-**Owner decision (2026-10-22).** $5.00 off the referrer's monthly maintenance plan for each
-referral, up to $25.00 off a month; the referrer sees the count and amount, the referred tenant
-sees whose code it used.
+**Owner decisions (2026-10-22).**
+
+- When another company uses a tenant's referral code, that tenant (the referrer) gets $5.00 off
+  its monthly maintenance plan for that referral, every month.
+- At most $25.00 off a month, however many referrals (5 referrals reach the cap).
+- A referral keeps counting whatever the referred company does later (cancelled or inactive).
+- The referral credit is **added** to the discount the platform owner sets by hand in Tenant
+  Management (`tenants.referral_discount_cents`).
+- The total discount never exceeds the monthly maintenance rate: maintenance never goes below
+  $0.00 and check fees are never reduced.
+- Any member of the referred company can enter the code, once per company.
+- The referrer sees the count and the amount; the referred company sees whose code it used.
+
+**The calculation, per tenant per month.**
+
+```
+referrals      = distinct companies that used this tenant's code (status 'active')
+referral_credit = min(2500, 500 * referrals)                                   -- cents
+discount        = min(referral_credit + referral_discount_cents, monthly_rate_cents)
+maintenance     = monthly_rate_cents - discount                                -- never below 0
+```
+
+| referrals | hand-set | rate | referral credit | discount | maintenance charged |
+|---|---|---|---|---|---|
+| 0 | $0 | $99 | $0 | $0 | $99 |
+| 1 | $0 | $99 | $5 | $5 | $94 |
+| 3 | $0 | $99 | $15 | $15 | $84 |
+| 5 | $0 | $99 | $25 | $25 | $74 |
+| 8 | $0 | $99 | $25 (cap) | $25 | $74 |
+| 2 | $10 | $99 | $10 | $20 | $79 |
+| 5 | $10 | $99 | $25 | $35 | $64 |
+| 5 | $0 | $20 | $25 | $20 (rate) | $0 |
 
 **What the functions do.**
 
@@ -28,20 +57,21 @@ sees whose code it used.
   row alone, so setting the event to anything but `active` removes the credit).
 - `aws_tenant_referral_credit_cents(uuid)`: `least(2500, 500 * count)`. An identity that cannot
   access the tenant is refused (42501); a session with no app identity (billing scheduler) may
-  read it. The billing engine (`tenant-billing-engine.mjs`) uses
-  `greatest(tenants.referral_discount_cents, credit)` as the maintenance discount, capped at the
-  monthly rate.
-- `aws_apply_referral_code(uuid, text)`: the caller must be a `tenant_users` owner or admin of
-  the tenant. Code trimmed and upper-cased, 3 to 40 of `A-Z 0-9 _ -`. Locks the redeeming tenant
+  read it. The billing engine (`tenant-billing-engine.mjs`, a separate Lambda change) uses
+  `least(tenants.referral_discount_cents + credit, tenants.monthly_rate_cents)` as the
+  maintenance discount.
+- `aws_apply_referral_code(uuid, text)`: the caller must be a member of the tenant (any
+  `tenant_users` row; the role is not checked, as everywhere since SQL 90). Code trimmed and
+  upper-cased, 3 to 40 of `A-Z 0-9 _ -`. Locks the redeeming tenant
   row `FOR UPDATE`; refuses `already_redeemed`, `invalid_code` (unknown, ambiguous or a system
   tenant), `own_code`, `mutual_referral`; inserts one `referral_events` row
   (`discount_applied_cents` 500, `status` `active`). Changes no `tenants` row. Returns
   `{success, error?, message, referrer_name, ...}`.
 - `aws_tenant_referral_summary(uuid)`: for an identity that can access the tenant: its code, the
   referrals it made (names and dates), active count, earned credit, hand-set discount, applied
-  discount and who referred it.
+  discount (`least(credit + hand-set, rate)`) and who referred it.
 - `aws_platform_owner_referral_overview()`: the platform owner only: the same figures for every
-  non-system tenant.
+  non-system tenant (no Founding, removed from Tenant Management in #1171).
 
 **Status:** pending. Both pins are `execute: false`, `authorization: "pending"`, with no recorded
 pre-state; nothing is applied by this change. Neither staging nor production has been inspected.

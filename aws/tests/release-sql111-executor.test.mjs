@@ -181,7 +181,12 @@ test('reviewed file and spec: one guarded block, five SECURITY DEFINER functions
   assert.deepEqual(writes, ['aws_apply_referral_code: INSERT INTO public.referral_events']);
   const redeem = defs.aws_apply_referral_code.prosrc;
   assert.match(redeem, /FROM public\.tenants WHERE id = _tenant_id FOR UPDATE;/);
-  assert.match(redeem, /lower\(tu\.role::text\) IN \('owner', 'admin'\)/);
+  // Any member of the tenant may redeem; the role is not checked (as everywhere since SQL 90).
+  assert.match(redeem, /WHERE tu\.tenant_id = _tenant_id AND tu\.user_id = v_uid\) THEN/);
+  assert.doesNotMatch(redeem, /tu\.role/);
+  // The discount is the referral credit plus the hand-set discount, at most the monthly rate.
+  assert.match(defs.aws_tenant_referral_summary.prosrc, /'applied_discount_cents', least\(v_earned \+ v_manual, v_rate\)/);
+  assert.doesNotMatch(defs.aws_platform_owner_referral_overview.prosrc, /founding/i);
   assert.match(redeem, /v_ref_id, _tenant_id, v_uid, v_code, 500, 'active'/);
   assert.match(defs.aws_tenant_referral_credit_cents.prosrc, /least\(2500, 500 \* public\.aws_tenant_referral_active_count\(_tenant_id\)\)/);
   const code = TEXT.replace(/--[^\n]*/g, '');
