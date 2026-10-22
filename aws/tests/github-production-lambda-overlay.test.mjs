@@ -960,7 +960,16 @@ test('live reconciliation 2026-10-19: ten members expect the bytes inspect run 3
   const readJson = (rel) => JSON.parse(fs.readFileSync(path.join(ROOT, rel), 'utf8'));
   assert.match(PLAN.notes, /inspect run 39179890402/);
   assert.equal(Object.keys(RECONCILED).length, 10);
+  // homeowner.mjs moved on: its c51ea27a release bytes went live (inspect run 39828391789,
+  // ALREADY_ACCEPTED) and the plan row now replaces them for the pre-claim upload (next tests).
+  const MOVED_ON = { 'homeowner.mjs': 'c51ea27a37a72b18aed7881ae349212257b790e6ff400cbe675949574504a80c' };
   for (const [member, [before, live, manifestRel, appliedRel]] of Object.entries(RECONCILED)) {
+    if (MOVED_ON[member]) {
+      assert.equal(readJson(manifestRel).members[member].live_sha256, live, member);
+      assert.equal(readJson(manifestRel).members[member].accepted_sha256, MOVED_ON[member], member);
+      assert.equal(PLAN.members[member].expected_live_sha256, MOVED_ON[member], member);
+      continue;
+    }
     const row = PLAN.members[member];
     assert.equal(row.operation, 'replace', member);
     assert.equal(row.expected_live_sha256, live, member);
@@ -1185,4 +1194,26 @@ test('Check Alt Poll Now time budget: poll REPLACEs the scheduled-reconcile byte
   for (const name of ['refreshDepositRow', 'loadDepositsForStatusRefresh', 'bindStatusRefreshGucs', 'batchDepositSummary']) {
     assert.match(src, new RegExp(`export (async )?(function|const) ${name}\\b`), name);
   }
+});
+
+test('homeowner pre-claim upload: homeowner.mjs REPLACEs the live c51ea27a bytes (no SQL hold; degrades until SQL 110)', async () => {
+  const MEMBER = 'homeowner.mjs';
+  const MANIFEST_REL = 'aws/tests/fixtures/production-homeowner-preclaim-upload-manifest-2026-10-22.json';
+  // Live since the release lock pin apply (inspect run 39828391789: ALREADY_ACCEPTED, live c51ea27a).
+  const LIVE = 'c51ea27a37a72b18aed7881ae349212257b790e6ff400cbe675949574504a80c';
+  const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, MANIFEST_REL), 'utf8'));
+  assert.equal(manifest.workstream_id, 'homeowner-preclaim-upload');
+  assert.equal(manifest.deploy_authorized, false);
+  assert.match(manifest.notes, /upload_unavailable/);
+  const row = PLAN.members[MEMBER];
+  assert.equal(row.operation, 'replace');
+  assert.equal(row.manifest, MANIFEST_REL);
+  assert.equal(row.sql_before, null);
+  assert.equal(row.expected_live_sha256, LIVE);
+  assert.equal(row.accepted_sha256, sha(`aws/functions/api/${MEMBER}`));
+  assert.notEqual(row.accepted_sha256, LIVE);
+  assert.deepEqual(manifest.members[MEMBER], { live_sha256: LIVE, accepted_sha256: row.accepted_sha256, operation: 'replace' });
+  const ready = await run({ ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER }, { root: ROOT, inspectLive: liveFor(MEMBER) });
+  assert.equal(ready.state, 'READY');
+  assert.equal(ready.mutation, false);
 });
