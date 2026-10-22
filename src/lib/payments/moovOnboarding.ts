@@ -400,7 +400,7 @@ export async function uploadOnboardingDocument(args: {
   } catch (e) {
     throw new DocumentUploadError(
       "finalize",
-      safeErrorMessage(e, "Uploaded, but sending to Moov failed. Retry to finish."),
+      safeErrorMessage(e, "Uploaded, but submitting it failed. Retry to finish."),
       target.document_id,
     );
   }
@@ -432,13 +432,13 @@ export function describeDocumentStatus(doc: Pick<OnboardingDocument, "moov_file_
   retryable: boolean;
 } {
   const s = (doc.moov_status ?? "").toLowerCase();
-  if (["approved", "accepted", "verified"].includes(s)) return { label: "Approved by Moov", tone: "ok", retryable: false };
-  if (["rejected", "denied"].includes(s)) return { label: "Rejected by Moov", tone: "error", retryable: false };
+  if (["approved", "accepted", "verified"].includes(s)) return { label: "Approved", tone: "ok", retryable: false };
+  if (["rejected", "denied"].includes(s)) return { label: "Rejected", tone: "error", retryable: false };
   if (["failed", "error", "sync_failed", "finalize_failed"].includes(s)) {
-    return { label: "Not sent to Moov", tone: "error", retryable: true };
+    return { label: "Not submitted", tone: "error", retryable: true };
   }
-  if (!doc.moov_file_id) return { label: "Stored, not yet sent to Moov", tone: "pending", retryable: true };
-  return { label: "Sent to Moov, in review", tone: "pending", retryable: false };
+  if (!doc.moov_file_id) return { label: "Stored, not yet submitted", tone: "pending", retryable: true };
+  return { label: "Submitted, in review", tone: "pending", retryable: false };
 }
 
 /* ------------------------------------------------------------------ */
@@ -700,11 +700,14 @@ export function moovFieldLabel(path: string): string {
   return path;
 }
 
+/** An error code as shown to users: the provider prefix is dropped (moov_rejected -> rejected). */
+const shownCode = (code: string) => String(code).replace(/^moov_/, "");
+
 /** One sentence naming what Moov refused, or null when nothing was reported. */
 export function describeRejectedFields(fields: string[] | null | undefined): string | null {
   const labels = Array.from(new Set((fields ?? []).map(moovFieldLabel)));
   if (labels.length === 0) return null;
-  return `Moov rejected: ${labels.join(", ")}. Correct ${labels.length === 1 ? "it" : "them"} and save again.`;
+  return `Not accepted: ${labels.join(", ")}. Correct ${labels.length === 1 ? "it" : "them"} and save again.`;
 }
 
 export function describeSyncStatus(args: {
@@ -716,19 +719,19 @@ export function describeSyncStatus(args: {
   if (args.saving) return { tone: "working", label: "Saving…" };
   const s = args.lastSave;
   if (s) {
-    if (!s.saved) return { tone: "error", label: `Not saved${s.error_code ? ` (${s.error_code})` : ""}` };
+    if (!s.saved) return { tone: "error", label: `Not saved${s.error_code ? ` (${shownCode(s.error_code)})` : ""}` };
     if (s.moov_synced && !s.pending) return { tone: "ok", label: "Synced" };
     if (s.error_code === "moov_rejected" && s.rejected_fields?.length) {
-      return { tone: "error", label: `Saved, but ${describeRejectedFields(s.rejected_fields)}` };
+      return { tone: "error", label: `Saved. ${describeRejectedFields(s.rejected_fields)}` };
     }
-    if (s.error_code) return { tone: "warn", label: `Saved, Moov retry pending (${s.error_code})` };
-    return { tone: "working", label: "Saved, sending to Moov…" };
+    if (s.error_code) return { tone: "warn", label: `Saved, submission retry pending (${shownCode(s.error_code)})` };
+    return { tone: "working", label: "Saved, submitting…" };
   }
   const sync = args.sync;
-  if (sync?.last_error_code) return { tone: "warn", label: `Saved, Moov retry pending (${sync.last_error_code})` };
-  if (sync?.pending) return { tone: "working", label: "Saved, sending to Moov…" };
+  if (sync?.last_error_code) return { tone: "warn", label: `Saved, submission retry pending (${shownCode(sync.last_error_code)})` };
+  if (sync?.pending) return { tone: "working", label: "Saved, submitting…" };
   if (args.accountConnected) return { tone: "ok", label: "Synced" };
-  return { tone: "idle", label: "Not yet sent to Moov" };
+  return { tone: "idle", label: "Not yet submitted" };
 }
 
 /**

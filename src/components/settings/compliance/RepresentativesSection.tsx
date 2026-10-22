@@ -69,7 +69,7 @@ export function RepresentativesSection({ representatives, onChange, readOnly }: 
             {r.ssn_resubmit_required && (
               <div role="alert" className="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/5 p-2 text-[11px]">
                 <AlertTriangle className="h-3.5 w-3.5 text-amber-500 mt-px shrink-0" />
-                Moov needs this person's SSN again. Please re-enter it and save.
+                This person's SSN is needed again. Please re-enter it and save.
               </div>
             )}
 

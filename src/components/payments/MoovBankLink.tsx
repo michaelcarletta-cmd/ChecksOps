@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { useStepUp } from "@/hooks/useStepUp";
+import { invokeWithBankStepUp } from "@/lib/bankStepUp";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -28,6 +30,7 @@ interface Props {
  * Ownership is proven afterwards with instant micro-deposit verification.
  */
 export function MoovBankLink({ tenantId, onConnected, onExit }: Props) {
+  const { requireStepUp } = useStepUp();
   const { toast } = useToast();
   const [saving, setSaving] = useState(false);
   const [holderName, setHolderName] = useState("");
@@ -49,7 +52,7 @@ export function MoovBankLink({ tenantId, onConnected, onExit }: Props) {
     if (!canSubmit) return;
     setSaving(true);
     try {
-      const { data, error } = await supabase.functions.invoke("moov-bank-account-add", {
+      const { data, error } = await invokeWithBankStepUp(() => supabase.functions.invoke("moov-bank-account-add", {
         body: {
           tenant_id: tenantId,
           holder_name: holderName.trim(),
@@ -58,7 +61,7 @@ export function MoovBankLink({ tenantId, onConnected, onExit }: Props) {
           routing_number: routingNumber,
           account_number: accountNumber,
         },
-      });
+      }), requireStepUp, tenantId);
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);
 
