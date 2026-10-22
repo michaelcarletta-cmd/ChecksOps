@@ -58,6 +58,7 @@ on:
           - sql108-check-intake-items-funds-type-values
           - sql109-moov-transfer-webhook-status
           - sql110-homeowner-preclaim-links
+          - sql111-tenant-referral-codes
       approved_commit:
         description: "Required for deploy/apply/read-live: exact main commit approved for this run"
         required: false
@@ -169,6 +170,7 @@ jobs:
           node --test aws/tests/release-sql108-executor.test.mjs
           node --test aws/tests/release-sql109-executor.test.mjs
           node --test aws/tests/release-sql110-executor.test.mjs
+          node --test aws/tests/release-sql111-executor.test.mjs
           node --test aws/tests/mortgage-executor-commit-outcome.test.mjs
           node --test aws/tests/deployment-guard-kms-receipt.test.mjs
           node --test aws/tests/deployment-guard-signed-receipt.test.mjs

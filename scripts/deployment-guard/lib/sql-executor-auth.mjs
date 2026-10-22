@@ -2416,6 +2416,32 @@ export const AUTHORIZED_SQL110_HOMEOWNER_PRECLAIM_LINKS = Object.freeze({
   function_identities: Object.freeze(['public.aws_public_homeowner_ledger_upload(text, text, text, text, numeric, text)']),
 });
 
+// Tenant referral codes 2026-10-22 staging pin: SQL 111 (five SECURITY DEFINER functions,
+// EXECUTE checksops only, the active-count helper the owner only: redeem a code into one
+// referral_events row, the $5.00-per-referral maintenance credit capped at $25.00 a month, the
+// tenant's summary and the platform owner's overview). No predecessor. Pending until a reviewed
+// pin change records a staging read-live.
+export const AUTHORIZED_SQL111_TENANT_REFERRAL_CODES = Object.freeze({
+  key: 'sql111',
+  filename: 'aws/workflows/sql/111_tenant_referral_codes.sql',
+  migration_id: '111_tenant_referral_codes',
+  // The commit that last authored the file bytes.
+  commit: 'f58f0347e4b8aa28d39600713cae9fce89b5111b',
+  source_sha256: 'c859ece70e5a09fee7fa79e5bc781f91756689ae686de2fc8469653ea2cc3edb',
+  authorization: 'pending',
+  execute: false,
+  expected_live_definition_sha256: null,
+  // Code-derived: releaseIntendedHash('sql111', file bytes) (release-sql-state.mjs); re-derived by the tests.
+  intended_replacement_sha256: 'e9699e1288554bf8161cf36654b163a387a507cb6645c3e597f90570b5bf16ba',
+  function_identities: Object.freeze([
+    'public.aws_tenant_referral_active_count(uuid)',
+    'public.aws_tenant_referral_credit_cents(uuid)',
+    'public.aws_apply_referral_code(uuid, text)',
+    'public.aws_tenant_referral_summary(uuid)',
+    'public.aws_platform_owner_referral_overview()',
+  ]),
+});
+
 export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql90: AUTHORIZED_SQL90_USERS_ONLY_TENANT_ROLES,
   sql91: AUTHORIZED_SQL91_MOOV_ONBOARDING,
@@ -2437,6 +2463,7 @@ export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql108: AUTHORIZED_SQL108_CHECK_INTAKE_ITEMS_FUNDS_TYPE_VALUES,
   sql109: AUTHORIZED_SQL109_MOOV_TRANSFER_WEBHOOK_STATUS,
   sql110: AUTHORIZED_SQL110_HOMEOWNER_PRECLAIM_LINKS,
+  sql111: AUTHORIZED_SQL111_TENANT_REFERRAL_CODES,
 });
 
 // The fee collection pin under its earlier map name (the same object as the release map's sql98).
@@ -2452,7 +2479,7 @@ export function isSql30TenantDocumentsDocType(input = {}) {
   return pinIdentifiersMatch(input, AUTHORIZED_SQL30_TENANT_DOCUMENTS_DOC_TYPE);
 }
 
-/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql110) an input names, or null. */
+/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql111) an input names, or null. */
 export function releaseSqlMigrationKey(input = {}) {
   return Object.keys(RELEASE_2026_10_17_PENDING_SQL_PINS)
     .find((key) => pinIdentifiersMatch(input, RELEASE_2026_10_17_PENDING_SQL_PINS[key])) || null;
