@@ -2426,13 +2426,13 @@ export const AUTHORIZED_SQL111_TENANT_REFERRAL_CODES = Object.freeze({
   filename: 'aws/workflows/sql/111_tenant_referral_codes.sql',
   migration_id: '111_tenant_referral_codes',
   // The commit that last authored the file bytes.
-  commit: 'f58f0347e4b8aa28d39600713cae9fce89b5111b',
-  source_sha256: 'c859ece70e5a09fee7fa79e5bc781f91756689ae686de2fc8469653ea2cc3edb',
+  commit: '2aab04de3c2f4c5e05c1929e2f04e68cc9e8233a',
+  source_sha256: '49144697145cb6f6e2495041c22967cfd44263f8abb7fad5ef0953f1abb8e829',
   authorization: 'pending',
   execute: false,
   expected_live_definition_sha256: null,
   // Code-derived: releaseIntendedHash('sql111', file bytes) (release-sql-state.mjs); re-derived by the tests.
-  intended_replacement_sha256: 'e9699e1288554bf8161cf36654b163a387a507cb6645c3e597f90570b5bf16ba',
+  intended_replacement_sha256: '0ca629155cf58f4f4033aa792cc0a8d817cd8692a1337ba85eb33716cf1c98fb',
   function_identities: Object.freeze([
     'public.aws_tenant_referral_active_count(uuid)',
     'public.aws_tenant_referral_credit_cents(uuid)',

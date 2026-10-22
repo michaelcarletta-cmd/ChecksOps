@@ -2,7 +2,7 @@
 
 | key | file | what it does |
 |---|---|---|
-| `sql111` | `aws/workflows/sql/111_tenant_referral_codes.sql` (sha256 `c859ece70e5a09fee7fa79e5bc781f91756689ae686de2fc8469653ea2cc3edb`) | Five new SECURITY DEFINER functions, `search_path = public`, PUBLIC revoked, EXECUTE `checksops` only (the active-count helper: the owner only). No table, column, policy, trigger or table grant change. |
+| `sql111` | `aws/workflows/sql/111_tenant_referral_codes.sql` (sha256 `49144697145cb6f6e2495041c22967cfd44263f8abb7fad5ef0953f1abb8e829`) | Five new SECURITY DEFINER functions, `search_path = public`, PUBLIC revoked, EXECUTE `checksops` only (the active-count helper: the owner only). No table, column, policy, trigger or table grant change. |
 
 **Why.**
 
@@ -84,15 +84,15 @@ have a `referral_code`.
 
 Code-derived on the release engine (`scripts/deployment-guard/lib/release-sql-state.mjs`, spec
 `functions` in `release-sql-specs.mjs`). Intended
-`e9699e1288554bf8161cf36654b163a387a507cb6645c3e597f90570b5bf16ba`:
+`0ca629155cf58f4f4033aa792cc0a8d817cd8692a1337ba85eb33716cf1c98fb`:
 
 ```
 release sql111 v1
 function public.aws_tenant_referral_active_count(uuid): lang=sql vol=s parallel=u secdef=true result=integer config=search_path=public prosrc=eb8305eb74987caac00cb6000923e589e0d89f00cfa14bff25023a3d2a90bbc6 acl=owner EXECUTE
 function public.aws_tenant_referral_credit_cents(uuid): lang=plpgsql vol=s parallel=u secdef=true result=integer config=search_path=public prosrc=52a157fe939b53e63c16f353cdda96ee508281f5829e1bbdb52ffff5cc322911 acl=checksops EXECUTE;owner EXECUTE
-function public.aws_apply_referral_code(uuid, text): lang=plpgsql vol=v parallel=u secdef=true result=jsonb config=search_path=public prosrc=24f94cbab1fc5df7b769eb14456914a728069f252b2cb7b11f130b0a204f1ffe acl=checksops EXECUTE;owner EXECUTE
-function public.aws_tenant_referral_summary(uuid): lang=plpgsql vol=s parallel=u secdef=true result=jsonb config=search_path=public prosrc=328dfd184252db1638935b587116e4317b0c9ebc0b7027f38a6fe1bce560d7a5 acl=checksops EXECUTE;owner EXECUTE
-function public.aws_platform_owner_referral_overview(): lang=plpgsql vol=s parallel=u secdef=true result=jsonb config=search_path=public prosrc=026440128326575403fd95409a75c3da84db1e58928d026ed1bf9ac76281f9a7 acl=checksops EXECUTE;owner EXECUTE
+function public.aws_apply_referral_code(uuid, text): lang=plpgsql vol=v parallel=u secdef=true result=jsonb config=search_path=public prosrc=82fe7207bdb4ae0359d7652c4d684e3cf6671f16b239037c5280ec9c20f34e22 acl=checksops EXECUTE;owner EXECUTE
+function public.aws_tenant_referral_summary(uuid): lang=plpgsql vol=s parallel=u secdef=true result=jsonb config=search_path=public prosrc=040cc1386234a82e3a82cee64e9f4a737f1e5d85006c7396b7bc8e243795c9b2 acl=checksops EXECUTE;owner EXECUTE
+function public.aws_platform_owner_referral_overview(): lang=plpgsql vol=s parallel=u secdef=true result=jsonb config=search_path=public prosrc=3c8566ec53d9d58d80657c0ce82582ec18ab5ac7279229ac6c57bed35eaa28ec acl=checksops EXECUTE;owner EXECUTE
 ```
 
 ## Preconditions (both environments; production adds the pinned `checksops_admin` login)

@@ -8,8 +8,8 @@
   "deployment_type": "sql-apply",
   "filename": "aws/workflows/sql/111_tenant_referral_codes.sql",
   "migration_id": "111_tenant_referral_codes",
-  "staging_pin_commit": "f58f0347e4b8aa28d39600713cae9fce89b5111b",
-  "source_sha256": "c859ece70e5a09fee7fa79e5bc781f91756689ae686de2fc8469653ea2cc3edb",
+  "staging_pin_commit": "2aab04de3c2f4c5e05c1929e2f04e68cc9e8233a",
+  "source_sha256": "49144697145cb6f6e2495041c22967cfd44263f8abb7fad5ef0953f1abb8e829",
   "function_identities": [
     "public.aws_tenant_referral_active_count(uuid)",
     "public.aws_tenant_referral_credit_cents(uuid)",
@@ -18,7 +18,7 @@
     "public.aws_platform_owner_referral_overview()"
   ],
   "expected_live_definition_sha256": null,
-  "intended_replacement_sha256": "e9699e1288554bf8161cf36654b163a387a507cb6645c3e597f90570b5bf16ba",
+  "intended_replacement_sha256": "0ca629155cf58f4f4033aa792cc0a8d817cd8692a1337ba85eb33716cf1c98fb",
   "authorization_phrase": "APPLY_TENANT_REFERRAL_CODES",
   "predecessors": [],
   "order_note": "No predecessor and no order on this engine. SQL 111 needs public.tenants (with the referral columns of the restored Supabase schema), public.referral_events and public.tenant_users owned by checksops_admin without FORCE ROW LEVEL SECURITY (referral_events and tenants), and the AWS identity helpers (auth.uid(), aws_is_authenticated, aws_can_access_tenant, is_platform_owner). Apply it before (or with) the API change that routes apply_referral_code, get_tenant_referral_summary and get_referral_overview to these functions and the billing engine change that reads aws_tenant_referral_credit_cents: until then Refer & Earn cannot redeem a code, and the billing engine's optional read of the credit returns no row, so the maintenance discount stays tenants.referral_discount_cents alone (unchanged behaviour). SQL 111 creates five SECURITY DEFINER functions, EXECUTE checksops only (the active-count helper the owner only). No later migration replaces them.",
@@ -57,8 +57,8 @@
     "note": "Pending: no read-only production inspect has been run for SQL 111 yet. Expected: tenants, referral_events and tenant_users with the columns the functions use present, referral_events and tenants owned by checksops_admin without FORCE ROW LEVEL SECURITY, and the five functions absent. Record its date, SSM command id, source commit, live_definition_sha256, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. If precondition_failures is not [] stop: that needs its own reviewed change."
   },
   "intended_post_state": {
-    "fingerprint": "e9699e1288554bf8161cf36654b163a387a507cb6645c3e597f90570b5bf16ba",
-    "note": "Five functions exist, SECURITY DEFINER, search_path=public, owned by checksops_admin, PUBLIC revoked: public.aws_tenant_referral_active_count(uuid) (sql, STABLE, EXECUTE the owner only), public.aws_tenant_referral_credit_cents(uuid) (plpgsql, STABLE), public.aws_apply_referral_code(uuid, text) (plpgsql, VOLATILE), public.aws_tenant_referral_summary(uuid) (plpgsql, STABLE) and public.aws_platform_owner_referral_overview() (plpgsql, STABLE), each EXECUTE checksops and the owner. No table, column, policy, trigger, grant on a table or row changes. The fingerprint is releaseIntendedHash('sql111', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): e9699e1288554bf8161cf36654b163a387a507cb6645c3e597f90570b5bf16ba."
+    "fingerprint": "0ca629155cf58f4f4033aa792cc0a8d817cd8692a1337ba85eb33716cf1c98fb",
+    "note": "Five functions exist, SECURITY DEFINER, search_path=public, owned by checksops_admin, PUBLIC revoked: public.aws_tenant_referral_active_count(uuid) (sql, STABLE, EXECUTE the owner only), public.aws_tenant_referral_credit_cents(uuid) (plpgsql, STABLE), public.aws_apply_referral_code(uuid, text) (plpgsql, VOLATILE), public.aws_tenant_referral_summary(uuid) (plpgsql, STABLE) and public.aws_platform_owner_referral_overview() (plpgsql, STABLE), each EXECUTE checksops and the owner. No table, column, policy, trigger, grant on a table or row changes. The fingerprint is releaseIntendedHash('sql111', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): 0ca629155cf58f4f4033aa792cc0a8d817cd8692a1337ba85eb33716cf1c98fb."
   },
   "staging_acceptance": {
     "ok": false,
