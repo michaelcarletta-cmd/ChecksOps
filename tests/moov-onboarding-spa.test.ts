@@ -218,7 +218,7 @@ test("can_submit fails closed and drives the read-only view", () => {
   assert.equal(resolveComplianceAccess({ canSubmit: true }).readOnly, false);
 
   assert.match(compliance, /resolveComplianceAccess\(\{ canSubmit: data\?\.can_submit, adminView, editOnBehalf \}\)/);
-  assert.match(compliance, /\{!readOnly && \([\s\S]*Save and send to Moov/);
+  assert.match(compliance, /\{!readOnly && \([\s\S]*Save and submit/);
   for (const src of [repsSection, docsSection, bankSection]) assert.match(src, /readOnly/);
   assert.match(docsSection, /\{!readOnly && \(\s*<div className="space-y-3 rounded-md border/);
   assert.match(repsSection, /\{!readOnly && \(\s*<Input\s+id=\{`\$\{p\}-ssn`\}/);
@@ -350,19 +350,19 @@ test("sync status is honest: saving, sending, retry pending (code), synced", () 
   assert.equal(describeSyncStatus({ saving: true }).label, "Saving…");
   assert.equal(
     describeSyncStatus({ saving: false, lastSave: { saved: true, moov_synced: false, pending: true, error_code: null } }).label,
-    "Saved, sending to Moov…",
+    "Saved, submitting…",
   );
   assert.equal(
     describeSyncStatus({ saving: false, lastSave: { saved: true, moov_synced: false, pending: true, error_code: "moov_timeout" } }).label,
-    "Saved, Moov retry pending (moov_timeout)",
+    "Saved, submission retry pending (timeout)",
   );
   assert.equal(
     describeSyncStatus({ saving: false, lastSave: { saved: true, moov_synced: true, pending: false, error_code: null } }).label,
     "Synced",
   );
-  assert.equal(describeSyncStatus({ saving: false, sync: { pending: true, last_error_code: null } }).label, "Saved, sending to Moov…");
-  assert.equal(describeSyncStatus({ saving: false, sync: { pending: true, last_error_code: "rate_limited" } }).label, "Saved, Moov retry pending (rate_limited)");
-  assert.equal(describeSyncStatus({ saving: false, sync: { pending: false, last_error_code: null }, accountConnected: false }).label, "Not yet sent to Moov");
+  assert.equal(describeSyncStatus({ saving: false, sync: { pending: true, last_error_code: null } }).label, "Saved, submitting…");
+  assert.equal(describeSyncStatus({ saving: false, sync: { pending: true, last_error_code: "rate_limited" } }).label, "Saved, submission retry pending (rate_limited)");
+  assert.equal(describeSyncStatus({ saving: false, sync: { pending: false, last_error_code: null }, accountConnected: false }).label, "Not yet submitted");
   assert.equal(describeSyncStatus({ saving: false, sync: { pending: false, last_error_code: null }, accountConnected: true }).label, "Synced");
   // A pending sync is never shown as "Synced".
   assert.notEqual(describeSyncStatus({ saving: false, sync: { pending: true, last_error_code: null }, accountConnected: true }).label, "Synced");
@@ -396,7 +396,7 @@ test("Save KYC tenants write, glba insert and paste-a-URL field are gone", () =>
   assert.doesNotMatch(compliance, /glba_security_events/);
   assert.doesNotMatch(compliance, /ID document URL|beneficial_owner_id_url/);
   assert.doesNotMatch(compliance, /Save KYC/);
-  assert.match(compliance, /Save and send to Moov/);
+  assert.match(compliance, /Save and submit/);
   assert.doesNotMatch(compliance, /useProviderProfile|PaymentOnboardingDialog|VerificationDocumentsPanel/);
   assert.equal(existsSync("src/hooks/useProviderProfile.ts"), false);
   assert.equal(existsSync("src/components/payments/PaymentOnboardingDialog.tsx"), false);

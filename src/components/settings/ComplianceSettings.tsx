@@ -147,12 +147,12 @@ export function ComplianceSettings({
       toast({
         title: status.label,
         description: rejected
-          ? `${rejected}${resubmit ? " Moov also needs the SSN re-entered for one representative." : ""}`
+          ? `${rejected}${resubmit ? " The SSN also needs to be re-entered for one representative." : ""}`
           : resubmit
-          ? "Moov needs an SSN re-entered for one representative."
+          ? "An SSN needs to be re-entered for one representative."
           : res.moov_synced
-          ? "Your details are saved in ChecksOps and with Moov."
-          : "Your details are saved in ChecksOps. Delivery to Moov will be retried.",
+          ? "Your details are saved and submitted for verification."
+          : "Your details are saved. Submitting them for verification will be retried.",
         variant: res.saved ? undefined : "destructive",
       });
       void refetch();
@@ -174,7 +174,7 @@ export function ComplianceSettings({
     try {
       await api.acceptTerms(tenantId);
       await api.sync(tenantId).catch(() => null);
-      toast({ title: "Terms accepted", description: "Acceptance recorded with Moov." });
+      toast({ title: "Terms accepted", description: "Your acceptance of the ChecksOps Terms of Service is recorded." });
       await reload();
     } catch (e) {
       toast({ title: "Couldn't record terms acceptance", description: safeErrorMessage(e), variant: "destructive" });
@@ -186,7 +186,7 @@ export function ComplianceSettings({
   const hero = (
     <SettingsHero
       title="Compliance & Identity"
-      description="Complete onboarding here. Everything you enter or upload is saved in ChecksOps and sent to Moov."
+      description="Complete onboarding here. Everything you enter or upload is saved in ChecksOps and submitted for verification."
       badge="Trust & Safety"
       icon={<ShieldCheck className="h-4 w-4 text-primary" />}
     />
@@ -252,11 +252,11 @@ export function ComplianceSettings({
         title="Compliance Status"
         accent="bg-gradient-to-r from-emerald-500/60 to-emerald-500/10"
         icon={<ShieldCheck className="h-4 w-4 text-emerald-500" />}
-        description="Onboarding status with Moov for this organization."
+        description="Payment account onboarding status for this organization."
       >
         <div className="space-y-3">
           <div className="flex flex-wrap items-center gap-2">
-            <StatusPill label={`Moov account: ${data.account.connected ? data.account.status ?? "connected" : "not created yet"}`} done={data.account.connected} />
+            <StatusPill label={`Payment account: ${data.account.connected ? data.account.status ?? "connected" : "not created yet"}`} done={data.account.connected} />
             <StatusPill label={data.account.tos_accepted ? "Terms accepted" : "Terms not accepted"} done={data.account.tos_accepted} />
             {isSandbox && (
               <Badge variant="outline" className="text-[10px] border-amber-500/40 text-amber-500 gap-1">
@@ -297,7 +297,7 @@ export function ComplianceSettings({
         title="Business"
         accent="bg-gradient-to-r from-primary/60 to-primary/10"
         icon={<ShieldCheck className="h-4 w-4 text-primary" />}
-        description="Legal identity of the business as Moov will verify it."
+        description="Legal identity of the business as it will be verified."
       >
         <BusinessSection
           form={business}
@@ -327,7 +327,7 @@ export function ComplianceSettings({
           )}
           <Button onClick={handleSave} disabled={saving} size="sm">
             {saving ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Send className="h-3 w-3 mr-1" />}
-            Save and send to Moov
+            Save and submit
           </Button>
         </div>
       )}
@@ -336,7 +336,7 @@ export function ComplianceSettings({
         title="Documents"
         accent="bg-gradient-to-r from-sky-500/60 to-sky-500/10"
         icon={<FileText className="h-4 w-4 text-sky-500" />}
-        description="Identity, business and vetting documents. Stored in ChecksOps and sent to Moov."
+        description="Identity, business and vetting documents. Stored in ChecksOps and submitted for verification."
       >
         <DocumentsSection tenantId={tenantId} documents={data.documents} readOnly={readOnly} api={api} onChanged={reload} />
       </SectionCard>
@@ -345,17 +345,19 @@ export function ComplianceSettings({
         title="Terms of Service"
         accent="bg-gradient-to-r from-primary/60 to-primary/10"
         icon={<ClipboardList className="h-4 w-4 text-primary" />}
-        description="Moov's platform agreement must be accepted before money can move."
+        description="The ChecksOps Terms of Service must be accepted before money can move."
       >
         {data.account.tos_accepted ? (
           <StatusPill label="Platform terms accepted" done />
         ) : (
           <div className="space-y-2">
             <p className="text-[11px] text-muted-foreground">
-              By accepting, the account holder agrees to Moov's{" "}
-              <a href="https://moov.io/legal/platform-agreement/" target="_blank" rel="noopener noreferrer" className="underline underline-offset-2">platform agreement</a>{" "}
+              By accepting, the account holder agrees to the{" "}
+              <a href="/terms" target="_blank" rel="noopener noreferrer" className="underline underline-offset-2">ChecksOps Terms of Service</a>,
+              including the{" "}
+              <a href="https://moov.io/legal/platform-agreement/" target="_blank" rel="noopener noreferrer" className="underline underline-offset-2">payment processing terms</a>{" "}
               and{" "}
-              <a href="https://moov.io/legal/privacy-policy/" target="_blank" rel="noopener noreferrer" className="underline underline-offset-2">privacy policy</a>.
+              <a href="https://moov.io/legal/privacy-policy/" target="_blank" rel="noopener noreferrer" className="underline underline-offset-2">payments privacy policy</a>.
             </p>
             {readOnly || !access.canAcceptTerms ? (
               <StatusPill label="Not accepted yet" done={false} />

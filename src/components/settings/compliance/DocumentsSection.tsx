@@ -69,7 +69,7 @@ export function DocumentsSection({ tenantId, documents, readOnly, api, onChanged
     try {
       await uploadOnboardingDocument({ api, put: xhrPut, tenantId, purpose: p, file, onProgress: setProgress });
       if (retryOf) setFailed((f) => f.filter((x) => x.localId !== retryOf));
-      toast({ title: "Document uploaded", description: "Stored in ChecksOps and sent to Moov for review." });
+      toast({ title: "Document uploaded", description: "Stored in ChecksOps and submitted for review." });
     } catch (e) {
       const err = e instanceof DocumentUploadError ? e : new DocumentUploadError("upload_url", safeErrorMessage(e));
       if (err.stage !== "validate") {
@@ -84,7 +84,7 @@ export function DocumentsSection({ tenantId, documents, readOnly, api, onChanged
         setFailed((f) => [...f.filter((x) => x.localId !== entry.localId), entry]);
       }
       toast({
-        title: err.stage === "finalize" ? "Uploaded, not yet sent to Moov" : "Upload failed",
+        title: err.stage === "finalize" ? "Uploaded, not yet submitted" : "Upload failed",
         description: err.message,
         variant: "destructive",
       });
@@ -110,9 +110,9 @@ export function DocumentsSection({ tenantId, documents, readOnly, api, onChanged
     try {
       await api.finalizeDocument(tenantId, documentId);
       if (localId) setFailed((f) => f.filter((x) => x.localId !== localId));
-      toast({ title: "Sent to Moov" });
+      toast({ title: "Submitted for review" });
     } catch (e) {
-      toast({ title: "Still couldn't send to Moov", description: safeErrorMessage(e), variant: "destructive" });
+      toast({ title: "Still couldn't submit", description: safeErrorMessage(e), variant: "destructive" });
     } finally {
       setBusyId(null);
       await onChanged();
@@ -242,7 +242,7 @@ export function DocumentsSection({ tenantId, documents, readOnly, api, onChanged
                     {busyId === d.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <><Eye className="h-3 w-3 mr-1" /> View</>}
                   </Button>
                   {st.retryable && !readOnly && (
-                    <Button type="button" size="sm" variant="outline" className="h-7 text-[11px] px-2" onClick={() => retryFinalize(d.id)} disabled={busyId === d.id} aria-label={`Retry sending ${d.file_name} to Moov`}>
+                    <Button type="button" size="sm" variant="outline" className="h-7 text-[11px] px-2" onClick={() => retryFinalize(d.id)} disabled={busyId === d.id} aria-label={`Retry submitting ${d.file_name}`}>
                       <RotateCcw className="h-3 w-3 mr-1" /> Retry
                     </Button>
                   )}
