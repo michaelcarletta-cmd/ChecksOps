@@ -1,12 +1,22 @@
 /**
- * Display-only conversation/thread title for ChecksOps Messages.
+ * Display-only conversation/thread title (subject) for ChecksOps Messages.
  *
- * Resolves the insured/homeowner name from structured check payee roles or
- * the claim's named insured. Never infers insureds by stripping companies
- * out of the raw payee line. Never returns "Unknown".
+ * The subject is the insured name, never the raw payee line. Sources, in order:
+ *   1. check payees typed insured / homeowner / policyholder;
+ *   2. the linked case's insured name (check_cases.insured_name via case_id);
+ *   3. the linked claim's named insured (claims.policyholder_name via claim_id);
+ *   4. untyped payees (OCR stores payee_type 'unknown') whose name is shaped
+ *      like a person and carries no company, bank or adjuster wording.
+ * Returns null when none apply; callers then show only the check number.
+ * Never returns "Unknown". Titles are derived at display time from the linked
+ * check, so threads that already exist show the insured name too.
  */
 
 const INSURED_PAYEE_TYPES = new Set(["insured", "homeowner", "policyholder"]);
+const UNTYPED_PAYEE_TYPES = new Set(["", "unknown", "other"]);
+
+const BUSINESS_WORDS =
+  /\b(llc|l\.l\.c|inc|incorporated|corp|corporation|co|company|ltd|lp|llp|pllc|n\.?a|bank|bancorp|mortgage|mtg|lending|lender|loans?|financial|finance|savings|credit|union|federal|fsb|trust|trustee|servicing|servicer|insurance|mutual|adjust\w*|public|claims?|roofing|construction|contractors?|contracting|restoration|builders?|services?|group|partners|associates|enterprises|holdings|solutions|isaoa|atima|estate|attorneys?|treasury)\b/i;
 
 export type MessageThreadPayee = {
   payee_name?: string | null;
@@ -15,12 +25,18 @@ export type MessageThreadPayee = {
 
 export type MessageThreadTitleSource = {
   payees?: MessageThreadPayee[] | null;
+  /** check_cases.insured_name for the check's case_id. */
+  caseInsuredName?: string | null;
+  /** claims.policyholder_name for the check's claim_id. */
   policyholderName?: string | null;
-  fallbackTitle?: string | null;
 };
 
 function isInsuredPayeeType(type: string | null | undefined): boolean {
   return INSURED_PAYEE_TYPES.has((type ?? "").toLowerCase().trim());
+}
+
+function isUntypedPayeeType(type: string | null | undefined): boolean {
+  return UNTYPED_PAYEE_TYPES.has((type ?? "").toLowerCase().trim());
 }
 
 function normalizeName(raw: string | null | undefined): string | null {
@@ -93,22 +109,35 @@ function formatInsuredDisplayNames(names: Array<string | null | undefined>): str
   return formatSharedLastName(unique) || unique.join(" & ");
 }
 
+/** An untyped payee name that reads as a person (or a couple), not a business. */
+function looksLikeIndividualPayee(name: string | null | undefined): boolean {
+  const cleaned = normalizeName(name);
+  if (!cleaned || BUSINESS_WORDS.test(cleaned)) return false;
+  return looksLikePersonName(cleaned) || splitCoupledNames(cleaned) !== null;
+}
+
 /**
- * Returns the Messages thread/conversation title, or null when nothing
- * displayable is available (callers must not substitute "Unknown").
+ * Returns the Messages thread/conversation title, or null when no insured
+ * name is available (callers must not substitute "Unknown" or the payee line).
  */
 export function resolveMessageThreadTitle(source: MessageThreadTitleSource): string | null {
-  const insuredPayeeNames = (source.payees ?? [])
-    .filter((payee) => isInsuredPayeeType(payee.payee_type))
-    .map((payee) => payee.payee_name);
+  const payees = source.payees ?? [];
 
-  const fromPayees = formatInsuredDisplayNames(insuredPayeeNames);
+  const fromPayees = formatInsuredDisplayNames(
+    payees.filter((payee) => isInsuredPayeeType(payee.payee_type)).map((payee) => payee.payee_name),
+  );
   if (fromPayees) return fromPayees;
 
-  const fromClaim = formatInsuredDisplayNames(
-    source.policyholderName ? [source.policyholderName] : [],
-  );
+  const fromCase = formatInsuredDisplayNames([source.caseInsuredName]);
+  if (fromCase) return fromCase;
+
+  const fromClaim = formatInsuredDisplayNames([source.policyholderName]);
   if (fromClaim) return fromClaim;
 
-  return normalizeName(source.fallbackTitle);
+  return formatInsuredDisplayNames(
+    payees
+      .filter((payee) => isUntypedPayeeType(payee.payee_type))
+      .map((payee) => payee.payee_name)
+      .filter(looksLikeIndividualPayee),
+  );
 }

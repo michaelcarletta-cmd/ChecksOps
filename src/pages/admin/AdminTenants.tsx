@@ -22,7 +22,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "@/hooks/use-toast";
-import { Megaphone, Loader2, Plus, Trash2, Mail, Building2, Users, Settings, ArrowLeft, RefreshCw, Copy, FileText, Receipt, Link2, Gift, ShieldCheck, Eye, Crosshair, Palette, Briefcase, Home, Calculator, Landmark, Wallet, LogOut, Banknote } from "lucide-react";
+import { Megaphone, Loader2, Plus, Trash2, Mail, Building2, Users, Settings, ArrowLeft, RefreshCw, Copy, FileText, Receipt, Link2, Gift, ShieldCheck, Eye, Crosshair, Briefcase, Home, Calculator, Landmark, Wallet, LogOut, Banknote } from "lucide-react";
 import { goToChecksOpsHome } from "@/lib/goToChecksOpsHome";
 import { SettingsPageShell } from "@/components/settings/SettingsPageShell";
 import { SettingsHero } from "@/components/settings/SettingsHero";
@@ -33,7 +33,6 @@ import { isCheckOpsHost } from "@/lib/checkopsHost";
 
 import { CheckAltSettings } from "@/components/settings/CheckAltSettings";
 import { CheckAltTenantAccountCard } from "@/components/settings/CheckAltTenantAccountCard";
-import { EmailSenderSettings } from "@/components/settings/EmailSenderSettings";
 import { ComplianceSettings } from "@/components/settings/ComplianceSettings";
 import { AdminReferralDashboard } from "@/components/settings/AdminReferralDashboard";
 import { PlatformAnnouncementsManager } from "@/components/admin/PlatformAnnouncementsManager";
@@ -73,7 +72,6 @@ type Tenant = {
   /** SQL 98 deposits switch (platform owner only); absent = on. */
   deposits_enabled?: boolean | null;
   per_check_rate_cents?: number | null;
-  is_founding_partner?: boolean | null;
   monthly_rate_cents?: number | null;
   referral_code?: string | null;
   referral_discount_cents?: number | null;
@@ -321,7 +319,7 @@ function CreateTenantDialog({ onCreated }: { onCreated: (t: Tenant) => void }) {
     <DialogContent>
       <DialogHeader>
         <DialogTitle>Create New Tenant</DialogTitle>
-        <DialogDescription>Add a new client company. You can configure branding, contact info, and invite users next.</DialogDescription>
+        <DialogDescription>Add a new client company. You can add contact info and invite users next.</DialogDescription>
       </DialogHeader>
       <div className="space-y-4 py-2">
         <div className="space-y-2">
@@ -365,7 +363,7 @@ function TenantDetail({ tenant, onBack, onUpdated }: { tenant: Tenant; onBack: (
 
         <SettingsHero
           title={tenant.name}
-          description={`Configure company details, branding, compliance, billing and users for /${tenant.slug}.`}
+          description={`Configure company details, compliance, billing and users for /${tenant.slug}. The company manages its own branding in its settings.`}
           badge="Tenant Settings"
           icon={<Building2 className="h-4 w-4 text-primary" />}
         />
@@ -375,7 +373,6 @@ function TenantDetail({ tenant, onBack, onUpdated }: { tenant: Tenant; onBack: (
           <TabsList className="flex w-full flex-wrap h-auto justify-start gap-1 p-1">
             <TabsTrigger value="overview" className="flex-1 min-w-[150px] whitespace-nowrap"><Building2 className="w-4 h-4 mr-1" /> Organization 360</TabsTrigger>
             <TabsTrigger value="company" className="flex-1 min-w-[110px] whitespace-nowrap"><Building2 className="w-4 h-4 mr-1" /> Company</TabsTrigger>
-            <TabsTrigger value="branding" className="flex-1 min-w-[150px] whitespace-nowrap"><Palette className="w-4 h-4 mr-1" /> Branding & Email</TabsTrigger>
             <TabsTrigger value="compliance" className="flex-1 min-w-[170px] whitespace-nowrap"><ShieldCheck className="w-4 h-4 mr-1" /> Compliance & Docs</TabsTrigger>
             <TabsTrigger value="integrations" className="flex-1 min-w-[130px] whitespace-nowrap"><Link2 className="w-4 h-4 mr-1" /> Integrations</TabsTrigger>
             
@@ -389,10 +386,6 @@ function TenantDetail({ tenant, onBack, onUpdated }: { tenant: Tenant; onBack: (
           </TabsContent>
           <TabsContent value="company" className="mt-6">
             <CompanyTab tenant={tenant} onUpdated={onUpdated} />
-          </TabsContent>
-          <TabsContent value="branding" className="mt-6 space-y-6">
-            <BrandingTab tenant={tenant} />
-            <EmailSenderSettings />
           </TabsContent>
           <TabsContent value="compliance" className="mt-6 space-y-8">
             {/* Read-only by default; the platform owner opts in with "Edit on behalf of tenant". */}
@@ -578,54 +571,6 @@ function CompanyTab({ tenant, onUpdated }: { tenant: Tenant; onUpdated: (t: Tena
           {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />} Save Changes
         </Button>
 
-    </SectionCard>
-
-  );
-}
-
-/**
- * Owner policy: a tenant's branding (logo, colors, email branding and sender)
- * is edited only by members of that tenant, in their own settings. The
- * platform owner sees it here read-only; there is no upload or save.
- */
-function BrandingTab({ tenant }: { tenant: Tenant }) {
-  const logoUrl = tenant.logo_url || "";
-  const primary = tenant.primary_color || "#3B82F6";
-  const secondary = tenant.secondary_color || "#1E293B";
-
-  return (
-    <SectionCard
-      title="Branding"
-      icon={<Palette className="h-4 w-4 text-pink-500" />}
-      accent="bg-gradient-to-r from-pink-500 to-pink-500/30"
-      description="Read-only. The company edits its own logo, colors and email branding in its settings."
-    >
-        <div className="space-y-2">
-          <Label>Logo</Label>
-          {logoUrl ? (
-            <div className="flex items-center gap-3 rounded border border-border bg-muted/30 p-2">
-              <img src={logoUrl} alt="Logo" className="h-12 max-w-[160px] object-contain rounded bg-white p-1" onError={(e) => (e.currentTarget.style.display = "none")} />
-            </div>
-          ) : (
-            <p className="text-xs text-muted-foreground">No logo set.</p>
-          )}
-        </div>
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label>Primary Color</Label>
-            <div className="flex items-center gap-2">
-              <span className="h-6 w-6 rounded border border-border" style={{ backgroundColor: primary }} />
-              <Input value={primary} readOnly disabled />
-            </div>
-          </div>
-          <div className="space-y-2">
-            <Label>Secondary Color</Label>
-            <div className="flex items-center gap-2">
-              <span className="h-6 w-6 rounded border border-border" style={{ backgroundColor: secondary }} />
-              <Input value={secondary} readOnly disabled />
-            </div>
-          </div>
-        </div>
     </SectionCard>
 
   );
@@ -1047,7 +992,7 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
   const [checkalt, setCheckalt] = useState<{ count: number; amount: number } | null>(null);
   const [moov, setMoov] = useState<{ count: number; amountOut: number } | null>(null);
   const [maintenance, setMaintenance] = useState<any[]>([]);
-  const [tenantMeta, setTenantMeta] = useState<{ monthly_rate_cents: number; referral_discount_cents: number; is_founding_partner: boolean } | null>(null);
+  const [tenantMeta, setTenantMeta] = useState<{ monthly_rate_cents: number; referral_discount_cents: number } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -1097,7 +1042,7 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
           .order("received_at", { ascending: false }),
         supabase
           .from("tenants")
-          .select("monthly_rate_cents, referral_discount_cents, is_founding_partner")
+          .select("monthly_rate_cents, referral_discount_cents")
           .eq("id", tenantId)
           .maybeSingle(),
       ]);
@@ -1263,9 +1208,6 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
                     <tr>
                       <td className="px-4 py-2">
                         Monthly maintenance
-                        {tenantMeta?.is_founding_partner && (
-                          <Badge variant="outline" className="ml-2 text-[9px] h-4 border-yellow-500/40 text-yellow-600">Founding partner</Badge>
-                        )}
                       </td>
                       <td className="text-right px-4 py-2 tabular-nums">1 mo</td>
                       <td className="text-right px-4 py-2 tabular-nums text-muted-foreground">{fmt(grossMaintenance)}</td>
@@ -1417,7 +1359,7 @@ function TenantManagementTable({
   const toggleActive = (t: Tenant, active: boolean) =>
     updateTenant(t.id, { subscription_status: active ? "active" : "inactive" });
 
-  // Pricing (rate, referral discount, founding-partner price) is the platform
+  // Pricing (rate, referral discount) is the platform
   // owner's and goes through tenant-billing-admin (SQL 96), never the generic
   // tenants update.
   const updatePricing = async (id: string, patch: TenantPricingPatch) => {
@@ -1434,11 +1376,6 @@ function TenantManagementTable({
       setBusyId(null);
     }
   };
-
-  const toggleFoundingPartner = (t: Tenant, on: boolean) =>
-    updatePricing(t.id, on
-      ? { is_founding_partner: true, monthly_rate_cents: 7500 }
-      : { is_founding_partner: false });
 
   // Test accounts also move to the payment provider's sandbox ledger, so
   // nothing they do moves real money. The server sets moov_environment.
@@ -1509,20 +1446,6 @@ function TenantManagementTable({
           onCheckedChange={(v) => toggleActive(t, v)}
           disabled={busyId === t.id}
           aria-label={`Active for ${t.name}`}
-        />
-      ),
-    },
-    {
-      id: "founding",
-      header: "Founding",
-      headerClassName: "w-[7%] min-w-[60px] text-center",
-      className: "text-center",
-      cell: (t) => (
-        <Switch
-          checked={!!t.is_founding_partner}
-          onCheckedChange={(v) => toggleFoundingPartner(t, v)}
-          disabled={busyId === t.id}
-          aria-label={`Founding partner for ${t.name}`}
         />
       ),
     },
