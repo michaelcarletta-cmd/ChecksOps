@@ -110,15 +110,20 @@ function gitTop(dir) {
   }
 }
 
-// True when the path exists on origin/main (or, without that ref, on HEAD).
-function onMain(top, rel) {
-  for (const ref of ['origin/main', 'HEAD']) {
-    try {
-      execFileSync('git', ['-C', top, 'cat-file', '-e', `${ref}:${rel}`], { stdio: 'ignore' });
-      return true;
-    } catch { /* try the next ref */ }
+const gitOk = (top, args) => {
+  try {
+    execFileSync('git', ['-C', top, ...args], { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
   }
-  return false;
+};
+
+// True when the path exists on origin/main (or, without that ref, on HEAD). A migration
+// committed only on a feature branch is not on main and stays editable until it merges.
+function onMain(top, rel) {
+  const ref = gitOk(top, ['rev-parse', '--verify', '--quiet', 'refs/remotes/origin/main']) ? 'origin/main' : 'HEAD';
+  return gitOk(top, ['cat-file', '-e', `${ref}:${rel}`]);
 }
 
 function repoRel(file) {

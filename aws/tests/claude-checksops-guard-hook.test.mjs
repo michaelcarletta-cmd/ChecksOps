@@ -61,6 +61,34 @@ test('an existing migration cannot be edited, written or overwritten; a new one 
   assert.equal(run({ tool_name: 'Write', tool_input: { file_path: path.join(ROOT, 'aws/workflows/sql/999_new_migration_probe.sql'), content: '-- new\n' } }).code, 0);
 });
 
+test('a migration committed only on a feature branch stays editable; once on origin/main it is not', () => {
+  const dir = repoOnBranch('main');
+  const g = (...args) => execFileSync('git', ['-C', dir, '-c', 'user.email=t@t', '-c', 'user.name=t', ...args], { stdio: 'ignore' });
+  const rel = 'aws/workflows/sql/998_branch_only_probe.sql';
+  const file = path.join(dir, rel);
+  const write = () => run({ tool_name: 'Write', tool_input: { file_path: file, content: '-- edited\n' } }, {}, dir);
+  try {
+    fs.writeFileSync(path.join(dir, 'README'), 'x\n');
+    g('add', 'README');
+    g('commit', '-q', '-m', 'base');
+    g('update-ref', 'refs/remotes/origin/main', 'HEAD');
+    g('checkout', '-q', '-b', 'claude/feature');
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, '-- first\n');
+    g('add', rel);
+    g('commit', '-q', '-m', 'migration on the branch');
+    assert.equal(write().code, 0, 'committed on the branch only');
+    g('update-ref', 'refs/remotes/origin/main', 'HEAD');
+    const r = write();
+    assert.equal(r.code, 2, 'on origin/main');
+    assert.match(r.err, /already exists on main/);
+    g('update-ref', '-d', 'refs/remotes/origin/main');
+    assert.equal(write().code, 2, 'without origin/main, HEAD decides');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('the owner override allows exactly the named migration', () => {
   const payload = { tool_name: 'Write', tool_input: { file_path: path.join(ROOT, SQL91), content: '-- x\n' } };
   assert.equal(run(payload, { CHECKSOPS_OWNER_ALLOW_SQL_EDIT: SQL91 }).code, 0);
