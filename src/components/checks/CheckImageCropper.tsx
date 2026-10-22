@@ -34,6 +34,16 @@ export function CheckImageCropper({ file, open, onCancel, onConfirm, title = "Cr
 
   const containerRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
+  // Re-render when the displayed image size changes (dialog or window resize),
+  // so the crop box stays on the image instead of drifting off its handles.
+  const [, setDisplayWidth] = useState(0);
+  useEffect(() => {
+    const img = imgRef.current;
+    if (!img || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => setDisplayWidth(img.clientWidth));
+    observer.observe(img);
+    return () => observer.disconnect();
+  }, [imgUrl]);
 
   // Load file → object URL, convert HEIC, or pass through non-images
   useEffect(() => {
@@ -208,18 +218,20 @@ export function CheckImageCropper({ file, open, onCancel, onConfirm, title = "Cr
         ) : (
           <div
             ref={containerRef}
-            className="relative w-full max-h-[70vh] overflow-auto bg-muted/30 rounded-md flex items-center justify-center touch-none"
+            className="relative w-full max-h-[75vh] overflow-auto bg-muted/30 rounded-md touch-none select-none"
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
             onPointerCancel={onPointerUp}
           >
             {imgUrl && (
-              <div className="relative inline-block">
+              // Padding keeps the handles on screen when the crop reaches the image edge.
+              <div className="relative mx-auto w-fit p-6">
+                <div className="relative">
                 <img
                   ref={imgRef}
                   src={imgUrl}
                   alt="check to crop"
-                  className="block max-w-full max-h-[70vh] select-none"
+                  className="block max-w-full max-h-[calc(75vh-3rem)] select-none"
                   draggable={false}
                   onLoad={handleImgLoad}
                 />
@@ -232,23 +244,48 @@ export function CheckImageCropper({ file, open, onCancel, onConfirm, title = "Cr
                       <div className="absolute bg-black/55" style={{ left: 0, top: displayRect.y, width: displayRect.x, height: displayRect.h }} />
                       <div className="absolute bg-black/55" style={{ left: displayRect.x + displayRect.w, top: displayRect.y, right: 0, height: displayRect.h }} />
                     </div>
-                    {/* crop rect */}
+                    {/* crop rect: drag inside to move, drag any edge or corner to resize */}
                     <div
-                      className="absolute border-2 border-primary cursor-move"
+                      className="absolute border-2 border-white shadow-[0_0_0_1px_rgba(0,0,0,0.6)] cursor-move"
                       style={{ left: displayRect.x, top: displayRect.y, width: displayRect.w, height: displayRect.h }}
                       onPointerDown={onPointerDown("move")}
                     >
-                      {(["n","s","e","w","ne","nw","se","sw"] as const).map((h) => (
+                      {/* thirds guide */}
+                      <div className="pointer-events-none absolute inset-0">
+                        <div className="absolute inset-y-0 left-1/3 border-l border-white/40" />
+                        <div className="absolute inset-y-0 left-2/3 border-l border-white/40" />
+                        <div className="absolute inset-x-0 top-1/3 border-t border-white/40" />
+                        <div className="absolute inset-x-0 top-2/3 border-t border-white/40" />
+                      </div>
+                      {EDGE_HANDLES.map((h) => (
                         <div
                           key={h}
+                          data-crop-handle={h}
                           onPointerDown={onPointerDown(h)}
-                          className={`absolute bg-primary border border-background rounded-sm ${handleCursor(h)}`}
-                          style={handleStyle(h)}
-                        />
+                          className={`absolute z-10 flex items-center justify-center ${handleCursor(h)}`}
+                          style={edgeHitStyle(h)}
+                        >
+                          <span
+                            className="pointer-events-none rounded-full bg-white shadow ring-1 ring-black/40"
+                            style={h === "n" || h === "s" ? { width: 28, height: 6 } : { width: 6, height: 28 }}
+                          />
+                        </div>
+                      ))}
+                      {CORNER_HANDLES.map((h) => (
+                        <div
+                          key={h}
+                          data-crop-handle={h}
+                          onPointerDown={onPointerDown(h)}
+                          className={`absolute z-20 flex items-center justify-center ${handleCursor(h)}`}
+                          style={cornerHitStyle(h)}
+                        >
+                          <span className="pointer-events-none h-4 w-4 rounded-full border-2 border-primary bg-white shadow" />
+                        </div>
                       ))}
                     </div>
                   </>
                 )}
+                </div>
               </div>
             )}
             {busy && (
@@ -268,6 +305,7 @@ export function CheckImageCropper({ file, open, onCancel, onConfirm, title = "Cr
         )}
         {!passthrough && rect && (
           <p className="text-xs text-muted-foreground">
+            Drag inside the box to move it. Drag a corner or any edge to resize it.
             Keep a thin margin of background visible on all four sides — a crop that touches the
             check border can cut off the right edge at the bank.
           </p>
@@ -304,20 +342,31 @@ export function CheckImageCropper({ file, open, onCancel, onConfirm, title = "Cr
 /*  Handle styling                                                     */
 /* ------------------------------------------------------------------ */
 
-function handleStyle(h: string): React.CSSProperties {
-  const s = 12;
-  const off = -s / 2;
-  const map: Record<string, React.CSSProperties> = {
-    n:  { top: off, left: `calc(50% - ${s/2}px)`, width: s, height: s },
-    s:  { bottom: off, left: `calc(50% - ${s/2}px)`, width: s, height: s },
-    e:  { right: off, top: `calc(50% - ${s/2}px)`, width: s, height: s },
-    w:  { left: off, top: `calc(50% - ${s/2}px)`, width: s, height: s },
-    ne: { top: off, right: off, width: s, height: s },
-    nw: { top: off, left: off, width: s, height: s },
-    se: { bottom: off, right: off, width: s, height: s },
-    sw: { bottom: off, left: off, width: s, height: s },
+const CORNER_HANDLES = ["nw", "ne", "sw", "se"] as const;
+const EDGE_HANDLES = ["n", "s", "e", "w"] as const;
+/** Touch-sized hit area for each corner, centered on the corner. */
+const CORNER_HIT = 40;
+/** Thickness of the grab strip along each edge, centered on the border. */
+const EDGE_HIT = 24;
+
+function cornerHitStyle(h: (typeof CORNER_HANDLES)[number]): React.CSSProperties {
+  const off = -CORNER_HIT / 2;
+  return {
+    width: CORNER_HIT,
+    height: CORNER_HIT,
+    ...(h.includes("n") ? { top: off } : { bottom: off }),
+    ...(h.includes("w") ? { left: off } : { right: off }),
   };
-  return map[h];
+}
+
+/** The whole edge between the corner hit areas is draggable, not just its midpoint. */
+function edgeHitStyle(h: (typeof EDGE_HANDLES)[number]): React.CSSProperties {
+  const off = -EDGE_HIT / 2;
+  const inset = CORNER_HIT / 2;
+  if (h === "n" || h === "s") {
+    return { left: inset, right: inset, height: EDGE_HIT, ...(h === "n" ? { top: off } : { bottom: off }) };
+  }
+  return { top: inset, bottom: inset, width: EDGE_HIT, ...(h === "w" ? { left: off } : { right: off }) };
 }
 function handleCursor(h: string): string {
   return {

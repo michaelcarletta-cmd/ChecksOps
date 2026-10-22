@@ -1,5 +1,5 @@
 /**
- * Specs of the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108, SQL 109) for the shared engine in
+ * Specs of the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108 to SQL 110) for the shared engine in
  * release-sql-state.mjs: what each pinned file creates, replaces or drops, the reviewed
  * EXECUTE ACLs, the prerequisites and predecessors, and the PostgreSQL renderings the file
  * leaves (policy expressions, view, column, constraint, index and trigger definitions as
@@ -57,7 +57,7 @@
  *                      this engine; SQL 106 before SQL 97): the production one-shot and the
  *                      runbook
  *
- * SQL 107 and later: add a spec here, its staging pin in sql-executor-auth.mjs
+ * SQL 111 and later (SQL 107 is unused): add a spec here, its staging pin in sql-executor-auth.mjs
  * (RELEASE_2026_10_17_PENDING_SQL_PINS or a successor map) and its production pin; the
  * engine, the executor handler and the production tool are generic.
  */
@@ -3595,6 +3595,84 @@ export const RELEASE_SQL_SPECS = deepFreeze({
     "definer_writes": [
       "public.payment_transfers",
       "public.payment_event_log"
+    ]
+  },
+  // SQL 110: homeowner pre-claim links. DELETE on homeowner_ledger_tokens for checksops (the
+  // fingerprint is that one grant line; every other grant on the table must stay as it was;
+  // aws_write_homeowner_ledger_tokens stays the authorization boundary), and the SECURITY
+  // DEFINER public homeowner upload writer (EXECUTE: checksops and the owner only), which locks
+  // the token row and writes homeowner_ledger_check_uploads and homeowner_ledger_events under
+  // RLS (definer_writes). No policy, table or column change.
+  sql110: {
+    "key": "sql110",
+    "label": "SQL 110",
+    "choice": "sql110-homeowner-preclaim-links",
+    "production_pin_rel": "ops/deployment-guard/sql110-homeowner-preclaim-links-production-apply.json",
+    "script": "sql110-homeowner-preclaim-links-production-apply",
+    "prerequisites": [
+      "public.homeowner_ledger_tokens",
+      "public.homeowner_ledger_check_uploads",
+      "public.homeowner_ledger_events",
+      "role checksops",
+      "column public.homeowner_ledger_tokens.id",
+      "column public.homeowner_ledger_tokens.token",
+      "column public.homeowner_ledger_tokens.tenant_id",
+      "column public.homeowner_ledger_tokens.claim_id",
+      "column public.homeowner_ledger_tokens.revoked_at",
+      "column public.homeowner_ledger_tokens.expires_at",
+      "column public.homeowner_ledger_tokens.partner_code",
+      "column public.homeowner_ledger_tokens.sent_by_user_id",
+      "column public.homeowner_ledger_tokens.created_by",
+      "column public.homeowner_ledger_check_uploads.id",
+      "column public.homeowner_ledger_check_uploads.tenant_id",
+      "column public.homeowner_ledger_check_uploads.claim_id",
+      "column public.homeowner_ledger_check_uploads.token_id",
+      "column public.homeowner_ledger_check_uploads.front_path",
+      "column public.homeowner_ledger_check_uploads.back_path",
+      "column public.homeowner_ledger_check_uploads.amount_estimate",
+      "column public.homeowner_ledger_check_uploads.homeowner_note",
+      "column public.homeowner_ledger_check_uploads.partner_code",
+      "column public.homeowner_ledger_check_uploads.assigned_to_user_id",
+      "column public.homeowner_ledger_check_uploads.status",
+      "column public.homeowner_ledger_check_uploads.created_at",
+      "column public.homeowner_ledger_events.tenant_id",
+      "column public.homeowner_ledger_events.claim_id",
+      "column public.homeowner_ledger_events.event_type",
+      "column public.homeowner_ledger_events.amount",
+      "column public.homeowner_ledger_events.actor_label",
+      "column public.homeowner_ledger_events.payload_json"
+    ],
+    "predecessors": [],
+    "functions": [
+      {
+        "identity": "public.aws_public_homeowner_ledger_upload(text, text, text, text, numeric, text)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ]
+      }
+    ],
+    "table_privileges": [
+      {
+        "table": "public.homeowner_ledger_tokens",
+        "grantees": [
+          "checksops"
+        ],
+        "privileges": [
+          "DELETE"
+        ],
+        "intended": [
+          "checksops DELETE"
+        ]
+      }
+    ],
+    "altered_relations": [
+      "public.homeowner_ledger_tokens"
+    ],
+    "definer_writes": [
+      "public.homeowner_ledger_tokens",
+      "public.homeowner_ledger_check_uploads",
+      "public.homeowner_ledger_events"
     ]
   },
 });

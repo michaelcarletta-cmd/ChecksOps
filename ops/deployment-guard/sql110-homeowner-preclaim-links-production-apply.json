@@ -1,0 +1,64 @@
+{
+  "id": "sql110-homeowner-preclaim-links-production-apply",
+  "migration": "sql110",
+  "authorization": "pending",
+  "execute": false,
+  "target_environment": "production",
+  "target_component": "production-sql",
+  "deployment_type": "sql-apply",
+  "filename": "aws/workflows/sql/110_homeowner_preclaim_links.sql",
+  "migration_id": "110_homeowner_preclaim_links",
+  "staging_pin_commit": "810dde9b754cc752922ce9169b4f0fa893036ba4",
+  "source_sha256": "17055748984218ae646ea0de138626318a6c4de4c1c575be1e23fc8dd0422db4",
+  "function_identities": [
+    "public.aws_public_homeowner_ledger_upload(text, text, text, text, numeric, text)"
+  ],
+  "expected_live_definition_sha256": null,
+  "intended_replacement_sha256": "ae039876920fde43cba6c3d01ed9443f2d129ad11d23825ec3c120256fc21ac3",
+  "authorization_phrase": "APPLY_HOMEOWNER_PRECLAIM_LINKS",
+  "predecessors": [],
+  "order_note": "No predecessor and no order on this engine. SQL 110 needs the homeowner ledger tables (homeowner_ledger_tokens, homeowner_ledger_check_uploads, homeowner_ledger_events, from the restored Supabase schema) owned by checksops_admin without FORCE ROW LEVEL SECURITY. Apply it before the API change that deletes pre-claim links or calls public.aws_public_homeowner_ledger_upload: until then a DELETE by checksops fails with permission denied, and the public upload's direct INSERT is refused by aws_write_homeowner_ledger_check_uploads. SQL 110 grants DELETE on homeowner_ledger_tokens to checksops (no policy change: aws_write_homeowner_ledger_tokens, FOR ALL with aws_can_write_tenant, decides which rows) and creates one SECURITY DEFINER function, EXECUTE checksops only. No later migration replaces it.",
+  "admin_login": "checksops_admin",
+  "rds_identifier": "checksops-production",
+  "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
+  "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
+  "tooling": {
+    "status": "built",
+    "production_tool": "scripts/deployment-guard/sql110-homeowner-preclaim-links-production-apply.mjs",
+    "production_lib": "scripts/deployment-guard/lib/release-sql-production-apply.mjs",
+    "staging_executor_handler": "aws/write-path/guarded-sql-executor/index.mjs handleReleaseSqlMigration",
+    "staging_workflow_choice": "sql110-homeowner-preclaim-links",
+    "one_shot_migration": "sql110",
+    "fingerprint_engine": "scripts/deployment-guard/lib/release-sql-state.mjs",
+    "runbook": "ops/production-sql-110-apply.md",
+    "tests": [
+      "aws/tests/release-sql110-executor.test.mjs",
+      "aws/tests/release-sql110-production-apply.test.mjs",
+      "aws/tests/release-sql90-97-executor.test.mjs",
+      "aws/tests/release-sql90-97-production-apply.test.mjs",
+      "aws/tests/sql110-homeowner-preclaim-links-pg.test.mjs"
+    ],
+    "note": "Guarded tooling for SQL 110: sql110-homeowner-preclaim-links-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql110-homeowner-preclaim-links); production-sql-one-shot.mjs --migration sql110. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): the function's language, volatility, SECURITY DEFINER, result, search_path, body hash and EXECUTE ACL (checksops and the owner), and the checksops DELETE line on homeowner_ledger_tokens. The pre-conditions also require that the applying login can write the three homeowner ledger tables as a definer (definer_can_write_relations) and owns homeowner_ledger_tokens; the post-conditions require every other grant on homeowner_ledger_tokens unchanged. The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
+  },
+  "production_inspect": {
+    "status": "pending",
+    "date": null,
+    "ssm_command_id": null,
+    "source_commit": null,
+    "read_only": true,
+    "connected_as": "checksops_admin",
+    "live_definition_sha256": null,
+    "apply_preconditions_met": null,
+    "precondition_failures": null,
+    "note": "Pending: no read-only production inspect has been run for SQL 110 yet. Expected: the three homeowner ledger tables and the columns the writer uses present, owned by checksops_admin without FORCE ROW LEVEL SECURITY, the function absent and checksops holding no DELETE on homeowner_ledger_tokens. Record its date, SSM command id, source commit, live_definition_sha256, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. If precondition_failures is not [] stop: that needs its own reviewed change."
+  },
+  "intended_post_state": {
+    "fingerprint": "ae039876920fde43cba6c3d01ed9443f2d129ad11d23825ec3c120256fc21ac3",
+    "note": "checksops holds DELETE on public.homeowner_ledger_tokens (its other grants and every other role's unchanged; policies unchanged). public.aws_public_homeowner_ledger_upload(text, text, text, text, numeric, text) exists: plpgsql, VOLATILE, SECURITY DEFINER, search_path=public, owned by checksops_admin, EXECUTE checksops and the owner only (PUBLIC revoked). No table, column, policy, trigger or row changes. The fingerprint is releaseIntendedHash('sql110', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): ae039876920fde43cba6c3d01ed9443f2d129ad11d23825ec3c120256fc21ac3."
+  },
+  "staging_acceptance": {
+    "ok": false,
+    "reference": null,
+    "basis": "Pending: record the guarded staging SQL executor read-live run of SQL 110 (choice sql110-homeowner-preclaim-links) and its staging apply run here in the reviewed change that sets execute true. The read-live is expected to report already_applied false (the function absent, no checksops DELETE); the staging pin then records that pre-state and the owner approves the staging apply, and the apply run (receipt before == the recorded pre-state, after == intended) is the staging evidence. The grant and the writer are covered on PostgreSQL 16 by aws/tests/sql110-homeowner-preclaim-links-pg.test.mjs. Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+  }
+}

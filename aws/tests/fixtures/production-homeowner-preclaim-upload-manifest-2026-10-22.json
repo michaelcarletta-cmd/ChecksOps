@@ -1,0 +1,14 @@
+{
+  "workstream_id": "homeowner-preclaim-upload",
+  "authorization": "Pending owner review (2026-10-22). Planning only: nothing is live or verified. The production apply still needs its own owner approval and staging acceptance.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Owner report 2026-10-22: homeowners who open a pre-claim upload link get \"entity too large\", uploads should start a new file and go to Review with OCR/MICR, and Recent Pre-claim links need Delete. The accepted homeowner.mjs bytes: homeowner-ledger-upload action upload_url presigns a direct S3 PUT (15 MB cap, image/PDF types) so images never pass through Lambda; the commit records the upload through SQL 110 aws_public_homeowner_ledger_upload (the identity-free public session cannot INSERT under RLS), files a check into Review as the link sender (same rows as Process to Review, in a savepoint; stays pending_review when the sender cannot write the tenant) and runs check-ocr-intake as the sender (time-boxed); homeowner-ledger-send action revoke|delete manages a link, same tenant only, delete refused while uploads point at the link and answering delete_unavailable until SQL 110's DELETE grant exists. live_sha256 c51ea27a is the homeowner.mjs bytes on main (release lock pin); a read-only production overlay inspect must confirm it before any apply. No sql_before: until SQL 110 (aws/workflows/sql/110_homeowner_preclaim_links.sql, its own guarded PR) is live, the commit answers upload_unavailable (42883) and delete answers delete_unavailable (42501) instead of failing, so these bytes are safe to deploy first; revoke and the presigned upload work without it.",
+  "members": {
+    "homeowner.mjs": {
+      "live_sha256": "c51ea27a37a72b18aed7881ae349212257b790e6ff400cbe675949574504a80c",
+      "accepted_sha256": "1fa4950c42bf26ff70bc04acd05ca8c784a970d2573178599859c8d682ce5849",
+      "operation": "replace"
+    }
+  }
+}

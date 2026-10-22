@@ -396,7 +396,7 @@ export function CheckAltSettings() {
   );
 }
 
-/** Shown on the "Waiting in Check Alt" list. ChecksOps does not approve or reject here. */
+/** Shown on the "Waiting on Deposit" list. ChecksOps does not approve or reject here. */
 export const CHECKALT_WAITING_NOTE =
   "Review this deposit in the Check Alt portal. ChecksOps updates it automatically once Check Alt approves or rejects it.";
 
@@ -505,7 +505,7 @@ export function PendingApprovalDeposits() {
     return (
       <div className="flex items-center justify-between rounded-md border border-dashed border-border/60 px-3 py-3">
         <p className="text-xs text-muted-foreground">
-          No deposits waiting in Check Alt.
+          No checks waiting on deposit.
         </p>
         <div className="flex items-center gap-2">
           {canPoll && (

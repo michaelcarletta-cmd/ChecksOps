@@ -1,13 +1,13 @@
 /**
- * Bank Deposits grouping (owner, 2026-10-22: "Bank deposit should only show
- * the checks that were deposited and on what day they were deposited").
+ * Bank Deposits grouping (owner, 2026-10-22): once a check has passed to
+ * Check Alt it belongs on Bank Deposits, under the day it was deposited,
+ * with a drop-down of that day's checks. There is no separate in-transit
+ * list; checks still waiting are on the "Waiting on Deposit" tab.
  *
- * A check is deposited only when its Check Alt deposit is `cleared` AND
- * `cleared_at` holds the FinCapture depositDate (the bank-credit day the
- * reconcile persisted). Deposited checks are grouped by that day with a daily
- * total. Everything else (pending_approval, submitted, unresolved) is in
- * transit and is never placed on a deposit day; submitted_at is not a deposit
- * date.
+ * On Bank Deposits: status `submitted` (Check Alt approved it) or `cleared`.
+ * Deposit day: the Check Alt depositDate stored in `cleared_at` when the
+ * deposit cleared (isBankDepositSettled), otherwise the local day the check
+ * was sent to Check Alt (`submitted_at`).
  */
 
 export type BankDepositRowLike = {
@@ -17,19 +17,38 @@ export type BankDepositRowLike = {
   submitted_at?: string | null;
 };
 
-/** YYYY-MM-DD of a stored timestamp, or "unknown". */
+const BANK_DEPOSIT_STATUSES = new Set(["submitted", "cleared"]);
+
+/** YYYY-MM-DD of a stored timestamp (its UTC date), or "unknown". */
 export const bankDepositDayKey = (iso: string | null | undefined): string => {
   if (!iso) return "unknown";
   const day = String(iso).slice(0, 10);
   return /^\d{4}-\d{2}-\d{2}$/.test(day) ? day : "unknown";
 };
 
+/** YYYY-MM-DD of a timestamp in the viewer's local time zone, or "unknown". */
+export const localDayKey = (iso: string | null | undefined): string => {
+  if (!iso) return "unknown";
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return "unknown";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())}`;
+};
+
 export const sumDepositAmounts = (rows: { amount?: number | string | null }[]): number =>
   rows.reduce((s, r) => s + Number(r.amount ?? 0), 0);
 
-/** Deposited only when local status is cleared and the provider depositDate was stored. */
+/** Cleared with the Check Alt depositDate stored in cleared_at. */
 export const isBankDepositSettled = (row: { status?: string | null; cleared_at?: string | null }): boolean =>
   row?.status === "cleared" && Boolean(row?.cleared_at) && bankDepositDayKey(row?.cleared_at) !== "unknown";
+
+/** Passed to Check Alt: approved (submitted) or cleared. Waiting checks are not listed. */
+export const isOnBankDeposits = (row: { status?: string | null }): boolean =>
+  BANK_DEPOSIT_STATUSES.has(String(row?.status || ""));
+
+/** The day a check is listed under on Bank Deposits. */
+export const bankDepositDayOf = (row: BankDepositRowLike): string =>
+  isBankDepositSettled(row) ? bankDepositDayKey(row.cleared_at) : localDayKey(row.submitted_at);
 
 export type BankDepositDay<T> = {
   key: string;
@@ -40,18 +59,12 @@ export type BankDepositDay<T> = {
 
 export function groupBankDeposits<T extends BankDepositRowLike>(rows: T[]): {
   days: BankDepositDay<T>[];
-  inTransit: T[];
-  depositedTotal: number;
-  inTransitTotal: number;
+  total: number;
 } {
   const byDay = new Map<string, BankDepositDay<T>>();
-  const inTransit: T[] = [];
   for (const row of rows || []) {
-    if (!isBankDepositSettled(row)) {
-      inTransit.push(row);
-      continue;
-    }
-    const dayKey = bankDepositDayKey(row.cleared_at);
+    if (!isOnBankDeposits(row)) continue;
+    const dayKey = bankDepositDayOf(row);
     const key = `deposited:${dayKey}`;
     let day = byDay.get(key);
     if (!day) {
@@ -61,22 +74,11 @@ export function groupBankDeposits<T extends BankDepositRowLike>(rows: T[]): {
     day.rows.push(row);
     day.total = sumDepositAmounts(day.rows);
   }
-  const days = Array.from(byDay.values()).sort((a, b) => b.dayKey.localeCompare(a.dayKey));
-  inTransit.sort((a, b) => String(b.submitted_at || "").localeCompare(String(a.submitted_at || "")));
-  return {
-    days,
-    inTransit,
-    depositedTotal: days.reduce((s, d) => s + d.total, 0),
-    inTransitTotal: sumDepositAmounts(inTransit),
-  };
+  // Newest day first; "unknown" sorts last.
+  const days = Array.from(byDay.values()).sort((a, b) => {
+    if (a.dayKey === "unknown") return 1;
+    if (b.dayKey === "unknown") return -1;
+    return b.dayKey.localeCompare(a.dayKey);
+  });
+  return { days, total: days.reduce((s, d) => s + d.total, 0) };
 }
-
-const TRANSIT_WORDS: Record<string, string> = {
-  pending_approval: "Waiting in Check Alt",
-  submitted: "Approved, not yet deposited",
-  cleared: "Cleared, deposit date not reported",
-};
-
-/** Status words for an in-transit row. */
-export const inTransitStatusLabel = (status: string | null | undefined): string =>
-  (status && TRANSIT_WORDS[status]) || (status ? status.replace(/_/g, " ") : "Unknown");

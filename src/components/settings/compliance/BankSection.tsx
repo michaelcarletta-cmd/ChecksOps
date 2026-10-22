@@ -82,7 +82,7 @@ export function BankSection({ tenantId, banks, environment, readOnly, accountCon
               <Plus className="h-3.5 w-3.5 mr-1.5" /> Add bank account
             </Button>
             {!accountConnected && (
-              <span className="text-[11px] text-muted-foreground">Save and send your business details to Moov first.</span>
+              <span className="text-[11px] text-muted-foreground">Save and submit your business details first.</span>
             )}
           </div>
         )

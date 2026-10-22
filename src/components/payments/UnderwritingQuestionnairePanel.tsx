@@ -9,18 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ClipboardList, Loader2, Save } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-
-interface Answers {
-  averageTransactionSize: string;
-  maxTransactionSize: string;
-  averageMonthlyTransactionVolume: string;
-  businessToBusinessPercentage: string;
-  consumerToBusinessPercentage: string;
-  hasPhysicalGoods: boolean;
-  isShippingProduct: boolean;
-  shipmentDurationDays: string;
-  returnPolicy: string;
-}
+import { buildUnderwritingPayload, type UnderwritingAnswers as Answers } from "@/lib/underwritingPayload";
 
 const EMPTY: Answers = {
   averageTransactionSize: "",
@@ -41,6 +30,14 @@ const RETURN_POLICIES = [
   { value: "other", label: "Other" },
 ];
 
+/** Plain words for provider error codes; the provider is never named. */
+const plainError = (code: string) =>
+  code === "moov_rejected"
+    ? "These answers were not accepted. Check the amounts and percentages and try again."
+    : /^moov_/.test(code)
+      ? "Payment setup is unavailable right now. Try again in a few minutes."
+      : code;
+
 async function invoke(fn: string, body: Record<string, unknown>) {
   const { data, error } = await supabase.functions.invoke(fn, { body });
   if (error) {
@@ -49,9 +46,9 @@ async function invoke(fn: string, body: Record<string, unknown>) {
       const parsed = await (error as any).context?.json?.();
       if (parsed?.error) message = parsed.error;
     } catch { /* keep original */ }
-    throw new Error(message);
+    throw new Error(plainError(message));
   }
-  if ((data as any)?.error) throw new Error((data as any).error);
+  if ((data as any)?.error) throw new Error(plainError((data as any).error));
   return data as any;
 }
 
@@ -111,9 +108,14 @@ export function UnderwritingQuestionnairePanel({
 
   async function handleSave() {
     if (!tenantId) return;
+    const built = buildUnderwritingPayload(answers);
+    if (!built.ok) {
+      toast({ title: "Check your answers", description: built.message, variant: "destructive" });
+      return;
+    }
     setSaving(true);
     try {
-      await invoke("moov-underwriting", { tenant_id: tenantId, action: "save", answers });
+      await invoke("moov-underwriting", { tenant_id: tenantId, action: "save", answers: built.payload });
       setOnFile(true);
       toast({ title: "Answers submitted", description: "Your expected activity was sent to the payment provider." });
     } catch (e: any) {
