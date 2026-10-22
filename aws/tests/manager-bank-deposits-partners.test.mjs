@@ -73,7 +73,7 @@ test('Manager tab order keeps Reports after the seven Manager items and omits De
   assert.equal(src.includes('value="deposit_ops"'), false);
   assert.equal(/DepositOperationsConsole/.test(src), false);
   assert.match(src, /defaultValue=\{SHOW_CHECKALT \? "pending_approvals" : "reports"\}/);
-  assert.match(src, /setActiveTab\("reissue"\)/);
+  assert.match(src, /handleTabChange\("reissue"\)/);
   assert.match(src, /<DepositReports/);
 });
 
