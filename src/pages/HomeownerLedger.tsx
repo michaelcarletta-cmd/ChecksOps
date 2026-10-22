@@ -718,20 +718,23 @@ function UploadPanel({ token, onDone, preClaim, hideHeader }: { token: string; o
     if (!front) { toast.error("Add the front image"); return; }
     setBusy(true);
     try {
-      const front_base64 = await fileToBase64(front);
-      const back_base64 = back ? await fileToBase64(back) : undefined;
+      // Each image goes straight to storage (no size-limited JSON body), then
+      // the upload is recorded with the stored paths.
+      const front_path = await putHomeownerFile(token, front, "front");
+      const back_path = back ? await putHomeownerFile(token, back, "back") : undefined;
       const { data, error } = await supabase.functions.invoke("homeowner-ledger-upload", {
         body: {
           token,
           kind,
-          front_base64, front_mime: front.type, front_filename: front.name,
-          back_base64, back_mime: back?.type, back_filename: back?.name,
+          front_path,
+          back_path,
           amount_estimate: amount ? Number(amount) : undefined,
           homeowner_note: note || undefined,
         },
       });
+      const reply = invokeReply(data, error);
+      if (reply?.error) throw new Error(homeownerUploadErrorText(reply.error));
       if (error) throw new Error(error.message);
-      if ((data as any)?.error) throw new Error((data as any).error);
       toast.success(kind === "check" ? "Check sent to your team" : "Document uploaded");
       setFront(null); setBack(null); setAmount(""); setNote("");
       if (fInput.current) fInput.current.value = "";
@@ -862,13 +865,39 @@ function groupByCheck(events: LedgerEvent[]) {
   return Array.from(map.values());
 }
 
-async function fileToBase64(f: File): Promise<string> {
-  return new Promise((res, rej) => {
-    const r = new FileReader();
-    r.onload = () => res(String(r.result));
-    r.onerror = () => rej(new Error("read failed"));
-    r.readAsDataURL(f);
+type InvokeReply = { error?: string; message?: string } | null;
+/** The function's JSON reply, from data or (on an HTTP error) the error context. */
+const invokeReply = (data: unknown, error: unknown): InvokeReply =>
+  (data as InvokeReply) ?? (error as { context?: { body?: InvokeReply } } | null)?.context?.body ?? null;
+
+const HOMEOWNER_UPLOAD_ERRORS: Record<string, string> = {
+  file_too_large: "That file is larger than 15 MB. Take the photo again or crop it closer.",
+  unsupported_type: "Upload a photo (JPG, PNG, HEIC) or a PDF.",
+  rate_limited: "Too many uploads on this link today. Try again tomorrow or contact your team.",
+  revoked: "This upload link is no longer active. Ask your team for a new one.",
+  expired: "This upload link has expired. Ask your team for a new one.",
+  upload_unavailable: "Uploads are being set up. Try again in a little while.",
+};
+
+const homeownerUploadErrorText = (code: string) => HOMEOWNER_UPLOAD_ERRORS[code] || code || "Upload failed";
+
+/** Upload one file straight to storage through a short-lived link; returns its stored path. */
+async function putHomeownerFile(token: string, file: File, side: "front" | "back"): Promise<string> {
+  const contentType = (file.type || (/\.pdf$/i.test(file.name) ? "application/pdf" : "image/jpeg")).toLowerCase();
+  const { data, error } = await supabase.functions.invoke("homeowner-ledger-upload", {
+    body: { token, action: "upload_url", side, content_type: contentType, size: file.size },
   });
+  const code = invokeReply(data, error)?.error;
+  if (code) throw new Error(homeownerUploadErrorText(code));
+  if (error) throw new Error(error.message);
+  const target = data as { upload_url: string; path: string; headers?: Record<string, string> };
+  const put = await fetch(target.upload_url, {
+    method: "PUT",
+    headers: target.headers ?? { "Content-Type": contentType },
+    body: file,
+  });
+  if (!put.ok) throw new Error(`Upload failed (${put.status}). Check your connection and try again.`);
+  return target.path;
 }
 
 /* ---------------- Project schedule ---------------- */

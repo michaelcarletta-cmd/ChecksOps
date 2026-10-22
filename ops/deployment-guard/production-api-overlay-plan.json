@@ -404,10 +404,10 @@
     },
     "homeowner.mjs": {
       "operation": "replace",
-      "accepted_sha256": "c51ea27a37a72b18aed7881ae349212257b790e6ff400cbe675949574504a80c",
-      "expected_live_sha256": "0cb700f158e01e8bf8ef5d02808fd8dd96c3710a2eebcee650db01dcc6717a95",
+      "accepted_sha256": "1fa4950c42bf26ff70bc04acd05ca8c784a970d2573178599859c8d682ce5849",
+      "expected_live_sha256": "c51ea27a37a72b18aed7881ae349212257b790e6ff400cbe675949574504a80c",
       "sql_before": null,
-      "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
+      "manifest": "aws/tests/fixtures/production-homeowner-preclaim-upload-manifest-2026-10-22.json"
     },
     "write-signature.mjs": {
       "operation": "replace",
