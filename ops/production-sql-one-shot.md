@@ -91,7 +91,9 @@ An unexpected exception also ends in one failure summary:
   before anything else.
 
 1. **Pin.** Refuses unless the pin has `execute: true`, a staging acceptance
-   (`ok: true` plus a reference) and an authorization phrase. SQL 109's pin is `execute: false`
+   (`ok: true` plus a reference) and an authorization phrase. SQL 110's pin is `execute: false`
+   again since its 2026-10-22 apply (owner statement "apply SQL 110 in production"; see
+   `ops/production-sql-110-apply.md`). SQL 109's pin is `execute: false`
    again since its 2026-10-21 apply (owner statement "apply SQL 109 in production"; see
    `ops/production-sql-109-apply.md`). SQL 108's pin is `execute: false`
    again since its 2026-10-21 apply (owner statement "apply SQL 108 in production"; see

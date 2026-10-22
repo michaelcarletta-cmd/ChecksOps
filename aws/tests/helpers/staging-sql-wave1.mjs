@@ -46,7 +46,8 @@ export const STAGING_WAVE1 = Object.freeze({
   // Wave 11 (owner approved 2026-10-22, "Apply SQL 110 to staging"): SQL 110 adds the DELETE grant
   // on homeowner_ledger_tokens and the public homeowner upload writer. Read at main 6cf4c2f6b after
   // the executor carried it: the writer absent, no DELETE grant, the definer able to write all three tables.
-  sql110: Object.freeze({ wave: 11, approved: '2026-10-22', run: '39836749684', live: '3fdbb3d323c1c0edab0c2ee7e4a6c1b08aa30c1a021c7d81899e95a616f186fd' }),
+  // Applied by the guarded staging executor run 39838878110 (receipt 3fdbb3d3… -> ae039876…).
+  sql110: Object.freeze({ wave: 11, approved: '2026-10-22', run: '39836749684', live: '3fdbb3d323c1c0edab0c2ee7e4a6c1b08aa30c1a021c7d81899e95a616f186fd', apply_run: '39838878110' }),
   sql98: Object.freeze({ wave: 3, approved: '2026-10-18', run: '39083278136', live: '296c3d6a274e10f66005fb9eaecf93fa17b81bd8db3607037ca07698fddd3275', apply_run: '39085677318' }),
 });
 
