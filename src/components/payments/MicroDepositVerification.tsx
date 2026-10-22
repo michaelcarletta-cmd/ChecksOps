@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useStepUp } from "@/hooks/useStepUp";
+import { invokeWithBankStepUp } from "@/lib/bankStepUp";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -33,6 +35,7 @@ export function MicroDepositVerification({
   environment: environmentProp,
 }: Props) {
   const { toast } = useToast();
+  const { requireStepUp } = useStepUp();
   const qc = useQueryClient();
   const [code, setCode] = useState("");
   const [showConfirm, setShowConfirm] = useState(false);
@@ -67,9 +70,9 @@ export function MicroDepositVerification({
   const initiate = useMutation({
     retry: false,
     mutationFn: async () => {
-      const { data, error } = await supabase.functions.invoke("moov-micro-deposit-initiate", {
+      const { data, error } = await invokeWithBankStepUp(() => supabase.functions.invoke("moov-micro-deposit-initiate", {
         body: { tenant_id: tenantId, payment_method_id: paymentMethodId }
-      });
+      }), requireStepUp, tenantId);
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).message ?? (data as any).error);
       return data;
@@ -98,13 +101,13 @@ export function MicroDepositVerification({
     mutationFn: async () => {
       const verificationId = await getVerificationId();
 
-      const { data, error } = await supabase.functions.invoke("moov-micro-deposit-confirm", {
+      const { data, error } = await invokeWithBankStepUp(() => supabase.functions.invoke("moov-micro-deposit-confirm", {
         body: {
           tenant_id: tenantId,
           verification_id: verificationId,
           code: code
         }
-      });
+      }), requireStepUp, tenantId);
       if (error) {
         let payload: any = null;
         try { payload = await (error as any).context?.json?.(); } catch { /* ignore */ }
