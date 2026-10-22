@@ -43,6 +43,10 @@ export const STAGING_WAVE1 = Object.freeze({
   // transfer webhook writer. Read at main c92fe457b after the executor carried it: the function
   // absent, SQL 91 applied, the definer able to write both tables.
   sql109: Object.freeze({ wave: 10, approved: '2026-10-21', run: '39663914111', live: 'e0f02501f167f4bee2bbb8bc32c1e19b23deb5425a650c63102030531aa9a077' }),
+  // Wave 11 (owner approved 2026-10-22, "Apply SQL 110 to staging"): SQL 110 adds the DELETE grant
+  // on homeowner_ledger_tokens and the public homeowner upload writer. Read at main 6cf4c2f6b after
+  // the executor carried it: the writer absent, no DELETE grant, the definer able to write all three tables.
+  sql110: Object.freeze({ wave: 11, approved: '2026-10-22', run: '39836749684', live: '3fdbb3d323c1c0edab0c2ee7e4a6c1b08aa30c1a021c7d81899e95a616f186fd' }),
   sql98: Object.freeze({ wave: 3, approved: '2026-10-18', run: '39083278136', live: '296c3d6a274e10f66005fb9eaecf93fa17b81bd8db3607037ca07698fddd3275', apply_run: '39085677318' }),
 });
 
@@ -54,7 +58,7 @@ export const pendingPin = (pin) => Object.freeze({
 });
 
 /**
- * The committed staging pin's apply state: waves 1-10 recorded and approved, wave 6 approved with
+ * The committed staging pin's apply state: waves 1-11 recorded and approved, wave 6 approved with
  * its read-live still to record (pending until then), the rest pending.
  */
 export function assertStagingPinState(assert, key, pin) {

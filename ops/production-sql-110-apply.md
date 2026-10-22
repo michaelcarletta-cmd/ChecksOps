@@ -58,6 +58,20 @@ _kind, _amount_estimate, _homeowner_note)`:
 **Status:** pending. Both pins are `execute: false`, `authorization: "pending"`, with no recorded
 pre-state; nothing is applied by this change. Neither staging nor production has been inspected.
 
+## Status
+
+- **Staging executor refreshed (2026-10-22).** Inspect run 39836139410 (main `6cf4c2f6b`) found the
+  live executor at CodeSha256 `ueLvAc0a…` without SQL 110 (adds only
+  `sql/110_homeowner_preclaim_links.sql`, supersedes the three engine files, nothing dropped, no
+  collisions). Deploy run 39836443329 updated it to main's package.
+- **Staging read-live (2026-10-22).** Run 39836749684 (main `6cf4c2f6b`): the writer `absent`, no
+  DELETE grant on `homeowner_ledger_tokens` (other write grant `checksops UPDATE`), live
+  `3fdbb3d323c1c0edab0c2ee7e4a6c1b08aa30c1a021c7d81899e95a616f186fd`, `definer_writes` ok for all three tables,
+  `already_applied` false, `precondition_failures` `[]`. Recorded in the staging pin
+  (`expected_live_definition_sha256`, `execute: true`, wave 11) under the owner's statement of
+  2026-10-22, "Apply SQL 110 to staging".
+- Staging apply and the second read-live: not run yet. The production pin stays pending.
+
 ## Fingerprint
 
 Code-derived on the release engine (`scripts/deployment-guard/lib/release-sql-state.mjs`, spec
