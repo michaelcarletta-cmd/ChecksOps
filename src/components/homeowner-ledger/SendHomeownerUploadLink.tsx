@@ -5,7 +5,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Send, Link as LinkIcon, Copy, Eye, RefreshCcw, Tag } from "lucide-react";
+import { Loader2, Send, Link as LinkIcon, Copy, Eye, RefreshCcw, Tag, Trash2 } from "lucide-react";
+
+type InvokeReply = { error?: string; message?: string } | null;
+/** The function's JSON reply, from data or (on an HTTP error) the error context. */
+const invokeReply = (data: unknown, error: unknown): InvokeReply =>
+  (data as InvokeReply) ?? (error as { context?: { body?: InvokeReply } } | null)?.context?.body ?? null;
 import { toast } from "sonner";
 
 type Token = {
@@ -87,10 +92,24 @@ export function SendHomeownerUploadLink({ tenantId }: { tenantId?: string }) {
     toast.success("Link copied");
   };
 
-  const revoke = async (id: string) => {
-    await supabase.from("homeowner_ledger_tokens")
-      .update({ revoked_at: new Date().toISOString() }).eq("id", id);
-    toast.success("Link revoked");
+  // Revoke and delete go through the API (same-tenant check server-side);
+  // the result is checked, so a refused change is never reported as done.
+  const manageLink = async (id: string, action: "revoke" | "delete") => {
+    if (action === "delete" && !window.confirm("Delete this link permanently? The homeowner will no longer be able to use it.")) return;
+    const { data, error } = await supabase.functions.invoke("homeowner-ledger-send", {
+      body: { action, token_id: id },
+    });
+    const reply = invokeReply(data, error);
+    if (error || reply?.error) {
+      const code = reply?.error || (error as Error | null)?.message;
+      toast.error(
+        reply?.message
+          || (code === "delete_unavailable" ? "Deleting links is not switched on yet. Revoke it for now." : null)
+          || (action === "delete" ? "Couldn't delete the link" : "Couldn't revoke the link"),
+      );
+      return;
+    }
+    toast.success(action === "delete" ? "Link deleted" : "Link revoked");
     load();
   };
 
@@ -142,7 +161,6 @@ export function SendHomeownerUploadLink({ tenantId }: { tenantId?: string }) {
                       {t.homeowner_email && <span className="text-muted-foreground"> • {t.homeowner_email}</span>}
                     </div>
                     <div className="flex items-center gap-1">
-                      {t.partner_code && <Badge variant="outline" className="text-[10px]"><Tag className="h-2.5 w-2.5 mr-1" />{t.partner_code}</Badge>}
                       {t.revoked_at
                         ? <Badge variant="destructive" className="text-[10px]">Revoked</Badge>
                         : <Badge variant="secondary" className="text-[10px]">Active</Badge>}
@@ -152,19 +170,24 @@ export function SendHomeownerUploadLink({ tenantId }: { tenantId?: string }) {
                     {t.last_viewed_at ? `Viewed ${new Date(t.last_viewed_at).toLocaleString()}` : "Not viewed yet"}
                     {t.view_count ? ` • ${t.view_count} views` : ""}
                   </div>
-                  {!t.revoked_at && (
-                    <div className="flex gap-2 pt-1">
-                      <Button size="sm" variant="outline" className="h-7 text-[11px]" onClick={() => copyLink(t.token)}>
-                        <Copy className="h-3 w-3 mr-1" /> Copy
-                      </Button>
-                      <Button size="sm" variant="outline" className="h-7 text-[11px]" asChild>
-                        <a href={`/start-claim/${t.token}`} target="_blank" rel="noreferrer"><Eye className="h-3 w-3 mr-1" /> Preview</a>
-                      </Button>
-                      <Button size="sm" variant="ghost" className="h-7 text-[11px] text-destructive" onClick={() => revoke(t.id)}>
-                        <RefreshCcw className="h-3 w-3 mr-1" /> Revoke
-                      </Button>
-                    </div>
-                  )}
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    {!t.revoked_at && (
+                      <>
+                        <Button size="sm" variant="outline" className="h-7 text-[11px]" onClick={() => copyLink(t.token)}>
+                          <Copy className="h-3 w-3 mr-1" /> Copy
+                        </Button>
+                        <Button size="sm" variant="outline" className="h-7 text-[11px]" asChild>
+                          <a href={`/start-claim/${t.token}`} target="_blank" rel="noreferrer"><Eye className="h-3 w-3 mr-1" /> Preview</a>
+                        </Button>
+                        <Button size="sm" variant="ghost" className="h-7 text-[11px] text-destructive" onClick={() => manageLink(t.id, "revoke")}>
+                          <RefreshCcw className="h-3 w-3 mr-1" /> Revoke
+                        </Button>
+                      </>
+                    )}
+                    <Button size="sm" variant="ghost" className="h-7 text-[11px] text-destructive" onClick={() => manageLink(t.id, "delete")}>
+                      <Trash2 className="h-3 w-3 mr-1" /> Delete
+                    </Button>
+                  </div>
                 </li>
               ))}
             </ul>

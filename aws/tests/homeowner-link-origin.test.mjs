@@ -158,8 +158,8 @@ test('the unauthenticated upload alert ignores a request-supplied origin', () =>
       if (text.includes('aws_public_homeowner_ledger_by_token')) {
         return { rows: [{ doc: { ok: true, token: { id: 't1', tenant_id: TENANT, claim_id: CLAIM } } }] };
       }
-      if (text.includes('INSERT INTO public.homeowner_ledger_check_uploads')) {
-        return { rows: [{ id: 'u1', front_path: 'p', status: 'uploaded', created_at: 'now' }] };
+      if (text.includes('aws_public_homeowner_ledger_upload')) {
+        return { rows: [{ doc: { ok: true, upload_id: 'u1', tenant_id: TENANT, claim_id: CLAIM, sent_by_user_id: STAFF } }] };
       }
       if (text.includes('FROM public.homeowner_ledger_tokens')) {
         return { rows: [{ id: 't1', tenant_id: TENANT, claim_id: CLAIM, sent_by_user_id: STAFF, homeowner_name: 'Ada', homeowner_email: 'home@example.com' }] };
@@ -169,8 +169,8 @@ test('the unauthenticated upload alert ignores a request-supplied origin', () =>
     },
   };
   const result = await handleHomeownerLedgerUpload(
-    { body: JSON.stringify({ token: 'ledger-token-1', front_base64: 'A'.repeat(200), origin: EVIL }) },
-    { client: db, putObject: async () => ({}), sendViaSesOrSink: async (msg) => { alerts.push(msg); return { ok: true }; } },
+    { body: JSON.stringify({ token: 'ledger-token-1', kind: 'document', front_path: `ledger/${CLAIM}/1_front.jpg`, origin: EVIL }) },
+    { client: db, uploadExists: async () => true, sendViaSesOrSink: async (msg) => { alerts.push(msg); return { ok: true }; } },
   );
   assert.equal(result.ok, true, JSON.stringify(result));
   assert.equal(result.notified, true);

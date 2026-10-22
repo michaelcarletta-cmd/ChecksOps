@@ -4,9 +4,12 @@
  */
 import { randomBytes, randomUUID } from 'node:crypto';
 import pg from 'pg';
-import { CopyObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import {
+  CopyObjectCommand, GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client,
+} from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { withIdentity, withIdentityWrite, parseBody, ignoredSpoof } from './data.mjs';
+import { APP_USER_EMAIL_GUC, APP_USER_ID_GUC } from './cognito.mjs';
 import { loadDatabaseCredentials } from './secrets.mjs';
 import { buildClientConfig, buildWriteClientConfig, sanitizePublicError } from './db-health.mjs';
 import { normalizePath, s3KeyFor } from './storage-paths.mjs';
@@ -527,6 +530,132 @@ export const handleHomeownerClaimPortal = async (event) => {
   }
 };
 
+// Homeowner pre-claim uploads (owner, 2026-10-22). The browser PUTs each
+// image straight to S3 through a presigned URL (action "upload_url"), so a
+// phone photo never passes through Lambda (the old base64 JSON body hit the
+// 6 MB request limit: "entity too large"). The commit then records the upload
+// through SQL 110 public.aws_public_homeowner_ledger_upload (SECURITY DEFINER:
+// this session has no app identity and RLS refuses a direct INSERT), files a
+// check into Review as the staff member who sent the link, and runs OCR/MICR.
+export const HOMEOWNER_UPLOAD_TYPES = Object.freeze({
+  'image/jpeg': 'jpg',
+  'image/jpg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+  'image/heic': 'heic',
+  'image/heif': 'heic',
+  'application/pdf': 'pdf',
+});
+export const HOMEOWNER_UPLOAD_MAX_BYTES = 15 * 1024 * 1024;
+const HOMEOWNER_OCR_WAIT_MS = 18_000;
+
+const homeownerUploadPrefix = (doc) => `ledger/${doc.token.claim_id || doc.token.id}/`;
+
+const presignHomeownerUpload = ({ key, contentType, contentLength }) => getSignedUrl(
+  s3(),
+  new PutObjectCommand({
+    Bucket: filesBucket(),
+    Key: key,
+    ContentType: contentType,
+    ContentLength: contentLength,
+  }),
+  { expiresIn: 900 },
+);
+
+const homeownerUploadExists = async (rel) => {
+  const key = s3KeyFor('homeowner-uploads', rel);
+  if (!key || !filesBucket()) return false;
+  try {
+    await s3().send(new HeadObjectCommand({ Bucket: filesBucket(), Key: key }));
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * File a homeowner check into Review as the link's sender: the same rows
+ * staff "Process to Review" writes (claim file copy, check_intake_items in
+ * stage review, upload marked attached). Runs inside a savepoint; when the
+ * sender cannot write the tenant (RLS) the upload simply stays pending_review
+ * in the Homeowner Uploads inbox.
+ */
+const fileHomeownerUploadToReview = async (client, upload, deps = {}) => {
+  const senderId = upload.sent_by_user_id;
+  if (!senderId) return { filed: false, reason: 'no_sender' };
+  await client.query('SAVEPOINT homeowner_upload_review');
+  try {
+    await client.query('SELECT set_config($1, $2, true)', [APP_USER_ID_GUC, String(senderId)]);
+    await client.query('SELECT set_config($1, $2, true)', [APP_USER_EMAIL_GUC, '']);
+    const copy = deps.copyToClaimFiles || copyHomeownerUploadToClaimFiles;
+    const claimKey = upload.claim_id || 'unlinked';
+    const front = await copy(upload.tenant_id, claimKey, upload.front_path);
+    const back = upload.back_path ? await copy(upload.tenant_id, claimKey, upload.back_path) : null;
+    const check = (await client.query(
+      `INSERT INTO public.check_intake_items (
+         claim_id, tenant_id, uploaded_by, front_image_path, back_image_path,
+         amount, status, check_stage, check_source
+       ) VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5, $6, 'pending', 'review', 'insurance')
+       RETURNING id`,
+      [upload.claim_id || null, upload.tenant_id, senderId, front, back, upload.amount_estimate ?? null],
+    )).rows[0];
+    const marked = await client.query(
+      `UPDATE public.homeowner_ledger_check_uploads
+       SET status = 'attached', attached_check_id = $2::uuid, reviewed_at = now()
+       WHERE id = $1::uuid`,
+      [upload.upload_id, check.id],
+    );
+    if (!marked.rowCount) throw new Error('upload_not_marked');
+    await client.query('RELEASE SAVEPOINT homeowner_upload_review');
+    return { filed: true, checkId: check.id };
+  } catch (error) {
+    try { await client.query('ROLLBACK TO SAVEPOINT homeowner_upload_review'); } catch { /* ignore */ }
+    return { filed: false, reason: sanitizePublicError(error) };
+  } finally {
+    // Back to the identity-free public session for anything that follows.
+    try { await client.query('SELECT set_config($1, $2, true)', [APP_USER_ID_GUC, '']); } catch { /* ignore */ }
+  }
+};
+
+/** OCR/MICR on the new check, as the link's sender, best-effort and time-boxed. */
+const runHomeownerUploadOcr = async ({ checkId, senderId, deps = {} }) => {
+  const runOcr = deps.runOcr || (async (event, injected) => (await import('./ocr.mjs')).handleCheckOcrIntake(event, injected));
+  const connect = deps.connectWrite || (() => publicDb(true));
+  let client;
+  const work = (async () => {
+    client = await connect();
+    await client.query('BEGIN');
+    await client.query('SET TRANSACTION READ WRITE');
+    await client.query('SELECT set_config($1, $2, true)', [APP_USER_ID_GUC, String(senderId)]);
+    await client.query('SELECT set_config($1, $2, true)', [APP_USER_EMAIL_GUC, '']);
+    const result = await runOcr(
+      { body: JSON.stringify({ check_id: checkId }) },
+      {
+        withIdentity: async (_event, fn) => fn({
+          client,
+          mapping: { application_user_id: String(senderId), email: '' },
+          body: { check_id: checkId },
+          spoof: {},
+        }),
+      },
+    );
+    await client.query('COMMIT');
+    return result?.ocr_success === true || result?.success === true;
+  })();
+  try {
+    return await Promise.race([
+      work,
+      new Promise((resolve) => { setTimeout(() => resolve(false), deps.ocrWaitMs ?? HOMEOWNER_OCR_WAIT_MS); }),
+    ]);
+  } catch {
+    if (client) { try { await client.query('ROLLBACK'); } catch { /* ignore */ } }
+    return false;
+  } finally {
+    // A late OCR keeps running on its own client; end it when it settles.
+    work.finally(async () => { if (client) { try { await client.end(); } catch { /* ignore */ } } }).catch(() => {});
+  }
+};
+
 export const handleHomeownerLedgerUpload = async (event, deps = {}) => {
   const body = parseBody(event);
   const spoof = ignoredSpoof(event, body);
@@ -549,39 +678,90 @@ export const handleHomeownerLedgerUpload = async (event, deps = {}) => {
       return { ok: false, statusCode: 404, error: doc?.error || 'not_found', spoofFieldsIgnored: spoof };
     }
 
-    const frontB64 = String(body.front_base64 || body.file_base64 || '');
-    if (frontB64.length < 100) {
+    if (String(body.action || '') === 'upload_url') {
+      if (!deps.client) await client.query('ROLLBACK');
+      const contentType = String(body.content_type || '').toLowerCase();
+      const ext = HOMEOWNER_UPLOAD_TYPES[contentType];
+      if (!ext) return { ok: false, statusCode: 415, error: 'unsupported_type', spoofFieldsIgnored: spoof };
+      const size = Number(body.size);
+      if (!Number.isFinite(size) || size <= 0) {
+        return { ok: false, statusCode: 400, error: 'missing_size', spoofFieldsIgnored: spoof };
+      }
+      if (size > HOMEOWNER_UPLOAD_MAX_BYTES) {
+        return {
+          ok: false,
+          statusCode: 413,
+          error: 'file_too_large',
+          message: 'That file is larger than 15 MB. Take the photo again or crop it closer.',
+          spoofFieldsIgnored: spoof,
+        };
+      }
+      const side = body.side === 'back' ? 'back' : 'front';
+      const rel = `${homeownerUploadPrefix(doc)}${Date.now()}_${side}.${ext}`;
+      const key = s3KeyFor('homeowner-uploads', rel);
+      if (!key || !filesBucket()) return { ok: false, statusCode: 503, error: 's3_not_configured', spoofFieldsIgnored: spoof };
+      const uploadUrl = await (deps.presign || presignHomeownerUpload)({ key, contentType, contentLength: size });
+      return {
+        ok: true,
+        statusCode: 200,
+        upload_url: uploadUrl,
+        path: rel,
+        headers: { 'Content-Type': contentType },
+        spoofFieldsIgnored: spoof,
+      };
+    }
+
+    const prefix = homeownerUploadPrefix(doc);
+    const frontPath = String(body.front_path || '').trim();
+    const backPath = String(body.back_path || '').trim() || null;
+    if (!frontPath) {
       if (!deps.client) await client.query('ROLLBACK');
       return { ok: false, statusCode: 400, error: 'missing_file', spoofFieldsIgnored: spoof };
     }
-    const clean = frontB64.includes(',') ? frontB64.split(',').pop() : frontB64;
-    const bytes = Buffer.from(clean, 'base64');
-    const rel = `ledger/${doc.token.claim_id || doc.token.id}/${Date.now()}_front.jpg`;
-    const key = s3KeyFor('homeowner-uploads', rel);
-    if (typeof deps.putObject === 'function') {
-      await deps.putObject({ Bucket: filesBucket(), Key: key, Body: bytes, ContentType: 'image/jpeg' });
-    } else {
-      await s3().send(new PutObjectCommand({
-        Bucket: filesBucket(),
-        Key: key,
-        Body: bytes,
-        ContentType: 'image/jpeg',
-      }));
+    for (const rel of [frontPath, backPath].filter(Boolean)) {
+      if (!rel.startsWith(prefix) || rel.includes('..')
+        || !(await (deps.uploadExists || homeownerUploadExists)(rel))) {
+        if (!deps.client) await client.query('ROLLBACK');
+        return { ok: false, statusCode: 400, error: 'invalid_path', spoofFieldsIgnored: spoof };
+      }
     }
-    const row = (await client.query(
-      `INSERT INTO public.homeowner_ledger_check_uploads (
-         tenant_id, claim_id, front_path, status, created_at
-       ) VALUES ($1::uuid, $2::uuid, $3, 'uploaded', now())
-       RETURNING id, front_path, status, created_at`,
-      [doc.token.tenant_id, doc.token.claim_id, rel],
-    )).rows[0];
+    const kind = body.kind === 'document' ? 'document' : 'check';
+    const amount = body.amount_estimate == null || body.amount_estimate === '' ? null : Number(body.amount_estimate);
+    const recorded = (await client.query(
+      'SELECT public.aws_public_homeowner_ledger_upload($1, $2, $3, $4, $5, $6) AS doc',
+      [token, frontPath, backPath, kind, Number.isFinite(amount) ? amount : null, body.homeowner_note || null],
+    )).rows[0]?.doc;
+    if (!recorded?.ok) {
+      if (!deps.client) await client.query('ROLLBACK');
+      const error = recorded?.error || 'upload_refused';
+      return {
+        ok: false,
+        statusCode: error === 'rate_limited' ? 429 : 400,
+        error,
+        spoofFieldsIgnored: spoof,
+      };
+    }
+    const upload = {
+      ...recorded,
+      front_path: frontPath,
+      back_path: backPath,
+      amount_estimate: Number.isFinite(amount) ? amount : null,
+    };
+    const review = kind === 'check'
+      ? await fileHomeownerUploadToReview(client, upload, deps)
+      : { filed: false, reason: 'document' };
     if (!deps.client) await client.query('COMMIT');
+
+    let ocr = false;
+    if (review.filed) {
+      ocr = await runHomeownerUploadOcr({ checkId: review.checkId, senderId: upload.sent_by_user_id, deps });
+    }
     let notified = false;
     try {
       const notify = await notifyStaffOfHomeownerLedgerUpload({
         client,
         token,
-        uploadId: row?.id,
+        uploadId: upload.upload_id,
         origin: body.origin,
         homeownerNote: body.homeowner_note,
         amountEstimate: body.amount_estimate,
@@ -591,10 +771,22 @@ export const handleHomeownerLedgerUpload = async (event, deps = {}) => {
     } catch {
       notified = false;
     }
-    return { ok: true, statusCode: 200, upload: row, notified, spoofFieldsIgnored: spoof };
+    return {
+      ok: true,
+      statusCode: 200,
+      upload: { id: upload.upload_id, status: review.filed ? 'attached' : 'pending_review' },
+      in_review: review.filed,
+      ocr_started: ocr,
+      notified,
+      spoofFieldsIgnored: spoof,
+    };
   } catch (error) {
     if (client && !deps.client) {
       try { await client.query('ROLLBACK'); } catch { /* ignore */ }
+    }
+    // SQL 110 not applied yet: the public upload function is missing.
+    if (error?.code === '42883') {
+      return { ok: false, statusCode: 503, error: 'upload_unavailable', spoofFieldsIgnored: spoof };
     }
     return {
       ok: false,
@@ -889,9 +1081,81 @@ export const runHomeownerLedgerSend = async ({
   };
 };
 
-export const handleHomeownerLedgerSend = (event, deps = {}) => withIdentity(event, (ctx) => (
-  runHomeownerLedgerSend({ ...ctx, send: deps.sendViaSesOrSink })
-), { write: true, commit: true, ...deps });
+/**
+ * Revoke or delete a homeowner upload link (Manager > Homeowner Uploads,
+ * "Recent Pre-claim links"). Same tenant only. Delete is permanent and is
+ * refused while uploads still point at the link (revoke it instead); it needs
+ * SQL 110's DELETE grant on homeowner_ledger_tokens.
+ */
+export const runHomeownerLinkManage = async ({ client, mapping, body, spoof }) => {
+  const action = String(body.action || '');
+  const tokenId = String(body.token_id || '').trim();
+  if (!/^[0-9a-f-]{36}$/i.test(tokenId)) {
+    return { ok: false, statusCode: 400, error: 'missing_token_id', spoofFieldsIgnored: spoof };
+  }
+  const link = (await client.query(
+    `SELECT id, tenant_id FROM public.homeowner_ledger_tokens WHERE id = $1::uuid LIMIT 1`,
+    [tokenId],
+  )).rows[0];
+  if (!link) return { ok: false, statusCode: 404, error: 'link_not_found', spoofFieldsIgnored: spoof };
+  const member = (await client.query(
+    `SELECT 1 FROM public.tenant_users WHERE user_id = $1::uuid AND tenant_id = $2::uuid LIMIT 1`,
+    [mapping.application_user_id, link.tenant_id],
+  )).rows[0];
+  if (!member) return { ok: false, statusCode: 403, error: 'forbidden', spoofFieldsIgnored: spoof };
+
+  if (action === 'revoke') {
+    const done = await client.query(
+      `UPDATE public.homeowner_ledger_tokens SET revoked_at = COALESCE(revoked_at, now())
+       WHERE id = $1::uuid`,
+      [tokenId],
+    );
+    if (!done.rowCount) return { ok: false, statusCode: 403, error: 'not_allowed', spoofFieldsIgnored: spoof };
+    return { ok: true, statusCode: 200, revoked: true, token_id: tokenId, spoofFieldsIgnored: spoof };
+  }
+
+  const uploads = Number((await client.query(
+    `SELECT count(*)::int AS n FROM public.homeowner_ledger_check_uploads WHERE token_id = $1::uuid`,
+    [tokenId],
+  )).rows[0]?.n || 0);
+  if (uploads > 0) {
+    return {
+      ok: false,
+      statusCode: 409,
+      error: 'link_has_uploads',
+      message: 'This link has uploads, so it can only be revoked, not deleted.',
+      spoofFieldsIgnored: spoof,
+    };
+  }
+  try {
+    await client.query('SAVEPOINT homeowner_link_delete');
+    const done = await client.query('DELETE FROM public.homeowner_ledger_tokens WHERE id = $1::uuid', [tokenId]);
+    await client.query('RELEASE SAVEPOINT homeowner_link_delete');
+    if (!done.rowCount) return { ok: false, statusCode: 403, error: 'not_allowed', spoofFieldsIgnored: spoof };
+  } catch (error) {
+    try { await client.query('ROLLBACK TO SAVEPOINT homeowner_link_delete'); } catch { /* ignore */ }
+    if (error?.code === '42501') {
+      return { ok: false, statusCode: 503, error: 'delete_unavailable', spoofFieldsIgnored: spoof };
+    }
+    if (error?.code === '23503') {
+      return {
+        ok: false,
+        statusCode: 409,
+        error: 'link_in_use',
+        message: 'This link is still referenced, so it can only be revoked, not deleted.',
+        spoofFieldsIgnored: spoof,
+      };
+    }
+    throw error;
+  }
+  return { ok: true, statusCode: 200, deleted: true, token_id: tokenId, spoofFieldsIgnored: spoof };
+};
+
+export const handleHomeownerLedgerSend = (event, deps = {}) => withIdentity(event, (ctx) => {
+  const action = String(ctx.body?.action || '');
+  if (action === 'revoke' || action === 'delete') return runHomeownerLinkManage(ctx);
+  return runHomeownerLedgerSend({ ...ctx, send: deps.sendViaSesOrSink });
+}, { write: true, commit: true, ...deps });
 
 export const runSendFileToHomeowner = async ({
   client, mapping, body, spoof, send,
