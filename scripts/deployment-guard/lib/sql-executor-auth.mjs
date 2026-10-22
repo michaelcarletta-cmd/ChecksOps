@@ -2403,9 +2403,14 @@ export const AUTHORIZED_SQL110_HOMEOWNER_PRECLAIM_LINKS = Object.freeze({
   // The commit that last authored the file bytes.
   commit: '810dde9b754cc752922ce9169b4f0fa893036ba4',
   source_sha256: '17055748984218ae646ea0de138626318a6c4de4c1c575be1e23fc8dd0422db4',
-  authorization: 'pending',
-  execute: false,
-  expected_live_definition_sha256: null,
+  // Owner's words 2026-10-22: "Apply SQL 110 to staging" (staging only; production separately).
+  authorization: 'Owner approved 2026-10-22: staging apply (wave 11) from staging read-live run 39836749684',
+  execute: true,
+  // Staging read-live run 39836749684 (2026-10-22, main 6cf4c2f6b, after executor deploy run
+  // 39836443329): the writer function absent, homeowner_ledger_tokens with no DELETE grant (other
+  // write grant checksops UPDATE), definer_writes ok for the three tables, already_applied false,
+  // precondition_failures [].
+  expected_live_definition_sha256: '3fdbb3d323c1c0edab0c2ee7e4a6c1b08aa30c1a021c7d81899e95a616f186fd',
   // Code-derived: releaseIntendedHash('sql110', file bytes) (release-sql-state.mjs); re-derived by the tests.
   intended_replacement_sha256: 'ae039876920fde43cba6c3d01ed9443f2d129ad11d23825ec3c120256fc21ac3',
   function_identities: Object.freeze(['public.aws_public_homeowner_ledger_upload(text, text, text, text, numeric, text)']),
