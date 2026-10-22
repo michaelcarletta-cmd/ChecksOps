@@ -1,0 +1,14 @@
+{
+  "workstream_id": "upload-url-rear-stamp-write",
+  "authorization": "Pending owner review (2026-10-22). Planning only: nothing is live or verified. Each production apply still needs its own owner approval and staging acceptance.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "handleStorageUploadUrl (storage-write.mjs) ran under withIdentity, a read-only connection (default_transaction_read_only=on) that always rolls back, but presigning the official rear .checkalt.jpg calls stampOfficialRearFingerprintIfNeeded -> stampCheckAltRearFingerprint, an UPDATE of check_intake_items.endorsement_render_meta. Production POST /prep/storage/upload-url answered 503 at 2026-10-22 00:55:00.430Z (request FnvDxjR6oAMEcEQ=) and 00:55:35.852Z (FnvJThSFIAMEJWw=) with 'cannot execute UPDATE in a read-only transaction' in the RDS log, while the front upload-url at 00:55:00.665Z returned 200 and front-1792613910986.checkalt.jpg landed in S3. The accepted bytes use withIdentityWrite (read-write, committed on success, rolled back on refusal); exports are unchanged, and withIdentityWrite is already exported by data.mjs live and on main, so no other member has to go first. storage-write.mjs was a release 2026-10-17 member (aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json, accepted c397c522, which stays as evidence). live_sha256 c397c522 is main's bytes, unchanged since 062535491 and byte-identical at fd1e059b5, e4daedefe, c92fe457b, 96361081c and 008af40e2; storage-write.mjs is in no section of ops/deployment-guard/lambda-rebuild-plan.json because every rebuild inspect found it equal to main, so the third full-package rebuilds (staging run 39666390516, production run 39669873076) left those bytes live in both environments. A read-only production overlay inspect must still confirm it before any apply. Column UPDATE on endorsement_render_meta is granted by SQL 89 (verified live); no SQL prerequisite is added.",
+  "members": {
+    "storage-write.mjs": {
+      "live_sha256": "c397c52202b564917cd9d2b62853566c765b92aa6a8cd2304b6a09e74a3ed73f",
+      "accepted_sha256": "ccc72b14288580740bd57602543caaca558ba76d18c26c1bd5565c9841becf9e",
+      "operation": "replace"
+    }
+  }
+}
