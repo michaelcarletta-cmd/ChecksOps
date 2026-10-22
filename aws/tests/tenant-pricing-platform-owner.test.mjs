@@ -166,6 +166,9 @@ test('SPA: Tenant Management saves pricing through tenant-billing-admin; tenant 
   for (const col of ['per_check_rate_cents: rate', 'updateTenant(t.id, { monthly_rate_cents', 'is_founding_partner: true, monthly_rate_cents: 7500 }']) {
     assert.equal(admin.includes(`updateTenant(t.id, { ${col}`) || admin.includes(`save({ per_check_billing_enabled: enabled, ${col}`), false, col);
   }
+  // Owner: no Founding in Tenant Management (column, toggle, badge, referral card).
+  assert.doesNotMatch(admin, /founding/i);
+  assert.doesNotMatch(read('src/components/settings/AdminReferralDashboard.tsx'), /founding/i);
   const panel = read('src/components/payments/PlatformFeeSchedulePanel.tsx');
   assert.match(panel, /const canEdit = isPlatformOwner\(/);
   assert.match(panel, /\{canEdit && \(/);

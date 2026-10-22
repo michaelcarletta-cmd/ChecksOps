@@ -4,11 +4,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { isPlatformOwner } from "@/lib/masterMerchant";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Users, DollarSign, TrendingUp, Search, Download, Star } from "lucide-react";
+import { Users, DollarSign, TrendingUp, Search, Download } from "lucide-react";
 import { format } from "date-fns";
 
 export function AdminReferralDashboard() {
@@ -27,7 +26,7 @@ export function AdminReferralDashboard() {
         .from("tenants")
         .select(`
           id, name, slug, referral_code, referral_discount_cents,
-          monthly_rate_cents, is_founding_partner, created_at,
+          monthly_rate_cents, created_at,
           referred_by:referred_by_tenant_id (name, referral_code)
         `)
         .eq("is_system_tenant", false)
@@ -63,7 +62,6 @@ export function AdminReferralDashboard() {
   const totalDiscountsGiven =
     tenants.reduce((s: number, t: any) => s + (t.referral_discount_cents || 0), 0) / 100;
   const eventCount = referralEvents.filter((e: any) => e.status === "active").length;
-  const foundingPartners = tenants.filter((t: any) => t.is_founding_partner).length;
 
   const filteredTenants = tenants.filter((t: any) =>
     !search ||
@@ -72,13 +70,12 @@ export function AdminReferralDashboard() {
   );
 
   const exportCSV = () => {
-    const headers = ["Tenant", "Referral Code", "Discount/mo", "Effective Rate", "Founding Partner", "Referred By", "Joined"];
+    const headers = ["Tenant", "Referral Code", "Discount/mo", "Effective Rate", "Referred By", "Joined"];
     const rows = filteredTenants.map((t: any) => [
       t.name,
       t.referral_code || "N/A",
       `$${(t.referral_discount_cents || 0) / 100}`,
       `$${((t.monthly_rate_cents || 0) - (t.referral_discount_cents || 0)) / 100}`,
-      t.is_founding_partner ? "Yes" : "No",
       t.referred_by?.name || "None",
       format(new Date(t.created_at), "yyyy-MM-dd")
     ]);
@@ -111,7 +108,7 @@ export function AdminReferralDashboard() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
@@ -136,17 +133,6 @@ export function AdminReferralDashboard() {
           <CardContent>
             <div className="text-2xl font-bold text-green-600">${totalDiscountsGiven.toFixed(2)}</div>
             <div className="text-[10px] text-muted-foreground mt-1">Sum of active tenant credits</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <Star className="h-4 w-4 text-yellow-500" />
-              Founding Partners
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{foundingPartners}</div>
           </CardContent>
         </Card>
         <Card>
@@ -185,7 +171,6 @@ export function AdminReferralDashboard() {
                   <th className="px-6 py-3">Tenant</th>
                   <th className="px-6 py-3 text-center">Referral Code</th>
                   <th className="px-6 py-3 text-center">Active Discount</th>
-                  <th className="px-6 py-3 text-center">Status</th>
                   <th className="px-6 py-3">Referred By</th>
                   <th className="px-6 py-3 text-right">Joined</th>
                 </tr>
@@ -193,13 +178,13 @@ export function AdminReferralDashboard() {
               <tbody className="divide-y">
                 {isLoading ? (
                   <tr>
-                    <td colSpan={6} className="px-6 py-12 text-center text-muted-foreground">
+                    <td colSpan={5} className="px-6 py-12 text-center text-muted-foreground">
                       Loading referral data...
                     </td>
                   </tr>
                 ) : filteredTenants.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-6 py-12 text-center text-muted-foreground">
+                    <td colSpan={5} className="px-6 py-12 text-center text-muted-foreground">
                       No matching tenants found.
                     </td>
                   </tr>
@@ -217,13 +202,6 @@ export function AdminReferralDashboard() {
                       </td>
                       <td className="px-6 py-4 text-center font-bold text-green-600">
                         ${(t.referral_discount_cents || 0) / 100}/mo
-                      </td>
-                      <td className="px-6 py-4 text-center">
-                        {t.is_founding_partner && (
-                          <Badge className="bg-yellow-500/10 text-yellow-600 border-yellow-200 hover:bg-yellow-500/20">
-                            Founding Partner
-                          </Badge>
-                        )}
                       </td>
                       <td className="px-6 py-4">
                         {t.referred_by ? (
