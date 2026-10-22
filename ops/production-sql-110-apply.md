@@ -55,8 +55,8 @@ _kind, _amount_estimate, _homeowner_note)`:
 - returns `{ok, upload_id, tenant_id, claim_id, token_id, kind, sent_by_user_id}`
   (`sent_by_user_id` falls back to `created_by`).
 
-**Status:** pending. Both pins are `execute: false`, `authorization: "pending"`, with no recorded
-pre-state; nothing is applied by this change. Neither staging nor production has been inspected.
+**Status:** applied to staging (2026-10-22); the production pin is `execute: true` once the pin
+change below is merged. Nothing is applied to production by that change (see "Status").
 
 ## Status
 
@@ -70,7 +70,23 @@ pre-state; nothing is applied by this change. Neither staging nor production has
   `already_applied` false, `precondition_failures` `[]`. Recorded in the staging pin
   (`expected_live_definition_sha256`, `execute: true`, wave 11) under the owner's statement of
   2026-10-22, "Apply SQL 110 to staging".
-- Staging apply and the second read-live: not run yet. The production pin stays pending.
+- **Staging apply (2026-10-22).** After the staging pin change merged (#1166, main `7c3b7abc7`),
+  deploy run 39838297300 (executor `SzEmktClMuLSQYvBYA5VY4RztzdTXJe8SMZOC5lJbec=`), then apply run
+  39838878110: `applied`, `3fdbb3d3…` ->
+  `ae039876920fde43cba6c3d01ed9443f2d129ad11d23825ec3c120256fc21ac3`, function `intended`, ACL
+  `checksops EXECUTE`, `owner EXECUTE`, table privilege `checksops DELETE`. Read-live run 39839173968:
+  `already_applied` true, live = intended, `precondition_failures` `[]`.
+- **Production inspect recorded (2026-10-22).** Read-only `--inspect` through SSM
+  `85ee4f39-7234-42a4-b1d8-79cd1390fdbc` on `i-0c35557c4e5385406`, main `7c3b7abc7` (tarball sha256
+  `58bd457946f37e970501c83fe226b9d18a5092d9aff80d150c7b34b19a8bde21`, transfer run 39839811134):
+  the writer `absent`, no DELETE grant on `homeowner_ledger_tokens` (other write grant `checksops
+  UPDATE`), live `3fdbb3d323c1c0edab0c2ee7e4a6c1b08aa30c1a021c7d81899e95a616f186fd` (the same
+  pre-state as staging), `definer_writes` ok for all three tables, `already_applied` false,
+  `precondition_failures` `[]`. Recorded in the pin as `expected_live_definition_sha256`, with the
+  staging apply run 39838878110 as `staging_acceptance`.
+- **Pin `execute: true`** once that change is merged, under the owner's statement of 2026-10-22,
+  "apply SQL 110 in production", which covers SQL 110's whole guarded path to production. Nothing
+  is applied by it; the apply (step 3) passes the owner's words for that run.
 
 ## Fingerprint
 

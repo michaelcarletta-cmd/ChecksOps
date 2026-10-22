@@ -4,8 +4,9 @@
  * release-sql90-97-executor.test.mjs runs what every release key shares (SQL 110 included); this
  * file covers what is new:
  *
- *   - the pin: pending (no read-live yet), code-derived, selectable, packed, in step with the
- *     production pin; the pinned commit authored the bytes; no predecessor;
+ *   - the pin: staging-authorized from its read-live (wave 11), code-derived, selectable, packed, in step with the
+ *     production pin (execute-authorized on the staging apply); the pinned commit authored the
+ *     bytes; no predecessor;
  *   - the file and spec: one guarded prerequisite block, GRANT DELETE on homeowner_ledger_tokens
  *     to checksops only, and one SECURITY DEFINER function, EXECUTE checksops only, writing the
  *     homeowner ledger tables (definer_writes); no table, policy or other grant DDL; the
@@ -136,7 +137,12 @@ test('pin: SQL 110 staging-authorized from its read-live, code-derived, selectab
   assert.equal(prod.staging_pin_commit, pin.commit);
   assert.equal(prod.source_sha256, pin.source_sha256);
   assert.deepEqual(prod.predecessors, []);
-  assert.equal(prod.execute, false);
+  // Production pin execute-authorized (owner-approved pin change of 2026-10-22) on the staging apply
+  // from the same pre-state: production's recorded pre-state is this pin's.
+  assert.equal(prod.execute, true);
+  assert.match(prod.authorization, /^Owner approved 2026-10-22 /);
+  assert.equal(prod.expected_live_definition_sha256, pin.expected_live_definition_sha256);
+  assert.notEqual(prod.expected_live_definition_sha256, prod.intended_replacement_sha256);
   let bytes = null;
   if (/^[0-9a-f]{40}$/.test(pin.commit)) {
     try {
