@@ -1,8 +1,8 @@
 {
   "id": "sql110-homeowner-preclaim-links-production-apply",
   "migration": "sql110",
-  "authorization": "Owner approved 2026-10-22 (the owner's words, verbatim: \"apply SQL 110 in production\"; this pin change is bound to that approval, which covers SQL 110's whole guarded path to production, including merging this change once CI is green): production apply of SQL 110 on the staging acceptance below (production 3fdbb3d323c1c0edab0c2ee7e4a6c1b08aa30c1a021c7d81899e95a616f186fd -> ae039876920fde43cba6c3d01ed9443f2d129ad11d23825ec3c120256fc21ac3); execute true takes effect only once this change is merged. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
-  "execute": true,
+  "authorization": "Applied to production on 2026-10-22; execute is false again, so this pin is no longer a standing authorization and a re-apply needs a new reviewed pin change. The owner approved SQL 110's guarded path to production on 2026-10-22 in the words \"apply SQL 110 in production\", which covered the SQL 110 production pin (3fdbb3d3 -> ae039876), the read-only production inspect, the staging acceptance and the execute change (#1167), and the one apply run recorded in applied (workstream prod-sql110-homeowner-preclaim-links-20261022), passed to it as \"apply SQL 110 in production\". That approval covered that run only",
+  "execute": false,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -60,5 +60,105 @@
     "ok": true,
     "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39838878110",
     "basis": "Guarded staging apply from the same pre-state as production. The guarded staging SQL executor (choice sql110-homeowner-preclaim-links) carried SQL 110 from deploy run 39836443329 (inspect run 39836139410) and, after the staging pin change (#1166), deploy run 39838297300 (executor SzEmktClMuLSQYvBYA5VY4RztzdTXJe8SMZOC5lJbec=). Read-live run 39836749684 (2026-10-22, main 6cf4c2f6b) reported already_applied false, precondition_failures [] and live 3fdbb3d323c1c0edab0c2ee7e4a6c1b08aa30c1a021c7d81899e95a616f186fd, which is this pin's expected_live_definition_sha256 (production_inspect). The staging apply run 39838878110 (2026-10-22, main 7c3b7abc760bf3c7fbf136f10614426d715eeed4, staging pin commit 810dde9b754cc752922ce9169b4f0fa893036ba4) reported result applied, before 3fdbb3d323c1c0edab0c2ee7e4a6c1b08aa30c1a021c7d81899e95a616f186fd, after ae039876920fde43cba6c3d01ed9443f2d129ad11d23825ec3c120256fc21ac3 = intended_replacement_sha256, function state intended, function_acl [checksops EXECUTE, owner EXECUTE], table_privileges homeowner_ledger_tokens lines [checksops DELETE] (other_write_grants [checksops UPDATE] unchanged). The read-live after it (run 39839173968) reported already_applied true, precondition_failures [] and live ae039876920fde43cba6c3d01ed9443f2d129ad11d23825ec3c120256fc21ac3, function intended, function ACL checksops EXECUTE and owner EXECUTE, table privilege checksops DELETE. Staging and production had the same pre-state. The grant and the writer are covered on PostgreSQL 16 by aws/tests/sql110-homeowner-preclaim-links-pg.test.mjs. The production apply refuses unless the live state still equals this pin's expected_live_definition_sha256, and its post-conditions roll back unless the intended fingerprint is reached with the rest of the catalog unchanged."
+  },
+  "applied": {
+    "date": "2026-10-22",
+    "result": "applied",
+    "source_commit": "e29b971fbf9c33d89cdf133155853d0c5e9c9b26",
+    "source_tarball": {
+      "file": "source-e29b971fbf9c33d89cdf133155853d0c5e9c9b26.tar.gz",
+      "sha256": "a86f2b286e579e75695ffed3e66919846a19995ea6654f1416ece5f9079abc19"
+    },
+    "migration_source_sha256": "17055748984218ae646ea0de138626318a6c4de4c1c575be1e23fc8dd0422db4",
+    "migration_source_sha256_note": "The one-shot source step hashed aws/workflows/sql/110_homeowner_preclaim_links.sql in the transfer tarball: equal to source_sha256 (the pin).",
+    "runner": "i-0c35557c4e5385406",
+    "workstream_id": "prod-sql110-homeowner-preclaim-links-20261022",
+    "one_use_id": "sql110-prod-a04eae17-2564-42ba-87a1-51bc200582ff",
+    "one_use_id_consumed": true,
+    "one_use_id_consumed_basis": "Inferred from the successful apply (the tool records the one_use_id after COMMIT and only warns if that write fails); the consumed-registry entry was not read back separately.",
+    "owner_approval": "apply SQL 110 in production",
+    "owner_approval_basis": "As passed (base64, --approval-statement-b64) for --approval-scope sql110; the one-shot cannot verify who said it. The owner's statement of 2026-10-22 was exactly \"apply SQL 110 in production\".",
+    "operator": "michaelcarletta-cmd",
+    "apply_ssm_command_id": "dff74531-5a77-4f17-9027-e927f7f10644",
+    "one_shot_run_id": "04f2dadf-1866-492e-a9e9-d301a2766b2b",
+    "one_shot_note": "One guarded production-sql-one-shot run (SSM dff74531-5a77-4f17-9027-e927f7f10644, run_id 04f2dadf-1866-492e-a9e9-d301a2766b2b) from main e29b971fb (transfer run 39842733299, sql53-temporary-transfer.yml dispatched on main after the #1167 merge) applied SQL 110: steps pin, source, inspect, contracts, manifest, source-recheck-before-preflight, preflight, evaluate (sql110_production_apply_allowed true), source-recheck-before-apply, apply (applied) and post-apply-inspect all ok; runner contracts, manifest, receipt and inspects as recorded below. SSM invocation 2026-10-22T19:46:49.169Z to 19:47:07.169Z (ExecutionStartDateTime to ExecutionEndDateTime). Before it, a read-only --phase inspect of the same one-shot (SSM c0dce565-8dce-46fa-9f2d-42702987afe1, run_id 02f48809-841d-47a8-bb38-16c290854101, 2026-10-22T19:46:17Z, same commit, tarball, workstream and approval statement) completed pin, source, inspect and contracts ok and wrote nothing. No predecessor; the pre-apply inspect reported predecessors {}, predecessors_applied true, missing_dependencies [] and precondition_failures [].",
+    "steps": [
+      "pin",
+      "source",
+      "inspect",
+      "contracts",
+      "manifest",
+      "source-recheck-before-preflight",
+      "preflight",
+      "evaluate",
+      "source-recheck-before-apply",
+      "apply",
+      "post-apply-inspect"
+    ],
+    "contract_results": {
+      "claim-ledger": {
+        "ok": true,
+        "passed": "4/4"
+      },
+      "tenant-isolation": {
+        "ok": true,
+        "passed": "6/6"
+      },
+      "financial-write-protections": {
+        "ok": true,
+        "passed": "43/43"
+      }
+    },
+    "pre_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "3fdbb3d323c1c0edab0c2ee7e4a6c1b08aa30c1a021c7d81899e95a616f186fd",
+      "live_matches_expected": true,
+      "already_applied": false,
+      "precondition_failures": [],
+      "missing_dependencies": [],
+      "predecessors_applied": true,
+      "successors_applied": [],
+      "note": "The one-shot inspect step (read-only --inspect) immediately before the apply: live == the recorded pre-state 3fdbb3d3..., live_matches_expected true, already_applied false, apply_preconditions_met true, precondition_failures [], missing_dependencies [], successors_applied []; release_sql_inspect.functions[0] (public.aws_public_homeowner_ledger_upload(text, text, text, text, numeric, text)) state absent, function_acl [], table_privileges homeowner_ledger_tokens lines [] (other_write_grants [checksops UPDATE]), prerequisites_missing [], predecessors {}, definer_writes homeowner_ledger_tokens ok, homeowner_ledger_check_uploads ok and homeowner_ledger_events ok; current_user and session_user checksops_admin."
+    },
+    "manifest_sha256": "ce9d1d6c262aa25e8fd358482f212fbfc08e77c464ff07d79bba732c5f428587",
+    "receipt": {
+      "migration": "sql110",
+      "workstream": "prod-sql110-homeowner-preclaim-links-20261022",
+      "commit": "e29b971fbf9c33d89cdf133155853d0c5e9c9b26",
+      "sql_file": "aws/workflows/sql/110_homeowner_preclaim_links.sql",
+      "before_hash": "3fdbb3d323c1c0edab0c2ee7e4a6c1b08aa30c1a021c7d81899e95a616f186fd",
+      "after_hash": "ae039876920fde43cba6c3d01ed9443f2d129ad11d23825ec3c120256fc21ac3",
+      "unrelated_catalog_sha256": "9d4cf0677f4806f30f75374f56c27d79bc5258b1e6b9c2e106dd60e63b01499a",
+      "unrelated_catalog_counts": {
+        "relations": 890,
+        "columns": 3535,
+        "constraints": 2233,
+        "policies": 404,
+        "functions": 1314,
+        "indexes": 654,
+        "default_acl": 0,
+        "role_memberships": 15,
+        "roles": 29,
+        "triggers": 180,
+        "views": 25,
+        "types": 18,
+        "schema": 2
+      },
+      "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39838878110",
+      "result": "applied"
+    },
+    "post_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "ae039876920fde43cba6c3d01ed9443f2d129ad11d23825ec3c120256fc21ac3",
+      "already_applied": true,
+      "precondition_failures": [],
+      "missing_dependencies": [],
+      "predecessors_applied": true,
+      "successors_applied": [],
+      "note": "The one-shot post-apply read-only --inspect: already_applied true (live == intended ae039876...), precondition_failures []; release_sql_inspect.functions[0] (public.aws_public_homeowner_ledger_upload(text, text, text, text, numeric, text)) state intended, function_acl [checksops EXECUTE, owner EXECUTE], table_privileges homeowner_ledger_tokens lines [checksops DELETE] (other_write_grants [checksops UPDATE] unchanged), definer_writes homeowner_ledger_tokens ok, homeowner_ledger_check_uploads ok and homeowner_ledger_events ok. The function body itself was not printed by the inspect; the fingerprint equals releaseIntendedHash('sql110', file bytes). current_user and session_user checksops_admin."
+    }
+  },
+  "production_evidence": {
+    "2026-10-22 apply": "Guarded production SQL one-shot on i-0c35557c4e5385406, workstream prod-sql110-homeowner-preclaim-links-20261022, main e29b971fb (tarball a86f2b28…, transfer run 39842733299, migration source 17055748… == pin), owner-approved run (\"apply SQL 110 in production\"), SSM dff74531-5a77-4f17-9027-e927f7f10644, run_id 04f2dadf-1866-492e-a9e9-d301a2766b2b, one_use_id sql110-prod-a04eae17-2564-42ba-87a1-51bc200582ff (spent): every step ok; contracts claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43; pre-apply inspect live 3fdbb3d3… (live_matches_expected true, precondition_failures []); manifest ce9d1d6c…; 3fdbb3d3… -> ae039876…, result applied, unrelated catalog 9d4cf067…; post-apply inspect already_applied true, precondition_failures []. Preceded by the read-only --phase inspect SSM c0dce565-8dce-46fa-9f2d-42702987afe1. No later inspect was run. execute is false so the pin is no longer a standing authorization."
   }
 }

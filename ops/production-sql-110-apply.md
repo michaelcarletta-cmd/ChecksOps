@@ -55,8 +55,8 @@ _kind, _amount_estimate, _homeowner_note)`:
 - returns `{ok, upload_id, tenant_id, claim_id, token_id, kind, sent_by_user_id}`
   (`sent_by_user_id` falls back to `created_by`).
 
-**Status:** applied to staging (2026-10-22); the production pin is `execute: true` once the pin
-change below is merged. Nothing is applied to production by that change (see "Status").
+**Status:** applied to staging and to production (2026-10-22); the production pin is retired
+(`execute: false` again; see "Production apply of SQL 110").
 
 ## Status
 
@@ -84,9 +84,11 @@ change below is merged. Nothing is applied to production by that change (see "St
   pre-state as staging), `definer_writes` ok for all three tables, `already_applied` false,
   `precondition_failures` `[]`. Recorded in the pin as `expected_live_definition_sha256`, with the
   staging apply run 39838878110 as `staging_acceptance`.
-- **Pin `execute: true`** once that change is merged, under the owner's statement of 2026-10-22,
-  "apply SQL 110 in production", which covers SQL 110's whole guarded path to production. Nothing
-  is applied by it; the apply (step 3) passes the owner's words for that run.
+- **Pin `execute: true`** once that change is merged (#1167), under the owner's statement of
+  2026-10-22, "apply SQL 110 in production", which covers SQL 110's whole guarded path to
+  production. Nothing is applied by it; the apply (step 3) passes the owner's words for that run.
+- **Applied to production (2026-10-22)** and the pin retired (`execute: false` again; see
+  "Production apply of SQL 110" below).
 
 ## Fingerprint
 
@@ -135,3 +137,40 @@ No predecessor. Apply before the API change that deletes pre-claim links or call
    --migration sql110 --approval-scope sql110 … --phase inspect`, then the owner-named
    `--phase apply`.
 4. Record the apply and retire the pin (`execute: false`).
+
+## Production apply of SQL 110 (2026-10-22)
+
+The owner's statement of 2026-10-22 was "apply SQL 110 in production", passed verbatim (base64,
+`--approval-statement-b64`). The one-shot cannot verify who said it, and the statement covered this
+run only. `production-sql-one-shot.mjs --migration sql110 --approval-scope sql110` on
+`i-0c35557c4e5385406`, operator `michaelcarletta-cmd`, workstream
+`prod-sql110-homeowner-preclaim-links-20261022`, from main `e29b971fb` (tarball
+`source-e29b971fbf9c33d89cdf133155853d0c5e9c9b26.tar.gz`, sha256 `a86f2b28…`, transfer run
+`39842733299`, `sql53-temporary-transfer.yml` dispatched on main after the #1167 merge; its package
+job printed `TARBALL_SHA256 a86f2b286e579e75695ffed3e66919846a19995ea6654f1416ece5f9079abc19`, equal
+to the uploaded `.sha256` sidecar).
+
+- **Inspect phase:** SSM `c0dce565-8dce-46fa-9f2d-42702987afe1`, run_id
+  `02f48809-841d-47a8-bb38-16c290854101`: pin, source, inspect and contracts ok, nothing written;
+  live `3fdbb3d3…` (live_matches_expected true), function `absent`, no `checksops DELETE`,
+  precondition_failures [].
+- **Apply phase:** SSM `dff74531-5a77-4f17-9027-e927f7f10644` (2026-10-22T19:46:49Z to 19:47:07Z),
+  run_id `04f2dadf-1866-492e-a9e9-d301a2766b2b`, one_use_id
+  `sql110-prod-a04eae17-2564-42ba-87a1-51bc200582ff` (spent): every step ok (pin, source, inspect,
+  contracts, manifest, source-recheck-before-preflight, preflight, evaluate,
+  source-recheck-before-apply, apply (applied), post-apply-inspect); migration source `17055748…`
+  (== pin); contracts claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43;
+  pre-apply inspect live `3fdbb3d3…`, predecessors `{}`, precondition_failures []; manifest
+  `ce9d1d6c…`; receipt `3fdbb3d3…` -> `ae039876…`, result applied, unrelated catalog `9d4cf067…`
+  (relations 890, columns 3535, constraints 2233, policies 404, functions 1314, indexes 654, triggers
+  180, views 25, types 18, roles 29, role memberships 15); post-apply inspect live `ae039876…`,
+  already_applied true, precondition_failures [], function `intended`, ACL `checksops EXECUTE`,
+  `owner EXECUTE`, `homeowner_ledger_tokens` `checksops DELETE` (other write grant `checksops UPDATE`
+  unchanged).
+
+No later read-only inspect was run, and neither a pre-claim link delete nor a public homeowner
+upload has been observed through production since the apply. The policies on
+`homeowner_ledger_tokens` are not covered by the fingerprint and were not inspected. The pin is
+`execute: false` again; a re-apply needs a new reviewed pin change. The API change that deletes
+pre-claim links or calls the writer is not part of this record and goes through its own guarded
+Lambda path.
