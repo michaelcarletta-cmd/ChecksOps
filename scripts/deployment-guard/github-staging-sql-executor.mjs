@@ -115,6 +115,7 @@ export const MIGRATIONS = Object.freeze({
   'sql106-financial-stepup-log-append-only': RELEASE_2026_10_17_PENDING_SQL_PINS.sql106,
   'sql108-check-intake-items-funds-type-values': RELEASE_2026_10_17_PENDING_SQL_PINS.sql108,
   'sql109-moov-transfer-webhook-status': RELEASE_2026_10_17_PENDING_SQL_PINS.sql109,
+  'sql110-homeowner-preclaim-links': RELEASE_2026_10_17_PENDING_SQL_PINS.sql110,
 });
 
 const LAMBDA_CODE_SHA_RE = /^[A-Za-z0-9+/]{43}=$/;

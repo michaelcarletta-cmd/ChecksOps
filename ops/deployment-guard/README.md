@@ -70,6 +70,7 @@ node scripts/deployment-guard/sql105-onboarding-payment-table-grants-production-
 node scripts/deployment-guard/sql106-financial-stepup-log-append-only-production-apply.mjs --inspect   # before SQL 97 (ops/production-sql-106-apply.md)
 node scripts/deployment-guard/sql108-check-intake-items-funds-type-values-production-apply.mjs --inspect   # funds_type values (ops/production-sql-108-apply.md)
 node scripts/deployment-guard/sql109-moov-transfer-webhook-status-production-apply.mjs --inspect   # any time after SQL 91 (ops/production-sql-109-apply.md)
+node scripts/deployment-guard/sql110-homeowner-preclaim-links-production-apply.mjs --inspect   # pre-claim link delete + public upload writer (ops/production-sql-110-apply.md)
 # Production SQL 71, 77-89 and 90-102 on the runner, one invocation (ops/production-sql-one-shot.md)
 node scripts/deployment-guard/production-sql-one-shot.mjs --migration sql80 --phase inspect ...
 node scripts/deployment-guard/verify-live.mjs --input path/to/live.json
