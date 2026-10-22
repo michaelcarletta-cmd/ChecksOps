@@ -1021,8 +1021,17 @@ test('Check Alt approve reconcile history: four REPLACE members, status-read and
     operation: 'replace',
   });
   assert.equal(PLAN.members[SUBMIT].expected_live_sha256, manifest.members[SUBMIT].accepted_sha256);
+  // Poll was re-pinned after this deploy (Check Alt scheduled status check, 2026-10-22):
+  // this manifest still records its cd083282 -> b7a2a7f9 replace; the plan row moved on.
+  assert.deepEqual(manifest.members[POLL], {
+    live_sha256: LIVE[POLL],
+    accepted_sha256: 'b7a2a7f9b33913625d454630939e1df3c2fe44aebbaca77f944f22e6a95af51e',
+    operation: 'replace',
+  });
+  assert.equal(PLAN.members[POLL].expected_live_sha256, manifest.members[POLL].accepted_sha256);
+  const REPINNED = new Set([SUBMIT, POLL]);
   for (const [name, live] of Object.entries(LIVE)) {
-    if (name === SUBMIT) continue;
+    if (REPINNED.has(name)) continue;
     const row = PLAN.members[name];
     assert.equal(row.operation, 'replace', name);
     assert.equal(row.manifest, MANIFEST_REL, name);
@@ -1042,7 +1051,7 @@ test('Check Alt approve reconcile history: four REPLACE members, status-read and
   assert.ok(at(STATUS_READ) >= 0 && at(STATUS_READ) < at(POLL) && at(POLL) < at(SUBMIT) && at(SUBMIT) < at(APPROVE));
   assert.ok(localImports(fs.readFileSync(path.join(API, SUBMIT), 'utf8'), SUBMIT).includes(POLL));
   assert.ok(localImports(fs.readFileSync(path.join(API, POLL), 'utf8'), POLL).includes(STATUS_READ));
-  for (const name of Object.keys(LIVE).filter((member) => member !== SUBMIT)) {
+  for (const name of Object.keys(LIVE).filter((member) => !REPINNED.has(member))) {
     const ready = await run({ ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: name }, { root: ROOT, inspectLive: liveFor(name) });
     assert.equal(ready.state, 'READY', name);
     assert.equal(ready.mutation, false, name);
@@ -1089,5 +1098,55 @@ test('Check Alt auto-approve always on: checkalt-submit.mjs REPLACE expects the 
   await assert.rejects(
     run({ ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: SUBMIT }, { root: ROOT, inspectLive: liveFor(SUBMIT, { sha256: '68b0b9a8406ac1ea6ee39641eefc4fc3522d2ca6f4de0f5d8f2b46f1bff67f7d' }) }),
     (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+  );
+});
+
+test('Check Alt scheduled status check: poll, status-reconcile, scheduled REPLACE the bytes found in the live package', async () => {
+  const POLL = 'providers/production/checkalt-poll.mjs';
+  const RECONCILE = 'providers/production/checkalt-status-reconcile.mjs';
+  const SCHEDULED = 'scheduled.mjs';
+  const MANIFEST_REL = 'aws/tests/fixtures/production-checkalt-scheduled-reconcile-manifest-2026-10-22.json';
+  // Members of the live package (lambda:GetFunction, CodeSha256 L1s1+KyN4s/4nSgniwePGsv4NrjBdJwrv3Id1QRMEO0=,
+  // 2026-10-22 14:18Z); each equals main at ea9b36500. Poll b7a2a7f9 is the reconcile-history accepted bytes.
+  const LIVE = {
+    [POLL]: 'b7a2a7f9b33913625d454630939e1df3c2fe44aebbaca77f944f22e6a95af51e',
+    [RECONCILE]: 'e3ee3d433b5fae826311709b6cb142fdee308e2770047e532c450d16675785b5',
+    [SCHEDULED]: '4b06d4cd578720a3996dc090cc396bda273c8de07e80cd7064d755af2b214abb',
+  };
+  const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, MANIFEST_REL), 'utf8'));
+  assert.equal(manifest.workstream_id, 'checkalt-scheduled-reconcile-bank-deposits');
+  assert.equal(manifest.deploy_authorized, false);
+  assert.match(manifest.notes, /L1s1\+KyN4s\/4nSgniwePGsv4NrjBdJwrv3Id1QRMEO0=/);
+  assert.match(PLAN.notes, /Check Alt scheduled status check/);
+  assert.deepEqual(Object.keys(manifest.members), [POLL, RECONCILE, SCHEDULED]);
+  for (const [name, live] of Object.entries(LIVE)) {
+    const row = PLAN.members[name];
+    assert.equal(row.operation, 'replace', name);
+    assert.equal(row.manifest, MANIFEST_REL, name);
+    assert.equal(row.sql_before, null, name);
+    assert.equal(row.expected_live_sha256, live, name);
+    assert.equal(row.accepted_sha256, sha(`aws/functions/api/${name}`), name);
+    assert.notEqual(row.accepted_sha256, live, name);
+    assert.deepEqual(manifest.members[name], { live_sha256: live, accepted_sha256: row.accepted_sha256, operation: 'replace' }, name);
+    assert.equal(approvalPhrase(name), `DEPLOY ${name} TO PRODUCTION`);
+    assert.equal(resolvePlannedMember(name, { root: ROOT, plan: PLAN }).ok, true, name);
+    const ready = await run({ ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: name }, { root: ROOT, inspectLive: liveFor(name) });
+    assert.equal(ready.state, 'READY', name);
+    assert.equal(ready.mutation, false, name);
+  }
+  // poll -> status-reconcile (imports its new exports) -> scheduled (reaches the job through it).
+  const at = (name) => PLAN.order.indexOf(name);
+  assert.ok(at(POLL) >= 0 && at(POLL) < at(RECONCILE) && at(RECONCILE) < at(SCHEDULED));
+  assert.ok(localImports(fs.readFileSync(path.join(API, RECONCILE), 'utf8'), RECONCILE).includes(POLL));
+  assert.ok(localImports(fs.readFileSync(path.join(API, SCHEDULED), 'utf8'), SCHEDULED).includes(RECONCILE));
+  // index.mjs is never overlaid and is unchanged: the scheduler event routes through the live /scheduled branch.
+  assert.ok(PLAN.do_not_overlay.includes('index.mjs'));
+  // status-reconcile refuses to link against a live poll without the new exports.
+  const oldPoll = fs.readFileSync(path.join(API, POLL), 'utf8')
+    .replace('export async function refreshDepositRow(', 'async function refreshDepositRow(');
+  await assert.rejects(
+    run(applyEnv(RECONCILE), applyDeps(RECONCILE, { sources: { [POLL]: oldPoll } }).deps),
+    (error) => error.code === CODES.DEPLOYMENT_COLLISION
+      && error.details.problems.some((row) => row === `${POLL} does not export refreshDepositRow`),
   );
 });

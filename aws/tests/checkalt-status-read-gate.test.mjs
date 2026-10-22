@@ -109,6 +109,9 @@ const identityClient = (store) => ({
       store.gucs[params[0]] = params[1];
       return { rows: [{ set_config: params[1] }] };
     }
+    if (text.includes('public.is_platform_owner()')) {
+      return { rows: [{ ok: store.gucs['request.app_user_id'] === store.ownerUserId }] };
+    }
     if (text === LOOKUP_MAPPING_SQL) return { rows: params[0] === mapping.cognito_sub ? [mapping] : [] };
     if (text === TENANT_MEMBERSHIP_SQL || text.includes('FROM public.tenant_users tu')) {
       return { rows: store.memberships };
@@ -394,6 +397,9 @@ test('11-13 via status-read poll persist', async () => {
   assert.equal(withDate.deposits[0].cleared_at, '2026-09-16T12:00:00.000Z');
 });
 
+const SCHEDULED_OWNER = 'a1000000-0000-4000-8000-00000000aa01';
+const NOT_OWNER = 'a1000000-0000-4000-8000-00000000aa02';
+
 test('scheduled job uses the same status-read permission and stays off by default', async () => {
   const store = createStore();
   seedPending(store);
@@ -408,11 +414,29 @@ test('scheduled job uses the same status-read permission and stays off by defaul
   });
   await withEnv(statusReadOnlyFlags, async () => {
     assert.equal(productionCheckAltExecutionAllowed(), false);
-    const allowed = await handleCheckAltStatusReconcileJob({
+    // No actor: refused before any Check Alt call.
+    const noActor = await handleCheckAltStatusReconcileJob({
       headers: {},
       body: JSON.stringify({ job: 'checkalt-poll-deposits' }),
     }, { ...deps(store), createClient: () => identityClient(store) });
+    assert.equal(noActor.error, 'scheduled_actor_required');
+    assert.equal(noActor.liveProviderCalled, false);
+    assert.equal(store.itemPosts, 0);
+    // An actor that is not the platform owner: refused before any Check Alt call.
+    store.ownerUserId = SCHEDULED_OWNER;
+    const notOwner = await handleCheckAltStatusReconcileJob({
+      headers: {},
+      body: JSON.stringify({ job: 'checkalt-poll-deposits', actor_application_user_id: NOT_OWNER }),
+    }, { ...deps(store), createClient: () => identityClient(store) });
+    assert.equal(notOwner.error, 'scheduled_actor_not_platform_owner');
+    assert.equal(store.itemPosts, 0);
+    const allowed = await handleCheckAltStatusReconcileJob({
+      headers: {},
+      body: JSON.stringify({ job: 'checkalt-poll-deposits', actor_application_user_id: SCHEDULED_OWNER }),
+    }, { ...deps(store), createClient: () => identityClient(store) });
     assert.equal(allowed.ok, true);
+    assert.equal(allowed.database_session, 'status_read');
+    assert.equal(store.gucs['request.financial_execution'], '0');
     assert.equal(store.processPosts, 0);
     assert.equal(store.approvePosts, 0);
     assert.equal(store.deposits[0].status, 'submitted');

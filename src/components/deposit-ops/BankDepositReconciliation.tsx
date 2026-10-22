@@ -12,6 +12,15 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Banknote, ChevronDown, ChevronRight, Clock } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { displayCaseOrNull } from "@/lib/displayCase";
+import {
+  bankDepositDayKey,
+  groupBankDeposits,
+  inTransitStatusLabel,
+  isBankDepositSettled,
+  sumDepositAmounts,
+} from "@/lib/bankDepositGroups";
+
+export { bankDepositDayKey, isBankDepositSettled, sumDepositAmounts };
 
 interface DepositRow {
   id: string;
@@ -31,20 +40,6 @@ interface DepositRow {
 const fmtMoney = (n: number | null | undefined) =>
   `$${(n ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-/** Bank-credit day from persisted FinCapture depositDate (cleared_at) or submitted_at. */
-export const bankDepositDayKey = (iso: string | null | undefined) => {
-  if (!iso) return "unknown";
-  const day = String(iso).slice(0, 10);
-  return /^\d{4}-\d{2}-\d{2}$/.test(day) ? day : "unknown";
-};
-
-export const sumDepositAmounts = (rows: { amount: number | null | undefined }[]) =>
-  rows.reduce((s, r) => s + Number(r.amount ?? 0), 0);
-
-/** Settled only when local status is cleared and provider depositDate was stored. */
-export const isBankDepositSettled = (row: { status?: string | null; cleared_at?: string | null }) =>
-  row?.status === "cleared" && Boolean(row?.cleared_at);
-
 const labelForDay = (dayKey: string) => {
   if (dayKey === "unknown") return "Date unknown";
   try {
@@ -58,7 +53,6 @@ interface DepositGroup {
   key: string;
   dayKey: string;
   label: string;
-  settled: boolean;
   total: number;
   rows: DepositRow[];
 }
@@ -86,7 +80,9 @@ export default function BankDepositReconciliation({ searchQuery = "" }: { search
     },
   });
 
-  const groups = useMemo<DepositGroup[]>(() => {
+  const [transitOpen, setTransitOpen] = useState(false);
+
+  const grouped = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     const rows = (data ?? []).filter((r) => {
       if (!q) return true;
@@ -103,31 +99,14 @@ export default function BankDepositReconciliation({ searchQuery = "" }: { search
         .some((v) => String(v).toLowerCase().includes(q));
     });
 
-    const map = new Map<string, DepositGroup>();
-    for (const row of rows) {
-      const settled = isBankDepositSettled(row);
-      const dayKey = bankDepositDayKey(row.cleared_at ?? row.submitted_at);
-      const key = `${settled ? "settled" : "pending"}:${dayKey}`;
-      if (!map.has(key)) {
-        map.set(key, {
-          key,
-          dayKey,
-          label: labelForDay(dayKey),
-          settled,
-          total: 0,
-          rows: [],
-        });
-      }
-      const g = map.get(key)!;
-      g.rows.push(row);
-      g.total = sumDepositAmounts(g.rows);
-    }
-
-    return Array.from(map.values()).sort((a, b) => {
-      if (a.settled !== b.settled) return a.settled ? 1 : -1;
-      return b.key.localeCompare(a.key);
-    });
+    // groupBankDeposits (src/lib/bankDepositGroups.ts): deposited means
+    // cleared with the Check Alt depositDate stored in cleared_at, grouped by
+    // that day. Everything else is in transit and never lands on a deposit day.
+    const split = groupBankDeposits(rows);
+    const days: DepositGroup[] = split.days.map((d) => ({ ...d, label: labelForDay(d.dayKey) }));
+    return { days, inTransit: split.inTransit, inTransitTotal: split.inTransitTotal };
   }, [data, searchQuery]);
+  const groups = grouped.days;
 
   const visibleGroups = useMemo(() => {
     if (!jumpDate) return groups;
@@ -145,8 +124,8 @@ export default function BankDepositReconciliation({ searchQuery = "" }: { search
     });
   }, [jumpDate, groups]);
 
-  const settledTotal = visibleGroups.filter((g) => g.settled).reduce((s, g) => s + g.total, 0);
-  const pendingTotal = visibleGroups.filter((g) => !g.settled).reduce((s, g) => s + g.total, 0);
+  const settledTotal = visibleGroups.reduce((s, g) => s + g.total, 0);
+  const pendingTotal = grouped.inTransitTotal;
 
   if (isLoading) {
     return (
@@ -185,7 +164,7 @@ export default function BankDepositReconciliation({ searchQuery = "" }: { search
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-xs font-medium text-muted-foreground flex items-center gap-2">
-              <Banknote className="h-3.5 w-3.5" /> Settled into your bank
+              <Banknote className="h-3.5 w-3.5" /> Deposited into your bank
             </CardTitle>
           </CardHeader>
           <CardContent className="pt-0">
@@ -195,7 +174,7 @@ export default function BankDepositReconciliation({ searchQuery = "" }: { search
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-xs font-medium text-muted-foreground flex items-center gap-2">
-              <Clock className="h-3.5 w-3.5" /> In transit / not yet cleared
+              <Clock className="h-3.5 w-3.5" /> In transit / waiting in Check Alt
             </CardTitle>
           </CardHeader>
           <CardContent className="pt-0">
@@ -205,14 +184,15 @@ export default function BankDepositReconciliation({ searchQuery = "" }: { search
       </div>
 
       <p className="text-xs text-muted-foreground">
-        Each row below is one bank credit. Expand a day to see exactly which checks make up that amount.
-        Daily total equals the sum of the checks shown.
+        Each day below is one bank credit on the day Check Alt deposited it. Expand a day to see exactly
+        which checks make up that amount. Daily total equals the sum of the checks shown. Checks that
+        Check Alt has not deposited yet are listed separately under In transit.
       </p>
 
       {visibleGroups.length === 0 && (
         <Card>
           <CardContent className="py-10 text-center text-sm text-muted-foreground">
-            {jumpDate ? `No deposits on ${labelForDay(jumpDate)}.` : "No deposits found yet."}
+            {jumpDate ? `No deposits on ${labelForDay(jumpDate)}.` : "No deposited checks yet."}
           </CardContent>
         </Card>
       )}
@@ -230,8 +210,8 @@ export default function BankDepositReconciliation({ searchQuery = "" }: { search
               <div className="flex items-center gap-2 min-w-0">
                 {isOpen ? <ChevronDown className="h-4 w-4 shrink-0" /> : <ChevronRight className="h-4 w-4 shrink-0" />}
                 <span className="font-medium truncate">{g.label}</span>
-                <Badge variant={g.settled ? "default" : "secondary"} className="text-[10px]">
-                  {g.settled ? "Settled" : "Pending"}
+                <Badge variant="default" className="text-[10px]">
+                  Deposited
                 </Badge>
                 <span className="text-xs text-muted-foreground whitespace-nowrap">
                   {g.rows.length} check{g.rows.length === 1 ? "" : "s"}
@@ -314,6 +294,68 @@ export default function BankDepositReconciliation({ searchQuery = "" }: { search
           </Card>
         );
       })}
+
+      {grouped.inTransit.length > 0 && (
+        <Card className="border-dashed">
+          <button
+            type="button"
+            onClick={() => setTransitOpen((v) => !v)}
+            className="w-full flex items-center justify-between gap-3 p-4 text-left hover:bg-muted/40 transition-colors"
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              {transitOpen ? <ChevronDown className="h-4 w-4 shrink-0" /> : <ChevronRight className="h-4 w-4 shrink-0" />}
+              <span className="font-medium truncate">In transit / waiting in Check Alt</span>
+              <Badge variant="secondary" className="text-[10px]">Not deposited yet</Badge>
+              <span className="text-xs text-muted-foreground whitespace-nowrap">
+                {grouped.inTransit.length} check{grouped.inTransit.length === 1 ? "" : "s"}
+              </span>
+            </div>
+            <span className="font-semibold tabular-nums whitespace-nowrap text-muted-foreground">
+              {fmtMoney(grouped.inTransitTotal)}
+            </span>
+          </button>
+          {transitOpen && (
+            <CardContent className="pt-0">
+              <p className="text-xs text-muted-foreground pb-2">
+                Not on any deposit day: Check Alt has not reported a bank deposit date for these checks yet.
+                They move to their deposit day once it does.
+              </p>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="whitespace-nowrap">Check #</TableHead>
+                      <TableHead className="whitespace-nowrap">Carrier</TableHead>
+                      <TableHead className="whitespace-nowrap">Payee</TableHead>
+                      <TableHead className="whitespace-nowrap">Reference</TableHead>
+                      <TableHead className="whitespace-nowrap">Sent to Check Alt</TableHead>
+                      <TableHead className="whitespace-nowrap">Status</TableHead>
+                      <TableHead className="text-right whitespace-nowrap">Amount</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {grouped.inTransit.map((r) => (
+                      <TableRow key={r.id}>
+                        <TableCell className="whitespace-nowrap">{r.check_intake_items?.check_number ?? "—"}</TableCell>
+                        <TableCell className="max-w-[180px] truncate">{displayCaseOrNull(r.check_intake_items?.carrier_name) ?? "—"}</TableCell>
+                        <TableCell className="max-w-[220px] truncate">{displayCaseOrNull(r.check_intake_items?.payee_line) ?? "—"}</TableCell>
+                        <TableCell className="whitespace-nowrap font-mono text-xs">{r.checkalt_reference ?? "—"}</TableCell>
+                        <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
+                          {bankDepositDayKey(r.submitted_at) === "unknown" ? "—" : labelForDay(bankDepositDayKey(r.submitted_at))}
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
+                          {inTransitStatusLabel(r.status)}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums whitespace-nowrap">{fmtMoney(r.amount)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          )}
+        </Card>
+      )}
     </div>
   );
 }
