@@ -49,6 +49,11 @@ Branding is accepted evaluate-only against merged #713. Do not weaken the
 intended invariants, do not treat older Branding SHAs as restore authority,
 and do not enable enforcement from this guide.
 
+#1171 superseded the two Tenant Management invariants on the owner's
+decision (2026-10-22): Tenant Management has no Branding & Email tab and
+does not mount EmailSenderSettings; the company edits its own branding. The
+tenant-side and Email Preview invariants are unchanged.
+
 ## Collision
 
 New files live under `ops/accepted-features/`, `scripts/lib/accepted-features.mjs`,
