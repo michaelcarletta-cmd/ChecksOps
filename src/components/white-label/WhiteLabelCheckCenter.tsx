@@ -1,6 +1,6 @@
 import { useTenant } from "@/contexts/TenantContext";
 import { useAuth } from "@/hooks/useAuth";
-import { Navigate, useNavigate, Link } from "react-router-dom";
+import { Navigate, useNavigate, useLocation, Link } from "react-router-dom";
 import { lazy, Suspense, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { LogOut, Settings, BadgeCheck, Banknote, Receipt, Hammer, Wallet } from "lucide-react";
 import { isCheckOpsHost } from "@/lib/checkopsHost";
 import { TenantLogo } from "@/components/branding/TenantLogo";
+import { loginPathWithNext } from "@/lib/loginReturnPath";
 
 const CheckCommandCenter = lazy(() => import("@/pages/CheckCommandCenter"));
 
@@ -18,17 +19,25 @@ const PageLoader = () => (
   </div>
 );
 
-export function WhiteLabelCheckCenter() {
+/**
+ * `basePath` is set by the tenant custom-domain app (""), where tenant routes
+ * live at the domain root. Without it the header links fell back to
+ * `/wl/{slug}/...`, which a custom domain does not route, so they (and a
+ * refresh on those pages) landed back on /checks.
+ */
+export function WhiteLabelCheckCenter({ basePath }: { basePath?: string } = {}) {
   const { tenant } = useTenant();
   const { user, loading } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const resolveTenantBase = useCallback((): string | null => {
+    if (basePath !== undefined) return basePath;
     if (!tenant?.slug) return null;
     if (isCheckOpsHost()) return `/${tenant.slug}`;
     if (window.location.pathname.startsWith("/wl/")) return `/wl/${tenant.slug}`;
     return null;
-  }, [tenant]);
+  }, [tenant, basePath]);
 
   const handleSignOut = useCallback(async () => {
     await supabase.auth.signOut();
@@ -40,8 +49,7 @@ export function WhiteLabelCheckCenter() {
   if (loading) return <PageLoader />;
   if (!user) {
     const tenantBase = resolveTenantBase();
-    const loginPath = tenantBase ? `${tenantBase}/login` : "/login";
-    return <Navigate to={loginPath} replace />;
+    return <Navigate to={loginPathWithNext(tenantBase ?? "", location)} replace />;
   }
 
   return (

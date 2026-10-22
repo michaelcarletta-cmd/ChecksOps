@@ -14,6 +14,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { isCheckOpsHost } from "@/lib/checkopsHost";
 import { isMasterMerchant } from "@/lib/masterMerchant";
+import { loginPathWithNext, postLoginPath } from "@/lib/loginReturnPath";
 
 const Payments = lazy(() => import("@/pages/Payments"));
 const CashJobs = lazy(() => import("@/pages/CashJobs"));
@@ -146,13 +147,17 @@ function WhiteLabelRoutes() {
     );
   }
 
+  // Signed-out / expired-session redirects keep the page the user was on
+  // (path + ?tab=...), and sign-in returns there instead of to /checks.
+  const loginRedirect = <Navigate to={loginPathWithNext(basePath, location)} replace />;
+
   return (
     <Routes>
       <Route
         path="login"
         element={
           user && !authLoading && isMember
-            ? <Navigate to={`${basePath}/checks`} replace />
+            ? <Navigate to={postLoginPath(basePath, location.search)} replace />
             : <WhiteLabelLogin />
         }
       />
@@ -160,7 +165,7 @@ function WhiteLabelRoutes() {
         path="checks"
         element={
           !user
-            ? <Navigate to={`${basePath}/login`} replace />
+            ? loginRedirect
             : isMember
               ? <WhiteLabelCheckCenter />
               : <Navigate to={`${basePath}/login`} replace />
@@ -170,7 +175,7 @@ function WhiteLabelRoutes() {
         path="payments"
         element={
           !user
-            ? <Navigate to={`${basePath}/login`} replace />
+            ? loginRedirect
             : isMember
               ? (
                 <div className="min-h-screen bg-background p-2 sm:p-3 md:p-6 max-w-full overflow-x-hidden">
@@ -187,7 +192,7 @@ function WhiteLabelRoutes() {
         path="cash-jobs"
         element={
           !user
-            ? <Navigate to={`${basePath}/login`} replace />
+            ? loginRedirect
             : isMember
               ? (
                 <div className="min-h-screen bg-background p-2 sm:p-3 md:p-6 max-w-full overflow-x-hidden">
@@ -204,7 +209,7 @@ function WhiteLabelRoutes() {
         path="wallet-ops"
         element={
           !user
-            ? <Navigate to={`${basePath}/login`} replace />
+            ? loginRedirect
             : isMember
               ? (
                 <div className="min-h-screen bg-background p-2 sm:p-3 md:p-6 max-w-full overflow-x-hidden">
@@ -221,7 +226,7 @@ function WhiteLabelRoutes() {
         path="settings"
         element={
           !user
-            ? <Navigate to={`${basePath}/login`} replace />
+            ? loginRedirect
             : isMember
               ? <WhiteLabelSettings />
               : <Navigate to={`${basePath}/login`} replace />

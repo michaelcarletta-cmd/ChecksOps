@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -7,6 +8,10 @@ import { Loader2, ImageIcon, CheckCircle2, XCircle, Send, Eye } from "lucide-rea
 import { toast } from "sonner";
 import { AttachUploadToClaimDialog } from "./AttachUploadToClaimDialog";
 import { supabase as client } from "@/integrations/supabase/client";
+import { refreshCheckQueues } from "@/lib/checkQueueRefresh";
+
+/** New homeowner submissions appear without a page reload (visible tab only). */
+const INBOX_REFRESH_MS = 30_000;
 
 type PendingUpload = {
   id: string;
@@ -29,9 +34,14 @@ export function HomeownerSubmittedChecksInbox({ tenantId, onCheckCreated }: { te
   const [loading, setLoading] = useState(true);
   const [signed, setSigned] = useState<Record<string, string>>({});
   const [attachTarget, setAttachTarget] = useState<PendingUpload | null>(null);
+  const qc = useQueryClient();
+  const signedRef = useRef<Record<string, string>>({});
+  const fullSignAtRef = useRef(0);
 
-  const load = async () => {
-    setLoading(true);
+  // `silent` reloads (interval / tab focus) keep the current list on screen
+  // and only sign image paths that are new since the last load.
+  const load = async (silent = false) => {
+    if (!silent) setLoading(true);
     let q = supabase
       .from("homeowner_ledger_check_uploads")
       .select("*")
@@ -43,19 +53,40 @@ export function HomeownerSubmittedChecksInbox({ tenantId, onCheckCreated }: { te
     const rows = (data ?? []) as PendingUpload[];
     setItems(rows);
 
-    const paths = rows.flatMap((r) => [r.front_path, r.back_path].filter(Boolean) as string[]);
+    const allPaths = rows.flatMap((r) => [r.front_path, r.back_path].filter(Boolean) as string[]);
+    // Signed URLs last 30 minutes; re-sign everything after 20.
+    const incremental = silent && Date.now() - fullSignAtRef.current < 20 * 60_000;
+    const paths = incremental ? allPaths.filter((p) => !signedRef.current[p]) : allPaths;
+    if (!incremental) fullSignAtRef.current = Date.now();
     if (paths.length) {
       const { data: signedList } = await supabase.storage
         .from("homeowner-uploads")
         .createSignedUrls(paths, 60 * 30);
       const map: Record<string, string> = {};
       (signedList ?? []).forEach((s: any) => { if (s.path && s.signedUrl) map[s.path] = s.signedUrl; });
-      setSigned(map);
+      const merged = incremental ? { ...signedRef.current, ...map } : map;
+      signedRef.current = merged;
+      setSigned(merged);
     }
     setLoading(false);
   };
 
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [tenantId]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const tick = () => {
+      if (document.visibilityState === "hidden") return;
+      void load(true);
+    };
+    const id = window.setInterval(tick, INBOX_REFRESH_MS);
+    document.addEventListener("visibilitychange", tick);
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", tick);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tenantId]);
 
   const reject = async (id: string) => {
     await supabase.from("homeowner_ledger_check_uploads")
@@ -129,6 +160,9 @@ export function HomeownerSubmittedChecksInbox({ tenantId, onCheckCreated }: { te
         claimIdFromUpload={attachTarget?.claim_id ?? null}
         onAttached={(checkId) => {
           load();
+          // The new check must be in the Review queue (and its count) before
+          // Review opens it; do not wait for the next background refresh.
+          void refreshCheckQueues(qc, { checkId });
           if (onCheckCreated && checkId) onCheckCreated(checkId);
         }}
       />
