@@ -65,18 +65,21 @@ const referenceOf = (json) => {
 };
 
 /*
- * Post-process auto-approval (Cursor PR #433 port, fail-closed ceiling).
+ * Post-process auto-approval (Cursor PR #433 port; always on since 2026-10-22).
  *
  * CheckAlt process status 40 (pending_approval) needs a second
- * /fincapture/deposit/approve call. The submit flow makes that call itself only
- * after its own committed /deposit/process parked the item, and only when the
- * tenant policy is enabled, auto_approve_max_cents is a set integer ceiling, the
- * server-side amount is at or below it, CheckAlt rated the item "Low Risk", and
- * CheckAlt did not flag it. A blank ceiling does NOT mean unlimited. It never
- * POSTs /deposit/process, never inserts a deposit, and never requires or
- * satisfies the manual-approve TOTP (checkalt-approve.mjs). Replays never reach
- * it (they return before any provider HTTP). Any provider, lock, timeout or
- * persist ambiguity leaves the row pending_approval for a Manager.
+ * /fincapture/deposit/approve call. Owner decision 2026-10-22: auto-approve is
+ * always on for every organization, with no amount ceiling. The tenant columns
+ * checkalt_tenant_accounts.auto_approve_enabled and auto_approve_max_cents stay
+ * in place but no longer decide anything. The submit flow makes the approve call
+ * itself only after its own committed /deposit/process parked the item, the
+ * reference is a positive integer, the server-side amount is a positive integer,
+ * CheckAlt rated the item "Low Risk", and CheckAlt did not flag it. A flagged or
+ * not-Low-Risk item stays pending_approval and is handled in the Check Alt
+ * portal. It never POSTs /deposit/process, never inserts a deposit, and never
+ * requires or satisfies the manual-approve TOTP (checkalt-approve.mjs). Replays
+ * never reach it (they return before any provider HTTP). Any provider, lock,
+ * timeout or persist ambiguity leaves the row pending_approval.
  *
  * Runs under an overall deadline (API Gateway / Lambda allow 29s) so the user
  * always gets the deposit id, reference and status back instead of a 504.
@@ -94,12 +97,9 @@ export const AUTO_APPROVE_SKIP_REASONS = Object.freeze([
   'not_pending_approval',
   'missing_reference',
   'invalid_reference',
-  'auto_approve_disabled',
   'flagged_by_checkalt',
   'risk_not_low',
   'invalid_amount',
-  'missing_auto_approve_ceiling',
-  'over_max_amount',
   'provider_declined',
   'locked_exhausted',
   'auth_failed',
@@ -111,26 +111,17 @@ export const AUTO_APPROVE_SKIP_REASONS = Object.freeze([
 const AUTO_APPROVE_FLAG_TEXT_RE = /duplicate|fraud|risk|exception|warning|hold|suspect|mismatch|unreadable/;
 const LOW_RISK_RE = /^low risk$/i;
 
-const optionalCents = (value) => {
-  if (value === undefined || value === null || value === '') return null;
-  const cents = Number(value);
-  return Number.isInteger(cents) && cents >= 0 ? cents : null;
-};
+export const AUTO_APPROVE_POLICY_SOURCE = 'always_on';
 
 /**
- * Tenant row wins as a whole when present; the global row is used only without one.
- * Submit always has a tenant row (it refuses an unregistered tenant) and passes
- * no global row, so the global checkalt_config setting is ignored at submit time.
+ * Always on for every organization, with no amount ceiling. The tenant and global
+ * auto_approve_enabled / auto_approve_max_cents settings are ignored on purpose.
  */
-export const resolveAutoApprovePolicy = (tenant = null, globalCfg = null) => {
-  const source = tenant ? 'checkalt_tenant_accounts' : (globalCfg ? 'checkalt_config' : 'none');
-  const row = tenant || globalCfg || null;
-  return {
-    enabled: row?.auto_approve_enabled === true,
-    maxCents: optionalCents(row?.auto_approve_max_cents),
-    source,
-  };
-};
+export const resolveAutoApprovePolicy = () => ({
+  enabled: true,
+  maxCents: null,
+  source: AUTO_APPROVE_POLICY_SOURCE,
+});
 
 export const depositIsFlagged = (providerJson = {}) => {
   const json = providerJson && typeof providerJson === 'object' ? providerJson : {};
@@ -166,8 +157,6 @@ export const safeCheckAltReference = (reference) => {
 export const decideAutoApprove = ({
   processRequiresApproval = false,
   reference = null,
-  enabled = false,
-  maxCents = null,
   amountCents = null,
   flagged = false,
   riskLow = false,
@@ -177,12 +166,9 @@ export const decideAutoApprove = ({
     return { approve: false, skipReason: 'missing_reference' };
   }
   if (safeCheckAltReference(reference) === null) return { approve: false, skipReason: 'invalid_reference' };
-  if (enabled !== true) return { approve: false, skipReason: 'auto_approve_disabled' };
   if (flagged) return { approve: false, skipReason: 'flagged_by_checkalt' };
   if (riskLow !== true) return { approve: false, skipReason: 'risk_not_low' };
   if (!Number.isInteger(amountCents) || amountCents <= 0) return { approve: false, skipReason: 'invalid_amount' };
-  if (!Number.isInteger(maxCents) || maxCents < 0) return { approve: false, skipReason: 'missing_auto_approve_ceiling' };
-  if (amountCents > maxCents) return { approve: false, skipReason: 'over_max_amount' };
   return { approve: true, skipReason: null };
 };
 
@@ -299,12 +285,10 @@ export async function maybeAutoApproveAfterProcess({
   now = Date.now,
   requestTimeoutMs = AUTO_APPROVE_REQUEST_TIMEOUT_MS,
 } = {}) {
-  const policy = resolveAutoApprovePolicy(acct || null, null);
+  const policy = resolveAutoApprovePolicy();
   let decision = decideAutoApprove({
     processRequiresApproval: row?.status === 'pending_approval',
     reference: row?.checkalt_reference ?? null,
-    enabled: policy.enabled,
-    maxCents: policy.maxCents,
     amountCents,
     flagged: depositIsFlagged(providerJson),
     riskLow: riskIsLow(providerJson),
@@ -783,6 +767,7 @@ export async function handleProductionCheckAltSubmit({
           approvePosted: autoApprove.approvePosted === true,
           skipReason: autoApprove.skipReason || null,
           maxCents: autoApprove.maxCents ?? null,
+          policySource: autoApprove.policySource || null,
           persistFailed: autoApprove.persistFailed === true,
         }
         : null,

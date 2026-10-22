@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useTenantFilter } from "@/hooks/useTenantFilter";
-import { TenantAutoApproveCard } from "@/components/billing/TenantAutoApproveCard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -10,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Banknote, ChevronDown, ChevronRight, Clock, Settings } from "lucide-react";
+import { Banknote, ChevronDown, ChevronRight, Clock } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { displayCaseOrNull } from "@/lib/displayCase";
 
@@ -68,7 +67,6 @@ export default function BankDepositReconciliation({ searchQuery = "" }: { search
   const { tenantId } = useTenantFilter();
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [jumpDate, setJumpDate] = useState("");
-  const [showSettings, setShowSettings] = useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ["bank-deposit-reconciliation", tenantId],
@@ -181,21 +179,7 @@ export default function BankDepositReconciliation({ searchQuery = "" }: { search
             )}
           </div>
         </div>
-        <Button
-          type="button"
-          size="sm"
-          variant={showSettings ? "default" : "outline"}
-          onClick={() => setShowSettings((v) => !v)}
-          className="gap-1.5"
-        >
-          <Settings className="h-3.5 w-3.5" />
-          Settings
-        </Button>
       </div>
-
-      {showSettings && (
-        <TenantAutoApproveCard tenantId={tenantId} />
-      )}
 
       <div className="grid gap-3 sm:grid-cols-2">
         <Card>

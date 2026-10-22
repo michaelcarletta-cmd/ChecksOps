@@ -50,14 +50,13 @@ test('tenant side: Deposit Ops shows the notice and disables prepare, route, rec
   assert.doesNotMatch(ops, /disabled=\{checkaltSubmitMutation\.isPending\}\n/);
 });
 
-test('tenant side: Check Alt approve-to-deposit is disabled per row for a tenant whose deposits are off; reject stays', () => {
+test('tenant side: the Waiting in Check Alt list offers no approve-to-deposit at all', () => {
   const ca = read('src/components/settings/CheckAltSettings.tsx');
-  assert.match(ca, /const depositsEnabledFor = useTenantsDepositsEnabled\(/);
-  assert.match(ca, /const depositsOn = depositsEnabledFor\(row\.tenant_id\);/);
-  assert.match(ca, /action: "approve",[\s\S]*?disabled=\{decide\.isPending \|\| !depositsOn\}/);
-  assert.match(ca, /\{!depositsOn && <DepositsDisabledNotice/);
-  // Reject is not a deposit.
-  assert.match(ca, /onClick=\{\(\) => setRejectingId\(row\.id\)\}\s+disabled=\{decide\.isPending\}/);
+  // Auto-approve is always on (2026-10-22); a still-pending deposit is reviewed in the
+  // Check Alt portal, so the SPA has no Approve (or Reject) to disable per tenant.
+  assert.equal(/action: "approve"/.test(ca), false);
+  assert.equal(/decide\.mutate\(/.test(ca), false);
+  assert.equal(/checkalt-approve-deposit/.test(ca), false);
   const notice = read('src/components/deposit-ops/DepositsDisabledNotice.tsx');
   assert.match(notice, /role="alert"/);
   assert.match(notice, /\{DEPOSITS_DISABLED_MESSAGE\}/);

@@ -561,7 +561,7 @@ export function DepositManagerCommandCenter({ searchQuery: _searchQuery = "" }: 
             <CardHeader className="pb-2">
               <CardTitle className="text-sm flex items-center gap-2">
                 <Shield className="h-4 w-4 text-amber-400" />
-                Deposit Manual Review
+                Waiting in Check Alt
               </CardTitle>
             </CardHeader>
             <CardContent>

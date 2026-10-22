@@ -160,13 +160,14 @@ test('scheduled CheckAlt status job stays disabled and is not a money job', asyn
   });
 });
 
-test('Pending Approvals UI uses empty-body Poll Now and refresh-before-act responses', () => {
+test('Waiting in Check Alt list uses empty-body Poll Now and sends no approve or reject', () => {
   const settings = fs.readFileSync(path.join(SPA, 'components/settings/CheckAltSettings.tsx'), 'utf8');
   assert.match(settings, /checkalt-poll-status/);
   assert.match(settings, /body: \{\}/);
-  assert.match(settings, /already_resolved/);
   assert.match(settings, /eq\("status", "pending_approval"\)/);
-  assert.match(settings, /checkalt-approve-deposit/);
+  // Auto-approve is always on; a deposit still pending is reviewed in the Check Alt portal.
+  assert.equal(/checkalt-approve-deposit/.test(settings), false);
+  assert.match(settings, /Review this deposit in the Check Alt portal\. ChecksOps updates it automatically once Check Alt approves or rejects it\./);
 });
 
 test('Deposit Ops Manager tab is gone while the console module remains', () => {

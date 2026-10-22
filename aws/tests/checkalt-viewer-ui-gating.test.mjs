@@ -141,17 +141,18 @@ test('Auto-Deposit card hides Save and locks the fields for viewers', () => {
   assert.match(card, /disabled=\{!enabled \|\| isLoading \|\| !canEdit\}/);
 });
 
-test('Pending approvals gate Approve/Reject per row tenant and Poll Now by any operator tenant', () => {
+test('Waiting in Check Alt is read-only (no Approve/Reject) and gates Poll Now by any operator tenant', () => {
   const src = sourceOf('src/components/settings/CheckAltSettings.tsx');
   const pending = src.slice(
     src.indexOf('export function PendingApprovalDeposits()'),
     src.indexOf('export function CheckAltDepositHistory()'),
   );
   assert.match(pending, /\.select\(\s*"id, tenant_id, amount,/);
-  assert.match(pending, /const canDecide = checkAltAccess\.canOperateIn\(row\.tenant_id\);/);
-  assert.match(pending, /\{canDecide && !isRejecting && \(/);
-  assert.match(pending, /\{canDecide && isRejecting && \(/);
-  assert.equal(count(pending, 'decide.mutate('), 2);
+  // Auto-approve is always on; a still-pending deposit is reviewed in the Check Alt portal.
+  assert.equal(count(pending, 'decide.mutate('), 0);
+  assert.equal(/canDecide|isRejecting|setRejectingId|checkalt-approve-deposit/.test(pending), false);
+  assert.equal(/>\s*(Approve|Reject|Confirm reject)\s*</.test(pending), false);
+  assert.equal(/"(Approve|Reject|Confirm reject)"/.test(pending), false);
   assert.match(pending, /const canPoll = checkAltAccess\.canOperateInAny;/);
   assert.equal(count(pending, 'onClick={() => poll.mutate()}'), 2);
   assert.equal((pending.match(/\{canPoll (&&|\?) \(\s*(<div[^>]*>\s*)?<Button[^>]*onClick=\{\(\) => poll\.mutate\(\)\}/g) || []).length, 2);
@@ -193,9 +194,8 @@ test('Check Alt submit/approve/poll call sites in the SPA are exactly the known 
     // UI call sites, with exact counts per token.
     'src/components/settings/CheckAltSettings.tsx': {
       // Platform-owner CheckAltSettings Poll (AdminTenants) + PendingApprovalDeposits poll.
+      // PendingApprovalDeposits no longer calls checkalt-approve-deposit (read-only list).
       'checkalt-poll-status': 4,
-      // Doc comment + guarded path + invoke in PendingApprovalDeposits.
-      'checkalt-approve-deposit': 3,
     },
     'src/components/deposit-ops/DepositOperationsConsole.tsx': { runCheckAltDepositClick: 2 },
     'src/pages/CheckCommandCenter.tsx': { runCheckAltDepositClick: 2 },

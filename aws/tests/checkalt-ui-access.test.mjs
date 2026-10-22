@@ -89,11 +89,11 @@ const identityClient = ({ platformOwner = false, tenantAdminFor = FREEDOM } = {}
   };
 };
 
-test('Manager Bank Deposits shows Auto-Deposit only', () => {
+test('Manager Bank Deposits shows no Auto-Deposit or Check Alt settings (auto-approve is always on)', () => {
   const bank = sourceOf('src/components/deposit-ops/BankDepositReconciliation.tsx');
   const card = sourceOf('src/components/billing/TenantAutoApproveCard.tsx');
-  assert.match(bank, /TenantAutoApproveCard/);
-  assert.match(card, /Auto-Deposit/);
+  assert.equal(/TenantAutoApproveCard/.test(bank), false);
+  assert.equal(/TenantAutoApproveCard/.test(sourceOf('src/components/billing/TenantUsageTracker.tsx')), false);
   assert.equal(/CheckAltSettings/.test(bank), false);
   assert.equal(/from\("checkalt_config"\)/.test(bank), false);
   assert.equal(/Base URL/.test(bank), false);

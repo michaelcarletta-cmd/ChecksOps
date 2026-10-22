@@ -2074,7 +2074,7 @@ const autoApproveStore = ({ enabled = true, maxCents = 200000, amount, payload }
   return store;
 };
 
-test('auto-approve: status 40 under the ceiling posts one approve and persists submitted + approved_at', async () => {
+test('auto-approve: status 40, clean and Low Risk, posts one approve and persists submitted + approved_at', async () => {
   const store = autoApproveStore();
   store.approvePayload = { success: true, status: 127, statusDescription: 'Approved' };
   const result = await submitOnce(store);
@@ -2084,7 +2084,7 @@ test('auto-approve: status 40 under the ceiling posts one approve and persists s
   assert.ok(result.approved_at);
   assert.deepEqual(
     { ...result.auto_approve },
-    { attempted: true, approved: true, approvePosted: true, skipReason: null, maxCents: 200000, persistFailed: false },
+    { attempted: true, approved: true, approvePosted: true, skipReason: null, maxCents: null, policySource: 'always_on', persistFailed: false },
   );
   assert.equal(store.processPosts, 1);
   assert.equal(store.approvePosts, 1);
@@ -2098,29 +2098,38 @@ test('auto-approve: status 40 under the ceiling posts one approve and persists s
   assert.deepEqual(store.approveBodies[0], { fiKey: 'prod-fi-key', referenceNumber: 9001, action: 1 });
 });
 
-test('auto-approve: exact ceiling approves; one cent over stays pending_approval', async () => {
-  const exact = autoApproveStore({ amount: 2000 });
-  const exactResult = await submitOnce(exact);
-  assert.equal(exactResult.status, 'submitted');
-  assert.equal(exactResult.auto_approve.approved, true);
-  assert.equal(exact.approvePosts, 1);
-
-  const over = autoApproveStore({ amount: 2000.01 });
-  const overResult = await submitOnce(over);
-  assert.equal(overResult.status, 'pending_approval');
-  assert.equal(overResult.auto_approve.skipReason, 'over_max_amount');
-  assert.equal(overResult.auto_approve.approvePosted, false);
-  assert.equal(over.processPosts, 1);
-  assert.equal(over.approvePosts, 0);
-  assert.equal(over.deposits[0].approved_at, undefined);
-  assert.equal(over.deposits[0].last_status_payload._auto_approve.skip_reason, 'over_max_amount');
+test('auto-approve: always on; tenant setting off, blank ceiling and amounts over the old ceiling all approve', async () => {
+  const cases = [
+    { name: 'tenant setting off', store: autoApproveStore({ enabled: false }) },
+    { name: 'blank ceiling', store: autoApproveStore({ maxCents: null }) },
+    { name: 'empty-string ceiling', store: autoApproveStore({ maxCents: '' }) },
+    { name: 'setting off and blank ceiling', store: autoApproveStore({ enabled: false, maxCents: null }) },
+    { name: 'one cent over the old ceiling', store: autoApproveStore({ amount: 2000.01 }) },
+    { name: 'far over a small ceiling', store: autoApproveStore({ maxCents: 100, amount: 9876.54 }) },
+  ];
+  for (const { name, store } of cases) {
+    const result = await submitOnce(store);
+    assert.equal(result.statusCode, 200, name);
+    assert.equal(result.status, 'submitted', name);
+    assert.ok(result.approved_at, name);
+    assert.equal(result.auto_approve.attempted, true, name);
+    assert.equal(result.auto_approve.approved, true, name);
+    assert.equal(result.auto_approve.skipReason, null, name);
+    assert.equal(result.auto_approve.maxCents, null, name);
+    assert.equal(result.auto_approve.policySource, 'always_on', name);
+    assert.equal(store.processPosts, 1, name);
+    assert.equal(store.approvePosts, 1, name);
+    assert.equal(store.deposits.length, 1, name);
+    assert.equal(store.deposits[0].status, 'submitted', name);
+    assert.equal(store.deposits[0].last_status_payload._auto_approve.approved, true, name);
+    assert.equal(store.deposits[0].last_status_payload._auto_approve.max_cents, null, name);
+  }
 });
 
-test('auto-approve: blank ceiling, disabled, flagged and missing reference skip and stay pending_approval', async () => {
+test('auto-approve: flagged and missing reference skip and stay pending_approval, whatever the tenant setting', async () => {
   const cases = [
-    { name: 'blank ceiling', store: autoApproveStore({ maxCents: null }), reason: 'missing_auto_approve_ceiling' },
-    { name: 'empty-string ceiling', store: autoApproveStore({ maxCents: '' }), reason: 'missing_auto_approve_ceiling' },
-    { name: 'disabled', store: autoApproveStore({ enabled: false }), reason: 'auto_approve_disabled' },
+    { name: 'exceptions, setting off', store: autoApproveStore({ enabled: false, payload: PROCESS_40(9001, { exceptions: ['possible duplicate'] }) }), reason: 'flagged_by_checkalt' },
+    { name: 'warnings, blank ceiling', store: autoApproveStore({ maxCents: null, payload: PROCESS_40(9001, { warnings: ['x'] }) }), reason: 'flagged_by_checkalt' },
     { name: 'exceptions', store: autoApproveStore({ payload: PROCESS_40(9001, { exceptions: ['possible duplicate'] }) }), reason: 'flagged_by_checkalt' },
     { name: 'warnings', store: autoApproveStore({ payload: PROCESS_40(9001, { warnings: ['x'] }) }), reason: 'flagged_by_checkalt' },
     { name: 'riskFactors', store: autoApproveStore({ payload: PROCESS_40(9001, { riskFactors: ['velocity'] }) }), reason: 'flagged_by_checkalt' },
@@ -2165,9 +2174,10 @@ test('auto-approve: replayed submit neither re-processes nor approves a second t
   assert.equal(store.deposits.length, 1);
 
   // A row parked pending_approval (skipped or failed auto-approve) replays without an approve.
-  const parked = autoApproveStore({ maxCents: null });
-  await submitOnce(parked);
-  parked.autoApproveMaxCents = 200000;
+  const parked = autoApproveStore({ payload: PROCESS_40(9001, { exceptions: ['possible duplicate'] }) });
+  const parkedFirst = await submitOnce(parked);
+  assert.equal(parkedFirst.auto_approve.skipReason, 'flagged_by_checkalt');
+  parked.processPayload = PROCESS_40();
   const parkedReplay = await submitOnce(parked);
   assert.equal(parkedReplay.status, 'pending_approval');
   assert.equal(parked.processPosts, 1);
