@@ -16,10 +16,15 @@ export const CHECKALT_MUTATION_FUNCTIONS = new Set([
   'checkalt-deposit-history',
 ]);
 
+// getUserAccountInformation is a read: it resolves the depositor ssoKey the
+// same way submit does (resolveSsoKey), so item/history name the right
+// depositor. getDepositAccountInformation, register and every deposit write
+// stay refused.
 export const CHECKALT_STATUS_READ_ALLOWED_PATHS = Object.freeze([
   '/public/fincapture/authenticate',
   '/fincapture/deposit/item',
   '/fincapture/deposit/history',
+  '/fincapture/useraccount/getUserAccountInformation',
 ]);
 
 export const CHECKALT_STATUS_READ_DENIED_PATHS = Object.freeze([
@@ -96,7 +101,8 @@ export const isCheckAltStatusDeniedPath = (url) => {
 
 /**
  * Adapter used by production poll / scheduled reconcile.
- * Allows authenticate + item + history. Refuses process/approve/register.
+ * Allows authenticate + item + history + getUserAccountInformation.
+ * Refuses process/approve/register and every other path.
  */
 export const statusReadOnlyFetch = (fetchImpl = fetch) => async (url, options = {}) => {
   if (isCheckAltStatusDeniedPath(url) || !isCheckAltStatusReadPath(url)) {

@@ -996,3 +996,54 @@ test('live reconciliation 2026-10-19: ten members expect the bytes inspect run 3
   assert.equal(PLAN.members[REGISTER].sql_before, 'aws/workflows/sql/81_checkalt_production_register.sql');
   assert.equal(PLAN.members[REGISTER].accepted_sha256, '8f06c079293a5e495043e87ad0d5aa6c01aa3fda182957efb745efa3c855f870');
 });
+
+test('Check Alt approve reconcile history: four REPLACE members, status-read and poll before submit', async () => {
+  const STATUS_READ = 'providers/production/checkalt-status-read.mjs';
+  const POLL = 'providers/production/checkalt-poll.mjs';
+  const SUBMIT = 'providers/production/checkalt-submit.mjs';
+  const APPROVE = 'providers/production/checkalt-approve.mjs';
+  const MANIFEST_REL = 'aws/tests/fixtures/production-checkalt-approve-reconcile-history-manifest-2026-10-22.json';
+  // Main's bytes at 008af40e2, live since the third full-package rebuild (production run 39669873076).
+  const LIVE = {
+    [STATUS_READ]: '10ac13a3c6c58df43d1a1dafbd8e0415c487125b2132b1cbc1caf9c3a0d18dee',
+    [POLL]: 'cd083282e328caadb1b38598aa5f15ae7eda41708978afd06094ff62a24e4e56',
+    [SUBMIT]: '68b0b9a8406ac1ea6ee39641eefc4fc3522d2ca6f4de0f5d8f2b46f1bff67f7d',
+    [APPROVE]: 'd2aec271955373ec24cace5bf3b08116b26511aed30810499e5e15d439f9b161',
+  };
+  const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, MANIFEST_REL), 'utf8'));
+  assert.equal(manifest.deploy_authorized, false);
+  assert.match(manifest.notes, /run 39669873076/);
+  for (const [name, live] of Object.entries(LIVE)) {
+    const row = PLAN.members[name];
+    assert.equal(row.operation, 'replace', name);
+    assert.equal(row.manifest, MANIFEST_REL, name);
+    assert.equal(row.sql_before, null, name);
+    assert.equal(row.expected_live_sha256, live, name);
+    assert.equal(row.accepted_sha256, sha(`aws/functions/api/${name}`), name);
+    assert.notEqual(row.accepted_sha256, live, name);
+    assert.deepEqual(manifest.members[name], { live_sha256: live, accepted_sha256: row.accepted_sha256, operation: 'replace' }, name);
+    assert.equal(approvalPhrase(name), `DEPLOY ${name} TO PRODUCTION`);
+  }
+  // The release 2026-10-17 pre-deploy values for submit and approve stay recorded in that manifest.
+  const release = JSON.parse(fs.readFileSync(path.join(ROOT, 'aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json'), 'utf8'));
+  assert.equal(release.members[SUBMIT].live_sha256, 'dd164667b1968cd487cf82b908ac3b8f2763152e700c649b53620e70425388d2');
+  assert.equal(release.members[APPROVE].live_sha256, '4f19b9a7d582fd4132e7a9b6f65180268ccf41100e733ec63ba7bcf761f331ba');
+  // Order: status-read (allow-list) -> poll (exports resolveSsoKey) -> submit (imports it) -> approve.
+  const at = (name) => PLAN.order.indexOf(name);
+  assert.ok(at(STATUS_READ) >= 0 && at(STATUS_READ) < at(POLL) && at(POLL) < at(SUBMIT) && at(SUBMIT) < at(APPROVE));
+  assert.ok(localImports(fs.readFileSync(path.join(API, SUBMIT), 'utf8'), SUBMIT).includes(POLL));
+  assert.ok(localImports(fs.readFileSync(path.join(API, POLL), 'utf8'), POLL).includes(STATUS_READ));
+  for (const name of Object.keys(LIVE)) {
+    const ready = await run({ ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: name }, { root: ROOT, inspectLive: liveFor(name) });
+    assert.equal(ready.state, 'READY', name);
+    assert.equal(ready.mutation, false, name);
+  }
+  // Submit refuses to link against a live poll that does not export resolveSsoKey yet.
+  const oldPoll = fs.readFileSync(path.join(API, POLL), 'utf8')
+    .replace('export async function resolveSsoKey(', 'async function resolveSsoKey(');
+  await assert.rejects(
+    run(applyEnv(SUBMIT), applyDeps(SUBMIT, { sources: { [POLL]: oldPoll } }).deps),
+    (error) => error.code === CODES.DEPLOYMENT_COLLISION
+      && error.details.problems.some((row) => row === `${POLL} does not export resolveSsoKey`),
+  );
+});

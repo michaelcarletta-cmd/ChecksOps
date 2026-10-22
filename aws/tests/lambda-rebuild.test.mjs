@@ -71,7 +71,18 @@ const CHANGED_SINCE_SECOND_REBUILD = {
   'providers/production/checkalt-eligibility.mjs': 'changed',
   // Moov transfer returns (#1116): production transfer.* events go to providers/moov-transfer-webhook.mjs.
   'providers/webhooks.mjs': 'changed',
+  // Check Alt approve reconcile history fix (2026-10-22): changed after the third rebuild
+  // (production run 39669873076 of main 008af40e2), taken through the production overlay plan
+  // (REPLACE members), not a rebuild section.
+  'providers/production/checkalt-poll.mjs': 'changed',
+  'providers/production/checkalt-status-read.mjs': 'changed',
 };
+// Listed changes that go through the production overlay plan, never the current rebuild section.
+const OVERLAY_PLAN_CHANGES = new Set([
+  'providers/production/checkalt-eligibility.mjs',
+  'providers/production/checkalt-poll.mjs',
+  'providers/production/checkalt-status-read.mjs',
+]);
 const assertSectionAcceptedIsMain = (apiRoot, name, accepted) => {
   const onMain = sha256(fs.readFileSync(path.join(apiRoot, name)));
   if (CHANGED_SINCE_SECOND_REBUILD[name]) assert.notEqual(onMain, accepted, `${name} is listed as changed but main still has the accepted bytes`);
@@ -301,7 +312,7 @@ test('the production plan section accepts inspect run 39666717878: Moov transfer
     assert.equal(second.members[name] || second.added[name], undefined, name);
   }
   for (const name of Object.keys(CHANGED_SINCE_SECOND_REBUILD)) {
-    if (name === 'providers/production/checkalt-eligibility.mjs') assert.equal(section.members[name], undefined, name);
+    if (OVERLAY_PLAN_CHANGES.has(name)) assert.equal(section.members[name], undefined, name);
     else assert.ok(section.members[name], `${name} changed on main but is not a production member`);
   }
   // The plan as committed makes the inspected live package READY, not BLOCKED.
@@ -443,7 +454,7 @@ test('the staging plan section accepts inspect run 39663300105: Moov transfer re
   // Every file main changed after the second rebuild is a member here, or already live at main's bytes
   // through the overlay (checkalt-eligibility.mjs, counted as same by the inspect).
   for (const name of Object.keys(CHANGED_SINCE_SECOND_REBUILD)) {
-    if (name === 'providers/production/checkalt-eligibility.mjs') assert.equal(section.members[name], undefined, name);
+    if (OVERLAY_PLAN_CHANGES.has(name)) assert.equal(section.members[name], undefined, name);
     else assert.ok(section.members[name], `${name} changed on main but is not a staging member`);
   }
   // The plan as committed makes the inspected live package READY, not BLOCKED.

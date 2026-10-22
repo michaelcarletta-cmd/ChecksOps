@@ -24,10 +24,13 @@ import {
 import { handleProductionCheckAltSubmit } from '../functions/api/providers/production/checkalt-submit.mjs';
 import { handleProductionCheckAltApprove } from '../functions/api/providers/production/checkalt-approve.mjs';
 import {
+  buildHistoryRequestBody,
   handleProductionCheckAltPoll,
   historyListOf,
+  historyWindow,
   matchHistoryByReference,
   reconcileProductionCheckAltDeposit,
+  resolveSsoKey,
 } from '../functions/api/providers/production/checkalt-poll.mjs';
 import { runCheckAltStatusReconcile } from '../functions/api/providers/production/checkalt-status-reconcile.mjs';
 import { syntheticCheckRaster } from '../functions/api/providers/parity/checkalt-image.mjs';
@@ -236,7 +239,9 @@ const identityClient = (store) => ({
           enabled: true,
           sso_user_id: 'depositor-prod',
           deposit_account_number: '1234567890',
-          last_register_payload: { sso_key: 'sso-prod' },
+          last_register_payload: store.tenantRegisterPayload === undefined
+            ? { sso_key: 'sso-prod' }
+            : store.tenantRegisterPayload,
           auto_approve_enabled: store.autoApproveEnabled !== false,
           auto_approve_max_cents: store.autoApproveMaxCents ?? null,
         }],
@@ -384,6 +389,14 @@ const identityClient = (store) => ({
       row.last_error = params[4];
       return { rows: [row] };
     }
+    if (text.includes('UPDATE public.checkalt_deposits') && text.includes('last_status_payload = COALESCE(last_status_payload, \'{}\'::jsonb) || $1::jsonb')) {
+      // Reconcile diagnostics: merges last_status_payload only, never status.
+      (store.diagnosticWrites = store.diagnosticWrites || []).push({ sql: text, params });
+      const row = store.deposits.find((item) => item.id === params[1]);
+      if (!row) return { rows: [] };
+      row.last_status_payload = { ...(row.last_status_payload || {}), ...JSON.parse(params[0]) };
+      return { rows: [] };
+    }
     if (text.includes('UPDATE public.checkalt_deposits')) {
       const row = store.deposits.find((item) => item.id === params[0]);
       if (!row) return { rows: [] };
@@ -412,6 +425,7 @@ const fetchImpl = (store) => async (url, options = {}) => {
   }
   if (target.includes('/fincapture/deposit/process')) {
     store.processPosts += 1;
+    try { (store.processBodies = store.processBodies || []).push(JSON.parse(options.body || '{}')); } catch { /* ignore */ }
     return {
       ok: true,
       status: 200,
@@ -446,6 +460,7 @@ const fetchImpl = (store) => async (url, options = {}) => {
   }
   if (target.includes('/fincapture/deposit/item')) {
     store.itemPosts += 1;
+    (store.itemBodies = store.itemBodies || []).push(JSON.parse(options.body || '{}'));
     return {
       ok: true,
       status: 200,
@@ -456,15 +471,17 @@ const fetchImpl = (store) => async (url, options = {}) => {
   }
   if (target.includes('/fincapture/deposit/history')) {
     store.historyPosts += 1;
+    (store.historyBodies = store.historyBodies || []).push(JSON.parse(options.body || '{}'));
     return {
       ok: true,
-      status: 200,
+      status: store.historyHttpStatus || 200,
       text: async () => JSON.stringify(store.historyPayload || {
         depositHistoryList: [{ referenceNumber: 9001, status: 127, userAmount: 1234 }],
       }),
     };
   }
   if (target.includes('/fincapture/useraccount/getUserAccountInformation')) {
+    (store.userInfoBodies = store.userInfoBodies || []).push(JSON.parse(options.body || '{}'));
     return {
       ok: true,
       status: 200,
@@ -1342,6 +1359,231 @@ test('ambiguous or reference-less history never issues a second process POST', a
   assert.equal(noRef.liveProviderCalled, false);
   assert.equal(store.processPosts, 0);
   assert.equal(store.historyPosts, 0);
+});
+
+// Production 2026-10-22 10:08:33Z: approve on a pending deposit (check #00001831,
+// ref 127491751, $5.00) answered reconciliation_required. The item endpoint can
+// answer ruleDetails with no status; the history fallback then sent only
+// { fiKey, ssoKey } with an unresolved ssoKey and matched nothing.
+const PROD_CFG = { fi_key: 'prod-fi-key', merchant: 'prod-merchant', base_url: 'https://api2.checkalt.com' };
+const PROD_REF = '127491751';
+const SECRET_VALUES = ['prod-fi-key', 'sso-prod', 'depositor-prod', '1234567890', 'prod-user', 'prod-pass', '.sig'];
+
+const pushPendingApproval = (store, extra = {}) => {
+  const row = {
+    id: DEPOSIT_ID,
+    tenant_id: FREEDOM_TENANT,
+    check_intake_item_id: CHECK_ID,
+    checkalt_reference: PROD_REF,
+    status: 'pending_approval',
+    amount: 12.34,
+    amount_cents: 1234,
+    submitted_at: '2026-10-22T01:53:56.000Z',
+    last_status_payload: {},
+    cleared_at: null,
+    ...extra,
+  };
+  store.deposits.push(row);
+  return row;
+};
+
+const approvePendingOnce = (store) => withEnv(productionFlags, () => handleProviderRequest(
+  jwtEvent('/functions/v1/checkalt-approve-deposit', 'POST', { deposit_id: DEPOSIT_ID, action: 'approve' }),
+  '/functions/v1/checkalt-approve-deposit',
+  'POST',
+  submitDeps(store),
+));
+
+test('history fallback sends the last working Supabase fields with the resolved ssoKey and a dated window', async () => {
+  const store = createStore();
+  store.itemPayload = { ruleDetails: [] };
+  store.historyPayload = { depositHistoryList: [{ referenceNumber: Number(PROD_REF), status: 40 }] };
+  const row = pushPendingApproval(store);
+  // Stored sso_key equal to sso_user_id: resolve through getUserAccountInformation, as submit does.
+  const acct = { sso_user_id: 'depositor-prod', sso_key: 'depositor-prod', deposit_account_number: '1234567890' };
+  const result = await reconcileProductionCheckAltDeposit({
+    client: identityClient(store),
+    mapping,
+    row,
+    cfg: PROD_CFG,
+    credentials: productionSecrets().credentials,
+    acct,
+    fetchImpl: fetchImpl(store),
+    now: Date.parse('2026-10-22T10:08:33.000Z'),
+  });
+  assert.equal(result.reconciled, true, JSON.stringify(result));
+  assert.equal(result.status, 'pending_approval');
+  assert.deepEqual(store.userInfoBodies, [{ fiKey: 'prod-fi-key', userId: 'depositor-prod' }]);
+  assert.equal(store.itemBodies[0].ssoKey, 'sso-prod');
+  assert.deepEqual(store.historyBodies, [{
+    fiKey: 'prod-fi-key',
+    userId: 'depositor-prod',
+    ssoKey: 'sso-prod',
+    accountNumber: '1234567890',
+    startDate: '2026-10-19',
+    endDate: '2026-10-22',
+  }]);
+  assert.equal(store.processPosts, 0);
+  assert.equal(store.approvePosts, 0);
+
+  // Unknown submitted_at: the last 30 days, like the Supabase poll.
+  assert.deepEqual(historyWindow(null, Date.parse('2026-10-22T10:08:33.000Z')), {
+    startDate: '2026-09-22',
+    endDate: '2026-10-22',
+  });
+  // A stored CheckAlt-issued sso_key is used as is, with no lookup.
+  assert.deepEqual(buildHistoryRequestBody({
+    cfg: PROD_CFG,
+    acct: { sso_user_id: 'depositor-prod', deposit_account_number: '1234567890' },
+    ssoKey: 'sso-stored',
+    submittedAt: '2026-10-01T12:00:00.000Z',
+    now: Date.parse('2026-10-22T10:08:33.000Z'),
+  }), {
+    fiKey: 'prod-fi-key',
+    userId: 'depositor-prod',
+    ssoKey: 'sso-stored',
+    accountNumber: '1234567890',
+    startDate: '2026-09-28',
+    endDate: '2026-10-22',
+  });
+});
+
+test('approve: item ruleDetails only + history status 40 for the reference sends approve once', async () => {
+  const store = createStore();
+  grantStepUp(store, { action: 'deposit.approve' });
+  store.tenantRegisterPayload = {};
+  store.itemPayload = { ruleDetails: [] };
+  store.historyPayload = { depositHistoryList: [{ referenceNumber: Number(PROD_REF), status: 40 }] };
+  pushPendingApproval(store);
+  const result = await approvePendingOnce(store);
+  assert.equal(result.statusCode, 200, JSON.stringify(result));
+  assert.equal(result.approvePosted, true);
+  assert.equal(result.action_taken, true);
+  assert.equal(store.approvePosts, 1);
+  assert.deepEqual(store.approveBodies, [{ fiKey: 'prod-fi-key', referenceNumber: Number(PROD_REF), action: 1 }]);
+  assert.equal(store.processPosts, 0);
+  assert.equal(store.historyBodies[0].ssoKey, 'sso-prod');
+  assert.equal(store.historyBodies[0].accountNumber, '1234567890');
+  assert.equal(store.deposits[0].status, 'submitted');
+});
+
+test('approve: empty history answers reconciliation_required with non-secret diagnostics and sends nothing', async () => {
+  const store = createStore();
+  grantStepUp(store, { action: 'deposit.approve' });
+  store.tenantRegisterPayload = {};
+  // A provider string that echoes the ssoKey is redacted.
+  store.itemPayload = { ruleDetails: [], statusDescription: 'No item for sso-prod' };
+  store.historyPayload = { depositHistoryList: [] };
+  pushPendingApproval(store);
+  const logged = [];
+  const originalWarn = console.warn;
+  console.warn = (...args) => { logged.push(args.join(' ')); };
+  let result;
+  try {
+    result = await approvePendingOnce(store);
+  } finally {
+    console.warn = originalWarn;
+  }
+  assert.equal(result.error, 'reconciliation_required');
+  assert.equal(result.ok, false);
+  // Approve rolls back its transaction, so the evidence is also logged once (no secrets).
+  const line = logged.find((entry) => entry.includes('checkalt_reconcile_unresolved'));
+  assert.ok(line, logged.join('\n'));
+  assert.equal(JSON.parse(line).history_list_length, 0);
+  for (const secret of SECRET_VALUES) assert.equal(logged.join('\n').includes(secret), false, secret);
+  assert.equal(result.approvePosted, false);
+  assert.equal(store.approvePosts, 0);
+  assert.equal(store.processPosts, 0);
+  assert.equal(store.deposits[0].status, 'pending_approval');
+  assert.deepEqual(result.diagnostics, {
+    item_http_status: 200,
+    item_keys: ['ruleDetails', 'statusDescription'],
+    item_status_fields: { statusDescription: 'No item for [redacted]' },
+    history_http_status: 200,
+    history_keys: ['depositHistoryList'],
+    history_status_fields: {},
+    history_envelope: 'depositHistoryList',
+    history_list_length: 0,
+    history_reference_matches: 0,
+    history_matched: false,
+    history_window: result.diagnostics.history_window,
+    sso_key_source: 'lookup',
+  });
+  assert.match(result.diagnostics.history_window.startDate, /^\d{4}-\d{2}-\d{2}$/);
+  const text = JSON.stringify(result);
+  for (const secret of SECRET_VALUES) assert.equal(text.includes(secret), false, secret);
+});
+
+test('poll: unresolved status keeps the row status and persists the diagnostics only', async () => {
+  const store = createStore();
+  store.itemPayload = { ruleDetails: [] };
+  store.historyPayload = { message: 'no records' };
+  store.historyHttpStatus = 200;
+  pushPendingApproval(store);
+  const result = await withEnv(productionPollFlags, () => handleProviderRequest(
+    jwtEvent('/functions/v1/checkalt-poll-status', 'POST', { deposit_id: DEPOSIT_ID }),
+    '/functions/v1/checkalt-poll-status',
+    'POST',
+    submitDeps(store),
+  ));
+  assert.equal(result.error, 'reconciliation_required');
+  assert.equal(result.diagnosticsPersisted, true);
+  assert.equal(result.diagnostics.history_envelope, null);
+  assert.deepEqual(result.diagnostics.history_keys, ['message']);
+  assert.equal(store.deposits[0].status, 'pending_approval');
+  assert.equal(store.diagnosticWrites.length, 1);
+  assert.doesNotMatch(store.diagnosticWrites[0].sql, /SET status|checkalt_reference =/);
+  const saved = store.deposits[0].last_status_payload.last_reconcile_unresolved;
+  assert.equal(saved.history_list_length, 0);
+  assert.ok(saved.at);
+  const text = JSON.stringify(saved);
+  for (const secret of SECRET_VALUES) assert.equal(text.includes(secret), false, secret);
+  assert.equal(store.processPosts, 0);
+  assert.equal(store.approvePosts, 0);
+});
+
+test('poll resolves the ssoKey with the same function and answer as submit', async () => {
+  const submitSrc = fs.readFileSync(path.join(ROOT, 'aws/functions/api/providers/production/checkalt-submit.mjs'), 'utf8');
+  assert.match(submitSrc, /import \{ reconcileProductionCheckAltDeposit, resolveSsoKey \} from '\.\/checkalt-poll\.mjs';/);
+  assert.equal(/function resolveSsoKey/.test(submitSrc), false);
+
+  // Submit with a register payload that has no CheckAlt sso_key: process uses the looked-up key.
+  const submitted = createStore();
+  submitted.tenantRegisterPayload = {};
+  grantStepUp(submitted);
+  const accepted = await submitOnce(submitted);
+  assert.equal(accepted.statusCode, 200, JSON.stringify(accepted));
+  assert.equal(submitted.processBodies[0].ssoKey, 'sso-prod');
+
+  // Poll on the same tenant account sends that key to item and history.
+  const polled = createStore();
+  polled.tenantRegisterPayload = {};
+  polled.itemPayload = { ruleDetails: [] };
+  polled.historyPayload = { depositHistoryList: [{ referenceNumber: Number(PROD_REF), status: 40 }] };
+  pushPendingApproval(polled);
+  const result = await withEnv(productionPollFlags, () => handleProviderRequest(
+    jwtEvent('/functions/v1/checkalt-poll-status', 'POST', { deposit_id: DEPOSIT_ID }),
+    '/functions/v1/checkalt-poll-status',
+    'POST',
+    submitDeps(polled),
+  ));
+  assert.equal(result.reconciled, true, JSON.stringify(result));
+  assert.equal(polled.itemBodies[0].ssoKey, submitted.processBodies[0].ssoKey);
+  assert.equal(polled.historyBodies[0].ssoKey, submitted.processBodies[0].ssoKey);
+
+  // The shared resolver: stored key wins; lookup otherwise; sso_user_id when the lookup fails.
+  const lookupFetch = fetchImpl(createStore());
+  const credentials = productionSecrets().credentials;
+  assert.equal(await resolveSsoKey({ cfg: PROD_CFG, credentials, acct: { sso_user_id: 'u', sso_key: 'k' }, fetchImpl: lookupFetch }), 'k');
+  assert.equal(await resolveSsoKey({
+    cfg: PROD_CFG, credentials, acct: { sso_user_id: 'u', sso_key: 'u', deposit_account_number: '1234567890' }, fetchImpl: lookupFetch,
+  }), 'sso-prod');
+  const failing = async (url) => (String(url).includes('getUserAccountInformation')
+    ? { ok: false, status: 500, text: async () => 'down' }
+    : lookupFetch(url));
+  assert.equal(await resolveSsoKey({
+    cfg: PROD_CFG, credentials, acct: { sso_user_id: 'u', sso_key: 'u', deposit_account_number: '1234567890' }, fetchImpl: failing,
+  }), 'u');
 });
 
 test('legacy NULL key and provider-may-have-occurred states block new process posts', () => {

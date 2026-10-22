@@ -10,6 +10,7 @@ import {
   checkaltStatusReconcileEnabled,
 } from '../functions/api/providers/production/checkalt-holds.mjs';
 import {
+  CHECKALT_STATUS_READ_ALLOWED_PATHS,
   checkaltStatusReadAllowed,
   checkaltStatusReadOnlyMode,
   statusReadOnlyFetch,
@@ -291,6 +292,22 @@ test('4-9. same configuration blocks process, approve, submit, reject, and regis
   await assert.rejects(() => guarded('https://api2.checkalt.com/fincapture/deposit/approve', { method: 'POST' }), /status_reconcile_refused_money_path/);
   await assert.rejects(() => guarded('https://api2.checkalt.com/fincapture/useraccount/register', { method: 'POST' }), /status_reconcile_refused_money_path/);
   assert.equal(isCheckAltStatusReadPath('https://api2.checkalt.com/fincapture/deposit/item'), true);
+  // The ssoKey lookup submit uses (getUserAccountInformation) is the only extra read; nothing else is let through.
+  assert.deepEqual([...CHECKALT_STATUS_READ_ALLOWED_PATHS], [
+    '/public/fincapture/authenticate',
+    '/fincapture/deposit/item',
+    '/fincapture/deposit/history',
+    '/fincapture/useraccount/getUserAccountInformation',
+  ]);
+  assert.equal(isCheckAltStatusReadPath('https://api2.checkalt.com/fincapture/useraccount/getUserAccountInformation'), true);
+  for (const refused of [
+    'https://api2.checkalt.com/fincapture/useraccount/getDepositAccountInformation',
+    'https://api2.checkalt.com/fincapture/useraccount/register',
+    'https://api2.checkalt.com/fincapture/useraccount/update',
+    'https://api2.checkalt.com/fincapture/deposit/void',
+  ]) {
+    await assert.rejects(() => guarded(refused, { method: 'POST' }), /status_reconcile_refused_money_path/, refused);
+  }
   assert.equal(store.processPosts, 0);
   assert.equal(store.approvePosts, 0);
   assert.equal(store.registerPosts, 0);
