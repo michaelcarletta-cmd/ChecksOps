@@ -25,8 +25,8 @@ export type CheckAltPollAnswer = {
 };
 
 const STATUS_WORDS: Record<string, string> = {
-  pending_approval: "waiting in Check Alt",
-  submitted: "approved, not yet deposited",
+  pending_approval: "waiting on deposit",
+  submitted: "deposited",
   cleared: "deposited",
   rejected: "rejected",
   returned: "returned",
