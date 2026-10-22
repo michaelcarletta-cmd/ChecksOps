@@ -1,5 +1,5 @@
 /**
- * Specs of the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108 to SQL 110) for the shared engine in
+ * Specs of the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108 to SQL 111) for the shared engine in
  * release-sql-state.mjs: what each pinned file creates, replaces or drops, the reviewed
  * EXECUTE ACLs, the prerequisites and predecessors, and the PostgreSQL renderings the file
  * leaves (policy expressions, view, column, constraint, index and trigger definitions as
@@ -57,7 +57,7 @@
  *                      this engine; SQL 106 before SQL 97): the production one-shot and the
  *                      runbook
  *
- * SQL 111 and later (SQL 107 is unused): add a spec here, its staging pin in sql-executor-auth.mjs
+ * SQL 112 and later (SQL 107 is unused): add a spec here, its staging pin in sql-executor-auth.mjs
  * (RELEASE_2026_10_17_PENDING_SQL_PINS or a successor map) and its production pin; the
  * engine, the executor handler and the production tool are generic.
  */
@@ -3673,6 +3673,88 @@ export const RELEASE_SQL_SPECS = deepFreeze({
       "public.homeowner_ledger_tokens",
       "public.homeowner_ledger_check_uploads",
       "public.homeowner_ledger_events"
+    ]
+  },
+  // SQL 111: tenant referral codes. Five new SECURITY DEFINER functions (EXECUTE: checksops and
+  // the owner; the active-count helper the owner only): redeem a code (one referral_events row
+  // under a FOR UPDATE lock on the redeeming tenant, definer_writes), the $5.00-per-referral
+  // credit capped at $25.00 a month, the tenant's summary and the platform owner's overview. No
+  // table, column, policy or table grant change.
+  sql111: {
+    "key": "sql111",
+    "label": "SQL 111",
+    "choice": "sql111-tenant-referral-codes",
+    "production_pin_rel": "ops/deployment-guard/sql111-tenant-referral-codes-production-apply.json",
+    "script": "sql111-tenant-referral-codes-production-apply",
+    "prerequisites": [
+      "public.tenants",
+      "public.referral_events",
+      "public.tenant_users",
+      "auth.uid()",
+      "public.aws_is_authenticated()",
+      "public.aws_can_access_tenant(uuid)",
+      "public.is_platform_owner()",
+      "role checksops",
+      "column public.tenants.id",
+      "column public.tenants.name",
+      "column public.tenants.slug",
+      "column public.tenants.created_at",
+      "column public.tenants.referral_code",
+      "column public.tenants.referred_by_tenant_id",
+      "column public.tenants.referral_discount_cents",
+      "column public.tenants.monthly_rate_cents",
+      "column public.referral_events.id",
+      "column public.referral_events.referrer_tenant_id",
+      "column public.referral_events.referred_tenant_id",
+      "column public.referral_events.referred_user_id",
+      "column public.referral_events.referral_code_used",
+      "column public.referral_events.discount_applied_cents",
+      "column public.referral_events.status",
+      "column public.referral_events.created_at",
+      "column public.tenant_users.tenant_id",
+      "column public.tenant_users.user_id",
+      "column public.tenant_users.role"
+    ],
+    "predecessors": [],
+    "functions": [
+      {
+        "identity": "public.aws_tenant_referral_active_count(uuid)",
+        "acl": [
+          "owner EXECUTE"
+        ]
+      },
+      {
+        "identity": "public.aws_tenant_referral_credit_cents(uuid)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ]
+      },
+      {
+        "identity": "public.aws_apply_referral_code(uuid, text)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ]
+      },
+      {
+        "identity": "public.aws_tenant_referral_summary(uuid)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ]
+      },
+      {
+        "identity": "public.aws_platform_owner_referral_overview()",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ]
+      }
+    ],
+    "definer_writes": [
+      "public.referral_events",
+      "public.tenants"
     ]
   },
 });

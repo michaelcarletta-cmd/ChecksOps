@@ -82,6 +82,7 @@ export const EXECUTOR_PACK_MEMBERS = Object.freeze([
   ['aws/workflows/sql/108_check_intake_items_funds_type_values.sql', 'sql/108_check_intake_items_funds_type_values.sql'],
   ['aws/workflows/sql/109_moov_transfer_webhook_status.sql', 'sql/109_moov_transfer_webhook_status.sql'],
   ['aws/workflows/sql/110_homeowner_preclaim_links.sql', 'sql/110_homeowner_preclaim_links.sql'],
+  ['aws/workflows/sql/111_tenant_referral_codes.sql', 'sql/111_tenant_referral_codes.sql'],
   ['aws/functions/api/rds-global-bundle.pem', 'rds-global-bundle.pem'],
   ['scripts/deployment-guard/lib/sql-apply.mjs', 'lib/sql-apply.mjs'],
   ['scripts/deployment-guard/lib/sql-executor-auth.mjs', 'lib/sql-executor-auth.mjs'],
