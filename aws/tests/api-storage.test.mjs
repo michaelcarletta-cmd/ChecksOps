@@ -488,3 +488,42 @@ test('official rear .checkalt.jpg presign stamps endorsement fingerprint', async
   assert.equal(stamp.params[2].length, 64);
 });
 
+test('official rear presign stamps in a committed read-write transaction', async () => {
+  const path = `checks/${CHECK_ID}/back.checkalt.jpg`;
+  const client = mockClient({ writeCheck: true });
+  const configs = [];
+  const deps = depsFor(client, { forceStorageWrites: true });
+  deps.createClient = (config) => { configs.push(config); return client; };
+  const result = await handleStorageUploadUrl(jwtEvent('/storage/upload-url', 'POST', {
+    bucket: 'claim-files',
+    path,
+    contentType: 'image/jpeg',
+    upsert: true,
+  }), deps);
+  assert.equal(result.ok, true, JSON.stringify(result));
+  assert.equal(configs.length, 1);
+  assert.doesNotMatch(String(configs[0].options || ''), /default_transaction_read_only=on/);
+  const sqls = client.queries.map((q) => String(q.sql));
+  const readWrite = sqls.indexOf('SET TRANSACTION READ WRITE');
+  const stamp = sqls.findIndex((sql) => sql.includes('jsonb_build_object'));
+  const commit = sqls.indexOf('COMMIT');
+  assert.ok(readWrite >= 0, 'upload-url must open a read-write transaction');
+  assert.ok(stamp > readWrite, 'stamp must run inside the read-write transaction');
+  assert.ok(commit > stamp, 'stamp must be committed');
+  assert.equal(sqls.includes('ROLLBACK'), false);
+});
+
+test('refused upload-url rolls back and commits nothing', async () => {
+  const client = mockClient({ authorize: false });
+  const result = await handleStorageUploadUrl(jwtEvent('/storage/upload-url', 'POST', {
+    bucket: 'claim-files',
+    path: `checks/${CHECK_ID}/back.checkalt.jpg`,
+    contentType: 'image/jpeg',
+    upsert: true,
+  }), depsFor(client, { forceStorageWrites: true }));
+  assert.equal(result.ok, false);
+  const sqls = client.queries.map((q) => String(q.sql));
+  assert.equal(sqls.includes('COMMIT'), false);
+  assert.equal(sqls.includes('ROLLBACK'), true);
+});
+

@@ -6,7 +6,7 @@ import {
   S3Client,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import { ignoredSpoof, parseBody, withIdentity } from './data.mjs';
+import { ignoredSpoof, parseBody, withIdentity, withIdentityWrite } from './data.mjs';
 import { authorizeObject } from './storage.mjs';
 import {
   ALLOWED_UPLOAD_CONTENT_TYPES,
@@ -81,7 +81,10 @@ export const handleStorageUploadUrl = async (event, deps = {}) => {
   const enabled = deps.forceStorageWrites === true || storageWritesEnabled();
   if (!enabled) return disabled(spoof);
 
-  return withIdentity(event, async ({ client, mapping, claims, body, spoof }) => {
+  // Read-write and committed: presigning the official rear CheckAlt image stamps
+  // its endorsement fingerprint on check_intake_items. In a read-only transaction
+  // that UPDATE fails and every deposit that rebuilds the rear stops with 503.
+  return withIdentityWrite(event, async ({ client, mapping, claims, body, spoof }) => {
     const bucket = String(body.bucket || '').trim();
     const objectPath = body.path || body.paths?.[0];
     const auth = await authorizeWritePath(client, bucket, objectPath, mapping.application_user_id);
