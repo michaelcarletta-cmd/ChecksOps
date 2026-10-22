@@ -1,6 +1,4 @@
 import { useEffect, useState } from "react";
-import { useFinancialGuard } from "@/hooks/useFinancialGuard";
-import { isStepUpRequiredError } from "@/lib/financialStepUp";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -22,10 +20,9 @@ import {
   requireAwsCheckAltProviderPath,
 } from "@/lib/awsCheckAltMoneyPath";
 import { isPlatformOwner } from "@/lib/masterMerchant";
-import { DEPOSITS_DISABLED_MESSAGE, useTenantsDepositsEnabled } from "@/lib/tenantDeposits";
-import { DepositsDisabledNotice } from "@/components/deposit-ops/DepositsDisabledNotice";
 import { Loader2, Banknote, ShieldCheck, AlertTriangle, RefreshCw } from "lucide-react";
 import { displayCase, displayCaseOrNull } from "@/lib/displayCase";
+import { checkAltAutoApproveSkipText } from "@/lib/checkAltAutoApproveSkip";
 
 /**
  * Platform-owner configuration panel for the CheckAlt (FinCapture) RDC integration.
@@ -398,18 +395,21 @@ export function CheckAltSettings() {
   );
 }
 
+/** Shown on the "Waiting in Check Alt" list. ChecksOps does not approve or reject here. */
+export const CHECKALT_WAITING_NOTE =
+  "Review this deposit in the Check Alt portal. ChecksOps updates it automatically once Check Alt approves or rejects it.";
+
 /**
- * Manager-side queue showing CheckAlt deposits parked at FinCapture for manual
- * review (status 40 / pending_approval). Approve/Reject calls the
- * AWS-only `checkalt-approve-deposit` path. Legacy Lovable/Supabase hosts
- * are refused; FinCapture is not called from the browser.
+ * Manager-side, read-only list of CheckAlt deposits parked at FinCapture
+ * (status 40 / pending_approval). Auto-approve is always on (2026-10-22), so a
+ * deposit is here only when Check Alt flagged it, did not rate it Low Risk, or
+ * the automatic approval did not go through. It is reviewed in the Check Alt
+ * portal, not here: there are no Approve or Reject buttons. Poll Now refreshes
+ * the status from CheckAlt; FinCapture is not called from the browser.
  */
 export function PendingApprovalDeposits() {
   const qc = useQueryClient();
-  // The list can hold deposits of every tenant the user belongs to, and the
-  // server checks each deposit against its own tenant. Approve/Reject show
-  // per row only when the user's role in that row's tenant allows it; Poll Now
-  // (empty body, all of the user's tenants) when it is allowed in any tenant.
+  // Poll Now (empty body, all of the user's tenants) shows when it is allowed in any tenant.
   const checkAltAccess = useCheckAltAccess();
   const canPoll = checkAltAccess.canOperateInAny;
   const pollAccess = checkAltAccessState({
@@ -418,8 +418,6 @@ export function PendingApprovalDeposits() {
     allowed: canPoll,
   });
   const { toast } = useToast();
-  const [rejectingId, setRejectingId] = useState<string | null>(null);
-  const [rejectNotes, setRejectNotes] = useState("");
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ["checkalt-pending-approvals"],
@@ -458,76 +456,6 @@ export function PendingApprovalDeposits() {
       }));
     },
     refetchInterval: 30_000,
-  });
-
-  const guardFinancial = useFinancialGuard();
-  // Per-tenant deposits switch (platform owner, SQL 98): approve-to-deposit is off for those tenants.
-  const depositsEnabledFor = useTenantsDepositsEnabled(((data ?? []) as Array<{ tenant_id?: string | null }>).map((r) => r.tenant_id ?? ""));
-
-  const decide = useMutation({
-    mutationFn: async (args: {
-      deposit_id: string;
-      action: "approve" | "reject";
-      reject_notes?: string;
-      check_intake_item_id?: string | null;
-    }) => {
-      if (args.action === "approve") {
-        await guardFinancial("deposit.approve", { checkId: args.check_intake_item_id });
-      }
-      requireAwsCheckAltProviderPath({
-        apiBaseUrl: awsApiBaseUrl(),
-        functionName: "checkalt-approve-deposit",
-      });
-      const send = () => invokeAwsCheckAltProviderFunction(
-        "checkalt-approve-deposit",
-        { body: args },
-        { apiBaseUrl: awsApiBaseUrl() },
-      );
-      let { data, error } = await send();
-      // Two-factor is once per login and the server decides; ask again only when it says so.
-      if (error && args.action === "approve" && isStepUpRequiredError(error)) {
-        await guardFinancial("deposit.approve", { checkId: args.check_intake_item_id, force: true });
-        ({ data, error } = await send());
-      }
-      if (error) throw new Error(checkAltProviderUserMessage(error));
-      if ((data as any)?.error) throw new Error(checkAltProviderUserMessage((data as any).error));
-      return data;
-    },
-    onSuccess: (data: any) => {
-      if (data?.already_resolved || data?.action_taken === false) {
-        toast({
-          title: "Updated from CheckAlt",
-          description: data?.message || `Status is now ${data?.status}. Approve/Reject was not sent.`,
-        });
-        setRejectingId(null);
-        setRejectNotes("");
-        qc.invalidateQueries({ queryKey: ["checkalt-pending-approvals"] });
-        qc.invalidateQueries({ queryKey: ["check-intake-items"] });
-        qc.invalidateQueries({ queryKey: ["deposit-items"] });
-        return;
-      }
-      const wasRejected = data?.status === "rejected";
-      toast({
-        title: wasRejected ? "Deposit rejected by CheckAlt" : "Deposit approved",
-        description:
-          data?.status_description
-            ? `${data.status_description}${data?.api_status ? ` (code ${data.api_status})` : ""}`
-            : `Status: ${data?.status}`,
-        variant: wasRejected ? "destructive" : "default",
-      });
-      setRejectingId(null);
-      setRejectNotes("");
-      qc.invalidateQueries({ queryKey: ["checkalt-pending-approvals"] });
-      qc.invalidateQueries({ queryKey: ["check-intake-items"] });
-      qc.invalidateQueries({ queryKey: ["deposit-items"] });
-    },
-    onError: (e: unknown) => {
-      toast({
-        title: "Approval call failed",
-        description: e instanceof Error ? e.message : "Unknown error",
-        variant: "destructive",
-      });
-    },
   });
 
   // Tenant-level Poll Now. Empty body tells production poll to refresh this
@@ -577,7 +505,7 @@ export function PendingApprovalDeposits() {
     return (
       <div className="flex items-center justify-between rounded-md border border-dashed border-border/60 px-3 py-3">
         <p className="text-xs text-muted-foreground">
-          No CheckAlt deposits awaiting approval.
+          No deposits waiting in Check Alt.
         </p>
         <div className="flex items-center gap-2">
           {canPoll && (
@@ -598,135 +526,64 @@ export function PendingApprovalDeposits() {
 
   return (
     <div className="space-y-2">
-      {canPoll ? (
-        <div className="flex items-center justify-end">
-          <Button size="sm" variant="outline" onClick={() => poll.mutate()} disabled={poll.isPending}>
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-xs text-muted-foreground">{CHECKALT_WAITING_NOTE}</p>
+        {canPoll ? (
+          <Button size="sm" variant="outline" className="shrink-0" onClick={() => poll.mutate()} disabled={poll.isPending}>
             {poll.isPending
               ? <Loader2 className="h-3 w-3 mr-1 animate-spin" />
               : <RefreshCw className="h-3 w-3 mr-1" />}
             Poll Now
           </Button>
-        </div>
-      ) : (
-        <CheckAltAccessNote
-          state={pollAccess}
-          action="approve, reject or refresh Check Alt deposits"
-          onRetry={() => checkAltAccess.retry()}
-          className="text-xs text-muted-foreground text-right"
-        />
-      )}
+        ) : (
+          <CheckAltAccessNote
+            state={pollAccess}
+            action="refresh Check Alt deposits"
+            onRetry={() => checkAltAccess.retry()}
+            className="text-xs text-muted-foreground text-right"
+          />
+        )}
+      </div>
       {data.map((row: any) => {
         const intake = row.check_intake_items;
         const statusDesc = row.last_status_payload?.statusDescription ?? row.last_status_payload?.reasonDescription;
-        const isRejecting = rejectingId === row.id;
-        const canDecide = checkAltAccess.canOperateIn(row.tenant_id);
-        const depositsOn = depositsEnabledFor(row.tenant_id);
+        const skipText = checkAltAutoApproveSkipText(row.last_status_payload);
         return (
           <div
             key={row.id}
-            className="rounded-md border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-sm space-y-2"
+            className="rounded-md border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-sm space-y-1"
           >
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <div className="font-medium truncate">
-                  {displayCaseOrNull(intake?.carrier_name) ?? "Check"} → {displayCaseOrNull(intake?.payee_line) ?? "—"}
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  Check #{intake?.check_number ?? "—"} ·{" "}
-                  {(intake?.freedom_claim_number || intake?.detected_claim_number)
-                    ? `Claim ${intake.freedom_claim_number || intake.detected_claim_number} · `
-                    : ""}
-                  Ref {row.checkalt_reference ?? "pending"} · $
-                  {Number(row.amount ?? 0).toLocaleString(undefined, {
-                    minimumFractionDigits: 2,
-                  })}
-                </div>
-                {statusDesc && (
-                  <div className="text-xs text-amber-300 mt-1">
-                    CheckAlt: {statusDesc}
-                  </div>
-                )}
-                {!depositsOn && <DepositsDisabledNotice className="mt-1 py-1.5 text-xs" />}
-                {row.status_unresolved && (
-                  <div className="text-xs text-destructive mt-1 flex items-center gap-1">
-                    <AlertTriangle className="h-3 w-3" />
-                    Last poll couldn't read a status from CheckAlt — this row may be stale
-                  </div>
-                )}
+            <div className="min-w-0">
+              <div className="font-medium truncate">
+                {displayCaseOrNull(intake?.carrier_name) ?? "Check"} → {displayCaseOrNull(intake?.payee_line) ?? "—"}
               </div>
-              {canDecide && !isRejecting && (
-                <div className="flex items-center gap-2 shrink-0">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setRejectingId(row.id)}
-                    disabled={decide.isPending}
-                  >
-                    Reject
-                  </Button>
-                  <Button
-                    size="sm"
-                    onClick={() =>
-                      decide.mutate({
-                        deposit_id: row.id,
-                        action: "approve",
-                        check_intake_item_id: row.check_intake_item_id,
-                      })
-                    }
-                    disabled={decide.isPending || !depositsOn}
-                    title={depositsOn ? undefined : DEPOSITS_DISABLED_MESSAGE}
-                  >
-                    {decide.isPending ? (
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                    ) : (
-                      "Approve"
-                    )}
-                  </Button>
+              <div className="text-xs text-muted-foreground">
+                Check #{intake?.check_number ?? "—"} ·{" "}
+                {(intake?.freedom_claim_number || intake?.detected_claim_number)
+                  ? `Claim ${intake.freedom_claim_number || intake.detected_claim_number} · `
+                  : ""}
+                Ref {row.checkalt_reference ?? "pending"} · $
+                {Number(row.amount ?? 0).toLocaleString(undefined, {
+                  minimumFractionDigits: 2,
+                })}
+              </div>
+              {skipText && (
+                <div className="text-xs text-amber-300 mt-1">
+                  Why it is waiting: {skipText}
+                </div>
+              )}
+              {statusDesc && (
+                <div className="text-xs text-muted-foreground mt-1">
+                  CheckAlt: {statusDesc}
+                </div>
+              )}
+              {row.status_unresolved && (
+                <div className="text-xs text-destructive mt-1 flex items-center gap-1">
+                  <AlertTriangle className="h-3 w-3" />
+                  Last poll couldn't read a status from CheckAlt — this row may be stale
                 </div>
               )}
             </div>
-            {canDecide && isRejecting && (
-              <div className="space-y-2 border-t border-border/40 pt-2">
-                <Label className="text-xs">Reject reason (optional)</Label>
-                <Input
-                  value={rejectNotes}
-                  onChange={(e) => setRejectNotes(e.target.value)}
-                  placeholder="Notes shown to CheckAlt"
-                  maxLength={1000}
-                />
-                <div className="flex justify-end gap-2">
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => {
-                      setRejectingId(null);
-                      setRejectNotes("");
-                    }}
-                    disabled={decide.isPending}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="destructive"
-                    onClick={() =>
-                      decide.mutate({
-                        deposit_id: row.id,
-                        action: "reject",
-                        reject_notes: rejectNotes || undefined,
-                      })
-                    }
-                    disabled={decide.isPending}
-                  >
-                    {decide.isPending ? (
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                    ) : (
-                      "Confirm reject"
-                    )}
-                  </Button>
-                </div>
-              </div>
-            )}
           </div>
         );
       })}

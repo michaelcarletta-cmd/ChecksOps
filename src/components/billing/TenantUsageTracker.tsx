@@ -9,7 +9,6 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { BarChart3, Receipt, Landmark, ArrowDownCircle, CheckCircle2, Calendar } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { format, startOfMonth, endOfMonth } from "date-fns";
-import { TenantAutoApproveCard } from "./TenantAutoApproveCard";
 import { displayCase } from "@/lib/displayCase";
 
 
@@ -162,8 +161,6 @@ export function TenantUsageTracker() {
           </CardContent>
         </Card>
       </div>
-
-      <TenantAutoApproveCard />
 
       <Card>
 
