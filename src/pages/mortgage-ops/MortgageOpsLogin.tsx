@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 import { Fingerprint, Mail, CheckCircle2, Loader2 } from "lucide-react";
 import mortgageOpsLogo from "@/assets/mortgage-ops-logo.png";
-import { isAwsStaging, isAwsStagingHttpsPasskeysEnabled, AWS_STAGING_MORTGAGE_AUTH_SESSION_KEY } from "@/lib/awsStaging";
+import { isAwsStaging, isAwsStagingHttpsPasskeysEnabled, isAwsStagingSite, AWS_STAGING_MORTGAGE_AUTH_SESSION_KEY } from "@/lib/awsStaging";
 import { signInWithAwsPasskey } from "@/lib/awsPasskeys";
 import { signInWithPasskey, sendMagicLink, passkeysSupported } from "@/lib/passkeys";
 import { startAwsEmailOtp, verifyAwsEmailOtp } from "@/lib/awsPasswordless";
@@ -22,6 +22,7 @@ export default function MortgageOpsLogin() {
   const [code, setCode] = useState("");
   const awsStaging = isAwsStaging();
   const awsHttpsPasskeys = isAwsStagingHttpsPasskeysEnabled();
+  const stagingSite = isAwsStagingSite();
   const canUsePasskeys = awsStaging
     ? awsHttpsPasskeys && passkeysSupported()
     : passkeysSupported();
@@ -135,7 +136,7 @@ export default function MortgageOpsLogin() {
         <CardHeader className="text-center">
           <CardTitle>ChecksOps Mortgage Desk</CardTitle>
           <p className="text-sm text-muted-foreground">
-            Employee sign-in{awsStaging ? " · AWS staging" : ""}
+            Employee sign-in{stagingSite ? " · AWS staging" : ""}
           </p>
         </CardHeader>
         <CardContent className="space-y-5">

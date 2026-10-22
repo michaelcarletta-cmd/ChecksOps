@@ -12,7 +12,7 @@ import { Loader2, ArrowLeft, KeyRound, Mail, CheckCircle2 } from "lucide-react";
 import { CheckOpsLogo } from "@/components/marketing/CheckOpsLogo";
 import { useAuth } from "@/hooks/useAuth";
 import { isPlatformOwner } from "@/lib/masterMerchant";
-import { isAwsStaging, isAwsStagingHttpsPasskeysEnabled } from "@/lib/awsStaging";
+import { isAwsStaging, isAwsStagingHttpsPasskeysEnabled, isAwsStagingSite } from "@/lib/awsStaging";
 import { signInWithAwsPasskey } from "@/lib/awsPasskeys";
 import { passkeysSupported, sendMagicLink, signInWithPasskey } from "@/lib/passkeys";
 import { classifyLoginMemberships, INACTIVE_ORG_LOGIN_MESSAGE, NO_MEMBERSHIP_LOGIN_MESSAGE, type LoginMembershipRow } from "@/lib/loginMembership";
@@ -25,6 +25,7 @@ export default function CheckOpsLogin() {
   const { user, loading: authLoading } = useAuth();
   const awsStaging = isAwsStaging();
   const awsHttpsPasskeys = isAwsStagingHttpsPasskeysEnabled();
+  const stagingSite = isAwsStagingSite();
   const pendingAws = awsStaging ? readPendingAwsEmailOtp() : null;
   const [email, setEmail] = useState(pendingAws?.email || "");
   const [loading, setLoading] = useState(false);
@@ -134,7 +135,7 @@ export default function CheckOpsLogin() {
         <CardHeader className="text-center space-y-3 pb-2">
           <div className="mx-auto"><CheckOpsLogo className="h-16 md:h-20" /></div>
           <CardTitle className="text-xl md:text-2xl">Sign in to ChecksOps</CardTitle>
-          <p className="text-xs text-muted-foreground">Access your organization's check workflows.{awsStaging ? " AWS staging." : ""}</p>
+          <p className="text-xs text-muted-foreground">Access your organization's check workflows.{stagingSite ? " AWS staging." : ""}</p>
         </CardHeader>
         <CardContent className="pt-2 space-y-4">
           {linkSent ? (
@@ -162,7 +163,7 @@ export default function CheckOpsLogin() {
               {supportsPasskeys && <div className="space-y-1.5"><Button type="button" className="w-full" disabled={loading} onClick={() => void handlePasskey()}>{loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <KeyRound className="mr-2 h-4 w-4" />}Sign in with a passkey<Badge variant="secondary" className="ml-2">Recommended</Badge></Button><p className="text-center text-[11px] text-muted-foreground">Fastest and most secure — Face ID, Touch ID or Windows Hello.</p></div>}
               {supportsPasskeys && <div className="relative py-1"><div className="absolute inset-0 flex items-center"><span className="w-full border-t border-border/60" /></div><div className="relative flex justify-center"><span className="bg-card px-2 text-[11px] tracking-wide text-muted-foreground">or</span></div></div>}
               <Button type="submit" variant="outline" className="w-full" disabled={loading}>{loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Mail className="mr-2 h-4 w-4" />}{awsStaging ? "Email me a verification code" : "Email me a sign-in link"}</Button>
-              <p className="text-center text-[11px] text-muted-foreground">{awsStaging
+              <p className="text-center text-[11px] text-muted-foreground">{stagingSite
                 ? (awsHttpsPasskeys
                   ? "AWS staging: passkeys use Cognito WebAuthn; email verification remains available. Password sign-in is disabled."
                   : "AWS staging passkeys require https://staging.checksops.com. Use email verification on this origin. Password sign-in is disabled.")
