@@ -15,9 +15,13 @@
 --    tenants.referral_discount_cents, a figure the platform owner types in by hand (SQL 96).
 --    Nothing turns a redeemed code into a discount.
 --
--- Owner decision (2026-10-22): a tenant whose referral code another tenant uses gets $5.00 off
--- its monthly maintenance plan for each referral, up to $25.00 off a month. The referrer sees the
--- count and the amount; the tenant that used the code sees whose code it used.
+-- Owner decisions (2026-10-22): a tenant whose referral code another tenant uses gets $5.00 off
+-- its monthly maintenance plan for each referral, up to $25.00 off a month, every month. A
+-- referral keeps counting whatever the referred tenant does later (cancelled or inactive). The
+-- credit is added to the platform owner's hand-set discount (tenants.referral_discount_cents),
+-- and the total discount never exceeds the monthly maintenance rate (maintenance never goes below
+-- $0; check fees are never reduced). The referrer sees the count and the amount; the tenant that
+-- used the code sees whose code it used.
 --
 -- What this file does (new functions only, all SECURITY DEFINER, search_path = public, owned by
 -- the applying login like the other aws/workflows/sql DEFINER functions):
@@ -30,12 +34,12 @@
 -- b) public.aws_tenant_referral_credit_cents(_tenant_id uuid) RETURNS integer (STABLE):
 --    least(2500, 500 * a). Refused (42501 not_authorized) for an identity that cannot access
 --    the tenant (aws_can_access_tenant); a session with no app identity (the billing scheduler)
---    may read it. EXECUTE: checksops only. The billing engine takes
---    greatest(tenants.referral_discount_cents, this) as the maintenance discount, so the owner's
---    hand-set figure is never lowered and a referral credit never counts twice.
+--    may read it. EXECUTE: checksops only. The billing engine's maintenance discount is
+--    least(tenants.referral_discount_cents + this, tenants.monthly_rate_cents).
 -- c) public.aws_apply_referral_code(_tenant_id uuid, _code text) RETURNS jsonb (VOLATILE). The
---    caller (auth.uid()) must hold tenant_users role owner or admin in _tenant_id, else
---    {"success":false,"error":"not_authorized"}. The code is trimmed and upper-cased and must be
+--    caller (auth.uid()) must be a member of _tenant_id (any tenant_users row; the role is not
+--    checked, as everywhere since SQL 90), else {"success":false,"error":"not_authorized"}. The
+--    code is trimmed and upper-cased and must be
 --    3 to 40 of A-Z 0-9 _ -, else invalid_code. The redeeming tenant row is locked FOR UPDATE so
 --    two redeems of one tenant serialise; a tenant already referred (referred_by_tenant_id set
 --    or any referral_events row naming it as referred) gets already_redeemed. The referrer is the
@@ -49,7 +53,7 @@
 -- d) public.aws_tenant_referral_summary(_tenant_id uuid) RETURNS jsonb (STABLE): for an identity
 --    that can access the tenant (42501 otherwise): its code, the per-referral and monthly cap
 --    amounts, active_referrals, earned_credit_cents (b), manual_discount_cents
---    (tenants.referral_discount_cents), applied_discount_cents (the greater of the two, at most
+--    (tenants.referral_discount_cents), applied_discount_cents (the sum of the two, at most
 --    monthly_rate_cents), monthly_rate_cents, referred_by {tenant_id, name, code, applied_at} or
 --    null, and the referrals it made [{name, applied_at, status}] (names and dates only).
 -- e) public.aws_platform_owner_referral_overview() RETURNS jsonb (STABLE): the platform owner
@@ -196,10 +200,9 @@ BEGIN
   IF v_uid IS NULL OR NOT COALESCE(public.aws_is_authenticated(), false) OR _tenant_id IS NULL
      OR NOT EXISTS (
        SELECT 1 FROM public.tenant_users tu
-        WHERE tu.tenant_id = _tenant_id AND tu.user_id = v_uid
-          AND lower(tu.role::text) IN ('owner', 'admin')) THEN
+        WHERE tu.tenant_id = _tenant_id AND tu.user_id = v_uid) THEN
     RETURN jsonb_build_object('success', false, 'error', 'not_authorized',
-      'message', 'Only an owner or admin of your company can redeem a referral code.');
+      'message', 'Only a member of your company can redeem its referral code.');
   END IF;
   IF v_code !~ '^[A-Z0-9_-]{3,40}$' THEN
     RETURN jsonb_build_object('success', false, 'error', 'invalid_code',
@@ -334,7 +337,7 @@ BEGIN
     'active_referrals', v_count,
     'earned_credit_cents', v_earned,
     'manual_discount_cents', v_manual,
-    'applied_discount_cents', least(GREATEST(v_earned, v_manual), v_rate),
+    'applied_discount_cents', least(v_earned + v_manual, v_rate),
     'monthly_rate_cents', v_rate,
     'referred_by', v_referred_by,
     'referrals', v_referrals
@@ -370,12 +373,11 @@ BEGIN
                'slug', t.slug,
                'referral_code', t.referral_code,
                'created_at', t.created_at,
-               'is_founding_partner', COALESCE((to_jsonb(t) ->> 'is_founding_partner')::boolean, false),
                'monthly_rate_cents', GREATEST(COALESCE(t.monthly_rate_cents, 0), 0),
                'manual_discount_cents', GREATEST(COALESCE(t.referral_discount_cents, 0), 0),
                'active_referrals', c.n,
                'earned_credit_cents', least(2500, 500 * c.n),
-               'applied_discount_cents', least(GREATEST(least(2500, 500 * c.n), GREATEST(COALESCE(t.referral_discount_cents, 0), 0)),
+               'applied_discount_cents', least(least(2500, 500 * c.n) + GREATEST(COALESCE(t.referral_discount_cents, 0), 0),
                                                GREATEST(COALESCE(t.monthly_rate_cents, 0), 0)),
                'referred_by', (
                  SELECT jsonb_build_object('tenant_id', r.id, 'name', r.name, 'code', COALESCE(e.referral_code_used, r.referral_code))
