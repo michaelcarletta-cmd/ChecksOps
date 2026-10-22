@@ -85,6 +85,15 @@
       "missing_evidence": ["staging acceptance", "production overlay receipts"],
       "open_pr_overlap": []
     },
+    "moov-production-invoice": {
+      "classification": "UNVERIFIED",
+      "git_sha": "177487c1e65114eee4b27fa332b9caff097d4351",
+      "deployed_artifact": "not deployed",
+      "applied_migrations": "none (moov_invoices / moov_invoice_customers from the Supabase restore; production grants not yet inspected)",
+      "environment": "unknown",
+      "missing_evidence": ["production read-only inspect of moov_invoices / moov_invoice_customers grants", "staging acceptance", "production overlay receipts"],
+      "open_pr_overlap": []
+    },
     "moov-production-fund": {
       "classification": "UNVERIFIED",
       "git_sha": "a4be10ebbc8db5576755f3e20c024d581c462dd2",

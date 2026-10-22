@@ -199,6 +199,7 @@
     "tenant-billing-handlers.mjs",
     "write-check-workflow.mjs",
     "providers/production/moov-wallet-fund.mjs",
+    "providers/production/moov-invoice.mjs",
     "providers/production/moov-send.mjs",
     "providers.mjs"
   ],
@@ -332,6 +333,16 @@
       "sql_before": null,
       "manifest": "aws/tests/fixtures/production-moov-wallet-fund-manifest-2026-10-13.json"
     },
+    "providers/production/moov-invoice.mjs": {
+      "operation": "add",
+      "accepted_sha256": "c9ada1357d4b38779765b24b664218e72d137aa20216d3057d95ac91318c1a0e",
+      "expected_live_sha256": null,
+      "sql_before": null,
+      "manifest": "aws/tests/fixtures/production-moov-invoice-manifest-2026-10-22.json",
+      "optional_imports": [
+        "invoice-actions.mjs"
+      ]
+    },
     "providers/production/moov-send.mjs": {
       "operation": "replace",
       "accepted_sha256": "f82c1e0847abaa719302d39ae65bce2d6e2a868f604c16e03029b52eaa2bfd66",
@@ -341,10 +352,10 @@
     },
     "providers.mjs": {
       "operation": "replace",
-      "accepted_sha256": "51fa3109f06470c09fc9598c5b29c92085c0833a5dd0894a1478e30db5f6423a",
-      "expected_live_sha256": "6ad4c7ec0ba58e8906f85fc7f8d8fef21194920fc53f253ddfed6e46bf006b9c",
+      "accepted_sha256": "c1718779778a3b58f00b9bfa92d83b629aadc9e4b106ab4e8c460a946566b45f",
+      "expected_live_sha256": "51fa3109f06470c09fc9598c5b29c92085c0833a5dd0894a1478e30db5f6423a",
       "sql_before": "aws/workflows/sql/98_tenant_fee_collection.sql",
-      "manifest": "aws/tests/fixtures/production-fee-collection-pin-manifest-2026-10-17.json"
+      "manifest": "aws/tests/fixtures/production-moov-invoice-manifest-2026-10-22.json"
     },
     "workflow-rpc.mjs": {
       "operation": "replace",
