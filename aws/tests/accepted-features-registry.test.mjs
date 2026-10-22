@@ -176,8 +176,8 @@ test('live registry is evaluate-only, Branding is accepted against #713, and int
     'branding-tenant-email-mounted',
     'branding-tenant-show-sending-domain-false',
     'branding-tenant-sending-subdomain-hidden',
-    'branding-admin-branding-email-present',
-    'branding-admin-email-sender-mounted',
+    'branding-admin-no-branding-tab',
+    'branding-admin-no-email-sender',
     'branding-public-url-resolver',
     'branding-email-preview-api-public-logo',
     'branding-email-preview-spa-apply-logo',
@@ -188,6 +188,18 @@ test('live registry is evaluate-only, Branding is accepted against #713, and int
     assert.ok(branding.passed_invariants.includes(id), id);
   }
   const brandingFeature = live.features.find((row) => row.feature_id === 'branding');
+  const [supersession] = brandingFeature.supersession_history;
+  assert.equal(brandingFeature.supersession_history.length, 1);
+  assert.equal(supersession.review_pr, 1171);
+  assert.equal(supersession.from_authority.merged_pr, 713);
+  assert.equal(supersession.from_authority.restore_authority, false);
+  assert.equal(supersession.to_authority.restore_authority, true);
+  assert.equal(supersession.to_authority.git_sha, supersession.commit);
+  assert.deepEqual(supersession.updated_invariant_ids, [
+    'branding-admin-no-branding-tab',
+    'branding-admin-no-email-sender',
+    'branding-intended-invariants',
+  ]);
   assert.ok(brandingFeature.required_tests.includes('aws/tests/email-preview-logo-url.test.mjs'));
   assert.ok(fs.existsSync(path.join(ROOT, 'aws/tests/email-preview-logo-url.test.mjs')));
   assert.equal(result.findings.some((row) => row.feature_id === 'branding'), false);

@@ -186,9 +186,12 @@ test('tenant Branding tab mounts Company Branding and Email Branding without Sen
   assert.match(emailSender, /applyEmailPreviewLogo/);
   assert.match(emailSender, /srcDoc=\{previewHtml\}/);
   assert.doesNotMatch(emailSender, /srcDoc=\{preview\.html\}/);
-  assert.match(adminTenants, /from "@\/components\/settings\/EmailSenderSettings"/);
-  assert.match(adminTenants, /<EmailSenderSettings/);
-  assert.doesNotMatch(adminTenants, /showSendingDomain=\{false\}/);
+  // Owner: only tenants control their branding. Tenant Management has no
+  // branding or email-branding controls at all.
+  assert.doesNotMatch(adminTenants, /EmailSenderSettings/);
+  assert.doesNotMatch(adminTenants, /value="branding"/);
+  assert.doesNotMatch(adminTenants, /function BrandingTab|<BrandingTab/);
+  assert.doesNotMatch(adminTenants, /Branding & Email/);
 
   assert.match(settings, /function BrandingSettings/);
   assert.match(settings, /secondary_color:\s*secondaryColor/);
