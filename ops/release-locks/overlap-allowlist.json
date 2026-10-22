@@ -2452,6 +2452,55 @@
       "reason": "The Check Alt eligibility SELECT fix moves only the checkalt-submission component's source.tree_hash in ops/release-locks/locked-components.json; open PR #1116 (Moov transfer returns) moves another component's tree_hash in the same file. The two edits are to different entries; whichever PR merges second must rebase onto main and re-run validate-release-locks.mjs. It does not merge, edit or deploy PR #1116.",
       "expires": "2026-12-31",
       "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 437,
+      "path": "aws/functions/api/providers/production/checkalt-poll.mjs",
+      "reason": "The Check Alt approve reconcile history fix changes reconcileProductionCheckAltDeposit in aws/functions/api/providers/production/checkalt-poll.mjs (history request fields and window, the shared resolveSsoKey moved from checkalt-submit.mjs, non-secret reconciliation diagnostics), which made production approve on reference 127491751 answer reconciliation_required on 2026-10-22; the fix has to live in that file, so moving code to a new module cannot avoid the overlap. It overlaps the still-open draft Cursor-era PR #437 (opened 2026-09-23, last updated 2026-09-23, branch cursor/checkalt-manager-approve-parity-7084), which predates the current main and must rebase before any merge. Allow review while that PR remains open. It does not merge, edit or deploy PR #437.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 436,
+      "path": "aws/functions/api/providers/production/checkalt-poll.mjs",
+      "reason": "The Check Alt approve reconcile history fix changes reconcileProductionCheckAltDeposit in aws/functions/api/providers/production/checkalt-poll.mjs (history request fields and window, the shared resolveSsoKey moved from checkalt-submit.mjs, non-secret reconciliation diagnostics), which made production approve on reference 127491751 answer reconciliation_required on 2026-10-22; the fix has to live in that file, so moving code to a new module cannot avoid the overlap. It overlaps the still-open draft Cursor-era PR #436 (opened 2026-09-23, last updated 2026-09-23, branch cursor/checkalt-reconcile-userid-7084), which predates the current main and must rebase before any merge. Allow review while that PR remains open. It does not merge, edit or deploy PR #436.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 373,
+      "path": "aws/functions/api/providers/production/checkalt-poll.mjs",
+      "reason": "The Check Alt approve reconcile history fix changes reconcileProductionCheckAltDeposit in aws/functions/api/providers/production/checkalt-poll.mjs (history request fields and window, the shared resolveSsoKey moved from checkalt-submit.mjs, non-secret reconciliation diagnostics), which made production approve on reference 127491751 answer reconciliation_required on 2026-10-22; the fix has to live in that file, so moving code to a new module cannot avoid the overlap. It overlaps the still-open draft Cursor-era PR #373 (opened 2026-09-18, last updated 2026-09-18, branch cursor/checkalt-status-read-db-isolation-6136), which predates the current main and must rebase before any merge. Allow review while that PR remains open. It does not merge, edit or deploy PR #373.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 332,
+      "path": "aws/functions/api/providers/production/checkalt-poll.mjs",
+      "reason": "The Check Alt approve reconcile history fix changes reconcileProductionCheckAltDeposit in aws/functions/api/providers/production/checkalt-poll.mjs (history request fields and window, the shared resolveSsoKey moved from checkalt-submit.mjs, non-secret reconciliation diagnostics), which made production approve on reference 127491751 answer reconciliation_required on 2026-10-22; the fix has to live in that file, so moving code to a new module cannot avoid the overlap. It overlaps the still-open Cursor-era PR #332 (opened 2026-09-15, last updated 2026-09-16, branch cursor/checkalt-0121319295-deposit-write-1268), which predates the current main and must rebase before any merge. Allow review while that PR remains open. It does not merge, edit or deploy PR #332.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 327,
+      "path": "aws/functions/api/providers/production/checkalt-poll.mjs",
+      "reason": "The Check Alt approve reconcile history fix changes reconcileProductionCheckAltDeposit in aws/functions/api/providers/production/checkalt-poll.mjs (history request fields and window, the shared resolveSsoKey moved from checkalt-submit.mjs, non-secret reconciliation diagnostics), which made production approve on reference 127491751 answer reconciliation_required on 2026-10-22; the fix has to live in that file, so moving code to a new module cannot avoid the overlap. It overlaps the still-open Cursor-era PR #327 (opened 2026-09-15, last updated 2026-09-15, branch cursor/checkalt-post-submission-safety-1268), which predates the current main and must rebase before any merge. Allow review while that PR remains open. It does not merge, edit or deploy PR #327.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 324,
+      "path": "aws/functions/api/providers/production/checkalt-poll.mjs",
+      "reason": "The Check Alt approve reconcile history fix changes reconcileProductionCheckAltDeposit in aws/functions/api/providers/production/checkalt-poll.mjs (history request fields and window, the shared resolveSsoKey moved from checkalt-submit.mjs, non-secret reconciliation diagnostics), which made production approve on reference 127491751 answer reconciliation_required on 2026-10-22; the fix has to live in that file, so moving code to a new module cannot avoid the overlap. It overlaps the still-open Cursor-era PR #324 (opened 2026-09-14, last updated 2026-09-14, branch cursor/totp-session-stepup-8b74), which predates the current main and must rebase before any merge. Allow review while that PR remains open. It does not merge, edit or deploy PR #324.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 322,
+      "path": "aws/functions/api/providers/production/checkalt-poll.mjs",
+      "reason": "The Check Alt approve reconcile history fix changes reconcileProductionCheckAltDeposit in aws/functions/api/providers/production/checkalt-poll.mjs (history request fields and window, the shared resolveSsoKey moved from checkalt-submit.mjs, non-secret reconciliation diagnostics), which made production approve on reference 127491751 answer reconciliation_required on 2026-10-22; the fix has to live in that file, so moving code to a new module cannot avoid the overlap. It overlaps the still-open Cursor-era PR #322 (opened 2026-09-14, last updated 2026-09-14, branch cursor/checkalt-golive-gate-c48b), which predates the current main and must rebase before any merge. Allow review while that PR remains open. It does not merge, edit or deploy PR #322.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
     }
   ]
 }
