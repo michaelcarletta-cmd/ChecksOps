@@ -19,6 +19,9 @@ export type CheckAltPollAnswer = {
   updated?: number;
   errors?: number;
   deposits?: CheckAltPollDeposit[];
+  /** Deposits not reached this time (the request stopped early); the next Poll Now checks them first. */
+  remaining?: number;
+  stopped_early?: string;
 };
 
 const STATUS_WORDS: Record<string, string> = {
@@ -61,6 +64,13 @@ export function checkAltPollSummary(answer: CheckAltPollAnswer | null | undefine
   const title = unresolved
     ? `Checked ${polled} deposit${polled === 1 ? "" : "s"}; ${unresolved} not resolved`
     : `Checked ${polled} deposit${polled === 1 ? "" : "s"}; ${changed} changed`;
+  const remaining = Number(answer?.remaining ?? 0);
+  if (remaining > 0) {
+    const why = answer?.stopped_early === "checkalt_unreachable"
+      ? "Check Alt stopped answering in time"
+      : "Check Alt is slow to answer";
+    lines.push(`${why}, so ${remaining} more deposit${remaining === 1 ? " was" : "s were"} not checked. Click Poll Now again to check ${remaining === 1 ? "it" : "them"}.`);
+  }
   return { title, description: lines.join(" ") || `Checked ${polled}.` };
 }
 

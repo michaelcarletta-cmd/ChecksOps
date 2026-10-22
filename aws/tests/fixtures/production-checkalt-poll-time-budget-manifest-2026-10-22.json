@@ -1,0 +1,14 @@
+{
+  "workstream_id": "checkalt-poll-time-budget",
+  "authorization": "Pending owner review (2026-10-22). Planning only: nothing is live or verified. The production apply still needs its own owner approval and staging acceptance.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Owner report 2026-10-22: \"When clicked poll now, error message appeared unable to connect to check alt.\" Root cause: POST /prep/functions/v1/checkalt-poll-status at 17:06:35Z (API Gateway requestId Fp9YTgUxoAMEPQg=) answered 503 Service Unavailable because the Lambda request 2ba4b662-556b-4d09-819b-6121d47d9455 ran to its 45 s timeout (REPORT Status: timeout) while refreshing every open deposit one after another; one deposit took 17.5 s cold and 2.6 s warm at 12:33Z/12:34Z. The accepted poll bytes give every Check Alt call at most 8 s and never past a 25 s request deadline, start no new deposit after 15 s, report remaining and stopped_early, keep the deposits already refreshed when Check Alt stops answering, poll the least recently polled deposits first, and stamp last_polled_at on unresolved deposits. Check Alt HTTP surface unchanged (status-read allowlist). live_sha256 b2e7faa1 is the poll bytes the scheduled-reconcile production apply put live; a read-only production overlay inspect must confirm it before any apply. No SQL prerequisite.",
+  "members": {
+    "providers/production/checkalt-poll.mjs": {
+      "live_sha256": "b2e7faa1b641f8898a3dc04c41f7f3e4723f0723157aeb6b95f2d146ee74c01e",
+      "accepted_sha256": "70f7252275b56e065f329785f2792c98a8cdea26c909907709958d3c261377da",
+      "operation": "replace"
+    }
+  }
+}

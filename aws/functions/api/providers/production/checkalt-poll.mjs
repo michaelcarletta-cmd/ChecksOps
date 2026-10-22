@@ -21,6 +21,18 @@ import { isProviderNetworkError } from '../../sandbox-credentials.mjs';
 
 const jwtCache = { token: null, expiresAt: null };
 
+/**
+ * Time limits for a status refresh. API Gateway answers 503 at about 30 s and
+ * the Lambda stops at 45 s, so a batch that kept calling Check Alt for every
+ * deposit timed out, rolled back and reported nothing. Each Check Alt call
+ * gets at most CHECKALT_CALL_TIMEOUT_MS and never runs past the request
+ * deadline; Poll Now starts no new deposit after its batch budget and reports
+ * how many are left for the next click (least recently polled go first).
+ */
+export const CHECKALT_CALL_TIMEOUT_MS = 8_000;
+export const CHECKALT_REQUEST_DEADLINE_MS = 25_000;
+export const CHECKALT_BATCH_BUDGET_MS = 15_000;
+
 const fail = (error, statusCode, extra = {}) => ({
   ok: false,
   statusCode,
@@ -81,6 +93,7 @@ export async function loadDepositsForStatusRefresh(client, {
        AND status = ANY($2::text[])
        AND checkalt_reference IS NOT NULL
      ORDER BY CASE WHEN status = 'pending_approval' THEN 0 ELSE 1 END,
+              last_polled_at ASC NULLS FIRST,
               submitted_at DESC NULLS LAST
      LIMIT $3`,
     [ids, CHECKALT_STATUS_REFRESH_STATUSES, Math.min(Number(limit) || 50, 100)],
@@ -329,7 +342,8 @@ const persistReconcileDiagnostics = async (client, rowId, diagnostics) => {
   try {
     await client.query(
       `UPDATE public.checkalt_deposits
-       SET last_status_payload = COALESCE(last_status_payload, '{}'::jsonb) || $1::jsonb
+       SET last_status_payload = COALESCE(last_status_payload, '{}'::jsonb) || $1::jsonb,
+           last_polled_at = now()
        WHERE id = $2::uuid`,
       [payload, rowId],
     );
@@ -423,6 +437,7 @@ export async function reconcileProductionCheckAltDeposit({
   acct,
   fetchImpl = fetch,
   now = Date.now(),
+  deadlineAt = Date.now() + CHECKALT_REQUEST_DEADLINE_MS,
 } = {}) {
   const reference = row.checkalt_reference;
   if (!reference) {
@@ -438,8 +453,21 @@ export async function reconcileProductionCheckAltDeposit({
   const guardedFetch = statusReadOnlyFetch(fetchImpl);
   // HTTP status per path, for diagnostics only (getDepositItemStatus does not return it).
   const httpStatusByPath = {};
-  const safeFetch = async (url, options) => {
-    const resp = await guardedFetch(url, options);
+  const safeFetch = async (url, options = {}) => {
+    const budget = Math.max(1, Math.min(CHECKALT_CALL_TIMEOUT_MS, deadlineAt - Date.now()));
+    let resp;
+    try {
+      resp = await guardedFetch(url, { ...options, signal: options.signal || AbortSignal.timeout(budget) });
+    } catch (error) {
+      if (error?.name === 'TimeoutError' || error?.name === 'AbortError') {
+        throw Object.assign(new Error('Check Alt did not answer in time'), {
+          code: 'PROVIDER_EGRESS_FAILED',
+          checkaltTimeout: true,
+          cause: error,
+        });
+      }
+      throw error;
+    }
     const text = String(url || '');
     const at = text.indexOf('/fincapture/');
     if (at >= 0) httpStatusByPath[text.slice(at).split('?')[0]] = resp?.status;
@@ -649,6 +677,7 @@ export async function handleProductionCheckAltPoll({
   fetchImpl = fetch,
   deps = {},
 } = {}) {
+  const startedAt = Date.now();
   const depositId = body.deposit_id || body.checkalt_deposit_id || null;
   const reference = body.checkalt_reference || body.referenceNumber || null;
   const memberships = await membershipsOf(client, mapping.application_user_id);
@@ -698,12 +727,19 @@ export async function handleProductionCheckAltPoll({
     let polled = 0;
     let updated = 0;
     let errors = 0;
+    let stoppedEarly = null;
+    let processed = 0;
     const deposits = [];
     const acctCache = new Map();
     for (const row of rows) {
+      if (Date.now() - startedAt >= CHECKALT_BATCH_BUDGET_MS) {
+        stoppedEarly = 'time_budget';
+        break;
+      }
       const authz = await authorizePollRow({ client, mapping, memberships, row });
       if (!authz.ok) {
         errors += 1;
+        processed += 1;
         continue;
       }
       let acct = acctCache.get(row.tenant_id);
@@ -712,20 +748,32 @@ export async function handleProductionCheckAltPoll({
         acctCache.set(row.tenant_id, acct);
       }
       const previousStatus = row.status;
-      const result = await refreshDepositRow({
-        client,
-        mapping,
-        row,
-        cfg: loaded.cfg,
-        credentials: loaded.credentials,
-        acct,
-        fetchImpl,
-      });
+      let result;
+      try {
+        result = await refreshDepositRow({
+          client,
+          mapping,
+          row,
+          cfg: loaded.cfg,
+          credentials: loaded.credentials,
+          acct,
+          fetchImpl,
+          deadlineAt: startedAt + CHECKALT_REQUEST_DEADLINE_MS,
+        });
+      } catch (error) {
+        // Check Alt unreachable or too slow: keep what this click already
+        // refreshed and stop; the rest stay unchanged for the next click.
+        if (error?.statusReadDenied || !isProviderNetworkError(error) || polled === 0) throw error;
+        stoppedEarly = 'checkalt_unreachable';
+        break;
+      }
       polled += 1;
+      processed += 1;
       if (result.reconciled) updated += 1;
       else errors += 1;
       deposits.push(batchDepositSummary(row, result, previousStatus));
     }
+    const remaining = rows.length - processed;
     return {
       ok: true,
       statusCode: 200,
@@ -734,6 +782,8 @@ export async function handleProductionCheckAltPoll({
       updated,
       errors,
       deposits,
+      remaining,
+      ...(stoppedEarly ? { stopped_early: stoppedEarly } : {}),
       tenant_ids: tenantIds,
       database_session: gucMode,
       liveProviderCalled: polled > 0,
@@ -770,6 +820,7 @@ export async function handleProductionCheckAltPoll({
     credentials: loaded.credentials,
     acct,
     fetchImpl,
+    deadlineAt: startedAt + CHECKALT_REQUEST_DEADLINE_MS,
   });
   return {
     ...result,

@@ -1028,7 +1028,9 @@ test('Check Alt approve reconcile history: four REPLACE members, status-read and
     accepted_sha256: 'b7a2a7f9b33913625d454630939e1df3c2fe44aebbaca77f944f22e6a95af51e',
     operation: 'replace',
   });
-  assert.equal(PLAN.members[POLL].expected_live_sha256, manifest.members[POLL].accepted_sha256);
+  // The next poll replace (scheduled status check) started from exactly these bytes.
+  const scheduledManifest = JSON.parse(fs.readFileSync(path.join(ROOT, 'aws/tests/fixtures/production-checkalt-scheduled-reconcile-manifest-2026-10-22.json'), 'utf8'));
+  assert.equal(scheduledManifest.members[POLL].live_sha256, manifest.members[POLL].accepted_sha256);
   const REPINNED = new Set([SUBMIT, POLL]);
   for (const [name, live] of Object.entries(LIVE)) {
     if (REPINNED.has(name)) continue;
@@ -1120,6 +1122,11 @@ test('Check Alt scheduled status check: poll, status-reconcile, scheduled REPLAC
   assert.match(PLAN.notes, /Check Alt scheduled status check/);
   assert.deepEqual(Object.keys(manifest.members), [POLL, RECONCILE, SCHEDULED]);
   for (const [name, live] of Object.entries(LIVE)) {
+    if (name === POLL) {
+      // Poll moved on to the time-budget bytes (next test); this manifest keeps its record.
+      assert.deepEqual(manifest.members[name], { live_sha256: live, accepted_sha256: 'b2e7faa1b641f8898a3dc04c41f7f3e4723f0723157aeb6b95f2d146ee74c01e', operation: 'replace' });
+      continue;
+    }
     const row = PLAN.members[name];
     assert.equal(row.operation, 'replace', name);
     assert.equal(row.manifest, MANIFEST_REL, name);
@@ -1149,4 +1156,33 @@ test('Check Alt scheduled status check: poll, status-reconcile, scheduled REPLAC
     (error) => error.code === CODES.DEPLOYMENT_COLLISION
       && error.details.problems.some((row) => row === `${POLL} does not export refreshDepositRow`),
   );
+});
+
+test('Check Alt Poll Now time budget: poll REPLACEs the scheduled-reconcile bytes now live', async () => {
+  const POLL = 'providers/production/checkalt-poll.mjs';
+  const MANIFEST_REL = 'aws/tests/fixtures/production-checkalt-poll-time-budget-manifest-2026-10-22.json';
+  // Live since the scheduled-reconcile production apply (2026-10-22).
+  const LIVE = 'b2e7faa1b641f8898a3dc04c41f7f3e4723f0723157aeb6b95f2d146ee74c01e';
+  const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, MANIFEST_REL), 'utf8'));
+  assert.equal(manifest.workstream_id, 'checkalt-poll-time-budget');
+  assert.equal(manifest.deploy_authorized, false);
+  assert.match(manifest.notes, /2ba4b662-556b-4d09-819b-6121d47d9455/);
+  assert.deepEqual(Object.keys(manifest.members), [POLL]);
+  const row = PLAN.members[POLL];
+  assert.equal(row.operation, 'replace');
+  assert.equal(row.manifest, MANIFEST_REL);
+  assert.equal(row.sql_before, null);
+  assert.equal(row.expected_live_sha256, LIVE);
+  assert.equal(row.accepted_sha256, sha(`aws/functions/api/${POLL}`));
+  assert.notEqual(row.accepted_sha256, LIVE);
+  assert.deepEqual(manifest.members[POLL], { live_sha256: LIVE, accepted_sha256: row.accepted_sha256, operation: 'replace' });
+  assert.equal(resolvePlannedMember(POLL, { root: ROOT, plan: PLAN }).ok, true);
+  const ready = await run({ ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: POLL }, { root: ROOT, inspectLive: liveFor(POLL) });
+  assert.equal(ready.state, 'READY');
+  assert.equal(ready.mutation, false);
+  // status-reconcile still links: the exports it imports are unchanged.
+  const src = fs.readFileSync(path.join(API, POLL), 'utf8');
+  for (const name of ['refreshDepositRow', 'loadDepositsForStatusRefresh', 'bindStatusRefreshGucs', 'batchDepositSummary']) {
+    assert.match(src, new RegExp(`export (async )?(function|const) ${name}\\b`), name);
+  }
 });
