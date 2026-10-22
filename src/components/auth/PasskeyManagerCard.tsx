@@ -8,6 +8,7 @@ import { KeyRound, Loader2, Plus, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { deleteAwsPasskey, listAwsPasskeys, registerAwsPasskey } from "@/lib/awsPasskeys";
 import { isAwsStaging, isAwsStagingHttpsPasskeysEnabled } from "@/lib/awsStaging";
+import { isAwsStagingSite } from "@/lib/awsStagingSite";
 import {
   formatPasskeyMetaLine,
   passkeyCreatedAtIso,
@@ -133,7 +134,7 @@ export function PasskeyManagerCard({ onChanged }: { onChanged?: () => void }) {
         <CardDescription>
           Sign in with Face ID, Touch ID, Windows Hello or a security key — the fastest and most
           secure option. Nothing to remember and nothing to phish.
-          {cognitoMode ? " AWS staging stores passkeys in Cognito (staging RP only)." : ""}
+          {cognitoMode && isAwsStagingSite() ? " AWS staging stores passkeys in Cognito (staging RP only)." : ""}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
