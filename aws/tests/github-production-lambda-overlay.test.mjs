@@ -540,6 +540,40 @@ test('checkalt-eligibility.mjs expected_live records the bytes production run 39
   );
 });
 
+test('storage-write.mjs expected_live records the bytes production run 39707778256 applied', async () => {
+  const STORAGE_WRITE = 'storage-write.mjs';
+  const LIVE = 'ccc72b14288580740bd57602543caaca558ba76d18c26c1bd5565c9841becf9e';
+  const BEFORE = 'c397c52202b564917cd9d2b62853566c765b92aa6a8cd2304b6a09e74a3ed73f';
+  const MANIFEST_REL = 'aws/tests/fixtures/production-upload-url-rear-stamp-manifest-2026-10-22.json';
+  // Staging apply run 39707666098 (the staging acceptance), production inspect run 39707520750
+  // (pre-apply bytes live), production apply run 39707778256, post-apply inspect run 39707882981.
+  assert.match(PLAN.notes, /staging apply run 39707666098/);
+  assert.match(PLAN.notes, /inspect run 39707520750/);
+  assert.match(PLAN.notes, /production apply run 39707778256/);
+  assert.match(PLAN.notes, /inspect run 39707882981/);
+  assert.ok(PLAN.order.includes(STORAGE_WRITE));
+  const row = PLAN.members[STORAGE_WRITE];
+  assert.equal(row.operation, 'replace');
+  assert.equal(row.manifest, MANIFEST_REL);
+  assert.equal(row.sql_before, 'aws/workflows/sql/94_document_library_restore.sql');
+  assert.equal(row.expected_live_sha256, LIVE);
+  assert.equal(row.accepted_sha256, LIVE);
+  assert.equal(sha(`aws/functions/api/${STORAGE_WRITE}`), LIVE);
+  const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, MANIFEST_REL), 'utf8'));
+  assert.equal(manifest.members[STORAGE_WRITE].live_sha256, LIVE);
+  assert.equal(manifest.members[STORAGE_WRITE].accepted_sha256, LIVE);
+  assert.match(manifest.notes, /run 39707778256/);
+  assert.equal(resolvePlannedMember(STORAGE_WRITE, { root: ROOT, plan: PLAN }).ok, true);
+  const done = await run({ ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: STORAGE_WRITE }, { root: ROOT, inspectLive: liveFor(STORAGE_WRITE) });
+  assert.equal(done.state, 'ALREADY_ACCEPTED');
+  assert.equal(done.mutation, false);
+  // The pre-apply bytes are no longer an accepted live state.
+  await assert.rejects(
+    run({ ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: STORAGE_WRITE }, { root: ROOT, inspectLive: liveFor(STORAGE_WRITE, { sha256: BEFORE }) }),
+    (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+  );
+});
+
 test('tenant-management-v2.mjs is added just before app-services.mjs, which imports it statically', async () => {
   const TMV2 = 'tenant-management-v2.mjs';
   const ROUTER = 'app-services.mjs';
