@@ -369,7 +369,7 @@
       "environment": "unknown",
       "source": {
         "git_sha": "b815d6bebc0cb0e8d907197bd5c538816438a40c",
-        "tree_hash": "4acdb3c72c289f44d5c7d5ce543d4baed9a9f637b35a3176aa4c54918dcde28d",
+        "tree_hash": "9eb64f5cd0a2fa6d18db9d083abfaa2ba4224bdefcfd79e424b18828a5a1cd3d",
         "merged": true,
         "merged_pr": null
       },
@@ -513,7 +513,7 @@
       "environment": "source-only",
       "source": {
         "git_sha": "5567757e8286bd9e9f643689f6b7da5a7dfe06c7",
-        "tree_hash": "af664d3a3e88e19fdd6d2271ea6fb53a3502a067df6e79f2630d7802078f6d04",
+        "tree_hash": "2e2ddc36d2bcd9373aebac6fc93481100ca9d58f5ddc27dd67deab5ab535c455",
         "merged": false,
         "merged_pr": null
       },
