@@ -1,0 +1,24 @@
+{
+  "workstream_id": "checkalt-scheduled-reconcile-bank-deposits",
+  "authorization": "Pending owner review (2026-10-22). Planning only: nothing is live or verified. Each production apply still needs its own owner approval and staging acceptance.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Owner request 2026-10-22: \"build the scheduled status check and bank deposits fix and the Poll Now failed\". Poll Now root cause: checkalt-poll-status answered 503 at 14:09:43Z because the status-read GUCs make aws_checkalt_production_config() raise 42501 and abort the transaction (checkalt_config_unreadable). The accepted poll bytes bind the approve financial GUCs when the production holds are lifted; the Check Alt HTTP surface stays the status-read allowlist (authenticate, /deposit/item, /deposit/history, getUserAccountInformation; process/approve/register refused). History matches by referenceNumber or by the depositId /deposit/item returned for the same reference, exactly one element; 127/approved stays submitted and cleared still needs a real depositDate (persisted into cleared_at); a 50-item page without a match leaves the status unchanged. The scheduled job checkalt-poll-deposits runs as the platform-owner actor from aws/production/checkalt-status-reconcile-schedule.yaml with per-row savepoints, and scheduled.mjs accepts an EventBridge Scheduler direct invocation for that job only. live_sha256 values are the members of the live package read with lambda:GetFunction on 2026-10-22 14:18Z (CodeSha256 L1s1+KyN4s/4nSgniwePGsv4NrjBdJwrv3Id1QRMEO0=); checkalt-poll.mjs b7a2a7f9 is also the bytes the reconcile-history apply put live. A read-only production overlay inspect must confirm each live hash before any apply. Order: checkalt-poll.mjs, checkalt-status-reconcile.mjs, scheduled.mjs. No SQL prerequisite.",
+  "members": {
+    "providers/production/checkalt-poll.mjs": {
+      "live_sha256": "b7a2a7f9b33913625d454630939e1df3c2fe44aebbaca77f944f22e6a95af51e",
+      "accepted_sha256": "b2e7faa1b641f8898a3dc04c41f7f3e4723f0723157aeb6b95f2d146ee74c01e",
+      "operation": "replace"
+    },
+    "providers/production/checkalt-status-reconcile.mjs": {
+      "live_sha256": "e3ee3d433b5fae826311709b6cb142fdee308e2770047e532c450d16675785b5",
+      "accepted_sha256": "a7842b7bffa1f850a965cfb503059116a2f0b09a80845afe172c4c69e17c4676",
+      "operation": "replace"
+    },
+    "scheduled.mjs": {
+      "live_sha256": "4b06d4cd578720a3996dc090cc396bda273c8de07e80cd7064d755af2b214abb",
+      "accepted_sha256": "458ba42455afe324ba4e8169bf23cdbd15498b180ada279286a8a92be6193791",
+      "operation": "replace"
+    }
+  }
+}

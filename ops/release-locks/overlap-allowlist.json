@@ -2508,6 +2508,34 @@
       "reason": "The Check Alt auto-approve always-on change renames one Manager Hub TabsTrigger label in src/pages/CheckCommandCenter.tsx from \"Pending Approvals\" to \"Waiting in Check Alt\" (owner decision 2026-10-22: auto-approve is always on, a still-pending deposit is reviewed in the Check Alt portal); the label lives only in that file, so moving code cannot avoid the overlap. Open PR #1089 (claude/check-center-tab-persistence-and-upload-reactivity, opened 2026-10-20) changes other lines of the same file (tab state in ?tab= and tenant-scoped check-intake-items invalidations) and does not touch the Manager Hub tab list. Whichever PR merges second must rebase onto main and re-run validate-release-locks.mjs (partner-sharing tree_hash). It does not merge, edit or deploy PR #1089.",
       "expires": "2026-12-31",
       "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 373,
+      "path": "aws/functions/api/providers/production/checkalt-status-reconcile.mjs",
+      "reason": "PR #1154 (Check Alt scheduled status check, 2026-10-22) changes runCheckAltStatusReconcile in checkalt-status-reconcile.mjs: the scheduled job runs as the reviewed platform-owner actor (refused unless is_platform_owner()), binds the same GUCs as Poll Now and refreshes each row in its own savepoint. Cursor PR #373 (opened before the 2026-10-14..22 Check Alt changes) also edits this file for the same SQL 65 status-read config problem with a different approach (new SQL); it is stale against main. Whichever PR merges second must rebase onto main. It does not merge, edit or deploy PR #373.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 566,
+      "path": "aws/functions/api/scheduled.mjs",
+      "reason": "PR #1154 (Check Alt scheduled status check, 2026-10-22) adds an EventBridge Scheduler direct-invocation path to scheduled.mjs for the read-only checkalt-poll-deposits job only (isSchedulerDirectInvocation); the Class A and financial job routing is unchanged. Open PR #566 (WalletOps production promotion) changes other parts of the same file. Whichever PR merges second must rebase onto main. It does not merge, edit or deploy PR #566.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 565,
+      "path": "aws/functions/api/scheduled.mjs",
+      "reason": "PR #1154 (Check Alt scheduled status check, 2026-10-22) adds an EventBridge Scheduler direct-invocation path to scheduled.mjs for the read-only checkalt-poll-deposits job only (isSchedulerDirectInvocation); the Class A and financial job routing is unchanged. Open PR #565 (WalletOps wallet-relative funding UX) changes other parts of the same file. Whichever PR merges second must rebase onto main. It does not merge, edit or deploy PR #565.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 547,
+      "path": "aws/functions/api/scheduled.mjs",
+      "reason": "PR #1154 (Check Alt scheduled status check, 2026-10-22) adds an EventBridge Scheduler direct-invocation path to scheduled.mjs for the read-only checkalt-poll-deposits job only (isSchedulerDirectInvocation); the Class A and financial job routing is unchanged. Open PR #547 (Tenant Collection v2) changes other parts of the same file. Whichever PR merges second must rebase onto main. It does not merge, edit or deploy PR #547.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
     }
   ]
 }

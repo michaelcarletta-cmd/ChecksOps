@@ -1,0 +1,87 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Scheduled Check Alt status check for production (stack
+  checksops-production-checkalt-status-schedule). Every 30 minutes
+  EventBridge Scheduler invokes checksops-production-prep-api directly with
+  the read-only job checkalt-poll-deposits: it refreshes every non-final
+  Check Alt deposit (pending_approval, submitted) through the status-read
+  fetch guard (authenticate, /deposit/item, /deposit/history,
+  getUserAccountInformation only). It never posts /deposit/process or
+  /deposit/approve, never inserts a deposit and moves no money.
+  The invoke is IAM-authorized (this stack's role may only call
+  lambda:InvokeFunction on that one function); there is no shared secret.
+  Creating this stack is a production deploy step: an owner-approved
+  operator runs it after the Lambda members are live
+  (ops/checkalt-status-reconcile-schedule.md). The Cloud Agent does not
+  create it. State DISABLED pauses the job without deleting it.
+
+Parameters:
+  ActorApplicationUserId:
+    Type: String
+    AllowedPattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+    Description: >
+      Platform-owner application_user_id (identity_accounts) the job runs as
+      under row security. The job refuses to call Check Alt unless
+      public.is_platform_owner() is true for this id.
+  ScheduleState:
+    Type: String
+    Default: ENABLED
+    AllowedValues:
+      - ENABLED
+      - DISABLED
+  ScheduleExpression:
+    Type: String
+    Default: rate(30 minutes)
+    AllowedValues:
+      - rate(30 minutes)
+      - rate(45 minutes)
+      - rate(60 minutes)
+
+Resources:
+  CheckAltStatusScheduleRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: checksops-production-checkalt-status-schedule
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: scheduler.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+      Policies:
+        - PolicyName: invoke-prep-api-only
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: lambda:InvokeFunction
+                Resource: !Sub arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:checksops-production-prep-api
+
+  CheckAltStatusSchedule:
+    Type: AWS::Scheduler::Schedule
+    Properties:
+      Name: checksops-production-checkalt-status-reconcile
+      Description: Read-only Check Alt status refresh (checkalt-poll-deposits). No process/approve POST.
+      ScheduleExpression: !Ref ScheduleExpression
+      ScheduleExpressionTimezone: UTC
+      State: !Ref ScheduleState
+      FlexibleTimeWindow:
+        Mode: 'OFF'
+      Target:
+        Arn: !Sub arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:checksops-production-prep-api
+        RoleArn: !GetAtt CheckAltStatusScheduleRole.Arn
+        RetryPolicy:
+          MaximumRetryAttempts: 0
+          MaximumEventAgeInSeconds: 300
+        Input: !Sub |
+          {"checksops_scheduler":"eventbridge-scheduler","job":"checkalt-poll-deposits","rawPath":"/scheduled/checkalt-poll-deposits","requestContext":{"http":{"method":"POST"}},"actor_application_user_id":"${ActorApplicationUserId}"}
+
+Outputs:
+  ScheduleName:
+    Value: !Ref CheckAltStatusSchedule
+  ScheduleRoleArn:
+    Value: !GetAtt CheckAltStatusScheduleRole.Arn

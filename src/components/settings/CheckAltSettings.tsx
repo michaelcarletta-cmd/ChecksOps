@@ -23,6 +23,7 @@ import { isPlatformOwner } from "@/lib/masterMerchant";
 import { Loader2, Banknote, ShieldCheck, AlertTriangle, RefreshCw } from "lucide-react";
 import { displayCase, displayCaseOrNull } from "@/lib/displayCase";
 import { checkAltAutoApproveSkipText } from "@/lib/checkAltAutoApproveSkip";
+import { checkAltPollErrorText, checkAltPollSummary, type CheckAltPollAnswer } from "@/lib/checkAltPollResult";
 
 /**
  * Platform-owner configuration panel for the CheckAlt (FinCapture) RDC integration.
@@ -472,18 +473,17 @@ export function PendingApprovalDeposits() {
         { body: {} },
         { apiBaseUrl: awsApiBaseUrl() },
       );
-      if (error) throw new Error(checkAltProviderUserMessage(error));
-      if ((data as any)?.error) throw new Error(checkAltProviderUserMessage((data as any).error));
-      return data as { polled: number; updated: number; errors: number };
+      if (error) throw new Error(checkAltPollErrorText(checkAltProviderUserMessage(error)));
+      if ((data as any)?.error) throw new Error(checkAltPollErrorText(checkAltProviderUserMessage((data as any).error)));
+      return data as CheckAltPollAnswer;
     },
     onSuccess: (data) => {
-      toast({
-        title: "Reconciled with CheckAlt",
-        description: `Checked ${data.polled}, updated ${data.updated}${data.errors ? `, ${data.errors} error(s)` : ""}`,
-      });
+      const summary = checkAltPollSummary(data);
+      toast({ title: summary.title, description: summary.description });
       qc.invalidateQueries({ queryKey: ["checkalt-pending-approvals"] });
       qc.invalidateQueries({ queryKey: ["check-intake-items"] });
       qc.invalidateQueries({ queryKey: ["deposit-items"] });
+      qc.invalidateQueries({ queryKey: ["bank-deposit-reconciliation"] });
     },
     onError: (e: unknown) => {
       toast({

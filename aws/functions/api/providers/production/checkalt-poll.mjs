@@ -8,10 +8,16 @@ import {
   getUserAccountInfo,
 } from '../parity/checkalt-client.mjs';
 import { loadProductionCheckAltConfig, loadProductionTenantAccount } from './checkalt-config.mjs';
-import { persistPollOutcome } from './checkalt-idempotency.mjs';
+import {
+  bindCheckAltProductionGucs,
+  bindCheckAltStatusReadGucs,
+  persistPollOutcome,
+} from './checkalt-idempotency.mjs';
+import { productionCheckAltExecutionAllowed } from './checkalt-holds.mjs';
 import { loadProductionCheckAltSecrets } from './checkalt-secrets.mjs';
 import { authorizeCheckAltProduction } from './checkalt-authz.mjs';
 import { statusReadOnlyFetch } from './checkalt-status-read.mjs';
+import { isProviderNetworkError } from '../../sandbox-credentials.mjs';
 
 const jwtCache = { token: null, expiresAt: null };
 
@@ -37,6 +43,26 @@ const membershipsOf = async (client, userId) => {
 };
 
 const resolvePollStatus = (json) => resolveCheckAltProviderStatus(json || {});
+
+/**
+ * Database session for a status refresh (Poll Now and the scheduled job).
+ * When the production money-movement holds are lifted (production today),
+ * bind the same financial GUCs approve binds: aws_checkalt_production_config()
+ * (SQL 65) refuses without them, and a refused call aborts the transaction,
+ * so the status-read GUCs alone always answered 503 checkalt_config_unreadable
+ * in production. The CheckAlt HTTP surface does not widen: every call still
+ * goes through statusReadOnlyFetch (authenticate, item, history,
+ * getUserAccountInformation only; process/approve/register are refused).
+ * With the holds on, the status-read GUCs stay as before.
+ */
+export async function bindStatusRefreshGucs(client, mapping, claims) {
+  if (productionCheckAltExecutionAllowed()) {
+    await bindCheckAltProductionGucs(client, mapping, claims);
+    return 'financial_execution';
+  }
+  await bindCheckAltStatusReadGucs(client, mapping, claims);
+  return 'status_read';
+}
 
 export { CHECKALT_STATUS_REFRESH_STATUSES };
 
@@ -194,10 +220,35 @@ const statusFieldsOf = (json, redact) => {
   return out;
 };
 
-const countReferenceMatches = (items, reference) => (items || []).filter((item) => {
-  const value = item?.referenceNumber ?? item?.reference;
-  return value != null && String(value) === String(reference);
-}).length;
+/**
+ * FinCapture /deposit/history answered 50 items for one depositor on
+ * 2026-10-22 with no match; 50 may be its page cap. A full page without a
+ * match proves nothing about the deposit, so status stays unchanged.
+ */
+export const HISTORY_PAGE_CAP = 50;
+
+const sameId = (value, want) => value != null && value !== '' && want != null && want !== ''
+  && String(value) === String(want);
+
+const historyReferenceOf = (item) => item?.referenceNumber ?? item?.reference;
+
+/** depositId from the /deposit/item answer for this same reference (no other field is trusted). */
+export const itemDepositIdOf = (itemJson) => {
+  if (!itemJson || typeof itemJson !== 'object' || Array.isArray(itemJson)) return null;
+  const value = itemJson.depositId;
+  return value == null || value === '' ? null : value;
+};
+
+const countReferenceMatches = (items, reference) => (items || [])
+  .filter((item) => sameId(historyReferenceOf(item), reference)).length;
+
+const countDepositIdMatches = (items, depositId) => (depositId == null ? 0 : (items || [])
+  .filter((item) => sameId(item?.depositId, depositId)).length);
+
+const firstItemKeys = (list) => {
+  const first = (list || [])[0];
+  return first && typeof first === 'object' && !Array.isArray(first) ? Object.keys(first).slice(0, 40) : [];
+};
 
 /**
  * Non-secret evidence for a reconciliation_required answer: HTTP statuses,
@@ -210,6 +261,7 @@ export const reconcileDiagnostics = ({
   hist,
   histJson,
   reference,
+  depositId = null,
   window,
   ssoKeySource,
   secrets = [],
@@ -217,6 +269,8 @@ export const reconcileDiagnostics = ({
   const redact = redactor(secrets);
   const list = historyListOf(histJson);
   const matches = countReferenceMatches(list, reference);
+  const depositIdMatches = countDepositIdMatches(list, depositId);
+  const matched = Boolean(matchHistory(list, { reference, depositId }));
   return {
     item_http_status: Number.isInteger(item?.status) ? item.status : null,
     item_keys: keysOf(item?.json),
@@ -226,11 +280,33 @@ export const reconcileDiagnostics = ({
     history_status_fields: statusFieldsOf(histJson, redact),
     history_envelope: historyEnvelopeOf(histJson),
     history_list_length: list.length,
+    // Key names of the first history element only (never values), so the
+    // element shape can be read from production evidence.
+    history_first_item_keys: firstItemKeys(list),
     history_reference_matches: matches,
-    history_matched: matches === 1,
+    item_deposit_id_present: depositId != null,
+    history_deposit_id_matches: depositIdMatches,
+    history_matched: matched,
+    history_page_cap: HISTORY_PAGE_CAP,
+    history_capped: !matched && list.length >= HISTORY_PAGE_CAP,
     history_window: window || null,
     sso_key_source: ssoKeySource || null,
   };
+};
+
+/** Plain words for an unresolved refresh (shown by Poll Now). No ids, keys or values. */
+export const unresolvedMessage = (diagnostics) => {
+  if (!diagnostics) return 'Check Alt did not return a status for this deposit. Its status was left unchanged.';
+  if (diagnostics.history_http_status != null && diagnostics.history_http_status !== 200) {
+    return `Check Alt deposit history answered HTTP ${diagnostics.history_http_status}. The status was left unchanged.`;
+  }
+  if (diagnostics.history_capped) {
+    return `Check Alt returned its full page of ${diagnostics.history_list_length} recent deposits and this deposit was not among them. The status was left unchanged; it will be checked again.`;
+  }
+  if (diagnostics.history_reference_matches > 1 || diagnostics.history_deposit_id_matches > 1) {
+    return 'Check Alt history lists this deposit more than once, so ChecksOps cannot tell which entry is right. The status was left unchanged.';
+  }
+  return 'Check Alt has not reported a new status for this deposit yet (no history entry with its reference or deposit id). The status was left unchanged.';
 };
 
 /**
@@ -273,6 +349,22 @@ export const matchHistoryByReference = (items, reference) => {
     return value != null && String(value) === want;
   });
   return matches.length === 1 ? matches[0] : null;
+};
+
+/**
+ * One history element for this deposit: its referenceNumber (or reference)
+ * equals the stored checkalt_reference, OR its depositId equals the depositId
+ * /deposit/item returned for that same reference. Exactly one distinct element
+ * must match; two elements (or a reference match and a depositId match that
+ * disagree) are ambiguous and match nothing. Amount is never used.
+ */
+export const matchHistory = (items, { reference = null, depositId = null } = {}) => {
+  const hits = new Set();
+  for (const item of items || []) {
+    if (!item || typeof item !== 'object') continue;
+    if (sameId(historyReferenceOf(item), reference) || sameId(item.depositId, depositId)) hits.add(item);
+  }
+  return hits.size === 1 ? [...hits][0] : null;
 };
 
 export const reconciliationRequired = (row, extra = {}) => ({
@@ -387,13 +479,15 @@ export async function reconcileProductionCheckAltDeposit({
       jwtCache,
     });
     const histJson = await parseJson(hist);
-    const match = matchHistoryByReference(historyListOf(histJson), reference);
+    const depositId = itemDepositIdOf(item.json);
+    const match = matchHistory(historyListOf(histJson), { reference, depositId });
     if (!match) {
       const diagnostics = reconcileDiagnostics({
         item: { status: httpStatusByPath['/fincapture/deposit/item'], json: item.json },
         hist,
         histJson,
         reference,
+        depositId,
         window: { startDate: historyBody.startDate, endDate: historyBody.endDate },
         ssoKeySource,
         secrets: [
@@ -419,7 +513,7 @@ export async function reconcileProductionCheckAltDeposit({
         productionExecution: true,
         productionRecordsMutated: false,
         applicationUserId: mapping?.application_user_id,
-        message: 'CheckAlt history has no unique referenceNumber match for this deposit. Amount is not a transaction id. Manual reconciliation required. A second process POST was not sent.',
+        message: `${unresolvedMessage(diagnostics)} Amount is not a transaction id. A second process POST was not sent.`,
         diagnostics,
         diagnosticsPersisted,
       });
@@ -433,6 +527,16 @@ export async function reconcileProductionCheckAltDeposit({
     reference,
     providerPayload: json,
   });
+  if (!saved) {
+    // The UPDATE matched no row (row security refused it). Nothing changed.
+    return reconciliationRequired(row, {
+      liveProviderCalled: true,
+      productionExecution: true,
+      productionRecordsMutated: false,
+      applicationUserId: mapping?.application_user_id,
+      message: 'Check Alt answered, but ChecksOps could not save the new status (the database refused the update). The status was left unchanged. A second process POST was not sent.',
+    });
+  }
   return {
     ok: true,
     statusCode: 200,
@@ -449,6 +553,56 @@ export async function reconcileProductionCheckAltDeposit({
     applicationUserId: mapping?.application_user_id,
   };
 }
+
+/**
+ * Refresh one deposit inside its own savepoint, so one failing row (a refused
+ * write, an unexpected answer) cannot abort the transaction and lose every
+ * other row's refresh. A status-read guard refusal or a network failure is
+ * rethrown after the rollback, as before.
+ */
+export async function refreshDepositRow({ client, ...args }) {
+  let savepoint = false;
+  try {
+    await client.query('SAVEPOINT checkalt_status_refresh_row');
+    savepoint = true;
+  } catch { /* mock clients; a real failure surfaces on the next query */ }
+  try {
+    const result = await reconcileProductionCheckAltDeposit({ client, ...args });
+    if (savepoint) await client.query('RELEASE SAVEPOINT checkalt_status_refresh_row');
+    return result;
+  } catch (error) {
+    if (savepoint) {
+      try { await client.query('ROLLBACK TO SAVEPOINT checkalt_status_refresh_row'); } catch { /* ignore */ }
+    }
+    if (error?.statusReadDenied || isProviderNetworkError(error)) throw error;
+    return reconciliationRequired(args.row, {
+      liveProviderCalled: true,
+      productionExecution: true,
+      productionRecordsMutated: false,
+      applicationUserId: args.mapping?.application_user_id,
+      message: 'Refreshing this deposit failed inside ChecksOps. Its status was left unchanged; it will be checked again.',
+    });
+  }
+}
+
+/** Per-deposit line of a batch refresh: status plus plain words when unresolved. */
+export const batchDepositSummary = (row, result, previousStatus = row.status) => ({
+  deposit_id: result?.deposit_id || row.id,
+  checkalt_reference: row.checkalt_reference || null,
+  status: result?.status || row.status,
+  previous_status: previousStatus,
+  reconciled: Boolean(result?.reconciled),
+  ...(result?.reconciled ? {} : {
+    message: result?.message || null,
+    diagnostics: result?.diagnostics ? {
+      history_http_status: result.diagnostics.history_http_status,
+      history_list_length: result.diagnostics.history_list_length,
+      history_reference_matches: result.diagnostics.history_reference_matches,
+      history_deposit_id_matches: result.diagnostics.history_deposit_id_matches,
+      history_capped: result.diagnostics.history_capped,
+    } : null,
+  }),
+});
 
 const authorizePollRow = async ({ client, mapping, memberships, row }) => {
   if (!membershipForTenant(memberships, row.tenant_id)) {
@@ -498,6 +652,7 @@ export async function handleProductionCheckAltPoll({
   const depositId = body.deposit_id || body.checkalt_deposit_id || null;
   const reference = body.checkalt_reference || body.referenceNumber || null;
   const memberships = await membershipsOf(client, mapping.application_user_id);
+  const gucMode = await bindStatusRefreshGucs(client, mapping, claims);
 
   if (!depositId && !reference) {
     const requestedTenant = body.tenant_id || null;
@@ -556,7 +711,8 @@ export async function handleProductionCheckAltPoll({
         acct = await loadProductionTenantAccount(client, row.tenant_id);
         acctCache.set(row.tenant_id, acct);
       }
-      const result = await reconcileProductionCheckAltDeposit({
+      const previousStatus = row.status;
+      const result = await refreshDepositRow({
         client,
         mapping,
         row,
@@ -568,12 +724,7 @@ export async function handleProductionCheckAltPoll({
       polled += 1;
       if (result.reconciled) updated += 1;
       else errors += 1;
-      deposits.push({
-        deposit_id: result.deposit_id || row.id,
-        status: result.status || row.status,
-        previous_status: row.status,
-        reconciled: Boolean(result.reconciled),
-      });
+      deposits.push(batchDepositSummary(row, result, previousStatus));
     }
     return {
       ok: true,
@@ -584,6 +735,7 @@ export async function handleProductionCheckAltPoll({
       errors,
       deposits,
       tenant_ids: tenantIds,
+      database_session: gucMode,
       liveProviderCalled: polled > 0,
       createdDeposit: false,
       productionExecution: true,

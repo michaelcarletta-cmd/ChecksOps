@@ -23,6 +23,28 @@ export const CLASS_A_SCHEDULED_JOBS = new Set([
   'check-ocr-backlog',
 ]);
 
+/** Jobs an EventBridge Scheduler direct Lambda invocation may run. */
+export const SCHEDULER_DIRECT_JOBS = new Set(['checkalt-poll-deposits']);
+export const SCHEDULER_DIRECT_SOURCE = 'eventbridge-scheduler';
+
+/**
+ * EventBridge Scheduler invoking the Lambda directly (IAM-authorized
+ * lambda:InvokeFunction, no shared secret). An HTTP API request can never
+ * look like this: API Gateway always builds the event itself (version,
+ * routeKey, headers, requestContext.apiId / requestId / domainName) and a
+ * caller cannot add top-level fields. Only SCHEDULER_DIRECT_JOBS run this way.
+ */
+export const isSchedulerDirectInvocation = (event) => {
+  if (!event || typeof event !== 'object' || Array.isArray(event)) return false;
+  if (event.checksops_scheduler !== SCHEDULER_DIRECT_SOURCE) return false;
+  if (event.version !== undefined || event.routeKey !== undefined || event.headers !== undefined) return false;
+  if (event.httpMethod !== undefined || event.body !== undefined || event.isBase64Encoded !== undefined) return false;
+  const ctx = event.requestContext;
+  if (ctx && (ctx.apiId !== undefined || ctx.requestId !== undefined || ctx.domainName !== undefined
+    || ctx.accountId !== undefined || ctx.stage !== undefined)) return false;
+  return SCHEDULER_DIRECT_JOBS.has(String(event.job || ''));
+};
+
 const authorized = (event) => {
   const expected = process.env.AWS_SCHEDULED_JOB_SECRET || '';
   if (!expected) return false;
@@ -35,6 +57,9 @@ const authorized = (event) => {
 export const handleScheduledRequest = async (event, path, deps = {}) => {
   if (!path.startsWith('/scheduled')) return null;
   const spoof = ignoredSpoof(event, parseBody(event));
+  if (isSchedulerDirectInvocation(event)) {
+    return handleCheckAltStatusReconcileJob(event, deps);
+  }
   if (!authorized(event)) {
     return {
       ok: false,

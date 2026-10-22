@@ -26,12 +26,16 @@ import { handleProductionCheckAltApprove } from '../functions/api/providers/prod
 import {
   buildHistoryRequestBody,
   handleProductionCheckAltPoll,
+  HISTORY_PAGE_CAP,
   historyListOf,
   historyWindow,
+  matchHistory,
   matchHistoryByReference,
   reconcileProductionCheckAltDeposit,
   resolveSsoKey,
 } from '../functions/api/providers/production/checkalt-poll.mjs';
+import { loadProductionCheckAltConfig } from '../functions/api/providers/production/checkalt-config.mjs';
+import { bindCheckAltStatusReadGucs } from '../functions/api/providers/production/checkalt-idempotency.mjs';
 import { runCheckAltStatusReconcile } from '../functions/api/providers/production/checkalt-status-reconcile.mjs';
 import { syntheticCheckRaster } from '../functions/api/providers/parity/checkalt-image.mjs';
 import { syntheticCompliantCheckAltJpeg } from '../functions/api/providers/production/checkalt-image-compliance.mjs';
@@ -191,6 +195,7 @@ const identityClient = (store) => ({
       return { rows: [] };
     }
     if (text.startsWith('SELECT set_config')) return { rows: [{ set_config: params[1] }] };
+    if (text.includes('public.is_platform_owner()')) return { rows: [{ ok: store.actorIsPlatformOwner !== false }] };
     if (text === LOOKUP_MAPPING_SQL) return { rows: params[0] === mapping.cognito_sub ? [mapping] : [] };
     if (text === TENANT_MEMBERSHIP_SQL || text.includes('FROM public.tenant_users tu')) {
       return { rows: store.memberships };
@@ -1504,8 +1509,13 @@ test('approve: empty history answers reconciliation_required with non-secret dia
     history_status_fields: {},
     history_envelope: 'depositHistoryList',
     history_list_length: 0,
+    history_first_item_keys: [],
     history_reference_matches: 0,
+    item_deposit_id_present: false,
+    history_deposit_id_matches: 0,
     history_matched: false,
+    history_page_cap: 50,
+    history_capped: false,
     history_window: result.diagnostics.history_window,
     sso_key_source: 'lookup',
   });
@@ -1715,6 +1725,7 @@ test('status reconcile job is read/status only and never submits or approves', a
     client: identityClient(store),
     fetchImpl: fetchImpl(store),
     deps: submitDeps(store),
+    actorId: FREEDOM_APP,
   }));
   assert.equal(result.ok, true);
   assert.equal(result.submitPosted, false);
@@ -2394,4 +2405,322 @@ test('auto-approve: 401 from approve is auth_failed without retry', async () => 
   assert.equal(result.auto_approve.skipReason, 'auth_failed');
   assert.equal(store.approvePosts, 1);
   assert.equal(result.status, 'pending_approval');
+});
+
+// ---------------------------------------------------------------------------
+// Scheduled status check, post-approval states and Poll Now (2026-10-22).
+// ---------------------------------------------------------------------------
+
+// The /deposit/item answer production returned for reference 127491751 at
+// 12:33Z and 12:34Z: these keys and no status field.
+const PROD_ITEM_SHAPE = (extra = {}) => ({
+  processDate: '2026-10-22',
+  aba: '000000000',
+  accountNumber: '1234567890',
+  frontImage: 'x',
+  rearImage: 'y',
+  ruleDetails: [],
+  depositId: 555001,
+  referenceNumber: Number(PROD_REF),
+  ...extra,
+});
+
+const otherHistory = (count) => Array.from({ length: count }, (_, i) => ({
+  referenceNumber: 900000 + i, depositId: 700000 + i, status: 127, depositDate: '2026-10-20',
+}));
+
+/**
+ * The PostgreSQL behaviour the plain mock does not model: under SQL 65,
+ * aws_checkalt_production_config() raises 42501 unless both financial GUCs
+ * are '1', and the failed statement aborts the transaction (25P02 for every
+ * later statement until ROLLBACK [TO SAVEPOINT]). checkalt_deposits UPDATE
+ * row security also needs the financial GUCs (aws_financial_update_checkalt_deposits).
+ */
+const pgFaithful = (inner) => {
+  const gucs = {};
+  let aborted = false;
+  return {
+    gucs,
+    connect: async () => {},
+    end: async () => {},
+    query: async (sql, params = []) => {
+      const text = String(sql);
+      if (aborted) {
+        if (text === 'ROLLBACK' || text.startsWith('ROLLBACK TO SAVEPOINT')) {
+          aborted = false;
+          return { rows: [] };
+        }
+        const error = new Error('current transaction is aborted, commands ignored until end of transaction block');
+        error.code = '25P02';
+        throw error;
+      }
+      const literal = text.match(/set_config\('([^']+)', '([^']*)'/);
+      if (literal) gucs[literal[1]] = literal[2];
+      else if (text.startsWith('SELECT set_config')) gucs[params[0]] = params[1];
+      const financial = gucs['request.financial_execution'] === '1'
+        && gucs['request.aws_financial_permissions_activated'] === '1';
+      if (text.includes('aws_checkalt_production_config') && !financial) {
+        aborted = true;
+        const error = new Error('checkalt production config requires financial execution GUCs');
+        error.code = '42501';
+        throw error;
+      }
+      if (text.includes('UPDATE public.checkalt_deposits') && !financial) return { rows: [] };
+      return inner.query(sql, params);
+    },
+  };
+};
+
+const pollNowEmptyBody = (store, client) => withEnv(productionPollFlags, () => handleProviderRequest(
+  jwtEvent('/functions/v1/checkalt-poll-status', 'POST', {}),
+  '/functions/v1/checkalt-poll-status',
+  'POST',
+  { ...submitDeps(store), createClient: () => client },
+));
+
+test('root cause: under status-read GUCs the production config read aborts the transaction (503 checkalt_config_unreadable)', async () => {
+  const store = createStore();
+  const client = pgFaithful(identityClient(store));
+  await bindCheckAltStatusReadGucs(client, mapping, { sub: COGNITO_SUB });
+  const loaded = await loadProductionCheckAltConfig(client, { credentials: productionSecrets().credentials });
+  assert.equal(loaded.ok, false);
+  assert.equal(loaded.statusCode, 503);
+  assert.equal(loaded.error, 'checkalt_config_unreadable');
+});
+
+test('Poll Now (empty body) reaches Check Alt in production, binds the approve GUCs, never posts process or approve', async () => {
+  const store = createStore();
+  store.itemPayload = PROD_ITEM_SHAPE();
+  store.historyPayload = [{ depositId: 555001, status: 127, statusDescription: 'Approved' }, ...otherHistory(3)];
+  pushPendingApproval(store);
+  const client = pgFaithful(identityClient(store));
+  const result = await pollNowEmptyBody(store, client);
+  assert.equal(result.statusCode, 200, JSON.stringify(result));
+  assert.equal(result.polled, 1);
+  assert.equal(result.updated, 1);
+  assert.equal(result.errors, 0);
+  assert.equal(result.database_session, 'financial_execution');
+  assert.equal(client.gucs['request.financial_execution'], '1');
+  assert.deepEqual(result.deposits, [{
+    deposit_id: DEPOSIT_ID,
+    checkalt_reference: PROD_REF,
+    status: 'submitted',
+    previous_status: 'pending_approval',
+    reconciled: true,
+  }]);
+  assert.equal(store.deposits[0].status, 'submitted');
+  assert.equal(store.processPosts, 0);
+  assert.equal(store.approvePosts, 0);
+});
+
+test('history matches by the depositId /deposit/item returned for the same reference', () => {
+  const list = [...otherHistory(2), { depositId: 555001, status: 127 }];
+  assert.equal(matchHistory(list, { reference: PROD_REF, depositId: 555001 }), list[2]);
+  // Reference still matches on its own; a string/number difference is not a mismatch.
+  const byRef = [{ referenceNumber: Number(PROD_REF), status: 127 }];
+  assert.equal(matchHistory(byRef, { reference: PROD_REF, depositId: null }), byRef[0]);
+  // A reference match and a depositId match on different elements are ambiguous.
+  const split = [{ referenceNumber: Number(PROD_REF) }, { depositId: 555001 }];
+  assert.equal(matchHistory(split, { reference: PROD_REF, depositId: 555001 }), null);
+  // Two elements with the same depositId are ambiguous.
+  assert.equal(matchHistory([{ depositId: 1 }, { depositId: 1 }], { depositId: 1 }), null);
+  // No locator, no match; amount is never used.
+  assert.equal(matchHistory([{ userAmount: 500 }], { reference: null, depositId: null }), null);
+  assert.equal(matchHistoryByReference(list, PROD_REF), null);
+});
+
+test('reconcile: history 200 cleared only with a real depositDate, which is persisted into cleared_at', async () => {
+  for (const [entry, expected, clearedAt] of [
+    [{ depositId: 555001, status: 200 }, 'submitted', undefined],
+    [{ depositId: 555001, status: 'settled', depositDate: '' }, 'submitted', undefined],
+    [{ depositId: 555001, status: 200, depositDate: '2026-10-22' }, 'cleared', '2026-10-22T12:00:00.000Z'],
+    [{ depositId: 555001, status: 'Cleared', depositDate: '10/23/2026' }, 'cleared', '2026-10-23T12:00:00.000Z'],
+    [{ depositId: 555001, status: 'approved' }, 'submitted', undefined],
+    [{ depositId: 555001, status: 'returned' }, 'returned', undefined],
+    [{ depositId: 555001, status: 120 }, 'rejected', undefined],
+  ]) {
+    const store = createStore();
+    store.itemPayload = PROD_ITEM_SHAPE();
+    store.historyPayload = [...otherHistory(2), entry];
+    pushPendingApproval(store);
+    const result = await withEnv(productionPollFlags, () => reconcileProductionCheckAltDeposit({
+      client: identityClient(store),
+      mapping,
+      row: store.deposits[0],
+      cfg: { fi_key: 'prod-fi-key', base_url: 'https://api2.checkalt.com', merchant: 'prod-merchant' },
+      credentials: productionSecrets().credentials,
+      acct: { sso_user_id: 'depositor-prod', sso_key: 'sso-prod', deposit_account_number: '1234567890' },
+      fetchImpl: fetchImpl(store),
+    }));
+    assert.equal(result.reconciled, true, JSON.stringify(entry));
+    assert.equal(store.deposits[0].status, expected, JSON.stringify(entry));
+    assert.equal(store.deposits[0].cleared_at ?? undefined, clearedAt, JSON.stringify(entry));
+    assert.equal(store.processPosts + store.approvePosts, 0);
+  }
+});
+
+test('reconcile: a full history page (cap) with no match leaves status unchanged and says so; key names only', async () => {
+  const store = createStore();
+  store.itemPayload = PROD_ITEM_SHAPE();
+  store.historyPayload = otherHistory(HISTORY_PAGE_CAP);
+  pushPendingApproval(store);
+  const client = pgFaithful(identityClient(store));
+  const originalWarn = console.warn;
+  console.warn = () => {};
+  let result;
+  try {
+    result = await pollNowEmptyBody(store, client);
+  } finally {
+    console.warn = originalWarn;
+  }
+  assert.equal(result.statusCode, 200);
+  assert.equal(result.updated, 0);
+  assert.equal(result.errors, 1);
+  assert.equal(store.deposits[0].status, 'pending_approval');
+  assert.ok(!store.deposits[0].cleared_at);
+  const [line] = result.deposits;
+  assert.equal(line.reconciled, false);
+  assert.match(line.message, /full page of 50 recent deposits/);
+  assert.match(line.message, /left unchanged/);
+  assert.deepEqual(line.diagnostics, {
+    history_http_status: 200,
+    history_list_length: 50,
+    history_reference_matches: 0,
+    history_deposit_id_matches: 0,
+    history_capped: true,
+  });
+  const saved = store.deposits[0].last_status_payload.last_reconcile_unresolved;
+  assert.deepEqual(saved.history_first_item_keys, ['referenceNumber', 'depositId', 'status', 'depositDate']);
+  assert.equal(saved.item_deposit_id_present, true);
+  assert.equal(saved.history_capped, true);
+  const text = JSON.stringify(result) + JSON.stringify(saved);
+  for (const secret of SECRET_VALUES) assert.equal(text.includes(secret), false, secret);
+  assert.equal(text.includes('555001'), false, 'no depositId value is recorded');
+  assert.equal(store.processPosts + store.approvePosts, 0);
+});
+
+test('scheduled job: refreshes only non-final rows as the platform-owner actor, one savepoint per row, never posts process or approve', async () => {
+  const store = createStore();
+  store.itemPayload = PROD_ITEM_SHAPE();
+  store.historyPayload = [{ depositId: 555001, status: 127 }];
+  const base = { tenant_id: FREEDOM_TENANT, check_intake_item_id: CHECK_ID, amount: 5, amount_cents: 500, submitted_at: '2026-10-22T01:00:00.000Z', last_status_payload: {} };
+  store.deposits.push(
+    { ...base, id: DEPOSIT_ID, checkalt_reference: PROD_REF, status: 'pending_approval' },
+    { ...base, id: OTHER_DEPOSIT_ID, checkalt_reference: '9002', status: 'submitted' },
+    { ...base, id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd', checkalt_reference: '9003', status: 'cleared', cleared_at: '2026-10-20T12:00:00.000Z' },
+    { ...base, id: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', checkalt_reference: '9004', status: 'rejected' },
+    { ...base, id: 'ffffffff-ffff-4fff-8fff-ffffffffffff', checkalt_reference: '9005', status: 'returned' },
+  );
+  const inner = identityClient(store);
+  const sqls = [];
+  const client = pgFaithful({ query: async (sql, params) => { sqls.push(String(sql)); return inner.query(sql, params); } });
+  const originalWarn = console.warn;
+  console.warn = () => {};
+  let result;
+  try {
+    result = await withEnv(productionPollFlags, () => runCheckAltStatusReconcile({
+      client,
+      fetchImpl: fetchImpl(store),
+      deps: submitDeps(store),
+      actorId: FREEDOM_APP,
+    }));
+  } finally {
+    console.warn = originalWarn;
+  }
+  assert.equal(result.ok, true, JSON.stringify(result));
+  assert.equal(result.polled, 2);
+  assert.equal(result.database_session, 'financial_execution');
+  assert.equal(client.gucs['request.app_user_id'], FREEDOM_APP);
+  assert.equal(store.itemPosts, 2);
+  assert.deepEqual(store.itemBodies.map((body) => String(body.referenceNumber)).sort(), [PROD_REF, '9002'].sort());
+  assert.equal(store.processPosts, 0);
+  assert.equal(store.approvePosts, 0);
+  assert.equal(result.submitPosted, false);
+  assert.equal(result.approvePosted, false);
+  assert.equal(result.moneyMoved, false);
+  assert.equal(sqls.filter((sql) => sql === 'SAVEPOINT checkalt_status_refresh_row').length, 2);
+  assert.ok(sqls.some((sql) => sql.includes('public.is_platform_owner()')));
+  // Final rows are untouched; the two non-final rows were refreshed (history depositId match / item lookup).
+  assert.deepEqual(store.deposits.slice(2).map((row) => row.status), ['cleared', 'rejected', 'returned']);
+  assert.equal(store.deposits[0].status, 'submitted');
+  assert.equal(result.deposits.length, 2);
+});
+
+test('scheduled job: one failing row is rolled back to its savepoint and the other rows still refresh', async () => {
+  const store = createStore();
+  store.itemPayload = { statusCode: 127, statusDescription: 'Approved' };
+  const base = { tenant_id: FREEDOM_TENANT, check_intake_item_id: CHECK_ID, amount: 5, submitted_at: '2026-10-22T01:00:00.000Z', last_status_payload: {} };
+  store.deposits.push(
+    { ...base, id: DEPOSIT_ID, checkalt_reference: '9001', status: 'pending_approval' },
+    { ...base, id: OTHER_DEPOSIT_ID, checkalt_reference: '9002', status: 'pending_approval' },
+  );
+  const inner = identityClient(store);
+  const client = {
+    query: async (sql, params) => {
+      if (String(sql).includes('UPDATE public.checkalt_deposits') && params?.[0] === DEPOSIT_ID && String(sql).includes('last_polled_at')) {
+        throw new Error('simulated_rds_failure');
+      }
+      return inner.query(sql, params);
+    },
+  };
+  const result = await withEnv(productionPollFlags, () => runCheckAltStatusReconcile({
+    client, fetchImpl: fetchImpl(store), deps: submitDeps(store), actorId: FREEDOM_APP,
+  }));
+  assert.equal(result.polled, 2);
+  assert.equal(result.updated, 1);
+  assert.equal(result.errors, 1);
+  assert.equal(store.deposits[0].status, 'pending_approval');
+  assert.equal(store.deposits[1].status, 'submitted');
+});
+
+test('scheduled job refuses without a platform-owner actor and calls nothing', async () => {
+  for (const [actorId, owner, error] of [[null, true, 'scheduled_actor_required'], ['not-a-uuid', true, 'scheduled_actor_required'], [FREEDOM_APP, false, 'scheduled_actor_not_platform_owner']]) {
+    const store = createStore();
+    store.actorIsPlatformOwner = owner;
+    pushPendingApproval(store);
+    const result = await withEnv(productionPollFlags, () => runCheckAltStatusReconcile({
+      client: identityClient(store), fetchImpl: fetchImpl(store), deps: submitDeps(store), actorId: actorId === 'not-a-uuid' ? null : actorId,
+    }));
+    assert.equal(result.ok, false);
+    assert.equal(result.error, error);
+    assert.equal(result.liveProviderCalled, false);
+    assert.equal(store.itemPosts + store.historyPosts + store.processPosts + store.approvePosts, 0);
+  }
+});
+
+test('EventBridge Scheduler direct invoke runs only checkalt-poll-deposits; an HTTP request cannot imitate it', async () => {
+  const store = createStore();
+  store.itemPayload = { statusCode: 127 };
+  pushPendingApproval(store);
+  const schedule = fs.readFileSync(path.join(ROOT, 'aws/production/checkalt-status-reconcile-schedule.yaml'), 'utf8');
+  const input = JSON.parse(schedule.split('Input: !Sub |')[1].split('\n')[1].trim().replace('${ActorApplicationUserId}', FREEDOM_APP));
+  assert.equal(input.job, 'checkalt-poll-deposits');
+  assert.match(schedule, /rate\(30 minutes\)/);
+  assert.match(schedule, /Action: lambda:InvokeFunction/);
+  assert.match(schedule, /function:checksops-production-prep-api/);
+  assert.equal(/deposit\/process|deposit\/approve/.test(schedule.split('Resources:')[1]), false);
+  const { handleScheduledRequest, isSchedulerDirectInvocation } = await import('../functions/api/scheduled.mjs');
+  assert.equal(isSchedulerDirectInvocation(input), true);
+  // HTTP API events always carry API Gateway's own fields.
+  for (const forged of [
+    { ...input, version: '2.0', routeKey: '$default', headers: {} },
+    { ...input, requestContext: { ...input.requestContext, apiId: 'kiqojucc02' } },
+    { ...input, body: '{}' },
+    { ...input, job: 'deposit-daily-automation' },
+    { ...input, checksops_scheduler: 'other' },
+  ]) assert.equal(isSchedulerDirectInvocation(forged), false, JSON.stringify(forged));
+  const result = await withEnv({ ...productionPollFlags, AWS_SCHEDULED_JOB_SECRET: undefined }, () => handleScheduledRequest(
+    input,
+    '/scheduled/checkalt-poll-deposits',
+    { ...submitDeps(store), createClient: () => identityClient(store) },
+  ));
+  assert.equal(result.ok, true, JSON.stringify(result));
+  assert.equal(result.job, 'checkalt-poll-deposits');
+  assert.equal(result.polled, 1);
+  assert.equal(store.processPosts + store.approvePosts, 0);
+  // Through the Lambda entry point the same shape routes to /scheduled (no secret configured).
+  const viaIndex = await withEnv({ AWS_SCHEDULED_JOB_SECRET: undefined, AWS_CHECKALT_STATUS_RECONCILE_ENABLED: undefined }, () => handler(input));
+  assert.equal(JSON.parse(viaIndex.body).error, 'checkalt_status_reconcile_disabled');
+  const forgedHttp = await withEnv({ AWS_SCHEDULED_JOB_SECRET: undefined }, () => handler({ ...input, version: '2.0', routeKey: '$default', headers: {} }));
+  assert.equal(JSON.parse(forgedHttp.body).error, 'unauthorized_scheduled_job');
 });

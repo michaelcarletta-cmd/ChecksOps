@@ -76,12 +76,19 @@ const CHANGED_SINCE_SECOND_REBUILD = {
   // (REPLACE members), not a rebuild section.
   'providers/production/checkalt-poll.mjs': 'changed',
   'providers/production/checkalt-status-read.mjs': 'changed',
+  // Check Alt scheduled status check (2026-10-22): the reconcile job runs as the platform-owner
+  // actor with per-row savepoints, and scheduled.mjs accepts the EventBridge Scheduler direct
+  // invocation; both REPLACE members of the production overlay plan, not a rebuild section.
+  'providers/production/checkalt-status-reconcile.mjs': 'changed',
+  'scheduled.mjs': 'changed',
 };
 // Listed changes that go through the production overlay plan, never the current rebuild section.
 const OVERLAY_PLAN_CHANGES = new Set([
   'providers/production/checkalt-eligibility.mjs',
   'providers/production/checkalt-poll.mjs',
   'providers/production/checkalt-status-read.mjs',
+  'providers/production/checkalt-status-reconcile.mjs',
+  'scheduled.mjs',
 ]);
 const assertSectionAcceptedIsMain = (apiRoot, name, accepted) => {
   const onMain = sha256(fs.readFileSync(path.join(apiRoot, name)));

@@ -127,9 +127,12 @@ test('Bank Deposits never treats status=cleared without cleared_at as settled', 
   assert.equal(isBankDepositSettled({ status: 'cleared', cleared_at: null }), false);
   assert.equal(isBankDepositSettled({ status: 'submitted', cleared_at: null }), false);
   assert.equal(applyCheckAltSettlementInvariant('cleared', { statusCode: 200 }), 'submitted');
+  // The grouping moved to src/lib/bankDepositGroups.ts (deposited = isBankDepositSettled(row)).
   const src = fs.readFileSync(path.join(SPA, 'components/deposit-ops/BankDepositReconciliation.tsx'), 'utf8');
-  assert.match(src, /isBankDepositSettled\(row\)/);
-  assert.equal(/const settled = !!row\.cleared_at/.test(src), false);
+  const lib = fs.readFileSync(path.join(SPA, 'lib/bankDepositGroups.ts'), 'utf8');
+  assert.match(src, /groupBankDeposits\(rows\)/);
+  assert.match(lib, /isBankDepositSettled\(row\)/);
+  assert.equal(/const settled = !!row\.cleared_at/.test(src + lib), false);
 });
 
 test('scheduled CheckAlt status job stays disabled and is not a money job', async () => {
