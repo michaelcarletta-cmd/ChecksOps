@@ -7,7 +7,8 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { KeyRound, Loader2, Plus, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { deleteAwsPasskey, listAwsPasskeys, registerAwsPasskey } from "@/lib/awsPasskeys";
-import { isAwsStaging, isAwsStagingHttpsPasskeysEnabled, isAwsStagingSite } from "@/lib/awsStaging";
+import { isAwsStaging, isAwsStagingHttpsPasskeysEnabled } from "@/lib/awsStaging";
+import { isAwsStagingSite } from "@/lib/awsStagingSite";
 import {
   formatPasskeyMetaLine,
   passkeyCreatedAtIso,
