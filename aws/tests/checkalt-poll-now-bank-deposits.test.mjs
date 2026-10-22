@@ -119,3 +119,19 @@ test('Bank Deposits page renders deposit days and a separate In transit / waitin
   assert.equal(/row\.cleared_at \?\? row\.submitted_at/.test(src), false);
   assert.equal(/"Pending"/.test(src), false);
 });
+
+test('Poll Now summary says how many deposits are left for the next click', () => {
+  const summary = checkAltPollSummary({
+    polled: 1,
+    updated: 1,
+    errors: 0,
+    remaining: 3,
+    stopped_early: 'time_budget',
+    deposits: [{ checkalt_reference: '9001', status: 'submitted', previous_status: 'pending_approval', reconciled: true }],
+  });
+  assert.equal(summary.title, 'Checked 1 deposit; 1 changed');
+  assert.match(summary.description, /Ref 9001: now approved, not yet deposited\./);
+  assert.match(summary.description, /Check Alt is slow to answer, so 3 more deposits were not checked\. Click Poll Now again to check them\./);
+  const unreachable = checkAltPollSummary({ polled: 1, remaining: 1, stopped_early: 'checkalt_unreachable', deposits: [{ checkalt_reference: '9001', status: 'submitted', previous_status: 'submitted', reconciled: true }] });
+  assert.match(unreachable.description, /Check Alt stopped answering in time, so 1 more deposit was not checked\. Click Poll Now again to check it\./);
+});

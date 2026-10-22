@@ -837,10 +837,10 @@
     },
     "providers/production/checkalt-poll.mjs": {
       "operation": "replace",
-      "accepted_sha256": "b2e7faa1b641f8898a3dc04c41f7f3e4723f0723157aeb6b95f2d146ee74c01e",
-      "expected_live_sha256": "b7a2a7f9b33913625d454630939e1df3c2fe44aebbaca77f944f22e6a95af51e",
+      "accepted_sha256": "70f7252275b56e065f329785f2792c98a8cdea26c909907709958d3c261377da",
+      "expected_live_sha256": "b2e7faa1b641f8898a3dc04c41f7f3e4723f0723157aeb6b95f2d146ee74c01e",
       "sql_before": null,
-      "manifest": "aws/tests/fixtures/production-checkalt-scheduled-reconcile-manifest-2026-10-22.json"
+      "manifest": "aws/tests/fixtures/production-checkalt-poll-time-budget-manifest-2026-10-22.json"
     },
     "providers/production/checkalt-status-reconcile.mjs": {
       "operation": "replace",

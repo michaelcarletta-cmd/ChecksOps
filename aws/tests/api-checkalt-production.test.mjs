@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { test } from 'node:test';
+import { mock, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { LOOKUP_MAPPING_SQL, TENANT_MEMBERSHIP_SQL } from '../functions/api/identity.mjs';
 import { handler } from '../functions/api/index.mjs';
@@ -2723,4 +2723,94 @@ test('EventBridge Scheduler direct invoke runs only checkalt-poll-deposits; an H
   assert.equal(JSON.parse(viaIndex.body).error, 'checkalt_status_reconcile_disabled');
   const forgedHttp = await withEnv({ AWS_SCHEDULED_JOB_SECRET: undefined }, () => handler({ ...input, version: '2.0', routeKey: '$default', headers: {} }));
   assert.equal(JSON.parse(forgedHttp.body).error, 'unauthorized_scheduled_job');
+});
+
+const threeRefreshableDeposits = (store) => {
+  store.itemPayload = { statusCode: 127, status: 127, statusDescription: 'Approved' };
+  const base = { tenant_id: FREEDOM_TENANT, check_intake_item_id: CHECK_ID, amount: 5, amount_cents: 500, status: 'pending_approval', last_status_payload: {} };
+  store.deposits.push(
+    { ...base, id: DEPOSIT_ID, checkalt_reference: '9001' },
+    { ...base, id: OTHER_DEPOSIT_ID, checkalt_reference: '9002' },
+    { ...base, id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd', checkalt_reference: '9003' },
+  );
+};
+
+test('Poll Now starts no new deposit after its time budget and reports how many are left', async () => {
+  const store = createStore();
+  threeRefreshableDeposits(store);
+  const inner = fetchImpl(store);
+  mock.timers.enable({ apis: ['Date'], now: 1_000_000 });
+  try {
+    const slowItem = async (url, options = {}) => {
+      assert.ok(options.signal instanceof AbortSignal, 'every Check Alt call carries a timeout signal');
+      if (String(url).includes('/fincapture/deposit/item')) mock.timers.tick(9_000);
+      return inner(url, options);
+    };
+    const result = await withEnv(productionPollFlags, () => handleProviderRequest(
+      jwtEvent('/functions/v1/checkalt-poll-status', 'POST', {}),
+      '/functions/v1/checkalt-poll-status',
+      'POST',
+      submitDeps(store, { fetchImpl: slowItem }),
+    ));
+    assert.equal(result.statusCode, 200, JSON.stringify(result));
+    assert.equal(result.polled, 2);
+    assert.equal(result.updated, 2);
+    assert.equal(result.remaining, 1);
+    assert.equal(result.stopped_early, 'time_budget');
+    assert.equal(store.itemPosts, 2);
+    assert.deepEqual(store.deposits.map((row) => row.status), ['submitted', 'submitted', 'pending_approval']);
+  } finally {
+    mock.timers.reset();
+  }
+});
+
+test('Poll Now keeps the deposits it already refreshed when Check Alt stops answering in time', async () => {
+  const store = createStore();
+  threeRefreshableDeposits(store);
+  const inner = fetchImpl(store);
+  let items = 0;
+  const timesOut = async (url, options = {}) => {
+    if (String(url).includes('/fincapture/deposit/item')) {
+      items += 1;
+      if (items === 2) throw new DOMException('The operation was aborted due to timeout', 'TimeoutError');
+    }
+    return inner(url, options);
+  };
+  const result = await withEnv(productionPollFlags, () => handleProviderRequest(
+    jwtEvent('/functions/v1/checkalt-poll-status', 'POST', {}),
+    '/functions/v1/checkalt-poll-status',
+    'POST',
+    submitDeps(store, { fetchImpl: timesOut }),
+  ));
+  assert.equal(result.statusCode, 200, JSON.stringify(result));
+  assert.equal(result.polled, 1);
+  assert.equal(result.updated, 1);
+  assert.equal(result.remaining, 2);
+  assert.equal(result.stopped_early, 'checkalt_unreachable');
+  assert.deepEqual(store.deposits.map((row) => row.status), ['submitted', 'pending_approval', 'pending_approval']);
+  assert.equal(store.processPosts + store.approvePosts, 0);
+});
+
+test('Poll Now answers provider_egress_failed when Check Alt times out on the first deposit', async () => {
+  const store = createStore();
+  threeRefreshableDeposits(store);
+  const inner = fetchImpl(store);
+  const timesOut = async (url, options = {}) => {
+    if (String(url).includes('/fincapture/deposit/item')) throw new DOMException('timeout', 'TimeoutError');
+    return inner(url, options);
+  };
+  const result = await withEnv(productionPollFlags, () => handleProviderRequest(
+    jwtEvent('/functions/v1/checkalt-poll-status', 'POST', {}),
+    '/functions/v1/checkalt-poll-status',
+    'POST',
+    submitDeps(store, { fetchImpl: timesOut }),
+  ));
+  assert.equal(result.error, 'provider_egress_failed', JSON.stringify(result));
+  assert.deepEqual(store.deposits.map((row) => row.status), ['pending_approval', 'pending_approval', 'pending_approval']);
+});
+
+test('status refresh polls the least recently polled deposits first and stamps unresolved ones', () => {
+  const src = fs.readFileSync(path.join(ROOT, 'aws/functions/api/providers/production/checkalt-poll.mjs'), 'utf8');
+  assert.match(src, /ORDER BY CASE WHEN status = 'pending_approval' THEN 0 ELSE 1 END,\s+last_polled_at ASC NULLS FIRST,/);
+  assert.match(src, /\|\| \$1::jsonb,\s+last_polled_at = now\(\)\s+WHERE id = \$2::uuid/);
 });
