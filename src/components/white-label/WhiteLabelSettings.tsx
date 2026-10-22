@@ -97,7 +97,7 @@ function MyVerificationStatus() {
 export function WhiteLabelSettings() {
   const { tenant } = useTenant();
   const { user, loading } = useAuth();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState(() => {
     const tab = searchParams.get("tab");
     return !tab || tab === "ai-key" ? "profile" : tab;
@@ -175,7 +175,20 @@ export function WhiteLabelSettings() {
       <main className="max-w-3xl mx-auto p-4 md:p-8">
         <h1 className="text-xl font-bold mb-6">Settings</h1>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+        <Tabs
+          value={activeTab}
+          onValueChange={(tab) => {
+            setActiveTab(tab);
+            // Keep the tab in ?tab= so a refresh stays on it.
+            setSearchParams((prev) => {
+              const next = new URLSearchParams(prev);
+              if (tab === "profile") next.delete("tab");
+              else next.set("tab", tab);
+              return next;
+            }, { replace: true });
+          }}
+          className="space-y-6"
+        >
           <TabsList className="w-full flex-wrap h-auto gap-1 bg-muted/50">
             <TabsTrigger value="profile" className="text-xs gap-1"><Building2 className="h-3 w-3" />Profile</TabsTrigger>
             <TabsTrigger value="usage" className="text-xs gap-1"><Receipt className="h-3 w-3" />Usage</TabsTrigger>

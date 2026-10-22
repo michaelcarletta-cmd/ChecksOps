@@ -45,6 +45,7 @@ import {
   Sparkles, MessageSquare, ArrowLeft, ShieldAlert,
 } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useListViewState } from "@/hooks/useListViewState";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { toast as sonnerToast } from "sonner";
 import { Pencil, Check as CheckIcon, X, Plus } from "lucide-react";
@@ -301,7 +302,14 @@ export default function CheckCommandCenter() {
   const { tenantId, isWhiteLabel, applyFilter } = useTenantFilter();
   const canMoveChecks = useCanMoveChecks();
   const isMobile = useIsMobile();
-  const [activeTab, setActiveTab] = useState("endorsements");
+  const listView = useListViewState({ defaultTab: "endorsements" });
+  const activeTab = listView.tab;
+
+  const handleTabChange = useCallback((newTab: string) => {
+    listView.setTab(newTab);
+    setSelectedCheck(null);
+    setReviewCheckId(null);
+  }, [listView]);
   const [classFilter, setClassFilter] = useState<string>("all");
   const [selectedCheck, setSelectedCheck] = useState<string | null>(null);
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
@@ -1121,7 +1129,7 @@ export default function CheckCommandCenter() {
     if (currentCount > 0) return;
     const next = buckets.find((b) => b.count > 0);
     if (next && next.tab !== activeTab) {
-      setActiveTab(next.tab);
+      handleTabChange(next.tab);
       setSelectedCheck(null);
       setReviewCheckId(null);
     }
@@ -1229,7 +1237,7 @@ export default function CheckCommandCenter() {
         )}
       </div>
 
-      <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); setSelectedCheck(null); setReviewCheckId(null); }}>
+      <Tabs value={activeTab} onValueChange={handleTabChange}>
         {/* Unified gradient nav cards — all primary navigation */}
         <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-4 xl:grid-cols-9 gap-2 md:gap-3">
           {(() => {
@@ -1275,7 +1283,7 @@ export default function CheckCommandCenter() {
             return (
               <button
                 key={tab.key}
-                onClick={() => { setActiveTab(tab.key); setSelectedCheck(null); setReviewCheckId(null); }}
+                onClick={() => handleTabChange(tab.key)}
                 className={`relative flex flex-col items-center gap-1.5 rounded-xl p-4 transition-all duration-200 bg-gradient-to-br ${tab.gradient} border cursor-pointer ${
                   tab.key === "messages" ? "col-span-2 sm:col-span-1" : ""
                 } ${
@@ -1325,7 +1333,7 @@ export default function CheckCommandCenter() {
                 <TabsTrigger value="mortgage_cos" className="text-xs gap-1"><Building2 className="h-3 w-3" />Mortgage Cos</TabsTrigger>
                 <button
                   type="button"
-                  onClick={() => { setActiveTab("reissue"); setSelectedCheck(null); }}
+                  onClick={() => handleTabChange("reissue")}
                   className="text-xs gap-1 inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 font-medium ring-offset-background transition-all hover:bg-background/60"
                 >
                   <RotateCcw className="h-3 w-3" />Reissue{reissueRequested.length > 0 ? ` (${reissueRequested.length})` : ""}
@@ -1382,7 +1390,7 @@ export default function CheckCommandCenter() {
                   <HomeownerSubmittedChecksInbox 
                     tenantId={tenantId} 
                     onCheckCreated={(id) => {
-                      setActiveTab("review");
+                      handleTabChange("review");
                       setReviewCheckId(id);
                       // Trigger OCR for the new check (not partner ingest).
                       supabase.functions.invoke("check-ocr-intake", {
@@ -1406,7 +1414,7 @@ export default function CheckCommandCenter() {
             <Suspense fallback={<TabLoader />}>
               <CheckMessagesPanel
                 onOpenCheck={(id) => {
-                  setActiveTab("endorsements");
+                  handleTabChange("endorsements");
                   setSelectedCheck(id);
                 }}
               />
@@ -1936,7 +1944,7 @@ export default function CheckCommandCenter() {
             <span className="text-xs font-medium flex items-center gap-2">
               <RotateCcw className="h-3.5 w-3.5" /> Reissue requested ({reissueRequested.length})
             </span>
-            <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => { setActiveTab("manager"); setSelectedCheck(null); }}>
+            <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => handleTabChange("manager")}>
               Back to Manager
             </Button>
           </div>

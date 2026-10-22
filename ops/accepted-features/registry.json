@@ -67,18 +67,18 @@
           "must_match": "showSendingDomain"
         },
         {
-          "id": "branding-admin-branding-email-present",
+          "id": "branding-admin-no-branding-tab",
           "kind": "source_marker",
-          "title": "Admin Branding & Email remains present",
+          "title": "Tenant Management has no Branding & Email tab (the company edits its own branding)",
           "file": "src/pages/admin/AdminTenants.tsx",
-          "must_match": "Branding & Email"
+          "must_not_match": "Branding & Email|value=\"branding\"|BrandingTab"
         },
         {
-          "id": "branding-admin-email-sender-mounted",
+          "id": "branding-admin-no-email-sender",
           "kind": "source_marker",
-          "title": "Admin Branding & Email mounts EmailSenderSettings",
+          "title": "Tenant Management does not mount EmailSenderSettings",
           "file": "src/pages/admin/AdminTenants.tsx",
-          "must_match": "<EmailSenderSettings"
+          "must_not_match": "EmailSenderSettings"
         },
         {
           "id": "branding-public-url-resolver",
@@ -129,8 +129,8 @@
             "branding-tenant-email-mounted",
             "branding-tenant-show-sending-domain-false",
             "branding-tenant-sending-subdomain-hidden",
-            "branding-admin-branding-email-present",
-            "branding-admin-email-sender-mounted",
+            "branding-admin-no-branding-tab",
+            "branding-admin-no-email-sender",
             "branding-public-url-resolver",
             "branding-email-preview-public-logo"
           ]
@@ -143,8 +143,42 @@
       ],
       "required_contracts": [],
       "applicable_artifact_types": ["spa", "lambda"],
-      "supersession_history": [],
-      "notes": "Accepted evaluate-only. Invariants record the #708 tenant remount plus the #709 Email Preview public-logo contract. Enforcement remains disabled; acceptance does not block merge or deploy. Release 2026-10-17 (not a supersession): Company Information and Document Letterhead save on the tenant's own row (aws/workflows/sql/93_tenant_company_info.sql) and the tenant-company-branding-save route answers 410 route_retired; every accepted Branding invariant still holds. Moving restore authority off #713 needs an explicit supersession record with the merged review PR."
+      "supersession_history": [
+        {
+          "from_feature_id": "branding",
+          "from_authority": {
+            "kind": "accepted_source",
+            "git_sha": "9ecde8eae66c3897c9a8ec7f8b943948c5cff9aa",
+            "merged_pr": 713,
+            "evidence_path": "aws/tests/email-preview-logo-url.test.mjs",
+            "restore_authority": false,
+            "notes": "#713 accepted the admin Branding & Email tab in Tenant Management (invariants branding-admin-branding-email-present and branding-admin-email-sender-mounted). Superseded for those two invariants only; every tenant-side and Email Preview invariant is unchanged."
+          },
+          "to_authority": {
+            "kind": "supersession",
+            "git_sha": "6f37c4350aa71faf9cd0d88bf2d7e8ec1f440468",
+            "merged_pr": 1171,
+            "evidence_path": "aws/tests/settings-branding-company-restore.test.mjs",
+            "restore_authority": true,
+            "notes": "Commit that removes the Branding & Email tab and the EmailSenderSettings mount from src/pages/admin/AdminTenants.tsx."
+          },
+          "reason": "Owner decision 2026-10-22: only the company controls its branding, in its own settings. Tenant Management keeps no Branding & Email tab; its email-branding card loaded and saved the platform owner's filtered tenant (useTenantFilter), not the tenant being viewed.",
+          "approving_workstream_id": "owner-2026-10-22-tenant-management-branding",
+          "review_pr": 1171,
+          "updated_invariant_ids": [
+            "branding-admin-no-branding-tab",
+            "branding-admin-no-email-sender",
+            "branding-intended-invariants"
+          ],
+          "updated_tests": [
+            "aws/tests/accepted-features-registry.test.mjs",
+            "aws/tests/settings-branding-company-restore.test.mjs"
+          ],
+          "committed_at": "2026-10-22T21:35:30Z",
+          "commit": "6f37c4350aa71faf9cd0d88bf2d7e8ec1f440468"
+        }
+      ],
+      "notes": "Accepted evaluate-only. Invariants record the #708 tenant remount plus the #709 Email Preview public-logo contract. Superseded in part by #1171 (owner, 2026-10-22): Tenant Management has no Branding & Email tab; the tenant-side Branding tab is unchanged. Enforcement remains disabled; acceptance does not block merge or deploy. Release 2026-10-17 (not a supersession): Company Information and Document Letterhead save on the tenant's own row (aws/workflows/sql/93_tenant_company_info.sql) and the tenant-company-branding-save route answers 410 route_retired; every accepted Branding invariant still holds. Moving restore authority off #713 needs an explicit supersession record with the merged review PR."
     },
     {
       "feature_id": "signature-requests",

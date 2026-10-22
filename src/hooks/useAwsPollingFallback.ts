@@ -12,7 +12,9 @@ export function useAwsPollingFallback(
   intervalMs = 15_000,
 ) {
   useEffect(() => {
-    if (!enabled || !isAwsStaging()) return;
+    // `vite build --mode aws` always uses the AWS adapter (whose realtime
+    // channel is a no-op), even if VITE_AUTH_PROVIDER were left unset.
+    if (!enabled || !(isAwsStaging() || import.meta.env.MODE === "aws")) return;
     const id = window.setInterval(() => {
       try {
         onTick();

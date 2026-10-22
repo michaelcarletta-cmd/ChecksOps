@@ -13,6 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Upload, X, Image, RefreshCw, CheckCircle2, Clock, Eye } from "lucide-react";
 import { CheckImageCropper } from "@/components/checks/CheckImageCropper";
+import { refreshCheckQueues } from "@/lib/checkQueueRefresh";
 
 interface Props {
   cashJobId: string;
@@ -145,6 +146,9 @@ export function CashJobCheckUpload({
       setPaymentClass("initial_deposit");
       setShowForm(false);
       qc.invalidateQueries({ queryKey: ["cash-job-checks", cashJobId] });
+      // The check also lands in the Command Center Review queue. That page is
+      // usually not mounted here, so refetch its cached queries too.
+      void refreshCheckQueues(qc, { includeInactive: true });
 
     } catch (err: any) {
       toast({ title: "Upload failed", description: err.message, variant: "destructive" });
