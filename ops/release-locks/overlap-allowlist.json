@@ -2501,6 +2501,13 @@
       "reason": "The Check Alt approve reconcile history fix changes reconcileProductionCheckAltDeposit in aws/functions/api/providers/production/checkalt-poll.mjs (history request fields and window, the shared resolveSsoKey moved from checkalt-submit.mjs, non-secret reconciliation diagnostics), which made production approve on reference 127491751 answer reconciliation_required on 2026-10-22; the fix has to live in that file, so moving code to a new module cannot avoid the overlap. It overlaps the still-open Cursor-era PR #322 (opened 2026-09-14, last updated 2026-09-14, branch cursor/checkalt-golive-gate-c48b), which predates the current main and must rebase before any merge. Allow review while that PR remains open. It does not merge, edit or deploy PR #322.",
       "expires": "2026-12-31",
       "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 1089,
+      "path": "src/pages/CheckCommandCenter.tsx",
+      "reason": "The Check Alt auto-approve always-on change renames one Manager Hub TabsTrigger label in src/pages/CheckCommandCenter.tsx from \"Pending Approvals\" to \"Waiting in Check Alt\" (owner decision 2026-10-22: auto-approve is always on, a still-pending deposit is reviewed in the Check Alt portal); the label lives only in that file, so moving code cannot avoid the overlap. Open PR #1089 (claude/check-center-tab-persistence-and-upload-reactivity, opened 2026-10-20) changes other lines of the same file (tab state in ?tab= and tenant-scoped check-intake-items invalidations) and does not touch the Manager Hub tab list. Whichever PR merges second must rebase onto main and re-run validate-release-locks.mjs (partner-sharing tree_hash). It does not merge, edit or deploy PR #1089.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
     }
   ]
 }
