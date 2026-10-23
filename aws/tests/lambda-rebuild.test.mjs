@@ -95,6 +95,10 @@ const CHANGED_SINCE_SECOND_REBUILD = {
   // Platform Finance P&L accuracy (2026-10-23): calendar-month buckets, production money only;
   // a REPLACE member of the production overlay plan, not a rebuild section.
   'providers/parity/platform-finance.mjs': 'changed',
+  // Moov payees (2026-10-23, SQL 113): the catalog adds moov-recipient-link-resend and opens
+  // homeowner-bank-link-send for the added providers/payees handlers; a REPLACE member of the
+  // production overlay plan when it is deployed, not a rebuild section.
+  'providers/catalog.mjs': 'changed',
 };
 // Listed changes that go through the production overlay plan, never the current rebuild section.
 const OVERLAY_PLAN_CHANGES = new Set([
@@ -108,6 +112,7 @@ const OVERLAY_PLAN_CHANGES = new Set([
   'workflow-rpc.mjs',
   'providers.mjs',
   'providers/parity/platform-finance.mjs',
+  'providers/catalog.mjs',
 ]);
 const assertSectionAcceptedIsMain = (apiRoot, name, accepted) => {
   const onMain = sha256(fs.readFileSync(path.join(apiRoot, name)));

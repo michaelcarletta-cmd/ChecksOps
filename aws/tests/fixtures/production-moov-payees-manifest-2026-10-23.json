@@ -1,0 +1,71 @@
+{
+  "workstream_id": "production-moov-payees",
+  "authorization": "Pending owner review (2026-10-23). Planning only: nothing is live or verified. Each production apply still needs its own owner approval and staging acceptance, and production payees stay off until SQL 113 is applied in production and AWS_MOOV_PAYEES_PRODUCTION_ENABLED is set.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Moov payees API (SQL 113): a homeowner or a Settings stakeholder (individual KYC or business KYB) a tenant pays is set up as a Moov payee through a secure emailed /pay-setup/:token link, without a ChecksOps login, and becomes payable only through aws_payee_apply_status(verified) once Moov verifies it. ADD providers/payees/flags.mjs, moov.mjs, email.mjs and handlers.mjs (imports only members already live), then REPLACE providers/catalog.mjs (adds moov-recipient-link-resend, opens homeowner-bank-link-send; live 43ada7ec since the 2026-10-21 production rebuild run 39636816351, lambda-rebuild-plan.json) and providers.mjs last (routes the payee names before the production hard block; live a72a583a since production run 39988166380, the Platform Finance applied manifest). Inert in production: payeeDeployment() is null unless AWS_MOOV_PAYEES_PRODUCTION_ENABLED is the string \"true\" (default off), so every payee name keeps answering production_execution_blocked. SQL 113 is applied in staging only; its production inspect, pin and apply are separate guarded steps that must precede the flag. Not authorized, not applied.",
+  "members": {
+    "providers/payees/flags.mjs": {
+      "live_sha256": null,
+      "accepted_sha256": "958ed63bc1a2bc0367961fdf1cb387e09df633b6634b1be85e71811d6d7735e1",
+      "operation": "add",
+      "required_imports": [
+        "provider-flags.mjs",
+        "sandbox-flags.mjs"
+      ]
+    },
+    "providers/payees/moov.mjs": {
+      "live_sha256": null,
+      "accepted_sha256": "008dc43d1e7112889c85a33022a49c9f32b64e5548f6ba370efdc64a75be7d2f",
+      "operation": "add",
+      "required_imports": [
+        "providers/parity/moov-client.mjs",
+        "providers/parity/moov-capabilities.mjs",
+        "providers/onboarding/moov-sync.mjs",
+        "providers/moov-recipient-tos-policy.mjs"
+      ]
+    },
+    "providers/payees/email.mjs": {
+      "live_sha256": null,
+      "accepted_sha256": "e2ecb320d72bda8833bc54cf90aa0f85ec797415ed4bd0160e1fe96b9c5fcb0e",
+      "operation": "add",
+      "required_imports": [
+        "email-layout.mjs",
+        "email-branding.mjs"
+      ]
+    },
+    "providers/payees/handlers.mjs": {
+      "live_sha256": null,
+      "accepted_sha256": "59f6a4e0fb3a72a638ea9feb4751240b0c4926ba66ef594e5b60790e8f820b9d",
+      "operation": "add",
+      "required_imports": [
+        "providers/parity/moov-client.mjs",
+        "providers/parity/caller.mjs",
+        "providers/moov-recipient-tos-policy.mjs",
+        "providers/onboarding/crypto.mjs",
+        "providers/onboarding/context.mjs",
+        "providers/onboarding/redact.mjs",
+        "providers/onboarding/store.mjs",
+        "cognito.mjs",
+        "data.mjs",
+        "email.mjs",
+        "email-branding.mjs",
+        "secrets.mjs",
+        "db-health.mjs",
+        "providers/payees/flags.mjs",
+        "providers/payees/moov.mjs",
+        "providers/payees/email.mjs"
+      ]
+    },
+    "providers/catalog.mjs": {
+      "live_sha256": "43ada7ec092497fabfcd127db37d7ca25dbfe9063a61a8be713e2b62167dd561",
+      "accepted_sha256": "91f9ea543d484f6daa584ec76a99218fecfccb8f628546c165a448e968bcc969",
+      "operation": "replace"
+    },
+    "providers.mjs": {
+      "live_sha256": "a72a583af99efff5cf9d5bba9f139080f947e04ed50a0f20ce3c2275037b40dc",
+      "accepted_sha256": "6b002711f93aecea35956b1ff137367b67655c9f0a3d2659308ae56e75c51e8a",
+      "operation": "replace"
+    }
+  }
+}

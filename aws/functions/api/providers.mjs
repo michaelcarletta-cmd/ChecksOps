@@ -34,6 +34,7 @@ import { providerSandboxExecutionEnabled } from './sandbox-flags.mjs';
 import { hasParityHandler, runParityHandler } from './providers/parity/dispatch.mjs';
 import { handleMoovOnboarding, isOnboardingFunction } from './providers/onboarding/handlers.mjs';
 import { moovOnboardingProductionEnabled } from './providers/onboarding/flags.mjs';
+import { handlePayeeFunction, isPayeeFunction } from './providers/payees/handlers.mjs';
 import { hasProductionCheckAltHandler, runProductionCheckAltHandler } from './providers/production/checkalt-dispatch.mjs';
 import { gateProviderDeposit } from './tenant-deposits-gate.mjs';
 import { productionCheckAltAmbiguousMode, productionCheckAltExecutionAllowed } from './providers/production/checkalt-holds.mjs';
@@ -354,6 +355,14 @@ export const handleFunctionInvoke = async (event, name, deps = {}) => {
     const productionOnboarding = executionAllowed('moov') && moovOnboardingProductionEnabled();
     const sandboxOnboarding = !executionAllowed('moov') && providerSandboxExecutionEnabled();
     if (productionOnboarding || sandboxOnboarding) return handleMoovOnboarding(name, event, deps);
+  }
+
+  // Moov payees (SQL 113): staging sandbox, production only with
+  // AWS_MOOV_PAYEES_PRODUCTION_ENABLED; otherwise null and the hard block below
+  // answers. The public (link token) names need no identity.
+  if (spec.provider === 'moov' && isPayeeFunction(name)) {
+    const payee = await handlePayeeFunction(name, event, deps);
+    if (payee) return payee;
   }
 
   // Production WalletOps balance refresh: Moov GETs only, updates only the

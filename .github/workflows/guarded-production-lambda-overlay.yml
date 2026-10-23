@@ -111,6 +111,10 @@ on:
           - providers/production/moov-invoice.mjs
           - providers/parity/platform-finance.mjs
           - providers/production/platform-finance.mjs
+          - providers/payees/flags.mjs
+          - providers/payees/moov.mjs
+          - providers/payees/email.mjs
+          - providers/payees/handlers.mjs
           - providers/production/moov-wallet-fund.mjs
           - providers/production/moov-send.mjs
           - providers.mjs
