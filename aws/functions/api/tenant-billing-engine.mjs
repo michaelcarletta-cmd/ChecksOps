@@ -183,6 +183,19 @@ export const netFeeCents = (rateCents, discountCents) => (
   Math.max(0, Number(rateCents || 0) - Number(discountCents || 0))
 );
 
+/**
+ * The monthly maintenance discount (owner decisions 2026-10-22, SQL 111): the
+ * discount the platform owner sets by hand (tenants.referral_discount_cents) plus
+ * the referral credit (aws_tenant_referral_credit_cents: $5.00 per company that
+ * used the tenant's code, at most $25.00), never more than the monthly rate, so
+ * maintenance never goes below $0.00 and usage fees are never reduced.
+ */
+export const maintenanceDiscountCents = (tenant) => Math.min(
+  Math.max(0, Number(tenant?.referral_discount_cents || 0))
+    + Math.max(0, Number(tenant?.referral_credit_cents || 0)),
+  Math.max(0, Number(tenant?.monthly_rate_cents || 0)),
+);
+
 const fail = (error, extra = {}) => ({ ok: false, error, ...extra });
 
 export const parseRateCents = (value, field) => {
@@ -389,6 +402,15 @@ export async function loadTenantBillingContext(client, tenantId) {
     [tenantId],
   )).rows[0];
   if (!tenant) return fail('tenant_not_found', { statusCode: 404 });
+  // SQL 111. Before it is applied (or for an identity it refuses) no row comes back
+  // and the credit is 0: the hand-set discount alone, as before.
+  const credit = (await optionalQuery(
+    client,
+    'tenant_referral_credit_read',
+    'SELECT public.aws_tenant_referral_credit_cents($1::uuid) AS referral_credit_cents',
+    [tenantId],
+  )).rows[0];
+  tenant.referral_credit_cents = Math.max(0, Number(credit?.referral_credit_cents || 0));
   const settings = (await optionalQuery(
     client,
     'tenant_billing_settings_read',
@@ -450,7 +472,8 @@ export async function evaluateBillingReadiness(client, {
   const ctx = await loadTenantBillingContext(client, tenantId);
   if (!ctx.ok) return ctx;
   const { tenant, settings, authorization, checkDefaultCents } = ctx;
-  const amountCents = netFeeCents(tenant.monthly_rate_cents, tenant.referral_discount_cents);
+  const discountCents = maintenanceDiscountCents(tenant);
+  const amountCents = netFeeCents(tenant.monthly_rate_cents, discountCents);
   const reasons = [];
   if (String(tenant.subscription_status || '') !== 'active') reasons.push('tenant_inactive');
   if (settings.billing_enabled !== true) reasons.push('billing_paused');
@@ -519,7 +542,8 @@ export async function evaluateBillingReadiness(client, {
     authorization,
     amountCents,
     rateCents: Number(tenant.monthly_rate_cents || 0),
-    discountCents: Number(tenant.referral_discount_cents || 0),
+    discountCents,
+    referralCreditCents: Number(tenant.referral_credit_cents || 0),
     maintenanceNetCents: amountCents,
     perCheckRateCents: resolveCheckRateCents(tenant, checkDefaultCents),
     nextDayRateCents: resolveNextDayRateCents(tenant),
@@ -854,7 +878,7 @@ export function assembleInvoiceTotals({
   checkDefaultCents = null,
 }) {
   const maintenance_rate_cents = Number(tenant.monthly_rate_cents || 0);
-  const discount_cents = Number(tenant.referral_discount_cents || 0);
+  const discount_cents = maintenanceDiscountCents(tenant);
   const maintenance_net_cents = netFeeCents(maintenance_rate_cents, discount_cents);
   const check_usage_cents = sumCents(checks);
   const next_day_usage_cents = sumCents(nextDay);
@@ -2476,7 +2500,9 @@ export async function buildTenantBillingSnapshot(client, tenantId, dest, { now =
     },
     monthly_rate_cents: Number(ctx.tenant.monthly_rate_cents || 0),
     referral_discount_cents: Number(ctx.tenant.referral_discount_cents || 0),
-    net_fee_cents: netFeeCents(ctx.tenant.monthly_rate_cents, ctx.tenant.referral_discount_cents),
+    referral_credit_cents: Number(ctx.tenant.referral_credit_cents || 0),
+    maintenance_discount_cents: maintenanceDiscountCents(ctx.tenant),
+    net_fee_cents: netFeeCents(ctx.tenant.monthly_rate_cents, maintenanceDiscountCents(ctx.tenant)),
     per_check_rate_cents: resolveCheckRateCents(ctx.tenant, ctx.checkDefaultCents),
     check_billing_default_cents: ctx.checkDefaultCents,
     // SQL 98 deposits switch (platform owner sets it; NOT NULL DEFAULT true).

@@ -1,0 +1,14 @@
+{
+  "workstream_id": "referral-billing-engine-credit",
+  "authorization": "Pending owner review (2026-10-23). Planning only: nothing is live or verified. Each production apply still needs its own owner approval and staging acceptance.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "tenant-billing-engine.mjs applies the SQL 111 referral credit: the maintenance discount is min(tenants.referral_discount_cents + aws_tenant_referral_credit_cents(tenant), tenants.monthly_rate_cents), read inside a SAVEPOINT so a missing or refusing function leaves the hand-set discount alone. live_sha256 is main's bytes since f039ad6c3 and the member of the live package (lambda:GetFunction 2026-10-23T01:44Z, checksops-production-prep-api CodeSha256 6YGMbhu9T8uw9tVJcMx12/x/GguD4vtGlUBrQes/kj4=, LastModified 2026-10-22T18:37:37Z; checksops-staging-api the same CodeSha256). The guarded overlay inspect re-reads it before any apply.",
+  "members": {
+    "tenant-billing-engine.mjs": {
+      "live_sha256": "338f93e1122d35e4929655b7418d65a6d14b51f5f61fe38812c1f2234be81d94",
+      "accepted_sha256": "43d9a162445bf8e84824d4f60180cbcfab7b0cdae54cee1caf127a9fbb17f7f3",
+      "operation": "replace"
+    }
+  }
+}
