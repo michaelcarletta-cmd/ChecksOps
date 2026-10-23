@@ -61,7 +61,8 @@ export const STAGING_WAVE1 = Object.freeze({
   // Wave 14 (owner approved 2026-10-23, "Apply SQL 113 to staging"): SQL 113 production payee
   // setup. Read at main ac2860a5a after the executor carried it: the six functions and seven payee
   // columns absent, checksops SELECT and UPDATE on external_payment_recipients.
-  sql113: Object.freeze({ wave: 14, approved: '2026-10-23', run: '40018316361', live: '88787a89c85585f25c18ea31d60740a6526522377a1b0d7b02e7902fe18970c1' }),
+  // Applied by the guarded staging executor run 40022413642 (receipt 88787a89… -> 5984d321…).
+  sql113: Object.freeze({ wave: 14, approved: '2026-10-23', run: '40018316361', live: '88787a89c85585f25c18ea31d60740a6526522377a1b0d7b02e7902fe18970c1', apply_run: '40022413642' }),
   sql98: Object.freeze({ wave: 3, approved: '2026-10-18', run: '39083278136', live: '296c3d6a274e10f66005fb9eaecf93fa17b81bd8db3607037ca07698fddd3275', apply_run: '39085677318' }),
 });
 
