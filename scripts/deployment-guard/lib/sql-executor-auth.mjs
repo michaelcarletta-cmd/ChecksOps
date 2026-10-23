@@ -2470,6 +2470,33 @@ export const AUTHORIZED_SQL112_MOOV_INVOICE_TABLE_GRANTS = Object.freeze({
   function_identities: Object.freeze([]),
 });
 
+// Payee setup 2026-10-23 staging pin: SQL 113 (the payee state columns on
+// external_payment_recipients, origin provider_recipient in stakeholder_accounts_origin_check,
+// SELECT on external_payment_recipients for checksops and authenticated, and six SECURITY DEFINER
+// payee functions, EXECUTE checksops only). No predecessor. Pending until a reviewed pin change
+// records a staging read-live.
+export const AUTHORIZED_SQL113_PAYEE_SETUP = Object.freeze({
+  key: 'sql113',
+  filename: 'aws/workflows/sql/113_payee_setup.sql',
+  migration_id: '113_payee_setup',
+  // The commit that last authored the file bytes.
+  commit: '700feee792e4075aa7189c69bf8a8dfdfc59a0e4',
+  source_sha256: '871d953df9ebb066601993ea6c36ec8162bd9664b813f27eccbf972e07d9f3ad',
+  authorization: 'pending',
+  execute: false,
+  expected_live_definition_sha256: null,
+  // Code-derived: releaseIntendedHash('sql113', file bytes) (release-sql-state.mjs); re-derived by the tests.
+  intended_replacement_sha256: '5984d321197bd03552da656381ea47b67220d8f0accac10214aa392fd26f81d7',
+  function_identities: Object.freeze([
+    'public.aws_payee_create(uuid, uuid, text, text, text, text, text, text, text, timestamp with time zone, uuid, uuid)',
+    'public.aws_payee_reissue_link(uuid, text, timestamp with time zone)',
+    'public.aws_payee_disconnect(uuid)',
+    'public.aws_public_payee_by_token(text)',
+    'public.aws_public_payee_record(text, text, jsonb)',
+    'public.aws_payee_apply_status(text, text, text)',
+  ]),
+});
+
 export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql90: AUTHORIZED_SQL90_USERS_ONLY_TENANT_ROLES,
   sql91: AUTHORIZED_SQL91_MOOV_ONBOARDING,
@@ -2493,6 +2520,7 @@ export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql110: AUTHORIZED_SQL110_HOMEOWNER_PRECLAIM_LINKS,
   sql111: AUTHORIZED_SQL111_TENANT_REFERRAL_CODES,
   sql112: AUTHORIZED_SQL112_MOOV_INVOICE_TABLE_GRANTS,
+  sql113: AUTHORIZED_SQL113_PAYEE_SETUP,
 });
 
 // The fee collection pin under its earlier map name (the same object as the release map's sql98).
@@ -2508,7 +2536,7 @@ export function isSql30TenantDocumentsDocType(input = {}) {
   return pinIdentifiersMatch(input, AUTHORIZED_SQL30_TENANT_DOCUMENTS_DOC_TYPE);
 }
 
-/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql112) an input names, or null. */
+/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql113) an input names, or null. */
 export function releaseSqlMigrationKey(input = {}) {
   return Object.keys(RELEASE_2026_10_17_PENDING_SQL_PINS)
     .find((key) => pinIdentifiersMatch(input, RELEASE_2026_10_17_PENDING_SQL_PINS[key])) || null;
