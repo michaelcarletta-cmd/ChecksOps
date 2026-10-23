@@ -406,7 +406,20 @@ async function walletPayload({ accountId, environment, fetchImpl }) {
   };
 }
 
-async function pnlPayload(client) {
+/**
+ * Transfer statuses that are not money moved: never sent to the provider (ready),
+ * stopped (failed, canceled) or sent back (returned, reversed).
+ */
+export const PNL_EXCLUDED_TRANSFER_STATUSES = Object.freeze(['ready', 'failed', 'cancelled', 'canceled', 'returned', 'reversed']);
+
+/** Calendar month (UTC) as YYYY-MM; pg hands timestamptz back as a Date, not ISO text. */
+export function pnlMonthOf(value) {
+  if (!value) return 'unknown';
+  const at = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(at.getTime()) ? 'unknown' : at.toISOString().slice(0, 7);
+}
+
+async function pnlPayload(client, { environment = null } = {}) {
   const empty = () => ({
     fees_cents: 0,
     transfer_fees_cents: 0,
@@ -426,8 +439,12 @@ async function pnlPayload(client) {
   let fees = [];
   let transfers = [];
   try {
-    tenants = (await client.query('SELECT id, name FROM public.tenants')).rows;
-  } catch { /* optional */ }
+    tenants = (await client.query('SELECT id, name, is_test_account FROM public.tenants')).rows;
+  } catch {
+    try {
+      tenants = (await client.query('SELECT id, name FROM public.tenants')).rows;
+    } catch { /* optional */ }
+  }
   try {
     fees = (await client.query(
       `SELECT tenant_id, amount_cents, occurred_at, fee_code, status
@@ -437,16 +454,25 @@ async function pnlPayload(client) {
     )).rows;
   } catch { /* optional */ }
   try {
+    // Only this environment's money: production P&L never counts sandbox (test account) transfers.
     transfers = (await client.query(
-      `SELECT tenant_id, amount_cents, provider_fee_cents, platform_fee_cents, status, created_at
-         FROM public.payment_transfers
-        WHERE created_at >= $1`,
-      [sinceIso],
+      environment
+        ? `SELECT tenant_id, amount_cents, provider_fee_cents, platform_fee_cents, status, created_at
+             FROM public.payment_transfers
+            WHERE created_at >= $1 AND environment = $2`
+        : `SELECT tenant_id, amount_cents, provider_fee_cents, platform_fee_cents, status, created_at
+             FROM public.payment_transfers
+            WHERE created_at >= $1`,
+      environment ? [sinceIso, environment] : [sinceIso],
     )).rows;
   } catch { /* optional */ }
 
   const nameById = new Map((tenants || []).map((row) => [row.id, row.name]));
-  const monthOf = (iso) => (iso ? String(iso).slice(0, 7) : 'unknown');
+  // Production P&L leaves out demo (test account) organizations: they run on the sandbox ledger.
+  const excludedTenants = new Set(environment === 'production'
+    ? (tenants || []).filter((row) => row.is_test_account === true).map((row) => row.id)
+    : []);
+  const monthOf = pnlMonthOf;
   const byMonth = new Map();
   const byTenant = new Map();
   const bump = (map, key) => {
@@ -455,13 +481,15 @@ async function pnlPayload(client) {
   };
   for (const fee of fees || []) {
     if (String(fee.status || '').toLowerCase() === 'void') continue;
+    if (excludedTenants.has(fee.tenant_id)) continue;
     const amount = Number(fee.amount_cents || 0);
     bump(byMonth, monthOf(fee.occurred_at)).fees_cents += amount;
     bump(byTenant, fee.tenant_id || 'unassigned').fees_cents += amount;
   }
   for (const transfer of transfers || []) {
     const status = String(transfer.status || '').toLowerCase();
-    if (['failed', 'cancelled', 'canceled'].includes(status)) continue;
+    if (PNL_EXCLUDED_TRANSFER_STATUSES.includes(status)) continue;
+    if (excludedTenants.has(transfer.tenant_id)) continue;
     for (const bucket of [bump(byMonth, monthOf(transfer.created_at)), bump(byTenant, transfer.tenant_id || 'unassigned')]) {
       bucket.transfer_fees_cents += Number(transfer.platform_fee_cents || 0);
       bucket.provider_cost_cents += Number(transfer.provider_fee_cents || 0);
@@ -577,7 +605,7 @@ async function runPlatformFinance({ client, body, ctx, fetchImpl }) {
       environment,
       identity: 'checksops_facilitator',
       tenant_context_used: false,
-      pnl: await pnlPayload(client),
+      pnl: await pnlPayload(client, { environment }),
       liveProviderCalled: false,
       ach_initiated: false,
       fee_pull: false,
@@ -585,7 +613,7 @@ async function runPlatformFinance({ client, body, ctx, fetchImpl }) {
   }
   const [wallet, pnl] = await Promise.all([
     walletPayload({ accountId, environment, fetchImpl }),
-    pnlPayload(client),
+    pnlPayload(client, { environment }),
   ]);
   return jsonResult({
     success: true,

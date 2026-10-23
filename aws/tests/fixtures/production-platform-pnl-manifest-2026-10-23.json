@@ -1,0 +1,14 @@
+{
+  "workstream_id": "production-platform-pnl",
+  "authorization": "Pending owner review (2026-10-23). Planning only: nothing is live or verified. The production apply needs its own owner approval and staging acceptance.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Owner report 2026-10-23 (screenshot of Tenant Management > Platform Finance > Wallet & P&L): every Monthly profit & loss row reads Invalid Date. Root cause in providers/parity/platform-finance.mjs pnlPayload: monthOf took String(value).slice(0, 7), but pg returns timestamptz columns as Date objects, so keys were weekday-month strings such as 'Fri Oct' (rows split by weekday, and the panel's YYYY-MM label parser shows Invalid Date). The same function also counted every payment_transfers row regardless of environment (sandbox test-account transfers in the production totals), counted test-account organizations' fees, and counted transfers that never moved money (ready) or came back (returned, reversed). The fix keys months by UTC calendar month (YYYY-MM), filters transfers to the running environment, leaves test-account organizations out of production P&L, and excludes ready, failed, canceled, cancelled, returned and reversed transfers. The top cards were already summed across all rows; they change only where sandbox, test-account or unsent rows exist. Expected live 746c89a6 is main's bytes since the 2026-10-21 live reconciliation (read-only production inspect run 39577337627 found the live module verbatim); the guarded REPLACE refuses if the live member differs. No SQL change; no money moves.",
+  "members": {
+    "providers/parity/platform-finance.mjs": {
+      "live_sha256": "746c89a69077463abd97f3f1a0beed23ba2d0eb17462c19ca75defd6e6fed0fb",
+      "accepted_sha256": "5b1ccfdb010d2ca3aab4ec22d3e958e7738623825c076d9531cb95c59c23d7e8",
+      "operation": "replace"
+    }
+  }
+}
