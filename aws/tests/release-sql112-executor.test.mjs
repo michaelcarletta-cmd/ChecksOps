@@ -4,8 +4,9 @@
  * release-sql90-97-executor.test.mjs runs what every release key shares (SQL 112 included); this
  * file covers what is new:
  *
- *   - the pin: pending (no read-live yet), code-derived, selectable, packed, in step with the
- *     production pin; the pinned commit authored the bytes; no predecessor;
+ *   - the pin: staging-authorized from its read-live (wave 13), code-derived, selectable, packed,
+ *     in step with the production pin (execute-authorized on the staging apply); the pinned
+ *     commit authored the bytes; no predecessor;
  *   - the spec's two table_privileges entries (SQL 112 creates or replaces no function): the
  *     fingerprint is the SELECT / INSERT / UPDATE / DELETE lines of checksops and authenticated
  *     on moov_invoices and their SELECT / INSERT lines on moov_invoice_customers; any subset of
@@ -152,8 +153,13 @@ test('pin: SQL 112 staging-authorized from its read-live, code-derived, selectab
   assert.equal(prod.staging_pin_commit, pin.commit);
   assert.equal(prod.source_sha256, pin.source_sha256);
   assert.deepEqual(prod.predecessors, []);
-  assert.equal(prod.execute, false);
-  assert.equal(prod.expected_live_definition_sha256, null);
+  // Production pin execute-authorized (owner-approved pin change of 2026-10-23) on the staging apply;
+  // production's pre-state differs from staging's (checksops already held every line there).
+  assert.equal(prod.execute, true);
+  assert.match(prod.authorization, /^Owner approved 2026-10-23 /);
+  assert.equal(prod.expected_live_definition_sha256, 'a61983121c4739f38084c66c6aaafcb67968b008526ff0c69459713280292acd');
+  assert.notEqual(prod.expected_live_definition_sha256, pin.expected_live_definition_sha256);
+  assert.notEqual(prod.expected_live_definition_sha256, prod.intended_replacement_sha256);
   let bytes = null;
   if (/^[0-9a-f]{40}$/.test(pin.commit)) {
     try {
