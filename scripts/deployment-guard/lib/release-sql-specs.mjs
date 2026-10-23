@@ -1,5 +1,5 @@
 /**
- * Specs of the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108 to SQL 112) for the shared engine in
+ * Specs of the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108 to SQL 113) for the shared engine in
  * release-sql-state.mjs: what each pinned file creates, replaces or drops, the reviewed
  * EXECUTE ACLs, the prerequisites and predecessors, and the PostgreSQL renderings the file
  * leaves (policy expressions, view, column, constraint, index and trigger definitions as
@@ -3824,6 +3824,263 @@ export const RELEASE_SQL_SPECS = deepFreeze({
     "altered_relations": [
       "public.moov_invoices",
       "public.moov_invoice_customers"
+    ]
+  },
+  // SQL 113: production payee setup (a homeowner or Settings stakeholder set up as a Moov payee
+  // through a secure link, payable only once Moov verifies it). Adds the payee state columns to
+  // external_payment_recipients (added_columns; no PII), allows origin provider_recipient in
+  // stakeholder_accounts_origin_check (the file replaces it only from the exact four-value
+  // definition of supabase 20260728110453 and refuses any other), grants SELECT on
+  // external_payment_recipients to checksops and authenticated (table_privileges; every other
+  // grant on the table must stay as it was), and creates six SECURITY DEFINER functions (EXECUTE:
+  // checksops and the owner only) that write the three payee tables under RLS (definer_writes).
+  // No policy, RLS flag or other table changes. No predecessor.
+  sql113: {
+    "key": "sql113",
+    "label": "SQL 113",
+    "choice": "sql113-payee-setup",
+    "production_pin_rel": "ops/deployment-guard/sql113-payee-setup-production-apply.json",
+    "script": "sql113-payee-setup-production-apply",
+    "prerequisites": [
+      "public.external_payment_recipients",
+      "public.stakeholder_accounts",
+      "public.payment_provider_methods",
+      "public.tenants",
+      "public.tenant_users",
+      "public.aws_user_tenant_ids()",
+      "auth.uid()",
+      "role checksops",
+      "role authenticated",
+      "column public.external_payment_recipients.id",
+      "column public.external_payment_recipients.tenant_id",
+      "column public.external_payment_recipients.provider",
+      "column public.external_payment_recipients.environment",
+      "column public.external_payment_recipients.display_name",
+      "column public.external_payment_recipients.email",
+      "column public.external_payment_recipients.recipient_type",
+      "column public.external_payment_recipients.relationship",
+      "column public.external_payment_recipients.provider_account_id",
+      "column public.external_payment_recipients.onboarding_status",
+      "column public.external_payment_recipients.secure_token",
+      "column public.external_payment_recipients.token_expires_at",
+      "column public.external_payment_recipients.token_used_at",
+      "column public.external_payment_recipients.claim_id",
+      "column public.external_payment_recipients.check_id",
+      "column public.external_payment_recipients.created_by",
+      "column public.external_payment_recipients.updated_at",
+      "column public.stakeholder_accounts.id",
+      "column public.stakeholder_accounts.tenant_id",
+      "column public.stakeholder_accounts.created_by",
+      "column public.stakeholder_accounts.nickname",
+      "column public.stakeholder_accounts.custname",
+      "column public.stakeholder_accounts.account_type",
+      "column public.stakeholder_accounts.origin",
+      "column public.stakeholder_accounts.is_active",
+      "column public.stakeholder_accounts.is_primary",
+      "column public.stakeholder_accounts.is_partner_payout",
+      "column public.stakeholder_accounts.verification_status",
+      "column public.stakeholder_accounts.verification_source",
+      "column public.stakeholder_accounts.verification_recipient_email",
+      "column public.stakeholder_accounts.verified_at",
+      "column public.stakeholder_accounts.verification_completed_at",
+      "column public.stakeholder_accounts.homeowner_email",
+      "column public.stakeholder_accounts.homeowner_name",
+      "column public.stakeholder_accounts.provider",
+      "column public.stakeholder_accounts.provider_environment",
+      "column public.stakeholder_accounts.provider_account_id",
+      "column public.stakeholder_accounts.provider_bank_account_id",
+      "column public.stakeholder_accounts.provider_bank_name",
+      "column public.stakeholder_accounts.provider_last_four",
+      "column public.stakeholder_accounts.updated_at",
+      "column public.payment_provider_methods.id",
+      "column public.payment_provider_methods.tenant_id",
+      "column public.payment_provider_methods.external_recipient_id",
+      "column public.payment_provider_methods.provider",
+      "column public.payment_provider_methods.environment",
+      "column public.payment_provider_methods.provider_account_id",
+      "column public.payment_provider_methods.provider_bank_account_id",
+      "column public.payment_provider_methods.bank_name",
+      "column public.payment_provider_methods.account_type",
+      "column public.payment_provider_methods.last_four",
+      "column public.payment_provider_methods.holder_name",
+      "column public.payment_provider_methods.verification_status",
+      "column public.payment_provider_methods.connection_status",
+      "column public.payment_provider_methods.can_receive",
+      "column public.payment_provider_methods.can_send",
+      "column public.payment_provider_methods.connected_at",
+      "column public.payment_provider_methods.disconnected_at",
+      "column public.payment_provider_methods.updated_at",
+      "column public.tenants.id",
+      "column public.tenants.name",
+      "column public.tenant_users.tenant_id",
+      "column public.tenant_users.user_id"
+    ],
+    "predecessors": [],
+    "functions": [
+      {
+        "identity": "public.aws_payee_create(uuid, uuid, text, text, text, text, text, text, text, timestamp with time zone, uuid, uuid)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ]
+      },
+      {
+        "identity": "public.aws_payee_reissue_link(uuid, text, timestamp with time zone)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ]
+      },
+      {
+        "identity": "public.aws_payee_disconnect(uuid)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ]
+      },
+      {
+        "identity": "public.aws_public_payee_by_token(text)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ]
+      },
+      {
+        "identity": "public.aws_public_payee_record(text, text, jsonb)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ]
+      },
+      {
+        "identity": "public.aws_payee_apply_status(text, text, text)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ]
+      }
+    ],
+    "added_columns": [
+      {
+        "table": "public.external_payment_recipients",
+        "column": "stakeholder_account_id",
+        "type": "uuid",
+        "notnull": false,
+        "default": null,
+        "acl": []
+      },
+      {
+        "table": "public.external_payment_recipients",
+        "column": "provider_bank_name",
+        "type": "text",
+        "notnull": false,
+        "default": null,
+        "acl": []
+      },
+      {
+        "table": "public.external_payment_recipients",
+        "column": "provider_last_four",
+        "type": "text",
+        "notnull": false,
+        "default": null,
+        "acl": []
+      },
+      {
+        "table": "public.external_payment_recipients",
+        "column": "bank_linked_at",
+        "type": "timestamp with time zone",
+        "notnull": false,
+        "default": null,
+        "acl": []
+      },
+      {
+        "table": "public.external_payment_recipients",
+        "column": "provider_bank_account_id",
+        "type": "text",
+        "notnull": false,
+        "default": null,
+        "acl": []
+      },
+      {
+        "table": "public.external_payment_recipients",
+        "column": "tos_accepted_at",
+        "type": "timestamp with time zone",
+        "notnull": false,
+        "default": null,
+        "acl": []
+      },
+      {
+        "table": "public.external_payment_recipients",
+        "column": "identity_submitted_at",
+        "type": "timestamp with time zone",
+        "notnull": false,
+        "default": null,
+        "acl": []
+      },
+      {
+        "table": "public.external_payment_recipients",
+        "column": "bank_verified_at",
+        "type": "timestamp with time zone",
+        "notnull": false,
+        "default": null,
+        "acl": []
+      },
+      {
+        "table": "public.external_payment_recipients",
+        "column": "verified_at",
+        "type": "timestamp with time zone",
+        "notnull": false,
+        "default": null,
+        "acl": []
+      },
+      {
+        "table": "public.external_payment_recipients",
+        "column": "disconnected_at",
+        "type": "timestamp with time zone",
+        "notnull": false,
+        "default": null,
+        "acl": []
+      },
+      {
+        "table": "public.external_payment_recipients",
+        "column": "setup_attempts",
+        "type": "integer",
+        "notnull": true,
+        "default": "0",
+        "acl": []
+      }
+    ],
+    "constraints": [
+      {
+        "table": "public.stakeholder_accounts",
+        "name": "stakeholder_accounts_origin_check",
+        "def": "CHECK ((origin = ANY (ARRAY['tenant_owned'::text, 'partner_shared'::text, 'homeowner_link'::text, 'provider_connected'::text, 'provider_recipient'::text])))"
+      }
+    ],
+    "table_privileges": [
+      {
+        "table": "public.external_payment_recipients",
+        "grantees": [
+          "authenticated",
+          "checksops"
+        ],
+        "privileges": [
+          "SELECT"
+        ],
+        "intended": [
+          "authenticated SELECT",
+          "checksops SELECT"
+        ]
+      }
+    ],
+    "altered_relations": [
+      "public.external_payment_recipients",
+      "public.stakeholder_accounts"
+    ],
+    "definer_writes": [
+      "public.external_payment_recipients",
+      "public.stakeholder_accounts",
+      "public.payment_provider_methods"
     ]
   },
 });
