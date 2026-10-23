@@ -9,8 +9,8 @@
  *     production pre-state and the owner-accepted staging apply from a different pre-state as its
  *     acceptance, applied on 2026-10-23 and retired (execute false again); it is in step with the
  *     staging pin, the one-shot (no runs_before), the bypass inventory and the test lists;
- *   - no predecessor; the handler it serves is live in production and the release lock names
- *     this inspect as its missing evidence; the runbook and the one-shot doc name it;
+ *   - no predecessor; the handler it serves is live in production and its release lock is
+ *     PRODUCTION_LOCKED on this migration; the runbook and the one-shot doc name it;
  *   - the pending (pre-authorization) pin refuses before connecting; the committed (retired) pin
  *     refuses; its execute-authorized copy allows only the manifest bound to its recorded
  *     pre-state and its spent one_use_id is a replay; an approved, accepted copy evaluates for the
@@ -204,7 +204,7 @@ test('pin: the release pin shape, applied and retired (owner approved 2026-10-23
   }
 });
 
-test('order: no predecessor; the handler it serves is live and its release lock waits on this inspect; the runbook and one-shot doc name it', () => {
+test('order: no predecessor; the handler it serves is live and its release lock is locked on this migration; the runbook and one-shot doc name it', () => {
   assert.match(COMMITTED.order_note, /^No predecessor and no order on this engine/);
   assert.match(COMMITTED.order_note, /20260819015105/);
   assert.match(COMMITTED.order_note, /already_applied true/);
@@ -214,13 +214,14 @@ test('order: no predecessor; the handler it serves is live and its release lock 
   assert.equal(member.operation, 'add');
   assert.equal(member.accepted_sha256, 'f6d4dab35dc7bccf0a55ec7e7595a0d823ab3cd7a66279efb5663dd99baecb62');
   assert.match(plan.notes, /39955069311/);
-  // The release lock names the grants inspect as its one missing evidence item.
+  // The release lock is PRODUCTION_LOCKED on this migration (its grants inspect and apply were the
+  // component's missing evidence until the 2026-10-23 lock change).
   const lock = readJson('ops/release-locks/locked-components.json');
   const component = lock.components['moov-production-invoice'];
-  assert.equal(component.classification, 'UNVERIFIED');
-  assert.equal(component.missing_evidence.length, 1);
-  assert.match(component.missing_evidence[0], /moov_invoices/);
-  assert.match(component.missing_evidence[0], /moov_invoice_customers/);
+  assert.equal(component.classification, 'PRODUCTION_LOCKED');
+  assert.deepEqual(component.missing_evidence, []);
+  assert.deepEqual(component.required_sql.map((row) => [row.path, row.applied_sha256]), [[SQL112_FILE, COMMITTED.source_sha256]]);
+  assert.equal(component.deployment_fingerprint.database_evidence_record, RELEASE_SQL_SPECS[KEY].production_pin_rel);
   const runbook = fs.readFileSync(path.join(ROOT, COMMITTED.tooling.runbook), 'utf8');
   assert.ok(runbook.includes(COMMITTED.intended_replacement_sha256));
   assert.ok(runbook.includes(COMMITTED.source_sha256));

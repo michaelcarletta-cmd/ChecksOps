@@ -766,7 +766,7 @@
       "environment": "unknown",
       "source": {
         "git_sha": "b815d6bebc0cb0e8d907197bd5c538816438a40c",
-        "tree_hash": "a8a07f9af0d7830d2d1ab6bdded21f41face3ea80f4262d65de2f88d664ec0bd",
+        "tree_hash": "31ead1b23919a69f3f15522993877ff4ad6905af4d7361f472a5633cb1c05d0e",
         "merged": true,
         "merged_pr": null
       },
@@ -902,8 +902,8 @@
     "moov-production-invoice": {
       "id": "moov-production-invoice",
       "ownership_group": "moov-production-invoice",
-      "classification": "UNVERIFIED",
-      "production_active": false,
+      "classification": "PRODUCTION_LOCKED",
+      "production_active": true,
       "environment": "production",
       "source": {
         "git_sha": "e379856835c8e31b85865cfdb580120c24af616d",
@@ -911,7 +911,16 @@
         "merged": true,
         "merged_pr": 1185
       },
-      "required_sql": [],
+      "required_sql": [
+        {
+          "path": "aws/workflows/sql/112_moov_invoice_table_grants.sql",
+          "source_sha256": "497e23e9b158d7d8287244b315ee1135cafb6fc955af05c0e1c60d0c5c44c7e4",
+          "applied": true,
+          "applied_environment": "production",
+          "applied_sha256": "497e23e9b158d7d8287244b315ee1135cafb6fc955af05c0e1c60d0c5c44c7e4",
+          "proof": "ops/release-locks/proof/sql112-moov-invoice-table-grants-production-apply.md"
+        }
+      ],
       "artifact": {
         "type": "lambda",
         "name": "checksops-production-prep-api",
@@ -923,19 +932,21 @@
         "lambda_alias": null
       },
       "production_validation": {
-        "completed": false,
+        "completed": true,
         "evidence_refs": [
           "aws/tests/fixtures/production-moov-invoice-manifest-2026-10-22.json",
           "aws/tests/fixtures/production-moov-invoice-applied-manifest-2026-10-23.json",
-          "ops/deployment-guard/production-api-overlay-plan.json"
+          "ops/deployment-guard/production-api-overlay-plan.json",
+          "ops/deployment-guard/sql112-moov-invoice-table-grants-production-apply.json",
+          "ops/release-locks/proof/sql112-moov-invoice-table-grants-production-apply.md"
         ],
-        "recorded_at": "2026-10-23T12:41:00Z",
+        "recorded_at": "2026-10-23T14:46:58Z",
         "environment": "production",
         "component": "moov-production-invoice",
         "git_sha": "e379856835c8e31b85865cfdb580120c24af616d",
         "artifact_identity": "checksops-production-prep-api providers.mjs c1718779778a3b58f00b9bfa92d83b629aadc9e4b106ab4e8c460a946566b45f + providers/production/moov-invoice.mjs f6d4dab35dc7bccf0a55ec7e7595a0d823ab3cd7a66279efb5663dd99baecb62",
-        "evidence_producer": "guarded-production-lambda-overlay runs 39954831032 and 39955069311 (VERIFIED), post-apply inspects 39955314383 and 39955539299 (ALREADY_ACCEPTED); owner-observed send 2026-10-23",
-        "evidence_type": "guarded production Lambda overlays of main e3798568 plus an owner-observed invoice send from the Payments section"
+        "evidence_producer": "guarded-production-lambda-overlay runs 39954831032 and 39955069311 (VERIFIED), post-apply inspects 39955314383 and 39955539299 (ALREADY_ACCEPTED); owner-observed send 2026-10-23; SQL 112 read-only production inspect SSM a868258f-3cac-4fce-88a3-318be6133ca5 and guarded production-sql-one-shot apply SSM 654fb07f-7c95-4828-ad95-7fce135f1d27 (run 3f3f7d9d-51df-458f-b9fe-49b4bc91f841, 2026-10-23, owner-approved \"apply SQL 112 in production\")",
+        "evidence_type": "guarded production Lambda overlays of main e3798568 plus an owner-observed invoice send from the Payments section; the moov_invoices / moov_invoice_customers grants read by the SQL 112 inspect (checksops already held every line the handler uses) and brought to the pinned fingerprint by the SQL 112 apply"
       },
       "deployment_fingerprint": {
         "recorded": true,
@@ -946,9 +957,9 @@
         "spa_sha256": null,
         "cloudfront_distribution": null,
         "cloudfront_deployment_fingerprint": null,
-        "applied_sql_hash": null,
-        "database_evidence_record": null,
-        "notes": "Guarded production Lambda overlays of main e3798568 (#1185) on 2026-10-23: ADD providers/production/moov-invoice.mjs run 39954831032 (owner-approved \"DEPLOY providers/production/moov-invoice.mjs TO PRODUCTION\", staging acceptance run 39953598125; VERIFIED f6d4dab3, RevisionId 400c1a5e-73cf-48d8-bda5-59e4003b6685), then REPLACE providers.mjs run 39955069311 (owner-approved \"DEPLOY providers.mjs TO PRODUCTION\", staging acceptance run 39953857056; VERIFIED 51fa3109 -> c1718779, package CodeSha256 LGjjxS11JYsJtAtWEnfP8DI+atz7ORBugs6nPeLa7Fs=, RevisionId 53961309-44de-40c5-92c9-f13958d5c923). Post-apply read-only inspects 39955314383 (providers.mjs c1718779) and 39955539299 (the added module f6d4dab3), both ALREADY_ACCEPTED on that RevisionId. lambda_code_hash is the live providers.mjs member sha256 (the route that makes the component active); the package CodeSha256 is recorded beside it. Staging carries the same package bytes (runs 39953598125 and 39953857056, CodeSha256 LGjjxS11...). Owner report 2026-10-23 after the applies: \"Invoice sent fine from Payments\" (the first production create_and_send through this handler). Recorded by #1186 in the overlay plan. The classification stays UNVERIFIED: the lock schema promotes a Lambda component to PRODUCTION_LOCKED only with applied production SQL hashes, and this component carries no migration of its own; the grants on moov_invoices / moov_invoice_customers were not inspected.",
+        "applied_sql_hash": "497e23e9b158d7d8287244b315ee1135cafb6fc955af05c0e1c60d0c5c44c7e4",
+        "database_evidence_record": "ops/deployment-guard/sql112-moov-invoice-table-grants-production-apply.json",
+        "notes": "Guarded production Lambda overlays of main e3798568 (#1185) on 2026-10-23: ADD providers/production/moov-invoice.mjs run 39954831032 (owner-approved \"DEPLOY providers/production/moov-invoice.mjs TO PRODUCTION\", staging acceptance run 39953598125; VERIFIED f6d4dab3, RevisionId 400c1a5e-73cf-48d8-bda5-59e4003b6685), then REPLACE providers.mjs run 39955069311 (owner-approved \"DEPLOY providers.mjs TO PRODUCTION\", staging acceptance run 39953857056; VERIFIED 51fa3109 -> c1718779, package CodeSha256 LGjjxS11JYsJtAtWEnfP8DI+atz7ORBugs6nPeLa7Fs=, RevisionId 53961309-44de-40c5-92c9-f13958d5c923). Post-apply read-only inspects 39955314383 (providers.mjs c1718779) and 39955539299 (the added module f6d4dab3), both ALREADY_ACCEPTED on that RevisionId. lambda_code_hash is the live providers.mjs member sha256 (the route that makes the component active); the package CodeSha256 is recorded beside it. Staging carries the same package bytes (runs 39953598125 and 39953857056, CodeSha256 LGjjxS11...). Owner report 2026-10-23 after the applies: \"Invoice sent fine from Payments\" (the first production create_and_send through this handler). Recorded by #1186 in the overlay plan. PRODUCTION_LOCKED since the SQL 112 workstream of 2026-10-23 (#1188, #1189, #1190, #1191): the read-only production inspect (SSM a868258f, main c74e7264c) read the grants on moov_invoices / moov_invoice_customers (checksops already held SELECT, INSERT, UPDATE, DELETE on moov_invoices and SELECT, INSERT on moov_invoice_customers; authenticated none), and the owner-approved one-shot apply (SSM 654fb07f, run 3f3f7d9d, main 4d2cf0c11) took production from a6198312 to the pinned fingerprint 7caba5ba (the authenticated lines added, nothing else changed). applied_sql_hash is the SQL 112 source sha256 and database_evidence_record its retired production pin; the ledger apply_evidence row links the proof.",
         "config_hash": null
       },
       "rollback": {
@@ -956,11 +967,9 @@
         "artifact": "providers.mjs 51fa3109f06470c09fc9598c5b29c92085c0833a5dd0894a1478e30db5f6423a (checksops-production-prep-api package CodeSha256 09SD1JeA4qT60x9dD3BSDGeXqRJJkJypBzZ9PHVQz3Q=, RevisionId efab337a-e414-407e-9c96-7d6d53f2244c)",
         "notes": "Rollback is a separately authorized guarded production overlay of providers.mjs back to 51fa3109 (the bytes production inspect run 39950875106 found live before the apply, main 55efb6e4d); the added module is inert without the providers.mjs route and may stay. Never restore by hand."
       },
-      "missing_evidence": [
-        "production read-only inspect of the moov_invoices / moov_invoice_customers grants (the 2026-10-23 send shows create_and_send works for the owner's tenant; the grant set itself was not read)"
-      ],
+      "missing_evidence": [],
       "open_pr_overlap": [],
-      "notes": "Live in production since 2026-10-23 (owner-approved overlays, runs 39954831032 and 39955069311; owner-observed send from the Payments section the same day). Production Invoices: create, create_and_send, send, resend, cancel, delete, sync and recover through invoice-provider.mjs on production credentials and the tenant's environment='production' account; any tenant member; no money movement. Earlier owner report: invoices could not be sent (POST /prep/functions/v1/moov-invoice answered 403 production_execution_blocked at 2026-10-22T19:27:08Z); the route added by #1185 fixed that."
+      "notes": "Live in production since 2026-10-23 (owner-approved overlays, runs 39954831032 and 39955069311; owner-observed send from the Payments section the same day). Production Invoices: create, create_and_send, send, resend, cancel, delete, sync and recover through invoice-provider.mjs on production credentials and the tenant's environment='production' account; any tenant member; no money movement. Earlier owner report: invoices could not be sent (POST /prep/functions/v1/moov-invoice answered 403 production_execution_blocked at 2026-10-22T19:27:08Z); the route added by #1185 fixed that. Locked 2026-10-23 after SQL 112 (the grants the handler relies on are recorded and applied in production: SSM a868258f inspect, SSM 654fb07f apply, pin ops/deployment-guard/sql112-moov-invoice-table-grants-production-apply.json). Unlocking is a reviewed lock change; rollback is the overlay recorded under rollback."
     },
     "moov-production-fund": {
       "id": "moov-production-fund",
