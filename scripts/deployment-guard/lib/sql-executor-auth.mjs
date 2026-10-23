@@ -2449,7 +2449,7 @@ export const AUTHORIZED_SQL111_TENANT_REFERRAL_CODES = Object.freeze({
 // Moov invoices 2026-10-23 staging pin: SQL 112 (SELECT, INSERT, UPDATE, DELETE on moov_invoices
 // and SELECT, INSERT on moov_invoice_customers, for checksops and authenticated: the table grants
 // the production invoice handler needs, which only the supabase migration 20260819015105 granted).
-// No predecessor. Pending until a reviewed pin change records a staging read-live.
+// No predecessor. Staging apply authorized (wave 13) from staging read-live run 39963348904.
 export const AUTHORIZED_SQL112_MOOV_INVOICE_TABLE_GRANTS = Object.freeze({
   key: 'sql112',
   filename: 'aws/workflows/sql/112_moov_invoice_table_grants.sql',
@@ -2457,9 +2457,13 @@ export const AUTHORIZED_SQL112_MOOV_INVOICE_TABLE_GRANTS = Object.freeze({
   // The commit that last authored the file bytes.
   commit: 'fcb2ead39b4bf3c58185a96abfc7e2b7b220bed9',
   source_sha256: '497e23e9b158d7d8287244b315ee1135cafb6fc955af05c0e1c60d0c5c44c7e4',
-  authorization: 'pending',
-  execute: false,
-  expected_live_definition_sha256: null,
+  // Owner's words 2026-10-23: "applying SQL 112 for parity." (staging apply and, separately, the production pin and apply).
+  authorization: 'Owner approved 2026-10-23: staging apply (wave 13) from staging read-live run 39963348904',
+  execute: true,
+  // Staging read-live run 39963348904 (2026-10-23, main c74e7264c, after executor deploy run
+  // 39962977351): checksops held SELECT only on moov_invoices and moov_invoice_customers,
+  // authenticated none of the pinned lines; already_applied false, precondition_failures [].
+  expected_live_definition_sha256: 'c606d5eda318a2336d5885b3675339ee98aed761c3aa620a7ced759b3c5eeb89',
   // Code-derived: releaseIntendedHash('sql112', file bytes) (release-sql-state.mjs); re-derived by the tests.
   intended_replacement_sha256: '7caba5ba4a322d54a3c55ca712966da58cf4358c0db81f95c142dabfc916f315',
   // The file creates, replaces and sets the ACL of no function.

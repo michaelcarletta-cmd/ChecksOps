@@ -53,6 +53,10 @@ export const STAGING_WAVE1 = Object.freeze({
   // carried it: the functions absent, the definer able to write referral_events and tenants.
   // Applied by the guarded staging executor run 39877945144 (receipt b78704b4… -> 0ca62915…).
   sql111: Object.freeze({ wave: 12, approved: '2026-10-22', run: '39874593011', live: 'b78704b4d46b3ca88146d8368e09c630ead8930d3717e89287bf07bb46b86978', apply_run: '39877945144' }),
+  // Wave 13 (owner approved 2026-10-23, "applying SQL 112 for parity."): SQL 112 grants the Moov
+  // invoice tables to checksops and authenticated. Read at main c74e7264c after the executor
+  // carried it: checksops SELECT only on both tables, authenticated none of the pinned lines.
+  sql112: Object.freeze({ wave: 13, approved: '2026-10-23', run: '39963348904', live: 'c606d5eda318a2336d5885b3675339ee98aed761c3aa620a7ced759b3c5eeb89' }),
   sql98: Object.freeze({ wave: 3, approved: '2026-10-18', run: '39083278136', live: '296c3d6a274e10f66005fb9eaecf93fa17b81bd8db3607037ca07698fddd3275', apply_run: '39085677318' }),
 });
 
@@ -64,7 +68,7 @@ export const pendingPin = (pin) => Object.freeze({
 });
 
 /**
- * The committed staging pin's apply state: waves 1-12 recorded and approved, wave 6 approved with
+ * The committed staging pin's apply state: waves 1-13 recorded and approved, wave 6 approved with
  * its read-live still to record (pending until then), the rest pending.
  */
 export function assertStagingPinState(assert, key, pin) {

@@ -25,7 +25,30 @@ nothing to apply; the inspect is recorded as the verified-live evidence and the 
 missing: the guarded apply path below adds it). Anything else (a precondition failure, a missing
 table or role) stops and needs its own reviewed change.
 
-**Status:** pending. No staging read-live, no production inspect, nothing applied.
+**Staging executor refreshed (2026-10-23).** Inspect run 39962715255 (main `c74e7264c`) found the
+live executor at CodeSha256 `iqIKOKkH…` without SQL 112 (adds only
+`sql/112_moov_invoice_table_grants.sql`, supersedes the three engine files, nothing dropped, no
+collisions). Deploy run 39962977351 updated it to main's package (`7BwUlIAA…`).
+
+**Staging read-live (2026-10-23).** Run 39963348904 (main `c74e7264c`): `checksops` holds `SELECT`
+only on `moov_invoices` and on `moov_invoice_customers`; `authenticated` holds none of the pinned
+lines; live `c606d5eda318a2336d5885b3675339ee98aed761c3aa620a7ced759b3c5eeb89`, `already_applied`
+false, `precondition_failures` `[]`. Recorded in the staging pin (`expected_live_definition_sha256`,
+`execute: true`, wave 13) under the owner's words of 2026-10-23, "applying SQL 112 for parity."
+
+**Production inspect (2026-10-23).** Read-only `--inspect` through SSM
+`a868258f-3cac-4fce-88a3-318be6133ca5` on `i-0c35557c4e5385406`, main `c74e7264c` (tarball sha256
+`206ad6e30558855da82ef4713905046c8dd27bedc3e4fbca8f27ddffb647d868`, transfer run 39963652555, migration
+source `497e23e9…` == pin): `checksops` already holds `SELECT`, `INSERT`, `UPDATE` and `DELETE` on
+`moov_invoices` and `SELECT` and `INSERT` on `moov_invoice_customers` (plus `UPDATE` and `DELETE`
+there, outside the fingerprint); `authenticated` holds none of the pinned lines. Live
+`a61983121c4739f38084c66c6aaafcb67968b008526ff0c69459713280292acd`, `already_applied` false,
+`precondition_failures` `[]`. So the invoice handler lacks no grant in production, and SQL 112 adds
+only the `authenticated` lines there (as SQL 105 did on the payment tables). The owner chose to apply
+it in both environments for parity; the production pin records this inspect in its own change after
+the staging apply.
+
+**Status:** staging pin execute-authorized (wave 13); nothing applied yet; production pin pending.
 
 ## Fingerprint
 

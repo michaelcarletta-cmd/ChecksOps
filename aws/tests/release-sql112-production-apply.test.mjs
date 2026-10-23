@@ -166,7 +166,8 @@ test('order: no predecessor; the handler it serves is live and its release lock 
   const runbook = fs.readFileSync(path.join(ROOT, COMMITTED.tooling.runbook), 'utf8');
   assert.ok(runbook.includes(COMMITTED.intended_replacement_sha256));
   assert.ok(runbook.includes(COMMITTED.source_sha256));
-  assert.match(runbook, /\*\*Status:\*\* pending/);
+  assert.match(runbook, /\*\*Status:\*\* staging pin execute-authorized \(wave 13\)/);
+  assert.match(runbook, /SSM\s+`a868258f-3cac-4fce-88a3-318be6133ca5`/);
   assert.match(fs.readFileSync(path.join(ROOT, 'ops/production-sql-one-shot.md'), 'utf8'), /\| `sql112` \|/);
   assert.match(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/README.md'), 'utf8'), /sql112-moov-invoice-table-grants-production-apply\.mjs --inspect/);
 });
