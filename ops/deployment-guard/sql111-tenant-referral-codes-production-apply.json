@@ -1,8 +1,8 @@
 {
   "id": "sql111-tenant-referral-codes-production-apply",
   "migration": "sql111",
-  "authorization": "Owner approved 2026-10-23 (the owner's words, verbatim: \"Run production\", then \"open the pin PR when the inspect is clean\"; this pin change is bound to that approval and takes effect only once the owner reviews and merges it): production apply of SQL 111 on the staging acceptance below (production b78704b4d46b3ca88146d8368e09c630ead8930d3717e89287bf07bb46b86978 -> 0ca629155cf58f4f4033aa792cc0a8d817cd8692a1337ba85eb33716cf1c98fb); execute true takes effect only once this change is merged. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
-  "execute": true,
+  "authorization": "Applied to production on 2026-10-23; execute is false again, so this pin is no longer a standing authorization and a re-apply needs a new reviewed pin change. The owner approved the SQL 111 production pin on 2026-10-23 in the words \"Run production\" (then \"open the pin PR when the inspect is clean\" and \"merge it when CI is green\"), which covered the SQL 111 production pin (b78704b4 -> 0ca62915), the read-only production inspect, the staging acceptance and the execute change (#1177), and approved the one apply run recorded in applied (workstream prod-sql111-tenant-referral-codes-20261023) in the words \"apply SQL 111 in production\", passed to it verbatim. That approval covered that run only",
+  "execute": false,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -64,5 +64,105 @@
     "ok": true,
     "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39877945144",
     "basis": "Guarded staging apply from the same pre-state as production. The guarded staging SQL executor (choice sql111-tenant-referral-codes) carried SQL 111 from deploy run 39874360848 and, after the staging pin change (#1176), deploy run 39877410445 (executor iqIKOKkHz1fCAl5yf/R1rhU/VDUH8ecUTa71/bJ0y3A=, inspect run 39876957488 before it). Read-live run 39874593011 (2026-10-22) reported already_applied false, precondition_failures [] and live b78704b4d46b3ca88146d8368e09c630ead8930d3717e89287bf07bb46b86978, which is this pin's expected_live_definition_sha256 (production_inspect); read-live run 39877666133 (2026-10-23, main 1586c24df) reported the same live hash immediately before the apply. The staging apply run 39877945144 (2026-10-23, main 1586c24dfcc96f748f005fb652453a7571ce05d6, staging pin commit 2aab04de3c2f4c5e05c1929e2f04e68cc9e8233a) reported result applied, before b78704b4d46b3ca88146d8368e09c630ead8930d3717e89287bf07bb46b86978, after 0ca629155cf58f4f4033aa792cc0a8d817cd8692a1337ba85eb33716cf1c98fb = intended_replacement_sha256, all five functions state intended, function_acl aws_tenant_referral_active_count(uuid) [owner EXECUTE] and [checksops EXECUTE, owner EXECUTE] for the other four, definer_writes referral_events and tenants ok. The read-live after it (run 39878217390) reported already_applied true, precondition_failures [] and live 0ca629155cf58f4f4033aa792cc0a8d817cd8692a1337ba85eb33716cf1c98fb = intended_replacement_sha256, all five functions intended. Staging and production had the same pre-state. The functions are covered on PostgreSQL 16 by aws/tests/sql111-tenant-referral-codes-pg.test.mjs. No code redeem was exercised on staging, so the live referral_events constraints are covered only by that test. The production apply refuses unless the live state still equals this pin's expected_live_definition_sha256, and its post-conditions roll back unless the intended fingerprint is reached with the rest of the catalog unchanged."
+  },
+  "applied": {
+    "date": "2026-10-23",
+    "result": "applied",
+    "source_commit": "8f534384e94090a5692ba38ccf97afea9dc148b3",
+    "source_tarball": {
+      "file": "source-8f534384e94090a5692ba38ccf97afea9dc148b3.tar.gz",
+      "sha256": "d129228149dfba4e4959350c2c7e0e7bfd5c899559f7b94e3b6dfcb2395f1ec9"
+    },
+    "migration_source_sha256": "49144697145cb6f6e2495041c22967cfd44263f8abb7fad5ef0953f1abb8e829",
+    "migration_source_sha256_note": "The one-shot source step hashed aws/workflows/sql/111_tenant_referral_codes.sql in the transfer tarball: equal to source_sha256 (the pin).",
+    "runner": "i-0c35557c4e5385406",
+    "workstream_id": "prod-sql111-tenant-referral-codes-20261023",
+    "one_use_id": "sql111-prod-761afdca-3fd7-4e7b-932a-bce2369faff6",
+    "one_use_id_consumed": true,
+    "one_use_id_consumed_basis": "Inferred from the successful apply (the tool records the one_use_id after COMMIT and only warns if that write fails); the consumed-registry entry was not read back separately.",
+    "owner_approval": "apply SQL 111 in production",
+    "owner_approval_basis": "As passed (base64, --approval-statement-b64) for --approval-scope sql111; the one-shot cannot verify who said it. The owner's statement of 2026-10-23 was exactly \"apply SQL 111 in production\".",
+    "operator": "michaelcarletta-cmd",
+    "apply_ssm_command_id": "c006d74b-7c52-4e6f-972f-b17afcc448cf",
+    "one_shot_run_id": "4bf98369-6fd4-477a-8d04-30a7952f977c",
+    "one_shot_note": "One guarded production-sql-one-shot run (SSM c006d74b-7c52-4e6f-972f-b17afcc448cf, run_id 4bf98369-6fd4-477a-8d04-30a7952f977c) from main 8f534384e (transfer run 39883324057, sql53-temporary-transfer.yml dispatched on main after the #1177 merge) applied SQL 111: steps pin, source, inspect, contracts, manifest, source-recheck-before-preflight, preflight, evaluate (sql111_production_apply_allowed true), source-recheck-before-apply, apply (applied) and post-apply-inspect all ok; runner contracts, manifest, receipt and inspects as recorded below. SSM invocation 2026-10-23T01:23:27.146Z to 01:23:43.146Z (ExecutionStartDateTime to ExecutionEndDateTime). Before it, a read-only --phase inspect of the same one-shot (SSM d1059d4a-741f-4f2d-b6f0-eff00e28d7f8, run_id 73d97a4c-41d8-47b9-af96-85c9808f16c1, 2026-10-23T01:21:04Z, same commit, tarball, workstream and approval statement) completed pin, source, inspect and contracts ok and wrote nothing. No predecessor; the pre-apply inspect reported predecessors {}, predecessors_applied true, missing_dependencies [] and precondition_failures []. The SSM output was cut at its 24000-character inline limit inside the post-apply inspect; every value recorded here was read from the part that was returned.",
+    "steps": [
+      "pin",
+      "source",
+      "inspect",
+      "contracts",
+      "manifest",
+      "source-recheck-before-preflight",
+      "preflight",
+      "evaluate",
+      "source-recheck-before-apply",
+      "apply",
+      "post-apply-inspect"
+    ],
+    "contract_results": {
+      "claim-ledger": {
+        "ok": true,
+        "passed": "4/4"
+      },
+      "tenant-isolation": {
+        "ok": true,
+        "passed": "6/6"
+      },
+      "financial-write-protections": {
+        "ok": true,
+        "passed": "43/43"
+      }
+    },
+    "pre_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "b78704b4d46b3ca88146d8368e09c630ead8930d3717e89287bf07bb46b86978",
+      "live_matches_expected": true,
+      "already_applied": false,
+      "precondition_failures": [],
+      "missing_dependencies": [],
+      "predecessors_applied": true,
+      "successors_applied": [],
+      "note": "The one-shot inspect step (read-only --inspect) immediately before the apply: live == the recorded pre-state b78704b4..., live_matches_expected true, already_applied false, apply_preconditions_met true, precondition_failures [], missing_dependencies [], successors_applied []; release_sql_inspect.functions: all five state absent, function_acl [] for each, table_privileges [], prerequisites_missing [], predecessors {}, definer_writes referral_events ok and tenants ok; current_user and session_user checksops_admin."
+    },
+    "manifest_sha256": "27919ac34e8e27616a1e00d3f32ff3dffaa5b7a37b1414e02f803026ca7f2092",
+    "receipt": {
+      "migration": "sql111",
+      "workstream": "prod-sql111-tenant-referral-codes-20261023",
+      "commit": "8f534384e94090a5692ba38ccf97afea9dc148b3",
+      "sql_file": "aws/workflows/sql/111_tenant_referral_codes.sql",
+      "before_hash": "b78704b4d46b3ca88146d8368e09c630ead8930d3717e89287bf07bb46b86978",
+      "after_hash": "0ca629155cf58f4f4033aa792cc0a8d817cd8692a1337ba85eb33716cf1c98fb",
+      "unrelated_catalog_sha256": "73d60457b06a0cf3a90426b48d61b0bd9f97ac1add46d805c2793df3add90528",
+      "unrelated_catalog_counts": {
+        "relations": 890,
+        "columns": 3535,
+        "constraints": 2233,
+        "policies": 404,
+        "functions": 1315,
+        "indexes": 654,
+        "default_acl": 0,
+        "role_memberships": 15,
+        "roles": 29,
+        "triggers": 180,
+        "views": 25,
+        "types": 18,
+        "schema": 2
+      },
+      "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39877945144",
+      "result": "applied"
+    },
+    "post_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "0ca629155cf58f4f4033aa792cc0a8d817cd8692a1337ba85eb33716cf1c98fb",
+      "already_applied": true,
+      "precondition_failures": [],
+      "missing_dependencies": [],
+      "predecessors_applied": true,
+      "successors_applied": [],
+      "note": "The one-shot post-apply read-only --inspect: already_applied true (live == intended 0ca62915...), precondition_failures []; release_sql_inspect.functions: all five state intended, function_acl aws_tenant_referral_active_count(uuid) [owner EXECUTE] and [checksops EXECUTE, owner EXECUTE] for aws_tenant_referral_credit_cents(uuid) (and, in the receipt, for the other three), table_privileges []; current_user and session_user checksops_admin. The function bodies themselves were not printed by the inspect; the fingerprint equals releaseIntendedHash('sql111', file bytes). The SSM output was cut inside this inspect's function_acl list; the receipt above (same transaction's re-read) lists all five ACLs and definer_writes referral_events ok and tenants ok."
+    }
+  },
+  "production_evidence": {
+    "2026-10-23 apply": "Guarded production SQL one-shot on i-0c35557c4e5385406, workstream prod-sql111-tenant-referral-codes-20261023, main 8f534384e (tarball d1292281…, transfer run 39883324057, migration source 49144697… == pin), owner-approved run (\"apply SQL 111 in production\"), SSM c006d74b-7c52-4e6f-972f-b17afcc448cf, run_id 4bf98369-6fd4-477a-8d04-30a7952f977c, one_use_id sql111-prod-761afdca-3fd7-4e7b-932a-bce2369faff6 (spent): every step ok; contracts claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43; pre-apply inspect live b78704b4… (live_matches_expected true, precondition_failures []); manifest 27919ac3…; b78704b4… -> 0ca62915…, result applied, unrelated catalog 73d60457…; post-apply inspect already_applied true, precondition_failures []. Preceded by the read-only --phase inspect SSM d1059d4a-741f-4f2d-b6f0-eff00e28d7f8. No later inspect was run. execute is false so the pin is no longer a standing authorization."
   }
 }

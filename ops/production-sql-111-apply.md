@@ -73,8 +73,8 @@ maintenance     = monthly_rate_cents - discount                                -
 - `aws_platform_owner_referral_overview()`: the platform owner only: the same figures for every
   non-system tenant (no Founding, removed from Tenant Management in #1171).
 
-**Status:** applied to staging (2026-10-23); the production pin is `execute: true` once the pin
-change below is merged. Nothing is applied to production by that change (see "Status").
+**Status:** applied to staging and to production (2026-10-23); the production pin is retired
+(`execute: false` again; see "Production apply of SQL 111").
 Not verified: the live `referral_events` constraints (a `status` CHECK that refuses `active`, or a
 NOT NULL column without a default that the insert does not set, would make the redeem fail; the
 inspect does not read constraints of tables it does not change), and whether existing tenants
@@ -108,9 +108,11 @@ have a `referral_code`.
   (the same pre-state as staging), `definer_writes` ok for `referral_events` and `tenants`,
   `already_applied` false, `precondition_failures` `[]`. Recorded in the pin as
   `expected_live_definition_sha256`, with the staging apply run 39877945144 as `staging_acceptance`.
-- **Pin `execute: true`** once that change is merged, under the owner's statement of 2026-10-23,
-  "Run production". Nothing is applied by it; the apply (step 3) passes the owner's words for that
-  run.
+- **Pin `execute: true`** once that change is merged (#1177), under the owner's statement of
+  2026-10-23, "Run production". Nothing is applied by it; the apply (step 3) passes the owner's
+  words for that run.
+- **Applied to production (2026-10-23)** and the pin retired (`execute: false` again; see
+  "Production apply of SQL 111" below).
 
 ## Fingerprint
 
@@ -163,3 +165,40 @@ with a database error and the billing engine keeps the hand-set discount only.
    --migration sql111 --approval-scope sql111 … --phase inspect`, then the owner-named
    `--phase apply`.
 4. Record the apply and retire the pin (`execute: false`).
+
+## Production apply of SQL 111 (2026-10-23)
+
+The owner's statement of 2026-10-23 was "apply SQL 111 in production", passed verbatim (base64,
+`--approval-statement-b64`). The one-shot cannot verify who said it, and the statement covered this
+run only. `production-sql-one-shot.mjs --migration sql111 --approval-scope sql111` on
+`i-0c35557c4e5385406`, operator `michaelcarletta-cmd`, workstream
+`prod-sql111-tenant-referral-codes-20261023`, from main `8f534384e` (tarball
+`source-8f534384e94090a5692ba38ccf97afea9dc148b3.tar.gz`, sha256 `d1292281…`, transfer run
+`39883324057`, `sql53-temporary-transfer.yml` dispatched on main after the #1177 merge; its package
+job printed `TARBALL_SHA256 d129228149dfba4e4959350c2c7e0e7bfd5c899559f7b94e3b6dfcb2395f1ec9`, equal
+to the uploaded `.sha256` sidecar).
+
+- **Inspect phase:** SSM `d1059d4a-741f-4f2d-b6f0-eff00e28d7f8`, run_id
+  `73d97a4c-41d8-47b9-af96-85c9808f16c1`: pin, source, inspect and contracts ok, nothing written;
+  live `b78704b4…` (live_matches_expected true), the five functions `absent`, precondition_failures [].
+- **Apply phase:** SSM `c006d74b-7c52-4e6f-972f-b17afcc448cf` (2026-10-23T01:23:27Z to 01:23:43Z),
+  run_id `4bf98369-6fd4-477a-8d04-30a7952f977c`, one_use_id
+  `sql111-prod-761afdca-3fd7-4e7b-932a-bce2369faff6` (spent): every step ok (pin, source, inspect,
+  contracts, manifest, source-recheck-before-preflight, preflight, evaluate,
+  source-recheck-before-apply, apply (applied), post-apply-inspect); migration source `49144697…`
+  (== pin); contracts claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43;
+  pre-apply inspect live `b78704b4…`, predecessors `{}`, precondition_failures []; manifest
+  `27919ac3…`; receipt `b78704b4…` -> `0ca62915…`, result applied, unrelated catalog `73d60457…`
+  (relations 890, columns 3535, constraints 2233, policies 404, functions 1315, indexes 654, triggers
+  180, views 25, types 18, roles 29, role memberships 15); post-apply inspect live `0ca62915…`,
+  already_applied true, precondition_failures [], the five functions `intended`, ACL `owner EXECUTE`
+  (active-count helper) and `checksops EXECUTE`, `owner EXECUTE` (the other four). The SSM output
+  was cut at its 24000-character inline limit inside the post-apply inspect's ACL list; the values
+  above were read from the returned part (the receipt lists all five ACLs).
+
+No later read-only inspect was run, and no referral code has been redeemed through production since
+the apply. The live `referral_events` constraints are not covered by the fingerprint and were not
+inspected. The pin is `execute: false` again; a re-apply needs a new reviewed pin change. The API
+routes (`workflow-rpc.mjs`), the billing engine change (`tenant-billing-engine.mjs`) and the website
+change that call these functions are not part of this record and go through their own guarded
+Lambda and SPA paths.
