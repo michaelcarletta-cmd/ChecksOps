@@ -175,7 +175,13 @@ test('Tenant Management selected-tenant register UI remains tenant-scoped', () =
   const integrations = admin.slice(admin.indexOf('value="integrations"'));
   assert.match(integrations, /CheckAltTenantAccountCard/);
   assert.equal(/<CheckAltSettings \/>/.test(integrations.slice(0, 800)), false);
-  assert.match(card, /tenant_id: tenant!\.id,\n\s+action: "status"/);
+  // The card acts on the tenant being viewed, not the platform owner's own signed-in tenant.
+  assert.match(integrations, /<CheckAltTenantAccountCard key=\{tenant\.id\} tenantId=\{tenant\.id\} tenantName=\{tenant\.name\} \/>/);
+  assert.match(card, /const tenantId = tenantIdProp \?\? contextTenant\?\.id \?\? null;/);
+  assert.match(card, /tenant_id: tenantId!,\n\s+action: "status"/);
+  assert.match(card, /tenant_id: tenantId,\n\s+sso_user_id/);
+  assert.match(card, /invokeCheckAlt\("checkalt-verify-account", \{ tenant_id: tenantId, action \}\)/);
+  assert.doesNotMatch(card, /tenant!\.id|tenant\?\.id|tenant\.id/);
   assert.match(card, /sso_user_id/);
   assert.match(card, /first_name/);
   assert.match(card, /last_name/);
