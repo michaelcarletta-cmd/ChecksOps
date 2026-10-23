@@ -270,6 +270,13 @@
       "paths": [
         "aws/functions/api/providers/production/moov-invoice.mjs"
       ]
+    },
+    "production-platform-finance": {
+      "owners": ["@michaelcarletta-cmd"],
+      "description": "Production Platform Finance reads (Banking status, Wallet & P&L overview) on the ChecksOps facilitator account; platform owner only, read-only",
+      "paths": [
+        "aws/functions/api/providers/production/platform-finance.mjs"
+      ]
     }
   }
 }

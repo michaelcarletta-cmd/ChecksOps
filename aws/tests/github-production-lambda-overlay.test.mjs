@@ -778,7 +778,9 @@ test('fee collection: eleven members on the fee manifest, collection-v2 then des
       // production run 39955069311): its fee bytes are the live bytes that REPLACE started from, the
       // invoice manifest keeps that record, and the plan row now names the applied manifest.
       const invoice = JSON.parse(fs.readFileSync(path.join(ROOT, 'aws/tests/fixtures/production-moov-invoice-manifest-2026-10-22.json'), 'utf8'));
-      assert.equal(row.manifest, 'aws/tests/fixtures/production-moov-invoice-applied-manifest-2026-10-23.json');
+      // Then on to the production Platform Finance route (platform-finance manifest): REPLACE starts
+      // from the invoice bytes production run 39955069311 applied.
+      assert.equal(row.manifest, 'aws/tests/fixtures/production-platform-finance-manifest-2026-10-23.json');
       assert.equal(row.expected_live_sha256, invoice.members[member].accepted_sha256);
       assert.equal(invoice.members[member].live_sha256, fees.members[member].accepted_sha256);
       assert.equal(row.sql_before, SQL98);
@@ -1416,13 +1418,12 @@ test('Production Invoices: providers.mjs expected_live records the bytes product
   assert.equal(manifest.members['providers.mjs'].accepted_sha256, LIVE['providers.mjs']);
   assert.equal(manifest.members[INVOICE].live_sha256, null);
   assert.equal(manifest.members[INVOICE].accepted_sha256, LIVE[INVOICE]);
-  // The plan: providers.mjs now records its applied bytes live and names the applied manifest; the
-  // ADD row stays on the invoice manifest with expected_live null, as applied ADD members do.
+  // The plan: providers.mjs has moved on to the Platform Finance route, so its REPLACE now starts from
+  // the bytes this apply put live; the ADD row stays on the invoice manifest with expected_live null,
+  // as applied ADD members do.
   const row = PLAN.members['providers.mjs'];
-  assert.equal(row.manifest, APPLIED_REL);
+  assert.equal(row.manifest, 'aws/tests/fixtures/production-platform-finance-manifest-2026-10-23.json');
   assert.equal(row.expected_live_sha256, LIVE['providers.mjs']);
-  assert.equal(row.accepted_sha256, LIVE['providers.mjs']);
-  assert.equal(sha('aws/functions/api/providers.mjs'), LIVE['providers.mjs']);
   const add = PLAN.members[INVOICE];
   assert.equal(add.manifest, MANIFEST_REL);
   assert.equal(add.operation, 'add');
@@ -1430,9 +1431,9 @@ test('Production Invoices: providers.mjs expected_live records the bytes product
   assert.equal(add.accepted_sha256, LIVE[INVOICE]);
   assert.equal(sha(`aws/functions/api/${INVOICE}`), LIVE[INVOICE]);
   assert.ok(PLAN.order.indexOf(INVOICE) < PLAN.order.indexOf('providers.mjs'));
-  // Inspect accepts the live bytes as done for both members; the pre-apply providers.mjs bytes are no
-  // longer an accepted live state.
-  for (const member of Object.keys(LIVE)) {
+  // Inspect accepts the added module as done; the pre-apply providers.mjs bytes are no longer an
+  // accepted live state (providers.mjs itself: the Platform Finance test below).
+  for (const member of [INVOICE]) {
     const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: member };
     const done = await run(inspect, { root: ROOT, inspectLive: liveFor(member, { sha256: LIVE[member] }) });
     assert.equal(done.state, 'ALREADY_ACCEPTED', member);
@@ -1443,4 +1444,52 @@ test('Production Invoices: providers.mjs expected_live records the bytes product
     run(inspect, { root: ROOT, inspectLive: liveFor('providers.mjs', { sha256: PROVIDERS_BEFORE }) }),
     (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
   );
+});
+
+test('Production Platform Finance: ADD the read handler, then REPLACE providers.mjs from the invoice bytes; providers.mjs stays last', async () => {
+  const PF = 'providers/production/platform-finance.mjs';
+  const MANIFEST_REL = 'aws/tests/fixtures/production-platform-finance-manifest-2026-10-23.json';
+  const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, MANIFEST_REL), 'utf8'));
+  // providers.mjs live bytes: the invoice REPLACE (production run 39955069311), confirmed by the
+  // read-only production inspects 39983773878 / 39983961992 (RevisionId 53961309-44de-40c5-92c9-f13958d5c923).
+  const PROVIDERS_LIVE = 'c1718779778a3b58f00b9bfa92d83b629aadc9e4b106ab4e8c460a946566b45f';
+  for (const run of ['39983773878', '39983961992']) {
+    assert.match(PLAN.notes, new RegExp(run), run);
+    assert.match(manifest.notes, new RegExp(run), run);
+  }
+  assert.equal(manifest.workstream_id, 'production-platform-finance');
+  assert.equal(manifest.deploy_authorized, false);
+  assert.deepEqual(Object.keys(manifest.members), [PF, 'providers.mjs']);
+
+  const add = PLAN.members[PF];
+  assert.equal(add.operation, 'add');
+  assert.equal(add.expected_live_sha256, null);
+  assert.equal(add.sql_before, null);
+  assert.equal(add.manifest, MANIFEST_REL);
+  assert.equal(sha(`aws/functions/api/${PF}`), add.accepted_sha256);
+  assert.equal(manifest.members[PF].accepted_sha256, add.accepted_sha256);
+  assert.equal(manifest.members[PF].live_sha256, null);
+  assert.ok(manifest.members[PF].required_imports.includes('providers/parity/platform-finance.mjs'));
+
+  const row = PLAN.members['providers.mjs'];
+  assert.equal(row.operation, 'replace');
+  assert.equal(row.expected_live_sha256, PROVIDERS_LIVE);
+  assert.equal(row.manifest, MANIFEST_REL);
+  assert.equal(sha('aws/functions/api/providers.mjs'), row.accepted_sha256);
+  assert.notEqual(row.accepted_sha256, PROVIDERS_LIVE);
+  assert.equal(manifest.members['providers.mjs'].live_sha256, PROVIDERS_LIVE);
+  assert.equal(manifest.members['providers.mjs'].accepted_sha256, row.accepted_sha256);
+
+  assert.ok(PLAN.order.indexOf('providers/production/moov-invoice.mjs') < PLAN.order.indexOf(PF));
+  assert.ok(PLAN.order.indexOf(PF) < PLAN.order.indexOf('providers.mjs'));
+  assert.equal(PLAN.order.at(-1), 'providers.mjs');
+  for (const member of [PF, 'providers.mjs']) assert.equal(resolvePlannedMember(member, { root: ROOT, plan: PLAN }).ok, true, member);
+
+  // Inspect before apply: the module absent is READY, providers.mjs at the invoice bytes is READY.
+  for (const member of [PF, 'providers.mjs']) {
+    const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: member };
+    const ready = await run(inspect, { root: ROOT, inspectLive: liveFor(member) });
+    assert.equal(ready.state, 'READY', member);
+    assert.equal(ready.mutation, false, member);
+  }
 });

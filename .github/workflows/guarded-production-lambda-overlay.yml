@@ -109,6 +109,7 @@ on:
           - tenant-billing-handlers.mjs
           - write-check-workflow.mjs
           - providers/production/moov-invoice.mjs
+          - providers/production/platform-finance.mjs
           - providers/production/moov-wallet-fund.mjs
           - providers/production/moov-send.mjs
           - providers.mjs
