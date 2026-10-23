@@ -766,7 +766,7 @@
       "environment": "unknown",
       "source": {
         "git_sha": "b815d6bebc0cb0e8d907197bd5c538816438a40c",
-        "tree_hash": "ec578e6726e49b8a4f2b20bd93b8b1f1eedb5d651e4565c2d9eda5b1887f4d8e",
+        "tree_hash": "c23c48913ffb808d6479dc1a99e2a0c21a3ad0356115671432ddfb90da7313bd",
         "merged": true,
         "merged_pr": null
       },
@@ -898,6 +898,50 @@
       ],
       "open_pr_overlap": [],
       "notes": "Owner-approved 2026-10-13 (PR #922). Production sends: stakeholders by ACH credit, partners the check is shared with wallet to wallet (else their bank), bank top-up when the balance is short; any tenant member, two-factor once per login, durable per-leg intent before each Moov POST. No SQL change (payment_transfers under SQL 72). PR #923 (owner-approved hash update 2026-10-14): partners added to the check stakeholders can be paid while the partnership is active and the share was not revoked. Partner picker fix (owner-approved hash update 2026-10-14): a partner with an active partnership (SQL 76 consent guard) can be paid on the sender's own check without a stakeholder row; a revoked share of the check still blocks them."
+    },
+    "moov-production-invoice": {
+      "id": "moov-production-invoice",
+      "ownership_group": "moov-production-invoice",
+      "classification": "UNVERIFIED",
+      "production_active": false,
+      "environment": "unknown",
+      "source": {
+        "git_sha": "55efb6e4df33ca548faeda6ed7317915949e4e99",
+        "tree_hash": "c3d1bc52568bf8c53374dd2df0fe6730da3b485d3e5e67281c6d9381eb9bfd28",
+        "merged": false,
+        "merged_pr": null
+      },
+      "required_sql": [],
+      "artifact": {
+        "type": "lambda",
+        "name": "checksops-production-prep-api",
+        "version": null,
+        "hash": null,
+        "cloudfront_distribution": null,
+        "lambda_name": "checksops-production-prep-api",
+        "lambda_version": null,
+        "lambda_alias": null
+      },
+      "production_validation": {
+        "completed": false,
+        "evidence_refs": [
+          "aws/tests/fixtures/production-moov-invoice-manifest-2026-10-22.json"
+        ],
+        "recorded_at": null
+      },
+      "deployment_fingerprint": null,
+      "rollback": {
+        "git_sha": null,
+        "artifact": null,
+        "notes": "Not yet deployed. After deploy, rollback is the guarded overlay of the previous live providers.mjs bytes recorded in the manifest (51fa3109); the added module is inert without the providers.mjs route."
+      },
+      "missing_evidence": [
+        "production read-only inspect of moov_invoices / moov_invoice_customers grants",
+        "staging acceptance",
+        "production overlay receipts"
+      ],
+      "open_pr_overlap": [],
+      "notes": "Pending owner approval (2026-10-23). Production Invoices: create, create_and_send, send, resend, cancel, delete, sync and recover through invoice-provider.mjs on production credentials and the tenant's environment='production' account; any tenant member; no money movement. Owner report: invoices cannot be sent (POST /prep/functions/v1/moov-invoice answered 403 production_execution_blocked at 2026-10-22T19:27:08Z)."
     },
     "moov-production-fund": {
       "id": "moov-production-fund",

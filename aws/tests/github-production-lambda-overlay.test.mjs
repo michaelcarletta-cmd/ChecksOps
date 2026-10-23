@@ -766,6 +766,16 @@ test('fee collection: eleven members on the fee manifest, collection-v2 then des
   for (const member of Object.keys(fees.members)) {
     if (REPINNED.has(member)) continue;
     const row = PLAN.members[member];
+    if (member === PROVIDERS) {
+      // providers.mjs moved on to the production invoice route (moov-invoice manifest); its
+      // fee bytes are the live bytes that REPLACE starts from, and this manifest keeps its record.
+      const invoice = JSON.parse(fs.readFileSync(path.join(ROOT, 'aws/tests/fixtures/production-moov-invoice-manifest-2026-10-22.json'), 'utf8'));
+      assert.equal(row.manifest, 'aws/tests/fixtures/production-moov-invoice-manifest-2026-10-22.json');
+      assert.equal(row.expected_live_sha256, fees.members[member].accepted_sha256);
+      assert.equal(invoice.members[member].live_sha256, fees.members[member].accepted_sha256);
+      assert.equal(row.sql_before, SQL98);
+      continue;
+    }
     assert.equal(row.manifest, MANIFEST_FEES, member);
     assert.equal(row.operation, ADDS.has(member) ? 'add' : 'replace', member);
     assert.equal(sha(`aws/functions/api/${member}`), row.accepted_sha256, member);

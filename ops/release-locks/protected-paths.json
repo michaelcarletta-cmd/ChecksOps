@@ -263,6 +263,13 @@
       "paths": [
         "aws/functions/api/providers/production/moov-send.mjs"
       ]
+    },
+    "moov-production-invoice": {
+      "owners": ["@michaelcarletta-cmd"],
+      "description": "Production Invoices (create, send, resend, cancel, delete, sync) on the tenant's production payment account; no money movement",
+      "paths": [
+        "aws/functions/api/providers/production/moov-invoice.mjs"
+      ]
     }
   }
 }
