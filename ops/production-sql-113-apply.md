@@ -67,8 +67,43 @@ production pin records the inspect above as its pre-state (`88787a89…`) and th
 40022413642 from the same pre-state as its staging acceptance, and sets `execute: true`. The owner
 reviews and merges it; nothing is applied by it.
 
-**Status:** staging applied (wave 14); production pin execute-authorized once its change is merged;
-production apply pending (the one-shot with the owner's words for that run).
+**Status:** applied to staging and to production (2026-10-23); the production pin is retired
+(`execute: false` again; see "Production apply of SQL 113").
+
+## Production apply of SQL 113 (2026-10-23)
+
+The owner's statement of 2026-10-23 was "apply SQL 113 in production and merge 1209 when green",
+passed verbatim (base64, `--approval-statement-b64`). The one-shot cannot verify who said it, and the
+statement covered this run only. `production-sql-one-shot.mjs --migration sql113 --approval-scope
+sql113` on `i-0c35557c4e5385406`, operator `michaelcarletta-cmd`, workstream
+`prod-sql113-payee-setup-20261023`, from main `09425a013` (tarball
+`source-09425a01389ce92e703f34eb2bcc526d532f1c13.tar.gz`, sha256 `201d6e08…`, transfer run
+`40028392875`, `sql53-temporary-transfer.yml` dispatched on main after the #1209 merge; its package
+job printed `TARBALL_SHA256 201d6e0840d0aba76c7d1378ad8782acbfbaf26c3f6a47a8b612753c0d77b3ef`).
+
+- **Inspect phase:** SSM `f77ae429-c9e4-458d-9152-06bf767f28c1`, run_id
+  `cc5c4e70-5ce2-4811-962f-d985ef82255a`, approval statement "apply SQL 113 in production and merge
+  1209 when green": pin, source, inspect and contracts ok, nothing written; live
+  `88787a89…` (live_matches_expected true), already_applied false, precondition_failures [],
+  apply_preconditions_met true.
+- **Apply phase:** SSM `9f209788-6247-47ed-bc6e-838d5791a42e` (2026-10-23T21:42:38Z to 21:42:54Z),
+  run_id `594619a2-671f-45f5-a260-7f991d5007ef`, one_use_id
+  `sql113-prod-86f11689-ab1d-4459-9f15-10ff2d135818` (spent): every step ok (pin, source, inspect,
+  contracts, manifest, source-recheck-before-preflight, preflight (receipt issued), evaluate
+  (`sql113_production_apply_allowed` true), source-recheck-before-apply, apply (applied),
+  post-apply-inspect); migration source `871d953d…` (== pin); pre-apply inspect live `88787a89…`,
+  predecessors `{}`, precondition_failures []; contracts claim-ledger 4/4,
+  tenant-isolation 6/6, financial-write-protections 43/43; manifest `be0e945a…`; receipt `88787a89…`
+  -> `5984d321…`, result applied, unrelated catalog `d080ebf0…` (relations 890, columns 3531,
+  constraints 2232, policies 404, functions 1320, indexes 654, triggers 180, views 25, types 18, roles
+  29, role memberships 15); post-apply inspect live `5984d321…` (= intended), already_applied true,
+  precondition_failures []. The six payee functions are `intended`, each with EXECUTE for `checksops`
+  and the owner only; all eleven payee columns and `stakeholder_accounts_origin_check` are `intended`;
+  `external_payment_recipients` grants `SELECT` to `authenticated` and `checksops` (`checksops` DELETE
+  and UPDATE there unchanged, `other_write_grants`); definer writes ok on the three payee tables.
+
+No later read-only inspect is recorded. The pin is `execute: false` again; a re-apply needs a new
+reviewed pin change.
 
 ## Fingerprint
 
