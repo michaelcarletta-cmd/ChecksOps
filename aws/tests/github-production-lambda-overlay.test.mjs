@@ -753,7 +753,11 @@ test('fee collection: eleven members on the fee manifest, collection-v2 then des
 
   const superseded = ['providers/parity/moov-functions.mjs', 'providers/parity/moov-money.mjs', 'providers/catalog.mjs', ENGINE, HANDLERS, WORKFLOW_RPC, PROVIDERS];
   assert.deepEqual(Object.keys(fees.members).sort(), [...superseded, COLLECTION, DESTINATION, INVOICE_EMAIL, DEPOSITS_GATE].sort());
+  // The engine was re-pinned after the fee work (referral billing credit, 2026-10-23): this manifest
+  // still records its fee-branch bytes; the plan row moved on (checked in its own test below).
+  const REPINNED = new Set([ENGINE]);
   for (const member of Object.keys(fees.members)) {
+    if (REPINNED.has(member)) continue;
     const row = PLAN.members[member];
     assert.equal(row.manifest, MANIFEST_FEES, member);
     assert.equal(row.operation, ADDS.has(member) ? 'add' : 'replace', member);
@@ -1216,4 +1220,35 @@ test('homeowner pre-claim upload: homeowner.mjs REPLACEs the live c51ea27a bytes
   const ready = await run({ ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER }, { root: ROOT, inspectLive: liveFor(MEMBER) });
   assert.equal(ready.state, 'READY');
   assert.equal(ready.mutation, false);
+});
+
+test('referral billing credit: tenant-billing-engine.mjs REPLACEs the bytes found in the live package', async () => {
+  const ENGINE = 'tenant-billing-engine.mjs';
+  const MANIFEST_REL = 'aws/tests/fixtures/production-referral-billing-engine-manifest-2026-10-23.json';
+  const MANIFEST_FEES = 'aws/tests/fixtures/production-fee-collection-pin-manifest-2026-10-17.json';
+  // The member of the live package (lambda:GetFunction 2026-10-23T01:44Z, CodeSha256
+  // 6YGMbhu9T8uw9tVJcMx12/x/GguD4vtGlUBrQes/kj4=): the fee branch's accepted bytes, main since f039ad6c3.
+  const LIVE = '338f93e1122d35e4929655b7418d65a6d14b51f5f61fe38812c1f2234be81d94';
+  const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, MANIFEST_REL), 'utf8'));
+  assert.equal(manifest.workstream_id, 'referral-billing-engine-credit');
+  assert.equal(manifest.deploy_authorized, false);
+  assert.match(manifest.notes, /6YGMbhu9T8uw9tVJcMx12\/x\/GguD4vtGlUBrQes\/kj4=/);
+  assert.deepEqual(Object.keys(manifest.members), [ENGINE]);
+  const row = PLAN.members[ENGINE];
+  assert.deepEqual(manifest.members[ENGINE], { live_sha256: LIVE, accepted_sha256: row.accepted_sha256, operation: 'replace' });
+  assert.equal(row.operation, 'replace');
+  assert.equal(row.manifest, MANIFEST_REL);
+  assert.equal(row.expected_live_sha256, LIVE);
+  assert.equal(row.accepted_sha256, sha(`aws/functions/api/${ENGINE}`));
+  assert.notEqual(row.accepted_sha256, LIVE);
+  assert.equal(row.sql_before, 'aws/workflows/sql/98_tenant_fee_collection.sql');
+  // The fee manifest's accepted bytes are the bytes now live.
+  const fees = JSON.parse(fs.readFileSync(path.join(ROOT, MANIFEST_FEES), 'utf8'));
+  assert.equal(fees.members[ENGINE].accepted_sha256, LIVE);
+  assert.equal(resolvePlannedMember(ENGINE, { root: ROOT, plan: PLAN }).ok, true);
+  assert.ok(PLAN.order.includes(ENGINE));
+  // The new bytes read the SQL 111 credit through optionalQuery and export the discount rule.
+  const source = fs.readFileSync(path.join(API, ENGINE), 'utf8');
+  assert.match(source, /aws_tenant_referral_credit_cents\(\$1::uuid\)/);
+  assert.match(source, /export const maintenanceDiscountCents/);
 });
