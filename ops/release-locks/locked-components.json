@@ -766,7 +766,7 @@
       "environment": "unknown",
       "source": {
         "git_sha": "b815d6bebc0cb0e8d907197bd5c538816438a40c",
-        "tree_hash": "83b7ee35e6f61c9b28b34a91fdbb3d1fc630fd7ba4df5fde886bcebf9c0ef910",
+        "tree_hash": "92d9b518076e0f3b987f324bf684bb584289df3fad2a4da17283196c382cbf2e",
         "merged": true,
         "merged_pr": null
       },
@@ -976,43 +976,63 @@
       "ownership_group": "production-platform-finance",
       "classification": "UNVERIFIED",
       "production_active": false,
-      "environment": "unknown",
+      "environment": "production",
       "source": {
-        "git_sha": "5cca7e6b9adb4c28d59bfd2121afaf8a90227291",
+        "git_sha": "f402a32cd7efd62bb2929aba0104e00e8249fdd2",
         "tree_hash": "22593a04fcb8dac3bab47a724bf1d06f3f278cf005996a69607b96c2bb4aba45",
-        "merged": false,
-        "merged_pr": null
+        "merged": true,
+        "merged_pr": 1195
       },
       "required_sql": [],
       "artifact": {
         "type": "lambda",
         "name": "checksops-production-prep-api",
-        "version": null,
-        "hash": null,
+        "version": "aba8a116-5937-4173-8b10-4fa1a0e68f57",
+        "hash": "a72a583af99efff5cf9d5bba9f139080f947e04ed50a0f20ce3c2275037b40dc",
         "cloudfront_distribution": null,
         "lambda_name": "checksops-production-prep-api",
-        "lambda_version": null,
+        "lambda_version": "aba8a116-5937-4173-8b10-4fa1a0e68f57",
         "lambda_alias": null
       },
       "production_validation": {
         "completed": false,
         "evidence_refs": [
-          "aws/tests/fixtures/production-platform-finance-manifest-2026-10-23.json"
+          "aws/tests/fixtures/production-platform-finance-manifest-2026-10-23.json",
+          "aws/tests/fixtures/production-platform-finance-applied-manifest-2026-10-23.json",
+          "ops/deployment-guard/production-api-overlay-plan.json"
         ],
-        "recorded_at": null
+        "recorded_at": "2026-10-23T16:37:51Z",
+        "environment": "production",
+        "component": "production-platform-finance",
+        "git_sha": "f402a32cd7efd62bb2929aba0104e00e8249fdd2",
+        "artifact_identity": "checksops-production-prep-api providers.mjs a72a583af99efff5cf9d5bba9f139080f947e04ed50a0f20ce3c2275037b40dc + providers/production/platform-finance.mjs 2096af29aa7c0fcdbc5edf418877dabef7004e145ae7570baf793259acda8d0d",
+        "evidence_producer": "guarded-production-lambda-overlay runs 39987995317 (VERIFIED) and 39988166380, post-apply inspect 39988303670 (ALREADY_ACCEPTED); owner-observed Banking and Wallet & P&L load 2026-10-23",
+        "evidence_type": "guarded production Lambda overlays of main f402a32cd plus the owner's report that Tenant Management > Platform Finance Banking and Wallet & P&L both load"
       },
-      "deployment_fingerprint": null,
+      "deployment_fingerprint": {
+        "recorded": true,
+        "lambda_name": "checksops-production-prep-api",
+        "lambda_version": "aba8a116-5937-4173-8b10-4fa1a0e68f57",
+        "lambda_code_hash": "a72a583af99efff5cf9d5bba9f139080f947e04ed50a0f20ce3c2275037b40dc",
+        "spa_bundle": null,
+        "spa_sha256": null,
+        "cloudfront_distribution": null,
+        "cloudfront_deployment_fingerprint": null,
+        "applied_sql_hash": null,
+        "database_evidence_record": null,
+        "notes": "Guarded production Lambda overlays of main f402a32cd (#1195) on 2026-10-23: ADD providers/production/platform-finance.mjs run 39987995317 (owner-approved \"DEPLOY providers/production/platform-finance.mjs TO PRODUCTION\", staging acceptance run 39987501459; VERIFIED 2096af29, RevisionId d1ed7878-ca26-42e9-84d4-6ed2f992e82e), then REPLACE providers.mjs run 39988166380 (owner-approved \"DEPLOY providers.mjs TO PRODUCTION\", staging acceptance run 39987661725; c1718779 -> a72a583a), post-apply inspect run 39988303670 (ALREADY_ACCEPTED, package CodeSha256 RlW706fIObNt1srZmphE9vJkCkd414u1jJydF8opOKU=, RevisionId aba8a116-5937-4173-8b10-4fa1a0e68f57). lambda_version is that RevisionId and lambda_code_hash the live providers.mjs member sha256. The P&L read model the handler uses (providers/parity/platform-finance.mjs) was then REPLACEd 746c89a6 -> 5b1ccfdb by run 40001351087 (#1199, package RevisionId 76b3b85d-6e50-41f9-9e0e-61e22f439ca2); that member is recorded by the overlay plan, not by this component.",
+        "config_hash": null
+      },
       "rollback": {
-        "git_sha": null,
-        "artifact": null,
-        "notes": "Not yet deployed. After deploy, rollback is the guarded overlay of the previous live providers.mjs bytes recorded in the manifest (c1718779); the added module is inert without the providers.mjs route."
+        "git_sha": "1d0b30d8c2d37a94baa08606ab2bd555f7591323",
+        "artifact": "providers.mjs c1718779778a3b58f00b9bfa92d83b629aadc9e4b106ab4e8c460a946566b45f (checksops-production-prep-api package CodeSha256 LGjjxS11JYsJtAtWEnfP8DI+atz7ORBugs6nPeLa7Fs=, RevisionId 53961309-44de-40c5-92c9-f13958d5c923)",
+        "notes": "Rollback is a separately authorized guarded production overlay of providers.mjs back to c1718779 (the bytes the read-only production inspects 39983773878 and 39983961992 found live before the apply); the added module is inert without the providers.mjs route and may stay. Never restore by hand."
       },
       "missing_evidence": [
-        "staging acceptance",
-        "production overlay receipts"
+        "production read-only inspect of the grants on the tables the read model selects (payment_provider_methods, platform_fee_line_items, payment_transfers, tenants); the 2026-10-23 owner report that both panels load shows the reads work for the platform owner, but the grant set itself was not read"
       ],
       "open_pr_overlap": [],
-      "notes": "Pending owner approval (2026-10-23). Production Platform Finance reads: moov-platform-bank status (Banking) and platform-treasury overview (Wallet & P&L) on the ChecksOps facilitator's production payment account, platform owner only, read-only; every other Platform Finance action stays at the production hard block. Owner report: both panels show production_execution_blocked (the two reads reach the sandbox-only parity wrapper)."
+      "notes": "Live in production since 2026-10-23 (owner-approved overlays, runs 39987995317 and 39988166380; the owner reported the same day that Tenant Management > Platform Finance Banking and Wallet & P&L both load). Production Platform Finance reads: moov-platform-bank status and platform-treasury overview on the ChecksOps facilitator's production payment account, platform owner only, read-only; every other Platform Finance action stays at the production hard block. Earlier owner report: both panels showed production_execution_blocked (the two reads reached the sandbox-only parity wrapper); the route added by #1195 fixed that. Classification stays UNVERIFIED as for moov-production-invoice: the lock schema promotes a component only with applied production SQL hashes or an SPA artifact, and this component carries neither."
     },
     "moov-production-fund": {
       "id": "moov-production-fund",
