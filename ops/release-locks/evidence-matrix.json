@@ -87,11 +87,11 @@
     },
     "moov-production-invoice": {
       "classification": "UNVERIFIED",
-      "git_sha": "55efb6e4df33ca548faeda6ed7317915949e4e99",
-      "deployed_artifact": "not deployed",
-      "applied_migrations": "none (moov_invoices / moov_invoice_customers from the Supabase restore; production grants not yet inspected)",
-      "environment": "unknown",
-      "missing_evidence": ["production read-only inspect of moov_invoices / moov_invoice_customers grants", "staging acceptance", "production overlay receipts"],
+      "git_sha": "e379856835c8e31b85865cfdb580120c24af616d",
+      "deployed_artifact": "checksops-production-prep-api package CodeSha256 LGjjxS11JYsJtAtWEnfP8DI+atz7ORBugs6nPeLa7Fs= RevisionId 53961309-44de-40c5-92c9-f13958d5c923; providers.mjs c1718779778a3b58f00b9bfa92d83b629aadc9e4b106ab4e8c460a946566b45f; providers/production/moov-invoice.mjs f6d4dab35dc7bccf0a55ec7e7595a0d823ab3cd7a66279efb5663dd99baecb62 (guarded overlay runs 39954831032, 39955069311; post inspects 39955314383, 39955539299)",
+      "applied_migrations": "none (moov_invoices / moov_invoice_customers from the Supabase restore; production grants not inspected; the 2026-10-23 owner-observed send shows create_and_send works)",
+      "environment": "production",
+      "missing_evidence": ["production read-only inspect of the moov_invoices / moov_invoice_customers grants (the 2026-10-23 send shows create_and_send works for the owner's tenant; the grant set itself was not read)"],
       "open_pr_overlap": []
     },
     "moov-production-fund": {

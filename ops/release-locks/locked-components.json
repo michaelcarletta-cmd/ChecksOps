@@ -766,7 +766,7 @@
       "environment": "unknown",
       "source": {
         "git_sha": "b815d6bebc0cb0e8d907197bd5c538816438a40c",
-        "tree_hash": "c23c48913ffb808d6479dc1a99e2a0c21a3ad0356115671432ddfb90da7313bd",
+        "tree_hash": "a8a07f9af0d7830d2d1ab6bdded21f41face3ea80f4262d65de2f88d664ec0bd",
         "merged": true,
         "merged_pr": null
       },
@@ -904,44 +904,63 @@
       "ownership_group": "moov-production-invoice",
       "classification": "UNVERIFIED",
       "production_active": false,
-      "environment": "unknown",
+      "environment": "production",
       "source": {
-        "git_sha": "55efb6e4df33ca548faeda6ed7317915949e4e99",
+        "git_sha": "e379856835c8e31b85865cfdb580120c24af616d",
         "tree_hash": "c3d1bc52568bf8c53374dd2df0fe6730da3b485d3e5e67281c6d9381eb9bfd28",
-        "merged": false,
-        "merged_pr": null
+        "merged": true,
+        "merged_pr": 1185
       },
       "required_sql": [],
       "artifact": {
         "type": "lambda",
         "name": "checksops-production-prep-api",
-        "version": null,
-        "hash": null,
+        "version": "53961309-44de-40c5-92c9-f13958d5c923",
+        "hash": "c1718779778a3b58f00b9bfa92d83b629aadc9e4b106ab4e8c460a946566b45f",
         "cloudfront_distribution": null,
         "lambda_name": "checksops-production-prep-api",
-        "lambda_version": null,
+        "lambda_version": "53961309-44de-40c5-92c9-f13958d5c923",
         "lambda_alias": null
       },
       "production_validation": {
         "completed": false,
         "evidence_refs": [
-          "aws/tests/fixtures/production-moov-invoice-manifest-2026-10-22.json"
+          "aws/tests/fixtures/production-moov-invoice-manifest-2026-10-22.json",
+          "aws/tests/fixtures/production-moov-invoice-applied-manifest-2026-10-23.json",
+          "ops/deployment-guard/production-api-overlay-plan.json"
         ],
-        "recorded_at": null
+        "recorded_at": "2026-10-23T12:41:00Z",
+        "environment": "production",
+        "component": "moov-production-invoice",
+        "git_sha": "e379856835c8e31b85865cfdb580120c24af616d",
+        "artifact_identity": "checksops-production-prep-api providers.mjs c1718779778a3b58f00b9bfa92d83b629aadc9e4b106ab4e8c460a946566b45f + providers/production/moov-invoice.mjs f6d4dab35dc7bccf0a55ec7e7595a0d823ab3cd7a66279efb5663dd99baecb62",
+        "evidence_producer": "guarded-production-lambda-overlay runs 39954831032 and 39955069311 (VERIFIED), post-apply inspects 39955314383 and 39955539299 (ALREADY_ACCEPTED); owner-observed send 2026-10-23",
+        "evidence_type": "guarded production Lambda overlays of main e3798568 plus an owner-observed invoice send from the Payments section"
       },
-      "deployment_fingerprint": null,
+      "deployment_fingerprint": {
+        "recorded": true,
+        "lambda_name": "checksops-production-prep-api",
+        "lambda_version": "53961309-44de-40c5-92c9-f13958d5c923",
+        "lambda_code_hash": "c1718779778a3b58f00b9bfa92d83b629aadc9e4b106ab4e8c460a946566b45f",
+        "spa_bundle": null,
+        "spa_sha256": null,
+        "cloudfront_distribution": null,
+        "cloudfront_deployment_fingerprint": null,
+        "applied_sql_hash": null,
+        "database_evidence_record": null,
+        "notes": "Guarded production Lambda overlays of main e3798568 (#1185) on 2026-10-23: ADD providers/production/moov-invoice.mjs run 39954831032 (owner-approved \"DEPLOY providers/production/moov-invoice.mjs TO PRODUCTION\", staging acceptance run 39953598125; VERIFIED f6d4dab3, RevisionId 400c1a5e-73cf-48d8-bda5-59e4003b6685), then REPLACE providers.mjs run 39955069311 (owner-approved \"DEPLOY providers.mjs TO PRODUCTION\", staging acceptance run 39953857056; VERIFIED 51fa3109 -> c1718779, package CodeSha256 LGjjxS11JYsJtAtWEnfP8DI+atz7ORBugs6nPeLa7Fs=, RevisionId 53961309-44de-40c5-92c9-f13958d5c923). Post-apply read-only inspects 39955314383 (providers.mjs c1718779) and 39955539299 (the added module f6d4dab3), both ALREADY_ACCEPTED on that RevisionId. lambda_code_hash is the live providers.mjs member sha256 (the route that makes the component active); the package CodeSha256 is recorded beside it. Staging carries the same package bytes (runs 39953598125 and 39953857056, CodeSha256 LGjjxS11...). Owner report 2026-10-23 after the applies: \"Invoice sent fine from Payments\" (the first production create_and_send through this handler). Recorded by #1186 in the overlay plan. The classification stays UNVERIFIED: the lock schema promotes a Lambda component to PRODUCTION_LOCKED only with applied production SQL hashes, and this component carries no migration of its own; the grants on moov_invoices / moov_invoice_customers were not inspected.",
+        "config_hash": null
+      },
       "rollback": {
-        "git_sha": null,
-        "artifact": null,
-        "notes": "Not yet deployed. After deploy, rollback is the guarded overlay of the previous live providers.mjs bytes recorded in the manifest (51fa3109); the added module is inert without the providers.mjs route."
+        "git_sha": "55efb6e4df33ca548faeda6ed7317915949e4e99",
+        "artifact": "providers.mjs 51fa3109f06470c09fc9598c5b29c92085c0833a5dd0894a1478e30db5f6423a (checksops-production-prep-api package CodeSha256 09SD1JeA4qT60x9dD3BSDGeXqRJJkJypBzZ9PHVQz3Q=, RevisionId efab337a-e414-407e-9c96-7d6d53f2244c)",
+        "notes": "Rollback is a separately authorized guarded production overlay of providers.mjs back to 51fa3109 (the bytes production inspect run 39950875106 found live before the apply, main 55efb6e4d); the added module is inert without the providers.mjs route and may stay. Never restore by hand."
       },
       "missing_evidence": [
-        "production read-only inspect of moov_invoices / moov_invoice_customers grants",
-        "staging acceptance",
-        "production overlay receipts"
+        "production read-only inspect of the moov_invoices / moov_invoice_customers grants (the 2026-10-23 send shows create_and_send works for the owner's tenant; the grant set itself was not read)"
       ],
       "open_pr_overlap": [],
-      "notes": "Pending owner approval (2026-10-23). Production Invoices: create, create_and_send, send, resend, cancel, delete, sync and recover through invoice-provider.mjs on production credentials and the tenant's environment='production' account; any tenant member; no money movement. Owner report: invoices cannot be sent (POST /prep/functions/v1/moov-invoice answered 403 production_execution_blocked at 2026-10-22T19:27:08Z)."
+      "notes": "Live in production since 2026-10-23 (owner-approved overlays, runs 39954831032 and 39955069311; owner-observed send from the Payments section the same day). Production Invoices: create, create_and_send, send, resend, cancel, delete, sync and recover through invoice-provider.mjs on production credentials and the tenant's environment='production' account; any tenant member; no money movement. Earlier owner report: invoices could not be sent (POST /prep/functions/v1/moov-invoice answered 403 production_execution_blocked at 2026-10-22T19:27:08Z); the route added by #1185 fixed that."
     },
     "moov-production-fund": {
       "id": "moov-production-fund",
