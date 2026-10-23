@@ -1,0 +1,15 @@
+{
+  "workstream_id": "production-platform-pnl-applied",
+  "authorization": "Record only (2026-10-23): the bytes below are live. Nothing is planned or authorized by this manifest; any later change to this member needs its own manifest, staging acceptance and owner approval.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Platform Finance P&L accuracy applied 2026-10-23 through the guarded overlay path on main a4602abb9 (#1199). providers/parity/platform-finance.mjs: staging inspect run 40000973350 (746c89a6 live, health ok), staging apply run 40001083285 (746c89a6 -> 5b1ccfdb, health ok); production preflight inspect run 40001243234 (746c89a6 live, health ok), production apply run 40001351087 (owner-approved \"DEPLOY providers/parity/platform-finance.mjs TO PRODUCTION\", staging acceptance run 40001083285; VERIFIED, 5b1ccfdb live, CodeSha256 I9ZYWPcGxeMvzgrvBhBixjfsMXrSQT4QJcZ+bH0OB4o=, RevisionId 76b3b85d-6e50-41f9-9e0e-61e22f439ca2; /health and /db-health ok). This row records the applied bytes as live_sha256 and accepted_sha256 and chains to the P&L manifest that applied them (previous_manifest), which keeps the pre-apply bytes 746c89a6 as its live_sha256.",
+  "members": {
+    "providers/parity/platform-finance.mjs": {
+      "live_sha256": "5b1ccfdb010d2ca3aab4ec22d3e958e7738623825c076d9531cb95c59c23d7e8",
+      "accepted_sha256": "5b1ccfdb010d2ca3aab4ec22d3e958e7738623825c076d9531cb95c59c23d7e8",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-platform-pnl-manifest-2026-10-23.json"
+    }
+  }
+}
