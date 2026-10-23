@@ -1504,3 +1504,27 @@ test('Production Platform Finance: providers.mjs expected_live records the bytes
     (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
   );
 });
+
+test('Platform Finance P&L accuracy: REPLACE providers/parity/platform-finance.mjs from its reconciled live bytes, before the handler', async () => {
+  const MEMBER = 'providers/parity/platform-finance.mjs';
+  const MANIFEST_REL = 'aws/tests/fixtures/production-platform-pnl-manifest-2026-10-23.json';
+  const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, MANIFEST_REL), 'utf8'));
+  const LIVE = '746c89a69077463abd97f3f1a0beed23ba2d0eb17462c19ca75defd6e6fed0fb';
+  const row = PLAN.members[MEMBER];
+  assert.equal(row.operation, 'replace');
+  assert.equal(row.expected_live_sha256, LIVE);
+  assert.equal(row.manifest, MANIFEST_REL);
+  assert.equal(row.sql_before, null);
+  assert.equal(sha(`aws/functions/api/${MEMBER}`), row.accepted_sha256);
+  assert.notEqual(row.accepted_sha256, LIVE);
+  assert.equal(manifest.deploy_authorized, false);
+  assert.deepEqual(manifest.members[MEMBER], { live_sha256: LIVE, accepted_sha256: row.accepted_sha256, operation: 'replace' });
+  assert.match(manifest.notes, /39577337627/);
+  assert.ok(PLAN.order.indexOf(MEMBER) < PLAN.order.indexOf('providers/production/platform-finance.mjs'));
+  assert.equal(PLAN.order.at(-1), 'providers.mjs');
+  assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
+  const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
+  const ready = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER) });
+  assert.equal(ready.state, 'READY');
+  assert.equal(ready.mutation, false);
+});

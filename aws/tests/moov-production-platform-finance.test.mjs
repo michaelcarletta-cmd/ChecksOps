@@ -55,7 +55,7 @@ const jwtEvent = (name, body) => ({
   },
 });
 
-const mockClient = ({ isOwner = true } = {}) => {
+const mockClient = ({ isOwner = true, tenants = null, fees = null, transfers = null } = {}) => {
   const queries = [];
   return {
     queries,
@@ -93,12 +93,14 @@ const mockClient = ({ isOwner = true } = {}) => {
             : [],
         };
       }
-      if (sql.includes('FROM public.tenants')) return { rows: [{ id: TENANT, name: 'Freedom Adjustment' }] };
+      if (sql.includes('FROM public.tenants')) return { rows: tenants || [{ id: TENANT, name: 'Freedom Adjustment', is_test_account: false }] };
       if (sql.includes('FROM public.platform_fee_line_items')) {
-        return { rows: [{ tenant_id: TENANT, amount_cents: 2500, occurred_at: '2026-10-05T00:00:00Z', fee_code: 'monthly', status: 'paid' }] };
+        return { rows: fees || [{ tenant_id: TENANT, amount_cents: 2500, occurred_at: '2026-10-05T00:00:00Z', fee_code: 'monthly', status: 'billed' }] };
       }
       if (sql.includes('FROM public.payment_transfers')) {
-        return { rows: [{ tenant_id: TENANT, amount_cents: 100000, provider_fee_cents: 30, platform_fee_cents: 100, status: 'completed', created_at: '2026-10-06T00:00:00Z' }] };
+        const all = transfers || [{ tenant_id: TENANT, environment: 'production', amount_cents: 100000, provider_fee_cents: 30, platform_fee_cents: 100, status: 'completed', created_at: '2026-10-06T00:00:00Z' }];
+        // Emulates the SQL filter: created_at >= $1 and, when given, environment = $2.
+        return { rows: all.filter((row) => (params[1] === undefined || row.environment === params[1])) };
       }
       return { rows: [] };
     },
@@ -272,4 +274,77 @@ test('route placement: the Platform Finance route sits before the production har
   assert.ok(route > 0);
   assert.ok(route < src.indexOf("error: 'production_execution_blocked'"));
   assert.ok(src.indexOf("import('./providers/production/moov-invoice.mjs')") < route);
+});
+
+test('P&L months are calendar months (YYYY-MM) even though pg returns timestamps as Date objects', async () => {
+  await withEnv(PRODUCTION_FLAGS, async () => {
+    const OTHER = '6a1e3b0c-1111-4222-8333-444455556666';
+    const client = mockClient({
+      tenants: [{ id: TENANT, name: 'Freedom Adjustment', is_test_account: false }, { id: OTHER, name: 'Condition One', is_test_account: false }],
+      fees: [
+        { tenant_id: TENANT, amount_cents: 1000, occurred_at: new Date('2026-10-02T15:00:00Z'), fee_code: 'monthly', status: 'billed' },
+        { tenant_id: OTHER, amount_cents: 500, occurred_at: new Date('2026-09-30T23:30:00Z'), fee_code: 'monthly', status: 'unbilled' },
+        { tenant_id: OTHER, amount_cents: 999, occurred_at: new Date('2026-10-03T00:00:00Z'), fee_code: 'monthly', status: 'void' },
+      ],
+      transfers: [
+        // Different weekdays of the same month land in one row.
+        { tenant_id: TENANT, environment: 'production', amount_cents: 10000, provider_fee_cents: 0, platform_fee_cents: 0, status: 'completed', created_at: new Date('2026-10-16T12:00:00Z') },
+        { tenant_id: TENANT, environment: 'production', amount_cents: 100, provider_fee_cents: 0, platform_fee_cents: 0, status: 'pending', created_at: new Date('2026-10-20T12:00:00Z') },
+        { tenant_id: OTHER, environment: 'production', amount_cents: 14400, provider_fee_cents: 0, platform_fee_cents: 0, status: 'completed', created_at: new Date('2026-10-23T12:00:00Z') },
+      ],
+    });
+    const d = deps({ client });
+    const result = await call('platform-treasury', { action: 'overview' }, d);
+    assert.equal(result.statusCode, 200, JSON.stringify(result));
+    assert.deepEqual(result.pnl.months.map((m) => m.month), ['2026-09', '2026-10']);
+    const oct = result.pnl.months.find((m) => m.month === '2026-10');
+    assert.equal(oct.fees_cents, 1000);
+    assert.equal(oct.volume_cents, 24500);
+    assert.equal(oct.transfer_count, 3);
+    assert.equal(result.pnl.months.find((m) => m.month === '2026-09').fees_cents, 500);
+    for (const m of result.pnl.months) assert.match(m.month, /^\d{4}-\d{2}$/);
+    assert.equal(result.pnl.totals.fees_cents, 1500);
+    assert.equal(result.pnl.totals.volume_cents, 24500);
+  });
+});
+
+test('production P&L counts only production money: no sandbox transfers, no test-account organizations', async () => {
+  await withEnv(PRODUCTION_FLAGS, async () => {
+    const DEMO = '7b2f4c1d-aaaa-4bbb-8ccc-ddddeeeeffff';
+    const client = mockClient({
+      tenants: [{ id: TENANT, name: 'Freedom Adjustment', is_test_account: false }, { id: DEMO, name: 'Demo Co', is_test_account: true }],
+      fees: [
+        { tenant_id: TENANT, amount_cents: 1000, occurred_at: '2026-10-02T00:00:00Z', fee_code: 'monthly', status: 'billed' },
+        { tenant_id: DEMO, amount_cents: 7000, occurred_at: '2026-10-02T00:00:00Z', fee_code: 'monthly', status: 'billed' },
+      ],
+      transfers: [
+        { tenant_id: TENANT, environment: 'production', amount_cents: 10000, provider_fee_cents: 0, platform_fee_cents: 0, status: 'completed', created_at: '2026-10-16T12:00:00Z' },
+        { tenant_id: TENANT, environment: 'sandbox', amount_cents: 500000, provider_fee_cents: 0, platform_fee_cents: 0, status: 'completed', created_at: '2026-10-16T12:00:00Z' },
+        { tenant_id: DEMO, environment: 'production', amount_cents: 88800, provider_fee_cents: 0, platform_fee_cents: 0, status: 'completed', created_at: '2026-10-16T12:00:00Z' },
+      ],
+    });
+    const d = deps({ client });
+    const result = await call('platform-treasury', { action: 'overview' }, d);
+    assert.equal(result.statusCode, 200, JSON.stringify(result));
+    assert.equal(result.pnl.totals.fees_cents, 1000);
+    assert.equal(result.pnl.totals.volume_cents, 10000);
+    assert.equal(result.pnl.totals.transfer_count, 1);
+    assert.equal(result.pnl.tenants.some((t) => t.tenant_id === DEMO), false);
+    const transferQuery = client.queries.find((q) => q.sql.includes('FROM public.payment_transfers'));
+    assert.match(transferQuery.sql, /environment = \$2/);
+    assert.equal(transferQuery.params[1], 'production');
+  });
+});
+
+test('transfers that never left or came back are not processed volume', async () => {
+  await withEnv(PRODUCTION_FLAGS, async () => {
+    const rows = ['completed', 'pending', 'submitting', 'ready', 'failed', 'canceled', 'cancelled', 'returned', 'reversed']
+      .map((status, i) => ({ tenant_id: TENANT, environment: 'production', amount_cents: 100 * (i + 1), provider_fee_cents: 0, platform_fee_cents: 0, status, created_at: '2026-10-16T12:00:00Z' }));
+    const d = deps({ client: mockClient({ transfers: rows }) });
+    const result = await call('platform-treasury', { action: 'overview' }, d);
+    assert.equal(result.statusCode, 200, JSON.stringify(result));
+    // completed 100 + pending 200 + submitting 300
+    assert.equal(result.pnl.totals.volume_cents, 600);
+    assert.equal(result.pnl.totals.transfer_count, 3);
+  });
 });
