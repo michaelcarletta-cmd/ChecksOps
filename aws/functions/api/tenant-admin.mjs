@@ -677,12 +677,53 @@ export const handleTenantRemoveOpenaiKey = async (event) => withIdentity(event, 
   return { ok: true, statusCode: 200, removed: true, spoofFieldsIgnored: spoof };
 }, { write: true, commit: true });
 
+const sendMortgageAgentInvite = async ({ client, send, email, fullName }) => {
+  const loginUrl = `${emailAssetOrigin()}/mortgage-ops/login`;
+  const branding = await resolveEmailBranding(client, { senderOverride: 'checksops' });
+  const rendered = renderTransactionalTemplate('mortgage-agent-invite', {
+    fullName,
+    loginUrl,
+    branding,
+  });
+  const mailer = send || sendViaSesOrSink;
+  await mailer({
+    to: email,
+    subject: rendered.subject,
+    html: rendered.html,
+    text: rendered.text,
+    from: branding.from,
+    replyTo: branding.replyTo,
+  });
+};
+
+/**
+ * Re-hiring an agent whose login an earlier hire created but never confirmed
+ * (still FORCE_CHANGE_PASSWORD, where Cognito offers no email code) repairs it:
+ * only a login linked to this same agent, only in that state. Returns null when
+ * there is nothing to repair; any other login is never touched.
+ */
+const repairUnconfirmedAgentLogin = async ({ client, adminCognito, email, appUserId }) => {
+  let login;
+  try {
+    login = await adminCognito('AdminGetUser', { UserPoolId: POOL_ID(), Username: email });
+  } catch {
+    return null;
+  }
+  if (login?.UserStatus !== 'FORCE_CHANGE_PASSWORD') return null;
+  const sub = (login.UserAttributes || []).find((a) => a.Name === 'sub')?.Value || login.Username;
+  if (!sub) return null;
+  const linkedUserId = (await client.query(IDENTITY_BY_SUB_SQL, [String(sub)])).rows[0]?.application_user_id || null;
+  if (!linkedUserId || String(linkedUserId) !== String(appUserId)) return null;
+  return { confirmed: await confirmInvitedLogin({ email, cognitoJson: adminCognito }) };
+};
+
 /**
  * Hire mortgage desk agent (Class A Cognito bridge for hire-mortgage-agent).
  * Preserves production semantics: mortgage_agent-only accounts, identity mapping
  * Cognito sub → application UUID (never equal). Cognito still needs a temp
  * password internally with MessageAction SUPPRESS; it is never emailed, logged,
- * or returned. The invite is passwordless login.
+ * or returned. The invite is passwordless login: handleHireMortgageAgent
+ * confirms a login this hire created once the hire has committed.
  */
 export const runHireMortgageAgent = async ({
   client, mapping, body, spoof, send, cognitoJson: cognitoFn,
@@ -715,6 +756,7 @@ export const runHireMortgageAgent = async ({
   )).rows[0]?.id || null;
   let created = false;
   let cognitoSub = null;
+  let loginToConfirm = false;
 
   if (appUserId) {
     const roles = (await client.query(
@@ -730,10 +772,37 @@ export const runHireMortgageAgent = async ({
       };
     }
     if (roles.includes('mortgage_agent')) {
+      const repair = await repairUnconfirmedAgentLogin({ client, adminCognito, email, appUserId });
+      if (!repair) {
+        return {
+          ok: false,
+          statusCode: 409,
+          error: 'User already has mortgage ops access.',
+          spoofFieldsIgnored: spoof,
+        };
+      }
+      if (!repair.confirmed) {
+        return {
+          ok: false,
+          statusCode: 502,
+          error: 'login_repair_failed',
+          message: 'The agent login could not be made ready for email-code sign-in.',
+          spoofFieldsIgnored: spoof,
+        };
+      }
+      await sendMortgageAgentInvite({ client, send, email, fullName });
       return {
-        ok: false,
-        statusCode: 409,
-        error: 'User already has mortgage ops access.',
+        ok: true,
+        statusCode: 200,
+        success: true,
+        user_id: appUserId,
+        email,
+        full_name: fullName,
+        created: false,
+        login_repaired: true,
+        login_ready: true,
+        invitationSent: true,
+        applicationUserId: appUserId,
         spoofFieldsIgnored: spoof,
       };
     }
@@ -756,6 +825,7 @@ export const runHireMortgageAgent = async ({
       || createdUser.User?.Username
       || null;
     created = true;
+    loginToConfirm = true;
     if (providedPassword) {
       try {
         await adminCognito('AdminSetUserPassword', {
@@ -764,6 +834,7 @@ export const runHireMortgageAgent = async ({
           Password: providedPassword,
           Permanent: true,
         });
+        loginToConfirm = false;
       } catch {
         /* Cognito still has a suppressed temp password; invite is passwordless. */
       }
@@ -912,22 +983,7 @@ export const runHireMortgageAgent = async ({
     try { await client.query('ROLLBACK TO SAVEPOINT hire_mortgage_agent_account'); } catch { /* request rolls back */ }
   }
 
-  const loginUrl = `${emailAssetOrigin()}/mortgage-ops/login`;
-  const branding = await resolveEmailBranding(client, { senderOverride: 'checksops' });
-  const rendered = renderTransactionalTemplate('mortgage-agent-invite', {
-    fullName,
-    loginUrl,
-    branding,
-  });
-  const mailer = send || sendViaSesOrSink;
-  await mailer({
-    to: email,
-    subject: rendered.subject,
-    html: rendered.html,
-    text: rendered.text,
-    from: branding.from,
-    replyTo: branding.replyTo,
-  });
+  await sendMortgageAgentInvite({ client, send, email, fullName });
 
   return {
     ok: true,
@@ -940,15 +996,23 @@ export const runHireMortgageAgent = async ({
     invitationSent: true,
     cognitoSub,
     applicationUserId: appUserId,
+    loginToConfirm,
     spoofFieldsIgnored: spoof,
   };
 };
 
-export const handleHireMortgageAgent = (event, deps = {}) => withIdentity(event, (ctx) => (
-  runHireMortgageAgent({
-    ...ctx,
-    send: deps.sendViaSesOrSink,
-    cognitoJson: deps.cognitoJson,
-  })
-), { write: true, commit: true, ...deps });
+export const handleHireMortgageAgent = async (event, deps = {}) => {
+  const result = await withIdentity(event, (ctx) => (
+    runHireMortgageAgent({
+      ...ctx,
+      send: deps.sendViaSesOrSink,
+      cognitoJson: deps.cognitoJson,
+    })
+  ), { write: true, commit: true, ...deps });
+  if (!result || typeof result !== 'object' || !('loginToConfirm' in result)) return result;
+  const { loginToConfirm, ...rest } = result;
+  // withIdentity has committed by the time it returns an ok result.
+  if (rest.ok !== true || !loginToConfirm || Number(rest.statusCode || 200) >= 400) return rest;
+  return { ...rest, login_ready: await confirmInvitedLogin({ email: rest.email, cognitoJson: deps.cognitoJson }) };
+};
 
