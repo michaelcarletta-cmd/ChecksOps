@@ -190,7 +190,7 @@ test('pin: the release pin shape, applied and retired (owner approved 2026-10-22
   assert.doesNotMatch(JSON.stringify(tool), /[0-9a-f]{64}/);
   const rows = JSON.stringify(readJson('ops/deployment-guard/bypass-inventory.json'));
   assert.match(rows, /"path":"scripts\/deployment-guard\/sql110-homeowner-preclaim-links-production-apply\.mjs","classification":"GUARDED","capabilities":\["sql110-production-apply"\]/);
-  assert.match(rows, /sql106, sql108, sql109, sql110, sql111, sql112\)/);
+  assert.match(rows, /sql106, sql108, sql109, sql110, sql111, sql112, sql113\)/);
   const scripts = readJson('package.json').scripts;
   const workflow = fs.readFileSync(path.join(ROOT, '.github/workflows/deployment-guard.yml'), 'utf8');
   for (const name of ['aws/tests/release-sql110-executor.test.mjs', 'aws/tests/release-sql110-production-apply.test.mjs']) {
