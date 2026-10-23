@@ -1,0 +1,15 @@
+{
+  "workstream_id": "production-mortgage-agent-login-applied",
+  "authorization": "Record only (2026-10-23): the bytes below are live. Nothing is planned or authorized by this manifest; any later change to this member needs its own manifest, staging acceptance and owner approval.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Mortgage agent login fix applied 2026-10-23 through the guarded overlay path on main 0f0127cb2 (#1202). tenant-admin.mjs: staging inspect run 40011746459 (e111223d live, health ok), staging apply run 40011854288 (e111223d -> 93fc4177, health ok), staging post-apply inspect run 40012050179 (93fc4177 live); production preflight inspect run 40012184072 (READY, e111223d live, health ok), production apply run 40013182981 (owner-approved \"DEPLOY tenant-admin.mjs TO PRODUCTION\", staging acceptance run 40011854288; health ok), production post-apply inspect run 40013344042 (ALREADY_ACCEPTED, 93fc4177 live, CodeSha256 pkUfIsqA87nPZPvS9A8XrClI6FEEpCy3CIcF0UuGmwk=, RevisionId 026d2d54-f461-4abb-8ca0-d532a18d920a; /health and /db-health ok). This row records the applied bytes as live_sha256 and accepted_sha256 and chains to the login manifest that applied them (previous_manifest), which keeps the pre-apply bytes e111223d as its live_sha256.",
+  "members": {
+    "tenant-admin.mjs": {
+      "live_sha256": "93fc41776f70c4c29349c74c4130bbafb2b87fdd7e353989ed2911be19893ed8",
+      "accepted_sha256": "93fc41776f70c4c29349c74c4130bbafb2b87fdd7e353989ed2911be19893ed8",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-mortgage-agent-login-manifest-2026-10-23.json"
+    }
+  }
+}
