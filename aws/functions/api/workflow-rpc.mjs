@@ -84,7 +84,9 @@ export const SAFE_WRITE_RPC_CLASSIFICATION = {
   backfill_check_billing_events: 'financial_sensitive',
   submit_payment_direction_by_token: 'financial_sensitive',
   decide_stakeholder_limit_request: 'financial_sensitive',
-  apply_referral_code: 'financial_sensitive',
+  // SQL 111: the redeem runs inside aws_apply_referral_code (SECURITY DEFINER, member check,
+  // one referral_events INSERT); it never moves money or changes a tenants row.
+  apply_referral_code: 'safe_now',
   add_partner_stakeholder_to_check: 'provider_dependent',
   ensure_partner_stakeholders: 'provider_dependent',
   save_checkalt_settings: 'safe_now',
@@ -114,6 +116,7 @@ export const SAFE_WRITE_RPCS = new Set([
   'save_checkalt_tenant_auto_deposit',
   'claim_ledger_link_or_create',
   'admin_override_check_status',
+  'apply_referral_code',
   SAVE_CLAIM_SETTLEMENT_BREAKDOWN,
 ]);
 
@@ -1434,6 +1437,26 @@ const executeClaimLedgerLinkOrCreate = async ({ client, mapping, args }) => {
   return { data: result };
 };
 
+export const APPLY_REFERRAL_CODE_SQL = 'SELECT public.aws_apply_referral_code($1::uuid, $2::text) AS result';
+
+/**
+ * Refer & Earn redeem (owner decisions 2026-10-22, SQL 111). The function checks that the
+ * caller (auth.uid()) is a member of the redeeming tenant, validates the code, refuses
+ * already_redeemed / invalid_code / own_code / mutual_referral and records one referral
+ * event; the referrer's $5.00 monthly credit (at most $25.00) is computed from those events
+ * by the billing engine. Its {success, error?, message, referrer_name} answer is returned
+ * as data, so the screen shows the function's own message.
+ */
+const executeApplyReferralCode = async ({ client, args }) => {
+  const tenantId = arg(args, 'p_new_tenant_id', 'p_tenant_id', 'tenant_id');
+  const code = arg(args, 'p_referring_code', 'p_code', 'code');
+  if (!isUuid(tenantId)) return { error: 'invalid_uuid', field: 'p_new_tenant_id' };
+  if (typeof code !== 'string' || !code.trim()) return { error: 'missing_required_field', field: 'p_referring_code' };
+  const result = (await client.query(APPLY_REFERRAL_CODE_SQL, [tenantId, code.trim()])).rows?.[0]?.result;
+  if (!result || typeof result !== 'object') return { error: 'referral_apply_failed' };
+  return { data: result };
+};
+
 export const executeSafeWriteRpc = async ({ client, mapping, name, args }) => {
   switch (name) {
     case 'log_audit':
@@ -1479,6 +1502,8 @@ export const executeSafeWriteRpc = async ({ client, mapping, name, args }) => {
       return executeClaimSettlementBreakdownWrite({ client, mapping, args });
     case 'admin_override_check_status':
       return executeAdminOverrideCheckStatus({ client, mapping, args });
+    case 'apply_referral_code':
+      return executeApplyReferralCode({ client, args });
     default:
       return { error: 'rpc_disabled', name };
   }

@@ -52,6 +52,10 @@ const READ_RPCS = new Set([
   'is_approval_required',
   'is_master_owner',
   'is_platform_owner',
+  // SQL 111 Refer & Earn reads (SECURITY DEFINER; the summary refuses an identity that cannot
+  // access the tenant, the overview anyone but the platform owner).
+  'aws_tenant_referral_summary',
+  'aws_platform_owner_referral_overview',
 ]);
 
 const RPC_UNWRAP_SINGLE_COLUMN = new Set([
@@ -68,6 +72,8 @@ const RPC_UNWRAP_SINGLE_COLUMN = new Set([
   'lookup_tenant_by_partner_code',
   'is_master_owner',
   'is_platform_owner',
+  'aws_tenant_referral_summary',
+  'aws_platform_owner_referral_overview',
 ]);
 
 export const ident = (name, kind = 'identifier') => {
