@@ -1,0 +1,25 @@
+{
+  "workstream_id": "production-platform-finance",
+  "authorization": "Pending owner review (2026-10-23). Planning only: nothing is live or verified. Each production apply still needs its own owner approval and staging acceptance.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Owner report 2026-10-23: Tenant Management > Platform Finance shows \"Couldn't load platform banking\" with production_execution_blocked, and Wallet & P&L shows the same error. Root cause: providers.mjs lets moov-platform-bank action=status and platform-treasury action=overview past the production hard block (isPlatformFinanceRead), but they then reach the parity wrapper in providers/parity/moov-functions.mjs, whose moovParityContext answers production_execution_blocked whenever production execution is allowed (sandbox-only by design). The read-only production overlay inspects on main 5cca7e6b9 found moov-functions.mjs live at main's 3d17efb4 (run 39983773878) and moov-onboard.mjs at main's dc60dc48 (run 39983961992), CodeSha256 LGjjxS11JYsJtAtWEnfP8DI+atz7ORBugs6nPeLa7Fs=, RevisionId 53961309-44de-40c5-92c9-f13958d5c923. The added module serves exactly those two reads for the platform owner (public.is_platform_owner(), checked before any secret is loaded), on production credentials and the facilitator account (MOOV_ACCOUNT_ID, never the sandbox facilitator), through the read model in providers/parity/platform-finance.mjs (live bytes since the 2026-10-21 reconciliation; the apply's live-import check confirms it is present). Every other Platform Finance action (bank add, micro-deposits, wallet, pnl, transfers) stays at the production hard block. No money moves and nothing is written. providers.mjs routes the two reads to it when execution is allowed, before the hard block. Apply in order: the added module, then providers.mjs last. No SQL change.",
+  "members": {
+    "providers/production/platform-finance.mjs": {
+      "live_sha256": null,
+      "accepted_sha256": "2096af29aa7c0fcdbc5edf418877dabef7004e145ae7570baf793259acda8d0d",
+      "operation": "add",
+      "required_imports": [
+        "providers/parity/caller.mjs",
+        "providers/parity/moov-client.mjs",
+        "providers/parity/platform-finance.mjs",
+        "data.mjs"
+      ]
+    },
+    "providers.mjs": {
+      "live_sha256": "c1718779778a3b58f00b9bfa92d83b629aadc9e4b106ab4e8c460a946566b45f",
+      "accepted_sha256": "a72a583af99efff5cf9d5bba9f139080f947e04ed50a0f20ce3c2275037b40dc",
+      "operation": "replace"
+    }
+  }
+}

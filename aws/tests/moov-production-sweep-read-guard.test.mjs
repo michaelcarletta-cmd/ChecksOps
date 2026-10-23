@@ -481,7 +481,9 @@ test('Platform Finance production exceptions stay limited to status and overview
       assert.equal(result.error, 'production_execution_blocked', `${name} ${action}`);
       assert.equal(result.tranche4HardBlock, true, `${name} ${action}`);
     }
-    // status/overview pass the hard block but must still fail closed on main: no secrets, no Moov call.
+    // status/overview pass the hard block to providers/production/platform-finance.mjs, which refuses a
+    // caller who is not the platform owner before any secret or provider call
+    // (owner path: aws/tests/moov-production-platform-finance.test.mjs).
     for (const [name, action] of [['moov-platform-bank', 'status'], ['platform-treasury', 'overview']]) {
       let secretsLoaded = false;
       const fetch = walletReadFetch({ wallets: [] });

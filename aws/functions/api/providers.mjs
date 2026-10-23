@@ -357,7 +357,7 @@ export const handleFunctionInvoke = async (event, name, deps = {}) => {
   }
 
   // Production WalletOps balance refresh: Moov GETs only, updates only the
-  // production payment_wallets row. Apart from funding, sends and invoices (next), every
+  // production payment_wallets row. Apart from funding, sends, invoices and the Platform Finance reads (next), every
   // other production Moov operation stays hard-blocked below.
   if (spec.provider === 'moov' && name === 'moov-wallet-sync' && executionAllowed('moov')) {
     const { handleProductionMoovWalletSync } = await import('./providers/production/moov-wallet-sync.mjs');
@@ -383,6 +383,14 @@ export const handleFunctionInvoke = async (event, name, deps = {}) => {
   if (spec.provider === 'moov' && name === 'moov-invoice' && executionAllowed('moov')) {
     const { handleProductionMoovInvoice } = await import('./providers/production/moov-invoice.mjs');
     return handleProductionMoovInvoice(event, deps);
+  }
+
+  // Production Platform Finance reads (Banking status, Wallet & P&L overview): the
+  // platform owner only, the ChecksOps facilitator's own account, read-only. Every
+  // other Platform Finance action still meets the hard block below.
+  if (spec.provider === 'moov' && executionAllowed('moov') && isPlatformFinanceRead(spec, body)) {
+    const { handleProductionPlatformFinance } = await import('./providers/production/platform-finance.mjs');
+    return handleProductionPlatformFinance(name, event, deps);
   }
 
   if (executionAllowed(spec.provider) && spec.aws !== 'db_status' && spec.aws !== 'webhook') {
