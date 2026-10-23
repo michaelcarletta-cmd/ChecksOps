@@ -96,11 +96,11 @@
     },
     "production-platform-finance": {
       "classification": "UNVERIFIED",
-      "git_sha": "5cca7e6b9adb4c28d59bfd2121afaf8a90227291",
-      "deployed_artifact": "not deployed",
-      "applied_migrations": "none (reads payment_provider_methods, tenants, platform_fee_line_items, payment_transfers)",
-      "environment": "unknown",
-      "missing_evidence": ["staging acceptance", "production overlay receipts"],
+      "git_sha": "f402a32cd7efd62bb2929aba0104e00e8249fdd2",
+      "deployed_artifact": "checksops-production-prep-api package CodeSha256 RlW706fIObNt1srZmphE9vJkCkd414u1jJydF8opOKU= RevisionId aba8a116-5937-4173-8b10-4fa1a0e68f57; providers.mjs a72a583af99efff5cf9d5bba9f139080f947e04ed50a0f20ce3c2275037b40dc; providers/production/platform-finance.mjs 2096af29aa7c0fcdbc5edf418877dabef7004e145ae7570baf793259acda8d0d (guarded overlay runs 39987995317, 39988166380; post inspect 39988303670)",
+      "applied_migrations": "none (reads payment_provider_methods, tenants, platform_fee_line_items, payment_transfers); owner-observed Banking and Wallet & P&L load 2026-10-23",
+      "environment": "production",
+      "missing_evidence": ["production read-only inspect of the grants on the tables the read model selects (payment_provider_methods, platform_fee_line_items, payment_transfers, tenants); the 2026-10-23 owner report that both panels load shows the reads work for the platform owner, but the grant set itself was not read"],
       "open_pr_overlap": []
     },
     "moov-production-fund": {
