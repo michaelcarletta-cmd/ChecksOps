@@ -393,7 +393,7 @@ function TenantDetail({ tenant, onBack, onUpdated }: { tenant: Tenant; onBack: (
           </TabsContent>
           <TabsContent value="integrations" className="mt-6 space-y-6">
             <TenantMoovIdentityCard tenantId={tenant.id} tenantName={tenant.name} />
-            <CheckAltTenantAccountCard />
+            <CheckAltTenantAccountCard key={tenant.id} tenantId={tenant.id} tenantName={tenant.name} />
           </TabsContent>
           <TabsContent value="billing" className="mt-6 space-y-6">
             <BillingTab tenant={tenant} onUpdated={onUpdated} />
