@@ -8,6 +8,7 @@ import { PlatformTreasuryPanel } from "@/components/admin/PlatformTreasuryPanel"
 import { PlatformFeeDestinationCard, TenantBillingVerifyButton, TenantFeeCollectButton } from "@/components/admin/TenantFeeCollection";
 import { billingPeriodKey } from "@/lib/tenantFeeBilling";
 import { TenantDepositsSwitch } from "@/components/admin/TenantDepositsSwitch";
+import { TenantOpsBadgeSwitch } from "@/components/admin/TenantOpsBadgeSwitch";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { resolveAdminTenantTab } from "@/lib/adminTenantTab";
 import { supabase } from "@/integrations/supabase/client";
@@ -344,7 +345,6 @@ function CreateTenantDialog({ onCreated }: { onCreated: (t: Tenant) => void }) {
 /* ---------------- Tenant Detail (with tabs) ---------------- */
 
 function TenantDetail({ tenant, onBack, onUpdated }: { tenant: Tenant; onBack: () => void; onUpdated: (t: Tenant) => void }) {
-  const [proOpen, setProOpen] = useState(false);
 
   return (
     <TenantProvider slug={tenant.slug}>
@@ -377,15 +377,15 @@ function TenantDetail({ tenant, onBack, onUpdated }: { tenant: Tenant; onBack: (
             <TabsTrigger value="integrations" className="flex-1 min-w-[130px] whitespace-nowrap"><Link2 className="w-4 h-4 mr-1" /> Integrations</TabsTrigger>
             
             <TabsTrigger value="billing" className="flex-1 min-w-[100px] whitespace-nowrap"><Receipt className="w-4 h-4 mr-1" /> Billing & Usage</TabsTrigger>
-            <TabsTrigger value="pro-badge" className="flex-1 min-w-[115px] whitespace-nowrap"><Crosshair className="w-4 h-4 mr-1" strokeWidth={2.5} /> OPS Badge</TabsTrigger>
             <TabsTrigger value="users" className="flex-1 min-w-[95px] whitespace-nowrap"><Users className="w-4 h-4 mr-1" /> Users</TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview" className="mt-6">
             <TenantManagementV2Dashboard tenantId={tenant.id} />
           </TabsContent>
-          <TabsContent value="company" className="mt-6">
+          <TabsContent value="company" className="mt-6 space-y-6">
             <CompanyTab tenant={tenant} onUpdated={onUpdated} />
+            <TenantOpsBadgeSwitch tenantId={tenant.id} tenantName={tenant.name} />
           </TabsContent>
           <TabsContent value="compliance" className="mt-6 space-y-8">
             {/* Read-only by default; the platform owner opts in with "Edit on behalf of tenant". */}
@@ -407,29 +407,10 @@ function TenantDetail({ tenant, onBack, onUpdated }: { tenant: Tenant; onBack: (
             <TenantBillingBankPanel tenantId={tenant.id} tenantName={tenant.name} />
             <TenantUsageInlinePanel tenantId={tenant.id} tenantName={tenant.name} />
           </TabsContent>
-          <TabsContent value="pro-badge" className="mt-6">
-            <SectionCard
-              title="Contractor OPS Badge"
-              icon={<Crosshair className="h-4 w-4 text-primary" strokeWidth={2.5} />}
-              accent="bg-gradient-to-r from-primary to-primary/40"
-              description="Approve or revoke the Find-a-Pro badge for contractor profiles in this tenant."
-            >
-              <Button onClick={() => setProOpen(true)}>
-                <Crosshair className="w-4 h-4 mr-2" strokeWidth={2.5} /> Manage OPS Badge
-              </Button>
-            </SectionCard>
-
-          </TabsContent>
           <TabsContent value="users" className="mt-6">
             <UsersTab tenant={tenant} />
           </TabsContent>
         </Tabs>
-        <TenantProBadgeManagement
-          tenantId={tenant.id}
-          tenantName={tenant.name}
-          isOpen={proOpen}
-          onClose={() => setProOpen(false)}
-        />
       </SettingsPageShell>
     </div>
 
