@@ -96,3 +96,28 @@ test('the summary and the owner overview are read RPCs that return the function\
   assert.deepEqual(unwrapRpcData('aws_platform_owner_referral_overview', [{ aws_platform_owner_referral_overview: overview }]), overview);
   assert.equal(unwrapRpcData('aws_tenant_referral_summary', []), null);
 });
+
+test('the Refer & Earn screens read through the SQL 111 functions, never the tables, and say who earns the credit', () => {
+  const settings = fs.readFileSync(path.join(ROOT, 'src/components/settings/ReferralSettings.tsx'), 'utf8');
+  const dashboard = fs.readFileSync(path.join(ROOT, 'src/components/settings/AdminReferralDashboard.tsx'), 'utf8');
+  // The tenant screen: one summary read and the redeem through apply_referral_code (its Supabase-era
+  // argument names, which the safe write route accepts).
+  assert.match(settings, /rpc\("aws_tenant_referral_summary", \{ _tenant_id: tenant!\.id \}\)/);
+  assert.match(settings, /rpc\("apply_referral_code", \{\s*p_referring_code:/);
+  assert.match(settings, /p_new_tenant_id: tenant!\.id/);
+  // The owner's dashboard: one overview read, and the hook order does not depend on who is signed in.
+  assert.match(dashboard, /rpc\("aws_platform_owner_referral_overview"\)/);
+  assert.match(dashboard, /enabled: owner/);
+  // Both go through the supabase shim (the AWS adapter on checksops.com), never a second client.
+  for (const src of [settings, dashboard]) assert.match(src, /supabase\.rpc as unknown as RpcCall\)\.call\(supabase/);
+  for (const [name, src] of [['ReferralSettings', settings], ['AdminReferralDashboard', dashboard]]) {
+    assert.doesNotMatch(src, /\.from\(/, `${name}: no table reads`);
+    assert.doesNotMatch(src, /referral_events|referred_by_tenant_id|is_founding_partner/, `${name}: no table columns`);
+    // Only the referrer earns the credit (owner decision 2026-10-22): $5 a month per referral, at most $25.
+    assert.doesNotMatch(src, /Both get/i, name);
+  }
+  assert.match(settings, /earned_credit_cents/);
+  assert.match(settings, /applied_discount_cents/);
+  assert.match(settings, /never takes maintenance below \$0 and never reduces check fees/);
+  assert.match(dashboard, /\$5 per referral, \$25 cap per tenant/);
+});
