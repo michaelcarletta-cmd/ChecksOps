@@ -1539,3 +1539,26 @@ test('Platform Finance P&L accuracy: providers/parity/platform-finance.mjs expec
     (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
   );
 });
+
+test('Mortgage agent login: REPLACE tenant-admin.mjs from the bytes the read-only inspect found live', async () => {
+  const MEMBER = 'tenant-admin.mjs';
+  const MANIFEST_REL = 'aws/tests/fixtures/production-mortgage-agent-login-manifest-2026-10-23.json';
+  const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, MANIFEST_REL), 'utf8'));
+  const LIVE = 'e111223d673e26e27a91b24620dc8e97576b5f2a012d349e02ad3e666e35c906';
+  const row = PLAN.members[MEMBER];
+  assert.equal(row.operation, 'replace');
+  assert.equal(row.expected_live_sha256, LIVE);
+  assert.equal(row.manifest, MANIFEST_REL);
+  assert.equal(row.sql_before, 'aws/workflows/sql/90_users_only_tenant_roles.sql');
+  assert.equal(sha(`aws/functions/api/${MEMBER}`), row.accepted_sha256);
+  assert.notEqual(row.accepted_sha256, LIVE);
+  assert.equal(manifest.deploy_authorized, false);
+  assert.deepEqual(manifest.members[MEMBER], { live_sha256: LIVE, accepted_sha256: row.accepted_sha256, operation: 'replace' });
+  assert.match(manifest.notes, /40008878953/);
+  assert.equal(PLAN.order.at(-1), 'providers.mjs');
+  assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
+  const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
+  const ready = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER) });
+  assert.equal(ready.state, 'READY');
+  assert.equal(ready.mutation, false);
+});

@@ -1,0 +1,14 @@
+{
+  "workstream_id": "production-mortgage-agent-login",
+  "authorization": "Pending owner review (2026-10-23). Planning only: nothing is live or verified. The production apply needs its own owner approval and staging acceptance.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Owner report 2026-10-23 (screenshot): a newly hired Mortgage Ops agent signing in at /mortgage-ops/login sees 'This staging Cognito account is not currently eligible for passwordless email OTP.' Root cause in tenant-admin.mjs runHireMortgageAgent: the hire creates the Cognito login with a suppressed temporary password (AdminCreateUser) and never makes a password permanent, so the login stays in FORCE_CHANGE_PASSWORD, where Cognito offers no EMAIL_OTP sign-in. Tenant invites were fixed for the same cause on 2026-10-18 (confirmInvitedLogin, a1a8971ed); the hire never was. The fix: handleHireMortgageAgent confirms a login the hire created, only after the hire commits (the same confirmInvitedLogin), and re-hiring an existing agent repairs that agent's login only when it is still FORCE_CHANGE_PASSWORD and linked to the same agent (identity_accounts), then sends the invite again; any other login is never touched. Expected live e111223d is main's bytes: read-only production inspect run 40008878953 (main 366c9543f) found the live member ALREADY_ACCEPTED at e111223d; the guarded REPLACE refuses if the live member differs. No SQL change.",
+  "members": {
+    "tenant-admin.mjs": {
+      "live_sha256": "e111223d673e26e27a91b24620dc8e97576b5f2a012d349e02ad3e666e35c906",
+      "accepted_sha256": "93fc41776f70c4c29349c74c4130bbafb2b87fdd7e353989ed2911be19893ed8",
+      "operation": "replace"
+    }
+  }
+}

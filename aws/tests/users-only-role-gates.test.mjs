@@ -26,6 +26,7 @@ import {
   TENANT_MEMBER_BY_EMAIL_SQL,
   TENANT_MEMBER_COUNT_SQL,
   USER_IS_PLATFORM_OWNER_SQL,
+  handleHireMortgageAgent,
   handleTenantInviteUser,
 } from '../functions/api/tenant-admin.mjs';
 import { resolveTrustedIdentityScope } from '../functions/api/identity-env.mjs';
@@ -767,6 +768,150 @@ test('invite: only after commit, a login the invite created gets an unseen perma
   assert.equal(refused.result.login_ready, false);
   assert.equal(refused.logs.length, 1);
   assert.deepEqual(JSON.parse(refused.logs[0]), { event: 'invite_login_confirm_failed', error_name: 'AccessDeniedException' });
+});
+
+// Hire mortgage agent through the real handler (withIdentity), the platform owner calling.
+const AGENT = '55555555-5555-4555-8555-555555555555';
+const OTHER_USER = '66666666-6666-4666-8666-666666666666';
+const hireThroughHandler = async ({
+  existingAgent = false, loginStatus = null, linkedUserId = null, commitTag = 'COMMIT', failConfirm = false, password = null,
+} = {}) => {
+  const CALLER_SUB = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+  const team = teamClient({ platformOwner: true, linkedUserId });
+  const cognitoCalls = [];
+  const passwords = [];
+  const sent = [];
+  const logs = [];
+  const origWarn = console.warn;
+  console.warn = (...args) => logs.push(args.map(String).join(' '));
+  try {
+    const result = await handleHireMortgageAgent({
+      requestContext: { authorizer: { jwt: { claims: { sub: CALLER_SUB } } } },
+      body: JSON.stringify({ email: 'Agent@Example.com', full_name: 'Mo Agent', ...(password ? { password } : {}) }),
+    }, {
+      identityScope: resolveTrustedIdentityScope({ checksopsEnv: 'staging', userPoolId: '' }),
+      loadDatabaseCredentials: async () => ({ host: 'db.invalid', port: 5432, username: 'u', password: 'p', dbname: 'd' }),
+      createClient: () => ({
+        connect: async () => {},
+        end: async () => {},
+        on: () => {},
+        query: async (sql, params = []) => {
+          if (sql === 'COMMIT') { team.queries.push({ sql, params }); return { command: commitTag }; }
+          if (params[0] === CALLER_SUB) return { rows: [{ application_user_id: USER }] };
+          if (/FROM public\.profiles WHERE lower\(email\)/.test(sql)) {
+            team.queries.push({ sql, params });
+            return { rows: existingAgent ? [{ id: AGENT }] : [] };
+          }
+          if (/SELECT role FROM public\.user_roles WHERE user_id/.test(sql)) {
+            team.queries.push({ sql, params });
+            return { rows: existingAgent ? [{ role: 'mortgage_agent' }] : [] };
+          }
+          return team.query(sql, params);
+        },
+      }),
+      sendViaSesOrSink: async (m) => { sent.push(m); },
+      cognitoJson: async (target, payload) => {
+        cognitoCalls.push(target);
+        if (target === 'AdminCreateUser') {
+          if (loginStatus) throw Object.assign(new Error('exists'), { name: 'UsernameExistsException' });
+          return { User: { Username: 'cog', Attributes: [{ Name: 'sub', Value: COGNITO_SUB }] } };
+        }
+        if (target === 'AdminGetUser') {
+          if (!loginStatus) throw Object.assign(new Error('missing'), { name: 'UserNotFoundException' });
+          return { Username: 'cog', UserStatus: loginStatus, UserAttributes: [{ Name: 'sub', Value: COGNITO_SUB }] };
+        }
+        if (target === 'AdminSetUserPassword') {
+          if (failConfirm) throw Object.assign(new Error('denied for agent@example.com'), { name: 'AccessDeniedException' });
+          passwords.push(payload);
+          return {};
+        }
+        throw new Error(`unexpected ${target}`);
+      },
+    });
+    return { result, cognitoCalls, passwords, sent, logs, sqls: team.queries.map((q) => q.sql) };
+  } finally {
+    console.warn = origWarn;
+  }
+};
+
+test('hire mortgage agent: only after commit, a login the hire created gets an unseen permanent password (email-code sign-in)', async () => {
+  const hired = await hireThroughHandler();
+  assert.equal(hired.result.ok, true);
+  assert.equal(hired.result.login_ready, true);
+  assert.equal('loginToConfirm' in hired.result, false);
+  assert.deepEqual(hired.cognitoCalls, ['AdminCreateUser', 'AdminSetUserPassword']);
+  assert.equal(hired.passwords.length, 1);
+  assert.equal(hired.passwords[0].Permanent, true);
+  assert.equal(hired.passwords[0].Username, 'agent@example.com');
+  assert.ok(hired.passwords[0].Password.length >= 32);
+  assert.ok(hired.sqls.includes('COMMIT'));
+  assert.equal(hired.sent.length, 1);
+  assert.match(hired.sent[0].html, /mortgage-ops\/login/);
+  for (const where of [hired.result, hired.sent, hired.logs]) {
+    assert.equal(JSON.stringify(where).includes(hired.passwords[0].Password), false);
+  }
+
+  // The commit did not happen: the login is not confirmed.
+  const rolledBack = await hireThroughHandler({ commitTag: 'ROLLBACK' });
+  assert.equal(rolledBack.result.ok, false);
+  assert.equal(rolledBack.cognitoCalls.includes('AdminSetUserPassword'), false);
+
+  // A login that existed before the hire (not an agent yet) is never touched, whatever its state.
+  for (const loginStatus of ['FORCE_CHANGE_PASSWORD', 'CONFIRMED']) {
+    const existing = await hireThroughHandler({ loginStatus });
+    assert.equal(existing.result.ok, true, loginStatus);
+    assert.equal('login_ready' in existing.result, false, loginStatus);
+    assert.equal('loginToConfirm' in existing.result, false, loginStatus);
+    assert.equal(existing.cognitoCalls.includes('AdminSetUserPassword'), false, loginStatus);
+  }
+
+  // A refused confirm keeps the committed hire; the log carries the error name only.
+  const refused = await hireThroughHandler({ failConfirm: true });
+  assert.equal(refused.result.ok, true);
+  assert.equal(refused.result.login_ready, false);
+  assert.deepEqual(JSON.parse(refused.logs[0]), { event: 'invite_login_confirm_failed', error_name: 'AccessDeniedException' });
+});
+
+test('hire mortgage agent: re-hiring repairs only this agent\'s unconfirmed login and sends the invite again', async () => {
+  const repaired = await hireThroughHandler({ existingAgent: true, loginStatus: 'FORCE_CHANGE_PASSWORD', linkedUserId: AGENT });
+  assert.equal(repaired.result.ok, true);
+  assert.equal(repaired.result.login_repaired, true);
+  assert.equal(repaired.result.login_ready, true);
+  assert.equal(repaired.result.created, false);
+  assert.deepEqual(repaired.cognitoCalls, ['AdminGetUser', 'AdminSetUserPassword']);
+  assert.equal(repaired.passwords[0].Permanent, true);
+  assert.equal(repaired.sent.length, 1);
+  assert.match(repaired.sent[0].html, /mortgage-ops\/login/);
+  assert.equal(repaired.sqls.some((sql) => /INSERT INTO/.test(sql)), false);
+  assert.equal(JSON.stringify(repaired.result).includes(repaired.passwords[0].Password), false);
+
+  // Nothing to repair: a confirmed login, a login linked to another user, no login at all.
+  for (const opts of [
+    { loginStatus: 'CONFIRMED', linkedUserId: AGENT },
+    { loginStatus: 'FORCE_CHANGE_PASSWORD', linkedUserId: OTHER_USER },
+    { loginStatus: 'FORCE_CHANGE_PASSWORD', linkedUserId: null },
+    { loginStatus: null, linkedUserId: AGENT },
+  ]) {
+    const kept = await hireThroughHandler({ existingAgent: true, ...opts });
+    assert.equal(kept.result.statusCode, 409, JSON.stringify(opts));
+    assert.equal(kept.result.error, 'User already has mortgage ops access.');
+    assert.equal(kept.cognitoCalls.includes('AdminSetUserPassword'), false, JSON.stringify(opts));
+    assert.equal(kept.sent.length, 0);
+  }
+
+  // A refused repair says so and sends no invite.
+  const refused = await hireThroughHandler({ existingAgent: true, loginStatus: 'FORCE_CHANGE_PASSWORD', linkedUserId: AGENT, failConfirm: true });
+  assert.equal(refused.result.statusCode, 502);
+  assert.equal(refused.result.error, 'login_repair_failed');
+  assert.equal(refused.sent.length, 0);
+});
+
+test('hire mortgage agent: an owner-set password is made permanent by the hire itself; no second confirm', async () => {
+  const hired = await hireThroughHandler({ password: 'Owner-Chosen-1' });
+  assert.equal(hired.result.ok, true);
+  assert.equal('login_ready' in hired.result, false);
+  assert.deepEqual(hired.cognitoCalls, ['AdminCreateUser', 'AdminSetUserPassword']);
+  assert.equal(hired.passwords[0].Password, 'Owner-Chosen-1');
 });
 
 test('invite: runTenantInviteUser itself never confirms a login (the handler does, after commit)', async () => {
