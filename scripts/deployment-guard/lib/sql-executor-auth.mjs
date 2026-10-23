@@ -2428,9 +2428,13 @@ export const AUTHORIZED_SQL111_TENANT_REFERRAL_CODES = Object.freeze({
   // The commit that last authored the file bytes.
   commit: '2aab04de3c2f4c5e05c1929e2f04e68cc9e8233a',
   source_sha256: '49144697145cb6f6e2495041c22967cfd44263f8abb7fad5ef0953f1abb8e829',
-  authorization: 'pending',
-  execute: false,
-  expected_live_definition_sha256: null,
+  // Owner's words 2026-10-22: "Owner approved the SQL 111 staging apply on 2026-10-22" (staging only; production separately).
+  authorization: 'Owner approved 2026-10-22: staging apply (wave 12) from staging read-live run 39874593011',
+  execute: true,
+  // Staging read-live run 39874593011 (2026-10-22, main 323206af2, after executor deploy run
+  // 39874360848): the five functions absent, definer_writes ok for referral_events and tenants,
+  // already_applied false, precondition_failures [].
+  expected_live_definition_sha256: 'b78704b4d46b3ca88146d8368e09c630ead8930d3717e89287bf07bb46b86978',
   // Code-derived: releaseIntendedHash('sql111', file bytes) (release-sql-state.mjs); re-derived by the tests.
   intended_replacement_sha256: '0ca629155cf58f4f4033aa792cc0a8d817cd8692a1337ba85eb33716cf1c98fb',
   function_identities: Object.freeze([

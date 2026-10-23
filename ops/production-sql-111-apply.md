@@ -80,6 +80,20 @@ NOT NULL column without a default that the insert does not set, would make the r
 inspect does not read constraints of tables it does not change), and whether existing tenants
 have a `referral_code`.
 
+## Status
+
+- **Staging executor refreshed (2026-10-22).** Inspect run 39874145339 (main `323206af2`) found the
+  live executor at CodeSha256 `SzEmktCl…` without SQL 111 (adds only
+  `sql/111_tenant_referral_codes.sql`, supersedes the three engine files, nothing dropped, no
+  collisions). Deploy run 39874360848 updated it to main's package.
+- **Staging read-live (2026-10-22).** Run 39874593011 (main `323206af2`): the five functions
+  `absent`, live `b78704b4d46b3ca88146d8368e09c630ead8930d3717e89287bf07bb46b86978`,
+  `definer_writes` ok for `referral_events` and `tenants`, `already_applied` false,
+  `precondition_failures` `[]`. Recorded in the staging pin (`expected_live_definition_sha256`,
+  `execute: true`, wave 12) under the owner's statement of 2026-10-22, "Owner approved the SQL 111
+  staging apply on 2026-10-22".
+- Staging apply and the second read-live: not run yet. The production pin stays pending.
+
 ## Fingerprint
 
 Code-derived on the release engine (`scripts/deployment-guard/lib/release-sql-state.mjs`, spec
