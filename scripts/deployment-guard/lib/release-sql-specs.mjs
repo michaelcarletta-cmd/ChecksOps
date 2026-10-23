@@ -1,5 +1,5 @@
 /**
- * Specs of the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108 to SQL 111) for the shared engine in
+ * Specs of the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108 to SQL 112) for the shared engine in
  * release-sql-state.mjs: what each pinned file creates, replaces or drops, the reviewed
  * EXECUTE ACLs, the prerequisites and predecessors, and the PostgreSQL renderings the file
  * leaves (policy expressions, view, column, constraint, index and trigger definitions as
@@ -3755,6 +3755,75 @@ export const RELEASE_SQL_SPECS = deepFreeze({
     "definer_writes": [
       "public.referral_events",
       "public.tenants"
+    ]
+  },
+  // SQL 112: the table grants on the two Moov invoice tables the production invoice handler
+  // (providers/production/moov-invoice.mjs, live 2026-10-23) reads and writes, which only the
+  // supabase migration 20260819015105 granted (to authenticated and service_role; nothing to
+  // checksops in this repository). Its fingerprint is the pinned lines of checksops and
+  // authenticated on each table only (SELECT / INSERT / UPDATE / DELETE on moov_invoices, SELECT /
+  // INSERT on moov_invoice_customers); every other grant on each table must stay as it was
+  // (other_table_privileges_unchanged). GRANT of a held privilege is a no-op, so a table that
+  // already holds some or all of them passes the pre-conditions; all held is already_applied.
+  sql112: {
+    "key": "sql112",
+    "label": "SQL 112",
+    "choice": "sql112-moov-invoice-table-grants",
+    "production_pin_rel": "ops/deployment-guard/sql112-moov-invoice-table-grants-production-apply.json",
+    "script": "sql112-moov-invoice-table-grants-production-apply",
+    "prerequisites": [
+      "public.moov_invoices",
+      "public.moov_invoice_customers",
+      "role checksops",
+      "role authenticated"
+    ],
+    "predecessors": [],
+    "functions": [],
+    "table_privileges": [
+      {
+        "table": "public.moov_invoices",
+        "grantees": [
+          "authenticated",
+          "checksops"
+        ],
+        "privileges": [
+          "SELECT",
+          "INSERT",
+          "UPDATE",
+          "DELETE"
+        ],
+        "intended": [
+          "authenticated DELETE",
+          "authenticated INSERT",
+          "authenticated SELECT",
+          "authenticated UPDATE",
+          "checksops DELETE",
+          "checksops INSERT",
+          "checksops SELECT",
+          "checksops UPDATE"
+        ]
+      },
+      {
+        "table": "public.moov_invoice_customers",
+        "grantees": [
+          "authenticated",
+          "checksops"
+        ],
+        "privileges": [
+          "SELECT",
+          "INSERT"
+        ],
+        "intended": [
+          "authenticated INSERT",
+          "authenticated SELECT",
+          "checksops INSERT",
+          "checksops SELECT"
+        ]
+      }
+    ],
+    "altered_relations": [
+      "public.moov_invoices",
+      "public.moov_invoice_customers"
     ]
   },
 });

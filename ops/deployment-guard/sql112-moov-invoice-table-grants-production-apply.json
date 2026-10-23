@@ -1,0 +1,62 @@
+{
+  "id": "sql112-moov-invoice-table-grants-production-apply",
+  "migration": "sql112",
+  "authorization": "pending",
+  "execute": false,
+  "target_environment": "production",
+  "target_component": "production-sql",
+  "deployment_type": "sql-apply",
+  "filename": "aws/workflows/sql/112_moov_invoice_table_grants.sql",
+  "migration_id": "112_moov_invoice_table_grants",
+  "staging_pin_commit": "fcb2ead39b4bf3c58185a96abfc7e2b7b220bed9",
+  "source_sha256": "497e23e9b158d7d8287244b315ee1135cafb6fc955af05c0e1c60d0c5c44c7e4",
+  "function_identities": [],
+  "expected_live_definition_sha256": null,
+  "intended_replacement_sha256": "7caba5ba4a322d54a3c55ca712966da58cf4358c0db81f95c142dabfc916f315",
+  "authorization_phrase": "APPLY_MOOV_INVOICE_TABLE_GRANTS",
+  "predecessors": [],
+  "order_note": "No predecessor and no order on this engine. SQL 112 needs public.moov_invoices and public.moov_invoice_customers (restored Supabase schema, migration 20260819015105) owned by checksops_admin and the roles checksops and authenticated. The production invoice handler (aws/functions/api/providers/production/moov-invoice.mjs, live since 2026-10-23 through the guarded overlay runs 39955069311 and 39955539299) reads and writes moov_invoices (SELECT, INSERT, UPDATE, DELETE) and reads and inserts moov_invoice_customers; in this repository only the supabase migration grants those tables (SELECT, INSERT, UPDATE, DELETE to authenticated, ALL to service_role) and nothing grants checksops. The owner sent an invoice from Payments on 2026-10-23, so production holds at least the lines that send used; the read-only inspect records which of the pinned lines are held. If every pinned line is held the inspect reports already_applied true and nothing is applied (the pin is then recorded as verified live, not applied). SQL 112 grants SELECT, INSERT, UPDATE and DELETE on moov_invoices and SELECT and INSERT on moov_invoice_customers to checksops and authenticated and changes nothing else. No later migration revokes these grants.",
+  "admin_login": "checksops_admin",
+  "rds_identifier": "checksops-production",
+  "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
+  "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
+  "tooling": {
+    "status": "built",
+    "production_tool": "scripts/deployment-guard/sql112-moov-invoice-table-grants-production-apply.mjs",
+    "production_lib": "scripts/deployment-guard/lib/release-sql-production-apply.mjs",
+    "staging_executor_handler": "aws/write-path/guarded-sql-executor/index.mjs handleReleaseSqlMigration",
+    "staging_workflow_choice": "sql112-moov-invoice-table-grants",
+    "one_shot_migration": "sql112",
+    "fingerprint_engine": "scripts/deployment-guard/lib/release-sql-state.mjs",
+    "runbook": "ops/production-sql-112-apply.md",
+    "tests": [
+      "aws/tests/release-sql112-executor.test.mjs",
+      "aws/tests/release-sql112-production-apply.test.mjs",
+      "aws/tests/release-sql90-97-executor.test.mjs",
+      "aws/tests/release-sql90-97-production-apply.test.mjs",
+      "aws/tests/sql112-moov-invoice-table-grants-pg.test.mjs"
+    ],
+    "note": "Guarded tooling for SQL 112: sql112-moov-invoice-table-grants-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql112-moov-invoice-table-grants); production-sql-one-shot.mjs --migration sql112. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): the SELECT, INSERT, UPDATE and DELETE grants of checksops and authenticated on public.moov_invoices and their SELECT and INSERT grants on public.moov_invoice_customers (spec table_privileges). The post-conditions also require every other grant on each of the two tables unchanged (other_table_privileges_unchanged) and the rest of the catalog unchanged. The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
+  },
+  "production_inspect": {
+    "status": "pending",
+    "date": null,
+    "ssm_command_id": null,
+    "source_commit": null,
+    "read_only": true,
+    "connected_as": "checksops_admin",
+    "live_definition_sha256": null,
+    "apply_preconditions_met": null,
+    "precondition_failures": null,
+    "note": "Pending: no read-only production inspect has been run for SQL 112 yet. Expected: moov_invoices and moov_invoice_customers present and owned by checksops_admin, roles checksops and authenticated present, precondition_failures []. Which pinned lines checksops and authenticated hold is unknown until the inspect (the supabase migration granted authenticated all four privileges; the owner's invoice send of 2026-10-23 shows checksops can at least read and insert moov_invoices). Record its date, SSM command id, source commit, live_definition_sha256, precondition_failures and apply_preconditions_met here. If already_applied is true, record the inspect as the verified-live evidence and leave execute false; otherwise copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. If precondition_failures is not [] stop: that needs its own reviewed change."
+  },
+  "intended_post_state": {
+    "fingerprint": "7caba5ba4a322d54a3c55ca712966da58cf4358c0db81f95c142dabfc916f315",
+    "note": "public.moov_invoices: checksops and authenticated each hold SELECT, INSERT, UPDATE and DELETE; public.moov_invoice_customers: checksops and authenticated each hold SELECT and INSERT (no TRUNCATE, REFERENCES or TRIGGER from this file). Every other grant on each table (service_role's, authenticated's UPDATE and DELETE on moov_invoice_customers where supabase granted them, the owner's), its RLS flags and its policies are unchanged; no other table, function, policy, column or row changes. The fingerprint is releaseIntendedHash('sql112', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): 7caba5ba4a322d54a3c55ca712966da58cf4358c0db81f95c142dabfc916f315."
+  },
+  "staging_acceptance": {
+    "ok": false,
+    "reference": null,
+    "basis": "Pending: record the guarded staging SQL executor read-live run of SQL 112 (choice sql112-moov-invoice-table-grants) and, where the read-live reports already_applied false, its staging apply run here in the reviewed change that sets execute true. The read-live records which pinned lines staging holds; where it reports already_applied true (every pinned line held) there is nothing to apply in staging and the read-live itself is the staging evidence. Otherwise the staging pin records that pre-state and the owner approves the staging apply, and the apply run (receipt before == the recorded pre-state, after == intended) is the staging evidence. The grants are covered on PostgreSQL 16 by aws/tests/sql112-moov-invoice-table-grants-pg.test.mjs. Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+  }
+}
