@@ -357,7 +357,7 @@ export const handleFunctionInvoke = async (event, name, deps = {}) => {
   }
 
   // Production WalletOps balance refresh: Moov GETs only, updates only the
-  // production payment_wallets row. Apart from funding and sends (next), every
+  // production payment_wallets row. Apart from funding, sends and invoices (next), every
   // other production Moov operation stays hard-blocked below.
   if (spec.provider === 'moov' && name === 'moov-wallet-sync' && executionAllowed('moov')) {
     const { handleProductionMoovWalletSync } = await import('./providers/production/moov-wallet-sync.mjs');
@@ -376,6 +376,13 @@ export const handleFunctionInvoke = async (event, name, deps = {}) => {
   if (spec.provider === 'moov' && name === 'moov-disburse' && executionAllowed('moov')) {
     const { handleProductionMoovSend } = await import('./providers/production/moov-send.mjs');
     return handleProductionMoovSend(event, deps);
+  }
+
+  // Production Invoices (create / send / resend / cancel / delete / sync): any tenant
+  // member, the tenant's production account only. No money moves.
+  if (spec.provider === 'moov' && name === 'moov-invoice' && executionAllowed('moov')) {
+    const { handleProductionMoovInvoice } = await import('./providers/production/moov-invoice.mjs');
+    return handleProductionMoovInvoice(event, deps);
   }
 
   if (executionAllowed(spec.provider) && spec.aws !== 'db_status' && spec.aws !== 'webhook') {
