@@ -62,8 +62,42 @@ SELECT` only, production already holds every `checksops` line; both reach `7caba
 bytes, and GRANT of a held privilege is a no-op), and sets `execute: true`. The owner reviews and
 merges it; nothing is applied by it.
 
-**Status:** staging applied (wave 13); production pin execute-authorized once its change is merged;
-production apply pending (the one-shot with the owner's words for that run).
+**Status:** applied to staging and to production (2026-10-23); the production pin is retired
+(`execute: false` again; see "Production apply of SQL 112").
+
+## Production apply of SQL 112 (2026-10-23)
+
+The owner's statement of 2026-10-23 was "apply SQL 112 in production", passed verbatim (base64,
+`--approval-statement-b64`). The one-shot cannot verify who said it, and the statement covered this
+run only. `production-sql-one-shot.mjs --migration sql112 --approval-scope sql112` on
+`i-0c35557c4e5385406`, operator `michaelcarletta-cmd`, workstream
+`prod-sql112-moov-invoice-table-grants-20261023`, from main `4d2cf0c11` (tarball
+`source-4d2cf0c119280c12a360400be657d6e43f2b7a64.tar.gz`, sha256 `49862a9b…`, transfer run
+`39969627282`, `sql53-temporary-transfer.yml` dispatched on main after the #1190 merge; its package
+job printed `TARBALL_SHA256 49862a9b106391ce61a04c4bec9040f3faf59fe0a6d935bf9df9bcb81e873d8f`, equal
+to the uploaded `.sha256` sidecar).
+
+- **Inspect phase:** SSM `a48aa853-2312-4b5f-a142-dcf06307d8e4` (2026-10-23T14:28:26Z), run_id
+  `84dc3b92-6d90-4eda-b525-5f29b11270ed`, approval statement "applying SQL 112 for parity.": pin, source,
+  inspect and contracts ok, nothing written; live `a6198312…` (live_matches_expected true),
+  precondition_failures [].
+- **Apply phase:** SSM `654fb07f-7c95-4828-ad95-7fce135f1d27` (2026-10-23T14:30:31Z to 14:30:49Z),
+  run_id `3f3f7d9d-51df-458f-b9fe-49b4bc91f841`, one_use_id
+  `sql112-prod-95240935-fac1-4d76-b727-7fd1f2f55bf4` (spent): every step ok (pin, source, inspect,
+  contracts, manifest, source-recheck-before-preflight, preflight, evaluate,
+  source-recheck-before-apply, apply (applied), post-apply-inspect); migration source `497e23e9…`
+  (== pin); contracts claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43;
+  pre-apply inspect live `a6198312…`, predecessors `{}`, precondition_failures []; manifest
+  `f8cc024e…`; receipt `a6198312…` -> `7caba5ba…`, result applied, unrelated catalog `9cf1140a…`
+  (relations 890, columns 3535, constraints 2233, policies 404, functions 1320, indexes 654, triggers
+  180, views 25, types 18, roles 29, role memberships 15); post-apply inspect live `7caba5ba…`,
+  already_applied true, precondition_failures []. `moov_invoices` now grants `authenticated` and
+  `checksops` SELECT, INSERT, UPDATE and DELETE; `moov_invoice_customers` grants both SELECT and
+  INSERT (`checksops` UPDATE and DELETE there unchanged, `other_write_grants`).
+
+No later read-only inspect was run. The pin is `execute: false` again; a re-apply needs a new
+reviewed pin change. The release lock `moov-production-invoice` still lists the grants inspect as
+its missing evidence; closing it is a separate reviewed lock change.
 
 ## Fingerprint
 
