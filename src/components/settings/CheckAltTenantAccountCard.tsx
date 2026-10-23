@@ -62,20 +62,22 @@ const invokeCheckAlt = async (name: string, body: Record<string, unknown>) => {
  * Status and responses come from the server with the account number masked
  * to the last four digits; the full number is only ever typed, never read back.
  */
-export function CheckAltTenantAccountCard() {
+export function CheckAltTenantAccountCard({ tenantId: tenantIdProp, tenantName }: { tenantId?: string; tenantName?: string } = {}) {
   const { user } = useAuth();
-  const { tenant } = useTenant();
+  const { tenant: contextTenant } = useTenant();
+  // Tenant Management passes the tenant being viewed; elsewhere it is the signed-in tenant.
+  const tenantId = tenantIdProp ?? contextTenant?.id ?? null;
   const { toast } = useToast();
   const qc = useQueryClient();
   const canManage = isPlatformOwner(user?.email);
-  const queryKey = ["checkalt-tenant-registration", tenant?.id];
+  const queryKey = ["checkalt-tenant-registration", tenantId];
 
   const { data: status, isLoading: statusLoading, error: statusError } = useQuery({
     queryKey,
-    enabled: canManage && !!tenant?.id,
+    enabled: canManage && !!tenantId,
     queryFn: async (): Promise<CheckAltRegistrationStatus> => {
       const { data, error } = await invokeCheckAlt("checkalt-verify-account", {
-        tenant_id: tenant!.id,
+        tenant_id: tenantId!,
         action: "status",
       });
       if (error) throw new Error(checkAltErrorText(data, error));
@@ -114,14 +116,14 @@ export function CheckAltTenantAccountCard() {
     && reg.last_name.trim()
     && emailValid
     && accountNumberValid
-    && tenant?.id,
+    && tenantId,
   );
 
   const registerMutation = useMutation({
     mutationFn: async () => {
-      if (!tenant?.id) throw new Error("No tenant in context");
+      if (!tenantId) throw new Error("No tenant selected");
       const { data, error } = await invokeCheckAlt("checkalt-register-account", {
-        tenant_id: tenant.id,
+        tenant_id: tenantId,
         sso_user_id: reg.sso_user_id.trim(),
         first_name: reg.first_name.trim(),
         last_name: reg.last_name.trim(),
@@ -151,8 +153,8 @@ export function CheckAltTenantAccountCard() {
 
   const verifyMutation = useMutation({
     mutationFn: async (action: "user" | "account") => {
-      if (!tenant?.id) throw new Error("No tenant in context");
-      const { data, error } = await invokeCheckAlt("checkalt-verify-account", { tenant_id: tenant.id, action });
+      if (!tenantId) throw new Error("No tenant selected");
+      const { data, error } = await invokeCheckAlt("checkalt-verify-account", { tenant_id: tenantId, action });
       // Server responses are already masked to the last four digits.
       const payload = (data as { data?: unknown; details?: unknown } | null)?.data
         ?? (data as { details?: unknown } | null)?.details
@@ -200,7 +202,7 @@ export function CheckAltTenantAccountCard() {
               Register Tenant Account with CheckAlt
             </CardTitle>
             <CardDescription>
-              Registers this tenant's depositor with Check Alt
+              Registers {tenantName ? <strong>{tenantName}</strong> : "this tenant"}'s depositor with Check Alt
               (<code>/fincapture/useraccount/register</code>). The User ID becomes the
               <code className="ml-1">ssoKey</code> used on every deposit submitted for this tenant, and deposits
               are credited to the account number registered here.
