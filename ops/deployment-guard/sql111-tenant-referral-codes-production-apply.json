@@ -1,8 +1,8 @@
 {
   "id": "sql111-tenant-referral-codes-production-apply",
   "migration": "sql111",
-  "authorization": "pending",
-  "execute": false,
+  "authorization": "Owner approved 2026-10-23 (the owner's words, verbatim: \"Run production\", then \"open the pin PR when the inspect is clean\"; this pin change is bound to that approval and takes effect only once the owner reviews and merges it): production apply of SQL 111 on the staging acceptance below (production b78704b4d46b3ca88146d8368e09c630ead8930d3717e89287bf07bb46b86978 -> 0ca629155cf58f4f4033aa792cc0a8d817cd8692a1337ba85eb33716cf1c98fb); execute true takes effect only once this change is merged. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
+  "execute": true,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -17,7 +17,7 @@
     "public.aws_tenant_referral_summary(uuid)",
     "public.aws_platform_owner_referral_overview()"
   ],
-  "expected_live_definition_sha256": null,
+  "expected_live_definition_sha256": "b78704b4d46b3ca88146d8368e09c630ead8930d3717e89287bf07bb46b86978",
   "intended_replacement_sha256": "0ca629155cf58f4f4033aa792cc0a8d817cd8692a1337ba85eb33716cf1c98fb",
   "authorization_phrase": "APPLY_TENANT_REFERRAL_CODES",
   "predecessors": [],
@@ -45,24 +45,24 @@
     "note": "Guarded tooling for SQL 111: sql111-tenant-referral-codes-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql111-tenant-referral-codes); production-sql-one-shot.mjs --migration sql111. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): each of the five functions' language, volatility, SECURITY DEFINER, result, search_path, body hash and EXECUTE ACL. The pre-conditions also require that the applying login can write public.referral_events and public.tenants as a definer (definer_can_write_relations). The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
   },
   "production_inspect": {
-    "status": "pending",
-    "date": null,
-    "ssm_command_id": null,
-    "source_commit": null,
+    "status": "recorded",
+    "date": "2026-10-23",
+    "ssm_command_id": "7e6fdcf5-a48e-4db9-870f-ba28655cba41",
+    "source_commit": "1586c24dfcc96f748f005fb652453a7571ce05d6",
     "read_only": true,
     "connected_as": "checksops_admin",
-    "live_definition_sha256": null,
-    "apply_preconditions_met": null,
-    "precondition_failures": null,
-    "note": "Pending: no read-only production inspect has been run for SQL 111 yet. Expected: tenants, referral_events and tenant_users with the columns the functions use present, referral_events and tenants owned by checksops_admin without FORCE ROW LEVEL SECURITY, and the five functions absent. Record its date, SSM command id, source commit, live_definition_sha256, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. If precondition_failures is not [] stop: that needs its own reviewed change."
+    "live_definition_sha256": "b78704b4d46b3ca88146d8368e09c630ead8930d3717e89287bf07bb46b86978",
+    "apply_preconditions_met": false,
+    "precondition_failures": [],
+    "note": "Recorded from the read-only production inspect of 2026-10-23 (SSM command 7e6fdcf5-a48e-4db9-870f-ba28655cba41, node scripts/deployment-guard/sql111-tenant-referral-codes-production-apply.mjs --inspect on the SQL53 runner i-0c35557c4e5385406 from main 1586c24df (tarball source-1586c24dfcc96f748f005fb652453a7571ce05d6.tar.gz sha256 d14a91b5167bfcd4176dd5facfa61016952c55c8b607e8a4456761289b56ddbe, transfer run 39881599527), read_only true, source_ok true). live_definition_sha256 b78704b4d46b3ca88146d8368e09c630ead8930d3717e89287bf07bb46b86978 (not the intended 0ca629155cf58f4f4033aa792cc0a8d817cd8692a1337ba85eb33716cf1c98fb: already_applied false; live_matches_expected false because the pin had no recorded pre-state); release_sql_inspect.functions: all five (aws_tenant_referral_active_count(uuid), aws_tenant_referral_credit_cents(uuid), aws_apply_referral_code(uuid, text), aws_tenant_referral_summary(uuid), aws_platform_owner_referral_overview()) state absent, function_acl [] for each, table_privileges [], prerequisites_missing [], predecessors {}, definer_writes referral_events ok and tenants ok. The live hash equals the staging pre-state (read-live runs 39874593011 and 39877666133). predecessors_applied true, missing dependencies [], precondition_failures [], successors_applied []. The inspect output's connected_as field was not printed by the summary line; the tool connects only as the pinned admin_login checksops_admin. apply_preconditions_met was false at inspect time only because no pre-state was recorded yet (expected_live_definition_sha256 null). This reviewed change copies live_definition_sha256 into expected_live_definition_sha256 and, in the same change, sets authorization, execute true and staging_acceptance. A fresh --inspect immediately before apply (the one-shot's inspect step) must still report this live_definition_sha256 and precondition_failures []; if not, stop. Earlier: Pending: no read-only production inspect has been run for SQL 111 yet. Expected: tenants, referral_events and tenant_users with the columns the functions use present, referral_events and tenants owned by checksops_admin without FORCE ROW LEVEL SECURITY, and the five functions absent. Record its date, SSM command id, source commit, live_definition_sha256, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. If precondition_failures is not [] stop: that needs its own reviewed change."
   },
   "intended_post_state": {
     "fingerprint": "0ca629155cf58f4f4033aa792cc0a8d817cd8692a1337ba85eb33716cf1c98fb",
     "note": "Five functions exist, SECURITY DEFINER, search_path=public, owned by checksops_admin, PUBLIC revoked: public.aws_tenant_referral_active_count(uuid) (sql, STABLE, EXECUTE the owner only), public.aws_tenant_referral_credit_cents(uuid) (plpgsql, STABLE), public.aws_apply_referral_code(uuid, text) (plpgsql, VOLATILE), public.aws_tenant_referral_summary(uuid) (plpgsql, STABLE) and public.aws_platform_owner_referral_overview() (plpgsql, STABLE), each EXECUTE checksops and the owner. No table, column, policy, trigger, grant on a table or row changes. The fingerprint is releaseIntendedHash('sql111', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): 0ca629155cf58f4f4033aa792cc0a8d817cd8692a1337ba85eb33716cf1c98fb."
   },
   "staging_acceptance": {
-    "ok": false,
-    "reference": null,
-    "basis": "Pending: record the guarded staging SQL executor read-live run of SQL 111 (choice sql111-tenant-referral-codes) and its staging apply run here in the reviewed change that sets execute true. The read-live is expected to report already_applied false (the five functions absent); the staging pin then records that pre-state and the owner approves the staging apply, and the apply run (receipt before == the recorded pre-state, after == intended) is the staging evidence. The functions are covered on PostgreSQL 16 by aws/tests/sql111-tenant-referral-codes-pg.test.mjs. Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+    "ok": true,
+    "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39877945144",
+    "basis": "Guarded staging apply from the same pre-state as production. The guarded staging SQL executor (choice sql111-tenant-referral-codes) carried SQL 111 from deploy run 39874360848 and, after the staging pin change (#1176), deploy run 39877410445 (executor iqIKOKkHz1fCAl5yf/R1rhU/VDUH8ecUTa71/bJ0y3A=, inspect run 39876957488 before it). Read-live run 39874593011 (2026-10-22) reported already_applied false, precondition_failures [] and live b78704b4d46b3ca88146d8368e09c630ead8930d3717e89287bf07bb46b86978, which is this pin's expected_live_definition_sha256 (production_inspect); read-live run 39877666133 (2026-10-23, main 1586c24df) reported the same live hash immediately before the apply. The staging apply run 39877945144 (2026-10-23, main 1586c24dfcc96f748f005fb652453a7571ce05d6, staging pin commit 2aab04de3c2f4c5e05c1929e2f04e68cc9e8233a) reported result applied, before b78704b4d46b3ca88146d8368e09c630ead8930d3717e89287bf07bb46b86978, after 0ca629155cf58f4f4033aa792cc0a8d817cd8692a1337ba85eb33716cf1c98fb = intended_replacement_sha256, all five functions state intended, function_acl aws_tenant_referral_active_count(uuid) [owner EXECUTE] and [checksops EXECUTE, owner EXECUTE] for the other four, definer_writes referral_events and tenants ok. The read-live after it (run 39878217390) reported already_applied true, precondition_failures [] and live 0ca629155cf58f4f4033aa792cc0a8d817cd8692a1337ba85eb33716cf1c98fb = intended_replacement_sha256, all five functions intended. Staging and production had the same pre-state. The functions are covered on PostgreSQL 16 by aws/tests/sql111-tenant-referral-codes-pg.test.mjs. No code redeem was exercised on staging, so the live referral_events constraints are covered only by that test. The production apply refuses unless the live state still equals this pin's expected_live_definition_sha256, and its post-conditions roll back unless the intended fingerprint is reached with the rest of the catalog unchanged."
   }
 }

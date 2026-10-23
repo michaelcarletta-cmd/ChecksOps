@@ -73,8 +73,8 @@ maintenance     = monthly_rate_cents - discount                                -
 - `aws_platform_owner_referral_overview()`: the platform owner only: the same figures for every
   non-system tenant (no Founding, removed from Tenant Management in #1171).
 
-**Status:** pending. Both pins are `execute: false`, `authorization: "pending"`, with no recorded
-pre-state; nothing is applied by this change. Neither staging nor production has been inspected.
+**Status:** applied to staging (2026-10-23); the production pin is `execute: true` once the pin
+change below is merged. Nothing is applied to production by that change (see "Status").
 Not verified: the live `referral_events` constraints (a `status` CHECK that refuses `active`, or a
 NOT NULL column without a default that the insert does not set, would make the redeem fail; the
 inspect does not read constraints of tables it does not change), and whether existing tenants
@@ -92,7 +92,25 @@ have a `referral_code`.
   `precondition_failures` `[]`. Recorded in the staging pin (`expected_live_definition_sha256`,
   `execute: true`, wave 12) under the owner's statement of 2026-10-22, "Owner approved the SQL 111
   staging apply on 2026-10-22".
-- Staging apply and the second read-live: not run yet. The production pin stays pending.
+- **Staging apply (2026-10-23).** After the staging pin change merged (#1176, main `1586c24df`),
+  inspect run 39876957488 found the executor without the new pin (`xV6M66pR…`, supersedes
+  `lib/sql-executor-auth.mjs`); deploy run 39877410445 updated it (executor
+  `iqIKOKkHz1fCAl5yf/R1rhU/VDUH8ecUTa71/bJ0y3A=`). Read-live run 39877666133: live still `b78704b4…`.
+  Apply run 39877945144: `applied`, `b78704b4…` ->
+  `0ca629155cf58f4f4033aa792cc0a8d817cd8692a1337ba85eb33716cf1c98fb`, the five functions `intended`,
+  ACL `owner EXECUTE` (active-count helper) and `checksops EXECUTE`, `owner EXECUTE` (the other
+  four). Read-live run 39878217390: `already_applied` true, live = intended, `precondition_failures`
+  `[]`. No code was redeemed on staging.
+- **Production inspect recorded (2026-10-23).** Read-only `--inspect` through SSM
+  `7e6fdcf5-a48e-4db9-870f-ba28655cba41` on `i-0c35557c4e5385406`, main `1586c24df` (tarball sha256
+  `d14a91b5167bfcd4176dd5facfa61016952c55c8b607e8a4456761289b56ddbe`, transfer run 39881599527):
+  the five functions `absent`, live `b78704b4d46b3ca88146d8368e09c630ead8930d3717e89287bf07bb46b86978`
+  (the same pre-state as staging), `definer_writes` ok for `referral_events` and `tenants`,
+  `already_applied` false, `precondition_failures` `[]`. Recorded in the pin as
+  `expected_live_definition_sha256`, with the staging apply run 39877945144 as `staging_acceptance`.
+- **Pin `execute: true`** once that change is merged, under the owner's statement of 2026-10-23,
+  "Run production". Nothing is applied by it; the apply (step 3) passes the owner's words for that
+  run.
 
 ## Fingerprint
 

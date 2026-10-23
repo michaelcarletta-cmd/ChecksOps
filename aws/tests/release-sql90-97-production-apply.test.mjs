@@ -82,7 +82,10 @@ const COMMITTED = Object.freeze(Object.fromEntries(RELEASE_SQL_KEYS.map((key) =>
 // "apply SQL 110 in production", on its guarded staging apply from the same pre-state, checked in
 // release-sql110-production-apply.test.mjs) until its record-and-retire change after its 2026-10-22
 // apply.
-const EXECUTE_AUTHORIZED = Object.freeze([]);
+// SQL 111's production pin is execute-authorized (owner-approved pin change of 2026-10-23, "Run
+// production", on its guarded staging apply from the same pre-state, checked in
+// release-sql111-production-apply.test.mjs) until its record-and-retire change.
+const EXECUTE_AUTHORIZED = Object.freeze(['sql111']);
 // SQL 95's and SQL 97's recorded production pre-states (read-only inspect of 2026-10-21, SSM
 // 43cb1d1f, main 69dbe9b01) and their staging references: the guarded staging read-live runs of
 // 2026-10-21 that report the intended state (their wave 4 apply runs are not recorded), accepted as
@@ -242,7 +245,7 @@ async function runCli(key, argv, { env = { CHECKSOPS_DEPLOYMENT_GUARD_APPLY: '1'
   return { out: writes.join(''), spent };
 }
 
-test('committed pins are pending (none execute-authorized; SQL 90, SQL 91, SQL 92, SQL 93, SQL 94, SQL 95, SQL 96, SQL 97, SQL 99, SQL 101, SQL 102, SQL 103, SQL 104, SQL 105, SQL 106, SQL 108, SQL 109 and SQL 110 applied and retired), bound to the staging pins, predecessors and the production RDS, and name the built tooling', () => {
+test('committed pins are pending (SQL 111 execute-authorized; SQL 90, SQL 91, SQL 92, SQL 93, SQL 94, SQL 95, SQL 96, SQL 97, SQL 99, SQL 101, SQL 102, SQL 103, SQL 104, SQL 105, SQL 106, SQL 108, SQL 109 and SQL 110 applied and retired), bound to the staging pins, predecessors and the production RDS, and name the built tooling', () => {
   const inventory = JSON.stringify(JSON.parse(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/bypass-inventory.json'), 'utf8')));
   assert.deepEqual(RELEASE_SQL_KEYS.filter((key) => COMMITTED[key].execute !== false), [...EXECUTE_AUTHORIZED]);
   assert.deepEqual(RELEASE_SQL_KEYS.filter((key) => COMMITTED[key].applied !== undefined), [...APPLIED_RETIRED]);
@@ -481,7 +484,7 @@ test('committed pins are pending (none execute-authorized; SQL 90, SQL 91, SQL 9
       assert.match(pin.staging_acceptance.reference, /^https:\/\/github\.com\/michaelcarletta-cmd\/ChecksOps\/actions\/runs\/\d+$/, key);
       assert.equal(pin.production_inspect.status, 'recorded', key);
       assert.equal(pin.production_inspect.live_definition_sha256, pin.expected_live_definition_sha256, key);
-      assert.match(pin.authorization, /^Owner approved 2026-10-(19|20|21|22) /, key);
+      assert.match(pin.authorization, /^Owner approved 2026-10-(19|20|21|22|23) /, key);
       assert.match(pin.authorization, /each apply still needs the owner's run-time approval/, key);
       assert.deepEqual(Object.keys(pin.staging_acceptance).sort(), ['basis', 'ok', 'reference'], key);
       assert.deepEqual(pin.production_inspect.precondition_failures, [], key);
