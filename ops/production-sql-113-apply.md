@@ -40,7 +40,35 @@ payee tables. Live `88787a89c85585f25c18ea31d60740a6526522377a1b0d7b02e7902fe189
 (`expected_live_definition_sha256`, `execute: true`, wave 14) under the owner's words of
 2026-10-23, "Apply SQL 113 to staging".
 
-**Status:** staging pin execute-authorized (wave 14); nothing applied yet; production pin pending.
+**Staging apply (2026-10-23).** After the staging pin change merged (#1207, main `b6e8d56bf`),
+inspect run 40021640429 found the executor without the new pin (`hU2AzlaR…`, supersedes
+`lib/sql-executor-auth.mjs`); deploy run 40021885543 updated it (executor
+`nloTNyc3Hlg8ps1wpeSGqoo6FTnX9NHOKT5TcfN3FIg=`). Read-live run 40022139561: live still `88787a89…`.
+Apply run 40022413642: `applied`, `88787a89…` ->
+`5984d321197bd03552da656381ea47b67220d8f0accac10214aa392fd26f81d7`. Read-live run 40022674916:
+`already_applied` true, live = intended; every payee column, the origin check and the six functions
+`intended`, `SELECT` on `external_payment_recipients` for `authenticated` and `checksops`, each
+function `EXECUTE` `checksops` and the owner only.
+
+**Production inspect (2026-10-23).** Read-only `--inspect` through SSM
+`8ee0c634-8fa3-457e-88aa-adbeb392b4fc` on `i-0c35557c4e5385406`, main `b6e8d56bf` (tarball sha256
+`df13b10343fb19667dcfd5309d06f836b1b0e2e2c0cfc253066a8236d81b05a8`, transfer run 40023140920, migration
+source `871d953d…` == pin), connected as `checksops_admin`, `read_only` true, `source_ok` true: the
+six functions absent; `stakeholder_account_id`, `provider_bank_name`, `provider_last_four` and
+`bank_linked_at` already the file's, the seven payee state columns absent;
+`stakeholder_accounts_origin_check` `different`; `checksops` holds `SELECT` on
+`external_payment_recipients` (and `UPDATE` and `DELETE`, outside the fingerprint and unchanged by
+SQL 113), `authenticated` none of the pinned lines; definer writes ok on the three payee tables.
+Live `88787a89c85585f25c18ea31d60740a6526522377a1b0d7b02e7902fe18970c1` (the same pre-state as
+staging), `already_applied` false, `missing_dependencies` `[]`, `precondition_failures` `[]`.
+
+**Production pin (2026-10-23).** Under the owner's words "Approve SQL 113 for production" the
+production pin records the inspect above as its pre-state (`88787a89…`) and the staging apply run
+40022413642 from the same pre-state as its staging acceptance, and sets `execute: true`. The owner
+reviews and merges it; nothing is applied by it.
+
+**Status:** staging applied (wave 14); production pin execute-authorized once its change is merged;
+production apply pending (the one-shot with the owner's words for that run).
 
 ## Fingerprint
 
