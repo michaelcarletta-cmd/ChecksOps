@@ -48,7 +48,22 @@ only the `authenticated` lines there (as SQL 105 did on the payment tables). The
 it in both environments for parity; the production pin records this inspect in its own change after
 the staging apply.
 
-**Status:** staging pin execute-authorized (wave 13); nothing applied yet; production pin pending.
+**Staging apply (2026-10-23).** After the staging pin change merged (#1189, main `784712e3f`),
+inspect run 39966052661 found the executor without the new pin (`7BwUlIAA…`, supersedes
+`lib/sql-executor-auth.mjs`); deploy run 39966318339 updated it (executor
+`51tMc1XFEefi/QY53mzE16WAAlCZgCIJOMNNOWuR9K8=`). Read-live run 39966632712: live still `c606d5ed…`.
+Apply run 39967007467: `applied`, `c606d5ed…` -> `7caba5ba…`, every pinned line held on both
+tables, `other_write_grants` `[]`. Read-live run 39967300107: `already_applied` true.
+
+**Production pin (2026-10-23).** Under the owner's words "applying SQL 112 for parity." the
+production pin records the inspect above as its pre-state (`a6198312…`) and the staging apply run
+39967007467 as owner-accepted substitute evidence (the pre-states differ: staging held `checksops
+SELECT` only, production already holds every `checksops` line; both reach `7caba5ba…` from the same
+bytes, and GRANT of a held privilege is a no-op), and sets `execute: true`. The owner reviews and
+merges it; nothing is applied by it.
+
+**Status:** staging applied (wave 13); production pin execute-authorized once its change is merged;
+production apply pending (the one-shot with the owner's words for that run).
 
 ## Fingerprint
 
