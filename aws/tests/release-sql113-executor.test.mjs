@@ -4,8 +4,9 @@
  * release-sql90-97-executor.test.mjs runs what every release key shares (SQL 113 included); this
  * file covers what is new:
  *
- *   - the pin: pending (no read-live yet), code-derived, selectable, packed, in step with the
- *     production pin; the pinned commit authored the bytes; no predecessor;
+ *   - the pin: staging-authorized from its read-live (wave 14), code-derived, selectable, packed,
+ *     in step with the production pin (execute-authorized on the staging apply); the pinned
+ *     commit authored the bytes; no predecessor;
  *   - the spec: six SECURITY DEFINER functions (EXECUTE checksops and the owner), the eleven payee
  *     columns on external_payment_recipients (added_columns), the stakeholder_accounts_origin_check
  *     definition with provider_recipient (constraints) and the SELECT lines of checksops and
@@ -169,8 +170,13 @@ test('pin: SQL 113 staging-authorized from its read-live, code-derived, selectab
   assert.equal(prod.source_sha256, pin.source_sha256);
   assert.deepEqual(prod.function_identities, [...pin.function_identities]);
   assert.deepEqual(prod.predecessors, []);
-  assert.equal(prod.execute, false);
-  assert.equal(prod.expected_live_definition_sha256, null);
+  // Production pin execute-authorized (owner-approved pin change of 2026-10-23) on the staging apply;
+  // production's pre-state is staging's (88787a89...: read-only production inspect SSM 8ee0c634).
+  assert.equal(prod.execute, true);
+  assert.match(prod.authorization, /^Owner approved 2026-10-23 /);
+  assert.equal(prod.expected_live_definition_sha256, '88787a89c85585f25c18ea31d60740a6526522377a1b0d7b02e7902fe18970c1');
+  assert.equal(prod.expected_live_definition_sha256, pin.expected_live_definition_sha256);
+  assert.notEqual(prod.expected_live_definition_sha256, prod.intended_replacement_sha256);
   let bytes = null;
   if (/^[0-9a-f]{40}$/.test(pin.commit)) {
     try {
