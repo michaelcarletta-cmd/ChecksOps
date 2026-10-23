@@ -1,0 +1,15 @@
+{
+  "workstream_id": "moov-production-invoice-applied",
+  "authorization": "Record only (2026-10-23): the bytes below are live. Nothing is planned or authorized by this manifest; any later change to these members needs its own manifest, staging acceptance and owner approval.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Production Invoices applied 2026-10-23 through the guarded overlay path on main e3798568 (#1185), one member per run in plan order. providers/production/moov-invoice.mjs: staging inspect run 39953390200 (ABSENT), staging apply run 39953598125 (ADD f6d4dab3, checksops-staging-api CodeSha256 ynstAmsQO0o/jBxgPuvjn2o6eLbIdWo++nv14+KeIBo=), staging post-apply inspect run 39954273009; production preflight inspect run 39954302396 (ABSENT, READY, CodeSha256 09SD1JeA4qT60x9dD3BSDGeXqRJJkJypBzZ9PHVQz3Q=), production apply run 39954831032 (owner-approved \"DEPLOY providers/production/moov-invoice.mjs TO PRODUCTION\", staging acceptance run 39953598125; VERIFIED, f6d4dab3 live, CodeSha256 ynstAmsQO0o/jBxgPuvjn2o6eLbIdWo++nv14+KeIBo=, RevisionId 400c1a5e-73cf-48d8-bda5-59e4003b6685), production post-apply inspect run 39955539299 (ALREADY_ACCEPTED). providers.mjs: staging inspect run 39953035235 (51fa3109 live), staging apply run 39953857056 (51fa3109 -> c1718779, CodeSha256 LGjjxS11JYsJtAtWEnfP8DI+atz7ORBugs6nPeLa7Fs=), staging post-apply inspect run 39954096337; production preflight inspect run 39950875106 (ALREADY_ACCEPTED on 51fa3109 before the plan moved on), production apply run 39955069311 (owner-approved \"DEPLOY providers.mjs TO PRODUCTION\", staging acceptance run 39953857056; VERIFIED, c1718779 live, CodeSha256 LGjjxS11JYsJtAtWEnfP8DI+atz7ORBugs6nPeLa7Fs=, RevisionId 53961309-44de-40c5-92c9-f13958d5c923), production post-apply inspect run 39955314383 (ALREADY_ACCEPTED). This row records the applied bytes as live_sha256 and accepted_sha256 and chains to the invoice manifest that applied them (previous_manifest), which keeps the pre-apply bytes 51fa3109 as its live_sha256. The ADD member stays on the invoice manifest with expected_live null, as applied ADD members do (the guard answers ALREADY_ACCEPTED on its accepted bytes).",
+  "members": {
+    "providers.mjs": {
+      "live_sha256": "c1718779778a3b58f00b9bfa92d83b629aadc9e4b106ab4e8c460a946566b45f",
+      "accepted_sha256": "c1718779778a3b58f00b9bfa92d83b629aadc9e4b106ab4e8c460a946566b45f",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-moov-invoice-manifest-2026-10-22.json"
+    }
+  }
+}

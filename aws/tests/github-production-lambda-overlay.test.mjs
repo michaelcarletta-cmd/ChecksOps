@@ -85,7 +85,14 @@ function liveFor(member, { sha256 = undefined, present = undefined, extra = [], 
   });
 }
 
+// providers.mjs records its applied Production Invoices bytes live (production run 39955069311,
+// 2026-10-23): every apply replay of it starts from the pre-apply live bytes (51fa3109, the invoice
+// manifest's live_sha256), the REPLACE that had to pass the order, link and SQL 98 gates.
+const PROVIDERS_PRE = JSON.parse(fs.readFileSync(path.join(ROOT, 'aws/tests/fixtures/production-moov-invoice-manifest-2026-10-22.json'), 'utf8')).members['providers.mjs'].live_sha256;
+const providersPre = (plan) => { plan.members['providers.mjs'].expected_live_sha256 = PROVIDERS_PRE; return plan; };
+
 function applyDeps(member, liveOpts = {}) {
+  if (member === 'providers.mjs' && liveOpts.sha256 === undefined) liveOpts = { ...liveOpts, sha256: PROVIDERS_PRE };
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'prod-overlay-'));
   fs.mkdirSync(path.join(root, 'ops/deployment-guard'), { recursive: true });
   fs.mkdirSync(path.join(root, 'aws/functions/api'), { recursive: true });
@@ -110,14 +117,14 @@ function applyDeps(member, liveOpts = {}) {
 // collection test below). Tests about member order and links run them with SQL 98 recorded live.
 const SQL98_FILE = 'aws/workflows/sql/98_tenant_fee_collection.sql';
 const PLAN_SQL98_LIVE = (() => {
-  const plan = structuredClone(PLAN);
+  const plan = providersPre(structuredClone(PLAN));
   plan.sql_prerequisites[SQL98_FILE] = { verified_live: true, evidence: 'test' };
   return plan;
 })();
 const withSql98 = (member, deps) => (PLAN.members[member]?.sql_before === SQL98_FILE ? { ...deps, plan: PLAN_SQL98_LIVE } : deps);
 // The plan before SQL 98 was recorded verified live (2026-10-19): the held-member refusals start from it.
 const PLAN_SQL98_PENDING = (() => {
-  const plan = structuredClone(PLAN);
+  const plan = providersPre(structuredClone(PLAN));
   plan.sql_prerequisites[SQL98_FILE] = { ...plan.sql_prerequisites[SQL98_FILE], verified_live: false, evidence: null };
   return plan;
 })();
@@ -126,7 +133,7 @@ const applyEnv = (member, extra = {}) => ({
   ...ENV,
   CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'apply',
   CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: member,
-  CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: PLAN.members[member].expected_live_sha256 || '',
+  CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: (member === 'providers.mjs' ? PROVIDERS_PRE : PLAN.members[member].expected_live_sha256) || '',
   CHECKSOPS_STAGING_ACCEPTANCE_REFERENCE: ACCEPTANCE,
   CHECKSOPS_PRODUCTION_APPROVAL: approvalPhrase(member),
   ...extra,
@@ -767,11 +774,12 @@ test('fee collection: eleven members on the fee manifest, collection-v2 then des
     if (REPINNED.has(member)) continue;
     const row = PLAN.members[member];
     if (member === PROVIDERS) {
-      // providers.mjs moved on to the production invoice route (moov-invoice manifest); its
-      // fee bytes are the live bytes that REPLACE starts from, and this manifest keeps its record.
+      // providers.mjs moved on to the production invoice route (moov-invoice manifest, applied by
+      // production run 39955069311): its fee bytes are the live bytes that REPLACE started from, the
+      // invoice manifest keeps that record, and the plan row now names the applied manifest.
       const invoice = JSON.parse(fs.readFileSync(path.join(ROOT, 'aws/tests/fixtures/production-moov-invoice-manifest-2026-10-22.json'), 'utf8'));
-      assert.equal(row.manifest, 'aws/tests/fixtures/production-moov-invoice-manifest-2026-10-22.json');
-      assert.equal(row.expected_live_sha256, fees.members[member].accepted_sha256);
+      assert.equal(row.manifest, 'aws/tests/fixtures/production-moov-invoice-applied-manifest-2026-10-23.json');
+      assert.equal(row.expected_live_sha256, invoice.members[member].accepted_sha256);
       assert.equal(invoice.members[member].live_sha256, fees.members[member].accepted_sha256);
       assert.equal(row.sql_before, SQL98);
       continue;
@@ -1378,4 +1386,61 @@ test('Refer & Earn routes: data.mjs and workflow-rpc.mjs expected_live record th
   const data = fs.readFileSync(path.join(API, 'data.mjs'), 'utf8');
   assert.match(data, /'aws_tenant_referral_summary'/);
   assert.match(data, /'aws_platform_owner_referral_overview'/);
+});
+
+test('Production Invoices: providers.mjs expected_live records the bytes production run 39955069311 applied; the added module is live', async () => {
+  const INVOICE = 'providers/production/moov-invoice.mjs';
+  const MANIFEST_REL = 'aws/tests/fixtures/production-moov-invoice-manifest-2026-10-22.json';
+  const APPLIED_REL = 'aws/tests/fixtures/production-moov-invoice-applied-manifest-2026-10-23.json';
+  const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, MANIFEST_REL), 'utf8'));
+  const applied = JSON.parse(fs.readFileSync(path.join(ROOT, APPLIED_REL), 'utf8'));
+  // The bytes the guarded production applies put live (ADD run 39954831032, REPLACE run 39955069311,
+  // both VERIFIED; post-apply inspects 39955314383 and 39955539299 ALREADY_ACCEPTED).
+  const LIVE = {
+    [INVOICE]: 'f6d4dab35dc7bccf0a55ec7e7595a0d823ab3cd7a66279efb5663dd99baecb62',
+    'providers.mjs': 'c1718779778a3b58f00b9bfa92d83b629aadc9e4b106ab4e8c460a946566b45f',
+  };
+  // The pre-apply providers.mjs (production inspect run 39950875106, ALREADY_ACCEPTED on the fee bytes).
+  const PROVIDERS_BEFORE = '51fa3109f06470c09fc9598c5b29c92085c0833a5dd0894a1478e30db5f6423a';
+  assert.equal(PROVIDERS_PRE, PROVIDERS_BEFORE);
+  for (const run of ['39953598125', '39953857056', '39954096337', '39954273009', '39954302396', '39954831032', '39955069311', '39955314383', '39955539299']) {
+    assert.match(PLAN.notes, new RegExp(run), run);
+  }
+  assert.equal(applied.workstream_id, 'moov-production-invoice-applied');
+  assert.equal(applied.deploy_authorized, false);
+  for (const run of ['39954831032', '39955069311', '39955314383', '39955539299']) assert.match(applied.notes, new RegExp(`run ${run}`), run);
+  assert.deepEqual(Object.keys(applied.members), ['providers.mjs']);
+  assert.deepEqual(applied.members['providers.mjs'], { live_sha256: LIVE['providers.mjs'], accepted_sha256: LIVE['providers.mjs'], operation: 'replace', previous_manifest: MANIFEST_REL });
+  // The invoice manifest keeps the pre-apply record: providers.mjs from 51fa3109, the module absent.
+  assert.equal(manifest.members['providers.mjs'].live_sha256, PROVIDERS_BEFORE);
+  assert.equal(manifest.members['providers.mjs'].accepted_sha256, LIVE['providers.mjs']);
+  assert.equal(manifest.members[INVOICE].live_sha256, null);
+  assert.equal(manifest.members[INVOICE].accepted_sha256, LIVE[INVOICE]);
+  // The plan: providers.mjs now records its applied bytes live and names the applied manifest; the
+  // ADD row stays on the invoice manifest with expected_live null, as applied ADD members do.
+  const row = PLAN.members['providers.mjs'];
+  assert.equal(row.manifest, APPLIED_REL);
+  assert.equal(row.expected_live_sha256, LIVE['providers.mjs']);
+  assert.equal(row.accepted_sha256, LIVE['providers.mjs']);
+  assert.equal(sha('aws/functions/api/providers.mjs'), LIVE['providers.mjs']);
+  const add = PLAN.members[INVOICE];
+  assert.equal(add.manifest, MANIFEST_REL);
+  assert.equal(add.operation, 'add');
+  assert.equal(add.expected_live_sha256, null);
+  assert.equal(add.accepted_sha256, LIVE[INVOICE]);
+  assert.equal(sha(`aws/functions/api/${INVOICE}`), LIVE[INVOICE]);
+  assert.ok(PLAN.order.indexOf(INVOICE) < PLAN.order.indexOf('providers.mjs'));
+  // Inspect accepts the live bytes as done for both members; the pre-apply providers.mjs bytes are no
+  // longer an accepted live state.
+  for (const member of Object.keys(LIVE)) {
+    const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: member };
+    const done = await run(inspect, { root: ROOT, inspectLive: liveFor(member, { sha256: LIVE[member] }) });
+    assert.equal(done.state, 'ALREADY_ACCEPTED', member);
+    assert.equal(done.mutation, false, member);
+  }
+  const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: 'providers.mjs' };
+  await assert.rejects(
+    run(inspect, { root: ROOT, inspectLive: liveFor('providers.mjs', { sha256: PROVIDERS_BEFORE }) }),
+    (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+  );
 });
