@@ -1505,26 +1505,37 @@ test('Production Platform Finance: providers.mjs expected_live records the bytes
   );
 });
 
-test('Platform Finance P&L accuracy: REPLACE providers/parity/platform-finance.mjs from its reconciled live bytes, before the handler', async () => {
+test('Platform Finance P&L accuracy: providers/parity/platform-finance.mjs expected_live records the bytes production run 40001351087 applied', async () => {
   const MEMBER = 'providers/parity/platform-finance.mjs';
   const MANIFEST_REL = 'aws/tests/fixtures/production-platform-pnl-manifest-2026-10-23.json';
+  const APPLIED_REL = 'aws/tests/fixtures/production-platform-pnl-applied-manifest-2026-10-23.json';
   const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, MANIFEST_REL), 'utf8'));
-  const LIVE = '746c89a69077463abd97f3f1a0beed23ba2d0eb17462c19ca75defd6e6fed0fb';
+  const applied = JSON.parse(fs.readFileSync(path.join(ROOT, APPLIED_REL), 'utf8'));
+  const BEFORE = '746c89a69077463abd97f3f1a0beed23ba2d0eb17462c19ca75defd6e6fed0fb';
+  const LIVE = '5b1ccfdb010d2ca3aab4ec22d3e958e7738623825c076d9531cb95c59c23d7e8';
+  for (const run of ['40000973350', '40001083285', '40001243234', '40001351087']) {
+    assert.match(PLAN.notes, new RegExp(run), run);
+    assert.match(applied.notes, new RegExp(`run ${run}`), run);
+  }
+  assert.equal(applied.workstream_id, 'production-platform-pnl-applied');
+  assert.equal(applied.deploy_authorized, false);
+  assert.deepEqual(applied.members[MEMBER], { live_sha256: LIVE, accepted_sha256: LIVE, operation: 'replace', previous_manifest: MANIFEST_REL });
+  // The P&L manifest keeps the pre-apply record.
+  assert.deepEqual(manifest.members[MEMBER], { live_sha256: BEFORE, accepted_sha256: LIVE, operation: 'replace' });
   const row = PLAN.members[MEMBER];
   assert.equal(row.operation, 'replace');
+  assert.equal(row.manifest, APPLIED_REL);
   assert.equal(row.expected_live_sha256, LIVE);
-  assert.equal(row.manifest, MANIFEST_REL);
-  assert.equal(row.sql_before, null);
-  assert.equal(sha(`aws/functions/api/${MEMBER}`), row.accepted_sha256);
-  assert.notEqual(row.accepted_sha256, LIVE);
-  assert.equal(manifest.deploy_authorized, false);
-  assert.deepEqual(manifest.members[MEMBER], { live_sha256: LIVE, accepted_sha256: row.accepted_sha256, operation: 'replace' });
-  assert.match(manifest.notes, /39577337627/);
+  assert.equal(row.accepted_sha256, LIVE);
+  assert.equal(sha(`aws/functions/api/${MEMBER}`), LIVE);
   assert.ok(PLAN.order.indexOf(MEMBER) < PLAN.order.indexOf('providers/production/platform-finance.mjs'));
   assert.equal(PLAN.order.at(-1), 'providers.mjs');
-  assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
   const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
-  const ready = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER) });
-  assert.equal(ready.state, 'READY');
-  assert.equal(ready.mutation, false);
+  const done = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: LIVE }) });
+  assert.equal(done.state, 'ALREADY_ACCEPTED');
+  assert.equal(done.mutation, false);
+  await assert.rejects(
+    run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: BEFORE }) }),
+    (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+  );
 });
