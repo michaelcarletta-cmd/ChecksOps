@@ -1,8 +1,8 @@
 {
   "id": "sql112-moov-invoice-table-grants-production-apply",
   "migration": "sql112",
-  "authorization": "Owner approved 2026-10-23 (the owner's words, verbatim: \"applying SQL 112 for parity.\", repeated as \"applying SQL 112 for parity\"; this pin change is bound to that approval and takes effect only once the owner reviews and merges it): production apply of SQL 112 on the staging acceptance below (production a61983121c4739f38084c66c6aaafcb67968b008526ff0c69459713280292acd -> 7caba5ba4a322d54a3c55ca712966da58cf4358c0db81f95c142dabfc916f315); execute true takes effect only once this change is merged. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
-  "execute": true,
+  "authorization": "Applied to production on 2026-10-23; execute is false again, so this pin is no longer a standing authorization and a re-apply needs a new reviewed pin change. The owner chose to apply SQL 112 in both environments on 2026-10-23 in the words \"applying SQL 112 for parity.\" (repeated as \"applying SQL 112 for parity\"), which covered the SQL 112 production pin (a6198312 -> 7caba5ba), the read-only production inspect, the owner-accepted staging acceptance and the execute change (#1190, merged on \"Merge 1190 when green.\"), and approved the one apply run recorded in applied (workstream prod-sql112-moov-invoice-table-grants-20261023) in the words \"apply SQL 112 in production\", passed to it verbatim. That approval covered that run only",
+  "execute": false,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -58,5 +58,105 @@
     "ok": true,
     "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39967007467",
     "basis": "Owner-accepted substitute evidence from a different pre-state (the owner's words: \"applying SQL 112 for parity.\"). The guarded staging SQL executor (choice sql112-moov-invoice-table-grants) carried SQL 112 from deploy run 39962977351 and, after the staging pin change (#1189), deploy run 39966318339 (executor 51tMc1XFEefi/QY53mzE16WAAlCZgCIJOMNNOWuR9K8=, inspect run 39966052661 before it). Read-live run 39963348904 (2026-10-23, main c74e7264c) reported already_applied false, precondition_failures [] and live c606d5eda318a2336d5885b3675339ee98aed761c3aa620a7ced759b3c5eeb89 (checksops SELECT only on moov_invoices and moov_invoice_customers, authenticated none of the pinned lines), recorded as the staging pin's expected_live_definition_sha256; read-live run 39966632712 (main 784712e3f) reported the same live hash immediately before the apply. The staging apply run 39967007467 (2026-10-23, main 784712e3f01d40529d43acd115179f6152a8ac2d, staging pin commit fcb2ead39b4bf3c58185a96abfc7e2b7b220bed9) reported result applied, before c606d5eda318a2336d5885b3675339ee98aed761c3aa620a7ced759b3c5eeb89, after 7caba5ba4a322d54a3c55ca712966da58cf4358c0db81f95c142dabfc916f315 = intended_replacement_sha256, every pinned line held on both tables, other_write_grants [] on both. The read-live after it (run 39967300107) reported already_applied true, precondition_failures [] and live 7caba5ba4a322d54a3c55ca712966da58cf4358c0db81f95c142dabfc916f315. The pre-states differ: staging held checksops SELECT only (c606d5eda318a2336d5885b3675339ee98aed761c3aa620a7ced759b3c5eeb89), while production already holds checksops SELECT, INSERT, UPDATE and DELETE on moov_invoices and SELECT and INSERT on moov_invoice_customers (a61983121c4739f38084c66c6aaafcb67968b008526ff0c69459713280292acd); neither held the authenticated lines. Both reach the intended 7caba5ba4a322d54a3c55ca712966da58cf4358c0db81f95c142dabfc916f315 from the same pinned file bytes, and GRANT of a held privilege is a no-op. Also accepted: aws/tests/sql112-moov-invoice-table-grants-pg.test.mjs (supabase-era, all-held and partly granted cases). The production apply refuses unless the live state still equals this pin's expected_live_definition_sha256, and its post-conditions roll back unless the intended fingerprint is reached with every other grant on the two tables and the rest of the catalog unchanged."
+  },
+  "applied": {
+    "date": "2026-10-23",
+    "result": "applied",
+    "source_commit": "4d2cf0c119280c12a360400be657d6e43f2b7a64",
+    "source_tarball": {
+      "file": "source-4d2cf0c119280c12a360400be657d6e43f2b7a64.tar.gz",
+      "sha256": "49862a9b106391ce61a04c4bec9040f3faf59fe0a6d935bf9df9bcb81e873d8f"
+    },
+    "migration_source_sha256": "497e23e9b158d7d8287244b315ee1135cafb6fc955af05c0e1c60d0c5c44c7e4",
+    "migration_source_sha256_note": "The one-shot source step hashed aws/workflows/sql/112_moov_invoice_table_grants.sql in the transfer tarball: equal to source_sha256 (the pin).",
+    "runner": "i-0c35557c4e5385406",
+    "workstream_id": "prod-sql112-moov-invoice-table-grants-20261023",
+    "one_use_id": "sql112-prod-95240935-fac1-4d76-b727-7fd1f2f55bf4",
+    "one_use_id_consumed": true,
+    "one_use_id_consumed_basis": "Inferred from the successful apply (the tool records the one_use_id after COMMIT and only warns if that write fails); the consumed-registry entry was not read back separately.",
+    "owner_approval": "apply SQL 112 in production",
+    "owner_approval_basis": "As passed in --approval-statement-b64 for --approval-scope sql112; the one-shot cannot verify who said it.",
+    "operator": "michaelcarletta-cmd",
+    "apply_ssm_command_id": "654fb07f-7c95-4828-ad95-7fce135f1d27",
+    "one_shot_run_id": "3f3f7d9d-51df-458f-b9fe-49b4bc91f841",
+    "one_shot_note": "One guarded production-sql-one-shot run (SSM 654fb07f-7c95-4828-ad95-7fce135f1d27, run_id 3f3f7d9d-51df-458f-b9fe-49b4bc91f841) from main 4d2cf0c11 (transfer run 39969627282, sql53-temporary-transfer.yml dispatched on main after the #1190 merge) applied SQL 112: steps pin, source, inspect, contracts, manifest, source-recheck-before-preflight, preflight, evaluate (sql112_production_apply_allowed true), source-recheck-before-apply, apply (applied) and post-apply-inspect all ok; runner contracts, manifest, receipt and inspects as recorded below. SSM invocation 2026-10-23T14:30:31Z to 14:30:49Z (ExecutionStartDateTime to ExecutionEndDateTime). Before it, a read-only --phase inspect of the same one-shot (SSM a48aa853-2312-4b5f-a142-dcf06307d8e4, run_id 84dc3b92-6d90-4eda-b525-5f29b11270ed, 2026-10-23T14:28:26Z, same commit, tarball and workstream, approval statement \"applying SQL 112 for parity.\") completed pin, source, inspect and contracts with live a61983121c4739f38084c66c6aaafcb67968b008526ff0c69459713280292acd (live_matches_expected true) and precondition_failures [], and wrote nothing. The one-shot JSON was summarised on the runner by a node one-liner (no console truncation).",
+    "steps": [
+      "pin",
+      "source",
+      "inspect",
+      "contracts",
+      "manifest",
+      "source-recheck-before-preflight",
+      "preflight",
+      "evaluate",
+      "source-recheck-before-apply",
+      "apply",
+      "post-apply-inspect"
+    ],
+    "contract_results": {
+      "claim-ledger": {
+        "ok": true,
+        "passed": "4/4"
+      },
+      "tenant-isolation": {
+        "ok": true,
+        "passed": "6/6"
+      },
+      "financial-write-protections": {
+        "ok": true,
+        "passed": "43/43"
+      }
+    },
+    "pre_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "a61983121c4739f38084c66c6aaafcb67968b008526ff0c69459713280292acd",
+      "live_matches_expected": true,
+      "already_applied": false,
+      "precondition_failures": [],
+      "missing_dependencies": [],
+      "predecessors_applied": true,
+      "successors_applied": [],
+      "note": "The one-shot inspect step (read-only --inspect) immediately before the apply: live == the recorded pre-state a6198312..., live_matches_expected true, already_applied false, apply_preconditions_met true, precondition_failures [], missing_dependencies [], successors_applied []; release_sql_inspect.table_privileges: moov_invoices [checksops DELETE, checksops INSERT, checksops SELECT, checksops UPDATE] (other_write_grants []), moov_invoice_customers [checksops INSERT, checksops SELECT] (other_write_grants [checksops DELETE, checksops UPDATE]); prerequisites_missing [], predecessors {}; current_user and session_user checksops_admin."
+    },
+    "manifest_sha256": "f8cc024e1d1e36cfd1f0ea441cec95e6834f26bd2e21091b27b1bb97ef07786d",
+    "receipt": {
+      "migration": "sql112",
+      "workstream": "prod-sql112-moov-invoice-table-grants-20261023",
+      "commit": "4d2cf0c119280c12a360400be657d6e43f2b7a64",
+      "sql_file": "aws/workflows/sql/112_moov_invoice_table_grants.sql",
+      "before_hash": "a61983121c4739f38084c66c6aaafcb67968b008526ff0c69459713280292acd",
+      "after_hash": "7caba5ba4a322d54a3c55ca712966da58cf4358c0db81f95c142dabfc916f315",
+      "unrelated_catalog_sha256": "9cf1140a95c118bdf6d82d7e9a7f57d2a20b05ee423641ba6572bda00a57bbaf",
+      "unrelated_catalog_counts": {
+        "relations": 890,
+        "columns": 3535,
+        "constraints": 2233,
+        "policies": 404,
+        "functions": 1320,
+        "indexes": 654,
+        "default_acl": 0,
+        "role_memberships": 15,
+        "roles": 29,
+        "triggers": 180,
+        "views": 25,
+        "types": 18,
+        "schema": 2
+      },
+      "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39967007467",
+      "result": "applied"
+    },
+    "post_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "7caba5ba4a322d54a3c55ca712966da58cf4358c0db81f95c142dabfc916f315",
+      "already_applied": true,
+      "precondition_failures": [],
+      "missing_dependencies": [],
+      "predecessors_applied": true,
+      "successors_applied": [],
+      "note": "The one-shot post-apply read-only --inspect: already_applied true (live == intended 7caba5ba...), precondition_failures []; release_sql_inspect.table_privileges: moov_invoices [authenticated DELETE, authenticated INSERT, authenticated SELECT, authenticated UPDATE, checksops DELETE, checksops INSERT, checksops SELECT, checksops UPDATE] (other_write_grants []), moov_invoice_customers [authenticated INSERT, authenticated SELECT, checksops INSERT, checksops SELECT] (other_write_grants [checksops DELETE, checksops UPDATE], unchanged); current_user and session_user checksops_admin."
+    }
+  },
+  "production_evidence": {
+    "2026-10-23 apply": "Guarded production SQL one-shot on i-0c35557c4e5385406, workstream prod-sql112-moov-invoice-table-grants-20261023, main 4d2cf0c11 (tarball 49862a9b…, transfer run 39969627282, migration source 497e23e9… == pin), owner-approved run (\"apply SQL 112 in production\"), SSM 654fb07f-7c95-4828-ad95-7fce135f1d27, run_id 3f3f7d9d-51df-458f-b9fe-49b4bc91f841, one_use_id sql112-prod-95240935-fac1-4d76-b727-7fd1f2f55bf4 (spent): every step ok; contracts claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43; pre-apply inspect live a6198312… (live_matches_expected true, precondition_failures []); manifest f8cc024e…; a6198312… -> 7caba5ba…, result applied, unrelated catalog 9cf1140a…; post-apply inspect already_applied true, precondition_failures []. Privileges after: authenticated and checksops SELECT/INSERT/UPDATE/DELETE on moov_invoices and SELECT/INSERT on moov_invoice_customers; checksops UPDATE and DELETE on moov_invoice_customers unchanged. Preceded by the read-only --phase inspect SSM a48aa853-2312-4b5f-a142-dcf06307d8e4. No later inspect was run. execute is false so the pin is no longer a standing authorization."
   }
 }

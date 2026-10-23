@@ -56,7 +56,8 @@ export const STAGING_WAVE1 = Object.freeze({
   // Wave 13 (owner approved 2026-10-23, "applying SQL 112 for parity."): SQL 112 grants the Moov
   // invoice tables to checksops and authenticated. Read at main c74e7264c after the executor
   // carried it: checksops SELECT only on both tables, authenticated none of the pinned lines.
-  sql112: Object.freeze({ wave: 13, approved: '2026-10-23', run: '39963348904', live: 'c606d5eda318a2336d5885b3675339ee98aed761c3aa620a7ced759b3c5eeb89' }),
+  // Applied by the guarded staging executor run 39967007467 (receipt c606d5ed… -> 7caba5ba…).
+  sql112: Object.freeze({ wave: 13, approved: '2026-10-23', run: '39963348904', live: 'c606d5eda318a2336d5885b3675339ee98aed761c3aa620a7ced759b3c5eeb89', apply_run: '39967007467' }),
   sql98: Object.freeze({ wave: 3, approved: '2026-10-18', run: '39083278136', live: '296c3d6a274e10f66005fb9eaecf93fa17b81bd8db3607037ca07698fddd3275', apply_run: '39085677318' }),
 });
 
