@@ -250,10 +250,10 @@
     },
     "data.mjs": {
       "operation": "replace",
-      "accepted_sha256": "75fe96fc3a3f782a0e69e30f7dd4c4f5a1c5f64a93915bd40a0eaf6bd3ddde31",
-      "expected_live_sha256": "965f5ed94e6d901bd26335199d82039cc5676f8eb83f182803efc2f45167d349",
+      "accepted_sha256": "c14a83e7c099150b8f6e489a6b318abc850b2868beeb3a9a981eea71fc38fae0",
+      "expected_live_sha256": "75fe96fc3a3f782a0e69e30f7dd4c4f5a1c5f64a93915bd40a0eaf6bd3ddde31",
       "sql_before": "aws/workflows/sql/53_claim_settlement_breakdown.sql",
-      "manifest": "aws/tests/fixtures/production-checkalt-onboarding-manifest-2026-10-15.json"
+      "manifest": "aws/tests/fixtures/production-referral-api-routes-manifest-2026-10-23.json"
     },
     "workflow-transitions.mjs": {
       "operation": "replace",
@@ -348,10 +348,10 @@
     },
     "workflow-rpc.mjs": {
       "operation": "replace",
-      "accepted_sha256": "79b7e4de653eb9d391afca9d27769b3b7c8e3d10d67af43e829ee32398797485",
-      "expected_live_sha256": "37cab8d6aac8ee1d9af70481b29dcda1e108904b68a2bc8e525d444e60ddf907",
+      "accepted_sha256": "6902fe6f89f91c52f251ae1218257a387d6d7dd1fdb0e07687f6c99dfd5591d3",
+      "expected_live_sha256": "79b7e4de653eb9d391afca9d27769b3b7c8e3d10d67af43e829ee32398797485",
       "sql_before": "aws/workflows/sql/98_tenant_fee_collection.sql",
-      "manifest": "aws/tests/fixtures/production-fee-collection-pin-manifest-2026-10-17.json"
+      "manifest": "aws/tests/fixtures/production-referral-api-routes-manifest-2026-10-23.json"
     },
     "providers/production/checkalt-authz.mjs": {
       "operation": "replace",

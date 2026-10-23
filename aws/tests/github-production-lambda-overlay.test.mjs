@@ -753,9 +753,10 @@ test('fee collection: eleven members on the fee manifest, collection-v2 then des
 
   const superseded = ['providers/parity/moov-functions.mjs', 'providers/parity/moov-money.mjs', 'providers/catalog.mjs', ENGINE, HANDLERS, WORKFLOW_RPC, PROVIDERS];
   assert.deepEqual(Object.keys(fees.members).sort(), [...superseded, COLLECTION, DESTINATION, INVOICE_EMAIL, DEPOSITS_GATE].sort());
-  // The engine was re-pinned after the fee work (referral billing credit, 2026-10-23): this manifest
-  // still records its fee-branch bytes; the plan row moved on (checked in its own test below).
-  const REPINNED = new Set([ENGINE]);
+  // The engine and workflow-rpc.mjs were re-pinned after the fee work (referral billing credit and
+  // Refer & Earn routes, 2026-10-23): this manifest still records their fee-branch bytes; the plan
+  // rows moved on (checked in their own tests below).
+  const REPINNED = new Set([ENGINE, WORKFLOW_RPC]);
   for (const member of Object.keys(fees.members)) {
     if (REPINNED.has(member)) continue;
     const row = PLAN.members[member];
@@ -973,7 +974,12 @@ test('live reconciliation 2026-10-19: ten members expect the bytes inspect run 3
   assert.equal(Object.keys(RECONCILED).length, 10);
   // homeowner.mjs moved on: its c51ea27a release bytes went live (inspect run 39828391789,
   // ALREADY_ACCEPTED) and the plan row now replaces them for the pre-claim upload (next tests).
-  const MOVED_ON = { 'homeowner.mjs': 'c51ea27a37a72b18aed7881ae349212257b790e6ff400cbe675949574504a80c' };
+  // workflow-rpc.mjs moved on the same way: its fee-branch 79b7e4de bytes went live (inspect run
+  // 39935902507, ALREADY_ACCEPTED) and the plan row now replaces them for the Refer & Earn routes.
+  const MOVED_ON = {
+    'homeowner.mjs': 'c51ea27a37a72b18aed7881ae349212257b790e6ff400cbe675949574504a80c',
+    'workflow-rpc.mjs': '79b7e4de653eb9d391afca9d27769b3b7c8e3d10d67af43e829ee32398797485',
+  };
   for (const [member, [before, live, manifestRel, appliedRel]] of Object.entries(RECONCILED)) {
     if (MOVED_ON[member]) {
       assert.equal(readJson(manifestRel).members[member].live_sha256, live, member);
@@ -1273,4 +1279,49 @@ test('referral billing credit: tenant-billing-engine.mjs expected_live records t
   const source = fs.readFileSync(path.join(API, ENGINE), 'utf8');
   assert.match(source, /aws_tenant_referral_credit_cents\(\$1::uuid\)/);
   assert.match(source, /export const maintenanceDiscountCents/);
+});
+
+test('Refer & Earn routes: data.mjs and workflow-rpc.mjs REPLACE the bytes found in the live package, keeping their SQL holds', async () => {
+  const MANIFEST_REL = 'aws/tests/fixtures/production-referral-api-routes-manifest-2026-10-23.json';
+  // Each row keeps its hold: workflow-rpc.mjs imports the deposits gate (SQL 98). The routes call SQL 111's
+  // functions, applied in staging (run 39877945144) and production (SSM c006d74b, #1178) before this change.
+  const SQL_BEFORE = {
+    'data.mjs': 'aws/workflows/sql/53_claim_settlement_breakdown.sql',
+    'workflow-rpc.mjs': 'aws/workflows/sql/98_tenant_fee_collection.sql',
+  };
+  // The members of the live package (guarded production overlay inspects 39935902507 and
+  // 39936933276, ALREADY_ACCEPTED, CodeSha256 busOVhKmeePCymsRvvyRdoDeF7FCmQwXhE9CJ24vpuc=).
+  const LIVE = {
+    'data.mjs': '75fe96fc3a3f782a0e69e30f7dd4c4f5a1c5f64a93915bd40a0eaf6bd3ddde31',
+    'workflow-rpc.mjs': '79b7e4de653eb9d391afca9d27769b3b7c8e3d10d67af43e829ee32398797485',
+  };
+  // Each builds on the manifest whose accepted bytes went live.
+  const PREVIOUS = {
+    'data.mjs': 'aws/tests/fixtures/production-checkalt-onboarding-manifest-2026-10-15.json',
+    'workflow-rpc.mjs': 'aws/tests/fixtures/production-fee-collection-pin-manifest-2026-10-17.json',
+  };
+  const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, MANIFEST_REL), 'utf8'));
+  assert.equal(manifest.workstream_id, 'referral-api-routes');
+  assert.equal(manifest.deploy_authorized, false);
+  assert.match(manifest.notes, /busOVhKmeePCymsRvvyRdoDeF7FCmQwXhE9CJ24vpuc=/);
+  assert.deepEqual(Object.keys(manifest.members), Object.keys(LIVE));
+  for (const [member, live] of Object.entries(LIVE)) {
+    const row = PLAN.members[member];
+    assert.deepEqual(manifest.members[member], { live_sha256: live, accepted_sha256: row.accepted_sha256, operation: 'replace', previous_manifest: PREVIOUS[member] }, member);
+    assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, PREVIOUS[member]), 'utf8')).members[member].accepted_sha256, live, member);
+    assert.equal(row.operation, 'replace', member);
+    assert.equal(row.manifest, MANIFEST_REL, member);
+    assert.equal(row.expected_live_sha256, live, member);
+    assert.equal(row.accepted_sha256, sha(`aws/functions/api/${member}`), member);
+    assert.notEqual(row.accepted_sha256, live, member);
+    assert.equal(row.sql_before, SQL_BEFORE[member], member);
+    assert.equal(PLAN.sql_prerequisites[row.sql_before].verified_live, true, member);
+    assert.equal(resolvePlannedMember(member, { root: ROOT, plan: PLAN }).ok, true, member);
+    assert.ok(PLAN.order.includes(member), member);
+  }
+  // The new bytes: the redeem is a safe write RPC, the summary and the overview are read RPCs.
+  assert.match(fs.readFileSync(path.join(API, 'workflow-rpc.mjs'), 'utf8'), /aws_apply_referral_code\(\$1::uuid, \$2::text\)/);
+  const data = fs.readFileSync(path.join(API, 'data.mjs'), 'utf8');
+  assert.match(data, /'aws_tenant_referral_summary'/);
+  assert.match(data, /'aws_platform_owner_referral_overview'/);
 });

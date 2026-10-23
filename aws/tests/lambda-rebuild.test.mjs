@@ -84,6 +84,10 @@ const CHANGED_SINCE_SECOND_REBUILD = {
   // Referral billing credit (2026-10-23, SQL 111): a REPLACE member of the production overlay plan,
   // not a rebuild section.
   'tenant-billing-engine.mjs': 'changed',
+  // Refer & Earn routes (2026-10-23, SQL 111): REPLACE members of the production overlay plan,
+  // not a rebuild section.
+  'data.mjs': 'changed',
+  'workflow-rpc.mjs': 'changed',
 };
 // Listed changes that go through the production overlay plan, never the current rebuild section.
 const OVERLAY_PLAN_CHANGES = new Set([
@@ -93,6 +97,8 @@ const OVERLAY_PLAN_CHANGES = new Set([
   'providers/production/checkalt-status-reconcile.mjs',
   'scheduled.mjs',
   'tenant-billing-engine.mjs',
+  'data.mjs',
+  'workflow-rpc.mjs',
 ]);
 const assertSectionAcceptedIsMain = (apiRoot, name, accepted) => {
   const onMain = sha256(fs.readFileSync(path.join(apiRoot, name)));
