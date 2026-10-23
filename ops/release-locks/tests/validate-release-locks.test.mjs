@@ -39,11 +39,23 @@ test('origin/main-based manifest validates fail-closed with production-spa PRODU
   const { errors } = validateReleaseLocks(inputs);
   assert.deepEqual(errors, []);
   const locked = Object.values(inputs.manifest.components).filter((c) => c.classification === 'PRODUCTION_LOCKED');
-  assert.equal(locked.length, 1);
-  assert.equal(locked[0].id, 'production-spa');
-  assert.equal(locked[0].production_active, true);
-  assert.equal(locked[0].artifact.name, '/assets/index-Dr7_4U0c.js');
-  assert.equal(locked[0].rollback.artifact, '/assets/index-BlDszv2n.js');
+  // production-spa (the live SPA baseline) and moov-production-invoice (locked 2026-10-23 on SQL 112).
+  assert.deepEqual(locked.map((c) => c.id).sort(), ['moov-production-invoice', 'production-spa']);
+  const spa = locked.find((c) => c.id === 'production-spa');
+  assert.equal(spa.production_active, true);
+  assert.equal(spa.artifact.name, '/assets/index-Dr7_4U0c.js');
+  assert.equal(spa.rollback.artifact, '/assets/index-BlDszv2n.js');
+  const invoice = locked.find((c) => c.id === 'moov-production-invoice');
+  assert.equal(invoice.production_active, true);
+  assert.deepEqual(invoice.missing_evidence, []);
+  assert.equal(invoice.required_sql.length, 1);
+  assert.equal(invoice.required_sql[0].path, 'aws/workflows/sql/112_moov_invoice_table_grants.sql');
+  assert.equal(invoice.required_sql[0].applied_environment, 'production');
+  assert.equal(invoice.required_sql[0].applied_sha256, invoice.required_sql[0].source_sha256);
+  assert.equal(invoice.deployment_fingerprint.applied_sql_hash, invoice.required_sql[0].source_sha256);
+  const ledgerRows = inputs.ledger.entries.filter((row) => row.path === invoice.required_sql[0].path);
+  assert.deepEqual(ledgerRows.map((row) => row.record_kind), ['source', 'apply_evidence']);
+  assert.equal(ledgerRows[1].proof_path, invoice.required_sql[0].proof);
   assert.equal(inputs.manifest.fail_closed, true);
   assert.equal(validateMain([], ROOT), 0);
 });
