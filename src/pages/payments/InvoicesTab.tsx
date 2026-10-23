@@ -19,9 +19,8 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { useMoovInvoices, type InvoiceLineItem } from "@/hooks/useMoovInvoices";
 import { usePaymentAccount } from "@/hooks/usePaymentAccount";
 import { supabase } from "@/integrations/supabase/client";
-import { useNavigate, useLocation } from "react-router-dom";
 import {
-  Plus, Trash2, Send, Link2, MoreHorizontal, RefreshCw, Loader2, FileText, Clock, CheckCircle2, Ban, Settings,
+  Plus, Trash2, Send, Link2, MoreHorizontal, RefreshCw, Loader2, FileText, Clock, CheckCircle2, Ban,
 } from "lucide-react";
 import { formatIssueDateDisplay } from "@/lib/issueDate";
 
@@ -43,8 +42,6 @@ const emptyItem = (): InvoiceLineItem => ({ name: "", unit_price: 0, quantity: 1
 
 export function InvoicesTab() {
   const { toast } = useToast();
-  const navigate = useNavigate();
-  const location = useLocation();
   const { invoices, createInvoice, sendInvoice, resendInvoice, cancelInvoice, deleteInvoice, syncInvoices } = useMoovInvoices();
   const { account } = usePaymentAccount();
   const isMobile = useIsMobile();
@@ -207,22 +204,6 @@ export function InvoicesTab() {
             </CardDescription>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                const isWhiteLabel = location.pathname.includes('/wl/');
-                const base = isWhiteLabel ? location.pathname.split('/payments')[0] : '/freedom';
-                const tab = isWhiteLabel ? 'branding' : 'organization';
-                const section = isWhiteLabel ? '' : '&section=branding';
-                navigate(`${base}/settings?tab=${tab}${section}`);
-              }}
-              className="hidden sm:flex"
-            >
-              <Settings className="h-4 w-4 mr-2" />
-              Invoice Branding
-            </Button>
             <Button
               variant="outline"
               size="sm"
