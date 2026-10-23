@@ -51,7 +51,8 @@ export const STAGING_WAVE1 = Object.freeze({
   // Wave 12 (owner approved 2026-10-22, "Owner approved the SQL 111 staging apply on 2026-10-22"):
   // SQL 111 adds the five tenant referral functions. Read at main 323206af2 after the executor
   // carried it: the functions absent, the definer able to write referral_events and tenants.
-  sql111: Object.freeze({ wave: 12, approved: '2026-10-22', run: '39874593011', live: 'b78704b4d46b3ca88146d8368e09c630ead8930d3717e89287bf07bb46b86978' }),
+  // Applied by the guarded staging executor run 39877945144 (receipt b78704b4… -> 0ca62915…).
+  sql111: Object.freeze({ wave: 12, approved: '2026-10-22', run: '39874593011', live: 'b78704b4d46b3ca88146d8368e09c630ead8930d3717e89287bf07bb46b86978', apply_run: '39877945144' }),
   sql98: Object.freeze({ wave: 3, approved: '2026-10-18', run: '39083278136', live: '296c3d6a274e10f66005fb9eaecf93fa17b81bd8db3607037ca07698fddd3275', apply_run: '39085677318' }),
 });
 
