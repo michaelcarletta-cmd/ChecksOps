@@ -52,7 +52,7 @@ import { EXECUTOR_PACK_MEMBERS } from '../../scripts/deployment-guard/sql-execut
 import { MIGRATIONS } from '../../scripts/deployment-guard/github-staging-sql-executor.mjs';
 import { READ_LIVE_EXPECTED_SENTINEL } from '../../scripts/deployment-guard/lib/sql-executor-read-live.mjs';
 import { importGuardedSqlExecutor } from './helpers/import-guarded-sql-executor.mjs';
-import { assertStagingPinState } from './helpers/staging-sql-wave1.mjs';
+import { assertStagingPinState, pendingPin } from './helpers/staging-sql-wave1.mjs';
 import { pgSkipReason, releaseFixture } from './helpers/release-sql-pg.mjs';
 import { PAYEE_SCHEMA, RECIPIENTS, STAKEHOLDERS, METHODS } from './helpers/sql113-payee-schema.mjs';
 
@@ -121,7 +121,7 @@ function handlerFor(connect, { pins = {} } = {}) {
   return createHandler({ connect, now: () => Date.parse(NOW), releaseSqlFiles: FILES, releaseSqlPins: { ...PINS, ...pins } });
 }
 
-test('pin: SQL 113 pending, code-derived, selectable, packed, in step with the production pin; no predecessor', () => {
+test('pin: SQL 113 staging-authorized from its read-live, code-derived, selectable, packed, in step with the production pin; no predecessor', () => {
   const pin = PINS[KEY];
   const spec = RELEASE_SQL_SPECS[KEY];
   const packed = Object.fromEntries(EXECUTOR_PACK_MEMBERS);
@@ -131,11 +131,13 @@ test('pin: SQL 113 pending, code-derived, selectable, packed, in step with the p
   assert.equal(pin.migration_id, '113_payee_setup');
   assert.equal(spec.choice, 'sql113-payee-setup');
   assert.equal(sha(TEXT), pin.source_sha256);
-  // Pending: no staging read-live yet, so no pre-state, no approval, execute false.
+  // Staging apply authorized (owner approved 2026-10-23, "Apply SQL 113 to staging") from staging
+  // read-live run 40018316361: the functions and payee columns absent, so SQL 113 not yet applied there.
   assertStagingPinState(assert, KEY, pin);
-  assert.equal(pin.execute, false);
-  assert.equal(pin.authorization, 'pending');
-  assert.equal(pin.expected_live_definition_sha256, null);
+  assert.equal(pin.execute, true);
+  assert.equal(pin.authorization, 'Owner approved 2026-10-23: staging apply (wave 14) from staging read-live run 40018316361');
+  assert.equal(pin.expected_live_definition_sha256, '88787a89c85585f25c18ea31d60740a6526522377a1b0d7b02e7902fe18970c1');
+  assert.notEqual(pin.expected_live_definition_sha256, pin.intended_replacement_sha256);
   assert.equal(releaseIntendedHash(KEY, TEXT), pin.intended_replacement_sha256);
   assert.equal(pin.superseded_intended_sha256, undefined);
   assert.ok(AUTHORIZED_STAGING_SQL.includes(pin));
@@ -370,8 +372,9 @@ test('PostgreSQL 16: SQL 113 through the executor: a pending pin cannot apply, d
   assert.deepEqual(r.release_sql_inspect.constraints.map((c) => c.state), ['different']);
   assert.deepEqual(r.release_sql_inspect.table_privileges, [{ name: 'external_payment_recipients', lines: [], other_write_grants: [] }]);
   assert.deepEqual(r.release_sql_inspect.definer_writes.map((d) => d.ok), [true, true, true]);
-  // A pending pin cannot apply.
-  const pending = await handlerFor(connect)(releaseEvent({ expected_live_definition_sha256: r.live_definition_sha256 }));
+  // A pending pin cannot apply (the committed pin is staging-authorized, so pend a copy).
+  const pendingCopy = pendingPin(PINS[KEY]);
+  const pending = await handlerFor(connect, { pins: { [KEY]: pendingCopy } })(releaseEvent({ pin: pendingCopy, expected_live_definition_sha256: r.live_definition_sha256 }));
   assert.equal(pending.ok, false);
   // Drift between the recorded pre-state and the apply refuses.
   await admin.query(`GRANT SELECT ON TABLE ${RECIPIENTS} TO checksops`);

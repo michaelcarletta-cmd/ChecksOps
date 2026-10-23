@@ -24,7 +24,23 @@ The origin check is not a precondition of the engine: the file itself refuses a 
 than the four supabase values, so an inspect that shows `stakeholder_accounts_origin_check`
 `different` must be read before any apply.
 
-**Status:** pending. No staging read-live, no production inspect, nothing applied.
+**Staging executor refreshed (2026-10-23).** Inspect run 40017771702 (main `ac2860a5a`) found the
+live executor at CodeSha256 `51tMc1XF…` without SQL 113 (adds only `sql/113_payee_setup.sql`,
+supersedes the three engine files, nothing dropped, no collisions). Deploy run 40018037771 updated it
+to main's package (`hU2AzlaR…`).
+
+**Staging read-live (2026-10-23).** Run 40018316361 (main `ac2860a5a`): the six functions absent;
+`stakeholder_account_id`, `provider_bank_name`, `provider_last_four` and `bank_linked_at` already the
+file's, the seven payee state columns absent; `stakeholder_accounts_origin_check` `different` (not yet
+the five-value check; the file replaces only the exact four-value supabase check and refuses any
+other); `checksops` holds `SELECT` (and `UPDATE`, outside the fingerprint) on
+`external_payment_recipients`, `authenticated` none of the pinned lines; definer writes ok on the three
+payee tables. Live `88787a89c85585f25c18ea31d60740a6526522377a1b0d7b02e7902fe18970c1`,
+`already_applied` false, `precondition_failures` `[]`. Recorded in the staging pin
+(`expected_live_definition_sha256`, `execute: true`, wave 14) under the owner's words of
+2026-10-23, "Apply SQL 113 to staging".
+
+**Status:** staging pin execute-authorized (wave 14); nothing applied yet; production pin pending.
 
 ## Fingerprint
 

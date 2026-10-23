@@ -159,7 +159,7 @@ test('order: no predecessor; the note names the supabase origin check and the pa
   const runbook = fs.readFileSync(path.join(ROOT, COMMITTED.tooling.runbook), 'utf8');
   assert.ok(runbook.includes(COMMITTED.intended_replacement_sha256));
   assert.ok(runbook.includes(COMMITTED.source_sha256));
-  assert.match(runbook, /\*\*Status:\*\* pending/);
+  assert.match(runbook, /\*\*Status:\*\* staging pin execute-authorized \(wave 14\); nothing applied yet; production pin pending/);
   // The runbook's fingerprint block is the code-derived state text.
   const text = fs.readFileSync(path.join(ROOT, SQL113_FILE), 'utf8');
   assert.ok(runbook.includes(`\`\`\`\n${releaseStateText(KEY, releaseIntendedState(KEY, text))}\n\`\`\``));

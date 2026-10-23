@@ -2473,8 +2473,8 @@ export const AUTHORIZED_SQL112_MOOV_INVOICE_TABLE_GRANTS = Object.freeze({
 // Payee setup 2026-10-23 staging pin: SQL 113 (the payee state columns on
 // external_payment_recipients, origin provider_recipient in stakeholder_accounts_origin_check,
 // SELECT on external_payment_recipients for checksops and authenticated, and six SECURITY DEFINER
-// payee functions, EXECUTE checksops only). No predecessor. Pending until a reviewed pin change
-// records a staging read-live.
+// payee functions, EXECUTE checksops only). No predecessor. Staging apply authorized (wave 14)
+// from staging read-live run 40018316361.
 export const AUTHORIZED_SQL113_PAYEE_SETUP = Object.freeze({
   key: 'sql113',
   filename: 'aws/workflows/sql/113_payee_setup.sql',
@@ -2482,9 +2482,14 @@ export const AUTHORIZED_SQL113_PAYEE_SETUP = Object.freeze({
   // The commit that last authored the file bytes.
   commit: '700feee792e4075aa7189c69bf8a8dfdfc59a0e4',
   source_sha256: '871d953df9ebb066601993ea6c36ec8162bd9664b813f27eccbf972e07d9f3ad',
-  authorization: 'pending',
-  execute: false,
-  expected_live_definition_sha256: null,
+  // Owner's words 2026-10-23: "Apply SQL 113 to staging" (staging apply only; the production pin and apply are separate).
+  authorization: 'Owner approved 2026-10-23: staging apply (wave 14) from staging read-live run 40018316361',
+  execute: true,
+  // Staging read-live run 40018316361 (2026-10-23, main ac2860a5a, after executor deploy run
+  // 40018037771): the six functions and seven payee columns absent, the four supabase-era columns
+  // already the file's, the origin check not yet the five-value one, checksops SELECT (and UPDATE)
+  // on external_payment_recipients; already_applied false, precondition_failures [].
+  expected_live_definition_sha256: '88787a89c85585f25c18ea31d60740a6526522377a1b0d7b02e7902fe18970c1',
   // Code-derived: releaseIntendedHash('sql113', file bytes) (release-sql-state.mjs); re-derived by the tests.
   intended_replacement_sha256: '5984d321197bd03552da656381ea47b67220d8f0accac10214aa392fd26f81d7',
   function_identities: Object.freeze([
