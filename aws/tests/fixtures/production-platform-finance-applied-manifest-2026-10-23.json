@@ -1,0 +1,15 @@
+{
+  "workstream_id": "production-platform-finance-applied",
+  "authorization": "Record only (2026-10-23): the bytes below are live. Nothing is planned or authorized by this manifest; any later change to these members needs its own manifest, staging acceptance and owner approval.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Production Platform Finance reads applied 2026-10-23 through the guarded overlay path on main f402a32cd (#1195), one member per run in plan order. providers/production/platform-finance.mjs: staging inspect run 39987370155 (ABSENT), staging apply run 39987501459 (ADD 2096af29, checksops-staging-api CodeSha256 76r+TJvniFVA6ngPSDbuTif3RGxlxhwRwBNksSFapZ0=, errors []); production preflight inspect run 39987878446 (ABSENT, READY, CodeSha256 LGjjxS11JYsJtAtWEnfP8DI+atz7ORBugs6nPeLa7Fs=, RevisionId 53961309-44de-40c5-92c9-f13958d5c923), production apply run 39987995317 (owner-approved \"DEPLOY providers/production/platform-finance.mjs TO PRODUCTION\", staging acceptance run 39987501459; VERIFIED, 2096af29 live, CodeSha256 76r+TJvniFVA6ngPSDbuTif3RGxlxhwRwBNksSFapZ0=, RevisionId d1ed7878-ca26-42e9-84d4-6ed2f992e82e). providers.mjs: staging apply run 39987661725 (c1718779 -> a72a583a, CodeSha256 RlW706fIObNt1srZmphE9vJkCkd414u1jJydF8opOKU=, errors []); production apply run 39988166380 (owner-approved \"DEPLOY providers.mjs TO PRODUCTION\", staging acceptance run 39987661725, expected live c1718779), production post-apply inspect run 39988303670 (ALREADY_ACCEPTED, a72a583a live, CodeSha256 RlW706fIObNt1srZmphE9vJkCkd414u1jJydF8opOKU=, RevisionId aba8a116-5937-4173-8b10-4fa1a0e68f57). /health and /db-health ok after each production run. This row records the applied bytes as live_sha256 and accepted_sha256 and chains to the Platform Finance manifest that applied them (previous_manifest), which keeps the pre-apply bytes c1718779 as its live_sha256. The ADD member stays on that manifest with expected_live null, as applied ADD members do.",
+  "members": {
+    "providers.mjs": {
+      "live_sha256": "a72a583af99efff5cf9d5bba9f139080f947e04ed50a0f20ce3c2275037b40dc",
+      "accepted_sha256": "a72a583af99efff5cf9d5bba9f139080f947e04ed50a0f20ce3c2275037b40dc",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-platform-finance-manifest-2026-10-23.json"
+    }
+  }
+}
