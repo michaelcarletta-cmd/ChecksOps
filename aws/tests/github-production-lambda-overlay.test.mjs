@@ -1083,7 +1083,10 @@ test('Check Alt approve reconcile history: four REPLACE members, status-read and
     accepted_sha256: '955b27e43eea1a1aea38fc888e9e8152a248306458fd70a6d02c2cda4232e2ba',
     operation: 'replace',
   });
-  assert.equal(PLAN.members[SUBMIT].expected_live_sha256, manifest.members[SUBMIT].accepted_sha256);
+  // The always-on replace then started from exactly these bytes (and its bytes are what Option A replaces).
+  const alwaysOn = JSON.parse(fs.readFileSync(path.join(ROOT, 'aws/tests/fixtures/production-checkalt-auto-approve-always-on-manifest-2026-10-22.json'), 'utf8'));
+  assert.equal(alwaysOn.members[SUBMIT].live_sha256, manifest.members[SUBMIT].accepted_sha256);
+  assert.equal(PLAN.members[SUBMIT].expected_live_sha256, alwaysOn.members[SUBMIT].accepted_sha256);
   // Poll was re-pinned after this deploy (Check Alt scheduled status check, 2026-10-22):
   // this manifest still records its cd083282 -> b7a2a7f9 replace; the plan row moved on.
   assert.deepEqual(manifest.members[POLL], {
@@ -1154,7 +1157,8 @@ test('Check Alt auto-approve always on: checkalt-submit.mjs REPLACE expects the 
   const row = PLAN.members[SUBMIT];
   assert.equal(row.operation, 'replace');
   assert.notEqual(row.manifest, MANIFEST_REL);
-  assert.equal(row.expected_live_sha256, LIVE);
+  // The always-on bytes went live (inspect run 40052246065); the Option A row replaces them.
+  assert.equal(row.expected_live_sha256, manifest.members[SUBMIT].accepted_sha256);
   assert.equal(approvalPhrase(SUBMIT), `DEPLOY ${SUBMIT} TO PRODUCTION`);
   assert.ok(PLAN.order.indexOf(POLL) < PLAN.order.indexOf(SUBMIT));
   assert.ok(localImports(fs.readFileSync(path.join(API, SUBMIT), 'utf8'), SUBMIT).includes(POLL));
@@ -1169,15 +1173,15 @@ test('Check Alt auto-approve Option A: checkalt-submit.mjs REPLACE from the plan
   const SUBMIT = 'providers/production/checkalt-submit.mjs';
   const POLL = 'providers/production/checkalt-poll.mjs';
   const MANIFEST_REL = 'aws/tests/fixtures/production-checkalt-auto-approve-option-a-manifest-2026-10-24.json';
-  // Guarded production apply run 39778247008 (PR #1151); read-only production inspect run 39778871528.
-  const LIVE = '955b27e43eea1a1aea38fc888e9e8152a248306458fd70a6d02c2cda4232e2ba';
-  // Always-on accepted bytes, never recorded as applied.
-  const ALWAYS_ON = 'd35e784179f98c2580ab2088aa4204340b727161eab55f301b91230daec19d69';
+  // Always-on bytes, live in production: read-only production overlay inspect run 40052246065 (2026-10-24).
+  const LIVE = 'd35e784179f98c2580ab2088aa4204340b727161eab55f301b91230daec19d69';
+  // PR #1151 bytes (apply run 39778247008), no longer live.
+  const PRE_ALWAYS_ON = '955b27e43eea1a1aea38fc888e9e8152a248306458fd70a6d02c2cda4232e2ba';
   const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, MANIFEST_REL), 'utf8'));
   assert.equal(manifest.workstream_id, 'checkalt-auto-approve-option-a');
   assert.equal(manifest.deploy_authorized, false);
   assert.match(manifest.notes, /Yes option A/);
-  assert.match(manifest.notes, /inspect run 39778871528/);
+  assert.match(manifest.notes, /inspect run 40052246065/);
   assert.match(PLAN.notes, /Check Alt auto-approve Option A/);
   const row = PLAN.members[SUBMIT];
   assert.equal(row.operation, 'replace');
@@ -1186,7 +1190,7 @@ test('Check Alt auto-approve Option A: checkalt-submit.mjs REPLACE from the plan
   assert.equal(row.expected_live_sha256, LIVE);
   assert.equal(row.accepted_sha256, sha(`aws/functions/api/${SUBMIT}`));
   assert.notEqual(row.accepted_sha256, LIVE);
-  assert.notEqual(row.accepted_sha256, ALWAYS_ON);
+  assert.notEqual(row.accepted_sha256, PRE_ALWAYS_ON);
   assert.deepEqual(Object.keys(manifest.members), [SUBMIT]);
   assert.deepEqual(manifest.members[SUBMIT], { live_sha256: LIVE, accepted_sha256: row.accepted_sha256, operation: 'replace' });
   assert.equal(approvalPhrase(SUBMIT), `DEPLOY ${SUBMIT} TO PRODUCTION`);
@@ -1197,9 +1201,9 @@ test('Check Alt auto-approve Option A: checkalt-submit.mjs REPLACE from the plan
   const ready = await run(inspect, { root: ROOT, inspectLive: liveFor(SUBMIT) });
   assert.equal(ready.state, 'READY');
   assert.equal(ready.mutation, false);
-  // If the unrecorded always-on bytes were found live, the guard refuses instead of overwriting them.
+  // The older PR #1151 bytes are not the reconciled pre-deploy state; the guard refuses them.
   await assert.rejects(
-    run(inspect, { root: ROOT, inspectLive: liveFor(SUBMIT, { sha256: ALWAYS_ON }) }),
+    run(inspect, { root: ROOT, inspectLive: liveFor(SUBMIT, { sha256: PRE_ALWAYS_ON }) }),
     (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
   );
 });
