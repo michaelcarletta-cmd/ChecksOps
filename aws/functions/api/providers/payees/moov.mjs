@@ -141,8 +141,11 @@ export const outstandingRequirements = (capabilities = []) => capabilityRequirem
 /**
  * Moov's verdict for a payee:
  *  'verified'       transfers enabled, nothing outstanding, terms accepted, the
- *                   payee's recorded bank verified, account not disabled, and
- *                   the identity verification (when Moov reports one) verified;
+ *                   payee's recorded bank verified and the account not disabled.
+ *                   Moov's transfers capability is the gate: a payee who only
+ *                   receives funds can have transfers enabled while the identity
+ *                   verification still reads 'unverified' (seen in sandbox), so
+ *                   only a failed or rejected verification blocks it;
  *  'failed'         Moov failed the verification or disabled the account;
  *  'pending_review' Moov is reviewing (capability pending / in review);
  *  null             setup still in progress.
@@ -162,7 +165,7 @@ export function payeeVerdict(live, { bankAccountId = null } = {}) {
     return { status: 'failed', complete: false, tos, bankVerified, verification, capStatus };
   }
   const complete = capabilitiesReadOk && capStatus === 'enabled' && outstanding.length === 0
-    && tos && bankVerified && (verification === '' || verification === 'verified');
+    && tos && bankVerified;
   if (complete) return { status: 'verified', complete: true, tos, bankVerified, verification, capStatus };
   const reviewing = capStatus === 'pending' || capStatus === 'in-review' || capStatus === 'in_review'
     || verification === 'pending' || verification === 'review' || verification === 'in-review';
