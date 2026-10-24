@@ -71,15 +71,22 @@ const referenceOf = (json) => {
  * /fincapture/deposit/approve call. Owner decision 2026-10-22: auto-approve is
  * always on for every organization, with no amount ceiling. The tenant columns
  * checkalt_tenant_accounts.auto_approve_enabled and auto_approve_max_cents stay
- * in place but no longer decide anything. The submit flow makes the approve call
- * itself only after its own committed /deposit/process parked the item, the
+ * in place but no longer decide anything. Owner decision 2026-10-24 ("Option A",
+ * the legacy Lovable/Supabase behaviour): every deposit CheckAlt parked as
+ * pending_approval is approved unless CheckAlt flagged it. There is no "Low Risk"
+ * gate any more: CheckAlt's FinCapture Status & Reject Reference documents
+ * riskRating as Accepted / Decline / Warning and riskRatingDescription as free
+ * text, so an exact "Low Risk" never matched. The submit flow makes the approve
+ * call itself only after its own committed /deposit/process parked the item, the
  * reference is a positive integer, the server-side amount is a positive integer,
- * CheckAlt rated the item "Low Risk", and CheckAlt did not flag it. A flagged or
- * not-Low-Risk item stays pending_approval and is handled in the Check Alt
- * portal. It never POSTs /deposit/process, never inserts a deposit, and never
- * requires or satisfies the manual-approve TOTP (checkalt-approve.mjs). Replays
- * never reach it (they return before any provider HTTP). Any provider, lock,
- * timeout or persist ambiguity leaves the row pending_approval.
+ * and CheckAlt did not flag it (depositIsFlagged: a duplicate, an amount mismatch,
+ * a Decline or Warning risk rating, errors, exceptions, warnings, risk factors, or
+ * flag words in the status text). A flagged item stays pending_approval and is
+ * handled in the Check Alt portal. It never POSTs /deposit/process, never inserts
+ * a deposit, and never requires or satisfies the manual-approve TOTP
+ * (checkalt-approve.mjs). Replays never reach it (they return before any provider
+ * HTTP). Any provider, lock, timeout or persist ambiguity leaves the row
+ * pending_approval.
  *
  * Runs under an overall deadline (API Gateway / Lambda allow 29s) so the user
  * always gets the deposit id, reference and status back instead of a 504.
@@ -98,6 +105,7 @@ export const AUTO_APPROVE_SKIP_REASONS = Object.freeze([
   'missing_reference',
   'invalid_reference',
   'flagged_by_checkalt',
+  // Recorded on rows submitted before 2026-10-24 (the removed "Low Risk" gate); no longer produced.
   'risk_not_low',
   'invalid_amount',
   'provider_declined',
@@ -109,7 +117,7 @@ export const AUTO_APPROVE_SKIP_REASONS = Object.freeze([
 ]);
 
 const AUTO_APPROVE_FLAG_TEXT_RE = /duplicate|fraud|risk|exception|warning|hold|suspect|mismatch|unreadable/;
-const LOW_RISK_RE = /^low risk$/i;
+const FLAGGED_RISK_RATINGS = new Set(['decline', 'warning']);
 
 export const AUTO_APPROVE_POLICY_SOURCE = 'always_on';
 
@@ -123,27 +131,28 @@ export const resolveAutoApprovePolicy = () => ({
   source: AUTO_APPROVE_POLICY_SOURCE,
 });
 
+const isTrueFlag = (value) => value === true || (typeof value === 'string' && value.trim().toLowerCase() === 'true');
+const isFalseFlag = (value) => value === false || (typeof value === 'string' && value.trim().toLowerCase() === 'false');
+
 export const depositIsFlagged = (providerJson = {}) => {
   const json = providerJson && typeof providerJson === 'object' ? providerJson : {};
   for (const key of ['exceptions', 'warnings', 'riskFactors', 'errors']) {
     if (Array.isArray(json[key]) && json[key].length > 0) return true;
   }
-  if (json.amountDiscrepancyDetected === true || json.amountDiscrepancyDetected === 'true') return true;
-  // Risk is judged separately by riskIsLow(); do not regex riskRatingDescription here.
+  if (isTrueFlag(json.amountDiscrepancyDetected)) return true;
+  // FinCapture Status & Reject Reference: duplicateStatus true marks a duplicate item.
+  if (isTrueFlag(json.duplicateStatus)) return true;
+  // riskRating is Accepted / Decline / Warning; Decline and Warning are CheckAlt risk flags.
+  if (typeof json.riskRating === 'string' && FLAGGED_RISK_RATINGS.has(json.riskRating.trim().toLowerCase())) return true;
+  // ocrAmountStatus False: the recognized amount does not match the keyed amount.
+  if (isFalseFlag(json.ocrAmountStatus)) return true;
+  // riskRatingDescription is free text and is not regexed here.
   const flagText = [
     json.statusDescription,
     JSON.stringify(json.warnings ?? ''),
     JSON.stringify(json.exceptions ?? ''),
   ].join(' ').toLowerCase();
   return AUTO_APPROVE_FLAG_TEXT_RE.test(flagText);
-};
-
-/** process sends performRiskAssessment: true. Only an explicit "Low Risk" is clean. */
-export const riskIsLow = (providerJson = {}) => {
-  const description = providerJson && typeof providerJson === 'object'
-    ? providerJson.riskRatingDescription
-    : null;
-  return typeof description === 'string' && LOW_RISK_RE.test(description.trim());
 };
 
 /** CheckAlt references are positive integers sent as JSON numbers. */
@@ -159,7 +168,6 @@ export const decideAutoApprove = ({
   reference = null,
   amountCents = null,
   flagged = false,
-  riskLow = false,
 } = {}) => {
   if (!processRequiresApproval) return { approve: false, skipReason: 'not_pending_approval' };
   if (reference === null || reference === undefined || String(reference).trim() === '') {
@@ -167,7 +175,6 @@ export const decideAutoApprove = ({
   }
   if (safeCheckAltReference(reference) === null) return { approve: false, skipReason: 'invalid_reference' };
   if (flagged) return { approve: false, skipReason: 'flagged_by_checkalt' };
-  if (riskLow !== true) return { approve: false, skipReason: 'risk_not_low' };
   if (!Number.isInteger(amountCents) || amountCents <= 0) return { approve: false, skipReason: 'invalid_amount' };
   return { approve: true, skipReason: null };
 };
@@ -291,7 +298,6 @@ export async function maybeAutoApproveAfterProcess({
     reference: row?.checkalt_reference ?? null,
     amountCents,
     flagged: depositIsFlagged(providerJson),
-    riskLow: riskIsLow(providerJson),
   });
   if (decision.approve && deadline - now() < AUTO_APPROVE_MIN_REQUEST_MS) {
     decision = { approve: false, skipReason: 'auto_approve_timeout' };
