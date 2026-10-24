@@ -478,6 +478,23 @@ test('Loss Draft from a newly uploaded check: uploaded → loss_draft_required i
   }).error, 'partner_linked_transition_denied');
 });
 
+test('Review "Review" decision (needs_review) maps to return_to_review instead of unknown_transition', () => {
+  // The Review console offers { value: "needs_review", label: "Review" }; before 2026-10-24 the
+  // API had no mapping for it and answered unknown_transition from every status.
+  assert.equal(mapReviewPath('needs_review').action, 'return_to_review');
+  const uploaded = { id: CHECK_ID, status: 'uploaded', check_stage: 'review', claim_id: null };
+  const decided = evaluateTransition(mapReviewPath('needs_review').action, uploaded);
+  assert.equal(decided.ok, true);
+  assert.equal(decided.nextStatus, 'needs_review');
+  assert.equal(decided.nextStage, 'review');
+  assert.equal(decided.providerExecution, false);
+  for (const from of ['endorsements_in_progress', 'approved_for_deposit', 'loss_draft_required']) {
+    assert.equal(evaluateTransition('return_to_review', { ...uploaded, status: from }).ok, true, from);
+  }
+  // Deposited checks stay refused.
+  assert.equal(evaluateTransition('return_to_review', { ...uploaded, status: 'deposited' }).error, 'financial_or_provider');
+});
+
 test('Review Loss Draft on an uploaded check with a mortgage company saves loss_draft_required / loss_draft', async () => {
   const check = { ...createdRow, status: 'uploaded', check_stage: 'review' };
   const client = mockClient({

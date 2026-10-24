@@ -7,7 +7,7 @@
   "members": {
     "workflow-transitions.mjs": {
       "live_sha256": "f11206b4ac7239b6d75eb62e739d3c83f3dc8c568aa5c6d2be98f8335166c350",
-      "accepted_sha256": "f8e4171d44a25666d0604ea314e20814cfcde0fd178e28010b96627058d251d1",
+      "accepted_sha256": "ed39e3c38d6f64f0b3a939ec2f741790406d913565fda6c399abe6ec6378ffe8",
       "operation": "replace",
       "previous_manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
     }
