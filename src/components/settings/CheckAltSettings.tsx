@@ -403,8 +403,8 @@ export const CHECKALT_WAITING_NOTE =
 /**
  * Manager-side, read-only list of CheckAlt deposits parked at FinCapture
  * (status 40 / pending_approval). Auto-approve is always on (2026-10-22), so a
- * deposit is here only when Check Alt flagged it, did not rate it Low Risk, or
- * the automatic approval did not go through. It is reviewed in the Check Alt
+ * deposit is here only when Check Alt flagged it, it was submitted before
+ * 2026-10-24 and not rated Low Risk, or the automatic approval did not go through. It is reviewed in the Check Alt
  * portal, not here: there are no Approve or Reject buttons. Poll Now refreshes
  * the status from CheckAlt; FinCapture is not called from the browser.
  */
