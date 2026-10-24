@@ -58,6 +58,7 @@ export const TRANSITIONS = {
   route_loss_draft: {
     action: 'route_loss_draft',
     fromStatus: [
+      'uploaded',
       'needs_review',
       'manual_review_required',
       'endorsements_complete',
