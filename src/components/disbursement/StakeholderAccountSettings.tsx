@@ -210,11 +210,17 @@ export function StakeholderAccountSettings() {
         }), "Couldn't disconnect the payee");
       }
 
-      const { error: linkError } = await supabase
+      // /data/write deletes check_stakeholders by id only, so unlink this
+      // stakeholder from each of its checks one row at a time.
+      const { data: links, error: linksError } = await supabase
         .from("check_stakeholders")
-        .delete()
+        .select("id")
         .eq("stakeholder_account_id", id);
-      if (linkError) throw linkError;
+      if (linksError) throw linksError;
+      for (const link of (links ?? []) as { id: string }[]) {
+        const { error: linkError } = await supabase.from("check_stakeholders").delete().eq("id", link.id);
+        if (linkError) throw linkError;
+      }
 
       if (!payee) {
         const { error } = await supabase
