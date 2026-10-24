@@ -378,7 +378,7 @@
     },
     "providers/payees/moov.mjs": {
       "operation": "add",
-      "accepted_sha256": "975fcdc13577eb145afe866e9fcf6d6ba1b232f2f426313de02dda4cd3a4c7b6",
+      "accepted_sha256": "3a8ed2d5ba329509c4a4c7d3577e4e99c0c10d40bbdfe3c8ed8b7075cb3aba48",
       "expected_live_sha256": null,
       "sql_before": null,
       "manifest": "aws/tests/fixtures/production-moov-payees-manifest-2026-10-23.json"

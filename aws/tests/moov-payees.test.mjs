@@ -760,8 +760,8 @@ test('a payee left unverified after identity logs which Moov check is open: code
       await h.call('moov-recipient-bank-verify', { token, action: 'initiate' });
       await h.call('moov-recipient-bank-verify', { token, action: 'confirm', code: '1234' });
 
-      // Transfers enabled and the bank verified, but identity still unverified.
-      acct.capStatus = 'enabled';
+      // Bank verified, identity unverified, transfers still pending at Moov.
+      acct.capStatus = 'pending';
       acct.verification = 'unverified';
       lines.length = 0;
       const stuck = await h.call('moov-recipient-session', { token });
@@ -773,10 +773,10 @@ test('a payee left unverified after identity logs which Moov check is open: code
         tenant: TENANT,
         environment: 'sandbox',
         stored_status: h.db.state.recipients[0].onboarding_status,
-        verdict: null,
+        verdict: 'pending_review',
         capabilities_read: 'ok',
         banks_read: 'ok',
-        transfers_status: 'enabled',
+        transfers_status: 'pending',
         identity_verification: 'unverified',
         terms_confirmed: true,
         bank_verified: true,
@@ -799,9 +799,9 @@ test('a payee left unverified after identity logs which Moov check is open: code
       await h.call('moov-recipient-session', { token });
       assert.deepEqual(notVerified(lines)[0].outstanding, ['individual.address']);
 
-      // Verified: no further line.
+      // Transfers enabled with nothing due: payable although identity reads unverified; no further line.
       acct.due = [];
-      acct.verification = 'verified';
+      acct.capStatus = 'enabled';
       lines.length = 0;
       const done = await h.call('moov-recipient-session', { token });
       assert.equal(done.onboarding.complete, true, JSON.stringify(done));
@@ -839,6 +839,12 @@ test('payeeVerdict: verified only with transfers enabled, nothing due, terms, th
   assert.equal(payeeVerdict({ ...live, account: { ...account, termsOfService: undefined } }, { bankAccountId: 'bank-1' }).complete, false);
   assert.equal(payeeVerdict({ ...live, capabilities: [{ ...caps[0], status: 'pending' }] }, { bankAccountId: 'bank-1' }).status, 'pending_review');
   assert.equal(payeeVerdict({ ...live, account: { ...account, disabledOn: 'x' } }, { bankAccountId: 'bank-1' }).status, 'failed');
+  // Transfers enabled is the gate: an identity verification Moov has not run does not block it; a failed one does.
+  const identity = (status) => ({ ...live, account: { ...account, profile: { individual: { verification: { status } } } } });
+  assert.equal(payeeVerdict(identity('unverified'), { bankAccountId: 'bank-1' }).status, 'verified');
+  assert.equal(payeeVerdict(identity('failed'), { bankAccountId: 'bank-1' }).status, 'failed');
+  assert.equal(payeeVerdict(identity('rejected'), { bankAccountId: 'bank-1' }).status, 'failed');
+  assert.equal(payeeVerdict({ ...identity('unverified'), capabilities: [{ ...caps[0], status: 'pending' }] }, { bankAccountId: 'bank-1' }).status, 'pending_review');
 });
 
 test('public links: malformed, unknown, expired and disconnected tokens are refused with clear codes', async () => {
