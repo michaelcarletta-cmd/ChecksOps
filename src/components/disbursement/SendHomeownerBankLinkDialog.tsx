@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/contexts/TenantContext";
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -10,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Loader2, Home } from "lucide-react";
 import { queriesInvalidatedAfterBankLinkSend } from "@/lib/homeownerBankLink";
+import { unwrapPayeeInvoke } from "@/lib/payeeSetup";
 
 interface Props {
   open: boolean;
@@ -20,49 +22,69 @@ interface Props {
 
 export function SendHomeownerBankLinkDialog({ open, onOpenChange, checkIntakeItemId, claimId }: Props) {
   const { tenant } = useTenant();
+  const { user } = useAuth();
   const { toast } = useToast();
   const qc = useQueryClient();
   const [scope, setScope] = useState<"check" | "claim">("check");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [requestId, setRequestId] = useState(() => crypto.randomUUID());
 
   const send = useMutation({
     mutationFn: async () => {
       if (!name.trim() || !email.trim()) throw new Error("Name and email are required");
-      const body: any = {
+      const body: Record<string, unknown> = {
         tenant_id: tenant!.id,
         scope,
         homeowner_name: name.trim(),
         homeowner_email: email.trim().toLowerCase(),
+        // A retried click maps to the same payee on the server.
+        request_id: requestId,
       };
       if (scope === "check") body.check_intake_item_id = checkIntakeItemId;
-      else body.claim_id = claimId;
+      if (claimId) body.claim_id = claimId;
 
-      const { data, error } = await supabase.functions.invoke("homeowner-bank-link-send", { body });
-      if (error) {
-        let msg = error.message ?? "Failed to send bank link";
-        try { const b = await (error as any).context?.json?.(); if (b?.error) msg = b.error; } catch {}
-        throw new Error(msg);
+      // The server creates the payee and its stakeholder account and emails the
+      // setup link; the link itself never comes back to the browser.
+      const created = await unwrapPayeeInvoke<{ stakeholder_account_id?: string | null; email_sent?: boolean }>(
+        await supabase.functions.invoke("homeowner-bank-link-send", { body }),
+        "Failed to send the setup link",
+      );
+
+      // Attach the homeowner to the check(s) right away ("Awaiting verification").
+      const stakeholderId = created.stakeholder_account_id ?? null;
+      if (stakeholderId) {
+        let checkIds: string[] = [checkIntakeItemId];
+        if (scope === "claim" && claimId) {
+          const { data: claimChecks } = await supabase.from("check_intake_items").select("id").eq("claim_id", claimId);
+          checkIds = Array.from(new Set([checkIntakeItemId, ...((claimChecks ?? []) as { id: string }[]).map((c) => c.id)]));
+        }
+        const { error: linkErr } = await supabase.from("check_stakeholders").insert(
+          checkIds.map((id) => ({
+            check_intake_item_id: id,
+            stakeholder_account_id: stakeholderId,
+            tenant_id: tenant!.id,
+            added_via: "homeowner_link",
+            added_by: user?.id ?? null,
+          })),
+        );
+        if (linkErr && !linkErr.message.includes("duplicate")) throw new Error(linkErr.message);
       }
-      if ((data as any)?.error) throw new Error((data as any).error);
-      return data;
+      return { emailSent: created.email_sent === true, email: email.trim().toLowerCase() };
     },
-    onSuccess: (data: any) => {
-      const url = data?.payout_url as string | undefined;
-      if (url) {
-        navigator.clipboard?.writeText(url).catch(() => {});
-      }
-      toast({
-        title: "Payout setup link sent",
-        description: `${name} will receive an email to complete their payout profile and bank details. ${url ? "The link was also copied to your clipboard." : ""}`,
-      });
+    onSuccess: ({ emailSent, email: sentTo }) => {
+      toast(emailSent
+        ? { title: "Setup link emailed", description: `${name} will receive an email at ${sentTo} to verify their identity and bank account.` }
+        : { title: "Homeowner added; email not sent", description: "The setup email could not be sent. Use Resend link in Settings → Stakeholders.", variant: "destructive" });
       for (const queryKey of queriesInvalidatedAfterBankLinkSend(checkIntakeItemId)) {
         void qc.invalidateQueries({ queryKey: [...queryKey] });
       }
-      setName(""); setEmail("");
+      void qc.invalidateQueries({ queryKey: ["stakeholder-accounts"] });
+      void qc.invalidateQueries({ queryKey: ["payee-recipients"] });
+      setName(""); setEmail(""); setRequestId(crypto.randomUUID());
       onOpenChange(false);
     },
-    onError: (e: any) => toast({ title: "Couldn't send link", description: e.message, variant: "destructive" }),
+    onError: (e: Error) => toast({ title: "Couldn't send link", description: e.message, variant: "destructive" }),
   });
 
   const claimScopeDisabled = !claimId;
@@ -75,9 +97,9 @@ export function SendHomeownerBankLinkDialog({ open, onOpenChange, checkIntakeIte
             <Home className="h-4 w-4" /> Send homeowner payout setup
           </DialogTitle>
           <DialogDescription>
-            The homeowner receives a secure link to complete their payout profile and bank details so claim
-            funds can be sent directly to their bank account. Once complete, they're auto-added as a
-            disbursable stakeholder.
+            The homeowner is emailed a secure link to verify their identity and add their bank account so
+            claim funds can be sent directly to them. They are added to the check now as awaiting
+            verification and can be paid once setup is verified.
           </DialogDescription>
         </DialogHeader>
 
@@ -111,7 +133,7 @@ export function SendHomeownerBankLinkDialog({ open, onOpenChange, checkIntakeIte
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={send.isPending}>Cancel</Button>
           <Button onClick={() => send.mutate()} disabled={send.isPending || !name || !email}>
-            {send.isPending && <Loader2 className="h-3 w-3 mr-1 animate-spin" />} Send link
+            {send.isPending && <Loader2 className="h-3 w-3 mr-1 animate-spin" />} Email setup link
           </Button>
         </DialogFooter>
       </DialogContent>

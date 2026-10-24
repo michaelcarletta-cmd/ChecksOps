@@ -9,7 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Copy, Loader2, UserPlus, CheckCircle2 } from "lucide-react";
+import { Loader2, UserPlus, CheckCircle2, MailWarning } from "lucide-react";
+import { unwrapPayeeInvoke, type PayeeRecipientType } from "@/lib/payeeSetup";
 
 interface Props {
   open: boolean;
@@ -18,11 +19,19 @@ interface Props {
   claimId?: string | null;
 }
 
+interface CreatedPayee {
+  recipient_id: string;
+  stakeholder_account_id: string | null;
+  email_sent?: boolean;
+  replayed?: boolean;
+}
+
 /**
- * Adds a payee who is NOT a ChecksOps organization (individual sub, vendor,
- * one-time payee). We create the recipient with the payment provider first,
- * attach a matching stakeholder record to this check, then email them a secure
- * link where the provider's hosted form collects their bank details.
+ * Adds a payee who is NOT a ChecksOps organization (an individual sub, a
+ * vendor, a one-time payee) to this check. The server (moov-recipient-create)
+ * creates the payee and its stakeholder account, then emails the payee a
+ * secure setup link; the link itself never comes back to the browser. This
+ * dialog only attaches the new stakeholder account to the check.
  */
 export function AddExternalStakeholderDialog({ open, onOpenChange, checkIntakeItemId, claimId }: Props) {
   const { tenant } = useTenant();
@@ -32,122 +41,61 @@ export function AddExternalStakeholderDialog({ open, onOpenChange, checkIntakeIt
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
-  const [recipientType, setRecipientType] = useState<"individual" | "business">("individual");
-  const [accountType, setAccountType] = useState<string>("subcontractor");
-  const [link, setLink] = useState<string | null>(null);
+  const [recipientType, setRecipientType] = useState<PayeeRecipientType>("individual");
+  const [relationship, setRelationship] = useState<string>("subcontractor");
+  const [requestId, setRequestId] = useState(() => crypto.randomUUID());
+  const [result, setResult] = useState<{ email: string; emailSent: boolean } | null>(null);
 
   const reset = () => {
-    setName(""); setEmail(""); setPhone(""); setRecipientType("individual");
-    setAccountType("subcontractor"); setLink(null);
+    setName(""); setEmail(""); setRecipientType("individual");
+    setRelationship("subcontractor"); setResult(null); setRequestId(crypto.randomUUID());
   };
 
   const create = useMutation({
     mutationFn: async () => {
       if (!name.trim()) throw new Error("Name is required");
+      if (!email.trim()) throw new Error("Email is required to send the setup link");
 
-      const { data, error } = await supabase.functions.invoke("moov-recipient-create", {
+      const created = await unwrapPayeeInvoke<CreatedPayee>(await supabase.functions.invoke("moov-recipient-create", {
         body: {
           tenant_id: tenant!.id,
           name: name.trim(),
-          email: email.trim() || null,
-          phone: phone.trim() || null,
+          email: email.trim().toLowerCase(),
           recipient_type: recipientType,
-          relationship: accountType === "insured" ? "homeowner" : "one_time",
+          relationship,
           claim_id: claimId ?? null,
           check_id: checkIntakeItemId,
+          // A retried click maps to the same payee on the server.
+          request_id: requestId,
         },
-      });
-      if (error) {
-        let msg = error.message ?? "Couldn't create recipient";
-        try { const b = await (error as any).context?.json?.(); if (b?.error) msg = b.error; } catch { /* keep */ }
-        throw new Error(msg);
-      }
-      if ((data as any)?.error) throw new Error((data as any).error);
+      }), "Couldn't add the payee");
 
-      if ((data as any)?.is_existing_member) {
-        throw new Error(
-          `${name.trim()} is already a ChecksOps organization. Add them from the Partners list instead.`,
-        );
-      }
-
-      const recipient = (data as any).recipient;
-      const secureLink: string | null = (data as any).secure_link ?? null;
-
-      // Mirror the provider recipient as a stakeholder account so the existing
-      // disbursement flow can pay them once their bank is on file.
-      const { data: existing } = await supabase
-        .from("stakeholder_accounts")
-        .select("id")
-        .eq("tenant_id", tenant!.id)
-        .eq("provider_account_id", recipient.provider_account_id)
-        .maybeSingle();
-
-      let accountId = existing?.id as string | undefined;
-
-      if (!accountId) {
-        const { data: inserted, error: insErr } = await supabase
-          .from("stakeholder_accounts")
-          .insert({
-            tenant_id: tenant!.id,
-            created_by: user?.id ?? null,
-            nickname: name.trim(),
-            custname: name.trim(),
-            account_type: accountType,
-            chk_aba: "000000000",
-            chk_acct: "PENDING",
-            acct_type: "C",
-            is_primary: false,
-            is_active: true,
-            origin: "provider_recipient",
-            verification_status: "pending",
-            verification_source: "moov",
-            provider: "moov",
-            provider_environment: recipient.environment ?? null,
-            provider_account_id: recipient.provider_account_id,
-            verification_recipient_email: email.trim() || null,
-          } as any)
-          .select("id")
-          .single();
-        if (insErr) throw new Error(insErr.message);
-        accountId = inserted.id;
-      }
-
-      const { error: linkErr } = await supabase.from("check_stakeholders").insert({
-        check_intake_item_id: checkIntakeItemId,
-        stakeholder_account_id: accountId!,
-        tenant_id: tenant!.id,
-        added_via: "manual",
-        added_by: user?.id ?? null,
-      });
-      if (linkErr && !linkErr.message.includes("duplicate")) throw new Error(linkErr.message);
-
-      if (email.trim() && secureLink) {
-        await supabase.functions.invoke("send-transactional-email", {
-          body: {
-            templateName: "stakeholder-verify-account",
-            recipientEmail: email.trim().toLowerCase(),
-            tenantId: tenant!.id,
-            idempotencyKey: `recipient-setup-${accountId}`,
-            templateData: { nickname: name.trim(), custname: name.trim(), verifyUrl: secureLink },
-          },
+      if (created.stakeholder_account_id) {
+        const { error: linkErr } = await supabase.from("check_stakeholders").insert({
+          check_intake_item_id: checkIntakeItemId,
+          stakeholder_account_id: created.stakeholder_account_id,
+          tenant_id: tenant!.id,
+          added_via: "manual",
+          added_by: user?.id ?? null,
         });
+        if (linkErr && !linkErr.message.includes("duplicate")) throw new Error(linkErr.message);
       }
-
-      return secureLink;
+      return { email: email.trim().toLowerCase(), emailSent: created.email_sent === true };
     },
-    onSuccess: (secureLink) => {
-      setLink(secureLink ?? null);
+    onSuccess: (out) => {
+      setResult(out);
       qc.invalidateQueries({ queryKey: ["check-stakeholders", checkIntakeItemId] });
       qc.invalidateQueries({ queryKey: ["disbursement-accounts", checkIntakeItemId] });
+      qc.invalidateQueries({ queryKey: ["stakeholder-accounts"] });
+      qc.invalidateQueries({ queryKey: ["payee-recipients"] });
       toast({
-        title: "Recipient added",
-        description: email
-          ? "They've been emailed a secure link to add their bank details."
-          : "Share the secure link so they can add their bank details.",
+        title: "Payee added",
+        description: out.emailSent
+          ? `A setup link was emailed to ${out.email}.`
+          : "The setup email could not be sent. Use Resend link in Settings → Stakeholders.",
       });
     },
-    onError: (e: any) => toast({ title: "Couldn't add recipient", description: e.message, variant: "destructive" }),
+    onError: (e: Error) => toast({ title: "Couldn't add payee", description: e.message, variant: "destructive" }),
   });
 
   return (
@@ -155,84 +103,70 @@ export function AddExternalStakeholderDialog({ open, onOpenChange, checkIntakeIt
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <UserPlus className="h-4 w-4" /> Add a new recipient
+            <UserPlus className="h-4 w-4" /> Add a new payee
           </DialogTitle>
           <DialogDescription>
-            For a payee who isn't a ChecksOps organization. They'll get a secure link to verify their
-            bank account before any money moves.
+            For a payee who isn't a ChecksOps organization. They get an emailed link to verify their identity
+            and bank account before any money moves.
           </DialogDescription>
         </DialogHeader>
 
-        {link ? (
-          <div className="space-y-3">
-            <div className="rounded-md border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm flex items-start gap-2">
-              <CheckCircle2 className="h-4 w-4 text-emerald-600 mt-0.5 shrink-0" />
-              <p className="text-xs">
-                Added to this check as <span className="font-medium">Awaiting verification</span>. They can be
-                paid once they finish bank verification.
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <Input readOnly value={link} className="text-xs" />
-              <Button
-                size="icon"
-                variant="outline"
-                onClick={() => { navigator.clipboard.writeText(link); toast({ title: "Link copied" }); }}
-              >
-                <Copy className="h-3.5 w-3.5" />
-              </Button>
-            </div>
+        {result ? (
+          <div className={`rounded-md border p-3 text-sm flex items-start gap-2 ${result.emailSent ? "border-emerald-500/30 bg-emerald-500/10" : "border-amber-500/30 bg-amber-500/10"}`}>
+            {result.emailSent
+              ? <CheckCircle2 className="h-4 w-4 text-emerald-600 mt-0.5 shrink-0" />
+              : <MailWarning className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />}
+            <p className="text-xs">
+              Added to this check as <span className="font-medium">Awaiting verification</span>.{" "}
+              {result.emailSent
+                ? <>Setup link emailed to <span className="font-medium">{result.email}</span>. They can be paid once they finish setup.</>
+                : <>The setup email could not be sent. Use <span className="font-medium">Resend link</span> in Settings → Stakeholders.</>}
+            </p>
           </div>
         ) : (
           <div className="space-y-3">
             <div className="space-y-1">
-              <Label className="text-xs">Name</Label>
-              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="ABC Roofing or Jane Smith" />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label className="text-xs">Recipient is</Label>
-                <Select value={recipientType} onValueChange={(v) => setRecipientType(v as any)}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="individual">A person</SelectItem>
-                    <SelectItem value="business">A business</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Role on check</Label>
-                <Select value={accountType} onValueChange={setAccountType}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="subcontractor">Subcontractor</SelectItem>
-                    <SelectItem value="vendor">Vendor</SelectItem>
-                    <SelectItem value="contractor">Contractor</SelectItem>
-                    <SelectItem value="supplier">Supplier</SelectItem>
-                    <SelectItem value="other">Other</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              <Label className="text-xs">Payee is</Label>
+              <Select value={recipientType} onValueChange={(v) => setRecipientType(v as PayeeRecipientType)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="individual">An individual (person)</SelectItem>
+                  <SelectItem value="business">A business</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-1">
-              <Label className="text-xs">Email (sends the verification link)</Label>
+              <Label className="text-xs">{recipientType === "business" ? "Business name" : "Full name"}</Label>
+              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={recipientType === "business" ? "ABC Roofing LLC" : "Jane Smith"} />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Role on check</Label>
+              <Select value={relationship} onValueChange={setRelationship}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="subcontractor">Subcontractor</SelectItem>
+                  <SelectItem value="vendor">Vendor</SelectItem>
+                  <SelectItem value="contractor">Contractor</SelectItem>
+                  <SelectItem value="supplier">Supplier</SelectItem>
+                  <SelectItem value="other">Other</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Email (receives the setup link)</Label>
               <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@company.com" />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Phone (optional)</Label>
-              <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(555) 555-5555" />
             </div>
           </div>
         )}
 
         <DialogFooter>
-          {link ? (
+          {result ? (
             <Button onClick={() => { onOpenChange(false); reset(); }}>Done</Button>
           ) : (
             <>
               <Button variant="outline" onClick={() => onOpenChange(false)} disabled={create.isPending}>Cancel</Button>
-              <Button onClick={() => create.mutate()} disabled={create.isPending || !name.trim()}>
-                {create.isPending && <Loader2 className="h-3 w-3 mr-1 animate-spin" />} Add & send link
+              <Button onClick={() => create.mutate()} disabled={create.isPending || !name.trim() || !email.trim()}>
+                {create.isPending && <Loader2 className="h-3 w-3 mr-1 animate-spin" />} Add & email link
               </Button>
             </>
           )}

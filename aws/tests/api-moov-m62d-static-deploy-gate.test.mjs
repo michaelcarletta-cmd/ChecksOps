@@ -45,33 +45,37 @@ test('session handler performs no Moov resource mutations', () => {
 });
 
 test('KYC PATCH is only reachable from explicit identity form submit', () => {
-  assert.match(ui, /async function submitIdentity\(e: React\.FormEvent\)/);
+  assert.match(ui, /async function submitIdentity\(e: React\.FormEvent<HTMLFormElement>\)/);
   assert.match(ui, /<form onSubmit=\{submitIdentity\}/);
   assert.match(ui, /invoke\("moov-recipient-kyc-update"/);
+  assert.equal(ui.split('invoke("moov-recipient-kyc-update"').length, 2, 'one KYC call site');
   const kycInvokeIdx = ui.indexOf('invoke("moov-recipient-kyc-update"');
   const submitIdx = ui.indexOf('async function submitIdentity');
-  const nextFn = ui.indexOf('async function submitTerms');
+  const nextFn = ui.indexOf('async function submitBank');
   assert.ok(kycInvokeIdx > submitIdx && kycInvokeIdx < nextFn);
   assert.match(kyc, /method:\s*"PATCH"/);
   assert.match(kyc, /buildIndividualKycPatch/);
 });
 
-test('ToS Drop render does not accept terms; server PATCH requires Drop token and explicit click', () => {
-  assert.match(ui, /createElement\("moov-terms-of-service"/);
+test('payee terms are accepted only by an explicit checkbox and click; the server mints the terms token', () => {
+  // SQL 113 payee page: no browser-side provider terms component or script;
+  // moov-recipient-tos-accept takes { token, accepted: true } and mints the
+  // terms token server-side with the payee's IP and user agent.
+  assert.doesNotMatch(ui, /moov-terms-of-service/);
+  assert.doesNotMatch(ui, /createElement\(/);
+  assert.doesNotMatch(ui, /terms_of_service_token/);
+  assert.match(ui, /<Checkbox id="accept-terms" checked=\{termsChecked\}/);
   assert.match(ui, /onClick=\{\(\) => void submitTerms\(\)\}/);
-  assert.match(ui, /disabled=\{!tosDropToken \|\| saving\}/);
-  assert.doesNotMatch(ui, /accepted:\s*true/);
+  assert.match(ui, /disabled=\{!termsChecked \|\| saving\}/);
+  assert.equal(ui.split('invoke("moov-recipient-tos-accept"').length, 2, 'one terms call site');
+  const termsFn = ui.slice(ui.indexOf('async function submitTerms'), ui.indexOf('async function submitIdentity'));
+  assert.match(termsFn, /if \(!termsChecked\)/);
+  assert.match(termsFn, /invoke\("moov-recipient-tos-accept", \{ token, accepted: true \}\)/);
   assert.doesNotMatch(ui, /accepted=\{true\}/);
-  assert.doesNotMatch(ui, /<Checkbox/);
   assert.match(tos, /rejectForgedRecipientTos/);
   assert.match(tos, /dropTokenFromBody/);
-  assert.match(ui, /terms_of_service_token: tosDropToken/);
   assert.match(tos, /method:\s*"PATCH"/);
   assert.match(tos, /termsOfService: \{ token: dropToken \}/);
-  const tosInvokeIdx = ui.indexOf('invoke("moov-recipient-tos-accept"');
-  const submitTermsIdx = ui.indexOf('async function submitTerms');
-  const submitBankIdx = ui.indexOf('async function submitBank');
-  assert.ok(tosInvokeIdx > submitTermsIdx && tosInvokeIdx < submitBankIdx);
 });
 
 test('micro-deposit POST /verify is only triggered by Send verification deposit click', () => {
@@ -124,7 +128,8 @@ test('READY requires live KYC + ToS + verified bank', () => {
     capabilities: [],
     capabilitiesReadOk: true,
   }), true);
-  assert.match(ui, /onboarding\?\.complete === true/);
+  assert.match(ui, /session\.onboarding\.complete === true/);
+  assert.match(ui, /payeeStepFromSession\(session/);
 });
 
 test('money flags, SQL72, and webhook config are not changed by this PR surface', () => {
