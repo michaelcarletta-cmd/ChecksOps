@@ -787,12 +787,15 @@ test('fee collection: eleven members on the fee manifest, collection-v2 then des
       // invoice manifest keeps that record, and the plan row now names the applied manifest.
       const invoice = JSON.parse(fs.readFileSync(path.join(ROOT, 'aws/tests/fixtures/production-moov-invoice-manifest-2026-10-22.json'), 'utf8'));
       // Then on to the production Platform Finance route, which REPLACE took from the invoice bytes
-      // production run 39955069311 applied; then on to the Moov payee routes (planned from the bytes
-      // production run 39988166380 applied), whose manifest the plan row now names.
+      // production run 39955069311 applied; then on to the Moov payee routes (REPLACE from the bytes
+      // production run 39988166380 applied), applied by production run 40140208837: the plan row now
+      // names the Moov payees applied manifest and expects its applied bytes.
       const pf = JSON.parse(fs.readFileSync(path.join(ROOT, 'aws/tests/fixtures/production-platform-finance-manifest-2026-10-23.json'), 'utf8'));
-      assert.equal(row.manifest, 'aws/tests/fixtures/production-moov-payees-manifest-2026-10-23.json');
+      const payees = JSON.parse(fs.readFileSync(path.join(ROOT, 'aws/tests/fixtures/production-moov-payees-manifest-2026-10-23.json'), 'utf8'));
+      assert.equal(row.manifest, 'aws/tests/fixtures/production-moov-payees-applied-manifest-2026-10-24.json');
       assert.equal(pf.members[member].live_sha256, invoice.members[member].accepted_sha256);
-      assert.equal(row.expected_live_sha256, pf.members[member].accepted_sha256);
+      assert.equal(payees.members[member].live_sha256, pf.members[member].accepted_sha256);
+      assert.equal(row.expected_live_sha256, payees.members[member].accepted_sha256);
       assert.equal(invoice.members[member].live_sha256, fees.members[member].accepted_sha256);
       assert.equal(row.sql_before, SQL98);
       continue;
@@ -1574,13 +1577,15 @@ test('Production Platform Finance: providers.mjs expected_live records the bytes
   assert.equal(manifest.members['providers.mjs'].accepted_sha256, LIVE['providers.mjs']);
   assert.equal(manifest.members[PF].live_sha256, null);
   assert.equal(manifest.members[PF].accepted_sha256, LIVE[PF]);
-  // The plan: providers.mjs has since moved on to the Moov payee routes, whose REPLACE starts from the
-  // bytes this apply put live (expected_live); the ADD row stays on the Platform Finance manifest with
-  // expected_live null.
+  // The plan: providers.mjs has since moved on to the Moov payee routes, whose REPLACE started from the
+  // bytes this apply put live and was applied 2026-10-24 (production run 40140208837, its own test
+  // below); the ADD row stays on the Platform Finance manifest with expected_live null.
+  const PAYEES_REL = 'aws/tests/fixtures/production-moov-payees-manifest-2026-10-23.json';
   const row = PLAN.members['providers.mjs'];
-  assert.equal(row.manifest, 'aws/tests/fixtures/production-moov-payees-manifest-2026-10-23.json');
-  assert.equal(row.expected_live_sha256, LIVE['providers.mjs']);
-  const payees = JSON.parse(fs.readFileSync(path.join(ROOT, row.manifest), 'utf8'));
+  assert.equal(row.manifest, 'aws/tests/fixtures/production-moov-payees-applied-manifest-2026-10-24.json');
+  assert.notEqual(row.expected_live_sha256, LIVE['providers.mjs']);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, row.manifest), 'utf8')).members['providers.mjs'].previous_manifest, PAYEES_REL);
+  const payees = JSON.parse(fs.readFileSync(path.join(ROOT, PAYEES_REL), 'utf8'));
   assert.equal(payees.members['providers.mjs'].live_sha256, LIVE['providers.mjs']);
   const add = PLAN.members[PF];
   assert.equal(add.manifest, MANIFEST_REL);
@@ -1591,46 +1596,81 @@ test('Production Platform Finance: providers.mjs expected_live records the bytes
   assert.ok(PLAN.order.indexOf('providers/production/moov-invoice.mjs') < PLAN.order.indexOf(PF));
   assert.ok(PLAN.order.indexOf(PF) < PLAN.order.indexOf('providers.mjs'));
   assert.equal(PLAN.order.at(-1), 'providers.mjs');
-  // Inspect accepts the added module as done; providers.mjs at the applied bytes is READY for the next
-  // (payee) REPLACE; the pre-apply providers.mjs bytes are no longer an accepted live state.
+  // Inspect accepts the added module as done; neither the bytes this apply put live (since replaced by
+  // the payee REPLACE) nor the pre-apply providers.mjs bytes are an accepted live state any more.
   const pfInspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: PF };
   const done = await run(pfInspect, { root: ROOT, inspectLive: liveFor(PF, { sha256: LIVE[PF] }) });
   assert.equal(done.state, 'ALREADY_ACCEPTED');
   assert.equal(done.mutation, false);
   const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: 'providers.mjs' };
-  const ready = await run(inspect, { root: ROOT, inspectLive: liveFor('providers.mjs', { sha256: LIVE['providers.mjs'] }) });
-  assert.equal(ready.state, 'READY');
-  assert.equal(ready.mutation, false);
+  await assert.rejects(
+    run(inspect, { root: ROOT, inspectLive: liveFor('providers.mjs', { sha256: LIVE['providers.mjs'] }) }),
+    (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+  );
   await assert.rejects(
     run(inspect, { root: ROOT, inspectLive: liveFor('providers.mjs', { sha256: PROVIDERS_BEFORE }) }),
     (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
   );
 });
 
-test('Moov payees (planning only): four added modules after Platform Finance, then catalog and providers.mjs REPLACE from their live bytes', async () => {
+test('Moov payees: four added modules, providers/catalog.mjs and providers.mjs record the bytes production runs 40139504036 to 40140208837 applied', async () => {
   const MANIFEST_REL = 'aws/tests/fixtures/production-moov-payees-manifest-2026-10-23.json';
+  const APPLIED_REL = 'aws/tests/fixtures/production-moov-payees-applied-manifest-2026-10-24.json';
   const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, MANIFEST_REL), 'utf8'));
+  const applied = JSON.parse(fs.readFileSync(path.join(ROOT, APPLIED_REL), 'utf8'));
+  const CATALOG = 'providers/catalog.mjs';
   const ADDS = ['providers/payees/flags.mjs', 'providers/payees/moov.mjs', 'providers/payees/email.mjs', 'providers/payees/handlers.mjs'];
-  // Live bytes: providers.mjs from production run 39988166380 (Platform Finance applied manifest), the
+  // Before: providers.mjs from production run 39988166380 (Platform Finance applied manifest), the
   // catalog from the 2026-10-21 production rebuild run 39636816351 (lambda-rebuild-plan.json history[1]).
-  const LIVE = {
+  const BEFORE = {
     'providers.mjs': 'a72a583af99efff5cf9d5bba9f139080f947e04ed50a0f20ce3c2275037b40dc',
-    'providers/catalog.mjs': '43ada7ec092497fabfcd127db37d7ca25dbfe9063a61a8be713e2b62167dd561',
+    [CATALOG]: '43ada7ec092497fabfcd127db37d7ca25dbfe9063a61a8be713e2b62167dd561',
   };
   const rebuild = JSON.parse(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/lambda-rebuild-plan.json'), 'utf8'));
-  assert.equal(rebuild.environments.production.history[1].members['providers/catalog.mjs'].accepted_sha256, LIVE['providers/catalog.mjs']);
+  assert.equal(rebuild.environments.production.history[1].members[CATALOG].accepted_sha256, BEFORE[CATALOG]);
   const pfApplied = JSON.parse(fs.readFileSync(path.join(ROOT, 'aws/tests/fixtures/production-platform-finance-applied-manifest-2026-10-23.json'), 'utf8'));
-  assert.equal(pfApplied.members['providers.mjs'].live_sha256, LIVE['providers.mjs']);
-
+  assert.equal(pfApplied.members['providers.mjs'].live_sha256, BEFORE['providers.mjs']);
+  // Production preflight inspect, production apply and staging acceptance runs, in plan order (catalog
+  // first); 40133588929 is the flags.mjs apply refused in preflight while the catalog was pending.
+  const RUNS = {
+    [CATALOG]: ['40126753113', '40139504036', '40126543954'],
+    'providers/payees/flags.mjs': ['40126279422', '40133588929', '40139632951', '40126294550'],
+    'providers/payees/moov.mjs': ['40126604674', '40139845109', '40125754577'],
+    'providers/payees/email.mjs': ['40126644269', '40140006753', '40126471286'],
+    'providers/payees/handlers.mjs': ['40126695520', '40140113163', '40123293289'],
+    'providers.mjs': ['40126804899', '40140208837', '40126301381'],
+  };
+  for (const [name, runs] of Object.entries(RUNS)) {
+    for (const runId of runs) {
+      assert.match(PLAN.notes, new RegExp(runId), `${name} ${runId}`);
+      assert.match(applied.notes, new RegExp(`run ${runId}`), `${name} ${runId}`);
+    }
+  }
+  assert.match(applied.notes, /No separate post-apply inspect run was made/);
+  assert.match(applied.notes, /AWS_MOOV_PAYEES_PRODUCTION_ENABLED is not set/);
+  assert.equal(applied.workstream_id, 'production-moov-payees-applied');
+  assert.equal(applied.deploy_authorized, false);
+  assert.match(applied.authorization, /^Record only/);
+  assert.deepEqual(Object.keys(applied.members), [...ADDS, CATALOG, 'providers.mjs']);
+  // The Moov payees manifest keeps the pre-apply record: the four modules absent, the old bytes live.
   assert.equal(manifest.deploy_authorized, false);
   assert.match(manifest.authorization, /Planning only/);
-  assert.deepEqual(Object.keys(manifest.members), [...ADDS, 'providers/catalog.mjs', 'providers.mjs']);
+  assert.deepEqual(Object.keys(manifest.members), [...ADDS, CATALOG, 'providers.mjs']);
+  assert.match(PLAN.notes, /Moov payees \(2026-10-23, SQL 113; planning only, not authorized\)/);
+
   const at = (name) => PLAN.order.indexOf(name);
   assert.deepEqual(PLAN.order.slice(at('providers/production/platform-finance.mjs') + 1, at('providers/production/platform-finance.mjs') + 5), ADDS);
+  assert.ok(at(CATALOG) < at(ADDS[0]));
   assert.equal(PLAN.order.at(-1), 'providers.mjs');
+  const inspect = (name) => ({ ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: name });
   for (const name of ADDS) {
-    const row = PLAN.members[name];
-    assert.deepEqual(row, { operation: 'add', accepted_sha256: sha(`aws/functions/api/${name}`), expected_live_sha256: null, sql_before: null, manifest: MANIFEST_REL }, name);
+    const LIVE = sha(`aws/functions/api/${name}`);
+    assert.equal(manifest.members[name].live_sha256, null, name);
+    assert.equal(manifest.members[name].accepted_sha256, LIVE, name);
+    assert.deepEqual(applied.members[name], { live_sha256: LIVE, accepted_sha256: LIVE, operation: 'add', previous_manifest: MANIFEST_REL }, name);
+    // The ADD rows stay as planned (precedent: secret-columns.mjs); inspect of the live module is a no-op.
+    assert.deepEqual(PLAN.members[name], { operation: 'add', accepted_sha256: LIVE, expected_live_sha256: null, sql_before: null, manifest: MANIFEST_REL }, name);
+    assert.equal((await run(inspect(name), { root: ROOT, inspectLive: liveFor(name, { sha256: LIVE }) })).state, 'ALREADY_ACCEPTED', name);
     // Each added module imports only members that are live or planned earlier.
     for (const dep of localImports(fs.readFileSync(path.join(API, name), 'utf8'), name)) {
       if (PLAN.members[dep]?.operation === 'add') assert.ok(at(dep) < at(name), `${dep} before ${name}`);
@@ -1640,23 +1680,28 @@ test('Moov payees (planning only): four added modules after Platform Finance, th
       assert.ok(localImports(fs.readFileSync(path.join(API, name), 'utf8'), name).includes(dep), `${name} imports ${dep}`);
     }
   }
-  for (const [name, live] of Object.entries(LIVE)) {
+  for (const [name, before] of Object.entries(BEFORE)) {
+    const LIVE = sha(`aws/functions/api/${name}`);
+    assert.deepEqual(manifest.members[name], { live_sha256: before, accepted_sha256: LIVE, operation: 'replace' }, name);
+    assert.deepEqual(applied.members[name], { live_sha256: LIVE, accepted_sha256: LIVE, operation: 'replace', previous_manifest: MANIFEST_REL }, name);
     const row = PLAN.members[name];
-    assert.equal(row.manifest, MANIFEST_REL, name);
     assert.equal(row.operation, 'replace', name);
-    assert.equal(row.expected_live_sha256, live, name);
-    assert.equal(row.accepted_sha256, sha(`aws/functions/api/${name}`), name);
-    const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: name };
-    assert.equal((await run(inspect, { root: ROOT, inspectLive: liveFor(name, { sha256: live }) })).state, 'READY', name);
+    assert.equal(row.manifest, APPLIED_REL, name);
+    assert.equal(row.expected_live_sha256, LIVE, name);
+    assert.equal(row.accepted_sha256, LIVE, name);
+    assert.equal(resolvePlannedMember(name, { root: ROOT, plan: PLAN }).ok, true, name);
+    const done = await run(inspect(name), { root: ROOT, inspectLive: liveFor(name, { sha256: LIVE }) });
+    assert.equal(done.state, 'ALREADY_ACCEPTED', name);
+    assert.equal(done.mutation, false, name);
+    await assert.rejects(
+      run(inspect(name), { root: ROOT, inspectLive: liveFor(name, { sha256: before }) }),
+      (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+      name,
+    );
   }
   assert.equal(PLAN.members['providers.mjs'].sql_before, 'aws/workflows/sql/98_tenant_fee_collection.sql');
+  assert.equal(PLAN.members[CATALOG].sql_before, null);
   assert.ok(localImports(fs.readFileSync(path.join(API, 'providers.mjs'), 'utf8'), 'providers.mjs').includes('providers/payees/handlers.mjs'));
-  assert.match(PLAN.notes, /Moov payees \(2026-10-23, SQL 113; planning only, not authorized\)/);
-  // providers.mjs before the added handlers: its import is not in the live ZIP yet.
-  await assert.rejects(
-    run(applyEnv('providers.mjs'), withSql98('providers.mjs', applyDeps('providers.mjs', { pending: ['providers/payees/handlers.mjs'] }).deps)),
-    (error) => error.code === CODES.DEPLOYMENT_COLLISION,
-  );
 });
 
 test('Platform Finance P&L accuracy: providers/parity/platform-finance.mjs expected_live records the bytes production run 40001351087 applied', async () => {
