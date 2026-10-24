@@ -27,16 +27,18 @@
     },
     "providers/payees/email.mjs": {
       "live_sha256": null,
-      "accepted_sha256": "e2ecb320d72bda8833bc54cf90aa0f85ec797415ed4bd0160e1fe96b9c5fcb0e",
+      "accepted_sha256": "7cb38feab5811eb7750926089b8e2ca1338968f992048132d473b9edfc4eb534",
       "operation": "add",
       "required_imports": [
         "email-layout.mjs",
-        "email-branding.mjs"
+        "email-branding.mjs",
+        "email-policy.mjs",
+        "endorsement-parity.mjs"
       ]
     },
     "providers/payees/handlers.mjs": {
       "live_sha256": null,
-      "accepted_sha256": "59f6a4e0fb3a72a638ea9feb4751240b0c4926ba66ef594e5b60790e8f820b9d",
+      "accepted_sha256": "ec24e8e80c7baa2639e78b7c96797853e08acb4ae58f43fc9ab4c0a8b55cd57b",
       "operation": "add",
       "required_imports": [
         "providers/parity/moov-client.mjs",
@@ -48,7 +50,6 @@
         "providers/onboarding/store.mjs",
         "cognito.mjs",
         "data.mjs",
-        "email.mjs",
         "email-branding.mjs",
         "secrets.mjs",
         "db-health.mjs",
