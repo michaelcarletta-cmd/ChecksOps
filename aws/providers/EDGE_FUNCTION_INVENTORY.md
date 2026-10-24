@@ -31,8 +31,7 @@ Classification:
 | `notify-homeowner-lead` / `notify-homeowner-lead-accepted` / `notify-mortgage-handling-request` | stubbed | Same as email/SMS A-class once mailer exists |
 | `lookup-partner-code-public` / `public-contractor-directory` / `contractor-directory-search` | stubbed | Public API Gateway routes + RLS-safe reads (already have some public workflow routes) |
 | `ingest-shared-check` / `delete-shared-check` / `partner-shared-checks` / `partner-checks-by-claim` | retired 2026-10-17 | Deleted (Freedom Claims bridge removal; `partner-shared-checks` was the unauthenticated Supabase partner-code check lookup). Partner sharing stays on AWS: connect_partner_by_code / share_check_with_partner (aws/rls/sql/32). |
-| `geocode-claim` / `geocode-claims-batch` / `fetch-aerial-image` | stubbed | Map provider sandbox **or** skip if not needed for staging UAT |
-| `jobnimbus-search-match` / `push-status-to-freedom` | stubbed | CRM sandbox credentials (B if vendor required; A if mockable) |
+| `geocode-claim` / `geocode-claims-batch` | stubbed | Map provider sandbox **or** skip if not needed for staging UAT |
 | `passkey-*` (Supabase SimpleWebAuthn) | superseded | **Already replaced** by Cognito WebAuthn on CheckOps HTTPS staging |
 | `auth-email-hook` | N/A on Cognito | **E** for staging Cognito path |
 | `aws-staging-storage-bridge` | transitional | Keep until Storage client fully AWS; then **E** |
@@ -44,7 +43,6 @@ Classification:
 | `quickbooks-auth` / `quickbooks-payment` | Intuit sandbox app + OAuth |
 | `send-docupost` | DocuPost sandbox |
 | `send-signature-request` / `submit-signature` / `get-signature-document` / `signature-webhook` | E-sign vendor sandbox (partial public routes already exist) |
-| `onesx-products` | Vendor catalog sandbox |
 | Moov sandbox read/status helpers once NAT + sandbox platform id exist | Still blocked by provider test configuration; execution remains gated |
 | CheckAlt sandbox connection/test once sandbox credentials exist | Keep deposit **submit/approve** in **C** |
 | Plaid sandbox link-token (non-transfer) | Link/read may be B; transfer/disburse stay **C** |
