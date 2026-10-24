@@ -1,0 +1,45 @@
+{
+  "workstream_id": "production-moov-payees-applied",
+  "authorization": "Record only (2026-10-24): the bytes below are live. Nothing is planned or authorized by this manifest; any later change to these members needs its own manifest, staging acceptance and owner approval.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Moov payees API applied 2026-10-24 through the guarded overlay path on main 13966c1ac (#1223 merged 13966c1a), in plan order with providers/catalog.mjs first (the owner's \"go ahead with catalog first\"), each production apply on the owner's \"Approve step 1 now\". Pre-apply production live CodeSha256 flV8jlABIVQuWzqaToBuS8D+CdWMeyqc8W1WfBlhX3Q=, RevisionId f01c4cd6-d133-4515-8980-c158e7143b68. providers/catalog.mjs: production preflight inspect run 40126753113 (READY, 43ada7ec live); production apply run 40139504036 (43ada7ec -> 91f9ea54, staging acceptance run 40126543954). providers/payees/flags.mjs (ADD): production preflight inspect run 40126279422 (READY, absent); an earlier production apply attempt, run 40133588929, was refused in preflight with DEPLOYMENT_COLLISION (apply plan members in order; providers/catalog.mjs pending) and wrote nothing; production apply run 40139632951 (staging acceptance run 40126294550). providers/payees/moov.mjs (ADD): production preflight inspect run 40126604674; production apply run 40139845109 (staging acceptance run 40125754577). providers/payees/email.mjs (ADD): production preflight inspect run 40126644269; production apply run 40140006753 (staging acceptance run 40126471286). providers/payees/handlers.mjs (ADD): production preflight inspect run 40126695520; production apply run 40140113163 (staging acceptance run 40123293289). providers.mjs: production preflight inspect run 40126804899; production apply run 40140208837 (a72a583a -> 6b002711, staging acceptance run 40126301381). Every apply run concluded success, including its \"Verify live member is the accepted bytes\" step and the public production smoke. No separate post-apply inspect run was made: each apply run's own verify step is the evidence that the accepted bytes are live, and no post-apply CodeSha256 or RevisionId is recorded here. AWS_MOOV_PAYEES_PRODUCTION_ENABLED is not set, so payees remain blocked in production. Each row records the applied bytes as live_sha256 and accepted_sha256 and chains to the Moov payees manifest that applied them (previous_manifest), which keeps the pre-apply state (the four payee modules absent, providers/catalog.mjs 43ada7ec, providers.mjs a72a583a).",
+  "members": {
+    "providers/payees/flags.mjs": {
+      "live_sha256": "958ed63bc1a2bc0367961fdf1cb387e09df633b6634b1be85e71811d6d7735e1",
+      "accepted_sha256": "958ed63bc1a2bc0367961fdf1cb387e09df633b6634b1be85e71811d6d7735e1",
+      "operation": "add",
+      "previous_manifest": "aws/tests/fixtures/production-moov-payees-manifest-2026-10-23.json"
+    },
+    "providers/payees/moov.mjs": {
+      "live_sha256": "3a8ed2d5ba329509c4a4c7d3577e4e99c0c10d40bbdfe3c8ed8b7075cb3aba48",
+      "accepted_sha256": "3a8ed2d5ba329509c4a4c7d3577e4e99c0c10d40bbdfe3c8ed8b7075cb3aba48",
+      "operation": "add",
+      "previous_manifest": "aws/tests/fixtures/production-moov-payees-manifest-2026-10-23.json"
+    },
+    "providers/payees/email.mjs": {
+      "live_sha256": "7cb38feab5811eb7750926089b8e2ca1338968f992048132d473b9edfc4eb534",
+      "accepted_sha256": "7cb38feab5811eb7750926089b8e2ca1338968f992048132d473b9edfc4eb534",
+      "operation": "add",
+      "previous_manifest": "aws/tests/fixtures/production-moov-payees-manifest-2026-10-23.json"
+    },
+    "providers/payees/handlers.mjs": {
+      "live_sha256": "8b44e120a8d9b611c1892a7b4e7e9dce2fb5950287d1ccba50c8215b2357992d",
+      "accepted_sha256": "8b44e120a8d9b611c1892a7b4e7e9dce2fb5950287d1ccba50c8215b2357992d",
+      "operation": "add",
+      "previous_manifest": "aws/tests/fixtures/production-moov-payees-manifest-2026-10-23.json"
+    },
+    "providers/catalog.mjs": {
+      "live_sha256": "91f9ea543d484f6daa584ec76a99218fecfccb8f628546c165a448e968bcc969",
+      "accepted_sha256": "91f9ea543d484f6daa584ec76a99218fecfccb8f628546c165a448e968bcc969",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-moov-payees-manifest-2026-10-23.json"
+    },
+    "providers.mjs": {
+      "live_sha256": "6b002711f93aecea35956b1ff137367b67655c9f0a3d2659308ae56e75c51e8a",
+      "accepted_sha256": "6b002711f93aecea35956b1ff137367b67655c9f0a3d2659308ae56e75c51e8a",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-moov-payees-manifest-2026-10-23.json"
+    }
+  }
+}
