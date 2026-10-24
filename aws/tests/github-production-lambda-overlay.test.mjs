@@ -1672,3 +1672,63 @@ test('Mortgage agent login: tenant-admin.mjs expected_live records the bytes pro
     (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
   );
 });
+
+test('Write echo secret columns (planning only): ADD secret-columns.mjs, then REPLACE write-app-metadata.mjs and write.mjs from their live bytes', async () => {
+  const MANIFEST_REL = 'aws/tests/fixtures/production-write-echo-secret-columns-manifest-2026-10-24.json';
+  const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, MANIFEST_REL), 'utf8'));
+  const ADD = 'secret-columns.mjs';
+  const APP = 'write-app-metadata.mjs';
+  const WRITE = 'write.mjs';
+  // Live bytes: write-app-metadata.mjs is the release 2026-10-17 accepted row (live since the 2026-10-21
+  // production rebuilds); write.mjs is the bytes production rebuild run 39588578627 put live
+  // (lambda-rebuild-plan.json production history[0]). Neither changed on main before the later
+  // rebuilds (39636816351, 39669873076) redeployed main member for member.
+  const release = JSON.parse(fs.readFileSync(path.join(ROOT, 'aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json'), 'utf8'));
+  const rebuild = JSON.parse(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/lambda-rebuild-plan.json'), 'utf8'));
+  const LIVE = {
+    [APP]: release.members[APP].accepted_sha256,
+    [WRITE]: rebuild.environments.production.history[0].members[WRITE].accepted_sha256,
+  };
+  assert.equal(rebuild.environments.production.history[0].applied.run_id, '39588578627');
+  assert.equal(rebuild.environments.production.history[0].applied.state, 'VERIFIED');
+
+  assert.equal(manifest.deploy_authorized, false);
+  assert.match(manifest.authorization, /Planning only/);
+  assert.deepEqual(Object.keys(manifest.members), [ADD, APP, WRITE]);
+  assert.deepEqual(manifest.members[ADD], { live_sha256: null, accepted_sha256: sha(`aws/functions/api/${ADD}`), operation: 'add', required_imports: [] });
+  assert.deepEqual(localImports(fs.readFileSync(path.join(API, ADD), 'utf8'), ADD), []);
+  assert.deepEqual(PLAN.members[ADD], { operation: 'add', accepted_sha256: sha(`aws/functions/api/${ADD}`), expected_live_sha256: null, sql_before: null, manifest: MANIFEST_REL });
+
+  // The module goes first, then its importers in order.
+  const at = (name) => PLAN.order.indexOf(name);
+  assert.deepEqual(PLAN.order.slice(at(ADD), at(ADD) + 3), [ADD, APP, WRITE]);
+  assert.equal(PLAN.order.at(-1), 'providers.mjs');
+  for (const name of [APP, WRITE]) {
+    assert.ok(localImports(fs.readFileSync(path.join(API, name), 'utf8'), name).includes(ADD), `${name} imports ${ADD}`);
+    assert.deepEqual(manifest.members[name], { live_sha256: LIVE[name], accepted_sha256: sha(`aws/functions/api/${name}`), operation: 'replace' }, name);
+    const row = PLAN.members[name];
+    assert.equal(row.operation, 'replace', name);
+    assert.equal(row.manifest, MANIFEST_REL, name);
+    assert.equal(row.expected_live_sha256, LIVE[name], name);
+    assert.equal(row.accepted_sha256, sha(`aws/functions/api/${name}`), name);
+    assert.notEqual(row.accepted_sha256, LIVE[name], name);
+    const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: name };
+    assert.equal((await run(inspect, { root: ROOT, inspectLive: liveFor(name, { sha256: LIVE[name] }) })).state, 'READY', name);
+  }
+  assert.equal(PLAN.members[APP].sql_before, 'aws/workflows/sql/93_tenant_company_info.sql');
+  assert.equal(PLAN.members[WRITE].sql_before, null);
+  assert.match(PLAN.notes, /Write echo secret columns \(2026-10-24, planning only, nothing deployed by this change\)/);
+
+  // While secret-columns.mjs is absent live, both importers are refused; the ADD applies when absent.
+  for (const name of [APP, WRITE]) {
+    await assert.rejects(
+      run(applyEnv(name), applyDeps(name, { pending: [ADD] }).deps),
+      (error) => error.code === CODES.DEPLOYMENT_COLLISION && error.details.missing?.includes(ADD),
+      name,
+    );
+  }
+  const { deps: addDeps, calls } = applyDeps(ADD);
+  const added = await run(applyEnv(ADD), addDeps);
+  assert.equal(added.mutation, false);
+  assert.deepEqual(calls.receipt.owned_member_ops, { replace: [], add: [ADD] });
+});

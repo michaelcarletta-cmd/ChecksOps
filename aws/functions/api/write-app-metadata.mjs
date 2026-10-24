@@ -2,6 +2,7 @@
  * Tranche-6 application metadata writes (non-financial, non-provider).
  */
 import { ident } from './data.mjs';
+import { stripSecretColumns } from './secret-columns.mjs';
 import { isAllowedTenantDocumentDocType } from './mortgage-library-doc-types.mjs';
 import { canManageTenantDocumentLibrary, mortgageAgentCanWriteTenantLossDraft } from './mortgage-library-docs.mjs';
 import { tenantMoovDefaults } from './tenant-moov-defaults.mjs';
@@ -952,7 +953,7 @@ export const executeClaimsNumberUpdate = async ({ client, mapping, op, values, f
   }
 };
 
-export const executeAppMetadataWrite = async ({ client, mapping, table, op, values, filters }) => {
+const dispatchAppMetadataWrite = async ({ client, mapping, table, op, values, filters }) => {
   switch (table) {
     case 'notifications':
       return executeNotifications({ client, mapping, op, values, filters });
@@ -993,4 +994,15 @@ export const executeAppMetadataWrite = async ({ client, mapping, table, op, valu
     default:
       return { error: 'table_not_allowlisted', table };
   }
+};
+
+/**
+ * Runs the table's writer, then removes the table's secret columns
+ * (secret-columns.mjs) from the rows it returns: a `RETURNING *` echo never
+ * hands a credential back to the writer. What is written is unchanged.
+ */
+export const executeAppMetadataWrite = async (args) => {
+  const result = await dispatchAppMetadataWrite(args);
+  if (!result || !Array.isArray(result.rows)) return result;
+  return { ...result, rows: stripSecretColumns(args.table, result.rows) };
 };
