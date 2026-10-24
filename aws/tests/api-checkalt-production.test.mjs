@@ -2085,7 +2085,7 @@ const autoApproveStore = ({ enabled = true, maxCents = 200000, amount, payload }
   return store;
 };
 
-test('auto-approve: status 40, clean and Low Risk, posts one approve and persists submitted + approved_at', async () => {
+test('auto-approve: status 40 and unflagged posts one approve and persists submitted + approved_at', async () => {
   const store = autoApproveStore();
   store.approvePayload = { success: true, status: 127, statusDescription: 'Approved' };
   const result = await submitOnce(store);
@@ -2147,6 +2147,13 @@ test('auto-approve: flagged and missing reference skip and stay pending_approval
     { name: 'errors', store: autoApproveStore({ payload: PROCESS_40(9001, { errors: ['e'] }) }), reason: 'flagged_by_checkalt' },
     { name: 'amountDiscrepancyDetected', store: autoApproveStore({ payload: PROCESS_40(9001, { amountDiscrepancyDetected: true }) }), reason: 'flagged_by_checkalt' },
     { name: 'statusDescription text', store: autoApproveStore({ payload: PROCESS_40(9001, { statusDescription: 'Pending Approval - Suspect Item' }) }), reason: 'flagged_by_checkalt' },
+    { name: 'riskRating Decline', store: autoApproveStore({ payload: PROCESS_40(9001, { riskRating: 'Decline' }) }), reason: 'flagged_by_checkalt' },
+    { name: 'riskRating Warning', store: autoApproveStore({ payload: PROCESS_40(9001, { riskRating: 'Warning' }) }), reason: 'flagged_by_checkalt' },
+    { name: 'duplicateStatus true', store: autoApproveStore({ payload: PROCESS_40(9001, { duplicateStatus: true }) }), reason: 'flagged_by_checkalt' },
+    { name: 'duplicateStatus "true"', store: autoApproveStore({ payload: PROCESS_40(9001, { duplicateStatus: 'true' }) }), reason: 'flagged_by_checkalt' },
+    { name: 'ocrAmountStatus False', store: autoApproveStore({ payload: PROCESS_40(9001, { ocrAmountStatus: 'False' }) }), reason: 'flagged_by_checkalt' },
+    { name: 'ocrAmountStatus false', store: autoApproveStore({ payload: PROCESS_40(9001, { ocrAmountStatus: false }) }), reason: 'flagged_by_checkalt' },
+    { name: 'errors object', store: autoApproveStore({ payload: PROCESS_40(9001, { errors: [{ code: 1, message: 'x' }] }) }), reason: 'flagged_by_checkalt' },
     { name: 'missing reference', store: autoApproveStore({ payload: { status: 40, statusDescription: 'Pending Approval' } }), reason: 'missing_reference' },
   ];
   for (const { name, store, reason } of cases) {
@@ -2264,25 +2271,35 @@ test('auto-approve never consults or mints the deposit.approve step-up', async (
   assert.doesNotMatch(src, /CHECKALT_APPROVE_ACTION|deposit\.approve/);
 });
 
-test('auto-approve: risk description must be exactly Low Risk', async () => {
+test('auto-approve: Option A, any risk description approves when Check Alt did not flag the deposit', async () => {
   const cases = [
     ['High Risk', PROCESS_40(9001, { riskRatingDescription: 'High Risk', riskRating: 9 })],
     ['Medium Risk', PROCESS_40(9001, { riskRatingDescription: 'Medium Risk', riskRating: 5 })],
-    ['missing', (() => { const p = PROCESS_40(); delete p.riskRatingDescription; return p; })()],
+    ['missing', (() => { const p = PROCESS_40(); delete p.riskRatingDescription; delete p.riskRating; return p; })()],
     ['unknown', PROCESS_40(9001, { riskRatingDescription: 'Low Risk?' })],
     ['non-string', PROCESS_40(9001, { riskRatingDescription: 1 })],
+    ['padded low risk', PROCESS_40(9001, { riskRatingDescription: '  low risk ' })],
+    ['riskRating Accepted', PROCESS_40(9001, { riskRating: 'Accepted', riskRatingDescription: 'Accepted' })],
+    ['doc clean fields', PROCESS_40(9001, { riskRating: 'Accepted', duplicateStatus: 'false', ocrAmountStatus: 'True' })],
+    ['Validation Failure', PROCESS_40(9001, { statusDescription: 'Validation Failure' })],
+    ['0: Validation Failure', PROCESS_40(9001, { statusDescription: '0: Validation Failure' })],
+    ['Pending', PROCESS_40(9001, { statusDescription: 'Pending' })],
   ];
   for (const [name, payload] of cases) {
     const store = autoApproveStore({ payload });
+    store.approvePayload = { success: true, status: 127, statusDescription: 'Approved' };
     const result = await submitOnce(store);
-    assert.equal(result.status, 'pending_approval', name);
-    assert.equal(result.auto_approve.skipReason, 'risk_not_low', name);
-    assert.equal(store.approvePosts, 0, name);
-    assert.equal(store.deposits[0].last_status_payload._auto_approve.skip_reason, 'risk_not_low', name);
+    assert.equal(result.status, 'submitted', name);
+    assert.ok(result.approved_at, name);
+    assert.equal(result.auto_approve.approved, true, name);
+    assert.equal(result.auto_approve.skipReason, null, name);
+    assert.equal(store.processPosts, 1, name);
+    assert.equal(store.approvePosts, 1, name);
+    assert.equal(store.deposits[0].status, 'submitted', name);
+    assert.equal(store.deposits[0].last_status_payload._auto_approve.approved, true, name);
   }
-  const padded = autoApproveStore({ payload: PROCESS_40(9001, { riskRatingDescription: '  low risk ' }) });
-  assert.equal((await submitOnce(padded)).status, 'submitted');
-  assert.equal(padded.approvePosts, 1);
+  const src = fs.readFileSync(path.join(ROOT, 'aws/functions/api/providers/production/checkalt-submit.mjs'), 'utf8');
+  assert.doesNotMatch(src, /riskIsLow|LOW_RISK_RE|riskLow/);
 });
 
 test('auto-approve: unsafe reference skips with invalid_reference and never posts approve', async () => {

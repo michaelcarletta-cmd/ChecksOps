@@ -29,7 +29,7 @@ Controls (Moov KYC/KYB and bank verification, financial two-factor step-up, veri
 ## Coordination With Vendors
 
 - **Moov** verifies each tenant's business and representatives (KYC/KYB), verifies bank accounts, and carries every ACH transfer. ChecksOps receives Moov's events by signed webhook; ACH policy §4 lists what is recorded automatically and the response procedure for returns.
-- **CheckAlt FinCapture** is asked for its risk assessment on every deposit. ChecksOps auto-approves a deposit only when CheckAlt rates it "Low Risk", raises no duplicate, fraud or other flag, and the amount is within the tenant's auto-approval ceiling; anything else waits for manual approval. The outcome is recorded on the `checkalt_deposits` row.
+- **CheckAlt FinCapture** is asked for its risk assessment on every deposit. ChecksOps auto-approves every deposit CheckAlt parks for approval unless CheckAlt flags it (a duplicate, an amount mismatch, a Decline or Warning risk rating, errors, or fraud, risk or other flag text); a flagged deposit waits for manual review in the Check Alt portal. The outcome is recorded on the `checkalt_deposits` row.
 - Vendor reliance does **not** relieve ChecksOps of its independent AML obligations.
 
 > **OWNER TO CONFIRM:** Does Moov perform OFAC/sanctions screening and return management for ChecksOps tenants and their payees under the agreement, and does CheckAlt perform its own duplicate-item and OFAC screening on deposits?
