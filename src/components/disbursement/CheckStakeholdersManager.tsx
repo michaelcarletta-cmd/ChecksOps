@@ -89,7 +89,7 @@ export function CheckStakeholdersManager({ checkIntakeItemId, onPay, payableKeys
     queryFn: async () => {
       const { data, error } = await supabase
         .from("stakeholder_accounts")
-        .select("id, nickname, account_type, chk_acct, custname, homeowner_name")
+        .select("id, nickname, account_type, chk_acct, custname, homeowner_name, verification_status, verification_recipient_email, homeowner_email")
         .eq("tenant_id", tenant!.id)
         .eq("is_active", true)
         .order("nickname");
@@ -303,6 +303,10 @@ export function CheckStakeholdersManager({ checkIntakeItemId, onPay, payableKeys
                   <div className="space-y-1 max-h-64 overflow-y-auto pr-1">
                     {availableToAdd.map((a: any) => {
                       const holder = a.custname || a.homeowner_name || a.nickname;
+                      // Same-name stakeholders (a payee re-invited, say) are told apart by
+                      // their email and whether they finished verification.
+                      const email = a.verification_recipient_email || a.homeowner_email || null;
+                      const vStatus = (a.verification_status ?? "unverified") as VerificationStatus;
                       return (
                         <button
                           key={a.id}
@@ -312,11 +316,16 @@ export function CheckStakeholdersManager({ checkIntakeItemId, onPay, payableKeys
                         >
                           <span className="min-w-0">
                             <span className="font-medium block truncate group-hover:text-accent-foreground">{holder}</span>
-                            <span className="text-muted-foreground text-[10px]">
-                              Payment account connected
+                            <span className="text-muted-foreground text-[10px] block truncate">
+                              {email ?? "Payment account connected"}
                             </span>
                           </span>
-                          <Badge variant="outline" className="text-[9px] ml-2 shrink-0">{TYPE_LABELS[a.account_type] ?? a.account_type}</Badge>
+                          <span className="flex flex-col items-end gap-1 ml-2 shrink-0">
+                            <Badge variant="outline" className={`text-[9px] ${VERIFICATION_BADGE_CLASS[vStatus]}`} title={VERIFICATION_LABEL[vStatus]}>
+                              {VERIFICATION_LABEL[vStatus]}
+                            </Badge>
+                            <Badge variant="outline" className="text-[9px]">{TYPE_LABELS[a.account_type] ?? a.account_type}</Badge>
+                          </span>
                         </button>
                       );
                     })}
