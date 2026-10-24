@@ -99,6 +99,10 @@ const CHANGED_SINCE_SECOND_REBUILD = {
   // homeowner-bank-link-send for the added providers/payees handlers; a REPLACE member of the
   // production overlay plan when it is deployed, not a rebuild section.
   'providers/catalog.mjs': 'changed',
+  // Write echo secret columns (2026-10-24): handleWrite strips the written table's secret columns
+  // (the added secret-columns.mjs) from the rows it returns; a REPLACE member of the production
+  // overlay plan when it is deployed, not a rebuild section.
+  'write.mjs': 'changed',
 };
 // Listed changes that go through the production overlay plan, never the current rebuild section.
 const OVERLAY_PLAN_CHANGES = new Set([
@@ -113,6 +117,7 @@ const OVERLAY_PLAN_CHANGES = new Set([
   'providers.mjs',
   'providers/parity/platform-finance.mjs',
   'providers/catalog.mjs',
+  'write.mjs',
 ]);
 const assertSectionAcceptedIsMain = (apiRoot, name, accepted) => {
   const onMain = sha256(fs.readFileSync(path.join(apiRoot, name)));

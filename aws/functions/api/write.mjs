@@ -11,6 +11,7 @@ import {
   writesEnabled,
 } from './write-allowlist.mjs';
 import { executeCheckWorkflowWrite } from './write-check-workflow.mjs';
+import { stripSecretColumns } from './secret-columns.mjs';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -472,7 +473,9 @@ export const handleWrite = async (event, deps = {}) => {
       return reject({ statusCode: status, ...executed });
     }
 
-    let data = executed.rows || [];
+    // Every writer returns rows of the table it wrote (`RETURNING *`); remove that table's secret
+    // columns (secret-columns.mjs) before they reach the client. What is written is unchanged.
+    let data = stripSecretColumns(body.table, executed.rows || []);
     if (body.single) {
       if (data.length !== 1) {
         return reject({ statusCode: 406, error: 'not_single', data: null });

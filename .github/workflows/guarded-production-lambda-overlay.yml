@@ -71,7 +71,9 @@ on:
           - signature-library-source.mjs
           - platform-announcements.mjs
           - mortgage-library-docs.mjs
+          - secret-columns.mjs
           - write-app-metadata.mjs
+          - write.mjs
           - storage-write-auth.mjs
           - storage.mjs
           - storage-write.mjs
