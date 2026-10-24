@@ -155,8 +155,17 @@ async function sendSetupLink(client, { tenantId, email, displayName, token, deps
       messageCategory: 'payee_setup',
     });
     const results = Array.isArray(out?.results) ? out.results : [];
+    const emailSent = results.some((r) => r.status === 'sent');
+    if (!emailSent) {
+      // Status and reason codes only (e.g. blocked / recipient_not_allowlisted,
+      // failed / resend_403): never the address, the name or the link.
+      const code = (value) => (/^[a-z0-9_]{1,40}$/.test(String(value ?? '')) ? String(value) : null);
+      log('payee_setup_email_not_sent', {
+        tenant: tenantId, status: code(results[0]?.status), reason: code(results[0]?.reason),
+      });
+    }
     return {
-      email_sent: results.some((r) => r.status === 'sent'),
+      email_sent: emailSent,
       email_delivery: results[0]?.status ?? null,
     };
   } catch (error) {

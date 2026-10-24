@@ -849,3 +849,33 @@ test('payee-setup-link template names the payer, links /pay-setup and never name
   assert.ok(r.html.includes('#123456'));
   assert.ok(r.text.includes('https://staging.checksops.com/pay-setup/abc'));
 });
+
+test('an unsent setup email logs only its status and reason codes, never the address, name or link', async () => {
+  await withEnv(STAGING, async () => {
+    for (const result of [
+      { status: 'blocked', reason: 'recipient_not_allowlisted' },
+      { status: 'failed', reason: 'resend_403' },
+      { status: 'failed', reason: 'contains https://x/pay-setup/abc' },
+    ]) {
+      const h = makeHarness();
+      const sent = [];
+      h.deps.sendEmail = async (msg) => { sent.push(msg); return { mode: 'resend', results: [result] }; };
+      const { result: r, lines } = await captureConsole(() => h.call('moov-recipient-create', {
+        tenant_id: TENANT, name: 'Hannah Owner', email: 'Hannah@Example.com', recipient_type: 'individual', relationship: 'subcontractor',
+      }, USERS.owner));
+      assert.equal(r.ok, true, JSON.stringify(r));
+      assert.equal(r.email_sent, false);
+      assert.equal(r.email_delivery, result.status);
+      const logged = lines.map((l) => { try { return JSON.parse(l); } catch { return null; } })
+        .filter((e) => e?.event === 'payee_setup_email_not_sent');
+      assert.equal(logged.length, 1, lines.join('\n'));
+      const safeReason = /^[a-z0-9_]+$/.test(result.reason) ? result.reason : null;
+      assert.deepEqual({ status: logged[0].status, reason: logged[0].reason }, { status: result.status, reason: safeReason });
+      const token = sent[0].text.match(/\/pay-setup\/([A-Za-z0-9_-]+)/)[1];
+      const all = lines.join('\n');
+      for (const secret of [token, 'hannah@example.com', 'Hannah@Example.com', 'Hannah Owner']) {
+        assert.ok(!all.includes(secret), `log carries ${secret}`);
+      }
+    }
+  });
+});
