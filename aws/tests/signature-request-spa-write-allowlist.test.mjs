@@ -48,6 +48,8 @@ const BASELINE_WITHOUT_SIGNATURE_TABLES = Object.freeze([
 ]);
 
 const RESTORED = Object.freeze(['signature_requests', 'signature_signers']);
+// Added after this repair, each pinned by its own test (check-stakeholders-spa-write.test.mjs).
+const LATER_ADDITIONS = Object.freeze(['check_stakeholders']);
 
 function parseWriteTables(source) {
   const match = source.match(/const AWS_WRITE_TABLES = new Set\(\[([\s\S]*?)\]\)/);
@@ -57,9 +59,9 @@ function parseWriteTables(source) {
 
 test('client AWS_WRITE_TABLES restores only signature_requests and signature_signers', () => {
   const tables = parseWriteTables(read(CLIENT_REL));
-  assert.deepEqual(tables, [...BASELINE_WITHOUT_SIGNATURE_TABLES, ...RESTORED]);
+  assert.deepEqual(tables, [...BASELINE_WITHOUT_SIGNATURE_TABLES, ...RESTORED, ...LATER_ADDITIONS]);
   assert.deepEqual(
-    tables.filter((table) => !BASELINE_WITHOUT_SIGNATURE_TABLES.includes(table)),
+    tables.filter((table) => !BASELINE_WITHOUT_SIGNATURE_TABLES.includes(table) && !LATER_ADDITIONS.includes(table)),
     [...RESTORED],
   );
   assert.equal(tables.filter((table) => table.startsWith('signature_')).length, 2);
