@@ -1,0 +1,15 @@
+{
+  "workstream_id": "production-checkalt-auto-approve-option-a-applied",
+  "authorization": "Record only (2026-10-24): the bytes below are live. Nothing is planned or authorized by this manifest; any later change to this member needs its own manifest, staging acceptance and owner approval.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Check Alt auto-approve Option A applied 2026-10-24 through the guarded overlay path on main ef362705f (#1211, merged on the owner's \"Merge 1211 when green\"). providers/production/checkalt-submit.mjs: production preflight inspect run 40052246065 (on main cffa5bb96; ALREADY_ACCEPTED against the always-on row, d35e7841 live, CodeSha256 pkUfIsqA87nPZPvS9A8XrClI6FEEpCy3CIcF0UuGmwk=, RevisionId 026d2d54-f461-4abb-8ca0-d532a18d920a); staging inspect run 40054175726 (d35e7841 live, CodeSha256 qbu7Zy/ViuKJyPhY1RVwj6lzIlmQiHIhXUoXcqqq2so=, RevisionId 21b88c96-5e28-43e2-9ee0-ebbf18c46122), staging apply run 40054260101 (d35e7841 -> 1b98060b); production apply run 40054316712 (owner-approved \"DEPLOY checkalt-submit.mjs TO PRODUCTION\", workflow phrase \"DEPLOY providers/production/checkalt-submit.mjs TO PRODUCTION\", staging acceptance run 40054260101), production post-apply inspect run 40055825626 (ALREADY_ACCEPTED, 1b98060b live, CodeSha256 QEo48Qy2CgUa8j1nfQKojScVdHuEJuCr81Qlb45q6AE=, RevisionId 60494a21-2863-49df-a640-694c89deb42c; /health and /db-health 200). This row records the applied bytes as live_sha256 and accepted_sha256 and chains to the Option A manifest that applied them (previous_manifest), which keeps the pre-apply bytes d35e7841 as its live_sha256. The earlier always-on replace (955b27e4 -> d35e7841, aws/tests/fixtures/production-checkalt-auto-approve-always-on-manifest-2026-10-22.json) has no applied record in this repository; its bytes were found live by inspect run 40052246065.",
+  "members": {
+    "providers/production/checkalt-submit.mjs": {
+      "live_sha256": "1b98060beb0645f31dabd7d366d914c95017028b993b01093de0c4d1422e47d1",
+      "accepted_sha256": "1b98060beb0645f31dabd7d366d914c95017028b993b01093de0c4d1422e47d1",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-checkalt-auto-approve-option-a-manifest-2026-10-24.json"
+    }
+  }
+}
