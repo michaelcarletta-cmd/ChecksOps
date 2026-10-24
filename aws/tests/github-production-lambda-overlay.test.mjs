@@ -1748,3 +1748,43 @@ test('Data API credential columns: data.mjs REPLACEs the bytes production run 39
   assert.match(data, /denySecretColumnQuery\(rawTable, parsedSelect, body\.filters, body\.order\)/);
   assert.match(data, /stripSecretColumns\(\(await client\.query\(sql, params\)\)\.rows, requested, table\)/);
 });
+
+test('Loss Draft from uploaded: REPLACE workflow-transitions.mjs from the release 2026-10-17 accepted bytes', async () => {
+  const MEMBER = 'workflow-transitions.mjs';
+  const MANIFEST_REL = 'aws/tests/fixtures/production-loss-draft-from-uploaded-manifest-2026-10-24.json';
+  const RELEASE = 'aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json';
+  const LEDGER = 'supabase/migrations/20261007193200_skip_claim_ledger_event_for_endorsement_stage.sql';
+  const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, MANIFEST_REL), 'utf8'));
+  const release = JSON.parse(fs.readFileSync(path.join(ROOT, RELEASE), 'utf8'));
+  const LIVE = 'f11206b4ac7239b6d75eb62e739d3c83f3dc8c568aa5c6d2be98f8335166c350';
+  const row = PLAN.members[MEMBER];
+  assert.equal(row.operation, 'replace');
+  assert.equal(row.expected_live_sha256, LIVE);
+  assert.equal(row.manifest, MANIFEST_REL);
+  assert.equal(row.sql_before, LEDGER);
+  assert.equal(PLAN.sql_prerequisites[LEDGER].verified_live, true);
+  assert.equal(sha(`aws/functions/api/${MEMBER}`), row.accepted_sha256);
+  assert.notEqual(row.accepted_sha256, LIVE);
+  // The live bytes are the release 2026-10-17 accepted bytes, which stay recorded in that manifest.
+  assert.equal(release.members[MEMBER].accepted_sha256, LIVE);
+  assert.equal(release.members[MEMBER].live_sha256, 'fc14b76734efa2ccd16db85f3f1c6f1ea58bf7e4f4058af574f077a621535f62');
+  assert.equal(manifest.deploy_authorized, false);
+  assert.deepEqual(manifest.members[MEMBER], {
+    live_sha256: LIVE,
+    accepted_sha256: row.accepted_sha256,
+    operation: 'replace',
+    previous_manifest: RELEASE,
+  });
+  assert.match(manifest.notes, /39669873076/);
+  assert.equal(PLAN.order.at(-1), 'providers.mjs');
+  assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
+  const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
+  const ready = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER) });
+  assert.equal(ready.state, 'READY');
+  assert.equal(ready.mutation, false);
+  // Any other live bytes are refused (the inspect must find f11206b4 before an apply).
+  await assert.rejects(
+    run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: release.members[MEMBER].live_sha256 }) }),
+    (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+  );
+});

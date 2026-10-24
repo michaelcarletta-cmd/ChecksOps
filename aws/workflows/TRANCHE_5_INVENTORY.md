@@ -58,7 +58,7 @@ Production review RPC `submit_check_review_decision` maps `p_deposit_path` → s
 | --- | --- | --- | --- |
 | `start_review` | `uploaded` | `needs_review` / `review` | no |
 | `start_endorsing` | `uploaded`, `needs_review`, … | `endorsements_in_progress` / `endorsing` | no |
-| `route_loss_draft` | `needs_review`, `endorsements_in_progress`, … | `loss_draft_required` / `loss_draft` | no (internal tracking row only) |
+| `route_loss_draft` | `uploaded`, `needs_review`, `endorsements_in_progress`, … | `loss_draft_required` / `loss_draft` | no (internal tracking row only) |
 | `mark_ready_for_deposit` | `needs_review`, `loss_draft_required`, … | `approved_for_deposit` / `ready_for_deposit` | **STOP** |
 | `return_to_review` | decision states | `needs_review` / `review` | no |
 

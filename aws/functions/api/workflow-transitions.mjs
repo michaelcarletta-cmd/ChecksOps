@@ -58,6 +58,7 @@ export const TRANSITIONS = {
   route_loss_draft: {
     action: 'route_loss_draft',
     fromStatus: [
+      'uploaded',
       'needs_review',
       'manual_review_required',
       'endorsements_complete',
@@ -119,6 +120,8 @@ export const REVIEW_PATH_TO_ACTION = {
   approved_for_deposit: 'mark_ready_for_deposit',
   revert_to_review: 'return_to_review',
   hold_for_claim_review: 'return_to_review',
+  // The Review console's "Review" decision (value needs_review).
+  needs_review: 'return_to_review',
 };
 
 export const DENIED_REVIEW_PATHS = {
