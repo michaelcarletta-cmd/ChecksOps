@@ -1,0 +1,15 @@
+{
+  "workstream_id": "production-loss-draft-from-uploaded",
+  "authorization": "Pending owner review (2026-10-24). Planning only: nothing is live or verified. The production apply needs its own owner approval and staging acceptance.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Owner report 2026-10-24: \"I uploaded a check with mortgage company. Once I clicked loss draft I received an error. The check remained in review and did not move as intended\" (toast: \"Failed to save decision - Invalid status transition: uploaded → loss_draft_required\"). Path: CheckReviewConsole.tsx calls submit_check_review_decision_safe with p_deposit_path loss_draft_required (with a mortgage_company payee Loss Draft is the only decision offered); the AWS client sends it to POST /workflow/transition; workflow.mjs handleCheckTransition maps it to route_loss_draft and evaluateTransition refused it because TRANSITIONS.route_loss_draft.fromStatus did not list 'uploaded', the status every new check is created with (stage review). The accepted bytes add 'uploaded' to that list only. The production RPC it mirrors (submit_check_review_decision, supabase/migrations/20260918170000_review_void_deposit_path.sql) allows loss_draft_required from any status, and the API writes with a direct guarded UPDATE of check_intake_items: the DB status trigger enforce_check_status_transition is an audit-only no-op since 20260505163706, and trg_auto_create_loss_draft / tr_record_mortgage_handling_billing key on the new status and stage, not on the old status, so no DB change is needed. Exports and imports are unchanged, so no other member has to go first. live_sha256 f11206b4 is the release 2026-10-17 accepted bytes (previous_manifest): main's bytes since eec3cb76b, byte-identical at fd1e059b5, e4daedefe, c92fe457b, 96361081c and 008af40e2, and absent from ops/deployment-guard/lambda-rebuild-plan.json, so the third full-package rebuilds (staging run 39666390516, production run 39669873076) left them live. A read-only production overlay inspect must confirm f11206b4 before any apply. sql_before stays the ledger migration (verified live). No SQL change.",
+  "members": {
+    "workflow-transitions.mjs": {
+      "live_sha256": "f11206b4ac7239b6d75eb62e739d3c83f3dc8c568aa5c6d2be98f8335166c350",
+      "accepted_sha256": "ed39e3c38d6f64f0b3a939ec2f741790406d913565fda6c399abe6ec6378ffe8",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
+    }
+  }
+}

@@ -451,6 +451,83 @@ test('manual Review backup allows mark_ready_for_deposit from endorsements_in_pr
   assert.equal(decided.providerExecution, false);
 });
 
+test('Loss Draft from a newly uploaded check: uploaded → loss_draft_required is allowed', () => {
+  // Owner report 2026-10-24: Review "Loss Draft" on a just-uploaded check with a mortgage
+  // company failed with "Invalid status transition: uploaded → loss_draft_required".
+  const check = { id: CHECK_ID, status: 'uploaded', check_stage: 'review', claim_id: null };
+  const decided = evaluateTransition('route_loss_draft', check);
+  assert.equal(decided.ok, true);
+  assert.equal(decided.nextStatus, 'loss_draft_required');
+  assert.equal(decided.nextStage, 'loss_draft');
+  assert.equal(decided.providerExecution, false);
+  assert.equal(decided.financialAuthorization, false);
+  assert.equal(decided.readyForProviderExecution, false);
+  assert.equal(mapReviewPath('loss_draft_required').action, 'route_loss_draft');
+  // Every from-state that Review can already reach Endorsing from may also go to Loss Draft.
+  for (const from of TRANSITIONS.start_endorsing.fromStatus) {
+    assert.equal(evaluateTransition('route_loss_draft', { ...check, status: from }).ok, true, from);
+  }
+  // Unchanged: an uploaded check still cannot skip to Ready for deposit, and terminal or
+  // partner-mirrored checks stay refused.
+  assert.equal(evaluateTransition('mark_ready_for_deposit', check).error, 'invalid_transition');
+  assert.equal(evaluateTransition('route_loss_draft', { ...check, status: 'deposited' }).error, 'financial_or_provider');
+  assert.equal(evaluateTransition('route_loss_draft', { ...check, status: 'voided' }).error, 'invalid_transition');
+  assert.equal(evaluateTransition('route_loss_draft', {
+    ...check,
+    external_origin: { source_app: 'freedom_crm', source_check_id: 'abc' },
+  }).error, 'partner_linked_transition_denied');
+});
+
+test('Review "Review" decision (needs_review) maps to return_to_review instead of unknown_transition', () => {
+  // The Review console offers { value: "needs_review", label: "Review" }; before 2026-10-24 the
+  // API had no mapping for it and answered unknown_transition from every status.
+  assert.equal(mapReviewPath('needs_review').action, 'return_to_review');
+  const uploaded = { id: CHECK_ID, status: 'uploaded', check_stage: 'review', claim_id: null };
+  const decided = evaluateTransition(mapReviewPath('needs_review').action, uploaded);
+  assert.equal(decided.ok, true);
+  assert.equal(decided.nextStatus, 'needs_review');
+  assert.equal(decided.nextStage, 'review');
+  assert.equal(decided.providerExecution, false);
+  for (const from of ['endorsements_in_progress', 'approved_for_deposit', 'loss_draft_required']) {
+    assert.equal(evaluateTransition('return_to_review', { ...uploaded, status: from }).ok, true, from);
+  }
+  // Deposited checks stay refused.
+  assert.equal(evaluateTransition('return_to_review', { ...uploaded, status: 'deposited' }).error, 'financial_or_provider');
+});
+
+test('Review Loss Draft on an uploaded check with a mortgage company saves loss_draft_required / loss_draft', async () => {
+  const check = { ...createdRow, status: 'uploaded', check_stage: 'review' };
+  const client = mockClient({
+    check,
+    payees: [
+      { id: 'payee-insured', check_id: CHECK_ID, tenant_id: FREEDOM_TENANT, payee_type: 'insured', payee_name: 'Homeowner' },
+      { id: 'payee-mortgage', check_id: CHECK_ID, tenant_id: FREEDOM_TENANT, payee_type: 'mortgage_company', payee_name: 'Example Mortgage Co' },
+    ],
+  });
+  const result = await handleCheckTransition(jwtEvent('/workflow/transition', 'POST', {
+    check_id: CHECK_ID,
+    p_deposit_path: 'loss_draft_required',
+    review_notes: 'Mortgage payee on check',
+  }), depsFor(client));
+  assert.equal(result.ok, true);
+  assert.equal(result.action, 'route_loss_draft');
+  assert.equal(result.fromStatus, 'uploaded');
+  assert.equal(result.toStatus, 'loss_draft_required');
+  assert.equal(result.toStage, 'loss_draft');
+  assert.equal(result.data.new_stage, 'loss_draft');
+  assert.equal(result.providerExecution, false);
+  const update = client.queries.find((q) => /UPDATE public.check_intake_items/.test(q.sql));
+  assert.ok(update);
+  assert.equal(update.params[1], 'loss_draft_required');
+  assert.equal(update.params[2], 'loss_draft');
+  assert.equal(update.params[6], 'uploaded');
+  // The loss_draft_tracking row comes from the DB trigger (trg_auto_create_loss_draft reads the
+  // mortgage_company payee); the API writes no tracking, ledger, deposit or provider rows itself.
+  assert.equal(client.queries.some((q) => /(?:INSERT|UPDATE|DELETE)\s+(?:INTO\s+)?public\.(?:loss_draft_tracking|claim_checks|claim_payments|homeowner_ledger_events|check_deposits)/i.test(q.sql)), false);
+  assert.equal(client.queries.some((q) => /INSERT INTO public.check_audit_log/.test(q.sql)), true);
+  assert.equal(client.queries.filter((q) => q.sql === 'COMMIT').length, 1);
+});
+
 test('review RPC path branch_deposit_required is denied as financial', async () => {
   const result = await handleCheckTransition(jwtEvent('/workflow/transition', 'POST', {
     check_id: CHECK_ID,
