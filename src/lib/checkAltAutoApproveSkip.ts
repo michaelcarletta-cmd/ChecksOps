@@ -3,13 +3,15 @@
  *
  * Auto-approve is always on (2026-10-22). Submit records a short classified
  * code in checkalt_deposits.last_status_payload._auto_approve.skip_reason
- * (aws/functions/api/providers/production/checkalt-submit.mjs). A deposit that
- * Check Alt flagged, or did not rate Low Risk, waits in the Check Alt portal.
- * The setting and ceiling codes are kept for rows submitted before always-on.
+ * (aws/functions/api/providers/production/checkalt-submit.mjs). Since 2026-10-24
+ * only a deposit that Check Alt flagged waits in the Check Alt portal (plus any
+ * automatic approval that did not go through). risk_not_low and the setting and
+ * ceiling codes are kept for rows submitted before those rules were removed.
  */
 const SKIP_REASON_TEXT: Readonly<Record<string, string>> = Object.freeze({
   flagged_by_checkalt: "Check Alt flagged this check",
-  risk_not_low: "Check Alt did not rate it Low Risk",
+  // Rows submitted before 2026-10-24, when auto-approve also required "Low Risk".
+  risk_not_low: "Submitted before 2026-10-24, when auto-approve also required a Low Risk rating",
   not_pending_approval: "Check Alt did not ask for approval when it was submitted",
   missing_reference: "Check Alt did not return a reference number",
   invalid_reference: "Check Alt did not return a usable reference number",
