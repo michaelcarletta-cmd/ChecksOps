@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/contexts/TenantContext";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,12 +10,22 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Switch } from "@/components/ui/switch";
-import { AlertTriangle, Building2, Plus, Trash2, Star, CreditCard, ShieldCheck, MailCheck, Lock, Loader2, Info, ShieldAlert } from "lucide-react";
+import { AlertTriangle, Building2, Plus, Trash2, Star, ShieldCheck, MailCheck, Lock, Loader2, Info, ShieldAlert, Unplug } from "lucide-react";
 import { isValidRoutingNumber, VERIFICATION_LABEL, VERIFICATION_BADGE_CLASS, type VerificationStatus } from "@/lib/banking";
 import { AchAuthorizationForm } from "./AchAuthorizationForm";
 import { BankVerification } from "./BankVerification";
 import { useCurrentTenantMembership } from "@/hooks/useCurrentTenantMembership";
+import {
+  PAYEE_ROW_COLUMNS,
+  PAYEE_STATUS_CLASS,
+  PAYEE_STATUS_LABEL,
+  payeeCanResend,
+  payeeProgress,
+  payeeStatus,
+  unwrapPayeeInvoke,
+  type PayeeRecipientType,
+  type PayeeRow,
+} from "@/lib/payeeSetup";
 
 
 const ACCOUNT_TYPE_LABELS: Record<string, string> = {
@@ -50,26 +59,24 @@ const ACCOUNT_TYPE_COLORS: Record<string, string> = {
 // stay in ACCOUNT_TYPE_LABELS so grandfathered accounts still render correctly.
 const SELECTABLE_ACCOUNT_TYPES = ["subcontractor", "vendor", "sales_rep", "homeowner"] as const;
 
+// A new stakeholder is a payee: the server creates it and emails the payee a
+// setup link (identity + bank, completed by the payee). No bank details here.
 const emptyForm = {
-  nickname: "",
+  recipient_type: "individual" as PayeeRecipientType,
+  name: "",
+  email: "",
   account_type: "subcontractor",
-  custname: "",
-  acct_type: "C",
-  is_primary: false,
-  send_method: "self" as "self" | "email",
-  verification_recipient_email: "",
 };
 
 export function StakeholderAccountSettings() {
-  const { user } = useAuth();
   const { tenant } = useTenant();
   const { toast } = useToast();
   const qc = useQueryClient();
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [capLimitDialog, setCapLimitDialog] = useState<null | "sales_rep" | "subcontractor" | "vendor">(null);
-  const [deleteTarget, setDeleteTarget] = useState<null | { id: string; label: string }>(null);
-  const [disconnectProvider, setDisconnectProvider] = useState(true);
+  const [deleteTarget, setDeleteTarget] = useState<null | { id: string; label: string; payee: PayeeRow | null }>(null);
+  const [requestId, setRequestId] = useState(() => crypto.randomUUID());
 
   const { data: accounts = [], isLoading } = useQuery({
     queryKey: ["stakeholder-accounts", tenant?.id],
@@ -92,6 +99,28 @@ export function StakeholderAccountSettings() {
       );
     },
   });
+
+  // Payee setup state (SQL 113 columns; SELECT under the tenant policy). The
+  // link token column is never read.
+  const { data: payees = [] } = useQuery({
+    queryKey: ["payee-recipients", tenant?.id],
+    enabled: !!tenant?.id,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("external_payment_recipients")
+        .select(PAYEE_ROW_COLUMNS)
+        .eq("tenant_id", tenant!.id)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as unknown as PayeeRow[];
+    },
+  });
+  const payeeByStakeholder = new Map<string, PayeeRow>();
+  for (const p of payees) {
+    if (p.stakeholder_account_id && !payeeByStakeholder.has(p.stakeholder_account_id)) payeeByStakeholder.set(p.stakeholder_account_id, p);
+  }
+  const activeIds = new Set(accounts.map((a: any) => a.id as string));
+  const disconnectedPayees = payees.filter((p) => p.disconnected_at && !(p.stakeholder_account_id && activeIds.has(p.stakeholder_account_id)));
 
   const { data: tenantCaps } = useQuery({
     queryKey: ["tenant-stakeholder-caps", tenant?.id],
@@ -129,117 +158,56 @@ export function StakeholderAccountSettings() {
 
   const addAccount = useMutation({
     mutationFn: async (values: typeof emptyForm) => {
-      const { send_method, verification_recipient_email, ...accountFields } = values;
-      let insertedId: string | null = null;
-      const { data: inserted, error } = await supabase
-        .from("stakeholder_accounts")
-        .insert({
-          ...accountFields,
-          verification_recipient_email: send_method === "email" ? verification_recipient_email.trim() : null,
-          chk_aba: "000000000",
-          chk_acct: "0000000000",
+      const created = await unwrapPayeeInvoke<{ email_sent?: boolean }>(await supabase.functions.invoke("moov-recipient-create", {
+        body: {
           tenant_id: tenant!.id,
-          created_by: user!.id,
-        } as any)
-        .select("id")
-        .single();
-      if (error) throw error;
-      insertedId = inserted!.id;
-
-      try {
-        if (send_method === "email") {
-          const { data: sent, error: sendErr } = await supabase.functions.invoke(
-            "stakeholder-resend-verification",
-            { body: { stakeholder_account_id: inserted!.id, recipient_email: verification_recipient_email.trim() } },
-          );
-          if (sendErr) {
-            let msg = sendErr.message ?? "Failed to send verification link";
-            try { const b = await (sendErr as any).context?.json?.(); if (b?.error) msg = b.error; } catch {}
-            throw new Error(msg);
-          }
-          if ((sent as any)?.error) throw new Error((sent as any).error);
-          return { url: null, emailed: true };
-        }
-
-        return { url: null, emailed: false };
-      } catch (e: any) {
-        if (insertedId) {
-          await supabase
-            .from("stakeholder_accounts")
-            .update({ is_active: false, verification_status: "failed", verification_failure_reason: e.message })
-            .eq("id", insertedId);
-        }
-        throw e;
-      }
+          name: values.name.trim(),
+          email: values.email.trim().toLowerCase(),
+          recipient_type: values.recipient_type,
+          relationship: values.account_type,
+          // A retried click maps to the same payee on the server.
+          request_id: requestId,
+        },
+      }), "Couldn't add the stakeholder");
+      return { emailSent: created.email_sent === true, email: values.email.trim().toLowerCase() };
     },
-    onSuccess: ({ url, emailed }) => {
-      if (emailed) {
-        toast({ title: "Verification link sent", description: "The account holder will receive an email to link their bank account." });
-      } else if (!url) {
-        toast({
-          title: "Account added",
-          description: "Click \u201cVerify with bank login\u201d on the new account to link it.",
-        });
-      } else if (url) {
-        // Open as a normal full-size tab, not a constrained popup — OAuth-based
-        // bank redirects (Wells Fargo, Chase, etc.) can lose session
-        // state inside small fixed-size popup windows, especially on mobile.
-        const win = window.open(url, "_blank", "noopener,noreferrer");
-        if (!win) {
-          toast({
-            title: "Popup blocked",
-            description: "Allow popups, then click 'Verify with bank login' on the new account.",
-            variant: "destructive",
-          });
-        } else {
-          toast({ title: "Bank login opened", description: "Sign in with your bank to verify the account." });
-        }
-      }
+    onSuccess: ({ emailSent, email }) => {
+      toast(emailSent
+        ? { title: "Setup link emailed", description: `${email} will receive a link to verify their identity and bank account.` }
+        : { title: "Stakeholder added; email not sent", description: "The setup email could not be sent. Use Resend link to try again.", variant: "destructive" });
       qc.invalidateQueries({ queryKey: ["stakeholder-accounts"] });
+      qc.invalidateQueries({ queryKey: ["payee-recipients"] });
       setForm(emptyForm);
+      setRequestId(crypto.randomUUID());
       setShowForm(false);
     },
-    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+    onError: (e: Error) => toast({ title: "Couldn't add stakeholder", description: e.message, variant: "destructive" }),
   });
 
-  const resendVerification = useMutation({
-    mutationFn: async (input: string | { id: string; termsOnly?: boolean }) => {
-      const id = typeof input === "string" ? input : input.id;
-      const termsOnly = typeof input === "string" ? false : Boolean(input.termsOnly);
-      const { data, error } = await supabase.functions.invoke("stakeholder-resend-verification", {
-        body: { stakeholder_account_id: id, terms_only: termsOnly },
-      });
-      if (error) {
-        let msg = error.message ?? "Failed to resend verification";
-        try {
-          const body = await (error as any).context?.json?.();
-          if (body?.error) msg = body.error;
-        } catch {}
-        throw new Error(msg);
-      }
-      if ((data as any)?.error) throw new Error((data as any).error);
+  const resendLink = useMutation({
+    mutationFn: async (payee: PayeeRow) => {
+      const out = await unwrapPayeeInvoke<{ email_sent?: boolean }>(await supabase.functions.invoke("moov-recipient-link-resend", {
+        body: { recipient_id: payee.id },
+      }), "Couldn't resend the link");
+      return { emailSent: out.email_sent === true, email: payee.email };
     },
-    onSuccess: () => toast({ title: "Setup link sent", description: "They can accept the provider's terms from the emailed link." }),
-    onError: (e: any) => toast({ title: "Couldn't resend", description: e.message, variant: "destructive" }),
+    onSuccess: ({ emailSent, email }) => {
+      toast(emailSent
+        ? { title: "Setup link emailed", description: `A new link was sent${email ? ` to ${email}` : ""}. Earlier links no longer work.` }
+        : { title: "Email not sent", description: "A new link was created but the email could not be sent. Try again shortly.", variant: "destructive" });
+      qc.invalidateQueries({ queryKey: ["payee-recipients"] });
+    },
+    onError: (e: Error) => toast({ title: "Couldn't resend", description: e.message, variant: "destructive" }),
   });
 
   const deleteAccount = useMutation({
-    mutationFn: async ({ id, disconnectProvider }: { id: string; disconnectProvider: boolean }) => {
-      // Provider accounts can never be deleted — only disconnected. Do it first
-      // so verification (KYC/KYB) billing stops on the abandoned account.
-      if (disconnectProvider) {
-        const { data, error } = await supabase.functions.invoke("moov-recipient-disconnect", {
-          body: { stakeholder_account_id: id },
-        });
-        if (error) {
-          let msg = error.message ?? "Couldn't disconnect the payment account";
-          try {
-            const body = await (error as any).context?.json?.();
-            if (body?.error) msg = body.error;
-          } catch { /* keep default */ }
-          throw new Error(msg);
-        }
-        if ((data as any)?.error) throw new Error((data as any).error);
+    mutationFn: async ({ id, payee }: { id: string; payee: PayeeRow | null }) => {
+      if (payee) {
+        // A payee is disconnected on the server: link closed, stakeholder
+        // inactive, bank methods disconnected, then the provider account.
+        await unwrapPayeeInvoke(await supabase.functions.invoke("moov-recipient-disconnect", {
+          body: { recipient_id: payee.id },
+        }), "Couldn't disconnect the payee");
       }
 
       const { error: linkError } = await supabase
@@ -248,24 +216,25 @@ export function StakeholderAccountSettings() {
         .eq("stakeholder_account_id", id);
       if (linkError) throw linkError;
 
-      const { error } = await supabase
-        .from("stakeholder_accounts")
-        .update({ is_active: false, is_primary: false })
-        .eq("id", id);
-      if (error) throw error;
+      if (!payee) {
+        const { error } = await supabase
+          .from("stakeholder_accounts")
+          .update({ is_active: false, is_primary: false })
+          .eq("id", id);
+        if (error) throw error;
+      }
     },
-    onSuccess: () => {
+    onSuccess: (_out, { payee }) => {
       setDeleteTarget(null);
-      toast({ title: "Account removed" });
+      toast({ title: payee ? "Payee disconnected" : "Account removed" });
       qc.invalidateQueries({ queryKey: ["stakeholder-accounts"] });
+      qc.invalidateQueries({ queryKey: ["payee-recipients"] });
       qc.invalidateQueries({ queryKey: ["tenant-primary-accounts"] });
       qc.invalidateQueries({ queryKey: ["check-stakeholders"] });
       qc.invalidateQueries({ queryKey: ["disbursement-accounts"] });
     },
-    onError: (e: any) => toast({ title: "Couldn't remove account", description: e.message, variant: "destructive" }),
+    onError: (e: Error) => toast({ title: "Couldn't remove account", description: e.message, variant: "destructive" }),
   });
-
-
 
   if (isLoading) return <div className="text-sm text-muted-foreground p-4">Loading accounts...</div>;
 
@@ -303,24 +272,44 @@ export function StakeholderAccountSettings() {
               }}
             >
               <Plus className="h-3 w-3 mr-1" />
-              Add account
+              Add stakeholder
             </Button>
 
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
 
-          {/* Add account form */}
+          {/* Add stakeholder form: creates a payee and emails the setup link */}
           {showForm && (
             <div className="rounded-md border bg-muted/30 p-3 space-y-3">
-              <p className="text-xs font-medium">New stakeholder account</p>
+              <p className="text-xs font-medium">New stakeholder</p>
+              <div className="flex gap-1" role="radiogroup" aria-label="Stakeholder is">
+                {(["individual", "business"] as const).map((t) => (
+                  <Button
+                    key={t}
+                    type="button"
+                    size="sm"
+                    variant={form.recipient_type === t ? "default" : "outline"}
+                    className="h-7 text-xs"
+                    role="radio"
+                    aria-checked={form.recipient_type === t}
+                    onClick={() => setForm({ ...form, recipient_type: t })}
+                  >
+                    {t === "individual" ? "Individual" : "Business"}
+                  </Button>
+                ))}
+              </div>
               <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-1">
-                  <Label className="text-xs">Nickname</Label>
-                  <Input className="h-8 text-sm" placeholder="e.g. Operating account" value={form.nickname} onChange={(e) => setForm({ ...form, nickname: e.target.value })} />
+                <div className="space-y-1 col-span-2">
+                  <Label className="text-xs">{form.recipient_type === "business" ? "Business name" : "Full name"}</Label>
+                  <Input className="h-8 text-sm" placeholder={form.recipient_type === "business" ? "ABC Roofing LLC" : "Jane Smith"} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-xs">Type</Label>
+                  <Label className="text-xs">Email</Label>
+                  <Input className="h-8 text-sm" type="email" placeholder="name@example.com" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Relationship</Label>
                   <Select
                     value={form.account_type}
                     onValueChange={(v) => {
@@ -341,63 +330,19 @@ export function StakeholderAccountSettings() {
                     </SelectContent>
                   </Select>
                 </div>
-
-                <div className="space-y-1 col-span-2">
-                  <Label className="text-xs">Account holder name</Label>
-                  <Input className="h-8 text-sm" placeholder="Full legal name on account" value={form.custname} onChange={(e) => setForm({ ...form, custname: e.target.value })} />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Account type</Label>
-                  <Select value={form.acct_type} onValueChange={(v) => setForm({ ...form, acct_type: v })}>
-                    <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="C" className="text-xs">Checking</SelectItem>
-                      <SelectItem value="S" className="text-xs">Savings</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="flex items-center gap-2 pt-4 col-span-2">
-                  <Switch checked={form.is_primary} onCheckedChange={(v) => setForm({ ...form, is_primary: v })} />
-                  <Label className="text-xs">Set as primary account</Label>
-                </div>
               </div>
 
-              {(!form.nickname || !form.custname) && (
+              {(form.name.trim().length < 2 || !form.email.trim()) && (
                 <div className="flex items-center gap-1 text-xs text-amber-600">
                   <AlertTriangle className="h-3 w-3" />
-                  Nickname and account holder name are required
+                  Name and email are required
                 </div>
               )}
 
-              <div className="flex items-center gap-2 pt-1">
-                <Switch
-                  checked={form.send_method === "email"}
-                  onCheckedChange={(v) => setForm({ ...form, send_method: v ? "email" : "self" })}
-                />
-                <Label className="text-xs">Send a link for the account holder to add their own bank account</Label>
-              </div>
-
-              {form.send_method === "email" ? (
-                <div className="space-y-1">
-                  <Label className="text-xs">Account holder's email</Label>
-                  <Input
-                    className="h-8 text-sm"
-                    type="email"
-                    placeholder="name@example.com"
-                    value={form.verification_recipient_email}
-                    onChange={(e) => setForm({ ...form, verification_recipient_email: e.target.value })}
-                  />
-                  <p className="text-[11px] text-muted-foreground">
-                    They'll get an emailed link to securely sign in to their bank and link
-                    their own account — no bank details are entered here.
-                  </p>
-                </div>
-              ) : (
-                <p className="text-[11px] text-muted-foreground">
-                  Routing & account numbers are captured securely after you sign in to your bank.
-                  Continue to launch the bank login.
-                </p>
-              )}
+              <p className="text-[11px] text-muted-foreground">
+                They'll be emailed a secure link to verify their {form.recipient_type === "business" ? "business, its owners" : "identity"} and
+                add their bank account. No bank details are entered here. They can be paid once setup is verified.
+              </p>
 
               <div className="flex gap-2">
                 <Button
@@ -409,20 +354,12 @@ export function StakeholderAccountSettings() {
                     }
                     addAccount.mutate(form);
                   }}
-
-                  disabled={
-                    addAccount.isPending ||
-                    !form.nickname ||
-                    !form.custname ||
-                    (form.send_method === "email" && !form.verification_recipient_email.trim())
-                  }
+                  disabled={addAccount.isPending || form.name.trim().length < 2 || !form.email.trim()}
                 >
                   {addAccount.isPending ? (
-                    <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> {form.send_method === "email" ? "Sending link..." : "Opening bank login..."}</>
-                  ) : form.send_method === "email" ? (
-                    "Send link"
+                    <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Sending link...</>
                   ) : (
-                    "Continue to bank login"
+                    "Add & email setup link"
                   )}
                 </Button>
                 <Button size="sm" variant="ghost" onClick={() => { setShowForm(false); setForm(emptyForm); }}>Cancel</Button>
@@ -446,6 +383,8 @@ export function StakeholderAccountSettings() {
 
           {accounts.map((acct: any) => {
             const vStatus = (acct.verification_status ?? "unverified") as VerificationStatus;
+            const payee = payeeByStakeholder.get(acct.id) ?? null;
+            const pStatus = payee ? payeeStatus(payee) : null;
             return (
               <React.Fragment key={acct.id}>
                 <div className="flex items-center justify-between gap-2 p-2.5 rounded-md border bg-background">
@@ -457,6 +396,13 @@ export function StakeholderAccountSettings() {
                       <Badge variant="outline" className={`text-[10px] px-1.5 ${ACCOUNT_TYPE_COLORS[acct.account_type]}`}>
                         {ACCOUNT_TYPE_LABELS[acct.account_type]}
                       </Badge>
+                      {payee && pStatus ? (
+                        <Badge variant="outline" className={`text-[10px] px-1.5 ${PAYEE_STATUS_CLASS[pStatus]}`} title={payeeProgress(payee)}>
+                          {pStatus === "verified" && <ShieldCheck className="h-2.5 w-2.5 mr-0.5 inline" />}
+                          {pStatus === "link_sent" && <MailCheck className="h-2.5 w-2.5 mr-0.5 inline" />}
+                          {PAYEE_STATUS_LABEL[pStatus]}
+                        </Badge>
+                      ) : (
                       <Badge variant="outline" className={`text-[10px] px-1.5 ${VERIFICATION_BADGE_CLASS[vStatus]}`} title={VERIFICATION_LABEL[vStatus]}>
                         {vStatus === "verified" || vStatus === "admin_override" ? (
                           <><ShieldCheck className="h-2.5 w-2.5 mr-0.5 inline" /> Verified</>
@@ -470,49 +416,61 @@ export function StakeholderAccountSettings() {
                           "Not verified"
                         )}
                       </Badge>
+                      )}
                     </div>
+                    {payee ? (
+                      <p className="text-xs text-muted-foreground">
+                        {payee.recipient_type === "business" ? "Business" : "Individual"}
+                        {payee.email ? ` · ${payee.email}` : ""}
+                        {" · "}
+                        {payee.provider_last_four
+                          ? <span className="font-mono">{payee.provider_bank_name ? `${payee.provider_bank_name} ` : ""}••••{payee.provider_last_four}</span>
+                          : payeeProgress(payee)}
+                      </p>
+                    ) : (
                     <p className="text-xs text-muted-foreground font-mono">
                       {acct.nickname ? `${acct.nickname} · ` : ""}{acct.chk_acct ? `••••${acct.chk_acct.slice(-4)}` : "Account pending"} · {acct.acct_type === "C" ? "Checking" : "Savings"}
                     </p>
+                    )}
                   </div>
                 </div>
                 <div className="flex items-center gap-1">
-                  {acct.verification_recipient_email && ["unverified", "pending", "failed"].includes(vStatus) && (
+                  {payee && payeeCanResend(payee) && (
                     <Button
                       size="sm"
                       variant="ghost"
                       className="h-7 text-xs"
-                      onClick={() => resendVerification.mutate({ id: acct.id })}
-                      disabled={resendVerification.isPending}
+                      onClick={() => resendLink.mutate(payee)}
+                      disabled={resendLink.isPending}
+                      title="Email a new setup link (earlier links stop working)"
                     >
-                      <MailCheck className="h-3 w-3 mr-1" /> Resend
+                      <MailCheck className="h-3 w-3 mr-1" /> Resend link
                     </Button>
                   )}
-                  {["verified", "admin_override"].includes(vStatus) && (
+                  {payee && (
                     <Button
                       size="sm"
                       variant="ghost"
-                      className="h-7 text-xs"
-                      onClick={() => resendVerification.mutate({ id: acct.id, termsOnly: true })}
-                      disabled={resendVerification.isPending}
-                      title="Send a link so they can accept the payment provider's terms of service"
+                      className="h-7 text-xs text-muted-foreground hover:text-destructive"
+                      onClick={() => setDeleteTarget({ id: acct.id, label: acct.custname || acct.nickname || "this stakeholder", payee })}
+                      title="Stop paying this payee and close their setup link"
                     >
-                      <MailCheck className="h-3 w-3 mr-1" /> Send terms link
+                      <Unplug className="h-3 w-3 mr-1" /> Disconnect
                     </Button>
                   )}
+                  {!payee && (
                   <Button
                     variant="ghost"
                     size="icon"
                     className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                    onClick={() => {
-                      setDisconnectProvider(true);
-                      setDeleteTarget({ id: acct.id, label: acct.custname || acct.nickname || "this stakeholder" });
-                    }}
+                    onClick={() => setDeleteTarget({ id: acct.id, label: acct.custname || acct.nickname || "this stakeholder", payee: null })}
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                   </Button>
+                  )}
                 </div>
               </div>
+              {!payee && (
               <BankVerification
                 accountId={acct.id}
                 accountNickname={acct.nickname}
@@ -520,6 +478,7 @@ export function StakeholderAccountSettings() {
                 verificationStatus={acct.verification_status ?? "unverified"}
                 verificationSource={(acct as any).verification_source ?? null}
               />
+              )}
               {acct.is_primary && (
                 <AchAuthorizationForm
                   stakeholderAccountId={acct.id}
@@ -531,6 +490,18 @@ export function StakeholderAccountSettings() {
             </React.Fragment>
           );
         })}
+
+          {disconnectedPayees.length > 0 && (
+            <div className="space-y-1 pt-2">
+              <p className="text-[11px] font-medium text-muted-foreground">Disconnected payees</p>
+              {disconnectedPayees.map((p) => (
+                <div key={p.id} className="flex items-center justify-between gap-2 p-2 rounded-md border border-dashed text-xs text-muted-foreground">
+                  <span className="truncate">{p.display_name}{p.email ? ` · ${p.email}` : ""}</span>
+                  <Badge variant="outline" className={`text-[10px] px-1.5 ${PAYEE_STATUS_CLASS.disconnected}`}>{PAYEE_STATUS_LABEL.disconnected}</Badge>
+                </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -558,43 +529,27 @@ export function StakeholderAccountSettings() {
       <Dialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle className="text-base">Remove {deleteTarget?.label}?</DialogTitle>
+            <DialogTitle className="text-base">{deleteTarget?.payee ? "Disconnect" : "Remove"} {deleteTarget?.label}?</DialogTitle>
             <DialogDescription className="text-xs">
-              They will be unlinked from all checks and hidden from payouts.
+              {deleteTarget?.payee
+                ? "They will be unlinked from all checks and can no longer be paid. Their setup link stops working and their payment account is disconnected. To pay them again, add them as a new stakeholder."
+                : "They will be unlinked from all checks and hidden from payouts."}
             </DialogDescription>
           </DialogHeader>
-          <div className="flex items-start gap-3 rounded-md border border-border/60 bg-muted/30 p-3">
-            <Switch
-              id="disconnect-provider"
-              checked={disconnectProvider}
-              onCheckedChange={setDisconnectProvider}
-            />
-            <div className="space-y-1">
-              <Label htmlFor="disconnect-provider" className="text-xs">
-                Also disconnect their payment account
-              </Label>
-              <p className="text-[11px] text-muted-foreground">
-                Payment accounts cannot be deleted at the provider — only disconnected. Leaving one
-                connected can keep incurring identity-verification fees.
-              </p>
-            </div>
-          </div>
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="outline" size="sm" onClick={() => setDeleteTarget(null)}>Cancel</Button>
             <Button
               variant="destructive"
               size="sm"
               disabled={deleteAccount.isPending}
-              onClick={() => deleteTarget && deleteAccount.mutate({ id: deleteTarget.id, disconnectProvider })}
+              onClick={() => deleteTarget && deleteAccount.mutate({ id: deleteTarget.id, payee: deleteTarget.payee })}
             >
               {deleteAccount.isPending && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
-              Remove
+              {deleteTarget?.payee ? "Disconnect" : "Remove"}
             </Button>
           </div>
         </DialogContent>
       </Dialog>
-
-
 
     </div>
   );
