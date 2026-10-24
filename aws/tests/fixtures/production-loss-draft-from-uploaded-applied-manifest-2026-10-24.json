@@ -1,0 +1,15 @@
+{
+  "workstream_id": "production-loss-draft-from-uploaded-applied",
+  "authorization": "Record only (2026-10-24): the bytes below are live. Nothing is planned or authorized by this manifest; any later change to these members needs its own manifest, staging acceptance and owner approval.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Loss Draft from an uploaded check and the Review console's Review decision applied 2026-10-24 through the guarded overlay path on main f588b69ec (#1217 merged 455822ad on the owner's \"Merge 1217 and 1218 when green\"). workflow-transitions.mjs: staging inspect runs on main f588b69ec (live CodeSha256 Cpg2U1tC2IqRH839Zu0vyFoNOzSp8MIqEJKPItvF9vA=, RevisionId f5dbb1d1-a0dd-4f45-8a4c-31cb2a2b4613) run 40088973289 (f11206b4 live); production preflight inspect runs on main f588b69ec (live CodeSha256 GVRTxsbLtzintBfCumTDpgEiVFSsLktsO2F1OCsMZBM=, RevisionId 1130efff-65ca-4bad-a1fd-a74c96a4bd65; READY) run 40089167308 (f11206b4 live); staging apply run 40089449374 (f11206b4 -> ed39e3c3); production apply run 40089521986 (owner-approved \"DEPLOY workflow-transitions.mjs TO PRODUCTION\", staging acceptance run 40089449374); production post-apply inspects (ALREADY_ACCEPTED, live CodeSha256 flV8jlABIVQuWzqaToBuS8D+CdWMeyqc8W1WfBlhX3Q=, RevisionId f01c4cd6-d133-4515-8980-c158e7143b68; /health and /db-health 200) run 40089953478 (ed39e3c3 live). This row records the applied bytes as live_sha256 and accepted_sha256 and chains to the Loss Draft manifest that applied them (previous_manifest), which keeps the pre-apply bytes f11206b4 as its live_sha256.",
+  "members": {
+    "workflow-transitions.mjs": {
+      "live_sha256": "ed39e3c38d6f64f0b3a939ec2f741790406d913565fda6c399abe6ec6378ffe8",
+      "accepted_sha256": "ed39e3c38d6f64f0b3a939ec2f741790406d913565fda6c399abe6ec6378ffe8",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-loss-draft-from-uploaded-manifest-2026-10-24.json"
+    }
+  }
+}
