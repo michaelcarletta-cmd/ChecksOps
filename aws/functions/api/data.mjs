@@ -567,7 +567,126 @@ export const splitEmbedFilters = (filters = []) => {
   return { parent, embed };
 };
 
-export const applyEmbedFilters = (parentTable, embedFilters = [], params = []) => {
+/**
+ * Credential columns the generic data route never returns, per table: link and
+ * session tokens, third-party passwords and API keys, webhook secrets, encrypted
+ * secrets, and the tenant's full EIN (the audited moov-ein-reveal route is its
+ * only reader). RLS still decides the rows; this decides the columns.
+ *
+ * - Named in a select (top level or embedded), a filter (eq/in/like/or/not and
+ *   embedded `table.column` filters) or the order: 403 secret_column_denied, so
+ *   no value can be read or tested for (no token oracle).
+ * - A `*` select (top level or embedded) keeps working: the columns are removed
+ *   from every row before it leaves the database client.
+ *
+ * Columns a screen shows on purpose stay readable (signature_signers.access_token,
+ * homeowner_ledger_tokens.token, moov_invoices.public_token: the "copy link"
+ * buttons for links the tenant created).
+ */
+export const SECRET_COLUMNS = Object.freeze({
+  check_endorsements: Object.freeze(['token']),
+  check_payees: Object.freeze(['endorsement_token']),
+  check_payment_directions: Object.freeze(['secure_token']),
+  checkalt_config: Object.freeze(['webhook_secret']),
+  claims: Object.freeze(['mortgage_portal_password']),
+  company_branding: Object.freeze(['signnow_make_webhook_url']),
+  email_unsubscribe_tokens: Object.freeze(['token']),
+  external_payment_recipients: Object.freeze(['secure_token']),
+  homeowner_bank_link_tokens: Object.freeze(['token']),
+  homeowner_intro_requests: Object.freeze(['access_token']),
+  mortgage_companies: Object.freeze(['portal_password']),
+  profiles: Object.freeze(['jobnimbus_api_key']),
+  signature_signers: Object.freeze(['token_hash']),
+  stakeholder_accounts: Object.freeze(['plaid_access_token', 'verification_token']),
+  tenant_billing_accounts: Object.freeze(['account_number_encrypted']),
+  tenant_openai_credentials: Object.freeze(['encrypted_key']),
+  tenants: Object.freeze(['actum_password', 'actum_test_password', 'actum_webhook_secret', 'ein']),
+  user_sessions: Object.freeze(['session_token']),
+});
+
+/** The secret columns of every named relation (requested, resolved or embedded name). */
+export const secretColumnsFor = (...tables) => {
+  const out = new Set();
+  for (const table of tables) {
+    const name = requestedTableName(table);
+    if (!Object.prototype.hasOwnProperty.call(SECRET_COLUMNS, name)) continue;
+    for (const column of SECRET_COLUMNS[name]) out.add(column);
+  }
+  return out;
+};
+
+const OR_TERM_COLUMN_RE = /([a-zA-Z_][a-zA-Z0-9_]*)\.(?:eq|neq|gt|gte|lt|lte|like|ilike|is|in)\./g;
+
+const secretDenied = (table, column) => ({
+  denied: true,
+  error: 'secret_column_denied',
+  statusCode: 403,
+  message: 'Credential columns are not available via generic data routes',
+  table: requestedTableName(table) || null,
+  column,
+});
+
+const embedSecretColumns = (embed) => secretColumnsFor(
+  embed?.table,
+  embedRelationTable(embed?.table, embed?.columns),
+);
+
+const findSecretEmbedColumn = (embeds = []) => {
+  for (const embed of embeds || []) {
+    const secret = embedSecretColumns(embed);
+    const hit = (embed?.columns || []).find((column) => secret.has(String(column)));
+    if (hit) return { table: embed.table, column: hit };
+    const nested = findSecretEmbedColumn(embed?.embeds || []);
+    if (nested) return nested;
+  }
+  return null;
+};
+
+/**
+ * Refuse a query that names a secret column anywhere: select list, embedded
+ * select, filter (including or=(...) terms and embedded `table.column`
+ * filters) or order. `*` is not refused; runSelect strips those columns.
+ */
+export const denySecretColumnQuery = (table, parsed = {}, filters = [], order = null) => {
+  const name = requestedTableName(table);
+  const top = secretColumnsFor(name, resolvePublicTable(name));
+  const column = (parsed?.columns || []).find((col) => top.has(String(col)));
+  if (column) return secretDenied(name, column);
+  const embedHit = findSecretEmbedColumn(parsed?.embeds || []);
+  if (embedHit) return secretDenied(embedHit.table, embedHit.column);
+  for (const filter of filters || []) {
+    const col = String(filter?.column || filter?.col || '');
+    const qualified = col.match(QUALIFIED_COLUMN);
+    if (qualified) {
+      if (secretColumnsFor(qualified[1]).has(qualified[2])) return secretDenied(qualified[1], qualified[2]);
+    } else if (top.has(col)) {
+      return secretDenied(name, col);
+    }
+    if (String(filter?.op || 'eq') === 'or') {
+      for (const match of String(filter?.value ?? '').matchAll(OR_TERM_COLUMN_RE)) {
+        if (top.has(match[1])) return secretDenied(name, match[1]);
+      }
+    }
+  }
+  const orderColumn = String(order?.column || '');
+  if (orderColumn && top.has(orderColumn)) return secretDenied(name, orderColumn);
+  return { denied: false };
+};
+
+/** Remove the secret columns of `tables` from each row (a `*` select read them). */
+export const stripSecretColumns = (rows, ...tables) => {
+  const secret = secretColumnsFor(...tables);
+  if (!secret.size || !Array.isArray(rows)) return rows;
+  return rows.map((row) => {
+    if (!row || typeof row !== 'object') return row;
+    if (![...secret].some((column) => Object.prototype.hasOwnProperty.call(row, column))) return row;
+    const out = { ...row };
+    for (const column of secret) delete out[column];
+    return out;
+  });
+};
+
+export const applyEmbedFilters =(parentTable, embedFilters = [], params = []) => {
   const clauses = [];
   const parent = ident(parentTable, 'table');
   for (const filter of embedFilters) {
@@ -847,10 +966,10 @@ const attachEmbeds = async (client, rows, parentTable, embeds) => {
       const embedCols = nestedNeeded.has('*')
         ? '*'
         : [...nestedNeeded].map((c) => ident(c, 'column')).join(', ');
-      const related = (await client.query(
+      const related = stripSecretColumns((await client.query(
         `SELECT ${embedCols} FROM public.${relTable} WHERE id = ANY($1::uuid[])`,
         [ids],
-      )).rows;
+      )).rows, embed.table, relTable);
       const nested = maskCheckAltRows(relTable, await attachEmbeds(client, related, relTable, embed.embeds || []), { dropAccountNumber });
       const byId = new Map(nested.map((row) => [String(row.id), row]));
       const next = [];
@@ -871,10 +990,10 @@ const attachEmbeds = async (client, rows, parentTable, embeds) => {
       const embedCols = nestedNeeded.has('*')
         ? '*'
         : [...nestedNeeded].map((c) => ident(c, 'column')).join(', ');
-      const related = (await client.query(
+      const related = stripSecretColumns((await client.query(
         `SELECT ${embedCols} FROM public.${relTable} WHERE ${ident(childKey, 'column')} = ANY($1::uuid[])`,
         [parentIds],
-      )).rows;
+      )).rows, embed.table, relTable);
       const nested = maskCheckAltRows(relTable, await attachEmbeds(client, related, relTable, embed.embeds || []), { dropAccountNumber });
       const byParent = new Map();
       for (const item of nested) {
@@ -931,8 +1050,8 @@ const runSelect = async (client, body) => {
     return { rows: [], count };
   }
   const sql = `SELECT ${cols} FROM public.${table} ${where} ${order} LIMIT ${limit} OFFSET ${offset}`;
-  const rows = (await client.query(sql, params)).rows;
-  const attached = maskCheckAltRows(table, await attachEmbeds(client, rows, table, parsed.embeds), { dropAccountNumber });
+  const rows = stripSecretColumns((await client.query(sql, params)).rows, requested, table);
+  const attached =maskCheckAltRows(table, await attachEmbeds(client, rows, table, parsed.embeds), { dropAccountNumber });
   return { rows: attached, count };
 };
 
@@ -1031,6 +1150,17 @@ export const handleDataQuery = async (event, deps) => {
       error: secretDeny.error,
       message: secretDeny.message,
       table: secretDeny.table,
+      spoofFieldsIgnored: spoof,
+    };
+  }
+  const columnDeny = denySecretColumnQuery(rawTable, parsedSelect, body.filters, body.order);
+  if (columnDeny.denied) {
+    return {
+      ok: false,
+      statusCode: 403,
+      error: columnDeny.error,
+      message: columnDeny.message,
+      table: columnDeny.table,
       spoofFieldsIgnored: spoof,
     };
   }

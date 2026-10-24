@@ -137,6 +137,8 @@ test('KYC fields are submitted, not merely read', () => {
   assert.match(ui, /birth_date/);
   assert.match(ui, /ssn/);
   assert.match(ui, /address_line1/);
+  // The SSN is read from the submitted form, never held in React state.
+  assert.match(ui, /ssn: readDigits\(form, "ssn", 9\)/);
   assert.doesNotMatch(kycSrc, /ssn: ssn/);
 });
 
@@ -270,17 +272,21 @@ test('money path is not enabled by this recipient ToS fix', () => {
   const bankAdd = readFileSync(new URL('../../supabase/functions/moov-recipient-bank-add/index.ts', import.meta.url), 'utf8');
   const ui = readFileSync(new URL('../../src/pages/RecipientPaymentSetup.tsx', import.meta.url), 'utf8');
   const session = readFileSync(new URL('../../supabase/functions/moov-recipient-session/index.ts', import.meta.url), 'utf8');
+  const payeeLib = readFileSync(new URL('../../src/lib/payeeSetup.ts', import.meta.url), 'utf8');
   assert.doesNotMatch(policy, /transfers\.write/);
   assert.doesNotMatch(tosAccept, /send-funds/);
   assert.doesNotMatch(tosAccept, /accepted !== true/);
   assert.match(tosAccept, /tos_acceptance_forged|rejectForgedRecipientTos/);
   assert.match(tosAccept, /termsOfService: \{ token: dropToken \}/);
   assert.match(bankAdd, /tos_required/);
-  assert.match(ui, /moov-terms-of-service/);
-  assert.match(ui, /onboarding\?\.complete === true/);
-  assert.match(ui, /oauthToken = oauthToken/);
-  assert.match(ui, /el\.token = oauthToken/);
-  assert.match(ui, /el\.accountID = accountId/);
+  // The payee page accepts terms through the server (accepted: true); no
+  // browser-side provider terms component, provider script or access token.
+  assert.doesNotMatch(ui, /moov-terms-of-service/);
+  assert.doesNotMatch(ui, /js\.moov\.io/);
+  assert.doesNotMatch(ui, /oauthToken/);
+  assert.match(ui, /accepted: true/);
+  assert.match(ui, /payeeStepFromSession/);
+  assert.match(payeeLib, /o\.complete === true\) return "done"/);
   assert.doesNotMatch(ui, /account_id: session/);
   assert.match(session, /scopes\.dropTos\(accountId\)/);
   assert.match(session, /bindMoovEnvironment/);
