@@ -314,6 +314,7 @@ const makeMoov = () => {
     }
     if (rest === '' && method === 'DELETE') { a.disconnected = true; return json(204); }
     if (rest === '/capabilities' && method === 'GET') {
+      if (a.capsFail) return json(403, { error: 'forbidden' });
       return json(200, [{ capability: 'transfers', status: a.capStatus, requirements: { currentlyDue: a.tos ? a.due : [...a.due, 'account.tos'] } }]);
     }
     if (rest === '/capabilities' && method === 'POST') return json(200, {});
@@ -734,6 +735,82 @@ test('Moov rejection of identity is reported by field name only (no values, no v
     noSecretsIn('response', JSON.stringify(r));
     noSecretsIn('logs', lines.join('\n'));
     assert.equal(h.db.state.recipients[0].identity_submitted_at, undefined);
+  });
+});
+
+test('a payee left unverified after identity logs which Moov check is open: codes and field names only', async () => {
+  await withEnv(STAGING, async () => {
+    const h = makeHarness();
+    const notVerified = (lines) => lines.map((l) => { try { return JSON.parse(l); } catch { return null; } })
+      .filter((e) => e?.event === 'payee_not_verified');
+    const lines = [];
+    const orig = { log: console.log, error: console.error, warn: console.warn, info: console.info };
+    for (const k of Object.keys(orig)) console[k] = (...args) => lines.push(args.map(String).join(' '));
+    try {
+      const created = await h.call('moov-recipient-create', { tenant_id: TENANT, name: 'Hannah Owner', email: 'hannah@example.com' }, USERS.owner);
+      const token = h.tokenFromEmail();
+      const acct = h.moov.accounts.get(created.recipient.provider_account_id);
+      assert.equal((await h.call('moov-recipient-session', { token })).ok, true);
+      await h.call('moov-recipient-tos-accept', { token, accepted: true });
+      assert.equal(notVerified(lines).length, 0, 'nothing logged before identity is submitted');
+
+      await h.call('moov-recipient-kyc-update', { token, ...INDIVIDUAL });
+      acct.due = [];
+      await h.call('moov-recipient-bank-add', { token, ...BANK });
+      await h.call('moov-recipient-bank-verify', { token, action: 'initiate' });
+      await h.call('moov-recipient-bank-verify', { token, action: 'confirm', code: '1234' });
+
+      // Transfers enabled and the bank verified, but identity still unverified.
+      acct.capStatus = 'enabled';
+      acct.verification = 'unverified';
+      lines.length = 0;
+      const stuck = await h.call('moov-recipient-session', { token });
+      assert.equal(stuck.onboarding.complete, false);
+      const [{ service, ...entry }] = notVerified(lines);
+      assert.equal(service, 'checksops-api');
+      assert.deepEqual(entry, {
+        event: 'payee_not_verified',
+        tenant: TENANT,
+        environment: 'sandbox',
+        stored_status: h.db.state.recipients[0].onboarding_status,
+        verdict: null,
+        capabilities_read: 'ok',
+        banks_read: 'ok',
+        transfers_status: 'enabled',
+        identity_verification: 'unverified',
+        terms_confirmed: true,
+        bank_verified: true,
+        steps: { terms: true, identity: true, bank: true },
+        outstanding: [],
+      });
+
+      // A failed capabilities read is named by its code instead of passing silently.
+      acct.capsFail = true;
+      acct.due = ['individual.address'];
+      lines.length = 0;
+      await h.call('moov-recipient-session', { token });
+      const [failedRead] = notVerified(lines);
+      assert.equal(failedRead.capabilities_read, 'moov_auth_failed');
+      assert.deepEqual(failedRead.outstanding, []);
+
+      // Requirement field names are listed once the read works.
+      acct.capsFail = false;
+      lines.length = 0;
+      await h.call('moov-recipient-session', { token });
+      assert.deepEqual(notVerified(lines)[0].outstanding, ['individual.address']);
+
+      // Verified: no further line.
+      acct.due = [];
+      acct.verification = 'verified';
+      lines.length = 0;
+      const done = await h.call('moov-recipient-session', { token });
+      assert.equal(done.onboarding.complete, true, JSON.stringify(done));
+      await h.call('moov-recipient-session', { token });
+      assert.equal(notVerified(lines).length, 0);
+      noSecretsIn('logs', lines.join('\n'), [token, acct.id, acct.banks[0].bankAccountID, 'Hannah', 'hannah@example.com']);
+    } finally {
+      Object.assign(console, orig);
+    }
   });
 });
 

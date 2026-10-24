@@ -378,7 +378,7 @@
     },
     "providers/payees/moov.mjs": {
       "operation": "add",
-      "accepted_sha256": "008dc43d1e7112889c85a33022a49c9f32b64e5548f6ba370efdc64a75be7d2f",
+      "accepted_sha256": "975fcdc13577eb145afe866e9fcf6d6ba1b232f2f426313de02dda4cd3a4c7b6",
       "expected_live_sha256": null,
       "sql_before": null,
       "manifest": "aws/tests/fixtures/production-moov-payees-manifest-2026-10-23.json"
@@ -392,7 +392,7 @@
     },
     "providers/payees/handlers.mjs": {
       "operation": "add",
-      "accepted_sha256": "17996065d6e10bf03c8338ef1c5dda86c11143ad71314efcc1d92ae134e12302",
+      "accepted_sha256": "8b44e120a8d9b611c1892a7b4e7e9dce2fb5950287d1ccba50c8215b2357992d",
       "expected_live_sha256": null,
       "sql_before": null,
       "manifest": "aws/tests/fixtures/production-moov-payees-manifest-2026-10-23.json"

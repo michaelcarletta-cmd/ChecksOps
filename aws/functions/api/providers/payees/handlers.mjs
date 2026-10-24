@@ -513,8 +513,40 @@ async function syncPayee(ctx, live = null) {
       }
     }
   }
+  if (!rec.verified_at && rec.identity_submitted_at) logNotVerified(rec, live, verdict);
   ctx.rec = rec;
   return { live, verdict, rec, applied: applied && !applied.error ? applied.status : null };
+}
+
+const REQUIREMENT_NAME = /^[A-Za-z0-9_.-]{1,60}$/;
+const logCode = (value) => (/^[a-z0-9_-]{1,40}$/.test(String(value ?? '')) ? String(value) : null);
+
+/**
+ * Once the payee has submitted identity, every sync that does not end verified
+ * logs which of Moov's checks is still open, so a payee stuck "under review"
+ * is diagnosable from the log. Codes, flags and requirement field names only:
+ * never the account or bank id, the name, the link or a submitted value.
+ */
+function logNotVerified(rec, live, verdict) {
+  const outstanding = live?.capabilitiesReadOk ? outstandingRequirements(live.capabilities) : [];
+  log('payee_not_verified', {
+    tenant: rec.tenant_id,
+    environment: logCode(rec.environment),
+    stored_status: logCode(rec.onboarding_status),
+    verdict: logCode(verdict?.status),
+    capabilities_read: live?.capabilitiesReadOk ? 'ok' : logCode(live?.capabilitiesReadError) || 'failed',
+    banks_read: live?.banksReadOk ? 'ok' : logCode(live?.banksReadError) || 'failed',
+    transfers_status: logCode(verdict?.capStatus),
+    identity_verification: logCode(verdict?.verification),
+    terms_confirmed: verdict?.tos === true,
+    bank_verified: verdict?.bankVerified === true,
+    steps: {
+      terms: Boolean(rec.tos_accepted_at),
+      identity: Boolean(rec.identity_submitted_at),
+      bank: Boolean(rec.bank_verified_at),
+    },
+    outstanding: outstanding.filter((name) => REQUIREMENT_NAME.test(name)).slice(0, 10),
+  });
 }
 
 const statusOut = (sync) => ({

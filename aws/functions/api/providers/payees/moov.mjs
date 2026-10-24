@@ -10,6 +10,7 @@
 import { MoovError, moovFetch, scopes } from '../parity/moov-client.mjs';
 import { MOOV_CAPABILITIES_API_VERSION, RECIPIENT_CAPABILITIES, missingRequestedCapabilities } from '../parity/moov-capabilities.mjs';
 import { businessProfileBody, representativeBody } from '../onboarding/moov-sync.mjs';
+import { moovErrorCode } from '../onboarding/redact.mjs';
 import {
   capabilityRequirementNames,
   liveBankVerified,
@@ -86,11 +87,15 @@ export async function createPayeeAccount({ environment, recipientId, tenantId, d
   }
 }
 
-/** Live account, capabilities and banks. A failed capabilities/bank read is reported, never guessed. */
+/**
+ * Live account, capabilities and banks. A failed capabilities/bank read is
+ * reported (its moovErrorCode), never guessed.
+ */
 export async function readPayeeLive(accountId, fetchImpl) {
   const account = await moovFetch(`/accounts/${accountId}`, { scopes: scopes.accountRead(accountId), fetchImpl });
   let capabilities = [];
   let capabilitiesReadOk = false;
+  let capabilitiesReadError = null;
   try {
     capabilities = asList(await moovFetch(`/accounts/${accountId}/capabilities`, {
       scopes: scopes.capabilitiesRead(accountId), fetchImpl,
@@ -98,9 +103,11 @@ export async function readPayeeLive(accountId, fetchImpl) {
     capabilitiesReadOk = true;
   } catch (error) {
     if (!(error instanceof MoovError)) throw error;
+    capabilitiesReadError = moovErrorCode(error);
   }
   let banks = [];
   let banksReadOk = false;
+  let banksReadError = null;
   try {
     banks = asList(await moovFetch(`/accounts/${accountId}/bank-accounts`, {
       scopes: scopes.bankAccountsRead(accountId), fetchImpl,
@@ -108,8 +115,9 @@ export async function readPayeeLive(accountId, fetchImpl) {
     banksReadOk = true;
   } catch (error) {
     if (!(error instanceof MoovError)) throw error;
+    banksReadError = moovErrorCode(error);
   }
-  return { account, capabilities, capabilitiesReadOk, banks, banksReadOk };
+  return { account, capabilities, capabilitiesReadOk, capabilitiesReadError, banks, banksReadOk, banksReadError };
 }
 
 export const bankIdOf = (bank) => String(bank?.bankAccountID ?? bank?.bankAccountId ?? '');
