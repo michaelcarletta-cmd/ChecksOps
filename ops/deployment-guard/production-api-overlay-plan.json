@@ -385,14 +385,14 @@
     },
     "providers/payees/email.mjs": {
       "operation": "add",
-      "accepted_sha256": "e2ecb320d72bda8833bc54cf90aa0f85ec797415ed4bd0160e1fe96b9c5fcb0e",
+      "accepted_sha256": "7cb38feab5811eb7750926089b8e2ca1338968f992048132d473b9edfc4eb534",
       "expected_live_sha256": null,
       "sql_before": null,
       "manifest": "aws/tests/fixtures/production-moov-payees-manifest-2026-10-23.json"
     },
     "providers/payees/handlers.mjs": {
       "operation": "add",
-      "accepted_sha256": "59f6a4e0fb3a72a638ea9feb4751240b0c4926ba66ef594e5b60790e8f820b9d",
+      "accepted_sha256": "ec24e8e80c7baa2639e78b7c96797853e08acb4ae58f43fc9ab4c0a8b55cd57b",
       "expected_live_sha256": null,
       "sql_before": null,
       "manifest": "aws/tests/fixtures/production-moov-payees-manifest-2026-10-23.json"

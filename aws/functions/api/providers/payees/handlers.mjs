@@ -127,7 +127,7 @@ const moovFailure = (error, { fn, step, environment }) => {
 
 async function sendSetupLink(client, { tenantId, email, displayName, token, deps }) {
   try {
-    const [{ resolveEmailBranding, emailAssetOrigin }, { renderPayeeSetupEmail }] = await Promise.all([
+    const [{ resolveEmailBranding, emailAssetOrigin }, { renderPayeeSetupEmail, sendPayeeSetupEmail }] = await Promise.all([
       import('../../email-branding.mjs'),
       import('./email.mjs'),
     ]);
@@ -141,7 +141,7 @@ async function sendSetupLink(client, { tenantId, email, displayName, token, deps
       expiresText: `This link expires in ${PAYEE_LINK_TTL_DAYS} days.`,
       branding,
     });
-    const send = typeof deps.sendEmail === 'function' ? deps.sendEmail : (await import('../../email.mjs')).sendViaSesOrSink;
+    const send = typeof deps.sendEmail === 'function' ? deps.sendEmail : sendPayeeSetupEmail;
     const out = await send({
       to: email,
       subject: rendered.subject,
@@ -149,6 +149,8 @@ async function sendSetupLink(client, { tenantId, email, displayName, token, deps
       text: rendered.text,
       from: branding.from,
       replyTo: branding.replyTo,
+      branding,
+      production: payeeDeployment() === 'production',
       tenantId,
       messageCategory: 'payee_setup',
     });
