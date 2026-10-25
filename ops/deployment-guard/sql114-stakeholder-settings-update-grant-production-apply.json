@@ -1,0 +1,62 @@
+{
+  "id": "sql114-stakeholder-settings-update-grant-production-apply",
+  "migration": "sql114",
+  "authorization": "pending",
+  "execute": false,
+  "target_environment": "production",
+  "target_component": "production-sql",
+  "deployment_type": "sql-apply",
+  "filename": "aws/workflows/sql/114_stakeholder_accounts_settings_update_grant.sql",
+  "migration_id": "114_stakeholder_accounts_settings_update_grant",
+  "staging_pin_commit": "35e118aa56628f1820baf4f4666c6da75a3fa888",
+  "source_sha256": "484a6c17d8dd8d25108a7de15c2181d20fca645838f37b5cfe3081cfa986d811",
+  "function_identities": [],
+  "expected_live_definition_sha256": null,
+  "intended_replacement_sha256": "809eba9b7f5d40b984f4f37562dfe5419ec2de50de103fc2699048eea5bf6c46",
+  "authorization_phrase": "APPLY_STAKEHOLDER_SETTINGS_UPDATE_GRANT",
+  "predecessors": [],
+  "order_note": "No predecessor and no order on this engine. SQL 114 needs public.stakeholder_accounts with its is_active, is_primary, account_type, homeowner_name, homeowner_email and updated_at columns (restored Supabase schema) owned by checksops_admin and the roles checksops and authenticated. Settings > Stakeholder Accounts (src/components/disbursement/StakeholderAccountSettings.tsx) removes a non-payee stakeholder with UPDATE stakeholder_accounts SET is_active = false, is_primary = false and changes a stakeholder type with SET account_type (clearing homeowner_name and homeowner_email when it stops being a homeowner); on AWS those writes need a /data/write route (a later code PR, not part of this migration) and an UPDATE privilege for checksops on those columns, which no migration in this repository grants (the restored database gave checksops SELECT only, aws/db-copy/sql/02_grant_readonly_application_role.sql). The policy aws_write_stakeholder_accounts (aws/rls/sql/24_complete_write_policies.sql: FOR ALL TO authenticated, USING / WITH CHECK aws_can_write_tenant(tenant_id)) stays the authorization boundary. SQL 114 grants UPDATE (is_active, is_primary, account_type, homeowner_name, homeowner_email, updated_at) on stakeholder_accounts to checksops and authenticated and changes nothing else. If the read-only inspect finds both lines on all six columns already held it reports already_applied true and nothing is applied (the pin is then recorded as verified live, not applied). No later migration revokes these grants.",
+  "admin_login": "checksops_admin",
+  "rds_identifier": "checksops-production",
+  "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
+  "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
+  "tooling": {
+    "status": "built",
+    "production_tool": "scripts/deployment-guard/sql114-stakeholder-settings-update-grant-production-apply.mjs",
+    "production_lib": "scripts/deployment-guard/lib/release-sql-production-apply.mjs",
+    "staging_executor_handler": "aws/write-path/guarded-sql-executor/index.mjs handleReleaseSqlMigration",
+    "staging_workflow_choice": "sql114-stakeholder-settings-update-grant",
+    "one_shot_migration": "sql114",
+    "fingerprint_engine": "scripts/deployment-guard/lib/release-sql-state.mjs",
+    "runbook": "ops/production-sql-114-apply.md",
+    "tests": [
+      "aws/tests/release-sql114-executor.test.mjs",
+      "aws/tests/release-sql114-production-apply.test.mjs",
+      "aws/tests/release-sql90-97-executor.test.mjs",
+      "aws/tests/release-sql90-97-production-apply.test.mjs",
+      "aws/tests/sql114-stakeholder-settings-update-grant-pg.test.mjs"
+    ],
+    "note": "Guarded tooling for SQL 114: sql114-stakeholder-settings-update-grant-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql114-stakeholder-settings-update-grant); production-sql-one-shot.mjs --migration sql114. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): the column ACL of stakeholder_accounts.is_active, .is_primary, .account_type, .homeowner_name, .homeowner_email and .updated_at, each exactly authenticated UPDATE and checksops UPDATE (spec column_acl, as SQL 92). The pre-conditions refuse any other live grant on those six columns (column_acl_replaceable); the table's own ACL, every other column, its RLS flags and its policies are in the unrelated-catalog snapshot and must be unchanged. The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
+  },
+  "production_inspect": {
+    "status": "pending",
+    "date": null,
+    "ssm_command_id": null,
+    "source_commit": null,
+    "read_only": true,
+    "connected_as": "checksops_admin",
+    "live_definition_sha256": null,
+    "apply_preconditions_met": null,
+    "precondition_failures": null,
+    "note": "Pending: no read-only production inspect has been run for SQL 114 yet. Expected: stakeholder_accounts present with is_active, is_primary, account_type, homeowner_name, homeowner_email and updated_at and owned by checksops_admin, roles checksops and authenticated present, no column grant on the six columns (the restored database granted table-level SELECT only), precondition_failures []. Record its date, SSM command id, source commit, live_definition_sha256, precondition_failures and apply_preconditions_met here. If already_applied is true, record the inspect as the verified-live evidence and leave execute false; otherwise copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. If precondition_failures is not [] stop: that needs its own reviewed change."
+  },
+  "intended_post_state": {
+    "fingerprint": "809eba9b7f5d40b984f4f37562dfe5419ec2de50de103fc2699048eea5bf6c46",
+    "note": "public.stakeholder_accounts: the columns is_active, is_primary, account_type, homeowner_name, homeowner_email and updated_at each carry exactly the column grants authenticated UPDATE and checksops UPDATE (no INSERT, SELECT, REFERENCES or other column from this file). The table ACL (table-level SELECT of checksops and authenticated, the owner's), every other column's ACL, the RLS flags and the policies (aws_write_stakeholder_accounts stays the authorization boundary) are unchanged; no other table, function, policy, column or row changes. The fingerprint is releaseIntendedHash('sql114', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): 809eba9b7f5d40b984f4f37562dfe5419ec2de50de103fc2699048eea5bf6c46."
+  },
+  "staging_acceptance": {
+    "ok": false,
+    "reference": null,
+    "basis": "Pending: record the guarded staging SQL executor read-live run of SQL 114 (choice sql114-stakeholder-settings-update-grant) and, where the read-live reports already_applied false, its staging apply run here in the reviewed change that sets execute true. Where the read-live reports already_applied true (both lines held on all six columns) there is nothing to apply in staging and the read-live itself is the staging evidence. Otherwise the staging pin records that pre-state and the owner approves the staging apply, and the apply run (receipt before == the recorded pre-state, after == intended) is the staging evidence. The grant is covered on PostgreSQL 16 by aws/tests/sql114-stakeholder-settings-update-grant-pg.test.mjs. Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+  }
+}

@@ -1,5 +1,5 @@
 /**
- * Specs of the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108 to SQL 113) for the shared engine in
+ * Specs of the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108 to SQL 114) for the shared engine in
  * release-sql-state.mjs: what each pinned file creates, replaces or drops, the reviewed
  * EXECUTE ACLs, the prerequisites and predecessors, and the PostgreSQL renderings the file
  * leaves (policy expressions, view, column, constraint, index and trigger definitions as
@@ -4081,6 +4081,89 @@ export const RELEASE_SQL_SPECS = deepFreeze({
       "public.external_payment_recipients",
       "public.stakeholder_accounts",
       "public.payment_provider_methods"
+    ]
+  },
+  // SQL 114: the column-scoped UPDATE grant on public.stakeholder_accounts (is_active,
+  // is_primary, account_type, homeowner_name, homeowner_email, updated_at) for checksops and
+  // authenticated, so Settings > Stakeholder Accounts can remove a non-payee stakeholder
+  // (is_active = false, is_primary = false) and change a stakeholder's type (account_type,
+  // clearing homeowner_name / homeowner_email) through a later /data/write route; the restored
+  // database gave checksops SELECT only. Like SQL 92 its fingerprint is each named column's ACL
+  // (column_acl: pg_attribute.attacl, every grantee); any other live grant on those columns
+  // refuses the pre-conditions (column_acl_replaceable), and the table ACL, every other column
+  // and the policies are in the unrelated snapshot. GRANT of a held privilege is a no-op, so a
+  // column that already holds one or both lines passes; all held is already_applied.
+  sql114: {
+    "key": "sql114",
+    "label": "SQL 114",
+    "choice": "sql114-stakeholder-settings-update-grant",
+    "production_pin_rel": "ops/deployment-guard/sql114-stakeholder-settings-update-grant-production-apply.json",
+    "script": "sql114-stakeholder-settings-update-grant-production-apply",
+    "prerequisites": [
+      "public.stakeholder_accounts",
+      "column public.stakeholder_accounts.is_active",
+      "column public.stakeholder_accounts.is_primary",
+      "column public.stakeholder_accounts.account_type",
+      "column public.stakeholder_accounts.homeowner_name",
+      "column public.stakeholder_accounts.homeowner_email",
+      "column public.stakeholder_accounts.updated_at",
+      "role checksops",
+      "role authenticated"
+    ],
+    "predecessors": [],
+    "functions": [],
+    "column_acl": [
+      {
+        "table": "public.stakeholder_accounts",
+        "column": "is_active",
+        "acl": [
+          "authenticated UPDATE",
+          "checksops UPDATE"
+        ]
+      },
+      {
+        "table": "public.stakeholder_accounts",
+        "column": "is_primary",
+        "acl": [
+          "authenticated UPDATE",
+          "checksops UPDATE"
+        ]
+      },
+      {
+        "table": "public.stakeholder_accounts",
+        "column": "account_type",
+        "acl": [
+          "authenticated UPDATE",
+          "checksops UPDATE"
+        ]
+      },
+      {
+        "table": "public.stakeholder_accounts",
+        "column": "homeowner_name",
+        "acl": [
+          "authenticated UPDATE",
+          "checksops UPDATE"
+        ]
+      },
+      {
+        "table": "public.stakeholder_accounts",
+        "column": "homeowner_email",
+        "acl": [
+          "authenticated UPDATE",
+          "checksops UPDATE"
+        ]
+      },
+      {
+        "table": "public.stakeholder_accounts",
+        "column": "updated_at",
+        "acl": [
+          "authenticated UPDATE",
+          "checksops UPDATE"
+        ]
+      }
+    ],
+    "altered_relations": [
+      "public.stakeholder_accounts"
     ]
   },
 });
