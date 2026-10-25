@@ -27,7 +27,19 @@ recorded as the verified-live evidence and the pin stays `execute: false`). Anyt
 function not owned by the login, an EXECUTE grant outside the five lines below, a missing table,
 column or function) stops and needs its own reviewed change.
 
-**Status:** pending. No staging read-live, no production inspect, nothing applied.
+**Staging executor refreshed (2026-10-25).** Inspect run 40240067999 (main `f5cc9ec`) found the
+live executor at CodeSha256 `r6G9KanI…` without SQL 115 (adds
+`sql/115_provider_stakeholder_one_partner_payout.sql`). Deploy run 40240193453 updated it to
+main's package ("Verify live executor now carries main's package" passed).
+
+**Staging read-live (2026-10-25).** Run 40240434651 (main `f5cc9ec`): the function `different`
+(the restored supabase body), EXECUTE `PUBLIC` and the owner, `definer_writes`
+`stakeholder_accounts` ok; live `6dbf58792a5eb0f9863ac0a6e88265de6ec9931a9e7a31bac21d7b71f643bba0`,
+`already_applied` false, `precondition_failures` `[]`. Recorded in the staging pin
+(`expected_live_definition_sha256`, `execute: true`, wave 16) under the owner's words of
+2026-10-25, "Approve SQL 115 staging apply".
+
+**Status:** staging pin execute-authorized (wave 16); nothing applied yet; production pin pending.
 
 ## Fingerprint
 

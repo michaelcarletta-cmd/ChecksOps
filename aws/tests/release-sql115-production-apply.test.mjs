@@ -161,7 +161,8 @@ test('order: no predecessor; replaces the restored supabase function the trigger
   const runbook = fs.readFileSync(path.join(ROOT, COMMITTED.tooling.runbook), 'utf8');
   assert.ok(runbook.includes(COMMITTED.intended_replacement_sha256));
   assert.ok(runbook.includes(COMMITTED.source_sha256));
-  assert.match(runbook, /\*\*Status:\*\* pending/);
+  assert.match(runbook, /\*\*Status:\*\* staging pin execute-authorized \(wave 16\)/);
+  assert.match(runbook, /read-live \(2026-10-25\)\.\*\* Run 40240434651/);
   const oneShot = fs.readFileSync(path.join(ROOT, 'ops/production-sql-one-shot.md'), 'utf8');
   assert.match(oneShot, /\| `sql115` \|/);
   assert.match(oneShot, /`sql114`, `sql115`\) \|/);

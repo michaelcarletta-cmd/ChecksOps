@@ -2530,7 +2530,7 @@ export const AUTHORIZED_SQL114_STAKEHOLDER_SETTINGS_UPDATE_GRANT = Object.freeze
 // Partner payout 2026-10-25 staging pin: SQL 115 (public.sync_provider_stakeholder_account(uuid)
 // replaced so a tenant with a Moov account in two environments keeps one active partner payout;
 // the second insert broke moov-sync on staging, 2026-10-25; EXECUTE owner only).
-// No predecessor. Pending until a reviewed pin change records a staging read-live.
+// No predecessor. Staging apply authorized (wave 16) from staging read-live run 40240434651.
 export const AUTHORIZED_SQL115_PROVIDER_STAKEHOLDER_ONE_PARTNER_PAYOUT = Object.freeze({
   key: 'sql115',
   filename: 'aws/workflows/sql/115_provider_stakeholder_one_partner_payout.sql',
@@ -2538,9 +2538,13 @@ export const AUTHORIZED_SQL115_PROVIDER_STAKEHOLDER_ONE_PARTNER_PAYOUT = Object.
   // The commit that last authored the file bytes.
   commit: '3807a0c356825dc3ccd9bf5b83a62310f4127f87',
   source_sha256: '5902638017eec4581a5f9241e93d9343b56ed39374beb671df8e8784e22f11ab',
-  authorization: 'pending',
-  execute: false,
-  expected_live_definition_sha256: null,
+  // Owner's words 2026-10-25: "Approve SQL 115 staging apply" (staging apply only; the production pin and apply are separate).
+  authorization: 'Owner approved 2026-10-25: staging apply (wave 16) from staging read-live run 40240434651',
+  execute: true,
+  // Staging read-live run 40240434651 (2026-10-25, main f5cc9ec, after executor deploy run
+  // 40240193453): the restored supabase body with EXECUTE to PUBLIC and the owner;
+  // already_applied false, precondition_failures [].
+  expected_live_definition_sha256: '6dbf58792a5eb0f9863ac0a6e88265de6ec9931a9e7a31bac21d7b71f643bba0',
   // Code-derived: releaseIntendedHash('sql115', file bytes) (release-sql-state.mjs); re-derived by the tests.
   intended_replacement_sha256: '8aed39a49d988a60bdedac07a3a97f424a9de5c1499e4f50738f749326a62452',
   function_identities: Object.freeze([
