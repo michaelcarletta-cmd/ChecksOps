@@ -1,0 +1,15 @@
+{
+  "workstream_id": "production-email-any-recipient-applied",
+  "authorization": "Record only (2026-10-25): the bytes below are live. Nothing is planned or authorized by this manifest; any later change to this member needs its own manifest, staging acceptance and owner approval.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Production email to every recipient applied 2026-10-25 through the guarded overlay path on main 89e7c42fb (#1230), on the owner's \"deploy email-policy.mjs to staging and DEPLOY email-policy.mjs TO PRODUCTION\". email-policy.mjs: staging inspect run 40150778782 (live 83d73511); staging apply run 40150895108 (the staging acceptance; staging runs AWS_EMAIL_MODE=sink, so staging delivery is unchanged); production preflight inspect run 40151011646 (READY, 83d73511 live, CodeSha256 00Jfy9+OrIaNrep50P/cjwcWD7DC5Z/KeIlDtaWWAFQ=, RevisionId dc2e68ca-93ef-454e-909c-f56d12cd280f); production apply run 40151123531 (83d73511 -> eaf2a33a), which concluded success including its \"Verify live member is the accepted bytes\" step and the public production smoke. Read-back after the apply through the owner AWS connector: CodeSha256 bS8L+gKhuWnG0BJRRDoPEikiN1+tW7l/W/eVpCCe9wc= (re-hashed from the downloaded package), RevisionId 65fd78b3-a4f4-4684-8c36-ea85d1ae6522, LastUpdateStatus Successful, and email-policy.mjs inside the package hashes to eaf2a33a. AWS_EMAIL_MODE stays ses and CHECKSOPS_ENV production-prep, so production now delivers every recipient. The row records the applied bytes as live_sha256 and accepted_sha256 and chains to the manifest that planned it (previous_manifest), which keeps the pre-apply state (83d73511).",
+  "members": {
+    "email-policy.mjs": {
+      "live_sha256": "eaf2a33a9e843692f43d128ce391d284b04e733818254c2a4664209561cb7559",
+      "accepted_sha256": "eaf2a33a9e843692f43d128ce391d284b04e733818254c2a4664209561cb7559",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-email-any-recipient-manifest-2026-10-25.json"
+    }
+  }
+}
