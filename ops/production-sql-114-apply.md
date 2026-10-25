@@ -52,7 +52,51 @@ source `484a6c17…` == pin), connected as `checksops_admin`: no column grant on
 acceptance and `execute: true` under the owner's words of 2026-10-25, "approve SQL 114 production
 apply". Each apply still needs the owner's run-time approval.
 
-**Status:** staging applied (wave 15); production pin execute-authorized; production apply pending.
+**Status:** applied to staging and to production (2026-10-25); the production pin is retired
+(`execute: false` again; see "Production apply of SQL 114").
+
+## Production apply of SQL 114 (2026-10-25)
+
+The owner's message of 2026-10-25 was "merge 1234 when green and approve SQL 114 production
+apply"; its statement "approve SQL 114 production apply" was passed verbatim (base64,
+`--approval-statement-b64`) and recorded by the one-shot as `approval_statement`. The one-shot
+cannot verify who said it, and the statement covered this run only. `production-sql-one-shot.mjs
+--migration sql114 --approval-scope sql114` on `i-0c35557c4e5385406` (operator-supplied
+`--runner`, not verified by the one-shot), operator `michaelcarletta-cmd`, workstream
+`prod-sql114-stakeholder-settings-20261025`, from main `9fa66403c` (tarball
+`source-9fa66403c6d4d358693ab8155a16393142177e7f.tar.gz`, sha256 `be81479a…`, 12711 files, transfer
+run `40185445236`, `sql53-temporary-transfer.yml` on main after the #1234 merge; it printed
+`TARBALL_SHA256 be81479a99c7bd1d42d6df16d701675a47413bdd22ce9154bad4a98ca887b240`).
+
+- **Inspect phase:** SSM `47fee3cf-be4e-4336-b85a-6f5a41b2220d` (exit 0), run_id
+  `b122c1a3-4a1f-4b0c-ba03-256d076f719d`: pin (execute true, staging acceptance run 40154043207),
+  source, inspect and contracts ok (claim-ledger 4/4, tenant-isolation 6/6,
+  financial-write-protections 43/43), read-only; live `8b5d1d4d…` (live_matches_expected true),
+  already_applied false, precondition_failures [], apply_preconditions_met true, connected as
+  `checksops_admin`.
+- **Apply phase:** SSM `f32cfcbd-c69e-46a7-958c-0cf3d1510d91` (2026-10-25T10:39:21Z to 10:39:38Z,
+  exit 0), run_id `65090c03-0403-4a95-92e4-3687e7f173b5`, one_use_id
+  `sql114-prod-a664d4c7-f0ce-4876-9b88-39b11c6a9701` (spent): every step ok (pin, source, inspect,
+  contracts, manifest, source-recheck-before-preflight, preflight (receipt issued), evaluate
+  (`sql114_production_apply_allowed` true), source-recheck-before-apply, apply (applied),
+  post-apply-inspect); migration source `484a6c17…` (== pin); pre-apply inspect live `8b5d1d4d…`,
+  live_matches_expected true, precondition_failures [], each of the six columns `different`
+  (`acl: []`); contracts claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43;
+  manifest `96416d48…`; receipt `8b5d1d4d…` -> `809eba9b…`, result applied, unrelated catalog
+  `7089cbcd…` (relations 890, columns 3536, constraints 2234, policies 404, functions 1326, indexes
+  654, triggers 180, views 25, types 18, roles 29, role memberships 15); post-apply inspect live
+  `809eba9b…` (= intended), already_applied true, precondition_failures [], missing_dependencies
+  []. Each of `is_active`, `is_primary`, `account_type`, `homeowner_name`, `homeowner_email` and
+  `updated_at` is `intended` with exactly `authenticated UPDATE` and `checksops UPDATE`.
+- **Not captured:** the SSM output was cut at 24000 characters, so the one-shot's summary after
+  `post_apply_inspect` (its trailing `not_observed_by_this_run` list beyond the first entry) was
+  not captured in full. A read-only listing of the runner's source directory after the apply (SSM
+  `c4b8df91-7877-4c09-bdb9-4a0851cf6966`) showed the receipt, the lease, the consumed receipt and
+  `sql114-stakeholder-settings-update-grant-production-consumed.json` (66 bytes); the consumed
+  entry itself was not read back.
+
+No later read-only inspect is recorded. The pin is `execute: false` again; a re-apply needs a new
+reviewed pin change.
 
 ## Fingerprint
 
