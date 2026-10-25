@@ -1,8 +1,8 @@
 {
   "id": "sql114-stakeholder-settings-update-grant-production-apply",
   "migration": "sql114",
-  "authorization": "Owner approved 2026-10-25 (the owner's words, verbatim: \"approve SQL 114 production apply\"; this pin change is bound to that approval and takes effect only once the owner reviews and merges it): production apply of SQL 114 on the staging acceptance below (production 8b5d1d4d49188412317a60036a392c27727852b246a1d59a9c2807cb17186e00 -> 809eba9b7f5d40b984f4f37562dfe5419ec2de50de103fc2699048eea5bf6c46); execute true takes effect only once this change is merged. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
-  "execute": true,
+  "authorization": "Applied to production on 2026-10-25; execute is false again, so this pin is no longer a standing authorization and a re-apply needs a new reviewed pin change. The owner approved the SQL 114 production pin on 2026-10-25 in the words \"approve SQL 114 production apply\", which covered the SQL 114 production pin (8b5d1d4d -> 809eba9b), the read-only production inspect, the staging acceptance and the execute change (#1234, merged on \"merge 1234 when green and approve SQL 114 production apply\"), and approved the one apply run recorded in applied (workstream prod-sql114-stakeholder-settings-20261025) in the words \"merge 1234 when green and approve SQL 114 production apply\", of which the statement \"approve SQL 114 production apply\" was passed to it verbatim. That approval covered that run only",
+  "execute": false,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -58,5 +58,103 @@
     "ok": true,
     "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/40154043207",
     "basis": "Guarded staging apply from the same pre-state as production. The guarded staging SQL executor (choice sql114-stakeholder-settings-update-grant) carried SQL 114 from deploy run 40152534378 (inspect run 40152370153 before it found the executor at nloTNyc3Hlg8ps1wpeSGqoo6FTnX9NHOKT5TcfN3FIg= without SQL 114) and, after the staging pin change (#1233, main 952ecf7a6), deploy run 40153846012 (inspect run 40153686657 before it found the executor at VMyMjKW186UWTkd4ZWuwEAxEz7vJ+5v9WJtGzHw8rx0= superseding only lib/sql-executor-auth.mjs; executor after it r6G9KanI5np/OtQaWdwWUcF3ktnSYgmB6JyRksun/w0=). Read-live run 40152706123 (2026-10-25, main cfc0829e5) reported already_applied false, precondition_failures [] and live 8b5d1d4d49188412317a60036a392c27727852b246a1d59a9c2807cb17186e00, recorded as the staging pin's expected_live_definition_sha256. The staging apply run 40154043207 (2026-10-25, staging pin commit 35e118aa56628f1820baf4f4666c6da75a3fa888) reported result applied, before 8b5d1d4d49188412317a60036a392c27727852b246a1d59a9c2807cb17186e00, after 809eba9b7f5d40b984f4f37562dfe5419ec2de50de103fc2699048eea5bf6c46 = intended_replacement_sha256. The read-live after it (run 40154234967) reported already_applied true and live 809eba9b7f5d40b984f4f37562dfe5419ec2de50de103fc2699048eea5bf6c46 = intended_replacement_sha256: each of the six columns authenticated UPDATE and checksops UPDATE. The pre-states are identical: staging before its apply and production at its inspect (SSM f4d57070-7215-4c70-93d0-43a03d3bc68a) both report 8b5d1d4d49188412317a60036a392c27727852b246a1d59a9c2807cb17186e00, so this is direct acceptance from the same pre-state, not substitute evidence. The grant is covered on PostgreSQL 16 by aws/tests/sql114-stakeholder-settings-update-grant-pg.test.mjs. The production apply refuses unless the live state still equals this pin's expected_live_definition_sha256, and its post-conditions roll back unless the intended fingerprint is reached with the table ACL, every other column and the rest of the catalog unchanged."
+  },
+  "applied": {
+    "date": "2026-10-25",
+    "result": "applied",
+    "source_commit": "9fa66403c6d4d358693ab8155a16393142177e7f",
+    "source_commit_basis": "SOURCE_COMMIT in the tarball (written by sql53-temporary-transfer) equals --commit, and the tarball sha256 equals --expected-tarball-sha256 as copied by the operator from that transfer run's log (TARBALL_SHA256 line); the one-shot source step reported tarball_sha256_matches_sidecar true, tarball_sha256_matches_expected true, tree_matches_tarball true and tarball_files 12711; the run log itself was not read by the one-shot.",
+    "source_tarball": {
+      "file": "source-9fa66403c6d4d358693ab8155a16393142177e7f.tar.gz",
+      "sha256": "be81479a99c7bd1d42d6df16d701675a47413bdd22ce9154bad4a98ca887b240"
+    },
+    "migration_source_sha256": "484a6c17d8dd8d25108a7de15c2181d20fca645838f37b5cfe3081cfa986d811",
+    "migration_source_sha256_note": "The one-shot source step hashed aws/workflows/sql/114_stakeholder_accounts_settings_update_grant.sql in the transfer tarball: equal to source_sha256 (the pin; migration_matches_pin true).",
+    "runner": "i-0c35557c4e5385406",
+    "runner_basis": "operator-supplied --runner (not verified by the one-shot)",
+    "workstream_id": "prod-sql114-stakeholder-settings-20261025",
+    "one_use_id": "sql114-prod-a664d4c7-f0ce-4876-9b88-39b11c6a9701",
+    "one_use_id_consumed": true,
+    "one_use_id_consumed_basis": "Inferred from the successful apply (the tool records the one_use_id after COMMIT and only warns if that write fails); a read-only listing of the runner's source directory after the apply (SSM c4b8df91-7877-4c09-bdb9-4a0851cf6966, /var/tmp/sql-one-shot-J7u6r6/src) showed sql114-stakeholder-settings-update-grant-production-consumed.json (66 bytes) and .deployment-guard/consumed-receipts/9adce98fa2f542ceedf829df04e2cf88683b61731479cc37f96970203b5b12fc.json, but the consumed-registry entry was not read back.",
+    "owner_approval": "approve SQL 114 production apply",
+    "owner_approval_basis": "As passed in --approval-statement (base64, --approval-statement-b64) for --approval-scope sql114 and recorded by the one-shot as approval_statement; the owner's full message of 2026-10-25 was \"merge 1234 when green and approve SQL 114 production apply\". The one-shot cannot verify who said it.",
+    "operator": "michaelcarletta-cmd",
+    "apply_ssm_command_id": "f32cfcbd-c69e-46a7-958c-0cf3d1510d91",
+    "one_shot_run_id": "65090c03-0403-4a95-92e4-3687e7f173b5",
+    "one_shot_note": "One production-sql-one-shot run verified the source, ran the read-only inspect and the runner contracts, built the manifest, issued the receipt and lease (preflight), evaluated (sql114_production_apply_allowed true), applied (exit 0) and ran the post-apply inspect. That run was SSM f32cfcbd-c69e-46a7-958c-0cf3d1510d91 (2026-10-25T10:39:21Z to 10:39:38Z), run_id 65090c03-0403-4a95-92e4-3687e7f173b5, from main 9fa66403c (transfer run 40185445236, sql53-temporary-transfer.yml on main after the #1234 merge; it printed TARBALL_SHA256 be81479a99c7bd1d42d6df16d701675a47413bdd22ce9154bad4a98ca887b240): steps pin, source, inspect, contracts, manifest, source-recheck-before-preflight, preflight (receipt_issued), evaluate (sql114_production_apply_allowed true), source-recheck-before-apply, apply (applied) and post-apply-inspect all ok; runner contracts, manifest, receipt and inspects as recorded below. Before it, a read-only --phase inspect of the same one-shot (SSM 47fee3cf-be4e-4336-b85a-6f5a41b2220d, exit 0, run_id b122c1a3-4a1f-4b0c-ba03-256d076f719d) completed pin (execute true, staging_acceptance run 40154043207), source, inspect and contracts (claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43) ok with read_only true, live 8b5d1d4d49188412317a60036a392c27727852b246a1d59a9c2807cb17186e00 (live_matches_expected true), already_applied false, precondition_failures [] and apply_preconditions_met true, current_user and session_user checksops_admin; its commit, tarball, workstream and approval statement are not in the captured evidence. The apply run's SSM output was cut at 24000 characters: the summary after post_apply_inspect, including the one-shot's trailing not_observed_by_this_run list (only its first entry, \"ssm_command_id (add from SSM)\", was captured), was not captured in full.",
+    "steps": [
+      "pin",
+      "source",
+      "inspect",
+      "contracts",
+      "manifest",
+      "source-recheck-before-preflight",
+      "preflight",
+      "evaluate",
+      "source-recheck-before-apply",
+      "apply",
+      "post-apply-inspect"
+    ],
+    "contract_results": {
+      "claim-ledger": {
+        "ok": true,
+        "passed": "4/4"
+      },
+      "tenant-isolation": {
+        "ok": true,
+        "passed": "6/6"
+      },
+      "financial-write-protections": {
+        "ok": true,
+        "passed": "43/43"
+      }
+    },
+    "pre_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "8b5d1d4d49188412317a60036a392c27727852b246a1d59a9c2807cb17186e00",
+      "live_matches_expected": true,
+      "already_applied": false,
+      "precondition_failures": [],
+      "note": "The apply run's own inspect step (read-only --inspect) immediately before the apply: live == the recorded pre-state 8b5d1d4d..., live_matches_expected true, already_applied false, apply_preconditions_met true, precondition_failures []; each of the six column ACLs (stakeholder_accounts.is_active, .is_primary, .account_type, .homeowner_name, .homeowner_email, .updated_at) state different, acl []. It matched the read-only --phase inspect SSM 47fee3cf-be4e-4336-b85a-6f5a41b2220d. missing_dependencies, predecessors_applied and successors_applied of this inspect are not in the captured evidence."
+    },
+    "manifest_sha256": "96416d48d6c26ab780ceae0636ab59c47062f293e1f7d28f27dae1694d41ac70",
+    "receipt": {
+      "migration": "sql114",
+      "workstream": "prod-sql114-stakeholder-settings-20261025",
+      "commit": "9fa66403c6d4d358693ab8155a16393142177e7f",
+      "sql_file": "aws/workflows/sql/114_stakeholder_accounts_settings_update_grant.sql",
+      "before_hash": "8b5d1d4d49188412317a60036a392c27727852b246a1d59a9c2807cb17186e00",
+      "after_hash": "809eba9b7f5d40b984f4f37562dfe5419ec2de50de103fc2699048eea5bf6c46",
+      "unrelated_catalog_sha256": "7089cbcd1029c5c49750a6963e94d9852f9276393175e7521a0f5cc78cbbd769",
+      "unrelated_catalog_counts": {
+        "relations": 890,
+        "columns": 3536,
+        "constraints": 2234,
+        "policies": 404,
+        "functions": 1326,
+        "indexes": 654,
+        "default_acl": 0,
+        "role_memberships": 15,
+        "roles": 29,
+        "triggers": 180,
+        "views": 25,
+        "types": 18,
+        "schema": 2
+      },
+      "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/40154043207",
+      "result": "applied"
+    },
+    "post_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "809eba9b7f5d40b984f4f37562dfe5419ec2de50de103fc2699048eea5bf6c46",
+      "already_applied": true,
+      "precondition_failures": [],
+      "missing_dependencies": [],
+      "predecessors_applied": true,
+      "note": "The one-shot post-apply read-only --inspect: already_applied true (live == intended 809eba9b..., so live_matches_expected false and apply_preconditions_met false), precondition_failures [], missing_dependencies [], predecessors_applied true; each of the six column ACLs (is_active, is_primary, account_type, homeowner_name, homeowner_email, updated_at) state intended, [\"authenticated UPDATE\",\"checksops UPDATE\"], as the receipt's release_sql_inspect also reported. current_user and session_user checksops_admin. successors_applied of this inspect is not in the captured evidence."
+    }
+  },
+  "production_evidence": {
+    "2026-10-25 apply": "Guarded production SQL one-shot on i-0c35557c4e5385406, workstream prod-sql114-stakeholder-settings-20261025, main 9fa66403c (tarball be81479a…, transfer run 40185445236, migration source 484a6c17… == pin), owner-approved run (\"approve SQL 114 production apply\", from the owner's message \"merge 1234 when green and approve SQL 114 production apply\"), SSM f32cfcbd-c69e-46a7-958c-0cf3d1510d91, run_id 65090c03-0403-4a95-92e4-3687e7f173b5, one_use_id sql114-prod-a664d4c7-f0ce-4876-9b88-39b11c6a9701 (spent): every step ok; contracts claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43; pre-apply inspect live 8b5d1d4d… (live_matches_expected true, precondition_failures []); manifest 96416d48…; 8b5d1d4d… -> 809eba9b…, result applied, unrelated catalog 7089cbcd…; post-apply inspect already_applied true, precondition_failures []. After: stakeholder_accounts.is_active, .is_primary, .account_type, .homeowner_name, .homeowner_email and .updated_at each grant UPDATE to authenticated and checksops (column-scoped). Preceded by the read-only --phase inspect SSM 47fee3cf-be4e-4336-b85a-6f5a41b2220d. No later inspect is recorded. execute is false so the pin is no longer a standing authorization."
   }
 }

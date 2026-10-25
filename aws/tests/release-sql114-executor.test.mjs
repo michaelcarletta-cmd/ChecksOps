@@ -5,7 +5,8 @@
  * file covers what is new:
  *
  *   - the pin: staging-authorized from its read-live (wave 15), code-derived, selectable, packed, in step with the
- *     production pin; the pinned commit authored the bytes; no predecessor;
+ *     production pin (applied 2026-10-25 and retired); the pinned commit authored the bytes; no
+ *     predecessor;
  *   - the spec's six column_acl entries (SQL 114 creates or replaces no function), as SQL 92's:
  *     the fingerprint is the column ACL (every grantee) of is_active, is_primary, account_type,
  *     homeowner_name, homeowner_email and updated_at; one or both pinned lines already held pass
@@ -147,10 +148,12 @@ test('pin: SQL 114 staging-authorized from its read-live, code-derived, selectab
   assert.equal(prod.staging_pin_commit, pin.commit);
   assert.equal(prod.source_sha256, pin.source_sha256);
   assert.deepEqual(prod.predecessors, []);
-  // Production pin execute-authorized (owner-approved pin change of 2026-10-25) on the staging apply;
+  // Production pin applied 2026-10-25 and retired (owner approved #1234, on the staging apply);
   // production's pre-state is staging's (8b5d1d4d...: read-only production inspect SSM f4d57070).
-  assert.equal(prod.execute, true);
-  assert.match(prod.authorization, /^Owner approved 2026-10-25 /);
+  assert.equal(prod.execute, false);
+  assert.match(prod.authorization, /^Applied to production on 2026-10-25; execute is false again/);
+  assert.equal(prod.applied.receipt.before_hash, prod.expected_live_definition_sha256);
+  assert.equal(prod.applied.receipt.after_hash, pin.intended_replacement_sha256);
   assert.equal(prod.expected_live_definition_sha256, '8b5d1d4d49188412317a60036a392c27727852b246a1d59a9c2807cb17186e00');
   assert.equal(prod.expected_live_definition_sha256, pin.expected_live_definition_sha256);
   assert.notEqual(prod.expected_live_definition_sha256, prod.intended_replacement_sha256);
