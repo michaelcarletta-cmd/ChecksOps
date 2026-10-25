@@ -1307,12 +1307,16 @@ function TenantManagementTable({
         .eq("provider", "moov")
         .order("created_at", { ascending: false });
       if (error) throw error;
-      const map: Record<string, { status: string | null; verification_status: string | null }> = {};
+      const map: Record<string, { status: string | null; verification_status: string | null; ledgers: string[] }> = {};
       for (const a of data ?? []) {
         // newest account wins (rows ordered desc)
         if (!map[a.tenant_id]) {
-          map[a.tenant_id] = { status: a.onboarding_status, verification_status: a.verification_status };
+          map[a.tenant_id] = { status: a.onboarding_status, verification_status: a.verification_status, ledgers: [] };
         }
+        // Every Moov account the organization has: which ledger it is on (sandbox or
+        // production) and its onboarding status. Sends only use an active account on
+        // the ledger the environment runs (staging: sandbox).
+        map[a.tenant_id].ledgers.push(`${a.environment || "unknown"} (${(a.onboarding_status || "not started").replace(/_/g, " ")})`);
       }
       return map;
     },
@@ -1497,6 +1501,9 @@ function TenantManagementTable({
         return (
           <div className="flex flex-col gap-1">
             {moovBadge}
+            {moov && moov.ledgers.length > 0 && (
+              <span className="text-[10px] text-muted-foreground">Moov: {moov.ledgers.join(", ")}</span>
+            )}
             <Select
               value={t.kyc_status || "pending"}
               onValueChange={(v) => updateTenant(t.id, { kyc_status: v })}
