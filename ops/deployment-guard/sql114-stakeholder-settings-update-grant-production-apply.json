@@ -1,8 +1,8 @@
 {
   "id": "sql114-stakeholder-settings-update-grant-production-apply",
   "migration": "sql114",
-  "authorization": "pending",
-  "execute": false,
+  "authorization": "Owner approved 2026-10-25 (the owner's words, verbatim: \"approve SQL 114 production apply\"; this pin change is bound to that approval and takes effect only once the owner reviews and merges it): production apply of SQL 114 on the staging acceptance below (production 8b5d1d4d49188412317a60036a392c27727852b246a1d59a9c2807cb17186e00 -> 809eba9b7f5d40b984f4f37562dfe5419ec2de50de103fc2699048eea5bf6c46); execute true takes effect only once this change is merged. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
+  "execute": true,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -11,7 +11,7 @@
   "staging_pin_commit": "35e118aa56628f1820baf4f4666c6da75a3fa888",
   "source_sha256": "484a6c17d8dd8d25108a7de15c2181d20fca645838f37b5cfe3081cfa986d811",
   "function_identities": [],
-  "expected_live_definition_sha256": null,
+  "expected_live_definition_sha256": "8b5d1d4d49188412317a60036a392c27727852b246a1d59a9c2807cb17186e00",
   "intended_replacement_sha256": "809eba9b7f5d40b984f4f37562dfe5419ec2de50de103fc2699048eea5bf6c46",
   "authorization_phrase": "APPLY_STAKEHOLDER_SETTINGS_UPDATE_GRANT",
   "predecessors": [],
@@ -39,24 +39,24 @@
     "note": "Guarded tooling for SQL 114: sql114-stakeholder-settings-update-grant-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql114-stakeholder-settings-update-grant); production-sql-one-shot.mjs --migration sql114. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): the column ACL of stakeholder_accounts.is_active, .is_primary, .account_type, .homeowner_name, .homeowner_email and .updated_at, each exactly authenticated UPDATE and checksops UPDATE (spec column_acl, as SQL 92). The pre-conditions refuse any other live grant on those six columns (column_acl_replaceable); the table's own ACL, every other column, its RLS flags and its policies are in the unrelated-catalog snapshot and must be unchanged. The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
   },
   "production_inspect": {
-    "status": "pending",
-    "date": null,
-    "ssm_command_id": null,
-    "source_commit": null,
+    "status": "recorded",
+    "date": "2026-10-25",
+    "ssm_command_id": "f4d57070-7215-4c70-93d0-43a03d3bc68a",
+    "source_commit": "952ecf7a61774c424993b8a0d79dc4057bed538b",
     "read_only": true,
     "connected_as": "checksops_admin",
-    "live_definition_sha256": null,
-    "apply_preconditions_met": null,
-    "precondition_failures": null,
-    "note": "Pending: no read-only production inspect has been run for SQL 114 yet. Expected: stakeholder_accounts present with is_active, is_primary, account_type, homeowner_name, homeowner_email and updated_at and owned by checksops_admin, roles checksops and authenticated present, no column grant on the six columns (the restored database granted table-level SELECT only), precondition_failures []. Record its date, SSM command id, source commit, live_definition_sha256, precondition_failures and apply_preconditions_met here. If already_applied is true, record the inspect as the verified-live evidence and leave execute false; otherwise copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. If precondition_failures is not [] stop: that needs its own reviewed change."
+    "live_definition_sha256": "8b5d1d4d49188412317a60036a392c27727852b246a1d59a9c2807cb17186e00",
+    "apply_preconditions_met": false,
+    "precondition_failures": [],
+    "note": "Recorded from the read-only production inspect of 2026-10-25 (SSM command f4d57070-7215-4c70-93d0-43a03d3bc68a, node scripts/deployment-guard/sql114-stakeholder-settings-update-grant-production-apply.mjs --inspect on the SQL53 runner i-0c35557c4e5385406 from main 952ecf7a6 (tarball source-952ecf7a61774c424993b8a0d79dc4057bed538b.tar.gz sha256 8af03c02dcca2deb97636f81807df65ffbb54b393b90361ebe5881dd1e2d91d6, transfer run 40184052967; migration source sha256 on the runner 484a6c17d8dd8d25108a7de15c2181d20fca645838f37b5cfe3081cfa986d811 == source_sha256), read_only true, source_ok true, connected as checksops_admin). live_definition_sha256 8b5d1d4d49188412317a60036a392c27727852b246a1d59a9c2807cb17186e00 (not the intended 809eba9b7f5d40b984f4f37562dfe5419ec2de50de103fc2699048eea5bf6c46: already_applied false); release_sql_inspect: the six columns stakeholder_accounts.is_active, .is_primary, .account_type, .homeowner_name, .homeowner_email and .updated_at state different with no column grant (acl []); prerequisites_missing [], missing_dependencies [], precondition_failures []. The live hash equals the staging pre-state (staging read-live run 40152706123). apply_preconditions_met was false at inspect time only because no pre-state was recorded yet (execute false, expected_live_definition_sha256 null). This reviewed change copies live_definition_sha256 into expected_live_definition_sha256 and, in the same change, sets authorization, execute true and staging_acceptance. A fresh --inspect immediately before apply (the one-shot's inspect step) must still report this live_definition_sha256 and precondition_failures []; if not, stop. If already_applied is true, or precondition_failures is not [], stop: that needs its own reviewed change. Earlier: Pending: no read-only production inspect has been run for SQL 114 yet. Expected: stakeholder_accounts present with is_active, is_primary, account_type, homeowner_name, homeowner_email and updated_at and owned by checksops_admin, roles checksops and authenticated present, no column grant on the six columns (the restored database granted table-level SELECT only), precondition_failures []. Record its date, SSM command id, source commit, live_definition_sha256, precondition_failures and apply_preconditions_met here. If already_applied is true, record the inspect as the verified-live evidence and leave execute false; otherwise copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. If precondition_failures is not [] stop: that needs its own reviewed change."
   },
   "intended_post_state": {
     "fingerprint": "809eba9b7f5d40b984f4f37562dfe5419ec2de50de103fc2699048eea5bf6c46",
     "note": "public.stakeholder_accounts: the columns is_active, is_primary, account_type, homeowner_name, homeowner_email and updated_at each carry exactly the column grants authenticated UPDATE and checksops UPDATE (no INSERT, SELECT, REFERENCES or other column from this file). The table ACL (table-level SELECT of checksops and authenticated, the owner's), every other column's ACL, the RLS flags and the policies (aws_write_stakeholder_accounts stays the authorization boundary) are unchanged; no other table, function, policy, column or row changes. The fingerprint is releaseIntendedHash('sql114', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): 809eba9b7f5d40b984f4f37562dfe5419ec2de50de103fc2699048eea5bf6c46."
   },
   "staging_acceptance": {
-    "ok": false,
-    "reference": null,
-    "basis": "Pending: record the guarded staging SQL executor read-live run of SQL 114 (choice sql114-stakeholder-settings-update-grant) and, where the read-live reports already_applied false, its staging apply run here in the reviewed change that sets execute true. Where the read-live reports already_applied true (both lines held on all six columns) there is nothing to apply in staging and the read-live itself is the staging evidence. Otherwise the staging pin records that pre-state and the owner approves the staging apply, and the apply run (receipt before == the recorded pre-state, after == intended) is the staging evidence. The grant is covered on PostgreSQL 16 by aws/tests/sql114-stakeholder-settings-update-grant-pg.test.mjs. Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+    "ok": true,
+    "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/40154043207",
+    "basis": "Guarded staging apply from the same pre-state as production. The guarded staging SQL executor (choice sql114-stakeholder-settings-update-grant) carried SQL 114 from deploy run 40152534378 (inspect run 40152370153 before it found the executor at nloTNyc3Hlg8ps1wpeSGqoo6FTnX9NHOKT5TcfN3FIg= without SQL 114) and, after the staging pin change (#1233, main 952ecf7a6), deploy run 40153846012 (inspect run 40153686657 before it found the executor at VMyMjKW186UWTkd4ZWuwEAxEz7vJ+5v9WJtGzHw8rx0= superseding only lib/sql-executor-auth.mjs; executor after it r6G9KanI5np/OtQaWdwWUcF3ktnSYgmB6JyRksun/w0=). Read-live run 40152706123 (2026-10-25, main cfc0829e5) reported already_applied false, precondition_failures [] and live 8b5d1d4d49188412317a60036a392c27727852b246a1d59a9c2807cb17186e00, recorded as the staging pin's expected_live_definition_sha256. The staging apply run 40154043207 (2026-10-25, staging pin commit 35e118aa56628f1820baf4f4666c6da75a3fa888) reported result applied, before 8b5d1d4d49188412317a60036a392c27727852b246a1d59a9c2807cb17186e00, after 809eba9b7f5d40b984f4f37562dfe5419ec2de50de103fc2699048eea5bf6c46 = intended_replacement_sha256. The read-live after it (run 40154234967) reported already_applied true and live 809eba9b7f5d40b984f4f37562dfe5419ec2de50de103fc2699048eea5bf6c46 = intended_replacement_sha256: each of the six columns authenticated UPDATE and checksops UPDATE. The pre-states are identical: staging before its apply and production at its inspect (SSM f4d57070-7215-4c70-93d0-43a03d3bc68a) both report 8b5d1d4d49188412317a60036a392c27727852b246a1d59a9c2807cb17186e00, so this is direct acceptance from the same pre-state, not substitute evidence. The grant is covered on PostgreSQL 16 by aws/tests/sql114-stakeholder-settings-update-grant-pg.test.mjs. The production apply refuses unless the live state still equals this pin's expected_live_definition_sha256, and its post-conditions roll back unless the intended fingerprint is reached with the table ACL, every other column and the rest of the catalog unchanged."
   }
 }

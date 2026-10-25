@@ -36,7 +36,23 @@ nothing dropped, no collisions). Deploy run 40152534378 updated it to main's pac
 `precondition_failures` `[]`. Recorded in the staging pin (`expected_live_definition_sha256`,
 `execute: true`, wave 15) under the owner's words of 2026-10-25, "approve SQL 114 staging apply".
 
-**Status:** staging pin execute-authorized (wave 15); nothing applied yet; production pin pending.
+**Staging apply (2026-10-25).** After the staging pin change (#1233, main `952ecf7a6`), inspect run
+40153686657 found the executor superseding only `lib/sql-executor-auth.mjs`; deploy run 40153846012
+refreshed it (`r6G9KanI…`). Apply run 40154043207: result `applied`, before `8b5d1d4d49188412317a60036a392c27727852b246a1d59a9c2807cb17186e00`,
+after `809eba9b7f5d40b984f4f37562dfe5419ec2de50de103fc2699048eea5bf6c46` (intended). Read-live run
+40154234967: `already_applied` true, each of the six columns `authenticated UPDATE` and
+`checksops UPDATE`.
+
+**Production inspect (2026-10-25).** Read-only `--inspect` through SSM
+`f4d57070-7215-4c70-93d0-43a03d3bc68a` on `i-0c35557c4e5385406`, main `952ecf7a6` (tarball sha256
+`8af03c02dcca2deb97636f81807df65ffbb54b393b90361ebe5881dd1e2d91d6`, transfer run 40184052967, migration
+source `484a6c17…` == pin), connected as `checksops_admin`: no column grant on the six columns; live
+`8b5d1d4d49188412317a60036a392c27727852b246a1d59a9c2807cb17186e00` (the staging pre-state), `already_applied` false,
+`precondition_failures` `[]`. Recorded in the production pin with the staging apply as its staging
+acceptance and `execute: true` under the owner's words of 2026-10-25, "approve SQL 114 production
+apply". Each apply still needs the owner's run-time approval.
+
+**Status:** staging applied (wave 15); production pin execute-authorized; production apply pending.
 
 ## Fingerprint
 
