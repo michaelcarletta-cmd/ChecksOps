@@ -50,17 +50,18 @@ const REPO_MODULES = {
 
 // Live ZIP stand-in: main's modules, with planned members before `member` already on the
 // accepted bytes, later ones still on the reconciled pre-deploy bytes, and ADD members absent.
-function liveFor(member, { sha256 = undefined, present = undefined, extra = [], pending = [], sources = {} } = {}) {
-  const row = PLAN.members[member];
+// `plan` replays an earlier state of the plan (a member's pre-apply bytes as expected_live).
+function liveFor(member, { sha256 = undefined, present = undefined, extra = [], pending = [], sources = {}, plan = PLAN } = {}) {
+  const row = plan.members[member];
   const memberSha = sha256 !== undefined ? sha256 : row.expected_live_sha256;
   const isPresent = present !== undefined ? present : memberSha !== null;
-  const index = PLAN.order.indexOf(member);
+  const index = plan.order.indexOf(member);
   const liveSources = { ...REPO_MODULES, ...sources };
   const memberHashes = {};
   for (const name of Object.keys(liveSources)) {
-    const planned = PLAN.members[name];
+    const planned = plan.members[name];
     if (!planned) { memberHashes[name] = createHash('sha256').update(liveSources[name]).digest('hex'); continue; }
-    const position = PLAN.order.indexOf(name);
+    const position = plan.order.indexOf(name);
     if (name === member) {
       if (isPresent) memberHashes[name] = memberSha;
     } else if (position < index && !pending.includes(name)) {
@@ -635,7 +636,7 @@ test('#901 Review financial edits: write-allowlist.mjs, then write-check-workflo
   const MANIFEST_901 = 'aws/tests/fixtures/production-review-financial-edits-manifest-2026-10-16.json';
 
   const MANIFEST_RELEASE = 'aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json';
-  const MANIFEST_STAKEHOLDER_SETTINGS = 'aws/tests/fixtures/production-stakeholder-settings-edit-manifest-2026-10-25.json';
+  const MANIFEST_STAKEHOLDER_SETTINGS_APPLIED = 'aws/tests/fixtures/production-stakeholder-settings-edit-applied-manifest-2026-10-25.json';
   const SQL93 = 'aws/workflows/sql/93_tenant_company_info.sql';
 
   // #901 planned both as REPLACE of the 2026-10-11 production bytes; that manifest stays as evidence.
@@ -655,9 +656,10 @@ test('#901 Review financial edits: write-allowlist.mjs, then write-check-workflo
     assert.equal(release.members[member].supersedes_unapplied_manifest, undefined, member);
     assert.equal(release.members[member].live_sha256, accepted, member);
     // The release bytes went live with the 2026-10-21 production rebuilds; the stakeholder settings
-    // edit (2026-10-25) replaces them, so the row now expects the release bytes.
-    assert.equal(row.manifest, MANIFEST_STAKEHOLDER_SETTINGS, member);
-    assert.equal(row.expected_live_sha256, release.members[member].accepted_sha256, member);
+    // edit replaced them in production (2026-10-25), so the row now expects that edit's applied bytes.
+    assert.equal(row.manifest, MANIFEST_STAKEHOLDER_SETTINGS_APPLIED, member);
+    assert.equal(row.expected_live_sha256, row.accepted_sha256, member);
+    assert.notEqual(row.expected_live_sha256, release.members[member].accepted_sha256, member);
     assert.notEqual(row.expected_live_sha256, live, member);
     assert.equal(sha(`aws/functions/api/${member}`), row.accepted_sha256, member);
     assert.equal(resolvePlannedMember(member, { root: ROOT, plan: PLAN }).ok, true, member);
@@ -690,55 +692,63 @@ test('#901 Review financial edits: write-allowlist.mjs, then write-check-workflo
     assert.equal(applied.applied?.result, 'applied', record);
   }
 
+  // Both rows record the stakeholder settings edit's applied bytes live (2026-10-25), so the gates below
+  // are replayed on the plan as it stood before that apply: each row expecting its pre-apply bytes.
+  const STAKEHOLDER_PRE_APPLY = { [ALLOWLIST]: '5f84c5634190ebade1ee6ae10d3420e09548efac78f2a72eb98886d2f0341189', [WORKFLOW_WRITES]: 'fa2c6aef0e4e6c8713f60a24804309b4cf7f9e4b9d69a379498ef9acaf621fc2' };
+  const PRE = structuredClone(PLAN);
+  for (const [member, before] of Object.entries(STAKEHOLDER_PRE_APPLY)) PRE.members[member].expected_live_sha256 = before;
+  const preEnv = (member) => applyEnv(member, { CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: STAKEHOLDER_PRE_APPLY[member] });
+  const preDeps = (member, opts = {}) => applyDeps(member, { ...opts, plan: PRE });
+
   // write-allowlist.mjs is held for SQL 93 (release 2026-10-17): SQL 93 is recorded live in
   // production since 2026-10-19 (#1061); its pre-record copy (SQL 93 not live) still refuses ...
   assert.equal(PLAN.sql_prerequisites[SQL93].verified_live, true);
   assert.match(PLAN.sql_prerequisites[SQL93].evidence, /SSM a3696b55-52c2-4674-bd11-35153197191c/);
-  const without93 = structuredClone(PLAN);
+  const without93 = structuredClone(PRE);
   without93.sql_prerequisites[SQL93] = { verified_live: false, evidence: null };
   await assert.rejects(
-    run(applyEnv(ALLOWLIST), { ...applyDeps(ALLOWLIST).deps, plan: without93 }),
+    run(preEnv(ALLOWLIST), { ...preDeps(ALLOWLIST).deps, plan: without93 }),
     (error) => error.code === CODES.PRODUCTION_APPROVAL_REQUIRED && error.details.sql_before === SQL93,
   );
   // ... and, once SQL 93 is recorded live, applies while write-check-workflow.mjs is still on its live bytes.
-  const with93 = structuredClone(PLAN);
+  const with93 = structuredClone(PRE);
   with93.sql_prerequisites[SQL93] = { verified_live: true, evidence: 'test' };
-  const { deps, calls } = applyDeps(ALLOWLIST);
+  const { deps, calls } = preDeps(ALLOWLIST);
   const live = await deps.inspectLive();
-  assert.equal(live.memberHashes[WORKFLOW_WRITES], PLAN.members[WORKFLOW_WRITES].expected_live_sha256);
-  const allowlist = await run(applyEnv(ALLOWLIST), { ...deps, plan: with93 });
+  assert.equal(live.memberHashes[WORKFLOW_WRITES], STAKEHOLDER_PRE_APPLY[WORKFLOW_WRITES]);
+  const allowlist = await run(preEnv(ALLOWLIST), { ...deps, plan: with93 });
   assert.equal(allowlist.mutation, false);
   assert.deepEqual(calls.receipt.owned_member_ops, { replace: [ALLOWLIST], add: [] });
 
   // write-check-workflow.mjs is refused while SQL 89 is not recorded verified live ...
-  const unverified = structuredClone(PLAN);
+  const unverified = structuredClone(PRE);
   unverified.sql_prerequisites[SQL89] = { verified_live: false, evidence: null };
   await assert.rejects(
-    run(applyEnv(WORKFLOW_WRITES), { ...applyDeps(WORKFLOW_WRITES).deps, plan: unverified }),
+    run(preEnv(WORKFLOW_WRITES), { ...preDeps(WORKFLOW_WRITES).deps, plan: unverified }),
     (error) => error.code === CODES.PRODUCTION_APPROVAL_REQUIRED && error.details.sql_before === SQL89,
   );
   // ... and recording SQL 71 alone does not satisfy it ...
   const only71 = structuredClone(unverified);
   only71.sql_prerequisites[SQL71] = { verified_live: true, evidence: 'test' };
   await assert.rejects(
-    run(applyEnv(WORKFLOW_WRITES), { ...applyDeps(WORKFLOW_WRITES).deps, plan: only71 }),
+    run(preEnv(WORKFLOW_WRITES), { ...preDeps(WORKFLOW_WRITES).deps, plan: only71 }),
     (error) => error.code === CODES.PRODUCTION_APPROVAL_REQUIRED && error.details.sql_before === SQL89,
   );
-  const verified = PLAN;
+  const verified = PRE;
   // ... and, once it is, still refused before write-allowlist.mjs is live ...
   await assert.rejects(
-    run(applyEnv(WORKFLOW_WRITES), { ...applyDeps(WORKFLOW_WRITES, { pending: [ALLOWLIST] }).deps, plan: verified }),
+    run(preEnv(WORKFLOW_WRITES), { ...preDeps(WORKFLOW_WRITES, { pending: [ALLOWLIST] }).deps, plan: verified }),
     (error) => error.code === CODES.DEPLOYMENT_COLLISION && error.details.pending.includes(ALLOWLIST),
   );
   // ... or against an allowlist that does not export the REVIEW_* names ...
   await assert.rejects(
-    run(applyEnv(WORKFLOW_WRITES), { ...applyDeps(WORKFLOW_WRITES, { sources: { [ALLOWLIST]: 'export const WRITE_ALLOWLIST = {};\n' } }).deps, plan: verified }),
+    run(preEnv(WORKFLOW_WRITES), { ...preDeps(WORKFLOW_WRITES, { sources: { [ALLOWLIST]: 'export const WRITE_ALLOWLIST = {};\n' } }).deps, plan: verified }),
     (error) => error.code === CODES.DEPLOYMENT_COLLISION
       && error.details.problems.some((row) => row === `${ALLOWLIST} does not export REVIEW_CHECK_STAGE`),
   );
   // ... and allowed after both.
-  const writes = applyDeps(WORKFLOW_WRITES);
-  const result = await run(applyEnv(WORKFLOW_WRITES), { ...writes.deps, plan: verified });
+  const writes = preDeps(WORKFLOW_WRITES);
+  const result = await run(preEnv(WORKFLOW_WRITES), { ...writes.deps, plan: verified });
   assert.equal(result.mutation, false);
   assert.deepEqual(writes.calls.receipt.owned_member_ops, { replace: [WORKFLOW_WRITES], add: [] });
 
@@ -1030,11 +1040,12 @@ test('live reconciliation 2026-10-19: ten members expect the bytes inspect run 3
   // 39935902507, ALREADY_ACCEPTED), the plan row replaced them for the Refer & Earn routes, and production
   // run 39942182669 applied those (6902fe6f, now recorded live).
   // write-allowlist.mjs and write-check-workflow.mjs moved on too: their release bytes went live with
-  // the 2026-10-21 production rebuilds, and the plan rows replace them for the stakeholder settings edit.
+  // the 2026-10-21 production rebuilds, and production runs 40189236116 and 40189657073 replaced them
+  // for the stakeholder settings edit (1fc4a43e and e1227c96, now recorded live).
   const MOVED_ON = {
     'homeowner.mjs': { accepted: 'c51ea27a37a72b18aed7881ae349212257b790e6ff400cbe675949574504a80c', liveNow: 'c51ea27a37a72b18aed7881ae349212257b790e6ff400cbe675949574504a80c' },
-    'write-allowlist.mjs': { accepted: '5f84c5634190ebade1ee6ae10d3420e09548efac78f2a72eb98886d2f0341189', liveNow: '5f84c5634190ebade1ee6ae10d3420e09548efac78f2a72eb98886d2f0341189' },
-    'write-check-workflow.mjs': { accepted: 'fa2c6aef0e4e6c8713f60a24804309b4cf7f9e4b9d69a379498ef9acaf621fc2', liveNow: 'fa2c6aef0e4e6c8713f60a24804309b4cf7f9e4b9d69a379498ef9acaf621fc2' },
+    'write-allowlist.mjs': { accepted: '5f84c5634190ebade1ee6ae10d3420e09548efac78f2a72eb98886d2f0341189', liveNow: '1fc4a43eda4455d406edd4566d7a2bada352d241e88ba01cb4ff2cd3afb2884a' },
+    'write-check-workflow.mjs': { accepted: 'fa2c6aef0e4e6c8713f60a24804309b4cf7f9e4b9d69a379498ef9acaf621fc2', liveNow: 'e1227c967906496519db1fe9c996514c03ca04a79378ff77e93b92ecf470544a' },
     'workflow-rpc.mjs': { accepted: '79b7e4de653eb9d391afca9d27769b3b7c8e3d10d67af43e829ee32398797485', liveNow: '6902fe6f89f91c52f251ae1218257a387d6d7dd1fdb0e07687f6c99dfd5591d3' },
   };
   for (const [member, [before, live, manifestRel, appliedRel]] of Object.entries(RECONCILED)) {
@@ -1911,9 +1922,10 @@ test('Write echo secret columns: secret-columns.mjs, write-app-metadata.mjs and 
   const at = (name) => PLAN.order.indexOf(name);
   assert.deepEqual(PLAN.order.slice(at(ADD), at(ADD) + 3), [ADD, APP, WRITE]);
   assert.equal(PLAN.order.at(-1), 'providers.mjs');
-  // write-app-metadata.mjs moved on: the stakeholder settings edit (2026-10-25) replaces the applied
-  // bytes, so its row expects them and accepts main's newer bytes; write.mjs is unchanged.
-  const MOVED_ON = { [APP]: 'aws/tests/fixtures/production-stakeholder-settings-edit-manifest-2026-10-25.json' };
+  // write-app-metadata.mjs moved on: the stakeholder settings edit replaced the applied bytes in
+  // production (run 40189560481, 2026-10-25), so its row expects that edit's applied bytes, which are
+  // main's; write.mjs is unchanged.
+  const MOVED_ON = { [APP]: 'aws/tests/fixtures/production-stakeholder-settings-edit-applied-manifest-2026-10-25.json' };
   for (const name of [APP, WRITE]) {
     const LIVE = applied.members[name].accepted_sha256;
     if (!MOVED_ON[name]) assert.equal(LIVE, sha(`aws/functions/api/${name}`), name);
@@ -1923,10 +1935,10 @@ test('Write echo secret columns: secret-columns.mjs, write-app-metadata.mjs and 
     const row = PLAN.members[name];
     assert.equal(row.operation, 'replace', name);
     assert.equal(row.manifest, MOVED_ON[name] || APPLIED_REL, name);
-    assert.equal(row.expected_live_sha256, LIVE, name);
     assert.equal(row.accepted_sha256, sha(`aws/functions/api/${name}`), name);
-    const done = await run(inspect(name), { root: ROOT, inspectLive: liveFor(name, { sha256: LIVE }) });
-    assert.equal(done.state, MOVED_ON[name] ? 'READY' : 'ALREADY_ACCEPTED', name);
+    assert.equal(row.expected_live_sha256, MOVED_ON[name] ? row.accepted_sha256 : LIVE, name);
+    const done = await run(inspect(name), { root: ROOT, inspectLive: liveFor(name, { sha256: row.expected_live_sha256 }) });
+    assert.equal(done.state, 'ALREADY_ACCEPTED', name);
     await assert.rejects(
       run(inspect(name), { root: ROOT, inspectLive: liveFor(name, { sha256: BEFORE[name] }) }),
       (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
@@ -1939,6 +1951,7 @@ test('Write echo secret columns: secret-columns.mjs, write-app-metadata.mjs and 
 
 test('Stakeholder settings edit: write-allowlist.mjs, write-app-metadata.mjs and write-check-workflow.mjs replace the bytes production runs 39636816351 and 40089767778 put live', async () => {
   const MANIFEST_REL = 'aws/tests/fixtures/production-stakeholder-settings-edit-manifest-2026-10-25.json';
+  const APPLIED_REL = 'aws/tests/fixtures/production-stakeholder-settings-edit-applied-manifest-2026-10-25.json';
   const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, MANIFEST_REL), 'utf8'));
   const readJson = (rel) => JSON.parse(fs.readFileSync(path.join(ROOT, rel), 'utf8'));
   const ALLOWLIST = 'write-allowlist.mjs';
@@ -1972,13 +1985,17 @@ test('Stakeholder settings edit: write-allowlist.mjs, write-app-metadata.mjs and
     const onMain = sha(`aws/functions/api/${name}`);
     assert.notEqual(onMain, LIVE[name], name);
     assert.deepEqual(manifest.members[name], { live_sha256: LIVE[name], accepted_sha256: onMain, operation: 'replace' }, name);
+    // Applied 2026-10-25 (next test): the row expects main's bytes and names the applied manifest, so
+    // the pre-apply bytes this manifest planned to replace are now drift.
     assert.deepEqual(PLAN.members[name], {
-      operation: 'replace', accepted_sha256: onMain, expected_live_sha256: LIVE[name], sql_before: SQL_BEFORE[name], manifest: MANIFEST_REL,
+      operation: 'replace', accepted_sha256: onMain, expected_live_sha256: onMain, sql_before: SQL_BEFORE[name], manifest: APPLIED_REL,
     }, name);
     assert.equal(resolvePlannedMember(name, { root: ROOT, plan: PLAN }).ok, true, name);
-    const ready = await run(inspect(name), { root: ROOT, inspectLive: liveFor(name, { sha256: LIVE[name] }) });
-    assert.equal(ready.state, 'READY', name);
-    assert.equal(ready.mutation, false, name);
+    await assert.rejects(
+      run(inspect(name), { root: ROOT, inspectLive: liveFor(name, { sha256: LIVE[name] }) }),
+      (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+      name,
+    );
     assert.equal((await run(inspect(name), { root: ROOT, inspectLive: liveFor(name, { sha256: onMain }) })).state, 'ALREADY_ACCEPTED', name);
   }
   // Each in its existing place: the allowlist, then the writer, then the forwarder that opens the
@@ -1989,6 +2006,42 @@ test('Stakeholder settings edit: write-allowlist.mjs, write-app-metadata.mjs and
   // SQL 114 is not yet a recorded prerequisite: the plan names it in the notes, not as a hold.
   assert.equal(PLAN.sql_prerequisites['aws/workflows/sql/114_stakeholder_accounts_settings_update_grant.sql'], undefined);
   assert.match(PLAN.notes, /apply production SQL 114 before write-check-workflow\.mjs/);
+});
+
+test('Stakeholder settings edit: the three members record the bytes production runs 40189236116, 40189560481 and 40189657073 applied', () => {
+  const PLANNED_REL = 'aws/tests/fixtures/production-stakeholder-settings-edit-manifest-2026-10-25.json';
+  const APPLIED_REL = 'aws/tests/fixtures/production-stakeholder-settings-edit-applied-manifest-2026-10-25.json';
+  const planned = JSON.parse(fs.readFileSync(path.join(ROOT, PLANNED_REL), 'utf8'));
+  const applied = JSON.parse(fs.readFileSync(path.join(ROOT, APPLIED_REL), 'utf8'));
+  // Staging acceptance, production preflight inspect and production apply, per member.
+  const RUNS = {
+    'write-allowlist.mjs': ['40187607327', '40189124128', '40189236116'],
+    'write-app-metadata.mjs': ['40187714948', '40189305061', '40189560481'],
+    'write-check-workflow.mjs': ['40187824410', '40189127903', '40189657073'],
+  };
+  assert.deepEqual(Object.keys(applied.members), Object.keys(RUNS));
+  for (const [member, runs] of Object.entries(RUNS)) {
+    const onMain = sha(`aws/functions/api/${member}`);
+    const row = PLAN.members[member];
+    // The plan row expects the applied bytes, which are main's bytes, and names the applied manifest.
+    assert.equal(row.operation, 'replace', member);
+    assert.equal(row.accepted_sha256, onMain, member);
+    assert.equal(row.expected_live_sha256, onMain, member);
+    assert.equal(row.manifest, APPLIED_REL, member);
+    assert.deepEqual(applied.members[member], {
+      live_sha256: onMain, accepted_sha256: onMain, operation: 'replace', previous_manifest: PLANNED_REL,
+    }, member);
+    // The planned manifest keeps the pre-apply state.
+    assert.notEqual(planned.members[member].live_sha256, onMain, member);
+    assert.equal(planned.members[member].accepted_sha256, onMain, member);
+    for (const runId of runs) {
+      assert.match(applied.notes, new RegExp(`run ${runId}`), `${member} ${runId}`);
+      assert.match(PLAN.notes, new RegExp(runId), `${member} ${runId}`);
+    }
+  }
+  assert.equal(applied.workstream_id, 'production-stakeholder-settings-edit-applied');
+  assert.equal(applied.deploy_authorized, false);
+  assert.match(applied.authorization, /^Record only/);
 });
 
 test('Production email to every recipient: email-policy.mjs records the bytes production run 40151123531 applied', () => {

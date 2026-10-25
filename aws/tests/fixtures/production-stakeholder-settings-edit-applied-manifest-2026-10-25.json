@@ -1,0 +1,27 @@
+{
+  "workstream_id": "production-stakeholder-settings-edit-applied",
+  "authorization": "Record only (2026-10-25): the bytes below are live. Nothing is planned or authorized by this manifest; any later change to these members needs its own manifest, staging acceptance and owner approval.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Stakeholder settings edit applied 2026-10-25 through the guarded overlay path on main 4e684a930 (#1236, then #1237, which changed only the website), on the owner's \"DEPLOY write-allowlist.mjs TO PRODUCTION, DEPLOY write-app-metadata.mjs TO PRODUCTION, DEPLOY write-check-workflow.mjs TO PRODUCTION\", after production SQL 114 (applied 2026-10-25, #1235). write-allowlist.mjs: staging apply run 40187607327 (the staging acceptance); production preflight inspect run 40189124128 (READY, 5f84c563 live, CodeSha256 bS8L+gKhuWnG0BJRRDoPEikiN1+tW7l/W/eVpCCe9wc=, RevisionId 65fd78b3-a4f4-4684-8c36-ea85d1ae6522); production apply run 40189236116 (5f84c563 -> 1fc4a43e). write-app-metadata.mjs: staging apply run 40187714948 (the staging acceptance); production preflight inspect run 40189305061 (READY, e9f59981 live; an earlier inspect, run 40189125975, was cancelled in the workflow queue before it started and read nothing); production apply run 40189560481 (e9f59981 -> 0e535bee). write-check-workflow.mjs: staging apply run 40187824410 (the staging acceptance); production preflight inspect run 40189127903 (READY, fa2c6aef live); production apply run 40189657073 (fa2c6aef -> e1227c96). Each apply run concluded success including its \"Verify live member is the accepted bytes\" step (state VERIFIED) and the public production smoke (/health and /db-health 200). The last verify read back CodeSha256 FoO84zeMGYaibWBbHh7uUf16DDyQ2minIe6F1I+JzeM= and RevisionId 6dd49a80-882f-404b-820f-c7607b819965. Each row records the applied bytes as live_sha256 and accepted_sha256 and chains to the manifest that planned it (previous_manifest), which keeps the pre-apply state.",
+  "members": {
+    "write-allowlist.mjs": {
+      "live_sha256": "1fc4a43eda4455d406edd4566d7a2bada352d241e88ba01cb4ff2cd3afb2884a",
+      "accepted_sha256": "1fc4a43eda4455d406edd4566d7a2bada352d241e88ba01cb4ff2cd3afb2884a",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-stakeholder-settings-edit-manifest-2026-10-25.json"
+    },
+    "write-app-metadata.mjs": {
+      "live_sha256": "0e535bee701c9f0b17c0af79c1997493c80c40a011517d7e13eca6fce54563b1",
+      "accepted_sha256": "0e535bee701c9f0b17c0af79c1997493c80c40a011517d7e13eca6fce54563b1",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-stakeholder-settings-edit-manifest-2026-10-25.json"
+    },
+    "write-check-workflow.mjs": {
+      "live_sha256": "e1227c967906496519db1fe9c996514c03ca04a79378ff77e93b92ecf470544a",
+      "accepted_sha256": "e1227c967906496519db1fe9c996514c03ca04a79378ff77e93b92ecf470544a",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-stakeholder-settings-edit-manifest-2026-10-25.json"
+    }
+  }
+}
