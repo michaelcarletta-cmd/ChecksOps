@@ -1,5 +1,5 @@
 /**
- * Specs of the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108 to SQL 114) for the shared engine in
+ * Specs of the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108 to SQL 115) for the shared engine in
  * release-sql-state.mjs: what each pinned file creates, replaces or drops, the reviewed
  * EXECUTE ACLs, the prerequisites and predecessors, and the PostgreSQL renderings the file
  * leaves (policy expressions, view, column, constraint, index and trigger definitions as
@@ -4163,6 +4163,89 @@ export const RELEASE_SQL_SPECS = deepFreeze({
       }
     ],
     "altered_relations": [
+      "public.stakeholder_accounts"
+    ]
+  },
+  // SQL 115: public.sync_provider_stakeholder_account(uuid), restored from supabase migration
+  // 20260728110453 and fired by trg_sync_provider_stakeholder_acct / _bank after every payment
+  // account or method change, replaced so a tenant with a Moov account in two environments never
+  // gets a second active partner payout (stakeholder_accounts_one_partner_payout refused it and
+  // the trigger rolled back moov-sync on staging, 2026-10-25). Same signature and attributes;
+  // EXECUTE revoked from PUBLIC, anon, authenticated and service_role (its callers are SECURITY
+  // DEFINER), so the final ACL is the owner's only. A live grant outside those lines refuses the
+  // pre-conditions (function_acl_replaceable). It writes stakeholder_accounts as a definer.
+  sql115: {
+    "key": "sql115",
+    "label": "SQL 115",
+    "choice": "sql115-provider-stakeholder-one-partner-payout",
+    "production_pin_rel": "ops/deployment-guard/sql115-provider-stakeholder-one-partner-payout-production-apply.json",
+    "script": "sql115-provider-stakeholder-one-partner-payout-production-apply",
+    "prerequisites": [
+      "public.sync_provider_stakeholder_account(uuid)",
+      "public.payment_provider_accounts",
+      "public.payment_provider_methods",
+      "public.stakeholder_accounts",
+      "public.tenants",
+      "public.tenant_users",
+      "column public.payment_provider_accounts.tenant_id",
+      "column public.payment_provider_accounts.provider",
+      "column public.payment_provider_accounts.environment",
+      "column public.payment_provider_accounts.provider_account_id",
+      "column public.payment_provider_accounts.display_name",
+      "column public.payment_provider_accounts.can_receive_payments",
+      "column public.payment_provider_accounts.disabled",
+      "column public.payment_provider_accounts.updated_at",
+      "column public.payment_provider_methods.tenant_id",
+      "column public.payment_provider_methods.provider",
+      "column public.payment_provider_methods.environment",
+      "column public.payment_provider_methods.external_recipient_id",
+      "column public.payment_provider_methods.can_receive",
+      "column public.payment_provider_methods.is_default",
+      "column public.payment_provider_methods.connected_at",
+      "column public.payment_provider_methods.provider_bank_account_id",
+      "column public.payment_provider_methods.bank_name",
+      "column public.payment_provider_methods.last_four",
+      "column public.stakeholder_accounts.id",
+      "column public.stakeholder_accounts.tenant_id",
+      "column public.stakeholder_accounts.created_by",
+      "column public.stakeholder_accounts.nickname",
+      "column public.stakeholder_accounts.account_type",
+      "column public.stakeholder_accounts.custname",
+      "column public.stakeholder_accounts.origin",
+      "column public.stakeholder_accounts.is_partner_payout",
+      "column public.stakeholder_accounts.is_active",
+      "column public.stakeholder_accounts.verification_status",
+      "column public.stakeholder_accounts.verification_source",
+      "column public.stakeholder_accounts.verified_at",
+      "column public.stakeholder_accounts.provider",
+      "column public.stakeholder_accounts.provider_environment",
+      "column public.stakeholder_accounts.provider_account_id",
+      "column public.stakeholder_accounts.provider_bank_account_id",
+      "column public.stakeholder_accounts.provider_bank_name",
+      "column public.stakeholder_accounts.provider_last_four",
+      "column public.stakeholder_accounts.updated_at",
+      "column public.tenants.id",
+      "column public.tenants.name",
+      "column public.tenant_users.tenant_id",
+      "column public.tenant_users.user_id",
+      "column public.tenant_users.created_at"
+    ],
+    "predecessors": [],
+    "functions": [
+      {
+        "identity": "public.sync_provider_stakeholder_account(uuid)",
+        "acl": [
+          "owner EXECUTE"
+        ],
+        "revokes": [
+          "PUBLIC EXECUTE",
+          "anon EXECUTE",
+          "authenticated EXECUTE",
+          "service_role EXECUTE"
+        ]
+      }
+    ],
+    "definer_writes": [
       "public.stakeholder_accounts"
     ]
   },
