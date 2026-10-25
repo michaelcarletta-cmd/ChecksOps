@@ -2021,10 +2021,11 @@ test('Staging sends: moov-send.mjs then providers.mjs replace the bytes the plan
   const readJson = (rel) => JSON.parse(fs.readFileSync(path.join(ROOT, rel), 'utf8'));
   const SEND = 'providers/production/moov-send.mjs';
   const PROVIDERS = 'providers.mjs';
-  // The live bytes, each from its recorded evidence: the expected live value of the 2026-10-13 send
-  // manifest (unconfirmed; a production inspect confirms it) and the Moov payees applied bytes.
+  // The live bytes, each from its recorded evidence: the 2026-10-13 send manifest's accepted bytes
+  // (main's file as of #1187, observed live by read-only production inspect 40221211781) and the
+  // Moov payees applied bytes.
   const LIVE = {
-    [SEND]: readJson('aws/tests/fixtures/production-moov-send-manifest-2026-10-13.json').members[SEND].live_sha256,
+    [SEND]: readJson('aws/tests/fixtures/production-moov-send-manifest-2026-10-13.json').members[SEND].accepted_sha256,
     [PROVIDERS]: readJson('aws/tests/fixtures/production-moov-payees-applied-manifest-2026-10-24.json').members[PROVIDERS].accepted_sha256,
   };
   assert.equal(manifest.workstream_id, 'production-sandbox-send');

@@ -345,7 +345,7 @@
     "providers/production/moov-send.mjs": {
       "operation": "replace",
       "accepted_sha256": "42655ac84abdeb93579d1ae24e69338268b02633c3b1d5014d219a4ace8f5217",
-      "expected_live_sha256": "a07442c49f33d100fa214ff44a85c9c5b86f16eaacc5f3daa1178fa43daef4ab",
+      "expected_live_sha256": "f82c1e0847abaa719302d39ae65bce2d6e2a868f604c16e03029b52eaa2bfd66",
       "sql_before": null,
       "manifest": "aws/tests/fixtures/production-sandbox-send-manifest-2026-10-25.json"
     },
