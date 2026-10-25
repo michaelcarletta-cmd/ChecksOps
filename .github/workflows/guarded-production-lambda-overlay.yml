@@ -117,6 +117,7 @@ on:
           - providers/payees/moov.mjs
           - providers/payees/email.mjs
           - providers/payees/handlers.mjs
+          - email-policy.mjs
           - providers/production/moov-wallet-fund.mjs
           - providers/production/moov-send.mjs
           - providers.mjs

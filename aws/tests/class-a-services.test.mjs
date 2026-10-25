@@ -29,6 +29,38 @@ test('recipient policy sinks non-allowlisted addresses in ses mode', () => {
   process.env.AWS_EMAIL_MODE = prev;
 });
 
+test('production ses mode delivers every recipient; staging ses mode keeps the allowlist', () => {
+  const prevMode = process.env.AWS_EMAIL_MODE;
+  const prevEnv = process.env.CHECKSOPS_ENV;
+  process.env.AWS_EMAIL_MODE = 'ses';
+  try {
+    for (const env of ['production-prep', 'production', ' Production ']) {
+      process.env.CHECKSOPS_ENV = env;
+      const [row] = applyRecipientPolicy(['Homeowner@Example.com']);
+      assert.equal(row.email, 'homeowner@example.com');
+      assert.equal(row.delivery, 'ses');
+      assert.equal(row.blocked, false);
+      assert.equal(row.policy, 'production_any_recipient');
+    }
+    for (const env of ['staging', '', 'prod']) {
+      process.env.CHECKSOPS_ENV = env;
+      const [row] = applyRecipientPolicy(['homeowner@example.com']);
+      assert.equal(row.delivery, 'sink');
+      assert.equal(row.blocked, true);
+    }
+    // Sink mode still sinks everyone, production included.
+    process.env.CHECKSOPS_ENV = 'production-prep';
+    process.env.AWS_EMAIL_MODE = 'sink';
+    const [sunk] = applyRecipientPolicy(['homeowner@example.com']);
+    assert.equal(sunk.delivery, 'sink');
+    // The plain allowlist check (payee and endorsement email) is unchanged.
+    assert.equal(isAllowlistedRecipient('homeowner@example.com'), false);
+  } finally {
+    if (prevMode === undefined) delete process.env.AWS_EMAIL_MODE; else process.env.AWS_EMAIL_MODE = prevMode;
+    if (prevEnv === undefined) delete process.env.CHECKSOPS_ENV; else process.env.CHECKSOPS_ENV = prevEnv;
+  }
+});
+
 test('sink mode always rewrites destination', () => {
   const prev = process.env.AWS_EMAIL_MODE;
   process.env.AWS_EMAIL_MODE = 'sink';

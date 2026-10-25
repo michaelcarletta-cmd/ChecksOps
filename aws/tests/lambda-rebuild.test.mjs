@@ -103,6 +103,10 @@ const CHANGED_SINCE_SECOND_REBUILD = {
   // (the added secret-columns.mjs) from the rows it returns; a REPLACE member of the production
   // overlay plan when it is deployed, not a rebuild section.
   'write.mjs': 'changed',
+  // Production email to every recipient (2026-10-25): SES mode on production delivers every
+  // recipient instead of the staging allowlist; a REPLACE member of the production overlay plan,
+  // not a rebuild section.
+  'email-policy.mjs': 'changed',
 };
 // Listed changes that go through the production overlay plan, never the current rebuild section.
 const OVERLAY_PLAN_CHANGES = new Set([
@@ -118,6 +122,7 @@ const OVERLAY_PLAN_CHANGES = new Set([
   'providers/parity/platform-finance.mjs',
   'providers/catalog.mjs',
   'write.mjs',
+  'email-policy.mjs',
 ]);
 const assertSectionAcceptedIsMain = (apiRoot, name, accepted) => {
   const onMain = sha256(fs.readFileSync(path.join(apiRoot, name)));
