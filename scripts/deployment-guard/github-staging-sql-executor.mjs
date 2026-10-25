@@ -119,6 +119,7 @@ export const MIGRATIONS = Object.freeze({
   'sql111-tenant-referral-codes': RELEASE_2026_10_17_PENDING_SQL_PINS.sql111,
   'sql112-moov-invoice-table-grants': RELEASE_2026_10_17_PENDING_SQL_PINS.sql112,
   'sql113-payee-setup': RELEASE_2026_10_17_PENDING_SQL_PINS.sql113,
+  'sql114-stakeholder-settings-update-grant': RELEASE_2026_10_17_PENDING_SQL_PINS.sql114,
 });
 
 const LAMBDA_CODE_SHA_RE = /^[A-Za-z0-9+/]{43}=$/;
