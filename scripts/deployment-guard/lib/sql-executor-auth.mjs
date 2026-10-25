@@ -2527,6 +2527,27 @@ export const AUTHORIZED_SQL114_STAKEHOLDER_SETTINGS_UPDATE_GRANT = Object.freeze
   function_identities: Object.freeze([]),
 });
 
+// Partner payout 2026-10-25 staging pin: SQL 115 (public.sync_provider_stakeholder_account(uuid)
+// replaced so a tenant with a Moov account in two environments keeps one active partner payout;
+// the second insert broke moov-sync on staging, 2026-10-25; EXECUTE owner only).
+// No predecessor. Pending until a reviewed pin change records a staging read-live.
+export const AUTHORIZED_SQL115_PROVIDER_STAKEHOLDER_ONE_PARTNER_PAYOUT = Object.freeze({
+  key: 'sql115',
+  filename: 'aws/workflows/sql/115_provider_stakeholder_one_partner_payout.sql',
+  migration_id: '115_provider_stakeholder_one_partner_payout',
+  // The commit that last authored the file bytes.
+  commit: '3807a0c356825dc3ccd9bf5b83a62310f4127f87',
+  source_sha256: '5902638017eec4581a5f9241e93d9343b56ed39374beb671df8e8784e22f11ab',
+  authorization: 'pending',
+  execute: false,
+  expected_live_definition_sha256: null,
+  // Code-derived: releaseIntendedHash('sql115', file bytes) (release-sql-state.mjs); re-derived by the tests.
+  intended_replacement_sha256: '8aed39a49d988a60bdedac07a3a97f424a9de5c1499e4f50738f749326a62452',
+  function_identities: Object.freeze([
+    'public.sync_provider_stakeholder_account(uuid)',
+  ]),
+});
+
 export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql90: AUTHORIZED_SQL90_USERS_ONLY_TENANT_ROLES,
   sql91: AUTHORIZED_SQL91_MOOV_ONBOARDING,
@@ -2552,6 +2573,7 @@ export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql112: AUTHORIZED_SQL112_MOOV_INVOICE_TABLE_GRANTS,
   sql113: AUTHORIZED_SQL113_PAYEE_SETUP,
   sql114: AUTHORIZED_SQL114_STAKEHOLDER_SETTINGS_UPDATE_GRANT,
+  sql115: AUTHORIZED_SQL115_PROVIDER_STAKEHOLDER_ONE_PARTNER_PAYOUT,
 });
 
 // The fee collection pin under its earlier map name (the same object as the release map's sql98).
@@ -2567,7 +2589,7 @@ export function isSql30TenantDocumentsDocType(input = {}) {
   return pinIdentifiersMatch(input, AUTHORIZED_SQL30_TENANT_DOCUMENTS_DOC_TYPE);
 }
 
-/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql114) an input names, or null. */
+/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql115) an input names, or null. */
 export function releaseSqlMigrationKey(input = {}) {
   return Object.keys(RELEASE_2026_10_17_PENDING_SQL_PINS)
     .find((key) => pinIdentifiersMatch(input, RELEASE_2026_10_17_PENDING_SQL_PINS[key])) || null;

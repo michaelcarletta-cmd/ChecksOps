@@ -38,6 +38,7 @@ that connects to the database:
 | `sql112` | `scripts/deployment-guard/sql112-moov-invoice-table-grants-production-apply.mjs` (`ops/production-sql-112-apply.md`; the table grants of `checksops` and `authenticated` on `moov_invoices` and `moov_invoice_customers`; no predecessor, no order) |
 | `sql113` | `scripts/deployment-guard/sql113-payee-setup-production-apply.mjs` (`ops/production-sql-113-apply.md`; the payee state columns on `external_payment_recipients`, origin `provider_recipient`, SELECT on `external_payment_recipients` for `checksops` and `authenticated`, and the six SECURITY DEFINER payee functions; no predecessor, no order) |
 | `sql114` | `scripts/deployment-guard/sql114-stakeholder-settings-update-grant-production-apply.mjs` (`ops/production-sql-114-apply.md`; UPDATE on `stakeholder_accounts` `is_active`, `is_primary`, `account_type`, `homeowner_name`, `homeowner_email` and `updated_at` for `checksops` and `authenticated`, column-scoped; no predecessor, no order) |
+| `sql115` | `scripts/deployment-guard/sql115-provider-stakeholder-one-partner-payout-production-apply.mjs` (`ops/production-sql-115-apply.md`; `sync_provider_stakeholder_account(uuid)` keeps one active partner payout per tenant, EXECUTE owner only; no predecessor, no order) |
 
 To add a migration, register its reviewed tool in `ONE_SHOT_TOOLS`
 (`scripts/deployment-guard/lib/production-sql-one-shot.mjs`). An entry names only the tool,
@@ -52,7 +53,7 @@ a migration file touches its pin, not the registry. An entry may add `inspect_re
 
 | flag | |
 |---|---|
-| `--migration <key>` | a registered key (`sql29`, `sql30`, `sql71`, `sql77`…`sql89`, `sql90`…`sql106`, `sql108`, `sql109`, `sql110`, `sql111`, `sql112`, `sql113`, `sql114`) |
+| `--migration <key>` | a registered key (`sql29`, `sql30`, `sql71`, `sql77`…`sql89`, `sql90`…`sql106`, `sql108`, `sql109`, `sql110`, `sql111`, `sql112`, `sql113`, `sql114`, `sql115`) |
 | `--approval-scope <key>` | the migration the owner approved; must equal `--migration` |
 | `--approval-statement "<words>"` or `--approval-statement-b64 <base64>` | the owner's exact words, recorded verbatim. Pass exactly one of the two. Use the base64 form when the words contain quotes or newlines. Must be non-empty. |
 | `--commit <sha>` | the full main commit the tarball was built from |

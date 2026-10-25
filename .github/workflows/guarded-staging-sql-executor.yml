@@ -62,6 +62,7 @@ on:
           - sql112-moov-invoice-table-grants
           - sql113-payee-setup
           - sql114-stakeholder-settings-update-grant
+          - sql115-provider-stakeholder-one-partner-payout
       approved_commit:
         description: "Required for deploy/apply/read-live: exact main commit approved for this run"
         required: false
@@ -177,6 +178,7 @@ jobs:
           node --test aws/tests/release-sql112-executor.test.mjs
           node --test aws/tests/release-sql113-executor.test.mjs
           node --test aws/tests/release-sql114-executor.test.mjs
+          node --test aws/tests/release-sql115-executor.test.mjs
           node --test aws/tests/mortgage-executor-commit-outcome.test.mjs
           node --test aws/tests/deployment-guard-kms-receipt.test.mjs
           node --test aws/tests/deployment-guard-signed-receipt.test.mjs
