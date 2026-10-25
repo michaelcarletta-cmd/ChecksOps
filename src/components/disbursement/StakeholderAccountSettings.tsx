@@ -80,6 +80,8 @@ export function StakeholderAccountSettings() {
   const [deleteTarget, setDeleteTarget] = useState<null | { id: string; label: string; payee: PayeeRow | null }>(null);
   const [typeTarget, setTypeTarget] = useState<null | { id: string; label: string; current: string }>(null);
   const [typeChoice, setTypeChoice] = useState<string>("contractor");
+  // Disconnected payees are a history record only (they cannot be paid); hidden until asked for.
+  const [showDisconnected, setShowDisconnected] = useState(false);
   const [requestId, setRequestId] = useState(() => crypto.randomUUID());
 
   const { data: accounts = [], isLoading } = useQuery({
@@ -542,8 +544,17 @@ export function StakeholderAccountSettings() {
 
           {disconnectedPayees.length > 0 && (
             <div className="space-y-1 pt-2">
-              <p className="text-[11px] font-medium text-muted-foreground">Disconnected payees</p>
-              {disconnectedPayees.map((p) => (
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="h-6 px-1 text-[11px] font-medium text-muted-foreground"
+                aria-expanded={showDisconnected}
+                onClick={() => setShowDisconnected((v) => !v)}
+              >
+                {showDisconnected ? "Hide" : "Show"} disconnected payees ({disconnectedPayees.length})
+              </Button>
+              {showDisconnected && disconnectedPayees.map((p) => (
                 <div key={p.id} className="flex items-center justify-between gap-2 p-2 rounded-md border border-dashed text-xs text-muted-foreground">
                   <span className="truncate">{p.display_name}{p.email ? ` · ${p.email}` : ""}</span>
                   <Badge variant="outline" className={`text-[10px] px-1.5 ${PAYEE_STATUS_CLASS.disconnected}`}>{PAYEE_STATUS_LABEL.disconnected}</Badge>

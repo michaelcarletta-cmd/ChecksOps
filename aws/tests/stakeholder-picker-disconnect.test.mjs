@@ -30,6 +30,13 @@ test('Settings unlinks check_stakeholders by id, never by stakeholder_account_id
   assert.match(src, /from\("check_stakeholders"\)\.delete\(\)\.eq\("id", link\.id\)/);
 });
 
+test('Settings hides disconnected payees until the owner asks to see them', () => {
+  const src = read('src/components/disbursement/StakeholderAccountSettings.tsx');
+  assert.match(src, /const \[showDisconnected, setShowDisconnected\] = useState\(false\);/);
+  assert.match(src, /\{showDisconnected \? "Hide" : "Show"\} disconnected payees \(\{disconnectedPayees\.length\}\)/);
+  assert.match(src, /\{showDisconnected && disconnectedPayees\.map\(/);
+});
+
 test('server allowlist still filters check_stakeholders deletes on id only', async () => {
   const { WRITE_ALLOWLIST } = await import('../functions/api/write-allowlist.mjs');
   assert.deepEqual([...WRITE_ALLOWLIST.check_stakeholders.filterColumns], ['id']);
