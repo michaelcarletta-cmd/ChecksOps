@@ -4,7 +4,7 @@
  * release-sql90-97-executor.test.mjs runs what every release key shares (SQL 114 included); this
  * file covers what is new:
  *
- *   - the pin: pending (no read-live yet), code-derived, selectable, packed, in step with the
+ *   - the pin: staging-authorized from its read-live (wave 15), code-derived, selectable, packed, in step with the
  *     production pin; the pinned commit authored the bytes; no predecessor;
  *   - the spec's six column_acl entries (SQL 114 creates or replaces no function), as SQL 92's:
  *     the fingerprint is the column ACL (every grantee) of is_active, is_primary, account_type,
@@ -50,7 +50,7 @@ import { EXECUTOR_PACK_MEMBERS } from '../../scripts/deployment-guard/sql-execut
 import { MIGRATIONS } from '../../scripts/deployment-guard/github-staging-sql-executor.mjs';
 import { READ_LIVE_EXPECTED_SENTINEL } from '../../scripts/deployment-guard/lib/sql-executor-read-live.mjs';
 import { importGuardedSqlExecutor } from './helpers/import-guarded-sql-executor.mjs';
-import { assertStagingPinState } from './helpers/staging-sql-wave1.mjs';
+import { assertStagingPinState, pendingPin } from './helpers/staging-sql-wave1.mjs';
 import { pgSkipReason, releaseFixture } from './helpers/release-sql-pg.mjs';
 import { SETTINGS_COLUMNS, STAKEHOLDERS, STAKEHOLDER_SETTINGS_SCHEMA } from './helpers/sql114-stakeholder-schema.mjs';
 
@@ -104,7 +104,7 @@ function handlerFor(connect, { pins = {} } = {}) {
   return createHandler({ connect, now: () => Date.parse(NOW), releaseSqlFiles: FILES, releaseSqlPins: { ...PINS, ...pins } });
 }
 
-test('pin: SQL 114 pending, code-derived, selectable, packed, in step with the production pin; no predecessor', () => {
+test('pin: SQL 114 staging-authorized from its read-live, code-derived, selectable, packed, in step with the production pin; no predecessor', () => {
   const pin = PINS[KEY];
   const spec = RELEASE_SQL_SPECS[KEY];
   const packed = Object.fromEntries(EXECUTOR_PACK_MEMBERS);
@@ -114,11 +114,13 @@ test('pin: SQL 114 pending, code-derived, selectable, packed, in step with the p
   assert.equal(pin.migration_id, '114_stakeholder_accounts_settings_update_grant');
   assert.equal(spec.choice, 'sql114-stakeholder-settings-update-grant');
   assert.equal(sha(TEXT), pin.source_sha256);
-  // Pending: no staging read-live yet, so no pre-state, no approval, execute false.
+  // Staging apply authorized (owner approved 2026-10-25) from staging read-live run 40152706123:
+  // no column grant on any of the six columns, so SQL 114 was not yet applied there.
   assertStagingPinState(assert, KEY, pin);
-  assert.equal(pin.execute, false);
-  assert.equal(pin.authorization, 'pending');
-  assert.equal(pin.expected_live_definition_sha256, null);
+  assert.equal(pin.execute, true);
+  assert.equal(pin.authorization, 'Owner approved 2026-10-25: staging apply (wave 15) from staging read-live run 40152706123');
+  assert.equal(pin.expected_live_definition_sha256, '8b5d1d4d49188412317a60036a392c27727852b246a1d59a9c2807cb17186e00');
+  assert.notEqual(pin.expected_live_definition_sha256, pin.intended_replacement_sha256);
   assert.equal(releaseIntendedHash(KEY, TEXT), pin.intended_replacement_sha256);
   assert.equal(pin.intended_replacement_sha256, '809eba9b7f5d40b984f4f37562dfe5419ec2de50de103fc2699048eea5bf6c46');
   assert.equal(pin.superseded_intended_sha256, undefined);
@@ -277,8 +279,9 @@ test('PostgreSQL 16: SQL 114 through the executor: drift refused, one apply on t
   const before = await acls();
   assert.deepEqual(before.table, ['authenticated SELECT', 'checksops SELECT']);
   assert.ok(Object.values(before.columns).every((acl) => acl.length === 0));
-  // A pending pin cannot apply.
-  const pending = await handlerFor(connect)(releaseEvent({ expected_live_definition_sha256: r.live_definition_sha256 }));
+  // A pending pin cannot apply (the committed pin is staging-authorized, so pend a copy).
+  const pendingCopy = pendingPin(PINS[KEY]);
+  const pending = await handlerFor(connect, { pins: { [KEY]: pendingCopy } })(releaseEvent({ pin: pendingCopy, expected_live_definition_sha256: r.live_definition_sha256 }));
   assert.equal(pending.ok, false);
   // Drift between the recorded pre-state and the apply refuses.
   await admin.query(`GRANT UPDATE (is_active) ON TABLE ${STAKEHOLDERS} TO checksops`);

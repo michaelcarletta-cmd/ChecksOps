@@ -25,7 +25,18 @@ recorded as the verified-live evidence and the pin stays `execute: false`). Anyt
 precondition failure, such as another role's grant on one of the columns, a missing table, column
 or role) stops and needs its own reviewed change.
 
-**Status:** pending. No staging read-live, no production inspect, nothing applied.
+**Staging executor refreshed (2026-10-25).** Inspect run 40152370153 (main `cfc0829e5`) found the
+live executor at CodeSha256 `nloTNyc3…` without SQL 114 (adds only
+`sql/114_stakeholder_accounts_settings_update_grant.sql`, supersedes the three engine files,
+nothing dropped, no collisions). Deploy run 40152534378 updated it to main's package (`VMyMjKW1…`).
+
+**Staging read-live (2026-10-25).** Run 40152706123 (main `cfc0829e5`): no column grant on
+`is_active`, `is_primary`, `account_type`, `homeowner_name`, `homeowner_email` or `updated_at`
+(each `acl: []`); live `8b5d1d4d49188412317a60036a392c27727852b246a1d59a9c2807cb17186e00`, `already_applied` false,
+`precondition_failures` `[]`. Recorded in the staging pin (`expected_live_definition_sha256`,
+`execute: true`, wave 15) under the owner's words of 2026-10-25, "approve SQL 114 staging apply".
+
+**Status:** staging pin execute-authorized (wave 15); nothing applied yet; production pin pending.
 
 ## Fingerprint
 
