@@ -1,0 +1,24 @@
+{
+  "workstream_id": "production-stakeholder-settings-edit",
+  "authorization": "Pending owner review (2026-10-25). Planning only: nothing is live or verified. Each production apply still needs its own owner approval, a staging acceptance reference and a read-only production inspect that confirms the live bytes.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Stakeholder settings edit (owner requirements 2026-10-25): Settings > Stakeholder Accounts removes a non-payee stakeholder (is_active and is_primary false) and changes a stakeholder's type (contractor, subcontractor, vendor or sales_rep; homeowner_name and homeowner_email cleared server-side) through /data/write stakeholder_accounts, tranche 6 (AWS_APPLICATION_WORKFLOW_WRITES_ENABLED), on the SQL 114 column grant (aws/workflows/sql/114_stakeholder_accounts_settings_update_grant.sql; applied in staging, not yet in production). REPLACE write-allowlist.mjs (adds WRITE_ALLOWLIST.stakeholder_accounts; live 5f84c563, accepted by production rebuild run 39636816351 of main e4daedefe, lambda-rebuild-plan.json production history[1]), then write-app-metadata.mjs (adds executeStakeholderAccounts; live e9f59981, applied by production overlay run 40089767778 on 2026-10-24), then write-check-workflow.mjs (forwards stakeholder_accounts to write-app-metadata.mjs; live fa2c6aef, main's bytes in the deterministic builds production rebuild runs 39636816351 and 39669873076 put live). None of the three changed on main after those runs. Each step is safe alone: until write-check-workflow.mjs forwards the table, a stakeholder_accounts write answers table_not_allowlisted. Without production SQL 114 the route is refused at the grant layer (permission denied) and no row changes: apply SQL 114 to production before write-check-workflow.mjs. A read-only production overlay inspect must confirm each live value before any apply. Not authorized, not applied.",
+  "members": {
+    "write-allowlist.mjs": {
+      "live_sha256": "5f84c5634190ebade1ee6ae10d3420e09548efac78f2a72eb98886d2f0341189",
+      "accepted_sha256": "1fc4a43eda4455d406edd4566d7a2bada352d241e88ba01cb4ff2cd3afb2884a",
+      "operation": "replace"
+    },
+    "write-app-metadata.mjs": {
+      "live_sha256": "e9f59981698128cc3dd491b901ad20eacbbd5938b819225a7b7dc1c220d2ce05",
+      "accepted_sha256": "0e535bee701c9f0b17c0af79c1997493c80c40a011517d7e13eca6fce54563b1",
+      "operation": "replace"
+    },
+    "write-check-workflow.mjs": {
+      "live_sha256": "fa2c6aef0e4e6c8713f60a24804309b4cf7f9e4b9d69a379498ef9acaf621fc2",
+      "accepted_sha256": "e1227c967906496519db1fe9c996514c03ca04a79378ff77e93b92ecf470544a",
+      "operation": "replace"
+    }
+  }
+}
