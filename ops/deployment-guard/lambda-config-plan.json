@@ -4,13 +4,8 @@
   "environments": {
     "staging": {
       "function_name": "checksops-staging-api",
-      "status": "accepted",
-      "set": {
-        "FINANCIAL_TOTP_WRAP_KEY_ARN": {
-          "from": null,
-          "to": "arn:aws:secretsmanager:us-east-1:806168576068:secret:checksops/staging/financial-totp-wrap-key-CAVZnt"
-        }
-      },
+      "status": "applied",
+      "set": {},
       "unset": {},
       "inspect": {
         "run_id": "40218256258",
@@ -21,6 +16,35 @@
         "live_configuration_sha256": "8f01c5deab37039487e48fae66d73cbfbedcf18dfecad16b61cea312495181ae",
         "live_variable_count": 44,
         "notes": "Owner decision 2026-10-25 (staging two-factor codes rejected): staging carries neither FINANCIAL_TOTP_WRAP_KEY_ARN nor FINANCIAL_TOTP_WRAP_KEY, so every financial TOTP enrollment and step-up (auth-financial-totp.mjs loadFinancialTotpWrapKey) answers 503 wrap_key_unconfigured and staging sends stop at the two-factor step. The owner approved a staging-only wrap key: secret checksops/staging/financial-totp-wrap-key (32 random bytes from KMS GenerateRandom, value never read or recorded) and an inline policy StagingFinancialTotpWrapKeyRead on the staging API role allowing secretsmanager:GetSecretValue on that one secret, both created 2026-10-25 through the owner AWS connector. The key is not credential-like (its value is an ARN, not the key). The inspect (PENDING_PLAN, 44 variables) lists no FINANCIAL_TOTP_WRAP_KEY_ARN, so from is null. Production already reads its own secret (checksops/production/financial-totp-wrap-key) and is not touched; staging never reads the production key."
+      },
+      "applied": {
+        "run_id": "40219217811",
+        "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/40219217811",
+        "main_commit": "0dc2d08f7b09b1420187df3210c3f1fba27cf948",
+        "approval_phrase": "APPLY API CONFIGURATION TO STAGING",
+        "change_sha256": "a3f0acea0d4c2c2a08e56780d009502360a37bcebf43bd7777e6aa686a3f057e",
+        "revision_id_before": "3fe1e7c6-dac5-4b94-bd29-d2bebec858cc",
+        "revision_id_after": "e3ab6d71-ca5d-4710-9619-ab85f5109f66",
+        "configuration_sha256_before": "8f01c5deab37039487e48fae66d73cbfbedcf18dfecad16b61cea312495181ae",
+        "configuration_sha256_after": "11cefe0ef98fdd72d27415564bb4d6dc264c8b558be1eeaf1852d56d4ca180c7",
+        "applied_at": "2026-10-25T18:01:30.281Z",
+        "smoke": [
+          "/health",
+          "/db-health",
+          "/db-readonly-validate"
+        ],
+        "code_sha256": "n7WoOa7xqoNi71L0gEX6FH7lzanuhPfLQAkGgziBSCE=",
+        "state": "VERIFIED",
+        "notes": "Owner approval: \"Merge when green and apply API configuration to staging\" (#1240 merged as 0dc2d08 on green CI). Pre-apply read-back through the owner AWS connector (GetFunctionConfiguration, no values): RevisionId 3fe1e7c6, 44 variables, FINANCIAL_TOTP_WRAP_KEY_ARN absent. The run preflight reported READY (configuration sha256 8f01c5de before). Verify step VERIFIED (45 variables: 44 + 1 set; FINANCIAL_TOTP_WRAP_KEY_ARN already_accepted, live equal to the planned staging secret ARN). Smoke /health, /db-health and /db-readonly-validate 200. IAM SimulatePrincipalPolicy for the staging API role: GetSecretValue allowed on the staging wrap-key secret, implicitDeny on the production one.",
+        "applied_change": {
+          "set": {
+            "FINANCIAL_TOTP_WRAP_KEY_ARN": {
+              "from": null,
+              "to": "arn:aws:secretsmanager:us-east-1:806168576068:secret:checksops/staging/financial-totp-wrap-key-CAVZnt"
+            }
+          },
+          "unset": {}
+        }
       },
       "history": [
         {
