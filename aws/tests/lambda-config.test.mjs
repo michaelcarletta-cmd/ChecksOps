@@ -216,19 +216,28 @@ test('the committed plan records production payees on (run 40148243435) and star
   assert.equal(row.applied.staging_acceptance, 'https://github.com/michaelcarletta-cmd/ChecksOps/pull/1228');
 });
 
-test('the committed plan gives staging its own financial TOTP wrap key from the 2026-10-25 inspect (40218256258)', () => {
+test('the committed plan records the staging financial TOTP wrap key (run 40219217811) and starts the next change empty', () => {
   const raw = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, CONFIG_PLAN_REL), 'utf8'));
   const section = loadConfigPlan(REPO_ROOT, 'staging');
-  assert.equal(section.status, 'accepted');
-  const arn = 'arn:aws:secretsmanager:us-east-1:806168576068:secret:checksops/staging/financial-totp-wrap-key-CAVZnt';
-  assert.deepEqual(section.set, { FINANCIAL_TOTP_WRAP_KEY_ARN: { from: null, to: arn } });
+  assert.equal(section.status, 'applied');
+  assert.deepEqual(section.set, {});
   assert.deepEqual(section.unset, {});
+  const arn = 'arn:aws:secretsmanager:us-east-1:806168576068:secret:checksops/staging/financial-totp-wrap-key-CAVZnt';
   const row = raw.environments.staging;
   assert.equal(row.inspect.run_id, '40218256258');
   assert.equal(row.inspect.main_commit, 'c380e305c91b5ad9692abb47f1008407c924a79d');
   assert.equal(row.inspect.live_revision_id, '3fe1e7c6-dac5-4b94-bd29-d2bebec858cc');
   assert.equal(row.inspect.live_variable_count, 44);
-  assert.equal(Object.hasOwn(row, 'applied'), false);
+  assert.equal(row.applied.run_id, '40219217811');
+  assert.equal(row.applied.main_commit, '0dc2d08f7b09b1420187df3210c3f1fba27cf948');
+  assert.equal(row.applied.state, 'VERIFIED');
+  assert.equal(row.applied.revision_id_before, row.inspect.live_revision_id);
+  assert.equal(row.applied.revision_id_after, 'e3ab6d71-ca5d-4710-9619-ab85f5109f66');
+  assert.equal(row.applied.configuration_sha256_before, row.inspect.live_configuration_sha256);
+  assert.equal(row.applied.code_sha256, row.inspect.live_code_sha256);
+  assert.deepEqual(row.applied.applied_change, { set: { FINANCIAL_TOTP_WRAP_KEY_ARN: { from: null, to: arn } }, unset: {} });
+  // The recorded change hash is the one the run's receipt owned.
+  assert.equal(changeSha256({ function_name: row.function_name, ...row.applied.applied_change }), row.applied.change_sha256);
   // The ARN names the staging secret; staging never points at the production key.
   assert.match(arn, /:secret:checksops\/staging\//);
   assert.doesNotMatch(arn, /production/);
