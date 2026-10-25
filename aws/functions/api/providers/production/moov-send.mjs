@@ -1,5 +1,8 @@
 /**
  * Production sends (moov-disburse): the tenant's money → stakeholders and partners.
+ * Staging runs the same path against the Moov sandbox (handleSandboxMoovSend):
+ * sandbox credentials and environment='sandbox' rows; the send switches below are
+ * production-only, AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED is the staging switch.
  *
  * Owner rules (docs/MOOV_PAYMENTS_RULES.md):
  * - Any member of the tenant may send. Platform roles alone may not. No amount limit.
@@ -35,7 +38,7 @@ import {
   scopes,
   withMoovContext,
 } from '../parity/moov-client.mjs';
-import { fail, jsonResult, moovProductionReadContext } from '../parity/caller.mjs';
+import { fail, jsonResult, moovParityContext, moovProductionReadContext } from '../parity/caller.mjs';
 import { loadMoovAccount, sanitize } from '../parity/db.mjs';
 import { syncWalletReadOnly } from '../parity/moov-wallet.mjs';
 import { loadSessionFundStepUp, loginSessionBinding, WALLET_FUND_TOTP_ACTION } from './moov-fund-authz.mjs';
@@ -49,7 +52,6 @@ import {
   transferPostEnabled,
 } from './moov-wallet-fund.mjs';
 
-const ENVIRONMENT = 'production';
 const OPERATION = 'wallet.send';
 export const SEND_KEY_PREFIX = 'send:';
 export const SEND_LEG_ROLES = Object.freeze({ wallet: 'send_wallet', bank: 'send_bank' });
@@ -198,7 +200,7 @@ async function logEvent(client, row) {
          transfer_id, provider_transfer_id, provider_metadata)
        VALUES ('moov', $1, $2::uuid, $3, $4, $5, $6::uuid, $7, $8::jsonb)`,
       [
-        ENVIRONMENT, row.tenantId, row.eventType, row.newStatus || null, row.previousStatus || null,
+        row.environment, row.tenantId, row.eventType, row.newStatus || null, row.previousStatus || null,
         row.transferId, row.providerTransferId || null, JSON.stringify(sanitize(row.metadata || {})),
       ],
     );
@@ -222,14 +224,14 @@ const legsByPrefix = async (client, tenantId, prefix) => (await client.query(
   [tenantId, prefix, prefix.length],
 )).rows;
 
-const connectedBanks = async (client, tenantId, providerAccountId) => (await client.query(
+const connectedBanks = async (client, tenantId, providerAccountId, environment) => (await client.query(
   `SELECT id, provider_bank_account_id, is_default
    FROM public.payment_provider_methods
    WHERE tenant_id = $1::uuid AND provider = 'moov' AND environment = $2
      AND provider_account_id = $3 AND connection_status = 'connected'
      AND external_recipient_id IS NULL
    ORDER BY created_at DESC NULLS LAST`,
-  [tenantId, ENVIRONMENT, providerAccountId],
+  [tenantId, environment, providerAccountId],
 )).rows;
 
 async function settingsFundingBankId(client, tenantId) {
@@ -323,7 +325,7 @@ function sendResult(legs, { duplicate, incomplete = false }) {
 }
 
 /** Resolve where each recipient is paid. Reads only; nothing is created. */
-async function resolveDestinations({ client, tenantId, request, fetchImpl }) {
+async function resolveDestinations({ client, tenantId, request, environment, fetchImpl }) {
   const resolved = [];
   for (const r of request.recipients) {
     if (r.kind === 'stakeholder') {
@@ -339,7 +341,7 @@ async function resolveDestinations({ client, tenantId, request, fetchImpl }) {
       if ((row.origin && row.origin !== 'tenant_owned') || row.is_partner_payout === true) {
         return { error: 'recipient_not_supported', recipient: r, name: row.nickname };
       }
-      if (row.provider_environment && row.provider_environment !== ENVIRONMENT) {
+      if (row.provider_environment && row.provider_environment !== environment) {
         return { error: 'recipient_setup_required', recipient: r, name: row.nickname };
       }
       if (!['verified', 'admin_override'].includes(String(row.verification_status || ''))) {
@@ -449,7 +451,7 @@ const DESTINATION_MESSAGES = {
   partner_bank_choice_required: "This partner's bank could not be determined.",
 };
 
-async function postLeg({ client, mapping, claims, tenantId, leg, facilitatorId, fetchImpl, timeoutMs }) {
+async function postLeg({ client, mapping, claims, tenantId, environment, leg, facilitatorId, fetchImpl, timeoutMs }) {
   const claimed = (await client.query(
     `UPDATE public.payment_transfers
      SET status = 'submitting', submitted_at = now()
@@ -489,7 +491,7 @@ async function postLeg({ client, mapping, claims, tenantId, leg, facilitatorId, 
         JSON.stringify({ post_error_status: error?.status ?? null })],
     )).rows[0];
     await logEvent(client, {
-      tenantId, transferId: leg.id, eventType: refused ? 'wallet.send.failed' : 'wallet.send.unknown',
+      environment, tenantId, transferId: leg.id, eventType: refused ? 'wallet.send.failed' : 'wallet.send.unknown',
       previousStatus: 'submitting', newStatus: status, metadata: { http_status: error?.status ?? null, leg: leg.leg_role },
     });
     await commitAndContinue(client, mapping, claims);
@@ -508,14 +510,14 @@ async function postLeg({ client, mapping, claims, tenantId, leg, facilitatorId, 
     [leg.id, providerTransferId, providerStatus, status, JSON.stringify({ moov: { transferID: providerTransferId, status: providerStatus } })],
   )).rows[0];
   await logEvent(client, {
-    tenantId, transferId: leg.id, providerTransferId, eventType: 'wallet.send.submitted',
+    environment, tenantId, transferId: leg.id, providerTransferId, eventType: 'wallet.send.submitted',
     previousStatus: 'submitting', newStatus: status, metadata: { provider_status: providerStatus, leg: leg.leg_role },
   });
   await commitAndContinue(client, mapping, claims);
   return saved;
 }
 
-async function cancelLeg(client, mapping, claims, tenantId, leg, reason) {
+async function cancelLeg({ client, mapping, claims, tenantId, environment }, leg, reason) {
   const canceled = (await client.query(
     `UPDATE public.payment_transfers
      SET status = 'canceled', failure_reason = $2
@@ -524,7 +526,7 @@ async function cancelLeg(client, mapping, claims, tenantId, leg, reason) {
     [leg.id, reason],
   )).rows[0];
   if (!canceled) return;
-  await logEvent(client, { tenantId, transferId: leg.id, eventType: 'wallet.send.canceled', previousStatus: 'ready', newStatus: 'canceled', metadata: { leg: leg.leg_role, reason } });
+  await logEvent(client, { environment, tenantId, transferId: leg.id, eventType: 'wallet.send.canceled', previousStatus: 'ready', newStatus: 'canceled', metadata: { leg: leg.leg_role, reason } });
   await commitAndContinue(client, mapping, claims);
 }
 
@@ -533,7 +535,8 @@ async function cancelLeg(client, mapping, claims, tenantId, leg, reason) {
  * unsent. A leg is only started while the request budget allows a full POST;
  * otherwise the send stops `incomplete` and the client continues it.
  */
-async function runLegs({ client, mapping, claims, tenantId, prefix, facilitatorId, fetchImpl, clock }) {
+async function runLegs({ client, mapping, claims, tenantId, environment, prefix, facilitatorId, fetchImpl, clock }) {
+  const scope = { client, mapping, claims, tenantId, environment };
   let stopped = false;
   let incomplete = false;
   for (const leg of await legsByPrefix(client, tenantId, prefix)) {
@@ -542,12 +545,12 @@ async function runLegs({ client, mapping, claims, tenantId, prefix, facilitatorI
       continue;
     }
     if (stopped) {
-      await cancelLeg(client, mapping, claims, tenantId, leg, 'not_sent_after_earlier_leg');
+      await cancelLeg(scope, leg, 'not_sent_after_earlier_leg');
       continue;
     }
     const createdAt = Date.parse(leg.created_at);
     if (Number.isFinite(createdAt) && clock.wall() - createdAt > READY_LEG_MAX_AGE_MS) {
-      await cancelLeg(client, mapping, claims, tenantId, leg, 'expired_unsent');
+      await cancelLeg(scope, leg, 'expired_unsent');
       stopped = true;
       continue;
     }
@@ -557,7 +560,7 @@ async function runLegs({ client, mapping, claims, tenantId, prefix, facilitatorI
       break;
     }
     const timeoutMs = Math.min(MOOV_POST_TIMEOUT_MS, remaining - 2_000);
-    const result = await postLeg({ client, mapping, claims, tenantId, leg, facilitatorId, fetchImpl, timeoutMs });
+    const result = await postLeg({ ...scope, leg, facilitatorId, fetchImpl, timeoutMs });
     if (!result || !ACCEPTED.has(String(result.status))) stopped = true;
   }
   return { legs: await legsByPrefix(client, tenantId, prefix), incomplete };
@@ -567,9 +570,11 @@ async function runLegs({ client, mapping, claims, tenantId, prefix, facilitatorI
 export const MOOV_READ_TIMEOUT_MS = 8_000;
 const withReadTimeout = (fetchImpl) => (url, init = {}) => fetchImpl(url, { ...init, signal: init.signal || AbortSignal.timeout(MOOV_READ_TIMEOUT_MS) });
 
-async function sendProduction({ client, mapping, claims, ctx, body, fetchImpl: postFetch, clock }) {
+async function runSend({ client, mapping, claims, ctx, body, fetchImpl: postFetch, clock }) {
   const fetchImpl = withReadTimeout(postFetch);
   const tenantId = ctx.tenantId;
+  const environment = ctx.environment;
+  const postsEnabled = () => environment !== 'production' || sendPostEnabled();
   const request = parseSendRequest(body);
   if (request.error) return fail('invalid_send_request', 400, { message: request.error });
   const prefix = `${SEND_KEY_PREFIX}${request.clickKey}:`;
@@ -593,7 +598,7 @@ async function sendProduction({ client, mapping, claims, ctx, body, fetchImpl: p
   if (existing.length && existing.some((leg) => leg.provider_metadata?.request_hash !== hash)) {
     return fail('idempotency_key_reused', 409, { message: 'That request was already used for a different payment.' });
   }
-  if (!existing.length && !sendPostEnabled()) {
+  if (!existing.length && !postsEnabled()) {
     return fail('send_post_held', 403, { message: 'Sending payments is switched off. Nothing was recorded or sent.' });
   }
   if (existing.length && !existing.some((leg) => String(leg.status) === 'ready')) {
@@ -612,7 +617,7 @@ async function sendProduction({ client, mapping, claims, ctx, body, fetchImpl: p
   if (planned.some((leg) => leg.provider_metadata?.request_hash !== hash)) {
     return fail('idempotency_key_reused', 409, { message: 'That request was already used for a different payment.' });
   }
-  const account = await loadMoovAccount(client, tenantId, ENVIRONMENT);
+  const account = await loadMoovAccount(client, tenantId, environment);
   if (!account?.provider_account_id) return fail('Set up your payment account first.', 409);
   if (account.onboarding_status !== 'active') {
     return fail(`Your payment account is not active yet (${account.onboarding_status}).`, 409);
@@ -621,12 +626,15 @@ async function sendProduction({ client, mapping, claims, ctx, body, fetchImpl: p
     scopes: scopes.paymentMethodsRead(account.provider_account_id), fetchImpl,
   });
   const wallet = await syncWalletReadOnly(client, {
-    tenantId, accountId: account.provider_account_id, environment: ENVIRONMENT, walletType: 'operating', fetchImpl,
+    tenantId, accountId: account.provider_account_id, environment, walletType: 'operating', fetchImpl,
   });
   if (!wallet || wallet.error || !wallet.provider_payment_method_id) {
     return fail('wallet_not_ready', 409, { message: 'Your balance account is not ready yet.' });
   }
-  const facilitatorId = resolveFacilitatorId(ctx.moovContext.productionPlatformAccountId, payerMethods, wallet.provider_payment_method_id);
+  const platformAccountId = environment === 'production'
+    ? ctx.moovContext.productionPlatformAccountId
+    : ctx.moovContext.sandboxPlatformAccountId;
+  const facilitatorId = resolveFacilitatorId(platformAccountId, payerMethods, wallet.provider_payment_method_id);
   if (!facilitatorId) return fail('facilitator_unavailable', 503, { message: 'Payments are not configured correctly. Nothing was sent.' });
 
   let legs = planned;
@@ -634,7 +642,7 @@ async function sendProduction({ client, mapping, claims, ctx, body, fetchImpl: p
     return fail('facilitator_changed', 409, { message: 'Payment settings changed since this payment was started. Nothing more was sent.' });
   }
   if (!legs.length) {
-    const destinations = await resolveDestinations({ client, tenantId, request, fetchImpl });
+    const destinations = await resolveDestinations({ client, tenantId, request, environment, fetchImpl });
     if (destinations.error) {
       return fail(destinations.error, 409, {
         recipient: destinations.recipient,
@@ -648,12 +656,12 @@ async function sendProduction({ client, mapping, claims, ctx, body, fetchImpl: p
          AND (status IN ('ready', 'submitting')
            OR (status IN ('submitted', 'pending', 'processing') AND submitted_at > now() - interval '2 minutes'))
          AND created_at > now() - interval '15 minutes'`,
-      [tenantId, ENVIRONMENT, SEND_LEG_ROLES.wallet],
+      [tenantId, environment, SEND_LEG_ROLES.wallet],
     )).rows[0]?.cents ?? 0);
     const plan = planSendLegs(destinations.resolved, Math.max(0, Number(wallet.available_cents ?? 0) - reserved));
     let bank = null;
     if (plan.some((p) => p.bank_cents > 0)) {
-      const banks = await connectedBanks(client, tenantId, account.provider_account_id);
+      const banks = await connectedBanks(client, tenantId, account.provider_account_id, environment);
       const local = preferredBank(banks, await settingsFundingBankId(client, tenantId));
       const picked = selectDebitMethod(payerMethods, local?.provider_bank_account_id);
       if (picked.error) {
@@ -683,7 +691,7 @@ async function sendProduction({ client, mapping, claims, ctx, body, fetchImpl: p
            VALUES ($1::uuid, 'moov', $2, 'ready', $3, $4, 0, $4, $5, $6,
                    $7, $8::uuid, $9::uuid, $10::uuid, $11, $12::uuid, $13::uuid, $14::jsonb, $15::uuid)`,
           [
-            tenantId, ENVIRONMENT, `${prefix}${legIndex}:${source}`, cents, request.speed,
+            tenantId, environment, `${prefix}${legIndex}:${source}`, cents, request.speed,
             String(request.description || `ChecksOps payment to ${p.name}`).slice(0, 128),
             account.provider_account_id, source === 'bank' ? bank.localId : null,
             p.kind === 'partner' ? p.id : null,
@@ -711,12 +719,12 @@ async function sendProduction({ client, mapping, claims, ctx, body, fetchImpl: p
     }
     legs = await legsByPrefix(client, tenantId, prefix);
     for (const leg of legs) {
-      await logEvent(client, { tenantId, transferId: leg.id, eventType: 'wallet.send.created', newStatus: 'ready', metadata: { leg: leg.leg_role, amount_cents: Number(leg.amount_cents) } });
+      await logEvent(client, { environment, tenantId, transferId: leg.id, eventType: 'wallet.send.created', newStatus: 'ready', metadata: { leg: leg.leg_role, amount_cents: Number(leg.amount_cents) } });
     }
     await commitAndContinue(client, mapping, claims);
   }
 
-  if (!sendPostEnabled()) {
+  if (!postsEnabled()) {
     return fail('send_post_held', 403, { send: summarizeSend(legs), message: 'Sending payments is switched off. Nothing was sent.' });
   }
   // Only one request runs a given send's legs at a time (the lock ends with the connection).
@@ -726,26 +734,37 @@ async function sendProduction({ client, mapping, claims, ctx, body, fetchImpl: p
     return fail('send_in_progress', 409, { message: 'This payment is still being sent. Check the payment history in a moment.' });
   }
   try {
-    const run = await runLegs({ client, mapping, claims, tenantId, prefix, facilitatorId, fetchImpl: postFetch, clock });
+    const run = await runLegs({ client, mapping, claims, tenantId, environment, prefix, facilitatorId, fetchImpl: postFetch, clock });
     return sendResult(run.legs, { duplicate: false, incomplete: run.incomplete });
   } finally {
     await client.query('SELECT pg_advisory_unlock(hashtext($1))', [lockKey]).catch(() => {});
   }
 }
 
-export async function handleProductionMoovSend(event, deps = {}) {
+/** Production: production credentials and rows, behind the financial and send switches. */
+export const handleProductionMoovSend = (event, deps = {}) => handleMoovSend(event, deps, 'production');
+
+/** Staging: the same send against the Moov sandbox, only while sandbox execution is on. */
+export const handleSandboxMoovSend = (event, deps = {}) => handleMoovSend(event, deps, 'sandbox');
+
+async function handleMoovSend(event, deps, environment) {
   // The budget counts from the start of the request (database connect and secrets included).
   const wall = deps.now || Date.now;
   const startedAt = wall();
   const { withIdentityWrite } = await import('../../data.mjs');
   return withIdentityWrite(event, async ({ client, mapping, claims, body, spoof }) => {
-    const ctx = await moovProductionReadContext({
-      client, mapping, body, requireAdmin: false, loadProviderSecrets: deps.loadProviderSecrets,
-    });
-    const meta = { spoofFieldsIgnored: spoof, applicationUserId: mapping.application_user_id, environment: ENVIRONMENT, operation: OPERATION };
+    const ctx = environment === 'production'
+      ? await moovProductionReadContext({
+        client, mapping, body, requireAdmin: false, loadProviderSecrets: deps.loadProviderSecrets,
+      })
+      : await moovParityContext({ client, mapping, body, requireAdmin: false, loadSandbox: deps.loadSandboxCredentials });
+    const meta = { spoofFieldsIgnored: spoof, applicationUserId: mapping.application_user_id, environment, operation: OPERATION };
     if (ctx.error) return { ...ctx, ...meta };
-    if (!financialPermissionsActivated() || providerSandboxExecutionEnabled()) {
-      return { ...fail('production_send_disabled', 403, { message: 'Sending payments is not enabled.' }), ...meta };
+    const enabled = environment === 'production'
+      ? financialPermissionsActivated() && !providerSandboxExecutionEnabled()
+      : providerSandboxExecutionEnabled() && ctx.environment === 'sandbox';
+    if (!enabled) {
+      return { ...fail(`${environment}_send_disabled`, 403, { message: 'Sending payments is not enabled.' }), ...meta };
     }
     // Platform roles never move a tenant's money; only that tenant's members can.
     if (!ctx.memberships.some((m) => m.tenant_id === ctx.tenantId)) {
@@ -754,7 +773,7 @@ export async function handleProductionMoovSend(event, deps = {}) {
     const fetchImpl = deps.fetchImpl || fetch;
     const clock = { wall, remaining: () => SEND_TIME_BUDGET_MS - (wall() - startedAt) };
     try {
-      const result = await withMoovContext({ ...ctx.moovContext, fetchImpl }, () => sendProduction({
+      const result = await withMoovContext({ ...ctx.moovContext, fetchImpl }, () => runSend({
         client, mapping, claims, ctx, body, fetchImpl, clock,
       }));
       return { ...result, ...meta };

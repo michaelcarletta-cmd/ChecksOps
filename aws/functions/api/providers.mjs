@@ -387,6 +387,14 @@ export const handleFunctionInvoke = async (event, name, deps = {}) => {
     return handleProductionMoovSend(event, deps);
   }
 
+  // Staging sends take the same path against the Moov sandbox. A request that names a
+  // disbursement batch (Run Payroll) still goes to the parity batch handler below.
+  if (spec.provider === 'moov' && name === 'moov-disburse' && !executionAllowed('moov')
+    && providerSandboxExecutionEnabled() && !body?.batch_id) {
+    const { handleSandboxMoovSend } = await import('./providers/production/moov-send.mjs');
+    return handleSandboxMoovSend(event, deps);
+  }
+
   // Production Invoices (create / send / resend / cancel / delete / sync): any tenant
   // member, the tenant's production account only. No money moves.
   if (spec.provider === 'moov' && name === 'moov-invoice' && executionAllowed('moov')) {

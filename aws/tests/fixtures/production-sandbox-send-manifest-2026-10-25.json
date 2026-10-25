@@ -1,0 +1,19 @@
+{
+  "workstream_id": "production-sandbox-send",
+  "authorization": "Pending owner review (2026-10-25). Planning only: nothing is live or verified. Each production apply still needs its own owner approval, a staging acceptance reference and a read-only production inspect that confirms the live bytes.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Staging sends (owner request 2026-10-25): on staging, moov-disburse with check_id and recipients (no batch_id) runs the production send path against the Moov sandbox (handleSandboxMoovSend: sandbox credentials, environment='sandbox' rows, two-factor kept; AWS_MOOV_SEND_POST_ENABLED and AWS_FINANCIAL_PERMISSIONS_ACTIVATED are production-only switches and are not consulted there). A Run Payroll request (batch_id) still goes to the parity batch handler. In production the new route is never taken (executionAllowed('moov') is true) and the send path is unchanged; both members are planned so main's bytes stay deployable. providers.mjs live_sha256 is the bytes production run 40140208837 applied (Moov payees applied manifest). providers/production/moov-send.mjs live_sha256 is the value the plan already expected (2026-10-13 send manifest); a read-only production overlay inspect must confirm it before any apply. Apply moov-send.mjs first, providers.mjs last.",
+  "members": {
+    "providers/production/moov-send.mjs": {
+      "live_sha256": "a07442c49f33d100fa214ff44a85c9c5b86f16eaacc5f3daa1178fa43daef4ab",
+      "accepted_sha256": "42655ac84abdeb93579d1ae24e69338268b02633c3b1d5014d219a4ace8f5217",
+      "operation": "replace"
+    },
+    "providers.mjs": {
+      "live_sha256": "6b002711f93aecea35956b1ff137367b67655c9f0a3d2659308ae56e75c51e8a",
+      "accepted_sha256": "58207e5e8762a1a912c2e2fc5e143f0df90205e5e16be604dc3c1cdf19ca73d9",
+      "operation": "replace"
+    }
+  }
+}
