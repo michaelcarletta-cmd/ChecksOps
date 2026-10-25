@@ -1,0 +1,14 @@
+{
+  "workstream_id": "production-email-any-recipient",
+  "authorization": "Pending owner review (2026-10-25). Planning only: nothing is live or verified. The production apply still needs its own owner approval and staging acceptance.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Owner decision 2026-10-25: \"Yes, send to anyone, use SES\". Production runs AWS_EMAIL_MODE=ses with the staging recipient allowlist (AWS_EMAIL_ALLOWLIST_DOMAINS checksops.invalid, checksops.com, freedomadj.com, gmail.com), so every sendViaSesOrSink email to any other address (team invites, e-sign requests, portal invites, homeowner upload codes, payment-direction requests, fee invoices) is rewritten to the sink while the caller reports it sent. The accepted bytes deliver every recipient as addressed when CHECKSOPS_ENV is production or production-prep and the mode is ses; sink mode, staging and isAllowlistedRecipient (payee and endorsement email) are unchanged. The production role already holds ses:SendEmail on the verified checksops.com and Support@checksops.com identities (inline policy ProductionApiSesSend) and the account has SES production access. live_sha256 83d73511 is the email-policy.mjs inside the live package (CodeSha256 00Jfy9+OrIaNrep50P/cjwcWD7DC5Z/KeIlDtaWWAFQ=, RevisionId dc2e68ca, read 2026-10-25 through the owner AWS connector) and equals main before this change; a read-only production overlay inspect must confirm it before any apply. No SQL prerequisite.",
+  "members": {
+    "email-policy.mjs": {
+      "live_sha256": "83d73511e751130a939c2e92c0b995b45d5f9d3bdaa02d5ac04c5322a39fd3a6",
+      "accepted_sha256": "eaf2a33a9e843692f43d128ce391d284b04e733818254c2a4664209561cb7559",
+      "operation": "replace"
+    }
+  }
+}

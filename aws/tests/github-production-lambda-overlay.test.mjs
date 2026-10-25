@@ -833,9 +833,12 @@ test('fee collection: eleven members on the fee manifest, collection-v2 then des
   assert.equal(PLAN.members[INVOICE_EMAIL].sql_before, null);
   assert.ok(localImports(fs.readFileSync(path.join(API, INVOICE_EMAIL), 'utf8'), INVOICE_EMAIL).includes(DESTINATION));
   assert.ok(localImports(fs.readFileSync(path.join(API, ENGINE), 'utf8'), ENGINE).includes(INVOICE_EMAIL));
-  // Its email imports are names the live bundle already exports (email.mjs, email-layout.mjs and
-  // email-policy.mjs are not members; email-branding.mjs is planned earlier).
-  for (const dep of ['email.mjs', 'email-layout.mjs', 'email-policy.mjs']) assert.ok(!PLAN.order.includes(dep), dep);
+  // Its email imports are names the live bundle already exports (email.mjs and email-layout.mjs
+  // are not members; email-branding.mjs is planned earlier). email-policy.mjs is replaced later
+  // (production email to every recipient) and still exports normalizeEmail, which it imports.
+  for (const dep of ['email.mjs', 'email-layout.mjs']) assert.ok(!PLAN.order.includes(dep), dep);
+  assert.ok(at('email-policy.mjs') > at(INVOICE_EMAIL));
+  assert.match(fs.readFileSync(path.join(API, 'email-policy.mjs'), 'utf8'), /^export const normalizeEmail\b/m);
   assert.ok(at('email-branding.mjs') >= 0 && at('email-branding.mjs') < at(INVOICE_EMAIL));
   const invoiceApply = await run(applyEnv(INVOICE_EMAIL), applyDeps(INVOICE_EMAIL).deps);
   assert.equal(invoiceApply.mutation, false);

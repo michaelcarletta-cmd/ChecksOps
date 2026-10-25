@@ -207,6 +207,7 @@
     "providers/payees/moov.mjs",
     "providers/payees/email.mjs",
     "providers/payees/handlers.mjs",
+    "email-policy.mjs",
     "providers/production/moov-wallet-fund.mjs",
     "providers/production/moov-send.mjs",
     "providers.mjs"
@@ -927,6 +928,13 @@
       "expected_live_sha256": "4b06d4cd578720a3996dc090cc396bda273c8de07e80cd7064d755af2b214abb",
       "sql_before": null,
       "manifest": "aws/tests/fixtures/production-checkalt-scheduled-reconcile-manifest-2026-10-22.json"
+    },
+    "email-policy.mjs": {
+      "operation": "replace",
+      "accepted_sha256": "eaf2a33a9e843692f43d128ce391d284b04e733818254c2a4664209561cb7559",
+      "expected_live_sha256": "83d73511e751130a939c2e92c0b995b45d5f9d3bdaa02d5ac04c5322a39fd3a6",
+      "sql_before": null,
+      "manifest": "aws/tests/fixtures/production-email-any-recipient-manifest-2026-10-25.json"
     }
   },
   "do_not_overlay": [

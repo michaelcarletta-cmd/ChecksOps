@@ -1,7 +1,11 @@
 /**
- * Staging-safe email recipient policy.
+ * Email recipient policy.
  * Default mode = sink (log only, never deliver to real production customers).
- * Optional SES mode only delivers to allowlisted domains / exact addresses.
+ * SES mode on staging only delivers to allowlisted domains / exact addresses.
+ * SES mode on production (CHECKSOPS_ENV production or production-prep)
+ * delivers to every recipient: the allowlist exists to keep staging mail away
+ * from real people, and production mail is meant for them (owner decision
+ * 2026-10-25).
  */
 
 const DEFAULT_ALLOWLIST_DOMAINS = [
@@ -20,6 +24,11 @@ export const emailMode = () => {
   const mode = String(process.env.AWS_EMAIL_MODE || 'sink').trim().toLowerCase();
   if (mode === 'ses' || mode === 'sink' || mode === 'log') return mode === 'log' ? 'sink' : mode;
   return 'sink';
+};
+
+export const isProductionEmailEnv = (env = process.env.CHECKSOPS_ENV) => {
+  const value = String(env || '').trim().toLowerCase();
+  return value === 'production' || value === 'production-prep';
 };
 
 export const allowlistDomains = () => {
@@ -64,6 +73,7 @@ export const isAllowlistedRecipient = (email) => {
  * Apply staging recipient policy.
  * - sink mode: always rewrite to sink (record original)
  * - ses mode: only allow allowlisted; others rewritten to sink with blocked flag
+ * - ses mode on production: every recipient is delivered as addressed
  */
 export const applyRecipientPolicy = (recipients = []) => {
   const mode = emailMode();
@@ -85,6 +95,16 @@ export const applyRecipientPolicy = (recipients = []) => {
       };
     }
     // ses mode
+    if (isProductionEmailEnv()) {
+      return {
+        ...r,
+        email: original,
+        originalEmail: original,
+        delivery: 'ses',
+        blocked: false,
+        policy: 'production_any_recipient',
+      };
+    }
     if (allowed) {
       return {
         ...r,
