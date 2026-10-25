@@ -74,6 +74,7 @@ node scripts/deployment-guard/sql110-homeowner-preclaim-links-production-apply.m
 node scripts/deployment-guard/sql111-tenant-referral-codes-production-apply.mjs --inspect   # tenant referral code functions (ops/production-sql-111-apply.md)
 node scripts/deployment-guard/sql112-moov-invoice-table-grants-production-apply.mjs --inspect   # Moov invoice table grants (ops/production-sql-112-apply.md)
 node scripts/deployment-guard/sql113-payee-setup-production-apply.mjs --inspect   # payee setup columns, origin, grant and functions (ops/production-sql-113-apply.md)
+node scripts/deployment-guard/sql114-stakeholder-settings-update-grant-production-apply.mjs --inspect   # stakeholder accounts settings column grant (ops/production-sql-114-apply.md)
 # Production SQL 71, 77-89 and 90-102 on the runner, one invocation (ops/production-sql-one-shot.md)
 node scripts/deployment-guard/production-sql-one-shot.mjs --migration sql80 --phase inspect ...
 node scripts/deployment-guard/verify-live.mjs --input path/to/live.json
