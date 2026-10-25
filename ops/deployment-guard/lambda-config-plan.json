@@ -4,46 +4,23 @@
   "environments": {
     "staging": {
       "function_name": "checksops-staging-api",
-      "status": "applied",
-      "set": {},
+      "status": "accepted",
+      "set": {
+        "FINANCIAL_TOTP_WRAP_KEY_ARN": {
+          "from": null,
+          "to": "arn:aws:secretsmanager:us-east-1:806168576068:secret:checksops/staging/financial-totp-wrap-key-CAVZnt"
+        }
+      },
       "unset": {},
       "inspect": {
-        "run_id": "39654673295",
-        "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39654673295",
-        "main_commit": "5e7b95838ea1beef93871e34d5ee6474c565612b",
-        "live_code_sha256": "Bh/f7zaIFGDECA1jTWgMeR/2qRMOUaABRWP1lQbREOc=",
-        "live_revision_id": "b317d571-f4ce-40d2-a180-e6a00f5a7185",
-        "live_configuration_sha256": "653ec35b78f0b20a66e36c68597c9b43578c185d18aa6a890e9038fbfc1fbc39",
-        "live_variable_count": 45,
-        "notes": "Plaid was removed by #1109 (owner decision 2026-10-21); no code on main reads AWS_PLAID_WEBHOOK_SECRET (provider-secrets.mjs no longer maps plaid). The key is credential-like, so the plan records only the SHA-256 of its live value, copied from this inspect live_credential_sha256; the value is never recorded. The same hash is reported for AWS_MOOV_WEBHOOK_SECRET and AWS_CHECKALT_WEBHOOK_SECRET (one shared staging sandbox fixture value); those two keys are not touched. Live CodeSha256 and RevisionId moved since the previous apply through other workstreams code changes; the variable count (45) is unchanged."
-      },
-      "applied": {
-        "run_id": "39658023037",
-        "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39658023037",
-        "main_commit": "fdde89459b5fb3a6669427677141ce955eaa9aac",
-        "approval_phrase": "APPLY API CONFIGURATION TO STAGING",
-        "change_sha256": "c9fc8733b51dce09c8d8ed6ec2ad4038d7fbf3f36d60c48e5032a0dbdae8b4d8",
-        "revision_id_before": "b317d571-f4ce-40d2-a180-e6a00f5a7185",
-        "revision_id_after": "5a23bea9-731a-4dce-bff6-9a3238d54496",
-        "configuration_sha256_before": "653ec35b78f0b20a66e36c68597c9b43578c185d18aa6a890e9038fbfc1fbc39",
-        "configuration_sha256_after": "6618d378f5fe0b4bddf378374ac17a098c896139364027ee48e374bdeaca821c",
-        "applied_at": "2026-10-21T19:02:29.677Z",
-        "smoke": [
-          "/health",
-          "/db-health",
-          "/db-readonly-validate"
-        ],
-        "code_sha256": "Bh/f7zaIFGDECA1jTWgMeR/2qRMOUaABRWP1lQbREOc=",
-        "state": "VERIFIED",
-        "notes": "Pre-apply inspect 39657808449 on main fdde8945 reported READY (live hash equal to from_sha256, RevisionId b317d571). Verify step VERIFIED (44 variables: 45 - 1 unset; AWS_PLAID_WEBHOOK_SECRET already_accepted, live_sha256 null). Names-only read-back through the owner AWS connector after the apply (GetFunctionConfiguration, variable names, LastUpdateStatus and RevisionId only, no values): AWS_PLAID_WEBHOOK_SECRET absent, every other of the 44 names unchanged (AWS_MOOV_WEBHOOK_SECRET and AWS_CHECKALT_WEBHOOK_SECRET still present), RevisionId 5a23bea9, CodeSha256 unchanged, LastUpdateStatus Successful.",
-        "applied_change": {
-          "set": {},
-          "unset": {
-            "AWS_PLAID_WEBHOOK_SECRET": {
-              "from_sha256": "a4084a76e7c01b4719f2c6949825b02ec308d093242ebe7ad9397df55b0a6326"
-            }
-          }
-        }
+        "run_id": "40218256258",
+        "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/40218256258",
+        "main_commit": "c380e305c91b5ad9692abb47f1008407c924a79d",
+        "live_code_sha256": "n7WoOa7xqoNi71L0gEX6FH7lzanuhPfLQAkGgziBSCE=",
+        "live_revision_id": "3fe1e7c6-dac5-4b94-bd29-d2bebec858cc",
+        "live_configuration_sha256": "8f01c5deab37039487e48fae66d73cbfbedcf18dfecad16b61cea312495181ae",
+        "live_variable_count": 44,
+        "notes": "Owner decision 2026-10-25 (staging two-factor codes rejected): staging carries neither FINANCIAL_TOTP_WRAP_KEY_ARN nor FINANCIAL_TOTP_WRAP_KEY, so every financial TOTP enrollment and step-up (auth-financial-totp.mjs loadFinancialTotpWrapKey) answers 503 wrap_key_unconfigured and staging sends stop at the two-factor step. The owner approved a staging-only wrap key: secret checksops/staging/financial-totp-wrap-key (32 random bytes from KMS GenerateRandom, value never read or recorded) and an inline policy StagingFinancialTotpWrapKeyRead on the staging API role allowing secretsmanager:GetSecretValue on that one secret, both created 2026-10-25 through the owner AWS connector. The key is not credential-like (its value is an ARN, not the key). The inspect (PENDING_PLAN, 44 variables) lists no FINANCIAL_TOTP_WRAP_KEY_ARN, so from is null. Production already reads its own secret (checksops/production/financial-totp-wrap-key) and is not touched; staging never reads the production key."
       },
       "history": [
         {
@@ -140,6 +117,46 @@
                 "AWS_PLAID_ENABLED": "false",
                 "AWS_ACTUM_ENABLED": "false",
                 "AWS_QUICKBOOKS_ENABLED": "false"
+              }
+            }
+          }
+        },
+        {
+          "inspect": {
+            "run_id": "39654673295",
+            "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39654673295",
+            "main_commit": "5e7b95838ea1beef93871e34d5ee6474c565612b",
+            "live_code_sha256": "Bh/f7zaIFGDECA1jTWgMeR/2qRMOUaABRWP1lQbREOc=",
+            "live_revision_id": "b317d571-f4ce-40d2-a180-e6a00f5a7185",
+            "live_configuration_sha256": "653ec35b78f0b20a66e36c68597c9b43578c185d18aa6a890e9038fbfc1fbc39",
+            "live_variable_count": 45,
+            "notes": "Plaid was removed by #1109 (owner decision 2026-10-21); no code on main reads AWS_PLAID_WEBHOOK_SECRET (provider-secrets.mjs no longer maps plaid). The key is credential-like, so the plan records only the SHA-256 of its live value, copied from this inspect live_credential_sha256; the value is never recorded. The same hash is reported for AWS_MOOV_WEBHOOK_SECRET and AWS_CHECKALT_WEBHOOK_SECRET (one shared staging sandbox fixture value); those two keys are not touched. Live CodeSha256 and RevisionId moved since the previous apply through other workstreams code changes; the variable count (45) is unchanged."
+          },
+          "applied": {
+            "run_id": "39658023037",
+            "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39658023037",
+            "main_commit": "fdde89459b5fb3a6669427677141ce955eaa9aac",
+            "approval_phrase": "APPLY API CONFIGURATION TO STAGING",
+            "change_sha256": "c9fc8733b51dce09c8d8ed6ec2ad4038d7fbf3f36d60c48e5032a0dbdae8b4d8",
+            "revision_id_before": "b317d571-f4ce-40d2-a180-e6a00f5a7185",
+            "revision_id_after": "5a23bea9-731a-4dce-bff6-9a3238d54496",
+            "configuration_sha256_before": "653ec35b78f0b20a66e36c68597c9b43578c185d18aa6a890e9038fbfc1fbc39",
+            "configuration_sha256_after": "6618d378f5fe0b4bddf378374ac17a098c896139364027ee48e374bdeaca821c",
+            "applied_at": "2026-10-21T19:02:29.677Z",
+            "smoke": [
+              "/health",
+              "/db-health",
+              "/db-readonly-validate"
+            ],
+            "code_sha256": "Bh/f7zaIFGDECA1jTWgMeR/2qRMOUaABRWP1lQbREOc=",
+            "state": "VERIFIED",
+            "notes": "Pre-apply inspect 39657808449 on main fdde8945 reported READY (live hash equal to from_sha256, RevisionId b317d571). Verify step VERIFIED (44 variables: 45 - 1 unset; AWS_PLAID_WEBHOOK_SECRET already_accepted, live_sha256 null). Names-only read-back through the owner AWS connector after the apply (GetFunctionConfiguration, variable names, LastUpdateStatus and RevisionId only, no values): AWS_PLAID_WEBHOOK_SECRET absent, every other of the 44 names unchanged (AWS_MOOV_WEBHOOK_SECRET and AWS_CHECKALT_WEBHOOK_SECRET still present), RevisionId 5a23bea9, CodeSha256 unchanged, LastUpdateStatus Successful.",
+            "applied_change": {
+              "set": {},
+              "unset": {
+                "AWS_PLAID_WEBHOOK_SECRET": {
+                  "from_sha256": "a4084a76e7c01b4719f2c6949825b02ec308d093242ebe7ad9397df55b0a6326"
+                }
               }
             }
           }
