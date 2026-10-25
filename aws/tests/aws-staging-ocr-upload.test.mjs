@@ -12,11 +12,14 @@ assert.ok(uploadFn, 'CheckUploadForm handleUpload must exist');
 const upload = uploadFn[0];
 
 test('AWS staging upload invokes check-ocr-intake after the image path is saved', () => {
-  assert.match(upload, /const aws = isAwsStaging\(\)/);
+  assert.match(upload, /const aws = awsStaging/);
   assert.match(upload, /createAwsCheck/);
+  assert.match(upload, /buildAwsStagingCheckCreateValues/);
+  assert.match(upload, /syntheticUat/);
   assert.match(upload, /front_image_path: frontPath/);
   assert.match(upload, /functions\.invoke\("check-ocr-intake"/);
   assert.match(upload, /body: \{ checkId: check\.id, skipAi \}/);
+  assert.doesNotMatch(upload, /amount:\s*1/);
   assert.doesNotMatch(
     upload,
     /if \(aws\) \{\s+toast\(\{[\s\S]+OCR and provider submission were not invoked/,
