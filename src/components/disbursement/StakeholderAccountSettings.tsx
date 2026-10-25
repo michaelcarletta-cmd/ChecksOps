@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { AlertTriangle, Building2, Plus, Trash2, Star, ShieldCheck, MailCheck, Lock, Loader2, Info, ShieldAlert, Unplug } from "lucide-react";
+import { AlertTriangle, Building2, Plus, Trash2, Star, ShieldCheck, MailCheck, Lock, Loader2, Info, ShieldAlert, Unplug, Pencil } from "lucide-react";
 import { isValidRoutingNumber, VERIFICATION_LABEL, VERIFICATION_BADGE_CLASS, type VerificationStatus } from "@/lib/banking";
 import { AchAuthorizationForm } from "./AchAuthorizationForm";
 import { BankVerification } from "./BankVerification";
@@ -54,10 +54,12 @@ const ACCOUNT_TYPE_COLORS: Record<string, string> = {
   other: "bg-muted text-muted-foreground border-border",
 };
 
-// Types users can pick when creating a new stakeholder account.
-// Legacy values (operating, overhead, insured, contractor, supplier, other)
-// stay in ACCOUNT_TYPE_LABELS so grandfathered accounts still render correctly.
-const SELECTABLE_ACCOUNT_TYPES = ["subcontractor", "vendor", "sales_rep", "homeowner"] as const;
+// Types users can pick when adding a stakeholder or changing its type. Homeowner
+// is not offered: homeowners get their link from the check itself. Legacy values
+// (operating, overhead, insured, supplier, homeowner, other) stay in
+// ACCOUNT_TYPE_LABELS so grandfathered accounts still render correctly. The
+// server (/data/write stakeholder_accounts) accepts the same four for a type change.
+const SELECTABLE_ACCOUNT_TYPES = ["contractor", "subcontractor", "vendor", "sales_rep"] as const;
 
 // A new stakeholder is a payee: the server creates it and emails the payee a
 // setup link (identity + bank, completed by the payee). No bank details here.
@@ -65,7 +67,7 @@ const emptyForm = {
   recipient_type: "individual" as PayeeRecipientType,
   name: "",
   email: "",
-  account_type: "subcontractor",
+  account_type: "contractor",
 };
 
 export function StakeholderAccountSettings() {
@@ -76,6 +78,8 @@ export function StakeholderAccountSettings() {
   const [form, setForm] = useState(emptyForm);
   const [capLimitDialog, setCapLimitDialog] = useState<null | "sales_rep" | "subcontractor" | "vendor">(null);
   const [deleteTarget, setDeleteTarget] = useState<null | { id: string; label: string; payee: PayeeRow | null }>(null);
+  const [typeTarget, setTypeTarget] = useState<null | { id: string; label: string; current: string }>(null);
+  const [typeChoice, setTypeChoice] = useState<string>("contractor");
   const [requestId, setRequestId] = useState(() => crypto.randomUUID());
 
   const { data: accounts = [], isLoading } = useQuery({
@@ -241,6 +245,32 @@ export function StakeholderAccountSettings() {
     },
     onError: (e: Error) => toast({ title: "Couldn't remove account", description: e.message, variant: "destructive" }),
   });
+
+  // Type change: the server writes only account_type (one of SELECTABLE_ACCOUNT_TYPES)
+  // and clears homeowner_name / homeowner_email itself.
+  const changeType = useMutation({
+    mutationFn: async ({ id, account_type }: { id: string; account_type: string }) => {
+      const { error } = await supabase
+        .from("stakeholder_accounts")
+        .update({ account_type })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: (_out, { account_type }) => {
+      setTypeTarget(null);
+      toast({ title: `Type changed to ${ACCOUNT_TYPE_LABELS[account_type] ?? account_type}` });
+      qc.invalidateQueries({ queryKey: ["stakeholder-accounts"] });
+      qc.invalidateQueries({ queryKey: ["payee-recipients"] });
+      qc.invalidateQueries({ queryKey: ["tenant-primary-accounts"] });
+      qc.invalidateQueries({ queryKey: ["check-stakeholders"] });
+      qc.invalidateQueries({ queryKey: ["disbursement-accounts"] });
+    },
+    onError: (e: Error) => toast({ title: "Couldn't change type", description: e.message, variant: "destructive" }),
+  });
+
+  // Moving into the shared vendor / sales rep / subcontractor limit needs a free slot.
+  const typeChangeHitsCap = (from: string, to: string) =>
+    !CAPPED_TYPES.includes(from) && isAtCap(to);
 
   if (isLoading) return <div className="text-sm text-muted-foreground p-4">Loading accounts...</div>;
 
@@ -441,6 +471,19 @@ export function StakeholderAccountSettings() {
                   </div>
                 </div>
                 <div className="flex items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 text-muted-foreground"
+                    onClick={() => {
+                      setTypeChoice((SELECTABLE_ACCOUNT_TYPES as readonly string[]).includes(acct.account_type) ? acct.account_type : "contractor");
+                      setTypeTarget({ id: acct.id, label: acct.homeowner_name || acct.custname || acct.nickname || "this stakeholder", current: acct.account_type });
+                    }}
+                    title="Change type"
+                    aria-label="Change type"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </Button>
                   {payee && payeeCanResend(payee) && (
                     <Button
                       size="sm"
@@ -528,6 +571,52 @@ export function StakeholderAccountSettings() {
           </DialogHeader>
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="outline" size="sm" onClick={() => setCapLimitDialog(null)}>Close</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!typeTarget} onOpenChange={(o) => !o && setTypeTarget(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-base">Change type for {typeTarget?.label}</DialogTitle>
+            <DialogDescription className="text-xs">
+              Currently {typeTarget ? (ACCOUNT_TYPE_LABELS[typeTarget.current] ?? typeTarget.current) : ""}.
+              {typeTarget?.current === "homeowner"
+                ? " Changing away from Homeowner removes their homeowner name and email from this account, so it is offered on every check instead of only the matching claim."
+                : ""}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1">
+            <Label className="text-xs">Type</Label>
+            <Select value={typeChoice} onValueChange={setTypeChoice}>
+              <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {SELECTABLE_ACCOUNT_TYPES.map((v) => (
+                  <SelectItem key={v} value={v} className="text-xs">
+                    {ACCOUNT_TYPE_LABELS[v]}{typeTarget && typeChangeHitsCap(typeTarget.current, v) ? " (limit reached)" : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" size="sm" onClick={() => setTypeTarget(null)}>Cancel</Button>
+            <Button
+              size="sm"
+              disabled={changeType.isPending || !typeTarget || typeChoice === typeTarget.current}
+              onClick={() => {
+                if (!typeTarget) return;
+                if (typeChangeHitsCap(typeTarget.current, typeChoice)) {
+                  setTypeTarget(null);
+                  setCapLimitDialog(typeChoice as "sales_rep" | "subcontractor" | "vendor");
+                  return;
+                }
+                changeType.mutate({ id: typeTarget.id, account_type: typeChoice });
+              }}
+            >
+              {changeType.isPending && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
+              Save
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

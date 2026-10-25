@@ -953,6 +953,115 @@ export const executeClaimsNumberUpdate = async ({ client, mapping, op, values, f
   }
 };
 
+/** The types Settings > Stakeholder Accounts may set (homeowners get their link from the check). */
+export const STAKEHOLDER_SETTINGS_TYPES = Object.freeze(['contractor', 'subcontractor', 'vendor', 'sales_rep']);
+const STAKEHOLDER_SETTINGS_VALUE_COLUMNS = new Set(['is_active', 'is_primary', 'account_type']);
+// Never a secret, bank, provider or verification column (SQL 114's grant plus the keys).
+const STAKEHOLDER_SETTINGS_RETURNING = 'id, tenant_id, account_type, is_active, is_primary, homeowner_name, homeowner_email, updated_at';
+
+/**
+ * stakeholder_accounts (Settings > Stakeholder Accounts, SQL 114 column grant), one row by id,
+ * in one of the caller's own tenants (aws_user_tenant_ids(); aws_write_stakeholder_accounts
+ * then requires aws_can_write_tenant). Exactly one of:
+ *   - deactivate: is_active false and/or is_primary false (never true). Refused while the row
+ *     has a connected payee (external_payment_recipients.disconnected_at IS NULL): a payee is
+ *     removed through moov-recipient-disconnect.
+ *   - type change: account_type in STAKEHOLDER_SETTINGS_TYPES on an active row; the server
+ *     clears homeowner_name and homeowner_email (the check picker shows a row with a
+ *     homeowner_name only for its own claim's policyholder).
+ * The tenant's own bank account (account_type operating, origin provider_connected) is not a
+ * stakeholder and is refused. No bank, provider or verification column is written.
+ */
+export const executeStakeholderAccounts = async ({ client, op, values, filters }) => {
+  if (op !== 'update') return { error: 'operation_not_allowlisted', op };
+  for (const filter of filters || []) {
+    const column = String(filter?.column || '');
+    if ((filter?.op || 'eq') !== 'eq') return { error: 'filter_not_allowlisted', columns: [column || String(filter?.op)] };
+    if (column !== 'id') return { error: 'column_not_allowlisted', columns: [column] };
+  }
+  const id = eqFilter(filters, 'id');
+  if (!isUuid(id)) return { error: 'invalid_uuid', field: 'id' };
+
+  const keys = Object.keys(values || {});
+  const denied = keys.filter((key) => !STAKEHOLDER_SETTINGS_VALUE_COLUMNS.has(key));
+  if (denied.length) return { error: 'column_not_allowlisted', columns: denied, table: 'stakeholder_accounts' };
+  if (!keys.length) return { error: 'missing_required_field', field: 'values' };
+
+  const typeChange = 'account_type' in values;
+  if (typeChange && keys.length > 1) {
+    return { error: 'invalid_field', field: 'account_type', message: 'a type change is its own write; it cannot also deactivate' };
+  }
+  for (const column of ['is_active', 'is_primary']) {
+    if (column in values && values[column] !== false && values[column] !== 'false') {
+      return { error: 'invalid_field', field: column, message: `${column} can only be set to false here` };
+    }
+  }
+  let accountType = null;
+  if (typeChange) {
+    accountType = typeof values.account_type === 'string' ? values.account_type.trim() : '';
+    if (!STAKEHOLDER_SETTINGS_TYPES.includes(accountType)) {
+      return { error: 'invalid_field', field: 'account_type', message: `account_type must be one of ${STAKEHOLDER_SETTINGS_TYPES.join(', ')}` };
+    }
+  }
+
+  const row = (await client.query(
+    `SELECT id, account_type, origin, is_active
+     FROM public.stakeholder_accounts
+     WHERE id = $1::uuid AND tenant_id IN (SELECT public.aws_user_tenant_ids())`,
+    [id],
+  )).rows[0];
+  if (!row) return { error: 'rls_denied', message: 'stakeholder account not found or not writable' };
+  if (row.account_type === 'operating' || row.origin === 'provider_connected') {
+    return { error: 'operation_not_allowlisted', reason: 'tenant_bank_account', message: "the organization's own bank account is not a stakeholder" };
+  }
+
+  // Both writes repeat the guards in the UPDATE so a concurrent change cannot slip past them.
+  const notTenantBank = (alias) => `${alias}account_type <> 'operating' AND ${alias}origin IS DISTINCT FROM 'provider_connected'`;
+  if (typeChange) {
+    const rows = (await client.query(
+      `UPDATE public.stakeholder_accounts
+       SET account_type = $2::text, homeowner_name = NULL, homeowner_email = NULL, updated_at = now()
+       WHERE id = $1::uuid AND tenant_id IN (SELECT public.aws_user_tenant_ids())
+         AND is_active IS TRUE AND ${notTenantBank('')}
+       RETURNING ${STAKEHOLDER_SETTINGS_RETURNING}`,
+      [id, accountType],
+    )).rows;
+    if (!rows.length) return { error: 'rls_denied', message: 'stakeholder account not found, inactive or not writable' };
+    return { rows };
+  }
+
+  const livePayee = (await client.query(
+    `SELECT 1 FROM public.external_payment_recipients
+     WHERE stakeholder_account_id = $1::uuid AND disconnected_at IS NULL
+     LIMIT 1`,
+    [id],
+  )).rows.length > 0;
+  if (livePayee) {
+    return {
+      error: 'operation_not_allowlisted',
+      reason: 'payee_disconnect_required',
+      message: 'A connected payee is removed with Disconnect (moov-recipient-disconnect), not here',
+    };
+  }
+  const sets = [];
+  if ('is_active' in values) sets.push('is_active = false');
+  if ('is_primary' in values) sets.push('is_primary = false');
+  const rows = (await client.query(
+    `UPDATE public.stakeholder_accounts sa
+     SET ${sets.join(', ')}, updated_at = now()
+     WHERE sa.id = $1::uuid AND sa.tenant_id IN (SELECT public.aws_user_tenant_ids())
+       AND ${notTenantBank('sa.')}
+       AND NOT EXISTS (
+         SELECT 1 FROM public.external_payment_recipients r
+         WHERE r.stakeholder_account_id = sa.id AND r.disconnected_at IS NULL
+       )
+     RETURNING ${STAKEHOLDER_SETTINGS_RETURNING.split(', ').map((c) => `sa.${c}`).join(', ')}`,
+    [id],
+  )).rows;
+  if (!rows.length) return { error: 'rls_denied', message: 'stakeholder account not found or not writable' };
+  return { rows };
+};
+
 const dispatchAppMetadataWrite = async ({ client, mapping, table, op, values, filters }) => {
   switch (table) {
     case 'notifications':
@@ -991,6 +1100,8 @@ const dispatchAppMetadataWrite = async ({ client, mapping, table, op, values, fi
       return executeHomeownerLedgerEvents({ client, mapping, values });
     case 'claims':
       return executeClaimsNumberUpdate({ client, mapping, op, values, filters });
+    case 'stakeholder_accounts':
+      return executeStakeholderAccounts({ client, op, values, filters });
     default:
       return { error: 'table_not_allowlisted', table };
   }

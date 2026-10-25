@@ -49,7 +49,7 @@ const BASELINE_WITHOUT_SIGNATURE_TABLES = Object.freeze([
 
 const RESTORED = Object.freeze(['signature_requests', 'signature_signers']);
 // Added after this repair, each pinned by its own test (check-stakeholders-spa-write.test.mjs).
-const LATER_ADDITIONS = Object.freeze(['check_stakeholders']);
+const LATER_ADDITIONS = Object.freeze(['check_stakeholders', 'stakeholder_accounts']);
 
 function parseWriteTables(source) {
   const match = source.match(/const AWS_WRITE_TABLES = new Set\(\[([\s\S]*?)\]\)/);

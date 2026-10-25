@@ -635,6 +635,7 @@ test('#901 Review financial edits: write-allowlist.mjs, then write-check-workflo
   const MANIFEST_901 = 'aws/tests/fixtures/production-review-financial-edits-manifest-2026-10-16.json';
 
   const MANIFEST_RELEASE = 'aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json';
+  const MANIFEST_STAKEHOLDER_SETTINGS = 'aws/tests/fixtures/production-stakeholder-settings-edit-manifest-2026-10-25.json';
   const SQL93 = 'aws/workflows/sql/93_tenant_company_info.sql';
 
   // #901 planned both as REPLACE of the 2026-10-11 production bytes; that manifest stays as evidence.
@@ -650,11 +651,13 @@ test('#901 Review financial edits: write-allowlist.mjs, then write-check-workflo
     // it, so its live bytes are #901's accepted bytes and the branch's bytes are accepted.
     const row = PLAN.members[member];
     assert.equal(row.operation, 'replace', member);
-    assert.equal(row.manifest, MANIFEST_RELEASE, member);
     assert.equal(release.members[member].previous_manifest, MANIFEST_901, member);
     assert.equal(release.members[member].supersedes_unapplied_manifest, undefined, member);
     assert.equal(release.members[member].live_sha256, accepted, member);
-    assert.equal(row.expected_live_sha256, accepted, member);
+    // The release bytes went live with the 2026-10-21 production rebuilds; the stakeholder settings
+    // edit (2026-10-25) replaces them, so the row now expects the release bytes.
+    assert.equal(row.manifest, MANIFEST_STAKEHOLDER_SETTINGS, member);
+    assert.equal(row.expected_live_sha256, release.members[member].accepted_sha256, member);
     assert.notEqual(row.expected_live_sha256, live, member);
     assert.equal(sha(`aws/functions/api/${member}`), row.accepted_sha256, member);
     assert.equal(resolvePlannedMember(member, { root: ROOT, plan: PLAN }).ok, true, member);
@@ -1026,8 +1029,12 @@ test('live reconciliation 2026-10-19: ten members expect the bytes inspect run 3
   // workflow-rpc.mjs moved on the same way: its fee-branch 79b7e4de bytes went live (inspect run
   // 39935902507, ALREADY_ACCEPTED), the plan row replaced them for the Refer & Earn routes, and production
   // run 39942182669 applied those (6902fe6f, now recorded live).
+  // write-allowlist.mjs and write-check-workflow.mjs moved on too: their release bytes went live with
+  // the 2026-10-21 production rebuilds, and the plan rows replace them for the stakeholder settings edit.
   const MOVED_ON = {
     'homeowner.mjs': { accepted: 'c51ea27a37a72b18aed7881ae349212257b790e6ff400cbe675949574504a80c', liveNow: 'c51ea27a37a72b18aed7881ae349212257b790e6ff400cbe675949574504a80c' },
+    'write-allowlist.mjs': { accepted: '5f84c5634190ebade1ee6ae10d3420e09548efac78f2a72eb98886d2f0341189', liveNow: '5f84c5634190ebade1ee6ae10d3420e09548efac78f2a72eb98886d2f0341189' },
+    'write-check-workflow.mjs': { accepted: 'fa2c6aef0e4e6c8713f60a24804309b4cf7f9e4b9d69a379498ef9acaf621fc2', liveNow: 'fa2c6aef0e4e6c8713f60a24804309b4cf7f9e4b9d69a379498ef9acaf621fc2' },
     'workflow-rpc.mjs': { accepted: '79b7e4de653eb9d391afca9d27769b3b7c8e3d10d67af43e829ee32398797485', liveNow: '6902fe6f89f91c52f251ae1218257a387d6d7dd1fdb0e07687f6c99dfd5591d3' },
   };
   for (const [member, [before, live, manifestRel, appliedRel]] of Object.entries(RECONCILED)) {
@@ -1904,18 +1911,22 @@ test('Write echo secret columns: secret-columns.mjs, write-app-metadata.mjs and 
   const at = (name) => PLAN.order.indexOf(name);
   assert.deepEqual(PLAN.order.slice(at(ADD), at(ADD) + 3), [ADD, APP, WRITE]);
   assert.equal(PLAN.order.at(-1), 'providers.mjs');
+  // write-app-metadata.mjs moved on: the stakeholder settings edit (2026-10-25) replaces the applied
+  // bytes, so its row expects them and accepts main's newer bytes; write.mjs is unchanged.
+  const MOVED_ON = { [APP]: 'aws/tests/fixtures/production-stakeholder-settings-edit-manifest-2026-10-25.json' };
   for (const name of [APP, WRITE]) {
-    const LIVE = sha(`aws/functions/api/${name}`);
+    const LIVE = applied.members[name].accepted_sha256;
+    if (!MOVED_ON[name]) assert.equal(LIVE, sha(`aws/functions/api/${name}`), name);
     assert.ok(localImports(fs.readFileSync(path.join(API, name), 'utf8'), name).includes(ADD), `${name} imports ${ADD}`);
     assert.deepEqual(manifest.members[name], { live_sha256: BEFORE[name], accepted_sha256: LIVE, operation: 'replace' }, name);
     assert.deepEqual(applied.members[name], { live_sha256: LIVE, accepted_sha256: LIVE, operation: 'replace', previous_manifest: MANIFEST_REL }, name);
     const row = PLAN.members[name];
     assert.equal(row.operation, 'replace', name);
-    assert.equal(row.manifest, APPLIED_REL, name);
+    assert.equal(row.manifest, MOVED_ON[name] || APPLIED_REL, name);
     assert.equal(row.expected_live_sha256, LIVE, name);
-    assert.equal(row.accepted_sha256, LIVE, name);
+    assert.equal(row.accepted_sha256, sha(`aws/functions/api/${name}`), name);
     const done = await run(inspect(name), { root: ROOT, inspectLive: liveFor(name, { sha256: LIVE }) });
-    assert.equal(done.state, 'ALREADY_ACCEPTED', name);
+    assert.equal(done.state, MOVED_ON[name] ? 'READY' : 'ALREADY_ACCEPTED', name);
     await assert.rejects(
       run(inspect(name), { root: ROOT, inspectLive: liveFor(name, { sha256: BEFORE[name] }) }),
       (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
@@ -1924,6 +1935,60 @@ test('Write echo secret columns: secret-columns.mjs, write-app-metadata.mjs and 
   }
   assert.equal(PLAN.members[APP].sql_before, 'aws/workflows/sql/93_tenant_company_info.sql');
   assert.equal(PLAN.members[WRITE].sql_before, null);
+});
+
+test('Stakeholder settings edit: write-allowlist.mjs, write-app-metadata.mjs and write-check-workflow.mjs replace the bytes production runs 39636816351 and 40089767778 put live', async () => {
+  const MANIFEST_REL = 'aws/tests/fixtures/production-stakeholder-settings-edit-manifest-2026-10-25.json';
+  const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, MANIFEST_REL), 'utf8'));
+  const readJson = (rel) => JSON.parse(fs.readFileSync(path.join(ROOT, rel), 'utf8'));
+  const ALLOWLIST = 'write-allowlist.mjs';
+  const APP = 'write-app-metadata.mjs';
+  const WORKFLOW_WRITES = 'write-check-workflow.mjs';
+  // The live bytes, each from its recorded evidence: the production rebuild section that accepted
+  // write-allowlist.mjs, the applied write echo manifest, and the release manifest whose
+  // write-check-workflow.mjs bytes the deterministic rebuilds of main put live.
+  const rebuild = readJson('ops/deployment-guard/lambda-rebuild-plan.json').environments.production.history[1];
+  assert.equal(rebuild.applied.run_id, '39636816351');
+  const LIVE = {
+    [ALLOWLIST]: rebuild.members[ALLOWLIST].accepted_sha256,
+    [APP]: readJson('aws/tests/fixtures/production-write-echo-secret-columns-applied-manifest-2026-10-24.json').members[APP].accepted_sha256,
+    [WORKFLOW_WRITES]: readJson('aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json').members[WORKFLOW_WRITES].accepted_sha256,
+  };
+  const SQL_BEFORE = {
+    [ALLOWLIST]: 'aws/workflows/sql/93_tenant_company_info.sql',
+    [APP]: 'aws/workflows/sql/93_tenant_company_info.sql',
+    [WORKFLOW_WRITES]: 'aws/workflows/sql/89_check_intake_items_column_update.sql',
+  };
+  assert.equal(manifest.workstream_id, 'production-stakeholder-settings-edit');
+  assert.equal(manifest.deploy_authorized, false);
+  assert.match(manifest.authorization, /^Pending owner review \(2026-10-25\)/);
+  assert.deepEqual(Object.keys(manifest.members), [ALLOWLIST, APP, WORKFLOW_WRITES]);
+  for (const runId of ['39636816351', '39669873076', '40089767778']) {
+    assert.match(manifest.notes, new RegExp(runId), runId);
+    assert.match(PLAN.notes, new RegExp(runId), runId);
+  }
+  const inspect = (name) => ({ ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: name });
+  for (const name of [ALLOWLIST, APP, WORKFLOW_WRITES]) {
+    const onMain = sha(`aws/functions/api/${name}`);
+    assert.notEqual(onMain, LIVE[name], name);
+    assert.deepEqual(manifest.members[name], { live_sha256: LIVE[name], accepted_sha256: onMain, operation: 'replace' }, name);
+    assert.deepEqual(PLAN.members[name], {
+      operation: 'replace', accepted_sha256: onMain, expected_live_sha256: LIVE[name], sql_before: SQL_BEFORE[name], manifest: MANIFEST_REL,
+    }, name);
+    assert.equal(resolvePlannedMember(name, { root: ROOT, plan: PLAN }).ok, true, name);
+    const ready = await run(inspect(name), { root: ROOT, inspectLive: liveFor(name, { sha256: LIVE[name] }) });
+    assert.equal(ready.state, 'READY', name);
+    assert.equal(ready.mutation, false, name);
+    assert.equal((await run(inspect(name), { root: ROOT, inspectLive: liveFor(name, { sha256: onMain }) })).state, 'ALREADY_ACCEPTED', name);
+  }
+  // Each in its existing place: the allowlist, then the writer, then the forwarder that opens the
+  // route; the Moov send module and providers.mjs stay last.
+  const at = (name) => PLAN.order.indexOf(name);
+  assert.ok(at(ALLOWLIST) < at(APP) && at(APP) < at(WORKFLOW_WRITES));
+  assert.deepEqual(PLAN.order.slice(-2), ['providers/production/moov-send.mjs', 'providers.mjs']);
+  // SQL 114 is not yet a recorded prerequisite: the plan names it in the notes, not as a hold.
+  assert.equal(PLAN.sql_prerequisites['aws/workflows/sql/114_stakeholder_accounts_settings_update_grant.sql'], undefined);
+  assert.match(PLAN.notes, /apply production SQL 114 before write-check-workflow\.mjs/);
 });
 
 test('Production email to every recipient: email-policy.mjs records the bytes production run 40151123531 applied', () => {

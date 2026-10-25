@@ -70,6 +70,7 @@ const AWS_WRITE_TABLES = new Set([
   "signature_requests",
   "signature_signers",
   "check_stakeholders",
+  "stakeholder_accounts",
 ]);
 
 const CLAIM_SETTLEMENT_VALUE_COLUMNS = new Set([

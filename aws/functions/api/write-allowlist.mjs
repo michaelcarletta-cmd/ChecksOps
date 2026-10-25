@@ -782,6 +782,52 @@ export const WRITE_ALLOWLIST = {
       reason: 'Rename an existing tenant claim in place. Does not insert, relink, or write financial fields.',
     },
   },
+  // Settings > Stakeholder Accounts (SQL 114 column grant). Two writes only, by id:
+  // deactivate (is_active/is_primary false) and type change (account_type). The executor
+  // (write-app-metadata.mjs executeStakeholderAccounts) refuses reactivation, is_primary true,
+  // homeowner as a target type and a connected payee's deactivation (payees go through
+  // moov-recipient-disconnect). homeowner_name / homeowner_email are serverClearedColumns:
+  // the server sets them NULL on a type change and a client value is refused
+  // (column_not_allowlisted), never written.
+  stakeholder_accounts: {
+    tranche: 6,
+    ops: new Set(['update']),
+    columns: new Set(['is_active', 'is_primary', 'account_type']),
+    serverClearedColumns: new Set(['homeowner_name', 'homeowner_email']),
+    identityColumn: null,
+    requiredForWrite: { update: [] },
+    filterColumns: new Set(['id']),
+    resource: 'tenant',
+    clientIgnored: new Set([
+      'id',
+      'tenant_id',
+      'created_by',
+      'created_at',
+      'updated_at',
+      'origin',
+      'nickname',
+      'custname',
+      'chk_acct',
+      'chk_aba',
+      'acct_type',
+      'plaid_access_token',
+      'verification_status',
+      'verification_source',
+      'verification_token',
+      'verification_recipient_email',
+      'verification_failure_reason',
+      'verified_at',
+      'provider',
+      'provider_environment',
+      'provider_account_id',
+      'is_partner_payout',
+    ]),
+    frontend: {
+      file: 'src/components/disbursement/StakeholderAccountSettings.tsx remove / change type',
+      op: 'update is_active+is_primary false / update account_type',
+      reason: "Removes a non-payee stakeholder (is_active false) or changes a stakeholder's type to contractor, subcontractor, vendor or sales rep (homeowner_name/email cleared server-side). No bank, provider or verification column; no money movement.",
+    },
+  },
   signature_requests: {
     tranche: 3,
     ops: new Set(['insert']),

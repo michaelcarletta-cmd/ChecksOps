@@ -36,6 +36,7 @@ Non-financial notes/settings/read-receipts. No money movement, no provider calls
 | `contractor_profiles` | insert/update | White-label Find-a-Pro settings | later |
 | `privacy_notice_acknowledgments` | insert | Public `/privacy-notice` (not Cognito-authenticated) | later / public API |
 | `referral_alerts` | update | Referral settings | later |
+| `stakeholder_accounts` | update (remove non-payee, change type) | **Yes.** Settings → Stakeholder Accounts (`StakeholderAccountSettings`) | **Tranche 6** (`AWS_APPLICATION_WORKFLOW_WRITES_ENABLED`; SQL 114 column grant). Update by `id` only: `is_active`/`is_primary` to `false` (never `true`), or `account_type` to contractor/subcontractor/vendor/sales_rep with `homeowner_name`/`homeowner_email` cleared server-side (never client-set). Refuses a connected payee (Disconnect via `moov-recipient-disconnect`) and the tenant's own bank account (`operating`, `provider_connected`). Insert, bank, provider and verification columns stay denied (§5). |
 
 ### 2. Claim/check workflow writes
 
@@ -90,7 +91,7 @@ Reads/sign/list already use S3. Tranche 3 enables upload/delete/move on `claim-f
 
 ### 5. Financial / payment / disbursement writes
 
-`disbursement_splits`, `disbursement_batches`, `deposit_items`, `deposit_attachments`, `deposit_exceptions`, `deposit_automation_settings`, `deposit_escalation_*`, `claim_check_payments`, `claim_disbursements`, `claim_settlements`, `cash_jobs` / `cash_job_*`, `payment_wallet_sub_ledgers`, `tenant_billing_accounts`, `tenant_bank_accounts`, `tenant_wallet_funding_settings`, `tenant_maintenance_payments`, `payroll_runs`, `ach_authorizations`, `stakeholder_accounts`, `stakeholder_limit_requests`, `recipient_tax_profiles`, `homeowner_ledger_events`.
+`disbursement_splits`, `disbursement_batches`, `deposit_items`, `deposit_attachments`, `deposit_exceptions`, `deposit_automation_settings`, `deposit_escalation_*`, `claim_check_payments`, `claim_disbursements`, `claim_settlements`, `cash_jobs` / `cash_job_*`, `payment_wallet_sub_ledgers`, `tenant_billing_accounts`, `tenant_bank_accounts`, `tenant_wallet_funding_settings`, `tenant_maintenance_payments`, `payroll_runs`, `ach_authorizations`, `stakeholder_accounts` (insert and bank/provider/verification columns; the Settings remove and type change are Tranche 6, §1), `stakeholder_limit_requests`, `recipient_tax_profiles`, `homeowner_ledger_events`.
 
 Denied by the Tranche 1 allowlist with `reason: financial_or_provider`.
 
