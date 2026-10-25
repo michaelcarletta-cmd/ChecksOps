@@ -26,6 +26,7 @@ import {
 } from '../../scripts/deployment-guard/lib/lambda-config.mjs';
 import { acquireLease } from '../../scripts/deployment-guard/lib/lease.mjs';
 import { issueReceipt } from '../../scripts/deployment-guard/lib/receipt.mjs';
+import { PAYEES_PRODUCTION_FLAG } from '../functions/api/providers/payees/flags.mjs';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const SHA = 'a'.repeat(40);
@@ -143,7 +144,7 @@ test('the committed plan keeps the remaining-features applies (runs 39616453836,
   assert.equal(raw.environments.production.history[1].applied.staging_acceptance, raw.environments.staging.history[1].applied.run_url);
 });
 
-test('the committed plan records the dead credential-key removals (runs 39658023037, 39658423786) and starts the next change empty', () => {
+test('the committed plan records the dead credential-key removals (runs 39658023037, 39658423786); production keeps it in history', () => {
   const raw = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, CONFIG_PLAN_REL), 'utf8'));
   const expected = {
     staging: {
@@ -164,17 +165,20 @@ test('the committed plan records the dead credential-key removals (runs 39658023
     },
   };
   for (const [environment, want] of Object.entries(expected)) {
-    const section = loadConfigPlan(REPO_ROOT, environment);
-    assert.equal(section.status, 'applied');
-    assert.deepEqual(section.set, {});
-    assert.deepEqual(section.unset, {});
-    const row = raw.environments[environment];
+    const section = raw.environments[environment];
+    // Staging still shows the removal as its current, applied change; production moved it to history.
+    const row = environment === 'staging' ? section : section.history[2];
+    if (environment === 'staging') {
+      assert.equal(loadConfigPlan(REPO_ROOT, environment).status, 'applied');
+      assert.deepEqual(section.set, {});
+      assert.deepEqual(section.unset, {});
+    }
     assert.equal(row.inspect.run_id, want.inspect);
     assert.equal(row.inspect.main_commit, '5e7b95838ea1beef93871e34d5ee6474c565612b');
     assert.equal(row.inspect.live_revision_id, want.revision);
     assert.equal(row.inspect.live_variable_count, want.count);
-    // Both earlier changes stay in history, oldest first.
-    assert.deepEqual(row.history.map((entry) => entry.applied.run_id), environment === 'staging' ? ['39594167097', '39616453836'] : ['39594352935', '39617806126']);
+    // The earlier changes stay in history, oldest first.
+    assert.deepEqual(section.history.map((entry) => entry.applied.run_id), environment === 'staging' ? ['39594167097', '39616453836'] : ['39594352935', '39617806126', want.run]);
     assert.equal(row.applied.run_id, want.run);
     assert.equal(row.applied.main_commit, 'fdde89459b5fb3a6669427677141ce955eaa9aac');
     assert.equal(row.applied.state, 'VERIFIED');
@@ -184,11 +188,32 @@ test('the committed plan records the dead credential-key removals (runs 39658023
     assert.equal(row.applied.code_sha256, row.inspect.live_code_sha256);
     assert.deepEqual(row.applied.applied_change, { set: {}, unset: want.unset });
     // The recorded change hash is the one the run's receipt owned.
-    assert.equal(changeSha256({ function_name: row.function_name, ...row.applied.applied_change }), row.applied.change_sha256);
+    assert.equal(changeSha256({ function_name: section.function_name, ...row.applied.applied_change }), row.applied.change_sha256);
     // The record never carries a credential value: every entry is exactly { from_sha256 }.
     for (const entry of Object.values(row.applied.applied_change.unset)) assert.deepEqual(Object.keys(entry), ['from_sha256']);
   }
-  assert.equal(raw.environments.production.applied.staging_acceptance, raw.environments.staging.applied.run_url);
+  assert.equal(raw.environments.production.history[2].applied.staging_acceptance, raw.environments.staging.applied.run_url);
+});
+
+test('the committed plan turns on production payees from the 2026-10-25 inspect (40147060785)', () => {
+  const raw = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, CONFIG_PLAN_REL), 'utf8'));
+  const section = loadConfigPlan(REPO_ROOT, 'production');
+  assert.equal(section.status, 'accepted');
+  assert.deepEqual(section.set, { AWS_MOOV_PAYEES_PRODUCTION_ENABLED: { from: null, to: 'true' } });
+  assert.deepEqual(section.unset, {});
+  const row = raw.environments.production;
+  assert.equal(row.inspect.run_id, '40147060785');
+  assert.equal(row.inspect.main_commit, '2670a22d3ff077b3dc199be30afe638429d44ad8');
+  // The inspect starts from the revision the credential-key removal left behind.
+  assert.equal(row.inspect.live_revision_id, 'df29f264-6872-42e1-9ac5-dd7366e3bb04');
+  assert.equal(row.inspect.live_variable_count, 45);
+  assert.equal(Object.hasOwn(row, 'applied'), false);
+  // The flag is the only key the payee guard reads (flags.mjs).
+  assert.equal(Object.keys(section.set)[0], PAYEES_PRODUCTION_FLAG);
+  // Staging needs no change.
+  const staging = loadConfigPlan(REPO_ROOT, 'staging');
+  assert.deepEqual(staging.set, {});
+  assert.deepEqual(staging.unset, {});
 });
 
 test('the plan refuses credential-like keys in set or as a plain unset value, invalid keys, non-string values and no-op entries', () => {

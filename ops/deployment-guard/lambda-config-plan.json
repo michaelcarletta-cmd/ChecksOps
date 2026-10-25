@@ -148,46 +148,23 @@
     },
     "production": {
       "function_name": "checksops-production-prep-api",
-      "status": "applied",
-      "set": {},
+      "status": "accepted",
+      "set": {
+        "AWS_MOOV_PAYEES_PRODUCTION_ENABLED": {
+          "from": null,
+          "to": "true"
+        }
+      },
       "unset": {},
       "inspect": {
-        "run_id": "39654936003",
-        "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39654936003",
-        "main_commit": "5e7b95838ea1beef93871e34d5ee6474c565612b",
-        "live_code_sha256": "Bh/f7zaIFGDECA1jTWgMeR/2qRMOUaABRWP1lQbREOc=",
-        "live_revision_id": "4945c256-37ff-49b1-b7d9-adffea1a51bf",
-        "live_configuration_sha256": "0d0e4dd57e17155b7da9127b560dd9fc4cd28e09d56ac762b82cbf34be2dd50c",
-        "live_variable_count": 46,
-        "notes": "The Supabase bridge functions that accepted CHECKSOPS_DB_BRIDGE_TOKEN were deleted by the owner (teardown recorded in #1126, aws/cutover/BRIDGE_TEARDOWN.md); no code on main reads the key. It is credential-like, so the plan records only the SHA-256 of its live value, copied from this inspect live_credential_sha256; the value is never recorded. Live CodeSha256 and RevisionId moved since the previous apply through other workstreams code changes; the variable count (46) is unchanged."
-      },
-      "applied": {
-        "run_id": "39658423786",
-        "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39658423786",
-        "main_commit": "fdde89459b5fb3a6669427677141ce955eaa9aac",
-        "approval_phrase": "APPLY API CONFIGURATION TO PRODUCTION",
-        "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39658023037",
-        "change_sha256": "ef97b66c83364d36f19be777d22a3aff63a58a4bb9874bea7ad903b9e20ab7c4",
-        "revision_id_before": "4945c256-37ff-49b1-b7d9-adffea1a51bf",
-        "revision_id_after": "e64c1ce8-2282-4011-8ced-bba5bcc93b91",
-        "configuration_sha256_before": "0d0e4dd57e17155b7da9127b560dd9fc4cd28e09d56ac762b82cbf34be2dd50c",
-        "configuration_sha256_after": "73f8403a13baa8b70123c189829b617f2156e377df5979ba44086c75b445b0a9",
-        "applied_at": "2026-10-21T19:05:05.549Z",
-        "smoke": [
-          "/health",
-          "/db-health"
-        ],
-        "code_sha256": "Bh/f7zaIFGDECA1jTWgMeR/2qRMOUaABRWP1lQbREOc=",
-        "state": "VERIFIED",
-        "notes": "Owner approval: \"merge 1128 when green then APPLY API CONFIGURATION TO PRODUCTION\". Pre-apply inspect 39658257188 on main fdde8945 reported READY (live hash equal to from_sha256, RevisionId 4945c256). Verify step VERIFIED (45 variables: 46 - 1 unset; CHECKSOPS_DB_BRIDGE_TOKEN already_accepted, live_sha256 null). Names-only read-back through the owner AWS connector after the apply (GetFunctionConfiguration, variable names, LastUpdateStatus and RevisionId only, no values): CHECKSOPS_DB_BRIDGE_TOKEN absent, every other of the 45 names unchanged, RevisionId e64c1ce8, CodeSha256 unchanged, LastUpdateStatus Successful.",
-        "applied_change": {
-          "set": {},
-          "unset": {
-            "CHECKSOPS_DB_BRIDGE_TOKEN": {
-              "from_sha256": "2de2f69eb2c4890fdc3630f6ddc58865778cc0cd5c4a404f063d7898e3ae15ba"
-            }
-          }
-        }
+        "run_id": "40147060785",
+        "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/40147060785",
+        "main_commit": "2670a22d3ff077b3dc199be30afe638429d44ad8",
+        "live_code_sha256": "00Jfy9+OrIaNrep50P/cjwcWD7DC5Z/KeIlDtaWWAFQ=",
+        "live_revision_id": "df29f264-6872-42e1-9ac5-dd7366e3bb04",
+        "live_configuration_sha256": "9363b78a4d98d20ceb4172995bd8acc97d9ca0240c71dbe222dee185217ddb71",
+        "live_variable_count": 45,
+        "notes": "Owner decision 2026-10-25: \"Merge 1227 and APPLY API CONFIGURATION TO PRODUCTION\" (turn on production payees). The inspect (state PENDING_PLAN, 45 variables) lists no AWS_MOOV_PAYEES_PRODUCTION_ENABLED, so from is null. With the key absent, moovPayeesProductionEnabled() is false and every payee function (providers/payees, live since the 2026-10-24 overlays recorded in production-moov-payees-applied-manifest-2026-10-24.json) answers production_execution_blocked. Setting it to the string \"true\" opens payee setup only (moov-recipient-create, the /pay-setup public steps, resend and disconnect against production Moov); it never opens money movement, onboarding or any other function, and production never falls back to sandbox. Prerequisites already live: SQL 113 applied in production 2026-10-23; the production website serves the payee pages since run 40146059448 (release lock #1227); the provider secret carries RESEND_API_KEY for the setup email. Staging needs no change (payeeDeployment() is sandbox there regardless of this key), so this reviewed plan PR is the staging acceptance reference."
       },
       "history": [
         {
@@ -290,6 +267,46 @@
                 "AWS_PLAID_ENABLED": "false",
                 "AWS_ACTUM_ENABLED": "false",
                 "AWS_QUICKBOOKS_ENABLED": "false"
+              }
+            }
+          }
+        },
+        {
+          "inspect": {
+            "run_id": "39654936003",
+            "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39654936003",
+            "main_commit": "5e7b95838ea1beef93871e34d5ee6474c565612b",
+            "live_code_sha256": "Bh/f7zaIFGDECA1jTWgMeR/2qRMOUaABRWP1lQbREOc=",
+            "live_revision_id": "4945c256-37ff-49b1-b7d9-adffea1a51bf",
+            "live_configuration_sha256": "0d0e4dd57e17155b7da9127b560dd9fc4cd28e09d56ac762b82cbf34be2dd50c",
+            "live_variable_count": 46,
+            "notes": "The Supabase bridge functions that accepted CHECKSOPS_DB_BRIDGE_TOKEN were deleted by the owner (teardown recorded in #1126, aws/cutover/BRIDGE_TEARDOWN.md); no code on main reads the key. It is credential-like, so the plan records only the SHA-256 of its live value, copied from this inspect live_credential_sha256; the value is never recorded. Live CodeSha256 and RevisionId moved since the previous apply through other workstreams code changes; the variable count (46) is unchanged."
+          },
+          "applied": {
+            "run_id": "39658423786",
+            "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39658423786",
+            "main_commit": "fdde89459b5fb3a6669427677141ce955eaa9aac",
+            "approval_phrase": "APPLY API CONFIGURATION TO PRODUCTION",
+            "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39658023037",
+            "change_sha256": "ef97b66c83364d36f19be777d22a3aff63a58a4bb9874bea7ad903b9e20ab7c4",
+            "revision_id_before": "4945c256-37ff-49b1-b7d9-adffea1a51bf",
+            "revision_id_after": "e64c1ce8-2282-4011-8ced-bba5bcc93b91",
+            "configuration_sha256_before": "0d0e4dd57e17155b7da9127b560dd9fc4cd28e09d56ac762b82cbf34be2dd50c",
+            "configuration_sha256_after": "73f8403a13baa8b70123c189829b617f2156e377df5979ba44086c75b445b0a9",
+            "applied_at": "2026-10-21T19:05:05.549Z",
+            "smoke": [
+              "/health",
+              "/db-health"
+            ],
+            "code_sha256": "Bh/f7zaIFGDECA1jTWgMeR/2qRMOUaABRWP1lQbREOc=",
+            "state": "VERIFIED",
+            "notes": "Owner approval: \"merge 1128 when green then APPLY API CONFIGURATION TO PRODUCTION\". Pre-apply inspect 39658257188 on main fdde8945 reported READY (live hash equal to from_sha256, RevisionId 4945c256). Verify step VERIFIED (45 variables: 46 - 1 unset; CHECKSOPS_DB_BRIDGE_TOKEN already_accepted, live_sha256 null). Names-only read-back through the owner AWS connector after the apply (GetFunctionConfiguration, variable names, LastUpdateStatus and RevisionId only, no values): CHECKSOPS_DB_BRIDGE_TOKEN absent, every other of the 45 names unchanged, RevisionId e64c1ce8, CodeSha256 unchanged, LastUpdateStatus Successful.",
+            "applied_change": {
+              "set": {},
+              "unset": {
+                "CHECKSOPS_DB_BRIDGE_TOKEN": {
+                  "from_sha256": "2de2f69eb2c4890fdc3630f6ddc58865778cc0cd5c4a404f063d7898e3ae15ba"
+                }
               }
             }
           }
