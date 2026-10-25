@@ -76,9 +76,11 @@ const STAKEHOLDERS = [
 
 /** Transactional fake: writes are visible to later reads only once committed. */
 const fakeDb = ({
+  environment = 'production',
+  tenantEnvironment = environment,
   memberships = [{ tenant_id: TENANT, role: 'member', tenant_name: 'Freedom', tenant_slug: 'freedom' }],
   stepUps = [{ id: 'stepup-1', user_id: APP_USER, tenant_id: TENANT, action_key: 'wallet.fund', login_session: LOGIN }],
-  account = { tenant_id: TENANT, environment: 'production', provider_account_id: 'moov-acct', onboarding_status: 'active' },
+  account = { tenant_id: TENANT, environment, provider_account_id: 'moov-acct', onboarding_status: 'active' },
   stakeholders = STAKEHOLDERS,
   shares = [{ check_id: CHECK, source_tenant_id: TENANT, target_tenant_id: PARTNER }],
   partnerships = [],
@@ -121,7 +123,7 @@ const fakeDb = ({
       }
       if (sql.includes('FROM public.tenant_users')) return { rows: memberships };
       if (sql.includes('FROM public.user_roles')) return { rows: [] };
-      if (sql.includes('FROM public.tenants WHERE id')) return { rows: [{ moov_allowlisted: true, moov_environment: 'production' }] };
+      if (sql.includes('FROM public.tenants WHERE id')) return { rows: [{ moov_allowlisted: true, moov_environment: tenantEnvironment }] };
       if (sql.includes('FROM public.financial_stepup_log')) {
         const [userId, tenantId, action, login] = params;
         return {
@@ -137,8 +139,8 @@ const fakeDb = ({
       }
       if (sql.includes('SELECT * FROM public.payment_wallets')) {
         return {
-          rows: params[1] === 'production' && params[2] === 'operating'
-            ? [{ id: 'wallet-row', tenant_id: TENANT, environment: 'production', wallet_type: 'operating', provider_wallet_id: 'wallet-1', provider_payment_method_id: 'pm-wallet' }]
+          rows: params[1] === environment && params[2] === 'operating'
+            ? [{ id: 'wallet-row', tenant_id: TENANT, environment, wallet_type: 'operating', provider_wallet_id: 'wallet-1', provider_payment_method_id: 'pm-wallet' }]
             : [],
         };
       }
@@ -216,7 +218,7 @@ const fakeDb = ({
         return { rows: [{ ...row }] };
       }
       if (sql.includes('INSERT INTO public.payment_event_log')) {
-        state().events.push({ type: params[2], status: params[3] });
+        state().events.push({ environment: params[0], type: params[2], status: params[3] });
         return { rows: [] };
       }
       return { rows: [] };
@@ -711,4 +713,93 @@ test('request parsing, leg planning and method selection', () => {
     { amount_cents: 50, status: 'unknown', leg_role: 'send_bank', provider_metadata: { recipient_index: 0 } },
   ]);
   assert.deepEqual([summary.sent_cents, summary.unknown_cents, summary.unsent_cents], [100, 50, 0]);
+});
+
+// Staging: the same send path against the Moov sandbox (sandbox credentials, environment='sandbox').
+const STAGING_FLAGS = {
+  AWS_PROVIDER_EXECUTION_ENABLED: 'false',
+  AWS_MOOV_ENABLED: 'false',
+  AWS_PROVIDER_LIVE_READS_ENABLED: 'false',
+  AWS_MOOV_TRANSFER_POST_ENABLED: undefined,
+  AWS_MOOV_SEND_POST_ENABLED: undefined,
+  AWS_FINANCIAL_PERMISSIONS_ACTIVATED: 'false',
+  AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED: 'true',
+};
+const SANDBOX_STAKEHOLDERS = STAKEHOLDERS.map((s) => ({ ...s, provider_environment: s.provider_environment && 'sandbox' }));
+const sandboxDeps = {
+  loadProviderSecrets: async () => { throw new Error('production secrets read on staging'); },
+  loadSandboxCredentials: async () => ({ moov: { publicKey: 'spk', secretKey: 'ssk', platformAccountId: 'sandbox-platform' } }),
+};
+
+test('staging: a check send (no batch_id) runs the send path against the Moov sandbox', async () => {
+  await withEnv(STAGING_FLAGS, async () => {
+    const client = fakeDb({ environment: 'sandbox', stakeholders: SANDBOX_STAKEHOLDERS });
+    const moov = moovStub();
+    const result = await run(client, moov, {}, {}, sandboxDeps);
+    assert.equal(result.ok, true, JSON.stringify(result));
+    assert.equal(result.environment, 'sandbox');
+    assert.equal(result.operation, 'wallet.send');
+    assert.equal(result.send.sent_cents, 2500);
+    const [post] = moov.posts();
+    assert.equal(post.path, '/accounts/sandbox-platform/transfers');
+    assert.deepEqual(post.body.destination, { paymentMethodID: 'pm-stk-std' });
+    const [leg] = client.committed.transfers;
+    assert.equal(leg.environment, 'sandbox');
+    assert.equal(leg.status, 'submitted');
+    assert.ok(client.committed.events.length > 0);
+    assert.ok(client.committed.events.every((e) => e.environment === 'sandbox'));
+  });
+});
+
+test('staging: a tenant flagged production still sends from its sandbox rows, never production keys', async () => {
+  await withEnv(STAGING_FLAGS, async () => {
+    const client = fakeDb({ environment: 'sandbox', tenantEnvironment: 'production', stakeholders: SANDBOX_STAKEHOLDERS });
+    const result = await run(client, moovStub(), {}, {}, sandboxDeps);
+    assert.equal(result.ok, true, JSON.stringify(result));
+    assert.equal(client.committed.transfers[0].environment, 'sandbox');
+  });
+});
+
+test('staging: a production stakeholder row is not paid from the sandbox', async () => {
+  await withEnv(STAGING_FLAGS, async () => {
+    const client = fakeDb({ environment: 'sandbox' });
+    const moov = moovStub();
+    const result = await run(client, moov, {}, {}, sandboxDeps);
+    assert.equal(result.error, 'recipient_setup_required', JSON.stringify(result));
+    assert.equal(moov.posts().length, 0);
+    assert.equal(client.committed.transfers.length, 0);
+  });
+});
+
+test('staging: the send still needs this login\'s two-factor step-up', async () => {
+  await withEnv(STAGING_FLAGS, async () => {
+    const client = fakeDb({ environment: 'sandbox', stakeholders: SANDBOX_STAKEHOLDERS, stepUps: [] });
+    const moov = moovStub();
+    const result = await run(client, moov, {}, {}, sandboxDeps);
+    assert.equal(result.error, 'totp_required', JSON.stringify(result));
+    assert.equal(moov.posts().length, 0);
+  });
+});
+
+test('staging: a Run Payroll batch (batch_id) still goes to the parity batch handler', async () => {
+  await withEnv(STAGING_FLAGS, async () => {
+    const client = fakeDb({ environment: 'sandbox', stakeholders: SANDBOX_STAKEHOLDERS });
+    const moov = moovStub();
+    const result = await run(client, moov, { batch_id: '3c4d5e6f-7a8b-4c9d-8e0f-1a2b3c4d5e6f' }, {}, sandboxDeps);
+    assert.notEqual(result.operation, 'wallet.send', JSON.stringify(result));
+    assert.ok(client.log.some(({ sql }) => sql.includes('FROM public.disbursement_batches')));
+    assert.equal(moov.posts().length, 0);
+  });
+});
+
+test('staging: with sandbox execution off, a send meets the hard block and nothing is written', async () => {
+  await withEnv({ ...STAGING_FLAGS, AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED: 'false' }, async () => {
+    const client = fakeDb({ environment: 'sandbox', stakeholders: SANDBOX_STAKEHOLDERS });
+    const moov = moovStub();
+    const result = await run(client, moov, {}, {}, sandboxDeps);
+    assert.notEqual(result.ok, true, JSON.stringify(result));
+    assert.notEqual(result.operation, 'wallet.send');
+    assert.equal(moov.calls.length, 0);
+    assert.equal(client.committed.transfers.length, 0);
+  });
 });

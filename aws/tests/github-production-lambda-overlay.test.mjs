@@ -802,10 +802,11 @@ test('fee collection: eleven members on the fee manifest, collection-v2 then des
       // Then on to the production Platform Finance route, which REPLACE took from the invoice bytes
       // production run 39955069311 applied; then on to the Moov payee routes (REPLACE from the bytes
       // production run 39988166380 applied), applied by production run 40140208837: the plan row now
-      // names the Moov payees applied manifest and expects its applied bytes.
+      // names the Moov payees applied manifest and expects its applied bytes; then on to the staging
+      // sandbox send route (planned), whose REPLACE starts from those applied bytes.
       const pf = JSON.parse(fs.readFileSync(path.join(ROOT, 'aws/tests/fixtures/production-platform-finance-manifest-2026-10-23.json'), 'utf8'));
       const payees = JSON.parse(fs.readFileSync(path.join(ROOT, 'aws/tests/fixtures/production-moov-payees-manifest-2026-10-23.json'), 'utf8'));
-      assert.equal(row.manifest, 'aws/tests/fixtures/production-moov-payees-applied-manifest-2026-10-24.json');
+      assert.equal(row.manifest, 'aws/tests/fixtures/production-sandbox-send-manifest-2026-10-25.json');
       assert.equal(pf.members[member].live_sha256, invoice.members[member].accepted_sha256);
       assert.equal(payees.members[member].live_sha256, pf.members[member].accepted_sha256);
       assert.equal(row.expected_live_sha256, payees.members[member].accepted_sha256);
@@ -1600,12 +1601,14 @@ test('Production Platform Finance: providers.mjs expected_live records the bytes
   assert.equal(manifest.members[PF].accepted_sha256, LIVE[PF]);
   // The plan: providers.mjs has since moved on to the Moov payee routes, whose REPLACE started from the
   // bytes this apply put live and was applied 2026-10-24 (production run 40140208837, its own test
-  // below); the ADD row stays on the Platform Finance manifest with expected_live null.
+  // below), then on to the staging sandbox send route (planned, its own test below); the ADD row stays
+  // on the Platform Finance manifest with expected_live null.
   const PAYEES_REL = 'aws/tests/fixtures/production-moov-payees-manifest-2026-10-23.json';
+  const PAYEES_APPLIED_REL = 'aws/tests/fixtures/production-moov-payees-applied-manifest-2026-10-24.json';
   const row = PLAN.members['providers.mjs'];
-  assert.equal(row.manifest, 'aws/tests/fixtures/production-moov-payees-applied-manifest-2026-10-24.json');
+  assert.equal(row.manifest, 'aws/tests/fixtures/production-sandbox-send-manifest-2026-10-25.json');
   assert.notEqual(row.expected_live_sha256, LIVE['providers.mjs']);
-  assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, row.manifest), 'utf8')).members['providers.mjs'].previous_manifest, PAYEES_REL);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, PAYEES_APPLIED_REL), 'utf8')).members['providers.mjs'].previous_manifest, PAYEES_REL);
   const payees = JSON.parse(fs.readFileSync(path.join(ROOT, PAYEES_REL), 'utf8'));
   assert.equal(payees.members['providers.mjs'].live_sha256, LIVE['providers.mjs']);
   const add = PLAN.members[PF];
@@ -1701,17 +1704,21 @@ test('Moov payees: four added modules, providers/catalog.mjs and providers.mjs r
       assert.ok(localImports(fs.readFileSync(path.join(API, name), 'utf8'), name).includes(dep), `${name} imports ${dep}`);
     }
   }
+  // providers.mjs has since moved on to the staging sandbox send route (planned, its own test below):
+  // its row expects these applied bytes live and accepts main's newer bytes.
+  const MOVED_ON = { 'providers.mjs': 'aws/tests/fixtures/production-sandbox-send-manifest-2026-10-25.json' };
   for (const [name, before] of Object.entries(BEFORE)) {
-    const LIVE = sha(`aws/functions/api/${name}`);
+    const LIVE = applied.members[name].accepted_sha256;
+    if (!MOVED_ON[name]) assert.equal(sha(`aws/functions/api/${name}`), LIVE, name);
     assert.deepEqual(manifest.members[name], { live_sha256: before, accepted_sha256: LIVE, operation: 'replace' }, name);
     assert.deepEqual(applied.members[name], { live_sha256: LIVE, accepted_sha256: LIVE, operation: 'replace', previous_manifest: MANIFEST_REL }, name);
     const row = PLAN.members[name];
     assert.equal(row.operation, 'replace', name);
-    assert.equal(row.manifest, APPLIED_REL, name);
+    assert.equal(row.manifest, MOVED_ON[name] || APPLIED_REL, name);
     assert.equal(row.expected_live_sha256, LIVE, name);
-    assert.equal(row.accepted_sha256, LIVE, name);
+    assert.equal(row.accepted_sha256, sha(`aws/functions/api/${name}`), name);
     assert.equal(resolvePlannedMember(name, { root: ROOT, plan: PLAN }).ok, true, name);
-    const done = await run(inspect(name), { root: ROOT, inspectLive: liveFor(name, { sha256: LIVE }) });
+    const done = await run(inspect(name), { root: ROOT, inspectLive: liveFor(name, { sha256: row.accepted_sha256 }) });
     assert.equal(done.state, 'ALREADY_ACCEPTED', name);
     assert.equal(done.mutation, false, name);
     await assert.rejects(
@@ -2006,6 +2013,38 @@ test('Stakeholder settings edit: write-allowlist.mjs, write-app-metadata.mjs and
   // SQL 114 is not yet a recorded prerequisite: the plan names it in the notes, not as a hold.
   assert.equal(PLAN.sql_prerequisites['aws/workflows/sql/114_stakeholder_accounts_settings_update_grant.sql'], undefined);
   assert.match(PLAN.notes, /apply production SQL 114 before write-check-workflow\.mjs/);
+});
+
+test('Staging sends: moov-send.mjs then providers.mjs replace the bytes the plan expects live (planning only)', async () => {
+  const MANIFEST_REL = 'aws/tests/fixtures/production-sandbox-send-manifest-2026-10-25.json';
+  const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, MANIFEST_REL), 'utf8'));
+  const readJson = (rel) => JSON.parse(fs.readFileSync(path.join(ROOT, rel), 'utf8'));
+  const SEND = 'providers/production/moov-send.mjs';
+  const PROVIDERS = 'providers.mjs';
+  // The live bytes, each from its recorded evidence: the expected live value of the 2026-10-13 send
+  // manifest (unconfirmed; a production inspect confirms it) and the Moov payees applied bytes.
+  const LIVE = {
+    [SEND]: readJson('aws/tests/fixtures/production-moov-send-manifest-2026-10-13.json').members[SEND].live_sha256,
+    [PROVIDERS]: readJson('aws/tests/fixtures/production-moov-payees-applied-manifest-2026-10-24.json').members[PROVIDERS].accepted_sha256,
+  };
+  assert.equal(manifest.workstream_id, 'production-sandbox-send');
+  assert.equal(manifest.deploy_authorized, false);
+  assert.match(manifest.authorization, /^Pending owner review \(2026-10-25\)/);
+  assert.deepEqual(Object.keys(manifest.members), [SEND, PROVIDERS]);
+  assert.match(PLAN.notes, /Staging sends \(2026-10-25, planning only, not authorized\)/);
+  const inspect = (name) => ({ ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: name });
+  for (const name of [SEND, PROVIDERS]) {
+    const onMain = sha(`aws/functions/api/${name}`);
+    assert.notEqual(onMain, LIVE[name], name);
+    assert.deepEqual(manifest.members[name], { live_sha256: LIVE[name], accepted_sha256: onMain, operation: 'replace' }, name);
+    assert.equal(PLAN.members[name].manifest, MANIFEST_REL, name);
+    assert.equal(PLAN.members[name].expected_live_sha256, LIVE[name], name);
+    assert.equal(PLAN.members[name].accepted_sha256, onMain, name);
+    assert.equal(resolvePlannedMember(name, { root: ROOT, plan: PLAN }).ok, true, name);
+    assert.equal((await run(inspect(name), { root: ROOT, inspectLive: liveFor(name, { sha256: onMain }) })).state, 'ALREADY_ACCEPTED', name);
+  }
+  assert.deepEqual(PLAN.order.slice(-2), [SEND, PROVIDERS]);
+  assert.ok(localImports(fs.readFileSync(path.join(ROOT, 'aws/functions/api', SEND), 'utf8'), SEND).includes('providers/parity/caller.mjs'));
 });
 
 test('Stakeholder settings edit: the three members record the bytes production runs 40189236116, 40189560481 and 40189657073 applied', () => {
