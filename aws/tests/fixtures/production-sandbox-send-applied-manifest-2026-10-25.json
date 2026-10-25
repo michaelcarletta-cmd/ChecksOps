@@ -1,0 +1,21 @@
+{
+  "workstream_id": "production-sandbox-send-applied",
+  "authorization": "Record only (2026-10-25): the bytes below are live. Nothing is planned or authorized by this manifest; any later change to these members needs its own manifest, staging acceptance and owner approval.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Staging sends applied 2026-10-25 through the guarded overlay path on main 8d8235be9 (#1242), on the owner's \"DEPLOY providers/production/moov-send.mjs TO PRODUCTION\" and \"DEPLOY providers.mjs TO PRODUCTION\". providers/production/moov-send.mjs: staging apply run 40197877443 (the staging acceptance); production inspect run 40221211781 (SOURCE_RECONCILIATION_REQUIRED, f82c1e08 live, which #1242 recorded); production preflight inspect run 40222492629 (READY, f82c1e08 live); production apply run 40222560555 (f82c1e08 -> 42655ac8; CodeSha256 UGkhXZb7m6nN2k2L6JDTwnpHm5lvnXochVR2UK3scb0=, RevisionId 863d2f70-3010-4867-b540-63902ba12d6f). providers.mjs: staging apply run 40198273983 (the staging acceptance); production preflight inspect run 40222650555 (READY, 6b002711 live); production apply run 40222801952 (6b002711 -> 58207e5e). Each apply run concluded success including its \"Verify live member is the accepted bytes\" step (state VERIFIED) and the public production smoke (/health and /db-health 200). The last verify read back CodeSha256 n7WoOa7xqoNi71L0gEX6FH7lzanuhPfLQAkGgziBSCE= and RevisionId b2996427-c605-4a58-9291-f5587e22d945; read-only inspect run 40222963538 then read moov-send.mjs 42655ac8 (ALREADY_ACCEPTED) at the same revision. In production the sandbox route is never taken and the send path is unchanged. Each row records the applied bytes as live_sha256 and accepted_sha256 and chains to the manifest that planned it (previous_manifest), which keeps the pre-apply state.",
+  "members": {
+    "providers/production/moov-send.mjs": {
+      "live_sha256": "42655ac84abdeb93579d1ae24e69338268b02633c3b1d5014d219a4ace8f5217",
+      "accepted_sha256": "42655ac84abdeb93579d1ae24e69338268b02633c3b1d5014d219a4ace8f5217",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-sandbox-send-manifest-2026-10-25.json"
+    },
+    "providers.mjs": {
+      "live_sha256": "58207e5e8762a1a912c2e2fc5e143f0df90205e5e16be604dc3c1cdf19ca73d9",
+      "accepted_sha256": "58207e5e8762a1a912c2e2fc5e143f0df90205e5e16be604dc3c1cdf19ca73d9",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-sandbox-send-manifest-2026-10-25.json"
+    }
+  }
+}
