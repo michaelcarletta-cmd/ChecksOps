@@ -2506,7 +2506,7 @@ export const AUTHORIZED_SQL113_PAYEE_SETUP = Object.freeze({
 // homeowner_name, homeowner_email, updated_at) on stakeholder_accounts for checksops and
 // authenticated: the column grant Settings > Stakeholder Accounts needs to remove a non-payee
 // stakeholder and change a stakeholder's type; the restored database gave checksops SELECT only).
-// No predecessor. Pending until a reviewed pin change records a staging read-live.
+// No predecessor. Staging apply authorized (wave 15) from staging read-live run 40152706123.
 export const AUTHORIZED_SQL114_STAKEHOLDER_SETTINGS_UPDATE_GRANT = Object.freeze({
   key: 'sql114',
   filename: 'aws/workflows/sql/114_stakeholder_accounts_settings_update_grant.sql',
@@ -2514,9 +2514,13 @@ export const AUTHORIZED_SQL114_STAKEHOLDER_SETTINGS_UPDATE_GRANT = Object.freeze
   // The commit that last authored the file bytes.
   commit: '35e118aa56628f1820baf4f4666c6da75a3fa888',
   source_sha256: '484a6c17d8dd8d25108a7de15c2181d20fca645838f37b5cfe3081cfa986d811',
-  authorization: 'pending',
-  execute: false,
-  expected_live_definition_sha256: null,
+  // Owner's words 2026-10-25: "approve SQL 114 staging apply" (staging apply only; the production pin and apply are separate).
+  authorization: 'Owner approved 2026-10-25: staging apply (wave 15) from staging read-live run 40152706123',
+  execute: true,
+  // Staging read-live run 40152706123 (2026-10-25, main cfc0829e5, after executor deploy run
+  // 40152534378): no column grant on any of the six columns; already_applied false,
+  // precondition_failures [].
+  expected_live_definition_sha256: '8b5d1d4d49188412317a60036a392c27727852b246a1d59a9c2807cb17186e00',
   // Code-derived: releaseIntendedHash('sql114', file bytes) (release-sql-state.mjs); re-derived by the tests.
   intended_replacement_sha256: '809eba9b7f5d40b984f4f37562dfe5419ec2de50de103fc2699048eea5bf6c46',
   // The file creates, replaces and sets the ACL of no function.
