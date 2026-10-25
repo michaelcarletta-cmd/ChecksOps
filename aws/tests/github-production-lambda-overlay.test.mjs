@@ -1925,3 +1925,32 @@ test('Write echo secret columns: secret-columns.mjs, write-app-metadata.mjs and 
   assert.equal(PLAN.members[APP].sql_before, 'aws/workflows/sql/93_tenant_company_info.sql');
   assert.equal(PLAN.members[WRITE].sql_before, null);
 });
+
+test('Production email to every recipient: email-policy.mjs records the bytes production run 40151123531 applied', () => {
+  const MEMBER = 'email-policy.mjs';
+  const PLANNED_REL = 'aws/tests/fixtures/production-email-any-recipient-manifest-2026-10-25.json';
+  const APPLIED_REL = 'aws/tests/fixtures/production-email-any-recipient-applied-manifest-2026-10-25.json';
+  const planned = JSON.parse(fs.readFileSync(path.join(ROOT, PLANNED_REL), 'utf8'));
+  const applied = JSON.parse(fs.readFileSync(path.join(ROOT, APPLIED_REL), 'utf8'));
+  const row = PLAN.members[MEMBER];
+  const onMain = sha(`aws/functions/api/${MEMBER}`);
+  // The plan row expects the applied bytes, which are main's bytes, and names the applied manifest.
+  assert.equal(row.operation, 'replace');
+  assert.equal(row.accepted_sha256, onMain);
+  assert.equal(row.expected_live_sha256, onMain);
+  assert.equal(row.manifest, APPLIED_REL);
+  assert.deepEqual(applied.members[MEMBER], {
+    live_sha256: onMain, accepted_sha256: onMain, operation: 'replace', previous_manifest: PLANNED_REL,
+  });
+  // The planned manifest keeps the pre-apply state: the bytes main had before #1230.
+  assert.equal(planned.members[MEMBER].live_sha256, '83d73511e751130a939c2e92c0b995b45d5f9d3bdaa02d5ac04c5322a39fd3a6');
+  assert.equal(planned.members[MEMBER].accepted_sha256, onMain);
+  // Staging inspect and apply, production preflight inspect and apply.
+  for (const runId of ['40150778782', '40150895108', '40151011646', '40151123531']) {
+    assert.match(applied.notes, new RegExp(`run ${runId}`), runId);
+  }
+  for (const runId of ['40150895108', '40151011646', '40151123531']) assert.match(PLAN.notes, new RegExp(runId), runId);
+  assert.equal(applied.workstream_id, 'production-email-any-recipient-applied');
+  assert.equal(applied.deploy_authorized, false);
+  assert.match(applied.authorization, /^Record only/);
+});
