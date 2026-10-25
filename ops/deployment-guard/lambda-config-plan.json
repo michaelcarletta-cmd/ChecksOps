@@ -148,13 +148,8 @@
     },
     "production": {
       "function_name": "checksops-production-prep-api",
-      "status": "accepted",
-      "set": {
-        "AWS_MOOV_PAYEES_PRODUCTION_ENABLED": {
-          "from": null,
-          "to": "true"
-        }
-      },
+      "status": "applied",
+      "set": {},
       "unset": {},
       "inspect": {
         "run_id": "40147060785",
@@ -165,6 +160,35 @@
         "live_configuration_sha256": "9363b78a4d98d20ceb4172995bd8acc97d9ca0240c71dbe222dee185217ddb71",
         "live_variable_count": 45,
         "notes": "Owner decision 2026-10-25: \"Merge 1227 and APPLY API CONFIGURATION TO PRODUCTION\" (turn on production payees). The inspect (state PENDING_PLAN, 45 variables) lists no AWS_MOOV_PAYEES_PRODUCTION_ENABLED, so from is null. With the key absent, moovPayeesProductionEnabled() is false and every payee function (providers/payees, live since the 2026-10-24 overlays recorded in production-moov-payees-applied-manifest-2026-10-24.json) answers production_execution_blocked. Setting it to the string \"true\" opens payee setup only (moov-recipient-create, the /pay-setup public steps, resend and disconnect against production Moov); it never opens money movement, onboarding or any other function, and production never falls back to sandbox. Prerequisites already live: SQL 113 applied in production 2026-10-23; the production website serves the payee pages since run 40146059448 (release lock #1227); the provider secret carries RESEND_API_KEY for the setup email. Staging needs no change (payeeDeployment() is sandbox there regardless of this key), so this reviewed plan PR is the staging acceptance reference."
+      },
+      "applied": {
+        "run_id": "40148243435",
+        "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/40148243435",
+        "main_commit": "6079ad3a78d30b0f3f9ab00ad3d10973d0a3f35b",
+        "approval_phrase": "APPLY API CONFIGURATION TO PRODUCTION",
+        "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/pull/1228",
+        "change_sha256": "f4156ecc314ed172887031429449295075e4f03206604335dfd6eaeee46cadce",
+        "revision_id_before": "df29f264-6872-42e1-9ac5-dd7366e3bb04",
+        "revision_id_after": "dc2e68ca-93ef-454e-909c-f56d12cd280f",
+        "configuration_sha256_before": "9363b78a4d98d20ceb4172995bd8acc97d9ca0240c71dbe222dee185217ddb71",
+        "configuration_sha256_after": "2f0b5f6170d5997991655098c82b817037750089a5e5864acedcd2df7bf47555",
+        "applied_at": "2026-10-25T00:50:41.068Z",
+        "smoke": [
+          "/health",
+          "/db-health"
+        ],
+        "code_sha256": "00Jfy9+OrIaNrep50P/cjwcWD7DC5Z/KeIlDtaWWAFQ=",
+        "state": "VERIFIED",
+        "notes": "Owner approval: \"Merge 1228 when green and APPLY API CONFIGURATION TO PRODUCTION\". Pre-apply read-back through the owner AWS connector (GetFunctionConfiguration, no values) on main 6079ad3a: RevisionId df29f264, 45 variables, AWS_MOOV_PAYEES_PRODUCTION_ENABLED absent. The run's own inspect matched the plan (configuration sha256 9363b78a before). Verify step VERIFIED (46 variables: 45 + 1 set; AWS_MOOV_PAYEES_PRODUCTION_ENABLED already_accepted, live \"true\"). Smoke /health and /db-health 200. Read-back after the apply: AWS_MOOV_PAYEES_PRODUCTION_ENABLED is \"true\", RevisionId dc2e68ca, 46 variables, CodeSha256 unchanged, LastUpdateStatus Successful.",
+        "applied_change": {
+          "set": {
+            "AWS_MOOV_PAYEES_PRODUCTION_ENABLED": {
+              "from": null,
+              "to": "true"
+            }
+          },
+          "unset": {}
+        }
       },
       "history": [
         {

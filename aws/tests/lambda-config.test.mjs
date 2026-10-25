@@ -195,11 +195,11 @@ test('the committed plan records the dead credential-key removals (runs 39658023
   assert.equal(raw.environments.production.history[2].applied.staging_acceptance, raw.environments.staging.applied.run_url);
 });
 
-test('the committed plan turns on production payees from the 2026-10-25 inspect (40147060785)', () => {
+test('the committed plan records production payees on (run 40148243435) and starts the next change empty', () => {
   const raw = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, CONFIG_PLAN_REL), 'utf8'));
   const section = loadConfigPlan(REPO_ROOT, 'production');
-  assert.equal(section.status, 'accepted');
-  assert.deepEqual(section.set, { AWS_MOOV_PAYEES_PRODUCTION_ENABLED: { from: null, to: 'true' } });
+  assert.equal(section.status, 'applied');
+  assert.deepEqual(section.set, {});
   assert.deepEqual(section.unset, {});
   const row = raw.environments.production;
   assert.equal(row.inspect.run_id, '40147060785');
@@ -207,9 +207,18 @@ test('the committed plan turns on production payees from the 2026-10-25 inspect 
   // The inspect starts from the revision the credential-key removal left behind.
   assert.equal(row.inspect.live_revision_id, 'df29f264-6872-42e1-9ac5-dd7366e3bb04');
   assert.equal(row.inspect.live_variable_count, 45);
-  assert.equal(Object.hasOwn(row, 'applied'), false);
+  assert.equal(row.applied.run_id, '40148243435');
+  assert.equal(row.applied.main_commit, '6079ad3a78d30b0f3f9ab00ad3d10973d0a3f35b');
+  assert.equal(row.applied.state, 'VERIFIED');
+  assert.equal(row.applied.revision_id_before, row.inspect.live_revision_id);
+  assert.equal(row.applied.revision_id_after, 'dc2e68ca-93ef-454e-909c-f56d12cd280f');
+  assert.equal(row.applied.configuration_sha256_before, row.inspect.live_configuration_sha256);
+  assert.equal(row.applied.code_sha256, row.inspect.live_code_sha256);
   // The flag is the only key the payee guard reads (flags.mjs).
-  assert.equal(Object.keys(section.set)[0], PAYEES_PRODUCTION_FLAG);
+  assert.deepEqual(row.applied.applied_change, { set: { [PAYEES_PRODUCTION_FLAG]: { from: null, to: 'true' } }, unset: {} });
+  // The recorded change hash is the one the run's receipt owned.
+  assert.equal(changeSha256({ function_name: row.function_name, ...row.applied.applied_change }), row.applied.change_sha256);
+  assert.equal(row.applied.staging_acceptance, 'https://github.com/michaelcarletta-cmd/ChecksOps/pull/1228');
   // Staging needs no change.
   const staging = loadConfigPlan(REPO_ROOT, 'staging');
   assert.deepEqual(staging.set, {});
