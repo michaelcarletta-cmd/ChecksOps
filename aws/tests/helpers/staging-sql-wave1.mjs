@@ -68,6 +68,11 @@ export const STAGING_WAVE1 = Object.freeze({
   // executor carried it (deploy run 40152534378): no column grant on any of the six.
   // Applied by the guarded staging executor run 40154043207 (receipt 8b5d1d4d… -> 809eba9b…).
   sql114: Object.freeze({ wave: 15, approved: '2026-10-25', run: '40152706123', live: '8b5d1d4d49188412317a60036a392c27727852b246a1d59a9c2807cb17186e00', apply_run: '40154043207' }),
+  // Wave 16 (owner approved 2026-10-25, "Approve SQL 115 staging apply"): SQL 115 replaces
+  // sync_provider_stakeholder_account(uuid) so a tenant keeps one active partner payout. Read at
+  // main f5cc9ec after the executor carried it (deploy run 40240193453): the restored supabase
+  // body, EXECUTE to PUBLIC and the owner.
+  sql115: Object.freeze({ wave: 16, approved: '2026-10-25', run: '40240434651', live: '6dbf58792a5eb0f9863ac0a6e88265de6ec9931a9e7a31bac21d7b71f643bba0' }),
   sql98: Object.freeze({ wave: 3, approved: '2026-10-18', run: '39083278136', live: '296c3d6a274e10f66005fb9eaecf93fa17b81bd8db3607037ca07698fddd3275', apply_run: '39085677318' }),
 });
 
@@ -79,7 +84,7 @@ export const pendingPin = (pin) => Object.freeze({
 });
 
 /**
- * The committed staging pin's apply state: waves 1-15 recorded and approved, wave 6 approved with
+ * The committed staging pin's apply state: waves 1-16 recorded and approved, wave 6 approved with
  * its read-live still to record (pending until then), the rest pending.
  */
 export function assertStagingPinState(assert, key, pin) {

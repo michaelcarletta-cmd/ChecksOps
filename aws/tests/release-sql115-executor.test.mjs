@@ -4,7 +4,7 @@
  * release-sql90-97-executor.test.mjs runs what every release key shares (SQL 115 included); this
  * file covers what is new:
  *
- *   - the pin: pending (no read-live yet), code-derived, selectable, packed, in step with the
+ *   - the pin: staging-authorized from its read-live (wave 16), code-derived, selectable, packed, in step with the
  *     production pin; the pinned commit authored the bytes; no predecessor;
  *   - the spec's one function: public.sync_provider_stakeholder_account(uuid) replaced with the
  *     supabase signature and attributes, EXECUTE the owner's only, the four supabase-era lines
@@ -50,7 +50,7 @@ import { EXECUTOR_PACK_MEMBERS } from '../../scripts/deployment-guard/sql-execut
 import { MIGRATIONS } from '../../scripts/deployment-guard/github-staging-sql-executor.mjs';
 import { READ_LIVE_EXPECTED_SENTINEL } from '../../scripts/deployment-guard/lib/sql-executor-read-live.mjs';
 import { importGuardedSqlExecutor } from './helpers/import-guarded-sql-executor.mjs';
-import { assertStagingPinState } from './helpers/staging-sql-wave1.mjs';
+import { assertStagingPinState, pendingPin } from './helpers/staging-sql-wave1.mjs';
 import { pgSkipReason, releaseFixture } from './helpers/release-sql-pg.mjs';
 import { PROVIDER_STAKEHOLDER_SCHEMA, SUPABASE_SYNC_FILE, SYNC_FUNCTION } from './helpers/sql115-provider-stakeholder-schema.mjs';
 
@@ -103,7 +103,7 @@ function handlerFor(connect, { pins = {} } = {}) {
   return createHandler({ connect, now: () => Date.parse(NOW), releaseSqlFiles: FILES, releaseSqlPins: { ...PINS, ...pins } });
 }
 
-test('pin: SQL 115 pending, code-derived, selectable, packed, in step with the production pin; no predecessor', () => {
+test('pin: SQL 115 staging-authorized from its read-live, code-derived, selectable, packed, in step with the production pin; no predecessor', () => {
   const pin = PINS[KEY];
   const spec = RELEASE_SQL_SPECS[KEY];
   const packed = Object.fromEntries(EXECUTOR_PACK_MEMBERS);
@@ -113,11 +113,13 @@ test('pin: SQL 115 pending, code-derived, selectable, packed, in step with the p
   assert.equal(pin.migration_id, '115_provider_stakeholder_one_partner_payout');
   assert.equal(spec.choice, 'sql115-provider-stakeholder-one-partner-payout');
   assert.equal(sha(TEXT), pin.source_sha256);
-  // Pending: no staging read-live yet, so no pre-state, no approval, execute false.
+  // Staging apply authorized (owner approved 2026-10-25) from staging read-live run 40240434651:
+  // the restored supabase body with EXECUTE to PUBLIC, so SQL 115 was not yet applied there.
   assertStagingPinState(assert, KEY, pin);
-  assert.equal(pin.execute, false);
-  assert.equal(pin.authorization, 'pending');
-  assert.equal(pin.expected_live_definition_sha256, null);
+  assert.equal(pin.execute, true);
+  assert.equal(pin.authorization, 'Owner approved 2026-10-25: staging apply (wave 16) from staging read-live run 40240434651');
+  assert.equal(pin.expected_live_definition_sha256, '6dbf58792a5eb0f9863ac0a6e88265de6ec9931a9e7a31bac21d7b71f643bba0');
+  assert.notEqual(pin.expected_live_definition_sha256, pin.intended_replacement_sha256);
   assert.equal(releaseIntendedHash(KEY, TEXT), pin.intended_replacement_sha256);
   assert.equal(pin.intended_replacement_sha256, '8aed39a49d988a60bdedac07a3a97f424a9de5c1499e4f50738f749326a62452');
   assert.equal(pin.superseded_intended_sha256, undefined);
@@ -293,8 +295,9 @@ test('PostgreSQL 16: SQL 115 through the executor: drift refused, one apply on t
   assert.deepEqual(r.precondition_failures, [], JSON.stringify(r.release_sql_inspect));
   assert.deepEqual(r.release_sql_inspect.predecessors, {});
   assert.equal(r.already_applied, false);
-  // A pending pin cannot apply.
-  const pending = await handlerFor(connect)(releaseEvent({ expected_live_definition_sha256: r.live_definition_sha256 }));
+  // A pending pin cannot apply (the committed pin is staging-authorized, so pend a copy).
+  const pendingCopy = pendingPin(PINS[KEY]);
+  const pending = await handlerFor(connect, { pins: { [KEY]: pendingCopy } })(releaseEvent({ pin: pendingCopy, expected_live_definition_sha256: r.live_definition_sha256 }));
   assert.equal(pending.ok, false);
   // Drift between the recorded pre-state and the apply refuses.
   const before = await acl();
