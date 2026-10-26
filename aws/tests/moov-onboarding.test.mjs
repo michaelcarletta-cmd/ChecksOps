@@ -1558,6 +1558,30 @@ test('bank add stores last four only and banks[] ids drive micro-deposit initiat
   });
 });
 
+test('a refused bank add logs Moov\'s masked reason and status, never the account or routing number', async () => {
+  await withEnv(BASE_ENV, async () => {
+    resetMoovTokenCache();
+    const db = makeDb();
+    const refusing = moovFetch([{
+      match: /\/bank-accounts$/, method: 'POST', status: 422,
+      body: { error: 'routing number 021000021 is not valid for account 000123456789' },
+    }]);
+    const { result, lines } = await captureConsole(() => run('moov-bank-account-add', {
+      tenant_id: TENANT, holder_name: 'Freedom LLC', routing_number: '021000021', account_number: '000123456789',
+    }, USERS.owner, { db, fetch: refusing }));
+    assert.equal(result.ok, false);
+    assert.equal(result.error, 'moov_rejected');
+    const log = lines.find((line) => line.includes('moov_bank_account_failed'));
+    assert.ok(log, 'failure logged');
+    const parsed = JSON.parse(log);
+    assert.equal(parsed.status, 422);
+    assert.equal(parsed.error_code, 'moov_rejected');
+    assert.equal(parsed.reason, 'routing number [redacted] is not valid for account [redacted]');
+    assert.equal(log.includes('021000021'), false);
+    assert.equal(log.includes('000123456789'), false);
+  });
+});
+
 test('webhook status: capability and verification events update only the matching environment rows', async () => {
   const db = makeDb();
   db.state.accounts.push({ id: 'acct-prod', tenant_id: TENANT, environment: 'production', provider_account_id: MOOV_ACCOUNT, capabilities: [], verification_status: 'pending' });
