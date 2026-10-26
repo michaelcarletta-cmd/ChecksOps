@@ -1,0 +1,24 @@
+{
+  "workstream_id": "production-moov-industry-underwriting",
+  "authorization": "Pending owner review (2026-10-26). Planning only: nothing is live or verified. The owner approved this plan (Moov industry on the business profile and the v2025.07.00 underwriting answers) in the word \"Go\". Each production apply still needs its own owner approval, a staging acceptance reference and a read-only production inspect that confirms the live bytes.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Moov onboarding (owner request 2026-10-26): Moov's form for Freedom Adjustment's new sandbox account listed Industry and expected activity (geographic reach, ACH send and collect monthly volume) as required and ChecksOps sent none. providers/onboarding/handlers.mjs: moov-onboarding-get action 'industries' returns Moov's industry list (GET /industries, v2025.07.00, /profile-enrichment.read); moov-underwriting saves with POST and reads on v2025.07.00 and accepts exactly geographicReach and the ACH sendFunds/collectFunds monthlyVolumeRange. providers/onboarding/store.mjs: the business profile keeps industry (SQL 116 column, staging-applied run 40339373370; production still needs SQL 116 first). providers/onboarding/moov-sync.mjs: profile.business.industry is sent to Moov. All three members stay ADDs (live_sha256 null); a read-only production overlay inspect must confirm each before any apply.",
+  "members": {
+    "providers/onboarding/handlers.mjs": {
+      "live_sha256": null,
+      "accepted_sha256": "e210200d8bd5c08c6d961e133df5a20a46281da53adf25ad9c8b9f99dbb0b97c",
+      "operation": "add"
+    },
+    "providers/onboarding/moov-sync.mjs": {
+      "live_sha256": null,
+      "accepted_sha256": "4b1179edf391b47bc0b6cf96d05b24080ac36d98d76763455f98ee09642382d5",
+      "operation": "add"
+    },
+    "providers/onboarding/store.mjs": {
+      "live_sha256": null,
+      "accepted_sha256": "b4a5fca39f7812d900c7010603ec07369a46b647dd0ce665703bcc9cf48f26cb",
+      "operation": "add"
+    }
+  }
+}
