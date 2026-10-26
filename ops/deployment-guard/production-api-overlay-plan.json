@@ -791,7 +791,7 @@
     },
     "providers/onboarding/store.mjs": {
       "operation": "add",
-      "accepted_sha256": "b4a5fca39f7812d900c7010603ec07369a46b647dd0ce665703bcc9cf48f26cb",
+      "accepted_sha256": "4bd8402ed8d4625b3ec426bee03ebffb21be6c53e7def99766eb317f56683d94",
       "expected_live_sha256": null,
       "sql_before": "aws/workflows/sql/105_onboarding_payment_table_grants.sql",
       "manifest": "aws/tests/fixtures/production-moov-industry-underwriting-manifest-2026-10-26.json"

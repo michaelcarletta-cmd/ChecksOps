@@ -72,13 +72,13 @@ export const moovAddress = (a) => (a ? {
   country: 'US',
 } : undefined);
 
+const INDUSTRY_PATTERN = /^[a-z0-9][a-z0-9-]{0,99}$/;
+
 /**
  * Validates the business section. `stored` is the existing profile row (EIN may
  * already be on file). Returns { fields, ein } where ein is the full EIN only
  * when supplied in this request (in memory, write-only).
  */
-const INDUSTRY_PATTERN = /^[a-z0-9][a-z0-9-]{0,99}$/;
-
 export function validateBusiness(input = {}, stored = null) {
   const legalName = str(input.legal_name ?? input.legalBusinessName, 120);
   if (!legalName) throw invalid('business.legal_name', 'Legal business name is required.');
