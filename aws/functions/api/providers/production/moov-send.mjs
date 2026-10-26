@@ -324,13 +324,23 @@ function sendResult(legs, { duplicate, incomplete = false }) {
   return jsonResult({ success: true, ...extra, message: 'Payment sent. Bank transfers usually arrive in 1–3 business days.' });
 }
 
+/**
+ * Stakeholder origins the send pays. A payee (provider_recipient) is set up through the payee
+ * link (SQL 113): its row is marked verified with its Moov account and bank only once that setup
+ * is finished, and is_active = false when the organization disconnects it, so the checks below
+ * (active, verified, environment, Moov account and bank, the live payment method) apply as for an
+ * organization-owned row.
+ */
+export const PAYABLE_STAKEHOLDER_ORIGINS = Object.freeze(new Set(['tenant_owned', 'provider_recipient']));
+
 /** Resolve where each recipient is paid. Reads only; nothing is created. */
 async function resolveDestinations({ client, tenantId, request, environment, fetchImpl }) {
   const resolved = [];
   for (const r of request.recipients) {
     if (r.kind === 'stakeholder') {
       const row = (await client.query(
-        // Homeowner and partner-payout rows are not paid here (homeowner sends are not built).
+        // Organization-owned rows and payees (SQL 113 origin provider_recipient) are paid here.
+        // Homeowner, partner-shared and partner-payout rows are not (homeowner sends are not built).
         `SELECT id, nickname, provider, provider_account_id, provider_bank_account_id,
                 verification_status, is_active, origin, is_partner_payout, provider_environment
          FROM public.stakeholder_accounts
@@ -338,7 +348,7 @@ async function resolveDestinations({ client, tenantId, request, environment, fet
         [r.id, tenantId],
       )).rows[0];
       if (!row || row.is_active === false) return { error: 'recipient_not_found', recipient: r };
-      if ((row.origin && row.origin !== 'tenant_owned') || row.is_partner_payout === true) {
+      if ((row.origin && !PAYABLE_STAKEHOLDER_ORIGINS.has(row.origin)) || row.is_partner_payout === true) {
         return { error: 'recipient_not_supported', recipient: r, name: row.nickname };
       }
       if (row.provider_environment && row.provider_environment !== environment) {
