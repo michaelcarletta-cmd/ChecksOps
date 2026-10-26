@@ -120,6 +120,21 @@ test('bank changes ask for the two-factor code on totp_required and retry once',
   assert.equal((read('src/components/payments/MicroDepositVerification.tsx').match(/invokeWithBankStepUp\(/g) || []).length, 2);
 });
 
+test('Compliance Refresh asks the provider for the account status before reloading; a failed sync still reloads', () => {
+  const page = read('src/components/settings/ComplianceSettings.tsx');
+  const fn = page.match(/async function refreshFromProvider\(\) \{([\s\S]*?)\n  \}\n/);
+  assert.ok(fn, 'refreshFromProvider exists');
+  const body = fn[1];
+  const sync = body.indexOf('await api.sync(tenantId).catch(() => null)');
+  const reload = body.indexOf('await reload()');
+  assert.ok(sync > -1, 'syncs with the provider');
+  assert.ok(reload > sync, 'reloads after the sync');
+  assert.match(body, /if \(data\?\.can_submit\) await api\.sync/, 'only members who may submit trigger the sync');
+  // The Refresh button uses it, not the plain reload.
+  assert.match(page, /onClick=\{\(\) => refreshFromProvider\(\)\}[^>]*>\s*<RefreshCw[^>]*\/> Refresh/);
+  assert.equal(/onClick=\{\(\) => reload\(\)\}[^>]*>\s*<RefreshCw[^>]*\/> Refresh/.test(page), false);
+});
+
 test('Compliance screens do not name the payment provider', () => {
   for (const rel of [
     'src/components/settings/ComplianceSettings.tsx',

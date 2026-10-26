@@ -85,6 +85,7 @@ export function ComplianceSettings({
   const [lastSave, setLastSave] = useState<(SaveResult & { at: number }) | null>(null);
   const [errors, setErrors] = useState<string[]>([]);
   const [tosBusy, setTosBusy] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   // Prefill from the server unless the user has unsaved edits.
   useEffect(() => {
@@ -107,6 +108,22 @@ export function ComplianceSettings({
 
   async function reload() {
     await refetch();
+  }
+
+  /**
+   * Refresh asks the payment provider for the current account status (moov-sync), then reloads.
+   * Without it the page only re-reads what ChecksOps stored, so a provider-side verification never
+   * shows (staging 2026-10-26). A failed or not-permitted sync still reloads.
+   */
+  async function refreshFromProvider() {
+    if (!tenantId) return;
+    setRefreshing(true);
+    try {
+      if (data?.can_submit) await api.sync(tenantId).catch(() => null);
+      await reload();
+    } finally {
+      setRefreshing(false);
+    }
   }
 
   async function handleSave() {
@@ -270,8 +287,8 @@ export function ComplianceSettings({
               {sync.tone === "working" && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
               {sync.label}
             </Badge>
-            <Button size="sm" variant="ghost" className="h-7 text-[11px] px-2" onClick={() => reload()} disabled={isFetching}>
-              <RefreshCw className={`h-3 w-3 mr-1 ${isFetching ? "animate-spin" : ""}`} /> Refresh
+            <Button size="sm" variant="ghost" className="h-7 text-[11px] px-2" onClick={() => refreshFromProvider()} disabled={isFetching || refreshing}>
+              <RefreshCw className={`h-3 w-3 mr-1 ${isFetching || refreshing ? "animate-spin" : ""}`} /> Refresh
             </Button>
           </div>
 
