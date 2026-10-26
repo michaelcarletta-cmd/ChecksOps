@@ -312,8 +312,16 @@ const makeDb = ({ tenantEnv = 'sandbox', account = true } = {}) => {
         if (text.includes('FROM public.moov_compliance_documents') && text.includes('WHERE id = $1')) {
           return { rows: state.docs.filter((d) => d.id === params[0] && d.tenant_id === params[1] && d.environment === params[2]).map((d) => ({ ...d })) };
         }
+        if (text.includes('FROM public.moov_compliance_documents') && text.includes('moov_file_id IS NULL')) {
+          return { rows: state.docs.filter((d) => d.tenant_id === params[0] && d.environment === params[1] && d.status === 'stored' && !d.moov_file_id).map((d) => ({ id: d.id })) };
+        }
         if (text.includes('FROM public.moov_compliance_documents')) {
           return { rows: state.docs.filter((d) => d.tenant_id === params[0] && d.environment === params[1] && d.status !== 'rejected') };
+        }
+        if (text.includes('UPDATE public.moov_compliance_documents') && text.includes('moov_account_id = $3')) {
+          const reset = state.docs.filter((d) => d.tenant_id === params[0] && d.environment === params[1] && d.moov_account_id === params[2] && d.status === 'sent');
+          for (const d of reset) Object.assign(d, { status: 'stored', moov_file_id: null, moov_status: null, moov_account_id: null, sent_at: null, last_error_code: null });
+          return { rows: reset.map((d) => ({ id: d.id })) };
         }
         if (text.includes('UPDATE public.moov_compliance_documents')) {
           const row = state.docs.find((d) => d.id === params[0]);
@@ -1200,6 +1208,139 @@ test('a live Moov account is kept: no new account, no reset', async () => {
     assert.equal(fetch.calls.filter((c) => c.method === 'POST' && /\/accounts$/.test(c.url)).length, 0);
     assert.equal(db.state.accounts[0].provider_account_id, MOOV_ACCOUNT);
     assert.equal(db.state.accounts[0].tos_accepted_at, '2026-10-01T00:00:00Z');
+  });
+});
+
+test('every save logs what Moov reports for the stored account, with no personal data', async () => {
+  await withEnv(BASE_ENV, async () => {
+    resetMoovTokenCache();
+    const fetch = moovFetch([accountGet({ accountID: MOOV_ACCOUNT, profile: { business: { legalBusinessName: 'Freedom Adjusting LLC' } } })]);
+    const { result, lines } = await captureConsole(() => run('moov-onboarding-save', saveBody(), USERS.owner, { db: makeDb(), fetch }));
+    assert.equal(result.moov_synced, true);
+    const line = lines.find((l) => l.includes('moov_account_check'));
+    assert.ok(line, 'logged');
+    const logged = JSON.parse(line);
+    assert.equal(logged.account_suffix, MOOV_ACCOUNT.slice(-4));
+    assert.equal(logged.http_status, 200);
+    assert.equal(logged.gone, false);
+    assert.deepEqual(logged.account_keys, ['accountID', 'profile']);
+    assert.equal(line.includes('Freedom Adjusting'), false);
+    assert.equal(line.includes(MOOV_ACCOUNT), false);
+
+    resetMoovTokenCache();
+    const { lines: l404 } = await captureConsole(() => run('moov-onboarding-save', saveBody(), USERS.owner, { db: makeDb(), fetch: moovFetch([accountGet({ error: 'x' }, 404)]) }));
+    const gone = JSON.parse(l404.find((l) => l.includes('moov_account_check')));
+    assert.equal(gone.http_status, 404);
+    assert.equal(gone.gone, true);
+  });
+});
+
+const foreignIdList = (body, status) => ({ match: /\/accounts\?foreignID=/, method: 'GET', ...(status ? { status } : {}), body });
+
+test('an account disconnected in the Moov dashboard is replaced even when the account itself does not say so', async () => {
+  await withEnv(BASE_ENV, async () => {
+    resetMoovTokenCache();
+    const db = makeDb();
+    // Staging 2026-10-26: the account answers without disconnectedOn, filed under the tenant, and
+    // Moov's list of accounts connected to ChecksOps no longer returns it.
+    const fetch = moovFetch([
+      accountGet({ accountID: MOOV_ACCOUNT, foreignID: TENANT }),
+      foreignIdList([]),
+      { match: /\/accounts$/, method: 'POST', body: { accountID: NEW_MOOV_ACCOUNT } },
+    ]);
+    const { result, lines } = await captureConsole(() => run('moov-onboarding-save', saveBody(), USERS.owner, { db, fetch }));
+    assert.equal(result.moov_synced, true, JSON.stringify(result));
+    assert.equal(db.state.accounts[0].provider_account_id, NEW_MOOV_ACCOUNT);
+    const logged = JSON.parse(lines.find((l) => l.includes('moov_account_check')));
+    assert.deepEqual(
+      { gone: logged.gone, disconnected_on: logged.disconnected_on, filed_here: logged.filed_here, listed: logged.listed },
+      { gone: true, disconnected_on: false, filed_here: true, listed: false },
+    );
+    assert.equal(lines.find((l) => l.includes('moov_account_check')).includes(MOOV_ACCOUNT), false, 'no full account id logged');
+  });
+});
+
+test('an account Moov still lists as connected is kept; a list that cannot be read or another foreignID never replaces it', async () => {
+  await withEnv(BASE_ENV, async () => {
+    for (const [remote, list, listed] of [
+      [{ accountID: MOOV_ACCOUNT, foreignID: TENANT }, foreignIdList([{ accountID: MOOV_ACCOUNT, foreignID: TENANT }]), true],
+      [{ accountID: MOOV_ACCOUNT, foreignID: TENANT }, foreignIdList({ error: 'down' }, 503), null],
+      [{ accountID: MOOV_ACCOUNT, foreignID: OTHER_TENANT }, foreignIdList([]), null],
+    ]) {
+      resetMoovTokenCache();
+      const db = makeDb();
+      const fetch = moovFetch([accountGet(remote), list]);
+      const { result, lines } = await captureConsole(() => run('moov-onboarding-save', saveBody(), USERS.owner, { db, fetch }));
+      assert.equal(result.moov_synced, true, JSON.stringify(result));
+      assert.equal(fetch.calls.filter((c) => c.method === 'POST' && /\/accounts$/.test(c.url)).length, 0, 'no new account');
+      assert.equal(db.state.accounts[0].provider_account_id, MOOV_ACCOUNT);
+      const logged = JSON.parse(lines.find((l) => l.includes('moov_account_check')));
+      assert.equal(logged.gone, false);
+      assert.equal(logged.listed, listed);
+      if (remote.foreignID !== TENANT) assert.equal(fetch.calls.some((c) => /\/accounts\?foreignID=/.test(c.url)), false, 'another foreignID is never judged by the list');
+    }
+  });
+});
+
+test('documents sent to a gone account are sent again to the new account from their stored copy', async () => {
+  await withEnv(BASE_ENV, async () => {
+    resetMoovTokenCache();
+    const db = makeDb();
+    const s3 = fakeS3({ bytes: PDF, contentType: 'application/pdf' });
+    const id = await uploadDoc(db);
+    const first = moovFetch();
+    await run('moov-document-finalize', { tenant_id: TENANT, document_id: id }, USERS.owner, { db, s3, fetch: first });
+    assert.equal(db.state.docs[0].moov_account_id, MOOV_ACCOUNT);
+    const firstKey = first.calls.find((c) => c.url.endsWith(`/accounts/${MOOV_ACCOUNT}/files`)).headers['X-Idempotency-Key'];
+
+    resetMoovTokenCache();
+    const replace = moovFetch([
+      accountGet({ accountID: MOOV_ACCOUNT, disconnectedOn: '2026-10-26T12:00:00Z' }),
+      { match: /\/accounts$/, method: 'POST', body: { accountID: NEW_MOOV_ACCOUNT } },
+    ]);
+    const saved = await run('moov-onboarding-save', saveBody(), USERS.owner, { db, fetch: replace });
+    assert.equal(saved.moov_synced, true, JSON.stringify(saved));
+    assert.deepEqual(
+      { status: db.state.docs[0].status, moov_file_id: db.state.docs[0].moov_file_id, moov_account_id: db.state.docs[0].moov_account_id },
+      { status: 'stored', moov_file_id: null, moov_account_id: null },
+    );
+    assert.ok(db.state.outbox.some((o) => o.kind === 'document_upload' && o.subject_id === id && o.status === 'pending'));
+
+    resetMoovTokenCache();
+    const resend = moovFetch([{ match: `/accounts/${NEW_MOOV_ACCOUNT}/files`, method: 'POST', body: { fileID: 'file_new', fileStatus: 'pending' } }]);
+    await run('moov-sync', { tenant_id: TENANT }, USERS.owner, { db, s3, fetch: resend });
+    const upload = resend.calls.find((c) => c.method === 'POST' && c.url.endsWith('/files'));
+    assert.ok(upload.url.endsWith(`/accounts/${NEW_MOOV_ACCOUNT}/files`), 'sent to the new account');
+    assert.notEqual(upload.headers['X-Idempotency-Key'], firstKey, 'never answered from the gone account\'s upload');
+    assert.deepEqual(
+      { status: db.state.docs[0].status, moov_file_id: db.state.docs[0].moov_file_id, moov_account_id: db.state.docs[0].moov_account_id },
+      { status: 'sent', moov_file_id: 'file_new', moov_account_id: NEW_MOOV_ACCOUNT },
+    );
+  });
+});
+
+test('a failed replacement create leaves people, banks and documents on the gone account untouched', async () => {
+  await withEnv(BASE_ENV, async () => {
+    resetMoovTokenCache();
+    const db = makeDb();
+    const s3 = fakeS3({ bytes: PDF, contentType: 'application/pdf' });
+    await run('moov-onboarding-save', saveBody(), USERS.owner, { db, fetch: moovFetch() });
+    const id = await uploadDoc(db);
+    await run('moov-document-finalize', { tenant_id: TENANT, document_id: id }, USERS.owner, { db, s3, fetch: moovFetch() });
+    db.state.methods.push({ id: 'aaaaaaaa-0000-4000-8000-0000000000b2', tenant_id: TENANT, environment: 'sandbox', provider_account_id: MOOV_ACCOUNT, provider_bank_account_id: 'bank_old', connection_status: 'connected', verification_status: 'verified', external_recipient_id: null });
+
+    resetMoovTokenCache();
+    const fetch = moovFetch([
+      accountGet({ accountID: MOOV_ACCOUNT, disconnectedOn: '2026-10-26T12:00:00Z' }),
+      { match: /\/accounts$/, method: 'POST', status: 503, body: { error: 'down' } },
+    ]);
+    const { result } = await captureConsole(() => run('moov-onboarding-save', saveBody(), USERS.owner, { db, fetch }));
+    assert.equal(result.moov_synced, false);
+    assert.equal(db.state.accounts[0].provider_account_id, MOOV_ACCOUNT);
+    assert.equal(db.state.reps[0].moov_representative_id, 'rep_1', 'the person keeps the Moov id');
+    assert.equal(db.state.methods[0].connection_status, 'connected');
+    assert.deepEqual({ status: db.state.docs[0].status, moov_account_id: db.state.docs[0].moov_account_id }, { status: 'sent', moov_account_id: MOOV_ACCOUNT });
+    assert.equal(db.state.outbox.some((o) => o.kind === 'document_upload' && o.status === 'pending'), false, 'nothing queued for the gone account');
   });
 });
 

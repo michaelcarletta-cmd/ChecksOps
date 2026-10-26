@@ -1,0 +1,19 @@
+{
+  "workstream_id": "production-moov-account-replace-detect",
+  "authorization": "Pending owner review (2026-10-26). Planning only: nothing is live or verified. The owner asked for this change to be merged when green and deployed to staging in the words \"Let's see if you can finish this and get this working. I want this merged when green and deployed to staging\". Each production apply still needs its own owner approval, a staging acceptance reference and a read-only production inspect that confirms the live bytes.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Moov onboarding (follows production-moov-account-replace-manifest-2026-10-26.json). Staging 2026-10-26: Freedom Adjustment's July 2026 sandbox account, disconnected in the Moov dashboard, still answered GET /accounts/{id} without disconnectedOn, so the 11:06 save kept writing to it. providers/onboarding/moov-sync.mjs: every save logs a moov_account_check line (status, disconnectedOn/closedOn set, filed under the tenant, listed as connected, Moov's field names; no values, no personal data); an account Moov files under the tenant's foreignID that Moov's list of connected accounts no longer returns is treated as gone (a list that cannot be read, or an account filed under another foreignID, never is); once the new account is recorded (a failed create leaves people, banks and documents on the gone account untouched), documents sent to the gone account are reset to their verified stored copy and, with stored documents that never reached Moov, queued in the outbox, so the outbox sends them to the new account. providers/onboarding/documents.mjs: the Moov file idempotency key is per document and per account, so a document sent again to a replacement account is never answered from the gone account's upload. Both members stay ADDs (live_sha256 null); a read-only production overlay inspect must confirm each before any apply.",
+  "members": {
+    "providers/onboarding/documents.mjs": {
+      "live_sha256": null,
+      "accepted_sha256": "ae9b9273a1ce938a478b0cdaa8a3e92732802d19f6755ae90a5e18448f8e9ba6",
+      "operation": "add"
+    },
+    "providers/onboarding/moov-sync.mjs": {
+      "live_sha256": null,
+      "accepted_sha256": "6e73430bff664861e1fb0a1ff413695d5a4db4e9557890564cbffd3934ebe4e5",
+      "operation": "add"
+    }
+  }
+}

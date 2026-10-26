@@ -347,7 +347,10 @@ export async function promoteToFinal(row, verified, deps = {}) {
   return { finalKey, finalVersion };
 }
 
-/** POST /accounts/{id}/files as multipart/form-data, idempotent per document. */
+/**
+ * POST /accounts/{id}/files as multipart/form-data, idempotent per document and account: a document
+ * sent again to a replacement account is never answered from the gone account's upload.
+ */
 export async function sendDocumentToMoov({ accountId, row, bytes, environment, fetchImpl }) {
   const form = new FormData();
   form.append('file', new Blob([bytes], { type: row.content_type }), row.file_name);
@@ -360,7 +363,7 @@ export async function sendDocumentToMoov({ accountId, row, bytes, environment, f
   return moovFetch(`/accounts/${accountId}/files`, {
     method: 'POST',
     scopes: scopes.filesWrite(accountId),
-    idempotencyKey: `checksops-file-${environment}-${row.id}`,
+    idempotencyKey: `checksops-file-${environment}-${row.id}-${createHash('sha256').update(JSON.stringify(accountId)).digest('hex').slice(0, 12)}`,
     formData: form,
     fetchImpl,
   });
