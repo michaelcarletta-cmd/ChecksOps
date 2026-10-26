@@ -204,6 +204,16 @@ export async function syncOnboardingToMoov(client, ctx, {
   let accountId = null;
   // Which Moov call failed, for the redacted failure log.
   let step = 'account';
+  // Set when Moov reports the business profile locked (already verified): later profile writes
+  // that Moov answers 409 are logged and skipped, so the capability request still goes.
+  let profileLocked = false;
+  const skipLockedConflict = (error) => {
+    if (!profileLocked || !(error instanceof MoovError) || error.status !== 409) return false;
+    onboardingLog('moov_onboarding_profile_conflict', {
+      tenant: tenantId, environment, status: 409, step, reason: moovConflictReason(error),
+    });
+    return true;
+  };
   try {
     const ein = await decryptProfileEin(deps, profile);
     const { account } = await ensureMoovAccount(client, ctx, { profile, ein, fetchImpl });
@@ -221,8 +231,10 @@ export async function syncOnboardingToMoov(client, ctx, {
       // adopted by foreignID). Moov keeps the details it holds; representatives and the capability
       // request still go, and Moov's reason is logged.
       if (!(error instanceof MoovError) || error.status !== 409) throw error;
+      const reason = moovConflictReason(error);
+      profileLocked = /profile locked/i.test(reason || '');
       onboardingLog('moov_onboarding_profile_conflict', {
-        tenant: tenantId, environment, status: 409, step, reason: moovConflictReason(error),
+        tenant: tenantId, environment, status: 409, step, reason,
       });
     }
 
@@ -260,20 +272,25 @@ export async function syncOnboardingToMoov(client, ctx, {
       const dob = await decryptRepresentativeDob(deps, rep);
       const body = representativeBody(rep, { dob, ssn });
       let moovRepId = rep.moov_representative_id;
-      if (moovRepId) {
-        await moovFetch(`/accounts/${accountId}/representatives/${moovRepId}`, {
-          method: 'PATCH', scopes: scopes.representativesWrite(accountId), body, fetchImpl,
-        });
-      } else {
-        const created = await moovFetch(`/accounts/${accountId}/representatives`, {
-          method: 'POST',
-          scopes: scopes.representativesWrite(accountId),
-          idempotencyKey: `checksops-representative-${environment}-${rep.id}`,
-          body,
-          fetchImpl,
-        });
-        moovRepId = created?.representativeID ?? created?.representativeId ?? null;
-        if (!moovRepId) throw new OnboardingError('moov_representative_id_missing', 502);
+      try {
+        if (moovRepId) {
+          await moovFetch(`/accounts/${accountId}/representatives/${moovRepId}`, {
+            method: 'PATCH', scopes: scopes.representativesWrite(accountId), body, fetchImpl,
+          });
+        } else {
+          const created = await moovFetch(`/accounts/${accountId}/representatives`, {
+            method: 'POST',
+            scopes: scopes.representativesWrite(accountId),
+            idempotencyKey: `checksops-representative-${environment}-${rep.id}`,
+            body,
+            fetchImpl,
+          });
+          moovRepId = created?.representativeID ?? created?.representativeId ?? null;
+          if (!moovRepId) throw new OnboardingError('moov_representative_id_missing', 502);
+        }
+      } catch (error) {
+        if (!skipLockedConflict(error)) throw error;
+        continue;
       }
       // Recorded immediately so a later failure never re-POSTs this person.
       await markRepresentativeSynced(client, { id: rep.id, moovRepresentativeId: moovRepId, ssnDelivered: Boolean(ssn) });
@@ -287,6 +304,8 @@ export async function syncOnboardingToMoov(client, ctx, {
         scopes: scopes.accountWrite(accountId),
         body: { profile: { business: { ownersProvided: true } } },
         fetchImpl,
+      }).catch((error) => {
+        if (!skipLockedConflict(error)) throw error;
       });
     }
 

@@ -1,0 +1,14 @@
+{
+  "workstream_id": "production-moov-profile-locked",
+  "authorization": "Pending owner review (2026-10-26). Planning only: nothing is live or verified. The owner approved this plan update in the words \"Approve moov sync.mjs plan update\". Each production apply still needs its own owner approval, a staging acceptance reference and a read-only production inspect that confirms the live bytes.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Moov onboarding (owner request 2026-10-26, follows production-moov-profile-conflict-manifest-2026-10-26.json): when Moov answers the business-profile PATCH 409 with a 'profile locked' reason, a later 409 on a representative write or the ownersProvided PATCH is logged as moov_onboarding_profile_conflict and skipped, so the capability request still goes. A 409 on an account that is not locked still fails the sync. Seen on staging 2026-10-26 00:47 for Freedom Adjustment's sandbox account: 'profile locked: profile fields cannot be updated', then moov_conflict at step representative. providers/onboarding/moov-sync.mjs stays an ADD (live_sha256 null); a read-only production overlay inspect must confirm it before any apply.",
+  "members": {
+    "providers/onboarding/moov-sync.mjs": {
+      "live_sha256": null,
+      "accepted_sha256": "d9cbd1d4e56e5aa80adf77ea52889324e2a7544e0854669c0c189f1418f7eef4",
+      "operation": "add"
+    }
+  }
+}
