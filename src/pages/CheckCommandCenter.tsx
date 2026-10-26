@@ -211,6 +211,8 @@ import {
 import { useCheckCommandRealtime } from "@/features/check-command/useCheckCommandRealtime";
 import { optimisticStage, optimisticRemove } from "@/features/check-command/optimistic";
 import { displayCase, displayCaseOrNull } from "@/lib/displayCase";
+import { useDuplicateChecks } from "@/hooks/useDuplicateChecks";
+import { DuplicateCheckBadge, DuplicateCheckBanner } from "@/components/checks/DuplicateCheckFlag";
 
 
 /* ------------------------------------------------------------------ */
@@ -901,6 +903,13 @@ export default function CheckCommandCenter() {
   const filteredChecks = classFilter === "all"
     ? rawFilteredChecks
     : rawFilteredChecks.filter((c) => (c.funds_type ?? "unclassified") === classFilter);
+
+  // Duplicate uploads: same check number and amount as another check in this tenant.
+  const ownTenantChecks = useMemo(
+    () => checks.filter((c) => !(c as { _shared?: boolean })._shared && (!tenantId || c.tenant_id === tenantId)),
+    [checks, tenantId],
+  );
+  const duplicateChecks = useDuplicateChecks(tenantId, ownTenantChecks);
 
   const classFilterCounts = (() => {
     const counts = new Map<string, { count: number; total: number }>();
@@ -2105,6 +2114,7 @@ export default function CheckCommandCenter() {
                               <div className="flex items-center gap-1.5">
                                 #{check.check_number || "—"}
                                 {isShared && <SharedChecksBadge sourceTenantName={sourceTenantName} />}
+                                {!isShared && <DuplicateCheckBadge duplicates={duplicateChecks.get(check.id)} />}
                               </div>
                             </TableCell>
                             <TableCell className="text-sm md:max-w-[180px]">
@@ -3018,6 +3028,8 @@ function CheckDetailPanel({
       return await attachPartnerPayees(data as CheckItem, tenantId);
     },
   });
+  const duplicateRows = useMemo(() => (check ? [check] : []), [check]);
+  const checkDuplicates = useDuplicateChecks(check?.tenant_id ?? tenantId, duplicateRows).get(checkId);
 
   // Realtime: refresh check detail + endorsements when any partner deposits or a payee signs.
   // AWS staging: poll while the detail panel is open.
@@ -3888,6 +3900,7 @@ function CheckDetailPanel({
             </Badge>
           </div>
         </div>
+        <DuplicateCheckBanner duplicates={checkDuplicates} />
         <div className="flex flex-wrap gap-2 mt-2">
           <ViewCheckImageButton
             checkId={checkId}
