@@ -25,7 +25,7 @@ import {
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { MoovError, moovFetch, scopes } from '../parity/moov-client.mjs';
 import { OnboardingError } from './crypto.mjs';
-import { isNetworkError, moovErrorCode, onboardingLog } from './redact.mjs';
+import { isNetworkError, moovErrorCode, moovRejectedFields, onboardingLog, redactText } from './redact.mjs';
 import { completeOutbox, enqueueOutbox, failOutboxAttempt, loadAccount, publicDocument } from './store.mjs';
 
 export const DOCUMENTS_KMS_KEY_ENV = 'COMPLIANCE_DOCUMENTS_KMS_KEY_ARN';
@@ -348,6 +348,20 @@ export async function promoteToFinal(row, verified, deps = {}) {
 }
 
 /**
+ * Moov's message for a refused file, short, with email addresses and digit runs masked (as
+ * handlers.mjs moovFailureReason, which this module cannot import: handlers.mjs imports it).
+ */
+const moovFileFailureReason = (error, max = 160) => {
+  let body = error?.body;
+  if (typeof body === 'string') { try { body = JSON.parse(body); } catch { /* plain text */ } }
+  const text = typeof body === 'string' ? body
+    : typeof body?.error === 'string' ? body.error
+      : typeof body?.message === 'string' ? body.message : null;
+  if (!text) return null;
+  return redactText(text.replace(/[^\s@]+@[^\s@]+/g, '[redacted]'), max);
+};
+
+/**
  * POST /accounts/{id}/files as multipart/form-data, idempotent per document and account: a document
  * sent again to a replacement account is never answered from the gone account's upload.
  */
@@ -438,7 +452,12 @@ export async function finalizeDocument(client, ctx, row, { deps = {}, fetchImpl,
       `UPDATE public.moov_compliance_documents SET last_error_code = $2, moov_status = 'sync_failed', updated_at = now() WHERE id = $1::uuid`,
       [row.id, code],
     );
-    onboardingLog('moov_document_send_failed', { tenant: ctx.tenantId, environment: ctx.environment, document: row.id, error_code: code });
+    onboardingLog('moov_document_send_failed', {
+      tenant: ctx.tenantId, environment: ctx.environment, document: row.id, error_code: code,
+      ...(error instanceof MoovError ? {
+        status: error.status ?? null, reason: moovFileFailureReason(error), rejected_fields: moovRejectedFields(error),
+      } : {}),
+    });
     return { document: publicDocument(stored), moov_synced: false, pending: true, error_code: code };
   }
 }

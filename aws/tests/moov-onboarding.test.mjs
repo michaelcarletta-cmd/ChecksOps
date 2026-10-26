@@ -877,6 +877,31 @@ test('Moov file failure leaves the document stored and pending; moov-sync retrie
   });
 });
 
+test('a refused Moov file logs Moov\'s masked reason and status, never the file name', async () => {
+  await withEnv(BASE_ENV, async () => {
+    resetMoovTokenCache();
+    const db = makeDb();
+    const id = await uploadDoc(db, { fileName: 'freedom-w9.pdf' });
+    const s3 = fakeS3({ bytes: PDF, contentType: 'application/pdf' });
+    const refusing = moovFetch([{
+      match: '/files', method: 'POST', status: 422,
+      body: { error: 'file rejected for owner@freedom.test account 000123456789' },
+    }]);
+    const { result, lines } = await captureConsole(() => run('moov-document-finalize', { tenant_id: TENANT, document_id: id }, USERS.owner, { db, s3, fetch: refusing }));
+    assert.equal(result.error_code, 'moov_rejected');
+    const log = lines.find((line) => line.includes('moov_document_send_failed'));
+    assert.ok(log, 'failure logged');
+    const parsed = JSON.parse(log);
+    assert.equal(parsed.status, 422);
+    assert.equal(parsed.error_code, 'moov_rejected');
+    assert.equal(parsed.reason, 'file rejected for [redacted] account [redacted]');
+    assert.equal(log.includes('owner@freedom.test'), false);
+    assert.equal(log.includes('000123456789'), false);
+    assert.equal(db.state.docs[0].file_name, 'freedom-w9.pdf');
+    assert.equal(log.includes('freedom-w9'), false);
+  });
+});
+
 test('legacy file upload is refused with a pointer to the new flow', async () => {
   await withEnv(BASE_ENV, async () => {
     const db = makeDb();

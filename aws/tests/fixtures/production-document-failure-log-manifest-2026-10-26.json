@@ -1,0 +1,14 @@
+{
+  "workstream_id": "production-document-failure-log",
+  "authorization": "Pending owner review (2026-10-26). Planning only: nothing is live or verified. The owner asked for this change, its plan update included, to be opened and merged when green in the words \"Go, open the PR and merge when green\". Each production apply still needs its own owner approval, a staging acceptance reference and a read-only production inspect that confirms the live bytes.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Moov onboarding (follows production-moov-account-replace-detect-manifest-2026-10-26.json). Staging 2026-10-26: Freedom Adjustment's W-9 upload to the new sandbox account was refused by Moov twice (moov_document_send_failed, error_code moov_rejected, 12:49:40Z and 12:50:59Z) and Moov's reason was not logged. providers/onboarding/documents.mjs: a refused POST /accounts/{id}/files now adds status, Moov's message (160 characters, emails and digit runs masked) and rejected field paths to moov_document_send_failed; the caller's response and the stored document are unchanged, and no file name or content is logged. providers/onboarding/documents.mjs stays an ADD (live_sha256 null); a read-only production overlay inspect must confirm it before any apply.",
+  "members": {
+    "providers/onboarding/documents.mjs": {
+      "live_sha256": null,
+      "accepted_sha256": "4d61d0690607995f98087767851a7c32d747b0c37bd4c65b13a7bb27a0eb53a7",
+      "operation": "add"
+    }
+  }
+}
