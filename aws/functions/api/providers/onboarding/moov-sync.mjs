@@ -327,6 +327,8 @@ export async function syncOnboardingToMoov(client, ctx, {
   let accountId = null;
   // Which Moov call failed, for the redacted failure log.
   let step = 'account';
+  // On the representative step: whether the failing call created or updated the person.
+  let representativeCall = null;
   // Set when Moov reports the business profile locked (already verified): later profile writes
   // that Moov answers 409 are logged and skipped, so the capability request still goes.
   let profileLocked = false;
@@ -397,6 +399,7 @@ export async function syncOnboardingToMoov(client, ctx, {
       const dob = await decryptRepresentativeDob(deps, rep);
       const body = representativeBody(rep, { dob, ssn });
       let moovRepId = rep.moov_representative_id;
+      representativeCall = moovRepId ? 'update' : 'create';
       try {
         if (moovRepId) {
           await moovFetch(`/accounts/${accountId}/representatives/${moovRepId}`, {
@@ -471,9 +474,13 @@ export async function syncOnboardingToMoov(client, ctx, {
     await setProfileSyncState(client, { tenantId, environment, pending: true, errorCode: code, moovAccountId: accountId });
     if (outboxId) await failOutboxAttempt(client, { id: outboxId, errorCode: code });
     const rejectedFields = moovRejectedFields(error);
+    // A 409 carries Moov's masked reason (staging 2026-10-26: a representative 409 logged none).
+    const reason = moovConflictReason(error);
     onboardingLog('moov_onboarding_sync_failed', {
       tenant: tenantId, environment, error_code: code, status: error?.status ?? null,
       step, rejected_fields: rejectedFields,
+      ...(step === 'representative' && representativeCall ? { representative_call: representativeCall } : {}),
+      ...(reason ? { reason } : {}),
     });
     return { synced: false, error_code: code, accountId, ...(rejectedFields.length ? { rejected_fields: rejectedFields } : {}) };
   }
