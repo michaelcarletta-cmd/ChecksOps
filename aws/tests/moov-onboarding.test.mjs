@@ -955,6 +955,48 @@ test('Moov 409 on the business profile logs a masked reason and still sends repr
   });
 });
 
+test('a locked Moov profile skips the refused representative and owners writes and still requests capabilities', async () => {
+  await withEnv(BASE_ENV, async () => {
+    resetMoovTokenCache();
+    const db = makeDb();
+    const locked = { error: 'patch data not in valid state: profile locked: profile fields cannot be updated' };
+    const conflicting = moovFetch([
+      { match: `/accounts/${MOOV_ACCOUNT}`, method: 'PATCH', status: 409, body: locked },
+      { match: /\/representatives$/, method: 'POST', status: 409, body: locked },
+    ]);
+    const { result, lines } = await captureConsole(() => run('moov-onboarding-save', saveBody(), USERS.owner, { db, fetch: conflicting }));
+    assert.equal(result.saved, true);
+    assert.equal(result.moov_synced, true, JSON.stringify(result));
+    assert.ok(conflicting.calls.some((c) => c.method === 'POST' && /\/capabilities$/.test(c.url)), 'capabilities still requested');
+    const all = lines.join('\n');
+    assert.equal(all.includes('moov_onboarding_sync_failed'), false);
+    const steps = lines.filter((line) => line.includes('moov_onboarding_profile_conflict')).map((line) => JSON.parse(line).step);
+    assert.ok(steps.includes('business_profile'));
+    assert.ok(steps.includes('representative'));
+    assert.ok(steps.includes('owners_provided'));
+    assert.equal(all.includes(EIN), false);
+  });
+});
+
+test('a Moov 409 on a representative still fails the sync when the profile is not locked', async () => {
+  await withEnv(BASE_ENV, async () => {
+    resetMoovTokenCache();
+    const db = makeDb();
+    let profilePatches = 0;
+    const conflicting = moovFetch([
+      { match: `/accounts/${MOOV_ACCOUNT}`, method: 'PATCH', status: () => (++profilePatches === 1 ? 409 : 200), body: { error: 'other conflict' } },
+      { match: /\/representatives$/, method: 'POST', status: 409, body: { error: 'duplicate representative' } },
+    ]);
+    const { result, lines } = await captureConsole(() => run('moov-onboarding-save', saveBody(), USERS.owner, { db, fetch: conflicting }));
+    assert.equal(result.saved, true);
+    assert.equal(result.moov_synced, false);
+    assert.equal(result.error_code, 'moov_conflict');
+    assert.equal(conflicting.calls.some((c) => c.method === 'POST' && /\/capabilities$/.test(c.url)), false);
+    const log = lines.find((line) => line.includes('moov_onboarding_sync_failed'));
+    assert.equal(JSON.parse(log).step, 'representative');
+  });
+});
+
 test('moovConflictReason reads only 409 bodies and masks emails and digit runs', async () => {
   const { moovConflictReason } = await import('../functions/api/providers/onboarding/moov-sync.mjs');
   assert.equal(moovConflictReason({ status: 422, body: { error: 'x' } }), null);
