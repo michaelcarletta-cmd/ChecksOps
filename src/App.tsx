@@ -13,6 +13,7 @@ import { AuthProvider } from "./hooks/useAuth";
 import { StepUpProvider } from "./hooks/useStepUp";
 import { ThemeProvider, ThemeScope } from "./hooks/useTheme";
 import { AwsStagingBanner } from "./components/AwsStagingBanner";
+import { LiveDataRefresh } from "./hooks/useLiveDataRefresh";
 
 
 import { isPublicTokenRoute } from "./lib/publicTokenRoutes";
@@ -54,9 +55,11 @@ export const queryClient = new QueryClient({
       staleTime: 1000 * 60 * 5,
       gcTime: 1000 * 60 * 30,
       retry: 1,
-      refetchOnWindowFocus: false,
+      // Live updates: a query marked stale by a save (useLiveDataRefresh) or older than
+      // staleTime refetches when its screen opens or the tab regains focus. Fresh ones do not.
+      refetchOnWindowFocus: true,
       refetchOnReconnect: false,
-      refetchOnMount: false,
+      refetchOnMount: true,
     },
   },
 });
@@ -189,6 +192,7 @@ function AppRoutes() {
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
+    <LiveDataRefresh />
     <ThemeProvider>
       <TooltipProvider>
         <Toaster />

@@ -145,7 +145,7 @@ test('login redirect carries the current page and sign-in returns to it', () => 
 test('Command Center refresh polls on AWS builds (no realtime) and on tab focus', () => {
   const hook = read('src/features/check-command/useCheckCommandRealtime.ts');
   assert.match(hook, /refreshCheckQueues\(qc\)/);
-  assert.match(hook, /useAwsPollingFallback\(!!tenantId, poll, 15_000\)/);
+  assert.match(hook, /useAwsPollingFallback\(!!tenantId, poll, 5_000\)/);
   assert.match(hook, /addEventListener\("focus", onFocus\)/);
   assert.match(hook, /addEventListener\("visibilitychange", onFocus\)/);
   assert.match(hook, /shouldRefreshOnFocus\(/);

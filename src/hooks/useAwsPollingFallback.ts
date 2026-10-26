@@ -15,13 +15,23 @@ export function useAwsPollingFallback(
     // `vite build --mode aws` always uses the AWS adapter (whose realtime
     // channel is a no-op), even if VITE_AUTH_PROVIDER were left unset.
     if (!enabled || !(isAwsStaging() || import.meta.env.MODE === "aws")) return;
-    const id = window.setInterval(() => {
+    const tick = () => {
+      // A hidden tab does not poll; it catches up the moment it is shown again.
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
       try {
         onTick();
       } catch {
         /* ignore polling errors */
       }
-    }, intervalMs);
-    return () => window.clearInterval(id);
+    };
+    const onVisible = () => {
+      if (document.visibilityState === "visible") tick();
+    };
+    const id = window.setInterval(tick, intervalMs);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [enabled, onTick, intervalMs]);
 }
