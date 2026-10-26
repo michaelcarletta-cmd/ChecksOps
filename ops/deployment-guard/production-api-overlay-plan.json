@@ -812,7 +812,7 @@
     },
     "providers/onboarding/moov-sync.mjs": {
       "operation": "add",
-      "accepted_sha256": "e1427571a609a33117c4c0fcdd71e146187223a305e76746a15bdecd8f720f3a",
+      "accepted_sha256": "6e73430bff664861e1fb0a1ff413695d5a4db4e9557890564cbffd3934ebe4e5",
       "expected_live_sha256": null,
       "sql_before": "aws/workflows/sql/104_payment_idempotency_keys_grant.sql",
       "manifest": "aws/tests/fixtures/production-moov-account-replace-detect-manifest-2026-10-26.json"

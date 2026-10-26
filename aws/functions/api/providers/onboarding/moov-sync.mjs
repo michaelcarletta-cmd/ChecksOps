@@ -125,14 +125,19 @@ async function forgetGoneAccount(client, ctx, goneAccountId) {
     [ctx.tenantId, ctx.environment, goneAccountId],
   );
   // Documents sent to the gone account go again from their verified stored copy: the outbox sends
-  // each one to the new account (the tenant does not upload them again).
-  const resend = (await client.query(
+  // each one to the new account (the tenant does not upload them again). Stored documents that never
+  // reached Moov are queued too, in case their earlier attempts gave up on the gone account.
+  await client.query(
     `UPDATE public.moov_compliance_documents
      SET status = 'stored', moov_file_id = NULL, moov_status = NULL, moov_account_id = NULL,
          sent_at = NULL, last_error_code = NULL, updated_at = now()
-     WHERE tenant_id = $1::uuid AND environment = $2 AND moov_account_id = $3 AND status = 'sent'
-     RETURNING id`,
+     WHERE tenant_id = $1::uuid AND environment = $2 AND moov_account_id = $3 AND status = 'sent'`,
     [ctx.tenantId, ctx.environment, goneAccountId],
+  );
+  const resend = (await client.query(
+    `SELECT id FROM public.moov_compliance_documents
+     WHERE tenant_id = $1::uuid AND environment = $2 AND status = 'stored' AND moov_file_id IS NULL`,
+    [ctx.tenantId, ctx.environment],
   )).rows;
   for (const doc of resend) {
     await enqueueOutbox(client, {
@@ -184,7 +189,6 @@ export async function ensureMoovAccount(client, ctx, { profile = null, ein = nul
     if (!(await moovAccountGone(ctx, existing.provider_account_id, fetchImpl))) return { account: existing, created: false };
     replacing = existing.provider_account_id;
     onboardingLog('moov_account_gone', { tenant: ctx.tenantId, environment: ctx.environment });
-    await forgetGoneAccount(client, ctx, replacing);
   }
   const tenant = (await client.query(
     `SELECT id, name, legal_business_name, email_reply_to, email_from_address, business_phone
@@ -273,6 +277,9 @@ export async function ensureMoovAccount(client, ctx, { profile = null, ein = nul
      WHERE tenant_id = $1::uuid AND provider = 'moov' AND scope = 'account_create' AND idempotency_key = $2`,
     [ctx.tenantId, key],
   );
+  // Only once the new account is recorded: a failed create leaves everything on the gone account
+  // as it was, and the next save tries again.
+  if (replacing) await forgetGoneAccount(client, ctx, replacing);
   await logPaymentEvent(client, {
     tenant_id: ctx.tenantId,
     environment: ctx.environment,

@@ -312,6 +312,9 @@ const makeDb = ({ tenantEnv = 'sandbox', account = true } = {}) => {
         if (text.includes('FROM public.moov_compliance_documents') && text.includes('WHERE id = $1')) {
           return { rows: state.docs.filter((d) => d.id === params[0] && d.tenant_id === params[1] && d.environment === params[2]).map((d) => ({ ...d })) };
         }
+        if (text.includes('FROM public.moov_compliance_documents') && text.includes('moov_file_id IS NULL')) {
+          return { rows: state.docs.filter((d) => d.tenant_id === params[0] && d.environment === params[1] && d.status === 'stored' && !d.moov_file_id).map((d) => ({ id: d.id })) };
+        }
         if (text.includes('FROM public.moov_compliance_documents')) {
           return { rows: state.docs.filter((d) => d.tenant_id === params[0] && d.environment === params[1] && d.status !== 'rejected') };
         }
@@ -1313,6 +1316,31 @@ test('documents sent to a gone account are sent again to the new account from th
       { status: db.state.docs[0].status, moov_file_id: db.state.docs[0].moov_file_id, moov_account_id: db.state.docs[0].moov_account_id },
       { status: 'sent', moov_file_id: 'file_new', moov_account_id: NEW_MOOV_ACCOUNT },
     );
+  });
+});
+
+test('a failed replacement create leaves people, banks and documents on the gone account untouched', async () => {
+  await withEnv(BASE_ENV, async () => {
+    resetMoovTokenCache();
+    const db = makeDb();
+    const s3 = fakeS3({ bytes: PDF, contentType: 'application/pdf' });
+    await run('moov-onboarding-save', saveBody(), USERS.owner, { db, fetch: moovFetch() });
+    const id = await uploadDoc(db);
+    await run('moov-document-finalize', { tenant_id: TENANT, document_id: id }, USERS.owner, { db, s3, fetch: moovFetch() });
+    db.state.methods.push({ id: 'aaaaaaaa-0000-4000-8000-0000000000b2', tenant_id: TENANT, environment: 'sandbox', provider_account_id: MOOV_ACCOUNT, provider_bank_account_id: 'bank_old', connection_status: 'connected', verification_status: 'verified', external_recipient_id: null });
+
+    resetMoovTokenCache();
+    const fetch = moovFetch([
+      accountGet({ accountID: MOOV_ACCOUNT, disconnectedOn: '2026-10-26T12:00:00Z' }),
+      { match: /\/accounts$/, method: 'POST', status: 503, body: { error: 'down' } },
+    ]);
+    const { result } = await captureConsole(() => run('moov-onboarding-save', saveBody(), USERS.owner, { db, fetch }));
+    assert.equal(result.moov_synced, false);
+    assert.equal(db.state.accounts[0].provider_account_id, MOOV_ACCOUNT);
+    assert.equal(db.state.reps[0].moov_representative_id, 'rep_1', 'the person keeps the Moov id');
+    assert.equal(db.state.methods[0].connection_status, 'connected');
+    assert.deepEqual({ status: db.state.docs[0].status, moov_account_id: db.state.docs[0].moov_account_id }, { status: 'sent', moov_account_id: MOOV_ACCOUNT });
+    assert.equal(db.state.outbox.some((o) => o.kind === 'document_upload' && o.status === 'pending'), false, 'nothing queued for the gone account');
   });
 });
 
