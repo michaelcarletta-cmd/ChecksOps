@@ -1,5 +1,5 @@
 /**
- * Specs of the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108 to SQL 115) for the shared engine in
+ * Specs of the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108 to SQL 116) for the shared engine in
  * release-sql-state.mjs: what each pinned file creates, replaces or drops, the reviewed
  * EXECUTE ACLs, the prerequisites and predecessors, and the PostgreSQL renderings the file
  * leaves (policy expressions, view, column, constraint, index and trigger definitions as
@@ -4247,6 +4247,42 @@ export const RELEASE_SQL_SPECS = deepFreeze({
     ],
     "definer_writes": [
       "public.stakeholder_accounts"
+    ]
+  },
+  // SQL 116: public.moov_onboarding_profiles.industry text (nullable, no default, no column grant),
+  // the Moov industry of the business profile (staging 2026-10-26: Moov's form for Freedom
+  // Adjustment's new sandbox account listed Industry as required). SQL 91 creates the table and
+  // fingerprints its full column list, so SQL 116 supersedes SQL 91: once SQL 116 is in place
+  // SQL 91 counts as applied by SQL 116's fingerprint (as SQL 93 by SQL 96's), and SQL 104, 105
+  // and 109 keep their SQL 91 predecessor.
+  sql116: {
+    "key": "sql116",
+    "label": "SQL 116",
+    "choice": "sql116-moov-onboarding-profile-industry",
+    "production_pin_rel": "ops/deployment-guard/sql116-moov-onboarding-profile-industry-production-apply.json",
+    "script": "sql116-moov-onboarding-profile-industry-production-apply",
+    "prerequisites": [
+      "public.moov_onboarding_profiles"
+    ],
+    "predecessors": [
+      "sql91"
+    ],
+    "supersedes": [
+      "sql91"
+    ],
+    "functions": [],
+    "added_columns": [
+      {
+        "table": "public.moov_onboarding_profiles",
+        "column": "industry",
+        "type": "text",
+        "notnull": false,
+        "default": null,
+        "acl": []
+      }
+    ],
+    "altered_relations": [
+      "public.moov_onboarding_profiles"
     ]
   },
 });

@@ -1,0 +1,64 @@
+{
+  "id": "sql116-moov-onboarding-profile-industry-production-apply",
+  "migration": "sql116",
+  "authorization": "pending",
+  "execute": false,
+  "target_environment": "production",
+  "target_component": "production-sql",
+  "deployment_type": "sql-apply",
+  "filename": "aws/workflows/sql/116_moov_onboarding_profile_industry.sql",
+  "migration_id": "116_moov_onboarding_profile_industry",
+  "staging_pin_commit": "eb945142973b8c1e2f435d57c11dd4dca797e0ef",
+  "source_sha256": "31217651d76753c9f76232f0bd2c64ab3fd9a36754ccda081fda18169437b8b8",
+  "function_identities": [],
+  "expected_live_definition_sha256": null,
+  "intended_replacement_sha256": "c99fc953f7ab14c2c68647ed3bcfa3e0b50a5aa4888bdc9f9c71163392314ee1",
+  "authorization_phrase": "APPLY_MOOV_ONBOARDING_PROFILE_INDUSTRY",
+  "predecessors": [
+    "sql91"
+  ],
+  "order_note": "Predecessor SQL 91, which SQL 116 supersedes. SQL 116 needs public.moov_onboarding_profiles (SQL 91) owned by checksops_admin. Moov requires an industry on a business account's profile (profile.business.industry, a value from Moov's GET /industries list); ChecksOps had nowhere to keep it, and on staging 2026-10-26 Moov's form for Freedom Adjustment's new sandbox account listed Industry as required and empty. SQL 116 adds one nullable column, moov_onboarding_profiles.industry text, with no default and no column grant (SQL 91's table grants to checksops and authenticated cover it), and changes nothing else: no constraint (the API validates the value), policy, function, trigger or row. SQL 91 fingerprints that table's full column list, so after SQL 116 SQL 91 counts as applied by SQL 116's fingerprint (spec supersedes, as SQL 93 by SQL 96); SQL 104, 105 and 109 keep their SQL 91 predecessor. The API code that writes and sends the column is a later change and reads it only once SQL 116 is applied. If the read-only inspect reports already_applied true nothing is applied.",
+  "admin_login": "checksops_admin",
+  "rds_identifier": "checksops-production",
+  "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
+  "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
+  "tooling": {
+    "status": "built",
+    "production_tool": "scripts/deployment-guard/sql116-moov-onboarding-profile-industry-production-apply.mjs",
+    "production_lib": "scripts/deployment-guard/lib/release-sql-production-apply.mjs",
+    "staging_executor_handler": "aws/write-path/guarded-sql-executor/index.mjs handleReleaseSqlMigration",
+    "staging_workflow_choice": "sql116-moov-onboarding-profile-industry",
+    "one_shot_migration": "sql116",
+    "fingerprint_engine": "scripts/deployment-guard/lib/release-sql-state.mjs",
+    "runbook": "ops/production-sql-116-apply.md",
+    "tests": [
+      "aws/tests/release-sql116-executor.test.mjs",
+      "aws/tests/release-sql116-production-apply.test.mjs",
+      "aws/tests/release-sql90-97-executor.test.mjs",
+      "aws/tests/release-sql90-97-production-apply.test.mjs",
+      "aws/tests/sql116-moov-onboarding-profile-industry-pg.test.mjs"
+    ],
+    "note": "Guarded tooling for SQL 116: sql116-moov-onboarding-profile-industry-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql116-moov-onboarding-profile-industry); production-sql-one-shot.mjs --migration sql116. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): the column public.moov_onboarding_profiles.industry, text, nullable, no default, no column grant (spec added_columns, as SQL 93). The pre-conditions require SQL 91 in place (predecessors_applied), the table owned by the login (altered_relations_owned_by_login) and the column absent or already as intended (added_columns_absent_or_intended); the table's other columns, its ACL, policies, constraints, indexes and triggers are in the unrelated-catalog snapshot and must be unchanged. The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
+  },
+  "production_inspect": {
+    "status": "pending",
+    "date": null,
+    "ssm_command_id": null,
+    "source_commit": null,
+    "read_only": true,
+    "connected_as": "checksops_admin",
+    "live_definition_sha256": null,
+    "apply_preconditions_met": null,
+    "precondition_failures": null,
+    "note": "Pending: no read-only production inspect has been run for SQL 116 yet. Expected: moov_onboarding_profiles present and owned by checksops_admin without an industry column, SQL 91 in place, precondition_failures []. Record its date, SSM command id, source commit, live_definition_sha256, precondition_failures and apply_preconditions_met here. If already_applied is true, record the inspect as the verified-live evidence and leave execute false; otherwise copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. If precondition_failures is not [] stop: that needs its own reviewed change."
+  },
+  "intended_post_state": {
+    "fingerprint": "c99fc953f7ab14c2c68647ed3bcfa3e0b50a5aa4888bdc9f9c71163392314ee1",
+    "note": "public.moov_onboarding_profiles.industry: text, nullable, no default, no column grant. Every other column, the table's ACL, RLS flags, policies, constraints, indexes and triggers are unchanged; no other table, function, policy or row changes. The fingerprint is releaseIntendedHash('sql116', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): c99fc953f7ab14c2c68647ed3bcfa3e0b50a5aa4888bdc9f9c71163392314ee1."
+  },
+  "staging_acceptance": {
+    "ok": false,
+    "reference": null,
+    "basis": "Pending: record the guarded staging SQL executor read-live run of SQL 116 (choice sql116-moov-onboarding-profile-industry) and its staging apply run here in the reviewed change that sets execute true. The staging pin records the read-live pre-state, the owner approves the staging apply, and the apply run (receipt before == the recorded pre-state, after == intended) is the staging evidence. The behaviour is covered on PostgreSQL 16 by aws/tests/sql116-moov-onboarding-profile-industry-pg.test.mjs. Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+  }
+}
