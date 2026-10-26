@@ -1172,16 +1172,6 @@ export default function CheckCommandCenter() {
 
 
 
-  // Total unread internal messages across all check threads (for tab badge)
-  const { data: totalUnreadMessages = 0 } = useQuery({
-    queryKey: ["check-unread-total"],
-    queryFn: async () => {
-      const { data, error } = await supabase.rpc("get_total_unread_check_messages");
-      if (error) throw error;
-      return Number(data ?? 0);
-    },
-    refetchInterval: 15_000,
-  });
 
   // Realtime: when a disbursement is recorded (Actum or external check), advance
   // the check stage and move it into the Funds Released bucket without a refresh.
@@ -1300,7 +1290,7 @@ export default function CheckCommandCenter() {
             { key: "fundsreceived", label: "Funds Received",   count: filteredFundsReceived.length,       icon: Banknote,       gradient: "from-sky-500/20 to-blue-500/10",      accent: "text-sky-400",     ring: "ring-sky-500/30" },
             // Partners moved into Manager → Partners sub-tab (2026-07-07).
             ...(canAccessManager ? [{ key: "manager", label: "Manager", count: null as number | null, icon: Shield, gradient: "from-indigo-500/20 to-blue-500/10", accent: "text-indigo-400", ring: "ring-indigo-500/30" }] : []),
-            { key: "messages",     label: "Messages",          count: totalUnreadMessages || null, icon: MessageSquare, gradient: "from-rose-500/20 to-pink-500/10",     accent: "text-rose-400",    ring: "ring-rose-500/30" },
+            { key: "messages",     label: "Messages",          count: null as number | null, icon: MessageSquare, gradient: "from-rose-500/20 to-pink-500/10",     accent: "text-rose-400",    ring: "ring-rose-500/30" },
           ];
           // Phones show three compact tiles per row; the last tile stretches to
           // fill an incomplete final row. From sm up the desktop grid is unchanged.

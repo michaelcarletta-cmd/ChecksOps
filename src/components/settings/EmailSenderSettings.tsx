@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { toast } from "sonner";
-import { Loader2, Mail, ShieldCheck, Globe, RefreshCw, Copy, CheckCircle2, AlertTriangle, Ban } from "lucide-react";
+import { Loader2, Mail, Globe, RefreshCw, Copy, CheckCircle2, AlertTriangle, Ban } from "lucide-react";
 import { SectionCard } from "./SectionCard";
 import { SettingsHero } from "./SettingsHero";
 import {
@@ -201,7 +201,11 @@ export function EmailSenderSettings({ showSendingDomain = true }: { showSendingD
   }, [settings]);
   const storedLogo = settings?.logoUrl || tenant?.logo_url || null;
   const logoUrl = brandingPublicUrl(storedLogo, "tenant-logos") || storedLogo;
-  const primaryColor = settings?.primaryColor || tenant?.primary_color || "#1a56db";
+  const storedColor = settings?.primaryColor || tenant?.primary_color || "#1a56db";
+  const [primaryColor, setPrimaryColor] = useState(storedColor);
+  useEffect(() => setPrimaryColor(storedColor), [storedColor]);
+  // The API accepts only #rgb or #rrggbb (isSafeHexColor in email-branding.mjs).
+  const colorValid = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(primaryColor.trim());
 
   const { data: preview } = useQuery({
     queryKey: ["tenant-email-preview", tenantId, aws, isVerified, fromName],
@@ -218,12 +222,14 @@ export function EmailSenderSettings({ showSendingDomain = true }: { showSendingD
     mutationFn: async () => {
       if (!tenantId) throw new Error("No tenant");
       if (!canConfigure) throw new Error("Not authorized");
+      if (!colorValid) throw new Error("Enter the brand color as a hex value such as #1a56db.");
       if (aws) {
         return invokeFunction<BrandingPayload>("tenant-email-branding-save", {
           tenantId,
           fromName: fromName.trim(),
           replyTo: replyTo.trim(),
           fromLocalPart: fromLocal.trim().toLowerCase(),
+          primaryColor: primaryColor.trim(),
         });
       }
       const { error } = await supabase
@@ -237,6 +243,11 @@ export function EmailSenderSettings({ showSendingDomain = true }: { showSendingD
           { onConflict: "tenant_id" },
         );
       if (error) throw error;
+      const { error: colorError } = await supabase
+        .from("tenants")
+        .update({ primary_color: primaryColor.trim() })
+        .eq("id", tenantId);
+      if (colorError) throw colorError;
     },
     onSuccess: () => {
       toast.success("Email branding saved");
@@ -329,27 +340,6 @@ export function EmailSenderSettings({ showSendingDomain = true }: { showSendingD
           icon={<Mail className="h-4 w-4 text-sky-500" />}
           accent="bg-gradient-to-r from-sky-500/60 to-sky-500/10"
         >
-          <Alert>
-            <ShieldCheck className="h-4 w-4" />
-            <AlertTitle>
-              {isVerified ? "Custom sending domain (active)" : "Platform sender (active)"}
-            </AlertTitle>
-            <AlertDescription>
-              {isVerified ? (
-                <>
-                  Emails send from your verified subdomain <code>{settings?.sendingDomain || settings?.sending_domain}</code>.
-                  Reply-To stays your operational mailbox. ChecksOps remains the delivery platform.
-                </>
-              ) : (
-                <>
-                  Until the subdomain is verified, mail is sent as{" "}
-                  <code>{fallbackFrom}</code>. Your logo, color, company name, and Reply-To still apply.
-                  DNS changes can take minutes to 48 hours.
-                </>
-              )}
-            </AlertDescription>
-          </Alert>
-
           <div className="flex flex-wrap items-center gap-4 rounded-md border bg-muted/30 p-3">
             {logoUrl ? (
               <img src={logoUrl} alt={`${tenantName} logo`} className="h-10 max-w-[180px] object-contain" />
@@ -357,12 +347,24 @@ export function EmailSenderSettings({ showSendingDomain = true }: { showSendingD
               <div className="text-xs text-muted-foreground">No tenant logo yet — ChecksOps logo is used in mail.</div>
             )}
             <div className="flex items-center gap-2 text-sm">
-              <span
-                className="h-6 w-6 rounded-full border"
-                style={{ backgroundColor: primaryColor }}
-                aria-label="Primary brand color"
+              <input
+                id="brand-color"
+                type="color"
+                className="h-8 w-8 cursor-pointer rounded border bg-transparent p-0"
+                value={colorValid && primaryColor.trim().length === 7 ? primaryColor.trim() : storedColor}
+                onChange={(e) => setPrimaryColor(e.target.value)}
+                disabled={!canConfigure}
+                aria-label="Brand color"
               />
-              <code className="text-xs">{primaryColor}</code>
+              <Input
+                className="h-8 w-28 font-mono text-xs"
+                value={primaryColor}
+                onChange={(e) => setPrimaryColor(e.target.value)}
+                maxLength={7}
+                disabled={!canConfigure}
+                aria-label="Brand color hex value"
+                aria-invalid={!colorValid}
+              />
             </div>
             <div className="text-sm font-medium">{tenantName}</div>
           </div>
@@ -397,7 +399,7 @@ export function EmailSenderSettings({ showSendingDomain = true }: { showSendingD
           </div>
 
           <div className="flex justify-end">
-            <Button onClick={() => save.mutate()} disabled={save.isPending || !canConfigure}>
+            <Button onClick={() => save.mutate()} disabled={save.isPending || !canConfigure || !colorValid}>
               {save.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Save branding
             </Button>
