@@ -826,10 +826,10 @@
     },
     "providers/onboarding/handlers.mjs": {
       "operation": "add",
-      "accepted_sha256": "c024afec1c868ba5d7fc4dd2dd769e6835e0fba748a368b473933c0a3aabbd2d",
+      "accepted_sha256": "3cff71b9e8a44d60c2c9f7d767a04ebe58e6b4243c4736015404c24f5ca7ebba",
       "expected_live_sha256": null,
       "sql_before": "aws/workflows/sql/105_onboarding_payment_table_grants.sql",
-      "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
+      "manifest": "aws/tests/fixtures/production-underwriting-failure-log-manifest-2026-10-26.json"
     },
     "providers/catalog.mjs": {
       "operation": "replace",
