@@ -2123,6 +2123,55 @@ test('Payee sends: moov-send.mjs replaces the bytes production run 40222560555 a
   assert.deepEqual(PLAN.order.slice(-2), [SEND, 'providers.mjs']);
 });
 
+test('Onboarding reconciliation: four live onboarding members replace the bytes the 2026-10-21 rebuild put live (planning only)', async () => {
+  const MANIFEST_REL = 'aws/tests/fixtures/production-moov-onboarding-reconcile-manifest-2026-10-26.json';
+  const readJson = (rel) => JSON.parse(fs.readFileSync(path.join(ROOT, rel), 'utf8'));
+  const manifest = readJson(MANIFEST_REL);
+  const RELEASE = readJson('aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json');
+  // Read-only production inspect that observed each live member.
+  const RUNS = {
+    'providers/onboarding/store.mjs': '40384161502',
+    'providers/onboarding/documents.mjs': '40382966241',
+    'providers/onboarding/moov-sync.mjs': '40383433363',
+    'providers/onboarding/handlers.mjs': '40383259853',
+  };
+  const NAMES = Object.keys(RUNS);
+  assert.equal(manifest.workstream_id, 'production-moov-onboarding-reconcile');
+  assert.equal(manifest.deploy_authorized, false);
+  assert.match(manifest.authorization, /^Pending owner review \(2026-10-26\)/);
+  assert.deepEqual(Object.keys(manifest.members), NAMES);
+  assert.match(manifest.notes, /run 39669873076/);
+  assert.match(PLAN.notes, /Onboarding reconciliation \(2026-10-26, planning only, not authorized\)/);
+  const inspect = (name) => ({ ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: name });
+  for (const name of NAMES) {
+    const onMain = sha(`aws/functions/api/${name}`);
+    const row = PLAN.members[name];
+    const entry = manifest.members[name];
+    // The live bytes, from their recorded evidence: the 2026-10-17 release manifest's accepted bytes
+    // (main's file at 008af40e2, which the 2026-10-21 rebuild deployed; observed by RUNS[name]).
+    const live = RELEASE.members[name].accepted_sha256;
+    assert.notEqual(onMain, live, name);
+    assert.deepEqual(entry, { live_sha256: live, accepted_sha256: onMain, operation: 'replace', previous_manifest: entry.previous_manifest }, name);
+    // The manifest that planned main's bytes still records them as accepted.
+    assert.equal(readJson(entry.previous_manifest).members[name].accepted_sha256, onMain, name);
+    assert.equal(row.operation, 'replace', name);
+    assert.equal(row.accepted_sha256, onMain, name);
+    assert.equal(row.expected_live_sha256, live, name);
+    assert.equal(row.manifest, MANIFEST_REL, name);
+    assert.match(manifest.notes, new RegExp(`run ${RUNS[name]}`), name);
+    assert.equal(resolvePlannedMember(name, { root: ROOT, plan: PLAN }).ok, true, name);
+    const ready = await run(inspect(name), { root: ROOT, inspectLive: liveFor(name, { sha256: live }) });
+    assert.equal(ready.mutation, false, name);
+    assert.notEqual(ready.state, 'ALREADY_ACCEPTED', name);
+    const done = await run(inspect(name), { root: ROOT, inspectLive: liveFor(name, { sha256: onMain }) });
+    assert.equal(done.state, 'ALREADY_ACCEPTED', name);
+  }
+  // Plan order: the four members in this order, before the send module and providers.mjs.
+  const at = (name) => PLAN.order.indexOf(name);
+  for (let i = 1; i < NAMES.length; i += 1) assert.ok(at(NAMES[i - 1]) < at(NAMES[i]), NAMES[i]);
+  assert.ok(at(NAMES[NAMES.length - 1]) < at('providers/production/moov-send.mjs'));
+});
+
 test('Stakeholder settings edit: the three members record the bytes production runs 40189236116, 40189560481 and 40189657073 applied', () => {
   const PLANNED_REL = 'aws/tests/fixtures/production-stakeholder-settings-edit-manifest-2026-10-25.json';
   const APPLIED_REL = 'aws/tests/fixtures/production-stakeholder-settings-edit-applied-manifest-2026-10-25.json';
