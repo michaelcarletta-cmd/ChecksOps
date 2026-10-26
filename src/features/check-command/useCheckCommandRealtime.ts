@@ -22,7 +22,7 @@ import {
  *
  * AWS backend (staging and production `--mode aws` builds): the adapter's
  * realtime channel is a no-op, so nothing above ever fires. Instead the queue
- * and every lane count refetch every 15s, and again when the browser tab
+ * and every lane count refetch every 5s while the tab is visible, and again when the browser tab
  * regains focus (throttled to once per 10s). Every query root is refreshed
  * together, including the lane badge totals ("check-stage-totals"), which
  * previously stayed stale until a full page reload.
@@ -41,7 +41,7 @@ export function useCheckCommandRealtime(tenantId: string | null | undefined) {
     void refreshCheckQueues(qc);
   }, [qc, tenantId]);
 
-  useAwsPollingFallback(!!tenantId, poll, 15_000);
+  useAwsPollingFallback(!!tenantId, poll, 5_000);
 
   useEffect(() => {
     if (!tenantId) return;
