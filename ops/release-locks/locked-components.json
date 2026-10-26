@@ -863,8 +863,8 @@
       "production_active": false,
       "environment": "unknown",
       "source": {
-        "git_sha": "c3521f7343843bfe28046391e1df0251e345ce34",
-        "tree_hash": "6eff0ee854aeedd1979876aaefced132b1508fdf475db954086ed595702aade2",
+        "git_sha": "8167bdde1f0e34f2f1e6daad8be2d57d6aa7582a",
+        "tree_hash": "c0855cac2c43ddb7f57cefe7c8b2f171a8794a77cb8d821e1e24ce3c67305578",
         "merged": false,
         "merged_pr": null
       },
@@ -897,7 +897,7 @@
         "production overlay receipts"
       ],
       "open_pr_overlap": [],
-      "notes": "Owner-approved 2026-10-13 (PR #922). Production sends: stakeholders by ACH credit, partners the check is shared with wallet to wallet (else their bank), bank top-up when the balance is short; any tenant member, two-factor once per login, durable per-leg intent before each Moov POST. No SQL change (payment_transfers under SQL 72). PR #923 (owner-approved hash update 2026-10-14): partners added to the check stakeholders can be paid while the partnership is active and the share was not revoked. Partner picker fix (owner-approved hash update 2026-10-14): a partner with an active partnership (SQL 76 consent guard) can be paid on the sender's own check without a stakeholder row; a revoked share of the check still blocks them. Staging sends (owner-approved hash update 2026-10-25): the same module also serves staging against the Moov sandbox (handleSandboxMoovSend: sandbox credentials, environment='sandbox' rows, two-factor kept; the production-only send and financial-permission switches are not consulted there); the production path is unchanged."
+      "notes": "Owner-approved 2026-10-13 (PR #922). Production sends: stakeholders by ACH credit, partners the check is shared with wallet to wallet (else their bank), bank top-up when the balance is short; any tenant member, two-factor once per login, durable per-leg intent before each Moov POST. No SQL change (payment_transfers under SQL 72). PR #923 (owner-approved hash update 2026-10-14): partners added to the check stakeholders can be paid while the partnership is active and the share was not revoked. Partner picker fix (owner-approved hash update 2026-10-14): a partner with an active partnership (SQL 76 consent guard) can be paid on the sender's own check without a stakeholder row; a revoked share of the check still blocks them. Staging sends (owner-approved hash update 2026-10-25): the same module also serves staging against the Moov sandbox (handleSandboxMoovSend: sandbox credentials, environment='sandbox' rows, two-factor kept; the production-only send and financial-permission switches are not consulted there); the production path is unchanged. Payee sends (owner-approved hash update 2026-10-26): payees who finished setup through the payee link (origin provider_recipient, SQL 113) are paid like organization-owned stakeholders, with the same checks; homeowner, partner-shared and partner-payout rows are still refused."
     },
     "moov-production-invoice": {
       "id": "moov-production-invoice",

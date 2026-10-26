@@ -1,0 +1,14 @@
+{
+  "workstream_id": "production-payee-send",
+  "authorization": "Pending owner review (2026-10-26). Planning only: nothing is live or verified. The production apply still needs its own owner approval, a staging acceptance reference and a read-only production inspect that confirms the live bytes.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Payee sends (owner request 2026-10-26): a check send can pay a payee who finished setup through the payee link (stakeholder_accounts origin 'provider_recipient', which SQL 113 marks verified with its Moov account and bank and sets is_active = false on disconnect), with the same active, verified, environment, Moov account, bank and live payment method checks as an organization-owned row. Homeowner (provider_connected), partner-shared and partner-payout rows are still refused. No SQL change. live_sha256 is the bytes production apply run 40222560555 put live (production-sandbox-send applied manifest, ALREADY_ACCEPTED in read-only inspect run 40222963538); a read-only production overlay inspect must confirm it before any apply.",
+  "members": {
+    "providers/production/moov-send.mjs": {
+      "live_sha256": "42655ac84abdeb93579d1ae24e69338268b02633c3b1d5014d219a4ace8f5217",
+      "accepted_sha256": "178988b5a372011a128473025c2426323931c58cf4d68a5d33faaf1894431573",
+      "operation": "replace"
+    }
+  }
+}

@@ -467,7 +467,14 @@ test('stakeholders must belong to this organization, be verified and have a prod
       [[{ ...STAKEHOLDERS[0], provider_account_id: 'sandbox-only' }], 'recipient_setup_required'],
       [[{ ...STAKEHOLDERS[0], provider_bank_account_id: 'other-bank' }], 'recipient_bank_not_ready'],
       [[{ ...STAKEHOLDERS[0], origin: 'homeowner_link' }], 'recipient_not_supported'],
+      [[{ ...STAKEHOLDERS[0], origin: 'partner_shared' }], 'recipient_not_supported'],
+      [[{ ...STAKEHOLDERS[0], origin: 'provider_connected' }], 'recipient_not_supported'],
       [[{ ...STAKEHOLDERS[0], is_partner_payout: true }], 'recipient_not_supported'],
+      [[{ ...STAKEHOLDERS[0], origin: 'provider_recipient', is_partner_payout: true }], 'recipient_not_supported'],
+      // A payee whose setup is unfinished, or whom the organization disconnected, is not paid.
+      [[{ ...STAKEHOLDERS[0], origin: 'provider_recipient', verification_status: 'pending' }], 'recipient_not_verified'],
+      [[{ ...STAKEHOLDERS[0], origin: 'provider_recipient', provider_bank_account_id: null }], 'recipient_setup_required'],
+      [[{ ...STAKEHOLDERS[0], origin: 'provider_recipient', is_active: false }], 'recipient_not_found'],
       [[{ ...STAKEHOLDERS[0], provider_environment: 'sandbox' }], 'recipient_setup_required'],
     ]) {
       const client = fakeDb({ stakeholders });
@@ -477,6 +484,17 @@ test('stakeholders must belong to this organization, be verified and have a prod
       assert.equal(moov.posts().length, 0, code);
       assert.equal(client.committed.transfers.length, 0, code);
     }
+  });
+});
+
+test('a payee who finished setup (SQL 113 provider_recipient) is paid to their bank like an organization-owned stakeholder', async () => {
+  await withEnv(FLAGS, async () => {
+    const client = fakeDb({ stakeholders: [{ ...STAKEHOLDERS[0], origin: 'provider_recipient' }] });
+    const moov = moovStub();
+    const result = await run(client, moov);
+    assert.equal(result.ok, true, JSON.stringify(result));
+    assert.ok(moov.posts().length > 0, 'the transfer is sent');
+    assert.ok(client.committed.transfers.length > 0, 'the transfer is recorded');
   });
 });
 
