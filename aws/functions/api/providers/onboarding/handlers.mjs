@@ -291,36 +291,93 @@ export const MONTHLY_VOLUME_RANGES = Object.freeze([
   'under-10k', '10k-50k', '50k-100k', '100k-250k', '250k-500k', '500k-1m', '1m-5m', 'over-5m',
 ]);
 
+// Moov's extended underwriting (asked once monthly volume is $10k or more), from the v2025.07.00
+// models of Moov's SDK @moovio/sdk 25.9.13.
+export const BUSINESS_PRESENCE = Object.freeze([
+  'commercial-office', 'home-based', 'mixed-presence', 'mobile-business', 'online-only', 'retail-storefront',
+]);
+export const PENDING_LITIGATION = Object.freeze([
+  'none', 'bankruptcy-or-insolvency', 'consumer-protection-or-class-action', 'data-breach-or-privacy',
+  'employment-or-workplace-disputes', 'fraud-or-financial-crime', 'government-enforcement-or-investigation',
+  'intellectual-property', 'personal-injury-or-medical', 'other',
+]);
+const CUSTOMER_TYPES = ['business', 'consumer', 'p2p'];
+
 const plainObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 const onlyKeys = (v, keys) => plainObject(v) && Object.keys(v).every((k) => keys.includes(k));
+const wholeDollars = (v) => Number.isSafeInteger(v) && v > 0;
 
 /**
  * The underwriting answers ChecksOps sends: geographic reach and the ACH send and collect monthly
- * volume ranges, exactly. Returns { answers } or { field, message } for the first invalid part.
+ * volume ranges (required), and the extended answers Moov asks for above $10k a month (each
+ * optional here; Moov says which it still needs): per side the average and largest ACH payment in
+ * whole USD next to the range, business presence, pending litigation, and the volume share by
+ * customer type (whole percentages totalling 100). Anything else is refused.
+ * Returns { answers } or { field, message } for the first invalid part.
  */
 export function validateUnderwritingAnswers(answers) {
-  if (!onlyKeys(answers, ['geographicReach', 'sendFunds', 'collectFunds'])) {
+  const top = ['geographicReach', 'sendFunds', 'collectFunds', 'businessPresence', 'pendingLitigation', 'volumeShareByCustomerType'];
+  if (!onlyKeys(answers, top)) {
     return { field: 'answers', message: 'Answer where your customers are and your monthly ACH volumes.' };
   }
   if (!GEOGRAPHIC_REACH.includes(answers.geographicReach)) {
     return { field: 'answers.geographicReach', message: 'Choose where your customers are located.' };
   }
-  const volume = (side) => {
+  const activity = (side) => {
     const s = answers[side];
     if (!onlyKeys(s, ['ach']) || !onlyKeys(s.ach, ['estimatedActivity'])
-      || !onlyKeys(s.ach.estimatedActivity, ['monthlyVolumeRange'])) return null;
-    const range = s.ach.estimatedActivity.monthlyVolumeRange;
-    return MONTHLY_VOLUME_RANGES.includes(range) ? range : null;
+      || !onlyKeys(s.ach.estimatedActivity, ['monthlyVolumeRange', 'averageTransactionAmount', 'maximumTransactionAmount'])) return null;
+    const { monthlyVolumeRange, averageTransactionAmount: average, maximumTransactionAmount: maximum } = s.ach.estimatedActivity;
+    if (!MONTHLY_VOLUME_RANGES.includes(monthlyVolumeRange)) return null;
+    if (average !== undefined && !wholeDollars(average)) return null;
+    if (maximum !== undefined && !wholeDollars(maximum)) return null;
+    if (average !== undefined && maximum !== undefined && maximum < average) return null;
+    return {
+      ach: {
+        estimatedActivity: {
+          monthlyVolumeRange,
+          ...(average !== undefined ? { averageTransactionAmount: average } : {}),
+          ...(maximum !== undefined ? { maximumTransactionAmount: maximum } : {}),
+        },
+      },
+    };
   };
-  const send = volume('sendFunds');
-  if (!send) return { field: 'answers.sendFunds', message: 'Choose your estimated monthly volume for ACH payments you send.' };
-  const collect = volume('collectFunds');
-  if (!collect) return { field: 'answers.collectFunds', message: 'Choose your estimated monthly volume for ACH payments you accept.' };
+  const send = activity('sendFunds');
+  if (!send) {
+    return { field: 'answers.sendFunds', message: 'Choose your monthly volume for ACH payments you send; amounts are whole dollars, the largest at least the average.' };
+  }
+  const collect = activity('collectFunds');
+  if (!collect) {
+    return { field: 'answers.collectFunds', message: 'Choose your monthly volume for ACH payments you accept; amounts are whole dollars, the largest at least the average.' };
+  }
+  const extended = {};
+  if (answers.businessPresence !== undefined) {
+    if (!BUSINESS_PRESENCE.includes(answers.businessPresence)) {
+      return { field: 'answers.businessPresence', message: 'Choose where your business operates.' };
+    }
+    extended.businessPresence = answers.businessPresence;
+  }
+  if (answers.pendingLitigation !== undefined) {
+    if (!PENDING_LITIGATION.includes(answers.pendingLitigation)) {
+      return { field: 'answers.pendingLitigation', message: 'Choose whether your business has pending litigation.' };
+    }
+    extended.pendingLitigation = answers.pendingLitigation;
+  }
+  if (answers.volumeShareByCustomerType !== undefined) {
+    const share = answers.volumeShareByCustomerType;
+    const parts = onlyKeys(share, CUSTOMER_TYPES) ? Object.values(share) : null;
+    if (!parts || parts.length === 0 || !parts.every((n) => Number.isSafeInteger(n) && n >= 0 && n <= 100)
+      || parts.reduce((a, n) => a + n, 0) !== 100) {
+      return { field: 'answers.volumeShareByCustomerType', message: 'Business, consumer and person-to-person shares must be whole percentages that add up to 100.' };
+    }
+    extended.volumeShareByCustomerType = Object.fromEntries(CUSTOMER_TYPES.filter((k) => k in share).map((k) => [k, share[k]]));
+  }
   return {
     answers: {
       geographicReach: answers.geographicReach,
-      sendFunds: { ach: { estimatedActivity: { monthlyVolumeRange: send } } },
-      collectFunds: { ach: { estimatedActivity: { monthlyVolumeRange: collect } } },
+      sendFunds: send,
+      collectFunds: collect,
+      ...extended,
     },
   };
 }

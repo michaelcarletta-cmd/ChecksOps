@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -8,18 +9,16 @@ import { ClipboardList, Loader2, Save } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import {
+  BUSINESS_PRESENCE_OPTIONS,
+  EMPTY_UNDERWRITING_ANSWERS as EMPTY,
   GEOGRAPHIC_REACH_OPTIONS,
   MONTHLY_VOLUME_OPTIONS,
+  PENDING_LITIGATION_OPTIONS,
   answersFromUnderwriting,
   buildUnderwritingPayload,
+  needsExtendedUnderwriting,
   type UnderwritingAnswers as Answers,
 } from "@/lib/underwritingPayload";
-
-const EMPTY: Answers = {
-  geographicReach: "",
-  sendAchMonthlyVolume: "",
-  collectAchMonthlyVolume: "",
-};
 
 /** Plain words for provider error codes; the provider is never named. */
 const plainError = (code: string) =>
@@ -63,6 +62,20 @@ export function UnderwritingQuestionnairePanel({
   const [onFile, setOnFile] = useState(false);
 
   const set = (patch: Partial<Answers>) => setAnswers((a) => ({ ...a, ...patch }));
+  const extended = needsExtendedUnderwriting(answers);
+
+  const textField = (key: keyof Answers, label: string, placeholder: string) => (
+    <div className="space-y-1.5">
+      <Label className="text-xs">{label}</Label>
+      <Input
+        inputMode="numeric"
+        value={answers[key]}
+        onChange={(e) => set({ [key]: e.target.value } as Partial<Answers>)}
+        placeholder={placeholder}
+        disabled={readOnly}
+      />
+    </div>
+  );
 
   const load = useCallback(async () => {
     if (!tenantId) return;
@@ -168,6 +181,55 @@ export function UnderwritingQuestionnairePanel({
                 ))}
               </SelectContent>
             </Select>
+          </div>
+        </div>
+
+        <div className="space-y-3 border-t pt-3">
+          <p className="text-xs text-muted-foreground">
+            {extended
+              ? "Because your monthly volume is $10,000 or more, these answers are required."
+              : "Required once either monthly volume is $10,000 or more; optional below that."}
+          </p>
+
+          <div className="grid sm:grid-cols-2 gap-3">
+            {textField("sendAchAverageAmount", "Average ACH payment you send ($)", "e.g. 2500")}
+            {textField("sendAchMaximumAmount", "Largest ACH payment you send ($)", "e.g. 25000")}
+            {textField("collectAchAverageAmount", "Average ACH payment you accept ($)", "e.g. 2500")}
+            {textField("collectAchMaximumAmount", "Largest ACH payment you accept ($)", "e.g. 25000")}
+          </div>
+
+          <div className="grid sm:grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Where does your business operate?</Label>
+              <Select value={answers.businessPresence} onValueChange={(v) => set({ businessPresence: v })} disabled={readOnly}>
+                <SelectTrigger><SelectValue placeholder="Choose your business presence" /></SelectTrigger>
+                <SelectContent>
+                  {BUSINESS_PRESENCE_OPTIONS.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Pending litigation</Label>
+              <Select value={answers.pendingLitigation} onValueChange={(v) => set({ pendingLitigation: v })} disabled={readOnly}>
+                <SelectTrigger><SelectValue placeholder="Choose None if there is none" /></SelectTrigger>
+                <SelectContent>
+                  {PENDING_LITIGATION_OPTIONS.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs">Share of your payment volume by customer type (whole %, totals 100)</Label>
+            <div className="grid grid-cols-3 gap-3">
+              {textField("businessSharePercent", "Businesses", "e.g. 80")}
+              {textField("consumerSharePercent", "Consumers", "e.g. 20")}
+              {textField("p2pSharePercent", "Person to person", "0")}
+            </div>
           </div>
         </div>
 

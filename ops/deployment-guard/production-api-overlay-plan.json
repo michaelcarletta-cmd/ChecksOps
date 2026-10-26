@@ -826,10 +826,10 @@
     },
     "providers/onboarding/handlers.mjs": {
       "operation": "add",
-      "accepted_sha256": "e210200d8bd5c08c6d961e133df5a20a46281da53adf25ad9c8b9f99dbb0b97c",
+      "accepted_sha256": "9a46bc79a11463540b9b4b2ee0be577c53843ae56a30d5acae5a1b39acca58fc",
       "expected_live_sha256": null,
       "sql_before": "aws/workflows/sql/105_onboarding_payment_table_grants.sql",
-      "manifest": "aws/tests/fixtures/production-moov-industry-underwriting-manifest-2026-10-26.json"
+      "manifest": "aws/tests/fixtures/production-moov-extended-underwriting-manifest-2026-10-26.json"
     },
     "providers/catalog.mjs": {
       "operation": "replace",
