@@ -207,6 +207,28 @@ async function drainOutbox(client, ctx, { deps, fetchImpl }) {
   return results;
 }
 
+/** Moov's account verification: verificationStatus first, then the older status fields. */
+export function accountVerificationStatus(remote) {
+  return remote?.verification?.verificationStatus
+    ?? remote?.profile?.business?.verification?.status
+    ?? remote?.verification?.status
+    ?? null;
+}
+
+/**
+ * The shared onboarding status, except that an account whose requested merchant capabilities are
+ * all enabled at Moov is active unless its verification failed or must be resubmitted: Moov only
+ * enables them on an account it has verified.
+ */
+export function onboardingStatusFromMoov({ verification, capabilities, disabled }) {
+  const status = normalizeOnboardingStatus({ verificationStatus: verification, capabilities, disabled });
+  if (disabled || status === 'restricted') return status;
+  const enabled = new Set((capabilities ?? [])
+    .filter((c) => String(c?.status ?? '').toLowerCase() === 'enabled')
+    .map((c) => String(c?.capability ?? '').toLowerCase()));
+  return MERCHANT_CAPABILITIES.every((id) => enabled.has(String(id).toLowerCase())) ? 'active' : status;
+}
+
 async function pullMoovStatus(client, ctx, { fetchImpl }) {
   const account = await loadAccount(client, ctx.tenantId, ctx.environment);
   if (!account?.provider_account_id) return { status: 'not_started', liveProviderCalled: false };
@@ -215,7 +237,10 @@ async function pullMoovStatus(client, ctx, { fetchImpl }) {
   const caps = await moovFetch(`/accounts/${accountId}/capabilities`, { scopes: scopes.capabilitiesRead(accountId), fetchImpl });
   const banks = await moovFetch(`/accounts/${accountId}/bank-accounts`, { scopes: scopes.bankAccountsRead(accountId), fetchImpl });
   const capList = (caps ?? []).map((c) => ({ capability: c.capability, status: c.status }));
-  const verification = remote?.profile?.business?.verification?.status ?? remote?.verification?.status ?? null;
+  // Moov's account verification carries verificationStatus and the older status (both deprecated
+  // on the pinned version). Staging 2026-10-26: Moov showed the account Verified with all four
+  // requested capabilities enabled while ChecksOps, reading status, stored "unverified".
+  const verification = accountVerificationStatus(remote);
   const missing = missingRequestedCapabilities(caps ?? [], MERCHANT_CAPABILITIES);
   if (missing.length > 0 && String(verification || '').toLowerCase() !== 'failed') {
     await moovFetch(`/accounts/${accountId}/capabilities`, {
@@ -227,7 +252,14 @@ async function pullMoovStatus(client, ctx, { fetchImpl }) {
     });
   }
   const flags = capabilityFlags(caps ?? []);
-  const onboarding = normalizeOnboardingStatus({ verificationStatus: verification, capabilities: caps ?? [], disabled: !!remote?.disabledOn });
+  const onboarding = onboardingStatusFromMoov({ verification, capabilities: caps ?? [], disabled: !!remote?.disabledOn });
+  onboardingLog('moov_onboarding_status_pulled', {
+    tenant: ctx.tenantId, environment: ctx.environment, onboarding_status: onboarding,
+    verification_status: remote?.verification?.verificationStatus ?? null,
+    verification_legacy_status: remote?.verification?.status ?? null,
+    business_verification_status: remote?.profile?.business?.verification?.status ?? null,
+    capabilities: capList,
+  });
   // Merge a small, PII-free summary; never overwrite provider_metadata wholesale.
   await client.query(
     `UPDATE public.payment_provider_accounts SET

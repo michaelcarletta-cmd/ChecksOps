@@ -10,6 +10,8 @@ import { PLATFORM_OWNER_SQL, TENANT_MOOV_ENV_SQL } from '../functions/api/provid
 import {
   NEW_ONBOARDING_FUNCTION_NAMES,
   ONBOARDING_FUNCTION_NAMES,
+  accountVerificationStatus,
+  onboardingStatusFromMoov,
 } from '../functions/api/providers/onboarding/handlers.mjs';
 import { sniffContentType } from '../functions/api/providers/onboarding/documents.mjs';
 import {
@@ -1071,6 +1073,51 @@ test('underwriting: the extended answers (ACH amounts next to the range, presenc
       assert.equal(refused.field, field);
       assert.equal(none.calls.some((c) => c.url.endsWith('/underwriting')), false, `${field}: not sent to Moov`);
     }
+  });
+});
+
+const ENABLED_MERCHANT_CAPS = ['transfers', 'collect-funds.ach', 'send-funds.ach', 'wallet.balance']
+  .map((capability) => ({ capability, status: 'enabled' }));
+
+test('Moov status: verificationStatus is read before the older status; all four merchant capabilities enabled is active unless verification failed', () => {
+  assert.equal(accountVerificationStatus({ verification: { verificationStatus: 'verified', status: 'unverified' } }), 'verified');
+  assert.equal(accountVerificationStatus({ verification: { status: 'verified' } }), 'verified');
+  assert.equal(accountVerificationStatus({ profile: { business: { verification: { status: 'pending' } } }, verification: { status: 'unverified' } }), 'pending');
+  assert.equal(accountVerificationStatus({}), null);
+  // Staging 2026-10-26: the older status said unverified while all four capabilities were enabled.
+  assert.equal(onboardingStatusFromMoov({ verification: 'unverified', capabilities: ENABLED_MERCHANT_CAPS, disabled: false }), 'active');
+  assert.equal(onboardingStatusFromMoov({ verification: 'verified', capabilities: ENABLED_MERCHANT_CAPS, disabled: false }), 'active');
+  // One requested capability still pending: not active.
+  const pending = ENABLED_MERCHANT_CAPS.map((c) => (c.capability === 'collect-funds.ach' ? { ...c, status: 'pending' } : c));
+  assert.equal(onboardingStatusFromMoov({ verification: 'unverified', capabilities: pending, disabled: false }), 'verification_pending');
+  // Failed or resubmit verification and a disabled account are never made active.
+  assert.equal(onboardingStatusFromMoov({ verification: 'failed', capabilities: ENABLED_MERCHANT_CAPS, disabled: false }), 'restricted');
+  assert.equal(onboardingStatusFromMoov({ verification: 'resubmit', capabilities: ENABLED_MERCHANT_CAPS, disabled: false }), 'restricted');
+  assert.equal(onboardingStatusFromMoov({ verification: 'verified', capabilities: ENABLED_MERCHANT_CAPS, disabled: true }), 'suspended');
+});
+
+test('moov-sync Refresh stores active and verified from Moov\'s verificationStatus and logs what Moov returned', async () => {
+  await withEnv(BASE_ENV, async () => {
+    resetMoovTokenCache();
+    const db = makeDb();
+    await run('moov-onboarding-save', saveBody(), USERS.owner, { db });
+    const fetch = moovFetch([
+      { match: new RegExp(`/accounts/${MOOV_ACCOUNT}$`), method: 'GET', body: { accountID: MOOV_ACCOUNT, verification: { verificationStatus: 'verified', status: 'unverified' } } },
+      { match: /\/capabilities$/, method: 'GET', body: ENABLED_MERCHANT_CAPS },
+    ]);
+    const { result, lines } = await captureConsole(() => run('moov-sync', { tenant_id: TENANT }, USERS.owner, { db, fetch }));
+    assert.equal(result.ok, true, JSON.stringify(result));
+    const update = db.state.accountUpdates.filter((u) => u.sql.includes('can_send_payments = $5')).at(-1);
+    assert.ok(update, 'status written');
+    assert.equal(update.params[1], 'active');
+    assert.equal(update.params[2], 'verified');
+    const log = lines.find((line) => line.includes('moov_onboarding_status_pulled'));
+    assert.ok(log, 'status read logged');
+    const parsed = JSON.parse(log);
+    assert.equal(parsed.onboarding_status, 'active');
+    assert.equal(parsed.verification_status, 'verified');
+    assert.equal(parsed.verification_legacy_status, 'unverified');
+    assert.deepEqual(parsed.capabilities, ENABLED_MERCHANT_CAPS);
   });
 });
 
