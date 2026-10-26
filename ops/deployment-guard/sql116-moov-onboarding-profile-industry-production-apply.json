@@ -1,8 +1,8 @@
 {
   "id": "sql116-moov-onboarding-profile-industry-production-apply",
   "migration": "sql116",
-  "authorization": "Owner approved 2026-10-26 (the owner's words, verbatim: \"build the SQL 116 pin PR\"; this pin change is bound to that approval and takes effect only once the owner reviews and merges it): production apply of SQL 116 on the staging acceptance below (production d145c18e29fb0e309222d250e270f5750be7f23a8cbe336190d5c9d7bfd7d9dd -> c99fc953f7ab14c2c68647ed3bcfa3e0b50a5aa4888bdc9f9c71163392314ee1); execute true takes effect only once this change is merged. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
-  "execute": true,
+  "authorization": "Applied to production on 2026-10-26; execute is false again, so this pin is no longer a standing authorization and a re-apply needs a new reviewed pin change. The owner approved the SQL 116 production pin on 2026-10-26 in the words \"build the SQL 116 pin PR\", which covered the SQL 116 production pin (d145c18e -> c99fc953), the read-only production inspect, the staging acceptance and the execute change (#1266, merged on \"merge 1266 when green\"), and approved the one apply run recorded in applied (workstream prod-sql116-moov-onboarding-profile-industry-20261026) in the words \"apply SQL 116 in production\", passed to it verbatim. That approval covered that run only",
+  "execute": false,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -60,5 +60,103 @@
     "ok": true,
     "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/40339373370",
     "basis": "Guarded staging apply from the same pre-state as production. The guarded staging SQL executor (choice sql116-moov-onboarding-profile-industry) carried SQL 116 from deploy run 40335727438 (inspect run 40335246738 before it found the executor at CodeSha256 k6Gyn1k4... without SQL 116); at the apply the live executor was y4Tko8e2L7bvEIzW0ErdLASp4GXDBqK3wpmqCb/g7Ug= and already carried main's package. Read-live run 40336144625 (2026-10-26, main d8d4e3b) reported already_applied false, precondition_failures [] and live d145c18e29fb0e309222d250e270f5750be7f23a8cbe336190d5c9d7bfd7d9dd, recorded as the staging pin's expected_live_definition_sha256. The staging apply run 40339373370 (2026-10-26, staging pin commit eb945142973b8c1e2f435d57c11dd4dca797e0ef) reported result applied, before d145c18e29fb0e309222d250e270f5750be7f23a8cbe336190d5c9d7bfd7d9dd, after c99fc953f7ab14c2c68647ed3bcfa3e0b50a5aa4888bdc9f9c71163392314ee1 = intended_replacement_sha256. The read-live after it (run 40339796555) reported already_applied true and live c99fc953f7ab14c2c68647ed3bcfa3e0b50a5aa4888bdc9f9c71163392314ee1 = intended_replacement_sha256: moov_onboarding_profiles.industry intended. The pre-states are identical: staging before its apply and production at its inspect (SSM 5120ddac-a515-4411-92c7-7c0046de0790) both report d145c18e29fb0e309222d250e270f5750be7f23a8cbe336190d5c9d7bfd7d9dd, so this is direct acceptance from the same pre-state, not substitute evidence. The column is covered on PostgreSQL 16 by aws/tests/sql116-moov-onboarding-profile-industry-pg.test.mjs. The production apply refuses unless the live state still equals this pin's expected_live_definition_sha256, and its post-conditions roll back unless the intended fingerprint is reached with the table's other columns, its ACL and the rest of the catalog unchanged."
+  },
+  "applied": {
+    "date": "2026-10-26",
+    "result": "applied",
+    "source_commit": "f403dbdfd6c0de90eb6effc7484a0dcac62d0728",
+    "source_commit_basis": "SOURCE_COMMIT in the tarball (written by sql53-temporary-transfer) equals --commit, and the tarball sha256 equals --expected-tarball-sha256 as copied by the operator from that transfer run's log (TARBALL_SHA256 line); the one-shot source step reported tarball_sha256_matches_sidecar true, tarball_sha256_matches_expected true, tree_matches_tarball true and tarball_files 12754; the run log itself was not read by the one-shot.",
+    "source_tarball": {
+      "file": "source-f403dbdfd6c0de90eb6effc7484a0dcac62d0728.tar.gz",
+      "sha256": "39e724ff8681d0927cff286530787281f1ce7e7e7e926e509f77714fb00297d2"
+    },
+    "migration_source_sha256": "31217651d76753c9f76232f0bd2c64ab3fd9a36754ccda081fda18169437b8b8",
+    "migration_source_sha256_note": "The one-shot source step hashed aws/workflows/sql/116_moov_onboarding_profile_industry.sql in the transfer tarball: equal to source_sha256 (the pin; migration_matches_pin true).",
+    "runner": "i-0c35557c4e5385406",
+    "runner_basis": "operator-supplied --runner (not verified by the one-shot)",
+    "workstream_id": "prod-sql116-moov-onboarding-profile-industry-20261026",
+    "one_use_id": "sql116-prod-95c04535-a6bc-4311-9ac5-50422f3cd1e6",
+    "one_use_id_consumed": true,
+    "one_use_id_consumed_basis": "Inferred from the successful apply (the tool records the one_use_id after COMMIT and only warns if that write fails); the consumed-registry entry was not read back separately.",
+    "owner_approval": "apply SQL 116 in production",
+    "owner_approval_basis": "As passed in --approval-statement (base64, --approval-statement-b64) for --approval-scope sql116 and recorded by the one-shot as approval_statement; the owner's message of 2026-10-26 was \"apply SQL 116 in production\". The one-shot cannot verify who said it.",
+    "operator": "michaelcarletta-cmd",
+    "apply_ssm_command_id": "8a72e2fc-c769-4ebf-9f00-64feb23d1df4",
+    "one_shot_run_id": "c415fcce-e3ac-4b65-9312-61763899f9b1",
+    "one_shot_note": "One production-sql-one-shot run verified the source, ran the read-only inspect and the runner contracts, built the manifest, issued the receipt and lease (preflight), evaluated (sql116_production_apply_allowed true), applied (exit 0) and ran the post-apply inspect. That run was SSM 8a72e2fc-c769-4ebf-9f00-64feb23d1df4 (2026-10-26T19:40:19Z to 19:40:37Z), run_id c415fcce-e3ac-4b65-9312-61763899f9b1, from main f403dbdfd (transfer run 40388495273, sql53-temporary-transfer.yml on main after the #1266 merge; it printed TARBALL_SHA256 39e724ff8681d0927cff286530787281f1ce7e7e7e926e509f77714fb00297d2): steps pin, source, inspect, contracts, manifest, source-recheck-before-preflight, preflight (receipt_issued), evaluate (sql116_production_apply_allowed true), source-recheck-before-apply, apply (applied) and post-apply-inspect all ok; runner contracts, manifest, receipt and inspects as recorded below. Before it, a read-only --phase inspect of the same one-shot (SSM 1a887b79-ad87-4673-a767-2dedbcf886f4, 2026-10-26T19:39:46Z to 19:40:03Z, exit 0, run_id 55b49160-e539-4580-91d3-b88a2e9f764b, same commit, tarball, workstream and approval statement) completed pin (execute true, staging_acceptance run 40339373370), source, inspect and contracts (claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43) ok with read_only true, live d145c18e29fb0e309222d250e270f5750be7f23a8cbe336190d5c9d7bfd7d9dd (live_matches_expected true), already_applied false, precondition_failures [] and apply_preconditions_met true, current_user and session_user checksops_admin. The apply run's full output was captured; its not_observed_by_this_run list named only the ssm_command_id and the transfer run id (source_staged_by), both recorded here.",
+    "steps": [
+      "pin",
+      "source",
+      "inspect",
+      "contracts",
+      "manifest",
+      "source-recheck-before-preflight",
+      "preflight",
+      "evaluate",
+      "source-recheck-before-apply",
+      "apply",
+      "post-apply-inspect"
+    ],
+    "contract_results": {
+      "claim-ledger": {
+        "ok": true,
+        "passed": "4/4"
+      },
+      "tenant-isolation": {
+        "ok": true,
+        "passed": "6/6"
+      },
+      "financial-write-protections": {
+        "ok": true,
+        "passed": "43/43"
+      }
+    },
+    "pre_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "d145c18e29fb0e309222d250e270f5750be7f23a8cbe336190d5c9d7bfd7d9dd",
+      "live_matches_expected": true,
+      "already_applied": false,
+      "precondition_failures": [],
+      "note": "The apply run's own inspect step (read-only --inspect) immediately before the apply: live == the recorded pre-state d145c18e..., live_matches_expected true, already_applied false, apply_preconditions_met true, precondition_failures [], missing_dependencies [], predecessors sql91 true, successors_applied []; moov_onboarding_profiles.industry state absent. It matched the read-only --phase inspect SSM 1a887b79-ad87-4673-a767-2dedbcf886f4."
+    },
+    "manifest_sha256": "8d735f7dce70fdca49d3db64e1a18c524a99e4e1aabe633ea72ade2b2f3b53df",
+    "receipt": {
+      "migration": "sql116",
+      "workstream": "prod-sql116-moov-onboarding-profile-industry-20261026",
+      "commit": "f403dbdfd6c0de90eb6effc7484a0dcac62d0728",
+      "sql_file": "aws/workflows/sql/116_moov_onboarding_profile_industry.sql",
+      "before_hash": "d145c18e29fb0e309222d250e270f5750be7f23a8cbe336190d5c9d7bfd7d9dd",
+      "after_hash": "c99fc953f7ab14c2c68647ed3bcfa3e0b50a5aa4888bdc9f9c71163392314ee1",
+      "unrelated_catalog_sha256": "be6fd2c8cfea2c90878ad51ba910295d065ee980dcbb65bcef036fb3298f1ffc",
+      "unrelated_catalog_counts": {
+        "relations": 890,
+        "columns": 3542,
+        "constraints": 2234,
+        "policies": 404,
+        "functions": 1326,
+        "indexes": 654,
+        "default_acl": 0,
+        "role_memberships": 15,
+        "roles": 29,
+        "triggers": 180,
+        "views": 25,
+        "types": 18,
+        "schema": 2
+      },
+      "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/40339373370",
+      "result": "applied"
+    },
+    "post_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "c99fc953f7ab14c2c68647ed3bcfa3e0b50a5aa4888bdc9f9c71163392314ee1",
+      "already_applied": true,
+      "precondition_failures": [],
+      "missing_dependencies": [],
+      "predecessors_applied": true,
+      "note": "The one-shot post-apply read-only --inspect: already_applied true (live == intended c99fc953..., so live_matches_expected false and apply_preconditions_met false), precondition_failures [], missing_dependencies [], predecessors_applied true, successors_applied []; moov_onboarding_profiles.industry state intended, as the receipt's release_sql_inspect also reported. current_user and session_user checksops_admin."
+    }
+  },
+  "production_evidence": {
+    "2026-10-26 apply": "Guarded production SQL one-shot on i-0c35557c4e5385406, workstream prod-sql116-moov-onboarding-profile-industry-20261026, main f403dbdfd (tarball 39e724ff…, transfer run 40388495273, migration source 31217651… == pin), owner-approved run (\"apply SQL 116 in production\"), SSM 8a72e2fc-c769-4ebf-9f00-64feb23d1df4, run_id c415fcce-e3ac-4b65-9312-61763899f9b1, one_use_id sql116-prod-95c04535-a6bc-4311-9ac5-50422f3cd1e6 (spent): every step ok; contracts claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43; pre-apply inspect live d145c18e… (live_matches_expected true, precondition_failures []); manifest 8d735f7d…; d145c18e… -> c99fc953…, result applied, unrelated catalog be6fd2c8…; post-apply inspect already_applied true, precondition_failures []. After: public.moov_onboarding_profiles.industry text, nullable, no default, no column grant. Preceded by the read-only --phase inspect SSM 1a887b79-ad87-4673-a767-2dedbcf886f4. No later inspect is recorded. execute is false so the pin is no longer a standing authorization."
   }
 }

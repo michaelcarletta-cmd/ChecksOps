@@ -76,7 +76,8 @@ export const STAGING_WAVE1 = Object.freeze({
   // Wave 17 (owner approved 2026-10-26, "Approve SQL 116 staging apply and merge when green"): SQL 116
   // adds moov_onboarding_profiles.industry. Read at main d8d4e3b after the executor carried it
   // (deploy run 40335727438): no industry column, SQL 91 in place.
-  sql116: Object.freeze({ wave: 17, approved: '2026-10-26', run: '40336144625', live: 'd145c18e29fb0e309222d250e270f5750be7f23a8cbe336190d5c9d7bfd7d9dd' }),
+  // Applied by the guarded staging executor run 40339373370 (receipt d145c18e… -> c99fc953…).
+  sql116: Object.freeze({ wave: 17, approved: '2026-10-26', run: '40336144625', live: 'd145c18e29fb0e309222d250e270f5750be7f23a8cbe336190d5c9d7bfd7d9dd', apply_run: '40339373370' }),
   sql98: Object.freeze({ wave: 3, approved: '2026-10-18', run: '39083278136', live: '296c3d6a274e10f66005fb9eaecf93fa17b81bd8db3607037ca07698fddd3275', apply_run: '39085677318' }),
 });
 

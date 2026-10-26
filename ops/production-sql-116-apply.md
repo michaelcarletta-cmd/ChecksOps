@@ -48,7 +48,44 @@ words of 2026-10-26, "build the SQL 116 pin PR". Each apply still needs the owne
 Apply SQL 116 before the onboarding members `store.mjs`, `moov-sync.mjs` and `handlers.mjs`
 (production-moov-onboarding-reconcile manifest).
 
-**Status:** staging applied (wave 17); production pin execute-authorized; production apply pending.
+**Status:** applied to staging and to production (2026-10-26); the production pin is retired
+(`execute: false` again; see "Production apply of SQL 116").
+
+## Production apply of SQL 116 (2026-10-26)
+
+The owner's message of 2026-10-26 was "apply SQL 116 in production"; it was passed verbatim (base64,
+`--approval-statement-b64`) and recorded by the one-shot as `approval_statement`. The one-shot
+cannot verify who said it, and the statement covered this run only. `production-sql-one-shot.mjs
+--migration sql116 --approval-scope sql116` on `i-0c35557c4e5385406` (operator-supplied
+`--runner`, not verified by the one-shot), operator `michaelcarletta-cmd`, workstream
+`prod-sql116-moov-onboarding-profile-industry-20261026`, from main `f403dbdfd` (tarball
+`source-f403dbdfd6c0de90eb6effc7484a0dcac62d0728.tar.gz`, sha256 `39e724ff…`, 12754 files, transfer
+run `40388495273`, `sql53-temporary-transfer.yml` on main after the #1266 merge; it printed
+`TARBALL_SHA256 39e724ff8681d0927cff286530787281f1ce7e7e7e926e509f77714fb00297d2`).
+
+- **Inspect phase:** SSM `1a887b79-ad87-4673-a767-2dedbcf886f4` (exit 0), run_id
+  `55b49160-e539-4580-91d3-b88a2e9f764b`: pin (execute true, staging acceptance run 40339373370),
+  source, inspect and contracts ok (claim-ledger 4/4, tenant-isolation 6/6,
+  financial-write-protections 43/43), read-only; live `d145c18e…` (live_matches_expected true),
+  already_applied false, precondition_failures [], apply_preconditions_met true, connected as
+  `checksops_admin`.
+- **Apply phase:** SSM `8a72e2fc-c769-4ebf-9f00-64feb23d1df4` (2026-10-26T19:40:19Z to 19:40:37Z,
+  exit 0), run_id `c415fcce-e3ac-4b65-9312-61763899f9b1`, one_use_id
+  `sql116-prod-95c04535-a6bc-4311-9ac5-50422f3cd1e6` (spent): every step ok (pin, source, inspect,
+  contracts, manifest, source-recheck-before-preflight, preflight (receipt issued), evaluate
+  (`sql116_production_apply_allowed` true), source-recheck-before-apply, apply (applied),
+  post-apply-inspect); migration source `31217651…` (== pin); pre-apply inspect live `d145c18e…`,
+  live_matches_expected true, precondition_failures [], `moov_onboarding_profiles.industry` absent;
+  contracts claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43; manifest
+  `8d735f7d…`; receipt `d145c18e…` -> `c99fc953…`, result applied, unrelated catalog `be6fd2c8…`
+  (relations 890, columns 3542, constraints 2234, policies 404, functions 1326, indexes 654,
+  triggers 180, views 25, types 18, roles 29, role memberships 15); post-apply inspect live
+  `c99fc953…` (= intended), already_applied true, precondition_failures [], missing_dependencies [];
+  `moov_onboarding_profiles.industry` intended. The full output was captured.
+
+No later read-only inspect is recorded. The pin is `execute: false` again; a re-apply needs a new
+reviewed pin change. The onboarding members that write and send the column (`store.mjs`,
+`moov-sync.mjs`, `handlers.mjs`) may now follow in plan order.
 
 ## Fingerprint
 
