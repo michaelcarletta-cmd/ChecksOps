@@ -48,7 +48,7 @@ test('persistPollOutcome does not invent a date from submittedDate', async () =>
   assert.equal(calls[0].params[4], null);
 });
 
-test('Manager tab order keeps Reports after the seven Manager items and omits Deposit Ops', () => {
+test('Manager tab order keeps Reports after the six Manager items and omits Deposit Ops and Deposit History', () => {
   const src = fs.readFileSync(path.join(spaRoot, 'pages/CheckCommandCenter.tsx'), 'utf8');
   const triggers = [...src.matchAll(/<TabsTrigger value="([^"]+)"/g)].map((m) => m[1]);
   const manager = [];
@@ -59,11 +59,10 @@ test('Manager tab order keeps Reports after the seven Manager items and omits De
     ].includes(value)) manager.push(value);
   }
   const start = manager.lastIndexOf('pending_approvals');
-  const slice = manager.slice(start, start + 8);
+  const slice = manager.slice(start, start + 7);
   assert.deepEqual(slice, [
     'pending_approvals',
     'bank_deposits',
-    'deposit_history',
     'returned',
     'mortgage_cos',
     'partners',
@@ -71,6 +70,9 @@ test('Manager tab order keeps Reports after the seven Manager items and omits De
     'reports',
   ]);
   assert.equal(src.includes('value="deposit_ops"'), false);
+  // Deposit History is removed (owner, 2026-10-26): Bank Deposits carries the history by date.
+  assert.equal(src.includes('value="deposit_history"'), false);
+  assert.equal(/CheckAltDepositHistory/.test(src), false);
   assert.equal(/DepositOperationsConsole/.test(src), false);
   assert.match(src, /defaultValue=\{SHOW_CHECKALT \? "pending_approvals" : "reports"\}/);
   assert.match(src, /handleTabChange\("reissue"\)/);
@@ -88,10 +90,12 @@ test('Deposit Ops backend console remains intact after Manager tab removal', () 
   assert.equal(/DepositOperationsConsole/.test(whiteLabel), false);
 });
 
-test('Bank Deposits exposes date jump and Total = sum of checks, with no Auto-Deposit settings', () => {
+test('Bank Deposits searches one date or a date range and Total = sum of checks, with no Auto-Deposit settings', () => {
   const src = fs.readFileSync(path.join(spaRoot, 'components/deposit-ops/BankDepositReconciliation.tsx'), 'utf8');
-  assert.match(src, /type="date"/);
-  assert.match(src, /Jump to deposit date/);
+  assert.equal((src.match(/type="date"/g) || []).length, 2);
+  assert.match(src, /Deposit date \(or start of range\)/);
+  assert.match(src, /End date \(optional\)/);
+  assert.match(src, /bankDepositDayInRange\(g\.dayKey, fromDate, toDate\)/);
   // Auto-approve is always on (2026-10-22): the Auto-Deposit settings card is not rendered.
   assert.equal(/TenantAutoApproveCard/.test(src), false);
   assert.match(src, /sumDepositAmounts/);

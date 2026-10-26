@@ -12,6 +12,7 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { displayCaseOrNull } from "@/lib/displayCase";
 import {
+  bankDepositDayInRange,
   bankDepositDayKey,
   groupBankDeposits,
   isBankDepositSettled,
@@ -58,7 +59,9 @@ interface DepositGroup {
 export default function BankDepositReconciliation({ searchQuery = "" }: { searchQuery?: string }) {
   const { tenantId } = useTenantFilter();
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-  const [jumpDate, setJumpDate] = useState("");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+  const dateFilterOn = Boolean(fromDate || toDate);
 
   const { data, isLoading } = useQuery({
     queryKey: ["bank-deposit-reconciliation", tenantId],
@@ -104,21 +107,32 @@ export default function BankDepositReconciliation({ searchQuery = "" }: { search
   }, [data, searchQuery]);
   const groups = grouped.days;
 
-  const visibleGroups = useMemo(() => {
-    if (!jumpDate) return groups;
-    return groups.filter((g) => g.dayKey === jumpDate);
-  }, [groups, jumpDate]);
+  const visibleGroups = useMemo(
+    () => groups.filter((g) => bankDepositDayInRange(g.dayKey, fromDate, toDate)),
+    [groups, fromDate, toDate],
+  );
+  const visibleTotal = useMemo(() => visibleGroups.reduce((s, g) => s + g.total, 0), [visibleGroups]);
+  const visibleChecks = useMemo(() => visibleGroups.reduce((s, g) => s + g.rows.length, 0), [visibleGroups]);
 
+  // A single date opens that day's deposit.
   useEffect(() => {
-    if (!jumpDate) return;
+    if (!fromDate || toDate) return;
     setExpanded((prev) => {
       const next = { ...prev };
       for (const g of groups) {
-        if (g.dayKey === jumpDate) next[g.key] = true;
+        if (g.dayKey === fromDate) next[g.key] = true;
       }
       return next;
     });
-  }, [jumpDate, groups]);
+  }, [fromDate, toDate, groups]);
+
+  const rangeLabel = !dateFilterOn
+    ? ""
+    : fromDate && !toDate
+      ? labelForDay(fromDate)
+      : !fromDate
+        ? `through ${labelForDay(toDate)}`
+        : `${labelForDay(fromDate <= toDate ? fromDate : toDate)} – ${labelForDay(fromDate <= toDate ? toDate : fromDate)}`;
 
   if (isLoading) {
     return (
@@ -132,26 +146,53 @@ export default function BankDepositReconciliation({ searchQuery = "" }: { search
   return (
     <div className="space-y-3">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div className="space-y-1">
-          <Label htmlFor="bank-deposit-date" className="text-xs text-muted-foreground">
-            Jump to deposit date
-          </Label>
-          <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-end gap-2">
+          <div className="space-y-1">
+            <Label htmlFor="bank-deposit-date" className="text-xs text-muted-foreground">
+              Deposit date (or start of range)
+            </Label>
             <Input
               id="bank-deposit-date"
               type="date"
-              value={jumpDate}
-              onChange={(e) => setJumpDate(e.target.value)}
+              value={fromDate}
+              onChange={(e) => setFromDate(e.target.value)}
               className="h-9 w-[11.5rem]"
             />
-            {jumpDate && (
-              <Button type="button" size="sm" variant="ghost" onClick={() => setJumpDate("")}>
-                All days
-              </Button>
-            )}
           </div>
+          <div className="space-y-1">
+            <Label htmlFor="bank-deposit-date-end" className="text-xs text-muted-foreground">
+              End date (optional)
+            </Label>
+            <Input
+              id="bank-deposit-date-end"
+              type="date"
+              value={toDate}
+              onChange={(e) => setToDate(e.target.value)}
+              className="h-9 w-[11.5rem]"
+            />
+          </div>
+          {dateFilterOn && (
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                setFromDate("");
+                setToDate("");
+              }}
+            >
+              All days
+            </Button>
+          )}
         </div>
       </div>
+
+      {dateFilterOn && visibleGroups.length > 0 && (
+        <p className="text-sm">
+          {rangeLabel}: {visibleGroups.length} deposit{visibleGroups.length === 1 ? "" : "s"}, {visibleChecks} check
+          {visibleChecks === 1 ? "" : "s"}, <span className="font-semibold tabular-nums">{fmtMoney(visibleTotal)}</span>
+        </p>
+      )}
 
       <p className="text-xs text-muted-foreground">
         Each date is one deposit. Click a date to see the checks deposited that day. The total equals
@@ -161,7 +202,11 @@ export default function BankDepositReconciliation({ searchQuery = "" }: { search
       {visibleGroups.length === 0 && (
         <Card>
           <CardContent className="py-10 text-center text-sm text-muted-foreground">
-            {jumpDate ? `No deposits on ${labelForDay(jumpDate)}.` : "No deposited checks yet."}
+            {!dateFilterOn
+              ? "No deposited checks yet."
+              : fromDate && !toDate
+                ? `No deposits on ${rangeLabel}.`
+                : `No deposits ${fromDate ? "from" : ""} ${rangeLabel}.`.replace(/\s+/g, " ")}
           </CardContent>
         </Card>
       )}

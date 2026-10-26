@@ -82,3 +82,20 @@ export function groupBankDeposits<T extends BankDepositRowLike>(rows: T[]): {
   });
   return { days, total: days.reduce((s, d) => s + d.total, 0) };
 }
+
+/**
+ * Bank Deposits date search (owner, 2026-10-26): one date shows that day's deposit; a start and
+ * an end date show every deposit in between (inclusive, in either order); an end date alone
+ * shows every deposit up to it. With no dates every day is shown. Days with an unknown date are
+ * only shown when no date is set. Dates are YYYY-MM-DD, as from an <input type="date">.
+ */
+export function bankDepositDayInRange(dayKey: string, from = "", to = ""): boolean {
+  const start = from.trim();
+  const end = to.trim();
+  if (!start && !end) return true;
+  if (dayKey === "unknown") return false;
+  if (start && !end) return dayKey === start;
+  if (!start) return dayKey <= end;
+  const [lo, hi] = start <= end ? [start, end] : [end, start];
+  return dayKey >= lo && dayKey <= hi;
+}

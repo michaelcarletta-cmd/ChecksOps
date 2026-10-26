@@ -145,9 +145,6 @@ const MortgageCompaniesDirectory = lazy(() =>
 const PendingApprovalDeposits = lazy(() =>
   import("@/components/settings/CheckAltSettings").then(m => ({ default: m.PendingApprovalDeposits }))
 );
-const CheckAltDepositHistory = lazy(() =>
-  import("@/components/settings/CheckAltSettings").then(m => ({ default: m.CheckAltDepositHistory }))
-);
 const BankDepositReconciliation = lazy(() =>
   import("@/components/deposit-ops/BankDepositReconciliation")
 );
@@ -1337,7 +1334,7 @@ export default function CheckCommandCenter() {
           </div>
         )}
 
-        {/* Manager Hub — Bank Deposits, History, Reports, Mortgage Cos (admin only) */}
+        {/* Manager Hub — Bank Deposits, Reports, Mortgage Cos (admin only) */}
         {activeTab === "manager" && canAccessManager && (
           <div className="mt-3">
             <Tabs defaultValue={SHOW_CHECKALT ? "pending_approvals" : "reports"}>
@@ -1346,7 +1343,6 @@ export default function CheckCommandCenter() {
                   <>
                     <TabsTrigger value="pending_approvals" className="text-xs gap-1"><ShieldAlert className="h-3 w-3" />Waiting on Deposit</TabsTrigger>
                     <TabsTrigger value="bank_deposits" className="text-xs gap-1"><Banknote className="h-3 w-3" />Bank Deposits</TabsTrigger>
-                    <TabsTrigger value="deposit_history" className="text-xs gap-1"><Banknote className="h-3 w-3" />Deposit History</TabsTrigger>
                   </>
                 )}
                 <TabsTrigger value="returned" className="text-xs gap-1"><RotateCcw className="h-3 w-3" />Returned{returnedCount > 0 ? ` (${returnedCount})` : ""}</TabsTrigger>
@@ -1372,11 +1368,6 @@ export default function CheckCommandCenter() {
                   <TabsContent value="bank_deposits" className="mt-3">
                     <Suspense fallback={<TabLoader />}>
                       <BankDepositReconciliation searchQuery={searchQuery} />
-                    </Suspense>
-                  </TabsContent>
-                  <TabsContent value="deposit_history" className="mt-3">
-                    <Suspense fallback={<TabLoader />}>
-                      <CheckAltDepositHistory />
                     </Suspense>
                   </TabsContent>
                 </>
