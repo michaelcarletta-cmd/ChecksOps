@@ -1135,6 +1135,36 @@ test('Moov 422 after save names the failed step and rejected field paths, never 
   });
 });
 
+test('Moov 409 on a representative logs the step, create or update, and Moov\'s masked reason, never the SSN or email', async () => {
+  await withEnv(BASE_ENV, async () => {
+    resetMoovTokenCache();
+    const db = makeDb();
+    const conflicting = moovFetch([{
+      match: `/accounts/${MOOV_ACCOUNT}/representatives`,
+      method: 'POST',
+      status: 409,
+      body: { error: `representative owner@freedom.test with SSN ${SSN_DASHED} already exists` },
+    }]);
+    const { result, lines } = await captureConsole(() => run('moov-onboarding-save', saveBody(), USERS.owner, { db, fetch: conflicting }));
+    assert.equal(result.saved, true);
+    assert.equal(result.moov_synced, false);
+    assert.equal(result.error_code, 'moov_conflict');
+    const log = lines.find((line) => line.includes('moov_onboarding_sync_failed'));
+    assert.ok(log, 'failure logged');
+    const parsed = JSON.parse(log);
+    assert.equal(parsed.status, 409);
+    assert.equal(parsed.step, 'representative');
+    assert.equal(parsed.representative_call, 'create');
+    assert.equal(typeof parsed.reason, 'string');
+    assert.match(parsed.reason, /already exists/);
+    assert.equal(log.includes('owner@freedom.test'), false);
+    assert.equal(log.includes(SSN_DASHED), false);
+    assert.equal(log.includes(SSN_DASHED.replace(/-/g, '')), false);
+    // The caller's response carries no Moov message.
+    assert.equal(JSON.stringify(result).includes('already exists'), false);
+  });
+});
+
 test('Moov 409 on the business profile logs a masked reason and still sends representatives and the capability request', async () => {
   await withEnv(BASE_ENV, async () => {
     resetMoovTokenCache();
