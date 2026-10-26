@@ -38,14 +38,51 @@ export const accountIdempotencyKey = (environment, tenantId, bodyDigest = '') =>
 );
 export const accountBodyDigest = (body) => createHash('sha256').update(JSON.stringify(body)).digest('hex').slice(0, 16);
 
-/** The Moov account already filed under this tenant's foreignID, or null. */
-async function findMoovAccountByForeignId(tenantId, fetchImpl) {
+/** The live Moov account already filed under this tenant's foreignID, or null. `exclude` is never adopted. */
+async function findMoovAccountByForeignId(tenantId, fetchImpl, { exclude = null } = {}) {
   const found = await moovFetch(`/accounts?foreignID=${encodeURIComponent(tenantId)}`, {
     method: 'GET', scopes: scopes.accountsRead(), fetchImpl,
   });
   const list = Array.isArray(found) ? found : [];
-  const match = list.find((a) => String(a?.foreignID ?? '') === String(tenantId));
+  const match = list.find((a) => String(a?.foreignID ?? '') === String(tenantId)
+    && !a?.disconnectedOn && !a?.closedOn
+    && (a?.accountID ?? a?.accountId) !== exclude);
   return match?.accountID ?? match?.accountId ?? null;
+}
+
+/**
+ * True when Moov no longer holds this account: 404/410, or it was disconnected or closed (the owner
+ * disconnects a stuck account in the Moov dashboard so onboarding can start again on a new one).
+ */
+async function moovAccountGone(accountId, fetchImpl) {
+  try {
+    const remote = await moovFetch(`/accounts/${encodeURIComponent(accountId)}`, {
+      method: 'GET', scopes: scopes.accountRead(accountId), fetchImpl,
+    });
+    return Boolean(remote?.disconnectedOn || remote?.closedOn);
+  } catch (error) {
+    if (error instanceof MoovError && (error.status === 404 || error.status === 410)) return true;
+    throw error;
+  }
+}
+
+/** Clears what belonged to a Moov account that is gone, so the next sync rebuilds it on the new one. */
+async function forgetGoneAccount(client, ctx, goneAccountId) {
+  // Representatives are re-created at Moov; the SSN is never stored, so each one asks for it again.
+  await client.query(
+    `UPDATE public.moov_onboarding_representatives
+     SET moov_representative_id = NULL, moov_synced_at = NULL, updated_at = now()
+     WHERE tenant_id = $1::uuid AND environment = $2 AND moov_representative_id IS NOT NULL`,
+    [ctx.tenantId, ctx.environment],
+  );
+  // Bank accounts linked to the gone account cannot pay or be paid; the tenant links one again.
+  await client.query(
+    `UPDATE public.payment_provider_methods
+     SET connection_status = 'disconnected', disconnected_at = now(), updated_at = now()
+     WHERE tenant_id = $1::uuid AND provider = 'moov' AND environment = $2
+       AND provider_account_id = $3 AND external_recipient_id IS NULL`,
+    [ctx.tenantId, ctx.environment, goneAccountId],
+  );
 }
 
 export function businessProfileBody(profile, ein) {
@@ -85,7 +122,13 @@ export function representativeBody(rep, { dob, ssn }) {
 /** Creates the Moov account when missing and records it. Returns the account row. */
 export async function ensureMoovAccount(client, ctx, { profile = null, ein = null, tosToken = null, fetchImpl } = {}) {
   const existing = await loadAccount(client, ctx.tenantId, ctx.environment);
-  if (existing?.provider_account_id) return { account: existing, created: false };
+  let replacing = null;
+  if (existing?.provider_account_id) {
+    if (!(await moovAccountGone(existing.provider_account_id, fetchImpl))) return { account: existing, created: false };
+    replacing = existing.provider_account_id;
+    onboardingLog('moov_account_gone', { tenant: ctx.tenantId, environment: ctx.environment });
+    await forgetGoneAccount(client, ctx, replacing);
+  }
   const tenant = (await client.query(
     `SELECT id, name, legal_business_name, email_reply_to, email_from_address, business_phone
      FROM public.tenants WHERE id = $1::uuid`,
@@ -106,7 +149,8 @@ export async function ensureMoovAccount(client, ctx, { profile = null, ein = nul
     foreignID: ctx.tenantId,
     metadata: { checksops_tenant_id: ctx.tenantId },
   };
-  const key = accountIdempotencyKey(ctx.environment, ctx.tenantId, accountBodyDigest(body));
+  // A replacement gets its own key: the gone account's create must not be replayed.
+  const key = accountIdempotencyKey(ctx.environment, ctx.tenantId, accountBodyDigest(replacing ? { body, replaces: replacing } : body));
   await client.query(
     `INSERT INTO public.payment_idempotency_keys (tenant_id, provider, scope, idempotency_key, status)
      VALUES ($1::uuid, 'moov', 'account_create', $2, 'in_progress')
@@ -114,6 +158,7 @@ export async function ensureMoovAccount(client, ctx, { profile = null, ein = nul
     [ctx.tenantId, key],
   );
   let accountId = null;
+  let adopted = false;
   try {
     const created = await moovFetch('/accounts', {
       method: 'POST',
@@ -128,10 +173,14 @@ export async function ensureMoovAccount(client, ctx, { profile = null, ein = nul
     // 409: Moov already holds an account for this tenant (an earlier create whose
     // record never landed here). Adopt it; anything else is a real failure.
     if (!(error instanceof MoovError) || error.status !== 409) throw error;
-    accountId = await findMoovAccountByForeignId(ctx.tenantId, fetchImpl);
+    accountId = await findMoovAccountByForeignId(ctx.tenantId, fetchImpl, { exclude: replacing });
     if (!accountId) throw error;
+    adopted = true;
   }
   if (!accountId) throw new OnboardingError('moov_account_id_missing', 502);
+  if (accountId === replacing) throw new OnboardingError('moov_account_gone', 409);
+  // The terms went to Moov only inside a create Moov accepted; an adopted account never saw them.
+  const tosSent = Boolean(tosToken) && ctx.member === true && !adopted;
   const saved = (await client.query(
     `INSERT INTO public.payment_provider_accounts
       (tenant_id, provider, environment, provider_account_id, account_type, display_name,
@@ -144,14 +193,22 @@ export async function ensureMoovAccount(client, ctx, { profile = null, ein = nul
              CASE WHEN $6::boolean THEN 'tos_drop' ELSE NULL END)
      ON CONFLICT (tenant_id, provider, environment) DO UPDATE SET
        provider_account_id = EXCLUDED.provider_account_id,
+       onboarding_status = EXCLUDED.onboarding_status,
+       verification_status = EXCLUDED.verification_status,
+       capabilities = '[]'::jsonb,
+       can_send_payments = false, can_receive_payments = false, can_ach_credit = false, can_ach_debit = false,
+       disabled = false, restricted = false,
+       tos_accepted_at = EXCLUDED.tos_accepted_at,
+       tos_accepted_by = EXCLUDED.tos_accepted_by,
+       tos_source = EXCLUDED.tos_source,
        provider_metadata = public.payment_provider_accounts.provider_metadata || EXCLUDED.provider_metadata,
        last_synced_at = now()
      RETURNING id, tenant_id, environment, provider_account_id, onboarding_status, verification_status,
                capabilities, tos_accepted_at, disabled, restricted, last_synced_at`,
     [
       ctx.tenantId, ctx.environment, accountId, tenant.name ?? null,
-      JSON.stringify({ created_via: 'moov_onboarding', account_type: 'business' }),
-      Boolean(tosToken), ctx.userId,
+      JSON.stringify({ created_via: adopted ? 'moov_adopted' : 'moov_onboarding', account_type: 'business', ...(replacing ? { replaced_account_id: replacing } : {}) }),
+      tosSent, ctx.userId,
     ],
   )).rows[0];
   await client.query(
@@ -164,9 +221,9 @@ export async function ensureMoovAccount(client, ctx, { profile = null, ein = nul
     environment: ctx.environment,
     event_type: 'payment_account.created',
     new_status: 'onboarding_incomplete',
-    provider_metadata: { account_id: accountId, created_by: ctx.userId },
+    provider_metadata: { account_id: accountId, created_by: ctx.userId, ...(replacing ? { replaced_account_id: replacing } : {}) },
   });
-  return { account: saved, created: true };
+  return { account: saved, created: true, replaced: replacing };
 }
 
 /**
@@ -199,7 +256,7 @@ export async function syncOnboardingToMoov(client, ctx, {
   const { tenantId, environment } = ctx;
   const profile = await loadProfile(client, tenantId, environment);
   if (!profile) return { synced: false, error_code: 'onboarding_profile_missing', skipped: true };
-  const reps = await loadRepresentatives(client, tenantId, environment);
+  let reps = await loadRepresentatives(client, tenantId, environment);
   const delivered = new Set();
   let accountId = null;
   // Which Moov call failed, for the redacted failure log.
@@ -216,8 +273,10 @@ export async function syncOnboardingToMoov(client, ctx, {
   };
   try {
     const ein = await decryptProfileEin(deps, profile);
-    const { account } = await ensureMoovAccount(client, ctx, { profile, ein, fetchImpl });
+    const { account, replaced } = await ensureMoovAccount(client, ctx, { profile, ein, fetchImpl });
     accountId = account.provider_account_id;
+    // A replaced account starts with no representatives at Moov.
+    if (replaced) reps = await loadRepresentatives(client, tenantId, environment);
     step = 'business_profile';
     try {
       await moovFetch(`/accounts/${accountId}`, {
@@ -281,7 +340,8 @@ export async function syncOnboardingToMoov(client, ctx, {
           const created = await moovFetch(`/accounts/${accountId}/representatives`, {
             method: 'POST',
             scopes: scopes.representativesWrite(accountId),
-            idempotencyKey: `checksops-representative-${environment}-${rep.id}`,
+            // Keyed per account too, so a replacement account's POST is never answered from the gone one.
+            idempotencyKey: `checksops-representative-${environment}-${rep.id}-${accountBodyDigest(accountId).slice(0, 12)}`,
             body,
             fetchImpl,
           });

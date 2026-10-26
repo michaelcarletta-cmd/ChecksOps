@@ -1,0 +1,14 @@
+{
+  "workstream_id": "production-moov-account-replace",
+  "authorization": "Pending owner review (2026-10-26). Planning only: nothing is live or verified. The owner approved this plan update in the words \"Approve the moov sync.mjs plan update\". Each production apply still needs its own owner approval, a staging acceptance reference and a read-only production inspect that confirms the live bytes.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Moov onboarding (owner request 2026-10-26, follows production-moov-profile-locked-manifest-2026-10-26.json): when the stored Moov account is gone (404/410, or disconnectedOn/closedOn set), the next onboarding sync creates a new account under a fresh idempotency key, clears the representatives' Moov ids, marks bank accounts on the gone account disconnected and resets status, capabilities and terms on the account row; foreignID adoption never picks the gone account. An account adopted after a 409 no longer records terms Moov never received. Owner chose 'Fresh account via ChecksOps' for Freedom Adjustment's frozen July 2026 sandbox account. providers/onboarding/moov-sync.mjs stays an ADD (live_sha256 null); a read-only production overlay inspect must confirm it before any apply.",
+  "members": {
+    "providers/onboarding/moov-sync.mjs": {
+      "live_sha256": null,
+      "accepted_sha256": "30dba650c7c058c9e10c942f3e6c9195b3288c8b80a6e9cb2b06133021903262",
+      "operation": "add"
+    }
+  }
+}
