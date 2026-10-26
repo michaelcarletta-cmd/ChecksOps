@@ -1203,6 +1203,30 @@ test('a live Moov account is kept: no new account, no reset', async () => {
   });
 });
 
+test('every save logs what Moov reports for the stored account, with no personal data', async () => {
+  await withEnv(BASE_ENV, async () => {
+    resetMoovTokenCache();
+    const fetch = moovFetch([accountGet({ accountID: MOOV_ACCOUNT, profile: { business: { legalBusinessName: 'Freedom Adjusting LLC' } } })]);
+    const { result, lines } = await captureConsole(() => run('moov-onboarding-save', saveBody(), USERS.owner, { db: makeDb(), fetch }));
+    assert.equal(result.moov_synced, true);
+    const line = lines.find((l) => l.includes('moov_account_check'));
+    assert.ok(line, 'logged');
+    const logged = JSON.parse(line);
+    assert.equal(logged.account_suffix, MOOV_ACCOUNT.slice(-4));
+    assert.equal(logged.http_status, 200);
+    assert.equal(logged.gone, false);
+    assert.deepEqual(logged.account_keys, ['accountID', 'profile']);
+    assert.equal(line.includes('Freedom Adjusting'), false);
+    assert.equal(line.includes(MOOV_ACCOUNT), false);
+
+    resetMoovTokenCache();
+    const { lines: l404 } = await captureConsole(() => run('moov-onboarding-save', saveBody(), USERS.owner, { db: makeDb(), fetch: moovFetch([accountGet({ error: 'x' }, 404)]) }));
+    const gone = JSON.parse(l404.find((l) => l.includes('moov_account_check')));
+    assert.equal(gone.http_status, 404);
+    assert.equal(gone.gone, true);
+  });
+});
+
 test('replacing a gone account never adopts it again by foreignID', async () => {
   await withEnv(BASE_ENV, async () => {
     resetMoovTokenCache();

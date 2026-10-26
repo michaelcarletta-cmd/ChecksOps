@@ -54,13 +54,25 @@ async function findMoovAccountByForeignId(tenantId, fetchImpl, { exclude = null 
  * True when Moov no longer holds this account: 404/410, or it was disconnected or closed (the owner
  * disconnects a stuck account in the Moov dashboard so onboarding can start again on a new one).
  */
-async function moovAccountGone(accountId, fetchImpl) {
+async function moovAccountGone(ctx, accountId, fetchImpl) {
+  // What Moov reports for the stored account, without personal data: why a Save did or did not
+  // start a new account (staging 2026-10-26: a dashboard-disconnected account still answered).
+  const check = (fields) => onboardingLog('moov_account_check', {
+    tenant: ctx.tenantId, environment: ctx.environment, account_suffix: String(accountId).slice(-4), ...fields,
+  });
   try {
     const remote = await moovFetch(`/accounts/${encodeURIComponent(accountId)}`, {
       method: 'GET', scopes: scopes.accountRead(accountId), fetchImpl,
     });
-    return Boolean(remote?.disconnectedOn || remote?.closedOn);
+    const gone = Boolean(remote?.disconnectedOn || remote?.closedOn);
+    check({
+      http_status: 200, gone,
+      disconnected_on: Boolean(remote?.disconnectedOn), closed_on: Boolean(remote?.closedOn),
+      account_keys: remote && typeof remote === 'object' ? Object.keys(remote).sort().slice(0, 40) : [],
+    });
+    return gone;
   } catch (error) {
+    check({ http_status: error?.status ?? null, gone: error instanceof MoovError && (error.status === 404 || error.status === 410) });
     if (error instanceof MoovError && (error.status === 404 || error.status === 410)) return true;
     throw error;
   }
@@ -124,7 +136,7 @@ export async function ensureMoovAccount(client, ctx, { profile = null, ein = nul
   const existing = await loadAccount(client, ctx.tenantId, ctx.environment);
   let replacing = null;
   if (existing?.provider_account_id) {
-    if (!(await moovAccountGone(existing.provider_account_id, fetchImpl))) return { account: existing, created: false };
+    if (!(await moovAccountGone(ctx, existing.provider_account_id, fetchImpl))) return { account: existing, created: false };
     replacing = existing.provider_account_id;
     onboardingLog('moov_account_gone', { tenant: ctx.tenantId, environment: ctx.environment });
     await forgetGoneAccount(client, ctx, replacing);
