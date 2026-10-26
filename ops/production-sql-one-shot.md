@@ -97,12 +97,9 @@ An unexpected exception also ends in one failure summary:
   before anything else.
 
 1. **Pin.** Refuses unless the pin has `execute: true`, a staging acceptance
-   (`ok: true` plus a reference) and an authorization phrase. SQL 116's pin is `execute: true`
-   (owner-approved pin change of 2026-10-26, "build the SQL 116 pin PR": the read-only production
-   inspect of 2026-10-26, SSM `5120ddac-a515-4411-92c7-7c0046de0790`, recorded as its pre-state, on
-   its guarded staging apply run 40339373370 from the same pre-state; see
-   `ops/production-sql-116-apply.md`) until its record-and-retire change.
-   SQL 114's pin is `execute: false`
+   (`ok: true` plus a reference) and an authorization phrase. SQL 116's pin is `execute: false`
+   again since its 2026-10-26 apply (owner statement "apply SQL 116 in production"; see
+   `ops/production-sql-116-apply.md`). SQL 114's pin is `execute: false`
    again since its 2026-10-25 apply (owner statement "approve SQL 114 production apply"; see
    `ops/production-sql-114-apply.md`). SQL 113's pin is `execute: false`
    again since its 2026-10-23 apply (owner statement "apply SQL 113 in production and merge 1209
