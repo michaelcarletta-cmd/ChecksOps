@@ -1,0 +1,39 @@
+{
+  "workstream_id": "production-onboarding-payee-send-applied",
+  "authorization": "Record only (2026-10-26): the bytes below are live. Nothing is planned or authorized by this manifest; any later change to these members needs its own manifest, staging acceptance and owner approval.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Onboarding and payee sends applied 2026-10-26 through the guarded overlay path on main 31a84414a (#1267), in plan order, on the owner's \"DEPLOY providers/onboarding/store.mjs TO PRODUCTION\", \"DEPLOY providers/onboarding/documents.mjs TO PRODUCTION\", \"DEPLOY providers/onboarding/moov-sync.mjs TO PRODUCTION\", \"DEPLOY providers/onboarding/handlers.mjs TO PRODUCTION\" and \"DEPLOY providers/production/moov-send.mjs TO PRODUCTION\", after production SQL 116 (moov_onboarding_profiles.industry; one-shot run c415fcce-e3ac-4b65-9312-61763899f9b1, SSM 8a72e2fc-c769-4ebf-9f00-64feb23d1df4). providers/onboarding/store.mjs (ec1b5df8 -> 4bd8402e; staging apply run 40345006505, production apply run 40390899889); providers/onboarding/documents.mjs (231028fb -> 40188793; staging apply run 40362965000, production apply run 40391039339); providers/onboarding/moov-sync.mjs (caea3962 -> b1dfb230; staging apply run 40366967600, production apply run 40391217210); providers/onboarding/handlers.mjs (c024afec -> ef56e6d6; staging apply run 40371735489, production apply run 40391366018); providers/production/moov-send.mjs (42655ac8 -> 178988b5; staging apply run 40381567460, production apply run 40391523374). Each staging acceptance is the guarded staging overlay apply of the same bytes. Each production apply run concluded success including its \"Verify live member is the accepted bytes\" step (state VERIFIED) and the public production smoke (/health and /db-health 200). The last verify (run 40391523374) read back CodeSha256 PibQk9rBezF+F3hn359Zx/TH0yi/nEnP6tycQ2Rxzi0= and RevisionId 54d16ce8-6870-47aa-88f2-52ac6e5e2e1c. Each row records the applied bytes as live_sha256 and accepted_sha256 and chains to the manifest that planned it (previous_manifest), which keeps the pre-apply state.",
+  "members": {
+    "providers/onboarding/store.mjs": {
+      "live_sha256": "4bd8402ed8d4625b3ec426bee03ebffb21be6c53e7def99766eb317f56683d94",
+      "accepted_sha256": "4bd8402ed8d4625b3ec426bee03ebffb21be6c53e7def99766eb317f56683d94",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-moov-onboarding-reconcile-manifest-2026-10-26.json"
+    },
+    "providers/onboarding/documents.mjs": {
+      "live_sha256": "401887932c73a9e26599d5a23d4db70d44f29ddcb3207c44d08c3255af11be81",
+      "accepted_sha256": "401887932c73a9e26599d5a23d4db70d44f29ddcb3207c44d08c3255af11be81",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-moov-onboarding-reconcile-manifest-2026-10-26.json"
+    },
+    "providers/onboarding/moov-sync.mjs": {
+      "live_sha256": "b1dfb2306bef44c4205c3a9f37c1e426cecaf6e58e0a6b5612ecacf0e2476890",
+      "accepted_sha256": "b1dfb2306bef44c4205c3a9f37c1e426cecaf6e58e0a6b5612ecacf0e2476890",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-moov-onboarding-reconcile-manifest-2026-10-26.json"
+    },
+    "providers/onboarding/handlers.mjs": {
+      "live_sha256": "ef56e6d63f15049f3acd90b06f705902a1f4628e7c1a5f69d9acde9be6d90928",
+      "accepted_sha256": "ef56e6d63f15049f3acd90b06f705902a1f4628e7c1a5f69d9acde9be6d90928",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-moov-onboarding-reconcile-manifest-2026-10-26.json"
+    },
+    "providers/production/moov-send.mjs": {
+      "live_sha256": "178988b5a372011a128473025c2426323931c58cf4d68a5d33faaf1894431573",
+      "accepted_sha256": "178988b5a372011a128473025c2426323931c58cf4d68a5d33faaf1894431573",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-payee-send-manifest-2026-10-26.json"
+    }
+  }
+}
