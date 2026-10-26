@@ -1,0 +1,14 @@
+{
+  "workstream_id": "production-moov-processing-statements-purpose",
+  "authorization": "Pending owner review (2026-10-26). Planning only: nothing is live or verified. The owner asked for this change in the words \"option 2 we need it to work directly with checksops\". Each production apply still needs its own owner approval, a staging acceptance reference and a read-only production inspect that confirms the live bytes.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Moov onboarding (owner request 2026-10-26): Freedom Adjustment's sandbox account showed one open requirement, Processing statements (underwriting.documents.processingStatementsPast3Months), while the bank statements uploaded through ChecksOps were filed by Moov as business documents and never filled it: ChecksOps sent them with filePurpose business_verification. providers/onboarding/documents.mjs: bank_statement now goes to Moov as merchant_underwriting, the underwriting file purpose in Moov's v2025.07.00 and 2026-07 SDK models (@moovio/sdk 25.9.13 and 26.7.8; their file metadata carries only representative_id and comment, so the purpose is what places a file). Every other purpose, the metadata and the caller's response are unchanged. The mapping is to be confirmed on staging by one re-uploaded statement landing in Processing statements. The member stays an ADD (live_sha256 null); a read-only production overlay inspect must confirm it before any apply.",
+  "members": {
+    "providers/onboarding/documents.mjs": {
+      "live_sha256": null,
+      "accepted_sha256": "401887932c73a9e26599d5a23d4db70d44f29ddcb3207c44d08c3255af11be81",
+      "operation": "add"
+    }
+  }
+}

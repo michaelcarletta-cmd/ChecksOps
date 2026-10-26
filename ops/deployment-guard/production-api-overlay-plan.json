@@ -805,10 +805,10 @@
     },
     "providers/onboarding/documents.mjs": {
       "operation": "add",
-      "accepted_sha256": "7ef0d02fdd0381bda98a899fab253425b64d063539c9c29a667963788c751e08",
+      "accepted_sha256": "401887932c73a9e26599d5a23d4db70d44f29ddcb3207c44d08c3255af11be81",
       "expected_live_sha256": null,
       "sql_before": "aws/workflows/sql/91_moov_onboarding.sql",
-      "manifest": "aws/tests/fixtures/production-document-metadata-manifest-2026-10-26.json"
+      "manifest": "aws/tests/fixtures/production-moov-processing-statements-purpose-manifest-2026-10-26.json"
     },
     "providers/onboarding/moov-sync.mjs": {
       "operation": "add",
