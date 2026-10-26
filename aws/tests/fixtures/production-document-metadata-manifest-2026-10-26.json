@@ -1,0 +1,14 @@
+{
+  "workstream_id": "production-document-metadata",
+  "authorization": "Pending owner review (2026-10-26). Planning only: nothing is live or verified. The owner approved this change, its plan update included, in the word \"go\" in reply to the proposal for it. Each production apply still needs its own owner approval, a staging acceptance reference and a read-only production inspect that confirms the live bytes.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Moov onboarding (follows production-document-failure-log-manifest-2026-10-26.json). Staging 2026-10-26 13:14:56Z: Moov refused Freedom Adjustment's W-9 with 422 'unable to parse document: validating metadata: metadata key checksops_document_id is not valid', so every ChecksOps document upload was refused. providers/onboarding/documents.mjs: files carry only metadata keys Moov accepts, comment (checksops:<purpose>:<document id>) and, for a person's document, representative_id set to that person's Moov representative id; a person's document waits (moov_representative_missing, retried from the outbox) until that person reaches Moov. providers/onboarding/documents.mjs stays an ADD (live_sha256 null); a read-only production overlay inspect must confirm it before any apply.",
+  "members": {
+    "providers/onboarding/documents.mjs": {
+      "live_sha256": null,
+      "accepted_sha256": "7ef0d02fdd0381bda98a899fab253425b64d063539c9c29a667963788c751e08",
+      "operation": "add"
+    }
+  }
+}

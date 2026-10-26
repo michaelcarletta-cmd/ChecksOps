@@ -834,7 +834,8 @@ test('finalize sends the verified bytes to Moov files as multipart and records m
     assert.equal(file.name, 'a.pdf');
     assert.deepEqual(new Uint8Array(await file.arrayBuffer()), PDF);
     assert.equal(call.body.get('filePurpose'), 'business_verification');
-    assert.equal(JSON.parse(call.body.get('metadata')).checksops_purpose, 'w9');
+    // Only keys Moov accepts (staging 2026-10-26: checksops_document_id was refused with a 422).
+    assert.deepEqual(JSON.parse(call.body.get('metadata')), { comment: `checksops:w9:${id}` });
     assert.equal(db.state.outbox[0].status, 'completed');
     const again = await run('moov-document-finalize', { tenant_id: TENANT, document_id: id }, USERS.owner, { db, s3, fetch });
     assert.equal(again.document.moov_file_id, 'file_1');
@@ -874,6 +875,29 @@ test('Moov file failure leaves the document stored and pending; moov-sync retrie
     assert.equal(retry.ok, true);
     assert.equal(db.state.docs[0].moov_file_id, 'file_1');
     assert.equal(db.state.outbox[0].status, 'completed');
+  });
+});
+
+test('a person\'s document names their Moov representative, and waits until that person reaches Moov', async () => {
+  await withEnv(BASE_ENV, async () => {
+    resetMoovTokenCache();
+    const db = makeDb();
+    const id = await uploadDoc(db, { purpose: 'representative_verification' });
+    const repId = '11111111-2222-4333-8444-555555555555';
+    db.state.reps.push({ id: repId, tenant_id: TENANT, environment: db.state.docs[0].environment, removed_at: null, moov_representative_id: null });
+    db.state.docs[0].representative_id = repId;
+    const s3 = fakeS3({ bytes: PDF, contentType: 'application/pdf' });
+    const early = moovFetch();
+    const waiting = await run('moov-document-finalize', { tenant_id: TENANT, document_id: id }, USERS.owner, { db, s3, fetch: early });
+    assert.equal(waiting.error_code, 'moov_representative_missing');
+    assert.equal(early.calls.filter((c) => c.url.endsWith('/files')).length, 0, 'nothing sent before the person is at Moov');
+    db.state.reps[db.state.reps.length - 1].moov_representative_id = 'rep_moov_1';
+    const fetch = moovFetch();
+    const sent = await run('moov-document-finalize', { tenant_id: TENANT, document_id: id }, USERS.owner, { db, s3, fetch });
+    assert.equal(sent.moov_synced, true);
+    const call = fetch.calls.find((c) => c.url.endsWith('/files'));
+    assert.equal(call.body.get('filePurpose'), 'representative_verification');
+    assert.deepEqual(JSON.parse(call.body.get('metadata')), { comment: `checksops:representative_verification:${id}`, representative_id: 'rep_moov_1' });
   });
 });
 
