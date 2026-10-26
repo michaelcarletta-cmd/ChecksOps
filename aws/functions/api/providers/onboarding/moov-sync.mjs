@@ -15,7 +15,7 @@ import { MoovError, moovFetch, scopes } from '../parity/moov-client.mjs';
 import { MERCHANT_CAPABILITIES, MOOV_CAPABILITIES_API_VERSION } from '../parity/moov-capabilities.mjs';
 import { logPaymentEvent } from '../parity/db.mjs';
 import { OnboardingError } from './crypto.mjs';
-import { isNetworkError, moovErrorCode, moovRejectedFields, onboardingLog } from './redact.mjs';
+import { isNetworkError, moovErrorCode, moovRejectedFields, onboardingLog, redactText } from './redact.mjs';
 import {
   completeOutbox,
   decryptProfileEin,
@@ -170,6 +170,23 @@ export async function ensureMoovAccount(client, ctx, { profile = null, ein = nul
 }
 
 /**
+ * Moov's reason for a 409, short, with email addresses and digit runs masked: enough to tell why
+ * a change was refused without echoing an EIN, SSN, phone or email.
+ */
+export const moovConflictReason = (error, max = 160) => {
+  if (Number(error?.status || 0) !== 409) return null;
+  let body = error?.body;
+  if (typeof body === 'string') {
+    try { body = JSON.parse(body); } catch { /* plain text */ }
+  }
+  const text = typeof body === 'string' ? body
+    : typeof body?.error === 'string' ? body.error
+      : typeof body?.message === 'string' ? body.message : null;
+  if (!text) return null;
+  return redactText(text.replace(/[^\s@]+@[^\s@]+/g, '[redacted]'), max);
+};
+
+/**
  * Pushes profile + representatives + capability request. Never throws for a
  * Moov failure: returns { synced:false, error_code } after recording it.
  */
@@ -192,12 +209,22 @@ export async function syncOnboardingToMoov(client, ctx, {
     const { account } = await ensureMoovAccount(client, ctx, { profile, ein, fetchImpl });
     accountId = account.provider_account_id;
     step = 'business_profile';
-    await moovFetch(`/accounts/${accountId}`, {
-      method: 'PATCH',
-      scopes: scopes.accountWrite(accountId),
-      body: { profile: { business: businessProfileBody(profile, ein) } },
-      fetchImpl,
-    });
+    try {
+      await moovFetch(`/accounts/${accountId}`, {
+        method: 'PATCH',
+        scopes: scopes.accountWrite(accountId),
+        body: { profile: { business: businessProfileBody(profile, ein) } },
+        fetchImpl,
+      });
+    } catch (error) {
+      // 409: Moov will not change this account's business details (staging 2026-10-25, an account
+      // adopted by foreignID). Moov keeps the details it holds; representatives and the capability
+      // request still go, and Moov's reason is logged.
+      if (!(error instanceof MoovError) || error.status !== 409) throw error;
+      onboardingLog('moov_onboarding_profile_conflict', {
+        tenant: tenantId, environment, status: 409, step, reason: moovConflictReason(error),
+      });
+    }
 
     // People removed in ChecksOps are removed at Moov too; self-healing on retry.
     const removed = (await client.query(

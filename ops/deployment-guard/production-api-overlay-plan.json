@@ -812,10 +812,10 @@
     },
     "providers/onboarding/moov-sync.mjs": {
       "operation": "add",
-      "accepted_sha256": "caea3962067181c62a59cb9a8c69050a820827066543be266c9c3d508018ea87",
+      "accepted_sha256": "e62c791ba4d273c8557602d734d92f3bfdca5d6f72a13fafdf1b0bd18c8f7b59",
       "expected_live_sha256": null,
       "sql_before": "aws/workflows/sql/104_payment_idempotency_keys_grant.sql",
-      "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
+      "manifest": "aws/tests/fixtures/production-moov-profile-conflict-manifest-2026-10-26.json"
     },
     "providers/onboarding/webhook-status.mjs": {
       "operation": "add",

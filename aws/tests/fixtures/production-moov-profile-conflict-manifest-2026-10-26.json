@@ -1,0 +1,14 @@
+{
+  "workstream_id": "production-moov-profile-conflict",
+  "authorization": "Pending owner review (2026-10-26). Planning only: nothing is live or verified. The owner approved this plan update in the words \"Approve the moov sync.mjs plan update\". Each production apply still needs its own owner approval, a staging acceptance reference and a read-only production inspect that confirms the live bytes.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Moov onboarding (owner request 2026-10-26): a Moov 409 on the business-profile PATCH no longer stops the submission. Moov keeps the business details it holds; representatives, ownersProvided and the capability request still go, and Moov's reason is logged as moov_onboarding_profile_conflict (160 characters, emails and digit runs masked). Seen on staging 2026-10-25 for Freedom Adjustment's sandbox account (adopted by foreignID): every sync stopped at business_profile with moov_conflict. providers/onboarding/moov-sync.mjs stays an ADD (live_sha256 null, as in the 2026-10-17 release-lock pin manifest); a read-only production overlay inspect must confirm it before any apply.",
+  "members": {
+    "providers/onboarding/moov-sync.mjs": {
+      "live_sha256": null,
+      "accepted_sha256": "e62c791ba4d273c8557602d734d92f3bfdca5d6f72a13fafdf1b0bd18c8f7b59",
+      "operation": "add"
+    }
+  }
+}
