@@ -422,12 +422,23 @@ export const ONBOARDING_HANDLERS = {
       const account = await loadAccount(client, ctx.tenantId, ctx.environment);
       const accountId = account?.provider_account_id;
       if (!accountId) return fail('Set up the payment account first.', 409, { error_code: 'moov_account_missing' });
-      const created = await moovFetch(`/accounts/${accountId}/bank-accounts`, {
-        method: 'POST',
-        scopes: scopes.bankAccountsWrite(accountId),
-        fetchImpl,
-        body: { account: { holderName, holderType, accountNumber, routingNumber, bankAccountType } },
-      });
+      let created;
+      try {
+        created = await moovFetch(`/accounts/${accountId}/bank-accounts`, {
+          method: 'POST',
+          scopes: scopes.bankAccountsWrite(accountId),
+          fetchImpl,
+          body: { account: { holderName, holderType, accountNumber, routingNumber, bankAccountType } },
+        });
+      } catch (error) {
+        if (error instanceof MoovError) {
+          onboardingLog('moov_bank_account_failed', {
+            tenant: ctx.tenantId, environment: ctx.environment, error_code: moovErrorCode(error),
+            status: error.status ?? null, reason: moovFailureReason(error), rejected_fields: moovRejectedFields(error),
+          });
+        }
+        throw error;
+      }
       const bankAccountId = created?.bankAccountID ?? created?.bankAccountId ?? null;
       if (!bankAccountId) return fail('moov_bank_account_id_missing', 502);
       const lastFour = created?.lastFourAccountNumber ?? safeLastFour(accountNumber);

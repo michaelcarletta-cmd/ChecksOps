@@ -1,0 +1,14 @@
+{
+  "workstream_id": "production-bank-account-failure-log",
+  "authorization": "Pending owner review (2026-10-26). Planning only: nothing is live or verified. The owner approved this plan update in the words \"Approve the handlers.mjs plan upd\". Each production apply still needs its own owner approval, a staging acceptance reference and a read-only production inspect that confirms the live bytes.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Moov onboarding (owner request 2026-10-26): a refused bank add (POST /accounts/{id}/bank-accounts) logs moov_bank_account_failed with status, error code, Moov's message (160 characters, emails and digit runs masked) and rejected field paths; the caller's response is unchanged and account and routing numbers are never logged. Seen on staging 2026-10-26 for Freedom Adjustment: the bank add returned moov_rejected and nothing was logged. providers/onboarding/handlers.mjs stays an ADD (live_sha256 null, as in the 2026-10-17 release-lock pin manifest); a read-only production overlay inspect must confirm it before any apply.",
+  "members": {
+    "providers/onboarding/handlers.mjs": {
+      "live_sha256": null,
+      "accepted_sha256": "e9ce45b8bf7bd69d76454329ccfb28f3147e616f3cc5a91451c43d7f7135bd9c",
+      "operation": "add"
+    }
+  }
+}
