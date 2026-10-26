@@ -924,6 +924,46 @@ test('Moov 422 after save names the failed step and rejected field paths, never 
   });
 });
 
+test('Moov 409 on the business profile logs a masked reason and still sends representatives and the capability request', async () => {
+  await withEnv(BASE_ENV, async () => {
+    resetMoovTokenCache();
+    const db = makeDb();
+    let profilePatches = 0;
+    const conflicting = moovFetch([{
+      match: `/accounts/${MOOV_ACCOUNT}`,
+      method: 'PATCH',
+      // Only the business-profile PATCH (the first) is refused; ownersProvided goes through.
+      status: () => (++profilePatches === 1 ? 409 : 200),
+      body: { error: `cannot update verified fields for owner@freedom.test ${EIN}` },
+    }]);
+    const { result, lines } = await captureConsole(() => run('moov-onboarding-save', saveBody(), USERS.owner, { db, fetch: conflicting }));
+    assert.equal(result.saved, true);
+    assert.equal(result.moov_synced, true, JSON.stringify(result));
+    assert.equal(result.error_code, undefined);
+    assert.ok(conflicting.calls.some((c) => c.method === 'POST' && /\/representatives$/.test(c.url)), 'representatives still sent');
+    assert.ok(conflicting.calls.some((c) => c.method === 'POST' && /\/capabilities$/.test(c.url)), 'capabilities still requested');
+    const all = lines.join('\n');
+    assert.equal(all.includes('moov_onboarding_sync_failed'), false);
+    const log = lines.find((line) => line.includes('moov_onboarding_profile_conflict'));
+    assert.ok(log, 'conflict logged');
+    const parsed = JSON.parse(log);
+    assert.equal(parsed.step, 'business_profile');
+    assert.equal(parsed.status, 409);
+    assert.match(parsed.reason, /^cannot update verified fields for \[redacted\] \[redacted\]/);
+    assert.equal(log.includes('owner@freedom.test'), false);
+    assert.equal(log.includes(EIN), false);
+  });
+});
+
+test('moovConflictReason reads only 409 bodies and masks emails and digit runs', async () => {
+  const { moovConflictReason } = await import('../functions/api/providers/onboarding/moov-sync.mjs');
+  assert.equal(moovConflictReason({ status: 422, body: { error: 'x' } }), null);
+  assert.equal(moovConflictReason({ status: 409, body: {} }), null);
+  assert.equal(moovConflictReason({ status: 409, body: 'plain a@b.co 123456' }), 'plain [redacted] [redacted]');
+  assert.equal(moovConflictReason({ status: 409, body: JSON.stringify({ message: 'locked' }) }), 'locked');
+  assert.equal(moovConflictReason({ status: 409, body: { error: 'x'.repeat(500) } }).length, 160);
+});
+
 test('business website is checked before Moov sees it: bare domains get https://, bad values fail on business.website', async () => {
   const { normalizeWebsite, WEBSITE_MAX } = await import('../functions/api/providers/onboarding/store.mjs');
   assert.equal(WEBSITE_MAX, 100);
