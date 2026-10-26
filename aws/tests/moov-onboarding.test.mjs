@@ -226,6 +226,7 @@ const makeDb = ({ tenantEnv = 'sandbox', account = true } = {}) => {
           const fields = {
             legal_name: params[2], dba: params[3], business_type: params[4], email: params[5], phone: params[6],
             website: params[7], description: params[8], address: JSON.parse(params[9]), sync_pending: true,
+            industry: params[14] ?? null,
           };
           if (!row) {
             row = { id: nextId(), tenant_id: params[0], environment: params[1], ...fields, ein_ciphertext: params[10], ein_last4: params[11], ein_key_arn: params[12] };
@@ -493,6 +494,11 @@ const REP = {
   ssn: SSN_DASHED, address: ADDRESS, is_controller: true, ownership_pct: 60,
 };
 const saveBody = (extra = {}) => ({ tenant_id: TENANT, business: BUSINESS, representatives: [REP], ...extra });
+const UNDERWRITING = {
+  geographicReach: 'us-only',
+  sendFunds: { ach: { estimatedActivity: { monthlyVolumeRange: 'under-10k' } } },
+  collectFunds: { ach: { estimatedActivity: { monthlyVolumeRange: '10k-50k' } } },
+};
 
 const allPersisted = (db) => JSON.stringify([db.state.writes, db.state.profiles, db.state.reps, db.state.outbox, db.state.events]);
 
@@ -520,7 +526,7 @@ test('access matrix: every member of the tenant (any stored role) and the platfo
       const read = await run('moov-onboarding-get', { tenant_id: TENANT }, USERS[who], { db });
       assert.equal(read.ok, true, who);
       assert.equal(read.can_submit, true, who);
-      const uw = await run('moov-underwriting', { tenant_id: TENANT, action: 'save', answers: { a: 1 } }, USERS[who], { db });
+      const uw = await run('moov-underwriting', { tenant_id: TENANT, action: 'save', answers: UNDERWRITING }, USERS[who], { db });
       assert.equal(uw.ok, true, `${who} underwriting save`);
       const up = await run('moov-document-upload-url', {
         tenant_id: TENANT, purpose: 'w9', file_name: 'w9.pdf', content_type: 'application/pdf', size: 10,
@@ -926,6 +932,88 @@ test('a refused Moov file logs Moov\'s masked reason and status, never the file 
   });
 });
 
+test('moov-onboarding-get industries: Moov\'s list on v2025.07.00 with the profile-enrichment scope, four fields only', async () => {
+  await withEnv(BASE_ENV, async () => {
+    resetMoovTokenCache();
+    const db = makeDb();
+    const fetch = moovFetch([{ match: /\/industries$/, method: 'GET', body: { industries: [
+      { industry: 'insurance-services', displayName: 'Insurance services', category: 'financial', categoryDisplayName: 'Financial', defaultMcc: '6411' },
+      { displayName: 'no identifier' },
+    ] } }]);
+    const r = await run('moov-onboarding-get', { tenant_id: TENANT, action: 'industries' }, USERS.viewer, { db, fetch });
+    assert.equal(r.ok, true, JSON.stringify(r));
+    assert.deepEqual(r.industries, [
+      { industry: 'insurance-services', displayName: 'Insurance services', category: 'financial', categoryDisplayName: 'Financial' },
+    ]);
+    const call = fetch.calls.find((c) => c.url.endsWith('/industries'));
+    assert.equal(call.method, 'GET');
+    assert.equal(call.headers['x-moov-version'], 'v2025.07.00');
+    const token = fetch.calls.find((c) => c.url.endsWith('/oauth2/token'));
+    assert.equal(new URLSearchParams(token.body).get('scope'), '/profile-enrichment.read');
+    // Without the action the read is unchanged and calls no provider.
+    const view = moovFetch();
+    const plain = await run('moov-onboarding-get', { tenant_id: TENANT }, USERS.viewer, { db, fetch: view });
+    assert.equal(plain.ok, true);
+    assert.equal(plain.industries, undefined);
+    assert.equal(view.calls.length, 0);
+  });
+});
+
+test('business industry: saved, shown, sent to Moov, kept when absent, cleared by null, refused when malformed', async () => {
+  await withEnv(BASE_ENV, async () => {
+    resetMoovTokenCache();
+    const db = makeDb();
+    const fetch = moovFetch();
+    const saved = await run('moov-onboarding-save', saveBody({ business: { ...BUSINESS, industry: 'insurance-services' } }), USERS.owner, { db, fetch });
+    assert.equal(saved.ok, true, JSON.stringify(saved));
+    assert.equal(db.state.profiles[0].industry, 'insurance-services');
+    const sent = fetch.calls.filter((c) => /\/accounts(\/[^/]+)?$/.test(c.url) && ['POST', 'PATCH'].includes(c.method)).map((c) => JSON.parse(c.body));
+    assert.ok(sent.some((b) => b?.profile?.business?.industry === 'insurance-services'), 'industry sent on the business profile');
+    const view = await run('moov-onboarding-get', { tenant_id: TENANT }, USERS.viewer, { db });
+    assert.equal(view.business.industry, 'insurance-services');
+    // A save without the field keeps it; null clears it.
+    await run('moov-onboarding-save', saveBody(), USERS.owner, { db });
+    assert.equal(db.state.profiles[0].industry, 'insurance-services');
+    await run('moov-onboarding-save', saveBody({ business: { ...BUSINESS, industry: null } }), USERS.owner, { db });
+    assert.equal(db.state.profiles[0].industry, null);
+    const bad = await run('moov-onboarding-save', saveBody({ business: { ...BUSINESS, industry: 'Insurance Services!' } }), USERS.owner, { db });
+    assert.equal(bad.ok, false);
+    assert.equal(bad.field, 'business.industry');
+  });
+});
+
+test('underwriting: POST on v2025.07.00 with exactly reach and ACH volumes; the old answers and unknown values are refused before Moov', async () => {
+  await withEnv(BASE_ENV, async () => {
+    resetMoovTokenCache();
+    const db = makeDb();
+    const fetch = moovFetch();
+    const r = await run('moov-underwriting', { tenant_id: TENANT, action: 'save', answers: UNDERWRITING }, USERS.owner, { db, fetch });
+    assert.equal(r.ok, true, JSON.stringify(r));
+    const post = fetch.calls.find((c) => c.url.endsWith('/underwriting'));
+    assert.equal(post.method, 'POST');
+    assert.equal(post.headers['x-moov-version'], 'v2025.07.00');
+    assert.deepEqual(JSON.parse(post.body), UNDERWRITING);
+    const read = moovFetch([{ match: /\/underwriting$/, method: 'GET', body: UNDERWRITING }]);
+    const got = await run('moov-underwriting', { tenant_id: TENANT, action: 'get' }, USERS.viewer, { db, fetch: read });
+    assert.deepEqual(got.underwriting, UNDERWRITING);
+    assert.equal(read.calls.find((c) => c.url.endsWith('/underwriting')).headers['x-moov-version'], 'v2025.07.00');
+    for (const [answers, field] of [
+      [{ averageTransactionSize: 100, maxTransactionSize: 200, averageMonthlyTransactionVolume: 1000 }, 'answers'],
+      [{ ...UNDERWRITING, geographicReach: 'mars' }, 'answers.geographicReach'],
+      [{ ...UNDERWRITING, sendFunds: { ach: { estimatedActivity: { monthlyVolumeRange: '1-2' } } } }, 'answers.sendFunds'],
+      [{ ...UNDERWRITING, collectFunds: { ach: { estimatedActivity: { monthlyVolumeRange: 'under-10k', extra: 1 } } } }, 'answers.collectFunds'],
+      [{ geographicReach: 'us-only', sendFunds: UNDERWRITING.sendFunds }, 'answers.collectFunds'],
+    ]) {
+      const none = moovFetch();
+      const refused = await run('moov-underwriting', { tenant_id: TENANT, action: 'save', answers }, USERS.owner, { db, fetch: none });
+      assert.equal(refused.ok, false, field);
+      assert.equal(refused.statusCode, 400, field);
+      assert.equal(refused.field, field);
+      assert.equal(none.calls.some((c) => c.url.endsWith('/underwriting')), false, `${field}: not sent to Moov`);
+    }
+  });
+});
+
 test('legacy file upload is refused with a pointer to the new flow', async () => {
   await withEnv(BASE_ENV, async () => {
     const db = makeDb();
@@ -1083,10 +1171,10 @@ test('a refused underwriting save logs Moov\'s masked reason and status', async 
     const db = makeDb();
     await run('moov-onboarding-save', saveBody(), USERS.owner, { db });
     const refusing = moovFetch([{
-      match: /\/underwriting$/, method: 'PUT', status: 409,
+      match: /\/underwriting$/, method: 'POST', status: 409,
       body: { error: `underwriting cannot be changed for owner@freedom.test ${EIN}` },
     }]);
-    const { result, lines } = await captureConsole(() => run('moov-underwriting', { tenant_id: TENANT, action: 'save', answers: { a: 1 } }, USERS.owner, { db, fetch: refusing }));
+    const { result, lines } = await captureConsole(() => run('moov-underwriting', { tenant_id: TENANT, action: 'save', answers: UNDERWRITING }, USERS.owner, { db, fetch: refusing }));
     assert.equal(result.ok, false);
     const log = lines.find((line) => line.includes('moov_underwriting_failed'));
     assert.ok(log, 'failure logged');
@@ -1495,7 +1583,7 @@ test('save creates the Moov account when none exists, then returns the masked sh
     for (const key of ['ok', 'environment', 'account', 'business', 'representatives', 'documents', 'banks', 'sync', 'can_submit']) {
       assert.ok(key in r, key);
     }
-    assert.deepEqual(Object.keys(r.business).sort(), ['address', 'dba', 'description', 'ein_masked', 'email', 'legal_name', 'phone', 'type', 'website']);
+    assert.deepEqual(Object.keys(r.business).sort(), ['address', 'dba', 'description', 'ein_masked', 'email', 'industry', 'legal_name', 'phone', 'type', 'website']);
     assert.deepEqual(r.business.address, { line1: '1 Main St', city: 'Austin', state: 'TX', postal_code: '78701', country: 'US' });
   });
 });

@@ -158,6 +158,8 @@ export function businessProfileBody(profile, ein) {
     email: profile.email,
     ...(profile.website ? { website: profile.website } : {}),
     ...(profile.description ? { description: profile.description } : {}),
+    // Moov's industry identifier from GET /industries (SQL 116); Moov requires one on a business profile.
+    ...(profile.industry ? { industry: profile.industry } : {}),
     ...(ein ? { taxID: { ein: { number: ein } } } : {}),
   };
 }

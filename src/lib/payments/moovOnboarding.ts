@@ -51,6 +51,16 @@ export interface OnboardingBusiness {
   website: string | null;
   description: string | null;
   address: OnboardingAddress | null;
+  /** The payment provider's industry identifier (from listIndustries). */
+  industry: string | null;
+}
+
+/** One entry of the payment provider's industry list. */
+export interface OnboardingIndustry {
+  industry: string;
+  displayName: string;
+  category: string | null;
+  categoryDisplayName: string | null;
 }
 
 export interface OnboardingRepresentative {
@@ -129,6 +139,8 @@ export interface BusinessPayload {
   website: string;
   description: string;
   address: OnboardingAddress;
+  /** null clears the industry on file. */
+  industry: string | null;
   ein?: string;
 }
 
@@ -175,6 +187,7 @@ const EMPTY_BUSINESS: OnboardingBusiness = {
   website: null,
   description: null,
   address: null,
+  industry: null,
 };
 
 /** Fills defaults so the UI never crashes on a partial server response. */
@@ -267,6 +280,16 @@ export function createOnboardingApi(invoke: InvokeFn) {
           ? res.rejected_fields.filter((f): f is string => typeof f === "string")
           : undefined,
       };
+    },
+
+    listIndustries: async (tenantId: string): Promise<OnboardingIndustry[]> => {
+      const res = await call<{ industries: OnboardingIndustry[] }>("moov-onboarding-get", {
+        tenant_id: tenantId,
+        action: "industries",
+      });
+      return Array.isArray(res?.industries)
+        ? res.industries.filter((i): i is OnboardingIndustry => typeof i?.industry === "string" && i.industry !== "")
+        : [];
     },
 
     revealEin: async (tenantId: string): Promise<string> => {
@@ -453,6 +476,7 @@ export interface BusinessForm {
   phone: string;
   website: string;
   description: string;
+  industry: string;
   line1: string;
   line2: string;
   city: string;
@@ -497,6 +521,7 @@ export function businessFormFrom(b: OnboardingBusiness | null | undefined): Busi
     phone: b?.phone ?? "",
     website: b?.website ?? "",
     description: b?.description ?? "",
+    industry: b?.industry ?? "",
     line1: a.line1 ?? "",
     line2: a.line2 ?? "",
     city: a.city ?? "",
@@ -601,6 +626,7 @@ export function buildSavePayload(tenantId: string, b: BusinessForm, reps: Repres
     phone: b.phone.trim(),
     website: b.website.trim(),
     description: b.description.trim(),
+    industry: b.industry || null,
     address: {
       line1: b.line1.trim(),
       line2: b.line2.trim(),
@@ -684,6 +710,7 @@ const MOOV_FIELD_LABELS: Array<[RegExp, string]> = [
   [/^profile\.business\.phone(\..*)?$/, "Business phone"],
   [/^profile\.business\.address(\..*)?$/, "Business address"],
   [/^profile\.business\.description$/, "Description"],
+  [/^profile\.business\.industry(Codes)?(\..*)?$/, "Industry"],
   [/^profile\.business\.taxID(\..*)?$/, "EIN"],
   [/^(representatives\.\d+\.)?name(\..*)?$/, "Representative name"],
   [/^(representatives\.\d+\.)?email$/, "Representative email"],

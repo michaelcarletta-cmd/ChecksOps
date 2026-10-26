@@ -3,6 +3,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
+  buildSavePayload,
+  businessFormFrom,
+  createOnboardingApi,
   describeRejectedFields,
   describeSyncStatus,
   moovFieldLabel,
@@ -48,4 +51,20 @@ test('the status line shows the rejected fields as an error, and other sync erro
 
   const synced = describeSyncStatus({ saving: false, lastSave: { saved: true, moov_synced: true, pending: false, error_code: null } });
   assert.deepEqual(synced, { tone: 'ok', label: 'Synced' });
+});
+
+test('the business industry round-trips through the form; blank clears it; the list comes from moov-onboarding-get', async () => {
+  const form = businessFormFrom({ legal_name: 'Freedom', industry: 'insurance-services' });
+  assert.equal(form.industry, 'insurance-services');
+  assert.equal(buildSavePayload('t1', form, []).business.industry, 'insurance-services');
+  assert.equal(buildSavePayload('t1', { ...form, industry: '' }, []).business.industry, null);
+  assert.equal(businessFormFrom(null).industry, '');
+  assert.equal(moovFieldLabel('profile.business.industry'), 'Industry');
+  const calls = [];
+  const api = createOnboardingApi(async (name, body) => {
+    calls.push([name, body]);
+    return { industries: [{ industry: 'insurance-services', displayName: 'Insurance services', category: 'f', categoryDisplayName: 'F' }, { displayName: 'x' }] };
+  });
+  assert.deepEqual(await api.listIndustries('t1'), [{ industry: 'insurance-services', displayName: 'Insurance services', category: 'f', categoryDisplayName: 'F' }]);
+  assert.deepEqual(calls, [['moov-onboarding-get', { tenant_id: 't1', action: 'industries' }]]);
 });

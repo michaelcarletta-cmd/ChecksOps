@@ -77,6 +77,8 @@ export const moovAddress = (a) => (a ? {
  * already be on file). Returns { fields, ein } where ein is the full EIN only
  * when supplied in this request (in memory, write-only).
  */
+const INDUSTRY_PATTERN = /^[a-z0-9][a-z0-9-]{0,99}$/;
+
 export function validateBusiness(input = {}, stored = null) {
   const legalName = str(input.legal_name ?? input.legalBusinessName, 120);
   if (!legalName) throw invalid('business.legal_name', 'Legal business name is required.');
@@ -102,6 +104,13 @@ export function validateBusiness(input = {}, stored = null) {
   if (!website && !description) {
     throw invalid('business.website', 'Provide a website or a short business description.');
   }
+  // Moov's industry identifier (GET /industries, e.g. 'clothing-accessories'; SQL 116). Absent from
+  // the request keeps the stored one; null or blank clears it.
+  let industry = stored?.industry ?? null;
+  if (input.industry !== undefined) {
+    industry = str(input.industry, 100);
+    if (industry && !INDUSTRY_PATTERN.test(industry)) throw invalid('business.industry', 'Choose an industry from the list.');
+  }
   return {
     fields: {
       legal_name: legalName,
@@ -112,6 +121,7 @@ export function validateBusiness(input = {}, stored = null) {
       website,
       description,
       address,
+      industry,
     },
     ein,
   };
@@ -273,12 +283,12 @@ export async function upsertProfile(client, deps, { tenantId, environment, field
   return (await client.query(
     `INSERT INTO public.moov_onboarding_profiles
       (tenant_id, environment, legal_name, dba, business_type, email, phone, website, description,
-       address, ein_ciphertext, ein_last4, ein_key_arn, submitted_by, sync_pending)
-     VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, $12, $13, $14::uuid, true)
+       address, ein_ciphertext, ein_last4, ein_key_arn, submitted_by, sync_pending, industry)
+     VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, $12, $13, $14::uuid, true, $15)
      ON CONFLICT (tenant_id, environment) DO UPDATE SET
        legal_name = EXCLUDED.legal_name, dba = EXCLUDED.dba, business_type = EXCLUDED.business_type,
        email = EXCLUDED.email, phone = EXCLUDED.phone, website = EXCLUDED.website,
-       description = EXCLUDED.description, address = EXCLUDED.address,
+       description = EXCLUDED.description, address = EXCLUDED.address, industry = EXCLUDED.industry,
        ein_ciphertext = COALESCE(EXCLUDED.ein_ciphertext, moov_onboarding_profiles.ein_ciphertext),
        ein_last4 = COALESCE(EXCLUDED.ein_last4, moov_onboarding_profiles.ein_last4),
        ein_key_arn = COALESCE(EXCLUDED.ein_key_arn, moov_onboarding_profiles.ein_key_arn),
@@ -287,7 +297,7 @@ export async function upsertProfile(client, deps, { tenantId, environment, field
     [
       tenantId, environment, fields.legal_name, fields.dba, fields.business_type, fields.email,
       fields.phone, fields.website, fields.description, JSON.stringify(fields.address),
-      einCipher, einLast4, einKey, userId,
+      einCipher, einLast4, einKey, userId, fields.industry ?? null,
     ],
   )).rows[0];
 }
@@ -533,6 +543,7 @@ export async function buildOnboardingView(client, ctx) {
       website: profile?.website ?? null,
       description: profile?.description ?? null,
       address: publicAddress(profile?.address),
+      industry: profile?.industry ?? null,
     },
     representatives: reps.map(publicRepresentative),
     documents: docs.map(publicDocument),

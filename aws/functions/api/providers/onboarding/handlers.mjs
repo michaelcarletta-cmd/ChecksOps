@@ -260,6 +260,71 @@ async function pullMoovStatus(client, ctx, { fetchImpl }) {
   return { status: onboarding, liveProviderCalled: true };
 }
 
+// ------------------------------------------------------------ industries + underwriting
+
+// Moov's industry list and its underwriting (POST, geographicReach + estimated activity) exist
+// from API version v2025.07.00; every other onboarding call stays on the pinned version.
+const MOOV_ONBOARDING_V2025_API_VERSION = 'v2025.07.00';
+const MOOV_INDUSTRIES_SCOPES = ['/profile-enrichment.read'];
+
+/** Moov's industry list (identifier, name, category) for the business profile's Industry. */
+async function listMoovIndustries(ctx, { deps, fetchImpl }) {
+  const moovContext = await loadOnboardingMoovContext(ctx.environment, deps);
+  if (moovContext.error) return moovContext;
+  const data = await withMoovContext({ ...moovContext, fetchImpl }, () => moovFetch('/industries', {
+    scopes: MOOV_INDUSTRIES_SCOPES, apiVersion: MOOV_ONBOARDING_V2025_API_VERSION, fetchImpl,
+  }));
+  const list = Array.isArray(data?.industries) ? data.industries : (Array.isArray(data) ? data : []);
+  const industries = list
+    .filter((i) => typeof i?.industry === 'string' && i.industry)
+    .map((i) => ({
+      industry: i.industry,
+      displayName: typeof i.displayName === 'string' ? i.displayName : i.industry,
+      category: typeof i.category === 'string' ? i.category : null,
+      categoryDisplayName: typeof i.categoryDisplayName === 'string' ? i.categoryDisplayName : null,
+    }));
+  return ok({ industries, liveProviderCalled: true });
+}
+
+export const GEOGRAPHIC_REACH = Object.freeze(['us-only', 'us-and-international', 'international-only']);
+export const MONTHLY_VOLUME_RANGES = Object.freeze([
+  'under-10k', '10k-50k', '50k-100k', '100k-250k', '250k-500k', '500k-1m', '1m-5m', 'over-5m',
+]);
+
+const plainObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
+const onlyKeys = (v, keys) => plainObject(v) && Object.keys(v).every((k) => keys.includes(k));
+
+/**
+ * The underwriting answers ChecksOps sends: geographic reach and the ACH send and collect monthly
+ * volume ranges, exactly. Returns { answers } or { field, message } for the first invalid part.
+ */
+export function validateUnderwritingAnswers(answers) {
+  if (!onlyKeys(answers, ['geographicReach', 'sendFunds', 'collectFunds'])) {
+    return { field: 'answers', message: 'Answer where your customers are and your monthly ACH volumes.' };
+  }
+  if (!GEOGRAPHIC_REACH.includes(answers.geographicReach)) {
+    return { field: 'answers.geographicReach', message: 'Choose where your customers are located.' };
+  }
+  const volume = (side) => {
+    const s = answers[side];
+    if (!onlyKeys(s, ['ach']) || !onlyKeys(s.ach, ['estimatedActivity'])
+      || !onlyKeys(s.ach.estimatedActivity, ['monthlyVolumeRange'])) return null;
+    const range = s.ach.estimatedActivity.monthlyVolumeRange;
+    return MONTHLY_VOLUME_RANGES.includes(range) ? range : null;
+  };
+  const send = volume('sendFunds');
+  if (!send) return { field: 'answers.sendFunds', message: 'Choose your estimated monthly volume for ACH payments you send.' };
+  const collect = volume('collectFunds');
+  if (!collect) return { field: 'answers.collectFunds', message: 'Choose your estimated monthly volume for ACH payments you accept.' };
+  return {
+    answers: {
+      geographicReach: answers.geographicReach,
+      sendFunds: { ach: { estimatedActivity: { monthlyVolumeRange: send } } },
+      collectFunds: { ach: { estimatedActivity: { monthlyVolumeRange: collect } } },
+    },
+  };
+}
+
 // ------------------------------------------------------------ handlers
 
 const access = {
@@ -270,7 +335,11 @@ const access = {
 export const ONBOARDING_HANDLERS = {
   'moov-onboarding-get': {
     access: access.read,
-    run: async ({ client, ctx }) => jsonResult({ success: true, ...(await buildOnboardingView(client, ctx)) }),
+    run: async ({ client, ctx, body, deps, fetchImpl }) => {
+      // action 'industries': Moov's industry list for the business profile (read-only).
+      if (String(body?.action ?? '').toLowerCase() === 'industries') return listMoovIndustries(ctx, { deps, fetchImpl });
+      return jsonResult({ success: true, ...(await buildOnboardingView(client, ctx)) });
+    },
   },
 
   'moov-onboarding-save': {
@@ -721,10 +790,13 @@ export const ONBOARDING_HANDLERS = {
       const id = account.provider_account_id;
       if (String(body.action ?? '').toLowerCase() === 'save') {
         if (!body.answers || typeof body.answers !== 'object') return fail('answers are required', 400, { field: 'answers' });
+        const checked = validateUnderwritingAnswers(body.answers);
+        if (!checked.answers) return fail(checked.message, 400, { field: checked.field });
         let saved;
         try {
           saved = await moovFetch(`/accounts/${id}/underwriting`, {
-            method: 'PUT', scopes: scopes.accountWrite(id), body: body.answers, fetchImpl,
+            method: 'POST', scopes: scopes.accountWrite(id), body: checked.answers,
+            apiVersion: MOOV_ONBOARDING_V2025_API_VERSION, fetchImpl,
           });
         } catch (error) {
           if (error instanceof MoovError) {
@@ -741,7 +813,9 @@ export const ONBOARDING_HANDLERS = {
         });
         return ok({ underwriting: redact(saved), liveProviderCalled: true });
       }
-      const data = await moovFetch(`/accounts/${id}/underwriting`, { scopes: scopes.accountRead(id), fetchImpl });
+      const data = await moovFetch(`/accounts/${id}/underwriting`, {
+        scopes: scopes.accountRead(id), apiVersion: MOOV_ONBOARDING_V2025_API_VERSION, fetchImpl,
+      });
       return ok({ underwriting: redact(data), liveProviderCalled: true });
     },
   },

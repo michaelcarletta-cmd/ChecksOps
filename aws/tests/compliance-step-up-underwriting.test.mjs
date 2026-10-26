@@ -3,38 +3,32 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { buildUnderwritingPayload } from '../../src/lib/underwritingPayload.ts';
+import { answersFromUnderwriting, buildUnderwritingPayload } from '../../src/lib/underwritingPayload.ts';
 import { invokeErrorCode, invokeWithBankStepUp } from '../../src/lib/bankStepUp.ts';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 
 const answers = {
-  averageTransactionSize: '1,250.50',
-  maxTransactionSize: '$25000',
-  averageMonthlyTransactionVolume: '100000',
-  businessToBusinessPercentage: '80',
-  consumerToBusinessPercentage: '20',
-  hasPhysicalGoods: false,
-  isShippingProduct: false,
-  shipmentDurationDays: '0',
-  returnPolicy: 'none',
+  geographicReach: 'us-only',
+  sendAchMonthlyVolume: 'under-10k',
+  collectAchMonthlyVolume: '10k-50k',
 };
 
-test('Expected Payment Activity sends whole cents and nested percentages and fulfillment', () => {
+test('Expected Payment Activity sends geographic reach and the ACH send and collect volume ranges', () => {
   const built = buildUnderwritingPayload(answers);
   assert.equal(built.ok, true);
   assert.deepEqual(built.payload, {
-    averageTransactionSize: 125050,
-    maxTransactionSize: 2500000,
-    averageMonthlyTransactionVolume: 10000000,
-    volumeByCustomerType: { businessToBusinessPercentage: 80, consumerToBusinessPercentage: 20 },
-    fulfillment: { hasPhysicalGoods: false, isShippingProduct: false, shipmentDurationDays: 0, returnPolicy: 'none' },
+    geographicReach: 'us-only',
+    sendFunds: { ach: { estimatedActivity: { monthlyVolumeRange: 'under-10k' } } },
+    collectFunds: { ach: { estimatedActivity: { monthlyVolumeRange: '10k-50k' } } },
   });
-  assert.equal(buildUnderwritingPayload({ ...answers, consumerToBusinessPercentage: '30' }).ok, false);
-  assert.equal(buildUnderwritingPayload({ ...answers, averageTransactionSize: '' }).ok, false);
-  assert.equal(buildUnderwritingPayload({ ...answers, maxTransactionSize: '10' }).ok, false);
-  assert.equal(buildUnderwritingPayload({ ...answers, shipmentDurationDays: '2.5' }).ok, false);
+  assert.equal(buildUnderwritingPayload({ ...answers, geographicReach: '' }).ok, false);
+  assert.equal(buildUnderwritingPayload({ ...answers, sendAchMonthlyVolume: '5000' }).ok, false);
+  assert.equal(buildUnderwritingPayload({ ...answers, collectAchMonthlyVolume: '' }).ok, false);
+  // The provider's read fills the form back; anything else stays blank.
+  assert.deepEqual(answersFromUnderwriting(built.payload), answers);
+  assert.deepEqual(answersFromUnderwriting({ averageTransactionSize: 100 }), { geographicReach: '', sendAchMonthlyVolume: '', collectAchMonthlyVolume: '' });
   const panel = read('src/components/payments/UnderwritingQuestionnairePanel.tsx');
   assert.match(panel, /answers: built\.payload/);
   assert.equal(/action: "save", answers \}/.test(panel), false);
