@@ -64,7 +64,7 @@ const letterheadUpload = company.slice(
 );
 const loadSettings = company.slice(
   company.indexOf('const loadSettings'),
-  company.indexOf('const handleInvoiceLetterheadUpload'),
+  company.indexOf('const handleLetterheadUpload'),
 );
 const brandingTab = settings.slice(
   settings.indexOf('<TabsContent value="branding"'),
@@ -168,6 +168,30 @@ test('unsupported invoice fields are not submitted or shown', () => {
   });
   assert.equal(extras.error, 'column_not_allowlisted');
   assert.deepEqual(extras.columns.sort(), ['invoice_accent_color', 'invoice_theme']);
+});
+
+test('retired invoice branding has no editor; the stored invoice fields round-trip unchanged', () => {
+  assert.doesNotMatch(company, /Invoice Branding/);
+  assert.doesNotMatch(company, /Invoice Letterhead|Invoice Footer Note|Default Payment Terms/);
+  assert.doesNotMatch(company, /handleInvoiceLetterheadUpload|invoice-letterhead-upload|uploadingInvoice/);
+  assert.doesNotMatch(company, /invoice presentation/);
+  // Public invoices still read these columns, so Save writes back what it loaded.
+  assert.match(loadSettings, /setInvoiceLetterheadUrl\(t\.invoice_letterhead_url \|\| null\)/);
+  assert.match(tenantPayload, /invoice_letterhead_url:\s*invoiceLetterheadUrl/);
+});
+
+test('Email Branding: no sending-domain notice; the brand color is editable and saved as primaryColor', () => {
+  assert.doesNotMatch(emailSender, /Custom sending domain \(active\)|Platform sender \(active\)/);
+  assert.match(emailSender, /title="Sender identity"/);
+  assert.match(emailSender, /type="color"/);
+  assert.match(emailSender, /onChange=\{\(e\) => setPrimaryColor\(e\.target\.value\)\}/);
+  const save = emailSender.slice(emailSender.indexOf('const save = useMutation'), emailSender.indexOf('const registerDomain'));
+  assert.match(save, /primaryColor: primaryColor\.trim\(\)/);
+  assert.match(save, /\.update\(\{ primary_color: primaryColor\.trim\(\) \}\)/);
+  assert.match(save, /if \(!colorValid\) throw/);
+  // The client check is the API's isSafeHexColor pattern.
+  assert.match(emailSender, /\/\^#\(\[0-9a-fA-F\]\{3\}\|\[0-9a-fA-F\]\{6\}\)\$\//);
+  assert.equal(pickAllowlistedValues('tenants', { primary_color: '#112233' }).error, undefined);
 });
 
 test('tenant Branding tab mounts Company Branding and Email Branding without Sending Subdomain', () => {

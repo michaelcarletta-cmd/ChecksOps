@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useTenant } from "@/contexts/TenantContext";
-import { Upload, Building2, Loader2, Sparkles, Image as ImageIcon, Layout } from "lucide-react";
+import { Upload, Building2, Loader2, Sparkles, Image as ImageIcon } from "lucide-react";
 
 import { brandingPublicUrl } from "@/lib/brandingPublicUrl";
 import { SectionCard } from "./SectionCard";
@@ -41,7 +41,6 @@ export function CompanyBrandingSettings() {
   
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [uploadingInvoice, setUploadingInvoice] = useState(false);
   const [saving, setSaving] = useState(false);
   const { toast } = useToast();
 
@@ -52,6 +51,8 @@ export function CompanyBrandingSettings() {
   const loadSettings = async () => {
     if (!tenantId) return;
     // 1. Application/sidebar logo, company name and allowlisted invoice fields live on the current tenant.
+    // The invoice fields have no editor here (invoice branding settings were retired); they are
+    // loaded and saved back unchanged because public invoices still read them.
     const { data: tenantRow } = await supabase
       .from("tenants")
       .select("name, logo_url, invoice_letterhead_url, invoice_footer_note, invoice_default_terms")
@@ -79,33 +80,6 @@ export function CompanyBrandingSettings() {
       setPhone(info.company_phone || "");
       setEmail(info.company_email || "");
       setLetterheadUrl(info.letterhead_url || null);
-    }
-  };
-
-  const handleInvoiceLetterheadUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (!file.type.startsWith("image/")) {
-      toast({ title: "Please upload an image file (PNG, JPG)", variant: "destructive" });
-      return;
-    }
-
-    setUploadingInvoice(true);
-    try {
-      const path = `invoice_letterhead_${Date.now()}.${file.name.split(".").pop()}`;
-      const { error } = await supabase.storage.from("company-branding").upload(path, file);
-      
-      if (error) throw error;
-
-      const { data: urlData } = supabase.storage.from("company-branding").getPublicUrl(path);
-      
-      setInvoiceLetterheadUrl(urlData?.publicUrl || null);
-      toast({ title: "Invoice letterhead uploaded successfully" });
-    } catch (error: any) {
-      toast({ title: "Upload failed", description: error.message, variant: "destructive" });
-    } finally {
-      setUploadingInvoice(false);
     }
   };
 
@@ -232,14 +206,13 @@ export function CompanyBrandingSettings() {
 
   const logoSrc = brandingPublicUrl(logoUrl, "tenant-logos") || logoUrl;
   const letterheadSrc = brandingPublicUrl(letterheadUrl, "tenant-logos") || letterheadUrl;
-  const invoiceLetterheadSrc = brandingPublicUrl(invoiceLetterheadUrl, "company-branding") || invoiceLetterheadUrl;
 
   return (
     <div className="space-y-6">
       {/* Hero Section */}
       <SettingsHero
         title="Company Settings"
-        description="Configure your organization's visual identity, contact information, and invoice presentation."
+        description="Configure your organization's visual identity and contact information."
         badge="Identity & Branding"
       />
 
@@ -366,66 +339,6 @@ export function CompanyBrandingSettings() {
                   disabled={uploading}
                 />
               </div>
-            </div>
-          </div>
-        </SectionCard>
-
-        <SectionCard
-          title="Invoice Branding"
-          icon={<Layout className="h-4 w-4 text-emerald-500" />}
-          accent="bg-gradient-to-r from-emerald-500/60 to-emerald-500/10"
-          description="Customize the visual presentation and default terms of your customer-facing invoices."
-        >
-          <div className="space-y-4">
-            <div>
-              <Label>Invoice Letterhead</Label>
-              <div className="mt-2">
-                <Label
-                  htmlFor="invoice-letterhead-upload"
-                  className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer hover:bg-muted/50 transition-colors"
-                >
-                  <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                    {invoiceLetterheadSrc ? (
-                      <img src={invoiceLetterheadSrc} alt="Invoice Letterhead Preview" className="h-20 object-contain mb-2" />
-                    ) : (
-                      <Upload className="h-8 w-8 text-muted-foreground mb-2" />
-                    )}
-                    <p className="text-sm text-muted-foreground">
-                      {uploadingInvoice ? "Uploading..." : "Click to upload invoice letterhead"}
-                    </p>
-                  </div>
-                </Label>
-                <Input
-                  id="invoice-letterhead-upload"
-                  type="file"
-                  accept="image/*"
-                  onChange={handleInvoiceLetterheadUpload}
-                  className="hidden"
-                  disabled={uploadingInvoice}
-                />
-              </div>
-            </div>
-
-            <div>
-              <Label>Invoice Footer Note</Label>
-              <Textarea
-                value={invoiceFooterNote}
-                onChange={(e) => setInvoiceFooterNote(e.target.value)}
-                placeholder="Thank you for your business!"
-                rows={2}
-              />
-              <p className="text-xs text-muted-foreground mt-1">Appears at the bottom of the invoice</p>
-            </div>
-
-            <div>
-              <Label>Default Payment Terms</Label>
-              <Textarea
-                value={invoiceDefaultTerms}
-                onChange={(e) => setInvoiceDefaultTerms(e.target.value)}
-                placeholder="Payment is due within 30 days. Please make checks payable to..."
-                rows={3}
-              />
-              <p className="text-xs text-muted-foreground mt-1">Default terms added to every new invoice</p>
             </div>
           </div>
         </SectionCard>
