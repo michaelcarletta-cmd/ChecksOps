@@ -20,6 +20,7 @@ import {
   completeOutbox,
   decryptProfileEin,
   decryptRepresentativeDob,
+  enqueueOutbox,
   failOutboxAttempt,
   loadAccount,
   loadProfile,
@@ -51,31 +52,59 @@ async function findMoovAccountByForeignId(tenantId, fetchImpl, { exclude = null 
 }
 
 /**
- * True when Moov no longer holds this account: 404/410, or it was disconnected or closed (the owner
- * disconnects a stuck account in the Moov dashboard so onboarding can start again on a new one).
+ * Whether Moov's list of accounts connected to this platform still returns `accountId` (it is filed
+ * under the tenant's foreignID). null when the list could not be read.
+ */
+async function listedAsConnected(tenantId, accountId, fetchImpl) {
+  try {
+    const found = await moovFetch(`/accounts?foreignID=${encodeURIComponent(tenantId)}`, {
+      method: 'GET', scopes: scopes.accountsRead(), fetchImpl,
+    });
+    const list = Array.isArray(found) ? found : [];
+    return list.some((a) => (a?.accountID ?? a?.accountId) === accountId && !a?.disconnectedOn && !a?.closedOn);
+  } catch (error) {
+    if (error instanceof MoovError || isNetworkError(error)) return null;
+    throw error;
+  }
+}
+
+/**
+ * True when Moov no longer holds this account for ChecksOps: 404/410, disconnectedOn/closedOn set,
+ * or an account filed under this tenant that Moov's list of connected accounts no longer returns.
+ * The owner disconnects a stuck account in the Moov dashboard so onboarding can start again on a new
+ * one (staging 2026-10-26: after that, the account itself still answered without disconnectedOn).
  */
 async function moovAccountGone(ctx, accountId, fetchImpl) {
   // What Moov reports for the stored account, without personal data: why a Save did or did not
-  // start a new account (staging 2026-10-26: a dashboard-disconnected account still answered).
+  // start a new account.
   const check = (fields) => onboardingLog('moov_account_check', {
     tenant: ctx.tenantId, environment: ctx.environment, account_suffix: String(accountId).slice(-4), ...fields,
   });
+  let remote;
   try {
-    const remote = await moovFetch(`/accounts/${encodeURIComponent(accountId)}`, {
+    remote = await moovFetch(`/accounts/${encodeURIComponent(accountId)}`, {
       method: 'GET', scopes: scopes.accountRead(accountId), fetchImpl,
     });
-    const gone = Boolean(remote?.disconnectedOn || remote?.closedOn);
-    check({
-      http_status: 200, gone,
-      disconnected_on: Boolean(remote?.disconnectedOn), closed_on: Boolean(remote?.closedOn),
-      account_keys: remote && typeof remote === 'object' ? Object.keys(remote).sort().slice(0, 40) : [],
-    });
-    return gone;
   } catch (error) {
-    check({ http_status: error?.status ?? null, gone: error instanceof MoovError && (error.status === 404 || error.status === 410) });
-    if (error instanceof MoovError && (error.status === 404 || error.status === 410)) return true;
+    const gone = error instanceof MoovError && (error.status === 404 || error.status === 410);
+    check({ http_status: error?.status ?? null, gone });
+    if (gone) return true;
     throw error;
   }
+  const disconnected = Boolean(remote?.disconnectedOn);
+  const closed = Boolean(remote?.closedOn);
+  // Only an account Moov files under this tenant must appear in the tenant's foreignID list; any
+  // other stored account is never judged by the list.
+  const filedHere = String(remote?.foreignID ?? '') === String(ctx.tenantId);
+  const listed = !disconnected && !closed && filedHere
+    ? await listedAsConnected(ctx.tenantId, accountId, fetchImpl)
+    : null;
+  const gone = disconnected || closed || listed === false;
+  check({
+    http_status: 200, gone, disconnected_on: disconnected, closed_on: closed, filed_here: filedHere, listed,
+    account_keys: remote && typeof remote === 'object' ? Object.keys(remote).sort().slice(0, 40) : [],
+  });
+  return gone;
 }
 
 /** Clears what belonged to a Moov account that is gone, so the next sync rebuilds it on the new one. */
@@ -95,6 +124,22 @@ async function forgetGoneAccount(client, ctx, goneAccountId) {
        AND provider_account_id = $3 AND external_recipient_id IS NULL`,
     [ctx.tenantId, ctx.environment, goneAccountId],
   );
+  // Documents sent to the gone account go again from their verified stored copy: the outbox sends
+  // each one to the new account (the tenant does not upload them again).
+  const resend = (await client.query(
+    `UPDATE public.moov_compliance_documents
+     SET status = 'stored', moov_file_id = NULL, moov_status = NULL, moov_account_id = NULL,
+         sent_at = NULL, last_error_code = NULL, updated_at = now()
+     WHERE tenant_id = $1::uuid AND environment = $2 AND moov_account_id = $3 AND status = 'sent'
+     RETURNING id`,
+    [ctx.tenantId, ctx.environment, goneAccountId],
+  )).rows;
+  for (const doc of resend) {
+    await enqueueOutbox(client, {
+      tenantId: ctx.tenantId, environment: ctx.environment, kind: 'document_upload', subjectId: doc.id,
+      userId: ctx.userId, payload: { document_id: doc.id },
+    });
+  }
 }
 
 export function businessProfileBody(profile, ein) {

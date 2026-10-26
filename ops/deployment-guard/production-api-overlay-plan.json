@@ -805,17 +805,17 @@
     },
     "providers/onboarding/documents.mjs": {
       "operation": "add",
-      "accepted_sha256": "231028fb19592d0cc677f8d365d1375a8c6493d905e97682267de7017fcc68ac",
+      "accepted_sha256": "ae9b9273a1ce938a478b0cdaa8a3e92732802d19f6755ae90a5e18448f8e9ba6",
       "expected_live_sha256": null,
       "sql_before": "aws/workflows/sql/91_moov_onboarding.sql",
-      "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
+      "manifest": "aws/tests/fixtures/production-moov-account-replace-detect-manifest-2026-10-26.json"
     },
     "providers/onboarding/moov-sync.mjs": {
       "operation": "add",
-      "accepted_sha256": "30dba650c7c058c9e10c942f3e6c9195b3288c8b80a6e9cb2b06133021903262",
+      "accepted_sha256": "e1427571a609a33117c4c0fcdd71e146187223a305e76746a15bdecd8f720f3a",
       "expected_live_sha256": null,
       "sql_before": "aws/workflows/sql/104_payment_idempotency_keys_grant.sql",
-      "manifest": "aws/tests/fixtures/production-moov-account-replace-manifest-2026-10-26.json"
+      "manifest": "aws/tests/fixtures/production-moov-account-replace-detect-manifest-2026-10-26.json"
     },
     "providers/onboarding/webhook-status.mjs": {
       "operation": "add",
