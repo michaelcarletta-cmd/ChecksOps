@@ -1,8 +1,8 @@
 {
   "id": "sql116-moov-onboarding-profile-industry-production-apply",
   "migration": "sql116",
-  "authorization": "pending",
-  "execute": false,
+  "authorization": "Owner approved 2026-10-26 (the owner's words, verbatim: \"build the SQL 116 pin PR\"; this pin change is bound to that approval and takes effect only once the owner reviews and merges it): production apply of SQL 116 on the staging acceptance below (production d145c18e29fb0e309222d250e270f5750be7f23a8cbe336190d5c9d7bfd7d9dd -> c99fc953f7ab14c2c68647ed3bcfa3e0b50a5aa4888bdc9f9c71163392314ee1); execute true takes effect only once this change is merged. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
+  "execute": true,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -11,7 +11,7 @@
   "staging_pin_commit": "eb945142973b8c1e2f435d57c11dd4dca797e0ef",
   "source_sha256": "31217651d76753c9f76232f0bd2c64ab3fd9a36754ccda081fda18169437b8b8",
   "function_identities": [],
-  "expected_live_definition_sha256": null,
+  "expected_live_definition_sha256": "d145c18e29fb0e309222d250e270f5750be7f23a8cbe336190d5c9d7bfd7d9dd",
   "intended_replacement_sha256": "c99fc953f7ab14c2c68647ed3bcfa3e0b50a5aa4888bdc9f9c71163392314ee1",
   "authorization_phrase": "APPLY_MOOV_ONBOARDING_PROFILE_INDUSTRY",
   "predecessors": [
@@ -41,24 +41,24 @@
     "note": "Guarded tooling for SQL 116: sql116-moov-onboarding-profile-industry-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql116-moov-onboarding-profile-industry); production-sql-one-shot.mjs --migration sql116. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): the column public.moov_onboarding_profiles.industry, text, nullable, no default, no column grant (spec added_columns, as SQL 93). The pre-conditions require SQL 91 in place (predecessors_applied), the table owned by the login (altered_relations_owned_by_login) and the column absent or already as intended (added_columns_absent_or_intended); the table's other columns, its ACL, policies, constraints, indexes and triggers are in the unrelated-catalog snapshot and must be unchanged. The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
   },
   "production_inspect": {
-    "status": "pending",
-    "date": null,
-    "ssm_command_id": null,
-    "source_commit": null,
+    "status": "recorded",
+    "date": "2026-10-26",
+    "ssm_command_id": "5120ddac-a515-4411-92c7-7c0046de0790",
+    "source_commit": "fc2af0c4521f467c25276dc1f3ab9cece41d7a07",
     "read_only": true,
     "connected_as": "checksops_admin",
-    "live_definition_sha256": null,
-    "apply_preconditions_met": null,
-    "precondition_failures": null,
-    "note": "Pending: no read-only production inspect has been run for SQL 116 yet. Expected: moov_onboarding_profiles present and owned by checksops_admin without an industry column, SQL 91 in place, precondition_failures []. Record its date, SSM command id, source commit, live_definition_sha256, precondition_failures and apply_preconditions_met here. If already_applied is true, record the inspect as the verified-live evidence and leave execute false; otherwise copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. If precondition_failures is not [] stop: that needs its own reviewed change."
+    "live_definition_sha256": "d145c18e29fb0e309222d250e270f5750be7f23a8cbe336190d5c9d7bfd7d9dd",
+    "apply_preconditions_met": false,
+    "precondition_failures": [],
+    "note": "Recorded from the read-only production inspect of 2026-10-26 (SSM command 5120ddac-a515-4411-92c7-7c0046de0790, node scripts/deployment-guard/sql116-moov-onboarding-profile-industry-production-apply.mjs --inspect on the SQL53 runner i-0c35557c4e5385406 from main fc2af0c45 (tarball source-fc2af0c4521f467c25276dc1f3ab9cece41d7a07.tar.gz sha256 2adf95c3a17f3edba52f56080b1c50f72d6284020d32df09ecff7be03046ca0d, transfer run 40382971367; migration source sha256 on the runner 31217651d76753c9f76232f0bd2c64ab3fd9a36754ccda081fda18169437b8b8 == source_sha256), read_only true, source_ok true, connected as checksops_admin). live_definition_sha256 d145c18e29fb0e309222d250e270f5750be7f23a8cbe336190d5c9d7bfd7d9dd (not the intended c99fc953f7ab14c2c68647ed3bcfa3e0b50a5aa4888bdc9f9c71163392314ee1: already_applied false); release_sql_inspect: moov_onboarding_profiles.industry state absent, predecessors sql91 true; prerequisites_missing [], missing_dependencies [], precondition_failures []. The live hash equals the staging pre-state (staging read-live run 40336144625). apply_preconditions_met was false at inspect time only because no pre-state was recorded yet (execute false, expected_live_definition_sha256 null). This reviewed change copies live_definition_sha256 into expected_live_definition_sha256 and, in the same change, sets authorization, execute true and staging_acceptance. A fresh --inspect immediately before apply (the one-shot's inspect step) must still report this live_definition_sha256 and precondition_failures []; if not, stop. If already_applied is true, or precondition_failures is not [], stop: that needs its own reviewed change. Earlier: Pending: no read-only production inspect has been run for SQL 116 yet. Expected: moov_onboarding_profiles present and owned by checksops_admin without an industry column, SQL 91 in place, precondition_failures []. Record its date, SSM command id, source commit, live_definition_sha256, precondition_failures and apply_preconditions_met here. If already_applied is true, record the inspect as the verified-live evidence and leave execute false; otherwise copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. If precondition_failures is not [] stop: that needs its own reviewed change."
   },
   "intended_post_state": {
     "fingerprint": "c99fc953f7ab14c2c68647ed3bcfa3e0b50a5aa4888bdc9f9c71163392314ee1",
     "note": "public.moov_onboarding_profiles.industry: text, nullable, no default, no column grant. Every other column, the table's ACL, RLS flags, policies, constraints, indexes and triggers are unchanged; no other table, function, policy or row changes. The fingerprint is releaseIntendedHash('sql116', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): c99fc953f7ab14c2c68647ed3bcfa3e0b50a5aa4888bdc9f9c71163392314ee1."
   },
   "staging_acceptance": {
-    "ok": false,
-    "reference": null,
-    "basis": "Pending: record the guarded staging SQL executor read-live run of SQL 116 (choice sql116-moov-onboarding-profile-industry) and its staging apply run here in the reviewed change that sets execute true. The staging pin records the read-live pre-state, the owner approves the staging apply, and the apply run (receipt before == the recorded pre-state, after == intended) is the staging evidence. The behaviour is covered on PostgreSQL 16 by aws/tests/sql116-moov-onboarding-profile-industry-pg.test.mjs. Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+    "ok": true,
+    "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/40339373370",
+    "basis": "Guarded staging apply from the same pre-state as production. The guarded staging SQL executor (choice sql116-moov-onboarding-profile-industry) carried SQL 116 from deploy run 40335727438 (inspect run 40335246738 before it found the executor at CodeSha256 k6Gyn1k4... without SQL 116); at the apply the live executor was y4Tko8e2L7bvEIzW0ErdLASp4GXDBqK3wpmqCb/g7Ug= and already carried main's package. Read-live run 40336144625 (2026-10-26, main d8d4e3b) reported already_applied false, precondition_failures [] and live d145c18e29fb0e309222d250e270f5750be7f23a8cbe336190d5c9d7bfd7d9dd, recorded as the staging pin's expected_live_definition_sha256. The staging apply run 40339373370 (2026-10-26, staging pin commit eb945142973b8c1e2f435d57c11dd4dca797e0ef) reported result applied, before d145c18e29fb0e309222d250e270f5750be7f23a8cbe336190d5c9d7bfd7d9dd, after c99fc953f7ab14c2c68647ed3bcfa3e0b50a5aa4888bdc9f9c71163392314ee1 = intended_replacement_sha256. The read-live after it (run 40339796555) reported already_applied true and live c99fc953f7ab14c2c68647ed3bcfa3e0b50a5aa4888bdc9f9c71163392314ee1 = intended_replacement_sha256: moov_onboarding_profiles.industry intended. The pre-states are identical: staging before its apply and production at its inspect (SSM 5120ddac-a515-4411-92c7-7c0046de0790) both report d145c18e29fb0e309222d250e270f5750be7f23a8cbe336190d5c9d7bfd7d9dd, so this is direct acceptance from the same pre-state, not substitute evidence. The column is covered on PostgreSQL 16 by aws/tests/sql116-moov-onboarding-profile-industry-pg.test.mjs. The production apply refuses unless the live state still equals this pin's expected_live_definition_sha256, and its post-conditions roll back unless the intended fingerprint is reached with the table's other columns, its ACL and the rest of the catalog unchanged."
   }
 }

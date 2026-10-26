@@ -30,7 +30,25 @@ absent, predecessor SQL 91 in place; live `d145c18e29fb0e309222d250e270f5750be7f
 `execute: true`, wave 17) under the owner's words of 2026-10-26, "Approve SQL 116 staging apply
 and merge when green".
 
-**Status:** staging pin execute-authorized (wave 17); nothing applied yet; production pin pending.
+**Staging apply (2026-10-26).** After the staging pin change (#1256), executor runs 40338592142 and
+40338947124 preceded the apply; at the apply the live executor was `y4Tko8e2…` and carried main's
+package. Apply run 40339373370 (staging pin commit `eb945142`): result `applied`, before
+`d145c18e29fb0e309222d250e270f5750be7f23a8cbe336190d5c9d7bfd7d9dd`, after
+`c99fc953f7ab14c2c68647ed3bcfa3e0b50a5aa4888bdc9f9c71163392314ee1` (intended). Read-live run
+40339796555: `already_applied` true, `moov_onboarding_profiles.industry` intended.
+
+**Production inspect (2026-10-26).** Read-only `--inspect` through SSM
+`5120ddac-a515-4411-92c7-7c0046de0790` on `i-0c35557c4e5385406`, main `fc2af0c45` (tarball sha256
+`2adf95c3a17f3edba52f56080b1c50f72d6284020d32df09ecff7be03046ca0d`, transfer run 40382971367, migration
+source `31217651…` == pin), connected as `checksops_admin`: `moov_onboarding_profiles.industry`
+absent, predecessor SQL 91 in place; live `d145c18e29fb0e309222d250e270f5750be7f23a8cbe336190d5c9d7bfd7d9dd`
+(the staging pre-state), `already_applied` false, `precondition_failures` `[]`. Recorded in the
+production pin with the staging apply as its staging acceptance and `execute: true` under the owner's
+words of 2026-10-26, "build the SQL 116 pin PR". Each apply still needs the owner's run-time approval.
+Apply SQL 116 before the onboarding members `store.mjs`, `moov-sync.mjs` and `handlers.mjs`
+(production-moov-onboarding-reconcile manifest).
+
+**Status:** staging applied (wave 17); production pin execute-authorized; production apply pending.
 
 ## Fingerprint
 
