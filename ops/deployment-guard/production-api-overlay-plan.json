@@ -826,10 +826,10 @@
     },
     "providers/onboarding/handlers.mjs": {
       "operation": "add",
-      "accepted_sha256": "3cff71b9e8a44d60c2c9f7d767a04ebe58e6b4243c4736015404c24f5ca7ebba",
+      "accepted_sha256": "e9ce45b8bf7bd69d76454329ccfb28f3147e616f3cc5a91451c43d7f7135bd9c",
       "expected_live_sha256": null,
       "sql_before": "aws/workflows/sql/105_onboarding_payment_table_grants.sql",
-      "manifest": "aws/tests/fixtures/production-underwriting-failure-log-manifest-2026-10-26.json"
+      "manifest": "aws/tests/fixtures/production-bank-account-failure-log-manifest-2026-10-26.json"
     },
     "providers/catalog.mjs": {
       "operation": "replace",
