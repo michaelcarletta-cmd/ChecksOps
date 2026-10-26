@@ -159,7 +159,8 @@ test('order: after SQL 91, which it supersedes; the column is new to SQL 91\'s t
   const runbook = fs.readFileSync(path.join(ROOT, COMMITTED.tooling.runbook), 'utf8');
   assert.ok(runbook.includes(COMMITTED.intended_replacement_sha256));
   assert.ok(runbook.includes(COMMITTED.source_sha256));
-  assert.match(runbook, /\*\*Status:\*\* pending/);
+  assert.match(runbook, /\*\*Status:\*\* staging pin execute-authorized \(wave 17\)/);
+  assert.match(runbook, /read-live \(2026-10-26\)\.\*\* Run 40336144625/);
   const oneShot = fs.readFileSync(path.join(ROOT, 'ops/production-sql-one-shot.md'), 'utf8');
   assert.match(oneShot, /\| `sql116` \|/);
   assert.match(oneShot, /`sql115`, `sql116`\) \|/);

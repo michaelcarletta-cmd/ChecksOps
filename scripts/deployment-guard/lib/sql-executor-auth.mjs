@@ -2555,7 +2555,7 @@ export const AUTHORIZED_SQL115_PROVIDER_STAKEHOLDER_ONE_PARTNER_PAYOUT = Object.
 // Moov onboarding 2026-10-26 staging pin: SQL 116 (public.moov_onboarding_profiles.industry text,
 // nullable, no default: the Moov industry of the business profile; Moov's form for Freedom
 // Adjustment's new sandbox account listed Industry as required, staging 2026-10-26).
-// Predecessor SQL 91 (which it supersedes). Pending until a reviewed pin change records a staging read-live.
+// Predecessor SQL 91 (which it supersedes). Staging apply authorized (wave 17) from staging read-live run 40336144625.
 export const AUTHORIZED_SQL116_MOOV_ONBOARDING_PROFILE_INDUSTRY = Object.freeze({
   key: 'sql116',
   filename: 'aws/workflows/sql/116_moov_onboarding_profile_industry.sql',
@@ -2563,9 +2563,12 @@ export const AUTHORIZED_SQL116_MOOV_ONBOARDING_PROFILE_INDUSTRY = Object.freeze(
   // The commit that last authored the file bytes.
   commit: 'eb945142973b8c1e2f435d57c11dd4dca797e0ef',
   source_sha256: '31217651d76753c9f76232f0bd2c64ab3fd9a36754ccda081fda18169437b8b8',
-  authorization: 'pending',
-  execute: false,
-  expected_live_definition_sha256: null,
+  // Owner's words 2026-10-26: "Approve SQL 116 staging apply and merge when green" (staging apply only; the production pin and apply are separate).
+  authorization: 'Owner approved 2026-10-26: staging apply (wave 17) from staging read-live run 40336144625',
+  execute: true,
+  // Staging read-live run 40336144625 (2026-10-26, main d8d4e3b, after executor deploy run
+  // 40335727438): no industry column, SQL 91 in place; already_applied false, precondition_failures [].
+  expected_live_definition_sha256: 'd145c18e29fb0e309222d250e270f5750be7f23a8cbe336190d5c9d7bfd7d9dd',
   // Code-derived: releaseIntendedHash('sql116', file bytes) (release-sql-state.mjs); re-derived by the tests.
   intended_replacement_sha256: 'c99fc953f7ab14c2c68647ed3bcfa3e0b50a5aa4888bdc9f9c71163392314ee1',
   // The file creates, replaces and sets the ACL of no function.
