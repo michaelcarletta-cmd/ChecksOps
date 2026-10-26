@@ -23,6 +23,7 @@ import { APP_BUCKET_SET, s3KeyFor } from '../functions/api/storage-paths.mjs';
 import { sanitizeWebhookPayload } from '../functions/api/providers/webhooks.mjs';
 import { FUNCTION_BY_NAME } from '../functions/api/providers/catalog.mjs';
 import { moovRejectedFields, redactText } from '../functions/api/providers/onboarding/redact.mjs';
+import { accountBodyDigest, accountIdempotencyKey } from '../functions/api/providers/onboarding/moov-sync.mjs';
 
 const TENANT = '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a';
 const OTHER_TENANT = '9b1f7a52-1c0e-4d5a-9a3f-5d6e7f8a9b0c';
@@ -183,7 +184,17 @@ const makeDb = ({ tenantEnv = 'sandbox', account = true } = {}) => {
 
         // payment_provider_accounts
         if (text.includes('INSERT INTO public.payment_provider_accounts')) {
-          const row = { id: nextId(), tenant_id: params[0], environment: params[1], provider_account_id: params[2], onboarding_status: 'onboarding_incomplete', capabilities: [], tos_accepted_at: null };
+          const fresh = {
+            provider_account_id: params[2], onboarding_status: 'onboarding_incomplete', verification_status: 'not_started', capabilities: [],
+            tos_accepted_at: params[5] ? new Date().toISOString() : null, provider_metadata: JSON.parse(params[4]), disabled: false, restricted: false,
+          };
+          // ON CONFLICT (tenant_id, provider, environment) DO UPDATE
+          const existing = state.accounts.find((a) => a.tenant_id === params[0] && a.environment === params[1]);
+          if (existing) {
+            Object.assign(existing, fresh, { provider_metadata: { ...(existing.provider_metadata || {}), ...fresh.provider_metadata } });
+            return { rows: [{ ...existing }] };
+          }
+          const row = { id: nextId(), tenant_id: params[0], environment: params[1], ...fresh };
           state.accounts.push(row);
           return { rows: [row] };
         }
@@ -267,6 +278,12 @@ const makeDb = ({ tenantEnv = 'sandbox', account = true } = {}) => {
             });
             return { rows: [{ ...row }] };
           }
+          if (text.includes('WHERE tenant_id = $1::uuid AND environment = $2 AND moov_representative_id IS NOT NULL')) {
+            for (const r of state.reps) {
+              if (r.tenant_id === params[0] && r.environment === params[1] && r.moov_representative_id) r.moov_representative_id = null;
+            }
+            return { rows: [] };
+          }
           const row = state.reps.find((r) => r.id === params[0]);
           if (!row) return { rows: [] };
           if (text.includes('removed_at = now()')) row.removed_at = new Date().toISOString();
@@ -348,6 +365,12 @@ const makeDb = ({ tenantEnv = 'sandbox', account = true } = {}) => {
         }
         if (text.includes('FROM public.payment_provider_methods')) {
           return { rows: state.methods.filter((m) => m.tenant_id === params[0] && m.environment === params[1] && (params[2] === undefined || m.id === params[2])) };
+        }
+        if (text.includes('UPDATE public.payment_provider_methods') && text.includes('provider_account_id = $3')) {
+          for (const m of state.methods) {
+            if (m.tenant_id === params[0] && m.environment === params[1] && m.provider_account_id === params[2] && !m.external_recipient_id) m.connection_status = 'disconnected';
+          }
+          return { rows: [] };
         }
         if (text.includes('UPDATE public.payment_provider_methods')) {
           const m = state.methods.find((x) => x.id === params[0]);
@@ -1127,6 +1150,92 @@ test('a Moov 409 on account creation adopts the account Moov already holds for t
     assert.equal(r2.moov_synced, false);
     assert.equal(r2.error_code, 'moov_conflict');
     assert.equal(orphan.calls.filter((c) => c.method === 'POST' && /\/accounts$/.test(c.url)).length, 1, 'no blind retry');
+  });
+});
+
+const NEW_MOOV_ACCOUNT = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+const accountIdempotencyKeyFor = (body) => accountIdempotencyKey('sandbox', TENANT, accountBodyDigest(body));
+const accountGet = (body, status) => ({ match: new RegExp(`/accounts/${MOOV_ACCOUNT}$`), method: 'GET', ...(status ? { status } : {}), body });
+
+test('a Moov account that was disconnected or is gone is replaced by a new one, with people, banks and terms reset', async () => {
+  await withEnv(BASE_ENV, async () => {
+    for (const gone of [accountGet({ accountID: MOOV_ACCOUNT, disconnectedOn: '2026-10-26T12:00:00Z' }), accountGet({ error: 'not found' }, 404)]) {
+      resetMoovTokenCache();
+      const db = makeDb();
+      const first = await run('moov-onboarding-save', saveBody(), USERS.owner, { db, fetch: moovFetch() });
+      assert.equal(first.moov_synced, true);
+      assert.equal(db.state.reps[0].moov_representative_id, 'rep_1');
+      Object.assign(db.state.accounts[0], { tos_accepted_at: '2026-07-01T00:00:00Z', onboarding_status: 'verification_pending' });
+      db.state.methods.push({ id: 'aaaaaaaa-0000-4000-8000-0000000000b1', tenant_id: TENANT, environment: 'sandbox', provider_account_id: MOOV_ACCOUNT, provider_bank_account_id: 'bank_old', connection_status: 'connected', verification_status: 'verified', external_recipient_id: null });
+
+      resetMoovTokenCache();
+      const fetch = moovFetch([gone, { match: /\/accounts$/, method: 'POST', body: { accountID: NEW_MOOV_ACCOUNT } }]);
+      const { result, lines } = await captureConsole(() => run('moov-onboarding-save', saveBody({ representatives: [{ ...REP, id: db.state.reps[0].id }] }), USERS.owner, { db, fetch }));
+      assert.equal(result.moov_synced, true, JSON.stringify(result));
+      assert.ok(lines.join('\n').includes('moov_account_gone'));
+      const creates = fetch.calls.filter((c) => c.method === 'POST' && /\/accounts$/.test(c.url));
+      assert.equal(creates.length, 1, 'one new account');
+      const sameBodyKey = accountIdempotencyKeyFor(JSON.parse(creates[0].body));
+      assert.notEqual(creates[0].headers['X-Idempotency-Key'], sameBodyKey, 'the gone create is never replayed');
+      assert.equal(db.state.accounts.length, 1);
+      assert.equal(db.state.accounts[0].provider_account_id, NEW_MOOV_ACCOUNT);
+      assert.equal(db.state.accounts[0].tos_accepted_at, null, 'terms are accepted again on the new account');
+      assert.equal(db.state.accounts[0].provider_metadata.replaced_account_id, MOOV_ACCOUNT);
+      assert.ok(fetch.calls.some((c) => c.method === 'POST' && c.url.endsWith(`/accounts/${NEW_MOOV_ACCOUNT}/representatives`)), 'the person is created on the new account');
+      assert.equal(fetch.calls.some((c) => c.url.includes(`/accounts/${MOOV_ACCOUNT}/`)), false, 'nothing more goes to the gone account');
+      assert.ok(fetch.calls.some((c) => c.method === 'POST' && c.url.endsWith(`/accounts/${NEW_MOOV_ACCOUNT}/capabilities`)));
+      assert.equal(db.state.methods.find((m) => m.provider_bank_account_id === 'bank_old').connection_status, 'disconnected');
+    }
+  });
+});
+
+test('a live Moov account is kept: no new account, no reset', async () => {
+  await withEnv(BASE_ENV, async () => {
+    resetMoovTokenCache();
+    const db = makeDb();
+    db.state.accounts[0].tos_accepted_at = '2026-10-01T00:00:00Z';
+    const fetch = moovFetch([accountGet({ accountID: MOOV_ACCOUNT, disconnectedOn: null })]);
+    const r = await run('moov-onboarding-save', saveBody(), USERS.owner, { db, fetch });
+    assert.equal(r.moov_synced, true);
+    assert.equal(fetch.calls.filter((c) => c.method === 'POST' && /\/accounts$/.test(c.url)).length, 0);
+    assert.equal(db.state.accounts[0].provider_account_id, MOOV_ACCOUNT);
+    assert.equal(db.state.accounts[0].tos_accepted_at, '2026-10-01T00:00:00Z');
+  });
+});
+
+test('replacing a gone account never adopts it again by foreignID', async () => {
+  await withEnv(BASE_ENV, async () => {
+    resetMoovTokenCache();
+    const db = makeDb();
+    const fetch = moovFetch([
+      accountGet({ accountID: MOOV_ACCOUNT, disconnectedOn: '2026-10-26T12:00:00Z' }),
+      { match: /\/accounts$/, method: 'POST', status: 409, body: { error: 'conflict' } },
+      { match: /\/accounts\?foreignID=/, method: 'GET', body: [{ accountID: MOOV_ACCOUNT, foreignID: TENANT }] },
+    ]);
+    const { result } = await captureConsole(() => run('moov-onboarding-save', saveBody(), USERS.owner, { db, fetch }));
+    assert.equal(result.moov_synced, false);
+    assert.equal(result.error_code, 'moov_conflict');
+    assert.equal(db.state.accounts[0].provider_account_id, MOOV_ACCOUNT, 'the record is unchanged until a new account exists');
+  });
+});
+
+test('an account adopted after a 409 does not record terms Moov never received', async () => {
+  await withEnv(BASE_ENV, async () => {
+    resetMoovTokenCache();
+    const created = makeDb({ account: false });
+    await run('moov-account-create', { tenant_id: TENANT, terms_of_service_token: 'client-tos-token-123' }, USERS.owner, { db: created, fetch: moovFetch() });
+    assert.ok(created.state.accounts[0].tos_accepted_at, 'a create Moov accepted records the terms');
+
+    resetMoovTokenCache();
+    const adopted = makeDb({ account: false });
+    const fetch = moovFetch([
+      { match: /\/accounts$/, method: 'POST', status: 409, body: { error: 'conflict' } },
+      { match: /\/accounts\?foreignID=/, method: 'GET', body: [{ accountID: MOOV_ACCOUNT, foreignID: TENANT }] },
+    ]);
+    const r = await run('moov-account-create', { tenant_id: TENANT, terms_of_service_token: 'client-tos-token-123' }, USERS.owner, { db: adopted, fetch });
+    assert.equal(r.ok, true, JSON.stringify(r));
+    assert.equal(adopted.state.accounts[0].provider_account_id, MOOV_ACCOUNT);
+    assert.equal(adopted.state.accounts[0].tos_accepted_at, null);
   });
 });
 
