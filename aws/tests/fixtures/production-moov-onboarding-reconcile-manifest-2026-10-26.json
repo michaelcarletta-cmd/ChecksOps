@@ -1,0 +1,33 @@
+{
+  "workstream_id": "production-moov-onboarding-reconcile",
+  "authorization": "Pending owner review (2026-10-26). Planning only: nothing is deployed or authorized by this manifest. The owner asked for it in the words \"inspect store.mjs and build the onboarding plan PR\". Each production apply still needs its own owner approval, a staging acceptance reference and a read-only production inspect that confirms the live bytes.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Read-only production overlay inspects on main fc2af0c4521f (2026-10-26) found these four onboarding members live, so their ADD rows were refused (DEPLOYMENT_COLLISION, \"ADD requires the member to be absent from the live production ZIP\"): store.mjs run 40384161502, documents.mjs run 40382966241, moov-sync.mjs run 40383433363, handlers.mjs run 40383259853. live_sha256 is the hash each inspect reported; each equals the file at main 008af40e2, the commit the third full-package production rebuild of 2026-10-21 deployed (run 39669873076, VERIFIED; ops/live-api-reconciliation-2026-10-21.md), and the two rebuilds before it carried the same bytes. accepted_sha256 is main's file, as already planned by previous_manifest. The production Lambda was at CodeSha256 n7WoOa7xqoNi71L0gEX6FH7lzanuhPfLQAkGgziBSCE= / RevisionId b2996427-c605-4a58-9291-f5587e22d945 during the inspects. Apply in plan order: store.mjs, documents.mjs, moov-sync.mjs, handlers.mjs; providers/production/moov-send.mjs (production-payee-send manifest) follows them. Production SQL 116 (moov_onboarding_profiles.industry, staging-applied run 40339373370) must be applied before store.mjs, moov-sync.mjs and handlers.mjs: main's store.mjs writes the industry column and moov-sync.mjs sends it (production-moov-industry-underwriting manifest). The rows' sql_before is unchanged by this record.",
+  "members": {
+    "providers/onboarding/store.mjs": {
+      "live_sha256": "ec1b5df82b3b32e17d8da0e8396aadb393f9f105720a4fa2aef51bf786bd6d25",
+      "accepted_sha256": "4bd8402ed8d4625b3ec426bee03ebffb21be6c53e7def99766eb317f56683d94",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-moov-industry-underwriting-manifest-2026-10-26.json"
+    },
+    "providers/onboarding/documents.mjs": {
+      "live_sha256": "231028fb19592d0cc677f8d365d1375a8c6493d905e97682267de7017fcc68ac",
+      "accepted_sha256": "401887932c73a9e26599d5a23d4db70d44f29ddcb3207c44d08c3255af11be81",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-moov-processing-statements-purpose-manifest-2026-10-26.json"
+    },
+    "providers/onboarding/moov-sync.mjs": {
+      "live_sha256": "caea3962067181c62a59cb9a8c69050a820827066543be266c9c3d508018ea87",
+      "accepted_sha256": "b1dfb2306bef44c4205c3a9f37c1e426cecaf6e58e0a6b5612ecacf0e2476890",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-moov-representative-locked-skip-manifest-2026-10-26.json"
+    },
+    "providers/onboarding/handlers.mjs": {
+      "live_sha256": "c024afec1c868ba5d7fc4dd2dd769e6835e0fba748a368b473933c0a3aabbd2d",
+      "accepted_sha256": "ef56e6d63f15049f3acd90b06f705902a1f4628e7c1a5f69d9acde9be6d90928",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-moov-status-read-manifest-2026-10-26.json"
+    }
+  }
+}
