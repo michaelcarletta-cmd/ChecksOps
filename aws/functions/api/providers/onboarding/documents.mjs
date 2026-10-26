@@ -363,16 +363,18 @@ const moovFileFailureReason = (error, max = 160) => {
 
 /**
  * POST /accounts/{id}/files as multipart/form-data, idempotent per document and account: a document
- * sent again to a replacement account is never answered from the gone account's upload.
+ * sent again to a replacement account is never answered from the gone account's upload. Moov accepts
+ * only its own metadata keys (representative_id, requirement_id, error_code, comment; staging
+ * 2026-10-26 refused checksops_document_id with a 422), so the ChecksOps purpose and document id ride
+ * in comment and a person's document names Moov's representative id.
  */
-export async function sendDocumentToMoov({ accountId, row, bytes, environment, fetchImpl }) {
+export async function sendDocumentToMoov({ accountId, row, bytes, environment, moovRepresentativeId = null, fetchImpl }) {
   const form = new FormData();
   form.append('file', new Blob([bytes], { type: row.content_type }), row.file_name);
   form.append('filePurpose', MOOV_FILE_PURPOSE[row.purpose] || 'business_verification');
   form.append('metadata', JSON.stringify({
-    checksops_document_id: row.id,
-    checksops_purpose: row.purpose,
-    ...(row.representative_id ? { checksops_representative_id: row.representative_id } : {}),
+    comment: `checksops:${row.purpose}:${row.id}`,
+    ...(moovRepresentativeId ? { representative_id: moovRepresentativeId } : {}),
   }));
   return moovFetch(`/accounts/${accountId}/files`, {
     method: 'POST',
@@ -429,8 +431,19 @@ export async function finalizeDocument(client, ctx, row, { deps = {}, fetchImpl,
     return { document: publicDocument(stored), moov_synced: false, pending: true, error_code: 'moov_account_missing' };
   }
   try {
+    // A person's document goes to their Moov representative; until that person reaches Moov it waits.
+    let moovRepresentativeId = null;
+    if (stored.representative_id) {
+      const rep = (await client.query(
+        `SELECT moov_representative_id FROM public.moov_onboarding_representatives
+         WHERE id = $1::uuid AND tenant_id = $2::uuid AND environment = $3 AND removed_at IS NULL LIMIT 1`,
+        [stored.representative_id, ctx.tenantId, ctx.environment],
+      )).rows[0];
+      if (!rep?.moov_representative_id) throw new OnboardingError('moov_representative_missing', 409);
+      moovRepresentativeId = rep.moov_representative_id;
+    }
     const uploaded = await sendDocumentToMoov({
-      accountId: account.provider_account_id, row: stored, bytes, environment: ctx.environment, fetchImpl,
+      accountId: account.provider_account_id, row: stored, bytes, environment: ctx.environment, moovRepresentativeId, fetchImpl,
     });
     const fileId = uploaded?.fileID ?? uploaded?.fileId ?? null;
     if (!fileId) throw new OnboardingError('moov_file_id_missing', 502);
