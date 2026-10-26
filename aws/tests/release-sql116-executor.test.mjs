@@ -4,7 +4,7 @@
  * release-sql90-97-executor.test.mjs runs what every release key shares (SQL 116 included); this
  * file covers what is new:
  *
- *   - the pin: pending (no read-live yet), code-derived, selectable, packed, in step with the
+ *   - the pin: staging-authorized from its read-live (wave 17), code-derived, selectable, packed, in step with the
  *     production pin; the pinned commit authored the bytes; after SQL 91, which it supersedes;
  *   - the spec's one added column (SQL 116 creates or replaces no function):
  *     moov_onboarding_profiles.industry, text, nullable, no default, no column grant; a column of
@@ -50,7 +50,7 @@ import { EXECUTOR_PACK_MEMBERS } from '../../scripts/deployment-guard/sql-execut
 import { MIGRATIONS } from '../../scripts/deployment-guard/github-staging-sql-executor.mjs';
 import { READ_LIVE_EXPECTED_SENTINEL } from '../../scripts/deployment-guard/lib/sql-executor-read-live.mjs';
 import { importGuardedSqlExecutor } from './helpers/import-guarded-sql-executor.mjs';
-import { assertStagingPinState } from './helpers/staging-sql-wave1.mjs';
+import { assertStagingPinState, pendingPin } from './helpers/staging-sql-wave1.mjs';
 import { pgSkipReason, releaseFixture } from './helpers/release-sql-pg.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -104,7 +104,7 @@ function handlerFor(connect, { pins = {} } = {}) {
   return createHandler({ connect, now: () => Date.parse(NOW), releaseSqlFiles: FILES, releaseSqlPins: { ...PINS, ...pins } });
 }
 
-test('pin: SQL 116 pending, code-derived, selectable, packed, in step with the production pin; after SQL 91, which it supersedes', () => {
+test('pin: SQL 116 staging-authorized from its read-live, code-derived, selectable, packed, in step with the production pin; after SQL 91, which it supersedes', () => {
   const pin = PINS[KEY];
   const spec = RELEASE_SQL_SPECS[KEY];
   const packed = Object.fromEntries(EXECUTOR_PACK_MEMBERS);
@@ -114,11 +114,13 @@ test('pin: SQL 116 pending, code-derived, selectable, packed, in step with the p
   assert.equal(pin.migration_id, '116_moov_onboarding_profile_industry');
   assert.equal(spec.choice, 'sql116-moov-onboarding-profile-industry');
   assert.equal(sha(TEXT), pin.source_sha256);
-  // Pending: no staging read-live yet, so no pre-state, no approval, execute false.
+  // Staging apply authorized (owner approved 2026-10-26) from staging read-live run 40336144625:
+  // no industry column yet, so SQL 116 was not yet applied there.
   assertStagingPinState(assert, KEY, pin);
-  assert.equal(pin.execute, false);
-  assert.equal(pin.authorization, 'pending');
-  assert.equal(pin.expected_live_definition_sha256, null);
+  assert.equal(pin.execute, true);
+  assert.equal(pin.authorization, 'Owner approved 2026-10-26: staging apply (wave 17) from staging read-live run 40336144625');
+  assert.equal(pin.expected_live_definition_sha256, 'd145c18e29fb0e309222d250e270f5750be7f23a8cbe336190d5c9d7bfd7d9dd');
+  assert.notEqual(pin.expected_live_definition_sha256, pin.intended_replacement_sha256);
   assert.equal(releaseIntendedHash(KEY, TEXT), pin.intended_replacement_sha256);
   assert.equal(pin.intended_replacement_sha256, 'c99fc953f7ab14c2c68647ed3bcfa3e0b50a5aa4888bdc9f9c71163392314ee1');
   // SQL 116 replaces no SQL 91 function; SQL 91 counts as applied by SQL 116's own fingerprint.
@@ -304,8 +306,9 @@ test('PostgreSQL 16: SQL 116 through the executor: refused before SQL 91, drift 
   assert.equal(r.already_applied, false);
   const before = await columns();
   assert.equal(before.some((c) => c.name === 'industry'), false);
-  // A pending pin cannot apply.
-  const pending = await handlerFor(connect)(releaseEvent({ expected_live_definition_sha256: r.live_definition_sha256 }));
+  // A pending pin cannot apply (the committed pin is staging-authorized, so pend a copy).
+  const pendingCopy = pendingPin(PINS[KEY]);
+  const pending = await handlerFor(connect, { pins: { [KEY]: pendingCopy } })(releaseEvent({ pin: pendingCopy, expected_live_definition_sha256: r.live_definition_sha256 }));
   assert.equal(pending.ok, false);
   // Drift between the recorded pre-state and the apply refuses.
   await admin.query(`ALTER TABLE ${TABLE} ADD COLUMN industry character varying(64)`);

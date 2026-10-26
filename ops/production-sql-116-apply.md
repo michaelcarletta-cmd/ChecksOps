@@ -19,7 +19,18 @@ change), so the column carries no check. SQL 91's table grants (`SELECT, INSERT,
 `execute: false`). Anything else (SQL 91 not in place, a table not owned by the login, an
 `industry` column of another type, default or grant) stops and needs its own reviewed change.
 
-**Status:** pending. No staging read-live, no production inspect, nothing applied.
+**Staging executor refreshed (2026-10-26).** Inspect run 40335246738 (main `d8d4e3b`) found the
+live executor at CodeSha256 `k6Gyn1k4…` without SQL 116 (adds
+`sql/116_moov_onboarding_profile_industry.sql`). Deploy run 40335727438 updated it to main's
+package (`taTo9Hxf…`; "Verify live executor now carries main's package" passed).
+
+**Staging read-live (2026-10-26).** Run 40336144625 (main `d8d4e3b`): `moov_onboarding_profiles.industry`
+absent, predecessor SQL 91 in place; live `d145c18e29fb0e309222d250e270f5750be7f23a8cbe336190d5c9d7bfd7d9dd`, `already_applied` false,
+`precondition_failures` `[]`. Recorded in the staging pin (`expected_live_definition_sha256`,
+`execute: true`, wave 17) under the owner's words of 2026-10-26, "Approve SQL 116 staging apply
+and merge when green".
+
+**Status:** staging pin execute-authorized (wave 17); nothing applied yet; production pin pending.
 
 ## Fingerprint
 
