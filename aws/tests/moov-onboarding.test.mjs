@@ -1236,6 +1236,40 @@ test('a locked Moov profile skips the refused representative and owners writes a
   });
 });
 
+test('a representative update Moov answers "profile locked" is skipped even when the business update went through, and the sync completes', async () => {
+  await withEnv(BASE_ENV, async () => {
+    resetMoovTokenCache();
+    const db = makeDb();
+    const first = await run('moov-onboarding-save', saveBody(), USERS.owner, { db, fetch: moovFetch() });
+    assert.equal(first.moov_synced, true, JSON.stringify(first));
+    const repId = db.state.reps[0].moov_representative_id;
+    assert.ok(repId, 'the person exists at Moov, so the next save updates them');
+    // Staging 2026-10-26 17:03Z: business PATCH 200, representative PATCH 409 "profile locked".
+    const conflicting = moovFetch([{
+      match: `/accounts/${MOOV_ACCOUNT}/representatives/${repId}`,
+      method: 'PATCH',
+      status: 409,
+      body: { error: 'patching representative: profile locked: profile fields cannot be updated' },
+    }]);
+    const { result, lines } = await captureConsole(() => run('moov-onboarding-save', saveBody({
+      representatives: [{ ...REP, id: db.state.reps[0].id }],
+    }), USERS.owner, { db, fetch: conflicting }));
+    assert.equal(result.saved, true);
+    assert.equal(result.moov_synced, true, JSON.stringify(result));
+    assert.equal(result.error_code, undefined);
+    assert.ok(conflicting.calls.some((c) => c.method === 'PATCH' && c.url.endsWith(`/representatives/${repId}`)), 'the update was tried');
+    assert.ok(conflicting.calls.some((c) => c.method === 'POST' && /\/capabilities$/.test(c.url)), 'capabilities still requested');
+    const all = lines.join('\n');
+    assert.equal(all.includes('moov_onboarding_sync_failed'), false);
+    const conflict = lines.map((line) => (line.includes('moov_onboarding_profile_conflict') ? JSON.parse(line) : null)).filter(Boolean);
+    assert.deepEqual(conflict.map((c) => c.step), ['representative']);
+    assert.equal(conflict[0].reason, 'patching representative: profile locked: profile fields cannot be updated');
+    // The stored conflict clears once the sync completes.
+    assert.equal(db.state.profiles[0].last_error_code ?? null, null);
+    assert.equal(db.state.profiles[0].sync_pending, false);
+  });
+});
+
 test('a Moov 409 on a representative still fails the sync when the profile is not locked', async () => {
   await withEnv(BASE_ENV, async () => {
     resetMoovTokenCache();

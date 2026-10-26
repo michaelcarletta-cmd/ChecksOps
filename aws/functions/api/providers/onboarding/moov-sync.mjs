@@ -329,13 +329,18 @@ export async function syncOnboardingToMoov(client, ctx, {
   let step = 'account';
   // On the representative step: whether the failing call created or updated the person.
   let representativeCall = null;
-  // Set when Moov reports the business profile locked (already verified): later profile writes
-  // that Moov answers 409 are logged and skipped, so the capability request still goes.
+  // Set when Moov reports the profile locked (already verified): later profile writes that Moov
+  // answers 409 are logged and skipped, so the capability request still goes. The lock can first
+  // show on the business profile or on a representative (staging 2026-10-26: the business PATCH
+  // went through and the representative PATCH answered "profile locked").
   let profileLocked = false;
   const skipLockedConflict = (error) => {
-    if (!profileLocked || !(error instanceof MoovError) || error.status !== 409) return false;
+    if (!(error instanceof MoovError) || error.status !== 409) return false;
+    const reason = moovConflictReason(error);
+    if (!profileLocked && !/profile locked/i.test(reason || '')) return false;
+    profileLocked = true;
     onboardingLog('moov_onboarding_profile_conflict', {
-      tenant: tenantId, environment, status: 409, step, reason: moovConflictReason(error),
+      tenant: tenantId, environment, status: 409, step, reason,
     });
     return true;
   };
