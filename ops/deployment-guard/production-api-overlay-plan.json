@@ -791,10 +791,10 @@
     },
     "providers/onboarding/store.mjs": {
       "operation": "add",
-      "accepted_sha256": "ec1b5df82b3b32e17d8da0e8396aadb393f9f105720a4fa2aef51bf786bd6d25",
+      "accepted_sha256": "4bd8402ed8d4625b3ec426bee03ebffb21be6c53e7def99766eb317f56683d94",
       "expected_live_sha256": null,
       "sql_before": "aws/workflows/sql/105_onboarding_payment_table_grants.sql",
-      "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
+      "manifest": "aws/tests/fixtures/production-moov-industry-underwriting-manifest-2026-10-26.json"
     },
     "providers/onboarding/context.mjs": {
       "operation": "add",
@@ -812,10 +812,10 @@
     },
     "providers/onboarding/moov-sync.mjs": {
       "operation": "add",
-      "accepted_sha256": "6e73430bff664861e1fb0a1ff413695d5a4db4e9557890564cbffd3934ebe4e5",
+      "accepted_sha256": "4b1179edf391b47bc0b6cf96d05b24080ac36d98d76763455f98ee09642382d5",
       "expected_live_sha256": null,
       "sql_before": "aws/workflows/sql/104_payment_idempotency_keys_grant.sql",
-      "manifest": "aws/tests/fixtures/production-moov-account-replace-detect-manifest-2026-10-26.json"
+      "manifest": "aws/tests/fixtures/production-moov-industry-underwriting-manifest-2026-10-26.json"
     },
     "providers/onboarding/webhook-status.mjs": {
       "operation": "add",
@@ -826,10 +826,10 @@
     },
     "providers/onboarding/handlers.mjs": {
       "operation": "add",
-      "accepted_sha256": "e9ce45b8bf7bd69d76454329ccfb28f3147e616f3cc5a91451c43d7f7135bd9c",
+      "accepted_sha256": "e210200d8bd5c08c6d961e133df5a20a46281da53adf25ad9c8b9f99dbb0b97c",
       "expected_live_sha256": null,
       "sql_before": "aws/workflows/sql/105_onboarding_payment_table_grants.sql",
-      "manifest": "aws/tests/fixtures/production-bank-account-failure-log-manifest-2026-10-26.json"
+      "manifest": "aws/tests/fixtures/production-moov-industry-underwriting-manifest-2026-10-26.json"
     },
     "providers/catalog.mjs": {
       "operation": "replace",

@@ -1,81 +1,81 @@
 /**
  * Expected Payment Activity form -> the payment provider's underwriting body
- * (PUT /accounts/{id}/underwriting). The provider rejects the flat form
- * state (dollar strings, top-level percentages and fulfillment fields), so
- * amounts go in as whole cents and the percentages and fulfillment answers
- * are nested the way the provider returns them (the form already reads
- * volumeByCustomerType and fulfillment back in that shape).
+ * (POST /accounts/{id}/underwriting, provider API v2025.07.00). The provider
+ * asks where customers are and the estimated monthly ACH volume for payments
+ * the organization sends and accepts, each as one of its fixed ranges; the
+ * server accepts exactly this shape.
  */
 
+export const GEOGRAPHIC_REACH_OPTIONS = [
+  { value: "us-only", label: "United States only" },
+  { value: "us-and-international", label: "United States and other countries" },
+  { value: "international-only", label: "Outside the United States only" },
+] as const;
+
+export const MONTHLY_VOLUME_OPTIONS = [
+  { value: "under-10k", label: "Under $10,000" },
+  { value: "10k-50k", label: "$10,000 – $50,000" },
+  { value: "50k-100k", label: "$50,000 – $100,000" },
+  { value: "100k-250k", label: "$100,000 – $250,000" },
+  { value: "250k-500k", label: "$250,000 – $500,000" },
+  { value: "500k-1m", label: "$500,000 – $1 million" },
+  { value: "1m-5m", label: "$1 million – $5 million" },
+  { value: "over-5m", label: "Over $5 million" },
+] as const;
+
+export type GeographicReach = (typeof GEOGRAPHIC_REACH_OPTIONS)[number]["value"];
+export type MonthlyVolumeRange = (typeof MONTHLY_VOLUME_OPTIONS)[number]["value"];
+
 export interface UnderwritingAnswers {
-  averageTransactionSize: string;
-  maxTransactionSize: string;
-  averageMonthlyTransactionVolume: string;
-  businessToBusinessPercentage: string;
-  consumerToBusinessPercentage: string;
-  hasPhysicalGoods: boolean;
-  isShippingProduct: boolean;
-  shipmentDurationDays: string;
-  returnPolicy: string;
+  geographicReach: string;
+  sendAchMonthlyVolume: string;
+  collectAchMonthlyVolume: string;
 }
 
+type AchActivity = { ach: { estimatedActivity: { monthlyVolumeRange: MonthlyVolumeRange } } };
+
 export type UnderwritingPayload = {
-  averageTransactionSize: number;
-  maxTransactionSize: number;
-  averageMonthlyTransactionVolume: number;
-  volumeByCustomerType: { businessToBusinessPercentage: number; consumerToBusinessPercentage: number };
-  fulfillment: {
-    hasPhysicalGoods: boolean;
-    isShippingProduct: boolean;
-    shipmentDurationDays: number;
-    returnPolicy: string;
-  };
+  geographicReach: GeographicReach;
+  sendFunds: AchActivity;
+  collectFunds: AchActivity;
 };
 
-const dollarsToCents = (value: string): number | null => {
-  const text = String(value ?? "").replace(/[$,\s]/g, "");
-  if (!/^\d+(\.\d{1,2})?$/.test(text)) return null;
-  return Math.round(Number(text) * 100);
-};
-
-const wholeNumber = (value: string): number | null => {
-  const text = String(value ?? "").trim();
-  return /^\d+$/.test(text) ? Number(text) : null;
-};
+const isReach = (v: string): v is GeographicReach => GEOGRAPHIC_REACH_OPTIONS.some((o) => o.value === v);
+const isRange = (v: string): v is MonthlyVolumeRange => MONTHLY_VOLUME_OPTIONS.some((o) => o.value === v);
+const ach = (monthlyVolumeRange: MonthlyVolumeRange): AchActivity => ({ ach: { estimatedActivity: { monthlyVolumeRange } } });
 
 /** The provider body, or the plain-words problem with the answers. */
 export function buildUnderwritingPayload(
   answers: UnderwritingAnswers,
 ): { ok: boolean; payload?: UnderwritingPayload; message?: string } {
-  const average = dollarsToCents(answers.averageTransactionSize);
-  const max = dollarsToCents(answers.maxTransactionSize);
-  const monthly = dollarsToCents(answers.averageMonthlyTransactionVolume);
-  if (average == null || max == null || monthly == null) {
-    return { ok: false, message: "Enter the average payment, largest payment and monthly volume as dollar amounts." };
+  if (!isReach(answers.geographicReach)) return { ok: false, message: "Choose where your customers are located." };
+  if (!isRange(answers.sendAchMonthlyVolume)) {
+    return { ok: false, message: "Choose your estimated monthly volume for ACH payments you send." };
   }
-  if (max < average) {
-    return { ok: false, message: "The largest payment can't be smaller than the average payment." };
+  if (!isRange(answers.collectAchMonthlyVolume)) {
+    return { ok: false, message: "Choose your estimated monthly volume for ACH payments you accept." };
   }
-  const b2b = wholeNumber(answers.businessToBusinessPercentage);
-  const c2b = wholeNumber(answers.consumerToBusinessPercentage);
-  if (b2b == null || c2b == null || b2b + c2b !== 100) {
-    return { ok: false, message: "Business and consumer percentages must be whole numbers that add up to 100." };
-  }
-  const days = wholeNumber(answers.shipmentDurationDays);
-  if (days == null) return { ok: false, message: "Shipping days must be a whole number (0 if you don't ship)." };
   return {
     ok: true,
     payload: {
-      averageTransactionSize: average,
-      maxTransactionSize: max,
-      averageMonthlyTransactionVolume: monthly,
-      volumeByCustomerType: { businessToBusinessPercentage: b2b, consumerToBusinessPercentage: c2b },
-      fulfillment: {
-        hasPhysicalGoods: Boolean(answers.hasPhysicalGoods),
-        isShippingProduct: Boolean(answers.isShippingProduct),
-        shipmentDurationDays: days,
-        returnPolicy: answers.returnPolicy || "none",
-      },
+      geographicReach: answers.geographicReach,
+      sendFunds: ach(answers.sendAchMonthlyVolume),
+      collectFunds: ach(answers.collectAchMonthlyVolume),
     },
+  };
+}
+
+/** Form answers from the provider's underwriting read (blank where it has none). */
+export function answersFromUnderwriting(u: unknown): UnderwritingAnswers {
+  type Activity = { ach?: { estimatedActivity?: { monthlyVolumeRange?: unknown } } };
+  const o = (u ?? {}) as { geographicReach?: unknown; sendFunds?: Activity; collectFunds?: Activity };
+  const range = (side: "sendFunds" | "collectFunds") => {
+    const v = o[side]?.ach?.estimatedActivity?.monthlyVolumeRange;
+    return typeof v === "string" && isRange(v) ? v : "";
+  };
+  return {
+    geographicReach: typeof o.geographicReach === "string" && isReach(o.geographicReach) ? o.geographicReach : "",
+    sendAchMonthlyVolume: range("sendFunds"),
+    collectAchMonthlyVolume: range("collectFunds"),
   };
 }

@@ -1,39 +1,30 @@
 import { useCallback, useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ClipboardList, Loader2, Save } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { buildUnderwritingPayload, type UnderwritingAnswers as Answers } from "@/lib/underwritingPayload";
+import {
+  GEOGRAPHIC_REACH_OPTIONS,
+  MONTHLY_VOLUME_OPTIONS,
+  answersFromUnderwriting,
+  buildUnderwritingPayload,
+  type UnderwritingAnswers as Answers,
+} from "@/lib/underwritingPayload";
 
 const EMPTY: Answers = {
-  averageTransactionSize: "",
-  maxTransactionSize: "",
-  averageMonthlyTransactionVolume: "",
-  businessToBusinessPercentage: "50",
-  consumerToBusinessPercentage: "50",
-  hasPhysicalGoods: false,
-  isShippingProduct: false,
-  shipmentDurationDays: "0",
-  returnPolicy: "none",
+  geographicReach: "",
+  sendAchMonthlyVolume: "",
+  collectAchMonthlyVolume: "",
 };
-
-const RETURN_POLICIES = [
-  { value: "none", label: "No returns" },
-  { value: "exchangeOnly", label: "Exchange only" },
-  { value: "withinThirtyDays", label: "Within 30 days" },
-  { value: "other", label: "Other" },
-];
 
 /** Plain words for provider error codes; the provider is never named. */
 const plainError = (code: string) =>
   code === "moov_rejected"
-    ? "These answers were not accepted. Check the amounts and percentages and try again."
+    ? "These answers were not accepted. Check your choices and try again."
     : /^moov_/.test(code)
       ? "Payment setup is unavailable right now. Try again in a few minutes."
       : code;
@@ -51,9 +42,6 @@ async function invoke(fn: string, body: Record<string, unknown>) {
   if ((data as any)?.error) throw new Error(plainError((data as any).error));
   return data as any;
 }
-
-const fromCents = (v: unknown) =>
-  typeof v === "number" && Number.isFinite(v) ? String(Math.round(v / 100)) : "";
 
 /**
  * Expected-activity questions the payment provider asks before an
@@ -83,19 +71,9 @@ export function UnderwritingQuestionnairePanel({
       const res = await invoke("moov-underwriting", { tenant_id: tenantId, action: "get" });
       const u = res?.underwriting;
       if (u) {
-        setOnFile(true);
-        const vol = u.volumeByCustomerType ?? u.volumeShareByCustomerType ?? {};
-        setAnswers({
-          averageTransactionSize: fromCents(u.averageTransactionSize),
-          maxTransactionSize: fromCents(u.maxTransactionSize),
-          averageMonthlyTransactionVolume: fromCents(u.averageMonthlyTransactionVolume),
-          businessToBusinessPercentage: String(vol.businessToBusinessPercentage ?? 50),
-          consumerToBusinessPercentage: String(vol.consumerToBusinessPercentage ?? 50),
-          hasPhysicalGoods: !!u.fulfillment?.hasPhysicalGoods,
-          isShippingProduct: !!u.fulfillment?.isShippingProduct,
-          shipmentDurationDays: String(u.fulfillment?.shipmentDurationDays ?? 0),
-          returnPolicy: u.fulfillment?.returnPolicy ?? "none",
-        });
+        const prefill = answersFromUnderwriting(u);
+        setOnFile(Boolean(prefill.geographicReach || prefill.sendAchMonthlyVolume || prefill.collectAchMonthlyVolume));
+        setAnswers(prefill);
       }
     } catch {
       /* Nothing on file yet — the blank form is the correct state. */
@@ -156,100 +134,41 @@ export function UnderwritingQuestionnairePanel({
         ) : null}
 
         <fieldset disabled={readOnly} className="space-y-4">
-        <div className="grid sm:grid-cols-3 gap-3">
-          <div className="space-y-1.5">
-            <Label className="text-xs">Average payment ($)</Label>
-            <Input
-              inputMode="numeric"
-              value={answers.averageTransactionSize}
-              onChange={(e) => set({ averageTransactionSize: e.target.value.replace(/\D/g, "") })}
-              placeholder="5000"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs">Largest payment ($)</Label>
-            <Input
-              inputMode="numeric"
-              value={answers.maxTransactionSize}
-              onChange={(e) => set({ maxTransactionSize: e.target.value.replace(/\D/g, "") })}
-              placeholder="50000"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs">Monthly volume ($)</Label>
-            <Input
-              inputMode="numeric"
-              value={answers.averageMonthlyTransactionVolume}
-              onChange={(e) => set({ averageMonthlyTransactionVolume: e.target.value.replace(/\D/g, "") })}
-              placeholder="250000"
-            />
-          </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs">Where are your customers located?</Label>
+          <Select value={answers.geographicReach} onValueChange={(v) => set({ geographicReach: v })} disabled={readOnly}>
+            <SelectTrigger><SelectValue placeholder="Choose where your customers are" /></SelectTrigger>
+            <SelectContent>
+              {GEOGRAPHIC_REACH_OPTIONS.map((o) => (
+                <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         <div className="grid sm:grid-cols-2 gap-3">
           <div className="space-y-1.5">
-            <Label className="text-xs">Volume with business customers (%)</Label>
-            <Input
-              inputMode="numeric"
-              value={answers.businessToBusinessPercentage}
-              onChange={(e) => {
-                const v = e.target.value.replace(/\D/g, "").slice(0, 3);
-                const n = Math.min(100, Number(v || 0));
-                set({
-                  businessToBusinessPercentage: v === "" ? "" : String(n),
-                  consumerToBusinessPercentage: String(100 - n),
-                });
-              }}
-            />
+            <Label className="text-xs">Monthly volume of ACH payments you send</Label>
+            <Select value={answers.sendAchMonthlyVolume} onValueChange={(v) => set({ sendAchMonthlyVolume: v })} disabled={readOnly}>
+              <SelectTrigger><SelectValue placeholder="Estimated monthly volume" /></SelectTrigger>
+              <SelectContent>
+                {MONTHLY_VOLUME_OPTIONS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs">Volume with consumers (%)</Label>
-            <Input value={answers.consumerToBusinessPercentage} readOnly className="bg-muted/40" />
+            <Label className="text-xs">Monthly volume of ACH payments you accept</Label>
+            <Select value={answers.collectAchMonthlyVolume} onValueChange={(v) => set({ collectAchMonthlyVolume: v })} disabled={readOnly}>
+              <SelectTrigger><SelectValue placeholder="Estimated monthly volume" /></SelectTrigger>
+              <SelectContent>
+                {MONTHLY_VOLUME_OPTIONS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
-        </div>
-
-        <div className="space-y-2 rounded-md border border-border p-3">
-          <div className="flex items-center justify-between">
-            <Label className="text-xs">We sell or deliver physical goods</Label>
-            <Switch
-              checked={answers.hasPhysicalGoods}
-              disabled={readOnly}
-              onCheckedChange={(v) => set({ hasPhysicalGoods: v, isShippingProduct: v ? answers.isShippingProduct : false })}
-            />
-          </div>
-          {answers.hasPhysicalGoods && (
-            <>
-              <div className="flex items-center justify-between">
-                <Label className="text-xs">We ship products to customers</Label>
-                <Switch
-                  checked={answers.isShippingProduct}
-                  disabled={readOnly}
-                  onCheckedChange={(v) => set({ isShippingProduct: v })}
-                />
-              </div>
-              <div className="grid sm:grid-cols-2 gap-3 pt-1">
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Typical delivery time (days)</Label>
-                  <Input
-                    inputMode="numeric"
-                    value={answers.shipmentDurationDays}
-                    onChange={(e) => set({ shipmentDurationDays: e.target.value.replace(/\D/g, "") })}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Return policy</Label>
-                  <Select value={answers.returnPolicy} onValueChange={(v) => set({ returnPolicy: v })} disabled={readOnly}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {RETURN_POLICIES.map((r) => (
-                        <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </>
-          )}
         </div>
 
         </fieldset>

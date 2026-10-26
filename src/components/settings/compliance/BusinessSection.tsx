@@ -3,7 +3,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -12,6 +12,7 @@ import {
   maskedEin,
   safeErrorMessage,
   type BusinessForm,
+  type OnboardingIndustry,
 } from "@/lib/payments/moovOnboarding";
 
 const BUSINESS_TYPES: { value: string; label: string }[] = [
@@ -33,9 +34,23 @@ interface Props {
   /** Whenever the server returns `can_submit: true` (any tenant member or the platform owner). */
   canRevealEin: boolean;
   onRevealEin: () => Promise<string>;
+  /** The payment provider's industry list; loaded once for the Industry field. */
+  onLoadIndustries?: () => Promise<OnboardingIndustry[]>;
 }
 
-export function BusinessSection({ form, onChange, einMasked, readOnly, canRevealEin, onRevealEin }: Props) {
+/** Industries grouped under their category, categories and names in display order. */
+function groupIndustries(list: OnboardingIndustry[]): Array<[string, OnboardingIndustry[]]> {
+  const groups = new Map<string, OnboardingIndustry[]>();
+  for (const i of list) {
+    const key = i.categoryDisplayName || i.category || "Other";
+    groups.set(key, [...(groups.get(key) ?? []), i]);
+  }
+  return [...groups.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([k, v]) => [k, [...v].sort((x, y) => x.displayName.localeCompare(y.displayName))]);
+}
+
+export function BusinessSection({ form, onChange, einMasked, readOnly, canRevealEin, onRevealEin, onLoadIndustries }: Props) {
   const { toast } = useToast();
   const set = (patch: Partial<BusinessForm>) => onChange({ ...form, ...patch });
 
@@ -47,6 +62,21 @@ export function BusinessSection({ form, onChange, einMasked, readOnly, canReveal
   useEffect(() => () => {
     if (timer.current) clearTimeout(timer.current);
   }, []);
+
+  const [industries, setIndustries] = useState<OnboardingIndustry[] | null>(null);
+  const [industriesFailed, setIndustriesFailed] = useState(false);
+  useEffect(() => {
+    if (!onLoadIndustries) return;
+    let live = true;
+    onLoadIndustries()
+      .then((list) => { if (live) setIndustries(list); })
+      .catch(() => { if (live) setIndustriesFailed(true); });
+    return () => { live = false; };
+    // Loaded once per mount: the list does not depend on the form.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const industryGroups = groupIndustries(industries ?? []);
+  const industryKnown = !form.industry || (industries ?? []).some((i) => i.industry === form.industry);
 
   async function handleReveal() {
     if (revealedEin) {
@@ -78,6 +108,26 @@ export function BusinessSection({ form, onChange, einMasked, readOnly, canReveal
             <SelectContent>
               {BUSINESS_TYPES.map((t) => (
                 <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-1">
+          <Label htmlFor="biz-industry" className="text-[11px] text-muted-foreground tracking-wide">Industry</Label>
+          <Select value={form.industry || undefined} onValueChange={(v) => set({ industry: v })} disabled={readOnly || (!industries && !form.industry)}>
+            <SelectTrigger id="biz-industry" className="h-9">
+              <SelectValue placeholder={industries ? "Select industry" : industriesFailed ? "Industry list unavailable" : "Loading industries…"} />
+            </SelectTrigger>
+            <SelectContent>
+              {!industryKnown && <SelectItem value={form.industry}>{form.industry}</SelectItem>}
+              {industryGroups.map(([category, items]) => (
+                <SelectGroup key={category}>
+                  <SelectLabel className="text-[11px]">{category}</SelectLabel>
+                  {items.map((i) => (
+                    <SelectItem key={i.industry} value={i.industry}>{i.displayName}</SelectItem>
+                  ))}
+                </SelectGroup>
               ))}
             </SelectContent>
           </Select>

@@ -306,6 +306,7 @@ export function ComplianceSettings({
           readOnly={readOnly}
           canRevealEin={access.canRevealEin}
           onRevealEin={() => api.revealEin(tenantId)}
+          onLoadIndustries={() => api.listIndustries(tenantId)}
         />
       </SectionCard>
 
