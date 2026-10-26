@@ -55,7 +55,9 @@ export const MOOV_FILE_PURPOSE = Object.freeze({
   individual_verification: 'individual_verification',
   representative_verification: 'representative_verification',
   w9: 'business_verification',
-  bank_statement: 'business_verification',
+  // Moov's Processing statements requirement (underwriting.documents.processingStatementsPast3Months)
+  // is an underwriting document; a business_verification file never fills it (staging 2026-10-26).
+  bank_statement: 'merchant_underwriting',
   license: 'business_verification',
   insurance: 'business_verification',
   saas_agreement: 'business_verification',

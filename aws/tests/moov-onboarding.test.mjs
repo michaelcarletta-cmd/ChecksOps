@@ -807,6 +807,23 @@ test('finalize rejects size, type, encryption and magic-byte mismatches and dele
   });
 });
 
+test('a bank statement goes to Moov as merchant_underwriting, the purpose of its Processing statements requirement; other business documents stay business_verification', async () => {
+  await withEnv(BASE_ENV, async () => {
+    resetMoovTokenCache();
+    for (const [purpose, filePurpose] of [['bank_statement', 'merchant_underwriting'], ['license', 'business_verification']]) {
+      const db = makeDb();
+      const id = await uploadDoc(db, { purpose });
+      const s3 = fakeS3({ bytes: PDF, contentType: 'application/pdf' });
+      const fetch = moovFetch();
+      const r = await run('moov-document-finalize', { tenant_id: TENANT, document_id: id }, USERS.owner, { db, s3, fetch });
+      assert.equal(r.ok, true, purpose);
+      const call = fetch.calls.find((c) => c.url.endsWith(`/accounts/${MOOV_ACCOUNT}/files`));
+      assert.equal(call.body.get('filePurpose'), filePurpose, purpose);
+      assert.deepEqual(JSON.parse(call.body.get('metadata')), { comment: `checksops:${purpose}:${id}` }, purpose);
+    }
+  });
+});
+
 test('finalize sends the verified bytes to Moov files as multipart and records moov_file_id; retry is a no-op', async () => {
   await withEnv(BASE_ENV, async () => {
     resetMoovTokenCache();
