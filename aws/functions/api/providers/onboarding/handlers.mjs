@@ -24,7 +24,7 @@ import { createUploadUrl, finalizeDocument, viewUrl } from './documents.mjs';
 import { loadSessionFundStepUp, loginSessionBinding, WALLET_FUND_TOTP_ACTION } from '../production/moov-fund-authz.mjs';
 import { onboardingDeployment } from './flags.mjs';
 import { ensureMoovAccount, syncOnboardingToMoov } from './moov-sync.mjs';
-import { isNetworkError, moovErrorCode, onboardingLog, redact } from './redact.mjs';
+import { isNetworkError, moovErrorCode, moovRejectedFields, onboardingLog, redact, redactText } from './redact.mjs';
 import { APP_USER_EMAIL_GUC, APP_USER_ID_GUC } from '../../cognito.mjs';
 import {
   buildOnboardingView,
@@ -47,6 +47,17 @@ import {
 } from './store.mjs';
 
 const ok = (body = {}) => jsonResult({ success: true, ...body });
+
+/** Moov's message for a failed call, short, with email addresses and digit runs masked. */
+export const moovFailureReason = (error, max = 160) => {
+  let body = error?.body;
+  if (typeof body === 'string') { try { body = JSON.parse(body); } catch { /* plain text */ } }
+  const text = typeof body === 'string' ? body
+    : typeof body?.error === 'string' ? body.error
+      : typeof body?.message === 'string' ? body.message : null;
+  if (!text) return null;
+  return redactText(text.replace(/[^\s@]+@[^\s@]+/g, '[redacted]'), max);
+};
 
 const errorResult = (error) => {
   if (error instanceof OnboardingError) {
@@ -699,9 +710,20 @@ export const ONBOARDING_HANDLERS = {
       const id = account.provider_account_id;
       if (String(body.action ?? '').toLowerCase() === 'save') {
         if (!body.answers || typeof body.answers !== 'object') return fail('answers are required', 400, { field: 'answers' });
-        const saved = await moovFetch(`/accounts/${id}/underwriting`, {
-          method: 'PUT', scopes: scopes.accountWrite(id), body: body.answers, fetchImpl,
-        });
+        let saved;
+        try {
+          saved = await moovFetch(`/accounts/${id}/underwriting`, {
+            method: 'PUT', scopes: scopes.accountWrite(id), body: body.answers, fetchImpl,
+          });
+        } catch (error) {
+          if (error instanceof MoovError) {
+            onboardingLog('moov_underwriting_failed', {
+              tenant: ctx.tenantId, environment: ctx.environment, error_code: moovErrorCode(error),
+              status: error.status ?? null, reason: moovFailureReason(error), rejected_fields: moovRejectedFields(error),
+            });
+          }
+          throw error;
+        }
         await logPaymentEvent(client, {
           tenant_id: ctx.tenantId, environment: ctx.environment, event_type: 'payment_account.underwriting_saved',
           provider_metadata: { account_id: id, by: ctx.userId },

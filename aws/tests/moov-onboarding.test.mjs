@@ -997,6 +997,28 @@ test('a Moov 409 on a representative still fails the sync when the profile is no
   });
 });
 
+test('a refused underwriting save logs Moov\'s masked reason and status', async () => {
+  await withEnv(BASE_ENV, async () => {
+    resetMoovTokenCache();
+    const db = makeDb();
+    await run('moov-onboarding-save', saveBody(), USERS.owner, { db });
+    const refusing = moovFetch([{
+      match: /\/underwriting$/, method: 'PUT', status: 409,
+      body: { error: `underwriting cannot be changed for owner@freedom.test ${EIN}` },
+    }]);
+    const { result, lines } = await captureConsole(() => run('moov-underwriting', { tenant_id: TENANT, action: 'save', answers: { a: 1 } }, USERS.owner, { db, fetch: refusing }));
+    assert.equal(result.ok, false);
+    const log = lines.find((line) => line.includes('moov_underwriting_failed'));
+    assert.ok(log, 'failure logged');
+    const parsed = JSON.parse(log);
+    assert.equal(parsed.status, 409);
+    assert.equal(parsed.error_code, 'moov_conflict');
+    assert.match(parsed.reason, /^underwriting cannot be changed for \[redacted\] \[redacted\]/);
+    assert.equal(log.includes('owner@freedom.test'), false);
+    assert.equal(log.includes(EIN), false);
+  });
+});
+
 test('moovConflictReason reads only 409 bodies and masks emails and digit runs', async () => {
   const { moovConflictReason } = await import('../functions/api/providers/onboarding/moov-sync.mjs');
   assert.equal(moovConflictReason({ status: 422, body: { error: 'x' } }), null);
