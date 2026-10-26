@@ -1014,6 +1014,49 @@ test('underwriting: POST on v2025.07.00 with exactly reach and ACH volumes; the 
   });
 });
 
+test('underwriting: the extended answers (ACH amounts next to the range, presence, litigation, customer-type share) go to Moov as given; malformed ones are refused before Moov', async () => {
+  await withEnv(BASE_ENV, async () => {
+    resetMoovTokenCache();
+    const db = makeDb();
+    const activity = (monthlyVolumeRange, averageTransactionAmount, maximumTransactionAmount) => ({
+      ach: { estimatedActivity: { monthlyVolumeRange, averageTransactionAmount, maximumTransactionAmount } },
+    });
+    const EXTENDED = {
+      geographicReach: 'us-only',
+      sendFunds: activity('50k-100k', 2500, 25000),
+      collectFunds: activity('50k-100k', 1500, 15000),
+      businessPresence: 'commercial-office',
+      pendingLitigation: 'none',
+      volumeShareByCustomerType: { business: 80, consumer: 20, p2p: 0 },
+    };
+    const fetch = moovFetch();
+    const r = await run('moov-underwriting', { tenant_id: TENANT, action: 'save', answers: EXTENDED }, USERS.owner, { db, fetch });
+    assert.equal(r.ok, true, JSON.stringify(r));
+    const post = fetch.calls.find((c) => c.url.endsWith('/underwriting'));
+    assert.equal(post.headers['x-moov-version'], 'v2025.07.00');
+    assert.deepEqual(JSON.parse(post.body), EXTENDED);
+    for (const [answers, field] of [
+      [{ ...EXTENDED, sendFunds: activity('50k-100k', 2500.5, 25000) }, 'answers.sendFunds'],
+      [{ ...EXTENDED, sendFunds: activity('50k-100k', '2500', 25000) }, 'answers.sendFunds'],
+      [{ ...EXTENDED, collectFunds: activity('50k-100k', 1500, 100) }, 'answers.collectFunds'],
+      [{ ...EXTENDED, collectFunds: activity('50k-100k', 0, 100) }, 'answers.collectFunds'],
+      [{ ...EXTENDED, businessPresence: 'garage' }, 'answers.businessPresence'],
+      [{ ...EXTENDED, pendingLitigation: 'pending' }, 'answers.pendingLitigation'],
+      [{ ...EXTENDED, volumeShareByCustomerType: { business: 80, consumer: 30, p2p: 0 } }, 'answers.volumeShareByCustomerType'],
+      [{ ...EXTENDED, volumeShareByCustomerType: { business: 100, merchants: 0 } }, 'answers.volumeShareByCustomerType'],
+      [{ ...EXTENDED, volumeShareByCustomerType: { business: 99.5, consumer: 0.5 } }, 'answers.volumeShareByCustomerType'],
+      [{ ...EXTENDED, submissionIntent: 'submit' }, 'answers'],
+    ]) {
+      const none = moovFetch();
+      const refused = await run('moov-underwriting', { tenant_id: TENANT, action: 'save', answers }, USERS.owner, { db, fetch: none });
+      assert.equal(refused.ok, false, field);
+      assert.equal(refused.statusCode, 400, field);
+      assert.equal(refused.field, field);
+      assert.equal(none.calls.some((c) => c.url.endsWith('/underwriting')), false, `${field}: not sent to Moov`);
+    }
+  });
+});
+
 test('legacy file upload is refused with a pointer to the new flow', async () => {
   await withEnv(BASE_ENV, async () => {
     const db = makeDb();

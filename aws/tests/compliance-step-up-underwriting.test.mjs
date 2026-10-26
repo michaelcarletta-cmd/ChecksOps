@@ -3,35 +3,90 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { answersFromUnderwriting, buildUnderwritingPayload } from '../../src/lib/underwritingPayload.ts';
+import {
+  EMPTY_UNDERWRITING_ANSWERS,
+  answersFromUnderwriting,
+  buildUnderwritingPayload,
+  needsExtendedUnderwriting,
+} from '../../src/lib/underwritingPayload.ts';
 import { invokeErrorCode, invokeWithBankStepUp } from '../../src/lib/bankStepUp.ts';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 
 const answers = {
+  ...EMPTY_UNDERWRITING_ANSWERS,
   geographicReach: 'us-only',
   sendAchMonthlyVolume: 'under-10k',
-  collectAchMonthlyVolume: '10k-50k',
+  collectAchMonthlyVolume: 'under-10k',
 };
 
-test('Expected Payment Activity sends geographic reach and the ACH send and collect volume ranges', () => {
+test('Expected Payment Activity under $10k sends geographic reach and the ACH send and collect volume ranges only', () => {
+  assert.equal(needsExtendedUnderwriting(answers), false);
   const built = buildUnderwritingPayload(answers);
-  assert.equal(built.ok, true);
+  assert.equal(built.ok, true, built.message);
   assert.deepEqual(built.payload, {
     geographicReach: 'us-only',
     sendFunds: { ach: { estimatedActivity: { monthlyVolumeRange: 'under-10k' } } },
-    collectFunds: { ach: { estimatedActivity: { monthlyVolumeRange: '10k-50k' } } },
+    collectFunds: { ach: { estimatedActivity: { monthlyVolumeRange: 'under-10k' } } },
   });
   assert.equal(buildUnderwritingPayload({ ...answers, geographicReach: '' }).ok, false);
   assert.equal(buildUnderwritingPayload({ ...answers, sendAchMonthlyVolume: '5000' }).ok, false);
   assert.equal(buildUnderwritingPayload({ ...answers, collectAchMonthlyVolume: '' }).ok, false);
+  // Optional below $10k, but checked when given.
+  assert.equal(buildUnderwritingPayload({ ...answers, sendAchAverageAmount: '100' }).ok, false);
+  assert.equal(buildUnderwritingPayload({ ...answers, pendingLitigation: 'maybe' }).ok, false);
   // The provider's read fills the form back; anything else stays blank.
   assert.deepEqual(answersFromUnderwriting(built.payload), answers);
-  assert.deepEqual(answersFromUnderwriting({ averageTransactionSize: 100 }), { geographicReach: '', sendAchMonthlyVolume: '', collectAchMonthlyVolume: '' });
+  assert.deepEqual(answersFromUnderwriting({ averageTransactionSize: 100 }), EMPTY_UNDERWRITING_ANSWERS);
   const panel = read('src/components/payments/UnderwritingQuestionnairePanel.tsx');
   assert.match(panel, /answers: built\.payload/);
   assert.equal(/action: "save", answers \}/.test(panel), false);
+});
+
+test('Expected Payment Activity at $10k or more requires and sends the extended answers', () => {
+  const big = {
+    ...answers,
+    sendAchMonthlyVolume: '50k-100k',
+    collectAchMonthlyVolume: '50k-100k',
+    sendAchAverageAmount: '$2,500',
+    sendAchMaximumAmount: '25000',
+    collectAchAverageAmount: '1500',
+    collectAchMaximumAmount: '15,000',
+    businessPresence: 'commercial-office',
+    pendingLitigation: 'none',
+    businessSharePercent: '80',
+    consumerSharePercent: '20',
+    p2pSharePercent: '',
+  };
+  assert.equal(needsExtendedUnderwriting(big), true);
+  const built = buildUnderwritingPayload(big);
+  assert.equal(built.ok, true, built.message);
+  assert.deepEqual(built.payload, {
+    geographicReach: 'us-only',
+    sendFunds: { ach: { estimatedActivity: { monthlyVolumeRange: '50k-100k', averageTransactionAmount: 2500, maximumTransactionAmount: 25000 } } },
+    collectFunds: { ach: { estimatedActivity: { monthlyVolumeRange: '50k-100k', averageTransactionAmount: 1500, maximumTransactionAmount: 15000 } } },
+    businessPresence: 'commercial-office',
+    pendingLitigation: 'none',
+    volumeShareByCustomerType: { business: 80, consumer: 20, p2p: 0 },
+  });
+  for (const patch of [
+    { sendAchAverageAmount: '' },
+    { collectAchMaximumAmount: '12.50' },
+    { sendAchMaximumAmount: '100' },
+    { businessPresence: '' },
+    { pendingLitigation: '' },
+    { consumerSharePercent: '30' },
+    { businessSharePercent: '', consumerSharePercent: '', p2pSharePercent: '' },
+  ]) {
+    assert.equal(buildUnderwritingPayload({ ...big, ...patch }).ok, false, JSON.stringify(patch));
+  }
+  // Either side at $10k or more is enough to ask.
+  assert.equal(needsExtendedUnderwriting({ sendAchMonthlyVolume: 'under-10k', collectAchMonthlyVolume: '10k-50k' }), true);
+  // The read fills every answer back (amounts and shares as whole numbers).
+  assert.deepEqual(answersFromUnderwriting(built.payload), {
+    ...big, sendAchAverageAmount: '2500', collectAchMaximumAmount: '15000', p2pSharePercent: '0',
+  });
 });
 
 test('bank changes ask for the two-factor code on totp_required and retry once', async () => {
