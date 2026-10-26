@@ -1,0 +1,14 @@
+{
+  "workstream_id": "production-moov-extended-underwriting",
+  "authorization": "Pending owner review (2026-10-26). Planning only: nothing is live or verified. The owner asked for this follow-up to the Moov industry and underwriting change (#1257) in the words \"what about PR 1257 that is what we should wrok on\". Each production apply still needs its own owner approval, a staging acceptance reference and a read-only production inspect that confirms the live bytes.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Moov onboarding (owner request 2026-10-26): with ACH send and collect volume at $50k-$100k, Moov asks Freedom Adjustment's sandbox account for the extended underwriting answers. providers/onboarding/handlers.mjs: validateUnderwritingAnswers also accepts, each optional and checked before Moov, the ACH averageTransactionAmount and maximumTransactionAmount (positive whole USD, largest at least the average) inside estimatedActivity next to monthlyVolumeRange, businessPresence, pendingLitigation and volumeShareByCustomerType {business, consumer, p2p} (whole percentages totalling 100); field names, nesting and enums from Moov's v2025.07.00 SDK models (@moovio/sdk 25.9.13). Anything else is still refused, submissionIntent included. The member stays an ADD (live_sha256 null); a read-only production overlay inspect must confirm it before any apply, and SQL 116 must still apply in production before store.mjs (#1257 manifest).",
+  "members": {
+    "providers/onboarding/handlers.mjs": {
+      "live_sha256": null,
+      "accepted_sha256": "9a46bc79a11463540b9b4b2ee0be577c53843ae56a30d5acae5a1b39acca58fc",
+      "operation": "add"
+    }
+  }
+}
