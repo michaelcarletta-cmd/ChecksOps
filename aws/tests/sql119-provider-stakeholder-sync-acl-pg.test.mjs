@@ -123,6 +123,13 @@ test('PostgreSQL 16: production\'s ACL refuses SQL 115; SQL 119 leaves the owner
     await owner.end();
   }
   assert.deepEqual(await executeAcl(admin), ['PUBLIC EXECUTE', 'checksops EXECUTE', 'owner EXECUTE']);
+  // Staging's pre-state before its SQL 115 apply (run 40243363235): the same body with EXECUTE for
+  // PUBLIC and the owner only; the pre-states differ only in the ACL.
+  await admin.query(`REVOKE EXECUTE ON FUNCTION ${SYNC_FUNCTION} FROM checksops`);
+  const asStaging = (await inspectReleaseProduction('sql115', { connect, pin: PINS.sql115, root: ROOT })).details;
+  assert.equal(asStaging.live_definition_sha256, '6dbf58792a5eb0f9863ac0a6e88265de6ec9931a9e7a31bac21d7b71f643bba0');
+  await admin.query(`GRANT EXECUTE ON FUNCTION ${SYNC_FUNCTION} TO checksops`);
+  assert.deepEqual(await executeAcl(admin), ['PUBLIC EXECUTE', 'checksops EXECUTE', 'owner EXECUTE']);
   const side = await unchangedSide(admin);
   assert.equal(side.triggers.length, 2);
 
@@ -130,6 +137,8 @@ test('PostgreSQL 16: production\'s ACL refuses SQL 115; SQL 119 leaves the owner
   const blocked = (await inspectReleaseProduction('sql115', { connect, pin: PINS.sql115, root: ROOT })).details;
   assert.equal(blocked.already_applied, false);
   assert.deepEqual(blocked.precondition_failures, ['function_acl_replaceable'], JSON.stringify(blocked.release_sql_inspect));
+  // The same live hash production's read-only inspects reported before SQL 119 (SSM 2db258df, 0019857c).
+  assert.equal(blocked.live_definition_sha256, '83d480ac50c23dbbe7c796a32be579aa69e25c4c020d00ecf171980a6b95cd6e');
 
   // SQL 119 through its production tool.
   const s = (await inspectReleaseProduction('sql119', { connect, pin: PINS.sql119, root: ROOT })).details;
@@ -170,6 +179,10 @@ test('PostgreSQL 16: production\'s ACL refuses SQL 115; SQL 119 leaves the owner
   const ready = (await inspectReleaseProduction('sql115', { connect, pin: PINS.sql115, root: ROOT })).details;
   assert.deepEqual(ready.precondition_failures, [], JSON.stringify(ready.release_sql_inspect));
   assert.equal(ready.already_applied, false);
+  // The same live hash production's read-only inspect reported after SQL 119 (SSM 6f6692d8), recorded
+  // as SQL 115's production pre-state.
+  assert.equal(ready.live_definition_sha256, PINS.sql115.expected_live_definition_sha256);
+  assert.equal(ready.live_definition_sha256, 'ee9d2d5222dd9f8850173384b13468154fa03def6487824c3ef378db4874775b');
   const pin115 = authorized('sql115', ready.live_definition_sha256);
   const applied115 = await executeReleaseProductionApply('sql115', manifest('sql115', pin115), { root: ROOT, pin: pin115, connect, consumedPath: consumedPath() });
   assert.equal(applied115.ok, true, JSON.stringify(applied115));

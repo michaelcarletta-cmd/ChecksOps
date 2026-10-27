@@ -39,7 +39,31 @@ main's package ("Verify live executor now carries main's package" passed).
 (`expected_live_definition_sha256`, `execute: true`, wave 16) under the owner's words of
 2026-10-25, "Approve SQL 115 staging apply".
 
-**Status:** staging pin execute-authorized (wave 16); nothing applied yet; production pin pending.
+**Staging apply (2026-10-25).** Apply run 40243363235 (main `3d16422`, staging pin commit `3807a0c`):
+result `applied`, before `6dbf58792a5eb0f9863ac0a6e88265de6ec9931a9e7a31bac21d7b71f643bba0`, after
+`8aed39a49d988a60bdedac07a3a97f424a9de5c1499e4f50738f749326a62452` (intended), EXECUTE the owner's only.
+Not recorded in the repository at the time; read from the run log on 2026-10-27. Read-live run
+40501865500 (2026-10-27, main `24c7c54`): `already_applied` true.
+
+**Production inspect (2026-10-27, after SQL 119).** Read-only `--inspect` through SSM
+`6f6692d8-3801-4b70-b51c-dd9749e723b4` on `i-0c35557c4e5385406`, main `a01deea9b` (tarball sha256
+`77e9e5d3f967ce8259518e6fcf1c64af8fb6c50c6b1fe8b44dce489bc0f70f07`, transfer run 40503922422, migration
+source `5902638…` == pin), connected as `checksops_admin`, after SQL 119's production apply (one-shot run
+`924b34f9-4fc6-446f-9190-e4bd9529cac8`): the function `different` (the restored supabase body), EXECUTE
+the owner's only; live `ee9d2d5222dd9f8850173384b13468154fa03def6487824c3ef378db4874775b`,
+`already_applied` false, `precondition_failures` `[]`. Before SQL 119 it was `83d480ac…` with
+`[function_acl_replaceable]`.
+
+**Pre-states.** Staging's (`6dbf5879…`) and production's (`ee9d2d52…`) differ only in the EXECUTE
+ACL: the engine on PostgreSQL 16 gives, from the same restored supabase function, `6dbf5879…` with
+`PUBLIC` and the owner, `83d480ac…` with `PUBLIC`, `checksops` and the owner, and `ee9d2d52…` with the
+owner only (`aws/tests/sql119-provider-stakeholder-sync-acl-pg.test.mjs`). The staging apply is the
+staging acceptance. Recorded in the production pin with `execute: true` under the owner's words of
+2026-10-27, "Approve a pin PR for SQL 119, then one for SQL 115" and "Merge the SQL 115 pin PR when
+green". Each apply still needs the owner's run-time approval.
+
+**Status:** staging applied (wave 16); SQL 119 applied in production; production pin execute-authorized;
+production apply pending.
 
 ## Fingerprint
 

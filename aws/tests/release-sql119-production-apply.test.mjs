@@ -190,8 +190,11 @@ test('order: immediately before SQL 115 (unchanged, intended 8aed39a4...), whose
   const sql115 = loadReleaseProductionPin('sql115', ROOT);
   assert.equal(sql115.intended_replacement_sha256, '8aed39a49d988a60bdedac07a3a97f424a9de5c1499e4f50738f749326a62452');
   assert.equal(sql115.source_sha256, STAGING.sql115.source_sha256);
-  assert.equal(sql115.execute, false);
-  assert.equal(sql115.expected_live_definition_sha256, null);
+  // SQL 115's production pin records the pre-state taken after SQL 119's production apply (owner EXECUTE
+  // only), not production's state before it.
+  assert.equal(sql115.execute, true);
+  assert.equal(sql115.expected_live_definition_sha256, 'ee9d2d5222dd9f8850173384b13468154fa03def6487824c3ef378db4874775b');
+  assert.notEqual(sql115.expected_live_definition_sha256, '83d480ac50c23dbbe7c796a32be579aa69e25c4c020d00ecf171980a6b95cd6e');
   assert.deepEqual(sql115.function_identities, [FN]);
   // SQL 115's spec keeps the owner's EXECUTE only and revokes PUBLIC, anon, authenticated and
   // service_role: production's checksops line is not one it may revoke (function_acl_replaceable).
