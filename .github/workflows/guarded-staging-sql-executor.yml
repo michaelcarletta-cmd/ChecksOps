@@ -65,6 +65,7 @@ on:
           - sql115-provider-stakeholder-one-partner-payout
           - sql116-moov-onboarding-profile-industry
           - sql117-platform-owner-tenant-lifecycle
+          - sql118-platform-owner-tenant-lifecycle
       approved_commit:
         description: "Required for deploy/apply/read-live: exact main commit approved for this run"
         required: false
@@ -183,6 +184,7 @@ jobs:
           node --test aws/tests/release-sql115-executor.test.mjs
           node --test aws/tests/release-sql116-executor.test.mjs
           node --test aws/tests/release-sql117-executor.test.mjs
+          node --test aws/tests/release-sql118-executor.test.mjs
           node --test aws/tests/mortgage-executor-commit-outcome.test.mjs
           node --test aws/tests/deployment-guard-kms-receipt.test.mjs
           node --test aws/tests/deployment-guard-signed-receipt.test.mjs

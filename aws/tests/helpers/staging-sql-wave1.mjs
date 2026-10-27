@@ -81,7 +81,9 @@ export const STAGING_WAVE1 = Object.freeze({
   // Wave 18 (owner approved 2026-10-27, "SQL 117 to production" and "Go"): SQL 117 adds
   // tenant_deactivations and the platform-owner tenant lifecycle functions. Read at main 9d6f164
   // after the executor carried it (deploy run 40431581944): the table and the six functions absent.
-  sql117: Object.freeze({ wave: 18, approved: '2026-10-27', run: '40431777849', live: 'dcfcb810a7d016f63451a3cf6ec00982be2f555fae087871885e49cc4b501956' }),
+  // Retired 2026-10-27: the staging apply (run 40434533070) rolled back (UNRELATED_MUTATION
+  // intended_state: the new table kept default-privilege grants); SQL 118 replaces it.
+  sql117: Object.freeze({ wave: 18, approved: '2026-10-27', run: '40431777849', live: 'dcfcb810a7d016f63451a3cf6ec00982be2f555fae087871885e49cc4b501956', retired: 'Retired 2026-10-27: superseded by SQL 118 after staging apply run 40434533070 rolled back; never applied' }),
   sql98: Object.freeze({ wave: 3, approved: '2026-10-18', run: '39083278136', live: '296c3d6a274e10f66005fb9eaecf93fa17b81bd8db3607037ca07698fddd3275', apply_run: '39085677318' }),
 });
 
@@ -94,7 +96,7 @@ export const pendingPin = (pin) => Object.freeze({
 
 /**
  * The committed staging pin's apply state: waves 1-18 recorded and approved, wave 6 approved with
- * its read-live still to record (pending until then), the rest pending.
+ * its read-live still to record (pending until then), wave 18 (SQL 117) retired, the rest pending.
  */
 export function assertStagingPinState(assert, key, pin) {
   const wave = STAGING_WAVE1[key];
@@ -108,6 +110,11 @@ export function assertStagingPinState(assert, key, pin) {
   }
   assert.equal(pin.expected_live_definition_sha256, wave.live, key);
   assert.notEqual(pin.expected_live_definition_sha256, pin.intended_replacement_sha256, `${key}: recorded pre-state is not the post-state`);
+  if (wave.retired) {
+    assert.equal(pin.execute, false, key);
+    assert.equal(pin.authorization, wave.retired, key);
+    return;
+  }
   if (Object.hasOwn(pin, 'execute')) {
     assert.equal(pin.execute, true, key);
     assert.equal(pin.authorization, `Owner approved ${wave.approved || '2026-10-17'}: staging apply (wave ${wave.wave || 1}) from staging read-live run ${wave.run}`, key);

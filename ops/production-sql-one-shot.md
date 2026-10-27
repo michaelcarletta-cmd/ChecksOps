@@ -40,7 +40,8 @@ that connects to the database:
 | `sql114` | `scripts/deployment-guard/sql114-stakeholder-settings-update-grant-production-apply.mjs` (`ops/production-sql-114-apply.md`; UPDATE on `stakeholder_accounts` `is_active`, `is_primary`, `account_type`, `homeowner_name`, `homeowner_email` and `updated_at` for `checksops` and `authenticated`, column-scoped; no predecessor, no order) |
 | `sql115` | `scripts/deployment-guard/sql115-provider-stakeholder-one-partner-payout-production-apply.mjs` (`ops/production-sql-115-apply.md`; `sync_provider_stakeholder_account(uuid)` keeps one active partner payout per tenant, EXECUTE owner only; no predecessor, no order) |
 | `sql116` | `scripts/deployment-guard/sql116-moov-onboarding-profile-industry-production-apply.mjs` (`ops/production-sql-116-apply.md`; `moov_onboarding_profiles.industry text`, nullable, no default; after SQL 91, which it supersedes) |
-| `sql117` | `scripts/deployment-guard/sql117-platform-owner-tenant-lifecycle-production-apply.mjs` (`ops/production-sql-117-apply.md`; `tenant_deactivations` and the platform-owner deactivate, reactivate, activity, delete-empty and deactivated-list functions; no predecessor) |
+| `sql117` | `scripts/deployment-guard/sql117-platform-owner-tenant-lifecycle-production-apply.mjs` (`ops/production-sql-117-apply.md`; `tenant_deactivations` and the platform-owner deactivate, reactivate, activity, delete-empty and deactivated-list functions; no predecessor; retired, never applied: SQL 118 replaces it) |
+| `sql118` | `scripts/deployment-guard/sql118-platform-owner-tenant-lifecycle-production-apply.mjs` (`ops/production-sql-118-apply.md`; SQL 117 plus every non-owner grant on `tenant_deactivations` revoked: the table and the platform-owner deactivate, reactivate, activity, delete-empty and deactivated-list functions; no predecessor; supersedes the retired SQL 117) |
 
 To add a migration, register its reviewed tool in `ONE_SHOT_TOOLS`
 (`scripts/deployment-guard/lib/production-sql-one-shot.mjs`). An entry names only the tool,
@@ -55,7 +56,7 @@ a migration file touches its pin, not the registry. An entry may add `inspect_re
 
 | flag | |
 |---|---|
-| `--migration <key>` | a registered key (`sql29`, `sql30`, `sql71`, `sql77`…`sql89`, `sql90`…`sql106`, `sql108`, `sql109`, `sql110`, `sql111`, `sql112`, `sql113`, `sql114`, `sql115`, `sql116`, `sql117`) |
+| `--migration <key>` | a registered key (`sql29`, `sql30`, `sql71`, `sql77`…`sql89`, `sql90`…`sql106`, `sql108`, `sql109`, `sql110`, `sql111`, `sql112`, `sql113`, `sql114`, `sql115`, `sql116`, `sql117`, `sql118`) |
 | `--approval-scope <key>` | the migration the owner approved; must equal `--migration` |
 | `--approval-statement "<words>"` or `--approval-statement-b64 <base64>` | the owner's exact words, recorded verbatim. Pass exactly one of the two. Use the base64 form when the words contain quotes or newlines. Must be non-empty. |
 | `--commit <sha>` | the full main commit the tarball was built from |

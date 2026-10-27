@@ -33,7 +33,18 @@ and `tenant_pricing_audit`; live `dcfcb810a7d016f63451a3cf6ec00982be2f555fae0878
 (`expected_live_definition_sha256`, `execute: true`, wave 18) under the owner's words of
 2026-10-27, "SQL 117 to production" and "Go".
 
-**Status:** staging pin execute-authorized (wave 18); nothing applied yet; production pin pending.
+**Staging apply (2026-10-27), rolled back.** Executor deploy run 40434302332 (main `acc1994`)
+carried the authorized pin (`QKETFJsu…`). Apply run 40434533070, under the owner's words
+"Approve SQL 117 staging apply", refused with `UNRELATED_MUTATION` ("SQL 117 did not leave exactly
+the reviewed state", failed `intended_state`, `unrelated_changed` `[]`) and rolled back. Read-live
+run 40434717509 confirmed staging unchanged (`dcfcb810…`, `already_applied` false). Cause: the new
+table kept the grants the database's default privileges give a new table, while the file revoked
+only `PUBLIC` and the spec requires no grant; reproduced on PostgreSQL 16 with a default `SELECT`
+grant to `checksops` on new tables.
+
+**Status:** retired, never applied anywhere. The staging pin is back to `execute: false` with a
+retirement `authorization`; the production pin stays pending. SQL 118
+(`ops/production-sql-118-apply.md`) replaces it.
 
 ## Fingerprint
 
