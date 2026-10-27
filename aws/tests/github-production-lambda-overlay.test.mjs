@@ -620,17 +620,21 @@ test('tenant-management-v2.mjs comes just before app-services.mjs, which imports
   const TMV2 = 'tenant-management-v2.mjs';
   const ROUTER = 'app-services.mjs';
   // Planned under the release manifest; its provider-status labels change (2026-10-27) moved the row
-  // to its own planning-only manifest. Production already serves the release bytes (read-only inspect
-  // run 40574248610), so the row replaces them.
-  const MANIFEST = 'aws/tests/fixtures/production-tenant-management-v2-provider-status-manifest-2026-10-27.json';
+  // to its own planning-only manifest, and production run 40576842354 applied it over the release
+  // bytes (b4596d10). The row records the applied bytes; the REPLACE is replayed from b4596d10 below.
+  const PRE = 'b4596d1078b9acb64d333eb2f241713ec42c5a3a2188eda69c5654fad8485835';
+  const MANIFEST = 'aws/tests/fixtures/production-tenant-management-v2-provider-status-applied-manifest-2026-10-27.json';
   const row = PLAN.members[TMV2];
   assert.equal(row.operation, 'replace');
-  assert.equal(row.expected_live_sha256, 'b4596d1078b9acb64d333eb2f241713ec42c5a3a2188eda69c5654fad8485835');
+  assert.equal(row.expected_live_sha256, row.accepted_sha256);
   assert.equal(row.sql_before, null);
   assert.equal(row.manifest, MANIFEST);
   const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, MANIFEST), 'utf8'));
   assert.equal(manifest.deploy_authorized, false);
   assert.equal(manifest.members[TMV2].accepted_sha256, row.accepted_sha256);
+  const prePlan = structuredClone(PLAN);
+  prePlan.members[TMV2].expected_live_sha256 = PRE;
+  const preEnv = (member) => applyEnv(member, member === TMV2 ? { CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: PRE } : {});
   assert.equal(row.accepted_sha256, sha(`aws/functions/api/${TMV2}`));
   assert.equal(PLAN.order.indexOf(TMV2) + 1, PLAN.order.indexOf(ROUTER));
   assert.ok(localImports(fs.readFileSync(path.join(ROOT, 'aws/functions/api', ROUTER), 'utf8'), ROUTER).includes(TMV2));
@@ -641,12 +645,12 @@ test('tenant-management-v2.mjs comes just before app-services.mjs, which imports
 
   // While tenant-management-v2.mjs is not yet the accepted bytes, app-services.mjs is refused.
   await assert.rejects(
-    run(applyEnv(ROUTER), applyDeps(ROUTER, { pending: [TMV2] }).deps),
+    run(applyEnv(ROUTER), applyDeps(ROUTER, { pending: [TMV2], plan: prePlan }).deps),
     (error) => error.code === CODES.DEPLOYMENT_COLLISION,
   );
   // The REPLACE itself applies over the live release bytes ...
-  const { deps: replaceDeps, calls } = applyDeps(TMV2);
-  const replaced = await run(applyEnv(TMV2), replaceDeps);
+  const { deps: replaceDeps, calls } = applyDeps(TMV2, { plan: prePlan });
+  const replaced = await run(preEnv(TMV2), replaceDeps);
   assert.equal(replaced.mutation, false);
   assert.deepEqual(calls.receipt.owned_member_ops, { replace: [TMV2], add: [] });
   // ... and app-services.mjs then links.
@@ -1432,11 +1436,12 @@ test('referral billing credit: tenant-billing-engine.mjs expected_live records t
   assert.match(manifest.notes, /run 39932114735/);
   assert.deepEqual(Object.keys(manifest.members), [ENGINE]);
   assert.deepEqual(manifest.members[ENGINE], { live_sha256: LIVE, accepted_sha256: LIVE, operation: 'replace' });
-  // The plan row moved on to the send-fee billing change (checked in its own test below); its
-  // expected live bytes are the bytes this apply put live.
+  // The plan row moved on to the send-fee billing change (checked in its own test below), planned
+  // over the bytes this apply put live.
   const row = PLAN.members[ENGINE];
   assert.equal(row.operation, 'replace');
-  assert.equal(row.expected_live_sha256, LIVE);
+  const sendFee = JSON.parse(fs.readFileSync(path.join(ROOT, 'aws/tests/fixtures/production-billing-send-fee-events-manifest-2026-10-27.json'), 'utf8'));
+  assert.equal(sendFee.members[ENGINE].live_sha256, LIVE);
   // The fee manifest's accepted bytes are the pre-apply bytes.
   const fees = JSON.parse(fs.readFileSync(path.join(ROOT, MANIFEST_FEES), 'utf8'));
   assert.equal(fees.members[ENGINE].accepted_sha256, BEFORE);
@@ -1451,32 +1456,49 @@ test('referral billing credit: tenant-billing-engine.mjs expected_live records t
   assert.match(source, /export const maintenanceDiscountCents/);
 });
 
-test('send-fee billing: tenant-billing-engine.mjs REPLACEs the 43d9a162 bytes production inspect run 40566119078 found live (after SQL 120)', async () => {
+test('send-fee billing: tenant-billing-engine.mjs replaced the 43d9a162 bytes; production run 40577608750 applied main\'s bytes (after SQL 120)', async () => {
   const ENGINE = 'tenant-billing-engine.mjs';
   const MANIFEST_REL = 'aws/tests/fixtures/production-billing-send-fee-events-manifest-2026-10-27.json';
-  // The member of the live package (read-only production overlay inspect run 40566119078,
+  const APPLIED_REL = 'aws/tests/fixtures/production-billing-send-fee-events-applied-manifest-2026-10-27.json';
+  // The member of the live package before the apply (read-only production overlay inspect run 40566119078,
   // ALREADY_ACCEPTED, CodeSha256 5w11XWe+2lgTnWTm5zQBrVWJftLs74DnwW6sZmoYbl8=): the referral credit bytes.
-  const LIVE = '43d9a162445bf8e84824d4f60180cbcfab7b0cdae54cee1caf127a9fbb17f7f3';
+  const BEFORE = '43d9a162445bf8e84824d4f60180cbcfab7b0cdae54cee1caf127a9fbb17f7f3';
+  const LIVE = 'bccffbe7aa9b21d3052a832f1d2c4b9ec4b333b1727156773b1ac034be96860c';
   const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, MANIFEST_REL), 'utf8'));
   assert.equal(manifest.workstream_id, 'billing-send-fee-events');
   assert.equal(manifest.deploy_authorized, false);
   assert.match(manifest.notes, /run 40566119078/);
   assert.match(manifest.notes, /5w11XWe\+2lgTnWTm5zQBrVWJftLs74DnwW6sZmoYbl8=/);
   assert.deepEqual(Object.keys(manifest.members), [ENGINE]);
+  assert.deepEqual(manifest.members[ENGINE], { live_sha256: BEFORE, accepted_sha256: LIVE, operation: 'replace' });
+  // Applied 2026-10-27: staging apply 40572754273, pre-apply inspect 40577454374, apply 40577608750 (VERIFIED).
+  const applied = JSON.parse(fs.readFileSync(path.join(ROOT, APPLIED_REL), 'utf8'));
+  for (const runId of ['40572754273', '40577454374', '40577608750']) {
+    assert.match(PLAN.notes, new RegExp(runId), runId);
+    assert.match(applied.notes, new RegExp(runId), runId);
+  }
+  assert.match(applied.notes, /fZPpTRW8dupjAOWnu6VKqvJ5SNaj2x7IYIaCdY4Rmfw=/);
+  assert.equal(applied.workstream_id, 'billing-send-fee-events-applied');
+  assert.equal(applied.deploy_authorized, false);
+  assert.match(applied.authorization, /^Record only/);
+  assert.deepEqual(applied.members[ENGINE], { live_sha256: LIVE, accepted_sha256: LIVE, operation: 'replace', previous_manifest: MANIFEST_REL });
   const row = PLAN.members[ENGINE];
-  assert.deepEqual(manifest.members[ENGINE], { live_sha256: LIVE, accepted_sha256: row.accepted_sha256, operation: 'replace' });
   assert.equal(row.operation, 'replace');
-  assert.equal(row.manifest, MANIFEST_REL);
+  assert.equal(row.manifest, APPLIED_REL);
   assert.equal(row.expected_live_sha256, LIVE);
-  assert.equal(row.accepted_sha256, sha(`aws/functions/api/${ENGINE}`));
-  assert.notEqual(row.accepted_sha256, LIVE);
-  // The engine bills the fee SQL 120 writes at send time: SQL 120 goes first.
+  assert.equal(row.accepted_sha256, LIVE);
+  assert.equal(sha(`aws/functions/api/${ENGINE}`), LIVE);
+  // The engine bills the fee SQL 120 writes at send time: SQL 120 stays its prerequisite.
   assert.equal(row.sql_before, 'aws/workflows/sql/120_usage_events_at_approval_and_send.sql');
   assert.equal(resolvePlannedMember(ENGINE, { root: ROOT, plan: PLAN }).ok, true);
-  assert.ok(PLAN.order.includes(ENGINE));
-  const ready = await run({ ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: ENGINE }, { root: ROOT, inspectLive: liveFor(ENGINE, { sha256: LIVE }) });
-  assert.equal(ready.state, 'READY');
-  assert.equal(ready.mutation, false);
+  const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: ENGINE };
+  const done = await run(inspect, { root: ROOT, inspectLive: liveFor(ENGINE, { sha256: LIVE }) });
+  assert.equal(done.state, 'ALREADY_ACCEPTED');
+  assert.equal(done.mutation, false);
+  await assert.rejects(
+    run(inspect, { root: ROOT, inspectLive: liveFor(ENGINE, { sha256: BEFORE }) }),
+    (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+  );
   const source = fs.readFileSync(path.join(API, ENGINE), 'utf8');
   assert.match(source, /export const sendRecipientKey/);
   assert.match(source, /NOT_A_SEND_LEG_ROLES = \['wallet_funding', 'parent', 'platform_fee'\]/);
@@ -2388,27 +2410,33 @@ test('Delete Check: workflow.mjs replaced the release 2026-10-17 bytes; producti
   );
 });
 
-test('Planned ADDs already live: tenant-management-v2.mjs and webhook-status.mjs replace the bytes inspect runs 40574248610 and 40574427787 found', async () => {
-  for (const [member, live, accepted, inspectRun, manifestRel] of [
-    ['tenant-management-v2.mjs', 'b4596d1078b9acb64d333eb2f241713ec42c5a3a2188eda69c5654fad8485835', '64539881783add1157d186e8504b86831ce4e6151a7b00c0ee8a892839735cb9', '40574248610', 'aws/tests/fixtures/production-tenant-management-v2-provider-status-manifest-2026-10-27.json'],
-    ['providers/onboarding/webhook-status.mjs', '45ac151c468ade3ed161ddd279545ffd58dd4b7dbe52f6769137f8fc51b4237f', '2f9570fa00d92898c1c4d656bede432def7ad02a05a8c428d50d7ff34ec917e7', '40574427787', 'aws/tests/fixtures/production-moov-webhook-verification-read-manifest-2026-10-27.json'],
+test('Planned ADDs already live: tenant-management-v2.mjs and webhook-status.mjs replaced the bytes inspect runs 40574248610 and 40574427787 found; production runs 40576842354 and 40577212139 applied them', async () => {
+  for (const [member, before, accepted, inspectRun, applyRun, manifestRel, appliedRel] of [
+    ['tenant-management-v2.mjs', 'b4596d1078b9acb64d333eb2f241713ec42c5a3a2188eda69c5654fad8485835', '64539881783add1157d186e8504b86831ce4e6151a7b00c0ee8a892839735cb9', '40574248610', '40576842354', 'aws/tests/fixtures/production-tenant-management-v2-provider-status-manifest-2026-10-27.json', 'aws/tests/fixtures/production-tenant-management-v2-provider-status-applied-manifest-2026-10-27.json'],
+    ['providers/onboarding/webhook-status.mjs', '45ac151c468ade3ed161ddd279545ffd58dd4b7dbe52f6769137f8fc51b4237f', '2f9570fa00d92898c1c4d656bede432def7ad02a05a8c428d50d7ff34ec917e7', '40574427787', '40577212139', 'aws/tests/fixtures/production-moov-webhook-verification-read-manifest-2026-10-27.json', 'aws/tests/fixtures/production-moov-webhook-verification-read-applied-manifest-2026-10-27.json'],
   ]) {
     const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, manifestRel), 'utf8'));
-    assert.match(PLAN.notes, new RegExp(`inspect runs 40574248610 and 40574427787`));
+    const applied = JSON.parse(fs.readFileSync(path.join(ROOT, appliedRel), 'utf8'));
+    assert.match(PLAN.notes, /inspect runs 40574248610 and 40574427787/);
+    assert.match(PLAN.notes, new RegExp(`production apply run ${applyRun} VERIFIED`), member);
     assert.match(manifest.notes, new RegExp(`inspect run ${inspectRun}`), member);
     assert.equal(manifest.deploy_authorized, false, member);
-    assert.deepEqual(manifest.members[member], { live_sha256: live, accepted_sha256: accepted, operation: 'replace' }, member);
+    assert.deepEqual(manifest.members[member], { live_sha256: before, accepted_sha256: accepted, operation: 'replace' }, member);
+    assert.match(applied.authorization, /^Record only/, member);
+    assert.equal(applied.deploy_authorized, false, member);
+    assert.match(applied.notes, new RegExp(`apply run ${applyRun}`), member);
+    assert.deepEqual(applied.members[member], { live_sha256: accepted, accepted_sha256: accepted, operation: 'replace', previous_manifest: manifestRel }, member);
     const row = PLAN.members[member];
     assert.equal(row.operation, 'replace', member);
-    assert.equal(row.expected_live_sha256, live, member);
+    assert.equal(row.expected_live_sha256, accepted, member);
     assert.equal(row.accepted_sha256, accepted, member);
-    assert.equal(row.manifest, manifestRel, member);
+    assert.equal(row.manifest, appliedRel, member);
     assert.equal(sha(`aws/functions/api/${member}`), accepted, member);
     const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: member };
-    const ready = await run(inspect, { root: ROOT, inspectLive: liveFor(member, { sha256: live }) });
-    assert.equal(ready.state, 'READY', member);
-    assert.equal(ready.mutation, false, member);
-    // A missing member is no longer an accepted live state for a REPLACE.
-    await assert.rejects(run(inspect, { root: ROOT, inspectLive: liveFor(member, { present: false, sha256: null }) }), member);
+    const done = await run(inspect, { root: ROOT, inspectLive: liveFor(member, { sha256: accepted }) });
+    assert.equal(done.state, 'ALREADY_ACCEPTED', member);
+    assert.equal(done.mutation, false, member);
+    // The pre-apply bytes are no longer an accepted live state.
+    await assert.rejects(run(inspect, { root: ROOT, inspectLive: liveFor(member, { sha256: before }) }), member);
   }
 });
