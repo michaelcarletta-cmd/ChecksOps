@@ -1,5 +1,12 @@
 import { useEffect, useState, useCallback, lazy, Suspense } from "react";
-import { mortgageSupabase as supabase } from "@/integrations/supabase/mortgageClient";
+import { mortgageSupabase as supabase, mortgageUsesAwsBackend } from "@/integrations/supabase/mortgageClient";
+import {
+  attachMortgageDeskFile,
+  mortgageDeskFilePath,
+  postMortgageDeskMessage,
+  updateMortgageDeskShipping,
+  type MortgageDeskWriteClient,
+} from "@/lib/mortgageDeskWrites";
 import { useMortgageAuth } from "@/hooks/useMortgageAuth";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -35,6 +42,10 @@ import { LossDraftDocsManager } from "@/components/loss-draft/LossDraftDocsManag
 import { useAwsPollingFallback } from "@/hooks/useAwsPollingFallback";
 import { displayCase } from "@/lib/displayCase";
 
+
+// On AWS the Desk's tenant-facing writes go through the agent-gated server path
+// (mortgage_desk_* RPCs, SQL 122); the Supabase backend keeps its direct writes.
+const deskClient = supabase as unknown as MortgageDeskWriteClient;
 
 interface Props {
   requestId: string | null;
@@ -427,11 +438,12 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
   }, [open, check?.id, load]);
 
   const postMessage = async () => {
-    if (!draft.trim() || !check?.id || !user?.id) return;
+    if (!draft.trim() || !check?.id || !user?.id || !req?.id) return;
     setPosting(true);
-    const { error } = await supabase.from("check_messages").insert({
-      check_id: check.id,
-      sender_id: user.id,
+    const { error } = await postMortgageDeskMessage(deskClient, mortgageUsesAwsBackend, {
+      requestId: req.id,
+      checkId: check.id,
+      senderId: user.id,
       body: draft.trim(),
     });
     setPosting(false);
@@ -482,15 +494,16 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
     if (!req) return;
     setSavingShipping(true);
     try {
-      const { error } = await supabase
-        .from("mortgage_handling_requests")
-        .update({
+      const { error } = await updateMortgageDeskShipping(deskClient, mortgageUsesAwsBackend, {
+        requestId: req.id,
+        senderId: user?.id ?? null,
+        fields: {
           mail_to_name: mailToName.trim() || null,
           mail_to_address: mailToAddress.trim() || null,
           shipping_label_carrier: shipCarrier.trim() || null,
           shipping_label_tracking: shipTracking.trim() || null,
-        } as any)
-        .eq("id", req.id);
+        },
+      });
       if (error) throw error;
       if (!opts?.silent) toast.success("Shipping details saved — visible to the tenant");
       void load();
@@ -509,32 +522,48 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
     }
     setUploadingLabel(true);
     try {
-      const path = `checks/${check.id}/mortgage-ops/label-${Date.now()}-${file.name.replace(/[^a-z0-9.\-_]/gi, "_")}`;
+      const path = mortgageDeskFilePath(check.id, file.name, "label-");
       const { error: upErr } = await supabase.storage
         .from("claim-files")
         .upload(path, file, { contentType: file.type, upsert: false });
       if (upErr) throw upErr;
 
-      const { error: updErr } = await supabase
-        .from("mortgage_handling_requests")
-        .update({
+      // The label is also a check document the tenant can open (and, on AWS,
+      // the record that lets the tenant sign its download URL).
+      const { error: attachErr } = await attachMortgageDeskFile(deskClient, mortgageUsesAwsBackend, {
+        requestId: req.id,
+        checkId: check.id,
+        senderId: user.id,
+        fileName: file.name,
+        filePath: path,
+        fileType: file.type || null,
+        fileSize: file.size,
+        category: "mortgage_ops_shipping_label",
+        description: "Shipping label",
+      });
+      if (attachErr) throw attachErr;
+
+      const { error: updErr } = await updateMortgageDeskShipping(deskClient, mortgageUsesAwsBackend, {
+        requestId: req.id,
+        senderId: user.id,
+        fields: {
           shipping_label_path: path,
           shipping_label_name: file.name,
-          shipping_label_uploaded_at: new Date().toISOString(),
-          shipping_label_uploaded_by: user.id,
           shipping_label_carrier: shipCarrier.trim() || null,
           shipping_label_tracking: shipTracking.trim() || null,
           mail_to_name: mailToName.trim() || null,
           mail_to_address: mailToAddress.trim() || null,
-        } as any)
-        .eq("id", req.id);
+        },
+      });
       if (updErr) throw updErr;
 
-      await supabase.from("check_messages").insert({
-        check_id: check.id,
-        sender_id: user.id,
+      const { error: msgErr } = await postMortgageDeskMessage(deskClient, mortgageUsesAwsBackend, {
+        requestId: req.id,
+        checkId: check.id,
+        senderId: user.id,
         body: `🏷️ Mortgage Ops uploaded a shipping label${shipCarrier ? ` (${shipCarrier})` : ""}${shipTracking ? ` · tracking ${shipTracking}` : ""}. Download it from the Mortgage Desk card on this loss draft.`,
       });
+      if (msgErr) toast.error("Label saved, but the tenant message was not posted", { description: msgErr.message });
 
       toast.success("Shipping label uploaded — tenant can download it");
       void load();
@@ -587,24 +616,24 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
   };
 
   const uploadDoc = async (file: File) => {
-    if (!check?.id || !user?.id) return;
+    if (!check?.id || !user?.id || !req?.id) return;
     setUploading(true);
     try {
-      const path = `checks/${check.id}/mortgage-ops/${Date.now()}-${file.name.replace(/[^a-z0-9.\-_]/gi, "_")}`;
+      const path = mortgageDeskFilePath(check.id, file.name);
       const { error: upErr } = await supabase.storage
         .from("claim-files")
         .upload(path, file, { contentType: file.type, upsert: false });
       if (upErr) throw upErr;
 
-      const { error: insErr } = await supabase.from("check_files").insert({
-        check_intake_item_id: check.id,
-        file_name: file.name,
-        file_path: path,
-        file_type: file.type,
-        file_size: file.size,
+      const { error: insErr } = await attachMortgageDeskFile(deskClient, mortgageUsesAwsBackend, {
+        requestId: req.id,
+        checkId: check.id,
+        senderId: user.id,
+        fileName: file.name,
+        filePath: path,
+        fileType: file.type || null,
+        fileSize: file.size,
         category: uploadForSignature ? "mortgage_ops_signature" : "mortgage_ops",
-        source: "mortgage_ops",
-        uploaded_by: user.id,
         description: uploadDesc || null,
       });
       if (insErr) throw insErr;
@@ -631,13 +660,15 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
       }
 
       // Non-PDF / no homeowner / not-for-signature → attach + notify tenant.
-      await supabase.from("check_messages").insert({
-        check_id: check.id,
-        sender_id: user.id,
+      const { error: noticeErr } = await postMortgageDeskMessage(deskClient, mortgageUsesAwsBackend, {
+        requestId: req.id,
+        checkId: check.id,
+        senderId: user.id,
         body: uploadForSignature
           ? `📄 Mortgage Ops uploaded a document for homeowner signature: "${file.name}"${uploadDesc ? ` — ${uploadDesc}` : ""}. ${req?.claim_id ? "Missing homeowner email or non-PDF — please route via your signature workflow." : "Please forward to the homeowner via your signature workflow."}`
           : `📎 Mortgage Ops attached a document: "${file.name}"${uploadDesc ? ` — ${uploadDesc}` : ""}.`,
       });
+      if (noticeErr) toast.error("Document saved, but the tenant message was not posted", { description: noticeErr.message });
 
       setUploadDesc("");
       toast.success("Document uploaded");
@@ -707,9 +738,10 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
           .eq("id", pendingDoc.lossDraftDocId);
       }
 
-      await supabase.from("check_messages").insert({
-        check_id: check.id,
-        sender_id: user.id,
+      await postMortgageDeskMessage(deskClient, mortgageUsesAwsBackend, {
+        requestId: req.id,
+        checkId: check.id,
+        senderId: user.id,
         body: `📄 Mortgage Ops sent "${pendingDoc.fileName}" to ${homeownerName} (${homeownerEmail}) for e-signature with ${placedFields.length} placed field${placedFields.length === 1 ? "" : "s"}. Status will update in the Signature requests panel.`,
       });
 
@@ -750,11 +782,11 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
   const updateEndorsementDate = async (field: "check_sent_date" | "check_received_back_date") => {
     if (!req?.id) return;
     setSavingDates(true);
-    const patch: any = { [field]: new Date().toISOString() };
-    const { error } = await supabase
-      .from("mortgage_handling_requests")
-      .update(patch)
-      .eq("id", req.id);
+    const { error } = await updateMortgageDeskShipping(deskClient, mortgageUsesAwsBackend, {
+      requestId: req.id,
+      senderId: user?.id ?? null,
+      fields: { [field]: new Date().toISOString() },
+    });
     setSavingDates(false);
     if (error) {
       toast.error(error.message);

@@ -15,6 +15,7 @@ import {
 } from './storage-paths.mjs';
 import { canManageTenantDocumentLibrary, mortgageAgentCanWriteTenantLossDraft } from './mortgage-library-docs.mjs';
 import { libraryObjectPath } from './tenant-library-rules.mjs';
+import { isMortgageDeskFilePath, mortgageDeskCanUploadForCheck } from './mortgage-desk-return.mjs';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -119,6 +120,15 @@ export const authorizeStorageWritePath = async (client, bucket, objectPath, user
       };
     }
     const looked = await lookupWritableCheck(client, checkId);
+    // Mortgage Desk (SQL 122): the agent assigned to an in-progress request on
+    // this check is not a member of its tenant and cannot see the check row.
+    // It may add new objects under checks/<check>/mortgage-ops/ only (create
+    // only: no overwrite, no delete through this grant).
+    if (looked.error === 'rls_denied' && bucket === 'claim-files'
+      && isMortgageDeskFilePath(rel, checkId)
+      && (await mortgageDeskCanUploadForCheck(client, userId, checkId))) {
+      return { ok: true, rel, key: s3KeyFor(bucket, rel), strategy: 'mortgage_desk', createOnly: true };
+    }
     if (looked.error) {
       return {
         ok: false,
