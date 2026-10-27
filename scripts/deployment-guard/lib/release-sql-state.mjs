@@ -1,5 +1,5 @@
 /**
- * One engine for the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108 to SQL 116), shared by the staging
+ * One engine for the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108 to SQL 117), shared by the staging
  * guarded executor (aws/write-path/guarded-sql-executor/index.mjs) and the production tools
  * (release-sql-production-apply.mjs): the catalog state reader, the code-derived
  * fingerprints, the pre- and post-conditions, the predecessor rules and the unrelated-catalog
@@ -579,7 +579,9 @@ export function releaseIntendedState(key, text) {
       volatility: def.volatility,
       parallel: def.parallel,
       security_definer: def.security_definer,
-      result: def.result,
+      // A RETURNS TABLE (...) result is stated in the spec (fn.result) as pg_get_function_result
+      // renders it (SQL 117); the file's RETURNS clause gives only the word TABLE.
+      result: fn.result ?? def.result,
       config: [...def.config],
       prosrc_sha256: sha(def.prosrc),
       acl: [...fn.acl].sort(),
