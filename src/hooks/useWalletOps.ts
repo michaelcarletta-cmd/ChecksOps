@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { usePaymentProviderEligibility } from "@/hooks/usePaymentProviderEligibility";
@@ -9,6 +10,7 @@ import {
   type PaymentMethodLabel,
   type WalletOpsTransferRow,
 } from "@/lib/payments/walletRelativeTransfers";
+import { invoicesInFlight, type InvoicePendingRow } from "@/lib/payments/invoicePendingIn";
 import {
   PaymentWalletSelectionError,
   resolveWalletOpsEnvironment,
@@ -47,7 +49,7 @@ export function useWalletOpsTransfers(limit = 25) {
     enabled: !!tenantId && enabled && environmentReady,
     staleTime: 30_000,
     queryFn: async () => {
-      const [transfersRes, walletRes, methodsRes, billingRes] = await Promise.all([
+      const [transfersRes, walletRes, methodsRes, billingRes, invoicesRes] = await Promise.all([
         supabase
           .from("payment_transfers")
           .select(
@@ -72,6 +74,13 @@ export function useWalletOpsTransfers(limit = 25) {
           .eq("tenant_id", tenantId!)
           .order("created_at", { ascending: false })
           .limit(12),
+        // Invoices a customer is paying through the hosted link write no payment_transfers row.
+        supabase
+          .from("moov_invoices")
+          .select("id, tenant_id, environment, status, total_amount, paid_amount, invoice_number, customer_name")
+          .eq("tenant_id", tenantId!)
+          .order("created_at", { ascending: false })
+          .limit(200),
       ]);
 
       if (transfersRes.error) throw transfersRes.error;
@@ -134,16 +143,51 @@ export function useWalletOpsTransfers(limit = 25) {
         tenantName: tenant?.name || "Organization",
       });
 
+      const invoices = invoicesInFlight(
+        (invoicesRes.error ? [] : invoicesRes.data ?? []) as InvoicePendingRow[],
+        { tenantId: tenantId!, environment: walletEnvironment },
+      );
+      const invoicePendingInCents = invoices.reduce((sum, row) => sum + row.pending_cents, 0);
+
       return {
         transfers: rows,
         classified: summary.transfers,
         billing: summary.billing as BillingActivity[],
         pendingOutCents: summary.pendingOutCents,
-        pendingInCents: summary.pendingInCents,
+        pendingInCents: summary.pendingInCents + invoicePendingInCents,
+        transferPendingInCents: summary.pendingInCents,
+        invoicePendingInCents,
+        invoicesInFlight: invoices,
         tenantWalletPaymentMethodId,
       };
     },
   });
+}
+
+/**
+ * Invoice statuses only change when someone syncs them from the provider (there is no invoice
+ * webhook), so opening WalletOps asks for the current status of the organization's open invoices
+ * once. Best effort: a failure leaves the last synced statuses in place.
+ */
+export function useSyncOpenInvoicesOnOpen() {
+  const { tenantId, enabled, environmentReady } = usePaymentProviderEligibility();
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    if (!tenantId || !enabled || !environmentReady) return;
+    let cancelled = false;
+    supabase.functions
+      .invoke("moov-invoice", { body: { action: "sync", tenant_id: tenantId } })
+      .then(({ data, error }) => {
+        if (cancelled || error || (data as any)?.error) return;
+        queryClient.invalidateQueries({ queryKey: ["wallet-ops-transfers"] });
+        queryClient.invalidateQueries({ queryKey: ["moov-invoices", tenantId] });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [tenantId, enabled, environmentReady, queryClient]);
 }
 
 /**

@@ -31,12 +31,13 @@ const STATUS_STYLES: Record<string, string> = {
   draft: "bg-muted text-muted-foreground",
   unpaid: "bg-amber-500/15 text-amber-600 dark:text-amber-400",
   partially_paid: "bg-blue-500/15 text-blue-600 dark:text-blue-400",
+  "payment-pending": "bg-blue-500/15 text-blue-600 dark:text-blue-400",
   paid: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
   overdue: "bg-destructive/15 text-destructive",
   canceled: "bg-muted text-muted-foreground line-through",
 };
 
-const label = (s: string) => s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+const label = (s: string) => (s === "payment-pending" ? "Payment pending" : s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()));
 
 const emptyItem = (): InvoiceLineItem => ({ name: "", unit_price: 0, quantity: 1 });
 
