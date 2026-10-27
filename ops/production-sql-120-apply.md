@@ -48,7 +48,20 @@ Not changed: no policy, no grant to `checksops`, no table or column; SQL 98's
 send-time events, skip voided ones, send legs only) is deployed, the month-end engine finds the
 event SQL 120 wrote for a leg and reuses it, so nothing is billed twice.
 
-**Status:** not applied anywhere. The staging pin and the production pin are pending.
+**Staging executor refreshed (2026-10-27).** Inspect run 40544345484 (main `6505198`) found the live
+executor at `Ffm7CRLP…` without `sql/120_usage_events_at_approval_and_send.sql`. Deploy run
+40544852676 updated it to main's package (`Br/C/qPsGWEmvgC0KHq4YRtLf4B+pQf7NM1h5TDQ1Sg=`; "Verify live
+executor now carries main's package" passed).
+
+**Staging read-live (2026-10-27).** Run 40545376358 (main `6505198`): the five functions and the two
+triggers absent, every prerequisite present, the login able to write `check_billing_events`, a unique
+index already covering `check_billing_events (payment_transfer_id, event_type)` (so the file adds no
+index on staging), `check_billing_event_transfer_duplicates` 0; live
+`f3c1dd26888ac9fce91721cad698d39ee99cdca80c4a7888f9cfea9043171e9d`, `already_applied` false,
+`precondition_failures` `[]`. Recorded in the staging pin (`expected_live_definition_sha256`,
+`execute: true`, wave 20) under the owner's words of 2026-10-27, "Deploy SQL 120 to staging".
+
+**Status:** staging pin execute-authorized (wave 20); nothing applied yet; production pin pending.
 
 ## Fingerprint
 

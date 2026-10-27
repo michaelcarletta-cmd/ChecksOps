@@ -90,6 +90,11 @@ export const STAGING_WAVE1 = Object.freeze({
   // (deploy run 40436720850): the table and the six functions absent.
   // Applied by the guarded staging executor run 40438147297 (receipt 1b5eec31… -> 6f9e2ef3…).
   sql118: Object.freeze({ wave: 19, approved: '2026-10-27', run: '40436888477', live: '1b5eec31635d869abbabc9d4584674ee5852a27689629d9c199627d7c8653cde', apply_run: '40438147297' }),
+  // Wave 20 (owner approved 2026-10-27, "Deploy SQL 120 to staging"): SQL 120, usage events at
+  // Check Alt approval and at send time. Read at main 6505198 after the executor carried it (deploy
+  // run 40544852676): the five functions and two triggers absent, a unique index already covering
+  // check_billing_events (payment_transfer_id, event_type).
+  sql120: Object.freeze({ wave: 20, approved: '2026-10-27', run: '40545376358', live: 'f3c1dd26888ac9fce91721cad698d39ee99cdca80c4a7888f9cfea9043171e9d' }),
   sql98: Object.freeze({ wave: 3, approved: '2026-10-18', run: '39083278136', live: '296c3d6a274e10f66005fb9eaecf93fa17b81bd8db3607037ca07698fddd3275', apply_run: '39085677318' }),
 });
 
@@ -101,7 +106,7 @@ export const pendingPin = (pin) => Object.freeze({
 });
 
 /**
- * The committed staging pin's apply state: waves 1-19 recorded and approved, wave 6 approved with
+ * The committed staging pin's apply state: waves 1-20 recorded and approved, wave 6 approved with
  * its read-live still to record (pending until then), wave 18 (SQL 117) retired, the rest pending.
  */
 export function assertStagingPinState(assert, key, pin) {
