@@ -1,0 +1,15 @@
+{
+  "workstream_id": "production-tenant-lifecycle-applied",
+  "authorization": "Record only (2026-10-27): the bytes below are live. Nothing is planned or authorized by this manifest; any later change to this member needs its own manifest, staging acceptance and owner approval.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Tenant lifecycle (owner item 8) applied 2026-10-27 through the guarded overlay path on main 89159a7e2 (#1276), on the owner's \"DEPLOY tenant-billing-handlers.mjs TO PRODUCTION\": tenant-billing-handlers.mjs (2f8ca3c5 -> b3d85944; staging apply run 40424663073, confirmed by staging inspect run 40424759231; production pre-apply inspect run 40425119783 READY at RevisionId 54d16ce8-6870-47aa-88f2-52ac6e5e2e1c; production apply run 40425235000). The production apply run concluded success including its \"Verify live member is the accepted bytes\" step and the public production smoke (/health and /db-health 200). Read-only production inspect run 40425379817 then reported the member ALREADY_ACCEPTED with CodeSha256 GyIaihpMixxk6gYtZo8bIIr3FHPvxd37X3A7blmcAC8= and RevisionId 70379dc2-6a82-4deb-944a-3de6b2bda245. SQL 117 is not applied in production: until it is, the new actions answer 503 tenant_lifecycle_missing and every existing action is unchanged. The row records the applied bytes as live_sha256 and accepted_sha256 and chains to the manifest that planned it (previous_manifest), which keeps the pre-apply state.",
+  "members": {
+    "tenant-billing-handlers.mjs": {
+      "live_sha256": "b3d8594416e257a8ff6658c677c9d8435ad18f92e0ad34968838f2b275ccb824",
+      "accepted_sha256": "b3d8594416e257a8ff6658c677c9d8435ad18f92e0ad34968838f2b275ccb824",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-tenant-lifecycle-manifest-2026-10-26.json"
+    }
+  }
+}

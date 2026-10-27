@@ -955,11 +955,17 @@ test('fee collection: eleven members on the fee manifest, collection-v2 then des
   const enginePre = (plan) => { plan.members[ENGINE].expected_live_sha256 = ENGINE_PRE; return plan; };
   const engineEnv = () => applyEnv(ENGINE, { CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: ENGINE_PRE });
   const engineDeps = (liveOpts = {}) => applyDeps(ENGINE, { sha256: ENGINE_PRE, ...liveOpts });
+  // The handlers' row likewise records its applied tenant lifecycle bytes live (2026-10-27), so their
+  // hold is replayed from the fee branch's accepted bytes (2f8ca3c5) too.
+  const HANDLERS_PRE = fees.members[HANDLERS].accepted_sha256;
   const plan102Pending = enginePre(structuredClone(PLAN_SQL98_PENDING));
+  plan102Pending.members[HANDLERS].expected_live_sha256 = HANDLERS_PRE;
   plan102Pending.sql_prerequisites[SQL102] = { ...plan102Pending.sql_prerequisites[SQL102], verified_live: false, evidence: null };
+  const handlersEnv = () => applyEnv(HANDLERS, { CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: HANDLERS_PRE });
+  const handlersDeps = () => applyDeps(HANDLERS, { sha256: HANDLERS_PRE });
   for (const [member, sqlBefore] of [[ENGINE, SQL98], [HANDLERS, SQL102]]) {
     await assert.rejects(
-      run(member === ENGINE ? engineEnv() : applyEnv(member), { ...(member === ENGINE ? engineDeps() : applyDeps(member)).deps, plan: plan102Pending }),
+      run(member === ENGINE ? engineEnv() : handlersEnv(), { ...(member === ENGINE ? engineDeps() : handlersDeps()).deps, plan: plan102Pending }),
       (error) => error.code === CODES.PRODUCTION_APPROVAL_REQUIRED && error.details.sql_before === sqlBefore,
       member,
     );
@@ -2189,8 +2195,9 @@ test('Onboarding reconciliation: four live onboarding members replaced the bytes
   assert.match(PLAN.notes, /Onboarding and payee sends applied 2026-10-26 on main 31a84414a/);
 });
 
-test('Tenant lifecycle: tenant-billing-handlers.mjs replaces the bytes production runs, still held for SQL 102 only (planning only)', async () => {
+test('Tenant lifecycle: tenant-billing-handlers.mjs replaced the bytes production ran; production run 40425235000 applied main\'s bytes', async () => {
   const MANIFEST_REL = 'aws/tests/fixtures/production-tenant-lifecycle-manifest-2026-10-26.json';
+  const APPLIED_REL = 'aws/tests/fixtures/production-tenant-lifecycle-applied-manifest-2026-10-27.json';
   const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, MANIFEST_REL), 'utf8'));
   const HANDLERS = 'tenant-billing-handlers.mjs';
   // The live bytes: the fee-collection pin's accepted bytes, which read-only production overlay
@@ -2208,13 +2215,21 @@ test('Tenant lifecycle: tenant-billing-handlers.mjs replaces the bytes productio
   assert.deepEqual(manifest.members[HANDLERS], { live_sha256: LIVE, accepted_sha256: onMain, operation: 'replace' });
   // Not held for SQL 117: the new actions answer 'needs database update SQL 117' until it is applied.
   const SQL102 = 'aws/workflows/sql/102_platform_owner_tenant_profile.sql';
-  assert.deepEqual(PLAN.members[HANDLERS], { operation: 'replace', accepted_sha256: onMain, expected_live_sha256: LIVE, sql_before: SQL102, manifest: MANIFEST_REL });
+  // Applied 2026-10-27: the applied manifest chains to the planned one; the row expects main's bytes.
+  const applied = JSON.parse(fs.readFileSync(path.join(ROOT, APPLIED_REL), 'utf8'));
+  assert.equal(applied.workstream_id, 'production-tenant-lifecycle-applied');
+  assert.equal(applied.deploy_authorized, false);
+  assert.match(applied.authorization, /^Record only \(2026-10-27\)/);
+  assert.deepEqual(applied.members[HANDLERS], { live_sha256: onMain, accepted_sha256: onMain, operation: 'replace', previous_manifest: MANIFEST_REL });
+  for (const runId of ['40424663073', '40425119783', '40425235000', '40425379817']) assert.match(applied.notes, new RegExp(`run ${runId}`), runId);
+  assert.match(applied.notes, /RevisionId 70379dc2-6a82-4deb-944a-3de6b2bda245/);
+  assert.match(PLAN.notes, /Tenant lifecycle applied 2026-10-27 on main 89159a7e2/);
+  assert.deepEqual(PLAN.members[HANDLERS], { operation: 'replace', accepted_sha256: onMain, expected_live_sha256: onMain, sql_before: SQL102, manifest: APPLIED_REL });
   assert.match(fs.readFileSync(path.join(API, HANDLERS), 'utf8'), /needs database update SQL 117/);
   assert.equal(resolvePlannedMember(HANDLERS, { root: ROOT, plan: PLAN }).ok, true);
   const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: HANDLERS };
-  const ready = await run(inspect, { root: ROOT, inspectLive: liveFor(HANDLERS, { sha256: LIVE }) });
-  assert.equal(ready.mutation, false);
-  assert.notEqual(ready.state, 'ALREADY_ACCEPTED');
+  // The pre-apply bytes are no longer an accepted live state.
+  await assert.rejects(run(inspect, { root: ROOT, inspectLive: liveFor(HANDLERS, { sha256: LIVE }) }), (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED);
   const done = await run(inspect, { root: ROOT, inspectLive: liveFor(HANDLERS, { sha256: onMain }) });
   assert.equal(done.state, 'ALREADY_ACCEPTED');
 });
