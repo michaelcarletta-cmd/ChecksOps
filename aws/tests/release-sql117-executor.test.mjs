@@ -4,7 +4,7 @@
  * release-sql90-97-executor.test.mjs runs what every release key shares (SQL 117 included); this
  * file covers SQL 117's own:
  *
- *   - the pin: staging-authorized from its read-live (wave 18), code-derived, selectable, packed, in step with the production pin; the
+ *   - the pin: retired after its staging apply rolled back (wave 18; SQL 118 replaces it), code-derived, selectable, packed, in step with the production pin; the
  *     pinned commit authored the bytes; no predecessor, nothing supersedes or needs it;
  *   - the reviewed file and spec: the six functions as the engine parses them (with
  *     aws_platform_owner_deactivated_tenants()'s RETURNS TABLE result stated in the spec), the new
@@ -109,7 +109,7 @@ const FUNCTIONS = Object.freeze([
   'public.aws_platform_owner_deactivated_tenants()',
 ]);
 
-test('pin: SQL 117 staging-authorized from its read-live, code-derived, selectable, packed, in step with the production pin; no predecessor', () => {
+test('pin: SQL 117 retired (SQL 118 replaces it), code-derived, selectable, packed, in step with the production pin; no predecessor', () => {
   const pin = PINS[KEY];
   const spec = RELEASE_SQL_SPECS[KEY];
   assert.equal(AUTHORIZED_SQL117_PLATFORM_OWNER_TENANT_LIFECYCLE, pin);
@@ -119,10 +119,10 @@ test('pin: SQL 117 staging-authorized from its read-live, code-derived, selectab
   assert.equal(spec.choice, 'sql117-platform-owner-tenant-lifecycle');
   assert.equal(MIGRATIONS[spec.choice], pin);
   assertStagingPinState(assert, KEY, pin);
-  // Staging apply authorized (owner approved 2026-10-27) from staging read-live run 40431777849:
-  // the table and the six functions absent, so SQL 117 was not yet applied there.
-  assert.equal(pin.execute, true);
-  assert.equal(pin.authorization, 'Owner approved 2026-10-27: staging apply (wave 18) from staging read-live run 40431777849');
+  // Retired: staging apply run 40434533070 rolled back (the new table kept default-privilege
+  // grants), so the pin can never execute again; its read-live pre-state stays recorded.
+  assert.equal(pin.execute, false);
+  assert.equal(pin.authorization, 'Retired 2026-10-27: superseded by SQL 118 after staging apply run 40434533070 rolled back; never applied');
   assert.equal(pin.expected_live_definition_sha256, 'dcfcb810a7d016f63451a3cf6ec00982be2f555fae087871885e49cc4b501956');
   assert.notEqual(pin.expected_live_definition_sha256, pin.intended_replacement_sha256);
   assert.equal(pin.source_sha256, sha(TEXT));
@@ -140,10 +140,11 @@ test('pin: SQL 117 staging-authorized from its read-live, code-derived, selectab
   assert.equal(spec.supersedes, undefined);
   assert.deepEqual(RELEASE_SQL_KEYS.filter((key) => (RELEASE_SQL_SPECS[key].supersedes || []).includes(KEY)
     || (RELEASE_SQL_SPECS[key].predecessors || []).includes(KEY)
-    || (RELEASE_SQL_SPECS[key].refuse_after || []).some((r) => r.key === KEY)), []);
+    || (RELEASE_SQL_SPECS[key].refuse_after || []).some((r) => r.key === KEY)), ['sql118']);
   // No other release migration creates the table or the functions.
-  assert.deepEqual(RELEASE_SQL_KEYS.filter((key) => key !== KEY && (RELEASE_SQL_SPECS[key].tables || []).some((t) => t.name === TABLE)), []);
-  assert.deepEqual(RELEASE_SQL_KEYS.filter((key) => key !== KEY && RELEASE_SQL_SPECS[key].functions.some((fn) => FUNCTIONS.includes(fn.identity))), []);
+  // Only SQL 118, which supersedes it, creates the same table and functions.
+  assert.deepEqual(RELEASE_SQL_KEYS.filter((key) => key !== KEY && (RELEASE_SQL_SPECS[key].tables || []).some((t) => t.name === TABLE)), ['sql118']);
+  assert.deepEqual(RELEASE_SQL_KEYS.filter((key) => key !== KEY && RELEASE_SQL_SPECS[key].functions.some((fn) => FUNCTIONS.includes(fn.identity))), ['sql118']);
   const prod = productionPin();
   assert.equal(prod.intended_replacement_sha256, pin.intended_replacement_sha256);
   assert.equal(prod.intended_post_state.fingerprint, pin.intended_replacement_sha256);
@@ -187,7 +188,7 @@ test('reviewed file and spec: six functions as parsed, the RETURNS TABLE result 
   // The engine change states a result only where the spec names one: every other release key's
   // intended fingerprint is the one its pin records.
   for (const key of RELEASE_SQL_KEYS.filter((k) => k !== KEY)) {
-    assert.ok(RELEASE_SQL_SPECS[key].functions.every((fn) => fn.result === undefined), key);
+    if (key !== 'sql118') assert.ok(RELEASE_SQL_SPECS[key].functions.every((fn) => fn.result === undefined), key);
     const text = fs.readFileSync(FILES[key], 'utf8');
     if (PINS[key].superseded_intended_sha256 == null) assert.equal(releaseIntendedHash(key, text), PINS[key].intended_replacement_sha256, key);
   }

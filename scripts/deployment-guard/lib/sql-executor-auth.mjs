@@ -2578,7 +2578,8 @@ export const AUTHORIZED_SQL116_MOOV_ONBOARDING_PROFILE_INDUSTRY = Object.freeze(
 // Tenant lifecycle 2026-10-26 staging pin: SQL 117 (public.tenant_deactivations and the
 // platform-owner functions that deactivate, reactivate or delete an empty tenant; owner item 8).
 // No predecessor (the file checks SQL 96's audit table and SQL 102's column guard itself).
-// Staging apply authorized (wave 18) from staging read-live run 40431777849.
+// Retired 2026-10-27, never applied anywhere: the staging apply (run 40434533070) rolled back with
+// UNRELATED_MUTATION intended_state (the new table kept default-privilege grants). SQL 118 replaces it.
 export const AUTHORIZED_SQL117_PLATFORM_OWNER_TENANT_LIFECYCLE = Object.freeze({
   key: 'sql117',
   filename: 'aws/workflows/sql/117_platform_owner_tenant_lifecycle.sql',
@@ -2586,16 +2587,42 @@ export const AUTHORIZED_SQL117_PLATFORM_OWNER_TENANT_LIFECYCLE = Object.freeze({
   // The commit that last authored the file bytes.
   commit: '98b8602e0274a1c7faf124261764fa51b0cc3391',
   source_sha256: '44cdef389446e528cc9633e5c8f845ba18c122a90a5ff276afb670856a61f00d',
-  // Owner's words 2026-10-27: "SQL 117 to production", then "Go" to the staging read-live and staging
-  // pin (staging apply only; the staging apply run, the production pin and apply are separate).
-  authorization: 'Owner approved 2026-10-27: staging apply (wave 18) from staging read-live run 40431777849',
-  execute: true,
+  // Was 'Owner approved 2026-10-27: staging apply (wave 18) from staging read-live run 40431777849'
+  // (execute true); retired after the staging apply rolled back, so it can never execute.
+  authorization: 'Retired 2026-10-27: superseded by SQL 118 after staging apply run 40434533070 rolled back; never applied',
+  execute: false,
   // Staging read-live run 40431777849 (2026-10-27, main 9d6f164, after executor deploy run
   // 40431581944): tenant_deactivations and the six functions absent; already_applied false,
   // precondition_failures [].
   expected_live_definition_sha256: 'dcfcb810a7d016f63451a3cf6ec00982be2f555fae087871885e49cc4b501956',
   // Code-derived: releaseIntendedHash('sql117', file bytes) (release-sql-state.mjs); re-derived by the tests.
   intended_replacement_sha256: 'aceed4572b39db76bc12258f1f707ec4b6d78ebcec730a5dbee2bb1999677e00',
+  function_identities: Object.freeze([
+    'public.aws_tenant_activity_tables()',
+    'public.aws_platform_owner_tenant_activity(uuid)',
+    'public.aws_platform_owner_deactivate_tenant(uuid, text)',
+    'public.aws_platform_owner_reactivate_tenant(uuid)',
+    'public.aws_platform_owner_delete_empty_tenant(uuid, text)',
+    'public.aws_platform_owner_deactivated_tenants()',
+  ]),
+});
+
+// Tenant lifecycle 2026-10-27 staging pin: SQL 118 (SQL 117 plus the revoke of every non-owner grant
+// on public.tenant_deactivations; SQL 117 is retired). Owner item 8.
+// No predecessor (the file checks SQL 96's audit table and SQL 102's column guard itself).
+// Pending until a reviewed pin change records a staging read-live.
+export const AUTHORIZED_SQL118_PLATFORM_OWNER_TENANT_LIFECYCLE = Object.freeze({
+  key: 'sql118',
+  filename: 'aws/workflows/sql/118_platform_owner_tenant_lifecycle.sql',
+  migration_id: '118_platform_owner_tenant_lifecycle',
+  // The commit that last authored the file bytes.
+  commit: 'f055ae5b00ddaf8d11a2a20aae50238a664554e2',
+  source_sha256: 'f10655a8f105436b4a020be5564186e335f1f6bb06f840742c939879bdba45a5',
+  authorization: 'pending',
+  execute: false,
+  expected_live_definition_sha256: null,
+  // Code-derived: releaseIntendedHash('sql118', file bytes) (release-sql-state.mjs); re-derived by the tests.
+  intended_replacement_sha256: '6f9e2ef349c397ab4df81337139776287e2b6e8a85d4108ae090604717476925',
   function_identities: Object.freeze([
     'public.aws_tenant_activity_tables()',
     'public.aws_platform_owner_tenant_activity(uuid)',
@@ -2634,6 +2661,7 @@ export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql115: AUTHORIZED_SQL115_PROVIDER_STAKEHOLDER_ONE_PARTNER_PAYOUT,
   sql116: AUTHORIZED_SQL116_MOOV_ONBOARDING_PROFILE_INDUSTRY,
   sql117: AUTHORIZED_SQL117_PLATFORM_OWNER_TENANT_LIFECYCLE,
+  sql118: AUTHORIZED_SQL118_PLATFORM_OWNER_TENANT_LIFECYCLE,
 });
 
 // The fee collection pin under its earlier map name (the same object as the release map's sql98).
@@ -2649,7 +2677,7 @@ export function isSql30TenantDocumentsDocType(input = {}) {
   return pinIdentifiersMatch(input, AUTHORIZED_SQL30_TENANT_DOCUMENTS_DOC_TYPE);
 }
 
-/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql117) an input names, or null. */
+/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql118) an input names, or null. */
 export function releaseSqlMigrationKey(input = {}) {
   return Object.keys(RELEASE_2026_10_17_PENDING_SQL_PINS)
     .find((key) => pinIdentifiersMatch(input, RELEASE_2026_10_17_PENDING_SQL_PINS[key])) || null;

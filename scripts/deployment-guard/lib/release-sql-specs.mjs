@@ -4380,4 +4380,98 @@ export const RELEASE_SQL_SPECS = deepFreeze({
       "public.tenant_pricing_audit"
     ]
   },
+  // SQL 118: SQL 117 (never applied: its staging apply, run 40434533070, rolled back because the
+  // new table kept the grants the database's default privileges give a new table) plus the revoke
+  // of every non-owner grant on public.tenant_deactivations. The same table, functions, grants and
+  // definer writes as SQL 117, so the spec is SQL 117's; it supersedes SQL 117, whose pins are
+  // retired.
+  sql118: {
+    "key": "sql118",
+    "label": "SQL 118",
+    "choice": "sql118-platform-owner-tenant-lifecycle",
+    "production_pin_rel": "ops/deployment-guard/sql118-platform-owner-tenant-lifecycle-production-apply.json",
+    "script": "sql118-platform-owner-tenant-lifecycle-production-apply",
+    "prerequisites": [
+      "public.tenants",
+      "public.tenant_users",
+      "public.tenant_pricing_audit",
+      "public.is_platform_owner()",
+      "public.aws_tenants_member_column_guard()",
+      "auth.uid()",
+      "role checksops",
+      "role authenticated",
+      "column public.tenants.id",
+      "column public.tenants.name",
+      "column public.tenants.slug",
+      "column public.tenants.subscription_status",
+      "column public.tenants.is_system_tenant",
+      "column public.tenants.created_at",
+      "column public.tenant_users.tenant_id",
+      "column public.tenant_users.created_at",
+      "column public.tenant_pricing_audit.tenant_id",
+      "column public.tenant_pricing_audit.actor_id",
+      "column public.tenant_pricing_audit.field",
+      "column public.tenant_pricing_audit.old_value",
+      "column public.tenant_pricing_audit.new_value"
+    ],
+    "predecessors": [],
+    "supersedes": [
+      "sql117"
+    ],
+    "functions": [
+      {
+        "identity": "public.aws_tenant_activity_tables()",
+        "acl": ["authenticated EXECUTE", "checksops EXECUTE", "owner EXECUTE"]
+      },
+      {
+        "identity": "public.aws_platform_owner_tenant_activity(uuid)",
+        "acl": ["authenticated EXECUTE", "checksops EXECUTE", "owner EXECUTE"]
+      },
+      {
+        "identity": "public.aws_platform_owner_deactivate_tenant(uuid, text)",
+        "acl": ["authenticated EXECUTE", "checksops EXECUTE", "owner EXECUTE"]
+      },
+      {
+        "identity": "public.aws_platform_owner_reactivate_tenant(uuid)",
+        "acl": ["authenticated EXECUTE", "checksops EXECUTE", "owner EXECUTE"]
+      },
+      {
+        "identity": "public.aws_platform_owner_delete_empty_tenant(uuid, text)",
+        "acl": ["authenticated EXECUTE", "checksops EXECUTE", "owner EXECUTE"]
+      },
+      {
+        "identity": "public.aws_platform_owner_deactivated_tenants()",
+        "acl": ["authenticated EXECUTE", "checksops EXECUTE", "owner EXECUTE"],
+        "result": "TABLE(tenant_id uuid, deactivated_at timestamp with time zone, deactivated_by uuid, reason text, previous_subscription_status text, suspended_memberships integer)"
+      }
+    ],
+    "tables": [
+      {
+        "name": "public.tenant_deactivations",
+        "rls": true,
+        "forced": false,
+        "columns": [
+          ["tenant_id", "uuid", true, null],
+          ["deactivated_at", "timestamp with time zone", true, "now()"],
+          ["deactivated_by", "uuid", false, null],
+          ["reason", "text", false, null],
+          ["previous_subscription_status", "text", false, null],
+          ["memberships", "jsonb", true, "'[]'::jsonb"]
+        ],
+        "constraints": [
+          ["tenant_deactivations_pkey", "PRIMARY KEY (tenant_id)"],
+          ["tenant_deactivations_tenant_id_fkey", "FOREIGN KEY (tenant_id) REFERENCES public.tenants(id) ON DELETE CASCADE"]
+        ],
+        "indexes": [
+          ["tenant_deactivations_pkey", "CREATE UNIQUE INDEX tenant_deactivations_pkey ON public.tenant_deactivations USING btree (tenant_id)"]
+        ],
+        "acl": []
+      }
+    ],
+    "definer_writes": [
+      "public.tenant_users",
+      "public.tenants",
+      "public.tenant_pricing_audit"
+    ]
+  },
 });

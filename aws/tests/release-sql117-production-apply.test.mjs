@@ -137,7 +137,7 @@ test('pin: the release pin shape, pending, in step with the staging pin, the one
   assert.doesNotMatch(JSON.stringify(tool), /[0-9a-f]{64}/);
   const rows = JSON.stringify(readJson('ops/deployment-guard/bypass-inventory.json'));
   assert.match(rows, /"path":"scripts\/deployment-guard\/sql117-platform-owner-tenant-lifecycle-production-apply\.mjs","classification":"GUARDED","capabilities":\["sql117-production-apply"\]/);
-  assert.match(rows, /sql113, sql114, sql115, sql116, sql117\)/);
+  assert.match(rows, /sql113, sql114, sql115, sql116, sql117, sql118\)/);
   const scripts = readJson('package.json').scripts;
   const workflow = fs.readFileSync(path.join(ROOT, '.github/workflows/deployment-guard.yml'), 'utf8');
   for (const name of ['aws/tests/release-sql117-executor.test.mjs', 'aws/tests/release-sql117-production-apply.test.mjs']) {
@@ -160,8 +160,8 @@ test('order: no predecessor; the prerequisites are SQL 96\'s audit table and SQL
   for (const key of ['sql96', 'sql102']) {
     assert.equal(readJson(RELEASE_SQL_SPECS[key].production_pin_rel).applied.result, 'applied', key);
   }
-  // The new table is not created by any earlier migration.
-  for (const key of Object.keys(RELEASE_SQL_SPECS).filter((k) => k !== KEY)) {
+  // The new table is not created by any earlier migration (SQL 118, which supersedes it, is later).
+  for (const key of Object.keys(RELEASE_SQL_SPECS).filter((k) => k !== KEY && k !== 'sql118')) {
     assert.ok(!(RELEASE_SQL_SPECS[key].tables || []).some((t) => t.name === 'public.tenant_deactivations'), key);
   }
   // The RETURNS TABLE result is stated as pg_get_function_result renders it.
@@ -170,11 +170,11 @@ test('order: no predecessor; the prerequisites are SQL 96\'s audit table and SQL
   const runbook = fs.readFileSync(path.join(ROOT, COMMITTED.tooling.runbook), 'utf8');
   assert.ok(runbook.includes(COMMITTED.intended_replacement_sha256));
   assert.ok(runbook.includes(COMMITTED.source_sha256));
-  assert.match(runbook, /\*\*Status:\*\* staging pin execute-authorized \(wave 18\)/);
+  assert.match(runbook, /\*\*Status:\*\* retired, never applied anywhere\./);
   assert.match(runbook, /read-live \(2026-10-27\)\.\*\* Run 40431777849/);
   const oneShot = fs.readFileSync(path.join(ROOT, 'ops/production-sql-one-shot.md'), 'utf8');
   assert.match(oneShot, /\| `sql117` \|/);
-  assert.match(oneShot, /`sql116`, `sql117`\) \|/);
+  assert.match(oneShot, /`sql117`, `sql118`\) \|/);
   assert.match(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/README.md'), 'utf8'), /sql117-platform-owner-tenant-lifecycle-production-apply\.mjs --inspect/);
 });
 
