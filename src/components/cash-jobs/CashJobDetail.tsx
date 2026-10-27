@@ -16,6 +16,8 @@ import { format } from "date-fns";
 import { CashJobForm } from "./CashJobForm";
 import { CashJobCheckUpload } from "./CashJobCheckUpload";
 import { formatIssueDateDisplay } from "@/lib/issueDate";
+import { formatPhoneForDisplay } from "@/lib/utils";
+import { isAwsStaging } from "@/lib/awsStaging";
 
 const PAYMENT_METHODS: Record<string, string> = {
   cash: "Cash", check: "Check", zelle: "Zelle",
@@ -44,6 +46,10 @@ interface Props {
 }
 
 export function CashJobDetail({ jobId, onBack }: Props) {
+  // On AWS, cash_job_payments is a financial table: the browser does not write
+  // it. A check uploaded to this job is linked to it, and when that check is
+  // deposited the database records the payment (trg_sync_cash_job_check_payment).
+  const manualPayments = !isAwsStaging();
   const { user } = useAuth();
   const { tenant } = useTenant();
   const { toast } = useToast();
@@ -173,8 +179,8 @@ export function CashJobDetail({ jobId, onBack }: Props) {
               </div>
               <div className="flex gap-3 mt-1">
                 {job.customer_phone && (
-                  <a href={`tel:${job.customer_phone}`} className="flex items-center gap-1 text-xs text-blue-500">
-                    <Phone className="h-3 w-3" />{job.customer_phone}
+                  <a href={`tel:${String(job.customer_phone).replace(/[^\d+]/g, "")}`} className="flex items-center gap-1 text-xs text-blue-500">
+                    <Phone className="h-3 w-3" />{formatPhoneForDisplay(job.customer_phone)}
                   </a>
                 )}
                 {job.customer_email && (
@@ -269,10 +275,12 @@ export function CashJobDetail({ jobId, onBack }: Props) {
               <Receipt className="h-4 w-4" />
               Payments Received
             </CardTitle>
-            <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setShowPaymentForm(!showPaymentForm)}>
-              <Plus className="h-3 w-3 mr-1" />
-              Record payment
-            </Button>
+            {manualPayments && (
+              <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setShowPaymentForm(!showPaymentForm)}>
+                <Plus className="h-3 w-3 mr-1" />
+                Record payment
+              </Button>
+            )}
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -286,9 +294,15 @@ export function CashJobDetail({ jobId, onBack }: Props) {
           />
           <div className="border-t my-2" />
 
+          {!manualPayments && (
+            <p className="text-xs text-muted-foreground">
+              Checks uploaded here go to Review and stay linked to this job. A payment is
+              recorded automatically when the check is deposited.
+            </p>
+          )}
 
           {/* Record payment form */}
-          {showPaymentForm && (
+          {manualPayments && showPaymentForm && (
             <div className="rounded-md border bg-muted/30 p-3 space-y-3">
               <p className="text-xs font-medium">Record a payment</p>
               <div className="grid grid-cols-2 gap-2">
@@ -348,14 +362,16 @@ export function CashJobDetail({ jobId, onBack }: Props) {
                     </p>
                     {payment.notes && <p className="text-xs text-muted-foreground italic">{payment.notes}</p>}
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                    onClick={() => deletePayment.mutate(payment.id)}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
+                  {manualPayments && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                      onClick={() => deletePayment.mutate(payment.id)}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
                 </div>
               ))}
             </div>

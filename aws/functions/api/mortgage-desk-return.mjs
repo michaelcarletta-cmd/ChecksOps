@@ -33,12 +33,18 @@
  * returned and a link to the company's Checks page. The email never names a
  * payment or deposit provider.
  */
-import { sendViaSesOrSink } from './email.mjs';
 import { renderChecksOpsEmail } from './email-layout.mjs';
 import { emailAssetOrigin, platformBranding } from './email-branding.mjs';
 import { normalizeEmail } from './email-policy.mjs';
 import { USER_ROLES_SQL } from './identity.mjs';
 import { withIdentityWrite } from './data.mjs';
+
+// Loaded at send time: email.mjs imports the SES client, which a module that only routes the Desk
+// RPCs (workflow-rpc.mjs, and the tests that load it) must not need at import time.
+const sendViaSesOrSink = async (...args) => {
+  const { sendViaSesOrSink: send } = await import('./email.mjs');
+  return send(...args);
+};
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const isUuid = (value) => UUID_RE.test(String(value || ''));

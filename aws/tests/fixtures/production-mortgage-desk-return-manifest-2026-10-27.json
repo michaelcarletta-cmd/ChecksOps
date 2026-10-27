@@ -7,7 +7,7 @@
   "members": {
     "mortgage-desk-return.mjs": {
       "live_sha256": null,
-      "accepted_sha256": "aa200fefa450be3d7d752f672fd12f3d2370c70aa5e536fd4a301ee5f884d44a",
+      "accepted_sha256": "0c99317f77b7b16a1801795b2c81526f3deb18d10ddff0afaf08efa0f9d7425b",
       "operation": "add",
       "required_imports": [
         "email.mjs",

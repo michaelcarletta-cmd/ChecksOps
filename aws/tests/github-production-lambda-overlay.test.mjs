@@ -91,13 +91,16 @@ function liveFor(member, { sha256 = undefined, present = undefined, extra = [], 
 // manifest's live_sha256), the REPLACE that had to pass the order, link and SQL 98 gates.
 const PROVIDERS_PRE = JSON.parse(fs.readFileSync(path.join(ROOT, 'aws/tests/fixtures/production-moov-invoice-manifest-2026-10-22.json'), 'utf8')).members['providers.mjs'].live_sha256;
 const providersPre = (plan) => { plan.members['providers.mjs'].expected_live_sha256 = PROVIDERS_PRE; return plan; };
-// workflow.mjs records its applied Delete Check bytes live (production run 40530367414, 2026-10-27):
-// the generic REPLACE tests replay it from the pre-apply live bytes (753ae14a, the release 2026-10-17
-// accepted bytes), a REPLACE that still has to pass the drift, approval, order and link gates.
-const WORKFLOW_PRE = '753ae14a0d04ded5782c653bd67c308067311f4fcebf835c0aac4e6659188138';
+// workflow.mjs REPLACEs its applied Delete Check bytes (c7159c4d, production run 40530367414) with the
+// cash-job check link, held on SQL 121 (not yet live in production): the generic REPLACE tests replay it
+// from those live bytes with SQL 121 recorded live, a REPLACE that still has to pass the drift,
+// approval, order and link gates.
+const WORKFLOW_PRE = 'c7159c4d9a74342f2a0f59a2836def78376c84d2781bbeb56dbb35ba83ed9337';
+const SQL121_FILE = 'aws/workflows/sql/121_cash_jobs_production_grants.sql';
 const WORKFLOW_PRE_PLAN = (() => {
   const plan = structuredClone(PLAN);
   plan.members['workflow.mjs'].expected_live_sha256 = WORKFLOW_PRE;
+  plan.sql_prerequisites[SQL121_FILE] = { ...plan.sql_prerequisites[SQL121_FILE], verified_live: true, evidence: 'test' };
   return plan;
 })();
 
@@ -2409,20 +2412,47 @@ test('Delete Check: workflow.mjs replaced the release 2026-10-17 bytes; producti
   assert.equal(applied.workstream_id, 'production-delete-check-applied');
   assert.equal(applied.deploy_authorized, false);
   assert.deepEqual(applied.members[MEMBER], { live_sha256: LIVE, accepted_sha256: LIVE, operation: 'replace', previous_manifest: MANIFEST_REL });
+  // workflow.mjs moved on to the cash-job check link (its own test below), whose REPLACE starts from
+  // these applied bytes: they are the expected live state, no longer the accepted one.
   const row = PLAN.members[MEMBER];
   assert.equal(row.operation, 'replace');
-  assert.equal(row.manifest, APPLIED_REL);
+  assert.equal(row.manifest, 'aws/tests/fixtures/production-cash-jobs-check-link-manifest-2026-10-27.json');
   assert.equal(row.expected_live_sha256, LIVE);
-  assert.equal(row.accepted_sha256, LIVE);
-  assert.equal(sha(`aws/functions/api/${MEMBER}`), LIVE);
-  assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
+  assert.notEqual(row.accepted_sha256, LIVE);
   const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
-  const done = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: LIVE }) });
-  assert.equal(done.state, 'ALREADY_ACCEPTED');
-  assert.equal(done.mutation, false);
   await assert.rejects(
     run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: BEFORE }) }),
     (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+  );
+});
+
+test('Cash jobs: workflow.mjs replaces the applied Delete Check bytes with the cash-job check link, held on SQL 121 until it is recorded live in production', async () => {
+  const MEMBER = 'workflow.mjs';
+  const MANIFEST_REL = 'aws/tests/fixtures/production-cash-jobs-check-link-manifest-2026-10-27.json';
+  const PREVIOUS = 'aws/tests/fixtures/production-delete-check-applied-manifest-2026-10-27.json';
+  const BEFORE = 'c7159c4d9a74342f2a0f59a2836def78376c84d2781bbeb56dbb35ba83ed9337';
+  const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, MANIFEST_REL), 'utf8'));
+  const accepted = sha(`aws/functions/api/${MEMBER}`);
+  assert.equal(manifest.deploy_authorized, false);
+  assert.match(manifest.authorization, /^Pending owner review/);
+  assert.deepEqual(manifest.members[MEMBER], { live_sha256: BEFORE, accepted_sha256: accepted, operation: 'replace', previous_manifest: PREVIOUS });
+  assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, PREVIOUS), 'utf8')).members[MEMBER].accepted_sha256, BEFORE);
+  const row = PLAN.members[MEMBER];
+  assert.deepEqual(row, { operation: 'replace', accepted_sha256: accepted, expected_live_sha256: BEFORE, sql_before: SQL121_FILE, manifest: MANIFEST_REL });
+  // SQL 121 is applied in staging (run 40591140684), not yet recorded live in production.
+  const pre = PLAN.sql_prerequisites[SQL121_FILE];
+  assert.equal(pre.verified_live, false);
+  assert.equal(pre.evidence, null);
+  assert.equal(pre.pin, 'ops/deployment-guard/sql121-cash-jobs-grants-production-apply.json');
+  assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
+  const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
+  const ready = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: BEFORE }) });
+  assert.equal(ready.mutation, false);
+  assert.notEqual(ready.state, 'ALREADY_ACCEPTED');
+  // The apply refuses until SQL 121 is recorded verified live in production.
+  await assert.rejects(
+    run(applyEnv(MEMBER), applyDeps(MEMBER, { plan: PLAN }).deps),
+    (error) => error.code === CODES.PRODUCTION_APPROVAL_REQUIRED && error.details.sql_before === SQL121_FILE,
   );
 });
 
