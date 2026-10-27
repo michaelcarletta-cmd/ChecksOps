@@ -239,3 +239,20 @@ test('upload from a job uses createAwsCheck and the check prefix, like the Comma
   assert.match(center, /createAwsCheck\(token, \{[\s\S]*?\.\.\.\(claimId \? \{ claim_id: claimId \} : \{\}\),/);
   assert.match(center, /<CashJobReviewLink cashJobId=\{check\.cash_job_id\} \/>/);
 });
+
+test('SQL 121: a cash-job check deposited through Check Alt records its payment on approval, once, and drops it if the deposit fails', () => {
+  const sql = read('aws/workflows/sql/121_cash_jobs_production_grants.sql');
+  assert.match(sql, /CREATE OR REPLACE FUNCTION public\.aws_record_cash_job_checkalt_payment\(\)\s+RETURNS trigger\s+LANGUAGE plpgsql\s+SECURITY DEFINER/);
+  assert.match(sql, /CREATE TRIGGER aws_checkalt_deposit_cash_job_payment\s+AFTER INSERT OR UPDATE OF status ON public\.checkalt_deposits/);
+  // Approved or accepted, for a cash-job check only.
+  assert.match(sql, /IF v_new IN \('submitted', 'cleared'\) AND v_old NOT IN \('submitted', 'cleared'\) THEN/);
+  assert.match(sql, /v_check\.check_source IS DISTINCT FROM 'cash_job' OR v_check\.cash_job_id IS NULL THEN\s+RETURN NULL;/);
+  // Once per check: the same reference the 'deposited' trigger uses.
+  assert.match(sql, /p\.reference_number = v_check\.id::text\) THEN\s+RETURN NULL;/);
+  // A failed deposit removes only the automatic payment, and only when nothing else went through.
+  assert.match(sql, /IF v_new IN \('rejected', 'error', 'duplicate'\) AND v_old IN \('submitted', 'cleared'\)/);
+  assert.match(sql, /AND v_check\.status IS DISTINCT FROM 'deposited'/);
+  assert.match(sql, /AND p\.payment_method = 'check';/);
+  assert.match(sql, /REVOKE ALL ON FUNCTION public\.aws_record_cash_job_checkalt_payment\(\) FROM PUBLIC;/);
+  assert.match(sql, /yes, record cash-job payments on Check Alt[\s-]*approval/);
+});

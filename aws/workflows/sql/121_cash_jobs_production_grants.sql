@@ -40,7 +40,29 @@
 --    running this file owns the function (42501 sql121_not_function_owner otherwise); a
 --    NOTICE and no change when the function is absent.
 --
--- Not changed: no grant on public.cash_job_payments; the function body, its trigger,
+-- 3) public.aws_record_cash_job_checkalt_payment() (new trigger function, SECURITY DEFINER,
+--    search_path public, pg_temp, row_security off) and trigger
+--    aws_checkalt_deposit_cash_job_payment, AFTER INSERT OR UPDATE OF status ON
+--    public.checkalt_deposits. Owner, 2026-10-27: "yes, record cash-job payments on Check Alt
+--    approval". A check deposited through Check Alt never becomes 'deposited' (its
+--    checkalt_deposits row goes submitted, then cleared; SQL 120's header), so the trigger in
+--    2) never fires for it and the job would show nothing collected.
+--      a. When a deposit becomes submitted or cleared (approved or accepted) from any other
+--         status, and its check is check_source 'cash_job' with a cash_job_id: inserts the
+--         job's payment row exactly as sync_cash_job_check_payment() does (amount = the
+--         check's amount, payment_method 'check', reference_number = the check id, the same
+--         notes by payment class), unless a payment for that check already exists. Once per
+--         check, whichever path records it first; the 'deposited' path then skips it.
+--      b. When the deposit is then rejected, errors or is a duplicate, no other deposit of
+--         the check is submitted or cleared, and the check is not 'deposited': deletes that
+--         automatic payment (reference_number = the check id, payment_method 'check'), so a
+--         check that did not go through is not counted as collected. A payment entered by
+--         hand (another reference) is never touched.
+--    EXECUTE on the function is revoked from PUBLIC, checksops and authenticated.
+--    Adds one public trigger: the DB validator's justified set and expected count must follow
+--    once this file is applied (as #1309 did for SQL 120), not before.
+--
+-- Not changed: no grant on public.cash_job_payments; sync_cash_job_check_payment()'s body and trigger,
 -- public.sync_cash_job_total_paid() and public.sync_cash_job_status(); no column, policy,
 -- RLS setting or row.
 --
@@ -103,3 +125,89 @@ BEGIN
   END LOOP;
 END
 $sql121_payment_trigger$;
+
+-- 3) Cash-job payment on Check Alt approval ---------------------------------------
+CREATE OR REPLACE FUNCTION public.aws_record_cash_job_checkalt_payment()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+SET row_security = off
+AS $$
+DECLARE
+  v_new text := lower(COALESCE(NEW.status, ''));
+  v_old text := CASE WHEN TG_OP = 'UPDATE' THEN lower(COALESCE(OLD.status, '')) ELSE '' END;
+  v_check record;
+BEGIN
+  IF NEW.check_intake_item_id IS NULL OR v_new = v_old THEN
+    RETURN NULL;
+  END IF;
+
+  SELECT c.id, c.tenant_id, c.cash_job_id, c.check_source, c.cash_job_payment_class,
+         c.amount, c.uploaded_by, c.status
+    INTO v_check
+    FROM public.check_intake_items c
+   WHERE c.id = NEW.check_intake_item_id;
+  IF v_check.id IS NULL OR v_check.check_source IS DISTINCT FROM 'cash_job' OR v_check.cash_job_id IS NULL THEN
+    RETURN NULL;
+  END IF;
+
+  IF v_new IN ('submitted', 'cleared') AND v_old NOT IN ('submitted', 'cleared') THEN
+    IF EXISTS (
+      SELECT 1 FROM public.cash_job_payments p
+       WHERE p.cash_job_id = v_check.cash_job_id
+         AND p.reference_number = v_check.id::text) THEN
+      RETURN NULL;
+    END IF;
+    INSERT INTO public.cash_job_payments (
+      tenant_id, cash_job_id, created_by,
+      amount, payment_method, payment_date,
+      reference_number, notes
+    ) VALUES (
+      v_check.tenant_id, v_check.cash_job_id, v_check.uploaded_by,
+      COALESCE(v_check.amount, 0), 'check', CURRENT_DATE,
+      v_check.id::text,
+      CASE v_check.cash_job_payment_class
+        WHEN 'initial_deposit' THEN 'Initial deposit check via ChecksOps'
+        WHEN 'final_payment' THEN 'Final payment check via ChecksOps'
+        WHEN 'progress_payment' THEN 'Progress payment check via ChecksOps'
+        ELSE 'Check deposit via ChecksOps'
+      END
+    );
+    RETURN NULL;
+  END IF;
+
+  IF v_new IN ('rejected', 'error', 'duplicate') AND v_old IN ('submitted', 'cleared')
+     AND v_check.status IS DISTINCT FROM 'deposited'
+     AND NOT EXISTS (
+       SELECT 1 FROM public.checkalt_deposits d
+        WHERE d.check_intake_item_id = NEW.check_intake_item_id
+          AND d.id <> NEW.id
+          AND lower(COALESCE(d.status, '')) IN ('submitted', 'cleared')) THEN
+    DELETE FROM public.cash_job_payments p
+     WHERE p.cash_job_id = v_check.cash_job_id
+       AND p.reference_number = v_check.id::text
+       AND p.payment_method = 'check';
+  END IF;
+  RETURN NULL;
+END
+$$;
+REVOKE ALL ON FUNCTION public.aws_record_cash_job_checkalt_payment() FROM PUBLIC;
+DO $sql121_checkalt_revoke$
+DECLARE
+  v_grantee text;
+BEGIN
+  FOREACH v_grantee IN ARRAY ARRAY['checksops', 'authenticated'] LOOP
+    IF EXISTS (SELECT 1 FROM pg_catalog.pg_roles r WHERE r.rolname = v_grantee) THEN
+      EXECUTE format('REVOKE ALL ON FUNCTION public.aws_record_cash_job_checkalt_payment() FROM %I', v_grantee);
+    END IF;
+  END LOOP;
+END
+$sql121_checkalt_revoke$;
+COMMENT ON FUNCTION public.aws_record_cash_job_checkalt_payment() IS
+  'SQL 121: records a cash-job check''s payment when its Check Alt deposit is approved or accepted (once per check, shared with sync_cash_job_check_payment); removes that automatic payment when the deposit is then rejected and the check did not go through.';
+
+DROP TRIGGER IF EXISTS aws_checkalt_deposit_cash_job_payment ON public.checkalt_deposits;
+CREATE TRIGGER aws_checkalt_deposit_cash_job_payment
+  AFTER INSERT OR UPDATE OF status ON public.checkalt_deposits
+  FOR EACH ROW EXECUTE FUNCTION public.aws_record_cash_job_checkalt_payment();
