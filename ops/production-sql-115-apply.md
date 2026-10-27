@@ -62,8 +62,18 @@ staging acceptance. Recorded in the production pin with `execute: true` under th
 2026-10-27, "Approve a pin PR for SQL 119, then one for SQL 115" and "Merge the SQL 115 pin PR when
 green". Each apply still needs the owner's run-time approval.
 
-**Status:** staging applied (wave 16); SQL 119 applied in production; production pin execute-authorized;
-production apply pending.
+**Production apply (2026-10-27).** After the pin change (#1290, merged on "Merge the SQL 115 pin PR
+when green"), transfer run 40507251712 staged main `40678dc44` (tarball sha256
+`00a482aee47dfaa5001e7f68b9bd57cfb17b6bcbfa1b7e983e933ef8720f27b4`). One-shot `--phase apply` run
+`250cdbb8-0e46-42c8-a4a8-4a9a646ff07a` through SSM `bf96510f-4f95-42d5-974b-cf99d9a952ac` (Success),
+workstream `prod-sql115-provider-stakeholder-one-partner-payout-20261027`, under the owner's words "AWS
+reconnected, apply SQL 115 in production" (passed verbatim): every step ok, contracts 4/4, 6/6 and 43/43;
+receipt `ee9d2d52…` → `8aed39a49d988a60bdedac07a3a97f424a9de5c1499e4f50738f749326a62452` (intended),
+result `applied`, unrelated catalog `7bebf201…`; post-apply inspect `already_applied` true, EXECUTE the
+owner's only. Production and staging now carry the same function.
+
+**Status:** staging applied (wave 16); SQL 119 applied in production; applied to production (2026-10-27); the production pin is retired
+(`execute: false`).
 
 ## Fingerprint
 
