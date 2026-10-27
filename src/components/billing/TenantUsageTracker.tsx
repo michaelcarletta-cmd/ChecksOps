@@ -13,7 +13,10 @@ import { displayCase } from "@/lib/displayCase";
 import {
   disbursementDetails,
   disbursementVolumeCents,
+  filterUsageEvents,
   isSendFeeEvent,
+  USAGE_CATEGORIES,
+  type UsageCategory,
   usageEventLabel,
   type SendLeg,
   type UsageCheck,
@@ -26,6 +29,9 @@ import { FeeScheduleCard } from "@/components/billing/FeeScheduleCard";
 export function TenantUsageTracker() {
   const { tenant } = useTenant();
   const [month, setMonth] = useState(format(new Date(), "yyyy-MM"));
+  const [category, setCategory] = useState<UsageCategory>("all");
+  // Clicking a usage card shows only its charges in the log; clicking it again shows all.
+  const toggleCategory = (next: UsageCategory) => setCategory((current) => (current === next ? "all" : next));
   const now = new Date(month + "-01T00:00:00");
   const monthStart = startOfMonth(now).toISOString();
   const monthEnd = endOfMonth(now).toISOString();
@@ -150,11 +156,26 @@ export function TenantUsageTracker() {
     .map((e: { unit_price_cents?: number | string | null }) => Number(e.unit_price_cents))
     .find((cents: number) => Number.isFinite(cents)) ?? null;
 
+  // The log shows the chosen month's charges, all or one category, with their total.
+  type UsageRow = { id: string; event_type?: string | null; unit_price_cents?: number | string | null };
+  const shownEvents = filterUsageEvents<UsageRow>(usage?.events as UsageRow[] | undefined, category);
+  const shownTotal = shownEvents.reduce(
+    (sum, e) => sum + Number(e.unit_price_cents ?? 0),
+    0,
+  ) / 100;
+
   return (
     <div className="space-y-6">
-      <FeeScheduleCard tenantId={tenant?.id} chargedCheckCents={chargedCheckCents} />
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className="bg-gradient-to-br from-primary/10 to-blue-500/5 border-primary/20">
+        <Card
+          role="button"
+          tabIndex={0}
+          aria-pressed={category === "check_processing"}
+          title={category === "check_processing" ? "Show all charges" : "Show only these charges"}
+          onClick={() => toggleCategory("check_processing")}
+          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleCategory("check_processing"); } }}
+          className={`bg-gradient-to-br from-primary/10 to-blue-500/5 border-primary/20 cursor-pointer transition hover:shadow-md ${category === "check_processing" ? "ring-2 ring-primary" : ""}`}
+        >
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
               <Receipt className="h-4 w-4 text-primary" />
@@ -177,7 +198,15 @@ export function TenantUsageTracker() {
           </CardContent>
         </Card>
 
-        <Card className="bg-gradient-to-br from-amber-500/10 to-orange-500/5 border-amber-500/20">
+        <Card
+          role="button"
+          tabIndex={0}
+          aria-pressed={category === "mortgage"}
+          title={category === "mortgage" ? "Show all charges" : "Show only these charges"}
+          onClick={() => toggleCategory("mortgage")}
+          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleCategory("mortgage"); } }}
+          className={`bg-gradient-to-br from-amber-500/10 to-orange-500/5 border-amber-500/20 cursor-pointer transition hover:shadow-md ${category === "mortgage" ? "ring-2 ring-amber-500" : ""}`}
+        >
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
               <Landmark className="h-4 w-4 text-amber-500" />
@@ -201,7 +230,15 @@ export function TenantUsageTracker() {
           </CardContent>
         </Card>
 
-        <Card className="bg-gradient-to-br from-emerald-500/10 to-teal-500/5 border-emerald-500/20">
+        <Card
+          role="button"
+          tabIndex={0}
+          aria-pressed={category === "payments"}
+          title={category === "payments" ? "Show all charges" : "Show only these charges"}
+          onClick={() => toggleCategory("payments")}
+          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleCategory("payments"); } }}
+          className={`bg-gradient-to-br from-emerald-500/10 to-teal-500/5 border-emerald-500/20 cursor-pointer transition hover:shadow-md ${category === "payments" ? "ring-2 ring-emerald-500" : ""}`}
+        >
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
               <Landmark className="h-4 w-4 text-emerald-500" />
@@ -236,9 +273,19 @@ export function TenantUsageTracker() {
             </CardTitle>
             <CardDescription className="text-[10px]">
               Showing {format(now, "MMMM yyyy")}
+              {category === "all" ? "" : ` · ${USAGE_CATEGORIES.find((c) => c.value === category)?.label}`}
+              {" · "}{shownEvents.length} {shownEvents.length === 1 ? "charge" : "charges"}, total {formatCurrency(shownTotal)}
+              {category !== "all" && (
+                <>
+                  {" · "}
+                  <button type="button" className="underline text-primary" onClick={() => setCategory("all")}>
+                    Show all
+                  </button>
+                </>
+              )}
             </CardDescription>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
             <Calendar className="h-4 w-4 text-muted-foreground" />
             <Select value={month} onValueChange={setMonth}>
               <SelectTrigger className="w-[170px] h-8 text-xs">
@@ -266,12 +313,14 @@ export function TenantUsageTracker() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {usage?.events?.length === 0 ? (
+                {shownEvents.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={4} className="h-24 text-center text-xs text-muted-foreground">No usage recorded for this period.</TableCell>
+                    <TableCell colSpan={4} className="h-24 text-center text-xs text-muted-foreground">
+                      {category === "all" ? "No usage recorded for this period." : "No charges of this type for this period."}
+                    </TableCell>
                   </TableRow>
                 ) : (
-                  usage?.events?.map((row: any) => {
+                  shownEvents.map((row: any) => {
                     const sent = isSendFeeEvent(row.event_type) ? disbursements?.get(row.id) : undefined;
                     const checkNumber = row.check_number || sent?.check_number;
                     const details = sent
@@ -322,6 +371,8 @@ export function TenantUsageTracker() {
           </ScrollArea>
         </CardContent>
       </Card>
+
+      <FeeScheduleCard tenantId={tenant?.id} chargedCheckCents={chargedCheckCents} />
     </div>
   );
 }
