@@ -104,7 +104,7 @@ function manifest(key, pin) {
 }
 const consumedPath = () => path.join(os.tmpdir(), `sql98100-prod-consumed-${process.pid}-${Math.random().toString(16).slice(2)}.json`);
 
-test('pins: the reconciled SQL 98 / SQL 99 pins keep their recorded hashes and notes; SQL 100 is new; all have the SQL 90-97 shape; SQL 98 and SQL 99 are applied and retired, SQL 100 stays pending', () => {
+test('pins: the reconciled SQL 98 / SQL 99 pins keep their recorded hashes and notes; SQL 100 is new; all have the SQL 90-97 shape; SQL 98 and SQL 99 are applied and retired, SQL 100 stays pending with its production inspect recorded', () => {
   // SQL 96's pin is the engine pin shape without its record-only applied / production_evidence sections.
   const shape = new Set(keyPaths(SQL96_PIN).filter((k) => !/^(applied|production_evidence)(\.|$)/.test(k)));
   for (const key of KEYS) {
@@ -209,7 +209,20 @@ test('pins: the reconciled SQL 98 / SQL 99 pins keep their recorded hashes and n
       assert.equal(pin.authorization, 'pending', key);
       assert.equal(pin.expected_live_definition_sha256, null, key);
       assert.equal(pin.staging_acceptance.ok, false, key);
-      assert.equal(pin.production_inspect.status, 'pending', key);
+      if (key === 'sql100') {
+        // SQL 100 is production_noop: the read-only production inspect of 2026-10-27 (SSM 8d241cf9,
+        // main afd06f10b) is its production record (already_applied true); it never becomes execute true.
+        assert.equal(pin.production_inspect.status, 'recorded', key);
+        assert.equal(pin.production_inspect.date, '2026-10-27', key);
+        assert.equal(pin.production_inspect.ssm_command_id, '8d241cf9-f770-4ae8-b530-379a7d16ba78', key);
+        assert.equal(pin.production_inspect.source_commit, 'afd06f10b9d443e384f6873a4a4e9d67f29cee4d', key);
+        assert.equal(pin.production_inspect.live_definition_sha256, pin.intended_replacement_sha256, key);
+        assert.equal(pin.production_inspect.already_applied, true, key);
+        assert.deepEqual(pin.production_inspect.precondition_failures, [], key);
+        assert.match(pin.production_inspect.note, / Earlier: Run 2026-10-17 at source commit 969e2b2b1/, key);
+      } else {
+        assert.equal(pin.production_inspect.status, 'pending', key);
+      }
     }
     assert.equal(pin.source_sha256, staging.source_sha256, key);
     assert.equal(pin.staging_pin_commit, staging.commit, key);

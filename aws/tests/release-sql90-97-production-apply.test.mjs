@@ -564,7 +564,20 @@ test('committed pins are pending (none execute-authorized; SQL 90, SQL 91, SQL 9
       assert.equal(pin.expected_live_definition_sha256, null, key);
       assert.equal(pin.staging_acceptance.ok, false, key);
       assert.equal(pin.staging_acceptance.reference, null, key);
-      assert.equal(pin.production_inspect.status, 'pending', key);
+      if (key === 'sql100') {
+        // SQL 100 is production_noop: the read-only production inspect of 2026-10-27 (SSM 8d241cf9,
+        // main afd06f10b) is its production record (already_applied true); it never becomes execute true.
+        assert.equal(pin.production_inspect.status, 'recorded', key);
+        assert.equal(pin.production_inspect.date, '2026-10-27', key);
+        assert.equal(pin.production_inspect.ssm_command_id, '8d241cf9-f770-4ae8-b530-379a7d16ba78', key);
+        assert.equal(pin.production_inspect.source_commit, 'afd06f10b9d443e384f6873a4a4e9d67f29cee4d', key);
+        assert.equal(pin.production_inspect.live_definition_sha256, pin.intended_replacement_sha256, key);
+        assert.equal(pin.production_inspect.already_applied, true, key);
+        assert.deepEqual(pin.production_inspect.precondition_failures, [], key);
+        assert.match(pin.production_inspect.note, / Earlier: Run 2026-10-17 at source commit 969e2b2b1/, key);
+      } else {
+        assert.equal(pin.production_inspect.status, 'pending', key);
+      }
     }
     assert.notEqual(pin.verified_live, true, key);
     assert.equal(pin.filename, staging.filename);
