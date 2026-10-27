@@ -5,9 +5,9 @@
  * aws/workflows/sql/122_mortgage_desk_return_to_tenant.sql applied by a non-superuser login that
  * owns the Desk and check tables (like checksops_admin).
  *
- * The functions are called as the API will call them (a later, separate change): checksops, RLS
- * on, request.app_user_id set, one committed transaction per request. Completion goes through the
- * existing update_mortgage_handling_request_status RPC (SQL 99's messages).
+ * The functions are called as the API calls them: checksops, RLS on, request.app_user_id set, one
+ * committed transaction per request. Completion goes through the update_mortgage_handling_request_status
+ * RPC (SQL 99's messages), which also adds the homeowner timeline row.
  *
  *   - the file refuses a login that does not own the tables it writes, and is idempotent;
  *   - the assigned agent posts a message, attaches documents (a retry returns the same row), sets
@@ -300,8 +300,8 @@ test('PostgreSQL 16: SQL 122 lets the assigned agent return notes, documents and
       args: { _request_id: REQ_1, _status: 'completed', _notes: 'Endorsed and mailed back' },
     }));
     assert.equal(done.error, undefined, JSON.stringify(done));
-    const posted1 = await timeline(AGENT, REQ_1);
-    assert.ok(posted1.id);
+    // The completion RPC itself adds the homeowner timeline row (workflow-rpc.mjs); a later call adds none.
+    assert.equal(done.data.homeowner_timeline_posted, true, JSON.stringify(done));
     const ledger = (await client.query(
       'SELECT tenant_id, claim_id, check_id, event_type, actor_label, amount, payload_json, created_by FROM public.homeowner_ledger_events',
     )).rows;

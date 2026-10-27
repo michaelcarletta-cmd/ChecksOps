@@ -63,6 +63,10 @@
     "aws/workflows/sql/121_cash_jobs_production_grants.sql": {
       "verified_live": true,
       "evidence": "Guarded staging SQL executor apply of sql121-cash-jobs-grants on 2026-10-27 (run 40591140684, main 3a4fedb6b, executor 7wybTiIc…; read-live run 40591470594 already_applied true): receipt before 084deae3…, after 2dd2ead6… = the pin's intended_replacement_sha256; precondition_failures [], prerequisites_missing []."
+    },
+    "aws/workflows/sql/122_mortgage_desk_return_to_tenant.sql": {
+      "verified_live": true,
+      "evidence": "Guarded staging SQL executor apply of sql122-mortgage-desk-return-to-tenant on 2026-10-27 (run 40591701699, main 3a4fedb6b, executor 7wybTiIc…; read-live run 40591941446 already_applied true): receipt before e13856d7…, after d026eb9b… = the pin's intended_replacement_sha256; precondition_failures [], prerequisites_missing []."
     }
   }
 }

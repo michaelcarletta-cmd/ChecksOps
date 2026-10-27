@@ -1,0 +1,40 @@
+{
+  "workstream_id": "mortgage-desk-return",
+  "authorization": "Pending owner review (2026-10-27). Planning only: nothing is live or verified. Each production apply still needs its own owner approval and staging acceptance.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "The Mortgage Desk returns its work to the tenant (SQL 122): the assigned agent posts Desk notes and documents on the request's check and sets the shipping details and label; a mid-work note is also posted on the check thread; at completion the homeowner timeline row is added and the requester is emailed once that the work was returned. ADD mortgage-desk-return.mjs (imports only members already live: email.mjs, email-layout.mjs, email-branding.mjs, email-policy.mjs, identity.mjs, data.mjs), then REPLACE workflow-rpc.mjs, storage-write-auth.mjs and app-services.mjs. The ADD calls SQL 122's functions and is held on it (sql_before); the three REPLACEs import it and follow it in the plan order, so the order gate holds them until it is applied. Each live_sha256 is the member's accepted bytes, live since the 2026-10-27 production apply of tenant-billing-engine.mjs (run 40577608750) passed the plan order gate, which requires every earlier member at its accepted bytes. The guarded overlay inspect re-reads each before any apply.",
+  "members": {
+    "mortgage-desk-return.mjs": {
+      "live_sha256": null,
+      "accepted_sha256": "0c99317f77b7b16a1801795b2c81526f3deb18d10ddff0afaf08efa0f9d7425b",
+      "operation": "add",
+      "required_imports": [
+        "email.mjs",
+        "email-layout.mjs",
+        "email-branding.mjs",
+        "email-policy.mjs",
+        "identity.mjs",
+        "data.mjs"
+      ]
+    },
+    "workflow-rpc.mjs": {
+      "live_sha256": "6902fe6f89f91c52f251ae1218257a387d6d7dd1fdb0e07687f6c99dfd5591d3",
+      "accepted_sha256": "acb5fc06ca01ddb5ad3294ee5840443c1747798f06c1990c174c469dbb5534e0",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-referral-api-routes-applied-manifest-2026-10-23.json"
+    },
+    "storage-write-auth.mjs": {
+      "live_sha256": "593afcd11f9bcd50d0cef9ee5abdec5dea2ec9493d81e514aad46cfd19e461b8",
+      "accepted_sha256": "fb9e3ecdff421ae8bf78315695662d843937febdec3fc2831138fdc3427aace5",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
+    },
+    "app-services.mjs": {
+      "live_sha256": "daab02f7199fef3a66b727ed0ac4ebc8315c675ea9b5025f18c1a53b197555f7",
+      "accepted_sha256": "d1faa2120bc944d299c274176ac52601e262ad7d9d448de0385bd70f858ecac5",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
+    }
+  }
+}

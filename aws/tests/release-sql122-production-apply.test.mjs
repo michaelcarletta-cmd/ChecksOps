@@ -159,7 +159,7 @@ test('pin: the release pin shape, pending, in step with the staging pin, the one
   }
 });
 
-test('order: no predecessor and no order; SQL 100\'s helper and the Desk, check and identity tables are prerequisites; no plan entry or API change yet; no trigger; the runbook, one-shot doc and README name it', () => {
+test('order: no predecessor and no order; SQL 100\'s helper and the Desk, check and identity tables are prerequisites; the API that calls it is held on it in the plan (the ADD, not yet live in production); no trigger; the runbook, one-shot doc and README name it', () => {
   const spec = RELEASE_SQL_SPECS[KEY];
   assert.deepEqual(spec.predecessors, []);
   for (const object of ['public.aws_is_mortgage_ops_agent()', 'public.is_platform_owner()', 'auth.uid()', 'role checksops',
@@ -171,11 +171,19 @@ test('order: no predecessor and no order; SQL 100\'s helper and the Desk, check 
   assert.match(COMMITTED.order_note, /^No predecessor and no ordering constraint\./);
   assert.match(COMMITTED.order_note, /separate, later step after SQL 122 is live in staging/);
   const plan = readJson('ops/deployment-guard/production-api-overlay-plan.json');
-  assert.equal((plan.sql_prerequisites || {})[SQL122_FILE], undefined);
-  assert.ok(!JSON.stringify(plan.members).includes(SQL122_FILE));
-  // The API that calls these functions comes later: nothing in the Lambda names them yet.
-  assert.equal(fs.existsSync(path.join(ROOT, 'aws/functions/api/mortgage-desk-return.mjs')), false);
-  assert.doesNotMatch(fs.readFileSync(path.join(ROOT, 'aws/functions/api/workflow-rpc.mjs'), 'utf8'), /aws_mortgage_desk_(post_message|attach_file|update_shipping|completion_timeline|return_email_claim)/);
+  // The API that calls these functions (mortgage-desk-return.mjs, an ADD) is held on it; workflow-rpc.mjs,
+  // storage-write-auth.mjs and app-services.mjs import it and follow it in the plan order.
+  const pre = plan.sql_prerequisites[SQL122_FILE];
+  assert.equal(pre.verified_live, false);
+  assert.equal(pre.evidence, null);
+  assert.equal(pre.pin, 'ops/deployment-guard/sql122-mortgage-desk-return-to-tenant-production-apply.json');
+  assert.deepEqual(Object.keys(plan.members).filter((m) => plan.members[m].sql_before === SQL122_FILE), ['mortgage-desk-return.mjs']);
+  assert.equal(plan.members['mortgage-desk-return.mjs'].operation, 'add');
+  for (const importer of ['workflow-rpc.mjs', 'storage-write-auth.mjs', 'app-services.mjs']) {
+    assert.ok(plan.order.indexOf('mortgage-desk-return.mjs') < plan.order.indexOf(importer), importer);
+    assert.match(fs.readFileSync(path.join(ROOT, 'aws/functions/api', importer), 'utf8'), /from '\.\/mortgage-desk-return\.mjs'/, importer);
+  }
+  assert.match(fs.readFileSync(path.join(ROOT, 'aws/functions/api/mortgage-desk-return.mjs'), 'utf8'), /aws_mortgage_desk_(post_message|attach_file|update_shipping|completion_timeline|return_email_claim)/);
   // No trigger: the DB validator's public trigger count is not concerned.
   assert.equal(spec.triggers, undefined);
   assert.doesNotMatch(fs.readFileSync(path.join(ROOT, SQL122_FILE), 'utf8').replace(/--[^\n]*/g, ''), /\bCREATE\s+TRIGGER\b/i);
