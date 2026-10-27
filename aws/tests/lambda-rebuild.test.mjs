@@ -111,6 +111,10 @@ const CHANGED_SINCE_SECOND_REBUILD = {
   // Stakeholder Accounts (remove a non-payee, change type); a REPLACE member of the production
   // overlay plan, not a rebuild section.
   'write-allowlist.mjs': 'changed',
+  // DB validator SQL 120 triggers (2026-10-27): the two usage-event triggers SQL 120 added join the
+  // justified public trigger set (182); deployed to staging by the guarded overlay, not a rebuild
+  // section.
+  'db-readonly-validate.mjs': 'changed',
 };
 // Listed changes that go through the production overlay plan, never the current rebuild section.
 const OVERLAY_PLAN_CHANGES = new Set([
@@ -128,6 +132,8 @@ const OVERLAY_PLAN_CHANGES = new Set([
   'write.mjs',
   'email-policy.mjs',
   'write-allowlist.mjs',
+  // Deployed by the guarded overlay (staging first; a production plan row when it goes there).
+  'db-readonly-validate.mjs',
 ]);
 const assertSectionAcceptedIsMain = (apiRoot, name, accepted) => {
   const onMain = sha256(fs.readFileSync(path.join(apiRoot, name)));
