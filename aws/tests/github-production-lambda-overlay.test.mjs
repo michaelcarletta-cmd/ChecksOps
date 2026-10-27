@@ -91,9 +91,19 @@ function liveFor(member, { sha256 = undefined, present = undefined, extra = [], 
 // manifest's live_sha256), the REPLACE that had to pass the order, link and SQL 98 gates.
 const PROVIDERS_PRE = JSON.parse(fs.readFileSync(path.join(ROOT, 'aws/tests/fixtures/production-moov-invoice-manifest-2026-10-22.json'), 'utf8')).members['providers.mjs'].live_sha256;
 const providersPre = (plan) => { plan.members['providers.mjs'].expected_live_sha256 = PROVIDERS_PRE; return plan; };
+// workflow.mjs records its applied Delete Check bytes live (production run 40530367414, 2026-10-27):
+// the generic REPLACE tests replay it from the pre-apply live bytes (753ae14a, the release 2026-10-17
+// accepted bytes), a REPLACE that still has to pass the drift, approval, order and link gates.
+const WORKFLOW_PRE = '753ae14a0d04ded5782c653bd67c308067311f4fcebf835c0aac4e6659188138';
+const WORKFLOW_PRE_PLAN = (() => {
+  const plan = structuredClone(PLAN);
+  plan.members['workflow.mjs'].expected_live_sha256 = WORKFLOW_PRE;
+  return plan;
+})();
 
 function applyDeps(member, liveOpts = {}) {
   if (member === 'providers.mjs' && liveOpts.sha256 === undefined) liveOpts = { ...liveOpts, sha256: PROVIDERS_PRE };
+  if (member === 'workflow.mjs' && liveOpts.plan === undefined) liveOpts = { ...liveOpts, plan: WORKFLOW_PRE_PLAN };
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'prod-overlay-'));
   fs.mkdirSync(path.join(root, 'ops/deployment-guard'), { recursive: true });
   fs.mkdirSync(path.join(root, 'aws/functions/api'), { recursive: true });
@@ -108,6 +118,7 @@ function applyDeps(member, liveOpts = {}) {
     deps: {
       root,
       inspectLive: liveFor(member, liveOpts),
+      ...(liveOpts.plan ? { plan: liveOpts.plan } : {}),
       acquireLease: (_root, input) => { calls.lease = input; return { ok: true, details: { lease: { id: 'lease-1', ...input } } }; },
       issueReceipt: (_root, input) => { calls.receipt = input; return { ok: true, details: { file: path.join(root, 'receipt.json') } }; },
     },
@@ -134,7 +145,7 @@ const applyEnv = (member, extra = {}) => ({
   ...ENV,
   CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'apply',
   CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: member,
-  CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: (member === 'providers.mjs' ? PROVIDERS_PRE : PLAN.members[member].expected_live_sha256) || '',
+  CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: (member === 'providers.mjs' ? PROVIDERS_PRE : member === 'workflow.mjs' ? WORKFLOW_PRE : PLAN.members[member].expected_live_sha256) || '',
   CHECKSOPS_STAGING_ACCEPTANCE_REFERENCE: ACCEPTANCE,
   CHECKSOPS_PRODUCTION_APPROVAL: approvalPhrase(member),
   ...extra,
@@ -180,7 +191,7 @@ test('workflow is main-only, production-environment gated and offers exactly the
 });
 
 test('inspect reports READY for reconciled live bytes and ALREADY_ACCEPTED when nothing is left to do', async () => {
-  const ready = await run({ ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: 'workflow.mjs' }, { root: ROOT, inspectLive: liveFor('workflow.mjs') });
+  const ready = await run({ ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: 'workflow.mjs' }, { root: ROOT, plan: WORKFLOW_PRE_PLAN, inspectLive: liveFor('workflow.mjs', { plan: WORKFLOW_PRE_PLAN }) });
   assert.equal(ready.state, 'READY');
   assert.equal(ready.mutation, false);
   const done = await run({ ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: 'check-deposited.mjs' }, { root: ROOT, inspectLive: liveFor('check-deposited.mjs') });
@@ -193,7 +204,7 @@ test('inspect reports READY for reconciled live bytes and ALREADY_ACCEPTED when 
 
 test('replace refuses a live member that drifted from the reconciled bytes', async () => {
   await assert.rejects(
-    run({ ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: 'workflow.mjs' }, { root: ROOT, inspectLive: liveFor('workflow.mjs', { sha256: 'c'.repeat(64) }) }),
+    run({ ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: 'workflow.mjs' }, { root: ROOT, plan: WORKFLOW_PRE_PLAN, inspectLive: liveFor('workflow.mjs', { sha256: 'c'.repeat(64), plan: WORKFLOW_PRE_PLAN }) }),
     (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
   );
   await assert.rejects(
@@ -272,7 +283,7 @@ test('apply issues a production receipt bound to this run, the live fingerprint 
 test('apply refuses out of plan order and when imported names would not link', async () => {
   await assert.rejects(
     // (A later member without a SQL hold: workflow-rpc.mjs now waits for SQL 90 first.)
-    run(applyEnv('providers/parity/checkalt-functions.mjs'), applyDeps('providers/parity/checkalt-functions.mjs', { pending: ['workflow.mjs'] }).deps),
+    run(applyEnv('providers/parity/checkalt-functions.mjs'), applyDeps('providers/parity/checkalt-functions.mjs', { pending: ['workflow.mjs'], plan: WORKFLOW_PRE_PLAN }).deps),
     (error) => error.code === CODES.DEPLOYMENT_COLLISION && error.details.pending.includes('workflow.mjs'),
   );
   // workflow.mjs imports withIdentity from data.mjs; a live data.mjs without it must block the write.
@@ -297,7 +308,7 @@ test('verify fails unless the live member is the accepted bytes', async () => {
   const ok = await run({ ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'verify', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: 'workflow.mjs' }, { root: ROOT, inspectLive: liveFor('workflow.mjs', { sha256: accepted }) });
   assert.equal(ok.state, 'VERIFIED');
   await assert.rejects(
-    run({ ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'verify', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: 'workflow.mjs' }, { root: ROOT, inspectLive: liveFor('workflow.mjs') }),
+    run({ ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'verify', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: 'workflow.mjs' }, { root: ROOT, inspectLive: liveFor('workflow.mjs', { sha256: WORKFLOW_PRE }) }),
     (error) => error.code === CODES.DEPLOYMENT_COLLISION,
   );
 });
@@ -2304,34 +2315,44 @@ test('Production email to every recipient: email-policy.mjs records the bytes pr
   assert.match(applied.authorization, /^Record only/);
 });
 
-test('Delete Check: workflow.mjs expects the release 2026-10-17 bytes read-only inspect run 40528072440 found live', async () => {
+test('Delete Check: workflow.mjs replaced the release 2026-10-17 bytes; production run 40530367414 applied main\'s bytes', async () => {
   const MEMBER = 'workflow.mjs';
   const MANIFEST_REL = 'aws/tests/fixtures/production-delete-check-shared-delete-manifest-2026-10-27.json';
+  const APPLIED_REL = 'aws/tests/fixtures/production-delete-check-applied-manifest-2026-10-27.json';
   const RELEASE = 'aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json';
   const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, MANIFEST_REL), 'utf8'));
+  const applied = JSON.parse(fs.readFileSync(path.join(ROOT, APPLIED_REL), 'utf8'));
   const release = JSON.parse(fs.readFileSync(path.join(ROOT, RELEASE), 'utf8'));
   const STALE = 'ecd6f716d6a2203a05446afd24eb1bf9e5849e70e49a0ee86bde708fd36c1968';
-  const LIVE = '753ae14a0d04ded5782c653bd67c308067311f4fcebf835c0aac4e6659188138';
-  const ACCEPTED = 'c7159c4d9a74342f2a0f59a2836def78376c84d2781bbeb56dbb35ba83ed9337';
+  const BEFORE = '753ae14a0d04ded5782c653bd67c308067311f4fcebf835c0aac4e6659188138';
+  const LIVE = 'c7159c4d9a74342f2a0f59a2836def78376c84d2781bbeb56dbb35ba83ed9337';
+  // Reconcile (#1296): inspect run 40528072440 found the release 2026-10-17 bytes live, not the stale pre-apply ones.
   assert.match(PLAN.notes, /inspect run 40528072440/);
   assert.match(manifest.notes, /inspect run 40528072440/);
-  // The release 2026-10-17 manifest put 753ae14a live (ecd6f716 -> 753ae14a).
-  assert.deepEqual([release.members[MEMBER].live_sha256, release.members[MEMBER].accepted_sha256], [STALE, LIVE]);
+  assert.deepEqual([release.members[MEMBER].live_sha256, release.members[MEMBER].accepted_sha256], [STALE, BEFORE]);
   assert.equal(manifest.deploy_authorized, false);
-  assert.deepEqual(manifest.members[MEMBER], { live_sha256: LIVE, accepted_sha256: ACCEPTED, operation: 'replace', previous_manifest: RELEASE });
+  assert.deepEqual(manifest.members[MEMBER], { live_sha256: BEFORE, accepted_sha256: LIVE, operation: 'replace', previous_manifest: RELEASE });
+  // Applied 2026-10-27: staging apply 40526348308, pre-apply inspect 40530101746, apply 40530367414, inspect 40530792383.
+  for (const runId of ['40526348308', '40530101746', '40530367414', '40530792383']) {
+    assert.match(PLAN.notes, new RegExp(runId), runId);
+    assert.match(applied.notes, new RegExp(runId), runId);
+  }
+  assert.equal(applied.workstream_id, 'production-delete-check-applied');
+  assert.equal(applied.deploy_authorized, false);
+  assert.deepEqual(applied.members[MEMBER], { live_sha256: LIVE, accepted_sha256: LIVE, operation: 'replace', previous_manifest: MANIFEST_REL });
   const row = PLAN.members[MEMBER];
   assert.equal(row.operation, 'replace');
-  assert.equal(row.manifest, MANIFEST_REL);
+  assert.equal(row.manifest, APPLIED_REL);
   assert.equal(row.expected_live_sha256, LIVE);
-  assert.equal(row.accepted_sha256, ACCEPTED);
-  assert.equal(sha(`aws/functions/api/${MEMBER}`), ACCEPTED);
+  assert.equal(row.accepted_sha256, LIVE);
+  assert.equal(sha(`aws/functions/api/${MEMBER}`), LIVE);
   assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
   const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
-  const ready = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: LIVE }) });
-  assert.equal(ready.state, 'READY');
-  assert.equal(ready.mutation, false);
+  const done = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: LIVE }) });
+  assert.equal(done.state, 'ALREADY_ACCEPTED');
+  assert.equal(done.mutation, false);
   await assert.rejects(
-    run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: STALE }) }),
+    run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: BEFORE }) }),
     (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
   );
 });
