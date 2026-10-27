@@ -8,7 +8,6 @@ import {
   evaluateTransition,
   INTERNAL_CREATE_STAGE,
   INTERNAL_CREATE_STATUS,
-  isPartnerLinked,
   isTerminalFinancial,
   mapReviewPath,
   TRANSITIONS,
@@ -599,11 +598,31 @@ export const handleDeleteCheck = async (event, deps = {}) => {
     if (!(await isTenantMember(client, mapping.application_user_id, looked.check.tenant_id))) {
       return denied(spoof, { error: 'not_authorized', message: 'Only a member of this check\'s company can delete it' });
     }
-    if (isPartnerLinked(looked.check)) {
-      return denied(spoof, {
-        error: 'check_shared_with_partner',
-        message: 'This check cannot be deleted because it is shared with a partner.',
-      });
+    // Owner policy: a check shared with a partner is unshared first, then deleted. Only an active
+    // share blocks; a partner-ingested copy (external_origin.source_check_id) or a revoked share does not.
+    await client.query('SAVEPOINT delete_active_share');
+    try {
+      const shared = (await client.query(
+        'SELECT 1 FROM public.shared_checks WHERE check_id = $1::uuid AND revoked_at IS NULL LIMIT 1',
+        [looked.check.id],
+      )).rows;
+      await client.query('RELEASE SAVEPOINT delete_active_share');
+      if (shared.length) {
+        return denied(spoof, {
+          error: 'check_shared_with_partner',
+          message: 'This check is shared with a partner. Unshare it first, then delete it.',
+        });
+      }
+    } catch (error) {
+      try { await client.query('ROLLBACK TO SAVEPOINT delete_active_share'); } catch { /* ignore */ }
+      try { await client.query('RELEASE SAVEPOINT delete_active_share'); } catch { /* ignore */ }
+      if (error?.code !== '42P01') {
+        return denied(spoof, {
+          error: 'blocker_verification_denied',
+          message: 'This check cannot be deleted because the service cannot verify whether it is shared (shared_checks).',
+          blocker: 'shared_checks',
+        });
+      }
     }
     if (isTerminalFinancial(looked.check)) {
       return denied(spoof, {
@@ -619,9 +638,19 @@ export const handleDeleteCheck = async (event, deps = {}) => {
       { table: 'checkalt_deposits', sql: 'SELECT 1 FROM public.checkalt_deposits WHERE check_intake_item_id = $1::uuid LIMIT 1' },
       { table: 'disbursement_batches', sql: 'SELECT 1 FROM public.disbursement_batches WHERE check_intake_item_id = $1::uuid LIMIT 1' },
       { table: 'claim_check_payments', sql: 'SELECT 1 FROM public.claim_check_payments WHERE check_intake_item_id = $1::uuid LIMIT 1' },
-      // Payments/ledger activity tied to check_intake_items must block deletion.
-      { table: 'claim_payments', sql: 'SELECT 1 FROM public.claim_payments WHERE check_intake_item_id = $1::uuid LIMIT 1' },
-      { table: 'check_billing_events', sql: 'SELECT 1 FROM public.check_billing_events WHERE check_intake_item_id = $1::uuid LIMIT 1' },
+      // claim_payments is not a blocker: its check link is ON DELETE SET NULL, so the claim keeps the
+      // payment and only loses the link (claim linkage is not a blocker).
+      // Billing events block only once billed: invoiced, or a charge for work done (check processing,
+      // Mortgage Ops). The mortgage_handling event written when a check enters Review is removed with
+      // the check (ON DELETE CASCADE) while it is not invoiced.
+      { table: 'check_billing_events', sql: `SELECT 1
+          FROM public.check_billing_events e
+         WHERE e.check_intake_item_id = $1::uuid
+           AND e.status IS DISTINCT FROM 'voided'
+           AND (e.status = 'invoiced'
+                OR to_jsonb(e)->>'invoice_id' IS NOT NULL
+                OR e.event_type IS DISTINCT FROM 'mortgage_handling')
+         LIMIT 1` },
       // Financial tables keyed by claim_checks.id. Join via claim_checks.check_intake_item_id.
       { table: 'check_payment_directions', sql: `SELECT 1
           FROM public.check_payment_directions d
