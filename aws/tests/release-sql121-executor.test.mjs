@@ -183,9 +183,14 @@ test('pin: SQL 121 staging-authorized from its read-live, code-derived, selectab
   assert.equal(prod.staging_pin_commit, pin.commit);
   assert.equal(prod.source_sha256, pin.source_sha256);
   assert.deepEqual(prod.predecessors, []);
-  assert.equal(prod.execute, false);
-  assert.equal(prod.authorization, 'pending');
-  assert.equal(prod.expected_live_definition_sha256, null);
+  // Production pin execute-authorized (owner-approved pin change of 2026-10-27) on the staging apply. Its
+  // pre-state is production's own (read-only inspect SSM b76e02f3): it differs from staging's by the
+  // checksops EXECUTE on sync_cash_job_check_payment() that the file revokes.
+  assert.equal(prod.execute, true);
+  assert.match(prod.authorization, /^Owner approved 2026-10-27 /);
+  assert.equal(prod.expected_live_definition_sha256, 'ded8c0f12bdb33d0d5c7cc6d544ddddac5a87db5696d5901fb2ffcaff338a790');
+  assert.notEqual(prod.expected_live_definition_sha256, pin.expected_live_definition_sha256);
+  assert.notEqual(prod.expected_live_definition_sha256, prod.intended_replacement_sha256);
   let bytes = null;
   if (/^[0-9a-f]{40}$/.test(pin.commit)) {
     try {
