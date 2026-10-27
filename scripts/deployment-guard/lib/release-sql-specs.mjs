@@ -4474,4 +4474,42 @@ export const RELEASE_SQL_SPECS = deepFreeze({
       "public.tenant_pricing_audit"
     ]
   },
+  // SQL 119: only the EXECUTE ACL of SQL 115's function (owner only), so SQL 115's guard
+  // (function_acl_replaceable) passes in production, as SQL 103 does for SQL 29. No predecessor:
+  // it runs before SQL 115 in production (pin order_note, ops/production-sql-119-apply.md) and is
+  // a no-op after it. render.grantors: only the owner's own entries are revocable by the owner.
+  sql119: {
+    "key": "sql119",
+    "label": "SQL 119",
+    "choice": "sql119-provider-stakeholder-sync-acl",
+    "production_pin_rel": "ops/deployment-guard/sql119-provider-stakeholder-sync-acl-production-apply.json",
+    "script": "sql119-provider-stakeholder-sync-acl-production-apply",
+    "prerequisites": [
+      "public.sync_provider_stakeholder_account(uuid)",
+      "role checksops"
+    ],
+    "predecessors": [],
+    "functions": [],
+    "acl_functions": [
+      {
+        "identity": "public.sync_provider_stakeholder_account(uuid)",
+        "acl": [
+          "owner EXECUTE grantor=owner"
+        ],
+        "revokes": [
+          "PUBLIC EXECUTE grantor=owner",
+          "anon EXECUTE grantor=owner",
+          "authenticated EXECUTE grantor=owner",
+          "checksops EXECUTE grantor=owner",
+          "service_role EXECUTE grantor=owner"
+        ]
+      }
+    ],
+    "render": {
+      "grantors": true
+    },
+    "runs_before": [
+      "sql115"
+    ]
+  },
 });
