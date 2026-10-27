@@ -1,5 +1,5 @@
 /**
- * Specs of the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108 to SQL 121) for the shared engine in
+ * Specs of the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108 to SQL 122) for the shared engine in
  * release-sql-state.mjs: what each pinned file creates, replaces or drops, the reviewed
  * EXECUTE ACLs, the prerequisites and predecessors, and the PostgreSQL renderings the file
  * leaves (policy expressions, view, column, constraint, index and trigger definitions as
@@ -4828,5 +4828,159 @@ export const RELEASE_SQL_SPECS = deepFreeze({
     "render": {
       "grantors": true
     }
+  },
+  // SQL 122: the Mortgage Desk returns its work to the tenant (owner, 2026-10-27). The column
+  // mortgage_handling_requests.return_emailed_at (nullable, no default, no grant) and six SECURITY
+  // DEFINER functions: the internal working-request check (EXECUTE for the owner only) and five the
+  // API calls as the signed-in agent (EXECUTE: checksops and the owner): a Desk message and a Desk
+  // document on the request's check, the shipping / mail-to / dates of the request, the homeowner
+  // timeline row of a completed request and the once-per-request "work returned" email claim. No
+  // policy, table grant or trigger. No predecessor: the file checks SQL 100's
+  // aws_is_mortgage_ops_agent() and every table and column it uses itself (prerequisites).
+  // definer_writes: the functions write check_messages, check_files, mortgage_handling_requests and
+  // homeowner_ledger_events under RLS. Four functions return a table row type, stated here (result)
+  // as pg_get_function_result renders it with search_path pg_catalog (public.<table>).
+  sql122: {
+    "key": "sql122",
+    "label": "SQL 122",
+    "choice": "sql122-mortgage-desk-return-to-tenant",
+    "production_pin_rel": "ops/deployment-guard/sql122-mortgage-desk-return-to-tenant-production-apply.json",
+    "script": "sql122-mortgage-desk-return-to-tenant-production-apply",
+    "prerequisites": [
+      "auth.uid()",
+      "public.aws_is_mortgage_ops_agent()",
+      "public.is_platform_owner()",
+      "public.check_messages",
+      "public.check_files",
+      "public.check_intake_items",
+      "public.mortgage_handling_requests",
+      "public.homeowner_ledger_events",
+      "public.tenants",
+      "public.tenant_users",
+      "public.identity_accounts",
+      "role checksops",
+      "column public.check_messages.id",
+      "column public.check_messages.check_id",
+      "column public.check_messages.sender_id",
+      "column public.check_messages.body",
+      "column public.check_messages.is_deleted",
+      "column public.check_messages.created_at",
+      "column public.check_files.id",
+      "column public.check_files.check_intake_item_id",
+      "column public.check_files.file_name",
+      "column public.check_files.file_path",
+      "column public.check_files.file_type",
+      "column public.check_files.file_size",
+      "column public.check_files.category",
+      "column public.check_files.source",
+      "column public.check_files.uploaded_by",
+      "column public.check_files.description",
+      "column public.check_files.created_at",
+      "column public.check_intake_items.id",
+      "column public.check_intake_items.claim_id",
+      "column public.check_intake_items.check_number",
+      "column public.mortgage_handling_requests.id",
+      "column public.mortgage_handling_requests.tenant_id",
+      "column public.mortgage_handling_requests.claim_id",
+      "column public.mortgage_handling_requests.status",
+      "column public.mortgage_handling_requests.check_intake_item_id",
+      "column public.mortgage_handling_requests.assigned_employee_id",
+      "column public.mortgage_handling_requests.requested_by",
+      "column public.mortgage_handling_requests.mortgage_company",
+      "column public.mortgage_handling_requests.completed_at",
+      "column public.mortgage_handling_requests.updated_at",
+      "column public.mortgage_handling_requests.mail_to_name",
+      "column public.mortgage_handling_requests.mail_to_address",
+      "column public.mortgage_handling_requests.shipping_label_path",
+      "column public.mortgage_handling_requests.shipping_label_name",
+      "column public.mortgage_handling_requests.shipping_label_carrier",
+      "column public.mortgage_handling_requests.shipping_label_tracking",
+      "column public.mortgage_handling_requests.shipping_label_uploaded_at",
+      "column public.mortgage_handling_requests.shipping_label_uploaded_by",
+      "column public.mortgage_handling_requests.check_sent_date",
+      "column public.mortgage_handling_requests.check_received_back_date",
+      "column public.homeowner_ledger_events.tenant_id",
+      "column public.homeowner_ledger_events.claim_id",
+      "column public.homeowner_ledger_events.check_id",
+      "column public.homeowner_ledger_events.event_type",
+      "column public.homeowner_ledger_events.occurred_at",
+      "column public.homeowner_ledger_events.actor_label",
+      "column public.homeowner_ledger_events.payload_json",
+      "column public.homeowner_ledger_events.created_by",
+      "column public.tenants.id",
+      "column public.tenants.name",
+      "column public.tenants.slug",
+      "column public.tenant_users.tenant_id",
+      "column public.tenant_users.user_id",
+      "column public.identity_accounts.application_user_id",
+      "column public.identity_accounts.email"
+    ],
+    "predecessors": [],
+    "functions": [
+      {
+        "identity": "public.aws_mortgage_desk_working_request(uuid, text[])",
+        "acl": [
+          "owner EXECUTE"
+        ],
+        "result": "public.mortgage_handling_requests"
+      },
+      {
+        "identity": "public.aws_mortgage_desk_post_message(uuid, text)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ],
+        "result": "public.check_messages"
+      },
+      {
+        "identity": "public.aws_mortgage_desk_attach_file(uuid, text, text, text, bigint, text, text)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ],
+        "result": "public.check_files"
+      },
+      {
+        "identity": "public.aws_mortgage_desk_update_shipping(uuid, jsonb)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ],
+        "result": "public.mortgage_handling_requests"
+      },
+      {
+        "identity": "public.aws_mortgage_desk_completion_timeline(uuid)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ]
+      },
+      {
+        "identity": "public.aws_mortgage_desk_return_email_claim(uuid)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ]
+      }
+    ],
+    "added_columns": [
+      {
+        "table": "public.mortgage_handling_requests",
+        "column": "return_emailed_at",
+        "type": "timestamp with time zone",
+        "notnull": false,
+        "default": null,
+        "acl": []
+      }
+    ],
+    "definer_writes": [
+      "public.check_messages",
+      "public.check_files",
+      "public.mortgage_handling_requests",
+      "public.homeowner_ledger_events"
+    ],
+    "altered_relations": [
+      "public.mortgage_handling_requests"
+    ]
   },
 });
