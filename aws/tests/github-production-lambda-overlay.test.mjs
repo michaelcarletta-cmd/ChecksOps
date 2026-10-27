@@ -616,15 +616,16 @@ test('storage-write.mjs expected_live records the bytes production run 397077782
   );
 });
 
-test('tenant-management-v2.mjs is added just before app-services.mjs, which imports it statically', async () => {
+test('tenant-management-v2.mjs comes just before app-services.mjs, which imports it statically', async () => {
   const TMV2 = 'tenant-management-v2.mjs';
   const ROUTER = 'app-services.mjs';
   // Planned under the release manifest; its provider-status labels change (2026-10-27) moved the row
-  // to its own planning-only manifest.
+  // to its own planning-only manifest. Production already serves the release bytes (read-only inspect
+  // run 40574248610), so the row replaces them.
   const MANIFEST = 'aws/tests/fixtures/production-tenant-management-v2-provider-status-manifest-2026-10-27.json';
   const row = PLAN.members[TMV2];
-  assert.equal(row.operation, 'add');
-  assert.equal(row.expected_live_sha256, null);
+  assert.equal(row.operation, 'replace');
+  assert.equal(row.expected_live_sha256, 'b4596d1078b9acb64d333eb2f241713ec42c5a3a2188eda69c5654fad8485835');
   assert.equal(row.sql_before, null);
   assert.equal(row.manifest, MANIFEST);
   const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, MANIFEST), 'utf8'));
@@ -638,16 +639,16 @@ test('tenant-management-v2.mjs is added just before app-services.mjs, which impo
   assert.deepEqual(deps, ['data.mjs']);
   assert.ok(PLAN.order.indexOf('data.mjs') < PLAN.order.indexOf(TMV2));
 
-  // While tenant-management-v2.mjs is absent live, app-services.mjs is refused.
+  // While tenant-management-v2.mjs is not yet the accepted bytes, app-services.mjs is refused.
   await assert.rejects(
     run(applyEnv(ROUTER), applyDeps(ROUTER, { pending: [TMV2] }).deps),
-    (error) => error.code === CODES.DEPLOYMENT_COLLISION && error.details.missing?.includes(TMV2),
+    (error) => error.code === CODES.DEPLOYMENT_COLLISION,
   );
-  // The ADD itself applies when absent ...
-  const { deps: addDeps, calls } = applyDeps(TMV2);
-  const added = await run(applyEnv(TMV2), addDeps);
-  assert.equal(added.mutation, false);
-  assert.deepEqual(calls.receipt.owned_member_ops, { replace: [], add: [TMV2] });
+  // The REPLACE itself applies over the live release bytes ...
+  const { deps: replaceDeps, calls } = applyDeps(TMV2);
+  const replaced = await run(applyEnv(TMV2), replaceDeps);
+  assert.equal(replaced.mutation, false);
+  assert.deepEqual(calls.receipt.owned_member_ops, { replace: [TMV2], add: [] });
   // ... and app-services.mjs then links.
   const router = await run(applyEnv(ROUTER), applyDeps(ROUTER).deps);
   assert.equal(router.mutation, false);
@@ -2385,4 +2386,29 @@ test('Delete Check: workflow.mjs replaced the release 2026-10-17 bytes; producti
     run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: BEFORE }) }),
     (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
   );
+});
+
+test('Planned ADDs already live: tenant-management-v2.mjs and webhook-status.mjs replace the bytes inspect runs 40574248610 and 40574427787 found', async () => {
+  for (const [member, live, accepted, inspectRun, manifestRel] of [
+    ['tenant-management-v2.mjs', 'b4596d1078b9acb64d333eb2f241713ec42c5a3a2188eda69c5654fad8485835', '64539881783add1157d186e8504b86831ce4e6151a7b00c0ee8a892839735cb9', '40574248610', 'aws/tests/fixtures/production-tenant-management-v2-provider-status-manifest-2026-10-27.json'],
+    ['providers/onboarding/webhook-status.mjs', '45ac151c468ade3ed161ddd279545ffd58dd4b7dbe52f6769137f8fc51b4237f', '2f9570fa00d92898c1c4d656bede432def7ad02a05a8c428d50d7ff34ec917e7', '40574427787', 'aws/tests/fixtures/production-moov-webhook-verification-read-manifest-2026-10-27.json'],
+  ]) {
+    const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, manifestRel), 'utf8'));
+    assert.match(PLAN.notes, new RegExp(`inspect runs 40574248610 and 40574427787`));
+    assert.match(manifest.notes, new RegExp(`inspect run ${inspectRun}`), member);
+    assert.equal(manifest.deploy_authorized, false, member);
+    assert.deepEqual(manifest.members[member], { live_sha256: live, accepted_sha256: accepted, operation: 'replace' }, member);
+    const row = PLAN.members[member];
+    assert.equal(row.operation, 'replace', member);
+    assert.equal(row.expected_live_sha256, live, member);
+    assert.equal(row.accepted_sha256, accepted, member);
+    assert.equal(row.manifest, manifestRel, member);
+    assert.equal(sha(`aws/functions/api/${member}`), accepted, member);
+    const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: member };
+    const ready = await run(inspect, { root: ROOT, inspectLive: liveFor(member, { sha256: live }) });
+    assert.equal(ready.state, 'READY', member);
+    assert.equal(ready.mutation, false, member);
+    // A missing member is no longer an accepted live state for a REPLACE.
+    await assert.rejects(run(inspect, { root: ROOT, inspectLive: liveFor(member, { present: false, sha256: null }) }), member);
+  }
 });

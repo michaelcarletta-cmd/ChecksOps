@@ -3,12 +3,12 @@
   "authorization": "Pending owner review (2026-10-27). Planning only: nothing is live or verified. The owner asked for this change in the words \"Work on 1-6\" (open item: the TenantManagementV2 card shows unknown). Each production apply still needs its own owner approval, a staging acceptance reference and a read-only production inspect that confirms the live bytes.",
   "deploy_authorized": false,
   "live_lambda": "checksops-production-prep-api",
-  "notes": "TenantManagementV2 Provider Health card: tenant-management-v2.mjs reduces payment_provider_accounts.onboarding_status and verification_status to a fixed safe set and showed anything else as unknown. The set held not_started, pending, in_progress, complete, completed and submitted, but the Moov writers store onboarding_incomplete, verification_pending, additional_information_required, active, restricted and suspended (normalizeOnboardingStatus, moov-sync.mjs, parity/moov-onboard.mjs), and Moov's verification values unverified, review and resubmit, so every synced tenant showed unknown. Those values are added to the fixed sets; any other value is still shown as unknown (no raw text). The member stays an ADD (live_sha256 null); a read-only production overlay inspect must confirm it before any apply.",
+  "notes": "TenantManagementV2 Provider Health card: tenant-management-v2.mjs reduces payment_provider_accounts.onboarding_status and verification_status to a fixed safe set and showed anything else as unknown. The set held not_started, pending, in_progress, complete, completed and submitted, but the Moov writers store onboarding_incomplete, verification_pending, additional_information_required, active, restricted and suspended (normalizeOnboardingStatus, moov-sync.mjs, parity/moov-onboard.mjs), and Moov's verification values unverified, review and resubmit, so every synced tenant showed unknown. Those values are added to the fixed sets; any other value is still shown as unknown (no raw text). Planned as an ADD; the read-only production overlay inspect run 40574248610 (main f7a6b44e2) found the member live at b4596d10... (its earlier accepted bytes, already applied in production), so it is a REPLACE of those bytes. The plan row expects them; a read-only production overlay inspect must confirm them before any apply.",
   "members": {
     "tenant-management-v2.mjs": {
-      "live_sha256": null,
+      "live_sha256": "b4596d1078b9acb64d333eb2f241713ec42c5a3a2188eda69c5654fad8485835",
       "accepted_sha256": "64539881783add1157d186e8504b86831ce4e6151a7b00c0ee8a892839735cb9",
-      "operation": "add"
+      "operation": "replace"
     }
   }
 }
