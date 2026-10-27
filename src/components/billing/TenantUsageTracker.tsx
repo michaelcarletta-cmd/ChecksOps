@@ -10,6 +10,16 @@ import { BarChart3, Receipt, Landmark, ArrowDownCircle, CheckCircle2, Calendar }
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { format, startOfMonth, endOfMonth } from "date-fns";
 import { displayCase } from "@/lib/displayCase";
+import {
+  disbursementDetails,
+  disbursementVolumeCents,
+  isSendFeeEvent,
+  usageEventLabel,
+  type SendLeg,
+  type UsageCheck,
+  type UsageClaim,
+  type UsageFeeEvent,
+} from "@/lib/billing/usageDisbursements";
 
 
 export function TenantUsageTracker() {
@@ -40,19 +50,59 @@ export function TenantUsageTracker() {
     enabled: !!tenant?.id,
   });
 
-  const { data: fundsLog = [], isLoading: fundsLoading } = useQuery({
-    queryKey: ["tenant-funds-log", tenant?.id],
+  // Disbursement fees: each next-day / same-day fee is linked to the payment it was charged for
+  // (its first posted leg), not to the check. Load those payments, the check and its claim, so the
+  // log names the check, the insured and the payee, and the card shows the amount sent.
+  const { data: disbursements } = useQuery({
+    queryKey: ["tenant-usage-disbursements", tenant?.id, monthStart, monthEnd],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("claim_check_payments")
-        .select(`
-          id, payment_amount, status, created_at,
-          check_intake_items (check_number, carrier_name)
-        `)
-        .eq("recipient_tenant_id", tenant!.id)
-        .order("created_at", { ascending: false });
+      const { data: events, error } = await supabase
+        .from("check_billing_events")
+        .select("id, event_type, payment_transfer_id, claim_id, status")
+        .eq("tenant_id", tenant!.id)
+        .in("event_type", ["moov_next_day", "moov_same_day", "moov_instant"])
+        .neq("status", "voided")
+        .gte("billed_at", monthStart)
+        .lte("billed_at", monthEnd);
       if (error) throw error;
-      return data ?? [];
+      const feeEvents = (events ?? []) as unknown as UsageFeeEvent[];
+      const anchorIds = [...new Set(feeEvents.map((e) => e.payment_transfer_id).filter(Boolean))] as string[];
+      if (!anchorIds.length) return disbursementDetails(feeEvents, [], [], []);
+      const legColumns = "id, amount_cents, status, check_id, provider_metadata";
+      const { data: anchors, error: anchorError } = await supabase
+        .from("payment_transfers")
+        .select(legColumns)
+        .in("id", anchorIds);
+      if (anchorError) throw anchorError;
+      const checkIds = [...new Set(((anchors ?? []) as SendLeg[]).map((l) => l.check_id).filter(Boolean))] as string[];
+      let legs = (anchors ?? []) as SendLeg[];
+      let checks: UsageCheck[] = [];
+      let claims: UsageClaim[] = [];
+      if (checkIds.length) {
+        const [siblings, checkRows] = await Promise.all([
+          supabase.from("payment_transfers").select(legColumns)
+            .in("check_id", checkIds).in("leg_role", ["send_wallet", "send_bank"]),
+          supabase.from("check_intake_items").select("id, check_number, payee_line, claim_id").in("id", checkIds),
+        ]);
+        if (siblings.error) throw siblings.error;
+        if (checkRows.error) throw checkRows.error;
+        const seen = new Set(legs.map((l) => l.id));
+        legs = [...legs, ...((siblings.data ?? []) as SendLeg[]).filter((l) => !seen.has(l.id))];
+        checks = (checkRows.data ?? []) as UsageCheck[];
+      }
+      const claimIds = [...new Set([
+        ...feeEvents.map((e) => e.claim_id),
+        ...checks.map((c) => c.claim_id),
+      ].filter(Boolean))] as string[];
+      if (claimIds.length) {
+        const { data: claimRows, error: claimError } = await supabase
+          .from("claims")
+          .select("id, claim_number, policyholder_name")
+          .in("id", claimIds);
+        if (claimError) throw claimError;
+        claims = (claimRows ?? []) as UsageClaim[];
+      }
+      return disbursementDetails(feeEvents, legs, checks, claims);
     },
     enabled: !!tenant?.id,
   });
@@ -81,14 +131,13 @@ export function TenantUsageTracker() {
     enabled: !!tenant?.id,
   });
 
-  if (usageLoading || fundsLoading) return <div className="p-8 text-center text-sm text-muted-foreground animate-pulse">Loading usage & funds data...</div>;
+  if (usageLoading) return <div className="p-8 text-center text-sm text-muted-foreground animate-pulse">Loading usage & funds data...</div>;
 
   const formatCurrency = (amount: number) => 
     new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(amount);
 
-  const totalReceived = fundsLog
-    .filter((f: any) => f.status === "settled")
-    .reduce((sum: number, f: any) => sum + Number(f.payment_amount), 0);
+  // Amount sent in the disbursements whose fees are counted this month.
+  const disbursementVolume = disbursements ? disbursementVolumeCents(disbursements) / 100 : 0;
 
   return (
     <div className="space-y-6">
@@ -151,12 +200,12 @@ export function TenantUsageTracker() {
           <CardContent>
             <div className="flex items-baseline gap-2">
               <span className="text-3xl font-bold text-emerald-600">
-                {usage?.events?.filter((e: any) => e.event_type?.startsWith('moov_')).length ?? 0}
+                {usage?.events?.filter((e: any) => isSendFeeEvent(e.event_type)).length ?? 0}
               </span>
               <span className="text-xs text-muted-foreground">transfers</span>
             </div>
             <p className="text-xs text-muted-foreground mt-2">
-              Total volume: <span className="font-semibold text-foreground">{formatCurrency(totalReceived)}</span>
+              Total volume: <span className="font-semibold text-foreground">{formatCurrency(disbursementVolume)}</span>
             </p>
           </CardContent>
         </Card>
@@ -207,7 +256,17 @@ export function TenantUsageTracker() {
                     <TableCell colSpan={4} className="h-24 text-center text-xs text-muted-foreground">No usage recorded for this period.</TableCell>
                   </TableRow>
                 ) : (
-                  usage?.events?.map((row: any) => (
+                  usage?.events?.map((row: any) => {
+                    const sent = isSendFeeEvent(row.event_type) ? disbursements?.get(row.id) : undefined;
+                    const checkNumber = row.check_number || sent?.check_number;
+                    const details = sent
+                      ? [
+                          sent.insured_name && `Insured: ${displayCase(sent.insured_name)}`,
+                          sent.payee_name && `Paid to: ${displayCase(sent.payee_name)}`,
+                          sent.amount_cents > 0 && `Sent ${formatCurrency(sent.amount_cents / 100)}`,
+                        ].filter(Boolean).join(" · ")
+                      : [displayCase(row.payee_name), row.processed_by].filter(Boolean).join(" · ");
+                    return (
                     <TableRow key={row.id} className="hover:bg-muted/30">
                       <TableCell className="pl-4 text-xs text-muted-foreground">
                         {format(new Date(row.billed_at), "MMM d, h:mm a")}
@@ -216,12 +275,15 @@ export function TenantUsageTracker() {
                         <div className="flex flex-col">
                           <span className="text-xs font-medium">
                             <Badge variant="secondary" className="text-[9px] h-4 px-1 py-0 mr-2">
-                              {row.event_type?.replace('_', ' ') || 'processing'}
+                              {usageEventLabel(row.event_type)}
                             </Badge>
-                            Check #{row.check_number || "—"}
+                            Check #{checkNumber || "—"}
+                            {sent?.claim_number && (
+                              <span className="text-muted-foreground font-normal"> · Claim {sent.claim_number}</span>
+                            )}
                           </span>
-                          <span className="text-[10px] text-muted-foreground truncate max-w-[150px]">
-                            {displayCase(row.payee_name)} {row.processed_by && `· ${row.processed_by}`}
+                          <span className="text-[10px] text-muted-foreground truncate max-w-[320px]" title={details}>
+                            {details}
                           </span>
                         </div>
                       </TableCell>
@@ -237,7 +299,8 @@ export function TenantUsageTracker() {
                         </Badge>
                       </TableCell>
                     </TableRow>
-                  ))
+                    );
+                  })
                 )}
               </TableBody>
             </Table>
