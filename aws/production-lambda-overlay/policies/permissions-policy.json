@@ -45,6 +45,74 @@
       "Resource": "arn:aws:cloudfront::806168576068:distribution/E1B0ZWWO5559U5"
     },
     {
+      "Sid": "InspectExactCheckAltStatusScheduleStack",
+      "Effect": "Allow",
+      "Action": [
+        "cloudformation:DescribeStacks",
+        "cloudformation:DescribeStackEvents",
+        "cloudformation:DescribeStackResources",
+        "cloudformation:GetTemplate"
+      ],
+      "Resource": "arn:aws:cloudformation:us-east-1:806168576068:stack/checksops-production-checkalt-status-schedule/*"
+    },
+    {
+      "Sid": "CreateExactCheckAltStatusScheduleStack",
+      "Effect": "Allow",
+      "Action": "cloudformation:CreateStack",
+      "Resource": "arn:aws:cloudformation:us-east-1:806168576068:stack/checksops-production-checkalt-status-schedule/*"
+    },
+    {
+      "Sid": "UpdateExactCheckAltStatusScheduleStack",
+      "Effect": "Allow",
+      "Action": "cloudformation:UpdateStack",
+      "Resource": "arn:aws:cloudformation:us-east-1:806168576068:stack/checksops-production-checkalt-status-schedule/*"
+    },
+    {
+      "Sid": "InspectExactCheckAltStatusScheduleRole",
+      "Effect": "Allow",
+      "Action": [
+        "iam:GetRole",
+        "iam:GetRolePolicy"
+      ],
+      "Resource": "arn:aws:iam::806168576068:role/checksops-production-checkalt-status-schedule"
+    },
+    {
+      "Sid": "CreateExactCheckAltStatusScheduleRole",
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreateRole",
+        "iam:PutRolePolicy",
+        "iam:TagRole"
+      ],
+      "Resource": "arn:aws:iam::806168576068:role/checksops-production-checkalt-status-schedule"
+    },
+    {
+      "Sid": "PassCheckAltStatusScheduleRoleToSchedulerOnly",
+      "Effect": "Allow",
+      "Action": "iam:PassRole",
+      "Resource": "arn:aws:iam::806168576068:role/checksops-production-checkalt-status-schedule",
+      "Condition": {
+        "StringEquals": {
+          "iam:PassedToService": "scheduler.amazonaws.com"
+        }
+      }
+    },
+    {
+      "Sid": "InspectExactCheckAltStatusSchedule",
+      "Effect": "Allow",
+      "Action": "scheduler:GetSchedule",
+      "Resource": "arn:aws:scheduler:us-east-1:806168576068:schedule/default/checksops-production-checkalt-status-reconcile"
+    },
+    {
+      "Sid": "CreateUpdateExactCheckAltStatusSchedule",
+      "Effect": "Allow",
+      "Action": [
+        "scheduler:CreateSchedule",
+        "scheduler:UpdateSchedule"
+      ],
+      "Resource": "arn:aws:scheduler:us-east-1:806168576068:schedule/default/checksops-production-checkalt-status-reconcile"
+    },
+    {
       "Sid": "SignDeploymentGuardReceiptsExactProductionKey",
       "Effect": "Allow",
       "Action": [

@@ -1,0 +1,255 @@
+name: Guarded production Check Alt status schedule
+
+# Creates, pauses or resumes the production CloudFormation stack
+# checksops-production-checkalt-status-schedule from the unchanged template
+# aws/production/checkalt-status-reconcile-schedule.yaml (sha256 pinned in
+# scripts/deployment-guard/production-checkalt-schedule.mjs). inspect only reads the stack, its IAM
+# role, its schedule and the prep Lambda. create and set-state are refused unless the live snapshot
+# still matches the inspect, the exact approval phrase and a staging acceptance reference are given,
+# and the production environment reviewer approves the job. The writer never retries and never
+# deletes. Runbook: ops/checkalt-status-reconcile-schedule.md.
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "inspect (read-only), create the stack, or set-state (pause/resume)"
+        required: true
+        default: inspect
+        type: choice
+        options:
+          - inspect
+          - create
+          - set-state
+      approved_commit:
+        description: "Required for create/set-state: exact main commit approved for this run"
+        required: false
+        default: ""
+        type: string
+      expected_snapshot_sha256:
+        description: "Required for create/set-state: snapshot SHA-256 from a prior inspect run"
+        required: false
+        default: ""
+        type: string
+      actor_application_user_id:
+        description: "Required for create only: platform-owner application_user_id (lower-case UUID)"
+        required: false
+        default: ""
+        type: string
+      schedule_state:
+        description: "Required for set-state only: DISABLED pauses, ENABLED resumes (leave empty for inspect/create)"
+        required: false
+        default: ""
+        type: string
+      staging_acceptance_reference:
+        description: "Required for create/set-state: ChecksOps GitHub run or PR URL recording the staging acceptance of the scheduled job"
+        required: false
+        default: ""
+        type: string
+      approval_phrase:
+        description: "create: CREATE CHECKALT STATUS SCHEDULE IN PRODUCTION / pause: PAUSE CHECKALT STATUS SCHEDULE IN PRODUCTION / resume: RESUME CHECKALT STATUS SCHEDULE IN PRODUCTION"
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: guarded-production-checkalt-status-schedule
+  cancel-in-progress: false
+
+jobs:
+  production-checkalt-schedule:
+    environment: production
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out exact workflow commit
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Refuse non-main or incomplete change
+        shell: bash
+        env:
+          INPUT_MODE: ${{ inputs.mode }}
+          INPUT_APPROVED_COMMIT: ${{ inputs.approved_commit }}
+          INPUT_EXPECTED_SNAPSHOT_SHA256: ${{ inputs.expected_snapshot_sha256 }}
+          INPUT_ACTOR: ${{ inputs.actor_application_user_id }}
+          INPUT_SCHEDULE_STATE: ${{ inputs.schedule_state }}
+          INPUT_STAGING_ACCEPTANCE: ${{ inputs.staging_acceptance_reference }}
+          INPUT_APPROVAL_PHRASE: ${{ inputs.approval_phrase }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/main" || { echo "Guarded Check Alt schedule change only runs from main"; exit 2; }
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA" || { echo "Checkout SHA mismatch"; exit 2; }
+          case "$INPUT_MODE" in
+            inspect|create|set-state) ;;
+            *) echo "mode must be inspect, create or set-state"; exit 2 ;;
+          esac
+          if [ "$INPUT_MODE" != "inspect" ]; then
+            [[ "$INPUT_APPROVED_COMMIT" =~ ^[0-9a-f]{40}$ ]] || { echo "$INPUT_MODE requires a 40-character approved_commit"; exit 2; }
+            test "$INPUT_APPROVED_COMMIT" = "$GITHUB_SHA" || { echo "main moved or approved commit does not match workflow SHA"; exit 2; }
+            [[ "$INPUT_EXPECTED_SNAPSHOT_SHA256" =~ ^[0-9a-f]{64}$ ]] || { echo "$INPUT_MODE requires expected_snapshot_sha256 from inspect"; exit 2; }
+            test -n "$INPUT_STAGING_ACCEPTANCE" || { echo "$INPUT_MODE requires staging_acceptance_reference"; exit 2; }
+          fi
+          if [ "$INPUT_MODE" = "create" ]; then
+            [[ "$INPUT_ACTOR" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$ ]] || { echo "create requires a lower-case UUID actor_application_user_id"; exit 2; }
+            test -z "$INPUT_SCHEDULE_STATE" || { echo "create takes no schedule_state (the template default ENABLED applies)"; exit 2; }
+            test "$INPUT_APPROVAL_PHRASE" = "CREATE CHECKALT STATUS SCHEDULE IN PRODUCTION" || { echo "approval_phrase must be exactly: CREATE CHECKALT STATUS SCHEDULE IN PRODUCTION"; exit 2; }
+          fi
+          if [ "$INPUT_MODE" = "set-state" ]; then
+            test -z "$INPUT_ACTOR" || { echo "set-state takes no actor_application_user_id (UsePreviousValue)"; exit 2; }
+            case "$INPUT_SCHEDULE_STATE" in
+              DISABLED) test "$INPUT_APPROVAL_PHRASE" = "PAUSE CHECKALT STATUS SCHEDULE IN PRODUCTION" || { echo "approval_phrase must be exactly: PAUSE CHECKALT STATUS SCHEDULE IN PRODUCTION"; exit 2; } ;;
+              ENABLED) test "$INPUT_APPROVAL_PHRASE" = "RESUME CHECKALT STATUS SCHEDULE IN PRODUCTION" || { echo "approval_phrase must be exactly: RESUME CHECKALT STATUS SCHEDULE IN PRODUCTION"; exit 2; } ;;
+              *) echo "set-state requires schedule_state ENABLED or DISABLED"; exit 2 ;;
+            esac
+          fi
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "22"
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: "1.4.2"
+
+      - name: Install locked dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run deployment safety tests
+        run: |
+          node --test aws/tests/production-checkalt-schedule-writer.test.mjs
+          node --test aws/tests/production-checkalt-schedule-policy.test.mjs
+          node --test aws/tests/deployment-guard-kms-receipt.test.mjs
+          node --test aws/tests/deployment-guard-signed-receipt.test.mjs
+          node scripts/deployment-guard/scan-bypass.mjs
+
+      - name: Validate production OIDC inputs
+        shell: bash
+        env:
+          PRODUCTION_DEPLOY_ROLE_ARN: ${{ vars.CHECKSOPS_PRODUCTION_DEPLOY_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          EXPECTED_ROLE_ARN="arn:aws:iam::806168576068:role/ChecksOpsGitHubProductionLambdaOverlay"
+          test "$PRODUCTION_DEPLOY_ROLE_ARN" = "$EXPECTED_ROLE_ARN" || { echo "CHECKSOPS_PRODUCTION_DEPLOY_ROLE_ARN must be the dedicated production deploy role"; exit 2; }
+          test -n "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" || { echo "GitHub did not provide an OIDC request URL"; exit 2; }
+
+      - name: Configure AWS credentials through GitHub OIDC
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a
+        with:
+          role-to-assume: ${{ vars.CHECKSOPS_PRODUCTION_DEPLOY_ROLE_ARN }}
+          aws-region: us-east-1
+          role-session-name: checksops-production-checkalt-schedule-${{ github.run_id }}
+
+      - name: Verify AWS identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          ARN="$(aws sts get-caller-identity --query Arn --output text)"
+          test "$ARN" = "arn:aws:sts::806168576068:assumed-role/ChecksOpsGitHubProductionLambdaOverlay/checksops-production-checkalt-schedule-$GITHUB_RUN_ID" || { echo "Unexpected AWS role identity"; exit 2; }
+
+      - name: Load production KMS verifier
+        if: ${{ inputs.mode != 'inspect' }}
+        shell: bash
+        env:
+          KMS_KEY_ARN: ${{ vars.CHECKSOPS_PRODUCTION_DEPLOYMENT_GUARD_KMS_KEY_ARN }}
+        run: |
+          set -euo pipefail
+          case "$KMS_KEY_ARN" in
+            arn:aws:kms:us-east-1:806168576068:key/*) ;;
+            *) echo "invalid production deployment-guard KMS key ARN"; exit 2 ;;
+          esac
+          PUBLIC_KEY_B64="$(aws kms get-public-key --region us-east-1 --key-id "$KMS_KEY_ARN" --query PublicKey --output text)"
+          test -n "$PUBLIC_KEY_B64" || { echo "KMS public key is missing"; exit 2; }
+          {
+            echo "CHECKSOPS_DEPLOYMENT_GUARD_KMS_KEY_ARN=$KMS_KEY_ARN"
+            echo "CHECKSOPS_DEPLOYMENT_GUARD_KMS_PUBLIC_KEY_DER_B64=$PUBLIC_KEY_B64"
+          } >> "$GITHUB_ENV"
+
+      - name: Inspect the live stack, role, schedule and prep Lambda
+        id: preflight
+        shell: bash
+        env:
+          CHECKSOPS_SCHEDULE_MODE: ${{ inputs.mode }}
+          CHECKSOPS_EXPECTED_SNAPSHOT_SHA256: ${{ inputs.expected_snapshot_sha256 }}
+          CHECKSOPS_SCHEDULE_ACTOR: ${{ inputs.actor_application_user_id }}
+          CHECKSOPS_SCHEDULE_STATE: ${{ inputs.schedule_state }}
+          CHECKSOPS_STAGING_ACCEPTANCE_REFERENCE: ${{ inputs.staging_acceptance_reference }}
+          CHECKSOPS_SCHEDULE_APPROVAL: ${{ inputs.approval_phrase }}
+        run: node scripts/deployment-guard/github-production-checkalt-schedule.mjs
+
+      - name: Record inspected live state
+        if: ${{ always() }}
+        shell: bash
+        env:
+          INPUT_MODE: ${{ inputs.mode }}
+          STATE: ${{ steps.preflight.outputs.state }}
+          SNAPSHOT_SHA256: ${{ steps.preflight.outputs.snapshot_sha256 }}
+          TEMPLATE_SHA256: ${{ steps.preflight.outputs.template_sha256 }}
+          STACK_STATUS: ${{ steps.preflight.outputs.stack_status }}
+          SCHEDULE_STATE: ${{ steps.preflight.outputs.schedule_state }}
+          SCHEDULE_ACTOR: ${{ steps.preflight.outputs.schedule_actor }}
+          LAMBDA_REVISION_ID: ${{ steps.preflight.outputs.lambda_revision_id }}
+          PROBLEMS: ${{ steps.preflight.outputs.problems }}
+        run: |
+          {
+            echo "### Production Check Alt status schedule preflight"
+            echo "- Mode: \`$INPUT_MODE\` / state: \`$STATE\`"
+            echo "- Commit: \`$GITHUB_SHA\` / template SHA-256: \`$TEMPLATE_SHA256\`"
+            echo "- Snapshot SHA-256: \`$SNAPSHOT_SHA256\`"
+            echo "- Stack: \`$STACK_STATUS\` / schedule: \`$SCHEDULE_STATE\` / actor: \`${SCHEDULE_ACTOR:-none}\` / prep Lambda RevisionId: \`$LAMBDA_REVISION_ID\`"
+            echo "- Drift: \`${PROBLEMS:-none}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Change the stack through the official receipt-gated writer
+        if: ${{ inputs.mode != 'inspect' }}
+        shell: bash
+        env:
+          CHECKSOPS_PRODUCTION_CHECKALT_SCHEDULE_EXECUTE: "1"
+          CHECKSOPS_DEPLOYMENT_GUARD_APPLY: "1"
+          CHECKSOPS_DEPLOYMENT_GUARD_RECEIPT: ${{ steps.preflight.outputs.receipt_path }}
+          CHECKSOPS_WORKSTREAM_ID: ${{ steps.preflight.outputs.workstream_id }}
+          CHECKSOPS_COMMIT: ${{ github.sha }}
+          CHECKSOPS_BRANCH: main
+          CHECKSOPS_OPERATOR: ${{ github.actor }}
+          CHECKSOPS_SCHEDULE_INPUT: ${{ steps.preflight.outputs.schedule_input }}
+        run: |
+          set -euo pipefail
+          node scripts/deployment-guard/production-checkalt-schedule.mjs
+
+      - name: Verify the requested change is live and nothing else moved
+        id: verify
+        if: ${{ inputs.mode != 'inspect' }}
+        shell: bash
+        env:
+          CHECKSOPS_SCHEDULE_MODE: verify
+          CHECKSOPS_SCHEDULE_INPUT: ${{ steps.preflight.outputs.schedule_input }}
+        run: node scripts/deployment-guard/github-production-checkalt-schedule.mjs
+
+      - name: Record verified live state
+        if: ${{ always() && inputs.mode != 'inspect' }}
+        shell: bash
+        env:
+          STATE: ${{ steps.verify.outputs.state }}
+          SNAPSHOT_SHA256: ${{ steps.verify.outputs.snapshot_sha256 }}
+          STACK_STATUS: ${{ steps.verify.outputs.stack_status }}
+          SCHEDULE_STATE: ${{ steps.verify.outputs.schedule_state }}
+          SCHEDULE_ACTOR: ${{ steps.verify.outputs.schedule_actor }}
+        run: |
+          {
+            echo "### Production Check Alt status schedule after the change"
+            echo "- Verify: \`${STATE:-not verified}\`"
+            echo "- Snapshot SHA-256: \`$SNAPSHOT_SHA256\`"
+            echo "- Stack: \`$STACK_STATUS\` / schedule: \`$SCHEDULE_STATE\` / actor: \`${SCHEDULE_ACTOR:-none}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Cleanup ephemeral deployment-guard state
+        if: ${{ always() }}
+        shell: bash
+        run: rm -rf .deployment-guard

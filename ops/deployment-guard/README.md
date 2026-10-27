@@ -113,6 +113,18 @@ its recorded live value. Credential-like keys are never set; a removal is record
 
 The production HTTP API CORS allow-list (`*` to checksops.com and www.checksops.com, nothing else)
 goes through `guarded-production-cors.yml`. Runbook: `ops/production-cors-allowlist.md`.
+
+The production stack `checksops-production-checkalt-status-schedule` (scheduled, read-only Check
+Alt status check; template `aws/production/checkalt-status-reconcile-schedule.yaml`, sha256 pinned
+in `scripts/deployment-guard/production-checkalt-schedule.mjs`) is created, paused and resumed
+through `guarded-production-checkalt-schedule.yml`: `inspect` is read-only; `create` needs the
+stack, role and schedule absent and `CREATE CHECKALT STATUS SCHEDULE IN PRODUCTION`; `set-state`
+needs `PAUSE ...` or `RESUME CHECKALT STATUS SCHEDULE IN PRODUCTION`. Both take the
+`production-checkalt-status-schedule` lease and a KMS-signed `cloudformation` receipt that binds the
+whole snapshot and the actor id or target state; the writer never retries or deletes. The deploy
+role has no CloudFormation, IAM or Scheduler rights until an operator attaches the scoped
+statements in `aws/production-lambda-overlay/policies/permissions-policy.json` once (owner-approved,
+manual). Runbook: `ops/checkalt-status-reconcile-schedule.md`.
 It reports the requested repository member as `PRESENT` (with its SHA-256) or
 `ABSENT`, alongside the live Lambda CodeSha256 and RevisionId. Absence is not
 deployment authorization. For `apply`, explicitly select `add` for an absent

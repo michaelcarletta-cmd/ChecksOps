@@ -424,6 +424,20 @@
       "note": "Official production CORS-only writer, run from guarded-production-cors.yml. Requires a production-http-api apigateway-cors-update receipt owning cors:AllowOrigins + active lease + the production gate; pins API/routes/authorizer/CloudFront shape, CAS-checks the whole signed snapshot (including the Lambda and CloudFront fingerprints) before and immediately before UpdateApi, and verifies only AllowOrigins changed."
     },
     {
+      "path": "scripts/deployment-guard/github-production-checkalt-schedule.mjs",
+      "classification": "SAFE",
+      "capabilities": [
+        "production-checkalt-schedule-preflight"
+      ],
+      "note": "GitHub-hosted preflight for the production stack checksops-production-checkalt-status-schedule. Checks the template bytes against the pinned sha256 and reads the stack, its IAM role, its schedule and the prep Lambda; for create/set-state requires the inspect snapshot SHA-256, the exact approval phrase, a staging acceptance reference and (create) a platform-owner actor matching the template AllowedPattern, then takes the production-checkalt-status-schedule lease and issues a KMS-signed cloudformation receipt whose preflight fingerprint is the whole snapshot and whose owned components carry the actor or target state. Never writes AWS; production-checkalt-schedule.mjs is the only writer."
+    },
+    {
+      "path": "scripts/deployment-guard/production-checkalt-schedule.mjs",
+      "classification": "GUARDED",
+      "capabilities": ["cloudformation-create-stack", "cloudformation-update-stack"],
+      "note": "Official production writer for the checksops-production-checkalt-status-schedule stack, run from guarded-production-checkalt-schedule.yml. Requires a production-checkalt-status-schedule cloudformation receipt + active lease + the production gate; create sends only the pinned template bytes with CAPABILITY_NAMED_IAM and the actor id, set-state only UpdateStack UsePreviousTemplate with ScheduleState; CAS-checks the whole signed snapshot before and immediately before the write, waits for the stack to settle, never retries or deletes, and verifies nothing else moved."
+    },
+    {
       "path": "scripts/deployment-guard/lease.mjs",
       "classification": "GUARDED",
       "capabilities": ["lease"]
