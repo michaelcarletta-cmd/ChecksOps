@@ -152,7 +152,7 @@ test('pin: the release pin shape, pending, in step with the staging pin, the one
   }
 });
 
-test('order: no predecessor and no order; the cash-job tables, columns, function and checkalt_deposits are prerequisites; no plan entry yet; the DB validator is unchanged before the apply; the runbook, one-shot doc and README name it', () => {
+test('order: no predecessor and no order; the cash-job tables, columns, function and checkalt_deposits are prerequisites; no plan entry yet; the DB validator justifies its trigger since the staging apply; the runbook, one-shot doc and README name it', () => {
   const spec = RELEASE_SQL_SPECS[KEY];
   assert.deepEqual(spec.predecessors, []);
   for (const object of ['public.cash_jobs', 'public.cash_job_line_items', 'public.cash_job_attachments', 'public.cash_job_payments',
@@ -166,11 +166,11 @@ test('order: no predecessor and no order; the cash-job tables, columns, function
   const plan = readJson('ops/deployment-guard/production-api-overlay-plan.json');
   assert.equal((plan.sql_prerequisites || {})[SQL121_FILE], undefined);
   assert.ok(!JSON.stringify(plan.members).includes(SQL121_FILE));
-  // One public trigger more once applied; the DB validator follows after the apply (as #1309 did for
-  // SQL 120), not in this change.
+  // One public trigger more once applied: the DB validator followed the staging apply (run 40591140684),
+  // as #1309 did for SQL 120, and justifies it by name (183).
   const validator = fs.readFileSync(path.join(ROOT, 'aws/functions/api/db-readonly-validate.mjs'), 'utf8');
-  assert.doesNotMatch(validator, /aws_checkalt_deposit_cash_job_payment/);
-  assert.match(validator, /export const EXPECTED_PUBLIC_TRIGGERS = 182;/);
+  assert.match(validator, /trigger: 'aws_checkalt_deposit_cash_job_payment',\n\s+functionName: 'aws_record_cash_job_checkalt_payment'/);
+  assert.match(validator, /export const EXPECTED_PUBLIC_TRIGGERS = 183;/);
   const runbook = fs.readFileSync(path.join(ROOT, COMMITTED.tooling.runbook), 'utf8');
   assert.ok(runbook.includes(COMMITTED.intended_replacement_sha256));
   assert.ok(runbook.includes(COMMITTED.source_sha256));

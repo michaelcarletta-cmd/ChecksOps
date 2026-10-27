@@ -51,14 +51,14 @@ test('restore snapshot stays 164 names and still records the superseded Ready tr
   assert.equal(new Set(restore.map(triggerKey)).size, 164);
 });
 
-test('justified baseline is the named 182-set, not a count-only allowance', () => {
+test('justified baseline is the named 183-set, not a count-only allowance', () => {
   const justified = loadJustifiedPublicTriggers();
-  assert.equal(EXPECTED_PUBLIC_TRIGGERS, 182);
-  assert.equal(JUSTIFIED_PUBLIC_TRIGGER_COUNT, 182);
-  assert.equal(justified.length, 182);
+  assert.equal(EXPECTED_PUBLIC_TRIGGERS, 183);
+  assert.equal(JUSTIFIED_PUBLIC_TRIGGER_COUNT, 183);
+  assert.equal(justified.length, 183);
   assert.deepEqual(SUPERSEDED_PUBLIC_TRIGGERS, SCRIPT_SUPERSEDED_PUBLIC_TRIGGERS);
   assert.deepEqual(POST_RESTORE_PUBLIC_TRIGGERS, SCRIPT_POST_RESTORE_PUBLIC_TRIGGERS);
-  assert.equal(REQUIRED_PUBLIC_TRIGGERS.length, 20);
+  assert.equal(REQUIRED_PUBLIC_TRIGGERS.length, 21);
   assert.ok(!justified.some((row) => (
     row.table === 'check_endorsements'
     && row.trigger === 'trg_advance_on_endorsement_complete'
@@ -69,7 +69,7 @@ test('justified baseline is the named 182-set, not a count-only allowance', () =
   assert.ok(justified.some((row) => (
     row.table === STEPUP_TRIGGER.table && row.trigger === STEPUP_TRIGGER.trigger
   )));
-  assert.equal(new Set(justified.map(triggerKey)).size, 182);
+  assert.equal(new Set(justified.map(triggerKey)).size, 183);
 });
 
 test('same-count inventory with a swapped name fails membership comparison', () => {
@@ -80,8 +80,8 @@ test('same-count inventory with a swapped name fails membership comparison', () 
       : row
   ));
   const comparison = comparePublicTriggerInventory(swapped, justified);
-  assert.equal(comparison.expectedCount, 182);
-  assert.equal(comparison.actualCount, 182);
+  assert.equal(comparison.expectedCount, 183);
+  assert.equal(comparison.actualCount, 183);
   assert.equal(comparison.added.length, 1);
   assert.equal(comparison.missing.length, 1);
   assert.equal(comparison.changed.length, 0);
@@ -145,7 +145,7 @@ test('diagnostic reports added, missing, and changed triggers without raw extras
     definition: `CREATE TRIGGER ${inventory[0].trigger} BEFORE UPDATE ON public.${inventory[0].table} FOR EACH ROW EXECUTE FUNCTION public.unexpected_function()`,
   };
   const comparison = comparePublicTriggerInventory(inventory, justified);
-  assert.equal(comparison.expectedCount, 182);
+  assert.equal(comparison.expectedCount, 183);
   assert.equal(comparison.added.length, 1);
   assert.deepEqual(comparison.added[0], {
     table: 'user_passkeys',
@@ -164,14 +164,14 @@ test('diagnostic reports added, missing, and changed triggers without raw extras
     tables: [],
     issues: [{ kind: 'trigger', severity: 'error', message: SENSITIVE }],
     catalog: {
-      publicTriggers: 182,
+      publicTriggers: 183,
       publicTriggerInventory: inventory,
       publicTriggerInventoryTruncated: false,
       authUidResult: SENSITIVE,
     },
   }, 503);
-  assert.equal(summary.triggerInventory.expectedCount, 182);
-  assert.equal(summary.triggerInventory.actualCount, 182);
+  assert.equal(summary.triggerInventory.expectedCount, 183);
+  assert.equal(summary.triggerInventory.actualCount, 183);
   assert.equal(summary.triggerInventory.added.length, 1);
   assert.equal(summary.triggerInventory.missing.length, 1);
   assert.equal(summary.triggerInventory.changed.length, 1);
@@ -215,7 +215,7 @@ test('validator stores allowlisted inventory from the read-only catalog probe', 
         if (sql.includes("c.relname = 'users'")) return { rows: [{ present: false }] };
         if (sql.includes('pg_constraint')) return { rows: [{ fk_count: 0 }] };
         if (sql.includes('pg_get_triggerdef')) return { rows: [inventoryRow, { table_name: SENSITIVE }] };
-        if (sql.includes('pg_trigger')) return { rows: [{ trigger_count: 182 }] };
+        if (sql.includes('pg_trigger')) return { rows: [{ trigger_count: 183 }] };
         if (sql.includes('prokind')) return { rows: [{
           function_count: 0, auth_uid_functions: 0, net_functions: 0, cron_functions: 0,
           vault_functions: 0, pgmq_functions: 0,
@@ -232,10 +232,10 @@ test('validator stores allowlisted inventory from the read-only catalog probe', 
   });
   assert.ok(queries.includes(PUBLIC_TRIGGER_INVENTORY_SQL));
   assert.equal(queries.some((sql) => /^\s*(?:INSERT|UPDATE|DELETE|ALTER|DROP|CREATE|GRANT|REVOKE)\b/i.test(sql)), false);
-  assert.equal(result.catalog.publicTriggers, 182);
+  assert.equal(result.catalog.publicTriggers, 183);
   assert.deepEqual(result.catalog.publicTriggerInventory, [sanitizePublicTriggerRow(inventoryRow)]);
   assert.equal(result.catalog.publicTriggerInventoryTruncated, false);
-  assert.equal(EXPECTED_PUBLIC_TRIGGERS, 182);
+  assert.equal(EXPECTED_PUBLIC_TRIGGERS, 183);
   assert.ok(result.issues.some((item) => item.kind === 'trigger' && item.severity === 'error'));
   assert.ok(result.issues.some((item) => (
     item.kind === 'trigger'
@@ -254,15 +254,15 @@ test('diagnostic omits inventory when the live catalog has not been expanded yet
     writesAttempted: false,
     tables: [],
     issues: [{ kind: 'trigger', severity: 'error' }],
-    catalog: { publicTriggers: 182 },
+    catalog: { publicTriggers: 183 },
   }, 503);
   assert.equal(Object.hasOwn(summary, 'triggerInventory'), false);
   assert.deepEqual(summary.issues[0], {
-    kind: 'trigger', severity: 'error', probe: 'triggers', expectedCount: 182, actualCount: 182,
+    kind: 'trigger', severity: 'error', probe: 'triggers', expectedCount: 183, actualCount: 183,
   });
 });
 
-test('membership rejects a 182-count inventory that still has the superseded Ready trigger', () => {
+test('membership rejects a 183-count inventory that still has the superseded Ready trigger', () => {
   const justified = loadJustifiedPublicTriggers();
   const dumpRow = justified.find((row) => (
     !REQUIRED_PUBLIC_TRIGGERS.some((required) => triggerKey(required) === triggerKey(row))
@@ -277,20 +277,20 @@ test('membership rejects a 182-count inventory that still has the superseded Rea
       : row
   ));
   const superseded = evaluatePublicTriggerMembership({
-    publicTriggers: 182,
+    publicTriggers: 183,
     inventory,
     truncated: false,
   });
   assert.ok(superseded.some((item) => String(item.message || '').includes('trg_advance_on_endorsement_complete')));
   const missingRequired = evaluatePublicTriggerMembership({
-    publicTriggers: 182,
+    publicTriggers: 183,
     inventory: justified.filter((row) => row.trigger !== STEPUP_TRIGGER.trigger),
     truncated: false,
   });
   assert.ok(missingRequired.some((item) => String(item.message || '').includes('trg_financial_stepup_log_updated_at')));
 });
 
-test('validator accepts the exact 182-name justified inventory and no other 182-set', async () => {
+test('validator accepts the exact 183-name justified inventory and no other 183-set', async () => {
   const justified = loadJustifiedPublicTriggers();
   const identity = {
     current_database: 'checksops', current_user: 'checksops',
@@ -331,7 +331,7 @@ test('validator accepts the exact 182-name justified inventory and no other 182-
         if (sql.includes("c.relname = 'users'")) return { rows: [{ present: false }] };
         if (sql.includes('pg_constraint')) return { rows: [{ fk_count: 0 }] };
         if (sql.includes('pg_get_triggerdef')) return { rows: inventoryRows };
-        if (sql.includes('pg_trigger')) return { rows: [{ trigger_count: 182 }] };
+        if (sql.includes('pg_trigger')) return { rows: [{ trigger_count: 183 }] };
         if (sql.includes('prokind')) return { rows: [{
           function_count: 0, auth_uid_functions: 0, net_functions: 0, cron_functions: 0,
           vault_functions: 0, pgmq_functions: 0,
@@ -346,8 +346,8 @@ test('validator accepts the exact 182-name justified inventory and no other 182-
       end: async () => {},
     }),
   });
-  assert.equal(result.catalog.publicTriggers, 182);
-  assert.equal(result.catalog.publicTriggerInventory.length, 182);
+  assert.equal(result.catalog.publicTriggers, 183);
+  assert.equal(result.catalog.publicTriggerInventory.length, 183);
   assert.equal(result.issues.some((item) => item.kind === 'trigger'), false);
   const swapped = inventoryRows.map((row, index) => (
     index === 0
@@ -358,8 +358,8 @@ test('validator accepts the exact 182-name justified inventory and no other 182-
     projectPublicTriggerInventory(swapped).inventory,
     justified,
   );
-  assert.equal(drifted.expectedCount, 182);
-  assert.equal(drifted.actualCount, 182);
+  assert.equal(drifted.expectedCount, 183);
+  assert.equal(drifted.actualCount, 183);
   assert.equal(drifted.added.length, 1);
   assert.equal(drifted.missing.length, 1);
 });
