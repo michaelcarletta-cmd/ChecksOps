@@ -149,7 +149,7 @@ test('allowlists classifications and assertion counts, never copies raw payload 
   assert.deepEqual(result.issues, [
     { kind: 'count_mismatch', severity: 'error', probe: 'row_count', table: 'claims', expectedCount: 180, actualCount: 179 },
     { kind: 'permission', severity: 'error', probe: 'rls_visibility', table: 'profiles', expectedCount: 0, actualCount: 8 },
-    { kind: 'trigger', severity: 'error', probe: 'triggers', expectedCount: 182, actualCount: 164 },
+    { kind: 'trigger', severity: 'error', probe: 'triggers', expectedCount: 183, actualCount: 164 },
     { kind: 'missing_fk', severity: 'error', probe: 'auth_users_fks', expectedCount: 47, actualCount: 1 },
     { kind: 'query', severity: 'error', probe: 'privileges' },
     { kind: 'unclassified', severity: 'error', probe: 'unclassified' },

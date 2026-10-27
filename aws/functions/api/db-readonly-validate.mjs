@@ -52,7 +52,7 @@ export const EXPECTED_ROW_COUNTS = {
 
 export const EXPECTED_DATABASE = 'checksops';
 export const EXPECTED_SKIPPED_AUTH_USERS_FKS = 47;
-export const EXPECTED_PUBLIC_TRIGGERS = 182;
+export const EXPECTED_PUBLIC_TRIGGERS = 183;
 
 export const SUPERSEDED_PUBLIC_TRIGGERS = Object.freeze([
   Object.freeze({
@@ -168,6 +168,12 @@ export const POST_RESTORE_PUBLIC_TRIGGERS = Object.freeze([
     table: 'payment_transfers',
     trigger: 'aws_payment_transfer_send_speed_fee',
     functionName: 'aws_record_send_speed_fee',
+  }),  // SQL 121 (121_cash_jobs_production_grants.sql), applied to staging 2026-10-27 (run 40591140684):
+  // the cash-job payment recorded when a Check Alt deposit is approved or accepted.
+  Object.freeze({
+    table: 'checkalt_deposits',
+    trigger: 'aws_checkalt_deposit_cash_job_payment',
+    functionName: 'aws_record_cash_job_checkalt_payment',
   }),
 ]);
 
