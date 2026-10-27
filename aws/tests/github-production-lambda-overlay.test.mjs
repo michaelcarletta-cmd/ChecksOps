@@ -917,9 +917,9 @@ test('fee collection: eleven members on the fee manifest, collection-v2 then des
   assert.equal(PLAN.members[DEPOSITS_GATE].expected_live_sha256, null);
   assert.equal(PLAN.members[DEPOSITS_GATE].sql_before, null);
   assert.equal((await run(applyEnv(DEPOSITS_GATE), applyDeps(DEPOSITS_GATE).deps)).mutation, false);
-  // SQL 98 holds the engine; the handlers (profile-update, member-remove) wait on SQL 102, which
-  // requires SQL 98 (SQL 98 itself requires SQL 96).
-  assert.equal(PLAN.members[ENGINE].sql_before, SQL98);
+  // SQL 120 (send-time fees, after SQL 98) now holds the engine; the handlers (profile-update,
+  // member-remove) wait on SQL 102, which requires SQL 98 (SQL 98 itself requires SQL 96).
+  assert.equal(PLAN.members[ENGINE].sql_before, 'aws/workflows/sql/120_usage_events_at_approval_and_send.sql');
   assert.equal(PLAN.members[HANDLERS].sql_before, SQL102);
   // SQL 102 is recorded live in production since its guarded apply of 2026-10-20 (#1079).
   const pre102 = PLAN.sql_prerequisites[SQL102];
@@ -968,7 +968,13 @@ test('fee collection: eleven members on the fee manifest, collection-v2 then des
   // are replayed from the pre-apply live bytes (338f93e1, the fee branch's accepted bytes): a REPLACE
   // that still has to pass every gate.
   const ENGINE_PRE = fees.members[ENGINE].accepted_sha256;
-  const enginePre = (plan) => { plan.members[ENGINE].expected_live_sha256 = ENGINE_PRE; return plan; };
+  // The row has since moved on to SQL 120 (send-fee billing, 2026-10-27); the replay restores the
+  // SQL 98 hold it had then.
+  const enginePre = (plan) => {
+    plan.members[ENGINE].expected_live_sha256 = ENGINE_PRE;
+    plan.members[ENGINE].sql_before = SQL98;
+    return plan;
+  };
   const engineEnv = () => applyEnv(ENGINE, { CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: ENGINE_PRE });
   const engineDeps = (liveOpts = {}) => applyDeps(ENGINE, { sha256: ENGINE_PRE, ...liveOpts });
   // The handlers' row likewise records its applied tenant lifecycle bytes live (2026-10-27), so their
@@ -1425,30 +1431,54 @@ test('referral billing credit: tenant-billing-engine.mjs expected_live records t
   assert.match(manifest.notes, /run 39932114735/);
   assert.deepEqual(Object.keys(manifest.members), [ENGINE]);
   assert.deepEqual(manifest.members[ENGINE], { live_sha256: LIVE, accepted_sha256: LIVE, operation: 'replace' });
+  // The plan row moved on to the send-fee billing change (checked in its own test below); its
+  // expected live bytes are the bytes this apply put live.
   const row = PLAN.members[ENGINE];
   assert.equal(row.operation, 'replace');
-  assert.equal(row.manifest, MANIFEST_REL);
   assert.equal(row.expected_live_sha256, LIVE);
-  assert.equal(row.accepted_sha256, LIVE);
-  assert.equal(sha(`aws/functions/api/${ENGINE}`), LIVE);
-  assert.equal(row.sql_before, 'aws/workflows/sql/98_tenant_fee_collection.sql');
   // The fee manifest's accepted bytes are the pre-apply bytes.
   const fees = JSON.parse(fs.readFileSync(path.join(ROOT, MANIFEST_FEES), 'utf8'));
   assert.equal(fees.members[ENGINE].accepted_sha256, BEFORE);
-  assert.equal(resolvePlannedMember(ENGINE, { root: ROOT, plan: PLAN }).ok, true);
-  assert.ok(PLAN.order.includes(ENGINE));
-  const done = await run({ ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: ENGINE }, { root: ROOT, inspectLive: liveFor(ENGINE) });
-  assert.equal(done.state, 'ALREADY_ACCEPTED');
-  assert.equal(done.mutation, false);
-  // The pre-apply bytes are no longer an accepted live state.
+  // The pre-apply bytes are not an accepted live state.
   await assert.rejects(
     run({ ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: ENGINE }, { root: ROOT, inspectLive: liveFor(ENGINE, { sha256: BEFORE }) }),
     (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
   );
-  // The live bytes read the SQL 111 credit through optionalQuery and export the discount rule.
+  // The bytes now on main still read the SQL 111 credit and export the discount rule.
   const source = fs.readFileSync(path.join(API, ENGINE), 'utf8');
   assert.match(source, /aws_tenant_referral_credit_cents\(\$1::uuid\)/);
   assert.match(source, /export const maintenanceDiscountCents/);
+});
+
+test('send-fee billing: tenant-billing-engine.mjs REPLACEs the 43d9a162 bytes production inspect run 40566119078 found live (after SQL 120)', async () => {
+  const ENGINE = 'tenant-billing-engine.mjs';
+  const MANIFEST_REL = 'aws/tests/fixtures/production-billing-send-fee-events-manifest-2026-10-27.json';
+  // The member of the live package (read-only production overlay inspect run 40566119078,
+  // ALREADY_ACCEPTED, CodeSha256 5w11XWe+2lgTnWTm5zQBrVWJftLs74DnwW6sZmoYbl8=): the referral credit bytes.
+  const LIVE = '43d9a162445bf8e84824d4f60180cbcfab7b0cdae54cee1caf127a9fbb17f7f3';
+  const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, MANIFEST_REL), 'utf8'));
+  assert.equal(manifest.workstream_id, 'billing-send-fee-events');
+  assert.equal(manifest.deploy_authorized, false);
+  assert.match(manifest.notes, /run 40566119078/);
+  assert.match(manifest.notes, /5w11XWe\+2lgTnWTm5zQBrVWJftLs74DnwW6sZmoYbl8=/);
+  assert.deepEqual(Object.keys(manifest.members), [ENGINE]);
+  const row = PLAN.members[ENGINE];
+  assert.deepEqual(manifest.members[ENGINE], { live_sha256: LIVE, accepted_sha256: row.accepted_sha256, operation: 'replace' });
+  assert.equal(row.operation, 'replace');
+  assert.equal(row.manifest, MANIFEST_REL);
+  assert.equal(row.expected_live_sha256, LIVE);
+  assert.equal(row.accepted_sha256, sha(`aws/functions/api/${ENGINE}`));
+  assert.notEqual(row.accepted_sha256, LIVE);
+  // The engine bills the fee SQL 120 writes at send time: SQL 120 goes first.
+  assert.equal(row.sql_before, 'aws/workflows/sql/120_usage_events_at_approval_and_send.sql');
+  assert.equal(resolvePlannedMember(ENGINE, { root: ROOT, plan: PLAN }).ok, true);
+  assert.ok(PLAN.order.includes(ENGINE));
+  const ready = await run({ ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: ENGINE }, { root: ROOT, inspectLive: liveFor(ENGINE, { sha256: LIVE }) });
+  assert.equal(ready.state, 'READY');
+  assert.equal(ready.mutation, false);
+  const source = fs.readFileSync(path.join(API, ENGINE), 'utf8');
+  assert.match(source, /export const sendRecipientKey/);
+  assert.match(source, /NOT_A_SEND_LEG_ROLES = \['wallet_funding', 'parent', 'platform_fee'\]/);
 });
 
 test('Refer & Earn routes: data.mjs and workflow-rpc.mjs expected_live record the bytes production runs 39941822534 and 39942182669 applied', async () => {

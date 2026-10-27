@@ -105,6 +105,12 @@
       "evidence": "2026-10-20 guarded production SQL one-shot on i-0c35557c4e5385406 (SSM 5896b901-2b8d-44da-91cf-65b6038c2907, workstream prod-sql105-onboarding-payment-table-grants-20261020, main 139600a45, one_use_id sql105-prod-841a42c3-2bcb-4709-bc31-64fe71b2a9cb): 06579587\u2026 -> a67bc0a6\u2026; post-apply read-only inspect already_applied true (authenticated and checksops SELECT, INSERT, UPDATE on payment_provider_accounts, payment_provider_methods and payment_method_verifications; SELECT, INSERT on payment_event_log); owner-accepted substitute staging evidence run 39433193531; recorded in ops/deployment-guard/sql105-onboarding-payment-table-grants-production-apply.json (applied, #1091)",
       "pin": "ops/deployment-guard/sql105-onboarding-payment-table-grants-production-apply.json",
       "note": "The table grants SQL 91 omitted on payment_provider_accounts, payment_provider_methods, payment_method_verifications and payment_event_log (successor of SQL 91; the same gap SQL 104 closed for payment_idempotency_keys). Holds providers/onboarding/store.mjs, providers/onboarding/handlers.mjs and providers/onboarding/webhook-status.mjs (sql_before), the onboarding members that write those tables; providers/onboarding/moov-sync.mjs (which also writes payment_provider_accounts) stays held by SQL 104, and the onboarding members after each in order wait for it too."
+    },
+    "aws/workflows/sql/120_usage_events_at_approval_and_send.sql": {
+      "verified_live": true,
+      "evidence": "2026-10-27 guarded production SQL one-shot on i-0c35557c4e5385406 (SSM 0c164128-b7cb-4e42-b1a4-28c3fa42d7eb, run 9e8ff872-d8d6-4bc0-822f-c942b3aa944b, workstream prod-sql120-usage-events-20261027, main 3a8a9993a, one_use_id sql120-prod-8cf035b2-f369-4624-b8c4-ae42c25182d8): f3c1dd26… -> fc9d0e34…; post-apply inspect already_applied true; staging acceptance run 40547527832; recorded in ops/deployment-guard/sql120-usage-events-at-approval-and-send-production-apply.json (applied, #1304)",
+      "pin": "ops/deployment-guard/sql120-usage-events-at-approval-and-send-production-apply.json",
+      "note": "Records the next-day / same-day fee once per recipient of a send at send time and voids it when every leg failed (SQL 120). Holds tenant-billing-engine.mjs (sql_before), which bills those fees instead of deriving one per leg."
     }
   },
   "order": [
@@ -861,10 +867,10 @@
     },
     "tenant-billing-engine.mjs": {
       "operation": "replace",
-      "accepted_sha256": "43d9a162445bf8e84824d4f60180cbcfab7b0cdae54cee1caf127a9fbb17f7f3",
+      "accepted_sha256": "bccffbe7aa9b21d3052a832f1d2c4b9ec4b333b1727156773b1ac034be96860c",
       "expected_live_sha256": "43d9a162445bf8e84824d4f60180cbcfab7b0cdae54cee1caf127a9fbb17f7f3",
-      "sql_before": "aws/workflows/sql/98_tenant_fee_collection.sql",
-      "manifest": "aws/tests/fixtures/production-referral-billing-engine-manifest-2026-10-23.json"
+      "sql_before": "aws/workflows/sql/120_usage_events_at_approval_and_send.sql",
+      "manifest": "aws/tests/fixtures/production-billing-send-fee-events-manifest-2026-10-27.json"
     },
     "tenant-billing-handlers.mjs": {
       "operation": "replace",
