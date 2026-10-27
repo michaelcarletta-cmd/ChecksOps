@@ -1,8 +1,8 @@
 {
   "id": "sql118-platform-owner-tenant-lifecycle-production-apply",
   "migration": "sql118",
-  "authorization": "Owner approved 2026-10-27 (the owner's words, verbatim: \"SQL 117 to production\" (the tenant lifecycle, which SQL 118 now carries) and \"Go\"; this pin change is bound to that approval and takes effect only once the owner reviews and merges it): production apply of SQL 118 on the staging acceptance below (production 1b5eec31635d869abbabc9d4584674ee5852a27689629d9c199627d7c8653cde -> 6f9e2ef349c397ab4df81337139776287e2b6e8a85d4108ae090604717476925); execute true takes effect only once this change is merged. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
-  "execute": true,
+  "authorization": "Applied to production on 2026-10-27; execute is false again, so this pin is no longer a standing authorization and a re-apply needs a new reviewed pin change. The owner approved the SQL 118 production pin on 2026-10-27 (#1283, merged on \"Merge 1283 when green\"; its authorization cited the owner's words \"SQL 117 to production\" and \"Go\"), which covered the SQL 118 production pin (1b5eec31 -> 6f9e2ef3), the read-only production inspect, the staging acceptance and the execute change, and approved the one apply run recorded in applied (workstream prod-sql118-tenant-lifecycle-20261027) in the words \"Apply SQL 118 in production\", passed to it verbatim. That approval covered that run only",
+  "execute": false,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -66,5 +66,103 @@
     "ok": true,
     "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/40438147297",
     "basis": "Guarded staging apply from the same pre-state as production. The guarded staging SQL executor (choice sql118-platform-owner-tenant-lifecycle) carried SQL 118 from deploy run 40436720850 (before it the executor was QKETFJsusK67/GaJoAN8nrF2AO6Jp74KOT+m790WK4w= without SQL 118) and the authorized staging pin from deploy run 40437966024 (Am+LSNC5uOlurpduaFnLJEn5XVEawpd9z+vgcnitdoA=). Read-live run 40436888477 (2026-10-27, main 7cd3272) reported already_applied false, precondition_failures [] and live 1b5eec31635d869abbabc9d4584674ee5852a27689629d9c199627d7c8653cde, recorded as the staging pin's expected_live_definition_sha256. The staging apply run 40438147297 (2026-10-27, staging pin commit f055ae5b00ddaf8d11a2a20aae50238a664554e2, main 58c99eb57) reported result applied, before 1b5eec31635d869abbabc9d4584674ee5852a27689629d9c199627d7c8653cde, after 6f9e2ef349c397ab4df81337139776287e2b6e8a85d4108ae090604717476925 = intended_replacement_sha256. The read-live after it (run 40438403321) reported already_applied true and live 6f9e2ef349c397ab4df81337139776287e2b6e8a85d4108ae090604717476925 = intended_replacement_sha256: tenant_deactivations intended (RLS on, no policy, table_privileges []) and the six functions intended with EXECUTE for authenticated, checksops and the owner. The pre-states are identical: staging before its apply and production at its inspect (SSM 7e8004f8-aad0-45ef-993a-f17a04b13304) both report 1b5eec31635d869abbabc9d4584674ee5852a27689629d9c199627d7c8653cde, so this is direct acceptance from the same pre-state, not substitute evidence. SQL 117, which SQL 118 replaces, rolled back in staging (run 40434533070) because the new table kept default-privilege grants; SQL 118 revokes them, and aws/tests/sql118-platform-owner-tenant-lifecycle-pg.test.mjs covers that case on PostgreSQL 16. The production apply refuses unless the live state still equals this pin's expected_live_definition_sha256, and its post-conditions roll back unless the intended fingerprint is reached with the rest of the catalog unchanged."
+  },
+  "applied": {
+    "date": "2026-10-27",
+    "result": "applied",
+    "source_commit": "4d9763eff050b7ca9471892562882d60da9419f5",
+    "source_commit_basis": "SOURCE_COMMIT in the tarball (written by sql53-temporary-transfer) equals --commit, and the tarball sha256 equals --expected-tarball-sha256 as copied by the operator from that transfer run's log (TARBALL_SHA256 line); the one-shot source step reported tarball_sha256_matches_sidecar true, tarball_sha256_matches_expected true, tree_matches_tarball true and tarball_files 12789; the run log itself was not read by the one-shot.",
+    "source_tarball": {
+      "file": "source-4d9763eff050b7ca9471892562882d60da9419f5.tar.gz",
+      "sha256": "f669e85678a64cb3ee43f0e0a7cdd27e7694197ff48be0b75982473311f848f1"
+    },
+    "migration_source_sha256": "f10655a8f105436b4a020be5564186e335f1f6bb06f840742c939879bdba45a5",
+    "migration_source_sha256_note": "The one-shot source step hashed aws/workflows/sql/118_platform_owner_tenant_lifecycle.sql in the transfer tarball: equal to source_sha256 (the pin; migration_matches_pin true).",
+    "runner": "i-0c35557c4e5385406",
+    "runner_basis": "operator-supplied --runner (not verified by the one-shot)",
+    "workstream_id": "prod-sql118-tenant-lifecycle-20261027",
+    "one_use_id": "sql118-prod-327fe57a-22b1-452f-afdc-6c52b653f153",
+    "one_use_id_consumed": true,
+    "one_use_id_consumed_basis": "Inferred from the successful apply (the tool records the one_use_id after COMMIT and only warns if that write fails); the consumed-registry entry was not read back separately.",
+    "owner_approval": "Apply SQL 118 in production",
+    "owner_approval_basis": "As passed in --approval-statement (base64, --approval-statement-b64) for --approval-scope sql118 and recorded by the one-shot as approval_statement; the owner's message of 2026-10-27 was \"Apply SQL 118 in production\". The one-shot cannot verify who said it.",
+    "operator": "michaelcarletta-cmd",
+    "apply_ssm_command_id": "9bccc7c9-9fe2-4e6f-988d-a778f07b1607",
+    "one_shot_run_id": "a47888ef-daf8-4add-adac-3a703176b67d",
+    "one_shot_note": "One SSM command (9bccc7c9-9fe2-4e6f-988d-a778f07b1607, 2026-10-27T10:45:37Z to 10:46:03Z, exit 0) ran the production-sql-one-shot twice from main 4d9763eff (transfer run 40439891990, sql53-temporary-transfer.yml on main after the #1283 merge; it printed TARBALL_SHA256 f669e85678a64cb3ee43f0e0a7cdd27e7694197ff48be0b75982473311f848f1) with the same commit, tarball, workstream and approval statement: first the read-only --phase inspect (run_id 04a48489-5dce-473d-81e5-c6347ac28b9b), which completed pin (execute true, staging_acceptance run 40438147297), source, inspect and contracts (claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43) with read_only true, live 1b5eec31635d869abbabc9d4584674ee5852a27689629d9c199627d7c8653cde (live_matches_expected true), already_applied false, precondition_failures [] and apply_preconditions_met true, current_user and session_user checksops_admin; then, under set -e only after that succeeded, --phase apply (run_id a47888ef-daf8-4add-adac-3a703176b67d): steps pin, source, inspect, contracts, manifest, source-recheck-before-preflight, preflight (receipt_issued), evaluate (sql118_production_apply_allowed true), source-recheck-before-apply, apply (applied) and post-apply-inspect all ok. SSM returns at most 24000 characters of standard output, so the end of the apply run's JSON (after the applied block's pre_apply_inspect) was not captured; every value recorded here (steps, contract results, manifest sha256, one_use_id, the receipt with its unrelated catalog, and the post-apply inspect) was printed in the captured part.",
+    "steps": [
+      "pin",
+      "source",
+      "inspect",
+      "contracts",
+      "manifest",
+      "source-recheck-before-preflight",
+      "preflight",
+      "evaluate",
+      "source-recheck-before-apply",
+      "apply",
+      "post-apply-inspect"
+    ],
+    "contract_results": {
+      "claim-ledger": {
+        "ok": true,
+        "passed": "4/4"
+      },
+      "tenant-isolation": {
+        "ok": true,
+        "passed": "6/6"
+      },
+      "financial-write-protections": {
+        "ok": true,
+        "passed": "43/43"
+      }
+    },
+    "pre_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "1b5eec31635d869abbabc9d4584674ee5852a27689629d9c199627d7c8653cde",
+      "live_matches_expected": true,
+      "already_applied": false,
+      "precondition_failures": [],
+      "note": "The apply run's own inspect step (read-only --inspect) immediately before the apply: live == the recorded pre-state 1b5eec31..., live_matches_expected true, already_applied false, apply_preconditions_met true, precondition_failures [], missing_dependencies [], successors_applied []; tenant_deactivations and the six functions state absent. It matched the read-only --phase inspect run 04a48489-5dce-473d-81e5-c6347ac28b9b of the same SSM command."
+    },
+    "manifest_sha256": "09ec4d5ce12191aba593c7e43007202230b7fc7969d10969c09ce3d156c30c81",
+    "receipt": {
+      "migration": "sql118",
+      "workstream": "prod-sql118-tenant-lifecycle-20261027",
+      "commit": "4d9763eff050b7ca9471892562882d60da9419f5",
+      "sql_file": "aws/workflows/sql/118_platform_owner_tenant_lifecycle.sql",
+      "before_hash": "1b5eec31635d869abbabc9d4584674ee5852a27689629d9c199627d7c8653cde",
+      "after_hash": "6f9e2ef349c397ab4df81337139776287e2b6e8a85d4108ae090604717476925",
+      "unrelated_catalog_sha256": "a6eed7366bc54d0176782d8a06ff990799bca5659a800d0a054a70a45dc7737a",
+      "unrelated_catalog_counts": {
+        "relations": 890,
+        "columns": 3543,
+        "constraints": 2234,
+        "policies": 404,
+        "functions": 1326,
+        "indexes": 654,
+        "default_acl": 0,
+        "role_memberships": 15,
+        "roles": 29,
+        "triggers": 180,
+        "views": 25,
+        "types": 18,
+        "schema": 2
+      },
+      "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/40438147297",
+      "result": "applied"
+    },
+    "post_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "6f9e2ef349c397ab4df81337139776287e2b6e8a85d4108ae090604717476925",
+      "already_applied": true,
+      "precondition_failures": [],
+      "missing_dependencies": [],
+      "predecessors_applied": true,
+      "note": "The one-shot post-apply read-only --inspect: already_applied true (live == intended 6f9e2ef3..., so live_matches_expected false and apply_preconditions_met false), precondition_failures [], missing_dependencies [], predecessors_applied true, successors_applied []; tenant_deactivations intended (rls true, 6 columns, no policy, table_privileges []) and the six functions intended with EXECUTE for authenticated, checksops and the owner, as the receipt's release_sql_inspect also reported. current_user and session_user checksops_admin."
+    }
+  },
+  "production_evidence": {
+    "2026-10-27 apply": "Guarded production SQL one-shot on i-0c35557c4e5385406, workstream prod-sql118-tenant-lifecycle-20261027, main 4d9763eff (tarball f669e856…, transfer run 40439891990, migration source f10655a8… == pin), owner-approved run (\"Apply SQL 118 in production\"), SSM 9bccc7c9-9fe2-4e6f-988d-a778f07b1607, run_id a47888ef-daf8-4add-adac-3a703176b67d, one_use_id sql118-prod-327fe57a-22b1-452f-afdc-6c52b653f153 (spent): every step ok; contracts claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43; pre-apply inspect live 1b5eec31… (live_matches_expected true, precondition_failures []); manifest 09ec4d5c…; 1b5eec31… -> 6f9e2ef3…, result applied, unrelated catalog a6eed736…; post-apply inspect already_applied true, precondition_failures []. After: public.tenant_deactivations (RLS on, no policy, no grant) and the six platform-owner tenant lifecycle functions (EXECUTE authenticated, checksops, owner). Preceded in the same SSM command by the read-only --phase inspect run 04a48489-5dce-473d-81e5-c6347ac28b9b. No later inspect is recorded. execute is false so the pin is no longer a standing authorization."
   }
 }
