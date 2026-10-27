@@ -48,8 +48,20 @@ read-live as its staging acceptance and `execute: true` under the owner's words 
 "Approve a pin PR for SQL 119, then one for SQL 115". Each apply still needs the owner's run-time
 approval.
 
-**Status:** staging already in the intended state (no apply); production pin execute-authorized;
-production apply pending. SQL 115's production pre-state changes with SQL 119 (its fingerprint
+**Production apply (2026-10-27).** After the pin change (#1289, merged on "Merge 1289 when green"),
+transfer run 40503922422 staged main `a01deea9b` (tarball sha256
+`77e9e5d3f967ce8259518e6fcf1c64af8fb6c50c6b1fe8b44dce489bc0f70f07`). One-shot `--phase apply` run
+`924b34f9-4fc6-446f-9190-e4bd9529cac8` through SSM `2a047b4d-b43b-45c4-8152-1bd4372daed9`, workstream
+`prod-sql119-provider-stakeholder-sync-acl-20261027`, under the owner's words "Apply in production: SQL
+119 first, then SQL 115" (passed verbatim): every step ok, contracts 4/4, 6/6 and 43/43; receipt
+`249237de…` → `3d62a511f479415b3a30ec532583527dc0f457ef3e6a2810bdccfab707dc0888` (intended), result
+`applied`, unrelated catalog `7bebf201…`; post-apply inspect `already_applied` true. The one-shot exited
+0; the SSM command reported Failed only because a `grep` in the operator's wrapper, after the one-shot,
+matched nothing. The read-only inspect of SSM `6f6692d8-3801-4b70-b51c-dd9749e723b4` then reported SQL
+119 `already_applied` true and SQL 115 `precondition_failures` `[]`.
+
+**Status:** staging already in the intended state (no apply); applied to production (2026-10-27); the production pin is retired
+(`execute: false`). SQL 115 follows (`ops/production-sql-115-apply.md`). SQL 115's production pre-state changes with SQL 119 (its fingerprint
 includes the ACL), so SQL 115's pin records a production inspect taken after SQL 119's apply.
 
 ## Run order (production)

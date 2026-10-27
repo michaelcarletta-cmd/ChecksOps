@@ -1,8 +1,8 @@
 {
   "id": "sql119-provider-stakeholder-sync-acl-production-apply",
   "migration": "sql119",
-  "authorization": "Owner approved 2026-10-27 (the owner's words of 2026-10-27: \"Approve a pin PR for SQL 119, then one for SQL 115\"; the change itself is reviewed and merged by the owner): production apply of SQL 119 after the staging acceptance below (production 249237decc1f079bf04915a5f42862792efb13f00729a8d0bbbfdb8b5c456e35 -> 3d62a511f479415b3a30ec532583527dc0f457ef3e6a2810bdccfab707dc0888), immediately before SQL 115; execute true takes effect only when the owner reviews and merges this change. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
-  "execute": true,
+  "authorization": "Applied to production on 2026-10-27; execute is false again, so this pin is no longer a standing authorization and a re-apply needs a new reviewed pin change. The owner approved the SQL 119 production pin on 2026-10-27 (#1289, merged on \"Merge 1289 when green\"; its authorization cited the owner's words \"Approve a pin PR for SQL 119, then one for SQL 115\"), which covered the SQL 119 production pin (249237de -> 3d62a511), the read-only production inspect, the staging acceptance and the execute change, and approved the one apply run recorded in applied (workstream prod-sql119-provider-stakeholder-sync-acl-20261027) in the words \"Apply in production: SQL 119 first, then SQL 115\", passed to it verbatim. That approval covered that run only",
+  "execute": false,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -60,5 +60,103 @@
     "ok": true,
     "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/40501861802",
     "basis": "Guarded staging SQL executor read-live of sql119-provider-stakeholder-sync-acl, run 40501861802 (2026-10-27, main 24c7c545e), on the executor deployed from main 24c7c545e (deploy run 40501540682: Am+LSNC5uOlurpduaFnLJEn5XVEawpd9z+vgcnitdoA= -> Ffm7CRLPMz9OjoPT/mOeArKcoig4/C/F3OoSYvqF398=, adding sql/119_provider_stakeholder_sync_acl.sql): live_definition_sha256 3d62a511f479415b3a30ec532583527dc0f457ef3e6a2810bdccfab707dc0888 == intended, already_applied true, precondition_failures []; acl_functions sync_provider_stakeholder_account(uuid) intended, ACL [owner EXECUTE grantor=owner]. Staging's function is already owner-only because SQL 115 is applied there (read-live run 40501865500 of the same day: SQL 115 already_applied true, live 8aed39a49d988a60bdedac07a3a97f424a9de5c1499e4f50738f749326a62452 == intended, function_acl [owner EXECUTE]), so no staging apply was needed or run (ops/production-sql-119-apply.md step 1: the read-live run is the staging acceptance); the staging pin stays pending (execute false). The pre-states differ: staging is already the intended state (3d62a511f479415b3a30ec532583527dc0f457ef3e6a2810bdccfab707dc0888) and production (production_inspect) is 249237decc1f079bf04915a5f42862792efb13f00729a8d0bbbfdb8b5c456e35 (EXECUTE also for PUBLIC and checksops). The revoke path itself is covered on PostgreSQL 16 by aws/tests/sql119-provider-stakeholder-sync-acl-pg.test.mjs from production's ACL (SQL 115 refused, SQL 119 applied, then SQL 115 reaching its intended fingerprint). The post-state fingerprint is the same in both environments (owner names are not part of it); the same file bytes (source_sha256) are pinned in both."
+  },
+  "applied": {
+    "date": "2026-10-27",
+    "result": "applied",
+    "source_commit": "a01deea9b89154f79e2ba40d2de0d050c064806a",
+    "source_commit_basis": "SOURCE_COMMIT in the tarball (written by sql53-temporary-transfer) equals --commit, and the tarball sha256 equals --expected-tarball-sha256 as copied by the operator from that transfer run's log (TARBALL_SHA256 line); the one-shot source step reported tarball_sha256_matches_sidecar true, tarball_sha256_matches_expected true, tree_matches_tarball true and tarball_files 12801; the run log itself was not read by the one-shot.",
+    "source_tarball": {
+      "file": "source-a01deea9b89154f79e2ba40d2de0d050c064806a.tar.gz",
+      "sha256": "77e9e5d3f967ce8259518e6fcf1c64af8fb6c50c6b1fe8b44dce489bc0f70f07"
+    },
+    "migration_source_sha256": "aed7a418e5776f1eeb00f3eb67287bb3177ec4898c14105e44d1eeea5868a30b",
+    "migration_source_sha256_note": "The one-shot source step hashed aws/workflows/sql/119_provider_stakeholder_sync_acl.sql in the transfer tarball: equal to source_sha256 (the pin; migration_matches_pin true).",
+    "runner": "i-0c35557c4e5385406",
+    "runner_basis": "operator-supplied --runner (not verified by the one-shot)",
+    "workstream_id": "prod-sql119-provider-stakeholder-sync-acl-20261027",
+    "one_use_id": "sql119-prod-ffb5846b-682d-400b-8b49-323215e196f5",
+    "one_use_id_consumed": true,
+    "one_use_id_consumed_basis": "Inferred from the successful apply (the tool records the one_use_id after COMMIT and only warns if that write fails); the consumed-registry entry was not read back separately.",
+    "owner_approval": "Apply in production: SQL 119 first, then SQL 115",
+    "owner_approval_basis": "As passed in --approval-statement (base64, --approval-statement-b64) for --approval-scope sql119 and recorded by the one-shot as approval_statement; the owner's message of 2026-10-27 listed \"Apply in production: SQL 119 first, then SQL 115\". The one-shot cannot verify who said it.",
+    "operator": "michaelcarletta-cmd",
+    "apply_ssm_command_id": "2a047b4d-b43b-45c4-8152-1bd4372daed9",
+    "one_shot_run_id": "924b34f9-4fc6-446f-9190-e4bd9529cac8",
+    "one_shot_note": "One SSM command (2a047b4d-b43b-45c4-8152-1bd4372daed9, 2026-10-27) ran the production-sql-one-shot --phase apply (run_id 924b34f9-4fc6-446f-9190-e4bd9529cac8) from main a01deea9b (transfer run 40503922422, sql53-temporary-transfer.yml on main after the #1289 merge; it printed TARBALL_SHA256 77e9e5d3f967ce8259518e6fcf1c64af8fb6c50c6b1fe8b44dce489bc0f70f07): steps pin (execute true, staging_acceptance run 40501861802), source, inspect, contracts, manifest, source-recheck-before-preflight, preflight (receipt_issued), evaluate (sql119_production_apply_allowed true), source-recheck-before-apply, apply (applied) and post-apply-inspect all ok; the one-shot exited 0 and its whole JSON (17824 bytes) was captured. The SSM command itself reported Failed (exit status 1) only because of the operator's wrapper: after the one-shot had exited 0 and its output was printed, a final grep over the one-shot's stderr found no lines and returned 1 under set -e. The read-only inspect of the same day (SSM 6f6692d8-3801-4b70-b51c-dd9749e723b4, main a01deea9b) confirmed SQL 119 in place (later_inspect).",
+    "steps": [
+      "pin",
+      "source",
+      "inspect",
+      "contracts",
+      "manifest",
+      "source-recheck-before-preflight",
+      "preflight",
+      "evaluate",
+      "source-recheck-before-apply",
+      "apply",
+      "post-apply-inspect"
+    ],
+    "contract_results": {
+      "claim-ledger": {
+        "ok": true,
+        "passed": "4/4"
+      },
+      "tenant-isolation": {
+        "ok": true,
+        "passed": "6/6"
+      },
+      "financial-write-protections": {
+        "ok": true,
+        "passed": "43/43"
+      }
+    },
+    "pre_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "249237decc1f079bf04915a5f42862792efb13f00729a8d0bbbfdb8b5c456e35",
+      "live_matches_expected": true,
+      "already_applied": false,
+      "precondition_failures": [],
+      "note": "The apply run's own inspect step (read-only --inspect) immediately before the apply: live == the recorded pre-state 249237de..., live_matches_expected true, already_applied false, apply_preconditions_met true, precondition_failures [], missing_dependencies [], successors_applied []; acl_functions sync_provider_stakeholder_account(uuid) different, ACL [PUBLIC EXECUTE grantor=owner, checksops EXECUTE grantor=owner, owner EXECUTE grantor=owner]."
+    },
+    "manifest_sha256": "4bfbdae91dfbe6958b42364ab428e9f26a64f40b0d648c43e191193ac0ee965d",
+    "receipt": {
+      "migration": "sql119",
+      "workstream": "prod-sql119-provider-stakeholder-sync-acl-20261027",
+      "commit": "a01deea9b89154f79e2ba40d2de0d050c064806a",
+      "sql_file": "aws/workflows/sql/119_provider_stakeholder_sync_acl.sql",
+      "before_hash": "249237decc1f079bf04915a5f42862792efb13f00729a8d0bbbfdb8b5c456e35",
+      "after_hash": "3d62a511f479415b3a30ec532583527dc0f457ef3e6a2810bdccfab707dc0888",
+      "unrelated_catalog_sha256": "7bebf20193526296a7dd20a319999fdec2eb1e36d8b99a533a86fcdcb7222ac1",
+      "unrelated_catalog_counts": {
+        "relations": 892,
+        "columns": 3549,
+        "constraints": 2239,
+        "policies": 404,
+        "functions": 1331,
+        "indexes": 655,
+        "default_acl": 0,
+        "role_memberships": 15,
+        "roles": 29,
+        "triggers": 180,
+        "views": 25,
+        "types": 18,
+        "schema": 2
+      },
+      "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/40501861802",
+      "result": "applied"
+    },
+    "post_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "3d62a511f479415b3a30ec532583527dc0f457ef3e6a2810bdccfab707dc0888",
+      "already_applied": true,
+      "precondition_failures": [],
+      "missing_dependencies": [],
+      "predecessors_applied": true,
+      "note": "The one-shot post-apply read-only --inspect: already_applied true (live == intended 3d62a511..., so live_matches_expected false and apply_preconditions_met false), precondition_failures [], missing_dependencies [], predecessors_applied true, successors_applied []; acl_functions sync_provider_stakeholder_account(uuid) intended, ACL [owner EXECUTE grantor=owner], as the receipt's release_sql_inspect also reported. current_user and session_user checksops_admin."
+    }
+  },
+  "production_evidence": {
+    "2026-10-27 apply": "Guarded production SQL one-shot on i-0c35557c4e5385406, workstream prod-sql119-provider-stakeholder-sync-acl-20261027, main a01deea9b (tarball 77e9e5d3…, transfer run 40503922422, migration source aed7a418… == pin), owner-approved run (\"Apply in production: SQL 119 first, then SQL 115\"), SSM 2a047b4d-b43b-45c4-8152-1bd4372daed9, run_id 924b34f9-4fc6-446f-9190-e4bd9529cac8, one_use_id sql119-prod-ffb5846b-682d-400b-8b49-323215e196f5 (spent): every step ok; contracts claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43; pre-apply inspect live 249237de… (live_matches_expected true, precondition_failures []); manifest 4bfbdae9…; 249237de… -> 3d62a511…, result applied, unrelated catalog 7bebf201…; post-apply inspect already_applied true, precondition_failures []. After: public.sync_provider_stakeholder_account(uuid) EXECUTE for its owner only. The later read-only inspect (SSM 6f6692d8) reported already_applied true. SQL 115, which it unblocks, is a separate pin and apply. execute is false so the pin is no longer a standing authorization."
   }
 }

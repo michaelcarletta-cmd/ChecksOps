@@ -145,10 +145,12 @@ test('pin: SQL 119 pending, code-derived, selectable, packed, in step with the p
   assert.equal(prod.staging_pin_commit, pin.commit);
   assert.equal(prod.source_sha256, pin.source_sha256);
   assert.deepEqual(prod.predecessors, []);
-  // Production pin execute-authorized (owner-approved pin change of 2026-10-27) on the staging
-  // read-live; the staging pin above stays pending (staging already in the intended state, no apply).
-  assert.equal(prod.execute, true);
-  assert.match(prod.authorization, /^Owner approved 2026-10-27 /);
+  // Production pin applied 2026-10-27 and retired (owner approved #1289, on the staging read-live);
+  // the staging pin above stays pending (staging already in the intended state, no apply).
+  assert.equal(prod.execute, false);
+  assert.match(prod.authorization, /^Applied to production on 2026-10-27; execute is false again/);
+  assert.equal(prod.applied.receipt.before_hash, prod.expected_live_definition_sha256);
+  assert.equal(prod.applied.receipt.after_hash, pin.intended_replacement_sha256);
   assert.equal(prod.expected_live_definition_sha256, '249237decc1f079bf04915a5f42862792efb13f00729a8d0bbbfdb8b5c456e35');
   assert.notEqual(prod.expected_live_definition_sha256, prod.intended_replacement_sha256);
   let bytes = null;
