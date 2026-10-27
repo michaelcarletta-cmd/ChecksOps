@@ -1,0 +1,14 @@
+{
+  "workstream_id": "production-tenant-lifecycle",
+  "authorization": "Pending owner review (2026-10-26). Planning only: nothing is live or verified. The production apply still needs its own owner approval, a staging acceptance reference and a read-only production inspect that confirms the live bytes.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Tenant lifecycle (owner item 8, 2026-10-26): tenant-billing-admin gains tenants-deactivated, tenant-deactivate, tenant-reactivate, tenant-activity and tenant-delete, each calling a SQL 117 function (platform owner only). sql_before stays SQL 102: until SQL 117 is applied the new actions answer 503 tenant_lifecycle_missing ('needs database update SQL 117') and every existing action is unchanged. live_sha256 is the bytes production runs: read-only production overlay inspect run 40422339860 on main e33871651 reported memberSha256 2f8ca3c5... (state ALREADY_ACCEPTED, RevisionId 54d16ce8-6870-47aa-88f2-52ac6e5e2e1c); a read-only production overlay inspect must confirm it again before any apply.",
+  "members": {
+    "tenant-billing-handlers.mjs": {
+      "live_sha256": "2f8ca3c53b3e3a125b6bb8c6e61e09a593388450274c320978498af78643937e",
+      "accepted_sha256": "b3d8594416e257a8ff6658c677c9d8435ad18f92e0ad34968838f2b275ccb824",
+      "operation": "replace"
+    }
+  }
+}

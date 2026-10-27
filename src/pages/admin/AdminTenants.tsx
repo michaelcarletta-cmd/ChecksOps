@@ -17,13 +17,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DeactivateTenantDialog, DeleteTenantDialog } from "@/components/admin/TenantLifecycleDialogs";
+import { listDeactivatedTenants, reactivateTenant } from "@/lib/tenantLifecycle";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "@/hooks/use-toast";
-import { Megaphone, Loader2, Plus, Trash2, Mail, Building2, Users, Settings, ArrowLeft, RefreshCw, Copy, FileText, Receipt, Link2, Gift, ShieldCheck, Eye, Crosshair, Briefcase, Home, Calculator, Landmark, Wallet, LogOut, Banknote } from "lucide-react";
+import { Megaphone, Loader2, Plus, Trash2, Power, Undo2, Mail, Building2, Users, Settings, ArrowLeft, RefreshCw, Copy, FileText, Receipt, Link2, Gift, ShieldCheck, Eye, Crosshair, Briefcase, Home, Calculator, Landmark, Wallet, LogOut, Banknote } from "lucide-react";
 import { goToChecksOpsHome } from "@/lib/goToChecksOpsHome";
 import { SettingsPageShell } from "@/components/settings/SettingsPageShell";
 import { SettingsHero } from "@/components/settings/SettingsHero";
@@ -1296,6 +1298,32 @@ function TenantManagementTable({
   const [notesTenant, setNotesTenant] = useState<Tenant | null>(null);
   const [proTenant, setProTenant] = useState<Tenant | null>(null);
   const [search, setSearch] = useState("");
+  // Item 8 (SQL 117): deactivated companies are hidden unless shown; empty ones can be deleted.
+  const [deactivateTarget, setDeactivateTarget] = useState<Tenant | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Tenant | null>(null);
+  const [showDeactivated, setShowDeactivated] = useState(false);
+  const { data: deactivatedList = [], refetch: refetchDeactivated } = useQuery({
+    queryKey: ["admin-tenants-deactivated"],
+    queryFn: listDeactivatedTenants,
+    retry: false,
+  });
+  const deactivatedById = new Map(deactivatedList.map((d) => [d.tenant_id, d]));
+  const lifecycleChanged = () => {
+    void refetchDeactivated();
+    onChanged();
+  };
+  const reactivate = async (t: Tenant) => {
+    setBusyId(t.id);
+    try {
+      const restored = await reactivateTenant(t.id);
+      toast({ title: `${t.name} reactivated`, description: `${restored} user${restored === 1 ? "" : "s"} have access again.` });
+      lifecycleChanged();
+    } catch (e) {
+      toast({ title: "Not reactivated", description: e instanceof Error ? e.message : "Try again.", variant: "destructive" });
+    } finally {
+      setBusyId(null);
+    }
+  };
 
   // Live Moov KYC/verification status per tenant (keyed by tenant_id).
   const { data: moovKycByTenant } = useQuery({
@@ -1388,6 +1416,11 @@ function TenantManagementTable({
           {t.is_system_tenant && (
             <Badge variant="outline" className="shrink-0 text-[10px]">
               System
+            </Badge>
+          )}
+          {deactivatedById.has(t.id) && (
+            <Badge variant="destructive" className="shrink-0 text-[10px]" title={deactivatedById.get(t.id)?.reason || undefined}>
+              Deactivated
             </Badge>
           )}
         </div>
@@ -1559,6 +1592,23 @@ function TenantManagementTable({
             <DropdownMenuItem onClick={() => onOpen(t)}>
               <Settings className="w-4 h-4 mr-2" /> Manage tenant
             </DropdownMenuItem>
+            {!t.is_system_tenant && (
+              <>
+                <DropdownMenuSeparator />
+                {deactivatedById.has(t.id) ? (
+                  <DropdownMenuItem onClick={() => reactivate(t)} disabled={busyId === t.id}>
+                    <Undo2 className="w-4 h-4 mr-2 text-emerald-500" /> Reactivate
+                  </DropdownMenuItem>
+                ) : (
+                  <DropdownMenuItem onClick={() => setDeactivateTarget(t)}>
+                    <Power className="w-4 h-4 mr-2 text-amber-500" /> Deactivate…
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => setDeleteTarget(t)}>
+                  <Trash2 className="w-4 h-4 mr-2" /> Delete permanently…
+                </DropdownMenuItem>
+              </>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       ),
@@ -1566,14 +1616,15 @@ function TenantManagementTable({
   ];
 
   const q = search.trim().toLowerCase();
+  const listedTenants = showDeactivated ? tenants : tenants.filter((t) => !deactivatedById.has(t.id));
   const visibleTenants = q
-    ? tenants.filter(
+    ? listedTenants.filter(
         (t) =>
           t.name?.toLowerCase().includes(q) ||
           t.slug?.toLowerCase().includes(q) ||
           (t.referral_code || "").toLowerCase().includes(q),
       )
-    : tenants;
+    : listedTenants;
 
   return (
     <SectionCard
@@ -1587,9 +1638,16 @@ function TenantManagementTable({
         onSearchChange={setSearch}
         placeholder="Search tenants by name, slug or referral code…"
         actions={
-          <Badge variant="secondary" className="text-[11px]">
-            {visibleTenants.length} of {tenants.length}
-          </Badge>
+          <div className="flex items-center gap-2">
+            {deactivatedList.length > 0 && (
+              <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setShowDeactivated((v) => !v)}>
+                {showDeactivated ? "Hide deactivated" : `Show deactivated (${deactivatedList.length})`}
+              </Button>
+            )}
+            <Badge variant="secondary" className="text-[11px]">
+              {visibleTenants.length} of {listedTenants.length}
+            </Badge>
+          </div>
         }
       />
 
@@ -1600,6 +1658,18 @@ function TenantManagementTable({
         empty="No tenants match your search."
         rowClassName={(t) => (busyId === t.id ? "opacity-60" : undefined)}
         className="mt-3"
+      />
+
+      <DeactivateTenantDialog
+        tenant={deactivateTarget}
+        onClose={() => setDeactivateTarget(null)}
+        onDone={lifecycleChanged}
+      />
+      <DeleteTenantDialog
+        tenant={deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onDone={lifecycleChanged}
+        onDeactivateInstead={(t) => setDeactivateTarget(tenants.find((x) => x.id === t.id) ?? null)}
       />
 
 
