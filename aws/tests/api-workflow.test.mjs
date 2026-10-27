@@ -354,7 +354,6 @@ test('create check derives tenant and uploaded_by and ignores spoofed identity',
     uploaded_by: SPOOF_ID,
     user_id: SPOOF_ID,
     carrier_name: 'AWS T5 TEST',
-    claim_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
     status: 'deposited',
   }), depsFor(client));
   assert.equal(result.ok, true);
@@ -368,7 +367,8 @@ test('create check derives tenant and uploaded_by and ignores spoofed identity',
   assert.equal(insert.params[3], 'uploaded');
   assert.equal(insert.params.includes(C1C_TENANT), false);
   assert.equal(insert.params.includes(SPOOF_ID), false);
-  assert.equal(insert.params.includes('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'), false);
+  // claim_id is accepted only after a tenant check: cash-job-check-create.test.mjs.
+  assert.equal(insert.params.includes('deposited'), false);
 });
 
 test('T5 kill switch disables create without a write transaction', async () => {

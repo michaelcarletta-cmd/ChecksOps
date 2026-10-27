@@ -71,6 +71,8 @@ const AWS_WRITE_TABLES = new Set([
   "signature_signers",
   "check_stakeholders",
   "stakeholder_accounts",
+  "cash_jobs",
+  "cash_job_line_items",
 ]);
 
 const CLAIM_SETTLEMENT_VALUE_COLUMNS = new Set([

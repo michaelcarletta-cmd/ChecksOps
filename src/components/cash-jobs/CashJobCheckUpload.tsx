@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { compressCheckImage } from "@/lib/compressCheckImage";
 import { useAuth } from "@/hooks/useAuth";
@@ -14,6 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Upload, X, Image, RefreshCw, CheckCircle2, Clock, Eye } from "lucide-react";
 import { CheckImageCropper } from "@/components/checks/CheckImageCropper";
 import { refreshCheckQueues } from "@/lib/checkQueueRefresh";
+import { isAwsStaging } from "@/lib/awsStaging";
 
 interface Props {
   cashJobId: string;
@@ -58,6 +60,7 @@ export function CashJobCheckUpload({
   const { tenant } = useTenant();
   const { toast } = useToast();
   const qc = useQueryClient();
+  const navigate = useNavigate();
 
   const [showForm, setShowForm] = useState(false);
   const [frontFile, setFrontFile] = useState<File | null>(null);
@@ -81,6 +84,11 @@ export function CashJobCheckUpload({
     },
   });
 
+  const propertyLine = [propertyAddress, propertyCity, propertyState]
+    .map((part) => (part ?? "").trim())
+    .filter(Boolean)
+    .join(", ");
+
   const handleUpload = async () => {
     if (!frontFile || !user || !tenant) return;
     setUploading(true);
@@ -90,55 +98,117 @@ export function CashJobCheckUpload({
       // browsers and our compositor can't decode HEIC and would render blank.
       const frontSafe = await compressCheckImage(frontFile);
       const backSafe = backFile ? await compressCheckImage(backFile) : null;
+      const frontExt = frontSafe.name.split(".").pop() || "jpg";
+      const backExt = backSafe ? (backSafe.name.split(".").pop() || "jpg") : null;
 
       const ts = Date.now();
-      const frontPath = `${tenant.id}/cash-jobs/${cashJobId}/${ts}_front.${frontSafe.name.split(".").pop()}`;
+      const aws = isAwsStaging();
+      const { data: session } = await supabase.auth.getSession();
+      let checkId: string;
 
-      // Upload front image
-      const { error: frontErr } = await supabase.storage
-        .from("claim-files")
-        .upload(frontPath, frontSafe, { upsert: false, contentType: frontSafe.type || "image/jpeg" });
-      if (frontErr) throw frontErr;
+      if (aws) {
+        // Same path as the Command Center upload on AWS: the server creates the
+        // check in Review (status uploaded, stage review), verifies the job is in
+        // this tenant and links it (cash_job_id, check_source 'cash_job', payment
+        // class). Images then go to the check's own prefix, checks/{checkId}/.
+        const { createAwsCheck } = await import("@/integrations/aws/workflow");
+        const token = session.session?.access_token;
+        if (!token) throw new Error("Not authenticated");
+        const created = await createAwsCheck(token, {
+          tenant_id: tenant.id,
+          cash_job_id: cashJobId,
+          cash_job_payment_class: paymentClass,
+          payee_line: customerName,
+          ...(propertyLine ? { property_address: propertyLine } : {}),
+          review_notes: "Cash job check",
+        });
+        checkId = String(created.check.id);
+        const prefix = created.imagePrefix.replace(/\/$/, "");
 
-      let backPath: string | null = null;
-      if (backSafe) {
-        backPath = `${tenant.id}/cash-jobs/${cashJobId}/${ts}_back.${backSafe.name.split(".").pop()}`;
-        const { error: backErr } = await supabase.storage
+        const frontPath = `${prefix}/${ts}_front.${frontExt}`;
+        const { error: frontErr } = await supabase.storage
           .from("claim-files")
-          .upload(backPath, backSafe, { upsert: false, contentType: backSafe.type || "image/jpeg" });
-        if (backErr) throw backErr;
+          .upload(frontPath, frontSafe, { upsert: false, contentType: frontSafe.type || "image/jpeg" });
+        if (frontErr) throw new Error(`Front upload failed: ${frontErr.message}`);
+
+        let backPath: string | null = null;
+        if (backSafe) {
+          backPath = `${prefix}/${ts}_back.${backExt}`;
+          const { error: backErr } = await supabase.storage
+            .from("claim-files")
+            .upload(backPath, backSafe, { upsert: false, contentType: backSafe.type || "image/jpeg" });
+          if (backErr) throw new Error(`Back upload failed: ${backErr.message}`);
+        }
+
+        const { error: pathErr } = await supabase
+          .from("check_intake_items")
+          .update({
+            front_image_path: frontPath,
+            back_image_path: backPath,
+            back_image_original_path: backPath,
+            back_image_deposit_path: null,
+            endorsement_render_status: "idle",
+            endorsement_render_meta: null,
+          })
+          .eq("id", checkId);
+        if (pathErr) throw new Error(pathErr.message);
+      } else {
+        const frontPath = `${tenant.id}/cash-jobs/${cashJobId}/${ts}_front.${frontExt}`;
+
+        // Upload front image
+        const { error: frontErr } = await supabase.storage
+          .from("claim-files")
+          .upload(frontPath, frontSafe, { upsert: false, contentType: frontSafe.type || "image/jpeg" });
+        if (frontErr) throw frontErr;
+
+        let backPath: string | null = null;
+        if (backSafe) {
+          backPath = `${tenant.id}/cash-jobs/${cashJobId}/${ts}_back.${backExt}`;
+          const { error: backErr } = await supabase.storage
+            .from("claim-files")
+            .upload(backPath, backSafe, { upsert: false, contentType: backSafe.type || "image/jpeg" });
+          if (backErr) throw backErr;
+        }
+
+        // Create check_intake_item with cash job context
+        const { data: check, error: checkErr } = await supabase
+          .from("check_intake_items")
+          .insert({
+            tenant_id: tenant.id,
+            uploaded_by: user.id,
+            cash_job_id: cashJobId,
+            check_source: "cash_job",
+            cash_job_payment_class: paymentClass,
+            // Pre-fill from cash job
+            payee_line: customerName,
+            carrier_name: null,
+            front_image_path: frontPath,
+            back_image_path: backPath,
+            status: "uploaded",
+            ocr_status: "pending",
+          })
+          .select("id")
+          .single();
+
+        if (checkErr) throw checkErr;
+        checkId = check.id;
       }
 
-      // Create check_intake_item with cash job context
-      const { data: check, error: checkErr } = await supabase
-        .from("check_intake_items")
-        .insert({
-          tenant_id: tenant.id,
-          uploaded_by: user.id,
-          cash_job_id: cashJobId,
-          check_source: "cash_job",
-          cash_job_payment_class: paymentClass,
-          // Pre-fill from cash job
-          payee_line: customerName,
-          carrier_name: null,
-          front_image_path: frontPath,
-          back_image_path: backPath,
-          status: "uploaded",
-          ocr_status: "pending",
-        })
-        .select("id")
-        .single();
-
-      if (checkErr) throw checkErr;
-
-      // Trigger OCR
-      await supabase.functions.invoke("check-ocr-intake", {
-        body: { checkId: check.id },
+      // Trigger OCR. The check is already in Review; if OCR is unavailable the
+      // details can be entered there by hand.
+      const { error: ocrErr } = await supabase.functions.invoke("check-ocr-intake", {
+        body: { checkId },
+        headers: session.session?.access_token
+          ? { Authorization: `Bearer ${session.session.access_token}` }
+          : undefined,
       });
+      if (ocrErr) console.error("OCR invoke error:", ocrErr);
 
       toast({
         title: "Check uploaded",
-        description: "It will appear in ChecksOps review shortly.",
+        description: ocrErr
+          ? "It is in Review, linked to this job. Enter the check details there."
+          : "It is in Review, linked to this job.",
       });
 
       setFrontFile(null);
@@ -203,7 +273,8 @@ export function CashJobCheckUpload({
                     variant="ghost"
                     size="icon"
                     className="h-6 w-6"
-                    onClick={() => window.location.href = `/check-command-center?checkId=${check.id}`}
+                    title="Open in Review"
+                    onClick={() => navigate(`../checks?checkId=${check.id}`, { relative: "path" })}
                   >
                     <Eye className="h-3 w-3" />
                   </Button>
