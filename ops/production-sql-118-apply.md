@@ -44,7 +44,26 @@ and `tenant_pricing_audit`; live `1b5eec31635d869abbabc9d4584674ee5852a27689629d
 `[]`. Recorded in the staging pin (`expected_live_definition_sha256`, `execute: true`, wave 19)
 under the owner's words of 2026-10-27, "Start the SQL 118 tooling PR" and "Go".
 
-**Status:** staging pin execute-authorized (wave 19); nothing applied yet; production pin pending.
+**Staging apply (2026-10-27).** After the staging pin change (#1282), executor deploy run
+40437966024 (main `58c99eb`) carried the authorized pin (`Am+LSNC5…`). Apply run 40438147297, under
+the owner's words "approve the SQL 118 staging apply": result `applied`, before
+`1b5eec31635d869abbabc9d4584674ee5852a27689629d9c199627d7c8653cde`, after
+`6f9e2ef349c397ab4df81337139776287e2b6e8a85d4108ae090604717476925` (intended). Read-live run
+40438403321: `already_applied` true, `tenant_deactivations` intended with `table_privileges` `[]`, the
+six functions intended.
+
+**Production inspect (2026-10-27).** Read-only `--inspect` through SSM
+`7e8004f8-aad0-45ef-993a-f17a04b13304` on `i-0c35557c4e5385406`, main `58c99eb57` (tarball sha256
+`5a3e3def5ddb27c46f764b8162fdcc32b89845158f370433ae544738ee06e56c`, transfer run 40438680541, migration
+source `f10655a8…` == pin), connected as `checksops_admin`: `tenant_deactivations` and the six
+functions absent, every prerequisite present; live
+`1b5eec31635d869abbabc9d4584674ee5852a27689629d9c199627d7c8653cde` (the staging pre-state),
+`already_applied` false, `precondition_failures` `[]`. Recorded in the production pin with the staging
+apply as its staging acceptance and `execute: true` under the owner's words of 2026-10-27, "SQL 117 to
+production" (the tenant lifecycle, which SQL 118 now carries) and "Go". Each apply still needs the
+owner's run-time approval.
+
+**Status:** staging applied (wave 19); production pin execute-authorized; production apply pending.
 
 ## Fingerprint
 
