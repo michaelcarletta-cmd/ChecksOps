@@ -384,12 +384,17 @@ const PAYMENT_STATUSES = new Set([
   'recorded', 'pending', 'submitted', 'failed', 'returned', 'cleared',
 ]);
 
+// The values the Moov writers store (normalizeOnboardingStatus in parity/moov-client.mjs,
+// moov-sync.mjs, parity/moov-onboard.mjs) and Moov's verification values; anything else is unknown.
 const PROVIDER_ONBOARDING_STATUSES = new Set([
   'not_started', 'pending', 'in_progress', 'complete', 'completed', 'submitted',
+  'onboarding_incomplete', 'verification_pending', 'additional_information_required',
+  'active', 'restricted', 'suspended',
 ]);
 
 const PROVIDER_VERIFICATION_STATUSES = new Set([
   'not_started', 'pending', 'verified', 'failed', 'admin_override',
+  'unverified', 'review', 'resubmit',
 ]);
 
 const paymentHistory = (rows) => rows.map((row) => ({
