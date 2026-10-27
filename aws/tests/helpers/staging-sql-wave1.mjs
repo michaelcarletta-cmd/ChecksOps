@@ -84,6 +84,11 @@ export const STAGING_WAVE1 = Object.freeze({
   // Retired 2026-10-27: the staging apply (run 40434533070) rolled back (UNRELATED_MUTATION
   // intended_state: the new table kept default-privilege grants); SQL 118 replaces it.
   sql117: Object.freeze({ wave: 18, approved: '2026-10-27', run: '40431777849', live: 'dcfcb810a7d016f63451a3cf6ec00982be2f555fae087871885e49cc4b501956', retired: 'Retired 2026-10-27: superseded by SQL 118 after staging apply run 40434533070 rolled back; never applied' }),
+  // Wave 19 (owner approved 2026-10-27, "Start the SQL 118 tooling PR" and "Go"): SQL 118 replaces
+  // the retired SQL 117 (tenant_deactivations with every non-owner grant revoked, and the
+  // platform-owner tenant lifecycle functions). Read at main 7cd3272 after the executor carried it
+  // (deploy run 40436720850): the table and the six functions absent.
+  sql118: Object.freeze({ wave: 19, approved: '2026-10-27', run: '40436888477', live: '1b5eec31635d869abbabc9d4584674ee5852a27689629d9c199627d7c8653cde' }),
   sql98: Object.freeze({ wave: 3, approved: '2026-10-18', run: '39083278136', live: '296c3d6a274e10f66005fb9eaecf93fa17b81bd8db3607037ca07698fddd3275', apply_run: '39085677318' }),
 });
 
@@ -95,7 +100,7 @@ export const pendingPin = (pin) => Object.freeze({
 });
 
 /**
- * The committed staging pin's apply state: waves 1-18 recorded and approved, wave 6 approved with
+ * The committed staging pin's apply state: waves 1-19 recorded and approved, wave 6 approved with
  * its read-live still to record (pending until then), wave 18 (SQL 117) retired, the rest pending.
  */
 export function assertStagingPinState(assert, key, pin) {

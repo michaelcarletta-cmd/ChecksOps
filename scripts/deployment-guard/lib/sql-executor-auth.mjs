@@ -2610,7 +2610,7 @@ export const AUTHORIZED_SQL117_PLATFORM_OWNER_TENANT_LIFECYCLE = Object.freeze({
 // Tenant lifecycle 2026-10-27 staging pin: SQL 118 (SQL 117 plus the revoke of every non-owner grant
 // on public.tenant_deactivations; SQL 117 is retired). Owner item 8.
 // No predecessor (the file checks SQL 96's audit table and SQL 102's column guard itself).
-// Pending until a reviewed pin change records a staging read-live.
+// Staging apply authorized (wave 19) from staging read-live run 40436888477.
 export const AUTHORIZED_SQL118_PLATFORM_OWNER_TENANT_LIFECYCLE = Object.freeze({
   key: 'sql118',
   filename: 'aws/workflows/sql/118_platform_owner_tenant_lifecycle.sql',
@@ -2618,9 +2618,15 @@ export const AUTHORIZED_SQL118_PLATFORM_OWNER_TENANT_LIFECYCLE = Object.freeze({
   // The commit that last authored the file bytes.
   commit: 'f055ae5b00ddaf8d11a2a20aae50238a664554e2',
   source_sha256: 'f10655a8f105436b4a020be5564186e335f1f6bb06f840742c939879bdba45a5',
-  authorization: 'pending',
-  execute: false,
-  expected_live_definition_sha256: null,
+  // Owner's words 2026-10-27: "Start the SQL 118 tooling PR", "Merge 1281 when green", then "Go" to the
+  // staging read-live and staging pin (staging apply only; the staging apply run, the production pin
+  // and apply are separate).
+  authorization: 'Owner approved 2026-10-27: staging apply (wave 19) from staging read-live run 40436888477',
+  execute: true,
+  // Staging read-live run 40436888477 (2026-10-27, main 7cd3272, after executor deploy run
+  // 40436720850): tenant_deactivations and the six functions absent; already_applied false,
+  // precondition_failures [].
+  expected_live_definition_sha256: '1b5eec31635d869abbabc9d4584674ee5852a27689629d9c199627d7c8653cde',
   // Code-derived: releaseIntendedHash('sql118', file bytes) (release-sql-state.mjs); re-derived by the tests.
   intended_replacement_sha256: '6f9e2ef349c397ab4df81337139776287e2b6e8a85d4108ae090604717476925',
   function_identities: Object.freeze([
