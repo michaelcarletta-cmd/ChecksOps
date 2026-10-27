@@ -2662,8 +2662,8 @@ export const AUTHORIZED_SQL119_PROVIDER_STAKEHOLDER_SYNC_ACL = Object.freeze({
 // Usage 2026-10-27 staging pin: SQL 120 (usage events at Check Alt approval and at send time: the
 // check_processing event when a Check Alt deposit is approved or accepted, the next-day / same-day
 // fee per recipient when a send is posted, voids when it did not go through, the one-fee-per-leg
-// unique index, a backfill from 2026-10-01). No predecessor. Pending until a reviewed pin change
-// records a staging read-live.
+// unique index, a backfill from 2026-10-01). No predecessor. Staging apply authorized (wave 20)
+// from staging read-live run 40545376358.
 export const AUTHORIZED_SQL120_USAGE_EVENTS_AT_APPROVAL_AND_SEND = Object.freeze({
   key: 'sql120',
   filename: 'aws/workflows/sql/120_usage_events_at_approval_and_send.sql',
@@ -2671,9 +2671,10 @@ export const AUTHORIZED_SQL120_USAGE_EVENTS_AT_APPROVAL_AND_SEND = Object.freeze
   // The commit that last authored the file bytes.
   commit: 'c5f5bc1122e050470e5fc3cef8a8c2acbe3a8389',
   source_sha256: 'aa7d44c3b0de31cec012bc04ece0591553fafb1a9f97f46f0b4a9168b10d6fc2',
-  authorization: 'pending',
-  execute: false,
-  expected_live_definition_sha256: null,
+  authorization: 'Owner approved 2026-10-27: staging apply (wave 20) from staging read-live run 40545376358',
+  execute: true,
+  // Staging read-live run 40545376358 (main 6505198, executor Br/C/qPsG...).
+  expected_live_definition_sha256: 'f3c1dd26888ac9fce91721cad698d39ee99cdca80c4a7888f9cfea9043171e9d',
   // Code-derived: releaseIntendedHash('sql120', file bytes) (release-sql-state.mjs); re-derived by the tests.
   intended_replacement_sha256: 'fc9d0e340d0a469440a8bbfd3d546ededbe4f035c12c584334a2a610c55ffc56',
   function_identities: Object.freeze([

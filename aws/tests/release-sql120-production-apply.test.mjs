@@ -172,7 +172,8 @@ test('order: no predecessor and no order; SQL 98 / SQL 96 objects are prerequisi
   const runbook = fs.readFileSync(path.join(ROOT, COMMITTED.tooling.runbook), 'utf8');
   assert.ok(runbook.includes(COMMITTED.intended_replacement_sha256));
   assert.ok(runbook.includes(COMMITTED.source_sha256));
-  assert.match(runbook, /\*\*Status:\*\* not applied anywhere/);
+  assert.match(runbook, /\*\*Status:\*\* staging pin execute-authorized \(wave 20\)/);
+  assert.match(runbook, /read-live \(2026-10-27\)\.\*\* Run 40545376358/);
   const oneShot = fs.readFileSync(path.join(ROOT, 'ops/production-sql-one-shot.md'), 'utf8');
   assert.match(oneShot, /\| `sql120` \|/);
   assert.match(oneShot, /`sql119`, `sql120`\) \|/);

@@ -4,7 +4,7 @@
  * release-sql90-97-executor.test.mjs runs what every release key shares (SQL 120 included); this
  * file covers what is new:
  *
- *   - the pin: pending, code-derived, selectable, packed, in step with the production pin; the
+ *   - the pin: staging-authorized from its read-live (wave 20), code-derived, selectable, packed, in step with the production pin; the
  *     pinned commit authored the bytes; no predecessor;
  *   - the file and spec: five functions, EXECUTE for the owner only, two triggers, the covering
  *     unique index; no table, column, policy or grant to another role; the definer-write and
@@ -135,7 +135,7 @@ CREATE FUNCTION public.aws_check_billing_default_price_cents() RETURNS integer L
 CREATE FUNCTION public.aws_check_billing_charges_when_per_check_off() RETURNS boolean LANGUAGE sql IMMUTABLE
   SET search_path = public AS $$ SELECT true $$;`;
 
-test('pin: SQL 120 pending, code-derived, selectable, packed, in step with the production pin; no predecessor', () => {
+test('pin: SQL 120 staging-authorized from its read-live, code-derived, selectable, packed, in step with the production pin; no predecessor', () => {
   const pin = PINS[KEY];
   const spec = RELEASE_SQL_SPECS[KEY];
   const packed = Object.fromEntries(EXECUTOR_PACK_MEMBERS);
@@ -145,11 +145,13 @@ test('pin: SQL 120 pending, code-derived, selectable, packed, in step with the p
   assert.equal(pin.migration_id, '120_usage_events_at_approval_and_send');
   assert.equal(spec.choice, 'sql120-usage-events-at-approval-and-send');
   assert.equal(sha(TEXT), pin.source_sha256);
-  // Pending: no staging read-live recorded yet (and no apply authorized).
+  // Staging apply authorized (owner approved 2026-10-27) from staging read-live run 40545376358: the five
+  // functions and two triggers absent, so SQL 120 was not yet applied there.
   assertStagingPinState(assert, KEY, pin);
-  assert.equal(pin.execute, false);
-  assert.equal(pin.authorization, 'pending');
-  assert.equal(pin.expected_live_definition_sha256, null);
+  assert.equal(pin.execute, true);
+  assert.equal(pin.authorization, 'Owner approved 2026-10-27: staging apply (wave 20) from staging read-live run 40545376358');
+  assert.equal(pin.expected_live_definition_sha256, 'f3c1dd26888ac9fce91721cad698d39ee99cdca80c4a7888f9cfea9043171e9d');
+  assert.notEqual(pin.expected_live_definition_sha256, pin.intended_replacement_sha256);
   assert.equal(releaseIntendedHash(KEY, TEXT), pin.intended_replacement_sha256);
   // Everything absent (a database without SQL 120) has a fingerprint of its own.
   assert.notEqual(releaseStateHash(KEY, {}), pin.intended_replacement_sha256);
@@ -302,8 +304,9 @@ test('PostgreSQL 16: SQL 120 through the executor: refused without SQL 98\'s pri
     assert.deepEqual(r.precondition_failures, [], JSON.stringify(r.release_sql_inspect));
     assert.equal(r.already_applied, false);
     assert.equal(r.live_definition_sha256, releaseStateHash(KEY, {}));
-    // A pending pin cannot apply.
-    const pending = await handlerFor(connect)(releaseEvent({ expected_live_definition_sha256: r.live_definition_sha256 }));
+    // A pending pin cannot apply (the committed pin is staging-authorized, so pend a copy).
+    const pendingCopy = pendingPin(PINS[KEY]);
+    const pending = await handlerFor(connect, { pins: { [KEY]: pendingCopy } })(releaseEvent({ pin: pendingCopy, expected_live_definition_sha256: r.live_definition_sha256 }));
     assert.equal(pending.ok, false);
     assert.equal((await fx.admin.query('SELECT count(*)::int AS n FROM public.check_billing_events')).rows[0].n, 0);
 
