@@ -200,7 +200,7 @@ test('public HTTP mapping still ignores inspect and health stays unchanged when 
         if (sql === SETTLEMENT_COLUMN_INSPECT_SQL) return { rows: [] };
         if (sql === LEDGER_TRIGGER_INSPECT_SQL) return { rows: [] };
         if (sql.includes('pg_get_triggerdef')) return { rows: [] };
-        if (sql.includes('pg_trigger')) return { rows: [{ trigger_count: 180 }] };
+        if (sql.includes('pg_trigger')) return { rows: [{ trigger_count: 182 }] };
         if (sql.includes('prokind')) return { rows: [{
           function_count: 0, auth_uid_functions: 0, net_functions: 0, cron_functions: 0,
           vault_functions: 0, pgmq_functions: 0,
@@ -308,7 +308,7 @@ test('production validation does not attach inspect and keeps the existing resul
         if (sql.includes("c.relname = 'users'")) return { rows: [{ present: false }] };
         if (sql.includes('pg_constraint')) return { rows: [{ fk_count: 0 }] };
         if (sql.includes('pg_get_triggerdef')) return { rows: [] };
-        if (sql.includes('pg_trigger')) return { rows: [{ trigger_count: 180 }] };
+        if (sql.includes('pg_trigger')) return { rows: [{ trigger_count: 182 }] };
         if (sql.includes('prokind')) return { rows: [{
           function_count: 0, auth_uid_functions: 0, net_functions: 0, cron_functions: 0,
           vault_functions: 0, pgmq_functions: 0,
