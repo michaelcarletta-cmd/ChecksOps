@@ -498,10 +498,10 @@
     },
     "tenant-management-v2.mjs": {
       "operation": "add",
-      "accepted_sha256": "b4596d1078b9acb64d333eb2f241713ec42c5a3a2188eda69c5654fad8485835",
+      "accepted_sha256": "64539881783add1157d186e8504b86831ce4e6151a7b00c0ee8a892839735cb9",
       "expected_live_sha256": null,
       "sql_before": null,
-      "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
+      "manifest": "aws/tests/fixtures/production-tenant-management-v2-provider-status-manifest-2026-10-27.json"
     },
     "app-services.mjs": {
       "operation": "replace",
