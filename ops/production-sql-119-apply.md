@@ -25,10 +25,32 @@ leaves is then one fingerprint (owner only) from any accepted starting ACL (prod
 default `PUBLIC` + owner, or owner only after SQL 115), so its tools can verify the post-state
 exactly, and the end state is SQL 115's intended one either way.
 
-**Status:** not applied anywhere. The staging pin (`sql119-provider-stakeholder-sync-acl`) and
-the production pin (`ops/deployment-guard/sql119-provider-stakeholder-sync-acl-production-apply.json`)
-are pending (`execute: false`, `authorization: "pending"`, no recorded pre-state, no staging
-acceptance), so every apply refuses before connecting.
+**Staging executor (2026-10-27).** Inspect run 40501251073 (main `24c7c54`) found the live
+executor at `Am+LSNC5…` without SQL 119 (adds `sql/119_provider_stakeholder_sync_acl.sql`). Deploy
+run 40501540682 updated it to `Ffm7CRLPMz9OjoPT/mOeArKcoig4/C/F3OoSYvqF398=` ("Verify live executor
+now carries main's package" passed).
+
+**Staging read-live (2026-10-27).** Run 40501861802 (main `24c7c54`): the function `intended`,
+EXECUTE the owner's only; live `3d62a511f479415b3a30ec532583527dc0f457ef3e6a2810bdccfab707dc0888`
+(intended), `already_applied` true, `precondition_failures` `[]`. Staging has SQL 115 applied
+(read-live run 40501865500: `already_applied` true, live `8aed39a4…`), so no staging apply is needed;
+this read-live is the staging acceptance and the staging pin stays pending.
+
+**Production inspect (2026-10-27).** Read-only `--inspect` through SSM
+`0019857c-86f0-46da-94e4-1805e6cd6cd7` on `i-0c35557c4e5385406`, main `24c7c545e` (tarball sha256
+`87d41441e36b92bd669e11c36078c9fd830f283b0ca7d284cec65a8fd8670dad`, transfer run 40501270069, migration
+source `aed7a418…` == pin), connected as `checksops_admin`: EXECUTE for `PUBLIC`, `checksops` and the
+owner, each granted by the owner; live
+`249237decc1f079bf04915a5f42862792efb13f00729a8d0bbbfdb8b5c456e35`, `already_applied` false,
+`precondition_failures` `[]`. The same command's SQL 115 inspect still reports
+`[function_acl_replaceable]` (live `83d480ac…`). Recorded in the production pin with the staging
+read-live as its staging acceptance and `execute: true` under the owner's words of 2026-10-27,
+"Approve a pin PR for SQL 119, then one for SQL 115". Each apply still needs the owner's run-time
+approval.
+
+**Status:** staging already in the intended state (no apply); production pin execute-authorized;
+production apply pending. SQL 115's production pre-state changes with SQL 119 (its fingerprint
+includes the ACL), so SQL 115's pin records a production inspect taken after SQL 119's apply.
 
 ## Run order (production)
 
