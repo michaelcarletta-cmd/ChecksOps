@@ -92,6 +92,7 @@ export const EXECUTOR_PACK_MEMBERS = Object.freeze([
   ['aws/workflows/sql/118_platform_owner_tenant_lifecycle.sql', 'sql/118_platform_owner_tenant_lifecycle.sql'],
   ['aws/workflows/sql/119_provider_stakeholder_sync_acl.sql', 'sql/119_provider_stakeholder_sync_acl.sql'],
   ['aws/workflows/sql/120_usage_events_at_approval_and_send.sql', 'sql/120_usage_events_at_approval_and_send.sql'],
+  ['aws/workflows/sql/121_cash_jobs_production_grants.sql', 'sql/121_cash_jobs_production_grants.sql'],
   ['aws/functions/api/rds-global-bundle.pem', 'rds-global-bundle.pem'],
   ['scripts/deployment-guard/lib/sql-apply.mjs', 'lib/sql-apply.mjs'],
   ['scripts/deployment-guard/lib/sql-executor-auth.mjs', 'lib/sql-executor-auth.mjs'],
