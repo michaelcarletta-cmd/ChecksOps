@@ -800,7 +800,8 @@ test('fee collection: eleven members on the fee manifest, collection-v2 then des
   // Refer & Earn routes, 2026-10-23), and providers/catalog.mjs for the Moov payee names (2026-10-23):
   // this manifest still records their fee-branch bytes; the plan rows moved on (checked in their own
   // tests below).
-  const REPINNED = new Set([ENGINE, WORKFLOW_RPC, 'providers/catalog.mjs']);
+  // tenant-billing-handlers.mjs was re-pinned for the tenant lifecycle actions (SQL 117, 2026-10-26).
+  const REPINNED = new Set([ENGINE, WORKFLOW_RPC, 'providers/catalog.mjs', HANDLERS]);
   for (const member of Object.keys(fees.members)) {
     if (REPINNED.has(member)) continue;
     const row = PLAN.members[member];
@@ -2186,6 +2187,36 @@ test('Onboarding reconciliation: four live onboarding members replaced the bytes
   assert.deepEqual(Object.keys(applied.members), [...NAMES, 'providers/production/moov-send.mjs']);
   assert.match(applied.notes, /SSM 8a72e2fc-c769-4ebf-9f00-64feb23d1df4/);
   assert.match(PLAN.notes, /Onboarding and payee sends applied 2026-10-26 on main 31a84414a/);
+});
+
+test('Tenant lifecycle: tenant-billing-handlers.mjs replaces the bytes production runs, still held for SQL 102 only (planning only)', async () => {
+  const MANIFEST_REL = 'aws/tests/fixtures/production-tenant-lifecycle-manifest-2026-10-26.json';
+  const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, MANIFEST_REL), 'utf8'));
+  const HANDLERS = 'tenant-billing-handlers.mjs';
+  // The live bytes: the fee-collection pin's accepted bytes, which read-only production overlay
+  // inspect run 40422339860 reported live (ALREADY_ACCEPTED).
+  const fees = JSON.parse(fs.readFileSync(path.join(ROOT, 'aws/tests/fixtures/production-fee-collection-pin-manifest-2026-10-17.json'), 'utf8'));
+  const LIVE = fees.members[HANDLERS].accepted_sha256;
+  const onMain = sha(`aws/functions/api/${HANDLERS}`);
+  assert.equal(manifest.workstream_id, 'production-tenant-lifecycle');
+  assert.equal(manifest.deploy_authorized, false);
+  assert.match(manifest.authorization, /^Pending owner review \(2026-10-26\)/);
+  assert.match(manifest.notes, /run 40422339860/);
+  assert.deepEqual(Object.keys(manifest.members), [HANDLERS]);
+  assert.match(PLAN.notes, /Tenant lifecycle \(2026-10-26, planning only, not authorized\)/);
+  assert.notEqual(onMain, LIVE);
+  assert.deepEqual(manifest.members[HANDLERS], { live_sha256: LIVE, accepted_sha256: onMain, operation: 'replace' });
+  // Not held for SQL 117: the new actions answer 'needs database update SQL 117' until it is applied.
+  const SQL102 = 'aws/workflows/sql/102_platform_owner_tenant_profile.sql';
+  assert.deepEqual(PLAN.members[HANDLERS], { operation: 'replace', accepted_sha256: onMain, expected_live_sha256: LIVE, sql_before: SQL102, manifest: MANIFEST_REL });
+  assert.match(fs.readFileSync(path.join(API, HANDLERS), 'utf8'), /needs database update SQL 117/);
+  assert.equal(resolvePlannedMember(HANDLERS, { root: ROOT, plan: PLAN }).ok, true);
+  const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: HANDLERS };
+  const ready = await run(inspect, { root: ROOT, inspectLive: liveFor(HANDLERS, { sha256: LIVE }) });
+  assert.equal(ready.mutation, false);
+  assert.notEqual(ready.state, 'ALREADY_ACCEPTED');
+  const done = await run(inspect, { root: ROOT, inspectLive: liveFor(HANDLERS, { sha256: onMain }) });
+  assert.equal(done.state, 'ALREADY_ACCEPTED');
 });
 
 test('Stakeholder settings edit: the three members record the bytes production runs 40189236116, 40189560481 and 40189657073 applied', () => {

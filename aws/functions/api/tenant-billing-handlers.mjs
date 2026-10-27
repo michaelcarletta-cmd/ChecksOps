@@ -62,6 +62,50 @@ export const TENANT_PROFILE_LOCKED_KEYS = Object.freeze(['slug', 'partner_code']
 export const SET_TENANT_PROFILE_SQL = 'SELECT public.aws_platform_owner_set_tenant_profile($1::uuid, $2::jsonb) AS result';
 export const REMOVE_TENANT_MEMBER_SQL = 'SELECT public.aws_platform_owner_remove_tenant_member($1::uuid, $2::uuid) AS result';
 
+/**
+ * SQL 117: deactivate (members suspended, reversible), reactivate, and permanently delete a
+ * tenant that has no checks or money movement (owner decision 2026-10-26).
+ */
+export const DEACTIVATE_TENANT_SQL = 'SELECT public.aws_platform_owner_deactivate_tenant($1::uuid, $2::text) AS result';
+export const REACTIVATE_TENANT_SQL = 'SELECT public.aws_platform_owner_reactivate_tenant($1::uuid) AS result';
+export const TENANT_ACTIVITY_SQL = 'SELECT public.aws_platform_owner_tenant_activity($1::uuid) AS result';
+export const DELETE_EMPTY_TENANT_SQL = 'SELECT public.aws_platform_owner_delete_empty_tenant($1::uuid, $2::text) AS result';
+export const DEACTIVATED_TENANTS_SQL = `
+  SELECT tenant_id, deactivated_at, reason, previous_subscription_status, suspended_memberships
+    FROM public.aws_platform_owner_deactivated_tenants()
+`;
+const SQL_117_MISSING_MESSAGE = 'Deactivating or deleting a company needs database update SQL 117.';
+
+/** Maps a refusal from the SQL 117 functions to { error, message }. */
+export const tenantLifecycleError = (error) => {
+  const code = String(error?.code || '');
+  const reason = String(error?.message || '').split(':')[0].trim();
+  const detail = error?.detail || null;
+  const refuse = (statusCode, errorCode, message, extra = {}) => ({
+    ok: false, statusCode, error: errorCode, message, ...extra,
+  });
+  if (code === '42883' || code === '42P01') return refuse(503, 'tenant_lifecycle_missing', SQL_117_MISSING_MESSAGE);
+  if (code === '42501') return refuse(403, 'platform_owner_required', 'Only the ChecksOps platform owner can deactivate or delete a company.');
+  if (code === 'P0002') return refuse(404, 'tenant_not_found', 'That company was not found.');
+  if (code === '55000' && reason === 'system_tenant_protected') {
+    return refuse(409, 'system_tenant_protected', 'The ChecksOps system company cannot be deactivated or deleted.');
+  }
+  if (code === '55000' && reason === 'tenant_not_empty') {
+    let counts = null;
+    try { counts = detail ? JSON.parse(detail) : null; } catch { counts = null; }
+    return refuse(409, 'tenant_not_empty', 'This company has checks or payment records, so it can only be deactivated.', { counts });
+  }
+  if (code === '55000' && reason === 'tenant_has_records') {
+    return refuse(409, 'tenant_has_records', 'This company still has records that must be kept, so it can only be deactivated.', { constraint: detail });
+  }
+  if (code === '22023' && reason === 'confirmation_mismatch') {
+    return refuse(400, 'confirmation_mismatch', "The confirmation doesn't match the company's URL name.");
+  }
+  if (code === '22023' && reason === 'invalid_value') return refuse(400, 'invalid_value', 'The reason is too long (500 characters at most).');
+  if (code === '22023') return refuse(400, 'missing_required_field', 'Choose a company first.');
+  throw error;
+};
+
 const PROFILE_FIELD_LABELS = Object.freeze({
   name: 'Company name',
   custom_domain: 'Custom domain',
@@ -256,6 +300,16 @@ const handleTenantBillingAdminInTransaction = async (event, deps = {}) => {
       return { ok: true, statusCode: 200, spoofFieldsIgnored: spoof, saved: true, destination };
     }
 
+    // SQL 117: the deactivated companies, for the Tenant Management list.
+    if (action === 'tenants-deactivated') {
+      try {
+        const { rows } = await client.query(DEACTIVATED_TENANTS_SQL);
+        return { ok: true, statusCode: 200, spoofFieldsIgnored: spoof, deactivated: rows || [] };
+      } catch (error) {
+        return denied(spoof, tenantLifecycleError(error));
+      }
+    }
+
     const tenantId = body.tenant_id || body.tenantId;
     if (!isUuid(tenantId)) {
       return denied(spoof, {
@@ -311,6 +365,33 @@ const handleTenantBillingAdminInTransaction = async (event, deps = {}) => {
         };
       } catch (error) {
         return denied(spoof, tenantProfileError(error));
+      }
+    }
+
+    // SQL 117: deactivate / reactivate / activity / delete an empty company.
+    if (action === 'tenant-deactivate' || action === 'tenant-reactivate'
+      || action === 'tenant-activity' || action === 'tenant-delete') {
+      try {
+        let row;
+        if (action === 'tenant-deactivate') {
+          const reason = body.reason == null ? null : String(body.reason);
+          row = (await client.query(DEACTIVATE_TENANT_SQL, [tenantId, reason])).rows[0];
+        } else if (action === 'tenant-reactivate') {
+          row = (await client.query(REACTIVATE_TENANT_SQL, [tenantId])).rows[0];
+        } else if (action === 'tenant-activity') {
+          row = (await client.query(TENANT_ACTIVITY_SQL, [tenantId])).rows[0];
+        } else {
+          const confirmSlug = String(body.confirm_slug || body.confirmSlug || '');
+          if (!confirmSlug.trim()) {
+            return denied(spoof, {
+              statusCode: 400, error: 'confirmation_required', message: "Type the company's URL name to confirm.",
+            });
+          }
+          row = (await client.query(DELETE_EMPTY_TENANT_SQL, [tenantId, confirmSlug])).rows[0];
+        }
+        return { ok: true, statusCode: 200, spoofFieldsIgnored: spoof, tenant_id: tenantId, result: row?.result || {} };
+      } catch (error) {
+        return denied(spoof, tenantLifecycleError(error));
       }
     }
 
