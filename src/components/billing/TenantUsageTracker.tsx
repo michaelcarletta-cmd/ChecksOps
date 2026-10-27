@@ -20,6 +20,7 @@ import {
   type UsageClaim,
   type UsageFeeEvent,
 } from "@/lib/billing/usageDisbursements";
+import { FeeScheduleCard } from "@/components/billing/FeeScheduleCard";
 
 
 export function TenantUsageTracker() {
@@ -143,8 +144,15 @@ export function TenantUsageTracker() {
     .filter((e: { event_type?: string | null }) => isSendFeeEvent(e.event_type))
     .reduce((sum: number, e: { unit_price_cents?: number | string | null }) => sum + Number(e.unit_price_cents ?? 0), 0) / 100;
 
+  // The price on the latest check processing charge: the per-check price when the tenant has no rate of its own.
+  const chargedCheckCents = (usage?.events ?? [])
+    .filter((e: { event_type?: string | null }) => e.event_type === "check_processing")
+    .map((e: { unit_price_cents?: number | string | null }) => Number(e.unit_price_cents))
+    .find((cents: number) => Number.isFinite(cents)) ?? null;
+
   return (
     <div className="space-y-6">
+      <FeeScheduleCard tenantId={tenant?.id} chargedCheckCents={chargedCheckCents} />
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card className="bg-gradient-to-br from-primary/10 to-blue-500/5 border-primary/20">
           <CardHeader className="pb-2">
