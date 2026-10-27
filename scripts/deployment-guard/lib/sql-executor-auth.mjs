@@ -2690,8 +2690,8 @@ export const AUTHORIZED_SQL120_USAGE_EVENTS_AT_APPROVAL_AND_SEND = Object.freeze
 // cash_job_line_items and cash_job_attachments for checksops and authenticated;
 // sync_cash_job_check_payment() SECURITY DEFINER with search_path public, pg_temp and EXECUTE for its
 // owner only; the cash-job payment recorded when a Check Alt deposit is approved or accepted, removed
-// when it is then rejected). No predecessor. Pending until a reviewed pin change records a staging
-// read-live.
+// when it is then rejected). No predecessor. Staging apply authorized (wave 21) from staging
+// read-live run 40588277757.
 export const AUTHORIZED_SQL121_CASH_JOBS_PRODUCTION_GRANTS = Object.freeze({
   key: 'sql121',
   filename: 'aws/workflows/sql/121_cash_jobs_production_grants.sql',
@@ -2699,9 +2699,10 @@ export const AUTHORIZED_SQL121_CASH_JOBS_PRODUCTION_GRANTS = Object.freeze({
   // The commit that last authored the file bytes.
   commit: '95069b2987728aa48ff1518903be218386398ff7',
   source_sha256: '72f1c189c4f218c477cea5f9974c40cbe1ff05b5cd4caf6f390e66636fd59ae6',
-  authorization: 'pending',
-  execute: false,
-  expected_live_definition_sha256: null,
+  authorization: 'Owner approved 2026-10-27: staging apply (wave 21) from staging read-live run 40588277757',
+  execute: true,
+  // Staging read-live run 40588277757 (main d20d599, executor 3k6z4Pa4...).
+  expected_live_definition_sha256: '084deae36bb533c91124d12698b1adb29e5fa7b9ff53932aa293537bc573e76e',
   // Code-derived: releaseIntendedHash('sql121', file bytes) (release-sql-state.mjs); re-derived by the tests.
   intended_replacement_sha256: '2dd2ead6974cec45f2b88fc76c81a3cd48befa25cc63fe03133f9fe24593165e',
   // The function the file creates (spec functions), then the existing one whose attributes and ACL it
@@ -2716,8 +2717,8 @@ export const AUTHORIZED_SQL121_CASH_JOBS_PRODUCTION_GRANTS = Object.freeze({
 // mortgage_handling_requests.return_emailed_at and six SECURITY DEFINER functions, five with EXECUTE
 // for checksops (a Desk message and a Desk document on the request's check, the shipping details, the
 // homeowner timeline row, the once-per-request "work returned" email claim) and the internal
-// working-request check for the owner only). No predecessor. Pending until a reviewed pin change
-// records a staging read-live.
+// working-request check for the owner only). No predecessor. Staging apply authorized (wave 21)
+// from staging read-live run 40588288300.
 export const AUTHORIZED_SQL122_MORTGAGE_DESK_RETURN_TO_TENANT = Object.freeze({
   key: 'sql122',
   filename: 'aws/workflows/sql/122_mortgage_desk_return_to_tenant.sql',
@@ -2725,9 +2726,10 @@ export const AUTHORIZED_SQL122_MORTGAGE_DESK_RETURN_TO_TENANT = Object.freeze({
   // The commit that last authored the file bytes.
   commit: '5872556730bdb89e125cc5356ce4e99ee5b868dc',
   source_sha256: 'b6f16b1dc615a78dfff87e488c543be72d79a8d2431246b2b0db0d0dbfbc12a8',
-  authorization: 'pending',
-  execute: false,
-  expected_live_definition_sha256: null,
+  authorization: 'Owner approved 2026-10-27: staging apply (wave 21) from staging read-live run 40588288300',
+  execute: true,
+  // Staging read-live run 40588288300 (main d20d599, executor 3k6z4Pa4...).
+  expected_live_definition_sha256: 'e13856d7a75483b5785b6e791fd83fbe9da9a1b09f6c819480cee54388a62609',
   // Code-derived: releaseIntendedHash('sql122', file bytes) (release-sql-state.mjs); re-derived by the tests.
   intended_replacement_sha256: 'd026eb9b5974a381900f2ef22066b9e408ffef86233195e14e5cdbd7ea619fe9',
   function_identities: Object.freeze([

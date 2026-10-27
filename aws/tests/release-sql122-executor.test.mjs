@@ -4,7 +4,7 @@
  * release-sql90-97-executor.test.mjs runs what every release key shares (SQL 122 included); this
  * file covers what is new:
  *
- *   - the pin: pending, code-derived, selectable, packed, in step with the production pin; the
+ *   - the pin: staging-authorized from its read-live (wave 21), code-derived, selectable, packed, in step with the production pin; the
  *     pinned commit authored the bytes; no predecessor;
  *   - the file and spec: the column mortgage_handling_requests.return_emailed_at and six SECURITY
  *     DEFINER functions (search_path public), five with EXECUTE for checksops and the owner, the
@@ -50,7 +50,7 @@ import { EXECUTOR_PACK_MEMBERS } from '../../scripts/deployment-guard/sql-execut
 import { MIGRATIONS } from '../../scripts/deployment-guard/github-staging-sql-executor.mjs';
 import { READ_LIVE_EXPECTED_SENTINEL } from '../../scripts/deployment-guard/lib/sql-executor-read-live.mjs';
 import { importGuardedSqlExecutor } from './helpers/import-guarded-sql-executor.mjs';
-import { assertStagingPinState } from './helpers/staging-sql-wave1.mjs';
+import { assertStagingPinState, pendingPin } from './helpers/staging-sql-wave1.mjs';
 import { pgSkipReason, releaseFixture, sql98To100Schema } from './helpers/release-sql-pg.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -135,7 +135,7 @@ CREATE FUNCTION public.aws_is_mortgage_ops_agent() RETURNS boolean LANGUAGE sql 
   AS $$ SELECT public.has_role(auth.uid(), 'mortgage_agent'::public.app_role) $$;
 ALTER FUNCTION public.aws_is_mortgage_ops_agent() OWNER TO checksops_admin;`;
 
-test('pin: SQL 122 pending, code-derived, selectable, packed, in step with the production pin; no predecessor', () => {
+test('pin: SQL 122 staging-authorized from its read-live, code-derived, selectable, packed, in step with the production pin; no predecessor', () => {
   const pin = PINS[KEY];
   const spec = RELEASE_SQL_SPECS[KEY];
   const packed = Object.fromEntries(EXECUTOR_PACK_MEMBERS);
@@ -146,11 +146,13 @@ test('pin: SQL 122 pending, code-derived, selectable, packed, in step with the p
   assert.equal(spec.choice, 'sql122-mortgage-desk-return-to-tenant');
   assert.doesNotMatch(spec.choice, /production/);
   assert.equal(sha(TEXT), pin.source_sha256);
-  // Pending: no staging read-live recorded yet (and no apply authorized).
+  // Staging apply authorized (owner approved 2026-10-27) from staging read-live run 40588288300: the
+  // six functions and return_emailed_at absent, so SQL 122 was not yet applied there.
   assertStagingPinState(assert, KEY, pin);
-  assert.equal(pin.execute, false);
-  assert.equal(pin.authorization, 'pending');
-  assert.equal(pin.expected_live_definition_sha256, null);
+  assert.equal(pin.execute, true);
+  assert.equal(pin.authorization, 'Owner approved 2026-10-27: staging apply (wave 21) from staging read-live run 40588288300');
+  assert.equal(pin.expected_live_definition_sha256, 'e13856d7a75483b5785b6e791fd83fbe9da9a1b09f6c819480cee54388a62609');
+  assert.notEqual(pin.expected_live_definition_sha256, pin.intended_replacement_sha256);
   assert.equal(releaseIntendedHash(KEY, TEXT), pin.intended_replacement_sha256);
   // Everything absent (a database without SQL 122) has a fingerprint of its own.
   assert.notEqual(releaseStateHash(KEY, {}), pin.intended_replacement_sha256);
@@ -388,8 +390,9 @@ test('PostgreSQL 16: SQL 122 through the executor: refused without SQL 100\'s ag
     assert.equal(r.already_applied, false);
     assert.notEqual(r.live_definition_sha256, PINS[KEY].intended_replacement_sha256);
     assert.deepEqual(r.release_sql_inspect.definer_writes, WRITES.map((table) => ({ name: table.replace(/^public\./, ''), ok: true })));
-    // A pending pin cannot apply.
-    const pending = await handlerFor(connect)(releaseEvent({ expected_live_definition_sha256: r.live_definition_sha256 }));
+    // A pending pin cannot apply (the committed pin is staging-authorized, so pend a copy).
+    const pendingCopy = pendingPin(PINS[KEY]);
+    const pending = await handlerFor(connect, { pins: { [KEY]: pendingCopy } })(releaseEvent({ pin: pendingCopy, expected_live_definition_sha256: r.live_definition_sha256 }));
     assert.equal(pending.ok, false);
     assert.equal(await fnCount(), 0);
 
