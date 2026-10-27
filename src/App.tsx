@@ -14,6 +14,7 @@ import { StepUpProvider } from "./hooks/useStepUp";
 import { ThemeProvider, ThemeScope } from "./hooks/useTheme";
 import { AwsStagingBanner } from "./components/AwsStagingBanner";
 import { LiveDataRefresh } from "./hooks/useLiveDataRefresh";
+import { RemoteChangeCursor } from "./hooks/useRemoteChangeCursor";
 
 
 import { isPublicTokenRoute } from "./lib/publicTokenRoutes";
@@ -200,6 +201,7 @@ const App = () => (
         <OfflineIndicator />
         <BrowserRouter>
           <AuthProvider>
+            <RemoteChangeCursor />
             <StepUpProvider>
               <ThemeScope>
                 <AwsStagingBanner />
