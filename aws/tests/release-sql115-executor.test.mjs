@@ -138,9 +138,12 @@ test('pin: SQL 115 staging-authorized from its read-live, code-derived, selectab
   assert.deepEqual(RELEASE_SQL_KEYS.filter((key) => (RELEASE_SQL_SPECS[key].supersedes || []).includes(KEY)
     || (RELEASE_SQL_SPECS[key].refuse_after || []).some((m) => m.key === KEY)
     || (RELEASE_SQL_SPECS[key].predecessors || []).includes(KEY)), []);
-  // No other release migration creates, replaces or sets the ACL of this function.
+  // No other release migration creates or replaces this function; SQL 119 only sets its ACL (owner
+  // only), immediately before SQL 115 in production (production's checksops line, 2026-10-27).
   assert.deepEqual(RELEASE_SQL_KEYS.filter((key) => key !== KEY && [...RELEASE_SQL_SPECS[key].functions, ...(RELEASE_SQL_SPECS[key].acl_functions || [])]
-    .some((fn) => fn.identity === SYNC_FUNCTION)), []);
+    .some((fn) => fn.identity === SYNC_FUNCTION)), ['sql119']);
+  assert.deepEqual(RELEASE_SQL_SPECS.sql119.functions, []);
+  assert.deepEqual(RELEASE_SQL_SPECS.sql119.runs_before, [KEY]);
   const prod = productionPin();
   assert.equal(prod.intended_replacement_sha256, pin.intended_replacement_sha256);
   assert.equal(prod.intended_post_state.fingerprint, pin.intended_replacement_sha256);

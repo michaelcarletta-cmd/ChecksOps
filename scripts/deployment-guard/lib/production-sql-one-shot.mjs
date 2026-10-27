@@ -258,7 +258,7 @@ export const ONE_SHOT_TOOLS = Object.freeze({
     pin_rel: SQL89_PRODUCTION_PIN_REL,
     allowed_key: 'sql89_production_apply_allowed',
   }),
-  // SQL 90-106 and 108-118 (release 2026-10-17): one tool per migration on the shared release engine.
+  // SQL 90-106 and 108-119 (release 2026-10-17): one tool per migration on the shared release engine.
   ...Object.fromEntries(Object.values(RELEASE_PRODUCTION).map((tool) => [tool.key, Object.freeze({
     key: tool.key,
     script: tool.cli,
@@ -294,6 +294,20 @@ export const ONE_SHOT_TOOLS = Object.freeze({
     pin_rel: RELEASE_PRODUCTION.sql106.pin_rel,
     allowed_key: RELEASE_PRODUCTION.sql106.allowed_key,
     runs_before: Object.freeze(['sql97']),
+  }),
+  // SQL 119 (ops/production-sql-119-apply.md): the shared release tool, with its order. Pin, file
+  // hash and fingerprints come from the pin, never this registry.
+  //   Order (runs_before, informational): SQL 119 immediately before SQL 115. SQL 115's guard
+  //   (function_acl_replaceable) refuses the function's live checksops EXECUTE entry until SQL 119
+  //   has left the owner as the only grantee; SQL 119 itself has no predecessor and is refused as
+  //   already in place once the owner is the only grantee (after SQL 115).
+  sql119: Object.freeze({
+    key: 'sql119',
+    script: RELEASE_PRODUCTION.sql119.cli,
+    args: Object.freeze([]),
+    pin_rel: RELEASE_PRODUCTION.sql119.pin_rel,
+    allowed_key: RELEASE_PRODUCTION.sql119.allowed_key,
+    runs_before: Object.freeze(['sql115']),
   }),
 });
 

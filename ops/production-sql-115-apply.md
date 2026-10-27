@@ -70,6 +70,14 @@ of `auth`) unchanged, this function excepted. The tools roll back otherwise.
 No predecessor and no order. No code change depends on it: the API keeps writing
 `payment_provider_accounts` as before, and the trigger stops failing.
 
+**Production: SQL 119 first.** The read-only production inspect of 2026-10-27 (SSM
+`2db258df-47a8-414b-b7c6-b9686768c5b9`) found EXECUTE for `PUBLIC`, `checksops` and the owner,
+live `83d480ac`, `precondition_failures` `[function_acl_replaceable]`: the `checksops` line is
+not one this file revokes. SQL 119 (`ops/production-sql-119-apply.md`) runs immediately before
+SQL 115 in production and leaves the owner as the only grantee; this file and its fingerprint
+are unchanged. Staging needs no SQL 119 apply (SQL 115 is in and there is no `checksops`
+grant); its read-live is SQL 119's staging acceptance.
+
 ## Steps
 
 1. Staging: the staging executor must carry SQL 115 first (executor package refresh through
