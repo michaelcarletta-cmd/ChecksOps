@@ -2712,6 +2712,34 @@ export const AUTHORIZED_SQL121_CASH_JOBS_PRODUCTION_GRANTS = Object.freeze({
   ]),
 });
 
+// Mortgage Desk 2026-10-27 staging pin: SQL 122 (the Mortgage Desk returns its work to the tenant:
+// mortgage_handling_requests.return_emailed_at and six SECURITY DEFINER functions, five with EXECUTE
+// for checksops (a Desk message and a Desk document on the request's check, the shipping details, the
+// homeowner timeline row, the once-per-request "work returned" email claim) and the internal
+// working-request check for the owner only). No predecessor. Pending until a reviewed pin change
+// records a staging read-live.
+export const AUTHORIZED_SQL122_MORTGAGE_DESK_RETURN_TO_TENANT = Object.freeze({
+  key: 'sql122',
+  filename: 'aws/workflows/sql/122_mortgage_desk_return_to_tenant.sql',
+  migration_id: '122_mortgage_desk_return_to_tenant',
+  // The commit that last authored the file bytes.
+  commit: '5872556730bdb89e125cc5356ce4e99ee5b868dc',
+  source_sha256: 'b6f16b1dc615a78dfff87e488c543be72d79a8d2431246b2b0db0d0dbfbc12a8',
+  authorization: 'pending',
+  execute: false,
+  expected_live_definition_sha256: null,
+  // Code-derived: releaseIntendedHash('sql122', file bytes) (release-sql-state.mjs); re-derived by the tests.
+  intended_replacement_sha256: 'd026eb9b5974a381900f2ef22066b9e408ffef86233195e14e5cdbd7ea619fe9',
+  function_identities: Object.freeze([
+    'public.aws_mortgage_desk_working_request(uuid, text[])',
+    'public.aws_mortgage_desk_post_message(uuid, text)',
+    'public.aws_mortgage_desk_attach_file(uuid, text, text, text, bigint, text, text)',
+    'public.aws_mortgage_desk_update_shipping(uuid, jsonb)',
+    'public.aws_mortgage_desk_completion_timeline(uuid)',
+    'public.aws_mortgage_desk_return_email_claim(uuid)',
+  ]),
+});
+
 export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql90: AUTHORIZED_SQL90_USERS_ONLY_TENANT_ROLES,
   sql91: AUTHORIZED_SQL91_MOOV_ONBOARDING,
@@ -2744,6 +2772,7 @@ export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql119: AUTHORIZED_SQL119_PROVIDER_STAKEHOLDER_SYNC_ACL,
   sql120: AUTHORIZED_SQL120_USAGE_EVENTS_AT_APPROVAL_AND_SEND,
   sql121: AUTHORIZED_SQL121_CASH_JOBS_PRODUCTION_GRANTS,
+  sql122: AUTHORIZED_SQL122_MORTGAGE_DESK_RETURN_TO_TENANT,
 });
 
 // The fee collection pin under its earlier map name (the same object as the release map's sql98).
@@ -2759,7 +2788,7 @@ export function isSql30TenantDocumentsDocType(input = {}) {
   return pinIdentifiersMatch(input, AUTHORIZED_SQL30_TENANT_DOCUMENTS_DOC_TYPE);
 }
 
-/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql121) an input names, or null. */
+/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql122) an input names, or null. */
 export function releaseSqlMigrationKey(input = {}) {
   return Object.keys(RELEASE_2026_10_17_PENDING_SQL_PINS)
     .find((key) => pinIdentifiersMatch(input, RELEASE_2026_10_17_PENDING_SQL_PINS[key])) || null;
