@@ -1,0 +1,14 @@
+{
+  "workstream_id": "production-delete-check-unshare-first",
+  "authorization": "Pending owner review (2026-10-27). Planning only: nothing is live or verified. The owner asked for this change in the words \"Work on delete check fix. If we need to delete a shared check we need to unshared and then delete\". Each production apply still needs its own owner approval, a staging acceptance reference and a read-only production inspect that confirms the live bytes.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Delete Check (workflow.mjs handleDeleteCheck, the handler production serves): it refused every check whose external_origin names a source check or Freedom CRM as shared with a partner, so a partner-ingested copy with no share could not be deleted, and it refused a check in Review that had a claim_payments row (written when OCR links a claim) or a check_billing_events row (the mortgage_handling event written when a check enters Review). Now only an active shared_checks row (revoked_at IS NULL) refuses, with 'Unshare it first, then delete it'; claim_payments is not a blocker (its check link is ON DELETE SET NULL); check_billing_events blocks only when not voided and invoiced (status or invoice_id) or not mortgage_handling. Deposits, Check Alt deposits, disbursements, payment directions, deposited claim checks and terminal checks still refuse. The plan row keeps expected_live_sha256; a read-only production overlay inspect must confirm the live bytes before any apply.",
+  "members": {
+    "workflow.mjs": {
+      "live_sha256": "ecd6f716d6a2203a05446afd24eb1bf9e5849e70e49a0ee86bde708fd36c1968",
+      "accepted_sha256": "649de82235ae4361677e11c5a43e9dbacbc3a2174fbc845aedc9a9b76734a670",
+      "operation": "replace"
+    }
+  }
+}
