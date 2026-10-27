@@ -31,6 +31,7 @@ import { useWallet } from "@/hooks/useWallet";
 import { useSweepConfig } from "@/hooks/useSweepConfig";
 import {
   useRefreshTransferStatuses,
+  useSyncOpenInvoicesOnOpen,
   useWalletOpsTransfers,
   useWalletRunningBalance,
 } from "@/hooks/useWalletOps";
@@ -133,6 +134,7 @@ export default function WalletOps() {
     enable: enableSweeps,
   } = useSweepConfig("operating");
   const { data: transferData, isLoading: transfersLoading } = useWalletOpsTransfers();
+  useSyncOpenInvoicesOnOpen();
   const refreshStatuses = useRefreshTransferStatuses();
 
   const { data: runningData, isLoading: runningLoading } = useWalletRunningBalance("operating");
@@ -174,6 +176,8 @@ export default function WalletOps() {
   });
   const pendingOut = (transferData?.pendingOutCents ?? 0) + sweepActivity.pendingOutCents;
   const pendingIn = transferData?.pendingInCents ?? 0;
+  const invoicePendingIn = transferData?.invoicePendingInCents ?? 0;
+  const invoicesBeingPaid = transferData?.invoicesInFlight?.length ?? 0;
   const minimumCents = config?.minimum_balance_cents ?? 0;
   const billingActivity = transferData?.billing ?? [];
   const classifiedTransfers = transferData?.classified ?? [];
@@ -342,6 +346,11 @@ export default function WalletOps() {
               <div className="mt-1 text-xl font-semibold">
                 {transfersLoading ? "…" : money(pendingIn)}
               </div>
+              {!transfersLoading && invoicesBeingPaid > 0 && (
+                <div className="mt-0.5 text-[11px] text-muted-foreground">
+                  Includes {money(invoicePendingIn)} from {invoicesBeingPaid} invoice{invoicesBeingPaid === 1 ? "" : "s"} being paid
+                </div>
+              )}
             </div>
             <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3">
               <div className="flex items-center gap-1.5 text-[10px] font-bold tracking-wider text-amber-500">
