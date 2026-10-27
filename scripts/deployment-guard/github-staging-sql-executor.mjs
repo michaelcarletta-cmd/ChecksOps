@@ -125,6 +125,7 @@ export const MIGRATIONS = Object.freeze({
   'sql117-platform-owner-tenant-lifecycle': RELEASE_2026_10_17_PENDING_SQL_PINS.sql117,
   'sql118-platform-owner-tenant-lifecycle': RELEASE_2026_10_17_PENDING_SQL_PINS.sql118,
   'sql119-provider-stakeholder-sync-acl': RELEASE_2026_10_17_PENDING_SQL_PINS.sql119,
+  'sql120-usage-events-at-approval-and-send': RELEASE_2026_10_17_PENDING_SQL_PINS.sql120,
 });
 
 const LAMBDA_CODE_SHA_RE = /^[A-Za-z0-9+/]{43}=$/;

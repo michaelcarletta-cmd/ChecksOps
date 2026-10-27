@@ -199,7 +199,7 @@ test('pin: the release pin shape, applied and retired (owner approved 2026-10-21
   assert.match(cli, /runReleaseProductionTool\(\s*\{ key: 'sql108'/);
   const rows = JSON.stringify(readJson('ops/deployment-guard/bypass-inventory.json'));
   assert.match(rows, /"path":"scripts\/deployment-guard\/sql108-check-intake-items-funds-type-values-production-apply\.mjs","classification":"GUARDED","capabilities":\["sql108-production-apply"\]/);
-  assert.match(rows, /sql105, sql106, sql108, sql109, sql110, sql111, sql112, sql113, sql114, sql115, sql116, sql117, sql118, sql119\)/);
+  assert.match(rows, /sql105, sql106, sql108, sql109, sql110, sql111, sql112, sql113, sql114, sql115, sql116, sql117, sql118, sql119, sql120\)/);
   const scripts = readJson('package.json').scripts;
   const workflow = fs.readFileSync(path.join(ROOT, '.github/workflows/deployment-guard.yml'), 'utf8');
   for (const name of ['aws/tests/release-sql108-executor.test.mjs', 'aws/tests/release-sql108-production-apply.test.mjs']) {

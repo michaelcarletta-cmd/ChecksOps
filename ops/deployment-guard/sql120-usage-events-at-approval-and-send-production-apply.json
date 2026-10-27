@@ -1,0 +1,68 @@
+{
+  "id": "sql120-usage-events-at-approval-and-send-production-apply",
+  "migration": "sql120",
+  "authorization": "pending",
+  "execute": false,
+  "target_environment": "production",
+  "target_component": "production-sql",
+  "deployment_type": "sql-apply",
+  "filename": "aws/workflows/sql/120_usage_events_at_approval_and_send.sql",
+  "migration_id": "120_usage_events_at_approval_and_send",
+  "staging_pin_commit": "c5f5bc1122e050470e5fc3cef8a8c2acbe3a8389",
+  "source_sha256": "aa7d44c3b0de31cec012bc04ece0591553fafb1a9f97f46f0b4a9168b10d6fc2",
+  "function_identities": [
+    "public.aws_check_processing_price_cents(uuid)",
+    "public.aws_record_checkalt_billing_event()",
+    "public.aws_send_speed_fee_type(text)",
+    "public.aws_send_speed_fee_cents(uuid, text)",
+    "public.aws_record_send_speed_fee()"
+  ],
+  "expected_live_definition_sha256": null,
+  "intended_replacement_sha256": "fc9d0e340d0a469440a8bbfd3d546ededbe4f035c12c584334a2a610c55ffc56",
+  "authorization_phrase": "APPLY_USAGE_EVENTS_AT_APPROVAL_AND_SEND",
+  "predecessors": [],
+  "order_note": "No predecessor and no ordering constraint. SQL 120 needs SQL 98's aws_check_billing_default_price_cents() and aws_check_billing_charges_when_per_check_off() and SQL 96's tenant next_day_rate_cents / same_day_rate_cents columns (spec prerequisites; both applied in production). The month-end billing engine change (tenant-billing-engine.mjs: bill only the send-time events, skip voided ones, send legs only) is a separate, later Lambda step whose plan row names SQL 120 as sql_before; until it is deployed the engine reuses the event SQL 120 writes for a leg, so no fee is billed twice.",
+  "admin_login": "checksops_admin",
+  "rds_identifier": "checksops-production",
+  "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
+  "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
+  "tooling": {
+    "status": "built",
+    "production_tool": "scripts/deployment-guard/sql120-usage-events-at-approval-and-send-production-apply.mjs",
+    "production_lib": "scripts/deployment-guard/lib/release-sql-production-apply.mjs",
+    "staging_executor_handler": "aws/write-path/guarded-sql-executor/index.mjs handleReleaseSqlMigration",
+    "staging_workflow_choice": "sql120-usage-events-at-approval-and-send",
+    "one_shot_migration": "sql120",
+    "fingerprint_engine": "scripts/deployment-guard/lib/release-sql-state.mjs",
+    "runbook": "ops/production-sql-120-apply.md",
+    "tests": [
+      "aws/tests/release-sql120-executor.test.mjs",
+      "aws/tests/release-sql120-production-apply.test.mjs",
+      "aws/tests/release-sql90-97-executor.test.mjs",
+      "aws/tests/release-sql90-97-production-apply.test.mjs",
+      "aws/tests/sql120-usage-events-pg.test.mjs"
+    ],
+    "note": "Guarded tooling for SQL 120: sql120-usage-events-at-approval-and-send-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql120-usage-events-at-approval-and-send); production-sql-one-shot.mjs --migration sql120. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): the five functions (bodies and attributes from the file, EXECUTE for the owner only), the two triggers and the covering unique index on check_billing_events (payment_transfer_id, event_type). The backfill writes rows only and is not part of the fingerprint. The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
+  },
+  "production_inspect": {
+    "status": "pending",
+    "date": null,
+    "ssm_command_id": null,
+    "source_commit": null,
+    "read_only": true,
+    "connected_as": "checksops_admin",
+    "live_definition_sha256": null,
+    "apply_preconditions_met": null,
+    "precondition_failures": null,
+    "note": "Pending: no read-only production inspect has been run for SQL 120 yet. Record its date, SSM command id, source commit, live_definition_sha256, prerequisites_missing, counts.check_billing_event_transfer_duplicates, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. Stop if prerequisites_missing is not [] (a column the triggers write is absent in production) or precondition_failures is not []: that needs its own reviewed change."
+  },
+  "intended_post_state": {
+    "fingerprint": "fc9d0e340d0a469440a8bbfd3d546ededbe4f035c12c584334a2a610c55ffc56",
+    "note": "Five functions owned by checksops_admin, EXECUTE for the owner only: aws_check_processing_price_cents(uuid), aws_record_checkalt_billing_event(), aws_send_speed_fee_type(text), aws_send_speed_fee_cents(uuid, text), aws_record_send_speed_fee(). Triggers aws_checkalt_deposit_billing_event (AFTER INSERT OR UPDATE OF status ON checkalt_deposits) and aws_payment_transfer_send_speed_fee (AFTER INSERT OR UPDATE OF status ON payment_transfers). A unique index covering check_billing_events (payment_transfer_id, event_type) (check_billing_events_transfer_event_uidx unless one exists). No policy, grant, table or column change; SQL 98's record_check_billing_event and its trigger unchanged. Rows: the backfill adds check_processing events for October 2026 Check Alt approvals and next-day / same-day fees for October 2026 sends that have none. The fingerprint is releaseIntendedHash('sql120', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): fc9d0e340d0a469440a8bbfd3d546ededbe4f035c12c584334a2a610c55ffc56."
+  },
+  "staging_acceptance": {
+    "ok": false,
+    "reference": null,
+    "basis": "Pending: record the guarded staging SQL executor read-live (and, if staging is not yet at the intended state, the staging apply) of SQL 120 (choice sql120-usage-events-at-approval-and-send) here in the reviewed change that sets execute true. The behavior is covered on PostgreSQL 16 by aws/tests/sql120-usage-events-pg.test.mjs. Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+  }
+}
