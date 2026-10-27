@@ -240,10 +240,10 @@
     },
     "workflow.mjs": {
       "operation": "replace",
-      "accepted_sha256": "649de82235ae4361677e11c5a43e9dbacbc3a2174fbc845aedc9a9b76734a670",
+      "accepted_sha256": "c7159c4d9a74342f2a0f59a2836def78376c84d2781bbeb56dbb35ba83ed9337",
       "expected_live_sha256": "ecd6f716d6a2203a05446afd24eb1bf9e5849e70e49a0ee86bde708fd36c1968",
       "sql_before": null,
-      "manifest": "aws/tests/fixtures/production-delete-check-unshare-first-manifest-2026-10-27.json"
+      "manifest": "aws/tests/fixtures/production-delete-check-shared-delete-manifest-2026-10-27.json"
     },
     "claim-settlement-rpc.mjs": {
       "operation": "add",

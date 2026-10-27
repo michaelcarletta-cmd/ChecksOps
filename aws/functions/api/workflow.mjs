@@ -598,32 +598,8 @@ export const handleDeleteCheck = async (event, deps = {}) => {
     if (!(await isTenantMember(client, mapping.application_user_id, looked.check.tenant_id))) {
       return denied(spoof, { error: 'not_authorized', message: 'Only a member of this check\'s company can delete it' });
     }
-    // Owner policy: a check shared with a partner is unshared first, then deleted. Only an active
-    // share blocks; a partner-ingested copy (external_origin.source_check_id) or a revoked share does not.
-    await client.query('SAVEPOINT delete_active_share');
-    try {
-      const shared = (await client.query(
-        'SELECT 1 FROM public.shared_checks WHERE check_id = $1::uuid AND revoked_at IS NULL LIMIT 1',
-        [looked.check.id],
-      )).rows;
-      await client.query('RELEASE SAVEPOINT delete_active_share');
-      if (shared.length) {
-        return denied(spoof, {
-          error: 'check_shared_with_partner',
-          message: 'This check is shared with a partner. Unshare it first, then delete it.',
-        });
-      }
-    } catch (error) {
-      try { await client.query('ROLLBACK TO SAVEPOINT delete_active_share'); } catch { /* ignore */ }
-      try { await client.query('RELEASE SAVEPOINT delete_active_share'); } catch { /* ignore */ }
-      if (error?.code !== '42P01') {
-        return denied(spoof, {
-          error: 'blocker_verification_denied',
-          message: 'This check cannot be deleted because the service cannot verify whether it is shared (shared_checks).',
-          blocker: 'shared_checks',
-        });
-      }
-    }
+    // Owner policy: a member deletes a check with a reason, shared or not. Sharing does not block:
+    // the check's shared_checks rows are removed with it (ON DELETE CASCADE), which unshares it.
     if (isTerminalFinancial(looked.check)) {
       return denied(spoof, {
         error: 'check_terminal_financial_state',

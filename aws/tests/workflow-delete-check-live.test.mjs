@@ -2,9 +2,10 @@
  * Delete Check as served in production (aws/functions/api/workflow.mjs handleDeleteCheck;
  * workflow-delete-check.mjs is not deployed, see production-lambda-source-reconciliation.test.mjs).
  *
- * Owner policy (2026-10-27): every check can be deleted with a reason. A check shared with a partner
- * is unshared first, then deleted: only an active shared_checks row blocks, not a partner-ingested
- * copy (external_origin.source_check_id) or a revoked share. A claim payment does not block (its
+ * Owner policy (2026-10-27): every check can be deleted with a reason, shared or not ("I really just
+ * need to be able to delete checks with a reason typed in and no other issues"). Sharing does not
+ * block: the check's shared_checks rows go with it (ON DELETE CASCADE), and a partner-ingested copy
+ * (external_origin.source_check_id) is the company's own check. A claim payment does not block (its
  * check link is ON DELETE SET NULL); a billing event blocks only once billed (invoiced, or a charge
  * for work done), not the mortgage_handling event written when a check enters Review. Real money
  * records (deposits, Check Alt, disbursements) still block.
@@ -61,7 +62,7 @@ const ingestedCheck = {
 
 const ANY_ROW = [{ '?column?': 1 }];
 
-const mockClient = ({ check = baseCheck, activeShare = false, shareError = null, blockers = {} } = {}) => {
+const mockClient = ({ check = baseCheck, blockers = {} } = {}) => {
   const queries = [];
   return {
     queries,
@@ -80,14 +81,6 @@ const mockClient = ({ check = baseCheck, activeShare = false, shareError = null,
       if (sql === TENANT_MEMBER_SQL) return { rows: params[0] === APP_ID && params[1] === FREEDOM ? ANY_ROW : [] };
       if (/FROM public.check_intake_items/.test(sql) && /SELECT id, tenant_id/.test(sql)) return { rows: [check] };
       if (/SELECT \* FROM public.check_intake_items/.test(sql)) return { rows: [check] };
-      if (/FROM public.shared_checks/.test(sql)) {
-        if (shareError) {
-          const error = new Error('shared_checks read failed');
-          error.code = shareError;
-          throw error;
-        }
-        return { rows: activeShare ? ANY_ROW : [] };
-      }
       for (const table of ['deposit_items', 'checkalt_deposits', 'disbursement_batches', 'claim_check_payments',
         'claim_payments', 'check_billing_events', 'check_payment_directions', 'claim_disbursements']) {
         if (new RegExp(`FROM public\\.${table}\\b`).test(sql)) return { rows: blockers[table] ? ANY_ROW : [] };
@@ -124,27 +117,13 @@ test('a partner-ingested copy with no active share is deleted', async () => {
   assert.equal(client.queries.some((q) => /INSERT INTO public\.check_deletion_log/.test(q.sql)), true);
 });
 
-test('an actively shared check is refused until it is unshared; only an active share counts', async () => {
-  const client = mockClient({ activeShare: true });
+test('a shared check is deleted with its reason; sharing is never read or a blocker', async () => {
+  const client = mockClient();
   const result = await remove(client);
-  assert.equal(result.ok, false);
-  assert.equal(result.error, 'check_shared_with_partner');
-  assert.match(result.message, /Unshare it first, then delete it/);
-  assert.equal(deleted(client), false);
-  const share = client.queries.find((q) => /FROM public\.shared_checks/.test(q.sql));
-  assert.match(share.sql, /check_id = \$1::uuid AND revoked_at IS NULL/);
-  assert.deepEqual(share.params, [CHECK_ID]);
-});
-
-test('a share check that cannot be read refuses; a missing shared_checks table does not block', async () => {
-  const denied = mockClient({ shareError: '42501' });
-  const refused = await remove(denied);
-  assert.equal(refused.ok, false);
-  assert.equal(refused.error, 'blocker_verification_denied');
-  assert.equal(refused.blocker, 'shared_checks');
-  assert.equal(deleted(denied), false);
-  const absent = mockClient({ shareError: '42P01' });
-  assert.equal((await remove(absent)).ok, true);
+  assert.equal(result.ok, true, JSON.stringify(result));
+  assert.equal(result.data.deleted, true);
+  assert.equal(deleted(client), true);
+  assert.equal(client.queries.some((q) => /shared_checks/.test(q.sql)), false);
 });
 
 test('a claim payment linked to a check in Review does not block (its link is ON DELETE SET NULL)', async () => {
