@@ -1,0 +1,15 @@
+{
+  "workstream_id": "production-delete-check-applied",
+  "authorization": "Record only (2026-10-27): the bytes below are live. Nothing is planned or authorized by this manifest; any later change to this member needs its own manifest, staging acceptance and owner approval.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Delete Check (a member deletes any check with a reason; only money-moved or billed records still refuse) applied 2026-10-27 through the guarded overlay path on main 1b02a9b21 (#1294, #1295, plan reconcile #1296), on the owner's \"DEPLOY workflow.mjs TO PRODUCTION\": workflow.mjs (753ae14a -> c7159c4d; staging apply runs 40523077105 and 40526348308; production pre-apply inspect run 40530101746 READY at CodeSha256 GyIaihpMixxk6gYtZo8bIIr3FHPvxd37X3A7blmcAC8=, RevisionId 70379dc2-6a82-4deb-944a-3de6b2bda245; production apply run 40530367414). The production apply run concluded success including its \"Verify live member is the accepted bytes\" step (VERIFIED at CodeSha256 5w11XWe+2lgTnWTm5zQBrVWJftLs74DnwW6sZmoYbl8=, RevisionId 3aa7dd74-248c-4d22-a304-41d7e28d1e86) and the public production smoke (/health and /db-health 200). Read-only production inspect run 40530792383 then reported the live member at the accepted bytes c7159c4d. The row records the applied bytes as live_sha256 and accepted_sha256 and chains to the manifest that planned it (previous_manifest), which keeps the pre-apply state.",
+  "members": {
+    "workflow.mjs": {
+      "live_sha256": "c7159c4d9a74342f2a0f59a2836def78376c84d2781bbeb56dbb35ba83ed9337",
+      "accepted_sha256": "c7159c4d9a74342f2a0f59a2836def78376c84d2781bbeb56dbb35ba83ed9337",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-delete-check-shared-delete-manifest-2026-10-27.json"
+    }
+  }
+}
