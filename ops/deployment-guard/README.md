@@ -81,6 +81,8 @@ node scripts/deployment-guard/sql117-platform-owner-tenant-lifecycle-production-
 node scripts/deployment-guard/sql118-platform-owner-tenant-lifecycle-production-apply.mjs --inspect   # Tenant deactivate / reactivate / delete-empty (ops/production-sql-118-apply.md)
 node scripts/deployment-guard/sql119-provider-stakeholder-sync-acl-production-apply.mjs --inspect   # provider stakeholder sync EXECUTE owner only, before SQL 115 (ops/production-sql-119-apply.md)
 node scripts/deployment-guard/sql120-usage-events-at-approval-and-send-production-apply.mjs --inspect   # usage events at Check Alt approval and at send time (ops/production-sql-120-apply.md)
+node scripts/deployment-guard/sql121-cash-jobs-grants-production-apply.mjs --inspect   # cash-job table grants, definer payment trigger, cash-job payment at Check Alt approval (ops/production-sql-121-apply.md)
+node scripts/deployment-guard/sql122-mortgage-desk-return-to-tenant-production-apply.mjs --inspect   # Mortgage Desk returns its work to the tenant: notes, documents, shipping, email claim (ops/production-sql-122-apply.md)
 # Production SQL 71, 77-89 and 90-102 on the runner, one invocation (ops/production-sql-one-shot.md)
 node scripts/deployment-guard/production-sql-one-shot.mjs --migration sql80 --phase inspect ...
 node scripts/deployment-guard/verify-live.mjs --input path/to/live.json
@@ -111,6 +113,18 @@ its recorded live value. Credential-like keys are never set; a removal is record
 
 The production HTTP API CORS allow-list (`*` to checksops.com and www.checksops.com, nothing else)
 goes through `guarded-production-cors.yml`. Runbook: `ops/production-cors-allowlist.md`.
+
+The production stack `checksops-production-checkalt-status-schedule` (scheduled, read-only Check
+Alt status check; template `aws/production/checkalt-status-reconcile-schedule.yaml`, sha256 pinned
+in `scripts/deployment-guard/production-checkalt-schedule.mjs`) is created, paused and resumed
+through `guarded-production-checkalt-schedule.yml`: `inspect` is read-only; `create` needs the
+stack, role and schedule absent and `CREATE CHECKALT STATUS SCHEDULE IN PRODUCTION`; `set-state`
+needs `PAUSE ...` or `RESUME CHECKALT STATUS SCHEDULE IN PRODUCTION`. Both take the
+`production-checkalt-status-schedule` lease and a KMS-signed `cloudformation` receipt that binds the
+whole snapshot and the actor id or target state; the writer never retries or deletes. The deploy
+role has no CloudFormation, IAM or Scheduler rights until an operator attaches the scoped
+statements in `aws/production-lambda-overlay/policies/permissions-policy.json` once (owner-approved,
+manual). Runbook: `ops/checkalt-status-reconcile-schedule.md`.
 It reports the requested repository member as `PRESENT` (with its SHA-256) or
 `ABSENT`, alongside the live Lambda CodeSha256 and RevisionId. Absence is not
 deployment authorization. For `apply`, explicitly select `add` for an absent

@@ -359,10 +359,22 @@
       "note": "Official production apply for SQL 120 (aws/workflows/sql/120_usage_events_at_approval_and_send.sql: usage events at Check Alt approval and at send time; five functions, EXECUTE for the owner only; triggers on checkalt_deposits and payment_transfers; the covering unique index on check_billing_events (payment_transfer_id, event_type); a backfill from 2026-10-01) only. Same engine and gates as SQL 109; no predecessor. Refuses unless every prerequisite table, column and SQL 98 price function is present, the login owns the altered tables and can write check_billing_events, and no duplicated (payment_transfer_id, event_type) pair exists without a covering unique index. Rolls back unless the intended fingerprint is reached and everything else in the catalog is unchanged. Inspect is BEGIN READ ONLY ... ROLLBACK and reads one aggregate count."
     },
     {
+      "path": "scripts/deployment-guard/sql121-cash-jobs-grants-production-apply.mjs",
+      "classification": "GUARDED",
+      "capabilities": ["sql121-production-apply"],
+      "note": "Official production apply for SQL 121 (aws/workflows/sql/121_cash_jobs_production_grants.sql: SELECT, INSERT, UPDATE and DELETE on cash_jobs, cash_job_line_items and cash_job_attachments for checksops and authenticated; sync_cash_job_check_payment() SECURITY DEFINER with search_path public, pg_temp and EXECUTE for its owner only; the new aws_record_cash_job_checkalt_payment() and its trigger on checkalt_deposits) only. Same engine and gates as SQL 109; no predecessor. Refuses unless every prerequisite table, column, role and the function are present, the login owns the altered tables and the function, the function's body is the reviewed one, every live EXECUTE entry on it is one the file revokes or keeps, and the definer can write cash_job_payments and cash_jobs. Rolls back unless the intended fingerprint is reached, the function is otherwise unchanged, other grants on the three tables are unchanged and everything else in the catalog is unchanged. Inspect is BEGIN READ ONLY ... ROLLBACK and reads no table rows."
+    },
+    {
+      "path": "scripts/deployment-guard/sql122-mortgage-desk-return-to-tenant-production-apply.mjs",
+      "classification": "GUARDED",
+      "capabilities": ["sql122-production-apply"],
+      "note": "Official production apply for SQL 122 (aws/workflows/sql/122_mortgage_desk_return_to_tenant.sql: the Mortgage Desk returns its work to the tenant; the column mortgage_handling_requests.return_emailed_at and six SECURITY DEFINER functions, five with EXECUTE for checksops (Desk message, Desk document, shipping details, homeowner timeline row, the once-per-request \"work returned\" email claim) and the internal working-request check for the owner only; no policy, table grant or trigger) only. Same engine and gates as SQL 111; no predecessor. Refuses unless SQL 100's aws_is_mortgage_ops_agent(), is_platform_owner(), auth.uid(), role checksops and every table and column the file uses are present, the login owns mortgage_handling_requests and can write check_messages, check_files, mortgage_handling_requests and homeowner_ledger_events. Rolls back unless the intended fingerprint is reached and everything else in the catalog is unchanged. Inspect is BEGIN READ ONLY ... ROLLBACK and reads no table rows."
+    },
+    {
       "path": "scripts/deployment-guard/production-sql-one-shot.mjs",
       "classification": "GUARDED",
       "capabilities": ["production-sql-orchestrator"],
-      "note": "Runner-side orchestrator for one registered production SQL tool (sql71, sql77, sql78, sql79, sql80, sql81, sql82, sql83, sql84, sql85, sql86, sql87, sql88, sql89, sql90, sql91, sql92, sql93, sql94, sql95, sql96, sql97, sql98, sql99, sql100, sql101, sql102, sql103, sql104, sql105, sql106, sql108, sql109, sql110, sql111, sql112, sql113, sql114, sql115, sql116, sql117, sql118, sql119, sql120). Never connects to a database or AWS itself and never applies SQL: it verifies the transfer tarball, the tree and the migration bytes, then runs the registered tool's --inspect, the registry's accepted contracts, preflight.mjs --acquire-lease --receipt, the tool's evaluate and --apply, and a post-apply --inspect, each as a child process, stopping on the first failure. Refuses a pin with execute false, takes no receipt, manifest or input file, refuses to start with any CHECKSOPS_DEPLOYMENT_GUARD_* or node loader variable or node flag set, binds the tree to --expected-tarball-sha256 and SOURCE_COMMIT and re-compares it before preflight and before apply, gives children only an allowlisted environment, and sets CHECKSOPS_DEPLOYMENT_GUARD_APPLY=1 and the preflight-issued receipt path only for the single apply child. The tool's own enforceScriptGuard, receipt ownership, execute, phrase and one_use_id checks stay authoritative."
+      "note": "Runner-side orchestrator for one registered production SQL tool (sql71, sql77, sql78, sql79, sql80, sql81, sql82, sql83, sql84, sql85, sql86, sql87, sql88, sql89, sql90, sql91, sql92, sql93, sql94, sql95, sql96, sql97, sql98, sql99, sql100, sql101, sql102, sql103, sql104, sql105, sql106, sql108, sql109, sql110, sql111, sql112, sql113, sql114, sql115, sql116, sql117, sql118, sql119, sql120, sql121, sql122). Never connects to a database or AWS itself and never applies SQL: it verifies the transfer tarball, the tree and the migration bytes, then runs the registered tool's --inspect, the registry's accepted contracts, preflight.mjs --acquire-lease --receipt, the tool's evaluate and --apply, and a post-apply --inspect, each as a child process, stopping on the first failure. Refuses a pin with execute false, takes no receipt, manifest or input file, refuses to start with any CHECKSOPS_DEPLOYMENT_GUARD_* or node loader variable or node flag set, binds the tree to --expected-tarball-sha256 and SOURCE_COMMIT and re-compares it before preflight and before apply, gives children only an allowlisted environment, and sets CHECKSOPS_DEPLOYMENT_GUARD_APPLY=1 and the preflight-issued receipt path only for the single apply child. The tool's own enforceScriptGuard, receipt ownership, execute, phrase and one_use_id checks stay authoritative."
     },
     {
       "path": "scripts/deployment-guard/github-sql53-production-apply.mjs",
@@ -410,6 +422,20 @@
       "capabilities": ["apigateway-update-api", "cors-allow-origins"],
       "shared_target": true,
       "note": "Official production CORS-only writer, run from guarded-production-cors.yml. Requires a production-http-api apigateway-cors-update receipt owning cors:AllowOrigins + active lease + the production gate; pins API/routes/authorizer/CloudFront shape, CAS-checks the whole signed snapshot (including the Lambda and CloudFront fingerprints) before and immediately before UpdateApi, and verifies only AllowOrigins changed."
+    },
+    {
+      "path": "scripts/deployment-guard/github-production-checkalt-schedule.mjs",
+      "classification": "SAFE",
+      "capabilities": [
+        "production-checkalt-schedule-preflight"
+      ],
+      "note": "GitHub-hosted preflight for the production stack checksops-production-checkalt-status-schedule. Checks the template bytes against the pinned sha256 and reads the stack, its IAM role, its schedule and the prep Lambda; for create/set-state requires the inspect snapshot SHA-256, the exact approval phrase, a staging acceptance reference and (create) a platform-owner actor matching the template AllowedPattern, then takes the production-checkalt-status-schedule lease and issues a KMS-signed cloudformation receipt whose preflight fingerprint is the whole snapshot and whose owned components carry the actor or target state. Never writes AWS; production-checkalt-schedule.mjs is the only writer."
+    },
+    {
+      "path": "scripts/deployment-guard/production-checkalt-schedule.mjs",
+      "classification": "GUARDED",
+      "capabilities": ["cloudformation-create-stack", "cloudformation-update-stack"],
+      "note": "Official production writer for the checksops-production-checkalt-status-schedule stack, run from guarded-production-checkalt-schedule.yml. Requires a production-checkalt-status-schedule cloudformation receipt + active lease + the production gate; create sends only the pinned template bytes with CAPABILITY_NAMED_IAM and the actor id, set-state only UpdateStack UsePreviousTemplate with ScheduleState; CAS-checks the whole signed snapshot before and immediately before the write, waits for the stack to settle, never retries or deletes, and verifies nothing else moved."
     },
     {
       "path": "scripts/deployment-guard/lease.mjs",

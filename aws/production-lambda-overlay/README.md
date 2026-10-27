@@ -31,6 +31,15 @@ Each run:
    `main`**, and variables `CHECKSOPS_PRODUCTION_DEPLOY_ROLE_ARN` and
    `CHECKSOPS_PRODUCTION_DEPLOYMENT_GUARD_KMS_KEY_ARN`.
 
+The same role runs `guarded-production-checkalt-schedule.yml` (the Check Alt status schedule
+stack). Its CloudFormation, IAM and Scheduler statements (Sids `*CheckAltStatusSchedule*`) are
+scoped to that one stack, IAM role and schedule, with PassRole only to `scheduler.amazonaws.com`
+and no delete. They are not on the live role until an operator attaches them once, with the
+owner's approval (`ops/checkalt-status-reconcile-schedule.md`). Note that `iam:CreateRole` and
+`iam:PutRolePolicy` on that role name let a production-environment job define what the role may
+do; only the receipt-gated writer, which sends the pinned template bytes, uses them, and the two
+create-only statements can be detached after the stack exists.
+
 The role trusts `environment:production` only. GitHub's OIDC subject for an
 environment job does not include the branch, so the `main`-only deployment branch
 rule on the environment is what stops a workflow on another branch from assuming
