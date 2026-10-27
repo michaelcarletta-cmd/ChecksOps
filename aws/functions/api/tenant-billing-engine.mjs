@@ -603,12 +603,26 @@ export async function loadCheckUsageForPeriod(client, { tenantId, period }) {
   return { included, excludedVoided };
 }
 
+// One recipient of one send is one payment and one fee (SQL 120): a wallet leg and a bank
+// top-up leg for the same recipient share provider_metadata request_hash and recipient_index.
+export const sendRecipientKey = (transfer) => {
+  const meta = transfer?.provider_metadata || {};
+  const hash = meta.request_hash == null ? '' : String(meta.request_hash);
+  if (!hash) return `leg:${transfer?.id}`;
+  const recipient = meta.recipient_index == null ? '' : String(meta.recipient_index);
+  return `send:${hash}:${recipient}`;
+};
+
+// Legs that move the tenant's own money into its wallet are not sends and carry no fee.
+const NOT_A_SEND_LEG_ROLES = ['wallet_funding', 'parent', 'platform_fee'];
+
 export async function persistMoovUsageForPeriod(client, { tenant, period, persist }) {
   const tenantId = tenant.id;
   const bounds = utcBounds(period);
   const transfers = (await client.query(
     `SELECT id, tenant_id, status, speed, requested_speed, completed_at, created_at,
-            provider_transfer_id, provider_fee_cents, platform_fee_cents
+            provider_transfer_id, provider_fee_cents, platform_fee_cents, leg_role,
+            provider_metadata
      FROM public.payment_transfers
      WHERE tenant_id = $1::uuid
        AND provider = 'moov'
@@ -616,24 +630,40 @@ export async function persistMoovUsageForPeriod(client, { tenant, period, persis
        AND COALESCE(completed_at, created_at) < $3::timestamptz
        -- ChecksOps' own fee pulls are not the tenant's deposits: never bill them.
        AND COALESCE(provider_metadata->>'collection_contract', '') <> $4
-       AND COALESCE(leg_role, '') <> 'platform_fee'`,
-    [tenantId, bounds.startIso, bounds.endIso, COLLECTION_CONTRACT_ID],
+       AND COALESCE(leg_role, '') <> ALL($5::text[])`,
+    [tenantId, bounds.startIso, bounds.endIso, COLLECTION_CONTRACT_ID, NOT_A_SEND_LEG_ROLES],
   ).catch(() => ({ rows: [] }))).rows;
 
+  // Every send fee already written for this tenant, by SQL 120 at send time or by an earlier
+  // month-end run, with the recipient its leg belongs to. A voided fee (every leg of the
+  // recipient failed or was canceled) is never billed and never written again here.
   const existing = (await client.query(
-    `SELECT id, payment_transfer_id, event_type, unit_price_cents, billed_at, billing_period,
-            invoice_id, status, source_kind, source_id, tenant_id, check_intake_item_id
-     FROM public.check_billing_events
-     WHERE tenant_id = $1::uuid
-       AND event_type IN ('moov_next_day', 'moov_same_day', 'moov_instant')
-       AND payment_transfer_id IS NOT NULL`,
+    `SELECT e.id, e.payment_transfer_id, e.event_type, e.unit_price_cents, e.billed_at,
+            e.billing_period, e.invoice_id, e.status, e.source_kind, e.source_id, e.tenant_id,
+            e.check_intake_item_id, e.claim_id, t.provider_metadata
+     FROM public.check_billing_events e
+     LEFT JOIN public.payment_transfers t ON t.id = e.payment_transfer_id
+     WHERE e.tenant_id = $1::uuid
+       AND e.event_type IN ('moov_next_day', 'moov_same_day', 'moov_instant')
+       AND e.payment_transfer_id IS NOT NULL`,
     [tenantId],
   ).catch(() => ({ rows: [] }))).rows;
-  const existingByTransfer = new Map(
-    existing.map((row) => [`${row.payment_transfer_id}:${row.event_type}`, row]),
-  );
+  const existingByRecipient = new Map();
+  for (const row of existing) {
+    const key = `${sendRecipientKey({ id: row.payment_transfer_id, provider_metadata: row.provider_metadata })}:${row.event_type}`;
+    if (!existingByRecipient.has(key)) existingByRecipient.set(key, row);
+  }
 
-  const created = [];
+  const billed = new Map();
+  const inPeriod = (at) => {
+    const ms = Date.parse(at);
+    return Number.isFinite(ms) && ms >= Date.parse(bounds.startIso) && ms < Date.parse(bounds.endIso);
+  };
+  for (const row of existing) {
+    if (row.status === 'voided' || !inPeriod(row.billed_at)) continue;
+    billed.set(row.id, asEvent(row));
+  }
+
   const skipped = [];
   for (const transfer of transfers) {
     const feeType = feeTypeForTransfer(transfer);
@@ -645,9 +675,10 @@ export async function persistMoovUsageForPeriod(client, { tenant, period, persis
       skipped.push({ id: transfer.id, reason: 'not_qualifying', status: transfer.status });
       continue;
     }
-    const key = `${transfer.id}:${feeType}`;
-    if (existingByTransfer.has(key)) {
-      created.push(asEvent(existingByTransfer.get(key)));
+    const key = `${sendRecipientKey(transfer)}:${feeType}`;
+    const prior = existingByRecipient.get(key);
+    if (prior) {
+      if (prior.status === 'voided') skipped.push({ id: transfer.id, reason: 'fee_voided', event_id: prior.id });
       continue;
     }
     const unit = feeType === FEE_SAME_DAY
@@ -655,7 +686,7 @@ export async function persistMoovUsageForPeriod(client, { tenant, period, persis
       : resolveNextDayRateCents(tenant);
     const billedAt = transfer.completed_at || transfer.created_at || bounds.startIso;
     if (!persist) {
-      created.push({
+      const preview = {
         id: null,
         tenant_id: tenantId,
         event_type: feeType,
@@ -669,7 +700,9 @@ export async function persistMoovUsageForPeriod(client, { tenant, period, persis
         check_intake_item_id: null,
         payment_transfer_id: transfer.id,
         preview: true,
-      });
+      };
+      existingByRecipient.set(key, preview);
+      billed.set(`preview:${transfer.id}`, preview);
       continue;
     }
     const inserted = (await client.query(
@@ -698,11 +731,12 @@ export async function persistMoovUsageForPeriod(client, { tenant, period, persis
       return { rows: again ? [again] : [] };
     })).rows[0];
     if (inserted) {
-      existingByTransfer.set(key, inserted);
-      created.push(asEvent(inserted));
+      existingByRecipient.set(key, inserted);
+      if (inserted.status !== 'voided') billed.set(inserted.id, asEvent(inserted));
     }
   }
 
+  const created = [...billed.values()];
   const nextDay = created.filter((row) => row.event_type === FEE_NEXT_DAY);
   const sameDay = created.filter((row) => row.event_type === FEE_SAME_DAY);
   const instant = created.filter((row) => row.event_type === FEE_INSTANT);

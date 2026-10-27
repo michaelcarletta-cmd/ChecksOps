@@ -171,7 +171,7 @@ test('Lambda projection keeps sanitized trigger names and drops definitions or i
   const result = projectValidation(validValidation({
     issues: [{ kind: 'trigger', severity: 'error', message: SENSITIVE }],
     catalog: {
-      publicTriggers: 180,
+      publicTriggers: 182,
       publicTriggerInventory: [
         extra,
         { table: SENSITIVE, trigger: 'trg_bad', enabled: 'O', functionName: 'set_updated_at_generic' },
@@ -181,7 +181,7 @@ test('Lambda projection keeps sanitized trigger names and drops definitions or i
       authUidResult: SENSITIVE,
     },
   }));
-  assert.equal(result.catalog.publicTriggers, 180);
+  assert.equal(result.catalog.publicTriggers, 182);
   assert.equal(result.catalog.expectedPublicTriggers, EXPECTED_PUBLIC_TRIGGERS);
   assert.deepEqual(result.catalog.publicTriggerInventory, [{
     table: extra.table,
@@ -226,7 +226,7 @@ test('existing validator enforces TLS/session/transaction read-only and never di
       if (sql.includes("c.relname = 'users'")) return { rows: [{ present: true }] };
       if (sql.includes('pg_constraint')) return { rows: [{ fk_count: 0 }] };
       if (sql.includes('pg_get_triggerdef')) return { rows: [] };
-      if (sql.includes('pg_trigger')) return { rows: [{ trigger_count: 180 }] };
+      if (sql.includes('pg_trigger')) return { rows: [{ trigger_count: 182 }] };
       if (sql.includes('prokind')) return { rows: [{
         function_count: 0, auth_uid_functions: 0, net_functions: 0, cron_functions: 0,
         vault_functions: 0, pgmq_functions: 0,
@@ -384,7 +384,7 @@ test('CLI names added public triggers from the sanitized Lambda inventory', asyn
     });
     const summary = JSON.parse(output);
     assert.equal(status, 1);
-    assert.equal(summary.triggerInventory.expectedCount, 180);
+    assert.equal(summary.triggerInventory.expectedCount, 182);
     assert.equal(summary.triggerInventory.actualCount, 179);
     assert.equal(summary.triggerInventory.added.length, 7);
     assert.deepEqual(

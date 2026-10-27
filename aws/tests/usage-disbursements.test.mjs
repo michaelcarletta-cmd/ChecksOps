@@ -8,7 +8,9 @@ import { test } from 'node:test';
 import {
   disbursementDetails,
   disbursementVolumeCents,
+  filterUsageEvents,
   isSendFeeEvent,
+  usageCategory,
   usageEventLabel,
 } from '../../src/lib/billing/usageDisbursements.ts';
 
@@ -88,4 +90,33 @@ test('4 the usage tracker shows the fees charged and the amount sent, friendly l
   assert.match(page, /Insured: \$\{displayCase\(sent\.insured_name\)\}/);
   assert.match(page, /Paid to: \$\{displayCase\(sent\.payee_name\)\}/);
   assert.match(page, /\.from\("check_billing_events"\)\s*\.select\("id, event_type, payment_transfer_id, claim_id, status"\)/);
+});
+
+test('5 clicking a usage card filters the log to its charges; the fee table sits at the bottom', () => {
+  assert.equal(usageCategory('check_processing'), 'check_processing');
+  assert.equal(usageCategory('moov_next_day'), 'payments');
+  assert.equal(usageCategory('moov_same_day'), 'payments');
+  assert.equal(usageCategory('mortgage_ops_initial'), 'mortgage');
+  assert.equal(usageCategory('mortgage_handling'), 'mortgage');
+  assert.equal(usageCategory('something_else'), 'other');
+  const events = [
+    { id: 'a', event_type: 'check_processing' },
+    { id: 'b', event_type: 'moov_next_day' },
+    { id: 'c', event_type: 'mortgage_ops_initial' },
+  ];
+  assert.deepEqual(filterUsageEvents(events, 'all').map((e) => e.id), ['a', 'b', 'c']);
+  assert.deepEqual(filterUsageEvents(events, 'payments').map((e) => e.id), ['b']);
+  assert.deepEqual(filterUsageEvents(null, 'mortgage'), []);
+  const page = readFileSync(new URL('../../src/components/billing/TenantUsageTracker.tsx', import.meta.url), 'utf8');
+  for (const cat of ['check_processing', 'mortgage', 'payments']) {
+    assert.match(page, new RegExp(`onClick=\\{\\(\\) => toggleCategory\\("${cat}"\\)\\}`), cat);
+    assert.match(page, new RegExp(`aria-pressed=\\{category === "${cat}"\\}`), cat);
+  }
+  assert.match(page, /current === next \? "all" : next/);
+  assert.match(page, /shownEvents\.map\(\(row: any\)/);
+  // No separate type dropdown; the month picker stays.
+  assert.doesNotMatch(page, /aria-label="Filter by type"/);
+  assert.match(page, /<Select value=\{month\} onValueChange=\{setMonth\}>/);
+  // The fee table is the last thing on the page, after the usage log.
+  assert.ok(page.indexOf('<FeeScheduleCard') > page.indexOf('Usage & Processing Log'));
 });

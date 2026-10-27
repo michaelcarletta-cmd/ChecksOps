@@ -216,7 +216,7 @@ test('pin: the release pin shape, applied and retired (owner approved 2026-10-27
   }
 });
 
-test('order: no predecessor and no order; SQL 98 / SQL 96 objects are prerequisites; no plan entry yet; the runbook, one-shot doc and README name it', () => {
+test('order: no predecessor and no order; SQL 98 / SQL 96 objects are prerequisites; the plan holds only the billing engine on it; the runbook, one-shot doc and README name it', () => {
   const spec = RELEASE_SQL_SPECS[KEY];
   assert.deepEqual(spec.predecessors, []);
   for (const object of ['public.aws_check_billing_default_price_cents()', 'public.aws_check_billing_charges_when_per_check_off()',
@@ -227,8 +227,13 @@ test('order: no predecessor and no order; SQL 98 / SQL 96 objects are prerequisi
   assert.match(COMMITTED.order_note, /^No predecessor and no ordering constraint\./);
   assert.match(COMMITTED.order_note, /sql_before/);
   const plan = readJson('ops/deployment-guard/production-api-overlay-plan.json');
-  assert.equal((plan.sql_prerequisites || {})[SQL120_FILE], undefined);
-  assert.ok(!JSON.stringify(plan.members).includes(SQL120_FILE));
+  // Recorded live in production since its 2026-10-27 apply; the month-end billing engine, which
+  // bills the fees it writes at send time, is the one member held on it.
+  const pre = plan.sql_prerequisites[SQL120_FILE];
+  assert.equal(pre.verified_live, true);
+  assert.equal(pre.pin, 'ops/deployment-guard/sql120-usage-events-at-approval-and-send-production-apply.json');
+  assert.match(pre.evidence, /SSM 0c164128-b7cb-4e42-b1a4-28c3fa42d7eb/);
+  assert.deepEqual(Object.keys(plan.members).filter((m) => plan.members[m].sql_before === SQL120_FILE), ['tenant-billing-engine.mjs']);
   const runbook = fs.readFileSync(path.join(ROOT, COMMITTED.tooling.runbook), 'utf8');
   assert.ok(runbook.includes(COMMITTED.intended_replacement_sha256));
   assert.ok(runbook.includes(COMMITTED.source_sha256));
