@@ -1,0 +1,15 @@
+{
+  "workstream_id": "cash-jobs-check-link",
+  "authorization": "Pending owner review (2026-10-27). Planning only: nothing is live or verified. Each production apply still needs its own owner approval and staging acceptance.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "workflow.mjs: cash jobs work like claim checks. The check-create route accepts the cash job a check is uploaded from (or the claim picked at upload), verifies it is in the check's tenant, and sets cash_job_id, check_source 'cash_job' and cash_job_payment_class server-side. Linking a check to a job fires sync_cash_job_check_payment(), which SQL 121 makes SECURITY DEFINER, so the member is held on SQL 121 (sql_before). live_sha256 is the Delete Check bytes applied by production run 40530367414 (production-delete-check-applied-manifest-2026-10-27.json), still live: the later 2026-10-27 production applies (runs 40576842354, 40577212139, 40577608750) passed the plan order gate, which requires workflow.mjs at those bytes. The guarded overlay inspect re-reads it before any apply.",
+  "members": {
+    "workflow.mjs": {
+      "live_sha256": "c7159c4d9a74342f2a0f59a2836def78376c84d2781bbeb56dbb35ba83ed9337",
+      "accepted_sha256": "0a8d1218eff03bc2f1785fd64d8f854ed17eef254f71bf9e91b270f86009d6e6",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-delete-check-applied-manifest-2026-10-27.json"
+    }
+  }
+}

@@ -24,6 +24,20 @@ export function formatPhoneNumber(value: string): string {
 }
 
 /**
+ * Shows a stored phone number as XXX-XXX-XXXX. Values saved before the input
+ * was formatted ("(555) 123-4567", "+1 555 123 4567", "5551234567") read the
+ * same way; anything that is not a 10-digit US number is shown as stored.
+ */
+export function formatPhoneForDisplay(value: string | null | undefined): string {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+  let digits = raw.replace(/\D/g, "");
+  if (digits.length === 11 && digits.startsWith("1")) digits = digits.slice(1);
+  if (digits.length !== 10) return raw;
+  return formatPhoneNumber(digits);
+}
+
+/**
  * Parses a date string (YYYY-MM-DD) as local time instead of UTC
  * This prevents the off-by-one-day issue when displaying dates
  */
