@@ -1,0 +1,69 @@
+{
+  "id": "sql122-mortgage-desk-return-to-tenant-production-apply",
+  "migration": "sql122",
+  "authorization": "pending",
+  "execute": false,
+  "target_environment": "production",
+  "target_component": "production-sql",
+  "deployment_type": "sql-apply",
+  "filename": "aws/workflows/sql/122_mortgage_desk_return_to_tenant.sql",
+  "migration_id": "122_mortgage_desk_return_to_tenant",
+  "staging_pin_commit": "5872556730bdb89e125cc5356ce4e99ee5b868dc",
+  "source_sha256": "b6f16b1dc615a78dfff87e488c543be72d79a8d2431246b2b0db0d0dbfbc12a8",
+  "function_identities": [
+    "public.aws_mortgage_desk_working_request(uuid, text[])",
+    "public.aws_mortgage_desk_post_message(uuid, text)",
+    "public.aws_mortgage_desk_attach_file(uuid, text, text, text, bigint, text, text)",
+    "public.aws_mortgage_desk_update_shipping(uuid, jsonb)",
+    "public.aws_mortgage_desk_completion_timeline(uuid)",
+    "public.aws_mortgage_desk_return_email_claim(uuid)"
+  ],
+  "expected_live_definition_sha256": null,
+  "intended_replacement_sha256": "d026eb9b5974a381900f2ef22066b9e408ffef86233195e14e5cdbd7ea619fe9",
+  "authorization_phrase": "APPLY_MORTGAGE_DESK_RETURN_TO_TENANT",
+  "predecessors": [],
+  "order_note": "No predecessor and no ordering constraint. SQL 122 needs SQL 100's public.aws_is_mortgage_ops_agent(), public.is_platform_owner(), auth.uid(), role checksops, and public.check_messages, public.check_files, public.check_intake_items, public.mortgage_handling_requests (with its shipping, mail-to and date columns), public.homeowner_ledger_events, public.tenants, public.tenant_users and public.identity_accounts with the columns the functions use (spec prerequisites; a read-only production inspect confirms them), and the applying login must own mortgage_handling_requests and be able to write check_messages, check_files, mortgage_handling_requests and homeowner_ledger_events under RLS (definer_can_write_relations). SQL 99's completion trigger is unchanged; the email claim reads its completed-work message when present. The API change that calls these functions (aws/functions/api/mortgage-desk-return.mjs, workflow-rpc.mjs, storage-write-auth.mjs, app-services.mjs) and the SPA change are a separate, later step after SQL 122 is live in staging; until then nothing calls them. Adds no trigger: the DB validator's public trigger count is not affected.",
+  "admin_login": "checksops_admin",
+  "rds_identifier": "checksops-production",
+  "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
+  "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
+  "tooling": {
+    "status": "built",
+    "production_tool": "scripts/deployment-guard/sql122-mortgage-desk-return-to-tenant-production-apply.mjs",
+    "production_lib": "scripts/deployment-guard/lib/release-sql-production-apply.mjs",
+    "staging_executor_handler": "aws/write-path/guarded-sql-executor/index.mjs handleReleaseSqlMigration",
+    "staging_workflow_choice": "sql122-mortgage-desk-return-to-tenant",
+    "one_shot_migration": "sql122",
+    "fingerprint_engine": "scripts/deployment-guard/lib/release-sql-state.mjs",
+    "runbook": "ops/production-sql-122-apply.md",
+    "tests": [
+      "aws/tests/release-sql122-executor.test.mjs",
+      "aws/tests/release-sql122-production-apply.test.mjs",
+      "aws/tests/release-sql90-97-executor.test.mjs",
+      "aws/tests/release-sql90-97-production-apply.test.mjs",
+      "aws/tests/sql122-mortgage-desk-return-pg.test.mjs"
+    ],
+    "note": "Guarded tooling for SQL 122: sql122-mortgage-desk-return-to-tenant-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql122-mortgage-desk-return-to-tenant); production-sql-one-shot.mjs --migration sql122. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): the six functions (body and attributes from the file, result as PostgreSQL renders it, EXECUTE for checksops and the owner, the working-request check for the owner only) and the column mortgage_handling_requests.return_emailed_at (timestamptz, nullable, no default, no grant). The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
+  },
+  "production_inspect": {
+    "status": "pending",
+    "date": null,
+    "ssm_command_id": null,
+    "source_commit": null,
+    "read_only": true,
+    "connected_as": "checksops_admin",
+    "live_definition_sha256": null,
+    "apply_preconditions_met": null,
+    "precondition_failures": null,
+    "note": "Pending: no read-only production inspect has been run for SQL 122 yet. Expected: the six functions and the column return_emailed_at absent, prerequisites_missing [], definer_writes ok for check_messages, check_files, mortgage_handling_requests and homeowner_ledger_events. Record its date, SSM command id, source commit, live_definition_sha256, prerequisites_missing, release_sql_inspect.functions, release_sql_inspect.definer_writes, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. Stop if prerequisites_missing is not [] (a table, column or helper absent in production) or precondition_failures is not [] (altered_relations_owned_by_login, definer_can_write_relations, function_acl_replaceable or added_columns_absent_or_intended): that needs its own reviewed change."
+  },
+  "intended_post_state": {
+    "fingerprint": "d026eb9b5974a381900f2ef22066b9e408ffef86233195e14e5cdbd7ea619fe9",
+    "note": "public.mortgage_handling_requests.return_emailed_at timestamptz, nullable, no default, no column grant. Six functions owned by checksops_admin, plpgsql, VOLATILE, SECURITY DEFINER, search_path public: aws_mortgage_desk_working_request(uuid, text[]) (EXECUTE for the owner only), aws_mortgage_desk_post_message(uuid, text), aws_mortgage_desk_attach_file(uuid, text, text, text, bigint, text, text), aws_mortgage_desk_update_shipping(uuid, jsonb), aws_mortgage_desk_completion_timeline(uuid) and aws_mortgage_desk_return_email_claim(uuid) (EXECUTE for checksops and the owner). No policy, RLS setting, table grant, trigger or row change; every existing function unchanged. The fingerprint is releaseIntendedHash('sql122', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): d026eb9b5974a381900f2ef22066b9e408ffef86233195e14e5cdbd7ea619fe9."
+  },
+  "staging_acceptance": {
+    "ok": false,
+    "reference": null,
+    "basis": "Pending: record the guarded staging SQL executor read-live (and, if staging is not yet at the intended state, the staging apply) of SQL 122 (choice sql122-mortgage-desk-return-to-tenant) here in the reviewed change that sets execute true. The behavior is covered on PostgreSQL 16 by aws/tests/sql122-mortgage-desk-return-pg.test.mjs. Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+  }
+}

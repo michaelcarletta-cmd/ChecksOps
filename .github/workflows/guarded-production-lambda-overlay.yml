@@ -62,6 +62,7 @@ on:
           - financial.mjs
           - tenant-admin.mjs
           - tenant-deposits-gate.mjs
+          - mortgage-desk-return.mjs
           - workflow-rpc.mjs
           - tenant-check-user.mjs
           - mortgage-library-doc-types.mjs

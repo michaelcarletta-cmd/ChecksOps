@@ -143,9 +143,21 @@ export const POST_RESTORE_PUBLIC_TRIGGERS = Object.freeze([
     trigger: 'aws_tenants_member_column_guard',
     functionName: 'aws_tenants_member_column_guard',
   }),
+  // SQL 120 (120_usage_events_at_approval_and_send.sql), applied to staging 2026-10-27
+  // (run 40547527832) and production (#1304): usage events at Check Alt approval and send time.
+  Object.freeze({
+    table: 'checkalt_deposits',
+    trigger: 'aws_checkalt_deposit_billing_event',
+    functionName: 'aws_record_checkalt_billing_event',
+  }),
+  Object.freeze({
+    table: 'payment_transfers',
+    trigger: 'aws_payment_transfer_send_speed_fee',
+    functionName: 'aws_record_send_speed_fee',
+  }),
 ]);
 
-export const JUSTIFIED_PUBLIC_TRIGGER_COUNT = 180;
+export const JUSTIFIED_PUBLIC_TRIGGER_COUNT = 182;
 
 const unqualified = (value) => {
   const text = String(value || '');

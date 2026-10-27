@@ -195,7 +195,8 @@ test('reviewed file and spec: six functions as parsed, the RETURNS TABLE result 
   // The engine change states a result only where the spec names one: every other release key's
   // intended fingerprint is the one its pin records.
   for (const key of RELEASE_SQL_KEYS.filter((k) => k !== KEY)) {
-    if (key !== 'sql117') assert.ok(RELEASE_SQL_SPECS[key].functions.every((fn) => fn.result === undefined), key);
+    // SQL 122 states its row-type results (public.<table>) the same way.
+    if (!['sql117', 'sql122'].includes(key)) assert.ok(RELEASE_SQL_SPECS[key].functions.every((fn) => fn.result === undefined), key);
     const text = fs.readFileSync(FILES[key], 'utf8');
     if (PINS[key].superseded_intended_sha256 == null) assert.equal(releaseIntendedHash(key, text), PINS[key].intended_replacement_sha256, key);
   }

@@ -1,22 +1,25 @@
 /**
- * SQL 122 (the Mortgage Desk returns its work to the tenant) against
- * PostgreSQL 16: the real AWS RLS helper files (through the shared stakeholder
- * fixture), the real check_messages / check_files / mortgage_handling_requests
- * policies (12, 24, SQL 50, SQL 90, SQL 100), SQL 99, then
- * aws/workflows/sql/122_mortgage_desk_return_to_tenant.sql applied by a
- * non-superuser login that owns the Desk and check tables (like
- * checksops_admin).
+ * SQL 122 (the Mortgage Desk returns its work to the tenant) against PostgreSQL 16: the real AWS
+ * RLS helper files (through the shared stakeholder fixture), the real check_messages / check_files
+ * / mortgage_handling_requests policies (12, 24, SQL 50, SQL 90, SQL 100), SQL 99, then
+ * aws/workflows/sql/122_mortgage_desk_return_to_tenant.sql applied by a non-superuser login that
+ * owns the Desk and check tables (like checksops_admin).
  *
- * The Desk is driven as the API drives it: checksops, RLS on,
- * request.app_user_id set, through workflow-rpc.mjs / mortgage-desk-return.mjs.
+ * The functions are called as the API calls them: checksops, RLS on, request.app_user_id set, one
+ * committed transaction per request. Completion goes through the update_mortgage_handling_request_status
+ * RPC (SQL 99's messages), which also adds the homeowner timeline row.
  *
- *   - the assigned agent posts a message, attaches a document, sets the
- *     shipping details and a label, adds a mid-work note (posted on the check
- *     thread) and completes (SQL 99's messages plus SQL 122's homeowner
- *     timeline row); the tenant member reads every one of them on its check;
- *   - another agent, the tenant's own member and a member of another tenant
- *     are refused, by the API gate and by the functions themselves;
- *   - the "work returned" email is claimed once, for the requester.
+ *   - the file refuses a login that does not own the tables it writes, and is idempotent;
+ *   - the assigned agent posts a message, attaches documents (a retry returns the same row), sets
+ *     the shipping details and a label, then, once completed, adds the homeowner timeline row (once
+ *     per request); the tenant member reads every Desk note and document on its check; a member of
+ *     another tenant reads none;
+ *   - another agent, the tenant's own member and another tenant's member are refused by the
+ *     functions; a path outside the request's check, an unlisted shipping field and a label that is
+ *     not a Desk document are refused; agents still cannot write the tables directly; writes stop
+ *     once the request is completed;
+ *   - the "work returned" email is claimed once, for the requester, with the Desk note and
+ *     documents; then for the members when the requester left the tenant; never for another agent.
  */
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -24,9 +27,6 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { AWS_ROOT, applyBaseSchema, pgSkipReason, policyBlock, startPg } from './helpers/stakeholder-policies-pg.mjs';
 import { executeSafeWriteRpc } from '../functions/api/workflow-rpc.mjs';
-import { runMortgageDeskReturnEmail } from '../functions/api/mortgage-desk-return.mjs';
-import { buildMortgageDeskCompletedMessage, buildReturnMessage } from '../../src/lib/mortgageDeskReturn.ts';
-import { buildMortgageDeskNoteMessage } from '../../src/lib/mortgageDeskWrites.ts';
 
 const SQL_50 = path.join(AWS_ROOT, 'workflows/sql/50_tranche5_write_grants.sql');
 const SQL_90 = path.join(AWS_ROOT, 'workflows/sql/90_users_only_tenant_roles.sql');
@@ -49,6 +49,7 @@ const MEMBER = 'a1000000-0000-4000-8000-000000000001';
 const MEMBER_B = 'a1000000-0000-4000-8000-000000000002';
 const AGENT = 'a1000000-0000-4000-8000-000000000003';
 const OTHER_AGENT = 'a1000000-0000-4000-8000-000000000004';
+const MEMBER_2 = 'a1000000-0000-4000-8000-000000000005';
 const CHECK_1 = 'c1000000-0000-4000-8000-000000000001';
 const CHECK_B = 'c1000000-0000-4000-8000-000000000002';
 const CLAIM_1 = 'e1000000-0000-4000-8000-000000000001';
@@ -121,11 +122,12 @@ INSERT INTO public.tenants (id, name, slug, company_email) VALUES
   ('${TENANT_A}', 'Freedom', 'freedom', 'office@freedom.test'), ('${TENANT_B}', 'Other', 'other', NULL);
 INSERT INTO public.identity_accounts (application_user_id, email, status) VALUES
   ('${MEMBER}', 'Requester@Freedom.test', 'active'), ('${MEMBER_B}', 'b@other.test', 'active'),
-  ('${AGENT}', 'agent@checksops.test', 'active'), ('${OTHER_AGENT}', 'agent2@checksops.test', 'active');
+  ('${AGENT}', 'agent@checksops.test', 'active'), ('${OTHER_AGENT}', 'agent2@checksops.test', 'active'),
+  ('${MEMBER_2}', 'second@freedom.test', 'active');
 INSERT INTO public.profiles (id, email) SELECT application_user_id, email FROM public.identity_accounts;
 INSERT INTO public.user_roles (user_id, role) VALUES ('${AGENT}', 'mortgage_agent'), ('${OTHER_AGENT}', 'mortgage_agent');
 INSERT INTO public.tenant_users (tenant_id, user_id, role) VALUES
-  ('${TENANT_A}', '${MEMBER}', 'viewer'), ('${TENANT_B}', '${MEMBER_B}', 'owner');
+  ('${TENANT_A}', '${MEMBER}', 'viewer'), ('${TENANT_A}', '${MEMBER_2}', 'owner'), ('${TENANT_B}', '${MEMBER_B}', 'owner');
 INSERT INTO public.claims (id, org_id) VALUES ('${CLAIM_1}', '${TENANT_A}');
 INSERT INTO public.check_intake_items (id, tenant_id, claim_id, check_number) VALUES
   ('${CHECK_1}', '${TENANT_A}', '${CLAIM_1}', '100234'), ('${CHECK_B}', '${TENANT_B}', NULL, '9');
@@ -170,11 +172,14 @@ test('PostgreSQL 16: SQL 122 lets the assigned agent return notes, documents and
     await owner.query(fs.readFileSync(SQL_99, 'utf8'));
     const sql122 = fs.readFileSync(SQL_122, 'utf8');
 
-    // Refuses when the applying login does not own the tables it writes.
+    // Refuses when the applying login does not own the tables it writes; nothing is left behind.
     const outsider = await open('sql122_outsider');
     clients.push(outsider);
     await assert.rejects(outsider.query(sql122),
       (error) => error.code === '55000' && /sql122_definer_cannot_write/.test(error.message));
+    assert.equal((await client.query(
+      "SELECT count(*)::int AS n FROM pg_attribute WHERE attrelid = 'public.mortgage_handling_requests'::regclass AND attname = 'return_emailed_at'",
+    )).rows[0].n, 0);
 
     // Apply twice as the owning login: idempotent.
     await owner.query(sql122);
@@ -213,148 +218,150 @@ test('PostgreSQL 16: SQL 122 lets the assigned agent return notes, documents and
         throw error;
       }
     };
-    const rpc = (user, name, args) => as(user, () => executeSafeWriteRpc({
-      client, mapping: { application_user_id: user }, name, args,
-    }));
-    const messages = async (checkId) => (await client.query(
-      'SELECT sender_id, body FROM public.check_messages WHERE check_id = $1 ORDER BY created_at, id', [checkId],
-    )).rows;
+    const call = (user, sql, params) => as(user, async () => (await client.query(sql, params)).rows[0]);
+    const post = (user, requestId, body) => call(user, 'SELECT * FROM public.aws_mortgage_desk_post_message($1::uuid, $2::text)', [requestId, body]);
+    const attach = (user, requestId, name, filePath, extra = {}) => call(user,
+      'SELECT * FROM public.aws_mortgage_desk_attach_file($1::uuid, $2::text, $3::text, $4::text, $5::bigint, $6::text, $7::text)',
+      [requestId, name, filePath, extra.type ?? null, extra.size ?? null, extra.category ?? null, extra.description ?? null]);
+    const ship = (user, requestId, fields) => call(user, 'SELECT * FROM public.aws_mortgage_desk_update_shipping($1::uuid, $2::jsonb)', [requestId, JSON.stringify(fields)]);
+    const timeline = (user, requestId) => call(user, 'SELECT public.aws_mortgage_desk_completion_timeline($1::uuid) AS id', [requestId]);
+    const claim = (user, requestId) => call(user, 'SELECT public.aws_mortgage_desk_return_email_claim($1::uuid) AS out', [requestId]);
+    const refused = (promise, code, message) => assert.rejects(promise, (error) => error.code === code && message.test(error.message));
 
-    // --- The assigned agent, through the API.
-    const posted = await rpc(AGENT, 'mortgage_desk_post_message', { _request_id: REQ_1, _body: 'Called Acme, payoff letter requested' });
-    assert.equal(posted.error, undefined, JSON.stringify(posted));
-    assert.equal(posted.data.check_id, CHECK_1);
-    assert.equal(posted.data.sender_id, AGENT);
+    // --- The assigned agent.
+    const posted = await post(AGENT, REQ_1, '  Called Acme, payoff letter requested  ');
+    assert.equal(posted.check_id, CHECK_1);
+    assert.equal(posted.sender_id, AGENT);
+    assert.equal(posted.body, 'Called Acme, payoff letter requested');
+    await refused(post(AGENT, REQ_1, '   '), '22023', /invalid_body/);
+    await refused(post(AGENT, REQ_1, 'x'.repeat(5001)), '22023', /invalid_body/);
 
     const docPath = `checks/${CHECK_1}/mortgage-ops/1700000000000-payoff.pdf`;
-    const attached = await rpc(AGENT, 'mortgage_desk_attach_file', {
-      _request_id: REQ_1, _file_name: 'payoff.pdf', _file_path: docPath, _file_type: 'application/pdf',
-      _file_size: 2048, _category: 'mortgage_ops', _description: 'Payoff letter',
-    });
-    assert.equal(attached.error, undefined, JSON.stringify(attached));
-    assert.equal(attached.data.source, 'mortgage_ops');
-    assert.equal(attached.data.uploaded_by, AGENT);
+    const attached = await attach(AGENT, REQ_1, 'payoff.pdf', docPath, { type: 'application/pdf', size: 2048, category: 'mortgage_ops', description: 'Payoff letter' });
+    assert.equal(attached.source, 'mortgage_ops');
+    assert.equal(attached.uploaded_by, AGENT);
+    assert.equal(attached.check_intake_item_id, CHECK_1);
     // A retry returns the same row.
-    const again = await rpc(AGENT, 'mortgage_desk_attach_file', { _request_id: REQ_1, _file_name: 'payoff.pdf', _file_path: docPath });
-    assert.equal(again.data.id, attached.data.id);
+    assert.equal((await attach(AGENT, REQ_1, 'payoff.pdf', docPath)).id, attached.id);
+    // Only exactly checks/<the request's check>/mortgage-ops/<one name>.
+    for (const bad of [`checks/${CHECK_B}/mortgage-ops/x.pdf`, `checks/${CHECK_1}/mortgage-ops/`, `checks/${CHECK_1}/mortgage-ops/a/b.pdf`,
+      `checks/${CHECK_1}/mortgage-ops/..x.pdf`, `checks/${CHECK_1}/other/x.pdf`]) {
+      await refused(attach(AGENT, REQ_1, 'x.pdf', bad), '22023', /invalid_file_path/);
+    }
+    await refused(attach(AGENT, REQ_1, 'x.pdf', `checks/${CHECK_1}/mortgage-ops/x.pdf`, { category: 'w9' }), '22023', /invalid_category/);
+    await refused(attach(AGENT, REQ_1, 'x.pdf', `checks/${CHECK_1}/mortgage-ops/x.pdf`, { size: 26214401 }), '22023', /invalid_file_size/);
 
     const labelPath = `checks/${CHECK_1}/mortgage-ops/label-1700000000001-label.pdf`;
-    await rpc(AGENT, 'mortgage_desk_attach_file', {
-      _request_id: REQ_1, _file_name: 'label.pdf', _file_path: labelPath, _category: 'mortgage_ops_shipping_label',
+    await refused(ship(AGENT, REQ_1, { shipping_label_path: labelPath }), '22023', /label_not_attached/);
+    await attach(AGENT, REQ_1, 'label.pdf', labelPath, { category: 'mortgage_ops_shipping_label' });
+    await refused(ship(AGENT, REQ_1, { status: 'completed' }), '22023', /field_not_allowed: status/);
+    await refused(ship(AGENT, REQ_1, { mail_to_name: 5 }), '22023', /invalid_field: mail_to_name/);
+    const shipped = await ship(AGENT, REQ_1, {
+      mail_to_name: 'Acme Loss Drafts', mail_to_address: 'PO Box 1', shipping_label_carrier: 'UPS',
+      shipping_label_tracking: '1Z999', shipping_label_path: labelPath, shipping_label_name: 'label.pdf',
+      check_sent_date: '2026-10-27T15:00:00Z',
     });
-    const shipped = await rpc(AGENT, 'mortgage_desk_update_shipping', {
-      _request_id: REQ_1,
-      _fields: {
-        mail_to_name: 'Acme Loss Drafts', mail_to_address: 'PO Box 1', shipping_label_carrier: 'UPS',
-        shipping_label_tracking: '1Z999', shipping_label_path: labelPath, shipping_label_name: 'label.pdf',
-        check_sent_date: '2026-10-27T15:00:00Z',
-      },
-    });
-    assert.equal(shipped.error, undefined, JSON.stringify(shipped));
+    assert.equal(shipped.status, 'in_progress');
     const req1 = (await client.query('SELECT * FROM public.mortgage_handling_requests WHERE id = $1', [REQ_1])).rows[0];
     assert.equal(req1.mail_to_name, 'Acme Loss Drafts');
     assert.equal(req1.shipping_label_path, labelPath);
     assert.equal(req1.shipping_label_uploaded_by, AGENT);
+    assert.ok(req1.shipping_label_uploaded_at);
     assert.equal(req1.check_sent_date.toISOString(), '2026-10-27T15:00:00.000Z');
-
-    const noted = await rpc(AGENT, 'update_mortgage_handling_request_status', {
-      _request_id: REQ_1, _status: 'in_progress', _notes: 'Acme wants the W-9 too',
-    });
-    assert.equal(noted.error, undefined, JSON.stringify(noted));
-    assert.equal(noted.data.tenant_message_posted, true);
+    // A key present with null clears it; a key absent keeps it.
+    await ship(AGENT, REQ_1, { mail_to_address: null });
+    const cleared = (await client.query('SELECT mail_to_name, mail_to_address FROM public.mortgage_handling_requests WHERE id = $1', [REQ_1])).rows[0];
+    assert.deepEqual(cleared, { mail_to_name: 'Acme Loss Drafts', mail_to_address: null });
 
     // --- Refused: another agent, the tenant's own member, another tenant's member.
     for (const user of [OTHER_AGENT, MEMBER, MEMBER_B]) {
-      const refused = await rpc(user, 'mortgage_desk_post_message', { _request_id: REQ_1, _body: 'spoof' });
-      assert.ok(['not_assigned_to_you', 'not_authorized'].includes(refused.error), `${user}: ${JSON.stringify(refused)}`);
-      const shipping = await rpc(user, 'mortgage_desk_update_shipping', { _request_id: REQ_1, _fields: { mail_to_name: 'x' } });
-      assert.ok(shipping.error, user);
-      // And by the function itself, past the API gate.
-      await assert.rejects(as(user, () => client.query(
-        'SELECT * FROM public.aws_mortgage_desk_post_message($1::uuid, $2::text)', [REQ_1, 'spoof'],
-      )), (error) => error.code === '42501', user);
+      await refused(post(user, REQ_1, 'spoof'), '42501', /not_assigned_to_you/);
+      await refused(ship(user, REQ_1, { mail_to_name: 'x' }), '42501', /not_assigned_to_you/);
+      await refused(attach(user, REQ_1, 'x.pdf', `checks/${CHECK_1}/mortgage-ops/x.pdf`), '42501', /not_assigned_to_you/);
     }
+    // A request that does not exist: not_authorized.
+    await refused(post(AGENT, 'd1000000-0000-4000-8000-0000000000ff', 'x'), '42501', /not_authorized/);
     // The agent of tenant B's request cannot write onto tenant A's check through its own request.
-    await assert.rejects(as(OTHER_AGENT, () => client.query(
-      'SELECT * FROM public.aws_mortgage_desk_attach_file($1::uuid, $2, $3, NULL, NULL, NULL, NULL)',
-      [REQ_B, 'x.pdf', `checks/${CHECK_1}/mortgage-ops/x.pdf`],
-    )), (error) => error.code === '22023' && /invalid_file_path/.test(error.message));
-    // Agents still have no direct write on the tenant's check.
-    await assert.rejects(as(AGENT, () => client.query(
-      'INSERT INTO public.check_messages (check_id, sender_id, body) VALUES ($1, $2, $3)', [CHECK_1, AGENT, 'direct'],
-    )), (error) => error.code === '42501');
-    await assert.rejects(as(AGENT, () => client.query(
-      'INSERT INTO public.check_files (check_intake_item_id, file_name, file_path) VALUES ($1, $2, $3)', [CHECK_1, 'd', 'd'],
-    )), (error) => error.code === '42501');
-    assert.equal((await messages(CHECK_B)).length, 0);
+    await refused(attach(OTHER_AGENT, REQ_B, 'x.pdf', `checks/${CHECK_1}/mortgage-ops/x.pdf`), '22023', /invalid_file_path/);
+    // The completed-only functions refuse an in-progress request.
+    await refused(timeline(AGENT, REQ_1), '42501', /request_not_in_status/);
+    await refused(claim(AGENT, REQ_1), '42501', /request_not_in_status/);
+    // The working-request check itself is not callable by the API login.
+    await refused(call(AGENT, 'SELECT * FROM public.aws_mortgage_desk_working_request($1::uuid, ARRAY[\'in_progress\'])', [REQ_1]), '42501', /permission denied/);
+    // Agents still have no direct write on the tenant's check or request.
+    await refused(call(AGENT, 'INSERT INTO public.check_messages (check_id, sender_id, body) VALUES ($1, $2, $3)', [CHECK_1, AGENT, 'direct']), '42501', /./);
+    await refused(call(AGENT, 'INSERT INTO public.check_files (check_intake_item_id, file_name, file_path) VALUES ($1, $2, $3)', [CHECK_1, 'd', 'd']), '42501', /./);
+    await refused(call(AGENT, 'UPDATE public.mortgage_handling_requests SET mail_to_name = $2 WHERE id = $1', [REQ_1, 'direct']), '42501', /./);
+    assert.equal((await client.query('SELECT count(*)::int AS n FROM public.check_messages WHERE check_id = $1', [CHECK_B])).rows[0].n, 0);
 
-    // --- Completion: SQL 99's two messages and the homeowner timeline row.
-    const done = await rpc(AGENT, 'update_mortgage_handling_request_status', {
-      _request_id: REQ_1, _status: 'completed', _notes: 'Endorsed and mailed back',
-    });
+    // --- Completion (the existing RPC; SQL 99's two messages), then the homeowner timeline row once.
+    const done = await as(AGENT, () => executeSafeWriteRpc({
+      client, mapping: { application_user_id: AGENT }, name: 'update_mortgage_handling_request_status',
+      args: { _request_id: REQ_1, _status: 'completed', _notes: 'Endorsed and mailed back' },
+    }));
     assert.equal(done.error, undefined, JSON.stringify(done));
-    assert.equal(done.data.homeowner_timeline_posted, true);
+    // The completion RPC itself adds the homeowner timeline row (workflow-rpc.mjs); a later call adds none.
+    assert.equal(done.data.homeowner_timeline_posted, true, JSON.stringify(done));
     const ledger = (await client.query(
-      'SELECT tenant_id, claim_id, check_id, event_type, actor_label, payload_json, created_by FROM public.homeowner_ledger_events',
+      'SELECT tenant_id, claim_id, check_id, event_type, actor_label, amount, payload_json, created_by FROM public.homeowner_ledger_events',
     )).rows;
     assert.equal(ledger.length, 1);
-    assert.equal(ledger[0].tenant_id, TENANT_A);
-    assert.equal(ledger[0].claim_id, CLAIM_1);
-    assert.equal(ledger[0].event_type, 'mortgage_update');
+    assert.deepEqual([ledger[0].tenant_id, ledger[0].claim_id, ledger[0].check_id, ledger[0].event_type, ledger[0].actor_label, ledger[0].amount, ledger[0].created_by],
+      [TENANT_A, CLAIM_1, CHECK_1, 'mortgage_update', 'Mortgage Desk', null, AGENT]);
     assert.equal(ledger[0].payload_json.mortgage_request_id, REQ_1);
-    assert.equal(ledger[0].created_by, AGENT);
-    // Once per request.
-    await as(AGENT, () => client.query('SELECT public.aws_mortgage_desk_completion_timeline($1::uuid)', [REQ_1]));
+    assert.equal(ledger[0].payload_json.title, 'Mortgage company step complete');
+    assert.equal((await timeline(AGENT, REQ_1)).id, null);
     assert.equal((await client.query('SELECT count(*)::int AS n FROM public.homeowner_ledger_events')).rows[0].n, 1);
+    await refused(timeline(OTHER_AGENT, REQ_1), '42501', /not_assigned_to_you/);
     // Desk writes stop once the request is completed.
-    const late = await rpc(AGENT, 'mortgage_desk_post_message', { _request_id: REQ_1, _body: 'late' });
-    assert.equal(late.error, 'request_not_in_progress');
+    await refused(post(AGENT, REQ_1, 'late'), '42501', /request_not_in_status/);
+    await refused(ship(AGENT, REQ_1, { mail_to_name: 'late' }), '42501', /request_not_in_status/);
 
-    // --- The tenant member reads every Desk note and document on its check.
+    // --- The tenant member reads every Desk note and document on its check; another tenant none.
     const tenantView = await as(MEMBER, async () => ({
-      messages: (await client.query('SELECT body FROM public.check_messages WHERE check_id = $1 ORDER BY created_at, id', [CHECK_1])).rows,
-      files: (await client.query("SELECT file_name, source FROM public.check_files WHERE check_intake_item_id = $1 ORDER BY created_at", [CHECK_1])).rows,
+      messages: (await client.query('SELECT body FROM public.check_messages WHERE check_id = $1 ORDER BY created_at, id', [CHECK_1])).rows.map((m) => m.body),
+      files: (await client.query('SELECT file_name, source FROM public.check_files WHERE check_intake_item_id = $1 ORDER BY created_at', [CHECK_1])).rows,
+      request: (await client.query('SELECT mail_to_name, shipping_label_path FROM public.mortgage_handling_requests WHERE id = $1', [REQ_1])).rows,
     }));
-    assert.deepEqual(tenantView.messages.map((m) => m.body), [
-      'Called Acme, payoff letter requested',
-      buildMortgageDeskNoteMessage('Acme wants the W-9 too'),
-      buildMortgageDeskCompletedMessage('Acme Mortgage', 'Endorsed and mailed back'),
-      buildReturnMessage(REQ_1),
-    ]);
+    assert.equal(tenantView.messages[0], 'Called Acme, payoff letter requested');
+    assert.ok(tenantView.messages.some((body) => body.startsWith('✅ ChecksOps Mortgage Desk completed work with Acme Mortgage.') && body.includes(' Notes: ')), JSON.stringify(tenantView.messages));
+    assert.ok(tenantView.messages.some((body) => body.startsWith(`MORTGAGE_DESK_RETURN:${REQ_1}`)), JSON.stringify(tenantView.messages));
     assert.deepEqual(tenantView.files, [
       { file_name: 'payoff.pdf', source: 'mortgage_ops' },
       { file_name: 'label.pdf', source: 'mortgage_ops' },
     ]);
+    assert.deepEqual(tenantView.request, [{ mail_to_name: 'Acme Loss Drafts', shipping_label_path: labelPath }]);
     const otherTenantView = await as(MEMBER_B, async () => (
       await client.query('SELECT count(*)::int AS n FROM public.check_files WHERE check_intake_item_id = $1', [CHECK_1])
     ).rows[0].n);
     assert.equal(otherTenantView, 0);
 
-    // --- The "work returned" email: once, to the requester, with the Desk's note and documents.
-    const sends = [];
-    const send = async (message) => {
-      sends.push(message);
-      return { mode: 'sink', results: message.to.map((to) => ({ to, status: 'sunk', delivery: 'sink' })) };
-    };
-    const refusedEmail = await as(OTHER_AGENT, () => runMortgageDeskReturnEmail({
-      client, mapping: { application_user_id: OTHER_AGENT }, requestId: REQ_1, send, env: {},
-    }));
-    assert.equal(refusedEmail.ok, false);
-    const emailed = await as(AGENT, () => runMortgageDeskReturnEmail({
-      client, mapping: { application_user_id: AGENT }, requestId: REQ_1, send, env: {},
-    }));
-    assert.equal(emailed.ok, true, JSON.stringify(emailed));
-    assert.equal(emailed.recipientSource, 'requester');
-    assert.equal(sends.length, 1);
-    assert.deepEqual(sends[0].to, ['requester@freedom.test']);
-    assert.ok(sends[0].text.includes('Endorsed and mailed back'));
-    assert.ok(sends[0].text.includes('payoff.pdf'));
-    assert.match(sends[0].subject, /check #100234/);
-    const second = await as(AGENT, () => runMortgageDeskReturnEmail({
-      client, mapping: { application_user_id: AGENT }, requestId: REQ_1, send, env: {},
-    }));
-    assert.equal(second.status, 'already_sent');
-    assert.equal(sends.length, 1);
+    // --- The "work returned" email: claimed once, for the requester, with the Desk's note and documents.
+    await refused(claim(OTHER_AGENT, REQ_1), '42501', /not_assigned_to_you/);
+    const first = (await claim(AGENT, REQ_1)).out;
+    assert.equal(first.claimed, true, JSON.stringify(first));
+    assert.equal(first.recipient_source, 'requester');
+    assert.deepEqual(first.recipients, ['requester@freedom.test']);
+    assert.equal(first.tenant_slug, 'freedom');
+    assert.equal(first.check_number, '100234');
+    assert.equal(first.mortgage_company, 'Acme Mortgage');
+    assert.match(first.note, /Endorsed and mailed back/);
+    assert.deepEqual(first.documents, [{ file_name: 'payoff.pdf', category: 'mortgage_ops' }, { file_name: 'label.pdf', category: 'mortgage_ops_shipping_label' }]);
+    assert.ok((await client.query('SELECT return_emailed_at FROM public.mortgage_handling_requests WHERE id = $1', [REQ_1])).rows[0].return_emailed_at);
+    assert.deepEqual((await claim(AGENT, REQ_1)).out, { claimed: false, reason: 'already_sent', request_id: REQ_1 });
+    // A claim in a transaction that rolls back (the API sends in the same transaction) leaves nothing marked.
+    await client.query('UPDATE public.mortgage_handling_requests SET return_emailed_at = NULL WHERE id = $1', [REQ_1]);
+    await client.query('BEGIN');
+    await client.query('SET LOCAL ROLE checksops');
+    await client.query("SELECT set_config('request.app_user_id', $1, true)", [AGENT]);
+    assert.equal((await client.query('SELECT public.aws_mortgage_desk_return_email_claim($1::uuid) AS out', [REQ_1])).rows[0].out.claimed, true);
+    await client.query('ROLLBACK');
+    assert.equal((await client.query('SELECT return_emailed_at FROM public.mortgage_handling_requests WHERE id = $1', [REQ_1])).rows[0].return_emailed_at, null);
+    // The requester left the tenant: the members get it instead.
+    await client.query('DELETE FROM public.tenant_users WHERE user_id = $1', [MEMBER]);
+    const members = (await claim(AGENT, REQ_1)).out;
+    assert.equal(members.recipient_source, 'members');
+    assert.deepEqual(members.recipients, ['second@freedom.test']);
   } finally {
     for (const c of clients.reverse()) {
       try { await c.end(); } catch { /* ignore */ }
