@@ -103,10 +103,9 @@ An unexpected exception also ends in one failure summary:
   before anything else.
 
 1. **Pin.** Refuses unless the pin has `execute: true`, a staging acceptance
-   (`ok: true` plus a reference) and an authorization phrase. SQL 121's pin is `execute: true`
-   (owner-approved pin change of 2026-10-27, "Go": the read-only production inspect of 2026-10-27, SSM
-   `b76e02f3-ea93-44fd-b00c-c0b72ed74509`, recorded as its pre-state, on its guarded staging apply run
-   40591140684; see `ops/production-sql-121-apply.md`) until its record-and-retire change. SQL 120's pin is `execute: false`
+   (`ok: true` plus a reference) and an authorization phrase. SQL 121's pin is `execute: false`
+   again since its 2026-10-27 apply (owner statement "then apply SQL 121 in production"; see
+   `ops/production-sql-121-apply.md`). SQL 120's pin is `execute: false`
    again since its 2026-10-27 apply (owner statement "Approve bundle prod-sql120-usage-events-20261027. Apply SQL 120 in production. DEPLOY WEBSITE TO PRODUCTION", bundle
    `prod-sql120-usage-events-20261027`; see `ops/production-sql-120-apply.md`). SQL 115's pin is `execute: false`
    again since its 2026-10-27 apply after SQL 119's (owner statement "AWS reconnected, apply SQL 115 in

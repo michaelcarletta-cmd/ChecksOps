@@ -114,9 +114,9 @@ const COMMITTED = Object.freeze(Object.fromEntries(RELEASE_SQL_KEYS.map((key) =>
 // SQL 120's production pin was execute-authorized (owner-approved bundle of 2026-10-27, #1303, on its guarded
 // staging apply from the same pre-state, checked in release-sql120-production-apply.test.mjs) until its
 // record-and-retire change after its 2026-10-27 apply.
-// SQL 121's production pin is execute-authorized (owner-approved pin change of 2026-10-27, on its guarded
-// staging apply, checked in release-sql121-production-apply.test.mjs) until its record-and-retire change.
-const EXECUTE_AUTHORIZED = Object.freeze(['sql121']);
+// SQL 121's production pin was execute-authorized (owner-approved pin change of 2026-10-27, #1320, on its
+// guarded staging apply) until its record-and-retire change after its 2026-10-27 apply.
+const EXECUTE_AUTHORIZED = Object.freeze([]);
 // SQL 95's and SQL 97's recorded production pre-states (read-only inspect of 2026-10-21, SSM
 // 43cb1d1f, main 69dbe9b01) and their staging references: the guarded staging read-live runs of
 // 2026-10-21 that report the intended state (their wave 4 apply runs are not recorded), accepted as
@@ -146,11 +146,13 @@ const SQL93_STAGING_REFERENCE = 'https://github.com/michaelcarletta-cmd/ChecksOp
 // 2026-10-17 from a different pre-state, accepted by the owner as substitute evidence).
 const SQL90_PRODUCTION_PRE = 'b5a1998de14922c26b9d829909fada17d3994cf8d0757d410c3e04f6c1f5d9fe';
 const SQL90_STAGING_REFERENCE = 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39080157856';
-const APPLIED_RETIRED = Object.freeze(['sql90', 'sql91', 'sql92', 'sql93', 'sql94', 'sql95', 'sql96', 'sql97', 'sql98', 'sql99', 'sql101', 'sql102', 'sql103', 'sql104', 'sql105', 'sql106', 'sql108', 'sql109', 'sql110', 'sql111', 'sql112', 'sql113', 'sql114', 'sql115', 'sql116', 'sql118', 'sql119', 'sql120']);
+const APPLIED_RETIRED = Object.freeze(['sql90', 'sql91', 'sql92', 'sql93', 'sql94', 'sql95', 'sql96', 'sql97', 'sql98', 'sql99', 'sql101', 'sql102', 'sql103', 'sql104', 'sql105', 'sql106', 'sql108', 'sql109', 'sql110', 'sql111', 'sql112', 'sql113', 'sql114', 'sql115', 'sql116', 'sql118', 'sql119', 'sql120', 'sql121']);
 // SQL 90's and SQL 101's production applies of 2026-10-19, recorded in applied.
 const SQL90_SQL101_APPLIED = Object.freeze({
   // SQL 120's production apply of 2026-10-27 (main 3a8a9993a).
   sql120: Object.freeze({ ssm: '0c164128-b7cb-4e42-b1a4-28c3fa42d7eb', run: '9e8ff872-d8d6-4bc0-822f-c942b3aa944b', one_use_id: 'sql120-prod-8cf035b2-f369-4624-b8c4-ae42c25182d8', commit: '3a8a9993a5c5ea33974c7cfe2e78719c2e8a9972', approval: 'Approve bundle prod-sql120-usage-events-20261027. Apply SQL 120 in production. DEPLOY WEBSITE TO PRODUCTION' }),
+  // SQL 121's production apply of 2026-10-27 (main 42fcad7a8).
+  sql121: Object.freeze({ ssm: '6bfda4a6-1583-4343-af86-ebf157239760', run: '0ba96971-f1e3-4d58-be57-9d6719336fb0', one_use_id: 'sql121-prod-f4045b78-51ff-401b-8ad0-292250ce6bbd', commit: '42fcad7a806f139812cf5a5146292edf51f13897', approval: 'then apply SQL 121 in production' }),
   // SQL 115's production apply of 2026-10-27 (main 40678dc44), after SQL 119's.
   sql115: Object.freeze({ ssm: 'bf96510f-4f95-42d5-974b-cf99d9a952ac', run: '250cdbb8-0e46-42c8-a4a8-4a9a646ff07a', one_use_id: 'sql115-prod-2ee1c7dd-6d5b-4f25-a4ce-19a1a64be13e', commit: '40678dc44b8de71ceb3ca2c48a21cae480327cea', approval: 'AWS reconnected, apply SQL 115 in production' }),
   // SQL 119's production apply of 2026-10-27 (main a01deea9b).
@@ -294,7 +296,7 @@ async function runCli(key, argv, { env = { CHECKSOPS_DEPLOYMENT_GUARD_APPLY: '1'
   return { out: writes.join(''), spent };
 }
 
-test('committed pins are pending (SQL 121 execute-authorized; SQL 90, SQL 91, SQL 92, SQL 93, SQL 94, SQL 95, SQL 96, SQL 97, SQL 99, SQL 101, SQL 102, SQL 103, SQL 104, SQL 105, SQL 106, SQL 108, SQL 109, SQL 110, SQL 111, SQL 112, SQL 113, SQL 114, SQL 115, SQL 116, SQL 118, SQL 119 and SQL 120 applied and retired), bound to the staging pins, predecessors and the production RDS, and name the built tooling', () => {
+test('committed pins are pending (none execute-authorized; SQL 90, SQL 91, SQL 92, SQL 93, SQL 94, SQL 95, SQL 96, SQL 97, SQL 99, SQL 101, SQL 102, SQL 103, SQL 104, SQL 105, SQL 106, SQL 108, SQL 109, SQL 110, SQL 111, SQL 112, SQL 113, SQL 114, SQL 115, SQL 116, SQL 118, SQL 119, SQL 120 and SQL 121 applied and retired), bound to the staging pins, predecessors and the production RDS, and name the built tooling', () => {
   const inventory = JSON.stringify(JSON.parse(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/bypass-inventory.json'), 'utf8')));
   assert.deepEqual(RELEASE_SQL_KEYS.filter((key) => COMMITTED[key].execute !== false), [...EXECUTE_AUTHORIZED]);
   assert.deepEqual(RELEASE_SQL_KEYS.filter((key) => COMMITTED[key].applied !== undefined), [...APPLIED_RETIRED]);

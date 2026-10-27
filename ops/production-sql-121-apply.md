@@ -92,7 +92,21 @@ intended fingerprint. Recorded in the production pin with the staging apply as i
 the pin change; the apply still needs the owner's run-time approval and runs only after that merge is on
 main and staged.
 
-**Status:** applied to staging (wave 21); production pin execute-authorized; not applied to production.
+**Production apply (2026-10-27).** After the pin change (#1320, merged on the owner's "merge 1320 when
+green"), transfer run 40602113322 staged main `42fcad7a8` (tarball sha256
+`389c88844db03516238f68da702a357835b6b36a377a77c0478afdf740180af7`). One-shot `--phase inspect` (SSM
+`9c3da39a-f768-43a4-a57a-7048829af14c`, run `ff0fb13c…`) then `--phase apply` run
+`0ba96971-f1e3-4d58-be57-9d6719336fb0` through SSM `6bfda4a6-1583-4343-af86-ebf157239760`, workstream
+`prod-sql121-cash-jobs-grants-20261027`, under the owner's words "then apply SQL 121 in production" (passed
+verbatim): every step ok, contracts 4/4, 6/6 and 43/43; receipt `ded8c0f1…` →
+`2dd2ead6974cec45f2b88fc76c81a3cd48befa25cc63fe03133f9fe24593165e` (intended), result `applied`, unrelated
+catalog `dc5ac4d9…`; post-apply inspect `already_applied` true, `precondition_failures` `[]`; a separate
+read-only inspect (SSM `3637a567-bdc0-4aa1-9581-b2c7afc7d3bc`) agreed. SSM returned the first 24000
+characters of the output; everything recorded was read from that part (see the pin's
+`applied.one_shot_note`).
+
+**Status:** applied to staging (wave 21) and to production (2026-10-27); the production pin is retired
+(`execute: false`).
 
 ## Fingerprint
 
