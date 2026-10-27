@@ -91,7 +91,7 @@ const queryRows = (sql) => {
   if (/FROM public\.payment_provider_accounts/.test(sql)) {
     return [{
       environment: 'sandbox',
-      onboarding_status: 'complete',
+      onboarding_status: 'active',
       verification_status: 'verified',
       can_receive_payments: true,
       can_send_payments: false,
@@ -274,6 +274,48 @@ test('integrity cohort matches exact billable deposited lifecycle and scopes ten
   assert.match(ADMIN_AUDIT_SQL, /metadata->>'tenant_id' = \$1::uuid::text/);
   assert.match(ADMIN_AUDIT_SQL, /SELECT created_at, user_id::text AS actor_id, action/);
   assert.doesNotMatch(ADMIN_AUDIT_SQL, /SELECT[^]*old_values|SELECT[^]*new_values/);
+});
+
+test('every onboarding and verification status the Moov writers store is shown as itself', async () => {
+  const onboarding = ['onboarding_incomplete', 'verification_pending', 'additional_information_required', 'active', 'restricted', 'suspended', 'not_started'];
+  const verification = ['unverified', 'pending', 'review', 'verified', 'resubmit', 'failed'];
+  for (let i = 0; i < Math.max(onboarding.length, verification.length); i += 1) {
+    const want = { onboarding: onboarding[i % onboarding.length], verification: verification[i % verification.length] };
+    const client = makeClient();
+    const originalQuery = client.query.bind(client);
+    client.query = async (sql, params = []) => {
+      const result = await originalQuery(sql, params);
+      if (/FROM public\.payment_provider_accounts/.test(sql)) {
+        return { rows: [{ ...result.rows[0], onboarding_status: want.onboarding, verification_status: want.verification }] };
+      }
+      return result;
+    };
+    const result = await runTenantManagementV2({
+      client,
+      tenantId: TENANT_ID,
+      period: { start: '2026-10-01T00:00:00.000Z', end: '2026-11-01T00:00:00.000Z' },
+    });
+    assert.equal(result.providers.moov[0].onboardingStatus, want.onboarding);
+    assert.equal(result.providers.moov[0].verificationStatus, want.verification);
+  }
+  // Every value normalizeOnboardingStatus can return is on the list.
+  const { normalizeOnboardingStatus } = await import('../functions/api/providers/parity/moov-client.mjs');
+  const caps = (status) => [{ capability: 'transfers', status }];
+  for (const input of [
+    { disabled: true }, { verificationStatus: 'failed' }, { capabilities: caps('pending') }, { capabilities: caps('errored') },
+    { verificationStatus: 'verified', capabilities: caps('enabled') }, {}, { verificationStatus: 'review', capabilities: caps('disabled') },
+  ]) {
+    const status = normalizeOnboardingStatus(input);
+    const client = makeClient();
+    const originalQuery = client.query.bind(client);
+    client.query = async (sql, params = []) => {
+      const result = await originalQuery(sql, params);
+      if (/FROM public\.payment_provider_accounts/.test(sql)) return { rows: [{ ...result.rows[0], onboarding_status: status }] };
+      return result;
+    };
+    const result = await runTenantManagementV2({ client, tenantId: TENANT_ID, period: { start: '2026-10-01T00:00:00.000Z', end: '2026-11-01T00:00:00.000Z' } });
+    assert.equal(result.providers.moov[0].onboardingStatus, status, status);
+  }
 });
 
 test('unknown provider and activity labels are reduced to fixed safe values', async () => {

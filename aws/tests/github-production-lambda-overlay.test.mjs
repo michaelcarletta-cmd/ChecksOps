@@ -608,12 +608,17 @@ test('storage-write.mjs expected_live records the bytes production run 397077782
 test('tenant-management-v2.mjs is added just before app-services.mjs, which imports it statically', async () => {
   const TMV2 = 'tenant-management-v2.mjs';
   const ROUTER = 'app-services.mjs';
-  const RELEASE = 'aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json';
+  // Planned under the release manifest; its provider-status labels change (2026-10-27) moved the row
+  // to its own planning-only manifest.
+  const MANIFEST = 'aws/tests/fixtures/production-tenant-management-v2-provider-status-manifest-2026-10-27.json';
   const row = PLAN.members[TMV2];
   assert.equal(row.operation, 'add');
   assert.equal(row.expected_live_sha256, null);
   assert.equal(row.sql_before, null);
-  assert.equal(row.manifest, RELEASE);
+  assert.equal(row.manifest, MANIFEST);
+  const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, MANIFEST), 'utf8'));
+  assert.equal(manifest.deploy_authorized, false);
+  assert.equal(manifest.members[TMV2].accepted_sha256, row.accepted_sha256);
   assert.equal(row.accepted_sha256, sha(`aws/functions/api/${TMV2}`));
   assert.equal(PLAN.order.indexOf(TMV2) + 1, PLAN.order.indexOf(ROUTER));
   assert.ok(localImports(fs.readFileSync(path.join(ROOT, 'aws/functions/api', ROUTER), 'utf8'), ROUTER).includes(TMV2));
