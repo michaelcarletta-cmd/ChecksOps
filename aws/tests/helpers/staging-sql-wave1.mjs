@@ -95,6 +95,15 @@ export const STAGING_WAVE1 = Object.freeze({
   // run 40544852676): the five functions and two triggers absent, a unique index already covering
   // check_billing_events (payment_transfer_id, event_type).
   sql120: Object.freeze({ wave: 20, approved: '2026-10-27', run: '40545376358', live: 'f3c1dd26888ac9fce91721cad698d39ee99cdca80c4a7888f9cfea9043171e9d', apply_run: '40547527832' }),
+  // Wave 21 (owner approved 2026-10-27, "start the SQL 121 and 122 staging applies"): SQL 121, the
+  // cash-job grants and the Check Alt cash-job payment trigger, and SQL 122, the Mortgage Desk return
+  // to the tenant. Read at main d20d599 after the executor carried both (deploy run 40587866121).
+  // SQL 121: the new function and its trigger absent, checksops already holding SELECT / INSERT /
+  // UPDATE / DELETE on the three cash-job tables, sync_cash_job_check_payment() with the reviewed body
+  // but not SECURITY DEFINER and EXECUTE to PUBLIC. SQL 122: the six functions and
+  // mortgage_handling_requests.return_emailed_at absent.
+  sql121: Object.freeze({ wave: 21, approved: '2026-10-27', run: '40588277757', live: '084deae36bb533c91124d12698b1adb29e5fa7b9ff53932aa293537bc573e76e' }),
+  sql122: Object.freeze({ wave: 21, approved: '2026-10-27', run: '40588288300', live: 'e13856d7a75483b5785b6e791fd83fbe9da9a1b09f6c819480cee54388a62609' }),
   sql98: Object.freeze({ wave: 3, approved: '2026-10-18', run: '39083278136', live: '296c3d6a274e10f66005fb9eaecf93fa17b81bd8db3607037ca07698fddd3275', apply_run: '39085677318' }),
 });
 
@@ -106,7 +115,7 @@ export const pendingPin = (pin) => Object.freeze({
 });
 
 /**
- * The committed staging pin's apply state: waves 1-20 recorded and approved, wave 6 approved with
+ * The committed staging pin's apply state: waves 1-21 recorded and approved, wave 6 approved with
  * its read-live still to record (pending until then), wave 18 (SQL 117) retired, the rest pending.
  */
 export function assertStagingPinState(assert, key, pin) {

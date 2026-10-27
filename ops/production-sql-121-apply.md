@@ -54,7 +54,24 @@ Not changed: no grant on `cash_job_payments`; `sync_cash_job_check_payment()`'s 
 `EXPECTED_PUBLIC_TRIGGERS` (182 today, `aws/functions/api/db-readonly-validate.mjs`) must follow in
 their own change, as #1309 did for SQL 120; not before the apply.
 
-**Status:** not applied anywhere. The staging pin and the production pin are pending.
+**Staging executor refreshed (2026-10-27).** Inspect run 40587591216 (main `d20d599`) found the live
+executor at `gX5VOEw7…` without `sql/121_cash_jobs_production_grants.sql` and
+`sql/122_mortgage_desk_return_to_tenant.sql`. Deploy run 40587866121 updated it to main's package
+(`3k6z4Pa45EyaPoS5EuUL4U7j8DGrhWzUPp8LG6/biCE=`; "Verify live executor now carries main's package" passed).
+
+**Staging read-live (2026-10-27).** Run 40588277757 (main `d20d599`): `aws_record_cash_job_checkalt_payment()`
+and the `aws_checkalt_deposit_cash_job_payment` trigger on `checkalt_deposits` absent; `checksops`
+already holding SELECT / INSERT / UPDATE / DELETE (owner-granted) on `cash_jobs`,
+`cash_job_line_items` and `cash_job_attachments`, no other write grant; `sync_cash_job_check_payment()`
+with the reviewed body (`body_reviewed` true) but not SECURITY DEFINER, `search_path=public` and
+EXECUTE to PUBLIC and the owner (state `different`, which the file sets); every prerequisite present;
+the definer writes to `cash_job_payments` and `cash_jobs` possible; live
+`084deae36bb533c91124d12698b1adb29e5fa7b9ff53932aa293537bc573e76e`, `already_applied` false,
+`precondition_failures` `[]`. Recorded in the staging pin (`expected_live_definition_sha256`,
+`execute: true`, wave 21) under the owner's words of 2026-10-27, "start the SQL 121 and 122 staging
+applies".
+
+**Status:** staging pin execute-authorized (wave 21); nothing applied yet; production pin pending.
 
 ## Fingerprint
 

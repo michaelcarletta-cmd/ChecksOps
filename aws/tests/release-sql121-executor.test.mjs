@@ -4,7 +4,7 @@
  * release-sql90-97-executor.test.mjs runs what every release key shares (SQL 121 included); this
  * file covers what is new:
  *
- *   - the pin: pending, code-derived, selectable, packed, in step with the production pin; the
+ *   - the pin: staging-authorized from its read-live (wave 21), code-derived, selectable, packed, in step with the production pin; the
  *     pinned commit authored the bytes; no predecessor;
  *   - the file and spec: one new owner-only definer function and its trigger on checkalt_deposits;
  *     sync_cash_job_check_payment() made SECURITY DEFINER with search_path public, pg_temp and
@@ -52,7 +52,7 @@ import { EXECUTOR_PACK_MEMBERS } from '../../scripts/deployment-guard/sql-execut
 import { MIGRATIONS } from '../../scripts/deployment-guard/github-staging-sql-executor.mjs';
 import { READ_LIVE_EXPECTED_SENTINEL } from '../../scripts/deployment-guard/lib/sql-executor-read-live.mjs';
 import { importGuardedSqlExecutor } from './helpers/import-guarded-sql-executor.mjs';
-import { assertStagingPinState } from './helpers/staging-sql-wave1.mjs';
+import { assertStagingPinState, pendingPin } from './helpers/staging-sql-wave1.mjs';
 import { CHECK_A, TENANT_A, pgSkipReason, releaseFixture } from './helpers/release-sql-pg.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -139,7 +139,7 @@ CREATE TABLE public.checkalt_deposits (
 ALTER TABLE public.checkalt_deposits ENABLE ROW LEVEL SECURITY;
 INSERT INTO public.checkalt_deposits (check_intake_item_id, tenant_id, status) VALUES ('${CHECK_A}', '${TENANT_A}', 'cleared');`;
 
-test('pin: SQL 121 pending, code-derived, selectable, packed, in step with the production pin; no predecessor', () => {
+test('pin: SQL 121 staging-authorized from its read-live, code-derived, selectable, packed, in step with the production pin; no predecessor', () => {
   const pin = PINS[KEY];
   const spec = RELEASE_SQL_SPECS[KEY];
   const packed = Object.fromEntries(EXECUTOR_PACK_MEMBERS);
@@ -149,11 +149,14 @@ test('pin: SQL 121 pending, code-derived, selectable, packed, in step with the p
   assert.equal(pin.migration_id, '121_cash_jobs_production_grants');
   assert.equal(spec.choice, 'sql121-cash-jobs-grants');
   assert.equal(sha(TEXT), pin.source_sha256);
-  // Pending: no staging read-live recorded yet (and no apply authorized).
+  // Staging apply authorized (owner approved 2026-10-27) from staging read-live run 40588277757: the
+  // new function and its trigger absent and sync_cash_job_check_payment() not yet SECURITY DEFINER,
+  // so SQL 121 was not yet applied there.
   assertStagingPinState(assert, KEY, pin);
-  assert.equal(pin.execute, false);
-  assert.equal(pin.authorization, 'pending');
-  assert.equal(pin.expected_live_definition_sha256, null);
+  assert.equal(pin.execute, true);
+  assert.equal(pin.authorization, 'Owner approved 2026-10-27: staging apply (wave 21) from staging read-live run 40588277757');
+  assert.equal(pin.expected_live_definition_sha256, '084deae36bb533c91124d12698b1adb29e5fa7b9ff53932aa293537bc573e76e');
+  assert.notEqual(pin.expected_live_definition_sha256, pin.intended_replacement_sha256);
   assert.equal(releaseIntendedHash(KEY, TEXT), pin.intended_replacement_sha256);
   // Everything absent (a database without SQL 121) has a fingerprint of its own.
   assert.notEqual(releaseStateHash(KEY, {}), pin.intended_replacement_sha256);
@@ -389,8 +392,9 @@ test('PostgreSQL 16: SQL 121 through the executor: refused without checkalt_depo
     assert.deepEqual(syncReport.acl, ['PUBLIC EXECUTE grantor=owner', 'checksops EXECUTE grantor=owner', 'owner EXECUTE grantor=owner']);
     assert.deepEqual(r.release_sql_inspect.table_privileges.map((p) => [p.name, p.lines]),
       CASH_TABLES.map((table) => [table.replace(/^public\./, ''), ['checksops SELECT grantor=owner']]));
-    // A pending pin cannot apply.
-    const pending = await handlerFor(connect)(releaseEvent({ expected_live_definition_sha256: r.live_definition_sha256 }));
+    // A pending pin cannot apply (the committed pin is staging-authorized, so pend a copy).
+    const pendingCopy = pendingPin(PINS[KEY]);
+    const pending = await handlerFor(connect, { pins: { [KEY]: pendingCopy } })(releaseEvent({ pin: pendingCopy, expected_live_definition_sha256: r.live_definition_sha256 }));
     assert.equal(pending.ok, false);
     assert.equal((await fx.admin.query("SELECT has_table_privilege('checksops', 'public.cash_jobs', 'INSERT') AS ok")).rows[0].ok, false);
 

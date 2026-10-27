@@ -54,7 +54,21 @@ Agents still cannot insert into `check_messages`, `check_files` or `homeowner_le
 update `mortgage_handling_requests`, directly. SQL 99's completion trigger is unchanged. No trigger
 is added, so the DB validator's public trigger count is not concerned.
 
-**Status:** not applied anywhere. The staging pin and the production pin are pending. The API
+**Staging executor refreshed (2026-10-27).** Inspect run 40587591216 (main `d20d599`) found the live
+executor at `gX5VOEw7…` without `sql/121_cash_jobs_production_grants.sql` and
+`sql/122_mortgage_desk_return_to_tenant.sql`. Deploy run 40587866121 updated it to main's package
+(`3k6z4Pa45EyaPoS5EuUL4U7j8DGrhWzUPp8LG6/biCE=`; "Verify live executor now carries main's package" passed).
+
+**Staging read-live (2026-10-27).** Run 40588288300 (main `d20d599`): the six functions and
+`mortgage_handling_requests.return_emailed_at` absent, every prerequisite present (SQL 100's agent
+helper among them), the definer writes to `check_messages`, `check_files`,
+`mortgage_handling_requests` and `homeowner_ledger_events` possible; live
+`e13856d7a75483b5785b6e791fd83fbe9da9a1b09f6c819480cee54388a62609`, `already_applied` false,
+`precondition_failures` `[]`. Recorded in the staging pin (`expected_live_definition_sha256`,
+`execute: true`, wave 21) under the owner's words of 2026-10-27, "start the SQL 121 and 122 staging
+applies".
+
+**Status:** staging pin execute-authorized (wave 21); nothing applied yet; production pin pending. The API
 (`aws/functions/api/mortgage-desk-return.mjs`, `workflow-rpc.mjs`, `storage-write-auth.mjs`,
 `app-services.mjs`) and SPA change that call these functions is a separate, later step after SQL
 122 is live in staging; until then nothing calls them.
