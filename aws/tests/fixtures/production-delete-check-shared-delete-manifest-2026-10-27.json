@@ -3,12 +3,13 @@
   "authorization": "Pending owner review (2026-10-27). Planning only: nothing is live or verified. The owner asked for this change in the words \"I was able to share a check but also able tod elete it, which is fine. I cannot test being shared on a check and deleting. I really just need to be able to delete checks with a reason typed in and no other issues.\" Each production apply still needs its own owner approval, a staging acceptance reference and a read-only production inspect that confirms the live bytes.",
   "deploy_authorized": false,
   "live_lambda": "checksops-production-prep-api",
-  "notes": "Delete Check (workflow.mjs handleDeleteCheck, the handler production serves), on top of production-delete-check-unshare-first (#1294, applied to staging in run 40523077105): sharing no longer blocks a delete. A member deletes a check with a reason, shared or not; the check's shared_checks rows are removed with it (ON DELETE CASCADE), which unshares it. Claim payments and the uninvoiced Review mortgage_handling billing event still do not block; deposits, Check Alt deposits, disbursements, payment directions, deposited claim checks, billed events and terminal checks still refuse. The plan row keeps expected_live_sha256; a read-only production overlay inspect must confirm the live bytes before any apply.",
+  "notes": "Delete Check (workflow.mjs handleDeleteCheck, the handler production serves), on top of production-delete-check-unshare-first (#1294, applied to staging in run 40523077105): sharing no longer blocks a delete. A member deletes a check with a reason, shared or not; the check's shared_checks rows are removed with it (ON DELETE CASCADE), which unshares it. Claim payments and the uninvoiced Review mortgage_handling billing event still do not block; deposits, Check Alt deposits, disbursements, payment directions, deposited claim checks, billed events and terminal checks still refuse. The plan row keeps expected_live_sha256; a read-only production overlay inspect must confirm the live bytes before any apply. Live reconciled (2026-10-27): read-only production overlay inspect run 40528072440 found workflow.mjs live at 753ae14a..., the release 2026-10-17 manifest accepted bytes, not the ecd6f716... this manifest first recorded; live_sha256 is the inspected value.",
   "members": {
     "workflow.mjs": {
-      "live_sha256": "ecd6f716d6a2203a05446afd24eb1bf9e5849e70e49a0ee86bde708fd36c1968",
+      "live_sha256": "753ae14a0d04ded5782c653bd67c308067311f4fcebf835c0aac4e6659188138",
       "accepted_sha256": "c7159c4d9a74342f2a0f59a2836def78376c84d2781bbeb56dbb35ba83ed9337",
-      "operation": "replace"
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
     }
   }
 }
