@@ -1,8 +1,8 @@
 {
   "id": "sql121-cash-jobs-grants-production-apply",
   "migration": "sql121",
-  "authorization": "pending",
-  "execute": false,
+  "authorization": "Owner approved 2026-10-27 (the owner's words of 2026-10-27: \"Go\", in reply to \"The next step is the SQL 121 production pin PR. Tell me when you want it opened.\"; the change itself is reviewed and merged by the owner): production apply of SQL 121 after the staging acceptance below (production ded8c0f12bdb33d0d5c7cc6d544ddddac5a87db5696d5901fb2ffcaff338a790 -> 2dd2ead6974cec45f2b88fc76c81a3cd48befa25cc63fe03133f9fe24593165e); execute true takes effect only when the owner reviews and merges this change. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
+  "execute": true,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -14,7 +14,7 @@
     "public.aws_record_cash_job_checkalt_payment()",
     "public.sync_cash_job_check_payment()"
   ],
-  "expected_live_definition_sha256": null,
+  "expected_live_definition_sha256": "ded8c0f12bdb33d0d5c7cc6d544ddddac5a87db5696d5901fb2ffcaff338a790",
   "intended_replacement_sha256": "2dd2ead6974cec45f2b88fc76c81a3cd48befa25cc63fe03133f9fe24593165e",
   "authorization_phrase": "APPLY_CASH_JOBS_PRODUCTION_GRANTS",
   "predecessors": [],
@@ -39,27 +39,27 @@
       "aws/tests/release-sql90-97-production-apply.test.mjs",
       "aws/tests/sql121-cash-jobs-pg.test.mjs"
     ],
-    "note": "Guarded tooling for SQL 121: sql121-cash-jobs-grants-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql121-cash-jobs-grants); production-sql-one-shot.mjs --migration sql121. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): the new function (body and attributes from the file, EXECUTE for the owner only), its trigger on checkalt_deposits, sync_cash_job_check_payment()'s SECURITY DEFINER, search_path, reviewed body hash and owner-only EXECUTE (spec acl_functions with attributes), and the SELECT / INSERT / UPDATE / DELETE lines of checksops and authenticated on the three cash-job tables, each ACL line with its grantor (render.grantors). The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
+    "note": "Guarded tooling for SQL 121: sql121-cash-jobs-grants-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql121-cash-jobs-grants); production-sql-one-shot.mjs --migration sql121. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): the new function (body and attributes from the file, EXECUTE for the owner only), its trigger on checkalt_deposits, sync_cash_job_check_payment()'s SECURITY DEFINER, search_path, reviewed body hash and owner-only EXECUTE (spec acl_functions with attributes), and the SELECT / INSERT / UPDATE / DELETE lines of checksops and authenticated on the three cash-job tables, each ACL line with its grantor (render.grantors). The tooling does not authorize anything: the reviewed change of 2026-10-27 (\"SQL 121 production pin: production pre-state recorded, staging apply accepted, execute true\") recorded the production inspect, the staging acceptance and the owner approval and set execute true; the record-and-retire change after the apply sets it false again."
   },
   "production_inspect": {
-    "status": "pending",
-    "date": null,
-    "ssm_command_id": null,
-    "source_commit": null,
+    "status": "recorded",
+    "date": "2026-10-27",
+    "ssm_command_id": "b76e02f3-ea93-44fd-b00c-c0b72ed74509",
+    "source_commit": "3a4fedb6bc3b304f841b6de7eba9ad1caf28d206",
     "read_only": true,
     "connected_as": "checksops_admin",
-    "live_definition_sha256": null,
-    "apply_preconditions_met": null,
-    "precondition_failures": null,
-    "note": "Pending: no read-only production inspect has been run for SQL 121 yet. Record its date, SSM command id, source commit, live_definition_sha256, prerequisites_missing, release_sql_inspect.acl_functions (sync_cash_job_check_payment(): ACL with grantors, security_definer, config, body_reviewed), release_sql_inspect.table_privileges, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. Stop if prerequisites_missing is not [] (a cash-job table or column, the function or checkalt_deposits absent in production), or precondition_failures is not [] (acl_functions_body_reviewed: the live function body is not the reviewed one; acl_functions_acl_replaceable: an EXECUTE entry the file does not revoke; altered_relations_owned_by_login or definer_can_write_relations): that needs its own reviewed change."
+    "live_definition_sha256": "ded8c0f12bdb33d0d5c7cc6d544ddddac5a87db5696d5901fb2ffcaff338a790",
+    "apply_preconditions_met": false,
+    "precondition_failures": [],
+    "note": "Recorded from the read-only production inspect of 2026-10-27 (SSM command b76e02f3-ea93-44fd-b00c-c0b72ed74509, node scripts/deployment-guard/sql121-cash-jobs-grants-production-apply.mjs --inspect on the SQL53 runner i-0c35557c4e5385406 from main 3a4fedb6b (tarball source-3a4fedb6bc3b304f841b6de7eba9ad1caf28d206.tar.gz sha256 afab3a5b3242dd31dcf66bf1349c3970fa08e8c784b9cc304c4f44be6426a494, transfer run 40590734577; migration source sha256 on the runner 72f1c189c4f218c477cea5f9974c40cbe1ff05b5cd4caf6f390e66636fd59ae6 == source_sha256), read_only true, source_ok true, connected as checksops_admin). live_definition_sha256 ded8c0f12bdb33d0d5c7cc6d544ddddac5a87db5696d5901fb2ffcaff338a790 (not the intended 2dd2ead6974cec45f2b88fc76c81a3cd48befa25cc63fe03133f9fe24593165e: already_applied false); release_sql_inspect: aws_record_cash_job_checkalt_payment() and the aws_checkalt_deposit_cash_job_payment trigger on checkalt_deposits absent; checksops already holding SELECT / INSERT / UPDATE / DELETE (owner-granted) on cash_jobs, cash_job_line_items and cash_job_attachments, other_write_grants []; sync_cash_job_check_payment() state different: the reviewed body (body_reviewed true), not SECURITY DEFINER, config search_path=public, ACL PUBLIC EXECUTE, checksops EXECUTE and owner EXECUTE, each owner-granted; prerequisites_missing [], definer_writes cash_job_payments and cash_jobs ok, successors_applied [], precondition_failures []. Production differs from staging's pre-state (read-live run 40588277757, 084deae36bb533c91124d12698b1adb29e5fa7b9ff53932aa293537bc573e76e) in one line only: production also grants EXECUTE on sync_cash_job_check_payment() to checksops. The file revokes EXECUTE from PUBLIC and checksops and leaves it to the owner, so the post-state is the same intended fingerprint in both environments (the inspect's acl_functions_acl_replaceable check passed). apply_preconditions_met was false at inspect time only because no pre-state was recorded yet (execute false, expected_live_definition_sha256 null). This reviewed change copies live_definition_sha256 into expected_live_definition_sha256 and, in the same change, sets authorization, execute true and staging_acceptance. A fresh --inspect immediately before apply (the one-shot's inspect step) must still report this live_definition_sha256 and precondition_failures []; if not, stop. If already_applied is true, or precondition_failures is not [], stop: that needs its own reviewed change. Earlier: Pending: no read-only production inspect has been run for SQL 121 yet. Record its date, SSM command id, source commit, live_definition_sha256, prerequisites_missing, release_sql_inspect.acl_functions (sync_cash_job_check_payment(): ACL with grantors, security_definer, config, body_reviewed), release_sql_inspect.table_privileges, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. Stop if prerequisites_missing is not [] (a cash-job table or column, the function or checkalt_deposits absent in production), or precondition_failures is not [] (acl_functions_body_reviewed: the live function body is not the reviewed one; acl_functions_acl_replaceable: an EXECUTE entry the file does not revoke; altered_relations_owned_by_login or definer_can_write_relations): that needs its own reviewed change."
   },
   "intended_post_state": {
     "fingerprint": "2dd2ead6974cec45f2b88fc76c81a3cd48befa25cc63fe03133f9fe24593165e",
     "note": "public.aws_record_cash_job_checkalt_payment() owned by checksops_admin, SECURITY DEFINER, search_path public, pg_temp, row_security off, EXECUTE for the owner only, and its trigger aws_checkalt_deposit_cash_job_payment (AFTER INSERT OR UPDATE OF status ON checkalt_deposits). public.sync_cash_job_check_payment() SECURITY DEFINER with search_path public, pg_temp and EXECUTE for the owner only; its body (the reviewed one), language, result, owner and trigger trg_sync_cash_job_check_payment unchanged. SELECT, INSERT, UPDATE and DELETE on cash_jobs, cash_job_line_items and cash_job_attachments for checksops and authenticated (owner-granted); every other grant on those tables unchanged. No grant on cash_job_payments, no policy, table, column or row change. The fingerprint is releaseIntendedHash('sql121', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): 2dd2ead6974cec45f2b88fc76c81a3cd48befa25cc63fe03133f9fe24593165e."
   },
   "staging_acceptance": {
-    "ok": false,
-    "reference": null,
-    "basis": "Pending: record the guarded staging SQL executor read-live (and, if staging is not yet at the intended state, the staging apply) of SQL 121 (choice sql121-cash-jobs-grants) here in the reviewed change that sets execute true. The behavior is covered on PostgreSQL 16 by aws/tests/sql121-cash-jobs-pg.test.mjs. Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+    "ok": true,
+    "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/40591140684",
+    "basis": "Guarded staging SQL executor apply of sql121-cash-jobs-grants, run 40591140684 (2026-10-27, main 3a4fedb6b, wave 21, on the executor deployed from main 3a4fedb6b, deploy run 40590824367: 7wybTiIca01jg0SHXIruSVOQzd3V1i64SUNoT4aoums=), from the staging pre-state recorded by read-live run 40588277757 (084deae36bb533c91124d12698b1adb29e5fa7b9ff53932aa293537bc573e76e): receipt before 084deae36bb533c91124d12698b1adb29e5fa7b9ff53932aa293537bc573e76e, after 2dd2ead6974cec45f2b88fc76c81a3cd48befa25cc63fe03133f9fe24593165e == intended, result applied. Read-live run 40591470594 then reported already_applied true, live 2dd2ead6974cec45f2b88fc76c81a3cd48befa25cc63fe03133f9fe24593165e, precondition_failures []: the new function and its trigger intended and owner-only; sync_cash_job_check_payment() intended (SECURITY DEFINER, search_path public, pg_temp, owner-only EXECUTE); checksops and authenticated SELECT / INSERT / UPDATE / DELETE on the three cash-job tables, other_write_grants []. The pre-states differ by one EXECUTE grant (production_inspect: production also grants checksops EXECUTE on sync_cash_job_check_payment(), which the file revokes); the post-state fingerprint is the same in both environments; the same file bytes (source_sha256) are pinned in both."
   }
 }

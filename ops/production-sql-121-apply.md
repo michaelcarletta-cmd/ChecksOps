@@ -71,7 +71,28 @@ the definer writes to `cash_job_payments` and `cash_jobs` possible; live
 `execute: true`, wave 21) under the owner's words of 2026-10-27, "start the SQL 121 and 122 staging
 applies".
 
-**Status:** staging pin execute-authorized (wave 21); nothing applied yet; production pin pending.
+**Staging apply (2026-10-27).** Run 40591140684 (main `3a4fedb`, after #1316 merged the staging pin and
+executor deploy run 40590824367 carried it, `7wybTiIc…`): receipt before
+`084deae36bb533c91124d12698b1adb29e5fa7b9ff53932aa293537bc573e76e`, after
+`2dd2ead6974cec45f2b88fc76c81a3cd48befa25cc63fe03133f9fe24593165e` (intended), result `applied`. Read-live
+run 40591470594: `already_applied` true, `precondition_failures` `[]`.
+
+**Production inspect (2026-10-27).** Read-only `--inspect` through SSM
+`b76e02f3-ea93-44fd-b00c-c0b72ed74509` on `i-0c35557c4e5385406`, main `3a4fedb` (tarball sha256
+`afab3a5b3242dd31dcf66bf1349c3970fa08e8c784b9cc304c4f44be6426a494`, transfer run 40590734577, migration
+source `72f1c189…` == pin), connected as `checksops_admin`: the new function and its trigger absent;
+`checksops` already holding SELECT / INSERT / UPDATE / DELETE on the three cash-job tables, no other write
+grant; `sync_cash_job_check_payment()` with the reviewed body, not SECURITY DEFINER, EXECUTE to PUBLIC,
+`checksops` and the owner; every prerequisite present; live
+`ded8c0f12bdb33d0d5c7cc6d544ddddac5a87db5696d5901fb2ffcaff338a790`, `already_applied` false,
+`precondition_failures` `[]`. Production differs from staging's pre-state (`084deae3…`) only by the
+`checksops` EXECUTE on `sync_cash_job_check_payment()`, which the file revokes, so both end on the same
+intended fingerprint. Recorded in the production pin with the staging apply as its staging acceptance and
+`execute: true` under the owner's words of 2026-10-27, "Go" (approving this pin change). The owner merges
+the pin change; the apply still needs the owner's run-time approval and runs only after that merge is on
+main and staged.
+
+**Status:** applied to staging (wave 21); production pin execute-authorized; not applied to production.
 
 ## Fingerprint
 
