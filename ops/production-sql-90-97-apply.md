@@ -441,6 +441,13 @@ nothing. The production tool therefore never runs the file there:
    shows which: `execute_acl`, `comment`, `column_acl_entries[].grantor`.
 3. The SQL 100 pin stays `execute: false`; no production apply step exists for it.
 
+**Recorded (2026-10-27).** Read-only `--inspect` through SSM `8d241cf9-f770-4ae8-b530-379a7d16ba78`
+on `i-0c35557c4e5385406`, main `afd06f10b` (tarball sha256
+`a42c404f5560c12326b012a6a0ddadd8ae6f91bb82e4f5ab9a30c41325aafc8b`, transfer run 40514044438,
+migration source `16cb8c9a…` == pin), connected as `checksops_admin`: live `52c00e3a…` (intended),
+`already_applied` true, `production_noop.live_is_intended` true, `precondition_failures` `[]`, SQL 90
+applied. Recorded in the SQL 100 production pin's `production_inspect`.
+
 ## Later migrations (SQL 103 and up)
 
 Adding one means: its spec in `release-sql-specs.mjs`, its staging pin (with its code-derived

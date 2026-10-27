@@ -47,17 +47,17 @@
     "note": "Guarded tooling for SQL 100: sql100-mortgage-desk-live-access-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql100-mortgage-desk-live-access); production-sql-one-shot.mjs --migration sql100. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's). production_noop: the production tool only inspects; its fingerprint includes every ACL entry's grantor (owner as owner) and each policy's comment hash, so a grant by another grantor or a policy comment (which DROP POLICY + CREATE POLICY would lose) makes the live state not the intended one and the tool refuses. The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
   },
   "production_inspect": {
-    "status": "pending",
-    "date": null,
-    "ssm_command_id": null,
-    "source_commit": null,
+    "status": "recorded",
+    "date": "2026-10-27",
+    "ssm_command_id": "8d241cf9-f770-4ae8-b530-379a7d16ba78",
+    "source_commit": "afd06f10b9d443e384f6873a4a4e9d67f29cee4d",
     "read_only": true,
     "connected_as": "checksops_admin",
-    "live_definition_sha256": null,
-    "already_applied": null,
-    "apply_preconditions_met": null,
-    "precondition_failures": null,
-    "note": "Run 2026-10-17 at source commit 969e2b2b1 (SSM 24b9f38c-d721-4b82-b3a5-056c6c84d37a, read-only, checksops_admin): live_definition_sha256 52c00e3a3fb401107fd6a0316685a7e7d40b4ebdd42b82899acf7a16831ef777, then not the intended 4a9e9b26... because the file assumed the default helper EXECUTE ACL and no policy comment; precondition_failures predecessors_applied (SQL 90 not applied), function_acl_replaceable, production_state_already_intended. The file was reconciled in a reviewed change (the live EXECUTE grants; the SQL 39 comment on aws_update_mortgage_ops_accept_complete, sha256 equal to the live 34ef5bf7...); its intended fingerprint is now that live value. status stays pending until a re-run at the merged commit shows already_applied true; predecessors_applied stays false until SQL 90 is applied. Never set execute true to make production match SQL 100."
+    "live_definition_sha256": "52c00e3a3fb401107fd6a0316685a7e7d40b4ebdd42b82899acf7a16831ef777",
+    "already_applied": true,
+    "apply_preconditions_met": false,
+    "precondition_failures": [],
+    "note": "Recorded from the read-only production inspect of 2026-10-27 (SSM command 8d241cf9-f770-4ae8-b530-379a7d16ba78, status Success, node scripts/deployment-guard/sql100-mortgage-desk-live-access-production-apply.mjs --inspect on the SQL53 runner i-0c35557c4e5385406 from main afd06f10b (tarball source-afd06f10b9d443e384f6873a4a4e9d67f29cee4d.tar.gz sha256 a42c404f5560c12326b012a6a0ddadd8ae6f91bb82e4f5ab9a30c41325aafc8b, transfer run 40514044438; SOURCE_COMMIT afd06f10b9d443e384f6873a4a4e9d67f29cee4d; migration source sha256 on the runner 16cb8c9ae8ab63bfce4948c560ce6b97a2a53dae11ce502af606ed837a086724 == source_sha256), read_only true, source_ok true, connected as checksops_admin, pin_execute false). live_definition_sha256 52c00e3a3fb401107fd6a0316685a7e7d40b4ebdd42b82899acf7a16831ef777 == intended_replacement_sha256: already_applied true, production_noop {required true, live_is_intended true}, precondition_failures [], missing_dependencies [], prerequisites_missing [], predecessors {sql90 true} (predecessors_applied true), successors_applied []; the three helpers and the five mortgage_handling_requests policies intended, aws_write_mortgage_handling_requests absent (intended), the 17 column ACLs and the table SELECT / INSERT / DELETE lines intended with grantor owner, only aws_update_mortgage_ops_accept_complete commented. apply_preconditions_met is false because the state is already intended (the tool never runs the file on production). This is the production record ops/production-sql-90-97-apply.md (\"SQL 100 on production\", step 1) asks for; the pin stays execute false and no production apply step exists for it. Earlier: Run 2026-10-17 at source commit 969e2b2b1 (SSM 24b9f38c-d721-4b82-b3a5-056c6c84d37a, read-only, checksops_admin): live_definition_sha256 52c00e3a3fb401107fd6a0316685a7e7d40b4ebdd42b82899acf7a16831ef777, then not the intended 4a9e9b26... because the file assumed the default helper EXECUTE ACL and no policy comment; precondition_failures predecessors_applied (SQL 90 not applied), function_acl_replaceable, production_state_already_intended. The file was reconciled in a reviewed change (the live EXECUTE grants; the SQL 39 comment on aws_update_mortgage_ops_accept_complete, sha256 equal to the live 34ef5bf7...); its intended fingerprint is now that live value. status stays pending until a re-run at the merged commit shows already_applied true; predecessors_applied stays false until SQL 90 is applied. Never set execute true to make production match SQL 100."
   },
   "intended_post_state": {
     "fingerprint": "52c00e3a3fb401107fd6a0316685a7e7d40b4ebdd42b82899acf7a16831ef777",
