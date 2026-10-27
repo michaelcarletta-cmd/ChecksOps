@@ -1,5 +1,5 @@
 /**
- * Specs of the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108 to SQL 117) for the shared engine in
+ * Specs of the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108 to SQL 120) for the shared engine in
  * release-sql-state.mjs: what each pinned file creates, replaces or drops, the reviewed
  * EXECUTE ACLs, the prerequisites and predecessors, and the PostgreSQL renderings the file
  * leaves (policy expressions, view, column, constraint, index and trigger definitions as
@@ -4510,6 +4510,147 @@ export const RELEASE_SQL_SPECS = deepFreeze({
     },
     "runs_before": [
       "sql115"
+    ]
+  },
+  // SQL 120: usage events at Check Alt approval and at send time. Five new functions (EXECUTE for
+  // the owner only), two triggers (checkalt_deposits, payment_transfers), the one-fee-per-leg unique
+  // index on check_billing_events (added only when none covers it, as SQL 98's check index) and a
+  // backfill from 2026-10-01 (rows only). No predecessor: it needs SQL 98's price functions and SQL
+  // 96's tenant rate columns, which are prerequisites. definer_writes: the trigger functions write
+  // check_billing_events under RLS.
+  sql120: {
+    "key": "sql120",
+    "label": "SQL 120",
+    "choice": "sql120-usage-events-at-approval-and-send",
+    "production_pin_rel": "ops/deployment-guard/sql120-usage-events-at-approval-and-send-production-apply.json",
+    "script": "sql120-usage-events-at-approval-and-send-production-apply",
+    "prerequisites": [
+      "public.tenants",
+      "public.check_intake_items",
+      "public.check_billing_events",
+      "public.checkalt_deposits",
+      "public.payment_transfers",
+      "public.aws_check_billing_default_price_cents()",
+      "public.aws_check_billing_charges_when_per_check_off()",
+      "column public.tenants.per_check_billing_enabled",
+      "column public.tenants.per_check_rate_cents",
+      "column public.tenants.next_day_rate_cents",
+      "column public.tenants.same_day_rate_cents",
+      "column public.check_intake_items.tenant_id",
+      "column public.check_intake_items.status",
+      "column public.check_intake_items.claim_id",
+      "column public.check_billing_events.tenant_id",
+      "column public.check_billing_events.check_intake_item_id",
+      "column public.check_billing_events.payment_transfer_id",
+      "column public.check_billing_events.event_type",
+      "column public.check_billing_events.unit_price_cents",
+      "column public.check_billing_events.currency",
+      "column public.check_billing_events.status",
+      "column public.check_billing_events.billed_at",
+      "column public.check_billing_events.invoice_id",
+      "column public.check_billing_events.claim_id",
+      "column public.check_billing_events.source_kind",
+      "column public.check_billing_events.source_id",
+      "column public.check_billing_events.created_at",
+      "column public.check_billing_events.updated_at",
+      "column public.checkalt_deposits.id",
+      "column public.checkalt_deposits.check_intake_item_id",
+      "column public.checkalt_deposits.tenant_id",
+      "column public.checkalt_deposits.status",
+      "column public.checkalt_deposits.submitted_at",
+      "column public.checkalt_deposits.created_at",
+      "column public.payment_transfers.id",
+      "column public.payment_transfers.tenant_id",
+      "column public.payment_transfers.status",
+      "column public.payment_transfers.speed",
+      "column public.payment_transfers.requested_speed",
+      "column public.payment_transfers.leg_role",
+      "column public.payment_transfers.check_id",
+      "column public.payment_transfers.provider_metadata",
+      "column public.payment_transfers.submitted_at",
+      "column public.payment_transfers.created_at"
+    ],
+    "predecessors": [],
+    "counts": {
+      "check_billing_event_transfer_duplicates": {
+        "requires": [
+          "public.check_billing_events",
+          "column public.check_billing_events.payment_transfer_id",
+          "column public.check_billing_events.event_type"
+        ],
+        "sql": "SELECT count(*)::int AS n FROM (SELECT 1 FROM public.check_billing_events\nWHERE payment_transfer_id IS NOT NULL GROUP BY payment_transfer_id, event_type HAVING count(*) > 1) d"
+      }
+    },
+    "functions": [
+      {
+        "identity": "public.aws_check_processing_price_cents(uuid)",
+        "acl": [
+          "owner EXECUTE"
+        ]
+      },
+      {
+        "identity": "public.aws_record_checkalt_billing_event()",
+        "acl": [
+          "owner EXECUTE"
+        ]
+      },
+      {
+        "identity": "public.aws_send_speed_fee_type(text)",
+        "acl": [
+          "owner EXECUTE"
+        ]
+      },
+      {
+        "identity": "public.aws_send_speed_fee_cents(uuid, text)",
+        "acl": [
+          "owner EXECUTE"
+        ]
+      },
+      {
+        "identity": "public.aws_record_send_speed_fee()",
+        "acl": [
+          "owner EXECUTE"
+        ]
+      }
+    ],
+    "unique_covers": [
+      {
+        "table": "public.check_billing_events",
+        "name": "transfer_event",
+        "contains": [
+          "payment_transfer_id",
+          "event_type"
+        ],
+        "within": [
+          "event_type",
+          "payment_transfer_id",
+          "tenant_id"
+        ],
+        "duplicates_count": "check_billing_event_transfer_duplicates"
+      }
+    ],
+    "added_indexes": [
+      "public.check_billing_events_transfer_event_uidx"
+    ],
+    "triggers": [
+      {
+        "table": "public.checkalt_deposits",
+        "name": "aws_checkalt_deposit_billing_event",
+        "def": "CREATE TRIGGER aws_checkalt_deposit_billing_event AFTER INSERT OR UPDATE OF status ON public.checkalt_deposits FOR EACH ROW EXECUTE FUNCTION public.aws_record_checkalt_billing_event()"
+      },
+      {
+        "table": "public.payment_transfers",
+        "name": "aws_payment_transfer_send_speed_fee",
+        "def": "CREATE TRIGGER aws_payment_transfer_send_speed_fee AFTER INSERT OR UPDATE OF status ON public.payment_transfers FOR EACH ROW EXECUTE FUNCTION public.aws_record_send_speed_fee()"
+      }
+    ],
+    "definer_writes": [
+      "public.check_billing_events"
+    ],
+    "altered_relations": [
+      "public.checkalt_deposits",
+      "public.payment_transfers",
+      "public.check_billing_events"
     ]
   },
 });

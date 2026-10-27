@@ -2659,6 +2659,32 @@ export const AUTHORIZED_SQL119_PROVIDER_STAKEHOLDER_SYNC_ACL = Object.freeze({
   function_identities: Object.freeze(['public.sync_provider_stakeholder_account(uuid)']),
 });
 
+// Usage 2026-10-27 staging pin: SQL 120 (usage events at Check Alt approval and at send time: the
+// check_processing event when a Check Alt deposit is approved or accepted, the next-day / same-day
+// fee per recipient when a send is posted, voids when it did not go through, the one-fee-per-leg
+// unique index, a backfill from 2026-10-01). No predecessor. Pending until a reviewed pin change
+// records a staging read-live.
+export const AUTHORIZED_SQL120_USAGE_EVENTS_AT_APPROVAL_AND_SEND = Object.freeze({
+  key: 'sql120',
+  filename: 'aws/workflows/sql/120_usage_events_at_approval_and_send.sql',
+  migration_id: '120_usage_events_at_approval_and_send',
+  // The commit that last authored the file bytes.
+  commit: 'c5f5bc1122e050470e5fc3cef8a8c2acbe3a8389',
+  source_sha256: 'aa7d44c3b0de31cec012bc04ece0591553fafb1a9f97f46f0b4a9168b10d6fc2',
+  authorization: 'pending',
+  execute: false,
+  expected_live_definition_sha256: null,
+  // Code-derived: releaseIntendedHash('sql120', file bytes) (release-sql-state.mjs); re-derived by the tests.
+  intended_replacement_sha256: 'fc9d0e340d0a469440a8bbfd3d546ededbe4f035c12c584334a2a610c55ffc56',
+  function_identities: Object.freeze([
+    'public.aws_check_processing_price_cents(uuid)',
+    'public.aws_record_checkalt_billing_event()',
+    'public.aws_send_speed_fee_type(text)',
+    'public.aws_send_speed_fee_cents(uuid, text)',
+    'public.aws_record_send_speed_fee()',
+  ]),
+});
+
 export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql90: AUTHORIZED_SQL90_USERS_ONLY_TENANT_ROLES,
   sql91: AUTHORIZED_SQL91_MOOV_ONBOARDING,
@@ -2689,6 +2715,7 @@ export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql117: AUTHORIZED_SQL117_PLATFORM_OWNER_TENANT_LIFECYCLE,
   sql118: AUTHORIZED_SQL118_PLATFORM_OWNER_TENANT_LIFECYCLE,
   sql119: AUTHORIZED_SQL119_PROVIDER_STAKEHOLDER_SYNC_ACL,
+  sql120: AUTHORIZED_SQL120_USAGE_EVENTS_AT_APPROVAL_AND_SEND,
 });
 
 // The fee collection pin under its earlier map name (the same object as the release map's sql98).
@@ -2704,7 +2731,7 @@ export function isSql30TenantDocumentsDocType(input = {}) {
   return pinIdentifiersMatch(input, AUTHORIZED_SQL30_TENANT_DOCUMENTS_DOC_TYPE);
 }
 
-/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql119) an input names, or null. */
+/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql120) an input names, or null. */
 export function releaseSqlMigrationKey(input = {}) {
   return Object.keys(RELEASE_2026_10_17_PENDING_SQL_PINS)
     .find((key) => pinIdentifiersMatch(input, RELEASE_2026_10_17_PENDING_SQL_PINS[key])) || null;
