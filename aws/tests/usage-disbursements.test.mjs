@@ -75,9 +75,13 @@ test('3 voided fees and failed legs add no volume; a leg without a send hash sta
   assert.equal(disbursementVolumeCents(details), 700);
 });
 
-test('4 the usage tracker uses the sent volume and friendly labels, not funds received or raw types', () => {
+test('4 the usage tracker shows the fees charged and the amount sent, friendly labels, not funds received or raw types', () => {
   const page = readFileSync(new URL('../../src/components/billing/TenantUsageTracker.tsx', import.meta.url), 'utf8');
-  assert.match(page, /Total volume: <span className="font-semibold text-foreground">\{formatCurrency\(disbursementVolume\)\}/);
+  // The card shows the fees charged (what is billed) and, separately labeled, the amount sent.
+  assert.match(page, /Estimated fees: <span className="font-semibold text-foreground">\{formatCurrency\(disbursementFees\)\}/);
+  assert.match(page, /Amount sent: <span className="font-semibold text-foreground">\{formatCurrency\(disbursementVolume\)\}/);
+  assert.match(page, /isSendFeeEvent\(e\.event_type\)\)\s*\.reduce\([^;]*unit_price_cents/);
+  assert.doesNotMatch(page, /Total volume:/);
   assert.doesNotMatch(page, /claim_check_payments|totalReceived/);
   assert.match(page, /\{usageEventLabel\(row\.event_type\)\}/);
   assert.doesNotMatch(page, /event_type\?\.replace\(/);

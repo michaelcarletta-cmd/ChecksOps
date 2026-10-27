@@ -138,6 +138,10 @@ export function TenantUsageTracker() {
 
   // Amount sent in the disbursements whose fees are counted this month.
   const disbursementVolume = disbursements ? disbursementVolumeCents(disbursements) / 100 : 0;
+  // The next-day / same-day fees charged for those disbursements (what the tenant is billed).
+  const disbursementFees = (usage?.events ?? [])
+    .filter((e: { event_type?: string | null }) => isSendFeeEvent(e.event_type))
+    .reduce((sum: number, e: { unit_price_cents?: number | string | null }) => sum + Number(e.unit_price_cents ?? 0), 0) / 100;
 
   return (
     <div className="space-y-6">
@@ -205,7 +209,10 @@ export function TenantUsageTracker() {
               <span className="text-xs text-muted-foreground">transfers</span>
             </div>
             <p className="text-xs text-muted-foreground mt-2">
-              Total volume: <span className="font-semibold text-foreground">{formatCurrency(disbursementVolume)}</span>
+              Estimated fees: <span className="font-semibold text-foreground">{formatCurrency(disbursementFees)}</span>
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Amount sent: <span className="font-semibold text-foreground">{formatCurrency(disbursementVolume)}</span>
             </p>
           </CardContent>
         </Card>
