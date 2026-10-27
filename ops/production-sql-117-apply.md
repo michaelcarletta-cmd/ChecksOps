@@ -20,7 +20,20 @@ after its slug is typed. Every change is audited in `tenant_pricing_audit` (no f
 inspect is recorded as the verified-live evidence and the pin stays `execute: false`). Anything
 else stops and needs its own reviewed change.
 
-**Status:** pending. No staging read-live, no production inspect, nothing applied.
+**Staging executor refreshed (2026-10-27).** Inspect run 40431399921 (main `9d6f164`) found the
+live executor at CodeSha256 `y4Tko8e2…` without SQL 117 (adds
+`sql/117_platform_owner_tenant_lifecycle.sql`; supersedes `lib/release-sql-specs.mjs`,
+`lib/release-sql-state.mjs`, `lib/sql-executor-auth.mjs`). Deploy run 40431581944 updated it to
+main's package (`BQRU3AYO…`; "Verify live executor now carries main's package" passed).
+
+**Staging read-live (2026-10-27).** Run 40431777849 (main `9d6f164`): `tenant_deactivations` and the
+six functions absent, every prerequisite present, the login able to write `tenants`, `tenant_users`
+and `tenant_pricing_audit`; live `dcfcb810a7d016f63451a3cf6ec00982be2f555fae087871885e49cc4b501956`,
+`already_applied` false, `precondition_failures` `[]`. Recorded in the staging pin
+(`expected_live_definition_sha256`, `execute: true`, wave 18) under the owner's words of
+2026-10-27, "SQL 117 to production" and "Go".
+
+**Status:** staging pin execute-authorized (wave 18); nothing applied yet; production pin pending.
 
 ## Fingerprint
 
