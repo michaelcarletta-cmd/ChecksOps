@@ -94,7 +94,7 @@ export const STAGING_WAVE1 = Object.freeze({
   // Check Alt approval and at send time. Read at main 6505198 after the executor carried it (deploy
   // run 40544852676): the five functions and two triggers absent, a unique index already covering
   // check_billing_events (payment_transfer_id, event_type).
-  sql120: Object.freeze({ wave: 20, approved: '2026-10-27', run: '40545376358', live: 'f3c1dd26888ac9fce91721cad698d39ee99cdca80c4a7888f9cfea9043171e9d' }),
+  sql120: Object.freeze({ wave: 20, approved: '2026-10-27', run: '40545376358', live: 'f3c1dd26888ac9fce91721cad698d39ee99cdca80c4a7888f9cfea9043171e9d', apply_run: '40547527832' }),
   sql98: Object.freeze({ wave: 3, approved: '2026-10-18', run: '39083278136', live: '296c3d6a274e10f66005fb9eaecf93fa17b81bd8db3607037ca07698fddd3275', apply_run: '39085677318' }),
 });
 
