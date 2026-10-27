@@ -2303,3 +2303,35 @@ test('Production email to every recipient: email-policy.mjs records the bytes pr
   assert.equal(applied.deploy_authorized, false);
   assert.match(applied.authorization, /^Record only/);
 });
+
+test('Delete Check: workflow.mjs expects the release 2026-10-17 bytes read-only inspect run 40528072440 found live', async () => {
+  const MEMBER = 'workflow.mjs';
+  const MANIFEST_REL = 'aws/tests/fixtures/production-delete-check-shared-delete-manifest-2026-10-27.json';
+  const RELEASE = 'aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json';
+  const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, MANIFEST_REL), 'utf8'));
+  const release = JSON.parse(fs.readFileSync(path.join(ROOT, RELEASE), 'utf8'));
+  const STALE = 'ecd6f716d6a2203a05446afd24eb1bf9e5849e70e49a0ee86bde708fd36c1968';
+  const LIVE = '753ae14a0d04ded5782c653bd67c308067311f4fcebf835c0aac4e6659188138';
+  const ACCEPTED = 'c7159c4d9a74342f2a0f59a2836def78376c84d2781bbeb56dbb35ba83ed9337';
+  assert.match(PLAN.notes, /inspect run 40528072440/);
+  assert.match(manifest.notes, /inspect run 40528072440/);
+  // The release 2026-10-17 manifest put 753ae14a live (ecd6f716 -> 753ae14a).
+  assert.deepEqual([release.members[MEMBER].live_sha256, release.members[MEMBER].accepted_sha256], [STALE, LIVE]);
+  assert.equal(manifest.deploy_authorized, false);
+  assert.deepEqual(manifest.members[MEMBER], { live_sha256: LIVE, accepted_sha256: ACCEPTED, operation: 'replace', previous_manifest: RELEASE });
+  const row = PLAN.members[MEMBER];
+  assert.equal(row.operation, 'replace');
+  assert.equal(row.manifest, MANIFEST_REL);
+  assert.equal(row.expected_live_sha256, LIVE);
+  assert.equal(row.accepted_sha256, ACCEPTED);
+  assert.equal(sha(`aws/functions/api/${MEMBER}`), ACCEPTED);
+  assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
+  const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
+  const ready = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: LIVE }) });
+  assert.equal(ready.state, 'READY');
+  assert.equal(ready.mutation, false);
+  await assert.rejects(
+    run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: STALE }) }),
+    (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+  );
+});
