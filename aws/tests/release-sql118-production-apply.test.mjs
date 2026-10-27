@@ -170,7 +170,8 @@ test('order: no predecessor; the prerequisites are SQL 96\'s audit table and SQL
   const runbook = fs.readFileSync(path.join(ROOT, COMMITTED.tooling.runbook), 'utf8');
   assert.ok(runbook.includes(COMMITTED.intended_replacement_sha256));
   assert.ok(runbook.includes(COMMITTED.source_sha256));
-  assert.match(runbook, /\*\*Status:\*\* pending/);
+  assert.match(runbook, /\*\*Status:\*\* staging pin execute-authorized \(wave 19\)/);
+  assert.match(runbook, /read-live \(2026-10-27\)\.\*\* Run 40436888477/);
   const oneShot = fs.readFileSync(path.join(ROOT, 'ops/production-sql-one-shot.md'), 'utf8');
   assert.match(oneShot, /\| `sql118` \|/);
   assert.match(oneShot, /`sql117`, `sql118`\) \|/);

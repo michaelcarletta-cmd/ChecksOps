@@ -33,7 +33,18 @@ after its slug is typed. Every change is audited in `tenant_pricing_audit` (no f
 inspect is recorded as the verified-live evidence and the pin stays `execute: false`). Anything
 else stops and needs its own reviewed change.
 
-**Status:** pending. No staging read-live of SQL 118, no production inspect, nothing applied.
+**Staging executor refreshed (2026-10-27).** Deploy run 40436720850 (main `7cd3272`) updated the
+live executor from `QKETFJsu…` (it lacked `sql/118_platform_owner_tenant_lifecycle.sql`) to main's
+package (`2YWR1aEg…`; "Verify live executor now carries main's package" passed).
+
+**Staging read-live (2026-10-27).** Run 40436888477 (main `7cd3272`): `tenant_deactivations` and the
+six functions absent, every prerequisite present, the login able to write `tenants`, `tenant_users`
+and `tenant_pricing_audit`; live `1b5eec31635d869abbabc9d4584674ee5852a27689629d9c199627d7c8653cde`
+(the same pre-state the PostgreSQL 16 test reads), `already_applied` false, `precondition_failures`
+`[]`. Recorded in the staging pin (`expected_live_definition_sha256`, `execute: true`, wave 19)
+under the owner's words of 2026-10-27, "Start the SQL 118 tooling PR" and "Go".
+
+**Status:** staging pin execute-authorized (wave 19); nothing applied yet; production pin pending.
 
 ## Fingerprint
 

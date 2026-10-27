@@ -4,7 +4,7 @@
  * release-sql90-97-executor.test.mjs runs what every release key shares (SQL 118 included); this
  * file covers SQL 118's own:
  *
- *   - the pin: pending, code-derived, selectable, packed, in step with the production pin; the
+ *   - the pin: staging-authorized from its read-live (wave 19), code-derived, selectable, packed, in step with the production pin; the
  *     pinned commit authored the bytes; no predecessor, nothing supersedes or needs it;
  *   - the reviewed file and spec: the six functions as the engine parses them (with
  *     aws_platform_owner_deactivated_tenants()'s RETURNS TABLE result stated in the spec), the new
@@ -48,7 +48,7 @@ import { EXECUTOR_PACK_MEMBERS } from '../../scripts/deployment-guard/sql-execut
 import { MIGRATIONS } from '../../scripts/deployment-guard/github-staging-sql-executor.mjs';
 import { READ_LIVE_EXPECTED_SENTINEL } from '../../scripts/deployment-guard/lib/sql-executor-read-live.mjs';
 import { importGuardedSqlExecutor } from './helpers/import-guarded-sql-executor.mjs';
-import { assertStagingPinState } from './helpers/staging-sql-wave1.mjs';
+import { assertStagingPinState, pendingPin } from './helpers/staging-sql-wave1.mjs';
 import { REPO_ROOT, pgSkipReason, releaseFixture, sql98To100Schema } from './helpers/release-sql-pg.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -109,7 +109,7 @@ const FUNCTIONS = Object.freeze([
   'public.aws_platform_owner_deactivated_tenants()',
 ]);
 
-test('pin: SQL 118 pending, code-derived, selectable, packed, in step with the production pin; no predecessor', () => {
+test('pin: SQL 118 staging-authorized from its read-live, code-derived, selectable, packed, in step with the production pin; no predecessor', () => {
   const pin = PINS[KEY];
   const spec = RELEASE_SQL_SPECS[KEY];
   assert.equal(AUTHORIZED_SQL118_PLATFORM_OWNER_TENANT_LIFECYCLE, pin);
@@ -119,6 +119,12 @@ test('pin: SQL 118 pending, code-derived, selectable, packed, in step with the p
   assert.equal(spec.choice, 'sql118-platform-owner-tenant-lifecycle');
   assert.equal(MIGRATIONS[spec.choice], pin);
   assertStagingPinState(assert, KEY, pin);
+  // Staging apply authorized (owner approved 2026-10-27) from staging read-live run 40436888477:
+  // the table and the six functions absent, so SQL 118 was not yet applied there.
+  assert.equal(pin.execute, true);
+  assert.equal(pin.authorization, 'Owner approved 2026-10-27: staging apply (wave 19) from staging read-live run 40436888477');
+  assert.equal(pin.expected_live_definition_sha256, '1b5eec31635d869abbabc9d4584674ee5852a27689629d9c199627d7c8653cde');
+  assert.notEqual(pin.expected_live_definition_sha256, pin.intended_replacement_sha256);
   assert.equal(pin.source_sha256, sha(TEXT));
   assert.equal(pin.intended_replacement_sha256, releaseIntendedHash(KEY, TEXT));
   assert.equal(pin.intended_replacement_sha256, '6f9e2ef349c397ab4df81337139776287e2b6e8a85d4108ae090604717476925');
@@ -287,8 +293,9 @@ test('PostgreSQL 16: SQL 118 through the executor: a pending pin cannot apply, d
   assert.deepEqual(r.precondition_failures, [], JSON.stringify(r.release_sql_inspect));
   assert.equal(r.already_applied, false);
   assert.equal(await absentNow(), true);
-  // A pending pin cannot apply.
-  const pending = await handlerFor(connect)(releaseEvent({ expected_live_definition_sha256: r.live_definition_sha256 }));
+  // A pending pin cannot apply (the committed pin is staging-authorized, so pend a copy).
+  const pendingCopy = pendingPin(PINS[KEY]);
+  const pending = await handlerFor(connect, { pins: { [KEY]: pendingCopy } })(releaseEvent({ pin: pendingCopy, expected_live_definition_sha256: r.live_definition_sha256 }));
   assert.equal(pending.ok, false);
   // Drift between the recorded pre-state and the apply refuses.
   const owner = await connectAs('checksops_admin');
