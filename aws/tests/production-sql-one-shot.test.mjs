@@ -574,14 +574,14 @@ test('only the apply child gets the apply variables, and its receipt is the one 
 // SQL 118's pin was execute-authorized (owner-approved pin change of 2026-10-27, #1283: the read-only
 // production inspect SSM 7e8004f8 recorded as its pre-state, the guarded staging apply run
 // 40438147297 from the same pre-state) until its record-and-retire change after its 2026-10-27 apply.
-// SQL 119's pin is execute-authorized (owner-approved pin change of 2026-10-27, "Approve a pin PR for
-// SQL 119, then one for SQL 115": the read-only production inspect SSM 0019857c recorded as its
+// SQL 119's pin was execute-authorized (owner-approved pin change of 2026-10-27, #1289, "Approve a pin PR
+// for SQL 119, then one for SQL 115": the read-only production inspect SSM 0019857c recorded as its
 // pre-state, the guarded staging read-live run 40501861802, already in the intended state there) until
-// its record-and-retire change.
+// its record-and-retire change after its 2026-10-27 apply.
 // SQL 115's pin is execute-authorized (owner-approved pin change of 2026-10-27: the read-only production
 // inspect SSM 6f6692d8, after SQL 119, recorded as its pre-state, the guarded staging apply run
 // 40243363235, whose pre-state differs only in the EXECUTE ACL) until its record-and-retire change.
-const EXECUTE_AUTHORIZED = Object.freeze(['sql115', 'sql119']);
+const EXECUTE_AUTHORIZED = Object.freeze(['sql115']);
 // SQL 95's and SQL 99's production applies of 2026-10-21 (main dcd865256) and SQL 106's and SQL 97's
 // (main 7124a160b; both runs passed the SQL 106 workstream id), recorded in applied.
 const APPLIED_2026_10_21 = Object.freeze({
@@ -597,6 +597,8 @@ const APPLIED_2026_10_21 = Object.freeze({
   sql110: Object.freeze({ ssm: 'dff74531-5a77-4f17-9027-e927f7f10644', run: '04f2dadf-1866-492e-a9e9-d301a2766b2b', one_use_id: 'sql110-prod-a04eae17-2564-42ba-87a1-51bc200582ff', workstream: 'prod-sql110-homeowner-preclaim-links-20261022', approval: 'apply SQL 110 in production' }),
   // SQL 116's production apply of 2026-10-26 (main f403dbdfd), kept with the 2026-10-21 ones.
   sql116: Object.freeze({ ssm: '8a72e2fc-c769-4ebf-9f00-64feb23d1df4', run: 'c415fcce-e3ac-4b65-9312-61763899f9b1', one_use_id: 'sql116-prod-95c04535-a6bc-4311-9ac5-50422f3cd1e6', workstream: 'prod-sql116-moov-onboarding-profile-industry-20261026', approval: 'apply SQL 116 in production' }),
+  // SQL 119's production apply of 2026-10-27 (main a01deea9b).
+  sql119: Object.freeze({ ssm: '2a047b4d-b43b-45c4-8152-1bd4372daed9', run: '924b34f9-4fc6-446f-9190-e4bd9529cac8', one_use_id: 'sql119-prod-ffb5846b-682d-400b-8b49-323215e196f5', workstream: 'prod-sql119-provider-stakeholder-sync-acl-20261027', approval: 'Apply in production: SQL 119 first, then SQL 115' }),
   // SQL 118's production apply of 2026-10-27 (main 4d9763eff).
   sql118: Object.freeze({ ssm: '9bccc7c9-9fe2-4e6f-988d-a778f07b1607', run: 'a47888ef-daf8-4add-adac-3a703176b67d', one_use_id: 'sql118-prod-327fe57a-22b1-452f-afdc-6c52b653f153', workstream: 'prod-sql118-tenant-lifecycle-20261027', approval: 'Apply SQL 118 in production' }),
   // SQL 114's production apply of 2026-10-25 (main 9fa66403c), kept with the 2026-10-21 ones.
@@ -770,7 +772,7 @@ test('SQL 82 to SQL 86 are retired with a verified_live record; their execute-au
   }
 });
 
-test('the committed execute-authorized pins (SQL 115, SQL 119) and the execute-authorized copies of the retired SQL 95, SQL 97, SQL 99, SQL 106, SQL 108, SQL 109, SQL 110, SQL 111, SQL 112, SQL 113, SQL 114, SQL 116 and SQL 118 pins pass the pin stage, and their evaluators allow the manifest built from them', async () => {
+test('the committed execute-authorized pin (SQL 115) and the execute-authorized copies of the retired SQL 95, SQL 97, SQL 99, SQL 106, SQL 108, SQL 109, SQL 110, SQL 111, SQL 112, SQL 113, SQL 114, SQL 116, SQL 118 and SQL 119 pins pass the pin stage, and their evaluators allow the manifest built from them', async () => {
   const STAGING_REFERENCE = {
     // SQL 95 / SQL 97: the guarded staging read-live of 2026-10-21 (intended state), owner-accepted
     // substitute evidence (different pre-state; their wave 4 apply runs are not recorded).
@@ -808,7 +810,7 @@ test('the committed execute-authorized pins (SQL 115, SQL 119) and the execute-a
     const real = realPin(key);
     let committed = real;
     if (APPLIED_2026_10_21[key]) {
-      // Applied 2026-10-21 (SQL 110: 2026-10-22, SQL 111, SQL 112 and SQL 113: 2026-10-23, SQL 114: 2026-10-25, SQL 116: 2026-10-26, SQL 118: 2026-10-27) and retired: execute false, the one apply run recorded in applied.
+      // Applied 2026-10-21 (SQL 110: 2026-10-22, SQL 111, SQL 112 and SQL 113: 2026-10-23, SQL 114: 2026-10-25, SQL 116: 2026-10-26, SQL 118 and SQL 119: 2026-10-27) and retired: execute false, the one apply run recorded in applied.
       const run = APPLIED_2026_10_21[key];
       assert.equal(real.execute, false, key);
       assert.match(real.authorization, /^Applied to production on 2026-10-2[123567]; execute is false again/, key);
