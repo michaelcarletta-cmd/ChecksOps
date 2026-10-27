@@ -81,7 +81,20 @@ PRODUCTION" (an approval bundle: this pin change, the one apply run of workstrea
 `prod-sql120-usage-events-20261027`, its record-and-retire change and the production website deploy). The
 owner merges the pin change; the apply runs only after that merge is on main and staged.
 
-**Status:** applied to staging (wave 20); production pin execute-authorized; not applied to production.
+**Production apply (2026-10-27).** After the pin change (#1303, merged on the owner's "merge 1303"),
+transfer run 40558494786 staged main `3a8a9993a` (tarball sha256
+`5fc3a92a880190ada35ea9961bd5a1080e1ef570c239d145977ed58ab200ad25`). One-shot `--phase inspect` (SSM
+`3fcd95d6-d96b-477d-a528-08047df31301`, run `6b250d84…`) then `--phase apply` run
+`9e8ff872-d8d6-4bc0-822f-c942b3aa944b` through SSM `0c164128-b7cb-4e42-b1a4-28c3fa42d7eb`, workstream
+`prod-sql120-usage-events-20261027`, under the owner's words "Approve bundle prod-sql120-usage-events-20261027. Apply SQL 120 in production. DEPLOY WEBSITE TO PRODUCTION" (passed verbatim): every step ok,
+contracts 4/4, 6/6 and 43/43; receipt `f3c1dd26…` →
+`fc9d0e340d0a469440a8bbfd3d546ededbe4f035c12c584334a2a610c55ffc56` (intended), result `applied`, unrelated
+catalog `5f166a42…`; post-apply inspect `already_applied` true, `precondition_failures` `[]`. SSM returned
+the first 24000 characters of the output; everything recorded was read from that part (see the pin's
+`applied.one_shot_note`).
+
+**Status:** applied to staging (wave 20) and to production (2026-10-27); the production pin is retired
+(`execute: false`).
 
 ## Fingerprint
 

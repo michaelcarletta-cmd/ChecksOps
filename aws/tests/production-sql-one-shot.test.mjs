@@ -582,10 +582,10 @@ test('only the apply child gets the apply variables, and its receipt is the one 
 // production inspect SSM 6f6692d8, after SQL 119, recorded as its pre-state, the guarded staging apply
 // run 40243363235, whose pre-state differs only in the EXECUTE ACL) until its record-and-retire change
 // after its 2026-10-27 apply.
-// SQL 120's pin is execute-authorized (owner-approved bundle of 2026-10-27, prod-sql120-usage-events-20261027:
-// the read-only production inspect SSM 899279cd recorded as its pre-state, the guarded staging apply run
-// 40547527832 from the same pre-state) until its record-and-retire change.
-const EXECUTE_AUTHORIZED = Object.freeze(['sql120']);
+// SQL 120's pin was execute-authorized (owner-approved bundle of 2026-10-27, prod-sql120-usage-events-20261027,
+// #1303: the read-only production inspect SSM 899279cd recorded as its pre-state, the guarded staging apply
+// run 40547527832 from the same pre-state) until its record-and-retire change after its 2026-10-27 apply.
+const EXECUTE_AUTHORIZED = Object.freeze([]);
 // SQL 95's and SQL 99's production applies of 2026-10-21 (main dcd865256) and SQL 106's and SQL 97's
 // (main 7124a160b; both runs passed the SQL 106 workstream id), recorded in applied.
 const APPLIED_2026_10_21 = Object.freeze({
@@ -605,6 +605,8 @@ const APPLIED_2026_10_21 = Object.freeze({
   sql115: Object.freeze({ ssm: 'bf96510f-4f95-42d5-974b-cf99d9a952ac', run: '250cdbb8-0e46-42c8-a4a8-4a9a646ff07a', one_use_id: 'sql115-prod-2ee1c7dd-6d5b-4f25-a4ce-19a1a64be13e', workstream: 'prod-sql115-provider-stakeholder-one-partner-payout-20261027', approval: 'AWS reconnected, apply SQL 115 in production' }),
   // SQL 119's production apply of 2026-10-27 (main a01deea9b).
   sql119: Object.freeze({ ssm: '2a047b4d-b43b-45c4-8152-1bd4372daed9', run: '924b34f9-4fc6-446f-9190-e4bd9529cac8', one_use_id: 'sql119-prod-ffb5846b-682d-400b-8b49-323215e196f5', workstream: 'prod-sql119-provider-stakeholder-sync-acl-20261027', approval: 'Apply in production: SQL 119 first, then SQL 115' }),
+  // SQL 120's production apply of 2026-10-27 (main 3a8a9993a), the bundle prod-sql120-usage-events-20261027.
+  sql120: Object.freeze({ ssm: '0c164128-b7cb-4e42-b1a4-28c3fa42d7eb', run: '9e8ff872-d8d6-4bc0-822f-c942b3aa944b', one_use_id: 'sql120-prod-8cf035b2-f369-4624-b8c4-ae42c25182d8', workstream: 'prod-sql120-usage-events-20261027', approval: 'Approve bundle prod-sql120-usage-events-20261027. Apply SQL 120 in production. DEPLOY WEBSITE TO PRODUCTION' }),
   // SQL 118's production apply of 2026-10-27 (main 4d9763eff).
   sql118: Object.freeze({ ssm: '9bccc7c9-9fe2-4e6f-988d-a778f07b1607', run: 'a47888ef-daf8-4add-adac-3a703176b67d', one_use_id: 'sql118-prod-327fe57a-22b1-452f-afdc-6c52b653f153', workstream: 'prod-sql118-tenant-lifecycle-20261027', approval: 'Apply SQL 118 in production' }),
   // SQL 114's production apply of 2026-10-25 (main 9fa66403c), kept with the 2026-10-21 ones.
@@ -779,7 +781,7 @@ test('SQL 82 to SQL 86 are retired with a verified_live record; their execute-au
   }
 });
 
-test('the committed execute-authorized pin (SQL 120) and the execute-authorized copies of the retired SQL 95, SQL 97, SQL 99, SQL 106, SQL 108, SQL 109, SQL 110, SQL 111, SQL 112, SQL 113, SQL 114, SQL 115, SQL 116, SQL 118 and SQL 119 pins pass the pin stage, and their evaluators allow the manifest built from them', async () => {
+test('the execute-authorized copies of the retired SQL 95, SQL 97, SQL 99, SQL 106, SQL 108, SQL 109, SQL 110, SQL 111, SQL 112, SQL 113, SQL 114, SQL 115, SQL 116, SQL 118, SQL 119 and SQL 120 pins pass the pin stage, and their evaluators allow the manifest built from them', async () => {
   const STAGING_REFERENCE = {
     // SQL 95 / SQL 97: the guarded staging read-live of 2026-10-21 (intended state), owner-accepted
     // substitute evidence (different pre-state; their wave 4 apply runs are not recorded).
@@ -819,7 +821,7 @@ test('the committed execute-authorized pin (SQL 120) and the execute-authorized 
     const real = realPin(key);
     let committed = real;
     if (APPLIED_2026_10_21[key]) {
-      // Applied 2026-10-21 (SQL 110: 2026-10-22, SQL 111, SQL 112 and SQL 113: 2026-10-23, SQL 114: 2026-10-25, SQL 116: 2026-10-26, SQL 115, SQL 118 and SQL 119: 2026-10-27) and retired: execute false, the one apply run recorded in applied.
+      // Applied 2026-10-21 (SQL 110: 2026-10-22, SQL 111, SQL 112 and SQL 113: 2026-10-23, SQL 114: 2026-10-25, SQL 116: 2026-10-26, SQL 115, SQL 118, SQL 119 and SQL 120: 2026-10-27) and retired: execute false, the one apply run recorded in applied.
       const run = APPLIED_2026_10_21[key];
       assert.equal(real.execute, false, key);
       assert.match(real.authorization, /^Applied to production on 2026-10-2[123567]; execute is false again/, key);
