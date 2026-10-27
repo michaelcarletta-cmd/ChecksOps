@@ -154,10 +154,16 @@ export const POST_RESTORE_PUBLIC_TRIGGERS = Object.freeze([
     table: 'payment_transfers',
     trigger: 'aws_payment_transfer_send_speed_fee',
     functionName: 'aws_record_send_speed_fee',
+  }),  // SQL 121 (121_cash_jobs_production_grants.sql), applied to staging 2026-10-27 (run 40591140684):
+  // the cash-job payment recorded when a Check Alt deposit is approved or accepted.
+  Object.freeze({
+    table: 'checkalt_deposits',
+    trigger: 'aws_checkalt_deposit_cash_job_payment',
+    functionName: 'aws_record_cash_job_checkalt_payment',
   }),
 ]);
 
-export const JUSTIFIED_PUBLIC_TRIGGER_COUNT = 182;
+export const JUSTIFIED_PUBLIC_TRIGGER_COUNT = 183;
 
 const unqualified = (value) => {
   const text = String(value || '');
