@@ -32,6 +32,14 @@ interface LineItem {
   unit_price: string;
 }
 
+// A saved cash_job_line_items row, as the job detail passes it.
+interface SavedLineItem {
+  description?: string | null;
+  quantity?: number | string | null;
+  unit_price?: number | string | null;
+  sort_order?: number | null;
+}
+
 interface Props {
   onSave: () => void;
   onCancel: () => void;
@@ -65,9 +73,9 @@ export function CashJobForm({ onSave, onCancel, initialData }: Props) {
   // starts from them so a save does not drop the scope of work.
   const [lineItems, setLineItems] = useState<LineItem[]>(() => {
     const saved: LineItem[] | undefined = Array.isArray(initialData?.cash_job_line_items)
-      ? [...initialData.cash_job_line_items]
-        .sort((a: any, b: any) => Number(a.sort_order ?? 0) - Number(b.sort_order ?? 0))
-        .map((item: any) => ({
+      ? [...(initialData.cash_job_line_items as SavedLineItem[])]
+        .sort((a, b) => Number(a.sort_order ?? 0) - Number(b.sort_order ?? 0))
+        .map((item) => ({
           description: String(item.description ?? ""),
           quantity: item.quantity == null ? "1" : String(item.quantity),
           unit_price: item.unit_price == null ? "" : String(item.unit_price),
