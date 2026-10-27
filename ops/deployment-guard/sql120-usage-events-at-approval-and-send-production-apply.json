@@ -1,8 +1,8 @@
 {
   "id": "sql120-usage-events-at-approval-and-send-production-apply",
   "migration": "sql120",
-  "authorization": "Owner approved 2026-10-27 (the owner's words of 2026-10-27: \"Approve bundle prod-sql120-usage-events-20261027. Apply SQL 120 in production. DEPLOY WEBSITE TO PRODUCTION\"; an approval bundle per ops/production-sql-one-shot.md \"Approval bundles\", workstream prod-sql120-usage-events-20261027, covering this pin change, the one SQL 120 production apply run, its record-and-retire change and the production website deploy): production apply of SQL 120 after the staging acceptance below (production f3c1dd26888ac9fce91721cad698d39ee99cdca80c4a7888f9cfea9043171e9d -> fc9d0e340d0a469440a8bbfd3d546ededbe4f035c12c584334a2a610c55ffc56). This change is execute authorization only: each apply still needs the owner's run-time approval, which the same words give for the one named run (--approval-scope sql120, workstream prod-sql120-usage-events-20261027); it covers no other run.",
-  "execute": true,
+  "authorization": "Applied to production on 2026-10-27; execute is false again, so this pin is no longer a standing authorization and a re-apply needs a new reviewed pin change. The owner approved the bundle prod-sql120-usage-events-20261027 on 2026-10-27 in the words \"Approve bundle prod-sql120-usage-events-20261027. Apply SQL 120 in production. DEPLOY WEBSITE TO PRODUCTION\", which covered the SQL 120 production pin (f3c1dd26 -> fc9d0e34), the read-only production inspect, the staging acceptance and the execute change (#1303, merged on the owner's \"merge 1303\"), the one apply run recorded in applied (workstream prod-sql120-usage-events-20261027), passed to it verbatim, this record-and-retire change and the production website deploy. That approval covered that run only.",
+  "execute": false,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -64,5 +64,319 @@
     "ok": true,
     "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/40547527832",
     "basis": "Guarded staging SQL executor apply of sql120-usage-events-at-approval-and-send, run 40547527832 (2026-10-27, main f63e023e5, wave 20, on the executor deployed from main f63e023e5, deploy run 40547005360: gX5VOEw7p/n4zHr9VGm5jRThqXN8PYt++DjP1u+RsmI=), from the staging pre-state recorded by read-live run 40545376358 (f3c1dd26888ac9fce91721cad698d39ee99cdca80c4a7888f9cfea9043171e9d): receipt before f3c1dd26888ac9fce91721cad698d39ee99cdca80c4a7888f9cfea9043171e9d, after fc9d0e340d0a469440a8bbfd3d546ededbe4f035c12c584334a2a610c55ffc56 == intended, result applied. Read-live run 40548075401 then reported already_applied true, live fc9d0e340d0a469440a8bbfd3d546ededbe4f035c12c584334a2a610c55ffc56, precondition_failures []. The pre-states are the same: staging f3c1dd26888ac9fce91721cad698d39ee99cdca80c4a7888f9cfea9043171e9d and production (production_inspect) f3c1dd26888ac9fce91721cad698d39ee99cdca80c4a7888f9cfea9043171e9d. After the apply the owner checked the staging usage page (2026-10-27): three send fees recorded, one same-day at $1.00 and two next-day at $0.75. The post-state fingerprint is the same in both environments; the same file bytes (source_sha256) are pinned in both."
+  },
+  "applied": {
+    "date": "2026-10-27",
+    "result": "applied",
+    "source_commit": "3a8a9993a5c5ea33974c7cfe2e78719c2e8a9972",
+    "source_commit_basis": "SOURCE_COMMIT in the tarball (written by sql53-temporary-transfer) equals --commit, and the tarball sha256 equals --expected-tarball-sha256 as copied by the operator from that transfer run's log (TARBALL_SHA256 line); the one-shot source step reported tarball_sha256_matches_sidecar true, tarball_sha256_matches_expected true, tree_matches_tarball true and tarball_files 12816; the run log itself was not read by the one-shot.",
+    "source_tarball": {
+      "file": "source-3a8a9993a5c5ea33974c7cfe2e78719c2e8a9972.tar.gz",
+      "sha256": "5fc3a92a880190ada35ea9961bd5a1080e1ef570c239d145977ed58ab200ad25"
+    },
+    "migration_source_sha256": "aa7d44c3b0de31cec012bc04ece0591553fafb1a9f97f46f0b4a9168b10d6fc2",
+    "migration_source_sha256_note": "The one-shot source step hashed aws/workflows/sql/120_usage_events_at_approval_and_send.sql in the transfer tarball: equal to source_sha256 (the pin; migration_matches_pin true).",
+    "runner": "i-0c35557c4e5385406",
+    "runner_basis": "operator-supplied --runner (not verified by the one-shot)",
+    "workstream_id": "prod-sql120-usage-events-20261027",
+    "one_use_id": "sql120-prod-8cf035b2-f369-4624-b8c4-ae42c25182d8",
+    "one_use_id_consumed": true,
+    "one_use_id_consumed_basis": "Inferred from the successful apply (the tool records the one_use_id after COMMIT and only warns if that write fails); the consumed-registry entry was not read back separately.",
+    "owner_approval": "Approve bundle prod-sql120-usage-events-20261027. Apply SQL 120 in production. DEPLOY WEBSITE TO PRODUCTION",
+    "owner_approval_basis": "As passed in --approval-statement (base64, --approval-statement-b64) for --approval-scope sql120 and recorded by the one-shot as approval_statement; the owner's message of 2026-10-27 was \"Approve bundle prod-sql120-usage-events-20261027. Apply SQL 120 in production. DEPLOY WEBSITE TO PRODUCTION\". The one-shot cannot verify who said it.",
+    "operator": "michaelcarletta-cmd",
+    "apply_ssm_command_id": "0c164128-b7cb-4e42-b1a4-28c3fa42d7eb",
+    "one_shot_run_id": "9e8ff872-d8d6-4bc0-822f-c942b3aa944b",
+    "one_shot_note": "One SSM command (0c164128-b7cb-4e42-b1a4-28c3fa42d7eb, 2026-10-27) ran the production-sql-one-shot --phase apply (run_id 9e8ff872-d8d6-4bc0-822f-c942b3aa944b) from main 3a8a9993a (transfer run 40558494786, sql53-temporary-transfer.yml on main after the #1303 merge; it printed TARBALL_SHA256 5fc3a92a880190ada35ea9961bd5a1080e1ef570c239d145977ed58ab200ad25), after a read-only --phase inspect of the same commit (SSM 3fcd95d6-d96b-477d-a528-08047df31301, run 6b250d84-e029-4474-8326-9d547c64782f: live f3c1dd26888ac9fce91721cad698d39ee99cdca80c4a7888f9cfea9043171e9d, apply_preconditions_met true, precondition_failures []): steps pin (execute true, staging_acceptance run 40547527832), source, inspect, contracts, manifest, source-recheck-before-preflight, preflight (receipt_issued), evaluate (sql120_production_apply_allowed true), source-recheck-before-apply, apply (applied) and post-apply-inspect all ok; the SSM command reported Success. SSM returned the first 24000 characters of the output (--output truncated--): the run's steps, source, pre_apply_inspect, contract_results, manifest_sha256, one_use_id, post_apply_inspect, apply_result (receipt fields before_hash, after_hash, unrelated_catalog_sha256 and counts, staging_acceptance, result) and the applied block up to its receipt were read from it; the tail (the applied block's copy of the receipt and the final ONE_SHOT_EXIT line) was cut, so receipt below is apply_result as printed, and the one-shot exit status is inferred from details.ok true, every step ok and the SSM Success, not read.",
+    "steps": [
+      "pin",
+      "source",
+      "inspect",
+      "contracts",
+      "manifest",
+      "source-recheck-before-preflight",
+      "preflight",
+      "evaluate",
+      "source-recheck-before-apply",
+      "apply",
+      "post-apply-inspect"
+    ],
+    "contract_results": {
+      "claim-ledger": {
+        "ok": true,
+        "test": "aws/tests/claim-ledger-accepted-contract.test.mjs",
+        "evidence": "4/4 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at 3a8a9993a5c5ea33974c7cfe2e78719c2e8a9972 (production-sql-one-shot 9e8ff872-d8d6-4bc0-822f-c942b3aa944b, node --test)"
+      },
+      "tenant-isolation": {
+        "ok": true,
+        "test": "aws/tests/tenant-security-compliance.test.mjs",
+        "evidence": "6/6 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at 3a8a9993a5c5ea33974c7cfe2e78719c2e8a9972 (production-sql-one-shot 9e8ff872-d8d6-4bc0-822f-c942b3aa944b, node --test)"
+      },
+      "financial-write-protections": {
+        "ok": true,
+        "test": "aws/tests/api-write.test.mjs",
+        "evidence": "43/43 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at 3a8a9993a5c5ea33974c7cfe2e78719c2e8a9972 (production-sql-one-shot 9e8ff872-d8d6-4bc0-822f-c942b3aa944b, node --test)"
+      }
+    },
+    "pre_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "f3c1dd26888ac9fce91721cad698d39ee99cdca80c4a7888f9cfea9043171e9d",
+      "live_matches_expected": true,
+      "already_applied": false,
+      "predecessors": {},
+      "predecessors_applied": true,
+      "missing_dependencies": [],
+      "apply_preconditions_met": true,
+      "precondition_failures": [],
+      "current_user": "checksops_admin",
+      "session_user": "checksops_admin",
+      "counts": {
+        "check_billing_event_transfer_duplicates": 0
+      },
+      "successors_applied": [],
+      "release_sql_inspect": {
+        "live_definition_sha256": "f3c1dd26888ac9fce91721cad698d39ee99cdca80c4a7888f9cfea9043171e9d",
+        "prerequisites_missing": [],
+        "predecessors": {},
+        "successors_applied": [],
+        "functions": [
+          {
+            "name": "aws_check_processing_price_cents(uuid)",
+            "state": "absent"
+          },
+          {
+            "name": "aws_record_checkalt_billing_event()",
+            "state": "absent"
+          },
+          {
+            "name": "aws_send_speed_fee_type(text)",
+            "state": "absent"
+          },
+          {
+            "name": "aws_send_speed_fee_cents(uuid, text)",
+            "state": "absent"
+          },
+          {
+            "name": "aws_record_send_speed_fee()",
+            "state": "absent"
+          }
+        ],
+        "policies": [],
+        "views": [],
+        "tables": [],
+        "columns": [],
+        "constraints": [],
+        "triggers": [
+          {
+            "name": "checkalt_deposits aws_checkalt_deposit_billing_event",
+            "state": "absent"
+          },
+          {
+            "name": "payment_transfers aws_payment_transfer_send_speed_fee",
+            "state": "absent"
+          }
+        ],
+        "table_privileges": [],
+        "function_acl": [
+          {
+            "name": "aws_check_processing_price_cents(uuid)",
+            "acl": []
+          },
+          {
+            "name": "aws_record_checkalt_billing_event()",
+            "acl": []
+          },
+          {
+            "name": "aws_send_speed_fee_type(text)",
+            "acl": []
+          },
+          {
+            "name": "aws_send_speed_fee_cents(uuid, text)",
+            "acl": []
+          },
+          {
+            "name": "aws_record_send_speed_fee()",
+            "acl": []
+          }
+        ],
+        "acl_functions": [],
+        "indexes": [],
+        "unique_covers": [
+          {
+            "name": "check_billing_events transfer_event",
+            "columns": [
+              "payment_transfer_id",
+              "event_type"
+            ],
+            "covered": true
+          }
+        ],
+        "definer_writes": [
+          {
+            "name": "check_billing_events",
+            "ok": true
+          }
+        ],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": {
+          "check_billing_event_transfer_duplicates": 0
+        }
+      },
+      "note": "The apply run's own inspect step (read-only --inspect) immediately before the apply: live == the recorded pre-state f3c1dd26..., live_matches_expected true, already_applied false, apply_preconditions_met true, precondition_failures []."
+    },
+    "manifest_sha256": "bdbfc9ac7fe538aab235c3b9d8d3c3f2709ff4fe5a17b4efa5b640dd8c03d3b5",
+    "receipt": {
+      "migration": "sql120",
+      "workstream": "prod-sql120-usage-events-20261027",
+      "commit": "3a8a9993a5c5ea33974c7cfe2e78719c2e8a9972",
+      "sql_file": "aws/workflows/sql/120_usage_events_at_approval_and_send.sql",
+      "before_hash": "f3c1dd26888ac9fce91721cad698d39ee99cdca80c4a7888f9cfea9043171e9d",
+      "after_hash": "fc9d0e340d0a469440a8bbfd3d546ededbe4f035c12c584334a2a610c55ffc56",
+      "unrelated_catalog_sha256": "5f166a4292f7e7e66095597b24784bdee17e51809f278e4c394d066fc9de5d3d",
+      "unrelated_catalog_counts": {
+        "relations": 892,
+        "columns": 3549,
+        "constraints": 2239,
+        "policies": 404,
+        "functions": 1332,
+        "indexes": 655,
+        "default_acl": 0,
+        "role_memberships": 15,
+        "roles": 29,
+        "triggers": 180,
+        "views": 25,
+        "types": 18,
+        "schema": 2
+      },
+      "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/40547527832",
+      "result": "applied"
+    },
+    "post_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "fc9d0e340d0a469440a8bbfd3d546ededbe4f035c12c584334a2a610c55ffc56",
+      "live_matches_expected": false,
+      "already_applied": true,
+      "predecessors": {},
+      "predecessors_applied": true,
+      "missing_dependencies": [],
+      "apply_preconditions_met": false,
+      "precondition_failures": [],
+      "current_user": "checksops_admin",
+      "session_user": "checksops_admin",
+      "counts": {
+        "check_billing_event_transfer_duplicates": 0
+      },
+      "successors_applied": [],
+      "release_sql_inspect": {
+        "live_definition_sha256": "fc9d0e340d0a469440a8bbfd3d546ededbe4f035c12c584334a2a610c55ffc56",
+        "prerequisites_missing": [],
+        "predecessors": {},
+        "successors_applied": [],
+        "functions": [
+          {
+            "name": "aws_check_processing_price_cents(uuid)",
+            "state": "intended"
+          },
+          {
+            "name": "aws_record_checkalt_billing_event()",
+            "state": "intended"
+          },
+          {
+            "name": "aws_send_speed_fee_type(text)",
+            "state": "intended"
+          },
+          {
+            "name": "aws_send_speed_fee_cents(uuid, text)",
+            "state": "intended"
+          },
+          {
+            "name": "aws_record_send_speed_fee()",
+            "state": "intended"
+          }
+        ],
+        "policies": [],
+        "views": [],
+        "tables": [],
+        "columns": [],
+        "constraints": [],
+        "triggers": [
+          {
+            "name": "checkalt_deposits aws_checkalt_deposit_billing_event",
+            "state": "intended"
+          },
+          {
+            "name": "payment_transfers aws_payment_transfer_send_speed_fee",
+            "state": "intended"
+          }
+        ],
+        "table_privileges": [],
+        "function_acl": [
+          {
+            "name": "aws_check_processing_price_cents(uuid)",
+            "acl": [
+              "owner EXECUTE"
+            ]
+          },
+          {
+            "name": "aws_record_checkalt_billing_event()",
+            "acl": [
+              "owner EXECUTE"
+            ]
+          },
+          {
+            "name": "aws_send_speed_fee_type(text)",
+            "acl": [
+              "owner EXECUTE"
+            ]
+          },
+          {
+            "name": "aws_send_speed_fee_cents(uuid, text)",
+            "acl": [
+              "owner EXECUTE"
+            ]
+          },
+          {
+            "name": "aws_record_send_speed_fee()",
+            "acl": [
+              "owner EXECUTE"
+            ]
+          }
+        ],
+        "acl_functions": [],
+        "indexes": [],
+        "unique_covers": [
+          {
+            "name": "check_billing_events transfer_event",
+            "columns": [
+              "payment_transfer_id",
+              "event_type"
+            ],
+            "covered": true
+          }
+        ],
+        "definer_writes": [
+          {
+            "name": "check_billing_events",
+            "ok": true
+          }
+        ],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": {
+          "check_billing_event_transfer_duplicates": 0
+        }
+      },
+      "note": "The one-shot's post-apply read-only --inspect: live fc9d0e34... == intended, already_applied true, precondition_failures []: the five functions and two triggers in the intended state, EXECUTE for the owner only; a unique index covering (payment_transfer_id, event_type) (the one production already had)."
+    }
+  },
+  "production_evidence": {
+    "2026-10-27 apply": "Guarded production SQL one-shot on i-0c35557c4e5385406, workstream prod-sql120-usage-events-20261027, main 3a8a9993a (tarball 5fc3a92a…, transfer run 40558494786, migration source aa7d44c3… == pin), owner-approved run (\"Approve bundle prod-sql120-usage-events-20261027. Apply SQL 120 in production. DEPLOY WEBSITE TO PRODUCTION\"), SSM 0c164128-b7cb-4e42-b1a4-28c3fa42d7eb, run_id 9e8ff872-d8d6-4bc0-822f-c942b3aa944b, one_use_id sql120-prod-8cf035b2-f369-4624-b8c4-ae42c25182d8 (spent): every step ok; contracts claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43; pre-apply inspect live f3c1dd26… (live_matches_expected true, precondition_failures []); manifest bdbfc9ac…; f3c1dd26… -> fc9d0e34…, result applied, unrelated catalog 5f166a42…; post-apply inspect already_applied true, precondition_failures []. After: the check_processing usage event at Check Alt approval and the next-day / same-day fee at send time are recorded by the database, and the October 2026 backfill ran. execute is false so the pin is no longer a standing authorization."
   }
 }
