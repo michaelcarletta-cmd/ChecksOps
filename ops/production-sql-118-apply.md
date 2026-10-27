@@ -63,7 +63,48 @@ apply as its staging acceptance and `execute: true` under the owner's words of 2
 production" (the tenant lifecycle, which SQL 118 now carries) and "Go". Each apply still needs the
 owner's run-time approval.
 
-**Status:** staging applied (wave 19); production pin execute-authorized; production apply pending.
+**Status:** applied to staging and to production (2026-10-27); the production pin is retired
+(`execute: false` again; see "Production apply of SQL 118").
+
+## Production apply of SQL 118 (2026-10-27)
+
+The owner's message of 2026-10-27 was "Apply SQL 118 in production"; it was passed verbatim (base64,
+`--approval-statement-b64`) and recorded by the one-shot as `approval_statement`. The one-shot
+cannot verify who said it, and the statement covered this run only. `production-sql-one-shot.mjs
+--migration sql118 --approval-scope sql118` on `i-0c35557c4e5385406` (operator-supplied
+`--runner`, not verified by the one-shot), operator `michaelcarletta-cmd`, workstream
+`prod-sql118-tenant-lifecycle-20261027`, from main `4d9763eff` (tarball
+`source-4d9763eff050b7ca9471892562882d60da9419f5.tar.gz`, sha256 `f669e856…`, 12789 files, transfer
+run `40439891990`, `sql53-temporary-transfer.yml` on main after the #1283 merge; it printed
+`TARBALL_SHA256 f669e85678a64cb3ee43f0e0a7cdd27e7694197ff48be0b75982473311f848f1`). One SSM command,
+`9bccc7c9-9fe2-4e6f-988d-a778f07b1607` (2026-10-27T10:45:37Z to 10:46:03Z, exit 0), ran both phases;
+the apply phase ran only after the inspect phase succeeded (`set -e`).
+
+- **Inspect phase:** run_id `04a48489-5dce-473d-81e5-c6347ac28b9b`: pin (execute true, staging
+  acceptance run 40438147297), source, inspect and contracts ok (claim-ledger 4/4, tenant-isolation
+  6/6, financial-write-protections 43/43), read-only; live `1b5eec31…` (live_matches_expected true),
+  already_applied false, precondition_failures [], apply_preconditions_met true, connected as
+  `checksops_admin`.
+- **Apply phase:** run_id `a47888ef-daf8-4add-adac-3a703176b67d`, one_use_id
+  `sql118-prod-327fe57a-22b1-452f-afdc-6c52b653f153` (spent): every step ok (pin, source, inspect,
+  contracts, manifest, source-recheck-before-preflight, preflight (receipt issued), evaluate
+  (`sql118_production_apply_allowed` true), source-recheck-before-apply, apply (applied),
+  post-apply-inspect); migration source `f10655a8…` (== pin); pre-apply inspect live `1b5eec31…`,
+  live_matches_expected true, precondition_failures [], `tenant_deactivations` and the six functions
+  absent; contracts claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43;
+  manifest `09ec4d5c…`; receipt `1b5eec31…` -> `6f9e2ef3…`, result applied, unrelated catalog
+  `a6eed736…` (relations 890, columns 3543, constraints 2234, policies 404, functions 1326, indexes
+  654, default ACL 0, triggers 180, views 25, types 18, roles 29, role memberships 15); post-apply
+  inspect live `6f9e2ef3…` (= intended), already_applied true, precondition_failures [],
+  missing_dependencies []; `tenant_deactivations` intended (RLS on, no policy, `table_privileges`
+  `[]`) and the six functions intended with EXECUTE for `authenticated`, `checksops` and the owner.
+  SSM returns at most 24000 characters of output, so the end of the apply run's JSON was not
+  captured; every value above was printed in the captured part.
+
+No later read-only inspect is recorded. The pin is `execute: false` again; a re-apply needs a new
+reviewed pin change. The tenant lifecycle API (`tenant-billing-admin` `tenants-deactivated`,
+`tenant-deactivate`, `tenant-reactivate`, `tenant-activity`, `tenant-delete`), live since overlay run
+40425235000, now reaches the functions instead of answering `503 tenant_lifecycle_missing`.
 
 ## Fingerprint
 

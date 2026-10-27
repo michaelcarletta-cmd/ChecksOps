@@ -88,7 +88,8 @@ export const STAGING_WAVE1 = Object.freeze({
   // the retired SQL 117 (tenant_deactivations with every non-owner grant revoked, and the
   // platform-owner tenant lifecycle functions). Read at main 7cd3272 after the executor carried it
   // (deploy run 40436720850): the table and the six functions absent.
-  sql118: Object.freeze({ wave: 19, approved: '2026-10-27', run: '40436888477', live: '1b5eec31635d869abbabc9d4584674ee5852a27689629d9c199627d7c8653cde' }),
+  // Applied by the guarded staging executor run 40438147297 (receipt 1b5eec31… -> 6f9e2ef3…).
+  sql118: Object.freeze({ wave: 19, approved: '2026-10-27', run: '40436888477', live: '1b5eec31635d869abbabc9d4584674ee5852a27689629d9c199627d7c8653cde', apply_run: '40438147297' }),
   sql98: Object.freeze({ wave: 3, approved: '2026-10-18', run: '39083278136', live: '296c3d6a274e10f66005fb9eaecf93fa17b81bd8db3607037ca07698fddd3275', apply_run: '39085677318' }),
 });
 
