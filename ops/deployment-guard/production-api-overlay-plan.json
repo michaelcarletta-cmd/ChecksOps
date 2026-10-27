@@ -819,10 +819,10 @@
     },
     "providers/onboarding/webhook-status.mjs": {
       "operation": "add",
-      "accepted_sha256": "45ac151c468ade3ed161ddd279545ffd58dd4b7dbe52f6769137f8fc51b4237f",
+      "accepted_sha256": "2f9570fa00d92898c1c4d656bede432def7ad02a05a8c428d50d7ff34ec917e7",
       "expected_live_sha256": null,
       "sql_before": "aws/workflows/sql/105_onboarding_payment_table_grants.sql",
-      "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
+      "manifest": "aws/tests/fixtures/production-moov-webhook-verification-read-manifest-2026-10-27.json"
     },
     "providers/onboarding/handlers.mjs": {
       "operation": "replace",

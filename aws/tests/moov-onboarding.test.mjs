@@ -1924,6 +1924,45 @@ test('webhook status: capability and verification events update only the matchin
   assert.equal(missing.applied, false);
 });
 
+test('webhook status: verificationStatus is read before the older status, and all four merchant capabilities enabled is active (as the Refresh pull)', async () => {
+  // Staging 2026-10-26: Moov showed the account Verified with all four capabilities enabled while the
+  // older verification.status said unverified; the webhook read that field and undid the Refresh.
+  const db = makeDb();
+  // The seeded sandbox account, as a Refresh left it: verified, all four capabilities enabled.
+  const row = () => db.state.accounts.find((a) => a.environment === 'sandbox' && a.provider_account_id === MOOV_ACCOUNT);
+  Object.assign(row(), { capabilities: ENABLED_MERCHANT_CAPS.map((c) => ({ ...c })), verification_status: 'verified', onboarding_status: 'active' });
+  const client = db.create();
+  await applyOnboardingWebhookStatus(client, {
+    environment: 'sandbox', eventType: 'account.updated', providerAccountId: MOOV_ACCOUNT,
+    data: { accountID: MOOV_ACCOUNT, verification: { verificationStatus: 'verified', status: 'unverified' } },
+  });
+  assert.equal(row().verification_status, 'verified');
+  assert.equal(row().onboarding_status, 'active');
+  // Only the older field, saying unverified, with all four capabilities enabled: still active.
+  await applyOnboardingWebhookStatus(client, {
+    environment: 'sandbox', eventType: 'account.updated', providerAccountId: MOOV_ACCOUNT,
+    data: { accountID: MOOV_ACCOUNT, verification: { status: 'unverified' } },
+  });
+  assert.equal(row().onboarding_status, 'active');
+  // A capability back to pending drops out of active; failed verification is never active.
+  await applyOnboardingWebhookStatus(client, {
+    environment: 'sandbox', eventType: 'capability.updated', providerAccountId: MOOV_ACCOUNT,
+    data: { accountID: MOOV_ACCOUNT, capabilityID: 'collect-funds.ach', status: 'pending' },
+  });
+  assert.notEqual(row().onboarding_status, 'active');
+  await applyOnboardingWebhookStatus(client, {
+    environment: 'sandbox', eventType: 'capability.updated', providerAccountId: MOOV_ACCOUNT,
+    data: { accountID: MOOV_ACCOUNT, capabilityID: 'collect-funds.ach', status: 'enabled' },
+  });
+  assert.equal(row().onboarding_status, 'active');
+  await applyOnboardingWebhookStatus(client, {
+    environment: 'sandbox', eventType: 'account.verification.updated', providerAccountId: MOOV_ACCOUNT,
+    data: { accountID: MOOV_ACCOUNT, verification: { verificationStatus: 'failed' } },
+  });
+  assert.equal(row().verification_status, 'failed');
+  assert.equal(row().onboarding_status, 'restricted');
+});
+
 test('production onboarding webhook apply needs the flag, production execution and non-dry-run', async () => {
   await withEnv({ AWS_PROVIDER_EXECUTION_ENABLED: 'true', AWS_MOOV_ENABLED: 'true', AWS_MOOV_ONBOARDING_PRODUCTION_ENABLED: 'true', AWS_PROVIDER_WEBHOOK_DRY_RUN: 'false' }, async () => {
     assert.equal(productionOnboardingWebhookApplyEnabled(), true);

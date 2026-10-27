@@ -8,6 +8,7 @@
  * No provider call is made here.
  */
 import { capabilityFlags, normalizeOnboardingStatus } from '../parity/moov-client.mjs';
+import { MERCHANT_CAPABILITIES } from '../parity/moov-capabilities.mjs';
 
 export const isOnboardingEvent = (eventType) => {
   const t = String(eventType || '');
@@ -18,6 +19,32 @@ const capabilityStatusFromEvent = (eventType, data) => {
   if (data?.status) return String(data.status).toLowerCase();
   if (String(eventType).endsWith('.requested')) return 'pending';
   return null;
+};
+
+/**
+ * Moov's account verification in a webhook payload, in the order the Refresh status pull reads it
+ * (handlers.mjs accountVerificationStatus): verificationStatus first, then the business and the
+ * older status. Staging 2026-10-26: the older status said unverified on an account Moov showed
+ * Verified, so a webhook read it and undid the Refresh.
+ */
+const webhookVerificationStatus = (eventType, data) => data?.verification?.verificationStatus
+  ?? data?.profile?.business?.verification?.status
+  ?? data?.verification?.status
+  ?? data?.verificationStatus
+  ?? (String(eventType).includes('verification') ? data?.status : null);
+
+/**
+ * The onboarding status as the Refresh pull derives it (handlers.mjs onboardingStatusFromMoov): the
+ * shared status, except that an account whose requested merchant capabilities are all enabled is
+ * active unless its verification failed or must be resubmitted or it is disabled.
+ */
+const webhookOnboardingStatus = ({ verification, capabilities, disabled }) => {
+  const status = normalizeOnboardingStatus({ verificationStatus: verification, capabilities, disabled });
+  if (disabled || status === 'restricted') return status;
+  const enabled = new Set((capabilities ?? [])
+    .filter((c) => String(c?.status ?? '').toLowerCase() === 'enabled')
+    .map((c) => String(c?.capability ?? '').toLowerCase()));
+  return MERCHANT_CAPABILITIES.every((id) => enabled.has(String(id).toLowerCase())) ? 'active' : status;
 };
 
 export async function applyOnboardingWebhookStatus(client, { environment, eventType, providerAccountId, data = {} }) {
@@ -46,13 +73,11 @@ export async function applyOnboardingWebhookStatus(client, { environment, eventT
       else caps = [...caps, { capability: String(capability), status }];
     }
   }
-  const verification = data?.verification?.status
-    ?? data?.verificationStatus
-    ?? (String(eventType).includes('verification') ? data?.status : null)
+  const verification = webhookVerificationStatus(eventType, data)
     ?? account.verification_status
     ?? null;
   const disabled = data?.disabledOn ? true : account.disabled === true;
-  const onboarding = normalizeOnboardingStatus({ verificationStatus: verification, capabilities: caps, disabled });
+  const onboarding = webhookOnboardingStatus({ verification, capabilities: caps, disabled });
   const flags = capabilityFlags(caps);
 
   await client.query(
