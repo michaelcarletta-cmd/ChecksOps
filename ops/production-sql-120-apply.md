@@ -61,7 +61,27 @@ index on staging), `check_billing_event_transfer_duplicates` 0; live
 `precondition_failures` `[]`. Recorded in the staging pin (`expected_live_definition_sha256`,
 `execute: true`, wave 20) under the owner's words of 2026-10-27, "Deploy SQL 120 to staging".
 
-**Status:** staging pin execute-authorized (wave 20); nothing applied yet; production pin pending.
+**Staging apply (2026-10-27).** Run 40547527832 (main `f63e023`, after #1300 merged the staging pin and
+executor deploy run 40547005360 carried it, `gX5VOEw7…`): receipt before
+`f3c1dd26888ac9fce91721cad698d39ee99cdca80c4a7888f9cfea9043171e9d`, after
+`fc9d0e340d0a469440a8bbfd3d546ededbe4f035c12c584334a2a610c55ffc56` (intended), result `applied`. Read-live
+run 40548075401: `already_applied` true, `precondition_failures` `[]`. The owner then checked the staging
+usage page: three send fees, one same-day at $1.00 and two next-day at $0.75.
+
+**Production inspect (2026-10-27).** Read-only `--inspect` through SSM
+`899279cd-3ec1-4cb6-b0ec-a31c0e60bcab` on `i-0c35557c4e5385406`, main `9a0625ea2` (tarball sha256
+`a4a28491cff74bbb1b4b232e5d18f3da85bf2a30b301e7f24cd492a00db51d63`, transfer run 40555617868, migration
+source `aa7d44c3…` == pin), connected as `checksops_admin`: the five functions and two triggers absent,
+every prerequisite present, a unique index already covering `(payment_transfer_id, event_type)`, no
+duplicates; live `f3c1dd26888ac9fce91721cad698d39ee99cdca80c4a7888f9cfea9043171e9d` (the same as staging's
+pre-state), `already_applied` false, `precondition_failures` `[]`. Recorded in the production pin with the
+staging apply as its staging acceptance and `execute: true` under the owner's words of 2026-10-27,
+"Approve bundle prod-sql120-usage-events-20261027. Apply SQL 120 in production. DEPLOY WEBSITE TO
+PRODUCTION" (an approval bundle: this pin change, the one apply run of workstream
+`prod-sql120-usage-events-20261027`, its record-and-retire change and the production website deploy). The
+owner merges the pin change; the apply runs only after that merge is on main and staged.
+
+**Status:** applied to staging (wave 20); production pin execute-authorized; not applied to production.
 
 ## Fingerprint
 
