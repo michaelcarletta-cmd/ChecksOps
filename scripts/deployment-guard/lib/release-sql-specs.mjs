@@ -1,5 +1,5 @@
 /**
- * Specs of the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108 to SQL 120) for the shared engine in
+ * Specs of the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108 to SQL 121) for the shared engine in
  * release-sql-state.mjs: what each pinned file creates, replaces or drops, the reviewed
  * EXECUTE ACLs, the prerequisites and predecessors, and the PostgreSQL renderings the file
  * leaves (policy expressions, view, column, constraint, index and trigger definitions as
@@ -52,7 +52,12 @@
  *                      the production tool never runs the file
  *   acl_functions      existing functions the file neither creates nor replaces, only sets the
  *                      EXECUTE ACL of (SQL 103): identity, final ACL, revokes (the entries it
- *                      removes); fingerprinted by presence and ACL only
+ *                      removes); fingerprinted by presence and ACL only. With `attributes`
+ *                      (SQL 121: ALTER FUNCTION ... SECURITY DEFINER, SET search_path) also by
+ *                      { security_definer, config } as the file leaves them and prosrc_sha256,
+ *                      the reviewed body (sha256 of the body the function's own migration
+ *                      defines, re-derived from that file by the tests), which must already be
+ *                      live (acl_functions_body_reviewed) and stays unchanged
  *   runs_before        informational production order (SQL 103 before SQL 29, which is not on
  *                      this engine; SQL 106 before SQL 97): the production one-shot and the
  *                      runbook
@@ -4652,5 +4657,176 @@ export const RELEASE_SQL_SPECS = deepFreeze({
       "public.payment_transfers",
       "public.check_billing_events"
     ]
+  },
+  // SQL 121: Cash Jobs on AWS. SELECT / INSERT / UPDATE / DELETE on cash_jobs, cash_job_line_items
+  // and cash_job_attachments for checksops and authenticated (table_privileges; every other grant on
+  // each table must stay as it was), sync_cash_job_check_payment() made SECURITY DEFINER with
+  // search_path public, pg_temp and EXECUTE for the owner only (acl_functions with attributes: its
+  // body must be the reviewed one from supabase/migrations/20260522142101_*.sql and stays unchanged),
+  // and the new aws_record_cash_job_checkalt_payment() (EXECUTE for the owner only) with its trigger
+  // on checkalt_deposits. No predecessor. definer_writes: both definer functions write
+  // cash_job_payments, whose trigger updates cash_jobs. render.grantors: only the owner's own
+  // entries are revocable by the owner (as SQL 103 and SQL 119).
+  sql121: {
+    "key": "sql121",
+    "label": "SQL 121",
+    "choice": "sql121-cash-jobs-grants",
+    "production_pin_rel": "ops/deployment-guard/sql121-cash-jobs-grants-production-apply.json",
+    "script": "sql121-cash-jobs-grants-production-apply",
+    "prerequisites": [
+      "public.cash_jobs",
+      "public.cash_job_line_items",
+      "public.cash_job_attachments",
+      "public.cash_job_payments",
+      "public.check_intake_items",
+      "public.checkalt_deposits",
+      "public.sync_cash_job_check_payment()",
+      "role checksops",
+      "role authenticated",
+      "column public.check_intake_items.id",
+      "column public.check_intake_items.tenant_id",
+      "column public.check_intake_items.cash_job_id",
+      "column public.check_intake_items.check_source",
+      "column public.check_intake_items.cash_job_payment_class",
+      "column public.check_intake_items.amount",
+      "column public.check_intake_items.uploaded_by",
+      "column public.check_intake_items.status",
+      "column public.checkalt_deposits.id",
+      "column public.checkalt_deposits.check_intake_item_id",
+      "column public.checkalt_deposits.status",
+      "column public.cash_job_payments.tenant_id",
+      "column public.cash_job_payments.cash_job_id",
+      "column public.cash_job_payments.created_by",
+      "column public.cash_job_payments.amount",
+      "column public.cash_job_payments.payment_method",
+      "column public.cash_job_payments.payment_date",
+      "column public.cash_job_payments.reference_number",
+      "column public.cash_job_payments.notes"
+    ],
+    "predecessors": [],
+    "functions": [
+      {
+        "identity": "public.aws_record_cash_job_checkalt_payment()",
+        "acl": [
+          "owner EXECUTE grantor=owner"
+        ],
+        "revokes": [
+          "PUBLIC EXECUTE grantor=owner",
+          "authenticated EXECUTE grantor=owner",
+          "checksops EXECUTE grantor=owner"
+        ]
+      }
+    ],
+    "acl_functions": [
+      {
+        "identity": "public.sync_cash_job_check_payment()",
+        "acl": [
+          "owner EXECUTE grantor=owner"
+        ],
+        "revokes": [
+          "PUBLIC EXECUTE grantor=owner",
+          "authenticated EXECUTE grantor=owner",
+          "checksops EXECUTE grantor=owner"
+        ],
+        "attributes": {
+          "security_definer": true,
+          "config": [
+            "search_path=public, pg_temp"
+          ],
+          "prosrc_sha256": "032154c6f7c53d0e2f1e293280ba6379003c4c21d96c029eee8028775aac66de"
+        }
+      }
+    ],
+    "table_privileges": [
+      {
+        "table": "public.cash_jobs",
+        "grantees": [
+          "authenticated",
+          "checksops"
+        ],
+        "privileges": [
+          "SELECT",
+          "INSERT",
+          "UPDATE",
+          "DELETE"
+        ],
+        "intended": [
+          "authenticated DELETE grantor=owner",
+          "authenticated INSERT grantor=owner",
+          "authenticated SELECT grantor=owner",
+          "authenticated UPDATE grantor=owner",
+          "checksops DELETE grantor=owner",
+          "checksops INSERT grantor=owner",
+          "checksops SELECT grantor=owner",
+          "checksops UPDATE grantor=owner"
+        ]
+      },
+      {
+        "table": "public.cash_job_line_items",
+        "grantees": [
+          "authenticated",
+          "checksops"
+        ],
+        "privileges": [
+          "SELECT",
+          "INSERT",
+          "UPDATE",
+          "DELETE"
+        ],
+        "intended": [
+          "authenticated DELETE grantor=owner",
+          "authenticated INSERT grantor=owner",
+          "authenticated SELECT grantor=owner",
+          "authenticated UPDATE grantor=owner",
+          "checksops DELETE grantor=owner",
+          "checksops INSERT grantor=owner",
+          "checksops SELECT grantor=owner",
+          "checksops UPDATE grantor=owner"
+        ]
+      },
+      {
+        "table": "public.cash_job_attachments",
+        "grantees": [
+          "authenticated",
+          "checksops"
+        ],
+        "privileges": [
+          "SELECT",
+          "INSERT",
+          "UPDATE",
+          "DELETE"
+        ],
+        "intended": [
+          "authenticated DELETE grantor=owner",
+          "authenticated INSERT grantor=owner",
+          "authenticated SELECT grantor=owner",
+          "authenticated UPDATE grantor=owner",
+          "checksops DELETE grantor=owner",
+          "checksops INSERT grantor=owner",
+          "checksops SELECT grantor=owner",
+          "checksops UPDATE grantor=owner"
+        ]
+      }
+    ],
+    "triggers": [
+      {
+        "table": "public.checkalt_deposits",
+        "name": "aws_checkalt_deposit_cash_job_payment",
+        "def": "CREATE TRIGGER aws_checkalt_deposit_cash_job_payment AFTER INSERT OR UPDATE OF status ON public.checkalt_deposits FOR EACH ROW EXECUTE FUNCTION public.aws_record_cash_job_checkalt_payment()"
+      }
+    ],
+    "definer_writes": [
+      "public.cash_job_payments",
+      "public.cash_jobs"
+    ],
+    "altered_relations": [
+      "public.cash_jobs",
+      "public.cash_job_line_items",
+      "public.cash_job_attachments",
+      "public.checkalt_deposits"
+    ],
+    "render": {
+      "grantors": true
+    }
   },
 });

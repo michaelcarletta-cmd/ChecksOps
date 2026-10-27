@@ -44,6 +44,7 @@ that connects to the database:
 | `sql118` | `scripts/deployment-guard/sql118-platform-owner-tenant-lifecycle-production-apply.mjs` (`ops/production-sql-118-apply.md`; SQL 117 plus every non-owner grant on `tenant_deactivations` revoked: the table and the platform-owner deactivate, reactivate, activity, delete-empty and deactivated-list functions; no predecessor; supersedes the retired SQL 117) |
 | `sql119` | `scripts/deployment-guard/sql119-provider-stakeholder-sync-acl-production-apply.mjs` (`ops/production-sql-119-apply.md`; EXECUTE on `sync_provider_stakeholder_account(uuid)` for its owner only (`PUBLIC`, `checksops` and, where they exist, `anon`, `authenticated` and `service_role` revoked); no predecessor; `runs_before` `sql115`) |
 | `sql120` | `scripts/deployment-guard/sql120-usage-events-at-approval-and-send-production-apply.mjs` (`ops/production-sql-120-apply.md`; usage events at Check Alt approval and at send time: two triggers, five owner-only functions, the one-fee-per-leg unique index and a backfill from 2026-10-01; no predecessor) |
+| `sql121` | `scripts/deployment-guard/sql121-cash-jobs-grants-production-apply.mjs` (`ops/production-sql-121-apply.md`; SELECT, INSERT, UPDATE, DELETE on `cash_jobs`, `cash_job_line_items` and `cash_job_attachments` for `checksops` and `authenticated`, `sync_cash_job_check_payment()` SECURITY DEFINER and owner-only, and the cash-job payment at Check Alt approval: one owner-only function and its trigger on `checkalt_deposits`; no predecessor) |
 
 To add a migration, register its reviewed tool in `ONE_SHOT_TOOLS`
 (`scripts/deployment-guard/lib/production-sql-one-shot.mjs`). An entry names only the tool,
@@ -58,7 +59,7 @@ a migration file touches its pin, not the registry. An entry may add `inspect_re
 
 | flag | |
 |---|---|
-| `--migration <key>` | a registered key (`sql29`, `sql30`, `sql71`, `sql77`…`sql89`, `sql90`…`sql106`, `sql108`, `sql109`, `sql110`, `sql111`, `sql112`, `sql113`, `sql114`, `sql115`, `sql116`, `sql117`, `sql118`, `sql119`, `sql120`) |
+| `--migration <key>` | a registered key (`sql29`, `sql30`, `sql71`, `sql77`…`sql89`, `sql90`…`sql106`, `sql108`, `sql109`, `sql110`, `sql111`, `sql112`, `sql113`, `sql114`, `sql115`, `sql116`, `sql117`, `sql118`, `sql119`, `sql120`, `sql121`) |
 | `--approval-scope <key>` | the migration the owner approved; must equal `--migration` |
 | `--approval-statement "<words>"` or `--approval-statement-b64 <base64>` | the owner's exact words, recorded verbatim. Pass exactly one of the two. Use the base64 form when the words contain quotes or newlines. Must be non-empty. |
 | `--commit <sha>` | the full main commit the tarball was built from |

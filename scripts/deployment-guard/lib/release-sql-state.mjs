@@ -1,5 +1,5 @@
 /**
- * One engine for the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108 to SQL 120), shared by the staging
+ * One engine for the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108 to SQL 121), shared by the staging
  * guarded executor (aws/write-path/guarded-sql-executor/index.mjs) and the production tools
  * (release-sql-production-apply.mjs): the catalog state reader, the code-derived
  * fingerprints, the pre- and post-conditions, the predecessor rules and the unrelated-catalog
@@ -26,7 +26,11 @@
  *   function_acl
  *              (an existing function the file neither creates nor replaces, spec acl_functions,
  *              SQL 103) absent, or its EXECUTE ACL only; the post-conditions require every other
- *              attribute (body, language, SECURITY DEFINER, config, result, owner) unchanged
+ *              attribute (body, language, SECURITY DEFINER, config, result, owner) unchanged.
+ *              An entry with `attributes` (SQL 121: ALTER FUNCTION ... SECURITY DEFINER, SET
+ *              search_path) also carries SECURITY DEFINER, proconfig and the reviewed body hash
+ *              (attributes.prosrc_sha256): the file sets the first two, the body must be the
+ *              reviewed one before and stays unchanged
  *
  * A spec may ask for more detail (spec.render, SQL 100): `grantors` adds each ACL entry's
  * grantor (the object owner read as `owner`) to the function, column and table privilege
@@ -508,7 +512,13 @@ export function releaseStateText(key, state = {}) {
   for (const identity of spec.dropped_functions || []) lines.push(fnLine(identity, s.functions?.[identity]));
   for (const fn of spec.acl_functions || []) {
     const row = s.acl_functions?.[fn.identity];
-    lines.push(row?.exists ? `function_acl ${fn.identity}: acl=${list(row.acl)}` : `function_acl ${fn.identity}: absent`);
+    if (!row?.exists) {
+      lines.push(`function_acl ${fn.identity}: absent`);
+      continue;
+    }
+    // spec attributes (SQL 121): the attributes the file alters and the reviewed body, after the ACL.
+    lines.push(`function_acl ${fn.identity}: acl=${list(row.acl)}${fn.attributes
+      ? ` secdef=${row.security_definer === true} config=${list(row.config)} prosrc=${row.prosrc_sha256 ?? '-'}` : ''}`);
   }
   for (const p of [...(spec.policies || []), ...(spec.dropped_policies || [])]) {
     const k = objKey(p.table, p.name);
@@ -588,7 +598,15 @@ export function releaseIntendedState(key, text) {
     };
   }
   for (const identity of spec.dropped_functions || []) functions[identity] = { exists: false };
-  const aclFunctions = Object.fromEntries((spec.acl_functions || []).map((fn) => [fn.identity, { exists: true, acl: [...fn.acl].sort() }]));
+  const aclFunctions = Object.fromEntries((spec.acl_functions || []).map((fn) => [fn.identity, {
+    exists: true,
+    acl: [...fn.acl].sort(),
+    ...(fn.attributes ? {
+      security_definer: fn.attributes.security_definer === true,
+      config: [...fn.attributes.config].sort(),
+      prosrc_sha256: fn.attributes.prosrc_sha256,
+    } : {}),
+  }]));
   const policies = {};
   for (const p of spec.policies || []) {
     policies[objKey(p.table, p.name)] = {
@@ -823,6 +841,9 @@ export function releaseSharedPreconditionFailures(key, state, text, { environmen
     ['acl_functions_owned_by_login', aclRows.every(([, row]) => !row.exists || row.owner_is_login === true)],
     ['acl_functions_acl_replaceable', aclRows.every(([fn, row]) => !row.exists || (row.acl || []).every((line) => (
       fn.acl.includes(line) || (fn.revokes || []).includes(line))))],
+    // SQL 121: a function the file makes SECURITY DEFINER must have the reviewed body.
+    ['acl_functions_body_reviewed', aclRows.every(([fn, row]) => !row.exists || !fn.attributes
+      || row.prosrc_sha256 === fn.attributes.prosrc_sha256)],
     ['dropped_functions_owned_by_login', (spec.dropped_functions || []).every((identity) => !s.functions?.[identity]?.exists || s.functions[identity].owner_is_login === true)],
     ['function_results_match', fnRows.every(([fn, row]) => !row.exists || !intended || row.result === intended.functions[fn.identity].result)],
     // An EXECUTE grant the file neither keeps nor revokes would survive CREATE OR REPLACE.
@@ -891,14 +912,17 @@ export function releaseSharedPostconditionFailures(key, before, after, pin) {
   return failed([
     ['intended_state', a.live_definition_sha256 === pin?.intended_replacement_sha256],
     ['functions_owned_by_login', spec.functions.every((fn) => a.functions?.[fn.identity]?.owner_is_login === true)],
-    // SQL 103: only the ACL of an acl_functions entry changes (body, attributes and owner as before).
+    // SQL 103: only the ACL of an acl_functions entry changes (body, attributes and owner as before);
+    // SQL 121: also SECURITY DEFINER and proconfig when the entry declares attributes.
     ['acl_functions_otherwise_unchanged', (spec.acl_functions || []).every((fn) => {
       const was = b.acl_functions?.[fn.identity];
       const now = a.acl_functions?.[fn.identity];
       if (!was?.exists || !now?.exists) return false;
-      const { acl: _wasAcl, ...wasRest } = was;
-      const { acl: _nowAcl, ...nowRest } = now;
-      return same(wasRest, nowRest) && now.owner_is_login === true;
+      // spec attributes (SQL 121): SECURITY DEFINER and proconfig are set by the file (and fixed by
+      // the fingerprint); everything else, the body included, stays as it was.
+      const altered = fn.attributes ? ['acl', 'security_definer', 'config'] : ['acl'];
+      const rest = (row) => Object.fromEntries(Object.entries(row).filter(([k]) => !altered.includes(k)));
+      return same(rest(was), rest(now)) && now.owner_is_login === true;
     })],
     ['created_tables_owned_by_login', (spec.tables || []).every((t) => a.tables?.[t.name]?.owner_is_login === true)],
     ['altered_relations_owner_unchanged', Object.entries(b.altered || {}).every(([name, row]) => a.altered?.[name]?.owner_is_login === row.owner_is_login)],
@@ -1114,10 +1138,25 @@ export function releaseSqlReport(key, state, text) {
     // SQL 103: functions whose ACL only the file sets ('intended' | 'different' | 'absent', and the ACL).
     acl_functions: (spec.acl_functions || []).map((fn) => {
       const live = s.acl_functions?.[fn.identity];
+      const intended = want?.acl_functions?.[fn.identity] ?? {
+        acl: [...fn.acl].sort(),
+        ...(fn.attributes ? {
+          security_definer: fn.attributes.security_definer === true,
+          config: [...fn.attributes.config].sort(),
+          prosrc_sha256: fn.attributes.prosrc_sha256,
+        } : {}),
+      };
+      const attrs = (row) => (fn.attributes ? [row?.security_definer === true, list(row?.config), row?.prosrc_sha256 ?? null] : []);
       return {
         name: fn.identity.replace(/^public\./, ''),
-        state: !live?.exists ? 'absent' : (same(live.acl, want?.acl_functions?.[fn.identity]?.acl ?? [...fn.acl].sort()) ? 'intended' : 'different'),
+        state: !live?.exists ? 'absent' : (same(live.acl, intended.acl) && same(attrs(live), attrs(intended)) ? 'intended' : 'different'),
         acl: [...(live?.acl || [])],
+        // SQL 121: the attributes the file sets, and whether the body is the reviewed one (never the body).
+        ...(fn.attributes && live?.exists ? {
+          security_definer: live.security_definer === true,
+          config: [...(live.config || [])],
+          body_reviewed: live.prosrc_sha256 === fn.attributes.prosrc_sha256,
+        } : {}),
       };
     }),
     indexes: objectLabels((spec.indexes || []).map((i) => [objKey(i.table, i.name).replace(/^public\./, ''), s.indexes?.[objKey(i.table, i.name)], want?.indexes?.[objKey(i.table, i.name)]])),

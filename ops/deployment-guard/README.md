@@ -81,6 +81,7 @@ node scripts/deployment-guard/sql117-platform-owner-tenant-lifecycle-production-
 node scripts/deployment-guard/sql118-platform-owner-tenant-lifecycle-production-apply.mjs --inspect   # Tenant deactivate / reactivate / delete-empty (ops/production-sql-118-apply.md)
 node scripts/deployment-guard/sql119-provider-stakeholder-sync-acl-production-apply.mjs --inspect   # provider stakeholder sync EXECUTE owner only, before SQL 115 (ops/production-sql-119-apply.md)
 node scripts/deployment-guard/sql120-usage-events-at-approval-and-send-production-apply.mjs --inspect   # usage events at Check Alt approval and at send time (ops/production-sql-120-apply.md)
+node scripts/deployment-guard/sql121-cash-jobs-grants-production-apply.mjs --inspect   # cash-job table grants, definer payment trigger, cash-job payment at Check Alt approval (ops/production-sql-121-apply.md)
 # Production SQL 71, 77-89 and 90-102 on the runner, one invocation (ops/production-sql-one-shot.md)
 node scripts/deployment-guard/production-sql-one-shot.mjs --migration sql80 --phase inspect ...
 node scripts/deployment-guard/verify-live.mjs --input path/to/live.json

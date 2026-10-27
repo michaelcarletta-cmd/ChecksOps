@@ -2686,6 +2686,32 @@ export const AUTHORIZED_SQL120_USAGE_EVENTS_AT_APPROVAL_AND_SEND = Object.freeze
   ]),
 });
 
+// Cash Jobs 2026-10-27 staging pin: SQL 121 (SELECT, INSERT, UPDATE, DELETE on cash_jobs,
+// cash_job_line_items and cash_job_attachments for checksops and authenticated;
+// sync_cash_job_check_payment() SECURITY DEFINER with search_path public, pg_temp and EXECUTE for its
+// owner only; the cash-job payment recorded when a Check Alt deposit is approved or accepted, removed
+// when it is then rejected). No predecessor. Pending until a reviewed pin change records a staging
+// read-live.
+export const AUTHORIZED_SQL121_CASH_JOBS_PRODUCTION_GRANTS = Object.freeze({
+  key: 'sql121',
+  filename: 'aws/workflows/sql/121_cash_jobs_production_grants.sql',
+  migration_id: '121_cash_jobs_production_grants',
+  // The commit that last authored the file bytes.
+  commit: '95069b2987728aa48ff1518903be218386398ff7',
+  source_sha256: '72f1c189c4f218c477cea5f9974c40cbe1ff05b5cd4caf6f390e66636fd59ae6',
+  authorization: 'pending',
+  execute: false,
+  expected_live_definition_sha256: null,
+  // Code-derived: releaseIntendedHash('sql121', file bytes) (release-sql-state.mjs); re-derived by the tests.
+  intended_replacement_sha256: '2dd2ead6974cec45f2b88fc76c81a3cd48befa25cc63fe03133f9fe24593165e',
+  // The function the file creates (spec functions), then the existing one whose attributes and ACL it
+  // sets (spec acl_functions).
+  function_identities: Object.freeze([
+    'public.aws_record_cash_job_checkalt_payment()',
+    'public.sync_cash_job_check_payment()',
+  ]),
+});
+
 export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql90: AUTHORIZED_SQL90_USERS_ONLY_TENANT_ROLES,
   sql91: AUTHORIZED_SQL91_MOOV_ONBOARDING,
@@ -2717,6 +2743,7 @@ export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql118: AUTHORIZED_SQL118_PLATFORM_OWNER_TENANT_LIFECYCLE,
   sql119: AUTHORIZED_SQL119_PROVIDER_STAKEHOLDER_SYNC_ACL,
   sql120: AUTHORIZED_SQL120_USAGE_EVENTS_AT_APPROVAL_AND_SEND,
+  sql121: AUTHORIZED_SQL121_CASH_JOBS_PRODUCTION_GRANTS,
 });
 
 // The fee collection pin under its earlier map name (the same object as the release map's sql98).
@@ -2732,7 +2759,7 @@ export function isSql30TenantDocumentsDocType(input = {}) {
   return pinIdentifiersMatch(input, AUTHORIZED_SQL30_TENANT_DOCUMENTS_DOC_TYPE);
 }
 
-/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql120) an input names, or null. */
+/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql121) an input names, or null. */
 export function releaseSqlMigrationKey(input = {}) {
   return Object.keys(RELEASE_2026_10_17_PENDING_SQL_PINS)
     .find((key) => pinIdentifiersMatch(input, RELEASE_2026_10_17_PENDING_SQL_PINS[key])) || null;
