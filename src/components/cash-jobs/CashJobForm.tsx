@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ArrowLeft, Save, Plus, Trash2 } from "lucide-react";
+import { formatPhoneForDisplay, formatPhoneNumber } from "@/lib/utils";
 
 const WORK_TYPES = [
   "roof", "siding", "gutters", "windows", "doors",
@@ -46,7 +47,7 @@ export function CashJobForm({ onSave, onCancel, initialData }: Props) {
     job_name: initialData?.job_name ?? "",
     work_type: initialData?.work_type ?? "roof",
     customer_name: initialData?.customer_name ?? "",
-    customer_phone: initialData?.customer_phone ?? "",
+    customer_phone: formatPhoneForDisplay(initialData?.customer_phone),
     customer_email: initialData?.customer_email ?? "",
     property_address: initialData?.property_address ?? "",
     property_city: initialData?.property_city ?? "",
@@ -60,9 +61,20 @@ export function CashJobForm({ onSave, onCancel, initialData }: Props) {
     notes: initialData?.notes ?? "",
   });
 
-  const [lineItems, setLineItems] = useState<LineItem[]>(
-    initialData?.line_items ?? [{ description: "", quantity: "1", unit_price: "" }]
-  );
+  // CashJobDetail passes the job with its cash_job_line_items rows; editing
+  // starts from them so a save does not drop the scope of work.
+  const [lineItems, setLineItems] = useState<LineItem[]>(() => {
+    const saved: LineItem[] | undefined = Array.isArray(initialData?.cash_job_line_items)
+      ? [...initialData.cash_job_line_items]
+        .sort((a: any, b: any) => Number(a.sort_order ?? 0) - Number(b.sort_order ?? 0))
+        .map((item: any) => ({
+          description: String(item.description ?? ""),
+          quantity: item.quantity == null ? "1" : String(item.quantity),
+          unit_price: item.unit_price == null ? "" : String(item.unit_price),
+        }))
+      : initialData?.line_items;
+    return saved && saved.length > 0 ? saved : [{ description: "", quantity: "1", unit_price: "" }];
+  });
 
   const lineTotal = lineItems.reduce((s, item) => {
     const qty = parseFloat(item.quantity || "0");
@@ -85,12 +97,19 @@ export function CashJobForm({ onSave, onCancel, initialData }: Props) {
       const contractAmount = lineTotal > 0
         ? lineTotal
         : parseFloat(form.contract_amount || "0");
+      // Stored as XXX-XXX-XXXX, the same as a claim's phone numbers.
+      const customerPhone = form.customer_phone.trim()
+        ? formatPhoneNumber(form.customer_phone)
+        : null;
 
+      let jobId: string;
       if (initialData?.id) {
+        jobId = initialData.id;
         const { error } = await supabase
           .from("cash_jobs")
           .update({
             ...form,
+            customer_phone: customerPhone,
             contract_amount: contractAmount,
             estimate_date: form.estimate_date || null,
             start_date: form.start_date || null,
@@ -99,13 +118,18 @@ export function CashJobForm({ onSave, onCancel, initialData }: Props) {
           .eq("id", initialData.id);
         if (error) throw error;
 
-        // Update line items
-        await supabase.from("cash_job_line_items").delete().eq("cash_job_id", initialData.id);
+        // Replace the line items with the ones on the form (inserted below).
+        const { error: clearErr } = await supabase
+          .from("cash_job_line_items")
+          .delete()
+          .eq("cash_job_id", initialData.id);
+        if (clearErr) throw clearErr;
       } else {
         const { data: job, error: jobErr } = await supabase
           .from("cash_jobs")
           .insert({
             ...form,
+            customer_phone: customerPhone,
             tenant_id: tenant.id,
             created_by: user.id,
             contract_amount: contractAmount,
@@ -117,21 +141,21 @@ export function CashJobForm({ onSave, onCancel, initialData }: Props) {
           .single();
 
         if (jobErr) throw jobErr;
+        jobId = job.id;
+      }
 
-        // Insert line items
-        const validItems = lineItems.filter(item => item.description.trim());
-        if (validItems.length > 0) {
-          await supabase.from("cash_job_line_items").insert(
-            validItems.map((item, i) => ({
-              cash_job_id: job.id,
-              tenant_id: tenant.id,
-              description: item.description,
-              quantity: parseFloat(item.quantity || "1"),
-              unit_price: parseFloat(item.unit_price || "0"),
-              sort_order: i,
-            }))
-          );
-        }
+      // One row per request: the AWS write path accepts a single row per insert.
+      const validItems = lineItems.filter(item => item.description.trim());
+      for (const [i, item] of validItems.entries()) {
+        const { error: itemErr } = await supabase.from("cash_job_line_items").insert({
+          cash_job_id: jobId,
+          tenant_id: tenant.id,
+          description: item.description,
+          quantity: parseFloat(item.quantity || "1"),
+          unit_price: parseFloat(item.unit_price || "0"),
+          sort_order: i,
+        });
+        if (itemErr) throw itemErr;
       }
     },
     onSuccess: () => {
@@ -209,7 +233,7 @@ export function CashJobForm({ onSave, onCancel, initialData }: Props) {
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Phone</Label>
-              <Input className="h-8 text-sm" placeholder="(555) 000-0000" value={form.customer_phone} onChange={(e) => setForm({ ...form, customer_phone: e.target.value })} />
+              <Input className="h-8 text-sm" type="tel" inputMode="tel" maxLength={12} placeholder="555-000-0000" value={form.customer_phone} onChange={(e) => setForm({ ...form, customer_phone: formatPhoneNumber(e.target.value) })} />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Email</Label>

@@ -80,6 +80,7 @@ import { ListSkeleton } from "@/components/shell";
 
 // Help moved to Settings → ChecksOps Guide
 import { ShareCheckDialog } from "@/components/check-review/ShareCheckDialog";
+import { CashJobReviewLink } from "@/components/cash-jobs/CashJobReviewLink";
 import { MarkCheckReturnedDialog } from "@/components/checks/MarkCheckReturnedDialog";
 import { SharedChecksBadge } from "@/components/check-review/SharedChecksBadge";
 import { DepositStatusPanel } from "@/components/check-review/DepositStatusPanel";
@@ -2559,7 +2560,11 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
         const { createAwsCheck } = await import("@/integrations/aws/workflow");
         const token = session.session?.access_token;
         if (!token) throw new Error("Not authenticated");
+        // The claim picked here is linked at create: the server checks that it
+        // belongs to this tenant before it writes claim_id.
         const created = await createAwsCheck(token, {
+          ...(tenantId ? { tenant_id: tenantId } : {}),
+          ...(claimId ? { claim_id: claimId } : {}),
           review_notes: skipAi ? "AWS staging intake — manual entry (OCR skipped)" : "AWS staging intake",
         });
         check = created.check as { id: string };
@@ -4133,6 +4138,9 @@ function CheckDetailPanel({
                 displayFormatter={(v) => (v ? `${v} days` : "Default (180 days)")}
                 onSave={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }}
               />
+              {check.check_source === "cash_job" && check.cash_job_id && (
+                <CashJobReviewLink cashJobId={check.cash_job_id} />
+              )}
               {check.check_source === "cash_job" ? (
                 <div className="flex justify-between text-sm py-1">
                   <span className="text-muted-foreground">Class</span>

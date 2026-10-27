@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -42,7 +43,9 @@ export default function CashJobsPage() {
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+  // Review links a cash-job check back to its job with ?job={id}.
+  const [searchParams] = useSearchParams();
+  const [selectedJobId, setSelectedJobId] = useState<string | null>(() => searchParams.get("job"));
   const [showForm, setShowForm] = useState(false);
 
   const { data: jobs = [], isLoading } = useQuery({
