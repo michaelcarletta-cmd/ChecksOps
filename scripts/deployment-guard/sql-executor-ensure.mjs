@@ -94,6 +94,7 @@ export const EXECUTOR_PACK_MEMBERS = Object.freeze([
   ['aws/workflows/sql/120_usage_events_at_approval_and_send.sql', 'sql/120_usage_events_at_approval_and_send.sql'],
   ['aws/workflows/sql/121_cash_jobs_production_grants.sql', 'sql/121_cash_jobs_production_grants.sql'],
   ['aws/workflows/sql/122_mortgage_desk_return_to_tenant.sql', 'sql/122_mortgage_desk_return_to_tenant.sql'],
+  ['aws/workflows/sql/123_checkalt_deposit_check_status.sql', 'sql/123_checkalt_deposit_check_status.sql'],
   ['aws/functions/api/rds-global-bundle.pem', 'rds-global-bundle.pem'],
   ['scripts/deployment-guard/lib/sql-apply.mjs', 'lib/sql-apply.mjs'],
   ['scripts/deployment-guard/lib/sql-executor-auth.mjs', 'lib/sql-executor-auth.mjs'],

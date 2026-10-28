@@ -2742,6 +2742,30 @@ export const AUTHORIZED_SQL122_MORTGAGE_DESK_RETURN_TO_TENANT = Object.freeze({
   ]),
 });
 
+// Check Alt 2026-10-28 staging pin: SQL 123 (a Check Alt deposit approved or accepted moves its check
+// forward to Deposited; rejected, error, duplicate or returned after approval moves it to Returned, as
+// record_check_return records a return; a one-time move of checks already approved and billed). Two
+// SECURITY DEFINER functions with EXECUTE for the owner only and one trigger on checkalt_deposits that
+// fires before SQL 120's and SQL 121's. No predecessor. Pending until a reviewed pin change records a
+// staging read-live.
+export const AUTHORIZED_SQL123_CHECKALT_DEPOSIT_CHECK_STATUS = Object.freeze({
+  key: 'sql123',
+  filename: 'aws/workflows/sql/123_checkalt_deposit_check_status.sql',
+  migration_id: '123_checkalt_deposit_check_status',
+  // The commit that last authored the file bytes.
+  commit: '525ff1647068d2824cf45d8b271b0525a774be9f',
+  source_sha256: '8f742d9d853373ab0674d46d733ccdf2a9ede0c299f662b5e3b00991f240758f',
+  authorization: 'pending',
+  execute: false,
+  expected_live_definition_sha256: null,
+  // Code-derived: releaseIntendedHash('sql123', file bytes) (release-sql-state.mjs); re-derived by the tests.
+  intended_replacement_sha256: 'e982bd786ca1b7bd107d4156359b32d5032fcb0b5e7962c5b2fd457387c230fc',
+  function_identities: Object.freeze([
+    'public.aws_checkalt_mark_check_deposited(uuid, timestamp with time zone)',
+    'public.aws_apply_checkalt_check_status()',
+  ]),
+});
+
 export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql90: AUTHORIZED_SQL90_USERS_ONLY_TENANT_ROLES,
   sql91: AUTHORIZED_SQL91_MOOV_ONBOARDING,
@@ -2775,6 +2799,7 @@ export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql120: AUTHORIZED_SQL120_USAGE_EVENTS_AT_APPROVAL_AND_SEND,
   sql121: AUTHORIZED_SQL121_CASH_JOBS_PRODUCTION_GRANTS,
   sql122: AUTHORIZED_SQL122_MORTGAGE_DESK_RETURN_TO_TENANT,
+  sql123: AUTHORIZED_SQL123_CHECKALT_DEPOSIT_CHECK_STATUS,
 });
 
 // The fee collection pin under its earlier map name (the same object as the release map's sql98).
@@ -2790,7 +2815,7 @@ export function isSql30TenantDocumentsDocType(input = {}) {
   return pinIdentifiersMatch(input, AUTHORIZED_SQL30_TENANT_DOCUMENTS_DOC_TYPE);
 }
 
-/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql122) an input names, or null. */
+/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql123) an input names, or null. */
 export function releaseSqlMigrationKey(input = {}) {
   return Object.keys(RELEASE_2026_10_17_PENDING_SQL_PINS)
     .find((key) => pinIdentifiersMatch(input, RELEASE_2026_10_17_PENDING_SQL_PINS[key])) || null;

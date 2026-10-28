@@ -46,6 +46,7 @@ that connects to the database:
 | `sql120` | `scripts/deployment-guard/sql120-usage-events-at-approval-and-send-production-apply.mjs` (`ops/production-sql-120-apply.md`; usage events at Check Alt approval and at send time: two triggers, five owner-only functions, the one-fee-per-leg unique index and a backfill from 2026-10-01; no predecessor) |
 | `sql121` | `scripts/deployment-guard/sql121-cash-jobs-grants-production-apply.mjs` (`ops/production-sql-121-apply.md`; SELECT, INSERT, UPDATE, DELETE on `cash_jobs`, `cash_job_line_items` and `cash_job_attachments` for `checksops` and `authenticated`, `sync_cash_job_check_payment()` SECURITY DEFINER and owner-only, and the cash-job payment at Check Alt approval: one owner-only function and its trigger on `checkalt_deposits`; no predecessor) |
 | `sql122` | `scripts/deployment-guard/sql122-mortgage-desk-return-to-tenant-production-apply.mjs` (`ops/production-sql-122-apply.md`; the Mortgage Desk returns its work to the tenant: `mortgage_handling_requests.return_emailed_at` and six SECURITY DEFINER functions, five with EXECUTE for `checksops` (Desk message, Desk document, shipping details, homeowner timeline row, "work returned" email claim) and the owner-only working-request check; no policy, table grant or trigger; no predecessor) |
+| `sql123` | `scripts/deployment-guard/sql123-checkalt-deposit-check-status-production-apply.mjs` (`ops/production-sql-123-apply.md`; a Check Alt deposit approved or accepted moves its check to Deposited, rejected, error, duplicate or returned after approval moves it to Returned: two owner-only SECURITY DEFINER functions and one trigger on `checkalt_deposits` that fires before SQL 120's and SQL 121's, and a one-time move of checks already approved and billed; no predecessor) |
 
 To add a migration, register its reviewed tool in `ONE_SHOT_TOOLS`
 (`scripts/deployment-guard/lib/production-sql-one-shot.mjs`). An entry names only the tool,
@@ -60,7 +61,7 @@ a migration file touches its pin, not the registry. An entry may add `inspect_re
 
 | flag | |
 |---|---|
-| `--migration <key>` | a registered key (`sql29`, `sql30`, `sql71`, `sql77`…`sql89`, `sql90`…`sql106`, `sql108`, `sql109`, `sql110`, `sql111`, `sql112`, `sql113`, `sql114`, `sql115`, `sql116`, `sql117`, `sql118`, `sql119`, `sql120`, `sql121`, `sql122`) |
+| `--migration <key>` | a registered key (`sql29`, `sql30`, `sql71`, `sql77`…`sql89`, `sql90`…`sql106`, `sql108`, `sql109`, `sql110`, `sql111`, `sql112`, `sql113`, `sql114`, `sql115`, `sql116`, `sql117`, `sql118`, `sql119`, `sql120`, `sql121`, `sql122`, `sql123`) |
 | `--approval-scope <key>` | the migration the owner approved; must equal `--migration` |
 | `--approval-statement "<words>"` or `--approval-statement-b64 <base64>` | the owner's exact words, recorded verbatim. Pass exactly one of the two. Use the base64 form when the words contain quotes or newlines. Must be non-empty. |
 | `--commit <sha>` | the full main commit the tarball was built from |
