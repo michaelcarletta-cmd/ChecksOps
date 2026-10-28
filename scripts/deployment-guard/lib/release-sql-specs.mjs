@@ -1,5 +1,5 @@
 /**
- * Specs of the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108 to SQL 122) for the shared engine in
+ * Specs of the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108 to SQL 123) for the shared engine in
  * release-sql-state.mjs: what each pinned file creates, replaces or drops, the reviewed
  * EXECUTE ACLs, the prerequisites and predecessors, and the PostgreSQL renderings the file
  * leaves (policy expressions, view, column, constraint, index and trigger definitions as
@@ -4981,6 +4981,107 @@ export const RELEASE_SQL_SPECS = deepFreeze({
     ],
     "altered_relations": [
       "public.mortgage_handling_requests"
+    ]
+  },
+  // SQL 123: a Check Alt deposit moves its check (owner, 2026-10-28). Two owner-only SECURITY
+  // DEFINER functions: aws_checkalt_mark_check_deposited(uuid, timestamptz) moves a check forward to
+  // Deposited, and the trigger function aws_apply_checkalt_check_status() with its trigger on
+  // checkalt_deposits (approved or accepted: Deposited; rejected, error, duplicate or returned after
+  // approval: Returned as record_check_return records it). The trigger's name sorts before SQL 120's
+  // and SQL 121's on the same table, so it fires first. A one-time move of checks already approved
+  // and billed. No predecessor: the file checks every table, column and the check_stage labels it
+  // uses (prerequisites; the labels in the file). definer_writes: the functions update
+  // check_intake_items and insert check_audit_log. counts: the checks the one-time move takes and
+  // the approved checks it leaves (no usage event), for the inspect.
+  sql123: {
+    "key": "sql123",
+    "label": "SQL 123",
+    "choice": "sql123-checkalt-deposit-check-status",
+    "production_pin_rel": "ops/deployment-guard/sql123-checkalt-deposit-check-status-production-apply.json",
+    "script": "sql123-checkalt-deposit-check-status-production-apply",
+    "prerequisites": [
+      "public.check_intake_items",
+      "public.checkalt_deposits",
+      "public.check_audit_log",
+      "public.check_billing_events",
+      "type public.check_stage",
+      "column public.check_intake_items.id",
+      "column public.check_intake_items.tenant_id",
+      "column public.check_intake_items.status",
+      "column public.check_intake_items.check_stage",
+      "column public.check_intake_items.deposited_at",
+      "column public.check_intake_items.pre_return_stage",
+      "column public.check_intake_items.returned_at",
+      "column public.check_intake_items.return_code",
+      "column public.check_intake_items.return_reason",
+      "column public.check_intake_items.return_notes",
+      "column public.check_intake_items.return_recorded_by",
+      "column public.check_intake_items.return_source",
+      "column public.check_intake_items.return_resolved_at",
+      "column public.check_intake_items.return_resolution",
+      "column public.check_intake_items.updated_at",
+      "column public.checkalt_deposits.id",
+      "column public.checkalt_deposits.check_intake_item_id",
+      "column public.checkalt_deposits.status",
+      "column public.checkalt_deposits.submitted_at",
+      "column public.checkalt_deposits.returned_at",
+      "column public.checkalt_deposits.return_reason",
+      "column public.check_audit_log.check_id",
+      "column public.check_audit_log.tenant_id",
+      "column public.check_audit_log.actor_id",
+      "column public.check_audit_log.event_type",
+      "column public.check_audit_log.event_description",
+      "column public.check_audit_log.event_data",
+      "column public.check_billing_events.check_intake_item_id",
+      "column public.check_billing_events.event_type",
+      "column public.check_billing_events.status"
+    ],
+    "predecessors": [],
+    "counts": {
+      "checkalt_approved_checks_to_move": {
+        "requires": [
+          "public.checkalt_deposits",
+          "public.check_intake_items",
+          "public.check_billing_events"
+        ],
+        "sql": "SELECT count(DISTINCT c.id)::int AS n FROM public.checkalt_deposits d\nJOIN public.check_intake_items c ON c.id = d.check_intake_item_id\nWHERE lower(COALESCE(d.status, '')) IN ('submitted', 'cleared')\nAND (c.check_stage IS NULL OR c.check_stage::text IN ('review', 'loss_draft', 'endorsing', 'ready_for_deposit'))\nAND EXISTS (SELECT 1 FROM public.check_billing_events e WHERE e.check_intake_item_id = c.id\nAND e.event_type = 'check_processing' AND e.status <> 'voided')"
+      },
+      "checkalt_approved_checks_left_unbilled": {
+        "requires": [
+          "public.checkalt_deposits",
+          "public.check_intake_items",
+          "public.check_billing_events"
+        ],
+        "sql": "SELECT count(DISTINCT c.id)::int AS n FROM public.checkalt_deposits d\nJOIN public.check_intake_items c ON c.id = d.check_intake_item_id\nWHERE lower(COALESCE(d.status, '')) IN ('submitted', 'cleared')\nAND (c.check_stage IS NULL OR c.check_stage::text IN ('review', 'loss_draft', 'endorsing', 'ready_for_deposit'))\nAND NOT EXISTS (SELECT 1 FROM public.check_billing_events e WHERE e.check_intake_item_id = c.id\nAND e.event_type = 'check_processing' AND e.status <> 'voided')"
+      }
+    },
+    "functions": [
+      {
+        "identity": "public.aws_checkalt_mark_check_deposited(uuid, timestamp with time zone)",
+        "acl": [
+          "owner EXECUTE"
+        ]
+      },
+      {
+        "identity": "public.aws_apply_checkalt_check_status()",
+        "acl": [
+          "owner EXECUTE"
+        ]
+      }
+    ],
+    "triggers": [
+      {
+        "table": "public.checkalt_deposits",
+        "name": "aws_checkalt_deposit_apply_check_status",
+        "def": "CREATE TRIGGER aws_checkalt_deposit_apply_check_status AFTER INSERT OR UPDATE OF status ON public.checkalt_deposits FOR EACH ROW EXECUTE FUNCTION public.aws_apply_checkalt_check_status()"
+      }
+    ],
+    "definer_writes": [
+      "public.check_intake_items",
+      "public.check_audit_log"
+    ],
+    "altered_relations": [
+      "public.checkalt_deposits"
     ]
   },
 });

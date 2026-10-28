@@ -201,7 +201,7 @@ test('pin: the release pin shape, applied and retired (owner approved 2026-10-26
   assert.doesNotMatch(JSON.stringify(tool), /[0-9a-f]{64}/);
   const rows = JSON.stringify(readJson('ops/deployment-guard/bypass-inventory.json'));
   assert.match(rows, /"path":"scripts\/deployment-guard\/sql116-moov-onboarding-profile-industry-production-apply\.mjs","classification":"GUARDED","capabilities":\["sql116-production-apply"\]/);
-  assert.match(rows, /sql113, sql114, sql115, sql116, sql117, sql118, sql119, sql120, sql121, sql122\)/);
+  assert.match(rows, /sql113, sql114, sql115, sql116, sql117, sql118, sql119, sql120, sql121, sql122, sql123\)/);
   const scripts = readJson('package.json').scripts;
   const workflow = fs.readFileSync(path.join(ROOT, '.github/workflows/deployment-guard.yml'), 'utf8');
   for (const name of ['aws/tests/release-sql116-executor.test.mjs', 'aws/tests/release-sql116-production-apply.test.mjs']) {
@@ -229,7 +229,7 @@ test('order: after SQL 91, which it supersedes; the column is new to SQL 91\'s t
   assert.match(runbook, /read-live \(2026-10-26\)\.\*\* Run 40336144625/);
   const oneShot = fs.readFileSync(path.join(ROOT, 'ops/production-sql-one-shot.md'), 'utf8');
   assert.match(oneShot, /\| `sql116` \|/);
-  assert.match(oneShot, /`sql117`, `sql118`, `sql119`, `sql120`, `sql121`, `sql122`\) \|/);
+  assert.match(oneShot, /`sql117`, `sql118`, `sql119`, `sql120`, `sql121`, `sql122`, `sql123`\) \|/);
   assert.match(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/README.md'), 'utf8'), /sql116-moov-onboarding-profile-industry-production-apply\.mjs --inspect/);
 });
 

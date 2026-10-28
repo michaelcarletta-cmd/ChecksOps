@@ -1,0 +1,65 @@
+{
+  "id": "sql123-checkalt-deposit-check-status-production-apply",
+  "migration": "sql123",
+  "authorization": "pending",
+  "execute": false,
+  "target_environment": "production",
+  "target_component": "production-sql",
+  "deployment_type": "sql-apply",
+  "filename": "aws/workflows/sql/123_checkalt_deposit_check_status.sql",
+  "migration_id": "123_checkalt_deposit_check_status",
+  "staging_pin_commit": "525ff1647068d2824cf45d8b271b0525a774be9f",
+  "source_sha256": "8f742d9d853373ab0674d46d733ccdf2a9ede0c299f662b5e3b00991f240758f",
+  "function_identities": [
+    "public.aws_checkalt_mark_check_deposited(uuid, timestamp with time zone)",
+    "public.aws_apply_checkalt_check_status()"
+  ],
+  "expected_live_definition_sha256": null,
+  "intended_replacement_sha256": "e982bd786ca1b7bd107d4156359b32d5032fcb0b5e7962c5b2fd457387c230fc",
+  "authorization_phrase": "APPLY_CHECKALT_DEPOSIT_CHECK_STATUS",
+  "predecessors": [],
+  "order_note": "No predecessor and no ordering constraint. SQL 123 needs check_intake_items with its deposit and return columns, the check_stage labels 'deposited' and 'returned', checkalt_deposits, check_audit_log and check_billing_events (spec prerequisites; the labels are checked by the file, 42704 sql123_check_stage_label_missing; a read-only production inspect confirms the rest). It works with SQL 120 and SQL 121 when they are live (its trigger fires first on checkalt_deposits; one usage event and one cash-job payment per check either way) and needs neither. Adds one public trigger (aws_checkalt_deposit_apply_check_status): the DB validator's justified set and expected count follow once this file is applied, as #1309 did for SQL 120, not before. The one-time move touches only checks the inspect counts as checkalt_approved_checks_to_move.",
+  "admin_login": "checksops_admin",
+  "rds_identifier": "checksops-production",
+  "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
+  "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
+  "tooling": {
+    "status": "built",
+    "production_tool": "scripts/deployment-guard/sql123-checkalt-deposit-check-status-production-apply.mjs",
+    "production_lib": "scripts/deployment-guard/lib/release-sql-production-apply.mjs",
+    "staging_executor_handler": "aws/write-path/guarded-sql-executor/index.mjs handleReleaseSqlMigration",
+    "staging_workflow_choice": "sql123-checkalt-deposit-check-status",
+    "one_shot_migration": "sql123",
+    "fingerprint_engine": "scripts/deployment-guard/lib/release-sql-state.mjs",
+    "runbook": "ops/production-sql-123-apply.md",
+    "tests": [
+      "aws/tests/release-sql123-executor.test.mjs",
+      "aws/tests/release-sql123-production-apply.test.mjs",
+      "aws/tests/release-sql90-97-executor.test.mjs",
+      "aws/tests/release-sql90-97-production-apply.test.mjs",
+      "aws/tests/sql123-checkalt-check-status-pg.test.mjs"
+    ],
+    "note": "Guarded tooling for SQL 123: sql123-checkalt-deposit-check-status-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql123-checkalt-deposit-check-status); production-sql-one-shot.mjs --migration sql123. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): the two new functions (bodies and attributes from the file, EXECUTE for the owner only) and the trigger on checkalt_deposits. The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
+  },
+  "production_inspect": {
+    "status": "pending",
+    "date": null,
+    "ssm_command_id": null,
+    "source_commit": null,
+    "read_only": true,
+    "connected_as": "checksops_admin",
+    "live_definition_sha256": null,
+    "apply_preconditions_met": null,
+    "precondition_failures": null,
+    "note": "Pending: no read-only production inspect has been run for SQL 123 yet. Record its date, SSM command id, source commit, live_definition_sha256, prerequisites_missing, counts (checkalt_approved_checks_to_move: approved Check Alt checks still before Deposited that already carry a usage event, which the file moves; checkalt_approved_checks_left_unbilled: those without one, which it leaves), precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. Stop if prerequisites_missing is not [] or precondition_failures is not [] (altered_relations_owned_by_login: checksops_admin does not own checkalt_deposits; definer_can_write_relations: it cannot write check_intake_items or check_audit_log): that needs its own reviewed change."
+  },
+  "intended_post_state": {
+    "fingerprint": "e982bd786ca1b7bd107d4156359b32d5032fcb0b5e7962c5b2fd457387c230fc",
+    "note": "public.aws_checkalt_mark_check_deposited(uuid, timestamp with time zone) and public.aws_apply_checkalt_check_status() owned by checksops_admin, SECURITY DEFINER, search_path public, pg_temp, row_security off, EXECUTE for the owner only, and the trigger aws_checkalt_deposit_apply_check_status (AFTER INSERT OR UPDATE OF status ON checkalt_deposits). No column, policy, grant or other trigger change; the one-time move updates rows of check_intake_items only (and, through their existing triggers, what a deposit already records). The fingerprint is releaseIntendedHash('sql123', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): e982bd786ca1b7bd107d4156359b32d5032fcb0b5e7962c5b2fd457387c230fc."
+  },
+  "staging_acceptance": {
+    "ok": false,
+    "reference": null,
+    "basis": "Pending: record the guarded staging SQL executor read-live (and, if staging is not yet at the intended state, the staging apply) of SQL 123 (choice sql123-checkalt-deposit-check-status) here in the reviewed change that sets execute true. The behavior is covered on PostgreSQL 16 by aws/tests/sql123-checkalt-check-status-pg.test.mjs. Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+  }
+}
