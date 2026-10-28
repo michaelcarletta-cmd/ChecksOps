@@ -2612,15 +2612,35 @@ test('Mortgage Desk return: ADD mortgage-desk-return.mjs held on SQL 122 (record
   }
 });
 
-test('DB validator SQL 123 trigger: db-readonly-validate.mjs replaces the bytes rebuild inspect run 40741101459 found live', async () => {
+test('DB validator SQL 123 trigger: db-readonly-validate.mjs replaced the bytes rebuild inspect run 40741101459 found live; production run 40743616203 applied main\'s bytes', async () => {
   const MEMBER = 'db-readonly-validate.mjs';
   const LIVE = '71cc313ed9e4156be1bf2513bd8829621ffa63579c445563e1a12eb056bc1147';
   const MANIFEST_REL = 'aws/tests/fixtures/production-db-validator-sql123-trigger-manifest-2026-10-28.json';
+  const APPLIED_REL = 'aws/tests/fixtures/production-db-validator-sql123-trigger-applied-manifest-2026-10-28.json';
   const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, MANIFEST_REL), 'utf8'));
   const accepted = sha(`aws/functions/api/${MEMBER}`);
   // Main's bytes (#1338) justify SQL 123's trigger and expect 184 public triggers.
   assert.match(fs.readFileSync(path.join(API, MEMBER), 'utf8'), /^export const EXPECTED_PUBLIC_TRIGGERS = 184;$/m);
-  assert.deepEqual(PLAN.members[MEMBER], { operation: 'replace', accepted_sha256: accepted, expected_live_sha256: LIVE, sql_before: null, manifest: MANIFEST_REL });
+  // Applied 2026-10-28: the row records the applied bytes and names the applied manifest.
+  assert.deepEqual(PLAN.members[MEMBER], { operation: 'replace', accepted_sha256: accepted, expected_live_sha256: accepted, sql_before: null, manifest: APPLIED_REL });
+  // Staging overlay 40739554272, pre-apply inspect 40743427458, apply 40743616203 (VERIFIED), rebuild inspect 40741101459.
+  const appliedManifest = JSON.parse(fs.readFileSync(path.join(ROOT, APPLIED_REL), 'utf8'));
+  assert.equal(appliedManifest.workstream_id, 'production-db-validator-sql123-trigger-applied');
+  assert.equal(appliedManifest.deploy_authorized, false);
+  assert.match(appliedManifest.authorization, /^Record only/);
+  assert.deepEqual(appliedManifest.members, { [MEMBER]: { live_sha256: accepted, accepted_sha256: accepted, operation: 'replace', previous_manifest: MANIFEST_REL } });
+  for (const runId of ['40739554272', '40743427458', '40743616203', '40741101459']) {
+    assert.match(PLAN.notes, new RegExp(runId), runId);
+    assert.match(appliedManifest.notes, new RegExp(`run ${runId}`), runId);
+  }
+  for (const evidence of ['"DEPLOY db-readonly-validate.mjs TO PRODUCTION"', 'hxOfJbEhwGz1cGJ/DaQlJ6ABMg069YFcEBISf8U6DIo=', 'caf1b784-3e52-4264-8ad6-55bbe1b7f8d6', 'WV2B9GAvLcd7R+NgSPDS/gt+X3xHipLm2LSc/xCtm98=', '7413f101-ef5a-4f8c-949a-781fa1959e60']) {
+    assert.ok(appliedManifest.notes.includes(evidence), evidence);
+  }
+  // The live CodeSha256 after the apply is the rebuild inspect's candidate zip of main e3823b5c5.
+  const CANDIDATE_ZIP = '87139f25b121c06cf570627f0da42527a001320d3af5815c1012127fc53a0c8a';
+  assert.equal(Buffer.from('hxOfJbEhwGz1cGJ/DaQlJ6ABMg069YFcEBISf8U6DIo=', 'base64').toString('hex'), CANDIDATE_ZIP);
+  assert.ok(appliedManifest.notes.includes(CANDIDATE_ZIP));
+  // The planned manifest keeps the pre-apply state.
   assert.equal(manifest.deploy_authorized, false);
   assert.deepEqual(manifest.members[MEMBER], { live_sha256: LIVE, accepted_sha256: accepted, operation: 'replace' });
   for (const evidence of ['#1338', '40739554272', '40741101459', 'WV2B9GAvLcd7R+NgSPDS/gt+X3xHipLm2LSc/xCtm98=', '7413f101-ef5a-4f8c-949a-781fa1959e60', '"open the validator plan PR"']) {
@@ -2631,15 +2651,24 @@ test('DB validator SQL 123 trigger: db-readonly-validate.mjs replaces the bytes 
   assert.ok(!localImports(fs.readFileSync(path.join(API, MEMBER), 'utf8'), MEMBER).some((dep) => PLAN.members[dep]));
   for (const name of PLAN.order) assert.ok(!localImports(fs.readFileSync(path.join(API, name), 'utf8'), name).includes(MEMBER), name);
   const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
-  assert.equal((await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER) })).state, 'READY');
-  assert.equal((await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: accepted }) })).state, 'ALREADY_ACCEPTED');
-  await assert.rejects(
-    run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: 'e'.repeat(64) }) }),
-    (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
-  );
-  // With every earlier member at its accepted bytes (the rebuild inspect found all other members at main's bytes), apply is ready.
-  const { deps, calls } = applyDeps(MEMBER);
-  const result = await run(applyEnv(MEMBER), deps);
+  // Inspect accepts the applied bytes as done; the pre-apply bytes are no longer an accepted live state.
+  const done = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: accepted }) });
+  assert.equal(done.state, 'ALREADY_ACCEPTED');
+  assert.equal(done.mutation, false);
+  for (const other of [LIVE, 'e'.repeat(64)]) {
+    await assert.rejects(
+      run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: other }) }),
+      (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+      other,
+    );
+  }
+  // The plan before this record (over the pre-apply bytes) was READY, and its apply was ready with every
+  // earlier member at its accepted bytes (the rebuild inspect found all other members at main's bytes).
+  const before = structuredClone(PLAN);
+  before.members[MEMBER] = { ...before.members[MEMBER], expected_live_sha256: LIVE, manifest: MANIFEST_REL };
+  assert.equal((await run(inspect, { root: ROOT, plan: before, inspectLive: liveFor(MEMBER, { plan: before }) })).state, 'READY');
+  const { deps, calls } = applyDeps(MEMBER, { plan: before });
+  const result = await run(applyEnv(MEMBER, { CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: LIVE }), deps);
   assert.equal(result.mutation, false);
   assert.deepEqual(calls.receipt.owned_member_ops, { replace: [MEMBER], add: [] });
 });
