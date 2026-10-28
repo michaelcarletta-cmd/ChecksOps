@@ -1,0 +1,71 @@
+{
+  "id": "sql124-mortgage-desk-signature-and-reads-production-apply",
+  "migration": "sql124",
+  "authorization": "pending",
+  "execute": false,
+  "target_environment": "production",
+  "target_component": "production-sql",
+  "deployment_type": "sql-apply",
+  "filename": "aws/workflows/sql/124_mortgage_desk_signature_and_reads.sql",
+  "migration_id": "124_mortgage_desk_signature_and_reads",
+  "staging_pin_commit": "51fdd33dccbda35993ed4e1a3f42297979a7aa2a",
+  "source_sha256": "0b597e65eec3bbcf96fd685b757015645a58bd224c942bef6c66c251de2be76f",
+  "function_identities": [
+    "public.aws_mortgage_desk_readable_request(uuid)",
+    "public.aws_mortgage_desk_messages(uuid)",
+    "public.aws_mortgage_desk_check_files(uuid)",
+    "public.aws_mortgage_desk_signature_requests(uuid)",
+    "public.aws_mortgage_desk_can_read_path(text[], text)",
+    "public.aws_mortgage_desk_create_signature_request(uuid, text, text, text, jsonb, jsonb, timestamp with time zone)",
+    "public.aws_mortgage_desk_record_signature_delivery(uuid, uuid, jsonb)",
+    "public.aws_mortgage_desk_post_timeline(uuid, text, text)"
+  ],
+  "expected_live_definition_sha256": null,
+  "intended_replacement_sha256": "daeeff54652d04b45bd7cbfb3e47f56209b90ce14c7410c32285e3cf8b129ccb",
+  "authorization_phrase": "APPLY_MORTGAGE_DESK_SIGNATURE_AND_READS",
+  "predecessors": [],
+  "order_note": "No predecessor and no ordering constraint. SQL 124 needs SQL 122's public.aws_mortgage_desk_working_request(uuid, text[]) (applied to production 2026-10-28), SQL 100's public.aws_is_mortgage_ops_agent(), SQL 90's public.aws_is_platform_owner_user(uuid), public.is_platform_owner(), public.has_role(uuid, public.app_role), auth.uid(), pg_catalog.sha256(bytea), role checksops, and public.check_messages, public.check_files, public.check_intake_items, public.mortgage_handling_requests, public.homeowner_ledger_events, public.signature_requests, public.signature_signers, public.signature_fields and public.esign_event_logs with the columns the functions use (spec prerequisites; a read-only production inspect confirms them), and the applying login must be able to read and write those eight tables under RLS (definer_can_write_relations: it owns them without FORCE ROW LEVEL SECURITY; signature_requests, signature_signers, signature_fields and esign_event_logs are the four this file adds to SQL 122's rule). The API change that calls these functions and the SPA change are a separate, later step after SQL 124 is live in staging; until then nothing calls them. Adds no trigger: the DB validator's public trigger count is not affected.",
+  "admin_login": "checksops_admin",
+  "rds_identifier": "checksops-production",
+  "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
+  "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
+  "tooling": {
+    "status": "built",
+    "production_tool": "scripts/deployment-guard/sql124-mortgage-desk-signature-and-reads-production-apply.mjs",
+    "production_lib": "scripts/deployment-guard/lib/release-sql-production-apply.mjs",
+    "staging_executor_handler": "aws/write-path/guarded-sql-executor/index.mjs handleReleaseSqlMigration",
+    "staging_workflow_choice": "sql124-mortgage-desk-signature-and-reads",
+    "one_shot_migration": "sql124",
+    "fingerprint_engine": "scripts/deployment-guard/lib/release-sql-state.mjs",
+    "runbook": "ops/production-sql-124-apply.md",
+    "tests": [
+      "aws/tests/release-sql124-executor.test.mjs",
+      "aws/tests/release-sql124-production-apply.test.mjs",
+      "aws/tests/release-sql90-97-executor.test.mjs",
+      "aws/tests/release-sql90-97-production-apply.test.mjs",
+      "aws/tests/sql124-mortgage-desk-signature-pg.test.mjs"
+    ],
+    "note": "Guarded tooling for SQL 124: sql124-mortgage-desk-signature-and-reads-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql124-mortgage-desk-signature-and-reads); production-sql-one-shot.mjs --migration sql124. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): the eight functions (body and attributes from the file, the two TABLE results as PostgreSQL renders them, EXECUTE for checksops and the owner, the readable-request check for the owner only). The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
+  },
+  "production_inspect": {
+    "status": "pending",
+    "date": null,
+    "ssm_command_id": null,
+    "source_commit": null,
+    "read_only": true,
+    "connected_as": "checksops_admin",
+    "live_definition_sha256": null,
+    "apply_preconditions_met": null,
+    "precondition_failures": null,
+    "note": "Pending: no read-only production inspect has been run for SQL 124 yet. Expected: the eight functions absent, prerequisites_missing [], definer_writes ok for check_messages, check_files, mortgage_handling_requests, homeowner_ledger_events, signature_requests, signature_signers, signature_fields and esign_event_logs. Record its date, SSM command id, source commit, live_definition_sha256, prerequisites_missing, release_sql_inspect.functions, release_sql_inspect.definer_writes, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. Stop if prerequisites_missing is not [] (a table, column or helper absent in production) or precondition_failures is not [] (definer_can_write_relations: checksops_admin does not own one of the eight tables, or it has FORCE ROW LEVEL SECURITY; function_acl_replaceable): that needs its own reviewed change."
+  },
+  "intended_post_state": {
+    "fingerprint": "daeeff54652d04b45bd7cbfb3e47f56209b90ce14c7410c32285e3cf8b129ccb",
+    "note": "Eight functions owned by checksops_admin, SECURITY DEFINER, search_path public: aws_mortgage_desk_readable_request(uuid) (plpgsql, STABLE, EXECUTE for the owner only); aws_mortgage_desk_messages(uuid), aws_mortgage_desk_check_files(uuid), aws_mortgage_desk_signature_requests(uuid) (plpgsql, STABLE), aws_mortgage_desk_can_read_path(text[], text) (sql, STABLE), aws_mortgage_desk_create_signature_request(uuid, text, text, text, jsonb, jsonb, timestamp with time zone), aws_mortgage_desk_record_signature_delivery(uuid, uuid, jsonb) and aws_mortgage_desk_post_timeline(uuid, text, text) (plpgsql, VOLATILE) (EXECUTE for checksops and the owner). No table, column, policy, RLS setting, table grant, trigger or row change; every existing function unchanged. The fingerprint is releaseIntendedHash('sql124', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): daeeff54652d04b45bd7cbfb3e47f56209b90ce14c7410c32285e3cf8b129ccb."
+  },
+  "staging_acceptance": {
+    "ok": false,
+    "reference": null,
+    "basis": "Pending: record the guarded staging SQL executor read-live (and, if staging is not yet at the intended state, the staging apply) of SQL 124 (choice sql124-mortgage-desk-signature-and-reads) here in the reviewed change that sets execute true. The behavior is covered on PostgreSQL 16 by aws/tests/sql124-mortgage-desk-signature-pg.test.mjs. Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+  }
+}
