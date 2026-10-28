@@ -2772,8 +2772,8 @@ export const AUTHORIZED_SQL123_CHECKALT_DEPOSIT_CHECK_STATUS = Object.freeze({
 // updates). Eight SECURITY DEFINER functions: seven with EXECUTE for checksops (the check's messages,
 // files and signature requests, the storage-read check of a path, the create of a draft signature
 // request, the record of its email sends, a homeowner timeline row) and the internal readable-request
-// check for the owner only. No predecessor. Pending until a reviewed pin change records a staging
-// read-live.
+// check for the owner only. No predecessor. Staging apply authorized (wave 23) from staging read-live
+// run 40754712957.
 export const AUTHORIZED_SQL124_MORTGAGE_DESK_SIGNATURE_AND_READS = Object.freeze({
   key: 'sql124',
   filename: 'aws/workflows/sql/124_mortgage_desk_signature_and_reads.sql',
@@ -2781,9 +2781,10 @@ export const AUTHORIZED_SQL124_MORTGAGE_DESK_SIGNATURE_AND_READS = Object.freeze
   // The commit that last authored the file bytes.
   commit: '51fdd33dccbda35993ed4e1a3f42297979a7aa2a',
   source_sha256: '0b597e65eec3bbcf96fd685b757015645a58bd224c942bef6c66c251de2be76f',
-  authorization: 'pending',
-  execute: false,
-  expected_live_definition_sha256: null,
+  authorization: 'Owner approved 2026-10-28: staging apply (wave 23) from staging read-live run 40754712957',
+  execute: true,
+  // Staging read-live run 40754712957 (main 3606348, executor OWClSgc4...): the eight functions absent.
+  expected_live_definition_sha256: '59fe6907e23de341e97d4aec548203d0cd7f7cf320b009e0e440d247d82a4db2',
   // Code-derived: releaseIntendedHash('sql124', file bytes) (release-sql-state.mjs); re-derived by the tests.
   intended_replacement_sha256: 'daeeff54652d04b45bd7cbfb3e47f56209b90ce14c7410c32285e3cf8b129ccb',
   function_identities: Object.freeze([
