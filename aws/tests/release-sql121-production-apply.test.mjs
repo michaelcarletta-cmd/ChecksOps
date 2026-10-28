@@ -219,7 +219,7 @@ test('pin: the release pin shape, applied and retired (owner approved 2026-10-27
   }
 });
 
-test('order: no predecessor and no order; the cash-job tables, columns, function and checkalt_deposits are prerequisites; the plan holds only workflow.mjs on it, not yet live in production; the DB validator justifies its trigger since the staging apply; the runbook, one-shot doc and README name it', () => {
+test('order: no predecessor and no order; the cash-job tables, columns, function and checkalt_deposits are prerequisites; the plan holds only workflow.mjs on it, recorded live in production; the DB validator justifies its trigger since the staging apply; the runbook, one-shot doc and README name it', () => {
   const spec = RELEASE_SQL_SPECS[KEY];
   assert.deepEqual(spec.predecessors, []);
   for (const object of ['public.cash_jobs', 'public.cash_job_line_items', 'public.cash_job_attachments', 'public.cash_job_payments',
@@ -231,11 +231,12 @@ test('order: no predecessor and no order; the cash-job tables, columns, function
   assert.match(COMMITTED.order_note, /^No predecessor and no ordering constraint\./);
   assert.match(COMMITTED.order_note, /#1309/);
   const plan = readJson('ops/deployment-guard/production-api-overlay-plan.json');
-  // The cash-job check link (workflow.mjs) is the one member held on it; production records it
-  // verified live only after its production apply.
+  // The cash-job check link (workflow.mjs) is the one member held on it; production records it verified
+  // live since its production apply (2026-10-27, the applied record of this pin).
   const pre = plan.sql_prerequisites[SQL121_FILE];
-  assert.equal(pre.verified_live, false);
-  assert.equal(pre.evidence, null);
+  assert.equal(pre.verified_live, true);
+  assert.ok(pre.evidence.includes(`SSM ${COMMITTED.applied.apply_ssm_command_id}`));
+  assert.ok(pre.evidence.includes(COMMITTED.applied.one_use_id));
   assert.equal(pre.pin, 'ops/deployment-guard/sql121-cash-jobs-grants-production-apply.json');
   assert.deepEqual(Object.keys(plan.members).filter((m) => plan.members[m].sql_before === SQL121_FILE), ['workflow.mjs']);
   // One public trigger more once applied: the DB validator followed the staging apply (run 40591140684),
