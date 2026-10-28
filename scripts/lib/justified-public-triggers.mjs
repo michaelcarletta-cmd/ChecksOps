@@ -160,10 +160,16 @@ export const POST_RESTORE_PUBLIC_TRIGGERS = Object.freeze([
     table: 'checkalt_deposits',
     trigger: 'aws_checkalt_deposit_cash_job_payment',
     functionName: 'aws_record_cash_job_checkalt_payment',
+  }),  // SQL 123 (123_checkalt_deposit_check_status.sql), applied to staging 2026-10-28 (run 40721665524)
+  // and production (#1336): the check's status follows its Check Alt deposit's status.
+  Object.freeze({
+    table: 'checkalt_deposits',
+    trigger: 'aws_checkalt_deposit_apply_check_status',
+    functionName: 'aws_apply_checkalt_check_status',
   }),
 ]);
 
-export const JUSTIFIED_PUBLIC_TRIGGER_COUNT = 183;
+export const JUSTIFIED_PUBLIC_TRIGGER_COUNT = 184;
 
 const unqualified = (value) => {
   const text = String(value || '');

@@ -52,7 +52,7 @@ export const EXPECTED_ROW_COUNTS = {
 
 export const EXPECTED_DATABASE = 'checksops';
 export const EXPECTED_SKIPPED_AUTH_USERS_FKS = 47;
-export const EXPECTED_PUBLIC_TRIGGERS = 183;
+export const EXPECTED_PUBLIC_TRIGGERS = 184;
 
 export const SUPERSEDED_PUBLIC_TRIGGERS = Object.freeze([
   Object.freeze({
@@ -174,6 +174,12 @@ export const POST_RESTORE_PUBLIC_TRIGGERS = Object.freeze([
     table: 'checkalt_deposits',
     trigger: 'aws_checkalt_deposit_cash_job_payment',
     functionName: 'aws_record_cash_job_checkalt_payment',
+  }),  // SQL 123 (123_checkalt_deposit_check_status.sql), applied to staging 2026-10-28 (run 40721665524)
+  // and production (#1336): the check's status follows its Check Alt deposit's status.
+  Object.freeze({
+    table: 'checkalt_deposits',
+    trigger: 'aws_checkalt_deposit_apply_check_status',
+    functionName: 'aws_apply_checkalt_check_status',
   }),
 ]);
 
