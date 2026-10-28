@@ -24,10 +24,10 @@ const test = (name, fn) => tests.push([name, fn]);
 
 test("Recent Wallet Activity sits in the main grid as a large box", () => {
   const activity = page.indexOf('title="Recent Wallet Activity"');
-  const gridClose = page.indexOf("Running Balance");
   assert.ok(activity > 0);
-  assert.ok(activity < gridClose, "activity should be above running balance");
   assert.match(page, /lg:col-span-2/);
+  // The Running Balance card was removed at the owner's request (#1352); activity is the last section.
+  assert.doesNotMatch(page, /Running Balance/);
 });
 
 test("Balances by Organization is removed", () => {
