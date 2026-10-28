@@ -74,7 +74,28 @@ the definer writes to `check_messages`, `check_files`, `mortgage_handling_reques
 `precondition_failures` `[]`. Recorded in the staging pin (`expected_live_definition_sha256`,
 `execute: true`, wave 23) under the owner's words of 2026-10-28, "start the SQL 124 staging apply".
 
-**Status:** staging pin execute-authorized (wave 23); nothing applied yet; production pin pending. The API and
+**Staging apply (2026-10-28).** Run 40757497983 (main `593ea3f`, after #1349 merged the staging pin and
+executor deploy run 40757069032 carried it, `7UUN4EHi…`; workstream `github-staging-sql-40757497983`):
+receipt before `59fe6907e23de341e97d4aec548203d0cd7f7cf320b009e0e440d247d82a4db2`, after
+`daeeff54652d04b45bd7cbfb3e47f56209b90ce14c7410c32285e3cf8b129ccb` (intended), result `applied`. Read-live
+run 40757812948: `already_applied` true, `precondition_failures` `[]`, the eight functions at the intended
+state (the readable-request check EXECUTE for the owner only, the other seven for `checksops` and the
+owner), every definer write possible.
+
+**Production inspect (2026-10-28).** Read-only `--inspect` through SSM
+`a139e8f8-df32-4f19-a5ce-4471623d65fb` on `i-0c35557c4e5385406`, main `593ea3f` (tarball sha256
+`f20220becb388abed7cf23852971827f1a0a6fdec6922d75e186629c1ddc49b6`, transfer run 40758552614, migration
+source `0b597e65…` == pin), connected as `checksops_admin`: the eight functions absent; every prerequisite
+present; the definer can write `check_messages`, `check_files`, `mortgage_handling_requests`,
+`homeowner_ledger_events`, `signature_requests`, `signature_signers`, `signature_fields` and
+`esign_event_logs` (production confirms the e-sign table ownership the file header asks about); live
+`59fe6907e23de341e97d4aec548203d0cd7f7cf320b009e0e440d247d82a4db2`, `already_applied` false,
+`precondition_failures` `[]`, the same pre-state as staging's. Recorded in the production pin with the
+staging apply as its staging acceptance and `execute: true` under the owner's words of 2026-10-28, "start
+the SQL 124 pin PR". The owner merges the pin change; the apply still needs the owner's run-time approval
+and runs only after that merge is on main and staged.
+
+**Status:** applied to staging (wave 23); production pin execute-authorized; not applied to production. The API and
 SPA change that calls these functions is a separate, later step after SQL 124 is live in staging;
 until then nothing calls them.
 
