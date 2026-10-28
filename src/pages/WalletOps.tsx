@@ -15,25 +15,14 @@ import {
   PowerOff,
   RefreshCw,
   Sparkles,
-  TrendingUp,
   Wallet,
 } from "lucide-react";
-import {
-  Area,
-  AreaChart,
-  CartesianGrid,
-  ResponsiveContainer,
-  Tooltip as RTooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
 import { useWallet } from "@/hooks/useWallet";
 import { useSweepConfig } from "@/hooks/useSweepConfig";
 import {
   useRefreshTransferStatuses,
   useSyncOpenInvoicesOnOpen,
   useWalletOpsTransfers,
-  useWalletRunningBalance,
 } from "@/hooks/useWalletOps";
 
 import { usePaymentProviderEligibility } from "@/hooks/usePaymentProviderEligibility";
@@ -104,10 +93,10 @@ function SectionCard({
   children: React.ReactNode;
 }) {
   return (
-    <Card className="overflow-hidden border-border/60 shadow-sm">
+    <Card className="min-w-0 overflow-hidden border-border/60 shadow-sm">
       <div className={`h-1.5 ${accent}`} />
-      <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0 p-4 pb-2">
-        <CardTitle className="flex items-center gap-2 text-base font-semibold">
+      <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3 space-y-0 p-4 pb-2">
+        <CardTitle className="flex min-w-0 items-center gap-2 text-base font-semibold">
           {icon}
           {title}
         </CardTitle>
@@ -140,14 +129,6 @@ export default function WalletOps() {
   const { data: transferData, isLoading: transfersLoading } = useWalletOpsTransfers();
   useSyncOpenInvoicesOnOpen();
   const refreshStatuses = useRefreshTransferStatuses();
-
-  const { data: runningData, isLoading: runningLoading } = useWalletRunningBalance("operating");
-
-  const runningPoints = runningData?.points ?? [];
-  const chartData = runningPoints.map((p) => ({
-    date: new Date(p.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric" }),
-    balance: p.balance_cents / 100,
-  }));
 
 
   const refreshingBalances = refreshWallet.isPending || refreshSweeps.isPending;
@@ -390,24 +371,24 @@ export default function WalletOps() {
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 text-sm">
             <div>
               <p className="text-[10px] font-bold tracking-wider text-muted-foreground">Wallet</p>
-              <p className="mt-0.5 font-medium">{walletLoading ? "…" : balanceLabel}</p>
+              <p className="mt-0.5 break-words font-medium">{walletLoading ? "…" : balanceLabel}</p>
               <p className="text-xs text-muted-foreground">Available operating balance</p>
             </div>
             <div>
               <p className="text-[10px] font-bold tracking-wider text-muted-foreground">Primary funding account</p>
-              <p className="mt-0.5 font-medium">{fundingBank}</p>
+              <p className="mt-0.5 break-words font-medium">{fundingBank}</p>
               <p className="text-xs text-muted-foreground">Connected bank for this organization</p>
             </div>
             <div>
               <p className="text-[10px] font-bold tracking-wider text-muted-foreground">ChecksOps billing</p>
-              <p className="mt-0.5 font-medium">Wallet first, then connected bank for the remainder</p>
+              <p className="mt-0.5 break-words font-medium">Wallet first, then connected bank for the remainder</p>
               <p className="text-xs text-muted-foreground">
                 Available wallet funds are used first. Any remainder is collected from {fundingBank}.
               </p>
             </div>
             <div>
               <p className="text-[10px] font-bold tracking-wider text-muted-foreground">Automatic payouts</p>
-              <p className="mt-0.5 font-medium">{sweepsOn ? "On" : "Off"}</p>
+              <p className="mt-0.5 break-words font-medium">{sweepsOn ? "On" : "Off"}</p>
               <p className="text-xs text-muted-foreground">
                 {sweepsOn
                   ? "When this is on, leftover wallet money is sent to your bank every day. You do not tap Send."
@@ -416,7 +397,7 @@ export default function WalletOps() {
             </div>
             <div>
               <p className="text-[10px] font-bold tracking-wider text-muted-foreground">Minimum retained balance</p>
-              <p className="mt-0.5 font-medium">{money(minimumCents)}</p>
+              <p className="mt-0.5 break-words font-medium">{money(minimumCents)}</p>
               {sweepsOn && (
                 <p className="text-xs text-muted-foreground">
                   Anything above this is paid out automatically.
@@ -452,7 +433,7 @@ export default function WalletOps() {
         </SectionCard>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {/* Wallet & Treasury */}
         <SectionCard
           title="Wallet & Treasury"
@@ -465,27 +446,27 @@ export default function WalletOps() {
           }
         >
           <div className="grid grid-cols-2 gap-3 text-sm">
-            <div>
+            <div className="min-w-0">
               <p className="text-[10px] font-bold tracking-wider text-muted-foreground">Settlement bank</p>
-              <p className="mt-0.5 font-medium">
+              <p className="mt-0.5 break-words font-medium">
                 {settlementMethod
                   ? `${displayCaseOrNull(settlementMethod.bank_name) ?? "Bank"} ••${settlementMethod.last_four ?? "----"}`
                   : "Not connected"}
               </p>
             </div>
-            <div>
+            <div className="min-w-0">
               <p className="text-[10px] font-bold tracking-wider text-muted-foreground">Minimum retained</p>
-              <p className="mt-0.5 font-medium">{money(minimumCents)}</p>
+              <p className="mt-0.5 break-words font-medium">{money(minimumCents)}</p>
             </div>
-            <div>
+            <div className="min-w-0">
               <p className="text-[10px] font-bold tracking-wider text-muted-foreground">Payout speed</p>
-              <p className="mt-0.5 font-medium">
+              <p className="mt-0.5 break-words font-medium">
                 {config?.push_rail ? (SWEEP_RAIL_LABEL[config.push_rail] ?? config.push_rail) : "Not set"}
               </p>
             </div>
-            <div>
+            <div className="min-w-0">
               <p className="text-[10px] font-bold tracking-wider text-muted-foreground">Last automatic payout</p>
-              <p className="mt-0.5 font-medium">
+              <p className="mt-0.5 break-words font-medium">
                 {lastSweep
                   ? `${money(sweepAmountCents(lastSweep))}${sweepTimestamp(lastSweep) ? ` · ${new Date(sweepTimestamp(lastSweep)!).toLocaleDateString()}` : ""}`
                   : historyUnavailable
@@ -591,7 +572,7 @@ export default function WalletOps() {
         </SectionCard>
 
         {/* Recent activity — large box in place of the old payout-preference slot */}
-        <div className="lg:col-span-2">
+        <div className="min-w-0 lg:col-span-2">
           <SectionCard
             title="Recent Wallet Activity"
             icon={<Clock className="h-4 w-4 text-sky-500" />}
@@ -639,15 +620,15 @@ export default function WalletOps() {
             ) : (
               <div className="max-h-[28rem] overflow-y-auto divide-y rounded-md border">
                 {recentActivity.map((item) => (
-                  <div key={item.key} className="flex items-center justify-between gap-3 px-3 py-2.5 text-sm">
-                    <div className="min-w-0">
-                      <p className="truncate font-medium">{item.title}</p>
-                      <p className="text-xs text-muted-foreground">{item.subtitle}</p>
+                  <div key={item.key} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-3 py-2.5 text-sm">
+                    <div className="min-w-0 flex-1">
+                      <p className="break-words font-medium">{item.title}</p>
+                      <p className="break-words text-xs text-muted-foreground">{item.subtitle}</p>
                       {item.detail && (
-                        <p className="text-xs text-muted-foreground">{item.detail}</p>
+                        <p className="break-words text-xs text-muted-foreground">{item.detail}</p>
                       )}
                       {item.issue && (
-                        <p className="text-xs text-destructive">{item.issue}</p>
+                        <p className="break-words text-xs text-destructive">{item.issue}</p>
                       )}
                       {item.kind === "billing" && item.walletCents != null && item.bankCents != null && (
                         <p className="text-xs text-muted-foreground">
@@ -656,7 +637,7 @@ export default function WalletOps() {
                       )}
                     </div>
                     {item.kind === "ledger" ? (
-                      <div className="text-right">
+                      <div className="shrink-0 text-right">
                         <p className={item.credit ? "font-semibold text-emerald-500" : "font-semibold"}>
                           {item.credit ? "+" : "−"}
                           {money(item.amountCents)}
@@ -668,7 +649,7 @@ export default function WalletOps() {
                         )}
                       </div>
                     ) : (
-                      <div className="flex items-center gap-2">
+                      <div className="flex shrink-0 items-center gap-2">
                         <Badge
                           variant="outline"
                           className={`text-[10px] ${STATUS_TONE[(item.status ?? "").toLowerCase()] ?? "border-muted-foreground/30 text-muted-foreground"}`}
@@ -688,87 +669,6 @@ export default function WalletOps() {
           </SectionCard>
         </div>
       </div>
-
-      {/* Running balance */}
-      <SectionCard
-        title="Running Balance"
-        icon={<TrendingUp className="h-4 w-4 text-emerald-500" />}
-        accent="bg-gradient-to-r from-emerald-500/60 to-transparent"
-      >
-        {runningLoading ? (
-          <p className="text-sm text-muted-foreground">Loading balance history…</p>
-        ) : runningPoints.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            No balance movements yet. Funding, payouts, and fees build your running balance here.
-          </p>
-        ) : (
-          <>
-            <div className="h-44 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="walletBalanceFill" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.45} />
-                      <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                  <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
-                  <YAxis
-                    tick={{ fontSize: 10 }}
-                    stroke="hsl(var(--muted-foreground))"
-                    width={64}
-                    tickFormatter={(v) => money(Number(v) * 100)}
-                  />
-                  <RTooltip
-                    contentStyle={{
-                      background: "hsl(var(--popover))",
-                      border: "1px solid hsl(var(--border))",
-                      borderRadius: 8,
-                      fontSize: 12,
-                      color: "hsl(var(--popover-foreground))",
-                    }}
-                    formatter={(v: any) => [money(Number(v) * 100), "Balance"]}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="balance"
-                    stroke="hsl(var(--primary))"
-                    strokeWidth={2}
-                    fill="url(#walletBalanceFill)"
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-
-            <div className="divide-y rounded-md border">
-              {runningPoints
-                .slice()
-                .reverse()
-                .slice(0, 8)
-                .map((p) => (
-                  <div key={p.id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
-                    <div className="min-w-0">
-                      <p className="truncate font-medium">{ENTRY_LABEL[p.label] ?? p.label}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {new Date(p.created_at).toLocaleString()}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className={p.direction === "credit" ? "text-emerald-500" : "text-foreground"}>
-                        {p.direction === "credit" ? "+" : "−"}
-                        {money(p.amount_cents)}
-                      </p>
-                      <p className="text-[11px] font-semibold">
-                        Running balance {money(p.balance_cents)}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-            </div>
-          </>
-        )}
-      </SectionCard>
     </div>
   );
 }
