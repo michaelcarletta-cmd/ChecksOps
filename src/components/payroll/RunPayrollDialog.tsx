@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { useFinancialGuard } from "@/hooks/useFinancialGuard";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useTenant } from "@/contexts/TenantContext";
@@ -15,6 +15,8 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Loader2, Zap, Clock, AlertTriangle } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { usePaymentProviderEligibility } from "@/hooks/usePaymentProviderEligibility";
+import { useActiveStakeholders } from "@/hooks/useActiveStakeholders";
+import { activeStakeholderName, isPayableStakeholder } from "@/lib/payments/activeStakeholders";
 
 type Speed = "next_day" | "same_day";
 
@@ -49,26 +51,17 @@ export function RunPayrollDialog({ open, onOpenChange, onDone }: Props) {
     setStep("form");
   };
 
-  // Load eligible payees: verified, active, has consumer_code, not the primary debit account
-  const { data: payees = [], isLoading } = useQuery({
-    queryKey: ["payroll-eligible-payees", tenant?.id],
-    enabled: !!tenant?.id && open,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("stakeholder_accounts")
-        .select("id, nickname, custname, account_type, verification_status, consumer_unique, is_primary, is_active")
-        .eq("tenant_id", tenant!.id)
-        .eq("is_active", true)
-        .eq("is_primary", false)
-        .in("verification_status", ["verified", "admin_override"])
-        .not("consumer_unique", "is", null)
-        .order("nickname", { ascending: true });
-      if (error) throw error;
-      return data ?? [];
-    },
-  });
+  // Every Active Stakeholder from Settings is listed (same query as Settings).
+  // Only those whose bank setup is verified can be paid; the rest show why not.
+  // (The old filter also required consumer_unique, a legacy rail field nothing
+  // writes any more, so stakeholders added in Settings never appeared.)
+  const { data: payees = [], isLoading } = useActiveStakeholders(tenant?.id, open);
 
-  const selected = useMemo(() => payees.find((p: any) => p.id === stakeholderId), [payees, stakeholderId]);
+  const selected = useMemo(
+    () => payees.find((p) => p.id === stakeholderId && isPayableStakeholder(p)),
+    [payees, stakeholderId],
+  );
+  const payableCount = payees.filter(isPayableStakeholder).length;
   const amount = Number.parseFloat(amountStr || "0");
   const fee = SPEED_FEES[speed];
   const total = amount + fee;
@@ -164,7 +157,7 @@ export function RunPayrollDialog({ open, onOpenChange, onDone }: Props) {
       return runRow.id;
     },
     onSuccess: () => {
-      toast({ title: "Payment submitted", description: `$${amount.toFixed(2)} sent to ${selected?.nickname}.` });
+      toast({ title: "Payment submitted", description: `$${amount.toFixed(2)} sent to ${selected ? activeStakeholderName(selected) : "the payee"}.` });
       qc.invalidateQueries({ queryKey: ["payroll-runs"] });
       resetForm();
       onOpenChange(false);
@@ -213,21 +206,36 @@ export function RunPayrollDialog({ open, onOpenChange, onDone }: Props) {
               <Label>Payee</Label>
               <Select value={stakeholderId} onValueChange={setStakeholderId} disabled={isLoading}>
                 <SelectTrigger>
-                  <SelectValue placeholder={isLoading ? "Loading..." : payees.length ? "Choose a stakeholder" : "No eligible payees"} />
+                  <SelectValue placeholder={isLoading ? "Loading..." : payees.length ? "Choose a stakeholder" : "No active stakeholders"} />
                 </SelectTrigger>
                 <SelectContent>
-                  {payees.map((p: any) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.nickname} <span className="text-muted-foreground text-xs">· {p.custname}</span>
-                    </SelectItem>
-                  ))}
+                  {payees.map((p) => {
+                    const payable = isPayableStakeholder(p);
+                    return (
+                      <SelectItem key={p.id} value={p.id} disabled={!payable}>
+                        {activeStakeholderName(p)}
+                        {p.custname && p.custname !== activeStakeholderName(p) && (
+                          <span className="text-muted-foreground text-xs"> · {p.custname}</span>
+                        )}
+                        {!payable && <span className="text-muted-foreground text-xs"> · Bank setup pending</span>}
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
               {payees.length === 0 && !isLoading && (
                 <Alert variant="default" className="mt-2">
                   <AlertTriangle className="h-4 w-4" />
                   <AlertDescription className="text-xs">
-                    No eligible payees. Add a stakeholder in the <strong>Stakeholders</strong> tab and complete the bank-link before running payroll.
+                    No active stakeholders. Add a stakeholder in <strong>Settings</strong> and complete the bank-link before running payroll.
+                  </AlertDescription>
+                </Alert>
+              )}
+              {payees.length > 0 && payableCount === 0 && !isLoading && (
+                <Alert variant="default" className="mt-2">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertDescription className="text-xs">
+                    None of your active stakeholders has finished bank setup yet. They can be paid once setup is verified.
                   </AlertDescription>
                 </Alert>
               )}
@@ -288,8 +296,8 @@ export function RunPayrollDialog({ open, onOpenChange, onDone }: Props) {
         {step === "confirm" && selected && (
           <div className="space-y-3">
             <div className="rounded-md border border-border p-3 space-y-2 text-sm">
-              <div className="flex justify-between"><span className="text-muted-foreground">Payee</span><span className="font-medium">{selected.nickname}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Account</span><span>{selected.custname}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Payee</span><span className="font-medium">{activeStakeholderName(selected)}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Account</span><span>{selected.custname ?? "—"}</span></div>
               <div className="flex justify-between"><span className="text-muted-foreground">Amount</span><span className="font-medium">${amount.toFixed(2)}</span></div>
               <div className="flex justify-between"><span className="text-muted-foreground">Speed</span><span>{SPEED_LABELS[speed]} (fee ${fee.toFixed(2)})</span></div>
               <div className="flex justify-between border-t border-border pt-2"><span>Total debit</span><span className="font-semibold">${total.toFixed(2)}</span></div>
