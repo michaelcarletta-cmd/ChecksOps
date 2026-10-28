@@ -219,7 +219,7 @@ test('pin: the release pin shape, applied and retired (owner approved 2026-10-28
   }
 });
 
-test('order: no predecessor and no order; the check, deposit, audit and usage tables are prerequisites; no plan entry or code change; one trigger, which fires first; the runbook, one-shot doc and README name it', () => {
+test('order: no predecessor and no order; the check, deposit, audit and usage tables are prerequisites; no plan entry or code change; one trigger, which fires first; the DB validator justifies it since the applies; the runbook, one-shot doc and README name it', () => {
   const spec = RELEASE_SQL_SPECS[KEY];
   assert.deepEqual(spec.predecessors, []);
   for (const object of ['public.check_intake_items', 'public.checkalt_deposits', 'public.check_audit_log', 'public.check_billing_events',
@@ -237,9 +237,12 @@ test('order: no predecessor and no order; the check, deposit, audit and usage ta
   for (const file of ['aws/functions/api/workflow-rpc.mjs', 'aws/functions/api/providers/production/checkalt-idempotency.mjs', 'src/pages/CheckCommandCenter.tsx']) {
     assert.doesNotMatch(fs.readFileSync(path.join(ROOT, file), 'utf8'), /aws_checkalt_mark_check_deposited|aws_apply_checkalt_check_status/, file);
   }
-  // One trigger, on checkalt_deposits; the DB validator is not changed in this step.
+  // One trigger, on checkalt_deposits: the DB validator followed the staging (run 40721665524) and
+  // production applies, as #1309 did for SQL 120 and 6a4bfa328 for SQL 121, and justifies it by name (184).
   assert.deepEqual(spec.triggers.map((t) => [t.table, t.name]), [['public.checkalt_deposits', 'aws_checkalt_deposit_apply_check_status']]);
-  assert.doesNotMatch(fs.readFileSync(path.join(ROOT, 'aws/functions/api/db-readonly-validate.mjs'), 'utf8'), /aws_checkalt_deposit_apply_check_status/);
+  const validator = fs.readFileSync(path.join(ROOT, 'aws/functions/api/db-readonly-validate.mjs'), 'utf8');
+  assert.match(validator, /trigger: 'aws_checkalt_deposit_apply_check_status',\n\s+functionName: 'aws_apply_checkalt_check_status'/);
+  assert.match(validator, /export const EXPECTED_PUBLIC_TRIGGERS = 184;/);
   const runbook = fs.readFileSync(path.join(ROOT, COMMITTED.tooling.runbook), 'utf8');
   assert.ok(runbook.includes(COMMITTED.intended_replacement_sha256));
   assert.ok(runbook.includes(COMMITTED.source_sha256));
