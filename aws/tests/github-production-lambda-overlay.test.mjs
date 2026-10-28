@@ -1109,8 +1109,9 @@ test('live reconciliation 2026-10-19: ten members expect the bytes inspect run 3
     'workflow-rpc.mjs': { accepted: '79b7e4de653eb9d391afca9d27769b3b7c8e3d10d67af43e829ee32398797485', liveNow: 'acb5fc06ca01ddb5ad3294ee5840443c1747798f06c1990c174c469dbb5534e0' },
     // app-services.mjs moved on too: its daab02f7 release bytes were live (the order gate of production
     // run 40577608750), and production run 40621229388 replaced them for the Mortgage Desk return email
-    // route (d1faa212, now recorded live).
-    'app-services.mjs': { accepted: 'daab02f7199fef3a66b727ed0ac4ebc8315c675ea9b5025f18c1a53b197555f7', liveNow: 'd1faa2120bc944d299c274176ac52601e262ad7d9d448de0385bd70f858ecac5' },
+    // route (d1faa212); production run 40778196802 then replaced those for the Mortgage Desk e-sign route
+    // (dd6e1797, now recorded live).
+    'app-services.mjs': { accepted: 'daab02f7199fef3a66b727ed0ac4ebc8315c675ea9b5025f18c1a53b197555f7', liveNow: 'dd6e1797dc00dc2beaf15585b481c76a33c415212e7be5d2efe3fd170d48121e' },
   };
   for (const [member, [before, live, manifestRel, appliedRel]] of Object.entries(RECONCILED)) {
     if (MOVED_ON[member]) {
@@ -2543,9 +2544,11 @@ test('Mortgage Desk return: ADD mortgage-desk-return.mjs held on SQL 122 (record
   assert.match(PLAN.notes, /run 40577608750/);
   const appliedManifest = JSON.parse(fs.readFileSync(path.join(ROOT, APPLIED_REL), 'utf8'));
   // The bytes each member was applied at (2026-10-28). app-services.mjs has since moved on: the Mortgage
-  // Desk e-sign plan (production-mortgage-desk-esign-manifest-2026-10-28.json) REPLACEs it from these
-  // applied bytes, so its row now names that manifest and expects these bytes live; the rest are main's.
+  // Desk e-sign plan (production-mortgage-desk-esign-manifest-2026-10-28.json) REPLACEd it from these
+  // applied bytes (production run 40778196802), so its row now names the e-sign applied manifest and
+  // expects main's bytes live; the rest are main's too.
   const NEXT_REL = 'aws/tests/fixtures/production-mortgage-desk-esign-manifest-2026-10-28.json';
+  const NEXT_APPLIED_REL = 'aws/tests/fixtures/production-mortgage-desk-esign-applied-manifest-2026-10-28.json';
   const MOVED_ON = ['app-services.mjs'];
   const appliedAt = (member) => appliedManifest.members[member].accepted_sha256;
   const addRow = PLAN.members[ADD];
@@ -2562,11 +2565,12 @@ test('Mortgage Desk return: ADD mortgage-desk-return.mjs held on SQL 122 (record
     const row = PLAN.members[member];
     assert.equal(row.operation, 'replace', member);
     if (MOVED_ON.includes(member)) {
-      // Applied 2026-10-28; the next REPLACE starts from those applied bytes.
-      assert.equal(row.expected_live_sha256, appliedAt(member), member);
-      assert.equal(row.manifest, NEXT_REL, member);
+      // Applied 2026-10-28; the next REPLACE started from those applied bytes and is recorded applied too.
+      assert.equal(row.expected_live_sha256, row.accepted_sha256, member);
+      assert.equal(row.manifest, NEXT_APPLIED_REL, member);
       const next = JSON.parse(fs.readFileSync(path.join(ROOT, NEXT_REL), 'utf8')).members[member];
       assert.deepEqual(next, { live_sha256: appliedAt(member), accepted_sha256: row.accepted_sha256, operation: 'replace', previous_manifest: APPLIED_REL }, member);
+      assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, NEXT_APPLIED_REL), 'utf8')).members[member].previous_manifest, NEXT_REL, member);
     } else {
       // Applied 2026-10-28: the row records the applied bytes and names the applied manifest.
       assert.equal(row.expected_live_sha256, row.accepted_sha256, member);
@@ -2627,17 +2631,19 @@ test('Mortgage Desk return: ADD mortgage-desk-return.mjs held on SQL 122 (record
   }
 });
 
-test('Mortgage Desk e-sign: ADD mortgage-desk-esign.mjs held on SQL 124 (recorded live, #1351), then app-services.mjs REPLACEs its applied Mortgage Desk return bytes; planning only', async () => {
+test('Mortgage Desk e-sign: ADD mortgage-desk-esign.mjs held on SQL 124 (recorded live, #1351), then app-services.mjs replaced its applied Mortgage Desk return bytes; production runs 40777808084 and 40778196802 applied main\'s bytes', async () => {
   const ADD = 'mortgage-desk-esign.mjs';
   const ROUTER = 'app-services.mjs';
   const SQL124 = 'aws/workflows/sql/124_mortgage_desk_signature_and_reads.sql';
   const MANIFEST_REL = 'aws/tests/fixtures/production-mortgage-desk-esign-manifest-2026-10-28.json';
   const RETURN_APPLIED_REL = 'aws/tests/fixtures/production-mortgage-desk-return-applied-manifest-2026-10-28.json';
+  const APPLIED_REL = 'aws/tests/fixtures/production-mortgage-desk-esign-applied-manifest-2026-10-28.json';
   const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, MANIFEST_REL), 'utf8'));
   assert.equal(manifest.deploy_authorized, false);
   assert.match(manifest.authorization, /^Pending owner review/);
   assert.deepEqual(Object.keys(manifest.members), [ADD, ROUTER]);
-  // The ADD: main's bytes, absent live, held on SQL 124; its imports are what the bytes import.
+  // The ADD: main's bytes, held on SQL 124; its imports are what the bytes import. Applied 2026-10-28, the
+  // ADD row keeps its planning manifest, as mortgage-desk-return.mjs's did.
   const addRow = PLAN.members[ADD];
   assert.deepEqual(addRow, { operation: 'add', accepted_sha256: sha(`aws/functions/api/${ADD}`), expected_live_sha256: null, sql_before: SQL124, manifest: MANIFEST_REL });
   const imports = localImports(fs.readFileSync(path.join(API, ADD), 'utf8'), ADD);
@@ -2650,9 +2656,10 @@ test('Mortgage Desk e-sign: ADD mortgage-desk-esign.mjs held on SQL 124 (recorde
     assert.ok(row.expected_live_sha256 === row.accepted_sha256 || PLAN.order.indexOf(name) < PLAN.order.indexOf(ROUTER), name);
   }
   // The router: main's bytes, from the bytes the Mortgage Desk return apply left live (run 40621229388).
+  // Applied 2026-10-28: the row records the applied bytes and names the applied manifest.
   const routerRow = PLAN.members[ROUTER];
   const appliedAt = JSON.parse(fs.readFileSync(path.join(ROOT, RETURN_APPLIED_REL), 'utf8')).members[ROUTER].accepted_sha256;
-  assert.deepEqual(routerRow, { operation: 'replace', accepted_sha256: sha(`aws/functions/api/${ROUTER}`), expected_live_sha256: appliedAt, sql_before: null, manifest: MANIFEST_REL });
+  assert.deepEqual(routerRow, { operation: 'replace', accepted_sha256: sha(`aws/functions/api/${ROUTER}`), expected_live_sha256: sha(`aws/functions/api/${ROUTER}`), sql_before: null, manifest: APPLIED_REL });
   assert.notEqual(routerRow.accepted_sha256, appliedAt);
   assert.deepEqual(manifest.members[ROUTER], { live_sha256: appliedAt, accepted_sha256: routerRow.accepted_sha256, operation: 'replace', previous_manifest: RETURN_APPLIED_REL });
   assert.ok(localImports(fs.readFileSync(path.join(API, ROUTER), 'utf8'), ROUTER).includes(ADD));
@@ -2676,21 +2683,67 @@ test('Mortgage Desk e-sign: ADD mortgage-desk-esign.mjs held on SQL 124 (recorde
   assert.deepEqual(Object.keys(PLAN.members).filter((m) => PLAN.members[m].sql_before === SQL124), [ADD]);
   assert.equal(resolvePlannedMember(ADD, { root: ROOT, plan: PLAN }).ok, true);
   assert.equal(resolvePlannedMember(ROUTER, { root: ROOT, plan: PLAN }).ok, true);
-  // The ADD is refused while SQL 124 is not recorded live ...
+  // Applied 2026-10-28 in plan order on main ddf74b5b2, each member with its own staging apply, pre-apply
+  // inspect and VERIFIED production apply.
+  const appliedManifest = JSON.parse(fs.readFileSync(path.join(ROOT, APPLIED_REL), 'utf8'));
+  assert.equal(appliedManifest.workstream_id, 'mortgage-desk-esign-applied');
+  assert.equal(appliedManifest.deploy_authorized, false);
+  assert.match(appliedManifest.authorization, /^Record only/);
+  assert.deepEqual(Object.keys(appliedManifest.members), [ADD, ROUTER]);
+  for (const member of [ADD, ROUTER]) {
+    const accepted = sha(`aws/functions/api/${member}`);
+    assert.deepEqual(appliedManifest.members[member], { live_sha256: accepted, accepted_sha256: accepted, operation: PLAN.members[member].operation, previous_manifest: MANIFEST_REL }, member);
+    assert.ok(appliedManifest.notes.includes(`"DEPLOY ${member} TO PRODUCTION"`), member);
+  }
+  for (const runId of ['40774766885', '40774906409', '40777675037', '40777808084', '40775035802', '40775541446', '40777980903', '40778196802']) {
+    assert.match(PLAN.notes, new RegExp(runId), runId);
+    assert.match(appliedManifest.notes, new RegExp(`run ${runId}`), runId);
+  }
+  for (const evidence of [
+    'ddf74b5b2977abd7a97f55ba9d13a33bf3960ab7',
+    // ADD pre-apply inspect, then its verify (= the router's pre-apply inspect).
+    'hxOfJbEhwGz1cGJ/DaQlJ6ABMg069YFcEBISf8U6DIo=', 'caf1b784-3e52-4264-8ad6-55bbe1b7f8d6',
+    'd1wFCeCpr8bNXQaXhkmt3APYQP6NGM0FGzAdIjvj3Tk=', '4cbcd30a-b7ac-46b3-b4ca-507b0f410992',
+    // Router verify and the read-only GetFunctionConfiguration afterwards.
+    'xS83i1iAu2xuvIQjQwLSfy7xxfSHmPmno8uiGwzaFAk=', '57792294-a40d-43bc-a647-4d9652eaf257', '2026-10-28T22:13:22Z',
+  ]) {
+    assert.ok(appliedManifest.notes.includes(evidence), evidence);
+  }
+  assert.ok(appliedManifest.notes.includes(Buffer.from('xS83i1iAu2xuvIQjQwLSfy7xxfSHmPmno8uiGwzaFAk=', 'base64').toString('hex')));
+  // The plan before this record (the ADD absent, the router at its applied Mortgage Desk return bytes).
   const before = structuredClone(PLAN);
-  before.sql_prerequisites[SQL124] = { ...pre, verified_live: false, evidence: null };
+  before.members[ROUTER] = { ...before.members[ROUTER], expected_live_sha256: appliedAt, manifest: MANIFEST_REL };
+  // The ADD was refused while SQL 124 was not recorded live ...
+  const held = structuredClone(before);
+  held.sql_prerequisites[SQL124] = { ...pre, verified_live: false, evidence: null };
   await assert.rejects(
-    run(applyEnv(ADD, { CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: '' }), applyDeps(ADD, { plan: before }).deps),
+    run(applyEnv(ADD, { CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: '' }), applyDeps(ADD, { plan: held }).deps),
     (error) => error.code === CODES.PRODUCTION_APPROVAL_REQUIRED && error.details.sql_before === SQL124,
   );
-  // ... and the router is refused while the ADD is not live (import check or order gate).
+  // ... and the router was refused while the ADD was not live (import check or order gate).
+  const beforeSql98 = structuredClone(PLAN_SQL98_LIVE);
+  beforeSql98.members[ROUTER] = { ...beforeSql98.members[ROUTER], expected_live_sha256: appliedAt, manifest: MANIFEST_REL };
   await assert.rejects(
-    run(applyEnv(ROUTER, { CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: appliedAt }), applyDeps(ROUTER, { pending: [ADD], plan: structuredClone(PLAN_SQL98_LIVE) }).deps),
+    run(applyEnv(ROUTER, { CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: appliedAt }), applyDeps(ROUTER, { pending: [ADD], plan: beforeSql98 }).deps),
     (error) => error.code === CODES.DEPLOYMENT_COLLISION && [error.details?.missing, error.details?.pending].some((names) => Array.isArray(names) && names.includes(ADD)),
   );
-  // Inspect: the ADD is absent today and READY; the router is still at its applied bytes and is held.
-  const inspectAdd = await run({ ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: ADD }, { root: ROOT, inspectLive: liveFor(ADD, { plan: PLAN }) });
+  // Before the applies the ADD was absent and READY (inspect run 40777675037) ...
+  const inspect = (member) => ({ ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: member });
+  const inspectAdd = await run(inspect(ADD), { root: ROOT, inspectLive: liveFor(ADD, { plan: before }) });
   assert.equal(inspectAdd.mutation, false);
+  // ... and, once the ADD was live, the router at d1faa212 was READY (inspect run 40777980903).
+  assert.equal((await run(inspect(ROUTER), { root: ROOT, plan: before, inspectLive: liveFor(ROUTER, { plan: before }) })).state, 'READY');
+  // Now inspect accepts the router's applied bytes as done; its pre-apply bytes are no longer an accepted live state.
+  const done = await run(inspect(ROUTER), { root: ROOT, inspectLive: liveFor(ROUTER, { sha256: routerRow.accepted_sha256 }) });
+  assert.equal(done.state, 'ALREADY_ACCEPTED');
+  assert.equal(done.mutation, false);
+  for (const other of [appliedAt, 'e'.repeat(64)]) {
+    await assert.rejects(
+      run(inspect(ROUTER), { root: ROOT, inspectLive: liveFor(ROUTER, { sha256: other }) }),
+      (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+      other,
+    );
+  }
 });
 
 test('DB validator SQL 123 trigger: db-readonly-validate.mjs replaced the bytes rebuild inspect run 40741101459 found live; production run 40743616203 applied main\'s bytes', async () => {

@@ -1,0 +1,21 @@
+{
+  "workstream_id": "mortgage-desk-esign-applied",
+  "authorization": "Record only (2026-10-28): the bytes below are live. Nothing is planned or authorized by this manifest; any later change to these members needs its own manifest, staging acceptance and owner approval.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "The Mortgage Desk sends a check's files for signature, reads the check's thread, files and signature requests and posts timeline notes (SQL 124 recorded verified live, #1351; members #1355), applied 2026-10-28 through the guarded overlay path on main ddf74b5b2977abd7a97f55ba9d13a33bf3960ab7, one member per run in plan order, each on its own owner approval: mortgage-desk-esign.mjs (absent -> 492da984; staging apply run 40774906409 after staging inspect run 40774766885; production pre-apply inspect run 40777675037 READY, member ABSENT, at CodeSha256 hxOfJbEhwGz1cGJ/DaQlJ6ABMg069YFcEBISf8U6DIo=, RevisionId caf1b784-3e52-4264-8ad6-55bbe1b7f8d6, /health and /db-health 200; production apply run 40777808084 on the owner's approval phrase \"DEPLOY mortgage-desk-esign.mjs TO PRODUCTION\", concluded success including its \"Verify live member is the accepted bytes\" step (VERIFIED, member PRESENT 492da984, at CodeSha256 d1wFCeCpr8bNXQaXhkmt3APYQP6NGM0FGzAdIjvj3Tk=, RevisionId 4cbcd30a-b7ac-46b3-b4ca-507b0f410992) and the public production smoke (/health and /db-health 200)); app-services.mjs (d1faa212 -> dd6e1797; staging apply run 40775541446 after staging inspect run 40775035802, staging live before d1faa212; production pre-apply inspect run 40777980903 READY, member PRESENT d1faa212, at CodeSha256 d1wFCeCpr8bNXQaXhkmt3APYQP6NGM0FGzAdIjvj3Tk=, RevisionId 4cbcd30a-b7ac-46b3-b4ca-507b0f410992, /health and /db-health 200; production apply run 40778196802 on the owner's approval phrase \"DEPLOY app-services.mjs TO PRODUCTION\", expected live d1faa212, concluded success including its \"Verify live member is the accepted bytes\" step (VERIFIED, member PRESENT dd6e1797, at CodeSha256 xS83i1iAu2xuvIQjQwLSfy7xxfSHmPmno8uiGwzaFAk=, RevisionId 57792294-a40d-43bc-a647-4d9652eaf257) and the public production smoke (/health and /db-health 200)). Read-only GetFunctionConfiguration after both applies: CodeSha256 xS83i1iAu2xuvIQjQwLSfy7xxfSHmPmno8uiGwzaFAk= (hex c52f378b5880bb6c6ebc84234302d27f2ef1c5f48798f9a7a3cba21b0cda1409), RevisionId 57792294-a40d-43bc-a647-4d9652eaf257, LastModified 2026-10-28T22:13:22Z. The rows record the applied bytes as live_sha256 and accepted_sha256 and chain to the manifest that planned them (previous_manifest), which keeps the pre-apply state. GitHub returned only the last 3000 lines of each apply log, so the receipt section of the apply output was not read; the writer's update result (CodeSha256 d1wFCeCpr8bNXQaXhkmt3APYQP6NGM0FGzAdIjvj3Tk=, then xS83i1iAu2xuvIQjQwLSfy7xxfSHmPmno8uiGwzaFAk=), the verify step and the pre-apply inspect are the evidence. No rebuild inspect was run after these applies, so the live package is not compared with a candidate zip of main.",
+  "members": {
+    "mortgage-desk-esign.mjs": {
+      "live_sha256": "492da984c1ec60d419c147431efef8ef03d25860f179b615a126c3b753174e2d",
+      "accepted_sha256": "492da984c1ec60d419c147431efef8ef03d25860f179b615a126c3b753174e2d",
+      "operation": "add",
+      "previous_manifest": "aws/tests/fixtures/production-mortgage-desk-esign-manifest-2026-10-28.json"
+    },
+    "app-services.mjs": {
+      "live_sha256": "dd6e1797dc00dc2beaf15585b481c76a33c415212e7be5d2efe3fd170d48121e",
+      "accepted_sha256": "dd6e1797dc00dc2beaf15585b481c76a33c415212e7be5d2efe3fd170d48121e",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-mortgage-desk-esign-manifest-2026-10-28.json"
+    }
+  }
+}
