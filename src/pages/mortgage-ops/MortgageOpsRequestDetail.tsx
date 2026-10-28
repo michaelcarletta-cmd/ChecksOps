@@ -8,6 +8,7 @@ import {
   type MortgageDeskWriteClient,
 } from "@/lib/mortgageDeskWrites";
 import { useMortgageAuth } from "@/hooks/useMortgageAuth";
+import { isPlatformOwner } from "@/lib/masterMerchant";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -438,11 +439,11 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
   }, [open, check?.id, load]);
 
   const postMessage = async () => {
-    if (!draft.trim() || !check?.id || !user?.id || !req?.id) return;
+    if (!draft.trim() || !req?.check_intake_item_id || !user?.id || !req?.id) return;
     setPosting(true);
     const { error } = await postMortgageDeskMessage(deskClient, mortgageUsesAwsBackend, {
       requestId: req.id,
-      checkId: check.id,
+      checkId: req.check_intake_item_id,
       senderId: user.id,
       body: draft.trim(),
     });
@@ -1326,8 +1327,9 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
             )}
 
 
-            {/* Updates / messages with tenant */}
-            {check?.id && (
+            {/* Updates / messages with tenant. Gated on the request's check id, not
+                the check row: on AWS the agent cannot read the tenant's check. */}
+            {req.check_intake_item_id && (
               <Card>
                 <CardContent className="pt-4 space-y-3">
                   <div className="font-semibold text-sm flex items-center gap-2">
@@ -1347,7 +1349,10 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
                       ))
                     )}
                   </div>
-                  {req.status === "in_progress" && req.assigned_employee_id === user?.id && (
+                  {/* Same rule as aws_mortgage_desk_working_request: in progress, and the
+                      assigned agent or the platform owner. Read-only otherwise. */}
+                  {req.status === "in_progress" &&
+                    (req.assigned_employee_id === user?.id || isPlatformOwner(user?.email, user?.id)) && (
                     <div className="space-y-2">
                       <Textarea
                         rows={2}
