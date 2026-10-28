@@ -37,7 +37,7 @@ import { isCheckOpsHost } from "@/lib/checkopsHost";
 import { CheckAltSettings } from "@/components/settings/CheckAltSettings";
 import { CheckAltTenantAccountCard } from "@/components/settings/CheckAltTenantAccountCard";
 import { ComplianceSettings } from "@/components/settings/ComplianceSettings";
-import { AdminReferralDashboard } from "@/components/settings/AdminReferralDashboard";
+import { AdminReferralDashboard, REFERRAL_OVERVIEW_QUERY_KEY, fetchReferralOverview } from "@/components/settings/AdminReferralDashboard";
 import { PlatformAnnouncementsManager } from "@/components/admin/PlatformAnnouncementsManager";
 import { MortgageAgentsPanel } from "@/components/admin/MortgageAgentsPanel";
 import { TenantProBadgeManagement } from "@/components/settings/TenantProBadgeManagement";
@@ -87,6 +87,12 @@ type Tenant = {
   internal_notes?: string | null;
   created_at: string;
 };
+
+// The maintenance discount the billing engine charges (maintenanceDiscountCents in
+// tenant-billing-engine.mjs, SQL 111): the manual discount (referral_discount_cents) plus the
+// automatic referral credit, never more than the monthly rate.
+const totalDiscountCents = (rateCents?: number | null, manualCents?: number | null, creditCents?: number | null) =>
+  Math.min(Math.max(0, Number(manualCents) || 0) + Math.max(0, Number(creditCents) || 0), Math.max(0, Number(rateCents) || 0));
 
 
 type TenantUserRow = {
@@ -978,6 +984,13 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
   const [tenantMeta, setTenantMeta] = useState<{ monthly_rate_cents: number; referral_discount_cents: number } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // The automatic referral credit, from the same overview as the Referral Dashboard.
+  const { data: referralOverview } = useQuery({
+    queryKey: REFERRAL_OVERVIEW_QUERY_KEY,
+    queryFn: fetchReferralOverview,
+    retry: false,
+  });
+  const referralCredit = referralOverview?.find((r) => r.tenant_id === tenantId)?.earned_credit_cents ?? 0;
 
   const range = (() => {
     if (scope === "month") {
@@ -1066,7 +1079,7 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
   const years = Array.from({ length: 5 }, (_, i) => now.getFullYear() - i);
 
   // Usage summary for the month (display only): each event's recorded unit price
-  // plus maintenance (monthly rate - referral discount). The amount actually
+  // plus maintenance (monthly rate - manual discount - referral credit). The amount actually
   // collected is computed by the server (TenantFeeCollectButton preview).
   const usageEvents: any[] = data?.events || [];
   const checkProcessingCents = usageEvents.filter(e => e.event_type === 'check_processing').reduce((s, e) => s + (e.unit_price_cents ?? 0), 0);
@@ -1074,7 +1087,8 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
   const disbursementCents = usageEvents.filter(e => e.event_type?.startsWith('moov_')).reduce((s, e) => s + (e.unit_price_cents ?? 0), 0);
   
   const grossMaintenance = tenantMeta?.monthly_rate_cents ?? 0;
-  const discount = tenantMeta?.referral_discount_cents ?? 0;
+  const manualDiscount = tenantMeta?.referral_discount_cents ?? 0;
+  const discount = totalDiscountCents(grossMaintenance, manualDiscount, referralCredit);
   const netMaintenance = Math.max(0, grossMaintenance - discount);
   const consolidatedTotalCents = checkProcessingCents + mortgageOpsCents + disbursementCents + netMaintenance;
 
@@ -1198,7 +1212,10 @@ function TenantUsageInlinePanel({ tenantId, tenantName }: { tenantId: string; te
                     </tr>
                     {discount > 0 && (
                       <tr>
-                        <td className="px-4 py-2 text-emerald-600">Referral discount</td>
+                        <td className="px-4 py-2 text-emerald-600">
+                          Maintenance discount
+                          <div className="text-[10px] text-muted-foreground">Manual {fmt(manualDiscount)} + referral credit {fmt(referralCredit)}</div>
+                        </td>
                         <td className="text-right px-4 py-2 tabular-nums text-muted-foreground">—</td>
                         <td className="text-right px-4 py-2 tabular-nums text-muted-foreground">—</td>
                         <td className="text-right px-4 py-2 tabular-nums font-medium text-emerald-600">−{fmt(discount)}</td>
@@ -1308,6 +1325,14 @@ function TenantManagementTable({
     retry: false,
   });
   const deactivatedById = new Map(deactivatedList.map((d) => [d.tenant_id, d]));
+  // Automatic referral credit per tenant ($5 per active referral, at most $25), from the
+  // same overview as the Referral Dashboard.
+  const { data: referralOverview } = useQuery({
+    queryKey: REFERRAL_OVERVIEW_QUERY_KEY,
+    queryFn: fetchReferralOverview,
+    retry: false,
+  });
+  const referralCreditById = new Map((referralOverview ?? []).map((r) => [r.tenant_id, Number(r.earned_credit_cents) || 0]));
   const lifecycleChanged = () => {
     void refetchDeactivated();
     onChanged();
@@ -1502,8 +1527,8 @@ function TenantManagementTable({
     },
     {
       id: "ref_disc",
-      header: "Ref. Disc.",
-      mobileLabel: "Referral discount",
+      header: "Manual disc.",
+      mobileLabel: "Manual discount",
       headerClassName: "w-[8%] min-w-[70px]",
       className: "text-[11px]",
       cell: (t) => (
@@ -1512,6 +1537,24 @@ function TenantManagementTable({
           onSave={(cents) => updatePricing(t.id, { referral_discount_cents: cents ?? 0 })}
         />
       ),
+    },
+    {
+      id: "ref_credit",
+      header: "Ref. credit",
+      mobileLabel: "Referral credit",
+      headerClassName: "w-[7%] min-w-[65px]",
+      className: "text-[11px] tabular-nums",
+      cell: (t) => (referralCreditById.has(t.id) ? fmtMoney(referralCreditById.get(t.id)) : "—"),
+    },
+    {
+      id: "total_disc",
+      header: "Total disc.",
+      mobileLabel: "Total discount",
+      headerClassName: "w-[7%] min-w-[65px]",
+      className: "text-[11px] tabular-nums font-medium",
+      cell: (t) => (referralCreditById.has(t.id)
+        ? fmtMoney(totalDiscountCents(t.monthly_rate_cents, t.referral_discount_cents, referralCreditById.get(t.id)))
+        : "—"),
     },
     {
       id: "kyc",
