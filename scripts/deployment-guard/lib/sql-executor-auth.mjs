@@ -2746,8 +2746,8 @@ export const AUTHORIZED_SQL122_MORTGAGE_DESK_RETURN_TO_TENANT = Object.freeze({
 // forward to Deposited; rejected, error, duplicate or returned after approval moves it to Returned, as
 // record_check_return records a return; a one-time move of checks already approved and billed). Two
 // SECURITY DEFINER functions with EXECUTE for the owner only and one trigger on checkalt_deposits that
-// fires before SQL 120's and SQL 121's. No predecessor. Pending until a reviewed pin change records a
-// staging read-live.
+// fires before SQL 120's and SQL 121's. No predecessor. Staging apply authorized (wave 22) from
+// staging read-live run 40717225525.
 export const AUTHORIZED_SQL123_CHECKALT_DEPOSIT_CHECK_STATUS = Object.freeze({
   key: 'sql123',
   filename: 'aws/workflows/sql/123_checkalt_deposit_check_status.sql',
@@ -2755,9 +2755,10 @@ export const AUTHORIZED_SQL123_CHECKALT_DEPOSIT_CHECK_STATUS = Object.freeze({
   // The commit that last authored the file bytes.
   commit: '525ff1647068d2824cf45d8b271b0525a774be9f',
   source_sha256: '8f742d9d853373ab0674d46d733ccdf2a9ede0c299f662b5e3b00991f240758f',
-  authorization: 'pending',
-  execute: false,
-  expected_live_definition_sha256: null,
+  authorization: 'Owner approved 2026-10-28: staging apply (wave 22) from staging read-live run 40717225525',
+  execute: true,
+  // Staging read-live run 40717225525 (main 6a7270f, executor ucqjAOPX...).
+  expected_live_definition_sha256: 'b584e1cd4352837eb5515cd07e76900e055637d11c29214db036f912e6b6f6b9',
   // Code-derived: releaseIntendedHash('sql123', file bytes) (release-sql-state.mjs); re-derived by the tests.
   intended_replacement_sha256: 'e982bd786ca1b7bd107d4156359b32d5032fcb0b5e7962c5b2fd457387c230fc',
   function_identities: Object.freeze([

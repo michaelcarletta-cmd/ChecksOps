@@ -59,7 +59,22 @@ RLS setting or other table.
 `EXPECTED_PUBLIC_TRIGGERS` (183 today, `aws/functions/api/db-readonly-validate.mjs`) must follow in
 their own change, as #1309 did for SQL 120; not before the apply.
 
-**Status:** not applied anywhere. The staging pin and the production pin are pending.
+**Staging executor refreshed (2026-10-28).** Inspect run 40712994465 found the live executor at
+`7wybTiIc…` without `sql/123_checkalt_deposit_check_status.sql`. Deploy run 40714754418 updated it to
+main's package (`ucqjAOPXdW52npzxNv8RSV3rlmf6hvE5Pj1R77uQ4+c=`; "Verify live executor now carries
+main's package" passed).
+
+**Staging read-live (2026-10-28).** Run 40717225525 (main `6a7270f`):
+`aws_checkalt_mark_check_deposited(uuid, timestamp with time zone)`,
+`aws_apply_checkalt_check_status()` and the `aws_checkalt_deposit_apply_check_status` trigger on
+`checkalt_deposits` absent; every prerequisite present; the definer writes to `check_intake_items`
+and `check_audit_log` possible; `checkalt_approved_checks_to_move` 0,
+`checkalt_approved_checks_left_unbilled` 1; live
+`b584e1cd4352837eb5515cd07e76900e055637d11c29214db036f912e6b6f6b9`, `already_applied` false,
+`precondition_failures` `[]`. Recorded in the staging pin (`expected_live_definition_sha256`,
+`execute: true`, wave 22) under the owner's words of 2026-10-28, "Yes open both PRs".
+
+**Status:** staging pin execute-authorized (wave 22); nothing applied yet; production pin pending.
 
 ## Fingerprint
 

@@ -104,6 +104,11 @@ export const STAGING_WAVE1 = Object.freeze({
   // mortgage_handling_requests.return_emailed_at absent.
   sql121: Object.freeze({ wave: 21, approved: '2026-10-27', run: '40588277757', live: '084deae36bb533c91124d12698b1adb29e5fa7b9ff53932aa293537bc573e76e', apply_run: '40591140684' }),
   sql122: Object.freeze({ wave: 21, approved: '2026-10-27', run: '40588288300', live: 'e13856d7a75483b5785b6e791fd83fbe9da9a1b09f6c819480cee54388a62609', apply_run: '40591701699' }),
+  // Wave 22 (owner approved 2026-10-28, "Yes open both PRs"): SQL 123, a Check Alt deposit moves its
+  // check to Deposited (Returned when rejected after approval). Read at main 6a7270f after the
+  // executor carried it (deploy run 40714754418): the two functions and the trigger absent, no
+  // approved check left to move.
+  sql123: Object.freeze({ wave: 22, approved: '2026-10-28', run: '40717225525', live: 'b584e1cd4352837eb5515cd07e76900e055637d11c29214db036f912e6b6f6b9' }),
   sql98: Object.freeze({ wave: 3, approved: '2026-10-18', run: '39083278136', live: '296c3d6a274e10f66005fb9eaecf93fa17b81bd8db3607037ca07698fddd3275', apply_run: '39085677318' }),
 });
 
@@ -115,7 +120,7 @@ export const pendingPin = (pin) => Object.freeze({
 });
 
 /**
- * The committed staging pin's apply state: waves 1-21 recorded and approved, wave 6 approved with
+ * The committed staging pin's apply state: waves 1-22 recorded and approved, wave 6 approved with
  * its read-live still to record (pending until then), wave 18 (SQL 117) retired, the rest pending.
  */
 export function assertStagingPinState(assert, key, pin) {
