@@ -1,0 +1,33 @@
+{
+  "workstream_id": "mortgage-desk-return-applied",
+  "authorization": "Record only (2026-10-28): the bytes below are live. Nothing is planned or authorized by this manifest; any later change to these members needs its own manifest, staging acceptance and owner approval.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "the Mortgage Desk returns its work to the tenant (SQL 122 recorded verified live, #1325), applied 2026-10-28 through the guarded overlay path on main f404cf9af (SQL 122 recorded verified live, #1325), one member per run, each on its own owner approval: mortgage-desk-return.mjs (absent -> 0c99317f; staging apply run 40613955451; production pre-apply inspect run 40616049509 READY at CodeSha256 fZPpTRW8dupjAOWnu6VKqvJ5SNaj2x7IYIaCdY4Rmfw=, RevisionId 93820ab4-e2f8-4efa-8401-5748753bedaf; production apply run 40618256980 on the owner's approval phrase \"DEPLOY mortgage-desk-return.mjs TO PRODUCTION\", concluded success including its \"Verify live member is the accepted bytes\" step (VERIFIED at CodeSha256 d/N+3JLKWn3ctOsZYMrp15Gci8NdcwUixv8VXkv2VEU=, RevisionId 554bfe2b-39a9-4923-a5d2-8d63d0102cbe) and the public production smoke (/health and /db-health 200)); workflow-rpc.mjs (6902fe6f -> acb5fc06; staging apply run 40614473141; production pre-apply inspect run 40618584612 READY at CodeSha256 d/N+3JLKWn3ctOsZYMrp15Gci8NdcwUixv8VXkv2VEU=, RevisionId 554bfe2b-39a9-4923-a5d2-8d63d0102cbe; production apply run 40618897308 on the owner's approval phrase \"DEPLOY workflow-rpc.mjs TO PRODUCTION\", concluded success including its \"Verify live member is the accepted bytes\" step (VERIFIED at CodeSha256 eIoEqur1uYwzVpO8DfEYlcVXyL8JE8rWLotboT7W3IY=, RevisionId e66bb8b6-4d7e-4a3f-b8db-39b414c5dfb7) and the public production smoke (/health and /db-health 200)); storage-write-auth.mjs (593afcd1 -> fb9e3ecd; staging apply run 40615193221; production pre-apply inspect run 40619214845 READY at CodeSha256 eIoEqur1uYwzVpO8DfEYlcVXyL8JE8rWLotboT7W3IY=, RevisionId e66bb8b6-4d7e-4a3f-b8db-39b414c5dfb7; production apply run 40620579635 on the owner's approval phrase \"DEPLOY storage-write-auth.mjs TO PRODUCTION\", concluded success including its \"Verify live member is the accepted bytes\" step (VERIFIED at CodeSha256 e2G6iObHOC5vgYC6TTFx+2I6F3K39ad13drvNBJcx/M=, RevisionId 797b5efe-b5ee-4072-bf56-fd8275217fc4) and the public production smoke (/health and /db-health 200)); app-services.mjs (daab02f7 -> d1faa212; staging apply run 40615533243; production pre-apply inspect run 40620929526 READY at CodeSha256 e2G6iObHOC5vgYC6TTFx+2I6F3K39ad13drvNBJcx/M=, RevisionId 797b5efe-b5ee-4072-bf56-fd8275217fc4; production apply run 40621229388 on the owner's approval phrase \"DEPLOY app-services.mjs TO PRODUCTION\", concluded success including its \"Verify live member is the accepted bytes\" step (VERIFIED at CodeSha256 WV2B9GAvLcd7R+NgSPDS/gt+X3xHipLm2LSc/xCtm98=, RevisionId 7413f101-ef5a-4f8c-949a-781fa1959e60) and the public production smoke (/health and /db-health 200)). In plan order: the ADD first, then the three REPLACEs that import it. An earlier apply of mortgage-desk-return.mjs (run 40616679703) was refused with DEPLOYMENT_COLLISION, pending [\"workflow.mjs\"], before any write; workflow.mjs was then applied (run 40617806077) and the ADD re-approved. The rows record the applied bytes as live_sha256 and accepted_sha256 and chain to the manifest that planned them (previous_manifest), which keeps the pre-apply state. GitHub returned only the last 5000 lines of each apply log, so the receipt and before/after section of the apply output were not read; the verify step and the pre-apply inspect are the evidence.",
+  "members": {
+    "mortgage-desk-return.mjs": {
+      "live_sha256": "0c99317f77b7b16a1801795b2c81526f3deb18d10ddff0afaf08efa0f9d7425b",
+      "accepted_sha256": "0c99317f77b7b16a1801795b2c81526f3deb18d10ddff0afaf08efa0f9d7425b",
+      "operation": "add",
+      "previous_manifest": "aws/tests/fixtures/production-mortgage-desk-return-manifest-2026-10-27.json"
+    },
+    "workflow-rpc.mjs": {
+      "live_sha256": "acb5fc06ca01ddb5ad3294ee5840443c1747798f06c1990c174c469dbb5534e0",
+      "accepted_sha256": "acb5fc06ca01ddb5ad3294ee5840443c1747798f06c1990c174c469dbb5534e0",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-mortgage-desk-return-manifest-2026-10-27.json"
+    },
+    "storage-write-auth.mjs": {
+      "live_sha256": "fb9e3ecdff421ae8bf78315695662d843937febdec3fc2831138fdc3427aace5",
+      "accepted_sha256": "fb9e3ecdff421ae8bf78315695662d843937febdec3fc2831138fdc3427aace5",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-mortgage-desk-return-manifest-2026-10-27.json"
+    },
+    "app-services.mjs": {
+      "live_sha256": "d1faa2120bc944d299c274176ac52601e262ad7d9d448de0385bd70f858ecac5",
+      "accepted_sha256": "d1faa2120bc944d299c274176ac52601e262ad7d9d448de0385bd70f858ecac5",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-mortgage-desk-return-manifest-2026-10-27.json"
+    }
+  }
+}
