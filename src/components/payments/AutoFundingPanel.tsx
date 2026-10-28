@@ -131,7 +131,7 @@ export function AutoFundingPanel({ canEdit = true }: { canEdit?: boolean }) {
   return (
     <div className="space-y-5">
       {/* Balances */}
-      <div className="grid gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Stat label="Available" value={money(availableCents)} />
         <Stat label="Pending in" value={money(pendingCents)} muted />
         <Stat label="Reserved for payments" value={money(reservedCents)} muted />
@@ -140,8 +140,8 @@ export function AutoFundingPanel({ canEdit = true }: { canEdit?: boolean }) {
 
       {attention.length > 0 && (
         <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/5 p-3 text-sm">
-          <AlertTriangle className="mt-0.5 h-4 w-4 text-amber-500" />
-          <div>
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+          <div className="min-w-0 break-words">
             <p className="font-medium">Funding needs attention</p>
             <p className="text-muted-foreground">
               {attention[0].failure_reason ??
@@ -155,7 +155,7 @@ export function AutoFundingPanel({ canEdit = true }: { canEdit?: boolean }) {
 
       {/* Switch */}
       <div className="flex items-center justify-between gap-4">
-        <div>
+        <div className="min-w-0 flex-1">
           <p className="text-sm font-medium">Automatic funding</p>
           <p className="text-xs text-muted-foreground">
             Top your wallet up from your own bank account when an approved payment is short.
@@ -165,11 +165,12 @@ export function AutoFundingPanel({ canEdit = true }: { canEdit?: boolean }) {
           checked={Boolean(s?.auto_funding_enabled)}
           disabled={!canEdit || !authorized || saveSettings.isPending}
           onCheckedChange={(checked) => persist({ auto_funding_enabled: checked })}
+          className="shrink-0"
         />
       </div>
 
       {!authorized && (
-        <div className="space-y-2 rounded-md border p-3 text-sm">
+        <div className="space-y-2 break-words rounded-md border p-3 text-sm">
           <p className="flex items-center gap-2 font-medium">
             <ShieldCheck className="h-4 w-4 text-primary" />
             Bank debit authorization required
@@ -199,7 +200,7 @@ export function AutoFundingPanel({ canEdit = true }: { canEdit?: boolean }) {
       )}
 
       {/* Settings */}
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="space-y-1.5">
           <Label>Funding bank account</Label>
           <Select value={bankId} onValueChange={setBankId} disabled={!canEdit}>
@@ -310,7 +311,7 @@ export function AutoFundingPanel({ canEdit = true }: { canEdit?: boolean }) {
                     {new Date(r.created_at).toLocaleString()}
                   </p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex shrink-0 items-center gap-2">
                   <Badge variant="outline">{FUNDING_STATUS_LABEL[r.status] ?? r.status}</Badge>
                   {["pending", "initiating", "ready"].includes(r.status) && canEdit && (
                     <Button
@@ -341,9 +342,9 @@ export function AutoFundingPanel({ canEdit = true }: { canEdit?: boolean }) {
 
 function Stat({ label, value, muted }: { label: string; value: string; muted?: boolean }) {
   return (
-    <div className="rounded-md border p-3">
+    <div className="min-w-0 rounded-md border p-3">
       <p className="text-xs tracking-wide text-muted-foreground">{label}</p>
-      <p className={`text-lg font-semibold ${muted ? "text-muted-foreground" : ""}`}>{value}</p>
+      <p className={`break-words text-lg font-semibold ${muted ? "text-muted-foreground" : ""}`}>{value}</p>
     </div>
   );
 }
