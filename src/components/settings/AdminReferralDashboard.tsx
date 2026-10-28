@@ -12,7 +12,7 @@ import { format } from "date-fns";
 // The platform owner's view of Refer & Earn (SQL 111): one row per tenant with its code, the
 // referrals it has made, the credit those earn ($5.00 each, at most $25.00 a month), any
 // discount set by hand, and what is applied to its maintenance invoice.
-type OverviewRow = {
+export type OverviewRow = {
   tenant_id: string;
   name: string | null;
   slug: string | null;
@@ -31,6 +31,15 @@ type RpcCall = (name: string, args?: Record<string, unknown>) => Promise<{ data:
 // The SQL 111 function is AWS-only, so it is not in the generated Supabase function types.
 const rpc = (name: string, args?: Record<string, unknown>) => (supabase.rpc as unknown as RpcCall).call(supabase, name, args);
 
+// Shared with Tenant Management (the list's referral credit column and the usage breakdown),
+// so both screens read the same rows from one cached query.
+export const REFERRAL_OVERVIEW_QUERY_KEY = ["admin-referral-overview"];
+export const fetchReferralOverview = async () => {
+  const { data, error } = await rpc("aws_platform_owner_referral_overview");
+  if (error) throw new Error(error.message || "Could not load referral overview");
+  return (Array.isArray(data) ? data : []) as OverviewRow[];
+};
+
 const dollars = (cents: number | null | undefined) => ((Number(cents) || 0) / 100).toFixed(2);
 
 export function AdminReferralDashboard() {
@@ -40,15 +49,11 @@ export function AdminReferralDashboard() {
   const owner = isPlatformOwner(user?.email, user?.id);
 
   const { data: tenants = [], isLoading, error } = useQuery({
-    queryKey: ["admin-referral-overview"],
+    queryKey: REFERRAL_OVERVIEW_QUERY_KEY,
     enabled: owner,
     refetchOnMount: "always",
     refetchInterval: 60_000,
-    queryFn: async () => {
-      const { data, error } = await rpc("aws_platform_owner_referral_overview");
-      if (error) throw new Error(error.message || "Could not load referral overview");
-      return (Array.isArray(data) ? data : []) as OverviewRow[];
-    },
+    queryFn: fetchReferralOverview,
   });
 
   if (!owner) return null;
