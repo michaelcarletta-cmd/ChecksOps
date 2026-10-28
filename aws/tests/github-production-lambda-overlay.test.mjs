@@ -2426,7 +2426,7 @@ test('Delete Check: workflow.mjs replaced the release 2026-10-17 bytes; producti
   );
 });
 
-test('Cash jobs: workflow.mjs replaces the applied Delete Check bytes with the cash-job check link, held on SQL 121 until it is recorded live in production', async () => {
+test('Cash jobs: workflow.mjs replaces the applied Delete Check bytes with the cash-job check link, held on SQL 121, recorded live in production (#1321)', async () => {
   const MEMBER = 'workflow.mjs';
   const MANIFEST_REL = 'aws/tests/fixtures/production-cash-jobs-check-link-manifest-2026-10-27.json';
   const PREVIOUS = 'aws/tests/fixtures/production-delete-check-applied-manifest-2026-10-27.json';
@@ -2439,19 +2439,26 @@ test('Cash jobs: workflow.mjs replaces the applied Delete Check bytes with the c
   assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, PREVIOUS), 'utf8')).members[MEMBER].accepted_sha256, BEFORE);
   const row = PLAN.members[MEMBER];
   assert.deepEqual(row, { operation: 'replace', accepted_sha256: accepted, expected_live_sha256: BEFORE, sql_before: SQL121_FILE, manifest: MANIFEST_REL });
-  // SQL 121 is applied in staging (run 40591140684), not yet recorded live in production.
+  // SQL 121 is applied in staging (run 40591140684) and recorded live in production from its applied pin
+  // (one-shot run 0ba96971, SSM 6bfda4a6, #1321).
   const pre = PLAN.sql_prerequisites[SQL121_FILE];
-  assert.equal(pre.verified_live, false);
-  assert.equal(pre.evidence, null);
+  assert.equal(pre.verified_live, true);
   assert.equal(pre.pin, 'ops/deployment-guard/sql121-cash-jobs-grants-production-apply.json');
+  const applied = JSON.parse(fs.readFileSync(path.join(ROOT, pre.pin), 'utf8')).applied;
+  assert.equal(applied.result, 'applied');
+  assert.ok(pre.evidence.includes(`SSM ${applied.apply_ssm_command_id}`));
+  assert.ok(pre.evidence.includes(applied.one_use_id));
+  assert.ok(pre.evidence.includes('#1321'));
   assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
   const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
   const ready = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: BEFORE }) });
   assert.equal(ready.mutation, false);
   assert.notEqual(ready.state, 'ALREADY_ACCEPTED');
-  // The apply refuses until SQL 121 is recorded verified live in production.
+  // The apply refused until SQL 121 was recorded verified live in production (the plan before this record).
+  const before = structuredClone(PLAN);
+  before.sql_prerequisites[SQL121_FILE] = { ...pre, verified_live: false, evidence: null };
   await assert.rejects(
-    run(applyEnv(MEMBER), applyDeps(MEMBER, { plan: PLAN }).deps),
+    run(applyEnv(MEMBER), applyDeps(MEMBER, { plan: before }).deps),
     (error) => error.code === CODES.PRODUCTION_APPROVAL_REQUIRED && error.details.sql_before === SQL121_FILE,
   );
 });
