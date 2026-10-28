@@ -79,6 +79,10 @@ const STATUS_TONE: Record<string, string> = {
   canceled: "border-muted-foreground/30 text-muted-foreground",
 };
 
+// Funding & Billing is hidden for now (owner request). Its billing rows still show in
+// Recent Wallet Activity. Set to true to bring the section back.
+const SHOW_FUNDING_AND_BILLING = false;
+
 const READINESS_COPY: Record<string, { label: string; tone: string }> = {
   ready: { label: "Ready", tone: "border-emerald-500/40 text-emerald-500 bg-emerald-500/5" },
   pending: { label: "Pending", tone: "border-amber-500/40 text-amber-500 bg-amber-500/5" },
@@ -377,74 +381,76 @@ export default function WalletOps() {
         </div>
       </div>
 
-      <SectionCard
-        title="Funding & Billing"
-        icon={<Landmark className="h-4 w-4 text-primary" />}
-        accent="bg-gradient-to-r from-primary/60 to-primary/10"
-      >
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 text-sm">
-          <div>
-            <p className="text-[10px] font-bold tracking-wider text-muted-foreground">Wallet</p>
-            <p className="mt-0.5 font-medium">{walletLoading ? "…" : balanceLabel}</p>
-            <p className="text-xs text-muted-foreground">Available operating balance</p>
-          </div>
-          <div>
-            <p className="text-[10px] font-bold tracking-wider text-muted-foreground">Primary funding account</p>
-            <p className="mt-0.5 font-medium">{fundingBank}</p>
-            <p className="text-xs text-muted-foreground">Connected bank for this organization</p>
-          </div>
-          <div>
-            <p className="text-[10px] font-bold tracking-wider text-muted-foreground">ChecksOps billing</p>
-            <p className="mt-0.5 font-medium">Wallet first, then connected bank for the remainder</p>
-            <p className="text-xs text-muted-foreground">
-              Available wallet funds are used first. Any remainder is collected from {fundingBank}.
-            </p>
-          </div>
-          <div>
-            <p className="text-[10px] font-bold tracking-wider text-muted-foreground">Automatic payouts</p>
-            <p className="mt-0.5 font-medium">{sweepsOn ? "On" : "Off"}</p>
-            <p className="text-xs text-muted-foreground">
-              {sweepsOn
-                ? "When this is on, leftover wallet money is sent to your bank every day. You do not tap Send."
-                : "Leftover wallet money stays in the wallet until you move it."}
-            </p>
-          </div>
-          <div>
-            <p className="text-[10px] font-bold tracking-wider text-muted-foreground">Minimum retained balance</p>
-            <p className="mt-0.5 font-medium">{money(minimumCents)}</p>
-            {sweepsOn && (
+      {SHOW_FUNDING_AND_BILLING && (
+        <SectionCard
+          title="Funding & Billing"
+          icon={<Landmark className="h-4 w-4 text-primary" />}
+          accent="bg-gradient-to-r from-primary/60 to-primary/10"
+        >
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 text-sm">
+            <div>
+              <p className="text-[10px] font-bold tracking-wider text-muted-foreground">Wallet</p>
+              <p className="mt-0.5 font-medium">{walletLoading ? "…" : balanceLabel}</p>
+              <p className="text-xs text-muted-foreground">Available operating balance</p>
+            </div>
+            <div>
+              <p className="text-[10px] font-bold tracking-wider text-muted-foreground">Primary funding account</p>
+              <p className="mt-0.5 font-medium">{fundingBank}</p>
+              <p className="text-xs text-muted-foreground">Connected bank for this organization</p>
+            </div>
+            <div>
+              <p className="text-[10px] font-bold tracking-wider text-muted-foreground">ChecksOps billing</p>
+              <p className="mt-0.5 font-medium">Wallet first, then connected bank for the remainder</p>
               <p className="text-xs text-muted-foreground">
-                Anything above this is paid out automatically.
+                Available wallet funds are used first. Any remainder is collected from {fundingBank}.
               </p>
-            )}
+            </div>
+            <div>
+              <p className="text-[10px] font-bold tracking-wider text-muted-foreground">Automatic payouts</p>
+              <p className="mt-0.5 font-medium">{sweepsOn ? "On" : "Off"}</p>
+              <p className="text-xs text-muted-foreground">
+                {sweepsOn
+                  ? "When this is on, leftover wallet money is sent to your bank every day. You do not tap Send."
+                  : "Leftover wallet money stays in the wallet until you move it."}
+              </p>
+            </div>
+            <div>
+              <p className="text-[10px] font-bold tracking-wider text-muted-foreground">Minimum retained balance</p>
+              <p className="mt-0.5 font-medium">{money(minimumCents)}</p>
+              {sweepsOn && (
+                <p className="text-xs text-muted-foreground">
+                  Anything above this is paid out automatically.
+                </p>
+              )}
+            </div>
           </div>
-        </div>
-        {billingActivity.length > 0 && (
-          <div className="divide-y rounded-md border">
-            {billingActivity.map((bill) => (
-              <div key={bill.id} className="flex flex-col gap-1 px-3 py-2.5 text-sm sm:flex-row sm:items-center sm:justify-between">
-                <div className="min-w-0">
-                  <p className="font-medium">ChecksOps Billing</p>
-                  <p className="text-xs text-muted-foreground">{bill.period_label}</p>
-                  <p className="text-xs text-muted-foreground">
-                    Funding: Wallet {money(bill.wallet_cents)} + {fundingBank} {money(bill.bank_cents)}
-                  </p>
-                  <p className="text-xs text-muted-foreground">To: ChecksOps</p>
+          {billingActivity.length > 0 && (
+            <div className="divide-y rounded-md border">
+              {billingActivity.map((bill) => (
+                <div key={bill.id} className="flex flex-col gap-1 px-3 py-2.5 text-sm sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0">
+                    <p className="font-medium">ChecksOps Billing</p>
+                    <p className="text-xs text-muted-foreground">{bill.period_label}</p>
+                    <p className="text-xs text-muted-foreground">
+                      Funding: Wallet {money(bill.wallet_cents)} + {fundingBank} {money(bill.bank_cents)}
+                    </p>
+                    <p className="text-xs text-muted-foreground">To: ChecksOps</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge
+                      variant="outline"
+                      className={`text-[10px] ${STATUS_TONE[bill.status.toLowerCase()] ?? "border-amber-500/40 text-amber-500 bg-amber-500/5"}`}
+                    >
+                      {bill.status}
+                    </Badge>
+                    <span className="font-semibold">{money(bill.amount_cents)}</span>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Badge
-                    variant="outline"
-                    className={`text-[10px] ${STATUS_TONE[bill.status.toLowerCase()] ?? "border-amber-500/40 text-amber-500 bg-amber-500/5"}`}
-                  >
-                    {bill.status}
-                  </Badge>
-                  <span className="font-semibold">{money(bill.amount_cents)}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </SectionCard>
+              ))}
+            </div>
+          )}
+        </SectionCard>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-2">
         {/* Wallet & Treasury */}
@@ -628,7 +634,7 @@ export default function WalletOps() {
           >
             {recentActivity.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                No wallet activity yet. Funding, payouts, and automatic payouts appear here.
+                No wallet activity yet. Billing, funding, payouts, transfers, and automatic payouts appear here.
               </p>
             ) : (
               <div className="max-h-[28rem] overflow-y-auto divide-y rounded-md border">
