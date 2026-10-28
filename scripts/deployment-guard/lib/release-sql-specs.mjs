@@ -1,5 +1,5 @@
 /**
- * Specs of the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108 to SQL 123) for the shared engine in
+ * Specs of the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108 to SQL 124) for the shared engine in
  * release-sql-state.mjs: what each pinned file creates, replaces or drops, the reviewed
  * EXECUTE ACLs, the prerequisites and predecessors, and the PostgreSQL renderings the file
  * leaves (policy expressions, view, column, constraint, index and trigger definitions as
@@ -5082,6 +5082,207 @@ export const RELEASE_SQL_SPECS = deepFreeze({
     ],
     "altered_relations": [
       "public.checkalt_deposits"
+    ]
+  },
+  // SQL 124: the Mortgage Desk sends a check's document for signature, reads the check's thread,
+  // files and signature requests, and posts homeowner timeline updates (owner, 2026-10-28). Eight
+  // SECURITY DEFINER functions (search_path public): the internal readable-request check (EXECUTE
+  // for the owner only) and seven the API calls as the signed-in agent (EXECUTE: checksops and the
+  // owner): the check's messages, files and signature requests, the storage-read check of a path,
+  // the create of a draft signature request on a .pdf / .docx of the check, the record of its email
+  // sends and a homeowner timeline row. No table, column, policy, table grant or trigger. No
+  // predecessor: the file checks SQL 122's aws_mortgage_desk_working_request(uuid, text[]), SQL
+  // 100's aws_is_mortgage_ops_agent(), SQL 90's aws_is_platform_owner_user(uuid) and every table
+  // and column it uses itself (prerequisites). definer_writes: the eight tables the file's own
+  // ownership rule names (the functions read check_messages and mortgage_handling_requests and
+  // write check_files, homeowner_ledger_events, signature_requests, signature_signers,
+  // signature_fields and esign_event_logs, all under RLS); the inspect confirms the login can for
+  // each. Two functions return TABLE (...), stated here (result) as pg_get_function_result renders
+  // it; the readable-request check returns the request's row type (public.<table>).
+  sql124: {
+    "key": "sql124",
+    "label": "SQL 124",
+    "choice": "sql124-mortgage-desk-signature-and-reads",
+    "production_pin_rel": "ops/deployment-guard/sql124-mortgage-desk-signature-and-reads-production-apply.json",
+    "script": "sql124-mortgage-desk-signature-and-reads-production-apply",
+    "prerequisites": [
+      "auth.uid()",
+      "public.aws_mortgage_desk_working_request(uuid, text[])",
+      "public.aws_is_mortgage_ops_agent()",
+      "public.aws_is_platform_owner_user(uuid)",
+      "public.is_platform_owner()",
+      "type public.app_role",
+      "public.has_role(uuid, public.app_role)",
+      "pg_catalog.sha256(bytea)",
+      "public.check_messages",
+      "public.check_files",
+      "public.check_intake_items",
+      "public.mortgage_handling_requests",
+      "public.homeowner_ledger_events",
+      "public.signature_requests",
+      "public.signature_signers",
+      "public.signature_fields",
+      "public.esign_event_logs",
+      "role checksops",
+      "column public.check_messages.id",
+      "column public.check_messages.check_id",
+      "column public.check_messages.sender_id",
+      "column public.check_messages.body",
+      "column public.check_messages.is_deleted",
+      "column public.check_messages.created_at",
+      "column public.check_files.id",
+      "column public.check_files.check_intake_item_id",
+      "column public.check_files.file_name",
+      "column public.check_files.file_path",
+      "column public.check_files.file_type",
+      "column public.check_files.file_size",
+      "column public.check_files.category",
+      "column public.check_files.description",
+      "column public.check_files.source",
+      "column public.check_files.created_at",
+      "column public.check_files.signature_request_id",
+      "column public.check_intake_items.id",
+      "column public.check_intake_items.claim_id",
+      "column public.mortgage_handling_requests.id",
+      "column public.mortgage_handling_requests.tenant_id",
+      "column public.mortgage_handling_requests.claim_id",
+      "column public.mortgage_handling_requests.status",
+      "column public.mortgage_handling_requests.check_intake_item_id",
+      "column public.mortgage_handling_requests.assigned_employee_id",
+      "column public.mortgage_handling_requests.mortgage_company",
+      "column public.homeowner_ledger_events.id",
+      "column public.homeowner_ledger_events.tenant_id",
+      "column public.homeowner_ledger_events.claim_id",
+      "column public.homeowner_ledger_events.check_id",
+      "column public.homeowner_ledger_events.event_type",
+      "column public.homeowner_ledger_events.occurred_at",
+      "column public.homeowner_ledger_events.actor_label",
+      "column public.homeowner_ledger_events.payload_json",
+      "column public.homeowner_ledger_events.created_by",
+      "column public.signature_requests.id",
+      "column public.signature_requests.claim_id",
+      "column public.signature_requests.check_intake_item_id",
+      "column public.signature_requests.document_name",
+      "column public.signature_requests.document_path",
+      "column public.signature_requests.document_type",
+      "column public.signature_requests.field_data",
+      "column public.signature_requests.status",
+      "column public.signature_requests.created_at",
+      "column public.signature_requests.created_by",
+      "column public.signature_requests.sent_at",
+      "column public.signature_requests.final_pdf_path",
+      "column public.signature_requests.delivery_mode",
+      "column public.signature_requests.provider_status",
+      "column public.signature_requests.last_error",
+      "column public.signature_requests.last_attempted_at",
+      "column public.signature_signers.id",
+      "column public.signature_signers.signature_request_id",
+      "column public.signature_signers.signer_name",
+      "column public.signature_signers.signer_email",
+      "column public.signature_signers.signer_type",
+      "column public.signature_signers.signing_order",
+      "column public.signature_signers.status",
+      "column public.signature_signers.signed_at",
+      "column public.signature_signers.viewed_at",
+      "column public.signature_signers.access_token",
+      "column public.signature_signers.token_hash",
+      "column public.signature_signers.expires_at",
+      "column public.signature_signers.delivery_status",
+      "column public.signature_signers.delivery_error",
+      "column public.signature_signers.email_sent_at",
+      "column public.signature_signers.email_provider_message_id",
+      "column public.signature_signers.created_at",
+      "column public.signature_fields.id",
+      "column public.signature_fields.signature_request_id",
+      "column public.signature_fields.signer_index",
+      "column public.signature_fields.field_type",
+      "column public.signature_fields.label",
+      "column public.signature_fields.page",
+      "column public.signature_fields.x",
+      "column public.signature_fields.y",
+      "column public.signature_fields.width",
+      "column public.signature_fields.height",
+      "column public.signature_fields.required",
+      "column public.signature_fields.placeholder",
+      "column public.signature_fields.checkbox_label",
+      "column public.esign_event_logs.request_id",
+      "column public.esign_event_logs.signer_id",
+      "column public.esign_event_logs.claim_id",
+      "column public.esign_event_logs.stage",
+      "column public.esign_event_logs.status",
+      "column public.esign_event_logs.message",
+      "column public.esign_event_logs.payload"
+    ],
+    "predecessors": [],
+    "functions": [
+      {
+        "identity": "public.aws_mortgage_desk_readable_request(uuid)",
+        "acl": [
+          "owner EXECUTE"
+        ],
+        "result": "public.mortgage_handling_requests"
+      },
+      {
+        "identity": "public.aws_mortgage_desk_messages(uuid)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ],
+        "result": "TABLE(id uuid, sender_id uuid, body text, created_at timestamp with time zone, from_desk boolean)"
+      },
+      {
+        "identity": "public.aws_mortgage_desk_check_files(uuid)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ],
+        "result": "TABLE(id uuid, file_name text, file_path text, file_type text, file_size bigint, category text, description text, source text, created_at timestamp with time zone, signature_request_id uuid)"
+      },
+      {
+        "identity": "public.aws_mortgage_desk_signature_requests(uuid)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ]
+      },
+      {
+        "identity": "public.aws_mortgage_desk_can_read_path(text[], text)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ]
+      },
+      {
+        "identity": "public.aws_mortgage_desk_create_signature_request(uuid, text, text, text, jsonb, jsonb, timestamp with time zone)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ]
+      },
+      {
+        "identity": "public.aws_mortgage_desk_record_signature_delivery(uuid, uuid, jsonb)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ]
+      },
+      {
+        "identity": "public.aws_mortgage_desk_post_timeline(uuid, text, text)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ]
+      }
+    ],
+    "definer_writes": [
+      "public.check_messages",
+      "public.check_files",
+      "public.mortgage_handling_requests",
+      "public.homeowner_ledger_events",
+      "public.signature_requests",
+      "public.signature_signers",
+      "public.signature_fields",
+      "public.esign_event_logs"
     ]
   },
 });
