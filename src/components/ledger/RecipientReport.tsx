@@ -12,6 +12,8 @@ import { Label } from "@/components/ui/label";
 import { Download, Search, Users, Pencil } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { format, startOfYear, endOfYear, startOfMonth, endOfMonth, subMonths } from "date-fns";
+import { useActiveStakeholders } from "@/hooks/useActiveStakeholders";
+import { withActiveStakeholders, type RecipientTotalRow } from "@/lib/payments/activeStakeholders";
 
 
 const TYPE_LABELS: Record<string, string> = {
@@ -172,8 +174,11 @@ export function RecipientReport() {
       .sort((a, b) => b.total - a.total);
   }, [filtered]);
 
+  // Every Active Stakeholder from Settings is listed, with $0 when not paid in the range.
+  const { data: stakeholders = [] } = useActiveStakeholders(tenant?.id);
+
   const byRecipient = useMemo(() => {
-    const acc: Record<string, { name: string; type: string; total: number; count: number; last: string }> = {};
+    const acc: Record<string, RecipientTotalRow & { last: string }> = {};
     for (const r of filtered) {
       if (r.status !== "settled") continue;
       const k = `${r.type}|${r.name}`;
@@ -182,8 +187,9 @@ export function RecipientReport() {
       acc[k].count += 1;
       if (new Date(r.date) > new Date(acc[k].last)) acc[k].last = r.date;
     }
-    return Object.values(acc).sort((a, b) => b.total - a.total);
-  }, [filtered]);
+    const paid = Object.values(acc).sort((a, b) => b.total - a.total);
+    return withActiveStakeholders(paid, stakeholders, { search, typeFilter });
+  }, [filtered, stakeholders, search, typeFilter]);
 
   const grandTotal = byType.reduce((s, t) => s + t.total, 0);
 
@@ -194,7 +200,7 @@ export function RecipientReport() {
       TYPE_LABELS[r.type] ?? r.type,
       r.total.toFixed(2),
       r.count,
-      format(new Date(r.last), "yyyy-MM-dd"),
+      r.last ? format(new Date(r.last), "yyyy-MM-dd") : "",
     ]);
     const csv = [headers, ...rs].map((row) => row.map((v) => `"${v}"`).join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
@@ -365,18 +371,20 @@ export function RecipientReport() {
                         ${r.total.toLocaleString("en-US", { minimumFractionDigits: 2 })}
                       </td>
                       <td className="p-3 text-xs text-muted-foreground hidden md:table-cell">
-                        {format(new Date(r.last), "MMM d, yyyy")}
+                        {r.last ? format(new Date(r.last), "MMM d, yyyy") : "—"}
                       </td>
                       <td className="p-3 text-right">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-7 w-7 p-0"
-                          title="Edit recipient"
-                          onClick={() => openEdit(r.name, r.type, r.count)}
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </Button>
+                        {r.count > 0 && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 w-7 p-0"
+                            title="Edit recipient"
+                            onClick={() => openEdit(r.name, r.type, r.count)}
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
                       </td>
                     </tr>
                   ))}
