@@ -2767,6 +2767,37 @@ export const AUTHORIZED_SQL123_CHECKALT_DEPOSIT_CHECK_STATUS = Object.freeze({
   ]),
 });
 
+// Mortgage Desk 2026-10-28 staging pin: SQL 124 (the Mortgage Desk sends a check's document for
+// signature, reads the check's thread, files and signature requests, and posts homeowner timeline
+// updates). Eight SECURITY DEFINER functions: seven with EXECUTE for checksops (the check's messages,
+// files and signature requests, the storage-read check of a path, the create of a draft signature
+// request, the record of its email sends, a homeowner timeline row) and the internal readable-request
+// check for the owner only. No predecessor. Pending until a reviewed pin change records a staging
+// read-live.
+export const AUTHORIZED_SQL124_MORTGAGE_DESK_SIGNATURE_AND_READS = Object.freeze({
+  key: 'sql124',
+  filename: 'aws/workflows/sql/124_mortgage_desk_signature_and_reads.sql',
+  migration_id: '124_mortgage_desk_signature_and_reads',
+  // The commit that last authored the file bytes.
+  commit: '51fdd33dccbda35993ed4e1a3f42297979a7aa2a',
+  source_sha256: '0b597e65eec3bbcf96fd685b757015645a58bd224c942bef6c66c251de2be76f',
+  authorization: 'pending',
+  execute: false,
+  expected_live_definition_sha256: null,
+  // Code-derived: releaseIntendedHash('sql124', file bytes) (release-sql-state.mjs); re-derived by the tests.
+  intended_replacement_sha256: 'daeeff54652d04b45bd7cbfb3e47f56209b90ce14c7410c32285e3cf8b129ccb',
+  function_identities: Object.freeze([
+    'public.aws_mortgage_desk_readable_request(uuid)',
+    'public.aws_mortgage_desk_messages(uuid)',
+    'public.aws_mortgage_desk_check_files(uuid)',
+    'public.aws_mortgage_desk_signature_requests(uuid)',
+    'public.aws_mortgage_desk_can_read_path(text[], text)',
+    'public.aws_mortgage_desk_create_signature_request(uuid, text, text, text, jsonb, jsonb, timestamp with time zone)',
+    'public.aws_mortgage_desk_record_signature_delivery(uuid, uuid, jsonb)',
+    'public.aws_mortgage_desk_post_timeline(uuid, text, text)',
+  ]),
+});
+
 export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql90: AUTHORIZED_SQL90_USERS_ONLY_TENANT_ROLES,
   sql91: AUTHORIZED_SQL91_MOOV_ONBOARDING,
@@ -2801,6 +2832,7 @@ export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql121: AUTHORIZED_SQL121_CASH_JOBS_PRODUCTION_GRANTS,
   sql122: AUTHORIZED_SQL122_MORTGAGE_DESK_RETURN_TO_TENANT,
   sql123: AUTHORIZED_SQL123_CHECKALT_DEPOSIT_CHECK_STATUS,
+  sql124: AUTHORIZED_SQL124_MORTGAGE_DESK_SIGNATURE_AND_READS,
 });
 
 // The fee collection pin under its earlier map name (the same object as the release map's sql98).
@@ -2816,7 +2848,7 @@ export function isSql30TenantDocumentsDocType(input = {}) {
   return pinIdentifiersMatch(input, AUTHORIZED_SQL30_TENANT_DOCUMENTS_DOC_TYPE);
 }
 
-/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql123) an input names, or null. */
+/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql124) an input names, or null. */
 export function releaseSqlMigrationKey(input = {}) {
   return Object.keys(RELEASE_2026_10_17_PENDING_SQL_PINS)
     .find((key) => pinIdentifiersMatch(input, RELEASE_2026_10_17_PENDING_SQL_PINS[key])) || null;

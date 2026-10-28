@@ -84,6 +84,7 @@ node scripts/deployment-guard/sql120-usage-events-at-approval-and-send-productio
 node scripts/deployment-guard/sql121-cash-jobs-grants-production-apply.mjs --inspect   # cash-job table grants, definer payment trigger, cash-job payment at Check Alt approval (ops/production-sql-121-apply.md)
 node scripts/deployment-guard/sql122-mortgage-desk-return-to-tenant-production-apply.mjs --inspect   # Mortgage Desk returns its work to the tenant: notes, documents, shipping, email claim (ops/production-sql-122-apply.md)
 node scripts/deployment-guard/sql123-checkalt-deposit-check-status-production-apply.mjs --inspect   # a Check Alt deposit moves its check to Deposited, a later rejection or return to Returned (ops/production-sql-123-apply.md)
+node scripts/deployment-guard/sql124-mortgage-desk-signature-and-reads-production-apply.mjs --inspect   # Mortgage Desk sends for signature, reads the check's thread, files and signature requests, posts timeline updates (ops/production-sql-124-apply.md)
 # Production SQL 71, 77-89 and 90-102 on the runner, one invocation (ops/production-sql-one-shot.md)
 node scripts/deployment-guard/production-sql-one-shot.mjs --migration sql80 --phase inspect ...
 node scripts/deployment-guard/verify-live.mjs --input path/to/live.json
