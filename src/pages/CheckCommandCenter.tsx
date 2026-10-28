@@ -42,7 +42,7 @@ import {
   Send, Eye, Users, Building2, Shield, ChevronRight,
   RefreshCw, Banknote, ClipboardCheck, RotateCcw, Printer, Landmark, Trash2, Search,
   FileImage, Undo2, HelpCircle, X as XIcon, Loader2 as Loader2Icon,
-  Sparkles, MessageSquare, ArrowLeft, ShieldAlert,
+  MessageSquare, ArrowLeft, ShieldAlert,
 } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useListViewState } from "@/hooks/useListViewState";
@@ -2510,7 +2510,6 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
   const [claimSearch, setClaimSearch] = useState("");
   const [uploading, setUploading] = useState(false);
   const [claimDropdownOpen, setClaimDropdownOpen] = useState(false);
-  const [skipAi, setSkipAi] = useState(false);
   const [mortgagee1, setMortgagee1] = useState("");
   const [mortgagee2, setMortgagee2] = useState("");
   const [showSecondMortgagee, setShowSecondMortgagee] = useState(false);
@@ -2565,7 +2564,7 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
         const created = await createAwsCheck(token, {
           ...(tenantId ? { tenant_id: tenantId } : {}),
           ...(claimId ? { claim_id: claimId } : {}),
-          review_notes: skipAi ? "AWS staging intake — manual entry (OCR skipped)" : "AWS staging intake",
+          review_notes: "AWS staging intake",
         });
         check = created.check as { id: string };
         prefix = created.imagePrefix.replace(/\/$/, "");
@@ -2632,19 +2631,10 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
       if (!check?.id) throw new Error("Insert failed");
 
       // AWS create is image-less by design. After the front image is stored,
-      // invoke the same check-ocr-intake path as production unless the user
-      // chose manual entry. Do not call CheckAlt or Moov from upload.
-      if (aws && skipAi) {
-        toast({
-          title: "Check uploaded for manual entry",
-          description: "AWS staging created an internal check. OCR was not invoked.",
-        });
-        onSuccess();
-        return;
-      }
-
+      // invoke the same check-ocr-intake path as production. Do not call
+      // CheckAlt or Moov from upload.
       const { data: ocrResult, error: fnErr } = await supabase.functions.invoke("check-ocr-intake", {
-        body: { checkId: check.id, skipAi },
+        body: { checkId: check.id },
         headers: { Authorization: `Bearer ${session.session?.access_token}` },
       });
 
@@ -2658,9 +2648,9 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
           description: "AI couldn't process this check. It's been added to the review queue for manual entry.",
         });
       } else if (result?.skipped) {
-        // User opted out, out of credits, or rate-limited — same downstream path.
+        // Out of credits or rate-limited: the check goes to the review queue for manual entry.
         toast({
-          title: skipAi ? "Check uploaded for manual entry" : "Check uploaded — AI unavailable",
+          title: "Check uploaded — AI unavailable",
           description: result.message ?? "Enter the check details in the review queue.",
         });
       } else if (result && ((("success" in result) && !result.success) || (("ocr_success" in result) && !result.ocr_success))) {
@@ -2684,37 +2674,6 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
 
   return (
     <div className="space-y-4">
-      {/* AI ON/OFF toggle — prominent at the top so the user can decide
-          before they even pick a file whether to spend AI credits. */}
-      <div className="flex items-center justify-between gap-3 rounded-lg border bg-muted/40 p-3">
-        <div className="flex items-center gap-2 min-w-0">
-          {skipAi ? (
-            <Pencil className="h-4 w-4 text-muted-foreground shrink-0" />
-          ) : (
-            <Sparkles className="h-4 w-4 text-primary shrink-0" />
-          )}
-          <div className="min-w-0">
-            <div className="text-sm font-medium leading-tight">
-              {skipAi ? "Manual entry mode" : "AI extraction enabled"}
-            </div>
-            <div className="text-[11px] text-muted-foreground leading-tight">
-              {skipAi
-                ? "You'll type the check details in the review queue. No AI credits used."
-                : "AI will read the check and pre-fill the details."}
-            </div>
-          </div>
-        </div>
-        <Button
-          type="button"
-          variant={skipAi ? "outline" : "default"}
-          size="sm"
-          className="shrink-0 h-8"
-          onClick={() => setSkipAi((v) => !v)}
-        >
-          {skipAi ? "Turn AI On" : "Turn AI Off"}
-        </Button>
-      </div>
-
       <div>
         <Label>Front of Check *</Label>
         <Input type="file" accept="image/*" onChange={(e) => {
@@ -2806,7 +2765,7 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
 
       <Button onClick={handleUpload} disabled={uploading || !frontFile} className="w-full">
         {uploading ? <RefreshCw className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
-        {uploading ? "Processing..." : skipAi ? "Upload for Manual Entry" : "Upload & Analyze"}
+        {uploading ? "Processing..." : "Upload & Analyze"}
       </Button>
     </div>
   );
