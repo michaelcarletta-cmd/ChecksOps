@@ -272,3 +272,17 @@ test('SQL 121: a cash-job check deposited through Check Alt records its payment 
   assert.match(sql, /REVOKE ALL ON FUNCTION public\.aws_record_cash_job_checkalt_payment\(\) FROM PUBLIC;/);
   assert.match(sql, /yes, record cash-job payments on Check Alt[\s-]*approval/);
 });
+
+test('review queue: cash job checks show their job, not an unlinked claim', () => {
+  const query = read('src/lib/reviewQueueQuery.ts');
+  for (const column of ['check_source', 'cash_job_id', 'cash_job_payment_class']) {
+    assert.match(query, new RegExp(`"${column}",`), column);
+  }
+  const review = read('src/components/check-review/CheckReviewConsole.tsx');
+  assert.match(review, /check\.check_source === "cash_job" && !!check\.cash_job_id/);
+  assert.match(review, /\.from\("cash_jobs"\)\s*\.select\("id, job_name, customer_name"\)\s*\.in\("id", linkedCashJobIds\)/);
+  assert.match(review, /`cashjob::\$\{cashJob\.id\}`/);
+  assert.match(review, /\{group\.cashJob \? \([\s\S]*?>Cash Job<\/Badge>[\s\S]*?Claim Check File/);
+  assert.match(review, /<Label className="text-\[10px\] text-muted-foreground shrink-0">Cash job<\/Label>/);
+  assert.match(review, /\{isCashJobCheck\(check\) && \([\s\S]*?<CashJobReviewLink cashJobId=\{check\.cash_job_id!\} \/>/);
+});
