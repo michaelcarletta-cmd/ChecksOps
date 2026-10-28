@@ -31,6 +31,12 @@ import { REVIEW_QUEUE_SELECT, isInReviewQueue, reviewQueuePayeeReasons } from "@
 import { formatIssueDateDisplay, toDateInputValue } from "@/lib/issueDate";
 import { displayCase } from "@/lib/displayCase";
 import { ShareCheckDialog } from "@/components/check-review/ShareCheckDialog";
+import {
+  COMPACT_LIST_SCROLL_CLASS,
+  CompactCheckListBody,
+  CompactCheckRow,
+  CompactClaimGroupHeader,
+} from "@/components/check-review/CompactCheckList";
 import { ReuploadCheckImageButton } from "@/components/checks/ReuploadCheckImageButton";
 import { AdminDeleteCheckButton } from "@/components/checks/AdminDeleteCheckButton";
 import { SendCheckTrackingLinkButton } from "@/components/homeowner-ledger/SendCheckTrackingLinkButton";
@@ -542,55 +548,27 @@ export function CheckReviewQueue({
   return (
     <>
     {filterBar}
-    <ScrollArea className="max-h-none lg:h-[calc(100vh-460px)]">
-      <div className="space-y-2 p-2">
+    <ScrollArea className={COMPACT_LIST_SCROLL_CLASS}>
+      <CompactCheckListBody>
         {groupedReviewChecks.map((group) => (
           <Fragment key={group.key}>
-            <div className="rounded-md border-t-4 border-primary bg-primary/20 px-3 py-3 text-foreground font-semibold">
-              <div className="flex flex-wrap items-center gap-2">
-                {group.cashJob ? (
-                  <>
-                    <Badge variant="secondary" className="text-[10px] tracking-wide border-amber-500/40 text-amber-500">Cash Job</Badge>
-                    <span className="font-semibold text-foreground truncate">{displayCase(group.policyholderName)}</span>
-                    <Badge variant="outline" className="text-[10px]">{group.cashJob.name}</Badge>
-                  </>
-                ) : (
-                  <>
-                    <Badge variant="secondary" className="text-[10px] tracking-wide">Claim Check File</Badge>
-                    <span className="font-semibold text-foreground truncate">{displayCase(group.policyholderName)}</span>
-                    <Badge variant="outline" className="font-mono text-[10px]">Claim #{group.claimNumber}</Badge>
-                  </>
-                )}
-              </div>
-              <div className="mt-1 flex flex-wrap items-center gap-2 text-xs font-normal text-muted-foreground">
-                <span>{group.checks.length} {group.checks.length === 1 ? "check" : "checks"}</span>
-                <span>•</span>
-                <span>Awaiting routing</span>
-              </div>
-            </div>
+            <CompactClaimGroupHeader
+              policyholderName={group.policyholderName}
+              claimNumber={group.claimNumber}
+              cashJob={group.cashJob}
+              count={group.checks.length}
+              details={["Awaiting routing"]}
+            />
             {group.checks.map((check) => (
-              <Card
+              <CompactCheckRow
                 key={check.id}
-                className={`cursor-pointer transition-colors hover:bg-accent/30 ${
-                  selectedCheckId === check.id ? "ring-1 ring-primary bg-accent/50" : ""
-                }`}
+                checkNumber={check.check_number}
+                amount={check.amount}
+                selected={selectedCheckId === check.id}
                 onClick={() => onSelectCheck(check.id)}
-              >
-                <CardContent className="p-3">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="font-mono text-sm font-medium">
-                      #{check.check_number || "Pending"}
-                    </span>
-                    <span className="text-sm font-bold tabular-nums">
-                      {check.amount != null
-                        ? `$${check.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}`
-                        : "—"}
-                    </span>
-                  </div>
-              <p className="text-xs text-muted-foreground truncate">
-                {displayCase(check.carrier_name) || "Unknown carrier"}
-              </p>
-              <div className="mt-1.5 flex flex-wrap gap-1">
+                subtitle={displayCase(check.carrier_name) || "Unknown carrier"}
+                pills={
+                  <>
                 {check.ocr_needs_verification ? (
                   <Badge variant="outline" className="text-[10px] bg-amber-500/15 text-amber-500 border-amber-500/30">
                     <AlertTriangle className="h-2.5 w-2.5 mr-1" />
@@ -617,11 +595,10 @@ export function CheckReviewQueue({
                     Has duplicates
                   </Badge>
                 )}
-              </div>
-              <div
-                className="mt-2 flex items-center gap-1.5"
-                onClick={(e) => e.stopPropagation()}
-              >
+                  </>
+                }
+                footer={
+                  <>
                 {group.cashJob ? (
                   <>
                     <Label className="text-[10px] text-muted-foreground shrink-0">Cash job</Label>
@@ -689,13 +666,13 @@ export function CheckReviewQueue({
                     qc.invalidateQueries({ queryKey: ["check-review-queue", tenantId] });
                   }}
                 />
-              </div>
-                </CardContent>
-              </Card>
+                  </>
+                }
+              />
             ))}
           </Fragment>
         ))}
-      </div>
+      </CompactCheckListBody>
       <ShareCheckDialog
         checkId={shareCheckId ?? ""}
         open={!!shareCheckId}
