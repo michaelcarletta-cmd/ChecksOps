@@ -113,7 +113,8 @@ const CHANGED_SINCE_SECOND_REBUILD = {
   'write-allowlist.mjs': 'changed',
   // DB validator SQL 120 triggers (2026-10-27): the two usage-event triggers SQL 120 added join the
   // justified public trigger set (182); deployed to staging by the guarded overlay, not a rebuild
-  // section.
+  // section. SQL 121 and SQL 123 (#1338) raised it to 184; a REPLACE member of the production
+  // overlay plan (2026-10-28).
   'db-readonly-validate.mjs': 'changed',
 };
 // Listed changes that go through the production overlay plan, never the current rebuild section.
@@ -132,7 +133,7 @@ const OVERLAY_PLAN_CHANGES = new Set([
   'write.mjs',
   'email-policy.mjs',
   'write-allowlist.mjs',
-  // Deployed by the guarded overlay (staging first; a production plan row when it goes there).
+  // Deployed by the guarded overlay (staging run 40739554272; a REPLACE row of the production plan).
   'db-readonly-validate.mjs',
 ]);
 const assertSectionAcceptedIsMain = (apiRoot, name, accepted) => {

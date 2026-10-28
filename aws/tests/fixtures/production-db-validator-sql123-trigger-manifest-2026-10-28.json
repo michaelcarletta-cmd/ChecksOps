@@ -1,0 +1,14 @@
+{
+  "workstream_id": "production-db-validator-sql123-trigger",
+  "authorization": "Pending owner review (2026-10-28). Planning only: nothing is live or verified. The production apply still needs its own owner approval and staging acceptance.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Owner request 2026-10-28: \"open the validator plan PR\". #1338 (4a3f4658e) adds SQL 123's checkalt_deposits.aws_checkalt_deposit_apply_check_status trigger to the validator's justified public trigger set and raises EXPECTED_PUBLIC_TRIGGERS to 184; SQL 123 is applied in production (record #1336), so production /db-readonly-validate reports that trigger as drift until these bytes are live. Staging acceptance: guarded staging Lambda overlay run 40739554272 (main e3823b5c5) replaced db-readonly-validate.mjs on checksops-staging-api, and staging /db-readonly-validate now returns 200 ok. live_sha256 71cc313e is the db-readonly-validate.mjs inside the live package, observed by the read-only guarded production Lambda rebuild inspect run 40741101459 (2026-10-28, main e3823b5c5, mutation false; live CodeSha256 WV2B9GAvLcd7R+NgSPDS/gt+X3xHipLm2LSc/xCtm98=, RevisionId 7413f101-ef5a-4f8c-949a-781fa1959e60, 6779 members): of 203 source members it is the only one that differs from main (202 same, none added or removed, dependencies 54/54 unchanged), so the modules it imports (secrets.mjs, rls-audit.mjs, db-health.mjs) and index.mjs, which imports it, are live at main's bytes. A read-only production overlay inspect must confirm the live member before any apply. No SQL prerequisite to hold on: SQL 123 is already applied in production.",
+  "members": {
+    "db-readonly-validate.mjs": {
+      "live_sha256": "71cc313ed9e4156be1bf2513bd8829621ffa63579c445563e1a12eb056bc1147",
+      "accepted_sha256": "d897c206e07a90c06815689e9926eb70a5aabb9fe10efdc74048991e146a850c",
+      "operation": "replace"
+    }
+  }
+}
