@@ -282,7 +282,10 @@ test('review queue: cash job checks show their job, not an unlinked claim', () =
   assert.match(review, /check\.check_source === "cash_job" && !!check\.cash_job_id/);
   assert.match(review, /\.from\("cash_jobs"\)\s*\.select\("id, job_name, customer_name"\)\s*\.in\("id", linkedCashJobIds\)/);
   assert.match(review, /`cashjob::\$\{cashJob\.id\}`/);
-  assert.match(review, /\{group\.cashJob \? \([\s\S]*?>Cash Job<\/Badge>[\s\S]*?Claim Check File/);
+  // The group header is the shared compact one (CompactCheckList); Review hands it the cash job.
+  assert.match(review, /<CompactClaimGroupHeader[\s\S]*?cashJob=\{group\.cashJob\}/);
+  const compact = read('src/components/check-review/CompactCheckList.tsx');
+  assert.match(compact, /\{cashJob \? \([\s\S]*?>Cash Job<\/Badge>[\s\S]*?Claim Check File/);
   assert.match(review, /<Label className="text-\[10px\] text-muted-foreground shrink-0">Cash job<\/Label>/);
   assert.match(review, /\{isCashJobCheck\(check\) && \([\s\S]*?<CashJobReviewLink cashJobId=\{check\.cash_job_id!\} \/>/);
 });
