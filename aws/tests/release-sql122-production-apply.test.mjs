@@ -222,7 +222,7 @@ test('pin: the release pin shape, applied and retired (owner approved 2026-10-27
   }
 });
 
-test('order: no predecessor and no order; SQL 100\'s helper and the Desk, check and identity tables are prerequisites; the API that calls it is held on it in the plan (the ADD, not yet live in production); no trigger; the runbook, one-shot doc and README name it', () => {
+test('order: no predecessor and no order; SQL 100\'s helper and the Desk, check and identity tables are prerequisites; the API that calls it is held on it in the plan (the ADD), recorded live in production; no trigger; the runbook, one-shot doc and README name it', () => {
   const spec = RELEASE_SQL_SPECS[KEY];
   assert.deepEqual(spec.predecessors, []);
   for (const object of ['public.aws_is_mortgage_ops_agent()', 'public.is_platform_owner()', 'auth.uid()', 'role checksops',
@@ -237,8 +237,10 @@ test('order: no predecessor and no order; SQL 100\'s helper and the Desk, check 
   // The API that calls these functions (mortgage-desk-return.mjs, an ADD) is held on it; workflow-rpc.mjs,
   // storage-write-auth.mjs and app-services.mjs import it and follow it in the plan order.
   const pre = plan.sql_prerequisites[SQL122_FILE];
-  assert.equal(pre.verified_live, false);
-  assert.equal(pre.evidence, null);
+  // Recorded verified live since its production apply (2026-10-28, the applied record of this pin).
+  assert.equal(pre.verified_live, true);
+  assert.ok(pre.evidence.includes(`SSM ${COMMITTED.applied.apply_ssm_command_id}`));
+  assert.ok(pre.evidence.includes(COMMITTED.applied.one_use_id));
   assert.equal(pre.pin, 'ops/deployment-guard/sql122-mortgage-desk-return-to-tenant-production-apply.json');
   assert.deepEqual(Object.keys(plan.members).filter((m) => plan.members[m].sql_before === SQL122_FILE), ['mortgage-desk-return.mjs']);
   assert.equal(plan.members['mortgage-desk-return.mjs'].operation, 'add');

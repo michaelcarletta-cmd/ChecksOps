@@ -2494,7 +2494,7 @@ test('Planned ADDs already live: tenant-management-v2.mjs and webhook-status.mjs
   }
 });
 
-test('Mortgage Desk return: ADD mortgage-desk-return.mjs held on SQL 122, then workflow-rpc.mjs, storage-write-auth.mjs and app-services.mjs replace their accepted live bytes', async () => {
+test('Mortgage Desk return: ADD mortgage-desk-return.mjs held on SQL 122, recorded live in production (#1324), then workflow-rpc.mjs, storage-write-auth.mjs and app-services.mjs replace their accepted live bytes', async () => {
   const ADD = 'mortgage-desk-return.mjs';
   const REPLACES = ['workflow-rpc.mjs', 'storage-write-auth.mjs', 'app-services.mjs'];
   const SQL122 = 'aws/workflows/sql/122_mortgage_desk_return_to_tenant.sql';
@@ -2539,11 +2539,23 @@ test('Mortgage Desk return: ADD mortgage-desk-return.mjs held on SQL 122, then w
     assert.ok(PLAN.order.indexOf(ADD) < PLAN.order.indexOf(member), member);
     assert.equal(resolvePlannedMember(member, { root: ROOT, plan: PLAN }).ok, true, member);
   }
-  assert.equal(PLAN.sql_prerequisites[SQL122].verified_live, false);
-  // The ADD is refused until SQL 122 is recorded verified live in production ...
+  // SQL 122 is applied in staging (run 40591701699) and recorded live in production from its applied pin
+  // (one-shot run 4ec757d1, SSM e01f11f2, #1324).
+  const pre = PLAN.sql_prerequisites[SQL122];
+  assert.equal(pre.verified_live, true);
+  assert.equal(pre.pin, 'ops/deployment-guard/sql122-mortgage-desk-return-to-tenant-production-apply.json');
+  const applied = JSON.parse(fs.readFileSync(path.join(ROOT, pre.pin), 'utf8')).applied;
+  assert.equal(applied.result, 'applied');
+  assert.ok(pre.evidence.includes(`SSM ${applied.apply_ssm_command_id}`));
+  assert.ok(pre.evidence.includes(applied.one_use_id));
+  assert.ok(pre.evidence.includes('#1324'));
+  assert.equal(resolvePlannedMember(ADD, { root: ROOT, plan: PLAN }).ok, true);
+  // The ADD was refused until SQL 122 was recorded verified live in production (the plan before this record) ...
+  const before = structuredClone(PLAN);
+  before.sql_prerequisites[SQL122] = { ...pre, verified_live: false, evidence: null };
   const withAddEnv = (member) => applyEnv(member, member === ADD ? { CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: '' } : {});
   await assert.rejects(
-    run(withAddEnv(ADD), applyDeps(ADD, { plan: PLAN }).deps),
+    run(withAddEnv(ADD), applyDeps(ADD, { plan: before }).deps),
     (error) => error.code === CODES.PRODUCTION_APPROVAL_REQUIRED && error.details.sql_before === SQL122,
   );
   // ... and every importer is refused while the ADD is not yet live.
