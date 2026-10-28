@@ -1,0 +1,15 @@
+{
+  "workstream_id": "production-db-validator-sql123-trigger-applied",
+  "authorization": "Record only (2026-10-28): the bytes below are live. Nothing is planned or authorized by this manifest; any later change to this member needs its own manifest, staging acceptance and owner approval.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "DB validator SQL 123 trigger (184 public triggers, #1338) applied 2026-10-28 through the guarded overlay path on main ec5aa6d8c (plan #1342, on the owner's \"open the validator plan PR\" and \"merge both PRs when green\"). db-readonly-validate.mjs: staging acceptance guarded staging overlay run 40739554272 (https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/40739554272; staging /db-readonly-validate 200 ok); production pre-apply inspect run 40743427458 (READY, member PRESENT 71cc313e, planned replace accepted d897c206, at CodeSha256 WV2B9GAvLcd7R+NgSPDS/gt+X3xHipLm2LSc/xCtm98=, RevisionId 7413f101-ef5a-4f8c-949a-781fa1959e60; /health and /db-health 200); production apply run 40743616203 (71cc313e -> d897c206) on the owner's approval phrase \"DEPLOY db-readonly-validate.mjs TO PRODUCTION\", concluded success including its \"Verify live member is the accepted bytes\" step (VERIFIED at CodeSha256 hxOfJbEhwGz1cGJ/DaQlJ6ABMg069YFcEBISf8U6DIo=, RevisionId caf1b784-3e52-4264-8ad6-55bbe1b7f8d6, member d897c206) and the public production smoke (/health and /db-health 200). Read-only GetFunctionConfiguration afterwards: CodeSha256 hxOfJbEhwGz1cGJ/DaQlJ6ABMg069YFcEBISf8U6DIo=, RevisionId caf1b784-3e52-4264-8ad6-55bbe1b7f8d6, LastModified 2026-10-28T18:17:19Z, LastUpdateStatus Successful. That CodeSha256 is hex 87139f25b121c06cf570627f0da42527a001320d3af5815c1012127fc53a0c8a, the candidate_zip_sha256 of main e3823b5c5 in the read-only production rebuild inspect run 40741101459, whose only differing source member was db-readonly-validate.mjs: production now equals main's full package. The row records the applied bytes as live_sha256 and accepted_sha256 and chains to the manifest that planned it (previous_manifest), which keeps the pre-apply state (71cc313e). GitHub returned only the last lines of the apply log, so the receipt section of the apply output was not read; the writer's update result (CodeSha256 hxOfJbEhwGz1cGJ/DaQlJ6ABMg069YFcEBISf8U6DIo=), the verify step and the pre-apply inspect are the evidence.",
+  "members": {
+    "db-readonly-validate.mjs": {
+      "live_sha256": "d897c206e07a90c06815689e9926eb70a5aabb9fe10efdc74048991e146a850c",
+      "accepted_sha256": "d897c206e07a90c06815689e9926eb70a5aabb9fe10efdc74048991e146a850c",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-db-validator-sql123-trigger-manifest-2026-10-28.json"
+    }
+  }
+}
