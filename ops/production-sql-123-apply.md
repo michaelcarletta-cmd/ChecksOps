@@ -74,7 +74,26 @@ and `check_audit_log` possible; `checkalt_approved_checks_to_move` 0,
 `precondition_failures` `[]`. Recorded in the staging pin (`expected_live_definition_sha256`,
 `execute: true`, wave 22) under the owner's words of 2026-10-28, "Yes open both PRs".
 
-**Status:** staging pin execute-authorized (wave 22); nothing applied yet; production pin pending.
+**Staging apply (2026-10-28).** Run 40721665524 (main `19c9c71`, after #1334 merged the staging pin and
+executor deploy run 40721058469 carried it, `W54SxDwd…`): receipt before
+`b584e1cd4352837eb5515cd07e76900e055637d11c29214db036f912e6b6f6b9`, after
+`e982bd786ca1b7bd107d4156359b32d5032fcb0b5e7962c5b2fd457387c230fc` (intended), result `applied`. Read-live
+run 40722182617: `already_applied` true, `precondition_failures` `[]`.
+
+**Production inspect (2026-10-28).** Read-only `--inspect` through SSM
+`e8a92ced-8043-4d9f-ba81-2c19beebfcb9` on `i-0c35557c4e5385406`, main `1c6e3b4` (tarball sha256
+`93cb0383aac2513e2a65c17d47351f0c0f3517f2e48f9903640f86bd7e929f3e`, transfer run 40722722727, migration
+source `8f742d9d…` == pin), connected as `checksops_admin`: the two functions and the
+`aws_checkalt_deposit_apply_check_status` trigger absent; every prerequisite present; the definer can write
+`check_intake_items` and `check_audit_log`; `checkalt_approved_checks_to_move` 2 (staging had 0),
+`checkalt_approved_checks_left_unbilled` 1; live
+`b584e1cd4352837eb5515cd07e76900e055637d11c29214db036f912e6b6f6b9`, `already_applied` false,
+`precondition_failures` `[]`, the same pre-state as staging's. Recorded in the production pin with the
+staging apply as its staging acceptance and `execute: true` under the owner's words of 2026-10-28, "start
+the SQL 123 pin PR". The owner merges the pin change; the apply still needs the owner's run-time approval
+and runs only after that merge is on main and staged.
+
+**Status:** applied to staging (wave 22); production pin execute-authorized; not applied to production.
 
 ## Fingerprint
 
