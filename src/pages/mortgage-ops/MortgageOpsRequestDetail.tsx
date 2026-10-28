@@ -7,6 +7,23 @@ import {
   updateMortgageDeskShipping,
   type MortgageDeskWriteClient,
 } from "@/lib/mortgageDeskWrites";
+import {
+  canReadMortgageDeskRequest,
+  canWorkMortgageDeskRequest,
+  defaultDeskSigners,
+  deskSignatureStatusLabel,
+  deskSignerStatusLabel,
+  isDeskSignableFile,
+  loadMortgageDeskWorkspace,
+  postMortgageDeskTimeline,
+  signMortgageDeskFile,
+  type MortgageDeskFunctionsClient,
+} from "@/lib/mortgageDeskEsign";
+import {
+  MortgageDeskSignatureDialog,
+  type MortgageDeskSignatureDocument,
+} from "@/components/mortgage-ops/MortgageDeskSignatureDialog";
+import { getFunctionErrorMessage } from "@/lib/edgeFunctionError";
 import { useMortgageAuth } from "@/hooks/useMortgageAuth";
 import { isPlatformOwner } from "@/lib/masterMerchant";
 import { Button } from "@/components/ui/button";
@@ -47,6 +64,10 @@ import { displayCase } from "@/lib/displayCase";
 // On AWS the Desk's tenant-facing writes go through the agent-gated server path
 // (mortgage_desk_* RPCs, SQL 122); the Supabase backend keeps its direct writes.
 const deskClient = supabase as unknown as MortgageDeskWriteClient;
+// On AWS the Desk reads its request's check thread, files and signature
+// requests, sends files for signature and posts timeline notes through
+// /functions/v1/mortgage-desk-esign (SQL 124).
+const deskEsignClient = supabase as unknown as MortgageDeskFunctionsClient;
 
 interface Props {
   requestId: string | null;
@@ -159,6 +180,8 @@ interface CheckFileRow {
   category: string | null;
   description: string | null;
   created_at: string;
+  source?: string | null;
+  signature_request_id?: string | null;
 }
 
 interface LossDraftDoc {
@@ -182,6 +205,8 @@ interface MessageRow {
   body: string;
   created_at: string;
   is_deleted: boolean;
+  /** AWS (SQL 124): the sender is the assigned agent, a mortgage agent or the platform owner. */
+  from_desk?: boolean;
 }
 
 interface SigSigner {
@@ -201,6 +226,7 @@ interface SigRequest {
   document_path: string;
   status: string;
   created_at: string;
+  final_pdf_path?: string | null;
   signature_signers: SigSigner[];
 }
 
@@ -266,6 +292,11 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
   } | null>(null);
   const [placedFields, setPlacedFields] = useState<any[]>([]);
   const [sending, setSending] = useState(false);
+
+  // Desk e-sign (AWS, SQL 124): the document being sent from the Desk dialog.
+  const [deskSigDoc, setDeskSigDoc] = useState<MortgageDeskSignatureDocument | null>(null);
+  const [deskSigOpen, setDeskSigOpen] = useState(false);
+  const platformOwner = isPlatformOwner(user?.email, user?.id);
 
   const load = useCallback(async () => {
     if (!requestId) return;
@@ -341,12 +372,14 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
           setImages({});
         }
 
+        if (!mortgageUsesAwsBackend) {
         const { data: fRows } = await supabase
           .from("check_files")
           .select("id,file_name,file_path,category,description,created_at")
           .eq("check_intake_item_id", r.check_intake_item_id)
           .order("created_at", { ascending: false });
         setFiles((fRows as CheckFileRow[]) || []);
+        }
 
         // Documents auto-shared from the tenant's Document Library
         const { data: libRows } = await supabase
@@ -377,16 +410,36 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
           setLossDocs([]);
         }
 
+        if (!mortgageUsesAwsBackend) {
         const { data: msgs } = await supabase
           .from("check_messages")
           .select("id,sender_id,body,created_at,is_deleted")
           .eq("check_id", r.check_intake_item_id)
           .order("created_at", { ascending: true });
         setMessages(((msgs as MessageRow[]) || []).filter((m) => !m.is_deleted));
+        }
       }
 
+      if (mortgageUsesAwsBackend) {
+        // The agent cannot read the tenant's check_messages, check_files or
+        // signature_requests on AWS: SQL 124 reads them for the assigned agent
+        // (or the platform owner) while the request is in progress or completed.
+        if (r.check_intake_item_id && canReadMortgageDeskRequest(r, user?.id, isPlatformOwner(user?.email, user?.id))) {
+          const { data: ws, error: wsErr } = await loadMortgageDeskWorkspace(deskEsignClient, r.id);
+          if (wsErr) toast.error(wsErr);
+          setFiles(((ws?.check_files || []) as CheckFileRow[]).slice().reverse());
+          setMessages((ws?.messages || []).map((m) => ({ ...m, sender_id: m.sender_id || "", is_deleted: false })));
+          setSigRequests((ws?.signature_requests || []).slice().reverse().map((sr) => ({
+            ...sr,
+            signature_signers: (sr.signers || []) as SigSigner[],
+          })));
+        } else {
+          setFiles([]);
+          setMessages([]);
+          setSigRequests([]);
+        }
+      } else if (r.claim_id) {
       // Signature requests for this claim
-      if (r.claim_id) {
         const { data: sigs } = await supabase
           .from("signature_requests")
           .select("id,document_name,document_path,status,created_at,signature_signers(id,signer_name,signer_email,signer_type,status,signed_at,viewed_at,delivery_status)")
@@ -414,7 +467,7 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
     } finally {
       setLoading(false);
     }
-  }, [requestId]);
+  }, [requestId, user?.id, user?.email]);
 
   useEffect(() => {
     if (open && requestId) void load();
@@ -617,10 +670,12 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
   };
 
   const uploadDoc = async (file: File) => {
-    if (!check?.id || !user?.id || !req?.id) return;
+    // The request's check id: on AWS the agent cannot read the tenant's check row.
+    const checkId = check?.id || req?.check_intake_item_id;
+    if (!checkId || !user?.id || !req?.id) return;
     setUploading(true);
     try {
-      const path = mortgageDeskFilePath(check.id, file.name);
+      const path = mortgageDeskFilePath(checkId, file.name);
       const { error: upErr } = await supabase.storage
         .from("claim-files")
         .upload(path, file, { contentType: file.type, upsert: false });
@@ -628,7 +683,7 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
 
       const { error: insErr } = await attachMortgageDeskFile(deskClient, mortgageUsesAwsBackend, {
         requestId: req.id,
-        checkId: check.id,
+        checkId,
         senderId: user.id,
         fileName: file.name,
         filePath: path,
@@ -642,6 +697,16 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
       const homeownerEmail = req?.homeowner_email || claim?.policyholder_email;
       const homeownerName = req?.homeowner_name || claim?.policyholder_name;
       const isPdf = /\.pdf$/i.test(file.name);
+
+      // AWS (SQL 124): a PDF or DOCX for signature opens the Desk's send dialog
+      // (fields, then signers), exactly as a tenant sends from Files.
+      if (mortgageUsesAwsBackend && uploadForSignature && isDeskSignableFile(path)) {
+        openDeskSignature({ name: file.name, path, file });
+        toast.success("Document uploaded — place signature fields, then add signers and send.");
+        setUploadDesc("");
+        void load();
+        return;
+      }
 
       // Signature PDF with a valid homeowner recipient → open the field
       // placer instead of dispatching immediately. Same UX as Freedom CRM.
@@ -663,7 +728,7 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
       // Non-PDF / no homeowner / not-for-signature → attach + notify tenant.
       const { error: noticeErr } = await postMortgageDeskMessage(deskClient, mortgageUsesAwsBackend, {
         requestId: req.id,
-        checkId: check.id,
+        checkId,
         senderId: user.id,
         body: uploadForSignature
           ? `📄 Mortgage Ops uploaded a document for homeowner signature: "${file.name}"${uploadDesc ? ` — ${uploadDesc}` : ""}. ${req?.claim_id ? "Missing homeowner email or non-PDF — please route via your signature workflow." : "Please forward to the homeowner via your signature workflow."}`
@@ -758,7 +823,22 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
     }
   };
 
+  const openDeskSignature = (doc: MortgageDeskSignatureDocument) => {
+    setDeskSigDoc(doc);
+    setDeskSigOpen(true);
+  };
+
   const downloadFile = async (path: string, name: string) => {
+    if (mortgageUsesAwsBackend && req?.id) {
+      // AWS: the Desk's files are signed by SQL 124 (e), which also covers signed PDFs.
+      const { signedUrl, error: signErr } = await signMortgageDeskFile(deskEsignClient, { requestId: req.id, path, download: name });
+      if (signErr || !signedUrl) {
+        toast.error(signErr || "Could not open file");
+        return;
+      }
+      window.open(signedUrl, "_blank", "noopener");
+      return;
+    }
     const { data, error } = await supabase.storage
       .from("claim-files")
       .createSignedUrl(path, 300, { download: name });
@@ -799,6 +879,24 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
   };
 
   const postMortgageUpdate = async () => {
+    if (mortgageUsesAwsBackend && req?.id && updateNote.trim()) {
+      // SQL 124 aws_mortgage_desk_post_timeline: claim, check and tenant come from the request.
+      setPostingUpdate(true);
+      const { error: tlErr } = await postMortgageDeskTimeline(
+        deskEsignClient,
+        { requestId: req.id, kind: updateKind, note: updateNote },
+        (err) => getFunctionErrorMessage(err, "Could not post to the timeline"),
+      );
+      setPostingUpdate(false);
+      if (tlErr) {
+        toast.error(tlErr);
+        return;
+      }
+      setUpdateNote("");
+      toast.success("Posted to homeowner timeline");
+      onAction?.();
+      return;
+    }
     if (!req?.claim_id || !updateNote.trim()) {
       toast.error("Add a note first");
       return;
@@ -831,6 +929,11 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
   const myOrder = req?.endorsement_order ?? null;
   const firstSibling = siblings.find((s) => s.endorsement_order === 1) || (siblings.length >= 2 ? siblings[0] : null);
   const firstReturned = !!firstSibling?.check_received_back_date;
+
+  // SQL 122 / 124 working rule: in progress, and the assigned agent or the platform owner.
+  const canWork = canWorkMortgageDeskRequest(req, user?.id, platformOwner);
+  const homeownerName = req?.homeowner_name || claim?.policyholder_name || "";
+  const homeownerEmail = req?.homeowner_email || claim?.policyholder_email || "";
 
 
   return (
@@ -968,8 +1071,8 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
             )}
 
 
-            {/* Log update to homeowner timeline */}
-            {req.claim_id && (
+            {/* Log update to homeowner timeline (AWS: SQL 124, the working agent only) */}
+            {(mortgageUsesAwsBackend ? canWork && !!req.check_intake_item_id : !!req.claim_id) && (
               <Card>
                 <CardContent className="pt-4 space-y-2">
                   <div className="font-semibold text-sm flex items-center gap-2">
@@ -1215,9 +1318,22 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
                           </div>
                           {f.description && <div className="text-xs text-muted-foreground truncate">{f.description}</div>}
                         </div>
-                        <Button size="sm" variant="ghost" onClick={() => downloadFile(f.file_path, f.file_name)}>
-                          <Download className="h-4 w-4" />
-                        </Button>
+                        <div className="flex items-center gap-1 shrink-0">
+                          {mortgageUsesAwsBackend && canWork && isDeskSignableFile(f.file_path) && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 text-xs"
+                              onClick={() => openDeskSignature({ name: f.file_name, path: f.file_path })}
+                              title="Send for signature"
+                            >
+                              <Send className="h-3 w-3 mr-1" /> Send for signature
+                            </Button>
+                          )}
+                          <Button size="sm" variant="ghost" onClick={() => downloadFile(f.file_path, f.file_name)}>
+                            <Download className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </li>
                     ))}
                   </ul>
@@ -1227,7 +1343,7 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
             </Card>
 
             {/* Send document for homeowner signature */}
-            {check?.id && req.status === "in_progress" && req.assigned_employee_id === user?.id && (
+            {req.check_intake_item_id && canWork && (
               <Card className="border-primary/40">
                 <CardContent className="pt-4 space-y-3">
                   <div className="font-semibold text-sm flex items-center gap-2">
@@ -1251,7 +1367,9 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
                       checked={uploadForSignature}
                       onChange={(e) => setUploadForSignature(e.target.checked)}
                     />
-                    Requires homeowner signature (tenant will be notified to send)
+                    {mortgageUsesAwsBackend
+                      ? "Send for signature after upload (PDF or DOCX)"
+                      : "Requires homeowner signature (tenant will be notified to send)"}
                   </label>
                   <label className="inline-flex">
                     <input
@@ -1275,8 +1393,8 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
               </Card>
             )}
 
-            {/* Signature requests — sent to homeowner via e-sign */}
-            {req.claim_id && (
+            {/* Signature requests — sent to homeowner via e-sign (AWS: every request on the check, SQL 124) */}
+            {(req.claim_id || (mortgageUsesAwsBackend && req.check_intake_item_id)) && (
               <Card>
                 <CardContent className="pt-4 space-y-3">
                   <div className="font-semibold text-sm flex items-center gap-2">
@@ -1285,7 +1403,9 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
                   </div>
                   {sigRequests.length === 0 ? (
                     <p className="text-xs text-muted-foreground">
-                      No signature requests yet. Upload a PDF above with "Requires homeowner signature" on to email it to the homeowner for e-signature.
+                      {mortgageUsesAwsBackend
+                        ? "No signature requests yet. Use \"Send for signature\" on a PDF or DOCX check file, or upload one above."
+                        : "No signature requests yet. Upload a PDF above with \"Requires homeowner signature\" on to email it to the homeowner for e-signature."}
                     </p>
                   ) : (
                     <ul className="text-sm divide-y divide-border">
@@ -1293,9 +1413,23 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
                         <li key={s.id} className="py-2 space-y-1">
                           <div className="flex items-center justify-between gap-2">
                             <span className="truncate font-medium">{s.document_name}</span>
-                            <Badge variant={s.status === "completed" ? "default" : s.status === "declined" || s.status === "failed" ? "destructive" : "secondary"} className="text-[10px]">
-                              {s.status.replace("_", " ")}
-                            </Badge>
+                            <span className="flex items-center gap-1 shrink-0">
+                              {mortgageUsesAwsBackend && (s.final_pdf_path || s.document_path) && (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-6 px-2 text-[11px]"
+                                  onClick={() => downloadFile(s.final_pdf_path || s.document_path, s.document_name)}
+                                  title={s.final_pdf_path ? "Open signed PDF" : "Open document"}
+                                >
+                                  <Download className="h-3 w-3 mr-1" />
+                                  {s.final_pdf_path ? "Signed PDF" : "Document"}
+                                </Button>
+                              )}
+                              <Badge variant={s.status === "completed" ? "default" : s.status === "declined" || s.status === "failed" ? "destructive" : "secondary"} className="text-[10px]">
+                                {mortgageUsesAwsBackend ? deskSignatureStatusLabel(s.status) : s.status.replace("_", " ")}
+                              </Badge>
+                            </span>
                           </div>
                           <div className="text-[11px] text-muted-foreground">
                             Sent {formatDistanceToNow(new Date(s.created_at), { addSuffix: true })}
@@ -1306,7 +1440,7 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
                                 {sg.signer_name} <span className="text-muted-foreground">· {sg.signer_email}</span>
                               </span>
                               <span className="text-[11px] text-muted-foreground whitespace-nowrap">
-                                {sg.status === "signed" && sg.signed_at
+                                {mortgageUsesAwsBackend ? deskSignerStatusLabel(sg) : sg.status === "signed" && sg.signed_at
                                   ? `Signed ${format(new Date(sg.signed_at), "MMM d")}`
                                   : sg.viewed_at
                                   ? `Viewed ${format(new Date(sg.viewed_at), "MMM d")}`
@@ -1343,7 +1477,7 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
                         <div key={m.id} className={`text-sm rounded p-2 ${m.sender_id === user?.id ? "bg-primary/10 ml-8" : "bg-card mr-8 border border-border"}`}>
                           <div className="whitespace-pre-wrap">{m.body}</div>
                           <div className="text-[10px] text-muted-foreground mt-1">
-                            {m.sender_id === user?.id ? "You" : "Tenant"} · {formatDistanceToNow(new Date(m.created_at), { addSuffix: true })}
+                            {m.sender_id === user?.id ? "You" : m.from_desk ? "Mortgage Desk" : "Tenant"} · {formatDistanceToNow(new Date(m.created_at), { addSuffix: true })}
                           </div>
                         </div>
                       ))
@@ -1570,6 +1704,19 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
         )}
       </SheetContent>
     </Sheet>
+
+    {/* Desk e-sign (AWS, SQL 124): signers, fields, send from ChecksOps. */}
+    {req && (
+      <MortgageDeskSignatureDialog
+        client={deskEsignClient}
+        open={deskSigOpen}
+        onOpenChange={(v) => { setDeskSigOpen(v); if (!v) setDeskSigDoc(null); }}
+        requestId={req.id}
+        document={deskSigDoc}
+        defaultSigners={defaultDeskSigners({ homeownerName, homeownerEmail })}
+        onSent={() => { void load(); onAction?.(); }}
+      />
+    )}
 
     {/* Signature field placer — same UX as Freedom CRM. */}
     <Dialog open={placerOpen} onOpenChange={(v) => { if (!sending) setPlacerOpen(v); }}>
