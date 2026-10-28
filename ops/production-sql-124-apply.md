@@ -60,7 +60,21 @@ Not changed: no table, column, trigger, policy, RLS flag or table grant; no exis
 resend, void or delete path for the Desk; the tenant e-sign paths are unchanged. No trigger is
 added, so the DB validator's public trigger count is not concerned.
 
-**Status:** not applied anywhere. The staging pin and the production pin are pending. The API and
+**Staging executor refreshed (2026-10-28).** Inspect run 40753819395 found the live executor at
+`W54SxDwd…` without `sql/124_mortgage_desk_signature_and_reads.sql`. Deploy run 40754334967 updated
+it to main's package (`OWClSgc4zkbCgaPCgFtK1wrq7OK858BFG50wSqSaP14=`; "Verify live executor now
+carries main's package" passed).
+
+**Staging read-live (2026-10-28).** Run 40754712957 (main `3606348`): the eight functions absent;
+every prerequisite present (SQL 122's `aws_mortgage_desk_working_request(uuid, text[])` included);
+the definer writes to `check_messages`, `check_files`, `mortgage_handling_requests`,
+`homeowner_ledger_events`, `signature_requests`, `signature_signers`, `signature_fields` and
+`esign_event_logs` possible; live
+`59fe6907e23de341e97d4aec548203d0cd7f7cf320b009e0e440d247d82a4db2`, `already_applied` false,
+`precondition_failures` `[]`. Recorded in the staging pin (`expected_live_definition_sha256`,
+`execute: true`, wave 23) under the owner's words of 2026-10-28, "start the SQL 124 staging apply".
+
+**Status:** staging pin execute-authorized (wave 23); nothing applied yet; production pin pending. The API and
 SPA change that calls these functions is a separate, later step after SQL 124 is live in staging;
 until then nothing calls them.
 

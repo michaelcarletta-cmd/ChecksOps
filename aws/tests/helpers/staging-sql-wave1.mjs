@@ -109,6 +109,10 @@ export const STAGING_WAVE1 = Object.freeze({
   // executor carried it (deploy run 40714754418): the two functions and the trigger absent, no
   // approved check left to move.
   sql123: Object.freeze({ wave: 22, approved: '2026-10-28', run: '40717225525', live: 'b584e1cd4352837eb5515cd07e76900e055637d11c29214db036f912e6b6f6b9' }),
+  // Wave 23 (owner approved 2026-10-28, "start the SQL 124 staging apply"): SQL 124, Mortgage Desk
+  // send-for-signature, reads and timeline. Read at main 3606348 after the executor carried it (deploy
+  // run 40754334967): the eight functions absent, every prerequisite present, the definer writes possible.
+  sql124: Object.freeze({ wave: 23, approved: '2026-10-28', run: '40754712957', live: '59fe6907e23de341e97d4aec548203d0cd7f7cf320b009e0e440d247d82a4db2' }),
   sql98: Object.freeze({ wave: 3, approved: '2026-10-18', run: '39083278136', live: '296c3d6a274e10f66005fb9eaecf93fa17b81bd8db3607037ca07698fddd3275', apply_run: '39085677318' }),
 });
 
@@ -120,7 +124,7 @@ export const pendingPin = (pin) => Object.freeze({
 });
 
 /**
- * The committed staging pin's apply state: waves 1-22 recorded and approved, wave 6 approved with
+ * The committed staging pin's apply state: waves 1-23 recorded and approved, wave 6 approved with
  * its read-live still to record (pending until then), wave 18 (SQL 117) retired, the rest pending.
  */
 export function assertStagingPinState(assert, key, pin) {
