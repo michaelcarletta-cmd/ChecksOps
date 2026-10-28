@@ -123,6 +123,12 @@
       "evidence": "2026-10-28 guarded production SQL one-shot on i-0c35557c4e5385406 (SSM e01f11f2-00af-428b-aea7-748dd46ec1f1, run 4ec757d1-4d6e-4cc1-be58-66649473fb50, workstream prod-sql122-mortgage-desk-return-to-tenant-20261028, main 1a62fa3b6, one_use_id sql122-prod-04cab2ce-4698-42da-ab63-738713aa171e): e13856d7\u2026 -> d026eb9b\u2026; post-apply inspect already_applied true, and a separate read-only inspect (SSM 8415fc61-d8cc-47dd-bbc3-bc900befb616) agreed; staging acceptance run 40591701699; recorded in ops/deployment-guard/sql122-mortgage-desk-return-to-tenant-production-apply.json (applied, #1324)",
       "pin": "ops/deployment-guard/sql122-mortgage-desk-return-to-tenant-production-apply.json",
       "note": "The Mortgage Desk returns its work to the tenant (SQL 122): mortgage_handling_requests.return_emailed_at and six SECURITY DEFINER functions (Desk message, Desk document, shipping details, homeowner timeline row, \"work returned\" email claim, owner-only working-request check). Holds mortgage-desk-return.mjs (ADD, sql_before), which calls them; workflow-rpc.mjs, storage-write-auth.mjs and app-services.mjs import it and come after it in order, so the order gate holds them too (each keeps its own sql_before). Applied in staging (run 40591701699) and in production (2026-10-28, #1324)."
+    },
+    "aws/workflows/sql/124_mortgage_desk_signature_and_reads.sql": {
+      "verified_live": true,
+      "evidence": "2026-10-28 guarded production SQL one-shot on i-0c35557c4e5385406 (SSM 35de8528-5a59-4202-b12e-43ba87fc576e, run 4b59c99e-5c5b-44e5-9f03-a70562dbe3d5, workstream prod-sql124-mortgage-desk-signature-and-reads-20261028, main b458e9510, one_use_id sql124-prod-c1fb8164-b9cc-4604-96d4-519c1ae524b2): 59fe6907… -> daeeff54…; post-apply inspect already_applied true, and a separate read-only inspect (SSM b992e01d-8017-464b-9650-a226fcda4c2c) agreed; staging acceptance run 40757497983; recorded in ops/deployment-guard/sql124-mortgage-desk-signature-and-reads-production-apply.json (applied, #1351)",
+      "pin": "ops/deployment-guard/sql124-mortgage-desk-signature-and-reads-production-apply.json",
+      "note": "The Mortgage Desk sends a check's documents for signature and reads the check's thread, files and signature requests (SQL 124): eight SECURITY DEFINER functions (owner-only readable-request check; thread, files, signature requests, storage read check, signature request create, delivery record, homeowner timeline row). Holds mortgage-desk-esign.mjs (ADD, sql_before), which calls them; app-services.mjs imports it and comes after it in order. Applied in staging (run 40757497983) and in production (2026-10-28, #1351)."
     }
   },
   "order": [
@@ -195,6 +201,7 @@
     "tax-secrets.mjs",
     "tax-profiles.mjs",
     "tenant-email-domain.mjs",
+    "mortgage-desk-esign.mjs",
     "tenant-management-v2.mjs",
     "app-services.mjs",
     "mortgage-agent-compensation.mjs",
@@ -530,12 +537,19 @@
       "sql_before": null,
       "manifest": "aws/tests/fixtures/production-tenant-management-v2-provider-status-applied-manifest-2026-10-27.json"
     },
+    "mortgage-desk-esign.mjs": {
+      "operation": "add",
+      "accepted_sha256": "492da984c1ec60d419c147431efef8ef03d25860f179b615a126c3b753174e2d",
+      "expected_live_sha256": null,
+      "sql_before": "aws/workflows/sql/124_mortgage_desk_signature_and_reads.sql",
+      "manifest": "aws/tests/fixtures/production-mortgage-desk-esign-manifest-2026-10-28.json"
+    },
     "app-services.mjs": {
       "operation": "replace",
-      "accepted_sha256": "d1faa2120bc944d299c274176ac52601e262ad7d9d448de0385bd70f858ecac5",
+      "accepted_sha256": "dd6e1797dc00dc2beaf15585b481c76a33c415212e7be5d2efe3fd170d48121e",
       "expected_live_sha256": "d1faa2120bc944d299c274176ac52601e262ad7d9d448de0385bd70f858ecac5",
       "sql_before": null,
-      "manifest": "aws/tests/fixtures/production-mortgage-desk-return-applied-manifest-2026-10-28.json"
+      "manifest": "aws/tests/fixtures/production-mortgage-desk-esign-manifest-2026-10-28.json"
     },
     "write-allowlist.mjs": {
       "operation": "replace",

@@ -8,8 +8,8 @@
  *     approved pin change of 2026-10-28, #1350) with the recorded production pre-state and the staging
  *     apply as its acceptance, then applied on 2026-10-28 and retired (execute false); it is in step
  *     with the staging pin, the one-shot, the bypass inventory and the test lists;
- *   - no predecessor and no order; SQL 122's working-request check is a prerequisite; no plan
- *     entry yet (the Mortgage Desk API and SPA change is a later, separate step); no trigger, so
+ *   - no predecessor and no order; SQL 122's working-request check is a prerequisite; the
+ *     Mortgage Desk API that calls it (mortgage-desk-esign.mjs) is a plan ADD held on it; no trigger, so
  *     the DB validator is not concerned; the runbook, one-shot doc and README name it;
  *   - the pending (pre-authorization) pin refuses before connecting; the committed pin allows only
  *     the manifest bound to its recorded pre-state; an approved, accepted copy evaluates for the
@@ -227,7 +227,7 @@ test('pin: the release pin shape, applied and retired (owner approved 2026-10-28
   }
 });
 
-test('order: no predecessor and no order; SQL 122\'s working-request check, SQL 100\'s and SQL 90\'s helpers and the Desk, check and e-sign tables are prerequisites; no plan entry or API change yet; no trigger; the runbook, one-shot doc and README name it', () => {
+test('order: no predecessor and no order; SQL 122\'s working-request check, SQL 100\'s and SQL 90\'s helpers and the Desk, check and e-sign tables are prerequisites; the API that calls it (mortgage-desk-esign.mjs, an ADD) is held on it in the plan, recorded live in production; no other Lambda member names it; no trigger; the runbook, one-shot doc and README name it', () => {
   const spec = RELEASE_SQL_SPECS[KEY];
   assert.deepEqual(spec.predecessors, []);
   for (const object of ['public.aws_mortgage_desk_working_request(uuid, text[])', 'public.aws_is_mortgage_ops_agent()',
@@ -241,14 +241,26 @@ test('order: no predecessor and no order; SQL 122\'s working-request check, SQL 
   assert.match(COMMITTED.order_note, /^No predecessor and no ordering constraint\./);
   assert.match(COMMITTED.order_note, /separate, later step after SQL 124 is live in staging/);
   const plan = readJson('ops/deployment-guard/production-api-overlay-plan.json');
-  assert.equal((plan.sql_prerequisites || {})[SQL124_FILE], undefined);
-  assert.ok(!JSON.stringify(plan.members).includes(SQL124_FILE));
-  // The API that calls these functions comes later: nothing in the Lambda names them yet.
+  // The API that calls these functions (mortgage-desk-esign.mjs, an ADD) is held on it; app-services.mjs
+  // imports it and follows it in the plan order.
+  const API_MEMBER = 'mortgage-desk-esign.mjs';
+  const pre = plan.sql_prerequisites[SQL124_FILE];
+  // Recorded verified live since its production apply (2026-10-28, the applied record of this pin).
+  assert.equal(pre.verified_live, true);
+  assert.ok(pre.evidence.includes(`SSM ${COMMITTED.applied.apply_ssm_command_id}`));
+  assert.ok(pre.evidence.includes(COMMITTED.applied.one_use_id));
+  assert.equal(pre.pin, 'ops/deployment-guard/sql124-mortgage-desk-signature-and-reads-production-apply.json');
+  assert.deepEqual(Object.keys(plan.members).filter((m) => plan.members[m].sql_before === SQL124_FILE), [API_MEMBER]);
+  assert.equal(plan.members[API_MEMBER].operation, 'add');
+  assert.ok(plan.order.indexOf(API_MEMBER) < plan.order.indexOf('app-services.mjs'));
+  // Exactly that member names these functions; no other Lambda file does.
   const apiDir = path.join(ROOT, 'aws/functions/api');
-  for (const file of fs.readdirSync(apiDir).filter((name) => name.endsWith('.mjs'))) {
-    assert.doesNotMatch(fs.readFileSync(path.join(apiDir, file), 'utf8'),
-      /aws_mortgage_desk_(readable_request|messages|check_files|signature_requests|can_read_path|create_signature_request|record_signature_delivery|post_timeline)\b/, file);
-  }
+  const callers = fs.readdirSync(apiDir).filter((name) => name.endsWith('.mjs')).filter((file) => (
+    /aws_mortgage_desk_(readable_request|messages|check_files|signature_requests|can_read_path|create_signature_request|record_signature_delivery|post_timeline)\b/
+      .test(fs.readFileSync(path.join(apiDir, file), 'utf8'))));
+  assert.deepEqual(callers, [API_MEMBER]);
+  // It never calls the owner-only internal helper.
+  assert.doesNotMatch(fs.readFileSync(path.join(apiDir, API_MEMBER), 'utf8'), /aws_mortgage_desk_readable_request\b/);
   // No trigger: the DB validator's public trigger count is not concerned.
   assert.equal(spec.triggers, undefined);
   assert.doesNotMatch(fs.readFileSync(path.join(ROOT, SQL124_FILE), 'utf8').replace(/--[^\n]*/g, ''), /\bCREATE\s+TRIGGER\b/i);
