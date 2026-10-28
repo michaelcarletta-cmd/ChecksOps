@@ -16,17 +16,18 @@ test('AWS staging upload invokes check-ocr-intake after the image path is saved'
   assert.match(upload, /createAwsCheck/);
   assert.match(upload, /front_image_path: frontPath/);
   assert.match(upload, /functions\.invoke\("check-ocr-intake"/);
-  assert.match(upload, /body: \{ checkId: check\.id, skipAi \}/);
+  assert.match(upload, /body: \{ checkId: check\.id \}/);
   assert.doesNotMatch(
     upload,
     /if \(aws\) \{\s+toast\(\{[\s\S]+OCR and provider submission were not invoked/,
   );
 });
 
-test('AWS staging upload skips OCR only when the user chose manual entry', () => {
-  assert.match(upload, /if \(aws && skipAi\)/);
-  assert.match(upload, /OCR was not invoked/);
-  assert.doesNotMatch(upload, /review_notes: skipAi \? "AWS staging intake — manual entry \(OCR skipped\)" : "AWS staging intake — OCR not invoked"/);
+test('upload has no AI on/off toggle: every upload goes through OCR', () => {
+  assert.doesNotMatch(commandCenter, /skipAi/);
+  assert.doesNotMatch(commandCenter, /Turn AI (On|Off)/);
+  assert.doesNotMatch(upload, /OCR was not invoked/);
+  assert.match(upload, /review_notes: "AWS staging intake"/);
 });
 
 test('AWS staging upload does not trigger CheckAlt or Moov', () => {
