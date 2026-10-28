@@ -93,7 +93,20 @@ staging apply as its staging acceptance and `execute: true` under the owner's wo
 the SQL 123 pin PR". The owner merges the pin change; the apply still needs the owner's run-time approval
 and runs only after that merge is on main and staged.
 
-**Status:** applied to staging (wave 22); production pin execute-authorized; not applied to production.
+**Production apply (2026-10-28).** After the pin change (#1335, merged green on the owner's words below),
+transfer run 40725346286 staged main `db7c45996` (tarball sha256
+`64349605d65799db31aa4316329ddb931612005ab1c6a586dc0fcae3fa4b5ee2`). One-shot `--phase inspect` (SSM
+`2b6833b7-50e7-440c-a020-c05d588b787a`, run `07d14484…`) then `--phase apply` run
+`6860d7bc-6056-4e3f-b27e-723ef4deb153` through SSM `7d9785a9-224d-43b1-bd5a-1fd2d4476000`, workstream
+`prod-sql123-checkalt-deposit-check-status-20261028`, under the owner's words "merge 1335 when green and apply SQL 123 into production" (passed verbatim): every step ok, contracts 4/4, 6/6 and 43/43;
+receipt `b584e1cd…` → `e982bd786ca1b7bd107d4156359b32d5032fcb0b5e7962c5b2fd457387c230fc` (intended),
+result `applied`, unrelated catalog `7a7a563e…`; `checkalt_approved_checks_to_move` 2 → 0 (the one-time
+move), `checkalt_approved_checks_left_unbilled` 1 (left); post-apply inspect `already_applied` true,
+`precondition_failures` `[]`; a separate read-only inspect (SSM `31ea98df-78bb-4621-8277-f49a08c3afa1`)
+agreed. The DB validator's public trigger set (183 → 184) follows in its own change.
+
+**Status:** applied to staging (wave 22) and to production (2026-10-28); the production pin is retired
+(`execute: false`).
 
 ## Fingerprint
 
