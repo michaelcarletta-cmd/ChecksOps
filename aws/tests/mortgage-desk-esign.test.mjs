@@ -37,7 +37,7 @@ import {
   canWorkMortgageDeskRequest,
   defaultDeskSigners,
   deskSignerMissingSignature,
-  deskSignersProblem,
+  MORTGAGE_DESK_SIGNER_TYPE,
   invokeMortgageDeskEsign,
   isDeskSignableFile,
   loadMortgageDeskWorkspace,
@@ -577,8 +577,8 @@ test('SPA helpers: payload, gates, signers and the function call', async () => {
     documentName: ' TPA.pdf ',
     documentPath: `${DOC_PATH}?x=1`,
     documentType: null,
-    fieldData: [{ type: 'signature', signerIndex: 0 }],
-    signers: [{ name: ' Pat ', email: ' pat@example.com ', type: 'policyholder' }],
+    fieldData: [{ type: 'signature', signerIndex: 0 }, { type: 'signature', signerIndex: 1 }],
+    signers: [{ name: ' Pat ', email: ' pat@example.com ' }, { name: 'Roof Co', email: 'office@roofco.example' }],
   });
   assert.deepEqual(payload, {
     action: 'send_signature_request',
@@ -586,8 +586,11 @@ test('SPA helpers: payload, gates, signers and the function call', async () => {
     document_name: 'TPA.pdf',
     document_path: DOC_PATH,
     document_type: null,
-    field_data: [{ type: 'signature', signerIndex: 0 }],
-    signers: [{ signer_name: 'Pat', signer_email: 'pat@example.com', signer_type: 'policyholder' }],
+    field_data: [{ type: 'signature', signerIndex: 0 }, { type: 'signature', signerIndex: 1 }],
+    signers: [
+      { signer_name: 'Pat', signer_email: 'pat@example.com', signer_type: 'policyholder' },
+      { signer_name: 'Roof Co', signer_email: 'office@roofco.example', signer_type: 'policyholder' },
+    ],
   });
   assert.equal(validateDeskSignatureInput(payload).ok, true, 'the SPA payload passes the server check');
 
@@ -601,9 +604,11 @@ test('SPA helpers: payload, gates, signers and the function call', async () => {
   assert.equal(isDeskSignableFile('a/b.PDF?x'), true);
   assert.equal(isDeskSignableFile('a/b.docx'), true);
   assert.equal(isDeskSignableFile('a/b.doc'), false);
-  assert.deepEqual(defaultDeskSigners({ homeownerName: 'Pat', homeownerEmail: 'p@x.example' }), [{ name: 'Pat', email: 'p@x.example', type: 'policyholder' }]);
-  assert.match(deskSignersProblem([{ name: 'Pat', email: 'bad', type: 'policyholder' }]), /Signer 1/);
-  assert.equal(deskSignersProblem([{ name: 'Pat', email: 'p@x.example', type: 'contractor' }]), null);
+  // Signers are a name and an email only; every one is sent as the tenant dialog sends its signer.
+  assert.equal(MORTGAGE_DESK_SIGNER_TYPE, 'policyholder');
+  assert.deepEqual(defaultDeskSigners({ homeownerName: 'Pat', homeownerEmail: 'p@x.example' }), [{ name: 'Pat', email: 'p@x.example' }]);
+  assert.deepEqual(defaultDeskSigners({}), [{ name: '', email: '' }]);
+  assert.match(read('src/components/claim-detail/SignatureRequests.tsx'), /\{ name: claim\.policyholder_name \|\| "", email: claim\.policyholder_email \|\| "", type: "policyholder", order: 1 \}/);
   assert.equal(deskSignerMissingSignature([{ type: 'signature', signerIndex: 0 }], 2), 2);
 
   const calls = [];
@@ -641,7 +646,8 @@ test('SPA wiring: the Desk detail reads, uploads, sends and posts through SQL 12
   assert.match(detail, /const checkId = check\?\.id \|\| req\?\.check_intake_item_id;/);
   assert.match(detail, /mortgageUsesAwsBackend && uploadForSignature && isDeskSignableFile\(path\)/);
   assert.match(detail, /<MortgageDeskSignatureDialog\s*\n\s*client=\{deskEsignClient\}/);
-  assert.match(detail, /contractorDefaults=\{\{ tenantName: tenant\?\.name \}\}/);
+  assert.match(detail, /defaultSigners=\{defaultDeskSigners\(\{ homeownerName, homeownerEmail \}\)\}/);
+  assert.doesNotMatch(detail, /contractorDefaults/);
   // Timeline note through (h) on AWS; Supabase keeps its direct insert.
   assert.match(detail, /postMortgageDeskTimeline\(\s*\n\s*deskEsignClient,\s*\n\s*\{ requestId: req\.id, kind: updateKind, note: updateNote \}/);
   assert.match(detail, /mortgageUsesAwsBackend \? canWork && !!req\.check_intake_item_id : !!req\.claim_id/);
@@ -655,9 +661,17 @@ test('SPA wiring: the Desk detail reads, uploads, sends and posts through SQL 12
   assert.match(dialog, /signerCount=\{signers\.length\}/);
   assert.match(dialog, /buildDeskSignaturePayload\(\{/);
   assert.match(dialog, /detectDocumentType\(document\.name\)/);
-  assert.match(dialog, /<SelectItem value="policyholder">/);
-  assert.match(dialog, /<SelectItem value="contractor">/);
-  assert.doesNotMatch(dialog, /value="staff"|value="other"/);
+  // The tenant Files-tab flow: fields first, then signers as a name and an email, "Add Signer" up to 4,
+  // Send disabled while a name or email is blank, and a clear message for a signer without a signature field.
+  assert.doesNotMatch(dialog, /<Select|SelectItem|signer_type|contractor/);
+  assert.ok(dialog.indexOf('Step 1: Field Placement') < dialog.indexOf('Step 2: Signer Configuration'));
+  assert.match(dialog, /\{step === 1 && "Place signature and date fields on the document"\}/);
+  assert.match(dialog, /\{step === 2 && "Configure signers"\}/);
+  assert.match(dialog, /<Label className="min-w-0">Signers \(in order\)<\/Label>/);
+  assert.match(dialog, /disabled=\{signers\.length >= MORTGAGE_DESK_ESIGN_MAX_SIGNERS\}/);
+  assert.match(dialog, /disabled=\{signers\.some\(\(s\) => !s\.name \|\| !s\.email\) \|\| sending\}/);
+  assert.match(dialog, /Signer \$\{missing\} needs at least one signature field/);
+  assert.match(dialog, /Send for Signature/);
   assert.doesNotMatch(dialog, /from\("signature_requests"\)|from\("signature_signers"\)/);
   assert.match(dialog, /signMortgageDeskFile\(client, \{ requestId, path: document\.path \}\)/);
   assert.match(detail, /signMortgageDeskFile\(deskEsignClient, \{ requestId: req\.id, path, download: name \}\)/);

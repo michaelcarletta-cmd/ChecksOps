@@ -699,10 +699,10 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
       const isPdf = /\.pdf$/i.test(file.name);
 
       // AWS (SQL 124): a PDF or DOCX for signature opens the Desk's send dialog
-      // (signers, then fields), exactly as a tenant sends from Files.
+      // (fields, then signers), exactly as a tenant sends from Files.
       if (mortgageUsesAwsBackend && uploadForSignature && isDeskSignableFile(path)) {
         openDeskSignature({ name: file.name, path, file });
-        toast.success("Document uploaded — choose signers and place fields, then send.");
+        toast.success("Document uploaded — place signature fields, then add signers and send.");
         setUploadDesc("");
         void load();
         return;
@@ -1714,7 +1714,6 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
         requestId={req.id}
         document={deskSigDoc}
         defaultSigners={defaultDeskSigners({ homeownerName, homeownerEmail })}
-        contractorDefaults={{ tenantName: tenant?.name }}
         onSent={() => { void load(); onAction?.(); }}
       />
     )}

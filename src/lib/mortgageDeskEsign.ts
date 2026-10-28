@@ -13,17 +13,18 @@
 export const MORTGAGE_DESK_ESIGN_FUNCTION = "mortgage-desk-esign";
 export const MORTGAGE_DESK_ESIGN_MAX_SIGNERS = 4;
 
-export type MortgageDeskSignerType = "policyholder" | "contractor";
+/**
+ * The signer_type the Desk sends for every signer. The tenant Files-tab dialog
+ * asks only for a name and an email for the signer it starts with and sends
+ * "policyholder" for it (SignatureRequests.tsx); SQL 124 accepts policyholder
+ * or contractor, so every Desk signer is sent as policyholder.
+ */
+export const MORTGAGE_DESK_SIGNER_TYPE = "policyholder";
 
-export const MORTGAGE_DESK_SIGNER_TYPE_LABELS: Record<MortgageDeskSignerType, string> = {
-  policyholder: "Insured (policyholder)",
-  contractor: "Contractor / tenant",
-};
-
+/** One signer as the agent types it: a name and an email address, nothing else. */
 export interface MortgageDeskSignerInput {
   name: string;
   email: string;
-  type: MortgageDeskSignerType;
 }
 
 export interface MortgageDeskMessage {
@@ -114,9 +115,8 @@ export function canReadMortgageDeskRequest(
 }
 
 /**
- * Default signers: the insured from the request (else the claim). The
- * contractor is offered as a second signer with the tenant's name; every
- * value stays editable.
+ * The first signer the dialog starts with, as the tenant dialog starts it: the
+ * claim's policyholder name and email when known, else blank. Always editable.
  */
 export function defaultDeskSigners(ctx: {
   homeownerName?: string | null;
@@ -125,32 +125,7 @@ export function defaultDeskSigners(ctx: {
   return [{
     name: String(ctx.homeownerName ?? "").trim(),
     email: String(ctx.homeownerEmail ?? "").trim(),
-    type: "policyholder",
   }];
-}
-
-export function contractorDeskSigner(ctx: { tenantName?: string | null; tenantEmail?: string | null }): MortgageDeskSignerInput {
-  return {
-    name: String(ctx.tenantName ?? "").trim(),
-    email: String(ctx.tenantEmail ?? "").trim(),
-    type: "contractor",
-  };
-}
-
-const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
-
-/** The first problem with the signers, or null. Same rules the server enforces. */
-export function deskSignersProblem(signers: MortgageDeskSignerInput[]): string | null {
-  if (!signers.length || signers.length > MORTGAGE_DESK_ESIGN_MAX_SIGNERS) {
-    return `Add 1 to ${MORTGAGE_DESK_ESIGN_MAX_SIGNERS} signers.`;
-  }
-  for (let i = 0; i < signers.length; i += 1) {
-    const s = signers[i];
-    if (!s.name.trim()) return `Signer ${i + 1}: enter a name.`;
-    if (!EMAIL_RE.test(s.email.trim())) return `Signer ${i + 1}: enter a valid email.`;
-    if (s.type !== "policyholder" && s.type !== "contractor") return `Signer ${i + 1}: choose insured or contractor.`;
-  }
-  return null;
 }
 
 /** The first signer without a signature field (1-based), or null. */
@@ -183,7 +158,7 @@ export function buildDeskSignaturePayload(params: {
     signers: params.signers.map((s) => ({
       signer_name: s.name.trim(),
       signer_email: s.email.trim(),
-      signer_type: s.type,
+      signer_type: MORTGAGE_DESK_SIGNER_TYPE,
     })),
   };
 }
