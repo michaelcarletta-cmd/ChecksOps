@@ -71,18 +71,18 @@ export default function CashJobsPage() {
     return matchSearch && matchStatus;
   });
 
-  // Summary stats
-  const totalRevenue = jobs
-    .filter((j: any) => j.status === "paid_in_full")
-    .reduce((s: number, j: any) => s + Number(j.contract_amount), 0);
+  // Summary stats. A job with no payment yet stays "estimate" (sync_cash_job_status),
+  // so every job that is not paid in full or cancelled counts as active and outstanding.
+  const openJobs = jobs.filter((j: any) => !["paid_in_full", "cancelled"].includes(j.status));
 
-  const outstanding = jobs
-    .filter((j: any) => !["paid_in_full", "cancelled", "estimate"].includes(j.status))
-    .reduce((s: number, j: any) => s + Number(j.balance_due ?? 0), 0);
+  const totalRevenue = jobs.reduce((s: number, j: any) => s + Number(j.total_paid ?? 0), 0);
 
-  const activeJobs = jobs.filter((j: any) =>
-    ["deposit_received", "in_progress", "final_payment_due"].includes(j.status)
-  ).length;
+  const outstanding = openJobs.reduce((s: number, j: any) => {
+    const balance = j.balance_due ?? Number(j.contract_amount ?? 0) - Number(j.total_paid ?? 0);
+    return s + Math.max(0, Number(balance));
+  }, 0);
+
+  const activeJobs = openJobs.length;
 
   if (showForm) {
     return (

@@ -140,6 +140,22 @@ test('record payment on AWS: no browser write; the UI says the deposit records i
   assert.match(detail, /recorded automatically when the check is deposited/);
 });
 
+test('cash jobs page: a job without payments counts as active and outstanding', () => {
+  const page = read('src/components/cash-jobs/CashJobsPage.tsx');
+  assert.match(page, /const openJobs = jobs\.filter\(\(j: any\) => !\["paid_in_full", "cancelled"\]\.includes\(j\.status\)\);/);
+  assert.match(page, /const activeJobs = openJobs\.length;/);
+  assert.match(page, /const outstanding = openJobs\.reduce/);
+  assert.match(page, /const totalRevenue = jobs\.reduce\(\(s: number, j: any\) => s \+ Number\(j\.total_paid \?\? 0\), 0\);/);
+  assert.doesNotMatch(page, /"cancelled", "estimate"/);
+});
+
+test('cash job detail shows the start, estimate and completion dates', () => {
+  const detail = read('src/components/cash-jobs/CashJobDetail.tsx');
+  assert.match(detail, /Start date: \{formatIssueDateDisplay\(job\.start_date\)\}/);
+  assert.match(detail, /Estimate date: \{formatIssueDateDisplay\(job\.estimate_date\)\}/);
+  assert.match(detail, /Completion date: \{formatIssueDateDisplay\(job\.completion_date\)\}/);
+});
+
 test('create check links a cash job of the caller tenant, server-side', async () => {
   const client = fakeClient();
   const result = await handleCreateCheck(event({
