@@ -91,11 +91,17 @@ function liveFor(member, { sha256 = undefined, present = undefined, extra = [], 
 // manifest's live_sha256), the REPLACE that had to pass the order, link and SQL 98 gates.
 const PROVIDERS_PRE = JSON.parse(fs.readFileSync(path.join(ROOT, 'aws/tests/fixtures/production-moov-invoice-manifest-2026-10-22.json'), 'utf8')).members['providers.mjs'].live_sha256;
 const providersPre = (plan) => { plan.members['providers.mjs'].expected_live_sha256 = PROVIDERS_PRE; return plan; };
-// workflow.mjs REPLACEs its applied Delete Check bytes (c7159c4d, production run 40530367414) with the
-// cash-job check link, held on SQL 121 (not yet live in production): the generic REPLACE tests replay it
-// from those live bytes with SQL 121 recorded live, a REPLACE that still has to pass the drift,
-// approval, order and link gates.
+// workflow.mjs REPLACEd its applied Delete Check bytes (c7159c4d, production run 40530367414) with the
+// cash-job check link, held on SQL 121 (production run 40617806077, 2026-10-28): the generic REPLACE tests
+// replay it from those pre-apply bytes with SQL 121 recorded live, a REPLACE that still has to pass the
+// drift, approval, order and link gates.
 const WORKFLOW_PRE = 'c7159c4d9a74342f2a0f59a2836def78376c84d2781bbeb56dbb35ba83ed9337';
+// The three Mortgage Desk return REPLACEs record their applied bytes live (production runs 40618897308,
+// 40620579635 and 40621229388, 2026-10-28): every apply replay of them starts from the pre-apply live bytes
+// (the planning manifest's live_sha256).
+const MORTGAGE_DESK_PRE = Object.freeze(Object.fromEntries(Object.entries(JSON.parse(fs.readFileSync(path.join(ROOT, 'aws/tests/fixtures/production-mortgage-desk-return-manifest-2026-10-27.json'), 'utf8')).members)
+  .filter(([, row]) => row.operation === 'replace').map(([name, row]) => [name, row.live_sha256])));
+const mortgageDeskPre = (plan) => { for (const [name, pre] of Object.entries(MORTGAGE_DESK_PRE)) plan.members[name].expected_live_sha256 = pre; return plan; };
 const SQL121_FILE = 'aws/workflows/sql/121_cash_jobs_production_grants.sql';
 const WORKFLOW_PRE_PLAN = (() => {
   const plan = structuredClone(PLAN);
@@ -107,6 +113,7 @@ const WORKFLOW_PRE_PLAN = (() => {
 function applyDeps(member, liveOpts = {}) {
   if (member === 'providers.mjs' && liveOpts.sha256 === undefined) liveOpts = { ...liveOpts, sha256: PROVIDERS_PRE };
   if (member === 'workflow.mjs' && liveOpts.plan === undefined) liveOpts = { ...liveOpts, plan: WORKFLOW_PRE_PLAN };
+  if (Object.hasOwn(MORTGAGE_DESK_PRE, member) && liveOpts.plan === undefined) liveOpts = { ...liveOpts, plan: mortgageDeskPre(structuredClone(PLAN)) };
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'prod-overlay-'));
   fs.mkdirSync(path.join(root, 'ops/deployment-guard'), { recursive: true });
   fs.mkdirSync(path.join(root, 'aws/functions/api'), { recursive: true });
@@ -148,7 +155,7 @@ const applyEnv = (member, extra = {}) => ({
   ...ENV,
   CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'apply',
   CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: member,
-  CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: (member === 'providers.mjs' ? PROVIDERS_PRE : member === 'workflow.mjs' ? WORKFLOW_PRE : PLAN.members[member].expected_live_sha256) || '',
+  CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: (member === 'providers.mjs' ? PROVIDERS_PRE : member === 'workflow.mjs' ? WORKFLOW_PRE : MORTGAGE_DESK_PRE[member] ?? PLAN.members[member].expected_live_sha256) || '',
   CHECKSOPS_STAGING_ACCEPTANCE_REFERENCE: ACCEPTANCE,
   CHECKSOPS_PRODUCTION_APPROVAL: approvalPhrase(member),
   ...extra,
@@ -635,7 +642,8 @@ test('tenant-management-v2.mjs comes just before app-services.mjs, which imports
   const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, MANIFEST), 'utf8'));
   assert.equal(manifest.deploy_authorized, false);
   assert.equal(manifest.members[TMV2].accepted_sha256, row.accepted_sha256);
-  const prePlan = structuredClone(PLAN);
+  // app-services.mjs replays from its pre-apply bytes too (Mortgage Desk return, production run 40621229388).
+  const prePlan = mortgageDeskPre(structuredClone(PLAN));
   prePlan.members[TMV2].expected_live_sha256 = PRE;
   const preEnv = (member) => applyEnv(member, member === TMV2 ? { CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: PRE } : {});
   assert.equal(row.accepted_sha256, sha(`aws/functions/api/${TMV2}`));
@@ -1089,7 +1097,8 @@ test('live reconciliation 2026-10-19: ten members expect the bytes inspect run 3
   // ALREADY_ACCEPTED) and the plan row now replaces them for the pre-claim upload (next tests).
   // workflow-rpc.mjs moved on the same way: its fee-branch 79b7e4de bytes went live (inspect run
   // 39935902507, ALREADY_ACCEPTED), the plan row replaced them for the Refer & Earn routes, and production
-  // run 39942182669 applied those (6902fe6f, now recorded live).
+  // run 39942182669 applied those (6902fe6f); production run 40618897308 then replaced them for the
+  // Mortgage Desk return (acb5fc06, now recorded live).
   // write-allowlist.mjs and write-check-workflow.mjs moved on too: their release bytes went live with
   // the 2026-10-21 production rebuilds, and production runs 40189236116 and 40189657073 replaced them
   // for the stakeholder settings edit (1fc4a43e and e1227c96, now recorded live).
@@ -1097,10 +1106,11 @@ test('live reconciliation 2026-10-19: ten members expect the bytes inspect run 3
     'homeowner.mjs': { accepted: 'c51ea27a37a72b18aed7881ae349212257b790e6ff400cbe675949574504a80c', liveNow: 'c51ea27a37a72b18aed7881ae349212257b790e6ff400cbe675949574504a80c' },
     'write-allowlist.mjs': { accepted: '5f84c5634190ebade1ee6ae10d3420e09548efac78f2a72eb98886d2f0341189', liveNow: '1fc4a43eda4455d406edd4566d7a2bada352d241e88ba01cb4ff2cd3afb2884a' },
     'write-check-workflow.mjs': { accepted: 'fa2c6aef0e4e6c8713f60a24804309b4cf7f9e4b9d69a379498ef9acaf621fc2', liveNow: 'e1227c967906496519db1fe9c996514c03ca04a79378ff77e93b92ecf470544a' },
-    'workflow-rpc.mjs': { accepted: '79b7e4de653eb9d391afca9d27769b3b7c8e3d10d67af43e829ee32398797485', liveNow: '6902fe6f89f91c52f251ae1218257a387d6d7dd1fdb0e07687f6c99dfd5591d3' },
-    // app-services.mjs moved on too: its daab02f7 release bytes are live (the order gate of production
-    // run 40577608750) and the plan row replaces them for the Mortgage Desk return email route.
-    'app-services.mjs': { accepted: 'daab02f7199fef3a66b727ed0ac4ebc8315c675ea9b5025f18c1a53b197555f7', liveNow: 'daab02f7199fef3a66b727ed0ac4ebc8315c675ea9b5025f18c1a53b197555f7' },
+    'workflow-rpc.mjs': { accepted: '79b7e4de653eb9d391afca9d27769b3b7c8e3d10d67af43e829ee32398797485', liveNow: 'acb5fc06ca01ddb5ad3294ee5840443c1747798f06c1990c174c469dbb5534e0' },
+    // app-services.mjs moved on too: its daab02f7 release bytes were live (the order gate of production
+    // run 40577608750), and production run 40621229388 replaced them for the Mortgage Desk return email
+    // route (d1faa212, now recorded live).
+    'app-services.mjs': { accepted: 'daab02f7199fef3a66b727ed0ac4ebc8315c675ea9b5025f18c1a53b197555f7', liveNow: 'd1faa2120bc944d299c274176ac52601e262ad7d9d448de0385bd70f858ecac5' },
   };
   for (const [member, [before, live, manifestRel, appliedRel]] of Object.entries(RECONCILED)) {
     if (MOVED_ON[member]) {
@@ -1556,9 +1566,12 @@ test('Refer & Earn routes: data.mjs and workflow-rpc.mjs expected_live record th
       manifest: 'aws/tests/fixtures/production-data-secret-columns-manifest-2026-10-24.json',
       applied: 'aws/tests/fixtures/production-data-secret-columns-applied-manifest-2026-10-24.json',
     },
-  };
-  const PLANNED_FROM_HERE = {
-    'workflow-rpc.mjs': 'aws/tests/fixtures/production-mortgage-desk-return-manifest-2026-10-27.json',
+    // workflow-rpc.mjs moved on to the Mortgage Desk return, planned over these bytes and applied
+    // 2026-10-28 (production run 40618897308).
+    'workflow-rpc.mjs': {
+      manifest: 'aws/tests/fixtures/production-mortgage-desk-return-manifest-2026-10-27.json',
+      applied: 'aws/tests/fixtures/production-mortgage-desk-return-applied-manifest-2026-10-28.json',
+    },
   };
   const appliedManifest = JSON.parse(fs.readFileSync(path.join(ROOT, APPLIED_REL), 'utf8'));
   assert.equal(appliedManifest.workstream_id, 'referral-api-routes-applied');
@@ -1577,8 +1590,9 @@ test('Refer & Earn routes: data.mjs and workflow-rpc.mjs expected_live record th
     assert.ok(PLAN.order.includes(member), member);
     const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: member };
     if (MOVED_ON[member]) {
-      // data.mjs moved on to the credential-column guard, whose REPLACE started from the bytes this apply
-      // put live and was applied 2026-10-24 (its own test below): these bytes are no longer accepted live.
+      // data.mjs moved on to the credential-column guard (applied 2026-10-24) and workflow-rpc.mjs to the
+      // Mortgage Desk return (applied 2026-10-28), each a REPLACE that started from the bytes this apply put
+      // live (their own tests below): these bytes are no longer accepted live.
       const later = MOVED_ON[member];
       assert.equal(row.manifest, later.applied, member);
       assert.notEqual(row.accepted_sha256, live, member);
@@ -1592,16 +1606,6 @@ test('Refer & Earn routes: data.mjs and workflow-rpc.mjs expected_live record th
         (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
         member,
       );
-    } else if (PLANNED_FROM_HERE[member]) {
-      // workflow-rpc.mjs: the Mortgage Desk return REPLACE starts from the bytes this apply put live (planned,
-      // not applied): they stay the expected live state, no longer the accepted one.
-      assert.equal(row.manifest, PLANNED_FROM_HERE[member], member);
-      assert.equal(row.expected_live_sha256, live, member);
-      assert.notEqual(row.accepted_sha256, live, member);
-      const planned = JSON.parse(fs.readFileSync(path.join(ROOT, PLANNED_FROM_HERE[member]), 'utf8')).members[member];
-      assert.deepEqual([planned.live_sha256, planned.previous_manifest], [live, APPLIED_REL], member);
-      const ready = await run(inspect, { root: ROOT, inspectLive: liveFor(member, { sha256: live }) });
-      assert.equal(ready.state, 'READY', member);
     } else {
       assert.equal(row.expected_live_sha256, live, member);
       assert.equal(row.manifest, APPLIED_REL, member);
@@ -2412,12 +2416,13 @@ test('Delete Check: workflow.mjs replaced the release 2026-10-17 bytes; producti
   assert.equal(applied.workstream_id, 'production-delete-check-applied');
   assert.equal(applied.deploy_authorized, false);
   assert.deepEqual(applied.members[MEMBER], { live_sha256: LIVE, accepted_sha256: LIVE, operation: 'replace', previous_manifest: MANIFEST_REL });
-  // workflow.mjs moved on to the cash-job check link (its own test below), whose REPLACE starts from
-  // these applied bytes: they are the expected live state, no longer the accepted one.
+  // workflow.mjs moved on to the cash-job check link (its own test below), whose REPLACE started from
+  // these applied bytes and was applied 2026-10-28 (production run 40617806077): they are no longer live.
   const row = PLAN.members[MEMBER];
   assert.equal(row.operation, 'replace');
-  assert.equal(row.manifest, 'aws/tests/fixtures/production-cash-jobs-check-link-manifest-2026-10-27.json');
-  assert.equal(row.expected_live_sha256, LIVE);
+  assert.equal(row.manifest, 'aws/tests/fixtures/production-cash-jobs-check-link-applied-manifest-2026-10-28.json');
+  assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, 'aws/tests/fixtures/production-cash-jobs-check-link-manifest-2026-10-27.json'), 'utf8')).members[MEMBER].live_sha256, LIVE);
+  assert.notEqual(row.expected_live_sha256, LIVE);
   assert.notEqual(row.accepted_sha256, LIVE);
   const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
   await assert.rejects(
@@ -2426,9 +2431,10 @@ test('Delete Check: workflow.mjs replaced the release 2026-10-17 bytes; producti
   );
 });
 
-test('Cash jobs: workflow.mjs replaces the applied Delete Check bytes with the cash-job check link, held on SQL 121, recorded live in production (#1321)', async () => {
+test('Cash jobs: workflow.mjs replaced the applied Delete Check bytes with the cash-job check link, held on SQL 121 (recorded live, #1321); production run 40617806077 applied main\'s bytes', async () => {
   const MEMBER = 'workflow.mjs';
   const MANIFEST_REL = 'aws/tests/fixtures/production-cash-jobs-check-link-manifest-2026-10-27.json';
+  const APPLIED_REL = 'aws/tests/fixtures/production-cash-jobs-check-link-applied-manifest-2026-10-28.json';
   const PREVIOUS = 'aws/tests/fixtures/production-delete-check-applied-manifest-2026-10-27.json';
   const BEFORE = 'c7159c4d9a74342f2a0f59a2836def78376c84d2781bbeb56dbb35ba83ed9337';
   const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, MANIFEST_REL), 'utf8'));
@@ -2437,8 +2443,20 @@ test('Cash jobs: workflow.mjs replaces the applied Delete Check bytes with the c
   assert.match(manifest.authorization, /^Pending owner review/);
   assert.deepEqual(manifest.members[MEMBER], { live_sha256: BEFORE, accepted_sha256: accepted, operation: 'replace', previous_manifest: PREVIOUS });
   assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, PREVIOUS), 'utf8')).members[MEMBER].accepted_sha256, BEFORE);
+  // Applied 2026-10-28: staging apply 40617170536, pre-apply inspect 40617322899, apply 40617806077 (VERIFIED).
+  const appliedManifest = JSON.parse(fs.readFileSync(path.join(ROOT, APPLIED_REL), 'utf8'));
+  for (const runId of ['40617170536', '40617322899', '40617806077']) {
+    assert.match(PLAN.notes, new RegExp(runId), runId);
+    assert.match(appliedManifest.notes, new RegExp(runId), runId);
+  }
+  assert.match(appliedManifest.notes, /ajOU0mbuCWhgoZUL5ARyOgtEXTy2NSe\+KUfAe7lVYd8=/);
+  assert.match(appliedManifest.notes, /DEPLOY workflow\.mjs TO PRODUCTION/);
+  assert.equal(appliedManifest.workstream_id, 'cash-jobs-check-link-applied');
+  assert.equal(appliedManifest.deploy_authorized, false);
+  assert.match(appliedManifest.authorization, /^Record only/);
+  assert.deepEqual(appliedManifest.members, { [MEMBER]: { live_sha256: accepted, accepted_sha256: accepted, operation: 'replace', previous_manifest: MANIFEST_REL } });
   const row = PLAN.members[MEMBER];
-  assert.deepEqual(row, { operation: 'replace', accepted_sha256: accepted, expected_live_sha256: BEFORE, sql_before: SQL121_FILE, manifest: MANIFEST_REL });
+  assert.deepEqual(row, { operation: 'replace', accepted_sha256: accepted, expected_live_sha256: accepted, sql_before: SQL121_FILE, manifest: APPLIED_REL });
   // SQL 121 is applied in staging (run 40591140684) and recorded live in production from its applied pin
   // (one-shot run 0ba96971, SSM 6bfda4a6, #1321).
   const pre = PLAN.sql_prerequisites[SQL121_FILE];
@@ -2451,11 +2469,18 @@ test('Cash jobs: workflow.mjs replaces the applied Delete Check bytes with the c
   assert.ok(pre.evidence.includes('#1321'));
   assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
   const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
-  const ready = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: BEFORE }) });
-  assert.equal(ready.mutation, false);
-  assert.notEqual(ready.state, 'ALREADY_ACCEPTED');
-  // The apply refused until SQL 121 was recorded verified live in production (the plan before this record).
+  // Inspect accepts the applied bytes as done; the pre-apply bytes are no longer an accepted live state.
+  const done = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: accepted }) });
+  assert.equal(done.state, 'ALREADY_ACCEPTED');
+  assert.equal(done.mutation, false);
+  await assert.rejects(
+    run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: BEFORE }) }),
+    (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+  );
+  // The apply refused until SQL 121 was recorded verified live in production (the plan before that record,
+  // over the pre-apply bytes).
   const before = structuredClone(PLAN);
+  before.members[MEMBER].expected_live_sha256 = BEFORE;
   before.sql_prerequisites[SQL121_FILE] = { ...pre, verified_live: false, evidence: null };
   await assert.rejects(
     run(applyEnv(MEMBER), applyDeps(MEMBER, { plan: before }).deps),
@@ -2494,11 +2519,12 @@ test('Planned ADDs already live: tenant-management-v2.mjs and webhook-status.mjs
   }
 });
 
-test('Mortgage Desk return: ADD mortgage-desk-return.mjs held on SQL 122, recorded live in production (#1324), then workflow-rpc.mjs, storage-write-auth.mjs and app-services.mjs replace their accepted live bytes', async () => {
+test('Mortgage Desk return: ADD mortgage-desk-return.mjs held on SQL 122 (recorded live, #1324), then workflow-rpc.mjs, storage-write-auth.mjs and app-services.mjs replaced their accepted live bytes; production runs 40618256980 to 40621229388 applied main\'s bytes', async () => {
   const ADD = 'mortgage-desk-return.mjs';
   const REPLACES = ['workflow-rpc.mjs', 'storage-write-auth.mjs', 'app-services.mjs'];
   const SQL122 = 'aws/workflows/sql/122_mortgage_desk_return_to_tenant.sql';
   const MANIFEST_REL = 'aws/tests/fixtures/production-mortgage-desk-return-manifest-2026-10-27.json';
+  const APPLIED_REL = 'aws/tests/fixtures/production-mortgage-desk-return-applied-manifest-2026-10-28.json';
   // The bytes each REPLACE starts from: the member's previously accepted bytes, live since
   // tenant-billing-engine.mjs's production apply (run 40577608750) passed the order gate.
   const LIVE = {
@@ -2528,16 +2554,33 @@ test('Mortgage Desk return: ADD mortgage-desk-return.mjs held on SQL 122, record
   for (const member of REPLACES) {
     const row = PLAN.members[member];
     assert.equal(row.operation, 'replace', member);
-    assert.equal(row.expected_live_sha256, LIVE[member], member);
+    // Applied 2026-10-28: the row records the applied bytes and names the applied manifest.
+    assert.equal(row.expected_live_sha256, row.accepted_sha256, member);
     assert.equal(row.accepted_sha256, sha(`aws/functions/api/${member}`), member);
     assert.notEqual(row.accepted_sha256, LIVE[member], member);
-    assert.equal(row.manifest, MANIFEST_REL, member);
+    assert.equal(row.manifest, APPLIED_REL, member);
     assert.deepEqual(manifest.members[member], { live_sha256: LIVE[member], accepted_sha256: row.accepted_sha256, operation: 'replace', previous_manifest: PREVIOUS[member] }, member);
     assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, PREVIOUS[member]), 'utf8')).members[member].accepted_sha256, LIVE[member], member);
     // Each imports the ADD and follows it in order, so the order gate holds it behind SQL 122 too.
     assert.ok(localImports(fs.readFileSync(path.join(ROOT, 'aws/functions/api', member), 'utf8'), member).includes(ADD), member);
     assert.ok(PLAN.order.indexOf(ADD) < PLAN.order.indexOf(member), member);
     assert.equal(resolvePlannedMember(member, { root: ROOT, plan: PLAN }).ok, true, member);
+  }
+  // Applied 2026-10-28 in plan order, each member with its own staging apply, pre-apply inspect and VERIFIED
+  // production apply; the first ADD apply (run 40616679703) was refused before any write, pending workflow.mjs.
+  const appliedManifest = JSON.parse(fs.readFileSync(path.join(ROOT, APPLIED_REL), 'utf8'));
+  assert.equal(appliedManifest.workstream_id, 'mortgage-desk-return-applied');
+  assert.equal(appliedManifest.deploy_authorized, false);
+  assert.match(appliedManifest.authorization, /^Record only/);
+  assert.deepEqual(Object.keys(appliedManifest.members), [ADD, ...REPLACES]);
+  for (const member of [ADD, ...REPLACES]) {
+    const accepted = sha(`aws/functions/api/${member}`);
+    assert.deepEqual(appliedManifest.members[member], { live_sha256: accepted, accepted_sha256: accepted, operation: PLAN.members[member].operation, previous_manifest: MANIFEST_REL }, member);
+    assert.ok(appliedManifest.notes.includes(`"DEPLOY ${member} TO PRODUCTION"`), member);
+  }
+  for (const runId of ['40613955451', '40616049509', '40618256980', '40614473141', '40618584612', '40618897308', '40615193221', '40619214845', '40620579635', '40615533243', '40620929526', '40621229388', '40616679703']) {
+    assert.match(PLAN.notes, new RegExp(runId), runId);
+    assert.match(appliedManifest.notes, new RegExp(runId), runId);
   }
   // SQL 122 is applied in staging (run 40591701699) and recorded live in production from its applied pin
   // (one-shot run 4ec757d1, SSM e01f11f2, #1324).
@@ -2558,11 +2601,12 @@ test('Mortgage Desk return: ADD mortgage-desk-return.mjs held on SQL 122, record
     run(withAddEnv(ADD), applyDeps(ADD, { plan: before }).deps),
     (error) => error.code === CODES.PRODUCTION_APPROVAL_REQUIRED && error.details.sql_before === SQL122,
   );
-  // ... and every importer is refused while the ADD is not yet live.
+  // ... and every importer was refused while the ADD was not yet live (replayed from its pre-apply bytes).
+  // The absent ADD is caught by the import check (missing) or, once present, by the order gate (pending).
   for (const member of REPLACES) {
     await assert.rejects(
-      run(applyEnv(member), withSql98(member, applyDeps(member, { pending: [ADD], plan: PLAN_SQL98_LIVE }).deps)),
-      (error) => error.code === CODES.DEPLOYMENT_COLLISION,
+      run(applyEnv(member), applyDeps(member, { pending: [ADD], plan: mortgageDeskPre(structuredClone(PLAN_SQL98_LIVE)) }).deps),
+      (error) => error.code === CODES.DEPLOYMENT_COLLISION && [error.details?.missing, error.details?.pending].some((names) => Array.isArray(names) && names.includes(ADD)),
       member,
     );
   }
