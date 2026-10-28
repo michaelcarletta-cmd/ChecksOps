@@ -86,7 +86,21 @@ staging apply as its staging acceptance and `execute: true` under the owner's wo
 start the SQL 122 pin PR". The owner merges the pin change; the apply still needs the owner's run-time
 approval and runs only after that merge is on main and staged.
 
-**Status:** applied to staging (wave 21); production pin execute-authorized; not applied to production. The API
+**Production apply (2026-10-28).** After the pin change (#1323, merged on the owner's "Merge 1323 when
+green"), transfer run 40609953631 staged main `1a62fa3b6` (tarball sha256
+`8168ad219a9341dab93c7e8cc019ff3e526e26986ca820d9e0dcbe21d56fefd3`). One-shot `--phase inspect` (SSM
+`722819ab-f058-4bf3-ab08-d08fd8549b96`, run `6615cea2…`) then `--phase apply` run
+`4ec757d1-4d6e-4cc1-be58-66649473fb50` through SSM `e01f11f2-00af-428b-aea7-748dd46ec1f1`, workstream
+`prod-sql122-mortgage-desk-return-to-tenant-20261028`, under the owner's words "then apply SQL 122 in
+production" (passed verbatim): every step ok, contracts 4/4, 6/6 and 43/43; receipt `e13856d7…` →
+`d026eb9b5974a381900f2ef22066b9e408ffef86233195e14e5cdbd7ea619fe9` (intended), result `applied`, unrelated
+catalog `58ff3fb3…`; post-apply inspect `already_applied` true, `precondition_failures` `[]`; a separate
+read-only inspect (SSM `8415fc61-d8cc-47dd-bbc3-bc900befb616`) agreed. SSM returned the first 24000
+characters of the output; everything recorded was read from that part (see the pin's
+`applied.one_shot_note`).
+
+**Status:** applied to staging (wave 21) and to production (2026-10-28); the production pin is retired
+(`execute: false`). The API
 (`aws/functions/api/mortgage-desk-return.mjs`, `workflow-rpc.mjs`, `storage-write-auth.mjs`,
 `app-services.mjs`) and SPA change that call these functions is a separate, later step after SQL
 122 is live in staging; until then nothing calls them.
