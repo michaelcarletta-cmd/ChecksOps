@@ -119,5 +119,12 @@ test('the Refer & Earn screens read through the SQL 111 functions, never the tab
   assert.match(settings, /earned_credit_cents/);
   assert.match(settings, /applied_discount_cents/);
   assert.match(settings, /never takes maintenance below \$0 and never reduces check fees/);
+  // The tenant sees the maintenance rate, the discount and what it pays, so the discount is not
+  // read as the maintenance amount (owner report 2026-10-28: "$10.00 / mo" looked like the invoice).
+  assert.match(settings, /Monthly maintenance/);
+  assert.match(settings, /monthly_rate_cents\) \|\| 0/);
+  assert.match(settings, /Total discount/);
+  assert.match(settings, /Maintenance you pay/);
+  assert.doesNotMatch(settings, /Applied to your maintenance invoice:/);
   assert.match(dashboard, /\$5 per referral, \$25 cap per tenant/);
 });
