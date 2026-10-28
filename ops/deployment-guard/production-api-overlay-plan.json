@@ -227,6 +227,7 @@
     "providers/payees/email.mjs",
     "providers/payees/handlers.mjs",
     "email-policy.mjs",
+    "db-readonly-validate.mjs",
     "providers/production/moov-wallet-fund.mjs",
     "providers/production/moov-send.mjs",
     "providers.mjs"
@@ -961,6 +962,13 @@
       "expected_live_sha256": "eaf2a33a9e843692f43d128ce391d284b04e733818254c2a4664209561cb7559",
       "sql_before": null,
       "manifest": "aws/tests/fixtures/production-email-any-recipient-applied-manifest-2026-10-25.json"
+    },
+    "db-readonly-validate.mjs": {
+      "operation": "replace",
+      "accepted_sha256": "d897c206e07a90c06815689e9926eb70a5aabb9fe10efdc74048991e146a850c",
+      "expected_live_sha256": "71cc313ed9e4156be1bf2513bd8829621ffa63579c445563e1a12eb056bc1147",
+      "sql_before": null,
+      "manifest": "aws/tests/fixtures/production-db-validator-sql123-trigger-manifest-2026-10-28.json"
     }
   },
   "do_not_overlay": [

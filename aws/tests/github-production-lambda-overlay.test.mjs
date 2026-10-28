@@ -2611,3 +2611,35 @@ test('Mortgage Desk return: ADD mortgage-desk-return.mjs held on SQL 122 (record
     );
   }
 });
+
+test('DB validator SQL 123 trigger: db-readonly-validate.mjs replaces the bytes rebuild inspect run 40741101459 found live', async () => {
+  const MEMBER = 'db-readonly-validate.mjs';
+  const LIVE = '71cc313ed9e4156be1bf2513bd8829621ffa63579c445563e1a12eb056bc1147';
+  const MANIFEST_REL = 'aws/tests/fixtures/production-db-validator-sql123-trigger-manifest-2026-10-28.json';
+  const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, MANIFEST_REL), 'utf8'));
+  const accepted = sha(`aws/functions/api/${MEMBER}`);
+  // Main's bytes (#1338) justify SQL 123's trigger and expect 184 public triggers.
+  assert.match(fs.readFileSync(path.join(API, MEMBER), 'utf8'), /^export const EXPECTED_PUBLIC_TRIGGERS = 184;$/m);
+  assert.deepEqual(PLAN.members[MEMBER], { operation: 'replace', accepted_sha256: accepted, expected_live_sha256: LIVE, sql_before: null, manifest: MANIFEST_REL });
+  assert.equal(manifest.deploy_authorized, false);
+  assert.deepEqual(manifest.members[MEMBER], { live_sha256: LIVE, accepted_sha256: accepted, operation: 'replace' });
+  for (const evidence of ['#1338', '40739554272', '40741101459', 'WV2B9GAvLcd7R+NgSPDS/gt+X3xHipLm2LSc/xCtm98=', '7413f101-ef5a-4f8c-949a-781fa1959e60', '"open the validator plan PR"']) {
+    assert.ok(manifest.notes.includes(evidence), evidence);
+  }
+  // Production keeps the Moov send tail last; the validator imports no planned member and none imports it.
+  assert.deepEqual(PLAN.order.slice(-3), ['providers/production/moov-wallet-fund.mjs', 'providers/production/moov-send.mjs', 'providers.mjs']);
+  assert.ok(!localImports(fs.readFileSync(path.join(API, MEMBER), 'utf8'), MEMBER).some((dep) => PLAN.members[dep]));
+  for (const name of PLAN.order) assert.ok(!localImports(fs.readFileSync(path.join(API, name), 'utf8'), name).includes(MEMBER), name);
+  const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
+  assert.equal((await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER) })).state, 'READY');
+  assert.equal((await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: accepted }) })).state, 'ALREADY_ACCEPTED');
+  await assert.rejects(
+    run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: 'e'.repeat(64) }) }),
+    (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+  );
+  // With every earlier member at its accepted bytes (the rebuild inspect found all other members at main's bytes), apply is ready.
+  const { deps, calls } = applyDeps(MEMBER);
+  const result = await run(applyEnv(MEMBER), deps);
+  assert.equal(result.mutation, false);
+  assert.deepEqual(calls.receipt.owned_member_ops, { replace: [MEMBER], add: [] });
+});
