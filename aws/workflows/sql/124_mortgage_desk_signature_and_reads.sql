@@ -56,63 +56,89 @@
 --    (has_role) or is the platform owner (aws_is_platform_owner_user, SQL 90).
 -- c) public.aws_mortgage_desk_check_files(_request_id uuid) RETURNS TABLE (id,
 --    file_name, file_path, file_type, file_size, category, description,
---    source, created_at, signature_request_id). a); every check_files row of
---    the check, oldest first.
+--    source, created_at, signature_request_id). a); the newest 1000
+--    check_files rows of the check, returned oldest first.
 -- d) public.aws_mortgage_desk_signature_requests(_request_id uuid) RETURNS
---    jsonb. a); an array of the check's signature_requests (id,
---    document_name, document_path, status, created_at, sent_at,
---    final_pdf_path, created_by), newest first, each with signers[] (id,
---    signer_name, signer_email, signer_type, signing_order, status,
---    signed_at, viewed_at, delivery_status) in signing order. Never
+--    jsonb. a); an array of the newest 200 signature_requests of the check
+--    (id, document_name, document_path, status, created_at, sent_at,
+--    final_pdf_path, created_by), returned oldest first, each with
+--    signers[] (id, signer_name, signer_email, signer_type, signing_order,
+--    status, signed_at, viewed_at, delivery_status) in signing order. Never
 --    access_token, token_hash or expires_at.
 -- e) public.aws_mortgage_desk_can_read_path(_candidates text[], _rel text)
---    RETURNS boolean. STABLE; never raises. The storage-sign check for the
---    Desk, modeled on aws_mortgage_agent_can_read_library_path (aws/rls/sql
---    29): true only when the caller passes a) for some request whose check X
---    has the path (_rel, or one of _candidates; a stored path compared with
---    its query string stripped) as a check_files.file_path, as a
---    signature_requests.document_path or final_pdf_path of a request on X, or
---    when the path is exactly checks/<X>/mortgage-ops/<one name> (no further
---    '/', no '..'; SQL 122's upload prefix).
+--    RETURNS boolean. STABLE; it raises nothing of its own (auth.uid() itself
+--    may raise on a malformed request.app_user_id, as everywhere). The
+--    storage-sign check for the Desk, modeled on
+--    aws_mortgage_agent_can_read_library_path (aws/rls/sql 29): true only
+--    when the caller passes a) for some request whose check X has the path
+--    (_rel, or one of _candidates; a stored path compared with its query
+--    string stripped) as a check_files.file_path, as a
+--    signature_requests.document_path or final_pdf_path of a request on X,
+--    or when the path is exactly checks/<X>/mortgage-ops/<one name> (no
+--    further '/', the name not '.' or '..'; SQL 122's upload prefix). It says nothing about the bucket: the API signs only
+--    claim-files keys with it.
 -- f) public.aws_mortgage_desk_create_signature_request(_request_id uuid,
 --    _document_name text, _document_path text, _document_type text,
 --    _field_data jsonb, _signers jsonb, _expires_at timestamptz) RETURNS
---    jsonb. SQL 122's working gate with status in_progress. Checks:
---      - _document_path (trimmed): at most 512 characters, no '..', ends in
---        .pdf or .docx (any case), and equal to the query-stripped file_path of a
+--    jsonb. SQL 122's working gate with status in_progress. Every check is
+--    written as nested IF / CASE, so malformed input raises this function's
+--    own error, never a cast error:
+--      - _document_path (trimmed): 1 to 512 characters, no path segment '.'
+--        or '..' (a name such as 'Report..pdf' is fine), ends in .pdf or
+--        .docx (any case), and equal to the query-stripped file_path of a
 --        check_files row of the request's check; else 42501
 --        document_not_on_check;
---      - _document_name trimmed, 1 to 255 characters (22023
---        invalid_document_name); _document_type empty / null, or one of
---        contract, check_endorsement, payment_authorization,
+--      - _document_name trimmed, 1 to 255 characters, no control character
+--        (22023 invalid_document_name); _document_type empty / null, or one
+--        of contract, check_endorsement, payment_authorization,
 --        work_authorization, proof_of_loss, lien_waiver (the seeded
 --        signature_document_presets and detectDocumentType values; 22023
 --        invalid_document_type);
---      - _signers: an array of 1 to 4 objects with only the keys signer_name
---        (1 to 200), signer_email (at most 254, ^[^@\s]+@[^@\s]+\.[^@\s]+$),
---        signer_type (policyholder or contractor, default policyholder; a
---        subset of the signature_signers valid_signer_type set),
---        signing_order (an integer 1 to 4,
---        default its position, unique) and access_token (exactly 64
---        lowercase hex characters, minted by the API as esign.mjs
---        generateRawToken does; unique); else 22023 invalid_signers /
+--      - _signers: an array of 1 to 4 objects (22023 invalid_signers) with
+--        only the keys signer_name (1 to 200, no control character),
+--        signer_email (at most 254, ^[^@\s]+@[^@\s]+\.[^@\s]+$), signer_type
+--        (policyholder or contractor, default policyholder; a subset of the
+--        signature_signers valid_signer_type set), signing_order (absent or
+--        exactly the signer's position: the signers are 1..n in array order,
+--        because the signing pages give signer k the fields with
+--        signer_index = signing_order - 1, aws/storage/sql
+--        01_public_token_lookup.sql, 02_public_signature_write_helpers.sql,
+--        signature-submit.mjs) and access_token (exactly 64 lowercase hex
+--        characters, minted by the API as esign.mjs generateRawToken does;
+--        distinct, and its hash on no signature_signers row yet); else 22023
 --        invalid_signer: <n>;
---      - _field_data: null (an empty array) or an array of at most 200
---        objects, each with type signature, date, text or checkbox (the
---        FieldPlacementEditor set), signerIndex (default 0) an integer below
---        the signer count, page (default 1) an integer of at least 1, and x,
---        y, width, height numbers when present; else 22023
---        invalid_field_data: <n>;
---      - _expires_at later than now() and at most 30 days ahead (22023
---        invalid_expires_at).
+--      - _field_data: an array (null is an empty array) of at most 200
+--        objects, at most 256 KB as text; each with type signature, date,
+--        text or checkbox (the FieldPlacementEditor set), signerIndex
+--        (default 0) an integer below the signer count, page (default 1) an
+--        integer 1 to 10000, x, y, width, height numbers when present,
+--        label, placeholder, checkboxLabel strings of at most 500 characters
+--        when present, and an id that, when it is a uuid, is not repeated
+--        and on no signature_fields row yet; else 22023
+--        invalid_field_data: <n>. Every signer needs at least one signature
+--        field (22023 missing_signature_field: <n>);
+--      - _expires_at later than now() and at most 72 hours ahead (esign.mjs
+--        TOKEN_EXPIRY_HOURS, the link lifetime the email states; 22023
+--        invalid_expires_at);
+--      - the claim is the check's claim (check_intake_items.claim_id, as
+--        write-signature.mjs resolveSignatureRequestIds takes it); a request
+--        whose own claim_id is set and differs is refused (42501
+--        claim_mismatch);
+--      - not a repeat: no draft request on the check with the same
+--        document_path created by the caller in the last 10 minutes (42501
+--        duplicate_signature_request), and at most 10 requests created
+--        through this Desk request in a rolling 24 hours, counted by their
+--        mortgage_desk_request_created event (42501
+--        signature_request_limit). The working gate locks the Desk request,
+--        so concurrent creates for it run one after the other.
 --    Writes, as esign.mjs createSignatureRequestRows and
 --    runSendSignatureRequest do: one signature_requests row (claim_id = the
---    request's claim, else its check's; check_intake_item_id;
---    document_name; document_path; document_type; field_data; status
---    'draft'; created_by auth.uid()); one signature_signers row per signer
---    (status 'pending', access_token, token_hash = hex sha256 of the token's
---    UTF-8 bytes (esign.mjs hashToken), expires_at); one signature_fields row
---    per field (the columns and defaults of esign.mjs: signer_index,
+--    check's claim; check_intake_item_id; document_name; document_path;
+--    document_type; field_data; status 'draft'; created_by auth.uid()); one
+--    signature_signers row per signer (signing_order its position, status
+--    'pending', access_token, token_hash = hex sha256 of the token's UTF-8
+--    bytes (esign.mjs hashToken), expires_at); one signature_fields row per
+--    field (the columns and defaults of esign.mjs: signer_index,
 --    field_type, label, page, x, y, width 33, height 6, required unless
 --    false, placeholder, checkbox_label; the field's id when it is a uuid);
 --    check_files.signature_request_id on the check's rows of that path (as
@@ -122,22 +148,26 @@
 --    signer_name, signer_email}]} (no token).
 -- g) public.aws_mortgage_desk_record_signature_delivery(_request_id uuid,
 --    _signature_request_id uuid, _results jsonb) RETURNS jsonb. SQL 122's
---    working gate with status in_progress. The signature request (locked)
---    must be on the request's check (42501 signature_request_not_on_check),
---    created by the caller or the caller is the platform owner (42501
---    not_your_signature_request), status 'draft' with sent_at null (42501
---    signature_request_not_draft). _results is an array with exactly one
---    object per signer of that request ({signer_id, success boolean,
---    message_id, error}; 22023 invalid_results otherwise). Sets, exactly as
---    esign.mjs runSendSignatureRequest does after its sends: per signer
---    delivery_status 'sent', email_sent_at now(), email_provider_message_id,
---    or delivery_status 'failed', delivery_error (at most 300 characters);
---    then the request's status 'pending' (or 'failed' when every send
---    failed), delivery_mode 'aws_ses_or_sink', sent_at now() (null when every
---    send failed), last_error ('All emails failed', 'Some emails failed' or
---    null), last_attempted_at now(), provider_status (emails_sent,
---    emails_failed or emails_partially_failed); one esign_event_logs row
---    (stage mortgage_desk_delivery_recorded). Returns {signature_request_id,
+--    working gate with status in_progress or completed (a Desk request may
+--    complete between the create and the sends). The signature request
+--    (locked) must be on the request's check (42501
+--    signature_request_not_on_check), created through this Desk request
+--    (its mortgage_desk_request_created event names it; 42501
+--    not_a_desk_signature_request), created by the caller or the caller is
+--    the platform owner (42501 not_your_signature_request), status 'draft'
+--    with sent_at null (42501 signature_request_not_draft). _results is an
+--    array with exactly one object per signer of that request ({signer_id,
+--    success boolean, message_id, error}; 22023 invalid_results otherwise).
+--    Sets, exactly as esign.mjs runSendSignatureRequest does after its
+--    sends: per signer delivery_status 'sent', email_sent_at now(),
+--    email_provider_message_id, or delivery_status 'failed', delivery_error
+--    (at most 300 characters); then the request's status 'pending' (or
+--    'failed' when every send failed), delivery_mode 'aws_ses_or_sink',
+--    sent_at now() (null when every send failed), last_error ('All emails
+--    failed', 'Some emails failed' or null), last_attempted_at now(),
+--    provider_status (emails_sent, emails_failed or
+--    emails_partially_failed); one esign_event_logs row (stage
+--    mortgage_desk_delivery_recorded). Returns {signature_request_id,
 --    status, provider_status, sent, failed, total}.
 -- h) public.aws_mortgage_desk_post_timeline(_request_id uuid, _kind text,
 --    _note text) RETURNS uuid. SQL 122's working gate with status
@@ -175,6 +205,11 @@
 -- public.homeowner_ledger_events, public.signature_requests,
 -- public.signature_signers, public.signature_fields and public.esign_event_logs
 -- without FORCE ROW LEVEL SECURITY (or is a superuser or BYPASSRLS).
+-- SQL 122 applied with the same ownership rule for its four tables; the
+-- read-only inspect before staging and production must confirm that the
+-- applying login owns public.signature_requests, public.signature_signers,
+-- public.signature_fields and public.esign_event_logs (without FORCE ROW
+-- LEVEL SECURITY), the four tables this file adds to the rule.
 --
 -- Numbering: SQL 124 (after SQL 123).
 --
@@ -395,15 +430,21 @@ BEGIN
   RETURN QUERY
     SELECT f.id, f.file_name, f.file_path, f.file_type, f.file_size, f.category, f.description,
            f.source, f.created_at, f.signature_request_id
-      FROM public.check_files f
-     WHERE f.check_intake_item_id = v_req.check_intake_item_id
+      FROM (
+        SELECT cf.id, cf.file_name, cf.file_path, cf.file_type, cf.file_size, cf.category,
+               cf.description, cf.source, cf.created_at, cf.signature_request_id
+          FROM public.check_files cf
+         WHERE cf.check_intake_item_id = v_req.check_intake_item_id
+         ORDER BY cf.created_at DESC, cf.id DESC
+         LIMIT 1000
+      ) f
      ORDER BY f.created_at, f.id;
 END
 $$;
 REVOKE ALL ON FUNCTION public.aws_mortgage_desk_check_files(uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.aws_mortgage_desk_check_files(uuid) TO checksops;
 COMMENT ON FUNCTION public.aws_mortgage_desk_check_files(uuid) IS
-  'SQL 124: every check_files row of an in-progress or completed Desk request''s check, for its assigned mortgage agent or the platform owner. checksops only.';
+  'SQL 124: the newest 1000 check_files rows (oldest first) of an in-progress or completed Desk request''s check, for its assigned mortgage agent or the platform owner. checksops only.';
 
 -- d) The check's signature requests and their signers (no token columns).
 CREATE OR REPLACE FUNCTION public.aws_mortgage_desk_signature_requests(_request_id uuid)
@@ -442,19 +483,27 @@ BEGIN
                FROM public.signature_signers s
               WHERE s.signature_request_id = sr.id
            ), '[]'::jsonb)
-         ) ORDER BY sr.created_at DESC, sr.id), '[]'::jsonb)
+         ) ORDER BY sr.created_at, sr.id), '[]'::jsonb)
     INTO v_out
-    FROM public.signature_requests sr
-   WHERE sr.check_intake_item_id = v_req.check_intake_item_id;
+    FROM (
+      SELECT r.id, r.document_name, r.document_path, r.status, r.created_at, r.sent_at,
+             r.final_pdf_path, r.created_by
+        FROM public.signature_requests r
+       WHERE r.check_intake_item_id = v_req.check_intake_item_id
+       ORDER BY r.created_at DESC, r.id DESC
+       LIMIT 200
+    ) sr;
   RETURN v_out;
 END
 $$;
 REVOKE ALL ON FUNCTION public.aws_mortgage_desk_signature_requests(uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.aws_mortgage_desk_signature_requests(uuid) TO checksops;
 COMMENT ON FUNCTION public.aws_mortgage_desk_signature_requests(uuid) IS
-  'SQL 124: the signature requests of an in-progress or completed Desk request''s check with their signers (never access_token, token_hash or expires_at), for its assigned mortgage agent or the platform owner. checksops only.';
+  'SQL 124: the newest 200 signature requests (oldest first) of an in-progress or completed Desk request''s check with their signers (never access_token, token_hash or expires_at), for its assigned mortgage agent or the platform owner. checksops only.';
 
--- e) May the caller sign a storage read of this path (never raises).
+-- e) May the caller sign a storage read of this path. Raises nothing of its own
+-- (auth.uid() may still raise on a malformed request.app_user_id). It does not
+-- know the bucket: the API signs only claim-files keys with it.
 CREATE OR REPLACE FUNCTION public.aws_mortgage_desk_can_read_path(_candidates text[], _rel text)
 RETURNS boolean
 LANGUAGE sql
@@ -497,20 +546,22 @@ AS $$
            OR EXISTS (
                 SELECT 1
                   FROM unnest(array_append(COALESCE(_candidates, ARRAY[]::text[]), _rel)) AS c(path)
+                 CROSS JOIN LATERAL (
+                   SELECT 'checks/' || r.check_intake_item_id::text || '/mortgage-ops/' AS prefix
+                 ) AS x
                  WHERE c.path IS NOT NULL
                    AND length(c.path) <= 512
-                   AND left(c.path, length('checks/' || r.check_intake_item_id::text || '/mortgage-ops/'))
-                       = 'checks/' || r.check_intake_item_id::text || '/mortgage-ops/'
-                   AND length(c.path) > length('checks/' || r.check_intake_item_id::text || '/mortgage-ops/')
-                   AND position('/' IN substr(c.path, length('checks/' || r.check_intake_item_id::text || '/mortgage-ops/') + 1)) = 0
-                   AND position('..' IN c.path) = 0)
+                   AND left(c.path, length(x.prefix)) = x.prefix
+                   AND length(c.path) > length(x.prefix)
+                   AND position('/' IN substr(c.path, length(x.prefix) + 1)) = 0
+                   AND substr(c.path, length(x.prefix) + 1) NOT IN ('.', '..'))
              )
      );
 $$;
 REVOKE ALL ON FUNCTION public.aws_mortgage_desk_can_read_path(text[], text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.aws_mortgage_desk_can_read_path(text[], text) TO checksops;
 COMMENT ON FUNCTION public.aws_mortgage_desk_can_read_path(text[], text) IS
-  'SQL 124: Mortgage Desk storage sign. True when the caller (assigned mortgage agent or platform owner) has an in-progress or completed Desk request whose check holds the path as a check file (query-stripped), a signature request document or final PDF, or is checks/<check>/mortgage-ops/<name>. Exact matches only. checksops only.';
+  'SQL 124: Mortgage Desk storage sign (claim-files keys only, the API''s rule). True when the caller (assigned mortgage agent or platform owner) has an in-progress or completed Desk request whose check holds the path as a check file (query-stripped), a signature request document or final PDF, or is checks/<check>/mortgage-ops/<name>. Exact matches only. checksops only.';
 
 -- f) A Desk signature request on a document of the request's check.
 CREATE OR REPLACE FUNCTION public.aws_mortgage_desk_create_signature_request(
@@ -534,31 +585,45 @@ DECLARE
   v_name text := btrim(COALESCE(_document_name, ''));
   v_type text := NULLIF(btrim(COALESCE(_document_type, '')), '');
   v_fields jsonb := COALESCE(_field_data, '[]'::jsonb);
-  v_claim uuid;
+  v_check_claim uuid;
   v_count integer;
+  v_nfields integer;
   v_signer jsonb;
   v_field jsonb;
   v_key text;
+  v_jt text;
+  v_text text;
+  v_num numeric;
+  v_idx integer;
   v_i integer;
-  v_order integer;
-  v_orders integer[] := ARRAY[]::integer[];
+  v_names text[] := ARRAY[]::text[];
+  v_emails text[] := ARRAY[]::text[];
+  v_types text[] := ARRAY[]::text[];
   v_tokens text[] := ARRAY[]::text[];
+  v_field_ids uuid[] := ARRAY[]::uuid[];
+  v_signed integer[] := ARRAY[]::integer[];
   v_sig_id uuid := gen_random_uuid();
   v_out_signers jsonb;
 BEGIN
   v_req := public.aws_mortgage_desk_working_request(_request_id, ARRAY['in_progress']);
 
-  IF length(v_path) = 0
-     OR length(v_path) > 512
-     OR position('..' IN v_path) > 0
-     OR NOT (lower(v_path) LIKE '%.pdf' OR lower(v_path) LIKE '%.docx')
-     OR NOT EXISTS (
-       SELECT 1 FROM public.check_files f
-        WHERE f.check_intake_item_id = v_req.check_intake_item_id
-          AND split_part(f.file_path, '?', 1) = v_path) THEN
+  -- The document: a .pdf / .docx file of this check.
+  IF length(v_path) = 0 OR length(v_path) > 512 THEN
     RAISE EXCEPTION 'document_not_on_check' USING ERRCODE = '42501';
   END IF;
-  IF length(v_name) = 0 OR length(v_name) > 255 THEN
+  IF EXISTS (SELECT 1 FROM unnest(string_to_array(v_path, '/')) AS seg(s) WHERE seg.s IN ('.', '..')) THEN
+    RAISE EXCEPTION 'document_not_on_check' USING ERRCODE = '42501';
+  END IF;
+  IF NOT (lower(v_path) LIKE '%.pdf' OR lower(v_path) LIKE '%.docx') THEN
+    RAISE EXCEPTION 'document_not_on_check' USING ERRCODE = '42501';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.check_files f
+     WHERE f.check_intake_item_id = v_req.check_intake_item_id
+       AND split_part(f.file_path, '?', 1) = v_path) THEN
+    RAISE EXCEPTION 'document_not_on_check' USING ERRCODE = '42501';
+  END IF;
+  IF length(v_name) = 0 OR length(v_name) > 255 OR v_name ~ '[[:cntrl:]]' THEN
     RAISE EXCEPTION 'invalid_document_name' USING ERRCODE = '22023';
   END IF;
   IF v_type IS NOT NULL AND v_type NOT IN (
@@ -567,12 +632,14 @@ BEGIN
     RAISE EXCEPTION 'invalid_document_type' USING ERRCODE = '22023';
   END IF;
 
-  -- Signers.
-  IF _signers IS NULL OR jsonb_typeof(_signers) IS DISTINCT FROM 'array'
-     OR jsonb_array_length(_signers) < 1 OR jsonb_array_length(_signers) > 4 THEN
+  -- Signers: 1 to 4, in signing order 1..n.
+  IF _signers IS NULL OR jsonb_typeof(_signers) IS DISTINCT FROM 'array' THEN
     RAISE EXCEPTION 'invalid_signers' USING ERRCODE = '22023';
   END IF;
   v_count := jsonb_array_length(_signers);
+  IF v_count < 1 OR v_count > 4 THEN
+    RAISE EXCEPTION 'invalid_signers' USING ERRCODE = '22023';
+  END IF;
   FOR v_i IN 0 .. v_count - 1 LOOP
     v_signer := _signers -> v_i;
     IF jsonb_typeof(v_signer) IS DISTINCT FROM 'object' THEN
@@ -583,106 +650,205 @@ BEGIN
         RAISE EXCEPTION 'invalid_signer: %', v_i + 1 USING ERRCODE = '22023';
       END IF;
     END LOOP;
-    IF jsonb_typeof(v_signer -> 'signer_name') IS DISTINCT FROM 'string'
-       OR length(btrim(v_signer ->> 'signer_name')) NOT BETWEEN 1 AND 200
-       OR jsonb_typeof(v_signer -> 'signer_email') IS DISTINCT FROM 'string'
-       OR length(btrim(v_signer ->> 'signer_email')) > 254
-       OR btrim(v_signer ->> 'signer_email') !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$'
-       OR (jsonb_typeof(v_signer -> 'signer_type') IS NOT NULL
-           AND jsonb_typeof(v_signer -> 'signer_type') <> 'null'
-           AND (jsonb_typeof(v_signer -> 'signer_type') <> 'string'
-                OR (v_signer ->> 'signer_type') NOT IN ('policyholder', 'contractor')))
-       OR jsonb_typeof(v_signer -> 'access_token') IS DISTINCT FROM 'string'
-       OR (v_signer ->> 'access_token') !~ '^[0-9a-f]{64}$'
-       OR (v_signer ->> 'access_token') = ANY (v_tokens) THEN
+
+    IF jsonb_typeof(v_signer -> 'signer_name') IS DISTINCT FROM 'string' THEN
       RAISE EXCEPTION 'invalid_signer: %', v_i + 1 USING ERRCODE = '22023';
     END IF;
-    IF jsonb_typeof(v_signer -> 'signing_order') IS NULL OR jsonb_typeof(v_signer -> 'signing_order') = 'null' THEN
-      v_order := v_i + 1;
-    ELSIF jsonb_typeof(v_signer -> 'signing_order') = 'number'
-          AND (v_signer ->> 'signing_order')::numeric IN (1, 2, 3, 4) THEN
-      v_order := (v_signer ->> 'signing_order')::numeric::integer;
+    v_text := btrim(v_signer ->> 'signer_name');
+    IF length(v_text) < 1 OR length(v_text) > 200 OR v_text ~ '[[:cntrl:]]' THEN
+      RAISE EXCEPTION 'invalid_signer: %', v_i + 1 USING ERRCODE = '22023';
+    END IF;
+    v_names := v_names || v_text;
+
+    IF jsonb_typeof(v_signer -> 'signer_email') IS DISTINCT FROM 'string' THEN
+      RAISE EXCEPTION 'invalid_signer: %', v_i + 1 USING ERRCODE = '22023';
+    END IF;
+    v_text := btrim(v_signer ->> 'signer_email');
+    IF length(v_text) > 254 OR v_text !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$' THEN
+      RAISE EXCEPTION 'invalid_signer: %', v_i + 1 USING ERRCODE = '22023';
+    END IF;
+    v_emails := v_emails || v_text;
+
+    v_jt := COALESCE(jsonb_typeof(v_signer -> 'signer_type'), 'null');
+    IF v_jt = 'null' THEN
+      v_text := 'policyholder';
+    ELSIF v_jt = 'string' THEN
+      v_text := v_signer ->> 'signer_type';
+      IF v_text NOT IN ('policyholder', 'contractor') THEN
+        RAISE EXCEPTION 'invalid_signer: %', v_i + 1 USING ERRCODE = '22023';
+      END IF;
     ELSE
       RAISE EXCEPTION 'invalid_signer: %', v_i + 1 USING ERRCODE = '22023';
     END IF;
-    IF v_order = ANY (v_orders) THEN
+    v_types := v_types || v_text;
+
+    -- The signing pages give signer k the fields with signer_index = signing_order - 1,
+    -- so the order must be exactly the signer's position.
+    v_jt := COALESCE(jsonb_typeof(v_signer -> 'signing_order'), 'null');
+    IF v_jt = 'number' THEN
+      IF (v_signer ->> 'signing_order')::numeric <> v_i + 1 THEN
+        RAISE EXCEPTION 'invalid_signer: %', v_i + 1 USING ERRCODE = '22023';
+      END IF;
+    ELSIF v_jt <> 'null' THEN
       RAISE EXCEPTION 'invalid_signer: %', v_i + 1 USING ERRCODE = '22023';
     END IF;
-    v_orders := v_orders || v_order;
-    v_tokens := v_tokens || (v_signer ->> 'access_token');
+
+    IF jsonb_typeof(v_signer -> 'access_token') IS DISTINCT FROM 'string' THEN
+      RAISE EXCEPTION 'invalid_signer: %', v_i + 1 USING ERRCODE = '22023';
+    END IF;
+    v_text := v_signer ->> 'access_token';
+    IF v_text !~ '^[0-9a-f]{64}$' OR v_text = ANY (v_tokens) THEN
+      RAISE EXCEPTION 'invalid_signer: %', v_i + 1 USING ERRCODE = '22023';
+    END IF;
+    IF EXISTS (
+      SELECT 1 FROM public.signature_signers s
+       WHERE s.token_hash = encode(sha256(convert_to(v_text, 'UTF8')), 'hex')) THEN
+      RAISE EXCEPTION 'invalid_signer: %', v_i + 1 USING ERRCODE = '22023';
+    END IF;
+    v_tokens := v_tokens || v_text;
   END LOOP;
 
   -- Fields.
-  IF jsonb_typeof(v_fields) IS DISTINCT FROM 'array' OR jsonb_array_length(v_fields) > 200 THEN
+  IF jsonb_typeof(v_fields) IS DISTINCT FROM 'array' THEN
     RAISE EXCEPTION 'invalid_field_data' USING ERRCODE = '22023';
   END IF;
-  FOR v_i IN 0 .. jsonb_array_length(v_fields) - 1 LOOP
+  IF octet_length(v_fields::text) > 262144 THEN
+    RAISE EXCEPTION 'invalid_field_data' USING ERRCODE = '22023';
+  END IF;
+  v_nfields := jsonb_array_length(v_fields);
+  IF v_nfields > 200 THEN
+    RAISE EXCEPTION 'invalid_field_data' USING ERRCODE = '22023';
+  END IF;
+  FOR v_i IN 0 .. v_nfields - 1 LOOP
     v_field := v_fields -> v_i;
-    IF jsonb_typeof(v_field) IS DISTINCT FROM 'object'
-       OR jsonb_typeof(v_field -> 'type') IS DISTINCT FROM 'string'
-       OR (v_field ->> 'type') NOT IN ('signature', 'date', 'text', 'checkbox')
-       OR (jsonb_typeof(v_field -> 'signerIndex') IS NOT NULL AND jsonb_typeof(v_field -> 'signerIndex') <> 'null'
-           AND (jsonb_typeof(v_field -> 'signerIndex') <> 'number'
-                OR (v_field ->> 'signerIndex')::numeric <> trunc((v_field ->> 'signerIndex')::numeric)
-                OR (v_field ->> 'signerIndex')::numeric < 0
-                OR (v_field ->> 'signerIndex')::numeric >= v_count))
-       OR (jsonb_typeof(v_field -> 'page') IS NOT NULL AND jsonb_typeof(v_field -> 'page') <> 'null'
-           AND (jsonb_typeof(v_field -> 'page') <> 'number'
-                OR (v_field ->> 'page')::numeric <> trunc((v_field ->> 'page')::numeric)
-                OR (v_field ->> 'page')::numeric < 1
-                OR (v_field ->> 'page')::numeric > 10000)) THEN
+    IF jsonb_typeof(v_field) IS DISTINCT FROM 'object' THEN
       RAISE EXCEPTION 'invalid_field_data: %', v_i + 1 USING ERRCODE = '22023';
     END IF;
+    IF jsonb_typeof(v_field -> 'type') IS DISTINCT FROM 'string' THEN
+      RAISE EXCEPTION 'invalid_field_data: %', v_i + 1 USING ERRCODE = '22023';
+    END IF;
+    IF (v_field ->> 'type') NOT IN ('signature', 'date', 'text', 'checkbox') THEN
+      RAISE EXCEPTION 'invalid_field_data: %', v_i + 1 USING ERRCODE = '22023';
+    END IF;
+
+    v_jt := COALESCE(jsonb_typeof(v_field -> 'signerIndex'), 'null');
+    IF v_jt = 'null' THEN
+      v_idx := 0;
+    ELSIF v_jt = 'number' THEN
+      v_num := (v_field ->> 'signerIndex')::numeric;
+      IF v_num <> trunc(v_num) OR v_num < 0 OR v_num >= v_count THEN
+        RAISE EXCEPTION 'invalid_field_data: %', v_i + 1 USING ERRCODE = '22023';
+      END IF;
+      v_idx := v_num::integer;
+    ELSE
+      RAISE EXCEPTION 'invalid_field_data: %', v_i + 1 USING ERRCODE = '22023';
+    END IF;
+
+    v_jt := COALESCE(jsonb_typeof(v_field -> 'page'), 'null');
+    IF v_jt = 'number' THEN
+      v_num := (v_field ->> 'page')::numeric;
+      IF v_num <> trunc(v_num) OR v_num < 1 OR v_num > 10000 THEN
+        RAISE EXCEPTION 'invalid_field_data: %', v_i + 1 USING ERRCODE = '22023';
+      END IF;
+    ELSIF v_jt <> 'null' THEN
+      RAISE EXCEPTION 'invalid_field_data: %', v_i + 1 USING ERRCODE = '22023';
+    END IF;
+
     FOREACH v_key IN ARRAY ARRAY['x', 'y', 'width', 'height'] LOOP
-      IF jsonb_typeof(v_field -> v_key) IS NOT NULL AND jsonb_typeof(v_field -> v_key) NOT IN ('number', 'null') THEN
+      IF COALESCE(jsonb_typeof(v_field -> v_key), 'null') NOT IN ('number', 'null') THEN
         RAISE EXCEPTION 'invalid_field_data: %', v_i + 1 USING ERRCODE = '22023';
       END IF;
     END LOOP;
     FOREACH v_key IN ARRAY ARRAY['label', 'placeholder', 'checkboxLabel'] LOOP
-      IF jsonb_typeof(v_field -> v_key) IS NOT NULL AND jsonb_typeof(v_field -> v_key) NOT IN ('string', 'null') THEN
+      v_jt := COALESCE(jsonb_typeof(v_field -> v_key), 'null');
+      IF v_jt = 'string' THEN
+        IF length(v_field ->> v_key) > 500 THEN
+          RAISE EXCEPTION 'invalid_field_data: %', v_i + 1 USING ERRCODE = '22023';
+        END IF;
+      ELSIF v_jt <> 'null' THEN
         RAISE EXCEPTION 'invalid_field_data: %', v_i + 1 USING ERRCODE = '22023';
       END IF;
     END LOOP;
+
+    -- A uuid id is kept (as esign.mjs does): it must be new.
+    IF jsonb_typeof(v_field -> 'id') = 'string'
+       AND (v_field ->> 'id') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$' THEN
+      IF (v_field ->> 'id')::uuid = ANY (v_field_ids)
+         OR EXISTS (SELECT 1 FROM public.signature_fields sf WHERE sf.id = (v_field ->> 'id')::uuid) THEN
+        RAISE EXCEPTION 'invalid_field_data: %', v_i + 1 USING ERRCODE = '22023';
+      END IF;
+      v_field_ids := v_field_ids || (v_field ->> 'id')::uuid;
+    END IF;
+
+    IF (v_field ->> 'type') = 'signature' THEN
+      v_signed := v_signed || v_idx;
+    END IF;
+  END LOOP;
+  FOR v_i IN 0 .. v_count - 1 LOOP
+    IF NOT (v_i = ANY (v_signed)) THEN
+      RAISE EXCEPTION 'missing_signature_field: %', v_i + 1 USING ERRCODE = '22023';
+    END IF;
   END LOOP;
 
-  IF _expires_at IS NULL OR _expires_at <= now() OR _expires_at > now() + interval '30 days' THEN
+  IF _expires_at IS NULL OR _expires_at <= now() OR _expires_at > now() + interval '72 hours' THEN
     RAISE EXCEPTION 'invalid_expires_at' USING ERRCODE = '22023';
   END IF;
 
-  SELECT COALESCE(v_req.claim_id, ci.claim_id) INTO v_claim
+  -- The check's claim (write-signature.mjs resolveSignatureRequestIds).
+  SELECT ci.claim_id INTO v_check_claim
     FROM public.check_intake_items ci
    WHERE ci.id = v_req.check_intake_item_id;
-  v_claim := COALESCE(v_claim, v_req.claim_id);
+  IF v_req.claim_id IS NOT NULL AND v_req.claim_id IS DISTINCT FROM v_check_claim THEN
+    RAISE EXCEPTION 'claim_mismatch' USING ERRCODE = '42501';
+  END IF;
+
+  -- Not a repeat, and not too many.
+  IF EXISTS (
+    SELECT 1 FROM public.signature_requests sr
+     WHERE sr.check_intake_item_id = v_req.check_intake_item_id
+       AND sr.document_path = v_path
+       AND sr.status = 'draft'
+       AND sr.created_by = auth.uid()
+       AND sr.created_at > now() - interval '10 minutes') THEN
+    RAISE EXCEPTION 'duplicate_signature_request' USING ERRCODE = '42501';
+  END IF;
+  IF (
+    SELECT count(DISTINCT sr.id)
+      FROM public.signature_requests sr
+      JOIN public.esign_event_logs l ON l.request_id = sr.id
+     WHERE sr.check_intake_item_id = v_req.check_intake_item_id
+       AND l.stage = 'mortgage_desk_request_created'
+       AND l.payload ->> 'mortgage_request_id' = v_req.id::text
+       AND l.created_at > now() - interval '24 hours'
+  ) >= 10 THEN
+    RAISE EXCEPTION 'signature_request_limit' USING ERRCODE = '42501';
+  END IF;
 
   INSERT INTO public.signature_requests (
     id, claim_id, check_intake_item_id, document_name, document_path, document_type,
     field_data, status, created_by
   ) VALUES (
-    v_sig_id, v_claim, v_req.check_intake_item_id, v_name, v_path, v_type,
+    v_sig_id, v_check_claim, v_req.check_intake_item_id, v_name, v_path, v_type,
     v_fields, 'draft', auth.uid()
   );
 
-  INSERT INTO public.signature_signers (
-    signature_request_id, signer_name, signer_email, signer_type, signing_order, status,
-    access_token, token_hash, expires_at
-  )
-  SELECT v_sig_id,
-         btrim(s.value ->> 'signer_name'),
-         btrim(s.value ->> 'signer_email'),
-         COALESCE(s.value ->> 'signer_type', 'policyholder'),
-         COALESCE((s.value ->> 'signing_order')::numeric::integer, s.ordinality::integer),
-         'pending',
-         s.value ->> 'access_token',
-         encode(sha256(convert_to(s.value ->> 'access_token', 'UTF8')), 'hex'),
-         _expires_at
-    FROM jsonb_array_elements(_signers) WITH ORDINALITY AS s(value, ordinality)
-   ORDER BY s.ordinality;
+  FOR v_i IN 1 .. v_count LOOP
+    INSERT INTO public.signature_signers (
+      signature_request_id, signer_name, signer_email, signer_type, signing_order, status,
+      access_token, token_hash, expires_at
+    ) VALUES (
+      v_sig_id, v_names[v_i], v_emails[v_i], v_types[v_i], v_i, 'pending',
+      v_tokens[v_i], encode(sha256(convert_to(v_tokens[v_i], 'UTF8')), 'hex'), _expires_at
+    );
+  END LOOP;
 
+  -- Every value below was checked above.
   INSERT INTO public.signature_fields (
     id, signature_request_id, signer_index, field_type, label, page, x, y, width, height,
     required, placeholder, checkbox_label
   )
-  SELECT CASE WHEN (f.value ->> 'id') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+  SELECT CASE WHEN jsonb_typeof(f.value -> 'id') = 'string'
+                   AND (f.value ->> 'id') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
               THEN (f.value ->> 'id')::uuid ELSE gen_random_uuid() END,
          v_sig_id,
          COALESCE((f.value ->> 'signerIndex')::numeric::integer, 0),
@@ -706,7 +872,7 @@ BEGIN
 
   INSERT INTO public.esign_event_logs (request_id, signer_id, claim_id, stage, status, message, payload)
   VALUES (
-    v_sig_id, NULL, v_claim, 'mortgage_desk_request_created', 'ok',
+    v_sig_id, NULL, v_check_claim, 'mortgage_desk_request_created', 'ok',
     'Mortgage Desk signature request created',
     jsonb_build_object('source', 'mortgage_desk', 'mortgage_request_id', v_req.id,
                        'application_user_id', auth.uid())
@@ -725,7 +891,7 @@ $$;
 REVOKE ALL ON FUNCTION public.aws_mortgage_desk_create_signature_request(uuid, text, text, text, jsonb, jsonb, timestamptz) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.aws_mortgage_desk_create_signature_request(uuid, text, text, text, jsonb, jsonb, timestamptz) TO checksops;
 COMMENT ON FUNCTION public.aws_mortgage_desk_create_signature_request(uuid, text, text, text, jsonb, jsonb, timestamptz) IS
-  'SQL 124: the assigned mortgage agent (or the platform owner) creates a draft signature request (1 to 4 insured or contractor signers, API-minted tokens) on a PDF or DOCX already on an in-progress Desk request''s check. checksops only.';
+  'SQL 124: the assigned mortgage agent (or the platform owner) creates a draft signature request (1 to 4 insured or contractor signers in order, a signature field each, API-minted tokens valid at most 72 hours) on a PDF or DOCX already on an in-progress Desk request''s check; at most 10 per Desk request per 24 hours. checksops only.';
 
 -- g) Record the API's email sends of a Desk signature request.
 CREATE OR REPLACE FUNCTION public.aws_mortgage_desk_record_signature_delivery(
@@ -749,7 +915,8 @@ DECLARE
   v_status text;
   v_provider_status text;
 BEGIN
-  v_req := public.aws_mortgage_desk_working_request(_request_id, ARRAY['in_progress']);
+  -- A Desk request may complete between the create and the sends.
+  v_req := public.aws_mortgage_desk_working_request(_request_id, ARRAY['in_progress', 'completed']);
 
   SELECT * INTO v_sig
     FROM public.signature_requests sr
@@ -758,6 +925,13 @@ BEGIN
    FOR UPDATE;
   IF NOT FOUND THEN
     RAISE EXCEPTION 'signature_request_not_on_check' USING ERRCODE = '42501';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.esign_event_logs l
+     WHERE l.request_id = v_sig.id
+       AND l.stage = 'mortgage_desk_request_created'
+       AND l.payload ->> 'mortgage_request_id' = v_req.id::text) THEN
+    RAISE EXCEPTION 'not_a_desk_signature_request' USING ERRCODE = '42501';
   END IF;
   IF v_sig.created_by IS DISTINCT FROM auth.uid() AND NOT COALESCE(public.is_platform_owner(), false) THEN
     RAISE EXCEPTION 'not_your_signature_request' USING ERRCODE = '42501';
@@ -770,22 +944,35 @@ BEGIN
   SELECT count(*)::integer INTO v_total FROM public.signature_signers s WHERE s.signature_request_id = v_sig.id;
 
   -- Exactly one result per signer of this request.
-  IF _results IS NULL OR jsonb_typeof(_results) IS DISTINCT FROM 'array'
-     OR jsonb_array_length(_results) <> v_total
-     OR v_total = 0
-     OR EXISTS (
-       SELECT 1 FROM jsonb_array_elements(_results) r(value)
-        WHERE jsonb_typeof(r.value) IS DISTINCT FROM 'object'
-           OR jsonb_typeof(r.value -> 'signer_id') IS DISTINCT FROM 'string'
-           OR (r.value ->> 'signer_id') !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-           OR jsonb_typeof(r.value -> 'success') IS DISTINCT FROM 'boolean'
-           OR (jsonb_typeof(r.value -> 'message_id') IS NOT NULL AND jsonb_typeof(r.value -> 'message_id') NOT IN ('string', 'null'))
-           OR (jsonb_typeof(r.value -> 'error') IS NOT NULL AND jsonb_typeof(r.value -> 'error') NOT IN ('string', 'null')))
-     OR (SELECT count(DISTINCT s.id)
-           FROM jsonb_array_elements(_results) r(value)
-           JOIN public.signature_signers s
-             ON s.id = (r.value ->> 'signer_id')::uuid
-            AND s.signature_request_id = v_sig.id) <> v_total THEN
+  IF _results IS NULL OR jsonb_typeof(_results) IS DISTINCT FROM 'array' OR v_total = 0 THEN
+    RAISE EXCEPTION 'invalid_results' USING ERRCODE = '22023';
+  END IF;
+  IF jsonb_array_length(_results) <> v_total THEN
+    RAISE EXCEPTION 'invalid_results' USING ERRCODE = '22023';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM jsonb_array_elements(_results) r(value)
+     WHERE jsonb_typeof(r.value) IS DISTINCT FROM 'object') THEN
+    RAISE EXCEPTION 'invalid_results' USING ERRCODE = '22023';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM jsonb_array_elements(_results) r(value)
+     WHERE jsonb_typeof(r.value -> 'signer_id') IS DISTINCT FROM 'string'
+        OR jsonb_typeof(r.value -> 'success') IS DISTINCT FROM 'boolean'
+        OR COALESCE(jsonb_typeof(r.value -> 'message_id'), 'null') NOT IN ('string', 'null')
+        OR COALESCE(jsonb_typeof(r.value -> 'error'), 'null') NOT IN ('string', 'null')) THEN
+    RAISE EXCEPTION 'invalid_results' USING ERRCODE = '22023';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM jsonb_array_elements(_results) r(value)
+     WHERE (r.value ->> 'signer_id') !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$') THEN
+    RAISE EXCEPTION 'invalid_results' USING ERRCODE = '22023';
+  END IF;
+  IF (SELECT count(DISTINCT s.id)
+        FROM jsonb_array_elements(_results) r(value)
+        JOIN public.signature_signers s
+          ON s.id = (r.value ->> 'signer_id')::uuid
+         AND s.signature_request_id = v_sig.id) <> v_total THEN
     RAISE EXCEPTION 'invalid_results' USING ERRCODE = '22023';
   END IF;
 
@@ -854,7 +1041,7 @@ $$;
 REVOKE ALL ON FUNCTION public.aws_mortgage_desk_record_signature_delivery(uuid, uuid, jsonb) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.aws_mortgage_desk_record_signature_delivery(uuid, uuid, jsonb) TO checksops;
 COMMENT ON FUNCTION public.aws_mortgage_desk_record_signature_delivery(uuid, uuid, jsonb) IS
-  'SQL 124: once per Desk signature request (still a draft), records the API''s per-signer email results and moves the request to pending (or failed), as esign.mjs does after its sends. Its creator or the platform owner, on an in-progress Desk request. checksops only.';
+  'SQL 124: once per Desk signature request (still a draft, created through this Desk request), records the API''s per-signer email results and moves the request to pending (or failed), as esign.mjs does after its sends. Its creator or the platform owner, on an in-progress or completed Desk request. checksops only.';
 
 -- h) A Desk update on the homeowner timeline.
 CREATE OR REPLACE FUNCTION public.aws_mortgage_desk_post_timeline(_request_id uuid, _kind text, _note text)
