@@ -68,7 +68,25 @@ helper among them), the definer writes to `check_messages`, `check_files`,
 `execute: true`, wave 21) under the owner's words of 2026-10-27, "start the SQL 121 and 122 staging
 applies".
 
-**Status:** staging pin execute-authorized (wave 21); nothing applied yet; production pin pending. The API
+**Staging apply (2026-10-27).** Run 40591701699 (main `3a4fedb`, after #1316 merged the staging pin and
+executor deploy run 40590824367 carried it, `7wybTiIc…`): receipt before
+`e13856d7a75483b5785b6e791fd83fbe9da9a1b09f6c819480cee54388a62609`, after
+`d026eb9b5974a381900f2ef22066b9e408ffef86233195e14e5cdbd7ea619fe9` (intended), result `applied`. Read-live
+run 40591941446: `already_applied` true, `precondition_failures` `[]`.
+
+**Production inspect (2026-10-27).** Read-only `--inspect` through SSM
+`d21ea074-cf7e-46c6-97e1-bfdf205565af` on `i-0c35557c4e5385406`, main `43a8db2` (tarball sha256
+`6c6e6bd7d3afbfc5068457dce15ac4d8fc6cad9cec2b1d50f42e45dd725cbcc2`, transfer run 40608155909, migration
+source `b6f16b1d…` == pin), connected as `checksops_admin`: the six functions and
+`mortgage_handling_requests.return_emailed_at` absent; every prerequisite present; the definer can write
+`check_messages`, `check_files`, `mortgage_handling_requests` and `homeowner_ledger_events`; live
+`e13856d7a75483b5785b6e791fd83fbe9da9a1b09f6c819480cee54388a62609`, `already_applied` false,
+`precondition_failures` `[]`, the same pre-state as staging's. Recorded in the production pin with the
+staging apply as its staging acceptance and `execute: true` under the owner's words of 2026-10-27, "then
+start the SQL 122 pin PR". The owner merges the pin change; the apply still needs the owner's run-time
+approval and runs only after that merge is on main and staged.
+
+**Status:** applied to staging (wave 21); production pin execute-authorized; not applied to production. The API
 (`aws/functions/api/mortgage-desk-return.mjs`, `workflow-rpc.mjs`, `storage-write-auth.mjs`,
 `app-services.mjs`) and SPA change that call these functions is a separate, later step after SQL
 122 is live in staging; until then nothing calls them.
