@@ -1,8 +1,8 @@
 {
   "id": "sql124-mortgage-desk-signature-and-reads-production-apply",
   "migration": "sql124",
-  "authorization": "Owner approved 2026-10-28 (the owner's words of 2026-10-28: \"start the SQL 124 pin PR\"; the change itself is reviewed and merged by the owner): production apply of SQL 124 after the staging acceptance below (production 59fe6907e23de341e97d4aec548203d0cd7f7cf320b009e0e440d247d82a4db2 -> daeeff54652d04b45bd7cbfb3e47f56209b90ce14c7410c32285e3cf8b129ccb); execute true takes effect only when the owner reviews and merges this change. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
-  "execute": true,
+  "authorization": "Applied to production on 2026-10-28; execute is false again, so this pin is no longer a standing authorization and a re-apply needs a new reviewed pin change. The owner approved the SQL 124 production pin change on 2026-10-28 in the words \"start the SQL 124 pin PR\" (59fe6907 -> daeeff54, #1350) and the one apply run recorded in applied (workstream prod-sql124-mortgage-desk-signature-and-reads-20261028) in the words \"apply SQL 124 into production\", passed to it verbatim. That approval covered that run only.",
+  "execute": false,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -67,5 +67,537 @@
     "ok": true,
     "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/40757497983",
     "basis": "Guarded staging SQL executor apply of sql124-mortgage-desk-signature-and-reads, run 40757497983 (2026-10-28, main 593ea3f3d, wave 23, workstream github-staging-sql-40757497983, on the executor deployed from main 593ea3f3d, deploy run 40757069032: 7UUN4EHi3FTq8l3LqsNNPABGy4xNm0thMPmN/fxhjjI=), from the staging pre-state recorded by read-live run 40754712957 (59fe6907e23de341e97d4aec548203d0cd7f7cf320b009e0e440d247d82a4db2): receipt before 59fe6907e23de341e97d4aec548203d0cd7f7cf320b009e0e440d247d82a4db2, after daeeff54652d04b45bd7cbfb3e47f56209b90ce14c7410c32285e3cf8b129ccb == intended, result applied. Read-live run 40757812948 then reported already_applied true, live daeeff54652d04b45bd7cbfb3e47f56209b90ce14c7410c32285e3cf8b129ccb, precondition_failures [], the eight functions at the intended state (aws_mortgage_desk_readable_request EXECUTE for the owner only, the other seven EXECUTE for checksops and the owner), every definer write ok. The behavior is covered on PostgreSQL 16 by aws/tests/sql124-mortgage-desk-signature-pg.test.mjs. Production's pre-state (production_inspect) is the same as staging's; the same file bytes (source_sha256) are pinned in both."
+  },
+  "applied": {
+    "date": "2026-10-28",
+    "result": "applied",
+    "source_commit": "b458e95102c4f106ab2acf39ddc738e99063d279",
+    "source_commit_basis": "SOURCE_COMMIT in the tarball (written by sql53-temporary-transfer) equals --commit, and the tarball sha256 equals --expected-tarball-sha256 as copied by the operator from that transfer run's log (TARBALL_SHA256 line); the run log itself was not read by the one-shot.",
+    "source_tarball": {
+      "file": "source-b458e95102c4f106ab2acf39ddc738e99063d279.tar.gz",
+      "sha256": "00dc4431386131cd0825c8785a6acb1d5828e0f28ea17342ca613dd1e35d4ae8"
+    },
+    "migration_source_sha256": "0b597e65eec3bbcf96fd685b757015645a58bd224c942bef6c66c251de2be76f",
+    "migration_source_sha256_note": "The one-shot source step hashed aws/workflows/sql/124_mortgage_desk_signature_and_reads.sql in the transfer tarball: equal to source_sha256 (the pin; migration_matches_pin true).",
+    "runner": "i-0c35557c4e5385406",
+    "runner_basis": "operator-supplied --runner (not verified by the one-shot)",
+    "workstream_id": "prod-sql124-mortgage-desk-signature-and-reads-20261028",
+    "one_use_id": "sql124-prod-c1fb8164-b9cc-4604-96d4-519c1ae524b2",
+    "one_use_id_consumed": true,
+    "one_use_id_consumed_basis": "Inferred from the successful apply (the tool records the one_use_id after COMMIT and only warns if that write fails); the consumed-registry entry was not read back separately.",
+    "owner_approval": "apply SQL 124 into production",
+    "owner_approval_basis": "As passed in --approval-statement (base64, --approval-statement-b64) for --approval-scope sql124; the one-shot cannot verify who said it. The owner's words of 2026-10-28; the pin change (#1350) was merged green before this run, on the owner's words \"merge the SQL 124 pin PR when green\".",
+    "operator": "michaelcarletta-cmd",
+    "apply_ssm_command_id": "35de8528-5a59-4202-b12e-43ba87fc576e",
+    "one_shot_run_id": "4b59c99e-5c5b-44e5-9f03-a70562dbe3d5",
+    "one_shot_note": "One SSM command (35de8528-5a59-4202-b12e-43ba87fc576e, 2026-10-28 20:15:23 to 20:15:36Z) ran the production-sql-one-shot --phase apply (run_id 4b59c99e-5c5b-44e5-9f03-a70562dbe3d5) from main b458e9510 (transfer run 40761332004, sql53-temporary-transfer.yml on main after the #1350 merge; it published TARBALL_SHA256 00dc4431386131cd0825c8785a6acb1d5828e0f28ea17342ca613dd1e35d4ae8), after a read-only --phase inspect of the same commit (SSM 2a6ff3c9-9932-41a6-85e4-3191bb86ce7d, run aae38fa7-ea95-4fc1-9999-03ad211c2493: live 59fe6907e23de341e97d4aec548203d0cd7f7cf320b009e0e440d247d82a4db2, apply_preconditions_met true, precondition_failures [], contracts 4/4, 6/6, 43/43): steps pin (execute true, staging_acceptance run 40757497983), source, inspect, contracts, manifest, source-recheck-before-preflight, preflight (receipt_issued), evaluate (sql124_production_apply_allowed true), source-recheck-before-apply, apply (applied) and post-apply-inspect all ok; the command printed EXIT=0 and SSM reported Success. The run's JSON output was not read in full: SSM truncated the command's standard output at 24000 characters, and the one-shot's own applied object, which began at about character 18392, was cut off. Every field that object is composed from arrived complete in that output (run_id, steps, commit, workstream_id, approval_statement, approval_scope, operator, source, pre_apply_inspect, contract_results, manifest_sha256, one_use_id, post_apply_inspect and apply_result, the receipt), so the one-shot's fields of the block below were rebuilt from them with exactly the composition of summary.applied in scripts/deployment-guard/lib/production-sql-one-shot.mjs (the fixed strings that code emits, date 2026-10-28); the printed part of the original applied object (about 5570 characters, through pre_apply_inspect.release_sql_inspect.definer_writes) is a byte-for-byte prefix of the rebuilt one. A separate read-only --inspect after the run (SSM b992e01d-8017-464b-9650-a226fcda4c2c, same tarball) reported live daeeff54652d04b45bd7cbfb3e47f56209b90ce14c7410c32285e3cf8b129ccb == intended, already_applied true, precondition_failures [], the eight functions intended (aws_mortgage_desk_readable_request EXECUTE for the owner only, the other seven EXECUTE for checksops and the owner).",
+    "steps": [
+      "pin",
+      "source",
+      "inspect",
+      "contracts",
+      "manifest",
+      "source-recheck-before-preflight",
+      "preflight",
+      "evaluate",
+      "source-recheck-before-apply",
+      "apply",
+      "post-apply-inspect"
+    ],
+    "contract_results": {
+      "claim-ledger": {
+        "ok": true,
+        "test": "aws/tests/claim-ledger-accepted-contract.test.mjs",
+        "evidence": "4/4 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at b458e95102c4f106ab2acf39ddc738e99063d279 (production-sql-one-shot 4b59c99e-5c5b-44e5-9f03-a70562dbe3d5, node --test)"
+      },
+      "tenant-isolation": {
+        "ok": true,
+        "test": "aws/tests/tenant-security-compliance.test.mjs",
+        "evidence": "6/6 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at b458e95102c4f106ab2acf39ddc738e99063d279 (production-sql-one-shot 4b59c99e-5c5b-44e5-9f03-a70562dbe3d5, node --test)"
+      },
+      "financial-write-protections": {
+        "ok": true,
+        "test": "aws/tests/api-write.test.mjs",
+        "evidence": "43/43 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at b458e95102c4f106ab2acf39ddc738e99063d279 (production-sql-one-shot 4b59c99e-5c5b-44e5-9f03-a70562dbe3d5, node --test)"
+      }
+    },
+    "pre_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "59fe6907e23de341e97d4aec548203d0cd7f7cf320b009e0e440d247d82a4db2",
+      "live_matches_expected": true,
+      "already_applied": false,
+      "predecessors": {},
+      "predecessors_applied": true,
+      "missing_dependencies": [],
+      "apply_preconditions_met": true,
+      "precondition_failures": [],
+      "current_user": "checksops_admin",
+      "session_user": "checksops_admin",
+      "counts": null,
+      "successors_applied": [],
+      "release_sql_inspect": {
+        "live_definition_sha256": "59fe6907e23de341e97d4aec548203d0cd7f7cf320b009e0e440d247d82a4db2",
+        "prerequisites_missing": [],
+        "predecessors": {},
+        "successors_applied": [],
+        "functions": [
+          {
+            "name": "aws_mortgage_desk_readable_request(uuid)",
+            "state": "absent"
+          },
+          {
+            "name": "aws_mortgage_desk_messages(uuid)",
+            "state": "absent"
+          },
+          {
+            "name": "aws_mortgage_desk_check_files(uuid)",
+            "state": "absent"
+          },
+          {
+            "name": "aws_mortgage_desk_signature_requests(uuid)",
+            "state": "absent"
+          },
+          {
+            "name": "aws_mortgage_desk_can_read_path(text[], text)",
+            "state": "absent"
+          },
+          {
+            "name": "aws_mortgage_desk_create_signature_request(uuid, text, text, text, jsonb, jsonb, timestamp with time zone)",
+            "state": "absent"
+          },
+          {
+            "name": "aws_mortgage_desk_record_signature_delivery(uuid, uuid, jsonb)",
+            "state": "absent"
+          },
+          {
+            "name": "aws_mortgage_desk_post_timeline(uuid, text, text)",
+            "state": "absent"
+          }
+        ],
+        "policies": [],
+        "views": [],
+        "tables": [],
+        "columns": [],
+        "constraints": [],
+        "triggers": [],
+        "table_privileges": [],
+        "function_acl": [
+          {
+            "name": "aws_mortgage_desk_readable_request(uuid)",
+            "acl": []
+          },
+          {
+            "name": "aws_mortgage_desk_messages(uuid)",
+            "acl": []
+          },
+          {
+            "name": "aws_mortgage_desk_check_files(uuid)",
+            "acl": []
+          },
+          {
+            "name": "aws_mortgage_desk_signature_requests(uuid)",
+            "acl": []
+          },
+          {
+            "name": "aws_mortgage_desk_can_read_path(text[], text)",
+            "acl": []
+          },
+          {
+            "name": "aws_mortgage_desk_create_signature_request(uuid, text, text, text, jsonb, jsonb, timestamp with time zone)",
+            "acl": []
+          },
+          {
+            "name": "aws_mortgage_desk_record_signature_delivery(uuid, uuid, jsonb)",
+            "acl": []
+          },
+          {
+            "name": "aws_mortgage_desk_post_timeline(uuid, text, text)",
+            "acl": []
+          }
+        ],
+        "acl_functions": [],
+        "indexes": [],
+        "unique_covers": [],
+        "definer_writes": [
+          {
+            "name": "check_messages",
+            "ok": true
+          },
+          {
+            "name": "check_files",
+            "ok": true
+          },
+          {
+            "name": "mortgage_handling_requests",
+            "ok": true
+          },
+          {
+            "name": "homeowner_ledger_events",
+            "ok": true
+          },
+          {
+            "name": "signature_requests",
+            "ok": true
+          },
+          {
+            "name": "signature_signers",
+            "ok": true
+          },
+          {
+            "name": "signature_fields",
+            "ok": true
+          },
+          {
+            "name": "esign_event_logs",
+            "ok": true
+          }
+        ],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": null
+      }
+    },
+    "manifest_sha256": "50ab445e3ad2676a8e214707239f25a18dbc6c6d4fca269de328a8923aa057d0",
+    "receipt": {
+      "migration": "sql124",
+      "workstream": "prod-sql124-mortgage-desk-signature-and-reads-20261028",
+      "commit": "b458e95102c4f106ab2acf39ddc738e99063d279",
+      "sql_file": "aws/workflows/sql/124_mortgage_desk_signature_and_reads.sql",
+      "before_hash": "59fe6907e23de341e97d4aec548203d0cd7f7cf320b009e0e440d247d82a4db2",
+      "after_hash": "daeeff54652d04b45bd7cbfb3e47f56209b90ce14c7410c32285e3cf8b129ccb",
+      "release_sql_inspect": {
+        "live_definition_sha256": "daeeff54652d04b45bd7cbfb3e47f56209b90ce14c7410c32285e3cf8b129ccb",
+        "prerequisites_missing": [],
+        "predecessors": {},
+        "successors_applied": [],
+        "functions": [
+          {
+            "name": "aws_mortgage_desk_readable_request(uuid)",
+            "state": "intended"
+          },
+          {
+            "name": "aws_mortgage_desk_messages(uuid)",
+            "state": "intended"
+          },
+          {
+            "name": "aws_mortgage_desk_check_files(uuid)",
+            "state": "intended"
+          },
+          {
+            "name": "aws_mortgage_desk_signature_requests(uuid)",
+            "state": "intended"
+          },
+          {
+            "name": "aws_mortgage_desk_can_read_path(text[], text)",
+            "state": "intended"
+          },
+          {
+            "name": "aws_mortgage_desk_create_signature_request(uuid, text, text, text, jsonb, jsonb, timestamp with time zone)",
+            "state": "intended"
+          },
+          {
+            "name": "aws_mortgage_desk_record_signature_delivery(uuid, uuid, jsonb)",
+            "state": "intended"
+          },
+          {
+            "name": "aws_mortgage_desk_post_timeline(uuid, text, text)",
+            "state": "intended"
+          }
+        ],
+        "policies": [],
+        "views": [],
+        "tables": [],
+        "columns": [],
+        "constraints": [],
+        "triggers": [],
+        "table_privileges": [],
+        "function_acl": [
+          {
+            "name": "aws_mortgage_desk_readable_request(uuid)",
+            "acl": [
+              "owner EXECUTE"
+            ]
+          },
+          {
+            "name": "aws_mortgage_desk_messages(uuid)",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          },
+          {
+            "name": "aws_mortgage_desk_check_files(uuid)",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          },
+          {
+            "name": "aws_mortgage_desk_signature_requests(uuid)",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          },
+          {
+            "name": "aws_mortgage_desk_can_read_path(text[], text)",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          },
+          {
+            "name": "aws_mortgage_desk_create_signature_request(uuid, text, text, text, jsonb, jsonb, timestamp with time zone)",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          },
+          {
+            "name": "aws_mortgage_desk_record_signature_delivery(uuid, uuid, jsonb)",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          },
+          {
+            "name": "aws_mortgage_desk_post_timeline(uuid, text, text)",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          }
+        ],
+        "acl_functions": [],
+        "indexes": [],
+        "unique_covers": [],
+        "definer_writes": [
+          {
+            "name": "check_messages",
+            "ok": true
+          },
+          {
+            "name": "check_files",
+            "ok": true
+          },
+          {
+            "name": "mortgage_handling_requests",
+            "ok": true
+          },
+          {
+            "name": "homeowner_ledger_events",
+            "ok": true
+          },
+          {
+            "name": "signature_requests",
+            "ok": true
+          },
+          {
+            "name": "signature_signers",
+            "ok": true
+          },
+          {
+            "name": "signature_fields",
+            "ok": true
+          },
+          {
+            "name": "esign_event_logs",
+            "ok": true
+          }
+        ],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": null
+      },
+      "unrelated_catalog_sha256": "32fe278f2246ee35375bb865a04b4e0c6a6097910fd2fcb9288c9965b160d20a",
+      "unrelated_catalog_counts": {
+        "relations": 892,
+        "columns": 3550,
+        "constraints": 2239,
+        "policies": 404,
+        "functions": 1346,
+        "indexes": 655,
+        "default_acl": 0,
+        "role_memberships": 15,
+        "roles": 29,
+        "triggers": 184,
+        "views": 25,
+        "types": 18,
+        "schema": 2
+      },
+      "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/40757497983",
+      "result": "applied"
+    },
+    "post_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "daeeff54652d04b45bd7cbfb3e47f56209b90ce14c7410c32285e3cf8b129ccb",
+      "live_matches_expected": false,
+      "already_applied": true,
+      "predecessors": {},
+      "predecessors_applied": true,
+      "missing_dependencies": [],
+      "apply_preconditions_met": false,
+      "precondition_failures": [],
+      "current_user": "checksops_admin",
+      "session_user": "checksops_admin",
+      "counts": null,
+      "successors_applied": [],
+      "release_sql_inspect": {
+        "live_definition_sha256": "daeeff54652d04b45bd7cbfb3e47f56209b90ce14c7410c32285e3cf8b129ccb",
+        "prerequisites_missing": [],
+        "predecessors": {},
+        "successors_applied": [],
+        "functions": [
+          {
+            "name": "aws_mortgage_desk_readable_request(uuid)",
+            "state": "intended"
+          },
+          {
+            "name": "aws_mortgage_desk_messages(uuid)",
+            "state": "intended"
+          },
+          {
+            "name": "aws_mortgage_desk_check_files(uuid)",
+            "state": "intended"
+          },
+          {
+            "name": "aws_mortgage_desk_signature_requests(uuid)",
+            "state": "intended"
+          },
+          {
+            "name": "aws_mortgage_desk_can_read_path(text[], text)",
+            "state": "intended"
+          },
+          {
+            "name": "aws_mortgage_desk_create_signature_request(uuid, text, text, text, jsonb, jsonb, timestamp with time zone)",
+            "state": "intended"
+          },
+          {
+            "name": "aws_mortgage_desk_record_signature_delivery(uuid, uuid, jsonb)",
+            "state": "intended"
+          },
+          {
+            "name": "aws_mortgage_desk_post_timeline(uuid, text, text)",
+            "state": "intended"
+          }
+        ],
+        "policies": [],
+        "views": [],
+        "tables": [],
+        "columns": [],
+        "constraints": [],
+        "triggers": [],
+        "table_privileges": [],
+        "function_acl": [
+          {
+            "name": "aws_mortgage_desk_readable_request(uuid)",
+            "acl": [
+              "owner EXECUTE"
+            ]
+          },
+          {
+            "name": "aws_mortgage_desk_messages(uuid)",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          },
+          {
+            "name": "aws_mortgage_desk_check_files(uuid)",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          },
+          {
+            "name": "aws_mortgage_desk_signature_requests(uuid)",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          },
+          {
+            "name": "aws_mortgage_desk_can_read_path(text[], text)",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          },
+          {
+            "name": "aws_mortgage_desk_create_signature_request(uuid, text, text, text, jsonb, jsonb, timestamp with time zone)",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          },
+          {
+            "name": "aws_mortgage_desk_record_signature_delivery(uuid, uuid, jsonb)",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          },
+          {
+            "name": "aws_mortgage_desk_post_timeline(uuid, text, text)",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          }
+        ],
+        "acl_functions": [],
+        "indexes": [],
+        "unique_covers": [],
+        "definer_writes": [
+          {
+            "name": "check_messages",
+            "ok": true
+          },
+          {
+            "name": "check_files",
+            "ok": true
+          },
+          {
+            "name": "mortgage_handling_requests",
+            "ok": true
+          },
+          {
+            "name": "homeowner_ledger_events",
+            "ok": true
+          },
+          {
+            "name": "signature_requests",
+            "ok": true
+          },
+          {
+            "name": "signature_signers",
+            "ok": true
+          },
+          {
+            "name": "signature_fields",
+            "ok": true
+          },
+          {
+            "name": "esign_event_logs",
+            "ok": true
+          }
+        ],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": null
+      }
+    }
+  },
+  "production_evidence": {
+    "2026-10-28 apply": "Guarded production SQL one-shot on i-0c35557c4e5385406, workstream prod-sql124-mortgage-desk-signature-and-reads-20261028, main b458e9510 (tarball 00dc4431…, transfer run 40761332004, migration source 0b597e65… == pin), owner-approved run (\"apply SQL 124 into production\"), SSM 35de8528-5a59-4202-b12e-43ba87fc576e, run_id 4b59c99e-5c5b-44e5-9f03-a70562dbe3d5, one_use_id sql124-prod-c1fb8164-b9cc-4604-96d4-519c1ae524b2 (spent): every step ok; contracts claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43; pre-apply inspect live 59fe6907… (live_matches_expected true, precondition_failures []); manifest 50ab445e…; 59fe6907… -> daeeff54…, result applied, unrelated catalog 32fe278f… (triggers 184); post-apply inspect already_applied true, precondition_failures []; separate read-only inspect SSM b992e01d-8017-464b-9650-a226fcda4c2c already_applied true. SSM truncated the run's output inside the one-shot's applied object; the applied block was rebuilt from the complete fields it is composed of (see applied.one_shot_note). After: the eight aws_mortgage_desk_* functions are live (aws_mortgage_desk_readable_request EXECUTE for the owner only, the other seven EXECUTE for checksops and the owner), so the Mortgage Desk can send a check's document for signature, read the check's thread, files and signature requests, and post homeowner timeline updates once the API and SPA change that calls them ships. No trigger was added, so the DB validator's public trigger set is unaffected. execute is false so the pin is no longer a standing authorization."
   }
 }

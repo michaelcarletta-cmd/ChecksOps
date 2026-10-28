@@ -95,7 +95,23 @@ staging apply as its staging acceptance and `execute: true` under the owner's wo
 the SQL 124 pin PR". The owner merges the pin change; the apply still needs the owner's run-time approval
 and runs only after that merge is on main and staged.
 
-**Status:** applied to staging (wave 23); production pin execute-authorized; not applied to production. The API and
+**Production apply (2026-10-28).** After the pin change (#1350, merged green on the owner's words "merge
+the SQL 124 pin PR when green"), transfer run 40761332004 staged main `b458e9510` (tarball sha256
+`00dc4431386131cd0825c8785a6acb1d5828e0f28ea17342ca613dd1e35d4ae8`). One-shot `--phase inspect` (SSM
+`2a6ff3c9-9932-41a6-85e4-3191bb86ce7d`, run `aae38fa7…`: live `59fe6907…`, `precondition_failures` `[]`) then
+`--phase apply` run `4b59c99e-5c5b-44e5-9f03-a70562dbe3d5` through SSM `35de8528-5a59-4202-b12e-43ba87fc576e`,
+workstream `prod-sql124-mortgage-desk-signature-and-reads-20261028`, under the owner's words "apply SQL 124
+into production" (passed verbatim): every step ok, contracts 4/4, 6/6 and 43/43; receipt `59fe6907…` →
+`daeeff54652d04b45bd7cbfb3e47f56209b90ce14c7410c32285e3cf8b129ccb` (intended), result `applied`, unrelated
+catalog `32fe278f…` (triggers 184: SQL 124 adds none); post-apply inspect `already_applied` true,
+`precondition_failures` `[]`, the eight functions intended (the readable-request check EXECUTE for the owner
+only, the other seven for `checksops` and the owner); a separate read-only inspect (SSM
+`b992e01d-8017-464b-9650-a226fcda4c2c`) agreed. SSM truncated the run's output at 24000 characters inside the
+one-shot's own `applied` object; the pin's `applied` block is rebuilt from the complete fields it is made of
+(see its `one_shot_note`).
+
+**Status:** applied to staging (wave 23) and to production (2026-10-28); the production pin is retired
+(`execute: false`). The API and
 SPA change that calls these functions is a separate, later step after SQL 124 is live in staging;
 until then nothing calls them.
 
