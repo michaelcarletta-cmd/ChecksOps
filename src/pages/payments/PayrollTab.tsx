@@ -28,7 +28,7 @@ export function PayrollTab() {
         <div>
           <h2 className="text-lg font-semibold">Payroll</h2>
           <p className="text-sm text-muted-foreground">
-            Send ACH payments to assistants, sales reps, vendors, or anyone else not tied to a specific claim check. Payees come from the <strong>Stakeholders</strong> tab.
+            Send ACH payments to assistants, sales reps, vendors, or anyone else not tied to a specific claim check. Payees are the <strong>Active Stakeholders</strong> added in Settings.
           </p>
         </div>
         <Button onClick={() => setOpen(true)} className="gap-2">
