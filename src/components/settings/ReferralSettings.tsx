@@ -99,6 +99,9 @@ export function ReferralSettings() {
   const monthlyCap = dollars(summary?.monthly_cap_cents ?? 2500);
   const earned = dollars(summary?.earned_credit_cents);
   const applied = dollars(summary?.applied_discount_cents);
+  const rateCents = Number(summary?.monthly_rate_cents) || 0;
+  const rate = dollars(rateCents);
+  const netMaintenance = dollars(Math.max(0, rateCents - (Number(summary?.applied_discount_cents) || 0)));
   const manual = Number(summary?.manual_discount_cents) || 0;
   const capCents = Number(summary?.monthly_cap_cents) || 2500;
   const progressPercent = Math.min(((Number(summary?.earned_credit_cents) || 0) / capCents) * 100, 100);
@@ -153,10 +156,24 @@ export function ReferralSettings() {
               <div className="h-2 w-full bg-primary/10 rounded-full overflow-hidden">
                 <div className="h-full bg-primary transition-all duration-500 ease-out" style={{ width: `${progressPercent}%` }} />
               </div>
-              <div className="text-xs text-muted-foreground">
-                Applied to your maintenance invoice: <span className="font-semibold text-foreground">${applied} / mo</span>
-                {manual > 0 ? <> (includes a ${dollars(manual)} discount set by ChecksOps)</> : null}
-                . The discount never takes maintenance below $0 and never reduces check fees.
+              <div className="space-y-1 text-xs">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Monthly maintenance</span>
+                  <span className="font-medium text-foreground">${rate} / mo</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">
+                    Total discount{manual > 0 ? <> (includes ${dollars(manual)} set by ChecksOps)</> : null}
+                  </span>
+                  <span className="font-medium text-foreground">−${applied} / mo</span>
+                </div>
+                <div className="flex justify-between border-t border-primary/10 pt-1">
+                  <span className="font-medium text-foreground">Maintenance you pay</span>
+                  <span className="font-semibold text-foreground">${netMaintenance} / mo</span>
+                </div>
+                <p className="text-muted-foreground pt-1">
+                  The discount never takes maintenance below $0 and never reduces check fees.
+                </p>
               </div>
             </div>
           </CardContent>
