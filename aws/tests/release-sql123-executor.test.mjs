@@ -173,9 +173,13 @@ test('pin: SQL 123 staging-authorized from its read-live, code-derived, selectab
   assert.equal(prod.source_sha256, pin.source_sha256);
   assert.deepEqual(prod.predecessors, []);
   assert.deepEqual(prod.function_identities, FNS);
-  assert.equal(prod.execute, false);
-  assert.equal(prod.authorization, 'pending');
-  assert.equal(prod.expected_live_definition_sha256, null);
+  // Production pin execute-authorized (owner-approved pin change of 2026-10-28) on the staging apply. Its
+  // pre-state is production's own (read-only inspect SSM e8a92ced), the same as staging's.
+  assert.equal(prod.execute, true);
+  assert.match(prod.authorization, /^Owner approved 2026-10-28 /);
+  assert.equal(prod.expected_live_definition_sha256, 'b584e1cd4352837eb5515cd07e76900e055637d11c29214db036f912e6b6f6b9');
+  assert.equal(prod.expected_live_definition_sha256, pin.expected_live_definition_sha256);
+  assert.notEqual(prod.expected_live_definition_sha256, prod.intended_replacement_sha256);
   let bytes = null;
   if (/^[0-9a-f]{40}$/.test(pin.commit)) {
     try {
