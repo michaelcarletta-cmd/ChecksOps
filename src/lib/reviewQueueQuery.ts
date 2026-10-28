@@ -31,6 +31,9 @@ export const REVIEW_QUEUE_INTAKE_COLUMNS = [
   "partner_status_label",
   "external_origin",
   "funds_type",
+  "check_source",
+  "cash_job_id",
+  "cash_job_payment_class",
 ] as const;
 
 export const REVIEW_QUEUE_PAYEE_COLUMNS = "payee_name, payee_type, endorsement_status";
