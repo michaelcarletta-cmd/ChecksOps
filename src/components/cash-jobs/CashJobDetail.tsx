@@ -189,6 +189,13 @@ export function CashJobDetail({ jobId, onBack }: Props) {
                   </a>
                 )}
               </div>
+              {(job.start_date || job.estimate_date || job.completion_date) && (
+                <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 text-xs text-muted-foreground">
+                  {job.start_date && <span>Start date: {formatIssueDateDisplay(job.start_date)}</span>}
+                  {job.estimate_date && <span>Estimate date: {formatIssueDateDisplay(job.estimate_date)}</span>}
+                  {job.completion_date && <span>Completion date: {formatIssueDateDisplay(job.completion_date)}</span>}
+                </div>
+              )}
             </div>
             <Badge variant="outline" className={`text-xs flex-shrink-0 ${STATUS_COLORS[job.status]}`}>
               {STATUS_LABELS[job.status]}
