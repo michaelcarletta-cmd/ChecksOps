@@ -181,7 +181,8 @@ test('order: no predecessor and no order; the check, deposit, audit and usage ta
   const runbook = fs.readFileSync(path.join(ROOT, COMMITTED.tooling.runbook), 'utf8');
   assert.ok(runbook.includes(COMMITTED.intended_replacement_sha256));
   assert.ok(runbook.includes(COMMITTED.source_sha256));
-  assert.match(runbook, /\*\*Status:\*\* not applied anywhere/);
+  assert.match(runbook, /\*\*Status:\*\* staging pin execute-authorized \(wave 22\)/);
+  assert.match(runbook, /read-live \(2026-10-28\)\.\*\* Run 40717225525/);
   const oneShot = fs.readFileSync(path.join(ROOT, 'ops/production-sql-one-shot.md'), 'utf8');
   assert.match(oneShot, /\| `sql123` \|/);
   assert.match(oneShot, /`sql121`, `sql122`, `sql123`\) \|/);
