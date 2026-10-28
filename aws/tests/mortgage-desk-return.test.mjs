@@ -560,6 +560,11 @@ test('SPA wiring: Desk writes go through the helpers, the tenant sees notes and 
   assert.match(detail, /updateMortgageDeskShipping\(deskClient, mortgageUsesAwsBackend/);
   assert.match(detail, /category: "mortgage_ops_shipping_label"/);
   assert.match(detail, /fields: \{ \[field\]: new Date\(\)\.toISOString\(\) \}/);
+  // The tenant updates card needs only the request's check id (an agent cannot
+  // read the check row on AWS), and its composer follows the server rule.
+  assert.match(detail, /\{req\.check_intake_item_id && \(\s*\n\s*<Card>\s*\n\s*<CardContent className="pt-4 space-y-3">\s*\n\s*<div[^>]*>\s*\n\s*<Send className="h-4 w-4" \/> Updates to tenant/);
+  assert.match(detail, /req\.status === "in_progress" &&\s*\n\s*\(req\.assigned_employee_id === user\?\.id \|\| isPlatformOwner\(user\?\.email, user\?\.id\)\) && \(\s*\n\s*<div className="space-y-2">\s*\n\s*<Textarea/);
+  assert.match(detail, /checkId: req\.check_intake_item_id,/);
 
   const queue = read('src/pages/mortgage-ops/MortgageOpsQueue.tsx');
   assert.match(queue, /toast\.success\("Marked complete"\);/);
