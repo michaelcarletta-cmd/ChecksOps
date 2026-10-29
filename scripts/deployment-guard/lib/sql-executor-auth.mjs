@@ -2856,6 +2856,30 @@ export const AUTHORIZED_SQL126_DEFINER_READS_CALLER_GATES = Object.freeze({
   ]),
 });
 
+// Homeowner portal signing staging pin: SQL 127 (owner decision 2026-10-29, "Portal link is enough":
+// SQL 83's endorse capability opens 'pending' as well as 'sent' insured endorsements, pending_signatures
+// lists an open homeowner signer whose emailed link expired, and the new document_portal_signer returns
+// the signer's existing token_hash and renews its expiry; EXECUTE for checksops and the owner). No
+// predecessor. Pending until a reviewed pin change records a staging read-live.
+export const AUTHORIZED_SQL127_HOMEOWNER_PORTAL_SIGNING = Object.freeze({
+  key: 'sql127',
+  filename: 'aws/workflows/sql/127_homeowner_portal_signing.sql',
+  migration_id: '127_homeowner_portal_signing',
+  // The commit that last authored the file bytes.
+  commit: '94dde846df58f8244e537f194be879d81a5ad14e',
+  source_sha256: '4d2d311bad221c2d0e33370a56c1ebf00b0887d7286892954cf76eef0e107c33',
+  authorization: 'pending',
+  execute: false,
+  expected_live_definition_sha256: null,
+  // Code-derived: releaseIntendedHash('sql127', file bytes) (release-sql-state.mjs); re-derived by the tests.
+  intended_replacement_sha256: 'c4936010132f2d542db796e50fe2d56d1aa3bae5133cdb53e8172978a5b2e190',
+  function_identities: Object.freeze([
+    'public.aws_public_homeowner_ledger_endorse_capability(text, uuid)',
+    'public.aws_public_homeowner_pending_signatures(text)',
+    'public.aws_public_homeowner_document_portal_signer(text, uuid)',
+  ]),
+});
+
 export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql90: AUTHORIZED_SQL90_USERS_ONLY_TENANT_ROLES,
   sql91: AUTHORIZED_SQL91_MOOV_ONBOARDING,
@@ -2893,6 +2917,7 @@ export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql124: AUTHORIZED_SQL124_MORTGAGE_DESK_SIGNATURE_AND_READS,
   sql125: AUTHORIZED_SQL125_DEPOSIT_VIEWS_SECURITY_INVOKER,
   sql126: AUTHORIZED_SQL126_DEFINER_READS_CALLER_GATES,
+  sql127: AUTHORIZED_SQL127_HOMEOWNER_PORTAL_SIGNING,
 });
 
 // The fee collection pin under its earlier map name (the same object as the release map's sql98).
@@ -2908,7 +2933,7 @@ export function isSql30TenantDocumentsDocType(input = {}) {
   return pinIdentifiersMatch(input, AUTHORIZED_SQL30_TENANT_DOCUMENTS_DOC_TYPE);
 }
 
-/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql126) an input names, or null. */
+/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql127) an input names, or null. */
 export function releaseSqlMigrationKey(input = {}) {
   return Object.keys(RELEASE_2026_10_17_PENDING_SQL_PINS)
     .find((key) => pinIdentifiersMatch(input, RELEASE_2026_10_17_PENDING_SQL_PINS[key])) || null;
