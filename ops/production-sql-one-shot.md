@@ -258,6 +258,35 @@ extraction.
   re-verifies the tarball and its sidecar against the `package` job's sha256 output,
   then uploads both.
 
+## Runner state: stopped between runs
+
+The runner's instance role (`ChecksOpsSql53TemporaryRunner`) reads the production
+`checksops_admin` secret, so the instance stays **stopped** whenever no production inspect or
+apply is in progress (security audit finding C, 2026-10-29). Start it for a run and stop it
+again when the run is done; the transfer workflow does not need it.
+
+Before the inspect or apply (an administrator, `ec2:StartInstances` on the instance):
+
+```bash
+aws ec2 start-instances --instance-ids i-0c35557c4e5385406
+aws ec2 wait instance-running --instance-ids i-0c35557c4e5385406
+# SSM must report the runner Online before the single SSM command below.
+aws ssm describe-instance-information \
+  --filters Key=InstanceIds,Values=i-0c35557c4e5385406 \
+  --query 'InstanceInformationList[0].PingStatus' --output text
+```
+
+After the last command of the run (inspect, apply and post-apply inspect), and before the
+record PR:
+
+```bash
+aws ec2 stop-instances --instance-ids i-0c35557c4e5385406
+aws ec2 wait instance-stopped --instance-ids i-0c35557c4e5385406
+```
+
+The record PR notes the start and stop times. A runner found running with no run in
+progress is stopped and reported to the owner.
+
 ## The single SSM command
 
 Stage the reviewed main commit with the transfer workflow first, and copy the
