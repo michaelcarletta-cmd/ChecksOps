@@ -435,7 +435,7 @@ export const embedColumnSql = (columns) => {
 
 const TENANTS_PUBLIC_COLUMNS = new Set([
   'id', 'name', 'slug', 'logo_url', 'primary_color', 'secondary_color',
-  'custom_domain', 'subscription_status', 'plan_tier', 'is_system_tenant', 'partner_code',
+  'custom_domain', 'subscription_status', 'plan_tier', 'is_system_tenant',
 ]);
 
 /**
@@ -662,6 +662,9 @@ export const SECRET_COLUMNS = Object.freeze({
   tenant_billing_accounts: Object.freeze(['account_number_encrypted']),
   tenant_openai_credentials: Object.freeze(['encrypted_key']),
   tenants: Object.freeze(['actum_password', 'actum_test_password', 'actum_webhook_secret', 'ein']),
+  // A partner code connects whoever enters it at once, so the public tenant list (readable
+  // without a login) never carries one. Members read their own from tenants (aws_select_tenants).
+  tenants_public: Object.freeze(['partner_code']),
   user_sessions: Object.freeze(['session_token']),
 });
 
@@ -1132,6 +1135,17 @@ const publicTenantsQuery = async (event, deps = {}) => {
   const spoof = ignoredSpoof(event, body);
   if (ident(body.table, 'table') !== 'tenants_public') {
     return { ok: false, statusCode: 401, error: 'missing_cognito_token', spoofFieldsIgnored: spoof };
+  }
+  const columnDeny = denySecretColumnQuery('tenants_public', parseSelect(body.select), body.filters, body.order);
+  if (columnDeny.denied) {
+    return {
+      ok: false,
+      statusCode: 403,
+      error: columnDeny.error,
+      message: columnDeny.message,
+      table: columnDeny.table,
+      spoofFieldsIgnored: spoof,
+    };
   }
   const loadCredentials = deps.loadDatabaseCredentials || loadDatabaseCredentials;
   const createClient = deps.createClient || ((config) => new Client(config));
