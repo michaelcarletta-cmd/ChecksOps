@@ -1,5 +1,5 @@
 /**
- * Specs of the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108 to SQL 124) for the shared engine in
+ * Specs of the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108 to SQL 125) for the shared engine in
  * release-sql-state.mjs: what each pinned file creates, replaces or drops, the reviewed
  * EXECUTE ACLs, the prerequisites and predecessors, and the PostgreSQL renderings the file
  * leaves (policy expressions, view, column, constraint, index and trigger definitions as
@@ -5283,6 +5283,57 @@ export const RELEASE_SQL_SPECS = deepFreeze({
       "public.signature_signers",
       "public.signature_fields",
       "public.esign_event_logs"
+    ]
+  },
+  sql125: {
+    "key": "sql125",
+    "label": "SQL 125",
+    "choice": "sql125-deposit-views-security-invoker",
+    "production_pin_rel": "ops/deployment-guard/sql125-deposit-views-security-invoker-production-apply.json",
+    "script": "sql125-deposit-views-security-invoker-production-apply",
+    "prerequisites": [
+      "public.deposit_queue_scored",
+      "public.deposit_owner_performance",
+      "public.deposit_reminder_queue",
+      "public.deposit_aging_dashboard"
+    ],
+    "predecessors": [],
+    "functions": [],
+    "views": [
+      {
+        "name": "public.deposit_queue_scored",
+        "definition": "SELECT id, check_number, carrier_name, amount, status, provider, owner_id, next_action, next_action_reason, created_at, cleared_at, bank_confirmed_at, reconciled_at, accounting_synced_at, closeout_complete, nsf_flag, variance_amount, claim_id, (((((LEAST((20)::numeric, round((ln(GREATEST(amount, (1)::numeric)) * (3)::numeric))) + (LEAST(30, (EXTRACT(day FROM (now() - created_at)))::integer))::numeric) + (COALESCE(( SELECT sum( CASE WHEN (de.severity = 'critical'::text) THEN 20 ELSE 10 END) AS sum FROM public.deposit_exceptions de WHERE ((de.deposit_item_id = di.id) AND (de.resolved_at IS NULL))), (0)::bigint))::numeric) + ( CASE WHEN ((status = ANY (ARRAY['succeeded'::public.deposit_item_status, 'provider_assigned'::public.deposit_item_status, 'pending_assignment'::public.deposit_item_status])) AND (cleared_at < (now() - '2 days'::interval))) THEN 15 ELSE 0 END)::numeric) + ( CASE WHEN ((status = 'succeeded'::public.deposit_item_status) AND (bank_confirmed_at IS NULL) AND (cleared_at < (now() - '3 days'::interval))) THEN 15 ELSE 0 END)::numeric))::integer AS priority_score, ( SELECT count(*) AS count FROM public.deposit_exceptions de2 WHERE ((de2.deposit_item_id = di.id) AND (de2.resolved_at IS NULL))) AS open_exception_count FROM public.deposit_items di WHERE ((NOT closeout_complete) AND (status <> ALL (ARRAY['failed'::public.deposit_item_status, 'returned'::public.deposit_item_status])));",
+        "options": [
+          "security_invoker=true"
+        ]
+      },
+      {
+        "name": "public.deposit_owner_performance",
+        "definition": "SELECT owner_id, count(*) AS total_assigned, count(*) FILTER (WHERE closeout_complete) AS total_closed, count(*) FILTER (WHERE ((NOT closeout_complete) AND (status <> ALL (ARRAY['failed'::public.deposit_item_status, 'returned'::public.deposit_item_status])))) AS open_items, COALESCE(sum(amount) FILTER (WHERE (NOT closeout_complete)), (0)::numeric) AS open_amount, COALESCE(sum(amount) FILTER (WHERE closeout_complete), (0)::numeric) AS closed_amount, round(avg((EXTRACT(epoch FROM (closeout_at - created_at)) / (86400)::numeric)) FILTER (WHERE closeout_complete), 1) AS avg_days_to_closeout, round(avg((EXTRACT(epoch FROM (bank_confirmed_at - cleared_at)) / (86400)::numeric)) FILTER (WHERE (bank_confirmed_at IS NOT NULL)), 1) AS avg_days_to_confirm, round(avg((EXTRACT(epoch FROM (reconciled_at - cleared_at)) / (86400)::numeric)) FILTER (WHERE (reconciled_at IS NOT NULL)), 1) AS avg_days_to_reconcile, count(*) FILTER (WHERE (nsf_flag = true)) AS nsf_count, count(*) FILTER (WHERE ((variance_amount IS NOT NULL) AND (variance_amount <> (0)::numeric))) AS variance_count, count(*) FILTER (WHERE ((NOT closeout_complete) AND (status = 'succeeded'::public.deposit_item_status) AND (cleared_at < (now() - '2 days'::interval)))) AS sla_breaches FROM public.deposit_items di WHERE (owner_id IS NOT NULL) GROUP BY owner_id;",
+        "options": [
+          "security_invoker=true"
+        ]
+      },
+      {
+        "name": "public.deposit_reminder_queue",
+        "definition": "SELECT id AS deposit_item_id, check_number, carrier_name, amount, status, provider, owner_id, created_at, CASE WHEN ((status = ANY (ARRAY['pending_assignment'::public.deposit_item_status, 'provider_assigned'::public.deposit_item_status])) AND (created_at < (now() - '2 days'::interval))) THEN 'sla_deposit_breach'::text WHEN ((status = 'succeeded'::public.deposit_item_status) AND (bank_confirmed_at IS NULL) AND (cleared_at < (now() - '3 days'::interval))) THEN 'sla_confirm_breach'::text WHEN ((status = 'succeeded'::public.deposit_item_status) AND (NOT (EXISTS ( SELECT 1 FROM public.deposit_attachments da WHERE ((da.deposit_item_id = di.id) AND (da.attachment_type = 'deposit_slip'::text)))))) THEN 'missing_deposit_slip'::text WHEN ((status = 'reconciled'::public.deposit_item_status) AND (accounting_synced_at IS NULL) AND (reconciled_at < (now() - '2 days'::interval))) THEN 'unsynced_reconciled'::text WHEN ((status = 'succeeded'::public.deposit_item_status) AND (reconciled_at IS NULL) AND (cleared_at < (now() - '5 days'::interval))) THEN 'stale_unreconciled'::text WHEN (EXISTS ( SELECT 1 FROM public.deposit_exceptions de WHERE ((de.deposit_item_id = di.id) AND (de.resolved_at IS NULL) AND (de.created_at < (now() - '3 days'::interval))))) THEN 'stale_open_exception'::text ELSE NULL::text END AS reminder_type, ( SELECT count(*) AS count FROM public.deposit_exceptions de WHERE ((de.deposit_item_id = di.id) AND (de.resolved_at IS NULL))) AS open_exception_count FROM public.deposit_items di WHERE ((NOT closeout_complete) AND (status <> ALL (ARRAY['failed'::public.deposit_item_status, 'returned'::public.deposit_item_status])));",
+        "options": [
+          "security_invoker=true"
+        ]
+      },
+      {
+        "name": "public.deposit_aging_dashboard",
+        "definition": "SELECT id, check_number, carrier_name, amount, status, provider, created_at, cleared_at, bank_confirmed_at, reconciled_at, accounting_synced_at, closeout_complete, CASE WHEN (status = ANY (ARRAY['pending_assignment'::public.deposit_item_status, 'provider_assigned'::public.deposit_item_status])) THEN 'awaiting_deposit'::text WHEN ((status = 'succeeded'::public.deposit_item_status) AND (bank_confirmed_at IS NULL)) THEN 'awaiting_bank_confirm'::text WHEN ((status = 'succeeded'::public.deposit_item_status) AND (bank_confirmed_at IS NOT NULL) AND (reconciled_at IS NULL)) THEN 'awaiting_reconciliation'::text WHEN ((status = 'reconciled'::public.deposit_item_status) AND (accounting_synced_at IS NULL)) THEN 'awaiting_accounting_sync'::text WHEN (status = ANY (ARRAY['failed'::public.deposit_item_status, 'returned'::public.deposit_item_status])) THEN 'exception'::text WHEN closeout_complete THEN 'complete'::text ELSE 'in_progress'::text END AS aging_bucket, (EXTRACT(day FROM (now() - COALESCE( CASE WHEN (status = ANY (ARRAY['pending_assignment'::public.deposit_item_status, 'provider_assigned'::public.deposit_item_status])) THEN created_at WHEN ((status = 'succeeded'::public.deposit_item_status) AND (bank_confirmed_at IS NULL)) THEN cleared_at WHEN ((status = 'succeeded'::public.deposit_item_status) AND (bank_confirmed_at IS NOT NULL)) THEN bank_confirmed_at WHEN (status = 'reconciled'::public.deposit_item_status) THEN reconciled_at ELSE created_at END, created_at))))::integer AS days_in_state, CASE WHEN ((status = ANY (ARRAY['pending_assignment'::public.deposit_item_status, 'provider_assigned'::public.deposit_item_status])) AND (created_at < (now() - '2 days'::interval))) THEN true ELSE false END AS sla_deposit_breach, CASE WHEN ((status = 'succeeded'::public.deposit_item_status) AND (bank_confirmed_at IS NULL) AND (cleared_at < (now() - '3 days'::interval))) THEN true ELSE false END AS sla_confirm_breach, CASE WHEN ((status = ANY (ARRAY['succeeded'::public.deposit_item_status, 'reconciled'::public.deposit_item_status])) AND (accounting_synced_at IS NULL) AND (cleared_at < (now() - '5 days'::interval))) THEN true ELSE false END AS sla_sync_breach, ( SELECT count(*) AS count FROM public.deposit_attachments da WHERE ((da.deposit_item_id = di.id) AND (da.attachment_type = 'deposit_slip'::text))) AS deposit_slip_count, ( SELECT count(*) AS count FROM public.deposit_attachments da WHERE ((da.deposit_item_id = di.id) AND (da.attachment_type = 'stamped_receipt'::text))) AS stamped_receipt_count, ( SELECT count(*) AS count FROM public.deposit_attachments da WHERE ((da.deposit_item_id = di.id) AND (da.attachment_type = 'bank_confirmation'::text))) AS bank_confirmation_count, ( SELECT count(*) AS count FROM public.deposit_exceptions de WHERE ((de.deposit_item_id = di.id) AND (de.resolved_at IS NULL))) AS open_exception_count FROM public.deposit_items di;",
+        "options": [
+          "security_invoker=true"
+        ]
+      }
+    ],
+    "altered_relations": [
+      "public.deposit_queue_scored",
+      "public.deposit_owner_performance",
+      "public.deposit_reminder_queue",
+      "public.deposit_aging_dashboard"
     ]
   },
 });

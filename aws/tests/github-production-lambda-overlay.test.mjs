@@ -2853,3 +2853,31 @@ test('DB validator SQL 123 trigger: db-readonly-validate.mjs replaced the bytes 
   assert.equal(result.mutation, false);
   assert.deepEqual(calls.receipt.owned_member_ops, { replace: [MEMBER], add: [] });
 });
+
+test('Branding logo served types (security audit finding 2): REPLACE storage.mjs is planned at main\'s bytes over the reconciled pre-deploy bytes; nothing else changes', () => {
+  const MEMBER = 'storage.mjs';
+  const MANIFEST_REL = 'aws/tests/fixtures/production-branding-logo-served-types-manifest-2026-10-29.json';
+  const RELEASE_REL = 'aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json';
+  const PRE_DEPLOY = '77714d51590969e026bb6a79dea7170fd6ab8b282ad90af3ff5002ae59a1be85';
+  const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, MANIFEST_REL), 'utf8'));
+  assert.equal(manifest.workstream_id, 'branding-logo-served-types');
+  assert.equal(manifest.deploy_authorized, false);
+  assert.match(manifest.authorization, /^Pending owner review/);
+  assert.deepEqual(Object.keys(manifest.members), [MEMBER]);
+  const row = PLAN.members[MEMBER];
+  assert.deepEqual(row, {
+    operation: 'replace',
+    accepted_sha256: sha(`aws/functions/api/${MEMBER}`),
+    expected_live_sha256: PRE_DEPLOY,
+    sql_before: 'aws/workflows/sql/94_document_library_restore.sql',
+    manifest: MANIFEST_REL,
+  });
+  // The release 2026-10-17 manifest planned other bytes for storage.mjs and recorded the same pre-deploy bytes live.
+  const release = JSON.parse(fs.readFileSync(path.join(ROOT, RELEASE_REL), 'utf8')).members[MEMBER];
+  assert.equal(release.live_sha256, PRE_DEPLOY);
+  assert.notEqual(release.accepted_sha256, row.accepted_sha256);
+  assert.deepEqual(manifest.members[MEMBER], { live_sha256: PRE_DEPLOY, accepted_sha256: row.accepted_sha256, operation: 'replace', previous_manifest: RELEASE_REL });
+  assert.match(PLAN.notes, /Branding logo served types \(security audit finding 2/);
+  assert.ok(WORKFLOW.includes(`          - ${MEMBER}\n`));
+  assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
+});
