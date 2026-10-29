@@ -1,0 +1,21 @@
+{
+  "workstream_id": "partner-storage-writes",
+  "authorization": "Pending owner review (2026-10-29). Planning only: nothing is live or verified. Each production apply still needs its own owner approval and staging acceptance.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Security audit finding 3: a partner tenant reads a check shared with it, and the platform owner reads every tenant's, but only the owner tenant's members may write the check's objects. storage-write-auth.mjs requires aws_can_write_check for check-scoped and stored-image claim-files and endorsement-packets writes (the Mortgage Desk create-only grant is unchanged) and adds BUCKET_WRITE_AUTH_SQL; storage-write.mjs authorizes delete and move by a referencing row the caller may write (each table's RLS write rule), no longer by one it can read. storage-write-auth.mjs goes first: storage-write.mjs imports its new authorizeObjectWrite. live_sha256 is each member's recorded applied bytes (storage-write-auth.mjs: production-mortgage-desk-return-applied-manifest-2026-10-28.json; storage-write.mjs: production run 39707778256, production-upload-url-rear-stamp-manifest-2026-10-22.json); not re-read for this plan. The guarded overlay inspect re-reads each before any apply.",
+  "members": {
+    "storage-write-auth.mjs": {
+      "live_sha256": "fb9e3ecdff421ae8bf78315695662d843937febdec3fc2831138fdc3427aace5",
+      "accepted_sha256": "1e821ea095ef03c91cb25770db7b322b0f91d69c9a96aa3cc3462510a92e5ed4",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-mortgage-desk-return-applied-manifest-2026-10-28.json"
+    },
+    "storage-write.mjs": {
+      "live_sha256": "ccc72b14288580740bd57602543caaca558ba76d18c26c1bd5565c9841becf9e",
+      "accepted_sha256": "04dac9a46334ec2b219623c41ca620524546bcc3343c163da306f2ca1d42395f",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-upload-url-rear-stamp-manifest-2026-10-22.json"
+    }
+  }
+}
