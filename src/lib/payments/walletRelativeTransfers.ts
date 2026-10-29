@@ -264,6 +264,16 @@ export type BillingActivity = {
   status: string;
   pending: boolean;
   transfer_ids: string[];
+  /** Latest real timestamp (occurrence or transfer created_at); null when none is known. */
+  at: string | null;
+};
+
+const laterIso = (a: string | null | undefined, b: string | null | undefined) => {
+  const ta = a ? new Date(a).getTime() : NaN;
+  const tb = b ? new Date(b).getTime() : NaN;
+  if (Number.isNaN(ta)) return Number.isNaN(tb) ? null : b ?? null;
+  if (Number.isNaN(tb)) return a ?? null;
+  return tb > ta ? b ?? null : a ?? null;
 };
 
 export function buildBillingActivity({
@@ -294,6 +304,7 @@ export function buildBillingActivity({
       status: patch.status || "pending",
       pending: false,
       transfer_ids: [],
+      at: null,
     };
     groups.set(key, {
       ...current,
@@ -304,6 +315,7 @@ export function buildBillingActivity({
       bank_cents: current.bank_cents + (patch.bank_cents ?? 0),
       pending: current.pending || !!patch.pending,
       transfer_ids: [...new Set([...current.transfer_ids, ...(patch.transfer_ids || [])])],
+      at: laterIso(current.at, patch.at),
     });
   };
 
@@ -318,6 +330,7 @@ export function buildBillingActivity({
       amount_cents: asCents(occurrence.amount_cents),
       status: occurrence.status || "due",
       pending: isWalletPendingStatus(occurrence.status) || ["due", "submitted"].includes(String(occurrence.status || "")),
+      at: occurrence.created_at ?? null,
     });
   }
 
@@ -343,6 +356,7 @@ export function buildBillingActivity({
       status: statusOf(transfer) || "pending",
       pending: classified.pending,
       transfer_ids: [transfer.provider_transfer_id || transfer.id],
+      at: transfer.created_at ?? null,
     });
   }
 
