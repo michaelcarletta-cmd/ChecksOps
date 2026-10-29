@@ -40,7 +40,18 @@ owner); `get_total_unread_check_messages`; any table, column, view, policy, RLS 
 grant, trigger or row. No API or SPA change. No trigger is added, so the DB validator's public
 trigger count is not concerned.
 
-**Status:** not applied anywhere. The staging pin and the production pin are pending.
+**Staging executor refreshed (2026-10-29).** Inspect run 40915770608 found the live executor at
+`yHVZNx1R…` without `sql/126_definer_reads_caller_gates.sql`. Deploy run 40917101622 (main
+`7d33d5c`) updated it to main's package ("Verify live executor now carries main's package" passed).
+
+**Staging read-live (2026-10-29).** Run 40917478177 (main `7d33d5c`, executor `/ZkFu2xY…`): the thirteen
+functions present, each `different` from the intended state; EXECUTE `PUBLIC` and the owner on every
+one; `prerequisites_missing` `[]`, `precondition_failures` `[]`, `already_applied` false; live
+`04106521263eeeb423ac2c0dfbf5e1f1af5a52c89501b63ac742d6b25c5e1612`, the restored pre-state derived from the supabase bytes and the
+default ACL. Recorded in the staging pin (`expected_live_definition_sha256`, `execute: true`, wave 25)
+under the owner's words of 2026-10-29, "start SQL 126 on staging".
+
+**Status:** staging pin execute-authorized (wave 25); nothing applied yet; production pin pending.
 
 ## Fingerprint
 
