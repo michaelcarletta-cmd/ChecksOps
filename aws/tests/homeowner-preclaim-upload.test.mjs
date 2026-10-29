@@ -88,7 +88,8 @@ test('a homeowner check is recorded through SQL 110, filed into Review as the li
   const bind = db.calls.find((c) => c.text.includes('set_config') && c.params?.[1] === STAFF);
   assert.ok(bind, 'binds the link sender before filing into Review');
   const intake = db.calls.find((c) => c.text.includes('INSERT INTO public.check_intake_items'));
-  assert.match(intake.text, /'pending', 'review', 'insurance'/);
+  // Filed like a tenant upload (2026-10-29): 'uploaded', not the old 'pending'.
+  assert.match(intake.text, /'uploaded', 'review', 'insurance'/);
   assert.equal(intake.params[2], STAFF);
   assert.equal(intake.params[5], 5);
   assert.equal(ocrCalls[0].mapping.application_user_id, STAFF);
