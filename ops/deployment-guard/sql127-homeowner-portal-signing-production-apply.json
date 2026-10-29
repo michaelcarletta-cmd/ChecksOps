@@ -1,0 +1,384 @@
+{
+  "id": "sql127-homeowner-portal-signing-production-apply",
+  "migration": "sql127",
+  "authorization": "Applied to production on 2026-10-29; execute is false again, so this pin is no longer a standing authorization and a re-apply needs a new reviewed pin change. The owner approved the SQL 127 production pin change on 2026-10-29 in the words \"start the SQL 127 pin PR\" (4b4af399 -> c4936010, #1410) and the one apply run recorded in applied (workstream prod-sql127-homeowner-portal-signing-20261029) in the words \"apply SQL 127 into production\", passed to it verbatim. That approval covered that run only.",
+  "execute": false,
+  "target_environment": "production",
+  "target_component": "production-sql",
+  "deployment_type": "sql-apply",
+  "filename": "aws/workflows/sql/127_homeowner_portal_signing.sql",
+  "migration_id": "127_homeowner_portal_signing",
+  "staging_pin_commit": "94dde846df58f8244e537f194be879d81a5ad14e",
+  "source_sha256": "4d2d311bad221c2d0e33370a56c1ebf00b0887d7286892954cf76eef0e107c33",
+  "function_identities": [
+    "public.aws_public_homeowner_ledger_endorse_capability(text, uuid)",
+    "public.aws_public_homeowner_pending_signatures(text)",
+    "public.aws_public_homeowner_document_portal_signer(text, uuid)"
+  ],
+  "expected_live_definition_sha256": "4b4af399a73a25e191d2f914cc074a3744c84fffbc8ce3e55f2adec2cf93dfe0",
+  "intended_replacement_sha256": "c4936010132f2d542db796e50fe2d56d1aa3bae5133cdb53e8172978a5b2e190",
+  "authorization_phrase": "APPLY_HOMEOWNER_PORTAL_SIGNING",
+  "predecessors": [],
+  "order_note": "No release-engine predecessor and no ordering constraint. SQL 127 replaces two of SQL 83's functions (aws/workflows/sql/83_homeowner_signing_capabilities.sql, applied to production and retired on its own homeowner engine, so it is not a release key) and adds a third beside SQL 83's aws_public_homeowner_document_sign_capability, which stays as it is. The spec prerequisites stand for SQL 82 and SQL 83: their four functions, homeowner_ledger_tokens, claims, check_intake_items, homeowner_ledger_events, check_endorsements, signature_requests and signature_signers with every column the bodies read or write, pg_catalog.gen_random_uuid() and role checksops; a read-only production inspect confirms them. Each replaced function must be owned by the applying login (functions_owned_by_login), keep its jsonb result (function_results_match) and hold no EXECUTE grant other than PUBLIC, authenticated, checksops and the owner (function_acl_replaceable); the login must be able to write check_endorsements and signature_signers under RLS (definer_can_write_relations). No API, Lambda or SPA change is part of this pin.Adds no trigger: the DB validator's public trigger count is not affected.",
+  "admin_login": "checksops_admin",
+  "rds_identifier": "checksops-production",
+  "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
+  "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
+  "tooling": {
+    "status": "built",
+    "production_tool": "scripts/deployment-guard/sql127-homeowner-portal-signing-production-apply.mjs",
+    "production_lib": "scripts/deployment-guard/lib/release-sql-production-apply.mjs",
+    "staging_executor_handler": "aws/write-path/guarded-sql-executor/index.mjs handleReleaseSqlMigration",
+    "staging_workflow_choice": "sql127-homeowner-portal-signing",
+    "one_shot_migration": "sql127",
+    "fingerprint_engine": "scripts/deployment-guard/lib/release-sql-state.mjs",
+    "runbook": "ops/production-sql-127-apply.md",
+    "tests": [
+      "aws/tests/release-sql127-executor.test.mjs",
+      "aws/tests/release-sql127-production-apply.test.mjs",
+      "aws/tests/release-sql90-97-executor.test.mjs",
+      "aws/tests/release-sql90-97-production-apply.test.mjs",
+      "aws/tests/sql127-homeowner-portal-signing-pg.test.mjs"
+    ],
+    "note": "Guarded tooling for SQL 127: sql127-homeowner-portal-signing-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql127-homeowner-portal-signing); production-sql-one-shot.mjs --migration sql127. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): the three functions (body and attributes from the file, EXECUTE for checksops and the owner). The tooling does not authorize anything: the reviewed change of 2026-10-29 (\"SQL 127 production pin: production pre-state recorded, staging apply accepted, execute true\") recorded the production inspect, the staging acceptance and the owner approval and set execute true; the record-and-retire change after the apply sets it false again."
+  },
+  "production_inspect": {
+    "status": "recorded",
+    "date": "2026-10-29",
+    "ssm_command_id": "08ef9da4-ecd8-4f0a-bb20-7030141ebece",
+    "source_commit": "e98d57754b590c85cb7e08e3e9af71843320f14a",
+    "read_only": true,
+    "connected_as": "checksops_admin",
+    "live_definition_sha256": "4b4af399a73a25e191d2f914cc074a3744c84fffbc8ce3e55f2adec2cf93dfe0",
+    "apply_preconditions_met": false,
+    "precondition_failures": [],
+    "note": "Recorded from the read-only production inspect of 2026-10-29 (SSM command 08ef9da4-ecd8-4f0a-bb20-7030141ebece, node scripts/deployment-guard/sql127-homeowner-portal-signing-production-apply.mjs --inspect on the SQL53 runner i-0c35557c4e5385406 from main e98d57754 (tarball source-e98d57754b590c85cb7e08e3e9af71843320f14a.tar.gz sha256 5285b1866326e37362c039b1a0022ee51b8f1c181a73efadfac325775c2aef49, transfer run 40952859758; migration source sha256 on the runner 4d2d311bad221c2d0e33370a56c1ebf00b0887d7286892954cf76eef0e107c33 == source_sha256), read_only true, source_ok true, connected as checksops_admin (current_user and session_user checksops_admin)). live_definition_sha256 4b4af399a73a25e191d2f914cc074a3744c84fffbc8ce3e55f2adec2cf93dfe0 (not the intended c4936010132f2d542db796e50fe2d56d1aa3bae5133cdb53e8172978a5b2e190: already_applied false); release_sql_inspect: aws_public_homeowner_ledger_endorse_capability(text, uuid) and aws_public_homeowner_pending_signatures(text) different, function_acl checksops EXECUTE and owner EXECUTE on both, aws_public_homeowner_document_portal_signer(text, uuid) absent (function_acl []); prerequisites_missing [], missing_dependencies [], predecessors {}, predecessors_applied true, successors_applied [], counts null, definer_writes check_endorsements and signature_signers ok, precondition_failures []. Production's pre-state is the same as staging's (read-live run 40947834848, 4b4af399a73a25e191d2f914cc074a3744c84fffbc8ce3e55f2adec2cf93dfe0). apply_preconditions_met was false at inspect time only because no pre-state was recorded yet (execute false, expected_live_definition_sha256 null). This reviewed change copies live_definition_sha256 into expected_live_definition_sha256 and, in the same change, sets authorization, execute true and staging_acceptance. A fresh --inspect immediately before apply (the one-shot's inspect step) must still report this live_definition_sha256 and precondition_failures []; if not, stop. If already_applied is true, or precondition_failures is not [], stop: that needs its own reviewed change. Earlier: Pending: no read-only production inspect has been run for SQL 127 yet. Expected: prerequisites_missing [], aws_public_homeowner_ledger_endorse_capability(text, uuid) and aws_public_homeowner_pending_signatures(text) 'different' (SQL 83's bodies), owned by checksops_admin, EXECUTE checksops and the owner (release_sql_inspect.function_acl), aws_public_homeowner_document_portal_signer(text, uuid) absent, definer_writes ok for check_endorsements and signature_signers; if production is exactly SQL 83's post-state the fingerprint is the one derived from SQL 83's bytes in ops/production-sql-127-apply.md. Record its date, SSM command id, source commit, live_definition_sha256, prerequisites_missing, release_sql_inspect.functions, release_sql_inspect.function_acl, release_sql_inspect.definer_writes, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. Stop if prerequisites_missing is not [] or precondition_failures is not [] (functions_owned_by_login: checksops_admin does not own a replaced function; function_results_match: a result type is not jsonb; function_acl_replaceable: an EXECUTE grant outside PUBLIC, authenticated and checksops; definer_can_write_relations: the login cannot write check_endorsements or signature_signers): that needs its own reviewed change."
+  },
+  "intended_post_state": {
+    "fingerprint": "c4936010132f2d542db796e50fe2d56d1aa3bae5133cdb53e8172978a5b2e190",
+    "note": "Three functions owned by checksops_admin, plpgsql, VOLATILE, SECURITY DEFINER, search_path public, row_security off, result jsonb, EXECUTE for checksops and the owner: aws_public_homeowner_ledger_endorse_capability(text, uuid) (SQL 83's body with the status allow-list ('pending', 'sent')), aws_public_homeowner_pending_signatures(text) (SQL 83's body without the emailed-link expiry filter on the listed signer) and aws_public_homeowner_document_portal_signer(text, uuid) (SQL 83's document gates, the signer row locked; returns the existing token_hash, renews an expired or expiring expires_at to now() + 72 hours). SQL 82's ledger view and SQL 83's aws_public_homeowner_document_sign_capability unchanged. No table, column, view, policy, RLS setting, table grant, trigger or row change; every other function unchanged. The fingerprint is releaseIntendedHash('sql127', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): c4936010132f2d542db796e50fe2d56d1aa3bae5133cdb53e8172978a5b2e190."
+  },
+  "staging_acceptance": {
+    "ok": true,
+    "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/40952161383",
+    "basis": "Guarded staging SQL executor apply of sql127-homeowner-portal-signing, run 40952161383 (2026-10-29, main e98d57754, wave 26, workstream github-staging-sql-40952161383, on the executor deployed from main e98d57754 by deploy run 40951841850: lpbOJp317ob1what8FC76Dm/hQudct4NcqfHXi6tNh0=), from the staging pre-state recorded by read-live run 40947834848 (4b4af399a73a25e191d2f914cc074a3744c84fffbc8ce3e55f2adec2cf93dfe0): receipt before 4b4af399a73a25e191d2f914cc074a3744c84fffbc8ce3e55f2adec2cf93dfe0, after c4936010132f2d542db796e50fe2d56d1aa3bae5133cdb53e8172978a5b2e190 == intended, result applied. Read-live run 40952453984 then reported already_applied true, live c4936010132f2d542db796e50fe2d56d1aa3bae5133cdb53e8172978a5b2e190, precondition_failures [], the three functions at the intended state (EXECUTE for checksops and the owner on all three). The behavior is covered on PostgreSQL 16 by aws/tests/sql127-homeowner-portal-signing-pg.test.mjs. Production's pre-state (production_inspect) is the same as staging's; the same file bytes (source_sha256) are pinned in both."
+  },
+  "applied": {
+    "date": "2026-10-29",
+    "result": "applied",
+    "source_commit": "025601432e0ab3d064986e286095ff8d0fd33e2a",
+    "source_commit_basis": "SOURCE_COMMIT in the tarball (written by sql53-temporary-transfer) equals --commit, and the tarball sha256 equals --expected-tarball-sha256 as copied by the operator from that transfer run's log (TARBALL_SHA256 line); the run log itself was not read by the one-shot.",
+    "source_tarball": {
+      "file": "source-025601432e0ab3d064986e286095ff8d0fd33e2a.tar.gz",
+      "sha256": "098016ddbeafab7d61f660cca7fe04bcfa3ed51beaf35dcb7ed722e7641550c2"
+    },
+    "migration_source_sha256": "4d2d311bad221c2d0e33370a56c1ebf00b0887d7286892954cf76eef0e107c33",
+    "migration_source_sha256_note": "The one-shot source step hashed aws/workflows/sql/127_homeowner_portal_signing.sql in the transfer tarball: equal to source_sha256 (the pin; migration_matches_pin true).",
+    "runner": "i-0c35557c4e5385406",
+    "runner_basis": "operator-supplied --runner (not verified by the one-shot)",
+    "workstream_id": "prod-sql127-homeowner-portal-signing-20261029",
+    "one_use_id": "sql127-prod-d93ab5e1-e45b-4fd5-a145-3aea5fb94f3e",
+    "one_use_id_consumed": true,
+    "one_use_id_consumed_basis": "Inferred from the successful apply (the tool records the one_use_id after COMMIT and only warns if that write fails); the consumed-registry entry was not read back separately.",
+    "owner_approval": "apply SQL 127 into production",
+    "owner_approval_basis": "As passed in --approval-statement (base64, --approval-statement-b64) for --approval-scope sql127; the one-shot cannot verify who said it. The owner's words of 2026-10-29; the pin change (#1410) was merged green before this run, on the owner's words \"merge the SQL 127 pin PR when green\".",
+    "operator": "michaelcarletta-cmd",
+    "apply_ssm_command_id": "8fb91070-b2d7-4584-a899-60afed92ebcc",
+    "one_shot_run_id": "d9f2fb05-303a-4623-9a5c-f50033a2757c",
+    "one_shot_note": "One SSM command (8fb91070-b2d7-4584-a899-60afed92ebcc on i-0c35557c4e5385406, comment \"SQL 127 one-shot apply (owner: apply SQL 127 into production)\", sent 2026-10-29 21:52:47Z, finished by 21:53:08Z, Status Success, ResponseCode 0) ran the production-sql-one-shot --phase apply (run_id d9f2fb05-303a-4623-9a5c-f50033a2757c) from main 025601432 (transfer run 40955847710, sql53-temporary-transfer.yml on main after the #1410 merge; it published TARBALL_SHA256 098016ddbeafab7d61f660cca7fe04bcfa3ed51beaf35dcb7ed722e7641550c2). No separate one-shot --phase inspect of this commit was run before the apply: the pre-state check is the run's own inspect step (pre_apply_inspect below: live 4b4af399a73a25e191d2f914cc074a3744c84fffbc8ce3e55f2adec2cf93dfe0 == the pre-state recorded from the read-only production inspect SSM 08ef9da4-ecd8-4f0a-bb20-7030141ebece at main e98d57754, live_matches_expected true, apply_preconditions_met true, precondition_failures [], aws_public_homeowner_ledger_endorse_capability(text, uuid) and aws_public_homeowner_pending_signatures(text) 'different', aws_public_homeowner_document_portal_signer(text, uuid) 'absent'). Steps pin (execute true, staging_acceptance run 40952161383), source (tarball sha256 matches the sidecar and --expected-tarball-sha256, tree matches the tarball, 12945 files, migration source == pin), inspect, contracts (claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43), manifest, source-recheck-before-preflight, preflight (receipt_issued), evaluate (sql127_production_apply_allowed true), source-recheck-before-apply, apply (applied) and post-apply-inspect all ok; the command printed EXIT=0 and SSM reported Success. SSM truncated the command's standard output at 24000 characters, after the one-shot's own applied object: that object (about characters 12398 to 23817) arrived complete, and its fields are recorded in this block as printed, except this note and owner_approval_basis, which are extended as in the SQL 124 record (the one-shot's own one_shot_note read: \"One production-sql-one-shot run verified the source, ran the read-only inspect and the runner contracts, built the manifest, issued the receipt and lease (preflight), evaluated (sql127_production_apply_allowed true), applied (exit 0) and ran the post-apply inspect.\"; its owner_approval_basis read: \"As passed in --approval-statement for --approval-scope sql127; the one-shot cannot verify who said it.\"). The printed object also equals the composition of summary.applied in scripts/deployment-guard/lib/production-sql-one-shot.mjs from the run's complete fields (run_id, steps, commit, workstream_id, approval_statement, approval_scope, operator, source, pre_apply_inspect, contract_results, one_use_id, post_apply_inspect, apply_result). Cut off and not observed: the rest of not_observed_by_this_run after its two printed entries (\"ssm_command_id (add from SSM)\", \"source_staged_by (the sql53-temporary-transfer run id; add from GitHub Actions)\"; the code at this commit emits only those two, supplied here as apply_ssm_command_id and transfer run 40955847710) and the close of the JSON, including its top-level errors array. No separate read-only --inspect was run after the apply this time; the one-shot's own post-apply inspect (post_apply_inspect below: live c4936010132f2d542db796e50fe2d56d1aa3bae5133cdb53e8172978a5b2e190 == intended, already_applied true, precondition_failures [], the three functions 'intended', EXECUTE checksops and the owner on all three) is the post-apply evidence. Runner state (security audit finding C): started for this run at 2026-10-29 21:52:31 UTC, SSM Online 21:52:47, stopped 21:53:18 UTC (StateTransitionReason \"User initiated (2026-10-29 21:53:18 GMT)\"); for the earlier read-only production inspect (SSM 08ef9da4-ecd8-4f0a-bb20-7030141ebece) it was started 20:56:07 and stopped 20:57:03 UTC.",
+    "steps": [
+      "pin",
+      "source",
+      "inspect",
+      "contracts",
+      "manifest",
+      "source-recheck-before-preflight",
+      "preflight",
+      "evaluate",
+      "source-recheck-before-apply",
+      "apply",
+      "post-apply-inspect"
+    ],
+    "contract_results": {
+      "claim-ledger": {
+        "ok": true,
+        "test": "aws/tests/claim-ledger-accepted-contract.test.mjs",
+        "evidence": "4/4 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at 025601432e0ab3d064986e286095ff8d0fd33e2a (production-sql-one-shot d9f2fb05-303a-4623-9a5c-f50033a2757c, node --test)"
+      },
+      "tenant-isolation": {
+        "ok": true,
+        "test": "aws/tests/tenant-security-compliance.test.mjs",
+        "evidence": "6/6 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at 025601432e0ab3d064986e286095ff8d0fd33e2a (production-sql-one-shot d9f2fb05-303a-4623-9a5c-f50033a2757c, node --test)"
+      },
+      "financial-write-protections": {
+        "ok": true,
+        "test": "aws/tests/api-write.test.mjs",
+        "evidence": "43/43 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at 025601432e0ab3d064986e286095ff8d0fd33e2a (production-sql-one-shot d9f2fb05-303a-4623-9a5c-f50033a2757c, node --test)"
+      }
+    },
+    "pre_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "4b4af399a73a25e191d2f914cc074a3744c84fffbc8ce3e55f2adec2cf93dfe0",
+      "live_matches_expected": true,
+      "already_applied": false,
+      "predecessors": {},
+      "predecessors_applied": true,
+      "missing_dependencies": [],
+      "apply_preconditions_met": true,
+      "precondition_failures": [],
+      "current_user": "checksops_admin",
+      "session_user": "checksops_admin",
+      "counts": null,
+      "successors_applied": [],
+      "release_sql_inspect": {
+        "live_definition_sha256": "4b4af399a73a25e191d2f914cc074a3744c84fffbc8ce3e55f2adec2cf93dfe0",
+        "prerequisites_missing": [],
+        "predecessors": {},
+        "successors_applied": [],
+        "functions": [
+          {
+            "name": "aws_public_homeowner_ledger_endorse_capability(text, uuid)",
+            "state": "different"
+          },
+          {
+            "name": "aws_public_homeowner_pending_signatures(text)",
+            "state": "different"
+          },
+          {
+            "name": "aws_public_homeowner_document_portal_signer(text, uuid)",
+            "state": "absent"
+          }
+        ],
+        "policies": [],
+        "views": [],
+        "tables": [],
+        "columns": [],
+        "constraints": [],
+        "triggers": [],
+        "table_privileges": [],
+        "function_acl": [
+          {
+            "name": "aws_public_homeowner_ledger_endorse_capability(text, uuid)",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          },
+          {
+            "name": "aws_public_homeowner_pending_signatures(text)",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          },
+          {
+            "name": "aws_public_homeowner_document_portal_signer(text, uuid)",
+            "acl": []
+          }
+        ],
+        "acl_functions": [],
+        "indexes": [],
+        "unique_covers": [],
+        "definer_writes": [
+          {
+            "name": "check_endorsements",
+            "ok": true
+          },
+          {
+            "name": "signature_signers",
+            "ok": true
+          }
+        ],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": null
+      }
+    },
+    "manifest_sha256": "f61315751c23f65b2cb9116a72436156158550482d2a3b305fa59a57eeee3af0",
+    "receipt": {
+      "migration": "sql127",
+      "workstream": "prod-sql127-homeowner-portal-signing-20261029",
+      "commit": "025601432e0ab3d064986e286095ff8d0fd33e2a",
+      "sql_file": "aws/workflows/sql/127_homeowner_portal_signing.sql",
+      "before_hash": "4b4af399a73a25e191d2f914cc074a3744c84fffbc8ce3e55f2adec2cf93dfe0",
+      "after_hash": "c4936010132f2d542db796e50fe2d56d1aa3bae5133cdb53e8172978a5b2e190",
+      "release_sql_inspect": {
+        "live_definition_sha256": "c4936010132f2d542db796e50fe2d56d1aa3bae5133cdb53e8172978a5b2e190",
+        "prerequisites_missing": [],
+        "predecessors": {},
+        "successors_applied": [],
+        "functions": [
+          {
+            "name": "aws_public_homeowner_ledger_endorse_capability(text, uuid)",
+            "state": "intended"
+          },
+          {
+            "name": "aws_public_homeowner_pending_signatures(text)",
+            "state": "intended"
+          },
+          {
+            "name": "aws_public_homeowner_document_portal_signer(text, uuid)",
+            "state": "intended"
+          }
+        ],
+        "policies": [],
+        "views": [],
+        "tables": [],
+        "columns": [],
+        "constraints": [],
+        "triggers": [],
+        "table_privileges": [],
+        "function_acl": [
+          {
+            "name": "aws_public_homeowner_ledger_endorse_capability(text, uuid)",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          },
+          {
+            "name": "aws_public_homeowner_pending_signatures(text)",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          },
+          {
+            "name": "aws_public_homeowner_document_portal_signer(text, uuid)",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          }
+        ],
+        "acl_functions": [],
+        "indexes": [],
+        "unique_covers": [],
+        "definer_writes": [
+          {
+            "name": "check_endorsements",
+            "ok": true
+          },
+          {
+            "name": "signature_signers",
+            "ok": true
+          }
+        ],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": null
+      },
+      "unrelated_catalog_sha256": "01ae5e2a79c21fba35bc962a55c6a179967286c5f046ab317ee27c511ca68915",
+      "unrelated_catalog_counts": {
+        "relations": 892,
+        "columns": 3550,
+        "constraints": 2239,
+        "policies": 404,
+        "functions": 1352,
+        "indexes": 655,
+        "default_acl": 0,
+        "role_memberships": 15,
+        "roles": 29,
+        "triggers": 184,
+        "views": 25,
+        "types": 18,
+        "schema": 2
+      },
+      "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/40952161383",
+      "result": "applied"
+    },
+    "post_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "c4936010132f2d542db796e50fe2d56d1aa3bae5133cdb53e8172978a5b2e190",
+      "live_matches_expected": false,
+      "already_applied": true,
+      "predecessors": {},
+      "predecessors_applied": true,
+      "missing_dependencies": [],
+      "apply_preconditions_met": false,
+      "precondition_failures": [],
+      "current_user": "checksops_admin",
+      "session_user": "checksops_admin",
+      "counts": null,
+      "successors_applied": [],
+      "release_sql_inspect": {
+        "live_definition_sha256": "c4936010132f2d542db796e50fe2d56d1aa3bae5133cdb53e8172978a5b2e190",
+        "prerequisites_missing": [],
+        "predecessors": {},
+        "successors_applied": [],
+        "functions": [
+          {
+            "name": "aws_public_homeowner_ledger_endorse_capability(text, uuid)",
+            "state": "intended"
+          },
+          {
+            "name": "aws_public_homeowner_pending_signatures(text)",
+            "state": "intended"
+          },
+          {
+            "name": "aws_public_homeowner_document_portal_signer(text, uuid)",
+            "state": "intended"
+          }
+        ],
+        "policies": [],
+        "views": [],
+        "tables": [],
+        "columns": [],
+        "constraints": [],
+        "triggers": [],
+        "table_privileges": [],
+        "function_acl": [
+          {
+            "name": "aws_public_homeowner_ledger_endorse_capability(text, uuid)",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          },
+          {
+            "name": "aws_public_homeowner_pending_signatures(text)",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          },
+          {
+            "name": "aws_public_homeowner_document_portal_signer(text, uuid)",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          }
+        ],
+        "acl_functions": [],
+        "indexes": [],
+        "unique_covers": [],
+        "definer_writes": [
+          {
+            "name": "check_endorsements",
+            "ok": true
+          },
+          {
+            "name": "signature_signers",
+            "ok": true
+          }
+        ],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": null
+      }
+    }
+  },
+  "production_evidence": {
+    "2026-10-29 apply": "Guarded production SQL one-shot on i-0c35557c4e5385406, workstream prod-sql127-homeowner-portal-signing-20261029, main 025601432 (tarball 098016dd…, transfer run 40955847710, migration source 4d2d311b… == pin), owner-approved run (\"apply SQL 127 into production\"), SSM 8fb91070-b2d7-4584-a899-60afed92ebcc, run_id d9f2fb05-303a-4623-9a5c-f50033a2757c, one_use_id sql127-prod-d93ab5e1-e45b-4fd5-a145-3aea5fb94f3e (spent): every step ok; contracts claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43; pre-apply inspect live 4b4af399… (live_matches_expected true, precondition_failures []); manifest f6131575…; 4b4af399… -> c4936010…, result applied, unrelated catalog 01ae5e2a… (triggers 184); post-apply inspect already_applied true, precondition_failures []. No separate read-only inspect was run after the apply; the one-shot's own post-apply inspect is the evidence. SSM truncated the run's output after the one-shot's applied object, which arrived complete (see applied.one_shot_note). After: aws_public_homeowner_ledger_endorse_capability(text, uuid) and aws_public_homeowner_pending_signatures(text) carry SQL 127's bodies and aws_public_homeowner_document_portal_signer(text, uuid) is live, EXECUTE for checksops and the owner on all three; the API's existing calls keep the same signatures, and the portal signer is called only once the API change that uses it ships (a separate step). No trigger was added, so the DB validator's public trigger set is unaffected. execute is false so the pin is no longer a standing authorization."
+  }
+}

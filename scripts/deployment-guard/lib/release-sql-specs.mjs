@@ -1,5 +1,5 @@
 /**
- * Specs of the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108 to SQL 126) for the shared engine in
+ * Specs of the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108 to SQL 127) for the shared engine in
  * release-sql-state.mjs: what each pinned file creates, replaces or drops, the reviewed
  * EXECUTE ACLs, the prerequisites and predecessors, and the PostgreSQL renderings the file
  * leaves (policy expressions, view, column, constraint, index and trigger definitions as
@@ -5567,6 +5567,120 @@ export const RELEASE_SQL_SPECS = deepFreeze({
         ],
         "result": "TABLE(check_id uuid, unread_count bigint, last_message_at timestamp with time zone)"
       }
+    ]
+  },
+  // SQL 127 (owner decision 2026-10-29, "Portal link is enough"): homeowners sign their checks and
+  // documents from the claim portal. Replaces SQL 83's aws_public_homeowner_ledger_endorse_capability
+  // (status allow-list 'pending' and 'sent') and aws_public_homeowner_pending_signatures (an open
+  // homeowner signer is listed after its emailed link expired), and adds
+  // aws_public_homeowner_document_portal_signer (SQL 83's document gates; returns the signer's existing
+  // token_hash and renews an expired expires_at). Same signatures and results; SECURITY DEFINER,
+  // search_path public, row_security off; EXECUTE for checksops and the owner (PUBLIC and
+  // authenticated revoked). The file has no prerequisite block: the prerequisites are the SQL 82 / SQL
+  // 83 objects and columns its header and bodies name, and role checksops. SQL 83 is on the homeowner
+  // engine (applied and retired), not a release key, so no predecessor. definer_writes: the tables
+  // the functions write (check_endorsements.token, signature_signers.expires_at).
+  sql127: {
+    "key": "sql127",
+    "label": "SQL 127",
+    "choice": "sql127-homeowner-portal-signing",
+    "production_pin_rel": "ops/deployment-guard/sql127-homeowner-portal-signing-production-apply.json",
+    "script": "sql127-homeowner-portal-signing-production-apply",
+    "prerequisites": [
+      "public.aws_public_homeowner_ledger_endorse_capability(text, uuid)",
+      "public.aws_public_homeowner_pending_signatures(text)",
+      "public.aws_public_homeowner_document_sign_capability(text, uuid)",
+      "public.aws_public_homeowner_ledger_by_token(text)",
+      "pg_catalog.gen_random_uuid()",
+      "public.homeowner_ledger_tokens",
+      "public.claims",
+      "public.check_intake_items",
+      "public.homeowner_ledger_events",
+      "public.check_endorsements",
+      "public.signature_requests",
+      "public.signature_signers",
+      "role checksops",
+      "column public.homeowner_ledger_tokens.token",
+      "column public.homeowner_ledger_tokens.tenant_id",
+      "column public.homeowner_ledger_tokens.claim_id",
+      "column public.homeowner_ledger_tokens.homeowner_email",
+      "column public.homeowner_ledger_tokens.homeowner_name",
+      "column public.homeowner_ledger_tokens.revoked_at",
+      "column public.homeowner_ledger_tokens.expires_at",
+      "column public.claims.id",
+      "column public.claims.org_id",
+      "column public.check_intake_items.id",
+      "column public.check_intake_items.tenant_id",
+      "column public.check_intake_items.claim_id",
+      "column public.homeowner_ledger_events.tenant_id",
+      "column public.homeowner_ledger_events.claim_id",
+      "column public.check_endorsements.id",
+      "column public.check_endorsements.check_id",
+      "column public.check_endorsements.tenant_id",
+      "column public.check_endorsements.payee_name",
+      "column public.check_endorsements.payee_type",
+      "column public.check_endorsements.status",
+      "column public.check_endorsements.token",
+      "column public.check_endorsements.contact_email",
+      "column public.check_endorsements.signed_at",
+      "column public.signature_requests.id",
+      "column public.signature_requests.claim_id",
+      "column public.signature_requests.check_intake_item_id",
+      "column public.signature_requests.document_name",
+      "column public.signature_requests.status",
+      "column public.signature_requests.sent_at",
+      "column public.signature_requests.created_at",
+      "column public.signature_requests.completed_at",
+      "column public.signature_signers.id",
+      "column public.signature_signers.signature_request_id",
+      "column public.signature_signers.signer_name",
+      "column public.signature_signers.signer_email",
+      "column public.signature_signers.signer_type",
+      "column public.signature_signers.signing_order",
+      "column public.signature_signers.status",
+      "column public.signature_signers.signed_at",
+      "column public.signature_signers.token_hash",
+      "column public.signature_signers.expires_at"
+    ],
+    "predecessors": [],
+    "functions": [
+      {
+        "identity": "public.aws_public_homeowner_ledger_endorse_capability(text, uuid)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ],
+        "revokes": [
+          "PUBLIC EXECUTE",
+          "authenticated EXECUTE"
+        ]
+      },
+      {
+        "identity": "public.aws_public_homeowner_pending_signatures(text)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ],
+        "revokes": [
+          "PUBLIC EXECUTE",
+          "authenticated EXECUTE"
+        ]
+      },
+      {
+        "identity": "public.aws_public_homeowner_document_portal_signer(text, uuid)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ],
+        "revokes": [
+          "PUBLIC EXECUTE",
+          "authenticated EXECUTE"
+        ]
+      }
+    ],
+    "definer_writes": [
+      "public.check_endorsements",
+      "public.signature_signers"
     ]
   },
 });

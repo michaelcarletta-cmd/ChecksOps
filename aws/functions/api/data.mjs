@@ -64,7 +64,9 @@ const READ_RPCS = new Set([
 // function runs: owner = platform owner only (the function reads every tenant), tenant =
 // the named tenant argument must pass aws_can_access_tenant (member or platform owner),
 // check = aws_can_access_check (owner tenant, active share target or platform owner),
-// self = only the caller's own user id unless platform owner.
+// self = only the caller's own user id unless platform owner, contractor = the caller's own
+// contractor profile or a cross-tenant reader (master or platform owner), the rule the
+// contractor_profiles select policy applies to a profile's owner.
 export const RPC_ACCESS_GATES = Object.freeze({
   get_all_checks_safety_net: { owner: true },
   get_stuck_checks: { owner: true },
@@ -81,7 +83,13 @@ export const RPC_ACCESS_GATES = Object.freeze({
   aws_tenant_referral_summary: { tenant: '_tenant_id' },
   get_check_claim_settlement: { check: 'p_check_id' },
   has_permission: { self: '_user_id' },
+  contractor_verification_status: { contractor: 'p_contractor_id' },
 });
+
+export const CONTRACTOR_GATE_SQL = `SELECT (
+  COALESCE(public.aws_is_cross_tenant_reader(), false)
+  OR EXISTS (SELECT 1 FROM public.contractor_profiles cp WHERE cp.id = $1::uuid AND cp.user_id = auth.uid())
+) AS ok`;
 
 const GATE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -96,7 +104,7 @@ export const rpcAccessDenial = async (client, name, args, applicationUserId) => 
     return typeof value === 'string' && GATE_UUID.test(value) ? value : null;
   };
   if (gate.owner) return (await isOwner()) ? null : forbidden;
-  const key = gate.tenant || gate.check || gate.self;
+  const key = gate.tenant || gate.check || gate.self || gate.contractor;
   const id = uuidArg(key);
   if (!id) return { ok: false, statusCode: 400, error: 'invalid_rpc_args', message: `${key} must be a uuid`, name };
   if (gate.self) {
@@ -105,7 +113,9 @@ export const rpcAccessDenial = async (client, name, args, applicationUserId) => 
   }
   const sql = gate.tenant
     ? 'SELECT COALESCE(public.aws_can_access_tenant($1::uuid), false) AS ok'
-    : 'SELECT COALESCE(public.aws_can_access_check($1::uuid), false) AS ok';
+    : gate.check
+      ? 'SELECT COALESCE(public.aws_can_access_check($1::uuid), false) AS ok'
+      : CONTRACTOR_GATE_SQL;
   return (await client.query(sql, [id])).rows[0]?.ok === true ? null : forbidden;
 };
 
@@ -425,7 +435,7 @@ export const embedColumnSql = (columns) => {
 
 const TENANTS_PUBLIC_COLUMNS = new Set([
   'id', 'name', 'slug', 'logo_url', 'primary_color', 'secondary_color',
-  'custom_domain', 'subscription_status', 'plan_tier', 'is_system_tenant', 'partner_code',
+  'custom_domain', 'subscription_status', 'plan_tier', 'is_system_tenant',
 ]);
 
 /**
@@ -652,6 +662,9 @@ export const SECRET_COLUMNS = Object.freeze({
   tenant_billing_accounts: Object.freeze(['account_number_encrypted']),
   tenant_openai_credentials: Object.freeze(['encrypted_key']),
   tenants: Object.freeze(['actum_password', 'actum_test_password', 'actum_webhook_secret', 'ein']),
+  // A partner code connects whoever enters it at once, so the public tenant list (readable
+  // without a login) never carries one. Members read their own from tenants (aws_select_tenants).
+  tenants_public: Object.freeze(['partner_code']),
   user_sessions: Object.freeze(['session_token']),
 });
 
@@ -1122,6 +1135,17 @@ const publicTenantsQuery = async (event, deps = {}) => {
   const spoof = ignoredSpoof(event, body);
   if (ident(body.table, 'table') !== 'tenants_public') {
     return { ok: false, statusCode: 401, error: 'missing_cognito_token', spoofFieldsIgnored: spoof };
+  }
+  const columnDeny = denySecretColumnQuery('tenants_public', parseSelect(body.select), body.filters, body.order);
+  if (columnDeny.denied) {
+    return {
+      ok: false,
+      statusCode: 403,
+      error: columnDeny.error,
+      message: columnDeny.message,
+      table: columnDeny.table,
+      spoofFieldsIgnored: spoof,
+    };
   }
   const loadCredentials = deps.loadDatabaseCredentials || loadDatabaseCredentials;
   const createClient = deps.createClient || ((config) => new Client(config));
