@@ -10,8 +10,9 @@
  *     with the staging pin, the one-shot, the bypass inventory and the test lists;
  *   - no predecessor and no order; the three functions (EXECUTE for checksops and the owner), the
  *     SQL 82 / SQL 83 prerequisites and the two tables the functions write; no table, view, policy
- *     or trigger (the DB validator is not concerned); no plan entry; the API's existing calls keep
- *     the same signatures; the runbook, one-shot doc and README name it;
+ *     or trigger (the DB validator is not concerned); the overlay plan records it verified live and
+ *     holds the four portal signing members on it; the API's existing calls keep the same signatures;
+ *     the runbook, one-shot doc and README name it;
  *   - the pending (pre-authorization) pin refuses before connecting; the committed pin allows only
  *     the manifest bound to its recorded pre-state; an approved, accepted copy evaluates for the
  *     manifest built from it, and refuses with execute false, another live hash, another staging
@@ -225,7 +226,7 @@ test('pin: the release pin shape, applied and retired (owner approved 2026-10-29
   }
 });
 
-test('order: no predecessor and no order; the three functions, the SQL 82 / SQL 83 prerequisites and the two written tables; no table, view, policy, trigger or plan entry; the API keeps its calls; the runbook, one-shot doc and README name it', () => {
+test('order: no predecessor and no order; the three functions, the SQL 82 / SQL 83 prerequisites and the two written tables; no table, view, policy or trigger; the plan records it live and holds the four portal signing members; the API keeps its calls; the runbook, one-shot doc and README name it', () => {
   const spec = RELEASE_SQL_SPECS[KEY];
   assert.deepEqual(spec.predecessors, []);
   assert.deepEqual(spec.functions.map((fn) => fn.identity), SQL127_IDENTITIES);
@@ -246,8 +247,16 @@ test('order: no predecessor and no order; the three functions, the SQL 82 / SQL 
   assert.match(COMMITTED.order_note, /^No release-engine predecessor and no ordering constraint\./);
   assert.match(COMMITTED.order_note, /No API, Lambda or SPA change is part of this pin\./);
   const plan = readJson('ops/deployment-guard/production-api-overlay-plan.json');
-  assert.equal((plan.sql_prerequisites || {})[SQL127_FILE], undefined);
-  assert.ok(!JSON.stringify(plan.members).includes(SQL127_FILE));
+  // The portal signing API change (four REPLACEs) is held on it; recorded verified live since its
+  // production apply (2026-10-29, the applied record of this pin).
+  const pre = plan.sql_prerequisites[SQL127_FILE];
+  assert.equal(pre.verified_live, true);
+  assert.ok(pre.evidence.includes(`SSM ${COMMITTED.applied.apply_ssm_command_id}`));
+  assert.ok(pre.evidence.includes(`run ${COMMITTED.applied.one_shot_run_id}`));
+  assert.ok(pre.evidence.includes(COMMITTED.applied.one_use_id));
+  assert.equal(pre.pin, 'ops/deployment-guard/sql127-homeowner-portal-signing-production-apply.json');
+  assert.deepEqual(Object.keys(plan.members).filter((m) => plan.members[m].sql_before === SQL127_FILE).sort(),
+    ['homeowner-signing-integration.mjs', 'homeowner.mjs', 'signature-submit.mjs', 'storage.mjs']);
   // The API's existing calls of the two replaced functions keep their signatures.
   assert.match(fs.readFileSync(path.join(ROOT, 'aws/functions/api/homeowner.mjs'), 'utf8'),
     /SELECT public\.aws_public_homeowner_ledger_endorse_capability\(\$1, \$2::uuid\) AS doc/);
