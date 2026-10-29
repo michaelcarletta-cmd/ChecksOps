@@ -64,7 +64,26 @@ approval and runs only after that merge is on main and staged. Runner state: the
 this inspect at 2026-10-29 20:56:07 UTC and stopped again at 20:57:03 UTC (`stopped`,
 `StateTransitionReason` "User initiated (2026-10-29 20:57:03 GMT)").
 
-**Status:** applied to staging (wave 26); production pin execute-authorized; not applied to production.
+**Production apply (2026-10-29).** After the pin change (#1410, merged green on the owner's words "merge
+the SQL 127 pin PR when green"), transfer run 40955847710 staged main `0256014` (tarball sha256
+`098016ddbeafab7d61f660cca7fe04bcfa3ed51beaf35dcb7ed722e7641550c2`). One-shot `--phase apply` run
+`d9f2fb05-303a-4623-9a5c-f50033a2757c` through SSM `8fb91070-b2d7-4584-a899-60afed92ebcc`, workstream
+`prod-sql127-homeowner-portal-signing-20261029`, under the owner's words "apply SQL 127 into production"
+(passed verbatim): every step ok; its own inspect step found live `4b4af399…` (the pinned pre-state),
+`precondition_failures` `[]` (no separate `--phase inspect` of this commit was run before it); contracts 4/4,
+6/6 and 43/43; manifest `f6131575…`; receipt `4b4af399…` →
+`c4936010132f2d542db796e50fe2d56d1aa3bae5133cdb53e8172978a5b2e190` (intended), result `applied`, unrelated
+catalog `01ae5e2a…` (triggers 184: SQL 127 adds none); post-apply inspect `already_applied` true,
+`precondition_failures` `[]`, the three functions `intended` with EXECUTE `checksops` and the owner. No
+separate read-only inspect was run after the apply; the one-shot's own post-apply inspect is the evidence. SSM
+truncated the run's output at 24000 characters after the one-shot's own `applied` object, which arrived
+complete; only the end of `not_observed_by_this_run` and the close of the JSON (its `errors` array) were cut
+(see the pin's `applied.one_shot_note`). Runner state: started for this run at 2026-10-29 21:52:31 UTC (SSM
+Online 21:52:47; command sent 21:52:47, finished by 21:53:08) and stopped at 21:53:18 UTC
+(`StateTransitionReason` "User initiated (2026-10-29 21:53:18 GMT)").
+
+**Status:** applied to staging (wave 26) and to production (2026-10-29); the production pin is retired
+(`execute: false`). The API change that calls `aws_public_homeowner_document_portal_signer` is a separate step.
 
 ## Fingerprint
 
