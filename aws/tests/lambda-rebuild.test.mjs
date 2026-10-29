@@ -120,6 +120,10 @@ const CHANGED_SINCE_SECOND_REBUILD = {
   // the stuck checks of its own tenants (get_stuck_checks returns no tenant_id); a REPLACE member of
   // the production overlay plan, not a rebuild section.
   'check-reconciliation.mjs': 'changed',
+  // Endorsement email to every recipient (2026-10-29): on production the Resend endorsement mailer
+  // sends to every recipient and keeps every CC; a REPLACE member of the production overlay plan,
+  // not a rebuild section.
+  'endorsement-parity.mjs': 'changed',
 };
 // Listed changes that go through the production overlay plan, never the current rebuild section.
 const OVERLAY_PLAN_CHANGES = new Set([
@@ -141,6 +145,8 @@ const OVERLAY_PLAN_CHANGES = new Set([
   'db-readonly-validate.mjs',
   // Security audit finding 4 (2026-10-29): a REPLACE row of the production plan.
   'check-reconciliation.mjs',
+  // Endorsement email to every recipient (2026-10-29): a REPLACE row of the production plan.
+  'endorsement-parity.mjs',
 ]);
 const assertSectionAcceptedIsMain = (apiRoot, name, accepted) => {
   const onMain = sha256(fs.readFileSync(path.join(apiRoot, name)));

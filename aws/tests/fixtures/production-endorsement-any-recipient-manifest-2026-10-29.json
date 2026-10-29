@@ -1,0 +1,14 @@
+{
+  "workstream_id": "endorsement-any-recipient",
+  "authorization": "Pending owner review (2026-10-29). Planning only: nothing is live or verified. The production apply still needs its own owner approval and staging acceptance.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Owner report 2026-10-29: sending an endorsement request email in production failed (endorsement_recipient_not_allowlisted), and a contractor copied on the first email was not reached. The production Lambda sends endorsement email through Resend (AWS_ENDORSEMENT_RESEND_ENABLED true) with AWS_ENDORSEMENT_RESEND_ALLOW_ANY_RECIPIENT false (lambda-config-plan.json, 2026-10-21), so sendViaResend refused any recipient outside the staging allowlist (checksops.invalid, checksops.com, freedomadj.com and three exact addresses) and silently dropped every CC outside it. email-policy.mjs already delivers SES mail to every recipient on production (owner decision 2026-10-25, applied); the endorsement mailer was never aligned. Owner request 2026-10-29: allow emails to every domain, with other addresses copied. The accepted endorsement-parity.mjs bytes make endorsementResendAllowAnyRecipient() true when isProductionEmailEnv() (CHECKSOPS_ENV production or production-prep), so production endorsement email (requests and reminders) goes to the payee at any domain and keeps every CC (the recipient is never copied to themselves); staging keeps the allowlist unless the flag opens it. The only new import is isProductionEmailEnv from email-policy.mjs, which the applied production bytes (eaf2a33a, production-email-any-recipient-applied-manifest-2026-10-25.json) export; no export is removed. live_sha256 db2d5448 is main's endorsement-parity.mjs at e3823b5c5, unchanged since, which the read-only guarded production Lambda rebuild inspect run 40741101459 (2026-10-28, mutation false) observed live with 202 of 203 source members equal to main (only db-readonly-validate.mjs differed); it is the rebuild plan's accepted bytes. A read-only production overlay inspect must confirm the live member before any apply. No SQL change; sql_before null. No Lambda configuration change.",
+  "members": {
+    "endorsement-parity.mjs": {
+      "live_sha256": "db2d5448ab1d3e0bdf107ce21c9ecd55af4339e7369de0ecfd75124e55ded1ea",
+      "accepted_sha256": "6d94f8ad86f037d6b6430c39d55efa8df89a8575d874317ee10285c7cab067cf",
+      "operation": "replace"
+    }
+  }
+}

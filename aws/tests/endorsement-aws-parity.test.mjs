@@ -140,6 +140,42 @@ test('Resend mailer fail-closes and never treats sink as delivered', async () =>
   });
 });
 
+test('production endorsement email goes to any domain and keeps every CC; staging keeps the allowlist', async () => {
+  const capture = () => {
+    const payloads = [];
+    return {
+      payloads,
+      fetchImpl: async (_url, init) => { payloads.push(JSON.parse(init.body)); return { ok: true, json: async () => ({ id: 're_msg_test' }) }; },
+    };
+  };
+  const message = {
+    to: 'Homeowner@Gmail.com',
+    cc: ['contractor@roofing-co.net', 'office@example.org', 'homeowner@gmail.com'],
+    subject: 'Endorsement Required',
+    html: '<p>x</p>',
+    apiKey: 're_test_not_real',
+  };
+  for (const env of ['production', 'production-prep']) {
+    await withEnv({ CHECKSOPS_ENV: env, AWS_ENDORSEMENT_RESEND_ALLOW_ANY_RECIPIENT: 'false' }, async () => {
+      const { payloads, fetchImpl } = capture();
+      const sent = await sendViaResend({ ...message, fetchImpl });
+      assert.equal(sent.deliveredCount, 1, env);
+      assert.deepEqual(payloads[0].to, ['homeowner@gmail.com'], env);
+      // The recipient is never copied to themselves; every other CC is kept.
+      assert.deepEqual(payloads[0].cc, ['contractor@roofing-co.net', 'office@example.org'], env);
+    });
+  }
+  for (const env of ['staging', undefined]) {
+    await withEnv({ CHECKSOPS_ENV: env, AWS_ENDORSEMENT_RESEND_ALLOW_ANY_RECIPIENT: undefined }, async () => {
+      const { payloads, fetchImpl } = capture();
+      await assert.rejects(() => sendViaResend({ ...message, fetchImpl }), /endorsement_recipient_not_allowlisted/);
+      assert.equal(payloads.length, 0);
+      await sendViaResend({ ...message, to: TEST_TO, fetchImpl });
+      assert.equal(payloads[0].cc, undefined, String(env));
+    });
+  }
+});
+
 test('endorsement sender reuses tenant branding and ChecksOps fallback', async () => {
   assert.equal(PLATFORM_ENDORSEMENT_FROM, 'ChecksOps <notify@checksops.com>');
   assert.equal(endorsementFromAddress({}), PLATFORM_ENDORSEMENT_FROM);
