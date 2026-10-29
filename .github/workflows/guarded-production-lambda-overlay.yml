@@ -121,6 +121,7 @@ on:
           - providers/payees/handlers.mjs
           - email-policy.mjs
           - db-readonly-validate.mjs
+          - check-reconciliation.mjs
           - providers/production/moov-wallet-fund.mjs
           - providers/production/moov-send.mjs
           - providers.mjs

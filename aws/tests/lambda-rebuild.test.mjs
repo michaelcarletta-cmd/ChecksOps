@@ -116,6 +116,10 @@ const CHANGED_SINCE_SECOND_REBUILD = {
   // section. SQL 121 and SQL 123 (#1338) raised it to 184; a REPLACE member of the production
   // overlay plan (2026-10-28).
   'db-readonly-validate.mjs': 'changed',
+  // Check reconciliation tenant scope (2026-10-29, security audit finding 4): a non-owner keeps only
+  // the stuck checks of its own tenants (get_stuck_checks returns no tenant_id); a REPLACE member of
+  // the production overlay plan, not a rebuild section.
+  'check-reconciliation.mjs': 'changed',
 };
 // Listed changes that go through the production overlay plan, never the current rebuild section.
 const OVERLAY_PLAN_CHANGES = new Set([
@@ -135,6 +139,8 @@ const OVERLAY_PLAN_CHANGES = new Set([
   'write-allowlist.mjs',
   // Deployed by the guarded overlay (staging run 40739554272; a REPLACE row of the production plan).
   'db-readonly-validate.mjs',
+  // Security audit finding 4 (2026-10-29): a REPLACE row of the production plan.
+  'check-reconciliation.mjs',
 ]);
 const assertSectionAcceptedIsMain = (apiRoot, name, accepted) => {
   const onMain = sha256(fs.readFileSync(path.join(apiRoot, name)));
