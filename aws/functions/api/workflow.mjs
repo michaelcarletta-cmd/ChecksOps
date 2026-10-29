@@ -277,6 +277,56 @@ const lookupWorkflowCheck = async (client, checkId) => {
   return { check: rows[0] };
 };
 
+// Transitions that move a check out of Review. A check filed from a homeowner's pre-claim upload
+// must carry a claim by then, so the homeowner's link can follow the claim from here on.
+const HOMEOWNER_CLAIM_LINK_ACTIONS = new Set(['start_endorsing', 'route_loss_draft', 'mark_ready_for_deposit']);
+
+const loadHomeownerUploadForCheck = async (client, check) => (await client.query(
+  `SELECT id, token_id, claim_id, amount_estimate
+   FROM public.homeowner_ledger_check_uploads
+   WHERE attached_check_id = $1::uuid AND tenant_id = $2::uuid
+   LIMIT 1`,
+  [check.id, check.tenant_id],
+)).rows[0] || null;
+
+// Mirrors the manual attach in homeowner.mjs: the homeowner's link joins the claim and the
+// timeline records it. Runs once per upload; a link already on a claim is never moved.
+const linkHomeownerUploadToClaim = async (client, upload, check) => {
+  if (upload.claim_id) return;
+  const claim = (await client.query(
+    `SELECT id, claim_number FROM public.claims WHERE id = $1::uuid AND org_id = $2::uuid LIMIT 1`,
+    [check.claim_id, check.tenant_id],
+  )).rows[0];
+  if (!claim) return;
+  const marked = (await client.query(
+    `UPDATE public.homeowner_ledger_check_uploads
+     SET claim_id = $2::uuid
+     WHERE id = $1::uuid AND claim_id IS NULL
+     RETURNING id`,
+    [upload.id, claim.id],
+  )).rows;
+  if (!marked.length) return;
+  if (upload.token_id) {
+    await client.query(
+      `UPDATE public.homeowner_ledger_tokens
+       SET claim_id = $2::uuid
+       WHERE id = $1::uuid AND tenant_id = $3::uuid AND claim_id IS NULL`,
+      [upload.token_id, claim.id, check.tenant_id],
+    );
+  }
+  await client.query(
+    `INSERT INTO public.homeowner_ledger_events (
+       tenant_id, claim_id, event_type, amount, actor_label, payload_json
+     ) VALUES ($1::uuid, $2::uuid, 'homeowner_upload_attached', $3, 'Staff', $4::jsonb)`,
+    [
+      check.tenant_id,
+      claim.id,
+      check.amount ?? upload.amount_estimate ?? null,
+      JSON.stringify({ upload_id: upload.id, check_id: check.id, claim_number: claim.claim_number }),
+    ],
+  );
+};
+
 const descriptiveFromBody = (body = {}) => {
   const out = {};
   for (const [column, max] of [
@@ -571,6 +621,16 @@ export const handleCheckTransition = async (event, deps = {}) => {
     }
     const notes = asText(body.review_notes || body.p_reviewer_notes, 2000);
     if (notes.error) return denied(spoof, { statusCode: 400, ...notes });
+    const homeownerUpload = HOMEOWNER_CLAIM_LINK_ACTIONS.has(action)
+      ? await loadHomeownerUploadForCheck(client, looked.check)
+      : null;
+    if (homeownerUpload && !looked.check.claim_id) {
+      return denied(spoof, {
+        statusCode: 409,
+        error: 'homeowner_upload_needs_claim',
+        message: 'Link this check to a claim first so the homeowner can follow it.',
+      });
+    }
     if (action === 'mark_ready_for_deposit') {
       const payees = await loadCheckPayees(client, looked.check.id, looked.check.tenant_id);
       const endorsements = await loadCheckEndorsements(client, looked.check.id, looked.check.tenant_id);
@@ -633,6 +693,9 @@ export const handleCheckTransition = async (event, deps = {}) => {
         }),
       ],
     );
+    if (homeownerUpload) {
+      await linkHomeownerUploadToClaim(client, homeownerUpload, looked.check);
+    }
     return okResult({
       mapping,
       claims,
