@@ -26,7 +26,22 @@ any table, column, view, policy, RLS setting, table grant, trigger or row. SQL 8
 not edited. No API, Lambda or SPA change is part of this file or its pins. No trigger is added, so
 the DB validator's public trigger count is not concerned.
 
-**Status:** not applied anywhere. The staging pin and the production pin are pending.
+**Staging executor refreshed (2026-10-29).** Inspect run 40947091811 found the live executor at
+`ODInv6cl…` without `sql/127_homeowner_portal_signing.sql`. Deploy run 40947474906 updated it to
+main's package (`wr7SyRLnmdIHOd+8oL5HSOWZKk1C2z27y3gN9HsepDo=`; "Verify live executor now carries
+main's package" passed).
+
+**Staging read-live (2026-10-29).** Run 40947834848 (main `f0264d9`): SQL 83's
+`aws_public_homeowner_ledger_endorse_capability(text, uuid)` and
+`aws_public_homeowner_pending_signatures(text)` present with SQL 83's bodies (state `different`),
+`aws_public_homeowner_document_portal_signer(text, uuid)` absent; every prerequisite present; the
+definer writes to `check_endorsements` and `signature_signers` possible; live
+`4b4af399a73a25e191d2f914cc074a3744c84fffbc8ce3e55f2adec2cf93dfe0` (the SQL 83 pre-state derived from SQL 83's
+bytes), `already_applied` false, `precondition_failures` `[]`. Recorded in the staging pin
+(`expected_live_definition_sha256`, `execute: true`, wave 26) under the owner's words of
+2026-10-29, "start the SQL 127 staging apply".
+
+**Status:** staging pin execute-authorized (wave 26); nothing applied yet; production pin pending.
 
 ## Fingerprint
 
