@@ -86,6 +86,7 @@ node scripts/deployment-guard/sql122-mortgage-desk-return-to-tenant-production-a
 node scripts/deployment-guard/sql123-checkalt-deposit-check-status-production-apply.mjs --inspect   # a Check Alt deposit moves its check to Deposited, a later rejection or return to Returned (ops/production-sql-123-apply.md)
 node scripts/deployment-guard/sql124-mortgage-desk-signature-and-reads-production-apply.mjs --inspect   # Mortgage Desk sends for signature, reads the check's thread, files and signature requests, posts timeline updates (ops/production-sql-124-apply.md)
 node scripts/deployment-guard/sql125-deposit-views-security-invoker-production-apply.mjs --inspect   # security_invoker on the four Supabase-era deposit views (ops/production-sql-125-apply.md)
+node scripts/deployment-guard/sql126-definer-reads-caller-gates-production-apply.mjs --inspect   # the Supabase-era SECURITY DEFINER reads check their caller themselves (ops/production-sql-126-apply.md)
 # Production SQL 71, 77-89 and 90-102 on the runner, one invocation (ops/production-sql-one-shot.md)
 node scripts/deployment-guard/production-sql-one-shot.mjs --migration sql80 --phase inspect ...
 node scripts/deployment-guard/verify-live.mjs --input path/to/live.json
