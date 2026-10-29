@@ -64,7 +64,9 @@ const READ_RPCS = new Set([
 // function runs: owner = platform owner only (the function reads every tenant), tenant =
 // the named tenant argument must pass aws_can_access_tenant (member or platform owner),
 // check = aws_can_access_check (owner tenant, active share target or platform owner),
-// self = only the caller's own user id unless platform owner.
+// self = only the caller's own user id unless platform owner, contractor = the caller's own
+// contractor profile or a cross-tenant reader (master or platform owner), the rule the
+// contractor_profiles select policy applies to a profile's owner.
 export const RPC_ACCESS_GATES = Object.freeze({
   get_all_checks_safety_net: { owner: true },
   get_stuck_checks: { owner: true },
@@ -81,7 +83,13 @@ export const RPC_ACCESS_GATES = Object.freeze({
   aws_tenant_referral_summary: { tenant: '_tenant_id' },
   get_check_claim_settlement: { check: 'p_check_id' },
   has_permission: { self: '_user_id' },
+  contractor_verification_status: { contractor: 'p_contractor_id' },
 });
+
+export const CONTRACTOR_GATE_SQL = `SELECT (
+  COALESCE(public.aws_is_cross_tenant_reader(), false)
+  OR EXISTS (SELECT 1 FROM public.contractor_profiles cp WHERE cp.id = $1::uuid AND cp.user_id = auth.uid())
+) AS ok`;
 
 const GATE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -96,7 +104,7 @@ export const rpcAccessDenial = async (client, name, args, applicationUserId) => 
     return typeof value === 'string' && GATE_UUID.test(value) ? value : null;
   };
   if (gate.owner) return (await isOwner()) ? null : forbidden;
-  const key = gate.tenant || gate.check || gate.self;
+  const key = gate.tenant || gate.check || gate.self || gate.contractor;
   const id = uuidArg(key);
   if (!id) return { ok: false, statusCode: 400, error: 'invalid_rpc_args', message: `${key} must be a uuid`, name };
   if (gate.self) {
@@ -105,7 +113,9 @@ export const rpcAccessDenial = async (client, name, args, applicationUserId) => 
   }
   const sql = gate.tenant
     ? 'SELECT COALESCE(public.aws_can_access_tenant($1::uuid), false) AS ok'
-    : 'SELECT COALESCE(public.aws_can_access_check($1::uuid), false) AS ok';
+    : gate.check
+      ? 'SELECT COALESCE(public.aws_can_access_check($1::uuid), false) AS ok'
+      : CONTRACTOR_GATE_SQL;
   return (await client.query(sql, [id])).rows[0]?.ok === true ? null : forbidden;
 };
 
