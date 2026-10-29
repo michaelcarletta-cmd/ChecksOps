@@ -72,7 +72,23 @@ Not checked: the screens in step 1 (tenant admin and platform owner on staging);
 test logins for those roles in this workstream. The caller rules are covered by
 `sql126-definer-reads-caller-gates-pg` on PostgreSQL 16, not by a signed-in staging check.
 
-**Status:** applied to staging (wave 25); production pin pending; not applied to production.
+**Production inspect (2026-10-29).** Read-only `--inspect` through SSM
+`a98a1794-509b-4689-ada4-1a35f32bbdaa` on `i-0c35557c4e5385406`, main `56a748c` (tarball sha256
+`26e22d758d452b17a87ffe0e5572bad38f74d009ca83c66dc6d94dd1ec4c4321`, transfer run 40924642393, migration
+source `398fe16c…` == pin), connected as `checksops_admin`: the thirteen functions present, each
+`different`; every prerequisite present; live
+`9ebc7455de1e0e467eabf59e697899bc64dc360efb8c34a3e00106e68b7754ed`, `already_applied` false,
+`precondition_failures` `[]`. EXECUTE on every one is `PUBLIC`, `checksops` and the owner: production's
+pre-state is staging's (the supabase bodies) plus a `checksops` EXECUTE grant that staging's restore did not
+carry. The engine derives `9ebc7455…` from the supabase bodies with that ACL (asserted in
+`aws/tests/release-sql126-executor.test.mjs`). SQL 126 grants `checksops` EXECUTE itself, so production
+reaches the same intended state as staging. The runner was started for the run and stopped after it
+(start requested 17:48:44 UTC, stopped 17:50:05 UTC). Recorded in the production pin with the staging apply
+as its staging acceptance and `execute: true` under the owner's words of 2026-10-29, "open the SQL 126
+production pin PR". The owner merges the pin change; the apply still needs the owner's run-time approval
+and runs only after that merge is on main and staged.
+
+**Status:** applied to staging (wave 25); production pin execute-authorized; not applied to production.
 
 ## Fingerprint
 
