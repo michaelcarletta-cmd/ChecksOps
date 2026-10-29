@@ -88,7 +88,23 @@ as its staging acceptance and `execute: true` under the owner's words of 2026-10
 production pin PR". The owner merges the pin change; the apply still needs the owner's run-time approval
 and runs only after that merge is on main and staged.
 
-**Status:** applied to staging (wave 25); production pin execute-authorized; not applied to production.
+**Production apply (2026-10-29).** After the pin change (#1394, merged green on the owner's words "merge
+1394 when green"), transfer run 40929470394 staged main `67a0ed2` (tarball sha256
+`e787b68a7bd5ed5eaf6850664ea9cc72674af78e2b70909f243ad7a7041123d1`). One-shot `--phase inspect` (SSM
+`2d484262-acf7-40ac-8df4-ad5a4ec566c5`: live `9ebc7455…`, `precondition_failures` `[]`, contracts 4/4, 6/6
+and 43/43) then `--phase apply` run `423ed639-30de-4aa0-99a0-981f1aeeb8a6` through SSM
+`9edcb2f7-365f-47cb-a395-17d033b4e179`, workstream `prod-sql126-definer-reads-caller-gates-20261029`,
+under the owner's words "apply SQL 126 in production" (passed verbatim): every step ok; receipt
+`9ebc7455…` → `3aebf853a375d7a668acf62c8877a7b6a0d5f791b73121b591acd9046b0510b2` (intended), unrelated catalog
+`afd0eb25…`, result `applied`; post-apply inspect `already_applied` true, `precondition_failures` `[]`; a
+separate read-only inspect (SSM `b0915da8-e5d7-41ea-9ccc-4cd819c76465`) reported the thirteen functions
+`intended` with EXECUTE `checksops` and the owner. SSM's output limit cut the apply's JSON after its summary;
+the pin's `applied` block takes every field from that summary and names what it could not capture (the
+apply run's contract counts, the receipt's unrelated-catalog counts, the per-function states). Runner
+(finding C): started for the run and stopped after it, 18:20:01 to 18:21:44 UTC; it is stopped.
+
+**Status:** applied to staging (wave 25) and to production (2026-10-29); the production pin is retired
+(`execute: false`). Security audit finding 4 is closed in production (API and database).
 
 ## Fingerprint
 
