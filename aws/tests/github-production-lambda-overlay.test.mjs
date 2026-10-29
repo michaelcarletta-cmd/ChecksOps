@@ -40,6 +40,8 @@ const SECURITY_HARDENING_APPLIED_REL = 'aws/tests/fixtures/production-security-h
 const HOMEOWNER_UPLOAD_STATUS_APPLIED_REL = 'aws/tests/fixtures/production-homeowner-upload-status-applied-manifest-2026-10-29.json';
 // Homeowner timeline link (2026-10-29): planned REPLACE of workflow.mjs from the cash-jobs applied bytes.
 const HOMEOWNER_TIMELINE_LINK_REL = 'aws/tests/fixtures/production-homeowner-timeline-link-manifest-2026-10-29.json';
+// Homeowner timeline link and endorsement email, applied in production 2026-10-29 (workflow.mjs, then endorsement-parity.mjs).
+const TIMELINE_ENDORSEMENT_APPLIED_REL = 'aws/tests/fixtures/production-homeowner-timeline-endorsement-applied-manifest-2026-10-29.json';
 function repoModules(dir = API, prefix = '') {
   const out = {};
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -2689,10 +2691,10 @@ test('Delete Check: workflow.mjs replaced the release 2026-10-17 bytes; producti
   assert.deepEqual(applied.members[MEMBER], { live_sha256: LIVE, accepted_sha256: LIVE, operation: 'replace', previous_manifest: MANIFEST_REL });
   // workflow.mjs moved on to the cash-job check link (its own test below), whose REPLACE started from
   // these applied bytes and was applied 2026-10-28 (production run 40617806077): they are no longer live.
-  // The plan row has since moved on again, to the homeowner timeline link (its own test below).
+  // The plan row has since moved on again, to the homeowner timeline link (its own test below), now applied.
   const row = PLAN.members[MEMBER];
   assert.equal(row.operation, 'replace');
-  assert.equal(row.manifest, HOMEOWNER_TIMELINE_LINK_REL);
+  assert.equal(row.manifest, TIMELINE_ENDORSEMENT_APPLIED_REL);
   assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, 'aws/tests/fixtures/production-cash-jobs-check-link-manifest-2026-10-27.json'), 'utf8')).members[MEMBER].live_sha256, LIVE);
   assert.notEqual(row.expected_live_sha256, LIVE);
   assert.notEqual(row.accepted_sha256, LIVE);
@@ -2728,9 +2730,10 @@ test('Cash jobs: workflow.mjs replaced the applied Delete Check bytes with the c
   assert.equal(appliedManifest.deploy_authorized, false);
   assert.match(appliedManifest.authorization, /^Record only/);
   assert.deepEqual(appliedManifest.members, { [MEMBER]: { live_sha256: accepted, accepted_sha256: accepted, operation: 'replace', previous_manifest: MANIFEST_REL } });
-  // The row now follows the homeowner timeline link, whose REPLACE starts from these applied bytes.
+  // The row moved on to the homeowner timeline link, whose REPLACE started from these applied bytes
+  // and was applied 2026-10-29 (production run 40938518776).
   const row = PLAN.members[MEMBER];
-  assert.deepEqual(row, { operation: 'replace', accepted_sha256: sha(`aws/functions/api/${MEMBER}`), expected_live_sha256: accepted, sql_before: SQL121_FILE, manifest: HOMEOWNER_TIMELINE_LINK_REL });
+  assert.deepEqual(row, { operation: 'replace', accepted_sha256: sha(`aws/functions/api/${MEMBER}`), expected_live_sha256: sha(`aws/functions/api/${MEMBER}`), sql_before: SQL121_FILE, manifest: TIMELINE_ENDORSEMENT_APPLIED_REL });
   assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, HOMEOWNER_TIMELINE_LINK_REL), 'utf8')).members[MEMBER].previous_manifest, APPLIED_REL);
   // SQL 121 is applied in staging (run 40591140684) and recorded live in production from its applied pin
   // (one-shot run 0ba96971, SSM 6bfda4a6, #1321).
@@ -2744,11 +2747,11 @@ test('Cash jobs: workflow.mjs replaced the applied Delete Check bytes with the c
   assert.ok(pre.evidence.includes('#1321'));
   assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
   const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
-  // Inspect takes the applied bytes as the next REPLACE's starting point; the pre-apply bytes are no
-  // longer an accepted live state.
-  const done = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: accepted }) });
-  assert.equal(done.state, 'READY');
-  assert.equal(done.mutation, false);
+  // Neither these applied bytes nor the pre-apply bytes are an accepted live state any more.
+  await assert.rejects(
+    run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: accepted }) }),
+    (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+  );
   await assert.rejects(
     run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: BEFORE }) }),
     (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
@@ -3276,13 +3279,21 @@ test('Homeowner timeline link: workflow.mjs REPLACE from the cash-jobs applied b
   assert.match(manifest.notes, /homeowner_upload_needs_claim/);
   assert.deepEqual(manifest.members, { [MEMBER]: { live_sha256: LIVE, accepted_sha256: accepted, operation: 'replace', previous_manifest: PREVIOUS } });
   assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, PREVIOUS), 'utf8')).members[MEMBER].accepted_sha256, LIVE);
-  assert.deepEqual(PLAN.members[MEMBER], { operation: 'replace', accepted_sha256: accepted, expected_live_sha256: LIVE, sql_before: SQL121_FILE, manifest: HOMEOWNER_TIMELINE_LINK_REL });
+  // Applied 2026-10-29 (production run 40938518776): the row records the accepted bytes as live.
+  assert.deepEqual(PLAN.members[MEMBER], { operation: 'replace', accepted_sha256: accepted, expected_live_sha256: accepted, sql_before: SQL121_FILE, manifest: TIMELINE_ENDORSEMENT_APPLIED_REL });
   assert.match(PLAN.notes, /Homeowner timeline link \(2026-10-29\)/);
   assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
   const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
-  const ready = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: LIVE }) });
+  // The plan before this record took the pre-apply bytes as ready.
+  const pre = structuredClone(PLAN);
+  pre.members[MEMBER].expected_live_sha256 = LIVE;
+  const ready = await run(inspect, { root: ROOT, plan: pre, inspectLive: liveFor(MEMBER, { sha256: LIVE, plan: pre }) });
   assert.equal(ready.state, 'READY');
   assert.equal(ready.mutation, false);
+  await assert.rejects(
+    run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: LIVE }) }),
+    (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+  );
   const done = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: accepted }) });
   assert.equal(done.state, 'ALREADY_ACCEPTED');
   await assert.rejects(
@@ -3298,7 +3309,8 @@ test('Endorsement email to every recipient: endorsement-parity.mjs replaces the 
   const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, MANIFEST_REL), 'utf8'));
   const accepted = sha(`aws/functions/api/${MEMBER}`);
   assert.match(fs.readFileSync(path.join(API, MEMBER), 'utf8'), /isProductionEmailEnv\(\)\n  \|\| String\(process\.env\.AWS_ENDORSEMENT_RESEND_ALLOW_ANY_RECIPIENT/);
-  assert.deepEqual(PLAN.members[MEMBER], { operation: 'replace', accepted_sha256: accepted, expected_live_sha256: LIVE, sql_before: null, manifest: MANIFEST_REL });
+  // Applied 2026-10-29 (production run 40939753926): the row records the accepted bytes as live.
+  assert.deepEqual(PLAN.members[MEMBER], { operation: 'replace', accepted_sha256: accepted, expected_live_sha256: accepted, sql_before: null, manifest: TIMELINE_ENDORSEMENT_APPLIED_REL });
   assert.equal(manifest.deploy_authorized, false);
   assert.match(manifest.authorization, /^Pending owner review/);
   assert.deepEqual(manifest.members, { [MEMBER]: { live_sha256: LIVE, accepted_sha256: accepted, operation: 'replace' } });
@@ -3314,10 +3326,41 @@ test('Endorsement email to every recipient: endorsement-parity.mjs replaces the 
   assert.ok(PLAN.order.indexOf(MEMBER) > PLAN.order.indexOf('email-policy.mjs'));
   assert.deepEqual(PLAN.order.slice(-3), ['providers/production/moov-wallet-fund.mjs', 'providers/production/moov-send.mjs', 'providers.mjs']);
   const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
-  assert.equal((await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER) })).state, 'READY');
+  // The plan before this record took the pre-apply bytes as ready; now only the applied bytes are accepted.
+  const pre = structuredClone(PLAN);
+  pre.members[MEMBER].expected_live_sha256 = LIVE;
+  assert.equal((await run(inspect, { root: ROOT, plan: pre, inspectLive: liveFor(MEMBER, { sha256: LIVE, plan: pre }) })).state, 'READY');
   assert.equal((await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: accepted }) })).state, 'ALREADY_ACCEPTED');
-  await assert.rejects(
-    run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: 'e'.repeat(64) }) }),
-    (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
-  );
+  for (const stale of [LIVE, 'e'.repeat(64)]) {
+    await assert.rejects(
+      run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: stale }) }),
+      (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+    );
+  }
+});
+
+test('Homeowner timeline and endorsement email record: workflow.mjs then endorsement-parity.mjs applied 2026-10-29, production runs 40938518776 and 40939753926', () => {
+  const record = JSON.parse(fs.readFileSync(path.join(ROOT, TIMELINE_ENDORSEMENT_APPLIED_REL), 'utf8'));
+  assert.equal(record.workstream_id, 'homeowner-timeline-endorsement-applied');
+  assert.equal(record.deploy_authorized, false);
+  assert.match(record.authorization, /^Record only/);
+  const planned = {
+    'workflow.mjs': HOMEOWNER_TIMELINE_LINK_REL,
+    'endorsement-parity.mjs': 'aws/tests/fixtures/production-endorsement-any-recipient-manifest-2026-10-29.json',
+  };
+  assert.deepEqual(Object.keys(record.members), Object.keys(planned));
+  for (const [member, previous] of Object.entries(planned)) {
+    const accepted = sha(`aws/functions/api/${member}`);
+    assert.deepEqual(record.members[member], { live_sha256: accepted, accepted_sha256: accepted, operation: 'replace', previous_manifest: previous });
+    assert.equal(PLAN.members[member].expected_live_sha256, accepted, member);
+    assert.equal(PLAN.members[member].manifest, TIMELINE_ENDORSEMENT_APPLIED_REL, member);
+    // The planning manifest keeps the pre-apply state.
+    assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, previous), 'utf8')).members[member].accepted_sha256, accepted, member);
+  }
+  for (const evidence of ['40936679416', '40938405913', '40938105920', '40938518776', 'BkxVa3fQ5g5SfISQEqkCQd77AVcVeJTZeeFBIKjKD14=', 'a51cb382-0523-469e-8ea9-ea91d9123b62',
+    '40939518620', '40939644697', '40939753926', 'okmC+E2goawrpRO3xMHr15xmQMfJXxP2Iwk9UVjuykg=', '40cfe898-d1fc-424c-b9fb-6ac7956d9eb4',
+    'DEPLOY workflow.mjs TO PRODUCTION', 'DEPLOY endorsement-parity.mjs TO PRODUCTION']) {
+    assert.ok(record.notes.includes(evidence), evidence);
+  }
+  for (const runId of ['40938518776', '40939753926']) assert.match(PLAN.notes, new RegExp(runId));
 });
