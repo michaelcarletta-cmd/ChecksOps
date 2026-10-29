@@ -10,11 +10,12 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-import { RPC_ACCESS_GATES, handleDataRpc, rpcAccessDenial } from '../functions/api/data.mjs';
+import { CONTRACTOR_GATE_SQL, RPC_ACCESS_GATES, handleDataRpc, rpcAccessDenial } from '../functions/api/data.mjs';
 import { LOOKUP_MAPPING_SQL } from '../functions/api/identity.mjs';
 import {
   CHECK_A, MEMBER_A, MEMBER_B, PLATFORM_OWNER, TENANT_A, TENANT_B, pgSkipReason, releaseFixture,
 } from './helpers/release-sql-pg.mjs';
+import { policyBlock } from './helpers/stakeholder-policies-pg.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const APP_ID = 'abd3c2a0-6dc0-4680-92dd-a013e1141c91';
@@ -34,7 +35,7 @@ const event = (name, args) => ({
 });
 
 /** A client whose answers to the gate queries are given; records whether the RPC itself ran. */
-const mockClient = ({ owner = false, tenantAccess = false, checkAccess = false } = {}) => {
+const mockClient = ({ owner = false, tenantAccess = false, checkAccess = false, contractorAccess = false } = {}) => {
   const queries = [];
   return {
     queries,
@@ -47,6 +48,7 @@ const mockClient = ({ owner = false, tenantAccess = false, checkAccess = false }
       if (sql === LOOKUP_MAPPING_SQL) {
         return { rows: [{ application_user_id: APP_ID, cognito_sub: COGNITO_SUB, email: 'tenant-admin@example.invalid', status: 'active' }] };
       }
+      if (sql === CONTRACTOR_GATE_SQL) return { rows: [{ ok: contractorAccess }] };
       if (sql.includes('public.is_platform_owner()')) return { rows: [{ is_owner: owner }] };
       if (sql.includes('aws_can_access_tenant')) return { rows: [{ ok: tenantAccess }] };
       if (sql.includes('aws_can_access_check')) return { rows: [{ ok: checkAccess }] };
@@ -116,6 +118,20 @@ test('has_permission answers for the caller\'s own user id; another user\'s only
   assert.equal((await call(owner, 'has_permission', { _user_id: OTHER_USER, _permission: 'manage_users' })).statusCode, 200);
 });
 
+test('contractor_verification_status runs only for the caller\'s own profile or a cross-tenant reader', async () => {
+  const PROFILE = 'c0000000-0000-4000-8000-000000000001';
+  const yes = mockClient({ contractorAccess: true });
+  assert.equal((await call(yes, 'contractor_verification_status', { p_contractor_id: PROFILE })).statusCode, 200);
+  assert.deepEqual(yes.queries.find((q) => q.sql === CONTRACTOR_GATE_SQL).params, [PROFILE]);
+  const no = mockClient({ contractorAccess: false });
+  const refused = await call(no, 'contractor_verification_status', { p_contractor_id: PROFILE });
+  assert.equal(refused.statusCode, 403);
+  assert.equal(no.ran('contractor_verification_status'), false);
+  const bad = mockClient({ contractorAccess: true });
+  assert.equal((await call(bad, 'contractor_verification_status', { p_contractor_id: 'not-a-uuid' })).statusCode, 400);
+  assert.equal(bad.ran('contractor_verification_status'), false);
+});
+
 test('every gated RPC is a read RPC, and every READ_RPCS entry with a tenant, check or user argument is gated', () => {
   const src = fs.readFileSync(path.join(ROOT, 'aws/functions/api/data.mjs'), 'utf8');
   const block = src.slice(src.indexOf('const READ_RPCS = new Set(['), src.indexOf(']);', src.indexOf('const READ_RPCS = new Set([')));
@@ -126,7 +142,6 @@ test('every gated RPC is a read RPC, and every READ_RPCS entry with a tenant, ch
     get_total_unread_check_messages: 'SQL migration (audit finding: unread counts across tenants)',
     get_check_unread_counts: 'SQL migration (audit finding: unread counts across tenants)',
     get_my_tenant_partner_codes: 'scoped to auth.uid() memberships in the function',
-    contractor_verification_status: 'contractor id, no tenant or global role branch',
     list_partner_payout_options: 'checks the caller\'s membership of the check\'s tenant in the function',
     lookup_tenant_by_partner_code: 'partner code lookup by design',
     is_approval_required: 'platform setting',
@@ -173,6 +188,59 @@ test('PostgreSQL 16: the gate SQL refuses a tenant admin holding user_roles.admi
         for (const name of GLOBAL) assert.equal(await rpcAccessDenial(api, name, {}, PLATFORM_OWNER), null, name);
         assert.equal(await rpcAccessDenial(api, 'get_tenant_users_with_profiles', { _tenant_id: TENANT_B }, PLATFORM_OWNER), null);
         assert.equal(await rpcAccessDenial(api, 'has_permission', { _user_id: MEMBER_A, _permission: 'x' }, PLATFORM_OWNER), null);
+      });
+    } finally {
+      await api.end().catch(() => {});
+    }
+  } finally {
+    await db.admin.end().catch(() => {});
+    db.server.stop();
+  }
+});
+
+test('PostgreSQL 16: contractor_verification_status is allowed for the profile\'s own user and the platform owner, refused for anyone else', { skip: skip || false }, async () => {
+  const { default: pg } = await import('pg');
+  const PROFILE_A = 'c0000000-0000-4000-8000-00000000000a';
+  const PROFILE_B = 'c0000000-0000-4000-8000-00000000000b';
+  const UNKNOWN = 'c0000000-0000-4000-8000-0000000000ff';
+  const db = await releaseFixture(pg, 'pg-rpc-contractor-gate-', 63420, {
+    extra: [
+      `ALTER TABLE public.contractor_profiles
+         ADD COLUMN is_directory_listed boolean NOT NULL DEFAULT false,
+         ADD COLUMN directory_opt_in boolean NOT NULL DEFAULT false`,
+      policyBlock('12_final_select_policies.sql', 'aws_select_contractor_profiles'),
+      // Profile B is listed in the directory: visible to everyone, its status still is not.
+      `INSERT INTO public.contractor_profiles (id, user_id, is_directory_listed, directory_opt_in) VALUES
+         ('${PROFILE_A}', '${MEMBER_A}', false, false), ('${PROFILE_B}', '${MEMBER_B}', true, true)`,
+      // Member A also holds global user_roles admin and staff: not a cross-tenant reader.
+      `INSERT INTO public.user_roles (user_id, role) VALUES ('${MEMBER_A}', 'admin'), ('${MEMBER_A}', 'staff')`,
+    ],
+  });
+  try {
+    const api = await db.connectAs('checksops');
+    const as = async (user, fn) => {
+      await api.query('BEGIN');
+      try {
+        await api.query("SELECT set_config('request.app_user_id', $1, true)", [user]);
+        return await fn();
+      } finally {
+        await api.query('ROLLBACK');
+      }
+    };
+    const denial = async (user, id) => (await rpcAccessDenial(api, 'contractor_verification_status', { p_contractor_id: id }, user))?.error ?? null;
+    try {
+      await as(MEMBER_A, async () => {
+        assert.equal(await denial(MEMBER_A, PROFILE_A), null);
+        assert.equal(await denial(MEMBER_A, PROFILE_B), 'rpc_forbidden');
+        assert.equal(await denial(MEMBER_A, UNKNOWN), 'rpc_forbidden');
+      });
+      await as(MEMBER_B, async () => {
+        assert.equal(await denial(MEMBER_B, PROFILE_B), null);
+        assert.equal(await denial(MEMBER_B, PROFILE_A), 'rpc_forbidden');
+      });
+      await as(PLATFORM_OWNER, async () => {
+        assert.equal(await denial(PLATFORM_OWNER, PROFILE_A), null);
+        assert.equal(await denial(PLATFORM_OWNER, PROFILE_B), null);
       });
     } finally {
       await api.end().catch(() => {});
