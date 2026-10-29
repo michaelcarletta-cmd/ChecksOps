@@ -265,6 +265,26 @@ const getObjectBytes = async (deps, key) => {
   };
 };
 
+/**
+ * The raster types /branding/logo serves from the app origin, each with its file signature.
+ * Anything else (image/svg+xml above all: a script in an SVG served from checksops.com runs
+ * on the app origin) is not served, and stored bytes are never relabelled.
+ */
+const BRANDING_LOGO_TYPES = Object.freeze({
+  'image/png': (b) => b.length >= 8 && b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])),
+  'image/jpeg': (b) => b.length >= 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff,
+  'image/webp': (b) => b.length >= 12 && b.toString('latin1', 0, 4) === 'RIFF' && b.toString('latin1', 8, 12) === 'WEBP',
+  'image/gif': (b) => b.length >= 6 && /^GIF8[79]a$/.test(b.toString('latin1', 0, 6)),
+});
+
+/** The type to serve a stored logo as, or null: its stored type must be a served raster type and its bytes must be that type. */
+export const servableBrandingLogoType = (contentType, bytes) => {
+  const declared = String(contentType || '').split(';')[0].trim().toLowerCase();
+  const type = declared === 'image/jpg' ? 'image/jpeg' : declared;
+  const matches = BRANDING_LOGO_TYPES[type];
+  return matches && Buffer.isBuffer(bytes) && matches(bytes) ? type : null;
+};
+
 export const handleBrandingLogo = async (event, deps = {}) => {
   const query = event?.queryStringParameters || {};
   const rawPath = String(event?.rawPath || event?.requestContext?.http?.path || '');
@@ -290,11 +310,15 @@ export const handleBrandingLogo = async (event, deps = {}) => {
       return { ok: false, statusCode: 404, error: 'object_not_in_s3', spoofFieldsIgnored: spoof };
     }
     const object = await getObjectBytes(deps, key);
+    const contentType = servableBrandingLogoType(object.contentType, object.bytes);
+    if (!contentType) {
+      return { ok: false, statusCode: 404, error: 'logo_type_not_served', spoofFieldsIgnored: spoof };
+    }
     return {
       ok: true,
       statusCode: 200,
       binary: true,
-      contentType: /^image\//i.test(object.contentType) ? object.contentType : 'image/png',
+      contentType,
       body: object.bytes,
       tenantId: tenantId.toLowerCase(),
       path: objectPath,
