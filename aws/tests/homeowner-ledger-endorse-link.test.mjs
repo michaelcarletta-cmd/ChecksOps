@@ -373,8 +373,9 @@ test('a sole insured whose payee name contradicts the homeowner is not actionabl
   );
   assert.equal(sanitized[0].parties[0].can_sign, false);
   assert.equal(sanitized[0].parties[0].sign_url, null);
-  // Without a contradicting payee name, the sole sent insured is actionable;
-  // an unrequested ('pending') one never is.
+  // Without a contradicting payee name, the sole sent insured is actionable.
+  // SQL 127 (owner decision 2026-10-29, the claim portal link is enough): an
+  // unrequested ('pending') one is too; 'manual_required' never is.
   const blank = sanitizePendingEndorsementsForHomeowner(
     [{ ...pending[0], parties: [{ ...pending[0].parties[0], payee_name: '' }] }],
     { name: 'Ada Lovelace', email: 'invite@example.com' },
@@ -386,7 +387,14 @@ test('a sole insured whose payee name contradicts the homeowner is not actionabl
     { name: 'Ada Lovelace', email: 'invite@example.com' },
     counts,
   );
-  assert.equal(unrequested[0].parties[0].can_sign, false);
+  assert.equal(unrequested[0].parties[0].can_sign, true);
+  assert.equal(unrequested[0].parties[0].sign_url, null);
+  const manual = sanitizePendingEndorsementsForHomeowner(
+    [{ ...pending[0], parties: [{ ...pending[0].parties[0], payee_name: 'Ada Lovelace', status: 'manual_required' }] }],
+    { name: 'Ada Lovelace', email: 'invite@example.com' },
+    counts,
+  );
+  assert.equal(manual[0].parties[0].can_sign, false);
 });
 
 test('multiple unmatched insureds from SQL 82 pending_endorsements fail closed', () => {
