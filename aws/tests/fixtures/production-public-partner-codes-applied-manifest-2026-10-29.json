@@ -1,0 +1,15 @@
+{
+  "workstream_id": "public-partner-codes-applied",
+  "authorization": "Record only (2026-10-29): the bytes below are live. Nothing is planned or authorized by this manifest; any later change to this member needs its own manifest, staging acceptance and owner approval.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Public partner codes (#1411, security audit finding 9, merged as main d2a20b9ce), applied 2026-10-29 through the guarded overlay path to checksops-production-prep-api on the owner's approval (the workflow refuses an apply unless approval_phrase is exactly \"DEPLOY data.mjs TO PRODUCTION\"). data.mjs e2415f90 -> c652e317 on \"DEPLOY data.mjs TO PRODUCTION\": staging inspect run 40962722955 on main d2a20b9ce (staging live e2415f90, member PRESENT, CodeSha256 US0hDuVJBs39Mi4StyrmiVQQyY7BTaUISEQL8h2t5qc=, RevisionId fe305f76-e049-4e01-bfd3-4cbedc4615b4), staging apply run 40962845158 on main d2a20b9ce (the staging acceptance; writer update CodeSha256 W+UPxMWbyAS0tFNdlBQxKBcGBM7juAS8W3VN0og3oRA=, RevisionId 23047832-509b-4654-ac63-89d2327af062; staging /health, /db-health and /db-readonly-validate 200); after it, an anonymous POST /data/query for tenants_public on staging returned 11 tenants with no partner_code (select *), and select or filter by partner_code answered 403 secret_column_denied; production inspect run 40962982248 READY on main d2a20b9ce, member PRESENT e2415f90, at CodeSha256 US0hDuVJBs39Mi4StyrmiVQQyY7BTaUISEQL8h2t5qc=, RevisionId ea23b00d-4d47-4432-a159-876e34cde47c (the contractor verification gate verify), /health and /db-health 200; production apply run 40963109952 on main d2a20b9cefcb1743a83029a669d9dbf25cc31991, writer update CodeSha256 W+UPxMWbyAS0tFNdlBQxKBcGBM7juAS8W3VN0og3oRA= (RevisionId c5960b76-7b23-48ac-a73b-e71ebc8c66a7, LastUpdateStatus InProgress), \"Verify live member is the accepted bytes\" VERIFIED, member PRESENT c652e317, at CodeSha256 W+UPxMWbyAS0tFNdlBQxKBcGBM7juAS8W3VN0og3oRA=, RevisionId 9fa0f26f-4edd-4302-bfef-742331676253; public production smoke /health and /db-health 200. The member's sha256 is derived from main's bytes and equals the memberSha256 the verify step read. The row records the applied bytes as live_sha256 and accepted_sha256 and chains to the manifest that planned them (previous_manifest), which keeps the pre-apply state. GitHub returned only the tail of the apply log, so the apply run's own inspect block and receipt were not read; the pre-apply state is the inspect run just before it. The anonymous check was not repeated against production (this session cannot reach checksops.com). No rebuild inspect followed, so the live package is not compared with a candidate zip of main.",
+  "members": {
+    "data.mjs": {
+      "live_sha256": "c652e317e2de5a14b32bf6aecfc5b76438b2ff23d6c3a282f3c1cbaedf115fe0",
+      "accepted_sha256": "c652e317e2de5a14b32bf6aecfc5b76438b2ff23d6c3a282f3c1cbaedf115fe0",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-public-partner-codes-manifest-2026-10-29.json"
+    }
+  }
+}
