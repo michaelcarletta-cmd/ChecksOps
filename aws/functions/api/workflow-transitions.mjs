@@ -6,6 +6,12 @@
  */
 
 export const INTERNAL_CREATE_STATUS = 'uploaded';
+/**
+ * Homeowner Uploads filed checks as 'pending' until 2026-10-29; they now file as 'uploaded'
+ * like tenant uploads. Wherever 'uploaded' may start a transition, 'pending' may too, so the
+ * checks already filed that way follow the same rules.
+ */
+export const LEGACY_HOMEOWNER_UPLOAD_STATUS = 'pending';
 export const INTERNAL_CREATE_STAGE = 'review';
 export const READY_STATUS = 'approved_for_deposit';
 export const READY_STAGE = 'ready_for_deposit';
@@ -35,7 +41,7 @@ export const PROVIDER_OR_FINANCIAL_ACTIONS = new Set([
 export const TRANSITIONS = {
   start_review: {
     action: 'start_review',
-    fromStatus: ['uploaded'],
+    fromStatus: ['uploaded', LEGACY_HOMEOWNER_UPLOAD_STATUS],
     toStatus: 'needs_review',
     toStage: 'review',
     requiredRole: 'tenant_member',
@@ -46,7 +52,7 @@ export const TRANSITIONS = {
   },
   start_endorsing: {
     action: 'start_endorsing',
-    fromStatus: ['uploaded', 'needs_review', 'ocr_complete', 'manual_review_required'],
+    fromStatus: ['uploaded', LEGACY_HOMEOWNER_UPLOAD_STATUS, 'needs_review', 'ocr_complete', 'manual_review_required'],
     toStatus: 'endorsements_in_progress',
     toStage: 'endorsing',
     requiredRole: 'tenant_member',
@@ -59,6 +65,7 @@ export const TRANSITIONS = {
     action: 'route_loss_draft',
     fromStatus: [
       'uploaded',
+      LEGACY_HOMEOWNER_UPLOAD_STATUS,
       'needs_review',
       'manual_review_required',
       'endorsements_complete',
@@ -97,6 +104,7 @@ export const TRANSITIONS = {
     action: 'return_to_review',
     fromStatus: [
       'uploaded',
+      LEGACY_HOMEOWNER_UPLOAD_STATUS,
       'needs_review',
       'endorsements_in_progress',
       'approved_for_deposit',

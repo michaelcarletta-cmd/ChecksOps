@@ -1147,7 +1147,9 @@ test('live reconciliation 2026-10-19: ten members expect the bytes inspect run 3
   assert.match(PLAN.notes, /inspect run 39179890402/);
   assert.equal(Object.keys(RECONCILED).length, 10);
   // homeowner.mjs moved on: its c51ea27a release bytes went live (inspect run 39828391789,
-  // ALREADY_ACCEPTED) and the plan row now replaces them for the pre-claim upload (next tests).
+  // ALREADY_ACCEPTED) and the plan row replaced them for the pre-claim upload (1fa4950c, observed live by
+  // the production rebuild inspect run 40741101459); the row now replaces those for the homeowner upload
+  // status (next tests).
   // workflow-rpc.mjs moved on the same way: its fee-branch 79b7e4de bytes went live (inspect run
   // 39935902507, ALREADY_ACCEPTED), the plan row replaced them for the Refer & Earn routes, and production
   // run 39942182669 applied those (6902fe6f); production run 40618897308 then replaced them for the
@@ -1156,7 +1158,7 @@ test('live reconciliation 2026-10-19: ten members expect the bytes inspect run 3
   // the 2026-10-21 production rebuilds, and production runs 40189236116 and 40189657073 replaced them
   // for the stakeholder settings edit (1fc4a43e and e1227c96, now recorded live).
   const MOVED_ON = {
-    'homeowner.mjs': { accepted: 'c51ea27a37a72b18aed7881ae349212257b790e6ff400cbe675949574504a80c', liveNow: 'c51ea27a37a72b18aed7881ae349212257b790e6ff400cbe675949574504a80c' },
+    'homeowner.mjs': { accepted: 'c51ea27a37a72b18aed7881ae349212257b790e6ff400cbe675949574504a80c', liveNow: '1fa4950c42bf26ff70bc04acd05ca8c784a970d2573178599859c8d682ce5849' },
     'write-allowlist.mjs': { accepted: '5f84c5634190ebade1ee6ae10d3420e09548efac78f2a72eb98886d2f0341189', liveNow: '1fc4a43eda4455d406edd4566d7a2bada352d241e88ba01cb4ff2cd3afb2884a' },
     'write-check-workflow.mjs': { accepted: 'fa2c6aef0e4e6c8713f60a24804309b4cf7f9e4b9d69a379498ef9acaf621fc2', liveNow: 'e1227c967906496519db1fe9c996514c03ca04a79378ff77e93b92ecf470544a' },
     'workflow-rpc.mjs': { accepted: '79b7e4de653eb9d391afca9d27769b3b7c8e3d10d67af43e829ee32398797485', liveNow: 'acb5fc06ca01ddb5ad3294ee5840443c1747798f06c1990c174c469dbb5534e0' },
@@ -1469,21 +1471,36 @@ test('homeowner pre-claim upload: homeowner.mjs REPLACEs the live c51ea27a bytes
   const MANIFEST_REL = 'aws/tests/fixtures/production-homeowner-preclaim-upload-manifest-2026-10-22.json';
   // Live since the release lock pin apply (inspect run 39828391789: ALREADY_ACCEPTED, live c51ea27a).
   const LIVE = 'c51ea27a37a72b18aed7881ae349212257b790e6ff400cbe675949574504a80c';
+  // The pre-claim upload accepted bytes (main's homeowner.mjs from 7693f07cc until the upload status fix).
+  const PRECLAIM = '1fa4950c42bf26ff70bc04acd05ca8c784a970d2573178599859c8d682ce5849';
   const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, MANIFEST_REL), 'utf8'));
   assert.equal(manifest.workstream_id, 'homeowner-preclaim-upload');
   assert.equal(manifest.deploy_authorized, false);
   assert.match(manifest.notes, /upload_unavailable/);
+  // The pre-claim manifest keeps its planning record.
+  assert.deepEqual(manifest.members[MEMBER], { live_sha256: LIVE, accepted_sha256: PRECLAIM, operation: 'replace' });
+  // The row has since moved on to the homeowner upload status (planned 2026-10-29 over the pre-claim
+  // bytes, which the production rebuild inspect run 40741101459 observed live; its own test below):
+  // expected_live records the pre-claim bytes; accepted is main's.
+  const UPLOAD_STATUS_REL = 'aws/tests/fixtures/production-homeowner-upload-status-manifest-2026-10-29.json';
   const row = PLAN.members[MEMBER];
   assert.equal(row.operation, 'replace');
-  assert.equal(row.manifest, MANIFEST_REL);
+  assert.equal(row.manifest, UPLOAD_STATUS_REL);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, UPLOAD_STATUS_REL), 'utf8')).members[MEMBER].previous_manifest, MANIFEST_REL);
   assert.equal(row.sql_before, null);
-  assert.equal(row.expected_live_sha256, LIVE);
+  assert.equal(row.expected_live_sha256, PRECLAIM);
   assert.equal(row.accepted_sha256, sha(`aws/functions/api/${MEMBER}`));
+  assert.notEqual(row.accepted_sha256, PRECLAIM);
   assert.notEqual(row.accepted_sha256, LIVE);
-  assert.deepEqual(manifest.members[MEMBER], { live_sha256: LIVE, accepted_sha256: row.accepted_sha256, operation: 'replace' });
-  const ready = await run({ ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER }, { root: ROOT, inspectLive: liveFor(MEMBER) });
+  const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
+  const ready = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER) });
   assert.equal(ready.state, 'READY');
   assert.equal(ready.mutation, false);
+  // The release bytes the pre-claim plan started from are no longer accepted live.
+  await assert.rejects(
+    run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: LIVE }) }),
+    (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+  );
 });
 
 test('referral billing credit: tenant-billing-engine.mjs expected_live records the bytes production run 39932114735 applied', async () => {
@@ -2133,24 +2150,99 @@ test('Loss Draft from uploaded: workflow-transitions.mjs expected_live records t
   // The Loss Draft manifest keeps the pre-apply record, which chains to the release 2026-10-17 bytes.
   assert.deepEqual(manifest.members[MEMBER], { live_sha256: BEFORE, accepted_sha256: LIVE, operation: 'replace', previous_manifest: RELEASE });
   assert.equal(release.members[MEMBER].accepted_sha256, BEFORE);
+  // The row has since moved on to the homeowner upload status (planned 2026-10-29 over these applied
+  // bytes, its own test below): expected_live still records these bytes; accepted is main's.
+  const UPLOAD_STATUS_REL = 'aws/tests/fixtures/production-homeowner-upload-status-manifest-2026-10-29.json';
   const row = PLAN.members[MEMBER];
   assert.equal(row.operation, 'replace');
-  assert.equal(row.manifest, APPLIED_REL);
+  assert.equal(row.manifest, UPLOAD_STATUS_REL);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, UPLOAD_STATUS_REL), 'utf8')).members[MEMBER].previous_manifest, APPLIED_REL);
   assert.equal(row.expected_live_sha256, LIVE);
-  assert.equal(row.accepted_sha256, LIVE);
+  assert.notEqual(row.accepted_sha256, LIVE);
+  assert.equal(sha(`aws/functions/api/${MEMBER}`), row.accepted_sha256);
   assert.equal(row.sql_before, LEDGER);
   assert.equal(PLAN.sql_prerequisites[LEDGER].verified_live, true);
-  assert.equal(sha(`aws/functions/api/${MEMBER}`), LIVE);
   assert.equal(PLAN.order.at(-1), 'providers.mjs');
   assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
   const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
-  const done = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: LIVE }) });
-  assert.equal(done.state, 'ALREADY_ACCEPTED');
-  assert.equal(done.mutation, false);
+  const ready = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: LIVE }) });
+  assert.equal(ready.state, 'READY');
+  assert.equal(ready.mutation, false);
   await assert.rejects(
     run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: BEFORE }) }),
     (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
   );
+});
+
+test('Homeowner upload status: workflow-transitions.mjs and homeowner.mjs REPLACE planned over the bytes production run 40089521986 applied and the pre-claim bytes rebuild inspect run 40741101459 found live', async () => {
+  const MANIFEST_REL = 'aws/tests/fixtures/production-homeowner-upload-status-manifest-2026-10-29.json';
+  const TRANSITIONS = 'workflow-transitions.mjs';
+  const HOMEOWNER = 'homeowner.mjs';
+  const LEDGER = 'supabase/migrations/20261007193200_skip_claim_ledger_event_for_endorsement_stage.sql';
+  // Live: the Loss Draft bytes (production apply run 40089521986, post-apply inspect run 40089953478
+  // ALREADY_ACCEPTED). Before them: the release 2026-10-17 bytes.
+  const TRANSITIONS_APPLIED_REL = 'aws/tests/fixtures/production-loss-draft-from-uploaded-applied-manifest-2026-10-24.json';
+  const TRANSITIONS_LIVE = 'ed39e3c38d6f64f0b3a939ec2f741790406d913565fda6c399abe6ec6378ffe8';
+  const TRANSITIONS_OLDER = 'f11206b4ac7239b6d75eb62e739d3c83f3dc8c568aa5c6d2be98f8335166c350';
+  // Live: the pre-claim upload accepted bytes, observed by the read-only production rebuild inspect run
+  // 40741101459 (202 of 203 source members equal to main e3823b5c5). Before them: the release bytes.
+  const PRECLAIM_REL = 'aws/tests/fixtures/production-homeowner-preclaim-upload-manifest-2026-10-22.json';
+  const VALIDATOR_REL = 'aws/tests/fixtures/production-db-validator-sql123-trigger-manifest-2026-10-28.json';
+  const HOMEOWNER_LIVE = '1fa4950c42bf26ff70bc04acd05ca8c784a970d2573178599859c8d682ce5849';
+  const HOMEOWNER_OLDER = 'c51ea27a37a72b18aed7881ae349212257b790e6ff400cbe675949574504a80c';
+  const readJson = (rel) => JSON.parse(fs.readFileSync(path.join(ROOT, rel), 'utf8'));
+  const manifest = readJson(MANIFEST_REL);
+  assert.equal(manifest.workstream_id, 'homeowner-upload-status');
+  assert.equal(manifest.deploy_authorized, false);
+  assert.deepEqual(Object.keys(manifest.members), [TRANSITIONS, HOMEOWNER]);
+  for (const evidence of ['Invalid status transition: pending -> endorsements_in_progress', '40089521986', '40741101459', 'workflow-transitions.mjs first']) {
+    assert.ok(manifest.notes.includes(evidence), evidence);
+  }
+  assert.match(readJson(VALIDATOR_REL).notes, /40741101459/);
+  assert.match(PLAN.notes, /Homeowner upload status \(2026-10-29; planning only, not authorized\)/);
+  const inspect = (member) => ({ ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: member });
+  const cases = [
+    [TRANSITIONS, TRANSITIONS_LIVE, TRANSITIONS_OLDER, TRANSITIONS_APPLIED_REL, LEDGER],
+    [HOMEOWNER, HOMEOWNER_LIVE, HOMEOWNER_OLDER, PRECLAIM_REL, null],
+  ];
+  for (const [member, live, older, previousRel, sqlBefore] of cases) {
+    const accepted = sha(`aws/functions/api/${member}`);
+    assert.notEqual(accepted, live, member);
+    assert.deepEqual(manifest.members[member], { live_sha256: live, accepted_sha256: accepted, operation: 'replace', previous_manifest: previousRel }, member);
+    assert.equal(readJson(previousRel).members[member].accepted_sha256, live, member);
+    assert.deepEqual(PLAN.members[member], {
+      operation: 'replace',
+      accepted_sha256: accepted,
+      expected_live_sha256: live,
+      sql_before: sqlBefore,
+      manifest: MANIFEST_REL,
+    }, member);
+    assert.equal(resolvePlannedMember(member, { root: ROOT, plan: PLAN }).ok, true, member);
+    const ready = await run(inspect(member), { root: ROOT, inspectLive: liveFor(member) });
+    assert.equal(ready.state, 'READY', member);
+    assert.equal(ready.mutation, false, member);
+    const done = await run(inspect(member), { root: ROOT, inspectLive: liveFor(member, { sha256: accepted }) });
+    assert.equal(done.state, 'ALREADY_ACCEPTED', member);
+    await assert.rejects(
+      run(inspect(member), { root: ROOT, inspectLive: liveFor(member, { sha256: older }) }),
+      (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+      member,
+    );
+  }
+  assert.equal(PLAN.sql_prerequisites[LEDGER].verified_live, true);
+  // workflow-transitions.mjs goes first: plan order already puts it ahead of homeowner.mjs.
+  assert.ok(PLAN.order.indexOf(TRANSITIONS) < PLAN.order.indexOf(HOMEOWNER));
+  // The planned bytes: 'pending' starts a transition wherever 'uploaded' does; homeowner uploads file as 'uploaded'.
+  const transitions = fs.readFileSync(path.join(API, TRANSITIONS), 'utf8');
+  assert.match(transitions, /export const LEGACY_HOMEOWNER_UPLOAD_STATUS = 'pending';/);
+  for (const action of ['start_review', 'start_endorsing', 'route_loss_draft', 'return_to_review']) {
+    const block = transitions.split(`  ${action}: {`)[1].split('\n  },')[0];
+    assert.match(block, /fromStatus: \[\s*'uploaded',\s*LEGACY_HOMEOWNER_UPLOAD_STATUS[,\]]/, action);
+  }
+  assert.doesNotMatch(transitions.split('  mark_ready_for_deposit: {')[1].split('\n  },')[0], /LEGACY_HOMEOWNER_UPLOAD_STATUS/);
+  const homeowner = fs.readFileSync(path.join(API, HOMEOWNER), 'utf8');
+  assert.equal((homeowner.match(/\$6, 'uploaded', 'review', 'insurance'\)/g) || []).length, 2);
+  assert.doesNotMatch(homeowner, /'pending', 'review', 'insurance'/);
 });
 
 test('Write echo secret columns: secret-columns.mjs, write-app-metadata.mjs and write.mjs record the bytes production runs 40089644649, 40089767778 and 40089891244 applied', async () => {
