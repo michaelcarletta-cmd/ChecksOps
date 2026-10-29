@@ -122,7 +122,9 @@ export const STAGING_WAVE1 = Object.freeze({
   // Wave 25 (owner approved 2026-10-29, "start SQL 126 on staging"): SQL 126, the thirteen Supabase-era
   // SECURITY DEFINER reads check their caller (security audit finding 4). Read at main 7d33d5c after the
   // executor carried it (deploy run 40917101622): the supabase bodies, EXECUTE PUBLIC and the owner.
-  sql126: Object.freeze({ wave: 25, approved: '2026-10-29', run: '40917478177', live: '04106521263eeeb423ac2c0dfbf5e1f1af5a52c89501b63ac742d6b25c5e1612' }),
+  // Applied by run 40921170890 (main 7422c69, executor deploy run 40920738142): receipt 04106521 ->
+  // 3aebf853 (intended); read-live run 40921576727 at the intended fingerprint.
+  sql126: Object.freeze({ wave: 25, approved: '2026-10-29', run: '40917478177', live: '04106521263eeeb423ac2c0dfbf5e1f1af5a52c89501b63ac742d6b25c5e1612', apply_run: '40921170890' }),
   sql98: Object.freeze({ wave: 3, approved: '2026-10-18', run: '39083278136', live: '296c3d6a274e10f66005fb9eaecf93fa17b81bd8db3607037ca07698fddd3275', apply_run: '39085677318' }),
 });
 
