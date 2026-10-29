@@ -60,7 +60,18 @@ the owner in the GitHub `staging` environment:
   the four views `intended`, `prerequisites_missing` `[]`.
 - Read-live run 40893116553: live `a041efa5…`, the four views `intended`.
 
-**Status:** applied to staging (wave 24); production pin pending; not applied to production.
+**Production inspect (2026-10-29).** Read-only `--inspect` through SSM
+`9e7ea74b-ced1-4407-9622-d1902720aa9d` on `i-0c35557c4e5385406`, main `4f26c14` (tarball sha256
+`834bf3c4ed405b7dc227f7799fbe86c4f98d7c2806b67f890a72765ca5171e49`, transfer run 40894708257, migration
+source `fc8096a3…` == pin), connected as `checksops_admin`: the four views present; every prerequisite
+present; live `9b31cf5dad3f82bf69fcddd03e0c26c0dc0fdd5ff6bd40137d1af316f1fd6541`, `already_applied` false, `precondition_failures` `[]`, the same pre-state as
+staging's (the reviewed definitions without options). The runner was started for the run and stopped
+after it (start requested 14:47:15 UTC, stopped 14:48:16 UTC). Recorded in the production pin with the
+staging apply as its staging acceptance and `execute: true` under the owner's words of 2026-10-29, "open
+the SQL 125 production pin PR". The owner merges the pin change; the apply still needs the owner's
+run-time approval and runs only after that merge is on main and staged.
+
+**Status:** applied to staging (wave 24); production pin execute-authorized; not applied to production.
 
 ## Fingerprint
 
