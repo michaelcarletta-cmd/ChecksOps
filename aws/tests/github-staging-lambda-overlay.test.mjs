@@ -509,8 +509,11 @@ test('staging SQL record: every sql_before of the plan has an entry; the pending
     else assert.equal(record.evidence, null, file);
     assert.ok(fs.existsSync(new URL(`../../${file}`, import.meta.url)), file);
   }
-  // Release 2026-10-17 waves 1-3 are applied in staging: every sql_before of the plan is live there.
-  for (const [file, record] of Object.entries(STAGING_SQL.sql)) assert.equal(record.verified_live, true, file);
+  // Release 2026-10-17 waves 1-3 are applied in staging: every sql_before of the plan is live there,
+  // except SQL 127 (homeowner portal signing, planned 2026-10-29), not yet applied in staging: the four
+  // members it holds wait for its guarded staging apply.
+  const PENDING_IN_STAGING = new Set(['aws/workflows/sql/127_homeowner_portal_signing.sql']);
+  for (const [file, record] of Object.entries(STAGING_SQL.sql)) assert.equal(record.verified_live, !PENDING_IN_STAGING.has(file), file);
   // A SQL recorded true here is either recorded live in production (with its staging acceptance)
   // or, staging first (release 2026-10-17), names its guarded staging SQL executor apply run and
   // a receipt that ended on the pin's intended fingerprint. It is never production's record.

@@ -71,6 +71,10 @@
     "aws/workflows/sql/124_mortgage_desk_signature_and_reads.sql": {
       "verified_live": true,
       "evidence": "Guarded staging SQL executor apply of sql124-mortgage-desk-signature-and-reads on 2026-10-28 (run 40757497983, main 593ea3f3d, executor 7UUN4EHi…; read-live run 40757812948 already_applied true): receipt before 59fe6907…, after daeeff54… = the pin's intended_replacement_sha256; precondition_failures [], prerequisites_missing []."
+    },
+    "aws/workflows/sql/127_homeowner_portal_signing.sql": {
+      "verified_live": false,
+      "evidence": null
     }
   }
 }
