@@ -71,7 +71,23 @@ staging apply as its staging acceptance and `execute: true` under the owner's wo
 the SQL 125 production pin PR". The owner merges the pin change; the apply still needs the owner's
 run-time approval and runs only after that merge is on main and staged.
 
-**Status:** applied to staging (wave 24); production pin execute-authorized; not applied to production.
+**Production apply (2026-10-29).** After the pin change (#1382, merged green on the owner's words "merge
+1382 when green"), transfer run 40897690604 staged main `1cc1737` (tarball sha256
+`b19123e27fccd48450d13a62357540d295cb9c785300fdb106b1a3e30d94eca4`). One-shot `--phase inspect` (SSM
+`c8ffbcec-ab7f-49e5-ae21-a59414abee2f`: live `9b31cf5d…`, `precondition_failures` `[]`) then `--phase apply`
+run `9e5a075d-3813-4567-aa0a-71ff86cf916e` through SSM `31ecaddd-b118-4239-a9e8-fb6e1c461db1`, workstream
+`prod-sql125-deposit-views-security-invoker-20261029`, under the owner's words "apply SQL 125 in production
+after 1382 merges" (passed verbatim): every step ok, contracts 4/4, 6/6 and 43/43; receipt `9b31cf5d…` →
+`a041efa5d6b8e564c860974d2427415ec3e031a8a63daf43005e893e2d55ddea` (intended), result `applied`; post-apply
+inspect `already_applied` true, `precondition_failures` `[]`; a separate read-only inspect (SSM
+`0a95b440-0900-428e-bf84-a87eaee64012`) agreed. The receipt's unrelated-catalog hash was not captured (the
+operator printed a summary and the first 6000 characters of the run's JSON); the pin's `applied` block
+leaves it out and says so. An earlier attempt (SSM `ef080c3f-9b86-448c-a749-d65d0631eeeb`) ran only the
+read-only inspect and stopped on the operator's own gate; nothing was written. Runner (finding C): started
+and stopped for each attempt, 15:05:22 to 15:06:48 UTC and 15:07:19 to 15:09:11 UTC; it is stopped.
+
+**Status:** applied to staging (wave 24) and to production (2026-10-29); the production pin is retired
+(`execute: false`). Security audit finding 1 is closed in production.
 
 ## Fingerprint
 
