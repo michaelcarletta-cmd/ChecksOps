@@ -1,0 +1,97 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "DenyProductionLambda",
+      "Effect": "Deny",
+      "Action": "lambda:*",
+      "Resource": [
+        "arn:aws:lambda:*:806168576068:function:checksops-prod*",
+        "arn:aws:lambda:*:806168576068:function:checksops-prod*:*"
+      ]
+    },
+    {
+      "Sid": "DenyProductionBuckets",
+      "Effect": "Deny",
+      "Action": "s3:*",
+      "Resource": [
+        "arn:aws:s3:::checksops-production-*",
+        "arn:aws:s3:::checksops-production-*/*",
+        "arn:aws:s3:::checksops-prod-*",
+        "arn:aws:s3:::checksops-prod-*/*",
+        "arn:aws:s3:::checksops-sql53-transfer-806168576068",
+        "arn:aws:s3:::checksops-sql53-transfer-806168576068/*"
+      ]
+    },
+    {
+      "Sid": "DenyProductionSecrets",
+      "Effect": "Deny",
+      "Action": "secretsmanager:*",
+      "Resource": [
+        "arn:aws:secretsmanager:*:806168576068:secret:*production*",
+        "arn:aws:secretsmanager:*:806168576068:secret:checksops/production/*"
+      ]
+    },
+    {
+      "Sid": "DenyProductionApiGateway",
+      "Effect": "Deny",
+      "Action": "apigateway:*",
+      "Resource": [
+        "arn:aws:apigateway:us-east-1::/apis/kiqojucc02",
+        "arn:aws:apigateway:us-east-1::/apis/kiqojucc02/*"
+      ]
+    },
+    {
+      "Sid": "DenyProductionCloudFrontWrites",
+      "Effect": "Deny",
+      "Action": [
+        "cloudfront:UpdateDistribution",
+        "cloudfront:DeleteDistribution",
+        "cloudfront:CreateInvalidation",
+        "cloudfront:TagResource"
+      ],
+      "Resource": "arn:aws:cloudfront::806168576068:distribution/E1B0ZWWO5559U5"
+    },
+    {
+      "Sid": "DenyProductionAlarmChanges",
+      "Effect": "Deny",
+      "Action": [
+        "cloudwatch:PutMetricAlarm",
+        "cloudwatch:DeleteAlarms"
+      ],
+      "Resource": "arn:aws:cloudwatch:*:806168576068:alarm:checksops-production-*"
+    },
+    {
+      "Sid": "DenyProductionStacks",
+      "Effect": "Deny",
+      "Action": [
+        "cloudformation:CreateStack",
+        "cloudformation:UpdateStack",
+        "cloudformation:DeleteStack",
+        "cloudformation:CreateChangeSet",
+        "cloudformation:ExecuteChangeSet"
+      ],
+      "Resource": [
+        "arn:aws:cloudformation:*:806168576068:stack/checksops-prod*/*"
+      ]
+    },
+    {
+      "Sid": "DenyGrantingAdminPolicies",
+      "Effect": "Deny",
+      "Action": [
+        "iam:AttachRolePolicy"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "ArnLike": {
+          "iam:PolicyARN": [
+            "arn:aws:iam::aws:policy/AdministratorAccess",
+            "arn:aws:iam::aws:policy/PowerUserAccess",
+            "arn:aws:iam::aws:policy/IAMFullAccess",
+            "arn:aws:iam::aws:policy/*FullAccess"
+          ]
+        }
+      }
+    }
+  ]
+}
