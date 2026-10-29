@@ -41,7 +41,30 @@ bytes), `already_applied` false, `precondition_failures` `[]`. Recorded in the s
 (`expected_live_definition_sha256`, `execute: true`, wave 26) under the owner's words of
 2026-10-29, "start the SQL 127 staging apply".
 
-**Status:** staging pin execute-authorized (wave 26); nothing applied yet; production pin pending.
+**Staging apply (2026-10-29).** Run 40952161383 (main `e98d577`, after #1408 merged the staging pin and
+executor deploy run 40951841850 carried it, `lpbOJp31…`; workstream `github-staging-sql-40952161383`):
+receipt before `4b4af399a73a25e191d2f914cc074a3744c84fffbc8ce3e55f2adec2cf93dfe0`, after
+`c4936010132f2d542db796e50fe2d56d1aa3bae5133cdb53e8172978a5b2e190` (intended), result `applied`. Read-live
+run 40952453984: `already_applied` true, `precondition_failures` `[]`, the three functions at the intended
+state (EXECUTE for `checksops` and the owner on all three).
+
+**Production inspect (2026-10-29).** Read-only `--inspect` through SSM
+`08ef9da4-ecd8-4f0a-bb20-7030141ebece` on `i-0c35557c4e5385406`, main `e98d577` (tarball sha256
+`5285b1866326e37362c039b1a0022ee51b8f1c181a73efadfac325775c2aef49`, transfer run 40952859758, migration
+source `4d2d311b…` == pin), connected as `checksops_admin`: SQL 83's
+`aws_public_homeowner_ledger_endorse_capability(text, uuid)` and
+`aws_public_homeowner_pending_signatures(text)` `different` (`function_acl` `checksops EXECUTE` and
+`owner EXECUTE`), `aws_public_homeowner_document_portal_signer(text, uuid)` absent; every prerequisite
+present; the definer can write `check_endorsements` and `signature_signers`; live
+`4b4af399a73a25e191d2f914cc074a3744c84fffbc8ce3e55f2adec2cf93dfe0`, `already_applied` false,
+`precondition_failures` `[]`, the same pre-state as staging's. Recorded in the production pin with the
+staging apply as its staging acceptance and `execute: true` under the owner's words of 2026-10-29,
+"start the SQL 127 pin PR". The owner merges the pin change; the apply still needs the owner's run-time
+approval and runs only after that merge is on main and staged. Runner state: the runner was started for
+this inspect at 2026-10-29 20:56:07 UTC and stopped again at 20:57:03 UTC (`stopped`,
+`StateTransitionReason` "User initiated (2026-10-29 20:57:03 GMT)").
+
+**Status:** applied to staging (wave 26); production pin execute-authorized; not applied to production.
 
 ## Fingerprint
 
