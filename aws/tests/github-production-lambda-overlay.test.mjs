@@ -2929,11 +2929,13 @@ test('DB validator SQL 123 trigger: db-readonly-validate.mjs replaced the bytes 
   assert.deepEqual(calls.receipt.owned_member_ops, { replace: [MEMBER], add: [] });
 });
 
-test('Branding logo served types (security audit finding 2): REPLACE storage.mjs is planned at main\'s bytes over the reconciled pre-deploy bytes; nothing else changes', () => {
+test('Branding logo served types (security audit finding 2): REPLACE storage.mjs is planned at main\'s bytes over the release 2026-10-17 bytes production holds; nothing else changes', () => {
   const MEMBER = 'storage.mjs';
   const MANIFEST_REL = 'aws/tests/fixtures/production-branding-logo-served-types-manifest-2026-10-29.json';
   const RELEASE_REL = 'aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json';
-  const PRE_DEPLOY = '77714d51590969e026bb6a79dea7170fd6ab8b282ad90af3ff5002ae59a1be85';
+  // The release 2026-10-17 accepted bytes, observed live by the guarded production overlay inspect run
+  // 40902942196 (main 025b4b8), which refused the earlier planned pre-release value 77714d51.
+  const PRE_DEPLOY = 'd92f34ca0dbba5b7b5b4c406d1a7cdf4b2e9c0a900ceddd1217dbebf3cd017d1';
   const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, MANIFEST_REL), 'utf8'));
   assert.equal(manifest.workstream_id, 'branding-logo-served-types');
   assert.equal(manifest.deploy_authorized, false);
@@ -2947,10 +2949,13 @@ test('Branding logo served types (security audit finding 2): REPLACE storage.mjs
     sql_before: 'aws/workflows/sql/94_document_library_restore.sql',
     manifest: MANIFEST_REL,
   });
-  // The release 2026-10-17 manifest planned other bytes for storage.mjs and recorded the same pre-deploy bytes live.
+  // The release 2026-10-17 manifest accepted these bytes for storage.mjs (its live_sha256 is the pre-release value).
   const release = JSON.parse(fs.readFileSync(path.join(ROOT, RELEASE_REL), 'utf8')).members[MEMBER];
-  assert.equal(release.live_sha256, PRE_DEPLOY);
+  assert.equal(release.accepted_sha256, PRE_DEPLOY);
+  assert.notEqual(release.live_sha256, PRE_DEPLOY);
   assert.notEqual(release.accepted_sha256, row.accepted_sha256);
+  assert.match(manifest.notes, /run 40902942196/);
+  assert.match(PLAN.notes, /run 40902942196/);
   assert.deepEqual(manifest.members[MEMBER], { live_sha256: PRE_DEPLOY, accepted_sha256: row.accepted_sha256, operation: 'replace', previous_manifest: RELEASE_REL });
   assert.match(PLAN.notes, /Branding logo served types \(security audit finding 2/);
   assert.ok(WORKFLOW.includes(`          - ${MEMBER}\n`));

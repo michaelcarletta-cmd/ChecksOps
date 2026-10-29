@@ -3,10 +3,10 @@
   "authorization": "Pending owner review (2026-10-29). Planning only: nothing is live or verified. The production apply still needs its own owner approval (\"DEPLOY storage.mjs TO PRODUCTION\") and staging acceptance.",
   "deploy_authorized": false,
   "live_lambda": "checksops-production-prep-api",
-  "notes": "Security audit finding 2 (owner: \"finding 2 smaller fix\"). REPLACE storage.mjs: handleBrandingLogo serves a stored tenant logo only as image/png, image/jpeg, image/webp or image/gif when the object's bytes carry that type's file signature, and answers 404 logo_type_not_served otherwise; it no longer serves image/svg+xml and no longer relabels a non-image object as image/png. storage.mjs adds no import. live_sha256 is the reconciled pre-deploy bytes the release 2026-10-17 manifest recorded (its d92f34ca bytes were planned, not recorded live); the guarded overlay inspect re-reads the live member before any apply.",
+  "notes": "Security audit finding 2 (owner: \"finding 2 smaller fix\"). REPLACE storage.mjs: handleBrandingLogo serves a stored tenant logo only as image/png, image/jpeg, image/webp or image/gif when the object's bytes carry that type's file signature, and answers 404 logo_type_not_served otherwise; it no longer serves image/svg+xml and no longer relabels a non-image object as image/png. storage.mjs adds no import. live_sha256 is d92f34ca, the bytes the release 2026-10-17 manifest accepted for storage.mjs (main's storage.mjs until finding 2) and the bytes production holds: the guarded production overlay inspect of 2026-10-29 (run 40902942196, main 025b4b8) observed live d92f34ca and refused the earlier planned 77714d51 (SOURCE_RECONCILIATION_REQUIRED), which was the release manifest's pre-release live value, taken here by mistake. The guarded overlay inspect re-reads the live member before any apply.",
   "members": {
     "storage.mjs": {
-      "live_sha256": "77714d51590969e026bb6a79dea7170fd6ab8b282ad90af3ff5002ae59a1be85",
+      "live_sha256": "d92f34ca0dbba5b7b5b4c406d1a7cdf4b2e9c0a900ceddd1217dbebf3cd017d1",
       "accepted_sha256": "0f7c1b3e5cbf3e048273228031a3c211cfe4ddd42216c46f6c021c5ebdbad190",
       "operation": "replace",
       "previous_manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
