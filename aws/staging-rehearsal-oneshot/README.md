@@ -60,3 +60,26 @@ aws iam put-role-policy \
   --policy-name ChecksOpsP6PromoteTemp \
   --policy-document "$(node -e "console.log(JSON.stringify(require('./aws/staging-rehearsal-oneshot/policies/inline-policies.live-2026-10-29.json').ChecksOpsP6PromoteTemp))")"
 ```
+
+## Applied (2026-10-29)
+
+Owner approval, verbatim: "apply B after 1371 merges" (PR #1371, merge `b8c1d28`). Source:
+`inline-policies.live-2026-10-29.json` (sha256
+`feb530fea38613ef7497373ffb8b675ee47750dc809c6946628c67618977f94f`) and `inline-policies.json`
+(sha256 `8c450248f55997508eaf8ff691daa38d718e714b30d2b3ab17d0858828f22a16`) from `origin/main`
+`b8c1d28`. Identity: `arn:aws:iam::806168576068:user/claude-code`.
+
+1. Precondition: the role's five inline policies before the apply equalled
+   `inline-policies.live-2026-10-29.json`.
+2. `iam:DeleteRolePolicy` `ChecksOpsP6PromoteTemp`.
+3. After the apply the role has exactly `oneshot-cc047-least-privilege`,
+   `oneshot-integration-grants-least-privilege`, `oneshot-rc351-least-privilege` and
+   `oneshot-rehearsal-least-privilege`, each equal to `inline-policies.json`.
+4. `iam:SimulatePrincipalPolicy` after the apply:
+
+   | action | resource | decision |
+   |---|---|---|
+   | GetSecretValue | production `checksops_admin` secret | implicitDeny |
+   | s3:GetObject | production files bucket `Migration/*` | implicitDeny |
+   | GetSecretValue | staging `checksops_admin` secret `1788286368527-Kv5tBt` | allowed |
+   | s3:GetObject | staging files bucket `Migration/*` | allowed |
