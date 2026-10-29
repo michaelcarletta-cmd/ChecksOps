@@ -4,7 +4,7 @@
  * release-sql90-97-executor.test.mjs runs what every release key shares (SQL 126 included); this
  * file covers what is new:
  *
- *   - the pin: pending, code-derived, selectable, packed, in step with the production pin; the
+ *   - the pin: staging-authorized from its read-live (wave 25), code-derived, selectable, packed, in step with the production pin; the
  *     pinned commit authored the bytes; no predecessor;
  *   - the file and spec: thirteen Supabase-era SECURITY DEFINER functions replaced, each body the
  *     supabase migration's with only SQL 126's gate or scoping edits (helpers/sql126-definer-reads-
@@ -53,7 +53,7 @@ import { EXECUTOR_PACK_MEMBERS } from '../../scripts/deployment-guard/sql-execut
 import { MIGRATIONS } from '../../scripts/deployment-guard/github-staging-sql-executor.mjs';
 import { READ_LIVE_EXPECTED_SENTINEL } from '../../scripts/deployment-guard/lib/sql-executor-read-live.mjs';
 import { importGuardedSqlExecutor } from './helpers/import-guarded-sql-executor.mjs';
-import { assertStagingPinState } from './helpers/staging-sql-wave1.mjs';
+import { assertStagingPinState, pendingPin } from './helpers/staging-sql-wave1.mjs';
 import { pgSkipReason, releaseFixture } from './helpers/release-sql-pg.mjs';
 import {
   SQL126_FUNCTIONS,
@@ -130,7 +130,7 @@ function handlerFor(connect, { pins = {} } = {}) {
   return createHandler({ connect, now: () => Date.parse(NOW), releaseSqlFiles: FILES, releaseSqlPins: { ...PINS, ...pins } });
 }
 
-test('pin: SQL 126 pending, code-derived, selectable, packed, in step with the production pin; no predecessor', () => {
+test('pin: SQL 126 staging-authorized from its read-live, code-derived, selectable, packed, in step with the production pin; no predecessor', () => {
   const pin = PINS[KEY];
   const spec = RELEASE_SQL_SPECS[KEY];
   const packed = Object.fromEntries(EXECUTOR_PACK_MEMBERS);
@@ -141,11 +141,15 @@ test('pin: SQL 126 pending, code-derived, selectable, packed, in step with the p
   assert.equal(spec.choice, 'sql126-definer-reads-caller-gates');
   assert.doesNotMatch(spec.choice, /production/);
   assert.equal(sha(TEXT), pin.source_sha256);
-  // Pending: no staging read-live recorded yet (and no apply authorized).
+  // Staging apply authorized (owner approved 2026-10-29) from staging read-live run 40917478177: the
+  // thirteen functions with their supabase bodies and EXECUTE PUBLIC and the owner, so not yet applied.
   assertStagingPinState(assert, KEY, pin);
-  assert.equal(pin.execute, false);
-  assert.equal(pin.authorization, 'pending');
-  assert.equal(pin.expected_live_definition_sha256, null);
+  assert.equal(pin.execute, true);
+  assert.equal(pin.authorization, 'Owner approved 2026-10-29: staging apply (wave 25) from staging read-live run 40917478177');
+  assert.equal(pin.expected_live_definition_sha256, '04106521263eeeb423ac2c0dfbf5e1f1af5a52c89501b63ac742d6b25c5e1612');
+  assert.notEqual(pin.expected_live_definition_sha256, pin.intended_replacement_sha256);
+  // That pre-state is the restored supabase state with the default ACL, derived on the engine.
+  assert.equal(releaseStateHash(KEY, restoredState()), pin.expected_live_definition_sha256);
   assert.equal(releaseIntendedHash(KEY, TEXT), pin.intended_replacement_sha256);
   // Everything absent, and the restored supabase state, each have a fingerprint of their own.
   assert.notEqual(releaseStateHash(KEY, {}), pin.intended_replacement_sha256);
@@ -404,8 +408,9 @@ test('PostgreSQL 16: SQL 126 through the executor: the restored state as derived
     const wider = await inspect();
     assert.deepEqual(wider.precondition_failures, [], JSON.stringify(wider.release_sql_inspect));
     assert.notEqual(wider.live_definition_sha256, r.live_definition_sha256);
-    // A pending pin cannot apply.
-    const pending = await handlerFor(connect)(releaseEvent({ expected_live_definition_sha256: wider.live_definition_sha256 }));
+    // A pending pin cannot apply (the committed pin is staging-authorized, so pend a copy).
+    const pendingCopy = pendingPin(PINS[KEY]);
+    const pending = await handlerFor(connect, { pins: { [KEY]: pendingCopy } })(releaseEvent({ pin: pendingCopy, expected_live_definition_sha256: wider.live_definition_sha256 }));
     assert.equal(pending.ok, false);
     assert.deepEqual(await bodies(), restoredBodies);
 

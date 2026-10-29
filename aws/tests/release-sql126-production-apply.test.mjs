@@ -183,7 +183,8 @@ test('order: no predecessor and no order; the thirteen functions and the file\'s
   const runbook = fs.readFileSync(path.join(ROOT, COMMITTED.tooling.runbook), 'utf8');
   assert.ok(runbook.includes(COMMITTED.intended_replacement_sha256));
   assert.ok(runbook.includes(COMMITTED.source_sha256));
-  assert.match(runbook, /\*\*Status:\*\* not applied anywhere/);
+  assert.match(runbook, /\*\*Status:\*\* staging pin execute-authorized \(wave 25\)/);
+  assert.match(runbook, /read-live \(2026-10-29\)\.\*\* Run 40917478177/);
   const oneShot = fs.readFileSync(path.join(ROOT, 'ops/production-sql-one-shot.md'), 'utf8');
   assert.match(oneShot, /\| `sql126` \|/);
   assert.match(oneShot, /`sql124`, `sql125`, `sql126`\) \|/);
