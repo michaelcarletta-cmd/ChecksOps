@@ -66,3 +66,19 @@ aws iam put-role-policy \
 The role's `ChecksOpsStagingDeploy` also allows `iam:PutRolePolicy` on `checksops-staging-*` roles,
 so a Cursor session could re-widen the staging API role's Cognito grant (finding A,
 `aws/staging-api/`). That is a separate change.
+
+## Applied (2026-10-29)
+
+Owner approval, verbatim: "start finding 1's migration PR and apply A and apply A2".
+Source: `deny-production.json` from `origin/main` `e82e7d2` (PR #1368, merge `e82e7d2`),
+sha256 `bb4955ff0b38259917f3d066b7f15c31063de89dc6c4c9bf6fbe4539882b7c8c`. Identity:
+`arn:aws:iam::806168576068:user/claude-code`.
+
+1. Precondition: `iam:GetRolePolicy` before the apply equalled
+   `deny-production.live-2026-10-29.json`.
+2. `iam:PutRolePolicy` with `deny-production.json`.
+3. `iam:GetRolePolicy` after the apply equals `deny-production.json`.
+4. `iam:SimulatePrincipalPolicy` after the apply: `AdminCreateUser`, `AdminGetUser`,
+   `AdminSetUserPassword`, `AdminDisableUser`, `AdminDeleteUser`, `AdminUpdateUserAttributes`,
+   `UpdateUserPool` and `ListUsers` are `explicitDeny` on `us-east-1_h00WorYMT` and `allowed` on
+   `us-east-1_vPmQ7cL1F`.
