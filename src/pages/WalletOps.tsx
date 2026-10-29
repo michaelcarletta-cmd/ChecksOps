@@ -20,7 +20,6 @@ import {
 import { useWallet } from "@/hooks/useWallet";
 import { useSweepConfig } from "@/hooks/useSweepConfig";
 import {
-  useRefreshTransferStatuses,
   useSyncOpenInvoicesOnOpen,
   useWalletOpsTransfers,
 } from "@/hooks/useWalletOps";
@@ -128,7 +127,6 @@ export default function WalletOps() {
   } = useSweepConfig("operating");
   const { data: transferData, isLoading: transfersLoading } = useWalletOpsTransfers();
   useSyncOpenInvoicesOnOpen();
-  const refreshStatuses = useRefreshTransferStatuses();
 
 
   const refreshingBalances = refreshWallet.isPending || refreshSweeps.isPending;
@@ -580,39 +578,9 @@ export default function WalletOps() {
             icon={<Clock className="h-4 w-4 text-sky-500" />}
             accent="bg-gradient-to-r from-sky-500/60 to-sky-500/10"
             action={
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={refreshStatuses.isPending}
-                onClick={async () => {
-                  try {
-                    const res = await refreshStatuses.mutateAsync();
-                    toast({
-                      title: res.checked
-                        ? `Checked ${res.checked} transfer${res.checked === 1 ? "" : "s"}`
-                        : "Nothing in flight",
-                      description: res.checked
-                        ? res.updated
-                          ? `${res.updated} updated with the bank's latest status.`
-                          : "Still processing at the bank — no change yet."
-                        : "All transfers have already settled.",
-                    });
-                  } catch (e) {
-                    toast({
-                      title: "Could not check status",
-                      description: (e as Error).message,
-                      variant: "destructive",
-                    });
-                  }
-                }}
-              >
-                {refreshStatuses.isPending ? (
-                  <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <RefreshCw className="mr-2 h-3.5 w-3.5" />
-                )}
-                Check status
-              </Button>
+              // Transfer statuses arrive from Moov's webhooks; production has no manual
+              // status check (moov-transfer-status is sandbox-only), so no button here.
+              <span className="text-xs text-muted-foreground">Updates automatically</span>
             }
           >
             {recentActivity.length === 0 ? (
