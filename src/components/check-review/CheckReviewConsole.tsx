@@ -1475,38 +1475,6 @@ export function ReviewDecisionPanel({
                 </div>
               )}
 
-              {canMoveChecks && (
-                <details className="group rounded-md border border-border/60 bg-muted/30 px-3 py-2">
-                  <summary className="text-[11px] text-muted-foreground hover:text-foreground cursor-pointer list-none flex items-center gap-1.5 select-none">
-                    <ShieldAlert className="h-3 w-3 text-amber-500" />
-                    <span className="underline underline-offset-2">Override status</span>
-                  </summary>
-                  <div className="mt-2 space-y-2">
-                    <Select
-                      value={depositPath}
-                      onValueChange={(v) => {
-                        setDepositPath(v);
-                        markDirty();
-                      }}
-                    >
-                      <SelectTrigger className="h-9 text-sm bg-background">
-                        <SelectValue placeholder="Select override..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {DEPOSIT_PATHS.map((path) => (
-                          <SelectItem key={path.value} value={path.value} className="text-sm">
-                            {path.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <p className="text-[10px] text-muted-foreground">
-                      Directly override the workflow status. This bypasses normal logic.
-                    </p>
-                  </div>
-                </details>
-              )}
-
               <div className="pt-2">
                 <Label className="text-xs font-semibold flex items-center gap-1.5 mb-1.5">
                   <ShieldAlert className="h-3.5 w-3.5 text-amber-500" />

@@ -117,9 +117,6 @@ const EndorsementChecklist = lazy(() =>
 const SharedCheckEndorsements = lazy(() =>
   import("@/components/check-review/SharedCheckEndorsements").then(m => ({ default: m.SharedCheckEndorsements }))
 );
-const SharedCheckPaymentDirection = lazy(() =>
-  import("@/components/check-review/SharedCheckPaymentDirection").then(m => ({ default: m.SharedCheckPaymentDirection }))
-);
 const CheckFilesSection = lazy(() =>
   import("@/components/check-review/CheckFilesSection").then(m => ({ default: m.CheckFilesSection }))
 );
@@ -4591,12 +4588,6 @@ function CheckDetailPanel({
             <TabsContent value="files" className="p-4 mt-0 space-y-4">
               <Suspense fallback={<TabLoader />}>
                 <CheckFilesSection checkIntakeItemId={checkId} claimId={check?.claim_id ?? null} />
-              </Suspense>
-              <Suspense fallback={<TabLoader />}>
-                <SharedCheckPaymentDirection
-                  checkIntakeItemId={checkId}
-                  checkNumber={check?.check_number}
-                />
               </Suspense>
             </TabsContent>
 
