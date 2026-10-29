@@ -30,7 +30,19 @@ The Supabase-era SECURITY DEFINER functions that read `deposit_owner_performance
 the views stay global: that is the separate finding on those functions. No trigger is added, so the
 DB validator's public trigger count is not concerned.
 
-**Status:** not applied anywhere. The staging pin and the production pin are pending.
+**Staging executor refreshed (2026-10-29).** Inspect run 40885358014 found the live executor at
+`7UUN4EHi…` without `sql/125_deposit_views_security_invoker.sql`. Deploy run 40885862573 (main
+`8b231c3`) updated it to main's package ("Verify live executor now carries main's package" passed).
+
+**Staging read-live (2026-10-29).** Run 40886747687 (main `a0c5c51`): the four views present, each
+`different` from the intended state; `prerequisites_missing` `[]`, `precondition_failures` `[]`,
+`already_applied` false; live
+`9b31cf5dad3f82bf69fcddd03e0c26c0dc0fdd5ff6bd40137d1af316f1fd6541`, which the engine derives from the four reviewed
+definitions without options (so the definitions are the reviewed ones and only `security_invoker`
+is missing). Recorded in the staging pin (`expected_live_definition_sha256`, `execute: true`,
+wave 24) under the owner's words of 2026-10-29, "open the SQL 125 staging pin PR".
+
+**Status:** staging pin execute-authorized (wave 24); nothing applied yet; production pin pending.
 
 ## Fingerprint
 

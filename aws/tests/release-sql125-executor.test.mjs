@@ -4,7 +4,7 @@
  * release-sql90-97-executor.test.mjs runs what every release key shares (SQL 125 included); this
  * file covers what is new:
  *
- *   - the pin: pending, code-derived, selectable, packed, in step with the production pin; the
+ *   - the pin: staging-authorized from its read-live (wave 24), code-derived, selectable, packed, in step with the production pin; the
  *     pinned commit authored the bytes; no predecessor;
  *   - the file and spec: security_invoker on the four deposit views, each only when present and
  *     owned by the login; no function, definition, grant, table, policy or trigger; the views are
@@ -52,7 +52,7 @@ import { EXECUTOR_PACK_MEMBERS } from '../../scripts/deployment-guard/sql-execut
 import { MIGRATIONS } from '../../scripts/deployment-guard/github-staging-sql-executor.mjs';
 import { READ_LIVE_EXPECTED_SENTINEL } from '../../scripts/deployment-guard/lib/sql-executor-read-live.mjs';
 import { importGuardedSqlExecutor } from './helpers/import-guarded-sql-executor.mjs';
-import { assertStagingPinState } from './helpers/staging-sql-wave1.mjs';
+import { assertStagingPinState, pendingPin } from './helpers/staging-sql-wave1.mjs';
 import { pgSkipReason, releaseFixture } from './helpers/release-sql-pg.mjs';
 import { DEPOSIT_VIEWS, SUPABASE_VIEW_FILES, depositViewsSchema, supabaseViewStatement } from './helpers/sql125-deposit-views-schema.mjs';
 
@@ -104,7 +104,7 @@ function handlerFor(connect, { pins = {} } = {}) {
   return createHandler({ connect, now: () => Date.parse(NOW), releaseSqlFiles: FILES, releaseSqlPins: { ...PINS, ...pins } });
 }
 
-test('pin: SQL 125 pending, code-derived, selectable, packed, in step with the production pin; no predecessor', () => {
+test('pin: SQL 125 staging-authorized from its read-live, code-derived, selectable, packed, in step with the production pin; no predecessor', () => {
   const pin = PINS[KEY];
   const spec = RELEASE_SQL_SPECS[KEY];
   const packed = Object.fromEntries(EXECUTOR_PACK_MEMBERS);
@@ -115,11 +115,17 @@ test('pin: SQL 125 pending, code-derived, selectable, packed, in step with the p
   assert.equal(spec.choice, 'sql125-deposit-views-security-invoker');
   assert.doesNotMatch(spec.choice, /production/);
   assert.equal(sha(TEXT), pin.source_sha256);
-  // Pending: no staging read-live recorded yet (and no apply authorized).
+  // Staging apply authorized (owner approved 2026-10-29) from staging read-live run 40886747687: the
+  // four views with the reviewed definitions and no options, so SQL 125 was not yet applied there.
   assertStagingPinState(assert, KEY, pin);
-  assert.equal(pin.execute, false);
-  assert.equal(pin.authorization, 'pending');
-  assert.equal(pin.expected_live_definition_sha256, null);
+  assert.equal(pin.execute, true);
+  assert.equal(pin.authorization, 'Owner approved 2026-10-29: staging apply (wave 24) from staging read-live run 40886747687');
+  assert.equal(pin.expected_live_definition_sha256, '9b31cf5dad3f82bf69fcddd03e0c26c0dc0fdd5ff6bd40137d1af316f1fd6541');
+  assert.notEqual(pin.expected_live_definition_sha256, pin.intended_replacement_sha256);
+  // That pre-state is the reviewed definitions without options, derived on the engine.
+  const reviewed = (options) => ({ views: Object.fromEntries(spec.views.map((v) => [v.name, { exists: true, def: v.definition, options }])) });
+  assert.equal(releaseStateHash(KEY, reviewed([])), pin.expected_live_definition_sha256);
+  assert.equal(releaseStateHash(KEY, reviewed(['security_invoker=true'])), pin.intended_replacement_sha256);
   assert.equal(releaseIntendedHash(KEY, TEXT), pin.intended_replacement_sha256);
   // Everything absent (a database without the views) has a fingerprint of its own.
   assert.notEqual(releaseStateHash(KEY, {}), pin.intended_replacement_sha256);
@@ -282,8 +288,9 @@ test('PostgreSQL 16: SQL 125 through the executor: the supabase views render as 
     assert.deepEqual(r.precondition_failures, [], JSON.stringify(r.release_sql_inspect));
     assert.equal(r.already_applied, false);
     assert.notEqual(r.live_definition_sha256, PINS[KEY].intended_replacement_sha256);
-    // A pending pin cannot apply.
-    const pending = await handlerFor(connect)(releaseEvent({ expected_live_definition_sha256: r.live_definition_sha256 }));
+    // A pending pin cannot apply (the committed pin is staging-authorized, so pend a copy).
+    const pendingCopy = pendingPin(PINS[KEY]);
+    const pending = await handlerFor(connect, { pins: { [KEY]: pendingCopy } })(releaseEvent({ pin: pendingCopy, expected_live_definition_sha256: r.live_definition_sha256 }));
     assert.equal(pending.ok, false);
     assert.deepEqual((await views()).map((v) => v.options), [[], [], [], []]);
 
