@@ -1,0 +1,39 @@
+{
+  "workstream_id": "security-hardening-applied",
+  "authorization": "Record only (2026-10-29): the bytes below are live. Nothing is planned or authorized by this manifest; any later change to these members needs its own manifest, staging acceptance and owner approval.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Security audit 2026-10-29, findings 2-4 (Lambda part): data RPC access gates (finding 4, data-rpc-access-gates manifest), partner storage writes (finding 3, partner-storage-writes manifest) and branding logo served types (finding 2, branding-logo-served-types manifest), applied 2026-10-29 through the guarded overlay path to checksops-production-prep-api, one member per run in plan order, each on its own owner approval (the workflow refuses an apply unless approval_phrase is exactly \"DEPLOY <member> TO PRODUCTION\"): data.mjs 4baa46e5 -> c7dd8229 on \"DEPLOY data.mjs TO PRODUCTION\" (main fd141a17bdf221474cf7f37ed8e2fa2200e0fc0f; staging inspect run 40905968523, staging apply run 40906234218; production inspect run 40906504524 READY, member PRESENT 4baa46e5, CodeSha256 xS83i1iAu2xuvIQjQwLSfy7xxfSHmPmno8uiGwzaFAk=, RevisionId 57792294-a40d-43bc-a647-4d9652eaf257; production apply run 40907296471 VERIFIED c7dd8229 at CodeSha256 ZfOywmCa97yWEcKGnP2NT63da61fdOcoMdAaNhB0pIs=, RevisionId be3266c0-4c30-4ce9-b468-eeb62130a647); storage-write-auth.mjs fb9e3ecd -> 1e821ea0 on \"DEPLOY storage-write-auth.mjs TO PRODUCTION\" (main fd141a1; staging inspect run 40903141869, staging apply run 40903578969; production inspect run 40907652626 READY, member PRESENT fb9e3ecd at ZfOywmCa/be3266c0; production apply run 40908770516 VERIFIED 1e821ea0 at CodeSha256 5TpFwgUtgYUyeCAiDGIfiUMiuyXa5L23uNXoWSPlNnc=, RevisionId 0d7ec549-f275-466b-9cf1-3b39b10af251); storage.mjs d92f34ca -> 0f7c1b3e on \"DEPLOY storage.mjs TO PRODUCTION\" (staging inspect run 40902092276, staging apply run 40902478793; production inspect run 40902942196 refused SOURCE_RECONCILIATION_REQUIRED against the earlier planned 77714d51, fixed in #1384; production apply run 40905353992 refused DEPLOYMENT_COLLISION, data.mjs and storage-write-auth.mjs pending, nothing applied; production inspect run 40909001691 READY, member PRESENT d92f34ca at 5TpFwgUt/0d7ec549; production apply run 40910519696 on main 6a333e035733d92c78219aa6de03388b398bee01 VERIFIED 0f7c1b3e at CodeSha256 slwmCHHH5iqb6T3eIMZCo63f9guVQKuiGu/HjBM1TwQ=, RevisionId 4ac2890d-feb8-4147-a9e3-f8bc7b573134); storage-write.mjs ccc72b14 -> 04dac9a4 on \"DEPLOY storage-write.mjs TO PRODUCTION\" (staging inspect run 40904776551, staging apply run 40904980873; production inspect run 40910959725 on main 1e73a2360c19605ceb94b1a74f68722aa243efcb READY, member PRESENT ccc72b14 at slwmCHHH/4ac2890d; production apply run 40911380838 VERIFIED 04dac9a4 at CodeSha256 FBGgkpmi2fEtKbLXBHsdDaRtHTqSFPOa9nXF5yLmBfo=, RevisionId 7b32f210-e6b4-4d9d-906f-5f06b5dcf7fb); check-reconciliation.mjs eae0171e -> 3dc1da5a on \"DEPLOY check-reconciliation.mjs TO PRODUCTION\" (staging inspect run 40905974183, staging apply run 40906239827; production inspect run 40911804852 READY, member PRESENT eae0171e at FBGgkpmi/7b32f210; production apply run 40912263545 VERIFIED 3dc1da5a at CodeSha256 TPyZ2fUUVERHh1WHUM9y4WMC3e+Cf/IqRybyI7jIBzc=, RevisionId c119508b-a561-4f74-a4ff-88fcfbf84a15). Read-only GetFunctionConfiguration afterwards: CodeSha256 TPyZ2fUUVERHh1WHUM9y4WMC3e+Cf/IqRybyI7jIBzc= (hex 4cfc99d9), RevisionId c119508b-a561-4f74-a4ff-88fcfbf84a15, LastModified 2026-10-29T16:31:12Z, LastUpdateStatus Successful. Public production smoke /prep/health and /prep/db-health 200 after every apply. Each member's sha256 is derived from main's bytes and equals the memberSha256 its verify step read. GitHub returned only the tail of each apply log (the writer prints the package member list), so each apply run's own inspect block and receipt were not read; the pre-apply state is the inspect run just before it, whose CodeSha256 and RevisionId equal the previous apply's verify. No rebuild inspect followed, so the live package is not compared with a candidate zip of main.",
+  "members": {
+    "data.mjs": {
+      "live_sha256": "c7dd822951344d0fb3d3833597eb6292a4a5073754fab659903cedc2c7437aaa",
+      "accepted_sha256": "c7dd822951344d0fb3d3833597eb6292a4a5073754fab659903cedc2c7437aaa",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-data-rpc-access-gates-manifest-2026-10-29.json"
+    },
+    "storage-write-auth.mjs": {
+      "live_sha256": "1e821ea095ef03c91cb25770db7b322b0f91d69c9a96aa3cc3462510a92e5ed4",
+      "accepted_sha256": "1e821ea095ef03c91cb25770db7b322b0f91d69c9a96aa3cc3462510a92e5ed4",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-partner-storage-writes-manifest-2026-10-29.json"
+    },
+    "storage.mjs": {
+      "live_sha256": "0f7c1b3e5cbf3e048273228031a3c211cfe4ddd42216c46f6c021c5ebdbad190",
+      "accepted_sha256": "0f7c1b3e5cbf3e048273228031a3c211cfe4ddd42216c46f6c021c5ebdbad190",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-branding-logo-served-types-manifest-2026-10-29.json"
+    },
+    "storage-write.mjs": {
+      "live_sha256": "04dac9a46334ec2b219623c41ca620524546bcc3343c163da306f2ca1d42395f",
+      "accepted_sha256": "04dac9a46334ec2b219623c41ca620524546bcc3343c163da306f2ca1d42395f",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-partner-storage-writes-manifest-2026-10-29.json"
+    },
+    "check-reconciliation.mjs": {
+      "live_sha256": "3dc1da5a7838a62bf73c35e9b64423ee75ed929d2872a91642810d6d735904fe",
+      "accepted_sha256": "3dc1da5a7838a62bf73c35e9b64423ee75ed929d2872a91642810d6d735904fe",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-data-rpc-access-gates-manifest-2026-10-29.json"
+    }
+  }
+}
