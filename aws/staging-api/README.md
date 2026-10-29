@@ -70,3 +70,27 @@ aws iam put-role-policy \
 
 The Cursor role `ChecksOpsCursorCloudStaging` also reaches the production pool. That is a separate
 finding with its own change.
+
+## Applied (2026-10-29)
+
+Owner approval, verbatim: "start finding 1's migration PR and apply A and apply A2".
+Source: `class-a-policy.json` from `origin/main` `e82e7d2` (PR #1367, merge `ca9b69c`),
+sha256 `7793d04226fe4c555bb962564504001c7c90de0c5b50d9ac176faf8acf795aea`. Identity:
+`arn:aws:iam::806168576068:user/claude-code`.
+
+1. Precondition: `iam:GetRolePolicy` before the apply equalled
+   `class-a-policy.live-2026-10-29.json`.
+2. `iam:PutRolePolicy` with `class-a-policy.json`.
+3. `iam:GetRolePolicy` after the apply equals `class-a-policy.json`.
+4. `iam:SimulatePrincipalPolicy` after the apply:
+
+   | action | staging `us-east-1_vPmQ7cL1F` | production `us-east-1_h00WorYMT` |
+   |---|---|---|
+   | AdminCreateUser | allowed | implicitDeny |
+   | AdminGetUser | allowed | implicitDeny |
+   | AdminSetUserPassword | allowed | implicitDeny |
+   | AdminDisableUser | allowed | implicitDeny |
+
+Not yet done: the staging invite smoke test (step 3 of "Verify after apply"). It needs a staging
+login in the app; the simulate above shows the four invite actions still allowed on the staging
+pool.
