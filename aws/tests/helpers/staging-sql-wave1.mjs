@@ -113,6 +113,10 @@ export const STAGING_WAVE1 = Object.freeze({
   // send-for-signature, reads and timeline. Read at main 3606348 after the executor carried it (deploy
   // run 40754334967): the eight functions absent, every prerequisite present, the definer writes possible.
   sql124: Object.freeze({ wave: 23, approved: '2026-10-28', run: '40754712957', live: '59fe6907e23de341e97d4aec548203d0cd7f7cf320b009e0e440d247d82a4db2' }),
+  // Wave 24 (owner approved 2026-10-29, "open the SQL 125 staging pin PR"): SQL 125, security_invoker
+  // on the four deposit views (security audit). Read at main a0c5c51 after the executor carried it
+  // (deploy run 40885862573): the four views present with the reviewed definitions and no options.
+  sql125: Object.freeze({ wave: 24, approved: '2026-10-29', run: '40886747687', live: '9b31cf5dad3f82bf69fcddd03e0c26c0dc0fdd5ff6bd40137d1af316f1fd6541' }),
   sql98: Object.freeze({ wave: 3, approved: '2026-10-18', run: '39083278136', live: '296c3d6a274e10f66005fb9eaecf93fa17b81bd8db3607037ca07698fddd3275', apply_run: '39085677318' }),
 });
 
@@ -124,7 +128,7 @@ export const pendingPin = (pin) => Object.freeze({
 });
 
 /**
- * The committed staging pin's apply state: waves 1-23 recorded and approved, wave 6 approved with
+ * The committed staging pin's apply state: waves 1-24 recorded and approved, wave 6 approved with
  * its read-live still to record (pending until then), wave 18 (SQL 117) retired, the rest pending.
  */
 export function assertStagingPinState(assert, key, pin) {

@@ -2803,7 +2803,7 @@ export const AUTHORIZED_SQL124_MORTGAGE_DESK_SIGNATURE_AND_READS = Object.freeze
 // views deposit_queue_scored, deposit_owner_performance, deposit_reminder_queue and
 // deposit_aging_dashboard, so a query through them reads deposit_items, deposit_exceptions and
 // deposit_attachments under their RLS). No function, grant or definition change. No predecessor.
-// Pending until a reviewed pin change records a staging read-live.
+// Staging apply authorized (wave 24) from staging read-live run 40886747687.
 export const AUTHORIZED_SQL125_DEPOSIT_VIEWS_SECURITY_INVOKER = Object.freeze({
   key: 'sql125',
   filename: 'aws/workflows/sql/125_deposit_views_security_invoker.sql',
@@ -2811,9 +2811,11 @@ export const AUTHORIZED_SQL125_DEPOSIT_VIEWS_SECURITY_INVOKER = Object.freeze({
   // The commit that last authored the file bytes.
   commit: 'c0e9d1ee6b69a0e807db3b31493241826852ea28',
   source_sha256: 'fc8096a3e7b4b71b05edfc80815aeca43d45bcacff9bc7486065aed34ba4d943',
-  authorization: 'pending',
-  execute: false,
-  expected_live_definition_sha256: null,
+  authorization: 'Owner approved 2026-10-29: staging apply (wave 24) from staging read-live run 40886747687',
+  execute: true,
+  // Staging read-live run 40886747687 (main a0c5c51, executor carrying main 8b231c3's package): the four
+  // views present with the reviewed definitions and no options.
+  expected_live_definition_sha256: '9b31cf5dad3f82bf69fcddd03e0c26c0dc0fdd5ff6bd40137d1af316f1fd6541',
   // Code-derived: releaseIntendedHash('sql125', file bytes) (release-sql-state.mjs); re-derived by the tests.
   intended_replacement_sha256: 'a041efa5d6b8e564c860974d2427415ec3e031a8a63daf43005e893e2d55ddea',
   function_identities: Object.freeze([]),
