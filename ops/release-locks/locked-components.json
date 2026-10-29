@@ -704,20 +704,20 @@
       "production_active": true,
       "environment": "production",
       "source": {
-        "git_sha": "6a333e035733d92c78219aa6de03388b398bee01",
+        "git_sha": "afb1641c36bd98a302e024884d084550756455ad",
         "tree_hash": "3cad89d8a2e828fc1c711228df00f22f2c36bb3a5584054caa2caa84f463b1e0",
         "merged": true,
-        "merged_pr": 1385
+        "merged_pr": 1389
       },
       "required_sql": [],
       "artifact": {
         "type": "spa",
-        "name": "/assets/index-2dZYxtuM.js",
-        "version": "bNXlEUVgyanTCnXDO_im72PEE0UF1ZeB",
-        "hash": "7d8279612bd2ea6e915050fee035fc64a8ddd2aabafd04c2b1018f0c119e6e2a",
+        "name": "/assets/index-CbyVwa5g.js",
+        "version": "RYLGENmB2CXzugmz9Wc02toeeq9kGaDh",
+        "hash": "56d6625883c23bbceae61f67b818bd2a7d4a071ea1477e651db28ac954333e6a",
         "cloudfront_distribution": "E1B0ZWWO5559U5",
         "lambda_name": "checksops-production-prep-api",
-        "lambda_version": "4ac2890d-feb8-4147-a9e3-f8bc7b573134",
+        "lambda_version": "c119508b-a561-4f74-a4ff-88fcfbf84a15",
         "lambda_alias": null
       },
       "production_validation": {
@@ -726,34 +726,34 @@
           "ops/release-locks/proof/production-spa-baseline.md",
           "ops/production-spa-deploy.md"
         ],
-        "recorded_at": "2026-10-29T16:25:17Z",
+        "recorded_at": "2026-10-29T17:14:40Z",
         "environment": "production",
         "component": "production-spa",
-        "git_sha": "6a333e035733d92c78219aa6de03388b398bee01",
-        "artifact_identity": "/assets/index-2dZYxtuM.js",
-        "evidence_producer": "guarded-production-spa-upload run 40910937417 (host-verified)",
+        "git_sha": "afb1641c36bd98a302e024884d084550756455ad",
+        "artifact_identity": "/assets/index-CbyVwa5g.js",
+        "evidence_producer": "guarded-production-spa-upload run 40918945066 (host-verified)",
         "evidence_type": "guarded production SPA upload of a fresh main build"
       },
       "deployment_fingerprint": {
         "recorded": true,
-        "spa_bundle": "/assets/index-2dZYxtuM.js",
-        "spa_sha256": "7d8279612bd2ea6e915050fee035fc64a8ddd2aabafd04c2b1018f0c119e6e2a",
+        "spa_bundle": "/assets/index-CbyVwa5g.js",
+        "spa_sha256": "56d6625883c23bbceae61f67b818bd2a7d4a071ea1477e651db28ac954333e6a",
         "cloudfront_id": "E1B0ZWWO5559U5",
         "cloudfront_distribution": "E1B0ZWWO5559U5",
-        "cloudfront_deployment_fingerprint": "bNXlEUVgyanTCnXDO_im72PEE0UF1ZeB",
+        "cloudfront_deployment_fingerprint": "RYLGENmB2CXzugmz9Wc02toeeq9kGaDh",
         "lambda_name": "checksops-production-prep-api",
-        "lambda_version": "4ac2890d-feb8-4147-a9e3-f8bc7b573134",
+        "lambda_version": "c119508b-a561-4f74-a4ff-88fcfbf84a15",
         "lambda_code_hash": null,
         "applied_sql_hash": null,
         "database_evidence_record": null,
-        "config_hash": "221f38f6979534118089cb421d728b06e32d5ea38c7f7101de1ae4cf608de027",
-        "notes": "Guarded production SPA upload 2026-10-29T16:25:17Z (the apply step's finished_at 2026-10-29T16:25:17.106Z; run 40910937417, job 123578399731, workstream github-production-spa-40910937417, owner-approved \"DEPLOY WEBSITE TO PRODUCTION\", staging acceptance run 40909688278 of the same main 6a333e035) of main 6a333e035, whose history contains the previous locked source 69338a1a0. Pre-apply read-only inspect run 40910782898 (job 123577864691) and the writer's preflight showed live equal to the previous lock (index.html sha256 a297f70f695c6c1ca062e01215e5d77530d5de25d81f2678cc179d98a1c45508, entry /assets/index-9wmcw3M0.js, S3 version ooES2v.bCF9XevoHCe8KH6t5LeeNtJpb, live_matches_lock true), and the writer re-read the same immediately before the first write and before the switch. The writer uploaded assets first and index.html last (no delete); CloudFront invalidation IEUZLEHU05OT1TBDLA2CLODF5U; index.html etag 562b89c039c320549329d1d31c380d8e, S3 version bNXlEUVgyanTCnXDO_im72PEE0UF1ZeB; entry asset assets/index-2dZYxtuM.js etag 1e93fba8009723905dada923a99e1865, S3 version NMFWQCaTrp7.xKGDhBC3fsSTv4E3mhrc; the run's public smoke step passed (https://checksops.com serves /assets/index-2dZYxtuM.js and /prep/health ok). The entry bundle sha256 7d8279612bd2ea6e915050fee035fc64a8ddd2aabafd04c2b1018f0c119e6e2a is the writer's candidate_fingerprint and after_host_fingerprint; the index.html sha256 221f38f6979534118089cb421d728b06e32d5ea38c7f7101de1ae4cf608de027 is its after_s3_fingerprint and after_host_fingerprint. The writer reported lock_advance advanced false, so the lock is advanced by this record. Ships the frontend change of PR #1385 (Recent Wallet Activity dates ChecksOps Billing rows by their real time; src/lib/payments/walletRelativeTransfers.ts and src/pages/WalletOps.tsx); PRs #1367-#1384 changed only Lambda/SQL records, not the SPA, except that a6bfa142f (SQL 125) changed package.json only to add test files to the test:deployment-guard script, and the SPA build is unaffected. The staging entry bundle of run 40909688278 is /assets/index-D9ckQzi_.js (staging index.html sha256 b655030170662f53b634d4982fd8b11a16b108100fbe6c25e01e585748e76369); it differs from production because the environment build variables differ. lambda_version is the production Lambda RevisionId 4ac2890d-feb8-4147-a9e3-f8bc7b573134 (CodeSha256 slwmCHHH5iqb6T3eIMZCo63f9guVQKuiGu/HjBM1TwQ=) live during this upload, taken from the post-apply verify output of the guarded production overlay run 40910519696 (job 123576936144, member storage.mjs, VERIFIED), not re-read live; it supersedes 57792294-a40d-43bc-a647-4d9652eaf257. A later security overlay, run 40911380838 (job 123579959659, member storage-write.mjs, PR #1386, applied 16:25:40-16:25:50Z, 23 seconds after this upload finished), moved the production Lambda to RevisionId 7b32f210-e6b4-4d9d-906f-5f06b5dcf7fb (CodeSha256 FBGgkpmi2fEtKbLXBHsdDaRtHTqSFPOa9nXF5yLmBfo=); this lock records the Lambda as of the SPA upload, and the security session's own records cover the Lambda. The upload workflow makes no Lambda call and did not change the Lambda. Previous lock /assets/index-9wmcw3M0.js is the rollback."
+        "config_hash": "3749713fd03d6a4c98af83ed9bf5f0288b1db9ff083fb1f8c3635522a09d0bb7",
+        "notes": "Guarded production SPA upload 2026-10-29T17:14:40Z (the apply step's finished_at 2026-10-29T17:14:40.274Z; run 40918945066, job 123606638401, workstream github-production-spa-40918945066, owner-approved \"DEPLOY WEBSITE TO PRODUCTION\", staging acceptance run 40918039406 of the same main afb1641c3) of main afb1641c3, whose history contains the previous locked source 6a333e035. Pre-apply read-only inspect run 40918754603 (job 123605957818) and the writer's preflight showed live equal to the previous lock (index.html sha256 221f38f6979534118089cb421d728b06e32d5ea38c7f7101de1ae4cf608de027, entry /assets/index-2dZYxtuM.js, S3 version bNXlEUVgyanTCnXDO_im72PEE0UF1ZeB, live_matches_lock true), and the writer re-read the same immediately before the first write and before the switch. The writer uploaded assets first and index.html last (no delete); CloudFront invalidation I8BD41GUFN0IAEC0KVL42TWFHD; index.html etag f9b20dad2bb47e6e68d81254d02986a9, S3 version RYLGENmB2CXzugmz9Wc02toeeq9kGaDh; entry asset assets/index-CbyVwa5g.js etag 132471513ba9fa023c86e7067dc7d79a, S3 version B8k838mN..dTt6IHu5D3nm9NiwgCCVJv; the run's public smoke step passed (https://checksops.com serves /assets/index-CbyVwa5g.js and /prep/health ok). The entry bundle sha256 56d6625883c23bbceae61f67b818bd2a7d4a071ea1477e651db28ac954333e6a is the writer's candidate_fingerprint and after_host_fingerprint; the index.html sha256 3749713fd03d6a4c98af83ed9bf5f0288b1db9ff083fb1f8c3635522a09d0bb7 is its after_s3_fingerprint and after_host_fingerprint. The writer reported lock_advance advanced false, so the lock is advanced by this record. Ships the frontend change of PR #1389 (removes the WalletOps Check status button from Recent Wallet Activity, which now shows Updates automatically; src/pages/WalletOps.tsx); PRs #1386-#1388 changed only Lambda/SQL records and the release lock, not the SPA, except that ac603cb69 (SQL 126, PR #1386) changed package.json only to add test files to the test:deployment-guard script, and the SPA build is unaffected. The staging entry bundle of run 40918039406 is /assets/index-CoMzoOpW.js (staging index.html sha256 202387e222d00b0ba11b5102a918cd2a4cf736adb6bd035ef1b1d0bcd592e0c8); it differs from production because the environment build variables differ. lambda_version is the production Lambda RevisionId c119508b-a561-4f74-a4ff-88fcfbf84a15 (CodeSha256 TPyZ2fUUVERHh1WHUM9y4WMC3e+Cf/IqRybyI7jIBzc=) live during this upload, taken from the post-apply verify output of the guarded production overlay run 40912263545 (job 123583082988, member check-reconciliation.mjs, PR #1388 record, applied 16:31:06-16:31:16Z, VERIFIED), the last overlay apply before this upload, not re-read live; it supersedes 4ac2890d-feb8-4147-a9e3-f8bc7b573134, which overlay runs 40911380838 (storage-write.mjs, RevisionId 7b32f210-e6b4-4d9d-906f-5f06b5dcf7fb) and 40912263545 had moved before this upload began. No guarded production Lambda overlay run started after run 40912263545, so none ran during or after this upload (17:13:04-17:14:40Z). The upload workflow makes no Lambda call and did not change the Lambda. Previous lock /assets/index-2dZYxtuM.js is the rollback."
 
       },
       "rollback": {
-        "git_sha": "69338a1a00af957bf1c8d067bb446b0c9ba68ce6",
-        "artifact": "/assets/index-9wmcw3M0.js",
-        "notes": "Immediate previous locked baseline is /assets/index-9wmcw3M0.js (S3 index.html version ooES2v.bCF9XevoHCe8KH6t5LeeNtJpb, index.html sha256 a297f70f695c6c1ca062e01215e5d77530d5de25d81f2678cc179d98a1c45508, bundle sha256 ff29111f1f6afbb4a3bbbd57bcd91c3a9f0d7d07ad450c5dfb2fb2408a99b95f; its assets were not deleted). Do not restore it unless a separately authorized guarded rollback names that exact artifact."
+        "git_sha": "6a333e035733d92c78219aa6de03388b398bee01",
+        "artifact": "/assets/index-2dZYxtuM.js",
+        "notes": "Immediate previous locked baseline is /assets/index-2dZYxtuM.js (S3 index.html version bNXlEUVgyanTCnXDO_im72PEE0UF1ZeB, index.html sha256 221f38f6979534118089cb421d728b06e32d5ea38c7f7101de1ae4cf608de027, bundle sha256 7d8279612bd2ea6e915050fee035fc64a8ddd2aabafd04c2b1018f0c119e6e2a; its assets were not deleted). Do not restore it unless a separately authorized guarded rollback names that exact artifact."
 
       },
       "missing_evidence": [],
@@ -768,7 +768,7 @@
       "environment": "unknown",
       "source": {
         "git_sha": "b815d6bebc0cb0e8d907197bd5c538816438a40c",
-        "tree_hash": "ad744de21ab9aaf4e4ebc3983c06af0ff67b63719fd98258936133a1b826e260",
+        "tree_hash": "074797627a7fc23111092f04b924709a5860abfa28071109358557ec232be357",
         "merged": true,
         "merged_pr": null
       },
