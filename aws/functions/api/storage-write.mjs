@@ -7,14 +7,13 @@ import {
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { ignoredSpoof, parseBody, withIdentity, withIdentityWrite } from './data.mjs';
-import { authorizeObject } from './storage.mjs';
 import {
   ALLOWED_UPLOAD_CONTENT_TYPES,
   MAX_UPLOAD_BYTES,
   normalizePath,
   s3KeyFor,
 } from './storage-paths.mjs';
-import { authorizeStorageWritePath } from './storage-write-auth.mjs';
+import { authorizeObjectWrite, authorizeStorageWritePath } from './storage-write-auth.mjs';
 import { LIBRARY_BUCKET, isLibraryContentType, isLibrarySize } from './tenant-library-rules.mjs';
 import { storageWritesEnabled } from './write-allowlist.mjs';
 import { stampOfficialRearFingerprintIfNeeded } from './providers/production/checkalt-eligibility.mjs';
@@ -63,7 +62,9 @@ const authorizeDeletePath = async (client, bucket, objectPath, userId) => {
   }
   const rel = normalizePath(objectPath, bucket);
   if (!rel) return { ok: false, statusCode: 400, error: 'invalid_path' };
-  const existing = await authorizeObject(client, bucket, rel);
+  // A referencing row the caller may write, never one it can only read (a partner's shared
+  // check, the platform owner's cross-tenant view).
+  const existing = await authorizeObjectWrite(client, bucket, rel);
   if (!existing.authorized) {
     return {
       ok: false,

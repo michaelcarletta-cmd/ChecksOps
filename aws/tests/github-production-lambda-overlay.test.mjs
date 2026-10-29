@@ -32,6 +32,8 @@ const ENV = {
 };
 
 const API = path.join(ROOT, 'aws/functions/api');
+// Security audit finding 3 (2026-10-29): planned REPLACE of storage-write-auth.mjs, then storage-write.mjs.
+const PARTNER_STORAGE_WRITES_REL = 'aws/tests/fixtures/production-partner-storage-writes-manifest-2026-10-29.json';
 function repoModules(dir = API, prefix = '') {
   const out = {};
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -606,24 +608,61 @@ test('storage-write.mjs expected_live records the bytes production run 397077782
   assert.ok(PLAN.order.includes(STORAGE_WRITE));
   const row = PLAN.members[STORAGE_WRITE];
   assert.equal(row.operation, 'replace');
-  assert.equal(row.manifest, MANIFEST_REL);
   assert.equal(row.sql_before, 'aws/workflows/sql/94_document_library_restore.sql');
-  assert.equal(row.expected_live_sha256, LIVE);
-  assert.equal(row.accepted_sha256, LIVE);
-  assert.equal(sha(`aws/functions/api/${STORAGE_WRITE}`), LIVE);
   const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, MANIFEST_REL), 'utf8'));
   assert.equal(manifest.members[STORAGE_WRITE].live_sha256, LIVE);
   assert.equal(manifest.members[STORAGE_WRITE].accepted_sha256, LIVE);
   assert.match(manifest.notes, /run 39707778256/);
+  // The plan row moved on to the partner storage writes change (checked in its own test), planned
+  // over the bytes this apply put live.
+  assert.equal(row.expected_live_sha256, LIVE);
+  assert.equal(row.manifest, PARTNER_STORAGE_WRITES_REL);
+  const next = JSON.parse(fs.readFileSync(path.join(ROOT, PARTNER_STORAGE_WRITES_REL), 'utf8'));
+  assert.equal(next.members[STORAGE_WRITE].live_sha256, LIVE);
+  assert.equal(next.members[STORAGE_WRITE].previous_manifest, MANIFEST_REL);
   assert.equal(resolvePlannedMember(STORAGE_WRITE, { root: ROOT, plan: PLAN }).ok, true);
   const done = await run({ ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: STORAGE_WRITE }, { root: ROOT, inspectLive: liveFor(STORAGE_WRITE) });
-  assert.equal(done.state, 'ALREADY_ACCEPTED');
+  assert.equal(done.state, 'READY');
   assert.equal(done.mutation, false);
   // The pre-apply bytes are no longer an accepted live state.
   await assert.rejects(
     run({ ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: STORAGE_WRITE }, { root: ROOT, inspectLive: liveFor(STORAGE_WRITE, { sha256: BEFORE }) }),
     (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
   );
+});
+
+test('partner storage writes: storage-write-auth.mjs then storage-write.mjs REPLACE their applied bytes (planned, not applied)', async () => {
+  const AUTH = 'storage-write-auth.mjs';
+  const WRITE = 'storage-write.mjs';
+  const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, PARTNER_STORAGE_WRITES_REL), 'utf8'));
+  assert.equal(manifest.workstream_id, 'partner-storage-writes');
+  assert.equal(manifest.deploy_authorized, false);
+  assert.match(manifest.authorization, /^Pending owner review/);
+  assert.deepEqual(Object.keys(manifest.members), [AUTH, WRITE]);
+  const PREVIOUS = {
+    [AUTH]: 'aws/tests/fixtures/production-mortgage-desk-return-applied-manifest-2026-10-28.json',
+    [WRITE]: 'aws/tests/fixtures/production-upload-url-rear-stamp-manifest-2026-10-22.json',
+  };
+  for (const member of [AUTH, WRITE]) {
+    const row = PLAN.members[member];
+    // From the bytes the previous manifest recorded applied, to main's bytes.
+    const applied = JSON.parse(fs.readFileSync(path.join(ROOT, PREVIOUS[member]), 'utf8')).members[member].accepted_sha256;
+    assert.deepEqual(manifest.members[member], { live_sha256: applied, accepted_sha256: sha(`aws/functions/api/${member}`), operation: 'replace', previous_manifest: PREVIOUS[member] }, member);
+    assert.equal(row.operation, 'replace', member);
+    assert.equal(row.manifest, PARTNER_STORAGE_WRITES_REL, member);
+    assert.equal(row.expected_live_sha256, applied, member);
+    assert.equal(row.accepted_sha256, sha(`aws/functions/api/${member}`), member);
+    assert.notEqual(row.accepted_sha256, applied, member);
+    assert.equal(resolvePlannedMember(member, { root: ROOT, plan: PLAN }).ok, true, member);
+    const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: member };
+    assert.equal((await run(inspect, { root: ROOT, inspectLive: liveFor(member) })).state, 'READY', member);
+    assert.equal((await run(inspect, { root: ROOT, inspectLive: liveFor(member, { sha256: row.accepted_sha256 }) })).state, 'ALREADY_ACCEPTED', member);
+  }
+  // storage-write.mjs imports the new authorizeObjectWrite from storage-write-auth.mjs: that member goes first.
+  assert.ok(localImports(fs.readFileSync(path.join(API, WRITE), 'utf8'), WRITE).includes(AUTH));
+  assert.match(fs.readFileSync(path.join(API, WRITE), 'utf8'), /import \{ authorizeObjectWrite, authorizeStorageWritePath \} from '\.\/storage-write-auth\.mjs'/);
+  assert.ok(PLAN.order.indexOf(AUTH) < PLAN.order.indexOf(WRITE));
+  assert.match(PLAN.notes, /Partner storage writes \(2026-10-29, security audit finding 3, pending owner review\)/);
 });
 
 test('tenant-management-v2.mjs comes just before app-services.mjs, which imports it statically', async () => {
@@ -2550,6 +2589,9 @@ test('Mortgage Desk return: ADD mortgage-desk-return.mjs held on SQL 122 (record
   const NEXT_REL = 'aws/tests/fixtures/production-mortgage-desk-esign-manifest-2026-10-28.json';
   const NEXT_APPLIED_REL = 'aws/tests/fixtures/production-mortgage-desk-esign-applied-manifest-2026-10-28.json';
   const MOVED_ON = ['app-services.mjs'];
+  // storage-write-auth.mjs has moved on too, to a change not applied yet: the partner storage writes
+  // plan REPLACEs it from these applied bytes.
+  const PENDING = { 'storage-write-auth.mjs': PARTNER_STORAGE_WRITES_REL };
   const appliedAt = (member) => appliedManifest.members[member].accepted_sha256;
   const addRow = PLAN.members[ADD];
   assert.deepEqual(addRow, { operation: 'add', accepted_sha256: sha(`aws/functions/api/${ADD}`), expected_live_sha256: null, sql_before: SQL122, manifest: MANIFEST_REL });
@@ -2564,7 +2606,12 @@ test('Mortgage Desk return: ADD mortgage-desk-return.mjs held on SQL 122 (record
   for (const member of REPLACES) {
     const row = PLAN.members[member];
     assert.equal(row.operation, 'replace', member);
-    if (MOVED_ON.includes(member)) {
+    if (PENDING[member]) {
+      assert.equal(row.expected_live_sha256, appliedAt(member), member);
+      assert.equal(row.manifest, PENDING[member], member);
+      const next = JSON.parse(fs.readFileSync(path.join(ROOT, PENDING[member]), 'utf8')).members[member];
+      assert.deepEqual(next, { live_sha256: appliedAt(member), accepted_sha256: row.accepted_sha256, operation: 'replace', previous_manifest: APPLIED_REL }, member);
+    } else if (MOVED_ON.includes(member)) {
       // Applied 2026-10-28; the next REPLACE started from those applied bytes and is recorded applied too.
       assert.equal(row.expected_live_sha256, row.accepted_sha256, member);
       assert.equal(row.manifest, NEXT_APPLIED_REL, member);
@@ -2593,7 +2640,7 @@ test('Mortgage Desk return: ADD mortgage-desk-return.mjs held on SQL 122 (record
   assert.match(appliedManifest.authorization, /^Record only/);
   assert.deepEqual(Object.keys(appliedManifest.members), [ADD, ...REPLACES]);
   for (const member of [ADD, ...REPLACES]) {
-    const accepted = MOVED_ON.includes(member) ? manifest.members[member].accepted_sha256 : sha(`aws/functions/api/${member}`);
+    const accepted = MOVED_ON.includes(member) || PENDING[member] ? manifest.members[member].accepted_sha256 : sha(`aws/functions/api/${member}`);
     assert.deepEqual(appliedManifest.members[member], { live_sha256: accepted, accepted_sha256: accepted, operation: PLAN.members[member].operation, previous_manifest: MANIFEST_REL }, member);
     assert.ok(appliedManifest.notes.includes(`"DEPLOY ${member} TO PRODUCTION"`), member);
   }
