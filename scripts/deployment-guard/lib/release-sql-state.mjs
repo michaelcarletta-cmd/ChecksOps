@@ -961,8 +961,11 @@ export function releaseUnrelatedScope(key) {
 // $1: relations created by the migration (skipped with their indexes, columns, constraints, policies and triggers).
 const SKIPPED_REL = (oid) => `EXISTS (SELECT 1 FROM unnest($1::text[]) x WHERE pg_catalog.to_regclass(x) = ${oid})`;
 const RELEASE_UNRELATED_SQL = Object.freeze({
+  // $4: the spec's views. Their reloptions are fingerprinted with the view (spec.views), so a
+  // migration may set them (security_invoker); owner, ACL and RLS flags stay here.
   relations: `SELECT c.oid::regclass::text || ' ' || c.relkind::text || ' ' || pg_catalog.pg_get_userbyid(c.relowner) || ' '
-  || c.relrowsecurity::text || ' ' || c.relforcerowsecurity::text || ' ' || COALESCE(c.reloptions::text, '') || ' '
+  || c.relrowsecurity::text || ' ' || c.relforcerowsecurity::text || ' '
+  || CASE WHEN (n.nspname || '.' || c.relname) = ANY ($4::text[]) THEN '<options in spec>' ELSE COALESCE(c.reloptions::text, '') END || ' '
   || CASE WHEN (n.nspname || '.' || c.relname) = ANY ($2::text[]) THEN '<acl ignored>' ELSE COALESCE(c.relacl::text, '') END AS d
 FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
 WHERE n.nspname = 'public' AND NOT ${SKIPPED_REL('c.oid')}
@@ -1040,7 +1043,7 @@ FROM pg_catalog.pg_namespace n WHERE n.nspname IN ('public', 'auth') ORDER BY 1`
 export async function readReleaseUnrelatedSnapshot(client, key) {
   const scope = releaseUnrelatedScope(key);
   const params = {
-    relations: [scope.skip_relations, scope.acl_relations, scope.skip_indexes],
+    relations: [scope.skip_relations, scope.acl_relations, scope.skip_indexes, scope.skip_views],
     columns: [scope.skip_relations, scope.skip_columns],
     constraints: [scope.skip_relations, scope.skip_constraints, scope.skip_not_null_columns],
     policies: [scope.skip_relations, scope.skip_policies],
