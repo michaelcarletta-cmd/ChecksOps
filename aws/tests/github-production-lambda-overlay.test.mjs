@@ -1634,7 +1634,14 @@ test('Refer & Earn routes: data.mjs and workflow-rpc.mjs expected_live record th
       // Mortgage Desk return (applied 2026-10-28), each a REPLACE that started from the bytes this apply put
       // live (their own tests below): these bytes are no longer accepted live.
       const later = MOVED_ON[member];
-      assert.equal(row.manifest, later.applied, member);
+      // The row names that applied manifest, or a later planning manifest chained to it
+      // (data.mjs: the RPC access gates, planned 2026-10-29 over the credential-column bytes).
+      const chain = [];
+      for (let rel = row.manifest; rel && !chain.includes(rel); rel = JSON.parse(fs.readFileSync(path.join(ROOT, rel), 'utf8')).members[member]?.previous_manifest) {
+        chain.push(rel);
+        if (rel === later.applied) break;
+      }
+      assert.equal(chain.at(-1), later.applied, member);
       assert.notEqual(row.accepted_sha256, live, member);
       assert.notEqual(row.expected_live_sha256, live, member);
       assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, later.applied), 'utf8')).members[member].previous_manifest, later.manifest, member);
@@ -1979,20 +1986,24 @@ test('Data API credential columns: data.mjs expected_live records the bytes prod
   assert.equal(manifest.workstream_id, 'data-secret-columns');
   assert.deepEqual(manifest.members[MEMBER], { live_sha256: BEFORE, accepted_sha256: LIVE, operation: 'replace', previous_manifest: PREVIOUS_REL });
   assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, PREVIOUS_REL), 'utf8')).members[MEMBER].accepted_sha256, BEFORE);
+  // The row has since moved on to the RPC access gates (planned 2026-10-29 over these applied
+  // bytes, their own test below): expected_live still records these bytes; accepted is main's.
+  const GATES_REL = 'aws/tests/fixtures/production-data-rpc-access-gates-manifest-2026-10-29.json';
   const row = PLAN.members[MEMBER];
   assert.equal(row.operation, 'replace');
-  assert.equal(row.manifest, APPLIED_REL);
+  assert.equal(row.manifest, GATES_REL);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, GATES_REL), 'utf8')).members[MEMBER].previous_manifest, APPLIED_REL);
   assert.equal(row.expected_live_sha256, LIVE);
-  assert.equal(row.accepted_sha256, LIVE);
-  assert.equal(sha(`aws/functions/api/${MEMBER}`), LIVE);
+  assert.notEqual(row.accepted_sha256, LIVE);
+  assert.equal(sha(`aws/functions/api/${MEMBER}`), row.accepted_sha256);
   assert.equal(row.sql_before, 'aws/workflows/sql/53_claim_settlement_breakdown.sql');
   assert.equal(PLAN.sql_prerequisites[row.sql_before].verified_live, true);
   assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
   assert.ok(PLAN.order.indexOf('claim-settlement-rpc.mjs') < PLAN.order.indexOf(MEMBER));
   const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
-  const done = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: LIVE }) });
-  assert.equal(done.state, 'ALREADY_ACCEPTED');
-  assert.equal(done.mutation, false);
+  const ready = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: LIVE }) });
+  assert.equal(ready.state, 'READY');
+  assert.equal(ready.mutation, false);
   await assert.rejects(
     run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: BEFORE }) }),
     (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
@@ -2002,6 +2013,70 @@ test('Data API credential columns: data.mjs expected_live records the bytes prod
   assert.match(data, /export const SECRET_COLUMNS = Object\.freeze\(/);
   assert.match(data, /denySecretColumnQuery\(rawTable, parsedSelect, body\.filters, body\.order\)/);
   assert.match(data, /stripSecretColumns\(\(await client\.query\(sql, params\)\)\.rows, requested, table\)/);
+});
+
+test('Data API RPC access gates: data.mjs REPLACE planned over the bytes production run 40086704439 applied, keeping its SQL 53 hold', async () => {
+  const MEMBER = 'data.mjs';
+  const MANIFEST_REL = 'aws/tests/fixtures/production-data-rpc-access-gates-manifest-2026-10-29.json';
+  const PREVIOUS_REL = 'aws/tests/fixtures/production-data-secret-columns-applied-manifest-2026-10-24.json';
+  // Live: the credential-column bytes (production apply run 40086704439, post-apply inspect run
+  // 40086776532 ALREADY_ACCEPTED). Before them: the Refer & Earn bytes.
+  const LIVE = '4baa46e564aadf24d700aa4992180f845152d5e4ef423eb5ffa8d08c3b614517';
+  const OLDER = 'c14a83e7c099150b8f6e489a6b318abc850b2868beeb3a9a981eea71fc38fae0';
+  const accepted = sha(`aws/functions/api/${MEMBER}`);
+  const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, MANIFEST_REL), 'utf8'));
+  assert.equal(manifest.workstream_id, 'data-rpc-access-gates');
+  assert.equal(manifest.deploy_authorized, false);
+  assert.match(manifest.notes, /40086704439/);
+  assert.deepEqual(manifest.members[MEMBER], { live_sha256: LIVE, accepted_sha256: accepted, operation: 'replace', previous_manifest: PREVIOUS_REL });
+  assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, PREVIOUS_REL), 'utf8')).members[MEMBER].accepted_sha256, LIVE);
+  assert.match(PLAN.notes, /Data API RPC access gates \(2026-10-29; planning only, not authorized\)/);
+  const row = PLAN.members[MEMBER];
+  assert.deepEqual(row, {
+    operation: 'replace',
+    accepted_sha256: accepted,
+    expected_live_sha256: LIVE,
+    sql_before: 'aws/workflows/sql/53_claim_settlement_breakdown.sql',
+    manifest: MANIFEST_REL,
+  });
+  assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
+  const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
+  const ready = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: LIVE }) });
+  assert.equal(ready.state, 'READY');
+  const done = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: accepted }) });
+  assert.equal(done.state, 'ALREADY_ACCEPTED');
+  await assert.rejects(
+    run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: OLDER }) }),
+    (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+  );
+  // The planned bytes check the caller before the gated RPCs run.
+  const data = fs.readFileSync(path.join(API, MEMBER), 'utf8');
+  assert.match(data, /export const RPC_ACCESS_GATES = Object\.freeze\(/);
+  assert.match(data, /const denial = await rpcAccessDenial\(client, name, args, mapping\.application_user_id\);/);
+
+  // check-reconciliation.mjs joins the plan: main's bytes before this change (eae0171e) are the live
+  // member the production rebuild inspect run 40741101459 observed.
+  const RECON = 'check-reconciliation.mjs';
+  const RECON_LIVE = 'eae0171e282c879b49f9756715c0096fc6d2aea65c57826dcf0910410e56720f';
+  const reconAccepted = sha(`aws/functions/api/${RECON}`);
+  assert.match(manifest.notes, /40741101459/);
+  assert.deepEqual(manifest.members[RECON], { live_sha256: RECON_LIVE, accepted_sha256: reconAccepted, operation: 'replace' });
+  assert.deepEqual(PLAN.members[RECON], {
+    operation: 'replace',
+    accepted_sha256: reconAccepted,
+    expected_live_sha256: RECON_LIVE,
+    sql_before: null,
+    manifest: MANIFEST_REL,
+  });
+  assert.ok(PLAN.order.indexOf(MEMBER) < PLAN.order.indexOf(RECON));
+  assert.equal(PLAN.order.indexOf('db-readonly-validate.mjs') + 1, PLAN.order.indexOf(RECON));
+  assert.match(fs.readFileSync(path.join(ROOT, '.github/workflows/guarded-production-lambda-overlay.yml'), 'utf8'), /\n {10}- check-reconciliation\.mjs\n/);
+  const reconInspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: RECON };
+  assert.equal((await run(reconInspect, { root: ROOT, inspectLive: liveFor(RECON, { sha256: RECON_LIVE }) })).state, 'READY');
+  assert.equal((await run(reconInspect, { root: ROOT, inspectLive: liveFor(RECON, { sha256: reconAccepted }) })).state, 'ALREADY_ACCEPTED');
+  const recon = fs.readFileSync(path.join(API, RECON), 'utf8');
+  assert.match(recon, /WHERE c\.id = ANY\(\$1::uuid\[\]\) AND c\.tenant_id = ANY\(\$2::uuid\[\]\)/);
+  assert.doesNotMatch(recon, /!row\.tenant_id \|\|/);
 });
 
 test('Loss Draft from uploaded: workflow-transitions.mjs expected_live records the bytes production run 40089521986 applied', async () => {

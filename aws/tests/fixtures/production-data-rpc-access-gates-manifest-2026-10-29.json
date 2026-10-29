@@ -1,0 +1,20 @@
+{
+  "workstream_id": "data-rpc-access-gates",
+  "authorization": "Pending owner review (2026-10-29). Planning only: nothing is live or verified. Each production apply still needs its own owner approval and staging acceptance.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Data API RPC access gates (2026-10-29, security audit finding 4): data.mjs checks the caller before the Supabase-era SECURITY DEFINER reads in READ_RPCS that let any global user_roles admin or staff read every tenant. Global reads (get_all_checks_safety_net, get_stuck_checks, get_deposit_ops_kpis, get_deposit_exception_kpis, get_deposit_aging_summary) run for the platform owner only; per-tenant reads run when aws_can_access_tenant(tenant argument) is true; get_check_claim_settlement when aws_can_access_check(p_check_id) is true; has_permission for the caller's own user id unless platform owner. Refused calls answer 403 rpc_forbidden (400 invalid_rpc_args for a missing or non-uuid argument) and never run the RPC. No SQL. live_sha256 is main's bytes before this change, the bytes production run 40086704439 applied (post-apply inspect run 40086776532 ALREADY_ACCEPTED); no data.mjs change has been planned or applied since. A read-only guarded production overlay inspect must confirm it before any apply. check-reconciliation.mjs (not previously in this plan; it reached both environments through the Lambda rebuilds): a non-owner keeps only the stuck checks of its own tenants, looked up by check id, because get_stuck_checks() returns no tenant_id; before, every tenant's stuck checks were kept. live_sha256 eae0171e is main's bytes, which the read-only guarded production Lambda rebuild inspect run 40741101459 (2026-10-28, main e3823b5c5) observed live (202 of 203 source members equal to main; only db-readonly-validate.mjs differed, since overlaid), and which are the accepted bytes of the staging rebuild history (lambda-rebuild-plan.json). It imports data.mjs (withIdentityWrite) and identity.mjs (TENANT_MEMBERSHIP_SQL), whose live exports it already uses.",
+  "members": {
+    "data.mjs": {
+      "live_sha256": "4baa46e564aadf24d700aa4992180f845152d5e4ef423eb5ffa8d08c3b614517",
+      "accepted_sha256": "c7dd822951344d0fb3d3833597eb6292a4a5073754fab659903cedc2c7437aaa",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-data-secret-columns-applied-manifest-2026-10-24.json"
+    },
+    "check-reconciliation.mjs": {
+      "live_sha256": "eae0171e282c879b49f9756715c0096fc6d2aea65c57826dcf0910410e56720f",
+      "accepted_sha256": "3dc1da5a7838a62bf73c35e9b64423ee75ed929d2872a91642810d6d735904fe",
+      "operation": "replace"
+    }
+  }
+}
