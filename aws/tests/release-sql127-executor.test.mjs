@@ -4,7 +4,7 @@
  * release-sql90-97-executor.test.mjs runs what every release key shares (SQL 127 included); this
  * file covers what is new:
  *
- *   - the pin: pending, code-derived, selectable, packed, in step with the production pin; the
+ *   - the pin: staging-authorized from its read-live (wave 26), code-derived, selectable, packed, in step with the production pin; the
  *     pinned commit authored the bytes; no predecessor (SQL 83 is on the homeowner engine);
  *   - the file and spec: SQL 83's endorse capability and pending_signatures replaced (each body SQL
  *     83's with only SQL 127's edits) and the new document_portal_signer; all three SECURITY
@@ -54,7 +54,7 @@ import { EXECUTOR_PACK_MEMBERS } from '../../scripts/deployment-guard/sql-execut
 import { MIGRATIONS } from '../../scripts/deployment-guard/github-staging-sql-executor.mjs';
 import { READ_LIVE_EXPECTED_SENTINEL } from '../../scripts/deployment-guard/lib/sql-executor-read-live.mjs';
 import { importGuardedSqlExecutor } from './helpers/import-guarded-sql-executor.mjs';
-import { assertStagingPinState } from './helpers/staging-sql-wave1.mjs';
+import { assertStagingPinState, pendingPin } from './helpers/staging-sql-wave1.mjs';
 import { pgSkipReason, releaseFixture } from './helpers/release-sql-pg.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -166,7 +166,7 @@ ALTER TABLE public.check_endorsements ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.signature_signers ENABLE ROW LEVEL SECURITY;
 `;
 
-test('pin: SQL 127 pending, code-derived, selectable, packed, in step with the production pin; no predecessor', () => {
+test('pin: SQL 127 staging-authorized from its read-live, code-derived, selectable, packed, in step with the production pin; no predecessor', () => {
   const pin = PINS[KEY];
   const spec = RELEASE_SQL_SPECS[KEY];
   const packed = Object.fromEntries(EXECUTOR_PACK_MEMBERS);
@@ -177,11 +177,13 @@ test('pin: SQL 127 pending, code-derived, selectable, packed, in step with the p
   assert.equal(spec.choice, 'sql127-homeowner-portal-signing');
   assert.doesNotMatch(spec.choice, /production/);
   assert.equal(sha(TEXT), pin.source_sha256);
-  // Pending: no staging read-live recorded yet (and no apply authorized).
+  // Staging apply authorized (owner approved 2026-10-29) from staging read-live run 40947834848: SQL 83's
+  // two bodies and the portal signer absent, so SQL 127 was not yet applied there.
   assertStagingPinState(assert, KEY, pin);
-  assert.equal(pin.execute, false);
-  assert.equal(pin.authorization, 'pending');
-  assert.equal(pin.expected_live_definition_sha256, null);
+  assert.equal(pin.execute, true);
+  assert.equal(pin.authorization, 'Owner approved 2026-10-29: staging apply (wave 26) from staging read-live run 40947834848');
+  assert.equal(pin.expected_live_definition_sha256, '4b4af399a73a25e191d2f914cc074a3744c84fffbc8ce3e55f2adec2cf93dfe0');
+  assert.notEqual(pin.expected_live_definition_sha256, pin.intended_replacement_sha256);
   assert.equal(releaseIntendedHash(KEY, TEXT), pin.intended_replacement_sha256);
   // Everything absent, and the SQL 83 state, each have a fingerprint of their own.
   assert.notEqual(releaseStateHash(KEY, {}), pin.intended_replacement_sha256);
@@ -477,8 +479,9 @@ test('PostgreSQL 16: SQL 127 through the executor: refused without SQL 82 / SQL 
     const wider = await inspect();
     assert.deepEqual(wider.precondition_failures, [], JSON.stringify(wider.release_sql_inspect));
     assert.notEqual(wider.live_definition_sha256, r.live_definition_sha256);
-    // A pending pin cannot apply.
-    const pending = await handlerFor(connect)(releaseEvent({ expected_live_definition_sha256: wider.live_definition_sha256 }));
+    // A pending pin cannot apply (the committed pin is staging-authorized, so pend a copy).
+    const pendingCopy = pendingPin(PINS[KEY]);
+    const pending = await handlerFor(connect, { pins: { [KEY]: pendingCopy } })(releaseEvent({ pin: pendingCopy, expected_live_definition_sha256: wider.live_definition_sha256 }));
     assert.equal(pending.ok, false);
     assert.deepEqual(await bodies(), sql83Bodies);
 
