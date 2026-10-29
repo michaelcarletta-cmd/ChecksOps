@@ -595,7 +595,7 @@ const fileHomeownerUploadToReview = async (client, upload, deps = {}) => {
       `INSERT INTO public.check_intake_items (
          claim_id, tenant_id, uploaded_by, front_image_path, back_image_path,
          amount, status, check_stage, check_source
-       ) VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5, $6, 'pending', 'review', 'insurance')
+       ) VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5, $6, 'uploaded', 'review', 'insurance')
        RETURNING id`,
       [upload.claim_id || null, upload.tenant_id, senderId, front, back, upload.amount_estimate ?? null],
     )).rows[0];
@@ -1746,7 +1746,7 @@ export const handleHomeownerLedgerAttachUpload = async (event) => withIdentityWr
     `INSERT INTO public.check_intake_items (
        claim_id, tenant_id, uploaded_by, front_image_path, back_image_path,
        amount, status, check_stage, check_source
-     ) VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5, $6, 'pending', 'review', 'insurance')
+     ) VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5, $6, 'uploaded', 'review', 'insurance')
      RETURNING id`,
     [claimId, up.tenant_id, mapping.application_user_id, copied, backCopied, amount],
   )).rows[0];
