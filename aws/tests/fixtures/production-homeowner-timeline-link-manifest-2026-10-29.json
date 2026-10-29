@@ -1,0 +1,15 @@
+{
+  "workstream_id": "homeowner-timeline-link",
+  "authorization": "Pending owner review (2026-10-29). Planning only: nothing is live or verified. The production apply still needs its own owner approval and staging acceptance.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Owner report 2026-10-29: a check filed from a homeowner's pre-claim upload link moves through Review and Endorsing, but the homeowner's link stays in pre-claim mode, so the homeowner never sees the claim timeline, the check, signature requests or later updates. fileHomeownerUploadToReview files the check with the upload's claim (null for a pre-claim link) and never ties the link to a claim afterwards. The owner chose (2026-10-29, Option 1) to block leaving Review without a claim and to tie the link when the check moves on. The accepted workflow.mjs bytes, in handleCheckTransition, for start_endorsing, route_loss_draft and mark_ready_for_deposit only: look up the homeowner_ledger_check_uploads row whose attached_check_id is the check (same tenant); if one exists and the check has no claim, refuse with 409 homeowner_upload_needs_claim ('Link this check to a claim first so the homeowner can follow it.') before any write; otherwise, after the status update and audit row and in the same transaction, when the upload has no claim yet and the claim belongs to the check's tenant: set the upload's claim_id, set homeowner_ledger_tokens.claim_id where the token is the upload's, in the same tenant, and still has no claim (a link on another claim is never moved), and insert one homeowner_upload_attached ledger event, mirroring handleHomeownerLedgerAttachUpload in homeowner.mjs. Checks without a homeowner upload are unchanged. The tables and columns are the ones homeowner.mjs already reads and writes in production through the same role; no SQL change. workflow.mjs live_sha256 0a8d1218 is the bytes the cash-jobs check-link production apply recorded (previous_manifest); no workflow.mjs change has been planned or applied since. sql_before stays SQL 121. A read-only production overlay inspect must confirm the live member before any apply.",
+  "members": {
+    "workflow.mjs": {
+      "live_sha256": "0a8d1218eff03bc2f1785fd64d8f854ed17eef254f71bf9e91b270f86009d6e6",
+      "accepted_sha256": "be56953fb4db1d89a7738beb0710fd801b8e056c0d95caba3a4a02cea5707bb8",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-cash-jobs-check-link-applied-manifest-2026-10-28.json"
+    }
+  }
+}
