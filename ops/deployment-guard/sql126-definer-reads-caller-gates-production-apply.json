@@ -1,8 +1,8 @@
 {
   "id": "sql126-definer-reads-caller-gates-production-apply",
   "migration": "sql126",
-  "authorization": "Owner approved 2026-10-29 (the owner's words of 2026-10-29: \"open the SQL 126 production pin PR\"; the change itself is reviewed and merged by the owner): production apply of SQL 126 after the staging acceptance below (production 9ebc7455de1e0e467eabf59e697899bc64dc360efb8c34a3e00106e68b7754ed -> 3aebf853a375d7a668acf62c8877a7b6a0d5f791b73121b591acd9046b0510b2); execute true takes effect only when the owner reviews and merges this change. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
-  "execute": true,
+  "authorization": "Applied to production on 2026-10-29; execute is false again, so this pin is no longer a standing authorization and a re-apply needs a new reviewed pin change. The owner approved the SQL 126 production pin change on 2026-10-29 in the words \"open the SQL 126 production pin PR\" (9ebc7455 -> 3aebf853, #1394) and the one apply run recorded in applied (workstream prod-sql126-definer-reads-caller-gates-20261029) in the words \"apply SQL 126 in production\", passed to it verbatim. That approval covered that run only.",
+  "execute": false,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -72,5 +72,97 @@
     "ok": true,
     "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/40921170890",
     "basis": "Guarded staging SQL executor apply of sql126-definer-reads-caller-gates, run 40921170890 (2026-10-29, main 7422c69, wave 25, workstream github-staging-sql-40921170890, on the executor deployed from main 7422c69, deploy run 40920738142: ODInv6cl/mZGp2lhmOqL8iT0WmjAnuRLpBVvaFBV5KE=), from the staging pre-state recorded by read-live run 40917478177 (04106521263eeeb423ac2c0dfbf5e1f1af5a52c89501b63ac742d6b25c5e1612): receipt before 04106521263eeeb423ac2c0dfbf5e1f1af5a52c89501b63ac742d6b25c5e1612, after 3aebf853a375d7a668acf62c8877a7b6a0d5f791b73121b591acd9046b0510b2 == intended, result applied. Read-live run 40921576727 then reported live 3aebf853a375d7a668acf62c8877a7b6a0d5f791b73121b591acd9046b0510b2, already_applied true, the thirteen functions at the intended state with EXECUTE checksops and the owner. The behavior is covered on PostgreSQL 16 by aws/tests/sql126-definer-reads-caller-gates-pg.test.mjs. The pre-states differ: production (9ebc7455de1e0e467eabf59e697899bc64dc360efb8c34a3e00106e68b7754ed, production_inspect) also grants checksops EXECUTE on the thirteen functions, which staging's restore did not; the bodies are the same supabase ones on both (derived), the executor test covers an apply from a pre-state with a checksops grant, and the same file bytes (source_sha256) are pinned in both."
+  },
+  "applied": {
+    "date": "2026-10-29",
+    "result": "applied",
+    "source_commit": "67a0ed2147e7d87c113b1ea08dedb52fc630d186",
+    "source_commit_basis": "SOURCE_COMMIT in the tarball (written by sql53-temporary-transfer) equals --commit, and the tarball sha256 equals --expected-tarball-sha256 as copied by the operator from that transfer run's log (TARBALL_SHA256 line); the run log itself was not read by the one-shot.",
+    "source_tarball": {
+      "file": "source-67a0ed2147e7d87c113b1ea08dedb52fc630d186.tar.gz",
+      "sha256": "e787b68a7bd5ed5eaf6850664ea9cc72674af78e2b70909f243ad7a7041123d1"
+    },
+    "migration_source_sha256": "398fe16cc3bfb0940e922a15233c56109a7b6f4f3990da4180f5e4cb58028933",
+    "migration_source_sha256_note": "The one-shot source step hashed aws/workflows/sql/126_definer_reads_caller_gates.sql in the transfer tarball: equal to source_sha256 (the pin; migration_matches_pin true).",
+    "runner": "i-0c35557c4e5385406",
+    "runner_basis": "operator-supplied --runner (not verified by the one-shot)",
+    "workstream_id": "prod-sql126-definer-reads-caller-gates-20261029",
+    "one_use_id": "sql126-prod-04d193c4-cf33-4b78-9510-4cc0b643de2b",
+    "one_use_id_consumed": true,
+    "one_use_id_consumed_basis": "Inferred from the successful apply (the tool records the one_use_id after COMMIT and only warns if that write fails); the consumed-registry entry was not read back separately.",
+    "owner_approval": "apply SQL 126 in production",
+    "owner_approval_basis": "As passed in --approval-statement (base64, --approval-statement-b64) for --approval-scope sql126; the one-shot cannot verify who said it. The owner's words of 2026-10-29; the pin change (#1394) was merged green before this run, on the owner's words \"merge 1394 when green\".",
+    "operator": "michaelcarletta-cmd",
+    "apply_ssm_command_id": "9edcb2f7-365f-47cb-a395-17d033b4e179",
+    "one_shot_run_id": "423ed639-30de-4aa0-99a0-981f1aeeb8a6",
+    "one_shot_note": "One SSM command (9edcb2f7-365f-47cb-a395-17d033b4e179, 2026-10-29 18:20:47 to 18:21:04Z) ran the production-sql-one-shot --phase apply (run_id 423ed639-30de-4aa0-99a0-981f1aeeb8a6) from main 67a0ed214 (transfer run 40929470394, sql53-temporary-transfer.yml on main after the #1394 merge; it published TARBALL_SHA256 e787b68a7bd5ed5eaf6850664ea9cc72674af78e2b70909f243ad7a7041123d1), after a read-only --phase inspect of the same commit (SSM 2d484262-acf7-40ac-8df4-ad5a4ec566c5, one-shot run ae1bc4fb-c778-4c8d-a694-957027b9b8ef: live 9ebc7455de1e0e467eabf59e697899bc64dc360efb8c34a3e00106e68b7754ed, live_matches_expected true, apply_preconditions_met true, precondition_failures [], the thirteen functions 'different' with EXECUTE PUBLIC, checksops and the owner; contracts claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43). The operator's gate read only the printed summary of that inspect and let the apply run. Steps pin (execute true, staging_acceptance run 40921170890), source, inspect, contracts, manifest, source-recheck-before-preflight, preflight (receipt_issued), evaluate (sql126_production_apply_allowed true), source-recheck-before-apply, apply (applied) and post-apply-inspect all ok; the command printed EXIT=0 and SSM reported Success. The operator's command printed a summary of the run's fields, then the run's JSON; SSM's 24000-character output limit cut the JSON after the steps, and the runner's working directory was then removed. Every field of this block is taken from that summary (run_id, steps, commit, workstream_id, approval_statement, source, pre_apply_inspect, contract_results ok, manifest_sha256, one_use_id, the receipt's commit, before_hash, after_hash, release_sql_inspect, unrelated_catalog_sha256 and result, post_apply_inspect), except receipt.staging_acceptance, which is the pin step's staging_acceptance (steps.0, printed in the JSON head) that the manifest carries. Not captured from the apply run: the contract test counts (the summary printed ok true for each; the counts above are the inspect phase's, same commit and runner), the receipt's unrelated_catalog_counts, and the per-function states and ACL of its pre- and post-apply inspects (the summary printed the names only); they are left out rather than reconstructed. A separate read-only --inspect after the run (SSM b0915da8-e5d7-41ea-9ccc-4cd819c76465, same tarball, full JSON captured) reported live 3aebf853a375d7a668acf62c8877a7b6a0d5f791b73121b591acd9046b0510b2 == intended, already_applied true, precondition_failures [], the thirteen functions 'intended', EXECUTE checksops and the owner on every one. The runner was started for the run and stopped after it (security audit finding C): start requested 18:20:01 UTC, running 18:20:18, SSM online 18:20:39, stop requested 18:21:12, stopped 18:21:44; it is stopped.",
+    "steps": [
+      "pin",
+      "source",
+      "inspect",
+      "contracts",
+      "manifest",
+      "source-recheck-before-preflight",
+      "preflight",
+      "evaluate",
+      "source-recheck-before-apply",
+      "apply",
+      "post-apply-inspect"
+    ],
+    "contract_results": {
+      "claim-ledger": {
+        "ok": true,
+        "test": "aws/tests/claim-ledger-accepted-contract.test.mjs",
+        "evidence": "ok in the apply run 423ed639-30de-4aa0-99a0-981f1aeeb8a6 (counts not captured); 4/4 in the inspect run ae1bc4fb-c778-4c8d-a694-957027b9b8ef on i-0c35557c4e5385406 at 67a0ed2147e7d87c113b1ea08dedb52fc630d186"
+      },
+      "tenant-isolation": {
+        "ok": true,
+        "test": "aws/tests/tenant-security-compliance.test.mjs",
+        "evidence": "ok in the apply run 423ed639-30de-4aa0-99a0-981f1aeeb8a6 (counts not captured); 6/6 in the inspect run ae1bc4fb-c778-4c8d-a694-957027b9b8ef on i-0c35557c4e5385406 at 67a0ed2147e7d87c113b1ea08dedb52fc630d186"
+      },
+      "financial-write-protections": {
+        "ok": true,
+        "test": "aws/tests/api-write.test.mjs",
+        "evidence": "ok in the apply run 423ed639-30de-4aa0-99a0-981f1aeeb8a6 (counts not captured); 43/43 in the inspect run ae1bc4fb-c778-4c8d-a694-957027b9b8ef on i-0c35557c4e5385406 at 67a0ed2147e7d87c113b1ea08dedb52fc630d186"
+      }
+    },
+    "pre_apply_inspect": {
+      "live_definition_sha256": "9ebc7455de1e0e467eabf59e697899bc64dc360efb8c34a3e00106e68b7754ed",
+      "live_matches_expected": true,
+      "already_applied": false,
+      "apply_preconditions_met": true,
+      "precondition_failures": [],
+      "release_sql_inspect": {
+        "live_definition_sha256": "9ebc7455de1e0e467eabf59e697899bc64dc360efb8c34a3e00106e68b7754ed",
+        "prerequisites_missing": []
+      }
+    },
+    "manifest_sha256": "1c7cfda5088935a035ffbcebbe325632895ed82d86b57044320406f7038bfb52",
+    "receipt": {
+      "commit": "67a0ed2147e7d87c113b1ea08dedb52fc630d186",
+      "before_hash": "9ebc7455de1e0e467eabf59e697899bc64dc360efb8c34a3e00106e68b7754ed",
+      "after_hash": "3aebf853a375d7a668acf62c8877a7b6a0d5f791b73121b591acd9046b0510b2",
+      "release_sql_inspect": {
+        "live_definition_sha256": "3aebf853a375d7a668acf62c8877a7b6a0d5f791b73121b591acd9046b0510b2",
+        "prerequisites_missing": []
+      },
+      "unrelated_catalog_sha256": "afd0eb25ad38ef96d95184abc9af409e2d8676b98303a9c82bc1d9d43f6fee15",
+      "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/40921170890",
+      "result": "applied"
+    },
+    "post_apply_inspect": {
+      "live_definition_sha256": "3aebf853a375d7a668acf62c8877a7b6a0d5f791b73121b591acd9046b0510b2",
+      "live_matches_expected": false,
+      "already_applied": true,
+      "apply_preconditions_met": false,
+      "precondition_failures": [],
+      "release_sql_inspect": {
+        "live_definition_sha256": "3aebf853a375d7a668acf62c8877a7b6a0d5f791b73121b591acd9046b0510b2",
+        "prerequisites_missing": []
+      }
+    }
+  },
+  "production_evidence": {
+    "2026-10-29 apply": "Guarded production SQL one-shot on i-0c35557c4e5385406, workstream prod-sql126-definer-reads-caller-gates-20261029, main 67a0ed214 (tarball e787b68a…, transfer run 40929470394, migration source 398fe16c… == pin), owner-approved run (\"apply SQL 126 in production\"), SSM 9edcb2f7-365f-47cb-a395-17d033b4e179, run_id 423ed639-30de-4aa0-99a0-981f1aeeb8a6, one_use_id sql126-prod-04d193c4-cf33-4b78-9510-4cc0b643de2b (spent): every step ok; contracts ok (4/4, 6/6, 43/43 in the inspect phase); pre-apply inspect live 9ebc7455… (live_matches_expected true, precondition_failures []); manifest 1c7cfda5…; 9ebc7455… -> 3aebf853…, result applied, unrelated catalog afd0eb25…; post-apply inspect already_applied true, precondition_failures []; separate read-only inspect SSM b0915da8-e5d7-41ea-9ccc-4cd819c76465 already_applied true, the thirteen functions intended, EXECUTE checksops and the owner. After: the thirteen Supabase-era SECURITY DEFINER reads check their caller (platform owner for the global reads, aws_can_access_tenant for the per-tenant reads, get_stuck_checks scoped to the caller's tenants, has_permission for the caller's own id, get_check_unread_counts limited to readable checks, get_check_claim_settlement for the check's tenant, an active share target or the platform owner), and PUBLIC no longer holds EXECUTE on them (security audit finding 4, database part, closed in production; the API part shipped with data.mjs on 2026-10-29). No trigger was added, so the DB validator is unaffected. execute is false so the pin is no longer a standing authorization."
   }
 }

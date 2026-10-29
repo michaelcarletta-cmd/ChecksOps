@@ -4,10 +4,11 @@
  * release-sql90-97-production-apply.test.mjs runs every release key (SQL 126 included) through the
  * shared refusals; this file covers SQL 126's own:
  *
- *   - the pin has the release pin shape; it is execute-authorized (owner-approved pin change of
- *     2026-10-29) with the recorded production pre-state (staging's plus a checksops EXECUTE grant)
- *     and the staging apply as its acceptance; it is in step with the staging pin, the one-shot, the
- *     bypass inventory and the test lists;
+ *   - the pin has the release pin shape plus the applied record; it was execute-authorized (owner-
+ *     approved pin change of 2026-10-29, #1394) with the recorded production pre-state (staging's plus a
+ *     checksops EXECUTE grant) and the staging apply as its acceptance, then applied on 2026-10-29 and
+ *     retired (execute false); it is in step with the staging pin, the one-shot, the bypass inventory
+ *     and the test lists;
  *   - no predecessor and no order; the thirteen functions (EXECUTE for checksops and the owner) and
  *     the file's prerequisites; no table, view, policy or trigger (the DB validator is not
  *     concerned); no plan entry and no API change (PR #1379's API gates stay in front of the same
@@ -54,6 +55,9 @@ const PRODUCTION_PRE = '9ebc7455de1e0e467eabf59e697899bc64dc360efb8c34a3e00106e6
 // The guarded staging apply (wave 25).
 const STAGING_ACCEPTANCE_REF = 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/40921170890';
 const OWNER_WORDS = '"open the SQL 126 production pin PR"';
+// SQL 126's production apply of 2026-10-29 (main 67a0ed214), recorded in applied; the owner's words were
+// passed to the run verbatim.
+const SQL126_APPLIED = Object.freeze({ ssm: '9edcb2f7-365f-47cb-a395-17d033b4e179', run: '423ed639-30de-4aa0-99a0-981f1aeeb8a6', one_use_id: 'sql126-prod-04d193c4-cf33-4b78-9510-4cc0b643de2b', commit: '67a0ed2147e7d87c113b1ea08dedb52fc630d186', workstream: 'prod-sql126-definer-reads-caller-gates-20261029', approval: 'apply SQL 126 in production' });
 const readJson = (rel) => JSON.parse(fs.readFileSync(path.join(ROOT, rel), 'utf8'));
 const keyPaths = (o, p = '') => Object.entries(o).flatMap(([k, v]) => (v && typeof v === 'object' && !Array.isArray(v) ? keyPaths(v, `${p}${k}.`) : [`${p}${k}`]));
 const neverConnect = async () => { throw new Error('should-not-connect'); };
@@ -98,24 +102,58 @@ const approved = (extra = {}) => Object.freeze({
   ...extra,
 });
 
-test('pin: the release pin shape, execute-authorized on the staging apply, in step with the staging pin, the one-shot, the inventory and the test lists', () => {
+test('pin: the release pin shape, applied and retired (owner approved 2026-10-29, on the staging apply), in step with the staging pin, the one-shot, the inventory and the test lists', () => {
   const pin = COMMITTED;
   const staging = STAGING[KEY];
   const shape = new Set(keyPaths(SQL96_PIN).filter((k) => !/^(applied|production_evidence)(\.|$)/.test(k)));
   assert.deepEqual([...shape].filter((k) => !keyPaths(pin).includes(k)), [], 'lacks the engine pin shape');
-  assert.deepEqual(keyPaths(pin).filter((k) => !shape.has(k)), []);
+  // The record-and-retire change adds applied and production_evidence on top of the engine pin shape.
+  assert.deepEqual(keyPaths(pin).filter((k) => !shape.has(k) && !/^(applied|production_evidence)(\.|$)/.test(k)), []);
   assert.equal(pin.id, RELEASE_SQL_SPECS[KEY].production_pin_rel.split('/').pop().replace(/\.json$/, ''));
   assert.equal(pin.migration, KEY);
-  // Owner-approved pin change of 2026-10-29: the read-only production inspect (SSM a98a1794, main 56a748c06)
-  // recorded as the pre-state; the staging apply (run 40921170890) as the acceptance.
-  assert.equal(pin.execute, true);
-  assert.match(pin.authorization, /^Owner approved 2026-10-29 /);
+  // Applied 2026-10-29 and retired.
+  assert.equal(pin.execute, false);
+  assert.match(pin.authorization, /^Applied to production on 2026-10-29; execute is false again/);
+  assert.doesNotMatch(pin.authorization, /^Owner approved/);
   assert.ok(pin.authorization.includes(OWNER_WORDS));
-  assert.ok(pin.authorization.includes(`${PRODUCTION_PRE} -> ${pin.intended_replacement_sha256}`));
-  assert.match(pin.authorization, /each apply still needs the owner's run-time approval/);
+  assert.ok(pin.authorization.includes('#1394'));
+  assert.ok(pin.authorization.includes(SQL126_APPLIED.workstream));
+  assert.ok(pin.authorization.includes(`"${SQL126_APPLIED.approval}"`));
   assert.equal(pin.expected_live_definition_sha256, PRODUCTION_PRE);
   assert.notEqual(pin.expected_live_definition_sha256, pin.intended_replacement_sha256);
-  assert.equal(pin.applied, undefined);
+  assert.equal(pin.applied.date, '2026-10-29');
+  assert.equal(pin.applied.result, 'applied');
+  assert.equal(pin.applied.apply_ssm_command_id, SQL126_APPLIED.ssm);
+  assert.equal(pin.applied.one_shot_run_id, SQL126_APPLIED.run);
+  assert.equal(pin.applied.one_use_id, SQL126_APPLIED.one_use_id);
+  assert.equal(pin.applied.one_use_id_consumed, true);
+  assert.equal(pin.applied.workstream_id, SQL126_APPLIED.workstream);
+  assert.equal(pin.applied.source_commit, SQL126_APPLIED.commit);
+  assert.equal(pin.applied.source_tarball.sha256, 'e787b68a7bd5ed5eaf6850664ea9cc72674af78e2b70909f243ad7a7041123d1');
+  assert.equal(pin.applied.migration_source_sha256, pin.source_sha256);
+  assert.equal(pin.applied.owner_approval, SQL126_APPLIED.approval);
+  assert.deepEqual(pin.applied.steps, ['pin', 'source', 'inspect', 'contracts', 'manifest', 'source-recheck-before-preflight', 'preflight', 'evaluate', 'source-recheck-before-apply', 'apply', 'post-apply-inspect']);
+  assert.deepEqual(Object.values(pin.applied.contract_results).map((c) => c.ok), [true, true, true]);
+  assert.equal(pin.applied.manifest_sha256, '1c7cfda5088935a035ffbcebbe325632895ed82d86b57044320406f7038bfb52');
+  assert.equal(pin.applied.receipt.unrelated_catalog_sha256, 'afd0eb25ad38ef96d95184abc9af409e2d8676b98303a9c82bc1d9d43f6fee15');
+  assert.match(pin.applied.one_shot_note, /SSM 2d484262-acf7-40ac-8df4-ad5a4ec566c5/);
+  assert.match(pin.applied.one_shot_note, /SSM b0915da8-e5d7-41ea-9ccc-4cd819c76465/);
+  // What the record could not capture is stated, not reconstructed.
+  assert.match(pin.applied.one_shot_note, /Not captured from the apply run: the contract test counts/);
+  assert.equal(pin.applied.receipt.unrelated_catalog_counts, undefined);
+  assert.equal(pin.applied.pre_apply_inspect.release_sql_inspect.functions, undefined);
+  assert.match(pin.applied.one_shot_note, /stopped 18:21:44/);
+  assert.equal(pin.applied.pre_apply_inspect.live_definition_sha256, PRODUCTION_PRE);
+  assert.equal(pin.applied.pre_apply_inspect.live_matches_expected, true);
+  assert.deepEqual(pin.applied.pre_apply_inspect.precondition_failures, []);
+  assert.equal(pin.applied.receipt.before_hash, PRODUCTION_PRE);
+  assert.equal(pin.applied.receipt.after_hash, pin.intended_replacement_sha256);
+  assert.equal(pin.applied.receipt.staging_acceptance, pin.staging_acceptance.reference);
+  assert.equal(pin.applied.receipt.result, 'applied');
+  assert.equal(pin.applied.post_apply_inspect.already_applied, true);
+  assert.equal(pin.applied.post_apply_inspect.live_definition_sha256, pin.intended_replacement_sha256);
+  assert.deepEqual(pin.applied.post_apply_inspect.precondition_failures, []);
+  assert.ok(pin.production_evidence['2026-10-29 apply'].includes(SQL126_APPLIED.ssm));
   assert.equal(pin.production_inspect.status, 'recorded');
   assert.equal(pin.production_inspect.date, '2026-10-29');
   assert.equal(pin.production_inspect.live_definition_sha256, PRODUCTION_PRE);
@@ -219,7 +257,8 @@ test('order: no predecessor and no order; the thirteen functions and the file\'s
   const runbook = fs.readFileSync(path.join(ROOT, COMMITTED.tooling.runbook), 'utf8');
   assert.ok(runbook.includes(COMMITTED.intended_replacement_sha256));
   assert.ok(runbook.includes(COMMITTED.source_sha256));
-  assert.match(runbook, /\*\*Status:\*\* applied to staging \(wave 25\); production pin execute-authorized/);
+  assert.match(runbook, /\*\*Status:\*\* applied to staging \(wave 25\) and to production \(2026-10-29\); the production pin is retired/);
+  assert.match(runbook, /\*\*Production apply \(2026-10-29\)\.\*\*/);
   assert.match(runbook, /SSM\s+`a98a1794-509b-4689-ada4-1a35f32bbdaa`/);
   assert.match(runbook, /Apply run 40921170890 [^\n]*\n\s+before `04106521[0-9a-f]{56}`, after\n\s+`3aebf853[0-9a-f]{56}` \(intended\), result `applied`/);
   assert.match(runbook, /Read-live run 40921576727: live `3aebf853…`/);
@@ -242,17 +281,21 @@ test('the pending (pre-authorization) pin refuses before connecting; the committ
   const flipped = { ...withPre, execute: true };
   assert.equal((await evaluateReleaseProductionApply(KEY, manifest(flipped), { root: ROOT, pin: flipped })).code, CODES.PRODUCTION_APPROVAL_REQUIRED);
 
-  // The committed (authorized) pin allows only the manifest bound to its recorded pre-state; staging's
+  // The committed pin is retired (execute false): an execute-authorized copy of it, before the
+  // record-and-retire change, allows only the manifest bound to its recorded pre-state; staging's
   // pre-state (without the checksops grant) is not it.
-  const committedOk = await evaluateReleaseProductionApply(KEY, manifest(COMMITTED), { root: ROOT });
+  const AUTHORIZED = Object.freeze({ ...COMMITTED, execute: true, authorization: 'Owner approved 2026-10-29 (test copy of the execute-authorized pin before its record-and-retire change)' });
+  const committedOk = await evaluateReleaseProductionApply(KEY, manifest(AUTHORIZED), { root: ROOT, pin: AUTHORIZED });
   assert.equal(committedOk.ok, true, JSON.stringify(committedOk));
   assert.equal(committedOk.details.sql126_production_apply_allowed, true);
   assert.equal(committedOk.details.staging_acceptance, STAGING_ACCEPTANCE_REF);
   for (const other of [PRE, STAGING[KEY].expected_live_definition_sha256]) {
-    assert.equal((await evaluateReleaseProductionApply(KEY, { ...manifest(COMMITTED), live_definition_sha256: other, expected_live_definition_sha256: other }, { root: ROOT })).code, CODES.SQL_COLLISION, other);
+    assert.equal((await evaluateReleaseProductionApply(KEY, { ...manifest(AUTHORIZED), live_definition_sha256: other, expected_live_definition_sha256: other }, { root: ROOT, pin: AUTHORIZED })).code, CODES.SQL_COLLISION, other);
   }
   const onIntended = COMMITTED.intended_replacement_sha256;
-  assert.equal((await evaluateReleaseProductionApply(KEY, { ...manifest(COMMITTED), live_definition_sha256: onIntended, expected_live_definition_sha256: onIntended }, { root: ROOT })).ok, false);
+  assert.equal((await evaluateReleaseProductionApply(KEY, { ...manifest(AUTHORIZED), live_definition_sha256: onIntended, expected_live_definition_sha256: onIntended }, { root: ROOT, pin: AUTHORIZED })).ok, false);
+  // The retired committed pin refuses before connecting.
+  assert.equal((await executeReleaseProductionApply(KEY, manifest(COMMITTED), { root: ROOT, connect: neverConnect, consumedPath: consumedPath() })).ok, false);
 
   const pin = approved();
   const allowed = await evaluateReleaseProductionApply(KEY, manifest(pin), { root: ROOT, pin });
