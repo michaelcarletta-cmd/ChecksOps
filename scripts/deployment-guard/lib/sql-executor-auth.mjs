@@ -2860,7 +2860,7 @@ export const AUTHORIZED_SQL126_DEFINER_READS_CALLER_GATES = Object.freeze({
 // SQL 83's endorse capability opens 'pending' as well as 'sent' insured endorsements, pending_signatures
 // lists an open homeowner signer whose emailed link expired, and the new document_portal_signer returns
 // the signer's existing token_hash and renews its expiry; EXECUTE for checksops and the owner). No
-// predecessor. Pending until a reviewed pin change records a staging read-live.
+// predecessor. Staging apply authorized (wave 26) from staging read-live run 40947834848.
 export const AUTHORIZED_SQL127_HOMEOWNER_PORTAL_SIGNING = Object.freeze({
   key: 'sql127',
   filename: 'aws/workflows/sql/127_homeowner_portal_signing.sql',
@@ -2868,9 +2868,10 @@ export const AUTHORIZED_SQL127_HOMEOWNER_PORTAL_SIGNING = Object.freeze({
   // The commit that last authored the file bytes.
   commit: '94dde846df58f8244e537f194be879d81a5ad14e',
   source_sha256: '4d2d311bad221c2d0e33370a56c1ebf00b0887d7286892954cf76eef0e107c33',
-  authorization: 'pending',
-  execute: false,
-  expected_live_definition_sha256: null,
+  authorization: 'Owner approved 2026-10-29: staging apply (wave 26) from staging read-live run 40947834848',
+  execute: true,
+  // Staging read-live run 40947834848 (main f0264d9, executor wr7SyRLn...): SQL 83's two bodies, the portal signer absent.
+  expected_live_definition_sha256: '4b4af399a73a25e191d2f914cc074a3744c84fffbc8ce3e55f2adec2cf93dfe0',
   // Code-derived: releaseIntendedHash('sql127', file bytes) (release-sql-state.mjs); re-derived by the tests.
   intended_replacement_sha256: 'c4936010132f2d542db796e50fe2d56d1aa3bae5133cdb53e8172978a5b2e190',
   function_identities: Object.freeze([
