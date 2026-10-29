@@ -17,3 +17,11 @@ test('the review console no longer shows the Override status select', () => {
   assert.doesNotMatch(reviewConsole, /Select override\.\.\./);
   assert.match(reviewConsole, /Reviewer Notes/);
 });
+
+test('the check detail Admin tools no longer offer the admin status override', () => {
+  // Owner, 2026-10-29: the second "Override status" button (Admin tools) is removed too.
+  assert.doesNotMatch(commandCenter, /StatusOverride/);
+  assert.doesNotMatch(commandCenter, /Override status|Override Status \(admin\)/);
+  assert.match(commandCenter, /Admin tools/);
+  assert.match(commandCenter, /<ReuploadCheckImageButton/);
+});

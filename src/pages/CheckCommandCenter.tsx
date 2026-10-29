@@ -203,7 +203,6 @@ import {
   payeeTypeIcons,
   endorsementColors,
   endorsementStatusLabel,
-  STATUS_OPTIONS,
   FUNDS_TYPE_OPTIONS,
 } from "@/features/check-command/status";
 import { useCheckCommandRealtime } from "@/features/check-command/useCheckCommandRealtime";
@@ -2683,86 +2682,6 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Admin Status Override — manually move a check between stages       */
-/* ------------------------------------------------------------------ */
-
-
-function StatusOverride({
-  checkId,
-  currentStatus,
-  onSuccess,
-}: {
-  checkId: string;
-  currentStatus: string;
-  onSuccess: () => void;
-}) {
-  const { toast } = useToast();
-  const { user } = useAuth();
-  const [editing, setEditing] = useState(false);
-  const [newStatus, setNewStatus] = useState(currentStatus);
-  const [saving, setSaving] = useState(false);
-
-  const handleSave = async () => {
-    if (newStatus === currentStatus) {
-      setEditing(false);
-      return;
-    }
-    setSaving(true);
-    try {
-      // Route through the security-definer RPC: it validates the admin/staff
-      // permission server-side, updates status + stage + recommendation
-      // atomically, mirrors claim_checks, and writes the audit log — bypassing
-      // the RLS failures that blocked direct frontend updates.
-      const { data, error } = await supabase.rpc("admin_override_check_status", {
-        p_check_id: checkId,
-        p_new_status: newStatus,
-        p_actor_id: user?.id ?? null,
-      });
-      if (error) throw error;
-      if (data && (data as any).ok === false) throw new Error((data as any).error ?? "Override rejected");
-      toast({ title: "Status updated", description: `Moved to ${newStatus.replace(/_/g, " ")}` });
-      setEditing(false);
-      onSuccess();
-    } catch (e: any) {
-      toast({ title: "Failed to update status", description: e.message, variant: "destructive" });
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  if (!editing) {
-    return (
-      <Button variant="ghost" size="sm" className="text-[10px] h-6 px-2 text-muted-foreground hover:text-foreground" onClick={() => { setNewStatus(currentStatus); setEditing(true); }}>
-        <Pencil className="h-3 w-3 mr-1" /> Override status
-      </Button>
-    );
-  }
-
-  return (
-    <div className="space-y-2 rounded-md border border-border/60 p-2 bg-muted/30">
-      <Label className="text-[10px] text-muted-foreground">Override Status (admin)</Label>
-      <Select value={newStatus} onValueChange={setNewStatus}>
-        <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-        <SelectContent>
-          {STATUS_OPTIONS.map((s) => (
-            <SelectItem key={s.value} value={s.value} className="text-xs">{s.label}</SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      <div className="flex gap-1">
-        <Button size="sm" className="flex-1 h-7 text-xs" onClick={handleSave} disabled={saving}>
-          {saving ? <Loader2Icon className="h-3 w-3 animate-spin mr-1" /> : <CheckIcon className="h-3 w-3 mr-1" />}
-          Save
-        </Button>
-        <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setEditing(false)}>
-          Cancel
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
 /*  Re-run OCR button                                                   */
 /* ------------------------------------------------------------------ */
 
@@ -4650,13 +4569,6 @@ function CheckDetailPanel({
                 <span className="underline underline-offset-2">Admin tools</span>
               </summary>
               <div className="mt-2 flex flex-col sm:flex-row sm:flex-wrap sm:justify-end gap-2 items-stretch sm:items-center">
-                <div className="w-full sm:w-auto sm:max-w-xs">
-                  <StatusOverride
-                    checkId={checkId}
-                    currentStatus={check.status}
-                    onSuccess={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); qc.invalidateQueries({ queryKey: ["check-intake-items"] }); onRefresh(); }}
-                  />
-                </div>
                 <ReuploadCheckImageButton
                   checkId={checkId}
                   side="front"
