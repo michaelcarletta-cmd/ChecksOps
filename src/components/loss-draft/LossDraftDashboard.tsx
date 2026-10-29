@@ -9,7 +9,6 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { AlertTriangle, Building2, Clock, FileWarning, RefreshCw, Landmark, ArrowLeft } from "lucide-react";
 import { LossDraftDetailPanel } from "./LossDraftDetailPanel";
 import { LossDraftFilterBar, type LossDraftFilter } from "./LossDraftDashboardCards";
-import { NewLossDraftDialog } from "./NewLossDraftDialog";
 import { useTenantFilter } from "@/hooks/useTenantFilter";
 import { extractInsuredName, matchesAmountQuery } from "@/features/check-command/status";
 import {
@@ -173,7 +172,6 @@ export function LossDraftDashboard({ searchQuery = "" }: LossDraftDashboardProps
                 Loss Draft
               </CardTitle>
               <div className="flex items-center gap-1">
-                <NewLossDraftDialog onCreated={() => qc.invalidateQueries({ queryKey: ["loss-draft-dashboard"] })} />
                 <Button
                   size="sm"
                   variant="ghost"

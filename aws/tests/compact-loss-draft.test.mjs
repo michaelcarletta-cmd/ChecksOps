@@ -51,7 +51,8 @@ test('the loss-draft facts stay on the compact card', () => {
 test('actions and click behaviour are kept', () => {
   assert.match(dashboard, /onSelect=\{\(\) => setSelectedId\(d\.id\)\}/);
   assert.match(dashboard, /onClick=\{onSelect\}/);
-  assert.match(dashboard, /<NewLossDraftDialog onCreated=/);
+  // New Loss Draft was removed from the tab (owner, 2026-10-29).
+  assert.doesNotMatch(dashboard, /NewLossDraftDialog/);
   assert.match(dashboard, /aria-label="Refresh loss drafts"/);
   assert.match(dashboard, /Back to list/);
   assert.match(dashboard, /<LossDraftDetailPanel/);
