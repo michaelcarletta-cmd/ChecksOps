@@ -1,0 +1,21 @@
+{
+  "workstream_id": "homeowner-upload-status-applied",
+  "authorization": "Record only (2026-10-29): the bytes below are live. Nothing is planned or authorized by this manifest; any later change to these members needs its own manifest, staging acceptance and owner approval.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Homeowner upload status (owner report 2026-10-29: a check filed from Homeowner Uploads failed to go to endorsing with \"Invalid status transition: pending -> endorsements_in_progress\"; members #1393, merged as main 6f38c8ff5), applied 2026-10-29 through the guarded overlay path to checksops-production-prep-api on main 67a0ed2147e7d87c113b1ea08dedb52fc630d186, one member per run in plan order, each on its own owner approval (the workflow refuses an apply unless approval_phrase is exactly \"DEPLOY <member> TO PRODUCTION\"): workflow-transitions.mjs ed39e3c3 -> 340b4a12 on \"DEPLOY workflow-transitions.mjs TO PRODUCTION\" (staging inspect run 40926450157, staging live ed39e3c3; staging apply run 40926664565, the staging acceptance; production inspect run 40929713106 READY, member PRESENT ed39e3c3, at CodeSha256 TPyZ2fUUVERHh1WHUM9y4WMC3e+Cf/IqRybyI7jIBzc=, RevisionId c119508b-a561-4f74-a4ff-88fcfbf84a15, /health and /db-health 200; production apply run 40929865650, apply step 2026-10-29T18:20:56Z to 18:21:04Z, writer update CodeSha256 IV2PdRWXf2hJtFfMI9hXyao2XrcD2yb9fEyER1pj+1U= (LastUpdateStatus InProgress), \"Verify live member is the accepted bytes\" VERIFIED, member PRESENT 340b4a12, at CodeSha256 IV2PdRWXf2hJtFfMI9hXyao2XrcD2yb9fEyER1pj+1U=, RevisionId 24ba4188-8dd3-4e90-88c8-69a3db9f223a; public production smoke /health and /db-health 200); homeowner.mjs 1fa4950c -> ea522429 on \"DEPLOY homeowner.mjs TO PRODUCTION\" (staging inspect run 40926834961, staging live 1fa4950c; staging apply run 40926966235, the staging acceptance; production inspect run 40930110061 READY, member PRESENT 1fa4950c, at CodeSha256 IV2PdRWXf2hJtFfMI9hXyao2XrcD2yb9fEyER1pj+1U=, RevisionId 24ba4188-8dd3-4e90-88c8-69a3db9f223a (the previous apply's verify), /health and /db-health 200; production apply run 40930253261, apply step 2026-10-29T18:23:23Z to 18:23:31Z, writer update CodeSha256 tUtgefks7a4r5e1TgV8xH9eG2jPi034LOiTDyVt6p/U= (LastUpdateStatus InProgress), \"Verify live member is the accepted bytes\" VERIFIED, member PRESENT ea522429, at CodeSha256 tUtgefks7a4r5e1TgV8xH9eG2jPi034LOiTDyVt6p/U= (hex b54b6079f92cedae2be5ed53815f311fd786da33e2d37e0b3a24c3c95b7aa7f5), RevisionId cbdd5ef4-6d78-4ded-a670-d3c4905d35d7; public production smoke /health and /db-health 200). The production inspect before the first apply read the CodeSha256 and RevisionId the security hardening applied manifest records after check-reconciliation.mjs, so no other change reached the function in between. Each member's sha256 is derived from main's bytes and equals the memberSha256 its verify step read. The rows record the applied bytes as live_sha256 and accepted_sha256 and chain to the manifest that planned them (previous_manifest), which keeps the pre-apply state. GitHub returned only the tail of each apply log (the writer prints the package member list), so each apply run's own inspect block and receipt were not read; the pre-apply state is the inspect run just before it. No rebuild inspect followed, so the live package is not compared with a candidate zip of main.",
+  "members": {
+    "workflow-transitions.mjs": {
+      "live_sha256": "340b4a126b728a8691a769a7ac7dd269ed800db8d3a7fdc8571601ba9f9a59b7",
+      "accepted_sha256": "340b4a126b728a8691a769a7ac7dd269ed800db8d3a7fdc8571601ba9f9a59b7",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-homeowner-upload-status-manifest-2026-10-29.json"
+    },
+    "homeowner.mjs": {
+      "live_sha256": "ea5224291c57ab367f511c75bc6e639fb9faeb04fe7139e27460c51ae3ea72b1",
+      "accepted_sha256": "ea5224291c57ab367f511c75bc6e639fb9faeb04fe7139e27460c51ae3ea72b1",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-homeowner-upload-status-manifest-2026-10-29.json"
+    }
+  }
+}

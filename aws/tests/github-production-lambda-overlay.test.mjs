@@ -36,6 +36,8 @@ const API = path.join(ROOT, 'aws/functions/api');
 const PARTNER_STORAGE_WRITES_REL = 'aws/tests/fixtures/production-partner-storage-writes-manifest-2026-10-29.json';
 // Security audit findings 2-4, applied in production 2026-10-29 (one run per member, in plan order).
 const SECURITY_HARDENING_APPLIED_REL = 'aws/tests/fixtures/production-security-hardening-applied-manifest-2026-10-29.json';
+// Homeowner upload status, applied in production 2026-10-29 (workflow-transitions.mjs, then homeowner.mjs).
+const HOMEOWNER_UPLOAD_STATUS_APPLIED_REL = 'aws/tests/fixtures/production-homeowner-upload-status-applied-manifest-2026-10-29.json';
 function repoModules(dir = API, prefix = '') {
   const out = {};
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -498,6 +500,10 @@ test('the SQL 85 hold on mortgage-agent-compensation.mjs does not block homeowne
   const PRE_SQL85 = 'c38986152765e1d43443c82a779627bd55f96b3c2c246988f4697a3565166512';
   const preApply = structuredClone(PLAN);
   preApply.members[MORTGAGE].expected_live_sha256 = PRE_SQL85;
+  // homeowner.mjs is simulated on its pre-apply bytes too: production run 40930253261 (2026-10-29)
+  // applied the homeowner upload status bytes, so its committed expected_live is already accepted.
+  const PRE_HOMEOWNER = '1fa4950c42bf26ff70bc04acd05ca8c784a970d2573178599859c8d682ce5849';
+  preApply.members['homeowner.mjs'].expected_live_sha256 = PRE_HOMEOWNER;
   const unverified = structuredClone(preApply);
   unverified.sql_prerequisites[SQL85] = { verified_live: false, evidence: null };
   // Held members sit after every member they must not block; providers.mjs stays last.
@@ -506,11 +512,11 @@ test('the SQL 85 hold on mortgage-agent-compensation.mjs does not block homeowne
   assert.equal(PLAN.order.at(-1), 'providers.mjs');
 
   // The mortgage member is still on its pre-SQL 85 bytes: homeowner.mjs applies anyway.
-  const { deps, calls } = applyDeps('homeowner.mjs', { pending: [MORTGAGE] });
+  const { deps, calls } = applyDeps('homeowner.mjs', { pending: [MORTGAGE], sha256: PRE_HOMEOWNER, plan: preApply });
   const live = await deps.inspectLive();
   live.memberHashes[MORTGAGE] = PRE_SQL85;
   deps.inspectLive = async () => live;
-  const result = await run(applyEnv('homeowner.mjs'), { ...deps, plan: preApply });
+  const result = await run(applyEnv('homeowner.mjs', { CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: PRE_HOMEOWNER }), { ...deps, plan: preApply });
   assert.equal(result.mutation, false);
   assert.deepEqual(calls.receipt.owned_member_ops, { replace: ['homeowner.mjs'], add: [] });
 
@@ -849,7 +855,11 @@ test('#901 Review financial edits: write-allowlist.mjs, then write-check-workflo
 
   // The SQL 89 hold does not block members before it (homeowner.mjs, mortgage-agent-compensation.mjs;
   // the latter simulated on its pre-apply bytes, since its committed expected_live is already accepted).
-  const PRE_APPLY = { 'mortgage-agent-compensation.mjs': 'c38986152765e1d43443c82a779627bd55f96b3c2c246988f4697a3565166512' };
+  const PRE_APPLY = {
+    'mortgage-agent-compensation.mjs': 'c38986152765e1d43443c82a779627bd55f96b3c2c246988f4697a3565166512',
+    // Applied by production run 40930253261 (2026-10-29); simulated on its pre-apply bytes.
+    'homeowner.mjs': '1fa4950c42bf26ff70bc04acd05ca8c784a970d2573178599859c8d682ce5849',
+  };
   for (const member of ['homeowner.mjs', 'mortgage-agent-compensation.mjs']) {
     assert.ok(PLAN.order.indexOf(member) < PLAN.order.indexOf(WORKFLOW_WRITES), member);
     const plan = structuredClone(PLAN);
@@ -1158,7 +1168,8 @@ test('live reconciliation 2026-10-19: ten members expect the bytes inspect run 3
   // the 2026-10-21 production rebuilds, and production runs 40189236116 and 40189657073 replaced them
   // for the stakeholder settings edit (1fc4a43e and e1227c96, now recorded live).
   const MOVED_ON = {
-    'homeowner.mjs': { accepted: 'c51ea27a37a72b18aed7881ae349212257b790e6ff400cbe675949574504a80c', liveNow: '1fa4950c42bf26ff70bc04acd05ca8c784a970d2573178599859c8d682ce5849' },
+    // Production run 40930253261 (2026-10-29) applied the homeowner upload status bytes.
+    'homeowner.mjs': { accepted: 'c51ea27a37a72b18aed7881ae349212257b790e6ff400cbe675949574504a80c', liveNow: 'ea5224291c57ab367f511c75bc6e639fb9faeb04fe7139e27460c51ae3ea72b1' },
     'write-allowlist.mjs': { accepted: '5f84c5634190ebade1ee6ae10d3420e09548efac78f2a72eb98886d2f0341189', liveNow: '1fc4a43eda4455d406edd4566d7a2bada352d241e88ba01cb4ff2cd3afb2884a' },
     'write-check-workflow.mjs': { accepted: 'fa2c6aef0e4e6c8713f60a24804309b4cf7f9e4b9d69a379498ef9acaf621fc2', liveNow: 'e1227c967906496519db1fe9c996514c03ca04a79378ff77e93b92ecf470544a' },
     'workflow-rpc.mjs': { accepted: '79b7e4de653eb9d391afca9d27769b3b7c8e3d10d67af43e829ee32398797485', liveNow: 'acb5fc06ca01ddb5ad3294ee5840443c1747798f06c1990c174c469dbb5534e0' },
@@ -1480,27 +1491,31 @@ test('homeowner pre-claim upload: homeowner.mjs REPLACEs the live c51ea27a bytes
   // The pre-claim manifest keeps its planning record.
   assert.deepEqual(manifest.members[MEMBER], { live_sha256: LIVE, accepted_sha256: PRECLAIM, operation: 'replace' });
   // The row has since moved on to the homeowner upload status (planned 2026-10-29 over the pre-claim
-  // bytes, which the production rebuild inspect run 40741101459 observed live; its own test below):
-  // expected_live records the pre-claim bytes; accepted is main's.
+  // bytes, which the production rebuild inspect run 40741101459 observed live; its own test below),
+  // applied by production run 40930253261: the row now records main's bytes live and names the
+  // homeowner upload status applied manifest.
   const UPLOAD_STATUS_REL = 'aws/tests/fixtures/production-homeowner-upload-status-manifest-2026-10-29.json';
   const row = PLAN.members[MEMBER];
   assert.equal(row.operation, 'replace');
-  assert.equal(row.manifest, UPLOAD_STATUS_REL);
+  assert.equal(row.manifest, HOMEOWNER_UPLOAD_STATUS_APPLIED_REL);
   assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, UPLOAD_STATUS_REL), 'utf8')).members[MEMBER].previous_manifest, MANIFEST_REL);
   assert.equal(row.sql_before, null);
-  assert.equal(row.expected_live_sha256, PRECLAIM);
+  assert.equal(row.expected_live_sha256, row.accepted_sha256);
   assert.equal(row.accepted_sha256, sha(`aws/functions/api/${MEMBER}`));
   assert.notEqual(row.accepted_sha256, PRECLAIM);
   assert.notEqual(row.accepted_sha256, LIVE);
   const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
-  const ready = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER) });
-  assert.equal(ready.state, 'READY');
-  assert.equal(ready.mutation, false);
-  // The release bytes the pre-claim plan started from are no longer accepted live.
-  await assert.rejects(
-    run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: LIVE }) }),
-    (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
-  );
+  const done = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER) });
+  assert.equal(done.state, 'ALREADY_ACCEPTED');
+  assert.equal(done.mutation, false);
+  // Neither the pre-claim bytes nor the release bytes before them are an accepted live state any more.
+  for (const other of [PRECLAIM, LIVE]) {
+    await assert.rejects(
+      run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: other }) }),
+      (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+      other,
+    );
+  }
 });
 
 test('referral billing credit: tenant-billing-engine.mjs expected_live records the bytes production run 39932114735 applied', async () => {
@@ -2151,13 +2166,14 @@ test('Loss Draft from uploaded: workflow-transitions.mjs expected_live records t
   assert.deepEqual(manifest.members[MEMBER], { live_sha256: BEFORE, accepted_sha256: LIVE, operation: 'replace', previous_manifest: RELEASE });
   assert.equal(release.members[MEMBER].accepted_sha256, BEFORE);
   // The row has since moved on to the homeowner upload status (planned 2026-10-29 over these applied
-  // bytes, its own test below): expected_live still records these bytes; accepted is main's.
+  // bytes, its own test below), applied by production run 40929865650: the row now records main's
+  // bytes live and names the homeowner upload status applied manifest.
   const UPLOAD_STATUS_REL = 'aws/tests/fixtures/production-homeowner-upload-status-manifest-2026-10-29.json';
   const row = PLAN.members[MEMBER];
   assert.equal(row.operation, 'replace');
-  assert.equal(row.manifest, UPLOAD_STATUS_REL);
+  assert.equal(row.manifest, HOMEOWNER_UPLOAD_STATUS_APPLIED_REL);
   assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, UPLOAD_STATUS_REL), 'utf8')).members[MEMBER].previous_manifest, APPLIED_REL);
-  assert.equal(row.expected_live_sha256, LIVE);
+  assert.equal(row.expected_live_sha256, row.accepted_sha256);
   assert.notEqual(row.accepted_sha256, LIVE);
   assert.equal(sha(`aws/functions/api/${MEMBER}`), row.accepted_sha256);
   assert.equal(row.sql_before, LEDGER);
@@ -2165,16 +2181,20 @@ test('Loss Draft from uploaded: workflow-transitions.mjs expected_live records t
   assert.equal(PLAN.order.at(-1), 'providers.mjs');
   assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
   const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
-  const ready = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: LIVE }) });
-  assert.equal(ready.state, 'READY');
-  assert.equal(ready.mutation, false);
-  await assert.rejects(
-    run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: BEFORE }) }),
-    (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
-  );
+  const done = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER) });
+  assert.equal(done.state, 'ALREADY_ACCEPTED');
+  assert.equal(done.mutation, false);
+  // Neither this apply's bytes nor the bytes before it are an accepted live state any more.
+  for (const other of [LIVE, BEFORE]) {
+    await assert.rejects(
+      run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: other }) }),
+      (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+      other,
+    );
+  }
 });
 
-test('Homeowner upload status: workflow-transitions.mjs and homeowner.mjs REPLACE planned over the bytes production run 40089521986 applied and the pre-claim bytes rebuild inspect run 40741101459 found live', async () => {
+test('Homeowner upload status: workflow-transitions.mjs and homeowner.mjs REPLACE planned over the bytes production run 40089521986 applied and the pre-claim bytes rebuild inspect run 40741101459 found live; production runs 40929865650 and 40930253261 applied main\'s bytes', async () => {
   const MANIFEST_REL = 'aws/tests/fixtures/production-homeowner-upload-status-manifest-2026-10-29.json';
   const TRANSITIONS = 'workflow-transitions.mjs';
   const HOMEOWNER = 'homeowner.mjs';
@@ -2210,24 +2230,33 @@ test('Homeowner upload status: workflow-transitions.mjs and homeowner.mjs REPLAC
     assert.notEqual(accepted, live, member);
     assert.deepEqual(manifest.members[member], { live_sha256: live, accepted_sha256: accepted, operation: 'replace', previous_manifest: previousRel }, member);
     assert.equal(readJson(previousRel).members[member].accepted_sha256, live, member);
-    assert.deepEqual(PLAN.members[member], {
+    // Applied 2026-10-29: the row records main's bytes live and names the homeowner upload status
+    // applied manifest; the planning manifest keeps the pre-apply state.
+    const row = PLAN.members[member];
+    assert.deepEqual(row, {
       operation: 'replace',
       accepted_sha256: accepted,
-      expected_live_sha256: live,
+      expected_live_sha256: accepted,
       sql_before: sqlBefore,
-      manifest: MANIFEST_REL,
+      manifest: HOMEOWNER_UPLOAD_STATUS_APPLIED_REL,
     }, member);
     assert.equal(resolvePlannedMember(member, { root: ROOT, plan: PLAN }).ok, true, member);
-    const ready = await run(inspect(member), { root: ROOT, inspectLive: liveFor(member) });
+    // Before the apply, the planned row took the pre-apply bytes as READY.
+    const before = structuredClone(PLAN);
+    before.members[member] = { ...row, expected_live_sha256: live, manifest: MANIFEST_REL };
+    const ready = await run(inspect(member), { root: ROOT, plan: before, inspectLive: liveFor(member, { plan: before }) });
     assert.equal(ready.state, 'READY', member);
     assert.equal(ready.mutation, false, member);
-    const done = await run(inspect(member), { root: ROOT, inspectLive: liveFor(member, { sha256: accepted }) });
+    const done = await run(inspect(member), { root: ROOT, inspectLive: liveFor(member) });
     assert.equal(done.state, 'ALREADY_ACCEPTED', member);
-    await assert.rejects(
-      run(inspect(member), { root: ROOT, inspectLive: liveFor(member, { sha256: older }) }),
-      (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
-      member,
-    );
+    assert.equal(done.mutation, false, member);
+    for (const other of [live, older]) {
+      await assert.rejects(
+        run(inspect(member), { root: ROOT, inspectLive: liveFor(member, { sha256: other }) }),
+        (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+        `${member} ${other}`,
+      );
+    }
   }
   assert.equal(PLAN.sql_prerequisites[LEDGER].verified_live, true);
   // workflow-transitions.mjs goes first: plan order already puts it ahead of homeowner.mjs.
@@ -3165,4 +3194,65 @@ test('Security hardening 2026-10-29 (audit findings 2-4): five members applied i
     assert.ok(applied.notes.includes(evidence), evidence);
   }
   assert.ok(applied.notes.includes(Buffer.from('TPyZ2fUUVERHh1WHUM9y4WMC3e+Cf/IqRybyI7jIBzc=', 'base64').toString('hex').slice(0, 8)));
+});
+
+test('Homeowner upload status 2026-10-29: workflow-transitions.mjs then homeowner.mjs applied in plan order, each on its own phrase, recorded in one applied manifest', async () => {
+  const PLANNING_REL = 'aws/tests/fixtures/production-homeowner-upload-status-manifest-2026-10-29.json';
+  const MEMBERS = ['workflow-transitions.mjs', 'homeowner.mjs'];
+  const applied = JSON.parse(fs.readFileSync(path.join(ROOT, HOMEOWNER_UPLOAD_STATUS_APPLIED_REL), 'utf8'));
+  const planning = JSON.parse(fs.readFileSync(path.join(ROOT, PLANNING_REL), 'utf8'));
+  assert.equal(applied.workstream_id, 'homeowner-upload-status-applied');
+  assert.equal(applied.deploy_authorized, false);
+  assert.match(applied.authorization, /^Record only/);
+  assert.equal(applied.live_lambda, 'checksops-production-prep-api');
+  // The planning manifest keeps its planning record.
+  assert.match(planning.authorization, /^Pending owner review/);
+  // Members in plan order, which is the order they were applied in.
+  assert.deepEqual(Object.keys(applied.members), MEMBERS);
+  assert.deepEqual([...MEMBERS].sort((a, b) => PLAN.order.indexOf(a) - PLAN.order.indexOf(b)), MEMBERS);
+  for (const member of MEMBERS) {
+    const accepted = sha(`aws/functions/api/${member}`);
+    const row = PLAN.members[member];
+    assert.deepEqual(applied.members[member], { live_sha256: accepted, accepted_sha256: accepted, operation: 'replace', previous_manifest: PLANNING_REL }, member);
+    assert.equal(row.accepted_sha256, accepted, member);
+    assert.equal(row.expected_live_sha256, accepted, member);
+    assert.equal(row.manifest, HOMEOWNER_UPLOAD_STATUS_APPLIED_REL, member);
+    // The planning manifest keeps the pre-apply state, and that state is not an accepted live state any more.
+    const planned = planning.members[member];
+    assert.equal(planned.accepted_sha256, accepted, member);
+    assert.notEqual(planned.live_sha256, accepted, member);
+    assert.ok(applied.notes.includes(`"DEPLOY ${member} TO PRODUCTION"`), member);
+    assert.ok(applied.notes.includes(`${member} ${planned.live_sha256.slice(0, 8)} -> ${accepted.slice(0, 8)}`), member);
+    assert.ok(PLAN.notes.includes(`${member} ${planned.live_sha256.slice(0, 8)} -> ${accepted.slice(0, 8)}`), member);
+    const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: member };
+    const done = await run(inspect, { root: ROOT, inspectLive: liveFor(member) });
+    assert.equal(done.state, 'ALREADY_ACCEPTED', member);
+    assert.equal(done.mutation, false, member);
+    await assert.rejects(
+      run(inspect, { root: ROOT, inspectLive: liveFor(member, { sha256: planned.live_sha256 }) }),
+      (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+      member,
+    );
+  }
+  // Staging inspect and apply, production inspect and apply, for each member in turn.
+  for (const runId of [
+    '40926450157', '40926664565', '40929713106', '40929865650',
+    '40926834961', '40926966235', '40930110061', '40930253261',
+  ]) {
+    assert.match(applied.notes, new RegExp(`run ${runId}`), runId);
+    assert.match(PLAN.notes, new RegExp(runId), runId);
+  }
+  for (const evidence of [
+    '67a0ed2147e7d87c113b1ea08dedb52fc630d186',
+    // The first pre-apply inspect read the CodeSha256 and RevisionId the security hardening record ends on.
+    'TPyZ2fUUVERHh1WHUM9y4WMC3e+Cf/IqRybyI7jIBzc=', 'c119508b-a561-4f74-a4ff-88fcfbf84a15',
+    // Each verify; the second pre-apply inspect read the first verify's CodeSha256 and RevisionId.
+    'IV2PdRWXf2hJtFfMI9hXyao2XrcD2yb9fEyER1pj+1U=', '24ba4188-8dd3-4e90-88c8-69a3db9f223a',
+    'tUtgefks7a4r5e1TgV8xH9eG2jPi034LOiTDyVt6p/U=', 'cbdd5ef4-6d78-4ded-a670-d3c4905d35d7',
+  ]) {
+    assert.ok(applied.notes.includes(evidence), evidence);
+  }
+  const security = JSON.parse(fs.readFileSync(path.join(ROOT, SECURITY_HARDENING_APPLIED_REL), 'utf8'));
+  assert.ok(security.notes.includes('TPyZ2fUUVERHh1WHUM9y4WMC3e+Cf/IqRybyI7jIBzc=, RevisionId c119508b-a561-4f74-a4ff-88fcfbf84a15'));
+  assert.ok(applied.notes.includes(Buffer.from('tUtgefks7a4r5e1TgV8xH9eG2jPi034LOiTDyVt6p/U=', 'base64').toString('hex')));
 });
