@@ -1,0 +1,66 @@
+{
+  "id": "sql127-homeowner-portal-signing-production-apply",
+  "migration": "sql127",
+  "authorization": "pending",
+  "execute": false,
+  "target_environment": "production",
+  "target_component": "production-sql",
+  "deployment_type": "sql-apply",
+  "filename": "aws/workflows/sql/127_homeowner_portal_signing.sql",
+  "migration_id": "127_homeowner_portal_signing",
+  "staging_pin_commit": "94dde846df58f8244e537f194be879d81a5ad14e",
+  "source_sha256": "4d2d311bad221c2d0e33370a56c1ebf00b0887d7286892954cf76eef0e107c33",
+  "function_identities": [
+    "public.aws_public_homeowner_ledger_endorse_capability(text, uuid)",
+    "public.aws_public_homeowner_pending_signatures(text)",
+    "public.aws_public_homeowner_document_portal_signer(text, uuid)"
+  ],
+  "expected_live_definition_sha256": null,
+  "intended_replacement_sha256": "c4936010132f2d542db796e50fe2d56d1aa3bae5133cdb53e8172978a5b2e190",
+  "authorization_phrase": "APPLY_HOMEOWNER_PORTAL_SIGNING",
+  "predecessors": [],
+  "order_note": "No release-engine predecessor and no ordering constraint. SQL 127 replaces two of SQL 83's functions (aws/workflows/sql/83_homeowner_signing_capabilities.sql, applied to production and retired on its own homeowner engine, so it is not a release key) and adds a third beside SQL 83's aws_public_homeowner_document_sign_capability, which stays as it is. The spec prerequisites stand for SQL 82 and SQL 83: their four functions, homeowner_ledger_tokens, claims, check_intake_items, homeowner_ledger_events, check_endorsements, signature_requests and signature_signers with every column the bodies read or write, pg_catalog.gen_random_uuid() and role checksops; a read-only production inspect confirms them. Each replaced function must be owned by the applying login (functions_owned_by_login), keep its jsonb result (function_results_match) and hold no EXECUTE grant other than PUBLIC, authenticated, checksops and the owner (function_acl_replaceable); the login must be able to write check_endorsements and signature_signers under RLS (definer_can_write_relations). No API, Lambda or SPA change is part of this pin.Adds no trigger: the DB validator's public trigger count is not affected.",
+  "admin_login": "checksops_admin",
+  "rds_identifier": "checksops-production",
+  "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
+  "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
+  "tooling": {
+    "status": "built",
+    "production_tool": "scripts/deployment-guard/sql127-homeowner-portal-signing-production-apply.mjs",
+    "production_lib": "scripts/deployment-guard/lib/release-sql-production-apply.mjs",
+    "staging_executor_handler": "aws/write-path/guarded-sql-executor/index.mjs handleReleaseSqlMigration",
+    "staging_workflow_choice": "sql127-homeowner-portal-signing",
+    "one_shot_migration": "sql127",
+    "fingerprint_engine": "scripts/deployment-guard/lib/release-sql-state.mjs",
+    "runbook": "ops/production-sql-127-apply.md",
+    "tests": [
+      "aws/tests/release-sql127-executor.test.mjs",
+      "aws/tests/release-sql127-production-apply.test.mjs",
+      "aws/tests/release-sql90-97-executor.test.mjs",
+      "aws/tests/release-sql90-97-production-apply.test.mjs",
+      "aws/tests/sql127-homeowner-portal-signing-pg.test.mjs"
+    ],
+    "note": "Guarded tooling for SQL 127: sql127-homeowner-portal-signing-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql127-homeowner-portal-signing); production-sql-one-shot.mjs --migration sql127. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): the three functions (body and attributes from the file, EXECUTE for checksops and the owner). The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
+  },
+  "production_inspect": {
+    "status": "pending",
+    "date": null,
+    "ssm_command_id": null,
+    "source_commit": null,
+    "read_only": true,
+    "connected_as": "checksops_admin",
+    "live_definition_sha256": null,
+    "apply_preconditions_met": null,
+    "precondition_failures": null,
+    "note": "Pending: no read-only production inspect has been run for SQL 127 yet. Expected: prerequisites_missing [], aws_public_homeowner_ledger_endorse_capability(text, uuid) and aws_public_homeowner_pending_signatures(text) 'different' (SQL 83's bodies), owned by checksops_admin, EXECUTE checksops and the owner (release_sql_inspect.function_acl), aws_public_homeowner_document_portal_signer(text, uuid) absent, definer_writes ok for check_endorsements and signature_signers; if production is exactly SQL 83's post-state the fingerprint is the one derived from SQL 83's bytes in ops/production-sql-127-apply.md. Record its date, SSM command id, source commit, live_definition_sha256, prerequisites_missing, release_sql_inspect.functions, release_sql_inspect.function_acl, release_sql_inspect.definer_writes, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. Stop if prerequisites_missing is not [] or precondition_failures is not [] (functions_owned_by_login: checksops_admin does not own a replaced function; function_results_match: a result type is not jsonb; function_acl_replaceable: an EXECUTE grant outside PUBLIC, authenticated and checksops; definer_can_write_relations: the login cannot write check_endorsements or signature_signers): that needs its own reviewed change."
+  },
+  "intended_post_state": {
+    "fingerprint": "c4936010132f2d542db796e50fe2d56d1aa3bae5133cdb53e8172978a5b2e190",
+    "note": "Three functions owned by checksops_admin, plpgsql, VOLATILE, SECURITY DEFINER, search_path public, row_security off, result jsonb, EXECUTE for checksops and the owner: aws_public_homeowner_ledger_endorse_capability(text, uuid) (SQL 83's body with the status allow-list ('pending', 'sent')), aws_public_homeowner_pending_signatures(text) (SQL 83's body without the emailed-link expiry filter on the listed signer) and aws_public_homeowner_document_portal_signer(text, uuid) (SQL 83's document gates, the signer row locked; returns the existing token_hash, renews an expired or expiring expires_at to now() + 72 hours). SQL 82's ledger view and SQL 83's aws_public_homeowner_document_sign_capability unchanged. No table, column, view, policy, RLS setting, table grant, trigger or row change; every other function unchanged. The fingerprint is releaseIntendedHash('sql127', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): c4936010132f2d542db796e50fe2d56d1aa3bae5133cdb53e8172978a5b2e190."
+  },
+  "staging_acceptance": {
+    "ok": false,
+    "reference": null,
+    "basis": "Pending: record the guarded staging SQL executor read-live (and, if staging is not yet at the intended state, the staging apply) of SQL 127 (choice sql127-homeowner-portal-signing) here in the reviewed change that sets execute true. The behavior is covered on PostgreSQL 16 by aws/tests/sql127-homeowner-portal-signing-pg.test.mjs. Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+  }
+}

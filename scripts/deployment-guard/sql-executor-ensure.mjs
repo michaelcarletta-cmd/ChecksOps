@@ -98,6 +98,7 @@ export const EXECUTOR_PACK_MEMBERS = Object.freeze([
   ['aws/workflows/sql/124_mortgage_desk_signature_and_reads.sql', 'sql/124_mortgage_desk_signature_and_reads.sql'],
   ['aws/workflows/sql/125_deposit_views_security_invoker.sql', 'sql/125_deposit_views_security_invoker.sql'],
   ['aws/workflows/sql/126_definer_reads_caller_gates.sql', 'sql/126_definer_reads_caller_gates.sql'],
+  ['aws/workflows/sql/127_homeowner_portal_signing.sql', 'sql/127_homeowner_portal_signing.sql'],
   ['aws/functions/api/rds-global-bundle.pem', 'rds-global-bundle.pem'],
   ['scripts/deployment-guard/lib/sql-apply.mjs', 'lib/sql-apply.mjs'],
   ['scripts/deployment-guard/lib/sql-executor-auth.mjs', 'lib/sql-executor-auth.mjs'],
