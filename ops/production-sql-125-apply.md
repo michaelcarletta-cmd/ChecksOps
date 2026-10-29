@@ -20,8 +20,11 @@ when present and owned by the applying login (42501 `sql125_not_view_owner` othe
 view, a member then reads the deposit items of their own tenants' checks
 (`aws_select_deposit_items`: `aws_can_access_check_non_partner(check_id)`), the platform owner
 what that helper gives it, a partner tenant nothing; the exception and attachment counts follow the
-same rule (`aws_can_access_deposit_item`). The Deposit Manager and Owner Queue screens show only the
-caller's tenants.
+same rule (`aws_can_access_deposit_item`). A `POST /data/query` on any of the four views then
+returns only the caller's tenants' rows. No routed screen reads these views (on main `4f26c14`,
+`DepositOwnerQueue`, `DepositAgingDashboard` and `DepositManagerCommandCenter`, which holds
+`DepositManagerWorkflows`, are imported by no page), so no screen changes; the exposure was the
+data API.
 
 Not changed: no view definition, column or comment; no grant (`checksops` keeps SELECT on the
 views, the views stay on the API allowlist); no table, policy, RLS setting, function, trigger or row.
@@ -42,7 +45,22 @@ definitions without options (so the definitions are the reviewed ones and only `
 is missing). Recorded in the staging pin (`expected_live_definition_sha256`, `execute: true`,
 wave 24) under the owner's words of 2026-10-29, "open the SQL 125 staging pin PR".
 
-**Status:** staging pin execute-authorized (wave 24); nothing applied yet; production pin pending.
+**Staging apply (2026-10-29).** After #1380 merged the staging pin (main `4f26c14`), under the
+owner's words of 2026-10-29, "merged 1380, start the SQL 125 staging apply", each run approved by
+the owner in the GitHub `staging` environment:
+
+- Inspect run 40890156931: live executor `TiHjGOKZ+OpHdVdQ8RgqSPelA579PDmzGamSkL8C+E8=` (deploy run
+  40885862573); main supersedes only `lib/sql-executor-auth.mjs`; no collisions.
+- Deploy run 40892051066: executor now `yHVZNx1R3mTcbyneZrWzSptd7qDIcD49ckM5DTehFZ4=` (revision
+  `8ce5236f-4089-4576-b991-87e5ab6babec`); "Verify live executor now carries main's package" passed;
+  staging API untouched.
+- Apply run 40892707444 (workstream `github-staging-sql-40892707444`, pin commit `c0e9d1e`): receipt
+  before `9b31cf5dad3f82bf69fcddd03e0c26c0dc0fdd5ff6bd40137d1af316f1fd6541`, after
+  `a041efa5d6b8e564c860974d2427415ec3e031a8a63daf43005e893e2d55ddea` (intended), result `applied`;
+  the four views `intended`, `prerequisites_missing` `[]`.
+- Read-live run 40893116553: live `a041efa5…`, the four views `intended`.
+
+**Status:** applied to staging (wave 24); production pin pending; not applied to production.
 
 ## Fingerprint
 
@@ -79,8 +97,9 @@ Post-conditions: the intended fingerprint; the views' owner unchanged; everythin
    `prerequisites_missing` other than `[]`, `precondition_failures` other than `[]`, or a view
    definition hash other than the reviewed one, stop. Otherwise record `LIVE_DEFINITION_SHA256` in
    the staging pin (`expected_live_definition_sha256`, owner-approved `authorization`,
-   `execute: true`) in a reviewed change, `apply`, then `read-live` again. Check the Deposit
-   Manager and Owner Queue screens on staging as a member of one tenant.
+   `execute: true`) in a reviewed change, `apply`, then `read-live` again. The check is that
+   read-live: `already_applied` true at the intended fingerprint. No routed screen reads these
+   views, so there is no screen to check.
 2. Production: run the read-only inspect on the runner
    (`node scripts/deployment-guard/production-sql-one-shot.mjs --migration sql125 … --phase inspect`);
    record `production_inspect` and copy `live_definition_sha256` into

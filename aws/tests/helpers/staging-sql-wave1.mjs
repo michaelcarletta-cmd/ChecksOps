@@ -116,7 +116,9 @@ export const STAGING_WAVE1 = Object.freeze({
   // Wave 24 (owner approved 2026-10-29, "open the SQL 125 staging pin PR"): SQL 125, security_invoker
   // on the four deposit views (security audit). Read at main a0c5c51 after the executor carried it
   // (deploy run 40885862573): the four views present with the reviewed definitions and no options.
-  sql125: Object.freeze({ wave: 24, approved: '2026-10-29', run: '40886747687', live: '9b31cf5dad3f82bf69fcddd03e0c26c0dc0fdd5ff6bd40137d1af316f1fd6541' }),
+  // Applied by run 40892707444 (main 4f26c14, executor deploy run 40892051066): receipt 9b31cf5d ->
+  // a041efa5 (intended); read-live run 40893116553 at the intended fingerprint.
+  sql125: Object.freeze({ wave: 24, approved: '2026-10-29', run: '40886747687', live: '9b31cf5dad3f82bf69fcddd03e0c26c0dc0fdd5ff6bd40137d1af316f1fd6541', apply_run: '40892707444' }),
   sql98: Object.freeze({ wave: 3, approved: '2026-10-18', run: '39083278136', live: '296c3d6a274e10f66005fb9eaecf93fa17b81bd8db3607037ca07698fddd3275', apply_run: '39085677318' }),
 });
 
