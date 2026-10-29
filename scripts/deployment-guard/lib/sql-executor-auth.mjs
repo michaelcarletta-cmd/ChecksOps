@@ -2824,7 +2824,7 @@ export const AUTHORIZED_SQL125_DEPOSIT_VIEWS_SECURITY_INVOKER = Object.freeze({
 // Security audit 2026-10-29 staging pin: SQL 126 (finding 4, database part: the thirteen Supabase-era
 // SECURITY DEFINER reads PR #1379 gates in the API check their caller themselves, same signatures,
 // results, language, volatility and search_path; EXECUTE for checksops and the owner). No predecessor.
-// Pending until a reviewed pin change records a staging read-live.
+// Staging apply authorized (wave 25) from staging read-live run 40917478177.
 export const AUTHORIZED_SQL126_DEFINER_READS_CALLER_GATES = Object.freeze({
   key: 'sql126',
   filename: 'aws/workflows/sql/126_definer_reads_caller_gates.sql',
@@ -2832,9 +2832,11 @@ export const AUTHORIZED_SQL126_DEFINER_READS_CALLER_GATES = Object.freeze({
   // The commit that last authored the file bytes.
   commit: '747fc1e00b207633cf3667d5abd26ae606f91829',
   source_sha256: '398fe16cc3bfb0940e922a15233c56109a7b6f4f3990da4180f5e4cb58028933',
-  authorization: 'pending',
-  execute: false,
-  expected_live_definition_sha256: null,
+  authorization: 'Owner approved 2026-10-29: staging apply (wave 25) from staging read-live run 40917478177',
+  execute: true,
+  // Staging read-live run 40917478177 (main 7d33d5c, executor carrying main's package from deploy run
+  // 40917101622): the thirteen functions with their supabase bodies, EXECUTE PUBLIC and the owner.
+  expected_live_definition_sha256: '04106521263eeeb423ac2c0dfbf5e1f1af5a52c89501b63ac742d6b25c5e1612',
   // Code-derived: releaseIntendedHash('sql126', file bytes) (release-sql-state.mjs); re-derived by the tests.
   intended_replacement_sha256: '3aebf853a375d7a668acf62c8877a7b6a0d5f791b73121b591acd9046b0510b2',
   function_identities: Object.freeze([
