@@ -176,7 +176,9 @@ export default function WalletOps() {
   const recentActivity = [
     ...billingActivity.map((bill) => ({
       key: `billing-${bill.id}`,
-      at: bill.period ? `${bill.period}-01` : new Date().toISOString(),
+      // When the bill happened, never "now": a bill without a timestamp used to sort
+      // above newer activity such as a just-submitted wallet funding.
+      at: bill.at ?? (bill.period ? `${bill.period}-01T00:00:00Z` : "1970-01-01T00:00:00Z"),
       title: "ChecksOps Billing",
       subtitle: bill.period_label,
       detail: `Funding: Wallet ${money(bill.wallet_cents)} + ${fundingBank} ${money(bill.bank_cents)}`,
