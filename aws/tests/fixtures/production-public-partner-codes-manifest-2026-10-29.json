@@ -1,0 +1,15 @@
+{
+  "workstream_id": "public-partner-codes",
+  "authorization": "Pending owner review (2026-10-29). Planning only: nothing is live or verified. The production apply still needs its own owner approval and staging acceptance.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Public partner codes (2026-10-29, security audit finding 9, API part): a partner code connects whoever enters it at once (owner, 2026-10-29: immediate connect and reconnect after removal are intended), yet POST /data/query answered tenants_public with every tenant's partner_code, to any signed-in user and to anonymous callers (handleDataQuery serves tenants_public without a login; an anonymous staging request on 2026-10-29 returned the codes). The accepted data.mjs bytes add tenants_public: [partner_code] to SECRET_COLUMNS, so a * select strips it and naming it in a select, embedded select, filter, or= term or order is refused with 403 secret_column_denied before any read, now also on the anonymous path (publicTenantsQuery runs denySecretColumnQuery), and drop partner_code from TENANTS_PUBLIC_COLUMNS, so an embedded tenants(..., partner_code) reads tenants, whose RLS (aws_select_tenants) shows a tenant's row to its members and the platform owner only. Members still read their own code from tenants (Settings partner code, get_my_tenant_partner_codes); the platform owner still reads every code on Admin > Tenants; no screen reads partner_code from tenants_public. The connect logic (aws_connect_partner_by_code) is unchanged. No SQL. data.mjs live_sha256 e2415f90 is the bytes the contractor verification gate production run 40945542902 applied (previous_manifest); no data.mjs change has been planned or applied since. sql_before stays SQL 53. A read-only production overlay inspect must confirm the live member before any apply.",
+  "members": {
+    "data.mjs": {
+      "live_sha256": "e2415f9046e3288e2bf3e296bf716a9f3e0c2777fe930590b316c8aec79559eb",
+      "accepted_sha256": "c652e317e2de5a14b32bf6aecfc5b76438b2ff23d6c3a282f3c1cbaedf115fe0",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-contractor-verification-gate-applied-manifest-2026-10-29.json"
+    }
+  }
+}
