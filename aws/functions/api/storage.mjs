@@ -480,6 +480,70 @@ const publicClient = async (deps) => {
 };
 
 
+const PORTAL_SIGNER_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/** The claim portal pair (ledger token + signer id), or null when the body carries neither. */
+export const portalSignerFromBody = (body = {}) => {
+  const ledgerToken = String(body.ledger_token || body.ledgerToken || '').trim();
+  const signerId = String(body.signer_id || body.signerId || '').trim();
+  if (!ledgerToken && !signerId) return null;
+  return { ledgerToken, signerId };
+};
+
+/**
+ * SQL 127: the claim portal signs a document with the portal link alone.
+ * aws_public_homeowner_document_portal_signer applies the homeowner, claim and
+ * tenant gates, renews an expired emailed link's expiry for this one signer,
+ * and returns the signer's existing token_hash, which never leaves the API.
+ */
+export const resolvePortalSignerHash = async (client, { ledgerToken, signerId }) => {
+  if (!ledgerToken || ledgerToken.length < 8 || !PORTAL_SIGNER_ID_RE.test(signerId || '')) {
+    return { ok: false, error: 'missing_fields' };
+  }
+  const doc = (await client.query(
+    'SELECT public.aws_public_homeowner_document_portal_signer($1, $2::uuid) AS doc',
+    [ledgerToken, signerId],
+  )).rows[0]?.doc;
+  const tokenHash = String(doc?.token_hash || '');
+  if (!doc?.ok || !/^[0-9a-f]{64}$/.test(tokenHash)) {
+    return { ok: false, error: String(doc?.error || 'not_found') };
+  }
+  return { ok: true, tokenHash };
+};
+
+const PORTAL_SIGNER_ERRORS = {
+  missing_fields: [400, 'Missing signing details.'],
+  already_signed: [409, 'This document has already been signed.'],
+  signer_order_blocked: [403, 'Another signer has to sign first.'],
+  revoked: [410, 'This claim link is no longer active.'],
+  expired: [410, 'This claim link has expired.'],
+};
+
+export const portalSignerRefusal = (error, spoof) => {
+  const [statusCode, message] = PORTAL_SIGNER_ERRORS[error] || [404, 'This signature is not available from this claim link.'];
+  return { ok: false, statusCode, stage: 'portal_signer', error: error || 'not_found', message, spoofFieldsIgnored: spoof };
+};
+
+const resolvePortalSignerHashWithWriter = async (deps, portal) => {
+  const loadCredentials = deps.loadDatabaseCredentials || loadDatabaseCredentials;
+  const createClient = deps.createWriteClient || deps.createClient || ((config) => new Client(config));
+  const credentials = await loadCredentials();
+  const writer = createClient(buildWriteClientConfig(credentials, { queryTimeoutMillis: 8000 }));
+  await writer.connect();
+  try {
+    await writer.query('BEGIN');
+    await writer.query('SET TRANSACTION READ WRITE');
+    const resolved = await resolvePortalSignerHash(writer, portal);
+    await writer.query(resolved.ok ? 'COMMIT' : 'ROLLBACK');
+    return resolved;
+  } catch (error) {
+    try { await writer.query('ROLLBACK'); } catch { /* ignore */ }
+    throw error;
+  } finally {
+    try { await writer.end(); } catch { /* ignore */ }
+  }
+};
+
 export const recordPublicSignerViewed = async (deps, { tokenHash, alreadyViewed }) => {
   if (!tokenHash || alreadyViewed) return { recorded: false, reason: 'skipped' };
   let writer = deps.writeClient;
@@ -631,12 +695,18 @@ export const handlePublicSignatureDocument = async (event, deps = {}) => {
   const body = parseBody(event);
   const spoof = ignoredSpoof(event, body);
   const token = String(body.token || '').trim();
-  if (!token || token.length < 10) {
+  const portal = token ? null : portalSignerFromBody(body);
+  if (!portal && (!token || token.length < 10)) {
     return { ok: false, statusCode: 400, error: 'validate_token', stage: 'validate_token', message: 'Missing or invalid token', spoofFieldsIgnored: spoof };
   }
-  const tokenHash = createHash('sha256').update(token).digest('hex');
+  let tokenHash = portal ? null : createHash('sha256').update(token).digest('hex');
   let client;
   try {
+    if (portal) {
+      const resolved = await resolvePortalSignerHashWithWriter(deps, portal);
+      if (!resolved.ok) return portalSignerRefusal(resolved.error, spoof);
+      tokenHash = resolved.tokenHash;
+    }
     client = await publicClient(deps);
     const row = (await client.query('SELECT public.aws_public_signature_by_token_hash($1) AS doc', [tokenHash])).rows[0]?.doc;
     if (!row) {

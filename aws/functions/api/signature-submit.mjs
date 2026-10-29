@@ -17,6 +17,7 @@ import { buildWriteClientConfig, sanitizePublicError } from './db-health.mjs';
 import { hashToken } from './esign.mjs';
 import { clientIpFromEvent, userAgentFromEvent } from './check-endorsement.mjs';
 import { normalizePath, s3KeyFor } from './storage-paths.mjs';
+import { portalSignerFromBody, portalSignerRefusal, resolvePortalSignerHash } from './storage.mjs';
 
 const { Client } = pg;
 
@@ -542,7 +543,8 @@ export const runPublicSignatureSubmit = async (event, deps = {}) => {
   const body = parseBody(event);
   const spoof = ignoredSpoof(event, body);
   const token = String(body.token || '').trim();
-  if (!token) {
+  const portal = token ? null : portalSignerFromBody(body);
+  if (!token && !portal) {
     return { ok: false, statusCode: 400, stage: 'validate_token', error: 'Missing token', spoofFieldsIgnored: spoof };
   }
   if (body.eSignConsentAccepted !== true) {
@@ -555,7 +557,17 @@ export const runPublicSignatureSubmit = async (event, deps = {}) => {
     const { client } = opened;
     await client.query('BEGIN');
     await client.query('SET TRANSACTION READ WRITE');
-    const tokenHash = hashToken(token);
+    let tokenHash = portal ? null : hashToken(token);
+    if (portal) {
+      // SQL 127: the claim portal pair resolves to the signer's existing hash in
+      // this transaction, with the signer row locked; the hash never leaves the API.
+      const resolved = await resolvePortalSignerHash(client, portal);
+      if (!resolved.ok) {
+        await client.query('ROLLBACK');
+        return portalSignerRefusal(resolved.error, spoof);
+      }
+      tokenHash = resolved.tokenHash;
+    }
     const lookup = (await client.query(
       'SELECT public.aws_public_signature_by_token_hash($1) AS doc',
       [tokenHash],

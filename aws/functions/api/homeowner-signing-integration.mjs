@@ -66,7 +66,8 @@ const signerIsOpen = (signer = {}) => {
   const status = String(signer.status || signer.signer_status || '').toLowerCase().trim();
   if (signer.signed_at || signer.revoked_at) return false;
   if (!OPEN_SIGNER_STATUSES.includes(status)) return false;
-  if (signer.expires_at && new Date(signer.expires_at) < new Date()) return false;
+  // SQL 127: an expired emailed link no longer hides the signature from the
+  // claim portal; the portal signer renews it.
   return true;
 };
 
@@ -77,6 +78,8 @@ const priorSignerBlocks = (signer, siblings = []) => {
     if (String(other.signer_id || other.id) === String(signer.signer_id || signer.id)) return false;
     const otherOrder = Number(other.signing_order || 1);
     if (!Number.isFinite(otherOrder) || otherOrder >= order) return false;
+    // As in SQL 83 and 127, an earlier signer whose link has expired does not block.
+    if (other.expires_at && new Date(other.expires_at) < new Date()) return false;
     return signerIsOpen(other);
   });
 };

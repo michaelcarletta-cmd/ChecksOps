@@ -213,9 +213,10 @@ const publicEndorsementParty = (party = {}, homeowner = {}, ctx = {}) => {
     status: party.status ?? null,
     sent_at: party.sent_at || party.request_sent_at || null,
     is_homeowner: isHomeowner,
-    // Only a requested ('sent') insured endorsement, matching the SQL 83 allow-list.
+    // An open insured endorsement, emailed ('sent') or not yet ('pending'), matching
+    // the SQL 127 allow-list: the claim portal link is enough to sign.
     can_sign: Boolean(isHomeowner && payeeType === 'insured'
-      && String(party.status || '').toLowerCase().trim() === 'sent'),
+      && ['pending', 'sent'].includes(String(party.status || '').toLowerCase().trim())),
     // Never return a raw check_endorsements.token. The endorse doorway mints at click.
     sign_url: null,
   };
