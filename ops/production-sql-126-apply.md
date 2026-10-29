@@ -51,7 +51,28 @@ one; `prerequisites_missing` `[]`, `precondition_failures` `[]`, `already_applie
 default ACL. Recorded in the staging pin (`expected_live_definition_sha256`, `execute: true`, wave 25)
 under the owner's words of 2026-10-29, "start SQL 126 on staging".
 
-**Status:** staging pin execute-authorized (wave 25); nothing applied yet; production pin pending.
+**Staging apply (2026-10-29).** After #1390 merged the staging pin (main `7422c69`), under the
+owner's words of 2026-10-29, "start the SQL 126 staging apply", each run approved by the owner in
+the GitHub `staging` environment:
+
+- Inspect run 40920400596: live executor `/ZkFu2xYI6I8lOfr9B7aLN2ODsr6k05SD2IDnoL2Rw0=` (deploy run
+  40917101622); main supersedes only `lib/sql-executor-auth.mjs`; nothing added.
+- Deploy run 40920738142: executor now `ODInv6cl/mZGp2lhmOqL8iT0WmjAnuRLpBVvaFBV5KE=` (revision
+  `68275648-d17c-48bc-8319-ba3397b493a2`); "Verify live executor now carries main's package" passed;
+  staging API untouched.
+- Apply run 40921170890 (workstream `github-staging-sql-40921170890`, pin commit `747fc1e`): receipt
+  before `04106521263eeeb423ac2c0dfbf5e1f1af5a52c89501b63ac742d6b25c5e1612`, after
+  `3aebf853a375d7a668acf62c8877a7b6a0d5f791b73121b591acd9046b0510b2` (intended), result `applied`;
+  the thirteen functions `intended`, EXECUTE `checksops` and the owner on every one,
+  `prerequisites_missing` `[]`.
+- Read-live run 40921576727: live `3aebf853…`, `already_applied` true, the thirteen functions
+  `intended`, EXECUTE `checksops` and the owner, `precondition_failures` `[]`.
+
+Not checked: the screens in step 1 (tenant admin and platform owner on staging); there are no staging
+test logins for those roles in this workstream. The caller rules are covered by
+`sql126-definer-reads-caller-gates-pg` on PostgreSQL 16, not by a signed-in staging check.
+
+**Status:** applied to staging (wave 25); production pin pending; not applied to production.
 
 ## Fingerprint
 
