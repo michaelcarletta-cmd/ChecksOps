@@ -1,8 +1,8 @@
 {
   "id": "sql126-definer-reads-caller-gates-production-apply",
   "migration": "sql126",
-  "authorization": "pending",
-  "execute": false,
+  "authorization": "Owner approved 2026-10-29 (the owner's words of 2026-10-29: \"open the SQL 126 production pin PR\"; the change itself is reviewed and merged by the owner): production apply of SQL 126 after the staging acceptance below (production 9ebc7455de1e0e467eabf59e697899bc64dc360efb8c34a3e00106e68b7754ed -> 3aebf853a375d7a668acf62c8877a7b6a0d5f791b73121b591acd9046b0510b2); execute true takes effect only when the owner reviews and merges this change. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
+  "execute": true,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -25,7 +25,7 @@
     "public.has_permission(uuid, text)",
     "public.get_check_unread_counts()"
   ],
-  "expected_live_definition_sha256": null,
+  "expected_live_definition_sha256": "9ebc7455de1e0e467eabf59e697899bc64dc360efb8c34a3e00106e68b7754ed",
   "intended_replacement_sha256": "3aebf853a375d7a668acf62c8877a7b6a0d5f791b73121b591acd9046b0510b2",
   "authorization_phrase": "APPLY_DEFINER_READS_CALLER_GATES",
   "predecessors": [],
@@ -50,27 +50,27 @@
       "aws/tests/release-sql90-97-production-apply.test.mjs",
       "aws/tests/sql126-definer-reads-caller-gates-pg.test.mjs"
     ],
-    "note": "Guarded tooling for SQL 126: sql126-definer-reads-caller-gates-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql126-definer-reads-caller-gates); production-sql-one-shot.mjs --migration sql126. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): the thirteen functions (body and attributes from the file, the four TABLE results as PostgreSQL renders them, EXECUTE for checksops and the owner). The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
+    "note": "Guarded tooling for SQL 126: sql126-definer-reads-caller-gates-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql126-definer-reads-caller-gates); production-sql-one-shot.mjs --migration sql126. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): the thirteen functions (body and attributes from the file, the four TABLE results as PostgreSQL renders them, EXECUTE for checksops and the owner). The tooling does not authorize anything: the reviewed change of 2026-10-29 (\"SQL 126 production pin: production pre-state recorded, staging apply accepted, execute true\") recorded the production inspect, the staging acceptance and the owner approval and set execute true; the record-and-retire change after the apply sets it false again."
   },
   "production_inspect": {
-    "status": "pending",
-    "date": null,
-    "ssm_command_id": null,
-    "source_commit": null,
+    "status": "recorded",
+    "date": "2026-10-29",
+    "ssm_command_id": "a98a1794-509b-4689-ada4-1a35f32bbdaa",
+    "source_commit": "56a748c06e78220c6d0a82c0c83b623e9e116574",
     "read_only": true,
     "connected_as": "checksops_admin",
-    "live_definition_sha256": null,
-    "apply_preconditions_met": null,
-    "precondition_failures": null,
-    "note": "Pending: no read-only production inspect has been run for SQL 126 yet. Expected: prerequisites_missing [], the thirteen functions 'different' (the restored supabase bodies), owned by checksops_admin, EXECUTE PUBLIC and the owner (release_sql_inspect.function_acl; the restore dropped the supabase grants). Record its date, SSM command id, source commit, live_definition_sha256, prerequisites_missing, release_sql_inspect.functions, release_sql_inspect.function_acl, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. Stop if prerequisites_missing is not [] or precondition_failures is not [] (functions_owned_by_login: checksops_admin does not own one of them; function_results_match: a result type differs from the supabase one; function_acl_replaceable: an EXECUTE grant outside PUBLIC, anon, authenticated, service_role and checksops): that needs its own reviewed change."
+    "live_definition_sha256": "9ebc7455de1e0e467eabf59e697899bc64dc360efb8c34a3e00106e68b7754ed",
+    "apply_preconditions_met": false,
+    "precondition_failures": [],
+    "note": "Recorded from the read-only production inspect of 2026-10-29 (SSM command a98a1794-509b-4689-ada4-1a35f32bbdaa, node scripts/deployment-guard/sql126-definer-reads-caller-gates-production-apply.mjs --inspect on the SQL53 runner i-0c35557c4e5385406 from main 56a748c06 (tarball source-56a748c06e78220c6d0a82c0c83b623e9e116574.tar.gz sha256 26e22d758d452b17a87ffe0e5572bad38f74d009ca83c66dc6d94dd1ec4c4321, transfer run 40924642393; migration source sha256 on the runner 398fe16cc3bfb0940e922a15233c56109a7b6f4f3990da4180f5e4cb58028933 == source_sha256), read_only true, source_ok true, connected as checksops_admin (current_user and session_user checksops_admin)). The runner was stopped before and after the run (security audit finding C): start requested 17:48:44 UTC, running 17:49:01, command sent 17:49:22, finished 17:49:32, stop requested 17:49:32, stopped 17:50:05. live_definition_sha256 9ebc7455de1e0e467eabf59e697899bc64dc360efb8c34a3e00106e68b7754ed (not the intended 3aebf853a375d7a668acf62c8877a7b6a0d5f791b73121b591acd9046b0510b2: already_applied false); release_sql_inspect: the thirteen functions present, each 'different' from the intended state; function_acl on every one PUBLIC EXECUTE, checksops EXECUTE and owner EXECUTE; prerequisites_missing [], missing_dependencies [], predecessors_applied true, successors_applied [], counts null, precondition_failures [] (functions_owned_by_login, function_results_match and function_acl_replaceable hold: checksops is a role the file keeps). The engine derives 9ebc7455de1e0e467eabf59e697899bc64dc360efb8c34a3e00106e68b7754ed from the thirteen functions with their supabase bodies and EXECUTE PUBLIC, checksops and the owner (releaseStateHash('sql126', ...), asserted in aws/tests/release-sql126-executor.test.mjs), so each production body is the supabase one. Production's pre-state differs from staging's (read-live run 40917478177, 04106521263eeeb423ac2c0dfbf5e1f1af5a52c89501b63ac742d6b25c5e1612: the same bodies with EXECUTE PUBLIC and the owner only) by the checksops EXECUTE grant alone; SQL 126 grants checksops EXECUTE itself, so both reach the same intended state. apply_preconditions_met was false at inspect time only because no pre-state was recorded yet (execute false, expected_live_definition_sha256 null). This reviewed change copies live_definition_sha256 into expected_live_definition_sha256 and, in the same change, sets authorization, execute true and staging_acceptance. A fresh --inspect immediately before apply (the one-shot's inspect step) must still report this live_definition_sha256 and precondition_failures []; if not, stop. If already_applied is true, or precondition_failures is not [], stop: that needs its own reviewed change. Earlier: Pending: no read-only production inspect has been run for SQL 126 yet. Expected: prerequisites_missing [], the thirteen functions 'different' (the restored supabase bodies), owned by checksops_admin, EXECUTE PUBLIC and the owner (release_sql_inspect.function_acl; the restore dropped the supabase grants). Record its date, SSM command id, source commit, live_definition_sha256, prerequisites_missing, release_sql_inspect.functions, release_sql_inspect.function_acl, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. Stop if prerequisites_missing is not [] or precondition_failures is not [] (functions_owned_by_login: checksops_admin does not own one of them; function_results_match: a result type differs from the supabase one; function_acl_replaceable: an EXECUTE grant outside PUBLIC, anon, authenticated, service_role and checksops): that needs its own reviewed change."
   },
   "intended_post_state": {
     "fingerprint": "3aebf853a375d7a668acf62c8877a7b6a0d5f791b73121b591acd9046b0510b2",
     "note": "The thirteen functions owned by checksops_admin, SECURITY DEFINER, search_path public, with their supabase signatures, results, languages and volatilities: get_all_checks_safety_net(), get_stuck_checks() (plpgsql, VOLATILE, TABLE results), get_deposit_ops_kpis(), get_deposit_exception_kpis(), get_deposit_aging_summary(), get_check_dashboard_counts_for_tenant(uuid), get_loss_draft_dashboard_counts_for_tenant(uuid), get_tenant_check_usage(uuid, timestamp with time zone, timestamp with time zone), get_check_claim_settlement(uuid), has_permission(uuid, text) (plpgsql, STABLE), get_tenant_users_with_profiles(uuid), is_checkalt_enabled_for_tenant(uuid), get_check_unread_counts() (sql, STABLE); each body the supabase one with only the caller gate or row scoping changed; EXECUTE for checksops and the owner. No table, column, view, policy, RLS setting, table grant, trigger or row change; every other function unchanged. The fingerprint is releaseIntendedHash('sql126', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): 3aebf853a375d7a668acf62c8877a7b6a0d5f791b73121b591acd9046b0510b2."
   },
   "staging_acceptance": {
-    "ok": false,
-    "reference": null,
-    "basis": "Pending: record the guarded staging SQL executor read-live (and, if staging is not yet at the intended state, the staging apply) of SQL 126 (choice sql126-definer-reads-caller-gates) here in the reviewed change that sets execute true. The behavior is covered on PostgreSQL 16 by aws/tests/sql126-definer-reads-caller-gates-pg.test.mjs. Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+    "ok": true,
+    "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/40921170890",
+    "basis": "Guarded staging SQL executor apply of sql126-definer-reads-caller-gates, run 40921170890 (2026-10-29, main 7422c69, wave 25, workstream github-staging-sql-40921170890, on the executor deployed from main 7422c69, deploy run 40920738142: ODInv6cl/mZGp2lhmOqL8iT0WmjAnuRLpBVvaFBV5KE=), from the staging pre-state recorded by read-live run 40917478177 (04106521263eeeb423ac2c0dfbf5e1f1af5a52c89501b63ac742d6b25c5e1612): receipt before 04106521263eeeb423ac2c0dfbf5e1f1af5a52c89501b63ac742d6b25c5e1612, after 3aebf853a375d7a668acf62c8877a7b6a0d5f791b73121b591acd9046b0510b2 == intended, result applied. Read-live run 40921576727 then reported live 3aebf853a375d7a668acf62c8877a7b6a0d5f791b73121b591acd9046b0510b2, already_applied true, the thirteen functions at the intended state with EXECUTE checksops and the owner. The behavior is covered on PostgreSQL 16 by aws/tests/sql126-definer-reads-caller-gates-pg.test.mjs. The pre-states differ: production (9ebc7455de1e0e467eabf59e697899bc64dc360efb8c34a3e00106e68b7754ed, production_inspect) also grants checksops EXECUTE on the thirteen functions, which staging's restore did not; the bodies are the same supabase ones on both (derived), the executor test covers an apply from a pre-state with a checksops grant, and the same file bytes (source_sha256) are pinned in both."
   }
 }
