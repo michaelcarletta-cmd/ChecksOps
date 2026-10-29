@@ -1,0 +1,15 @@
+{
+  "workstream_id": "contractor-verification-gate",
+  "authorization": "Pending owner review (2026-10-29). Planning only: nothing is live or verified. The production apply still needs its own owner approval and staging acceptance.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Contractor verification status gate (2026-10-29, security audit follow-up): POST /data/rpc ran contractor_verification_status (a SECURITY DEFINER read in READ_RPCS) for any signed-in caller and any p_contractor_id, so anyone could read any contractor's compliance status (W-9, insurance, license, Pro tier). The accepted data.mjs bytes add a contractor gate to RPC_ACCESS_GATES: the RPC runs only when the contractor profile's user_id is the caller (auth.uid()) or the caller is a cross-tenant reader (aws_is_cross_tenant_reader(): master or platform owner), the rule the contractor_profiles select policy applies to a profile's owner (owner decision 2026-10-29). A directory listing makes the profile visible, not its status. Refused calls answer 403 rpc_forbidden (400 invalid_rpc_args for a missing or non-uuid argument) and never run the RPC. The two callers keep working: the contractor's own status card (WhiteLabelSettings, own profile) and the OPS badge dialog on /admin/tenants (platform owner, whose Pro approval executeAdminSetContractorPro already requires). workflow-rpc.mjs reads the status only after its own platform-owner check and is unchanged. No SQL. data.mjs live_sha256 c7dd8229 is the bytes security hardening production run 40907296471 applied (previous_manifest); no data.mjs change has been planned or applied since. sql_before stays SQL 53. A read-only production overlay inspect must confirm the live member before any apply.",
+  "members": {
+    "data.mjs": {
+      "live_sha256": "c7dd822951344d0fb3d3833597eb6292a4a5073754fab659903cedc2c7437aaa",
+      "accepted_sha256": "e2415f9046e3288e2bf3e296bf716a9f3e0c2777fe930590b316c8aec79559eb",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-security-hardening-applied-manifest-2026-10-29.json"
+    }
+  }
+}
