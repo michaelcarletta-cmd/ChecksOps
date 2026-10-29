@@ -1,8 +1,8 @@
 {
   "id": "sql125-deposit-views-security-invoker-production-apply",
   "migration": "sql125",
-  "authorization": "Owner approved 2026-10-29 (the owner's words of 2026-10-29: \"open the SQL 125 production pin PR\"; the change itself is reviewed and merged by the owner): production apply of SQL 125 after the staging acceptance below (production 9b31cf5dad3f82bf69fcddd03e0c26c0dc0fdd5ff6bd40137d1af316f1fd6541 -> a041efa5d6b8e564c860974d2427415ec3e031a8a63daf43005e893e2d55ddea); execute true takes effect only when the owner reviews and merges this change. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
-  "execute": true,
+  "authorization": "Applied to production on 2026-10-29; execute is false again, so this pin is no longer a standing authorization and a re-apply needs a new reviewed pin change. The owner approved the SQL 125 production pin change on 2026-10-29 in the words \"open the SQL 125 production pin PR\" (9b31cf5d -> a041efa5, #1382) and the one apply run recorded in applied (workstream prod-sql125-deposit-views-security-invoker-20261029) in the words \"apply SQL 125 in production after 1382 merges\", passed to it verbatim. That approval covered that run only.",
+  "execute": false,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -59,5 +59,148 @@
     "ok": true,
     "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/40892707444",
     "basis": "Guarded staging SQL executor apply of sql125-deposit-views-security-invoker, run 40892707444 (2026-10-29, main 4f26c1480, wave 24, workstream github-staging-sql-40892707444, on the executor deployed from main 4f26c1480, deploy run 40892051066: yHVZNx1R3mTcbyneZrWzSptd7qDIcD49ckM5DTehFZ4=), from the staging pre-state recorded by read-live run 40886747687 (9b31cf5dad3f82bf69fcddd03e0c26c0dc0fdd5ff6bd40137d1af316f1fd6541): receipt before 9b31cf5dad3f82bf69fcddd03e0c26c0dc0fdd5ff6bd40137d1af316f1fd6541, after a041efa5d6b8e564c860974d2427415ec3e031a8a63daf43005e893e2d55ddea == intended, result applied. Read-live run 40893116553 then reported live a041efa5d6b8e564c860974d2427415ec3e031a8a63daf43005e893e2d55ddea, the four views at the intended state. The behavior is covered on PostgreSQL 16 by aws/tests/sql125-deposit-views-pg.test.mjs. Production's pre-state (production_inspect) is the same as staging's; the same file bytes (source_sha256) are pinned in both."
+  },
+  "applied": {
+    "date": "2026-10-29",
+    "result": "applied",
+    "source_commit": "1cc17378739ad697ed24e5cfd169afe8af1859d9",
+    "source_commit_basis": "SOURCE_COMMIT in the tarball (written by sql53-temporary-transfer) equals --commit, and the tarball sha256 equals --expected-tarball-sha256 as copied by the operator from that transfer run's log (TARBALL_SHA256 line); the run log itself was not read by the one-shot.",
+    "source_tarball": {
+      "file": "source-1cc17378739ad697ed24e5cfd169afe8af1859d9.tar.gz",
+      "sha256": "b19123e27fccd48450d13a62357540d295cb9c785300fdb106b1a3e30d94eca4"
+    },
+    "migration_source_sha256": "fc8096a3e7b4b71b05edfc80815aeca43d45bcacff9bc7486065aed34ba4d943",
+    "migration_source_sha256_note": "The one-shot source step hashed aws/workflows/sql/125_deposit_views_security_invoker.sql in the transfer tarball: equal to source_sha256 (the pin; migration_matches_pin true).",
+    "runner": "i-0c35557c4e5385406",
+    "runner_basis": "operator-supplied --runner (not verified by the one-shot)",
+    "workstream_id": "prod-sql125-deposit-views-security-invoker-20261029",
+    "one_use_id": "sql125-prod-20bfb375-3207-421e-8593-03552cb075db",
+    "one_use_id_consumed": true,
+    "one_use_id_consumed_basis": "Inferred from the successful apply (the tool records the one_use_id after COMMIT and only warns if that write fails); the consumed-registry entry was not read back separately.",
+    "owner_approval": "apply SQL 125 in production after 1382 merges",
+    "owner_approval_basis": "As passed in --approval-statement (base64, --approval-statement-b64) for --approval-scope sql125; the one-shot cannot verify who said it. The owner's words of 2026-10-29; the pin change (#1382) was merged green before this run, on the owner's words \"merge 1382 when green\".",
+    "operator": "michaelcarletta-cmd",
+    "apply_ssm_command_id": "31ecaddd-b118-4239-a9e8-fb6e1c461db1",
+    "one_shot_run_id": "9e5a075d-3813-4567-aa0a-71ff86cf916e",
+    "one_shot_note": "One SSM command (31ecaddd-b118-4239-a9e8-fb6e1c461db1, 2026-10-29 15:08:14 to 15:08:30Z) ran the production-sql-one-shot --phase apply (run_id 9e5a075d-3813-4567-aa0a-71ff86cf916e) from main 1cc173787 (transfer run 40897690604, sql53-temporary-transfer.yml on main after the #1382 merge; it published TARBALL_SHA256 b19123e27fccd48450d13a62357540d295cb9c785300fdb106b1a3e30d94eca4), after a read-only --phase inspect of the same commit (SSM c8ffbcec-ab7f-49e5-ae21-a59414abee2f, run fields: live 9b31cf5dad3f82bf69fcddd03e0c26c0dc0fdd5ff6bd40137d1af316f1fd6541, live_matches_expected true, apply_preconditions_met true, precondition_failures [], contracts claim-ledger, tenant-isolation and financial-write-protections ok): steps pin (execute true, staging_acceptance run 40892707444), source, inspect, contracts, manifest, source-recheck-before-preflight, preflight (receipt_issued), evaluate (sql125_production_apply_allowed true), source-recheck-before-apply, apply (applied) and post-apply-inspect all ok; the command printed EXIT=0 and SSM reported Success. The operator's command saved the run's JSON on the runner and printed a summary of its fields and the first 6000 characters; the working directory was then removed. Every field of this block except the receipt's unrelated catalog is taken from that output: run_id, steps, commit, workstream_id, approval_statement, operator, source, pre_apply_inspect and contract_results complete (the printed prefix), manifest_sha256 and one_use_id; the receipt's before_hash, after_hash and result, and post_apply_inspect's live_definition_sha256, live_matches_expected, already_applied, predecessors_applied, apply_preconditions_met, precondition_failures and prerequisites_missing from the summary. Not captured: the receipt's unrelated_catalog_sha256 and unrelated_catalog_counts, and the per-view states of the post-apply release_sql_inspect (the summary printed the view names only); they are left out rather than reconstructed. The engine refuses and rolls back an apply that changes anything outside its spec (UNRELATED_MUTATION), so the result applied means that check passed; the after_hash a041efa5 is the intended fingerprint, which carries the four views' definitions and security_invoker=true. An earlier attempt the same afternoon (SSM ef080c3f-9b86-448c-a749-d65d0631eeeb, one-shot --phase inspect run d123c2c2-24d3-4fef-b418-eef4c8b236bf: live 9b31cf5d, apply_preconditions_met true, precondition_failures []) ran only the read-only inspect: the operator's own gate misread the printed JSON and stopped before the apply; nothing was written. A separate read-only --inspect after the run (SSM 0a95b440-0900-428e-bf84-a87eaee64012, same tarball) reported live a041efa5d6b8e564c860974d2427415ec3e031a8a63daf43005e893e2d55ddea == intended, already_applied true, precondition_failures []. The runner was started for each attempt and stopped after it (security audit finding C): 15:05:22 to 15:06:48 UTC (inspect only) and 15:07:19 to 15:09:11 UTC (inspect, apply, inspect); it is stopped.",
+    "steps": [
+      "pin",
+      "source",
+      "inspect",
+      "contracts",
+      "manifest",
+      "source-recheck-before-preflight",
+      "preflight",
+      "evaluate",
+      "source-recheck-before-apply",
+      "apply",
+      "post-apply-inspect"
+    ],
+    "contract_results": {
+      "claim-ledger": {
+        "ok": true,
+        "test": "aws/tests/claim-ledger-accepted-contract.test.mjs",
+        "evidence": "4/4 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at 1cc17378739ad697ed24e5cfd169afe8af1859d9 (production-sql-one-shot 9e5a075d-3813-4567-aa0a-71ff86cf916e, node --test)"
+      },
+      "tenant-isolation": {
+        "ok": true,
+        "test": "aws/tests/tenant-security-compliance.test.mjs",
+        "evidence": "6/6 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at 1cc17378739ad697ed24e5cfd169afe8af1859d9 (production-sql-one-shot 9e5a075d-3813-4567-aa0a-71ff86cf916e, node --test)"
+      },
+      "financial-write-protections": {
+        "ok": true,
+        "test": "aws/tests/api-write.test.mjs",
+        "evidence": "43/43 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at 1cc17378739ad697ed24e5cfd169afe8af1859d9 (production-sql-one-shot 9e5a075d-3813-4567-aa0a-71ff86cf916e, node --test)"
+      }
+    },
+    "pre_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "9b31cf5dad3f82bf69fcddd03e0c26c0dc0fdd5ff6bd40137d1af316f1fd6541",
+      "live_matches_expected": true,
+      "already_applied": false,
+      "predecessors": {},
+      "predecessors_applied": true,
+      "missing_dependencies": [],
+      "apply_preconditions_met": true,
+      "precondition_failures": [],
+      "current_user": "checksops_admin",
+      "session_user": "checksops_admin",
+      "counts": null,
+      "successors_applied": [],
+      "release_sql_inspect": {
+        "live_definition_sha256": "9b31cf5dad3f82bf69fcddd03e0c26c0dc0fdd5ff6bd40137d1af316f1fd6541",
+        "prerequisites_missing": [],
+        "predecessors": {},
+        "successors_applied": [],
+        "functions": [],
+        "policies": [],
+        "views": [
+          {
+            "name": "deposit_queue_scored",
+            "state": "different"
+          },
+          {
+            "name": "deposit_owner_performance",
+            "state": "different"
+          },
+          {
+            "name": "deposit_reminder_queue",
+            "state": "different"
+          },
+          {
+            "name": "deposit_aging_dashboard",
+            "state": "different"
+          }
+        ],
+        "tables": [],
+        "columns": [],
+        "constraints": [],
+        "triggers": [],
+        "table_privileges": [],
+        "function_acl": [],
+        "acl_functions": [],
+        "indexes": [],
+        "unique_covers": [],
+        "definer_writes": [],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": null
+      }
+    },
+    "manifest_sha256": "a44b663244296b848fb5dbd2b1fde1569ef976ce1cafca51e85ff0370a162305",
+    "receipt": {
+      "migration": "sql125",
+      "workstream": "prod-sql125-deposit-views-security-invoker-20261029",
+      "commit": "1cc17378739ad697ed24e5cfd169afe8af1859d9",
+      "sql_file": "aws/workflows/sql/125_deposit_views_security_invoker.sql",
+      "before_hash": "9b31cf5dad3f82bf69fcddd03e0c26c0dc0fdd5ff6bd40137d1af316f1fd6541",
+      "after_hash": "a041efa5d6b8e564c860974d2427415ec3e031a8a63daf43005e893e2d55ddea",
+      "release_sql_inspect": {
+        "live_definition_sha256": "a041efa5d6b8e564c860974d2427415ec3e031a8a63daf43005e893e2d55ddea",
+        "prerequisites_missing": []
+      },
+      "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/40892707444",
+      "result": "applied"
+    },
+    "post_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "a041efa5d6b8e564c860974d2427415ec3e031a8a63daf43005e893e2d55ddea",
+      "live_matches_expected": false,
+      "already_applied": true,
+      "predecessors": {},
+      "predecessors_applied": true,
+      "apply_preconditions_met": false,
+      "precondition_failures": [],
+      "release_sql_inspect": {
+        "live_definition_sha256": "a041efa5d6b8e564c860974d2427415ec3e031a8a63daf43005e893e2d55ddea",
+        "prerequisites_missing": []
+      }
+    }
+  },
+  "production_evidence": {
+    "2026-10-29 apply": "Guarded production SQL one-shot on i-0c35557c4e5385406, workstream prod-sql125-deposit-views-security-invoker-20261029, main 1cc173787 (tarball b19123e2…, transfer run 40897690604, migration source fc8096a3… == pin), owner-approved run (\"apply SQL 125 in production after 1382 merges\"), SSM 31ecaddd-b118-4239-a9e8-fb6e1c461db1, run_id 9e5a075d-3813-4567-aa0a-71ff86cf916e, one_use_id sql125-prod-20bfb375-3207-421e-8593-03552cb075db (spent): every step ok; contracts claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43; pre-apply inspect live 9b31cf5d… (live_matches_expected true, precondition_failures []); manifest a44b6632…; 9b31cf5d… -> a041efa5…, result applied (the unrelated catalog hash was not captured; see applied.one_shot_note); post-apply inspect already_applied true, precondition_failures []; separate read-only inspect SSM 0a95b440-0900-428e-bf84-a87eaee64012 already_applied true. After: deposit_queue_scored, deposit_owner_performance, deposit_reminder_queue and deposit_aging_dashboard read as the caller (security_invoker), so a POST /data/query on any of them returns only the caller's tenants' rows (security audit finding 1 closed in production). No trigger or function was added, so the DB validator is unaffected. execute is false so the pin is no longer a standing authorization."
   }
 }
