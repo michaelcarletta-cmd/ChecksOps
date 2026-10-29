@@ -30,3 +30,11 @@ test('Recent Wallet Activity never dates a billing row as now', () => {
   assert.doesNotMatch(billingAt[1], /new Date\(\)/);
   assert.match(billingAt[1], /bill\.at/);
 });
+
+test('Recent Wallet Activity has no Check status button (production has no manual status check)', () => {
+  // Owner, 2026-10-29: statuses update from Moov's webhooks; the button only showed
+  // production_execution_blocked in production.
+  assert.doesNotMatch(walletOps, /Check status/);
+  assert.doesNotMatch(walletOps, /useRefreshTransferStatuses/);
+  assert.match(walletOps, /Updates automatically/);
+});
