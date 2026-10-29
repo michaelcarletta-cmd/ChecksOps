@@ -94,6 +94,8 @@ const fakeClient = ({
       if (sql === PLATFORM_OWNER_SQL) return { rows: [{ is_owner: platformOwner }] };
       if (sql === MORTGAGE_DESK_REQUEST_SQL) return { rows: visibleRequest ? [visibleRequest] : [] };
       if (sql === MORTGAGE_DESK_UPLOAD_SQL) return { rows: uploadRequestRows };
+      // A visible check here is the member's own, so it is writable (aws_can_write_check).
+      if (sql === 'SELECT public.aws_can_write_check($1::uuid) AS ok') return { rows: [{ ok: checkVisible }] };
       if (/FROM public.check_intake_items WHERE id = \$1::uuid/.test(sql)) {
         return { rows: checkVisible ? [{ id: params[0], tenant_id: TENANT_A }] : [] };
       }
