@@ -186,11 +186,13 @@ test('pin: SQL 126 staging-authorized from its read-live, code-derived, selectab
   assert.equal(prod.staging_pin_commit, pin.commit);
   assert.equal(prod.source_sha256, pin.source_sha256);
   assert.deepEqual(prod.predecessors, []);
-  // Production pin execute-authorized (owner-approved pin change of 2026-10-29) on the staging apply. Its
-  // pre-state is production's own (read-only inspect SSM a98a1794): the supabase bodies, as on staging, with
-  // EXECUTE for PUBLIC, checksops and the owner (staging's restore had PUBLIC and the owner only).
-  assert.equal(prod.execute, true);
-  assert.match(prod.authorization, /^Owner approved 2026-10-29 /);
+  // Production pin applied 2026-10-29 and retired (owner-approved pin change, #1394, on the staging apply).
+  // Its pre-state is production's own (read-only inspect SSM a98a1794): the supabase bodies, as on staging,
+  // with EXECUTE for PUBLIC, checksops and the owner (staging's restore had PUBLIC and the owner only).
+  assert.equal(prod.execute, false);
+  assert.match(prod.authorization, /^Applied to production on 2026-10-29; execute is false again/);
+  assert.equal(prod.applied.receipt.before_hash, prod.expected_live_definition_sha256);
+  assert.equal(prod.applied.receipt.after_hash, pin.intended_replacement_sha256);
   assert.equal(prod.expected_live_definition_sha256, '9ebc7455de1e0e467eabf59e697899bc64dc360efb8c34a3e00106e68b7754ed');
   assert.notEqual(prod.expected_live_definition_sha256, pin.expected_live_definition_sha256);
   assert.notEqual(prod.expected_live_definition_sha256, prod.intended_replacement_sha256);
