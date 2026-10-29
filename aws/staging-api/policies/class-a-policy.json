@@ -1,0 +1,49 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "StagingSesSendLockedIdentity",
+      "Effect": "Allow",
+      "Action": [
+        "ses:SendEmail"
+      ],
+      "Resource": [
+        "arn:aws:ses:us-east-1:806168576068:identity/ses-gate.staging.checksops.com"
+      ]
+    },
+    {
+      "Sid": "StagingTextract",
+      "Effect": "Allow",
+      "Action": [
+        "textract:DetectDocumentText",
+        "textract:AnalyzeDocument",
+        "textract:AnalyzeExpense",
+        "textract:AnalyzeID"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "StagingTenantOpenaiSecrets",
+      "Effect": "Allow",
+      "Action": [
+        "secretsmanager:CreateSecret",
+        "secretsmanager:PutSecretValue",
+        "secretsmanager:GetSecretValue",
+        "secretsmanager:DeleteSecret",
+        "secretsmanager:DescribeSecret"
+      ],
+      "Resource": "arn:aws:secretsmanager:us-east-1:806168576068:secret:checksops/staging/tenant-openai/*"
+    },
+    {
+      "Sid": "StagingCognitoAdminInvite",
+      "Effect": "Allow",
+      "Action": [
+        "cognito-idp:AdminCreateUser",
+        "cognito-idp:AdminGetUser",
+        "cognito-idp:AdminDisableUser",
+        "cognito-idp:AdminSetUserPassword"
+      ],
+      "Resource": "arn:aws:cognito-idp:us-east-1:806168576068:userpool/us-east-1_vPmQ7cL1F"
+    }
+  ]
+}
