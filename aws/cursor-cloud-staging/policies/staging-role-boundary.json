@@ -1,0 +1,230 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AllowStagingServices",
+      "Effect": "Allow",
+      "Action": [
+        "lambda:*",
+        "apigateway:*",
+        "s3:*",
+        "cognito-idp:*",
+        "secretsmanager:*",
+        "logs:*",
+        "xray:*",
+        "textract:*"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "AllowObservedSes",
+      "Effect": "Allow",
+      "Action": [
+        "ses:CreateEmailIdentity",
+        "ses:GetAccount",
+        "ses:GetAccountSendingEnabled",
+        "ses:GetEmailIdentity",
+        "ses:GetIdentityDkimAttributes",
+        "ses:GetIdentityVerificationAttributes",
+        "ses:GetSendQuota",
+        "ses:ListEmailIdentities",
+        "ses:ListIdentities",
+        "ses:SendEmail",
+        "ses:SendRawEmail"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "AllowLambdaVpcNetworking",
+      "Effect": "Allow",
+      "Action": [
+        "ec2:CreateNetworkInterface",
+        "ec2:DescribeNetworkInterfaces",
+        "ec2:DeleteNetworkInterface",
+        "ec2:DetachNetworkInterface",
+        "ec2:AssignPrivateIpAddresses",
+        "ec2:UnassignPrivateIpAddresses",
+        "ec2:DescribeSubnets",
+        "ec2:DescribeSecurityGroups",
+        "ec2:DescribeVpcs"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "AllowScheduleReads",
+      "Effect": "Allow",
+      "Action": [
+        "events:DescribeRule",
+        "events:ListRules",
+        "events:ListTargetsByRule",
+        "scheduler:GetSchedule",
+        "scheduler:ListSchedules"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "AllowIamReads",
+      "Effect": "Allow",
+      "Action": [
+        "iam:Get*",
+        "iam:List*",
+        "iam:SimulatePrincipalPolicy"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "AllowStagingRoleWrites",
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreateRole",
+        "iam:PutRolePolicy",
+        "iam:AttachRolePolicy",
+        "iam:DetachRolePolicy",
+        "iam:DeleteRolePolicy",
+        "iam:PutRolePermissionsBoundary",
+        "iam:DeleteRole",
+        "iam:PassRole",
+        "iam:TagRole",
+        "iam:UntagRole"
+      ],
+      "Resource": "arn:aws:iam::806168576068:role/checksops-staging-*"
+    },
+    {
+      "Sid": "DenyProductionLambda",
+      "Effect": "Deny",
+      "Action": "lambda:*",
+      "Resource": [
+        "arn:aws:lambda:*:806168576068:function:checksops-prod*",
+        "arn:aws:lambda:*:806168576068:function:checksops-prod*:*"
+      ]
+    },
+    {
+      "Sid": "DenyProductionBuckets",
+      "Effect": "Deny",
+      "Action": "s3:*",
+      "Resource": [
+        "arn:aws:s3:::checksops-production-*",
+        "arn:aws:s3:::checksops-production-*/*",
+        "arn:aws:s3:::checksops-prod-*",
+        "arn:aws:s3:::checksops-prod-*/*",
+        "arn:aws:s3:::checksops-sql53-transfer-806168576068",
+        "arn:aws:s3:::checksops-sql53-transfer-806168576068/*"
+      ]
+    },
+    {
+      "Sid": "DenyProductionSecrets",
+      "Effect": "Deny",
+      "Action": "secretsmanager:*",
+      "Resource": [
+        "arn:aws:secretsmanager:*:806168576068:secret:*production*",
+        "arn:aws:secretsmanager:*:806168576068:secret:checksops/production/*"
+      ]
+    },
+    {
+      "Sid": "DenyProductionApiGateway",
+      "Effect": "Deny",
+      "Action": "apigateway:*",
+      "Resource": [
+        "arn:aws:apigateway:us-east-1::/apis/kiqojucc02",
+        "arn:aws:apigateway:us-east-1::/apis/kiqojucc02/*"
+      ]
+    },
+    {
+      "Sid": "DenyProductionUserPool",
+      "Effect": "Deny",
+      "Action": "cognito-idp:*",
+      "Resource": [
+        "arn:aws:cognito-idp:us-east-1:806168576068:userpool/us-east-1_h00WorYMT"
+      ]
+    },
+    {
+      "Sid": "DenyProductionCloudFrontWrites",
+      "Effect": "Deny",
+      "Action": [
+        "cloudfront:UpdateDistribution",
+        "cloudfront:DeleteDistribution",
+        "cloudfront:CreateInvalidation",
+        "cloudfront:TagResource"
+      ],
+      "Resource": "arn:aws:cloudfront::806168576068:distribution/E1B0ZWWO5559U5"
+    },
+    {
+      "Sid": "DenyProductionAlarmChanges",
+      "Effect": "Deny",
+      "Action": [
+        "cloudwatch:PutMetricAlarm",
+        "cloudwatch:DeleteAlarms"
+      ],
+      "Resource": "arn:aws:cloudwatch:*:806168576068:alarm:checksops-production-*"
+    },
+    {
+      "Sid": "DenyProductionStacks",
+      "Effect": "Deny",
+      "Action": [
+        "cloudformation:CreateStack",
+        "cloudformation:UpdateStack",
+        "cloudformation:DeleteStack",
+        "cloudformation:CreateChangeSet",
+        "cloudformation:ExecuteChangeSet"
+      ],
+      "Resource": [
+        "arn:aws:cloudformation:*:806168576068:stack/checksops-prod*/*"
+      ]
+    },
+    {
+      "Sid": "DenyGrantingAdminPolicies",
+      "Effect": "Deny",
+      "Action": [
+        "iam:AttachRolePolicy"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "ArnLike": {
+          "iam:PolicyARN": [
+            "arn:aws:iam::aws:policy/AdministratorAccess",
+            "arn:aws:iam::aws:policy/PowerUserAccess",
+            "arn:aws:iam::aws:policy/IAMFullAccess",
+            "arn:aws:iam::aws:policy/*FullAccess"
+          ]
+        }
+      }
+    },
+    {
+      "Sid": "DenyRoleWritesWithoutStagingBoundary",
+      "Effect": "Deny",
+      "Action": [
+        "iam:CreateRole",
+        "iam:PutRolePolicy",
+        "iam:AttachRolePolicy",
+        "iam:DetachRolePolicy",
+        "iam:DeleteRolePolicy",
+        "iam:PutRolePermissionsBoundary"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "StringNotEquals": {
+          "iam:PermissionsBoundary": "arn:aws:iam::806168576068:policy/ChecksOpsStagingRoleBoundary"
+        }
+      }
+    },
+    {
+      "Sid": "DenyRemovingStagingBoundary",
+      "Effect": "Deny",
+      "Action": [
+        "iam:DeleteRolePermissionsBoundary"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "DenyEditingStagingBoundaryPolicy",
+      "Effect": "Deny",
+      "Action": [
+        "iam:CreatePolicyVersion",
+        "iam:DeletePolicy",
+        "iam:DeletePolicyVersion",
+        "iam:SetDefaultPolicyVersion"
+      ],
+      "Resource": "arn:aws:iam::806168576068:policy/ChecksOpsStagingRoleBoundary"
+    }
+  ]
+}
