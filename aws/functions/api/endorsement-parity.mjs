@@ -4,7 +4,7 @@
  * Resend is called directly (api.resend.com). Not SES. Not Supabase Edge.
  */
 import { loadProviderSecrets } from './provider-secrets.mjs';
-import { isAllowlistedRecipient, normalizeEmail } from './email-policy.mjs';
+import { isAllowlistedRecipient, isProductionEmailEnv, normalizeEmail } from './email-policy.mjs';
 
 const RESEND_EMAILS_URL = 'https://api.resend.com/emails';
 
@@ -25,8 +25,11 @@ export const endorsementAutoAdvanceEnabled = () => (
   String(process.env.AWS_ENDORSEMENT_AUTO_ADVANCE || '').trim().toLowerCase() === 'true'
 );
 
+// Production delivers to every recipient and CC, as email-policy.mjs does for SES (owner decision
+// 2026-10-25; endorsement emails 2026-10-29). Staging keeps the allowlist unless the flag opens it.
 export const endorsementResendAllowAnyRecipient = () => (
-  String(process.env.AWS_ENDORSEMENT_RESEND_ALLOW_ANY_RECIPIENT || '').trim().toLowerCase() === 'true'
+  isProductionEmailEnv()
+  || String(process.env.AWS_ENDORSEMENT_RESEND_ALLOW_ANY_RECIPIENT || '').trim().toLowerCase() === 'true'
 );
 
 export const allowDepositAdvance = (newStatus = 'approved_for_deposit') => ({

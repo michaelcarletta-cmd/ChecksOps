@@ -122,6 +122,7 @@ on:
           - email-policy.mjs
           - db-readonly-validate.mjs
           - check-reconciliation.mjs
+          - endorsement-parity.mjs
           - providers/production/moov-wallet-fund.mjs
           - providers/production/moov-send.mjs
           - providers.mjs

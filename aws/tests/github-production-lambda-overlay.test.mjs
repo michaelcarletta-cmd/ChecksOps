@@ -3290,3 +3290,34 @@ test('Homeowner timeline link: workflow.mjs REPLACE from the cash-jobs applied b
     (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
   );
 });
+
+test('Endorsement email to every recipient: endorsement-parity.mjs replaces the bytes rebuild inspect run 40741101459 found live', async () => {
+  const MEMBER = 'endorsement-parity.mjs';
+  const LIVE = 'db2d5448ab1d3e0bdf107ce21c9ecd55af4339e7369de0ecfd75124e55ded1ea';
+  const MANIFEST_REL = 'aws/tests/fixtures/production-endorsement-any-recipient-manifest-2026-10-29.json';
+  const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, MANIFEST_REL), 'utf8'));
+  const accepted = sha(`aws/functions/api/${MEMBER}`);
+  assert.match(fs.readFileSync(path.join(API, MEMBER), 'utf8'), /isProductionEmailEnv\(\)\n  \|\| String\(process\.env\.AWS_ENDORSEMENT_RESEND_ALLOW_ANY_RECIPIENT/);
+  assert.deepEqual(PLAN.members[MEMBER], { operation: 'replace', accepted_sha256: accepted, expected_live_sha256: LIVE, sql_before: null, manifest: MANIFEST_REL });
+  assert.equal(manifest.deploy_authorized, false);
+  assert.match(manifest.authorization, /^Pending owner review/);
+  assert.deepEqual(manifest.members, { [MEMBER]: { live_sha256: LIVE, accepted_sha256: accepted, operation: 'replace' } });
+  for (const evidence of ['40741101459', 'endorsement_recipient_not_allowlisted', 'eaf2a33a']) {
+    assert.ok(manifest.notes.includes(evidence), evidence);
+  }
+  assert.match(PLAN.notes, /Endorsement email to every recipient \(2026-10-29\)/);
+  // Its one planned import, email-policy.mjs, is already live at its accepted bytes and exports isProductionEmailEnv.
+  const deps = localImports(fs.readFileSync(path.join(API, MEMBER), 'utf8'), MEMBER).filter((dep) => PLAN.members[dep]);
+  assert.deepEqual(deps, ['email-policy.mjs']);
+  assert.equal(PLAN.members['email-policy.mjs'].expected_live_sha256, PLAN.members['email-policy.mjs'].accepted_sha256);
+  assert.match(fs.readFileSync(path.join(API, 'email-policy.mjs'), 'utf8'), /^export const isProductionEmailEnv = /m);
+  assert.ok(PLAN.order.indexOf(MEMBER) > PLAN.order.indexOf('email-policy.mjs'));
+  assert.deepEqual(PLAN.order.slice(-3), ['providers/production/moov-wallet-fund.mjs', 'providers/production/moov-send.mjs', 'providers.mjs']);
+  const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
+  assert.equal((await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER) })).state, 'READY');
+  assert.equal((await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: accepted }) })).state, 'ALREADY_ACCEPTED');
+  await assert.rejects(
+    run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: 'e'.repeat(64) }) }),
+    (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+  );
+});
