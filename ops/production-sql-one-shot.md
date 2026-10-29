@@ -287,6 +287,13 @@ aws ec2 wait instance-stopped --instance-ids i-0c35557c4e5385406
 The record PR notes the start and stop times. A runner found running with no run in
 progress is stopped and reported to the owner.
 
+First stop (2026-10-29), owner approval verbatim: "merge 1374 when green and stop the SQL
+runner". Precondition: the instance was `running`, named `checksops-sql53-temporary-runner`
+with instance profile `ChecksOpsSql53TemporaryRunner`, and no SSM command was pending or in
+progress. `ec2:StopInstances` at 2026-10-29 13:18:29 UTC by `user/claude-code`; `stopped` at
+13:18:52 UTC (`StateTransitionReason`: "User initiated (2026-10-29 13:18:30 GMT)"). The last
+run before it was SQL 124's post-apply inspect, 2026-10-28 20:16 UTC.
+
 ## The single SSM command
 
 Stage the reviewed main commit with the transfer workflow first, and copy the
