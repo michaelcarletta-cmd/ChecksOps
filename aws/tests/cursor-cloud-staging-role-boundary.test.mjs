@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import { createHash } from 'node:crypto';
 import test from 'node:test';
 
 // The permissions boundary every checksops-staging-* role the Cursor staging role creates or changes
@@ -73,4 +74,18 @@ test('the runbook records the read-only simulation and the apply steps', () => {
   assert.match(readme, /aws iam create-policy[\s\S]*--policy-name ChecksOpsStagingRoleBoundary/);
   assert.match(readme, /deny-production\.live-2026-10-29-after-a2\.json/);
   assert.match(readme, /--permissions-boundary arn:aws:iam::806168576068:policy\/ChecksOpsStagingRoleBoundary/);
+});
+
+test('the applied record names the owner approval and the sha256 of the bytes that were applied', () => {
+  const readme = fs.readFileSync(new URL('../../aws/cursor-cloud-staging/README.md', import.meta.url), 'utf8');
+  const applied = readme.slice(readme.indexOf('### Applied (2026-10-29)'));
+  assert.ok(applied.startsWith('### Applied (2026-10-29)'));
+  assert.match(applied, /Owner approval, verbatim: "apply the Cursor staging role boundary"/);
+  for (const file of ['staging-role-boundary.json', 'deny-production.json']) {
+    const bytes = fs.readFileSync(new URL(`../../aws/cursor-cloud-staging/policies/${file}`, import.meta.url));
+    const digest = createHash('sha256').update(bytes).digest('hex');
+    assert.ok(applied.includes(`\`${file}\` sha256 \`${digest}\``), file);
+  }
+  assert.match(applied, /did not exist/);
+  assert.match(applied, /equals `staging-role-boundary\.json`; `iam:GetRolePolicy`\s+equals `deny-production\.json`/);
 });
