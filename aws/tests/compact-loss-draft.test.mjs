@@ -53,7 +53,8 @@ test('actions and click behaviour are kept', () => {
   assert.match(dashboard, /onClick=\{onSelect\}/);
   // New Loss Draft was removed from the tab (owner, 2026-10-29).
   assert.doesNotMatch(dashboard, /NewLossDraftDialog/);
-  assert.match(dashboard, /aria-label="Refresh loss drafts"/);
+  // The refresh button was removed too (owner, 2026-10-29).
+  assert.doesNotMatch(dashboard, /Refresh loss drafts|RefreshCw/);
   assert.match(dashboard, /Back to list/);
   assert.match(dashboard, /<LossDraftDetailPanel/);
   // Returned-from-Desk drafts still sort first and keep their tint.

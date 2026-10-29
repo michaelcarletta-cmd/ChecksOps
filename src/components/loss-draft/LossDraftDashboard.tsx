@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { AlertTriangle, Building2, Clock, FileWarning, RefreshCw, Landmark, ArrowLeft } from "lucide-react";
+import { AlertTriangle, Building2, Clock, FileWarning, Landmark, ArrowLeft } from "lucide-react";
 import { LossDraftDetailPanel } from "./LossDraftDetailPanel";
 import { LossDraftFilterBar, type LossDraftFilter } from "./LossDraftDashboardCards";
 import { useTenantFilter } from "@/hooks/useTenantFilter";
@@ -171,18 +171,6 @@ export function LossDraftDashboard({ searchQuery = "" }: LossDraftDashboardProps
                 <Landmark className="h-4 w-4 text-purple-400" />
                 Loss Draft
               </CardTitle>
-              <div className="flex items-center gap-1">
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-8 w-8 p-0"
-                  aria-label="Refresh loss drafts"
-                  title="Refresh"
-                  onClick={() => qc.invalidateQueries({ queryKey: ["loss-draft-dashboard"] })}
-                >
-                  <RefreshCw className="h-4 w-4" />
-                </Button>
-              </div>
             </div>
           </CardHeader>
           <LossDraftFilterBar
