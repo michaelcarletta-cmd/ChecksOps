@@ -48,6 +48,7 @@ that connects to the database:
 | `sql122` | `scripts/deployment-guard/sql122-mortgage-desk-return-to-tenant-production-apply.mjs` (`ops/production-sql-122-apply.md`; the Mortgage Desk returns its work to the tenant: `mortgage_handling_requests.return_emailed_at` and six SECURITY DEFINER functions, five with EXECUTE for `checksops` (Desk message, Desk document, shipping details, homeowner timeline row, "work returned" email claim) and the owner-only working-request check; no policy, table grant or trigger; no predecessor) |
 | `sql123` | `scripts/deployment-guard/sql123-checkalt-deposit-check-status-production-apply.mjs` (`ops/production-sql-123-apply.md`; a Check Alt deposit approved or accepted moves its check to Deposited, rejected, error, duplicate or returned after approval moves it to Returned: two owner-only SECURITY DEFINER functions and one trigger on `checkalt_deposits` that fires before SQL 120's and SQL 121's, and a one-time move of checks already approved and billed; no predecessor) |
 | `sql124` | `scripts/deployment-guard/sql124-mortgage-desk-signature-and-reads-production-apply.mjs` (`ops/production-sql-124-apply.md`; the Mortgage Desk sends a check's document for signature, reads the check's thread, files and signature requests, and posts homeowner timeline updates: eight SECURITY DEFINER functions, seven with EXECUTE for `checksops` (messages, check files, signature requests, the storage-read path check, the signature request create, its delivery record, the timeline row) and the owner-only readable-request check; no table, column, policy, table grant or trigger; no predecessor) |
+| `sql125` | `scripts/deployment-guard/sql125-deposit-views-security-invoker-production-apply.mjs` (`ops/production-sql-125-apply.md`; security_invoker on the four Supabase-era deposit views `deposit_queue_scored`, `deposit_owner_performance`, `deposit_reminder_queue` and `deposit_aging_dashboard`: no definition, grant or function change) |
 
 To add a migration, register its reviewed tool in `ONE_SHOT_TOOLS`
 (`scripts/deployment-guard/lib/production-sql-one-shot.mjs`). An entry names only the tool,
@@ -62,7 +63,7 @@ a migration file touches its pin, not the registry. An entry may add `inspect_re
 
 | flag | |
 |---|---|
-| `--migration <key>` | a registered key (`sql29`, `sql30`, `sql71`, `sql77`…`sql89`, `sql90`…`sql106`, `sql108`, `sql109`, `sql110`, `sql111`, `sql112`, `sql113`, `sql114`, `sql115`, `sql116`, `sql117`, `sql118`, `sql119`, `sql120`, `sql121`, `sql122`, `sql123`, `sql124`) |
+| `--migration <key>` | a registered key (`sql29`, `sql30`, `sql71`, `sql77`…`sql89`, `sql90`…`sql106`, `sql108`, `sql109`, `sql110`, `sql111`, `sql112`, `sql113`, `sql114`, `sql115`, `sql116`, `sql117`, `sql118`, `sql119`, `sql120`, `sql121`, `sql122`, `sql123`, `sql124`, `sql125`) |
 | `--approval-scope <key>` | the migration the owner approved; must equal `--migration` |
 | `--approval-statement "<words>"` or `--approval-statement-b64 <base64>` | the owner's exact words, recorded verbatim. Pass exactly one of the two. Use the base64 form when the words contain quotes or newlines. Must be non-empty. |
 | `--commit <sha>` | the full main commit the tarball was built from |
