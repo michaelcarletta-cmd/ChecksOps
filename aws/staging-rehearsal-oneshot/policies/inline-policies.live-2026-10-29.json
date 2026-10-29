@@ -1,0 +1,100 @@
+{
+  "ChecksOpsP6PromoteTemp": {
+    "Version": "2012-10-17",
+    "Statement": [
+      {
+        "Sid": "ProdAdminSecretRead",
+        "Effect": "Allow",
+        "Action": [
+          "secretsmanager:GetSecretValue"
+        ],
+        "Resource": [
+          "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/*",
+          "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-staging/checksops_admin/*"
+        ]
+      },
+      {
+        "Sid": "OverlayAndD2",
+        "Effect": "Allow",
+        "Action": [
+          "s3:GetObject",
+          "s3:ListBucket"
+        ],
+        "Resource": [
+          "arn:aws:s3:::checksops-staging-privatefilesbucket-erzqsolpucjp",
+          "arn:aws:s3:::checksops-staging-privatefilesbucket-erzqsolpucjp/Migration/*",
+          "arn:aws:s3:::checksops-production-privatefiles-806168576068",
+          "arn:aws:s3:::checksops-production-privatefiles-806168576068/Migration/*"
+        ]
+      }
+    ]
+  },
+  "oneshot-cc047-least-privilege": {
+    "Version": "2012-10-17",
+    "Statement": [
+      {
+        "Effect": "Allow",
+        "Action": [
+          "secretsmanager:GetSecretValue"
+        ],
+        "Resource": [
+          "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-staging/checksops_admin/1788286368527-Kv5tBt"
+        ]
+      }
+    ]
+  },
+  "oneshot-integration-grants-least-privilege": {
+    "Version": "2012-10-17",
+    "Statement": [
+      {
+        "Effect": "Allow",
+        "Action": [
+          "secretsmanager:GetSecretValue"
+        ],
+        "Resource": [
+          "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-staging/checksops_admin/1788286368527-Kv5tBt"
+        ]
+      }
+    ]
+  },
+  "oneshot-rc351-least-privilege": {
+    "Version": "2012-10-17",
+    "Statement": [
+      {
+        "Effect": "Allow",
+        "Action": [
+          "secretsmanager:GetSecretValue"
+        ],
+        "Resource": [
+          "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-staging/checksops_admin/1788286368527-Kv5tBt"
+        ]
+      }
+    ]
+  },
+  "oneshot-rehearsal-least-privilege": {
+    "Version": "2012-10-17",
+    "Statement": [
+      {
+        "Effect": "Allow",
+        "Action": [
+          "secretsmanager:GetSecretValue"
+        ],
+        "Resource": [
+          "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-staging/checksops_admin/1788286368527-Kv5tBt"
+        ]
+      },
+      {
+        "Effect": "Allow",
+        "Action": [
+          "s3:GetObject",
+          "s3:PutObject",
+          "s3:ListBucket"
+        ],
+        "Resource": [
+          "arn:aws:s3:::checksops-staging-privatefilesbucket-erzqsolpucjp",
+          "arn:aws:s3:::checksops-staging-privatefilesbucket-erzqsolpucjp/Migration/*"
+        ]
+      }
+    ]
+  }
+}
