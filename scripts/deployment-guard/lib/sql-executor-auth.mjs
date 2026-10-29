@@ -2821,6 +2821,39 @@ export const AUTHORIZED_SQL125_DEPOSIT_VIEWS_SECURITY_INVOKER = Object.freeze({
   function_identities: Object.freeze([]),
 });
 
+// Security audit 2026-10-29 staging pin: SQL 126 (finding 4, database part: the thirteen Supabase-era
+// SECURITY DEFINER reads PR #1379 gates in the API check their caller themselves, same signatures,
+// results, language, volatility and search_path; EXECUTE for checksops and the owner). No predecessor.
+// Pending until a reviewed pin change records a staging read-live.
+export const AUTHORIZED_SQL126_DEFINER_READS_CALLER_GATES = Object.freeze({
+  key: 'sql126',
+  filename: 'aws/workflows/sql/126_definer_reads_caller_gates.sql',
+  migration_id: '126_definer_reads_caller_gates',
+  // The commit that last authored the file bytes.
+  commit: '747fc1e00b207633cf3667d5abd26ae606f91829',
+  source_sha256: '398fe16cc3bfb0940e922a15233c56109a7b6f4f3990da4180f5e4cb58028933',
+  authorization: 'pending',
+  execute: false,
+  expected_live_definition_sha256: null,
+  // Code-derived: releaseIntendedHash('sql126', file bytes) (release-sql-state.mjs); re-derived by the tests.
+  intended_replacement_sha256: '3aebf853a375d7a668acf62c8877a7b6a0d5f791b73121b591acd9046b0510b2',
+  function_identities: Object.freeze([
+    'public.get_all_checks_safety_net()',
+    'public.get_stuck_checks()',
+    'public.get_deposit_ops_kpis()',
+    'public.get_deposit_exception_kpis()',
+    'public.get_deposit_aging_summary()',
+    'public.get_check_dashboard_counts_for_tenant(uuid)',
+    'public.get_loss_draft_dashboard_counts_for_tenant(uuid)',
+    'public.get_tenant_check_usage(uuid, timestamp with time zone, timestamp with time zone)',
+    'public.get_tenant_users_with_profiles(uuid)',
+    'public.is_checkalt_enabled_for_tenant(uuid)',
+    'public.get_check_claim_settlement(uuid)',
+    'public.has_permission(uuid, text)',
+    'public.get_check_unread_counts()',
+  ]),
+});
+
 export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql90: AUTHORIZED_SQL90_USERS_ONLY_TENANT_ROLES,
   sql91: AUTHORIZED_SQL91_MOOV_ONBOARDING,
@@ -2857,6 +2890,7 @@ export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql123: AUTHORIZED_SQL123_CHECKALT_DEPOSIT_CHECK_STATUS,
   sql124: AUTHORIZED_SQL124_MORTGAGE_DESK_SIGNATURE_AND_READS,
   sql125: AUTHORIZED_SQL125_DEPOSIT_VIEWS_SECURITY_INVOKER,
+  sql126: AUTHORIZED_SQL126_DEFINER_READS_CALLER_GATES,
 });
 
 // The fee collection pin under its earlier map name (the same object as the release map's sql98).
@@ -2872,7 +2906,7 @@ export function isSql30TenantDocumentsDocType(input = {}) {
   return pinIdentifiersMatch(input, AUTHORIZED_SQL30_TENANT_DOCUMENTS_DOC_TYPE);
 }
 
-/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql125) an input names, or null. */
+/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql126) an input names, or null. */
 export function releaseSqlMigrationKey(input = {}) {
   return Object.keys(RELEASE_2026_10_17_PENDING_SQL_PINS)
     .find((key) => pinIdentifiersMatch(input, RELEASE_2026_10_17_PENDING_SQL_PINS[key])) || null;

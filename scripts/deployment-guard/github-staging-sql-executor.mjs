@@ -131,6 +131,7 @@ export const MIGRATIONS = Object.freeze({
   'sql123-checkalt-deposit-check-status': RELEASE_2026_10_17_PENDING_SQL_PINS.sql123,
   'sql124-mortgage-desk-signature-and-reads': RELEASE_2026_10_17_PENDING_SQL_PINS.sql124,
   'sql125-deposit-views-security-invoker': RELEASE_2026_10_17_PENDING_SQL_PINS.sql125,
+  'sql126-definer-reads-caller-gates': RELEASE_2026_10_17_PENDING_SQL_PINS.sql126,
 });
 
 const LAMBDA_CODE_SHA_RE = /^[A-Za-z0-9+/]{43}=$/;

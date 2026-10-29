@@ -1,5 +1,5 @@
 /**
- * Specs of the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108 to SQL 125) for the shared engine in
+ * Specs of the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108 to SQL 126) for the shared engine in
  * release-sql-state.mjs: what each pinned file creates, replaces or drops, the reviewed
  * EXECUTE ACLs, the prerequisites and predecessors, and the PostgreSQL renderings the file
  * leaves (policy expressions, view, column, constraint, index and trigger definitions as
@@ -5334,6 +5334,239 @@ export const RELEASE_SQL_SPECS = deepFreeze({
       "public.deposit_owner_performance",
       "public.deposit_reminder_queue",
       "public.deposit_aging_dashboard"
+    ]
+  },
+  // SQL 126 (security audit 2026-10-29, finding 4, database part): the thirteen Supabase-era SECURITY
+  // DEFINER reads PR #1379 gates in the API check their caller themselves: owner-only (the safety net,
+  // the deposit KPIs), tenant (aws_can_access_tenant: the dashboard counts, usage, users, Check Alt
+  // status), the claim settlement (owner tenant, active share target, platform owner), has_permission
+  // (self or platform owner), get_stuck_checks and get_check_unread_counts scoped to the caller. Same
+  // signatures, results, language, volatility, SECURITY DEFINER and search_path; EXECUTE for checksops
+  // and the owner (PUBLIC, anon, authenticated and service_role revoked). No predecessor.
+  sql126: {
+    "key": "sql126",
+    "label": "SQL 126",
+    "choice": "sql126-definer-reads-caller-gates",
+    "production_pin_rel": "ops/deployment-guard/sql126-definer-reads-caller-gates-production-apply.json",
+    "script": "sql126-definer-reads-caller-gates-production-apply",
+    "prerequisites": [
+      "public.get_all_checks_safety_net()",
+      "public.get_stuck_checks()",
+      "public.get_deposit_ops_kpis()",
+      "public.get_deposit_exception_kpis()",
+      "public.get_deposit_aging_summary()",
+      "public.get_check_dashboard_counts_for_tenant(uuid)",
+      "public.get_loss_draft_dashboard_counts_for_tenant(uuid)",
+      "public.get_tenant_check_usage(uuid, timestamp with time zone, timestamp with time zone)",
+      "public.get_tenant_users_with_profiles(uuid)",
+      "public.is_checkalt_enabled_for_tenant(uuid)",
+      "public.get_check_claim_settlement(uuid)",
+      "public.has_permission(uuid, text)",
+      "public.get_check_unread_counts()",
+      "auth.uid()",
+      "public.is_platform_owner()",
+      "public.aws_can_access_tenant(uuid)",
+      "public.aws_can_access_check(uuid)",
+      "public.aws_user_tenant_ids()",
+      "public.has_role(uuid, public.app_role)",
+      "public.user_belongs_to_tenant(uuid, uuid)",
+      "public.check_intake_items",
+      "public.check_status_audit",
+      "public.loss_draft_tracking",
+      "public.loss_draft_documents",
+      "public.shared_checks",
+      "public.tenants",
+      "public.tenant_users",
+      "public.profiles",
+      "public.user_roles",
+      "public.check_billing_events",
+      "public.mortgage_handling_requests",
+      "public.checkalt_config",
+      "public.checkalt_tenant_accounts",
+      "public.claims",
+      "public.claim_settlements",
+      "public.check_messages",
+      "public.check_message_reads",
+      "public.deposit_ops_kpis",
+      "public.deposit_exception_kpis",
+      "public.deposit_aging_summary",
+      "role checksops"
+    ],
+    "predecessors": [],
+    "functions": [
+      {
+        "identity": "public.get_all_checks_safety_net()",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ],
+        "revokes": [
+          "PUBLIC EXECUTE",
+          "anon EXECUTE",
+          "authenticated EXECUTE",
+          "service_role EXECUTE"
+        ],
+        "result": "TABLE(id uuid, claim_id uuid, status text, amount numeric, check_number text, carrier_name text, payee_line text, front_image_path text, back_image_path text, created_at timestamp with time zone, updated_at timestamp with time zone, has_loss_draft boolean)"
+      },
+      {
+        "identity": "public.get_stuck_checks()",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ],
+        "revokes": [
+          "PUBLIC EXECUTE",
+          "anon EXECUTE",
+          "authenticated EXECUTE",
+          "service_role EXECUTE"
+        ],
+        "result": "TABLE(id uuid, claim_id uuid, status text, amount numeric, carrier_name text, payee_line text, created_at timestamp with time zone, updated_at timestamp with time zone, hours_in_status numeric, sla_hours integer, is_overdue boolean)"
+      },
+      {
+        "identity": "public.get_deposit_ops_kpis()",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ],
+        "revokes": [
+          "PUBLIC EXECUTE",
+          "anon EXECUTE",
+          "authenticated EXECUTE",
+          "service_role EXECUTE"
+        ]
+      },
+      {
+        "identity": "public.get_deposit_exception_kpis()",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ],
+        "revokes": [
+          "PUBLIC EXECUTE",
+          "anon EXECUTE",
+          "authenticated EXECUTE",
+          "service_role EXECUTE"
+        ]
+      },
+      {
+        "identity": "public.get_deposit_aging_summary()",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ],
+        "revokes": [
+          "PUBLIC EXECUTE",
+          "anon EXECUTE",
+          "authenticated EXECUTE",
+          "service_role EXECUTE"
+        ]
+      },
+      {
+        "identity": "public.get_check_dashboard_counts_for_tenant(uuid)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ],
+        "revokes": [
+          "PUBLIC EXECUTE",
+          "anon EXECUTE",
+          "authenticated EXECUTE",
+          "service_role EXECUTE"
+        ]
+      },
+      {
+        "identity": "public.get_loss_draft_dashboard_counts_for_tenant(uuid)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ],
+        "revokes": [
+          "PUBLIC EXECUTE",
+          "anon EXECUTE",
+          "authenticated EXECUTE",
+          "service_role EXECUTE"
+        ]
+      },
+      {
+        "identity": "public.get_tenant_check_usage(uuid, timestamp with time zone, timestamp with time zone)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ],
+        "revokes": [
+          "PUBLIC EXECUTE",
+          "anon EXECUTE",
+          "authenticated EXECUTE",
+          "service_role EXECUTE"
+        ]
+      },
+      {
+        "identity": "public.get_tenant_users_with_profiles(uuid)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ],
+        "revokes": [
+          "PUBLIC EXECUTE",
+          "anon EXECUTE",
+          "authenticated EXECUTE",
+          "service_role EXECUTE"
+        ],
+        "result": "TABLE(id uuid, user_id uuid, role text, created_at timestamp with time zone, full_name text, email text)"
+      },
+      {
+        "identity": "public.is_checkalt_enabled_for_tenant(uuid)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ],
+        "revokes": [
+          "PUBLIC EXECUTE",
+          "anon EXECUTE",
+          "authenticated EXECUTE",
+          "service_role EXECUTE"
+        ]
+      },
+      {
+        "identity": "public.get_check_claim_settlement(uuid)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ],
+        "revokes": [
+          "PUBLIC EXECUTE",
+          "anon EXECUTE",
+          "authenticated EXECUTE",
+          "service_role EXECUTE"
+        ]
+      },
+      {
+        "identity": "public.has_permission(uuid, text)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ],
+        "revokes": [
+          "PUBLIC EXECUTE",
+          "anon EXECUTE",
+          "authenticated EXECUTE",
+          "service_role EXECUTE"
+        ]
+      },
+      {
+        "identity": "public.get_check_unread_counts()",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ],
+        "revokes": [
+          "PUBLIC EXECUTE",
+          "anon EXECUTE",
+          "authenticated EXECUTE",
+          "service_role EXECUTE"
+        ],
+        "result": "TABLE(check_id uuid, unread_count bigint, last_message_at timestamp with time zone)"
+      }
     ]
   },
 });
