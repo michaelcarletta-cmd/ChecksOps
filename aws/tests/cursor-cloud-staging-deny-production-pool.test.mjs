@@ -36,11 +36,16 @@ test('the recorded live policy has no Cognito deny: the gap being closed', () =>
   assert.ok(!LIVE.Statement.some((s) => arr(s.Action).some((a) => a.startsWith('cognito-idp:'))));
 });
 
+// The staging role boundary change (aws/tests/cursor-cloud-staging-role-boundary.test.mjs) later added
+// its own statements after this one; they are left out of this comparison.
+const BOUNDARY_SIDS = ['DenyRoleWritesWithoutStagingBoundary', 'DenyRemovingStagingBoundary', 'DenyEditingStagingBoundaryPolicy'];
+
 test('only the new statement is added; every existing deny equals live', () => {
   const { Statement, ...rest } = TARGET;
   const { Statement: liveStatements, ...liveRest } = LIVE;
   assert.deepEqual(rest, liveRest);
-  assert.deepEqual(Statement.filter((s) => s.Sid !== 'DenyProductionUserPool'), liveStatements);
-  assert.equal(Statement.length, liveStatements.length + 1);
+  const ownStatements = Statement.filter((s) => !BOUNDARY_SIDS.includes(s.Sid));
+  assert.deepEqual(ownStatements.filter((s) => s.Sid !== 'DenyProductionUserPool'), liveStatements);
+  assert.equal(ownStatements.length, liveStatements.length + 1);
   assert.ok(Statement.every((s) => s.Effect === 'Deny'));
 });
