@@ -41,16 +41,21 @@ for (const [env, { id, live }] of Object.entries(POOLS)) {
     assert.deepEqual(request.EmailConfiguration, pool.EmailConfiguration);
     assert.deepEqual(request.AccountRecoverySetting, pool.AccountRecoverySetting);
     assert.equal(request.DeletionProtection, pool.DeletionProtection);
-    // Only user tags are written; aws:* tags belong to AWS.
-    for (const key of Object.keys(request.UserPoolTags || {})) assert.equal(key.startsWith('aws:'), false, key);
-    for (const [key, value] of Object.entries(pool.UserPoolTags || {})) {
-      if (!key.startsWith('aws:')) assert.equal(request.UserPoolTags[key], value, key);
-    }
+    // Tags are never sent: UserPoolTags would replace the whole set, system tags included.
+    assert.equal('UserPoolTags' in request, false);
     for (const key of NOT_UPDATABLE) assert.equal(key in request, false, key);
     // The input is not modified.
     assert.equal(pool.AdminCreateUserConfig.AllowAdminCreateUserOnly, false);
   });
 }
+
+test('a pool with aws:* system tags gets a request without UserPoolTags (the 2026-10-30 production refusal)', () => {
+  const pool = POOLS.production.live.UserPool;
+  assert.ok(Object.keys(pool.UserPoolTags).some((key) => key.startsWith('aws:cloudformation:')));
+  const request = buildAdminCreateOnlyUpdate(pool);
+  assert.equal('UserPoolTags' in request, false);
+  assert.equal(request.AdminCreateUserConfig.AllowAdminCreateUserOnly, true);
+});
 
 test('the builder refuses a non-pool input and a deprecated-only invite expiry', () => {
   assert.throws(() => buildAdminCreateOnlyUpdate({}));
@@ -64,4 +69,6 @@ test('the runbook applies staging first, production on the owner\'s words, verif
   assert.match(readme, /## Rollback/);
   assert.match(readme, /get_user_pool_mfa_config|GetUserPoolMfaConfig/);
   assert.match(readme, /0 `SignUp`/);
+  assert.match(readme, /SignUp is not permitted for this user pool/);
+  assert.match(readme, /TagResource/);
 });

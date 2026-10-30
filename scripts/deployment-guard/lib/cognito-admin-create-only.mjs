@@ -29,8 +29,10 @@ const COPIED = Object.freeze([
   'UserPoolTier',
 ]);
 
-// DescribeUserPool fields UpdateUserPool cannot set (fixed at creation or computed).
+// DescribeUserPool fields UpdateUserPool cannot set (fixed at creation or computed), or that
+// this request leaves alone (UserPoolTags).
 export const NOT_UPDATABLE = Object.freeze([
+  'UserPoolTags',
   'Arn', 'Id', 'IssuerConfiguration', 'KeyConfiguration', 'SchemaAttributes', 'UsernameAttributes',
   'AliasAttributes', 'Domain', 'CustomDomain', 'EstimatedNumberOfUsers', 'CreationDate',
   'LastModifiedDate', 'Status', 'SmsConfigurationFailure', 'EmailConfigurationFailure',
@@ -45,9 +47,10 @@ export const buildAdminCreateOnlyUpdate = (userPool) => {
     if (userPool[key] !== undefined) request[key] = clone(userPool[key]);
   }
   if (userPool.Name !== undefined) request.PoolName = userPool.Name;
-  // aws:* tags belong to AWS (CloudFormation) and cannot be written.
-  const tags = Object.fromEntries(Object.entries(userPool.UserPoolTags || {}).filter(([key]) => !key.startsWith('aws:')));
-  if (Object.keys(tags).length) request.UserPoolTags = tags;
+  // Tags are never sent. UserPoolTags replaces the whole tag set, so on a pool that carries aws:*
+  // system tags (production: aws:cloudformation:*) Cognito refuses the call ("not allowed to mutate
+  // system tags") and, on 2026-10-30, still recorded the settings without enforcing them. Tags are
+  // checked after the update and any user tag missing is restored with TagResource.
   // UnusedAccountValidityDays is superseded by Policies.PasswordPolicy.TemporaryPasswordValidityDays,
   // and Cognito refuses a request that sets both.
   const { UnusedAccountValidityDays, ...adminCreate } = clone(userPool.AdminCreateUserConfig || {});
