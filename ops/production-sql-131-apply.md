@@ -35,7 +35,38 @@ Not changed: the functions' bodies, `SECURITY DEFINER`, `search_path`, results a
 trigger or row; the lockout behavior. No API, Lambda or SPA change is part of this file or its pins. No
 trigger is added.
 
-**Status:** not applied anywhere. The staging pin and the production pin are pending.
+**Staging executor refreshed (2026-10-30).** Inspect run 41107092402 (main `6f7357af`) found the live
+executor at `5OmSJSao…` without `sql/131_financial_totp_functions_no_public.sql`. Deploy run
+41107423198 updated it to main's package (`jOd0IqUJQWAawRveO44q7mLIxYP2iqmwtFgiebyMQ2M=`, RevisionId
+`d6814564-30a0-4ead-9eb8-3a3534c26a84`).
+
+**Staging read-live (2026-10-30).** Run 41107844336 (main `6f7357afbdd85ccd23a3c609164a1a4d0a15541f`,
+executor `jOd0IqUJ…`): the four functions `intended`, EXECUTE for `checksops` and the owner only
+(`checksops EXECUTE grantor=owner`, `owner EXECUTE grantor=owner`); every prerequisite present
+(`prerequisites_missing` `[]`); `predecessors.sql130` true; live
+`a661533320d9b391cc9b5c5f2fade5632801060693a5205c4bf8391702fe90c7` (the intended state),
+`already_applied` true, `precondition_failures` `[]`. Staging never held `PUBLIC` on the four (the
+proposed-file load there revoked it), so there was nothing to apply: no staging apply was run, this
+read-live is the staging acceptance and the staging pin stays pending, as SQL 119's did.
+
+**Production inspect (2026-10-30).** Read-only `--inspect` through SSM
+`be25e88a-1088-49af-81fa-10eecd8902b4` on `i-0c35557c4e5385406`, main `1dcd0f33e` (tarball sha256
+`1d9efa200afe912ace7feb0455204b661d076b0012682fe17a46c65f6f4c8968`, transfer run 41108283066, migration
+source `e7b5a8df…` == pin), connected as `checksops_admin`: the four functions `different`, each with
+ACL `PUBLIC EXECUTE grantor=owner`, `checksops EXECUTE grantor=owner`, `owner EXECUTE grantor=owner`;
+every prerequisite present; `predecessors.sql130` true; live
+`99d9e8e925ca8c5b56e11409f145e2d75de2759c27d8fd1b476494ffc62e2eaa`, `already_applied` false,
+`precondition_failures` `[]`. That is the production pre-state derived below from the spec; it differs
+from staging's (the intended state) only by the `PUBLIC` EXECUTE grant on each of the four, which the
+file revokes (`aws/tests/sql131-financial-totp-functions-pg.test.mjs` applies from both pre-states).
+Recorded in the production pin with the staging read-live as its staging acceptance and `execute: true`
+under the owner's words of 2026-10-30 ("restart SQL 131 and the lockout fix", "Merge SQL 131 and the
+lockout fix when green", "continue with SQL 131 staging", "run the SQL 131 production inspect"; no words
+for the production apply yet). The owner merges the pin change; the apply still needs the owner's
+run-time approval and runs only after that merge is on main and staged.
+
+**Status:** staging already in the intended state (no apply); production pin execute-authorized;
+production apply pending.
 
 ## Order
 
@@ -69,12 +100,13 @@ and read back from a PostgreSQL 16 database with the proposed file loaded:
 
 | environment | EXECUTE on each of the four | fingerprint under `sql131` | recorded in |
 |---|---|---|---|
-| production | `PUBLIC`, `checksops`, owner (each granted by the owner) | `99d9e8e925ca8c5b56e11409f145e2d75de2759c27d8fd1b476494ffc62e2eaa` | the production pin, from the one-shot `--phase inspect` |
-| staging | `checksops`, owner | `a661533320d9b391cc9b5c5f2fade5632801060693a5205c4bf8391702fe90c7` (the intended state: `already_applied` true) | the staging read-live run, as the staging acceptance |
+| production | `PUBLIC`, `checksops`, owner (each granted by the owner) | `99d9e8e925ca8c5b56e11409f145e2d75de2759c27d8fd1b476494ffc62e2eaa` | the production pin, from the read-only inspect of 2026-10-30 (SSM `be25e88a…`, above) |
+| staging | `checksops`, owner | `a661533320d9b391cc9b5c5f2fade5632801060693a5205c4bf8391702fe90c7` (the intended state: `already_applied` true) | the staging read-live run 41107844336, as the staging acceptance (above) |
 
-Staging's pre-state is expected, not read: SQL 130's read-live (run 41081764481 for SQL 129, run
-41087643551 for SQL 130) read the fifth function without `PUBLIC`, and the proposed file revokes
-`PUBLIC` from all five in one transaction, so the four are expected to lack it too. Each pin records its
+Both were derived before they were read, and each run read the derived value. Staging's was expected
+from SQL 130's read-live (run 41081764481 for SQL 129, run 41087643551 for SQL 130), which read the fifth
+function without `PUBLIC`; the proposed file revokes `PUBLIC` from all five in one transaction, so the
+four were expected to lack it too, and read-live run 41107844336 confirmed it. Each pin records its
 own environment's read; neither value is written into a pin before a run reads it. A pre-state other than
 these is not by itself a stop, but its per-function report and ACL must be read and explained before it
 is recorded. A `PUBLIC` entry whose grantor is not the owner is refused (`acl_functions_acl_replaceable`):
