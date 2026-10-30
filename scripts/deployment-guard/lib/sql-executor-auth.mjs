@@ -2951,6 +2951,34 @@ export const AUTHORIZED_SQL130_FINANCIAL_TOTP_RATE_LIMIT_CODE_CHECK_NO_PUBLIC = 
   ]),
 });
 
+// Financial TOTP staging pin: SQL 131 (owner 2026-10-30 "restart SQL 131 and the lockout fix": EXECUTE
+// revoked from PUBLIC on the four financial TOTP enrollment functions the API calls as checksops, and
+// granted to checksops, a no-op; SQL 103 / SQL 119's ACL-only shape). Predecessor SQL 130. Pending
+// until a reviewed pin change records a staging read-live. Expected there: already_applied true (the
+// proposed-file load on staging revoked PUBLIC, as SQL 130's read-live run 41087643551 showed for the
+// fifth function), in which case the read-live is the staging acceptance and this pin stays pending,
+// as SQL 119's did.
+export const AUTHORIZED_SQL131_FINANCIAL_TOTP_FUNCTIONS_NO_PUBLIC = Object.freeze({
+  key: 'sql131',
+  filename: 'aws/workflows/sql/131_financial_totp_functions_no_public.sql',
+  migration_id: '131_financial_totp_functions_no_public',
+  // The commit that last authored the file bytes.
+  commit: 'a532b0d1f367c7528d9628b988881427a21e2eb2',
+  source_sha256: 'e7b5a8dfb70fda9226356a463ff25acf373a7c891321f55a53d8a92051546217',
+  authorization: 'pending',
+  execute: false,
+  expected_live_definition_sha256: null,
+  // Code-derived: releaseIntendedHash('sql131', file bytes) (release-sql-state.mjs); re-derived by the tests.
+  intended_replacement_sha256: 'a661533320d9b391cc9b5c5f2fade5632801060693a5205c4bf8391702fe90c7',
+  // The functions whose ACL the file sets (spec acl_functions); it creates or replaces none.
+  function_identities: Object.freeze([
+    'public.financial_totp_upsert_enrollment(uuid, bytea, bytea, text)',
+    'public.financial_totp_get_enrollment(uuid)',
+    'public.financial_totp_mark_verified(uuid, bigint)',
+    'public.financial_totp_status(uuid)',
+  ]),
+});
+
 // Financial TOTP lockout staging pin: SQL 132 (owner 2026-10-30 "restart SQL 131 and the lockout fix":
 // the new SECURITY DEFINER financial_totp_count_code_check(uuid) counts a code check before the API
 // compares the code, locks the enrollment for 15 minutes at the tenth consecutive check without a
@@ -3015,6 +3043,7 @@ export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql128: AUTHORIZED_SQL128_CONTRACTOR_VERIFICATION_FROM_COMPLIANCE,
   sql129: AUTHORIZED_SQL129_FINANCIAL_TOTP_RATE_LIMIT_CODE_CHECK,
   sql130: AUTHORIZED_SQL130_FINANCIAL_TOTP_RATE_LIMIT_CODE_CHECK_NO_PUBLIC,
+  sql131: AUTHORIZED_SQL131_FINANCIAL_TOTP_FUNCTIONS_NO_PUBLIC,
   sql132: AUTHORIZED_SQL132_FINANCIAL_TOTP_CODE_CHECK_LOCKOUT,
 });
 
@@ -3031,7 +3060,7 @@ export function isSql30TenantDocumentsDocType(input = {}) {
   return pinIdentifiersMatch(input, AUTHORIZED_SQL30_TENANT_DOCUMENTS_DOC_TYPE);
 }
 
-/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql130, sql132) an input names, or null. */
+/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql132) an input names, or null. */
 export function releaseSqlMigrationKey(input = {}) {
   return Object.keys(RELEASE_2026_10_17_PENDING_SQL_PINS)
     .find((key) => pinIdentifiersMatch(input, RELEASE_2026_10_17_PENDING_SQL_PINS[key])) || null;
