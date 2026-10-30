@@ -46,8 +46,9 @@ origin header (351,792 lines; daily 48 to 134,727). The only invalid ones are th
 
 Repository references to the raw production host:
 
-- `.github/workflows/guarded-production-cors.yml` "Public production smoke" sends raw `OPTIONS`
-  preflights to `kiqojucc02…/prep/health`; it breaks if the raw endpoint is disabled.
+- `.github/workflows/guarded-production-cors.yml` "Public production smoke" sent raw `OPTIONS`
+  preflights to `kiqojucc02…/prep/health`, which would break once the raw endpoint is disabled.
+  Step 1 below moves them to `https://checksops.com/prep/health`.
 - `scripts/deployment-guard/production-readonly-inspect.mjs` pins `api_host` (a recorded pin,
   not a request).
 - Staging workflows and scripts call `psr19uhop4…/staging` directly; staging has no CloudFront
@@ -63,6 +64,11 @@ endpoint).
 Proposed guarded sequence, each step its own reviewed PR and run:
 
 1. Move the CORS smoke in `guarded-production-cors.yml` to CloudFront (`https://checksops.com/prep/…`).
+   Done in source by the PR `claude/cors-smoke-via-cloudfront`: same origins, same assertions.
+   CloudFront passes preflights through unchanged (read-only, 2026-10-30): the `/prep` and
+   `/prep/*` behaviors allow `OPTIONS` and cache only `GET`/`HEAD` (`Managed-CachingDisabled`),
+   forward every viewer header except `Host` (`Managed-AllViewerExceptHostHeader`, so `Origin`
+   reaches the API), and the response headers policy `756a8f23-…` has no CORS configuration.
 2. A reviewed tool that sets only `DisableExecuteApiEndpoint` on `kiqojucc02` from a read-only
    precondition (this file's configuration), run by a role that may `apigateway:PATCH` the API,
    on the owner's approval of that run. Post-checks: CloudFront `/prep/health` and

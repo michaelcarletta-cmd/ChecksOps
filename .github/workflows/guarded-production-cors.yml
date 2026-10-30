@@ -206,9 +206,11 @@ jobs:
           set -euo pipefail
           node --input-type=module <<'NODE'
           const mode = process.env.INPUT_MODE;
-          const raw = 'https://kiqojucc02.execute-api.us-east-1.amazonaws.com/prep/health';
+          // Preflights go through CloudFront, as the website's do, not to the raw execute-api
+          // host: the raw endpoint is to be disabled (API_PERIMETER_STEP3_GATE3D_LIVE_STATE.md).
+          const viaCloudFront = 'https://checksops.com/prep/health';
           async function preflight(origin) {
-            const res = await fetch(raw, { method: 'OPTIONS', redirect: 'manual', signal: AbortSignal.timeout(20000), headers: {
+            const res = await fetch(viaCloudFront, { method: 'OPTIONS', redirect: 'manual', signal: AbortSignal.timeout(20000), headers: {
               Origin: origin, 'Access-Control-Request-Method': 'GET', 'Access-Control-Request-Headers': 'authorization,content-type',
             } });
             return { origin, status: res.status, allowOrigin: res.headers.get('access-control-allow-origin') };
