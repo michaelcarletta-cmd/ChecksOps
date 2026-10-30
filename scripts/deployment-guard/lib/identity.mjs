@@ -28,6 +28,7 @@ export const DEPLOYMENT_TYPES = Object.freeze([
   'sql53-production-apply',
   'apigateway-update',
   'apigateway-cors-update',
+  'cloudfront-response-headers-policy',
   'infra-mutate',
   'verify-only',
 ]);
