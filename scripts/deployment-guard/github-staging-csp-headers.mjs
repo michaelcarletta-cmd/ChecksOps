@@ -4,15 +4,20 @@
  * step 1, ops/security/SPA_CSP_ROLLOUT.md). Staging distribution E1CG52WRQZI7X1 only.
  *
  * inspect:  read the distribution, the policy checksops-staging-browser-security-headers and the
- *           live staging index.html; report READY, ATTACHED_CURRENT, ATTACHED_STALE or BLOCKED and
- *           the exact report-only CSP the apply would set. Never writes AWS.
+ *           live staging index.html; report READY, ATTACHED_CURRENT, ATTACHED_STALE,
+ *           ENFORCING_CURRENT, ENFORCING_STALE or BLOCKED and the exact report-only and enforcing
+ *           CSPs a change would set. Never writes AWS.
  * apply:    same read, then requires the snapshot SHA-256 from a prior inspect and the exact phrase
  *           ATTACH REPORT-ONLY CSP TO STAGING, takes the staging-frontend lease and issues a
  *           KMS-signed receipt whose preflight fingerprint is the whole snapshot, for
  *           staging-csp-headers.mjs, the only writer.
+ * enforce:  as apply with ENFORCE CSP ON STAGING (rollout step 3); the writer moves the CSP into the
+ *           enforcing Content-Security-Policy and drops the report-only header, policy only.
+ * revert:   as apply with REVERT CSP TO REPORT-ONLY ON STAGING; back to exactly the report-only policy.
  * rollback: as apply with DETACH CSP FROM STAGING; the writer restores the previous
  *           ResponseHeadersPolicyId (none).
- * verify:   after apply the policy is attached and current; after rollback nothing is attached.
+ * verify:   after apply or revert the report-only policy is attached and current; after enforce the
+ *           enforcing one is; after rollback nothing is attached.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -38,8 +43,11 @@ import {
 
 export const APPROVAL_PHRASES = Object.freeze({
   apply: 'ATTACH REPORT-ONLY CSP TO STAGING',
+  enforce: 'ENFORCE CSP ON STAGING',
+  revert: 'REVERT CSP TO REPORT-ONLY ON STAGING',
   rollback: 'DETACH CSP FROM STAGING',
 });
+const VERIFY_STATES = Object.freeze({ attached: 'ATTACHED_CURRENT', enforcing: 'ENFORCING_CURRENT', detached: 'READY' });
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 export function workflowIdentity(env = process.env) {
@@ -55,7 +63,7 @@ export function workflowIdentity(env = process.env) {
 }
 
 export function validateChangeInputs({ mode, approval, expectedFingerprint, liveFingerprint }) {
-  if (approval !== APPROVAL_PHRASES[mode]) {
+  if (!Object.hasOwn(APPROVAL_PHRASES, mode) || approval !== APPROVAL_PHRASES[mode]) {
     throw new GuardError(CODES.INVALID_MANIFEST, `staging CSP ${mode} requires the exact approval phrase`, { expected: APPROVAL_PHRASES[mode] });
   }
   const expected = String(expectedFingerprint || '').trim();
@@ -82,12 +90,13 @@ function writeState(root, name, data) {
 export async function run(env = process.env, deps = {}) {
   const root = deps.root || repoRoot;
   const mode = String(env.CHECKSOPS_STAGING_CSP_MODE || 'inspect').trim();
-  if (!['inspect', 'apply', 'rollback', 'verify'].includes(mode)) throw new GuardError(CODES.INVALID_MANIFEST, 'mode must be inspect, apply, rollback or verify');
+  if (!['inspect', 'apply', 'enforce', 'revert', 'rollback', 'verify'].includes(mode)) throw new GuardError(CODES.INVALID_MANIFEST, 'mode must be inspect, apply, enforce, revert, rollback or verify');
   const identity = workflowIdentity(env);
   const template = deps.template || loadTemplatePolicy(root);
   const { raw, snapshot } = (deps.readState || readState)(env);
   const desired = desiredPolicyConfig(raw.indexHtml, template);
-  const { state, problems, fingerprint } = classify(snapshot, desired);
+  const enforcing = desiredPolicyConfig(raw.indexHtml, template, { enforce: true });
+  const { state, problems, fingerprint } = classify(snapshot, desired, enforcing);
   const summary = {
     distribution_id: DISTRIBUTION_ID,
     snapshot_sha256: fingerprint,
@@ -96,12 +105,12 @@ export async function run(env = process.env, deps = {}) {
     policy_id: snapshot.policy?.Id || 'none',
     index_html_sha256: snapshot.index.sha256,
     csp_report_only: desired.CustomHeadersConfig.Items[0].Value,
+    csp_enforcing: enforcing.SecurityHeadersConfig.ContentSecurityPolicy.ContentSecurityPolicy,
   };
 
   if (mode === 'verify') {
     const expect = String(env.CHECKSOPS_STAGING_CSP_VERIFY_EXPECT || '').trim();
-    const okState = { attached: state === 'ATTACHED_CURRENT', detached: state === 'READY' }[expect];
-    if (!okState) throw new GuardError(CODES.DEPLOYMENT_COLLISION, 'post-change staging state is not the expected one', { expect, state, problems });
+    if (!Object.hasOwn(VERIFY_STATES, expect) || state !== VERIFY_STATES[expect]) throw new GuardError(CODES.DEPLOYMENT_COLLISION, 'post-change staging state is not the expected one', { expect, state, problems });
     appendGithubOutput({ ...summary, state: 'VERIFIED' }, env);
     return { ok: true, mode, identity, ...summary, state: 'VERIFIED', mutation: false };
   }

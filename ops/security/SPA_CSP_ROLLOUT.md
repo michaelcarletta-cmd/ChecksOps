@@ -73,8 +73,17 @@ Tests: `aws/tests/spa-csp.test.mjs`, `aws/tests/github-staging-csp-headers.test.
    screen (sign-in, checks, uploads and previews, PDF field placement, deposits, settings) and collect
    violations from the console.
 2. **Adjust** the directives in `spa-csp.mjs` for any real violation (reviewed PR), repeat 1.
-3. **Staging enforce.** Move the value to `SecurityHeadersConfig.ContentSecurityPolicy`, add
-   `upgrade-insecure-requests`, retest.
+3. **Staging enforce.** `guarded-staging-csp-headers.yml`: `mode: inspect` (expect
+   `ATTACHED_CURRENT`), then `mode: enforce` with the inspect's snapshot SHA-256 and the owner's words
+   "ENFORCE CSP ON STAGING". It updates policy `d3f84b15-…` only (the distribution is not changed):
+   the same directives plus `upgrade-insecure-requests` in `SecurityHeadersConfig.ContentSecurityPolicy`
+   (Override true), and no `Content-Security-Policy-Report-Only` header. The run verifies the policy,
+   that the distribution config is unchanged, and that staging serves exactly that
+   `Content-Security-Policy` and no report-only header. Retest every screen; a blocked load is now a
+   broken screen. Way back: `mode: revert`, "REVERT CSP TO REPORT-ONLY ON STAGING" (exactly the
+   report-only policy again), or `mode: rollback`, "DETACH CSP FROM STAGING" (no policy at all).
+   Inspect reports `ENFORCING_CURRENT` after it, `ENFORCING_STALE` once a new `index.html` changes
+   the inline-script hash (enforce again refreshes it); `apply` is refused while enforcing.
 4. **Production report-only**, then **production enforce**, on the production policy
    `756a8f23-…`, each on the owner's approval of that change.
 
@@ -97,12 +106,20 @@ Order to apply: deploy the SPA to staging first (guarded staging SPA upload), th
 CSP TO STAGING"), which updates the policy in place. The inline-script hash is unchanged by this
 change, but the apply always builds from the live `index.html`.
 
+Click-through after apply run 41079658922 (the report-only policy updated to the live
+`index.html` deployed by #1308): the owner used the screens again with the console open. No CSP
+reports. The `/storage/sign` 404s in the same console are staging data, not CSP: the signed objects
+are missing, most likely from the finding-5 `Migration/` deletion. This cleared step 3.
+
 ## Rollback
 
 `guarded-staging-csp-headers.yml` with `mode: rollback` and the owner's words "DETACH CSP FROM
 STAGING": the default behavior goes back to no response headers policy, as before step 1; the policy
-object stays. Report-only never blocks anything.
+object stays. Report-only never blocks anything. From enforcing, `mode: revert` with "REVERT CSP TO
+REPORT-ONLY ON STAGING" goes back to report-only instead (policy only); rollback also works from
+enforcing.
 
 ## Not done yet
 
-Staging enforce, production report-only and production enforce. No production change.
+Staging enforce is in source (`mode: enforce`) but not run: it waits for the owner's "ENFORCE CSP ON
+STAGING" on a fresh inspect. Production report-only and production enforce. No production change.

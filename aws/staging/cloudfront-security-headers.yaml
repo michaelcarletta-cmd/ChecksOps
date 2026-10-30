@@ -4,6 +4,15 @@ Description: >
   Content-Security-Policy. Source-only definition: this template does not attach the
   policy to any CloudFront behavior. Runbook: ops/security/SPA_CSP_ROLLOUT.md.
 
+# Enforcing variant (rollout step 3, workflow mode enforce) is derived, not a second resource:
+# desiredPolicyConfig(indexHtml, template, { enforce: true }) in
+# scripts/deployment-guard/staging-csp-headers.mjs keeps this SecurityHeadersConfig, adds
+#   ContentSecurityPolicy: { ContentSecurityPolicy: <the Value below>; upgrade-insecure-requests,
+#                            Override: true }
+# (buildCsp(..., { enforce: true })), drops CustomHeadersConfig and sets the comment
+# "Production baseline headers plus an enforcing CSP (staging step 3)." revert restores exactly
+# this report-only config.
+
 Resources:
   StagingBrowserSecurityHeadersPolicy:
     Type: AWS::CloudFront::ResponseHeadersPolicy

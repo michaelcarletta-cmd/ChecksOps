@@ -8,14 +8,19 @@
  *           checksops-staging-browser-security-headers (production baseline security headers
  *           plus a custom Content-Security-Policy-Report-Only header built by spa-csp.mjs from
  *           the live staging index.html), then set DefaultCacheBehavior.ResponseHeadersPolicyId
- *           to it. Never an enforcing ContentSecurityPolicy.
+ *           to it.
+ *   enforce: (rollout step 3) update that attached policy only: the same directives plus
+ *           upgrade-insecure-requests in SecurityHeadersConfig.ContentSecurityPolicy (Override true),
+ *           and no Content-Security-Policy-Report-Only header. The distribution is not changed.
+ *   revert: update that attached policy only, back to exactly the report-only config attach sets.
  *   detach: restore DefaultCacheBehavior.ResponseHeadersPolicyId to its value before the first
  *           attach (none, read 2026-10-30). The policy object is left in place.
  *
  * The distribution config, the policy and the live index.html are pinned through the receipt:
  * the signed preflight fingerprint is the whole snapshot, the writer re-reads it before and
  * immediately before the first write, sends If-Match ETags, and the post-write distribution
- * config must differ from the pre-write one only in DefaultCacheBehavior.ResponseHeadersPolicyId.
+ * config must differ from the pre-write one only in DefaultCacheBehavior.ResponseHeadersPolicyId
+ * (and not at all for update-policy, enforce and revert).
  * Production (E1B0ZWWO5559U5 and its policy 756a8f23-…) is refused at every read and write.
  *
  * Run only from guarded-staging-csp-headers.yml after github-staging-csp-headers.mjs issued the
@@ -43,6 +48,8 @@ export const PRODUCTION_DISTRIBUTION_ID = 'E1B0ZWWO5559U5';
 export const PRODUCTION_POLICY_ID = '756a8f23-68dd-4f8a-8293-5a2fd08f919a';
 export const POLICY_NAME = 'checksops-staging-browser-security-headers';
 export const REPORT_ONLY_HEADER = 'Content-Security-Policy-Report-Only';
+// The enforcing policy's comment; the report-only one is the template's.
+export const ENFORCING_COMMENT = 'Production baseline headers plus an enforcing CSP (staging step 3).';
 // DefaultCacheBehavior.ResponseHeadersPolicyId before the first attach (read-only inspect,
 // 2026-10-30, user/claude-code): absent. detach restores exactly this.
 export const PREVIOUS_RESPONSE_HEADERS_POLICY_ID = null;
@@ -56,8 +63,12 @@ export const OWNED_POLICY = `response-headers-policy:${POLICY_NAME}`;
 export const OWNED_COMPONENTS = Object.freeze({
   attach: [OWNED_BEHAVIOR, OWNED_POLICY],
   'update-policy': [OWNED_POLICY],
+  enforce: [OWNED_POLICY],
+  revert: [OWNED_POLICY],
   detach: [OWNED_BEHAVIOR],
 });
+// Actions that change only the attached policy, never the distribution.
+const POLICY_ONLY_ACTIONS = new Set(['update-policy', 'enforce', 'revert']);
 
 const sha256 = (text) => createHash('sha256').update(text).digest('hex');
 const hashJson = (value) => sha256(JSON.stringify(value));
@@ -94,8 +105,23 @@ export function loadTemplatePolicy(root = repoRoot) {
   return config;
 }
 
-/** The exact policy config the attach sends: template headers, CSP built from the live index.html. */
-export function desiredPolicyConfig(indexHtml, template = loadTemplatePolicy()) {
+/**
+ * The exact policy config a change sends: template headers, CSP built from the live index.html.
+ * Report-only (attach, update-policy, revert): the template's config. Enforcing (enforce): derived
+ * from it, not a second template: the template's security headers plus ContentSecurityPolicy =
+ * buildCsp(..., { enforce: true }), and no custom headers.
+ */
+export function desiredPolicyConfig(indexHtml, template = loadTemplatePolicy(), { enforce = false } = {}) {
+  if (enforce) {
+    return {
+      Name: POLICY_NAME,
+      Comment: ENFORCING_COMMENT,
+      SecurityHeadersConfig: {
+        ...structuredClone(template.SecurityHeadersConfig),
+        ContentSecurityPolicy: { ContentSecurityPolicy: buildCsp({ environment: 'staging', indexHtml, enforce: true }), Override: true },
+      },
+    };
+  }
   return {
     Name: POLICY_NAME,
     Comment: template.Comment,
@@ -163,14 +189,23 @@ export function normalizeSnapshot({ distribution, policies, policy, indexHtml })
 
 export const snapshotFingerprint = (snapshot) => hashJson(snapshot);
 
+// An enforcing CSP is ours when it is buildCsp(enforce) up to the inline-script hashes: the
+// same value for an older index.html is ours and stale; any other value is foreign.
+const withoutScriptHashes = (csp) => String(csp).replace(/ 'sha256-[A-Za-z0-9+/=]+'/g, '');
+export const isOwnEnforcingCsp = (value, enforcing) => typeof value === 'string'
+  && withoutScriptHashes(value) === withoutScriptHashes(enforcing.SecurityHeadersConfig.ContentSecurityPolicy.ContentSecurityPolicy);
+
 /**
  * READY: nothing attached, attach creates/updates our policy and attaches it.
- * ATTACHED_STALE: our policy attached but its headers differ from the template/live index.html;
- *   apply updates the policy only. ATTACHED_CURRENT: nothing to apply.
+ * ATTACHED_STALE: our report-only policy attached but its headers differ from the template/live
+ *   index.html; apply updates the policy only. ATTACHED_CURRENT: nothing to apply; enforce may run.
+ * ENFORCING_CURRENT / ENFORCING_STALE: our policy attached with our enforcing CSP, equal to (or
+ *   differing from) the enforcing config for the live index.html; revert or detach may run.
  * BLOCKED: anything else (another policy attached, production ids, duplicate names, a policy with
- *   settings this tool does not own, distribution not Deployed or not the staging host).
+ *   settings this tool does not own, a foreign enforcing CSP, distribution not Deployed or not the
+ *   staging host).
  */
-export function classify(snapshot, desired) {
+export function classify(snapshot, desired, enforcing = null) {
   const problems = [];
   const d = snapshot.distribution;
   if (d.Id !== DISTRIBUTION_ID) problems.push('distribution_not_staging');
@@ -184,22 +219,30 @@ export function classify(snapshot, desired) {
   if (attached === PRODUCTION_POLICY_ID) problems.push('production_policy_attached');
   const ours = snapshot.policy?.Id || null;
   const want = normalizePolicyConfig(desired);
+  const enforcingCsp = snapshot.policy?.config.SecurityHeadersConfig?.ContentSecurityPolicy;
+  const ownEnforcing = Boolean(enforcingCsp) && Boolean(enforcing) && enforcingCsp.Override === true
+    && Object.keys(enforcingCsp).length === 2 && isOwnEnforcingCsp(enforcingCsp.ContentSecurityPolicy, enforcing);
   if (snapshot.policy) {
     const have = snapshot.policy.config;
-    if (have.CorsConfig || have.RemoveHeaders || have.ServerTiming || have.SecurityHeadersConfig?.ContentSecurityPolicy) problems.push('policy_has_unowned_settings');
+    if (have.CorsConfig || have.RemoveHeaders || have.ServerTiming || (enforcingCsp && !ownEnforcing)) problems.push('policy_has_unowned_settings');
   }
   let state;
   if (problems.length) state = 'BLOCKED';
   else if (attached === PREVIOUS_RESPONSE_HEADERS_POLICY_ID) state = 'READY';
+  else if (ours && attached === ours && ownEnforcing) state = eq(snapshot.policy.config, normalizePolicyConfig(enforcing)) ? 'ENFORCING_CURRENT' : 'ENFORCING_STALE';
   else if (ours && attached === ours) state = eq(snapshot.policy.config, want) ? 'ATTACHED_CURRENT' : 'ATTACHED_STALE';
   else { state = 'BLOCKED'; problems.push('other_policy_attached'); }
   return { state, problems, fingerprint: snapshotFingerprint(snapshot) };
 }
 
 /** What a given mode does in a given state; null means the mode refuses. */
+// apply never touches an enforcing policy (revert is the explicit way back); enforce needs the
+// report-only policy current first, so the enforcing hashes are the ones staging was observed with.
 export function actionFor(mode, state) {
   if (mode === 'apply') return { READY: 'attach', ATTACHED_STALE: 'update-policy' }[state] || null;
-  if (mode === 'rollback') return { ATTACHED_CURRENT: 'detach', ATTACHED_STALE: 'detach' }[state] || null;
+  if (mode === 'enforce') return { ATTACHED_CURRENT: 'enforce', ENFORCING_STALE: 'enforce' }[state] || null;
+  if (mode === 'revert') return { ENFORCING_CURRENT: 'revert', ENFORCING_STALE: 'revert' }[state] || null;
+  if (mode === 'rollback') return { ATTACHED_CURRENT: 'detach', ATTACHED_STALE: 'detach', ENFORCING_CURRENT: 'detach', ENFORCING_STALE: 'detach' }[state] || null;
   return null;
 }
 
@@ -281,15 +324,17 @@ export function main(env = process.env, deps = {}) {
   const input = readInput(env);
   if (input.policy_id || input.policy_config || input.distribution_config || input.csp) throw new Error('caller_supplied_config_forbidden');
   const mode = input.mode;
-  if (!['apply', 'rollback'].includes(mode)) throw new Error('mode_invalid');
+  if (!['apply', 'enforce', 'revert', 'rollback'].includes(mode)) throw new Error('mode_invalid');
   const template = deps.template || loadTemplatePolicy(deps.templateRoot || repoRoot);
 
   const first = read();
-  const desired = desiredPolicyConfig(first.raw.indexHtml, template);
-  const checked = classify(first.snapshot, desired);
+  const reportOnly = desiredPolicyConfig(first.raw.indexHtml, template);
+  const enforcing = desiredPolicyConfig(first.raw.indexHtml, template, { enforce: true });
+  const checked = classify(first.snapshot, reportOnly, enforcing);
   const action = actionFor(mode, checked.state);
   if (!action) throw new Error(`state_refused:${checked.state}:${checked.problems.join(',')}`);
   if (action !== input.action) throw new Error('action_mismatch');
+  const desired = action === 'enforce' ? enforcing : reportOnly;
 
   const authorized = refuseUnguardedDeploy({
     target_environment: TARGET_ENVIRONMENT,
@@ -318,8 +363,9 @@ export function main(env = process.env, deps = {}) {
   if (!consumed.ok) throw new Error(`receipt_consumption_failed:${consumed.code || 'unknown'}`);
 
   let policyId = second.snapshot.policy?.Id || null;
-  if (action === 'attach' || action === 'update-policy') {
+  if (action === 'attach' || POLICY_ONLY_ACTIONS.has(action)) {
     if (!policyId) {
+      if (action !== 'attach') throw new Error('policy_missing');
       policyId = client.createPolicy(desired, env).ResponseHeadersPolicy?.Id;
       if (!policyId) throw new Error('policy_create_failed');
     } else if (!eq(second.snapshot.policy.config, normalizePolicyConfig(desired))) {
@@ -328,12 +374,12 @@ export function main(env = process.env, deps = {}) {
     assertNotProductionPolicy(policyId);
   }
   const target = action === 'detach' ? PREVIOUS_RESPONSE_HEADERS_POLICY_ID : policyId;
-  if (action !== 'update-policy') {
+  if (!POLICY_ONLY_ACTIONS.has(action)) {
     client.updateDistribution(DISTRIBUTION_ID, second.snapshot.distribution.ETag, desiredDistributionConfig(second.raw.distributionConfig, target), env);
   }
 
   const after = read();
-  assertOnlyBehaviorDelta(second.raw.distributionConfig, after.raw.distributionConfig, action === 'update-policy' ? second.snapshot.distribution.DefaultResponseHeadersPolicyId : target);
+  assertOnlyBehaviorDelta(second.raw.distributionConfig, after.raw.distributionConfig, POLICY_ONLY_ACTIONS.has(action) ? second.snapshot.distribution.DefaultResponseHeadersPolicyId : target);
   if (action !== 'detach' && !eq(after.snapshot.policy?.config, normalizePolicyConfig(desired))) throw new Error('policy_post_verify_failed');
   process.stdout.write(`${JSON.stringify({
     ok: true,
