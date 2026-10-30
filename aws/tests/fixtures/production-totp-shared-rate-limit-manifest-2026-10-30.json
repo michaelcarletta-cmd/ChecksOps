@@ -1,0 +1,15 @@
+{
+  "workstream_id": "totp-shared-rate-limit",
+  "authorization": "Pending owner review (2026-10-30). Planning only: nothing is live or verified. The production apply still needs its own owner approval and staging acceptance.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "TOTP shared rate limit (2026-10-30, security audit finding 7, Lambda part): handleMfaVerify (enroll confirm, which checks a code without consuming its timestep) and handleMfaStepUp each drew on their own consume_financial_totp_rate_limit bucket (enroll_confirm, step_up; 5 per 300s each), about 10 code guesses per 5 minutes per user. The accepted auth-financial-totp.mjs bytes make both draw on one bucket, TOTP_CODE_CHECK_RATE_ACTION code_check (5 per 300s); enroll_start keeps its own. No SQL: the rate-limit function is keyed by action text. Not in this change: the failed_attempts / locked_until lockout (the TOTP enrollment functions are tracked only in aws/migrations/proposed/NOT_APPLIED_20260911_financial_totp_enrollment.sql, so their live definitions are read first) and the replay window (financial-totp.mjs is not a member of this plan). live_sha256 ccfe06bb is the bytes read-only production overlay inspect run 40990003881 (2026-10-30, main 1b7c4dc6b) reported live, member PRESENT, ALREADY_ACCEPTED against the release-2026-10-17 planned bytes (previous_manifest), at CodeSha256 T2y60mG7PWGRUltrOxHuDNeyh56059o1/xc2ERFj+gc=, RevisionId d9535b87-2590-46c2-baa1-c95e7e7a00ac; the plan row had still expected c625e8c2. A read-only production overlay inspect must confirm the live member again before any apply.",
+  "members": {
+    "auth-financial-totp.mjs": {
+      "live_sha256": "ccfe06bb1164212ba6fb0d2b6f42eed282f5d1bc59a0c075a267a6afecd5b393",
+      "accepted_sha256": "db939888c6c0d237ee805ed3cd6924e2a8bef199ee76afa8fac2a8bd96687b91",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
+    }
+  }
+}

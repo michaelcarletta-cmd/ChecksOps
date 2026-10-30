@@ -96,6 +96,14 @@ const wrapFail = (error) => {
   };
 };
 
+/**
+ * Every check of a TOTP code (enroll confirm and step-up) draws on one bucket, 5 per 300s per
+ * user. Separate buckets gave about 10 guesses per 5 minutes, and enroll confirm checks a code
+ * without consuming it (audit finding 7). Starting an enrollment is not a code check and keeps
+ * its own bucket.
+ */
+export const TOTP_CODE_CHECK_RATE_ACTION = 'code_check';
+
 const consumeRate = async (client, userId, action) => {
   const result = await client.query(
     'SELECT allowed, count, retry_after_seconds FROM public.consume_financial_totp_rate_limit($1::uuid, $2, $3::int, $4::int)',
@@ -318,7 +326,7 @@ export const handleMfaVerify = async (event, deps = {}) => {
   const identity = deps.withIdentityWrite || withIdentityWrite;
   return identity(event, async (ctx) => {
     try {
-      const rate = await consumeRate(ctx.client, ctx.mapping.application_user_id, 'enroll_confirm');
+      const rate = await consumeRate(ctx.client, ctx.mapping.application_user_id, TOTP_CODE_CHECK_RATE_ACTION);
       if (!rate.ok) return rate;
       await persistRateLimitHit(ctx.client, ctx.mapping, ctx.claims);
       const wrap = await (deps.loadWrapKey || loadFinancialTotpWrapKey)();
@@ -577,7 +585,7 @@ export const handleMfaStepUp = async (event, deps = {}) => {
   const identity = deps.withIdentityWrite || withIdentityWrite;
   return identity(event, async (ctx) => {
     try {
-      const rate = await consumeRate(ctx.client, ctx.mapping.application_user_id, 'step_up');
+      const rate = await consumeRate(ctx.client, ctx.mapping.application_user_id, TOTP_CODE_CHECK_RATE_ACTION);
       if (!rate.ok) return rate;
       await persistRateLimitHit(ctx.client, ctx.mapping, ctx.claims);
       const bound = await resolveFinancialStepUpBinding({
