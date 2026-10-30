@@ -24,14 +24,44 @@ import {
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const isUuid = (value) => UUID_RE.test(String(value || ''));
 
-/** Actions allowed on loss_draft_action (no amount / escrow money movement). */
+/**
+ * Actions allowed on loss_draft_action. None of them moves money: the escrow and
+ * draw actions only record, on a monitored file, amounts the mortgage company
+ * reports (owner decision 2026-10-30: the file stays open in Loss Draft to
+ * document escrow and disbursements).
+ */
 export const SAFE_LOSS_DRAFT_ACTIONS = new Set([
   'set_monitoring_type',
   'mark_sent',
   'mark_received_back',
   'send_for_endorsements',
   'admin_reset_status',
+  'mark_escrowed',
+  'request_draw',
+  'record_release',
+  'record_holdback',
+  'mark_final_release',
 ]);
+
+/** Escrow and draw records: monitored files only, same tenant gate as the override. */
+export const LOSS_DRAFT_ESCROW_ACTIONS = new Set([
+  'mark_escrowed',
+  'request_draw',
+  'record_release',
+  'record_holdback',
+  'mark_final_release',
+]);
+
+/** Escrow actions that need an amount (numeric(12,2), positive). */
+const LOSS_DRAFT_AMOUNT_ACTIONS = new Set([
+  'mark_escrowed',
+  'request_draw',
+  'record_release',
+  'record_holdback',
+]);
+
+/** Override target that closes the loss-draft file and returns its check to Review. */
+export const LOSS_DRAFT_REVIEW_TARGET = 'review';
 
 const SAFE_LOSS_DRAFT_RESET_STATUSES = new Set([
   'pending_send',
@@ -39,7 +69,43 @@ const SAFE_LOSS_DRAFT_RESET_STATUSES = new Set([
   'received_by_lender',
   'check_received_back',
   'endorsing',
+  LOSS_DRAFT_REVIEW_TARGET,
 ]);
+
+/** escrow_status values loss_draft_dashboard hides: the file is closed. */
+const CLOSED_LOSS_DRAFT_STATUSES = new Set(['endorsing', 'final_release_complete']);
+
+/** The tenant of a loss draft: its check's tenant, else its claim's org. */
+export const LOSS_DRAFT_TENANT_SQL = `SELECT COALESCE(ci.tenant_id, c.org_id) AS tenant_id
+         FROM public.loss_draft_tracking ld
+         LEFT JOIN public.check_intake_items ci ON ci.id = ld.check_intake_item_id
+         LEFT JOIN public.claims c ON c.id = ld.claim_id
+        WHERE ld.id = $1::uuid`;
+
+/**
+ * The endorsed back of the check is on file: EndorsedCheckUpload (Loss Draft
+ * Actions tab) records back_image_reuploaded when it replaces the back image.
+ */
+export const ENDORSED_BACK_IMAGE_SQL = `SELECT 1 FROM public.check_audit_log
+        WHERE check_id = $1::uuid AND event_type = 'back_image_reuploaded'
+        LIMIT 1`;
+
+/**
+ * A positive amount that fits loss_draft_tracking's numeric(12,2) exactly:
+ * at most 10 whole digits and 2 decimals, no rounding. Returns the decimal
+ * text bound as ::numeric, or null.
+ */
+export const parseLossDraftAmount = (value) => {
+  if (value === null || value === undefined || typeof value === 'boolean') return null;
+  if (typeof value === 'number' && !Number.isFinite(value)) return null;
+  const text = String(value).trim();
+  const match = /^(\d{1,10})(?:\.(\d{1,2}))?$/.exec(text);
+  if (!match) return null;
+  const whole = match[1].replace(/^0+(?=\d)/, '');
+  const cents = (match[2] || '').padEnd(2, '0');
+  if (/^0+$/.test(whole) && cents === '00') return null;
+  return `${whole}.${cents}`;
+};
 
 /**
  * Full classification of the 42 audit rpc_disabled names for this remediation batch.
@@ -64,7 +130,7 @@ export const SAFE_WRITE_RPC_CLASSIFICATION = {
   log_audit: 'safe_now',
   init_loss_draft_documents: 'safe_now',
   loss_draft_set_lender: 'safe_now',
-  loss_draft_action: 'safe_now_subset', // financial amount actions remain disabled
+  loss_draft_action: 'safe_now', // escrow/draw actions record amounts only (owner decision 2026-10-30)
   submit_homeowner_intro_request: 'safe_now',
   register_session: 'safe_now',
   validate_session: 'safe_now',
@@ -442,6 +508,68 @@ const executeLossDraftSetLender = async ({ client, mapping, args }) => {
   return { data: null, row: rows[0] };
 };
 
+const LOSS_DRAFT_AUDIT_VALUES_SQL = `SELECT escrow_status, monitoring_type, total_escrowed, draw_amount_released, holdback_amount
+     FROM public.loss_draft_tracking WHERE id = $1::uuid`;
+
+const insertCheckAuditLog = (client, { checkId, actorId, eventType, description, eventData }) => client.query(
+  `INSERT INTO public.check_audit_log (
+     check_id, tenant_id, actor_id, event_type, event_description, event_data
+   ) VALUES (
+     $1::uuid,
+     (SELECT tenant_id FROM public.check_intake_items WHERE id = $1::uuid),
+     $2::uuid,
+     $3::text,
+     $4::text,
+     $5::jsonb
+   )`,
+  [checkId, actorId, eventType, description, JSON.stringify(eventData)],
+);
+
+/** Closing a file removes it as production's endorsing override does: tracking, its audit and document rows. */
+const deleteLossDraftFile = async (client, draftId) => {
+  await client.query('DELETE FROM public.loss_draft_audit_log WHERE loss_draft_id = $1::uuid', [draftId]);
+  await client.query('DELETE FROM public.loss_draft_documents WHERE loss_draft_id = $1::uuid', [draftId]);
+  await client.query('DELETE FROM public.loss_draft_tracking WHERE id = $1::uuid', [draftId]);
+};
+
+/**
+ * Each recorded draw is also listed in loss_draft_releases (the Draws tab). A
+ * missing grant or RLS refusal there never fails the recorded amount: the insert
+ * runs in a savepoint and the response says whether the row was written.
+ */
+const recordLossDraftReleaseRow = async (client, { draftId, amount, notes, actorId }) => {
+  try {
+    await client.query('SAVEPOINT loss_draft_release_row');
+    try {
+      await client.query(
+        `INSERT INTO public.loss_draft_releases (
+           loss_draft_id, draw_number, amount_requested, amount_released,
+           release_date, released_at, status, notes, created_by
+         ) VALUES (
+           $1::uuid,
+           (SELECT COALESCE(MAX(r.draw_number), 0) + 1 FROM public.loss_draft_releases r WHERE r.loss_draft_id = $1::uuid),
+           $2::numeric, $2::numeric,
+           CURRENT_DATE, now(), 'released', $3::text, $4::uuid
+         )`,
+        [draftId, amount, notes, actorId],
+      );
+      await client.query('RELEASE SAVEPOINT loss_draft_release_row');
+      return true;
+    } catch {
+      await client.query('ROLLBACK TO SAVEPOINT loss_draft_release_row');
+      return false;
+    }
+  } catch {
+    try { await client.query('ROLLBACK TO SAVEPOINT loss_draft_release_row'); } catch { /* ignore */ }
+    return false;
+  }
+};
+
+const MONITORED_NO_ENDORSING = {
+  error: 'monitored_no_endorsing',
+  message: 'A monitored loss draft stays in Loss Draft: the bank deposits the check, so it is never sent to Endorsing.',
+};
+
 const executeLossDraftAction = async ({ client, mapping, args }) => {
   const draftId = arg(args, 'p_loss_draft_id');
   const action = String(arg(args, 'p_action') || '').trim();
@@ -458,17 +586,61 @@ const executeLossDraftAction = async ({ client, mapping, args }) => {
       action,
     };
   }
+  let amount = null;
+  if (LOSS_DRAFT_AMOUNT_ACTIONS.has(action)) {
+    amount = parseLossDraftAmount(arg(args, 'p_amount'));
+    if (!amount) {
+      return {
+        error: 'invalid_field',
+        field: 'p_amount',
+        message: 'Enter a positive amount in dollars and cents (at most 2 decimals).',
+      };
+    }
+  }
   const draft = (await client.query(
     'SELECT * FROM public.loss_draft_tracking WHERE id = $1::uuid FOR UPDATE',
     [draftId],
   )).rows[0];
   if (!draft) return { error: 'rls_denied', message: 'Loss draft record not found' };
+  const isMonitored = draft.monitoring_type !== 'not_monitored';
+  const actorId = mapping.application_user_id;
+  const notesText = notes == null ? null : String(notes).slice(0, 2000);
   const oldValues = {
     escrow_status: draft.escrow_status,
     monitoring_type: draft.monitoring_type,
+    total_escrowed: draft.total_escrowed ?? null,
+    draw_amount_released: draft.draw_amount_released ?? null,
+    holdback_amount: draft.holdback_amount ?? null,
   };
   const tracking = extra?.tracking_number ? String(extra.tracking_number).slice(0, 120) : null;
 
+  // Owner policy: every member of the tenant is a user with the same rights; partners and other
+  // tenants do not act. Checked before any write for each action that moves a check, closes the
+  // file or records an amount.
+  if (action === 'admin_reset_status' || action === 'send_for_endorsements' || LOSS_DRAFT_ESCROW_ACTIONS.has(action)) {
+    const draftTenant = (await client.query(LOSS_DRAFT_TENANT_SQL, [draftId])).rows[0]?.tenant_id || null;
+    if (!(await isTenantMember(client, actorId, draftTenant))) {
+      return {
+        error: 'not_authorized',
+        message: action === 'admin_reset_status'
+          ? 'Not authorized to reset this loss draft'
+          : 'Not authorized for this loss draft',
+      };
+    }
+  }
+  if (LOSS_DRAFT_ESCROW_ACTIONS.has(action)) {
+    if (!isMonitored) {
+      return {
+        error: 'not_monitored_no_escrow',
+        message: 'Escrow and draws are recorded on monitored loss drafts only.',
+      };
+    }
+    if (CLOSED_LOSS_DRAFT_STATUSES.has(draft.escrow_status)) {
+      return { error: 'loss_draft_closed', message: 'This loss draft file is closed.' };
+    }
+  }
+
+  let releaseRecorded = null;
   if (action === 'set_monitoring_type') {
     const monitoringType = String(extra?.monitoring_type || 'monitored');
     if (!['monitored', 'not_monitored'].includes(monitoringType)) {
@@ -501,36 +673,107 @@ const executeLossDraftAction = async ({ client, mapping, args }) => {
       [draftId],
     );
   } else if (action === 'send_for_endorsements') {
+    // Owner decision 2026-10-30: a monitored check never goes to Endorsing (the bank deposits
+    // it). A not-monitored check goes once the mortgage company's endorsement is on file: the
+    // file was marked received back, or the endorsed back of the check was uploaded (the upload
+    // is the evidence the check came back, so the received-back step is not required first).
+    if (isMonitored) return MONITORED_NO_ENDORSING;
+    if (CLOSED_LOSS_DRAFT_STATUSES.has(draft.escrow_status)) {
+      return { error: 'loss_draft_closed', message: 'This loss draft file is closed.' };
+    }
+    if (draft.escrow_status !== 'check_received_back') {
+      const onFile = draft.check_intake_item_id
+        ? (await client.query(ENDORSED_BACK_IMAGE_SQL, [draft.check_intake_item_id])).rows.length > 0
+        : false;
+      if (!onFile) {
+        return {
+          error: 'endorsed_back_image_required',
+          message: 'Upload the endorsed back of the check before sending it to Endorsing.',
+        };
+      }
+    }
     await client.query(
       `UPDATE public.loss_draft_tracking
-       SET escrow_status = 'endorsing', updated_at = now()
+       SET escrow_status = 'endorsing',
+           check_received_back_date = COALESCE(check_received_back_date, CURRENT_DATE),
+           updated_at = now()
        WHERE id = $1::uuid`,
       [draftId],
     );
     if (draft.check_intake_item_id) {
-      await client.query(
+      const moved = (await client.query(
         `UPDATE public.check_intake_items
          SET status = 'endorsements_in_progress',
              check_stage = 'endorsing',
              updated_at = now()
          WHERE id = $1::uuid
-           AND deposited_at IS NULL`,
+           AND deposited_at IS NULL
+         RETURNING id`,
         [draft.check_intake_item_id],
-      );
+      )).rows.length > 0;
+      await insertCheckAuditLog(client, {
+        checkId: draft.check_intake_item_id,
+        actorId,
+        eventType: 'loss_draft_sent_to_endorsing',
+        description: moved
+          ? 'Endorsed check from the mortgage company: sent to Endorsing; loss draft file closed.'
+          : 'Endorsed check from the mortgage company: loss draft file closed; the check was already deposited and did not move.',
+        eventData: { loss_draft_id: draftId, prior_escrow_status: draft.escrow_status, check_moved: moved },
+      });
     }
-  } else if (action === 'admin_reset_status') {
-    // Owner policy: every member of the tenant is a user with the same rights; partners and other tenants do not act.
-    const draftTenant = (await client.query(
-      `SELECT COALESCE(ci.tenant_id, c.org_id) AS tenant_id
-         FROM public.loss_draft_tracking ld
-         LEFT JOIN public.check_intake_items ci ON ci.id = ld.check_intake_item_id
-         LEFT JOIN public.claims c ON c.id = ld.claim_id
-        WHERE ld.id = $1::uuid`,
+  } else if (action === 'mark_escrowed') {
+    await client.query(
+      `UPDATE public.loss_draft_tracking
+       SET escrow_status = 'escrowed',
+           total_escrowed = $2::numeric,
+           check_received_date = COALESCE(check_received_date, CURRENT_DATE),
+           updated_at = now()
+       WHERE id = $1::uuid`,
+      [draftId, amount],
+    );
+  } else if (action === 'request_draw') {
+    await client.query(
+      `UPDATE public.loss_draft_tracking
+       SET escrow_status = 'first_draw_requested',
+           draw_amount_requested = COALESCE(draw_amount_requested, 0) + $2::numeric,
+           draw_stage = draw_stage + 1,
+           updated_at = now()
+       WHERE id = $1::uuid`,
+      [draftId, amount],
+    );
+  } else if (action === 'record_release') {
+    await client.query(
+      `UPDATE public.loss_draft_tracking
+       SET escrow_status = CASE
+             WHEN COALESCE(draw_amount_released, 0) + $2::numeric >= COALESCE(total_escrowed, 0)
+               AND COALESCE(total_escrowed, 0) > 0
+             THEN 'final_release_complete'
+             ELSE 'partial_release'
+           END,
+           draw_amount_released = COALESCE(draw_amount_released, 0) + $2::numeric,
+           updated_at = now()
+       WHERE id = $1::uuid`,
+      [draftId, amount],
+    );
+    releaseRecorded = await recordLossDraftReleaseRow(client, { draftId, amount, notes: notesText, actorId });
+  } else if (action === 'record_holdback') {
+    await client.query(
+      `UPDATE public.loss_draft_tracking
+       SET holdback_amount = $2::numeric,
+           updated_at = now()
+       WHERE id = $1::uuid`,
+      [draftId, amount],
+    );
+  } else if (action === 'mark_final_release') {
+    await client.query(
+      `UPDATE public.loss_draft_tracking
+       SET escrow_status = 'final_release_complete',
+           draw_amount_released = COALESCE(total_escrowed, draw_amount_released),
+           updated_at = now()
+       WHERE id = $1::uuid`,
       [draftId],
-    )).rows[0]?.tenant_id || null;
-    if (!(await isTenantMember(client, mapping.application_user_id, draftTenant))) {
-      return { error: 'not_authorized', message: 'Not authorized to reset this loss draft' };
-    }
+    );
+  } else if (action === 'admin_reset_status') {
     const target = String(extra?.target_status || '').trim();
     if (!SAFE_LOSS_DRAFT_RESET_STATUSES.has(target)) {
       return {
@@ -539,7 +782,40 @@ const executeLossDraftAction = async ({ client, mapping, args }) => {
         target,
       };
     }
+    if (target === LOSS_DRAFT_REVIEW_TARGET) {
+      // Owner decision 2026-10-30 ("Always close it"): Review closes the loss-draft file and
+      // returns its check to Review, the status and stage return_to_review uses.
+      if (draft.check_intake_item_id) {
+        const moved = (await client.query(
+          `UPDATE public.check_intake_items
+           SET status = 'needs_review',
+               check_stage = 'review',
+               updated_at = now()
+           WHERE id = $1::uuid AND deposited_at IS NULL
+           RETURNING id`,
+          [draft.check_intake_item_id],
+        )).rows.length > 0;
+        await insertCheckAuditLog(client, {
+          checkId: draft.check_intake_item_id,
+          actorId,
+          eventType: 'loss_draft_returned_to_review',
+          description: moved
+            ? 'Override moved check to Review; loss draft file closed.'
+            : 'Override closed the loss draft file; the check was already deposited and did not move.',
+          eventData: {
+            loss_draft_id: draftId,
+            prior_escrow_status: draft.escrow_status,
+            monitoring_type: draft.monitoring_type,
+            check_moved: moved,
+            notes: notesText,
+          },
+        });
+      }
+      await deleteLossDraftFile(client, draftId);
+      return { data: null };
+    }
     if (target === 'endorsing') {
+      if (isMonitored) return MONITORED_NO_ENDORSING;
       if (draft.check_intake_item_id) {
         await client.query(
           `UPDATE public.check_intake_items
@@ -549,27 +825,15 @@ const executeLossDraftAction = async ({ client, mapping, args }) => {
            WHERE id = $1::uuid AND deposited_at IS NULL`,
           [draft.check_intake_item_id],
         );
-        await client.query(
-          `INSERT INTO public.check_audit_log (
-             check_id, tenant_id, actor_id, event_type, event_description, event_data
-           ) VALUES (
-             $1::uuid,
-             (SELECT tenant_id FROM public.check_intake_items WHERE id = $1::uuid),
-             $2::uuid,
-             'loss_draft_moved_to_endorsing',
-             'Admin reset moved check to Endorsing; loss draft tracking removed.',
-             $3::jsonb
-           )`,
-          [
-            draft.check_intake_item_id,
-            mapping.application_user_id,
-            JSON.stringify({ loss_draft_id: draftId, prior_escrow_status: draft.escrow_status }),
-          ],
-        );
+        await insertCheckAuditLog(client, {
+          checkId: draft.check_intake_item_id,
+          actorId,
+          eventType: 'loss_draft_moved_to_endorsing',
+          description: 'Admin reset moved check to Endorsing; loss draft tracking removed.',
+          eventData: { loss_draft_id: draftId, prior_escrow_status: draft.escrow_status },
+        });
       }
-      await client.query('DELETE FROM public.loss_draft_audit_log WHERE loss_draft_id = $1::uuid', [draftId]);
-      await client.query('DELETE FROM public.loss_draft_documents WHERE loss_draft_id = $1::uuid', [draftId]);
-      await client.query('DELETE FROM public.loss_draft_tracking WHERE id = $1::uuid', [draftId]);
+      await deleteLossDraftFile(client, draftId);
       return { data: null };
     }
     await client.query(
@@ -580,25 +844,24 @@ const executeLossDraftAction = async ({ client, mapping, args }) => {
     );
   }
 
-  const updated = (await client.query(
-    'SELECT escrow_status, monitoring_type FROM public.loss_draft_tracking WHERE id = $1::uuid',
-    [draftId],
-  )).rows[0];
+  const updated = (await client.query(LOSS_DRAFT_AUDIT_VALUES_SQL, [draftId])).rows[0];
   if (updated) {
     await client.query(
       `INSERT INTO public.loss_draft_audit_log (
          loss_draft_id, action, actor_id, amount, notes, old_values, new_values
-       ) VALUES ($1::uuid, $2::text, $3::uuid, NULL, $4::text, $5::jsonb, $6::jsonb)`,
+       ) VALUES ($1::uuid, $2::text, $3::uuid, $4::numeric, $5::text, $6::jsonb, $7::jsonb)`,
       [
         draftId,
         action,
-        mapping.application_user_id,
-        notes == null ? null : String(notes).slice(0, 2000),
+        actorId,
+        amount,
+        notesText,
         JSON.stringify(oldValues),
         JSON.stringify(updated),
       ],
     );
   }
+  if (releaseRecorded !== null) return { data: { release_recorded: releaseRecorded } };
   return { data: null };
 };
 
