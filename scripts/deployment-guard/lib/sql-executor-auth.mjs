@@ -2983,8 +2983,7 @@ export const AUTHORIZED_SQL131_FINANCIAL_TOTP_FUNCTIONS_NO_PUBLIC = Object.freez
 // the new SECURITY DEFINER financial_totp_count_code_check(uuid) counts a code check before the API
 // compares the code, locks the enrollment for 15 minutes at the tenth consecutive check without a
 // success and refuses while locked; EXECUTE for checksops and the owner). Predecessor SQL 130.
-// Pending until a reviewed pin change records a staging read-live (expected: the function absent,
-// everything else in place).
+// Staging apply authorized (wave 29) from staging read-live run 41113777003.
 export const AUTHORIZED_SQL132_FINANCIAL_TOTP_CODE_CHECK_LOCKOUT = Object.freeze({
   key: 'sql132',
   filename: 'aws/workflows/sql/132_financial_totp_code_check_lockout.sql',
@@ -2992,9 +2991,10 @@ export const AUTHORIZED_SQL132_FINANCIAL_TOTP_CODE_CHECK_LOCKOUT = Object.freeze
   // The commit that last authored the file bytes.
   commit: 'c2b69ed13d22313a4959bc65b4516983e838a5bd',
   source_sha256: 'ca91ce9c04e09715fa01f54fe9dc81a88cb22a3e0ea1e3994b9ffc63b55566eb',
-  authorization: 'pending',
-  execute: false,
-  expected_live_definition_sha256: null,
+  authorization: 'Owner approved 2026-10-30: staging apply (wave 29) from staging read-live run 41113777003',
+  execute: true,
+  // Staging read-live run 41113777003 (main 546dd7cb8, executor J75AEogm...): the function absent, everything else in place.
+  expected_live_definition_sha256: 'e1a1d4edb115e3fa0881112e6759c2d7ee1e9d8c6b3e24a7611b655dcf75741f',
   // Code-derived: releaseIntendedHash('sql132', file bytes) (release-sql-state.mjs); re-derived by the tests.
   intended_replacement_sha256: '88828cb48d8b847cf177d57314bdbc0c8a1f49051958be5adb264a0c418ebd72',
   function_identities: Object.freeze([
