@@ -13,7 +13,21 @@ const STACK_ARN = `arn:aws:cloudformation:us-east-1:806168576068:stack/${STACK_N
 const SCHEDULE_ARN = `arn:aws:scheduler:us-east-1:806168576068:schedule/default/${SCHEDULE_NAME}`;
 const arr = (v) => (Array.isArray(v) ? v : [v]);
 
-const statements = POLICY.Statement.filter((s) => arr(s.Action).some((a) => /^(cloudformation|iam|scheduler):/.test(a)));
+// The schedule's statements; the onboarding keys stack has its own CloudFormation statements
+// (Sids *OnboardingKeys*, production-onboarding-keys-policy.test.mjs). Every other
+// CloudFormation, IAM or Scheduler statement would be a new, unreviewed grant.
+const statements = POLICY.Statement.filter((s) => /CheckAltStatusSchedule/.test(s.Sid));
+
+test('every CloudFormation, IAM or Scheduler statement belongs to the schedule or the onboarding keys stack', () => {
+  const other = POLICY.Statement
+    .filter((s) => arr(s.Action).some((a) => /^(cloudformation|iam|scheduler):/.test(a)))
+    .filter((s) => !/CheckAltStatusSchedule/.test(s.Sid));
+  for (const s of other) {
+    assert.match(s.Sid, /OnboardingKeys/, s.Sid);
+    for (const action of arr(s.Action)) assert.match(action, /^cloudformation:/, `${s.Sid} ${action}`);
+    assert.equal(s.Resource, 'arn:aws:cloudformation:us-east-1:806168576068:stack/checksops-production-onboarding-keys/*', s.Sid);
+  }
+});
 
 test('the deploy role gains CloudFormation, IAM and Scheduler rights only on this stack, role and schedule', () => {
   const bySid = Object.fromEntries(statements.map((s) => [s.Sid, s]));

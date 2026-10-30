@@ -1,0 +1,230 @@
+name: Guarded production onboarding keys
+
+# Creates the production CloudFormation stack checksops-production-onboarding-keys (the KMS keys
+# for Compliance & Docs uploads and onboarding PII field encryption) from the unchanged template
+# aws/production/onboarding-keys.yaml (sha256 pinned in
+# scripts/deployment-guard/production-onboarding-keys.mjs). inspect only reads the stack, the two
+# aliases with the keys they target, and the prep Lambda configuration. create is refused unless the
+# live snapshot still matches the inspect, the exact approval phrase and a staging acceptance
+# reference are given, and the production environment reviewer approves the job. There is no update
+# and no delete mode; the writer never retries and never deletes. No Lambda, role or bucket changes
+# here. Runbook: ops/production-onboarding-keys.md.
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "inspect (read-only) or create the stack"
+        required: true
+        default: inspect
+        type: choice
+        options:
+          - inspect
+          - create
+      approved_commit:
+        description: "Required for create: exact main commit approved for this run"
+        required: false
+        default: ""
+        type: string
+      expected_snapshot_sha256:
+        description: "Required for create: snapshot SHA-256 from a prior inspect run"
+        required: false
+        default: ""
+        type: string
+      staging_acceptance_reference:
+        description: "Required for create: ChecksOps GitHub run or PR URL recording the staging evidence the owner accepts (staging keys and uploads)"
+        required: false
+        default: ""
+        type: string
+      approval_phrase:
+        description: "create: CREATE ONBOARDING KEYS IN PRODUCTION"
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: guarded-production-onboarding-keys
+  cancel-in-progress: false
+
+jobs:
+  production-onboarding-keys:
+    environment: production
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out exact workflow commit
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Refuse non-main or incomplete change
+        shell: bash
+        env:
+          INPUT_MODE: ${{ inputs.mode }}
+          INPUT_APPROVED_COMMIT: ${{ inputs.approved_commit }}
+          INPUT_EXPECTED_SNAPSHOT_SHA256: ${{ inputs.expected_snapshot_sha256 }}
+          INPUT_STAGING_ACCEPTANCE: ${{ inputs.staging_acceptance_reference }}
+          INPUT_APPROVAL_PHRASE: ${{ inputs.approval_phrase }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/main" || { echo "Guarded onboarding keys change only runs from main"; exit 2; }
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA" || { echo "Checkout SHA mismatch"; exit 2; }
+          case "$INPUT_MODE" in
+            inspect|create) ;;
+            *) echo "mode must be inspect or create"; exit 2 ;;
+          esac
+          if [ "$INPUT_MODE" = "create" ]; then
+            [[ "$INPUT_APPROVED_COMMIT" =~ ^[0-9a-f]{40}$ ]] || { echo "create requires a 40-character approved_commit"; exit 2; }
+            test "$INPUT_APPROVED_COMMIT" = "$GITHUB_SHA" || { echo "main moved or approved commit does not match workflow SHA"; exit 2; }
+            [[ "$INPUT_EXPECTED_SNAPSHOT_SHA256" =~ ^[0-9a-f]{64}$ ]] || { echo "create requires expected_snapshot_sha256 from inspect"; exit 2; }
+            test -n "$INPUT_STAGING_ACCEPTANCE" || { echo "create requires staging_acceptance_reference"; exit 2; }
+            test "$INPUT_APPROVAL_PHRASE" = "CREATE ONBOARDING KEYS IN PRODUCTION" || { echo "approval_phrase must be exactly: CREATE ONBOARDING KEYS IN PRODUCTION"; exit 2; }
+          fi
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "22"
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: "1.4.2"
+
+      - name: Install locked dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run deployment safety tests
+        run: |
+          node --test aws/tests/production-onboarding-keys-writer.test.mjs
+          node --test aws/tests/production-onboarding-keys-policy.test.mjs
+          node --test aws/tests/deployment-guard-kms-receipt.test.mjs
+          node --test aws/tests/deployment-guard-signed-receipt.test.mjs
+          node scripts/deployment-guard/scan-bypass.mjs
+
+      - name: Validate production OIDC inputs
+        shell: bash
+        env:
+          PRODUCTION_DEPLOY_ROLE_ARN: ${{ vars.CHECKSOPS_PRODUCTION_DEPLOY_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          EXPECTED_ROLE_ARN="arn:aws:iam::806168576068:role/ChecksOpsGitHubProductionLambdaOverlay"
+          test "$PRODUCTION_DEPLOY_ROLE_ARN" = "$EXPECTED_ROLE_ARN" || { echo "CHECKSOPS_PRODUCTION_DEPLOY_ROLE_ARN must be the dedicated production deploy role"; exit 2; }
+          test -n "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" || { echo "GitHub did not provide an OIDC request URL"; exit 2; }
+
+      - name: Configure AWS credentials through GitHub OIDC
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a
+        with:
+          role-to-assume: ${{ vars.CHECKSOPS_PRODUCTION_DEPLOY_ROLE_ARN }}
+          aws-region: us-east-1
+          role-session-name: checksops-production-onboarding-keys-${{ github.run_id }}
+
+      - name: Verify AWS identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          ARN="$(aws sts get-caller-identity --query Arn --output text)"
+          test "$ARN" = "arn:aws:sts::806168576068:assumed-role/ChecksOpsGitHubProductionLambdaOverlay/checksops-production-onboarding-keys-$GITHUB_RUN_ID" || { echo "Unexpected AWS role identity"; exit 2; }
+
+      - name: Load production KMS verifier
+        if: ${{ inputs.mode != 'inspect' }}
+        shell: bash
+        env:
+          KMS_KEY_ARN: ${{ vars.CHECKSOPS_PRODUCTION_DEPLOYMENT_GUARD_KMS_KEY_ARN }}
+        run: |
+          set -euo pipefail
+          case "$KMS_KEY_ARN" in
+            arn:aws:kms:us-east-1:806168576068:key/*) ;;
+            *) echo "invalid production deployment-guard KMS key ARN"; exit 2 ;;
+          esac
+          PUBLIC_KEY_B64="$(aws kms get-public-key --region us-east-1 --key-id "$KMS_KEY_ARN" --query PublicKey --output text)"
+          test -n "$PUBLIC_KEY_B64" || { echo "KMS public key is missing"; exit 2; }
+          {
+            echo "CHECKSOPS_DEPLOYMENT_GUARD_KMS_KEY_ARN=$KMS_KEY_ARN"
+            echo "CHECKSOPS_DEPLOYMENT_GUARD_KMS_PUBLIC_KEY_DER_B64=$PUBLIC_KEY_B64"
+          } >> "$GITHUB_ENV"
+
+      - name: Inspect the live stack, aliases, keys and prep Lambda
+        id: preflight
+        shell: bash
+        env:
+          CHECKSOPS_ONBOARDING_KEYS_MODE: ${{ inputs.mode }}
+          CHECKSOPS_EXPECTED_SNAPSHOT_SHA256: ${{ inputs.expected_snapshot_sha256 }}
+          CHECKSOPS_STAGING_ACCEPTANCE_REFERENCE: ${{ inputs.staging_acceptance_reference }}
+          CHECKSOPS_ONBOARDING_KEYS_APPROVAL: ${{ inputs.approval_phrase }}
+        run: node scripts/deployment-guard/github-production-onboarding-keys.mjs
+
+      - name: Record inspected live state
+        if: ${{ always() }}
+        shell: bash
+        env:
+          INPUT_MODE: ${{ inputs.mode }}
+          STATE: ${{ steps.preflight.outputs.state }}
+          SNAPSHOT_SHA256: ${{ steps.preflight.outputs.snapshot_sha256 }}
+          TEMPLATE_SHA256: ${{ steps.preflight.outputs.template_sha256 }}
+          STACK_STATUS: ${{ steps.preflight.outputs.stack_status }}
+          DOCUMENTS_KEY: ${{ steps.preflight.outputs.documents_key }}
+          PII_KEY: ${{ steps.preflight.outputs.pii_key }}
+          LAMBDA_REVISION_ID: ${{ steps.preflight.outputs.lambda_revision_id }}
+          PROBLEMS: ${{ steps.preflight.outputs.problems }}
+        run: |
+          {
+            echo "### Production onboarding keys preflight"
+            echo "- Mode: \`$INPUT_MODE\` / state: \`$STATE\`"
+            echo "- Commit: \`$GITHUB_SHA\` / template SHA-256: \`$TEMPLATE_SHA256\`"
+            echo "- Snapshot SHA-256: \`$SNAPSHOT_SHA256\`"
+            echo "- Stack: \`$STACK_STATUS\` / documents key: \`$DOCUMENTS_KEY\` / PII key: \`$PII_KEY\` / prep Lambda RevisionId: \`$LAMBDA_REVISION_ID\`"
+            echo "- Drift: \`${PROBLEMS:-none}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Create the stack through the official receipt-gated writer
+        if: ${{ inputs.mode != 'inspect' }}
+        shell: bash
+        env:
+          CHECKSOPS_PRODUCTION_ONBOARDING_KEYS_EXECUTE: "1"
+          CHECKSOPS_DEPLOYMENT_GUARD_APPLY: "1"
+          CHECKSOPS_DEPLOYMENT_GUARD_RECEIPT: ${{ steps.preflight.outputs.receipt_path }}
+          CHECKSOPS_WORKSTREAM_ID: ${{ steps.preflight.outputs.workstream_id }}
+          CHECKSOPS_COMMIT: ${{ github.sha }}
+          CHECKSOPS_BRANCH: main
+          CHECKSOPS_OPERATOR: ${{ github.actor }}
+          CHECKSOPS_ONBOARDING_KEYS_INPUT: ${{ steps.preflight.outputs.keys_input }}
+        run: |
+          set -euo pipefail
+          node scripts/deployment-guard/production-onboarding-keys.mjs
+
+      - name: Verify the keys are live and nothing else moved
+        id: verify
+        if: ${{ inputs.mode != 'inspect' }}
+        shell: bash
+        env:
+          CHECKSOPS_ONBOARDING_KEYS_MODE: verify
+          CHECKSOPS_ONBOARDING_KEYS_INPUT: ${{ steps.preflight.outputs.keys_input }}
+        run: node scripts/deployment-guard/github-production-onboarding-keys.mjs
+
+      - name: Record verified live state
+        if: ${{ always() && inputs.mode != 'inspect' }}
+        shell: bash
+        env:
+          STATE: ${{ steps.verify.outputs.state }}
+          SNAPSHOT_SHA256: ${{ steps.verify.outputs.snapshot_sha256 }}
+          STACK_STATUS: ${{ steps.verify.outputs.stack_status }}
+          DOCUMENTS_KEY: ${{ steps.verify.outputs.documents_key }}
+          PII_KEY: ${{ steps.verify.outputs.pii_key }}
+          LAMBDA_REVISION_ID: ${{ steps.verify.outputs.lambda_revision_id }}
+        run: |
+          {
+            echo "### Production onboarding keys after the create"
+            echo "- Verify: \`${STATE:-not verified}\`"
+            echo "- Snapshot SHA-256: \`$SNAPSHOT_SHA256\`"
+            echo "- Stack: \`$STACK_STATUS\` / documents key: \`$DOCUMENTS_KEY\` / PII key: \`$PII_KEY\` / prep Lambda RevisionId: \`$LAMBDA_REVISION_ID\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Cleanup ephemeral deployment-guard state
+        if: ${{ always() }}
+        shell: bash
+        run: rm -rf .deployment-guard

@@ -1,0 +1,188 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Production onboarding KMS keys (stack checksops-production-onboarding-keys).
+  ComplianceDocumentsKey is the SSE-KMS key for compliance documents under
+  files/verification-docs/ in checksops-production-privatefiles-806168576068
+  (COMPLIANCE_DOCUMENTS_KMS_KEY_ARN; without it the Compliance & Docs upload
+  returns 503 document_storage_unavailable). MoovOnboardingPiiKey encrypts the
+  onboarding PII fields ChecksOps keeps, EIN and representative DOB
+  (MOOV_ONBOARDING_PII_KMS_KEY_ARN). Both mirror the staging keys in
+  aws/template.yaml, except that the key policies name the production API
+  Lambda role checksops-production-api-execution directly, so that role's IAM
+  policy does not change. Both keys are retained if the stack is deleted.
+  Creating this stack is a production deploy step: an owner-approved run of
+  guarded-production-onboarding-keys.yml (ops/production-onboarding-keys.md).
+  It changes no Lambda, role or bucket; pointing the Lambda at the keys is a
+  later guarded lambda-config change.
+
+Resources:
+  # Compliance documents under files/verification-docs/ (SSE-KMS). Root (IAM)
+  # gets key administration only (PutKeyPolicy kept so the key cannot be
+  # locked out; no CreateGrant, Encrypt or Decrypt). Use is limited to the
+  # production API Lambda role, through S3 only, under the documents prefix.
+  ComplianceDocumentsKey:
+    Type: AWS::KMS::Key
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      Description: ChecksOps compliance documents (SSE-KMS) under files/verification-docs/.
+      EnableKeyRotation: true
+      KeySpec: SYMMETRIC_DEFAULT
+      KeyUsage: ENCRYPT_DECRYPT
+      Tags:
+        - Key: checksops-stack
+          Value: checksops-production-onboarding-keys
+      KeyPolicy: {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Sid": "KeyAdministrationOnly",
+            "Effect": "Allow",
+            "Principal": { "AWS": { "Fn::Sub": "arn:aws:iam::${AWS::AccountId}:root" } },
+            "Action": [
+              "kms:DescribeKey",
+              "kms:GetKeyPolicy",
+              "kms:PutKeyPolicy",
+              "kms:ListKeyPolicies",
+              "kms:ListResourceTags",
+              "kms:ListAliases",
+              "kms:ListGrants",
+              "kms:GetKeyRotationStatus",
+              "kms:EnableKeyRotation",
+              "kms:DisableKeyRotation",
+              "kms:RotateKeyOnDemand",
+              "kms:ListKeyRotations",
+              "kms:EnableKey",
+              "kms:DisableKey",
+              "kms:UpdateKeyDescription",
+              "kms:CreateAlias",
+              "kms:UpdateAlias",
+              "kms:DeleteAlias",
+              "kms:RevokeGrant",
+              "kms:RetireGrant",
+              "kms:TagResource",
+              "kms:UntagResource",
+              "kms:ScheduleKeyDeletion",
+              "kms:CancelKeyDeletion"
+            ],
+            "Resource": "*"
+          },
+          {
+            "Sid": "ProductionApiRoleViaS3",
+            "Effect": "Allow",
+            "Principal": { "AWS": { "Fn::Sub": "arn:aws:iam::${AWS::AccountId}:role/checksops-production-api-execution" } },
+            "Action": [
+              "kms:GenerateDataKey",
+              "kms:Decrypt"
+            ],
+            "Resource": "*",
+            "Condition": {
+              "StringEquals": {
+                "kms:ViaService": { "Fn::Sub": "s3.${AWS::Region}.amazonaws.com" }
+              },
+              "StringLike": {
+                "kms:EncryptionContext:aws:s3:arn": { "Fn::Sub": "arn:aws:s3:::checksops-production-privatefiles-${AWS::AccountId}/files/verification-docs/*" }
+              }
+            }
+          }
+        ]
+      }
+
+  ComplianceDocumentsKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: alias/checksops-production-compliance-documents
+      TargetKeyId: !Ref ComplianceDocumentsKey
+
+  # Onboarding PII field encryption (EIN, representative DOB). Same
+  # administration statement. Use is limited to the production API Lambda role
+  # and to the encryption context crypto.mjs sends (app, environment,
+  # tenant_id, field; app = checksops-moov-onboarding).
+  MoovOnboardingPiiKey:
+    Type: AWS::KMS::Key
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      Description: ChecksOps Moov onboarding PII field encryption (EIN, representative DOB). Full SSNs are never stored.
+      EnableKeyRotation: true
+      KeySpec: SYMMETRIC_DEFAULT
+      KeyUsage: ENCRYPT_DECRYPT
+      Tags:
+        - Key: checksops-stack
+          Value: checksops-production-onboarding-keys
+      KeyPolicy: {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Sid": "KeyAdministrationOnly",
+            "Effect": "Allow",
+            "Principal": { "AWS": { "Fn::Sub": "arn:aws:iam::${AWS::AccountId}:root" } },
+            "Action": [
+              "kms:DescribeKey",
+              "kms:GetKeyPolicy",
+              "kms:PutKeyPolicy",
+              "kms:ListKeyPolicies",
+              "kms:ListResourceTags",
+              "kms:ListAliases",
+              "kms:ListGrants",
+              "kms:GetKeyRotationStatus",
+              "kms:EnableKeyRotation",
+              "kms:DisableKeyRotation",
+              "kms:RotateKeyOnDemand",
+              "kms:ListKeyRotations",
+              "kms:EnableKey",
+              "kms:DisableKey",
+              "kms:UpdateKeyDescription",
+              "kms:CreateAlias",
+              "kms:UpdateAlias",
+              "kms:DeleteAlias",
+              "kms:RevokeGrant",
+              "kms:RetireGrant",
+              "kms:TagResource",
+              "kms:UntagResource",
+              "kms:ScheduleKeyDeletion",
+              "kms:CancelKeyDeletion"
+            ],
+            "Resource": "*"
+          },
+          {
+            "Sid": "ProductionApiRoleFieldEncryption",
+            "Effect": "Allow",
+            "Principal": { "AWS": { "Fn::Sub": "arn:aws:iam::${AWS::AccountId}:role/checksops-production-api-execution" } },
+            "Action": [
+              "kms:Encrypt",
+              "kms:Decrypt"
+            ],
+            "Resource": "*",
+            "Condition": {
+              "StringEquals": {
+                "kms:EncryptionContext:app": "checksops-moov-onboarding"
+              },
+              "ForAllValues:StringEquals": {
+                "kms:EncryptionContextKeys": [
+                  "app",
+                  "environment",
+                  "tenant_id",
+                  "field"
+                ]
+              }
+            }
+          }
+        ]
+      }
+
+  MoovOnboardingPiiKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: alias/checksops-production-moov-onboarding-pii
+      TargetKeyId: !Ref MoovOnboardingPiiKey
+
+Outputs:
+  ComplianceDocumentsKeyArn:
+    Value: !GetAtt ComplianceDocumentsKey.Arn
+  ComplianceDocumentsKeyAliasName:
+    Value: !Ref ComplianceDocumentsKeyAlias
+  MoovOnboardingPiiKeyArn:
+    Value: !GetAtt MoovOnboardingPiiKey.Arn
+  MoovOnboardingPiiKeyAliasName:
+    Value: !Ref MoovOnboardingPiiKeyAlias

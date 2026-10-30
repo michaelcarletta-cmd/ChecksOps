@@ -173,7 +173,7 @@ test('the committed plan keeps the dead credential-key removals (runs 3965802303
     assert.equal(row.inspect.live_revision_id, want.revision);
     assert.equal(row.inspect.live_variable_count, want.count);
     // The earlier changes stay in history, oldest first.
-    assert.deepEqual(section.history.map((entry) => entry.applied.run_id), environment === 'staging' ? ['39594167097', '39616453836', want.run] : ['39594352935', '39617806126', want.run]);
+    assert.deepEqual(section.history.map((entry) => entry.applied.run_id), environment === 'staging' ? ['39594167097', '39616453836', want.run] : ['39594352935', '39617806126', want.run, '40148243435']);
     assert.equal(row.applied.run_id, want.run);
     assert.equal(row.applied.main_commit, 'fdde89459b5fb3a6669427677141ce955eaa9aac');
     assert.equal(row.applied.state, 'VERIFIED');
@@ -190,13 +190,11 @@ test('the committed plan keeps the dead credential-key removals (runs 3965802303
   assert.equal(raw.environments.production.history[2].applied.staging_acceptance, raw.environments.staging.history[2].applied.run_url);
 });
 
-test('the committed plan records production payees on (run 40148243435) and starts the next change empty', () => {
+test('the committed plan records production payees on (run 40148243435); production keeps it in history', () => {
   const raw = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, CONFIG_PLAN_REL), 'utf8'));
-  const section = loadConfigPlan(REPO_ROOT, 'production');
-  assert.equal(section.status, 'applied');
-  assert.deepEqual(section.set, {});
-  assert.deepEqual(section.unset, {});
-  const row = raw.environments.production;
+  const section = raw.environments.production;
+  const row = section.history[3];
+  assert.deepEqual(section.history.map((entry) => entry.applied.run_id), ['39594352935', '39617806126', '39658423786', '40148243435']);
   assert.equal(row.inspect.run_id, '40147060785');
   assert.equal(row.inspect.main_commit, '2670a22d3ff077b3dc199be30afe638429d44ad8');
   // The inspect starts from the revision the credential-key removal left behind.
@@ -212,8 +210,38 @@ test('the committed plan records production payees on (run 40148243435) and star
   // The flag is the only key the payee guard reads (flags.mjs).
   assert.deepEqual(row.applied.applied_change, { set: { [PAYEES_PRODUCTION_FLAG]: { from: null, to: 'true' } }, unset: {} });
   // The recorded change hash is the one the run's receipt owned.
-  assert.equal(changeSha256({ function_name: row.function_name, ...row.applied.applied_change }), row.applied.change_sha256);
+  assert.equal(changeSha256({ function_name: section.function_name, ...row.applied.applied_change }), row.applied.change_sha256);
   assert.equal(row.applied.staging_acceptance, 'https://github.com/michaelcarletta-cmd/ChecksOps/pull/1228');
+});
+
+test('the committed plan points the production API at the onboarding keys from the 2026-10-30 inspect (41105016517)', () => {
+  const raw = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, CONFIG_PLAN_REL), 'utf8'));
+  const section = loadConfigPlan(REPO_ROOT, 'production');
+  const documents = 'arn:aws:kms:us-east-1:806168576068:key/59d713da-72f3-43a6-8a48-a826d432d53f';
+  const pii = 'arn:aws:kms:us-east-1:806168576068:key/30d2da88-e7bc-4280-a594-bcacf2a2a934';
+  assert.equal(section.status, 'accepted');
+  assert.deepEqual(section.set, {
+    COMPLIANCE_DOCUMENTS_KMS_KEY_ARN: { from: null, to: documents },
+    MOOV_ONBOARDING_PII_KMS_KEY_ARN: { from: null, to: pii },
+  });
+  assert.deepEqual(section.unset, {});
+  const row = raw.environments.production;
+  assert.equal(row.inspect.run_id, '41105016517');
+  assert.equal(row.inspect.main_commit, '2ae712c6fec9fadc59bae563d2a7110c4c3fc279');
+  assert.equal(row.inspect.live_revision_id, '71a89043-17b0-4ff7-bf76-31f518429e20');
+  assert.equal(row.inspect.live_variable_count, 46);
+  assert.equal(Object.hasOwn(row, 'applied'), false);
+  // The keys the code reads: documents.mjs (documentsKeyArn) and crypto.mjs (PII_KMS_KEY_ENV).
+  const documentsSource = fs.readFileSync(path.join(REPO_ROOT, 'aws/functions/api/providers/onboarding/documents.mjs'), 'utf8');
+  const cryptoSource = fs.readFileSync(path.join(REPO_ROOT, 'aws/functions/api/providers/onboarding/crypto.mjs'), 'utf8');
+  assert.match(documentsSource, /export const DOCUMENTS_KMS_KEY_ENV = 'COMPLIANCE_DOCUMENTS_KMS_KEY_ARN';/);
+  assert.match(cryptoSource, /export const PII_KMS_KEY_ENV = 'MOOV_ONBOARDING_PII_KMS_KEY_ARN';/);
+  // Both values are production KMS key ARNs, never a staging key.
+  for (const arn of [documents, pii]) assert.match(arn, /^arn:aws:kms:us-east-1:806168576068:key\/[0-9a-f-]{36}$/);
+  // Staging needs no change.
+  const staging = loadConfigPlan(REPO_ROOT, 'staging');
+  assert.deepEqual(staging.set, {});
+  assert.deepEqual(staging.unset, {});
 });
 
 test('the committed plan records the staging financial TOTP wrap key (run 40219217811) and starts the next change empty', () => {
@@ -244,10 +272,6 @@ test('the committed plan records the staging financial TOTP wrap key (run 402192
   // The key the handler reads (auth-financial-totp.mjs loadFinancialTotpWrapKey).
   const handler = fs.readFileSync(path.join(REPO_ROOT, 'aws/functions/api/auth-financial-totp.mjs'), 'utf8');
   assert.match(handler, /process\.env\.FINANCIAL_TOTP_WRAP_KEY_ARN/);
-  // Production needs no change.
-  const production = loadConfigPlan(REPO_ROOT, 'production');
-  assert.deepEqual(production.set, {});
-  assert.deepEqual(production.unset, {});
 });
 
 test('the plan refuses credential-like keys in set or as a plain unset value, invalid keys, non-string values and no-op entries', () => {
