@@ -88,6 +88,7 @@ node scripts/deployment-guard/sql124-mortgage-desk-signature-and-reads-productio
 node scripts/deployment-guard/sql125-deposit-views-security-invoker-production-apply.mjs --inspect   # security_invoker on the four Supabase-era deposit views (ops/production-sql-125-apply.md)
 node scripts/deployment-guard/sql126-definer-reads-caller-gates-production-apply.mjs --inspect   # the Supabase-era SECURITY DEFINER reads check their caller themselves (ops/production-sql-126-apply.md)
 node scripts/deployment-guard/sql127-homeowner-portal-signing-production-apply.mjs --inspect   # homeowners sign their checks and documents from the claim portal (ops/production-sql-127-apply.md)
+node scripts/deployment-guard/sql128-contractor-verification-from-compliance-production-apply.mjs --inspect   # contractor verification reads the Compliance & Docs uploads (ops/production-sql-128-apply.md)
 # Production SQL 71, 77-89 and 90-102 on the runner, one invocation (ops/production-sql-one-shot.md)
 node scripts/deployment-guard/production-sql-one-shot.mjs --migration sql80 --phase inspect ...
 node scripts/deployment-guard/verify-live.mjs --input path/to/live.json

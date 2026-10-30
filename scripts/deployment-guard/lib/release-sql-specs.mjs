@@ -1,5 +1,5 @@
 /**
- * Specs of the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108 to SQL 127) for the shared engine in
+ * Specs of the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108 to SQL 128) for the shared engine in
  * release-sql-state.mjs: what each pinned file creates, replaces or drops, the reviewed
  * EXECUTE ACLs, the prerequisites and predecessors, and the PostgreSQL renderings the file
  * leaves (policy expressions, view, column, constraint, index and trigger definitions as
@@ -5681,6 +5681,70 @@ export const RELEASE_SQL_SPECS = deepFreeze({
     "definer_writes": [
       "public.check_endorsements",
       "public.signature_signers"
+    ]
+  },
+  // SQL 128 (owner decision 2026-10-30, "There are no admin so B"): contractor verification reads the
+  // Compliance & Docs uploads. contractor_verification_status(uuid), restored from supabase
+  // 20260709105400, read public.contractor_documents (dropped by supabase 20260826140740), so it and
+  // every caller failed (the Find-a-Pro card, the OPS Badge dialog and approve/revoke, the review and
+  // profile tier triggers). Replaced with the same signature, jsonb result, language, volatility (STABLE),
+  // SECURITY DEFINER and search_path; only the W-9 and insurance checks change (the contractor's tenants'
+  // stored or sent moov_compliance_documents, or their tenant_documents; library insurance not expired).
+  // EXECUTE for checksops and the owner (PUBLIC, anon, authenticated and service_role revoked). The
+  // orphan _trg_recompute_contractor_tier_from_docs() is dropped. No predecessor: the function is
+  // Supabase-era, on no release key.
+  sql128: {
+    "key": "sql128",
+    "label": "SQL 128",
+    "choice": "sql128-contractor-verification-from-compliance",
+    "production_pin_rel": "ops/deployment-guard/sql128-contractor-verification-from-compliance-production-apply.json",
+    "script": "sql128-contractor-verification-from-compliance-production-apply",
+    "prerequisites": [
+      "public.contractor_verification_status(uuid)",
+      "public.contractor_profiles",
+      "public.contractor_reviews",
+      "public.tenant_users",
+      "public.moov_compliance_documents",
+      "public.tenant_documents",
+      "role checksops",
+      "column public.contractor_profiles.id",
+      "column public.contractor_profiles.user_id",
+      "column public.contractor_profiles.tier",
+      "column public.contractor_profiles.license_number",
+      "column public.contractor_profiles.admin_disbursed_verified",
+      "column public.contractor_profiles.has_open_disputes",
+      "column public.contractor_profiles.created_at",
+      "column public.contractor_profiles.verified_at",
+      "column public.contractor_profiles.pro_approved_at",
+      "column public.contractor_reviews.contractor_id",
+      "column public.contractor_reviews.rating",
+      "column public.tenant_users.user_id",
+      "column public.tenant_users.tenant_id",
+      "column public.moov_compliance_documents.tenant_id",
+      "column public.moov_compliance_documents.purpose",
+      "column public.moov_compliance_documents.status",
+      "column public.tenant_documents.tenant_id",
+      "column public.tenant_documents.doc_type",
+      "column public.tenant_documents.expires_at"
+    ],
+    "predecessors": [],
+    "functions": [
+      {
+        "identity": "public.contractor_verification_status(uuid)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ],
+        "revokes": [
+          "PUBLIC EXECUTE",
+          "anon EXECUTE",
+          "authenticated EXECUTE",
+          "service_role EXECUTE"
+        ]
+      }
+    ],
+    "dropped_functions": [
+      "public._trg_recompute_contractor_tier_from_docs()"
     ]
   },
 });

@@ -1,0 +1,64 @@
+{
+  "id": "sql128-contractor-verification-from-compliance-production-apply",
+  "migration": "sql128",
+  "authorization": "pending",
+  "execute": false,
+  "target_environment": "production",
+  "target_component": "production-sql",
+  "deployment_type": "sql-apply",
+  "filename": "aws/workflows/sql/128_contractor_verification_from_compliance.sql",
+  "migration_id": "128_contractor_verification_from_compliance",
+  "staging_pin_commit": "213396a87526560d35bc5ce02c76a2ba06a13726",
+  "source_sha256": "19d5ea14967dd604bcb2e9ae7d90822a404de5c52ec07907e01ff6e0cee5a9cc",
+  "function_identities": [
+    "public.contractor_verification_status(uuid)"
+  ],
+  "expected_live_definition_sha256": null,
+  "intended_replacement_sha256": "ba4dcb2e43c233adf6109e5a89e7d6319dc993babcf3dbdcdfee261e6a33fbd7",
+  "authorization_phrase": "APPLY_CONTRACTOR_VERIFICATION_FROM_COMPLIANCE",
+  "predecessors": [],
+  "order_note": "No release-engine predecessor and no ordering constraint. SQL 128 replaces contractor_verification_status(uuid), restored onto the AWS databases from supabase migration 20260709105400 (on no release key), and drops the orphan _trg_recompute_contractor_tier_from_docs() if present. The spec prerequisites are the function, contractor_profiles, contractor_reviews, tenant_users, moov_compliance_documents (SQL 91) and tenant_documents with every column the body reads, and role checksops; a read-only production inspect confirms them. The replaced function must be owned by the applying login (functions_owned_by_login), keep its jsonb result (function_results_match) and hold no EXECUTE grant other than PUBLIC, anon, authenticated, service_role, checksops and the owner (function_acl_replaceable); the dropped function, if present, must be owned by the login with no dependents or callers. No API, Lambda or SPA change is part of this pin. Adds no trigger: the DB validator's public trigger count is not affected.",
+  "admin_login": "checksops_admin",
+  "rds_identifier": "checksops-production",
+  "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
+  "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
+  "tooling": {
+    "status": "built",
+    "production_tool": "scripts/deployment-guard/sql128-contractor-verification-from-compliance-production-apply.mjs",
+    "production_lib": "scripts/deployment-guard/lib/release-sql-production-apply.mjs",
+    "staging_executor_handler": "aws/write-path/guarded-sql-executor/index.mjs handleReleaseSqlMigration",
+    "staging_workflow_choice": "sql128-contractor-verification-from-compliance",
+    "one_shot_migration": "sql128",
+    "fingerprint_engine": "scripts/deployment-guard/lib/release-sql-state.mjs",
+    "runbook": "ops/production-sql-128-apply.md",
+    "tests": [
+      "aws/tests/release-sql128-executor.test.mjs",
+      "aws/tests/release-sql128-production-apply.test.mjs",
+      "aws/tests/release-sql90-97-executor.test.mjs",
+      "aws/tests/release-sql90-97-production-apply.test.mjs",
+      "aws/tests/sql128-contractor-verification-pg.test.mjs"
+    ],
+    "note": "Guarded tooling for SQL 128: sql128-contractor-verification-from-compliance-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql128-contractor-verification-from-compliance); production-sql-one-shot.mjs --migration sql128. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): the function (body and attributes from the file, EXECUTE for checksops and the owner) and the dropped trigger function absent. The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
+  },
+  "production_inspect": {
+    "status": "pending",
+    "date": null,
+    "ssm_command_id": null,
+    "source_commit": null,
+    "read_only": true,
+    "connected_as": "checksops_admin",
+    "live_definition_sha256": null,
+    "apply_preconditions_met": null,
+    "precondition_failures": null,
+    "note": "Pending: no read-only production inspect has been run for SQL 128 yet. Expected: prerequisites_missing [], contractor_verification_status(uuid) 'different' (the supabase body), owned by checksops_admin, EXECUTE PUBLIC and the owner as restored (release_sql_inspect.function_acl); _trg_recompute_contractor_tier_from_docs() present or absent. Record its date, SSM command id, source commit, live_definition_sha256, prerequisites_missing, release_sql_inspect.functions, release_sql_inspect.function_acl, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. Stop if prerequisites_missing is not [] or precondition_failures is not [] (functions_owned_by_login, function_results_match, function_acl_replaceable, or a dropped-function check): that needs its own reviewed change."
+  },
+  "intended_post_state": {
+    "fingerprint": "ba4dcb2e43c233adf6109e5a89e7d6319dc993babcf3dbdcdfee261e6a33fbd7",
+    "note": "contractor_verification_status(uuid) owned by checksops_admin, plpgsql, STABLE, SECURITY DEFINER, search_path public, result jsonb with the same keys, EXECUTE for checksops and the owner: the supabase body with w9_on_file and coi_current read from the contractor's tenants' stored or sent moov_compliance_documents (purpose w9 / insurance) or tenant_documents (library:mortgage:w-9 or w9; library:mortgage:certificate-of-insurance, general-liability-insurance, workers-comp-insurance or insurance, not expired). _trg_recompute_contractor_tier_from_docs() absent. recompute_contractor_tier, admin_set_contractor_pro and the trigger functions unchanged. No table, column, view, policy, RLS setting, table grant, trigger or row change. The fingerprint is releaseIntendedHash('sql128', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): ba4dcb2e43c233adf6109e5a89e7d6319dc993babcf3dbdcdfee261e6a33fbd7."
+  },
+  "staging_acceptance": {
+    "ok": false,
+    "reference": null,
+    "basis": "Pending: record the guarded staging SQL executor read-live (and, if staging is not yet at the intended state, the staging apply) of SQL 128 (choice sql128-contractor-verification-from-compliance) here in the reviewed change that sets execute true. The behavior is covered on PostgreSQL 16 by aws/tests/sql128-contractor-verification-pg.test.mjs. Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+  }
+}
