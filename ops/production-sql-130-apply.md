@@ -53,7 +53,30 @@ body (state `different`), EXECUTE for `checksops` and the owner only; every prer
 (`expected_live_definition_sha256`, `execute: true`, wave 28) under the owner's words of 2026-10-30,
 "continue with SQL 130 staging".
 
-**Status:** staging pin execute-authorized (wave 28); nothing applied yet; production pin pending.
+**Staging apply (2026-10-30).** Run 41090274902 (main `66a0baaf2`, staging pin PR #1451, on the executor
+deployed by run 41089857134, `5OmSJSao…`; workstream `github-staging-sql-41090274902`) under the owner's
+words "apply SQL 130 in staging": receipt before
+`cb2fd65bb580f9338cab728c2507a32b7589aee5e702d117c31e1862f98a5a19`, after
+`013549faba6166280b03df404ca23c1973870efad9f7d499d6a695be0de7246b` (intended), result `applied`. Read-live
+run 41090642842: `already_applied` true, live `013549fa…`, `function_acl` `checksops EXECUTE` and
+`owner EXECUTE`.
+
+**Production inspect (2026-10-30).** Read-only `--inspect` through SSM
+`88570df0-02e3-408f-8f1d-1fdddd0dadda` on `i-0c35557c4e5385406`, main `66a0baaf2` (tarball sha256
+`8cb7d3398830c6b5c69b185b6d1bf6da2a6dde05633abdea21678753450a2089`, transfer run 41091045905, migration
+source `da17dd5d…` == pin), connected as `checksops_admin`:
+`consume_financial_totp_rate_limit(uuid, text, integer, integer)` `different` (`function_acl`
+`PUBLIC EXECUTE`, `checksops EXECUTE` and `owner EXECUTE`); every prerequisite present; live
+`e49dc44662d1ac04762cf06d139f527d9a09158cbccd64fc8370d62e1f43c838`, `already_applied` false,
+`precondition_failures` `[]`. That is the production pre-state derived above from the proposed file's
+bytes; it differs from staging's (`cb2fd65b…`) only by the `PUBLIC` EXECUTE grant, which the file
+revokes, so both reach the same intended state (`aws/tests/sql130-financial-totp-rate-limit-pg.test.mjs`
+applies from both). Recorded in the production pin with the staging apply as its staging acceptance and
+`execute: true` under the owner's words of 2026-10-30, "apply SQL 130 in production" (given before the
+pin existed). The owner merges the pin change; the apply still needs the owner's run-time approval and
+runs only after that merge is on main and staged.
+
+**Status:** applied to staging (wave 28); production pin execute-authorized; not applied to production.
 
 ## Fingerprint
 
