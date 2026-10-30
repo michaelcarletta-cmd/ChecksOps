@@ -76,3 +76,24 @@ Order: staging `us-east-1_vPmQ7cL1F` first, verify; then production `us-east-1_h
 ## Rollback
 
 The same request with `AllowAdminCreateUserOnly: false`, built from the live pool.
+
+## Applied (2026-10-30)
+
+Identity: `arn:aws:iam::806168576068:user/claude-code`. Requests built from the live pool by
+`buildAdminCreateOnlyUpdate`.
+
+- **Staging** `us-east-1_vPmQ7cL1F`. Owner: "apply sign-up off to staging". Builder at `fa41e4d`
+  (PR #1417); the staging pool has no tags. Precondition equal to the snapshot; `UpdateUserPool`
+  HTTP 200, request `52a47e82-c283-40f4-a025-d0ea50dde684`, LastModifiedDate
+  2026-10-30T01:32:56Z. After: only `AllowAdminCreateUserOnly` differs (true); MFA config
+  unchanged; `SignUp` refused (`NotAuthorizedException: SignUp is not permitted for this user pool`).
+- **Production** `us-east-1_h00WorYMT`. Owner: "apply sign-up off to production", then "re-apply
+  sign-up off to production" after the first run below. Re-apply with the builder at `5f91964`
+  (PR #1419, no `UserPoolTags`). Precondition: the snapshot with
+  `AllowAdminCreateUserOnly: true` (the state the first run left), 13 users. `UpdateUserPool` HTTP
+  200, request `fa434eae-815d-434f-8d74-2ef70848afb3`, LastModifiedDate 2026-10-30T01:54:24Z.
+  After: only `AllowAdminCreateUserOnly` differs (true); tags and MFA config unchanged; `SignUp`
+  refused (`NotAuthorizedException: SignUp is not permitted for this user pool`); 13 users, no
+  test user left.
+
+Not verified: an invite (`AdminCreateUser`) after the change; the flag does not restrict it.
