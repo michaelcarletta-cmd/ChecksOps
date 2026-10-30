@@ -1,0 +1,62 @@
+{
+  "id": "sql134-loss-draft-escrow-write-grants-production-apply",
+  "migration": "sql134",
+  "authorization": "pending",
+  "execute": false,
+  "target_environment": "production",
+  "target_component": "production-sql",
+  "deployment_type": "sql-apply",
+  "filename": "aws/workflows/sql/134_loss_draft_escrow_write_grants.sql",
+  "migration_id": "134_loss_draft_escrow_write_grants",
+  "staging_pin_commit": "05faad793cd360736420859f1b686e5956bc39dc",
+  "source_sha256": "a9082d1369587a702014e10e443ab965c1608e99d14a193da900f7d35c91e03a",
+  "function_identities": [],
+  "expected_live_definition_sha256": null,
+  "intended_replacement_sha256": "c046d1c91cc79596c103f154b043b5421cb1dc6ceaef45d87f2f6ea1c0073c7c",
+  "authorization_phrase": "APPLY_LOSS_DRAFT_ESCROW_WRITE_GRANTS",
+  "predecessors": [],
+  "order_note": "No predecessor and no order on this engine. SQL 134 needs public.loss_draft_tracking with total_escrowed, draw_amount_requested, draw_stage, draw_amount_released and holdback_amount, public.loss_draft_releases with loss_draft_id, draw_number, amount_requested, amount_released, release_date, released_at, status, notes and created_by (restored Supabase schema, supabase/migrations/20260308163837_*.sql), both owned by checksops_admin, and the roles checksops and authenticated. The Loss Draft API change (#1464, aws/functions/api/workflow-rpc.mjs loss_draft_action: mark_escrowed, request_draw, record_release, record_holdback, mark_final_release; owner decision 2026-10-30) updates those five loss_draft_tracking columns (with escrow_status, check_received_date and updated_at, which SQL 50 already grants to checksops and authenticated) and, for record_release, inserts the draw into loss_draft_releases (id from gen_random_uuid(), no sequence). No migration in this repository grants UPDATE on those five columns or INSERT on loss_draft_releases (SQL 50 does not; SQL 51 revokes SQL 50's loss_draft_tracking grants where it is run), so PostgreSQL refuses those writes before row-level security. The policies aws_write_loss_draft_tracking (aws_can_write_check(check_intake_item_id)) and aws_write_loss_draft_releases (aws/rls/sql/24_complete_write_policies.sql: aws_can_write_claim of the draft's claim_id) stay the authorization boundary and are not changed: a draft without a claim_id still gets no Draws row (the API reports release_recorded false). SQL 134 grants exactly those column privileges to checksops and authenticated and changes nothing else. If the read-only inspect finds both lines on all fourteen columns already held it reports already_applied true and nothing is applied (the pin is then recorded as verified live, not applied). No later migration revokes these grants. The API change itself is deployed through the guarded Lambda path, not by this pin.",
+  "admin_login": "checksops_admin",
+  "rds_identifier": "checksops-production",
+  "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
+  "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
+  "tooling": {
+    "status": "built",
+    "production_tool": "scripts/deployment-guard/sql134-loss-draft-escrow-write-grants-production-apply.mjs",
+    "production_lib": "scripts/deployment-guard/lib/release-sql-production-apply.mjs",
+    "staging_executor_handler": "aws/write-path/guarded-sql-executor/index.mjs handleReleaseSqlMigration",
+    "staging_workflow_choice": "sql134-loss-draft-escrow-write-grants",
+    "one_shot_migration": "sql134",
+    "fingerprint_engine": "scripts/deployment-guard/lib/release-sql-state.mjs",
+    "runbook": "ops/production-sql-134-apply.md",
+    "tests": [
+      "aws/tests/release-sql134-executor.test.mjs",
+      "aws/tests/release-sql134-production-apply.test.mjs",
+      "aws/tests/release-sql90-97-executor.test.mjs",
+      "aws/tests/release-sql90-97-production-apply.test.mjs",
+      "aws/tests/sql134-loss-draft-escrow-write-grants-pg.test.mjs"
+    ],
+    "note": "Guarded tooling for SQL 134: sql134-loss-draft-escrow-write-grants-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql134-loss-draft-escrow-write-grants); production-sql-one-shot.mjs --migration sql134. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): the column ACL of loss_draft_tracking.total_escrowed, .draw_amount_requested, .draw_stage, .draw_amount_released and .holdback_amount, each exactly authenticated UPDATE and checksops UPDATE, and of loss_draft_releases.loss_draft_id, .draw_number, .amount_requested, .amount_released, .release_date, .released_at, .status, .notes and .created_by, each exactly authenticated INSERT and checksops INSERT (spec column_acl, as SQL 92 and SQL 114). The pre-conditions refuse any other live grant on those fourteen columns (column_acl_replaceable); the two tables' own ACLs, every other column (SQL 50's loss_draft_tracking column grants among them), their RLS flags and their policies are in the unrelated-catalog snapshot and must be unchanged. The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
+  },
+  "production_inspect": {
+    "status": "pending",
+    "date": null,
+    "ssm_command_id": null,
+    "source_commit": null,
+    "read_only": true,
+    "connected_as": "checksops_admin",
+    "live_definition_sha256": null,
+    "apply_preconditions_met": null,
+    "precondition_failures": null,
+    "note": "Pending: no read-only production inspect has been run for SQL 134 yet. Expected: loss_draft_tracking and loss_draft_releases present with the fourteen columns and owned by checksops_admin, roles checksops and authenticated present, no column grant on any of the fourteen columns (the restored database granted table-level SELECT only and SQL 50 grants none of them). Expected release-engine fingerprint of that state under sql134: 7827f4c87e5bc9e7bd0def01d5f201a0a1fc26365480921896aa452e1403466d (each of the fourteen columns acl []; derived by aws/tests/release-sql134-executor.test.mjs and read back on PostgreSQL 16). Record the one-shot --phase inspect's date, SSM command id, source commit, live_definition_sha256, prerequisites_missing, release_sql_inspect.columns, precondition_failures and apply_preconditions_met here. If already_applied is true, record the inspect as the verified-live evidence and leave execute false; otherwise copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. Also read, from the same inspect's unrelated snapshot, the table ACLs of loss_draft_tracking and loss_draft_releases and SQL 50's column grants on loss_draft_tracking (escrow_status, check_received_date, updated_at for checksops): the API needs them as well, and this file does not grant them. If precondition_failures is not [] stop: that needs its own reviewed change."
+  },
+  "intended_post_state": {
+    "fingerprint": "c046d1c91cc79596c103f154b043b5421cb1dc6ceaef45d87f2f6ea1c0073c7c",
+    "note": "public.loss_draft_tracking: the columns total_escrowed, draw_amount_requested, draw_stage, draw_amount_released and holdback_amount each carry exactly the column grants authenticated UPDATE and checksops UPDATE. public.loss_draft_releases: the columns loss_draft_id, draw_number, amount_requested, amount_released, release_date, released_at, status, notes and created_by each carry exactly authenticated INSERT and checksops INSERT. The table ACLs, every other column's ACL, the RLS flags and the policies (aws_write_loss_draft_tracking and aws_write_loss_draft_releases stay the authorization boundary) are unchanged; no other table, function, policy, column or row changes. The fingerprint is releaseIntendedHash('sql134', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): c046d1c91cc79596c103f154b043b5421cb1dc6ceaef45d87f2f6ea1c0073c7c."
+  },
+  "staging_acceptance": {
+    "ok": false,
+    "reference": null,
+    "basis": "Pending: record the guarded staging SQL executor read-live and the staging apply of SQL 134 (choice sql134-loss-draft-escrow-write-grants) here in the reviewed change that sets execute true. The grants are covered on PostgreSQL 16 by aws/tests/sql134-loss-draft-escrow-write-grants-pg.test.mjs. Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+  }
+}

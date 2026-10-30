@@ -139,6 +139,7 @@ export const MIGRATIONS = Object.freeze({
   'sql131-financial-totp-functions-no-public': RELEASE_2026_10_17_PENDING_SQL_PINS.sql131,
   'sql132-financial-totp-code-check-lockout': RELEASE_2026_10_17_PENDING_SQL_PINS.sql132,
   'sql133-financial-totp-admin-reset-enrollment': RELEASE_2026_10_17_PENDING_SQL_PINS.sql133,
+  'sql134-loss-draft-escrow-write-grants': RELEASE_2026_10_17_PENDING_SQL_PINS.sql134,
 });
 
 const LAMBDA_CODE_SHA_RE = /^[A-Za-z0-9+/]{43}=$/;

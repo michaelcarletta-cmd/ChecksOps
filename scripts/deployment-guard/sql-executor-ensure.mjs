@@ -105,6 +105,7 @@ export const EXECUTOR_PACK_MEMBERS = Object.freeze([
   ['aws/workflows/sql/131_financial_totp_functions_no_public.sql', 'sql/131_financial_totp_functions_no_public.sql'],
   ['aws/workflows/sql/132_financial_totp_code_check_lockout.sql', 'sql/132_financial_totp_code_check_lockout.sql'],
   ['aws/workflows/sql/133_financial_totp_admin_reset_enrollment.sql', 'sql/133_financial_totp_admin_reset_enrollment.sql'],
+  ['aws/workflows/sql/134_loss_draft_escrow_write_grants.sql', 'sql/134_loss_draft_escrow_write_grants.sql'],
   ['aws/functions/api/rds-global-bundle.pem', 'rds-global-bundle.pem'],
   ['scripts/deployment-guard/lib/sql-apply.mjs', 'lib/sql-apply.mjs'],
   ['scripts/deployment-guard/lib/sql-executor-auth.mjs', 'lib/sql-executor-auth.mjs'],
