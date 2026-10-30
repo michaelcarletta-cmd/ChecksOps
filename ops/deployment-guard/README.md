@@ -91,6 +91,7 @@ node scripts/deployment-guard/sql127-homeowner-portal-signing-production-apply.m
 node scripts/deployment-guard/sql128-contractor-verification-from-compliance-production-apply.mjs --inspect   # contractor verification reads the Compliance & Docs uploads (ops/production-sql-128-apply.md)
 node scripts/deployment-guard/sql129-financial-totp-rate-limit-code-check-production-apply.mjs --inspect   # the financial TOTP rate limit accepts code_check (ops/production-sql-129-apply.md)  (retired: SQL 130 replaces it)
 node scripts/deployment-guard/sql130-financial-totp-rate-limit-code-check-no-public-production-apply.mjs --inspect   # the financial TOTP rate limit accepts code_check, no PUBLIC EXECUTE (ops/production-sql-130-apply.md)
+node scripts/deployment-guard/sql131-financial-totp-functions-no-public-production-apply.mjs --inspect   # the four financial TOTP enrollment functions, no PUBLIC EXECUTE (ops/production-sql-131-apply.md)
 # Production SQL 71, 77-89 and 90-102 on the runner, one invocation (ops/production-sql-one-shot.md)
 node scripts/deployment-guard/production-sql-one-shot.mjs --migration sql80 --phase inspect ...
 node scripts/deployment-guard/verify-live.mjs --input path/to/live.json
