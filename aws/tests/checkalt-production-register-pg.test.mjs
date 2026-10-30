@@ -76,7 +76,7 @@ const checkAltFetch = (calls) => async (url, init = {}) => {
   const reply = (body) => ({ ok: true, status: 200, text: async () => (typeof body === 'string' ? body : JSON.stringify(body)) });
   if (href.endsWith('/authenticate')) return reply('header.payload.sig');
   if (href.endsWith('/useraccount/register')) return reply({ success: true, echo: JSON.parse(init.body).accountDataList });
-  if (href.endsWith('/getUserAccountInformation')) return reply({ accountDataList: [{ accountNumber: JSON.parse(init.body).userId === 'dep-2' ? '5550001234' : FULL, ssoKey: 'sso-live' }] });
+  if (href.endsWith('/getUserAccountInformation')) return reply({ accountDataList: [{ accountNumber: FULL, ssoKey: 'sso-live' }] });
   if (href.endsWith('/getDepositAccountInformation')) return reply({ accountNumber: JSON.parse(init.body).accountNumber, status: 'Active' });
   return { ok: false, status: 404, text: async () => 'nf' };
 };
@@ -154,13 +154,22 @@ test('PostgreSQL 16: SQL 81 lets only the platform owner register a production C
     assert.equal(row.last_register_payload.sso_key, 'sso-live');
     assert.equal(JSON.stringify(row.last_register_payload).includes(FULL), false);
 
-    // Re-register updates the same row and leaves Auto-Deposit (SQL 80) alone.
+    // Re-register with the same deposit account updates the same row without a code and leaves
+    // Auto-Deposit (SQL 80) alone.
     await client.query('UPDATE public.checkalt_tenant_accounts SET auto_approve_enabled = true, auto_approve_max_cents = 50000, enabled = false');
-    result = await register(OWNER, { sso_user_id: 'dep-2', deposit_account_number: '5550001234' });
+    result = await register(OWNER, { sso_user_id: 'dep-2' });
     assert.equal(result.success, true, JSON.stringify(result));
     row = await stored();
     assert.equal(row.sso_user_id, 'dep-2');
-    assert.equal(row.deposit_account_number, '5550001234');
+    assert.equal(row.deposit_account_number, FULL);
+    // Changing the registered deposit account needs a fresh authenticator code (finding 13): without
+    // one it is refused before Check Alt is called and nothing is written.
+    const changeCalls = [];
+    const unchanged = JSON.stringify(await stored());
+    result = await register(OWNER, { sso_user_id: 'dep-2', deposit_account_number: '5550001234' }, changeCalls);
+    assert.equal(result.error, 'account_change_code_required', JSON.stringify(result));
+    assert.deepEqual(changeCalls, []);
+    assert.equal(JSON.stringify(await stored()), unchanged);
     assert.equal(row.enabled, true);
     assert.equal(row.auto_approve_enabled, true);
     assert.equal(row.auto_approve_max_cents, 50000);
@@ -172,13 +181,13 @@ test('PostgreSQL 16: SQL 81 lets only the platform owner register a production C
       client, body: { tenant_id: TENANT_A, action: 'status' }, deps: { loadProductionSecrets: secrets },
     }));
     assert.equal(status.status, 'registered', JSON.stringify(status));
-    assert.equal(status.account_last4, '1234');
+    assert.equal(status.account_last4, '6789');
     const live = await as(OWNER, () => handleProductionCheckAltVerify({
       client, body: { tenant_id: TENANT_A, action: 'account' }, fetchImpl: checkAltFetch([]), deps: { loadProductionSecrets: secrets },
     }));
     assert.equal(live.success, true, JSON.stringify(live));
-    assert.equal(live.data.accountNumber, '****1234');
-    assert.equal(JSON.stringify(live).includes('5550001234'), false);
+    assert.equal(live.data.accountNumber, '****6789');
+    assert.equal(JSON.stringify(live).includes(FULL), false);
     assert.equal(JSON.stringify(await stored()), before);
 
     // Tenant admin and platform admin (not the owner) are refused by the API and by the function.

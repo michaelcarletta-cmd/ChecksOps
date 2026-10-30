@@ -35,7 +35,6 @@ on:
           - providers/production/checkalt-register.mjs
           - providers/production/checkalt-dispatch.mjs
           - providers/production/checkalt-holds.mjs
-          - homeowner-signing-integration.mjs
           - ops-readiness.mjs
           - privileged-auth.mjs
           - identity.mjs
@@ -62,6 +61,7 @@ on:
           - financial.mjs
           - tenant-admin.mjs
           - tenant-deposits-gate.mjs
+          - mortgage-desk-return.mjs
           - workflow-rpc.mjs
           - tenant-check-user.mjs
           - mortgage-library-doc-types.mjs
@@ -75,17 +75,16 @@ on:
           - write-app-metadata.mjs
           - write.mjs
           - storage-write-auth.mjs
-          - storage.mjs
           - storage-write.mjs
           - email-branding.mjs
           - esign.mjs
           - endorsement-composite.mjs
           - check-endorsement.mjs
           - documents.mjs
-          - homeowner.mjs
           - tax-secrets.mjs
           - tax-profiles.mjs
           - tenant-email-domain.mjs
+          - mortgage-desk-esign.mjs
           - tenant-management-v2.mjs
           - app-services.mjs
           - mortgage-agent-compensation.mjs
@@ -118,6 +117,13 @@ on:
           - providers/payees/email.mjs
           - providers/payees/handlers.mjs
           - email-policy.mjs
+          - db-readonly-validate.mjs
+          - check-reconciliation.mjs
+          - endorsement-parity.mjs
+          - homeowner-signing-integration.mjs
+          - storage.mjs
+          - signature-submit.mjs
+          - homeowner.mjs
           - providers/production/moov-wallet-fund.mjs
           - providers/production/moov-send.mjs
           - providers.mjs

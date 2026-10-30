@@ -42,7 +42,7 @@ import {
   Send, Eye, Users, Building2, Shield, ChevronRight,
   RefreshCw, Banknote, ClipboardCheck, RotateCcw, Printer, Landmark, Trash2, Search,
   FileImage, Undo2, HelpCircle, X as XIcon, Loader2 as Loader2Icon,
-  Sparkles, MessageSquare, ArrowLeft, ShieldAlert,
+  MessageSquare, ArrowLeft, ShieldAlert,
 } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useListViewState } from "@/hooks/useListViewState";
@@ -80,6 +80,7 @@ import { ListSkeleton } from "@/components/shell";
 
 // Help moved to Settings → ChecksOps Guide
 import { ShareCheckDialog } from "@/components/check-review/ShareCheckDialog";
+import { CashJobReviewLink } from "@/components/cash-jobs/CashJobReviewLink";
 import { MarkCheckReturnedDialog } from "@/components/checks/MarkCheckReturnedDialog";
 import { SharedChecksBadge } from "@/components/check-review/SharedChecksBadge";
 import { DepositStatusPanel } from "@/components/check-review/DepositStatusPanel";
@@ -115,9 +116,6 @@ const EndorsementChecklist = lazy(() =>
 );
 const SharedCheckEndorsements = lazy(() =>
   import("@/components/check-review/SharedCheckEndorsements").then(m => ({ default: m.SharedCheckEndorsements }))
-);
-const SharedCheckPaymentDirection = lazy(() =>
-  import("@/components/check-review/SharedCheckPaymentDirection").then(m => ({ default: m.SharedCheckPaymentDirection }))
 );
 const CheckFilesSection = lazy(() =>
   import("@/components/check-review/CheckFilesSection").then(m => ({ default: m.CheckFilesSection }))
@@ -205,7 +203,6 @@ import {
   payeeTypeIcons,
   endorsementColors,
   endorsementStatusLabel,
-  STATUS_OPTIONS,
   FUNDS_TYPE_OPTIONS,
 } from "@/features/check-command/status";
 import { useCheckCommandRealtime } from "@/features/check-command/useCheckCommandRealtime";
@@ -213,6 +210,21 @@ import { optimisticStage, optimisticRemove } from "@/features/check-command/opti
 import { displayCase, displayCaseOrNull } from "@/lib/displayCase";
 import { useDuplicateChecks } from "@/hooks/useDuplicateChecks";
 import { DuplicateCheckBadge, DuplicateCheckBanner } from "@/components/checks/DuplicateCheckFlag";
+import {
+  COMPACT_LIST_SCROLL_CLASS,
+  CompactCheckListBody,
+  CompactCheckRow,
+  CompactClaimGroupHeader,
+  compactFundsTypeLabel,
+} from "@/components/check-review/CompactCheckList";
+
+/** Title for each check lane, shown like the Review tab's "Manual Review Queue". */
+const LANE_TITLES: Record<string, { title: string; icon: typeof Send; accent: string }> = {
+  endorsements: { title: "Endorsing", icon: Send, accent: "text-amber-400" },
+  ready: { title: "Ready for Deposit", icon: CheckCircle2, accent: "text-emerald-400" },
+  deposited: { title: "Deposited", icon: Banknote, accent: "text-primary" },
+  reissue: { title: "Reissue Requested", icon: RotateCcw, accent: "text-orange-400" },
+};
 
 
 /* ------------------------------------------------------------------ */
@@ -1510,7 +1522,7 @@ export default function CheckCommandCenter() {
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm flex items-center gap-2">
                   <Banknote className="h-4 w-4 text-emerald-400" />
-                  Funds Released ({filteredFundsReleased.length})
+                  Funds Released
                 </CardTitle>
               </CardHeader>
               <ClassFilterBar
@@ -1522,7 +1534,7 @@ export default function CheckCommandCenter() {
                 itemLabel="disbursement"
               />
               <CardContent className="p-0">
-                <ScrollArea className="h-[calc(100vh-460px)]">
+                <ScrollArea className={COMPACT_LIST_SCROLL_CLASS}>
                   {(() => {
                     const visible = classFilter === "all"
                       ? filteredFundsReleased
@@ -1531,118 +1543,68 @@ export default function CheckCommandCenter() {
                       return <div className="p-8 text-center text-muted-foreground">No funds released yet</div>;
                     }
                     return (
-                    <Table className="min-w-[760px] border-separate border-spacing-y-0 border-spacing-x-0">
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Check</TableHead>
-                          <TableHead>Carrier</TableHead>
-                          <TableHead>Property</TableHead>
-                          <TableHead className="text-right">Amount</TableHead>
-                          <TableHead>Class</TableHead>
-                          <TableHead>Recipient</TableHead>
-                          <TableHead>Date Settled</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {(() => {
-                          // Group released splits by claim # so every disbursement
-                          // tied to the same claim sits under one darker file band.
-                          const groups = new Map<string, { key: string; claimNumber: string; policyholderName: string; rows: any[]; total: number; latest: string }>();
-                          visible.forEach((split: any) => {
-                            const batch = split.disbursement_batches;
-                            const check = batch?.check_intake_items;
-                            const linked = check?.claim_id ? claimLookup.get(check.claim_id) : null;
-                            const embeddedClaim = check?.claims ?? null;
-                            const claimNumber = linked?.claim_number || embeddedClaim?.claim_number || check?.detected_claim_number || "Unlinked claim";
-                            const policyholderName = linked?.policyholder_name || embeddedClaim?.policyholder_name || extractInsuredName(check?.payee_line) || "Unknown insured";
-                            const hasClaim = !!(linked?.claim_number || embeddedClaim?.claim_number || check?.detected_claim_number);
-
-                            const key = hasClaim
-                              ? `claim::${String(claimNumber).trim().toLowerCase()}`
-                              : `unlinked::${split.id}`;
-                            const existing = groups.get(key);
-                            const settledAt = split.settled_at ?? split.created_at ?? new Date().toISOString();
-                            if (existing) {
-                              existing.rows.push(split);
-                              existing.total += Number(split.amount) || 0;
-                              if (new Date(settledAt).getTime() > new Date(existing.latest).getTime()) existing.latest = settledAt;
-                            } else {
-                              groups.set(key, { key, claimNumber, policyholderName, rows: [split], total: Number(split.amount) || 0, latest: settledAt });
-                            }
-                          });
-                          const sortedGroups = Array.from(groups.values()).sort(
-                            (a, b) => new Date(b.latest).getTime() - new Date(a.latest).getTime(),
-                          );
-                          return sortedGroups.map((group) => (
-                            <Fragment key={group.key}>
-                              <TableRow className="bg-primary/20 hover:bg-primary/20 border-t-4 border-primary text-foreground font-semibold rounded-t-xl overflow-hidden [&>td:first-child]:rounded-tl-xl [&>td:last-child]:rounded-tr-xl">
-                                <TableCell colSpan={7} className="py-3">
-                                  <div className="flex flex-wrap items-center justify-between gap-2">
-                                    <div className="flex flex-wrap items-center gap-2">
-                                      <Badge variant="secondary" className="text-[10px] tracking-wide">Claim Check File</Badge>
-                                      <span className="font-semibold text-foreground">{displayCase(group.policyholderName)}</span>
-                                      <Badge variant="outline" className="font-mono text-[10px]">Claim #{group.claimNumber}</Badge>
-                                      <span className="text-xs font-normal text-muted-foreground">
-                                        {group.rows.length} {group.rows.length === 1 ? "disbursement" : "disbursements"}
-                                      </span>
-                                    </div>
-                                    <div className="text-sm font-semibold tabular-nums text-foreground">
-                                      ${group.total.toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                                    </div>
-                                  </div>
-                                </TableCell>
-                              </TableRow>
-                              {group.rows.map((split: any, idx: number) => {
-                                const acct = split.stakeholder_accounts;
-                                const batch = split.disbursement_batches;
-                                const check = batch?.check_intake_items;
-                                const fundsType = check?.funds_type;
-                                const checkId = batch?.check_intake_item_id;
-                                const isSelected = checkId && selectedCheck === checkId;
-                                return (
-                                  <TableRow
-                                    key={split.id}
-                                    className={`${checkId ? "cursor-pointer" : ""} ${isSelected ? "bg-accent" : ""} ${idx === group.rows.length - 1 ? "[&>td:first-child]:rounded-bl-xl [&>td:last-child]:rounded-br-xl" : ""}`}
-                                    onMouseEnter={() => checkId && prefetchCheckDetail(checkId)}
-                                    onFocus={() => checkId && prefetchCheckDetail(checkId)}
-                                    onClick={() => checkId && setSelectedCheck(isSelected ? null : checkId)}
-                                  >
-                                    <TableCell className="font-mono text-sm">#{check?.check_number || "—"}</TableCell>
-                                    <TableCell className="text-sm">{displayCase(check?.carrier_name) || "—"}</TableCell>
-                                    <TableCell className="text-sm text-muted-foreground max-w-[200px] truncate" title={check?.property_address || ""}>
-                                      {check?.property_address || "—"}
-                                    </TableCell>
-                                    <TableCell className="text-right tabular-nums">
-                                      ${Number(split.amount).toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                                    </TableCell>
-                                    <TableCell>
-                                      {fundsType ? (
-                                        <Badge variant="outline" className="text-[10px]">
-                                          {fundsType === "recoverable_depreciation"
-                                            ? "Rec. Dep."
-                                            : fundsType === "overhead_and_profit"
-                                            ? "O&P"
-                                            : fundsType}
-                                        </Badge>
-                                      ) : (
-                                        <span className="text-[10px] text-muted-foreground">—</span>
+                      <CompactCheckListBody>
+                        {groupSplitsByClaim(visible, (check) => {
+                      const linked = check?.claim_id ? claimLookup.get(check.claim_id) : null;
+                      const embedded = check?.claims ?? null;
+                      return {
+                        claimNumber: linked?.claim_number || embedded?.claim_number || check?.detected_claim_number || null,
+                        policyholderName: linked?.policyholder_name || embedded?.policyholder_name || extractInsuredName(check?.payee_line) || null,
+                      };
+                    }).map((group) => (
+                          <Fragment key={group.key}>
+                            <CompactClaimGroupHeader
+                              policyholderName={group.policyholderName}
+                              claimNumber={group.claimNumber}
+                              count={group.rows.length}
+                              noun={["disbursement", "disbursements"]}
+                              details={[`$${group.total.toLocaleString("en-US", { minimumFractionDigits: 2 })}`]}
+                            />
+                            {group.rows.map((split: any) => {
+                              const batch = split.disbursement_batches;
+                              const check = batch?.check_intake_items;
+                              const fundsLabel = compactFundsTypeLabel(check?.funds_type);
+                              const checkId = batch?.check_intake_item_id;
+                              const isSelected = !!checkId && selectedCheck === checkId;
+                              const acct = split.stakeholder_accounts;
+                              const party = `To ${split.recipient_name ?? acct?.nickname ?? acct?.custname ?? "—"}`;
+                              const carrier = displayCase(check?.carrier_name) || "—";
+                              return (
+                                <CompactCheckRow
+                                  key={split.id}
+                                  checkNumber={check?.check_number || "—"}
+                                  amount={Number(split.amount)}
+                                  selected={isSelected}
+                                  interactive={!!checkId}
+                                  onMouseEnter={() => checkId && prefetchCheckDetail(checkId)}
+                                  onFocus={() => checkId && prefetchCheckDetail(checkId)}
+                                  onClick={() => checkId && setSelectedCheck(isSelected ? null : checkId)}
+                                  subtitle={
+                                    <span title={check?.property_address ? `${carrier} · ${check.property_address}` : carrier}>
+                                      {carrier}
+                                      {check?.property_address ? ` · ${check.property_address}` : ""}
+                                    </span>
+                                  }
+                                  pills={
+                                    <>
+                                      <Badge variant="outline" className="text-[10px] max-w-full truncate">
+                                        {party}
+                                        {split.external_check_number ? ` · Ck #${split.external_check_number}` : ""}
+                                      </Badge>
+                                      <Badge variant="outline" className="text-[10px]">
+                                        Settled {split.settled_at ? format(new Date(split.settled_at), "MMM d, yyyy") : "—"}
+                                      </Badge>
+                                      {fundsLabel && (
+                                        <Badge variant="outline" className="text-[10px]">{fundsLabel}</Badge>
                                       )}
-                                    </TableCell>
-                                    <TableCell className="text-sm">{split.recipient_name ?? acct?.nickname ?? acct?.custname ?? "—"}{split.external_check_number ? <span className="ml-1 text-xs text-muted-foreground font-mono">· Ck #{split.external_check_number}</span> : null}</TableCell>
-                                    <TableCell className="text-sm text-muted-foreground">
-                                      {split.settled_at ? format(new Date(split.settled_at), "MMM d, yyyy") : "—"}
-                                    </TableCell>
-                                  </TableRow>
-                                );
-                              })}
-                              <TableRow className="h-2 bg-transparent border-none pointer-events-none">
-                                <TableCell colSpan={7} />
-                              </TableRow>
-                            </Fragment>
-                          ));
-                        })()}
-                      </TableBody>
-                    </Table>
+                                    </>
+                                  }
+                                />
+                              );
+                            })}
+                          </Fragment>
+                        ))}
+                      </CompactCheckListBody>
                     );
                   })()}
                 </ScrollArea>
@@ -1687,7 +1649,7 @@ export default function CheckCommandCenter() {
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm flex items-center gap-2">
                   <Banknote className="h-4 w-4 text-sky-400" />
-                  Funds Received ({filteredFundsReceived.length})
+                  Funds Received
                 </CardTitle>
               </CardHeader>
               <ClassFilterBar
@@ -1699,7 +1661,7 @@ export default function CheckCommandCenter() {
                 itemLabel="receipt"
               />
               <CardContent className="p-0">
-                <ScrollArea className="h-[calc(100vh-460px)]">
+                <ScrollArea className={COMPACT_LIST_SCROLL_CLASS}>
                   {(() => {
                     const visible = classFilter === "all"
                       ? filteredFundsReceived
@@ -1708,118 +1670,66 @@ export default function CheckCommandCenter() {
                       return <div className="p-8 text-center text-muted-foreground">No funds received yet</div>;
                     }
                     return (
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Check</TableHead>
-                          <TableHead>Carrier</TableHead>
-                          <TableHead>Property</TableHead>
-                          <TableHead className="text-right">Amount</TableHead>
-                          <TableHead>Class</TableHead>
-                          <TableHead>From</TableHead>
-                          <TableHead>Date Received</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {(() => {
-                          const groups = new Map<string, { key: string; claimNumber: string; policyholderName: string; rows: any[]; total: number; latest: string }>();
-                          visible.forEach((split: any) => {
-                            const batch = split.disbursement_batches;
-                            const check = batch?.check_intake_items;
-                            const embeddedClaim = check?.claims ?? null;
-                            const claimNumber = embeddedClaim?.claim_number || check?.detected_claim_number || "Unlinked claim";
-                            const policyholderName = embeddedClaim?.policyholder_name || extractInsuredName(check?.payee_line) || "Unknown insured";
-                            const hasClaim = !!(embeddedClaim?.claim_number || check?.detected_claim_number);
-
-                            const key = hasClaim
-                              ? `claim::${String(claimNumber).trim().toLowerCase()}`
-                              : `unlinked::${split.id}`;
-                            const existing = groups.get(key);
-                            const settledAt = split.settled_at ?? split.created_at ?? new Date().toISOString();
-                            if (existing) {
-                              existing.rows.push(split);
-                              existing.total += Number(split.amount) || 0;
-                              if (new Date(settledAt).getTime() > new Date(existing.latest).getTime()) existing.latest = settledAt;
-                            } else {
-                              groups.set(key, { key, claimNumber, policyholderName, rows: [split], total: Number(split.amount) || 0, latest: settledAt });
-                            }
-                          });
-                          const sortedGroups = Array.from(groups.values()).sort(
-                            (a, b) => new Date(b.latest).getTime() - new Date(a.latest).getTime(),
-                          );
-                          return sortedGroups.map((group) => (
-                            <Fragment key={group.key}>
-                              <TableRow className="bg-primary/20 hover:bg-primary/20 border-t-4 border-primary text-foreground font-semibold">
-                                <TableCell colSpan={7} className="py-3">
-                                  <div className="flex flex-wrap items-center justify-between gap-2">
-                                    <div className="flex flex-wrap items-center gap-2">
-                                      <Badge variant="secondary" className="text-[10px] tracking-wide">Claim Check File</Badge>
-                                      <span className="font-semibold text-foreground">{displayCase(group.policyholderName)}</span>
-                                      <Badge variant="outline" className="font-mono text-[10px]">Claim #{group.claimNumber}</Badge>
-                                      <span className="text-xs font-normal text-muted-foreground">
-                                        {group.rows.length} {group.rows.length === 1 ? "receipt" : "receipts"}
-                                      </span>
-                                    </div>
-                                    <div className="text-sm font-semibold tabular-nums text-sky-400">
-                                      ${group.total.toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                                    </div>
-                                  </div>
-                                </TableCell>
-                              </TableRow>
-                              {group.rows.map((split: any, idx: number) => {
-                                const batch = split.disbursement_batches;
-                                const check = batch?.check_intake_items;
-                                const fundsType = check?.funds_type;
-                                const checkId = batch?.check_intake_item_id;
-                                const isSelected = checkId && selectedCheck === checkId;
-                                const senderName = split.sender?.name ?? "Partner tenant";
-                                return (
-                                  <TableRow
-                                    key={split.id}
-                                    className={`${checkId ? "cursor-pointer" : ""} ${isSelected ? "bg-accent" : ""} ${idx === group.rows.length - 1 ? "[&>td:first-child]:rounded-bl-xl [&>td:last-child]:rounded-br-xl" : ""}`}
-                                    onMouseEnter={() => checkId && prefetchCheckDetail(checkId)}
-                                    onFocus={() => checkId && prefetchCheckDetail(checkId)}
-                                    onClick={() => checkId && setSelectedCheck(isSelected ? null : checkId)}
-                                  >
-                                    <TableCell className="font-mono text-sm">#{check?.check_number || "—"}</TableCell>
-                                    <TableCell className="text-sm">{displayCase(check?.carrier_name) || "—"}</TableCell>
-                                    <TableCell className="text-sm text-muted-foreground max-w-[200px] truncate" title={check?.property_address || ""}>
-                                      {check?.property_address || "—"}
-                                    </TableCell>
-                                    <TableCell className="text-right tabular-nums">
-                                      ${Number(split.amount).toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                                    </TableCell>
-                                    <TableCell>
-                                      {fundsType ? (
-                                        <Badge variant="outline" className="text-[10px]">
-                                          {fundsType === "recoverable_depreciation"
-                                            ? "Rec. Dep."
-                                            : fundsType === "overhead_and_profit"
-                                            ? "O&P"
-                                            : fundsType}
-                                        </Badge>
-                                      ) : (
-                                        <span className="text-[10px] text-muted-foreground">—</span>
+                      <CompactCheckListBody>
+                        {groupSplitsByClaim(visible, (check) => {
+                      const embedded = check?.claims ?? null;
+                      return {
+                        claimNumber: embedded?.claim_number || check?.detected_claim_number || null,
+                        policyholderName: embedded?.policyholder_name || extractInsuredName(check?.payee_line) || null,
+                      };
+                    }).map((group) => (
+                          <Fragment key={group.key}>
+                            <CompactClaimGroupHeader
+                              policyholderName={group.policyholderName}
+                              claimNumber={group.claimNumber}
+                              count={group.rows.length}
+                              noun={["receipt", "receipts"]}
+                              details={[`$${group.total.toLocaleString("en-US", { minimumFractionDigits: 2 })}`]}
+                            />
+                            {group.rows.map((split: any) => {
+                              const batch = split.disbursement_batches;
+                              const check = batch?.check_intake_items;
+                              const fundsLabel = compactFundsTypeLabel(check?.funds_type);
+                              const checkId = batch?.check_intake_item_id;
+                              const isSelected = !!checkId && selectedCheck === checkId;
+                              const party = `From ${split.sender?.name ?? "Partner tenant"}`;
+                              const carrier = displayCase(check?.carrier_name) || "—";
+                              return (
+                                <CompactCheckRow
+                                  key={split.id}
+                                  checkNumber={check?.check_number || "—"}
+                                  amount={Number(split.amount)}
+                                  selected={isSelected}
+                                  interactive={!!checkId}
+                                  onMouseEnter={() => checkId && prefetchCheckDetail(checkId)}
+                                  onFocus={() => checkId && prefetchCheckDetail(checkId)}
+                                  onClick={() => checkId && setSelectedCheck(isSelected ? null : checkId)}
+                                  subtitle={
+                                    <span title={check?.property_address ? `${carrier} · ${check.property_address}` : carrier}>
+                                      {carrier}
+                                      {check?.property_address ? ` · ${check.property_address}` : ""}
+                                    </span>
+                                  }
+                                  pills={
+                                    <>
+                                      <Badge variant="outline" className="text-[10px] max-w-full truncate">
+                                        {party}
+                                        {split.external_check_number ? ` · Ck #${split.external_check_number}` : ""}
+                                      </Badge>
+                                      <Badge variant="outline" className="text-[10px]">
+                                        Received {split.settled_at ? format(new Date(split.settled_at), "MMM d, yyyy") : "—"}
+                                      </Badge>
+                                      {fundsLabel && (
+                                        <Badge variant="outline" className="text-[10px]">{fundsLabel}</Badge>
                                       )}
-                                    </TableCell>
-                                    <TableCell className="text-sm">
-                                      {senderName}
-                                      {split.external_check_number ? <span className="ml-1 text-xs text-muted-foreground font-mono">· Ck #{split.external_check_number}</span> : null}
-                                    </TableCell>
-                                    <TableCell className="text-sm text-muted-foreground">
-                                      {split.settled_at ? format(new Date(split.settled_at), "MMM d, yyyy") : "—"}
-                                    </TableCell>
-                                  </TableRow>
-                                );
-                              })}
-                              <TableRow className="h-2 bg-transparent border-none pointer-events-none">
-                                <TableCell colSpan={7} />
-                              </TableRow>
-                            </Fragment>
-                          ));
-                        })()}
-                      </TableBody>
-                    </Table>
+                                    </>
+                                  }
+                                />
+                              );
+                            })}
+                          </Fragment>
+                        ))}
+                      </CompactCheckListBody>
                     );
                   })()}
                 </ScrollArea>
@@ -1978,6 +1888,18 @@ export default function CheckCommandCenter() {
               className={`overflow-hidden transition-all duration-300 ease-in-out lg:flex-shrink-0 w-full min-w-0 ${isMobile && selectedCheck ? "hidden" : ""}`}
               style={!isMobile ? { width: selectedCheck ? "58%" : "80%" } : undefined}
             >
+              {(() => {
+                const lane = LANE_TITLES[activeTab] ?? { title: "Checks", icon: ClipboardCheck, accent: "text-muted-foreground" };
+                const LaneIcon = lane.icon;
+                return (
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <LaneIcon className={`h-4 w-4 ${lane.accent}`} />
+                      {lane.title}
+                    </CardTitle>
+                  </CardHeader>
+                );
+              })()}
               <CardContent className="p-0 h-full">
                 {bulkSelected.size > 0 && (
                   <div className="sticky top-0 z-20 flex flex-wrap items-center gap-2 border-b bg-primary/10 px-3 py-2 backdrop-blur safe-bottom sm:pb-2">
@@ -2034,51 +1956,56 @@ export default function CheckCommandCenter() {
                     </span>
                   </div>
                 </div>
-                <div className="overflow-x-auto h-full">
+                <div className="h-full min-w-0">
                   {isLoading ? (
                     <div className="p-8 text-center text-muted-foreground">Loading checks...</div>
                   ) : filteredChecks.length === 0 ? (
                     <div className="p-8 text-center text-muted-foreground">No checks in this category</div>
                   ) : (
                     (() => {
+                      // Same compact layout as the Review tab (Manual Review Queue):
+                      // one header per claim file, then a small card per check with
+                      // the stage facts as pills. No wide table, no fixed-height
+                      // inner scroll box on phones.
                       const hideDepositCol = activeTab === "endorsements" || activeTab === "ready" || activeTab === "deposited";
                       const hideReadySignal = activeTab === "ready" || activeTab === "deposited";
-                      const colCount = (hideDepositCol ? 7 : 8) + 1;
 
-                      const renderHeaderRow = (group: CheckGroup) => (
-                        <TableRow key={`${group.key}-header`} className="bg-primary/20 hover:bg-primary/20 border-t-4 border-primary text-foreground font-semibold rounded-t-xl overflow-hidden [&>td:first-child]:rounded-tl-xl [&>td:last-child]:rounded-tr-xl">
-                          <TableCell className="py-3 w-8">
-                            {group.checks.length > 1 && (() => {
-                              const groupIds = group.checks.map((c) => c.id);
-                              const allChecked = groupIds.every((id) => bulkSelected.has(id));
-                              const someChecked = !allChecked && groupIds.some((id) => bulkSelected.has(id));
-                              return (
-                                <input
-                                  type="checkbox"
-                                  className="h-4 w-4 accent-primary cursor-pointer"
-                                  checked={allChecked}
-                                  ref={(el) => { if (el) el.indeterminate = someChecked; }}
-                                  onClick={(e) => e.stopPropagation()}
-                                  onChange={() => {
-                                    setBulkSelected((prev) => {
-                                      const next = new Set(prev);
-                                      if (allChecked) groupIds.forEach((id) => next.delete(id));
-                                      else groupIds.forEach((id) => next.add(id));
-                                      return next;
-                                    });
-                                  }}
-                                  title="Select all checks in this file"
-                                />
-                              );
-                            })()}
-                          </TableCell>
-                          <TableCell colSpan={colCount - 1} className="py-3">
-                            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                              <ClaimCheckFileHeader group={group} hideReadySignal={hideReadySignal} />
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      );
+                      const renderHeaderRow = (group: CheckGroup) => {
+                        let leading: JSX.Element | null = null;
+                        if (group.checks.length > 1) {
+                          const groupIds = group.checks.map((c) => c.id);
+                          const allChecked = groupIds.every((id) => bulkSelected.has(id));
+                          const someChecked = !allChecked && groupIds.some((id) => bulkSelected.has(id));
+                          leading = (
+                            <input
+                              type="checkbox"
+                              className="h-4 w-4 accent-primary cursor-pointer"
+                              checked={allChecked}
+                              ref={(el) => { if (el) el.indeterminate = someChecked; }}
+                              onClick={(e) => e.stopPropagation()}
+                              onChange={() => {
+                                setBulkSelected((prev) => {
+                                  const next = new Set(prev);
+                                  if (allChecked) groupIds.forEach((id) => next.delete(id));
+                                  else groupIds.forEach((id) => next.add(id));
+                                  return next;
+                                });
+                              }}
+                              title="Select all checks in this file"
+                            />
+                          );
+                        }
+                        return (
+                          <CompactClaimGroupHeader
+                            policyholderName={group.policyholderName}
+                            claimNumber={group.claimNumber}
+                            cashJob={group.checks.every((c) => c.check_source === "cash_job") ? {} : null}
+                            count={group.checks.length}
+                            details={claimFileStageDetails(group, hideReadySignal)}
+                            leading={leading}
+                          />
+                        );
+                      };
 
                       const renderCheckRow = (check: CheckItem) => {
                         const effStatus = getEffectiveStatus(check);
@@ -2094,88 +2021,63 @@ export default function CheckCommandCenter() {
                         const isShared = (check as any)._shared;
                         const canDelete = !isShared && canDeleteCheckInTenant(check.tenant_id);
                         const sourceTenantName = (check as any)._sourceTenantName;
+                        const fundsLabel = compactFundsTypeLabel(check.funds_type);
+                        const payeeCount = check.check_payees?.length ?? 0;
+                        const carrier = displayCase(check.carrier_name) || "Pending OCR";
                         return (
-                          <TableRow
-                            key={check.id}
-                            className={`cursor-pointer transition-colors ${isSelected ? "bg-accent" : ""} ${isBulk ? "bg-primary/5" : ""}`}
+                          <CompactCheckRow
+                            checkNumber={check.check_number}
+                            amount={check.amount}
+                            selected={isSelected}
+                            className={isBulk && !isSelected ? "bg-primary/5" : ""}
                             onMouseEnter={() => prefetchCheckDetail(check.id)}
                             onFocus={() => prefetchCheckDetail(check.id)}
                             onClick={() => setSelectedCheck(isSelected ? null : check.id)}
-                          >
-                            <TableCell className="w-8" onClick={(e) => e.stopPropagation()}>
+                            leading={
                               <input
                                 type="checkbox"
                                 className="h-4 w-4 accent-primary cursor-pointer"
                                 checked={isBulk}
                                 onChange={() => toggleBulk(check.id)}
+                                aria-label="Select check"
                               />
-                            </TableCell>
-                            <TableCell className="font-mono text-sm">
-                              <div className="flex items-center gap-1.5">
-                                #{check.check_number || "—"}
+                            }
+                            titleAdornment={
+                              <>
                                 {isShared && <SharedChecksBadge sourceTenantName={sourceTenantName} />}
                                 {!isShared && <DuplicateCheckBadge duplicates={duplicateChecks.get(check.id)} />}
-                              </div>
-                            </TableCell>
-                            <TableCell className="text-sm md:max-w-[180px]">
-                              <div className="flex flex-col gap-0.5">
-                                <span className="break-words md:truncate leading-tight">{displayCase(check.carrier_name) || "Pending OCR"}</span>
-                                <CheckValidityBadge issueDate={check.issue_date} expirationDays={check.expiration_days} hideWhenSafe />
-                                {check.property_address && (
-                                  <span className="text-[10px] text-muted-foreground break-words md:truncate leading-tight" title={check.property_address}>
-                                    📍 {check.property_address}
-                                  </span>
-                                )}
-                              </div>
-                            </TableCell>
-                            <TableCell className="text-right font-semibold tabular-nums">
-                              {check.amount != null
-                                ? `$${check.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}`
-                                : "—"}
-                            </TableCell>
-                            <TableCell>
-                              {check.funds_type ? (
-                                <Badge variant="outline" className="text-[10px]">
-                                  {check.funds_type === "recoverable_depreciation"
-                                    ? "Rec. Dep."
-                                    : check.funds_type === "overhead_and_profit"
-                                    ? "O&P"
-                                    : check.funds_type}
+                              </>
+                            }
+                            subtitle={
+                              <span title={check.property_address ? `${carrier} · ${check.property_address}` : carrier}>
+                                {carrier}
+                                {check.property_address ? ` · ${check.property_address}` : ""}
+                              </span>
+                            }
+                            pills={
+                              <>
+                                <Badge className={`text-[10px] ${getTabStatusClass(check, activeTab)}`}>
+                                  {getTabStatusLabel(check, activeTab)}
                                 </Badge>
-                              ) : (
-                                <span className="text-[10px] text-muted-foreground">—</span>
-                              )}
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex items-center gap-1">
-                                <span className="text-xs">{check.check_payees?.length ?? 0}</span>
-                                {check.is_multi_payee && (
-                                  <Badge variant="outline" className="text-[10px] px-1">Multi</Badge>
+                                {payeeCount > 0 && (
+                                  <Badge variant="outline" className="text-[10px]">
+                                    {payeeCount} payee{payeeCount > 1 ? "s" : ""}{check.is_multi_payee ? " · Multi" : ""}
+                                  </Badge>
                                 )}
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <Badge className={`text-[10px] ${getTabStatusClass(check, activeTab)}`}>
-                                {getTabStatusLabel(check, activeTab)}
-                              </Badge>
-                            </TableCell>
-                            {!hideDepositCol && (
-                              <TableCell>
-                                {RecIcon && (
-                                  <span
-                                    className="inline-flex items-center gap-1"
-                                    title={rec!.label}
-                                  >
-                                    <RecIcon className={`h-4 w-4 ${rec!.color}`} />
-                                    <span className={`text-[10px] ${rec!.color} hidden md:inline`}>
-                                      {rec!.label}
-                                    </span>
-                                  </span>
+                                {fundsLabel && (
+                                  <Badge variant="outline" className="text-[10px]">{fundsLabel}</Badge>
                                 )}
-                              </TableCell>
-                            )}
-                            <TableCell>
-                              <div className="flex items-center gap-1">
+                                <CheckValidityBadge issueDate={check.issue_date} expirationDays={check.expiration_days} hideWhenSafe />
+                                {!hideDepositCol && RecIcon && (
+                                  <Badge variant="outline" className={`text-[10px] gap-1 ${rec!.color}`} title={rec!.label}>
+                                    <RecIcon className="h-3 w-3" />
+                                    {rec!.label}
+                                  </Badge>
+                                )}
+                              </>
+                            }
+                            actions={
+                              <>
                                 {!isShared && (
                                   <Button
                                     variant="ghost"
@@ -2228,93 +2130,50 @@ export default function CheckCommandCenter() {
                                     />
                                   </div>
                                 )}
-                              </div>
-                            </TableCell>
-                          </TableRow>
+                              </>
+                            }
+                          />
                         );
                       };
 
-                      const headerRow = (
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead className="w-8"></TableHead>
-                            <TableHead>Check</TableHead>
-                            <TableHead>Carrier / Property</TableHead>
-                            <TableHead className="text-right">Amount</TableHead>
-                            <TableHead>Class</TableHead>
-                            <TableHead>Payees</TableHead>
-                            <TableHead>Status</TableHead>
-                            {!hideDepositCol && <TableHead>Deposit</TableHead>}
-                            <TableHead className="w-20"></TableHead>
-                          </TableRow>
-                        </TableHeader>
-                      );
-
                       if (shouldVirtualizeQueue) {
+                        // Large lanes keep virtualization; the scroll box is needed for
+                        // it, but it is tall on phones so several checks show at once.
                         const virtualItems = queueVirtualizer.getVirtualItems();
                         const totalSize = queueVirtualizer.getTotalSize();
                         const paddingTop = virtualItems.length > 0 ? virtualItems[0].start : 0;
                         const paddingBottom = virtualItems.length > 0 ? totalSize - virtualItems[virtualItems.length - 1].end : 0;
                         return (
-                          <div ref={queueScrollRef} className="overflow-x-auto overflow-y-auto h-[calc(100vh-460px)] min-h-[300px] min-w-0">
-                            <Table className="min-w-[760px]">
-                              {headerRow}
-                              <TableBody>
-                                {paddingTop > 0 && (
-                                  <tr aria-hidden="true"><td colSpan={colCount} style={{ height: paddingTop, padding: 0, border: 0 }} /></tr>
-                                )}
-                                {virtualItems.map((vi) => {
-                                  const item = flatQueueItems[vi.index];
-                                  if (!item) return null;
-                                  const content = item.kind === "header" ? renderHeaderRow(item.group) : renderCheckRow(item.check);
-                                  return (
-                                    <Fragment key={item.key}>
-                                      {content}
-                                    </Fragment>
-                                  );
-                                })}
-                                {paddingBottom > 0 && (
-                                  <tr aria-hidden="true"><td colSpan={colCount} style={{ height: paddingBottom, padding: 0, border: 0 }} /></tr>
-                                )}
-                              </TableBody>
-                            </Table>
+                          <div ref={queueScrollRef} className="overflow-y-auto h-[70vh] lg:h-[calc(100vh-460px)] min-h-[300px] min-w-0">
+                            <div className="px-2">
+                              {paddingTop > 0 && <div aria-hidden="true" style={{ height: paddingTop }} />}
+                              {virtualItems.map((vi) => {
+                                const item = flatQueueItems[vi.index];
+                                if (!item) return null;
+                                return (
+                                  <div key={item.key} data-index={vi.index} ref={queueVirtualizer.measureElement} className="py-1">
+                                    {item.kind === "header" ? renderHeaderRow(item.group) : renderCheckRow(item.check)}
+                                  </div>
+                                );
+                              })}
+                              {paddingBottom > 0 && <div aria-hidden="true" style={{ height: paddingBottom }} />}
+                            </div>
                           </div>
                         );
                       }
 
                       return (
-                        <ScrollArea className="h-[calc(100vh-460px)] min-h-[300px]">
-                        <ScrollArea className="h-[calc(100vh-460px)] min-h-[300px]">
-                          <Table className="border-separate border-spacing-y-0 border-spacing-x-0">
-                            {headerRow}
-                            <TableBody>
-                              {groupedFilteredChecks.map((group) => (
-                                <Fragment key={group.key}>
-                                  {renderHeaderRow(group)}
-                                  {group.checks.map((check, idx) => {
-                                    const isLast = idx === group.checks.length - 1;
-                                    const row = renderCheckRow(check);
-                                    // Clone and apply the bottom rounding if it's the last row in the file
-                                    return (
-                                      <Fragment key={check.id}>
-                                        {isLast ? (
-                                          <TableRow 
-                                            {...row.props} 
-                                            className={`${row.props.className} rounded-b-xl overflow-hidden [&>td:first-child]:rounded-bl-xl [&>td:last-child]:rounded-br-xl`}
-                                          />
-                                        ) : row}
-                                      </Fragment>
-                                    );
-                                  })}
-                                  {/* Spacer row between files */}
-                                  <TableRow className="h-4 bg-transparent hover:bg-transparent">
-                                    <TableCell colSpan={colCount} className="p-0 border-0" />
-                                  </TableRow>
-                                </Fragment>
-                              ))}
-                            </TableBody>
-                          </Table>
-                        </ScrollArea>
+                        <ScrollArea className={COMPACT_LIST_SCROLL_CLASS}>
+                          <CompactCheckListBody>
+                            {groupedFilteredChecks.map((group) => (
+                              <Fragment key={group.key}>
+                                {renderHeaderRow(group)}
+                                {group.checks.map((check) => (
+                                  <Fragment key={check.id}>{renderCheckRow(check)}</Fragment>
+                                ))}
+                              </Fragment>
+                            ))}
+                          </CompactCheckListBody>
                         </ScrollArea>
                       );
                     })()
@@ -2420,6 +2279,58 @@ export default function CheckCommandCenter() {
 /*  Summary card (kept for Phase 1 compat)                             */
 /* ------------------------------------------------------------------ */
 
+type SplitClaimGroup = { key: string; claimNumber: string; policyholderName: string; rows: any[]; total: number; latest: string };
+
+/** Group disbursement splits (Funds Released / Funds Received) by claim #, newest file first. */
+function groupSplitsByClaim(
+  rows: any[],
+  resolve: (check: any) => { claimNumber: string | null; policyholderName: string | null },
+): SplitClaimGroup[] {
+  const groups = new Map<string, SplitClaimGroup>();
+  rows.forEach((split: any) => {
+    const check = split.disbursement_batches?.check_intake_items;
+    const resolved = resolve(check);
+    const claimNumber = resolved.claimNumber || "Unlinked claim";
+    const policyholderName = resolved.policyholderName || "Unknown insured";
+    const key = resolved.claimNumber
+      ? `claim::${String(claimNumber).trim().toLowerCase()}`
+      : `unlinked::${split.id}`;
+    const existing = groups.get(key);
+    const settledAt = split.settled_at ?? split.created_at ?? new Date().toISOString();
+    if (existing) {
+      existing.rows.push(split);
+      existing.total += Number(split.amount) || 0;
+      if (new Date(settledAt).getTime() > new Date(existing.latest).getTime()) existing.latest = settledAt;
+    } else {
+      groups.set(key, { key, claimNumber, policyholderName, rows: [split], total: Number(split.amount) || 0, latest: settledAt });
+    }
+  });
+  return Array.from(groups.values()).sort(
+    (x, y) => new Date(y.latest).getTime() - new Date(x.latest).getTime(),
+  );
+}
+
+/** The one summary line of a claim file in the compact lane list. */
+function claimFileStageDetails(group: CheckGroup, hideReadySignal: boolean): string[] {
+  const settledPayees = group.checks.reduce(
+    (sum, check) => sum + (check.check_payees ?? []).filter((p) => {
+      const status = (p.endorsement_status ?? "").toLowerCase();
+      return status === "signed" || status === "waived";
+    }).length,
+    0,
+  );
+  const totalPayees = group.checks.reduce((sum, check) => sum + (check.check_payees?.length ?? 0), 0);
+  const hasBlocked = group.checks.some((check) => ["loss_draft_required", "branch_deposit_required", "reissue_requested", "needs_review", "manual_review_required"].includes(check.status));
+  const hasReady = group.checks.some((check) => check.status === "approved_for_deposit" || check.deposit_recommendation === "ready_for_deposit");
+  const hasLossDraft = group.checks.some((check) => check.status === "loss_draft_required");
+  const details = [`${settledPayees}/${totalPayees || 0} endorsements received`];
+  if (hasLossDraft) details.push("Loss draft visibility active");
+  if (hasBlocked) details.push("Blocked / pending");
+  if (hasReady && !hideReadySignal) details.push("Ready signal");
+  details.push(`$${group.totalAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })}`);
+  return details;
+}
+
 function ClaimCheckFileHeader({ group, compact = false, hideReadySignal = false }: { group: CheckGroup; compact?: boolean; hideReadySignal?: boolean }) {
   const settledPayees = group.checks.reduce(
     (sum, check) => sum + (check.check_payees ?? []).filter((p) => {
@@ -2509,7 +2420,6 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
   const [claimSearch, setClaimSearch] = useState("");
   const [uploading, setUploading] = useState(false);
   const [claimDropdownOpen, setClaimDropdownOpen] = useState(false);
-  const [skipAi, setSkipAi] = useState(false);
   const [mortgagee1, setMortgagee1] = useState("");
   const [mortgagee2, setMortgagee2] = useState("");
   const [showSecondMortgagee, setShowSecondMortgagee] = useState(false);
@@ -2559,8 +2469,12 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
         const { createAwsCheck } = await import("@/integrations/aws/workflow");
         const token = session.session?.access_token;
         if (!token) throw new Error("Not authenticated");
+        // The claim picked here is linked at create: the server checks that it
+        // belongs to this tenant before it writes claim_id.
         const created = await createAwsCheck(token, {
-          review_notes: skipAi ? "AWS staging intake — manual entry (OCR skipped)" : "AWS staging intake",
+          ...(tenantId ? { tenant_id: tenantId } : {}),
+          ...(claimId ? { claim_id: claimId } : {}),
+          review_notes: "AWS staging intake",
         });
         check = created.check as { id: string };
         prefix = created.imagePrefix.replace(/\/$/, "");
@@ -2627,19 +2541,10 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
       if (!check?.id) throw new Error("Insert failed");
 
       // AWS create is image-less by design. After the front image is stored,
-      // invoke the same check-ocr-intake path as production unless the user
-      // chose manual entry. Do not call CheckAlt or Moov from upload.
-      if (aws && skipAi) {
-        toast({
-          title: "Check uploaded for manual entry",
-          description: "AWS staging created an internal check. OCR was not invoked.",
-        });
-        onSuccess();
-        return;
-      }
-
+      // invoke the same check-ocr-intake path as production. Do not call
+      // CheckAlt or Moov from upload.
       const { data: ocrResult, error: fnErr } = await supabase.functions.invoke("check-ocr-intake", {
-        body: { checkId: check.id, skipAi },
+        body: { checkId: check.id },
         headers: { Authorization: `Bearer ${session.session?.access_token}` },
       });
 
@@ -2653,9 +2558,9 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
           description: "AI couldn't process this check. It's been added to the review queue for manual entry.",
         });
       } else if (result?.skipped) {
-        // User opted out, out of credits, or rate-limited — same downstream path.
+        // Out of credits or rate-limited: the check goes to the review queue for manual entry.
         toast({
-          title: skipAi ? "Check uploaded for manual entry" : "Check uploaded — AI unavailable",
+          title: "Check uploaded — AI unavailable",
           description: result.message ?? "Enter the check details in the review queue.",
         });
       } else if (result && ((("success" in result) && !result.success) || (("ocr_success" in result) && !result.ocr_success))) {
@@ -2679,37 +2584,6 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
 
   return (
     <div className="space-y-4">
-      {/* AI ON/OFF toggle — prominent at the top so the user can decide
-          before they even pick a file whether to spend AI credits. */}
-      <div className="flex items-center justify-between gap-3 rounded-lg border bg-muted/40 p-3">
-        <div className="flex items-center gap-2 min-w-0">
-          {skipAi ? (
-            <Pencil className="h-4 w-4 text-muted-foreground shrink-0" />
-          ) : (
-            <Sparkles className="h-4 w-4 text-primary shrink-0" />
-          )}
-          <div className="min-w-0">
-            <div className="text-sm font-medium leading-tight">
-              {skipAi ? "Manual entry mode" : "AI extraction enabled"}
-            </div>
-            <div className="text-[11px] text-muted-foreground leading-tight">
-              {skipAi
-                ? "You'll type the check details in the review queue. No AI credits used."
-                : "AI will read the check and pre-fill the details."}
-            </div>
-          </div>
-        </div>
-        <Button
-          type="button"
-          variant={skipAi ? "outline" : "default"}
-          size="sm"
-          className="shrink-0 h-8"
-          onClick={() => setSkipAi((v) => !v)}
-        >
-          {skipAi ? "Turn AI On" : "Turn AI Off"}
-        </Button>
-      </div>
-
       <div>
         <Label>Front of Check *</Label>
         <Input type="file" accept="image/*" onChange={(e) => {
@@ -2801,88 +2675,8 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
 
       <Button onClick={handleUpload} disabled={uploading || !frontFile} className="w-full">
         {uploading ? <RefreshCw className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
-        {uploading ? "Processing..." : skipAi ? "Upload for Manual Entry" : "Upload & Analyze"}
+        {uploading ? "Processing..." : "Upload & Analyze"}
       </Button>
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/*  Admin Status Override — manually move a check between stages       */
-/* ------------------------------------------------------------------ */
-
-
-function StatusOverride({
-  checkId,
-  currentStatus,
-  onSuccess,
-}: {
-  checkId: string;
-  currentStatus: string;
-  onSuccess: () => void;
-}) {
-  const { toast } = useToast();
-  const { user } = useAuth();
-  const [editing, setEditing] = useState(false);
-  const [newStatus, setNewStatus] = useState(currentStatus);
-  const [saving, setSaving] = useState(false);
-
-  const handleSave = async () => {
-    if (newStatus === currentStatus) {
-      setEditing(false);
-      return;
-    }
-    setSaving(true);
-    try {
-      // Route through the security-definer RPC: it validates the admin/staff
-      // permission server-side, updates status + stage + recommendation
-      // atomically, mirrors claim_checks, and writes the audit log — bypassing
-      // the RLS failures that blocked direct frontend updates.
-      const { data, error } = await supabase.rpc("admin_override_check_status", {
-        p_check_id: checkId,
-        p_new_status: newStatus,
-        p_actor_id: user?.id ?? null,
-      });
-      if (error) throw error;
-      if (data && (data as any).ok === false) throw new Error((data as any).error ?? "Override rejected");
-      toast({ title: "Status updated", description: `Moved to ${newStatus.replace(/_/g, " ")}` });
-      setEditing(false);
-      onSuccess();
-    } catch (e: any) {
-      toast({ title: "Failed to update status", description: e.message, variant: "destructive" });
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  if (!editing) {
-    return (
-      <Button variant="ghost" size="sm" className="text-[10px] h-6 px-2 text-muted-foreground hover:text-foreground" onClick={() => { setNewStatus(currentStatus); setEditing(true); }}>
-        <Pencil className="h-3 w-3 mr-1" /> Override status
-      </Button>
-    );
-  }
-
-  return (
-    <div className="space-y-2 rounded-md border border-border/60 p-2 bg-muted/30">
-      <Label className="text-[10px] text-muted-foreground">Override Status (admin)</Label>
-      <Select value={newStatus} onValueChange={setNewStatus}>
-        <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-        <SelectContent>
-          {STATUS_OPTIONS.map((s) => (
-            <SelectItem key={s.value} value={s.value} className="text-xs">{s.label}</SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      <div className="flex gap-1">
-        <Button size="sm" className="flex-1 h-7 text-xs" onClick={handleSave} disabled={saving}>
-          {saving ? <Loader2Icon className="h-3 w-3 animate-spin mr-1" /> : <CheckIcon className="h-3 w-3 mr-1" />}
-          Save
-        </Button>
-        <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setEditing(false)}>
-          Cancel
-        </Button>
-      </div>
     </div>
   );
 }
@@ -4133,6 +3927,9 @@ function CheckDetailPanel({
                 displayFormatter={(v) => (v ? `${v} days` : "Default (180 days)")}
                 onSave={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }}
               />
+              {check.check_source === "cash_job" && check.cash_job_id && (
+                <CashJobReviewLink cashJobId={check.cash_job_id} />
+              )}
               {check.check_source === "cash_job" ? (
                 <div className="flex justify-between text-sm py-1">
                   <span className="text-muted-foreground">Class</span>
@@ -4711,12 +4508,6 @@ function CheckDetailPanel({
               <Suspense fallback={<TabLoader />}>
                 <CheckFilesSection checkIntakeItemId={checkId} claimId={check?.claim_id ?? null} />
               </Suspense>
-              <Suspense fallback={<TabLoader />}>
-                <SharedCheckPaymentDirection
-                  checkIntakeItemId={checkId}
-                  checkNumber={check?.check_number}
-                />
-              </Suspense>
             </TabsContent>
 
 
@@ -4778,13 +4569,6 @@ function CheckDetailPanel({
                 <span className="underline underline-offset-2">Admin tools</span>
               </summary>
               <div className="mt-2 flex flex-col sm:flex-row sm:flex-wrap sm:justify-end gap-2 items-stretch sm:items-center">
-                <div className="w-full sm:w-auto sm:max-w-xs">
-                  <StatusOverride
-                    checkId={checkId}
-                    currentStatus={check.status}
-                    onSuccess={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); qc.invalidateQueries({ queryKey: ["check-intake-items"] }); onRefresh(); }}
-                  />
-                </div>
                 <ReuploadCheckImageButton
                   checkId={checkId}
                   side="front"

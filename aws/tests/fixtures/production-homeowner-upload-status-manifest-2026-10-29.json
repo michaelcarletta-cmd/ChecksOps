@@ -1,0 +1,21 @@
+{
+  "workstream_id": "homeowner-upload-status",
+  "authorization": "Pending owner review (2026-10-29). Planning only: nothing is live or verified. Each production apply still needs its own owner approval and staging acceptance.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Owner report 2026-10-29: a check filed from Homeowner Uploads reached Review, but sending it to endorsing failed with \"Invalid status transition: pending -> endorsements_in_progress\". homeowner.mjs inserted check_intake_items with status 'pending', a status the workflow machine never accepts; tenant uploads use 'uploaded' (INTERNAL_CREATE_STATUS). The accepted homeowner.mjs bytes file both Homeowner Upload paths (fileHomeownerUploadToReview and handleHomeownerLedgerAttachUpload) as 'uploaded'. The accepted workflow-transitions.mjs bytes add the export LEGACY_HOMEOWNER_UPLOAD_STATUS ('pending') to the fromStatus of start_review, start_endorsing, route_loss_draft and return_to_review (wherever 'uploaded' is accepted, not mark_ready_for_deposit), so checks already filed as pending move on without a data fix. No export is removed and neither member imports anything new, so no other member has to go first and either order links. Recommended order: workflow-transitions.mjs first, so already-filed pending checks unstick even if homeowner.mjs waits; plan order already puts workflow-transitions.mjs before homeowner.mjs. workflow-transitions.mjs live_sha256 ed39e3c3 is the bytes production run 40089521986 applied (post-apply inspect run 40089953478 ALREADY_ACCEPTED, previous_manifest); no workflow-transitions.mjs change has been planned or applied since, and main held these bytes at e3823b5c5. homeowner.mjs live_sha256 1fa4950c is the pre-claim upload accepted bytes (previous_manifest), main's bytes from 7693f07cc until this change, which the read-only guarded production Lambda rebuild inspect run 40741101459 (2026-10-28, main e3823b5c5, mutation false) observed live: 202 of 203 source members equal to main, only db-readonly-validate.mjs differed (production-db-validator-sql123-trigger-manifest-2026-10-28.json); no production overlay has replaced homeowner.mjs since. The repository records no guarded apply that put 1fa4950c live (the pre-claim manifest expected c51ea27a, and the full-package rebuilds of lambda-rebuild-plan.json ran 2026-10-21 on main 008af40e2, where homeowner.mjs was c51ea27a): the rebuild inspect is the only evidence. A read-only production overlay inspect must confirm both live members before any apply. sql_before is unchanged: workflow-transitions.mjs keeps the ledger migration (verified live); homeowner.mjs has none. No SQL change.",
+  "members": {
+    "workflow-transitions.mjs": {
+      "live_sha256": "ed39e3c38d6f64f0b3a939ec2f741790406d913565fda6c399abe6ec6378ffe8",
+      "accepted_sha256": "340b4a126b728a8691a769a7ac7dd269ed800db8d3a7fdc8571601ba9f9a59b7",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-loss-draft-from-uploaded-applied-manifest-2026-10-24.json"
+    },
+    "homeowner.mjs": {
+      "live_sha256": "1fa4950c42bf26ff70bc04acd05ca8c784a970d2573178599859c8d682ce5849",
+      "accepted_sha256": "ea5224291c57ab367f511c75bc6e639fb9faeb04fe7139e27460c51ae3ea72b1",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-homeowner-preclaim-upload-manifest-2026-10-22.json"
+    }
+  }
+}

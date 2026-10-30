@@ -16,6 +16,7 @@ import {
   handleStorageDelete,
   handleStorageMove,
 } from '../functions/api/storage-write.mjs';
+import { BUCKET_WRITE_AUTH_SQL } from '../functions/api/storage-write-auth.mjs';
 import { LOOKUP_MAPPING_SQL } from '../functions/api/identity.mjs';
 import { matchCheckScopedPath, s3KeyFor, normalizePath, pathCandidates } from '../functions/api/storage-paths.mjs';
 
@@ -46,7 +47,10 @@ const jwtEvent = (path, method, body, extra = {}) => ({
   },
 });
 
-const mockClient = ({ authorize = false, writeCheck = false, writeSibling = false, publicLogo = false, mapping = {
+// canWrite: aws_can_write_check (default: the caller can write a check it can see, an owner-tenant
+// member); false models a partner or the platform owner that only reads it. writeRows: the
+// write-side row lookups of delete and move (default: as the read lookups).
+const mockClient = ({ authorize = false, writeCheck = false, writeSibling = false, publicLogo = false, canWrite = true, writeRows = authorize, mapping = {
   application_user_id: APP_ID,
   cognito_sub: COGNITO_SUB,
   email: 'checksops-tester@freedomadj.com',
@@ -60,6 +64,10 @@ const mockClient = ({ authorize = false, writeCheck = false, writeSibling = fals
       queries.push({ sql, params });
       if (sql === 'BEGIN' || sql === 'ROLLBACK') return { rows: [] };
       if (sql.startsWith('SELECT set_config')) return { rows: [{ set_config: params[1] }] };
+      if (sql === 'SELECT public.aws_can_write_check($1::uuid) AS ok') return { rows: [{ ok: canWrite }] };
+      if (String(sql).startsWith('SELECT 1 FROM public.') && String(sql).includes('aws_can_write_')) {
+        return { rows: writeRows ? [{ '?column?': 1 }] : [] };
+      }
       if (sql === LOOKUP_MAPPING_SQL) {
         return { rows: params[0] === mapping.cognito_sub ? [mapping] : [] };
       }
@@ -333,6 +341,76 @@ test('delete and move require server-side authorization', async () => {
   }), depsFor(client, { forceStorageWrites: true }));
   assert.equal(moved.ok, true, JSON.stringify(moved));
   assert.equal(moved.to, `check-intake/${CHECK_ID}/files/aws-t3-test-moved.pdf`);
+});
+
+// Audit finding 3: a partner tenant sees a check shared with it (and the platform owner sees every
+// check), but only the owner tenant's members may write the check's objects (aws_can_write_check).
+test('a reader that cannot write the check cannot upload over, delete or move its objects', async () => {
+  const keys = new Set([s3KeyFor('claim-files', WRITE_PATH)]);
+  const reader = () => depsFor(mockClient({ writeCheck: true, writeSibling: true, authorize: true, canWrite: false, writeRows: false }), { forceStorageWrites: true, keys });
+
+  const overwrite = await handleStorageUploadUrl(jwtEvent('/storage/upload-url', 'POST', {
+    bucket: 'claim-files', path: WRITE_PATH, contentType: 'application/pdf', upsert: true,
+  }), reader());
+  assert.equal(overwrite.statusCode, 403);
+  assert.equal(overwrite.error, 'rls_denied');
+
+  const rear = await handleStorageUploadUrl(jwtEvent('/storage/upload-url', 'POST', {
+    bucket: 'claim-files', path: 'checks/user-not-a-check-id/front.deposit2.jpg', contentType: 'image/jpeg', upsert: true,
+  }), reader());
+  assert.equal(rear.statusCode, 403);
+  assert.equal(rear.error, 'rls_denied');
+
+  const packet = await handleStorageUploadUrl(jwtEvent('/storage/upload-url', 'POST', {
+    bucket: 'endorsement-packets', path: WRITE_PATH, contentType: 'application/pdf', upsert: true,
+  }), reader());
+  assert.equal(packet.statusCode, 403);
+
+  const deps = reader();
+  const deleted = await handleStorageDelete(jwtEvent('/storage/delete', 'POST', { bucket: 'claim-files', path: WRITE_PATH }), deps);
+  assert.equal(deleted.statusCode, 403);
+  assert.equal(deleted.error, 'storage_forbidden');
+  const moved = await handleStorageMove(jwtEvent('/storage/move', 'POST', {
+    bucket: 'claim-files', from: WRITE_PATH, to: `check-intake/${CHECK_ID}/files/moved.pdf`,
+  }), deps);
+  assert.equal(moved.statusCode, 403);
+  assert.equal(moved.field, 'from');
+  assert.deepEqual(deps.sent.filter((c) => c.name !== 'HeadObjectCommand'), [], 'no S3 write, copy or delete');
+});
+
+test('the owner tenant keeps upload over, delete and move of its check objects', async () => {
+  const keys = new Set([s3KeyFor('claim-files', WRITE_PATH)]);
+  const owner = () => depsFor(mockClient({ writeCheck: true, authorize: true }), { forceStorageWrites: true, keys });
+  const overwrite = await handleStorageUploadUrl(jwtEvent('/storage/upload-url', 'POST', {
+    bucket: 'claim-files', path: WRITE_PATH, contentType: 'application/pdf', upsert: true,
+  }), owner());
+  assert.equal(overwrite.ok, true, JSON.stringify(overwrite));
+  // Delete of an object a written row references (not under the check prefix), by the write lookup.
+  const claimFile = 'claims/1de2f734-de37-404a-aa3e-d23905f7a6ea/estimate.pdf';
+  const deleted = await handleStorageDelete(jwtEvent('/storage/delete', 'POST', { bucket: 'claim-files', path: claimFile }), owner());
+  assert.equal(deleted.ok, true, JSON.stringify(deleted));
+  const moved = await handleStorageMove(jwtEvent('/storage/move', 'POST', {
+    bucket: 'claim-files', from: WRITE_PATH, to: `check-intake/${CHECK_ID}/files/moved.pdf`,
+  }), owner());
+  assert.equal(moved.ok, true, JSON.stringify(moved));
+});
+
+test('delete and move find referencing rows by each table\'s RLS write rule, never by the read map', () => {
+  const write = (bucket) => BUCKET_WRITE_AUTH_SQL[bucket].join('\n');
+  for (const bucket of Object.keys(BUCKET_WRITE_AUTH_SQL)) {
+    for (const sql of BUCKET_WRITE_AUTH_SQL[bucket]) assert.match(sql, /public\.aws_can_write_(check|claim|tenant)\(/, bucket);
+  }
+  assert.match(write('claim-files'), /check_files f .*aws_can_write_check\(f\.check_intake_item_id\)/s);
+  assert.match(write('claim-files'), /claim_files f .*aws_can_write_claim\(f\.claim_id\)/s);
+  assert.match(write('claim-files'), /check_intake_items c .*deposit2\.jpg.*checkalt\.jpg.*aws_can_write_check\(c\.id\)/s);
+  assert.match(write('claim-files'), /signature_requests s .*aws_can_write_check\(s\.check_intake_item_id\)/s);
+  assert.match(write('claim-files'), /cash_job_attachments a .*aws_can_write_tenant\(a\.tenant_id\)/s);
+  assert.match(write('endorsement-packets'), /endorsement_packet_path.*aws_can_write_check\(c\.id\)/s);
+  assert.match(write('deposit-attachments'), /deposit_items di .*aws_can_write_check\(di\.check_id\)/s);
+  assert.match(write('loss-draft-documents'), /loss_draft_tracking ldt .*aws_can_write_claim\(ldt\.claim_id\)/s);
+  assert.match(write('tenant-documents'), /aws_can_write_tenant\(t\.tenant_id\)/);
+  // Shared-check visibility never authorizes a write.
+  assert.doesNotMatch(Object.values(BUCKET_WRITE_AUTH_SQL).flat().join('\n'), /aws_can_access_check|shared_checks|aws_is_active_shared_check_target/);
 });
 
 test('claim-files read auth includes endorsed deposit JPEGs and .deposit2.jpg siblings', () => {

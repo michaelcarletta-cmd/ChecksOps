@@ -1,0 +1,28 @@
+{
+  "workstream_id": "mortgage-desk-esign",
+  "authorization": "Pending owner review (2026-10-28). Planning only: nothing is live or verified. Each production apply still needs its own owner approval and staging acceptance.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "The Mortgage Desk sends a check's files for signature, reads the check's thread, files and signature requests, signs Desk file reads and posts homeowner timeline notes (SQL 124). ADD mortgage-desk-esign.mjs (imports data.mjs, esign.mjs, email-branding.mjs, email.mjs, mortgage-desk-return.mjs, storage-paths.mjs: mortgage-desk-return.mjs, esign.mjs, email-branding.mjs and data.mjs are planned members already live at their accepted bytes and come earlier in the plan order; email.mjs and storage-paths.mjs are unplanned members of the live ZIP), then REPLACE app-services.mjs, which routes /functions/v1/mortgage-desk-esign to it and follows it in the plan order. The ADD calls SQL 124's functions and is held on it (sql_before); SQL 124 is recorded verified live in production (#1351), so the hold is already released. app-services.mjs's live_sha256 is its accepted bytes recorded live by the Mortgage Desk return apply (production run 40621229388, aws/tests/fixtures/production-mortgage-desk-return-applied-manifest-2026-10-28.json). esign.mjs, storage.mjs and storage-write-auth.mjs do not change. The guarded overlay inspect re-reads each before any apply.",
+  "members": {
+    "mortgage-desk-esign.mjs": {
+      "live_sha256": null,
+      "accepted_sha256": "492da984c1ec60d419c147431efef8ef03d25860f179b615a126c3b753174e2d",
+      "operation": "add",
+      "required_imports": [
+        "data.mjs",
+        "esign.mjs",
+        "email-branding.mjs",
+        "email.mjs",
+        "mortgage-desk-return.mjs",
+        "storage-paths.mjs"
+      ]
+    },
+    "app-services.mjs": {
+      "live_sha256": "d1faa2120bc944d299c274176ac52601e262ad7d9d448de0385bd70f858ecac5",
+      "accepted_sha256": "dd6e1797dc00dc2beaf15585b481c76a33c415212e7be5d2efe3fd170d48121e",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-mortgage-desk-return-applied-manifest-2026-10-28.json"
+    }
+  }
+}

@@ -119,5 +119,35 @@ test('the Refer & Earn screens read through the SQL 111 functions, never the tab
   assert.match(settings, /earned_credit_cents/);
   assert.match(settings, /applied_discount_cents/);
   assert.match(settings, /never takes maintenance below \$0 and never reduces check fees/);
+  // The tenant sees the maintenance rate, the discount and what it pays, so the discount is not
+  // read as the maintenance amount (owner report 2026-10-28: "$10.00 / mo" looked like the invoice).
+  assert.match(settings, /Monthly maintenance/);
+  assert.match(settings, /monthly_rate_cents\) \|\| 0/);
+  assert.match(settings, /Total discount/);
+  assert.match(settings, /Maintenance you pay/);
+  assert.doesNotMatch(settings, /Applied to your maintenance invoice:/);
   assert.match(dashboard, /\$5 per referral, \$25 cap per tenant/);
+});
+
+test('Tenant Management shows the manual discount, the referral credit and the total the billing engine charges', () => {
+  const admin = fs.readFileSync(path.join(ROOT, 'src/pages/admin/AdminTenants.tsx'), 'utf8');
+  const dashboard = fs.readFileSync(path.join(ROOT, 'src/components/settings/AdminReferralDashboard.tsx'), 'utf8');
+  // referral_discount_cents is the discount the owner types by hand (SQL 96), not the referral
+  // credit (owner report 2026-10-28: $5.00 in the row, $10.00 on the tenant's Refer & Earn page).
+  assert.doesNotMatch(admin, /Ref\. Disc\./);
+  assert.doesNotMatch(admin, /mobileLabel: "Referral discount"/);
+  assert.match(admin, /header: "Manual disc\.",\s*mobileLabel: "Manual discount"/);
+  assert.match(admin, /updatePricing\(t\.id, \{ referral_discount_cents: cents \?\? 0 \}\)/);
+  assert.match(admin, /header: "Ref\. credit",\s*mobileLabel: "Referral credit"/);
+  assert.match(admin, /header: "Total disc\.",\s*mobileLabel: "Total discount"/);
+  // The credit comes from the owner's overview (no new SQL), through the dashboard's own query.
+  assert.match(dashboard, /export const fetchReferralOverview = async/);
+  assert.match(dashboard, /queryFn: fetchReferralOverview/);
+  assert.match(admin, /queryKey: REFERRAL_OVERVIEW_QUERY_KEY,\s*queryFn: fetchReferralOverview/);
+  assert.match(admin, /earned_credit_cents/);
+  // The usage breakdown discounts maintenance the way maintenanceDiscountCents does: manual plus
+  // credit, capped at the monthly rate.
+  assert.match(admin, /Math\.min\(Math\.max\(0, Number\(manualCents\) \|\| 0\) \+ Math\.max\(0, Number\(creditCents\) \|\| 0\), Math\.max\(0, Number\(rateCents\) \|\| 0\)\)/);
+  assert.match(admin, /const discount = totalDiscountCents\(grossMaintenance, manualDiscount, referralCredit\);/);
+  assert.doesNotMatch(admin, /const discount = tenantMeta\?\.referral_discount_cents/);
 });

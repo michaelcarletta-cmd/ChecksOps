@@ -1,8 +1,12 @@
 import { useRef, useState, useCallback, useEffect, useMemo } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
+// The pdf.js worker from react-pdf's own pdfjs-dist, bundled with the SPA: its version always
+// equals the pdf.js API react-pdf runs, and no third-party origin is needed in the CSP.
+import pdfWorkerUrl from "react-pdf/node_modules/pdfjs-dist/build/pdf.worker.min.mjs?url";
 import "react-pdf/dist/esm/Page/AnnotationLayer.css";
 import "react-pdf/dist/esm/Page/TextLayer.css";
 import mammoth from "mammoth";
+import { sanitizeDocxHtml } from "@/lib/sanitizeDocxHtml";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
@@ -29,7 +33,7 @@ import {
 } from "@/lib/signature-field-coordinates";
 
 // Set up PDF.js worker
-pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
+pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
 interface Field {
   id: string;
@@ -145,7 +149,7 @@ export function FieldPlacementEditor({ documentUrl, docxData, onFieldsChange, si
       }
     )
       .then((result) => {
-        setDocxHtml(result.value);
+        setDocxHtml(sanitizeDocxHtml(result.value));
         setIsLoading(false);
         toast({ title: "Document loaded. Click on the document to place fields." });
       })

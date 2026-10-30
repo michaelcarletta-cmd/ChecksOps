@@ -1,6 +1,7 @@
 import { Fragment, useState, useEffect, useRef, useCallback, useMemo } from "react";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { isAwsStaging } from "@/lib/awsStaging";
 import { pickAwsSafeIntakeUpdates } from "@/integrations/aws/safeIntakeFields";
@@ -25,10 +26,17 @@ import {
 import { useCanMoveChecks } from "@/hooks/useCanMoveChecks";
 import { DepositImageViewer } from "@/components/checks/DepositImageViewer";
 import { assessCheckValidity, isAtRisk } from "@/lib/checkValidity";
+import { CashJobReviewLink } from "@/components/cash-jobs/CashJobReviewLink";
 import { REVIEW_QUEUE_SELECT, isInReviewQueue, reviewQueuePayeeReasons } from "@/lib/reviewQueueQuery";
 import { formatIssueDateDisplay, toDateInputValue } from "@/lib/issueDate";
 import { displayCase } from "@/lib/displayCase";
 import { ShareCheckDialog } from "@/components/check-review/ShareCheckDialog";
+import {
+  COMPACT_LIST_SCROLL_CLASS,
+  CompactCheckListBody,
+  CompactCheckRow,
+  CompactClaimGroupHeader,
+} from "@/components/check-review/CompactCheckList";
 import { ReuploadCheckImageButton } from "@/components/checks/ReuploadCheckImageButton";
 import { AdminDeleteCheckButton } from "@/components/checks/AdminDeleteCheckButton";
 import { SendCheckTrackingLinkButton } from "@/components/homeowner-ledger/SendCheckTrackingLinkButton";
@@ -88,12 +96,28 @@ interface ReviewCheck {
   external_origin?: Record<string, unknown> | null;
   check_payees?: CheckPayee[];
   funds_type?: string | null;
+  check_source?: string | null;
+  cash_job_id?: string | null;
+  cash_job_payment_class?: string | null;
 }
+
+type ReviewCashJob = { id: string; job_name: string | null; customer_name: string | null };
+
+const CASH_JOB_PAYMENT_LABELS: Record<string, string> = {
+  initial_deposit: "Initial Deposit",
+  progress_payment: "Progress Payment",
+  final_payment: "Final Payment",
+  other: "Other",
+};
+
+const isCashJobCheck = (check: Pick<ReviewCheck, "check_source" | "cash_job_id">) =>
+  check.check_source === "cash_job" && !!check.cash_job_id;
 
 interface ReviewCheckGroup {
   key: string;
   claimNumber: string;
   policyholderName: string;
+  cashJob?: { id: string; name: string } | null;
   checks: ReviewCheck[];
   totalAmount: number;
   latestCreatedAt: string;
@@ -330,6 +354,25 @@ export function CheckReviewQueue({
     staleTime: 60_000,
   });
 
+  const linkedCashJobIds = useMemo(() => Array.from(new Set(reviewChecks.filter(isCashJobCheck).map((check) => check.cash_job_id))) as string[], [reviewChecks]);
+
+  const { data: linkedCashJobs = [] } = useQuery({
+    queryKey: ["check-review-linked-cash-jobs", linkedCashJobIds],
+    queryFn: async () => {
+      if (linkedCashJobIds.length === 0) return [];
+      const { data, error } = await supabase
+        .from("cash_jobs")
+        .select("id, job_name, customer_name")
+        .in("id", linkedCashJobIds);
+      if (error) throw error;
+      return (data ?? []) as ReviewCashJob[];
+    },
+    enabled: linkedCashJobIds.length > 0,
+    staleTime: 60_000,
+  });
+
+  const cashJobLookup = useMemo(() => new Map(linkedCashJobs.map((job) => [job.id, job])), [linkedCashJobs]);
+
   const groupedReviewChecks = useMemo<ReviewCheckGroup[]>(() => {
     const claimLookup = new Map(linkedClaims.map((claim: any) => [claim.id, claim]));
     const groups = new Map<string, ReviewCheckGroup>();
@@ -345,10 +388,15 @@ export function CheckReviewQueue({
       const claimNumber = linked?.claim_number || check.detected_claim_number || "Unlinked claim";
       const insuredPayee = check.check_payees?.find((payee) => payee.payee_type === "insured")?.payee_name;
       const parsedInsured = extractInsuredName(check.payee_line);
-      const policyholderName = linked?.policyholder_name || insuredPayee || parsedInsured || "Unknown insured";
+      const cashJobRow = isCashJobCheck(check) ? cashJobLookup.get(check.cash_job_id!) : null;
+      const cashJob = isCashJobCheck(check)
+        ? { id: check.cash_job_id!, name: cashJobRow?.job_name || cashJobRow?.customer_name || "Cash job" }
+        : null;
+      const policyholderName = (cashJob && cashJobRow?.customer_name) || linked?.policyholder_name || insuredPayee || parsedInsured || "Unknown insured";
 
       if (q) {
         const matches =
+          (cashJob?.name || "").toLowerCase().includes(q) ||
           claimNumber.toLowerCase().includes(q) ||
           policyholderName.toLowerCase().includes(q) ||
           (check.check_number || "").toLowerCase().includes(q) ||
@@ -359,11 +407,14 @@ export function CheckReviewQueue({
       }
 
       // Group strictly by claim # so every check tied to the same claim appears
-      // under one file. Unlinked checks stay separate (keyed by check id).
+      // under one file; cash job checks group by their job instead. Unlinked
+      // checks stay separate (keyed by check id).
       const hasClaim = !!(linked?.claim_number || check.detected_claim_number);
-      const key = hasClaim
-        ? `claim::${claimNumber.trim().toLowerCase()}`
-        : `unlinked::${check.id}`;
+      const key = cashJob
+        ? `cashjob::${cashJob.id}`
+        : hasClaim
+          ? `claim::${claimNumber.trim().toLowerCase()}`
+          : `unlinked::${check.id}`;
       const existing = groups.get(key);
 
       if (existing) {
@@ -373,12 +424,12 @@ export function CheckReviewQueue({
           existing.latestCreatedAt = check.created_at;
         }
       } else {
-        groups.set(key, { key, claimNumber, policyholderName, checks: [check], totalAmount: check.amount ?? 0, latestCreatedAt: check.created_at });
+        groups.set(key, { key, claimNumber, policyholderName, cashJob, checks: [check], totalAmount: check.amount ?? 0, latestCreatedAt: check.created_at });
       }
     });
 
     return Array.from(groups.values()).sort((a, b) => new Date(b.latestCreatedAt).getTime() - new Date(a.latestCreatedAt).getTime());
-  }, [linkedClaims, reviewChecks, searchQuery, classFilter]);
+  }, [linkedClaims, cashJobLookup, reviewChecks, searchQuery, classFilter]);
 
   // Duplicate detection: same check_number + amount + carrier_name (all present).
   // The earliest-created check keeps "original"; later ones are flagged duplicates.
@@ -497,45 +548,27 @@ export function CheckReviewQueue({
   return (
     <>
     {filterBar}
-    <ScrollArea className="max-h-none lg:h-[calc(100vh-460px)]">
-      <div className="space-y-2 p-2">
+    <ScrollArea className={COMPACT_LIST_SCROLL_CLASS}>
+      <CompactCheckListBody>
         {groupedReviewChecks.map((group) => (
           <Fragment key={group.key}>
-            <div className="rounded-md border-t-4 border-primary bg-primary/20 px-3 py-3 text-foreground font-semibold">
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge variant="secondary" className="text-[10px] tracking-wide">Claim Check File</Badge>
-                <span className="font-semibold text-foreground truncate">{displayCase(group.policyholderName)}</span>
-                <Badge variant="outline" className="font-mono text-[10px]">Claim #{group.claimNumber}</Badge>
-              </div>
-              <div className="mt-1 flex flex-wrap items-center gap-2 text-xs font-normal text-muted-foreground">
-                <span>{group.checks.length} {group.checks.length === 1 ? "check" : "checks"}</span>
-                <span>•</span>
-                <span>Awaiting routing</span>
-              </div>
-            </div>
+            <CompactClaimGroupHeader
+              policyholderName={group.policyholderName}
+              claimNumber={group.claimNumber}
+              cashJob={group.cashJob}
+              count={group.checks.length}
+              details={["Awaiting routing"]}
+            />
             {group.checks.map((check) => (
-              <Card
+              <CompactCheckRow
                 key={check.id}
-                className={`cursor-pointer transition-colors hover:bg-accent/30 ${
-                  selectedCheckId === check.id ? "ring-1 ring-primary bg-accent/50" : ""
-                }`}
+                checkNumber={check.check_number}
+                amount={check.amount}
+                selected={selectedCheckId === check.id}
                 onClick={() => onSelectCheck(check.id)}
-              >
-                <CardContent className="p-3">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="font-mono text-sm font-medium">
-                      #{check.check_number || "Pending"}
-                    </span>
-                    <span className="text-sm font-bold tabular-nums">
-                      {check.amount != null
-                        ? `$${check.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}`
-                        : "—"}
-                    </span>
-                  </div>
-              <p className="text-xs text-muted-foreground truncate">
-                {displayCase(check.carrier_name) || "Unknown carrier"}
-              </p>
-              <div className="mt-1.5 flex flex-wrap gap-1">
+                subtitle={displayCase(check.carrier_name) || "Unknown carrier"}
+                pills={
+                  <>
                 {check.ocr_needs_verification ? (
                   <Badge variant="outline" className="text-[10px] bg-amber-500/15 text-amber-500 border-amber-500/30">
                     <AlertTriangle className="h-2.5 w-2.5 mr-1" />
@@ -562,39 +595,56 @@ export function CheckReviewQueue({
                     Has duplicates
                   </Badge>
                 )}
-              </div>
-              <div
-                className="mt-2 flex items-center gap-1.5"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <Label className="text-[10px] text-muted-foreground shrink-0">Claim #</Label>
-                <Input
-                  value={claimEdits[check.id] ?? check.detected_claim_number ?? ""}
-                  onChange={(e) => setClaimEdits((p) => ({ ...p, [check.id]: e.target.value }))}
-                  placeholder="Add claim #"
-                  className="h-7 text-xs font-mono"
-                  disabled={savingClaimId === check.id}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      const v = claimEdits[check.id] ?? check.detected_claim_number ?? "";
-                      saveClaimNumber(check.id, v);
-                    }
-                  }}
-                />
-                {claimEdits[check.id] !== undefined &&
-                  claimEdits[check.id] !== (check.detected_claim_number ?? "") && (
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className="h-7 w-7 shrink-0"
+                  </>
+                }
+                footer={
+                  <>
+                {group.cashJob ? (
+                  <>
+                    <Label className="text-[10px] text-muted-foreground shrink-0">Cash job</Label>
+                    <Link
+                      to={`../cash-jobs?job=${encodeURIComponent(group.cashJob.id)}`}
+                      relative="path"
+                      className="flex-1 min-w-0 truncate text-xs font-medium text-primary hover:underline"
+                    >
+                      {group.cashJob.name}
+                      {check.cash_job_payment_class && CASH_JOB_PAYMENT_LABELS[check.cash_job_payment_class]
+                        ? ` · ${CASH_JOB_PAYMENT_LABELS[check.cash_job_payment_class]}`
+                        : ""}
+                    </Link>
+                  </>
+                ) : (
+                  <>
+                  <Label className="text-[10px] text-muted-foreground shrink-0">Claim #</Label>
+                  <Input
+                    value={claimEdits[check.id] ?? check.detected_claim_number ?? ""}
+                    onChange={(e) => setClaimEdits((p) => ({ ...p, [check.id]: e.target.value }))}
+                    placeholder="Add claim #"
+                    className="h-7 text-xs font-mono"
                     disabled={savingClaimId === check.id}
-                    onClick={() => saveClaimNumber(check.id, claimEdits[check.id] ?? "")}
-                    title="Save claim #"
-                  >
-                    {savingClaimId === check.id
-                      ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      : <Save className="h-3.5 w-3.5" />}
-                  </Button>
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        const v = claimEdits[check.id] ?? check.detected_claim_number ?? "";
+                        saveClaimNumber(check.id, v);
+                      }
+                    }}
+                  />
+                  {claimEdits[check.id] !== undefined &&
+                    claimEdits[check.id] !== (check.detected_claim_number ?? "") && (
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-7 w-7 shrink-0"
+                      disabled={savingClaimId === check.id}
+                      onClick={() => saveClaimNumber(check.id, claimEdits[check.id] ?? "")}
+                      title="Save claim #"
+                    >
+                      {savingClaimId === check.id
+                        ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        : <Save className="h-3.5 w-3.5" />}
+                    </Button>
+                  )}
+                  </>
                 )}
                 <Button
                   size="icon"
@@ -616,13 +666,13 @@ export function CheckReviewQueue({
                     qc.invalidateQueries({ queryKey: ["check-review-queue", tenantId] });
                   }}
                 />
-              </div>
-                </CardContent>
-              </Card>
+                  </>
+                }
+              />
             ))}
           </Fragment>
         ))}
-      </div>
+      </CompactCheckListBody>
       <ShareCheckDialog
         checkId={shareCheckId ?? ""}
         open={!!shareCheckId}
@@ -972,6 +1022,27 @@ export function ReviewDecisionPanel({
 
 
 
+
+        {isCashJobCheck(check) && (
+          <Card className="border-amber-500/40 bg-amber-500/10">
+            <CardContent className="p-3 space-y-1">
+              <div className="flex items-center gap-2 text-xs font-semibold text-amber-500">
+                <Badge variant="secondary" className="text-[10px] tracking-wide border-amber-500/40 text-amber-500">Cash Job</Badge>
+                Cash job payment, not an insurance claim check
+              </div>
+              <CashJobReviewLink cashJobId={check.cash_job_id!} />
+              {check.cash_job_payment_class && CASH_JOB_PAYMENT_LABELS[check.cash_job_payment_class] && (
+                <div className="flex justify-between gap-2 text-sm py-1">
+                  <span className="text-muted-foreground">Payment</span>
+                  <span className="font-medium">{CASH_JOB_PAYMENT_LABELS[check.cash_job_payment_class]}</span>
+                </div>
+              )}
+              <p className="text-[11px] text-muted-foreground">
+                The payment is added to the job when this check's deposit is submitted.
+              </p>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Duplicate Warning */}
         {(() => {
@@ -1402,38 +1473,6 @@ export function ReviewDecisionPanel({
                     </SelectContent>
                   </Select>
                 </div>
-              )}
-
-              {canMoveChecks && (
-                <details className="group rounded-md border border-border/60 bg-muted/30 px-3 py-2">
-                  <summary className="text-[11px] text-muted-foreground hover:text-foreground cursor-pointer list-none flex items-center gap-1.5 select-none">
-                    <ShieldAlert className="h-3 w-3 text-amber-500" />
-                    <span className="underline underline-offset-2">Override status</span>
-                  </summary>
-                  <div className="mt-2 space-y-2">
-                    <Select
-                      value={depositPath}
-                      onValueChange={(v) => {
-                        setDepositPath(v);
-                        markDirty();
-                      }}
-                    >
-                      <SelectTrigger className="h-9 text-sm bg-background">
-                        <SelectValue placeholder="Select override..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {DEPOSIT_PATHS.map((path) => (
-                          <SelectItem key={path.value} value={path.value} className="text-sm">
-                            {path.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <p className="text-[10px] text-muted-foreground">
-                      Directly override the workflow status. This bypasses normal logic.
-                    </p>
-                  </div>
-                </details>
               )}
 
               <div className="pt-2">

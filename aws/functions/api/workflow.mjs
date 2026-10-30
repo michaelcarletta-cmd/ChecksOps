@@ -277,6 +277,56 @@ const lookupWorkflowCheck = async (client, checkId) => {
   return { check: rows[0] };
 };
 
+// Transitions that move a check out of Review. A check filed from a homeowner's pre-claim upload
+// must carry a claim by then, so the homeowner's link can follow the claim from here on.
+const HOMEOWNER_CLAIM_LINK_ACTIONS = new Set(['start_endorsing', 'route_loss_draft', 'mark_ready_for_deposit']);
+
+const loadHomeownerUploadForCheck = async (client, check) => (await client.query(
+  `SELECT id, token_id, claim_id, amount_estimate
+   FROM public.homeowner_ledger_check_uploads
+   WHERE attached_check_id = $1::uuid AND tenant_id = $2::uuid
+   LIMIT 1`,
+  [check.id, check.tenant_id],
+)).rows[0] || null;
+
+// Mirrors the manual attach in homeowner.mjs: the homeowner's link joins the claim and the
+// timeline records it. Runs once per upload; a link already on a claim is never moved.
+const linkHomeownerUploadToClaim = async (client, upload, check) => {
+  if (upload.claim_id) return;
+  const claim = (await client.query(
+    `SELECT id, claim_number FROM public.claims WHERE id = $1::uuid AND org_id = $2::uuid LIMIT 1`,
+    [check.claim_id, check.tenant_id],
+  )).rows[0];
+  if (!claim) return;
+  const marked = (await client.query(
+    `UPDATE public.homeowner_ledger_check_uploads
+     SET claim_id = $2::uuid
+     WHERE id = $1::uuid AND claim_id IS NULL
+     RETURNING id`,
+    [upload.id, claim.id],
+  )).rows;
+  if (!marked.length) return;
+  if (upload.token_id) {
+    await client.query(
+      `UPDATE public.homeowner_ledger_tokens
+       SET claim_id = $2::uuid
+       WHERE id = $1::uuid AND tenant_id = $3::uuid AND claim_id IS NULL`,
+      [upload.token_id, claim.id, check.tenant_id],
+    );
+  }
+  await client.query(
+    `INSERT INTO public.homeowner_ledger_events (
+       tenant_id, claim_id, event_type, amount, actor_label, payload_json
+     ) VALUES ($1::uuid, $2::uuid, 'homeowner_upload_attached', $3, 'Staff', $4::jsonb)`,
+    [
+      check.tenant_id,
+      claim.id,
+      check.amount ?? upload.amount_estimate ?? null,
+      JSON.stringify({ upload_id: upload.id, check_id: check.id, claim_number: claim.claim_number }),
+    ],
+  );
+};
+
 const descriptiveFromBody = (body = {}) => {
   const out = {};
   for (const [column, max] of [
@@ -318,6 +368,69 @@ const descriptiveFromBody = (body = {}) => {
     out.amount = n;
   }
   return { values: out };
+};
+
+// A check created from a Cash Job carries the job's link; a check uploaded from
+// the Command Center may carry the claim picked at upload. Both are verified
+// against the tenant the check is created in; nothing the client sends is
+// written without that check. check_source and cash_job_payment_class are set
+// here, server-side (the generic write path keeps them prohibited).
+export const CASH_JOB_PAYMENT_CLASSES = Object.freeze([
+  'initial_deposit', 'final_payment', 'progress_payment', 'other',
+]);
+
+export const CLAIM_IN_TENANT_SQL = `SELECT 1 FROM public.claims c
+     WHERE c.id = $1::uuid
+       AND (c.org_id = $2::uuid
+         OR (c.org_id IS NULL AND EXISTS (SELECT 1 FROM public.check_intake_items ci
+                    WHERE ci.claim_id = c.id AND ci.tenant_id = $2::uuid)))
+     LIMIT 1`;
+
+export const CASH_JOB_IN_TENANT_SQL = `SELECT id, tenant_id, job_name FROM public.cash_jobs
+     WHERE id = $1::uuid AND tenant_id = $2::uuid
+     LIMIT 1`;
+
+const blankLink = (value) => value === undefined || value === null || value === '';
+
+export const resolveCreateLinks = async (client, tenantId, body = {}) => {
+  const rawClaim = body.claim_id ?? body.claimId;
+  const rawJob = body.cash_job_id ?? body.cashJobId;
+  const rawClass = body.cash_job_payment_class ?? body.cashJobPaymentClass;
+  const links = { claimId: null, cashJobId: null, cashJobName: null, paymentClass: null };
+  if (!blankLink(rawClaim) && !blankLink(rawJob)) {
+    return { statusCode: 400, error: 'invalid_field', field: 'claim_id', message: 'A check links to a claim or a cash job, not both' };
+  }
+  if (!blankLink(rawClass) && blankLink(rawJob)) {
+    return { statusCode: 400, error: 'invalid_field', field: 'cash_job_payment_class' };
+  }
+  if (!blankLink(rawClaim)) {
+    if (!isUuid(rawClaim)) return { statusCode: 400, error: 'invalid_uuid', field: 'claim_id' };
+    const owned = (await client.query(CLAIM_IN_TENANT_SQL, [String(rawClaim), tenantId])).rows;
+    if (!owned.length) {
+      return { statusCode: 403, error: 'claim_not_in_tenant', message: 'The claim is not in this tenant' };
+    }
+    links.claimId = String(rawClaim);
+  }
+  if (!blankLink(rawJob)) {
+    if (!isUuid(rawJob)) return { statusCode: 400, error: 'invalid_uuid', field: 'cash_job_id' };
+    const jobId = String(rawJob).toLowerCase();
+    const jobs = (await client.query(CASH_JOB_IN_TENANT_SQL, [jobId, tenantId])).rows;
+    const job = jobs.find((row) => (
+      String(row.id || '').toLowerCase() === jobId
+      && String(row.tenant_id || '').toLowerCase() === String(tenantId).toLowerCase()
+    ));
+    if (!job) {
+      return { statusCode: 403, error: 'cash_job_not_in_tenant', message: 'The cash job is not in this tenant' };
+    }
+    const paymentClass = blankLink(rawClass) ? 'other' : String(rawClass);
+    if (!CASH_JOB_PAYMENT_CLASSES.includes(paymentClass)) {
+      return { statusCode: 400, error: 'invalid_field', field: 'cash_job_payment_class' };
+    }
+    links.cashJobId = jobId;
+    links.cashJobName = job.job_name ?? null;
+    links.paymentClass = paymentClass;
+  }
+  return { links };
 };
 
 const requireWorkflowEnabled = (event, deps = {}) => {
@@ -377,22 +490,35 @@ export const handleCreateCheck = async (event, deps = {}) => {
     if (derived.error) return denied(spoof, { statusCode: 403, ...derived });
     const coerced = descriptiveFromBody(body);
     if (coerced.error) return denied(spoof, { statusCode: 400, ...coerced });
+    const resolved = await resolveCreateLinks(client, derived.tenantId, body);
+    if (resolved.error) return denied(spoof, resolved);
+    const links = resolved.links;
     const checkId = isUuid(body.id) ? String(body.id) : crypto.randomUUID();
     const placeholder = `checks/${checkId}/pending_front.jpg`;
     const values = coerced.values || {};
+    // The cash-job columns are named only when the check is a cash-job check,
+    // so an ordinary create does not depend on them.
+    const linkColumns = ['claim_id'];
+    const linkValues = ['$18::uuid'];
+    const linkParams = [links.claimId];
+    if (links.cashJobId) {
+      linkColumns.push('cash_job_id', 'check_source', 'cash_job_payment_class');
+      linkValues.push('$19::uuid', "'cash_job'", '$20::text');
+      linkParams.push(links.cashJobId, links.paymentClass);
+    }
     const rows = (await client.query(
       `INSERT INTO public.check_intake_items (
          id, tenant_id, uploaded_by, status, check_stage, ocr_status,
          front_image_path, back_image_path, ocr_needs_verification,
          carrier_name, check_number, payee_line, property_address,
          funds_type, review_notes, payee_address, expiration_days,
-         is_multi_payee, issue_date, amount
+         is_multi_payee, issue_date, amount, ${linkColumns.join(', ')}
        ) VALUES (
          $1::uuid, $2::uuid, $3::uuid, $4::text, $5::check_stage, 'pending',
          $6::text, NULL, false,
          $7::text, $8::text, $9::text, $10::text,
          $11::text, $12::text, $13::text, $14::int,
-         $15::boolean, $16::date, $17::numeric
+         $15::boolean, $16::date, $17::numeric, ${linkValues.join(', ')}
        ) RETURNING *`,
       [
         checkId,
@@ -412,6 +538,7 @@ export const handleCreateCheck = async (event, deps = {}) => {
         values.is_multi_payee ?? null,
         values.issue_date || null,
         values.amount ?? null,
+        ...linkParams,
       ],
     )).rows;
     if (!rows.length) return denied(spoof, { error: 'rls_denied', message: 'check insert blocked by RLS' });
@@ -432,7 +559,10 @@ export const handleCreateCheck = async (event, deps = {}) => {
           image_prefix: `checks/${created.id}/`,
           ocr_invoked: false,
           provider_submitted: false,
-          claim_id: null,
+          claim_id: links.claimId,
+          cash_job_id: links.cashJobId,
+          check_source: links.cashJobId ? 'cash_job' : null,
+          cash_job_payment_class: links.paymentClass,
         }),
       ],
     );
@@ -450,6 +580,9 @@ export const handleCreateCheck = async (event, deps = {}) => {
         imagePrefix: `checks/${created.id}/`,
         tenantDerived: true,
         usedClaimedMembership: derived.usedClaimedMembership,
+        claimId: links.claimId,
+        cashJobId: links.cashJobId,
+        cashJobName: links.cashJobName,
       },
     });
   }, deps);
@@ -488,6 +621,16 @@ export const handleCheckTransition = async (event, deps = {}) => {
     }
     const notes = asText(body.review_notes || body.p_reviewer_notes, 2000);
     if (notes.error) return denied(spoof, { statusCode: 400, ...notes });
+    const homeownerUpload = HOMEOWNER_CLAIM_LINK_ACTIONS.has(action)
+      ? await loadHomeownerUploadForCheck(client, looked.check)
+      : null;
+    if (homeownerUpload && !looked.check.claim_id) {
+      return denied(spoof, {
+        statusCode: 409,
+        error: 'homeowner_upload_needs_claim',
+        message: 'Link this check to a claim first so the homeowner can follow it.',
+      });
+    }
     if (action === 'mark_ready_for_deposit') {
       const payees = await loadCheckPayees(client, looked.check.id, looked.check.tenant_id);
       const endorsements = await loadCheckEndorsements(client, looked.check.id, looked.check.tenant_id);
@@ -550,6 +693,9 @@ export const handleCheckTransition = async (event, deps = {}) => {
         }),
       ],
     );
+    if (homeownerUpload) {
+      await linkHomeownerUploadToClaim(client, homeownerUpload, looked.check);
+    }
     return okResult({
       mapping,
       claims,

@@ -161,8 +161,10 @@ test('pins: SQL 98-100 code-derived (the SQL 98 and SQL 99 production pins appli
   // SQL 100 alone is production_noop with grantors and policy comments in its fingerprint.
   assert.deepEqual(Object.keys(RELEASE_SQL_SPECS).filter((key) => RELEASE_SQL_SPECS[key].production_noop === true), ['sql100']);
   assert.deepEqual(RELEASE_SQL_SPECS.sql100.render, { grantors: true, policy_comments: true });
-  // SQL 103 and SQL 119 render grantors too (each fingerprint is one function ACL), without policy comments.
-  assert.deepEqual(Object.keys(RELEASE_SQL_SPECS).filter((key) => RELEASE_SQL_SPECS[key].render), ['sql100', 'sql103', 'sql119']);
+  // SQL 103 and SQL 119 render grantors too (each fingerprint is one function ACL), and SQL 121 (function
+  // and table ACLs), without policy comments.
+  assert.deepEqual(Object.keys(RELEASE_SQL_SPECS).filter((key) => RELEASE_SQL_SPECS[key].render), ['sql100', 'sql103', 'sql119', 'sql121']);
+  assert.deepEqual(RELEASE_SQL_SPECS.sql121.render, { grantors: true });
   assert.deepEqual(RELEASE_SQL_SPECS.sql119.render, { grantors: true });
   assert.deepEqual(RELEASE_SQL_SPECS.sql103.render, { grantors: true });
 });

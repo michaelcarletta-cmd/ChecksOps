@@ -1,0 +1,305 @@
+{
+  "id": "sql128-contractor-verification-from-compliance-production-apply",
+  "migration": "sql128",
+  "authorization": "Applied to production on 2026-10-30; execute is false again, so this pin is no longer a standing authorization and a re-apply needs a new reviewed pin change. The owner approved the SQL 128 production pin change on 2026-10-30 in the words \"Start SQL 128 production\" and \"SQL 128 from the production state\" (127bf5da -> ba4dcb2e, #1437) and the one apply run recorded in applied (workstream prod-sql128-contractor-verification-from-compliance-20261030) in the words \"apply SQL 128 in production\", passed to it verbatim. That approval covered that run only.",
+  "execute": false,
+  "target_environment": "production",
+  "target_component": "production-sql",
+  "deployment_type": "sql-apply",
+  "filename": "aws/workflows/sql/128_contractor_verification_from_compliance.sql",
+  "migration_id": "128_contractor_verification_from_compliance",
+  "staging_pin_commit": "213396a87526560d35bc5ce02c76a2ba06a13726",
+  "source_sha256": "19d5ea14967dd604bcb2e9ae7d90822a404de5c52ec07907e01ff6e0cee5a9cc",
+  "function_identities": [
+    "public.contractor_verification_status(uuid)"
+  ],
+  "expected_live_definition_sha256": "127bf5da500b4e5975686249b373ab0913f370ce5557292c5c49394e0ad775e8",
+  "intended_replacement_sha256": "ba4dcb2e43c233adf6109e5a89e7d6319dc993babcf3dbdcdfee261e6a33fbd7",
+  "authorization_phrase": "APPLY_CONTRACTOR_VERIFICATION_FROM_COMPLIANCE",
+  "predecessors": [],
+  "order_note": "No release-engine predecessor and no ordering constraint. SQL 128 replaces contractor_verification_status(uuid), restored onto the AWS databases from supabase migration 20260709105400 (on no release key), and drops the orphan _trg_recompute_contractor_tier_from_docs() if present. The spec prerequisites are the function, contractor_profiles, contractor_reviews, tenant_users, moov_compliance_documents (SQL 91) and tenant_documents with every column the body reads, and role checksops; a read-only production inspect confirms them. The replaced function must be owned by the applying login (functions_owned_by_login), keep its jsonb result (function_results_match) and hold no EXECUTE grant other than PUBLIC, anon, authenticated, service_role, checksops and the owner (function_acl_replaceable); the dropped function, if present, must be owned by the login with no dependents or callers. No API, Lambda or SPA change is part of this pin. Adds no trigger: the DB validator's public trigger count is not affected.",
+  "admin_login": "checksops_admin",
+  "rds_identifier": "checksops-production",
+  "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
+  "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
+  "tooling": {
+    "status": "built",
+    "production_tool": "scripts/deployment-guard/sql128-contractor-verification-from-compliance-production-apply.mjs",
+    "production_lib": "scripts/deployment-guard/lib/release-sql-production-apply.mjs",
+    "staging_executor_handler": "aws/write-path/guarded-sql-executor/index.mjs handleReleaseSqlMigration",
+    "staging_workflow_choice": "sql128-contractor-verification-from-compliance",
+    "one_shot_migration": "sql128",
+    "fingerprint_engine": "scripts/deployment-guard/lib/release-sql-state.mjs",
+    "runbook": "ops/production-sql-128-apply.md",
+    "tests": [
+      "aws/tests/release-sql128-executor.test.mjs",
+      "aws/tests/release-sql128-production-apply.test.mjs",
+      "aws/tests/release-sql90-97-executor.test.mjs",
+      "aws/tests/release-sql90-97-production-apply.test.mjs",
+      "aws/tests/sql128-contractor-verification-pg.test.mjs"
+    ],
+    "note": "Guarded tooling for SQL 128: sql128-contractor-verification-from-compliance-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql128-contractor-verification-from-compliance); production-sql-one-shot.mjs --migration sql128. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): the function (body and attributes from the file, EXECUTE for checksops and the owner) and the dropped trigger function absent. The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
+  },
+  "production_inspect": {
+    "status": "recorded",
+    "date": "2026-10-30",
+    "ssm_command_id": "54ccb458-4942-4bb9-9bdc-c3e06a6aad0a",
+    "source_commit": "c19b0444a9fb42323fd683e2e4e5ff3191be3f79",
+    "read_only": true,
+    "connected_as": "checksops_admin",
+    "live_definition_sha256": "127bf5da500b4e5975686249b373ab0913f370ce5557292c5c49394e0ad775e8",
+    "apply_preconditions_met": false,
+    "precondition_failures": [],
+    "note": "Recorded from the read-only production inspect of 2026-10-30 (SSM command 54ccb458-4942-4bb9-9bdc-c3e06a6aad0a, node scripts/deployment-guard/sql128-contractor-verification-from-compliance-production-apply.mjs --inspect on the SQL53 runner i-0c35557c4e5385406 from main c19b0444a (tarball source-c19b0444a9fb42323fd683e2e4e5ff3191be3f79.tar.gz sha256 72f7c3a6f25d64eb0a699182557a8aec2119e01b6205fb0eeeda2c9c262aeacf, transfer run 41048447302; migration source sha256 on the runner 19d5ea14967dd604bcb2e9ae7d90822a404de5c52ec07907e01ff6e0cee5a9cc == source_sha256), read_only true, source_ok true, connected as checksops_admin (current_user and session_user checksops_admin)). live_definition_sha256 127bf5da500b4e5975686249b373ab0913f370ce5557292c5c49394e0ad775e8 (not the intended ba4dcb2e43c233adf6109e5a89e7d6319dc993babcf3dbdcdfee261e6a33fbd7: already_applied false); release_sql_inspect: contractor_verification_status(uuid) different, function_acl PUBLIC EXECUTE, checksops EXECUTE and owner EXECUTE; _trg_recompute_contractor_tier_from_docs() present; prerequisites_missing [], missing_dependencies [], predecessors {}, predecessors_applied true, successors_applied [], dropped_function_dependents 0, dropped_function_callers [], precondition_failures []. Production's pre-state differs from staging's (read-live run 41042517205, 8bd6b42d189ff05b77e19d178ddba0229a0d2b6bca0a2d1d98221774fa8fbc5f) only by an EXECUTE grant to checksops on both functions: 127bf5da500b4e5975686249b373ab0913f370ce5557292c5c49394e0ad775e8 is derived from the supabase bytes as the restored pre-state with the docs trigger function present and EXECUTE for PUBLIC, checksops and the owner on both functions (aws/tests/release-sql128-executor.test.mjs; aws/tests/sql128-contractor-verification-pg.test.mjs reads it back from PostgreSQL 16 and applies from it). function_acl_replaceable allows the checksops grant, and the file grants checksops EXECUTE and revokes PUBLIC, so the intended post-state is the same. apply_preconditions_met was false at inspect time only because no pre-state was recorded yet (execute false, expected_live_definition_sha256 null). This reviewed change copies live_definition_sha256 into expected_live_definition_sha256 and, in the same change, sets authorization, execute true and staging_acceptance. A fresh --inspect immediately before apply (the one-shot's inspect step) must still report this live_definition_sha256 and precondition_failures []; if not, stop. If already_applied is true, or precondition_failures is not [], stop: that needs its own reviewed change. Earlier: Pending: no read-only production inspect has been run for SQL 128 yet. Expected: prerequisites_missing [], contractor_verification_status(uuid) 'different' (the supabase body), owned by checksops_admin, EXECUTE PUBLIC and the owner as restored (release_sql_inspect.function_acl); _trg_recompute_contractor_tier_from_docs() present or absent. Record its date, SSM command id, source commit, live_definition_sha256, prerequisites_missing, release_sql_inspect.functions, release_sql_inspect.function_acl, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. Stop if prerequisites_missing is not [] or precondition_failures is not [] (functions_owned_by_login, function_results_match, function_acl_replaceable, or a dropped-function check): that needs its own reviewed change."
+  },
+  "intended_post_state": {
+    "fingerprint": "ba4dcb2e43c233adf6109e5a89e7d6319dc993babcf3dbdcdfee261e6a33fbd7",
+    "note": "contractor_verification_status(uuid) owned by checksops_admin, plpgsql, STABLE, SECURITY DEFINER, search_path public, result jsonb with the same keys, EXECUTE for checksops and the owner: the supabase body with w9_on_file and coi_current read from the contractor's tenants' stored or sent moov_compliance_documents (purpose w9 / insurance) or tenant_documents (library:mortgage:w-9 or w9; library:mortgage:certificate-of-insurance, general-liability-insurance, workers-comp-insurance or insurance, not expired). _trg_recompute_contractor_tier_from_docs() absent. recompute_contractor_tier, admin_set_contractor_pro and the trigger functions unchanged. No table, column, view, policy, RLS setting, table grant, trigger or row change. The fingerprint is releaseIntendedHash('sql128', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): ba4dcb2e43c233adf6109e5a89e7d6319dc993babcf3dbdcdfee261e6a33fbd7."
+  },
+  "staging_acceptance": {
+    "ok": true,
+    "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/41045591568",
+    "basis": "Guarded staging SQL executor apply of sql128-contractor-verification-from-compliance, run 41045591568 (2026-10-30, main b809a699282d2973f4810960f79c25dd3abe0d77, wave 27, workstream github-staging-sql-41045591568, on the executor deployed by deploy run 41045243433: 7QfEFTsiiF6lK96dwUPcLYtBVQtqwWovzgbor7aja+s=), from the staging pre-state recorded by read-live run 41042517205 (8bd6b42d189ff05b77e19d178ddba0229a0d2b6bca0a2d1d98221774fa8fbc5f): receipt before 8bd6b42d189ff05b77e19d178ddba0229a0d2b6bca0a2d1d98221774fa8fbc5f, after ba4dcb2e43c233adf6109e5a89e7d6319dc993babcf3dbdcdfee261e6a33fbd7 == intended, result applied. Read-live run 41046074638 then reported already_applied true, live ba4dcb2e43c233adf6109e5a89e7d6319dc993babcf3dbdcdfee261e6a33fbd7. The behavior is covered on PostgreSQL 16 by aws/tests/sql128-contractor-verification-pg.test.mjs, including an apply from production's pre-state (127bf5da500b4e5975686249b373ab0913f370ce5557292c5c49394e0ad775e8: the extra checksops EXECUTE grant) to the same intended state. The same file bytes (source_sha256) are pinned in both."
+  },
+  "applied": {
+    "date": "2026-10-30",
+    "result": "applied",
+    "source_commit": "b7a4b34091e2bc56d7de8435a87fd9c2480e0259",
+    "source_commit_basis": "SOURCE_COMMIT in the tarball (written by sql53-temporary-transfer) equals --commit, and the tarball sha256 equals --expected-tarball-sha256 as copied by the operator from that transfer run's log (TARBALL_SHA256 line); the run log itself was not read by the one-shot.",
+    "source_tarball": {
+      "file": "source-b7a4b34091e2bc56d7de8435a87fd9c2480e0259.tar.gz",
+      "sha256": "8cbf52bd777fd7375d2c16af23e13c4f93b646f03631fd383d84eafda1fa8190"
+    },
+    "migration_source_sha256": "19d5ea14967dd604bcb2e9ae7d90822a404de5c52ec07907e01ff6e0cee5a9cc",
+    "migration_source_sha256_note": "The one-shot source step hashed aws/workflows/sql/128_contractor_verification_from_compliance.sql in the transfer tarball: equal to source_sha256 (the pin; migration_matches_pin true).",
+    "runner": "i-0c35557c4e5385406",
+    "runner_basis": "operator-supplied --runner (not verified by the one-shot)",
+    "workstream_id": "prod-sql128-contractor-verification-from-compliance-20261030",
+    "one_use_id": "sql128-prod-39880651-2b89-4961-9c90-0d45497e461e",
+    "one_use_id_consumed": true,
+    "one_use_id_consumed_basis": "Inferred from the successful apply (the tool records the one_use_id after COMMIT and only warns if that write fails); the consumed-registry entry was not read back separately.",
+    "owner_approval": "apply SQL 128 in production",
+    "owner_approval_basis": "As passed in --approval-statement (base64, --approval-statement-b64) for --approval-scope sql128; the one-shot cannot verify who said it. The owner's words of 2026-10-30; the pin change (#1437) was merged green before this run, on the owner's words \"merge 1437 when green\".",
+    "operator": "michaelcarletta-cmd",
+    "apply_ssm_command_id": "e9e25699-8a3f-4349-b5d5-cc8d5964d41e",
+    "one_shot_run_id": "309640f4-ba8c-4e7e-aed1-a7b75ec63916",
+    "one_shot_note": "One SSM command (e9e25699-8a3f-4349-b5d5-cc8d5964d41e on i-0c35557c4e5385406, comment \"SQL 128 production apply (owner: apply SQL 128 in production)\", sent 2026-10-30 12:32:23Z, finished by 12:32:40Z, Status Success) ran the production-sql-one-shot --phase apply (run_id 309640f4-ba8c-4e7e-aed1-a7b75ec63916) from main b7a4b3409 (transfer run 41055873418, sql53-temporary-transfer.yml on main after the #1437 merge; it published TARBALL_SHA256 8cbf52bd777fd7375d2c16af23e13c4f93b646f03631fd383d84eafda1fa8190), after a read-only --phase inspect of the same commit and tarball (SSM ba8d180e-5d0e-490a-b078-1991dd30216f, one-shot run 013f1f49-41c6-43af-b638-bad5b9383351: live 127bf5da500b4e5975686249b373ab0913f370ce5557292c5c49394e0ad775e8, live_matches_expected true, apply_preconditions_met true, precondition_failures [], prerequisites_missing [], contractor_verification_status(uuid) 'different' with EXECUTE PUBLIC, checksops and the owner, _trg_recompute_contractor_tier_from_docs() 'present' with 0 dependents and no callers; contracts claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43). The operator's gate read only the printed summary of that inspect and let the apply run. Steps pin (execute true, staging_acceptance run 41045591568), source (tarball sha256 matches the sidecar and --expected-tarball-sha256, tree matches the tarball, migration source == pin), inspect, contracts, manifest, source-recheck-before-preflight, preflight (receipt_issued), evaluate (sql128_production_apply_allowed true), source-recheck-before-apply, apply (applied) and post-apply-inspect all ok; the command printed EXIT=0 and SSM reported Success. This time the run's whole JSON arrived (about 13900 characters, under SSM's 24000-character limit, closing with its top-level errors []); this block records the one-shot's own applied object as printed, except this note and owner_approval_basis, which are extended as in the SQL 124 and SQL 127 records (the one-shot's own one_shot_note read: \"One production-sql-one-shot run verified the source, ran the read-only inspect and the runner contracts, built the manifest, issued the receipt and lease (preflight), evaluated (sql128_production_apply_allowed true), applied (exit 0) and ran the post-apply inspect.\"; its owner_approval_basis read: \"As passed in --approval-statement for --approval-scope sql128; the one-shot cannot verify who said it.\"), and adds migration_source_sha256 (with its note), apply_ssm_command_id, steps and manifest_sha256 from the same run's details, as the SQL 126 and SQL 127 records do. The run's not_observed_by_this_run listed \"ssm_command_id (add from SSM)\" and \"source_staged_by (the sql53-temporary-transfer run id; add from GitHub Actions)\", supplied here as apply_ssm_command_id and transfer run 41055873418. A separate read-only --inspect after the run (SSM 1dd5b8e0-7cd6-4a88-bc84-f19f01db6312, same tarball, full JSON captured) reported live ba4dcb2e43c233adf6109e5a89e7d6319dc993babcf3dbdcdfee261e6a33fbd7 == intended, already_applied true, precondition_failures [], both functions 'intended', contractor_verification_status(uuid) EXECUTE checksops and the owner (PUBLIC revoked), dropped_function_dependents 0. Runner state (security audit finding C): started for this run at 2026-10-30 12:31:37 UTC (running 12:31:54, SSM online 12:32:14), stop requested 12:32:48 and stopped 12:33:20 UTC; for the earlier read-only production inspect (SSM 54ccb458-4942-4bb9-9bdc-c3e06a6aad0a) it was started 11:30:53 and stopped 11:32:17 UTC.",
+    "steps": [
+      "pin",
+      "source",
+      "inspect",
+      "contracts",
+      "manifest",
+      "source-recheck-before-preflight",
+      "preflight",
+      "evaluate",
+      "source-recheck-before-apply",
+      "apply",
+      "post-apply-inspect"
+    ],
+    "contract_results": {
+      "claim-ledger": {
+        "ok": true,
+        "test": "aws/tests/claim-ledger-accepted-contract.test.mjs",
+        "evidence": "4/4 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at b7a4b34091e2bc56d7de8435a87fd9c2480e0259 (production-sql-one-shot 309640f4-ba8c-4e7e-aed1-a7b75ec63916, node --test)"
+      },
+      "tenant-isolation": {
+        "ok": true,
+        "test": "aws/tests/tenant-security-compliance.test.mjs",
+        "evidence": "6/6 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at b7a4b34091e2bc56d7de8435a87fd9c2480e0259 (production-sql-one-shot 309640f4-ba8c-4e7e-aed1-a7b75ec63916, node --test)"
+      },
+      "financial-write-protections": {
+        "ok": true,
+        "test": "aws/tests/api-write.test.mjs",
+        "evidence": "43/43 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at b7a4b34091e2bc56d7de8435a87fd9c2480e0259 (production-sql-one-shot 309640f4-ba8c-4e7e-aed1-a7b75ec63916, node --test)"
+      }
+    },
+    "pre_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "127bf5da500b4e5975686249b373ab0913f370ce5557292c5c49394e0ad775e8",
+      "live_matches_expected": true,
+      "already_applied": false,
+      "predecessors": {},
+      "predecessors_applied": true,
+      "missing_dependencies": [],
+      "apply_preconditions_met": true,
+      "precondition_failures": [],
+      "current_user": "checksops_admin",
+      "session_user": "checksops_admin",
+      "counts": null,
+      "successors_applied": [],
+      "release_sql_inspect": {
+        "live_definition_sha256": "127bf5da500b4e5975686249b373ab0913f370ce5557292c5c49394e0ad775e8",
+        "prerequisites_missing": [],
+        "predecessors": {},
+        "successors_applied": [],
+        "functions": [
+          {
+            "name": "contractor_verification_status(uuid)",
+            "state": "different"
+          },
+          {
+            "name": "_trg_recompute_contractor_tier_from_docs()",
+            "state": "present"
+          }
+        ],
+        "policies": [],
+        "views": [],
+        "tables": [],
+        "columns": [],
+        "constraints": [],
+        "triggers": [],
+        "table_privileges": [],
+        "function_acl": [
+          {
+            "name": "contractor_verification_status(uuid)",
+            "acl": [
+              "PUBLIC EXECUTE",
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          }
+        ],
+        "acl_functions": [],
+        "indexes": [],
+        "unique_covers": [],
+        "definer_writes": [],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": null
+      }
+    },
+    "manifest_sha256": "26e6f8317ae75705c3a1f48975b3ef3e2ee3871bde81a4a8435a6df803b2a736",
+    "receipt": {
+      "migration": "sql128",
+      "workstream": "prod-sql128-contractor-verification-from-compliance-20261030",
+      "commit": "b7a4b34091e2bc56d7de8435a87fd9c2480e0259",
+      "sql_file": "aws/workflows/sql/128_contractor_verification_from_compliance.sql",
+      "before_hash": "127bf5da500b4e5975686249b373ab0913f370ce5557292c5c49394e0ad775e8",
+      "after_hash": "ba4dcb2e43c233adf6109e5a89e7d6319dc993babcf3dbdcdfee261e6a33fbd7",
+      "release_sql_inspect": {
+        "live_definition_sha256": "ba4dcb2e43c233adf6109e5a89e7d6319dc993babcf3dbdcdfee261e6a33fbd7",
+        "prerequisites_missing": [],
+        "predecessors": {},
+        "successors_applied": [],
+        "functions": [
+          {
+            "name": "contractor_verification_status(uuid)",
+            "state": "intended"
+          },
+          {
+            "name": "_trg_recompute_contractor_tier_from_docs()",
+            "state": "intended"
+          }
+        ],
+        "policies": [],
+        "views": [],
+        "tables": [],
+        "columns": [],
+        "constraints": [],
+        "triggers": [],
+        "table_privileges": [],
+        "function_acl": [
+          {
+            "name": "contractor_verification_status(uuid)",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          }
+        ],
+        "acl_functions": [],
+        "indexes": [],
+        "unique_covers": [],
+        "definer_writes": [],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": null
+      },
+      "unrelated_catalog_sha256": "561693f18c034f56f6ddc27fd4cf52cf35aeca9595651be32abbcc1143cef69a",
+      "unrelated_catalog_counts": {
+        "relations": 892,
+        "columns": 3550,
+        "constraints": 2239,
+        "policies": 404,
+        "functions": 1353,
+        "indexes": 655,
+        "default_acl": 0,
+        "role_memberships": 15,
+        "roles": 29,
+        "triggers": 184,
+        "views": 25,
+        "types": 18,
+        "schema": 2
+      },
+      "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/41045591568",
+      "result": "applied"
+    },
+    "post_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "ba4dcb2e43c233adf6109e5a89e7d6319dc993babcf3dbdcdfee261e6a33fbd7",
+      "live_matches_expected": false,
+      "already_applied": true,
+      "predecessors": {},
+      "predecessors_applied": true,
+      "missing_dependencies": [],
+      "apply_preconditions_met": false,
+      "precondition_failures": [],
+      "current_user": "checksops_admin",
+      "session_user": "checksops_admin",
+      "counts": null,
+      "successors_applied": [],
+      "release_sql_inspect": {
+        "live_definition_sha256": "ba4dcb2e43c233adf6109e5a89e7d6319dc993babcf3dbdcdfee261e6a33fbd7",
+        "prerequisites_missing": [],
+        "predecessors": {},
+        "successors_applied": [],
+        "functions": [
+          {
+            "name": "contractor_verification_status(uuid)",
+            "state": "intended"
+          },
+          {
+            "name": "_trg_recompute_contractor_tier_from_docs()",
+            "state": "intended"
+          }
+        ],
+        "policies": [],
+        "views": [],
+        "tables": [],
+        "columns": [],
+        "constraints": [],
+        "triggers": [],
+        "table_privileges": [],
+        "function_acl": [
+          {
+            "name": "contractor_verification_status(uuid)",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          }
+        ],
+        "acl_functions": [],
+        "indexes": [],
+        "unique_covers": [],
+        "definer_writes": [],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": null
+      }
+    }
+  },
+  "production_evidence": {
+    "2026-10-30 apply": "Guarded production SQL one-shot on i-0c35557c4e5385406, workstream prod-sql128-contractor-verification-from-compliance-20261030, main b7a4b3409 (tarball 8cbf52bd…, transfer run 41055873418, migration source 19d5ea14… == pin), owner-approved run (\"apply SQL 128 in production\"), SSM e9e25699-8a3f-4349-b5d5-cc8d5964d41e, run_id 309640f4-ba8c-4e7e-aed1-a7b75ec63916, one_use_id sql128-prod-39880651-2b89-4961-9c90-0d45497e461e (spent): every step ok; contracts claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43; pre-apply inspect live 127bf5da… (live_matches_expected true, precondition_failures []), after the read-only --phase inspect SSM ba8d180e-5d0e-490a-b078-1991dd30216f; manifest 26e6f831…; 127bf5da… -> ba4dcb2e…, result applied, unrelated catalog 561693f1… (triggers 184); post-apply inspect already_applied true, precondition_failures []; separate read-only inspect SSM 1dd5b8e0-7cd6-4a88-bc84-f19f01db6312 already_applied true, both functions intended, EXECUTE checksops and the owner. After: contractor_verification_status(uuid) reads the W-9 and insurance from the contractor's tenants' Compliance & Docs uploads (moov_compliance_documents and tenant_documents) instead of the dropped contractor_documents, PUBLIC no longer holds EXECUTE on it, and the orphan _trg_recompute_contractor_tier_from_docs() is dropped (0 dependents, no callers). No trigger was added, so the DB validator is unaffected. execute is false so the pin is no longer a standing authorization."
+  }
+}

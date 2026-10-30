@@ -13,6 +13,8 @@ import {
   handleNotifyHomeownerLead,
   handleNotifyHomeownerLeadAccepted,
 } from './email.mjs';
+import { handleNotifyMortgageDeskReturn } from './mortgage-desk-return.mjs';
+import { handleMortgageDeskEsign } from './mortgage-desk-esign.mjs';
 import {
   handleProcessEmailQueue,
   handleEmailSuppression,
@@ -112,6 +114,11 @@ export const CLASS_A_FUNCTIONS = new Set([
   'process-email-queue',
   'resend-webhook',
   'notify-mortgage-handling-request',
+  // SQL 122: "work returned" email of a completed Desk request (once per request)
+  'notify-mortgage-desk-return',
+  // SQL 124: the Desk reads its request's check thread, files and signature requests,
+  // sends a check file for signature (sender ChecksOps) and posts homeowner timeline notes
+  'mortgage-desk-esign',
   'notify-homeowner-lead',
   'notify-homeowner-lead-accepted',
   'send-portal-invite',
@@ -241,6 +248,10 @@ export const handleAppServiceRequest = async (event, path, method) => {
       return handleResendWebhook(event);
     case 'notify-mortgage-handling-request':
       return handleNotifyMortgageHandlingRequest(event);
+    case 'notify-mortgage-desk-return':
+      return handleNotifyMortgageDeskReturn(event);
+    case 'mortgage-desk-esign':
+      return handleMortgageDeskEsign(event);
     case 'notify-homeowner-lead':
       return handleNotifyHomeownerLead(event);
     case 'notify-homeowner-lead-accepted':

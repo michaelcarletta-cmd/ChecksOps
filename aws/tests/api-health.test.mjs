@@ -346,7 +346,7 @@ const mockValidateClient = ({
   canExecuteAuthUid = false,
   authUidError = Object.assign(new Error('permission denied for function uid'), { code: '42501' }),
   authUsersFkCount = 0,
-  triggerCount = 180,
+  triggerCount = 184,
   writePrivilege = false,
   rlsEnabled = false,
 } = {}) => {

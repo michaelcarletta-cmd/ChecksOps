@@ -134,3 +134,28 @@ export function disbursementVolumeCents(details: Map<string, DisbursementDetail>
   for (const detail of details.values()) total += detail.amount_cents;
   return total;
 }
+
+/** Charge categories for filtering the usage log (labels never name a provider). */
+export const USAGE_CATEGORIES = [
+  { value: "all", label: "All charges" },
+  { value: "check_processing", label: "Check processing" },
+  { value: "payments", label: "Next-day / same-day payments" },
+  { value: "mortgage", label: "Mortgage handling" },
+  { value: "other", label: "Other" },
+] as const;
+
+export type UsageCategory = (typeof USAGE_CATEGORIES)[number]["value"];
+
+export function usageCategory(eventType: string | null | undefined): Exclude<UsageCategory, "all"> {
+  const key = String(eventType || "");
+  if (key === "check_processing") return "check_processing";
+  if (isSendFeeEvent(key)) return "payments";
+  if (key.startsWith("mortgage")) return "mortgage";
+  return "other";
+}
+
+/** Events in the chosen category ("all" keeps every event). */
+export function filterUsageEvents<T extends { event_type?: string | null }>(events: T[] | null | undefined, category: UsageCategory): T[] {
+  const list = events ?? [];
+  return category === "all" ? list : list.filter((e) => usageCategory(e.event_type) === category);
+}

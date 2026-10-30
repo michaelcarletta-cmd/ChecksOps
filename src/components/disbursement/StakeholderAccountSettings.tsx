@@ -15,6 +15,7 @@ import { isValidRoutingNumber, VERIFICATION_LABEL, VERIFICATION_BADGE_CLASS, typ
 import { AchAuthorizationForm } from "./AchAuthorizationForm";
 import { BankVerification } from "./BankVerification";
 import { useCurrentTenantMembership } from "@/hooks/useCurrentTenantMembership";
+import { useActiveStakeholders } from "@/hooks/useActiveStakeholders";
 import {
   PAYEE_ROW_COLUMNS,
   PAYEE_STATUS_CLASS,
@@ -84,27 +85,8 @@ export function StakeholderAccountSettings() {
   const [showDisconnected, setShowDisconnected] = useState(false);
   const [requestId, setRequestId] = useState(() => crypto.randomUUID());
 
-  const { data: accounts = [], isLoading } = useQuery({
-    queryKey: ["stakeholder-accounts", tenant?.id],
-    enabled: !!tenant?.id,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("stakeholder_accounts")
-        .select("id, nickname, account_type, chk_acct, acct_type, is_primary, is_active, custname, homeowner_name, verification_status, verified_at, verification_recipient_email, origin")
-        .eq("tenant_id", tenant!.id)
-        .eq("is_active", true)
-        .order("is_primary", { ascending: false })
-        .order("created_at", { ascending: true });
-      if (error) throw error;
-      // Tenant's own bank account (operating, or a provider-connected payment
-      // account like the Moov-linked "payment account") is shown separately at
-      // the top of the page in TenantBankAccountSettings. Exclude both here so
-      // stakeholders are strictly third parties identified by their account_type.
-      return (data ?? []).filter(
-        (a: any) => a.account_type !== "operating" && a.origin !== "provider_connected",
-      );
-    },
-  });
+  // The Active Stakeholders list; Payroll and the recipient report read the same query.
+  const { data: accounts = [], isLoading } = useActiveStakeholders(tenant?.id);
 
   // Payee setup state (SQL 113 columns; SELECT under the tenant policy). The
   // link token column is never read.

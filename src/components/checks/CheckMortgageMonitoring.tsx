@@ -18,6 +18,8 @@ import {
 import { format } from "date-fns";
 import { MortgageDeskShippingCard } from "@/components/loss-draft/MortgageDeskShippingCard";
 import { MortgageDeskReturnedBanner } from "@/components/loss-draft/MortgageDeskReturnedBanner";
+import { MortgageDeskReturnedWork } from "@/components/loss-draft/MortgageDeskReturnedWork";
+import { scrollToMortgageDeskReturnedWork } from "@/lib/mortgageDeskReturn";
 import { useAcknowledgeMortgageDeskReturn, useMortgageDeskReturnAlert } from "@/hooks/useMortgageDeskReturnAlert";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -287,6 +289,7 @@ export function CheckMortgageMonitoring({ checkId, onRefresh }: Props) {
         <MortgageDeskReturnedBanner
           completedAt={returnAlert.completedAt || deskRequest.completed_at}
           returnedAt={returnAlert.returnedAt}
+          onReview={() => scrollToMortgageDeskReturnedWork(checkId)}
           acknowledging={ackBusy}
           onAcknowledge={async () => {
             if (!user?.id) return;
@@ -336,6 +339,9 @@ export function CheckMortgageMonitoring({ checkId, onRefresh }: Props) {
           )}
         </div>
       )}
+
+      {/* Everything the Desk returned on this check: its notes and documents. */}
+      {deskRequest && <MortgageDeskReturnedWork checkId={checkId} />}
 
 
 

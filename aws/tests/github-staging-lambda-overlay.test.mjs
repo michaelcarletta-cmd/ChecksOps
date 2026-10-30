@@ -564,7 +564,10 @@ test('staging apply of a member held by sql_before is refused before any AWS cal
   stagingSqlLive.sql[SQL98] = { verified_live: false, evidence: null };
   // tenant-billing-handlers.mjs waits on SQL 102 (live in staging, run 39162625974), shown the same way.
   stagingSqlLive.sql[SQL102] = { verified_live: false, evidence: null };
-  for (const [member, sqlBefore] of [['providers.mjs', SQL98], ['workflow-rpc.mjs', SQL98], ['tenant-billing-engine.mjs', SQL98], ['tenant-billing-handlers.mjs', SQL102]]) {
+  // tenant-billing-engine.mjs waits on SQL 120 (send-time fees; live in staging, run 40547527832), shown the same way.
+  const SQL120 = 'aws/workflows/sql/120_usage_events_at_approval_and_send.sql';
+  stagingSqlLive.sql[SQL120] = { verified_live: false, evidence: null };
+  for (const [member, sqlBefore] of [['providers.mjs', SQL98], ['workflow-rpc.mjs', SQL98], ['tenant-billing-engine.mjs', SQL120], ['tenant-billing-handlers.mjs', SQL102]]) {
     assert.equal(PLAN.members[member].sql_before, sqlBefore, member);
     assert.equal(stagingSqlBefore(member).verified_live_in_staging, true, `${member}: released by the committed record`);
     assert.deepEqual(stagingSqlBefore(member, { stagingSqlLive }), { sql_before: sqlBefore, verified_live_in_staging: false, evidence: null }, member);

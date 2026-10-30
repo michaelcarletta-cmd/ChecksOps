@@ -98,7 +98,21 @@ export const runCheckReconciliation = async ({ client, mapping, spoof }) => {
          WHERE l.check_intake_item_id = c.id
        )`,
   )).rows;
-  const scopedStuck = admin ? stuck : stuck.filter((row) => !row.tenant_id || tenantIds.includes(row.tenant_id));
+  // get_stuck_checks() returns no tenant_id: a non-owner keeps only the rows whose check is in
+  // one of the caller's tenants, looked up here (an unresolved row is dropped, never kept).
+  const stuckTenant = admin || !stuck.length ? [] : (await safeQuery(
+    client,
+    `SELECT c.id::text AS id, c.tenant_id::text AS tenant_id
+     FROM public.check_intake_items c
+     WHERE c.id = ANY($1::uuid[]) AND c.tenant_id = ANY($2::uuid[])`,
+    [stuck.map((row) => row.id), tenantIds],
+  )).rows;
+  const stuckTenantById = new Map(stuckTenant.map((row) => [String(row.id), row.tenant_id]));
+  const scopedStuck = admin
+    ? stuck
+    : stuck
+      .filter((row) => stuckTenantById.has(String(row.id)))
+      .map((row) => ({ ...row, tenant_id: stuckTenantById.get(String(row.id)) }));
   const scopedMortgage = admin ? mortgage : mortgage.filter((row) => tenantIds.includes(row.tenant_id));
 
   const totalSql = admin

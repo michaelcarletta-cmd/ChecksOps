@@ -526,6 +526,16 @@ test('source does not call remint or rewrite SQL 82 or Sign.tsx', () => {
   assert.doesNotMatch(integration, /FROM public\.signature_signers/);
   assert.match(sql82, /'pending_signatures', '\[\]'::jsonb/);
   assert.match(page, /Review & Sign Document/);
-  assert.match(page, /homeowner-ledger-document-sign-link/);
+  // SQL 127 (owner decision 2026-10-29, the claim portal link is enough): the page opens
+  // /sign?portal_signer=<id> and keeps the claim link token in this tab's session storage,
+  // never in the /sign URL; the API resolves the signer server-side.
+  assert.match(page, /portalSignPath\(signerId\)/);
+  assert.match(page, /rememberPortalLedgerToken\(token\)/);
   assert.doesNotMatch(page, /homeowner-ledger-sign-link/);
+  const lib = fs.readFileSync(path.join(ROOT, 'src/lib/portalSigning.ts'), 'utf8');
+  assert.match(lib, /sessionStorage/);
+  assert.match(lib, /\/sign\?portal_signer=\$\{encodeURIComponent\(signerId\)\}/);
+  assert.doesNotMatch(lib, /ledger_token=|token=\$/);
+  const sign = fs.readFileSync(path.join(ROOT, 'src/pages/Sign.tsx'), 'utf8');
+  assert.match(sign, /ledger_token: portalLedgerToken, signer_id: portalSignerId/);
 });

@@ -1,5 +1,5 @@
 /**
- * Specs of the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108 to SQL 120) for the shared engine in
+ * Specs of the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108 to SQL 128) for the shared engine in
  * release-sql-state.mjs: what each pinned file creates, replaces or drops, the reviewed
  * EXECUTE ACLs, the prerequisites and predecessors, and the PostgreSQL renderings the file
  * leaves (policy expressions, view, column, constraint, index and trigger definitions as
@@ -52,7 +52,12 @@
  *                      the production tool never runs the file
  *   acl_functions      existing functions the file neither creates nor replaces, only sets the
  *                      EXECUTE ACL of (SQL 103): identity, final ACL, revokes (the entries it
- *                      removes); fingerprinted by presence and ACL only
+ *                      removes); fingerprinted by presence and ACL only. With `attributes`
+ *                      (SQL 121: ALTER FUNCTION ... SECURITY DEFINER, SET search_path) also by
+ *                      { security_definer, config } as the file leaves them and prosrc_sha256,
+ *                      the reviewed body (sha256 of the body the function's own migration
+ *                      defines, re-derived from that file by the tests), which must already be
+ *                      live (acl_functions_body_reviewed) and stays unchanged
  *   runs_before        informational production order (SQL 103 before SQL 29, which is not on
  *                      this engine; SQL 106 before SQL 97): the production one-shot and the
  *                      runbook
@@ -4651,6 +4656,1095 @@ export const RELEASE_SQL_SPECS = deepFreeze({
       "public.checkalt_deposits",
       "public.payment_transfers",
       "public.check_billing_events"
+    ]
+  },
+  // SQL 121: Cash Jobs on AWS. SELECT / INSERT / UPDATE / DELETE on cash_jobs, cash_job_line_items
+  // and cash_job_attachments for checksops and authenticated (table_privileges; every other grant on
+  // each table must stay as it was), sync_cash_job_check_payment() made SECURITY DEFINER with
+  // search_path public, pg_temp and EXECUTE for the owner only (acl_functions with attributes: its
+  // body must be the reviewed one from supabase/migrations/20260522142101_*.sql and stays unchanged),
+  // and the new aws_record_cash_job_checkalt_payment() (EXECUTE for the owner only) with its trigger
+  // on checkalt_deposits. No predecessor. definer_writes: both definer functions write
+  // cash_job_payments, whose trigger updates cash_jobs. render.grantors: only the owner's own
+  // entries are revocable by the owner (as SQL 103 and SQL 119).
+  sql121: {
+    "key": "sql121",
+    "label": "SQL 121",
+    "choice": "sql121-cash-jobs-grants",
+    "production_pin_rel": "ops/deployment-guard/sql121-cash-jobs-grants-production-apply.json",
+    "script": "sql121-cash-jobs-grants-production-apply",
+    "prerequisites": [
+      "public.cash_jobs",
+      "public.cash_job_line_items",
+      "public.cash_job_attachments",
+      "public.cash_job_payments",
+      "public.check_intake_items",
+      "public.checkalt_deposits",
+      "public.sync_cash_job_check_payment()",
+      "role checksops",
+      "role authenticated",
+      "column public.check_intake_items.id",
+      "column public.check_intake_items.tenant_id",
+      "column public.check_intake_items.cash_job_id",
+      "column public.check_intake_items.check_source",
+      "column public.check_intake_items.cash_job_payment_class",
+      "column public.check_intake_items.amount",
+      "column public.check_intake_items.uploaded_by",
+      "column public.check_intake_items.status",
+      "column public.checkalt_deposits.id",
+      "column public.checkalt_deposits.check_intake_item_id",
+      "column public.checkalt_deposits.status",
+      "column public.cash_job_payments.tenant_id",
+      "column public.cash_job_payments.cash_job_id",
+      "column public.cash_job_payments.created_by",
+      "column public.cash_job_payments.amount",
+      "column public.cash_job_payments.payment_method",
+      "column public.cash_job_payments.payment_date",
+      "column public.cash_job_payments.reference_number",
+      "column public.cash_job_payments.notes"
+    ],
+    "predecessors": [],
+    "functions": [
+      {
+        "identity": "public.aws_record_cash_job_checkalt_payment()",
+        "acl": [
+          "owner EXECUTE grantor=owner"
+        ],
+        "revokes": [
+          "PUBLIC EXECUTE grantor=owner",
+          "authenticated EXECUTE grantor=owner",
+          "checksops EXECUTE grantor=owner"
+        ]
+      }
+    ],
+    "acl_functions": [
+      {
+        "identity": "public.sync_cash_job_check_payment()",
+        "acl": [
+          "owner EXECUTE grantor=owner"
+        ],
+        "revokes": [
+          "PUBLIC EXECUTE grantor=owner",
+          "authenticated EXECUTE grantor=owner",
+          "checksops EXECUTE grantor=owner"
+        ],
+        "attributes": {
+          "security_definer": true,
+          "config": [
+            "search_path=public, pg_temp"
+          ],
+          "prosrc_sha256": "032154c6f7c53d0e2f1e293280ba6379003c4c21d96c029eee8028775aac66de"
+        }
+      }
+    ],
+    "table_privileges": [
+      {
+        "table": "public.cash_jobs",
+        "grantees": [
+          "authenticated",
+          "checksops"
+        ],
+        "privileges": [
+          "SELECT",
+          "INSERT",
+          "UPDATE",
+          "DELETE"
+        ],
+        "intended": [
+          "authenticated DELETE grantor=owner",
+          "authenticated INSERT grantor=owner",
+          "authenticated SELECT grantor=owner",
+          "authenticated UPDATE grantor=owner",
+          "checksops DELETE grantor=owner",
+          "checksops INSERT grantor=owner",
+          "checksops SELECT grantor=owner",
+          "checksops UPDATE grantor=owner"
+        ]
+      },
+      {
+        "table": "public.cash_job_line_items",
+        "grantees": [
+          "authenticated",
+          "checksops"
+        ],
+        "privileges": [
+          "SELECT",
+          "INSERT",
+          "UPDATE",
+          "DELETE"
+        ],
+        "intended": [
+          "authenticated DELETE grantor=owner",
+          "authenticated INSERT grantor=owner",
+          "authenticated SELECT grantor=owner",
+          "authenticated UPDATE grantor=owner",
+          "checksops DELETE grantor=owner",
+          "checksops INSERT grantor=owner",
+          "checksops SELECT grantor=owner",
+          "checksops UPDATE grantor=owner"
+        ]
+      },
+      {
+        "table": "public.cash_job_attachments",
+        "grantees": [
+          "authenticated",
+          "checksops"
+        ],
+        "privileges": [
+          "SELECT",
+          "INSERT",
+          "UPDATE",
+          "DELETE"
+        ],
+        "intended": [
+          "authenticated DELETE grantor=owner",
+          "authenticated INSERT grantor=owner",
+          "authenticated SELECT grantor=owner",
+          "authenticated UPDATE grantor=owner",
+          "checksops DELETE grantor=owner",
+          "checksops INSERT grantor=owner",
+          "checksops SELECT grantor=owner",
+          "checksops UPDATE grantor=owner"
+        ]
+      }
+    ],
+    "triggers": [
+      {
+        "table": "public.checkalt_deposits",
+        "name": "aws_checkalt_deposit_cash_job_payment",
+        "def": "CREATE TRIGGER aws_checkalt_deposit_cash_job_payment AFTER INSERT OR UPDATE OF status ON public.checkalt_deposits FOR EACH ROW EXECUTE FUNCTION public.aws_record_cash_job_checkalt_payment()"
+      }
+    ],
+    "definer_writes": [
+      "public.cash_job_payments",
+      "public.cash_jobs"
+    ],
+    "altered_relations": [
+      "public.cash_jobs",
+      "public.cash_job_line_items",
+      "public.cash_job_attachments",
+      "public.checkalt_deposits"
+    ],
+    "render": {
+      "grantors": true
+    }
+  },
+  // SQL 122: the Mortgage Desk returns its work to the tenant (owner, 2026-10-27). The column
+  // mortgage_handling_requests.return_emailed_at (nullable, no default, no grant) and six SECURITY
+  // DEFINER functions: the internal working-request check (EXECUTE for the owner only) and five the
+  // API calls as the signed-in agent (EXECUTE: checksops and the owner): a Desk message and a Desk
+  // document on the request's check, the shipping / mail-to / dates of the request, the homeowner
+  // timeline row of a completed request and the once-per-request "work returned" email claim. No
+  // policy, table grant or trigger. No predecessor: the file checks SQL 100's
+  // aws_is_mortgage_ops_agent() and every table and column it uses itself (prerequisites).
+  // definer_writes: the functions write check_messages, check_files, mortgage_handling_requests and
+  // homeowner_ledger_events under RLS. Four functions return a table row type, stated here (result)
+  // as pg_get_function_result renders it with search_path pg_catalog (public.<table>).
+  sql122: {
+    "key": "sql122",
+    "label": "SQL 122",
+    "choice": "sql122-mortgage-desk-return-to-tenant",
+    "production_pin_rel": "ops/deployment-guard/sql122-mortgage-desk-return-to-tenant-production-apply.json",
+    "script": "sql122-mortgage-desk-return-to-tenant-production-apply",
+    "prerequisites": [
+      "auth.uid()",
+      "public.aws_is_mortgage_ops_agent()",
+      "public.is_platform_owner()",
+      "public.check_messages",
+      "public.check_files",
+      "public.check_intake_items",
+      "public.mortgage_handling_requests",
+      "public.homeowner_ledger_events",
+      "public.tenants",
+      "public.tenant_users",
+      "public.identity_accounts",
+      "role checksops",
+      "column public.check_messages.id",
+      "column public.check_messages.check_id",
+      "column public.check_messages.sender_id",
+      "column public.check_messages.body",
+      "column public.check_messages.is_deleted",
+      "column public.check_messages.created_at",
+      "column public.check_files.id",
+      "column public.check_files.check_intake_item_id",
+      "column public.check_files.file_name",
+      "column public.check_files.file_path",
+      "column public.check_files.file_type",
+      "column public.check_files.file_size",
+      "column public.check_files.category",
+      "column public.check_files.source",
+      "column public.check_files.uploaded_by",
+      "column public.check_files.description",
+      "column public.check_files.created_at",
+      "column public.check_intake_items.id",
+      "column public.check_intake_items.claim_id",
+      "column public.check_intake_items.check_number",
+      "column public.mortgage_handling_requests.id",
+      "column public.mortgage_handling_requests.tenant_id",
+      "column public.mortgage_handling_requests.claim_id",
+      "column public.mortgage_handling_requests.status",
+      "column public.mortgage_handling_requests.check_intake_item_id",
+      "column public.mortgage_handling_requests.assigned_employee_id",
+      "column public.mortgage_handling_requests.requested_by",
+      "column public.mortgage_handling_requests.mortgage_company",
+      "column public.mortgage_handling_requests.completed_at",
+      "column public.mortgage_handling_requests.updated_at",
+      "column public.mortgage_handling_requests.mail_to_name",
+      "column public.mortgage_handling_requests.mail_to_address",
+      "column public.mortgage_handling_requests.shipping_label_path",
+      "column public.mortgage_handling_requests.shipping_label_name",
+      "column public.mortgage_handling_requests.shipping_label_carrier",
+      "column public.mortgage_handling_requests.shipping_label_tracking",
+      "column public.mortgage_handling_requests.shipping_label_uploaded_at",
+      "column public.mortgage_handling_requests.shipping_label_uploaded_by",
+      "column public.mortgage_handling_requests.check_sent_date",
+      "column public.mortgage_handling_requests.check_received_back_date",
+      "column public.homeowner_ledger_events.tenant_id",
+      "column public.homeowner_ledger_events.claim_id",
+      "column public.homeowner_ledger_events.check_id",
+      "column public.homeowner_ledger_events.event_type",
+      "column public.homeowner_ledger_events.occurred_at",
+      "column public.homeowner_ledger_events.actor_label",
+      "column public.homeowner_ledger_events.payload_json",
+      "column public.homeowner_ledger_events.created_by",
+      "column public.tenants.id",
+      "column public.tenants.name",
+      "column public.tenants.slug",
+      "column public.tenant_users.tenant_id",
+      "column public.tenant_users.user_id",
+      "column public.identity_accounts.application_user_id",
+      "column public.identity_accounts.email"
+    ],
+    "predecessors": [],
+    "functions": [
+      {
+        "identity": "public.aws_mortgage_desk_working_request(uuid, text[])",
+        "acl": [
+          "owner EXECUTE"
+        ],
+        "result": "public.mortgage_handling_requests"
+      },
+      {
+        "identity": "public.aws_mortgage_desk_post_message(uuid, text)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ],
+        "result": "public.check_messages"
+      },
+      {
+        "identity": "public.aws_mortgage_desk_attach_file(uuid, text, text, text, bigint, text, text)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ],
+        "result": "public.check_files"
+      },
+      {
+        "identity": "public.aws_mortgage_desk_update_shipping(uuid, jsonb)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ],
+        "result": "public.mortgage_handling_requests"
+      },
+      {
+        "identity": "public.aws_mortgage_desk_completion_timeline(uuid)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ]
+      },
+      {
+        "identity": "public.aws_mortgage_desk_return_email_claim(uuid)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ]
+      }
+    ],
+    "added_columns": [
+      {
+        "table": "public.mortgage_handling_requests",
+        "column": "return_emailed_at",
+        "type": "timestamp with time zone",
+        "notnull": false,
+        "default": null,
+        "acl": []
+      }
+    ],
+    "definer_writes": [
+      "public.check_messages",
+      "public.check_files",
+      "public.mortgage_handling_requests",
+      "public.homeowner_ledger_events"
+    ],
+    "altered_relations": [
+      "public.mortgage_handling_requests"
+    ]
+  },
+  // SQL 123: a Check Alt deposit moves its check (owner, 2026-10-28). Two owner-only SECURITY
+  // DEFINER functions: aws_checkalt_mark_check_deposited(uuid, timestamptz) moves a check forward to
+  // Deposited, and the trigger function aws_apply_checkalt_check_status() with its trigger on
+  // checkalt_deposits (approved or accepted: Deposited; rejected, error, duplicate or returned after
+  // approval: Returned as record_check_return records it). The trigger's name sorts before SQL 120's
+  // and SQL 121's on the same table, so it fires first. A one-time move of checks already approved
+  // and billed. No predecessor: the file checks every table, column and the check_stage labels it
+  // uses (prerequisites; the labels in the file). definer_writes: the functions update
+  // check_intake_items and insert check_audit_log. counts: the checks the one-time move takes and
+  // the approved checks it leaves (no usage event), for the inspect.
+  sql123: {
+    "key": "sql123",
+    "label": "SQL 123",
+    "choice": "sql123-checkalt-deposit-check-status",
+    "production_pin_rel": "ops/deployment-guard/sql123-checkalt-deposit-check-status-production-apply.json",
+    "script": "sql123-checkalt-deposit-check-status-production-apply",
+    "prerequisites": [
+      "public.check_intake_items",
+      "public.checkalt_deposits",
+      "public.check_audit_log",
+      "public.check_billing_events",
+      "type public.check_stage",
+      "column public.check_intake_items.id",
+      "column public.check_intake_items.tenant_id",
+      "column public.check_intake_items.status",
+      "column public.check_intake_items.check_stage",
+      "column public.check_intake_items.deposited_at",
+      "column public.check_intake_items.pre_return_stage",
+      "column public.check_intake_items.returned_at",
+      "column public.check_intake_items.return_code",
+      "column public.check_intake_items.return_reason",
+      "column public.check_intake_items.return_notes",
+      "column public.check_intake_items.return_recorded_by",
+      "column public.check_intake_items.return_source",
+      "column public.check_intake_items.return_resolved_at",
+      "column public.check_intake_items.return_resolution",
+      "column public.check_intake_items.updated_at",
+      "column public.checkalt_deposits.id",
+      "column public.checkalt_deposits.check_intake_item_id",
+      "column public.checkalt_deposits.status",
+      "column public.checkalt_deposits.submitted_at",
+      "column public.checkalt_deposits.returned_at",
+      "column public.checkalt_deposits.return_reason",
+      "column public.check_audit_log.check_id",
+      "column public.check_audit_log.tenant_id",
+      "column public.check_audit_log.actor_id",
+      "column public.check_audit_log.event_type",
+      "column public.check_audit_log.event_description",
+      "column public.check_audit_log.event_data",
+      "column public.check_billing_events.check_intake_item_id",
+      "column public.check_billing_events.event_type",
+      "column public.check_billing_events.status"
+    ],
+    "predecessors": [],
+    "counts": {
+      "checkalt_approved_checks_to_move": {
+        "requires": [
+          "public.checkalt_deposits",
+          "public.check_intake_items",
+          "public.check_billing_events"
+        ],
+        "sql": "SELECT count(DISTINCT c.id)::int AS n FROM public.checkalt_deposits d\nJOIN public.check_intake_items c ON c.id = d.check_intake_item_id\nWHERE lower(COALESCE(d.status, '')) IN ('submitted', 'cleared')\nAND (c.check_stage IS NULL OR c.check_stage::text IN ('review', 'loss_draft', 'endorsing', 'ready_for_deposit'))\nAND EXISTS (SELECT 1 FROM public.check_billing_events e WHERE e.check_intake_item_id = c.id\nAND e.event_type = 'check_processing' AND e.status <> 'voided')"
+      },
+      "checkalt_approved_checks_left_unbilled": {
+        "requires": [
+          "public.checkalt_deposits",
+          "public.check_intake_items",
+          "public.check_billing_events"
+        ],
+        "sql": "SELECT count(DISTINCT c.id)::int AS n FROM public.checkalt_deposits d\nJOIN public.check_intake_items c ON c.id = d.check_intake_item_id\nWHERE lower(COALESCE(d.status, '')) IN ('submitted', 'cleared')\nAND (c.check_stage IS NULL OR c.check_stage::text IN ('review', 'loss_draft', 'endorsing', 'ready_for_deposit'))\nAND NOT EXISTS (SELECT 1 FROM public.check_billing_events e WHERE e.check_intake_item_id = c.id\nAND e.event_type = 'check_processing' AND e.status <> 'voided')"
+      }
+    },
+    "functions": [
+      {
+        "identity": "public.aws_checkalt_mark_check_deposited(uuid, timestamp with time zone)",
+        "acl": [
+          "owner EXECUTE"
+        ]
+      },
+      {
+        "identity": "public.aws_apply_checkalt_check_status()",
+        "acl": [
+          "owner EXECUTE"
+        ]
+      }
+    ],
+    "triggers": [
+      {
+        "table": "public.checkalt_deposits",
+        "name": "aws_checkalt_deposit_apply_check_status",
+        "def": "CREATE TRIGGER aws_checkalt_deposit_apply_check_status AFTER INSERT OR UPDATE OF status ON public.checkalt_deposits FOR EACH ROW EXECUTE FUNCTION public.aws_apply_checkalt_check_status()"
+      }
+    ],
+    "definer_writes": [
+      "public.check_intake_items",
+      "public.check_audit_log"
+    ],
+    "altered_relations": [
+      "public.checkalt_deposits"
+    ]
+  },
+  // SQL 124: the Mortgage Desk sends a check's document for signature, reads the check's thread,
+  // files and signature requests, and posts homeowner timeline updates (owner, 2026-10-28). Eight
+  // SECURITY DEFINER functions (search_path public): the internal readable-request check (EXECUTE
+  // for the owner only) and seven the API calls as the signed-in agent (EXECUTE: checksops and the
+  // owner): the check's messages, files and signature requests, the storage-read check of a path,
+  // the create of a draft signature request on a .pdf / .docx of the check, the record of its email
+  // sends and a homeowner timeline row. No table, column, policy, table grant or trigger. No
+  // predecessor: the file checks SQL 122's aws_mortgage_desk_working_request(uuid, text[]), SQL
+  // 100's aws_is_mortgage_ops_agent(), SQL 90's aws_is_platform_owner_user(uuid) and every table
+  // and column it uses itself (prerequisites). definer_writes: the eight tables the file's own
+  // ownership rule names (the functions read check_messages and mortgage_handling_requests and
+  // write check_files, homeowner_ledger_events, signature_requests, signature_signers,
+  // signature_fields and esign_event_logs, all under RLS); the inspect confirms the login can for
+  // each. Two functions return TABLE (...), stated here (result) as pg_get_function_result renders
+  // it; the readable-request check returns the request's row type (public.<table>).
+  sql124: {
+    "key": "sql124",
+    "label": "SQL 124",
+    "choice": "sql124-mortgage-desk-signature-and-reads",
+    "production_pin_rel": "ops/deployment-guard/sql124-mortgage-desk-signature-and-reads-production-apply.json",
+    "script": "sql124-mortgage-desk-signature-and-reads-production-apply",
+    "prerequisites": [
+      "auth.uid()",
+      "public.aws_mortgage_desk_working_request(uuid, text[])",
+      "public.aws_is_mortgage_ops_agent()",
+      "public.aws_is_platform_owner_user(uuid)",
+      "public.is_platform_owner()",
+      "type public.app_role",
+      "public.has_role(uuid, public.app_role)",
+      "pg_catalog.sha256(bytea)",
+      "public.check_messages",
+      "public.check_files",
+      "public.check_intake_items",
+      "public.mortgage_handling_requests",
+      "public.homeowner_ledger_events",
+      "public.signature_requests",
+      "public.signature_signers",
+      "public.signature_fields",
+      "public.esign_event_logs",
+      "role checksops",
+      "column public.check_messages.id",
+      "column public.check_messages.check_id",
+      "column public.check_messages.sender_id",
+      "column public.check_messages.body",
+      "column public.check_messages.is_deleted",
+      "column public.check_messages.created_at",
+      "column public.check_files.id",
+      "column public.check_files.check_intake_item_id",
+      "column public.check_files.file_name",
+      "column public.check_files.file_path",
+      "column public.check_files.file_type",
+      "column public.check_files.file_size",
+      "column public.check_files.category",
+      "column public.check_files.description",
+      "column public.check_files.source",
+      "column public.check_files.created_at",
+      "column public.check_files.signature_request_id",
+      "column public.check_intake_items.id",
+      "column public.check_intake_items.claim_id",
+      "column public.mortgage_handling_requests.id",
+      "column public.mortgage_handling_requests.tenant_id",
+      "column public.mortgage_handling_requests.claim_id",
+      "column public.mortgage_handling_requests.status",
+      "column public.mortgage_handling_requests.check_intake_item_id",
+      "column public.mortgage_handling_requests.assigned_employee_id",
+      "column public.mortgage_handling_requests.mortgage_company",
+      "column public.homeowner_ledger_events.id",
+      "column public.homeowner_ledger_events.tenant_id",
+      "column public.homeowner_ledger_events.claim_id",
+      "column public.homeowner_ledger_events.check_id",
+      "column public.homeowner_ledger_events.event_type",
+      "column public.homeowner_ledger_events.occurred_at",
+      "column public.homeowner_ledger_events.actor_label",
+      "column public.homeowner_ledger_events.payload_json",
+      "column public.homeowner_ledger_events.created_by",
+      "column public.signature_requests.id",
+      "column public.signature_requests.claim_id",
+      "column public.signature_requests.check_intake_item_id",
+      "column public.signature_requests.document_name",
+      "column public.signature_requests.document_path",
+      "column public.signature_requests.document_type",
+      "column public.signature_requests.field_data",
+      "column public.signature_requests.status",
+      "column public.signature_requests.created_at",
+      "column public.signature_requests.created_by",
+      "column public.signature_requests.sent_at",
+      "column public.signature_requests.final_pdf_path",
+      "column public.signature_requests.delivery_mode",
+      "column public.signature_requests.provider_status",
+      "column public.signature_requests.last_error",
+      "column public.signature_requests.last_attempted_at",
+      "column public.signature_signers.id",
+      "column public.signature_signers.signature_request_id",
+      "column public.signature_signers.signer_name",
+      "column public.signature_signers.signer_email",
+      "column public.signature_signers.signer_type",
+      "column public.signature_signers.signing_order",
+      "column public.signature_signers.status",
+      "column public.signature_signers.signed_at",
+      "column public.signature_signers.viewed_at",
+      "column public.signature_signers.access_token",
+      "column public.signature_signers.token_hash",
+      "column public.signature_signers.expires_at",
+      "column public.signature_signers.delivery_status",
+      "column public.signature_signers.delivery_error",
+      "column public.signature_signers.email_sent_at",
+      "column public.signature_signers.email_provider_message_id",
+      "column public.signature_signers.created_at",
+      "column public.signature_fields.id",
+      "column public.signature_fields.signature_request_id",
+      "column public.signature_fields.signer_index",
+      "column public.signature_fields.field_type",
+      "column public.signature_fields.label",
+      "column public.signature_fields.page",
+      "column public.signature_fields.x",
+      "column public.signature_fields.y",
+      "column public.signature_fields.width",
+      "column public.signature_fields.height",
+      "column public.signature_fields.required",
+      "column public.signature_fields.placeholder",
+      "column public.signature_fields.checkbox_label",
+      "column public.esign_event_logs.request_id",
+      "column public.esign_event_logs.signer_id",
+      "column public.esign_event_logs.claim_id",
+      "column public.esign_event_logs.stage",
+      "column public.esign_event_logs.status",
+      "column public.esign_event_logs.message",
+      "column public.esign_event_logs.payload"
+    ],
+    "predecessors": [],
+    "functions": [
+      {
+        "identity": "public.aws_mortgage_desk_readable_request(uuid)",
+        "acl": [
+          "owner EXECUTE"
+        ],
+        "result": "public.mortgage_handling_requests"
+      },
+      {
+        "identity": "public.aws_mortgage_desk_messages(uuid)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ],
+        "result": "TABLE(id uuid, sender_id uuid, body text, created_at timestamp with time zone, from_desk boolean)"
+      },
+      {
+        "identity": "public.aws_mortgage_desk_check_files(uuid)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ],
+        "result": "TABLE(id uuid, file_name text, file_path text, file_type text, file_size bigint, category text, description text, source text, created_at timestamp with time zone, signature_request_id uuid)"
+      },
+      {
+        "identity": "public.aws_mortgage_desk_signature_requests(uuid)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ]
+      },
+      {
+        "identity": "public.aws_mortgage_desk_can_read_path(text[], text)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ]
+      },
+      {
+        "identity": "public.aws_mortgage_desk_create_signature_request(uuid, text, text, text, jsonb, jsonb, timestamp with time zone)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ]
+      },
+      {
+        "identity": "public.aws_mortgage_desk_record_signature_delivery(uuid, uuid, jsonb)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ]
+      },
+      {
+        "identity": "public.aws_mortgage_desk_post_timeline(uuid, text, text)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ]
+      }
+    ],
+    "definer_writes": [
+      "public.check_messages",
+      "public.check_files",
+      "public.mortgage_handling_requests",
+      "public.homeowner_ledger_events",
+      "public.signature_requests",
+      "public.signature_signers",
+      "public.signature_fields",
+      "public.esign_event_logs"
+    ]
+  },
+  sql125: {
+    "key": "sql125",
+    "label": "SQL 125",
+    "choice": "sql125-deposit-views-security-invoker",
+    "production_pin_rel": "ops/deployment-guard/sql125-deposit-views-security-invoker-production-apply.json",
+    "script": "sql125-deposit-views-security-invoker-production-apply",
+    "prerequisites": [
+      "public.deposit_queue_scored",
+      "public.deposit_owner_performance",
+      "public.deposit_reminder_queue",
+      "public.deposit_aging_dashboard"
+    ],
+    "predecessors": [],
+    "functions": [],
+    "views": [
+      {
+        "name": "public.deposit_queue_scored",
+        "definition": "SELECT id, check_number, carrier_name, amount, status, provider, owner_id, next_action, next_action_reason, created_at, cleared_at, bank_confirmed_at, reconciled_at, accounting_synced_at, closeout_complete, nsf_flag, variance_amount, claim_id, (((((LEAST((20)::numeric, round((ln(GREATEST(amount, (1)::numeric)) * (3)::numeric))) + (LEAST(30, (EXTRACT(day FROM (now() - created_at)))::integer))::numeric) + (COALESCE(( SELECT sum( CASE WHEN (de.severity = 'critical'::text) THEN 20 ELSE 10 END) AS sum FROM public.deposit_exceptions de WHERE ((de.deposit_item_id = di.id) AND (de.resolved_at IS NULL))), (0)::bigint))::numeric) + ( CASE WHEN ((status = ANY (ARRAY['succeeded'::public.deposit_item_status, 'provider_assigned'::public.deposit_item_status, 'pending_assignment'::public.deposit_item_status])) AND (cleared_at < (now() - '2 days'::interval))) THEN 15 ELSE 0 END)::numeric) + ( CASE WHEN ((status = 'succeeded'::public.deposit_item_status) AND (bank_confirmed_at IS NULL) AND (cleared_at < (now() - '3 days'::interval))) THEN 15 ELSE 0 END)::numeric))::integer AS priority_score, ( SELECT count(*) AS count FROM public.deposit_exceptions de2 WHERE ((de2.deposit_item_id = di.id) AND (de2.resolved_at IS NULL))) AS open_exception_count FROM public.deposit_items di WHERE ((NOT closeout_complete) AND (status <> ALL (ARRAY['failed'::public.deposit_item_status, 'returned'::public.deposit_item_status])));",
+        "options": [
+          "security_invoker=true"
+        ]
+      },
+      {
+        "name": "public.deposit_owner_performance",
+        "definition": "SELECT owner_id, count(*) AS total_assigned, count(*) FILTER (WHERE closeout_complete) AS total_closed, count(*) FILTER (WHERE ((NOT closeout_complete) AND (status <> ALL (ARRAY['failed'::public.deposit_item_status, 'returned'::public.deposit_item_status])))) AS open_items, COALESCE(sum(amount) FILTER (WHERE (NOT closeout_complete)), (0)::numeric) AS open_amount, COALESCE(sum(amount) FILTER (WHERE closeout_complete), (0)::numeric) AS closed_amount, round(avg((EXTRACT(epoch FROM (closeout_at - created_at)) / (86400)::numeric)) FILTER (WHERE closeout_complete), 1) AS avg_days_to_closeout, round(avg((EXTRACT(epoch FROM (bank_confirmed_at - cleared_at)) / (86400)::numeric)) FILTER (WHERE (bank_confirmed_at IS NOT NULL)), 1) AS avg_days_to_confirm, round(avg((EXTRACT(epoch FROM (reconciled_at - cleared_at)) / (86400)::numeric)) FILTER (WHERE (reconciled_at IS NOT NULL)), 1) AS avg_days_to_reconcile, count(*) FILTER (WHERE (nsf_flag = true)) AS nsf_count, count(*) FILTER (WHERE ((variance_amount IS NOT NULL) AND (variance_amount <> (0)::numeric))) AS variance_count, count(*) FILTER (WHERE ((NOT closeout_complete) AND (status = 'succeeded'::public.deposit_item_status) AND (cleared_at < (now() - '2 days'::interval)))) AS sla_breaches FROM public.deposit_items di WHERE (owner_id IS NOT NULL) GROUP BY owner_id;",
+        "options": [
+          "security_invoker=true"
+        ]
+      },
+      {
+        "name": "public.deposit_reminder_queue",
+        "definition": "SELECT id AS deposit_item_id, check_number, carrier_name, amount, status, provider, owner_id, created_at, CASE WHEN ((status = ANY (ARRAY['pending_assignment'::public.deposit_item_status, 'provider_assigned'::public.deposit_item_status])) AND (created_at < (now() - '2 days'::interval))) THEN 'sla_deposit_breach'::text WHEN ((status = 'succeeded'::public.deposit_item_status) AND (bank_confirmed_at IS NULL) AND (cleared_at < (now() - '3 days'::interval))) THEN 'sla_confirm_breach'::text WHEN ((status = 'succeeded'::public.deposit_item_status) AND (NOT (EXISTS ( SELECT 1 FROM public.deposit_attachments da WHERE ((da.deposit_item_id = di.id) AND (da.attachment_type = 'deposit_slip'::text)))))) THEN 'missing_deposit_slip'::text WHEN ((status = 'reconciled'::public.deposit_item_status) AND (accounting_synced_at IS NULL) AND (reconciled_at < (now() - '2 days'::interval))) THEN 'unsynced_reconciled'::text WHEN ((status = 'succeeded'::public.deposit_item_status) AND (reconciled_at IS NULL) AND (cleared_at < (now() - '5 days'::interval))) THEN 'stale_unreconciled'::text WHEN (EXISTS ( SELECT 1 FROM public.deposit_exceptions de WHERE ((de.deposit_item_id = di.id) AND (de.resolved_at IS NULL) AND (de.created_at < (now() - '3 days'::interval))))) THEN 'stale_open_exception'::text ELSE NULL::text END AS reminder_type, ( SELECT count(*) AS count FROM public.deposit_exceptions de WHERE ((de.deposit_item_id = di.id) AND (de.resolved_at IS NULL))) AS open_exception_count FROM public.deposit_items di WHERE ((NOT closeout_complete) AND (status <> ALL (ARRAY['failed'::public.deposit_item_status, 'returned'::public.deposit_item_status])));",
+        "options": [
+          "security_invoker=true"
+        ]
+      },
+      {
+        "name": "public.deposit_aging_dashboard",
+        "definition": "SELECT id, check_number, carrier_name, amount, status, provider, created_at, cleared_at, bank_confirmed_at, reconciled_at, accounting_synced_at, closeout_complete, CASE WHEN (status = ANY (ARRAY['pending_assignment'::public.deposit_item_status, 'provider_assigned'::public.deposit_item_status])) THEN 'awaiting_deposit'::text WHEN ((status = 'succeeded'::public.deposit_item_status) AND (bank_confirmed_at IS NULL)) THEN 'awaiting_bank_confirm'::text WHEN ((status = 'succeeded'::public.deposit_item_status) AND (bank_confirmed_at IS NOT NULL) AND (reconciled_at IS NULL)) THEN 'awaiting_reconciliation'::text WHEN ((status = 'reconciled'::public.deposit_item_status) AND (accounting_synced_at IS NULL)) THEN 'awaiting_accounting_sync'::text WHEN (status = ANY (ARRAY['failed'::public.deposit_item_status, 'returned'::public.deposit_item_status])) THEN 'exception'::text WHEN closeout_complete THEN 'complete'::text ELSE 'in_progress'::text END AS aging_bucket, (EXTRACT(day FROM (now() - COALESCE( CASE WHEN (status = ANY (ARRAY['pending_assignment'::public.deposit_item_status, 'provider_assigned'::public.deposit_item_status])) THEN created_at WHEN ((status = 'succeeded'::public.deposit_item_status) AND (bank_confirmed_at IS NULL)) THEN cleared_at WHEN ((status = 'succeeded'::public.deposit_item_status) AND (bank_confirmed_at IS NOT NULL)) THEN bank_confirmed_at WHEN (status = 'reconciled'::public.deposit_item_status) THEN reconciled_at ELSE created_at END, created_at))))::integer AS days_in_state, CASE WHEN ((status = ANY (ARRAY['pending_assignment'::public.deposit_item_status, 'provider_assigned'::public.deposit_item_status])) AND (created_at < (now() - '2 days'::interval))) THEN true ELSE false END AS sla_deposit_breach, CASE WHEN ((status = 'succeeded'::public.deposit_item_status) AND (bank_confirmed_at IS NULL) AND (cleared_at < (now() - '3 days'::interval))) THEN true ELSE false END AS sla_confirm_breach, CASE WHEN ((status = ANY (ARRAY['succeeded'::public.deposit_item_status, 'reconciled'::public.deposit_item_status])) AND (accounting_synced_at IS NULL) AND (cleared_at < (now() - '5 days'::interval))) THEN true ELSE false END AS sla_sync_breach, ( SELECT count(*) AS count FROM public.deposit_attachments da WHERE ((da.deposit_item_id = di.id) AND (da.attachment_type = 'deposit_slip'::text))) AS deposit_slip_count, ( SELECT count(*) AS count FROM public.deposit_attachments da WHERE ((da.deposit_item_id = di.id) AND (da.attachment_type = 'stamped_receipt'::text))) AS stamped_receipt_count, ( SELECT count(*) AS count FROM public.deposit_attachments da WHERE ((da.deposit_item_id = di.id) AND (da.attachment_type = 'bank_confirmation'::text))) AS bank_confirmation_count, ( SELECT count(*) AS count FROM public.deposit_exceptions de WHERE ((de.deposit_item_id = di.id) AND (de.resolved_at IS NULL))) AS open_exception_count FROM public.deposit_items di;",
+        "options": [
+          "security_invoker=true"
+        ]
+      }
+    ],
+    "altered_relations": [
+      "public.deposit_queue_scored",
+      "public.deposit_owner_performance",
+      "public.deposit_reminder_queue",
+      "public.deposit_aging_dashboard"
+    ]
+  },
+  // SQL 126 (security audit 2026-10-29, finding 4, database part): the thirteen Supabase-era SECURITY
+  // DEFINER reads PR #1379 gates in the API check their caller themselves: owner-only (the safety net,
+  // the deposit KPIs), tenant (aws_can_access_tenant: the dashboard counts, usage, users, Check Alt
+  // status), the claim settlement (owner tenant, active share target, platform owner), has_permission
+  // (self or platform owner), get_stuck_checks and get_check_unread_counts scoped to the caller. Same
+  // signatures, results, language, volatility, SECURITY DEFINER and search_path; EXECUTE for checksops
+  // and the owner (PUBLIC, anon, authenticated and service_role revoked). No predecessor.
+  sql126: {
+    "key": "sql126",
+    "label": "SQL 126",
+    "choice": "sql126-definer-reads-caller-gates",
+    "production_pin_rel": "ops/deployment-guard/sql126-definer-reads-caller-gates-production-apply.json",
+    "script": "sql126-definer-reads-caller-gates-production-apply",
+    "prerequisites": [
+      "public.get_all_checks_safety_net()",
+      "public.get_stuck_checks()",
+      "public.get_deposit_ops_kpis()",
+      "public.get_deposit_exception_kpis()",
+      "public.get_deposit_aging_summary()",
+      "public.get_check_dashboard_counts_for_tenant(uuid)",
+      "public.get_loss_draft_dashboard_counts_for_tenant(uuid)",
+      "public.get_tenant_check_usage(uuid, timestamp with time zone, timestamp with time zone)",
+      "public.get_tenant_users_with_profiles(uuid)",
+      "public.is_checkalt_enabled_for_tenant(uuid)",
+      "public.get_check_claim_settlement(uuid)",
+      "public.has_permission(uuid, text)",
+      "public.get_check_unread_counts()",
+      "auth.uid()",
+      "public.is_platform_owner()",
+      "public.aws_can_access_tenant(uuid)",
+      "public.aws_can_access_check(uuid)",
+      "public.aws_user_tenant_ids()",
+      "public.has_role(uuid, public.app_role)",
+      "public.user_belongs_to_tenant(uuid, uuid)",
+      "public.check_intake_items",
+      "public.check_status_audit",
+      "public.loss_draft_tracking",
+      "public.loss_draft_documents",
+      "public.shared_checks",
+      "public.tenants",
+      "public.tenant_users",
+      "public.profiles",
+      "public.user_roles",
+      "public.check_billing_events",
+      "public.mortgage_handling_requests",
+      "public.checkalt_config",
+      "public.checkalt_tenant_accounts",
+      "public.claims",
+      "public.claim_settlements",
+      "public.check_messages",
+      "public.check_message_reads",
+      "public.deposit_ops_kpis",
+      "public.deposit_exception_kpis",
+      "public.deposit_aging_summary",
+      "role checksops"
+    ],
+    "predecessors": [],
+    "functions": [
+      {
+        "identity": "public.get_all_checks_safety_net()",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ],
+        "revokes": [
+          "PUBLIC EXECUTE",
+          "anon EXECUTE",
+          "authenticated EXECUTE",
+          "service_role EXECUTE"
+        ],
+        "result": "TABLE(id uuid, claim_id uuid, status text, amount numeric, check_number text, carrier_name text, payee_line text, front_image_path text, back_image_path text, created_at timestamp with time zone, updated_at timestamp with time zone, has_loss_draft boolean)"
+      },
+      {
+        "identity": "public.get_stuck_checks()",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ],
+        "revokes": [
+          "PUBLIC EXECUTE",
+          "anon EXECUTE",
+          "authenticated EXECUTE",
+          "service_role EXECUTE"
+        ],
+        "result": "TABLE(id uuid, claim_id uuid, status text, amount numeric, carrier_name text, payee_line text, created_at timestamp with time zone, updated_at timestamp with time zone, hours_in_status numeric, sla_hours integer, is_overdue boolean)"
+      },
+      {
+        "identity": "public.get_deposit_ops_kpis()",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ],
+        "revokes": [
+          "PUBLIC EXECUTE",
+          "anon EXECUTE",
+          "authenticated EXECUTE",
+          "service_role EXECUTE"
+        ]
+      },
+      {
+        "identity": "public.get_deposit_exception_kpis()",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ],
+        "revokes": [
+          "PUBLIC EXECUTE",
+          "anon EXECUTE",
+          "authenticated EXECUTE",
+          "service_role EXECUTE"
+        ]
+      },
+      {
+        "identity": "public.get_deposit_aging_summary()",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ],
+        "revokes": [
+          "PUBLIC EXECUTE",
+          "anon EXECUTE",
+          "authenticated EXECUTE",
+          "service_role EXECUTE"
+        ]
+      },
+      {
+        "identity": "public.get_check_dashboard_counts_for_tenant(uuid)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ],
+        "revokes": [
+          "PUBLIC EXECUTE",
+          "anon EXECUTE",
+          "authenticated EXECUTE",
+          "service_role EXECUTE"
+        ]
+      },
+      {
+        "identity": "public.get_loss_draft_dashboard_counts_for_tenant(uuid)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ],
+        "revokes": [
+          "PUBLIC EXECUTE",
+          "anon EXECUTE",
+          "authenticated EXECUTE",
+          "service_role EXECUTE"
+        ]
+      },
+      {
+        "identity": "public.get_tenant_check_usage(uuid, timestamp with time zone, timestamp with time zone)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ],
+        "revokes": [
+          "PUBLIC EXECUTE",
+          "anon EXECUTE",
+          "authenticated EXECUTE",
+          "service_role EXECUTE"
+        ]
+      },
+      {
+        "identity": "public.get_tenant_users_with_profiles(uuid)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ],
+        "revokes": [
+          "PUBLIC EXECUTE",
+          "anon EXECUTE",
+          "authenticated EXECUTE",
+          "service_role EXECUTE"
+        ],
+        "result": "TABLE(id uuid, user_id uuid, role text, created_at timestamp with time zone, full_name text, email text)"
+      },
+      {
+        "identity": "public.is_checkalt_enabled_for_tenant(uuid)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ],
+        "revokes": [
+          "PUBLIC EXECUTE",
+          "anon EXECUTE",
+          "authenticated EXECUTE",
+          "service_role EXECUTE"
+        ]
+      },
+      {
+        "identity": "public.get_check_claim_settlement(uuid)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ],
+        "revokes": [
+          "PUBLIC EXECUTE",
+          "anon EXECUTE",
+          "authenticated EXECUTE",
+          "service_role EXECUTE"
+        ]
+      },
+      {
+        "identity": "public.has_permission(uuid, text)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ],
+        "revokes": [
+          "PUBLIC EXECUTE",
+          "anon EXECUTE",
+          "authenticated EXECUTE",
+          "service_role EXECUTE"
+        ]
+      },
+      {
+        "identity": "public.get_check_unread_counts()",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ],
+        "revokes": [
+          "PUBLIC EXECUTE",
+          "anon EXECUTE",
+          "authenticated EXECUTE",
+          "service_role EXECUTE"
+        ],
+        "result": "TABLE(check_id uuid, unread_count bigint, last_message_at timestamp with time zone)"
+      }
+    ]
+  },
+  // SQL 127 (owner decision 2026-10-29, "Portal link is enough"): homeowners sign their checks and
+  // documents from the claim portal. Replaces SQL 83's aws_public_homeowner_ledger_endorse_capability
+  // (status allow-list 'pending' and 'sent') and aws_public_homeowner_pending_signatures (an open
+  // homeowner signer is listed after its emailed link expired), and adds
+  // aws_public_homeowner_document_portal_signer (SQL 83's document gates; returns the signer's existing
+  // token_hash and renews an expired expires_at). Same signatures and results; SECURITY DEFINER,
+  // search_path public, row_security off; EXECUTE for checksops and the owner (PUBLIC and
+  // authenticated revoked). The file has no prerequisite block: the prerequisites are the SQL 82 / SQL
+  // 83 objects and columns its header and bodies name, and role checksops. SQL 83 is on the homeowner
+  // engine (applied and retired), not a release key, so no predecessor. definer_writes: the tables
+  // the functions write (check_endorsements.token, signature_signers.expires_at).
+  sql127: {
+    "key": "sql127",
+    "label": "SQL 127",
+    "choice": "sql127-homeowner-portal-signing",
+    "production_pin_rel": "ops/deployment-guard/sql127-homeowner-portal-signing-production-apply.json",
+    "script": "sql127-homeowner-portal-signing-production-apply",
+    "prerequisites": [
+      "public.aws_public_homeowner_ledger_endorse_capability(text, uuid)",
+      "public.aws_public_homeowner_pending_signatures(text)",
+      "public.aws_public_homeowner_document_sign_capability(text, uuid)",
+      "public.aws_public_homeowner_ledger_by_token(text)",
+      "pg_catalog.gen_random_uuid()",
+      "public.homeowner_ledger_tokens",
+      "public.claims",
+      "public.check_intake_items",
+      "public.homeowner_ledger_events",
+      "public.check_endorsements",
+      "public.signature_requests",
+      "public.signature_signers",
+      "role checksops",
+      "column public.homeowner_ledger_tokens.token",
+      "column public.homeowner_ledger_tokens.tenant_id",
+      "column public.homeowner_ledger_tokens.claim_id",
+      "column public.homeowner_ledger_tokens.homeowner_email",
+      "column public.homeowner_ledger_tokens.homeowner_name",
+      "column public.homeowner_ledger_tokens.revoked_at",
+      "column public.homeowner_ledger_tokens.expires_at",
+      "column public.claims.id",
+      "column public.claims.org_id",
+      "column public.check_intake_items.id",
+      "column public.check_intake_items.tenant_id",
+      "column public.check_intake_items.claim_id",
+      "column public.homeowner_ledger_events.tenant_id",
+      "column public.homeowner_ledger_events.claim_id",
+      "column public.check_endorsements.id",
+      "column public.check_endorsements.check_id",
+      "column public.check_endorsements.tenant_id",
+      "column public.check_endorsements.payee_name",
+      "column public.check_endorsements.payee_type",
+      "column public.check_endorsements.status",
+      "column public.check_endorsements.token",
+      "column public.check_endorsements.contact_email",
+      "column public.check_endorsements.signed_at",
+      "column public.signature_requests.id",
+      "column public.signature_requests.claim_id",
+      "column public.signature_requests.check_intake_item_id",
+      "column public.signature_requests.document_name",
+      "column public.signature_requests.status",
+      "column public.signature_requests.sent_at",
+      "column public.signature_requests.created_at",
+      "column public.signature_requests.completed_at",
+      "column public.signature_signers.id",
+      "column public.signature_signers.signature_request_id",
+      "column public.signature_signers.signer_name",
+      "column public.signature_signers.signer_email",
+      "column public.signature_signers.signer_type",
+      "column public.signature_signers.signing_order",
+      "column public.signature_signers.status",
+      "column public.signature_signers.signed_at",
+      "column public.signature_signers.token_hash",
+      "column public.signature_signers.expires_at"
+    ],
+    "predecessors": [],
+    "functions": [
+      {
+        "identity": "public.aws_public_homeowner_ledger_endorse_capability(text, uuid)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ],
+        "revokes": [
+          "PUBLIC EXECUTE",
+          "authenticated EXECUTE"
+        ]
+      },
+      {
+        "identity": "public.aws_public_homeowner_pending_signatures(text)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ],
+        "revokes": [
+          "PUBLIC EXECUTE",
+          "authenticated EXECUTE"
+        ]
+      },
+      {
+        "identity": "public.aws_public_homeowner_document_portal_signer(text, uuid)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ],
+        "revokes": [
+          "PUBLIC EXECUTE",
+          "authenticated EXECUTE"
+        ]
+      }
+    ],
+    "definer_writes": [
+      "public.check_endorsements",
+      "public.signature_signers"
+    ]
+  },
+  // SQL 128 (owner decision 2026-10-30, "There are no admin so B"): contractor verification reads the
+  // Compliance & Docs uploads. contractor_verification_status(uuid), restored from supabase
+  // 20260709105400, read public.contractor_documents (dropped by supabase 20260826140740), so it and
+  // every caller failed (the Find-a-Pro card, the OPS Badge dialog and approve/revoke, the review and
+  // profile tier triggers). Replaced with the same signature, jsonb result, language, volatility (STABLE),
+  // SECURITY DEFINER and search_path; only the W-9 and insurance checks change (the contractor's tenants'
+  // stored or sent moov_compliance_documents, or their tenant_documents; library insurance not expired).
+  // EXECUTE for checksops and the owner (PUBLIC, anon, authenticated and service_role revoked). The
+  // orphan _trg_recompute_contractor_tier_from_docs() is dropped. No predecessor: the function is
+  // Supabase-era, on no release key.
+  sql128: {
+    "key": "sql128",
+    "label": "SQL 128",
+    "choice": "sql128-contractor-verification-from-compliance",
+    "production_pin_rel": "ops/deployment-guard/sql128-contractor-verification-from-compliance-production-apply.json",
+    "script": "sql128-contractor-verification-from-compliance-production-apply",
+    "prerequisites": [
+      "public.contractor_verification_status(uuid)",
+      "public.contractor_profiles",
+      "public.contractor_reviews",
+      "public.tenant_users",
+      "public.moov_compliance_documents",
+      "public.tenant_documents",
+      "role checksops",
+      "column public.contractor_profiles.id",
+      "column public.contractor_profiles.user_id",
+      "column public.contractor_profiles.tier",
+      "column public.contractor_profiles.license_number",
+      "column public.contractor_profiles.admin_disbursed_verified",
+      "column public.contractor_profiles.has_open_disputes",
+      "column public.contractor_profiles.created_at",
+      "column public.contractor_profiles.verified_at",
+      "column public.contractor_profiles.pro_approved_at",
+      "column public.contractor_reviews.contractor_id",
+      "column public.contractor_reviews.rating",
+      "column public.tenant_users.user_id",
+      "column public.tenant_users.tenant_id",
+      "column public.moov_compliance_documents.tenant_id",
+      "column public.moov_compliance_documents.purpose",
+      "column public.moov_compliance_documents.status",
+      "column public.tenant_documents.tenant_id",
+      "column public.tenant_documents.doc_type",
+      "column public.tenant_documents.expires_at"
+    ],
+    "predecessors": [],
+    "functions": [
+      {
+        "identity": "public.contractor_verification_status(uuid)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ],
+        "revokes": [
+          "PUBLIC EXECUTE",
+          "anon EXECUTE",
+          "authenticated EXECUTE",
+          "service_role EXECUTE"
+        ]
+      }
+    ],
+    "dropped_functions": [
+      "public._trg_recompute_contractor_tier_from_docs()"
     ]
   },
 });

@@ -218,6 +218,8 @@ const mockClient = ({
   rows = [createdRow],
   payees,
   endorsements,
+  homeownerUpload = null,
+  claim = { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', claim_number: 'CLM-1' },
 } = {}) => {
   const queries = [];
   const defaultPayees = payees || [{
@@ -275,6 +277,12 @@ const mockClient = ({
         return { rows: [{ ...check, status: params?.[1] || check.status, check_stage: params?.[2] || check.check_stage }] };
       }
       if (/INSERT INTO public.check_audit_log/.test(sql)) return { rows: [{ id: 'audit' }] };
+      if (/FROM public.homeowner_ledger_check_uploads/.test(sql)) return { rows: homeownerUpload ? [homeownerUpload] : [] };
+      if (/UPDATE public.homeowner_ledger_check_uploads/.test(sql)) {
+        return { rows: homeownerUpload && !homeownerUpload.claim_id ? [{ id: params[0] }] : [] };
+      }
+      if (/FROM public.claims WHERE id/.test(sql)) return { rows: claim && claim.id === params[0] ? [claim] : [] };
+      if (/UPDATE public.homeowner_ledger_tokens|INSERT INTO public.homeowner_ledger_events/.test(sql)) return { rows: [] };
       if (/INSERT INTO public.mortgage_handling_requests/.test(sql)) {
         return { rows: [{ id: 'req-1', check_intake_item_id: params[1], requested_by: params[5] }] };
       }
@@ -354,7 +362,6 @@ test('create check derives tenant and uploaded_by and ignores spoofed identity',
     uploaded_by: SPOOF_ID,
     user_id: SPOOF_ID,
     carrier_name: 'AWS T5 TEST',
-    claim_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
     status: 'deposited',
   }), depsFor(client));
   assert.equal(result.ok, true);
@@ -368,7 +375,8 @@ test('create check derives tenant and uploaded_by and ignores spoofed identity',
   assert.equal(insert.params[3], 'uploaded');
   assert.equal(insert.params.includes(C1C_TENANT), false);
   assert.equal(insert.params.includes(SPOOF_ID), false);
-  assert.equal(insert.params.includes('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'), false);
+  // claim_id is accepted only after a tenant check: cash-job-check-create.test.mjs.
+  assert.equal(insert.params.includes('deposited'), false);
 });
 
 test('T5 kill switch disables create without a write transaction', async () => {
@@ -646,3 +654,95 @@ for (const [label, opts] of [
     assert.equal(client.queries.some((q) => /UPDATE public.check_intake_items/.test(q.sql)), false);
   });
 }
+
+const CLAIM_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const TOKEN_ID = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+const UPLOAD_ID = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+const homeownerUpload = (extra = {}) => ({
+  id: UPLOAD_ID, token_id: TOKEN_ID, claim_id: null, amount_estimate: '500.00', ...extra,
+});
+const homeownerWrites = (client) => client.queries.filter((q) => /homeowner_ledger_(?:tokens|events|check_uploads)/.test(q.sql) && /UPDATE|INSERT/.test(q.sql));
+
+for (const path of ['endorsements_in_progress', 'approved_for_deposit']) {
+  test(`homeowner upload: moving out of Review (${path}) without a claim is refused and writes nothing`, async () => {
+    const client = mockClient({ check: { ...createdRow, status: 'needs_review' }, homeownerUpload: homeownerUpload() });
+    const result = await handleCheckTransition(jwtEvent('/workflow/transition', 'POST', {
+      check_id: CHECK_ID,
+      p_deposit_path: path,
+    }), depsFor(client));
+    assert.equal(result.ok, false);
+    assert.equal(result.error, 'homeowner_upload_needs_claim');
+    assert.equal(result.message, 'Link this check to a claim first so the homeowner can follow it.');
+    assert.equal(client.queries.some((q) => /UPDATE public.check_intake_items/.test(q.sql)), false);
+    assert.deepEqual(homeownerWrites(client), []);
+  });
+}
+
+test('homeowner upload: Endorsing with a claim ties the homeowner link to the claim and starts the timeline', async () => {
+  const check = { ...createdRow, status: 'needs_review', claim_id: CLAIM_ID, amount: '1234.56' };
+  const client = mockClient({ check, homeownerUpload: homeownerUpload() });
+  const result = await handleCheckTransition(jwtEvent('/workflow/transition', 'POST', {
+    check_id: CHECK_ID,
+    p_deposit_path: 'endorsements_in_progress',
+  }), depsFor(client));
+  assert.equal(result.ok, true, JSON.stringify(result));
+  assert.equal(result.data.check_stage, 'endorsing');
+
+  const lookup = client.queries.find((q) => /FROM public.homeowner_ledger_check_uploads/.test(q.sql));
+  assert.match(lookup.sql, /attached_check_id = \$1::uuid AND tenant_id = \$2::uuid/);
+  assert.deepEqual(lookup.params, [CHECK_ID, FREEDOM_TENANT]);
+  const claimLookup = client.queries.find((q) => /FROM public.claims WHERE id/.test(q.sql));
+  assert.deepEqual(claimLookup.params, [CLAIM_ID, FREEDOM_TENANT]);
+
+  const [upload, token, ledgerEvent] = homeownerWrites(client);
+  assert.match(upload.sql, /UPDATE public.homeowner_ledger_check_uploads[\s\S]*claim_id IS NULL/);
+  assert.deepEqual(upload.params, [UPLOAD_ID, CLAIM_ID]);
+  assert.match(token.sql, /UPDATE public.homeowner_ledger_tokens[\s\S]*tenant_id = \$3::uuid AND claim_id IS NULL/);
+  assert.deepEqual(token.params, [TOKEN_ID, CLAIM_ID, FREEDOM_TENANT]);
+  assert.match(ledgerEvent.sql, /INSERT INTO public.homeowner_ledger_events[\s\S]*'homeowner_upload_attached'/);
+  assert.equal(ledgerEvent.params[0], FREEDOM_TENANT);
+  assert.equal(ledgerEvent.params[1], CLAIM_ID);
+  assert.equal(ledgerEvent.params[2], '1234.56');
+  assert.deepEqual(JSON.parse(ledgerEvent.params[3]), { upload_id: UPLOAD_ID, check_id: CHECK_ID, claim_number: 'CLM-1' });
+
+  // The tie happens after the check moved, inside the same transaction.
+  const order = client.queries.map((q) => q.sql);
+  const moved = order.findIndex((sql) => /UPDATE public.check_intake_items/.test(sql));
+  assert.ok(moved < order.indexOf(upload.sql));
+  assert.ok(order.indexOf(ledgerEvent.sql) < order.indexOf('COMMIT'));
+});
+
+test('homeowner upload: an upload already tied to a claim is not tied again', async () => {
+  const check = { ...createdRow, status: 'needs_review', claim_id: CLAIM_ID };
+  const client = mockClient({ check, homeownerUpload: homeownerUpload({ claim_id: CLAIM_ID }) });
+  const result = await handleCheckTransition(jwtEvent('/workflow/transition', 'POST', {
+    check_id: CHECK_ID,
+    p_deposit_path: 'endorsements_in_progress',
+  }), depsFor(client));
+  assert.equal(result.ok, true);
+  assert.deepEqual(homeownerWrites(client), []);
+});
+
+test('homeowner upload: a claim outside the check\'s company never receives the homeowner link', async () => {
+  const check = { ...createdRow, status: 'needs_review', claim_id: CLAIM_ID };
+  const client = mockClient({ check, homeownerUpload: homeownerUpload(), claim: null });
+  const result = await handleCheckTransition(jwtEvent('/workflow/transition', 'POST', {
+    check_id: CHECK_ID,
+    p_deposit_path: 'endorsements_in_progress',
+  }), depsFor(client));
+  assert.equal(result.ok, true);
+  assert.deepEqual(homeownerWrites(client), []);
+});
+
+test('homeowner upload: returning to Review neither blocks nor ties the link', async () => {
+  const client = mockClient({
+    check: { ...createdRow, status: 'endorsements_in_progress', check_stage: 'endorsing' },
+    homeownerUpload: homeownerUpload(),
+  });
+  const result = await handleCheckTransition(jwtEvent('/workflow/transition', 'POST', {
+    check_id: CHECK_ID,
+    p_deposit_path: 'revert_to_review',
+  }), depsFor(client));
+  assert.equal(result.ok, true);
+  assert.equal(client.queries.some((q) => /homeowner_ledger_check_uploads/.test(q.sql)), false);
+});

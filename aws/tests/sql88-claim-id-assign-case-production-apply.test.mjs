@@ -307,7 +307,7 @@ test('the tool is inventoried as GUARDED and its tests run in test:deployment-gu
   const inventory = JSON.parse(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/bypass-inventory.json'), 'utf8'));
   const rows = JSON.stringify(inventory);
   assert.match(rows, /"path":"scripts\/deployment-guard\/sql88-claim-id-assign-case-tenant-scope-production-apply\.mjs","classification":"GUARDED","capabilities":\["sql88-production-apply"\]/);
-  assert.match(rows, /\(sql71, sql77, sql78, sql79, sql80, sql81, sql82, sql83, sql84, sql85, sql86, sql87, sql88, sql89, sql90, sql91, sql92, sql93, sql94, sql95, sql96, sql97, sql98, sql99, sql100, sql101, sql102, sql103, sql104, sql105, sql106, sql108, sql109, sql110, sql111, sql112, sql113, sql114, sql115, sql116, sql117, sql118, sql119, sql120\)/);
+  assert.match(rows, /\(sql71, sql77, sql78, sql79, sql80, sql81, sql82, sql83, sql84, sql85, sql86, sql87, sql88, sql89, sql90, sql91, sql92, sql93, sql94, sql95, sql96, sql97, sql98, sql99, sql100, sql101, sql102, sql103, sql104, sql105, sql106, sql108, sql109, sql110, sql111, sql112, sql113, sql114, sql115, sql116, sql117, sql118, sql119, sql120, sql121, sql122, sql123, sql124, sql125, sql126, sql127, sql128\)/);
   const scripts = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).scripts;
   const workflow = fs.readFileSync(path.join(ROOT, '.github/workflows/deployment-guard.yml'), 'utf8');
   for (const name of ['aws/tests/sql88-claim-id-assign-case-executor.test.mjs', 'aws/tests/sql88-claim-id-assign-case-production-apply.test.mjs']) {

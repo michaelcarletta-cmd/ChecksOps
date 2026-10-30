@@ -1,0 +1,15 @@
+{
+  "workstream_id": "cash-jobs-check-link-applied",
+  "authorization": "Record only (2026-10-28): the bytes below are live. Nothing is planned or authorized by this manifest; any later change to this member needs its own manifest, staging acceptance and owner approval.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "cash jobs: the check-create route links a check uploaded from a cash job to that job (SQL 121 recorded verified live, #1322), applied 2026-10-28 through the guarded overlay path on main f404cf9af (SQL 122 recorded verified live, #1325), one member per run, each on its own owner approval: workflow.mjs (c7159c4d -> 0a8d1218; staging apply run 40617170536; production pre-apply inspect run 40617322899 READY at CodeSha256 fZPpTRW8dupjAOWnu6VKqvJ5SNaj2x7IYIaCdY4Rmfw=, RevisionId 93820ab4-e2f8-4efa-8401-5748753bedaf; production apply run 40617806077 on the owner's approval phrase \"DEPLOY workflow.mjs TO PRODUCTION\", concluded success including its \"Verify live member is the accepted bytes\" step (VERIFIED at CodeSha256 ajOU0mbuCWhgoZUL5ARyOgtEXTy2NSe+KUfAe7lVYd8=, RevisionId 7cb0a89a-b064-437a-811c-11e47a6a2715) and the public production smoke (/health and /db-health 200)). It went before the Mortgage Desk members because the plan order puts it earlier: the first mortgage-desk-return.mjs apply (run 40616679703) was refused with DEPLOYMENT_COLLISION, pending [\"workflow.mjs\"], before any write. The rows record the applied bytes as live_sha256 and accepted_sha256 and chain to the manifest that planned them (previous_manifest), which keeps the pre-apply state. GitHub returned only the last 5000 lines of each apply log, so the receipt and before/after section of the apply output were not read; the verify step and the pre-apply inspect are the evidence.",
+  "members": {
+    "workflow.mjs": {
+      "live_sha256": "0a8d1218eff03bc2f1785fd64d8f854ed17eef254f71bf9e91b270f86009d6e6",
+      "accepted_sha256": "0a8d1218eff03bc2f1785fd64d8f854ed17eef254f71bf9e91b270f86009d6e6",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-cash-jobs-check-link-manifest-2026-10-27.json"
+    }
+  }
+}

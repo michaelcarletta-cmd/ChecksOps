@@ -31,6 +31,8 @@ import { CheckMessageThread } from "@/components/check-messages/CheckMessageThre
 import { SendToMortgageDeskButton } from "./SendToMortgageDeskButton";
 import { MortgageDeskShippingCard } from "./MortgageDeskShippingCard";
 import { MortgageDeskReturnedBanner } from "./MortgageDeskReturnedBanner";
+import { MortgageDeskReturnedWork } from "./MortgageDeskReturnedWork";
+import { scrollToMortgageDeskReturnedWork } from "@/lib/mortgageDeskReturn";
 import { useAcknowledgeMortgageDeskReturn, useMortgageDeskReturnAlert } from "@/hooks/useMortgageDeskReturnAlert";
 
 import { useTenantFilter } from "@/hooks/useTenantFilter";
@@ -318,6 +320,11 @@ export function LossDraftDetailPanel({
               <MortgageDeskShippingCard checkIntakeItemId={draft.check_intake_item_id} />
             )}
 
+            {/* Everything the Desk returned on this check: its notes and documents. */}
+            {draft.check_intake_item_id && (
+              <MortgageDeskReturnedWork checkId={draft.check_intake_item_id} />
+            )}
+
 
 
 
@@ -357,7 +364,13 @@ export function LossDraftDetailPanel({
             completedAt={returnAlert.completedAt}
             returnedAt={returnAlert.returnedAt}
             acknowledging={ackBusy}
-            onReview={() => setActiveTab("docs")}
+            onReview={() => {
+              // The Desk's notes and documents; the loss-draft docs tab when the
+              // Desk returned none on this check.
+              if (!draft.check_intake_item_id || !scrollToMortgageDeskReturnedWork(draft.check_intake_item_id)) {
+                setActiveTab("docs");
+              }
+            }}
             onAcknowledge={async () => {
               if (!user?.id || !draft.check_intake_item_id) return;
               setAckBusy(true);

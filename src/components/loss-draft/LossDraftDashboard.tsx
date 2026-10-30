@@ -1,25 +1,25 @@
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { localTodayDateValue, toDateInputValue } from "@/lib/issueDate";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
-import {
-  Building2, AlertTriangle, Clock, DollarSign, FileWarning,
-  ChevronRight, RefreshCw, Landmark, ArrowRightLeft, ArrowLeft,
-} from "lucide-react";
-import { format, differenceInDays } from "date-fns";
+import { AlertTriangle, Building2, Clock, FileWarning, Landmark, ArrowLeft } from "lucide-react";
 import { LossDraftDetailPanel } from "./LossDraftDetailPanel";
-import { LossDraftDashboardCards, type LossDraftFilter } from "./LossDraftDashboardCards";
-import { NewLossDraftDialog } from "./NewLossDraftDialog";
+import { LossDraftFilterBar, type LossDraftFilter } from "./LossDraftDashboardCards";
 import { useTenantFilter } from "@/hooks/useTenantFilter";
-import { matchesAmountQuery } from "@/features/check-command/status";
+import { extractInsuredName, matchesAmountQuery } from "@/features/check-command/status";
+import {
+  COMPACT_LIST_SCROLL_CLASS,
+  CompactCheckListBody,
+  CompactCheckRow,
+  CompactClaimGroupHeader,
+  formatCompactAmount,
+} from "@/components/check-review/CompactCheckList";
 import { displayCase } from "@/lib/displayCase";
+import { groupLossDraftsByClaim, lossDraftGroupDetails } from "@/lib/lossDraftGroups";
 import { useMortgageDeskReturnAlerts } from "@/hooks/useMortgageDeskReturnAlert";
 import { compareLossDraftReturnPriority } from "@/lib/mortgageDeskReturn";
 
@@ -149,165 +149,190 @@ export function LossDraftDashboard({ searchQuery = "" }: LossDraftDashboardProps
     ),
   );
 
-  const activeDrafts = visibleDrafts.filter(isActiveDraft);
-  const totalUnreleased = activeDrafts.reduce((s, d) => s + (d.unreleased_amount ?? 0), 0);
+  const visibleUnreleased = prioritized.reduce((s, d) => s + (d.unreleased_amount ?? 0), 0);
+  const isReturned = (d: LossDraftRow) =>
+    Boolean(d.check_intake_item_id && returnAlerts?.[d.check_intake_item_id]?.actionRequired);
+  const groups = groupLossDraftsByClaim(prioritized, extractInsuredName);
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-lg font-semibold flex items-center gap-2">
-            <Landmark className="h-5 w-5 text-amber-400" />
-            Loss Draft Visibility
-          </h2>
-          <p className="text-xs text-muted-foreground">
-            Track lender-held funds, missing documents, follow-ups, and releases · {activeDrafts.length} active ·{" "}
-            ${totalUnreleased.toLocaleString("en-US", { minimumFractionDigits: 2 })} unreleased
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Badge variant="outline" className="h-7 px-3 text-[10px] font-medium border-amber-400/30 text-amber-400 bg-amber-400/5">
-            Active Files
-          </Badge>
-          <NewLossDraftDialog onCreated={() => qc.invalidateQueries({ queryKey: ["loss-draft-dashboard"] })} />
-          <Button size="sm" variant="ghost" onClick={() => qc.invalidateQueries({ queryKey: ["loss-draft-dashboard"] })}>
-            <RefreshCw className="h-4 w-4" />
-          </Button>
-        </div>
-      </div>
-
-      <LossDraftDashboardCards
-        activeCount={activeCount}
-        monitoredCount={monitoredCount}
-        nonMonitoredCount={nonMonitoredCount}
-        totalUnreleased={totalUnreleased}
-        activeFilter={filter}
-        onFilterChange={setFilter}
-      />
-
-      <div
-        className={
-          selectedId
-            ? "grid items-start gap-4 grid-cols-1"
-            : "grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(22rem,28rem)]"
-        }
-      >
-        {/* Table — hidden when a check is expanded */}
-        {!selectedId && (
-          <Card>
-            <CardContent className="p-0">
-              <ScrollArea className="h-[calc(100vh-16rem)] min-h-[22rem] max-h-[42rem]">
-                {isLoading ? (
-                  <div className="p-8 text-center text-muted-foreground">Loading loss drafts...</div>
-                ) : prioritized.length === 0 ? (
-                  <div className="p-8 text-center text-muted-foreground">
-                    <Landmark className="h-10 w-10 mx-auto mb-2 opacity-30" />
-                    No loss drafts in this view
-                  </div>
-                ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Claim</TableHead>
-                        <TableHead>Servicer</TableHead>
-                        <TableHead className="text-right">Escrowed</TableHead>
-                        <TableHead className="text-right">Released</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Alerts</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {prioritized.map(d => {
-                        const sc = escrowStatusConfig[d.escrow_status] ?? { label: d.escrow_status, color: "" };
-                        const overdue = Boolean(d.follow_up_date) && toDateInputValue(d.follow_up_date) < localTodayDateValue();
-                        const returned = Boolean(
-                          d.check_intake_item_id && returnAlerts?.[d.check_intake_item_id]?.actionRequired,
-                        );
-                        return (
-                          <TableRow
-                            key={d.id}
-                            className={`cursor-pointer transition-colors ${
-                              selectedId === d.id ? "bg-accent/50" : returned ? "bg-amber-500/10" : ""
-                            }`}
-                            onClick={() => setSelectedId(d.id)}
-                          >
-                            <TableCell>
-                              <div className="text-sm font-medium">
-                                {d.claim_number || (d.check_number ? `Check #${d.check_number}` : "No claim")}
-                              </div>
-                              <div className="text-xs text-muted-foreground truncate max-w-[160px]">
-                                {displayCase(d.policyholder_name || d.payee_line) || "—"}
-                              </div>
-                              {!d.claim_number && (
-                                <div className="text-[10px] text-muted-foreground truncate max-w-[160px]">
-                                  {displayCase(d.insurance_company) || displayCase(d.carrier_name)}
-                                  {d.check_amount ? ` · $${Number(d.check_amount).toLocaleString("en-US", { minimumFractionDigits: 2 })}` : ""}
-                                </div>
-                              )}
-                            </TableCell>
-                            <TableCell className="text-sm max-w-[120px] truncate">{d.mortgage_servicer}</TableCell>
-                            <TableCell className="text-right font-semibold tabular-nums text-sm">
-                              ${(d.total_escrowed ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                            </TableCell>
-                            <TableCell className="text-right tabular-nums text-sm text-emerald-400">
-                              ${(d.draw_amount_released ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                            </TableCell>
-                            <TableCell>
-                              <Badge className={`text-[10px] ${sc.color}`}>{sc.label}</Badge>
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex items-center gap-1">
-                                {returned && (
-                                  <Badge className="text-[9px] bg-amber-500/20 text-amber-200 border-amber-400/30">
-                                    Returned from Mortgage Desk · Action Required
-                                  </Badge>
-                                )}
-                                {d.is_stale && <span title="Stale — no contact 14+ days"><AlertTriangle className="h-3.5 w-3.5 text-red-400" /></span>}
-                                {d.missing_docs_count > 0 && <span title={`${d.missing_docs_count} missing docs`}><FileWarning className="h-3.5 w-3.5 text-amber-400" /></span>}
-                                {overdue && <span title="Overdue follow-up"><Clock className="h-3.5 w-3.5 text-orange-400" /></span>}
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                )}
-              </ScrollArea>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Detail panel — full-width when a check is expanded */}
-        {selectedId ? (
-          <div className="space-y-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setSelectedId(null)}
-              className="gap-1.5 h-8 px-2 text-muted-foreground hover:text-foreground"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              Back to list
-            </Button>
-            <LossDraftDetailPanel
-              lossDraftId={selectedId}
-              onUpdate={() => {
-                qc.invalidateQueries({ queryKey: ["loss-draft-dashboard"] });
-                qc.invalidateQueries({ queryKey: ["loss-draft-counts"] });
-              }}
-              onSelectId={setSelectedId}
-            />
-          </div>
-        ) : (
-          <Card className="hidden lg:flex items-center justify-center h-[calc(100vh-16rem)] min-h-[22rem] max-h-[42rem]">
-            <div className="text-center text-muted-foreground">
-              <Landmark className="h-12 w-12 mx-auto mb-3 opacity-30" />
-              <p className="text-sm">Select a loss draft to manage</p>
+    <div
+      className={
+        selectedId
+          ? "grid items-start gap-4 grid-cols-1"
+          : "grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(22rem,28rem)]"
+      }
+    >
+      {/* Compact list — hidden when a check is expanded */}
+      {!selectedId && (
+        <Card className="overflow-hidden min-w-0">
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between gap-2">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Landmark className="h-4 w-4 text-purple-400" />
+                Loss Draft
+              </CardTitle>
             </div>
-          </Card>
-        )}
-      </div>
+          </CardHeader>
+          <LossDraftFilterBar
+            activeCount={activeCount}
+            monitoredCount={monitoredCount}
+            nonMonitoredCount={nonMonitoredCount}
+            visibleCount={prioritized.length}
+            visibleUnreleased={visibleUnreleased}
+            activeFilter={filter}
+            onFilterChange={setFilter}
+          />
+          <CardContent className="p-0">
+            <ScrollArea className={COMPACT_LIST_SCROLL_CLASS}>
+              {isLoading ? (
+                <div className="p-8 text-center text-muted-foreground">Loading loss drafts...</div>
+              ) : prioritized.length === 0 ? (
+                <div className="p-8 text-center text-muted-foreground">
+                  <Landmark className="h-10 w-10 mx-auto mb-2 opacity-30" />
+                  No loss drafts in this view
+                </div>
+              ) : (
+                <CompactCheckListBody>
+                  {groups.map((group) => (
+                    <Fragment key={group.key}>
+                      <CompactClaimGroupHeader
+                        policyholderName={group.policyholderName}
+                        claimNumber={group.claimNumber}
+                        count={group.drafts.length}
+                        details={lossDraftGroupDetails(group.drafts, escrowStatusLabel)}
+                      />
+                      {group.drafts.map((d) => (
+                        <LossDraftCompactRow
+                          key={d.id}
+                          draft={d}
+                          returned={isReturned(d)}
+                          onSelect={() => setSelectedId(d.id)}
+                        />
+                      ))}
+                    </Fragment>
+                  ))}
+                </CompactCheckListBody>
+              )}
+            </ScrollArea>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Detail panel — full-width when a check is expanded */}
+      {selectedId ? (
+        <div className="space-y-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setSelectedId(null)}
+            className="gap-1.5 h-8 px-2 text-muted-foreground hover:text-foreground"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to list
+          </Button>
+          <LossDraftDetailPanel
+            lossDraftId={selectedId}
+            onUpdate={() => {
+              qc.invalidateQueries({ queryKey: ["loss-draft-dashboard"] });
+              qc.invalidateQueries({ queryKey: ["loss-draft-counts"] });
+            }}
+            onSelectId={setSelectedId}
+          />
+        </div>
+      ) : (
+        <Card className="hidden lg:flex self-stretch items-center justify-center min-h-[22rem]">
+          <div className="text-center text-muted-foreground">
+            <Landmark className="h-12 w-12 mx-auto mb-3 opacity-30" />
+            <p className="text-sm">Select a loss draft to manage</p>
+          </div>
+        </Card>
+      )}
     </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Compact list pieces                                                */
+/* ------------------------------------------------------------------ */
+
+function escrowStatusLabel(status: string): string {
+  return escrowStatusConfig[status]?.label ?? status;
+}
+
+function LossDraftCompactRow({
+  draft: d,
+  returned,
+  onSelect,
+}: {
+  draft: LossDraftRow;
+  returned: boolean;
+  onSelect: () => void;
+}) {
+  const sc = escrowStatusConfig[d.escrow_status] ?? { label: d.escrow_status, color: "" };
+  const overdue = Boolean(d.follow_up_date) && toDateInputValue(d.follow_up_date) < localTodayDateValue();
+  const carrier = displayCase(d.insurance_company) || displayCase(d.carrier_name) || "—";
+  const notMonitored = (d.monitoring_type ?? "monitored") === "not_monitored";
+  const escrowed = d.total_escrowed ?? 0;
+  const released = d.draw_amount_released ?? 0;
+  return (
+    <CompactCheckRow
+      checkNumber={d.check_number}
+      amount={d.check_amount ?? d.total_escrowed}
+      className={returned ? "bg-amber-500/10" : ""}
+      onClick={onSelect}
+      subtitle={
+        <span title={carrier}>{carrier}</span>
+      }
+      pills={
+        <>
+          <Badge className={`text-[10px] ${sc.color}`}>{sc.label}</Badge>
+          {returned && (
+            <Badge className="text-[10px] bg-amber-500/20 text-amber-200 border-amber-400/30">
+              Returned from Mortgage Desk · Action Required
+            </Badge>
+          )}
+          <Badge
+            variant="outline"
+            className="text-[10px] gap-1 max-w-full min-w-0"
+            title={`Mortgage company: ${d.mortgage_servicer || "—"}`}
+          >
+            <Building2 className="h-3 w-3 shrink-0" />
+            <span className="truncate">{d.mortgage_servicer || "No mortgage company"}</span>
+          </Badge>
+          <Badge variant="outline" className="text-[10px] tabular-nums">
+            Escrowed {formatCompactAmount(escrowed)} · <span className="text-emerald-400">&nbsp;Released {formatCompactAmount(released)}</span>
+          </Badge>
+          {d.holdback_amount > 0 && (
+            <Badge variant="outline" className="text-[10px] tabular-nums">
+              Holdback {formatCompactAmount(d.holdback_amount)}
+            </Badge>
+          )}
+          {d.draw_stage > 0 && (
+            <Badge variant="outline" className="text-[10px]">Draw {d.draw_stage}</Badge>
+          )}
+          {notMonitored && (
+            <Badge variant="outline" className="text-[10px] text-muted-foreground">Not monitored</Badge>
+          )}
+          {d.is_stale && (
+            <Badge variant="outline" className="text-[10px] gap-1 text-red-400 border-red-400/30" title="Stale — no contact 14+ days">
+              <AlertTriangle className="h-3 w-3" />
+              Stale
+            </Badge>
+          )}
+          {d.missing_docs_count > 0 && (
+            <Badge variant="outline" className="text-[10px] gap-1 text-amber-400 border-amber-400/30" title={`${d.missing_docs_count} missing docs`}>
+              <FileWarning className="h-3 w-3" />
+              {d.missing_docs_count} missing doc{d.missing_docs_count === 1 ? "" : "s"}
+            </Badge>
+          )}
+          {overdue && (
+            <Badge variant="outline" className="text-[10px] gap-1 text-orange-400 border-orange-400/30" title="Overdue follow-up">
+              <Clock className="h-3 w-3" />
+              Follow-up overdue
+            </Badge>
+          )}
+        </>
+      }
+    />
   );
 }

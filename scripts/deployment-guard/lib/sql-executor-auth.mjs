@@ -2686,6 +2686,224 @@ export const AUTHORIZED_SQL120_USAGE_EVENTS_AT_APPROVAL_AND_SEND = Object.freeze
   ]),
 });
 
+// Cash Jobs 2026-10-27 staging pin: SQL 121 (SELECT, INSERT, UPDATE, DELETE on cash_jobs,
+// cash_job_line_items and cash_job_attachments for checksops and authenticated;
+// sync_cash_job_check_payment() SECURITY DEFINER with search_path public, pg_temp and EXECUTE for its
+// owner only; the cash-job payment recorded when a Check Alt deposit is approved or accepted, removed
+// when it is then rejected). No predecessor. Staging apply authorized (wave 21) from staging
+// read-live run 40588277757.
+export const AUTHORIZED_SQL121_CASH_JOBS_PRODUCTION_GRANTS = Object.freeze({
+  key: 'sql121',
+  filename: 'aws/workflows/sql/121_cash_jobs_production_grants.sql',
+  migration_id: '121_cash_jobs_production_grants',
+  // The commit that last authored the file bytes.
+  commit: '95069b2987728aa48ff1518903be218386398ff7',
+  source_sha256: '72f1c189c4f218c477cea5f9974c40cbe1ff05b5cd4caf6f390e66636fd59ae6',
+  authorization: 'Owner approved 2026-10-27: staging apply (wave 21) from staging read-live run 40588277757',
+  execute: true,
+  // Staging read-live run 40588277757 (main d20d599, executor 3k6z4Pa4...).
+  expected_live_definition_sha256: '084deae36bb533c91124d12698b1adb29e5fa7b9ff53932aa293537bc573e76e',
+  // Code-derived: releaseIntendedHash('sql121', file bytes) (release-sql-state.mjs); re-derived by the tests.
+  intended_replacement_sha256: '2dd2ead6974cec45f2b88fc76c81a3cd48befa25cc63fe03133f9fe24593165e',
+  // The function the file creates (spec functions), then the existing one whose attributes and ACL it
+  // sets (spec acl_functions).
+  function_identities: Object.freeze([
+    'public.aws_record_cash_job_checkalt_payment()',
+    'public.sync_cash_job_check_payment()',
+  ]),
+});
+
+// Mortgage Desk 2026-10-27 staging pin: SQL 122 (the Mortgage Desk returns its work to the tenant:
+// mortgage_handling_requests.return_emailed_at and six SECURITY DEFINER functions, five with EXECUTE
+// for checksops (a Desk message and a Desk document on the request's check, the shipping details, the
+// homeowner timeline row, the once-per-request "work returned" email claim) and the internal
+// working-request check for the owner only). No predecessor. Staging apply authorized (wave 21)
+// from staging read-live run 40588288300.
+export const AUTHORIZED_SQL122_MORTGAGE_DESK_RETURN_TO_TENANT = Object.freeze({
+  key: 'sql122',
+  filename: 'aws/workflows/sql/122_mortgage_desk_return_to_tenant.sql',
+  migration_id: '122_mortgage_desk_return_to_tenant',
+  // The commit that last authored the file bytes.
+  commit: '5872556730bdb89e125cc5356ce4e99ee5b868dc',
+  source_sha256: 'b6f16b1dc615a78dfff87e488c543be72d79a8d2431246b2b0db0d0dbfbc12a8',
+  authorization: 'Owner approved 2026-10-27: staging apply (wave 21) from staging read-live run 40588288300',
+  execute: true,
+  // Staging read-live run 40588288300 (main d20d599, executor 3k6z4Pa4...).
+  expected_live_definition_sha256: 'e13856d7a75483b5785b6e791fd83fbe9da9a1b09f6c819480cee54388a62609',
+  // Code-derived: releaseIntendedHash('sql122', file bytes) (release-sql-state.mjs); re-derived by the tests.
+  intended_replacement_sha256: 'd026eb9b5974a381900f2ef22066b9e408ffef86233195e14e5cdbd7ea619fe9',
+  function_identities: Object.freeze([
+    'public.aws_mortgage_desk_working_request(uuid, text[])',
+    'public.aws_mortgage_desk_post_message(uuid, text)',
+    'public.aws_mortgage_desk_attach_file(uuid, text, text, text, bigint, text, text)',
+    'public.aws_mortgage_desk_update_shipping(uuid, jsonb)',
+    'public.aws_mortgage_desk_completion_timeline(uuid)',
+    'public.aws_mortgage_desk_return_email_claim(uuid)',
+  ]),
+});
+
+// Check Alt 2026-10-28 staging pin: SQL 123 (a Check Alt deposit approved or accepted moves its check
+// forward to Deposited; rejected, error, duplicate or returned after approval moves it to Returned, as
+// record_check_return records a return; a one-time move of checks already approved and billed). Two
+// SECURITY DEFINER functions with EXECUTE for the owner only and one trigger on checkalt_deposits that
+// fires before SQL 120's and SQL 121's. No predecessor. Staging apply authorized (wave 22) from
+// staging read-live run 40717225525.
+export const AUTHORIZED_SQL123_CHECKALT_DEPOSIT_CHECK_STATUS = Object.freeze({
+  key: 'sql123',
+  filename: 'aws/workflows/sql/123_checkalt_deposit_check_status.sql',
+  migration_id: '123_checkalt_deposit_check_status',
+  // The commit that last authored the file bytes.
+  commit: '525ff1647068d2824cf45d8b271b0525a774be9f',
+  source_sha256: '8f742d9d853373ab0674d46d733ccdf2a9ede0c299f662b5e3b00991f240758f',
+  authorization: 'Owner approved 2026-10-28: staging apply (wave 22) from staging read-live run 40717225525',
+  execute: true,
+  // Staging read-live run 40717225525 (main 6a7270f, executor ucqjAOPX...).
+  expected_live_definition_sha256: 'b584e1cd4352837eb5515cd07e76900e055637d11c29214db036f912e6b6f6b9',
+  // Code-derived: releaseIntendedHash('sql123', file bytes) (release-sql-state.mjs); re-derived by the tests.
+  intended_replacement_sha256: 'e982bd786ca1b7bd107d4156359b32d5032fcb0b5e7962c5b2fd457387c230fc',
+  function_identities: Object.freeze([
+    'public.aws_checkalt_mark_check_deposited(uuid, timestamp with time zone)',
+    'public.aws_apply_checkalt_check_status()',
+  ]),
+});
+
+// Mortgage Desk 2026-10-28 staging pin: SQL 124 (the Mortgage Desk sends a check's document for
+// signature, reads the check's thread, files and signature requests, and posts homeowner timeline
+// updates). Eight SECURITY DEFINER functions: seven with EXECUTE for checksops (the check's messages,
+// files and signature requests, the storage-read check of a path, the create of a draft signature
+// request, the record of its email sends, a homeowner timeline row) and the internal readable-request
+// check for the owner only. No predecessor. Staging apply authorized (wave 23) from staging read-live
+// run 40754712957.
+export const AUTHORIZED_SQL124_MORTGAGE_DESK_SIGNATURE_AND_READS = Object.freeze({
+  key: 'sql124',
+  filename: 'aws/workflows/sql/124_mortgage_desk_signature_and_reads.sql',
+  migration_id: '124_mortgage_desk_signature_and_reads',
+  // The commit that last authored the file bytes.
+  commit: '51fdd33dccbda35993ed4e1a3f42297979a7aa2a',
+  source_sha256: '0b597e65eec3bbcf96fd685b757015645a58bd224c942bef6c66c251de2be76f',
+  authorization: 'Owner approved 2026-10-28: staging apply (wave 23) from staging read-live run 40754712957',
+  execute: true,
+  // Staging read-live run 40754712957 (main 3606348, executor OWClSgc4...): the eight functions absent.
+  expected_live_definition_sha256: '59fe6907e23de341e97d4aec548203d0cd7f7cf320b009e0e440d247d82a4db2',
+  // Code-derived: releaseIntendedHash('sql124', file bytes) (release-sql-state.mjs); re-derived by the tests.
+  intended_replacement_sha256: 'daeeff54652d04b45bd7cbfb3e47f56209b90ce14c7410c32285e3cf8b129ccb',
+  function_identities: Object.freeze([
+    'public.aws_mortgage_desk_readable_request(uuid)',
+    'public.aws_mortgage_desk_messages(uuid)',
+    'public.aws_mortgage_desk_check_files(uuid)',
+    'public.aws_mortgage_desk_signature_requests(uuid)',
+    'public.aws_mortgage_desk_can_read_path(text[], text)',
+    'public.aws_mortgage_desk_create_signature_request(uuid, text, text, text, jsonb, jsonb, timestamp with time zone)',
+    'public.aws_mortgage_desk_record_signature_delivery(uuid, uuid, jsonb)',
+    'public.aws_mortgage_desk_post_timeline(uuid, text, text)',
+  ]),
+});
+
+// Security audit 2026-10-29 staging pin: SQL 125 (security_invoker on the four Supabase-era deposit
+// views deposit_queue_scored, deposit_owner_performance, deposit_reminder_queue and
+// deposit_aging_dashboard, so a query through them reads deposit_items, deposit_exceptions and
+// deposit_attachments under their RLS). No function, grant or definition change. No predecessor.
+// Staging apply authorized (wave 24) from staging read-live run 40886747687.
+export const AUTHORIZED_SQL125_DEPOSIT_VIEWS_SECURITY_INVOKER = Object.freeze({
+  key: 'sql125',
+  filename: 'aws/workflows/sql/125_deposit_views_security_invoker.sql',
+  migration_id: '125_deposit_views_security_invoker',
+  // The commit that last authored the file bytes.
+  commit: 'c0e9d1ee6b69a0e807db3b31493241826852ea28',
+  source_sha256: 'fc8096a3e7b4b71b05edfc80815aeca43d45bcacff9bc7486065aed34ba4d943',
+  authorization: 'Owner approved 2026-10-29: staging apply (wave 24) from staging read-live run 40886747687',
+  execute: true,
+  // Staging read-live run 40886747687 (main a0c5c51, executor carrying main 8b231c3's package): the four
+  // views present with the reviewed definitions and no options.
+  expected_live_definition_sha256: '9b31cf5dad3f82bf69fcddd03e0c26c0dc0fdd5ff6bd40137d1af316f1fd6541',
+  // Code-derived: releaseIntendedHash('sql125', file bytes) (release-sql-state.mjs); re-derived by the tests.
+  intended_replacement_sha256: 'a041efa5d6b8e564c860974d2427415ec3e031a8a63daf43005e893e2d55ddea',
+  function_identities: Object.freeze([]),
+});
+
+// Security audit 2026-10-29 staging pin: SQL 126 (finding 4, database part: the thirteen Supabase-era
+// SECURITY DEFINER reads PR #1379 gates in the API check their caller themselves, same signatures,
+// results, language, volatility and search_path; EXECUTE for checksops and the owner). No predecessor.
+// Staging apply authorized (wave 25) from staging read-live run 40917478177.
+export const AUTHORIZED_SQL126_DEFINER_READS_CALLER_GATES = Object.freeze({
+  key: 'sql126',
+  filename: 'aws/workflows/sql/126_definer_reads_caller_gates.sql',
+  migration_id: '126_definer_reads_caller_gates',
+  // The commit that last authored the file bytes.
+  commit: '747fc1e00b207633cf3667d5abd26ae606f91829',
+  source_sha256: '398fe16cc3bfb0940e922a15233c56109a7b6f4f3990da4180f5e4cb58028933',
+  authorization: 'Owner approved 2026-10-29: staging apply (wave 25) from staging read-live run 40917478177',
+  execute: true,
+  // Staging read-live run 40917478177 (main 7d33d5c, executor carrying main's package from deploy run
+  // 40917101622): the thirteen functions with their supabase bodies, EXECUTE PUBLIC and the owner.
+  expected_live_definition_sha256: '04106521263eeeb423ac2c0dfbf5e1f1af5a52c89501b63ac742d6b25c5e1612',
+  // Code-derived: releaseIntendedHash('sql126', file bytes) (release-sql-state.mjs); re-derived by the tests.
+  intended_replacement_sha256: '3aebf853a375d7a668acf62c8877a7b6a0d5f791b73121b591acd9046b0510b2',
+  function_identities: Object.freeze([
+    'public.get_all_checks_safety_net()',
+    'public.get_stuck_checks()',
+    'public.get_deposit_ops_kpis()',
+    'public.get_deposit_exception_kpis()',
+    'public.get_deposit_aging_summary()',
+    'public.get_check_dashboard_counts_for_tenant(uuid)',
+    'public.get_loss_draft_dashboard_counts_for_tenant(uuid)',
+    'public.get_tenant_check_usage(uuid, timestamp with time zone, timestamp with time zone)',
+    'public.get_tenant_users_with_profiles(uuid)',
+    'public.is_checkalt_enabled_for_tenant(uuid)',
+    'public.get_check_claim_settlement(uuid)',
+    'public.has_permission(uuid, text)',
+    'public.get_check_unread_counts()',
+  ]),
+});
+
+// Homeowner portal signing staging pin: SQL 127 (owner decision 2026-10-29, "Portal link is enough":
+// SQL 83's endorse capability opens 'pending' as well as 'sent' insured endorsements, pending_signatures
+// lists an open homeowner signer whose emailed link expired, and the new document_portal_signer returns
+// the signer's existing token_hash and renews its expiry; EXECUTE for checksops and the owner). No
+// predecessor. Staging apply authorized (wave 26) from staging read-live run 40947834848.
+export const AUTHORIZED_SQL127_HOMEOWNER_PORTAL_SIGNING = Object.freeze({
+  key: 'sql127',
+  filename: 'aws/workflows/sql/127_homeowner_portal_signing.sql',
+  migration_id: '127_homeowner_portal_signing',
+  // The commit that last authored the file bytes.
+  commit: '94dde846df58f8244e537f194be879d81a5ad14e',
+  source_sha256: '4d2d311bad221c2d0e33370a56c1ebf00b0887d7286892954cf76eef0e107c33',
+  authorization: 'Owner approved 2026-10-29: staging apply (wave 26) from staging read-live run 40947834848',
+  execute: true,
+  // Staging read-live run 40947834848 (main f0264d9, executor wr7SyRLn...): SQL 83's two bodies, the portal signer absent.
+  expected_live_definition_sha256: '4b4af399a73a25e191d2f914cc074a3744c84fffbc8ce3e55f2adec2cf93dfe0',
+  // Code-derived: releaseIntendedHash('sql127', file bytes) (release-sql-state.mjs); re-derived by the tests.
+  intended_replacement_sha256: 'c4936010132f2d542db796e50fe2d56d1aa3bae5133cdb53e8172978a5b2e190',
+  function_identities: Object.freeze([
+    'public.aws_public_homeowner_ledger_endorse_capability(text, uuid)',
+    'public.aws_public_homeowner_pending_signatures(text)',
+    'public.aws_public_homeowner_document_portal_signer(text, uuid)',
+  ]),
+});
+
+// Contractor verification staging pin: SQL 128 (owner decision 2026-10-30, "There are no admin so B":
+// contractor_verification_status reads the W-9 and insurance the contractor's tenants uploaded on
+// Compliance & Docs instead of the dropped contractor_documents; EXECUTE for checksops and the owner;
+// the orphan _trg_recompute_contractor_tier_from_docs() dropped). No predecessor. Staging apply
+// authorized (wave 27) from staging read-live run 41042517205.
+export const AUTHORIZED_SQL128_CONTRACTOR_VERIFICATION_FROM_COMPLIANCE = Object.freeze({
+  key: 'sql128',
+  filename: 'aws/workflows/sql/128_contractor_verification_from_compliance.sql',
+  migration_id: '128_contractor_verification_from_compliance',
+  // The commit that last authored the file bytes.
+  commit: '213396a87526560d35bc5ce02c76a2ba06a13726',
+  source_sha256: '19d5ea14967dd604bcb2e9ae7d90822a404de5c52ec07907e01ff6e0cee5a9cc',
+  authorization: 'Owner approved 2026-10-30: staging apply (wave 27) from staging read-live run 41042517205',
+  execute: true,
+  // Staging read-live run 41042517205 (main add2bbfc9, executor /U7wVHb5...): the restored supabase function and the orphan docs trigger function present.
+  expected_live_definition_sha256: '8bd6b42d189ff05b77e19d178ddba0229a0d2b6bca0a2d1d98221774fa8fbc5f',
+  // Code-derived: releaseIntendedHash('sql128', file bytes) (release-sql-state.mjs); re-derived by the tests.
+  intended_replacement_sha256: 'ba4dcb2e43c233adf6109e5a89e7d6319dc993babcf3dbdcdfee261e6a33fbd7',
+  function_identities: Object.freeze([
+    'public.contractor_verification_status(uuid)',
+  ]),
+});
+
 export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql90: AUTHORIZED_SQL90_USERS_ONLY_TENANT_ROLES,
   sql91: AUTHORIZED_SQL91_MOOV_ONBOARDING,
@@ -2717,6 +2935,14 @@ export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql118: AUTHORIZED_SQL118_PLATFORM_OWNER_TENANT_LIFECYCLE,
   sql119: AUTHORIZED_SQL119_PROVIDER_STAKEHOLDER_SYNC_ACL,
   sql120: AUTHORIZED_SQL120_USAGE_EVENTS_AT_APPROVAL_AND_SEND,
+  sql121: AUTHORIZED_SQL121_CASH_JOBS_PRODUCTION_GRANTS,
+  sql122: AUTHORIZED_SQL122_MORTGAGE_DESK_RETURN_TO_TENANT,
+  sql123: AUTHORIZED_SQL123_CHECKALT_DEPOSIT_CHECK_STATUS,
+  sql124: AUTHORIZED_SQL124_MORTGAGE_DESK_SIGNATURE_AND_READS,
+  sql125: AUTHORIZED_SQL125_DEPOSIT_VIEWS_SECURITY_INVOKER,
+  sql126: AUTHORIZED_SQL126_DEFINER_READS_CALLER_GATES,
+  sql127: AUTHORIZED_SQL127_HOMEOWNER_PORTAL_SIGNING,
+  sql128: AUTHORIZED_SQL128_CONTRACTOR_VERIFICATION_FROM_COMPLIANCE,
 });
 
 // The fee collection pin under its earlier map name (the same object as the release map's sql98).
@@ -2732,7 +2958,7 @@ export function isSql30TenantDocumentsDocType(input = {}) {
   return pinIdentifiersMatch(input, AUTHORIZED_SQL30_TENANT_DOCUMENTS_DOC_TYPE);
 }
 
-/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql120) an input names, or null. */
+/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql128) an input names, or null. */
 export function releaseSqlMigrationKey(input = {}) {
   return Object.keys(RELEASE_2026_10_17_PENDING_SQL_PINS)
     .find((key) => pinIdentifiersMatch(input, RELEASE_2026_10_17_PENDING_SQL_PINS[key])) || null;

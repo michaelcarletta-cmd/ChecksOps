@@ -68,6 +68,14 @@ on:
           - sql118-platform-owner-tenant-lifecycle
           - sql119-provider-stakeholder-sync-acl
           - sql120-usage-events-at-approval-and-send
+          - sql121-cash-jobs-grants
+          - sql122-mortgage-desk-return-to-tenant
+          - sql123-checkalt-deposit-check-status
+          - sql124-mortgage-desk-signature-and-reads
+          - sql125-deposit-views-security-invoker
+          - sql126-definer-reads-caller-gates
+          - sql127-homeowner-portal-signing
+          - sql128-contractor-verification-from-compliance
       approved_commit:
         description: "Required for deploy/apply/read-live: exact main commit approved for this run"
         required: false
@@ -189,6 +197,14 @@ jobs:
           node --test aws/tests/release-sql118-executor.test.mjs
           node --test aws/tests/release-sql119-executor.test.mjs
           node --test aws/tests/release-sql120-executor.test.mjs
+          node --test aws/tests/release-sql121-executor.test.mjs
+          node --test aws/tests/release-sql122-executor.test.mjs
+          node --test aws/tests/release-sql123-executor.test.mjs
+          node --test aws/tests/release-sql124-executor.test.mjs
+          node --test aws/tests/release-sql125-executor.test.mjs
+          node --test aws/tests/release-sql126-executor.test.mjs
+          node --test aws/tests/release-sql127-executor.test.mjs
+          node --test aws/tests/release-sql128-executor.test.mjs
           node --test aws/tests/mortgage-executor-commit-outcome.test.mjs
           node --test aws/tests/deployment-guard-kms-receipt.test.mjs
           node --test aws/tests/deployment-guard-signed-receipt.test.mjs

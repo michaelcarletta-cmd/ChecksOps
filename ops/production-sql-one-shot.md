@@ -44,6 +44,14 @@ that connects to the database:
 | `sql118` | `scripts/deployment-guard/sql118-platform-owner-tenant-lifecycle-production-apply.mjs` (`ops/production-sql-118-apply.md`; SQL 117 plus every non-owner grant on `tenant_deactivations` revoked: the table and the platform-owner deactivate, reactivate, activity, delete-empty and deactivated-list functions; no predecessor; supersedes the retired SQL 117) |
 | `sql119` | `scripts/deployment-guard/sql119-provider-stakeholder-sync-acl-production-apply.mjs` (`ops/production-sql-119-apply.md`; EXECUTE on `sync_provider_stakeholder_account(uuid)` for its owner only (`PUBLIC`, `checksops` and, where they exist, `anon`, `authenticated` and `service_role` revoked); no predecessor; `runs_before` `sql115`) |
 | `sql120` | `scripts/deployment-guard/sql120-usage-events-at-approval-and-send-production-apply.mjs` (`ops/production-sql-120-apply.md`; usage events at Check Alt approval and at send time: two triggers, five owner-only functions, the one-fee-per-leg unique index and a backfill from 2026-10-01; no predecessor) |
+| `sql121` | `scripts/deployment-guard/sql121-cash-jobs-grants-production-apply.mjs` (`ops/production-sql-121-apply.md`; SELECT, INSERT, UPDATE, DELETE on `cash_jobs`, `cash_job_line_items` and `cash_job_attachments` for `checksops` and `authenticated`, `sync_cash_job_check_payment()` SECURITY DEFINER and owner-only, and the cash-job payment at Check Alt approval: one owner-only function and its trigger on `checkalt_deposits`; no predecessor) |
+| `sql122` | `scripts/deployment-guard/sql122-mortgage-desk-return-to-tenant-production-apply.mjs` (`ops/production-sql-122-apply.md`; the Mortgage Desk returns its work to the tenant: `mortgage_handling_requests.return_emailed_at` and six SECURITY DEFINER functions, five with EXECUTE for `checksops` (Desk message, Desk document, shipping details, homeowner timeline row, "work returned" email claim) and the owner-only working-request check; no policy, table grant or trigger; no predecessor) |
+| `sql123` | `scripts/deployment-guard/sql123-checkalt-deposit-check-status-production-apply.mjs` (`ops/production-sql-123-apply.md`; a Check Alt deposit approved or accepted moves its check to Deposited, rejected, error, duplicate or returned after approval moves it to Returned: two owner-only SECURITY DEFINER functions and one trigger on `checkalt_deposits` that fires before SQL 120's and SQL 121's, and a one-time move of checks already approved and billed; no predecessor) |
+| `sql124` | `scripts/deployment-guard/sql124-mortgage-desk-signature-and-reads-production-apply.mjs` (`ops/production-sql-124-apply.md`; the Mortgage Desk sends a check's document for signature, reads the check's thread, files and signature requests, and posts homeowner timeline updates: eight SECURITY DEFINER functions, seven with EXECUTE for `checksops` (messages, check files, signature requests, the storage-read path check, the signature request create, its delivery record, the timeline row) and the owner-only readable-request check; no table, column, policy, table grant or trigger; no predecessor) |
+| `sql125` | `scripts/deployment-guard/sql125-deposit-views-security-invoker-production-apply.mjs` (`ops/production-sql-125-apply.md`; security_invoker on the four Supabase-era deposit views `deposit_queue_scored`, `deposit_owner_performance`, `deposit_reminder_queue` and `deposit_aging_dashboard`: no definition, grant or function change) |
+| `sql126` | `scripts/deployment-guard/sql126-definer-reads-caller-gates-production-apply.mjs` (`ops/production-sql-126-apply.md`; the thirteen Supabase-era SECURITY DEFINER reads check their caller themselves: owner-only, tenant, check and self gates, `get_stuck_checks` and `get_check_unread_counts` scoped to the caller; same signatures, EXECUTE for `checksops` and the owner) |
+| `sql127` | `scripts/deployment-guard/sql127-homeowner-portal-signing-production-apply.mjs` (`ops/production-sql-127-apply.md`; homeowners sign their checks and documents from the claim portal: SQL 83's `aws_public_homeowner_ledger_endorse_capability` opens `pending` as well as `sent` insured endorsements, `aws_public_homeowner_pending_signatures` lists an open homeowner signer whose emailed link expired, and the new `aws_public_homeowner_document_portal_signer` returns the signer's existing token hash and renews its expiry; three SECURITY DEFINER functions, EXECUTE for `checksops` and the owner; no table, column, policy, table grant or trigger; no predecessor) |
+| `sql128` | `scripts/deployment-guard/sql128-contractor-verification-from-compliance-production-apply.mjs` (`ops/production-sql-128-apply.md`; contractor verification reads the Compliance & Docs uploads: `contractor_verification_status` takes the W-9 and insurance from the contractor's tenants' `moov_compliance_documents` and `tenant_documents` instead of the dropped `contractor_documents`; EXECUTE for `checksops` and the owner; the orphan `_trg_recompute_contractor_tier_from_docs()` dropped) |
 
 To add a migration, register its reviewed tool in `ONE_SHOT_TOOLS`
 (`scripts/deployment-guard/lib/production-sql-one-shot.mjs`). An entry names only the tool,
@@ -58,7 +66,7 @@ a migration file touches its pin, not the registry. An entry may add `inspect_re
 
 | flag | |
 |---|---|
-| `--migration <key>` | a registered key (`sql29`, `sql30`, `sql71`, `sql77`…`sql89`, `sql90`…`sql106`, `sql108`, `sql109`, `sql110`, `sql111`, `sql112`, `sql113`, `sql114`, `sql115`, `sql116`, `sql117`, `sql118`, `sql119`, `sql120`) |
+| `--migration <key>` | a registered key (`sql29`, `sql30`, `sql71`, `sql77`…`sql89`, `sql90`…`sql106`, `sql108`, `sql109`, `sql110`, `sql111`, `sql112`, `sql113`, `sql114`, `sql115`, `sql116`, `sql117`, `sql118`, `sql119`, `sql120`, `sql121`, `sql122`, `sql123`, `sql124`, `sql125`, `sql126`, `sql127`, `sql128`) |
 | `--approval-scope <key>` | the migration the owner approved; must equal `--migration` |
 | `--approval-statement "<words>"` or `--approval-statement-b64 <base64>` | the owner's exact words, recorded verbatim. Pass exactly one of the two. Use the base64 form when the words contain quotes or newlines. Must be non-empty. |
 | `--commit <sha>` | the full main commit the tarball was built from |
@@ -101,7 +109,23 @@ An unexpected exception also ends in one failure summary:
   before anything else.
 
 1. **Pin.** Refuses unless the pin has `execute: true`, a staging acceptance
-   (`ok: true` plus a reference) and an authorization phrase. SQL 120's pin is `execute: false`
+   (`ok: true` plus a reference) and an authorization phrase. SQL 128's pin is `execute: false`
+   again since its 2026-10-30 apply (owner statement "apply SQL 128 in production"; see
+   `ops/production-sql-128-apply.md`). SQL 127's pin is `execute: false`
+   again since its 2026-10-29 apply (owner statement "apply SQL 127 into production"; see
+   `ops/production-sql-127-apply.md`). SQL 126's pin is `execute: false`
+   again since its 2026-10-29 apply (owner statement "apply SQL 126 in production"; see
+   `ops/production-sql-126-apply.md`). SQL 125's pin is `execute: false`
+   again since its 2026-10-29 apply (owner statement "apply SQL 125 in production after 1382 merges"; see
+   `ops/production-sql-125-apply.md`). SQL 124's pin is `execute: false`
+   again since its 2026-10-28 apply (owner statement "apply SQL 124 into production"; see
+   `ops/production-sql-124-apply.md`). SQL 123's pin is `execute: false`
+   again since its 2026-10-28 apply (owner statement "merge 1335 when green and apply SQL 123 into production"; see
+   `ops/production-sql-123-apply.md`). SQL 122's pin is `execute: false`
+   again since its 2026-10-28 apply (owner statement "then apply SQL 122 in production"; see
+   `ops/production-sql-122-apply.md`). SQL 121's pin is `execute: false`
+   again since its 2026-10-27 apply (owner statement "then apply SQL 121 in production"; see
+   `ops/production-sql-121-apply.md`). SQL 120's pin is `execute: false`
    again since its 2026-10-27 apply (owner statement "Approve bundle prod-sql120-usage-events-20261027. Apply SQL 120 in production. DEPLOY WEBSITE TO PRODUCTION", bundle
    `prod-sql120-usage-events-20261027`; see `ops/production-sql-120-apply.md`). SQL 115's pin is `execute: false`
    again since its 2026-10-27 apply after SQL 119's (owner statement "AWS reconnected, apply SQL 115 in
@@ -245,6 +269,42 @@ extraction.
 - `upload` (the only job with `id-token: write`). Runs no repository or npm code. It
   re-verifies the tarball and its sidecar against the `package` job's sha256 output,
   then uploads both.
+
+## Runner state: stopped between runs
+
+The runner's instance role (`ChecksOpsSql53TemporaryRunner`) reads the production
+`checksops_admin` secret, so the instance stays **stopped** whenever no production inspect or
+apply is in progress (security audit finding C, 2026-10-29). Start it for a run and stop it
+again when the run is done; the transfer workflow does not need it.
+
+Before the inspect or apply (an administrator, `ec2:StartInstances` on the instance):
+
+```bash
+aws ec2 start-instances --instance-ids i-0c35557c4e5385406
+aws ec2 wait instance-running --instance-ids i-0c35557c4e5385406
+# SSM must report the runner Online before the single SSM command below.
+aws ssm describe-instance-information \
+  --filters Key=InstanceIds,Values=i-0c35557c4e5385406 \
+  --query 'InstanceInformationList[0].PingStatus' --output text
+```
+
+After the last command of the run (inspect, apply and post-apply inspect), and before the
+record PR:
+
+```bash
+aws ec2 stop-instances --instance-ids i-0c35557c4e5385406
+aws ec2 wait instance-stopped --instance-ids i-0c35557c4e5385406
+```
+
+The record PR notes the start and stop times. A runner found running with no run in
+progress is stopped and reported to the owner.
+
+First stop (2026-10-29), owner approval verbatim: "merge 1374 when green and stop the SQL
+runner". Precondition: the instance was `running`, named `checksops-sql53-temporary-runner`
+with instance profile `ChecksOpsSql53TemporaryRunner`, and no SSM command was pending or in
+progress. `ec2:StopInstances` at 2026-10-29 13:18:29 UTC by `user/claude-code`; `stopped` at
+13:18:52 UTC (`StateTransitionReason`: "User initiated (2026-10-29 13:18:30 GMT)"). The last
+run before it was SQL 124's post-apply inspect, 2026-10-28 20:16 UTC.
 
 ## The single SSM command
 

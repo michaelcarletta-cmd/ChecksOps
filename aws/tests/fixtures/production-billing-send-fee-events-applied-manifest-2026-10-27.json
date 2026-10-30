@@ -1,0 +1,15 @@
+{
+  "workstream_id": "billing-send-fee-events-applied",
+  "authorization": "Record only (2026-10-27): the bytes below are live. Nothing is planned or authorized by this manifest; any later change to this member needs its own manifest, staging acceptance and owner approval.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "month-end billing bills the send-time fees SQL 120 records, once per recipient, never voided ones (#1306), applied 2026-10-27 through the guarded overlay path on main bd9fe944b (plan reconcile #1311), on the owner's approval \"Approve production deploy of tenant-management-v2.mjs (staging run 40498221922), providers/onboarding/webhook-status.mjs (staging run 40497446291), then tenant-billing-engine.mjs (staging run 40572754273), in that order.\" (approval phrase \"DEPLOY tenant-billing-engine.mjs TO PRODUCTION\"): tenant-billing-engine.mjs (43d9a162 -> bccffbe7; staging apply run 40572754273; production pre-apply inspect run 40577454374 READY at CodeSha256 gKit91o1Ps74kN58ZHr/P85SEqqy2fJonbjlVlmVB8U=, RevisionId 7bcdd16e-ea77-4de1-85e3-d68884a0ab6c; production apply run 40577608750). The production apply run concluded success including its \"Verify live member is the accepted bytes\" step (VERIFIED at CodeSha256 fZPpTRW8dupjAOWnu6VKqvJ5SNaj2x7IYIaCdY4Rmfw=, RevisionId 93820ab4-e2f8-4efa-8401-5748753bedaf) and the public production smoke (/health and /db-health 200). The row records the applied bytes as live_sha256 and accepted_sha256 and chains to the manifest that planned it (previous_manifest), which keeps the pre-apply state.",
+  "members": {
+    "tenant-billing-engine.mjs": {
+      "live_sha256": "bccffbe7aa9b21d3052a832f1d2c4b9ec4b333b1727156773b1ac034be96860c",
+      "accepted_sha256": "bccffbe7aa9b21d3052a832f1d2c4b9ec4b333b1727156773b1ac034be96860c",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-billing-send-fee-events-manifest-2026-10-27.json"
+    }
+  }
+}

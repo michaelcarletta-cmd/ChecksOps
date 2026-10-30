@@ -1,0 +1,14 @@
+{
+  "workstream_id": "billing-send-fee-events",
+  "authorization": "Pending owner review (2026-10-27). Planning only: nothing is live or verified. Each production apply still needs its own owner approval and staging acceptance.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "tenant-billing-engine.mjs bills the next-day / same-day fee SQL 120 writes at send time: one fee per recipient of a send (its legs share provider_metadata request_hash and recipient_index), a voided fee is neither billed nor written again, and wallet funding and parent legs are not sends. Fees for sends with no fee yet (before SQL 120) are still written once per recipient. live_sha256 is main's bytes since be4df1878 and the member of the live package: read-only production overlay inspect run 40566119078 (2026-10-27T19:07Z, ALREADY_ACCEPTED, checksops-production-prep-api CodeSha256 5w11XWe+2lgTnWTm5zQBrVWJftLs74DnwW6sZmoYbl8=, RevisionId 3aa7dd74-248c-4d22-a304-41d7e28d1e86). The guarded overlay inspect re-reads it before any apply.",
+  "members": {
+    "tenant-billing-engine.mjs": {
+      "live_sha256": "43d9a162445bf8e84824d4f60180cbcfab7b0cdae54cee1caf127a9fbb17f7f3",
+      "accepted_sha256": "bccffbe7aa9b21d3052a832f1d2c4b9ec4b333b1727156773b1ac034be96860c",
+      "operation": "replace"
+    }
+  }
+}

@@ -44,6 +44,8 @@ const mockClient = (rows) => {
           status: 'active',
         }] : [] };
       }
+      // The caller is a member of the tenant it asks about (data.mjs RPC_ACCESS_GATES).
+      if (String(sql).includes('aws_can_access_tenant')) return { rows: [{ ok: true }] };
       if (String(sql).includes('get_tenant_funds_received')) return { rows };
       return { rows: [] };
     },
@@ -91,6 +93,8 @@ test('handleDataRpc preserves get_tenant_funds_received as an array', async () =
   assert.equal(result.data.length, manyRows.length);
   assert.equal(result.data[0].id, manyRows[0].id);
   assert.match(client.queries.some((q) => String(q.sql).includes('get_tenant_funds_received')) ? 'called' : '', /called/);
+  const gate = client.queries.find((q) => String(q.sql).includes('aws_can_access_tenant'));
+  assert.deepEqual(gate.params, ['aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa']);
 });
 
 test('data.mjs no longer lists get_tenant_funds_received in RPC_UNWRAP_SINGLE_COLUMN', () => {

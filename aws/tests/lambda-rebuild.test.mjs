@@ -111,6 +111,25 @@ const CHANGED_SINCE_SECOND_REBUILD = {
   // Stakeholder Accounts (remove a non-payee, change type); a REPLACE member of the production
   // overlay plan, not a rebuild section.
   'write-allowlist.mjs': 'changed',
+  // DB validator SQL 120 triggers (2026-10-27): the two usage-event triggers SQL 120 added join the
+  // justified public trigger set (182); deployed to staging by the guarded overlay, not a rebuild
+  // section. SQL 121 and SQL 123 (#1338) raised it to 184; a REPLACE member of the production
+  // overlay plan (2026-10-28).
+  'db-readonly-validate.mjs': 'changed',
+  // Check reconciliation tenant scope (2026-10-29, security audit finding 4): a non-owner keeps only
+  // the stuck checks of its own tenants (get_stuck_checks returns no tenant_id); a REPLACE member of
+  // the production overlay plan, not a rebuild section.
+  'check-reconciliation.mjs': 'changed',
+  // Endorsement email to every recipient (2026-10-29): on production the Resend endorsement mailer
+  // sends to every recipient and keeps every CC; a REPLACE member of the production overlay plan,
+  // not a rebuild section.
+  'endorsement-parity.mjs': 'changed',
+  // Homeowner portal signing (2026-10-29, SQL 127): the portal pair {ledger_token, signer_id} signs
+  // documents (signature-submit.mjs, now importing storage.mjs) and an expired homeowner signer stays
+  // listed (homeowner-signing-integration.mjs); REPLACE members of the production overlay plan, not a
+  // rebuild section.
+  'signature-submit.mjs': 'changed',
+  'homeowner-signing-integration.mjs': 'changed',
 };
 // Listed changes that go through the production overlay plan, never the current rebuild section.
 const OVERLAY_PLAN_CHANGES = new Set([
@@ -128,6 +147,15 @@ const OVERLAY_PLAN_CHANGES = new Set([
   'write.mjs',
   'email-policy.mjs',
   'write-allowlist.mjs',
+  // Deployed by the guarded overlay (staging run 40739554272; a REPLACE row of the production plan).
+  'db-readonly-validate.mjs',
+  // Security audit finding 4 (2026-10-29): a REPLACE row of the production plan.
+  'check-reconciliation.mjs',
+  // Endorsement email to every recipient (2026-10-29): a REPLACE row of the production plan.
+  'endorsement-parity.mjs',
+  // Homeowner portal signing (2026-10-29): REPLACE rows of the production plan, held on SQL 127.
+  'signature-submit.mjs',
+  'homeowner-signing-integration.mjs',
 ]);
 const assertSectionAcceptedIsMain = (apiRoot, name, accepted) => {
   const onMain = sha256(fs.readFileSync(path.join(apiRoot, name)));

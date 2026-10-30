@@ -18,6 +18,7 @@ import { SettingsHero } from "@/components/settings/SettingsHero";
 import { useAwsPollingFallback } from "@/hooks/useAwsPollingFallback";
 import { ensureMortgageDeskReturnMessage } from "@/hooks/useMortgageDeskReturnAlert";
 import { buildMortgageDeskCompletedMessage, mortgageDeskCompletionPostedByClient } from "@/lib/mortgageDeskReturn";
+import { buildMortgageDeskNoteMessage } from "@/lib/mortgageDeskWrites";
 
 interface Request {
   id: string;
@@ -152,7 +153,7 @@ export default function MortgageOpsQueue() {
   const handleStatus = async (id: string, status: "completed" | "cancelled") => {
     setBusyId(id);
     const notes = notesById[id]?.trim() || null;
-    const { error } = await supabase.rpc("update_mortgage_handling_request_status", {
+    const { data: updated, error } = await supabase.rpc("update_mortgage_handling_request_status", {
       _request_id: id,
       _status: status,
       _notes: notes,
@@ -196,13 +197,34 @@ export default function MortgageOpsQueue() {
             returnMarkerError = e instanceof Error ? e.message : "unknown error";
           }
         }
-        void supabase.from("homeowner_ledger_events").insert({
-          check_intake_item_id: row.check_intake_item_id,
-          claim_id: row.claim_id,
-          event_type: "mortgage_update",
-          title: "Mortgage company step complete",
-          description: "Our mortgage team finished working with your mortgage company on this check.",
-        } as any);
+        // Homeowner timeline row. On AWS the server posts it in the completion's
+        // transaction (SQL 122 aws_mortgage_desk_completion_timeline): the agent
+        // is not a member of the tenant. The Supabase backend posts it here, with
+        // the table's own columns.
+        if (!mortgageUsesAwsBackend && row.claim_id) {
+          void supabase.from("homeowner_ledger_events").insert({
+            tenant_id: row.tenant_id,
+            claim_id: row.claim_id,
+            check_id: row.check_intake_item_id,
+            event_type: "mortgage_update",
+            occurred_at: new Date().toISOString(),
+            actor_label: "Mortgage Desk",
+            payload_json: {
+              title: "Mortgage company step complete",
+              note: "Our mortgage team finished working with your mortgage company on this check.",
+              mortgage_company: row.mortgage_company,
+              mortgage_request_id: id,
+            },
+          } as any);
+        }
+        // On AWS the tenant is emailed once after the completion commits.
+        const returnEmail = (updated as { return_email?: { emailed?: boolean; status?: string } } | null)?.return_email;
+        if (mortgageUsesAwsBackend && returnEmail && !returnEmail.emailed
+          && !["already_sent", "disabled"].includes(String(returnEmail.status || ""))) {
+          toast.warning("Marked complete, but the tenant email was not sent", {
+            description: String(returnEmail.status || "unknown"),
+          });
+        }
         if (returnMarkerError) {
           setBusyId(null);
           toast.error("Marked complete, but the tenant was not notified", {
@@ -228,18 +250,40 @@ export default function MortgageOpsQueue() {
     const notes = notesById[id]?.trim();
     if (!notes) return;
     setBusyId(id);
-    const { error } = await supabase.rpc("update_mortgage_handling_request_status", {
+    const { data: updated, error } = await supabase.rpc("update_mortgage_handling_request_status", {
       _request_id: id,
       _status: "in_progress",
       _notes: notes,
     });
-    setBusyId(null);
     if (error) {
+      setBusyId(null);
       toast.error(error.message);
       return;
     }
+    // The tenant sees Desk notes on the check thread. On AWS the server posts
+    // the note there in the same call (SQL 122); the Supabase backend posts it here.
+    let tenantNotified = true;
+    const row = [...mine, ...available, ...completed].find((r) => r.id === id);
+    if (mortgageUsesAwsBackend) {
+      tenantNotified = (updated as { tenant_message_posted?: boolean } | null)?.tenant_message_posted !== false;
+    } else if (row?.check_intake_item_id && user?.id) {
+      const body = buildMortgageDeskNoteMessage(notes);
+      if (body) {
+        const { error: msgErr } = await supabase.from("check_messages").insert({
+          check_id: row.check_intake_item_id,
+          sender_id: user.id,
+          body,
+        });
+        tenantNotified = !msgErr;
+      }
+    }
+    setBusyId(null);
     setNotesById((prev) => ({ ...prev, [id]: "" }));
-    toast.success("Note added");
+    if (tenantNotified) {
+      toast.success("Note added");
+    } else {
+      toast.warning("Note saved, but it was not posted to the tenant");
+    }
     void fetchQueues();
   };
 

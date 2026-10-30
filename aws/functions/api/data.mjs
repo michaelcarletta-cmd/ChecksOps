@@ -58,6 +58,67 @@ const READ_RPCS = new Set([
   'aws_platform_owner_referral_overview',
 ]);
 
+// Supabase-era SECURITY DEFINER reads in READ_RPCS let any caller holding a global
+// user_roles admin or staff in (has_role is not tenant-scoped; tenant admins hold it), so
+// they would answer for every tenant. The caller's access is checked here before the
+// function runs: owner = platform owner only (the function reads every tenant), tenant =
+// the named tenant argument must pass aws_can_access_tenant (member or platform owner),
+// check = aws_can_access_check (owner tenant, active share target or platform owner),
+// self = only the caller's own user id unless platform owner, contractor = the caller's own
+// contractor profile or a cross-tenant reader (master or platform owner), the rule the
+// contractor_profiles select policy applies to a profile's owner.
+export const RPC_ACCESS_GATES = Object.freeze({
+  get_all_checks_safety_net: { owner: true },
+  get_stuck_checks: { owner: true },
+  get_deposit_ops_kpis: { owner: true },
+  get_deposit_exception_kpis: { owner: true },
+  get_deposit_aging_summary: { owner: true },
+  get_check_dashboard_counts_for_tenant: { tenant: '_tenant_id' },
+  get_loss_draft_dashboard_counts_for_tenant: { tenant: '_tenant_id' },
+  get_tenant_funds_received: { tenant: '_tenant_id' },
+  get_tenant_check_usage: { tenant: '_tenant_id' },
+  get_tenant_users_with_profiles: { tenant: '_tenant_id' },
+  is_checkalt_enabled_for_tenant: { tenant: '_tenant_id' },
+  get_check_stage_totals: { tenant: 'p_tenant_id' },
+  aws_tenant_referral_summary: { tenant: '_tenant_id' },
+  get_check_claim_settlement: { check: 'p_check_id' },
+  has_permission: { self: '_user_id' },
+  contractor_verification_status: { contractor: 'p_contractor_id' },
+});
+
+export const CONTRACTOR_GATE_SQL = `SELECT (
+  COALESCE(public.aws_is_cross_tenant_reader(), false)
+  OR EXISTS (SELECT 1 FROM public.contractor_profiles cp WHERE cp.id = $1::uuid AND cp.user_id = auth.uid())
+) AS ok`;
+
+const GATE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** null when the caller may run the RPC; otherwise the refusal (no RPC runs). */
+export const rpcAccessDenial = async (client, name, args, applicationUserId) => {
+  const gate = RPC_ACCESS_GATES[name];
+  if (!gate) return null;
+  const forbidden = { ok: false, statusCode: 403, error: 'rpc_forbidden', message: 'Not authorized for this RPC', name };
+  const isOwner = async () => (await client.query(IS_PLATFORM_OWNER_SQL)).rows[0]?.is_owner === true;
+  const uuidArg = (key) => {
+    const value = args[key];
+    return typeof value === 'string' && GATE_UUID.test(value) ? value : null;
+  };
+  if (gate.owner) return (await isOwner()) ? null : forbidden;
+  const key = gate.tenant || gate.check || gate.self || gate.contractor;
+  const id = uuidArg(key);
+  if (!id) return { ok: false, statusCode: 400, error: 'invalid_rpc_args', message: `${key} must be a uuid`, name };
+  if (gate.self) {
+    if (id.toLowerCase() === String(applicationUserId || '').toLowerCase()) return null;
+    return (await isOwner()) ? null : forbidden;
+  }
+  const sql = gate.tenant
+    ? 'SELECT COALESCE(public.aws_can_access_tenant($1::uuid), false) AS ok'
+    : gate.check
+      ? 'SELECT COALESCE(public.aws_can_access_check($1::uuid), false) AS ok'
+      : CONTRACTOR_GATE_SQL;
+  return (await client.query(sql, [id])).rows[0]?.ok === true ? null : forbidden;
+};
+
 const RPC_UNWRAP_SINGLE_COLUMN = new Set([
   'has_permission',
   'is_checkalt_enabled_for_tenant',
@@ -374,7 +435,7 @@ export const embedColumnSql = (columns) => {
 
 const TENANTS_PUBLIC_COLUMNS = new Set([
   'id', 'name', 'slug', 'logo_url', 'primary_color', 'secondary_color',
-  'custom_domain', 'subscription_status', 'plan_tier', 'is_system_tenant', 'partner_code',
+  'custom_domain', 'subscription_status', 'plan_tier', 'is_system_tenant',
 ]);
 
 /**
@@ -601,6 +662,9 @@ export const SECRET_COLUMNS = Object.freeze({
   tenant_billing_accounts: Object.freeze(['account_number_encrypted']),
   tenant_openai_credentials: Object.freeze(['encrypted_key']),
   tenants: Object.freeze(['actum_password', 'actum_test_password', 'actum_webhook_secret', 'ein']),
+  // A partner code connects whoever enters it at once, so the public tenant list (readable
+  // without a login) never carries one. Members read their own from tenants (aws_select_tenants).
+  tenants_public: Object.freeze(['partner_code']),
   user_sessions: Object.freeze(['session_token']),
 });
 
@@ -1072,6 +1136,17 @@ const publicTenantsQuery = async (event, deps = {}) => {
   if (ident(body.table, 'table') !== 'tenants_public') {
     return { ok: false, statusCode: 401, error: 'missing_cognito_token', spoofFieldsIgnored: spoof };
   }
+  const columnDeny = denySecretColumnQuery('tenants_public', parseSelect(body.select), body.filters, body.order);
+  if (columnDeny.denied) {
+    return {
+      ok: false,
+      statusCode: 403,
+      error: columnDeny.error,
+      message: columnDeny.message,
+      table: columnDeny.table,
+      spoofFieldsIgnored: spoof,
+    };
+  }
   const loadCredentials = deps.loadDatabaseCredentials || loadDatabaseCredentials;
   const createClient = deps.createClient || ((config) => new Client(config));
   let client;
@@ -1280,6 +1355,8 @@ export const handleDataRpc = async (event, deps) => {
     params.push(args[key]);
     return `${key} := $${index + 1}`;
   });
+  const denial = await rpcAccessDenial(client, name, args, mapping.application_user_id);
+  if (denial) return { ...denial, spoofFieldsIgnored: spoof };
   const sql = placeholders.length
     ? `SELECT * FROM public.${name}(${placeholders.join(', ')})`
     : `SELECT * FROM public.${name}()`;

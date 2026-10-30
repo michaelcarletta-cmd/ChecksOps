@@ -18,8 +18,10 @@ const OTHER_CHECK = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1';
 const CLAIM = '1de2f734-de37-404a-aa3e-d23905f7a6ea';
 const TENANT = '11111111-1111-4111-8111-111111111111';
 
+// The listed checks are the caller's own: visible and writable (aws_can_write_check).
 const visibleChecks = (ids) => ({
   query: async (sql, params = []) => {
+    if (sql === 'SELECT public.aws_can_write_check($1::uuid) AS ok') return { rows: [{ ok: ids.includes(params[0]) }] };
     if (String(sql).includes('FROM public.check_intake_items WHERE id = $1::uuid')) {
       return { rows: ids.includes(params[0]) ? [{ id: params[0], tenant_id: TENANT }] : [] };
     }

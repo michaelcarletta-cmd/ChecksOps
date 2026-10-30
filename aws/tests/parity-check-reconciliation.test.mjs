@@ -20,6 +20,15 @@ const sqlClient = (handlers) => ({
   },
 });
 
+// The stuck-check tenant lookup: answers only for checks in the tenants it is given.
+const CHECK_TENANT = { c1: TENANT_A, c2: TENANT_B };
+const stuckTenantLookup = () => ({
+  match: (sql) => sql.includes('FROM public.check_intake_items c') && sql.includes('c.id = ANY($1::uuid[])'),
+  result: (params) => ({
+    rows: params[0].filter((id) => params[1].includes(CHECK_TENANT[id])).map((id) => ({ id, tenant_id: CHECK_TENANT[id] })),
+  }),
+});
+
 test('check-reconciliation is Class A and requires auth', async () => {
   assert.ok(CLASS_A_FUNCTIONS.has('check-reconciliation'));
   const result = await handleAppServiceRequest({
@@ -60,11 +69,13 @@ test('reconciliation is tenant-isolated for non-admins', async () => {
       },
       {
         match: (sql) => sql.includes('get_stuck_checks'),
+        // get_stuck_checks() returns no tenant_id (supabase/migrations/20260502114110_*.sql).
         result: () => ({ rows: [
-          { id: 'c1', is_overdue: true, hours_in_status: 10, sla_hours: 8, tenant_id: TENANT_A, status: 'uploaded' },
-          { id: 'c2', is_overdue: true, hours_in_status: 10, sla_hours: 8, tenant_id: TENANT_B, status: 'uploaded' },
+          { id: 'c1', is_overdue: true, hours_in_status: 10, sla_hours: 8, status: 'uploaded' },
+          { id: 'c2', is_overdue: true, hours_in_status: 10, sla_hours: 8, status: 'uploaded' },
         ] }),
       },
+      stuckTenantLookup(),
       {
         match: (sql) => sql.includes('loss_draft_tracking'),
         result: () => ({ rows: [{ id: 'c9', tenant_id: TENANT_B, payee_line: 'Other' }] }),
@@ -90,6 +101,8 @@ test('reconciliation is tenant-isolated for non-admins', async () => {
   assert.equal(result.orphan_storage_skipped, true);
   assert.equal(inserted.includes('missing_loss_draft_row'), false);
   assert.equal(inserted.includes('stale_status'), true);
+  // Only tenant A's stuck check (c1); tenant B's (c2) is dropped.
+  assert.equal(inserted.filter((type) => type === 'stale_status').length, 1);
 });
 
 test('empty tenant scope does not fail open', () => {
@@ -121,11 +134,13 @@ test('tenant user_roles.admin stays tenant-scoped', async () => {
       },
       {
         match: (sql) => sql.includes('get_stuck_checks'),
+        // get_stuck_checks() returns no tenant_id (supabase/migrations/20260502114110_*.sql).
         result: () => ({ rows: [
-          { id: 'c1', is_overdue: true, hours_in_status: 10, sla_hours: 8, tenant_id: TENANT_A, status: 'uploaded' },
-          { id: 'c2', is_overdue: true, hours_in_status: 10, sla_hours: 8, tenant_id: TENANT_B, status: 'uploaded' },
+          { id: 'c1', is_overdue: true, hours_in_status: 10, sla_hours: 8, status: 'uploaded' },
+          { id: 'c2', is_overdue: true, hours_in_status: 10, sla_hours: 8, status: 'uploaded' },
         ] }),
       },
+      stuckTenantLookup(),
       {
         match: (sql) => sql.includes('loss_draft_tracking'),
         result: () => ({ rows: [{ id: 'c9', tenant_id: TENANT_B, payee_line: 'Other' }] }),
@@ -150,6 +165,7 @@ test('tenant user_roles.admin stays tenant-scoped', async () => {
   assert.equal(result.ok, true);
   assert.equal(inserted.includes('stale_status'), true);
   assert.equal(inserted.includes('missing_loss_draft_row'), false);
+  assert.equal(inserted.filter((type) => type === 'stale_status').length, 1);
 });
 
 test('unattached mortgage_agent cannot reconcile all tenants', async () => {
@@ -197,11 +213,13 @@ test('platform owner may reconcile across tenants', async () => {
       },
       {
         match: (sql) => sql.includes('get_stuck_checks'),
+        // get_stuck_checks() returns no tenant_id (supabase/migrations/20260502114110_*.sql).
         result: () => ({ rows: [
-          { id: 'c1', is_overdue: true, hours_in_status: 10, sla_hours: 8, tenant_id: TENANT_A, status: 'uploaded' },
-          { id: 'c2', is_overdue: true, hours_in_status: 10, sla_hours: 8, tenant_id: TENANT_B, status: 'uploaded' },
+          { id: 'c1', is_overdue: true, hours_in_status: 10, sla_hours: 8, status: 'uploaded' },
+          { id: 'c2', is_overdue: true, hours_in_status: 10, sla_hours: 8, status: 'uploaded' },
         ] }),
       },
+      stuckTenantLookup(),
       {
         match: (sql) => sql.includes('loss_draft_tracking'),
         result: () => ({ rows: [] }),

@@ -1,0 +1,32 @@
+{
+  "workstream_id": "homeowner-portal-signing",
+  "authorization": "Pending owner review (2026-10-29). Planning only: no member is applied. SQL 127 is recorded verified live in production (#1412); each production apply still needs its own owner approval and staging acceptance.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Owner decision 2026-10-29 (\"Portal link is enough\"): a homeowner signs every check and document on their claim from the claim portal (the tracking link, homeowner_ledger_tokens). The accepted homeowner.mjs bytes make an insured endorsement signable from the portal when 'pending' (not yet emailed) or 'sent', matching SQL 127's endorse doorway allow-list. The accepted homeowner-signing-integration.mjs bytes keep an open homeowner document signer listed after its emailed link expires (SQL 127 renews it); an earlier signer whose link expired does not block, as in SQL 83 and 127. The accepted storage.mjs (/public/signature-document) and signature-submit.mjs (/public/signature-submit) bytes accept, besides the emailed token, the portal pair {ledger_token, signer_id}: the API resolves the signer's existing token_hash through aws_public_homeowner_document_portal_signer (SQL 127), the view with a write client in its own transaction, the submit inside its own transaction before the lookup and submit. The hash never leaves the API, a refusal never falls back to a token, a malformed signer id never reaches the database, and the emailed-token path is unchanged. Live evidence: storage.mjs 0f7c1b3e and homeowner.mjs ea522429 are the plan rows' recorded applied bytes (production-security-hardening-applied-manifest-2026-10-29.json and production-homeowner-upload-status-applied-manifest-2026-10-29.json, chained as previous_manifest). signature-submit.mjs 24845b4c and homeowner-signing-integration.mjs 4deac31f are main's bytes at e3823b5c5, unchanged on main since, which the read-only guarded production Lambda rebuild inspect run 40741101459 (2026-10-28, mutation false) observed live with 202 of 203 source members equal to main (only db-readonly-validate.mjs differed); signature-submit.mjs was not in the plan, and homeowner-signing-integration.mjs was an ADD of 4deac31f, so both are REPLACEs from those bytes. Re-checked after merging main 197749e9b: main has not changed any of the four members' bytes or plan rows since, so each live_sha256 (expected live) stands: homeowner-signing-integration.mjs 4deac31f, storage.mjs 0f7c1b3e, signature-submit.mjs 24845b4c, homeowner.mjs ea522429. A read-only production overlay inspect must confirm each live member before any apply. SQL prerequisite: all four call or depend on SQL 127 (aws/workflows/sql/127_homeowner_portal_signing.sql: the endorse capability allow-list, the pending signatures listing, the new portal signer function), each row has sql_before SQL 127. SQL 127 is applied in staging (guarded staging SQL executor run 40952161383, wave 26) and in production (2026-10-29 one-shot run d9f2fb05-303a-4623-9a5c-f50033a2757c, SSM 8fb91070-b2d7-4584-a899-60afed92ebcc, receipt 4b4af399… -> c4936010…, recorded in ops/deployment-guard/sql127-homeowner-portal-signing-production-apply.json, #1412), and the plan records it verified live. Recommended order (plan order, late, just before the Moov send tail moov-wallet-fund.mjs, moov-send.mjs, providers.mjs): homeowner-signing-integration.mjs, storage.mjs, then signature-submit.mjs (it now imports portalSignerFromBody, portalSignerRefusal and resolvePortalSignerHash from storage.mjs), then homeowner.mjs (it imports homeowner-signing-integration.mjs). No Lambda configuration change.",
+  "members": {
+    "homeowner-signing-integration.mjs": {
+      "live_sha256": "4deac31f61ebf797a4123d99ae4a2166da81c54dbdad0faccc5cafdb3dbbf7c3",
+      "accepted_sha256": "f3d3575cec17e2483a9dec700ee03d7852764f4b3bf21693f2e02229916adb23",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-homeowner-signing-links-manifest-2026-10-15.json"
+    },
+    "storage.mjs": {
+      "live_sha256": "0f7c1b3e5cbf3e048273228031a3c211cfe4ddd42216c46f6c021c5ebdbad190",
+      "accepted_sha256": "df96755de5a42d754fd24e95defd9cb25f082ac72b11952537661413941b8d76",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-security-hardening-applied-manifest-2026-10-29.json"
+    },
+    "signature-submit.mjs": {
+      "live_sha256": "24845b4cfbce74de6163a7f94174d5c56af2e5828cfbdeca99c791175150f38d",
+      "accepted_sha256": "72711f54bae8e39309b0c4eb0945f791a88c1df0423ae243e6ace034878de8bd",
+      "operation": "replace"
+    },
+    "homeowner.mjs": {
+      "live_sha256": "ea5224291c57ab367f511c75bc6e639fb9faeb04fe7139e27460c51ae3ea72b1",
+      "accepted_sha256": "d7117e18fb42efb0ab6cf2b1847b2d57f22878927ceda5155d4165dcd1f442a2",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-homeowner-upload-status-applied-manifest-2026-10-29.json"
+    }
+  }
+}

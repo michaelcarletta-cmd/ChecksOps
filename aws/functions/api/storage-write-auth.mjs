@@ -11,10 +11,12 @@ import {
   matchLossDraftDocumentPath,
   matchTenantDocumentPath,
   normalizePath,
+  pathCandidates,
   s3KeyFor,
 } from './storage-paths.mjs';
 import { canManageTenantDocumentLibrary, mortgageAgentCanWriteTenantLossDraft } from './mortgage-library-docs.mjs';
 import { libraryObjectPath } from './tenant-library-rules.mjs';
+import { isMortgageDeskFilePath, mortgageDeskCanUploadForCheck } from './mortgage-desk-return.mjs';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -61,6 +63,72 @@ const lookupWritableCheckByImagePath = async (client, rel) => {
   return rows[0] || null;
 };
 
+// Seeing a check is not writing it: a partner tenant reads checks shared with it
+// (aws_is_active_shared_check_target), and the platform owner reads every tenant's. Writing a
+// check's objects follows aws_can_write_check, the owner-tenant rule its rows' RLS uses (SQL 90).
+const canWriteCheck = async (client, checkId) => (
+  (await client.query('SELECT public.aws_can_write_check($1::uuid) AS ok', [checkId])).rows[0]?.ok === true
+);
+
+// A stored path as storage.mjs storedPathSql reduces it (query string, a Supabase storage URL
+// prefix for this bucket, leading slashes), compared for equality only.
+const storedPath = (col, bucket) => (
+  `regexp_replace(split_part(COALESCE(${col}, ''), '?', 1), '^(https?://[^/]+/storage/v1/object/(sign|public|authenticated)/${bucket}/|/+)', '')`
+);
+const pathMatch = (col, bucket) => `(${col} = ANY($1::text[]) OR ${storedPath(col, bucket)} = $2)`;
+const siblingMatch = (col, suffix) => (
+  `regexp_replace(split_part(COALESCE(${col}, ''), '?', 1), '\\.[^.]+$', '') || '${suffix}' = $2`
+);
+const CHECK_IMAGE_COLUMNS = ['front_image_path', 'back_image_path', 'back_image_original_path', 'back_image_deposit_path'];
+
+/**
+ * Rows that reference an object and that the caller may write, per bucket: the read map of
+ * storage.mjs (BUCKET_AUTH_SQL) narrowed by each table's RLS write rule
+ * (aws/rls/sql/21_proposed_write_policies.sql, 24_complete_write_policies.sql). Delete and move
+ * use it; reading a row (a partner's shared check, the platform owner) never authorizes either.
+ */
+export const BUCKET_WRITE_AUTH_SQL = {
+  'claim-files': [
+    `SELECT 1 FROM public.check_files f WHERE ${pathMatch('f.file_path', 'claim-files')} AND public.aws_can_write_check(f.check_intake_item_id) LIMIT 1`,
+    `SELECT 1 FROM public.claim_files f WHERE ${pathMatch('f.file_path', 'claim-files')} AND public.aws_can_write_claim(f.claim_id) LIMIT 1`,
+    `SELECT 1 FROM public.check_intake_items c WHERE (${[
+      ...CHECK_IMAGE_COLUMNS.map((col) => pathMatch(`c.${col}`, 'claim-files')),
+      ...CHECK_IMAGE_COLUMNS.flatMap((col) => [siblingMatch(`c.${col}`, '.deposit2.jpg'), siblingMatch(`c.${col}`, '.checkalt.jpg')]),
+    ].join(' OR ')}) AND public.aws_can_write_check(c.id) LIMIT 1`,
+    `SELECT 1 FROM public.homeowner_check_uploads h WHERE ${pathMatch('h.file_path', 'claim-files')}
+       AND (public.aws_is_authenticated() AND public.aws_is_cross_tenant_reader()
+         OR h.contractor_user_id = auth.uid()
+         OR public.aws_can_write_check(h.converted_check_id)) LIMIT 1`,
+    `SELECT 1 FROM public.signature_requests s WHERE (${pathMatch('s.document_path', 'claim-files')} OR ${pathMatch('s.final_pdf_path', 'claim-files')}) AND public.aws_can_write_check(s.check_intake_item_id) LIMIT 1`,
+    `SELECT 1 FROM public.cash_job_attachments a WHERE ${pathMatch('a.file_path', 'claim-files')} AND public.aws_can_write_tenant(a.tenant_id) LIMIT 1`,
+  ],
+  'endorsement-packets': [
+    `SELECT 1 FROM public.check_intake_items c WHERE ${pathMatch('c.endorsement_packet_path', 'endorsement-packets')} AND public.aws_can_write_check(c.id) LIMIT 1`,
+  ],
+  'deposit-attachments': [
+    `SELECT 1 FROM public.deposit_attachments a JOIN public.deposit_items di ON di.id = a.deposit_item_id
+     WHERE ${pathMatch('a.file_path', 'deposit-attachments')} AND public.aws_can_write_check(di.check_id) LIMIT 1`,
+  ],
+  'loss-draft-documents': [
+    `SELECT 1 FROM public.loss_draft_documents d JOIN public.loss_draft_tracking ldt ON ldt.id = d.loss_draft_id
+     WHERE ${pathMatch('d.file_path', 'loss-draft-documents')} AND public.aws_can_write_claim(ldt.claim_id) LIMIT 1`,
+  ],
+  'tenant-documents': [
+    `SELECT 1 FROM public.tenant_documents t WHERE ${pathMatch('t.file_path', 'tenant-documents')} AND public.aws_can_write_tenant(t.tenant_id) LIMIT 1`,
+  ],
+};
+
+/** An existing object the caller may delete or move: a referencing row it may write. */
+export const authorizeObjectWrite = async (client, bucket, objectPath) => {
+  const rel = normalizePath(objectPath, bucket)?.split('?')[0];
+  if (!rel) return { authorized: false, reason: 'invalid_path' };
+  const candidates = pathCandidates(bucket, objectPath);
+  for (const sql of BUCKET_WRITE_AUTH_SQL[bucket] || []) {
+    if ((await client.query(sql, [candidates, rel])).rows.length) return { authorized: true, rel };
+  }
+  return { authorized: false, reason: 'not_authorized', rel };
+};
+
 const hasTenantMembership = async (client, userId, tenantId) => {
   if (!UUID_RE.test(String(tenantId || ''))) return false;
   const rows = (await client.query(
@@ -101,6 +169,9 @@ export const authorizeStorageWritePath = async (client, bucket, objectPath, user
     if (!checkId) {
       if (bucket === 'claim-files') {
         const existing = await lookupWritableCheckByImagePath(client, rel);
+        if (existing && !(await canWriteCheck(client, existing.id))) {
+          return { ok: false, statusCode: 403, error: 'rls_denied', message: 'Not authorized to write this check' };
+        }
         if (existing) {
           return {
             ok: true,
@@ -119,6 +190,21 @@ export const authorizeStorageWritePath = async (client, bucket, objectPath, user
       };
     }
     const looked = await lookupWritableCheck(client, checkId);
+    // A check the caller sees but may not write (a partner's shared check, the platform owner)
+    // is treated as not found here.
+    if (!looked.error && !(await canWriteCheck(client, looked.check.id))) {
+      looked.error = 'rls_denied';
+      looked.message = 'Not authorized to write this check';
+    }
+    // Mortgage Desk (SQL 122): the agent assigned to an in-progress request on
+    // this check is not a member of its tenant and cannot see the check row.
+    // It may add new objects under checks/<check>/mortgage-ops/ only (create
+    // only: no overwrite, no delete through this grant).
+    if (looked.error === 'rls_denied' && bucket === 'claim-files'
+      && isMortgageDeskFilePath(rel, checkId)
+      && (await mortgageDeskCanUploadForCheck(client, userId, checkId))) {
+      return { ok: true, rel, key: s3KeyFor(bucket, rel), strategy: 'mortgage_desk', createOnly: true };
+    }
     if (looked.error) {
       return {
         ok: false,

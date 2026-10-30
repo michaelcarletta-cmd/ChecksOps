@@ -126,6 +126,14 @@ export const MIGRATIONS = Object.freeze({
   'sql118-platform-owner-tenant-lifecycle': RELEASE_2026_10_17_PENDING_SQL_PINS.sql118,
   'sql119-provider-stakeholder-sync-acl': RELEASE_2026_10_17_PENDING_SQL_PINS.sql119,
   'sql120-usage-events-at-approval-and-send': RELEASE_2026_10_17_PENDING_SQL_PINS.sql120,
+  'sql121-cash-jobs-grants': RELEASE_2026_10_17_PENDING_SQL_PINS.sql121,
+  'sql122-mortgage-desk-return-to-tenant': RELEASE_2026_10_17_PENDING_SQL_PINS.sql122,
+  'sql123-checkalt-deposit-check-status': RELEASE_2026_10_17_PENDING_SQL_PINS.sql123,
+  'sql124-mortgage-desk-signature-and-reads': RELEASE_2026_10_17_PENDING_SQL_PINS.sql124,
+  'sql125-deposit-views-security-invoker': RELEASE_2026_10_17_PENDING_SQL_PINS.sql125,
+  'sql126-definer-reads-caller-gates': RELEASE_2026_10_17_PENDING_SQL_PINS.sql126,
+  'sql127-homeowner-portal-signing': RELEASE_2026_10_17_PENDING_SQL_PINS.sql127,
+  'sql128-contractor-verification-from-compliance': RELEASE_2026_10_17_PENDING_SQL_PINS.sql128,
 });
 
 const LAMBDA_CODE_SHA_RE = /^[A-Za-z0-9+/]{43}=$/;

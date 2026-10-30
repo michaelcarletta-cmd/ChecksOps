@@ -55,6 +55,26 @@
     "aws/workflows/sql/105_onboarding_payment_table_grants.sql": {
       "verified_live": true,
       "evidence": "Guarded staging SQL executor apply of sql105-onboarding-payment-table-grants on 2026-10-20 (run 39433193531, main 11a2971dc, executor OS8rWhVG…): receipt before fbbdae18…, after a67bc0a6… = the pin's intended_replacement_sha256; precondition_failures [], prerequisites_missing []; read-live run 39433431805 already_applied true."
+    },
+    "aws/workflows/sql/120_usage_events_at_approval_and_send.sql": {
+      "verified_live": true,
+      "evidence": "Guarded staging SQL executor apply of SQL 120 on 2026-10-27 (run 40547527832; intended fc9d0e34…), the staging acceptance recorded in ops/deployment-guard/sql120-usage-events-at-approval-and-send-production-apply.json."
+    },
+    "aws/workflows/sql/121_cash_jobs_production_grants.sql": {
+      "verified_live": true,
+      "evidence": "Guarded staging SQL executor apply of sql121-cash-jobs-grants on 2026-10-27 (run 40591140684, main 3a4fedb6b, executor 7wybTiIc…; read-live run 40591470594 already_applied true): receipt before 084deae3…, after 2dd2ead6… = the pin's intended_replacement_sha256; precondition_failures [], prerequisites_missing []."
+    },
+    "aws/workflows/sql/122_mortgage_desk_return_to_tenant.sql": {
+      "verified_live": true,
+      "evidence": "Guarded staging SQL executor apply of sql122-mortgage-desk-return-to-tenant on 2026-10-27 (run 40591701699, main 3a4fedb6b, executor 7wybTiIc…; read-live run 40591941446 already_applied true): receipt before e13856d7…, after d026eb9b… = the pin's intended_replacement_sha256; precondition_failures [], prerequisites_missing []."
+    },
+    "aws/workflows/sql/124_mortgage_desk_signature_and_reads.sql": {
+      "verified_live": true,
+      "evidence": "Guarded staging SQL executor apply of sql124-mortgage-desk-signature-and-reads on 2026-10-28 (run 40757497983, main 593ea3f3d, executor 7UUN4EHi…; read-live run 40757812948 already_applied true): receipt before 59fe6907…, after daeeff54… = the pin's intended_replacement_sha256; precondition_failures [], prerequisites_missing []."
+    },
+    "aws/workflows/sql/127_homeowner_portal_signing.sql": {
+      "verified_live": true,
+      "evidence": "Guarded staging SQL executor apply of sql127-homeowner-portal-signing on 2026-10-29 (run 40952161383, main e98d57754, wave 26, executor lpbOJp31…; read-live run 40952453984 already_applied true): receipt before 4b4af399…, after c4936010… = the pin's intended_replacement_sha256; precondition_failures [], prerequisites_missing []."
     }
   }
 }

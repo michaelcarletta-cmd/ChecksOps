@@ -1,0 +1,241 @@
+name: Guarded staging CSP headers
+
+# SPA CSP rollout step 1 (ops/security/SPA_CSP_ROLLOUT.md), staging distribution E1CG52WRQZI7X1
+# only. inspect reads the distribution, the policy checksops-staging-browser-security-headers and
+# the live staging index.html. apply creates or updates that policy (production baseline headers
+# plus a report-only CSP built from the live index.html) and attaches it to the default behavior;
+# rollback restores the default behavior's previous response headers policy (none). Each change is
+# refused unless the live snapshot still matches the inspect and the exact phrase is given.
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "inspect the live staging state, apply the report-only CSP, or rollback (detach)"
+        required: true
+        default: inspect
+        type: choice
+        options:
+          - inspect
+          - apply
+          - rollback
+      approved_commit:
+        description: "Required for apply/rollback: exact main commit approved for this run"
+        required: false
+        default: ""
+        type: string
+      expected_snapshot_sha256:
+        description: "Required for apply/rollback: snapshot SHA-256 from a prior inspect run"
+        required: false
+        default: ""
+        type: string
+      approval_phrase:
+        description: "apply: ATTACH REPORT-ONLY CSP TO STAGING / rollback: DETACH CSP FROM STAGING"
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+# Shares the staging SPA upload's group: both change what staging.checksops.com serves.
+concurrency:
+  group: guarded-staging-spa-upload
+  cancel-in-progress: false
+
+jobs:
+  staging-csp:
+    environment: staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out exact workflow commit
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Refuse non-main or incomplete change
+        shell: bash
+        # Inputs reach the script only through env, never as interpolated shell source.
+        env:
+          INPUT_MODE: ${{ inputs.mode }}
+          INPUT_APPROVED_COMMIT: ${{ inputs.approved_commit }}
+          INPUT_EXPECTED_SNAPSHOT_SHA256: ${{ inputs.expected_snapshot_sha256 }}
+          INPUT_APPROVAL_PHRASE: ${{ inputs.approval_phrase }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/main" || { echo "Guarded staging CSP change only runs from main"; exit 2; }
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA" || { echo "Checkout SHA mismatch"; exit 2; }
+          case "$INPUT_MODE" in
+            inspect) ;;
+            apply) PHRASE="ATTACH REPORT-ONLY CSP TO STAGING" ;;
+            rollback) PHRASE="DETACH CSP FROM STAGING" ;;
+            *) echo "mode must be inspect, apply or rollback"; exit 2 ;;
+          esac
+          if [ "$INPUT_MODE" != "inspect" ]; then
+            [[ "$INPUT_APPROVED_COMMIT" =~ ^[0-9a-f]{40}$ ]] || { echo "$INPUT_MODE requires a 40-character approved_commit"; exit 2; }
+            test "$INPUT_APPROVED_COMMIT" = "$GITHUB_SHA" || { echo "main moved or approved commit does not match workflow SHA"; exit 2; }
+            [[ "$INPUT_EXPECTED_SNAPSHOT_SHA256" =~ ^[0-9a-f]{64}$ ]] || { echo "$INPUT_MODE requires expected_snapshot_sha256 from inspect"; exit 2; }
+            test "$INPUT_APPROVAL_PHRASE" = "$PHRASE" || { echo "approval_phrase must be exactly: $PHRASE"; exit 2; }
+          fi
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "22"
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: "1.4.2"
+
+      - name: Install locked dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run deployment safety tests
+        run: |
+          node --test aws/tests/github-staging-csp-headers.test.mjs
+          node --test aws/tests/spa-csp.test.mjs
+          node --test aws/tests/deployment-guard-kms-receipt.test.mjs
+          node --test aws/tests/deployment-guard-signed-receipt.test.mjs
+          node scripts/deployment-guard/scan-bypass.mjs
+
+      - name: Validate staging OIDC inputs
+        shell: bash
+        env:
+          STAGING_CSP_ROLE_ARN: ${{ vars.CHECKSOPS_STAGING_CSP_HEADERS_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          test "$STAGING_CSP_ROLE_ARN" = "arn:aws:iam::806168576068:role/ChecksOpsGitHubStagingCspHeaders" || { echo "CHECKSOPS_STAGING_CSP_HEADERS_ROLE_ARN must be the dedicated staging CSP headers role"; exit 2; }
+          test -n "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" || { echo "GitHub did not provide an OIDC request URL"; exit 2; }
+
+      - name: Configure read-only staging AWS session (inspect)
+        if: ${{ inputs.mode == 'inspect' }}
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a
+        with:
+          role-to-assume: ${{ vars.CHECKSOPS_STAGING_CSP_HEADERS_ROLE_ARN }}
+          aws-region: us-east-1
+          role-session-name: checksops-staging-csp-${{ github.run_id }}
+          inline-session-policy: >-
+            {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["cloudfront:GetDistribution"],"Resource":"arn:aws:cloudfront::806168576068:distribution/E1CG52WRQZI7X1"},{"Effect":"Allow","Action":["cloudfront:ListResponseHeadersPolicies"],"Resource":"*"},{"Effect":"Allow","Action":["cloudfront:GetResponseHeadersPolicy"],"Resource":"arn:aws:cloudfront::806168576068:response-headers-policy/*"},{"Effect":"Allow","Action":["s3:GetObject"],"Resource":"arn:aws:s3:::checksops-staging-frontend-c48b/index.html"}]}
+
+      - name: Configure staging CSP headers session (apply / rollback)
+        if: ${{ inputs.mode != 'inspect' }}
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a
+        with:
+          role-to-assume: ${{ vars.CHECKSOPS_STAGING_CSP_HEADERS_ROLE_ARN }}
+          aws-region: us-east-1
+          role-session-name: checksops-staging-csp-${{ github.run_id }}
+          inline-session-policy: >-
+            {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["cloudfront:GetDistribution","cloudfront:UpdateDistribution"],"Resource":"arn:aws:cloudfront::806168576068:distribution/E1CG52WRQZI7X1"},{"Effect":"Allow","Action":["cloudfront:ListResponseHeadersPolicies","cloudfront:CreateResponseHeadersPolicy"],"Resource":"*"},{"Effect":"Allow","Action":["cloudfront:GetResponseHeadersPolicy","cloudfront:UpdateResponseHeadersPolicy"],"Resource":"arn:aws:cloudfront::806168576068:response-headers-policy/*"},{"Effect":"Deny","Action":["cloudfront:UpdateResponseHeadersPolicy","cloudfront:DeleteResponseHeadersPolicy"],"Resource":"arn:aws:cloudfront::806168576068:response-headers-policy/756a8f23-68dd-4f8a-8293-5a2fd08f919a"},{"Effect":"Allow","Action":["s3:GetObject"],"Resource":"arn:aws:s3:::checksops-staging-frontend-c48b/index.html"},{"Effect":"Allow","Action":["kms:Sign","kms:GetPublicKey"],"Resource":"*"}]}
+
+      - name: Verify AWS identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          ARN="$(aws sts get-caller-identity --query Arn --output text)"
+          test "$ARN" = "arn:aws:sts::806168576068:assumed-role/ChecksOpsGitHubStagingCspHeaders/checksops-staging-csp-$GITHUB_RUN_ID" || { echo "Unexpected AWS role identity"; exit 2; }
+
+      - name: Load staging KMS verifier
+        if: ${{ inputs.mode != 'inspect' }}
+        shell: bash
+        env:
+          KMS_KEY_ARN: ${{ vars.CHECKSOPS_STAGING_DEPLOYMENT_GUARD_KMS_KEY_ARN }}
+        run: |
+          set -euo pipefail
+          case "$KMS_KEY_ARN" in
+            arn:aws:kms:us-east-1:806168576068:key/*) ;;
+            *) echo "invalid staging deployment-guard KMS key ARN"; exit 2 ;;
+          esac
+          PUBLIC_KEY_B64="$(aws kms get-public-key --region us-east-1 --key-id "$KMS_KEY_ARN" --query PublicKey --output text)"
+          test -n "$PUBLIC_KEY_B64" || { echo "KMS public key is missing"; exit 2; }
+          {
+            echo "CHECKSOPS_DEPLOYMENT_GUARD_KMS_KEY_ARN=$KMS_KEY_ARN"
+            echo "CHECKSOPS_DEPLOYMENT_GUARD_KMS_PUBLIC_KEY_DER_B64=$PUBLIC_KEY_B64"
+          } >> "$GITHUB_ENV"
+
+      - name: Inspect the live staging distribution
+        id: preflight
+        shell: bash
+        env:
+          CHECKSOPS_STAGING_CSP_MODE: ${{ inputs.mode }}
+          CHECKSOPS_EXPECTED_SNAPSHOT_SHA256: ${{ inputs.expected_snapshot_sha256 }}
+          CHECKSOPS_STAGING_CSP_APPROVAL: ${{ inputs.approval_phrase }}
+        run: node scripts/deployment-guard/github-staging-csp-headers.mjs
+
+      - name: Record inspected live state
+        if: ${{ always() }}
+        shell: bash
+        env:
+          INPUT_MODE: ${{ inputs.mode }}
+          STATE: ${{ steps.preflight.outputs.state }}
+          SNAPSHOT_SHA256: ${{ steps.preflight.outputs.snapshot_sha256 }}
+          DISTRIBUTION_ETAG: ${{ steps.preflight.outputs.distribution_etag }}
+          ATTACHED: ${{ steps.preflight.outputs.response_headers_policy_id }}
+          POLICY_ID: ${{ steps.preflight.outputs.policy_id }}
+          INDEX_SHA256: ${{ steps.preflight.outputs.index_html_sha256 }}
+          CSP: ${{ steps.preflight.outputs.csp_report_only }}
+          PROBLEMS: ${{ steps.preflight.outputs.problems }}
+        run: |
+          {
+            echo "### Staging CSP headers preflight"
+            echo "- Mode: \`$INPUT_MODE\` / state: \`$STATE\`"
+            echo "- Commit: \`$GITHUB_SHA\`"
+            echo "- Snapshot SHA-256: \`$SNAPSHOT_SHA256\`"
+            echo "- Distribution ETag: \`$DISTRIBUTION_ETAG\` / attached response headers policy: \`$ATTACHED\` / our policy: \`$POLICY_ID\`"
+            echo "- Live index.html SHA-256: \`$INDEX_SHA256\`"
+            echo "- Content-Security-Policy-Report-Only: \`$CSP\`"
+            echo "- Drift: \`${PROBLEMS:-none}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Change through the official receipt-gated staging CSP writer
+        if: ${{ inputs.mode != 'inspect' }}
+        shell: bash
+        env:
+          CHECKSOPS_STAGING_CSP_EXECUTE: "1"
+          CHECKSOPS_DEPLOYMENT_GUARD_APPLY: "1"
+          CHECKSOPS_DEPLOYMENT_GUARD_RECEIPT: ${{ steps.preflight.outputs.receipt_path }}
+          CHECKSOPS_WORKSTREAM_ID: ${{ steps.preflight.outputs.workstream_id }}
+          CHECKSOPS_COMMIT: ${{ github.sha }}
+          CHECKSOPS_BRANCH: main
+          CHECKSOPS_OPERATOR: ${{ github.actor }}
+          CHECKSOPS_STAGING_CSP_INPUT: ${{ steps.preflight.outputs.csp_input }}
+        run: |
+          set -euo pipefail
+          node scripts/deployment-guard/staging-csp-headers.mjs | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Verify the staging state and that nothing else moved
+        if: ${{ inputs.mode != 'inspect' }}
+        shell: bash
+        env:
+          CHECKSOPS_STAGING_CSP_MODE: verify
+          CHECKSOPS_STAGING_CSP_VERIFY_EXPECT: ${{ inputs.mode == 'apply' && 'attached' || 'detached' }}
+        run: node scripts/deployment-guard/github-staging-csp-headers.mjs
+
+      - name: Public staging header check
+        if: ${{ inputs.mode != 'inspect' }}
+        shell: bash
+        env:
+          INPUT_MODE: ${{ inputs.mode }}
+        run: |
+          set -euo pipefail
+          # CloudFront propagates the behavior change to edges over a few minutes.
+          for attempt in $(seq 1 20); do
+            present=0
+            rm -f headers.txt
+            curl -fsS --max-time 20 -o /dev/null -D headers.txt -H 'Cache-Control: no-cache' "https://staging.checksops.com/?csp=$GITHUB_RUN_ID-$attempt" || true
+            grep -qi '^content-security-policy-report-only:' headers.txt 2>/dev/null && present=1
+            if grep -qi '^content-security-policy:' headers.txt 2>/dev/null; then echo "an enforcing Content-Security-Policy header is served; expected report-only"; exit 2; fi
+            if { [ "$INPUT_MODE" = "apply" ] && [ "$present" = 1 ]; } || { [ "$INPUT_MODE" = "rollback" ] && [ "$present" = 0 ]; }; then
+              echo "- Public staging (attempt $attempt): report-only header present=$present" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            sleep 30
+          done
+          echo "public staging did not reach the expected header state for $INPUT_MODE"
+          exit 2
+
+      - name: Cleanup ephemeral deployment-guard state
+        if: ${{ always() }}
+        run: rm -rf .deployment-guard headers.txt

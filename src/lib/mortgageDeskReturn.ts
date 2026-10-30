@@ -304,3 +304,49 @@ export async function loadMortgageDeskReturnStates(
   }
   return result;
 }
+
+/**
+ * Everything the Mortgage Desk wrote on a check thread, for the tenant's
+ * "Returned from Mortgage Desk" view: messages sent by an agent assigned to one
+ * of the check's Desk requests (updates, upload notices, mid-work notes, the
+ * completed-work note), plus Desk-prefixed messages from any sender (the
+ * Supabase-era client posts). The return marker and its acknowledgement are
+ * bookkeeping, not notes, and are left out. Oldest first.
+ */
+export const MORTGAGE_DESK_MESSAGE_PREFIXES = [
+  "✅ ChecksOps Mortgage Desk",
+  "📝 ChecksOps Mortgage Desk note:",
+  "📎 Mortgage Ops",
+  "📄 Mortgage Ops",
+  "🏷️ Mortgage Ops",
+] as const;
+
+export function selectMortgageDeskNotes<T extends MortgageDeskReturnMessage & { sender_id?: string | null }>(
+  messages: T[] | null | undefined,
+  agentIds: Array<string | null | undefined>,
+): T[] {
+  const agents = new Set(agentIds.filter(Boolean).map((id) => String(id).toLowerCase()));
+  return (messages || [])
+    .filter((m) => !m.is_deleted && typeof m.body === "string" && m.body.trim() !== "")
+    .filter((m) => !isReturnMessage(m.body) && !isReturnAckMessage(m.body))
+    .filter((m) => (
+      (m.sender_id && agents.has(String(m.sender_id).toLowerCase()))
+      || MORTGAGE_DESK_MESSAGE_PREFIXES.some((prefix) => m.body.startsWith(prefix))
+    ))
+    .slice()
+    .sort((a, b) => new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime());
+}
+
+/** DOM id of the tenant's returned-work section for a check (the banner's Review target). */
+export function mortgageDeskReturnedWorkAnchorId(checkId: string): string {
+  return `mortgage-desk-returned-work-${checkId}`;
+}
+
+/** Scroll the tenant's returned-work section into view (banner "Review Returned File"). */
+export function scrollToMortgageDeskReturnedWork(checkId: string): boolean {
+  if (typeof document === "undefined") return false;
+  const el = document.getElementById(mortgageDeskReturnedWorkAnchorId(checkId));
+  if (!el) return false;
+  el.scrollIntoView({ behavior: "smooth", block: "start" });
+  return true;
+}

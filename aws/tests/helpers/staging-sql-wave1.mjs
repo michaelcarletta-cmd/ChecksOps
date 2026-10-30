@@ -95,6 +95,46 @@ export const STAGING_WAVE1 = Object.freeze({
   // run 40544852676): the five functions and two triggers absent, a unique index already covering
   // check_billing_events (payment_transfer_id, event_type).
   sql120: Object.freeze({ wave: 20, approved: '2026-10-27', run: '40545376358', live: 'f3c1dd26888ac9fce91721cad698d39ee99cdca80c4a7888f9cfea9043171e9d', apply_run: '40547527832' }),
+  // Wave 21 (owner approved 2026-10-27, "start the SQL 121 and 122 staging applies"): SQL 121, the
+  // cash-job grants and the Check Alt cash-job payment trigger, and SQL 122, the Mortgage Desk return
+  // to the tenant. Read at main d20d599 after the executor carried both (deploy run 40587866121).
+  // SQL 121: the new function and its trigger absent, checksops already holding SELECT / INSERT /
+  // UPDATE / DELETE on the three cash-job tables, sync_cash_job_check_payment() with the reviewed body
+  // but not SECURITY DEFINER and EXECUTE to PUBLIC. SQL 122: the six functions and
+  // mortgage_handling_requests.return_emailed_at absent.
+  sql121: Object.freeze({ wave: 21, approved: '2026-10-27', run: '40588277757', live: '084deae36bb533c91124d12698b1adb29e5fa7b9ff53932aa293537bc573e76e', apply_run: '40591140684' }),
+  sql122: Object.freeze({ wave: 21, approved: '2026-10-27', run: '40588288300', live: 'e13856d7a75483b5785b6e791fd83fbe9da9a1b09f6c819480cee54388a62609', apply_run: '40591701699' }),
+  // Wave 22 (owner approved 2026-10-28, "Yes open both PRs"): SQL 123, a Check Alt deposit moves its
+  // check to Deposited (Returned when rejected after approval). Read at main 6a7270f after the
+  // executor carried it (deploy run 40714754418): the two functions and the trigger absent, no
+  // approved check left to move.
+  sql123: Object.freeze({ wave: 22, approved: '2026-10-28', run: '40717225525', live: 'b584e1cd4352837eb5515cd07e76900e055637d11c29214db036f912e6b6f6b9' }),
+  // Wave 23 (owner approved 2026-10-28, "start the SQL 124 staging apply"): SQL 124, Mortgage Desk
+  // send-for-signature, reads and timeline. Read at main 3606348 after the executor carried it (deploy
+  // run 40754334967): the eight functions absent, every prerequisite present, the definer writes possible.
+  sql124: Object.freeze({ wave: 23, approved: '2026-10-28', run: '40754712957', live: '59fe6907e23de341e97d4aec548203d0cd7f7cf320b009e0e440d247d82a4db2' }),
+  // Wave 24 (owner approved 2026-10-29, "open the SQL 125 staging pin PR"): SQL 125, security_invoker
+  // on the four deposit views (security audit). Read at main a0c5c51 after the executor carried it
+  // (deploy run 40885862573): the four views present with the reviewed definitions and no options.
+  // Applied by run 40892707444 (main 4f26c14, executor deploy run 40892051066): receipt 9b31cf5d ->
+  // a041efa5 (intended); read-live run 40893116553 at the intended fingerprint.
+  sql125: Object.freeze({ wave: 24, approved: '2026-10-29', run: '40886747687', live: '9b31cf5dad3f82bf69fcddd03e0c26c0dc0fdd5ff6bd40137d1af316f1fd6541', apply_run: '40892707444' }),
+  // Wave 25 (owner approved 2026-10-29, "start SQL 126 on staging"): SQL 126, the thirteen Supabase-era
+  // SECURITY DEFINER reads check their caller (security audit finding 4). Read at main 7d33d5c after the
+  // executor carried it (deploy run 40917101622): the supabase bodies, EXECUTE PUBLIC and the owner.
+  // Applied by run 40921170890 (main 7422c69, executor deploy run 40920738142): receipt 04106521 ->
+  // 3aebf853 (intended); read-live run 40921576727 at the intended fingerprint.
+  sql126: Object.freeze({ wave: 25, approved: '2026-10-29', run: '40917478177', live: '04106521263eeeb423ac2c0dfbf5e1f1af5a52c89501b63ac742d6b25c5e1612', apply_run: '40921170890' }),
+  // Wave 26 (owner approved 2026-10-29, "start the SQL 127 staging apply"): SQL 127, homeowners sign
+  // their checks and documents from the claim portal. Read at main f0264d9 after the executor carried it
+  // (deploy run 40947474906): SQL 83's endorse capability and pending_signatures bodies, the portal
+  // signer absent, every prerequisite present, the definer writes possible.
+  sql127: Object.freeze({ wave: 26, approved: '2026-10-29', run: '40947834848', live: '4b4af399a73a25e191d2f914cc074a3744c84fffbc8ce3e55f2adec2cf93dfe0' }),
+  // Wave 27 (owner approved 2026-10-30, "start SQL 128 staging"): SQL 128, contractor verification reads
+  // the Compliance & Docs uploads. Read at main add2bbfc9 after the executor carried it (deploy run
+  // 41041668169): the restored supabase contractor_verification_status (state different) and the orphan
+  // _trg_recompute_contractor_tier_from_docs() present, every prerequisite present.
+  sql128: Object.freeze({ wave: 27, approved: '2026-10-30', run: '41042517205', live: '8bd6b42d189ff05b77e19d178ddba0229a0d2b6bca0a2d1d98221774fa8fbc5f' }),
   sql98: Object.freeze({ wave: 3, approved: '2026-10-18', run: '39083278136', live: '296c3d6a274e10f66005fb9eaecf93fa17b81bd8db3607037ca07698fddd3275', apply_run: '39085677318' }),
 });
 
@@ -106,7 +146,7 @@ export const pendingPin = (pin) => Object.freeze({
 });
 
 /**
- * The committed staging pin's apply state: waves 1-20 recorded and approved, wave 6 approved with
+ * The committed staging pin's apply state: waves 1-27 recorded and approved, wave 6 approved with
  * its read-live still to record (pending until then), wave 18 (SQL 117) retired, the rest pending.
  */
 export function assertStagingPinState(assert, key, pin) {

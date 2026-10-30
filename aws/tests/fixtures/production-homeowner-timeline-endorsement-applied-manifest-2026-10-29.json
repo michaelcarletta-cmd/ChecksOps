@@ -1,0 +1,21 @@
+{
+  "workstream_id": "homeowner-timeline-endorsement-applied",
+  "authorization": "Record only (2026-10-29): the bytes below are live. Nothing is planned or authorized by this manifest; any later change to these members needs its own manifest, staging acceptance and owner approval.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Homeowner timeline link (#1398, merged as main e9daedafd) and endorsement email to every recipient (#1400, merged as main 59a49148d), applied 2026-10-29 through the guarded overlay path to checksops-production-prep-api, one member per run in plan order, each on its own owner approval (the workflow refuses an apply unless approval_phrase is exactly \"DEPLOY <member> TO PRODUCTION\"). workflow.mjs 0a8d1218 -> be56953f on \"DEPLOY workflow.mjs TO PRODUCTION\": staging inspect run 40936378566 (staging live 0a8d1218), staging apply run 40936679416 (the staging acceptance); production inspect run 40937960821 READY on main e9daedafd; the first production apply run 40938105920 was refused by its preflight before any AWS call (\"main moved or approved commit does not match workflow SHA\": #1399, which touches neither workflow.mjs nor the plan, had merged as main 2687bd678), and the owner gave the approval again for the next run; production inspect run 40938405913 READY on main 2687bd678, member PRESENT 0a8d1218, at CodeSha256 tUtgefks7a4r5e1TgV8xH9eG2jPi034LOiTDyVt6p/U=, RevisionId cbdd5ef4-6d78-4ded-a670-d3c4905d35d7 (the homeowner upload status record's last state), /health and /db-health 200; production apply run 40938518776 on main 2687bd678b287b40fbb76aea0a50362c8e30d658, writer update CodeSha256 BkxVa3fQ5g5SfISQEqkCQd77AVcVeJTZeeFBIKjKD14= (RevisionId 41c7ffa0-1978-4d03-a6ba-7c920318c9b5, LastUpdateStatus InProgress), \"Verify live member is the accepted bytes\" VERIFIED, member PRESENT be56953f, at CodeSha256 BkxVa3fQ5g5SfISQEqkCQd77AVcVeJTZeeFBIKjKD14=, RevisionId a51cb382-0523-469e-8ea9-ea91d9123b62; public production smoke /health and /db-health 200. endorsement-parity.mjs db2d5448 -> 6d94f8ad on \"DEPLOY endorsement-parity.mjs TO PRODUCTION\": staging inspect run 40939384157 (staging live db2d5448), staging apply run 40939518620 (the staging acceptance); production inspect run 40939644697 READY on main 59a49148d, member PRESENT db2d5448, at CodeSha256 BkxVa3fQ5g5SfISQEqkCQd77AVcVeJTZeeFBIKjKD14=, RevisionId a51cb382-0523-469e-8ea9-ea91d9123b62 (the workflow.mjs verify), /health and /db-health 200; production apply run 40939753926 on main 59a49148ddff01a2adf432d01ee4e9d7e75796c1, \"Verify live member is the accepted bytes\" VERIFIED, member PRESENT 6d94f8ad, at CodeSha256 okmC+E2goawrpRO3xMHr15xmQMfJXxP2Iwk9UVjuykg=, RevisionId 40cfe898-d1fc-424c-b9fb-6ac7956d9eb4; public production smoke /health and /db-health 200. Each member's sha256 is derived from main's bytes and equals the memberSha256 its verify step read. The rows record the applied bytes as live_sha256 and accepted_sha256 and chain to the manifest that planned them (previous_manifest), which keeps the pre-apply state. GitHub returned only the tail of each apply log, so each apply run's own inspect block and receipt were not read; the pre-apply state is the inspect run just before it. No rebuild inspect followed, so the live package is not compared with a candidate zip of main.",
+  "members": {
+    "workflow.mjs": {
+      "live_sha256": "be56953fb4db1d89a7738beb0710fd801b8e056c0d95caba3a4a02cea5707bb8",
+      "accepted_sha256": "be56953fb4db1d89a7738beb0710fd801b8e056c0d95caba3a4a02cea5707bb8",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-homeowner-timeline-link-manifest-2026-10-29.json"
+    },
+    "endorsement-parity.mjs": {
+      "live_sha256": "6d94f8ad86f037d6b6430c39d55efa8df89a8575d874317ee10285c7cab067cf",
+      "accepted_sha256": "6d94f8ad86f037d6b6430c39d55efa8df89a8575d874317ee10285c7cab067cf",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-endorsement-any-recipient-manifest-2026-10-29.json"
+    }
+  }
+}

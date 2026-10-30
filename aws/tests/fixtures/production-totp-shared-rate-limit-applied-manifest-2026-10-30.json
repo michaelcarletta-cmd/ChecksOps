@@ -1,0 +1,15 @@
+{
+  "workstream_id": "totp-shared-rate-limit-applied",
+  "authorization": "Record only (2026-10-30): the bytes below are live. Nothing is planned or authorized by this manifest; any later change to this member needs its own manifest, staging acceptance and owner approval.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "TOTP shared rate limit (#1422, security audit finding 7, Lambda part, merged as main 6f504e70f), applied 2026-10-30 through the guarded overlay path to checksops-production-prep-api on the owner's approval (the workflow refuses an apply unless approval_phrase is exactly \"DEPLOY auth-financial-totp.mjs TO PRODUCTION\"). auth-financial-totp.mjs ccfe06bb -> db939888 on \"DEPLOY auth-financial-totp.mjs TO PRODUCTION\": staging inspect run 40992081009 on main 6f504e70f (staging live ccfe06bb, member PRESENT, CodeSha256 T2y60mG7PWGRUltrOxHuDNeyh56059o1/xc2ERFj+gc=, RevisionId fcd03e19-96b8-4f05-8597-a7c5d5fdf026, /health, /db-health and /db-readonly-validate 200), staging apply run 40992267013 on main 6f504e70f (the staging acceptance; errors [], writer update CodeSha256 AIwLrEimESQenf3Su3uCVRuLDy1NVpoo/fxqvzChVx0=, RevisionId a79e80b4-e67b-4b48-be5b-50f67f9f36bd; staging /health, /db-health and /db-readonly-validate 200 afterwards); production inspect run 40992293311 READY on main 6f504e70f, member PRESENT ccfe06bb, at CodeSha256 T2y60mG7PWGRUltrOxHuDNeyh56059o1/xc2ERFj+gc=, RevisionId d9535b87-2590-46c2-baa1-c95e7e7a00ac, /health and /db-health 200; production apply run 40992441506 on main 6f504e70f8fe550638a21b0573ba87c4b1d0e638, writer update CodeSha256 AIwLrEimESQenf3Su3uCVRuLDy1NVpoo/fxqvzChVx0= (RevisionId 28f03b2b-ca84-48f6-a008-c34320528958), errors [], \"Verify live member is the accepted bytes\" VERIFIED, member db939888, at CodeSha256 AIwLrEimESQenf3Su3uCVRuLDy1NVpoo/fxqvzChVx0=, RevisionId 17808565-859e-46d2-bad5-51d89a3bb5ed; public production smoke /health and /db-health 200. Staging and production started from the same package (T2y60mG7...) and both now read CodeSha256 AIwLrEim..., so staging holds the bytes production verified. The member's sha256 is derived from main's bytes and equals the memberSha256 the verify step read. The row records the applied bytes as live_sha256 and accepted_sha256 and chains to the manifest that planned them (previous_manifest), which keeps the pre-apply state. Not verified: no signed-in TOTP check (enroll confirm and step-up sharing one bucket) was run against staging or production after the apply; no rebuild inspect followed, so the live package is not compared with a candidate zip of main. Not in this change: the failed_attempts / locked_until lockout and the replay window (finding 7, later steps).",
+  "members": {
+    "auth-financial-totp.mjs": {
+      "live_sha256": "db939888c6c0d237ee805ed3cd6924e2a8bef199ee76afa8fac2a8bd96687b91",
+      "accepted_sha256": "db939888c6c0d237ee805ed3cd6924e2a8bef199ee76afa8fac2a8bd96687b91",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-totp-shared-rate-limit-manifest-2026-10-30.json"
+    }
+  }
+}

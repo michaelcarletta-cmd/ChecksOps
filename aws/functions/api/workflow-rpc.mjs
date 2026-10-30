@@ -14,6 +14,12 @@ import { executeClaimSettlementBreakdownWrite, SAVE_CLAIM_SETTLEMENT_BREAKDOWN }
 import { executeAdminOverrideCheckStatus } from './admin-override-check-status.mjs';
 import { maskAccountNumber } from './providers/checkalt-account-mask.mjs';
 import { checkTenantDepositsEnabled } from './tenant-deposits-gate.mjs';
+import {
+  MORTGAGE_DESK_RPCS,
+  afterMortgageDeskStatusUpdate,
+  executeMortgageDeskRpc,
+  runMortgageDeskReturnEmail,
+} from './mortgage-desk-return.mjs';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const isUuid = (value) => UUID_RE.test(String(value || ''));
@@ -50,6 +56,11 @@ export const SAFE_WRITE_RPC_CLASSIFICATION = {
   is_approval_required: 'read_only',
   accept_mortgage_handling_request: 'safe_now',
   update_mortgage_handling_request_status: 'safe_now',
+  // SQL 122: the assigned mortgage agent (or the platform owner) returns its work
+  // to the tenant: messages, documents and shipping details on the request's check.
+  mortgage_desk_post_message: 'safe_now',
+  mortgage_desk_attach_file: 'safe_now',
+  mortgage_desk_update_shipping: 'safe_now',
   log_audit: 'safe_now',
   init_loss_draft_documents: 'safe_now',
   loss_draft_set_lender: 'safe_now',
@@ -98,6 +109,7 @@ export const SAFE_WRITE_RPC_CLASSIFICATION = {
 export const SAFE_WRITE_RPCS = new Set([
   'accept_mortgage_handling_request',
   'update_mortgage_handling_request_status',
+  ...MORTGAGE_DESK_RPCS,
   'log_audit',
   'init_loss_draft_documents',
   'loss_draft_set_lender',
@@ -377,7 +389,10 @@ const executeUpdateMortgageStatus = async ({ client, mapping, args }) => {
     [requestId, status, notes == null ? null : String(notes).slice(0, 4000), mapping.application_user_id],
   )).rows;
   if (!rows.length) return { error: 'not_assigned_to_you', message: 'not_assigned_to_you' };
-  return { data: rows[0] };
+  // SQL 122: a mid-work note is also posted on the check thread for the tenant;
+  // a completion adds the homeowner timeline row. Neither ever fails the update.
+  const extra = await afterMortgageDeskStatusUpdate(client, { request: rows[0], status, note: notes });
+  return { data: { ...rows[0], ...extra } };
 };
 
 const executeInitLossDraftDocuments = async () => ({ data: null });
@@ -1471,6 +1486,10 @@ export const executeSafeWriteRpc = async ({ client, mapping, name, args }) => {
       return executeAcceptMortgage({ client, mapping, args });
     case 'update_mortgage_handling_request_status':
       return executeUpdateMortgageStatus({ client, mapping, args });
+    case 'mortgage_desk_post_message':
+    case 'mortgage_desk_attach_file':
+    case 'mortgage_desk_update_shipping':
+      return executeMortgageDeskRpc({ client, mapping, name, args });
     case 'init_loss_draft_documents':
       return executeInitLossDraftDocuments();
     case 'loss_draft_set_lender':
@@ -1535,7 +1554,7 @@ export const handleSafeWriteRpc = async (event, deps = {}) => {
     }), deps);
   }
 
-  return withIdentityWrite(event, async ({ client, mapping, claims, body, spoof }) => {
+  const result = await withIdentityWrite(event, async ({ client, mapping, claims, body, spoof }) => {
     if (body.sql || body.query || body.rawSql) {
       return denied(spoof, { error: 'generic_sql_denied' });
     }
@@ -1554,4 +1573,35 @@ export const handleSafeWriteRpc = async (event, deps = {}) => {
     }
     return ok({ mapping, claims, spoof, data: executed.data });
   }, deps);
+  return maybeEmailMortgageDeskReturn(event, { name, body, result, deps });
+};
+
+/**
+ * After a Mortgage Desk completion has committed, email the tenant once (SQL
+ * 122) in its own transaction, so a rolled-back completion never sends and a
+ * failed email never undoes the completion. The outcome is reported on the
+ * response as data.return_email.
+ */
+const maybeEmailMortgageDeskReturn = async (event, { name, body, result, deps }) => {
+  if (name !== 'update_mortgage_handling_request_status' || !result?.ok) return result;
+  const args = body?.args && typeof body.args === 'object' ? body.args : {};
+  const status = String(args._status ?? args.status ?? '').trim();
+  const requestId = result.data?.id;
+  if (status !== 'completed' || !isUuid(requestId)) return result;
+  let returnEmail;
+  try {
+    const emailed = await withIdentityWrite(event, ({ client, mapping }) => runMortgageDeskReturnEmail({
+      client,
+      mapping,
+      requestId,
+      ...(deps.sendViaSesOrSink ? { send: deps.sendViaSesOrSink } : {}),
+    }), deps);
+    returnEmail = {
+      status: emailed?.status || emailed?.error || 'failed',
+      emailed: emailed?.emailed === true,
+    };
+  } catch (error) {
+    returnEmail = { status: 'failed', emailed: false, error: String(error?.message || error).slice(0, 200) };
+  }
+  return { ...result, data: { ...result.data, return_email: returnEmail } };
 };

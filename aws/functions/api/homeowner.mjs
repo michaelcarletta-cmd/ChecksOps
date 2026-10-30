@@ -213,9 +213,10 @@ const publicEndorsementParty = (party = {}, homeowner = {}, ctx = {}) => {
     status: party.status ?? null,
     sent_at: party.sent_at || party.request_sent_at || null,
     is_homeowner: isHomeowner,
-    // Only a requested ('sent') insured endorsement, matching the SQL 83 allow-list.
+    // An open insured endorsement, emailed ('sent') or not yet ('pending'), matching
+    // the SQL 127 allow-list: the claim portal link is enough to sign.
     can_sign: Boolean(isHomeowner && payeeType === 'insured'
-      && String(party.status || '').toLowerCase().trim() === 'sent'),
+      && ['pending', 'sent'].includes(String(party.status || '').toLowerCase().trim())),
     // Never return a raw check_endorsements.token. The endorse doorway mints at click.
     sign_url: null,
   };
@@ -595,7 +596,7 @@ const fileHomeownerUploadToReview = async (client, upload, deps = {}) => {
       `INSERT INTO public.check_intake_items (
          claim_id, tenant_id, uploaded_by, front_image_path, back_image_path,
          amount, status, check_stage, check_source
-       ) VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5, $6, 'pending', 'review', 'insurance')
+       ) VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5, $6, 'uploaded', 'review', 'insurance')
        RETURNING id`,
       [upload.claim_id || null, upload.tenant_id, senderId, front, back, upload.amount_estimate ?? null],
     )).rows[0];
@@ -1746,7 +1747,7 @@ export const handleHomeownerLedgerAttachUpload = async (event) => withIdentityWr
     `INSERT INTO public.check_intake_items (
        claim_id, tenant_id, uploaded_by, front_image_path, back_image_path,
        amount, status, check_stage, check_source
-     ) VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5, $6, 'pending', 'review', 'insurance')
+     ) VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5, $6, 'uploaded', 'review', 'insurance')
      RETURNING id`,
     [claimId, up.tenant_id, mapping.application_user_id, copied, backCopied, amount],
   )).rows[0];
