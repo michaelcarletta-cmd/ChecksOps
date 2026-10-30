@@ -83,7 +83,8 @@ test('the tool is inventoried as SAFE, is not a one-shot apply entry and has no 
   assert.ok(entry, 'inventoried');
   assert.equal(entry.classification, 'SAFE');
   assert.match(entry.note, /BEGIN READ ONLY/);
-  assert.ok(!JSON.stringify(ONE_SHOT_TOOLS).includes('financial-totp'));
+  // SQL 129's one-shot (sql129-financial-totp-rate-limit-code-check-production-apply) is; this inspect is not.
+  assert.ok(!JSON.stringify(ONE_SHOT_TOOLS).includes('financial-totp-live-inspect'));
   const source = fs.readFileSync(path.join(ROOT, TOOL), 'utf8') + fs.readFileSync(path.join(ROOT, LIB), 'utf8');
   assert.doesNotMatch(source, /CHECKSOPS_DEPLOYMENT_GUARD_APPLY|issueReceipt|acquireLease|UpdateFunctionCode|PutObject|SendCommand/);
 });
@@ -315,7 +316,8 @@ test('PostgreSQL 16: the inspect is read-only and tells whether the live rate-li
     assert.deepEqual(fixed.rate_limit.detail[0].action_allow_list, ['code_check', 'enroll_confirm', 'enroll_start', 'step_up']);
     const fixedRl = fixed.functions.find((f) => f.name === 'public.consume_financial_totp_rate_limit');
     assert.equal(fixedRl.matches_proposed_file, 'differs');
-    assert.equal(fixedRl.repo_match, 'differs_from_repo');
+    // The definition with code_check is SQL 129's (aws/workflows/sql/129_financial_totp_rate_limit_code_check.sql).
+    assert.equal(fixedRl.repo_match, 'exact');
 
     // 3. The inspect's transaction is read-only: a write inside it is refused.
     const c = await open('checksops_admin');
