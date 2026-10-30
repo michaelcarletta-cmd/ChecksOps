@@ -23,6 +23,9 @@ export const CHECKALT_ACCOUNT_NUMBER_PATTERN = /^\d{5,17}$/;
 /** A plain email shape check before Register is enabled; the server still validates. */
 export const CHECKALT_EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+/** Six digits from the authenticator app. */
+export const CHECKALT_TOTP_CODE_PATTERN = /^\d{6}$/;
+
 /**
  * Readable text for a refused Check Alt call: the reviewed provider sentences
  * (checkAltProviderUserMessage) when the code maps, else the server's
@@ -110,12 +113,23 @@ export function CheckAltTenantAccountCard({ tenantId: tenantIdProp, tenantName }
 
   const accountNumberValid = CHECKALT_ACCOUNT_NUMBER_PATTERN.test(reg.deposit_account_number.trim());
   const emailValid = CHECKALT_EMAIL_PATTERN.test(reg.email.trim());
+
+  // Changing a registered deposit account needs a fresh authenticator code (the server decides;
+  // a different last four, or the server asking for one, shows the field here).
+  const [serverAskedForCode, setServerAskedForCode] = useState(false);
+  const [totpCode, setTotpCode] = useState("");
+  const typedLast4 = reg.deposit_account_number.trim().slice(-4);
+  const changingAccount = registered && accountNumberValid && Boolean(status?.account_last4) && typedLast4 !== status?.account_last4;
+  const codeNeeded = serverAskedForCode || changingAccount;
+  const codeValid = CHECKALT_TOTP_CODE_PATTERN.test(totpCode.trim());
+
   const registerReady = Boolean(
     reg.sso_user_id.trim()
     && reg.first_name.trim()
     && reg.last_name.trim()
     && emailValid
     && accountNumberValid
+    && (!codeNeeded || codeValid)
     && tenantId,
   );
 
@@ -129,15 +143,24 @@ export function CheckAltTenantAccountCard({ tenantId: tenantIdProp, tenantName }
         last_name: reg.last_name.trim(),
         email: reg.email.trim(),
         deposit_account_number: reg.deposit_account_number.trim(),
+        ...(codeNeeded ? { totp_code: totpCode.trim() } : {}),
       });
-      if (error) throw new Error(checkAltErrorText(data, error));
-      return data as CheckAltRegistrationStatus & { warning?: string };
+      if (error) {
+        if ((data as { code_required?: unknown } | null)?.code_required === true) setServerAskedForCode(true);
+        setTotpCode("");
+        throw new Error(checkAltErrorText(data, error));
+      }
+      return data as CheckAltRegistrationStatus & { warning?: string; account_changed?: boolean };
     },
     onSuccess: (data) => {
       setReg((prev) => ({ ...prev, deposit_account_number: "" }));
+      setServerAskedForCode(false);
+      setTotpCode("");
       toast({
-        title: "Account registered with Check Alt",
-        description: data?.warning || (data?.account_last4 ? `Deposit account ending ${data.account_last4}` : undefined),
+        title: data?.account_changed ? "Deposit account changed" : "Account registered with Check Alt",
+        description: data?.warning || (data?.account_last4
+          ? `Deposit account ending ${data.account_last4}${data?.account_changed ? ". The company has been emailed about the change." : ""}`
+          : undefined),
       });
       qc.invalidateQueries({ queryKey: ["checkalt-tenant-registration"] });
     },
@@ -294,6 +317,24 @@ export function CheckAltTenantAccountCard({ tenantId: tenantIdProp, tenantName }
                   <p className="text-xs text-destructive">Digits only, 5 to 17 digits.</p>
                 ) : null}
               </div>
+              {codeNeeded ? (
+                <div className="space-y-1.5 md:col-span-2">
+                  <Label htmlFor="reg_totp">Authenticator code</Label>
+                  <Input
+                    id="reg_totp"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    maxLength={6}
+                    placeholder="6-digit code"
+                    value={totpCode}
+                    onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, ""))}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Changing the deposit account needs a new code from your authenticator app. The company is
+                    emailed about the change.
+                  </p>
+                </div>
+              ) : null}
             </div>
 
             <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
@@ -328,7 +369,11 @@ export function CheckAltTenantAccountCard({ tenantId: tenantIdProp, tenantName }
             {!registered || !registerReady ? (
               <p className="text-right text-xs text-muted-foreground">
                 {[
-                  !registerReady ? "Fill in every field with valid values to register." : null,
+                  !registerReady
+                    ? (codeNeeded && !codeValid && accountNumberValid
+                      ? "Enter the 6-digit code from your authenticator app to change the deposit account."
+                      : "Fill in every field with valid values to register.")
+                    : null,
                   !registered ? "Verify is available once the account is registered." : null,
                 ].filter(Boolean).join(" ")}
               </p>
