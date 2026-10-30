@@ -3005,8 +3005,8 @@ export const AUTHORIZED_SQL132_FINANCIAL_TOTP_CODE_CHECK_LOCKOUT = Object.freeze
 // Financial TOTP teammate reset staging pin: SQL 133 (owner 2026-10-30 "ok build the reset after SQL 131
 // and the lockout fix": the new SECURITY DEFINER financial_totp_admin_reset_enrollment(uuid, uuid) deletes a
 // teammate's financial_totp_enrollments row under the API's own gate, re-checked in the database;
-// EXECUTE for checksops and the owner). No predecessor. Pending until a reviewed pin change records a
-// staging read-live (expected: the function absent, everything else in place).
+// EXECUTE for checksops and the owner). No predecessor. Staging apply authorized (wave 30) from staging
+// read-live run 41129536538.
 export const AUTHORIZED_SQL133_FINANCIAL_TOTP_ADMIN_RESET_ENROLLMENT = Object.freeze({
   key: 'sql133',
   filename: 'aws/workflows/sql/133_financial_totp_admin_reset_enrollment.sql',
@@ -3014,9 +3014,10 @@ export const AUTHORIZED_SQL133_FINANCIAL_TOTP_ADMIN_RESET_ENROLLMENT = Object.fr
   // The commit that last authored the file bytes.
   commit: '9bf17aa23c66bdaf0688de6d56eff99ad143f6e5',
   source_sha256: '2184701c42869cef45839bb68aec7a8275f303612576d426225d172d54c8e9a2',
-  authorization: 'pending',
-  execute: false,
-  expected_live_definition_sha256: null,
+  authorization: 'Owner approved 2026-10-30: staging apply (wave 30) from staging read-live run 41129536538',
+  execute: true,
+  // Staging read-live run 41129536538 (main 564b7baee, executor 0RDcYqTS...): the function absent, everything else in place.
+  expected_live_definition_sha256: 'f3b1671e8617df78a20600b43fcfc6636739d78f235ef78d1cc7d1d68f2f909d',
   // Code-derived: releaseIntendedHash('sql133', file bytes) (release-sql-state.mjs); re-derived by the tests.
   intended_replacement_sha256: 'edfef132ffea2b00a1b22e452b35a4232a14c81fbba832325d22ce8656a45459',
   function_identities: Object.freeze([
