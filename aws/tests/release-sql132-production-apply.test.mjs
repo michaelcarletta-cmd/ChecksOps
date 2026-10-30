@@ -187,12 +187,14 @@ test('order: predecessor SQL 130 (untouched); the one new function, its prerequi
   const sql130 = loadReleaseProductionPin('sql130', ROOT);
   assert.equal(sql130.execute, false);
   assert.equal(sql130.applied.result, 'applied');
-  // The API members that call the function wait for this pin: sql_before SQL 132, recorded in the overlay
-  // plan as not yet verified live, so the guarded Lambda path refuses them until the record change.
+  // The API members that call the function pend their REPLACE on this pin: auth-financial-totp.mjs has
+  // sql_before SQL 132, recorded in the overlay plan as not yet verified live, so the guarded Lambda path
+  // refuses it until the record change; checkalt-register.mjs keeps SQL 81, its recorded dependency.
   const plan = readJson('ops/deployment-guard/production-api-overlay-plan.json');
   assert.deepEqual(plan.sql_prerequisites[SQL132_FILE], { verified_live: false, evidence: null });
+  assert.equal(plan.members['auth-financial-totp.mjs'].sql_before, SQL132_FILE);
+  assert.equal(plan.members['providers/production/checkalt-register.mjs'].sql_before, 'aws/workflows/sql/81_checkalt_production_register.sql');
   for (const member of ['auth-financial-totp.mjs', 'providers/production/checkalt-register.mjs']) {
-    assert.equal(plan.members[member].sql_before, SQL132_FILE, member);
     assert.notEqual(plan.members[member].expected_live_sha256, plan.members[member].accepted_sha256, `${member} pends the lockout REPLACE`);
   }
   // The API: the same count call and the same existence check in both members, as checksops.
