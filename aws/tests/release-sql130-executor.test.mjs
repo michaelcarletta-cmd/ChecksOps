@@ -194,7 +194,9 @@ test('pin: SQL 130 staging-authorized from its read-live, code-derived, selectab
   // SQL 131 (the same PUBLIC revoke on the other four financial TOTP functions) runs after it: its predecessor.
   assert.deepEqual(RELEASE_SQL_KEYS.filter((key) => (RELEASE_SQL_SPECS[key].supersedes || []).includes(KEY)
     || (RELEASE_SQL_SPECS[key].refuse_after || []).some((m) => m.key === KEY)), []);
-  assert.deepEqual(RELEASE_SQL_KEYS.filter((key) => (RELEASE_SQL_SPECS[key].predecessors || []).includes(KEY)), ['sql131']);
+  // SQL 131 and SQL 132 both name SQL 130 as their predecessor (the same PUBLIC revoke; the API counts
+  // every code check next to this rate limit).
+  assert.deepEqual(RELEASE_SQL_KEYS.filter((key) => (RELEASE_SQL_SPECS[key].predecessors || []).includes(KEY)), ['sql131', 'sql132']);
   // No other release migration but the retired SQL 129 creates, replaces, drops or re-grants the function.
   for (const key of RELEASE_SQL_KEYS.filter((k) => k !== KEY && k !== 'sql129')) {
     const other = RELEASE_SQL_SPECS[key];

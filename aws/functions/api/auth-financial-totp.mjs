@@ -128,11 +128,11 @@ const consumeRate = async (client, userId, action) => {
 };
 
 /**
- * Commit the rate-limit hit before the code is checked. A wrong code makes the
- * request fail and roll back, which would otherwise undo the count and allow
- * unlimited guessing.
+ * Commit what this request has done so far (the rate-limit hit; in verifyAgainstStore the SQL 132
+ * code-check count) and continue in a new transaction with the same identity. A wrong code makes
+ * the request fail and roll back, which would otherwise undo the counts and allow unlimited guessing.
  */
-const persistRateLimitHit = async (client, mapping, claims) => {
+const commitAndContinue = async (client, mapping, claims) => {
   await commitWriteTransaction(client);
   await client.query('BEGIN');
   await client.query('SET TRANSACTION READ WRITE');
@@ -156,6 +156,45 @@ const loadEnrollment = async (client, userId) => {
   );
   return result.rows[0] || null;
 };
+
+/**
+ * SQL 132 (aws/workflows/sql/132_financial_totp_code_check_lockout.sql): counts one code check
+ * against the enrollment before the code is compared. Ten consecutive checks without a success lock
+ * the enrollment for 15 minutes; while locked the database answers allowed false and the code is
+ * never compared. financial_totp_mark_verified clears the count and the lock on a correct code.
+ *
+ * Before SQL 132 is applied in an environment the function does not exist. The check is then not
+ * counted and nothing is locked (the behavior before this change; the rate limit still applies),
+ * and the request is not a 500: the existence check is a catalog read, so a missing function never
+ * aborts the transaction.
+ */
+export const TOTP_CODE_CHECK_LOCKOUT_FUNCTION = 'public.financial_totp_count_code_check(uuid)';
+export const TOTP_CODE_CHECK_LOCKOUT_PRESENT_SQL = 'SELECT pg_catalog.to_regprocedure($1) IS NOT NULL AS present';
+export const TOTP_CODE_CHECK_LOCKOUT_SQL = 'SELECT allowed, failed_attempts, retry_after_seconds FROM public.financial_totp_count_code_check($1::uuid)';
+
+export const countCodeCheck = async (client, userId) => {
+  const present = (await client.query(TOTP_CODE_CHECK_LOCKOUT_PRESENT_SQL, [TOTP_CODE_CHECK_LOCKOUT_FUNCTION])).rows[0]?.present === true;
+  if (!present) return { present: false, counted: false, locked: false };
+  const row = (await client.query(TOTP_CODE_CHECK_LOCKOUT_SQL, [userId])).rows[0];
+  if (!row) return { present: true, counted: false, locked: false, enrolled: false };
+  if (row.allowed !== true) {
+    return { present: true, counted: false, locked: true, retryAfterSec: Math.max(1, Number(row.retry_after_seconds) || 1) };
+  }
+  return { present: true, counted: true, locked: false, failedAttempts: Number(row.failed_attempts) };
+};
+
+/**
+ * The answer to a wrong code. Also the answer while the enrollment is locked (SQL 132), so a locked
+ * check reveals nothing about the code.
+ */
+const codeRejected = () => ({
+  ok: false,
+  statusCode: 401,
+  error: 'mfa_step_up_failed',
+  verified: false,
+  message: totpUserFailureMessage({ name: 'CodeMismatchException' }),
+  ...financialGate(),
+});
 
 const listPasskeys = async (accessToken) => {
   if (!accessToken) return 0;
@@ -269,14 +308,16 @@ export const handleMfaAssociate = async (event, deps = {}) => {
   }, deps);
 };
 
-const verifyAgainstStore = async ({ client, mapping, code, wrap, nowMs, consumeTimestep = true }) => {
+const verifyAgainstStore = async ({ client, mapping, claims, code, wrap, nowMs, consumeTimestep = true }) => {
+  const notEnrolled = () => ({ ok: false, statusCode: 403, error: 'totp_not_enrolled', ...financialGate() });
   const row = await loadEnrollment(client, mapping.application_user_id);
-  if (!row?.ciphertext) {
-    return { ok: false, statusCode: 403, error: 'totp_not_enrolled', ...financialGate() };
-  }
-  if (row.locked_until && new Date(row.locked_until).getTime() > Date.now()) {
-    return { ok: false, statusCode: 429, error: 'rate_limited', ...financialGate() };
-  }
+  if (!row?.ciphertext) return notEnrolled();
+  // SQL 132: count this check and keep the count before the code is compared (a wrong code rolls
+  // the request back). While locked, refuse without comparing: the same answer as a wrong code.
+  const gate = await countCodeCheck(client, mapping.application_user_id);
+  if (gate.present && gate.enrolled === false) return notEnrolled();
+  if (gate.counted) await commitAndContinue(client, mapping, claims);
+  if (gate.locked || (row.locked_until && new Date(row.locked_until).getTime() > Date.now())) return codeRejected();
   const secret = decryptSecret({ ciphertext: row.ciphertext, nonce: row.nonce, key: wrap.key });
   const verified = verifyFinancialTotp({
     secret,
@@ -285,29 +326,13 @@ const verifyAgainstStore = async ({ client, mapping, code, wrap, nowMs, consumeT
     lastUsedTimestep: row.last_used_timestep,
   });
   if (!verified.ok) {
-    return {
-      ok: false,
-      statusCode: 401,
-      error: verified.error === 'totp_mismatch' ? 'mfa_step_up_failed' : verified.error,
-      verified: false,
-      message: totpUserFailureMessage({ name: 'CodeMismatchException' }),
-      ...financialGate(),
-    };
+    return verified.error === 'totp_mismatch' ? codeRejected() : { ...codeRejected(), error: verified.error };
   }
   const marked = await client.query(
     'SELECT public.financial_totp_mark_verified($1::uuid, $2::bigint) AS claimed',
     [mapping.application_user_id, consumeTimestep ? verified.timestep : null],
   );
-  if (consumeTimestep && marked.rows[0]?.claimed !== true) {
-    return {
-      ok: false,
-      statusCode: 401,
-      error: 'mfa_step_up_failed',
-      verified: false,
-      message: totpUserFailureMessage({ name: 'CodeMismatchException' }),
-      ...financialGate(),
-    };
-  }
+  if (consumeTimestep && marked.rows[0]?.claimed !== true) return codeRejected();
   return { ok: true, timestep: verified.timestep };
 };
 
@@ -328,11 +353,12 @@ export const handleMfaVerify = async (event, deps = {}) => {
     try {
       const rate = await consumeRate(ctx.client, ctx.mapping.application_user_id, TOTP_CODE_CHECK_RATE_ACTION);
       if (!rate.ok) return rate;
-      await persistRateLimitHit(ctx.client, ctx.mapping, ctx.claims);
+      await commitAndContinue(ctx.client, ctx.mapping, ctx.claims);
       const wrap = await (deps.loadWrapKey || loadFinancialTotpWrapKey)();
       const verified = await verifyAgainstStore({
         client: ctx.client,
         mapping: ctx.mapping,
+        claims: ctx.claims,
         code: normalized.code,
         wrap,
         nowMs: deps.nowMs,
@@ -587,7 +613,7 @@ export const handleMfaStepUp = async (event, deps = {}) => {
     try {
       const rate = await consumeRate(ctx.client, ctx.mapping.application_user_id, TOTP_CODE_CHECK_RATE_ACTION);
       if (!rate.ok) return rate;
-      await persistRateLimitHit(ctx.client, ctx.mapping, ctx.claims);
+      await commitAndContinue(ctx.client, ctx.mapping, ctx.claims);
       const bound = await resolveFinancialStepUpBinding({
         client: ctx.client,
         mapping: ctx.mapping,
@@ -600,6 +626,7 @@ export const handleMfaStepUp = async (event, deps = {}) => {
       const verified = await verifyAgainstStore({
         client: ctx.client,
         mapping: ctx.mapping,
+        claims: ctx.claims,
         code: normalized.code,
         wrap,
         nowMs: deps.nowMs,
