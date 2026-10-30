@@ -124,6 +124,12 @@ const CHANGED_SINCE_SECOND_REBUILD = {
   // sends to every recipient and keeps every CC; a REPLACE member of the production overlay plan,
   // not a rebuild section.
   'endorsement-parity.mjs': 'changed',
+  // Homeowner portal signing (2026-10-29, SQL 127): the portal pair {ledger_token, signer_id} signs
+  // documents (signature-submit.mjs, now importing storage.mjs) and an expired homeowner signer stays
+  // listed (homeowner-signing-integration.mjs); REPLACE members of the production overlay plan, not a
+  // rebuild section.
+  'signature-submit.mjs': 'changed',
+  'homeowner-signing-integration.mjs': 'changed',
 };
 // Listed changes that go through the production overlay plan, never the current rebuild section.
 const OVERLAY_PLAN_CHANGES = new Set([
@@ -147,6 +153,9 @@ const OVERLAY_PLAN_CHANGES = new Set([
   'check-reconciliation.mjs',
   // Endorsement email to every recipient (2026-10-29): a REPLACE row of the production plan.
   'endorsement-parity.mjs',
+  // Homeowner portal signing (2026-10-29): REPLACE rows of the production plan, held on SQL 127.
+  'signature-submit.mjs',
+  'homeowner-signing-integration.mjs',
 ]);
 const assertSectionAcceptedIsMain = (apiRoot, name, accepted) => {
   const onMain = sha256(fs.readFileSync(path.join(apiRoot, name)));

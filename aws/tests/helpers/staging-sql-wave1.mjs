@@ -125,6 +125,11 @@ export const STAGING_WAVE1 = Object.freeze({
   // Applied by run 40921170890 (main 7422c69, executor deploy run 40920738142): receipt 04106521 ->
   // 3aebf853 (intended); read-live run 40921576727 at the intended fingerprint.
   sql126: Object.freeze({ wave: 25, approved: '2026-10-29', run: '40917478177', live: '04106521263eeeb423ac2c0dfbf5e1f1af5a52c89501b63ac742d6b25c5e1612', apply_run: '40921170890' }),
+  // Wave 26 (owner approved 2026-10-29, "start the SQL 127 staging apply"): SQL 127, homeowners sign
+  // their checks and documents from the claim portal. Read at main f0264d9 after the executor carried it
+  // (deploy run 40947474906): SQL 83's endorse capability and pending_signatures bodies, the portal
+  // signer absent, every prerequisite present, the definer writes possible.
+  sql127: Object.freeze({ wave: 26, approved: '2026-10-29', run: '40947834848', live: '4b4af399a73a25e191d2f914cc074a3744c84fffbc8ce3e55f2adec2cf93dfe0' }),
   sql98: Object.freeze({ wave: 3, approved: '2026-10-18', run: '39083278136', live: '296c3d6a274e10f66005fb9eaecf93fa17b81bd8db3607037ca07698fddd3275', apply_run: '39085677318' }),
 });
 
@@ -136,7 +141,7 @@ export const pendingPin = (pin) => Object.freeze({
 });
 
 /**
- * The committed staging pin's apply state: waves 1-25 recorded and approved, wave 6 approved with
+ * The committed staging pin's apply state: waves 1-26 recorded and approved, wave 6 approved with
  * its read-live still to record (pending until then), wave 18 (SQL 117) retired, the rest pending.
  */
 export function assertStagingPinState(assert, key, pin) {

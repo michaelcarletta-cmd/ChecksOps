@@ -1,5 +1,11 @@
 # Production secret host compare (source-only)
 
+> **Withdrawn 2026-10-29 (finding 12).** The diagnostic ran once (run 38067130648, 2026-10-10).
+> The `GetSecretValue` grant on `ChecksOpsGitHubProductionReadOnlyInspect` is removed by
+> `ops/deployment-guard/production-readonly-inspect-role/`; this workflow is refused at
+> `GetSecretValue` until the statement below is re-granted on the owner's approval of a run,
+> and withdrawn again afterwards.
+
 This is a tightly scoped, fail-closed diagnostic for the remaining
 two-RDS ambiguity. It is not authorized to run from this pull request.
 Do not apply IAM, dispatch the workflow, merge PR #855, or deploy.

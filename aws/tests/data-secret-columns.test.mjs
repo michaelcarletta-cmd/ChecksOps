@@ -40,6 +40,9 @@ const EXPECTED_BLOCK = {
   tenant_billing_accounts: ['account_number_encrypted'],
   tenant_openai_credentials: ['encrypted_key'],
   tenants: ['actum_password', 'actum_test_password', 'actum_webhook_secret', 'ein'],
+  // Audit finding 9 (2026-10-29): a partner code connects whoever enters it, so the public
+  // tenant list never carries one. tenants.partner_code stays readable (KEEP) for members.
+  tenants_public: ['partner_code'],
   user_sessions: ['session_token'],
 };
 
@@ -249,9 +252,16 @@ test('secret columns: KEEP columns stay selectable, filterable and orderable', a
 test('secret columns: an embedded tenants(...) list of public columns still uses tenants_public; tenants(ein) is refused', async () => {
   const fk = relatedFk(PARENT, 'tenants');
   const client = mockClient({ parentRow: { id: PARENT_ID, [fk]: CHILD_ID } });
-  const ok = await query({ table: PARENT, select: 'id, tenants(id, name, partner_code)' }, client);
+  const ok = await query({ table: PARENT, select: 'id, tenants(id, name)' }, client);
   assert.equal(ok.result.statusCode, 200);
   assert.ok(client.queries.some((q) => /FROM public\.tenants_public/.test(q.sql)));
+  // partner_code is not a public column (finding 9): the embed reads tenants, whose RLS shows a
+  // tenant's row (and its code) to its members and the platform owner only.
+  const own = mockClient({ parentRow: { id: PARENT_ID, [fk]: CHILD_ID } });
+  const withCode = await query({ table: PARENT, select: 'id, tenants(id, name, partner_code)' }, own);
+  assert.equal(withCode.result.statusCode, 200);
+  assert.ok(own.queries.some((q) => /FROM public\.tenants WHERE/.test(q.sql)));
+  assert.equal(own.queries.some((q) => /FROM public\.tenants_public/.test(q.sql)), false);
   const denied = await query({ table: PARENT, select: 'id, tenants(id, name, ein)' });
   assertDenied(denied.result, denied.client, 'tenants(ein)');
 });

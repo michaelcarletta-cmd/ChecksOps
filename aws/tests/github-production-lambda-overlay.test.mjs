@@ -42,6 +42,25 @@ const HOMEOWNER_UPLOAD_STATUS_APPLIED_REL = 'aws/tests/fixtures/production-homeo
 const HOMEOWNER_TIMELINE_LINK_REL = 'aws/tests/fixtures/production-homeowner-timeline-link-manifest-2026-10-29.json';
 // Homeowner timeline link and endorsement email, applied in production 2026-10-29 (workflow.mjs, then endorsement-parity.mjs).
 const TIMELINE_ENDORSEMENT_APPLIED_REL = 'aws/tests/fixtures/production-homeowner-timeline-endorsement-applied-manifest-2026-10-29.json';
+// Homeowner portal signing (2026-10-29): planned REPLACEs of homeowner-signing-integration.mjs, storage.mjs,
+// signature-submit.mjs and homeowner.mjs, each held on SQL 127 (applied in production 2026-10-29, #1412).
+const PORTAL_SIGNING_REL = 'aws/tests/fixtures/production-homeowner-portal-signing-manifest-2026-10-29.json';
+// Homeowner portal signing, applied in production 2026-10-29/30 (homeowner-signing-integration.mjs, storage.mjs,
+// signature-submit.mjs, then homeowner.mjs; one run per member, in plan order).
+const PORTAL_SIGNING_APPLIED_REL = 'aws/tests/fixtures/production-homeowner-portal-signing-applied-manifest-2026-10-29.json';
+const SQL127_FILE = 'aws/workflows/sql/127_homeowner_portal_signing.sql';
+// Contractor verification status gate (2026-10-29): planned REPLACE of data.mjs from the security hardening applied bytes.
+const CONTRACTOR_GATE_REL = 'aws/tests/fixtures/production-contractor-verification-gate-manifest-2026-10-29.json';
+// data.mjs as security hardening production run 40907296471 applied it (the RPC access gates).
+const DATA_GATES_APPLIED = 'c7dd822951344d0fb3d3833597eb6292a4a5073754fab659903cedc2c7437aaa';
+// Contractor verification status gate, applied in production 2026-10-29 (data.mjs, run 40945542902).
+const CONTRACTOR_GATE_APPLIED_REL = 'aws/tests/fixtures/production-contractor-verification-gate-applied-manifest-2026-10-29.json';
+// data.mjs as production run 40945542902 applied it (the contractor verification status gate).
+const CONTRACTOR_GATE_BYTES = 'e2415f9046e3288e2bf3e296bf716a9f3e0c2777fe930590b316c8aec79559eb';
+// Public partner codes (2026-10-29, finding 9): planned REPLACE of data.mjs from the contractor gate's applied bytes.
+const PUBLIC_PARTNER_CODES_REL = 'aws/tests/fixtures/production-public-partner-codes-manifest-2026-10-29.json';
+// Public partner codes, applied in production 2026-10-29 (data.mjs, run 40963109952).
+const PUBLIC_PARTNER_CODES_APPLIED_REL = 'aws/tests/fixtures/production-public-partner-codes-applied-manifest-2026-10-29.json';
 function repoModules(dir = API, prefix = '') {
   const out = {};
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -504,15 +523,21 @@ test('the SQL 85 hold on mortgage-agent-compensation.mjs does not block homeowne
   const PRE_SQL85 = 'c38986152765e1d43443c82a779627bd55f96b3c2c246988f4697a3565166512';
   const preApply = structuredClone(PLAN);
   preApply.members[MORTGAGE].expected_live_sha256 = PRE_SQL85;
-  // homeowner.mjs is simulated on its pre-apply bytes too: production run 40930253261 (2026-10-29)
-  // applied the homeowner upload status bytes, so its committed expected_live is already accepted.
-  const PRE_HOMEOWNER = '1fa4950c42bf26ff70bc04acd05ca8c784a970d2573178599859c8d682ce5849';
+  // homeowner.mjs REPLACEd the homeowner upload status bytes production run 40930253261 applied
+  // (ea522429) for the portal signing (SQL 127, recorded live), applied 2026-10-30 (production run
+  // 40979800002); the replay simulates the row on those pre-apply bytes. Its row has since moved late in
+  // order (after this member, which is applied and whose SQL 85 is live), so the replay puts it back
+  // before the mortgage member, where it stood when the SQL 85 hold was live.
+  const PRE_HOMEOWNER = 'ea5224291c57ab367f511c75bc6e639fb9faeb04fe7139e27460c51ae3ea72b1';
+  assert.equal(PLAN.members['homeowner.mjs'].manifest, PORTAL_SIGNING_APPLIED_REL);
   preApply.members['homeowner.mjs'].expected_live_sha256 = PRE_HOMEOWNER;
+  preApply.order = preApply.order.filter((name) => name !== 'homeowner.mjs');
+  preApply.order.splice(preApply.order.indexOf(MORTGAGE), 0, 'homeowner.mjs');
   const unverified = structuredClone(preApply);
   unverified.sql_prerequisites[SQL85] = { verified_live: false, evidence: null };
   // Held members sit after every member they must not block; providers.mjs stays last.
   assert.ok(PLAN.order.indexOf(MORTGAGE) > PLAN.order.indexOf('app-services.mjs'));
-  assert.ok(PLAN.order.indexOf(MORTGAGE) > PLAN.order.indexOf('homeowner.mjs'));
+  assert.ok(preApply.order.indexOf(MORTGAGE) > preApply.order.indexOf('homeowner.mjs'));
   assert.equal(PLAN.order.at(-1), 'providers.mjs');
 
   // The mortgage member is still on its pre-SQL 85 bytes: homeowner.mjs applies anyway.
@@ -526,11 +551,11 @@ test('the SQL 85 hold on mortgage-agent-compensation.mjs does not block homeowne
 
   // The mortgage member is refused while SQL 85 is not recorded verified live ...
   await assert.rejects(
-    run(applyEnv(MORTGAGE, { CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: PRE_SQL85 }), { ...applyDeps(MORTGAGE, { sha256: PRE_SQL85 }).deps, plan: unverified }),
+    run(applyEnv(MORTGAGE, { CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: PRE_SQL85 }), { ...applyDeps(MORTGAGE, { sha256: PRE_SQL85, plan: preApply }).deps, plan: unverified }),
     (error) => error.code === CODES.PRODUCTION_APPROVAL_REQUIRED && error.details.sql_before === SQL85,
   );
   // ... and allowed once SQL 85 is verified live (as run 38901611978 did).
-  const mortgage = await run(applyEnv(MORTGAGE, { CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: PRE_SQL85 }), { ...applyDeps(MORTGAGE, { sha256: PRE_SQL85 }).deps, plan: preApply });
+  const mortgage = await run(applyEnv(MORTGAGE, { CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: PRE_SQL85 }), { ...applyDeps(MORTGAGE, { sha256: PRE_SQL85, plan: preApply }).deps, plan: preApply });
   assert.equal(mortgage.mutation, false);
   // With the committed plan the live member already holds the accepted bytes: nothing to apply.
   await assert.rejects(
@@ -857,14 +882,14 @@ test('#901 Review financial edits: write-allowlist.mjs, then write-check-workflo
   assert.equal(result.mutation, false);
   assert.deepEqual(writes.calls.receipt.owned_member_ops, { replace: [WORKFLOW_WRITES], add: [] });
 
-  // The SQL 89 hold does not block members before it (homeowner.mjs, mortgage-agent-compensation.mjs;
-  // the latter simulated on its pre-apply bytes, since its committed expected_live is already accepted).
+  // The SQL 89 hold does not block members before it (mortgage-agent-compensation.mjs, simulated on its
+  // pre-apply bytes, since its committed expected_live is already accepted). homeowner.mjs used to be
+  // one of them; its portal signing row now sits after this member, late in order.
   const PRE_APPLY = {
     'mortgage-agent-compensation.mjs': 'c38986152765e1d43443c82a779627bd55f96b3c2c246988f4697a3565166512',
-    // Applied by production run 40930253261 (2026-10-29); simulated on its pre-apply bytes.
-    'homeowner.mjs': '1fa4950c42bf26ff70bc04acd05ca8c784a970d2573178599859c8d682ce5849',
   };
-  for (const member of ['homeowner.mjs', 'mortgage-agent-compensation.mjs']) {
+  assert.ok(PLAN.order.indexOf('homeowner.mjs') > PLAN.order.indexOf(WORKFLOW_WRITES));
+  for (const member of ['mortgage-agent-compensation.mjs']) {
     assert.ok(PLAN.order.indexOf(member) < PLAN.order.indexOf(WORKFLOW_WRITES), member);
     const plan = structuredClone(PLAN);
     if (PRE_APPLY[member]) plan.members[member].expected_live_sha256 = PRE_APPLY[member];
@@ -1172,8 +1197,9 @@ test('live reconciliation 2026-10-19: ten members expect the bytes inspect run 3
   // the 2026-10-21 production rebuilds, and production runs 40189236116 and 40189657073 replaced them
   // for the stakeholder settings edit (1fc4a43e and e1227c96, now recorded live).
   const MOVED_ON = {
-    // Production run 40930253261 (2026-10-29) applied the homeowner upload status bytes.
-    'homeowner.mjs': { accepted: 'c51ea27a37a72b18aed7881ae349212257b790e6ff400cbe675949574504a80c', liveNow: 'ea5224291c57ab367f511c75bc6e639fb9faeb04fe7139e27460c51ae3ea72b1' },
+    // Production run 40930253261 (2026-10-29) applied the homeowner upload status bytes (ea522429), and
+    // production run 40979800002 (2026-10-30) replaced them with the homeowner portal signing bytes.
+    'homeowner.mjs': { accepted: 'c51ea27a37a72b18aed7881ae349212257b790e6ff400cbe675949574504a80c', liveNow: 'd7117e18fb42efb0ab6cf2b1847b2d57f22878927ceda5155d4165dcd1f442a2' },
     'write-allowlist.mjs': { accepted: '5f84c5634190ebade1ee6ae10d3420e09548efac78f2a72eb98886d2f0341189', liveNow: '1fc4a43eda4455d406edd4566d7a2bada352d241e88ba01cb4ff2cd3afb2884a' },
     'write-check-workflow.mjs': { accepted: 'fa2c6aef0e4e6c8713f60a24804309b4cf7f9e4b9d69a379498ef9acaf621fc2', liveNow: 'e1227c967906496519db1fe9c996514c03ca04a79378ff77e93b92ecf470544a' },
     'workflow-rpc.mjs': { accepted: '79b7e4de653eb9d391afca9d27769b3b7c8e3d10d67af43e829ee32398797485', liveNow: 'acb5fc06ca01ddb5ad3294ee5840443c1747798f06c1990c174c469dbb5534e0' },
@@ -1496,24 +1522,32 @@ test('homeowner pre-claim upload: homeowner.mjs REPLACEs the live c51ea27a bytes
   assert.deepEqual(manifest.members[MEMBER], { live_sha256: LIVE, accepted_sha256: PRECLAIM, operation: 'replace' });
   // The row has since moved on to the homeowner upload status (planned 2026-10-29 over the pre-claim
   // bytes, which the production rebuild inspect run 40741101459 observed live; its own test below),
-  // applied by production run 40930253261: the row now records main's bytes live and names the
-  // homeowner upload status applied manifest.
+  // applied by production run 40930253261 (homeowner upload status applied manifest); the row then moved
+  // on to the portal signing (planned 2026-10-29 over those applied bytes, held on SQL 127; its own test
+  // below), applied 2026-10-30 by production run 40979800002: expected_live records main's bytes, the
+  // portal signing applied record names the row, and the planning manifest keeps the chain.
   const UPLOAD_STATUS_REL = 'aws/tests/fixtures/production-homeowner-upload-status-manifest-2026-10-29.json';
+  const UPLOAD_STATUS_APPLIED = JSON.parse(fs.readFileSync(path.join(ROOT, HOMEOWNER_UPLOAD_STATUS_APPLIED_REL), 'utf8')).members[MEMBER].accepted_sha256;
   const row = PLAN.members[MEMBER];
   assert.equal(row.operation, 'replace');
-  assert.equal(row.manifest, HOMEOWNER_UPLOAD_STATUS_APPLIED_REL);
+  assert.equal(row.manifest, PORTAL_SIGNING_APPLIED_REL);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, PORTAL_SIGNING_APPLIED_REL), 'utf8')).members[MEMBER].previous_manifest, PORTAL_SIGNING_REL);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, PORTAL_SIGNING_REL), 'utf8')).members[MEMBER].previous_manifest, HOMEOWNER_UPLOAD_STATUS_APPLIED_REL);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, PORTAL_SIGNING_REL), 'utf8')).members[MEMBER].live_sha256, UPLOAD_STATUS_APPLIED);
   assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, UPLOAD_STATUS_REL), 'utf8')).members[MEMBER].previous_manifest, MANIFEST_REL);
-  assert.equal(row.sql_before, null);
-  assert.equal(row.expected_live_sha256, row.accepted_sha256);
+  assert.equal(row.sql_before, SQL127_FILE);
   assert.equal(row.accepted_sha256, sha(`aws/functions/api/${MEMBER}`));
+  assert.equal(row.expected_live_sha256, row.accepted_sha256);
+  assert.notEqual(row.accepted_sha256, UPLOAD_STATUS_APPLIED);
   assert.notEqual(row.accepted_sha256, PRECLAIM);
   assert.notEqual(row.accepted_sha256, LIVE);
   const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
-  const done = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER) });
+  const done = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: row.accepted_sha256 }) });
   assert.equal(done.state, 'ALREADY_ACCEPTED');
   assert.equal(done.mutation, false);
-  // Neither the pre-claim bytes nor the release bytes before them are an accepted live state any more.
-  for (const other of [PRECLAIM, LIVE]) {
+  // Neither the upload status bytes, the pre-claim bytes nor the release bytes before them are an
+  // accepted live state any more.
+  for (const other of [UPLOAD_STATUS_APPLIED, PRECLAIM, LIVE]) {
     await assert.rejects(
       run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: other }) }),
       (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
@@ -2038,11 +2072,15 @@ test('Data API credential columns: data.mjs expected_live records the bytes prod
   assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, PREVIOUS_REL), 'utf8')).members[MEMBER].accepted_sha256, BEFORE);
   // The row has since moved on to the RPC access gates (planned 2026-10-29 over these applied
   // bytes, their own test below), applied by production run 40907296471: the row now records main's
-  // bytes live and names the security hardening applied manifest.
+  // bytes live and names the security hardening applied manifest. It has since moved on again, to the
+  // contractor verification status gate (its own test below), whose REPLACE started from those bytes and
+  // was applied 2026-10-29 (production run 40945542902), and on again to the public partner codes
+  // REPLACE (its own test below), which started from the contractor gate's applied bytes and was applied
+  // 2026-10-29 (production run 40963109952): the row now names that record.
   const GATES_REL = 'aws/tests/fixtures/production-data-rpc-access-gates-manifest-2026-10-29.json';
   const row = PLAN.members[MEMBER];
   assert.equal(row.operation, 'replace');
-  assert.equal(row.manifest, SECURITY_HARDENING_APPLIED_REL);
+  assert.equal(row.manifest, PUBLIC_PARTNER_CODES_APPLIED_REL);
   assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, GATES_REL), 'utf8')).members[MEMBER].previous_manifest, APPLIED_REL);
   assert.equal(row.expected_live_sha256, row.accepted_sha256);
   assert.notEqual(row.accepted_sha256, LIVE);
@@ -2077,7 +2115,8 @@ test('Data API RPC access gates: data.mjs REPLACE planned over the bytes product
   // 40086776532 ALREADY_ACCEPTED). Before them: the Refer & Earn bytes.
   const LIVE = '4baa46e564aadf24d700aa4992180f845152d5e4ef423eb5ffa8d08c3b614517';
   const OLDER = 'c14a83e7c099150b8f6e489a6b318abc850b2868beeb3a9a981eea71fc38fae0';
-  const accepted = sha(`aws/functions/api/${MEMBER}`);
+  // The bytes production run 40907296471 applied; main has since moved on to the contractor gate.
+  const accepted = DATA_GATES_APPLIED;
   const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, MANIFEST_REL), 'utf8'));
   assert.equal(manifest.workstream_id, 'data-rpc-access-gates');
   assert.equal(manifest.deploy_authorized, false);
@@ -2086,15 +2125,20 @@ test('Data API RPC access gates: data.mjs REPLACE planned over the bytes product
   assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, PREVIOUS_REL), 'utf8')).members[MEMBER].accepted_sha256, LIVE);
   assert.match(PLAN.notes, /Data API RPC access gates \(2026-10-29; planning only, not authorized\)/);
   // Applied 2026-10-29 (production run 40907296471): the row records main's bytes live and names the
-  // security hardening applied manifest; the planning manifest keeps the pre-apply state.
+  // security hardening applied manifest; the planning manifest keeps the pre-apply state. The row now
+  // follows the contractor verification status gate, whose REPLACE started from these applied bytes and
+  // was applied 2026-10-29 (production run 40945542902); it now follows the public partner codes
+  // REPLACE, which started from the contractor gate's applied bytes and was applied 2026-10-29
+  // (production run 40963109952).
   const row = PLAN.members[MEMBER];
   assert.deepEqual(row, {
     operation: 'replace',
-    accepted_sha256: accepted,
-    expected_live_sha256: accepted,
+    accepted_sha256: sha(`aws/functions/api/${MEMBER}`),
+    expected_live_sha256: sha(`aws/functions/api/${MEMBER}`),
     sql_before: 'aws/workflows/sql/53_claim_settlement_breakdown.sql',
-    manifest: SECURITY_HARDENING_APPLIED_REL,
+    manifest: PUBLIC_PARTNER_CODES_APPLIED_REL,
   });
+  assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, CONTRACTOR_GATE_REL), 'utf8')).members[MEMBER].previous_manifest, SECURITY_HARDENING_APPLIED_REL);
   assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
   const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
   // Before the apply, the planned row took the applied credential-column bytes as READY.
@@ -2102,9 +2146,9 @@ test('Data API RPC access gates: data.mjs REPLACE planned over the bytes product
   before.members[MEMBER] = { ...row, expected_live_sha256: LIVE, manifest: MANIFEST_REL };
   const ready = await run(inspect, { root: ROOT, plan: before, inspectLive: liveFor(MEMBER, { plan: before }) });
   assert.equal(ready.state, 'READY');
-  const done = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: accepted }) });
-  assert.equal(done.state, 'ALREADY_ACCEPTED');
-  for (const other of [LIVE, OLDER]) {
+  // These applied bytes were the contractor gate's starting point; production has moved on, so they are
+  // no longer an accepted live state.
+  for (const other of [LIVE, OLDER, accepted]) {
     await assert.rejects(
       run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: other }) }),
       (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
@@ -2229,31 +2273,61 @@ test('Homeowner upload status: workflow-transitions.mjs and homeowner.mjs REPLAC
     [TRANSITIONS, TRANSITIONS_LIVE, TRANSITIONS_OLDER, TRANSITIONS_APPLIED_REL, LEDGER],
     [HOMEOWNER, HOMEOWNER_LIVE, HOMEOWNER_OLDER, PRECLAIM_REL, null],
   ];
+  // homeowner.mjs has since moved on to the portal signing (planned 2026-10-29 over the bytes production
+  // run 40930253261 applied, held on SQL 127; its own test below), applied 2026-10-30 (production run
+  // 40979800002): main's bytes are no longer these.
+  const MOVED_ON = { [HOMEOWNER]: readJson(HOMEOWNER_UPLOAD_STATUS_APPLIED_REL).members[HOMEOWNER].accepted_sha256 };
   for (const [member, live, older, previousRel, sqlBefore] of cases) {
-    const accepted = sha(`aws/functions/api/${member}`);
+    const accepted = MOVED_ON[member] ?? sha(`aws/functions/api/${member}`);
     assert.notEqual(accepted, live, member);
     assert.deepEqual(manifest.members[member], { live_sha256: live, accepted_sha256: accepted, operation: 'replace', previous_manifest: previousRel }, member);
     assert.equal(readJson(previousRel).members[member].accepted_sha256, live, member);
     // Applied 2026-10-29: the row records main's bytes live and names the homeowner upload status
     // applied manifest; the planning manifest keeps the pre-apply state.
     const row = PLAN.members[member];
-    assert.deepEqual(row, {
-      operation: 'replace',
-      accepted_sha256: accepted,
-      expected_live_sha256: accepted,
-      sql_before: sqlBefore,
-      manifest: HOMEOWNER_UPLOAD_STATUS_APPLIED_REL,
-    }, member);
+    if (MOVED_ON[member]) {
+      // The portal signing REPLACE started from the applied bytes (its planning manifest chains to the
+      // applied manifest) and is applied: the row records main's bytes live and names its record.
+      assert.notEqual(sha(`aws/functions/api/${member}`), accepted, member);
+      assert.deepEqual(row, {
+        operation: 'replace',
+        accepted_sha256: sha(`aws/functions/api/${member}`),
+        expected_live_sha256: sha(`aws/functions/api/${member}`),
+        sql_before: SQL127_FILE,
+        manifest: PORTAL_SIGNING_APPLIED_REL,
+      }, member);
+      assert.equal(readJson(PORTAL_SIGNING_REL).members[member].previous_manifest, HOMEOWNER_UPLOAD_STATUS_APPLIED_REL, member);
+      assert.equal(sqlBefore, null, member);
+    } else {
+      assert.deepEqual(row, {
+        operation: 'replace',
+        accepted_sha256: accepted,
+        expected_live_sha256: accepted,
+        sql_before: sqlBefore,
+        manifest: HOMEOWNER_UPLOAD_STATUS_APPLIED_REL,
+      }, member);
+    }
     assert.equal(resolvePlannedMember(member, { root: ROOT, plan: PLAN }).ok, true, member);
-    // Before the apply, the planned row took the pre-apply bytes as READY.
-    const before = structuredClone(PLAN);
-    before.members[member] = { ...row, expected_live_sha256: live, manifest: MANIFEST_REL };
-    const ready = await run(inspect(member), { root: ROOT, plan: before, inspectLive: liveFor(member, { plan: before }) });
-    assert.equal(ready.state, 'READY', member);
-    assert.equal(ready.mutation, false, member);
-    const done = await run(inspect(member), { root: ROOT, inspectLive: liveFor(member) });
-    assert.equal(done.state, 'ALREADY_ACCEPTED', member);
-    assert.equal(done.mutation, false, member);
+    if (!MOVED_ON[member]) {
+      // Before the apply, the planned row took the pre-apply bytes as READY.
+      const before = structuredClone(PLAN);
+      before.members[member] = { ...row, expected_live_sha256: live, manifest: MANIFEST_REL };
+      const ready = await run(inspect(member), { root: ROOT, plan: before, inspectLive: liveFor(member, { plan: before }) });
+      assert.equal(ready.state, 'READY', member);
+      assert.equal(ready.mutation, false, member);
+    }
+    // The applied bytes: accepted live, or (moved on and applied again) no longer an accepted live state.
+    if (MOVED_ON[member]) {
+      await assert.rejects(
+        run(inspect(member), { root: ROOT, inspectLive: liveFor(member, { sha256: accepted }) }),
+        (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+        member,
+      );
+    } else {
+      const done = await run(inspect(member), { root: ROOT, inspectLive: liveFor(member, { sha256: accepted }) });
+      assert.equal(done.state, 'ALREADY_ACCEPTED', member);
+      assert.equal(done.mutation, false, member);
+    }
     for (const other of [live, older]) {
       await assert.rejects(
         run(inspect(member), { root: ROOT, inspectLive: liveFor(member, { sha256: other }) }),
@@ -3106,35 +3180,46 @@ test('Branding logo served types (security audit finding 2): REPLACE storage.mjs
   assert.equal(manifest.deploy_authorized, false);
   assert.match(manifest.authorization, /^Pending owner review/);
   assert.deepEqual(Object.keys(manifest.members), [MEMBER]);
-  // Applied 2026-10-29: the row records main's bytes live and names the security hardening applied manifest.
+  // Applied 2026-10-29 (security hardening applied manifest). The row has since moved on to the portal
+  // signing (planned 2026-10-29 over these applied bytes, held on SQL 127; its own test below), applied
+  // 2026-10-30 (production run 40979415490): expected_live records main's bytes, named by the portal
+  // signing applied record.
+  const APPLIED = JSON.parse(fs.readFileSync(path.join(ROOT, SECURITY_HARDENING_APPLIED_REL), 'utf8')).members[MEMBER].accepted_sha256;
   const row = PLAN.members[MEMBER];
   assert.deepEqual(row, {
     operation: 'replace',
     accepted_sha256: sha(`aws/functions/api/${MEMBER}`),
     expected_live_sha256: sha(`aws/functions/api/${MEMBER}`),
-    sql_before: 'aws/workflows/sql/94_document_library_restore.sql',
-    manifest: SECURITY_HARDENING_APPLIED_REL,
+    sql_before: SQL127_FILE,
+    manifest: PORTAL_SIGNING_APPLIED_REL,
   });
+  assert.notEqual(row.accepted_sha256, APPLIED);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, PORTAL_SIGNING_REL), 'utf8')).members[MEMBER].previous_manifest, SECURITY_HARDENING_APPLIED_REL);
   // The release 2026-10-17 manifest accepted these bytes for storage.mjs (its live_sha256 is the pre-release value).
   const release = JSON.parse(fs.readFileSync(path.join(ROOT, RELEASE_REL), 'utf8')).members[MEMBER];
   assert.equal(release.accepted_sha256, PRE_DEPLOY);
   assert.notEqual(release.live_sha256, PRE_DEPLOY);
-  assert.notEqual(release.accepted_sha256, row.accepted_sha256);
+  assert.notEqual(release.accepted_sha256, APPLIED);
   assert.match(manifest.notes, /run 40902942196/);
   assert.match(PLAN.notes, /run 40902942196/);
-  assert.deepEqual(manifest.members[MEMBER], { live_sha256: PRE_DEPLOY, accepted_sha256: row.accepted_sha256, operation: 'replace', previous_manifest: RELEASE_REL });
+  assert.deepEqual(manifest.members[MEMBER], { live_sha256: PRE_DEPLOY, accepted_sha256: APPLIED, operation: 'replace', previous_manifest: RELEASE_REL });
   assert.match(PLAN.notes, /Branding logo served types \(security audit finding 2/);
   assert.ok(WORKFLOW.includes(`          - ${MEMBER}\n`));
   assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
   const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
-  const before = structuredClone(PLAN);
-  before.members[MEMBER] = { ...row, expected_live_sha256: PRE_DEPLOY, manifest: MANIFEST_REL };
-  assert.equal((await run(inspect, { root: ROOT, plan: before, inspectLive: liveFor(MEMBER, { plan: before }) })).state, 'READY');
+  // The applied bytes were the READY start of the portal signing REPLACE (the plan before its record);
+  // now only the portal signing bytes are accepted.
+  const pre = structuredClone(PLAN);
+  pre.members[MEMBER].expected_live_sha256 = APPLIED;
+  assert.equal((await run(inspect, { root: ROOT, plan: pre, inspectLive: liveFor(MEMBER, { plan: pre }) })).state, 'READY');
   assert.equal((await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER) })).state, 'ALREADY_ACCEPTED');
-  await assert.rejects(
-    run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: PRE_DEPLOY }) }),
-    (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
-  );
+  for (const stale of [APPLIED, PRE_DEPLOY]) {
+    await assert.rejects(
+      run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: stale }) }),
+      (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+      stale,
+    );
+  }
 });
 
 test('Security hardening 2026-10-29 (audit findings 2-4): five members applied in plan order, each on its own phrase, recorded in one applied manifest', async () => {
@@ -3150,17 +3235,35 @@ test('Security hardening 2026-10-29 (audit findings 2-4): five members applied i
   assert.equal(applied.deploy_authorized, false);
   assert.match(applied.authorization, /^Record only/);
   assert.equal(applied.live_lambda, 'checksops-production-prep-api');
-  // Members in plan order, which is the order they were applied in.
+  // Members in the order they were applied in, which was plan order.
   const names = Object.keys(MEMBERS);
   assert.deepEqual(Object.keys(applied.members), names);
-  assert.deepEqual([...names].sort((a, b) => PLAN.order.indexOf(a) - PLAN.order.indexOf(b)), names);
+  // storage.mjs has since moved on to the portal signing (planned 2026-10-29 over its applied bytes, held on
+  // SQL 127; its own test below), applied 2026-10-30 (production run 40979415490): main's bytes are newer,
+  // and the row now sits late in plan order with the other portal signing rows. The others keep plan order.
+  const movedOn = new Set(['storage.mjs']);
+  const kept = names.filter((name) => !movedOn.has(name));
+  assert.deepEqual([...kept].sort((a, b) => PLAN.order.indexOf(a) - PLAN.order.indexOf(b)), kept);
+  assert.ok(PLAN.order.indexOf('storage.mjs') > Math.max(...kept.map((name) => PLAN.order.indexOf(name))));
   for (const [member, planningRel] of Object.entries(MEMBERS)) {
-    const accepted = sha(`aws/functions/api/${member}`);
+    // data.mjs has since moved on to the contractor verification status gate, whose REPLACE started from
+    // the bytes applied here and was applied 2026-10-29 (production run 40945542902); the row now
+    // follows the public partner codes REPLACE from the contractor gate's applied bytes, applied
+    // 2026-10-29 (production run 40963109952).
+    const dataMovedOn = member === 'data.mjs';
+    const accepted = movedOn.has(member) ? applied.members[member].accepted_sha256 : dataMovedOn ? DATA_GATES_APPLIED : sha(`aws/functions/api/${member}`);
     const row = PLAN.members[member];
     assert.deepEqual(applied.members[member], { live_sha256: accepted, accepted_sha256: accepted, operation: 'replace', previous_manifest: planningRel }, member);
-    assert.equal(row.accepted_sha256, accepted, member);
-    assert.equal(row.expected_live_sha256, accepted, member);
-    assert.equal(row.manifest, SECURITY_HARDENING_APPLIED_REL, member);
+    if (movedOn.has(member)) {
+      assert.equal(row.expected_live_sha256, sha(`aws/functions/api/${member}`), member);
+      assert.equal(row.accepted_sha256, sha(`aws/functions/api/${member}`), member);
+      assert.notEqual(row.accepted_sha256, accepted, member);
+      assert.equal(row.manifest, PORTAL_SIGNING_APPLIED_REL, member);
+    } else {
+      assert.equal(row.accepted_sha256, dataMovedOn ? sha(`aws/functions/api/${member}`) : accepted, member);
+      assert.equal(row.expected_live_sha256, dataMovedOn ? sha(`aws/functions/api/${member}`) : accepted, member);
+      assert.equal(row.manifest, dataMovedOn ? PUBLIC_PARTNER_CODES_APPLIED_REL : SECURITY_HARDENING_APPLIED_REL, member);
+    }
     // The planning manifest keeps the pre-apply state, and that state is not an accepted live state any more.
     const planned = JSON.parse(fs.readFileSync(path.join(ROOT, planningRel), 'utf8')).members[member];
     assert.equal(planned.accepted_sha256, accepted, member);
@@ -3169,14 +3272,18 @@ test('Security hardening 2026-10-29 (audit findings 2-4): five members applied i
     assert.ok(applied.notes.includes(`${planned.live_sha256.slice(0, 8)} -> ${accepted.slice(0, 8)}`), member);
     assert.ok(PLAN.notes.includes(`${member} ${planned.live_sha256.slice(0, 8)} -> ${accepted.slice(0, 8)}`), member);
     const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: member };
-    const done = await run(inspect, { root: ROOT, inspectLive: liveFor(member) });
+    // The applied bytes are accepted live. data.mjs and storage.mjs (moved on, and applied again) are
+    // inspected at their current accepted live bytes (the public partner codes, the portal signing).
+    const done = await run(inspect, { root: ROOT, inspectLive: dataMovedOn || movedOn.has(member) ? liveFor(member) : liveFor(member, { sha256: accepted }) });
     assert.equal(done.state, 'ALREADY_ACCEPTED', member);
     assert.equal(done.mutation, false, member);
-    await assert.rejects(
-      run(inspect, { root: ROOT, inspectLive: liveFor(member, { sha256: planned.live_sha256 }) }),
-      (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
-      member,
-    );
+    for (const other of dataMovedOn || movedOn.has(member) ? [planned.live_sha256, accepted] : [planned.live_sha256]) {
+      await assert.rejects(
+        run(inspect, { root: ROOT, inspectLive: liveFor(member, { sha256: other }) }),
+        (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+        member,
+      );
+    }
   }
   // Staging inspect and apply, production inspect and apply for each member, plus the two refused runs.
   for (const runId of [
@@ -3220,13 +3327,23 @@ test('Homeowner upload status 2026-10-29: workflow-transitions.mjs then homeowne
   // Members in plan order, which is the order they were applied in.
   assert.deepEqual(Object.keys(applied.members), MEMBERS);
   assert.deepEqual([...MEMBERS].sort((a, b) => PLAN.order.indexOf(a) - PLAN.order.indexOf(b)), MEMBERS);
+  // homeowner.mjs has since moved on to the portal signing (planned 2026-10-29 over its applied bytes, held
+  // on SQL 127; its own test below), applied 2026-10-30 (production run 40979800002): main's bytes are newer.
+  const movedOn = new Set(['homeowner.mjs']);
   for (const member of MEMBERS) {
-    const accepted = sha(`aws/functions/api/${member}`);
+    const accepted = movedOn.has(member) ? applied.members[member].accepted_sha256 : sha(`aws/functions/api/${member}`);
     const row = PLAN.members[member];
     assert.deepEqual(applied.members[member], { live_sha256: accepted, accepted_sha256: accepted, operation: 'replace', previous_manifest: PLANNING_REL }, member);
-    assert.equal(row.accepted_sha256, accepted, member);
-    assert.equal(row.expected_live_sha256, accepted, member);
-    assert.equal(row.manifest, HOMEOWNER_UPLOAD_STATUS_APPLIED_REL, member);
+    if (movedOn.has(member)) {
+      assert.equal(row.expected_live_sha256, sha(`aws/functions/api/${member}`), member);
+      assert.equal(row.accepted_sha256, sha(`aws/functions/api/${member}`), member);
+      assert.notEqual(row.accepted_sha256, accepted, member);
+      assert.equal(row.manifest, PORTAL_SIGNING_APPLIED_REL, member);
+    } else {
+      assert.equal(row.expected_live_sha256, accepted, member);
+      assert.equal(row.accepted_sha256, accepted, member);
+      assert.equal(row.manifest, HOMEOWNER_UPLOAD_STATUS_APPLIED_REL, member);
+    }
     // The planning manifest keeps the pre-apply state, and that state is not an accepted live state any more.
     const planned = planning.members[member];
     assert.equal(planned.accepted_sha256, accepted, member);
@@ -3235,14 +3352,18 @@ test('Homeowner upload status 2026-10-29: workflow-transitions.mjs then homeowne
     assert.ok(applied.notes.includes(`${member} ${planned.live_sha256.slice(0, 8)} -> ${accepted.slice(0, 8)}`), member);
     assert.ok(PLAN.notes.includes(`${member} ${planned.live_sha256.slice(0, 8)} -> ${accepted.slice(0, 8)}`), member);
     const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: member };
-    const done = await run(inspect, { root: ROOT, inspectLive: liveFor(member) });
+    // The applied bytes are accepted live; homeowner.mjs (moved on, and applied again) is inspected at its
+    // current accepted live bytes (the portal signing), and its upload status bytes are stale too.
+    const done = await run(inspect, { root: ROOT, inspectLive: movedOn.has(member) ? liveFor(member) : liveFor(member, { sha256: accepted }) });
     assert.equal(done.state, 'ALREADY_ACCEPTED', member);
     assert.equal(done.mutation, false, member);
-    await assert.rejects(
-      run(inspect, { root: ROOT, inspectLive: liveFor(member, { sha256: planned.live_sha256 }) }),
-      (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
-      member,
-    );
+    for (const other of movedOn.has(member) ? [planned.live_sha256, accepted] : [planned.live_sha256]) {
+      await assert.rejects(
+        run(inspect, { root: ROOT, inspectLive: liveFor(member, { sha256: other }) }),
+        (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+        member,
+      );
+    }
   }
   // Staging inspect and apply, production inspect and apply, for each member in turn.
   for (const runId of [
@@ -3363,4 +3484,330 @@ test('Homeowner timeline and endorsement email record: workflow.mjs then endorse
     assert.ok(record.notes.includes(evidence), evidence);
   }
   for (const runId of ['40938518776', '40939753926']) assert.match(PLAN.notes, new RegExp(runId));
+});
+
+test('Homeowner portal signing: four REPLACEs held on SQL 127 (now recorded live), planning only, placed late in order', async () => {
+  const HSI = 'homeowner-signing-integration.mjs';
+  const STORAGE = 'storage.mjs';
+  const SUBMIT = 'signature-submit.mjs';
+  const HOMEOWNER = 'homeowner.mjs';
+  const readJson = (rel) => JSON.parse(fs.readFileSync(path.join(ROOT, rel), 'utf8'));
+  // Live: storage.mjs and homeowner.mjs are the rows' recorded applied bytes; homeowner-signing-integration.mjs
+  // and signature-submit.mjs are main's bytes at e3823b5c5, which the read-only production rebuild inspect
+  // run 40741101459 observed live (202 of 203 source members equal to main).
+  const LIVE = {
+    [HSI]: '4deac31f61ebf797a4123d99ae4a2166da81c54dbdad0faccc5cafdb3dbbf7c3',
+    [STORAGE]: '0f7c1b3e5cbf3e048273228031a3c211cfe4ddd42216c46f6c021c5ebdbad190',
+    [SUBMIT]: '24845b4cfbce74de6163a7f94174d5c56af2e5828cfbdeca99c791175150f38d',
+    [HOMEOWNER]: 'ea5224291c57ab367f511c75bc6e639fb9faeb04fe7139e27460c51ae3ea72b1',
+  };
+  const PREVIOUS = {
+    [HSI]: 'aws/tests/fixtures/production-homeowner-signing-links-manifest-2026-10-15.json',
+    [STORAGE]: SECURITY_HARDENING_APPLIED_REL,
+    [SUBMIT]: undefined,
+    [HOMEOWNER]: HOMEOWNER_UPLOAD_STATUS_APPLIED_REL,
+  };
+  const manifest = readJson(PORTAL_SIGNING_REL);
+  assert.equal(manifest.workstream_id, 'homeowner-portal-signing');
+  assert.equal(manifest.deploy_authorized, false);
+  assert.match(manifest.authorization, /^Pending owner review/);
+  assert.equal(manifest.live_lambda, FUNCTION_NAME);
+  for (const evidence of ['"Portal link is enough"', '40741101459', '202 of 203', 'e3823b5c5', 'SQL 127', '127_homeowner_portal_signing.sql', '{ledger_token, signer_id}', '40952161383', 'd9f2fb05-303a-4623-9a5c-f50033a2757c', '8fb91070-b2d7-4584-a899-60afed92ebcc', '#1412', '197749e9b']) {
+    assert.ok(manifest.notes.includes(evidence), evidence);
+  }
+  assert.match(PLAN.notes, /Homeowner portal signing \(2026-10-29/);
+  // Members in plan order.
+  assert.deepEqual(Object.keys(manifest.members), [HSI, STORAGE, SUBMIT, HOMEOWNER]);
+  assert.deepEqual([...Object.keys(LIVE)].sort((a, b) => PLAN.order.indexOf(a) - PLAN.order.indexOf(b)), [HSI, STORAGE, SUBMIT, HOMEOWNER]);
+  // SQL 127 is applied in staging (run 40952161383) and in production (2026-10-29, #1412), and the plan
+  // records it verified live from its retired pin: the same file bytes the pin and the one-shot hashed.
+  const PIN127 = 'ops/deployment-guard/sql127-homeowner-portal-signing-production-apply.json';
+  const pin = readJson(PIN127);
+  assert.equal(pin.source_sha256, sha(SQL127_FILE));
+  assert.equal(pin.applied.migration_source_sha256, sha(SQL127_FILE));
+  assert.equal(pin.execute, false);
+  assert.equal(pin.applied.result, 'applied');
+  assert.equal(pin.applied.receipt.before_hash, pin.expected_live_definition_sha256);
+  assert.equal(pin.applied.receipt.after_hash, pin.intended_replacement_sha256);
+  assert.equal(pin.staging_acceptance.reference, 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/40952161383');
+  const prerequisite = PLAN.sql_prerequisites[SQL127_FILE];
+  assert.equal(prerequisite.verified_live, true);
+  assert.equal(prerequisite.pin, PIN127);
+  const fromTo = `${pin.expected_live_definition_sha256.slice(0, 8)}… -> ${pin.intended_replacement_sha256.slice(0, 8)}…`;
+  for (const evidence of [pin.applied.apply_ssm_command_id, pin.applied.one_shot_run_id, pin.applied.workstream_id, pin.applied.one_use_id, pin.applied.runner, fromTo, 'staging acceptance run 40952161383', PIN127, '#1412']) {
+    assert.ok(prerequisite.evidence.includes(evidence), evidence);
+  }
+  const staging = readJson('ops/deployment-guard/staging-sql-live.json').sql[SQL127_FILE];
+  assert.equal(staging.verified_live, true);
+  for (const evidence of ['run 40952161383', 'read-live run 40952453984', `receipt before ${pin.expected_live_definition_sha256.slice(0, 8)}…`, `after ${pin.intended_replacement_sha256.slice(0, 8)}…`]) {
+    assert.ok(staging.evidence.includes(evidence), evidence);
+  }
+  // Applied 2026-10-29/30 (portal signing applied record): every row records main's bytes live. The
+  // replays below run on the plan as it stood before the applies (each row on its pre-apply live bytes).
+  const pre = structuredClone(PLAN);
+  for (const [member, live] of Object.entries(LIVE)) pre.members[member] = { ...pre.members[member], expected_live_sha256: live, manifest: PORTAL_SIGNING_REL };
+  // Replays of the hold: that plan with SQL 127 not recorded live.
+  const sql127Pending = structuredClone(pre);
+  sql127Pending.sql_prerequisites[SQL127_FILE] = { ...prerequisite, verified_live: false, evidence: null };
+  const inspect = (member) => ({ ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: member });
+  for (const [member, live] of Object.entries(LIVE)) {
+    const accepted = sha(`aws/functions/api/${member}`);
+    assert.notEqual(accepted, live, member);
+    assert.deepEqual(manifest.members[member], {
+      live_sha256: live, accepted_sha256: accepted, operation: 'replace', ...(PREVIOUS[member] ? { previous_manifest: PREVIOUS[member] } : {}),
+    }, member);
+    if (PREVIOUS[member]) assert.equal(readJson(PREVIOUS[member]).members[member].accepted_sha256, live, member);
+    assert.deepEqual(PLAN.members[member], { operation: 'replace', accepted_sha256: accepted, expected_live_sha256: accepted, sql_before: SQL127_FILE, manifest: PORTAL_SIGNING_APPLIED_REL }, member);
+    assert.ok(WORKFLOW.includes(`          - ${member}\n`), member);
+    assert.equal(resolvePlannedMember(member, { root: ROOT, plan: PLAN }).ok, true, member);
+    // Inspect before the apply: the expected live bytes were READY.
+    const ready = await run(inspect(member), { root: ROOT, plan: pre, inspectLive: liveFor(member, { plan: pre }) });
+    assert.equal(ready.state, 'READY', member);
+    assert.equal(ready.mutation, false, member);
+    // Now: the accepted bytes ALREADY_ACCEPTED, the pre-apply bytes and anything else refused.
+    assert.equal((await run(inspect(member), { root: ROOT, inspectLive: liveFor(member, { sha256: accepted }) })).state, 'ALREADY_ACCEPTED', member);
+    for (const stale of [live, 'e'.repeat(64)]) {
+      await assert.rejects(
+        run(inspect(member), { root: ROOT, inspectLive: liveFor(member, { sha256: stale }) }),
+        (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+        member,
+      );
+    }
+    // Apply (replayed from the pre-apply plan): with SQL 127 recorded live and every earlier member
+    // accepted, the member applies on its own.
+    const ok = applyDeps(member, { plan: pre });
+    const applied = await run(applyEnv(member, { CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: live }), ok.deps);
+    assert.equal(applied.mutation, false, member);
+    assert.deepEqual(ok.calls.receipt.owned_member_ops, { replace: [member], add: [] }, member);
+    // Had SQL 127 not been recorded live, the same apply is refused before any lease or receipt.
+    const held = applyDeps(member, { plan: sql127Pending });
+    await assert.rejects(
+      run(applyEnv(member, { CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: live }), { ...held.deps, plan: sql127Pending }),
+      (error) => error.code === CODES.PRODUCTION_APPROVAL_REQUIRED && error.details.sql_before === SQL127_FILE,
+      member,
+    );
+    assert.equal(held.calls.lease, undefined, member);
+    assert.equal(held.calls.receipt, undefined, member);
+  }
+  // The four sit as late as they can, just before the Moov send tail, so a pending row holds as few
+  // unrelated members as possible: signature-submit.mjs imports storage.mjs (its portal signer exports)
+  // and homeowner.mjs imports homeowner-signing-integration.mjs, each after what it imports.
+  assert.ok(localImports(fs.readFileSync(path.join(API, SUBMIT), 'utf8'), SUBMIT).includes(STORAGE));
+  assert.ok(localImports(fs.readFileSync(path.join(API, HOMEOWNER), 'utf8'), HOMEOWNER).includes(HSI));
+  assert.deepEqual(PLAN.order.slice(-7), [HSI, STORAGE, SUBMIT, HOMEOWNER, 'providers/production/moov-wallet-fund.mjs', 'providers/production/moov-send.mjs', 'providers.mjs']);
+  // signature-submit.mjs waited for storage.mjs, and homeowner.mjs for homeowner-signing-integration.mjs.
+  for (const [member, before] of [[SUBMIT, STORAGE], [HOMEOWNER, HSI]]) {
+    await assert.rejects(
+      run(applyEnv(member, { CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: LIVE[member] }), applyDeps(member, { pending: [before], plan: pre }).deps),
+      (error) => error.code === CODES.DEPLOYMENT_COLLISION && error.details.pending.includes(before),
+      member,
+    );
+  }
+});
+
+test('Homeowner portal signing record: homeowner-signing-integration.mjs, storage.mjs, signature-submit.mjs then homeowner.mjs applied 2026-10-29/30, production runs 40968414068, 40979415490, 40979609965 and 40979800002', () => {
+  const record = JSON.parse(fs.readFileSync(path.join(ROOT, PORTAL_SIGNING_APPLIED_REL), 'utf8'));
+  const planning = JSON.parse(fs.readFileSync(path.join(ROOT, PORTAL_SIGNING_REL), 'utf8'));
+  assert.equal(record.workstream_id, 'homeowner-portal-signing-applied');
+  assert.equal(record.deploy_authorized, false);
+  assert.match(record.authorization, /^Record only/);
+  assert.equal(record.live_lambda, 'checksops-production-prep-api');
+  // The planning manifest keeps its planning record.
+  assert.match(planning.authorization, /^Pending owner review/);
+  const MEMBERS = ['homeowner-signing-integration.mjs', 'storage.mjs', 'signature-submit.mjs', 'homeowner.mjs'];
+  // Members in plan order, which is the order they were applied in.
+  assert.deepEqual(Object.keys(record.members), MEMBERS);
+  assert.deepEqual([...MEMBERS].sort((a, b) => PLAN.order.indexOf(a) - PLAN.order.indexOf(b)), MEMBERS);
+  for (const member of MEMBERS) {
+    const accepted = sha(`aws/functions/api/${member}`);
+    assert.deepEqual(record.members[member], { live_sha256: accepted, accepted_sha256: accepted, operation: 'replace', previous_manifest: PORTAL_SIGNING_REL }, member);
+    assert.equal(PLAN.members[member].expected_live_sha256, accepted, member);
+    assert.equal(PLAN.members[member].manifest, PORTAL_SIGNING_APPLIED_REL, member);
+    // The planning manifest keeps the pre-apply state.
+    const planned = planning.members[member];
+    assert.equal(planned.accepted_sha256, accepted, member);
+    assert.notEqual(planned.live_sha256, accepted, member);
+    assert.ok(record.notes.includes(`"DEPLOY ${member} TO PRODUCTION"`), member);
+    assert.ok(record.notes.includes(`${member} ${planned.live_sha256.slice(0, 8)} -> ${accepted.slice(0, 8)}`), member);
+    assert.ok(PLAN.notes.includes(`${member} ${accepted.slice(0, 8)} (production apply run`), member);
+  }
+  // Staging inspect and apply (and the refused staging apply), production inspect and apply, member by member.
+  for (const runId of [
+    '40966975676', '40967367206', '40968290590', '40968414068',
+    '40967052945', '40967459787', '40979333544', '40979415490',
+    '40967123784', '40967570329', '40967667465', '40979528749', '40979609965',
+    '40967195993', '40967780612', '40979705061', '40979800002',
+  ]) {
+    assert.match(record.notes, new RegExp(`run ${runId}`), runId);
+  }
+  for (const runId of ['40967367206', '40968414068', '40967459787', '40979415490', '40967667465', '40979609965', '40967780612', '40979800002']) {
+    assert.match(PLAN.notes, new RegExp(runId), runId);
+  }
+  for (const evidence of [
+    '9aca421b7d07f3abe216d42eef10ff94a4031be7', '864d9f6c7b755f306f8507c0d6d76b461c02d732',
+    // The pre-apply inspect of the first member, then each member's identity after its apply.
+    'W+UPxMWbyAS0tFNdlBQxKBcGBM7juAS8W3VN0og3oRA=', '9fa0f26f-4edd-4302-bfef-742331676253',
+    '4e6dvxyx0iZCxFv2TXKfnBfK/ifSDOjNSO88TsjQkGc=', 'a8120c77-be64-47ee-b063-48c1ca7e914b', '2026-10-29T22:47:20Z',
+    'B4h1ZVou+AoQovdZtHhtZQhac4etjazRWYhyOkvIhvs=', '81e0dd3a-d104-4623-aedb-c2b6e52200b5', '2026-10-30T00:24:25Z',
+    '7B96l1qNxIIgLI6FExNmZFeD5n4oaTpveRCR/Om57Uw=', 'cc283c17-72f7-4c05-b6ad-2e51f1c0c881', '2026-10-30T00:26:13Z',
+    'T2y60mG7PWGRUltrOxHuDNeyh56059o1/xc2ERFj+gc=', 'd9535b87-2590-46c2-baa1-c95e7e7a00ac', '2026-10-30T00:28:04Z',
+    'lambda:GetFunctionConfiguration', 'not read in full',
+  ]) {
+    assert.ok(record.notes.includes(evidence), evidence);
+  }
+});
+
+test('Contractor verification status gate: data.mjs REPLACE planned from the security hardening applied bytes, keeping its SQL 53 hold; production run 40945542902 applied it', async () => {
+  const MEMBER = 'data.mjs';
+  const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, CONTRACTOR_GATE_REL), 'utf8'));
+  // The bytes production run 40945542902 applied; main has since moved on to the public partner codes.
+  const accepted = CONTRACTOR_GATE_BYTES;
+  // The planning manifest keeps the pre-apply state.
+  assert.equal(manifest.workstream_id, 'contractor-verification-gate');
+  assert.equal(manifest.deploy_authorized, false);
+  assert.match(manifest.authorization, /^Pending owner review/);
+  assert.match(manifest.notes, /40907296471/);
+  assert.match(manifest.notes, /aws_is_cross_tenant_reader/);
+  assert.deepEqual(manifest.members, { [MEMBER]: { live_sha256: DATA_GATES_APPLIED, accepted_sha256: accepted, operation: 'replace', previous_manifest: SECURITY_HARDENING_APPLIED_REL } });
+  assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, SECURITY_HARDENING_APPLIED_REL), 'utf8')).members[MEMBER].accepted_sha256, DATA_GATES_APPLIED);
+  assert.ok(PLAN.notes.includes(`Contractor verification status gate (2026-10-29): REPLACE data.mjs ${DATA_GATES_APPLIED.slice(0, 8)} -> ${accepted.slice(0, 8)}`));
+  // Applied 2026-10-29; the row has since moved on to the public partner codes REPLACE, which starts
+  // from these applied bytes and was applied 2026-10-29 (production run 40963109952).
+  const row = PLAN.members[MEMBER];
+  assert.deepEqual(row, {
+    operation: 'replace',
+    accepted_sha256: sha(`aws/functions/api/${MEMBER}`),
+    expected_live_sha256: sha(`aws/functions/api/${MEMBER}`),
+    sql_before: 'aws/workflows/sql/53_claim_settlement_breakdown.sql',
+    manifest: PUBLIC_PARTNER_CODES_APPLIED_REL,
+  });
+  assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, PUBLIC_PARTNER_CODES_REL), 'utf8')).members[MEMBER].previous_manifest, CONTRACTOR_GATE_APPLIED_REL);
+  assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
+  const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
+  // Before the apply, the planned row took the security hardening applied bytes as READY.
+  const before = structuredClone(PLAN);
+  before.members[MEMBER] = { ...row, expected_live_sha256: DATA_GATES_APPLIED, manifest: CONTRACTOR_GATE_REL };
+  const ready = await run(inspect, { root: ROOT, plan: before, inspectLive: liveFor(MEMBER, { plan: before }) });
+  assert.equal(ready.state, 'READY');
+  assert.equal(ready.mutation, false);
+  // Production has moved on from these applied bytes, so they are no longer an accepted live state.
+  const now = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER) });
+  assert.equal(now.state, 'ALREADY_ACCEPTED');
+  assert.equal(now.mutation, false);
+  for (const other of [DATA_GATES_APPLIED, accepted, 'c'.repeat(64)]) {
+    await assert.rejects(
+      run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: other }) }),
+      (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+      other,
+    );
+  }
+  // The applied bytes gate contractor_verification_status on the caller's own profile or a cross-tenant reader.
+  const data = fs.readFileSync(path.join(API, MEMBER), 'utf8');
+  assert.match(data, /contractor_verification_status: \{ contractor: 'p_contractor_id' \}/);
+  assert.match(data, /public\.aws_is_cross_tenant_reader\(\)/);
+});
+
+test('Contractor verification status gate 2026-10-29: data.mjs applied on its own phrase, recorded in an applied manifest', () => {
+  const MEMBER = 'data.mjs';
+  const applied = JSON.parse(fs.readFileSync(path.join(ROOT, CONTRACTOR_GATE_APPLIED_REL), 'utf8'));
+  const accepted = CONTRACTOR_GATE_BYTES;
+  assert.equal(applied.workstream_id, 'contractor-verification-gate-applied');
+  assert.equal(applied.deploy_authorized, false);
+  assert.match(applied.authorization, /^Record only/);
+  assert.equal(applied.live_lambda, 'checksops-production-prep-api');
+  assert.deepEqual(applied.members, { [MEMBER]: { live_sha256: accepted, accepted_sha256: accepted, operation: 'replace', previous_manifest: CONTRACTOR_GATE_REL } });
+  assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, CONTRACTOR_GATE_REL), 'utf8')).members[MEMBER].accepted_sha256, accepted);
+  assert.ok(applied.notes.includes('"DEPLOY data.mjs TO PRODUCTION"'));
+  assert.ok(applied.notes.includes(`data.mjs ${DATA_GATES_APPLIED.slice(0, 8)} -> ${accepted.slice(0, 8)}`));
+  // Staging inspect and apply, both production inspects, the refused first apply and the apply.
+  for (const runId of ['40944351419', '40944529734', '40944701948', '40944961619', '40945360271', '40945542902']) {
+    assert.match(applied.notes, new RegExp(`run ${runId}`), runId);
+  }
+  for (const runId of ['40944529734', '40945360271', '40945542902', '40944961619']) {
+    assert.match(PLAN.notes, new RegExp(runId), runId);
+  }
+  for (const evidence of [
+    '5d27a10b5d1c23bba68b0dc91804b08a36665c69', 'main moved or approved commit does not match workflow SHA',
+    // The pre-apply inspect and the verify.
+    'okmC+E2goawrpRO3xMHr15xmQMfJXxP2Iwk9UVjuykg=', '40cfe898-d1fc-424c-b9fb-6ac7956d9eb4',
+    'US0hDuVJBs39Mi4StyrmiVQQyY7BTaUISEQL8h2t5qc=', 'ea23b00d-4d47-4432-a159-876e34cde47c',
+  ]) {
+    assert.ok(applied.notes.includes(evidence), evidence);
+  }
+  assert.ok(PLAN.notes.includes('Applied 2026-10-29 (production-contractor-verification-gate-applied-manifest-2026-10-29.json): data.mjs e2415f90'));
+  assert.ok(PLAN.notes.includes('US0hDuVJBs39Mi4StyrmiVQQyY7BTaUISEQL8h2t5qc=, RevisionId ea23b00d-4d47-4432-a159-876e34cde47c'));
+});
+
+test('Public partner codes (finding 9): data.mjs REPLACE from the contractor gate applied bytes, SQL 53 still first; production run 40963109952 applied it', async () => {
+  const MEMBER = 'data.mjs';
+  const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, PUBLIC_PARTNER_CODES_REL), 'utf8'));
+  const accepted = sha(`aws/functions/api/${MEMBER}`);
+  assert.equal(manifest.workstream_id, 'public-partner-codes');
+  assert.equal(manifest.deploy_authorized, false);
+  assert.match(manifest.authorization, /^Pending owner review/);
+  assert.match(manifest.notes, /40945542902/);
+  assert.match(manifest.notes, /aws_connect_partner_by_code\) is unchanged/);
+  assert.deepEqual(manifest.members, { [MEMBER]: { live_sha256: CONTRACTOR_GATE_BYTES, accepted_sha256: accepted, operation: 'replace', previous_manifest: CONTRACTOR_GATE_APPLIED_REL } });
+  assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, CONTRACTOR_GATE_APPLIED_REL), 'utf8')).members[MEMBER].accepted_sha256, CONTRACTOR_GATE_BYTES);
+  // Applied 2026-10-29: the row records the applied bytes live and names the applied record.
+  assert.deepEqual(PLAN.members[MEMBER], {
+    operation: 'replace',
+    accepted_sha256: accepted,
+    expected_live_sha256: accepted,
+    sql_before: 'aws/workflows/sql/53_claim_settlement_breakdown.sql',
+    manifest: PUBLIC_PARTNER_CODES_APPLIED_REL,
+  });
+  assert.ok(PLAN.notes.includes(`Public partner codes (2026-10-29, finding 9): REPLACE data.mjs ${CONTRACTOR_GATE_BYTES.slice(0, 8)} -> ${accepted.slice(0, 8)}`));
+  assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
+  const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
+  // Before the apply, the planned row took the contractor gate's applied bytes as READY.
+  const before = structuredClone(PLAN);
+  before.members[MEMBER] = { ...PLAN.members[MEMBER], expected_live_sha256: CONTRACTOR_GATE_BYTES, manifest: PUBLIC_PARTNER_CODES_REL };
+  const ready = await run(inspect, { root: ROOT, plan: before, inspectLive: liveFor(MEMBER, { plan: before }) });
+  assert.equal(ready.state, 'READY');
+  assert.equal(ready.mutation, false);
+  const done = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER) });
+  assert.equal(done.state, 'ALREADY_ACCEPTED');
+  for (const other of [CONTRACTOR_GATE_BYTES, 'c'.repeat(64)]) {
+    await assert.rejects(
+      run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: other }) }),
+      (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+      other,
+    );
+  }
+  // The planned bytes keep partner codes off the public tenant list, signed in or not.
+  const data = fs.readFileSync(path.join(API, MEMBER), 'utf8');
+  assert.match(data, /tenants_public: Object\.freeze\(\['partner_code'\]\)/);
+  assert.match(data, /const columnDeny = denySecretColumnQuery\('tenants_public', parseSelect\(body\.select\), body\.filters, body\.order\);/);
+});
+
+test('Public partner codes 2026-10-29: data.mjs applied on its own phrase, recorded in an applied manifest', () => {
+  const MEMBER = 'data.mjs';
+  const applied = JSON.parse(fs.readFileSync(path.join(ROOT, PUBLIC_PARTNER_CODES_APPLIED_REL), 'utf8'));
+  const accepted = sha(`aws/functions/api/${MEMBER}`);
+  assert.equal(applied.workstream_id, 'public-partner-codes-applied');
+  assert.equal(applied.deploy_authorized, false);
+  assert.match(applied.authorization, /^Record only/);
+  assert.equal(applied.live_lambda, 'checksops-production-prep-api');
+  assert.deepEqual(applied.members, { [MEMBER]: { live_sha256: accepted, accepted_sha256: accepted, operation: 'replace', previous_manifest: PUBLIC_PARTNER_CODES_REL } });
+  assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, PUBLIC_PARTNER_CODES_REL), 'utf8')).members[MEMBER].accepted_sha256, accepted);
+  assert.ok(applied.notes.includes('"DEPLOY data.mjs TO PRODUCTION"'));
+  assert.ok(applied.notes.includes(`data.mjs ${CONTRACTOR_GATE_BYTES.slice(0, 8)} -> ${accepted.slice(0, 8)}`));
+  // Staging inspect and apply, the production inspect and the apply.
+  for (const runId of ['40962722955', '40962845158', '40962982248', '40963109952']) {
+    assert.match(applied.notes, new RegExp(`run ${runId}`), runId);
+  }
+  for (const runId of ['40962845158', '40962982248', '40963109952']) {
+    assert.match(PLAN.notes, new RegExp(runId), runId);
+  }
+  for (const evidence of [
+    'd2a20b9cefcb1743a83029a669d9dbf25cc31991', 'secret_column_denied',
+    // The pre-apply inspect and the verify.
+    'US0hDuVJBs39Mi4StyrmiVQQyY7BTaUISEQL8h2t5qc=', 'ea23b00d-4d47-4432-a159-876e34cde47c',
+    'W+UPxMWbyAS0tFNdlBQxKBcGBM7juAS8W3VN0og3oRA=', '9fa0f26f-4edd-4302-bfef-742331676253',
+  ]) {
+    assert.ok(applied.notes.includes(evidence), evidence);
+  }
+  assert.ok(PLAN.notes.includes('Applied 2026-10-29 (production-public-partner-codes-applied-manifest-2026-10-29.json): data.mjs c652e317'));
+  assert.ok(PLAN.notes.includes('W+UPxMWbyAS0tFNdlBQxKBcGBM7juAS8W3VN0og3oRA=, RevisionId 9fa0f26f-4edd-4302-bfef-742331676253'));
 });

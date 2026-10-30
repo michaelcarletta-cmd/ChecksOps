@@ -202,3 +202,35 @@ aws iam delete-policy --policy-arn arn:aws:iam::806168576068:policy/ChecksOpsSta
 ```
 
 (Delete the policy only if no role carries it as a boundary.)
+
+### Applied (2026-10-29)
+
+Owner approval, verbatim: "apply the Cursor staging role boundary".
+Source: `origin/main` `f45562b`; the files as merged in PR #1399 (merge `2687bd6`):
+`staging-role-boundary.json` sha256 `842239fc6743946eb52c6c9ff691af4fa2c5d4a5ca7b13f2d122f2179796d23f`,
+`deny-production.json` sha256 `0f7b92a2b351095ef5efec75ef7d110cfe14a11a74c4010113597ef78e618aac`.
+Identity: `arn:aws:iam::806168576068:user/claude-code`.
+
+1. Precondition: `iam:GetRolePolicy` before the apply equalled
+   `deny-production.live-2026-10-29-after-a2.json`; `ChecksOpsStagingRoleBoundary` did not exist.
+2. `iam:CreatePolicy` `ChecksOpsStagingRoleBoundary` (PolicyId `ANPA3XM3EIBCF2RGGZ7UP`, version
+   `v1`, created 2026-10-29T20:38:56Z, request `78724aa1-ed9a-45ac-8889-68c725c5eb6d`).
+3. `iam:PutRolePolicy` `ChecksOpsDenyProduction` on `ChecksOpsCursorCloudStaging` with
+   `deny-production.json` (HTTP 200, request `8b650c58-9db2-49ce-84b9-7415e1655818`).
+4. Read-back: `iam:GetPolicyVersion` `v1` equals `staging-role-boundary.json`; `iam:GetRolePolicy`
+   equals `deny-production.json`. The boundary had 0 attachments and 0 boundary uses.
+5. `iam:SimulatePrincipalPolicy` as the role, after the apply, matched the target table above
+   (17 checks): `CreateRole` with the boundary `allowed`, without it or with another one
+   `explicitDeny`; writes on a bounded role `allowed`; `PutRolePolicy`, `AttachRolePolicy` and
+   `DeleteRolePolicy` on the staging API role and `PutRolePolicy` on the guarded SQL executor
+   `explicitDeny`; `DeleteRolePermissionsBoundary` and `CreatePolicyVersion` on the boundary
+   `explicitDeny`; `lambda:UpdateFunctionCode` on `checksops-staging-api` and `AdminCreateUser` on
+   `us-east-1_vPmQ7cL1F` `allowed`; `AdminSetUserPassword` on `us-east-1_h00WorYMT` and
+   `lambda:UpdateFunctionCode` on `checksops-production-prep-api` `explicitDeny`.
+6. `iam:SimulateCustomPolicy` of a role whose own policy is `*:*` under the live boundary document
+   (9 checks): a staging secret `allowed`; a production secret, the production API Lambda, the
+   production pool and the production files bucket `explicitDeny`; `ssm:SendCommand` on
+   `i-0c35557c4e5385406`, `sts:AssumeRole`, `iam:CreateUser` and `iam:CreatePolicy` `implicitDeny`.
+
+Not verified: no Cursor session has created a bounded role yet; the checks above are IAM policy
+simulations, not a live `CreateRole`.
