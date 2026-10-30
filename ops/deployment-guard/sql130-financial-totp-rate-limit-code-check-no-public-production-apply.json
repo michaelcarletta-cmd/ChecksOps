@@ -1,8 +1,8 @@
 {
   "id": "sql130-financial-totp-rate-limit-code-check-no-public-production-apply",
   "migration": "sql130",
-  "authorization": "Owner approved 2026-10-30 (the owner's words of 2026-10-30: \"continue with SQL 130 staging\", \"apply SQL 130 in staging\" and \"apply SQL 130 in production\", the last given before this pin existed; the change itself is reviewed and merged by the owner): production apply of SQL 130 after the staging acceptance below (production e49dc44662d1ac04762cf06d139f527d9a09158cbccd64fc8370d62e1f43c838 -> 013549faba6166280b03df404ca23c1973870efad9f7d499d6a695be0de7246b); execute true takes effect only when the owner reviews and merges this change. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
-  "execute": true,
+  "authorization": "Applied to production on 2026-10-30; execute is false again, so this pin is no longer a standing authorization and a re-apply needs a new reviewed pin change. The owner approved the SQL 130 production pin change on 2026-10-30 in the words \"continue with SQL 130 staging\", \"apply SQL 130 in staging\" and \"apply SQL 130 in production\" (e49dc446 -> 013549fa, #1452) and the one apply run recorded in applied (workstream prod-sql130-financial-totp-rate-limit-code-check-no-public-20261030) in the words \"apply SQL 130 in production\", passed to it verbatim. That approval covered that run only.",
+  "execute": false,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -60,5 +60,234 @@
     "ok": true,
     "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/41090274902",
     "basis": "Guarded staging SQL executor apply of sql130-financial-totp-rate-limit-code-check-no-public, run 41090274902 (2026-10-30, main 66a0baaf26418341d88a870562a6ff38c51ca49d, wave 28, workstream github-staging-sql-41090274902, staging pin commit e08e422ce4ebc2c8879d43bdccb0575a9701114b, on the executor deployed by deploy run 41089857134: 5OmSJSaoZv+vQbQ4ShxpVv6r+q9JDWgB8jhg68FdDoQ=), from the staging pre-state recorded by read-live run 41087643551 (cb2fd65bb580f9338cab728c2507a32b7589aee5e702d117c31e1862f98a5a19; staging pin PR #1451): receipt before cb2fd65bb580f9338cab728c2507a32b7589aee5e702d117c31e1862f98a5a19, after 013549faba6166280b03df404ca23c1973870efad9f7d499d6a695be0de7246b == intended, result applied. Read-live run 41090642842 then reported already_applied true, live 013549faba6166280b03df404ca23c1973870efad9f7d499d6a695be0de7246b, function_acl checksops EXECUTE and owner EXECUTE. The behavior is covered on PostgreSQL 16 by aws/tests/sql130-financial-totp-rate-limit-pg.test.mjs, including an apply from production's pre-state (e49dc44662d1ac04762cf06d139f527d9a09158cbccd64fc8370d62e1f43c838: the extra PUBLIC EXECUTE grant, which the file revokes) to the same intended state. The same file bytes (source_sha256) are pinned in both."
+  },
+  "applied": {
+    "date": "2026-10-30",
+    "result": "applied",
+    "source_commit": "e84fb368402c12e5d27710f5c4fa808f8c8675de",
+    "source_commit_basis": "SOURCE_COMMIT in the tarball (written by sql53-temporary-transfer) equals --commit, and the tarball sha256 equals --expected-tarball-sha256 as copied by the operator from that transfer run's log (TARBALL_SHA256 line); the run log itself was not read by the one-shot.",
+    "source_tarball": {
+      "file": "source-e84fb368402c12e5d27710f5c4fa808f8c8675de.tar.gz",
+      "sha256": "f15087d3579d1430b39cec32b4054fab5fc7212e6b6fbdc03c91487fe07663f6"
+    },
+    "migration_source_sha256": "da17dd5d4a74bcf9c5b59dc13bf3a557e3488c5f36ab0b8431a2b8b67fefc561",
+    "migration_source_sha256_note": "The one-shot source step hashed aws/workflows/sql/130_financial_totp_rate_limit_code_check_no_public.sql in the transfer tarball: equal to source_sha256 (the pin; migration_matches_pin true).",
+    "runner": "i-0c35557c4e5385406",
+    "runner_basis": "operator-supplied --runner (not verified by the one-shot)",
+    "workstream_id": "prod-sql130-financial-totp-rate-limit-code-check-no-public-20261030",
+    "one_use_id": "sql130-prod-4da47b86-1f88-4ecc-920e-d5ccb1d71744",
+    "one_use_id_consumed": true,
+    "one_use_id_consumed_basis": "Inferred from the successful apply (the tool records the one_use_id after COMMIT and only warns if that write fails); the consumed-registry entry was not read back separately.",
+    "owner_approval": "apply SQL 130 in production",
+    "owner_approval_basis": "As passed in --approval-statement for --approval-scope sql130; the one-shot cannot verify who said it. The owner's words of 2026-10-30 for this run; the same words appear in the pin change (#1452, merged to main as e84fb3684 before this run), recorded there as given before the pin existed.",
+    "operator": "michaelcarletta-cmd",
+    "apply_ssm_command_id": "e37e683c-98ed-417e-9caf-9e74dc121d51",
+    "one_shot_run_id": "a682df1c-5853-43d4-8d92-dd6641674431",
+    "one_shot_note": "One SSM command (e37e683c-98ed-417e-9caf-9e74dc121d51 on i-0c35557c4e5385406, sent 2026-10-30 17:02:54Z, finished by 17:03:11Z) ran the production-sql-one-shot --phase apply (run_id a682df1c-5853-43d4-8d92-dd6641674431) from main e84fb3684 (transfer run 41093905854, sql53-temporary-transfer.yml on main after the #1452 merge; tarball sha256 f15087d3579d1430b39cec32b4054fab5fc7212e6b6fbdc03c91487fe07663f6), after a read-only --phase inspect of the same commit and tarball (SSM 051ba51e-3621-4765-babe-776ac9e96380, sent 2026-10-30 17:02:46Z, one-shot run fc61b584-0ad8-4173-b781-48502dae903b: live e49dc44662d1ac04762cf06d139f527d9a09158cbccd64fc8370d62e1f43c838, live_matches_expected true, apply_preconditions_met true, precondition_failures [], prerequisites_missing [], consume_financial_totp_rate_limit(uuid, text, integer, integer) 'different' with EXECUTE PUBLIC, checksops and the owner; contracts claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43). Steps pin (execute true, staging_acceptance run 41090274902), source (tarball sha256 matches the sidecar and --expected-tarball-sha256, tree matches the tarball, migration source == pin), inspect, contracts, manifest, source-recheck-before-preflight, preflight (receipt_issued), evaluate (sql130_production_apply_allowed true), source-recheck-before-apply, apply (applied) and post-apply-inspect all ok; the command printed EXIT=0. The run's whole JSON arrived (13838 characters, under SSM's 16000-character capture, closing with its top-level errors []); this block records the one-shot's own applied object as printed, except this note and owner_approval_basis, which are extended as in the SQL 127 and SQL 128 records (the one-shot's own one_shot_note read: \"One production-sql-one-shot run verified the source, ran the read-only inspect and the runner contracts, built the manifest, issued the receipt and lease (preflight), evaluated (sql130_production_apply_allowed true), applied (exit 0) and ran the post-apply inspect.\"; its owner_approval_basis read: \"As passed in --approval-statement for --approval-scope sql130; the one-shot cannot verify who said it.\"), and adds migration_source_sha256 (with its note), apply_ssm_command_id, steps and manifest_sha256 from the same run's details, as the SQL 127 and SQL 128 records do. The run's not_observed_by_this_run listed \"ssm_command_id (add from SSM)\" and \"source_staged_by (the sql53-temporary-transfer run id; add from GitHub Actions)\", supplied here as apply_ssm_command_id and transfer run 41093905854. A separate read-only --inspect after the run (SSM 8cbeeebb-c58f-4ab4-a654-d7ea171d899b, same tarball, full JSON captured) reported live 013549faba6166280b03df404ca23c1973870efad9f7d499d6a695be0de7246b == intended, already_applied true, precondition_failures [], consume_financial_totp_rate_limit(uuid, text, integer, integer) 'intended' with EXECUTE checksops and the owner (PUBLIC revoked), dropped_function_dependents 0. Runner state (security audit finding C): started for these runs at 2026-10-30 17:02:08Z and stopped at 17:03:51Z. Not recorded: the SSM command comment and SSM's own status for e37e683c-98ed-417e-9caf-9e74dc121d51, which are not in the captured stdout.",
+    "steps": [
+      "pin",
+      "source",
+      "inspect",
+      "contracts",
+      "manifest",
+      "source-recheck-before-preflight",
+      "preflight",
+      "evaluate",
+      "source-recheck-before-apply",
+      "apply",
+      "post-apply-inspect"
+    ],
+    "contract_results": {
+      "claim-ledger": {
+        "ok": true,
+        "test": "aws/tests/claim-ledger-accepted-contract.test.mjs",
+        "evidence": "4/4 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at e84fb368402c12e5d27710f5c4fa808f8c8675de (production-sql-one-shot a682df1c-5853-43d4-8d92-dd6641674431, node --test)"
+      },
+      "tenant-isolation": {
+        "ok": true,
+        "test": "aws/tests/tenant-security-compliance.test.mjs",
+        "evidence": "6/6 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at e84fb368402c12e5d27710f5c4fa808f8c8675de (production-sql-one-shot a682df1c-5853-43d4-8d92-dd6641674431, node --test)"
+      },
+      "financial-write-protections": {
+        "ok": true,
+        "test": "aws/tests/api-write.test.mjs",
+        "evidence": "43/43 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at e84fb368402c12e5d27710f5c4fa808f8c8675de (production-sql-one-shot a682df1c-5853-43d4-8d92-dd6641674431, node --test)"
+      }
+    },
+    "pre_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "e49dc44662d1ac04762cf06d139f527d9a09158cbccd64fc8370d62e1f43c838",
+      "live_matches_expected": true,
+      "already_applied": false,
+      "predecessors": {},
+      "predecessors_applied": true,
+      "missing_dependencies": [],
+      "apply_preconditions_met": true,
+      "precondition_failures": [],
+      "current_user": "checksops_admin",
+      "session_user": "checksops_admin",
+      "counts": null,
+      "successors_applied": [],
+      "release_sql_inspect": {
+        "live_definition_sha256": "e49dc44662d1ac04762cf06d139f527d9a09158cbccd64fc8370d62e1f43c838",
+        "prerequisites_missing": [],
+        "predecessors": {},
+        "successors_applied": [],
+        "functions": [
+          {
+            "name": "consume_financial_totp_rate_limit(uuid, text, integer, integer)",
+            "state": "different"
+          }
+        ],
+        "policies": [],
+        "views": [],
+        "tables": [],
+        "columns": [],
+        "constraints": [],
+        "triggers": [],
+        "table_privileges": [],
+        "function_acl": [
+          {
+            "name": "consume_financial_totp_rate_limit(uuid, text, integer, integer)",
+            "acl": [
+              "PUBLIC EXECUTE",
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          }
+        ],
+        "acl_functions": [],
+        "indexes": [],
+        "unique_covers": [],
+        "definer_writes": [],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": null
+      }
+    },
+    "manifest_sha256": "955c01b52372d57743600e789ae4c62f6961c421bd5ae6e040a27212bbfdece4",
+    "receipt": {
+      "migration": "sql130",
+      "workstream": "prod-sql130-financial-totp-rate-limit-code-check-no-public-20261030",
+      "commit": "e84fb368402c12e5d27710f5c4fa808f8c8675de",
+      "sql_file": "aws/workflows/sql/130_financial_totp_rate_limit_code_check_no_public.sql",
+      "before_hash": "e49dc44662d1ac04762cf06d139f527d9a09158cbccd64fc8370d62e1f43c838",
+      "after_hash": "013549faba6166280b03df404ca23c1973870efad9f7d499d6a695be0de7246b",
+      "release_sql_inspect": {
+        "live_definition_sha256": "013549faba6166280b03df404ca23c1973870efad9f7d499d6a695be0de7246b",
+        "prerequisites_missing": [],
+        "predecessors": {},
+        "successors_applied": [],
+        "functions": [
+          {
+            "name": "consume_financial_totp_rate_limit(uuid, text, integer, integer)",
+            "state": "intended"
+          }
+        ],
+        "policies": [],
+        "views": [],
+        "tables": [],
+        "columns": [],
+        "constraints": [],
+        "triggers": [],
+        "table_privileges": [],
+        "function_acl": [
+          {
+            "name": "consume_financial_totp_rate_limit(uuid, text, integer, integer)",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          }
+        ],
+        "acl_functions": [],
+        "indexes": [],
+        "unique_covers": [],
+        "definer_writes": [],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": null
+      },
+      "unrelated_catalog_sha256": "02f15e36160f224cd8fbf08f05601a3c184a22818bd744e6cc4a2436d61990bd",
+      "unrelated_catalog_counts": {
+        "relations": 892,
+        "columns": 3550,
+        "constraints": 2239,
+        "policies": 404,
+        "functions": 1353,
+        "indexes": 655,
+        "default_acl": 0,
+        "role_memberships": 15,
+        "roles": 29,
+        "triggers": 184,
+        "views": 25,
+        "types": 18,
+        "schema": 2
+      },
+      "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/41090274902",
+      "result": "applied"
+    },
+    "post_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "013549faba6166280b03df404ca23c1973870efad9f7d499d6a695be0de7246b",
+      "live_matches_expected": false,
+      "already_applied": true,
+      "predecessors": {},
+      "predecessors_applied": true,
+      "missing_dependencies": [],
+      "apply_preconditions_met": false,
+      "precondition_failures": [],
+      "current_user": "checksops_admin",
+      "session_user": "checksops_admin",
+      "counts": null,
+      "successors_applied": [],
+      "release_sql_inspect": {
+        "live_definition_sha256": "013549faba6166280b03df404ca23c1973870efad9f7d499d6a695be0de7246b",
+        "prerequisites_missing": [],
+        "predecessors": {},
+        "successors_applied": [],
+        "functions": [
+          {
+            "name": "consume_financial_totp_rate_limit(uuid, text, integer, integer)",
+            "state": "intended"
+          }
+        ],
+        "policies": [],
+        "views": [],
+        "tables": [],
+        "columns": [],
+        "constraints": [],
+        "triggers": [],
+        "table_privileges": [],
+        "function_acl": [
+          {
+            "name": "consume_financial_totp_rate_limit(uuid, text, integer, integer)",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          }
+        ],
+        "acl_functions": [],
+        "indexes": [],
+        "unique_covers": [],
+        "definer_writes": [],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": null
+      }
+    }
+  },
+  "production_evidence": {
+    "2026-10-30 apply": "Guarded production SQL one-shot on i-0c35557c4e5385406, workstream prod-sql130-financial-totp-rate-limit-code-check-no-public-20261030, main e84fb3684 (tarball f15087d3…, transfer run 41093905854, migration source da17dd5d… == pin), owner-approved run (\"apply SQL 130 in production\"), SSM e37e683c-98ed-417e-9caf-9e74dc121d51, run_id a682df1c-5853-43d4-8d92-dd6641674431, one_use_id sql130-prod-4da47b86-1f88-4ecc-920e-d5ccb1d71744 (spent): every step ok; contracts claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43; pre-apply inspect live e49dc446… (live_matches_expected true, precondition_failures []), after the read-only --phase inspect SSM 051ba51e-3621-4765-babe-776ac9e96380; manifest 955c01b5…; e49dc446… -> 013549fa…, result applied, unrelated catalog 02f15e36… (triggers 184); post-apply inspect already_applied true, precondition_failures []; separate read-only inspect SSM 8cbeeebb-c58f-4ab4-a654-d7ea171d899b already_applied true, the function intended, EXECUTE checksops and the owner. After: consume_financial_totp_rate_limit(uuid, text, integer, integer) accepts the action 'code_check' the API sends for every authenticator-code check (finding 7), and PUBLIC no longer holds EXECUTE on it; no other function, table, policy, grant or trigger changed. No trigger was added, so the DB validator is unaffected. execute is false so the pin is no longer a standing authorization."
   }
 }

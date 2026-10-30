@@ -76,7 +76,24 @@ applies from both). Recorded in the production pin with the staging apply as its
 pin existed). The owner merges the pin change; the apply still needs the owner's run-time approval and
 runs only after that merge is on main and staged.
 
-**Status:** applied to staging (wave 28); production pin execute-authorized; not applied to production.
+**Production apply (2026-10-30).** After the pin change (#1452, merged to main as `e84fb36`), transfer
+run 41093905854 staged main `e84fb36` (tarball sha256
+`f15087d3579d1430b39cec32b4054fab5fc7212e6b6fbdc03c91487fe07663f6`). A read-only one-shot `--phase inspect`
+of the same commit (SSM `051ba51e-3621-4765-babe-776ac9e96380`, run `fc61b584-0ad8-4173-b781-48502dae903b`)
+found live `e49dc446…` (the pinned pre-state), `precondition_failures` `[]`, contracts 4/4, 6/6 and 43/43.
+One-shot `--phase apply` run `a682df1c-5853-43d4-8d92-dd6641674431` through SSM
+`e37e683c-98ed-417e-9caf-9e74dc121d51`, workstream `prod-sql130-financial-totp-rate-limit-code-check-no-public-20261030`,
+under the owner's words "apply SQL 130 in production" (passed verbatim): every step ok; manifest
+`955c01b5…`; receipt `e49dc446…` → `013549faba6166280b03df404ca23c1973870efad9f7d499d6a695be0de7246b`
+(intended), result `applied`, unrelated catalog `02f15e36…` (triggers 184); post-apply inspect
+`already_applied` true, `precondition_failures` `[]`. A separate read-only inspect (SSM
+`8cbeeebb-c58f-4ab4-a654-d7ea171d899b`) reported `consume_financial_totp_rate_limit(uuid, text, integer, integer)`
+`intended`, EXECUTE for `checksops` and the owner only (PUBLIC revoked). The run's whole JSON arrived
+(see the pin's `applied.one_shot_note`). Runner state: started for these runs at 2026-10-30 17:02:08 UTC
+and stopped at 17:03:51 UTC.
+
+**Status:** applied to staging (wave 28) and to production (2026-10-30); the production pin is retired
+(`execute: false`).
 
 ## Fingerprint
 
