@@ -72,7 +72,33 @@ pre-state derived above, the function absent), `already_applied` false, `precond
 Recorded in the staging pin (`expected_live_definition_sha256`, `execute: true`, wave 29) under the
 owner's words of 2026-10-30, "continue with SQL 132 staging".
 
-**Status:** staging pin execute-authorized (wave 29); nothing applied yet; production pin pending.
+**Staging apply (2026-10-30).** Run 41117004966 (main `42068df3f516653ebb96cffbf4d522f0117db4ac`, staging
+pin PR #1461, on the executor deployed by run 41116686272, `aBuDhgGl…`, RevisionId
+`9c082867-4ad1-4e22-be11-09c5c1a50a7b`; workstream `github-staging-sql-41117004966`) under the owner's
+words "apply SQL 132 in staging": receipt before
+`e1a1d4edb115e3fa0881112e6759c2d7ee1e9d8c6b3e24a7611b655dcf75741f`, after
+`88828cb48d8b847cf177d57314bdbc0c8a1f49051958be5adb264a0c418ebd72` (intended), result `applied`;
+`financial_totp_count_code_check(uuid)` `intended`, `function_acl` `checksops EXECUTE` and
+`owner EXECUTE`, `definer_writes` ok. Read-live run 41117375887: `already_applied` true, live
+`88828cb4…`.
+
+**Production inspect (2026-10-30).** Read-only `--inspect` through SSM
+`ea2ce576-471a-4a90-bb50-e52b3430e6ec` on `i-0c35557c4e5385406`, main `42068df3f` (tarball sha256
+`4000d070b6f33d354b8a102fc08319ddcc624e8acf73ab07f9ce1c54247b6e33`, transfer run 41117411043, migration
+source `ca91ce9c…` == pin), connected as `checksops_admin`: `financial_totp_count_code_check(uuid)`
+`absent` (`function_acl` `[]`); every prerequisite present; `predecessors.sql130` true; the definer
+write on `financial_totp_enrollments` ok; live
+`e1a1d4edb115e3fa0881112e6759c2d7ee1e9d8c6b3e24a7611b655dcf75741f`, `already_applied` false,
+`precondition_failures` `[]`. That is the pre-state derived above (the function absent), the same one
+staging had, so the staging apply took the path production will
+(`aws/tests/sql132-financial-totp-lockout-pg.test.mjs`). Recorded in the production pin with the
+staging apply as its staging acceptance and `execute: true`; the owner's words so far ("restart SQL
+131 and the lockout fix", "Merge SQL 131 and the lockout fix when green", "continue with SQL 132
+staging", "merge 1461 when green", "apply SQL 132 in staging") name the restart, the merges and the
+staging step, not the production apply. The owner merges the pin change; the apply still needs the
+owner's words for that run and runs only after that merge is on main and staged.
+
+**Status:** applied to staging (wave 29); production pin execute-authorized; not applied to production.
 
 ## Fingerprint
 

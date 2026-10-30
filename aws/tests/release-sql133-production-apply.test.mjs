@@ -184,15 +184,15 @@ test('order: no predecessor; the one new function, its prerequisites and the fou
   assert.match(COMMITTED.order_note, /definer_can_write_relations/);
   assert.match(COMMITTED.order_note, /tolerates its absence \(the Cognito and profiles reset as before, financialTotpCleared false, never a 500\)/);
   assert.match(COMMITTED.order_note, /no API, Lambda or SPA change is part of this pin\./);
-  // SQL 130's and SQL 131's production pins are applied and retired (#1453, #1463); SQL 132's stays
-  // pending; this change touches none of them.
+  // SQL 130's and SQL 131's production pins are applied and retired (#1453, #1463); SQL 132's is on
+  // its own guarded path (pin #1467); this change touches none of them.
   assert.equal(loadReleaseProductionPin('sql130', ROOT).applied.result, 'applied');
   const sql131 = loadReleaseProductionPin('sql131', ROOT);
   assert.equal(sql131.execute, false);
   assert.equal(sql131.applied.result, 'applied');
   const sql132 = loadReleaseProductionPin('sql132', ROOT);
-  assert.equal(sql132.execute, false);
-  assert.equal(sql132.authorization, 'pending');
+  assert.equal(sql132.migration, 'sql132');
+  assert.equal(typeof sql132.execute, 'boolean');
   // The API member that calls the function pends its REPLACE on this pin: admin-reset-totp.mjs has
   // sql_before SQL 133, recorded in the overlay plan as not yet verified live, so the guarded Lambda path
   // refuses it until the record change.
