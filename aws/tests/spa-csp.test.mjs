@@ -107,3 +107,19 @@ test('index.html carries no CSP meta tag: frame-ancestors is ignored there and t
     assert.deepEqual(directive(buildCsp({ environment, indexHtml: INDEX }), 'frame-ancestors'), ["'self'"], environment);
   }
 });
+
+test('enforce appends only upgrade-insecure-requests; the report-only policy and production default are unchanged', () => {
+  for (const environment of ['staging', 'production']) {
+    const reportOnly = buildCsp({ environment, indexHtml: INDEX });
+    const enforcing = buildCsp({ environment, indexHtml: INDEX, enforce: true });
+    assert.equal(enforcing, `${reportOnly}; upgrade-insecure-requests`, environment);
+    assert.equal(buildCsp({ environment, indexHtml: INDEX, enforce: false }), reportOnly, environment);
+    assert.equal(reportOnly.includes('upgrade-insecure-requests'), false, environment);
+    assert.deepEqual(cspDirectives({ environment, indexHtml: INDEX, enforce: true }).at(-1), ['upgrade-insecure-requests', []]);
+    // A directive without sources is the bare name, no trailing space.
+    assert.equal(enforcing.endsWith('upgrade-insecure-requests'), true, environment);
+  }
+  // The template's report-only value is still exactly the default build.
+  const config = Object.values(template.Resources)[0].Properties.ResponseHeadersPolicyConfig;
+  assert.equal(config.CustomHeadersConfig.Items[0].Value, buildCsp({ environment: 'staging', indexHtml: INDEX }));
+});
