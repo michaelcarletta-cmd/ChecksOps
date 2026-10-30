@@ -4,8 +4,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import {
-  ArrowDownLeft,
-  ArrowUpRight,
   Banknote,
   Clock,
   Gauge,
@@ -157,10 +155,6 @@ export default function WalletOps() {
       ? `${displayCaseOrNull(settlementMethod.bank_name) ?? "Bank"} ••••${settlementMethod.last_four ?? "----"}`
       : "Connected bank",
   });
-  const pendingOut = (transferData?.pendingOutCents ?? 0) + sweepActivity.pendingOutCents;
-  const pendingIn = transferData?.pendingInCents ?? 0;
-  const invoicePendingIn = transferData?.invoicePendingInCents ?? 0;
-  const invoicesBeingPaid = transferData?.invoicesInFlight?.length ?? 0;
   const minimumCents = config?.minimum_balance_cents ?? 0;
   const billingActivity = transferData?.billing ?? [];
   const classifiedTransfers = transferData?.classified ?? [];
@@ -324,27 +318,6 @@ export default function WalletOps() {
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3">
-              <div className="flex items-center gap-1.5 text-[10px] font-bold tracking-wider text-emerald-500">
-                <ArrowDownLeft className="h-3 w-3" /> Pending in
-              </div>
-              <div className="mt-1 text-xl font-semibold">
-                {transfersLoading ? "…" : money(pendingIn)}
-              </div>
-              {!transfersLoading && invoicesBeingPaid > 0 && (
-                <div className="mt-0.5 text-[11px] text-muted-foreground">
-                  Includes {money(invoicePendingIn)} from {invoicesBeingPaid} invoice{invoicesBeingPaid === 1 ? "" : "s"} being paid
-                </div>
-              )}
-            </div>
-            <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3">
-              <div className="flex items-center gap-1.5 text-[10px] font-bold tracking-wider text-amber-500">
-                <ArrowUpRight className="h-3 w-3" /> Pending out
-              </div>
-              <div className="mt-1 text-xl font-semibold">
-                {transfersLoading ? "…" : money(pendingOut)}
-              </div>
-            </div>
             <Button
               variant="outline"
               className="col-span-2 bg-background/60"
