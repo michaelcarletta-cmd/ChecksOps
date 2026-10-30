@@ -154,9 +154,11 @@ export const STAGING_WAVE1 = Object.freeze({
   // Wave 30 (owner approved 2026-10-30, "continue with SQL 133 staging"): SQL 133, the financial TOTP
   // teammate reset. Read at main 564b7baee after the executor carried it (deploy run 41129102846):
   // financial_totp_admin_reset_enrollment(uuid, uuid) absent, every prerequisite present, no predecessor,
-  // the four definer writes ok (the pre-state the executor test derives). SQL 134 (merged as step 0 the
-  // same day) has no staging read-live yet and no wave.
   sql133: Object.freeze({ wave: 30, approved: '2026-10-30', run: '41129536538', live: 'f3b1671e8617df78a20600b43fcfc6636739d78f235ef78d1cc7d1d68f2f909d' }),
+  // Wave 30 (owner approved 2026-10-30, "start the SQL 134 staging apply"): SQL 134, the Loss Draft
+  // escrow and draw column grants. Read at main 564b7baee with the executor current (inspect run 41130389562):
+  // none of the fourteen columns granted, every prerequisite present (the pre-state the executor test derives).
+  sql134: Object.freeze({ wave: 30, approved: '2026-10-30', run: '41130749260', live: '7827f4c87e5bc9e7bd0def01d5f201a0a1fc26365480921896aa452e1403466d' }),
   sql98: Object.freeze({ wave: 3, approved: '2026-10-18', run: '39083278136', live: '296c3d6a274e10f66005fb9eaecf93fa17b81bd8db3607037ca07698fddd3275', apply_run: '39085677318' }),
 });
 
