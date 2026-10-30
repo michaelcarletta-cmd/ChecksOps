@@ -229,7 +229,8 @@ test('order: no predecessor; the one new function, its prerequisites and the fou
   const runbook = fs.readFileSync(path.join(ROOT, COMMITTED.tooling.runbook), 'utf8');
   assert.ok(runbook.includes(COMMITTED.intended_replacement_sha256));
   assert.ok(runbook.includes(COMMITTED.source_sha256));
-  assert.match(runbook, /\*\*Status:\*\* not applied anywhere/);
+  assert.match(runbook, /\*\*Status:\*\* staging pin execute-authorized \(wave 30\)/);
+  assert.match(runbook, /read-live \(2026-10-30\)\.\*\* Run 41129536538/);
   assert.match(runbook, /\*\*Predecessor\.\*\* None/);
   assert.match(runbook, /"ok build the reset\s+after SQL 131 and the lockout fix"/);
   assert.match(runbook, /APPLY_FINANCIAL_TOTP_ADMIN_RESET/);

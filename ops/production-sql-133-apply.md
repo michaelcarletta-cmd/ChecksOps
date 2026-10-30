@@ -62,7 +62,27 @@ guarded Lambda path after SQL 133 is applied in that environment. No trigger is 
 **Predecessor.** None: SQL 133 calls none of SQL 130, 131 or 132's functions. It follows them by the
 order of work the owner set ("after SQL 131 and the lockout fix"), not by an engine gate.
 
-**Status:** not applied anywhere. The staging pin and the production pin are pending.
+**Staging executor refreshed (2026-10-30).** Inspect run 41128753561 (main `564b7baee`) found the live
+executor at `aBuDhgGl…` (LastModified 2026-10-30T19:38:33Z, `executor_current` false) without
+`sql/133_financial_totp_admin_reset_enrollment.sql` and `sql/134_loss_draft_escrow_write_grants.sql`
+(main's package also superseded `lib/release-sql-specs.mjs`, `lib/release-sql-state.mjs` and
+`lib/sql-executor-auth.mjs`). Deploy run 41129102846 (main `564b7baeef67a7078334ad3ad6d112a3e75531dd`,
+`expected_executor_code_sha256` `aBuDhgGl…` matched) updated `checksops-staging-guarded-sql-executor` to
+main's package (`0RDcYqTSW+3Ylm4Bbjk8cbHToxs/Rgp0Ip57BRIdzu0=`, RevisionId
+`85896645-1c14-46aa-bbbe-697dd086a731`, previous `40d85b6c-5982-423c-8aa7-e130cb2ac47d`; `result`
+`applied`, `mutation` false).
+
+**Staging read-live (2026-10-30).** Run 41129536538 (main `564b7baeef67a7078334ad3ad6d112a3e75531dd`,
+executor `0RDcYqTS…`): `financial_totp_admin_reset_enrollment(uuid, uuid)` absent (`function_acl` `[]`);
+every prerequisite present (`prerequisites_missing` `[]`); `predecessors` `{}`; the definer writes on
+`financial_totp_enrollments`, `tenant_users`, `identity_accounts` and `profiles` all ok; live
+`f3b1671e8617df78a20600b43fcfc6636739d78f235ef78d1cc7d1d68f2f909d` (the pre-state derived above, the
+function absent), intended `edfef132…`, `already_applied` false, `precondition_failures` `[]`,
+`mutation` false. Recorded in the staging pin (`expected_live_definition_sha256`, `execute: true`,
+wave 30) under the owner's words of 2026-10-30, "continue with SQL 133 staging". The staging apply
+itself waits for the owner's words for that run.
+
+**Status:** staging pin execute-authorized (wave 30); nothing applied yet; production pin pending.
 
 ## Fingerprint
 
