@@ -1,0 +1,15 @@
+{
+  "workstream_id": "billing-apply-event-staging-only",
+  "authorization": "Pending owner review (2026-10-30). Planning only: nothing is live or verified. The production apply still needs its own owner approval and staging acceptance.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Billing apply-event staging only (2026-10-30, security audit finding 6): tenant-billing-admin action apply-event passed body.status and body.provider_transfer_id to applyBillingProviderEvent, so on the production runtime the platform owner could set any transfer's billing status (for example mark a Collection V2 obligation settled) without a Moov event, against the \"never settled without provider confirmation\" contract. The accepted tenant-billing-handlers.mjs bytes refuse apply-event with 403 apply_event_staging_only when billingEnvironment() is production (CHECKSOPS_ENV production or production-prep), before any read or write; staging keeps the simulated event. Provider webhooks (handleBillingProviderEvent) and every other action are unchanged; no screen calls apply-event. No SQL. tenant-billing-handlers.mjs live_sha256 b3d85944 is the bytes the tenant lifecycle production apply recorded (previous_manifest); no change to this member has been planned or applied since. sql_before stays SQL 102. A read-only production overlay inspect must confirm the live member before any apply.",
+  "members": {
+    "tenant-billing-handlers.mjs": {
+      "live_sha256": "b3d8594416e257a8ff6658c677c9d8435ad18f92e0ad34968838f2b275ccb824",
+      "accepted_sha256": "70241b083fc373d626fa73082aebafcb6933837376f7228709ab8fb3f90b931f",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-tenant-lifecycle-applied-manifest-2026-10-27.json"
+    }
+  }
+}
