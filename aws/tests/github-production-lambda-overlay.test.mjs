@@ -154,6 +154,13 @@ const totpPre = (plan) => { plan.members['auth-financial-totp.mjs'].expected_liv
 // live_sha256).
 const REGISTER_PRE = LOCKOUT_MANIFEST.members['providers/production/checkalt-register.mjs'].live_sha256;
 const registerPre = (plan) => { plan.members['providers/production/checkalt-register.mjs'].expected_live_sha256 = REGISTER_PRE; return withSql132(plan); };
+// SQL 133 (financial TOTP teammate reset): admin-reset-totp.mjs pends a REPLACE from the release 2026-10-17 live
+// bytes; the committed plan records SQL 133 as not yet verified live, so a replay of its apply starts from a plan
+// copy that has it live (the record change will).
+const SQL133_FILE = 'aws/workflows/sql/133_financial_totp_admin_reset_enrollment.sql';
+const ADMIN_RESET_REL = 'aws/tests/fixtures/production-financial-totp-admin-reset-manifest-2026-10-30.json';
+const ADMIN_RESET_MANIFEST = JSON.parse(fs.readFileSync(path.join(ROOT, ADMIN_RESET_REL), 'utf8'));
+const withSql133 = (plan) => { plan.sql_prerequisites[SQL133_FILE] = { verified_live: true, evidence: 'test' }; return plan; };
 const SQL121_FILE = 'aws/workflows/sql/121_cash_jobs_production_grants.sql';
 const WORKFLOW_PRE_PLAN = (() => {
   const plan = structuredClone(PLAN);
@@ -168,6 +175,7 @@ function applyDeps(member, liveOpts = {}) {
   if (Object.hasOwn(MORTGAGE_DESK_PRE, member) && liveOpts.plan === undefined) liveOpts = { ...liveOpts, plan: mortgageDeskPre(structuredClone(PLAN)) };
   if (member === 'auth-financial-totp.mjs' && liveOpts.plan === undefined) liveOpts = { ...liveOpts, plan: totpPre(structuredClone(PLAN)) };
   if (member === 'providers/production/checkalt-register.mjs' && liveOpts.plan === undefined) liveOpts = { ...liveOpts, plan: registerPre(structuredClone(PLAN)) };
+  if (member === 'admin-reset-totp.mjs' && liveOpts.plan === undefined) liveOpts = { ...liveOpts, plan: withSql133(structuredClone(PLAN)) };
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'prod-overlay-'));
   fs.mkdirSync(path.join(root, 'ops/deployment-guard'), { recursive: true });
   fs.mkdirSync(path.join(root, 'aws/functions/api'), { recursive: true });
@@ -4135,4 +4143,69 @@ test('Financial TOTP lockout (SQL 132): auth-financial-totp.mjs and checkalt-reg
   const register = fs.readFileSync(path.join(API, 'providers/production/checkalt-register.mjs'), 'utf8');
   assert.match(register, /if \(gate\.allowed !== true\) return rejected;/);
   assert.match(register, /if \(enrollment\.locked_until && new Date\(enrollment\.locked_until\)\.getTime\(\) > Date\.now\(\)\) return rejected;/);
+});
+
+test('Financial TOTP teammate reset (SQL 133): admin-reset-totp.mjs REPLACE from the release 2026-10-17 live bytes, planning only, SQL 133 first', async () => {
+  const MEMBER = 'admin-reset-totp.mjs';
+  const RELEASE = 'aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json';
+  // The release 2026-10-17 reconciliation bytes, still live: that manifest planned a REPLACE (9e85ae9a) over them
+  // which was never applied, so this row supersedes it from the same live bytes.
+  const LIVE = 'a1d8a54a0f686be926498cf823cfd55bfc1fe4caf919ab66ce49810d63bcb450';
+  const SUPERSEDED = '9e85ae9a1393a73aa83ed8df12f26544bd47f44de6db0c234fb56c29ee9f2a09';
+  const CALL = 'SELECT cleared FROM public.financial_totp_admin_reset_enrollment($1::uuid, $2::uuid)';
+  const PRESENT = 'SELECT pg_catalog.to_regprocedure($1) IS NOT NULL AS present';
+  const release = JSON.parse(fs.readFileSync(path.join(ROOT, RELEASE), 'utf8'));
+  assert.equal(ADMIN_RESET_MANIFEST.workstream_id, 'financial-totp-admin-reset');
+  assert.equal(ADMIN_RESET_MANIFEST.deploy_authorized, false);
+  assert.match(ADMIN_RESET_MANIFEST.authorization, /^Pending owner review/);
+  assert.match(ADMIN_RESET_MANIFEST.notes, /SQL 133/);
+  assert.match(ADMIN_RESET_MANIFEST.notes, /never answers 500/);
+  assert.match(ADMIN_RESET_MANIFEST.notes, /No self-service reset; the platform owner stays protected/);
+  assert.deepEqual(Object.keys(ADMIN_RESET_MANIFEST.members), [MEMBER]);
+  // SQL 133 is recorded, not yet verified live: the gate the apply below waits on.
+  assert.deepEqual(PLAN.sql_prerequisites[SQL133_FILE], { verified_live: false, evidence: null });
+  assert.ok(PLAN.notes.includes('Financial TOTP teammate reset (2026-10-30, SQL 133; owner "ok build the reset after SQL 131 and the lockout fix")'));
+  const accepted = sha(`aws/functions/api/${MEMBER}`);
+  assert.notEqual(accepted, LIVE);
+  assert.notEqual(accepted, SUPERSEDED);
+  assert.deepEqual(ADMIN_RESET_MANIFEST.members[MEMBER], { live_sha256: LIVE, accepted_sha256: accepted, operation: 'replace', previous_manifest: RELEASE });
+  assert.deepEqual([release.members[MEMBER].live_sha256, release.members[MEMBER].accepted_sha256], [LIVE, SUPERSEDED], 'the previous manifest planned over the same live bytes');
+  assert.deepEqual(PLAN.members[MEMBER], { operation: 'replace', accepted_sha256: accepted, expected_live_sha256: LIVE, sql_before: SQL133_FILE, manifest: ADMIN_RESET_REL });
+  assert.ok(PLAN.notes.includes(`REPLACE ${MEMBER} ${LIVE.slice(0, 8)} -> ${accepted.slice(0, 8)}`));
+  assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
+  // The accepted bytes ask the catalog for the function, then send the one call, after the step-up consumption
+  // and before Cognito; every success answer says whether the authenticator was cleared; no new local import.
+  const source = fs.readFileSync(path.join(API, MEMBER), 'utf8');
+  assert.ok(source.includes(PRESENT));
+  assert.ok(source.includes(CALL));
+  assert.ok(source.includes("'public.financial_totp_admin_reset_enrollment(uuid, uuid)'"));
+  assert.ok(source.indexOf('await consumeResetStepUp(') < source.indexOf('await clearFinancialTotpEnrollment('));
+  assert.ok(source.indexOf('await clearFinancialTotpEnrollment(') < source.indexOf('new AdminGetUserCommand('));
+  assert.equal([...source.matchAll(/financialTotpCleared: financial\.cleared/g)].length, 3);
+  assert.deepEqual(localImports(source, MEMBER).sort(), ['data.mjs', 'providers/production/moov-fund-authz.mjs']);
+  const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
+  const ready = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: LIVE }) });
+  assert.equal(ready.state, 'READY');
+  assert.equal(ready.mutation, false);
+  const done = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: accepted }) });
+  assert.equal(done.state, 'ALREADY_ACCEPTED');
+  // The superseded planned bytes, or anything else, live: a reconciliation stop, never an apply.
+  for (const other of [SUPERSEDED, 'c'.repeat(64)]) {
+    await assert.rejects(
+      run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: other }) }),
+      (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+      other,
+    );
+  }
+  // The apply is refused while SQL 133 is not recorded verified live (the committed plan) ...
+  const committed = structuredClone(PLAN);
+  await assert.rejects(
+    run(applyEnv(MEMBER), { ...applyDeps(MEMBER, { sha256: LIVE, plan: committed }).deps, plan: committed }),
+    (error) => error.code === CODES.PRODUCTION_APPROVAL_REQUIRED && error.details.sql_before === SQL133_FILE,
+  );
+  // ... and passes the order and link gates once it is (the SQL 133 record change).
+  const { deps, calls } = applyDeps(MEMBER);
+  const applied = await run(applyEnv(MEMBER), deps);
+  assert.equal(applied.mutation, false);
+  assert.deepEqual(calls.receipt.owned_member_ops, { replace: [MEMBER], add: [] });
 });

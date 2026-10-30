@@ -137,6 +137,30 @@ const consumeResetStepUp = async (client, { userId, targetUserId, stepUp }) => {
   }
 };
 
+/**
+ * SQL 133 (aws/workflows/sql/133_financial_totp_admin_reset_enrollment.sql): deletes the teammate's
+ * financial_totp_enrollments row, the application-level authenticator this file never cleared (the
+ * API connects as checksops, which holds no privilege on that table), so the teammate's next
+ * enrollment no longer answers 409 enrollment_reset_required. The database re-checks this file's
+ * rules (the caller is auth.uid(), not the target, shares a tenant with the target, the target is not
+ * the platform owner) and raises 42501 otherwise, which withIdentityWrite answers as 403 and rolls
+ * back, step-up consumption included.
+ *
+ * Before SQL 133 is applied in an environment the function does not exist. The reset then does what
+ * it did before (Cognito and profiles only, financialTotpCleared false) and is not a 500: the
+ * existence check is a catalog read, so a missing function never aborts the transaction.
+ */
+export const FINANCIAL_TOTP_ADMIN_RESET_FUNCTION = 'public.financial_totp_admin_reset_enrollment(uuid, uuid)';
+export const FINANCIAL_TOTP_ADMIN_RESET_PRESENT_SQL = 'SELECT pg_catalog.to_regprocedure($1) IS NOT NULL AS present';
+export const FINANCIAL_TOTP_ADMIN_RESET_SQL = 'SELECT cleared FROM public.financial_totp_admin_reset_enrollment($1::uuid, $2::uuid)';
+
+export const clearFinancialTotpEnrollment = async (client, actorUserId, targetUserId) => {
+  const present = (await client.query(FINANCIAL_TOTP_ADMIN_RESET_PRESENT_SQL, [FINANCIAL_TOTP_ADMIN_RESET_FUNCTION])).rows[0]?.present === true;
+  if (!present) return { present: false, cleared: false };
+  const row = (await client.query(FINANCIAL_TOTP_ADMIN_RESET_SQL, [actorUserId, targetUserId])).rows[0];
+  return { present: true, cleared: row?.cleared === true };
+};
+
 export const softwareTokenEnrolled = (user = {}) => {
   const list = user.UserMFASettingList || user.userMFASettingList || [];
   return list.includes('SOFTWARE_TOKEN_MFA');
@@ -176,6 +200,10 @@ export const runAdminResetTotp = async ({
     };
   }
   await consumeResetStepUp(client, { userId: mapping.application_user_id, targetUserId: userId, stepUp });
+  // The financial authenticator (SQL 133), in this transaction and before Cognito: a Cognito failure
+  // below returns ok false, so withIdentityWrite rolls the row deletion and the step-up consumption
+  // back together and nothing is half reset. Where the function is absent, nothing changes here.
+  const financial = await clearFinancialTotpEnrollment(client, mapping.application_user_id, userId);
 
   const account = (await safeQuery(
     client,
@@ -195,6 +223,7 @@ export const runAdminResetTotp = async ({
       cognitoUserFound: false,
       importedUser: false,
       poolMfaChanged: false,
+      financialTotpCleared: financial.cleared,
       spoofFieldsIgnored: spoof,
     };
   }
@@ -219,6 +248,7 @@ export const runAdminResetTotp = async ({
         cognitoUserFound: false,
         importedUser: false,
         poolMfaChanged: false,
+        financialTotpCleared: financial.cleared,
         spoofFieldsIgnored: spoof,
       };
     }
@@ -272,6 +302,7 @@ export const runAdminResetTotp = async ({
     importedUser: false,
     poolMfaChanged: false,
     preferredMfaEnabled: false,
+    financialTotpCleared: financial.cleared,
     spoofFieldsIgnored: spoof,
   };
 };
