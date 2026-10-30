@@ -204,7 +204,8 @@ test('order: no predecessor and no order; supersedes SQL 129; the function and i
   const runbook = fs.readFileSync(path.join(ROOT, COMMITTED.tooling.runbook), 'utf8');
   assert.ok(runbook.includes(COMMITTED.intended_replacement_sha256));
   assert.ok(runbook.includes(COMMITTED.source_sha256));
-  assert.match(runbook, /\*\*Status:\*\* not applied anywhere/);
+  assert.match(runbook, /\*\*Status:\*\* staging pin execute-authorized \(wave 28\)/);
+  assert.match(runbook, /read-live \(2026-10-30\)\.\*\* Run 41087643551/);
   assert.match(runbook, /run 41081764481/);
   assert.match(runbook, /"New combined\s+fix"/);
   const oneShot = fs.readFileSync(path.join(ROOT, 'ops/production-sql-one-shot.md'), 'utf8');

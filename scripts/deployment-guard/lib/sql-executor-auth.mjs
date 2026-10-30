@@ -2932,8 +2932,7 @@ export const AUTHORIZED_SQL129_FINANCIAL_TOTP_RATE_LIMIT_CODE_CHECK = Object.fre
 // Financial TOTP rate-limit staging pin: SQL 130 (owner 2026-10-30 "New combined fix": SQL 129's
 // consume_financial_totp_rate_limit with 'code_check' in the action allow-list, plus EXECUTE revoked
 // from PUBLIC and granted to checksops on that one function; SQL 129 is retired). No predecessor.
-// Pending until a reviewed pin change records a staging read-live (expected: the proposed body with
-// EXECUTE for checksops and the owner, as SQL 129's read-live run 41081764481 read it).
+// Staging apply authorized (wave 28) from staging read-live run 41087643551.
 export const AUTHORIZED_SQL130_FINANCIAL_TOTP_RATE_LIMIT_CODE_CHECK_NO_PUBLIC = Object.freeze({
   key: 'sql130',
   filename: 'aws/workflows/sql/130_financial_totp_rate_limit_code_check_no_public.sql',
@@ -2941,9 +2940,10 @@ export const AUTHORIZED_SQL130_FINANCIAL_TOTP_RATE_LIMIT_CODE_CHECK_NO_PUBLIC = 
   // The commit that last authored the file bytes.
   commit: 'e08e422ce4ebc2c8879d43bdccb0575a9701114b',
   source_sha256: 'da17dd5d4a74bcf9c5b59dc13bf3a557e3488c5f36ab0b8431a2b8b67fefc561',
-  authorization: 'pending',
-  execute: false,
-  expected_live_definition_sha256: null,
+  authorization: 'Owner approved 2026-10-30: staging apply (wave 28) from staging read-live run 41087643551',
+  execute: true,
+  // Staging read-live run 41087643551 (main 81b188b97, executor WhquviZ/...): the proposed file's body without PUBLIC EXECUTE.
+  expected_live_definition_sha256: 'cb2fd65bb580f9338cab728c2507a32b7589aee5e702d117c31e1862f98a5a19',
   // Code-derived: releaseIntendedHash('sql130', file bytes) (release-sql-state.mjs); re-derived by the tests.
   intended_replacement_sha256: '013549faba6166280b03df404ca23c1973870efad9f7d499d6a695be0de7246b',
   function_identities: Object.freeze([
