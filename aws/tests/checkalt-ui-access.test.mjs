@@ -607,3 +607,12 @@ test('checkalt_config depositor_account_id is last four only in Data API reads a
   assert.equal(/depositor_account_id/.test(settings), false);
   assert.equal(/\.select\("\*"\)\s*\.eq\("singleton"/.test(settings), false);
 });
+
+test('Check Alt settings: automatic approval is shown as always on, with no switch or ceiling to edit', () => {
+  const settings = sourceOf('src/components/settings/CheckAltSettings.tsx');
+  assert.match(settings, /Automatic approval: always on/);
+  assert.equal(/id="auto_approve_enabled"/.test(settings), false);
+  assert.equal(/id="auto_approve_max_dollars"/.test(settings), false);
+  const submit = sourceOf('aws/functions/api/providers/production/checkalt-submit.mjs');
+  assert.match(submit, /AUTO_APPROVE_POLICY_SOURCE = 'always_on'/);
+});
