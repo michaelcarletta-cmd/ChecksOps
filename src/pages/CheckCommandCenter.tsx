@@ -94,6 +94,7 @@ import { assessCheckValidity } from "@/lib/checkValidity";
 import { SendPaymentPanel } from "@/components/payments/SendPaymentPanel";
 import { FundsTab as IncomingFundsTab } from "@/components/payments/FundsTab";
 import { ClaimLedgerCard } from "@/components/payments/ClaimLedgerCard";
+import { ClaimCashFlowCard } from "@/components/loss-draft/ClaimCashFlowCard";
 
 
 
@@ -4454,6 +4455,10 @@ function CheckDetailPanel({
                 detectedClaimNumber={check.detected_claim_number ?? null}
                 readOnly={isSharedView}
               />
+
+              {/* Loss draft escrow: Total Escrowed, Released and Outstanding from loss_draft_tracking
+                  (by this check, or its claim); shown only when the check has a loss draft. */}
+              <ClaimCashFlowCard escrowOnly checkIntakeItemId={checkId} claimId={check.claim_id ?? null} />
 
               {(() => {
                 const stage = (check as any).check_stage ?? null;
