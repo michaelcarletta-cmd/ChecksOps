@@ -113,6 +113,120 @@
       "Resource": "arn:aws:scheduler:us-east-1:806168576068:schedule/default/checksops-production-checkalt-status-reconcile"
     },
     {
+      "Sid": "InspectExactOnboardingKeysStack",
+      "Effect": "Allow",
+      "Action": [
+        "cloudformation:DescribeStacks",
+        "cloudformation:DescribeStackEvents",
+        "cloudformation:DescribeStackResources",
+        "cloudformation:GetTemplate"
+      ],
+      "Resource": "arn:aws:cloudformation:us-east-1:806168576068:stack/checksops-production-onboarding-keys/*"
+    },
+    {
+      "Sid": "CreateExactOnboardingKeysStack",
+      "Effect": "Allow",
+      "Action": "cloudformation:CreateStack",
+      "Resource": "arn:aws:cloudformation:us-east-1:806168576068:stack/checksops-production-onboarding-keys/*"
+    },
+    {
+      "Sid": "ListKmsAliasesForOnboardingKeys",
+      "Effect": "Allow",
+      "Action": "kms:ListAliases",
+      "Resource": "*"
+    },
+    {
+      "Sid": "InspectTaggedOnboardingKeys",
+      "Effect": "Allow",
+      "Action": [
+        "kms:DescribeKey",
+        "kms:GetKeyPolicy",
+        "kms:GetKeyRotationStatus",
+        "kms:ListResourceTags"
+      ],
+      "Resource": "arn:aws:kms:us-east-1:806168576068:key/*",
+      "Condition": {
+        "StringEquals": {
+          "aws:ResourceTag/checksops-stack": "checksops-production-onboarding-keys"
+        }
+      }
+    },
+    {
+      "Sid": "CreateOnboardingKeysThroughCloudFormation",
+      "Effect": "Allow",
+      "Action": "kms:CreateKey",
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "kms:CallerAccount": "806168576068",
+          "kms:KeySpec": "SYMMETRIC_DEFAULT",
+          "kms:KeyUsage": "ENCRYPT_DECRYPT",
+          "aws:RequestTag/checksops-stack": "checksops-production-onboarding-keys"
+        },
+        "ForAnyValue:StringEquals": {
+          "aws:CalledVia": "cloudformation.amazonaws.com"
+        },
+        "BoolIfExists": {
+          "kms:BypassPolicyLockoutSafetyCheck": "false",
+          "kms:MultiRegion": "false"
+        }
+      }
+    },
+    {
+      "Sid": "SetUpNewOnboardingKeysThroughCloudFormation",
+      "Effect": "Allow",
+      "Action": [
+        "kms:PutKeyPolicy",
+        "kms:TagResource",
+        "kms:EnableKeyRotation"
+      ],
+      "Resource": "arn:aws:kms:us-east-1:806168576068:key/*",
+      "Condition": {
+        "StringEquals": {
+          "kms:CallerAccount": "806168576068",
+          "aws:ResourceTag/checksops-stack": "checksops-production-onboarding-keys"
+        },
+        "ForAnyValue:StringEquals": {
+          "aws:CalledVia": "cloudformation.amazonaws.com"
+        },
+        "BoolIfExists": {
+          "kms:BypassPolicyLockoutSafetyCheck": "false"
+        }
+      }
+    },
+    {
+      "Sid": "CreateExactOnboardingKeyAliasesThroughCloudFormation",
+      "Effect": "Allow",
+      "Action": "kms:CreateAlias",
+      "Resource": [
+        "arn:aws:kms:us-east-1:806168576068:alias/checksops-production-compliance-documents",
+        "arn:aws:kms:us-east-1:806168576068:alias/checksops-production-moov-onboarding-pii"
+      ],
+      "Condition": {
+        "StringEquals": {
+          "kms:CallerAccount": "806168576068"
+        },
+        "ForAnyValue:StringEquals": {
+          "aws:CalledVia": "cloudformation.amazonaws.com"
+        }
+      }
+    },
+    {
+      "Sid": "AliasTaggedOnboardingKeysThroughCloudFormation",
+      "Effect": "Allow",
+      "Action": "kms:CreateAlias",
+      "Resource": "arn:aws:kms:us-east-1:806168576068:key/*",
+      "Condition": {
+        "StringEquals": {
+          "kms:CallerAccount": "806168576068",
+          "aws:ResourceTag/checksops-stack": "checksops-production-onboarding-keys"
+        },
+        "ForAnyValue:StringEquals": {
+          "aws:CalledVia": "cloudformation.amazonaws.com"
+        }
+      }
+    },
+    {
       "Sid": "SignDeploymentGuardReceiptsExactProductionKey",
       "Effect": "Allow",
       "Action": [
