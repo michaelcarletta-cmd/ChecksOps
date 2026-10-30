@@ -1,0 +1,103 @@
+{
+  "read_at": "2026-10-30",
+  "read_by": "arn:aws:iam::806168576068:user/claude-code",
+  "roles": {
+    "ChecksOpsGitHubProductionLambdaOverlay": {
+      "trust": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Sid": "GitHubChecksOpsProductionEnvironmentOnly",
+            "Effect": "Allow",
+            "Principal": {
+              "Federated": "arn:aws:iam::806168576068:oidc-provider/token.actions.githubusercontent.com"
+            },
+            "Action": "sts:AssumeRoleWithWebIdentity",
+            "Condition": {
+              "StringEquals": {
+                "token.actions.githubusercontent.com:sub": "repo:michaelcarletta-cmd/ChecksOps:environment:production",
+                "token.actions.githubusercontent.com:aud": "sts.amazonaws.com"
+              }
+            }
+          }
+        ]
+      },
+      "inline_actions": [
+        "apigateway:GET",
+        "apigateway:PATCH",
+        "cloudfront:GetDistribution",
+        "kms:GetPublicKey",
+        "kms:Sign",
+        "lambda:GetFunction",
+        "lambda:GetFunctionConfiguration",
+        "lambda:UpdateFunctionCode",
+        "lambda:UpdateFunctionConfiguration"
+      ],
+      "attached_policies": [],
+      "permissions_boundary": null
+    },
+    "ChecksOpsGitHubProductionReadOnlyInspect": {
+      "trust": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Principal": {
+              "Federated": "arn:aws:iam::806168576068:oidc-provider/token.actions.githubusercontent.com"
+            },
+            "Action": "sts:AssumeRoleWithWebIdentity",
+            "Condition": {
+              "StringEquals": {
+                "token.actions.githubusercontent.com:sub": "repo:michaelcarletta-cmd/ChecksOps:environment:production-readonly",
+                "token.actions.githubusercontent.com:aud": "sts.amazonaws.com"
+              }
+            }
+          }
+        ]
+      },
+      "inline_actions": [
+        "apigateway:GET",
+        "cloudfront:GetDistribution",
+        "ec2:DescribeSecurityGroups",
+        "lambda:GetFunction",
+        "lambda:GetFunctionConfiguration",
+        "rds:DescribeDBInstances",
+        "s3:GetObject",
+        "secretsmanager:DescribeSecret"
+      ],
+      "attached_policies": [],
+      "permissions_boundary": null
+    },
+    "ChecksOpsGitHubStagingLambdaOverlay": {
+      "trust": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Sid": "GitHubChecksOpsStagingEnvironmentOnly",
+            "Effect": "Allow",
+            "Principal": {
+              "Federated": "arn:aws:iam::806168576068:oidc-provider/token.actions.githubusercontent.com"
+            },
+            "Action": "sts:AssumeRoleWithWebIdentity",
+            "Condition": {
+              "StringEquals": {
+                "token.actions.githubusercontent.com:sub": "repo:michaelcarletta-cmd/ChecksOps:environment:staging",
+                "token.actions.githubusercontent.com:aud": "sts.amazonaws.com"
+              }
+            }
+          }
+        ]
+      },
+      "inline_actions": [
+        "kms:GetPublicKey",
+        "kms:Sign",
+        "lambda:GetFunction",
+        "lambda:GetFunctionConfiguration",
+        "lambda:UpdateFunctionCode",
+        "lambda:UpdateFunctionConfiguration"
+      ],
+      "attached_policies": [],
+      "permissions_boundary": null
+    }
+  }
+}
