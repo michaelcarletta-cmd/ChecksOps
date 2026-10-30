@@ -57,7 +57,22 @@ SQL 132 is applied in that environment. No trigger is added.
 2026-10-30): the engine refuses SQL 132 (`predecessors_applied`) until
 `consume_financial_totp_rate_limit(uuid, text, integer, integer)` is at SQL 130's intended state.
 
-**Status:** not applied anywhere. The staging pin and the production pin are pending.
+**Staging executor refreshed (2026-10-30).** Inspect run 41112932726 (main `55cd626f`) found the live
+executor at `jOd0IqUJ…` without `sql/132_financial_totp_code_check_lockout.sql` (main's package also
+superseded `lib/release-sql-specs.mjs`, `lib/release-sql-state.mjs` and `lib/sql-executor-auth.mjs`;
+`collisions` `[]`). Deploy run 41113385981 (main `546dd7cb839153b161f0e8f5f6a3927c6ee29084`) updated it
+to main's package (`J75AEogmHX9pvZxfn458CPfzQxhryyeJYz/r1Tk8dl0=`, RevisionId
+`9e68fd37-f226-4c18-8f52-4f1e20f9b58e`; `errors` `[]`; verified current).
+
+**Staging read-live (2026-10-30).** Run 41113777003 (main `546dd7cb839153b161f0e8f5f6a3927c6ee29084`,
+executor `J75AEogm…`): `financial_totp_count_code_check(uuid)` absent (`function_acl` `[]`); every
+prerequisite present (`prerequisites_missing` `[]`); `predecessors.sql130` true; the definer write on
+`financial_totp_enrollments` ok; live `e1a1d4edb115e3fa0881112e6759c2d7ee1e9d8c6b3e24a7611b655dcf75741f` (the
+pre-state derived above, the function absent), `already_applied` false, `precondition_failures` `[]`.
+Recorded in the staging pin (`expected_live_definition_sha256`, `execute: true`, wave 29) under the
+owner's words of 2026-10-30, "continue with SQL 132 staging".
+
+**Status:** staging pin execute-authorized (wave 29); nothing applied yet; production pin pending.
 
 ## Fingerprint
 
