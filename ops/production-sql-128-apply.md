@@ -33,7 +33,20 @@ functions and triggers, any table, column, view, policy, RLS setting, table gran
 Compliance & Docs upload routes. No API, Lambda or SPA change is part of this file or its pins. No
 trigger is added, so the DB validator's public trigger count is not concerned.
 
-**Status:** not applied anywhere. The staging pin and the production pin are pending.
+**Staging executor refreshed (2026-10-30).** Inspect run 41040936178 found the live executor at
+`lpbOJp31…` without `sql/128_contractor_verification_from_compliance.sql`. Deploy run 41041668169
+updated it to main's package (`/U7wVHb50lkgL+nNMEP13urWDZPDzBuo5LUxC6lLpQE=`, RevisionId
+`e14c18c0-5dd5-489e-89f2-1fa27ff7ec28`; `errors` `[]`).
+
+**Staging read-live (2026-10-30).** Run 41042517205 (main `add2bbfc9`):
+`contractor_verification_status(uuid)` present with the restored supabase body (state `different`),
+the orphan `_trg_recompute_contractor_tier_from_docs()` present; every prerequisite present
+(`prerequisites_missing` `[]`); live `8bd6b42d189ff05b77e19d178ddba0229a0d2b6bca0a2d1d98221774fa8fbc5f` (the restored pre-state
+with the orphan function, derived from the supabase bytes), `already_applied` false,
+`precondition_failures` `[]`. Recorded in the staging pin (`expected_live_definition_sha256`,
+`execute: true`, wave 27) under the owner's words of 2026-10-30, "start SQL 128 staging".
+
+**Status:** staging pin execute-authorized (wave 27); nothing applied yet; production pin pending.
 
 ## Fingerprint
 

@@ -130,6 +130,11 @@ export const STAGING_WAVE1 = Object.freeze({
   // (deploy run 40947474906): SQL 83's endorse capability and pending_signatures bodies, the portal
   // signer absent, every prerequisite present, the definer writes possible.
   sql127: Object.freeze({ wave: 26, approved: '2026-10-29', run: '40947834848', live: '4b4af399a73a25e191d2f914cc074a3744c84fffbc8ce3e55f2adec2cf93dfe0' }),
+  // Wave 27 (owner approved 2026-10-30, "start SQL 128 staging"): SQL 128, contractor verification reads
+  // the Compliance & Docs uploads. Read at main add2bbfc9 after the executor carried it (deploy run
+  // 41041668169): the restored supabase contractor_verification_status (state different) and the orphan
+  // _trg_recompute_contractor_tier_from_docs() present, every prerequisite present.
+  sql128: Object.freeze({ wave: 27, approved: '2026-10-30', run: '41042517205', live: '8bd6b42d189ff05b77e19d178ddba0229a0d2b6bca0a2d1d98221774fa8fbc5f' }),
   sql98: Object.freeze({ wave: 3, approved: '2026-10-18', run: '39083278136', live: '296c3d6a274e10f66005fb9eaecf93fa17b81bd8db3607037ca07698fddd3275', apply_run: '39085677318' }),
 });
 
@@ -141,7 +146,7 @@ export const pendingPin = (pin) => Object.freeze({
 });
 
 /**
- * The committed staging pin's apply state: waves 1-26 recorded and approved, wave 6 approved with
+ * The committed staging pin's apply state: waves 1-27 recorded and approved, wave 6 approved with
  * its read-live still to record (pending until then), wave 18 (SQL 117) retired, the rest pending.
  */
 export function assertStagingPinState(assert, key, pin) {
