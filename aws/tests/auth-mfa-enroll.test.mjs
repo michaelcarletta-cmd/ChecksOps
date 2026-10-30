@@ -13,6 +13,7 @@ import {
   MFA_AUTH_ROUTES,
 } from '../functions/api/auth-mfa.mjs';
 import { AUTH_ROUTES } from '../functions/api/auth-cognito.mjs';
+import { TOTP_CODE_CHECK_RATE_ACTION } from '../functions/api/auth-financial-totp.mjs';
 import { timestepOf, totpAt, wrapKeyFromHex } from '../functions/api/financial-totp.mjs';
 import { CHECKALT_TOTP_ACTION } from '../functions/api/providers/production/checkalt-authz.mjs';
 
@@ -267,7 +268,7 @@ test('replayed timestep is rejected', async () => {
 test('step-up is rate limited', async () => {
   const store = createStore();
   await enrollTester(store);
-  store.rates.set(`${TESTER_APP}:step_up`, 5);
+  store.rates.set(`${TESTER_APP}:${TOTP_CODE_CHECK_RATE_ACTION}`, 5);
   const denied = await handleMfaStepUp(eventOf({
     code: '123456',
     check_intake_item_id: CHECK,
@@ -354,6 +355,9 @@ test('deposit.approve TOTP is recorded against the login, with the check and amo
 test('deposit.approve TOTP fails closed without a check, on amount mismatch, and on replay', async () => {
   const store = createStore();
   const { code } = await enrollTester(store);
+  // Five step-ups follow; enroll confirm and step-up share one 5-check budget, and this test is
+  // about the refusals, not the budget (the shared-budget test covers that).
+  store.rates.delete(`${TESTER_APP}:${TOTP_CODE_CHECK_RATE_ACTION}`);
   const noCheck = await handleMfaStepUp(eventOf({ code, action_key: 'deposit.approve' }), depsOf(store));
   assert.equal(noCheck.error, 'check_intake_item_id is required');
   const amount = await handleMfaStepUp(eventOf({
@@ -668,4 +672,27 @@ test('a wrong step-up code still counts against the rate limit (committed before
   const result = await handleMfaStepUp(eventOf({ code: wrong, check_intake_item_id: CHECK }), depsOf(store));
   assert.equal(result.ok, false);
   assert.deepEqual(order, ['rate', 'commit', 'verify']);
+});
+
+test('enroll confirm and step-up share one budget of 5 code checks (audit finding 7)', async () => {
+  const store = createStore();
+  const { secret } = await enrollTester(store);
+  // enrollTester's confirm used 1 check. Three more wrong confirms and one wrong step-up use the rest.
+  for (let i = 0; i < 3; i += 1) {
+    const wrong = await handleMfaVerify(eventOf({ code: '000000' }), depsOf(store));
+    assert.equal(wrong.ok, false);
+    assert.notEqual(wrong.error, 'rate_limited', `confirm ${i}`);
+  }
+  const wrongStep = await handleMfaStepUp(eventOf({ code: '000000', check_intake_item_id: CHECK }), depsOf(store));
+  assert.notEqual(wrongStep.error, 'rate_limited');
+  // The sixth check is refused on either route, even with the right code.
+  const right = totpAt(secret, timestepOf(NOW));
+  const viaStepUp = await handleMfaStepUp(eventOf({ code: right, check_intake_item_id: CHECK }), depsOf(store));
+  assert.equal(viaStepUp.error, 'rate_limited');
+  const viaConfirm = await handleMfaVerify(eventOf({ code: right }), depsOf(store));
+  assert.equal(viaConfirm.error, 'rate_limited');
+  assert.equal(store.stepups.length, 0);
+  assert.equal(store.rates.get(`${TESTER_APP}:${TOTP_CODE_CHECK_RATE_ACTION}`), 7);
+  assert.equal(store.rates.has(`${TESTER_APP}:step_up`), false);
+  assert.equal(store.rates.has(`${TESTER_APP}:enroll_confirm`), false);
 });

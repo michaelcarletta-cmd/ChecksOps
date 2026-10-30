@@ -3851,3 +3851,39 @@ test('Billing apply-event staging only (finding 6): tenant-billing-handlers.mjs 
   );
   assert.match(fs.readFileSync(path.join(API, MEMBER), 'utf8'), /error: 'apply_event_staging_only'/);
 });
+
+test('TOTP shared rate limit (finding 7): auth-financial-totp.mjs REPLACE from the bytes inspect run 40990003881 found live, planning only', async () => {
+  const MEMBER = 'auth-financial-totp.mjs';
+  const REL = 'aws/tests/fixtures/production-totp-shared-rate-limit-manifest-2026-10-30.json';
+  const PREVIOUS = 'aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json';
+  // The release-2026-10-17 bytes, which read-only production overlay inspect run 40990003881 reported
+  // live (ALREADY_ACCEPTED); the row had still expected c625e8c2.
+  const LIVE = 'ccfe06bb1164212ba6fb0d2b6f42eed282f5d1bc59a0c075a267a6afecd5b393';
+  const STALE = 'c625e8c2b0efa5a5093c983bcd89f3660f017e22d8143bd6a2b4d88df9ab4c4d';
+  const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, REL), 'utf8'));
+  const accepted = sha(`aws/functions/api/${MEMBER}`);
+  assert.equal(manifest.workstream_id, 'totp-shared-rate-limit');
+  assert.equal(manifest.deploy_authorized, false);
+  assert.match(manifest.authorization, /^Pending owner review/);
+  assert.match(manifest.notes, /run 40990003881/);
+  assert.match(manifest.notes, /T2y60mG7PWGRUltrOxHuDNeyh56059o1\/xc2ERFj\+gc=/);
+  assert.deepEqual(manifest.members, { [MEMBER]: { live_sha256: LIVE, accepted_sha256: accepted, operation: 'replace', previous_manifest: PREVIOUS } });
+  const previous = JSON.parse(fs.readFileSync(path.join(ROOT, PREVIOUS), 'utf8')).members[MEMBER];
+  assert.equal(previous.accepted_sha256, LIVE);
+  assert.equal(previous.live_sha256, STALE);
+  assert.deepEqual(PLAN.members[MEMBER], { operation: 'replace', accepted_sha256: accepted, expected_live_sha256: LIVE, sql_before: null, manifest: REL });
+  assert.ok(PLAN.notes.includes(`TOTP shared rate limit (2026-10-30, finding 7): REPLACE ${MEMBER} ${LIVE.slice(0, 8)} -> ${accepted.slice(0, 8)}`));
+  assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
+  const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
+  const ready = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: LIVE }) });
+  assert.equal(ready.state, 'READY');
+  assert.equal(ready.mutation, false);
+  const done = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: accepted }) });
+  assert.equal(done.state, 'ALREADY_ACCEPTED');
+  // The stale expectation is no longer an accepted live state.
+  await assert.rejects(
+    run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: STALE }) }),
+    (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+  );
+  assert.match(fs.readFileSync(path.join(API, MEMBER), 'utf8'), /export const TOTP_CODE_CHECK_RATE_ACTION = 'code_check';/);
+});
