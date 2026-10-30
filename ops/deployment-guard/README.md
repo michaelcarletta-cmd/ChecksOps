@@ -133,6 +133,19 @@ whole snapshot and the actor id or target state; the writer never retries or del
 role has no CloudFormation, IAM or Scheduler rights until an operator attaches the scoped
 statements in `aws/production-lambda-overlay/policies/permissions-policy.json` once (owner-approved,
 manual). Runbook: `ops/checkalt-status-reconcile-schedule.md`.
+
+The production stack `checksops-production-onboarding-keys` (KMS keys
+`alias/checksops-production-compliance-documents` and `alias/checksops-production-moov-onboarding-pii`;
+template `aws/production/onboarding-keys.yaml`, sha256 pinned in
+`scripts/deployment-guard/production-onboarding-keys.mjs`) is created through
+`guarded-production-onboarding-keys.yml`: `inspect` is read-only; `create` needs the stack and both
+aliases absent, the prep Lambda unchanged and `CREATE ONBOARDING KEYS IN PRODUCTION`, takes the
+`production-onboarding-keys` lease and a KMS-signed `cloudformation` receipt that binds the whole
+snapshot, the stack and both aliases. There is no update or delete mode; the writer never retries
+or deletes. The deploy role has no rights for it until an operator attaches the `*OnboardingKeys*`
+statements once (owner-approved, manual). Setting `COMPLIANCE_DOCUMENTS_KMS_KEY_ARN` and
+`MOOV_ONBOARDING_PII_KMS_KEY_ARN` on the Lambda is a later `guarded-production-lambda-config.yml`
+change. Runbook: `ops/production-onboarding-keys.md`.
 It reports the requested repository member as `PRESENT` (with its SHA-256) or
 `ABSENT`, alongside the live Lambda CodeSha256 and RevisionId. Absence is not
 deployment authorization. For `apply`, explicitly select `add` for an absent
