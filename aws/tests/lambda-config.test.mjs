@@ -214,23 +214,36 @@ test('the committed plan records production payees on (run 40148243435); product
   assert.equal(row.applied.staging_acceptance, 'https://github.com/michaelcarletta-cmd/ChecksOps/pull/1228');
 });
 
-test('the committed plan points the production API at the onboarding keys from the 2026-10-30 inspect (41105016517)', () => {
+test('the committed plan records the production onboarding keys config (run 41106380051) and starts the next change empty', () => {
   const raw = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, CONFIG_PLAN_REL), 'utf8'));
   const section = loadConfigPlan(REPO_ROOT, 'production');
   const documents = 'arn:aws:kms:us-east-1:806168576068:key/59d713da-72f3-43a6-8a48-a826d432d53f';
   const pii = 'arn:aws:kms:us-east-1:806168576068:key/30d2da88-e7bc-4280-a594-bcacf2a2a934';
-  assert.equal(section.status, 'accepted');
-  assert.deepEqual(section.set, {
-    COMPLIANCE_DOCUMENTS_KMS_KEY_ARN: { from: null, to: documents },
-    MOOV_ONBOARDING_PII_KMS_KEY_ARN: { from: null, to: pii },
-  });
+  assert.equal(section.status, 'applied');
+  assert.deepEqual(section.set, {});
   assert.deepEqual(section.unset, {});
   const row = raw.environments.production;
   assert.equal(row.inspect.run_id, '41105016517');
   assert.equal(row.inspect.main_commit, '2ae712c6fec9fadc59bae563d2a7110c4c3fc279');
   assert.equal(row.inspect.live_revision_id, '71a89043-17b0-4ff7-bf76-31f518429e20');
   assert.equal(row.inspect.live_variable_count, 46);
-  assert.equal(Object.hasOwn(row, 'applied'), false);
+  assert.equal(row.applied.run_id, '41106380051');
+  assert.equal(row.applied.main_commit, '342eb3922289a5aa239b5d7633728cc2cc674ed5');
+  assert.equal(row.applied.state, 'VERIFIED');
+  assert.equal(row.applied.revision_id_before, row.inspect.live_revision_id);
+  assert.equal(row.applied.revision_id_after, '4015e4b6-6c4d-4840-bafc-67fe53123424');
+  assert.equal(row.applied.configuration_sha256_before, row.inspect.live_configuration_sha256);
+  assert.equal(row.applied.code_sha256, row.inspect.live_code_sha256);
+  assert.deepEqual(row.applied.applied_change, {
+    set: {
+      COMPLIANCE_DOCUMENTS_KMS_KEY_ARN: { from: null, to: documents },
+      MOOV_ONBOARDING_PII_KMS_KEY_ARN: { from: null, to: pii },
+    },
+    unset: {},
+  });
+  // The recorded change hash is the one the run's receipt owned.
+  assert.equal(changeSha256({ function_name: row.function_name, ...row.applied.applied_change }), row.applied.change_sha256);
+  assert.equal(row.applied.staging_acceptance, 'https://github.com/michaelcarletta-cmd/ChecksOps/pull/1456');
   // The keys the code reads: documents.mjs (documentsKeyArn) and crypto.mjs (PII_KMS_KEY_ENV).
   const documentsSource = fs.readFileSync(path.join(REPO_ROOT, 'aws/functions/api/providers/onboarding/documents.mjs'), 'utf8');
   const cryptoSource = fs.readFileSync(path.join(REPO_ROOT, 'aws/functions/api/providers/onboarding/crypto.mjs'), 'utf8');
