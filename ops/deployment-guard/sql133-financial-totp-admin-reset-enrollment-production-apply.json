@@ -1,0 +1,64 @@
+{
+  "id": "sql133-financial-totp-admin-reset-enrollment-production-apply",
+  "migration": "sql133",
+  "authorization": "pending",
+  "execute": false,
+  "target_environment": "production",
+  "target_component": "production-sql",
+  "deployment_type": "sql-apply",
+  "filename": "aws/workflows/sql/133_financial_totp_admin_reset_enrollment.sql",
+  "migration_id": "133_financial_totp_admin_reset_enrollment",
+  "staging_pin_commit": "9bf17aa23c66bdaf0688de6d56eff99ad143f6e5",
+  "source_sha256": "2184701c42869cef45839bb68aec7a8275f303612576d426225d172d54c8e9a2",
+  "function_identities": [
+    "public.financial_totp_admin_reset_enrollment(uuid, uuid)"
+  ],
+  "expected_live_definition_sha256": null,
+  "intended_replacement_sha256": "edfef132ffea2b00a1b22e452b35a4232a14c81fbba832325d22ce8656a45459",
+  "authorization_phrase": "APPLY_FINANCIAL_TOTP_ADMIN_RESET",
+  "predecessors": [],
+  "order_note": "No predecessor: SQL 133 calls none of SQL 130, 131 or 132's functions; it follows them by the order of work the owner set (2026-10-30 'ok build the reset after SQL 131 and the lockout fix'). SQL 133 creates one new function, financial_totp_admin_reset_enrollment(uuid, uuid), on the financial TOTP enrollment schema created on the AWS databases from aws/migrations/proposed/NOT_APPLIED_20260911_financial_totp_enrollment.sql (on no release key) and the tenant membership and identity tables. The spec prerequisites are financial_totp_enrollments (application_user_id), tenant_users (tenant_id, user_id), identity_accounts (application_user_id, email), profiles (id, email), auth.uid() and role checksops; a read-only production inspect confirms them. The applying login must be able to reach all four relations as the function's owner past RLS (definer_can_write_relations on each: the table owner without FORCE ROW LEVEL SECURITY, or a superuser or BYPASSRLS): the function deletes from financial_totp_enrollments and reads the other three for its gate, and a gate filtered by RLS would refuse every reset or let one through on a partial view. Expected pre-state in both environments: the function absent (release sql133 v1 / function public.financial_totp_admin_reset_enrollment(uuid, uuid): absent). Where it already exists (a re-run) it must be owned by the applying login (functions_owned_by_login), keep its TABLE result (function_results_match) and hold no EXECUTE grant other than checksops and the owner, which the file keeps, and PUBLIC, which it revokes (function_acl_replaceable). The ACL after the apply is checksops and the owner. The API change that calls the function (aws/functions/api/admin-reset-totp.mjs, this change) tolerates its absence (the Cognito and profiles reset as before, financialTotpCleared false, never a 500) and needs the guarded Lambda path after this pin is applied in that environment; no API, Lambda or SPA change is part of this pin. Adds no trigger.",
+  "admin_login": "checksops_admin",
+  "rds_identifier": "checksops-production",
+  "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
+  "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
+  "tooling": {
+    "status": "built",
+    "production_tool": "scripts/deployment-guard/sql133-financial-totp-admin-reset-enrollment-production-apply.mjs",
+    "production_lib": "scripts/deployment-guard/lib/release-sql-production-apply.mjs",
+    "staging_executor_handler": "aws/write-path/guarded-sql-executor/index.mjs handleReleaseSqlMigration",
+    "staging_workflow_choice": "sql133-financial-totp-admin-reset-enrollment",
+    "one_shot_migration": "sql133",
+    "fingerprint_engine": "scripts/deployment-guard/lib/release-sql-state.mjs",
+    "runbook": "ops/production-sql-133-apply.md",
+    "tests": [
+      "aws/tests/release-sql133-executor.test.mjs",
+      "aws/tests/release-sql133-production-apply.test.mjs",
+      "aws/tests/release-sql90-97-executor.test.mjs",
+      "aws/tests/release-sql90-97-production-apply.test.mjs",
+      "aws/tests/sql133-financial-totp-admin-reset-pg.test.mjs"
+    ],
+    "note": "Guarded tooling for SQL 133: sql133-financial-totp-admin-reset-enrollment-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql133-financial-totp-admin-reset-enrollment); production-sql-one-shot.mjs --migration sql133. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): the new function with the file's body and attributes and EXECUTE for checksops and the owner. The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
+  },
+  "production_inspect": {
+    "status": "pending",
+    "date": null,
+    "ssm_command_id": null,
+    "source_commit": null,
+    "read_only": true,
+    "connected_as": "checksops_admin",
+    "live_definition_sha256": null,
+    "apply_preconditions_met": null,
+    "precondition_failures": null,
+    "note": "Pending: no release-engine production inspect has been run for SQL 133 yet. The financial TOTP live inspect of 2026-10-30 (SSM cfee4512-4988-4fd1-be77-b03d1b4cd50b, main da064a34, scripts/deployment-guard/financial-totp-live-inspect.mjs) read financial_totp_enrollments owned by checksops_admin and the four financial_totp_* functions as the proposed file defines them; no financial_totp_admin_reset_enrollment exists. Expected release-engine fingerprint of that state under sql133: f3b1671e8617df78a20600b43fcfc6636739d78f235ef78d1cc7d1d68f2f909d (the function absent; derived by aws/tests/release-sql133-executor.test.mjs and read back on PostgreSQL 16). Record the one-shot --phase inspect's date, SSM command id, source commit, live_definition_sha256, prerequisites_missing, release_sql_inspect.functions, release_sql_inspect.function_acl, release_sql_inspect.definer_writes (all four relations must read ok true), precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. Stop if prerequisites_missing is not [] or precondition_failures is not [] (prerequisites_present, definer_can_write_relations; on a re-run also functions_owned_by_login, function_results_match, function_acl_replaceable): that needs its own reviewed change."
+  },
+  "intended_post_state": {
+    "fingerprint": "edfef132ffea2b00a1b22e452b35a4232a14c81fbba832325d22ce8656a45459",
+    "note": "financial_totp_admin_reset_enrollment(uuid, uuid) owned by checksops_admin, plpgsql, VOLATILE, SECURITY DEFINER, search_path public, pg_temp, RETURNS TABLE(cleared boolean), EXECUTE for checksops and the owner (PUBLIC revoked): for a caller that is auth.uid(), not the target, shares a tenant with the target (tenant_users) and names a target that is not the platform owner (identity_accounts / profiles email checksopsadmin@gmail.com), deletes the target's financial_totp_enrollments row and returns cleared true (false when there was none); every other case raises (22023 invalid_reset; 42501 enrollment_caller_mismatch, cannot_reset_own_totp, reset_target_not_teammate, platform_owner_protected) and deletes nothing. No other function, table, column, policy, RLS setting, grant, trigger or row change. The fingerprint is releaseIntendedHash('sql133', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): edfef132ffea2b00a1b22e452b35a4232a14c81fbba832325d22ce8656a45459."
+  },
+  "staging_acceptance": {
+    "ok": false,
+    "reference": null,
+    "basis": "Pending: record the guarded staging SQL executor read-live and the staging apply of SQL 133 (choice sql133-financial-totp-admin-reset-enrollment) here in the reviewed change that sets execute true. The behavior is covered on PostgreSQL 16 by aws/tests/sql133-financial-totp-admin-reset-pg.test.mjs. Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+  }
+}

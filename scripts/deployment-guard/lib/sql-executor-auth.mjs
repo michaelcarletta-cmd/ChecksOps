@@ -3002,6 +3002,28 @@ export const AUTHORIZED_SQL132_FINANCIAL_TOTP_CODE_CHECK_LOCKOUT = Object.freeze
   ]),
 });
 
+// Financial TOTP teammate reset staging pin: SQL 133 (owner 2026-10-30 "ok build the reset after SQL 131
+// and the lockout fix": the new SECURITY DEFINER financial_totp_admin_reset_enrollment(uuid, uuid) deletes a
+// teammate's financial_totp_enrollments row under the API's own gate, re-checked in the database;
+// EXECUTE for checksops and the owner). No predecessor. Pending until a reviewed pin change records a
+// staging read-live (expected: the function absent, everything else in place).
+export const AUTHORIZED_SQL133_FINANCIAL_TOTP_ADMIN_RESET_ENROLLMENT = Object.freeze({
+  key: 'sql133',
+  filename: 'aws/workflows/sql/133_financial_totp_admin_reset_enrollment.sql',
+  migration_id: '133_financial_totp_admin_reset_enrollment',
+  // The commit that last authored the file bytes.
+  commit: '9bf17aa23c66bdaf0688de6d56eff99ad143f6e5',
+  source_sha256: '2184701c42869cef45839bb68aec7a8275f303612576d426225d172d54c8e9a2',
+  authorization: 'pending',
+  execute: false,
+  expected_live_definition_sha256: null,
+  // Code-derived: releaseIntendedHash('sql133', file bytes) (release-sql-state.mjs); re-derived by the tests.
+  intended_replacement_sha256: 'edfef132ffea2b00a1b22e452b35a4232a14c81fbba832325d22ce8656a45459',
+  function_identities: Object.freeze([
+    'public.financial_totp_admin_reset_enrollment(uuid, uuid)',
+  ]),
+});
+
 // Loss Draft escrow and draw records staging pin: SQL 134 (owner 2026-10-30: a monitored loss draft
 // stays in Loss Draft to document escrow and disbursements; UPDATE (total_escrowed,
 // draw_amount_requested, draw_stage, draw_amount_released, holdback_amount) on loss_draft_tracking
@@ -3068,6 +3090,7 @@ export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql130: AUTHORIZED_SQL130_FINANCIAL_TOTP_RATE_LIMIT_CODE_CHECK_NO_PUBLIC,
   sql131: AUTHORIZED_SQL131_FINANCIAL_TOTP_FUNCTIONS_NO_PUBLIC,
   sql132: AUTHORIZED_SQL132_FINANCIAL_TOTP_CODE_CHECK_LOCKOUT,
+  sql133: AUTHORIZED_SQL133_FINANCIAL_TOTP_ADMIN_RESET_ENROLLMENT,
   sql134: AUTHORIZED_SQL134_LOSS_DRAFT_ESCROW_WRITE_GRANTS,
 });
 
@@ -3084,7 +3107,7 @@ export function isSql30TenantDocumentsDocType(input = {}) {
   return pinIdentifiersMatch(input, AUTHORIZED_SQL30_TENANT_DOCUMENTS_DOC_TYPE);
 }
 
-/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql132, sql134) an input names, or null. */
+/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql134) an input names, or null. */
 export function releaseSqlMigrationKey(input = {}) {
   return Object.keys(RELEASE_2026_10_17_PENDING_SQL_PINS)
     .find((key) => pinIdentifiersMatch(input, RELEASE_2026_10_17_PENDING_SQL_PINS[key])) || null;
