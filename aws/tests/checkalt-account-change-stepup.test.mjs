@@ -148,10 +148,22 @@ const fakeClient = (state) => ({
       return { rows: [{ allowed: state.rateAllowed, count: 1, retry_after_seconds: 60 }] };
     }
     if (text.includes('financial_totp_get_enrollment')) return { rows: state.enrollment ? [state.enrollment] : [] };
+    // SQL 132: the API checks for the function, then counts the check; ten without a success lock for 15 minutes.
+    if (text.includes('to_regprocedure')) return { rows: [{ present: state.lockoutFunction !== false && params[0] === 'public.financial_totp_count_code_check(uuid)' }] };
+    if (text.includes('financial_totp_count_code_check')) {
+      if (!state.enrollment) return { rows: [] };
+      const now = Date.now();
+      const lockedUntil = state.enrollment.locked_until ? new Date(state.enrollment.locked_until).getTime() : 0;
+      if (lockedUntil > now) return { rows: [{ allowed: false, failed_attempts: state.enrollment.failed_attempts, retry_after_seconds: Math.max(1, Math.ceil((lockedUntil - now) / 1000)) }] };
+      const failed = state.enrollment.failed_attempts + 1;
+      state.enrollment = { ...state.enrollment, failed_attempts: failed, locked_until: failed >= 10 ? new Date(now + 15 * 60000).toISOString() : null };
+      track(state, `count:${failed}`);
+      return { rows: [{ allowed: true, failed_attempts: failed, retry_after_seconds: 0 }] };
+    }
     if (text.includes('financial_totp_mark_verified')) {
       const step = Number(params[1]);
       if (state.enrollment.last_used_timestep !== null && Number(state.enrollment.last_used_timestep) === step) return { rows: [{ claimed: false }] };
-      state.enrollment = { ...state.enrollment, last_used_timestep: step };
+      state.enrollment = { ...state.enrollment, last_used_timestep: step, failed_attempts: 0, locked_until: null };
       track(state, `mark:${step}`);
       return { rows: [{ claimed: true }] };
     }
@@ -266,7 +278,8 @@ test('wrong path: a wrong code is refused with no Check Alt call or write; the r
   assert.equal(result.statusCode, 401, JSON.stringify(result));
   assert.equal(result.error, 'code_rejected');
   noProviderNoWrite(state);
-  assert.deepEqual(state.committedWrites, [`rate:${TOTP_CODE_CHECK_RATE_ACTION}`], 'only the rate-limit hit is committed');
+  assert.deepEqual(state.committedWrites, [`rate:${TOTP_CODE_CHECK_RATE_ACTION}`, 'count:1'], 'only the rate-limit hit and the SQL 132 count are committed');
+  assert.equal(state.enrollment.failed_attempts, 1);
   assert.equal(state.stepups.length, 0);
 });
 
@@ -396,4 +409,59 @@ test('SPA: the card asks for the authenticator code only when changing a registe
   assert.match(card, /code_required\?: unknown/);
   assert.match(card, /id="reg_totp"/);
   assert.match(card, /&& \(!codeNeeded \|\| codeValid\)/);
+});
+
+test('SQL 132: ten wrong codes lock the account change; while locked the right code is refused exactly like a wrong one, with no Check Alt call, write or mark', async () => {
+  const state = newState({ row: registeredRow() });
+  const wrong = CODE === '000000' ? '111111' : '000000';
+  let wrongResult = null;
+  for (let i = 0; i < 10; i += 1) {
+    wrongResult = await call(state, body({ totp_code: wrong }));
+    assert.equal(wrongResult.statusCode, 401, `check ${i + 1}`);
+    assert.equal(wrongResult.error, 'code_rejected', `check ${i + 1}`);
+    assert.equal(state.enrollment.failed_attempts, i + 1);
+  }
+  assert.ok(state.enrollment.locked_until && new Date(state.enrollment.locked_until).getTime() > Date.now(), 'locked after the tenth');
+  state.queries = [];
+  const locked = await call(state, body({ totp_code: CODE }));
+  assert.deepEqual(locked, wrongResult, 'a locked check answers exactly like a wrong code');
+  noProviderNoWrite(state);
+  assert.equal(state.queries.some((q) => q.sql.includes('financial_totp_mark_verified')), false, 'the code is never compared or spent');
+  assert.equal(state.stepups.length, 0);
+  assert.equal(state.enrollment.failed_attempts, 10, 'a locked check is not counted again');
+});
+
+test('SQL 132: the count is committed before the compare, and a right code clears it', async () => {
+  const state = newState({ row: registeredRow(), enrollment: { ...enrollment(), failed_attempts: 4 } });
+  const result = await call(state, body({ totp_code: CODE }));
+  assert.equal(result.statusCode, 200, JSON.stringify(result));
+  const countAt = state.committedWrites.indexOf('count:5');
+  const markAt = state.committedWrites.findIndex((w) => w.startsWith('mark:'));
+  assert.ok(countAt >= 0 && markAt > countAt, JSON.stringify(state.committedWrites));
+  assert.equal(state.enrollment.failed_attempts, 0);
+  assert.equal(state.enrollment.locked_until, null);
+});
+
+test('SQL 132 not applied (the function absent): the check is not counted, nothing locks, and the change answers as before', async () => {
+  const state = newState({ row: registeredRow(), lockoutFunction: false });
+  const wrong = CODE === '000000' ? '111111' : '000000';
+  for (let i = 0; i < 12; i += 1) {
+    const result = await call(state, body({ totp_code: wrong }));
+    assert.equal(result.statusCode, 401, `check ${i + 1}`);
+    assert.equal(result.error, 'code_rejected', `check ${i + 1}`);
+  }
+  assert.equal(state.enrollment.failed_attempts, 0);
+  assert.equal(state.enrollment.locked_until, null);
+  assert.equal(state.queries.some((q) => q.sql.includes('financial_totp_count_code_check')), false);
+  const right = await call(state, body({ totp_code: CODE }));
+  assert.equal(right.statusCode, 200, JSON.stringify(right));
+});
+
+test('a locked_until already on the row is refused like a wrong code even when the SQL 132 function is absent', async () => {
+  const state = newState({ row: registeredRow(), lockoutFunction: false, enrollment: { ...enrollment(), locked_until: new Date(Date.now() + 60000).toISOString() } });
+  const result = await call(state, body({ totp_code: CODE }));
+  assert.equal(result.statusCode, 401, JSON.stringify(result));
+  assert.equal(result.error, 'code_rejected');
+  noProviderNoWrite(state);
+  assert.equal(state.queries.some((q) => q.sql.includes('financial_totp_mark_verified')), false);
 });

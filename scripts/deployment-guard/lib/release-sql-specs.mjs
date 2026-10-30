@@ -1,5 +1,5 @@
 /**
- * Specs of the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108 to SQL 131) for the shared engine in
+ * Specs of the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108 to SQL 132) for the shared engine in
  * release-sql-state.mjs: what each pinned file creates, replaces or drops, the reviewed
  * EXECUTE ACLs, the prerequisites and predecessors, and the PostgreSQL renderings the file
  * leaves (policy expressions, view, column, constraint, index and trigger definitions as
@@ -5897,5 +5897,48 @@ export const RELEASE_SQL_SPECS = deepFreeze({
     "render": {
       "grantors": true
     }
+  },
+  // SQL 132 (owner 2026-10-30, "restart SQL 131 and the lockout fix"): the financial TOTP lockout.
+  // One new SECURITY DEFINER function, financial_totp_count_code_check(uuid), counts a code check
+  // against financial_totp_enrollments.failed_attempts before the API compares the code, locks the
+  // row (locked_until, 15 minutes) at the tenth consecutive check without a success and refuses while
+  // locked; financial_totp_mark_verified (unchanged) clears both on a correct code. EXECUTE: checksops
+  // and the owner (PUBLIC revoked). It writes the enrollment table under RLS as its owner
+  // (definer_writes). Predecessor SQL 130: the API counts every code check next to SQL 130's
+  // code_check rate limit, so the limit must be live first. No table, column, policy or grant change.
+  sql132: {
+    "key": "sql132",
+    "label": "SQL 132",
+    "choice": "sql132-financial-totp-code-check-lockout",
+    "production_pin_rel": "ops/deployment-guard/sql132-financial-totp-code-check-lockout-production-apply.json",
+    "script": "sql132-financial-totp-code-check-lockout-production-apply",
+    "prerequisites": [
+      "public.financial_totp_enrollments",
+      "public.financial_totp_mark_verified(uuid, bigint)",
+      "auth.uid()",
+      "role checksops",
+      "column public.financial_totp_enrollments.application_user_id",
+      "column public.financial_totp_enrollments.failed_attempts",
+      "column public.financial_totp_enrollments.locked_until"
+    ],
+    "predecessors": [
+      "sql130"
+    ],
+    "functions": [
+      {
+        "identity": "public.financial_totp_count_code_check(uuid)",
+        "result": "TABLE(allowed boolean, failed_attempts integer, retry_after_seconds integer)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ],
+        "revokes": [
+          "PUBLIC EXECUTE"
+        ]
+      }
+    ],
+    "definer_writes": [
+      "public.financial_totp_enrollments"
+    ]
   },
 });
