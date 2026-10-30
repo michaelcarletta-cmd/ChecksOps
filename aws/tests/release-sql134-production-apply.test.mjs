@@ -213,7 +213,8 @@ test('order: no predecessor; no function; the fourteen column grants the Loss Dr
   const runbook = fs.readFileSync(path.join(ROOT, COMMITTED.tooling.runbook), 'utf8');
   assert.ok(runbook.includes(COMMITTED.intended_replacement_sha256));
   assert.ok(runbook.includes(COMMITTED.source_sha256));
-  assert.match(runbook, /\*\*Status:\*\* not applied anywhere\. The staging pin and the production pin are pending\./);
+  assert.match(runbook, /\*\*Status:\*\* staging pin execute-authorized \(wave 30\)/);
+  assert.match(runbook, /Read-live run 41130749260/);
   assert.match(runbook, /APPLY_LOSS_DRAFT_ESCROW_WRITE_GRANTS/);
   assert.match(runbook, /`aws_can_write_claim\(NULL\)` is false/);
   const oneShot = fs.readFileSync(path.join(ROOT, 'ops/production-sql-one-shot.md'), 'utf8');

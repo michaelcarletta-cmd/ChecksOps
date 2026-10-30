@@ -3029,8 +3029,7 @@ export const AUTHORIZED_SQL133_FINANCIAL_TOTP_ADMIN_RESET_ENROLLMENT = Object.fr
 // draw_amount_requested, draw_stage, draw_amount_released, holdback_amount) on loss_draft_tracking
 // and INSERT (loss_draft_id, draw_number, amount_requested, amount_released, release_date,
 // released_at, status, notes, created_by) on loss_draft_releases, for checksops and authenticated).
-// No predecessor. Pending until a reviewed pin change records a staging read-live (expected: no
-// column grant on any of the fourteen columns).
+// No predecessor. Staging apply authorized (wave 30) from staging read-live run 41130749260.
 export const AUTHORIZED_SQL134_LOSS_DRAFT_ESCROW_WRITE_GRANTS = Object.freeze({
   key: 'sql134',
   filename: 'aws/workflows/sql/134_loss_draft_escrow_write_grants.sql',
@@ -3038,9 +3037,10 @@ export const AUTHORIZED_SQL134_LOSS_DRAFT_ESCROW_WRITE_GRANTS = Object.freeze({
   // The commit that last authored the file bytes.
   commit: '05faad793cd360736420859f1b686e5956bc39dc',
   source_sha256: 'a9082d1369587a702014e10e443ab965c1608e99d14a193da900f7d35c91e03a',
-  authorization: 'pending',
-  execute: false,
-  expected_live_definition_sha256: null,
+  authorization: 'Owner approved 2026-10-30: staging apply (wave 30) from staging read-live run 41130749260',
+  execute: true,
+  // Staging read-live run 41130749260 (main 564b7baee): none of the fourteen columns granted.
+  expected_live_definition_sha256: '7827f4c87e5bc9e7bd0def01d5f201a0a1fc26365480921896aa452e1403466d',
   // Code-derived: releaseIntendedHash('sql134', file bytes) (release-sql-state.mjs); re-derived by the tests.
   intended_replacement_sha256: 'c046d1c91cc79596c103f154b043b5421cb1dc6ceaef45d87f2f6ea1c0073c7c',
   // The file creates, replaces and sets the ACL of no function.
