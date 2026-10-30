@@ -100,6 +100,7 @@ export const EXECUTOR_PACK_MEMBERS = Object.freeze([
   ['aws/workflows/sql/126_definer_reads_caller_gates.sql', 'sql/126_definer_reads_caller_gates.sql'],
   ['aws/workflows/sql/127_homeowner_portal_signing.sql', 'sql/127_homeowner_portal_signing.sql'],
   ['aws/workflows/sql/128_contractor_verification_from_compliance.sql', 'sql/128_contractor_verification_from_compliance.sql'],
+  ['aws/workflows/sql/129_financial_totp_rate_limit_code_check.sql', 'sql/129_financial_totp_rate_limit_code_check.sql'],
   ['aws/functions/api/rds-global-bundle.pem', 'rds-global-bundle.pem'],
   ['scripts/deployment-guard/lib/sql-apply.mjs', 'lib/sql-apply.mjs'],
   ['scripts/deployment-guard/lib/sql-executor-auth.mjs', 'lib/sql-executor-auth.mjs'],
