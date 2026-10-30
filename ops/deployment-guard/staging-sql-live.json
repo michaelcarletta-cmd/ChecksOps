@@ -77,8 +77,8 @@
       "evidence": "Guarded staging SQL executor apply of sql127-homeowner-portal-signing on 2026-10-29 (run 40952161383, main e98d57754, wave 26, executor lpbOJp31…; read-live run 40952453984 already_applied true): receipt before 4b4af399…, after c4936010… = the pin's intended_replacement_sha256; precondition_failures [], prerequisites_missing []."
     },
     "aws/workflows/sql/132_financial_totp_code_check_lockout.sql": {
-      "verified_live": false,
-      "evidence": null
+      "verified_live": true,
+      "evidence": "Guarded staging SQL executor apply of sql132-financial-totp-code-check-lockout on 2026-10-30 (run 41117004966, main 42068df3f, wave 29, executor aBuDhgGl…; read-live run 41117375887 already_applied true): receipt before e1a1d4ed…, after 88828cb4… = the pin's intended_replacement_sha256; precondition_failures [], prerequisites_missing []."
     },
     "aws/workflows/sql/133_financial_totp_admin_reset_enrollment.sql": {
       "verified_live": false,
