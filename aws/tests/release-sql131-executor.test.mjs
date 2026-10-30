@@ -4,9 +4,10 @@
  * release-sql90-97-executor.test.mjs runs what every release key shares (SQL 131 included); this
  * file covers what is new:
  *
- *   - the pin: pending (execute false, no recorded pre-state), code-derived, selectable, packed,
- *     in step with the production pin; the pinned commit authored the bytes; predecessor SQL 130
- *     (applied to both databases); nothing names SQL 131;
+ *   - the pin: pending (execute false, no recorded pre-state: staging read as already in the intended
+ *     state, run 41107844336, so no staging apply), code-derived, selectable, packed, in step with the
+ *     production pin (execute true on production's own pre-state, derived from the spec); the pinned
+ *     commit authored the bytes; predecessor SQL 130 (applied to both databases); nothing names SQL 131;
  *   - the spec's four acl_functions entries (SQL 131 creates or replaces no function): the
  *     fingerprint is the four EXECUTE ACLs with grantors, checksops and the owner on each; the
  *     unrelated snapshot skips the four and the post-conditions require the rest of each unchanged;
@@ -199,9 +200,19 @@ test('pin: SQL 131 pending, code-derived, selectable, packed, in step with the p
   assert.equal(prod.staging_pin_commit, pin.commit);
   assert.equal(prod.source_sha256, pin.source_sha256);
   assert.deepEqual(prod.predecessors, ['sql130']);
-  assert.equal(prod.execute, false);
-  assert.equal(prod.authorization, 'pending');
-  assert.equal(prod.expected_live_definition_sha256, null);
+  // Production pin execute-authorized (owner-approved pin change of 2026-10-30) on the staging read-live
+  // (already in the intended state there: the staging pin above stays pending). Its pre-state is production's
+  // own (read-only inspect SSM be25e88a): the four with EXECUTE also for PUBLIC, derived here from the spec.
+  assert.equal(prod.execute, true);
+  assert.match(prod.authorization, /^Owner approved 2026-10-30 /);
+  assert.equal(prod.expected_live_definition_sha256, '99d9e8e925ca8c5b56e11409f145e2d75de2759c27d8fd1b476494ffc62e2eaa');
+  assert.equal(prod.expected_live_definition_sha256, prod.production_inspect.live_definition_sha256);
+  assert.equal(prod.expected_live_definition_sha256, PRODUCTION_PRE);
+  assert.notEqual(prod.expected_live_definition_sha256, STAGING_PRE);
+  assert.notEqual(prod.expected_live_definition_sha256, prod.intended_replacement_sha256);
+  assert.equal(prod.production_inspect.status, 'recorded');
+  assert.equal(prod.staging_acceptance.ok, true);
+  assert.match(prod.staging_acceptance.reference, /\/actions\/runs\/41107844336$/);
   assert.equal(prod.applied, undefined);
   assert.ok(prod.production_inspect.note.includes(PRODUCTION_PRE));
   let bytes = null;
@@ -304,7 +315,7 @@ async function functionStates(admin) {
 }
 const withoutAcl = (states) => Object.fromEntries(Object.entries(states).map(([f, r]) => [f, { ...r, execute: null }]));
 
-test('PostgreSQL 16: SQL 131 through the executor: refused until SQL 130 is in place; production\'s pre-state as derived; the file\'s own refusals; a missing, foreign-owned, otherwise-granted or foreign-granted function refused; a pending pin and an unexpected pre-state cannot apply; one apply on the intended fingerprint with bodies and the fifth function unchanged; then already in place', { timeout: 600000 }, async (t) => {
+test('PostgreSQL 16: SQL 131 through the executor: refused until SQL 130 is in place; production\'s pre-state as derived and as recorded; the file\'s own refusals; a missing, foreign-owned, otherwise-granted or foreign-granted function refused; a pending pin and an unexpected pre-state cannot apply; one apply on the intended fingerprint with bodies and the fifth function unchanged; then already in place', { timeout: 600000 }, async (t) => {
   const reason = pgSkipReason();
   if (reason) {
     t.skip(reason);
@@ -373,9 +384,11 @@ test('PostgreSQL 16: SQL 131 through the executor: refused until SQL 130 is in p
     assert.equal(prod.live_definition_sha256, PRODUCTION_PRE);
     assert.deepEqual(prod.release_sql_inspect.functions, []);
     assert.deepEqual(prod.release_sql_inspect.acl_functions, IDENTITIES.map((identity) => ({ name: identity.replace('public.', ''), state: 'different', acl: [...PRODUCTION_ACL] })));
-    // The production pin's note names this expected pre-state (never recorded in a pin before a run reads it).
+    // The production pin's recorded pre-state (read-only inspect of 2026-10-30, SSM be25e88a) is this value,
+    // which its earlier note named before any run read it.
     assert.ok(productionPin().production_inspect.note.includes(prod.live_definition_sha256));
-    assert.equal(productionPin().expected_live_definition_sha256, null);
+    assert.equal(productionPin().expected_live_definition_sha256, prod.live_definition_sha256);
+    assert.equal(productionPin().production_inspect.live_definition_sha256, prod.live_definition_sha256);
 
     // The file refuses a login that does not own the functions (the superuser here) ...
     await admin.query('BEGIN');
