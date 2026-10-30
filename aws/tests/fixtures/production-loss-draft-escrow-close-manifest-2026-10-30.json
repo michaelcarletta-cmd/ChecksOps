@@ -1,0 +1,15 @@
+{
+  "workstream_id": "loss-draft-escrow-close",
+  "authorization": "Pending owner review (2026-10-30). Planning only: nothing is live or verified. The production apply still needs its own owner approval and staging acceptance.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Loss Draft escrow records and file close (owner decisions 2026-10-30): loss_draft_action on POST /data/rpc. A monitored loss draft never goes to Endorsing (send_for_endorsements and the Endorsing override refuse it, monitored_no_endorsing). A not-monitored send_for_endorsements moves the check to Endorsing (endorsements_in_progress / endorsing, only when not deposited) and closes the file (escrow_status endorsing) from any open state once the endorsed back of the check is on file (check_audit_log back_image_reuploaded) or the file is marked received back; a check_audit_log row records it. The override target review always closes the file (tracking, its audit and document rows deleted, as the endorsing override does) and returns the check to Review (needs_review / review, as return_to_review), with a check_audit_log row. mark_escrowed, request_draw, record_release, record_holdback and mark_final_release record amounts on monitored files only, mirroring the production loss_draft_action function's escrow semantics (no money moves): amounts positive and exact to numeric(12,2), tenant member gate before any write, loss_draft_audit_log row with the amount; record_release also inserts a loss_draft_releases row in a savepoint (a refused insert never fails the recorded amount). Staging's column grants (SQL 50) do not cover total_escrowed, draw_amount_released, holdback_amount, draw_amount_requested or draw_stage, and no repo SQL grants INSERT on loss_draft_releases: the escrow actions need the role's privileges confirmed (read-only inspect) or a new numbered migration before they can write in staging. No import changes; no SQL change; sql_before stays SQL 98. live_sha256 acb5fc06 is the plan row's expected_live: the Mortgage Desk return bytes applied 2026-10-28 (production apply run 40618897308, previous_manifest). A read-only production overlay inspect must confirm the live member before any apply.",
+  "members": {
+    "workflow-rpc.mjs": {
+      "live_sha256": "acb5fc06ca01ddb5ad3294ee5840443c1747798f06c1990c174c469dbb5534e0",
+      "accepted_sha256": "0e77f1f6a33a78c3be406622e16cc74fc6e8374cf5f505cf865453784b467dc0",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-mortgage-desk-return-applied-manifest-2026-10-28.json"
+    }
+  }
+}
