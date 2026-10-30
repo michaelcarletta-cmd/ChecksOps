@@ -56,6 +56,7 @@ that connects to the database:
 | `sql130` | `scripts/deployment-guard/sql130-financial-totp-rate-limit-code-check-no-public-production-apply.mjs` (`ops/production-sql-130-apply.md`; SQL 129's `code_check` allow-list plus EXECUTE revoked from `PUBLIC` and granted to `checksops` on `consume_financial_totp_rate_limit` only: production (PUBLIC granted) and staging (no PUBLIC) reach the same state; supersedes SQL 129) |
 | `sql131` | `scripts/deployment-guard/sql131-financial-totp-functions-no-public-production-apply.mjs` (`ops/production-sql-131-apply.md`; EXECUTE revoked from `PUBLIC` and granted to `checksops` on the four financial TOTP enrollment functions `financial_totp_upsert_enrollment`, `_get_enrollment`, `_mark_verified` and `_status`, which the API calls as `checksops`; bodies, owners and the fifth function (SQL 130) unchanged; predecessor `sql130`) |
 | `sql132` | `scripts/deployment-guard/sql132-financial-totp-code-check-lockout-production-apply.mjs` (`ops/production-sql-132-apply.md`; the financial TOTP lockout: the new SECURITY DEFINER `financial_totp_count_code_check(uuid)` counts a code check before the API compares the code, locks the enrollment for 15 minutes at the tenth consecutive check without a success and refuses while locked; `financial_totp_mark_verified` clears both on a correct code; EXECUTE for `checksops` and the owner; predecessor SQL 130) |
+| `sql134` | `scripts/deployment-guard/sql134-loss-draft-escrow-write-grants-production-apply.mjs` (`ops/production-sql-134-apply.md`; the Loss Draft escrow and draw records: column UPDATE (`total_escrowed`, `draw_amount_requested`, `draw_stage`, `draw_amount_released`, `holdback_amount`) on `loss_draft_tracking` and column INSERT (`loss_draft_id`, `draw_number`, `amount_requested`, `amount_released`, `release_date`, `released_at`, `status`, `notes`, `created_by`) on `loss_draft_releases`, for `checksops` and `authenticated`; no predecessor, no policy change) |
 
 To add a migration, register its reviewed tool in `ONE_SHOT_TOOLS`
 (`scripts/deployment-guard/lib/production-sql-one-shot.mjs`). An entry names only the tool,
@@ -70,7 +71,7 @@ a migration file touches its pin, not the registry. An entry may add `inspect_re
 
 | flag | |
 |---|---|
-| `--migration <key>` | a registered key (`sql29`, `sql30`, `sql71`, `sql77`…`sql89`, `sql90`…`sql106`, `sql108`, `sql109`, `sql110`, `sql111`, `sql112`, `sql113`, `sql114`, `sql115`, `sql116`, `sql117`, `sql118`, `sql119`, `sql120`, `sql121`, `sql122`, `sql123`, `sql124`, `sql125`, `sql126`, `sql127`, `sql128`, `sql129`, `sql130`, `sql131`, `sql132`) |
+| `--migration <key>` | a registered key (`sql29`, `sql30`, `sql71`, `sql77`…`sql89`, `sql90`…`sql106`, `sql108`, `sql109`, `sql110`, `sql111`, `sql112`, `sql113`, `sql114`, `sql115`, `sql116`, `sql117`, `sql118`, `sql119`, `sql120`, `sql121`, `sql122`, `sql123`, `sql124`, `sql125`, `sql126`, `sql127`, `sql128`, `sql129`, `sql130`, `sql131`, `sql132`, `sql134`) |
 | `--approval-scope <key>` | the migration the owner approved; must equal `--migration` |
 | `--approval-statement "<words>"` or `--approval-statement-b64 <base64>` | the owner's exact words, recorded verbatim. Pass exactly one of the two. Use the base64 form when the words contain quotes or newlines. Must be non-empty. |
 | `--commit <sha>` | the full main commit the tarball was built from |
