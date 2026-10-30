@@ -55,6 +55,10 @@ const CONTRACTOR_GATE_REL = 'aws/tests/fixtures/production-contractor-verificati
 const DATA_GATES_APPLIED = 'c7dd822951344d0fb3d3833597eb6292a4a5073754fab659903cedc2c7437aaa';
 // Contractor verification status gate, applied in production 2026-10-29 (data.mjs, run 40945542902).
 const CONTRACTOR_GATE_APPLIED_REL = 'aws/tests/fixtures/production-contractor-verification-gate-applied-manifest-2026-10-29.json';
+// Billing apply-event staging only (2026-10-30, finding 6): planned REPLACE of tenant-billing-handlers.mjs.
+const APPLY_EVENT_STAGING_ONLY_REL = 'aws/tests/fixtures/production-billing-apply-event-staging-only-manifest-2026-10-30.json';
+// tenant-billing-handlers.mjs as the tenant lifecycle production run 40425235000 applied it.
+const TENANT_LIFECYCLE_APPLIED_BYTES = 'b3d8594416e257a8ff6658c677c9d8435ad18f92e0ad34968838f2b275ccb824';
 // data.mjs as production run 40945542902 applied it (the contractor verification status gate).
 const CONTRACTOR_GATE_BYTES = 'e2415f9046e3288e2bf3e296bf716a9f3e0c2777fe930590b316c8aec79559eb';
 // Public partner codes (2026-10-29, finding 9): planned REPLACE of data.mjs from the contractor gate's applied bytes.
@@ -2643,7 +2647,8 @@ test('Tenant lifecycle: tenant-billing-handlers.mjs replaced the bytes productio
   // inspect run 40422339860 reported live (ALREADY_ACCEPTED).
   const fees = JSON.parse(fs.readFileSync(path.join(ROOT, 'aws/tests/fixtures/production-fee-collection-pin-manifest-2026-10-17.json'), 'utf8'));
   const LIVE = fees.members[HANDLERS].accepted_sha256;
-  const onMain = sha(`aws/functions/api/${HANDLERS}`);
+  // The bytes production run 40425235000 applied; main has since moved on to finding 6 (its own test).
+  const onMain = TENANT_LIFECYCLE_APPLIED_BYTES;
   assert.equal(manifest.workstream_id, 'production-tenant-lifecycle');
   assert.equal(manifest.deploy_authorized, false);
   assert.match(manifest.authorization, /^Pending owner review \(2026-10-26\)/);
@@ -2663,14 +2668,16 @@ test('Tenant lifecycle: tenant-billing-handlers.mjs replaced the bytes productio
   for (const runId of ['40424663073', '40425119783', '40425235000', '40425379817']) assert.match(applied.notes, new RegExp(`run ${runId}`), runId);
   assert.match(applied.notes, /RevisionId 70379dc2-6a82-4deb-944a-3de6b2bda245/);
   assert.match(PLAN.notes, /Tenant lifecycle applied 2026-10-27 on main 89159a7e2/);
-  assert.deepEqual(PLAN.members[HANDLERS], { operation: 'replace', accepted_sha256: onMain, expected_live_sha256: onMain, sql_before: SQL102, manifest: APPLIED_REL });
+  // The row now follows the finding 6 REPLACE, which starts from these applied bytes.
+  assert.deepEqual(PLAN.members[HANDLERS], { operation: 'replace', accepted_sha256: sha(`aws/functions/api/${HANDLERS}`), expected_live_sha256: onMain, sql_before: SQL102, manifest: APPLY_EVENT_STAGING_ONLY_REL });
   assert.match(fs.readFileSync(path.join(API, HANDLERS), 'utf8'), /needs database update SQL 117/);
   assert.equal(resolvePlannedMember(HANDLERS, { root: ROOT, plan: PLAN }).ok, true);
   const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: HANDLERS };
   // The pre-apply bytes are no longer an accepted live state.
   await assert.rejects(run(inspect, { root: ROOT, inspectLive: liveFor(HANDLERS, { sha256: LIVE }) }), (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED);
-  const done = await run(inspect, { root: ROOT, inspectLive: liveFor(HANDLERS, { sha256: onMain }) });
-  assert.equal(done.state, 'ALREADY_ACCEPTED');
+  // The applied bytes are now the next REPLACE's starting point.
+  const now = await run(inspect, { root: ROOT, inspectLive: liveFor(HANDLERS, { sha256: onMain }) });
+  assert.equal(now.state, 'READY');
 });
 
 test('Stakeholder settings edit: the three members record the bytes production runs 40189236116, 40189560481 and 40189657073 applied', () => {
@@ -3810,6 +3817,39 @@ test('Public partner codes 2026-10-29: data.mjs applied on its own phrase, recor
   }
   assert.ok(PLAN.notes.includes('Applied 2026-10-29 (production-public-partner-codes-applied-manifest-2026-10-29.json): data.mjs c652e317'));
   assert.ok(PLAN.notes.includes('W+UPxMWbyAS0tFNdlBQxKBcGBM7juAS8W3VN0og3oRA=, RevisionId 9fa0f26f-4edd-4302-bfef-742331676253'));
+});
+
+test('Billing apply-event staging only (finding 6): tenant-billing-handlers.mjs REPLACE from the tenant lifecycle applied bytes, planning only, SQL 102 still first', async () => {
+  const MEMBER = 'tenant-billing-handlers.mjs';
+  const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, APPLY_EVENT_STAGING_ONLY_REL), 'utf8'));
+  const accepted = sha(`aws/functions/api/${MEMBER}`);
+  const PREVIOUS = 'aws/tests/fixtures/production-tenant-lifecycle-applied-manifest-2026-10-27.json';
+  assert.equal(manifest.workstream_id, 'billing-apply-event-staging-only');
+  assert.equal(manifest.deploy_authorized, false);
+  assert.match(manifest.authorization, /^Pending owner review/);
+  assert.match(manifest.notes, /apply_event_staging_only/);
+  assert.deepEqual(manifest.members, { [MEMBER]: { live_sha256: TENANT_LIFECYCLE_APPLIED_BYTES, accepted_sha256: accepted, operation: 'replace', previous_manifest: PREVIOUS } });
+  assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, PREVIOUS), 'utf8')).members[MEMBER].accepted_sha256, TENANT_LIFECYCLE_APPLIED_BYTES);
+  assert.deepEqual(PLAN.members[MEMBER], {
+    operation: 'replace',
+    accepted_sha256: accepted,
+    expected_live_sha256: TENANT_LIFECYCLE_APPLIED_BYTES,
+    sql_before: 'aws/workflows/sql/102_platform_owner_tenant_profile.sql',
+    manifest: APPLY_EVENT_STAGING_ONLY_REL,
+  });
+  assert.ok(PLAN.notes.includes(`Billing apply-event staging only (2026-10-30, finding 6): REPLACE ${MEMBER} ${TENANT_LIFECYCLE_APPLIED_BYTES.slice(0, 8)} -> ${accepted.slice(0, 8)}`));
+  assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
+  const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
+  const ready = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: TENANT_LIFECYCLE_APPLIED_BYTES }) });
+  assert.equal(ready.state, 'READY');
+  assert.equal(ready.mutation, false);
+  const done = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: accepted }) });
+  assert.equal(done.state, 'ALREADY_ACCEPTED');
+  await assert.rejects(
+    run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: 'c'.repeat(64) }) }),
+    (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+  );
+  assert.match(fs.readFileSync(path.join(API, MEMBER), 'utf8'), /error: 'apply_event_staging_only'/);
 });
 
 test('TOTP shared rate limit (finding 7): auth-financial-totp.mjs REPLACE from the bytes inspect run 40990003881 found live, planning only', async () => {

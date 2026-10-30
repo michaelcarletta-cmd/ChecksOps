@@ -438,6 +438,15 @@ const handleTenantBillingAdminInTransaction = async (event, deps = {}) => {
     }
 
     if (action === 'apply-event') {
+      // A status from the request body, not from Moov: staging simulation only. In production a
+      // transfer is settled only by the provider's own event (audit finding 6).
+      if (billingEnvironment() === 'production') {
+        return denied(spoof, {
+          statusCode: 403,
+          error: 'apply_event_staging_only',
+          message: 'Billing events are applied only from the provider in production.',
+        });
+      }
       const applied = await applyBillingProviderEvent(client, {
         providerTransferId: body.provider_transfer_id || body.providerTransferId,
         status: body.status,
