@@ -71,7 +71,25 @@ still needs the owner's run-time approval and runs only after that merge is on m
 state: the runner was started for this inspect at 2026-10-30 11:30:53 UTC and stopped again at 11:32:17
 UTC.
 
-**Status:** applied to staging (wave 27); production pin execute-authorized; not applied to production.
+**Production apply (2026-10-30).** After the pin change (#1437, merged green on the owner's words "merge
+1437 when green"), transfer run 41055873418 staged main `b7a4b34` (tarball sha256
+`8cbf52bd777fd7375d2c16af23e13c4f93b646f03631fd383d84eafda1fa8190`). A read-only one-shot `--phase inspect`
+of the same commit (SSM `ba8d180e-5d0e-490a-b078-1991dd30216f`, run `013f1f49-41c6-43af-b638-bad5b9383351`)
+found live `127bf5da…` (the pinned pre-state), `precondition_failures` `[]`, contracts 4/4, 6/6 and 43/43.
+One-shot `--phase apply` run `309640f4-ba8c-4e7e-aed1-a7b75ec63916` through SSM
+`e9e25699-8a3f-4349-b5d5-cc8d5964d41e`, workstream `prod-sql128-contractor-verification-from-compliance-20261030`,
+under the owner's words "apply SQL 128 in production" (passed verbatim): every step ok; manifest
+`26e6f831…`; receipt `127bf5da…` → `ba4dcb2e43c233adf6109e5a89e7d6319dc993babcf3dbdcdfee261e6a33fbd7`
+(intended), result `applied`, unrelated catalog `561693f1…` (triggers 184); post-apply inspect
+`already_applied` true, `precondition_failures` `[]`. A separate read-only inspect (SSM
+`1dd5b8e0-7cd6-4a88-bc84-f19f01db6312`) reported both functions `intended`, EXECUTE on
+`contractor_verification_status(uuid)` for `checksops` and the owner only (PUBLIC revoked), and the orphan
+trigger function dropped (0 dependents). The run's whole JSON arrived, under SSM's output limit (see the pin's
+`applied.one_shot_note`). Runner state: started for this run at 2026-10-30 12:31:37 UTC (SSM online 12:32:14)
+and stopped at 12:33:20 UTC.
+
+**Status:** applied to staging (wave 27) and to production (2026-10-30); the production pin is retired
+(`execute: false`).
 
 ## Fingerprint
 
