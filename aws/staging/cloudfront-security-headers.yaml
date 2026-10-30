@@ -29,7 +29,7 @@ Resources:
           Items:
             - Header: Content-Security-Policy-Report-Only
               Override: true
-              Value: "default-src 'self'; script-src 'self' 'sha256-ts3my6jAAjgd6WfZ3C3O2R2Lc8IrKeHMSIlUM6Sdsmg='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.s3.amazonaws.com https://*.s3.us-east-1.amazonaws.com; font-src 'self' data:; connect-src 'self' https://psr19uhop4.execute-api.us-east-1.amazonaws.com https://*.s3.amazonaws.com https://*.s3.us-east-1.amazonaws.com https://api.zippopotam.us data: blob:; frame-src 'self' blob: data: https://*.s3.amazonaws.com https://*.s3.us-east-1.amazonaws.com; worker-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'"
+              Value: "default-src 'self'; script-src 'self' 'sha256-ts3my6jAAjgd6WfZ3C3O2R2Lc8IrKeHMSIlUM6Sdsmg='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://psr19uhop4.execute-api.us-east-1.amazonaws.com https://*.s3.amazonaws.com https://*.s3.us-east-1.amazonaws.com; font-src 'self' data:; connect-src 'self' https://psr19uhop4.execute-api.us-east-1.amazonaws.com https://*.s3.amazonaws.com https://*.s3.us-east-1.amazonaws.com https://api.zippopotam.us data: blob:; frame-src 'self' blob: data: https://*.s3.amazonaws.com https://*.s3.us-east-1.amazonaws.com; worker-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'"
 
 Outputs:
   ResponseHeadersPolicyId:
