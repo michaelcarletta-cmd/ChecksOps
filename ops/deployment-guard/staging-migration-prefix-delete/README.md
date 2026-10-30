@@ -53,3 +53,20 @@ finished in September; production runs on its own database, backups and bucket.
 
 There is no rollback: deleted versions cannot be restored. The production database, its backups
 and the production bucket are the source of truth.
+
+## Applied (2026-10-30)
+
+Owner approval, verbatim: "delete finding 5". Source: `origin/main` `a2f0995` (PR #1425); snapshot
+`staging-migration-prefix.live-2026-10-30.json` sha256
+`d39f7425d23ebb0cfee902c90459f62f00019bd4e07c5e9fe9e9bcbfcd716829`. Identity:
+`arn:aws:iam::806168576068:user/claude-code`.
+
+1. `ListObjectVersions` of `Migration/` just before: 657 versions, 0 delete markers;
+   `diffListing(snapshot, live)` equal (0 missing, 0 extra, 0 changed). `files/`: 1573 objects.
+2. `buildDeleteRequests(snapshot)`: one request, 657 objects. `DeleteObjects` HTTP 200, request
+   `0P525DJ0GK8C56QC`: 657 deleted, `Errors` [].
+3. Verify: `ListObjectVersions` of `Migration/` returns 0 versions and 0 delete markers; `files/`
+   still 1573 objects.
+
+Not verified: no CloudTrail data event read for the request (data events may not be logged for
+this bucket).

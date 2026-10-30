@@ -82,3 +82,12 @@ test('the runbook deletes only on the owner\'s approval, verifies an empty prefi
   assert.match(readme, /no rollback/i);
   assert.match(readme, /checksops-production-privatefiles-806168576068/);
 });
+
+test('the delete is recorded: owner approval, the request, and an empty prefix afterwards', () => {
+  const readme = read(`${DIR}/README.md`);
+  assert.match(readme, /## Applied \(2026-10-30\)/);
+  assert.match(readme, /Owner approval, verbatim: "delete finding 5"/);
+  assert.match(readme, /request\s+`0P525DJ0GK8C56QC`: 657 deleted, `Errors` \[\]/);
+  assert.match(readme, /returns 0 versions and 0 delete markers/);
+  assert.match(readme, /d39f7425d23ebb0cfee902c90459f62f00019bd4e07c5e9fe9e9bcbfcd716829/);
+});
