@@ -1220,6 +1220,9 @@ test('live reconciliation 2026-10-19: ten members expect the bytes inspect run 3
     // route (d1faa212); production run 40778196802 then replaced those for the Mortgage Desk e-sign route
     // (dd6e1797, now recorded live).
     'app-services.mjs': { accepted: 'daab02f7199fef3a66b727ed0ac4ebc8315c675ea9b5025f18c1a53b197555f7', liveNow: 'dd6e1797dc00dc2beaf15585b481c76a33c415212e7be5d2efe3fd170d48121e' },
+    // checkalt-register.mjs moved on without its 8f06c079 onboarding re-pin ever going live: the row
+    // now plans the deposit account change step-up (finding 13) from the same live 2264e34c bytes.
+    [REGISTER]: { accepted: '8f06c079293a5e495043e87ad0d5aa6c01aa3fda182957efb745efa3c855f870', liveNow: '2264e34cc1d824d5f1c3a89c822a489bb35f90fc85b0ed90f68ebdbd1117b501' },
   };
   for (const [member, [before, live, manifestRel, appliedRel]] of Object.entries(RECONCILED)) {
     if (MOVED_ON[member]) {
@@ -1261,7 +1264,7 @@ test('live reconciliation 2026-10-19: ten members expect the bytes inspect run 3
     }
   }
   assert.equal(PLAN.members[REGISTER].sql_before, 'aws/workflows/sql/81_checkalt_production_register.sql');
-  assert.equal(PLAN.members[REGISTER].accepted_sha256, '8f06c079293a5e495043e87ad0d5aa6c01aa3fda182957efb745efa3c855f870');
+  assert.equal(PLAN.members[REGISTER].manifest, 'aws/tests/fixtures/production-checkalt-account-change-stepup-manifest-2026-10-30.json');
 });
 
 test('Check Alt approve reconcile history: four REPLACE members, status-read and poll before submit', async () => {
@@ -3935,4 +3938,63 @@ test('TOTP shared rate limit (finding 7): auth-financial-totp.mjs REPLACE from t
     );
   }
   assert.match(fs.readFileSync(path.join(API, MEMBER), 'utf8'), /export const TOTP_CODE_CHECK_RATE_ACTION = 'code_check';/);
+});
+
+test('Check Alt deposit account change step-up (finding 13): checkalt-register.mjs REPLACE from the live 2264e34c bytes, planning only, SQL 81 still first', async () => {
+  const MEMBER = 'providers/production/checkalt-register.mjs';
+  const REL = 'aws/tests/fixtures/production-checkalt-account-change-stepup-manifest-2026-10-30.json';
+  const PREVIOUS = 'aws/tests/fixtures/production-checkalt-onboarding-manifest-2026-10-15.json';
+  // The bytes the Check Alt production onboarding ADD applied (live reconciliation inspect run 39179890402).
+  const LIVE = '2264e34cc1d824d5f1c3a89c822a489bb35f90fc85b0ed90f68ebdbd1117b501';
+  // The onboarding re-pin that never went live.
+  const NEVER_APPLIED = '8f06c079293a5e495043e87ad0d5aa6c01aa3fda182957efb745efa3c855f870';
+  const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, REL), 'utf8'));
+  const accepted = sha(`aws/functions/api/${MEMBER}`);
+  assert.equal(manifest.workstream_id, 'checkalt-account-change-stepup');
+  assert.equal(manifest.deploy_authorized, false);
+  assert.match(manifest.authorization, /^Pending owner review/);
+  assert.match(manifest.notes, /finding 13/);
+  assert.match(manifest.notes, /inspect run 39179890402/);
+  assert.deepEqual(manifest.members, { [MEMBER]: { live_sha256: LIVE, accepted_sha256: accepted, operation: 'replace', previous_manifest: PREVIOUS } });
+  const previous = JSON.parse(fs.readFileSync(path.join(ROOT, PREVIOUS), 'utf8')).members[MEMBER];
+  assert.equal(previous.live_sha256, LIVE);
+  assert.equal(previous.accepted_sha256, NEVER_APPLIED);
+  assert.deepEqual(PLAN.members[MEMBER], {
+    operation: 'replace',
+    accepted_sha256: accepted,
+    expected_live_sha256: LIVE,
+    sql_before: 'aws/workflows/sql/81_checkalt_production_register.sql',
+    manifest: REL,
+  });
+  assert.ok(PLAN.notes.includes(`Check Alt deposit account change step-up (2026-10-30, finding 13): REPLACE ${MEMBER} ${LIVE.slice(0, 8)} -> ${accepted.slice(0, 8)}`));
+  assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
+  // Every local import is a module the live package already has; none is a member planned after this one
+  // with new bytes, so the member links against the live production modules on its own.
+  const imports = localImports(fs.readFileSync(path.join(API, MEMBER), 'utf8'), MEMBER);
+  for (const dep of ['auth-financial-totp.mjs', 'financial-totp.mjs', 'auth-totp-code.mjs', 'email.mjs', 'email-layout.mjs', 'email-branding.mjs', 'providers/production/checkalt-idempotency.mjs', 'providers/production/moov-fund-authz.mjs']) {
+    assert.ok(imports.includes(dep), dep);
+  }
+  const totp = PLAN.members['auth-financial-totp.mjs'];
+  assert.equal(totp.expected_live_sha256, totp.accepted_sha256, 'auth-financial-totp.mjs is applied, not pending');
+  const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
+  const ready = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: LIVE }) });
+  assert.equal(ready.state, 'READY');
+  assert.equal(ready.mutation, false);
+  const done = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: accepted }) });
+  assert.equal(done.state, 'ALREADY_ACCEPTED');
+  for (const other of [NEVER_APPLIED, 'c'.repeat(64)]) {
+    await assert.rejects(
+      run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: other }) }),
+      (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+      other,
+    );
+  }
+  // The apply passes the order, SQL 81 and link gates from the live bytes.
+  const { deps, calls } = applyDeps(MEMBER, { sha256: LIVE });
+  const applied = await run(applyEnv(MEMBER, { CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: LIVE }), deps);
+  assert.equal(applied.mutation, false);
+  assert.deepEqual(calls.receipt.owned_member_ops, { replace: [MEMBER], add: [] });
+  const source = fs.readFileSync(path.join(API, MEMBER), 'utf8');
+  assert.match(source, /export const CHECKALT_ACCOUNT_CHANGE_ACTION = 'checkalt\.deposit_account\.change';/);
+  assert.match(source, /'account_change_code_required'/);
 });

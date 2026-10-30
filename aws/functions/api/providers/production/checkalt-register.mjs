@@ -18,8 +18,27 @@
  *
  * Submit is unchanged: it still needs sso_user_id + deposit_account_number +
  * enabled (loadProductionTenantAccount).
+ *
+ * Changing a registered deposit account (security audit finding 13, owner
+ * decision 2026-10-30): when the tenant already has a registered account and
+ * the new number differs, register needs a fresh code from the platform
+ * owner's authenticator app in the same request (totp_code), checked before
+ * any Check Alt call or write. First registration and a re-register with the
+ * same number need no code. The code draws on the shared code_check rate
+ * limit, must be from a newer time step than the last code used (a code is
+ * accepted once), is spent and logged in financial_stepup_log before Check
+ * Alt is called, and is not the once-per-login financial step-up. After the
+ * change is saved, the company is emailed the old and new last four digits.
+ * Only exports already live in production are imported (auth-financial-totp,
+ * financial-totp, email), so this member deploys on its own.
  */
-import { IS_PLATFORM_OWNER_SQL } from '../../data.mjs';
+import { commitWriteTransaction, IS_PLATFORM_OWNER_SQL } from '../../data.mjs';
+import { insertAppStepUpLog, loadFinancialTotpWrapKey, TOTP_CODE_CHECK_RATE_ACTION } from '../../auth-financial-totp.mjs';
+import { normalizeTotpCode } from '../../auth-totp-code.mjs';
+import { platformBranding, resolveEmailBranding } from '../../email-branding.mjs';
+import { renderChecksOpsEmail } from '../../email-layout.mjs';
+import { sendViaSesOrSink } from '../../email.mjs';
+import { decryptSecret, verifyFinancialTotp } from '../../financial-totp.mjs';
 import { isUuid } from '../../financial-ownership.mjs';
 import {
   accountLast4,
@@ -35,7 +54,9 @@ import {
   getUserAccountInfo,
 } from '../parity/checkalt-client.mjs';
 import { loadProductionCheckAltConfig } from './checkalt-config.mjs';
+import { bindCheckAltProductionGucs } from './checkalt-idempotency.mjs';
 import { loadProductionCheckAltSecrets } from './checkalt-secrets.mjs';
+import { loginSessionBinding } from './moov-fund-authz.mjs';
 
 const jwtCache = { token: null, expiresAt: null };
 
@@ -196,8 +217,235 @@ export const publicRegistrationStatus = (row) => {
   };
 };
 
+/** Step-up action recorded for a deposit account change (financial_stepup_log.action_key). */
+export const CHECKALT_ACCOUNT_CHANGE_ACTION = 'checkalt.deposit_account.change';
+export const DEPOSIT_ACCOUNT_CHANGED_TEMPLATE = 'checkalt-deposit-account-changed';
+
+const RATE_LIMIT_SQL = 'SELECT allowed, count, retry_after_seconds FROM public.consume_financial_totp_rate_limit($1::uuid, $2, $3::int, $4::int)';
+const ENROLLMENT_SQL = `SELECT ciphertext, nonce, key_id, last_used_timestep, verified_at, failed_attempts, locked_until
+     FROM public.financial_totp_get_enrollment($1::uuid)`;
+const MARK_USED_SQL = 'SELECT public.financial_totp_mark_verified($1::uuid, $2::bigint) AS claimed';
+
+/** A registered account is changed when the new number differs from the stored one. */
+export const isDepositAccountChange = (stored, depositAccountNumber) => Boolean(
+  stored?.registered_at && stored?.deposit_account_number && stored.deposit_account_number !== depositAccountNumber,
+);
+
+const codeFail = (error, statusCode, message, extra = {}) => fail(error, statusCode, {
+  productionExecution: false,
+  code_required: true,
+  message,
+  ...extra,
+});
+
+/** Commit what this request has done so far and continue in a new transaction with the same identity. */
+const commitAndContinue = async (client, mapping, claims) => {
+  await commitWriteTransaction(client);
+  await client.query('BEGIN');
+  await client.query('SET TRANSACTION READ WRITE');
+  await bindCheckAltProductionGucs(client, mapping, claims);
+};
+
+/**
+ * Checks the platform owner's authenticator code for one deposit account change.
+ * Same store, rate limit and verifier as the financial step-up (auth-financial-totp.mjs);
+ * stricter on replay: the code's time step must be newer than the last one used.
+ */
+export const verifyAccountChangeCode = async ({ client, mapping, claims, code, tenantId, deps = {} }) => {
+  const normalized = normalizeTotpCode(code);
+  if (!normalized.ok) return codeFail('invalid_code', 400, 'Enter the 6-digit code from your authenticator app.');
+  const loginSession = loginSessionBinding(claims);
+  if (!loginSession) return codeFail('login_session_unbound', 401, 'Sign out and sign back in, then try again.');
+  const userId = mapping?.application_user_id;
+  const rate = (await client.query(RATE_LIMIT_SQL, [userId, TOTP_CODE_CHECK_RATE_ACTION, 5, 300])).rows[0];
+  if (!rate) {
+    const error = new Error('rate_limit_unavailable');
+    error.statusCode = 503;
+    throw error;
+  }
+  if (rate.allowed !== true) {
+    return codeFail('rate_limited', 429, 'Too many codes tried. Wait a few minutes and try again.', {
+      retryAfterSec: Number(rate.retry_after_seconds || 1),
+    });
+  }
+  // Keep the rate-limit hit: a wrong code fails the request, which rolls back.
+  await commitAndContinue(client, mapping, claims);
+  const enrollment = (await client.query(ENROLLMENT_SQL, [userId])).rows[0];
+  if (!enrollment?.ciphertext) {
+    return codeFail('totp_not_enrolled', 403, 'Set up your authenticator app first, then change the deposit account.');
+  }
+  if (enrollment.locked_until && new Date(enrollment.locked_until).getTime() > Date.now()) {
+    return codeFail('rate_limited', 429, 'Too many codes tried. Wait a few minutes and try again.');
+  }
+  const wrap = await (deps.loadWrapKey || loadFinancialTotpWrapKey)();
+  const secret = decryptSecret({ ciphertext: enrollment.ciphertext, nonce: enrollment.nonce, key: wrap.key });
+  const lastUsed = enrollment.last_used_timestep === null || enrollment.last_used_timestep === undefined
+    ? null
+    : Number(enrollment.last_used_timestep);
+  const verified = verifyFinancialTotp({ secret, code: normalized.code, nowMs: deps.nowMs, lastUsedTimestep: lastUsed });
+  const rejected = codeFail('code_rejected', 401, 'That code was not accepted. Wait for a new code in your authenticator app and try again.');
+  if (!verified.ok || (lastUsed !== null && verified.timestep <= lastUsed)) return rejected;
+  if ((await client.query(MARK_USED_SQL, [userId, verified.timestep])).rows[0]?.claimed !== true) return rejected;
+  const recorded = await insertAppStepUpLog(client, mapping, {
+    kind: 'login_session',
+    tenantId,
+    actionKey: CHECKALT_ACCOUNT_CHANGE_ACTION,
+    loginSession,
+  });
+  if (!recorded?.ok) {
+    return codeFail('stepup_log_failed', 500, 'The code was valid but could not be recorded. Nothing was changed; try again.');
+  }
+  // Spend the code before Check Alt is called: a later failure must not let it be used again.
+  await commitAndContinue(client, mapping, claims);
+  return { ok: true, stepupId: recorded.stepup_id };
+};
+
+/** The company's notice of a deposit account change. Last four digits only. */
+export const buildDepositAccountChangedEmail = ({
+  tenantName, previousLast4, newLast4, changedAt, changedBy, branding = {},
+}) => {
+  const name = String(tenantName || 'your company').slice(0, 120);
+  const when = (changedAt ? new Date(changedAt) : new Date()).toISOString().replace('T', ' ').slice(0, 16);
+  const paragraphs = [
+    `The bank account that Check Alt deposits for ${name} are credited to was changed.`,
+    `New deposit account: ending in ${newLast4 || '----'}. Previous deposit account: ending in ${previousLast4 || '----'}.`,
+    `Changed on ${when} UTC by ${changedBy || 'the ChecksOps platform owner'}.`,
+    'If you did not expect this change, contact support@checksops.com right away.',
+  ];
+  const layout = renderChecksOpsEmail({
+    title: 'Your deposit account was changed',
+    preview: `Check Alt deposits now go to the account ending in ${newLast4 || '----'}`,
+    paragraphs,
+    companySubtitle: branding.companySubtitle || name,
+    logoUrl: branding.logoUrl || null,
+  });
+  return {
+    subject: `${name}: your Check Alt deposit account was changed`,
+    html: layout.html,
+    text: ['Your deposit account was changed', ...paragraphs].join('\n'),
+  };
+};
+
+const emailOf = (value) => {
+  const email = String(value || '').trim().toLowerCase();
+  return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) ? email : null;
+};
+
+/** Runs fn under a savepoint; a failed read or log row never fails the change. */
+const optional = async (client, name, fn) => {
+  await client.query(`SAVEPOINT ${name}`);
+  try {
+    const result = await fn();
+    await client.query(`RELEASE SAVEPOINT ${name}`);
+    return result;
+  } catch {
+    await client.query(`ROLLBACK TO SAVEPOINT ${name}`).catch(() => {});
+    return null;
+  }
+};
+
+/**
+ * Recipients: the company's business address (tenants.company_email, SQL 93), else every member
+ * of the tenant (users-only roles, SQL 90: there is no owner role to pick instead).
+ */
+export const resolveDepositAccountChangeRecipients = async (client, tenantId) => {
+  const tenant = await optional(client, 'checkalt_change_tenant', async () => (await client.query(
+    'SELECT name, company_email FROM public.tenants WHERE id = $1::uuid',
+    [tenantId],
+  )).rows[0] || null);
+  const company = emailOf(tenant?.company_email);
+  if (company) return { tenantName: tenant?.name || null, recipients: [{ email: company, source: 'company_email' }] };
+  const members = await optional(client, 'checkalt_change_members', async () => (await client.query(
+    `SELECT DISTINCT ia.email
+       FROM public.tenant_users tu
+       JOIN public.identity_accounts ia ON ia.application_user_id = tu.user_id
+      WHERE tu.tenant_id = $1::uuid`,
+    [tenantId],
+  )).rows) || [];
+  const emails = [...new Set(members.map((row) => emailOf(row.email)).filter(Boolean))];
+  return { tenantName: tenant?.name || null, recipients: emails.map((email) => ({ email, source: 'tenant_member' })) };
+};
+
+/** Emails the company after a committed change. Never throws; a failure is logged, not returned as an error. */
+export const notifyDepositAccountChange = async ({
+  client, tenantId, previousNumber, newNumber, changedBy, stepupId = null, deps = {},
+}) => {
+  try {
+    const { tenantName, recipients } = await resolveDepositAccountChangeRecipients(client, tenantId);
+    const branding = await optional(client, 'checkalt_change_branding', () => resolveEmailBranding(client, { tenantId })) || {};
+    const email = buildDepositAccountChangedEmail({
+      tenantName,
+      previousLast4: accountLast4(previousNumber),
+      newLast4: accountLast4(newNumber),
+      changedAt: deps.nowMs ? new Date(deps.nowMs) : new Date(),
+      changedBy,
+      branding,
+    });
+    if (!recipients.length) {
+      console.error(JSON.stringify({ service: 'checksops-api', event: 'checkalt_deposit_account_change_email_no_recipient', tenant_id: tenantId }));
+      return { status: 'no_recipient', sent: false, recipient_count: 0 };
+    }
+    const mailer = deps.sendViaSesOrSink || sendViaSesOrSink;
+    const platform = platformBranding();
+    const outcomes = [];
+    for (const recipient of recipients) {
+      let outcome;
+      try {
+        const sent = await mailer({
+          to: recipient.email,
+          subject: email.subject,
+          html: email.html,
+          text: email.text,
+          from: platform.from,
+          replyTo: platform.replyTo,
+          tenantId,
+          messageCategory: DEPOSIT_ACCOUNT_CHANGED_TEMPLATE,
+        });
+        const primary = sent?.results?.[0] || {};
+        const status = primary.status === 'failed' || !sent?.results?.length
+          ? 'failed'
+          : (primary.delivery === 'ses' && primary.status === 'sent' ? 'sent' : 'sunk');
+        outcome = { status, messageId: primary.messageId || null, error: primary.error || null };
+      } catch (error) {
+        outcome = { status: 'failed', messageId: null, error: String(error?.message || error).slice(0, 240) };
+      }
+      outcomes.push(outcome);
+      if (outcome.status === 'failed') {
+        console.error(JSON.stringify({
+          service: 'checksops-api',
+          event: 'checkalt_deposit_account_change_email_failed',
+          tenant_id: tenantId,
+          recipient_source: recipient.source,
+          error: outcome.error,
+        }));
+      }
+      await optional(client, 'checkalt_change_email_log', () => client.query(
+        `INSERT INTO public.email_send_log (
+           id, template_name, recipient_email, tenant_id, status, provider, provider_message_id,
+           idempotency_key, error_message, metadata, created_at
+         ) VALUES (gen_random_uuid(), $1, $2, $3::uuid, $4, 'aws_ses', $5, $6, $7, $8::jsonb, now())`,
+        [
+          DEPOSIT_ACCOUNT_CHANGED_TEMPLATE, recipient.email, tenantId, outcome.status, outcome.messageId,
+          stepupId ? `checkalt-account-change:${stepupId}:${recipient.email}` : null, outcome.error,
+          JSON.stringify({ recipient_source: recipient.source, stepup_id: stepupId }),
+        ],
+      ));
+    }
+    const sent = outcomes.filter((o) => o.status === 'sent' || o.status === 'sunk').length;
+    return { status: sent ? 'sent' : 'failed', sent: sent > 0, recipient_count: recipients.length };
+  } catch (error) {
+    console.error(JSON.stringify({
+      service: 'checksops-api',
+      event: 'checkalt_deposit_account_change_email_failed',
+      tenant_id: tenantId,
+      error: String(error?.message || error).slice(0, 240),
+    }));
+    return { status: 'failed', sent: false };
+  }
+};
+
 export async function handleProductionCheckAltRegister({
-  client, body = {}, spoof, fetchImpl = fetch, deps = {},
+  client, mapping, claims, body = {}, spoof, fetchImpl = fetch, deps = {},
 } = {}) {
   const denied = await requireCheckAltPlatformOwner(client);
   if (denied) return { ...denied, spoofFieldsIgnored: spoof };
@@ -217,6 +465,27 @@ export async function handleProductionCheckAltRegister({
   }
   if (!preflight.tenant_exists) {
     return { ...sqlErrorResult({ code: 'P0002' }), productionExecution: false, spoofFieldsIgnored: spoof };
+  }
+
+  // Finding 13: changing a registered deposit account needs a fresh authenticator code.
+  const stored = await loadStoredAccount(client, input.tenantId);
+  const change = isDepositAccountChange(stored, input.depositAccountNumber);
+  let stepupId = null;
+  if (change) {
+    const previousLast4 = accountLast4(stored.deposit_account_number);
+    if (body.totp_code === undefined || body.totp_code === null || body.totp_code === '') {
+      return {
+        ...codeFail('account_change_code_required', 403, 'Changing the deposit account needs a code from your authenticator app. Enter the 6-digit code and submit again.', {
+          account_last4: previousLast4,
+        }),
+        spoofFieldsIgnored: spoof,
+      };
+    }
+    const checked = await verifyAccountChangeCode({
+      client, mapping, claims, code: body.totp_code, tenantId: input.tenantId, deps,
+    });
+    if (!checked.ok) return { ...checked, account_last4: previousLast4, spoofFieldsIgnored: spoof };
+    stepupId = checked.stepupId;
   }
 
   const loaded = await loadSecretsAndConfig(client, deps);
@@ -295,9 +564,41 @@ export async function handleProductionCheckAltRegister({
     });
   }
 
+  let changeNotice;
+  if (change) {
+    // The change is committed before the company is told about it; the email never undoes it.
+    try {
+      await commitAndContinue(client, mapping, claims);
+    } catch {
+      return fail('register_save_failed', 500, {
+        reason: 'commit_failed',
+        liveProviderCalled: true,
+        registeredWithCheckAlt: true,
+        productionRecordsMutated: false,
+        message: 'Check Alt accepted the registration but ChecksOps did not save it. Nothing was changed in ChecksOps; register again once fixed.',
+        spoofFieldsIgnored: spoof,
+      });
+    }
+    changeNotice = await notifyDepositAccountChange({
+      client,
+      tenantId: input.tenantId,
+      previousNumber: stored.deposit_account_number,
+      newNumber: input.depositAccountNumber,
+      changedBy: mapping?.email || claims?.email || null,
+      stepupId,
+      deps,
+    });
+  }
+
   return ok({
     ...publicRegistrationStatus({ ...saved, deposit_account_number: input.depositAccountNumber }),
     tenant_id: input.tenantId,
+    ...(change ? {
+      account_changed: true,
+      previous_account_last4: accountLast4(stored.deposit_account_number),
+      stepup_id: stepupId,
+      change_notice: changeNotice,
+    } : {}),
     has_sso_key: Boolean(ssoKey),
     liveProviderCalled: true,
     productionRecordsMutated: true,
