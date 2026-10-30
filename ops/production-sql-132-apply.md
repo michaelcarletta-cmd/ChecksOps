@@ -98,7 +98,26 @@ staging", "merge 1461 when green", "apply SQL 132 in staging") name the restart,
 staging step, not the production apply. The owner merges the pin change; the apply still needs the
 owner's words for that run and runs only after that merge is on main and staged.
 
-**Status:** applied to staging (wave 29); production pin execute-authorized; not applied to production.
+**Production apply (2026-10-30).** After the pin change (#1467, merged to main as `d5780e105` on the
+owner's "Merge 1467 and 1466"), transfer run 41121202177 staged main `d5780e105` (tarball sha256
+`20a490847015c223a0f31f8bb1901e986df83ace99ffd5bd5b458d7e75024d43`). A read-only one-shot
+`--phase inspect` of the same commit (SSM `ba2f3350-034b-41e8-a9af-149ac804a211`, run
+`65e549f8-14ae-4b25-b4ba-352c3d4775c2`) found live `e1a1d4ed…` (the pinned pre-state), the function
+`absent`, `predecessors.sql130` true, `already_applied` false, `precondition_failures` `[]`, contracts 4/4,
+6/6 and 43/43. One-shot `--phase apply` run `aba09b96-f0fc-48c9-94dd-175f45ad638d` through SSM
+`e3234a9c-ad40-4a13-9078-58a5b1872a35`, workstream `prod-sql132-financial-totp-code-check-lockout-20261030`,
+under the owner's words "apply SQL 132 in production" (passed verbatim): every step ok; manifest
+`af74d381…`; receipt `e1a1d4ed…` → `88828cb48d8b847cf177d57314bdbc0c8a1f49051958be5adb264a0c418ebd72`
+(intended), result `applied`, unrelated catalog `25c9872f…` (functions 1354, triggers 184); post-apply
+inspect `already_applied` true, `precondition_failures` `[]`. A separate read-only inspect (SSM
+`2884bd09-63cc-4996-b095-2e3f32c9e4f5`) reported `financial_totp_count_code_check(uuid)` `intended`,
+EXECUTE for `checksops` and the owner only (PUBLIC revoked), `definer_writes` ok. The run's whole JSON
+arrived (see the pin's `applied.one_shot_note`). Runner state: started for these runs at 2026-10-30
+20:18:19 UTC (SSM online 20:18:57 UTC) and stopped at 20:19:46 UTC.
+
+**Status:** applied to staging (wave 29) and to production (2026-10-30); the production pin is retired
+(`execute: false`). Next: the API change (`auth-financial-totp.mjs`, `checkalt-register.mjs`) through the
+guarded Lambda path (step 5 below); the overlay plan records SQL 132 verified live.
 
 ## Fingerprint
 
