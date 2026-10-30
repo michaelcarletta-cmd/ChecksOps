@@ -2,6 +2,9 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { CLASS_A_FUNCTIONS, handleAppServiceRequest } from '../functions/api/app-services.mjs';
 import {
+  FINANCIAL_TOTP_ADMIN_RESET_FUNCTION,
+  FINANCIAL_TOTP_ADMIN_RESET_PRESENT_SQL,
+  FINANCIAL_TOTP_ADMIN_RESET_SQL,
   MFA_RESET_PREFERENCE,
   RESET_TOTP_CONSUME_SQL,
   RESET_TOTP_STEPUP_LOCK_SQL,
@@ -11,6 +14,7 @@ import {
   RESET_TOTP_TEAMMATE_SQL,
   TEAM_RESET_TOTP_ACTION,
   TEAM_RESET_TOTP_STEPUP_MAX_AGE_MINUTES,
+  clearFinancialTotpEnrollment,
   runAdminResetTotp,
   softwareTokenEnrolled,
 } from '../functions/api/admin-reset-totp.mjs';
@@ -62,10 +66,34 @@ const STEPPED_UP = [{ user_id: CALLER, tenant_id: TENANT, action_key: 'team.rese
  * RESET_TOTP_TEAMMATE_SQL (owner policy: any member, the role is not read). user_roles and is_master_owner are answered too,
  * so a test can prove they are not consulted.
  */
+/**
+ * `financialReset` (SQL 133): null means the function is absent (the catalog check reads false, as before
+ * SQL 133 is applied); otherwise { rows: Set<user id with an enrollment row>, calls: [] } plays the DEFINER
+ * function: it records each call (after the step-up consumption, which the handler asserts), deletes the
+ * target's row and answers cleared accordingly.
+ */
 const teamClient = ({
   memberships = [], userRoles = [], master = false, account = null, stepUps = STEPPED_UP, targetIsOwner = false,
-  consumed = [], locks = [],
+  consumed = [], locks = [], financialReset = null,
 } = {}) => sqlClient([
+  {
+    match: (sql) => sql === FINANCIAL_TOTP_ADMIN_RESET_PRESENT_SQL,
+    result: ([identity]) => {
+      assert.equal(identity, FINANCIAL_TOTP_ADMIN_RESET_FUNCTION);
+      return { rows: [{ present: financialReset !== null }] };
+    },
+  },
+  {
+    match: (sql) => sql === FINANCIAL_TOTP_ADMIN_RESET_SQL,
+    result: ([actor, target]) => {
+      assert.ok(financialReset, 'the function is only called where the catalog says it exists');
+      assert.equal(consumed.length, 1, 'the step-up is consumed before the authenticator is cleared');
+      financialReset.calls.push({ actor, target });
+      if (financialReset.raise) throw financialReset.raise;
+      const cleared = financialReset.rows.delete(target);
+      return { rows: [{ cleared }] };
+    },
+  },
   {
     match: (sql) => sql === RESET_TOTP_STEPUP_LOCK_SQL.replace(/\s+/g, ' '),
     result: ([caller]) => { locks.push(caller); return { rows: [{}] }; },
@@ -324,4 +352,108 @@ test('a team.reset_totp step-up is single use: one code, one reset', async () =>
     assert.equal(again.error, 'totp_required');
   }
   assert.equal(consumed.length, 1);
+});
+
+// SQL 133: the financial authenticator (public.financial_totp_enrollments) is cleared by the DEFINER
+// function, in the reset transaction, after the step-up consumption and before Cognito.
+const cognitoSpy = (calls, settings = ['SOFTWARE_TOKEN_MFA']) => ({
+  send: async (command) => {
+    calls.push(command.constructor.name);
+    return command.constructor.name === 'AdminGetUserCommand' ? { Username: 'ada@example.com', UserMFASettingList: settings } : {};
+  },
+});
+const ACCOUNT = { email: 'ada@example.com', cognito_sub: 'sub', application_user_id: USER_ID };
+
+test('SQL 133: the teammate reset clears the financial authenticator in the same transaction, after the step-up consumption and before Cognito, and says so', async () => {
+  assert.equal(FINANCIAL_TOTP_ADMIN_RESET_FUNCTION, 'public.financial_totp_admin_reset_enrollment(uuid, uuid)');
+  assert.equal(FINANCIAL_TOTP_ADMIN_RESET_PRESENT_SQL, 'SELECT pg_catalog.to_regprocedure($1) IS NOT NULL AS present');
+  assert.equal(FINANCIAL_TOTP_ADMIN_RESET_SQL, 'SELECT cleared FROM public.financial_totp_admin_reset_enrollment($1::uuid, $2::uuid)');
+  const financialReset = { rows: new Set([USER_ID, CALLER]), calls: [] };
+  const consumed = [];
+  const cognito = [];
+  const client = teamClient({ memberships: TEAM, account: ACCOUNT, financialReset, consumed });
+  const order = [];
+  const traced = { query: async (sql, params) => { const compact = String(sql).replace(/\s+/g, ' '); order.push(compact === FINANCIAL_TOTP_ADMIN_RESET_SQL ? 'clear' : compact === RESET_TOTP_CONSUME_SQL.replace(/\s+/g, ' ') ? 'consume' : 'other'); return client.query(sql, params); } };
+  const result = await reset(traced, { poolId: 'us-east-1_test', cognitoClient: { send: async (c) => { order.push('cognito'); return cognitoSpy(cognito).send(c); } } });
+  assert.equal(result.ok, true);
+  assert.equal(result.financialTotpCleared, true);
+  assert.equal(result.removed_count, 1);
+  assert.deepEqual(financialReset.calls, [{ actor: CALLER, target: USER_ID }], 'the caller acts as itself, on the target only');
+  assert.ok(!financialReset.rows.has(USER_ID), 'the target row is gone');
+  assert.ok(financialReset.rows.has(CALLER), 'the caller\'s own row is untouched');
+  const steps = order.filter((step) => step !== 'other');
+  assert.deepEqual(steps.slice(0, 2), ['consume', 'clear']);
+  assert.equal(steps.indexOf('clear') < steps.indexOf('cognito'), true, 'the database clear precedes every Cognito call');
+  assert.ok(cognito.includes('AdminSetUserMFAPreferenceCommand'));
+});
+
+test('SQL 133: a teammate without a financial authenticator row is reset as before and reports financialTotpCleared false; so does a target with no Cognito account', async () => {
+  const noRow = { rows: new Set([CALLER]), calls: [] };
+  const withCognito = await reset(teamClient({ memberships: TEAM, account: ACCOUNT, financialReset: noRow }), { poolId: 'p', cognitoClient: cognitoSpy([], []) });
+  assert.equal(withCognito.ok, true);
+  assert.equal(withCognito.financialTotpCleared, false);
+  assert.deepEqual(noRow.calls, [{ actor: CALLER, target: USER_ID }]);
+  // No Cognito account at all: the row is still cleared and the answer still says so.
+  const rowOnly = { rows: new Set([USER_ID]), calls: [] };
+  const noAccount = await reset(teamClient({ memberships: TEAM, account: null, financialReset: rowOnly }));
+  assert.equal(noAccount.ok, true);
+  assert.equal(noAccount.cognitoUserFound, false);
+  assert.equal(noAccount.financialTotpCleared, true);
+  assert.equal(rowOnly.rows.size, 0);
+});
+
+test('SQL 133 not applied: the function is absent, the reset behaves as before and reports financialTotpCleared false, never a 500', async () => {
+  const calls = [];
+  const absent = await reset(teamClient({ memberships: TEAM, account: ACCOUNT }), { poolId: 'p', cognitoClient: cognitoSpy(calls) });
+  assert.equal(absent.ok, true);
+  assert.equal(absent.statusCode, 200);
+  assert.equal(absent.financialTotpCleared, false);
+  assert.equal(absent.removed_count, 1);
+  assert.ok(calls.includes('AdminSetUserMFAPreferenceCommand'));
+  assert.deepEqual(await clearFinancialTotpEnrollment({ query: async () => ({ rows: [] }) }, CALLER, USER_ID), { present: false, cleared: false });
+  assert.deepEqual(await clearFinancialTotpEnrollment({ query: async () => ({ rows: [{ present: false }] }) }, CALLER, USER_ID), { present: false, cleared: false });
+});
+
+test('SQL 133: the existing refusals (self, another tenant, the platform owner, no step-up) never reach the financial authenticator, and a database refusal stops the reset before Cognito', async () => {
+  const cases = [
+    ['self', { memberships: [{ user_id: CALLER, tenant_id: TENANT, role: 'owner' }] }, { body: { user_id: CALLER } }, 403, 'cannot_reset_own_totp'],
+    ['another tenant', { memberships: [{ user_id: CALLER, tenant_id: OTHER_TENANT, role: 'owner' }, { user_id: USER_ID, tenant_id: TENANT, role: 'operator' }] }, {}, 403, 'forbidden'],
+    ['the platform owner', { memberships: TEAM, targetIsOwner: true }, {}, 403, 'platform_owner_protected'],
+    ['no step-up', { memberships: TEAM, stepUps: [] }, {}, 401, 'totp_required'],
+  ];
+  for (const [label, opts, extra, statusCode, error] of cases) {
+    const financialReset = { rows: new Set([USER_ID]), calls: [] };
+    const cognito = [];
+    const result = await reset(teamClient({ ...opts, account: ACCOUNT, financialReset }), { ...extra, poolId: 'p', cognitoClient: cognitoSpy(cognito) });
+    assert.equal(result.statusCode, statusCode, label);
+    assert.equal(result.error, error, label);
+    assert.deepEqual(financialReset.calls, [], label);
+    assert.ok(financialReset.rows.has(USER_ID), label);
+    assert.deepEqual(cognito, [], label);
+    assert.equal(result.financialTotpCleared, undefined, label);
+  }
+  // The database's own gate (42501) propagates: withIdentityWrite answers 403 and rolls back; Cognito is never called.
+  const refused = Object.assign(new Error('reset_target_not_teammate'), { code: '42501' });
+  const financialReset = { rows: new Set([USER_ID]), calls: [], raise: refused };
+  const cognito = [];
+  await assert.rejects(reset(teamClient({ memberships: TEAM, account: ACCOUNT, financialReset }), { poolId: 'p', cognitoClient: cognitoSpy(cognito) }), refused);
+  assert.equal(financialReset.calls.length, 1);
+  assert.deepEqual(cognito, []);
+});
+
+test('SQL 133: a Cognito failure after the database clear answers ok false, so the transaction (row deletion and step-up consumption) rolls back together', async () => {
+  const financialReset = { rows: new Set([USER_ID]), calls: [] };
+  const failing = {
+    send: async (command) => {
+      if (command.constructor.name === 'AdminGetUserCommand') return { Username: 'ada@example.com', UserMFASettingList: ['SOFTWARE_TOKEN_MFA'] };
+      if (command.constructor.name === 'AdminSetUserMFAPreferenceCommand') throw Object.assign(new Error('InternalErrorException'), { name: 'InternalErrorException' });
+      return {};
+    },
+  };
+  const result = await reset(teamClient({ memberships: TEAM, account: ACCOUNT, financialReset }), { poolId: 'p', cognitoClient: failing });
+  assert.equal(result.ok, false);
+  assert.equal(result.statusCode, 500);
+  assert.equal(result.error, 'factor_reset_failed');
+  assert.equal(result.financialTotpCleared, undefined);
+  assert.equal(financialReset.calls.length, 1, 'the clear ran inside the transaction that ok false now rolls back');
 });

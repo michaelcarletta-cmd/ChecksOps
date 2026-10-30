@@ -1,5 +1,5 @@
 /**
- * Specs of the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108 to SQL 132, SQL 134) for the shared engine in
+ * Specs of the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108 to SQL 134) for the shared engine in
  * release-sql-state.mjs: what each pinned file creates, replaces or drops, the reviewed
  * EXECUTE ACLs, the prerequisites and predecessors, and the PostgreSQL renderings the file
  * leaves (policy expressions, view, column, constraint, index and trigger definitions as
@@ -5939,6 +5939,59 @@ export const RELEASE_SQL_SPECS = deepFreeze({
     ],
     "definer_writes": [
       "public.financial_totp_enrollments"
+    ]
+  },
+  // SQL 133 (owner 2026-10-30, "ok build the reset after SQL 131 and the lockout fix"): the teammate
+  // reset of a financial TOTP enrollment. One new SECURITY DEFINER function,
+  // financial_totp_admin_reset_enrollment(uuid, uuid), enforces the API's reset rules again (the caller is
+  // auth.uid(), not the target, shares a tenant with the target through tenant_users, the target is not the
+  // platform owner by identity_accounts / profiles email) and deletes the target's
+  // financial_totp_enrollments row; cleared false when there is none. EXECUTE: checksops and the owner
+  // (PUBLIC revoked). definer_writes lists the four relations the DEFINER function must reach past RLS as
+  // their owner: the enrollment table it deletes from and the three it reads for the gate (a gate filtered
+  // by RLS would refuse every reset or let one through on a partial view). No predecessor: it calls none of
+  // SQL 130, 131 or 132's functions; it follows them by the order of work. No table, column, policy or
+  // grant change.
+  sql133: {
+    "key": "sql133",
+    "label": "SQL 133",
+    "choice": "sql133-financial-totp-admin-reset-enrollment",
+    "production_pin_rel": "ops/deployment-guard/sql133-financial-totp-admin-reset-enrollment-production-apply.json",
+    "script": "sql133-financial-totp-admin-reset-enrollment-production-apply",
+    "prerequisites": [
+      "public.financial_totp_enrollments",
+      "public.tenant_users",
+      "public.identity_accounts",
+      "public.profiles",
+      "auth.uid()",
+      "role checksops",
+      "column public.financial_totp_enrollments.application_user_id",
+      "column public.tenant_users.tenant_id",
+      "column public.tenant_users.user_id",
+      "column public.identity_accounts.application_user_id",
+      "column public.identity_accounts.email",
+      "column public.profiles.id",
+      "column public.profiles.email"
+    ],
+    "predecessors": [],
+    "functions": [
+      {
+        "identity": "public.financial_totp_admin_reset_enrollment(uuid, uuid)",
+        "result": "TABLE(cleared boolean)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ],
+        "revokes": [
+          "PUBLIC EXECUTE"
+        ]
+      }
+    ],
+    "definer_writes": [
+      "public.financial_totp_enrollments",
+      "public.tenant_users",
+      "public.identity_accounts",
+      "public.profiles"
     ]
   },
   // SQL 134 (owner 2026-10-30: a monitored loss draft stays in Loss Draft to document escrow and

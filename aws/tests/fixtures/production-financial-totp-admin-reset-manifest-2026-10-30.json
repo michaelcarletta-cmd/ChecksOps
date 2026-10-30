@@ -1,0 +1,15 @@
+{
+  "workstream_id": "financial-totp-admin-reset",
+  "authorization": "Pending owner review (2026-10-30). Planning only: nothing is live or verified. The production apply still needs SQL 133 applied and recorded verified live in that environment (sql_before), its own staging acceptance and the owner's approval.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Financial TOTP teammate reset (2026-10-30, SQL 133 aws/workflows/sql/133_financial_totp_admin_reset_enrollment.sql; owner \"ok build the reset after SQL 131 and the lockout fix\"): a verified financial TOTP enrollment can never be replaced (handleMfaAssociate answers 409 enrollment_reset_required, financial_totp_upsert_enrollment raises verified_enrollment_exists) and the teammate reset never cleared the financial_totp_enrollments row (the API connects as checksops, which holds no privilege on the table), so the User Management button left the authenticator enrolled and a user who lost the phone had no way back in. The accepted bytes of admin-reset-totp.mjs call the new SECURITY DEFINER financial_totp_admin_reset_enrollment(uuid, uuid) once per reset, after the existing checks (a valid target, not self, a shared tenant, not the platform owner, the caller's own fresh team.reset_totp step-up) and after the step-up consumption row, inside the same withIdentityWrite transaction and before the Cognito calls: a Cognito failure returns ok false, so the transaction rolls the row deletion and the step-up consumption back together and nothing is half reset; the database re-checks the same gate and raises 42501 otherwise, which the API answers as 403 and rolls back. Every success answer carries financialTotpCleared true|false (true when a row was deleted). The member first asks the catalog whether the function exists (pg_catalog.to_regprocedure); where SQL 133 is not applied it resets Cognito and profiles as before, answers financialTotpCleared false, and never answers 500. No new import. live_sha256 is the row's expected live bytes (a1d8a54a, the release 2026-10-17 reconciliation, production-release-lock-pin-manifest-2026-10-17.json), the previous_manifest; the 9e85ae9a REPLACE that manifest planned for this member was never applied and this row supersedes it. The row waits for SQL 133 (sql_before, recorded in the plan as not verified live: the overlay refuses it until the SQL 133 record change marks it live). No self-service reset; the platform owner stays protected; no lockout or replay change. A read-only production overlay inspect must confirm the live member before any apply.",
+  "members": {
+    "admin-reset-totp.mjs": {
+      "live_sha256": "a1d8a54a0f686be926498cf823cfd55bfc1fe4caf919ab66ce49810d63bcb450",
+      "accepted_sha256": "688ceddff31adc27c29918549a339de325c8fefea689e995a5732d99a074cae9",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
+    }
+  }
+}
