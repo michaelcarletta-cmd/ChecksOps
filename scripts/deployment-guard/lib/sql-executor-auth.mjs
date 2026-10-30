@@ -3002,6 +3002,29 @@ export const AUTHORIZED_SQL132_FINANCIAL_TOTP_CODE_CHECK_LOCKOUT = Object.freeze
   ]),
 });
 
+// Loss Draft escrow and draw records staging pin: SQL 134 (owner 2026-10-30: a monitored loss draft
+// stays in Loss Draft to document escrow and disbursements; UPDATE (total_escrowed,
+// draw_amount_requested, draw_stage, draw_amount_released, holdback_amount) on loss_draft_tracking
+// and INSERT (loss_draft_id, draw_number, amount_requested, amount_released, release_date,
+// released_at, status, notes, created_by) on loss_draft_releases, for checksops and authenticated).
+// No predecessor. Pending until a reviewed pin change records a staging read-live (expected: no
+// column grant on any of the fourteen columns).
+export const AUTHORIZED_SQL134_LOSS_DRAFT_ESCROW_WRITE_GRANTS = Object.freeze({
+  key: 'sql134',
+  filename: 'aws/workflows/sql/134_loss_draft_escrow_write_grants.sql',
+  migration_id: '134_loss_draft_escrow_write_grants',
+  // The commit that last authored the file bytes.
+  commit: '05faad793cd360736420859f1b686e5956bc39dc',
+  source_sha256: 'a9082d1369587a702014e10e443ab965c1608e99d14a193da900f7d35c91e03a',
+  authorization: 'pending',
+  execute: false,
+  expected_live_definition_sha256: null,
+  // Code-derived: releaseIntendedHash('sql134', file bytes) (release-sql-state.mjs); re-derived by the tests.
+  intended_replacement_sha256: 'c046d1c91cc79596c103f154b043b5421cb1dc6ceaef45d87f2f6ea1c0073c7c',
+  // The file creates, replaces and sets the ACL of no function.
+  function_identities: Object.freeze([]),
+});
+
 export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql90: AUTHORIZED_SQL90_USERS_ONLY_TENANT_ROLES,
   sql91: AUTHORIZED_SQL91_MOOV_ONBOARDING,
@@ -3045,6 +3068,7 @@ export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql130: AUTHORIZED_SQL130_FINANCIAL_TOTP_RATE_LIMIT_CODE_CHECK_NO_PUBLIC,
   sql131: AUTHORIZED_SQL131_FINANCIAL_TOTP_FUNCTIONS_NO_PUBLIC,
   sql132: AUTHORIZED_SQL132_FINANCIAL_TOTP_CODE_CHECK_LOCKOUT,
+  sql134: AUTHORIZED_SQL134_LOSS_DRAFT_ESCROW_WRITE_GRANTS,
 });
 
 // The fee collection pin under its earlier map name (the same object as the release map's sql98).
@@ -3060,7 +3084,7 @@ export function isSql30TenantDocumentsDocType(input = {}) {
   return pinIdentifiersMatch(input, AUTHORIZED_SQL30_TENANT_DOCUMENTS_DOC_TYPE);
 }
 
-/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql132) an input names, or null. */
+/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql132, sql134) an input names, or null. */
 export function releaseSqlMigrationKey(input = {}) {
   return Object.keys(RELEASE_2026_10_17_PENDING_SQL_PINS)
     .find((key) => pinIdentifiersMatch(input, RELEASE_2026_10_17_PENDING_SQL_PINS[key])) || null;

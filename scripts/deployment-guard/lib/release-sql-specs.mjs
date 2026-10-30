@@ -1,5 +1,5 @@
 /**
- * Specs of the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108 to SQL 132) for the shared engine in
+ * Specs of the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108 to SQL 132, SQL 134) for the shared engine in
  * release-sql-state.mjs: what each pinned file creates, replaces or drops, the reviewed
  * EXECUTE ACLs, the prerequisites and predecessors, and the PostgreSQL renderings the file
  * leaves (policy expressions, view, column, constraint, index and trigger definitions as
@@ -5939,6 +5939,165 @@ export const RELEASE_SQL_SPECS = deepFreeze({
     ],
     "definer_writes": [
       "public.financial_totp_enrollments"
+    ]
+  },
+  // SQL 134 (owner 2026-10-30: a monitored loss draft stays in Loss Draft to document escrow and
+  // disbursements): the column grants the Loss Draft escrow and draw records need. UPDATE
+  // (total_escrowed, draw_amount_requested, draw_stage, draw_amount_released, holdback_amount) on
+  // public.loss_draft_tracking and INSERT (loss_draft_id, draw_number, amount_requested,
+  // amount_released, release_date, released_at, status, notes, created_by) on
+  // public.loss_draft_releases, for checksops and authenticated (SQL 50's roles for
+  // loss_draft_tracking). Like SQL 92 and SQL 114 its fingerprint is each named column's ACL
+  // (column_acl: pg_attribute.attacl, every grantee); any other live grant on those columns refuses
+  // the pre-conditions (column_acl_replaceable), and the table ACLs, every other column (SQL 50's
+  // escrow_status, check_received_date and updated_at grants among them) and the policies are in
+  // the unrelated snapshot. GRANT of a held privilege is a no-op; all held is already_applied. No
+  // predecessor, policy, function or trigger.
+  sql134: {
+    "key": "sql134",
+    "label": "SQL 134",
+    "choice": "sql134-loss-draft-escrow-write-grants",
+    "production_pin_rel": "ops/deployment-guard/sql134-loss-draft-escrow-write-grants-production-apply.json",
+    "script": "sql134-loss-draft-escrow-write-grants-production-apply",
+    "prerequisites": [
+      "public.loss_draft_tracking",
+      "public.loss_draft_releases",
+      "column public.loss_draft_tracking.total_escrowed",
+      "column public.loss_draft_tracking.draw_amount_requested",
+      "column public.loss_draft_tracking.draw_stage",
+      "column public.loss_draft_tracking.draw_amount_released",
+      "column public.loss_draft_tracking.holdback_amount",
+      "column public.loss_draft_releases.loss_draft_id",
+      "column public.loss_draft_releases.draw_number",
+      "column public.loss_draft_releases.amount_requested",
+      "column public.loss_draft_releases.amount_released",
+      "column public.loss_draft_releases.release_date",
+      "column public.loss_draft_releases.released_at",
+      "column public.loss_draft_releases.status",
+      "column public.loss_draft_releases.notes",
+      "column public.loss_draft_releases.created_by",
+      "role checksops",
+      "role authenticated"
+    ],
+    "predecessors": [],
+    "functions": [],
+    "column_acl": [
+      {
+        "table": "public.loss_draft_tracking",
+        "column": "total_escrowed",
+        "acl": [
+          "authenticated UPDATE",
+          "checksops UPDATE"
+        ]
+      },
+      {
+        "table": "public.loss_draft_tracking",
+        "column": "draw_amount_requested",
+        "acl": [
+          "authenticated UPDATE",
+          "checksops UPDATE"
+        ]
+      },
+      {
+        "table": "public.loss_draft_tracking",
+        "column": "draw_stage",
+        "acl": [
+          "authenticated UPDATE",
+          "checksops UPDATE"
+        ]
+      },
+      {
+        "table": "public.loss_draft_tracking",
+        "column": "draw_amount_released",
+        "acl": [
+          "authenticated UPDATE",
+          "checksops UPDATE"
+        ]
+      },
+      {
+        "table": "public.loss_draft_tracking",
+        "column": "holdback_amount",
+        "acl": [
+          "authenticated UPDATE",
+          "checksops UPDATE"
+        ]
+      },
+      {
+        "table": "public.loss_draft_releases",
+        "column": "loss_draft_id",
+        "acl": [
+          "authenticated INSERT",
+          "checksops INSERT"
+        ]
+      },
+      {
+        "table": "public.loss_draft_releases",
+        "column": "draw_number",
+        "acl": [
+          "authenticated INSERT",
+          "checksops INSERT"
+        ]
+      },
+      {
+        "table": "public.loss_draft_releases",
+        "column": "amount_requested",
+        "acl": [
+          "authenticated INSERT",
+          "checksops INSERT"
+        ]
+      },
+      {
+        "table": "public.loss_draft_releases",
+        "column": "amount_released",
+        "acl": [
+          "authenticated INSERT",
+          "checksops INSERT"
+        ]
+      },
+      {
+        "table": "public.loss_draft_releases",
+        "column": "release_date",
+        "acl": [
+          "authenticated INSERT",
+          "checksops INSERT"
+        ]
+      },
+      {
+        "table": "public.loss_draft_releases",
+        "column": "released_at",
+        "acl": [
+          "authenticated INSERT",
+          "checksops INSERT"
+        ]
+      },
+      {
+        "table": "public.loss_draft_releases",
+        "column": "status",
+        "acl": [
+          "authenticated INSERT",
+          "checksops INSERT"
+        ]
+      },
+      {
+        "table": "public.loss_draft_releases",
+        "column": "notes",
+        "acl": [
+          "authenticated INSERT",
+          "checksops INSERT"
+        ]
+      },
+      {
+        "table": "public.loss_draft_releases",
+        "column": "created_by",
+        "acl": [
+          "authenticated INSERT",
+          "checksops INSERT"
+        ]
+      }
+    ],
+    "altered_relations": [
+      "public.loss_draft_tracking",
+      "public.loss_draft_releases"
     ]
   },
 });
