@@ -51,6 +51,7 @@ that connects to the database:
 | `sql125` | `scripts/deployment-guard/sql125-deposit-views-security-invoker-production-apply.mjs` (`ops/production-sql-125-apply.md`; security_invoker on the four Supabase-era deposit views `deposit_queue_scored`, `deposit_owner_performance`, `deposit_reminder_queue` and `deposit_aging_dashboard`: no definition, grant or function change) |
 | `sql126` | `scripts/deployment-guard/sql126-definer-reads-caller-gates-production-apply.mjs` (`ops/production-sql-126-apply.md`; the thirteen Supabase-era SECURITY DEFINER reads check their caller themselves: owner-only, tenant, check and self gates, `get_stuck_checks` and `get_check_unread_counts` scoped to the caller; same signatures, EXECUTE for `checksops` and the owner) |
 | `sql127` | `scripts/deployment-guard/sql127-homeowner-portal-signing-production-apply.mjs` (`ops/production-sql-127-apply.md`; homeowners sign their checks and documents from the claim portal: SQL 83's `aws_public_homeowner_ledger_endorse_capability` opens `pending` as well as `sent` insured endorsements, `aws_public_homeowner_pending_signatures` lists an open homeowner signer whose emailed link expired, and the new `aws_public_homeowner_document_portal_signer` returns the signer's existing token hash and renews its expiry; three SECURITY DEFINER functions, EXECUTE for `checksops` and the owner; no table, column, policy, table grant or trigger; no predecessor) |
+| `sql128` | `scripts/deployment-guard/sql128-contractor-verification-from-compliance-production-apply.mjs` (`ops/production-sql-128-apply.md`; contractor verification reads the Compliance & Docs uploads: `contractor_verification_status` takes the W-9 and insurance from the contractor's tenants' `moov_compliance_documents` and `tenant_documents` instead of the dropped `contractor_documents`; EXECUTE for `checksops` and the owner; the orphan `_trg_recompute_contractor_tier_from_docs()` dropped) |
 
 To add a migration, register its reviewed tool in `ONE_SHOT_TOOLS`
 (`scripts/deployment-guard/lib/production-sql-one-shot.mjs`). An entry names only the tool,
@@ -65,7 +66,7 @@ a migration file touches its pin, not the registry. An entry may add `inspect_re
 
 | flag | |
 |---|---|
-| `--migration <key>` | a registered key (`sql29`, `sql30`, `sql71`, `sql77`…`sql89`, `sql90`…`sql106`, `sql108`, `sql109`, `sql110`, `sql111`, `sql112`, `sql113`, `sql114`, `sql115`, `sql116`, `sql117`, `sql118`, `sql119`, `sql120`, `sql121`, `sql122`, `sql123`, `sql124`, `sql125`, `sql126`, `sql127`) |
+| `--migration <key>` | a registered key (`sql29`, `sql30`, `sql71`, `sql77`…`sql89`, `sql90`…`sql106`, `sql108`, `sql109`, `sql110`, `sql111`, `sql112`, `sql113`, `sql114`, `sql115`, `sql116`, `sql117`, `sql118`, `sql119`, `sql120`, `sql121`, `sql122`, `sql123`, `sql124`, `sql125`, `sql126`, `sql127`, `sql128`) |
 | `--approval-scope <key>` | the migration the owner approved; must equal `--migration` |
 | `--approval-statement "<words>"` or `--approval-statement-b64 <base64>` | the owner's exact words, recorded verbatim. Pass exactly one of the two. Use the base64 form when the words contain quotes or newlines. Must be non-empty. |
 | `--commit <sha>` | the full main commit the tarball was built from |
