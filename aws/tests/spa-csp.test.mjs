@@ -73,3 +73,13 @@ test('connect-src names the API each environment calls and nothing wider', () =>
   }
   assert.throws(() => cspDirectives({ environment: 'dev', indexHtml: INDEX }));
 });
+
+test('the pdf.js worker is self-hosted: no unpkg anywhere in the policy, scripts only from the SPA itself', () => {
+  for (const environment of ['staging', 'production']) {
+    const policy = buildCsp({ environment, indexHtml: INDEX });
+    assert.equal(policy.includes('unpkg'), false, environment);
+    assert.deepEqual(directive(policy, 'worker-src'), ["'self'", 'blob:'], environment);
+    assert.deepEqual(directive(policy, 'script-src'), ["'self'", ...inlineScriptHashes(INDEX)], environment);
+  }
+  assert.equal(read(TEMPLATE_REL).includes('unpkg'), false);
+});

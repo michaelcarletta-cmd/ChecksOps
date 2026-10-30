@@ -58,7 +58,8 @@ export function distFingerprint(distDir) {
 }
 
 function contentTypeForKey(key) {
-  if (key.endsWith('.js')) return 'application/javascript';
+  // .mjs: the pdf.js worker is a module worker, which browsers load only with a JavaScript type.
+  if (key.endsWith('.js') || key.endsWith('.mjs')) return 'application/javascript';
   if (key.endsWith('.css')) return 'text/css';
   if (key.endsWith('.svg')) return 'image/svg+xml';
   if (key.endsWith('.json')) return 'application/json';
