@@ -200,11 +200,13 @@ test('pin: SQL 131 pending, code-derived, selectable, packed, in step with the p
   assert.equal(prod.staging_pin_commit, pin.commit);
   assert.equal(prod.source_sha256, pin.source_sha256);
   assert.deepEqual(prod.predecessors, ['sql130']);
-  // Production pin execute-authorized (owner-approved pin change of 2026-10-30) on the staging read-live
-  // (already in the intended state there: the staging pin above stays pending). Its pre-state is production's
+  // Production pin applied 2026-10-30 and retired (owner-approved pin change, #1460, on the staging read-live,
+  // already in the intended state there: the staging pin above stays pending). Its pre-state is production's
   // own (read-only inspect SSM be25e88a): the four with EXECUTE also for PUBLIC, derived here from the spec.
-  assert.equal(prod.execute, true);
-  assert.match(prod.authorization, /^Owner approved 2026-10-30 /);
+  assert.equal(prod.execute, false);
+  assert.match(prod.authorization, /^Applied to production on 2026-10-30; execute is false again/);
+  assert.equal(prod.applied.receipt.before_hash, prod.expected_live_definition_sha256);
+  assert.equal(prod.applied.receipt.after_hash, prod.intended_replacement_sha256);
   assert.equal(prod.expected_live_definition_sha256, '99d9e8e925ca8c5b56e11409f145e2d75de2759c27d8fd1b476494ffc62e2eaa');
   assert.equal(prod.expected_live_definition_sha256, prod.production_inspect.live_definition_sha256);
   assert.equal(prod.expected_live_definition_sha256, PRODUCTION_PRE);
@@ -213,7 +215,8 @@ test('pin: SQL 131 pending, code-derived, selectable, packed, in step with the p
   assert.equal(prod.production_inspect.status, 'recorded');
   assert.equal(prod.staging_acceptance.ok, true);
   assert.match(prod.staging_acceptance.reference, /\/actions\/runs\/41107844336$/);
-  assert.equal(prod.applied, undefined);
+  assert.equal(prod.applied.result, 'applied');
+  assert.equal(prod.applied.post_apply_inspect.already_applied, true);
   assert.ok(prod.production_inspect.note.includes(PRODUCTION_PRE));
   let bytes = null;
   if (/^[0-9a-f]{40}$/.test(pin.commit)) {
