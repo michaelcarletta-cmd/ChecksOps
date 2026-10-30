@@ -2907,7 +2907,10 @@ export const AUTHORIZED_SQL128_CONTRACTOR_VERIFICATION_FROM_COMPLIANCE = Object.
 // Financial TOTP rate-limit staging pin: SQL 129 (finding 7 follow-up, owner 2026-10-30 "build SQL 129":
 // consume_financial_totp_rate_limit also accepts 'code_check', the action the API sends for every
 // authenticator-code check since finding 7; same body otherwise; no grant change). No predecessor.
-// Pending until a reviewed pin change records a staging read-live.
+// Retired 2026-10-30, never applied anywhere: the staging read-live (run 41081764481, main f2bb55b1,
+// already_applied false, precondition_failures []) read the function without PUBLIC EXECUTE, while the
+// file keeps the ACL and its fingerprint names PUBLIC, so the staging apply would roll back. SQL 130
+// replaces it (owner 2026-10-30, "New combined fix"). Its pre-state was never recorded here.
 export const AUTHORIZED_SQL129_FINANCIAL_TOTP_RATE_LIMIT_CODE_CHECK = Object.freeze({
   key: 'sql129',
   filename: 'aws/workflows/sql/129_financial_totp_rate_limit_code_check.sql',
@@ -2915,11 +2918,34 @@ export const AUTHORIZED_SQL129_FINANCIAL_TOTP_RATE_LIMIT_CODE_CHECK = Object.fre
   // The commit that last authored the file bytes.
   commit: 'b48a41b8dfd8629a677599f838cbe9dd56827f17',
   source_sha256: '7c4c5f8be1baf6acbdabd27884952c34fac729aea50c95d3bfb5fb8ba693905a',
-  authorization: 'pending',
+  // Was 'pending' (execute false); retired before any approval, so it can never execute.
+  authorization: 'Retired 2026-10-30: superseded by SQL 130 after staging read-live run 41081764481 found no PUBLIC EXECUTE; never applied',
   execute: false,
   expected_live_definition_sha256: null,
   // Code-derived: releaseIntendedHash('sql129', file bytes) (release-sql-state.mjs); re-derived by the tests.
   intended_replacement_sha256: '8be5fa81be5451803fa2df179fd592862c69020ecdbe429a66834cec1e78b85e',
+  function_identities: Object.freeze([
+    'public.consume_financial_totp_rate_limit(uuid, text, integer, integer)',
+  ]),
+});
+
+// Financial TOTP rate-limit staging pin: SQL 130 (owner 2026-10-30 "New combined fix": SQL 129's
+// consume_financial_totp_rate_limit with 'code_check' in the action allow-list, plus EXECUTE revoked
+// from PUBLIC and granted to checksops on that one function; SQL 129 is retired). No predecessor.
+// Pending until a reviewed pin change records a staging read-live (expected: the proposed body with
+// EXECUTE for checksops and the owner, as SQL 129's read-live run 41081764481 read it).
+export const AUTHORIZED_SQL130_FINANCIAL_TOTP_RATE_LIMIT_CODE_CHECK_NO_PUBLIC = Object.freeze({
+  key: 'sql130',
+  filename: 'aws/workflows/sql/130_financial_totp_rate_limit_code_check_no_public.sql',
+  migration_id: '130_financial_totp_rate_limit_code_check_no_public',
+  // The commit that last authored the file bytes.
+  commit: 'e08e422ce4ebc2c8879d43bdccb0575a9701114b',
+  source_sha256: 'da17dd5d4a74bcf9c5b59dc13bf3a557e3488c5f36ab0b8431a2b8b67fefc561',
+  authorization: 'pending',
+  execute: false,
+  expected_live_definition_sha256: null,
+  // Code-derived: releaseIntendedHash('sql130', file bytes) (release-sql-state.mjs); re-derived by the tests.
+  intended_replacement_sha256: '013549faba6166280b03df404ca23c1973870efad9f7d499d6a695be0de7246b',
   function_identities: Object.freeze([
     'public.consume_financial_totp_rate_limit(uuid, text, integer, integer)',
   ]),
@@ -2965,6 +2991,7 @@ export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql127: AUTHORIZED_SQL127_HOMEOWNER_PORTAL_SIGNING,
   sql128: AUTHORIZED_SQL128_CONTRACTOR_VERIFICATION_FROM_COMPLIANCE,
   sql129: AUTHORIZED_SQL129_FINANCIAL_TOTP_RATE_LIMIT_CODE_CHECK,
+  sql130: AUTHORIZED_SQL130_FINANCIAL_TOTP_RATE_LIMIT_CODE_CHECK_NO_PUBLIC,
 });
 
 // The fee collection pin under its earlier map name (the same object as the release map's sql98).
@@ -2980,7 +3007,7 @@ export function isSql30TenantDocumentsDocType(input = {}) {
   return pinIdentifiersMatch(input, AUTHORIZED_SQL30_TENANT_DOCUMENTS_DOC_TYPE);
 }
 
-/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql129) an input names, or null. */
+/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql130) an input names, or null. */
 export function releaseSqlMigrationKey(input = {}) {
   return Object.keys(RELEASE_2026_10_17_PENDING_SQL_PINS)
     .find((key) => pinIdentifiersMatch(input, RELEASE_2026_10_17_PENDING_SQL_PINS[key])) || null;

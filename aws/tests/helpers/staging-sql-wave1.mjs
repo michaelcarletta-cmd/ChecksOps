@@ -135,6 +135,10 @@ export const STAGING_WAVE1 = Object.freeze({
   // 41041668169): the restored supabase contractor_verification_status (state different) and the orphan
   // _trg_recompute_contractor_tier_from_docs() present, every prerequisite present.
   sql128: Object.freeze({ wave: 27, approved: '2026-10-30', run: '41042517205', live: '8bd6b42d189ff05b77e19d178ddba0229a0d2b6bca0a2d1d98221774fa8fbc5f' }),
+  // SQL 129: retired before any approval (owner 2026-10-30, "New combined fix"). Its read-live (run
+  // 41081764481, main f2bb55b1) read the function without PUBLIC EXECUTE, which the file keeps and its
+  // fingerprint names, so the apply would roll back; SQL 130 replaces it. No pre-state was recorded.
+  sql129: Object.freeze({ run: null, retired: 'Retired 2026-10-30: superseded by SQL 130 after staging read-live run 41081764481 found no PUBLIC EXECUTE; never applied' }),
   sql98: Object.freeze({ wave: 3, approved: '2026-10-18', run: '39083278136', live: '296c3d6a274e10f66005fb9eaecf93fa17b81bd8db3607037ca07698fddd3275', apply_run: '39085677318' }),
 });
 
@@ -147,7 +151,8 @@ export const pendingPin = (pin) => Object.freeze({
 
 /**
  * The committed staging pin's apply state: waves 1-27 recorded and approved, wave 6 approved with
- * its read-live still to record (pending until then), wave 18 (SQL 117) retired, the rest pending.
+ * its read-live still to record (pending until then), wave 18 (SQL 117) retired, SQL 129 retired
+ * before any read-live was recorded, the rest pending.
  */
 export function assertStagingPinState(assert, key, pin) {
   const wave = STAGING_WAVE1[key];
@@ -155,7 +160,8 @@ export function assertStagingPinState(assert, key, pin) {
     assert.equal(pin.expected_live_definition_sha256, null, key);
     if (Object.hasOwn(pin, 'execute')) {
       assert.equal(pin.execute, false, key);
-      assert.equal(pin.authorization, 'pending', key);
+      // Pending, or retired before a pre-state was ever recorded (SQL 129).
+      assert.equal(pin.authorization, wave?.retired || 'pending', key);
     }
     return;
   }

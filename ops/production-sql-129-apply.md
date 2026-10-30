@@ -27,7 +27,19 @@ trigger or row. Revoking `PUBLIC` EXECUTE from the `financial_totp_*` functions 
 and a separate migration. No API, Lambda or SPA change is part of this file or its pins. No trigger is
 added.
 
-**Status:** not applied anywhere. The staging pin and the production pin are pending.
+**Staging read-live (2026-10-30).** The guarded staging SQL executor read-live of SQL 129 (run
+41081764481 on main `f2bb55b1`, executor CodeSha256 `+2f0KhpfRn1/njlZrwya5TAQDyyddkse3VuK6gr3gBc=`)
+reported `already_applied` false, `precondition_failures` `[]`, `live_definition_sha256`
+`1b805d53c7a00f90bf4341045b21f25893b3ddf2f56dd51b9a48ee2045a04bb7` and `function_acl`
+`checksops EXECUTE`, `owner EXECUTE`: production's body without `PUBLIC`. The file keeps the ACL and
+the intended fingerprint names `PUBLIC`, so the staging apply would miss it and roll back. Owner
+decision 2026-10-30, "New combined fix": SQL 130 (`ops/production-sql-130-apply.md`) adds `code_check`
+and revokes `PUBLIC` EXECUTE on this function, so both databases converge to one state.
+
+**Status:** retired, never applied anywhere. The staging pin stays `execute: false` with a
+retirement `authorization` (its read-live pre-state was never recorded); the production pin stays
+pending. Do not apply SQL 129 in any environment. SQL 130 (`ops/production-sql-130-apply.md`)
+replaces it.
 
 ## Fingerprint
 

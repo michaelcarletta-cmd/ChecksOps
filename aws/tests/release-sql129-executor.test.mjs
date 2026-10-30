@@ -4,8 +4,9 @@
  * release-sql90-97-executor.test.mjs runs what every release key shares (SQL 129 included); this
  * file covers what is new:
  *
- *   - the pin: pending, code-derived, selectable, packed, in step with the production pin; the
- *     pinned commit authored the bytes; no predecessor;
+ *   - the pin: retired before any approval (the staging read-live, run 41081764481, found no PUBLIC
+ *     EXECUTE; SQL 130 replaces it), code-derived, selectable, packed, in step with the production
+ *     pin; the pinned commit authored the bytes; no predecessor;
  *   - the file and spec: consume_financial_totp_rate_limit(uuid, text, integer, integer) replaced,
  *     its body the proposed financial TOTP file's (the live definition) with only the action
  *     allow-list changed; plpgsql, VOLATILE, SECURITY DEFINER, search_path public, pg_temp, the
@@ -119,7 +120,7 @@ function handlerFor(connect, { pins = {} } = {}) {
   return createHandler({ connect, now: () => Date.parse(NOW), releaseSqlFiles: FILES, releaseSqlPins: { ...PINS, ...pins } });
 }
 
-test('pin: SQL 129 pending, code-derived, selectable, packed, in step with the production pin; no predecessor', () => {
+test('pin: SQL 129 retired (SQL 130 replaces it), code-derived, selectable, packed, in step with the production pin; no predecessor', () => {
   const pin = PINS[KEY];
   const spec = RELEASE_SQL_SPECS[KEY];
   const packed = Object.fromEntries(EXECUTOR_PACK_MEMBERS);
@@ -130,11 +131,17 @@ test('pin: SQL 129 pending, code-derived, selectable, packed, in step with the p
   assert.equal(spec.choice, 'sql129-financial-totp-rate-limit-code-check');
   assert.doesNotMatch(spec.choice, /production/);
   assert.equal(sha(TEXT), pin.source_sha256);
-  // Pending: no staging read-live recorded yet (and no apply authorized).
+  // Retired before any approval: the staging read-live (run 41081764481) found no PUBLIC EXECUTE, so the
+  // apply would miss the intended fingerprint; SQL 130 replaces it. No pre-state was ever recorded, and
+  // the pin can never execute.
   assertStagingPinState(assert, KEY, pin);
   assert.equal(pin.execute, false);
-  assert.equal(pin.authorization, 'pending');
+  assert.equal(pin.authorization, 'Retired 2026-10-30: superseded by SQL 130 after staging read-live run 41081764481 found no PUBLIC EXECUTE; never applied');
   assert.equal(pin.expected_live_definition_sha256, null);
+  // The staging read-live's hash is this key's fingerprint of the proposed state without PUBLIC (derived here).
+  const stagingState = liveState();
+  stagingState.functions[IDENTITY].acl = stagingState.functions[IDENTITY].acl.filter((line) => line !== 'PUBLIC EXECUTE');
+  assert.equal(releaseStateHash(KEY, stagingState), '1b805d53c7a00f90bf4341045b21f25893b3ddf2f56dd51b9a48ee2045a04bb7');
   assert.equal(releaseIntendedHash(KEY, TEXT), pin.intended_replacement_sha256);
   // Everything absent, and the live (proposed-file) state, each have a fingerprint of their own.
   assert.notEqual(releaseStateHash(KEY, {}), pin.intended_replacement_sha256);
@@ -157,11 +164,12 @@ test('pin: SQL 129 pending, code-derived, selectable, packed, in step with the p
   assert.deepEqual([...pin.function_identities], spec.functions.map((fn) => fn.identity));
   assert.deepEqual(spec.predecessors, []);
   for (const absent of ['runs_before', 'supersedes', 'refuse_after']) assert.equal(spec[absent], undefined, absent);
-  assert.deepEqual(RELEASE_SQL_KEYS.filter((key) => (RELEASE_SQL_SPECS[key].supersedes || []).includes(KEY)
-    || (RELEASE_SQL_SPECS[key].refuse_after || []).some((m) => m.key === KEY)
+  // SQL 130 supersedes it (the same function, PUBLIC revoked); nothing else names it.
+  assert.deepEqual(RELEASE_SQL_KEYS.filter((key) => (RELEASE_SQL_SPECS[key].supersedes || []).includes(KEY)), ['sql130']);
+  assert.deepEqual(RELEASE_SQL_KEYS.filter((key) => (RELEASE_SQL_SPECS[key].refuse_after || []).some((m) => m.key === KEY)
     || (RELEASE_SQL_SPECS[key].predecessors || []).includes(KEY)), []);
-  // No other release migration creates, replaces, drops or re-grants the function.
-  for (const key of RELEASE_SQL_KEYS.filter((k) => k !== KEY)) {
+  // No other release migration but SQL 130 creates, replaces, drops or re-grants the function.
+  for (const key of RELEASE_SQL_KEYS.filter((k) => k !== KEY && k !== 'sql130')) {
     const other = RELEASE_SQL_SPECS[key];
     const touched = [...other.functions.map((fn) => fn.identity), ...(other.dropped_functions || []), ...(other.acl_functions || []).map((fn) => fn.identity)];
     assert.ok(!touched.includes(IDENTITY), key);
