@@ -19,6 +19,7 @@ import { CheckOpsLogo } from "@/components/marketing/CheckOpsLogo";
 import { CheckImageCropper } from "@/components/checks/CheckImageCropper";
 import homeownerOpsLogo from "@/assets/homeowner-ops-logo.png";
 import { displayCase, displayCaseOrNull } from "@/lib/displayCase";
+import { portalSignPath, rememberPortalLedgerToken } from "@/lib/portalSigning";
 
 type LedgerEvent = {
   id: string;
@@ -520,32 +521,16 @@ function PendingEndorsementsPanel({
 }
 
 
-function isSafeDocumentSignUrl(url: string): boolean {
-  if (!url.startsWith("/sign?")) return false;
-  if (url.includes("://") || url.includes("//") || url.includes("\\") || url.includes("..")) return false;
-  return true;
-}
-
 function PendingSignaturesPanel({ token, pending }: { token: string; pending: PendingSignature[] }) {
   const [busyId, setBusyId] = useState<string | null>(null);
   if (!pending || pending.length === 0) return null;
 
-  const reviewAndSignDocument = async (signerId: string) => {
+  // SQL 127: the claim portal link is enough to sign. /sign resolves this signer on the
+  // server from the claim link token (kept for this tab) and the signer id.
+  const reviewAndSignDocument = (signerId: string) => {
     setBusyId(signerId);
-    try {
-      const { data, error } = await supabase.functions.invoke("homeowner-ledger-document-sign-link", {
-        body: { token, signer_id: signerId },
-      });
-      const res = data as SignLinkResponse;
-      const failure = signLinkErrorMessage(res, error);
-      if (failure) throw new Error(failure);
-      const url = String(res?.sign_url || "");
-      if (!isSafeDocumentSignUrl(url)) throw new Error("No sign link returned");
-      window.location.assign(url);
-    } catch (e) {
-      toast.error((e as Error).message || "Could not open document signing");
-      setBusyId(null);
-    }
+    rememberPortalLedgerToken(token);
+    window.location.assign(portalSignPath(signerId));
   };
 
   return (

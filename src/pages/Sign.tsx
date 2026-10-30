@@ -13,10 +13,19 @@ import { resolveFieldDisplay, detectDocumentType } from "@/lib/signer-display-te
 import { publicWorkflowRequest } from "@/lib/publicWorkflowApi";
 import { displayCase } from "@/lib/displayCase";
 import { SIGN_PREVIEW_NARROW_MQ, signPreviewFrameStyle } from "@/lib/signPreviewFrame";
+import { readPortalLedgerToken } from "@/lib/portalSigning";
 
 export default function Sign() {
   const [searchParams] = useSearchParams();
   const token = searchParams.get("token");
+  // Claim portal signing (SQL 127): see src/lib/portalSigning.ts.
+  const portalSignerId = token ? null : searchParams.get("portal_signer");
+  const portalLedgerToken = portalSignerId ? readPortalLedgerToken() : null;
+  const credentials = token
+    ? { token }
+    : portalSignerId && portalLedgerToken
+      ? { ledger_token: portalLedgerToken, signer_id: portalSignerId }
+      : null;
   const { toast } = useToast();
   
   const [signer, setSigner] = useState<any>(null);
@@ -85,13 +94,13 @@ export default function Sign() {
   }, [fields, fieldValues, drawingFields, isCanvasDrawn]);
 
   useEffect(() => {
-    if (token) {
+    if (credentials) {
       fetchSignerData();
     } else {
-      setError("No signing token provided");
+      setError(portalSignerId ? "Open this signature again from your claim page." : "No signing token provided");
       setLoading(false);
     }
-  }, [token]);
+  }, [token, portalSignerId]);
 
   const fetchSignerData = async () => {
     try {
@@ -99,7 +108,7 @@ export default function Sign() {
       const response = await fetch(url, {
         method: "POST",
         headers,
-        body: JSON.stringify({ token }),
+        body: JSON.stringify(credentials),
       });
 
       const data = await response.json();
@@ -270,7 +279,7 @@ export default function Sign() {
       const response = await fetch(url, {
         method: "POST",
         headers,
-        body: JSON.stringify({ token, fieldValues: collectedValues, eSignConsentAccepted, consentText: eSignConsentText }),
+        body: JSON.stringify({ ...credentials, fieldValues: collectedValues, eSignConsentAccepted, consentText: eSignConsentText }),
       });
 
       const data = await response.json();
@@ -384,6 +393,13 @@ export default function Sign() {
               Thank you! Your signature has been recorded.
             </CardDescription>
           </CardHeader>
+          {portalLedgerToken && (
+            <CardContent>
+              <Button asChild className="w-full">
+                <a href={`/ledger/${encodeURIComponent(portalLedgerToken)}`}>Back to your claim</a>
+              </Button>
+            </CardContent>
+          )}
         </Card>
       </div>
     );
