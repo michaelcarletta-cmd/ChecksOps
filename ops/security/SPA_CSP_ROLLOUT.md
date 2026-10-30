@@ -29,8 +29,10 @@ Test: `aws/tests/spa-csp.test.mjs`.
 - Files: presigned S3 URLs from the API (`storage.mjs`, `storage-write.mjs`), read with `fetch`,
   shown in `<img>`/`<iframe>`, uploaded with `PUT`. Many `blob:` object URLs for previews, CSV and
   PDF downloads.
-- pdf.js worker from `https://unpkg.com/pdfjs-dist@<version>/build/pdf.worker.min.mjs`
-  (`FieldPlacementEditor.tsx`). Self-hosting the worker would remove this third-party script.
+- pdf.js worker: bundled with the SPA (`FieldPlacementEditor.tsx` imports react-pdf's own
+  `pdfjs-dist/build/pdf.worker.min.mjs?url`, emitted as `assets/pdf.worker.min-<hash>.mjs`), so it
+  always matches the pdf.js version react-pdf runs. Both SPA uploaders serve `.mjs` as
+  `application/javascript`, which a module worker needs. It used to come from `https://unpkg.com`.
 - ZIP lookups: `https://api.zippopotam.us` (`ContractorServiceAreaCard.tsx`).
 - Fonts: `@fontsource` files served from the SPA itself; PWA manifest and service worker from `'self'`.
 - Inline: one inline `<script>` in `index.html` (the hostname title script, allowed by its sha256)
@@ -40,9 +42,9 @@ Test: `aws/tests/spa-csp.test.mjs`.
 ## Policy
 
 `buildCsp({ environment, indexHtml })`; the staging value is in the template. Highlights:
-`default-src 'self'`, `script-src 'self' 'sha256-…' https://unpkg.com` (no `'unsafe-inline'`, no
+`default-src 'self'`, `script-src 'self' 'sha256-…'` (no `'unsafe-inline'`, no
 `'unsafe-eval'`), `object-src 'none'`, `base-uri 'self'`, `form-action 'self'`,
-`frame-ancestors 'self'`, `connect-src` limited to the API, presigned S3, ZIP lookup, unpkg,
+`frame-ancestors 'self'`, `connect-src` limited to the API, presigned S3, ZIP lookup,
 `data:` and `blob:`. Production drops the execute-api host (same-origin `/prep`).
 
 ## Open decisions (owner)
@@ -52,8 +54,9 @@ Test: `aws/tests/spa-csp.test.mjs`.
    needs the loader moved into a stylesheet and a report-only check of every screen.
 2. **Report endpoint.** Report-only with no `report-uri` shows violations in the browser console only.
    Option: a small API route that logs reports (rate-limited, no body stored), added as its own PR.
-3. **pdf.js worker.** Self-host it so `https://unpkg.com` can be dropped from `script-src`,
-   `connect-src` and `worker-src`.
+3. **pdf.js worker.** Done (2026-10-30): the worker is self-hosted and `https://unpkg.com` is gone
+   from `script-src`, `connect-src` and `worker-src`. The SPA ships it on the next guarded website
+   deploy.
 
 ## Rollout (each step on the owner's words, staging before production)
 

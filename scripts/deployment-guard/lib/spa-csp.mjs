@@ -11,8 +11,6 @@ import crypto from 'node:crypto';
 export const STAGING_API_ORIGIN = 'https://psr19uhop4.execute-api.us-east-1.amazonaws.com';
 // Presigned file URLs (storage.mjs / storage-write.mjs sign with the regional S3 client).
 export const S3_PRESIGNED_ORIGINS = Object.freeze(['https://*.s3.amazonaws.com', 'https://*.s3.us-east-1.amazonaws.com']);
-// pdf.js worker (FieldPlacementEditor.tsx sets workerSrc to unpkg); self-hosting it would drop this.
-export const PDFJS_WORKER_ORIGIN = 'https://unpkg.com';
 // Contractor service area ZIP lookups (ContractorServiceAreaCard.tsx).
 export const ZIP_LOOKUP_ORIGIN = 'https://api.zippopotam.us';
 
@@ -25,14 +23,15 @@ export const cspDirectives = ({ environment, indexHtml }) => {
   const api = environment === 'staging' ? [STAGING_API_ORIGIN] : [];
   return [
     ['default-src', ["'self'"]],
-    ['script-src', ["'self'", ...inlineScriptHashes(indexHtml), PDFJS_WORKER_ORIGIN]],
+    ['script-src', ["'self'", ...inlineScriptHashes(indexHtml)]],
     // index.html's loader uses a style attribute and UI libraries inject <style>; see the runbook.
     ['style-src', ["'self'", "'unsafe-inline'"]],
     ['img-src', ["'self'", 'data:', 'blob:', ...S3_PRESIGNED_ORIGINS]],
     ['font-src', ["'self'", 'data:']],
-    ['connect-src', ["'self'", ...api, ...S3_PRESIGNED_ORIGINS, ZIP_LOOKUP_ORIGIN, PDFJS_WORKER_ORIGIN, 'data:', 'blob:']],
+    ['connect-src', ["'self'", ...api, ...S3_PRESIGNED_ORIGINS, ZIP_LOOKUP_ORIGIN, 'data:', 'blob:']],
     ['frame-src', ["'self'", 'blob:', 'data:', ...S3_PRESIGNED_ORIGINS]],
-    ['worker-src', ["'self'", 'blob:', PDFJS_WORKER_ORIGIN]],
+    // The pdf.js worker is a bundled asset of the SPA (FieldPlacementEditor.tsx).
+    ['worker-src', ["'self'", 'blob:']],
     ['manifest-src', ["'self'"]],
     ['object-src', ["'none'"]],
     ['base-uri', ["'self'"]],

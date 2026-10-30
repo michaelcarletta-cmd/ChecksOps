@@ -69,7 +69,8 @@ function uploadTree(distDir, bucket, env) {
         continue;
       }
       if (key === 'index.html') continue;
-      const contentType = key.endsWith('.js')
+      // .mjs: the pdf.js worker is a module worker, which browsers load only with a JavaScript type.
+      const contentType = key.endsWith('.js') || key.endsWith('.mjs')
         ? 'application/javascript'
         : key.endsWith('.css')
           ? 'text/css'
