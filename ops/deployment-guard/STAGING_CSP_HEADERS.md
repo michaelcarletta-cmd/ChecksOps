@@ -1,24 +1,38 @@
 # Guarded staging CSP headers
 
-`.github/workflows/guarded-staging-csp-headers.yml` is SPA CSP rollout step 1
-(`ops/security/SPA_CSP_ROLLOUT.md`): a report-only Content-Security-Policy on
+`.github/workflows/guarded-staging-csp-headers.yml` is SPA CSP rollout steps 1 and 3
+(`ops/security/SPA_CSP_ROLLOUT.md`): a report-only, then an enforcing, Content-Security-Policy on
 `https://staging.checksops.com`. It touches only staging distribution `E1CG52WRQZI7X1`:
 
 - **inspect** reads the distribution, the policy `checksops-staging-browser-security-headers` (if it
-  exists) and the live staging `index.html`, and prints the state, the snapshot SHA-256 and the exact
-  `Content-Security-Policy-Report-Only` value the apply would set.
+  exists) and the live staging `index.html`, and prints the state (`READY`, `ATTACHED_CURRENT`,
+  `ATTACHED_STALE`, `ENFORCING_CURRENT`, `ENFORCING_STALE` or `BLOCKED`), the snapshot SHA-256 and
+  the exact `Content-Security-Policy-Report-Only` and enforcing `Content-Security-Policy` values a
+  change would set.
 - **apply** ("ATTACH REPORT-ONLY CSP TO STAGING") creates or updates that policy from
   `aws/staging/cloudfront-security-headers.yaml`, with the CSP built by
   `scripts/deployment-guard/lib/spa-csp.mjs` from the live `index.html` (so the inline-script hash
   matches what is served), and sets it on the default behavior. If the policy is already attached but
-  out of date (for example a new inline script), apply updates the policy only.
-- **rollback** ("DETACH CSP FROM STAGING") puts the default behavior back to no response headers
-  policy, its state before the first attach (read 2026-10-30). The policy object stays.
+  out of date (for example a new inline script), apply updates the policy only. Refused while the
+  policy is enforcing.
+- **enforce** ("ENFORCE CSP ON STAGING", from `ATTACHED_CURRENT` or `ENFORCING_STALE`) updates the
+  attached policy only: the same directives plus `upgrade-insecure-requests` in
+  `SecurityHeadersConfig.ContentSecurityPolicy` (Override true), no
+  `Content-Security-Policy-Report-Only` header, comment "Production baseline headers plus an
+  enforcing CSP (staging step 3)." The enforcing config is derived from the template
+  (`desiredPolicyConfig(indexHtml, template, { enforce: true })`), not a second template.
+- **revert** ("REVERT CSP TO REPORT-ONLY ON STAGING", from `ENFORCING_CURRENT` or `ENFORCING_STALE`)
+  updates the attached policy only, back to exactly the report-only config apply sets.
+- **rollback** ("DETACH CSP FROM STAGING", from any attached state of ours, enforcing included) puts
+  the default behavior back to no response headers policy, its state before the first attach (read
+  2026-10-30). The policy object stays.
 
 The writer `scripts/deployment-guard/staging-csp-headers.mjs` refuses any other distribution and the
-production policy `756a8f23-68dd-4f8a-8293-5a2fd08f919a`, never sets an enforcing
-`ContentSecurityPolicy`, sends If-Match ETags, and fails if the distribution config changed in
-anything but `DefaultCacheBehavior.ResponseHeadersPolicyId`. Test:
+production policy `756a8f23-68dd-4f8a-8293-5a2fd08f919a`, sets an enforcing `ContentSecurityPolicy`
+only on enforce and only equal to `buildCsp(..., { enforce: true })` of the live `index.html`, sends
+If-Match ETags, and fails if the distribution config changed in anything but
+`DefaultCacheBehavior.ResponseHeadersPolicyId` (enforce and revert: in anything at all). An enforcing
+CSP that is not ours (any other value, `Override` false, an extra field) is `BLOCKED`. Test:
 `aws/tests/github-staging-csp-headers.test.mjs`.
 
 ## One-time setup (owner)
@@ -52,9 +66,14 @@ read or change CloudFront configuration.
    policy or the live `index.html` changed since the inspect (`DEPLOYMENT_COLLISION`). It shares the
    staging SPA upload's concurrency group and lease (`staging-frontend`).
 4. After the write it re-reads and verifies, then checks that `https://staging.checksops.com/` serves
-   `Content-Security-Policy-Report-Only` (and no enforcing `Content-Security-Policy`).
+   `Content-Security-Policy-Report-Only` (and no enforcing `Content-Security-Policy`); after enforce,
+   exactly the enforcing `Content-Security-Policy` from the preflight and no report-only header;
+   after rollback, neither.
 
-Rollback is the same with `mode: rollback` and `DETACH CSP FROM STAGING`.
+Enforce, revert and rollback are the same with their mode and phrase: `ENFORCE CSP ON STAGING`,
+`REVERT CSP TO REPORT-ONLY ON STAGING`, `DETACH CSP FROM STAGING`. The role needs no change for
+enforce or revert: `permissions-policy.json` already allows `cloudfront:UpdateResponseHeadersPolicy`
+on `response-headers-policy/*` and denies it on the production policy.
 
 ## Run log
 

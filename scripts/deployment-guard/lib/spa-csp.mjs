@@ -18,7 +18,9 @@ export const ZIP_LOOKUP_ORIGIN = 'https://api.zippopotam.us';
 export const inlineScriptHashes = (indexHtml) => [...String(indexHtml).matchAll(/<script>([\s\S]*?)<\/script>/g)]
   .map((m) => `'sha256-${crypto.createHash('sha256').update(m[1], 'utf8').digest('base64')}'`);
 
-export const cspDirectives = ({ environment, indexHtml }) => {
+// enforce: the policy served as Content-Security-Policy (rollout steps 3 and 5) also upgrades
+// any http: subresource to https:. The report-only header ignores that directive, so it is left out there.
+export const cspDirectives = ({ environment, indexHtml, enforce = false }) => {
   if (!['staging', 'production'].includes(environment)) throw new Error('environment must be staging or production');
   const api = environment === 'staging' ? [STAGING_API_ORIGIN] : [];
   return [
@@ -40,7 +42,8 @@ export const cspDirectives = ({ environment, indexHtml }) => {
     ['base-uri', ["'self'"]],
     ['form-action', ["'self'"]],
     ['frame-ancestors', ["'self'"]],
+    ...(enforce ? [['upgrade-insecure-requests', []]] : []),
   ];
 };
 
-export const buildCsp = (options) => cspDirectives(options).map(([name, sources]) => `${name} ${sources.join(' ')}`).join('; ');
+export const buildCsp = (options) => cspDirectives(options).map(([name, sources]) => [name, ...sources].join(' ')).join('; ');

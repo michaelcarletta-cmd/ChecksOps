@@ -1,9 +1,10 @@
 /**
- * Guarded staging CSP headers (SPA CSP rollout step 1, ops/security/SPA_CSP_ROLLOUT.md): only
- * staging distribution E1CG52WRQZI7X1 and never the production policy; apply and rollback need the
- * exact phrase and the inspect's snapshot; the policy carries only a report-only CSP equal to
- * buildCsp of the live index.html; the distribution changes only in
- * DefaultCacheBehavior.ResponseHeadersPolicyId; rollback restores the previous value (none).
+ * Guarded staging CSP headers (SPA CSP rollout steps 1 and 3, ops/security/SPA_CSP_ROLLOUT.md):
+ * only staging distribution E1CG52WRQZI7X1 and never the production policy; every change needs its
+ * exact phrase and the inspect's snapshot; the policy carries a report-only CSP equal to buildCsp of
+ * the live index.html, or after enforce only the enforcing one equal to buildCsp(enforce); the
+ * distribution changes only in DefaultCacheBehavior.ResponseHeadersPolicyId (enforce and revert not
+ * at all); revert restores the report-only config; rollback restores the previous value (none).
  * Runbook: ops/deployment-guard/STAGING_CSP_HEADERS.md.
  */
 import assert from 'node:assert/strict';
@@ -16,6 +17,7 @@ import { fileURLToPath } from 'node:url';
 import {
   DEPLOYMENT_TYPE,
   DISTRIBUTION_ID,
+  ENFORCING_COMMENT,
   OWNED_COMPONENTS,
   POLICY_NAME,
   PREVIOUS_RESPONSE_HEADERS_POLICY_ID,
@@ -114,6 +116,7 @@ function fakeAws({ indexHtml = INDEX, attached = null, ours = null, mutate = nul
       if (state.policies[id].ETag !== etag) throw new Error('PreconditionFailed');
       state.writes.push({ op: 'updatePolicy', id, config });
       state.policies[id] = { ETag: `${etag}+`, config: structuredClone(config) };
+      if (mutate) mutate(state);
       return {};
     },
     updateDistribution: (id, etag, config) => {
@@ -175,7 +178,7 @@ test('the deployment type is registered and both scripts are in the bypass inven
   assert.equal(TARGET_COMPONENT, 'staging-frontend');
 });
 
-test('the policy carries only a report-only CSP equal to buildCsp of the live index.html, never an enforcing one', () => {
+test('the default (report-only) policy carries only a report-only CSP equal to buildCsp of the live index.html, never an enforcing one', () => {
   const desired = desiredPolicyConfig(INDEX, TEMPLATE);
   assert.equal(desired.Name, POLICY_NAME);
   assert.deepEqual(desired.CustomHeadersConfig, {
@@ -468,4 +471,253 @@ test('the IAM source can change only the staging distribution and never the prod
   const denies = policy.Statement.filter((s) => s.Effect === 'Deny').map((s) => s.Resource);
   assert.ok(denies.includes(`arn:aws:cloudfront::806168576068:response-headers-policy/${PRODUCTION_POLICY_ID}`));
   assert.ok(denies.includes(`arn:aws:cloudfront::806168576068:distribution/${PRODUCTION_DISTRIBUTION_ID}`));
+});
+
+// --- Rollout step 3: enforce, revert (ops/security/SPA_CSP_ROLLOUT.md) ---
+
+const OURS = 'd3f84b15-c4db-481c-98cb-64eb541619fe';
+const REPORT_ONLY = desiredPolicyConfig(INDEX, TEMPLATE);
+const ENFORCING = desiredPolicyConfig(INDEX, TEMPLATE, { enforce: true });
+// CloudFront also echoes a policy without custom headers as CustomHeadersConfig { Quantity: 0 }.
+const awsEchoNoCustom = (config) => {
+  const echoed = awsEcho(config);
+  if (!echoed.CustomHeadersConfig) echoed.CustomHeadersConfig = { Quantity: 0 };
+  return echoed;
+};
+const attachedWith = (config, extra = {}) => fakeAws({ attached: OURS, ours: { id: OURS, config }, echo: awsEchoNoCustom, ...extra });
+const verifyAs = (aws, root, expect) => preflight({ ...ENV, CHECKSOPS_STAGING_CSP_MODE: 'verify', CHECKSOPS_STAGING_CSP_VERIFY_EXPECT: expect }, { root, template: TEMPLATE, readState: aws.readState });
+
+test('the enforce payload: ContentSecurityPolicy is buildCsp(staging, live index.html, enforce), Override true, and no report-only header', () => {
+  assert.deepEqual(ENFORCING.SecurityHeadersConfig.ContentSecurityPolicy, {
+    ContentSecurityPolicy: buildCsp({ environment: 'staging', indexHtml: INDEX, enforce: true }),
+    Override: true,
+  });
+  assert.equal(ENFORCING.SecurityHeadersConfig.ContentSecurityPolicy.ContentSecurityPolicy, `${REPORT_ONLY.CustomHeadersConfig.Items[0].Value}; upgrade-insecure-requests`);
+  assert.equal(ENFORCING.CustomHeadersConfig, undefined);
+  assert.deepEqual(normalizePolicyConfig(ENFORCING).CustomHeaders, []);
+  const { ContentSecurityPolicy, ...rest } = ENFORCING.SecurityHeadersConfig;
+  assert.deepEqual(rest, TEMPLATE.SecurityHeadersConfig);
+  assert.equal(ENFORCING.Name, POLICY_NAME);
+  assert.equal(ENFORCING.Comment, ENFORCING_COMMENT);
+  // Follows the served index.html like the report-only one.
+  const other = INDEX.replace('<script>', '<script>/* changed */');
+  assert.notEqual(desiredPolicyConfig(other, TEMPLATE, { enforce: true }).SecurityHeadersConfig.ContentSecurityPolicy.ContentSecurityPolicy, ENFORCING.SecurityHeadersConfig.ContentSecurityPolicy.ContentSecurityPolicy);
+  // The template stays the report-only source and documents how the enforcing variant is derived.
+  assert.equal(TEMPLATE.SecurityHeadersConfig.ContentSecurityPolicy, undefined);
+  assert.match(read('aws/staging/cloudfront-security-headers.yaml'), /desiredPolicyConfig\(indexHtml, template, \{ enforce: true \}\)/);
+});
+
+test('classify: the four attached states, and which mode may run in each', async () => {
+  const stale = (enforce) => desiredPolicyConfig(INDEX.replace('<script>', '<script>/* old */'), TEMPLATE, { enforce });
+  const states = {
+    ATTACHED_CURRENT: attachedWith(REPORT_ONLY),
+    ATTACHED_STALE: attachedWith(stale(false)),
+    ENFORCING_CURRENT: attachedWith(ENFORCING),
+    ENFORCING_STALE: attachedWith(stale(true)),
+  };
+  for (const [state, aws] of Object.entries(states)) {
+    const result = await inspect(aws);
+    assert.equal(result.state, state);
+    assert.deepEqual(result.problems, []);
+    assert.equal(result.csp_enforcing, buildCsp({ environment: 'staging', indexHtml: INDEX, enforce: true }));
+  }
+  // Ours with both the enforcing CSP and a leftover report-only header: enforcing, stale.
+  const mixed = { ...structuredClone(ENFORCING), CustomHeadersConfig: structuredClone(REPORT_ONLY.CustomHeadersConfig) };
+  assert.equal((await inspect(attachedWith(mixed))).state, 'ENFORCING_STALE');
+  const table = {
+    apply: { READY: 'attach', ATTACHED_CURRENT: null, ATTACHED_STALE: 'update-policy', ENFORCING_CURRENT: null, ENFORCING_STALE: null, BLOCKED: null },
+    enforce: { READY: null, ATTACHED_CURRENT: 'enforce', ATTACHED_STALE: null, ENFORCING_CURRENT: null, ENFORCING_STALE: 'enforce', BLOCKED: null },
+    revert: { READY: null, ATTACHED_CURRENT: null, ATTACHED_STALE: null, ENFORCING_CURRENT: 'revert', ENFORCING_STALE: 'revert', BLOCKED: null },
+    rollback: { READY: null, ATTACHED_CURRENT: 'detach', ATTACHED_STALE: 'detach', ENFORCING_CURRENT: 'detach', ENFORCING_STALE: 'detach', BLOCKED: null },
+  };
+  for (const [mode, row] of Object.entries(table)) {
+    for (const [state, action] of Object.entries(row)) assert.equal(actionFor(mode, state), action, `${mode} ${state}`);
+  }
+  assert.deepEqual(OWNED_COMPONENTS.enforce, OWNED_COMPONENTS['update-policy']);
+  assert.deepEqual(OWNED_COMPONENTS.revert, OWNED_COMPONENTS['update-policy']);
+});
+
+test('enforce: updates only the attached policy to the enforcing config; the distribution is unchanged; apply is then refused', async () => {
+  const root = tmpRoot();
+  const aws = attachedWith(REPORT_ONLY);
+  const before = structuredClone(aws.state.dist);
+  const result = await preflightChange('enforce', root, aws);
+  assert.equal(result.action, 'enforce');
+  const receipt = JSON.parse(fs.readFileSync(result.authorization.receiptFile, 'utf8'));
+  assert.deepEqual(receipt.owned_components, OWNED_COMPONENTS.enforce);
+  assert.equal(JSON.parse(fs.readFileSync(result.authorization.cspInput, 'utf8')).approval.phrase, 'ENFORCE CSP ON STAGING');
+  assert.equal(runWriter(result, aws, root), 0);
+  assert.deepEqual(aws.state.writes.map((w) => w.op), ['updatePolicy']);
+  assert.equal(aws.state.writes[0].id, OURS);
+  assert.deepEqual(aws.state.writes[0].config, ENFORCING);
+  assert.equal(aws.state.writes[0].config.CustomHeadersConfig, undefined);
+  assert.deepEqual(aws.state.dist, before);
+  assert.equal(aws.state.policies[PRODUCTION_POLICY_ID].ETag, 'PRODETAG');
+  assert.equal((await verifyAs(aws, root, 'enforcing')).state, 'VERIFIED');
+  await assert.rejects(verifyAs(aws, root, 'attached'), (e) => e.code === CODES.DEPLOYMENT_COLLISION);
+  assert.equal((await inspect(aws)).state, 'ENFORCING_CURRENT');
+  // A report-only apply never overwrites an enforcing policy; revert is the explicit way back.
+  await assert.rejects(preflightChange('apply', tmpRoot(), aws), (e) => e.code === CODES.UNRELATED_MUTATION);
+  await assert.rejects(preflightChange('enforce', tmpRoot(), aws), (e) => e.code === CODES.UNRELATED_MUTATION);
+  // The same receipt cannot run again.
+  assert.throws(() => runWriter(result, aws, root), /state_refused|guard_refused|receipt_consumption_failed/);
+  assert.equal(aws.state.writes.length, 1);
+});
+
+test('enforce refuses unless the report-only policy is attached and current', async () => {
+  await assert.rejects(preflightChange('enforce', tmpRoot(), fakeAws()), (e) => e.code === CODES.UNRELATED_MUTATION);
+  const stale = desiredPolicyConfig(INDEX.replace('<script>', '<script>/* old */'), TEMPLATE);
+  const aws = attachedWith(stale);
+  await assert.rejects(preflightChange('enforce', tmpRoot(), aws), (e) => e.code === CODES.UNRELATED_MUTATION);
+  assert.deepEqual(aws.state.writes, []);
+});
+
+test('enforce refreshes a stale enforcing policy (a new inline script) to the live index.html', async () => {
+  const root = tmpRoot();
+  const aws = attachedWith(desiredPolicyConfig(INDEX.replace('<script>', '<script>/* old */'), TEMPLATE, { enforce: true }));
+  const result = await preflightChange('enforce', root, aws);
+  assert.equal(result.action, 'enforce');
+  assert.equal(runWriter(result, aws, root), 0);
+  assert.deepEqual(aws.state.writes.map((w) => w.op), ['updatePolicy']);
+  assert.equal((await inspect(aws)).state, 'ENFORCING_CURRENT');
+});
+
+test('revert restores exactly the report-only config and leaves the distribution unchanged; rollback still detaches from enforcing', async () => {
+  const root = tmpRoot();
+  const aws = attachedWith(REPORT_ONLY);
+  const reportOnlyStored = structuredClone(aws.state.policies[OURS].config);
+  const distBefore = structuredClone(aws.state.dist);
+  assert.equal(runWriter(await preflightChange('enforce', root, aws), aws, root), 0);
+  const root2 = tmpRoot();
+  const result = await preflightChange('revert', root2, aws);
+  assert.equal(result.action, 'revert');
+  assert.deepEqual(JSON.parse(fs.readFileSync(result.authorization.receiptFile, 'utf8')).owned_components, OWNED_COMPONENTS.revert);
+  assert.equal(runWriter(result, aws, root2), 0);
+  assert.deepEqual(aws.state.writes.map((w) => w.op), ['updatePolicy', 'updatePolicy']);
+  assert.deepEqual(aws.state.policies[OURS].config, reportOnlyStored);
+  assert.deepEqual(aws.state.policies[OURS].config, REPORT_ONLY);
+  assert.deepEqual(aws.state.dist, distBefore);
+  assert.equal((await verifyAs(aws, root2, 'attached')).state, 'VERIFIED');
+  await assert.rejects(preflightChange('revert', tmpRoot(), aws), (e) => e.code === CODES.UNRELATED_MUTATION);
+  // From enforcing, DETACH CSP FROM STAGING removes the policy from the behavior entirely.
+  const enforced = attachedWith(ENFORCING);
+  const original = structuredClone(enforced.state.dist.config);
+  delete original.DefaultCacheBehavior.ResponseHeadersPolicyId;
+  const root3 = tmpRoot();
+  const detach = await preflightChange('rollback', root3, enforced);
+  assert.equal(detach.action, 'detach');
+  assert.equal(runWriter(detach, enforced, root3), 0);
+  assert.deepEqual(enforced.state.dist.config, original);
+});
+
+test('a foreign enforcing CSP is still BLOCKED: another value, a wider source, Override false, or an extra field', async () => {
+  const value = ENFORCING.SecurityHeadersConfig.ContentSecurityPolicy.ContentSecurityPolicy;
+  for (const csp of [
+    { ContentSecurityPolicy: "default-src 'self'", Override: true },
+    { ContentSecurityPolicy: value.replace("script-src 'self'", "script-src 'self' 'unsafe-inline'"), Override: true },
+    { ContentSecurityPolicy: value.replace('; upgrade-insecure-requests', ''), Override: true },
+    { ContentSecurityPolicy: `${value}; report-uri https://example.com`, Override: true },
+    { ContentSecurityPolicy: value, Override: false },
+  ]) {
+    const config = structuredClone(ENFORCING);
+    config.SecurityHeadersConfig.ContentSecurityPolicy = csp;
+    const aws = attachedWith(config);
+    const result = await inspect(aws);
+    assert.equal(result.state, 'BLOCKED', csp.ContentSecurityPolicy);
+    assert.ok(result.problems.includes('policy_has_unowned_settings'), result.problems.join(','));
+    for (const mode of ['enforce', 'revert', 'apply', 'rollback']) {
+      await assert.rejects(preflightChange(mode, tmpRoot(), aws), (e) => e.code === CODES.DEPLOYMENT_COLLISION, mode);
+    }
+    assert.deepEqual(aws.state.writes, []);
+  }
+});
+
+test('enforce and revert need their exact phrase; near-misses and the other modes\' phrases are refused', async () => {
+  assert.equal(APPROVAL_PHRASES.enforce, 'ENFORCE CSP ON STAGING');
+  assert.equal(APPROVAL_PHRASES.revert, 'REVERT CSP TO REPORT-ONLY ON STAGING');
+  const fp = 'a'.repeat(64);
+  const nearMisses = {
+    enforce: ['enforce csp on staging', 'ENFORCE CSP ON STAGING ', ' ENFORCE CSP ON STAGING', 'ENFORCE CSP', 'ENFORCE CSP ON PRODUCTION', 'ENFORCE  CSP ON STAGING', APPROVAL_PHRASES.apply, APPROVAL_PHRASES.revert, APPROVAL_PHRASES.rollback, '', undefined],
+    revert: ['revert csp to report-only on staging', 'REVERT CSP TO REPORT-ONLY ON STAGING.', 'REVERT CSP TO REPORT ONLY ON STAGING', 'REVERT CSP ON STAGING', APPROVAL_PHRASES.enforce, APPROVAL_PHRASES.apply, APPROVAL_PHRASES.rollback, '', undefined],
+  };
+  for (const [mode, phrases] of Object.entries(nearMisses)) {
+    for (const approval of phrases) {
+      assert.throws(() => validateChangeInputs({ mode, approval, expectedFingerprint: fp, liveFingerprint: fp }), (e) => e.code === CODES.INVALID_MANIFEST, `${mode} ${approval}`);
+    }
+    assert.doesNotThrow(() => validateChangeInputs({ mode, approval: APPROVAL_PHRASES[mode], expectedFingerprint: fp, liveFingerprint: fp }));
+  }
+  // No phrase for a mode that does not exist.
+  assert.throws(() => validateChangeInputs({ mode: 'toString', approval: undefined, expectedFingerprint: fp, liveFingerprint: fp }), (e) => e.code === CODES.INVALID_MANIFEST);
+  const aws = attachedWith(REPORT_ONLY);
+  await assert.rejects(preflightChange('enforce', tmpRoot(), aws, { CHECKSOPS_STAGING_CSP_APPROVAL: undefined }), (e) => e.code === CODES.INVALID_MANIFEST);
+  await assert.rejects(preflightChange('enforce', tmpRoot(), aws, { CHECKSOPS_STAGING_CSP_APPROVAL: 'ENFORCE CSP ON STAGIN' }), (e) => e.code === CODES.INVALID_MANIFEST);
+  assert.deepEqual(aws.state.writes, []);
+  const workflow = read('.github/workflows/guarded-staging-csp-headers.yml');
+  assert.match(workflow, /enforce\) PHRASE="ENFORCE CSP ON STAGING"/);
+  assert.match(workflow, /revert\) PHRASE="REVERT CSP TO REPORT-ONLY ON STAGING"/);
+  assert.match(workflow, /inputs\.mode == 'enforce' && 'enforcing'/);
+  // The public check compares the served enforcing header with the preflight's exact value.
+  assert.match(workflow, /EXPECTED_ENFORCING: \$\{\{ steps\.preflight\.outputs\.csp_enforcing \}\}/);
+  assert.match(workflow, /enforce\) WANT_REPORT_ONLY=0; WANT_ENFORCING=1 ;;/);
+});
+
+test('enforce drift refuses: a stale inspect hash before the receipt, any move after it before any write, and a distribution move after the write', async () => {
+  const aws = attachedWith(REPORT_ONLY);
+  await assert.rejects(preflightChange('enforce', tmpRoot(), aws, { CHECKSOPS_EXPECTED_SNAPSHOT_SHA256: 'b'.repeat(64) }), (e) => e.code === CODES.DEPLOYMENT_COLLISION);
+  for (const move of [
+    (s) => { s.dist.ETag = 'DIST-MOVED'; },
+    (s) => { s.indexHtml = INDEX.replace('<script>', '<script>/* redeployed */'); },
+    (s) => { s.policies[OURS].ETag = 'POL-MOVED'; },
+  ]) {
+    const root = tmpRoot();
+    const moving = attachedWith(REPORT_ONLY);
+    const result = await preflightChange('enforce', root, moving);
+    move(moving.state);
+    assert.throws(() => runWriter(result, moving, root), /guard_refused|state_refused/);
+    assert.deepEqual(moving.state.writes, []);
+  }
+  const root = tmpRoot();
+  const drifting = attachedWith(REPORT_ONLY, { mutate: (s) => { s.dist.config.DefaultCacheBehavior.Compress = false; } });
+  const result = await preflightChange('enforce', root, drifting);
+  assert.throws(() => runWriter(result, drifting, root), /post_write_distribution_drift/);
+  // And a stored value that is not what was sent fails post-verify.
+  const root2 = tmpRoot();
+  const wrong = attachedWith(REPORT_ONLY, { echo: (config) => {
+    const echoed = awsEchoNoCustom(config);
+    if (echoed.SecurityHeadersConfig.ContentSecurityPolicy?.ContentSecurityPolicy) echoed.SecurityHeadersConfig.ContentSecurityPolicy.ContentSecurityPolicy += ' ';
+    return echoed;
+  } });
+  const wrongResult = await preflightChange('enforce', root2, wrong);
+  assert.throws(() => runWriter(wrongResult, wrong, root2), /policy_post_verify_failed/);
+});
+
+test('enforce never reaches production: the production policy under our name blocks, and the writer refuses it', async () => {
+  const aws = fakeAws({ attached: OURS, ours: { id: OURS, config: REPORT_ONLY }, echo: awsEchoNoCustom });
+  aws.state.policies[PRODUCTION_POLICY_ID].config = structuredClone(REPORT_ONLY);
+  const result = await inspect(aws);
+  assert.equal(result.state, 'BLOCKED');
+  assert.ok(result.problems.includes('production_policy'), result.problems.join(','));
+  await assert.rejects(preflightChange('enforce', tmpRoot(), aws), (e) => e.code === CODES.DEPLOYMENT_COLLISION);
+  assert.throws(() => awsClient.updatePolicy(PRODUCTION_POLICY_ID, 'E', ENFORCING, {}), /staging_only/);
+  assert.deepEqual(aws.state.writes, []);
+});
+
+test('CloudFront\'s empty-section echo on an enforcing policy is not drift (XSSProtection {}, CustomHeadersConfig { Quantity: 0 })', () => {
+  const echoed = awsEchoNoCustom(ENFORCING);
+  assert.deepEqual(echoed.SecurityHeadersConfig.XSSProtection, {});
+  assert.deepEqual(echoed.CustomHeadersConfig, { Quantity: 0 });
+  assert.deepEqual(normalizePolicyConfig(echoed), normalizePolicyConfig(ENFORCING));
+});
+
+test('the IAM source already allows enforce and revert: UpdateResponseHeadersPolicy on response-headers-policy/* minus production', () => {
+  const policy = JSON.parse(read('aws/staging-csp-headers/policies/permissions-policy.json'));
+  const update = policy.Statement.find((s) => s.Effect === 'Allow' && [].concat(s.Action).includes('cloudfront:UpdateResponseHeadersPolicy'));
+  assert.equal(update.Resource, 'arn:aws:cloudfront::806168576068:response-headers-policy/*');
+  const deny = policy.Statement.find((s) => s.Effect === 'Deny' && [].concat(s.Action).includes('cloudfront:UpdateResponseHeadersPolicy'));
+  assert.equal(deny.Resource, `arn:aws:cloudfront::806168576068:response-headers-policy/${PRODUCTION_POLICY_ID}`);
+  // The workflow's change session carries the same grant and deny.
+  const workflow = read('.github/workflows/guarded-staging-csp-headers.yml');
+  const session = workflow.split('Configure staging CSP headers session (apply / enforce / revert / rollback)')[1].split('- name:')[0];
+  assert.match(session, /"cloudfront:GetResponseHeadersPolicy","cloudfront:UpdateResponseHeadersPolicy"\],"Resource":"arn:aws:cloudfront::806168576068:response-headers-policy\/\*"/);
+  assert.match(session, /"Effect":"Deny","Action":\["cloudfront:UpdateResponseHeadersPolicy","cloudfront:DeleteResponseHeadersPolicy"\],"Resource":"arn:aws:cloudfront::806168576068:response-headers-policy\/756a8f23-68dd-4f8a-8293-5a2fd08f919a"/);
 });

@@ -4,32 +4,36 @@ name: Guarded staging CSP headers
 # only. inspect reads the distribution, the policy checksops-staging-browser-security-headers and
 # the live staging index.html. apply creates or updates that policy (production baseline headers
 # plus a report-only CSP built from the live index.html) and attaches it to the default behavior;
-# rollback restores the default behavior's previous response headers policy (none). Each change is
-# refused unless the live snapshot still matches the inspect and the exact phrase is given.
+# enforce (rollout step 3) moves the same CSP plus upgrade-insecure-requests into the enforcing
+# Content-Security-Policy and drops the report-only header, policy only; revert puts the report-only
+# policy back; rollback restores the default behavior's previous response headers policy (none).
+# Each change is refused unless the live snapshot still matches the inspect and the exact phrase is given.
 on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "inspect the live staging state, apply the report-only CSP, or rollback (detach)"
+        description: "inspect the live staging state, apply the report-only CSP, enforce it, revert to report-only, or rollback (detach)"
         required: true
         default: inspect
         type: choice
         options:
           - inspect
           - apply
+          - enforce
+          - revert
           - rollback
       approved_commit:
-        description: "Required for apply/rollback: exact main commit approved for this run"
+        description: "Required for a change: exact main commit approved for this run"
         required: false
         default: ""
         type: string
       expected_snapshot_sha256:
-        description: "Required for apply/rollback: snapshot SHA-256 from a prior inspect run"
+        description: "Required for a change: snapshot SHA-256 from a prior inspect run"
         required: false
         default: ""
         type: string
       approval_phrase:
-        description: "apply: ATTACH REPORT-ONLY CSP TO STAGING / rollback: DETACH CSP FROM STAGING"
+        description: "apply: ATTACH REPORT-ONLY CSP TO STAGING / enforce: ENFORCE CSP ON STAGING / revert: REVERT CSP TO REPORT-ONLY ON STAGING / rollback: DETACH CSP FROM STAGING"
         required: false
         default: ""
         type: string
@@ -70,8 +74,10 @@ jobs:
           case "$INPUT_MODE" in
             inspect) ;;
             apply) PHRASE="ATTACH REPORT-ONLY CSP TO STAGING" ;;
+            enforce) PHRASE="ENFORCE CSP ON STAGING" ;;
+            revert) PHRASE="REVERT CSP TO REPORT-ONLY ON STAGING" ;;
             rollback) PHRASE="DETACH CSP FROM STAGING" ;;
-            *) echo "mode must be inspect, apply or rollback"; exit 2 ;;
+            *) echo "mode must be inspect, apply, enforce, revert or rollback"; exit 2 ;;
           esac
           if [ "$INPUT_MODE" != "inspect" ]; then
             [[ "$INPUT_APPROVED_COMMIT" =~ ^[0-9a-f]{40}$ ]] || { echo "$INPUT_MODE requires a 40-character approved_commit"; exit 2; }
@@ -120,7 +126,7 @@ jobs:
           inline-session-policy: >-
             {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["cloudfront:GetDistribution"],"Resource":"arn:aws:cloudfront::806168576068:distribution/E1CG52WRQZI7X1"},{"Effect":"Allow","Action":["cloudfront:ListResponseHeadersPolicies"],"Resource":"*"},{"Effect":"Allow","Action":["cloudfront:GetResponseHeadersPolicy"],"Resource":"arn:aws:cloudfront::806168576068:response-headers-policy/*"},{"Effect":"Allow","Action":["s3:GetObject"],"Resource":"arn:aws:s3:::checksops-staging-frontend-c48b/index.html"}]}
 
-      - name: Configure staging CSP headers session (apply / rollback)
+      - name: Configure staging CSP headers session (apply / enforce / revert / rollback)
         if: ${{ inputs.mode != 'inspect' }}
         uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a
         with:
@@ -176,6 +182,7 @@ jobs:
           POLICY_ID: ${{ steps.preflight.outputs.policy_id }}
           INDEX_SHA256: ${{ steps.preflight.outputs.index_html_sha256 }}
           CSP: ${{ steps.preflight.outputs.csp_report_only }}
+          CSP_ENFORCING: ${{ steps.preflight.outputs.csp_enforcing }}
           PROBLEMS: ${{ steps.preflight.outputs.problems }}
         run: |
           {
@@ -186,6 +193,7 @@ jobs:
             echo "- Distribution ETag: \`$DISTRIBUTION_ETAG\` / attached response headers policy: \`$ATTACHED\` / our policy: \`$POLICY_ID\`"
             echo "- Live index.html SHA-256: \`$INDEX_SHA256\`"
             echo "- Content-Security-Policy-Report-Only: \`$CSP\`"
+            echo "- Content-Security-Policy (enforce): \`$CSP_ENFORCING\`"
             echo "- Drift: \`${PROBLEMS:-none}\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -210,7 +218,7 @@ jobs:
         shell: bash
         env:
           CHECKSOPS_STAGING_CSP_MODE: verify
-          CHECKSOPS_STAGING_CSP_VERIFY_EXPECT: ${{ inputs.mode == 'apply' && 'attached' || 'detached' }}
+          CHECKSOPS_STAGING_CSP_VERIFY_EXPECT: ${{ (inputs.mode == 'apply' || inputs.mode == 'revert') && 'attached' || inputs.mode == 'enforce' && 'enforcing' || 'detached' }}
         run: node scripts/deployment-guard/github-staging-csp-headers.mjs
 
       - name: Public staging header check
@@ -218,22 +226,35 @@ jobs:
         shell: bash
         env:
           INPUT_MODE: ${{ inputs.mode }}
+          EXPECTED_ENFORCING: ${{ steps.preflight.outputs.csp_enforcing }}
         run: |
           set -euo pipefail
-          # CloudFront propagates the behavior change to edges over a few minutes.
+          # apply / revert: report-only only; enforce: exactly the enforcing CSP and no report-only;
+          # rollback: neither. CloudFront propagates a change to edges over a few minutes.
+          case "$INPUT_MODE" in
+            apply|revert) WANT_REPORT_ONLY=1; WANT_ENFORCING=0 ;;
+            enforce) WANT_REPORT_ONLY=0; WANT_ENFORCING=1 ;;
+            rollback) WANT_REPORT_ONLY=0; WANT_ENFORCING=0 ;;
+            *) echo "unexpected mode"; exit 2 ;;
+          esac
+          test "$WANT_ENFORCING" = 0 || test -n "$EXPECTED_ENFORCING" || { echo "expected enforcing CSP missing"; exit 2; }
           for attempt in $(seq 1 20); do
-            present=0
             rm -f headers.txt
             curl -fsS --max-time 20 -o /dev/null -D headers.txt -H 'Cache-Control: no-cache' "https://staging.checksops.com/?csp=$GITHUB_RUN_ID-$attempt" || true
-            grep -qi '^content-security-policy-report-only:' headers.txt 2>/dev/null && present=1
-            if grep -qi '^content-security-policy:' headers.txt 2>/dev/null; then echo "an enforcing Content-Security-Policy header is served; expected report-only"; exit 2; fi
-            if { [ "$INPUT_MODE" = "apply" ] && [ "$present" = 1 ]; } || { [ "$INPUT_MODE" = "rollback" ] && [ "$present" = 0 ]; }; then
-              echo "- Public staging (attempt $attempt): report-only header present=$present" >> "$GITHUB_STEP_SUMMARY"
+            report_only=0; enforcing=0; enforcing_value=""
+            grep -qi '^content-security-policy-report-only:' headers.txt 2>/dev/null && report_only=1
+            if grep -qi '^content-security-policy:' headers.txt 2>/dev/null; then
+              enforcing=1
+              enforcing_value="$(grep -i '^content-security-policy:' headers.txt | head -n 1 | cut -d: -f2- | tr -d '\r' | sed 's/^ *//')"
+            fi
+            # An edge may still serve the previous value; only the expected one counts.
+            if [ "$report_only" = "$WANT_REPORT_ONLY" ] && [ "$enforcing" = "$WANT_ENFORCING" ] && { [ "$WANT_ENFORCING" = 0 ] || [ "$enforcing_value" = "$EXPECTED_ENFORCING" ]; }; then
+              echo "- Public staging (attempt $attempt): report-only present=$report_only, enforcing present=$enforcing" >> "$GITHUB_STEP_SUMMARY"
               exit 0
             fi
             sleep 30
           done
-          echo "public staging did not reach the expected header state for $INPUT_MODE"
+          echo "public staging did not reach the expected header state for $INPUT_MODE (report-only=$report_only, enforcing=$enforcing: $enforcing_value)"
           exit 2
 
       - name: Cleanup ephemeral deployment-guard state
