@@ -1,8 +1,8 @@
 {
   "id": "sql131-financial-totp-functions-no-public-production-apply",
   "migration": "sql131",
-  "authorization": "Owner approved 2026-10-30 (the owner's words of 2026-10-30: \"restart SQL 131 and the lockout fix\", \"Merge SQL 131 and the lockout fix when green\", \"continue with SQL 131 staging\" and \"run the SQL 131 production inspect\", none of them words for the production apply; the change itself is reviewed and merged by the owner): production apply of SQL 131 after the staging acceptance below (production 99d9e8e925ca8c5b56e11409f145e2d75de2759c27d8fd1b476494ffc62e2eaa -> a661533320d9b391cc9b5c5f2fade5632801060693a5205c4bf8391702fe90c7); execute true takes effect only when the owner reviews and merges this change. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
-  "execute": true,
+  "authorization": "Applied to production on 2026-10-30; execute is false again, so this pin is no longer a standing authorization and a re-apply needs a new reviewed pin change. The owner approved the SQL 131 production pin change on 2026-10-30 in the words \"restart SQL 131 and the lockout fix\", \"Merge SQL 131 and the lockout fix when green\", \"continue with SQL 131 staging\" and \"run the SQL 131 production inspect\" (none of them words for the production apply; 99d9e8e9 -> a6615333, #1460, merged on \"merge the SQL 131 pin when green\") and the one apply run recorded in applied (workstream prod-sql131-financial-totp-functions-no-public-20261030) in the words \"apply SQL 131 in production\", passed to it verbatim. That approval covered that run only.",
+  "execute": false,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -65,5 +65,307 @@
     "ok": true,
     "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/41107844336",
     "basis": "Guarded staging SQL executor read-live of sql131-financial-totp-functions-no-public, run 41107844336 (2026-10-30, main 6f7357afbdd85ccd23a3c609164a1a4d0a15541f, workstream github-staging-sql-41107844336), on the executor deployed from main 6f7357af (deploy run 41107423198: 5OmSJSaoZv+vQbQ4ShxpVv6r+q9JDWgB8jhg68FdDoQ= -> jOd0IqUJQWAawRveO44q7mLIxYP2iqmwtFgiebyMQ2M=, RevisionId d6814564-30a0-4ead-9eb8-3a3534c26a84, adding sql/131_financial_totp_functions_no_public.sql; inspect run 41107092402 had found the live executor at 5OmSJSao... without it): live_definition_sha256 a661533320d9b391cc9b5c5f2fade5632801060693a5205c4bf8391702fe90c7 == intended, already_applied true, precondition_failures []; prerequisites_missing [], predecessors {sql130: true}; acl_functions financial_totp_upsert_enrollment(uuid, bytea, bytea, text), financial_totp_get_enrollment(uuid), financial_totp_mark_verified(uuid, bigint) and financial_totp_status(uuid) each intended, ACL [checksops EXECUTE grantor=owner, owner EXECUTE grantor=owner]. Staging never held PUBLIC EXECUTE on the four (the proposed-file load there revoked it, as SQL 130's read-live run 41087643551 showed for the fifth function), so no staging apply was needed or run (ops/production-sql-131-apply.md step 1: the read-live run is the staging acceptance); the staging pin stays pending (execute false, expected_live_definition_sha256 null: a pin whose expected live hash equals the intended one cannot be bound, INVALID_MANIFEST). The pre-states differ: staging is already the intended state (a661533320d9b391cc9b5c5f2fade5632801060693a5205c4bf8391702fe90c7) and production (production_inspect) is 99d9e8e925ca8c5b56e11409f145e2d75de2759c27d8fd1b476494ffc62e2eaa (EXECUTE also for PUBLIC on each of the four). The revoke path itself is covered on PostgreSQL 16 by aws/tests/sql131-financial-totp-functions-pg.test.mjs from production's ACL, and through the executor by aws/tests/release-sql131-executor.test.mjs (one apply from production's pre-state to the intended fingerprint, then read-live already_applied true as staging reads). The post-state fingerprint is the same in both environments (owner names are not part of it); the same file bytes (source_sha256) are pinned in both."
+  },
+  "applied": {
+    "date": "2026-10-30",
+    "result": "applied",
+    "source_commit": "546dd7cb839153b161f0e8f5f6a3927c6ee29084",
+    "source_commit_basis": "SOURCE_COMMIT in the tarball (written by sql53-temporary-transfer) equals --commit, and the tarball sha256 equals --expected-tarball-sha256 as copied by the operator from that transfer run's log (TARBALL_SHA256 line); the run log itself was not read by the one-shot.",
+    "source_tarball": {
+      "file": "source-546dd7cb839153b161f0e8f5f6a3927c6ee29084.tar.gz",
+      "sha256": "becdc3771311f1d4e4120e0cda0e1dfa88fb0fa45e3b83f3928a30cdd0f8468c"
+    },
+    "migration_source_sha256": "e7b5a8dfb70fda9226356a463ff25acf373a7c891321f55a53d8a92051546217",
+    "migration_source_sha256_note": "The one-shot source step hashed aws/workflows/sql/131_financial_totp_functions_no_public.sql in the transfer tarball: equal to source_sha256 (the pin; migration_matches_pin true).",
+    "runner": "i-0c35557c4e5385406",
+    "runner_basis": "operator-supplied --runner (not verified by the one-shot)",
+    "workstream_id": "prod-sql131-financial-totp-functions-no-public-20261030",
+    "one_use_id": "sql131-prod-b8182ca6-f99b-4695-b930-b36a9b94f1a5",
+    "one_use_id_consumed": true,
+    "one_use_id_consumed_basis": "Inferred from the successful apply (the tool records the one_use_id after COMMIT and only warns if that write fails); the consumed-registry entry was not read back separately.",
+    "owner_approval": "apply SQL 131 in production",
+    "owner_approval_basis": "As passed in --approval-statement for --approval-scope sql131; the one-shot cannot verify who said it. The owner's words of 2026-10-30 for this run, given after the pin change (#1460, merged to main as 546dd7cb8 on the owner's \"merge the SQL 131 pin when green\") whose authorization recorded that no words for the production apply had been given yet.",
+    "operator": "michaelcarletta-cmd",
+    "apply_ssm_command_id": "decffaaa-25d2-4665-b6ee-f243fe459062",
+    "one_shot_run_id": "5e1711ea-5181-42f7-83a4-cd340a50641a",
+    "one_shot_note": "One SSM command (decffaaa-25d2-4665-b6ee-f243fe459062 on i-0c35557c4e5385406, sent 2026-10-30 19:17:00Z, finished by 19:17:16Z) ran the production-sql-one-shot --phase apply (run_id 5e1711ea-5181-42f7-83a4-cd340a50641a) from main 546dd7cb8 (transfer run 41113179289, sql53-temporary-transfer.yml on main after the #1460 merge; tarball sha256 becdc3771311f1d4e4120e0cda0e1dfa88fb0fa45e3b83f3928a30cdd0f8468c), after a read-only --phase inspect of the same commit and tarball (SSM e63078b3-fc50-45ee-8ccc-066559e25c88, sent 2026-10-30 19:16:51Z, one-shot run f7f6e63b-ad8c-4c03-8a5d-fe3ca90dff29: live 99d9e8e925ca8c5b56e11409f145e2d75de2759c27d8fd1b476494ffc62e2eaa, live_matches_expected true, apply_preconditions_met true, precondition_failures [], prerequisites_missing [], predecessors {sql130: true}, the four acl_functions financial_totp_upsert_enrollment(uuid, bytea, bytea, text), financial_totp_get_enrollment(uuid), financial_totp_mark_verified(uuid, bigint) and financial_totp_status(uuid) each 'different' with ACL [PUBLIC EXECUTE grantor=owner, checksops EXECUTE grantor=owner, owner EXECUTE grantor=owner]; contracts claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43). Steps pin (execute true, staging_acceptance run 41107844336), source (tarball sha256 matches the sidecar and --expected-tarball-sha256, tree matches the tarball, migration source == pin), inspect, contracts, manifest, source-recheck-before-preflight, preflight (receipt_issued), evaluate (sql131_production_apply_allowed true), source-recheck-before-apply, apply (applied) and post-apply-inspect all ok; the command printed EXIT=0. The run's JSON did not arrive whole: SSM returned the first 24000 characters of the command's output (--output truncated--), so the compact one-shot JSON printed after the command's summary section arrived cut at 14730 characters, inside the one-shot's own applied object at applied.post_apply_inspect (after \"predecessors\":{\"sql130\":true}, at the key pre…); the summary section, printed in full before it, listed the key fields of applied.post_apply_inspect (live_definition_sha256 a661533320d9b391cc9b5c5f2fade5632801060693a5205c4bf8391702fe90c7, live_matches_expected false, already_applied true, apply_preconditions_met false, precondition_failures [], release_sql_inspect.live_definition_sha256 the same, prerequisites_missing [], the four acl_functions names). Every other field of the applied object arrived (date, result, source_commit and its basis, source_tarball, runner and its basis, workstream_id, one_use_id and its consumed basis, owner_approval and its basis, operator, pre_apply_inspect, contract_results, one_shot_run_id, one_shot_note, receipt) and is recorded as printed, except this note and owner_approval_basis, which are extended as in the SQL 127, SQL 128 and SQL 130 records (the one-shot's own one_shot_note read: \"One production-sql-one-shot run verified the source, ran the read-only inspect and the runner contracts, built the manifest, issued the receipt and lease (preflight), evaluated (sql131_production_apply_allowed true), applied (exit 0) and ran the post-apply inspect.\"; its owner_approval_basis read: \"As passed in --approval-statement for --approval-scope sql131; the one-shot cannot verify who said it.\"). post_apply_inspect below is the run's top-level details.post_apply_inspect, which arrived whole: the one-shot assigns that same object to applied.post_apply_inspect (summary.applied in scripts/deployment-guard/lib/production-sql-one-shot.mjs), and the 198 characters of applied.post_apply_inspect that were printed are a byte-for-byte prefix of it; likewise the printed pre_apply_inspect, contract_results and receipt of the applied object equal the run's top-level pre_apply_inspect, contract_results and apply_result. This block adds migration_source_sha256 (with its note), apply_ssm_command_id, steps and manifest_sha256 from the same run's details, as the SQL 127, SQL 128 and SQL 130 records do. The run's not_observed_by_this_run list (printed after the applied object) was cut off with the tail; as in every one-shot run it names ssm_command_id and source_staged_by, supplied here as apply_ssm_command_id and transfer run 41113179289. A separate read-only --inspect after the run (SSM 57285e9d-c4b6-4397-ab9f-82c426a15520, finished by 19:17:25Z, same tarball, full JSON captured) reported live a661533320d9b391cc9b5c5f2fade5632801060693a5205c4bf8391702fe90c7 == intended, already_applied true, precondition_failures [], the four acl_functions 'intended' with ACL [checksops EXECUTE grantor=owner, owner EXECUTE grantor=owner] (PUBLIC revoked), dropped_function_dependents 0. Runner state (security audit finding C): started for these runs at 2026-10-30 19:16:14Z and stopped at 19:17:41Z. Not recorded: the SSM command comment and SSM's own status for decffaaa-25d2-4665-b6ee-f243fe459062, which are not in the captured stdout.",
+    "steps": [
+      "pin",
+      "source",
+      "inspect",
+      "contracts",
+      "manifest",
+      "source-recheck-before-preflight",
+      "preflight",
+      "evaluate",
+      "source-recheck-before-apply",
+      "apply",
+      "post-apply-inspect"
+    ],
+    "contract_results": {
+      "claim-ledger": {
+        "ok": true,
+        "test": "aws/tests/claim-ledger-accepted-contract.test.mjs",
+        "evidence": "4/4 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at 546dd7cb839153b161f0e8f5f6a3927c6ee29084 (production-sql-one-shot 5e1711ea-5181-42f7-83a4-cd340a50641a, node --test)"
+      },
+      "tenant-isolation": {
+        "ok": true,
+        "test": "aws/tests/tenant-security-compliance.test.mjs",
+        "evidence": "6/6 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at 546dd7cb839153b161f0e8f5f6a3927c6ee29084 (production-sql-one-shot 5e1711ea-5181-42f7-83a4-cd340a50641a, node --test)"
+      },
+      "financial-write-protections": {
+        "ok": true,
+        "test": "aws/tests/api-write.test.mjs",
+        "evidence": "43/43 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at 546dd7cb839153b161f0e8f5f6a3927c6ee29084 (production-sql-one-shot 5e1711ea-5181-42f7-83a4-cd340a50641a, node --test)"
+      }
+    },
+    "pre_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "99d9e8e925ca8c5b56e11409f145e2d75de2759c27d8fd1b476494ffc62e2eaa",
+      "live_matches_expected": true,
+      "already_applied": false,
+      "predecessors": {
+        "sql130": true
+      },
+      "predecessors_applied": true,
+      "missing_dependencies": [],
+      "apply_preconditions_met": true,
+      "precondition_failures": [],
+      "current_user": "checksops_admin",
+      "session_user": "checksops_admin",
+      "counts": null,
+      "successors_applied": [],
+      "release_sql_inspect": {
+        "live_definition_sha256": "99d9e8e925ca8c5b56e11409f145e2d75de2759c27d8fd1b476494ffc62e2eaa",
+        "prerequisites_missing": [],
+        "predecessors": {
+          "sql130": true
+        },
+        "successors_applied": [],
+        "functions": [],
+        "policies": [],
+        "views": [],
+        "tables": [],
+        "columns": [],
+        "constraints": [],
+        "triggers": [],
+        "table_privileges": [],
+        "function_acl": [],
+        "acl_functions": [
+          {
+            "name": "financial_totp_upsert_enrollment(uuid, bytea, bytea, text)",
+            "state": "different",
+            "acl": [
+              "PUBLIC EXECUTE grantor=owner",
+              "checksops EXECUTE grantor=owner",
+              "owner EXECUTE grantor=owner"
+            ]
+          },
+          {
+            "name": "financial_totp_get_enrollment(uuid)",
+            "state": "different",
+            "acl": [
+              "PUBLIC EXECUTE grantor=owner",
+              "checksops EXECUTE grantor=owner",
+              "owner EXECUTE grantor=owner"
+            ]
+          },
+          {
+            "name": "financial_totp_mark_verified(uuid, bigint)",
+            "state": "different",
+            "acl": [
+              "PUBLIC EXECUTE grantor=owner",
+              "checksops EXECUTE grantor=owner",
+              "owner EXECUTE grantor=owner"
+            ]
+          },
+          {
+            "name": "financial_totp_status(uuid)",
+            "state": "different",
+            "acl": [
+              "PUBLIC EXECUTE grantor=owner",
+              "checksops EXECUTE grantor=owner",
+              "owner EXECUTE grantor=owner"
+            ]
+          }
+        ],
+        "indexes": [],
+        "unique_covers": [],
+        "definer_writes": [],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": null
+      }
+    },
+    "manifest_sha256": "1a3cad1d4e134068e3d88d061c10baba0c1fd43865b54582429c7e6b27989dde",
+    "receipt": {
+      "migration": "sql131",
+      "workstream": "prod-sql131-financial-totp-functions-no-public-20261030",
+      "commit": "546dd7cb839153b161f0e8f5f6a3927c6ee29084",
+      "sql_file": "aws/workflows/sql/131_financial_totp_functions_no_public.sql",
+      "before_hash": "99d9e8e925ca8c5b56e11409f145e2d75de2759c27d8fd1b476494ffc62e2eaa",
+      "after_hash": "a661533320d9b391cc9b5c5f2fade5632801060693a5205c4bf8391702fe90c7",
+      "release_sql_inspect": {
+        "live_definition_sha256": "a661533320d9b391cc9b5c5f2fade5632801060693a5205c4bf8391702fe90c7",
+        "prerequisites_missing": [],
+        "predecessors": {
+          "sql130": true
+        },
+        "successors_applied": [],
+        "functions": [],
+        "policies": [],
+        "views": [],
+        "tables": [],
+        "columns": [],
+        "constraints": [],
+        "triggers": [],
+        "table_privileges": [],
+        "function_acl": [],
+        "acl_functions": [
+          {
+            "name": "financial_totp_upsert_enrollment(uuid, bytea, bytea, text)",
+            "state": "intended",
+            "acl": [
+              "checksops EXECUTE grantor=owner",
+              "owner EXECUTE grantor=owner"
+            ]
+          },
+          {
+            "name": "financial_totp_get_enrollment(uuid)",
+            "state": "intended",
+            "acl": [
+              "checksops EXECUTE grantor=owner",
+              "owner EXECUTE grantor=owner"
+            ]
+          },
+          {
+            "name": "financial_totp_mark_verified(uuid, bigint)",
+            "state": "intended",
+            "acl": [
+              "checksops EXECUTE grantor=owner",
+              "owner EXECUTE grantor=owner"
+            ]
+          },
+          {
+            "name": "financial_totp_status(uuid)",
+            "state": "intended",
+            "acl": [
+              "checksops EXECUTE grantor=owner",
+              "owner EXECUTE grantor=owner"
+            ]
+          }
+        ],
+        "indexes": [],
+        "unique_covers": [],
+        "definer_writes": [],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": null
+      },
+      "unrelated_catalog_sha256": "eda4f4eaea80913897cedfd63d93d369a458d5c4a55e474fd8ca36e423039c25",
+      "unrelated_catalog_counts": {
+        "relations": 892,
+        "columns": 3550,
+        "constraints": 2239,
+        "policies": 404,
+        "functions": 1350,
+        "indexes": 655,
+        "default_acl": 0,
+        "role_memberships": 15,
+        "roles": 29,
+        "triggers": 184,
+        "views": 25,
+        "types": 18,
+        "schema": 2
+      },
+      "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/41107844336",
+      "result": "applied"
+    },
+    "post_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "a661533320d9b391cc9b5c5f2fade5632801060693a5205c4bf8391702fe90c7",
+      "live_matches_expected": false,
+      "already_applied": true,
+      "predecessors": {
+        "sql130": true
+      },
+      "predecessors_applied": true,
+      "missing_dependencies": [],
+      "apply_preconditions_met": false,
+      "precondition_failures": [],
+      "current_user": "checksops_admin",
+      "session_user": "checksops_admin",
+      "counts": null,
+      "successors_applied": [],
+      "release_sql_inspect": {
+        "live_definition_sha256": "a661533320d9b391cc9b5c5f2fade5632801060693a5205c4bf8391702fe90c7",
+        "prerequisites_missing": [],
+        "predecessors": {
+          "sql130": true
+        },
+        "successors_applied": [],
+        "functions": [],
+        "policies": [],
+        "views": [],
+        "tables": [],
+        "columns": [],
+        "constraints": [],
+        "triggers": [],
+        "table_privileges": [],
+        "function_acl": [],
+        "acl_functions": [
+          {
+            "name": "financial_totp_upsert_enrollment(uuid, bytea, bytea, text)",
+            "state": "intended",
+            "acl": [
+              "checksops EXECUTE grantor=owner",
+              "owner EXECUTE grantor=owner"
+            ]
+          },
+          {
+            "name": "financial_totp_get_enrollment(uuid)",
+            "state": "intended",
+            "acl": [
+              "checksops EXECUTE grantor=owner",
+              "owner EXECUTE grantor=owner"
+            ]
+          },
+          {
+            "name": "financial_totp_mark_verified(uuid, bigint)",
+            "state": "intended",
+            "acl": [
+              "checksops EXECUTE grantor=owner",
+              "owner EXECUTE grantor=owner"
+            ]
+          },
+          {
+            "name": "financial_totp_status(uuid)",
+            "state": "intended",
+            "acl": [
+              "checksops EXECUTE grantor=owner",
+              "owner EXECUTE grantor=owner"
+            ]
+          }
+        ],
+        "indexes": [],
+        "unique_covers": [],
+        "definer_writes": [],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": null
+      }
+    }
+  },
+  "production_evidence": {
+    "2026-10-30 apply": "Guarded production SQL one-shot on i-0c35557c4e5385406, workstream prod-sql131-financial-totp-functions-no-public-20261030, main 546dd7cb8 (tarball becdc377…, transfer run 41113179289, migration source e7b5a8df… == pin), owner-approved run (\"apply SQL 131 in production\"), SSM decffaaa-25d2-4665-b6ee-f243fe459062, run_id 5e1711ea-5181-42f7-83a4-cd340a50641a, one_use_id sql131-prod-b8182ca6-f99b-4695-b930-b36a9b94f1a5 (spent): every step ok; contracts claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43; pre-apply inspect live 99d9e8e9… (live_matches_expected true, precondition_failures [], predecessors {sql130: true}), after the read-only --phase inspect SSM e63078b3-fc50-45ee-8ccc-066559e25c88; manifest 1a3cad1d…; 99d9e8e9… -> a6615333…, result applied, unrelated catalog eda4f4ea… (functions 1350, triggers 184); post-apply inspect already_applied true, precondition_failures [] (recorded from the run's top-level details.post_apply_inspect: the applied object's copy was cut by the output capture, see applied.one_shot_note); separate read-only inspect SSM 57285e9d-c4b6-4397-ab9f-82c426a15520 already_applied true, the four functions intended, EXECUTE checksops and the owner. After: financial_totp_upsert_enrollment(uuid, bytea, bytea, text), financial_totp_get_enrollment(uuid), financial_totp_mark_verified(uuid, bigint) and financial_totp_status(uuid) hold EXECUTE for checksops and the owner only (PUBLIC revoked); their bodies, owners and consume_financial_totp_rate_limit (SQL 130's) are unchanged; no other function, table, policy, grant or trigger changed. No trigger was added, so the DB validator is unaffected. execute is false so the pin is no longer a standing authorization."
   }
 }
