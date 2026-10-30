@@ -75,6 +75,10 @@
     "aws/workflows/sql/127_homeowner_portal_signing.sql": {
       "verified_live": true,
       "evidence": "Guarded staging SQL executor apply of sql127-homeowner-portal-signing on 2026-10-29 (run 40952161383, main e98d57754, wave 26, executor lpbOJp31…; read-live run 40952453984 already_applied true): receipt before 4b4af399…, after c4936010… = the pin's intended_replacement_sha256; precondition_failures [], prerequisites_missing []."
+    },
+    "aws/workflows/sql/132_financial_totp_code_check_lockout.sql": {
+      "verified_live": false,
+      "evidence": null
     }
   }
 }

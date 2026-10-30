@@ -225,6 +225,12 @@ const RATE_LIMIT_SQL = 'SELECT allowed, count, retry_after_seconds FROM public.c
 const ENROLLMENT_SQL = `SELECT ciphertext, nonce, key_id, last_used_timestep, verified_at, failed_attempts, locked_until
      FROM public.financial_totp_get_enrollment($1::uuid)`;
 const MARK_USED_SQL = 'SELECT public.financial_totp_mark_verified($1::uuid, $2::bigint) AS claimed';
+// SQL 132: counts the check before the code is compared; locked after ten consecutive checks without
+// a success (the same SQL as auth-financial-totp.mjs, inlined so this member deploys on its own).
+// Absent before SQL 132 is applied: the check is then not counted and nothing is locked, not a 500.
+const CODE_CHECK_LOCKOUT_FUNCTION = 'public.financial_totp_count_code_check(uuid)';
+const CODE_CHECK_LOCKOUT_PRESENT_SQL = 'SELECT pg_catalog.to_regprocedure($1) IS NOT NULL AS present';
+const CODE_CHECK_LOCKOUT_SQL = 'SELECT allowed, failed_attempts, retry_after_seconds FROM public.financial_totp_count_code_check($1::uuid)';
 
 /** A registered account is changed when the new number differs from the stored one. */
 export const isDepositAccountChange = (stored, depositAccountNumber) => Boolean(
@@ -270,20 +276,28 @@ export const verifyAccountChangeCode = async ({ client, mapping, claims, code, t
   }
   // Keep the rate-limit hit: a wrong code fails the request, which rolls back.
   await commitAndContinue(client, mapping, claims);
+  const notEnrolled = () => codeFail('totp_not_enrolled', 403, 'Set up your authenticator app first, then change the deposit account.');
   const enrollment = (await client.query(ENROLLMENT_SQL, [userId])).rows[0];
-  if (!enrollment?.ciphertext) {
-    return codeFail('totp_not_enrolled', 403, 'Set up your authenticator app first, then change the deposit account.');
+  if (!enrollment?.ciphertext) return notEnrolled();
+  // The answer to a wrong code; also the answer while the enrollment is locked, so a locked check
+  // reveals nothing about the code.
+  const rejected = codeFail('code_rejected', 401, 'That code was not accepted. Wait for a new code in your authenticator app and try again.');
+  // SQL 132: count this check and keep the count before the code is compared (a wrong code rolls
+  // the request back). While locked, refuse without comparing.
+  const lockoutPresent = (await client.query(CODE_CHECK_LOCKOUT_PRESENT_SQL, [CODE_CHECK_LOCKOUT_FUNCTION])).rows[0]?.present === true;
+  if (lockoutPresent) {
+    const gate = (await client.query(CODE_CHECK_LOCKOUT_SQL, [userId])).rows[0];
+    if (!gate) return notEnrolled();
+    if (gate.allowed !== true) return rejected;
+    await commitAndContinue(client, mapping, claims);
   }
-  if (enrollment.locked_until && new Date(enrollment.locked_until).getTime() > Date.now()) {
-    return codeFail('rate_limited', 429, 'Too many codes tried. Wait a few minutes and try again.');
-  }
+  if (enrollment.locked_until && new Date(enrollment.locked_until).getTime() > Date.now()) return rejected;
   const wrap = await (deps.loadWrapKey || loadFinancialTotpWrapKey)();
   const secret = decryptSecret({ ciphertext: enrollment.ciphertext, nonce: enrollment.nonce, key: wrap.key });
   const lastUsed = enrollment.last_used_timestep === null || enrollment.last_used_timestep === undefined
     ? null
     : Number(enrollment.last_used_timestep);
   const verified = verifyFinancialTotp({ secret, code: normalized.code, nowMs: deps.nowMs, lastUsedTimestep: lastUsed });
-  const rejected = codeFail('code_rejected', 401, 'That code was not accepted. Wait for a new code in your authenticator app and try again.');
   if (!verified.ok || (lastUsed !== null && verified.timestep <= lastUsed)) return rejected;
   if ((await client.query(MARK_USED_SQL, [userId, verified.timestep])).rows[0]?.claimed !== true) return rejected;
   const recorded = await insertAppStepUpLog(client, mapping, {

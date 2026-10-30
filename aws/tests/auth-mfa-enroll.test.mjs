@@ -29,6 +29,10 @@ const NOW = Date.UTC(2026, 8, 11, 1, 0, 0);
 const ORIGIN_JTI = 'origin-jti-login-1';
 const LOGIN_SESSION = `${TESTER_SUB}:jti:${ORIGIN_JTI}`;
 const WRAP_HEX = 'ab'.repeat(32);
+// SQL 132 (aws/workflows/sql/132_financial_totp_code_check_lockout.sql): ten consecutive code checks
+// without a success lock the enrollment for 15 minutes. The store below emulates the function.
+const LOCKOUT_THRESHOLD = 10;
+const LOCKOUT_MINUTES = 15;
 
 const eventOf = (body) => ({
   headers: { authorization: 'Bearer test-id-token' },
@@ -43,11 +47,14 @@ const createStore = ({
   email = TESTER_EMAIL,
   memberships = [{ tenant_id: TENANT, role: 'admin' }],
   checks = [{ id: CHECK, tenant_id: TENANT, amount: 12.34, status: 'ready' }],
+  lockoutFunction = true,
 } = {}) => {
   const enrollments = new Map();
   const rates = new Map();
   const stepups = [];
   const cognitoCalls = [];
+  // SQL 132 applied (the function exists) unless a test says otherwise.
+  const flags = { lockoutFunction };
   const client = {
     query: async (sql, params = []) => {
       const text = String(sql);
@@ -88,14 +95,35 @@ const createStore = ({
         });
         return { rows: [] };
       }
-      if (text.includes('financial_totp_get_enrollment')) {
+      if (text.includes('to_regprocedure')) {
+        return { rows: [{ present: flags.lockoutFunction && params[0] === 'public.financial_totp_count_code_check(uuid)' }] };
+      }
+      if (text.includes('financial_totp_count_code_check')) {
         if (String(params[0]) !== String(userId)) {
           const error = new Error('enrollment_caller_mismatch');
           error.code = '42501';
           throw error;
         }
         const row = enrollments.get(String(params[0]));
-        return { rows: row ? [row] : [] };
+        if (!row) return { rows: [] };
+        const now = Date.now();
+        const lockedUntil = row.locked_until ? new Date(row.locked_until).getTime() : 0;
+        if (lockedUntil > now) {
+          return { rows: [{ allowed: false, failed_attempts: row.failed_attempts, retry_after_seconds: Math.max(1, Math.ceil((lockedUntil - now) / 1000)) }] };
+        }
+        row.failed_attempts += 1;
+        row.locked_until = row.failed_attempts >= LOCKOUT_THRESHOLD ? new Date(now + LOCKOUT_MINUTES * 60000).toISOString() : null;
+        return { rows: [{ allowed: true, failed_attempts: row.failed_attempts, retry_after_seconds: 0 }] };
+      }
+      if (text.includes('financial_totp_get_enrollment')) {
+        if (String(params[0]) !== String(userId)) {
+          const error = new Error('enrollment_caller_mismatch');
+          error.code = '42501';
+          throw error;
+        }
+        // A snapshot, as a row read from PostgreSQL is: a later count in the same request does not change it.
+        const row = enrollments.get(String(params[0]));
+        return { rows: row ? [{ ...row }] : [] };
       }
       if (text.includes('financial_totp_status')) {
         const row = enrollments.get(String(params[0]));
@@ -111,6 +139,8 @@ const createStore = ({
           return { rows: [{ claimed: false }] };
         }
         row.verified_at = row.verified_at || new Date(NOW).toISOString();
+        row.failed_attempts = 0;
+        row.locked_until = null;
         if (timestep !== null && timestep !== undefined) {
           row.last_used_timestep = timestep;
         }
@@ -144,6 +174,7 @@ const createStore = ({
     rates,
     stepups,
     cognitoCalls,
+    flags,
     mapping: {
       application_user_id: userId,
       email,
@@ -664,6 +695,7 @@ test('a wrong step-up code still counts against the rate limit (committed before
     if (text.includes('consume_financial_totp_rate_limit')) order.push('rate');
     if (text === 'COMMIT') order.push('commit');
     if (text.includes('financial_totp_get_enrollment')) order.push('verify');
+    if (text.includes('financial_totp_count_code_check')) order.push('count');
     if (text === 'COMMIT' || text === 'BEGIN' || text.startsWith('SET TRANSACTION') || text.startsWith('SELECT set_config')) {
       return { command: text, rows: [] };
     }
@@ -671,7 +703,9 @@ test('a wrong step-up code still counts against the rate limit (committed before
   };
   const result = await handleMfaStepUp(eventOf({ code: wrong, check_intake_item_id: CHECK }), depsOf(store));
   assert.equal(result.ok, false);
-  assert.deepEqual(order, ['rate', 'commit', 'verify']);
+  // The rate-limit hit is committed before anything else; the SQL 132 count is committed right after the
+  // enrollment is read and before the code is compared.
+  assert.deepEqual(order, ['rate', 'commit', 'verify', 'count', 'commit']);
 });
 
 test('enroll confirm and step-up share one budget of 5 code checks (audit finding 7)', async () => {
@@ -695,4 +729,138 @@ test('enroll confirm and step-up share one budget of 5 code checks (audit findin
   assert.equal(store.rates.get(`${TESTER_APP}:${TOTP_CODE_CHECK_RATE_ACTION}`), 7);
   assert.equal(store.rates.has(`${TESTER_APP}:step_up`), false);
   assert.equal(store.rates.has(`${TESTER_APP}:enroll_confirm`), false);
+});
+
+const wrongCodeFor = (code) => (code === '000000' ? '111111' : '000000');
+
+/** The order of the store's calls, with the transaction statements answered locally. */
+const traceOrder = (store) => {
+  const order = [];
+  const base = store.client.query;
+  store.client.query = async (sql, params) => {
+    const text = String(sql);
+    if (text.includes('financial_totp_get_enrollment')) order.push('read');
+    if (text.includes('financial_totp_count_code_check')) order.push('count');
+    if (text.includes('financial_totp_mark_verified')) order.push('mark');
+    if (text === 'COMMIT') order.push('commit');
+    if (text === 'COMMIT' || text === 'BEGIN' || text.startsWith('SET TRANSACTION') || text.startsWith('SELECT set_config')) {
+      return { command: text, rows: [] };
+    }
+    return base(sql, params);
+  };
+  return order;
+};
+
+test('SQL 132: a wrong code counts one check, committed before the compare; the right code clears the count', async () => {
+  const store = createStore();
+  const { code } = await enrollTester(store);
+  const row = store.enrollments.get(TESTER_APP);
+  assert.equal(row.failed_attempts, 0, 'the enroll confirm counted one check and its success cleared it');
+  const order = traceOrder(store);
+  const wrong = await handleMfaStepUp(eventOf({ code: wrongCodeFor(code), check_intake_item_id: CHECK }), depsOf(store));
+  assert.equal(wrong.ok, false);
+  assert.equal(wrong.statusCode, 401);
+  assert.equal(wrong.error, 'mfa_step_up_failed');
+  assert.deepEqual(order, ['commit', 'read', 'count', 'commit'], 'rate hit committed, enrollment read, count committed, then the compare; nothing marked');
+  assert.equal(row.failed_attempts, 1);
+  assert.equal(row.locked_until, null);
+  order.length = 0;
+  const right = await handleMfaStepUp(eventOf({ code, check_intake_item_id: CHECK }), depsOf(store));
+  assert.equal(right.ok, true, JSON.stringify(right));
+  assert.deepEqual(order, ['commit', 'read', 'count', 'commit', 'mark']);
+  assert.equal(row.failed_attempts, 0);
+  assert.equal(row.locked_until, null);
+  assert.equal(store.stepups.length, 1);
+});
+
+test('SQL 132: ten wrong codes across enroll confirm and step-up lock the enrollment; while locked the right code gets the wrong-code answer and nothing is compared, marked or recorded', async () => {
+  const store = createStore();
+  const { code } = await enrollTester(store);
+  const wrong = wrongCodeFor(code);
+  const row = store.enrollments.get(TESTER_APP);
+  let wrongAnswer = null;
+  for (let i = 0; i < LOCKOUT_THRESHOLD; i += 1) {
+    if (i % 5 === 0) store.rates.clear(); // a new rate-limit window (5 per 300 s)
+    const answer = i % 2 === 0
+      ? await handleMfaVerify(eventOf({ code: wrong }), depsOf(store))
+      : await handleMfaStepUp(eventOf({ code: wrong, check_intake_item_id: CHECK }), depsOf(store));
+    assert.equal(answer.statusCode, 401, `check ${i + 1}`);
+    assert.equal(answer.error, 'mfa_step_up_failed', `check ${i + 1}`);
+    assert.equal(row.failed_attempts, i + 1);
+    if (i < LOCKOUT_THRESHOLD - 1) assert.equal(row.locked_until, null, `check ${i + 1}`);
+    wrongAnswer = answer;
+  }
+  assert.ok(row.locked_until && new Date(row.locked_until).getTime() > Date.now(), 'locked after the tenth');
+  store.rates.clear();
+  const order = traceOrder(store);
+  const lockedStepUp = await handleMfaStepUp(eventOf({ code, check_intake_item_id: CHECK }), depsOf(store));
+  assert.deepEqual(lockedStepUp, wrongAnswer, 'a locked check answers exactly like a wrong code');
+  const lockedConfirm = await handleMfaVerify(eventOf({ code }), depsOf(store));
+  assert.deepEqual(lockedConfirm, wrongAnswer);
+  const lockedWrong = await handleMfaStepUp(eventOf({ code: wrong, check_intake_item_id: CHECK }), depsOf(store));
+  assert.deepEqual(lockedWrong, wrongAnswer);
+  assert.deepEqual(order, ['commit', 'read', 'count', 'commit', 'read', 'count', 'commit', 'read', 'count'], 'refused at the count; nothing marked, no second commit');
+  assert.equal(store.stepups.length, 0);
+  assert.equal(row.failed_attempts, LOCKOUT_THRESHOLD, 'a locked check is not counted again');
+});
+
+test('SQL 132: after locked_until passes the right code works and clears the count and the lock', async () => {
+  const store = createStore();
+  const { code } = await enrollTester(store);
+  const row = store.enrollments.get(TESTER_APP);
+  row.failed_attempts = LOCKOUT_THRESHOLD;
+  row.locked_until = new Date(Date.now() - 1000).toISOString();
+  const right = await handleMfaStepUp(eventOf({ code, check_intake_item_id: CHECK }), depsOf(store));
+  assert.equal(right.ok, true, JSON.stringify(right));
+  assert.equal(row.failed_attempts, 0);
+  assert.equal(row.locked_until, null);
+  assert.equal(store.stepups.length, 1);
+});
+
+test('SQL 132: another user\'s counter is independent', async () => {
+  const locked = createStore();
+  const other = createStore({ userId: '7a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d', email: 'other@freedomadj.com' });
+  const { code: lockedCode } = await enrollTester(locked);
+  const { code: otherCode } = await enrollTester(other);
+  for (let i = 0; i < LOCKOUT_THRESHOLD; i += 1) {
+    if (i % 5 === 0) locked.rates.clear();
+    await handleMfaStepUp(eventOf({ code: wrongCodeFor(lockedCode), check_intake_item_id: CHECK }), depsOf(locked));
+  }
+  assert.ok(locked.enrollments.get(TESTER_APP).locked_until);
+  const right = await handleMfaStepUp(eventOf({ code: otherCode, check_intake_item_id: CHECK }), depsOf(other));
+  assert.equal(right.ok, true, JSON.stringify(right));
+  assert.equal(other.enrollments.get('7a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d').failed_attempts, 0);
+  assert.equal(locked.enrollments.get(TESTER_APP).failed_attempts, LOCKOUT_THRESHOLD);
+});
+
+test('SQL 132 not applied (the function absent): checks are not counted, nothing locks, and the API answers as before, never a 500', async () => {
+  const store = createStore({ lockoutFunction: false });
+  const { code } = await enrollTester(store);
+  const row = store.enrollments.get(TESTER_APP);
+  const order = traceOrder(store);
+  for (let i = 0; i < LOCKOUT_THRESHOLD + 2; i += 1) {
+    if (i % 5 === 0) store.rates.clear();
+    const answer = await handleMfaStepUp(eventOf({ code: wrongCodeFor(code), check_intake_item_id: CHECK }), depsOf(store));
+    assert.equal(answer.statusCode, 401, `check ${i + 1}`);
+    assert.equal(answer.error, 'mfa_step_up_failed', `check ${i + 1}`);
+  }
+  assert.equal(row.failed_attempts, 0);
+  assert.equal(row.locked_until, null);
+  assert.equal(order.includes('count'), false, 'the count function is never called when absent');
+  store.rates.clear();
+  const right = await handleMfaStepUp(eventOf({ code, check_intake_item_id: CHECK }), depsOf(store));
+  assert.equal(right.ok, true, JSON.stringify(right));
+});
+
+test('a locked_until already on the row is refused with the wrong-code answer even when the SQL 132 function is absent', async () => {
+  const store = createStore({ lockoutFunction: false });
+  const { code } = await enrollTester(store);
+  const row = store.enrollments.get(TESTER_APP);
+  row.locked_until = new Date(Date.now() + 60000).toISOString();
+  const order = traceOrder(store);
+  const locked = await handleMfaStepUp(eventOf({ code, check_intake_item_id: CHECK }), depsOf(store));
+  assert.equal(locked.statusCode, 401);
+  assert.equal(locked.error, 'mfa_step_up_failed');
+  assert.equal(order.includes('mark'), false);
+  assert.equal(store.stepups.length, 0);
 });
