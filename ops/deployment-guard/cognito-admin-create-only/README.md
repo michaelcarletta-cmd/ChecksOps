@@ -51,7 +51,27 @@ Order: staging `us-east-1_vPmQ7cL1F` first, verify; then production `us-east-1_h
    (now `true`; `UnusedAccountValidityDays` may disappear, superseded by
    `PasswordPolicy.TemporaryPasswordValidityDays: 7`) and `LastModifiedDate`.
 2. `GetUserPoolMfaConfig` (get_user_pool_mfa_config) equals the snapshot (TOTP, passkeys, MFA mode).
-3. Staging: an invite (`AdminCreateUser`) still works.
+3. Tags equal the snapshot. The request sends no tags; if a user tag (not `aws:*`) is missing,
+   restore it with `TagResource` on the pool ARN.
+4. A `SignUp` with a made-up `@example.invalid` email on the pool's app client is refused with
+   `NotAuthorizedException: SignUp is not permitted for this user pool`. If it is accepted, delete
+   that user at once (`AdminDeleteUser`) and stop: the setting is not enforced.
+5. Staging: an invite (`AdminCreateUser`) still works.
+
+## 2026-10-30 runs
+
+- Staging (owner: "apply sign-up off to staging"): precondition equal; `UpdateUserPool` HTTP 200
+  (request `52a47e82-c283-40f4-a025-d0ea50dde684`); only `AllowAdminCreateUserOnly` changed; MFA
+  config unchanged; `SignUp` refused ("SignUp is not permitted for this user pool").
+- Production (owner: "apply sign-up off to production"): precondition equal; the request then
+  carried the pool's user tags, and `UpdateUserPool` answered `InvalidParameterException: Caller
+  is an end user and not allowed to mutate system tags` (the pool carries `aws:cloudformation:*`
+  tags). The pool nonetheless reads `AllowAdminCreateUserOnly: true` (LastModifiedDate
+  2026-10-30T01:35:58Z) with every other setting, the MFA config and all tags unchanged, but a
+  verification `SignUp` was accepted (user `34c8e4f8-c021-7023-9140-1558af378da2`, deleted at once;
+  13 users remain): recorded, not enforced. The builder no longer sends tags. The production
+  re-apply runs the same steps; its precondition is the snapshot with
+  `AllowAdminCreateUserOnly: true`, the state the refused call left.
 
 ## Rollback
 
