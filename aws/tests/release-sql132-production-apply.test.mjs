@@ -152,7 +152,7 @@ test('pin: the release pin shape, pending, in step with the staging pin, the one
   assert.doesNotMatch(JSON.stringify(tool), /[0-9a-f]{64}/);
   const rows = JSON.stringify(readJson('ops/deployment-guard/bypass-inventory.json'));
   assert.match(rows, /"path":"scripts\/deployment-guard\/sql132-financial-totp-code-check-lockout-production-apply\.mjs","classification":"GUARDED","capabilities":\["sql132-production-apply"\]/);
-  assert.match(rows, /sql128, sql129, sql130, sql131, sql132\)/);
+  assert.match(rows, /sql128, sql129, sql130, sql131, sql132, sql134\)/);
   const scripts = readJson('package.json').scripts;
   const workflow = fs.readFileSync(path.join(ROOT, '.github/workflows/deployment-guard.yml'), 'utf8');
   for (const name of ['aws/tests/release-sql132-executor.test.mjs', 'aws/tests/release-sql132-production-apply.test.mjs', 'aws/tests/sql132-financial-totp-lockout-pg.test.mjs']) {
@@ -232,7 +232,7 @@ test('order: predecessor SQL 130 (untouched); the one new function, its prerequi
   assert.match(runbook, /APPLY_FINANCIAL_TOTP_LOCKOUT/);
   const oneShot = fs.readFileSync(path.join(ROOT, 'ops/production-sql-one-shot.md'), 'utf8');
   assert.match(oneShot, /\| `sql132` \|/);
-  assert.match(oneShot, /`sql129`, `sql130`, `sql131`, `sql132`\) \|/);
+  assert.match(oneShot, /`sql129`, `sql130`, `sql131`, `sql132`, `sql134`\) \|/);
   assert.match(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/README.md'), 'utf8'), /sql132-financial-totp-code-check-lockout-production-apply\.mjs --inspect/);
 });
 
