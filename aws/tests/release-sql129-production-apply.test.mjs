@@ -146,7 +146,7 @@ test('pin: the release pin shape, pending, in step with the staging pin, the one
   assert.doesNotMatch(JSON.stringify(tool), /[0-9a-f]{64}/);
   const rows = JSON.stringify(readJson('ops/deployment-guard/bypass-inventory.json'));
   assert.match(rows, /"path":"scripts\/deployment-guard\/sql129-financial-totp-rate-limit-code-check-production-apply\.mjs","classification":"GUARDED","capabilities":\["sql129-production-apply"\]/);
-  assert.match(rows, /sql123, sql124, sql125, sql126, sql127, sql128, sql129\)/);
+  assert.match(rows, /sql123, sql124, sql125, sql126, sql127, sql128, sql129, sql130\)/);
   const scripts = readJson('package.json').scripts;
   const workflow = fs.readFileSync(path.join(ROOT, '.github/workflows/deployment-guard.yml'), 'utf8');
   for (const name of ['aws/tests/release-sql129-executor.test.mjs', 'aws/tests/release-sql129-production-apply.test.mjs', 'aws/tests/sql129-financial-totp-rate-limit-pg.test.mjs']) {
@@ -197,10 +197,12 @@ test('order: no predecessor and no order; the function and its prerequisites; no
   const runbook = fs.readFileSync(path.join(ROOT, COMMITTED.tooling.runbook), 'utf8');
   assert.ok(runbook.includes(COMMITTED.intended_replacement_sha256));
   assert.ok(runbook.includes(COMMITTED.source_sha256));
-  assert.match(runbook, /\*\*Status:\*\* not applied anywhere/);
+  // Retired before any approval; SQL 130 replaces it. The production pin stays pending (execute false).
+  assert.match(runbook, /\*\*Status:\*\* retired, never applied anywhere\./);
+  assert.match(runbook, /Do not apply SQL 129 in any environment\./);
   const oneShot = fs.readFileSync(path.join(ROOT, 'ops/production-sql-one-shot.md'), 'utf8');
   assert.match(oneShot, /\| `sql129` \|/);
-  assert.match(oneShot, /`sql127`, `sql128`, `sql129`\) \|/);
+  assert.match(oneShot, /`sql127`, `sql128`, `sql129`, `sql130`\) \|/);
   assert.match(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/README.md'), 'utf8'), /sql129-financial-totp-rate-limit-code-check-production-apply\.mjs --inspect/);
 });
 

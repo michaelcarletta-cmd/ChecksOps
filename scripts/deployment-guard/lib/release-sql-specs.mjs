@@ -1,5 +1,5 @@
 /**
- * Specs of the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108 to SQL 129) for the shared engine in
+ * Specs of the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108 to SQL 130) for the shared engine in
  * release-sql-state.mjs: what each pinned file creates, replaces or drops, the reviewed
  * EXECUTE ACLs, the prerequisites and predecessors, and the PostgreSQL renderings the file
  * leaves (policy expressions, view, column, constraint, index and trigger definitions as
@@ -5781,6 +5781,47 @@ export const RELEASE_SQL_SPECS = deepFreeze({
           "owner EXECUTE"
         ],
         "revokes": []
+      }
+    ]
+  },
+  // SQL 130 (owner 2026-10-30, "New combined fix"): SQL 129's consume_financial_totp_rate_limit (the
+  // allow-list gains 'code_check', the body otherwise the live one) plus REVOKE EXECUTE FROM PUBLIC and
+  // GRANT EXECUTE TO checksops on that one function. SQL 129 kept the ACL and names PUBLIC; the staging
+  // read-live of SQL 129 (run 41081764481, main f2bb55b1) read the same body without PUBLIC, so SQL 129
+  // would roll back on staging. Production (read-only inspect SSM cfee4512) has PUBLIC, checksops and
+  // the owner; staging has checksops and the owner: both are pre-states this file accepts
+  // (function_acl_replaceable: PUBLIC is revoked) and both reach the same intended fingerprint. It
+  // supersedes SQL 129, whose pins are retired, never applied. No predecessor.
+  sql130: {
+    "key": "sql130",
+    "label": "SQL 130",
+    "choice": "sql130-financial-totp-rate-limit-code-check-no-public",
+    "production_pin_rel": "ops/deployment-guard/sql130-financial-totp-rate-limit-code-check-no-public-production-apply.json",
+    "script": "sql130-financial-totp-rate-limit-code-check-no-public-production-apply",
+    "prerequisites": [
+      "public.consume_financial_totp_rate_limit(uuid, text, integer, integer)",
+      "public.financial_totp_rate_limits",
+      "role checksops",
+      "column public.financial_totp_rate_limits.user_id",
+      "column public.financial_totp_rate_limits.action",
+      "column public.financial_totp_rate_limits.window_started_at",
+      "column public.financial_totp_rate_limits.request_count"
+    ],
+    "predecessors": [],
+    "supersedes": [
+      "sql129"
+    ],
+    "functions": [
+      {
+        "identity": "public.consume_financial_totp_rate_limit(uuid, text, integer, integer)",
+        "result": "TABLE(allowed boolean, count integer, retry_after_seconds integer)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ],
+        "revokes": [
+          "PUBLIC EXECUTE"
+        ]
       }
     ]
   },
