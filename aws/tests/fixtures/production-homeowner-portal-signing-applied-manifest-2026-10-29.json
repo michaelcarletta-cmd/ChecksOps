@@ -1,0 +1,33 @@
+{
+  "workstream_id": "homeowner-portal-signing-applied",
+  "authorization": "Record only (2026-10-30): the bytes below are live. Nothing is planned or authorized by this manifest; any later change to these members needs its own manifest, staging acceptance and owner approval.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Homeowner portal signing (owner decision 2026-10-29 \"Portal link is enough\"), applied 2026-10-29 and 2026-10-30 through the guarded overlay path to checksops-production-prep-api, one member per run in plan order, each on its own owner approval (the workflow refuses an apply unless approval_phrase is exactly \"DEPLOY <member> TO PRODUCTION\"). All four hold on SQL 127 (sql_before), recorded verified live in production (#1412). homeowner-signing-integration.mjs 4deac31f -> f3d3575c on \"DEPLOY homeowner-signing-integration.mjs TO PRODUCTION\" (owner, 2026-10-29; the owner typed it with a trailing period, and the run was given the exact phrase without it, as the workflow requires): staging inspect run 40966975676, staging apply run 40967367206 (the staging acceptance); production inspect run 40968290590 READY on main 9aca421b7d07f3abe216d42eef10ff94a4031be7, member PRESENT 4deac31f61ebf797a4123d99ae4a2166da81c54dbdad0faccc5cafdb3dbbf7c3, at CodeSha256 W+UPxMWbyAS0tFNdlBQxKBcGBM7juAS8W3VN0og3oRA=, RevisionId 9fa0f26f-4edd-4302-bfef-742331676253, /health and /db-health 200; production apply run 40968414068 on main 9aca421b7d07f3abe216d42eef10ff94a4031be7, concluded success; afterwards CodeSha256 4e6dvxyx0iZCxFv2TXKfnBfK/ifSDOjNSO88TsjQkGc=, RevisionId a8120c77-be64-47ee-b063-48c1ca7e914b, LastModified 2026-10-29T22:47:20Z, /health 200. Main then moved from 9aca421b7 to 864d9f6c7b755f306f8507c0d6d76b461c02d732 (other workstreams' commits); git diff 9aca421b7 864d9f6c7 on the plan and on storage.mjs, signature-submit.mjs and homeowner.mjs is empty, so their rows and bytes are those the staging acceptances took. storage.mjs 0f7c1b3e -> df96755d on \"DEPLOY storage.mjs TO PRODUCTION\" (owner, 2026-10-30): staging inspect run 40967052945, staging apply run 40967459787 (the staging acceptance); production inspect run 40979333544 READY on main 864d9f6c7; production apply run 40979415490 on main 864d9f6c7, concluded success; afterwards CodeSha256 B4h1ZVou+AoQovdZtHhtZQhac4etjazRWYhyOkvIhvs=, RevisionId 81e0dd3a-d104-4623-aedb-c2b6e52200b5, LastModified 2026-10-30T00:24:25Z. signature-submit.mjs 24845b4c -> 72711f54 on \"DEPLOY signature-submit.mjs TO PRODUCTION\" (owner, 2026-10-30): staging inspect run 40967123784, staging apply run 40967667465 (the staging acceptance; an earlier staging apply run 40967570329 was refused at input validation before any AWS call because the operator passed a malformed expected hash); production inspect run 40979528749 READY; production apply run 40979609965 on main 864d9f6c7, concluded success; afterwards CodeSha256 7B96l1qNxIIgLI6FExNmZFeD5n4oaTpveRCR/Om57Uw=, RevisionId cc283c17-72f7-4c05-b6ad-2e51f1c0c881, LastModified 2026-10-30T00:26:13Z. homeowner.mjs ea522429 -> d7117e18 on \"DEPLOY homeowner.mjs TO PRODUCTION\" (owner, 2026-10-30): staging inspect run 40967195993, staging apply run 40967780612 (the staging acceptance); production inspect run 40979705061 READY; production apply run 40979800002 on main 864d9f6c7, concluded success; afterwards CodeSha256 T2y60mG7PWGRUltrOxHuDNeyh56059o1/xc2ERFj+gc=, RevisionId d9535b87-2590-46c2-baa1-c95e7e7a00ac, LastModified 2026-10-30T00:28:04Z, LastUpdateStatus Successful. Each apply run's success requires its \"Verify live member is the accepted bytes\" step; the apply run logs were not read in full, so each run's own inspect block, receipt and verify output were not read. The after identities (CodeSha256, RevisionId, LastModified) were read with lambda:GetFunctionConfiguration right after each apply run, not from the run logs. Each member's sha256 is derived from main's LF bytes and equals the planning manifest's accepted_sha256. The rows record the applied bytes as live_sha256 and accepted_sha256 and chain to the manifest that planned them (previous_manifest), which keeps the pre-apply state. No rebuild inspect followed, so the live package is not compared with a candidate zip of main.",
+  "members": {
+    "homeowner-signing-integration.mjs": {
+      "live_sha256": "f3d3575cec17e2483a9dec700ee03d7852764f4b3bf21693f2e02229916adb23",
+      "accepted_sha256": "f3d3575cec17e2483a9dec700ee03d7852764f4b3bf21693f2e02229916adb23",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-homeowner-portal-signing-manifest-2026-10-29.json"
+    },
+    "storage.mjs": {
+      "live_sha256": "df96755de5a42d754fd24e95defd9cb25f082ac72b11952537661413941b8d76",
+      "accepted_sha256": "df96755de5a42d754fd24e95defd9cb25f082ac72b11952537661413941b8d76",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-homeowner-portal-signing-manifest-2026-10-29.json"
+    },
+    "signature-submit.mjs": {
+      "live_sha256": "72711f54bae8e39309b0c4eb0945f791a88c1df0423ae243e6ace034878de8bd",
+      "accepted_sha256": "72711f54bae8e39309b0c4eb0945f791a88c1df0423ae243e6ace034878de8bd",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-homeowner-portal-signing-manifest-2026-10-29.json"
+    },
+    "homeowner.mjs": {
+      "live_sha256": "d7117e18fb42efb0ab6cf2b1847b2d57f22878927ceda5155d4165dcd1f442a2",
+      "accepted_sha256": "d7117e18fb42efb0ab6cf2b1847b2d57f22878927ceda5155d4165dcd1f442a2",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-homeowner-portal-signing-manifest-2026-10-29.json"
+    }
+  }
+}
