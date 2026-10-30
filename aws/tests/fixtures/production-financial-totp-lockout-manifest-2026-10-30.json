@@ -1,0 +1,21 @@
+{
+  "workstream_id": "financial-totp-lockout",
+  "authorization": "Pending owner review (2026-10-30). Planning only: nothing is live or verified. The production apply still needs SQL 132 applied and recorded verified live in that environment (sql_before), its own staging acceptance and the owner's approval, one member per run.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Financial TOTP lockout (2026-10-30, SQL 132 aws/workflows/sql/132_financial_totp_code_check_lockout.sql; owner \"restart SQL 131 and the lockout fix\"): financial_totp_enrollments.failed_attempts and locked_until were never written, so the only bound on guessing an authenticator code was SQL 130's code_check rate limit (5 per 300 s per user, for ever). The accepted bytes of both members call the new SECURITY DEFINER financial_totp_count_code_check(uuid) once per code check, after the enrollment is read and before the code is compared, and commit the count (a wrong code rolls the request back): ten consecutive checks without a success lock the enrollment for 15 minutes, and while locked the check is refused before any comparison with the same answer as a wrong code (401 mfa_step_up_failed in auth-financial-totp.mjs, 401 code_rejected in checkalt-register.mjs; a locked enrollment no longer answers 429 rate_limited). A correct code still clears both columns through financial_totp_mark_verified (unchanged). Both members first ask the catalog whether the function exists (pg_catalog.to_regprocedure); where SQL 132 is not applied they count nothing and lock nothing, as before this change, and never answer 500. No new import: auth-financial-totp.mjs exports the SQL it sends; checkalt-register.mjs inlines the same SQL so it keeps deploying on its own. live_sha256 of each member is the bytes its applied record verified live on 2026-10-30 (auth-financial-totp.mjs db939888, production run 40992441506, finding 7; checkalt-register.mjs d011e50b, production run 41047251544, finding 13), the previous_manifest of each row. sql_before is SQL 132 for both: the overlay refuses either member until the SQL 132 record change marks it verified live; SQL 81 (checkalt-register.mjs's earlier sql_before) is live in both environments and still required by the bytes. A read-only production overlay inspect must confirm each live member before any apply.",
+  "members": {
+    "auth-financial-totp.mjs": {
+      "live_sha256": "db939888c6c0d237ee805ed3cd6924e2a8bef199ee76afa8fac2a8bd96687b91",
+      "accepted_sha256": "3edfea2a0328eda03466cad4c13c1075aa2a020c4164eee0564ade2dee06319b",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-totp-shared-rate-limit-applied-manifest-2026-10-30.json"
+    },
+    "providers/production/checkalt-register.mjs": {
+      "live_sha256": "d011e50b788cd019e5072d2258c5f7b4e4476e1d7d31f781d13f1f4c538e45fa",
+      "accepted_sha256": "bea07991f94e02e6de7ce1f724cef7d7833989ebe5e960b7025c0fbb4d97ee12",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-checkalt-account-change-stepup-applied-manifest-2026-10-30.json"
+    }
+  }
+}
