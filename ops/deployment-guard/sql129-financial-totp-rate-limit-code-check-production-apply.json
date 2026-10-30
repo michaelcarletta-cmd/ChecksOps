@@ -1,0 +1,64 @@
+{
+  "id": "sql129-financial-totp-rate-limit-code-check-production-apply",
+  "migration": "sql129",
+  "authorization": "pending",
+  "execute": false,
+  "target_environment": "production",
+  "target_component": "production-sql",
+  "deployment_type": "sql-apply",
+  "filename": "aws/workflows/sql/129_financial_totp_rate_limit_code_check.sql",
+  "migration_id": "129_financial_totp_rate_limit_code_check",
+  "staging_pin_commit": "b48a41b8dfd8629a677599f838cbe9dd56827f17",
+  "source_sha256": "7c4c5f8be1baf6acbdabd27884952c34fac729aea50c95d3bfb5fb8ba693905a",
+  "function_identities": [
+    "public.consume_financial_totp_rate_limit(uuid, text, integer, integer)"
+  ],
+  "expected_live_definition_sha256": null,
+  "intended_replacement_sha256": "8be5fa81be5451803fa2df179fd592862c69020ecdbe429a66834cec1e78b85e",
+  "authorization_phrase": "APPLY_FINANCIAL_TOTP_RATE_LIMIT_CODE_CHECK",
+  "predecessors": [],
+  "order_note": "No release-engine predecessor and no ordering constraint. SQL 129 replaces consume_financial_totp_rate_limit(uuid, text, integer, integer), created on the AWS databases from aws/migrations/proposed/NOT_APPLIED_20260911_financial_totp_enrollment.sql (on no release key). The spec prerequisites are the function, financial_totp_rate_limits with the columns the body writes, and role checksops; a read-only production inspect confirms them. The replaced function must be owned by the applying login (functions_owned_by_login), keep its TABLE result (function_results_match) and hold no EXECUTE grant other than PUBLIC, checksops and the owner (function_acl_replaceable). The file changes no grant, so the ACL after the apply is the ACL before it. The API change that sends 'code_check' (finding 7, auth-financial-totp.mjs and checkalt-register.mjs) is already live; this pin only makes the database accept it. No API, Lambda or SPA change is part of this pin. Adds no trigger.",
+  "admin_login": "checksops_admin",
+  "rds_identifier": "checksops-production",
+  "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
+  "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
+  "tooling": {
+    "status": "built",
+    "production_tool": "scripts/deployment-guard/sql129-financial-totp-rate-limit-code-check-production-apply.mjs",
+    "production_lib": "scripts/deployment-guard/lib/release-sql-production-apply.mjs",
+    "staging_executor_handler": "aws/write-path/guarded-sql-executor/index.mjs handleReleaseSqlMigration",
+    "staging_workflow_choice": "sql129-financial-totp-rate-limit-code-check",
+    "one_shot_migration": "sql129",
+    "fingerprint_engine": "scripts/deployment-guard/lib/release-sql-state.mjs",
+    "runbook": "ops/production-sql-129-apply.md",
+    "tests": [
+      "aws/tests/release-sql129-executor.test.mjs",
+      "aws/tests/release-sql129-production-apply.test.mjs",
+      "aws/tests/release-sql90-97-executor.test.mjs",
+      "aws/tests/release-sql90-97-production-apply.test.mjs",
+      "aws/tests/sql129-financial-totp-rate-limit-pg.test.mjs"
+    ],
+    "note": "Guarded tooling for SQL 129: sql129-financial-totp-rate-limit-code-check-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql129-financial-totp-rate-limit-code-check); production-sql-one-shot.mjs --migration sql129. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): the function with the file's body and attributes and EXECUTE for PUBLIC, checksops and the owner. The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
+  },
+  "production_inspect": {
+    "status": "pending",
+    "date": null,
+    "ssm_command_id": null,
+    "source_commit": null,
+    "read_only": true,
+    "connected_as": "checksops_admin",
+    "live_definition_sha256": null,
+    "apply_preconditions_met": null,
+    "precondition_failures": null,
+    "note": "Pending: no release-engine production inspect has been run for SQL 129 yet. The financial TOTP live inspect of 2026-10-30 (SSM cfee4512-4988-4fd1-be77-b03d1b4cd50b, main da064a34, scripts/deployment-guard/financial-totp-live-inspect.mjs) read the live function: prosrc sha256 0507b4474de7fb03ac843f44c2ad7bd06f603620905ab58b550d3b4e379b4d24, equal to the proposed file's, owner checksops_admin, SECURITY DEFINER, EXECUTE PUBLIC, checksops and the owner. Expected release-engine fingerprint of that state: 37d945da85fb51e1cf532806171c1477f8d3701e2e41ed3aa259f54c7baf97b2 (derived from the proposed file's bytes by aws/tests/release-sql129-executor.test.mjs and read back on PostgreSQL 16). Record the one-shot --phase inspect's date, SSM command id, source commit, live_definition_sha256, prerequisites_missing, release_sql_inspect.functions, release_sql_inspect.function_acl, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. Stop if prerequisites_missing is not [] or precondition_failures is not [] (functions_owned_by_login, function_results_match, function_acl_replaceable): that needs its own reviewed change."
+  },
+  "intended_post_state": {
+    "fingerprint": "8be5fa81be5451803fa2df179fd592862c69020ecdbe429a66834cec1e78b85e",
+    "note": "consume_financial_totp_rate_limit(uuid, text, integer, integer) owned by checksops_admin, plpgsql, VOLATILE, SECURITY DEFINER, search_path public, pg_temp, RETURNS TABLE(allowed boolean, count integer, retry_after_seconds integer), EXECUTE for PUBLIC, checksops and the owner (unchanged): the live body with the action allow-list 'enroll_start', 'enroll_confirm', 'step_up', 'code_check'. No other function, table, column, policy, RLS setting, grant, trigger or row change. The fingerprint is releaseIntendedHash('sql129', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): 8be5fa81be5451803fa2df179fd592862c69020ecdbe429a66834cec1e78b85e."
+  },
+  "staging_acceptance": {
+    "ok": false,
+    "reference": null,
+    "basis": "Pending: record the guarded staging SQL executor read-live (and, if staging is not yet at the intended state, the staging apply) of SQL 129 (choice sql129-financial-totp-rate-limit-code-check) here in the reviewed change that sets execute true. The behavior is covered on PostgreSQL 16 by aws/tests/sql129-financial-totp-rate-limit-pg.test.mjs. Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+  }
+}
