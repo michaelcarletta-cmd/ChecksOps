@@ -1,0 +1,36 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  ChecksOps staging browser security response headers policy with a report-only
+  Content-Security-Policy. Source-only definition: this template does not attach the
+  policy to any CloudFront behavior. Runbook: ops/security/SPA_CSP_ROLLOUT.md.
+
+Resources:
+  StagingBrowserSecurityHeadersPolicy:
+    Type: AWS::CloudFront::ResponseHeadersPolicy
+    Properties:
+      ResponseHeadersPolicyConfig:
+        Name: checksops-staging-browser-security-headers
+        Comment: Production baseline headers plus a report-only CSP (staging step 1).
+        SecurityHeadersConfig:
+          StrictTransportSecurity:
+            AccessControlMaxAgeSec: 31536000
+            IncludeSubdomains: true
+            Preload: false
+            Override: true
+          ContentTypeOptions:
+            Override: true
+          FrameOptions:
+            FrameOption: SAMEORIGIN
+            Override: true
+          ReferrerPolicy:
+            ReferrerPolicy: strict-origin-when-cross-origin
+            Override: true
+        CustomHeadersConfig:
+          Items:
+            - Header: Content-Security-Policy-Report-Only
+              Override: true
+              Value: "default-src 'self'; script-src 'self' 'sha256-ts3my6jAAjgd6WfZ3C3O2R2Lc8IrKeHMSIlUM6Sdsmg=' https://unpkg.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.s3.amazonaws.com https://*.s3.us-east-1.amazonaws.com; font-src 'self' data:; connect-src 'self' https://psr19uhop4.execute-api.us-east-1.amazonaws.com https://*.s3.amazonaws.com https://*.s3.us-east-1.amazonaws.com https://api.zippopotam.us https://unpkg.com data: blob:; frame-src 'self' blob: data: https://*.s3.amazonaws.com https://*.s3.us-east-1.amazonaws.com; worker-src 'self' blob: https://unpkg.com; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'"
+
+Outputs:
+  ResponseHeadersPolicyId:
+    Value: !Ref StagingBrowserSecurityHeadersPolicy
