@@ -412,7 +412,7 @@ test('resolveAuthorizedMigration is exact-match and never defaults to SQL 44', (
   assert.equal(isSql39({ filename: AUTHORIZED_SQL39.filename }), true);
   assert.equal(isSql40({ migration_id: AUTHORIZED_SQL40.migration_id }), true);
   // 24 reviewed pins plus the forty-two release 2026-10-17 pins (SQL 90-106, 108-132).
-  assert.equal(AUTHORIZED_STAGING_SQL.length, 65);
+  assert.equal(AUTHORIZED_STAGING_SQL.length, 66);
   assert.equal(isSql53AuthorizedMigration({
     filename: AUTHORIZED_SQL53.filename,
     migration_id: AUTHORIZED_SQL44.migration_id,
