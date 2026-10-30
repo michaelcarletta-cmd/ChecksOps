@@ -513,6 +513,20 @@
       "note": "Official production writer for the checksops-production-checkalt-status-schedule stack, run from guarded-production-checkalt-schedule.yml. Requires a production-checkalt-status-schedule cloudformation receipt + active lease + the production gate; create sends only the pinned template bytes with CAPABILITY_NAMED_IAM and the actor id, set-state only UpdateStack UsePreviousTemplate with ScheduleState; CAS-checks the whole signed snapshot before and immediately before the write, waits for the stack to settle, never retries or deletes, and verifies nothing else moved."
     },
     {
+      "path": "scripts/deployment-guard/github-production-onboarding-keys.mjs",
+      "classification": "SAFE",
+      "capabilities": [
+        "production-onboarding-keys-preflight"
+      ],
+      "note": "GitHub-hosted preflight for the production stack checksops-production-onboarding-keys. Checks the template bytes against the pinned sha256 and reads the stack, the two aliases with the keys they target (metadata, key policy, rotation, tags) and the prep Lambda configuration (RevisionId, role, FILES_BUCKET, the two KMS key variables); for create requires ABSENT, the inspect snapshot SHA-256, the exact approval phrase and a staging acceptance reference, then takes the production-onboarding-keys lease and issues a KMS-signed cloudformation receipt whose preflight fingerprint is the whole snapshot and whose owned components are the stack and its two aliases. Never writes AWS; production-onboarding-keys.mjs is the only writer."
+    },
+    {
+      "path": "scripts/deployment-guard/production-onboarding-keys.mjs",
+      "classification": "GUARDED",
+      "capabilities": ["cloudformation-create-stack"],
+      "note": "Official production writer for the checksops-production-onboarding-keys stack, run from guarded-production-onboarding-keys.yml. Requires a production-onboarding-keys cloudformation receipt + active lease + the production gate; sends only CreateStack with the pinned template bytes, no parameters, no capabilities, OnFailure DO_NOTHING; CAS-checks the whole signed snapshot before and immediately before the write, waits for the stack to settle, never retries, updates or deletes, and verifies both aliases target enabled, rotation-on keys whose key policies equal the template's and that the prep Lambda did not move."
+    },
+    {
       "path": "scripts/deployment-guard/lease.mjs",
       "classification": "GUARDED",
       "capabilities": ["lease"]

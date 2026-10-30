@@ -40,6 +40,16 @@ owner's approval (`ops/checkalt-status-reconcile-schedule.md`). Note that `iam:C
 do; only the receipt-gated writer, which sends the pinned template bytes, uses them, and the two
 create-only statements can be detached after the stack exists.
 
+It also runs `guarded-production-onboarding-keys.yml` (the stack
+`checksops-production-onboarding-keys`: the KMS keys for Compliance & Docs uploads and onboarding
+PII). Its statements (Sids `*OnboardingKeys*`) give CloudFormation describe/create on that one
+stack; `kms:CreateKey` (`Resource "*"`, which KMS requires) only for this account, a symmetric
+`ENCRYPT_DECRYPT` key, the request tag `checksops-stack=checksops-production-onboarding-keys`, and
+only through CloudFormation (`aws:CalledVia`); key policy, tag, rotation and alias writes only
+through CloudFormation, aliases only for the two alias names; key reads only on keys carrying that
+tag. No delete, disable, grant or cryptographic right. They are not on the live role until an
+operator attaches them once, with the owner's approval (`ops/production-onboarding-keys.md`).
+
 The role trusts `environment:production` only. GitHub's OIDC subject for an
 environment job does not include the branch, so the `main`-only deployment branch
 rule on the environment is what stops a workflow on another branch from assuming
