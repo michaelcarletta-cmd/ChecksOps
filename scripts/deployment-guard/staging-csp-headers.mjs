@@ -107,13 +107,26 @@ export function desiredPolicyConfig(indexHtml, template = loadTemplatePolicy()) 
   };
 }
 
+const isEmptyObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length === 0;
+
+/**
+ * CloudFront echoes headers a policy does not set as empty objects (`XSSProtection: {}`,
+ * `ContentSecurityPolicy: {}`, run 41067994638); the template omits them. An empty section sets
+ * nothing, so it is dropped; a section with any field (an enforcing CSP included) is kept.
+ */
+function normalizeSecurityHeaders(section) {
+  if (!section) return null;
+  const kept = Object.fromEntries(Object.entries(section).filter(([, value]) => !isEmptyObject(value)));
+  return Object.keys(kept).length ? kept : null;
+}
+
 /** The parts of a policy config this tool owns; anything else set on the policy is drift. */
 export function normalizePolicyConfig(config) {
   if (!config) return null;
   return sortKeys({
     Name: config.Name,
     Comment: config.Comment || '',
-    SecurityHeadersConfig: config.SecurityHeadersConfig || null,
+    SecurityHeadersConfig: normalizeSecurityHeaders(config.SecurityHeadersConfig),
     CustomHeaders: (config.CustomHeadersConfig?.Items || []).map((item) => ({ Header: item.Header, Value: item.Value, Override: item.Override })),
     CorsConfig: config.CorsConfig || null,
     RemoveHeaders: config.RemoveHeadersConfig?.Quantity || 0,
