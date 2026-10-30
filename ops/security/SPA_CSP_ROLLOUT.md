@@ -19,8 +19,9 @@ Tests: `aws/tests/spa-csp.test.mjs`, `aws/tests/github-staging-csp-headers.test.
   `nosniff`, `strict-origin-when-cross-origin`); its CSP is empty ("CSP intentionally deferred").
 - Staging `E1CG52WRQZI7X1` (`staging.checksops.com`, origin `StagingSpaS3`): no response headers
   policy at all.
-- `index.html` sets only `<meta http-equiv="Content-Security-Policy" content="frame-ancestors 'self'">`,
-  which browsers ignore (`frame-ancestors` has no effect in a meta tag).
+- `index.html` used to set `<meta http-equiv="Content-Security-Policy" content="frame-ancestors 'self'">`,
+  which browsers ignore (`frame-ancestors` has no effect in a meta tag). Removed after the
+  2026-10-30 click-through; the header carries `frame-ancestors 'self'`.
 
 ## What the SPA loads (source inventory)
 
@@ -34,6 +35,9 @@ Tests: `aws/tests/spa-csp.test.mjs`, `aws/tests/github-staging-csp-headers.test.
   `pdfjs-dist/build/pdf.worker.min.mjs?url`, emitted as `assets/pdf.worker.min-<hash>.mjs`), so it
   always matches the pdf.js version react-pdf runs. Both SPA uploaders serve `.mjs` as
   `application/javascript`, which a module worker needs. It used to come from `https://unpkg.com`.
+- Tenant logos: `<img>` from the API's `/storage/public?bucket=tenant-logos&path=…`
+  (`getPublicUrl` in `src/integrations/aws/storage.ts`, `src/lib/brandingPublicUrl.ts`): the
+  execute-api host on staging (in `img-src` there), same-origin `/prep` on production.
 - ZIP lookups: `https://api.zippopotam.us` (`ContractorServiceAreaCard.tsx`).
 - Fonts: `@fontsource` files served from the SPA itself; PWA manifest and service worker from `'self'`.
 - Inline: one inline `<script>` in `index.html` (the hostname title script, allowed by its sha256)
@@ -74,6 +78,25 @@ Tests: `aws/tests/spa-csp.test.mjs`, `aws/tests/github-staging-csp-headers.test.
 4. **Production report-only**, then **production enforce**, on the production policy
    `756a8f23-…`, each on the owner's approval of that change.
 
+## Staging click-through (2026-10-30)
+
+Policy `d3f84b15-…` attached report-only (apply run 41067994638, confirmed `ATTACHED_CURRENT` by
+inspect run 41070941215). The owner used sign-in, checks, previews, deposits and wallet screens with
+the console open. CSP reports:
+
+1. `img-src`, 22 times: tenant logos from `https://psr19uhop4.execute-api.us-east-1.amazonaws.com/staging/storage/public?…tenant-logos…`.
+   Fixed: the staging API origin is in staging's `img-src`; production unchanged.
+2. "`frame-ancestors` is ignored when delivered via a `<meta>` element". Fixed: the meta tag is
+   removed from `index.html`.
+
+No other CSP reports. The 404s from `/storage/sign`, 401s, 409, 406 and 502 seen in the same
+session are API responses, not CSP.
+
+Order to apply: deploy the SPA to staging first (guarded staging SPA upload), then run
+`guarded-staging-csp-headers.yml` inspect (expect `ATTACHED_STALE`) and apply ("ATTACH REPORT-ONLY
+CSP TO STAGING"), which updates the policy in place. The inline-script hash is unchanged by this
+change, but the apply always builds from the live `index.html`.
+
 ## Rollback
 
 `guarded-staging-csp-headers.yml` with `mode: rollback` and the owner's words "DETACH CSP FROM
@@ -82,6 +105,4 @@ object stays. Report-only never blocks anything.
 
 ## Not done yet
 
-Nothing is attached or created: the staging tool has not run, and its IAM role
-(`ChecksOpsGitHubStagingCspHeaders`) does not exist yet (`ops/deployment-guard/STAGING_CSP_HEADERS.md`).
-No production change.
+Staging enforce, production report-only and production enforce. No production change.

@@ -83,3 +83,27 @@ test('the pdf.js worker is self-hosted: no unpkg anywhere in the policy, scripts
   }
   assert.equal(read(TEMPLATE_REL).includes('unpkg'), false);
 });
+
+test('2026-10-30 click-through: staging tenant logos load from the API, production stays same-origin', () => {
+  // Owner's console on staging (policy d3f84b15): 22 img-src reports for
+  // <STAGING_API_ORIGIN>/staging/storage/public?bucket=tenant-logos&path=... (getPublicUrl in
+  // src/integrations/aws/storage.ts, src/lib/brandingPublicUrl.ts).
+  const storage = read('src/integrations/aws/storage.ts');
+  assert.match(storage, /\$\{awsApiBaseUrl\(\)\}\/storage\/public\?bucket=/);
+  const staging = directive(buildCsp({ environment: 'staging', indexHtml: INDEX }), 'img-src');
+  const production = directive(buildCsp({ environment: 'production', indexHtml: INDEX }), 'img-src');
+  assert.ok(staging.includes(STAGING_API_ORIGIN));
+  assert.equal(production.some((s) => s.includes('execute-api')), false);
+  assert.deepEqual(production, ["'self'", 'data:', 'blob:', 'https://*.s3.amazonaws.com', 'https://*.s3.us-east-1.amazonaws.com']);
+  // Only images: frame-src stays without the API host in both environments.
+  for (const environment of ['staging', 'production']) {
+    assert.equal(directive(buildCsp({ environment, indexHtml: INDEX }), 'frame-src').some((s) => s.includes('execute-api')), false, environment);
+  }
+});
+
+test('index.html carries no CSP meta tag: frame-ancestors is ignored there and the header sets it', () => {
+  assert.equal(/http-equiv=["']Content-Security-Policy/i.test(INDEX), false);
+  for (const environment of ['staging', 'production']) {
+    assert.deepEqual(directive(buildCsp({ environment, indexHtml: INDEX }), 'frame-ancestors'), ["'self'"], environment);
+  }
+});
