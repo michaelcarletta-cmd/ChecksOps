@@ -1,5 +1,5 @@
 /**
- * Specs of the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108 to SQL 130) for the shared engine in
+ * Specs of the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108 to SQL 131) for the shared engine in
  * release-sql-state.mjs: what each pinned file creates, replaces or drops, the reviewed
  * EXECUTE ACLs, the prerequisites and predecessors, and the PostgreSQL renderings the file
  * leaves (policy expressions, view, column, constraint, index and trigger definitions as
@@ -5824,5 +5824,78 @@ export const RELEASE_SQL_SPECS = deepFreeze({
         ]
       }
     ]
+  },
+  // SQL 131 (owner 2026-10-30, "restart SQL 131 and the lockout fix"): EXECUTE revoked from PUBLIC on
+  // the four financial TOTP enrollment functions the API calls as checksops
+  // (financial_totp_upsert_enrollment, _get_enrollment, _mark_verified, _status), and granted to
+  // checksops (a no-op in both databases); nothing else. An ACL-only migration in SQL 103's and SQL 119's
+  // shape: acl_functions with grantors, no attributes (the bodies are not asserted; the post-condition
+  // acl_functions_otherwise_unchanged requires everything but the ACL unchanged). Production (read-only
+  // inspect SSM cfee4512) holds PUBLIC, checksops and the owner on each; staging's proposed-file load
+  // already revoked PUBLIC, so staging is expected to read as already in the intended state. Predecessor
+  // SQL 130 (the same PUBLIC revoke on consume_financial_totp_rate_limit, applied to both databases
+  // 2026-10-30): SQL 131 runs after it. SQL 130 is not touched.
+  sql131: {
+    "key": "sql131",
+    "label": "SQL 131",
+    "choice": "sql131-financial-totp-functions-no-public",
+    "production_pin_rel": "ops/deployment-guard/sql131-financial-totp-functions-no-public-production-apply.json",
+    "script": "sql131-financial-totp-functions-no-public-production-apply",
+    "prerequisites": [
+      "public.financial_totp_upsert_enrollment(uuid, bytea, bytea, text)",
+      "public.financial_totp_get_enrollment(uuid)",
+      "public.financial_totp_mark_verified(uuid, bigint)",
+      "public.financial_totp_status(uuid)",
+      "role checksops"
+    ],
+    "predecessors": [
+      "sql130"
+    ],
+    "functions": [],
+    "acl_functions": [
+      {
+        "identity": "public.financial_totp_upsert_enrollment(uuid, bytea, bytea, text)",
+        "acl": [
+          "checksops EXECUTE grantor=owner",
+          "owner EXECUTE grantor=owner"
+        ],
+        "revokes": [
+          "PUBLIC EXECUTE grantor=owner"
+        ]
+      },
+      {
+        "identity": "public.financial_totp_get_enrollment(uuid)",
+        "acl": [
+          "checksops EXECUTE grantor=owner",
+          "owner EXECUTE grantor=owner"
+        ],
+        "revokes": [
+          "PUBLIC EXECUTE grantor=owner"
+        ]
+      },
+      {
+        "identity": "public.financial_totp_mark_verified(uuid, bigint)",
+        "acl": [
+          "checksops EXECUTE grantor=owner",
+          "owner EXECUTE grantor=owner"
+        ],
+        "revokes": [
+          "PUBLIC EXECUTE grantor=owner"
+        ]
+      },
+      {
+        "identity": "public.financial_totp_status(uuid)",
+        "acl": [
+          "checksops EXECUTE grantor=owner",
+          "owner EXECUTE grantor=owner"
+        ],
+        "revokes": [
+          "PUBLIC EXECUTE grantor=owner"
+        ]
+      }
+    ],
+    "render": {
+      "grantors": true
+    }
   },
 });

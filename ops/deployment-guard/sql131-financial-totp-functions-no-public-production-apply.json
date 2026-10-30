@@ -1,0 +1,69 @@
+{
+  "id": "sql131-financial-totp-functions-no-public-production-apply",
+  "migration": "sql131",
+  "authorization": "pending",
+  "execute": false,
+  "target_environment": "production",
+  "target_component": "production-sql",
+  "deployment_type": "sql-apply",
+  "filename": "aws/workflows/sql/131_financial_totp_functions_no_public.sql",
+  "migration_id": "131_financial_totp_functions_no_public",
+  "staging_pin_commit": "a532b0d1f367c7528d9628b988881427a21e2eb2",
+  "source_sha256": "e7b5a8dfb70fda9226356a463ff25acf373a7c891321f55a53d8a92051546217",
+  "function_identities": [
+    "public.financial_totp_upsert_enrollment(uuid, bytea, bytea, text)",
+    "public.financial_totp_get_enrollment(uuid)",
+    "public.financial_totp_mark_verified(uuid, bigint)",
+    "public.financial_totp_status(uuid)"
+  ],
+  "expected_live_definition_sha256": null,
+  "intended_replacement_sha256": "a661533320d9b391cc9b5c5f2fade5632801060693a5205c4bf8391702fe90c7",
+  "authorization_phrase": "REVOKE_FINANCIAL_TOTP_PUBLIC_EXECUTE",
+  "predecessors": [
+    "sql130"
+  ],
+  "order_note": "Predecessor SQL 130 (aws/workflows/sql/130_financial_totp_rate_limit_code_check_no_public.sql, applied to staging and production on 2026-10-30): the inspect reports predecessors.sql130 true only while consume_financial_totp_rate_limit(uuid, text, integer, integer) is in SQL 130's intended state, which it is in both databases. SQL 131 does not read or change that function; the predecessor records the order the owner chose (SQL 130 first, then SQL 131: 'restart SQL 131 and the lockout fix', 2026-10-30). SQL 131 sets only the EXECUTE ACL of the four financial TOTP enrollment functions created on the AWS databases from aws/migrations/proposed/NOT_APPLIED_20260911_financial_totp_enrollment.sql (on no release key): financial_totp_upsert_enrollment(uuid, bytea, bytea, text), financial_totp_get_enrollment(uuid), financial_totp_mark_verified(uuid, bigint) and financial_totp_status(uuid). Production (read-only financial TOTP live inspect 2026-10-30, SSM cfee4512-4988-4fd1-be77-b03d1b4cd50b) holds EXECUTE for PUBLIC, checksops and the owner on each; the file revokes PUBLIC and grants checksops (already granted), so the ACL after is checksops and the owner. Each function must exist and be owned by the applying login (acl_functions_present, acl_functions_owned_by_login) and hold no EXECUTE entry other than checksops and the owner, which the file keeps, and PUBLIC, which it revokes, each granted by the owner (acl_functions_acl_replaceable). The only callers are the API Lambda (aws/functions/api/auth-financial-totp.mjs: all four; providers/production/checkalt-register.mjs: get_enrollment and mark_verified), which connects as checksops (data.mjs withIdentity, db-health.mjs EXPECTED_APPLICATION_ROLE checksops), so no caller loses access; no SQL function, view, policy or trigger calls them. No API, Lambda or SPA change is part of this pin. Adds no trigger.",
+  "admin_login": "checksops_admin",
+  "rds_identifier": "checksops-production",
+  "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
+  "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
+  "tooling": {
+    "status": "built",
+    "production_tool": "scripts/deployment-guard/sql131-financial-totp-functions-no-public-production-apply.mjs",
+    "production_lib": "scripts/deployment-guard/lib/release-sql-production-apply.mjs",
+    "staging_executor_handler": "aws/write-path/guarded-sql-executor/index.mjs handleReleaseSqlMigration",
+    "staging_workflow_choice": "sql131-financial-totp-functions-no-public",
+    "one_shot_migration": "sql131",
+    "fingerprint_engine": "scripts/deployment-guard/lib/release-sql-state.mjs",
+    "runbook": "ops/production-sql-131-apply.md",
+    "tests": [
+      "aws/tests/release-sql131-executor.test.mjs",
+      "aws/tests/release-sql131-production-apply.test.mjs",
+      "aws/tests/release-sql90-97-executor.test.mjs",
+      "aws/tests/release-sql90-97-production-apply.test.mjs",
+      "aws/tests/sql131-financial-totp-functions-pg.test.mjs"
+    ],
+    "note": "Guarded tooling for SQL 131: sql131-financial-totp-functions-no-public-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql131-financial-totp-functions-no-public); production-sql-one-shot.mjs --migration sql131. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): the four functions' EXECUTE ACLs with grantors (spec acl_functions, render.grantors, no attributes), checksops and the owner on each. The post-conditions also require each function's body, attributes and owner unchanged (acl_functions_otherwise_unchanged). The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
+  },
+  "production_inspect": {
+    "status": "pending",
+    "date": null,
+    "ssm_command_id": null,
+    "source_commit": null,
+    "read_only": true,
+    "connected_as": "checksops_admin",
+    "live_definition_sha256": null,
+    "apply_preconditions_met": null,
+    "precondition_failures": null,
+    "note": "Pending: no release-engine production inspect has been run for SQL 131 yet. The financial TOTP live inspect of 2026-10-30 (SSM cfee4512-4988-4fd1-be77-b03d1b4cd50b, main da064a34, scripts/deployment-guard/financial-totp-live-inspect.mjs) read the four functions: owner checksops_admin, SECURITY DEFINER, search_path public, pg_temp, bodies equal to the proposed file's, EXECUTE for PUBLIC, checksops and the owner. Expected release-engine fingerprint of that state under sql131: 99d9e8e925ca8c5b56e11409f145e2d75de2759c27d8fd1b476494ffc62e2eaa (derived from the spec by aws/tests/release-sql131-executor.test.mjs and read back on PostgreSQL 16), with each entry granted by the owner. Record the one-shot --phase inspect's date, SSM command id, source commit, live_definition_sha256, prerequisites_missing, predecessors (sql130 must be true), release_sql_inspect.acl_functions (each function's state and ACL with grantors), precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. Stop if prerequisites_missing is not [] or precondition_failures is not [] (predecessors_applied, acl_functions_present, acl_functions_owned_by_login, acl_functions_acl_replaceable: an entry for another grantee, granted by another role or with grant option): that needs its own reviewed change. If already_applied is true, stop too: production is not expected to be in the intended state."
+  },
+  "intended_post_state": {
+    "fingerprint": "a661533320d9b391cc9b5c5f2fade5632801060693a5205c4bf8391702fe90c7",
+    "note": "public.financial_totp_upsert_enrollment(uuid, bytea, bytea, text), public.financial_totp_get_enrollment(uuid), public.financial_totp_mark_verified(uuid, bigint) and public.financial_totp_status(uuid): EXECUTE for checksops and the owner on each (checksops EXECUTE grantor=owner, owner EXECUTE grantor=owner); PUBLIC holds nothing on them. Their bodies, language, SECURITY DEFINER, search_path, result types and owner (checksops_admin) are unchanged; so is consume_financial_totp_rate_limit (SQL 130's). No other function, table, column, policy, RLS setting, grant, trigger or row change. The same state is reached from production's pre-state (PUBLIC granted) and is staging's expected current state (no PUBLIC: already_applied true). The fingerprint is releaseIntendedHash('sql131', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): a661533320d9b391cc9b5c5f2fade5632801060693a5205c4bf8391702fe90c7."
+  },
+  "staging_acceptance": {
+    "ok": false,
+    "reference": null,
+    "basis": "Pending: record the guarded staging SQL executor read-live (and, if staging is not yet at the intended state, the staging apply) of SQL 131 (choice sql131-financial-totp-functions-no-public) here in the reviewed change that sets execute true. Staging is expected to read as already in the intended state (the proposed-file load there revoked PUBLIC, as SQL 130's read-live run 41087643551 showed for the fifth function); then the read-live run is the staging acceptance and no staging apply is run, as for SQL 119. The behavior is covered on PostgreSQL 16 by aws/tests/sql131-financial-totp-functions-pg.test.mjs from both pre-states. Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+  }
+}
