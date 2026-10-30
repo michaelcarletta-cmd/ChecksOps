@@ -46,7 +46,32 @@ with the orphan function, derived from the supabase bytes), `already_applied` fa
 `precondition_failures` `[]`. Recorded in the staging pin (`expected_live_definition_sha256`,
 `execute: true`, wave 27) under the owner's words of 2026-10-30, "start SQL 128 staging".
 
-**Status:** staging pin execute-authorized (wave 27); nothing applied yet; production pin pending.
+**Staging apply (2026-10-30).** Run 41045591568 (main `b809a69`, on the executor deployed by run 41045243433,
+`7QfEFTsi…`; workstream `github-staging-sql-41045591568`): receipt before
+`8bd6b42d189ff05b77e19d178ddba0229a0d2b6bca0a2d1d98221774fa8fbc5f`, after
+`ba4dcb2e43c233adf6109e5a89e7d6319dc993babcf3dbdcdfee261e6a33fbd7` (intended), result `applied`. Read-live
+run 41046074638: `already_applied` true, live `ba4dcb2e…`.
+
+**Production inspect (2026-10-30).** Read-only `--inspect` through SSM
+`54ccb458-4942-4bb9-9bdc-c3e06a6aad0a` on `i-0c35557c4e5385406`, main `c19b0444a` (tarball sha256
+`72f7c3a6f25d64eb0a699182557a8aec2119e01b6205fb0eeeda2c9c262aeacf`, transfer run 41048447302, migration
+source `19d5ea14…` == pin), connected as `checksops_admin`: `contractor_verification_status(uuid)`
+`different` (`function_acl` `PUBLIC EXECUTE`, `checksops EXECUTE` and `owner EXECUTE`),
+`_trg_recompute_contractor_tier_from_docs()` present with no dependents or callers; every prerequisite
+present; live `127bf5da500b4e5975686249b373ab0913f370ce5557292c5c49394e0ad775e8`, `already_applied` false,
+`precondition_failures` `[]`. Production's pre-state differs from staging's (`8bd6b42d…`) only by an
+EXECUTE grant to `checksops` on both functions: `127bf5da…` is the restored pre-state with the orphan
+function and EXECUTE for `PUBLIC`, `checksops` and the owner on both, derived from the supabase bytes by
+`aws/tests/release-sql128-executor.test.mjs`, which also reads it back from PostgreSQL 16 and applies
+from it to `ba4dcb2e…`. `function_acl_replaceable` allows the grant, and the file keeps `checksops` and
+revokes `PUBLIC`, so the intended state is the same. Recorded in the production pin with the staging
+apply as its staging acceptance and `execute: true` under the owner's words of 2026-10-30, "Start SQL
+128 production" and "SQL 128 from the production state". The owner merges the pin change; the apply
+still needs the owner's run-time approval and runs only after that merge is on main and staged. Runner
+state: the runner was started for this inspect at 2026-10-30 11:30:53 UTC and stopped again at 11:32:17
+UTC.
+
+**Status:** applied to staging (wave 27); production pin execute-authorized; not applied to production.
 
 ## Fingerprint
 

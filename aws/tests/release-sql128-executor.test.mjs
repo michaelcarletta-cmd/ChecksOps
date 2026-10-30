@@ -4,7 +4,8 @@
  * release-sql90-97-executor.test.mjs runs what every release key shares (SQL 128 included); this
  * file covers what is new:
  *
- *   - the pin: staging-authorized from its read-live (wave 27), code-derived, selectable, packed, in step with the production pin; the
+ *   - the pin: staging-authorized from its read-live (wave 27), code-derived, selectable, packed, in step with the production pin
+ *     (execute true on production's own pre-state, derived from bytes); the
  *     pinned commit authored the bytes; no predecessor;
  *   - the file and spec: contractor_verification_status(uuid) replaced, its body the supabase
  *     migration's with only the two document checks changed (helpers/sql128-contractor-verification-
@@ -71,6 +72,8 @@ const KEY = 'sql128';
 const FOR_CHECKSOPS = Object.freeze(['checksops EXECUTE', 'owner EXECUTE']);
 const REVOKES = Object.freeze(['PUBLIC EXECUTE', 'anon EXECUTE', 'authenticated EXECUTE', 'service_role EXECUTE']);
 const RESTORED_ACL = Object.freeze(['PUBLIC EXECUTE', 'owner EXECUTE']);
+// Production's pre-state (read-only inspect of 2026-10-30): the restored ACL plus EXECUTE for checksops.
+const PRODUCTION_ACL = Object.freeze(['PUBLIC EXECUTE', 'checksops EXECUTE', 'owner EXECUTE']);
 const sha = (text) => createHash('sha256').update(text).digest('hex');
 const TEXT = fs.readFileSync(path.join(ROOT, PINS[KEY].filename), 'utf8');
 const FILES = Object.freeze(Object.fromEntries(RELEASE_SQL_KEYS.map((key) => [key, path.join(ROOT, PINS[key].filename)])));
@@ -193,9 +196,18 @@ test('pin: SQL 128 staging-authorized from its read-live, code-derived, selectab
   assert.equal(prod.staging_pin_commit, pin.commit);
   assert.equal(prod.source_sha256, pin.source_sha256);
   assert.deepEqual(prod.predecessors, []);
-  assert.equal(prod.execute, false);
-  assert.equal(prod.authorization, 'pending');
-  assert.equal(prod.expected_live_definition_sha256, null);
+  // Production pin execute-authorized (owner-approved pin change of 2026-10-30) on the staging apply. Its
+  // pre-state is production's own (read-only inspect SSM 54ccb458): the restored state with an extra
+  // EXECUTE grant to checksops on both functions, derived here from the supabase bytes.
+  assert.equal(prod.execute, true);
+  assert.match(prod.authorization, /^Owner approved 2026-10-30 /);
+  assert.equal(prod.expected_live_definition_sha256, '127bf5da500b4e5975686249b373ab0913f370ce5557292c5c49394e0ad775e8');
+  assert.equal(prod.expected_live_definition_sha256, prod.production_inspect.live_definition_sha256);
+  assert.notEqual(prod.expected_live_definition_sha256, pin.expected_live_definition_sha256);
+  assert.notEqual(prod.expected_live_definition_sha256, prod.intended_replacement_sha256);
+  const productionRestored = restoredState();
+  for (const fn of Object.values(productionRestored.functions)) fn.acl = [...PRODUCTION_ACL];
+  assert.equal(releaseStateHash(KEY, productionRestored), prod.expected_live_definition_sha256);
   let bytes = null;
   if (/^[0-9a-f]{40}$/.test(pin.commit)) {
     try {
@@ -298,7 +310,7 @@ test('reviewed file and spec: the supabase body with only the two document check
   assert.deepEqual(releaseSharedPostconditionFailures(KEY, {}, after({ live_definition_sha256: 'f'.repeat(64) }), PINS[KEY]), ['intended_state']);
 });
 
-test('PostgreSQL 16: SQL 128 through the executor: the restored state as derived; refused while the function is missing, owned by another role or granted beyond the revoked roles; a pending pin cannot apply; one apply on the intended fingerprint, then already in place', { timeout: 600000 }, async (t) => {
+test('PostgreSQL 16: SQL 128 through the executor: the restored state as derived; refused while the function is missing, owned by another role or granted beyond the revoked roles; production\'s pre-state as recorded, any other refused; a pending pin cannot apply; one apply from it on the intended fingerprint, then already in place', { timeout: 600000 }, async (t) => {
   const reason = pgSkipReason();
   if (reason) {
     t.skip(reason);
@@ -369,20 +381,35 @@ test('PostgreSQL 16: SQL 128 through the executor: the restored state as derived
     await fx.admin.query('REVOKE EXECUTE ON FUNCTION public.contractor_verification_status(uuid) FROM reporting; DROP ROLE reporting');
     assert.equal(await body(), restoredBody);
 
-    // EXECUTE for authenticated (the supabase grant, a role the file revokes): allowed.
+    // EXECUTE for authenticated (the supabase grant, a role the file revokes): allowed; revoked again.
     await fx.admin.query('GRANT EXECUTE ON FUNCTION public.contractor_verification_status(uuid) TO authenticated');
     const wider = await inspect();
     assert.deepEqual(wider.precondition_failures, [], JSON.stringify(wider.release_sql_inspect));
     assert.notEqual(wider.live_definition_sha256, r.live_definition_sha256);
+    await fx.admin.query('REVOKE EXECUTE ON FUNCTION public.contractor_verification_status(uuid) FROM authenticated');
+
+    // Production's pre-state (read-only inspect of 2026-10-30): the restored state plus EXECUTE for
+    // checksops on both functions. The inspect reads the production pin's recorded pre-state.
+    await fx.admin.query(`GRANT EXECUTE ON FUNCTION public.contractor_verification_status(uuid) TO checksops;
+      GRANT EXECUTE ON FUNCTION public._trg_recompute_contractor_tier_from_docs() TO checksops`);
+    const production = await inspect();
+    assert.deepEqual(production.precondition_failures, [], JSON.stringify(production.release_sql_inspect));
+    assert.deepEqual(production.release_sql_inspect.prerequisites_missing, []);
+    assert.equal(production.already_applied, false);
+    assert.equal(production.live_definition_sha256, productionPin().expected_live_definition_sha256);
+    assert.notEqual(production.live_definition_sha256, r.live_definition_sha256);
+    // Any other recorded pre-state is refused: staging's, the authenticated grant's.
+    assert.equal((await apply(r.live_definition_sha256)).code, CODES.DEPLOYMENT_COLLISION);
+    assert.equal((await apply(wider.live_definition_sha256)).code, CODES.DEPLOYMENT_COLLISION);
     // A pending pin cannot apply (the committed pin is staging-authorized, so pend a copy).
     const pendingCopy = pendingPin(PINS[KEY]);
-    const pending = await handlerFor(connect, { pins: { [KEY]: pendingCopy } })(releaseEvent({ pin: pendingCopy, expected_live_definition_sha256: wider.live_definition_sha256 }));
+    const pending = await handlerFor(connect, { pins: { [KEY]: pendingCopy } })(releaseEvent({ pin: pendingCopy, expected_live_definition_sha256: production.live_definition_sha256 }));
     assert.equal(pending.ok, false);
     assert.equal(await body(), restoredBody);
 
-    const applied = await apply(wider.live_definition_sha256);
+    const applied = await apply(production.live_definition_sha256);
     assert.equal(applied.ok, true, JSON.stringify(applied));
-    assert.equal(applied.details.receipt.before_hash, wider.live_definition_sha256);
+    assert.equal(applied.details.receipt.before_hash, production.live_definition_sha256);
     assert.equal(applied.details.receipt.after_hash, PINS[KEY].intended_replacement_sha256);
     const after = await inspect();
     assert.equal(after.already_applied, true);
@@ -394,7 +421,7 @@ test('PostgreSQL 16: SQL 128 through the executor: the restored state as derived
         to_regprocedure('public._trg_recompute_contractor_tier_from_docs()') IS NULL AS docs_dropped
       FROM pg_catalog.pg_proc p WHERE p.oid = $1::regprocedure`, [STATUS_IDENTITY])).rows[0];
     assert.deepEqual(row, { owner: 'checksops_admin', prosecdef: true, provolatile: 's', checksops: true, authenticated: false, docs_dropped: true });
-    assert.equal((await apply(wider.live_definition_sha256)).code, CODES.UNRELATED_MUTATION);
+    assert.equal((await apply(production.live_definition_sha256)).code, CODES.UNRELATED_MUTATION);
   } finally {
     await fx.close();
   }
