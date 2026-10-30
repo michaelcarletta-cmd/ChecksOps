@@ -135,6 +135,11 @@ const WORKFLOW_PRE = 'c7159c4d9a74342f2a0f59a2836def78376c84d2781bbeb56dbb35ba83
 const MORTGAGE_DESK_PRE = Object.freeze(Object.fromEntries(Object.entries(JSON.parse(fs.readFileSync(path.join(ROOT, 'aws/tests/fixtures/production-mortgage-desk-return-manifest-2026-10-27.json'), 'utf8')).members)
   .filter(([, row]) => row.operation === 'replace').map(([name, row]) => [name, row.live_sha256])));
 const mortgageDeskPre = (plan) => { for (const [name, pre] of Object.entries(MORTGAGE_DESK_PRE)) plan.members[name].expected_live_sha256 = pre; return plan; };
+// auth-financial-totp.mjs records its applied TOTP shared rate limit bytes live (production run 40992441506,
+// 2026-10-30): every apply replay of it starts from the pre-apply live bytes (ccfe06bb, the planning
+// manifest's live_sha256).
+const TOTP_PRE = JSON.parse(fs.readFileSync(path.join(ROOT, 'aws/tests/fixtures/production-totp-shared-rate-limit-manifest-2026-10-30.json'), 'utf8')).members['auth-financial-totp.mjs'].live_sha256;
+const totpPre = (plan) => { plan.members['auth-financial-totp.mjs'].expected_live_sha256 = TOTP_PRE; return plan; };
 const SQL121_FILE = 'aws/workflows/sql/121_cash_jobs_production_grants.sql';
 const WORKFLOW_PRE_PLAN = (() => {
   const plan = structuredClone(PLAN);
@@ -147,6 +152,7 @@ function applyDeps(member, liveOpts = {}) {
   if (member === 'providers.mjs' && liveOpts.sha256 === undefined) liveOpts = { ...liveOpts, sha256: PROVIDERS_PRE };
   if (member === 'workflow.mjs' && liveOpts.plan === undefined) liveOpts = { ...liveOpts, plan: WORKFLOW_PRE_PLAN };
   if (Object.hasOwn(MORTGAGE_DESK_PRE, member) && liveOpts.plan === undefined) liveOpts = { ...liveOpts, plan: mortgageDeskPre(structuredClone(PLAN)) };
+  if (member === 'auth-financial-totp.mjs' && liveOpts.plan === undefined) liveOpts = { ...liveOpts, plan: totpPre(structuredClone(PLAN)) };
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'prod-overlay-'));
   fs.mkdirSync(path.join(root, 'ops/deployment-guard'), { recursive: true });
   fs.mkdirSync(path.join(root, 'aws/functions/api'), { recursive: true });
@@ -188,7 +194,7 @@ const applyEnv = (member, extra = {}) => ({
   ...ENV,
   CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'apply',
   CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: member,
-  CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: (member === 'providers.mjs' ? PROVIDERS_PRE : member === 'workflow.mjs' ? WORKFLOW_PRE : MORTGAGE_DESK_PRE[member] ?? PLAN.members[member].expected_live_sha256) || '',
+  CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: (member === 'providers.mjs' ? PROVIDERS_PRE : member === 'workflow.mjs' ? WORKFLOW_PRE : member === 'auth-financial-totp.mjs' ? TOTP_PRE : MORTGAGE_DESK_PRE[member] ?? PLAN.members[member].expected_live_sha256) || '',
   CHECKSOPS_STAGING_ACCEPTANCE_REFERENCE: ACCEPTANCE,
   CHECKSOPS_PRODUCTION_APPROVAL: approvalPhrase(member),
   ...extra,
@@ -3852,9 +3858,10 @@ test('Billing apply-event staging only (finding 6): tenant-billing-handlers.mjs 
   assert.match(fs.readFileSync(path.join(API, MEMBER), 'utf8'), /error: 'apply_event_staging_only'/);
 });
 
-test('TOTP shared rate limit (finding 7): auth-financial-totp.mjs REPLACE from the bytes inspect run 40990003881 found live, planning only', async () => {
+test('TOTP shared rate limit (finding 7): auth-financial-totp.mjs REPLACE from the bytes inspect run 40990003881 found live, applied 2026-10-30', async () => {
   const MEMBER = 'auth-financial-totp.mjs';
   const REL = 'aws/tests/fixtures/production-totp-shared-rate-limit-manifest-2026-10-30.json';
+  const APPLIED_REL = 'aws/tests/fixtures/production-totp-shared-rate-limit-applied-manifest-2026-10-30.json';
   const PREVIOUS = 'aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json';
   // The release-2026-10-17 bytes, which read-only production overlay inspect run 40990003881 reported
   // live (ALREADY_ACCEPTED); the row had still expected c625e8c2.
@@ -3862,6 +3869,7 @@ test('TOTP shared rate limit (finding 7): auth-financial-totp.mjs REPLACE from t
   const STALE = 'c625e8c2b0efa5a5093c983bcd89f3660f017e22d8143bd6a2b4d88df9ab4c4d';
   const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, REL), 'utf8'));
   const accepted = sha(`aws/functions/api/${MEMBER}`);
+  // The planning manifest keeps the pre-apply state.
   assert.equal(manifest.workstream_id, 'totp-shared-rate-limit');
   assert.equal(manifest.deploy_authorized, false);
   assert.match(manifest.authorization, /^Pending owner review/);
@@ -3871,19 +3879,36 @@ test('TOTP shared rate limit (finding 7): auth-financial-totp.mjs REPLACE from t
   const previous = JSON.parse(fs.readFileSync(path.join(ROOT, PREVIOUS), 'utf8')).members[MEMBER];
   assert.equal(previous.accepted_sha256, LIVE);
   assert.equal(previous.live_sha256, STALE);
-  assert.deepEqual(PLAN.members[MEMBER], { operation: 'replace', accepted_sha256: accepted, expected_live_sha256: LIVE, sql_before: null, manifest: REL });
   assert.ok(PLAN.notes.includes(`TOTP shared rate limit (2026-10-30, finding 7): REPLACE ${MEMBER} ${LIVE.slice(0, 8)} -> ${accepted.slice(0, 8)}`));
+  // Applied 2026-10-30 (production run 40992441506): the record names the run and the verified state.
+  const applied = JSON.parse(fs.readFileSync(path.join(ROOT, APPLIED_REL), 'utf8'));
+  assert.equal(applied.workstream_id, 'totp-shared-rate-limit-applied');
+  assert.equal(applied.deploy_authorized, false);
+  assert.match(applied.authorization, /^Record only/);
+  for (const evidence of ['run 40992081009', 'run 40992267013', 'run 40992293311', 'run 40992441506', 'DEPLOY auth-financial-totp.mjs TO PRODUCTION', 'VERIFIED', 'AIwLrEimESQenf3Su3uCVRuLDy1NVpoo/fxqvzChVx0=', '17808565-859e-46d2-bad5-51d89a3bb5ed', 'Not verified']) {
+    assert.ok(applied.notes.includes(evidence), evidence);
+  }
+  assert.deepEqual(applied.members, { [MEMBER]: { live_sha256: accepted, accepted_sha256: accepted, operation: 'replace', previous_manifest: REL } });
+  assert.deepEqual(PLAN.members[MEMBER], { operation: 'replace', accepted_sha256: accepted, expected_live_sha256: accepted, sql_before: null, manifest: APPLIED_REL });
+  assert.ok(PLAN.notes.includes('TOTP shared rate limit applied 2026-10-30 (production run 40992441506'));
   assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
   const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
-  const ready = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: LIVE }) });
+  // Before the apply, the planned row read READY on the bytes production held.
+  const before = structuredClone(PLAN);
+  before.members[MEMBER] = { ...before.members[MEMBER], expected_live_sha256: LIVE, manifest: REL };
+  const ready = await run(inspect, { root: ROOT, plan: before, inspectLive: liveFor(MEMBER, { plan: before, sha256: LIVE }) });
   assert.equal(ready.state, 'READY');
   assert.equal(ready.mutation, false);
-  const done = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: accepted }) });
+  const done = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER) });
   assert.equal(done.state, 'ALREADY_ACCEPTED');
-  // The stale expectation is no longer an accepted live state.
-  await assert.rejects(
-    run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: STALE }) }),
-    (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
-  );
+  assert.equal(done.mutation, false);
+  // Neither the pre-apply bytes nor the stale expectation is an accepted live state any more.
+  for (const other of [LIVE, STALE, 'c'.repeat(64)]) {
+    await assert.rejects(
+      run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: other }) }),
+      (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+      other,
+    );
+  }
   assert.match(fs.readFileSync(path.join(API, MEMBER), 'utf8'), /export const TOTP_CODE_CHECK_RATE_ACTION = 'code_check';/);
 });
