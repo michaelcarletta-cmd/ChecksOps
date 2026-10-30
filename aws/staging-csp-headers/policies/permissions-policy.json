@@ -1,0 +1,70 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReadAndUpdateStagingDistributionOnly",
+      "Effect": "Allow",
+      "Action": [
+        "cloudfront:GetDistribution",
+        "cloudfront:UpdateDistribution"
+      ],
+      "Resource": "arn:aws:cloudfront::806168576068:distribution/E1CG52WRQZI7X1"
+    },
+    {
+      "Sid": "ListAndCreateResponseHeadersPolicies",
+      "Effect": "Allow",
+      "Action": [
+        "cloudfront:ListResponseHeadersPolicies",
+        "cloudfront:CreateResponseHeadersPolicy"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "ReadAndUpdateResponseHeadersPolicies",
+      "Effect": "Allow",
+      "Action": [
+        "cloudfront:GetResponseHeadersPolicy",
+        "cloudfront:UpdateResponseHeadersPolicy"
+      ],
+      "Resource": "arn:aws:cloudfront::806168576068:response-headers-policy/*"
+    },
+    {
+      "Sid": "NeverChangeTheProductionPolicy",
+      "Effect": "Deny",
+      "Action": [
+        "cloudfront:UpdateResponseHeadersPolicy",
+        "cloudfront:DeleteResponseHeadersPolicy"
+      ],
+      "Resource": "arn:aws:cloudfront::806168576068:response-headers-policy/756a8f23-68dd-4f8a-8293-5a2fd08f919a"
+    },
+    {
+      "Sid": "NeverChangeTheProductionDistribution",
+      "Effect": "Deny",
+      "Action": "cloudfront:*",
+      "Resource": "arn:aws:cloudfront::806168576068:distribution/E1B0ZWWO5559U5"
+    },
+    {
+      "Sid": "ReadLiveStagingIndex",
+      "Effect": "Allow",
+      "Action": "s3:GetObject",
+      "Resource": "arn:aws:s3:::checksops-staging-frontend-c48b/index.html"
+    },
+    {
+      "Sid": "SignStagingGuardReceipts",
+      "Effect": "Allow",
+      "Action": "kms:Sign",
+      "Resource": "arn:aws:kms:us-east-1:806168576068:key/9396f5b2-d6af-4fca-aa55-0fbf57913f6c",
+      "Condition": {
+        "StringEquals": {
+          "kms:SigningAlgorithm": "ECDSA_SHA_256"
+        }
+      }
+    },
+    {
+      "Sid": "ReadStagingGuardPublicKey",
+      "Effect": "Allow",
+      "Action": "kms:GetPublicKey",
+      "Resource": "arn:aws:kms:us-east-1:806168576068:key/9396f5b2-d6af-4fca-aa55-0fbf57913f6c"
+    }
+  ]
+}
