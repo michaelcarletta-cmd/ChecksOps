@@ -72,3 +72,14 @@ test('the runbook applies staging first, production on the owner\'s words, verif
   assert.match(readme, /SignUp is not permitted for this user pool/);
   assert.match(readme, /TagResource/);
 });
+
+test('the applied record names both runs, their approvals and the refused SignUp after each', () => {
+  const readme = read(`${DIR}/README.md`);
+  const applied = readme.slice(readme.indexOf('## Applied (2026-10-30)'));
+  assert.ok(applied.startsWith('## Applied (2026-10-30)'));
+  assert.match(applied, /"apply sign-up off to staging"/);
+  assert.match(applied, /"re-apply\s+sign-up off to production"/);
+  assert.match(applied, /52a47e82-c283-40f4-a025-d0ea50dde684/);
+  assert.match(applied, /fa434eae-815d-434f-8d74-2ef70848afb3/);
+  assert.equal(applied.match(/SignUp is not permitted for this user pool/g).length, 2);
+});
