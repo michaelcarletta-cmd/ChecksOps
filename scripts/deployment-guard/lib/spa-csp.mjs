@@ -26,7 +26,10 @@ export const cspDirectives = ({ environment, indexHtml }) => {
     ['script-src', ["'self'", ...inlineScriptHashes(indexHtml)]],
     // index.html's loader uses a style attribute and UI libraries inject <style>; see the runbook.
     ['style-src', ["'self'", "'unsafe-inline'"]],
-    ['img-src', ["'self'", 'data:', 'blob:', ...S3_PRESIGNED_ORIGINS]],
+    // Tenant logos load as <img> from the API's /storage/public (src/integrations/aws/storage.ts
+    // getPublicUrl, src/lib/brandingPublicUrl.ts): the execute-api host on staging, same-origin
+    // /prep on production.
+    ['img-src', ["'self'", 'data:', 'blob:', ...api, ...S3_PRESIGNED_ORIGINS]],
     ['font-src', ["'self'", 'data:']],
     ['connect-src', ["'self'", ...api, ...S3_PRESIGNED_ORIGINS, ZIP_LOOKUP_ORIGIN, 'data:', 'blob:']],
     ['frame-src', ["'self'", 'blob:', 'data:', ...S3_PRESIGNED_ORIGINS]],
