@@ -40,7 +40,20 @@ Not changed: the other `financial_totp_*` functions (their ACLs are a separate m
 column, policy, RLS setting, table grant, trigger or row; the lockout behavior. No API, Lambda or SPA
 change is part of this file or its pins. No trigger is added.
 
-**Status:** not applied anywhere. The staging pin and the production pin are pending.
+**Staging executor refreshed (2026-10-30).** Inspect run 41086925906 found the live executor at
+`+2f0KhpfR…` without `sql/130_financial_totp_rate_limit_code_check_no_public.sql`. Deploy run
+41087238803 updated it to main's package (`WhquviZ/jvETdQAPUPliD7meJbBupiILVJDCurPF12E=`, RevisionId
+`0716c90d-b85f-494e-b3be-fbfe6ef431a3`; `errors` `[]`).
+
+**Staging read-live (2026-10-30).** Run 41087643551 (main `81b188b97`):
+`consume_financial_totp_rate_limit(uuid, text, integer, integer)` present with the proposed file's
+body (state `different`), EXECUTE for `checksops` and the owner only; every prerequisite present
+(`prerequisites_missing` `[]`); live `cb2fd65bb580f9338cab728c2507a32b7589aee5e702d117c31e1862f98a5a19` (the staging pre-state derived above),
+`already_applied` false, `precondition_failures` `[]`. Recorded in the staging pin
+(`expected_live_definition_sha256`, `execute: true`, wave 28) under the owner's words of 2026-10-30,
+"continue with SQL 130 staging".
+
+**Status:** staging pin execute-authorized (wave 28); nothing applied yet; production pin pending.
 
 ## Fingerprint
 
