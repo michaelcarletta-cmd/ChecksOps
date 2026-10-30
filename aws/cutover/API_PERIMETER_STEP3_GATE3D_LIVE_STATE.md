@@ -47,38 +47,51 @@ origin header (351,792 lines; daily 48 to 134,727). The only invalid ones are th
 Repository references to the raw production host:
 
 - `.github/workflows/guarded-production-cors.yml` "Public production smoke" sent raw `OPTIONS`
-  preflights to `kiqojucc02…/prep/health`, which would break once the raw endpoint is disabled.
-  Step 1 below moves them to `https://checksops.com/prep/health`.
+  preflights to `kiqojucc02…/prep/health`. #1439 moved them to `https://checksops.com/prep/health`
+  (see the decision below).
 - `scripts/deployment-guard/production-readonly-inspect.mjs` pins `api_host` (a recorded pin,
   not a request).
 - Staging workflows and scripts call `psr19uhop4…/staging` directly; staging has no CloudFront
   API path, so its raw endpoint is its only endpoint.
 
-## What is left (item 1)
+## Decision (item 1): the raw endpoint stays enabled
 
-Require-mode already refuses every raw request except CORS preflight. The remaining step is
-`DisableExecuteApiEndpoint=true` on `kiqojucc02`, which also closes the unauthenticated raw
-`OPTIONS` route. Staging cannot rehearse it (staging has no origin-verify path and needs its raw
-endpoint).
+Owner, 2026-10-30: "Go with B for item 1". `DisableExecuteApiEndpoint` stays **false** on
+`kiqojucc02`. Item 1 is covered by require-mode: since 2026-09-09 the origin-verify authorizer
+refuses every raw request except CORS preflight (`OPTIONS`), which returns headers and no data.
 
-Proposed guarded sequence, each step its own reviewed PR and run:
+Why the endpoint cannot simply be disabled (read-only, 2026-10-30, `user/claude-code`):
 
-1. Move the CORS smoke in `guarded-production-cors.yml` to CloudFront (`https://checksops.com/prep/…`).
-   Done in source by the PR `claude/cors-smoke-via-cloudfront`: same origins, same assertions.
-   CloudFront passes preflights through unchanged (read-only, 2026-10-30): the `/prep` and
-   `/prep/*` behaviors allow `OPTIONS` and cache only `GET`/`HEAD` (`Managed-CachingDisabled`),
-   forward every viewer header except `Host` (`Managed-AllViewerExceptHostHeader`, so `Origin`
-   reaches the API), and the response headers policy `756a8f23-…` has no CORS configuration.
-2. A reviewed tool that sets only `DisableExecuteApiEndpoint` on `kiqojucc02` from a read-only
-   precondition (this file's configuration), run by a role that may `apigateway:PATCH` the API,
-   on the owner's approval of that run. Post-checks: CloudFront `/prep/health` and
-   `/prep/db-health` 200, authenticated `POST /prep/data/query` through CloudFront 200, raw
-   `…/prep/health` no longer resolves (DNS or 403 from the disabled endpoint).
-3. Rollback: the same tool with `DisableExecuteApiEndpoint=false`.
-4. Record PR.
+- CloudFront `E1B0ZWWO5559U5` serves `/prep` and `/prep/*` from origin `ProductionPrepHttpApi`,
+  whose domain is `kiqojucc02.execute-api.us-east-1.amazonaws.com`: the website itself reaches the
+  API through the execute-api endpoint, adding `x-checksops-origin-verify`.
+- API Gateway has no custom domain names (`apigatewayv2 GetDomainNames` returns `[]`), so nothing
+  else maps to `kiqojucc02`.
+- `DisableExecuteApiEndpoint=true` disables the execute-api endpoint for every caller, CloudFront
+  included: `checksops.com/prep/*`, the whole app, would stop answering. An earlier version of this
+  file proposed exactly that as the next step; it is withdrawn.
 
-Stop conditions: any authorizer log line with `originHeaderValid:false` that is not a known probe,
-a CloudFront path failure, or any change to the configuration above before the run.
+Kept: the PR `claude/cors-smoke-via-cloudfront` (#1439) moved the CORS smoke in
+`guarded-production-cors.yml` to `https://checksops.com/prep/…` (same origins, same assertions).
+That is harmless under this decision and tests the path users take. CloudFront passes preflights
+through unchanged: the `/prep` and `/prep/*` behaviors allow `OPTIONS` and cache only `GET`/`HEAD`
+(`Managed-CachingDisabled`), forward every viewer header except `Host`
+(`Managed-AllViewerExceptHostHeader`, so `Origin` reaches the API), and the response headers
+policy `756a8f23-…` has no CORS configuration.
+
+If this is ever revisited (option A, not planned), the custom-domain prerequisite comes first, each
+step its own reviewed PR and owner-approved run:
+
+1. A regional API Gateway custom domain with an ACM certificate (for example `origin.checksops.com`)
+   and an API mapping to `kiqojucc02`.
+2. Move CloudFront's `ProductionPrepHttpApi` origin to that domain, keeping the origin-verify header.
+3. Verify through CloudFront: `/prep/health` and `/prep/db-health` 200, an authenticated
+   `POST /prep/data/query` 200.
+4. Only then set `DisableExecuteApiEndpoint=true` (rollback: `false`), and a record PR.
+
+Watch conditions while the endpoint stays enabled: any authorizer log line with
+`originHeaderValid:false` that is not a known probe, or any change to `ORIGIN_VERIFY_REQUIRE` or
+the authorizer configuration above.
 
 Not verified: CloudFront `/prep` health from this session (proxy), the authenticated data query
 through CloudFront, and the origin-verify secret (not read).

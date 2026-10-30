@@ -1,8 +1,9 @@
 /**
  * Gate 3D live state (2026-10-30, read-only): require-mode is live on the production origin-verify
  * authorizer (applied 2026-09-09 by the account root, recorded here), raw execute-api refuses every
- * request but CORS preflight, and DisableExecuteApiEndpoint is the remaining step. The record holds
- * no secret, header value or token.
+ * request but CORS preflight. Owner decision B (2026-10-30): the execute-api endpoint stays enabled,
+ * because CloudFront's /prep origin is that endpoint; disabling it needs a custom domain first.
+ * The record holds no secret, header value or token.
  */
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
@@ -22,19 +23,35 @@ test('the live state records require-mode as applied, by whom and when, and that
   assert.match(DOC, /`ChecksOpsCursorApiPerimeterStep3Temp` and `ChecksOpsCursorApiPerimeterStep3AuditTemp` no\s+longer exist/);
 });
 
-test('raw execute-api refuses everything but CORS preflight, and only the disable step remains', () => {
+test('raw execute-api refuses everything but CORS preflight, and the endpoint stays enabled by decision B', () => {
   assert.match(DOC, /`DisableExecuteApiEndpoint` \*\*false\*\*/);
   assert.match(DOC, /raw `GET https:\/\/kiqojucc02\.execute-api\.us-east-1\.amazonaws\.com\/prep\/health` \| \*\*403\*\*/);
   assert.match(DOC, /fabricated `x-checksops-origin-verify` \| 403/);
   assert.match(DOC, /raw `OPTIONS …\/prep\/data\/query` \| \*\*204\*\*/);
-  assert.match(DOC, /The remaining step is\s+`DisableExecuteApiEndpoint=true` on `kiqojucc02`/);
-  assert.match(DOC, /Staging cannot rehearse it/);
-  // Step 1: the CORS smoke no longer calls the raw host, so disabling it cannot break the smoke.
+  // Decision B, and the reason: CloudFront's /prep origin is the execute-api endpoint, with no custom domain.
+  assert.match(DOC, /## Decision \(item 1\): the raw endpoint stays enabled/);
+  assert.match(DOC, /Go with B for item 1/);
+  assert.match(DOC, /`DisableExecuteApiEndpoint` stays \*\*false\*\* on\s+`kiqojucc02`/);
+  assert.match(DOC, /origin `ProductionPrepHttpApi`,\s+whose domain is `kiqojucc02\.execute-api\.us-east-1\.amazonaws\.com`/);
+  assert.match(DOC, /API Gateway has no custom domain names/);
+  assert.match(DOC, /`checksops\.com\/prep\/\*`, the whole app,\s+would stop answering/);
+  // Disabling is never a next step on its own: it appears only after the custom-domain prerequisite.
+  assert.doesNotMatch(DOC, /The remaining step is/);
+  assert.doesNotMatch(DOC, /## What is left \(item 1\)/);
+  const optionA = DOC.split('If this is ever revisited (option A, not planned)')[1];
+  assert.ok(optionA, 'option A is recorded as the only path to disabling');
+  const domainAt = optionA.indexOf('custom domain');
+  const originAt = optionA.indexOf("Move CloudFront's `ProductionPrepHttpApi` origin");
+  const disableAt = optionA.indexOf('set `DisableExecuteApiEndpoint=true`');
+  assert.ok(domainAt >= 0 && originAt > domainAt && disableAt > originAt, 'custom domain, then origin move, then disable');
+  const beforeOptionA = DOC.split('If this is ever revisited (option A, not planned)')[0];
+  assert.doesNotMatch(beforeOptionA, /DisableExecuteApiEndpoint=true`? on `kiqojucc02`/);
+  assert.match(DOC, /Staging HTTP API `psr19uhop4`/);
+  // #1439's move of the CORS smoke stays: it no longer calls the raw host.
   assert.doesNotMatch(read('.github/workflows/guarded-production-cors.yml'), /https:\/\/[a-z0-9]+\.execute-api\./);
   assert.match(DOC, /guarded-production-cors\.yml/);
-  assert.match(DOC, /Done in source by the PR `claude\/cors-smoke-via-cloudfront`/);
-  assert.match(DOC, /`Managed-AllViewerExceptHostHeader`, so `Origin`\s+reaches the API/);
-  assert.match(DOC, /## Rollback|Rollback: the same tool with `DisableExecuteApiEndpoint=false`/);
+  assert.match(DOC, /`claude\/cors-smoke-via-cloudfront` \(#1439\)/);
+  assert.match(DOC, /`Managed-AllViewerExceptHostHeader`, so `Origin` reaches the API/);
 });
 
 test('the record carries no secret, header value or token', () => {
