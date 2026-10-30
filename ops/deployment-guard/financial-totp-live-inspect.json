@@ -1,0 +1,15 @@
+{
+  "id": "financial-totp-live-inspect",
+  "read_only": true,
+  "apply": false,
+  "target_environment": "production",
+  "target_component": "production-sql",
+  "tool": "scripts/deployment-guard/financial-totp-live-inspect.mjs",
+  "runbook": "ops/security/FINANCIAL_TOTP_LIVE_INSPECT.md",
+  "admin_login": "checksops_admin",
+  "rds_identifier": "checksops-production",
+  "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
+  "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
+  "note": "Inspect-only configuration (no pin, no execute, no apply). Same production RDS and checksops_admin secret as ops/deployment-guard/mortgage-desk-access-production-inspect.json. The tool runs one BEGIN READ ONLY ... ROLLBACK of fixed SELECTs and prints function definitions, hashes, column names and aggregate counts only.",
+  "production_inspect": null
+}

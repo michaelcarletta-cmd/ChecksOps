@@ -167,6 +167,12 @@
       "note": "Read-only production inspect of the Mortgage Desk access surface; there is no apply. Accepts exactly --inspect (every other argument is refused before a secret is read). Credentials come only from the pinned production checksops_admin secret through the Secrets Manager VPC endpoint (ops/deployment-guard/mortgage-desk-access-production-inspect.json, the SQL 99 pin's RDS and secret). One BEGIN READ ONLY ... ROLLBACK of fixed catalog SELECTs: RLS enabled / forced, owners, policies (name, command, roles, USING / WITH CHECK text unless id-, email- or long-number-shaped), table and column ACLs and effective privileges for checksops, authenticated, PUBLIC and checksops_admin, triggers (names and function names), sha256 of pg_get_functiondef / prosrc of the Mortgage Desk helpers compared with the repository's SQL, and SQL 99's ownership preconditions. Reads no table rows and no row counts; prints names, booleans, hashes and counts only."
     },
     {
+      "path": "scripts/deployment-guard/financial-totp-live-inspect.mjs",
+      "classification": "SAFE",
+      "capabilities": ["financial-totp-live-inspect"],
+      "note": "Read-only production inspect of the financial TOTP database surface; there is no apply. Accepts exactly --inspect (every other argument, and any CHECKSOPS_DEPLOYMENT_GUARD_* or CHECKSOPS_SKIP_DEPLOYMENT_GUARD variable, is refused before a secret is read). Credentials come only from the pinned production checksops_admin secret through the Secrets Manager VPC endpoint (ops/deployment-guard/financial-totp-live-inspect.json, the same RDS and secret as the Mortgage Desk access inspect). One BEGIN READ ONLY ... ROLLBACK of fixed SELECTs: the public financial_totp functions (owner, SECURITY DEFINER, EXECUTE ACL, definition and hashes, repository match), the action allow-list of consume_financial_totp_rate_limit and whether it accepts code_check, column names of the three TOTP tables, and aggregate activity counts since 2026-10-29. Never selects user ids, tenant ids, secrets, ciphertext, nonce, key id, metadata or raw rows."
+    },
+    {
       "path": "scripts/deployment-guard/sql29-mortgage-ops-library-parity-production-apply.mjs",
       "classification": "GUARDED",
       "capabilities": ["sql29-production-apply"],
