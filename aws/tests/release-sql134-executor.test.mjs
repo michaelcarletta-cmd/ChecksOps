@@ -4,8 +4,8 @@
  * release-sql90-97-executor.test.mjs runs what every release key shares (SQL 134 included); this
  * file covers what is new:
  *
- *   - the pin: pending (no read-live yet), code-derived, selectable, packed, in step with the
- *     pending production pin; the pinned commit authored the bytes; no predecessor;
+ *   - the pin: staging-authorized from its read-live (wave 30), code-derived, selectable, packed, in step
+ *     with the pending production pin; the pinned commit authored the bytes; no predecessor;
  *   - the spec's fourteen column_acl entries (SQL 134 creates or replaces no function), as SQL 92's
  *     and SQL 114's: the fingerprint is the column ACL (every grantee) of five loss_draft_tracking
  *     columns (UPDATE) and nine loss_draft_releases columns (INSERT); the expected pre-state (no
@@ -114,7 +114,7 @@ function handlerFor(connect, { pins = {} } = {}) {
   return createHandler({ connect, now: () => Date.parse(NOW), releaseSqlFiles: FILES, releaseSqlPins: { ...PINS, ...pins } });
 }
 
-test('pin: SQL 134 pending, code-derived, selectable, packed, in step with the pending production pin; no predecessor', () => {
+test('pin: SQL 134 staging-authorized from its read-live, code-derived, selectable, packed, in step with the pending production pin; no predecessor', () => {
   const pin = PINS[KEY];
   const spec = RELEASE_SQL_SPECS[KEY];
   const packed = Object.fromEntries(EXECUTOR_PACK_MEMBERS);
@@ -124,11 +124,14 @@ test('pin: SQL 134 pending, code-derived, selectable, packed, in step with the p
   assert.equal(pin.migration_id, '134_loss_draft_escrow_write_grants');
   assert.equal(spec.choice, 'sql134-loss-draft-escrow-write-grants');
   assert.equal(sha(TEXT), pin.source_sha256);
-  // Pending: no staging read-live recorded yet.
+  // Staging apply authorized (owner approved 2026-10-30) from staging read-live run 41130749260: none of the
+  // fourteen columns granted, so SQL 134 was not yet applied there.
   assertStagingPinState(assert, KEY, pin);
-  assert.equal(pin.execute, false);
-  assert.equal(pin.authorization, 'pending');
-  assert.equal(pin.expected_live_definition_sha256, null);
+  assert.equal(pin.execute, true);
+  assert.equal(pin.authorization, 'Owner approved 2026-10-30: staging apply (wave 30) from staging read-live run 41130749260');
+  assert.equal(pin.expected_live_definition_sha256, '7827f4c87e5bc9e7bd0def01d5f201a0a1fc26365480921896aa452e1403466d');
+  assert.equal(pin.expected_live_definition_sha256, ABSENT_GRANTS);
+  assert.notEqual(pin.expected_live_definition_sha256, pin.intended_replacement_sha256);
   assert.equal(releaseIntendedHash(KEY, TEXT), pin.intended_replacement_sha256);
   assert.equal(pin.intended_replacement_sha256, 'c046d1c91cc79596c103f154b043b5421cb1dc6ceaef45d87f2f6ea1c0073c7c');
   assert.notEqual(ABSENT_GRANTS, pin.intended_replacement_sha256);
@@ -303,7 +306,7 @@ test('PostgreSQL 16: SQL 134 through the executor: the derived pre-state, a pend
   assert.deepEqual(before[TRACKING].table, ['authenticated DELETE', 'authenticated INSERT', 'authenticated SELECT', 'checksops DELETE', 'checksops INSERT', 'checksops SELECT']);
   for (const c of ['escrow_status', 'check_received_date', 'updated_at']) assert.deepEqual(before[TRACKING].columns[c], [...UPD], c);
   for (const c of UPDATE_COLUMNS) assert.deepEqual(before[TRACKING].columns[c], [], c);
-  // A pending pin cannot apply (the committed pin is pending; pend a copy anyway).
+  // A pending pin cannot apply (the committed pin is staging-authorized, so pend a copy).
   const pendingCopy = pendingPin(PINS[KEY]);
   const pending = await handlerFor(connect, { pins: { [KEY]: pendingCopy } })(releaseEvent({ pin: pendingCopy, expected_live_definition_sha256: r.live_definition_sha256 }));
   assert.equal(pending.ok, false);

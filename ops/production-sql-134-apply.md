@@ -54,7 +54,14 @@ from the same inspect, the table ACLs of both tables and SQL 50's column grants 
 `loss_draft_tracking` (`escrow_status`, `check_received_date`, `updated_at` for `checksops`): the
 API needs them too, and SQL 134 does not grant them.
 
-**Status:** not applied anywhere. The staging pin and the production pin are pending.
+**Staging read-live (2026-10-30).** Inspect run 41130389562 found the staging executor current with
+main (no deploy needed). Read-live run 41130749260 (main `564b7baee`): none of the fourteen columns
+granted, every prerequisite present, live `7827f4c87e5bc9e7bd0def01d5f201a0a1fc26365480921896aa452e1403466d` (the pre-state the executor test
+derives), `already_applied` false, `precondition_failures` `[]`. Recorded in the staging pin
+(`expected_live_definition_sha256`, `execute: true`, wave 30) under the owner's words of 2026-10-30,
+"start the SQL 134 staging apply".
+
+**Status:** staging pin execute-authorized (wave 30); nothing applied yet; production pin pending.
 
 ## Fingerprint
 
