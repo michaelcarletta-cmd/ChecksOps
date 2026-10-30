@@ -79,7 +79,7 @@ const lossDraftReset = (opts) => {
     handlers: [
       [/SELECT \* FROM public\.loss_draft_tracking WHERE id = \$1::uuid FOR UPDATE/, { rows: [{ id: DRAFT_ID, check_intake_item_id: CHECK_ID, escrow_status: 'pending_send', monitoring_type: 'monitored' }] }],
       [/COALESCE\(ci\.tenant_id, c\.org_id\) AS tenant_id/, { rows: [{ tenant_id: TENANT }] }],
-      [/SELECT escrow_status, monitoring_type FROM public\.loss_draft_tracking/, { rows: [{ escrow_status: 'sent_to_lender', monitoring_type: 'monitored' }] }],
+      [/SELECT escrow_status, monitoring_type, total_escrowed, draw_amount_released, holdback_amount\s+FROM public\.loss_draft_tracking/, { rows: [{ escrow_status: 'sent_to_lender', monitoring_type: 'monitored' }] }],
     ],
   });
   return executeSafeWriteRpc({

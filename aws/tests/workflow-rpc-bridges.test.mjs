@@ -72,7 +72,12 @@ test('classifies all audit rpc_disabled names', () => {
   assert.equal(SAFE_WRITE_RPCS.has('admin_override_check_status'), true);
   assert.equal(SAFE_WRITE_RPC_CLASSIFICATION.admin_override_check_status, 'safe_now');
   assert.ok(SAFE_LOSS_DRAFT_ACTIONS.has('mark_sent'));
-  assert.equal(SAFE_LOSS_DRAFT_ACTIONS.has('mark_escrowed'), false);
+  // Owner decision 2026-10-30: the escrow and draw actions record amounts on a monitored file
+  // (no money moves), so they are bridged; loss-draft-escrow-close.test.mjs covers their gates.
+  for (const action of ['mark_escrowed', 'request_draw', 'record_release', 'record_holdback', 'mark_final_release']) {
+    assert.equal(SAFE_LOSS_DRAFT_ACTIONS.has(action), true, action);
+  }
+  assert.equal(SAFE_LOSS_DRAFT_ACTIONS.has('disburse_funds'), false);
 });
 
 test('write allowlist gained non-financial workflow tables', () => {
@@ -196,7 +201,8 @@ test('accept_mortgage_handling_request assigns caller', async () => {
   assert.equal(result.data.assigned_employee_id, APP_ID);
 });
 
-test('loss_draft_action blocks financial amount actions', async () => {
+test('loss_draft_action refuses an action it does not know', async () => {
+  // mark_escrowed used to be refused here; the owner enabled it on 2026-10-30 (amounts only).
   const client = mockClient();
   const result = await executeSafeWriteRpc({
     client,
@@ -204,11 +210,12 @@ test('loss_draft_action blocks financial amount actions', async () => {
     name: 'loss_draft_action',
     args: {
       p_loss_draft_id: DRAFT_ID,
-      p_action: 'mark_escrowed',
+      p_action: 'disburse_funds',
       p_amount: 1000,
     },
   });
   assert.equal(result.error, 'rpc_financial_disabled');
+  assert.equal(client.queries.some((q) => /loss_draft_tracking/.test(q.sql)), false);
 });
 
 test('loss_draft_action mark_sent updates tracking metadata', async () => {
