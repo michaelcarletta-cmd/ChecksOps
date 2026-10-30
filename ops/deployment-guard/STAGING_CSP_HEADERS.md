@@ -55,3 +55,18 @@ read or change CloudFront configuration.
    `Content-Security-Policy-Report-Only` (and no enforcing `Content-Security-Policy`).
 
 Rollback is the same with `mode: rollback` and `DETACH CSP FROM STAGING`.
+
+## Run log
+
+- **2026-10-30, apply run 41067994638** (main `ee57c5ec2`, owner: "ATTACH REPORT-ONLY CSP TO STAGING",
+  after inspect run 41067803191 reported `READY`, snapshot `c29a036e…`). The writer created policy
+  `d3f84b15-c4db-481c-98cb-64eb541619fe` (`checksops-staging-browser-security-headers`, 14:01:08Z)
+  and attached it to the default behavior (distribution ETag `E1VC38T7YXB528`); its check that the
+  distribution changed only in `ResponseHeadersPolicyId` passed. It then stopped with
+  `policy_post_verify_failed`: CloudFront returns the headers the policy does not set as empty
+  objects (`XSSProtection: {}`, `ContentSecurityPolicy: {}`), which the template omits, and the
+  comparison counted them as a difference. Every set field matched. The same echo made inspect read
+  the empty `ContentSecurityPolicy` as an enforcing one (`BLOCKED`, `policy_has_unowned_settings`),
+  which also refused rollback. The owner kept the policy attached; the comparison now drops empty
+  sections (an enforcing CSP or any other set field still counts). The public header check of that
+  run did not run; the next read-only inspect is the confirmation (expected `ATTACHED_CURRENT`).

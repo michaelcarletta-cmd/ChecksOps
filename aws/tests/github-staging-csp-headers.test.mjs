@@ -71,8 +71,17 @@ const productionPolicy = () => ({
   config: { Name: 'checksops-production-browser-security-headers', Comment: 'prod', SecurityHeadersConfig: structuredClone(TEMPLATE.SecurityHeadersConfig) },
 });
 
-// A fake CloudFront + S3 with ETags; counts every write.
-function fakeAws({ indexHtml = INDEX, attached = null, ours = null, mutate = null } = {}) {
+// How CloudFront echoes a stored policy (get-response-headers-policy, read 2026-10-30 for
+// d3f84b15-c4db-481c-98cb-64eb541619fe after apply run 41067994638): every security header the
+// policy does not set comes back as an empty object.
+const awsEcho = (config) => {
+  const echoed = structuredClone(config);
+  echoed.SecurityHeadersConfig = { XSSProtection: {}, ContentSecurityPolicy: {}, ...echoed.SecurityHeadersConfig };
+  return echoed;
+};
+
+// A fake CloudFront + S3 with ETags; counts every write. `echo` is how reads return a stored policy.
+function fakeAws({ indexHtml = INDEX, attached = null, ours = null, mutate = null, echo = (config) => config } = {}) {
   let n = 0;
   const state = {
     indexHtml,
@@ -87,11 +96,11 @@ function fakeAws({ indexHtml = INDEX, attached = null, ours = null, mutate = nul
       assertStagingDistribution(id);
       return structuredClone({ ETag: state.dist.ETag, Distribution: { Id: state.dist.Id, Status: state.dist.Status, DistributionConfig: state.dist.config } });
     },
-    listPolicies: () => structuredClone({ ResponseHeadersPolicyList: { Items: Object.entries(state.policies).map(([Id, p]) => ({ Type: 'custom', ResponseHeadersPolicy: { Id, ResponseHeadersPolicyConfig: p.config } })) } }),
+    listPolicies: () => structuredClone({ ResponseHeadersPolicyList: { Items: Object.entries(state.policies).map(([Id, p]) => ({ Type: 'custom', ResponseHeadersPolicy: { Id, ResponseHeadersPolicyConfig: echo(p.config) } })) } }),
     getPolicy: (id) => {
       assertNotProductionPolicy(id);
       const p = state.policies[id];
-      return structuredClone({ ETag: p.ETag, ResponseHeadersPolicy: { Id: id, ResponseHeadersPolicyConfig: p.config } });
+      return structuredClone({ ETag: p.ETag, ResponseHeadersPolicy: { Id: id, ResponseHeadersPolicyConfig: echo(p.config) } });
     },
     readIndexHtml: () => state.indexHtml,
     createPolicy: (config) => {
@@ -281,6 +290,65 @@ test('apply updates only an attached policy that is out of date (a new inline sc
   assert.equal(runWriter(result, aws, root), 0);
   assert.deepEqual(aws.state.writes.map((w) => w.op), ['updatePolicy']);
   assert.deepEqual(normalizePolicyConfig(aws.state.policies['stg-existing'].config), normalizePolicyConfig(desiredPolicyConfig(INDEX, TEMPLATE)));
+});
+
+test('CloudFront\'s empty security-header sections are not drift: apply verifies and inspect then reports ATTACHED_CURRENT (run 41067994638)', async () => {
+  const desired = desiredPolicyConfig(INDEX, TEMPLATE);
+  const echoed = awsEcho(desired);
+  // The shape run 41067994638 read back. Comparing the raw sections, as the writer did, differs:
+  assert.deepEqual(echoed.SecurityHeadersConfig.XSSProtection, {});
+  assert.deepEqual(echoed.SecurityHeadersConfig.ContentSecurityPolicy, {});
+  assert.notDeepEqual(echoed.SecurityHeadersConfig, desired.SecurityHeadersConfig);
+  // The owned parts are equal once an empty section, which sets nothing, is dropped.
+  assert.deepEqual(normalizePolicyConfig(echoed), normalizePolicyConfig(desired));
+  const root = tmpRoot();
+  const aws = fakeAws({ echo: awsEcho });
+  const result = await preflightChange('apply', root, aws);
+  assert.equal(result.action, 'attach');
+  assert.equal(runWriter(result, aws, root), 0);
+  assert.deepEqual(aws.state.writes.map((w) => w.op), ['createPolicy', 'updateDistribution']);
+  aws.state.dist.Status = 'Deployed';
+  const after = await inspect(aws);
+  assert.equal(after.state, 'ATTACHED_CURRENT');
+  assert.deepEqual(after.problems, []);
+  // The live case: our policy already attached, echoed with the empty sections. Apply has nothing to do.
+  const live = fakeAws({ attached: 'd3f84b15-c4db-481c-98cb-64eb541619fe', ours: { id: 'd3f84b15-c4db-481c-98cb-64eb541619fe', config: desired }, echo: awsEcho });
+  const inspected = await inspect(live);
+  assert.equal(inspected.state, 'ATTACHED_CURRENT');
+  assert.deepEqual(inspected.problems, []);
+  assert.equal(actionFor('apply', inspected.state), null);
+});
+
+test('a real difference still counts: an enforcing CSP blocks, another CSP value is stale, and a changed read-back fails post-verify', async () => {
+  const desired = desiredPolicyConfig(INDEX, TEMPLATE);
+  const id = 'stg-existing';
+  // A non-empty ContentSecurityPolicy is an enforcing CSP this tool never sets.
+  const enforcing = (config) => {
+    const echoed = awsEcho(config);
+    echoed.SecurityHeadersConfig.ContentSecurityPolicy = { ContentSecurityPolicy: "default-src 'self'", Override: true };
+    return echoed;
+  };
+  const blocked = await inspect(fakeAws({ attached: id, ours: { id, config: desired }, echo: enforcing }));
+  assert.equal(blocked.state, 'BLOCKED');
+  assert.ok(blocked.problems.includes('policy_has_unowned_settings'), blocked.problems.join(','));
+  assert.notDeepEqual(normalizePolicyConfig(enforcing(desired)), normalizePolicyConfig(desired));
+  // A section with a field that differs (here X-XSS-Protection set) is not dropped.
+  const xss = awsEcho(desired);
+  xss.SecurityHeadersConfig.XSSProtection = { Protection: true, ModeBlock: true, Override: true };
+  assert.notDeepEqual(normalizePolicyConfig(xss), normalizePolicyConfig(desired));
+  // Another report-only value is stale, not current.
+  const otherCsp = awsEcho(desired);
+  otherCsp.CustomHeadersConfig.Items[0].Value = "default-src 'self'";
+  assert.equal((await inspect(fakeAws({ attached: id, ours: { id, config: otherCsp }, echo: awsEcho }))).state, 'ATTACHED_STALE');
+  // The writer still fails when what CloudFront stored is not what it sent.
+  const root = tmpRoot();
+  const wrong = fakeAws({ echo: (config) => {
+    const echoed = awsEcho(config);
+    if (echoed.CustomHeadersConfig?.Items?.[0]) echoed.CustomHeadersConfig.Items[0].Value = "default-src *";
+    return echoed;
+  } });
+  const result = await preflightChange('apply', root, wrong);
+  assert.throws(() => runWriter(result, wrong, root), /policy_post_verify_failed/);
 });
 
 test('rollback restores the previous ResponseHeadersPolicyId (none) and leaves everything else as it was', async () => {
