@@ -2951,6 +2951,29 @@ export const AUTHORIZED_SQL130_FINANCIAL_TOTP_RATE_LIMIT_CODE_CHECK_NO_PUBLIC = 
   ]),
 });
 
+// Financial TOTP lockout staging pin: SQL 132 (owner 2026-10-30 "restart SQL 131 and the lockout fix":
+// the new SECURITY DEFINER financial_totp_count_code_check(uuid) counts a code check before the API
+// compares the code, locks the enrollment for 15 minutes at the tenth consecutive check without a
+// success and refuses while locked; EXECUTE for checksops and the owner). Predecessor SQL 130.
+// Pending until a reviewed pin change records a staging read-live (expected: the function absent,
+// everything else in place).
+export const AUTHORIZED_SQL132_FINANCIAL_TOTP_CODE_CHECK_LOCKOUT = Object.freeze({
+  key: 'sql132',
+  filename: 'aws/workflows/sql/132_financial_totp_code_check_lockout.sql',
+  migration_id: '132_financial_totp_code_check_lockout',
+  // The commit that last authored the file bytes.
+  commit: 'c2b69ed13d22313a4959bc65b4516983e838a5bd',
+  source_sha256: 'ca91ce9c04e09715fa01f54fe9dc81a88cb22a3e0ea1e3994b9ffc63b55566eb',
+  authorization: 'pending',
+  execute: false,
+  expected_live_definition_sha256: null,
+  // Code-derived: releaseIntendedHash('sql132', file bytes) (release-sql-state.mjs); re-derived by the tests.
+  intended_replacement_sha256: '88828cb48d8b847cf177d57314bdbc0c8a1f49051958be5adb264a0c418ebd72',
+  function_identities: Object.freeze([
+    'public.financial_totp_count_code_check(uuid)',
+  ]),
+});
+
 export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql90: AUTHORIZED_SQL90_USERS_ONLY_TENANT_ROLES,
   sql91: AUTHORIZED_SQL91_MOOV_ONBOARDING,
@@ -2992,6 +3015,7 @@ export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql128: AUTHORIZED_SQL128_CONTRACTOR_VERIFICATION_FROM_COMPLIANCE,
   sql129: AUTHORIZED_SQL129_FINANCIAL_TOTP_RATE_LIMIT_CODE_CHECK,
   sql130: AUTHORIZED_SQL130_FINANCIAL_TOTP_RATE_LIMIT_CODE_CHECK_NO_PUBLIC,
+  sql132: AUTHORIZED_SQL132_FINANCIAL_TOTP_CODE_CHECK_LOCKOUT,
 });
 
 // The fee collection pin under its earlier map name (the same object as the release map's sql98).
@@ -3007,7 +3031,7 @@ export function isSql30TenantDocumentsDocType(input = {}) {
   return pinIdentifiersMatch(input, AUTHORIZED_SQL30_TENANT_DOCUMENTS_DOC_TYPE);
 }
 
-/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql130) an input names, or null. */
+/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql130, sql132) an input names, or null. */
 export function releaseSqlMigrationKey(input = {}) {
   return Object.keys(RELEASE_2026_10_17_PENDING_SQL_PINS)
     .find((key) => pinIdentifiersMatch(input, RELEASE_2026_10_17_PENDING_SQL_PINS[key])) || null;

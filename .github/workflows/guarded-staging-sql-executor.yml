@@ -78,6 +78,7 @@ on:
           - sql128-contractor-verification-from-compliance
           - sql129-financial-totp-rate-limit-code-check
           - sql130-financial-totp-rate-limit-code-check-no-public
+          - sql132-financial-totp-code-check-lockout
       approved_commit:
         description: "Required for deploy/apply/read-live: exact main commit approved for this run"
         required: false
@@ -209,6 +210,7 @@ jobs:
           node --test aws/tests/release-sql128-executor.test.mjs
           node --test aws/tests/release-sql129-executor.test.mjs
           node --test aws/tests/release-sql130-executor.test.mjs
+          node --test aws/tests/release-sql132-executor.test.mjs
           node --test aws/tests/mortgage-executor-commit-outcome.test.mjs
           node --test aws/tests/deployment-guard-kms-receipt.test.mjs
           node --test aws/tests/deployment-guard-signed-receipt.test.mjs
