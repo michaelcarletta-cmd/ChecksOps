@@ -49,7 +49,7 @@ test('3 unpaid, overdue, paid, canceled, draft, other tenants and other environm
   assert.equal(invoicePendingInCents(null, { tenantId: TENANT }), 0);
 });
 
-test('4 WalletOps adds invoices being paid to Pending in and syncs open invoices when it opens', () => {
+test('4 the WalletOps hook adds invoices being paid to its pending-in total and syncs open invoices when it opens', () => {
   const hook = readFileSync(new URL('../../src/hooks/useWalletOps.ts', import.meta.url), 'utf8');
   assert.match(hook, /\.from\("moov_invoices"\)/);
   assert.match(hook, /pendingInCents: summary\.pendingInCents \+ invoicePendingInCents/);
@@ -58,5 +58,6 @@ test('4 WalletOps adds invoices being paid to Pending in and syncs open invoices
   assert.match(hook, /invoke\("moov-invoice", \{ body: \{ action: "sync", tenant_id: tenantId \} \}\)/);
   const page = readFileSync(new URL('../../src/pages/WalletOps.tsx', import.meta.url), 'utf8');
   assert.match(page, /useSyncOpenInvoicesOnOpen\(\);/);
-  assert.match(page, /invoice\{invoicesBeingPaid === 1 \? "" : "s"\} being paid/);
+  // Owner decision 2026-10-30: the page shows no Pending in / Pending out cards; Recent Wallet Activity covers it.
+  assert.doesNotMatch(page, /Pending in|Pending out|invoicesBeingPaid/);
 });
