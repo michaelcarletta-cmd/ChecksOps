@@ -56,3 +56,15 @@ test('the runbook applies the target, verifies by simulation and rolls back to t
   assert.match(readme, /SimulatePrincipalPolicy/);
   assert.match(read('ops/production-secret-host-compare.md'), /Withdrawn 2026-10-29/);
 });
+
+test('the applied record names the owner approval and the sha256 of the bytes that were applied', async () => {
+  const { createHash } = await import('node:crypto');
+  const readme = read(`${DIR}/README.md`);
+  const applied = readme.slice(readme.indexOf('## Applied (2026-10-30)'));
+  assert.ok(applied.startsWith('## Applied (2026-10-30)'));
+  assert.match(applied, /Owner approval, verbatim: "Merge 1414 and apply finding 12"/);
+  const digest = createHash('sha256').update(fs.readFileSync(new URL(`../../${DIR}/ChecksOpsProductionReadOnlyInspect.json`, import.meta.url))).digest('hex');
+  assert.ok(applied.includes(digest));
+  assert.match(applied, /equalled\s+`ChecksOpsProductionReadOnlyInspect\.live-2026-10-29\.json`/);
+  assert.match(applied, /`GetSecretValue` on the\s+production app database secret `implicitDeny`/);
+});

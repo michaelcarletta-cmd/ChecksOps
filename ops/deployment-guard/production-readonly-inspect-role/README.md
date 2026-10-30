@@ -71,3 +71,25 @@ aws iam put-role-policy --role-name ChecksOpsGitHubProductionReadOnlyInspect \
   --policy-name ChecksOpsProductionReadOnlyInspect \
   --policy-document file://ops/deployment-guard/production-readonly-inspect-role/ChecksOpsProductionReadOnlyInspect.live-2026-10-29.json
 ```
+
+## Applied (2026-10-30)
+
+Owner approval, verbatim: "Merge 1414 and apply finding 12".
+Source: `origin/main` `864d9f6` (PR #1414); `ChecksOpsProductionReadOnlyInspect.json` sha256
+`3e78d60720b2e66883805c7f8a898c3c7efb9c841e35a09d8dc0d7c2b9792238`. Identity:
+`arn:aws:iam::806168576068:user/claude-code`.
+
+1. Precondition: `iam:GetRolePolicy` before the apply equalled
+   `ChecksOpsProductionReadOnlyInspect.live-2026-10-29.json`; the role had that one inline policy.
+2. `iam:PutRolePolicy` `ChecksOpsProductionReadOnlyInspect` on
+   `ChecksOpsGitHubProductionReadOnlyInspect` with `ChecksOpsProductionReadOnlyInspect.json`
+   (HTTP 200, request `7164bfda-9bfa-41a5-9ead-d9612ab5593b`, about 2026-10-30T00:20Z).
+3. Read-back: `iam:GetRolePolicy` equals `ChecksOpsProductionReadOnlyInspect.json`.
+4. `iam:SimulatePrincipalPolicy` as the role after the apply (9 checks): `GetSecretValue` on the
+   production app database secret `implicitDeny`; `DescribeSecret` on it, `lambda:GetFunction` and
+   `GetFunctionConfiguration` on `checksops-production-prep-api`, `s3:GetObject` on the production SPA
+   `index.html`, `apigateway:GET` on `kiqojucc02`, `cloudfront:GetDistribution` on `E1B0ZWWO5559U5`,
+   `rds:DescribeDBInstances` and `ec2:DescribeSecurityGroups` `allowed`.
+
+Not verified: no routine inspect has run since the apply; its session never asked for
+`GetSecretValue`, so none of its reads change.
