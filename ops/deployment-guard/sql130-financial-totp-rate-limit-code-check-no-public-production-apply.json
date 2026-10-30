@@ -1,8 +1,8 @@
 {
   "id": "sql130-financial-totp-rate-limit-code-check-no-public-production-apply",
   "migration": "sql130",
-  "authorization": "pending",
-  "execute": false,
+  "authorization": "Owner approved 2026-10-30 (the owner's words of 2026-10-30: \"continue with SQL 130 staging\", \"apply SQL 130 in staging\" and \"apply SQL 130 in production\", the last given before this pin existed; the change itself is reviewed and merged by the owner): production apply of SQL 130 after the staging acceptance below (production e49dc44662d1ac04762cf06d139f527d9a09158cbccd64fc8370d62e1f43c838 -> 013549faba6166280b03df404ca23c1973870efad9f7d499d6a695be0de7246b); execute true takes effect only when the owner reviews and merges this change. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
+  "execute": true,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -13,7 +13,7 @@
   "function_identities": [
     "public.consume_financial_totp_rate_limit(uuid, text, integer, integer)"
   ],
-  "expected_live_definition_sha256": null,
+  "expected_live_definition_sha256": "e49dc44662d1ac04762cf06d139f527d9a09158cbccd64fc8370d62e1f43c838",
   "intended_replacement_sha256": "013549faba6166280b03df404ca23c1973870efad9f7d499d6a695be0de7246b",
   "authorization_phrase": "APPLY_FINANCIAL_TOTP_RATE_LIMIT_CODE_CHECK_NO_PUBLIC",
   "predecessors": [],
@@ -41,24 +41,24 @@
     "note": "Guarded tooling for SQL 130: sql130-financial-totp-rate-limit-code-check-no-public-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql130-financial-totp-rate-limit-code-check-no-public); production-sql-one-shot.mjs --migration sql130. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): the function with the file's body and attributes and EXECUTE for checksops and the owner. The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
   },
   "production_inspect": {
-    "status": "pending",
-    "date": null,
-    "ssm_command_id": null,
-    "source_commit": null,
+    "status": "recorded",
+    "date": "2026-10-30",
+    "ssm_command_id": "88570df0-02e3-408f-8f1d-1fdddd0dadda",
+    "source_commit": "66a0baaf26418341d88a870562a6ff38c51ca49d",
     "read_only": true,
     "connected_as": "checksops_admin",
-    "live_definition_sha256": null,
-    "apply_preconditions_met": null,
-    "precondition_failures": null,
-    "note": "Pending: no release-engine production inspect has been run for SQL 130 yet. The financial TOTP live inspect of 2026-10-30 (SSM cfee4512-4988-4fd1-be77-b03d1b4cd50b, main da064a34, scripts/deployment-guard/financial-totp-live-inspect.mjs) read the live function: prosrc sha256 0507b4474de7fb03ac843f44c2ad7bd06f603620905ab58b550d3b4e379b4d24, equal to the proposed file's, owner checksops_admin, SECURITY DEFINER, EXECUTE PUBLIC, checksops and the owner. Expected release-engine fingerprint of that state under sql130: e49dc44662d1ac04762cf06d139f527d9a09158cbccd64fc8370d62e1f43c838 (derived from the proposed file's bytes by aws/tests/release-sql130-executor.test.mjs and read back on PostgreSQL 16). Record the one-shot --phase inspect's date, SSM command id, source commit, live_definition_sha256, prerequisites_missing, release_sql_inspect.functions, release_sql_inspect.function_acl, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. Stop if prerequisites_missing is not [] or precondition_failures is not [] (functions_owned_by_login, function_results_match, function_acl_replaceable): that needs its own reviewed change."
+    "live_definition_sha256": "e49dc44662d1ac04762cf06d139f527d9a09158cbccd64fc8370d62e1f43c838",
+    "apply_preconditions_met": false,
+    "precondition_failures": [],
+    "note": "Recorded from the read-only production inspect of 2026-10-30 (SSM command 88570df0-02e3-408f-8f1d-1fdddd0dadda, node scripts/deployment-guard/sql130-financial-totp-rate-limit-code-check-no-public-production-apply.mjs --inspect on the SQL53 runner i-0c35557c4e5385406 from main 66a0baaf2 (tarball source-66a0baaf26418341d88a870562a6ff38c51ca49d.tar.gz sha256 8cb7d3398830c6b5c69b185b6d1bf6da2a6dde05633abdea21678753450a2089, transfer run 41091045905; migration source sha256 on the runner da17dd5d4a74bcf9c5b59dc13bf3a557e3488c5f36ab0b8431a2b8b67fefc561 == source_sha256), read_only true, source_ok true, connected as checksops_admin (current_user and session_user checksops_admin)). live_definition_sha256 e49dc44662d1ac04762cf06d139f527d9a09158cbccd64fc8370d62e1f43c838 (not the intended 013549faba6166280b03df404ca23c1973870efad9f7d499d6a695be0de7246b: already_applied false); release_sql_inspect: consume_financial_totp_rate_limit(uuid, text, integer, integer) different, function_acl PUBLIC EXECUTE, checksops EXECUTE and owner EXECUTE; prerequisites_missing [], missing_dependencies [], predecessors {}, predecessors_applied true, successors_applied [], dropped_function_dependents 0, dropped_function_callers [], precondition_failures []. e49dc44662d1ac04762cf06d139f527d9a09158cbccd64fc8370d62e1f43c838 is the expected production pre-state the earlier note below names: the proposed file's function with EXECUTE for PUBLIC, checksops and the owner, derived from the proposed file's bytes (releaseStateHash('sql130', ...), aws/tests/release-sql130-executor.test.mjs, which also reads it back from PostgreSQL 16 and applies from it). Production's pre-state differs from staging's (read-live run 41087643551, cb2fd65bb580f9338cab728c2507a32b7589aee5e702d117c31e1862f98a5a19) only by the PUBLIC EXECUTE grant, which the file revokes, so both reach the same intended state (aws/tests/sql130-financial-totp-rate-limit-pg.test.mjs from both pre-states). apply_preconditions_met was false at inspect time only because no pre-state was recorded yet (execute false, expected_live_definition_sha256 null). This reviewed change copies live_definition_sha256 into expected_live_definition_sha256 and, in the same change, sets authorization, execute true and staging_acceptance. A fresh --inspect immediately before apply (the one-shot's inspect step) must still report this live_definition_sha256 and precondition_failures []; if not, stop. If already_applied is true, or precondition_failures is not [], stop: that needs its own reviewed change. Earlier: Pending: no release-engine production inspect has been run for SQL 130 yet. The financial TOTP live inspect of 2026-10-30 (SSM cfee4512-4988-4fd1-be77-b03d1b4cd50b, main da064a34, scripts/deployment-guard/financial-totp-live-inspect.mjs) read the live function: prosrc sha256 0507b4474de7fb03ac843f44c2ad7bd06f603620905ab58b550d3b4e379b4d24, equal to the proposed file's, owner checksops_admin, SECURITY DEFINER, EXECUTE PUBLIC, checksops and the owner. Expected release-engine fingerprint of that state under sql130: e49dc44662d1ac04762cf06d139f527d9a09158cbccd64fc8370d62e1f43c838 (derived from the proposed file's bytes by aws/tests/release-sql130-executor.test.mjs and read back on PostgreSQL 16). Record the one-shot --phase inspect's date, SSM command id, source commit, live_definition_sha256, prerequisites_missing, release_sql_inspect.functions, release_sql_inspect.function_acl, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. Stop if prerequisites_missing is not [] or precondition_failures is not [] (functions_owned_by_login, function_results_match, function_acl_replaceable): that needs its own reviewed change."
   },
   "intended_post_state": {
     "fingerprint": "013549faba6166280b03df404ca23c1973870efad9f7d499d6a695be0de7246b",
     "note": "consume_financial_totp_rate_limit(uuid, text, integer, integer) owned by checksops_admin, plpgsql, VOLATILE, SECURITY DEFINER, search_path public, pg_temp, RETURNS TABLE(allowed boolean, count integer, retry_after_seconds integer), EXECUTE for checksops and the owner (PUBLIC revoked): the live body with the action allow-list 'enroll_start', 'enroll_confirm', 'step_up', 'code_check'. No other function (the other financial_totp_* functions keep their ACLs), table, column, policy, RLS setting, grant, trigger or row change. The same state is reached from production's pre-state (PUBLIC granted) and staging's (no PUBLIC). The fingerprint is releaseIntendedHash('sql130', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): 013549faba6166280b03df404ca23c1973870efad9f7d499d6a695be0de7246b."
   },
   "staging_acceptance": {
-    "ok": false,
-    "reference": null,
-    "basis": "Pending: record the guarded staging SQL executor read-live and the staging apply of SQL 130 (choice sql130-financial-totp-rate-limit-code-check-no-public) here in the reviewed change that sets execute true. The behavior is covered on PostgreSQL 16 by aws/tests/sql130-financial-totp-rate-limit-pg.test.mjs from both pre-states. Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+    "ok": true,
+    "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/41090274902",
+    "basis": "Guarded staging SQL executor apply of sql130-financial-totp-rate-limit-code-check-no-public, run 41090274902 (2026-10-30, main 66a0baaf26418341d88a870562a6ff38c51ca49d, wave 28, workstream github-staging-sql-41090274902, staging pin commit e08e422ce4ebc2c8879d43bdccb0575a9701114b, on the executor deployed by deploy run 41089857134: 5OmSJSaoZv+vQbQ4ShxpVv6r+q9JDWgB8jhg68FdDoQ=), from the staging pre-state recorded by read-live run 41087643551 (cb2fd65bb580f9338cab728c2507a32b7589aee5e702d117c31e1862f98a5a19; staging pin PR #1451): receipt before cb2fd65bb580f9338cab728c2507a32b7589aee5e702d117c31e1862f98a5a19, after 013549faba6166280b03df404ca23c1973870efad9f7d499d6a695be0de7246b == intended, result applied. Read-live run 41090642842 then reported already_applied true, live 013549faba6166280b03df404ca23c1973870efad9f7d499d6a695be0de7246b, function_acl checksops EXECUTE and owner EXECUTE. The behavior is covered on PostgreSQL 16 by aws/tests/sql130-financial-totp-rate-limit-pg.test.mjs, including an apply from production's pre-state (e49dc44662d1ac04762cf06d139f527d9a09158cbccd64fc8370d62e1f43c838: the extra PUBLIC EXECUTE grant, which the file revokes) to the same intended state. The same file bytes (source_sha256) are pinned in both."
   }
 }

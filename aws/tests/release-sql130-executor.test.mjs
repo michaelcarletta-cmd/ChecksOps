@@ -4,7 +4,8 @@
  * release-sql90-97-executor.test.mjs runs what every release key shares (SQL 130 included); this
  * file covers what is new:
  *
- *   - the pin: staging-authorized from its read-live (wave 28), code-derived, selectable, packed, in step with the production pin; the
+ *   - the pin: staging-authorized from its read-live (wave 28), code-derived, selectable, packed, in step with the production pin
+ *     (execute true on production's own pre-state, derived from bytes); the
  *     pinned commit authored the bytes; no predecessor; it supersedes the retired SQL 129;
  *   - the file and spec: consume_financial_totp_rate_limit(uuid, text, integer, integer) replaced with
  *     SQL 129's body (the proposed financial TOTP file's with only the action allow-list changed);
@@ -205,9 +206,16 @@ test('pin: SQL 130 staging-authorized from its read-live, code-derived, selectab
   assert.equal(prod.staging_pin_commit, pin.commit);
   assert.equal(prod.source_sha256, pin.source_sha256);
   assert.deepEqual(prod.predecessors, []);
-  assert.equal(prod.execute, false);
-  assert.equal(prod.authorization, 'pending');
-  assert.equal(prod.expected_live_definition_sha256, null);
+  // Production pin execute-authorized (owner-approved pin change of 2026-10-30) on the staging apply. Its
+  // pre-state is production's own (read-only inspect SSM 88570df0): the proposed function with EXECUTE
+  // also for PUBLIC, derived here from the proposed file's bytes.
+  assert.equal(prod.execute, true);
+  assert.match(prod.authorization, /^Owner approved 2026-10-30 /);
+  assert.equal(prod.expected_live_definition_sha256, 'e49dc44662d1ac04762cf06d139f527d9a09158cbccd64fc8370d62e1f43c838');
+  assert.equal(prod.expected_live_definition_sha256, prod.production_inspect.live_definition_sha256);
+  assert.equal(prod.expected_live_definition_sha256, PRODUCTION_PRE);
+  assert.notEqual(prod.expected_live_definition_sha256, pin.expected_live_definition_sha256);
+  assert.notEqual(prod.expected_live_definition_sha256, prod.intended_replacement_sha256);
   assert.ok(JSON.stringify(prod.production_inspect).includes(PRODUCTION_PRE));
   let bytes = null;
   if (/^[0-9a-f]{40}$/.test(pin.commit)) {
@@ -306,7 +314,7 @@ test('reviewed file and spec: SQL 129\'s body; same header; EXECUTE revoked from
   assert.deepEqual(releaseSharedPostconditionFailures(KEY, {}, post({ live_definition_sha256: PRODUCTION_PRE }), PINS[KEY]), ['intended_state']);
 });
 
-test('PostgreSQL 16: SQL 130 through the executor: both pre-states as derived; refused while the function is missing, owned by another role or granted to another role; a pending pin and an unexpected pre-state cannot apply; from each pre-state one apply on the same intended fingerprint, then refused', { timeout: 600000 }, async (t) => {
+test('PostgreSQL 16: SQL 130 through the executor: both pre-states as derived, production\'s as recorded; refused while the function is missing, owned by another role or granted to another role; a pending pin and an unexpected pre-state cannot apply; from each pre-state one apply on the same intended fingerprint, then refused', { timeout: 600000 }, async (t) => {
   const reason = pgSkipReason();
   if (reason) {
     t.skip(reason);
@@ -364,6 +372,8 @@ test('PostgreSQL 16: SQL 130 through the executor: both pre-states as derived; r
     assert.deepEqual(prod.release_sql_inspect.prerequisites_missing, []);
     assert.equal(prod.already_applied, false);
     assert.equal(prod.live_definition_sha256, PRODUCTION_PRE);
+    // The production pin's recorded pre-state (read-only inspect of 2026-10-30, SSM 88570df0).
+    assert.equal(prod.live_definition_sha256, productionPin().expected_live_definition_sha256);
     assert.equal(await body(), liveBody);
 
     // The function missing: refused, nothing applied.
