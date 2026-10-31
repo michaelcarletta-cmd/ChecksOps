@@ -523,6 +523,21 @@
       "note": "Official staging-only writer for the report-only CSP and, on enforce (rollout step 3), the enforcing CSP built from the live index.html, run from guarded-staging-csp-headers.yml. Requires a staging-frontend cloudfront-response-headers-policy receipt owning exactly the action's components + active lease; refuses any distribution but E1CG52WRQZI7X1 and the production policy 756a8f23-…; CAS-checks the signed snapshot before and immediately before the first write, sends If-Match ETags, sets an enforcing ContentSecurityPolicy only for enforce and only equal to buildCsp(enforce), and verifies the distribution config changed only in DefaultCacheBehavior.ResponseHeadersPolicyId (not at all for update-policy, enforce and revert)."
     },
     {
+      "path": "scripts/deployment-guard/github-production-csp-headers.mjs",
+      "classification": "SAFE",
+      "capabilities": [
+        "production-csp-headers-preflight"
+      ],
+      "note": "GitHub-hosted preflight for the production SPA CSP (rollout step 5). Reads production distribution E1B0ZWWO5559U5, its response headers policy 756a8f23-68dd-4f8a-8293-5a2fd08f919a and the live production index.html; for enforce/revert requires the inspect snapshot SHA-256, the exact phrase and a staging acceptance reference, then takes the production-spa lease and issues a KMS-signed cloudfront-response-headers-policy receipt whose preflight fingerprint is the whole snapshot. Never writes AWS; production-csp-headers.mjs is the only writer."
+    },
+    {
+      "path": "scripts/deployment-guard/production-csp-headers.mjs",
+      "classification": "GUARDED",
+      "capabilities": ["cloudfront-response-headers-policy"],
+      "shared_target": true,
+      "note": "Official production-only writer for the enforcing SPA CSP, run from guarded-production-csp-headers.yml (owner 2026-10-31: in place). Requires a production-spa cloudfront-response-headers-policy receipt owning exactly response-headers-policy:756a8f23-… + active lease + the production gate (staging acceptance, approval for this workstream, second fingerprint); refuses any distribution but E1B0ZWWO5559U5 and any policy but 756a8f23-… (staging ids by name); CAS-checks the signed snapshot before and immediately before its only write (UpdateResponseHeadersPolicy with If-Match), sets ContentSecurityPolicy only equal to buildCsp(production, live index.html, enforce) with the SH-1 headers byte-for-byte, revert restores exactly the SH-1 baseline, and verifies the distribution config is unchanged."
+    },
+    {
       "path": "scripts/deployment-guard/github-production-checkalt-schedule.mjs",
       "classification": "SAFE",
       "capabilities": [

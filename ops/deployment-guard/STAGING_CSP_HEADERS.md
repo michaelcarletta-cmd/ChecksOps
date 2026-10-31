@@ -89,3 +89,13 @@ on `response-headers-policy/*` and denies it on the production policy.
   which also refused rollback. The owner kept the policy attached; the comparison now drops empty
   sections (an enforcing CSP or any other set field still counts). The public header check of that
   run did not run; the next read-only inspect is the confirmation (expected `ATTACHED_CURRENT`).
+
+- **2026-10-30, enforce run 41086648035** (main `927c79d59c7de3f4a76b41ec217c08018b253500`, after run
+  41085684008 on the same commit). The writer printed `"ok":true,"action":"enforce"` on policy
+  `d3f84b15-c4db-481c-98cb-64eb541619fe` (distribution `E1CG52WRQZI7X1`), `before_fingerprint`
+  `fec5d708b69825371db1f018ed37ce02599a17119b4ae8a534e31beac4f6ba7f`, `after_fingerprint`
+  `7a222f594b383ee3d07062f382e8f1fa8100af29c000c3157200a7e383e59d5d`. The verify step printed
+  `"state": "VERIFIED"` (snapshot `7a222f59…`, distribution ETag `E3AEGXETSR30VB`), and the public
+  staging header check passed with the expected enforcing `Content-Security-Policy`. Staging is
+  enforcing; this run is the staging acceptance reference for production
+  (`PRODUCTION_CSP_HEADERS.md`).

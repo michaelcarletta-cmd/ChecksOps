@@ -1,0 +1,73 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReadProductionDistributionOnly",
+      "Effect": "Allow",
+      "Action": "cloudfront:GetDistribution",
+      "Resource": "arn:aws:cloudfront::806168576068:distribution/E1B0ZWWO5559U5"
+    },
+    {
+      "Sid": "ReadAndUpdateTheProductionPolicyOnly",
+      "Effect": "Allow",
+      "Action": [
+        "cloudfront:GetResponseHeadersPolicy",
+        "cloudfront:UpdateResponseHeadersPolicy"
+      ],
+      "Resource": "arn:aws:cloudfront::806168576068:response-headers-policy/756a8f23-68dd-4f8a-8293-5a2fd08f919a"
+    },
+    {
+      "Sid": "ReadLiveProductionIndex",
+      "Effect": "Allow",
+      "Action": "s3:GetObject",
+      "Resource": "arn:aws:s3:::checksops-production-frontend-806168576068/index.html"
+    },
+    {
+      "Sid": "SignProductionGuardReceipts",
+      "Effect": "Allow",
+      "Action": "kms:Sign",
+      "Resource": "arn:aws:kms:us-east-1:806168576068:key/*",
+      "Condition": {
+        "StringEquals": {
+          "kms:SigningAlgorithm": "ECDSA_SHA_256"
+        },
+        "ForAnyValue:StringEquals": {
+          "kms:ResourceAliases": "alias/checksops-production-deployment-guard"
+        }
+      }
+    },
+    {
+      "Sid": "ReadProductionGuardPublicKey",
+      "Effect": "Allow",
+      "Action": "kms:GetPublicKey",
+      "Resource": "arn:aws:kms:us-east-1:806168576068:key/*",
+      "Condition": {
+        "ForAnyValue:StringEquals": {
+          "kms:ResourceAliases": "alias/checksops-production-deployment-guard"
+        }
+      }
+    },
+    {
+      "Sid": "NeverChangeAnyDistributionOrOtherPolicy",
+      "Effect": "Deny",
+      "Action": [
+        "cloudfront:UpdateDistribution",
+        "cloudfront:CreateDistribution",
+        "cloudfront:DeleteDistribution",
+        "cloudfront:CreateResponseHeadersPolicy",
+        "cloudfront:DeleteResponseHeadersPolicy",
+        "cloudfront:CreateInvalidation"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "NeverTouchStaging",
+      "Effect": "Deny",
+      "Action": "cloudfront:*",
+      "Resource": [
+        "arn:aws:cloudfront::806168576068:distribution/E1CG52WRQZI7X1",
+        "arn:aws:cloudfront::806168576068:response-headers-policy/d3f84b15-c4db-481c-98cb-64eb541619fe"
+      ]
+    }
+  ]
+}
