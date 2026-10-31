@@ -1,0 +1,548 @@
+{
+  "id": "sql134-loss-draft-escrow-write-grants-production-apply",
+  "migration": "sql134",
+  "authorization": "Applied to production on 2026-10-31; execute is false again, so this pin is no longer a standing authorization and a re-apply needs a new reviewed pin change. The owner approved the SQL 134 production pin change on 2026-10-31 in the words \"Merge 1468 when green\", \"start the SQL 134 staging apply\", \"merge 1471 when green\", \"Yes\" to the read-only production inspect and \"Yes\" to the pin change (none of them words for the production apply; 7827f4c8 -> c046d1c9, #1473, merged on \"Merge 1473\") and the one apply run recorded in applied (workstream prod-sql134-loss-draft-escrow-write-grants-20261031) in the words \"apply SQL 134 in production\", passed to it verbatim. That approval covered that run only.",
+  "execute": false,
+  "target_environment": "production",
+  "target_component": "production-sql",
+  "deployment_type": "sql-apply",
+  "filename": "aws/workflows/sql/134_loss_draft_escrow_write_grants.sql",
+  "migration_id": "134_loss_draft_escrow_write_grants",
+  "staging_pin_commit": "05faad793cd360736420859f1b686e5956bc39dc",
+  "source_sha256": "a9082d1369587a702014e10e443ab965c1608e99d14a193da900f7d35c91e03a",
+  "function_identities": [],
+  "expected_live_definition_sha256": "7827f4c87e5bc9e7bd0def01d5f201a0a1fc26365480921896aa452e1403466d",
+  "intended_replacement_sha256": "c046d1c91cc79596c103f154b043b5421cb1dc6ceaef45d87f2f6ea1c0073c7c",
+  "authorization_phrase": "APPLY_LOSS_DRAFT_ESCROW_WRITE_GRANTS",
+  "predecessors": [],
+  "order_note": "No predecessor and no order on this engine. SQL 134 needs public.loss_draft_tracking with total_escrowed, draw_amount_requested, draw_stage, draw_amount_released and holdback_amount, public.loss_draft_releases with loss_draft_id, draw_number, amount_requested, amount_released, release_date, released_at, status, notes and created_by (restored Supabase schema, supabase/migrations/20260308163837_*.sql), both owned by checksops_admin, and the roles checksops and authenticated. The Loss Draft API change (#1464, aws/functions/api/workflow-rpc.mjs loss_draft_action: mark_escrowed, request_draw, record_release, record_holdback, mark_final_release; owner decision 2026-10-30) updates those five loss_draft_tracking columns (with escrow_status, check_received_date and updated_at, which SQL 50 already grants to checksops and authenticated) and, for record_release, inserts the draw into loss_draft_releases (id from gen_random_uuid(), no sequence). No migration in this repository grants UPDATE on those five columns or INSERT on loss_draft_releases (SQL 50 does not; SQL 51 revokes SQL 50's loss_draft_tracking grants where it is run), so PostgreSQL refuses those writes before row-level security. The policies aws_write_loss_draft_tracking (aws_can_write_check(check_intake_item_id)) and aws_write_loss_draft_releases (aws/rls/sql/24_complete_write_policies.sql: aws_can_write_claim of the draft's claim_id) stay the authorization boundary and are not changed: a draft without a claim_id still gets no Draws row (the API reports release_recorded false). SQL 134 grants exactly those column privileges to checksops and authenticated and changes nothing else. If the read-only inspect finds both lines on all fourteen columns already held it reports already_applied true and nothing is applied (the pin is then recorded as verified live, not applied). No later migration revokes these grants. The API change itself is deployed through the guarded Lambda path, not by this pin.",
+  "admin_login": "checksops_admin",
+  "rds_identifier": "checksops-production",
+  "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
+  "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
+  "tooling": {
+    "status": "built",
+    "production_tool": "scripts/deployment-guard/sql134-loss-draft-escrow-write-grants-production-apply.mjs",
+    "production_lib": "scripts/deployment-guard/lib/release-sql-production-apply.mjs",
+    "staging_executor_handler": "aws/write-path/guarded-sql-executor/index.mjs handleReleaseSqlMigration",
+    "staging_workflow_choice": "sql134-loss-draft-escrow-write-grants",
+    "one_shot_migration": "sql134",
+    "fingerprint_engine": "scripts/deployment-guard/lib/release-sql-state.mjs",
+    "runbook": "ops/production-sql-134-apply.md",
+    "tests": [
+      "aws/tests/release-sql134-executor.test.mjs",
+      "aws/tests/release-sql134-production-apply.test.mjs",
+      "aws/tests/release-sql90-97-executor.test.mjs",
+      "aws/tests/release-sql90-97-production-apply.test.mjs",
+      "aws/tests/sql134-loss-draft-escrow-write-grants-pg.test.mjs"
+    ],
+    "note": "Guarded tooling for SQL 134: sql134-loss-draft-escrow-write-grants-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql134-loss-draft-escrow-write-grants); production-sql-one-shot.mjs --migration sql134. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): the column ACL of loss_draft_tracking.total_escrowed, .draw_amount_requested, .draw_stage, .draw_amount_released and .holdback_amount, each exactly authenticated UPDATE and checksops UPDATE, and of loss_draft_releases.loss_draft_id, .draw_number, .amount_requested, .amount_released, .release_date, .released_at, .status, .notes and .created_by, each exactly authenticated INSERT and checksops INSERT (spec column_acl, as SQL 92 and SQL 114). The pre-conditions refuse any other live grant on those fourteen columns (column_acl_replaceable); the two tables' own ACLs, every other column (SQL 50's loss_draft_tracking column grants among them), their RLS flags and their policies are in the unrelated-catalog snapshot and must be unchanged. The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
+  },
+  "production_inspect": {
+    "status": "recorded",
+    "date": "2026-10-31",
+    "ssm_command_id": "6a2f2c2c-cf5b-4e6f-9df6-12fe8221a1e9",
+    "source_commit": "d0ac2e0798ffc6d54b590a1c0705ca903351f6ba",
+    "read_only": true,
+    "connected_as": "checksops_admin",
+    "live_definition_sha256": "7827f4c87e5bc9e7bd0def01d5f201a0a1fc26365480921896aa452e1403466d",
+    "apply_preconditions_met": false,
+    "precondition_failures": [],
+    "note": "Recorded from the read-only production inspect of 2026-10-31 (SSM command 6a2f2c2c-cf5b-4e6f-9df6-12fe8221a1e9, node scripts/deployment-guard/sql134-loss-draft-escrow-write-grants-production-apply.mjs --inspect on the SQL53 runner i-0c35557c4e5385406 from main d0ac2e079 (tarball source-d0ac2e0798ffc6d54b590a1c0705ca903351f6ba.tar.gz sha256 abb179d5613b6bf008c35f74576561edd929535045c9956dc72e6c713ffb3fe7, transfer run 41149979809; migration source sha256 on the runner a9082d1369587a702014e10e443ab965c1608e99d14a193da900f7d35c91e03a == source_sha256), read_only true, source_ok true, connected as checksops_admin (current_user and session_user checksops_admin)). live_definition_sha256 7827f4c87e5bc9e7bd0def01d5f201a0a1fc26365480921896aa452e1403466d (not the intended c046d1c91cc79596c103f154b043b5421cb1dc6ceaef45d87f2f6ea1c0073c7c: already_applied false); release_sql_inspect.columns: all fourteen column ACLs [] (loss_draft_tracking total_escrowed, draw_amount_requested, draw_stage, draw_amount_released, holdback_amount; loss_draft_releases loss_draft_id, draw_number, amount_requested, amount_released, release_date, released_at, status, notes, created_by); prerequisites_missing [], missing_dependencies [], predecessors {} (none), predecessors_applied true, successors_applied [], precondition_failures []. 7827f4c87e5bc9e7bd0def01d5f201a0a1fc26365480921896aa452e1403466d is the expected production pre-state the earlier note below names (each of the fourteen columns acl [], derived by aws/tests/release-sql134-executor.test.mjs). Production's pre-state equals staging's (read-live run 41130749260, the same fingerprint), so the guarded staging apply (run 41134571358, staging_acceptance below) took the same path production will. apply_preconditions_met was false at inspect time only because no pre-state was recorded yet (execute false, expected_live_definition_sha256 null). Not read: the inspect prints no table ACL of loss_draft_tracking or loss_draft_releases and none of SQL 50's loss_draft_tracking column grants (escrow_status, check_received_date, updated_at); they are in the unrelated-catalog snapshot the apply requires unchanged, and SQL 134 does not change them. This reviewed change copies live_definition_sha256 into expected_live_definition_sha256 and, in the same change, sets authorization, execute true and staging_acceptance. A fresh --inspect immediately before apply (the one-shot's inspect step) must still report this live_definition_sha256 and precondition_failures []; if not, stop. If already_applied is true, or precondition_failures is not [], stop: that needs its own reviewed change. Earlier: Pending: no read-only production inspect has been run for SQL 134 yet. Expected: loss_draft_tracking and loss_draft_releases present with the fourteen columns and owned by checksops_admin, roles checksops and authenticated present, no column grant on any of the fourteen columns (the restored database granted table-level SELECT only and SQL 50 grants none of them). Expected release-engine fingerprint of that state under sql134: 7827f4c87e5bc9e7bd0def01d5f201a0a1fc26365480921896aa452e1403466d (each of the fourteen columns acl []; derived by aws/tests/release-sql134-executor.test.mjs and read back on PostgreSQL 16). Record the one-shot --phase inspect's date, SSM command id, source commit, live_definition_sha256, prerequisites_missing, release_sql_inspect.columns, precondition_failures and apply_preconditions_met here. If already_applied is true, record the inspect as the verified-live evidence and leave execute false; otherwise copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. Also read, from the same inspect's unrelated snapshot, the table ACLs of loss_draft_tracking and loss_draft_releases and SQL 50's column grants on loss_draft_tracking (escrow_status, check_received_date, updated_at for checksops): the API needs them as well, and this file does not grant them. If precondition_failures is not [] stop: that needs its own reviewed change."
+  },
+  "intended_post_state": {
+    "fingerprint": "c046d1c91cc79596c103f154b043b5421cb1dc6ceaef45d87f2f6ea1c0073c7c",
+    "note": "public.loss_draft_tracking: the columns total_escrowed, draw_amount_requested, draw_stage, draw_amount_released and holdback_amount each carry exactly the column grants authenticated UPDATE and checksops UPDATE. public.loss_draft_releases: the columns loss_draft_id, draw_number, amount_requested, amount_released, release_date, released_at, status, notes and created_by each carry exactly authenticated INSERT and checksops INSERT. The table ACLs, every other column's ACL, the RLS flags and the policies (aws_write_loss_draft_tracking and aws_write_loss_draft_releases stay the authorization boundary) are unchanged; no other table, function, policy, column or row changes. The fingerprint is releaseIntendedHash('sql134', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): c046d1c91cc79596c103f154b043b5421cb1dc6ceaef45d87f2f6ea1c0073c7c."
+  },
+  "staging_acceptance": {
+    "ok": true,
+    "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/41134571358",
+    "basis": "Guarded staging SQL executor apply of sql134-loss-draft-escrow-write-grants, run 41134571358 (2026-10-30, main 746074fb1b8f799b6cd413ccf9e4e7fad5694c0d, wave 30, workstream github-staging-sql-41134571358, staging pin commit 05faad793cd360736420859f1b686e5956bc39dc, on the live executor PPZJFH/UBvNACkdfIyCBNG4T9g0z69dc/WnNkJC+nRg= (deploy run 41133133498; inspect run 41134289523 reported it current with main), from the staging pre-state recorded by read-live run 41130749260 (7827f4c87e5bc9e7bd0def01d5f201a0a1fc26365480921896aa452e1403466d; staging pin PR #1471): receipt before 7827f4c87e5bc9e7bd0def01d5f201a0a1fc26365480921896aa452e1403466d, after c046d1c91cc79596c103f154b043b5421cb1dc6ceaef45d87f2f6ea1c0073c7c == intended, result applied; all fourteen columns intended (authenticated and checksops UPDATE on the five loss_draft_tracking columns, INSERT on the nine loss_draft_releases columns). Read-live run 41134851274 then reported already_applied true, live c046d1c91cc79596c103f154b043b5421cb1dc6ceaef45d87f2f6ea1c0073c7c, precondition_failures []. Production's pre-state (production_inspect) equals staging's: no grant on any of the fourteen columns in both, so the same path applies there; the grants are covered on PostgreSQL 16 by aws/tests/sql134-loss-draft-escrow-write-grants-pg.test.mjs and through the executor by aws/tests/release-sql134-executor.test.mjs. The same file bytes (source_sha256) are pinned in both."
+  },
+  "applied": {
+    "date": "2026-10-31",
+    "result": "applied",
+    "source_commit": "60ebc82c2f793c9cab8a87accd3aa1090f3739ea",
+    "source_commit_basis": "SOURCE_COMMIT in the tarball (written by sql53-temporary-transfer) equals --commit, and the tarball sha256 equals --expected-tarball-sha256 as copied by the operator from that transfer run's log (TARBALL_SHA256 line); the run log itself was not read by the one-shot.",
+    "source_tarball": {
+      "file": "source-60ebc82c2f793c9cab8a87accd3aa1090f3739ea.tar.gz",
+      "sha256": "20550289cb1a7c1e7a044e868f97e64b091471eb8b3bb7b1831e7b0cbe008589"
+    },
+    "migration_source_sha256": "a9082d1369587a702014e10e443ab965c1608e99d14a193da900f7d35c91e03a",
+    "migration_source_sha256_note": "The one-shot source step hashed aws/workflows/sql/134_loss_draft_escrow_write_grants.sql in the transfer tarball: equal to source_sha256 (the pin; migration_matches_pin true).",
+    "runner": "i-0c35557c4e5385406",
+    "runner_basis": "operator-supplied --runner (not verified by the one-shot)",
+    "workstream_id": "prod-sql134-loss-draft-escrow-write-grants-20261031",
+    "one_use_id": "sql134-prod-c44fcefe-878b-4a63-9819-8898861cce64",
+    "one_use_id_consumed": true,
+    "one_use_id_consumed_basis": "Inferred from the successful apply (the tool records the one_use_id after COMMIT and only warns if that write fails); the consumed-registry entry was not read back separately.",
+    "owner_approval": "apply SQL 134 in production",
+    "owner_approval_basis": "As passed in --approval-statement for --approval-scope sql134; the one-shot cannot verify who said it. The owner's words of 2026-10-31 for this run were \"apply SQL 134 in production\", given after the pin change (#1473, merged to main as 442ced7f7 on the owner's \"Merge 1473\") whose authorization recorded that no words for the production apply had been given yet; they were passed verbatim as the approval statement for the --phase apply run.",
+    "operator": "michaelcarletta-cmd",
+    "apply_ssm_command_id": "d709209e-4873-4d95-aa22-35e49b02472c",
+    "one_shot_run_id": "cab03139-9b20-4a34-9773-6aeb3145b971",
+    "one_shot_note": "One SSM command (d709209e-4873-4d95-aa22-35e49b02472c on i-0c35557c4e5385406, comment \"SQL 134 one-shot apply (owner: apply SQL 134 in production)\", sent 2026-10-31 01:14:02Z, Success at 01:14:23Z; the runner was started from stopped for this run at 01:14:01Z, SSM online at 01:14:02Z, and stopped again at 01:15:35Z after the read-only inspect below) ran the production-sql-one-shot --phase apply (run_id cab03139-9b20-4a34-9773-6aeb3145b971) from main 60ebc82c2 (transfer run 41154179368, sql53-temporary-transfer.yml on main after the #1473 merge (442ced7f7) and the SQL 133 record #1474, which changes no SQL 134 file; tarball sha256 20550289cb1a7c1e7a044e868f97e64b091471eb8b3bb7b1831e7b0cbe008589). No separate --phase inspect ran before it: the one-shot's own inspect step read live 7827f4c87e5bc9e7bd0def01d5f201a0a1fc26365480921896aa452e1403466d (live_matches_expected true, already_applied false, apply_preconditions_met true, precondition_failures [], prerequisites_missing [], predecessors {} (none), all fourteen columns acl []), the same pre-state as the read-only inspect recorded in production_inspect (SSM 6a2f2c2c-cf5b-4e6f-9df6-12fe8221a1e9). Steps pin (execute true, staging_acceptance run 41134571358), source (tarball sha256 matches the sidecar and --expected-tarball-sha256, tree matches the tarball, migration source == pin), inspect, contracts (claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43), manifest, source-recheck-before-preflight, preflight (receipt_issued), evaluate (sql134_production_apply_allowed true), source-recheck-before-apply, apply (applied) and post-apply-inspect all ok; the command printed EXIT=0. The run's JSON did not arrive whole: SSM returned the first 24000 characters of the command's output (--output truncated--), which cut the one-shot's pretty-printed JSON 6800 characters into its applied object, inside applied.receipt at after_hash (380 characters of the receipt printed). Every other field of the applied object arrived (date, result, source_commit and its basis, source_tarball, runner and its basis, workstream_id, one_use_id and its consumed basis, owner_approval and its basis, operator, pre_apply_inspect, contract_results, one_shot_run_id, one_shot_note) and is recorded as printed, except this note and owner_approval_basis, which are extended as in the SQL 127 to SQL 133 records (the one-shot's own one_shot_note read: \"One production-sql-one-shot run verified the source, ran the read-only inspect and the runner contracts, built the manifest, issued the receipt and lease (preflight), evaluated (sql134_production_apply_allowed true), applied (exit 0) and ran the post-apply inspect.\"; its owner_approval_basis read: \"As passed in --approval-statement for --approval-scope sql134; the one-shot cannot verify who said it.\"). receipt and post_apply_inspect below are the run's top-level details.apply_result and details.post_apply_inspect, which arrived whole: the one-shot assigns those same objects to applied.receipt and applied.post_apply_inspect (summary.applied in scripts/deployment-guard/lib/production-sql-one-shot.mjs: receipt: applyRecord, post_apply_inspect: summary.post_apply_inspect), the 380 characters of applied.receipt that were printed are a byte-for-byte prefix of details.apply_result printed at the same indent, and details.apply_result.release_sql_inspect equals details.post_apply_inspect.release_sql_inspect; the printed pre_apply_inspect and contract_results of the applied object equal the run's top-level pre_apply_inspect and contract_results. This block adds migration_source_sha256 (with its note), apply_ssm_command_id, steps and manifest_sha256 from the same run's details, as the SQL 127 to SQL 133 records do. The run's not_observed_by_this_run list (printed after the applied object) was cut off with the tail; as in every one-shot run it names ssm_command_id and source_staged_by, supplied here as apply_ssm_command_id and transfer run 41154179368. A separate read-only --inspect after the run (SSM b931146e-bb1d-4215-9161-655268967451, same tarball) reported live c046d1c91cc79596c103f154b043b5421cb1dc6ceaef45d87f2f6ea1c0073c7c == intended, already_applied true, precondition_failures [], all fourteen columns 'intended' (authenticated and checksops UPDATE on the five loss_draft_tracking columns, INSERT on the nine loss_draft_releases columns).",
+    "steps": [
+      "pin",
+      "source",
+      "inspect",
+      "contracts",
+      "manifest",
+      "source-recheck-before-preflight",
+      "preflight",
+      "evaluate",
+      "source-recheck-before-apply",
+      "apply",
+      "post-apply-inspect"
+    ],
+    "contract_results": {
+      "claim-ledger": {
+        "ok": true,
+        "test": "aws/tests/claim-ledger-accepted-contract.test.mjs",
+        "evidence": "4/4 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at 60ebc82c2f793c9cab8a87accd3aa1090f3739ea (production-sql-one-shot cab03139-9b20-4a34-9773-6aeb3145b971, node --test)"
+      },
+      "tenant-isolation": {
+        "ok": true,
+        "test": "aws/tests/tenant-security-compliance.test.mjs",
+        "evidence": "6/6 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at 60ebc82c2f793c9cab8a87accd3aa1090f3739ea (production-sql-one-shot cab03139-9b20-4a34-9773-6aeb3145b971, node --test)"
+      },
+      "financial-write-protections": {
+        "ok": true,
+        "test": "aws/tests/api-write.test.mjs",
+        "evidence": "43/43 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at 60ebc82c2f793c9cab8a87accd3aa1090f3739ea (production-sql-one-shot cab03139-9b20-4a34-9773-6aeb3145b971, node --test)"
+      }
+    },
+    "pre_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "7827f4c87e5bc9e7bd0def01d5f201a0a1fc26365480921896aa452e1403466d",
+      "live_matches_expected": true,
+      "already_applied": false,
+      "predecessors": {},
+      "predecessors_applied": true,
+      "missing_dependencies": [],
+      "apply_preconditions_met": true,
+      "precondition_failures": [],
+      "current_user": "checksops_admin",
+      "session_user": "checksops_admin",
+      "counts": null,
+      "successors_applied": [],
+      "release_sql_inspect": {
+        "live_definition_sha256": "7827f4c87e5bc9e7bd0def01d5f201a0a1fc26365480921896aa452e1403466d",
+        "prerequisites_missing": [],
+        "predecessors": {},
+        "successors_applied": [],
+        "functions": [],
+        "policies": [],
+        "views": [],
+        "tables": [],
+        "columns": [
+          {
+            "name": "loss_draft_tracking.total_escrowed acl",
+            "state": "different",
+            "acl": []
+          },
+          {
+            "name": "loss_draft_tracking.draw_amount_requested acl",
+            "state": "different",
+            "acl": []
+          },
+          {
+            "name": "loss_draft_tracking.draw_stage acl",
+            "state": "different",
+            "acl": []
+          },
+          {
+            "name": "loss_draft_tracking.draw_amount_released acl",
+            "state": "different",
+            "acl": []
+          },
+          {
+            "name": "loss_draft_tracking.holdback_amount acl",
+            "state": "different",
+            "acl": []
+          },
+          {
+            "name": "loss_draft_releases.loss_draft_id acl",
+            "state": "different",
+            "acl": []
+          },
+          {
+            "name": "loss_draft_releases.draw_number acl",
+            "state": "different",
+            "acl": []
+          },
+          {
+            "name": "loss_draft_releases.amount_requested acl",
+            "state": "different",
+            "acl": []
+          },
+          {
+            "name": "loss_draft_releases.amount_released acl",
+            "state": "different",
+            "acl": []
+          },
+          {
+            "name": "loss_draft_releases.release_date acl",
+            "state": "different",
+            "acl": []
+          },
+          {
+            "name": "loss_draft_releases.released_at acl",
+            "state": "different",
+            "acl": []
+          },
+          {
+            "name": "loss_draft_releases.status acl",
+            "state": "different",
+            "acl": []
+          },
+          {
+            "name": "loss_draft_releases.notes acl",
+            "state": "different",
+            "acl": []
+          },
+          {
+            "name": "loss_draft_releases.created_by acl",
+            "state": "different",
+            "acl": []
+          }
+        ],
+        "constraints": [],
+        "triggers": [],
+        "table_privileges": [],
+        "function_acl": [],
+        "acl_functions": [],
+        "indexes": [],
+        "unique_covers": [],
+        "definer_writes": [],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": null
+      }
+    },
+    "manifest_sha256": "29e18734e0b0e07e33e09a162cfcd6b65e9886ad30970293001beff1ca51d16a",
+    "receipt": {
+      "migration": "sql134",
+      "workstream": "prod-sql134-loss-draft-escrow-write-grants-20261031",
+      "commit": "60ebc82c2f793c9cab8a87accd3aa1090f3739ea",
+      "sql_file": "aws/workflows/sql/134_loss_draft_escrow_write_grants.sql",
+      "before_hash": "7827f4c87e5bc9e7bd0def01d5f201a0a1fc26365480921896aa452e1403466d",
+      "after_hash": "c046d1c91cc79596c103f154b043b5421cb1dc6ceaef45d87f2f6ea1c0073c7c",
+      "release_sql_inspect": {
+        "live_definition_sha256": "c046d1c91cc79596c103f154b043b5421cb1dc6ceaef45d87f2f6ea1c0073c7c",
+        "prerequisites_missing": [],
+        "predecessors": {},
+        "successors_applied": [],
+        "functions": [],
+        "policies": [],
+        "views": [],
+        "tables": [],
+        "columns": [
+          {
+            "name": "loss_draft_tracking.total_escrowed acl",
+            "state": "intended",
+            "acl": [
+              "authenticated UPDATE",
+              "checksops UPDATE"
+            ]
+          },
+          {
+            "name": "loss_draft_tracking.draw_amount_requested acl",
+            "state": "intended",
+            "acl": [
+              "authenticated UPDATE",
+              "checksops UPDATE"
+            ]
+          },
+          {
+            "name": "loss_draft_tracking.draw_stage acl",
+            "state": "intended",
+            "acl": [
+              "authenticated UPDATE",
+              "checksops UPDATE"
+            ]
+          },
+          {
+            "name": "loss_draft_tracking.draw_amount_released acl",
+            "state": "intended",
+            "acl": [
+              "authenticated UPDATE",
+              "checksops UPDATE"
+            ]
+          },
+          {
+            "name": "loss_draft_tracking.holdback_amount acl",
+            "state": "intended",
+            "acl": [
+              "authenticated UPDATE",
+              "checksops UPDATE"
+            ]
+          },
+          {
+            "name": "loss_draft_releases.loss_draft_id acl",
+            "state": "intended",
+            "acl": [
+              "authenticated INSERT",
+              "checksops INSERT"
+            ]
+          },
+          {
+            "name": "loss_draft_releases.draw_number acl",
+            "state": "intended",
+            "acl": [
+              "authenticated INSERT",
+              "checksops INSERT"
+            ]
+          },
+          {
+            "name": "loss_draft_releases.amount_requested acl",
+            "state": "intended",
+            "acl": [
+              "authenticated INSERT",
+              "checksops INSERT"
+            ]
+          },
+          {
+            "name": "loss_draft_releases.amount_released acl",
+            "state": "intended",
+            "acl": [
+              "authenticated INSERT",
+              "checksops INSERT"
+            ]
+          },
+          {
+            "name": "loss_draft_releases.release_date acl",
+            "state": "intended",
+            "acl": [
+              "authenticated INSERT",
+              "checksops INSERT"
+            ]
+          },
+          {
+            "name": "loss_draft_releases.released_at acl",
+            "state": "intended",
+            "acl": [
+              "authenticated INSERT",
+              "checksops INSERT"
+            ]
+          },
+          {
+            "name": "loss_draft_releases.status acl",
+            "state": "intended",
+            "acl": [
+              "authenticated INSERT",
+              "checksops INSERT"
+            ]
+          },
+          {
+            "name": "loss_draft_releases.notes acl",
+            "state": "intended",
+            "acl": [
+              "authenticated INSERT",
+              "checksops INSERT"
+            ]
+          },
+          {
+            "name": "loss_draft_releases.created_by acl",
+            "state": "intended",
+            "acl": [
+              "authenticated INSERT",
+              "checksops INSERT"
+            ]
+          }
+        ],
+        "constraints": [],
+        "triggers": [],
+        "table_privileges": [],
+        "function_acl": [],
+        "acl_functions": [],
+        "indexes": [],
+        "unique_covers": [],
+        "definer_writes": [],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": null
+      },
+      "unrelated_catalog_sha256": "68edc0809867cfa7aa716a0b9ff75b1589a90bdd7d30f17bd4c9b148370464ab",
+      "unrelated_catalog_counts": {
+        "relations": 892,
+        "columns": 3536,
+        "constraints": 2239,
+        "policies": 404,
+        "functions": 1356,
+        "indexes": 655,
+        "default_acl": 0,
+        "role_memberships": 15,
+        "roles": 29,
+        "triggers": 184,
+        "views": 25,
+        "types": 18,
+        "schema": 2
+      },
+      "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/41134571358",
+      "result": "applied"
+    },
+    "post_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "c046d1c91cc79596c103f154b043b5421cb1dc6ceaef45d87f2f6ea1c0073c7c",
+      "live_matches_expected": false,
+      "already_applied": true,
+      "predecessors": {},
+      "predecessors_applied": true,
+      "missing_dependencies": [],
+      "apply_preconditions_met": false,
+      "precondition_failures": [],
+      "current_user": "checksops_admin",
+      "session_user": "checksops_admin",
+      "counts": null,
+      "successors_applied": [],
+      "release_sql_inspect": {
+        "live_definition_sha256": "c046d1c91cc79596c103f154b043b5421cb1dc6ceaef45d87f2f6ea1c0073c7c",
+        "prerequisites_missing": [],
+        "predecessors": {},
+        "successors_applied": [],
+        "functions": [],
+        "policies": [],
+        "views": [],
+        "tables": [],
+        "columns": [
+          {
+            "name": "loss_draft_tracking.total_escrowed acl",
+            "state": "intended",
+            "acl": [
+              "authenticated UPDATE",
+              "checksops UPDATE"
+            ]
+          },
+          {
+            "name": "loss_draft_tracking.draw_amount_requested acl",
+            "state": "intended",
+            "acl": [
+              "authenticated UPDATE",
+              "checksops UPDATE"
+            ]
+          },
+          {
+            "name": "loss_draft_tracking.draw_stage acl",
+            "state": "intended",
+            "acl": [
+              "authenticated UPDATE",
+              "checksops UPDATE"
+            ]
+          },
+          {
+            "name": "loss_draft_tracking.draw_amount_released acl",
+            "state": "intended",
+            "acl": [
+              "authenticated UPDATE",
+              "checksops UPDATE"
+            ]
+          },
+          {
+            "name": "loss_draft_tracking.holdback_amount acl",
+            "state": "intended",
+            "acl": [
+              "authenticated UPDATE",
+              "checksops UPDATE"
+            ]
+          },
+          {
+            "name": "loss_draft_releases.loss_draft_id acl",
+            "state": "intended",
+            "acl": [
+              "authenticated INSERT",
+              "checksops INSERT"
+            ]
+          },
+          {
+            "name": "loss_draft_releases.draw_number acl",
+            "state": "intended",
+            "acl": [
+              "authenticated INSERT",
+              "checksops INSERT"
+            ]
+          },
+          {
+            "name": "loss_draft_releases.amount_requested acl",
+            "state": "intended",
+            "acl": [
+              "authenticated INSERT",
+              "checksops INSERT"
+            ]
+          },
+          {
+            "name": "loss_draft_releases.amount_released acl",
+            "state": "intended",
+            "acl": [
+              "authenticated INSERT",
+              "checksops INSERT"
+            ]
+          },
+          {
+            "name": "loss_draft_releases.release_date acl",
+            "state": "intended",
+            "acl": [
+              "authenticated INSERT",
+              "checksops INSERT"
+            ]
+          },
+          {
+            "name": "loss_draft_releases.released_at acl",
+            "state": "intended",
+            "acl": [
+              "authenticated INSERT",
+              "checksops INSERT"
+            ]
+          },
+          {
+            "name": "loss_draft_releases.status acl",
+            "state": "intended",
+            "acl": [
+              "authenticated INSERT",
+              "checksops INSERT"
+            ]
+          },
+          {
+            "name": "loss_draft_releases.notes acl",
+            "state": "intended",
+            "acl": [
+              "authenticated INSERT",
+              "checksops INSERT"
+            ]
+          },
+          {
+            "name": "loss_draft_releases.created_by acl",
+            "state": "intended",
+            "acl": [
+              "authenticated INSERT",
+              "checksops INSERT"
+            ]
+          }
+        ],
+        "constraints": [],
+        "triggers": [],
+        "table_privileges": [],
+        "function_acl": [],
+        "acl_functions": [],
+        "indexes": [],
+        "unique_covers": [],
+        "definer_writes": [],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": null
+      }
+    }
+  },
+  "production_evidence": {
+    "2026-10-31 apply": "Guarded production SQL one-shot on i-0c35557c4e5385406, workstream prod-sql134-loss-draft-escrow-write-grants-20261031, main 60ebc82c2 (tarball 20550289…, transfer run 41154179368, migration source a9082d13… == pin), owner-approved run (\"apply SQL 134 in production\"), SSM d709209e-4873-4d95-aa22-35e49b02472c, run_id cab03139-9b20-4a34-9773-6aeb3145b971, one_use_id sql134-prod-c44fcefe-878b-4a63-9819-8898861cce64 (spent): every step ok; contracts claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43; pre-apply inspect live 7827f4c8… (live_matches_expected true, precondition_failures [], predecessors {} (none)); manifest 29e18734…; 7827f4c8… -> c046d1c9…, result applied, unrelated catalog 68edc080… (functions 1356, triggers 184); post-apply inspect already_applied true, precondition_failures []; the run's JSON was cut by SSM's 24000-character output limit inside applied.receipt, and receipt and post_apply_inspect are the run's identical top-level apply_result and post_apply_inspect (see applied.one_shot_note); separate read-only inspect SSM b931146e-bb1d-4215-9161-655268967451 already_applied true, all fourteen columns intended. After: loss_draft_tracking total_escrowed, draw_amount_requested, draw_stage, draw_amount_released and holdback_amount each carry exactly authenticated UPDATE and checksops UPDATE; loss_draft_releases loss_draft_id, draw_number, amount_requested, amount_released, release_date, released_at, status, notes and created_by each carry exactly authenticated INSERT and checksops INSERT; no other column, table ACL, policy, function or trigger changed (the unrelated catalog check passed). No trigger was added, so the DB validator is unaffected. execute is false so the pin is no longer a standing authorization."
+  }
+}

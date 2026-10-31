@@ -144,6 +144,21 @@ export const STAGING_WAVE1 = Object.freeze({
   // executor carried it (deploy run 41087238803): the proposed file's body with EXECUTE for checksops
   // and the owner only (state different), the same state SQL 129's read-live run 41081764481 read.
   sql130: Object.freeze({ wave: 28, approved: '2026-10-30', run: '41087643551', live: 'cb2fd65bb580f9338cab728c2507a32b7589aee5e702d117c31e1862f98a5a19' }),
+  // SQL 131: no wave; its staging read-live (run 41107844336) found the intended state already (already_applied
+  // true), so no staging apply was authorized and its staging pin stays pending.
+  // Wave 29 (owner approved 2026-10-30, "continue with SQL 132 staging"): SQL 132, the financial TOTP
+  // code-check lockout counter. Read at main 546dd7cb8 after the executor carried it (deploy run
+  // 41113385981): financial_totp_count_code_check(uuid) absent, every prerequisite present,
+  // predecessors.sql130 true, the definer write ok (the pre-state the executor test derives).
+  sql132: Object.freeze({ wave: 29, approved: '2026-10-30', run: '41113777003', live: 'e1a1d4edb115e3fa0881112e6759c2d7ee1e9d8c6b3e24a7611b655dcf75741f' }),
+  // Wave 30 (owner approved 2026-10-30, "continue with SQL 133 staging"): SQL 133, the financial TOTP
+  // teammate reset. Read at main 564b7baee after the executor carried it (deploy run 41129102846):
+  // financial_totp_admin_reset_enrollment(uuid, uuid) absent, every prerequisite present, no predecessor,
+  sql133: Object.freeze({ wave: 30, approved: '2026-10-30', run: '41129536538', live: 'f3b1671e8617df78a20600b43fcfc6636739d78f235ef78d1cc7d1d68f2f909d' }),
+  // Wave 30 (owner approved 2026-10-30, "start the SQL 134 staging apply"): SQL 134, the Loss Draft
+  // escrow and draw column grants. Read at main 564b7baee with the executor current (inspect run 41130389562):
+  // none of the fourteen columns granted, every prerequisite present (the pre-state the executor test derives).
+  sql134: Object.freeze({ wave: 30, approved: '2026-10-30', run: '41130749260', live: '7827f4c87e5bc9e7bd0def01d5f201a0a1fc26365480921896aa452e1403466d' }),
   sql98: Object.freeze({ wave: 3, approved: '2026-10-18', run: '39083278136', live: '296c3d6a274e10f66005fb9eaecf93fa17b81bd8db3607037ca07698fddd3275', apply_run: '39085677318' }),
 });
 
@@ -155,7 +170,7 @@ export const pendingPin = (pin) => Object.freeze({
 });
 
 /**
- * The committed staging pin's apply state: waves 1-28 recorded and approved, wave 6 approved with
+ * The committed staging pin's apply state: waves 1-30 recorded and approved, wave 6 approved with
  * its read-live still to record (pending until then), wave 18 (SQL 117) retired, SQL 129 retired
  * before any read-live was recorded, the rest pending.
  */

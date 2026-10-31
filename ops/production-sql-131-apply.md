@@ -65,8 +65,26 @@ lockout fix when green", "continue with SQL 131 staging", "run the SQL 131 produ
 for the production apply yet). The owner merges the pin change; the apply still needs the owner's
 run-time approval and runs only after that merge is on main and staged.
 
-**Status:** staging already in the intended state (no apply); production pin execute-authorized;
-production apply pending.
+**Production apply (2026-10-30).** After the pin change (#1460, merged to main as `546dd7cb8` on the
+owner's "merge the SQL 131 pin when green"), transfer run 41113179289 staged main `546dd7cb8` (tarball
+sha256 `becdc3771311f1d4e4120e0cda0e1dfa88fb0fa45e3b83f3928a30cdd0f8468c`). A read-only one-shot
+`--phase inspect` of the same commit (SSM `e63078b3-fc50-45ee-8ccc-066559e25c88`, run
+`f7f6e63b-ad8c-4c03-8a5d-fe3ca90dff29`) found live `99d9e8e9…` (the pinned pre-state), the four functions
+`different` with `PUBLIC`, `predecessors.sql130` true, `precondition_failures` `[]`, contracts 4/4, 6/6 and
+43/43. One-shot `--phase apply` run `5e1711ea-5181-42f7-83a4-cd340a50641a` through SSM
+`decffaaa-25d2-4665-b6ee-f243fe459062`, workstream `prod-sql131-financial-totp-functions-no-public-20261030`,
+under the owner's words "apply SQL 131 in production" (passed verbatim): every step ok; manifest
+`1a3cad1d…`; receipt `99d9e8e9…` → `a661533320d9b391cc9b5c5f2fade5632801060693a5205c4bf8391702fe90c7`
+(intended), result `applied`, unrelated catalog `eda4f4ea…` (functions 1350, triggers 184); post-apply
+inspect `already_applied` true, `precondition_failures` `[]`. SSM returned the first 24000 characters of the
+command's output, which cut the one-shot JSON inside its `applied.post_apply_inspect`; the pin records the
+run's top-level `post_apply_inspect` (the same object, printed whole) and says so in `applied.one_shot_note`.
+A separate read-only inspect (SSM `57285e9d-c4b6-4397-ab9f-82c426a15520`) reported the four functions
+`intended`, EXECUTE for `checksops` and the owner only (`PUBLIC` revoked). Runner state: started for these
+runs at 2026-10-30 19:16:14 UTC and stopped at 19:17:41 UTC.
+
+**Status:** staging already in the intended state (no apply); applied to production (2026-10-30); the
+production pin is retired (`execute: false`).
 
 ## Order
 

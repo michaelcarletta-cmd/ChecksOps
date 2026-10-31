@@ -56,6 +56,8 @@ that connects to the database:
 | `sql130` | `scripts/deployment-guard/sql130-financial-totp-rate-limit-code-check-no-public-production-apply.mjs` (`ops/production-sql-130-apply.md`; SQL 129's `code_check` allow-list plus EXECUTE revoked from `PUBLIC` and granted to `checksops` on `consume_financial_totp_rate_limit` only: production (PUBLIC granted) and staging (no PUBLIC) reach the same state; supersedes SQL 129) |
 | `sql131` | `scripts/deployment-guard/sql131-financial-totp-functions-no-public-production-apply.mjs` (`ops/production-sql-131-apply.md`; EXECUTE revoked from `PUBLIC` and granted to `checksops` on the four financial TOTP enrollment functions `financial_totp_upsert_enrollment`, `_get_enrollment`, `_mark_verified` and `_status`, which the API calls as `checksops`; bodies, owners and the fifth function (SQL 130) unchanged; predecessor `sql130`) |
 | `sql132` | `scripts/deployment-guard/sql132-financial-totp-code-check-lockout-production-apply.mjs` (`ops/production-sql-132-apply.md`; the financial TOTP lockout: the new SECURITY DEFINER `financial_totp_count_code_check(uuid)` counts a code check before the API compares the code, locks the enrollment for 15 minutes at the tenth consecutive check without a success and refuses while locked; `financial_totp_mark_verified` clears both on a correct code; EXECUTE for `checksops` and the owner; predecessor SQL 130) |
+| `sql133` | `scripts/deployment-guard/sql133-financial-totp-admin-reset-enrollment-production-apply.mjs` (`ops/production-sql-133-apply.md`; the teammate reset of a financial TOTP enrollment: the new SECURITY DEFINER `financial_totp_admin_reset_enrollment(uuid, uuid)` re-checks the API's gate in the database (the caller is `auth.uid()`, not the target, shares a tenant with the target, the target is not the platform owner) and deletes the target's `financial_totp_enrollments` row, `cleared false` when there is none; EXECUTE for `checksops` and the owner; no predecessor) |
+| `sql134` | `scripts/deployment-guard/sql134-loss-draft-escrow-write-grants-production-apply.mjs` (`ops/production-sql-134-apply.md`; the Loss Draft escrow and draw records: column UPDATE (`total_escrowed`, `draw_amount_requested`, `draw_stage`, `draw_amount_released`, `holdback_amount`) on `loss_draft_tracking` and column INSERT (`loss_draft_id`, `draw_number`, `amount_requested`, `amount_released`, `release_date`, `released_at`, `status`, `notes`, `created_by`) on `loss_draft_releases`, for `checksops` and `authenticated`; no predecessor, no policy change) |
 
 To add a migration, register its reviewed tool in `ONE_SHOT_TOOLS`
 (`scripts/deployment-guard/lib/production-sql-one-shot.mjs`). An entry names only the tool,
@@ -70,7 +72,7 @@ a migration file touches its pin, not the registry. An entry may add `inspect_re
 
 | flag | |
 |---|---|
-| `--migration <key>` | a registered key (`sql29`, `sql30`, `sql71`, `sql77`…`sql89`, `sql90`…`sql106`, `sql108`, `sql109`, `sql110`, `sql111`, `sql112`, `sql113`, `sql114`, `sql115`, `sql116`, `sql117`, `sql118`, `sql119`, `sql120`, `sql121`, `sql122`, `sql123`, `sql124`, `sql125`, `sql126`, `sql127`, `sql128`, `sql129`, `sql130`, `sql131`, `sql132`) |
+| `--migration <key>` | a registered key (`sql29`, `sql30`, `sql71`, `sql77`…`sql89`, `sql90`…`sql106`, `sql108`, `sql109`, `sql110`, `sql111`, `sql112`, `sql113`, `sql114`, `sql115`, `sql116`, `sql117`, `sql118`, `sql119`, `sql120`, `sql121`, `sql122`, `sql123`, `sql124`, `sql125`, `sql126`, `sql127`, `sql128`, `sql129`, `sql130`, `sql131`, `sql132`, `sql133`, `sql134`) |
 | `--approval-scope <key>` | the migration the owner approved; must equal `--migration` |
 | `--approval-statement "<words>"` or `--approval-statement-b64 <base64>` | the owner's exact words, recorded verbatim. Pass exactly one of the two. Use the base64 form when the words contain quotes or newlines. Must be non-empty. |
 | `--commit <sha>` | the full main commit the tarball was built from |
@@ -113,12 +115,15 @@ An unexpected exception also ends in one failure summary:
   before anything else.
 
 1. **Pin.** Refuses unless the pin has `execute: true`, a staging acceptance
-   (`ok: true` plus a reference) and an authorization phrase. SQL 131's pin is `execute: true`
-   (owner-approved pin change of 2026-10-30: the read-only production inspect of 2026-10-30, SSM
-   `be25e88a-1088-49af-81fa-10eecd8902b4`, recorded as its pre-state, on its guarded staging read-live
-   run 41107844336, already in the intended state there; see `ops/production-sql-131-apply.md`) until
-   its record-and-retire change; the production apply still needs the owner's words for that run.
-   SQL 130's pin is `execute: false`
+   (`ok: true` plus a reference) and an authorization phrase. SQL 134's pin is `execute: false`
+   again since its 2026-10-31 apply (owner statement "apply SQL 134 in production"; see
+   `ops/production-sql-134-apply.md`). SQL 133's pin is `execute: false`
+   again since its 2026-10-31 apply (owner statement "apply SQL 133 in production"; see
+   `ops/production-sql-133-apply.md`). SQL 132's pin is `execute: false`
+   again since its 2026-10-30 apply (owner statement "apply SQL 132 in production"; see
+   `ops/production-sql-132-apply.md`). SQL 131's pin is `execute: false`
+   again since its 2026-10-30 apply (owner statement "apply SQL 131 in production"; see
+   `ops/production-sql-131-apply.md`). SQL 130's pin is `execute: false`
    again since its 2026-10-30 apply (owner statement "apply SQL 130 in production"; see
    `ops/production-sql-130-apply.md`). SQL 128's pin is `execute: false`
    again since its 2026-10-30 apply (owner statement "apply SQL 128 in production"; see

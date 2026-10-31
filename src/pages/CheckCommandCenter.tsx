@@ -2237,9 +2237,8 @@ export default function CheckCommandCenter() {
               ) : (
                 <Card className="flex flex-col items-center justify-center h-full">
                   <div className="text-center text-muted-foreground">
-                    <Banknote className="h-12 w-12 mx-auto mb-3 opacity-30" />
-                    <Badge variant="outline" className="mb-3">{allChecks.length} checks</Badge>
-                    <p className="text-sm">Select a check to begin</p>
+                    <ClipboardCheck className="h-12 w-12 mx-auto mb-3 opacity-30" />
+                    <p className="text-xs">Select a check</p>
                   </div>
                 </Card>
               )}

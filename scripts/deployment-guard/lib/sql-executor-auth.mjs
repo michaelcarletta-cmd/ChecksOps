@@ -2983,8 +2983,7 @@ export const AUTHORIZED_SQL131_FINANCIAL_TOTP_FUNCTIONS_NO_PUBLIC = Object.freez
 // the new SECURITY DEFINER financial_totp_count_code_check(uuid) counts a code check before the API
 // compares the code, locks the enrollment for 15 minutes at the tenth consecutive check without a
 // success and refuses while locked; EXECUTE for checksops and the owner). Predecessor SQL 130.
-// Pending until a reviewed pin change records a staging read-live (expected: the function absent,
-// everything else in place).
+// Staging apply authorized (wave 29) from staging read-live run 41113777003.
 export const AUTHORIZED_SQL132_FINANCIAL_TOTP_CODE_CHECK_LOCKOUT = Object.freeze({
   key: 'sql132',
   filename: 'aws/workflows/sql/132_financial_totp_code_check_lockout.sql',
@@ -2992,14 +2991,61 @@ export const AUTHORIZED_SQL132_FINANCIAL_TOTP_CODE_CHECK_LOCKOUT = Object.freeze
   // The commit that last authored the file bytes.
   commit: 'c2b69ed13d22313a4959bc65b4516983e838a5bd',
   source_sha256: 'ca91ce9c04e09715fa01f54fe9dc81a88cb22a3e0ea1e3994b9ffc63b55566eb',
-  authorization: 'pending',
-  execute: false,
-  expected_live_definition_sha256: null,
+  authorization: 'Owner approved 2026-10-30: staging apply (wave 29) from staging read-live run 41113777003',
+  execute: true,
+  // Staging read-live run 41113777003 (main 546dd7cb8, executor J75AEogm...): the function absent, everything else in place.
+  expected_live_definition_sha256: 'e1a1d4edb115e3fa0881112e6759c2d7ee1e9d8c6b3e24a7611b655dcf75741f',
   // Code-derived: releaseIntendedHash('sql132', file bytes) (release-sql-state.mjs); re-derived by the tests.
   intended_replacement_sha256: '88828cb48d8b847cf177d57314bdbc0c8a1f49051958be5adb264a0c418ebd72',
   function_identities: Object.freeze([
     'public.financial_totp_count_code_check(uuid)',
   ]),
+});
+
+// Financial TOTP teammate reset staging pin: SQL 133 (owner 2026-10-30 "ok build the reset after SQL 131
+// and the lockout fix": the new SECURITY DEFINER financial_totp_admin_reset_enrollment(uuid, uuid) deletes a
+// teammate's financial_totp_enrollments row under the API's own gate, re-checked in the database;
+// EXECUTE for checksops and the owner). No predecessor. Staging apply authorized (wave 30) from staging
+// read-live run 41129536538.
+export const AUTHORIZED_SQL133_FINANCIAL_TOTP_ADMIN_RESET_ENROLLMENT = Object.freeze({
+  key: 'sql133',
+  filename: 'aws/workflows/sql/133_financial_totp_admin_reset_enrollment.sql',
+  migration_id: '133_financial_totp_admin_reset_enrollment',
+  // The commit that last authored the file bytes.
+  commit: '9bf17aa23c66bdaf0688de6d56eff99ad143f6e5',
+  source_sha256: '2184701c42869cef45839bb68aec7a8275f303612576d426225d172d54c8e9a2',
+  authorization: 'Owner approved 2026-10-30: staging apply (wave 30) from staging read-live run 41129536538',
+  execute: true,
+  // Staging read-live run 41129536538 (main 564b7baee, executor 0RDcYqTS...): the function absent, everything else in place.
+  expected_live_definition_sha256: 'f3b1671e8617df78a20600b43fcfc6636739d78f235ef78d1cc7d1d68f2f909d',
+  // Code-derived: releaseIntendedHash('sql133', file bytes) (release-sql-state.mjs); re-derived by the tests.
+  intended_replacement_sha256: 'edfef132ffea2b00a1b22e452b35a4232a14c81fbba832325d22ce8656a45459',
+  function_identities: Object.freeze([
+    'public.financial_totp_admin_reset_enrollment(uuid, uuid)',
+  ]),
+});
+
+// Loss Draft escrow and draw records staging pin: SQL 134 (owner 2026-10-30: a monitored loss draft
+// stays in Loss Draft to document escrow and disbursements; UPDATE (total_escrowed,
+// draw_amount_requested, draw_stage, draw_amount_released, holdback_amount) on loss_draft_tracking
+// and INSERT (loss_draft_id, draw_number, amount_requested, amount_released, release_date,
+// released_at, status, notes, created_by) on loss_draft_releases, for checksops and authenticated).
+// No predecessor. Staging apply authorized (wave 30) from staging read-live run 41130749260.
+export const AUTHORIZED_SQL134_LOSS_DRAFT_ESCROW_WRITE_GRANTS = Object.freeze({
+  key: 'sql134',
+  filename: 'aws/workflows/sql/134_loss_draft_escrow_write_grants.sql',
+  migration_id: '134_loss_draft_escrow_write_grants',
+  // The commit that last authored the file bytes.
+  commit: '05faad793cd360736420859f1b686e5956bc39dc',
+  source_sha256: 'a9082d1369587a702014e10e443ab965c1608e99d14a193da900f7d35c91e03a',
+  authorization: 'Owner approved 2026-10-30: staging apply (wave 30) from staging read-live run 41130749260',
+  execute: true,
+  // Staging read-live run 41130749260 (main 564b7baee): none of the fourteen columns granted.
+  expected_live_definition_sha256: '7827f4c87e5bc9e7bd0def01d5f201a0a1fc26365480921896aa452e1403466d',
+  // Code-derived: releaseIntendedHash('sql134', file bytes) (release-sql-state.mjs); re-derived by the tests.
+  intended_replacement_sha256: 'c046d1c91cc79596c103f154b043b5421cb1dc6ceaef45d87f2f6ea1c0073c7c',
+  // The file creates, replaces and sets the ACL of no function.
+  function_identities: Object.freeze([]),
 });
 
 export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
@@ -3045,6 +3091,8 @@ export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql130: AUTHORIZED_SQL130_FINANCIAL_TOTP_RATE_LIMIT_CODE_CHECK_NO_PUBLIC,
   sql131: AUTHORIZED_SQL131_FINANCIAL_TOTP_FUNCTIONS_NO_PUBLIC,
   sql132: AUTHORIZED_SQL132_FINANCIAL_TOTP_CODE_CHECK_LOCKOUT,
+  sql133: AUTHORIZED_SQL133_FINANCIAL_TOTP_ADMIN_RESET_ENROLLMENT,
+  sql134: AUTHORIZED_SQL134_LOSS_DRAFT_ESCROW_WRITE_GRANTS,
 });
 
 // The fee collection pin under its earlier map name (the same object as the release map's sql98).
@@ -3060,7 +3108,7 @@ export function isSql30TenantDocumentsDocType(input = {}) {
   return pinIdentifiersMatch(input, AUTHORIZED_SQL30_TENANT_DOCUMENTS_DOC_TYPE);
 }
 
-/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql132) an input names, or null. */
+/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql134) an input names, or null. */
 export function releaseSqlMigrationKey(input = {}) {
   return Object.keys(RELEASE_2026_10_17_PENDING_SQL_PINS)
     .find((key) => pinIdentifiersMatch(input, RELEASE_2026_10_17_PENDING_SQL_PINS[key])) || null;

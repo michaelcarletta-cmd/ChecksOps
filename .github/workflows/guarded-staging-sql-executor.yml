@@ -80,6 +80,8 @@ on:
           - sql130-financial-totp-rate-limit-code-check-no-public
           - sql131-financial-totp-functions-no-public
           - sql132-financial-totp-code-check-lockout
+          - sql133-financial-totp-admin-reset-enrollment
+          - sql134-loss-draft-escrow-write-grants
       approved_commit:
         description: "Required for deploy/apply/read-live: exact main commit approved for this run"
         required: false
@@ -213,6 +215,8 @@ jobs:
           node --test aws/tests/release-sql130-executor.test.mjs
           node --test aws/tests/release-sql131-executor.test.mjs
           node --test aws/tests/release-sql132-executor.test.mjs
+          node --test aws/tests/release-sql133-executor.test.mjs
+          node --test aws/tests/release-sql134-executor.test.mjs
           node --test aws/tests/mortgage-executor-commit-outcome.test.mjs
           node --test aws/tests/deployment-guard-kms-receipt.test.mjs
           node --test aws/tests/deployment-guard-signed-receipt.test.mjs

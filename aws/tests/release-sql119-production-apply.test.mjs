@@ -212,7 +212,7 @@ test('pin: the release pin shape, applied and retired (owner approved 2026-10-27
   assert.doesNotMatch(JSON.stringify(tool), /[0-9a-f]{64}/);
   const rows = JSON.stringify(readJson('ops/deployment-guard/bypass-inventory.json'));
   assert.match(rows, /"path":"scripts\/deployment-guard\/sql119-provider-stakeholder-sync-acl-production-apply\.mjs","classification":"GUARDED","capabilities":\["sql119-production-apply"\]/);
-  assert.match(rows, /sql115, sql116, sql117, sql118, sql119, sql120, sql121, sql122, sql123, sql124, sql125, sql126, sql127, sql128, sql129, sql130, sql131, sql132\)/);
+  assert.match(rows, /sql115, sql116, sql117, sql118, sql119, sql120, sql121, sql122, sql123, sql124, sql125, sql126, sql127, sql128, sql129, sql130, sql131, sql132, sql133, sql134\)/);
   const scripts = readJson('package.json').scripts;
   const workflow = fs.readFileSync(path.join(ROOT, '.github/workflows/deployment-guard.yml'), 'utf8');
   for (const name of ['aws/tests/release-sql119-executor.test.mjs', 'aws/tests/release-sql119-production-apply.test.mjs']) {
@@ -255,7 +255,7 @@ test('order: immediately before SQL 115 (unchanged, intended 8aed39a4...), whose
   assert.match(fs.readFileSync(path.join(ROOT, 'ops/production-sql-115-apply.md'), 'utf8'), /\*\*Production: SQL 119 first\.\*\*/);
   const oneShot = fs.readFileSync(path.join(ROOT, 'ops/production-sql-one-shot.md'), 'utf8');
   assert.match(oneShot, /\| `sql119` \|/);
-  assert.match(oneShot, /`sql118`, `sql119`, `sql120`, `sql121`, `sql122`, `sql123`, `sql124`, `sql125`, `sql126`, `sql127`, `sql128`, `sql129`, `sql130`, `sql131`, `sql132`\) \|/);
+  assert.match(oneShot, /`sql118`, `sql119`, `sql120`, `sql121`, `sql122`, `sql123`, `sql124`, `sql125`, `sql126`, `sql127`, `sql128`, `sql129`, `sql130`, `sql131`, `sql132`, `sql133`, `sql134`\) \|/);
   assert.match(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/README.md'), 'utf8'), /sql119-provider-stakeholder-sync-acl-production-apply\.mjs --inspect/);
 });
 

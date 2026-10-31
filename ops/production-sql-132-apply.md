@@ -57,7 +57,67 @@ SQL 132 is applied in that environment. No trigger is added.
 2026-10-30): the engine refuses SQL 132 (`predecessors_applied`) until
 `consume_financial_totp_rate_limit(uuid, text, integer, integer)` is at SQL 130's intended state.
 
-**Status:** not applied anywhere. The staging pin and the production pin are pending.
+**Staging executor refreshed (2026-10-30).** Inspect run 41112932726 (main `55cd626f`) found the live
+executor at `jOd0IqUJ…` without `sql/132_financial_totp_code_check_lockout.sql` (main's package also
+superseded `lib/release-sql-specs.mjs`, `lib/release-sql-state.mjs` and `lib/sql-executor-auth.mjs`;
+`collisions` `[]`). Deploy run 41113385981 (main `546dd7cb839153b161f0e8f5f6a3927c6ee29084`) updated it
+to main's package (`J75AEogmHX9pvZxfn458CPfzQxhryyeJYz/r1Tk8dl0=`, RevisionId
+`9e68fd37-f226-4c18-8f52-4f1e20f9b58e`; `errors` `[]`; verified current).
+
+**Staging read-live (2026-10-30).** Run 41113777003 (main `546dd7cb839153b161f0e8f5f6a3927c6ee29084`,
+executor `J75AEogm…`): `financial_totp_count_code_check(uuid)` absent (`function_acl` `[]`); every
+prerequisite present (`prerequisites_missing` `[]`); `predecessors.sql130` true; the definer write on
+`financial_totp_enrollments` ok; live `e1a1d4edb115e3fa0881112e6759c2d7ee1e9d8c6b3e24a7611b655dcf75741f` (the
+pre-state derived above, the function absent), `already_applied` false, `precondition_failures` `[]`.
+Recorded in the staging pin (`expected_live_definition_sha256`, `execute: true`, wave 29) under the
+owner's words of 2026-10-30, "continue with SQL 132 staging".
+
+**Staging apply (2026-10-30).** Run 41117004966 (main `42068df3f516653ebb96cffbf4d522f0117db4ac`, staging
+pin PR #1461, on the executor deployed by run 41116686272, `aBuDhgGl…`, RevisionId
+`9c082867-4ad1-4e22-be11-09c5c1a50a7b`; workstream `github-staging-sql-41117004966`) under the owner's
+words "apply SQL 132 in staging": receipt before
+`e1a1d4edb115e3fa0881112e6759c2d7ee1e9d8c6b3e24a7611b655dcf75741f`, after
+`88828cb48d8b847cf177d57314bdbc0c8a1f49051958be5adb264a0c418ebd72` (intended), result `applied`;
+`financial_totp_count_code_check(uuid)` `intended`, `function_acl` `checksops EXECUTE` and
+`owner EXECUTE`, `definer_writes` ok. Read-live run 41117375887: `already_applied` true, live
+`88828cb4…`.
+
+**Production inspect (2026-10-30).** Read-only `--inspect` through SSM
+`ea2ce576-471a-4a90-bb50-e52b3430e6ec` on `i-0c35557c4e5385406`, main `42068df3f` (tarball sha256
+`4000d070b6f33d354b8a102fc08319ddcc624e8acf73ab07f9ce1c54247b6e33`, transfer run 41117411043, migration
+source `ca91ce9c…` == pin), connected as `checksops_admin`: `financial_totp_count_code_check(uuid)`
+`absent` (`function_acl` `[]`); every prerequisite present; `predecessors.sql130` true; the definer
+write on `financial_totp_enrollments` ok; live
+`e1a1d4edb115e3fa0881112e6759c2d7ee1e9d8c6b3e24a7611b655dcf75741f`, `already_applied` false,
+`precondition_failures` `[]`. That is the pre-state derived above (the function absent), the same one
+staging had, so the staging apply took the path production will
+(`aws/tests/sql132-financial-totp-lockout-pg.test.mjs`). Recorded in the production pin with the
+staging apply as its staging acceptance and `execute: true`; the owner's words so far ("restart SQL
+131 and the lockout fix", "Merge SQL 131 and the lockout fix when green", "continue with SQL 132
+staging", "merge 1461 when green", "apply SQL 132 in staging") name the restart, the merges and the
+staging step, not the production apply. The owner merges the pin change; the apply still needs the
+owner's words for that run and runs only after that merge is on main and staged.
+
+**Production apply (2026-10-30).** After the pin change (#1467, merged to main as `d5780e105` on the
+owner's "Merge 1467 and 1466"), transfer run 41121202177 staged main `d5780e105` (tarball sha256
+`20a490847015c223a0f31f8bb1901e986df83ace99ffd5bd5b458d7e75024d43`). A read-only one-shot
+`--phase inspect` of the same commit (SSM `ba2f3350-034b-41e8-a9af-149ac804a211`, run
+`65e549f8-14ae-4b25-b4ba-352c3d4775c2`) found live `e1a1d4ed…` (the pinned pre-state), the function
+`absent`, `predecessors.sql130` true, `already_applied` false, `precondition_failures` `[]`, contracts 4/4,
+6/6 and 43/43. One-shot `--phase apply` run `aba09b96-f0fc-48c9-94dd-175f45ad638d` through SSM
+`e3234a9c-ad40-4a13-9078-58a5b1872a35`, workstream `prod-sql132-financial-totp-code-check-lockout-20261030`,
+under the owner's words "apply SQL 132 in production" (passed verbatim): every step ok; manifest
+`af74d381…`; receipt `e1a1d4ed…` → `88828cb48d8b847cf177d57314bdbc0c8a1f49051958be5adb264a0c418ebd72`
+(intended), result `applied`, unrelated catalog `25c9872f…` (functions 1354, triggers 184); post-apply
+inspect `already_applied` true, `precondition_failures` `[]`. A separate read-only inspect (SSM
+`2884bd09-63cc-4996-b095-2e3f32c9e4f5`) reported `financial_totp_count_code_check(uuid)` `intended`,
+EXECUTE for `checksops` and the owner only (PUBLIC revoked), `definer_writes` ok. The run's whole JSON
+arrived (see the pin's `applied.one_shot_note`). Runner state: started for these runs at 2026-10-30
+20:18:19 UTC (SSM online 20:18:57 UTC) and stopped at 20:19:46 UTC.
+
+**Status:** applied to staging (wave 29) and to production (2026-10-30); the production pin is retired
+(`execute: false`). Next: the API change (`auth-financial-totp.mjs`, `checkalt-register.mjs`) through the
+guarded Lambda path (step 5 below); the overlay plan records SQL 132 verified live.
 
 ## Fingerprint
 

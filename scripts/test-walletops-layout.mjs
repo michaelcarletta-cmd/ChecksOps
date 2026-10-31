@@ -91,10 +91,10 @@ test("Item #4 Compliance and Documents still provides Payment Account", () => {
   assert.match(compliance, /title="Terms of Service"/);
 });
 
-test("Item #4 Funding & Billing and pending cards remain", () => {
+test("Item #4 Funding & Billing remains; the Pending in / Pending out cards are gone (owner 2026-10-30)", () => {
   assert.match(page, /Funding & Billing/);
-  assert.match(page, /Pending in/);
-  assert.match(page, /Pending out/);
+  assert.doesNotMatch(page, /Pending in/);
+  assert.doesNotMatch(page, /Pending out/);
   assert.match(page, /Recent Wallet Activity/);
   assert.match(page, /Available operating balance/);
 });
