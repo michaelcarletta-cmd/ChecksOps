@@ -82,7 +82,33 @@ function absent), intended `edfef132…`, `already_applied` false, `precondition
 wave 30) under the owner's words of 2026-10-30, "continue with SQL 133 staging". The staging apply
 itself waits for the owner's words for that run.
 
-**Status:** staging pin execute-authorized (wave 30); nothing applied yet; production pin pending.
+**Staging apply (2026-10-30).** Run 41133471065 (main `746074fb1b8f799b6cd413ccf9e4e7fad5694c0d`, staging
+pin PR #1470, on the executor deployed by run 41133133498, `PPZJFH/U…`, RevisionId
+`c8196e9e-fb64-41d3-bdf2-1f7fd6ea0911`, previous `9kXHUCcy…` / `26f2a3a0-b94d-45a3-8c18-6749b2121682`;
+workstream `github-staging-sql-41133471065`) under the owner's words "apply SQL 133 in staging": receipt
+before `f3b1671e8617df78a20600b43fcfc6636739d78f235ef78d1cc7d1d68f2f909d`, after
+`edfef132ffea2b00a1b22e452b35a4232a14c81fbba832325d22ce8656a45459` (intended), result `applied`;
+`financial_totp_admin_reset_enrollment(uuid, uuid)` `intended`, `function_acl` `checksops EXECUTE` and
+`owner EXECUTE`, `definer_writes` ok. Read-live run 41133803430: `already_applied` true, live
+`edfef132…`, `precondition_failures` `[]`.
+
+**Production inspect (2026-10-30).** Read-only `--inspect` through SSM
+`a28009c3-db1c-4567-b7b6-7fe01f7d06f4` on `i-0c35557c4e5385406`, main `746074fb1` (tarball sha256
+`0445edb2fc3ce505fe08c9d9d770e13a27ed456f31af52af1b1b904293fc1ab4`, transfer run 41147257903, migration
+source `2184701c…` == pin), connected as `checksops_admin`: `financial_totp_admin_reset_enrollment(uuid,
+uuid)` `absent` (`function_acl` `[]`); every prerequisite present; `predecessors` `{}`; the definer
+writes on `financial_totp_enrollments`, `tenant_users`, `identity_accounts` and `profiles` all ok; live
+`f3b1671e8617df78a20600b43fcfc6636739d78f235ef78d1cc7d1d68f2f909d`, `already_applied` false,
+`precondition_failures` `[]`. That is the pre-state derived above (the function absent), the same one
+staging had, so the staging apply took the path production will
+(`aws/tests/sql133-financial-totp-admin-reset-pg.test.mjs`). Recorded in the production pin with the
+staging apply as its staging acceptance and `execute: true`; the owner's words so far ("ok build the
+reset after SQL 131 and the lockout fix", "Merge 1467 and 1466", "continue with SQL 133 staging", "apply
+SQL 133 in staging", "merge 1470", "run the SQL 133 production inspect") name the build, the merges, the
+staging step and the inspect, not the production apply. The owner merges the pin change; the apply still
+needs the owner's words for that run and runs only after that merge is on main and staged.
+
+**Status:** applied to staging (wave 30); production pin execute-authorized; not applied to production.
 
 ## Fingerprint
 
