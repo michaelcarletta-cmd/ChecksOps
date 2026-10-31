@@ -38,6 +38,7 @@ import { loadProductionCheckAltConfig } from '../functions/api/providers/product
 import { bindCheckAltStatusReadGucs } from '../functions/api/providers/production/checkalt-idempotency.mjs';
 import { runCheckAltStatusReconcile } from '../functions/api/providers/production/checkalt-status-reconcile.mjs';
 import { syntheticCheckRaster } from '../functions/api/providers/parity/checkalt-image.mjs';
+import { minutesAgo, stepUpWithinWindow } from './helpers/financial-stepup-window.mjs';
 import { syntheticCompliantCheckAltJpeg } from '../functions/api/providers/production/checkalt-image-compliance.mjs';
 import { buildCompletedEndorsementState } from '../functions/api/providers/production/checkalt-eligibility.mjs';
 import { resetProviderSecretsCache } from '../functions/api/provider-secrets.mjs';
@@ -267,7 +268,7 @@ const identityClient = (store) => ({
           )),
         };
       }
-      // Once-per-login lookup: user, tenant, Check Alt action, app TOTP, login session.
+      // Login lookup: user, tenant, Check Alt action, app TOTP, login session, verified in the window.
       const [userId, tenantId, actionKeys, loginSession] = params;
       if (!Array.isArray(actionKeys) || !loginSession) return { rows: [] };
       return {
@@ -279,6 +280,7 @@ const identityClient = (store) => ({
           && row.factor_type === 'totp'
           && row.metadata?.source === 'app_financial_totp'
           && row.metadata?.login_session === loginSession
+          && stepUpWithinWindow(text, params, row)
         )).slice(-1),
       };
     }
@@ -1071,9 +1073,10 @@ test('a Check Alt step-up row without this login session does not authorize', as
 });
 
 test('one verification authorizes two different checks and amounts in the same login session', async () => {
-  // One step-up, entered hours ago for the first check: no check, amount or 30-minute binding.
+  // One step-up, entered 14 minutes ago for the first check: bound to the login and the
+  // 15-minute window (finding 7), not to a check or an amount.
   const first = createStore();
-  grantStepUp(first, { createdAt: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString() });
+  grantStepUp(first, { createdAt: minutesAgo(14) });
   const stepups = first.stepups;
   assert.equal(stepups.length, 1);
 
@@ -1848,19 +1851,60 @@ test('approve refuses when the deposit check row is missing (no self-comparison)
   assertApproveRefused(store, await approveOnce(store), 'deposit_binding_mismatch');
 });
 
-test('a deposit.approve step-up for another check and amount, earlier in this login, still approves', async () => {
+test('a deposit.approve step-up for another check and amount, earlier in this login (within 15 minutes), still approves', async () => {
   const store = createStore();
   pendingApprovalDeposit(store);
   grantStepUp(store, {
     action: 'deposit.approve',
     checkId: OTHER_CHECK_ID,
     amountCents: 1235,
-    createdAt: new Date(Date.now() - 31 * 60 * 1000).toISOString(),
+    createdAt: minutesAgo(14),
   });
   const result = await approveOnce(store);
   assert.equal(result.ok, true, JSON.stringify(result));
   assert.equal(result.approvePosted, true);
   assert.equal(store.approvePosts, 1);
+});
+
+test('finding 7: Check Alt submit needs a step-up verified within 15 minutes; 16 minutes old answers step_up_required', async () => {
+  const fresh = createStore();
+  grantStepUp(fresh, { createdAt: minutesAgo(14) });
+  const submitted = await submitOnce(fresh);
+  assert.equal(submitted.statusCode, 200, JSON.stringify(submitted));
+  assert.equal(fresh.processPosts, 1);
+
+  const stale = createStore();
+  grantStepUp(stale, { createdAt: minutesAgo(16) });
+  const refused = await submitOnce(stale);
+  // The code the SPA re-prompts on (checkaltDepositOrchestrator isStepUpRequiredError).
+  assert.equal(refused.statusCode, 403);
+  assert.equal(refused.error, 'step_up_required');
+  assert.equal(stale.processPosts, 0);
+  assert.equal(stale.deposits.length, 0);
+
+  // A newer code in the same login authorizes again; the stale row never does.
+  grantStepUp(stale, { createdAt: minutesAgo(1) });
+  const retried = await submitOnce(stale);
+  assert.equal(retried.statusCode, 200, JSON.stringify(retried));
+  assert.equal(stale.processPosts, 1);
+});
+
+test('finding 7: Check Alt approve needs a step-up verified within 15 minutes; 16 minutes old answers step_up_required', async () => {
+  for (const action of ['deposit.approve', 'deposit.submit']) {
+    const fresh = createStore();
+    pendingApprovalDeposit(fresh);
+    grantStepUp(fresh, { action, createdAt: minutesAgo(14) });
+    const approved = await approveOnce(fresh);
+    assert.equal(approved.ok, true, `${action} ${JSON.stringify(approved)}`);
+    assert.equal(fresh.approvePosts, 1, action);
+
+    const stale = createStore();
+    pendingApprovalDeposit(stale);
+    grantStepUp(stale, { action, createdAt: minutesAgo(16) });
+    const refused = await approveOnce(stale);
+    assert.equal(refused.statusCode, 403, action);
+    assertApproveRefused(stale, refused, 'step_up_required');
+  }
 });
 
 test('a valid deposit.approve step-up approves once; replaying it never POSTs approve again', async () => {

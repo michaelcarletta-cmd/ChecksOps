@@ -4770,6 +4770,59 @@ test('Moov webhook body confirmation (2026-10-31): ADD moov-webhook-confirm.mjs 
   assert.equal(/notes LIKE/.test(fs.readFileSync(path.join(API, SETTLEMENT), 'utf8')), false);
 });
 
+test('Money step-up window (finding 7): REPLACE moov-fund-authz.mjs then checkalt-authz.mjs from the third rebuild bytes, planning only', async () => {
+  const REL = 'aws/tests/fixtures/production-money-stepup-window-manifest-2026-10-31.json';
+  const FUND = 'providers/production/moov-fund-authz.mjs';
+  const CHECKALT = 'providers/production/checkalt-authz.mjs';
+  const PREVIOUS = {
+    [FUND]: 'aws/tests/fixtures/production-moov-wallet-fund-manifest-2026-10-13.json',
+    [CHECKALT]: 'aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json',
+  };
+  // The bytes the third full-package production rebuild put live (run 39669873076 of main 008af40e2):
+  // what each previous manifest accepted, unchanged on main until this change.
+  const LIVE = {
+    [FUND]: '290da0d4c085cfc93b849d33ec8606f61f48f128c14a17ddf484f69b9c7c7afb',
+    [CHECKALT]: '259802f8f0af515d75b139f8bf6a4bbe24a9d7b9ae12b11b3eeae879b7107c71',
+  };
+  const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, REL), 'utf8'));
+  assert.equal(manifest.workstream_id, 'money-stepup-window');
+  assert.equal(manifest.deploy_authorized, false);
+  assert.match(manifest.authorization, /^Pending owner review/);
+  assert.equal(manifest.live_lambda, FUNCTION_NAME);
+  for (const evidence of ['finding 7', '15 minutes', '39669873076', '008af40e2', 'totp_required', 'step_up_required', 'No SQL change']) {
+    assert.ok(manifest.notes.includes(evidence), evidence);
+  }
+  const rebuild = JSON.parse(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/lambda-rebuild-plan.json'), 'utf8')).environments.production;
+  assert.equal(rebuild.applied.run_id, '39669873076');
+  assert.equal(rebuild.applied.state, 'VERIFIED');
+  assert.equal(rebuild.applied.main_commit, '008af40e2465eb68fdfeab72eaf06f2efb1d5b45');
+  assert.deepEqual(Object.keys(manifest.members), [FUND, CHECKALT]);
+  for (const member of [FUND, CHECKALT]) {
+    const accepted = sha(`aws/functions/api/${member}`);
+    assert.notEqual(accepted, LIVE[member], member);
+    assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, PREVIOUS[member]), 'utf8')).members[member].accepted_sha256, LIVE[member], member);
+    assert.deepEqual(manifest.members[member], { live_sha256: LIVE[member], accepted_sha256: accepted, operation: 'replace', previous_manifest: PREVIOUS[member] }, member);
+    assert.deepEqual(PLAN.members[member], { operation: 'replace', accepted_sha256: accepted, expected_live_sha256: LIVE[member], sql_before: null, manifest: REL }, member);
+    assert.equal(resolvePlannedMember(member, { root: ROOT, plan: PLAN }).ok, true, member);
+    const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: member };
+    const ready = await run(inspect, { root: ROOT, inspectLive: liveFor(member, { sha256: LIVE[member] }) });
+    assert.equal(ready.state, 'READY', member);
+    assert.equal(ready.mutation, false, member);
+    assert.equal((await run(inspect, { root: ROOT, inspectLive: liveFor(member, { sha256: accepted }) })).state, 'ALREADY_ACCEPTED', member);
+    await assert.rejects(
+      run(inspect, { root: ROOT, inspectLive: liveFor(member, { sha256: 'c'.repeat(64) }) }),
+      (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+      member,
+    );
+  }
+  // checkalt-authz.mjs imports the window from moov-fund-authz.mjs at load: moov-fund-authz.mjs goes first.
+  assert.ok(localImports(fs.readFileSync(path.join(API, CHECKALT), 'utf8'), CHECKALT).includes(FUND));
+  assert.ok(PLAN.order.indexOf(FUND) < PLAN.order.indexOf(CHECKALT));
+  assert.match(fs.readFileSync(path.join(API, FUND), 'utf8'), /export const FINANCIAL_STEPUP_MAX_AGE_SECONDS = 15 \* 60;/);
+  assert.match(fs.readFileSync(path.join(API, CHECKALT), 'utf8'), /AND \$\{financialStepUpFreshSql\(5\)\}/);
+  assert.ok(PLAN.notes.includes('Money step-up window (2026-10-31, security audit finding 7, pending owner review'));
+});
+
 test('Billing database errors redacted (finding 25): tenant-billing-engine.mjs REPLACE from the send-fee billing applied bytes, SQL 120 still first, applied 2026-10-31', async () => {
   const MEMBER = 'tenant-billing-engine.mjs';
   const MANIFEST_REL = BILLING_DB_ERROR_REDACTION_REL;

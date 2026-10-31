@@ -26,6 +26,8 @@ import { sanitizeWebhookPayload } from '../functions/api/providers/webhooks.mjs'
 import { FUNCTION_BY_NAME } from '../functions/api/providers/catalog.mjs';
 import { moovRejectedFields, redactText } from '../functions/api/providers/onboarding/redact.mjs';
 import { accountBodyDigest, accountIdempotencyKey } from '../functions/api/providers/onboarding/moov-sync.mjs';
+import { FINANCIAL_STEPUP_MAX_AGE_SECONDS } from '../functions/api/providers/production/moov-fund-authz.mjs';
+import { minutesAgo, stepUpWithinWindow } from './helpers/financial-stepup-window.mjs';
 
 const TENANT = '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a';
 const OTHER_TENANT = '9b1f7a52-1c0e-4d5a-9a3f-5d6e7f8a9b0c';
@@ -178,7 +180,8 @@ const makeDb = ({ tenantEnv = 'sandbox', account = true } = {}) => {
             && params[3] === `${user?.sub}:auth:1760000000`
             && /user_id = \$1::uuid/.test(text) && /tenant_id = \$2::uuid/.test(text)
             && /\(metadata->>'login_session'\) = \$4/.test(text) && /\(metadata->>'source'\) = 'app_financial_totp'/.test(text);
-          return { rows: state.noStepUp || !bound ? [] : [{ id: 'stepup-1', created_at: new Date().toISOString() }] };
+          const row = { id: 'stepup-1', created_at: state.stepUpCreatedAt ?? new Date().toISOString() };
+          return { rows: state.noStepUp || !bound || !stepUpWithinWindow(text, params, row) ? [] : [row] };
         }
         if (text.includes('count(*)::int AS pending')) {
           return { rows: [{ pending: state.docs.filter((d) => d.tenant_id === params[0] && d.status === 'pending_upload').length }] };
@@ -1841,12 +1844,13 @@ test('bank add stores last four only and banks[] ids drive micro-deposit initiat
     }
     assert.equal(fetch.calls.length, 0);
     db.state.noStepUp = false;
-    // A step-up for another user or another login does not count: the lookup is bound.
+    // A step-up for another user or another login does not count: the lookup is bound
+    // (and to the 15-minute window, finding 7).
     const q = db.state.stepUpQueries.at(-1);
-    assert.deepEqual(q.params, [USERS.owner.app, TENANT, 'wallet.fund', `${USERS.owner.sub}:auth:1760000000`]);
+    assert.deepEqual(q.params, [USERS.owner.app, TENANT, 'wallet.fund', `${USERS.owner.sub}:auth:1760000000`, FINANCIAL_STEPUP_MAX_AGE_SECONDS]);
     const otherUser = await run('moov-bank-link-token', { tenant_id: TENANT }, USERS.admin, { db, fetch: moovFetch() });
     assert.equal(otherUser.ok, true, 'another member is checked against their own step-up');
-    assert.deepEqual(db.state.stepUpQueries.at(-1).params, [USERS.admin.app, TENANT, 'wallet.fund', `${USERS.admin.sub}:auth:1760000000`]);
+    assert.deepEqual(db.state.stepUpQueries.at(-1).params, [USERS.admin.app, TENANT, 'wallet.fund', `${USERS.admin.sub}:auth:1760000000`, FINANCIAL_STEPUP_MAX_AGE_SECONDS]);
     const added = await run('moov-bank-account-add', {
       tenant_id: TENANT, holder_name: 'Freedom LLC', routing_number: '021000021', account_number: '000123456789',
     }, USERS.owner, { db, fetch });
@@ -1863,6 +1867,26 @@ test('bank add stores last four only and banks[] ids drive micro-deposit initiat
     assert.equal(confirm.verified, true);
     const put = fetch.calls.find((c) => c.method === 'PUT' && c.url.endsWith('/verify'));
     assert.deepEqual(JSON.parse(put.body), { code: '1234' });
+  });
+});
+
+test('finding 7: bank-detail changes reuse the wallet.fund step-up only within 15 minutes; 16 minutes old answers totp_required', async () => {
+  await withEnv(BASE_ENV, async () => {
+    resetMoovTokenCache();
+    const db = makeDb();
+    db.state.stepUpCreatedAt = minutesAgo(14);
+    const fresh = await run('moov-bank-link-token', { tenant_id: TENANT }, USERS.owner, { db, fetch: moovFetch() });
+    assert.equal(fresh.ok, true, JSON.stringify(fresh));
+    db.state.stepUpCreatedAt = minutesAgo(16);
+    const fetch = moovFetch();
+    for (const name of ['moov-bank-account-add', 'moov-micro-deposit-initiate', 'moov-micro-deposit-confirm', 'moov-bank-link-token']) {
+      const r = await run(name, { tenant_id: TENANT, holder_name: 'Freedom LLC', routing_number: '021000021', account_number: '000123456789', payment_method_id: TENANT, code: '1234' }, USERS.owner, { db, fetch });
+      // The code the SPA re-prompts on (bankStepUp.ts: totp_required).
+      assert.equal(r.statusCode, 401, name);
+      assert.equal(r.error, 'totp_required', name);
+      assert.equal(r.actionKey, 'wallet.fund', name);
+    }
+    assert.equal(fetch.calls.length, 0);
   });
 });
 
