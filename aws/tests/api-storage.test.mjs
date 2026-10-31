@@ -239,6 +239,7 @@ test('authorized upload-url succeeds and ignores spoofed identity', async () => 
     bucket: 'claim-files',
     path: WRITE_PATH,
     contentType: 'application/pdf',
+    contentLength: 1200,
     user_id: SPOOF_ID,
     tenant_id: 'spoof-tenant',
   }), deps);
@@ -256,6 +257,7 @@ test('upload-url conflicts when the object exists and upsert is false', async ()
     bucket: 'claim-files',
     path: WRITE_PATH,
     contentType: 'application/pdf',
+    contentLength: 1200,
   }), depsFor(client, { keys: new Set([key]), forceStorageWrites: true }));
   assert.equal(result.statusCode, 409);
   assert.equal(result.error, 'object_exists');
@@ -267,6 +269,7 @@ test('C1C cannot authorize a Freedom check-scoped upload and knowing the key is 
     bucket: 'claim-files',
     path: WRITE_PATH,
     contentType: 'application/pdf',
+    contentLength: 1200,
   }), depsFor(client, { forceStorageWrites: true }));
   assert.equal(result.statusCode, 403);
   assert.equal(result.error, 'rls_denied');
@@ -278,6 +281,7 @@ test('malformed deposit-attachment paths stay denied; check-scoped endorsement p
     bucket: 'deposit-attachments',
     path: 'freedom/x.pdf',
     contentType: 'application/pdf',
+    contentLength: 1200,
   }), depsFor(client, { forceStorageWrites: true }));
   assert.equal(deposit.statusCode, 403);
 
@@ -285,6 +289,7 @@ test('malformed deposit-attachment paths stay denied; check-scoped endorsement p
     bucket: 'endorsement-packets',
     path: WRITE_PATH,
     contentType: 'application/pdf',
+    contentLength: 1200,
   }), depsFor(client, { forceStorageWrites: true }));
   assert.equal(packet.ok, true, JSON.stringify(packet));
   assert.equal(packet.path, WRITE_PATH);
@@ -307,6 +312,7 @@ test('tenant-documents library writes require tenant owner or admin, not mere me
     bucket: 'tenant-documents',
     path,
     contentType: 'application/pdf',
+    contentLength: 1200,
   }), depsFor(outsider, { forceStorageWrites: true }));
   assert.equal(denied.statusCode, 403);
 });
@@ -350,19 +356,19 @@ test('a reader that cannot write the check cannot upload over, delete or move it
   const reader = () => depsFor(mockClient({ writeCheck: true, writeSibling: true, authorize: true, canWrite: false, writeRows: false }), { forceStorageWrites: true, keys });
 
   const overwrite = await handleStorageUploadUrl(jwtEvent('/storage/upload-url', 'POST', {
-    bucket: 'claim-files', path: WRITE_PATH, contentType: 'application/pdf', upsert: true,
+    bucket: 'claim-files', path: WRITE_PATH, contentType: 'application/pdf', contentLength: 1200, upsert: true,
   }), reader());
   assert.equal(overwrite.statusCode, 403);
   assert.equal(overwrite.error, 'rls_denied');
 
   const rear = await handleStorageUploadUrl(jwtEvent('/storage/upload-url', 'POST', {
-    bucket: 'claim-files', path: 'checks/user-not-a-check-id/front.deposit2.jpg', contentType: 'image/jpeg', upsert: true,
+    bucket: 'claim-files', path: 'checks/user-not-a-check-id/front.deposit2.jpg', contentType: 'image/jpeg', contentLength: 1200, upsert: true,
   }), reader());
   assert.equal(rear.statusCode, 403);
   assert.equal(rear.error, 'rls_denied');
 
   const packet = await handleStorageUploadUrl(jwtEvent('/storage/upload-url', 'POST', {
-    bucket: 'endorsement-packets', path: WRITE_PATH, contentType: 'application/pdf', upsert: true,
+    bucket: 'endorsement-packets', path: WRITE_PATH, contentType: 'application/pdf', contentLength: 1200, upsert: true,
   }), reader());
   assert.equal(packet.statusCode, 403);
 
@@ -382,7 +388,7 @@ test('the owner tenant keeps upload over, delete and move of its check objects',
   const keys = new Set([s3KeyFor('claim-files', WRITE_PATH)]);
   const owner = () => depsFor(mockClient({ writeCheck: true, authorize: true }), { forceStorageWrites: true, keys });
   const overwrite = await handleStorageUploadUrl(jwtEvent('/storage/upload-url', 'POST', {
-    bucket: 'claim-files', path: WRITE_PATH, contentType: 'application/pdf', upsert: true,
+    bucket: 'claim-files', path: WRITE_PATH, contentType: 'application/pdf', contentLength: 1200, upsert: true,
   }), owner());
   assert.equal(overwrite.ok, true, JSON.stringify(overwrite));
   // Delete of an object a written row references (not under the check prefix), by the write lookup.
@@ -490,6 +496,7 @@ test('browser .deposit2.jpg sibling of a stored check image is writable', async 
     bucket: 'claim-files',
     path: sibling,
     contentType: 'image/jpeg',
+    contentLength: 1200,
     upsert: true,
   }), depsFor(mockClient({ writeSibling: false }), { forceStorageWrites: true }));
   assert.equal(denied.statusCode, 403);
@@ -498,6 +505,7 @@ test('browser .deposit2.jpg sibling of a stored check image is writable', async 
     bucket: 'claim-files',
     path: sibling,
     contentType: 'image/jpeg',
+    contentLength: 1200,
     upsert: true,
   }), depsFor(mockClient({ writeSibling: true }), { forceStorageWrites: true }));
   assert.equal(allowed.ok, true, JSON.stringify(allowed));
@@ -510,6 +518,7 @@ test('check-scoped .deposit2.jpg remains writable via the check UUID prefix', as
     bucket: 'claim-files',
     path,
     contentType: 'image/jpeg',
+    contentLength: 1200,
     upsert: true,
   }), depsFor(mockClient({ writeCheck: true }), { forceStorageWrites: true }));
   assert.equal(result.ok, true, JSON.stringify(result));
@@ -522,6 +531,7 @@ test('browser .checkalt.jpg sibling of a stored check image is writable', async 
     bucket: 'claim-files',
     path: sibling,
     contentType: 'image/jpeg',
+    contentLength: 1200,
     upsert: true,
   }), depsFor(mockClient({ writeSibling: false }), { forceStorageWrites: true }));
   assert.equal(denied.statusCode, 403);
@@ -530,6 +540,7 @@ test('browser .checkalt.jpg sibling of a stored check image is writable', async 
     bucket: 'claim-files',
     path: sibling,
     contentType: 'image/jpeg',
+    contentLength: 1200,
     upsert: true,
   }), depsFor(mockClient({ writeSibling: true }), { forceStorageWrites: true }));
   assert.equal(allowed.ok, true, JSON.stringify(allowed));
@@ -542,6 +553,7 @@ test('check-scoped .checkalt.jpg remains writable via the check UUID prefix', as
     bucket: 'claim-files',
     path,
     contentType: 'image/jpeg',
+    contentLength: 1200,
     upsert: true,
   }), depsFor(mockClient({ writeCheck: true }), { forceStorageWrites: true }));
   assert.equal(result.ok, true, JSON.stringify(result));
@@ -555,6 +567,7 @@ test('official rear .checkalt.jpg presign stamps endorsement fingerprint', async
     bucket: 'claim-files',
     path,
     contentType: 'image/jpeg',
+    contentLength: 1200,
     upsert: true,
   }), depsFor(client, { forceStorageWrites: true }));
   assert.equal(result.ok, true, JSON.stringify(result));
@@ -576,6 +589,7 @@ test('official rear presign stamps in a committed read-write transaction', async
     bucket: 'claim-files',
     path,
     contentType: 'image/jpeg',
+    contentLength: 1200,
     upsert: true,
   }), deps);
   assert.equal(result.ok, true, JSON.stringify(result));
@@ -597,6 +611,7 @@ test('refused upload-url rolls back and commits nothing', async () => {
     bucket: 'claim-files',
     path: `checks/${CHECK_ID}/back.checkalt.jpg`,
     contentType: 'image/jpeg',
+    contentLength: 1200,
     upsert: true,
   }), depsFor(client, { forceStorageWrites: true }));
   assert.equal(result.ok, false);
