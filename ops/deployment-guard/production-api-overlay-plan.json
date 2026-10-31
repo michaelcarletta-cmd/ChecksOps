@@ -778,10 +778,10 @@
     },
     "storage-write.mjs": {
       "operation": "replace",
-      "accepted_sha256": "04dac9a46334ec2b219623c41ca620524546bcc3343c163da306f2ca1d42395f",
+      "accepted_sha256": "43956c3ed0b1fc2146ad301dcb7ba245dc341992d171a728dc266a98fc3d9f92",
       "expected_live_sha256": "04dac9a46334ec2b219623c41ca620524546bcc3343c163da306f2ca1d42395f",
       "sql_before": "aws/workflows/sql/94_document_library_restore.sql",
-      "manifest": "aws/tests/fixtures/production-security-hardening-applied-manifest-2026-10-29.json"
+      "manifest": "aws/tests/fixtures/production-storage-upload-signed-size-manifest-2026-10-31.json"
     },
     "endorsement-composite.mjs": {
       "operation": "replace",
@@ -946,10 +946,10 @@
     },
     "tenant-billing-engine.mjs": {
       "operation": "replace",
-      "accepted_sha256": "bccffbe7aa9b21d3052a832f1d2c4b9ec4b333b1727156773b1ac034be96860c",
+      "accepted_sha256": "c5e9b0bd5b5e04eac304337918dfd772477319dc5d5357cd8a0282e277119f80",
       "expected_live_sha256": "bccffbe7aa9b21d3052a832f1d2c4b9ec4b333b1727156773b1ac034be96860c",
       "sql_before": "aws/workflows/sql/120_usage_events_at_approval_and_send.sql",
-      "manifest": "aws/tests/fixtures/production-billing-send-fee-events-applied-manifest-2026-10-27.json"
+      "manifest": "aws/tests/fixtures/production-billing-db-error-redaction-manifest-2026-10-31.json"
     },
     "tenant-billing-handlers.mjs": {
       "operation": "replace",

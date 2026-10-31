@@ -1,0 +1,15 @@
+{
+  "workstream_id": "billing-db-error-redaction",
+  "authorization": "Pending owner review (2026-10-31). Planning only: nothing is live or verified. The production apply still needs its own owner approval and staging acceptance.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Billing database errors redacted (2026-10-31, security audit 2026-10-29 finding 25, Low): the billing audit refusal (503 billing_audit_unavailable, verification debit and fee pull) returned the raw database error text as detail, and the invoice resend refusal (503 invoice_queue_failed) and a pull whose invoice could not be queued returned the outbox driver text as invoice_email.error. The accepted tenant-billing-engine.mjs bytes answer with the same HTTP status, error code and fixed message, drop detail and invoice_email.error, and log the driver detail server-side (logBillingDbFailure: SQLSTATE, constraint, table, column, routine and the message and DETAIL redacted with data.mjs sanitizeLogText). The new static import is data.mjs sanitizeLogText; data.mjs is live at its accepted bytes c652e317 (production-public-partner-codes-applied-manifest-2026-10-29.json), which export it. Successful responses are unchanged. No SQL. tenant-billing-engine.mjs live_sha256 bccffbe7 is the bytes the send-fee billing production apply (run 40577608750) recorded (previous_manifest); no change to this member has been planned or applied since. sql_before stays SQL 120. A read-only production overlay inspect must confirm the live member before any apply.",
+  "members": {
+    "tenant-billing-engine.mjs": {
+      "live_sha256": "bccffbe7aa9b21d3052a832f1d2c4b9ec4b333b1727156773b1ac034be96860c",
+      "accepted_sha256": "c5e9b0bd5b5e04eac304337918dfd772477319dc5d5357cd8a0282e277119f80",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-billing-send-fee-events-applied-manifest-2026-10-27.json"
+    }
+  }
+}

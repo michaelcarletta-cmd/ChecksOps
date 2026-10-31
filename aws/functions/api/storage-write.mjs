@@ -14,11 +14,37 @@ import {
   s3KeyFor,
 } from './storage-paths.mjs';
 import { authorizeObjectWrite, authorizeStorageWritePath } from './storage-write-auth.mjs';
-import { LIBRARY_BUCKET, isLibraryContentType, isLibrarySize } from './tenant-library-rules.mjs';
+import { LIBRARY_BUCKET, LIBRARY_MAX_BYTES, isLibraryContentType, isLibrarySize } from './tenant-library-rules.mjs';
 import { storageWritesEnabled } from './write-allowlist.mjs';
 import { stampOfficialRearFingerprintIfNeeded } from './providers/production/checkalt-eligibility.mjs';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+const MB = 1024 * 1024;
+
+/**
+ * Largest object each upload kind (bucket) may PUT, signed into the presigned URL
+ * as Content-Length. Taken from the SPA's client-side limits:
+ *   tenant-logos      5 MB  logo and letterhead pickers (CompanyBrandingSettings,
+ *                           WhiteLabelSettings; TenantManagement stops at 2 MB)
+ *   company-branding  5 MB  letterheads, the SPA's letterhead limit
+ *   homeowner-uploads 15 MB homeowner portal MAX_MB (refused here regardless)
+ * and the Document Library's 25 MB (MAX_UPLOAD_BYTES) where the SPA sets none.
+ */
+export const UPLOAD_MAX_BYTES_BY_BUCKET = Object.freeze({
+  'claim-files': MAX_UPLOAD_BYTES,
+  'endorsement-packets': MAX_UPLOAD_BYTES,
+  'loss-draft-documents': MAX_UPLOAD_BYTES,
+  'tenant-documents': LIBRARY_MAX_BYTES,
+  'tenant-logos': 5 * MB,
+  'company-branding': 5 * MB,
+  'deposit-attachments': MAX_UPLOAD_BYTES,
+  'homeowner-uploads': 15 * MB,
+});
+
+export const uploadMaxBytesFor = (bucket) => (
+  Object.hasOwn(UPLOAD_MAX_BYTES_BY_BUCKET, bucket) ? UPLOAD_MAX_BYTES_BY_BUCKET[bucket] : MAX_UPLOAD_BYTES
+);
 
 const filesBucket = () => process.env.FILES_BUCKET || '';
 const s3Region = () => process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || 'us-east-1';
@@ -101,19 +127,24 @@ export const handleStorageUploadUrl = async (event, deps = {}) => {
         spoofFieldsIgnored: spoof,
       };
     }
-    const contentLength = body.contentLength == null ? null : Number(body.contentLength);
-    if (contentLength != null && (!Number.isFinite(contentLength) || contentLength < 1 || contentLength > MAX_UPLOAD_BYTES)) {
+    // Every upload kind: the declared size is required, bounded per bucket, and
+    // signed into the PUT below, so S3 refuses a body of any other length.
+    const contentLength = body.contentLength == null || body.contentLength === '' ? null : Number(body.contentLength);
+    const maxBytes = uploadMaxBytesFor(bucket);
+    if (!Number.isInteger(contentLength) || contentLength < 1 || contentLength > maxBytes) {
       return {
         ok: false,
         statusCode: 400,
         error: 'invalid_field',
         field: 'contentLength',
+        message: `Uploads to ${bucket} need a contentLength of 1 byte to ${maxBytes} bytes`,
+        maxBytes,
         spoofFieldsIgnored: spoof,
       };
     }
 
-    // Document Library: documents and images only, 25 MB at most, and the size is
-    // signed into the PUT (S3 refuses a body of any other length).
+    // Document Library: documents and images only, 25 MB at most (the size is
+    // signed into the PUT like every other upload kind's).
     const library = bucket === LIBRARY_BUCKET;
     if (library && !isLibraryContentType(contentType)) {
       return { ok: false, statusCode: 400, error: 'invalid_field', field: 'contentType', spoofFieldsIgnored: spoof };
@@ -165,8 +196,9 @@ export const handleStorageUploadUrl = async (event, deps = {}) => {
       Bucket: filesBucket(),
       Key: auth.key,
       ContentType: contentType,
-      ...(library ? { ContentLength: contentLength } : {}),
+      ContentLength: contentLength,
     });
+    // The presigner signs content-length (X-Amz-SignedHeaders): S3 refuses any other body length.
     const uploadUrl = await sign(s3, command, { expiresIn: 60 });
     return {
       ok: true,
