@@ -776,10 +776,10 @@
     },
     "storage-write.mjs": {
       "operation": "replace",
-      "accepted_sha256": "04dac9a46334ec2b219623c41ca620524546bcc3343c163da306f2ca1d42395f",
+      "accepted_sha256": "43956c3ed0b1fc2146ad301dcb7ba245dc341992d171a728dc266a98fc3d9f92",
       "expected_live_sha256": "04dac9a46334ec2b219623c41ca620524546bcc3343c163da306f2ca1d42395f",
       "sql_before": "aws/workflows/sql/94_document_library_restore.sql",
-      "manifest": "aws/tests/fixtures/production-security-hardening-applied-manifest-2026-10-29.json"
+      "manifest": "aws/tests/fixtures/production-storage-upload-signed-size-manifest-2026-10-31.json"
     },
     "endorsement-composite.mjs": {
       "operation": "replace",
