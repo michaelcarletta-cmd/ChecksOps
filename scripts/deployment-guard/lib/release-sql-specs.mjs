@@ -1,5 +1,5 @@
 /**
- * Specs of the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108 to SQL 135) for the shared engine in
+ * Specs of the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108 to SQL 135, SQL 137) for the shared engine in
  * release-sql-state.mjs: what each pinned file creates, replaces or drops, the reviewed
  * EXECUTE ACLs, the prerequisites and predecessors, and the PostgreSQL renderings the file
  * leaves (policy expressions, view, column, constraint, index and trigger definitions as
@@ -6467,6 +6467,74 @@ export const RELEASE_SQL_SPECS = deepFreeze({
     ],
     "altered_relations": [
       "public.check_intake_items"
+    ]
+  },
+  // SQL 137 (security audit 2026-10-29, finding 15, database access only): is_platform_owner() decided
+  // by the identity account only (the profiles.email branch removed; the same mailbox on the same
+  // identity_accounts row, so today's owner is recognized as before), and UPDATE, DELETE and TRUNCATE
+  // on public.identity_accounts revoked from PUBLIC, anon, authenticated and checksops (no API path
+  // writes an email column; checksops only reads and inserts identity_accounts). The function keeps
+  // its signature, result, language, volatility, SECURITY DEFINER and proconfig; EXECUTE for
+  // checksops, authenticated and the owner (PUBLIC, anon and service_role revoked). The table's
+  // fingerprint is those roles' UPDATE / DELETE / TRUNCATE lines, which must be none; every other
+  // grant on it (SELECT, INSERT, the owner's) must stay as it was (other_table_privileges_unchanged),
+  // as SQL 106. The file's own preconditions also require the unique lower(email) index and exactly
+  // one active owner identity row with no owner-mailbox profile outside it. No predecessor.
+  sql137: {
+    "key": "sql137",
+    "label": "SQL 137",
+    "choice": "sql137-platform-owner-identity",
+    "production_pin_rel": "ops/deployment-guard/sql137-platform-owner-identity-production-apply.json",
+    "script": "sql137-platform-owner-identity-production-apply",
+    "prerequisites": [
+      "public.identity_accounts",
+      "public.profiles",
+      "public.identity_accounts_email_lower_key",
+      "public.is_platform_owner()",
+      "auth.uid()",
+      "column public.identity_accounts.application_user_id",
+      "column public.identity_accounts.email",
+      "column public.identity_accounts.status",
+      "column public.profiles.id",
+      "column public.profiles.email",
+      "role checksops",
+      "role authenticated"
+    ],
+    "predecessors": [],
+    "functions": [
+      {
+        "identity": "public.is_platform_owner()",
+        "acl": [
+          "authenticated EXECUTE",
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ],
+        "revokes": [
+          "PUBLIC EXECUTE",
+          "anon EXECUTE",
+          "service_role EXECUTE"
+        ]
+      }
+    ],
+    "table_privileges": [
+      {
+        "table": "public.identity_accounts",
+        "grantees": [
+          "PUBLIC",
+          "anon",
+          "authenticated",
+          "checksops"
+        ],
+        "privileges": [
+          "UPDATE",
+          "DELETE",
+          "TRUNCATE"
+        ],
+        "intended": []
+      }
+    ],
+    "altered_relations": [
+      "public.identity_accounts"
     ]
   },
 });

@@ -253,7 +253,7 @@ test('pin: the release pin shape, applied and retired (owner approved 2026-10-31
   assert.doesNotMatch(JSON.stringify(tool), /[0-9a-f]{64}/);
   const rows = JSON.stringify(readJson('ops/deployment-guard/bypass-inventory.json'));
   assert.match(rows, /"path":"scripts\/deployment-guard\/sql134-loss-draft-escrow-write-grants-production-apply\.mjs","classification":"GUARDED","capabilities":\["sql134-production-apply"\]/);
-  assert.match(rows, /sql128, sql129, sql130, sql131, sql132, sql133, sql134, sql135\)/);
+  assert.match(rows, /sql128, sql129, sql130, sql131, sql132, sql133, sql134, sql135, sql137\)/);
   const scripts = readJson('package.json').scripts;
   const workflow = fs.readFileSync(path.join(ROOT, '.github/workflows/deployment-guard.yml'), 'utf8');
   for (const name of ['aws/tests/release-sql134-executor.test.mjs', 'aws/tests/release-sql134-production-apply.test.mjs', 'aws/tests/sql134-loss-draft-escrow-write-grants-pg.test.mjs']) {
@@ -328,7 +328,7 @@ test('order: no predecessor; no function; the fourteen column grants the Loss Dr
   assert.match(runbook, /`aws_can_write_claim\(NULL\)` is false/);
   const oneShot = fs.readFileSync(path.join(ROOT, 'ops/production-sql-one-shot.md'), 'utf8');
   assert.match(oneShot, /\| `sql134` \|/);
-  assert.match(oneShot, /`sql130`, `sql131`, `sql132`, `sql133`, `sql134`, `sql135`\) \|/);
+  assert.match(oneShot, /`sql130`, `sql131`, `sql132`, `sql133`, `sql134`, `sql135`, `sql137`\) \|/);
   assert.match(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/README.md'), 'utf8'), /sql134-loss-draft-escrow-write-grants-production-apply\.mjs --inspect/);
 });
 

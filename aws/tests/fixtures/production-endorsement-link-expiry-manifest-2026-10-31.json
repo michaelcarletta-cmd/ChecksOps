@@ -1,0 +1,15 @@
+{
+  "workstream_id": "endorsement-link-expiry",
+  "authorization": "Pending owner review (2026-10-31). Planning only: nothing is live or verified. The production apply still needs its own owner approval and staging acceptance.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Endorsement link expiry (2026-10-31, security audit 2026-10-29 finding 22; owner decision 2026-10-31: \"Endorsement links: how long they stay valid. - 30 days. If an endorsement is resent it refreshes the links\"). Public endorsement links never expired. The accepted check-endorsement.mjs bytes stamp check_endorsements.token_expires_at and check_payees.endorsement_token_expires_at (existing columns; no SQL change) to send time + 30 days (ENDORSEMENT_LINK_TTL_DAYS) on send_endorsement_request, keeping the same token, so a resend restarts the 30 days for every link already sent. get_endorsement_data, submit_endorsement and reject_endorsement refuse a link at or past that time with 410 link_expired before any write; a row sent before the stamp existed (token_expires_at NULL) runs 30 days from request_sent_at when it can be read. The SPA Endorse page already shows the response error text; no SPA change. live_sha256 provenance: supersedes_unapplied_manifest: no production apply of the release 2026-10-17 accepted bytes (85f4bec4) is recorded, so live_sha256 stays that manifest's live value (7c6ae301, the 2026-10-11 live production bundle snapshot), which must be confirmed by a read-only production inspect before any apply. sql_before stays null.",
+  "members": {
+    "check-endorsement.mjs": {
+      "live_sha256": "7c6ae30182358a80184b9617188c59356f357e94d2c79fc875d9d74f8e82e3da",
+      "accepted_sha256": "edd20078ffdfcdb2ae44bf25542ab3068f606e1abdc12fbbc638ddb9a678047d",
+      "operation": "replace",
+      "supersedes_unapplied_manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
+    }
+  }
+}
