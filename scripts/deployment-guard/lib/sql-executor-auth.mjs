@@ -3071,6 +3071,28 @@ export const AUTHORIZED_SQL135_CHECK_CREATE_INSERT_GRANT = Object.freeze({
   function_identities: Object.freeze([]),
 });
 
+// Platform owner identity staging pin: SQL 137 (security audit 2026-10-29, finding 15: is_platform_owner()
+// decided by the identity_accounts row only, the profiles.email branch removed; UPDATE, DELETE and
+// TRUNCATE on identity_accounts revoked from PUBLIC, anon, authenticated and checksops). No predecessor.
+// Pending until a reviewed pin change records a staging read-live (the staging function body, its
+// EXECUTE ACL and the identity_accounts grants are not recorded in this repository).
+export const AUTHORIZED_SQL137_PLATFORM_OWNER_IDENTITY = Object.freeze({
+  key: 'sql137',
+  filename: 'aws/workflows/sql/137_platform_owner_identity.sql',
+  migration_id: '137_platform_owner_identity',
+  // The commit that last authored the file bytes.
+  commit: '556626cb5135cc5cd8787c42edec8a3c5b07bc91',
+  source_sha256: 'f1308cbdcb58ddcca23be9139dc32ebb28bc912ce5541327777a8027b843d5bb',
+  authorization: 'pending',
+  execute: false,
+  expected_live_definition_sha256: null,
+  // Code-derived: releaseIntendedHash('sql137', file bytes) (release-sql-state.mjs); re-derived by the tests.
+  intended_replacement_sha256: '9a88fca29d21f5537052f475f4133f05e89e002bdf00b22cfc3cf2cf78c6d8da',
+  function_identities: Object.freeze([
+    'public.is_platform_owner()',
+  ]),
+});
+
 // Payee setup link staging pin: SQL 138 (security audit 2026-10-29 finding 18; owner 2026-10-31, "Okay,
 // let's do option A and fix it correctly for SQL 138"): SQL 113's aws_public_payee_record refuses every
 // event once the payee is verified (already_verified), so a leaked link cannot swap a verified bank. Needs
@@ -3140,6 +3162,7 @@ export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql133: AUTHORIZED_SQL133_FINANCIAL_TOTP_ADMIN_RESET_ENROLLMENT,
   sql134: AUTHORIZED_SQL134_LOSS_DRAFT_ESCROW_WRITE_GRANTS,
   sql135: AUTHORIZED_SQL135_CHECK_CREATE_INSERT_GRANT,
+  sql137: AUTHORIZED_SQL137_PLATFORM_OWNER_IDENTITY,
   sql138: AUTHORIZED_SQL138_PAYEE_SETUP_LINK_CLOSED_AFTER_VERIFICATION,
 });
 
@@ -3156,7 +3179,7 @@ export function isSql30TenantDocumentsDocType(input = {}) {
   return pinIdentifiersMatch(input, AUTHORIZED_SQL30_TENANT_DOCUMENTS_DOC_TYPE);
 }
 
-/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql135, sql138) an input names, or null. */
+/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql135, sql137, sql138) an input names, or null. */
 export function releaseSqlMigrationKey(input = {}) {
   return Object.keys(RELEASE_2026_10_17_PENDING_SQL_PINS)
     .find((key) => pinIdentifiersMatch(input, RELEASE_2026_10_17_PENDING_SQL_PINS[key])) || null;
