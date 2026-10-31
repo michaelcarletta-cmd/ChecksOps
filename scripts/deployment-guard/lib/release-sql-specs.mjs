@@ -1,5 +1,5 @@
 /**
- * Specs of the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108 to SQL 135) for the shared engine in
+ * Specs of the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108 to SQL 135, SQL 137, SQL 138) for the shared engine in
  * release-sql-state.mjs: what each pinned file creates, replaces or drops, the reviewed
  * EXECUTE ACLs, the prerequisites and predecessors, and the PostgreSQL renderings the file
  * leaves (policy expressions, view, column, constraint, index and trigger definitions as
@@ -6467,6 +6467,152 @@ export const RELEASE_SQL_SPECS = deepFreeze({
     ],
     "altered_relations": [
       "public.check_intake_items"
+    ]
+  },
+  // SQL 137 (security audit 2026-10-29, finding 15, database access only): is_platform_owner() decided
+  // by the identity account only (the profiles.email branch removed; the same mailbox on the same
+  // identity_accounts row, so today's owner is recognized as before), and UPDATE, DELETE and TRUNCATE
+  // on public.identity_accounts revoked from PUBLIC, anon, authenticated and checksops (no API path
+  // writes an email column; checksops only reads and inserts identity_accounts). The function keeps
+  // its signature, result, language, volatility, SECURITY DEFINER and proconfig; EXECUTE for
+  // checksops, authenticated and the owner (PUBLIC, anon and service_role revoked). The table's
+  // fingerprint is those roles' UPDATE / DELETE / TRUNCATE lines, which must be none; every other
+  // grant on it (SELECT, INSERT, the owner's) must stay as it was (other_table_privileges_unchanged),
+  // as SQL 106. The file's own preconditions also require the unique lower(email) index and exactly
+  // one active owner identity row with no owner-mailbox profile outside it. No predecessor.
+  sql137: {
+    "key": "sql137",
+    "label": "SQL 137",
+    "choice": "sql137-platform-owner-identity",
+    "production_pin_rel": "ops/deployment-guard/sql137-platform-owner-identity-production-apply.json",
+    "script": "sql137-platform-owner-identity-production-apply",
+    "prerequisites": [
+      "public.identity_accounts",
+      "public.profiles",
+      "public.identity_accounts_email_lower_key",
+      "public.is_platform_owner()",
+      "auth.uid()",
+      "column public.identity_accounts.application_user_id",
+      "column public.identity_accounts.email",
+      "column public.identity_accounts.status",
+      "column public.profiles.id",
+      "column public.profiles.email",
+      "role checksops",
+      "role authenticated"
+    ],
+    "predecessors": [],
+    "functions": [
+      {
+        "identity": "public.is_platform_owner()",
+        "acl": [
+          "authenticated EXECUTE",
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ],
+        "revokes": [
+          "PUBLIC EXECUTE",
+          "anon EXECUTE",
+          "service_role EXECUTE"
+        ]
+      }
+    ],
+    "table_privileges": [
+      {
+        "table": "public.identity_accounts",
+        "grantees": [
+          "PUBLIC",
+          "anon",
+          "authenticated",
+          "checksops"
+        ],
+        "privileges": [
+          "UPDATE",
+          "DELETE",
+          "TRUNCATE"
+        ],
+        "intended": []
+      }
+    ],
+    "altered_relations": [
+      "public.identity_accounts"
+    ]
+  },
+  // SQL 138 (owner 2026-10-31, "Okay, let's do option A and fix it correctly for SQL 138"; security audit
+  // 2026-10-29 finding 18): SQL 113's public link writer aws_public_payee_record(text, text, jsonb) replaced
+  // with the same signature, attributes and EXECUTE ACL and SQL 113's body plus one check: once the payee is
+  // verified (verified_at) every event returns already_verified and writes nothing, so a leaked setup link
+  // can no longer swap a verified payee's bank. Predecessor and supersedes SQL 113 (as SQL 101 for SQL 90):
+  // the function it replaces is SQL 113's, and after SQL 138 SQL 113 counts as applied only while every
+  // other SQL 113 object still matches (staging pin superseded_intended_sha256.sql113). definer_writes the
+  // two tables the DEFINER function writes. aws_public_payee_by_token and the other four SQL 113 functions
+  // are not touched. No table, column, policy, grant or trigger.
+  sql138: {
+    "key": "sql138",
+    "label": "SQL 138",
+    "choice": "sql138-payee-setup-link-closed-after-verification",
+    "production_pin_rel": "ops/deployment-guard/sql138-payee-setup-link-closed-after-verification-production-apply.json",
+    "script": "sql138-payee-setup-link-closed-after-verification-production-apply",
+    "prerequisites": [
+      "public.external_payment_recipients",
+      "public.payment_provider_methods",
+      "public.aws_public_payee_record(text, text, jsonb)",
+      "public.aws_public_payee_by_token(text)",
+      "role checksops",
+      "column public.external_payment_recipients.id",
+      "column public.external_payment_recipients.tenant_id",
+      "column public.external_payment_recipients.environment",
+      "column public.external_payment_recipients.provider_account_id",
+      "column public.external_payment_recipients.onboarding_status",
+      "column public.external_payment_recipients.secure_token",
+      "column public.external_payment_recipients.token_expires_at",
+      "column public.external_payment_recipients.updated_at",
+      "column public.external_payment_recipients.provider_bank_account_id",
+      "column public.external_payment_recipients.provider_bank_name",
+      "column public.external_payment_recipients.provider_last_four",
+      "column public.external_payment_recipients.bank_linked_at",
+      "column public.external_payment_recipients.tos_accepted_at",
+      "column public.external_payment_recipients.identity_submitted_at",
+      "column public.external_payment_recipients.bank_verified_at",
+      "column public.external_payment_recipients.verified_at",
+      "column public.external_payment_recipients.disconnected_at",
+      "column public.external_payment_recipients.setup_attempts",
+      "column public.payment_provider_methods.id",
+      "column public.payment_provider_methods.tenant_id",
+      "column public.payment_provider_methods.external_recipient_id",
+      "column public.payment_provider_methods.provider",
+      "column public.payment_provider_methods.environment",
+      "column public.payment_provider_methods.provider_account_id",
+      "column public.payment_provider_methods.provider_bank_account_id",
+      "column public.payment_provider_methods.bank_name",
+      "column public.payment_provider_methods.account_type",
+      "column public.payment_provider_methods.last_four",
+      "column public.payment_provider_methods.holder_name",
+      "column public.payment_provider_methods.verification_status",
+      "column public.payment_provider_methods.connection_status",
+      "column public.payment_provider_methods.can_receive",
+      "column public.payment_provider_methods.can_send",
+      "column public.payment_provider_methods.connected_at",
+      "column public.payment_provider_methods.disconnected_at",
+      "column public.payment_provider_methods.updated_at"
+    ],
+    "predecessors": [
+      "sql113"
+    ],
+    "supersedes": [
+      "sql113"
+    ],
+    "functions": [
+      {
+        "identity": "public.aws_public_payee_record(text, text, jsonb)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ]
+      }
+    ],
+    "definer_writes": [
+      "public.external_payment_recipients",
+      "public.payment_provider_methods"
     ]
   },
 });

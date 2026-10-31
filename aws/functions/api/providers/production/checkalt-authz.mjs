@@ -2,17 +2,23 @@ import { membershipForTenant } from '../../financial-ownership.mjs';
 import { financialPermissionsActivated } from '../../financial-flags.mjs';
 import { formatCheckAltUserAmount } from '../amounts.mjs';
 import { productionCheckAltExecutionAllowed } from './checkalt-holds.mjs';
-import { loginSessionBinding } from './moov-fund-authz.mjs';
+import {
+  FINANCIAL_STEPUP_MAX_AGE_SECONDS,
+  financialStepUpFreshSql,
+  loginSessionBinding,
+} from './moov-fund-authz.mjs';
 
 export const CHECKALT_TOTP_ACTION = 'deposit.submit';
 export const CHECKALT_APPROVE_ACTION = 'deposit.approve';
 /**
- * Check Alt financial TOTP actions. Two-factor is once per login, the same as
- * Moov wallet fund and send: one successful step-up for any of these actions,
- * recorded with the caller's login (loginSessionBinding), authorizes every
- * Check Alt action for the check's tenant until the user signs out. The
- * step-up request still names a check, only so the tenant is taken from the
- * server-side check and the check and amount are kept in the audit log.
+ * Check Alt financial TOTP actions. The same window as Moov wallet fund and
+ * send: one successful step-up for any of these actions, recorded with the
+ * caller's login (loginSessionBinding), authorizes Check Alt actions for the
+ * check's tenant in that login for FINANCIAL_STEPUP_MAX_AGE_SECONDS (15
+ * minutes); after that the server answers step_up_required and the app asks
+ * for a new code. The step-up request still names a check, only so the tenant
+ * is taken from the server-side check and the check and amount are kept in
+ * the audit log.
  */
 export const FINANCIAL_CHECKALT_STEPUP_ACTIONS = Object.freeze([
   CHECKALT_TOTP_ACTION,
@@ -73,10 +79,11 @@ export async function loadCheckAltTenantRoles(client, userId, tenantId) {
 }
 
 /**
- * The caller's own Check Alt step-up for this tenant in this login, or null.
- * Bound to user, tenant and login session (sub + origin_jti or auth_time), not
- * to a check, an amount or a time window: a new login, another user, another
- * tenant or another session needs a new code.
+ * The caller's own Check Alt step-up for this tenant in this login, verified
+ * within FINANCIAL_STEPUP_MAX_AGE_SECONDS, or null. Bound to user, tenant and
+ * login session (sub + origin_jti or auth_time) and to that window, not to a
+ * check or an amount: a code older than 15 minutes, a new login, another user,
+ * another tenant or another session needs a new code.
  */
 export async function loadSessionCheckAltStepUp(client, { userId, tenantId, loginSession } = {}) {
   if (!userId || !tenantId || !loginSession) return null;
@@ -91,9 +98,10 @@ export async function loadSessionCheckAltStepUp(client, { userId, tenantId, logi
        -- Only rows the server wrote after a verified app TOTP (insertAppStepUpLog).
        AND (metadata->>'source') = 'app_financial_totp'
        AND (metadata->>'login_session') = $4
+       AND ${financialStepUpFreshSql(5)}
      ORDER BY created_at DESC
      LIMIT 1`,
-    [userId, tenantId, [...FINANCIAL_CHECKALT_STEPUP_ACTIONS], loginSession],
+    [userId, tenantId, [...FINANCIAL_CHECKALT_STEPUP_ACTIONS], loginSession, FINANCIAL_STEPUP_MAX_AGE_SECONDS],
   )).rows[0] || null;
 }
 
@@ -143,7 +151,7 @@ export const evaluateCheckAltProductionAuthorization = ({
         : !roleOk
           ? 'Membership of the check tenant is required.'
           : !stepUpOk
-            ? 'Your own Cognito TOTP step-up is required once per login.'
+            ? 'Your own Cognito TOTP step-up from the last 15 minutes is required.'
             : !flagsOk
               ? 'Production CheckAlt holds remain on.'
               : 'CheckAlt production authorization satisfied. Holds must still be lifted by a human.',
@@ -177,7 +185,8 @@ export async function authorizeCheckAltProduction({
   // platform user_roles admin/staff never lets a non-member act.
   const roles = await loadCheckAltTenantRoles(client, userId, check.tenant_id);
   // Only the caller's own Check Alt step-up for this tenant, entered in this
-  // login, counts. A second person's approval never substitutes for it.
+  // login within the last 15 minutes, counts. A second person's approval
+  // never substitutes for it.
   let totpOk = false;
   let totpRow = null;
   if (requireStepUp) {

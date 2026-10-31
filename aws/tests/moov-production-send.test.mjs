@@ -12,6 +12,7 @@ import {
   summarizeSend,
 } from '../functions/api/providers/production/moov-send.mjs';
 import { MoovError } from '../functions/api/providers/parity/moov-client.mjs';
+import { minutesAgo, stepUpWithinWindow } from './helpers/financial-stepup-window.mjs';
 
 const APP_USER = 'abd3c2a0-6dc0-4680-92dd-a013e1141c91';
 const TENANT = '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a';
@@ -127,8 +128,9 @@ const fakeDb = ({
       if (sql.includes('FROM public.financial_stepup_log')) {
         const [userId, tenantId, action, login] = params;
         return {
-          rows: stepUps.filter((s) => s.user_id === userId && s.tenant_id === tenantId && s.action_key === action && s.login_session === login)
-            .map((s) => ({ id: s.id, created_at: '2026-10-13T00:00:00Z' })),
+          rows: stepUps.filter((s) => s.user_id === userId && s.tenant_id === tenantId && s.action_key === action && s.login_session === login
+            && stepUpWithinWindow(sql, params, s))
+            .map((s) => ({ id: s.id, created_at: s.created_at ?? new Date().toISOString() })),
         };
       }
       if (sql.includes('FROM public.check_intake_items')) {
@@ -516,6 +518,27 @@ test('any member can send; platform roles without membership, other checks and n
       assert.equal(moov.calls.length, 0);
       assert.equal(client.committed.transfers.length, 0);
     }
+  });
+});
+
+test('finding 7: a send needs a step-up verified within 15 minutes; 16 minutes old answers totp_required', async () => {
+  await withEnv(FLAGS, async () => {
+    const stepUp = (minutes) => [{ id: 'stepup-1', user_id: APP_USER, tenant_id: TENANT, action_key: 'wallet.fund', login_session: LOGIN, created_at: minutesAgo(minutes) }];
+    const fresh = await run(fakeDb({ stepUps: stepUp(14) }), moovStub());
+    assert.equal(fresh.ok, true, JSON.stringify(fresh));
+    assert.equal(fresh.send.sent_cents, 2500);
+
+    const client = fakeDb({ stepUps: stepUp(16) });
+    const moov = moovStub();
+    const stale = await run(client, moov);
+    // The code the SPA re-prompts on (DisbursementConsole: error.code === "totp_required").
+    assert.equal(stale.statusCode, 401);
+    assert.equal(stale.error, 'totp_required');
+    assert.equal(stale.actionKey, 'wallet.fund');
+    assert.equal(moov.calls.length, 0);
+    assert.equal(client.committed.transfers.length, 0);
+    const lookup = client.log.find((q) => q.sql.includes('FROM public.financial_stepup_log'));
+    assert.equal(lookup.params[4], 15 * 60);
   });
 });
 

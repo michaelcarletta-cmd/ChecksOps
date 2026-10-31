@@ -249,7 +249,7 @@ test('pin: the release pin shape, applied and retired (owner approved 2026-10-30
   assert.doesNotMatch(JSON.stringify(tool), /[0-9a-f]{64}/);
   const rows = JSON.stringify(readJson('ops/deployment-guard/bypass-inventory.json'));
   assert.match(rows, /"path":"scripts\/deployment-guard\/sql132-financial-totp-code-check-lockout-production-apply\.mjs","classification":"GUARDED","capabilities":\["sql132-production-apply"\]/);
-  assert.match(rows, /sql128, sql129, sql130, sql131, sql132, sql133, sql134, sql135\)/);
+  assert.match(rows, /sql128, sql129, sql130, sql131, sql132, sql133, sql134, sql135, sql137, sql138\)/);
   const scripts = readJson('package.json').scripts;
   const workflow = fs.readFileSync(path.join(ROOT, '.github/workflows/deployment-guard.yml'), 'utf8');
   for (const name of ['aws/tests/release-sql132-executor.test.mjs', 'aws/tests/release-sql132-production-apply.test.mjs', 'aws/tests/sql132-financial-totp-lockout-pg.test.mjs']) {
@@ -308,7 +308,12 @@ test('order: predecessor SQL 130 (untouched); the one new function, its prerequi
   const lockoutApplied = readJson(LOCKOUT_APPLIED).members;
   assert.ok(lockoutApplied['providers/production/checkalt-register.mjs'], 'checkalt-register.mjs is recorded applied (production run 41156679208)');
   for (const member of ['auth-financial-totp.mjs', 'providers/production/checkalt-register.mjs']) {
-    if (lockoutApplied[member]) {
+    if (member === 'auth-financial-totp.mjs') {
+      // Moved on to the finding 8 REPLACE (first enrollment needs an email code), which starts from the applied
+      // lockout bytes: the row expects those bytes live and names its own planning manifest.
+      assert.equal(plan.members[member].expected_live_sha256, lockoutApplied[member].accepted_sha256, `${member} expects the applied lockout bytes live`);
+      assert.equal(plan.members[member].manifest, 'aws/tests/fixtures/production-financial-totp-enroll-email-code-manifest-2026-10-31.json', member);
+    } else if (lockoutApplied[member]) {
       assert.equal(plan.members[member].expected_live_sha256, plan.members[member].accepted_sha256, `${member} records the applied lockout bytes`);
       assert.equal(plan.members[member].manifest, LOCKOUT_APPLIED, member);
     } else {
@@ -356,7 +361,7 @@ test('order: predecessor SQL 130 (untouched); the one new function, its prerequi
   assert.match(runbook, /APPLY_FINANCIAL_TOTP_LOCKOUT/);
   const oneShot = fs.readFileSync(path.join(ROOT, 'ops/production-sql-one-shot.md'), 'utf8');
   assert.match(oneShot, /\| `sql132` \|/);
-  assert.match(oneShot, /`sql129`, `sql130`, `sql131`, `sql132`, `sql133`, `sql134`, `sql135`\) \|/);
+  assert.match(oneShot, /`sql129`, `sql130`, `sql131`, `sql132`, `sql133`, `sql134`, `sql135`, `sql137`, `sql138`\) \|/);
   assert.match(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/README.md'), 'utf8'), /sql132-financial-totp-code-check-lockout-production-apply\.mjs --inspect/);
 });
 

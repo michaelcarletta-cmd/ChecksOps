@@ -1,0 +1,21 @@
+{
+  "workstream_id": "money-stepup-window",
+  "authorization": "Pending owner review (2026-10-31). Planning only: nothing is live or verified. Each production apply still needs its own owner approval and staging acceptance.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Money step-up window (2026-10-31, security audit 2026-10-29 finding 7; owner decision 2026-10-31 \"Money step-up: how fresh the code must be ... - 15 minutes\", no amount threshold): the financial TOTP step-up was bound only to the login (origin_jti, which survives token refresh for up to 30 days), so one code authorized Check Alt deposits and approvals, wallet funding, sends and bank-detail changes for the whole login. The accepted bytes: providers/production/moov-fund-authz.mjs exports FINANCIAL_STEPUP_MAX_AGE_SECONDS (15 * 60) and financialStepUpFreshSql (created_at > now() - make_interval(secs => $n::int), the database clock against the server-written step-up row, the approach admin-reset-totp.mjs already takes for team.reset_totp), and loadSessionFundStepUp (wallet fund, send, bank details) adds that condition; providers/production/checkalt-authz.mjs imports both and loadSessionCheckAltStepUp (Check Alt submit and approve) adds the same condition. A step-up older than 15 minutes is treated as absent: the same 401 totp_required (Moov) or 403 step_up_required (Check Alt) the SPA already answers by asking for a new code. No SQL change; no other member changes (moov-wallet-fund.mjs, moov-send.mjs, onboarding/handlers.mjs, checkalt-submit.mjs and checkalt-approve.mjs call the two lookups unchanged). live_sha256 for both is the bytes the third full-package production rebuild put live (ops/deployment-guard/lambda-rebuild-plan.json, production run 39669873076 of main 008af40e2, CodeSha256 pNCewAaF...), the bytes each previous_manifest accepted; neither file changed on main since and no overlay of either has been planned or applied since. Order: moov-fund-authz.mjs first (checkalt-authz.mjs imports its new exports at load), then checkalt-authz.mjs; the plan order already has moov-fund-authz.mjs earlier. A read-only production overlay inspect must confirm each live member before any apply.",
+  "members": {
+    "providers/production/moov-fund-authz.mjs": {
+      "live_sha256": "290da0d4c085cfc93b849d33ec8606f61f48f128c14a17ddf484f69b9c7c7afb",
+      "accepted_sha256": "27d9c674e8b439fd85741981e957a01797cc9ebe6d4df58f7cf302b8c5ea43dc",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-moov-wallet-fund-manifest-2026-10-13.json"
+    },
+    "providers/production/checkalt-authz.mjs": {
+      "live_sha256": "259802f8f0af515d75b139f8bf6a4bbe24a9d7b9ae12b11b3eeae879b7107c71",
+      "accepted_sha256": "b5e0dc3d2446a7d7cc8d8965d39940fc25f3a8974b823488f5fbb3408b878fc2",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
+    }
+  }
+}

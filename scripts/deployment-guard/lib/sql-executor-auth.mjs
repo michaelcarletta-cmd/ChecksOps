@@ -3071,6 +3071,54 @@ export const AUTHORIZED_SQL135_CHECK_CREATE_INSERT_GRANT = Object.freeze({
   function_identities: Object.freeze([]),
 });
 
+// Platform owner identity staging pin: SQL 137 (security audit 2026-10-29, finding 15: is_platform_owner()
+// decided by the identity_accounts row only, the profiles.email branch removed; UPDATE, DELETE and
+// TRUNCATE on identity_accounts revoked from PUBLIC, anon, authenticated and checksops). No predecessor.
+// Staging apply authorized (wave 32) from staging read-live run 41234275408.
+export const AUTHORIZED_SQL137_PLATFORM_OWNER_IDENTITY = Object.freeze({
+  key: 'sql137',
+  filename: 'aws/workflows/sql/137_platform_owner_identity.sql',
+  migration_id: '137_platform_owner_identity',
+  // The commit that last authored the file bytes.
+  commit: '556626cb5135cc5cd8787c42edec8a3c5b07bc91',
+  source_sha256: 'f1308cbdcb58ddcca23be9139dc32ebb28bc912ce5541327777a8027b843d5bb',
+  authorization: 'Owner approved 2026-10-31: staging apply (wave 32) from staging read-live run 41234275408',
+  execute: true,
+  // Staging read-live run 41234275408 (main 7d845915e, executor m30FadRm...): is_platform_owner() "different",
+  // EXECUTE for PUBLIC, authenticated, checksops and the owner; checksops UPDATE on identity_accounts. Not the
+  // derived staging prediction 7349393d... (aws/rls/sql/10's body with those grants): the grants match, the
+  // live function definition does not (its body is not printed by the read-live; SQL 137 replaces it whole).
+  expected_live_definition_sha256: 'a2c2d856a21c52d47544fad05e0f0275a24a093421c8a7a7fbeea0e4bb329dfc',
+  // Code-derived: releaseIntendedHash('sql137', file bytes) (release-sql-state.mjs); re-derived by the tests.
+  intended_replacement_sha256: '9a88fca29d21f5537052f475f4133f05e89e002bdf00b22cfc3cf2cf78c6d8da',
+  function_identities: Object.freeze([
+    'public.is_platform_owner()',
+  ]),
+});
+
+// Payee setup link staging pin: SQL 138 (security audit 2026-10-29 finding 18; owner 2026-10-31, "Okay,
+// let's do option A and fix it correctly for SQL 138"): SQL 113's aws_public_payee_record refuses every
+// event once the payee is verified (already_verified), so a leaked link cannot swap a verified bank. Needs
+// SQL 113, whose function it replaces (release-sql-specs.mjs supersedes). Pending until a reviewed pin
+// change records a staging read-live.
+export const AUTHORIZED_SQL138_PAYEE_SETUP_LINK_CLOSED_AFTER_VERIFICATION = Object.freeze({
+  key: 'sql138',
+  filename: 'aws/workflows/sql/138_payee_setup_link_closed_after_verification.sql',
+  migration_id: '138_payee_setup_link_closed_after_verification',
+  // The commit that last authored the file bytes.
+  commit: 'c7c960f856c949a74eae9781573525828bada010',
+  source_sha256: 'b4b3da5a22c18d69c143cf7e9f2add93be197304c65b70e11213d45b24392ef9',
+  authorization: 'pending',
+  execute: false,
+  expected_live_definition_sha256: null,
+  // Code-derived: releaseIntendedHash('sql138', file bytes) (release-sql-state.mjs); re-derived by the tests.
+  intended_replacement_sha256: '9acaf809824101d8ef62098e6440ca5d06cda1bec4117118c53931130efadf48',
+  // Code-derived: releaseSupersededIntendedHash('sql113', SQL 113 bytes, 'sql138', these bytes). After
+  // SQL 138, SQL 113 counts as applied only when every other SQL 113 object matches.
+  superseded_intended_sha256: Object.freeze({ sql113: 'b4e3cf0c6dec304d3121a45b964537abdc364391e279486046b48fe9e88464fa' }),
+  function_identities: Object.freeze(['public.aws_public_payee_record(text, text, jsonb)']),
+});
+
 export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql90: AUTHORIZED_SQL90_USERS_ONLY_TENANT_ROLES,
   sql91: AUTHORIZED_SQL91_MOOV_ONBOARDING,
@@ -3117,6 +3165,8 @@ export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql133: AUTHORIZED_SQL133_FINANCIAL_TOTP_ADMIN_RESET_ENROLLMENT,
   sql134: AUTHORIZED_SQL134_LOSS_DRAFT_ESCROW_WRITE_GRANTS,
   sql135: AUTHORIZED_SQL135_CHECK_CREATE_INSERT_GRANT,
+  sql137: AUTHORIZED_SQL137_PLATFORM_OWNER_IDENTITY,
+  sql138: AUTHORIZED_SQL138_PAYEE_SETUP_LINK_CLOSED_AFTER_VERIFICATION,
 });
 
 // The fee collection pin under its earlier map name (the same object as the release map's sql98).
@@ -3132,7 +3182,7 @@ export function isSql30TenantDocumentsDocType(input = {}) {
   return pinIdentifiersMatch(input, AUTHORIZED_SQL30_TENANT_DOCUMENTS_DOC_TYPE);
 }
 
-/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql135) an input names, or null. */
+/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql135, sql137, sql138) an input names, or null. */
 export function releaseSqlMigrationKey(input = {}) {
   return Object.keys(RELEASE_2026_10_17_PENDING_SQL_PINS)
     .find((key) => pinIdentifiersMatch(input, RELEASE_2026_10_17_PENDING_SQL_PINS[key])) || null;

@@ -30,7 +30,12 @@ const readSession = (sessionKey = AWS_STAGING_AUTH_SESSION_KEY): {
   }
 };
 
-const post = async (path: string, body: Record<string, unknown> = {}) => {
+const post = async (
+  path: string,
+  body: Record<string, unknown> = {},
+  // Answers that are a step of the flow, not a failure (finding 8: email_code_required).
+  allowErrors: string[] = [],
+) => {
   const session = readSession();
   if (!session.accessToken) throw new Error("missing_access_token");
   const response = await fetch(`${awsApiBaseUrl()}${path}`, {
@@ -42,6 +47,7 @@ const post = async (path: string, body: Record<string, unknown> = {}) => {
     body: JSON.stringify({ ...body, accessToken: session.accessToken }),
   });
   const payload = await response.json().catch(() => ({}));
+  if (payload?.error && allowErrors.includes(String(payload.error))) return payload;
   if (!response.ok || payload?.ok === false) {
     throw new Error(String(payload?.message || payload?.error || `mfa_request_failed_${response.status}`));
   }
@@ -58,12 +64,51 @@ export const getAwsMfaStatus = async (): Promise<AwsMfaStatus> => {
   };
 };
 
-export const associateAwsTotp = async (email?: string | null) => {
-  const payload = await post("/auth/mfa/associate", { email: email || undefined });
+export type AwsTotpAssociation = {
+  secret: string | null;
+  otpauthUri: string | null;
+  /** Sent back with the first verify; the API refuses to activate a pending setup without it. */
+  enrollmentTicket: string | null;
+  /** First-time setup: a code was emailed and must be entered before the secret is issued. */
+  emailCodeRequired: boolean;
+  emailChallenge: string | null;
+  emailHint: string | null;
+  /** Staging only (email sink): the API shows the emailed code. Never set in production. */
+  stagingDebugCode: string | null;
+};
+
+const text = (value: unknown) => (typeof value === "string" && value ? value : null);
+
+/**
+ * Starts authenticator setup. Without emailCode, an API that requires a fresh email code
+ * (finding 8) emails one and answers emailCodeRequired with a challenge; call again with the
+ * challenge and the code to get the secret. An API without that step answers with the secret
+ * directly, so this works against both.
+ */
+export const associateAwsTotp = async (
+  email?: string | null,
+  emailCode?: { challenge: string; code: string },
+): Promise<AwsTotpAssociation> => {
+  const payload = await post("/auth/mfa/associate", {
+    email: email || undefined,
+    emailChallenge: emailCode?.challenge,
+    emailCode: emailCode?.code,
+  }, ["email_code_required"]);
   return {
-    secret: payload?.totp?.secret ? String(payload.totp.secret) : null,
-    otpauthUri: payload?.totp?.otpauth_uri ? String(payload.totp.otpauth_uri) : null,
+    secret: text(payload?.totp?.secret),
+    otpauthUri: text(payload?.totp?.otpauth_uri),
+    enrollmentTicket: text(payload?.enrollmentTicket),
+    emailCodeRequired: payload?.error === "email_code_required",
+    emailChallenge: text(payload?.emailChallenge),
+    emailHint: text(payload?.emailHint),
+    stagingDebugCode: text(payload?.stagingDebugCode),
   };
+};
+
+/** The 6-digit code from the setup email, as a string (leading zeros kept). */
+export const normalizeEmailSetupCode = (value: unknown): string | null => {
+  const trimmed = typeof value === "string" ? value.trim() : "";
+  return /^\d{6}$/.test(trimmed) ? trimmed : null;
 };
 
 const totpBody = (
@@ -92,9 +137,12 @@ const postTotp = async (path: string, body: Record<string, unknown>) => {
 
 export const verifyAwsTotp = async (
   code: string,
-  extra: { actionKey?: string; tenantId?: string | null; checkId?: string | null } = {},
+  extra: { actionKey?: string; tenantId?: string | null; checkId?: string | null; enrollmentTicket?: string | null } = {},
 ) => {
-  const payload = await postTotp("/auth/mfa/verify", totpBody(code, extra));
+  const payload = await postTotp("/auth/mfa/verify", {
+    ...totpBody(code, extra),
+    enrollmentTicket: extra.enrollmentTicket || undefined,
+  });
   return Boolean(payload.verified || payload.ok);
 };
 

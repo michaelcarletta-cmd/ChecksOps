@@ -147,6 +147,9 @@ const CHANGED_SINCE_SECOND_REBUILD = {
   'tenant-collection-v2.mjs': 'changed',
   'tenant-collection-v2-uat.mjs': 'changed',
   'tenant-settings-handlers.mjs': 'changed',
+  // Money step-up window (2026-10-31, security audit finding 7): every money step-up must be
+  // verified within 15 minutes; a REPLACE row of the production overlay plan, not a rebuild section.
+  'providers/production/moov-fund-authz.mjs': 'changed',
 };
 // Members of the current (third) rebuild sections that main changed after those rebuilds were
 // applied (staging run 39666390516, production run 39669873076 of main 008af40e2). The sections keep
@@ -200,6 +203,8 @@ const OVERLAY_PLAN_CHANGES = new Set([
   'tenant-collection-v2.mjs',
   'tenant-collection-v2-uat.mjs',
   'tenant-settings-handlers.mjs',
+  // Money step-up window (2026-10-31, finding 7): a REPLACE row of the production plan.
+  'providers/production/moov-fund-authz.mjs',
 ]);
 const assertSectionAcceptedIsMain = (apiRoot, name, accepted) => {
   const onMain = sha256(fs.readFileSync(path.join(apiRoot, name)));
