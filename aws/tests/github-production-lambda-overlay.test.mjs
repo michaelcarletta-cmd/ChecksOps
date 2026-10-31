@@ -3967,9 +3967,11 @@ test('TOTP shared rate limit (finding 7): auth-financial-totp.mjs REPLACE from t
     assert.ok(applied.notes.includes(evidence), evidence);
   }
   assert.deepEqual(applied.members, { [MEMBER]: { live_sha256: accepted, accepted_sha256: accepted, operation: 'replace', previous_manifest: REL } });
-  // The committed row expects these applied bytes live and plans the SQL 132 lockout REPLACE from them.
-  assert.equal(PLAN.members[MEMBER].expected_live_sha256, accepted);
-  assert.equal(PLAN.members[MEMBER].manifest, LOCKOUT_REL);
+  // The SQL 132 lockout REPLACE started from these applied bytes and was applied 2026-10-31 (production run
+  // 41190246725): the committed row expects the lockout bytes live and names the lockout applied record.
+  const LOCKOUT_ACCEPTED = '3edfea2a0328eda03466cad4c13c1075aa2a020c4164eee0564ade2dee06319b';
+  assert.equal(PLAN.members[MEMBER].expected_live_sha256, LOCKOUT_ACCEPTED);
+  assert.equal(PLAN.members[MEMBER].manifest, LOCKOUT_APPLIED_REL);
   assert.ok(PLAN.notes.includes('TOTP shared rate limit applied 2026-10-30 (production run 40992441506'));
   assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
   const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
@@ -3979,12 +3981,13 @@ test('TOTP shared rate limit (finding 7): auth-financial-totp.mjs REPLACE from t
   const ready = await run(inspect, { root: ROOT, plan: before, inspectLive: liveFor(MEMBER, { plan: before, sha256: LIVE }) });
   assert.equal(ready.state, 'READY');
   assert.equal(ready.mutation, false);
-  // The applied bytes live: READY for the lockout REPLACE (the committed row's pre-state).
+  // The lockout bytes live: nothing is left to do for the committed row.
   const done = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER) });
-  assert.equal(done.state, 'READY');
+  assert.equal(done.state, 'ALREADY_ACCEPTED');
   assert.equal(done.mutation, false);
-  // Neither the pre-apply bytes nor the stale expectation is an accepted live state any more.
-  for (const other of [LIVE, STALE, 'c'.repeat(64)]) {
+  // Neither these applied bytes (the lockout pre-state), the pre-apply bytes nor the stale expectation is an
+  // accepted live state any more.
+  for (const other of [accepted, LIVE, STALE, 'c'.repeat(64)]) {
     await assert.rejects(
       run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: other }) }),
       (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
@@ -4048,7 +4051,7 @@ test('Check Alt deposit account change step-up (finding 13): checkalt-register.m
     assert.ok(imports.includes(dep), dep);
   }
   const totp = PLAN.members['auth-financial-totp.mjs'];
-  assert.equal(totp.expected_live_sha256, 'db939888c6c0d237ee805ed3cd6924e2a8bef199ee76afa8fac2a8bd96687b91', 'auth-financial-totp.mjs: the finding 7 bytes are live (it pends the SQL 132 lockout REPLACE, below)');
+  assert.equal(totp.expected_live_sha256, '3edfea2a0328eda03466cad4c13c1075aa2a020c4164eee0564ade2dee06319b', 'auth-financial-totp.mjs: the SQL 132 lockout bytes are live (production run 41190246725, below)');
   const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
   // Before the apply, the planned row read READY on the bytes production held.
   const before = structuredClone(PLAN);
@@ -4080,7 +4083,7 @@ test('Check Alt deposit account change step-up (finding 13): checkalt-register.m
   assert.match(source, /'account_change_code_required'/);
 });
 
-test('Financial TOTP lockout (SQL 132): auth-financial-totp.mjs and checkalt-register.mjs REPLACE from their applied bytes, SQL 132 first; checkalt-register.mjs applied 2026-10-31', async () => {
+test('Financial TOTP lockout (SQL 132): auth-financial-totp.mjs and checkalt-register.mjs REPLACE from their applied bytes, SQL 132 first, applied 2026-10-31', async () => {
   const MEMBERS = {
     'auth-financial-totp.mjs': {
       // Applied 2026-10-30 (finding 7, production run 40992441506).
@@ -4145,6 +4148,8 @@ test('Financial TOTP lockout (SQL 132): auth-financial-totp.mjs and checkalt-reg
   assert.equal(LOCKOUT_APPLIED.live_lambda, 'checksops-production-prep-api');
   const APPLIED_RUNS = {
     'providers/production/checkalt-register.mjs': ['run 41156144977', 'run 41156288333', 'run 41156370512', 'run 41156543446', 'run 41156679208', 'run 41156757476', '"DEPLOY providers/production/checkalt-register.mjs TO PRODUCTION"', 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/41156288333', 'FCH9QF9y2neoSe7FmyzMC/L/XUJbMwXhHmlxYcm1n3U=', '36ccf76b-378b-4d13-b349-b20638e9f4d2', '4015e4b6-6c4d-4840-bafc-67fe53123424', 'ALREADY_ACCEPTED'],
+    // The first apply (run 41155864533) was refused by the order gate before any write.
+    'auth-financial-totp.mjs': ['run 41154473153', 'run 41155379330', 'run 41155497402', 'run 41189990452', 'run 41190246725', 'run 41190321264', '"DEPLOY auth-financial-totp.mjs TO PRODUCTION"', 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/41155379330', 'xLOIV0T/QaL2Ja0ftVQkiyOgtvWY3JAzqK/zCRZZaEs=', '9299e302-7bb7-44f2-add0-dbf2c2c44171', '969702e9-ee4c-4182-a937-306ab9a7d506', '74ce06ca-eb54-4735-887d-4fa9d2a4b9bb', 'run 41155864533', 'DEPLOYMENT_COLLISION'],
   };
   assert.deepEqual(Object.keys(LOCKOUT_APPLIED.members).sort(), Object.keys(APPLIED_RUNS).sort());
   for (const evidence of ['SQL 132', 'Not verified']) assert.ok(LOCKOUT_APPLIED.notes.includes(evidence), evidence);
