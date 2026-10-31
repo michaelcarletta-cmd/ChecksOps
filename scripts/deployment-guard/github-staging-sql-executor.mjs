@@ -141,6 +141,7 @@ export const MIGRATIONS = Object.freeze({
   'sql133-financial-totp-admin-reset-enrollment': RELEASE_2026_10_17_PENDING_SQL_PINS.sql133,
   'sql134-loss-draft-escrow-write-grants': RELEASE_2026_10_17_PENDING_SQL_PINS.sql134,
   'sql135-check-create-insert-grant': RELEASE_2026_10_17_PENDING_SQL_PINS.sql135,
+  'sql137-platform-owner-identity': RELEASE_2026_10_17_PENDING_SQL_PINS.sql137,
 });
 
 const LAMBDA_CODE_SHA_RE = /^[A-Za-z0-9+/]{43}=$/;
