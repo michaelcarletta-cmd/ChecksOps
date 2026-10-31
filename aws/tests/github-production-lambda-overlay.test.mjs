@@ -673,6 +673,11 @@ test('checkalt-eligibility.mjs expected_live records the bytes production run 39
   );
 });
 
+// Storage upload signed size (2026-10-31, audit finding 26): planned REPLACE of storage-write.mjs from the
+// bytes production run 40911380838 applied (partner storage writes, finding 3).
+const STORAGE_UPLOAD_SIGNED_SIZE_REL = 'aws/tests/fixtures/production-storage-upload-signed-size-manifest-2026-10-31.json';
+const STORAGE_WRITE_APPLIED_BYTES = '04dac9a46334ec2b219623c41ca620524546bcc3343c163da306f2ca1d42395f';
+
 test('storage-write.mjs expected_live records the bytes production run 39707778256 applied', async () => {
   const STORAGE_WRITE = 'storage-write.mjs';
   const LIVE = 'ccc72b14288580740bd57602543caaca558ba76d18c26c1bd5565c9841becf9e';
@@ -693,14 +698,15 @@ test('storage-write.mjs expected_live records the bytes production run 397077782
   assert.equal(manifest.members[STORAGE_WRITE].accepted_sha256, LIVE);
   assert.match(manifest.notes, /run 39707778256/);
   // The plan row moved on to the partner storage writes change (checked in its own test), planned
-  // over the bytes this apply put live and applied 2026-10-29 (production run 40911380838).
-  assert.equal(row.expected_live_sha256, row.accepted_sha256);
-  assert.equal(row.manifest, SECURITY_HARDENING_APPLIED_REL);
+  // over the bytes this apply put live and applied 2026-10-29 (production run 40911380838), and then
+  // to the signed upload size REPLACE from those applied bytes (finding 26, its own test).
+  assert.equal(row.expected_live_sha256, STORAGE_WRITE_APPLIED_BYTES);
+  assert.equal(row.manifest, STORAGE_UPLOAD_SIGNED_SIZE_REL);
   const next = JSON.parse(fs.readFileSync(path.join(ROOT, PARTNER_STORAGE_WRITES_REL), 'utf8'));
   assert.equal(next.members[STORAGE_WRITE].live_sha256, LIVE);
   assert.equal(next.members[STORAGE_WRITE].previous_manifest, MANIFEST_REL);
   assert.equal(resolvePlannedMember(STORAGE_WRITE, { root: ROOT, plan: PLAN }).ok, true);
-  const done = await run({ ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: STORAGE_WRITE }, { root: ROOT, inspectLive: liveFor(STORAGE_WRITE) });
+  const done = await run({ ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: STORAGE_WRITE }, { root: ROOT, inspectLive: liveFor(STORAGE_WRITE, { sha256: row.accepted_sha256 }) });
   assert.equal(done.state, 'ALREADY_ACCEPTED');
   assert.equal(done.mutation, false);
   // Neither this apply's bytes nor the bytes before it are an accepted live state any more.
@@ -729,20 +735,26 @@ test('partner storage writes: storage-write-auth.mjs then storage-write.mjs repl
     const row = PLAN.members[member];
     // From the bytes the previous manifest recorded applied, to main's bytes.
     const applied = JSON.parse(fs.readFileSync(path.join(ROOT, PREVIOUS[member]), 'utf8')).members[member].accepted_sha256;
-    assert.deepEqual(manifest.members[member], { live_sha256: applied, accepted_sha256: sha(`aws/functions/api/${member}`), operation: 'replace', previous_manifest: PREVIOUS[member] }, member);
+    // storage-write.mjs has moved on to the signed upload size REPLACE (finding 26, its own test) from the
+    // bytes this plan put live (production run 40911380838).
+    const movedOn = member === WRITE;
+    const thisPlan = movedOn ? STORAGE_WRITE_APPLIED_BYTES : sha(`aws/functions/api/${member}`);
+    assert.deepEqual(manifest.members[member], { live_sha256: applied, accepted_sha256: thisPlan, operation: 'replace', previous_manifest: PREVIOUS[member] }, member);
     assert.equal(row.operation, 'replace', member);
     // Applied 2026-10-29: the row records the applied bytes and names the applied manifest.
-    assert.equal(row.manifest, SECURITY_HARDENING_APPLIED_REL, member);
-    assert.equal(row.expected_live_sha256, row.accepted_sha256, member);
+    assert.equal(row.manifest, movedOn ? STORAGE_UPLOAD_SIGNED_SIZE_REL : SECURITY_HARDENING_APPLIED_REL, member);
+    assert.equal(row.expected_live_sha256, thisPlan, member);
     assert.equal(row.accepted_sha256, sha(`aws/functions/api/${member}`), member);
     assert.notEqual(row.accepted_sha256, applied, member);
     assert.equal(resolvePlannedMember(member, { root: ROOT, plan: PLAN }).ok, true, member);
     const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: member };
     // Before the apply the pre-apply bytes were READY; now they are refused and main's are done.
-    const before = structuredClone(PLAN);
-    before.members[member] = { ...row, expected_live_sha256: applied, manifest: PARTNER_STORAGE_WRITES_REL };
-    assert.equal((await run(inspect, { root: ROOT, plan: before, inspectLive: liveFor(member, { plan: before }) })).state, 'READY', member);
-    assert.equal((await run(inspect, { root: ROOT, inspectLive: liveFor(member) })).state, 'ALREADY_ACCEPTED', member);
+    if (!movedOn) {
+      const before = structuredClone(PLAN);
+      before.members[member] = { ...row, expected_live_sha256: applied, manifest: PARTNER_STORAGE_WRITES_REL };
+      assert.equal((await run(inspect, { root: ROOT, plan: before, inspectLive: liveFor(member, { plan: before }) })).state, 'READY', member);
+    }
+    assert.equal((await run(inspect, { root: ROOT, inspectLive: liveFor(member, { sha256: row.accepted_sha256 }) })).state, 'ALREADY_ACCEPTED', member);
     await assert.rejects(
       run(inspect, { root: ROOT, inspectLive: liveFor(member, { sha256: applied }) }),
       (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
@@ -754,6 +766,46 @@ test('partner storage writes: storage-write-auth.mjs then storage-write.mjs repl
   assert.match(fs.readFileSync(path.join(API, WRITE), 'utf8'), /import \{ authorizeObjectWrite, authorizeStorageWritePath \} from '\.\/storage-write-auth\.mjs'/);
   assert.ok(PLAN.order.indexOf(AUTH) < PLAN.order.indexOf(WRITE));
   assert.match(PLAN.notes, /Partner storage writes \(2026-10-29, security audit finding 3, pending owner review\)/);
+});
+
+test('Storage upload signed size (finding 26): storage-write.mjs REPLACE from the bytes production run 40911380838 applied, planning only, SQL 94 still first', async () => {
+  const MEMBER = 'storage-write.mjs';
+  const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, STORAGE_UPLOAD_SIGNED_SIZE_REL), 'utf8'));
+  const accepted = sha(`aws/functions/api/${MEMBER}`);
+  assert.equal(manifest.workstream_id, 'storage-upload-signed-size');
+  assert.equal(manifest.deploy_authorized, false);
+  assert.match(manifest.authorization, /^Pending owner review/);
+  assert.equal(manifest.live_lambda, 'checksops-production-prep-api');
+  assert.match(manifest.notes, /finding 26/);
+  assert.deepEqual(manifest.members, { [MEMBER]: { live_sha256: STORAGE_WRITE_APPLIED_BYTES, accepted_sha256: accepted, operation: 'replace', previous_manifest: SECURITY_HARDENING_APPLIED_REL } });
+  // The previous record holds these bytes as applied (finding 3, production run 40911380838).
+  const previous = JSON.parse(fs.readFileSync(path.join(ROOT, SECURITY_HARDENING_APPLIED_REL), 'utf8'));
+  assert.equal(previous.members[MEMBER].accepted_sha256, STORAGE_WRITE_APPLIED_BYTES);
+  assert.match(previous.notes, /production apply run 40911380838 VERIFIED 04dac9a4/);
+  assert.notEqual(accepted, STORAGE_WRITE_APPLIED_BYTES);
+  assert.deepEqual(PLAN.members[MEMBER], {
+    operation: 'replace',
+    accepted_sha256: accepted,
+    expected_live_sha256: STORAGE_WRITE_APPLIED_BYTES,
+    sql_before: 'aws/workflows/sql/94_document_library_restore.sql',
+    manifest: STORAGE_UPLOAD_SIGNED_SIZE_REL,
+  });
+  assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
+  // Still after storage-write-auth.mjs (its authorizeObjectWrite import, finding 3), which is unchanged.
+  assert.ok(PLAN.order.indexOf('storage-write-auth.mjs') < PLAN.order.indexOf(MEMBER));
+  const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
+  const ready = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: STORAGE_WRITE_APPLIED_BYTES }) });
+  assert.equal(ready.state, 'READY');
+  assert.equal(ready.mutation, false);
+  const done = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: accepted }) });
+  assert.equal(done.state, 'ALREADY_ACCEPTED');
+  await assert.rejects(
+    run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: 'c'.repeat(64) }) }),
+    (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+  );
+  const source = fs.readFileSync(path.join(API, MEMBER), 'utf8');
+  assert.match(source, /export const UPLOAD_MAX_BYTES_BY_BUCKET/);
+  assert.match(source, /ContentLength: contentLength,\n/);
 });
 
 test('tenant-management-v2.mjs comes just before app-services.mjs, which imports it statically', async () => {
@@ -1675,16 +1727,19 @@ test('send-fee billing: tenant-billing-engine.mjs replaced the 43d9a162 bytes; p
   assert.deepEqual(applied.members[ENGINE], { live_sha256: LIVE, accepted_sha256: LIVE, operation: 'replace', previous_manifest: MANIFEST_REL });
   const row = PLAN.members[ENGINE];
   assert.equal(row.operation, 'replace');
-  assert.equal(row.manifest, APPLIED_REL);
+  // The row now follows the finding 25 REPLACE (billing database errors redacted, its own test),
+  // which starts from these applied bytes; main has moved on.
+  assert.equal(row.manifest, 'aws/tests/fixtures/production-billing-db-error-redaction-manifest-2026-10-31.json');
   assert.equal(row.expected_live_sha256, LIVE);
-  assert.equal(row.accepted_sha256, LIVE);
-  assert.equal(sha(`aws/functions/api/${ENGINE}`), LIVE);
+  assert.equal(row.accepted_sha256, sha(`aws/functions/api/${ENGINE}`));
+  assert.notEqual(row.accepted_sha256, LIVE);
   // The engine bills the fee SQL 120 writes at send time: SQL 120 stays its prerequisite.
   assert.equal(row.sql_before, 'aws/workflows/sql/120_usage_events_at_approval_and_send.sql');
   assert.equal(resolvePlannedMember(ENGINE, { root: ROOT, plan: PLAN }).ok, true);
   const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: ENGINE };
+  // The applied bytes are now the next REPLACE's starting point.
   const done = await run(inspect, { root: ROOT, inspectLive: liveFor(ENGINE, { sha256: LIVE }) });
-  assert.equal(done.state, 'ALREADY_ACCEPTED');
+  assert.equal(done.state, 'READY');
   assert.equal(done.mutation, false);
   await assert.rejects(
     run(inspect, { root: ROOT, inspectLive: liveFor(ENGINE, { sha256: BEFORE }) }),
@@ -3318,7 +3373,9 @@ test('Security hardening 2026-10-29 (audit findings 2-4): five members applied i
     // follows the public partner codes REPLACE from the contractor gate's applied bytes, applied
     // 2026-10-29 (production run 40963109952).
     const dataMovedOn = member === 'data.mjs';
-    const accepted = movedOn.has(member) ? applied.members[member].accepted_sha256 : dataMovedOn ? DATA_GATES_APPLIED : sha(`aws/functions/api/${member}`);
+    // storage-write.mjs now follows the signed upload size REPLACE (finding 26) from the bytes applied here.
+    const writeMovedOn = member === 'storage-write.mjs';
+    const accepted = movedOn.has(member) ? applied.members[member].accepted_sha256 : dataMovedOn ? DATA_GATES_APPLIED : writeMovedOn ? STORAGE_WRITE_APPLIED_BYTES : sha(`aws/functions/api/${member}`);
     const row = PLAN.members[member];
     assert.deepEqual(applied.members[member], { live_sha256: accepted, accepted_sha256: accepted, operation: 'replace', previous_manifest: planningRel }, member);
     if (movedOn.has(member)) {
@@ -3326,6 +3383,11 @@ test('Security hardening 2026-10-29 (audit findings 2-4): five members applied i
       assert.equal(row.accepted_sha256, sha(`aws/functions/api/${member}`), member);
       assert.notEqual(row.accepted_sha256, accepted, member);
       assert.equal(row.manifest, PORTAL_SIGNING_APPLIED_REL, member);
+    } else if (writeMovedOn) {
+      assert.equal(row.accepted_sha256, sha(`aws/functions/api/${member}`), member);
+      assert.notEqual(row.accepted_sha256, accepted, member);
+      assert.equal(row.expected_live_sha256, accepted, member);
+      assert.equal(row.manifest, STORAGE_UPLOAD_SIGNED_SIZE_REL, member);
     } else {
       assert.equal(row.accepted_sha256, dataMovedOn ? sha(`aws/functions/api/${member}`) : accepted, member);
       assert.equal(row.expected_live_sha256, dataMovedOn ? sha(`aws/functions/api/${member}`) : accepted, member);
@@ -3341,8 +3403,9 @@ test('Security hardening 2026-10-29 (audit findings 2-4): five members applied i
     const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: member };
     // The applied bytes are accepted live. data.mjs and storage.mjs (moved on, and applied again) are
     // inspected at their current accepted live bytes (the public partner codes, the portal signing).
+    // storage-write.mjs's applied bytes are the next REPLACE's starting point (READY).
     const done = await run(inspect, { root: ROOT, inspectLive: dataMovedOn || movedOn.has(member) ? liveFor(member) : liveFor(member, { sha256: accepted }) });
-    assert.equal(done.state, 'ALREADY_ACCEPTED', member);
+    assert.equal(done.state, writeMovedOn ? 'READY' : 'ALREADY_ACCEPTED', member);
     assert.equal(done.mutation, false, member);
     for (const other of dataMovedOn || movedOn.has(member) ? [planned.live_sha256, accepted] : [planned.live_sha256]) {
       await assert.rejects(
@@ -4434,4 +4497,46 @@ test('Financial TOTP teammate reset (SQL 133): admin-reset-totp.mjs REPLACE from
   const replay = await run(applyEnv(MEMBER), deps);
   assert.equal(replay.mutation, false);
   assert.deepEqual(calls.receipt.owned_member_ops, { replace: [MEMBER], add: [] });
+});
+
+test('Billing database errors redacted (finding 25): tenant-billing-engine.mjs REPLACE from the send-fee billing applied bytes, planning only, SQL 120 still first', async () => {
+  const MEMBER = 'tenant-billing-engine.mjs';
+  const MANIFEST_REL = 'aws/tests/fixtures/production-billing-db-error-redaction-manifest-2026-10-31.json';
+  const PREVIOUS = 'aws/tests/fixtures/production-billing-send-fee-events-applied-manifest-2026-10-27.json';
+  // tenant-billing-engine.mjs as the send-fee billing production run 40577608750 applied it.
+  const SEND_FEE_APPLIED_BYTES = 'bccffbe7aa9b21d3052a832f1d2c4b9ec4b333b1727156773b1ac034be96860c';
+  const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, MANIFEST_REL), 'utf8'));
+  const accepted = sha(`aws/functions/api/${MEMBER}`);
+  assert.notEqual(accepted, SEND_FEE_APPLIED_BYTES);
+  assert.equal(manifest.workstream_id, 'billing-db-error-redaction');
+  assert.equal(manifest.deploy_authorized, false);
+  assert.match(manifest.authorization, /^Pending owner review/);
+  assert.match(manifest.notes, /finding 25/);
+  assert.deepEqual(manifest.members, { [MEMBER]: { live_sha256: SEND_FEE_APPLIED_BYTES, accepted_sha256: accepted, operation: 'replace', previous_manifest: PREVIOUS } });
+  assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, PREVIOUS), 'utf8')).members[MEMBER].accepted_sha256, SEND_FEE_APPLIED_BYTES);
+  assert.deepEqual(PLAN.members[MEMBER], {
+    operation: 'replace',
+    accepted_sha256: accepted,
+    expected_live_sha256: SEND_FEE_APPLIED_BYTES,
+    sql_before: 'aws/workflows/sql/120_usage_events_at_approval_and_send.sql',
+    manifest: MANIFEST_REL,
+  });
+  // The one new import (data.mjs, for sanitizeLogText) is a member recorded live at its accepted bytes.
+  const source = fs.readFileSync(path.join(API, MEMBER), 'utf8');
+  assert.ok(localImports(source, MEMBER).includes('data.mjs'));
+  assert.equal(PLAN.members['data.mjs'].expected_live_sha256, PLAN.members['data.mjs'].accepted_sha256);
+  assert.match(fs.readFileSync(path.join(API, 'data.mjs'), 'utf8'), /export const sanitizeLogText/);
+  assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
+  const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
+  const ready = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: SEND_FEE_APPLIED_BYTES }) });
+  assert.equal(ready.state, 'READY');
+  assert.equal(ready.mutation, false);
+  const done = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: accepted }) });
+  assert.equal(done.state, 'ALREADY_ACCEPTED');
+  await assert.rejects(
+    run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: 'c'.repeat(64) }) }),
+    (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+  );
+  assert.doesNotMatch(source, /detail:\s*error\.message/);
+  assert.match(source, /export const logBillingDbFailure/);
 });
