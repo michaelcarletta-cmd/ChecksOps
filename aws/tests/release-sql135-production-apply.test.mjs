@@ -235,7 +235,8 @@ test('order: no predecessor; no function; exactly the columns the check create n
   const runbook = read(COMMITTED.tooling.runbook);
   assert.ok(runbook.includes(COMMITTED.intended_replacement_sha256));
   assert.ok(runbook.includes(COMMITTED.source_sha256));
-  assert.match(runbook, /\*\*Status:\*\* staging pin execute-authorized \(wave 31\)/);
+  assert.match(runbook, /\*\*Status:\*\* applied in staging \(wave 31, 2026-10-31\); staging acceptance: owner retested Upload & Analyze successfully; production pin pending \(production apply not yet decided by the owner\)/);
+  assert.match(runbook, /\*\*Staging apply \(2026-10-31\)\.\*\* Apply run 41217214392/);
   assert.match(runbook, /read-live \(2026-10-31\)\.\*\* Run 41214330222/);
   assert.match(runbook, /APPLY_CHECK_CREATE_INSERT_GRANT/);
   assert.match(runbook, /13:06:40Z and 13:15:40Z/);
