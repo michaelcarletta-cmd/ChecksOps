@@ -3074,8 +3074,7 @@ export const AUTHORIZED_SQL135_CHECK_CREATE_INSERT_GRANT = Object.freeze({
 // Platform owner identity staging pin: SQL 137 (security audit 2026-10-29, finding 15: is_platform_owner()
 // decided by the identity_accounts row only, the profiles.email branch removed; UPDATE, DELETE and
 // TRUNCATE on identity_accounts revoked from PUBLIC, anon, authenticated and checksops). No predecessor.
-// Pending until a reviewed pin change records a staging read-live (the staging function body, its
-// EXECUTE ACL and the identity_accounts grants are not recorded in this repository).
+// Staging apply authorized (wave 32) from staging read-live run 41234275408.
 export const AUTHORIZED_SQL137_PLATFORM_OWNER_IDENTITY = Object.freeze({
   key: 'sql137',
   filename: 'aws/workflows/sql/137_platform_owner_identity.sql',
@@ -3083,9 +3082,13 @@ export const AUTHORIZED_SQL137_PLATFORM_OWNER_IDENTITY = Object.freeze({
   // The commit that last authored the file bytes.
   commit: '556626cb5135cc5cd8787c42edec8a3c5b07bc91',
   source_sha256: 'f1308cbdcb58ddcca23be9139dc32ebb28bc912ce5541327777a8027b843d5bb',
-  authorization: 'pending',
-  execute: false,
-  expected_live_definition_sha256: null,
+  authorization: 'Owner approved 2026-10-31: staging apply (wave 32) from staging read-live run 41234275408',
+  execute: true,
+  // Staging read-live run 41234275408 (main 7d845915e, executor m30FadRm...): is_platform_owner() "different",
+  // EXECUTE for PUBLIC, authenticated, checksops and the owner; checksops UPDATE on identity_accounts. Not the
+  // derived staging prediction 7349393d... (aws/rls/sql/10's body with those grants): the grants match, the
+  // live function definition does not (its body is not printed by the read-live; SQL 137 replaces it whole).
+  expected_live_definition_sha256: 'a2c2d856a21c52d47544fad05e0f0275a24a093421c8a7a7fbeea0e4bb329dfc',
   // Code-derived: releaseIntendedHash('sql137', file bytes) (release-sql-state.mjs); re-derived by the tests.
   intended_replacement_sha256: '9a88fca29d21f5537052f475f4133f05e89e002bdf00b22cfc3cf2cf78c6d8da',
   function_identities: Object.freeze([
