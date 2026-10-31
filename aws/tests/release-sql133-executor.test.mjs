@@ -4,8 +4,9 @@
  * release-sql90-97-executor.test.mjs runs what every release key shares (SQL 133 included); this
  * file covers what is new:
  *
- *   - the pin: staging-authorized from its read-live (wave 30), code-derived, selectable, packed, in step with the production pin (pending
- *     still); the pinned commit authored the bytes; no predecessor; nothing supersedes or names it;
+ *   - the pin: staging-authorized from its read-live (wave 30), code-derived, selectable, packed, in step with the production pin
+ *     (execute true on production's own pre-state, the same one staging had, derived from the spec); the pinned commit
+ *     authored the bytes; no predecessor; nothing supersedes or names it;
  *   - the file and spec: one new function, financial_totp_admin_reset_enrollment(uuid, uuid): plpgsql,
  *     VOLATILE, SECURITY DEFINER, search_path public, pg_temp, the TABLE result, the caller check, the
  *     self, teammate and platform-owner gates (the API's own SQL), the one DELETE, no secret returned;
@@ -174,10 +175,17 @@ test('pin: SQL 133 staging-authorized from its read-live, code-derived, selectab
   assert.equal(prod.staging_pin_commit, pin.commit);
   assert.equal(prod.source_sha256, pin.source_sha256);
   assert.deepEqual(prod.predecessors, []);
-  assert.equal(prod.execute, false);
-  assert.equal(prod.authorization, 'pending');
-  assert.equal(prod.expected_live_definition_sha256, null);
-  assert.equal(prod.production_inspect.status, 'pending');
+  // Production pin execute-authorized (owner-approved pin change of 2026-10-30) on the staging apply. Its
+  // pre-state is production's own (read-only inspect SSM a28009c3): the function absent, everything else in
+  // place, derived here from the spec; the same pre-state staging recorded (read-live run 41129536538).
+  assert.equal(prod.execute, true);
+  assert.match(prod.authorization, /^Owner approved 2026-10-30 /);
+  assert.equal(prod.expected_live_definition_sha256, 'f3b1671e8617df78a20600b43fcfc6636739d78f235ef78d1cc7d1d68f2f909d');
+  assert.equal(prod.expected_live_definition_sha256, prod.production_inspect.live_definition_sha256);
+  assert.equal(prod.expected_live_definition_sha256, ABSENT_PRE);
+  assert.equal(prod.expected_live_definition_sha256, pin.expected_live_definition_sha256);
+  assert.notEqual(prod.expected_live_definition_sha256, prod.intended_replacement_sha256);
+  assert.equal(prod.production_inspect.status, 'recorded');
   assert.ok(prod.production_inspect.note.includes(ABSENT_PRE));
   let bytes = null;
   if (/^[0-9a-f]{40}$/.test(pin.commit)) {
@@ -294,7 +302,7 @@ test('reviewed file and spec: one new DEFINER function that re-checks the API ga
   assert.deepEqual(releaseSharedPostconditionFailures(KEY, {}, post({ live_definition_sha256: ABSENT_PRE }), PINS[KEY]), ['intended_state']);
 });
 
-test('PostgreSQL 16: SQL 133 through the executor: the pre-state as derived; refused while the enrollment table is missing or a relation is under FORCE ROW LEVEL SECURITY; a pending pin and an unexpected pre-state cannot apply; one apply on the intended fingerprint, then refused', { timeout: 600000 }, async (t) => {
+test('PostgreSQL 16: SQL 133 through the executor: the pre-state as derived, production\'s as recorded; refused while the enrollment table is missing or a relation is under FORCE ROW LEVEL SECURITY; a pending pin and an unexpected pre-state cannot apply; one apply on the intended fingerprint, then refused', { timeout: 600000 }, async (t) => {
   const reason = pgSkipReason();
   if (reason) {
     t.skip(reason);
@@ -347,6 +355,8 @@ test('PostgreSQL 16: SQL 133 through the executor: the pre-state as derived; ref
     assert.deepEqual(pre.release_sql_inspect.definer_writes, allOk);
     assert.equal(pre.already_applied, false);
     assert.equal(pre.live_definition_sha256, ABSENT_PRE);
+    // The production pin's recorded pre-state (read-only inspect of 2026-10-30, SSM a28009c3).
+    assert.equal(pre.live_definition_sha256, productionPin().expected_live_definition_sha256);
     assert.equal(await present(), false);
 
     // Any of the four relations under FORCE ROW LEVEL SECURITY (the DEFINER owner could not reach it): refused, nothing applied.

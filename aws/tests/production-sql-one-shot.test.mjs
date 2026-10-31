@@ -621,7 +621,11 @@ test('only the apply child gets the apply variables, and its receipt is the one 
 // "apply SQL 132 in staging", #1467: the read-only production inspect SSM ea2ce576 recorded as its pre-state, the
 // guarded staging apply run 41117004966 from the same pre-state) until its record-and-retire change after its
 // 2026-10-30 apply ("apply SQL 132 in production").
-const EXECUTE_AUTHORIZED = Object.freeze([]);
+// SQL 133's pin is execute-authorized (owner-approved pin change of 2026-10-30, "continue with SQL 133 staging" /
+// "apply SQL 133 in staging" / "run the SQL 133 production inspect", no words for the production apply yet: the
+// read-only production inspect SSM a28009c3 recorded as its pre-state, the guarded staging apply run 41133471065
+// from the same pre-state) until its record-and-retire change.
+const EXECUTE_AUTHORIZED = Object.freeze(['sql133']);
 // SQL 95's and SQL 99's production applies of 2026-10-21 (main dcd865256) and SQL 106's and SQL 97's
 // (main 7124a160b; both runs passed the SQL 106 workstream id), recorded in applied.
 const APPLIED_2026_10_21 = Object.freeze({
@@ -773,8 +777,9 @@ test('a pin without staging acceptance or phrase is refused', async () => {
     sql130: 'e49dc44662d1ac04762cf06d139f527d9a09158cbccd64fc8370d62e1f43c838',
     sql131: '99d9e8e925ca8c5b56e11409f145e2d75de2759c27d8fd1b476494ffc62e2eaa',
     sql132: 'e1a1d4edb115e3fa0881112e6759c2d7ee1e9d8c6b3e24a7611b655dcf75741f',
+    sql133: 'f3b1671e8617df78a20600b43fcfc6636739d78f235ef78d1cc7d1d68f2f909d',
   };
-  for (const key of ['sql71', 'sql87', 'sql88', 'sql89', 'sql82', 'sql83', 'sql84', 'sql85', 'sql86', 'sql103', 'sql29', 'sql30', 'sql91', 'sql92', 'sql90', 'sql101', 'sql93', 'sql96', 'sql94', 'sql104', 'sql98', 'sql102', 'sql105', 'sql95', 'sql97', 'sql99', 'sql106', 'sql108', 'sql109', 'sql110', 'sql111', 'sql112', 'sql113', 'sql114', 'sql116', 'sql118', 'sql119', 'sql115', 'sql120', 'sql121', 'sql122', 'sql123', 'sql124', 'sql125', 'sql126', 'sql127', 'sql128', 'sql130', 'sql131', 'sql132']) {
+  for (const key of ['sql71', 'sql87', 'sql88', 'sql89', 'sql82', 'sql83', 'sql84', 'sql85', 'sql86', 'sql103', 'sql29', 'sql30', 'sql91', 'sql92', 'sql90', 'sql101', 'sql93', 'sql96', 'sql94', 'sql104', 'sql98', 'sql102', 'sql105', 'sql95', 'sql97', 'sql99', 'sql106', 'sql108', 'sql109', 'sql110', 'sql111', 'sql112', 'sql113', 'sql114', 'sql116', 'sql118', 'sql119', 'sql115', 'sql120', 'sql121', 'sql122', 'sql123', 'sql124', 'sql125', 'sql126', 'sql127', 'sql128', 'sql130', 'sql131', 'sql132', 'sql133']) {
     const real = realPin(key);
     assert.equal(real.expected_live_definition_sha256, RECORDED_PRODUCTION_PRE[key]);
     // Execute-authorized and applied (retired) pins get an explicit pre-authorization copy; SQL 71's committed pin is still pending.
@@ -907,8 +912,10 @@ test('the execute-authorized copies of the retired SQL 95, SQL 97, SQL 99, SQL 1
     sql131: 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/41107844336',
     // SQL 132: its guarded staging apply of 2026-10-30 (the same pre-state as production's: the function absent in both).
     sql132: 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/41117004966',
+    // SQL 133: its guarded staging apply of 2026-10-30 (the same pre-state as production's: the function absent in both).
+    sql133: 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/41133471065',
   };
-  for (const key of ['sql95', 'sql97', 'sql99', 'sql106', 'sql108', 'sql109', 'sql110', 'sql111', 'sql112', 'sql113', 'sql114', 'sql116', 'sql118', 'sql119', 'sql115', 'sql120', 'sql121', 'sql122', 'sql123', 'sql124', 'sql125', 'sql126', 'sql127', 'sql128', 'sql130', 'sql131', 'sql132']) {
+  for (const key of ['sql95', 'sql97', 'sql99', 'sql106', 'sql108', 'sql109', 'sql110', 'sql111', 'sql112', 'sql113', 'sql114', 'sql116', 'sql118', 'sql119', 'sql115', 'sql120', 'sql121', 'sql122', 'sql123', 'sql124', 'sql125', 'sql126', 'sql127', 'sql128', 'sql130', 'sql131', 'sql132', 'sql133']) {
     const real = realPin(key);
     let committed = real;
     if (APPLIED_2026_10_21[key]) {
