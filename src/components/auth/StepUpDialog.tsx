@@ -18,8 +18,10 @@ import {
   associateAwsTotp,
   awsMfaAvailable,
   getAwsMfaStatus,
+  normalizeEmailSetupCode,
   stepUpAwsTotp,
   verifyAwsTotp,
+  type AwsTotpAssociation,
 } from "@/lib/awsMfa";
 import { isCheckBoundAction } from "@/lib/financialStepUp";
 import { TOTP_BOUNDARY_MESSAGE, normalizeTotpCode, totpUserFailureMessage } from "@/lib/totpCode";
@@ -32,7 +34,7 @@ interface Props {
   onFactorsChanged: () => Promise<void> | void;
 }
 
-type Mode = "loading" | "verify" | "enroll" | "setup-error";
+type Mode = "loading" | "verify" | "email-code" | "enroll" | "setup-error";
 
 /**
  * Blocking two-factor challenge shown before any money-movement action.
@@ -51,6 +53,27 @@ export function StepUpDialog({ request, onResolved, onFactorsChanged }: Props) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [setupAttempt, setSetupAttempt] = useState(0);
+  // First-time setup (finding 8): the API emails a code before it issues the secret.
+  const [emailChallenge, setEmailChallenge] = useState<string | null>(null);
+  const [emailHint, setEmailHint] = useState<string | null>(null);
+  const [stagingEmailCode, setStagingEmailCode] = useState<string | null>(null);
+  const [enrollmentTicket, setEnrollmentTicket] = useState<string | null>(null);
+
+  const showEnrollment = async (associated: AwsTotpAssociation) => {
+    const uri = resolveTotpOtpauthUri({
+      otpauthUri: associated.otpauthUri,
+      secret: associated.secret,
+    });
+    const qrUrl = await totpQrDataUrl(uri);
+    setFactorId("software-token");
+    setSecret(associated.secret);
+    setQr(qrUrl);
+    setEnrollmentTicket(associated.enrollmentTicket);
+    setEmailChallenge(null);
+    setStagingEmailCode(null);
+    setCode("");
+    setMode("enroll");
+  };
 
   useEffect(() => {
     if (!open) {
@@ -61,6 +84,10 @@ export function StepUpDialog({ request, onResolved, onFactorsChanged }: Props) {
       setSecret(null);
       setFactorId(null);
       setSetupAttempt(0);
+      setEmailChallenge(null);
+      setEmailHint(null);
+      setStagingEmailCode(null);
+      setEnrollmentTicket(null);
       return;
     }
 
@@ -78,16 +105,16 @@ export function StepUpDialog({ request, onResolved, onFactorsChanged }: Props) {
           }
           const associated = await associateAwsTotp();
           if (cancelled) return;
-          const uri = resolveTotpOtpauthUri({
-            otpauthUri: associated.otpauthUri,
-            secret: associated.secret,
-          });
-          const qr = await totpQrDataUrl(uri);
-          if (cancelled) return;
-          setFactorId("software-token");
-          setSecret(associated.secret);
-          setQr(qr);
-          setMode("enroll");
+          if (associated.emailCodeRequired) {
+            setFactorId("software-token");
+            setEmailChallenge(associated.emailChallenge);
+            setEmailHint(associated.emailHint);
+            setStagingEmailCode(associated.stagingDebugCode);
+            setCode("");
+            setMode("email-code");
+            return;
+          }
+          await showEnrollment(associated);
         } catch (err: unknown) {
           if (cancelled) return;
           setError(`Could not check your two-factor setup: ${err instanceof Error ? err.message : String(err)}`);
@@ -142,9 +169,32 @@ export function StepUpDialog({ request, onResolved, onFactorsChanged }: Props) {
     };
   }, [open, setupAttempt]);
 
+  const submitEmailCode = async () => {
+    const emailCode = normalizeEmailSetupCode(code);
+    if (!emailCode || !emailChallenge) {
+      setError("Enter the 6-digit code from the setup email.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const associated = await associateAwsTotp(undefined, { challenge: emailChallenge, code: emailCode });
+      if (associated.emailCodeRequired || !associated.secret) throw new Error("Request a new setup code and try again.");
+      await showEnrollment(associated);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const submit = async () => {
     if (!factorId) {
       setError("Two-factor is not ready yet. Close and try again.");
+      return;
+    }
+    if (mode === "email-code") {
+      await submitEmailCode();
       return;
     }
     const normalized = normalizeTotpCode(code);
@@ -167,6 +217,7 @@ export function StepUpDialog({ request, onResolved, onFactorsChanged }: Props) {
             actionKey: request?.actionKey,
             tenantId: request?.tenantId,
             checkId: request?.checkId,
+            enrollmentTicket,
           });
           if (!enrolled) throw new Error(TOTP_BOUNDARY_MESSAGE);
           if (
@@ -270,6 +321,51 @@ export function StepUpDialog({ request, onResolved, onFactorsChanged }: Props) {
           </div>
         )}
 
+        {mode === "email-code" && (
+          <div className="space-y-2">
+            <Alert>
+              <AlertDescription className="text-xs space-y-2">
+                <p className="font-medium">First, confirm it's you.</p>
+                <p>
+                  We emailed a 6-digit setup code to {emailHint ?? "your account email"}. Enter it below to
+                  continue. The code expires in 10 minutes.
+                </p>
+                {stagingEmailCode && <p>Staging email is not delivered. Setup code: {stagingEmailCode}</p>}
+              </AlertDescription>
+            </Alert>
+            <Label htmlFor="stepup-email-code">Email setup code</Label>
+            <Input
+              id="stepup-email-code"
+              type="text"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              maxLength={6}
+              placeholder="000000"
+              value={code}
+              autoFocus
+              onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void submit();
+              }}
+            />
+            <Button
+              type="button"
+              variant="link"
+              size="sm"
+              className="h-auto p-0 text-xs"
+              disabled={busy}
+              onClick={() => {
+                setError(null);
+                setMode("loading");
+                setSetupAttempt((attempt) => attempt + 1);
+              }}
+            >
+              Send a new code
+            </Button>
+            {error && <p className="text-xs text-destructive">{error}</p>}
+          </div>
+        )}
+
         {mode === "enroll" && (
           <div className="space-y-3">
             <Alert>
@@ -359,7 +455,7 @@ export function StepUpDialog({ request, onResolved, onFactorsChanged }: Props) {
             onClick={() => void submit()}
           >
             {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Verify
+            {mode === "email-code" ? "Continue" : "Verify"}
           </Button>
         </div>
       </DialogContent>

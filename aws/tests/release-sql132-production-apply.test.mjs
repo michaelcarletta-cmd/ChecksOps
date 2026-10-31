@@ -308,7 +308,12 @@ test('order: predecessor SQL 130 (untouched); the one new function, its prerequi
   const lockoutApplied = readJson(LOCKOUT_APPLIED).members;
   assert.ok(lockoutApplied['providers/production/checkalt-register.mjs'], 'checkalt-register.mjs is recorded applied (production run 41156679208)');
   for (const member of ['auth-financial-totp.mjs', 'providers/production/checkalt-register.mjs']) {
-    if (lockoutApplied[member]) {
+    if (member === 'auth-financial-totp.mjs') {
+      // Moved on to the finding 8 REPLACE (first enrollment needs an email code), which starts from the applied
+      // lockout bytes: the row expects those bytes live and names its own planning manifest.
+      assert.equal(plan.members[member].expected_live_sha256, lockoutApplied[member].accepted_sha256, `${member} expects the applied lockout bytes live`);
+      assert.equal(plan.members[member].manifest, 'aws/tests/fixtures/production-financial-totp-enroll-email-code-manifest-2026-10-31.json', member);
+    } else if (lockoutApplied[member]) {
       assert.equal(plan.members[member].expected_live_sha256, plan.members[member].accepted_sha256, `${member} records the applied lockout bytes`);
       assert.equal(plan.members[member].manifest, LOCKOUT_APPLIED, member);
     } else {

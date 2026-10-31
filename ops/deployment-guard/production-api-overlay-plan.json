@@ -352,10 +352,10 @@
     },
     "auth-financial-totp.mjs": {
       "operation": "replace",
-      "accepted_sha256": "3edfea2a0328eda03466cad4c13c1075aa2a020c4164eee0564ade2dee06319b",
+      "accepted_sha256": "ae72b8087aab2bf112b812afefb40206d112ea8843682017e4de831fa777dce0",
       "expected_live_sha256": "3edfea2a0328eda03466cad4c13c1075aa2a020c4164eee0564ade2dee06319b",
       "sql_before": "aws/workflows/sql/132_financial_totp_code_check_lockout.sql",
-      "manifest": "aws/tests/fixtures/production-financial-totp-lockout-applied-manifest-2026-10-31.json"
+      "manifest": "aws/tests/fixtures/production-financial-totp-enroll-email-code-manifest-2026-10-31.json"
     },
     "providers/production/checkalt-approve.mjs": {
       "operation": "replace",
