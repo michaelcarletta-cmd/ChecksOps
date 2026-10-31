@@ -1730,6 +1730,11 @@ test('referral billing credit: tenant-billing-engine.mjs expected_live records t
   assert.match(source, /export const maintenanceDiscountCents/);
 });
 
+// tenant-billing-engine.mjs records its applied billing database error redaction bytes live (production run
+// 41227499349, 2026-10-31).
+const BILLING_DB_ERROR_REDACTION_REL = 'aws/tests/fixtures/production-billing-db-error-redaction-manifest-2026-10-31.json';
+const BILLING_DB_ERROR_REDACTION_APPLIED_REL = 'aws/tests/fixtures/production-billing-db-error-redaction-applied-manifest-2026-10-31.json';
+
 test('send-fee billing: tenant-billing-engine.mjs replaced the 43d9a162 bytes; production run 40577608750 applied main\'s bytes (after SQL 120)', async () => {
   const ENGINE = 'tenant-billing-engine.mjs';
   const MANIFEST_REL = 'aws/tests/fixtures/production-billing-send-fee-events-manifest-2026-10-27.json';
@@ -1758,24 +1763,32 @@ test('send-fee billing: tenant-billing-engine.mjs replaced the 43d9a162 bytes; p
   assert.deepEqual(applied.members[ENGINE], { live_sha256: LIVE, accepted_sha256: LIVE, operation: 'replace', previous_manifest: MANIFEST_REL });
   const row = PLAN.members[ENGINE];
   assert.equal(row.operation, 'replace');
-  // The row now follows the finding 25 REPLACE (billing database errors redacted, its own test),
-  // which starts from these applied bytes; main has moved on.
-  assert.equal(row.manifest, 'aws/tests/fixtures/production-billing-db-error-redaction-manifest-2026-10-31.json');
-  assert.equal(row.expected_live_sha256, LIVE);
+  // The row then followed the finding 25 REPLACE (billing database errors redacted, its own test),
+  // which started from these applied bytes and was applied 2026-10-31 (production run 41227499349):
+  // the row expects main's bytes and names their applied record.
+  assert.equal(row.manifest, BILLING_DB_ERROR_REDACTION_APPLIED_REL);
+  assert.equal(row.expected_live_sha256, row.accepted_sha256);
   assert.equal(row.accepted_sha256, sha(`aws/functions/api/${ENGINE}`));
   assert.notEqual(row.accepted_sha256, LIVE);
   // The engine bills the fee SQL 120 writes at send time: SQL 120 stays its prerequisite.
   assert.equal(row.sql_before, 'aws/workflows/sql/120_usage_events_at_approval_and_send.sql');
   assert.equal(resolvePlannedMember(ENGINE, { root: ROOT, plan: PLAN }).ok, true);
   const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: ENGINE };
-  // The applied bytes are now the next REPLACE's starting point.
-  const done = await run(inspect, { root: ROOT, inspectLive: liveFor(ENGINE, { sha256: LIVE }) });
+  // The applied bytes were the finding 25 REPLACE's starting point: READY on the pre-apply row (production
+  // inspect run 41224111276).
+  const before = structuredClone(PLAN);
+  before.members[ENGINE] = { ...before.members[ENGINE], expected_live_sha256: LIVE, manifest: BILLING_DB_ERROR_REDACTION_REL };
+  const done = await run(inspect, { root: ROOT, plan: before, inspectLive: liveFor(ENGINE, { plan: before, sha256: LIVE }) });
   assert.equal(done.state, 'READY');
   assert.equal(done.mutation, false);
-  await assert.rejects(
-    run(inspect, { root: ROOT, inspectLive: liveFor(ENGINE, { sha256: BEFORE }) }),
-    (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
-  );
+  // With that REPLACE applied, these bytes and the 43d9a162 bytes live are a reconciliation stop.
+  for (const other of [LIVE, BEFORE]) {
+    await assert.rejects(
+      run(inspect, { root: ROOT, inspectLive: liveFor(ENGINE, { sha256: other }) }),
+      (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+      other,
+    );
+  }
   const source = fs.readFileSync(path.join(API, ENGINE), 'utf8');
   assert.match(source, /export const sendRecipientKey/);
   assert.match(source, /NOT_A_SEND_LEG_ROLES = \['wallet_funding', 'parent', 'platform_fee'\]/);
@@ -4690,9 +4703,9 @@ test('Moov webhook body confirmation (2026-10-31): ADD moov-webhook-confirm.mjs 
   assert.equal(/notes LIKE/.test(fs.readFileSync(path.join(API, SETTLEMENT), 'utf8')), false);
 });
 
-test('Billing database errors redacted (finding 25): tenant-billing-engine.mjs REPLACE from the send-fee billing applied bytes, planning only, SQL 120 still first', async () => {
+test('Billing database errors redacted (finding 25): tenant-billing-engine.mjs REPLACE from the send-fee billing applied bytes, SQL 120 still first, applied 2026-10-31', async () => {
   const MEMBER = 'tenant-billing-engine.mjs';
-  const MANIFEST_REL = 'aws/tests/fixtures/production-billing-db-error-redaction-manifest-2026-10-31.json';
+  const MANIFEST_REL = BILLING_DB_ERROR_REDACTION_REL;
   const PREVIOUS = 'aws/tests/fixtures/production-billing-send-fee-events-applied-manifest-2026-10-27.json';
   // tenant-billing-engine.mjs as the send-fee billing production run 40577608750 applied it.
   const SEND_FEE_APPLIED_BYTES = 'bccffbe7aa9b21d3052a832f1d2c4b9ec4b333b1727156773b1ac034be96860c';
@@ -4705,13 +4718,31 @@ test('Billing database errors redacted (finding 25): tenant-billing-engine.mjs R
   assert.match(manifest.notes, /finding 25/);
   assert.deepEqual(manifest.members, { [MEMBER]: { live_sha256: SEND_FEE_APPLIED_BYTES, accepted_sha256: accepted, operation: 'replace', previous_manifest: PREVIOUS } });
   assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, PREVIOUS), 'utf8')).members[MEMBER].accepted_sha256, SEND_FEE_APPLIED_BYTES);
+  // Applied 2026-10-31 (production run 41227499349): the record names the runs and the verified state; the row
+  // records the applied bytes live and names the record.
+  const applied = JSON.parse(fs.readFileSync(path.join(ROOT, BILLING_DB_ERROR_REDACTION_APPLIED_REL), 'utf8'));
+  assert.equal(applied.workstream_id, 'billing-db-error-redaction-applied');
+  assert.equal(applied.deploy_authorized, false);
+  assert.match(applied.authorization, /^Record only/);
+  assert.equal(applied.live_lambda, 'checksops-production-prep-api');
+  for (const evidence of [
+    'run 41223836219', 'run 41223964144', 'run 41224109079', 'run 41224111276', 'run 41227499349', 'job 124614599777', '#1482', '276af746', '#1488',
+    '"DEPLOY tenant-billing-engine.mjs TO PRODUCTION"', 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/41223964144',
+    '2c00a18767e852ab9c57d5e97087224df87ac9e4', 'c58c394078bc2462e1ee7c96ae756a03b2114dd2', 'ZOEV957sqD2oNWTJ9C7cYwviuT0a+JIqkT1xl+XDiVk=',
+    '07c4efde-ad8d-4b90-9f6f-1d9a931518dd', 'pOltcVT66IPbtWJR0R+LlDBZcNiggUDtAyLi/ZM19nM=', '509517d7-9aa2-46ca-bc94-73d7b31d375d',
+    '398d8f2a-212d-4579-802c-7c88df7a8184', 'VERIFIED', 'SQL 120', 'finding 25', 'Not verified',
+  ]) {
+    assert.ok(applied.notes.includes(evidence), evidence);
+  }
+  assert.deepEqual(applied.members, { [MEMBER]: { live_sha256: accepted, accepted_sha256: accepted, operation: 'replace', previous_manifest: MANIFEST_REL } });
   assert.deepEqual(PLAN.members[MEMBER], {
     operation: 'replace',
     accepted_sha256: accepted,
-    expected_live_sha256: SEND_FEE_APPLIED_BYTES,
+    expected_live_sha256: accepted,
     sql_before: 'aws/workflows/sql/120_usage_events_at_approval_and_send.sql',
-    manifest: MANIFEST_REL,
+    manifest: BILLING_DB_ERROR_REDACTION_APPLIED_REL,
   });
+  assert.ok(PLAN.notes.includes('Billing database errors redacted tenant-billing-engine.mjs applied 2026-10-31 (production run 41227499349'));
   // The one new import (data.mjs, for sanitizeLogText) is a member recorded live at its accepted bytes.
   const source = fs.readFileSync(path.join(API, MEMBER), 'utf8');
   assert.ok(localImports(source, MEMBER).includes('data.mjs'));
@@ -4719,15 +4750,23 @@ test('Billing database errors redacted (finding 25): tenant-billing-engine.mjs R
   assert.match(fs.readFileSync(path.join(API, 'data.mjs'), 'utf8'), /export const sanitizeLogText/);
   assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
   const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
-  const ready = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: SEND_FEE_APPLIED_BYTES }) });
+  // Before the apply, the planned row read READY on the bytes production held (production inspect run 41224111276).
+  const before = structuredClone(PLAN);
+  before.members[MEMBER] = { ...before.members[MEMBER], expected_live_sha256: SEND_FEE_APPLIED_BYTES, manifest: MANIFEST_REL };
+  const ready = await run(inspect, { root: ROOT, plan: before, inspectLive: liveFor(MEMBER, { plan: before, sha256: SEND_FEE_APPLIED_BYTES }) });
   assert.equal(ready.state, 'READY');
   assert.equal(ready.mutation, false);
-  const done = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: accepted }) });
+  const done = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER) });
   assert.equal(done.state, 'ALREADY_ACCEPTED');
-  await assert.rejects(
-    run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: 'c'.repeat(64) }) }),
-    (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
-  );
+  assert.equal(done.mutation, false);
+  // The pre-apply bccffbe7 bytes, or anything else, live: a reconciliation stop, never an apply.
+  for (const other of [SEND_FEE_APPLIED_BYTES, 'c'.repeat(64)]) {
+    await assert.rejects(
+      run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: other }) }),
+      (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+      other,
+    );
+  }
   assert.doesNotMatch(source, /detail:\s*error\.message/);
   assert.match(source, /export const logBillingDbFailure/);
 });
