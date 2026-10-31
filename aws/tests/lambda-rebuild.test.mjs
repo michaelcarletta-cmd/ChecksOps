@@ -134,6 +134,9 @@ const CHANGED_SINCE_SECOND_REBUILD = {
   // matches the ` · moov:<id>` notes token exactly instead of LIKE '%id%'; a REPLACE row of the
   // production overlay plan, not a rebuild section.
   'tenant-collection-v2-settlement.mjs': 'changed',
+  // Money step-up window (2026-10-31, security audit finding 7): every money step-up must be
+  // verified within 15 minutes; a REPLACE row of the production overlay plan, not a rebuild section.
+  'providers/production/moov-fund-authz.mjs': 'changed',
 };
 // Members of the current (third) rebuild sections that main changed after those rebuilds were
 // applied (staging run 39666390516, production run 39669873076 of main 008af40e2). The sections keep
@@ -174,6 +177,8 @@ const OVERLAY_PLAN_CHANGES = new Set([
   'homeowner-signing-integration.mjs',
   // Moov webhook body confirmation (2026-10-31): a REPLACE row of the production plan.
   'tenant-collection-v2-settlement.mjs',
+  // Money step-up window (2026-10-31, finding 7): a REPLACE row of the production plan.
+  'providers/production/moov-fund-authz.mjs',
 ]);
 const assertSectionAcceptedIsMain = (apiRoot, name, accepted) => {
   const onMain = sha256(fs.readFileSync(path.join(apiRoot, name)));
