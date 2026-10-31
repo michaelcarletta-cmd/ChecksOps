@@ -1727,16 +1727,19 @@ test('send-fee billing: tenant-billing-engine.mjs replaced the 43d9a162 bytes; p
   assert.deepEqual(applied.members[ENGINE], { live_sha256: LIVE, accepted_sha256: LIVE, operation: 'replace', previous_manifest: MANIFEST_REL });
   const row = PLAN.members[ENGINE];
   assert.equal(row.operation, 'replace');
-  assert.equal(row.manifest, APPLIED_REL);
+  // The row now follows the finding 25 REPLACE (billing database errors redacted, its own test),
+  // which starts from these applied bytes; main has moved on.
+  assert.equal(row.manifest, 'aws/tests/fixtures/production-billing-db-error-redaction-manifest-2026-10-31.json');
   assert.equal(row.expected_live_sha256, LIVE);
-  assert.equal(row.accepted_sha256, LIVE);
-  assert.equal(sha(`aws/functions/api/${ENGINE}`), LIVE);
+  assert.equal(row.accepted_sha256, sha(`aws/functions/api/${ENGINE}`));
+  assert.notEqual(row.accepted_sha256, LIVE);
   // The engine bills the fee SQL 120 writes at send time: SQL 120 stays its prerequisite.
   assert.equal(row.sql_before, 'aws/workflows/sql/120_usage_events_at_approval_and_send.sql');
   assert.equal(resolvePlannedMember(ENGINE, { root: ROOT, plan: PLAN }).ok, true);
   const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: ENGINE };
+  // The applied bytes are now the next REPLACE's starting point.
   const done = await run(inspect, { root: ROOT, inspectLive: liveFor(ENGINE, { sha256: LIVE }) });
-  assert.equal(done.state, 'ALREADY_ACCEPTED');
+  assert.equal(done.state, 'READY');
   assert.equal(done.mutation, false);
   await assert.rejects(
     run(inspect, { root: ROOT, inspectLive: liveFor(ENGINE, { sha256: BEFORE }) }),
@@ -4494,4 +4497,46 @@ test('Financial TOTP teammate reset (SQL 133): admin-reset-totp.mjs REPLACE from
   const replay = await run(applyEnv(MEMBER), deps);
   assert.equal(replay.mutation, false);
   assert.deepEqual(calls.receipt.owned_member_ops, { replace: [MEMBER], add: [] });
+});
+
+test('Billing database errors redacted (finding 25): tenant-billing-engine.mjs REPLACE from the send-fee billing applied bytes, planning only, SQL 120 still first', async () => {
+  const MEMBER = 'tenant-billing-engine.mjs';
+  const MANIFEST_REL = 'aws/tests/fixtures/production-billing-db-error-redaction-manifest-2026-10-31.json';
+  const PREVIOUS = 'aws/tests/fixtures/production-billing-send-fee-events-applied-manifest-2026-10-27.json';
+  // tenant-billing-engine.mjs as the send-fee billing production run 40577608750 applied it.
+  const SEND_FEE_APPLIED_BYTES = 'bccffbe7aa9b21d3052a832f1d2c4b9ec4b333b1727156773b1ac034be96860c';
+  const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, MANIFEST_REL), 'utf8'));
+  const accepted = sha(`aws/functions/api/${MEMBER}`);
+  assert.notEqual(accepted, SEND_FEE_APPLIED_BYTES);
+  assert.equal(manifest.workstream_id, 'billing-db-error-redaction');
+  assert.equal(manifest.deploy_authorized, false);
+  assert.match(manifest.authorization, /^Pending owner review/);
+  assert.match(manifest.notes, /finding 25/);
+  assert.deepEqual(manifest.members, { [MEMBER]: { live_sha256: SEND_FEE_APPLIED_BYTES, accepted_sha256: accepted, operation: 'replace', previous_manifest: PREVIOUS } });
+  assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, PREVIOUS), 'utf8')).members[MEMBER].accepted_sha256, SEND_FEE_APPLIED_BYTES);
+  assert.deepEqual(PLAN.members[MEMBER], {
+    operation: 'replace',
+    accepted_sha256: accepted,
+    expected_live_sha256: SEND_FEE_APPLIED_BYTES,
+    sql_before: 'aws/workflows/sql/120_usage_events_at_approval_and_send.sql',
+    manifest: MANIFEST_REL,
+  });
+  // The one new import (data.mjs, for sanitizeLogText) is a member recorded live at its accepted bytes.
+  const source = fs.readFileSync(path.join(API, MEMBER), 'utf8');
+  assert.ok(localImports(source, MEMBER).includes('data.mjs'));
+  assert.equal(PLAN.members['data.mjs'].expected_live_sha256, PLAN.members['data.mjs'].accepted_sha256);
+  assert.match(fs.readFileSync(path.join(API, 'data.mjs'), 'utf8'), /export const sanitizeLogText/);
+  assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
+  const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
+  const ready = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: SEND_FEE_APPLIED_BYTES }) });
+  assert.equal(ready.state, 'READY');
+  assert.equal(ready.mutation, false);
+  const done = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: accepted }) });
+  assert.equal(done.state, 'ALREADY_ACCEPTED');
+  await assert.rejects(
+    run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: 'c'.repeat(64) }) }),
+    (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+  );
+  assert.doesNotMatch(source, /detail:\s*error\.message/);
+  assert.match(source, /export const logBillingDbFailure/);
 });

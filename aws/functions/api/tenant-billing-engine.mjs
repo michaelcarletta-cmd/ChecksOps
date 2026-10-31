@@ -16,6 +16,7 @@
  * Mortgage Ops accrues on Accept (status in_progress + accepted_at), not on submit.
  */
 import { createHash } from 'node:crypto';
+import { sanitizeLogText } from './data.mjs';
 import { queueFeeInvoiceEmail } from './tenant-fee-invoice-email.mjs';
 import {
   billingEnvironment,
@@ -197,6 +198,35 @@ export const maintenanceDiscountCents = (tenant) => Math.min(
 );
 
 const fail = (error, extra = {}) => ({ ok: false, error, ...extra });
+
+/**
+ * A database failure is answered with a fixed code and message only (security
+ * audit 2026-10-29, finding 25): the driver text, SQLSTATE, constraint, table
+ * and column go to the server log, redacted the way data.mjs logs a failed
+ * query (sanitizeLogText), never into the response body.
+ */
+export const logBillingDbFailure = (event, error, context = {}) => {
+  console.error(JSON.stringify({
+    service: 'checksops-api',
+    event,
+    ...context,
+    sqlstate: error?.code ? String(error.code) : null,
+    constraint: error?.constraint || null,
+    table: error?.table || null,
+    column: error?.column || null,
+    routine: error?.routine || null,
+    message: sanitizeLogText(error?.message || error, 500),
+    detail: error?.detail ? sanitizeLogText(error.detail, 500) : null,
+  }));
+};
+
+/** The invoice email status a response may carry: the queue's error text stays in the log. */
+const clientInvoiceEmail = (queued, context = {}) => {
+  if (!queued || typeof queued !== 'object' || !Object.hasOwn(queued, 'error')) return queued;
+  const { error, ...rest } = queued;
+  logBillingDbFailure('tenant_fee_invoice_queue_failed', { message: error }, { ...context, status: queued.status || null });
+  return rest;
+};
 
 export const parseRateCents = (value, field) => {
   if (value === undefined || value === null || value === '') {
@@ -1625,10 +1655,10 @@ export async function verifyTenantBillingDebit(client, {
       details: { verification_id: verificationId },
     }, { required: true });
   } catch (error) {
+    logBillingDbFailure('billing_audit_unavailable', error, { action: 'verify_debit', tenantId });
     return fail('billing_audit_unavailable', {
       statusCode: 503,
       message: 'The billing audit writer is not available (SQL 98). Nothing was charged.',
-      detail: error.message,
     });
   }
 
@@ -2001,10 +2031,10 @@ export async function chargeTenantPeriod(client, {
       previewHash,
     }, { required: true });
   } catch (error) {
+    logBillingDbFailure('billing_audit_unavailable', error, { action: 'pull', tenantId, period });
     return fail('billing_audit_unavailable', {
       statusCode: 503,
       message: 'The billing audit writer is not available (SQL 98). Nothing was charged.',
-      detail: error.message,
     });
   }
 
@@ -2056,7 +2086,7 @@ export async function chargeTenantPeriod(client, {
     amount_cents: Number(booked.occurrence.amount_cents || 0),
     provider_transfer_ids: transferIds,
     audit_recorded: audit.ok === true,
-    invoice_email: invoiceEmail,
+    invoice_email: clientInvoiceEmail(invoiceEmail, { action: 'pull', tenantId, period }),
     invoice_email_sent: false,
     invoice_email_after_commit: invoiceEmail.status === 'pending' ? submitted.occurrence.id : null,
   };
@@ -2080,7 +2110,10 @@ export async function resendTenantFeeInvoice(client, { tenantId, period, deps = 
   const queued = await queueFeeInvoiceEmail(client, { occurrenceId: occurrence.id, tenantId, period, deps });
   if (queued.status === 'disabled') return { ok: true, statusCode: 200, invoice_email: queued };
   if (queued.status !== 'pending') {
-    return fail('invoice_queue_failed', { statusCode: 503, invoice_email: queued });
+    return fail('invoice_queue_failed', {
+      statusCode: 503,
+      invoice_email: clientInvoiceEmail(queued, { action: 'resend_invoice', tenantId, period }),
+    });
   }
   return { ok: true, statusCode: 200, invoice_email: queued, invoice_email_after_commit: occurrence.id };
 }
