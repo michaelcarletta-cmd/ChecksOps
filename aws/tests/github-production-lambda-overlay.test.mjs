@@ -156,8 +156,8 @@ const totpPre = (plan) => { plan.members['auth-financial-totp.mjs'].expected_liv
 const REGISTER_PRE = LOCKOUT_MANIFEST.members['providers/production/checkalt-register.mjs'].live_sha256;
 const registerPre = (plan) => { plan.members['providers/production/checkalt-register.mjs'].expected_live_sha256 = REGISTER_PRE; return withSql132(plan); };
 // SQL 133 (financial TOTP teammate reset): admin-reset-totp.mjs pends a REPLACE from the release 2026-10-17 live
-// bytes; the committed plan records SQL 133 as not yet verified live, so a replay of its apply starts from a plan
-// copy that has it live (the record change will).
+// bytes; the committed plan records SQL 133 verified live (the SQL 133 record change, from its 2026-10-31 production
+// apply), and a replay of its apply still runs on a plan copy that states it, as PLAN_SQL98_LIVE does for SQL 98.
 const SQL133_FILE = 'aws/workflows/sql/133_financial_totp_admin_reset_enrollment.sql';
 const ADMIN_RESET_REL = 'aws/tests/fixtures/production-financial-totp-admin-reset-manifest-2026-10-30.json';
 const ADMIN_RESET_MANIFEST = JSON.parse(fs.readFileSync(path.join(ROOT, ADMIN_RESET_REL), 'utf8'));
@@ -4261,8 +4261,33 @@ test('Financial TOTP teammate reset (SQL 133): admin-reset-totp.mjs REPLACE from
   assert.match(ADMIN_RESET_MANIFEST.notes, /never answers 500/);
   assert.match(ADMIN_RESET_MANIFEST.notes, /No self-service reset; the platform owner stays protected/);
   assert.deepEqual(Object.keys(ADMIN_RESET_MANIFEST.members), [MEMBER]);
-  // SQL 133 is recorded, not yet verified live: the gate the apply below waits on.
-  assert.deepEqual(PLAN.sql_prerequisites[SQL133_FILE], { verified_live: false, evidence: null });
+  // SQL 133 is recorded verified live in production (2026-10-31, the SQL 133 record change) from its retired pin:
+  // the same file bytes the pin and the one-shot hashed. The gate the apply below is checked against is shown on a
+  // plan copy where it is not yet recorded.
+  const PIN133 = 'ops/deployment-guard/sql133-financial-totp-admin-reset-enrollment-production-apply.json';
+  const readJson = (rel) => JSON.parse(fs.readFileSync(path.join(ROOT, rel), 'utf8'));
+  const pin133 = readJson(PIN133);
+  assert.equal(pin133.source_sha256, sha(SQL133_FILE));
+  assert.equal(pin133.applied.migration_source_sha256, sha(SQL133_FILE));
+  assert.equal(pin133.execute, false);
+  assert.equal(pin133.applied.result, 'applied');
+  assert.equal(pin133.applied.receipt.before_hash, pin133.expected_live_definition_sha256);
+  assert.equal(pin133.applied.receipt.after_hash, pin133.intended_replacement_sha256);
+  assert.equal(pin133.staging_acceptance.reference, 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/41133471065');
+  const prerequisite133 = PLAN.sql_prerequisites[SQL133_FILE];
+  assert.equal(prerequisite133.verified_live, true);
+  assert.equal(prerequisite133.pin, PIN133);
+  const fromTo133 = `${pin133.expected_live_definition_sha256.slice(0, 8)}… -> ${pin133.intended_replacement_sha256.slice(0, 8)}…`;
+  for (const evidence of [pin133.applied.apply_ssm_command_id, pin133.applied.one_shot_run_id, pin133.applied.workstream_id, pin133.applied.one_use_id, pin133.applied.runner, fromTo133, 'staging acceptance run 41133471065', PIN133]) {
+    assert.ok(prerequisite133.evidence.includes(evidence), evidence);
+  }
+  const staging133 = readJson('ops/deployment-guard/staging-sql-live.json').sql[SQL133_FILE];
+  assert.equal(staging133.verified_live, true);
+  for (const evidence of ['run 41133471065', 'read-live run 41133803430', `receipt before ${pin133.expected_live_definition_sha256.slice(0, 8)}…`, `after ${pin133.intended_replacement_sha256.slice(0, 8)}…`]) {
+    assert.ok(staging133.evidence.includes(evidence), evidence);
+  }
+  const sql133Pending = structuredClone(PLAN);
+  sql133Pending.sql_prerequisites[SQL133_FILE] = { verified_live: false, evidence: null };
   assert.ok(PLAN.notes.includes('Financial TOTP teammate reset (2026-10-30, SQL 133; owner "ok build the reset after SQL 131 and the lockout fix")'));
   const accepted = sha(`aws/functions/api/${MEMBER}`);
   assert.notEqual(accepted, LIVE);
@@ -4296,13 +4321,15 @@ test('Financial TOTP teammate reset (SQL 133): admin-reset-totp.mjs REPLACE from
       other,
     );
   }
-  // The apply is refused while SQL 133 is not recorded verified live (the committed plan) ...
-  const committed = structuredClone(PLAN);
+  // The apply was refused while SQL 133 was not recorded verified live (the plan before the SQL 133 record change,
+  // replayed on a copy) ...
+  const pending = structuredClone(sql133Pending);
   await assert.rejects(
-    run(applyEnv(MEMBER), { ...applyDeps(MEMBER, { sha256: LIVE, plan: committed }).deps, plan: committed }),
+    run(applyEnv(MEMBER), { ...applyDeps(MEMBER, { sha256: LIVE, plan: pending }).deps, plan: pending }),
     (error) => error.code === CODES.PRODUCTION_APPROVAL_REQUIRED && error.details.sql_before === SQL133_FILE,
   );
-  // ... and passes the order and link gates once it is (the SQL 133 record change).
+  // ... and passes the order and link gates now that it is (the committed plan, as the replay copy states).
+  assert.equal(PLAN.sql_prerequisites[SQL133_FILE].verified_live, true);
   const { deps, calls } = applyDeps(MEMBER);
   const applied = await run(applyEnv(MEMBER), deps);
   assert.equal(applied.mutation, false);
