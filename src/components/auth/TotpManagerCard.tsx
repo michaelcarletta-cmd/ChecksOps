@@ -9,7 +9,15 @@ import { Loader2, ShieldCheck, ShieldAlert } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useStepUp } from "@/hooks/useStepUp";
 import { isAwsStaging } from "@/lib/awsStaging";
-import { associateAwsTotp, awsMfaAvailable, awsTotpEnrollmentDisplay, getAwsMfaStatus, verifyAwsTotp } from "@/lib/awsMfa";
+import {
+  associateAwsTotp,
+  awsMfaAvailable,
+  awsTotpEnrollmentDisplay,
+  getAwsMfaStatus,
+  normalizeEmailSetupCode,
+  verifyAwsTotp,
+  type AwsTotpAssociation,
+} from "@/lib/awsMfa";
 import { resolveTotpOtpauthUri, totpQrDataUrl } from "@/lib/totpQr";
 import { TotpQrDisplay } from "@/components/auth/TotpQrDisplay";
 import { useAuth } from "@/hooks/useAuth";
@@ -29,6 +37,12 @@ export function TotpManagerCard() {
   const [awsSecret, setAwsSecret] = useState<string | null>(null);
   const [awsQr, setAwsQr] = useState<string | null>(null);
   const [awsCode, setAwsCode] = useState("");
+  // First-time setup (finding 8): the API emails a code before it issues the secret.
+  const [emailChallenge, setEmailChallenge] = useState<string | null>(null);
+  const [emailHint, setEmailHint] = useState<string | null>(null);
+  const [stagingEmailCode, setStagingEmailCode] = useState<string | null>(null);
+  const [emailCode, setEmailCode] = useState("");
+  const [enrollmentTicket, setEnrollmentTicket] = useState<string | null>(null);
   const awsStaging = isAwsStaging();
   const awsMode = awsMfaAvailable();
 
@@ -60,22 +74,36 @@ export function TotpManagerCard() {
   }, [load, verified]);
 
   if (awsMode) {
+    const showAws = async (associated: AwsTotpAssociation) => {
+      const uri = resolveTotpOtpauthUri({
+        otpauthUri: associated.otpauthUri,
+        secret: associated.secret,
+        email: user?.email,
+      });
+      const qr = await totpQrDataUrl(uri);
+      setAwsSecret(associated.secret);
+      setAwsQr(qr);
+      setEnrollmentTicket(associated.enrollmentTicket);
+      setEmailChallenge(null);
+      setStagingEmailCode(null);
+      setEmailCode("");
+      toast({
+        title: "Scan the QR code",
+        description: "Add ChecksOps in your authenticator app, then enter the current 6-digit code.",
+      });
+    };
     const startAws = async () => {
       setBusy(true);
       try {
         const associated = await associateAwsTotp(user?.email);
-        const uri = resolveTotpOtpauthUri({
-          otpauthUri: associated.otpauthUri,
-          secret: associated.secret,
-          email: user?.email,
-        });
-        const qr = await totpQrDataUrl(uri);
-        setAwsSecret(associated.secret);
-        setAwsQr(qr);
-        toast({
-          title: "Scan the QR code",
-          description: "Add ChecksOps in your authenticator app, then enter the current 6-digit code.",
-        });
+        if (associated.emailCodeRequired) {
+          setEmailChallenge(associated.emailChallenge);
+          setEmailHint(associated.emailHint);
+          setStagingEmailCode(associated.stagingDebugCode);
+          setEmailCode("");
+          return;
+        }
+        await showAws(associated);
       } catch (error) {
         setAwsSecret(null);
         setAwsQr(null);
@@ -84,14 +112,29 @@ export function TotpManagerCard() {
         setBusy(false);
       }
     };
+    const confirmEmailCode = async () => {
+      const code = normalizeEmailSetupCode(emailCode);
+      if (!code || !emailChallenge) return;
+      setBusy(true);
+      try {
+        const associated = await associateAwsTotp(user?.email, { challenge: emailChallenge, code });
+        if (associated.emailCodeRequired || !associated.secret) throw new Error("Request a new setup code and try again.");
+        await showAws(associated);
+      } catch (error) {
+        toast({ title: "Could not confirm the email code", description: String((error as Error).message || error), variant: "destructive" });
+      } finally {
+        setBusy(false);
+      }
+    };
     const confirmAws = async () => {
       setBusy(true);
       try {
-        const ok = await verifyAwsTotp(awsCode.trim());
+        const ok = await verifyAwsTotp(awsCode.trim(), { enrollmentTicket });
         if (!ok) throw new Error("verify_failed");
         setAwsSecret(null);
         setAwsQr(null);
         setAwsCode("");
+        setEnrollmentTicket(null);
         const status = await getAwsMfaStatus();
         const nowEnrolled = awsTotpEnrollmentDisplay(status) === "enrolled";
         setStatusError(null);
@@ -128,11 +171,36 @@ export function TotpManagerCard() {
               </AlertDescription>
             </Alert>
           )}
-          {enrolled === false && !awsQr && !awsSecret && (
+          {enrolled === false && !awsQr && !awsSecret && !emailChallenge && (
             <Button onClick={() => void startAws()} disabled={busy}>
               {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Set up authenticator
             </Button>
+          )}
+          {emailChallenge && !awsQr && !awsSecret && (
+            <div className="space-y-3 text-xs">
+              <p className="text-muted-foreground">
+                We emailed a 6-digit setup code to {emailHint ?? "your account email"}. Enter it to continue. The code expires in 10 minutes.
+              </p>
+              {stagingEmailCode && <p className="text-muted-foreground">Staging email is not delivered. Setup code: {stagingEmailCode}</p>}
+              <Input
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                maxLength={6}
+                placeholder="Email setup code"
+                value={emailCode}
+                onChange={(event) => setEmailCode(event.target.value.replace(/\D/g, ""))}
+              />
+              <div className="flex gap-2">
+                <Button onClick={() => void confirmEmailCode()} disabled={busy || emailCode.trim().length !== 6}>
+                  {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Continue
+                </Button>
+                <Button variant="ghost" onClick={() => void startAws()} disabled={busy}>
+                  Send a new code
+                </Button>
+              </div>
+            </div>
           )}
           {(awsQr || awsSecret) && (
             <div className="space-y-3 text-xs">

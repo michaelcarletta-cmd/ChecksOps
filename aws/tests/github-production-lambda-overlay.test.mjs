@@ -155,7 +155,12 @@ const LOCKOUT_MANIFEST = JSON.parse(fs.readFileSync(path.join(ROOT, LOCKOUT_REL)
 // 2026-10-31): every apply replay starts from the pre-apply live bytes (the planning manifest's live_sha256).
 const LOCKOUT_APPLIED_REL = 'aws/tests/fixtures/production-financial-totp-lockout-applied-manifest-2026-10-31.json';
 const withSql132 = (plan) => { plan.sql_prerequisites[SQL132_FILE] = { verified_live: true, evidence: 'test' }; return plan; };
-const TOTP_PRE = LOCKOUT_MANIFEST.members['auth-financial-totp.mjs'].live_sha256;
+// Finding 8 (first financial authenticator enrollment needs a fresh email code): auth-financial-totp.mjs pends a
+// REPLACE from the applied lockout bytes; every apply replay of it starts from those bytes (the planning
+// manifest's live_sha256, the committed row's expected_live_sha256).
+const ENROLL_EMAIL_REL = 'aws/tests/fixtures/production-financial-totp-enroll-email-code-manifest-2026-10-31.json';
+const ENROLL_EMAIL_MANIFEST = JSON.parse(fs.readFileSync(path.join(ROOT, ENROLL_EMAIL_REL), 'utf8'));
+const TOTP_PRE = ENROLL_EMAIL_MANIFEST.members['auth-financial-totp.mjs'].live_sha256;
 const totpPre = (plan) => { plan.members['auth-financial-totp.mjs'].expected_live_sha256 = TOTP_PRE; return withSql132(plan); };
 // checkalt-register.mjs records its applied finding 13 bytes live (production run 41047251544, 2026-10-30):
 // every apply replay of it starts from the pre-apply live bytes (8f06c079, the planning manifest's
@@ -4132,7 +4137,9 @@ test('TOTP shared rate limit (finding 7): auth-financial-totp.mjs REPLACE from t
   // 41190246725): the committed row expects the lockout bytes live and names the lockout applied record.
   const LOCKOUT_ACCEPTED = '3edfea2a0328eda03466cad4c13c1075aa2a020c4164eee0564ade2dee06319b';
   assert.equal(PLAN.members[MEMBER].expected_live_sha256, LOCKOUT_ACCEPTED);
-  assert.equal(PLAN.members[MEMBER].manifest, LOCKOUT_APPLIED_REL);
+  // The row now follows the finding 8 REPLACE (first enrollment needs an email code, its own test), which
+  // starts from the lockout bytes; main has moved on.
+  assert.equal(PLAN.members[MEMBER].manifest, ENROLL_EMAIL_REL);
   assert.ok(PLAN.notes.includes('TOTP shared rate limit applied 2026-10-30 (production run 40992441506'));
   assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
   const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
@@ -4142,9 +4149,9 @@ test('TOTP shared rate limit (finding 7): auth-financial-totp.mjs REPLACE from t
   const ready = await run(inspect, { root: ROOT, plan: before, inspectLive: liveFor(MEMBER, { plan: before, sha256: LIVE }) });
   assert.equal(ready.state, 'READY');
   assert.equal(ready.mutation, false);
-  // The lockout bytes live: nothing is left to do for the committed row.
+  // The lockout bytes live: the committed row is READY for the finding 8 REPLACE that starts from them.
   const done = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER) });
-  assert.equal(done.state, 'ALREADY_ACCEPTED');
+  assert.equal(done.state, 'READY');
   assert.equal(done.mutation, false);
   // Neither these applied bytes (the lockout pre-state), the pre-apply bytes nor the stale expectation is an
   // accepted live state any more.
@@ -4315,7 +4322,11 @@ test('Financial TOTP lockout (SQL 132): auth-financial-totp.mjs and checkalt-reg
   assert.deepEqual(Object.keys(LOCKOUT_APPLIED.members).sort(), Object.keys(APPLIED_RUNS).sort());
   for (const evidence of ['SQL 132', 'Not verified']) assert.ok(LOCKOUT_APPLIED.notes.includes(evidence), evidence);
   for (const [MEMBER, { live, previous, stale, sqlBefore }] of Object.entries(MEMBERS)) {
-    const accepted = sha(`aws/functions/api/${MEMBER}`);
+    // auth-financial-totp.mjs has moved on to the finding 8 REPLACE (first enrollment needs an email code, its
+    // own test), which starts from the lockout bytes applied here (production run 41190246725).
+    const movedOn = MEMBER === 'auth-financial-totp.mjs';
+    const accepted = movedOn ? LOCKOUT_MANIFEST.members[MEMBER].accepted_sha256 : sha(`aws/functions/api/${MEMBER}`);
+    if (movedOn) assert.equal(accepted, TOTP_PRE, MEMBER);
     assert.notEqual(accepted, live, MEMBER);
     // The planning manifest keeps the pre-apply state.
     assert.deepEqual(LOCKOUT_MANIFEST.members[MEMBER], { live_sha256: live, accepted_sha256: accepted, operation: 'replace', previous_manifest: previous }, MEMBER);
@@ -4329,7 +4340,9 @@ test('Financial TOTP lockout (SQL 132): auth-financial-totp.mjs and checkalt-reg
     }
     // The committed row records the applied bytes live and names the applied record; the pre-apply row is
     // replayed on a plan copy.
-    assert.deepEqual(PLAN.members[MEMBER], { operation: 'replace', accepted_sha256: accepted, expected_live_sha256: isApplied ? accepted : live, sql_before: sqlBefore, manifest: isApplied ? LOCKOUT_APPLIED_REL : LOCKOUT_REL }, MEMBER);
+    assert.deepEqual(PLAN.members[MEMBER], movedOn
+      ? { operation: 'replace', accepted_sha256: sha(`aws/functions/api/${MEMBER}`), expected_live_sha256: accepted, sql_before: sqlBefore, manifest: ENROLL_EMAIL_REL }
+      : { operation: 'replace', accepted_sha256: accepted, expected_live_sha256: isApplied ? accepted : live, sql_before: sqlBefore, manifest: isApplied ? LOCKOUT_APPLIED_REL : LOCKOUT_REL }, MEMBER);
     const before = structuredClone(PLAN);
     before.members[MEMBER] = { ...before.members[MEMBER], expected_live_sha256: live, manifest: LOCKOUT_REL };
     assert.ok(PLAN.notes.includes(`REPLACE ${MEMBER} ${live.slice(0, 8)} -> ${accepted.slice(0, 8)}`), MEMBER);
@@ -4351,7 +4364,8 @@ test('Financial TOTP lockout (SQL 132): auth-financial-totp.mjs and checkalt-reg
     assert.equal(ready.state, 'READY', MEMBER);
     assert.equal(ready.mutation, false);
     const done = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: accepted }) });
-    assert.equal(done.state, 'ALREADY_ACCEPTED', MEMBER);
+    // The lockout bytes live: done for checkalt-register.mjs, the finding 8 starting point for auth-financial-totp.mjs.
+    assert.equal(done.state, movedOn ? 'READY' : 'ALREADY_ACCEPTED', MEMBER);
     assert.equal(done.mutation, false);
     // Once applied, the pre-apply bytes are no longer an accepted live state either.
     for (const other of [...(isApplied ? [live] : []), stale, 'c'.repeat(64)]) {
@@ -4367,7 +4381,8 @@ test('Financial TOTP lockout (SQL 132): auth-financial-totp.mjs and checkalt-reg
       const pending = structuredClone(before);
       pending.sql_prerequisites[SQL132_FILE] = structuredClone(sql132Pending.sql_prerequisites[SQL132_FILE]);
       await assert.rejects(
-        run(applyEnv(MEMBER), { ...applyDeps(MEMBER, { sha256: live, plan: pending }).deps, plan: pending }),
+        // The pre-apply live bytes, stated explicitly (TOTP_PRE now names the finding 8 starting point).
+        run(applyEnv(MEMBER, { CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: live }), { ...applyDeps(MEMBER, { sha256: live, plan: pending }).deps, plan: pending }),
         (error) => error.code === CODES.PRODUCTION_APPROVAL_REQUIRED && error.details.sql_before === SQL132_FILE,
         MEMBER,
       );
@@ -4823,4 +4838,59 @@ test('Billing database errors redacted (finding 25): tenant-billing-engine.mjs R
   }
   assert.doesNotMatch(source, /detail:\s*error\.message/);
   assert.match(source, /export const logBillingDbFailure/);
+});
+
+test('First financial authenticator enrollment needs a fresh email code (finding 8): auth-financial-totp.mjs REPLACE from the applied lockout bytes, planning only, SQL 132 still first', async () => {
+  const MEMBER = 'auth-financial-totp.mjs';
+  // auth-financial-totp.mjs as the SQL 132 lockout production run 41190246725 applied it.
+  const LOCKOUT_APPLIED_BYTES = '3edfea2a0328eda03466cad4c13c1075aa2a020c4164eee0564ade2dee06319b';
+  const accepted = sha(`aws/functions/api/${MEMBER}`);
+  assert.notEqual(accepted, LOCKOUT_APPLIED_BYTES);
+  assert.equal(ENROLL_EMAIL_MANIFEST.workstream_id, 'financial-totp-enroll-email-code');
+  assert.equal(ENROLL_EMAIL_MANIFEST.deploy_authorized, false);
+  assert.match(ENROLL_EMAIL_MANIFEST.authorization, /^Pending owner review/);
+  for (const evidence of ['finding 8', 'First-time financial authenticator enrollment: whether it should require a fresh email code. - yes', 'No SQL', 'run 41190246725']) {
+    assert.ok(ENROLL_EMAIL_MANIFEST.notes.includes(evidence), evidence);
+  }
+  assert.deepEqual(ENROLL_EMAIL_MANIFEST.members, { [MEMBER]: { live_sha256: LOCKOUT_APPLIED_BYTES, accepted_sha256: accepted, operation: 'replace', previous_manifest: LOCKOUT_APPLIED_REL } });
+  assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, LOCKOUT_APPLIED_REL), 'utf8')).members[MEMBER].accepted_sha256, LOCKOUT_APPLIED_BYTES);
+  assert.deepEqual(PLAN.members[MEMBER], {
+    operation: 'replace',
+    accepted_sha256: accepted,
+    expected_live_sha256: LOCKOUT_APPLIED_BYTES,
+    sql_before: SQL132_FILE,
+    manifest: ENROLL_EMAIL_REL,
+  });
+  // The new static imports link against modules the live package already has: email.mjs and email-layout.mjs
+  // are not overlay members, email-policy.mjs is live at its accepted bytes, and email-branding.mjs
+  // platformBranding is what the live checkalt-register.mjs already imports.
+  const source = fs.readFileSync(path.join(API, MEMBER), 'utf8');
+  const imports = localImports(source, MEMBER);
+  for (const dep of ['email.mjs', 'email-layout.mjs', 'email-branding.mjs', 'email-policy.mjs']) assert.ok(imports.includes(dep), dep);
+  assert.equal(PLAN.members['email.mjs'], undefined);
+  assert.equal(PLAN.members['email-layout.mjs'], undefined);
+  assert.equal(PLAN.members['email-policy.mjs'].expected_live_sha256, PLAN.members['email-policy.mjs'].accepted_sha256);
+  const register = fs.readFileSync(path.join(API, 'providers/production/checkalt-register.mjs'), 'utf8');
+  assert.match(register, /import \{ platformBranding, resolveEmailBranding \} from '\.\.\/\.\.\/email-branding\.mjs';/);
+  assert.equal(PLAN.members['providers/production/checkalt-register.mjs'].expected_live_sha256, PLAN.members['providers/production/checkalt-register.mjs'].accepted_sha256);
+  // No new rate-limit action: enroll_start and enroll_confirm are accepted by the live SQL 130 function.
+  assert.match(source, /export const ENROLL_EMAIL_CODE_RATE_ACTION = 'enroll_confirm';/);
+  assert.match(fs.readFileSync(path.join(ROOT, 'aws/workflows/sql/130_financial_totp_rate_limit_code_check_no_public.sql'), 'utf8'),
+    /p_action NOT IN \('enroll_start', 'enroll_confirm', 'step_up', 'code_check'\)/);
+  assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
+  const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
+  const ready = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: LOCKOUT_APPLIED_BYTES }) });
+  assert.equal(ready.state, 'READY');
+  assert.equal(ready.mutation, false);
+  const done = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: accepted }) });
+  assert.equal(done.state, 'ALREADY_ACCEPTED');
+  await assert.rejects(
+    run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: 'c'.repeat(64) }) }),
+    (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+  );
+  // The apply replay from the lockout bytes passes the order and link gates.
+  const { deps, calls } = applyDeps(MEMBER);
+  const replay = await run(applyEnv(MEMBER), deps);
+  assert.equal(replay.mutation, false);
+  assert.deepEqual(calls.receipt.owned_member_ops, { replace: [MEMBER], add: [] });
 });
