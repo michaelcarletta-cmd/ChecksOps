@@ -85,7 +85,29 @@ snapshot unchanged). Recorded in the production pin with the staging apply as it
 staging step, the inspect and the pin change, not the production apply. The owner merges the pin change;
 the apply still needs the owner's words for that run and runs only after that merge is on main and staged.
 
-**Status:** applied to staging (wave 30); production pin execute-authorized; not applied to production.
+**Production apply (2026-10-31).** After the pin change (#1473, merged to main as `442ced7f7` on the
+owner's "Merge 1473"), transfer run 41154179368 staged main `60ebc82c2` (which adds only the SQL 133
+record #1474; tarball sha256 `20550289cb1a7c1e7a044e868f97e64b091471eb8b3bb7b1831e7b0cbe008589`). One-shot
+`--phase apply` run `cab03139-9b20-4a34-9773-6aeb3145b971` through SSM `d709209e-4873-4d95-aa22-35e49b02472c`, workstream
+`prod-sql134-loss-draft-escrow-write-grants-20261031`, under the owner's words "apply SQL 134 in production" (passed
+verbatim): its own inspect step found live `7827f4c8…` (the pinned pre-state), `predecessors` `{}`,
+`already_applied` false, `precondition_failures` `[]`; contracts 4/4, 6/6 and 43/43; every step ok;
+manifest `29e18734…`; receipt `7827f4c8…` →
+`c046d1c91cc79596c103f154b043b5421cb1dc6ceaef45d87f2f6ea1c0073c7c` (intended), result `applied`,
+unrelated catalog `68edc080…` (functions 1356, triggers 184); post-apply inspect `already_applied`
+true, `precondition_failures` `[]`, all fourteen columns `intended`. SSM returned the first 24000 characters
+of the command's output, which cut the one-shot JSON inside its `applied.receipt` at `after_hash`; the pin
+records the run's top-level `apply_result` and `post_apply_inspect` (the same objects, printed whole; the
+printed prefix of `applied.receipt` equals `apply_result` byte for byte) and says so in
+`applied.one_shot_note`, as the SQL 131 and SQL 133 records did. A separate read-only inspect (SSM
+`b931146e-bb1d-4215-9161-655268967451`) reported live `c046d1c9…` == intended, `already_applied` true, each
+of the fourteen columns with exactly its two pinned grants. Runner state: started from stopped at
+2026-10-31 01:14:01 UTC (SSM online 01:14:02 UTC) and stopped again at 01:15:35 UTC.
+
+**Status:** applied to staging (wave 30) and to production (2026-10-31); the production pin is retired
+(`execute: false`). Next: the Loss Draft API change (`workflow-rpc.mjs`, #1464) through the guarded Lambda
+path after its own read-only inspect, once the earlier members of the overlay plan are deployed; then the
+website (#1465).
 
 ## Fingerprint
 
