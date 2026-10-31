@@ -12,6 +12,7 @@ import { randomUUID } from 'node:crypto';
 import { parseBody, withIdentityWrite } from './data.mjs';
 import { COLLECTION_CONTRACT_ID } from './tenant-collection-v2.mjs';
 import { applyBillingProviderEvent } from './tenant-collection-v2-settlement.mjs';
+import { setMoneyWriteFlag } from './money-write-flag.mjs';
 
 export const UAT_SETTLEMENT_FN = applyBillingProviderEvent;
 
@@ -274,6 +275,7 @@ const createFixture = async ({ client, mapping, randomId }) => {
   if (!tenantId) return denied('no_writable_synthetic_tenant', { statusCode: 409 });
   const billingPeriod = `uat-cv2-${ids.harnessId.slice(0, 8)}`;
   const notes = harnessNotes(ids);
+  await setMoneyWriteFlag(client);
   const inserted = (await client.query(
     `INSERT INTO public.tenant_maintenance_payments (
        id, tenant_id, amount_cents, monthly_rate_cents, discount_cents,
@@ -363,6 +365,7 @@ const inspectEvidence = async (client, fixture) => (
 ).rows;
 
 const cleanupFixture = async ({ client, harnessId, fixture }) => {
+  await setMoneyWriteFlag(client);
   const deletedTmp = (await client.query(
     `DELETE FROM public.tenant_maintenance_payments
       WHERE id = $1::uuid

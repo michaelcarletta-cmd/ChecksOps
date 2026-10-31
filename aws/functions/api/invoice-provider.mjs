@@ -13,6 +13,7 @@ import { loadMoovAccount, logPaymentEvent, sanitize } from './providers/parity/d
 import { failClosedMissingAccount, requireMoovProviderEnvironment } from './providers/parity/moov-provider-env.mjs';
 import { MoovError, moovFetch } from './providers/parity/moov-client.mjs';
 import { generatePublicToken } from './invoice-actions.mjs';
+import { setMoneyWriteFlag } from './money-write-flag.mjs';
 
 export const INVOICE_API_VERSION = 'v2026.07.00';
 
@@ -292,6 +293,11 @@ export async function runProviderInvoiceAction({ client, body = {}, ctx = {}, fe
         apiVersion: INVOICE_API_VERSION,
       });
     }
+
+    // Every action below may write moov_invoices / moov_invoice_customers. Set the
+    // server-only money-write flag once, in this transaction, before any SAVEPOINT
+    // (finding 14; SQL 136 will require it).
+    await setMoneyWriteFlag(client);
 
     if (action === 'recover') {
       const moovInvoiceId = String(body.moov_invoice_id || '').trim();

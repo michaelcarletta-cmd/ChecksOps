@@ -23,6 +23,7 @@ import {
   missingRequestedCapabilities,
 } from './moov-capabilities.mjs';
 import { loadMoovAccount, logPaymentEvent, sanitize } from './db.mjs';
+import { setMoneyWriteFlag } from '../../money-write-flag.mjs';
 import { readWallet, syncWallet } from './moov-wallet.mjs';
 import {
   cancelWalletFunding,
@@ -119,6 +120,11 @@ const wrap = (handler, name) => async (event, deps = {}) => {
         loadSandbox: loader,
       });
     if (ctx.error) return { ...ctx, spoofFieldsIgnored: spoof, applicationUserId: mapping.application_user_id };
+    // Write-mode handlers write the money tables (wallets, transfers, provider methods,
+    // recipients, invoices, disbursement splits): set the server-only money-write flag in
+    // this transaction before the handler runs (finding 14; SQL 136 will require it).
+    // The production read path (withIdentity, read-only) never sets it.
+    if (!productionRead) await setMoneyWriteFlag(client);
     try {
       const fetchImpl = deps.fetchImpl || fetch;
       const result = await withMoovContext({ ...ctx.moovContext, fetchImpl }, () => handler.run({

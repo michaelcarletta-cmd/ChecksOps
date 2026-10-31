@@ -134,6 +134,19 @@ const CHANGED_SINCE_SECOND_REBUILD = {
   // matches the ` · moov:<id>` notes token exactly instead of LIKE '%id%'; a REPLACE row of the
   // production overlay plan, not a rebuild section.
   'tenant-collection-v2-settlement.mjs': 'changed',
+  // Money-write flag (2026-10-31, security audit finding 14, step 1 of 2): the money-table writers
+  // set the server-only request.money_write flag (the added money-write-flag.mjs) before they
+  // write; REPLACE rows of the production overlay plan where they are members, otherwise a later
+  // rebuild, not a rebuild section. (tenant-billing-engine.mjs and
+  // tenant-collection-v2-settlement.mjs are listed above.)
+  'invoice-provider.mjs': 'changed',
+  'mortgage-ops-usage.mjs': 'changed',
+  'providers/parity/moov-functions.mjs': 'changed',
+  'providers/production/moov-wallet-sync.mjs': 'changed',
+  'tenant-billing-handlers.mjs': 'changed',
+  'tenant-collection-v2.mjs': 'changed',
+  'tenant-collection-v2-uat.mjs': 'changed',
+  'tenant-settings-handlers.mjs': 'changed',
   // Money step-up window (2026-10-31, security audit finding 7): every money step-up must be
   // verified within 15 minutes; a REPLACE row of the production overlay plan, not a rebuild section.
   'providers/production/moov-fund-authz.mjs': 'changed',
@@ -177,6 +190,19 @@ const OVERLAY_PLAN_CHANGES = new Set([
   'homeowner-signing-integration.mjs',
   // Moov webhook body confirmation (2026-10-31): a REPLACE row of the production plan.
   'tenant-collection-v2-settlement.mjs',
+  // Money-write flag (2026-10-31, finding 14 step 1): REPLACE rows of the production plan
+  // (moov-functions, moov-wallet-sync, tenant-billing-handlers, tenant-collection-v2,
+  // tenant-settings-handlers). invoice-provider.mjs, mortgage-ops-usage.mjs and
+  // tenant-collection-v2-uat.mjs are not overlay members: they reach a function only with a
+  // later rebuild, never the current rebuild section.
+  'invoice-provider.mjs',
+  'mortgage-ops-usage.mjs',
+  'providers/parity/moov-functions.mjs',
+  'providers/production/moov-wallet-sync.mjs',
+  'tenant-billing-handlers.mjs',
+  'tenant-collection-v2.mjs',
+  'tenant-collection-v2-uat.mjs',
+  'tenant-settings-handlers.mjs',
   // Money step-up window (2026-10-31, finding 7): a REPLACE row of the production plan.
   'providers/production/moov-fund-authz.mjs',
 ]);

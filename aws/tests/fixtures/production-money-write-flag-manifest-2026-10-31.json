@@ -1,0 +1,56 @@
+{
+  "workstream_id": "money-write-flag",
+  "authorization": "Pending owner review (2026-10-31). Planning only: nothing is live or verified. Each production apply still needs its own owner approval and staging acceptance.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Money-write flag (2026-10-31, security audit 2026-10-29 finding 14, step 1 of 2; owner decision 2026-10-31 (a)): the invoice, billing-settings, billing-engine, collection v2, wallet and Moov parity write paths set the server-only transaction-local GUC request.money_write = 1 (SELECT set_config(...,true)) in their open transaction before they write the money tables, through the added money-write-flag.mjs. No policy reads it yet: behavior-neutral. SQL 136 (step 2) restricts the money tables to it (and the SQL 72 / SQL 91 GUCs) and must not be applied before every member here is live in staging and production. The generic /data/write route never sets it. No SQL; no money movement; no export changes. live_sha256 is each row's previous accepted bytes (main's bytes, put live by the third full-package production rebuild, run 39669873076, or a later recorded overlay); a read-only production overlay inspect must confirm each live member before any apply. money-write-flag.mjs is new, so it has no live bytes; moov-wallet-sync.mjs (the first importer in plan order) and every other member import it at load, so it is ordered first. Design note: aws/docs/money-write-flag.md.",
+  "members": {
+    "money-write-flag.mjs": {
+      "live_sha256": null,
+      "accepted_sha256": "d3073e5de067155aa419d6ab666261f9d4b87eeeac0980050da3ecbd8d677dbf",
+      "operation": "add"
+    },
+    "providers/production/moov-wallet-sync.mjs": {
+      "live_sha256": "812c9dfd3af0a0dfc945ea320118a8a86362d8e98165e0045b158f4743f18c5e",
+      "accepted_sha256": "05ea75f7876167a95a7eaa913f53fce62ef3474bf0fbd4f3ac24d4314d174d8c",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-moov-wallet-fund-manifest-2026-10-13.json"
+    },
+    "providers/parity/moov-functions.mjs": {
+      "live_sha256": "3d17efb4f680a675a97231709e4379a4478641a46c744bf2fee5796c24fcd6be",
+      "accepted_sha256": "16376b457a8558f7b8ba15b9480ea5bac1a459186d14a420aa33a280f6d25e45",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-fee-collection-pin-manifest-2026-10-17.json"
+    },
+    "tenant-settings-handlers.mjs": {
+      "live_sha256": "9766306dfccffbb515c6dd1f0a329b91a407f53eb97c1ed148c9dcc5b9f24717",
+      "accepted_sha256": "c813c6dc5dac144f2d10d9409a4cb31cb47789080969e1c2e35f0579004d3caa",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
+    },
+    "tenant-collection-v2-settlement.mjs": {
+      "live_sha256": "dece31d7bbed756c714ebe7740645d5f426048e318c8f2ac6e3ec42498fc999d",
+      "accepted_sha256": "e899ee989632dd4c7845bda5d073354f4e7bf40b86a14764aead1dd5ab691579",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-moov-webhook-body-auth-applied-manifest-2026-10-31.json"
+    },
+    "tenant-collection-v2.mjs": {
+      "live_sha256": "6b4a415fe38a49243f31a2ab9495ab72bc62e1f1e69afae37c48d67147e2a20a",
+      "accepted_sha256": "7354856763a29fddf058cfc1677e73c62d28b8ce829b6c8927de74a03ccf8ff1",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-fee-collection-pin-manifest-2026-10-17.json"
+    },
+    "tenant-billing-engine.mjs": {
+      "live_sha256": "c5e9b0bd5b5e04eac304337918dfd772477319dc5d5357cd8a0282e277119f80",
+      "accepted_sha256": "5a4327cadbc4537a269f0d249eae233dad441c2a177dd7f0aa105fd6891a4364",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-billing-db-error-redaction-applied-manifest-2026-10-31.json"
+    },
+    "tenant-billing-handlers.mjs": {
+      "live_sha256": "70241b083fc373d626fa73082aebafcb6933837376f7228709ab8fb3f90b931f",
+      "accepted_sha256": "a7b0a448938bac7661ae25da3f2fc26aa4d6d00d7815f6447053f051a27f7199",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-billing-apply-event-staging-only-applied-manifest-2026-10-30.json"
+    }
+  }
+}

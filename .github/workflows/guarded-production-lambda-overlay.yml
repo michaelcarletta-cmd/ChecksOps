@@ -26,6 +26,7 @@ on:
           - providers/checkalt-account-mask.mjs
           - data.mjs
           - providers/parity/moov-wallet.mjs
+          - money-write-flag.mjs
           - providers/production/moov-wallet-sync.mjs
           - providers/production/moov-fund-authz.mjs
           - cognito.mjs
