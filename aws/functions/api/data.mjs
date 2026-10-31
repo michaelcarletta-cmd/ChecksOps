@@ -243,9 +243,32 @@ export const ignoredSpoof = (event, body) => {
   };
 };
 
+// Cognito sends email_verified as a boolean in a verified token and as the string "true" in the
+// API Gateway JWT authorizer claims. Anything else (absent, false, "false") is unverified.
+export const isVerifiedEmailClaim = (value) => value === true || value === 'true';
+
+const authorizerJwtClaims = (event) => {
+  const jwt = event?.requestContext?.authorizer?.jwt?.claims
+    || event?.requestContext?.authorizer?.claims
+    || null;
+  return jwt && typeof jwt === 'object' ? jwt : null;
+};
+
+// The payload of a token verifyCognitoIdToken has already accepted (signature, issuer, client, expiry).
+const verifiedTokenPayload = (token) => {
+  try {
+    const segment = String(token).split('.')[1] || '';
+    return JSON.parse(Buffer.from(segment, 'base64url').toString('utf8'));
+  } catch {
+    return null;
+  }
+};
+
 export const resolveClaims = async (event) => {
   let claims = cognitoClaimsFromEvent(event);
-  if (!claims?.sub) {
+  if (claims?.sub) {
+    claims = { ...claims, email_verified: isVerifiedEmailClaim(authorizerJwtClaims(event)?.email_verified) };
+  } else {
     const token = bearerToken(event);
     if (!token) return { ok: false, statusCode: 401, error: 'missing_cognito_token' };
     try {
@@ -253,8 +276,23 @@ export const resolveClaims = async (event) => {
     } catch (error) {
       return { ok: false, statusCode: 401, error: 'invalid_cognito_token', message: String(error.message || error).slice(0, 200) };
     }
+    claims = { ...claims, email_verified: isVerifiedEmailClaim(verifiedTokenPayload(token)?.email_verified) };
   }
   return { ok: true, claims };
+};
+
+// The email auth.email() returns (request.jwt.claim.email), which the homeowner upload and intro
+// request policies match on (security audit finding 17). A user can change the email on their own
+// Cognito user without verifying it, so the token email is never trusted on its own: the email
+// recorded in the identity mapping (identity_accounts) wins, and the token email is used only when
+// the mapping has none and Cognito marks it verified. Otherwise the GUC is empty and auth.email()
+// is NULL.
+export const appUserEmailForGuc = (mapping, claims) => {
+  const mapped = mapping?.email ? String(mapping.email) : '';
+  if (mapped) return mapped;
+  const tokenEmail = claims?.email ? String(claims.email) : '';
+  if (tokenEmail && isVerifiedEmailClaim(claims?.email_verified)) return tokenEmail;
+  return '';
 };
 
 export const classifyTrackedSqlFailure = (error, sqlText) => {
@@ -352,7 +390,7 @@ export const withIdentity = async (event, fn, deps = {}) => {
     }
     refuseSubAsApplicationId(mapping.application_user_id, claimsResult.claims.sub);
     await client.query('SELECT set_config($1, $2, true)', [APP_USER_ID_GUC, mapping.application_user_id]);
-    await client.query('SELECT set_config($1, $2, true)', [APP_USER_EMAIL_GUC, mapping.email || claimsResult.claims.email || '']);
+    await client.query('SELECT set_config($1, $2, true)', [APP_USER_EMAIL_GUC, appUserEmailForGuc(mapping, claimsResult.claims)]);
     const result = await fn({ client, mapping, claims: claimsResult.claims, body, spoof });
     const status = Number(result?.statusCode || (result?.ok === false ? 400 : 200));
     if (commit && result?.ok !== false && status < 400) {
