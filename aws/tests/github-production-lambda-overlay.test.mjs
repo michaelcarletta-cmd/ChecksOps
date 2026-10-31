@@ -170,6 +170,13 @@ const withSql133 = (plan) => { plan.sql_prerequisites[SQL133_FILE] = { verified_
 const ADMIN_RESET_APPLIED_REL = 'aws/tests/fixtures/production-financial-totp-admin-reset-applied-manifest-2026-10-31.json';
 const ADMIN_RESET_PRE = ADMIN_RESET_MANIFEST.members['admin-reset-totp.mjs'].live_sha256;
 const adminResetPre = (plan) => { plan.members['admin-reset-totp.mjs'].expected_live_sha256 = ADMIN_RESET_PRE; return withSql133(plan); };
+// The Moov webhook body confirmation REPLACEs record their applied bytes live (production run 41219106461 for
+// providers/webhooks.mjs, 2026-10-31): every apply replay starts from the pre-apply live bytes (the planning
+// manifest's live_sha256).
+const MOOV_WEBHOOK_BODY_AUTH_MANIFEST = JSON.parse(fs.readFileSync(path.join(ROOT, 'aws/tests/fixtures/production-moov-webhook-body-auth-manifest-2026-10-31.json'), 'utf8'));
+const MOOV_WEBHOOK_PRE = Object.freeze(Object.fromEntries(['providers/webhooks.mjs']
+  .map((name) => [name, MOOV_WEBHOOK_BODY_AUTH_MANIFEST.members[name].live_sha256])));
+const moovWebhookPre = (plan) => { for (const [name, pre] of Object.entries(MOOV_WEBHOOK_PRE)) plan.members[name].expected_live_sha256 = pre; return plan; };
 const SQL121_FILE = 'aws/workflows/sql/121_cash_jobs_production_grants.sql';
 const WORKFLOW_PRE_PLAN = (() => {
   const plan = structuredClone(PLAN);
@@ -185,6 +192,7 @@ function applyDeps(member, liveOpts = {}) {
   if (member === 'auth-financial-totp.mjs' && liveOpts.plan === undefined) liveOpts = { ...liveOpts, plan: totpPre(structuredClone(PLAN)) };
   if (member === 'providers/production/checkalt-register.mjs' && liveOpts.plan === undefined) liveOpts = { ...liveOpts, plan: registerPre(structuredClone(PLAN)) };
   if (member === 'admin-reset-totp.mjs' && liveOpts.plan === undefined) liveOpts = { ...liveOpts, plan: adminResetPre(structuredClone(PLAN)) };
+  if (Object.hasOwn(MOOV_WEBHOOK_PRE, member) && liveOpts.plan === undefined) liveOpts = { ...liveOpts, plan: moovWebhookPre(structuredClone(PLAN)) };
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'prod-overlay-'));
   fs.mkdirSync(path.join(root, 'ops/deployment-guard'), { recursive: true });
   fs.mkdirSync(path.join(root, 'aws/functions/api'), { recursive: true });
@@ -226,7 +234,7 @@ const applyEnv = (member, extra = {}) => ({
   ...ENV,
   CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'apply',
   CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: member,
-  CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: (member === 'providers.mjs' ? PROVIDERS_PRE : member === 'workflow.mjs' ? WORKFLOW_PRE : member === 'auth-financial-totp.mjs' ? TOTP_PRE : member === 'providers/production/checkalt-register.mjs' ? REGISTER_PRE : member === 'admin-reset-totp.mjs' ? ADMIN_RESET_PRE : MORTGAGE_DESK_PRE[member] ?? PLAN.members[member].expected_live_sha256) || '',
+  CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: (member === 'providers.mjs' ? PROVIDERS_PRE : member === 'workflow.mjs' ? WORKFLOW_PRE : member === 'auth-financial-totp.mjs' ? TOTP_PRE : member === 'providers/production/checkalt-register.mjs' ? REGISTER_PRE : member === 'admin-reset-totp.mjs' ? ADMIN_RESET_PRE : MORTGAGE_DESK_PRE[member] ?? MOOV_WEBHOOK_PRE[member] ?? PLAN.members[member].expected_live_sha256) || '',
   CHECKSOPS_STAGING_ACCEPTANCE_REFERENCE: ACCEPTANCE,
   CHECKSOPS_PRODUCTION_APPROVAL: approvalPhrase(member),
   ...extra,
@@ -4524,7 +4532,7 @@ test('Financial TOTP teammate reset (SQL 133): admin-reset-totp.mjs REPLACE from
   assert.deepEqual(calls.receipt.owned_member_ops, { replace: [MEMBER], add: [] });
 });
 
-test('Moov webhook body confirmation (2026-10-31): ADD moov-webhook-confirm.mjs before webhooks.mjs, REPLACE webhooks.mjs and tenant-collection-v2-settlement.mjs from the third rebuild bytes; moov-webhook-confirm.mjs applied 2026-10-31', async () => {
+test('Moov webhook body confirmation (2026-10-31): ADD moov-webhook-confirm.mjs before webhooks.mjs, REPLACE webhooks.mjs and tenant-collection-v2-settlement.mjs from the third rebuild bytes; moov-webhook-confirm.mjs and webhooks.mjs applied 2026-10-31', async () => {
   const REL = 'aws/tests/fixtures/production-moov-webhook-body-auth-manifest-2026-10-31.json';
   const CONFIRM = 'providers/moov-webhook-confirm.mjs';
   const WEBHOOKS = 'providers/webhooks.mjs';
@@ -4562,7 +4570,7 @@ test('Moov webhook body confirmation (2026-10-31): ADD moov-webhook-confirm.mjs 
   // state. An applied REPLACE row expects the applied bytes and names the record; the applied ADD row keeps its
   // planning manifest, as mortgage-desk-esign.mjs's did.
   const APPLIED_REL = 'aws/tests/fixtures/production-moov-webhook-body-auth-applied-manifest-2026-10-31.json';
-  const APPLIED_MEMBERS = [CONFIRM];
+  const APPLIED_MEMBERS = [CONFIRM, WEBHOOKS];
   const applied = JSON.parse(fs.readFileSync(path.join(ROOT, APPLIED_REL), 'utf8'));
   assert.equal(applied.workstream_id, 'moov-webhook-body-auth-applied');
   assert.equal(applied.deploy_authorized, false);
@@ -4582,10 +4590,15 @@ test('Moov webhook body confirmation (2026-10-31): ADD moov-webhook-confirm.mjs 
     'run 41218515028', '11d2a12cd57cb0d8e2c25f6a4abe7e8f1950bbc2', 'member ABSENT', '6b15a47c-dc5b-449e-bb1a-b50c0c41a4b8',
     'run 41218725024', 'job 124588625700', '482607a1c96ddc92be4a1efd3c547c5dc70e8725', 'O00YMSncwpLhBJ5AKnXoojLaBzWRnGkrKeJr+tDDDm0=',
     '3f4ad017-ded1-4222-8dd1-661e55453c8a', '8c0f8c69-cc00-498e-95ec-03a0664fdd60', 'errors []', 'VERIFIED',
+    // webhooks.mjs: staging apply, the production inspect (f7353ee1 live), the apply and its verify.
+    'run 41202670517', 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/41202670517', 'Isn4LTclYBy/62acTNhrxBbNt5nWucF5EqHwOZl9zO0=',
+    'run 41218865288', 'member PRESENT f7353ee1', 'run 41219106461', 'job 124589757529', '8mXH1fquI6TeidgsPbka93Ct6K8Au2U4pm+zv+XOWIY=',
+    '95e49b41-36af-409c-92b4-86f7a52dd20d', '940f0bf8-d2c9-477b-b108-184f66144303', 'member PRESENT 59b58674',
   ]) {
     assert.ok(applied.notes.includes(evidence), evidence);
   }
   assert.ok(PLAN.notes.includes('Moov webhook body confirmation providers/moov-webhook-confirm.mjs applied 2026-10-31 (production run 41218725024'));
+  assert.ok(PLAN.notes.includes('Moov webhook body confirmation providers/webhooks.mjs applied 2026-10-31 (production run 41219106461'));
   for (const member of [CONFIRM, WEBHOOKS, SETTLEMENT]) {
     const live = manifest.members[member].live_sha256;
     const recorded = live !== null && APPLIED_MEMBERS.includes(member);
