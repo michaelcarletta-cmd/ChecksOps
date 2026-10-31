@@ -55,7 +55,37 @@ the function, a missing table, column, index, function or role) stops and needs 
 change. The inspect reads no table rows, so the owner-row checks (`sql137_owner_identity_count`,
 `sql137_owner_profile_without_identity`) are seen only by the apply, which then fails and rolls back.
 
-**Status:** not applied anywhere. The staging pin and the production pin are pending.
+**Staging executor refreshed (2026-10-31).** Inspect run 41233783836 (main `7d845915e`) found the live
+executor at `kMYf1oP4mKP/zAPAREg0imlMC/cdheEWC8V5P9viUtg=` (LastModified 2026-10-31T15:55:22Z,
+`executor_current` false) without `sql/137_platform_owner_identity.sql` (main's package also
+superseded `lib/release-sql-specs.mjs`, `lib/release-sql-state.mjs` and `lib/sql-executor-auth.mjs`).
+Deploy run 41234041020 (main `7d845915e89c6ea21b98a0ed720c93a871b974aa`,
+`expected_executor_code_sha256` `kMYf1oP4…` matched) updated `checksops-staging-guarded-sql-executor`
+to main's package (`m30FadRmX2njQ2GTbBbysuzIG99OyHxXIIFu2OL2uZ4=`, RevisionId
+`e6b92528-c9bb-41c6-a499-13e00d67ee2d`, LastModified 2026-10-31T19:26:03Z).
+
+**Staging read-live (2026-10-31).** Run 41234275408 (main `7d845915e`, executor `m30FadRm…`, pin
+commit `556626cb5`): `is_platform_owner()` state `different`, its EXECUTE ACL `PUBLIC EXECUTE`,
+`authenticated EXECUTE`, `checksops EXECUTE`, `owner EXECUTE`; `identity_accounts` holds
+`checksops UPDATE` (`other_write_grants` `[]`). Live
+`a2c2d856a21c52d47544fad05e0f0275a24a093421c8a7a7fbeea0e4bb329dfc`, intended `9a88fca2…`,
+`already_applied` false, `precondition_failures` `[]`, `prerequisites_missing` `[]`, `mutation` false.
+
+**The staging pre-state is not the predicted one.** The prediction below (`7349393d…`,
+`aws/rls/sql/10`'s body with these grants) does not match the live value. The grants the run reported
+are the predicted ones, so the live `is_platform_owner()` definition is not `aws/rls/sql/10`'s (the
+read-live prints its fingerprint, not its body; neither Supabase-era body in `supabase/migrations`,
+`20260830114402_…` or `20260910130000_restrict_platform_owner_to_checksops_admin.sql`, reproduces it
+with these grants either). SQL 137 replaces the whole function (`CREATE OR REPLACE`), so the live body
+is overwritten; the engine's preconditions passed on it, and the apply still checks the owner rows
+(`sql137_owner_identity_count`, `sql137_owner_profile_without_identity`) and rolls back if they fail.
+Told this, the owner chose to record the read-live value. Recorded in the staging pin
+(`expected_live_definition_sha256`, `execute: true`, wave 32) under the owner's words of 2026-10-31,
+"record the SQL 137 staging pin". The staging apply itself is a separate run after this pin is merged,
+on the owner's words for that run. Production is read by its own inspect; the production prediction
+(`9862a392…`) may differ in the same way.
+
+**Status:** staging pin execute-authorized (wave 32); nothing applied yet; production pin pending.
 
 ## Fingerprint
 
