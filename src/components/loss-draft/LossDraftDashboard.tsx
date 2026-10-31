@@ -237,6 +237,7 @@ export function LossDraftDashboard({ searchQuery = "" }: LossDraftDashboardProps
               qc.invalidateQueries({ queryKey: ["loss-draft-counts"] });
             }}
             onSelectId={setSelectedId}
+            onClosed={() => setSelectedId(null)}
           />
         </div>
       ) : (

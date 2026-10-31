@@ -10,19 +10,42 @@ import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Send, Building2, ArrowRightLeft, DollarSign, CheckCircle2,
-  Clock, AlertTriangle, Eye, EyeOff, Shield, RotateCcw, PackageCheck, Upload, FileText,
+  Clock, AlertTriangle, Eye, EyeOff, Shield, RotateCcw, PackageCheck, Upload,
 } from "lucide-react";
 import { format } from "date-fns";
 import { MortgageContactCard } from "../MortgageContactCard";
 import type { LossDraftRecord } from "@/hooks/queries/useLossDraft";
-import { ClaimLedgerCard } from "@/components/payments/ClaimLedgerCard";
-import { ClaimSettlementEditor } from "@/components/payments/ClaimSettlementEditor";
-import { useQuery } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
+import { refreshCheckQueues } from "@/lib/checkQueueRefresh";
 import { formatIssueDateDisplay } from "@/lib/issueDate";
 import { useAcknowledgeMortgageDeskReturn, useMortgageDeskReturnAlert } from "@/hooks/useMortgageDeskReturnAlert";
 
 
+
+/*
+ * Owner decisions 2026-10-30:
+ * - Monitored: the bank deposits the check, so it never goes to Endorsing; the file
+ *   stays open here to record escrow and disbursements (amounts only, no money moves).
+ * - Not monitored: once the endorsed back of the check is uploaded, the user is asked
+ *   to send it to Endorsing, which moves the check and closes this file.
+ * - Override: Review always closes the file and returns the check to Review;
+ *   Endorsing only for not-monitored files.
+ */
+
+/** Override targets the API accepts: "review" closes the file, "endorsing" (not monitored) too. */
+export const LOSS_DRAFT_OVERRIDE_REVIEW = "review";
+export const LOSS_DRAFT_OVERRIDE_ENDORSING = "endorsing";
 
 /* Not Monitored = mortgage endorses & releases check, no escrow/draws */
 const NOT_MONITORED_ACTIONS: ActionDef[] = [
@@ -55,15 +78,18 @@ interface Props {
   lossDraftId: string;
   draft: LossDraftRecord;
   onChanged: () => void;
+  /** The file was closed (sent to Endorsing or overridden to Review): return to the list. */
+  onClosed?: () => void;
 }
 
 const fmtMoney = (v: number) =>
   `$${(v ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}`;
 
-export function LossDraftActionsTab({ lossDraftId, draft, onChanged }: Props) {
+export function LossDraftActionsTab({ lossDraftId, draft, onChanged, onClosed }: Props) {
   const { user } = useAuth();
   const canMoveChecks = useCanMoveChecks();
   const { toast } = useToast();
+  const qc = useQueryClient();
 
   const [actionAmount, setActionAmount] = useState("");
   const [actionNotes, setActionNotes] = useState("");
@@ -73,22 +99,7 @@ export function LossDraftActionsTab({ lossDraftId, draft, onChanged }: Props) {
   const [showAdminEdit, setShowAdminEdit] = useState(false);
   const [adminTargetStatus, setAdminTargetStatus] = useState("");
   const [adminResetNotes, setAdminResetNotes] = useState("");
-  const [ledgerEditorOpen, setLedgerEditorOpen] = useState(false);
-
-  // Fetch settlement for the ledger editor
-  const { data: settlement } = useQuery({
-    queryKey: ["claim-ledger-settlement", draft.claim_id],
-    enabled: !!draft.claim_id,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("claim_settlements")
-        .select("*")
-        .eq("claim_id", draft.claim_id!)
-        .maybeSingle();
-      if (error) throw error;
-      return data;
-    },
-  });
+  const [endorsePromptOpen, setEndorsePromptOpen] = useState(false);
 
 
   const { data: returnAlert } = useMortgageDeskReturnAlert(draft.check_intake_item_id);
@@ -98,18 +109,43 @@ export function LossDraftActionsTab({ lossDraftId, draft, onChanged }: Props) {
   const availableActions = actionButtons.filter(a =>
     a.fromStatuses.includes(draft.escrow_status)
   );
+  const isOpen = draft.escrow_status !== "endorsing" && draft.escrow_status !== "final_release_complete";
 
-  const executeAction = async (action: string) => {
+  /**
+   * The file was closed and its check moved to another lane: refresh the check
+   * queues and counts (so the check shows in its new tab) and return to the list.
+   */
+  const afterFileClosed = () => {
+    void refreshCheckQueues(qc, { includeInactive: true, checkId: draft.check_intake_item_id });
+    qc.invalidateQueries({ queryKey: ["loss-draft-dashboard"] });
+    if (draft.check_intake_item_id) {
+      qc.invalidateQueries({ queryKey: ["check-loss-draft-link", draft.check_intake_item_id] });
+    }
+    onChanged();
+    onClosed?.();
+  };
+
+  const executeAction = async (action: string, def?: ActionDef) => {
     if (!user?.id) return;
+    const amountText = actionAmount.trim();
+    if (def?.needsAmount && !/^\d{1,10}(\.\d{1,2})?$/.test(amountText)) {
+      toast({ title: "Enter an amount", description: "Use dollars and cents, for example 2500.00.", variant: "destructive" });
+      return;
+    }
+    if (def?.needsAmount && Number(amountText) <= 0) {
+      toast({ title: "Enter an amount", description: "The amount must be more than zero.", variant: "destructive" });
+      return;
+    }
     setSubmitting(true);
     try {
       const extra: Record<string, string> = {};
       if (actionTracking) extra.tracking_number = actionTracking;
-      const { error } = await supabase.rpc("loss_draft_action", {
+      const { data, error } = await supabase.rpc("loss_draft_action", {
         p_loss_draft_id: lossDraftId,
         p_action: action,
         p_actor_id: user.id,
-        p_amount: actionAmount ? parseFloat(actionAmount) : null,
+        // At most 2 decimals (checked above), so the number serializes back to the same cents.
+        p_amount: def?.needsAmount ? Number(amountText) : null,
         p_notes: actionNotes || null,
         p_extra: extra,
       });
@@ -129,6 +165,14 @@ export function LossDraftActionsTab({ lossDraftId, draft, onChanged }: Props) {
           description: ackError,
           variant: "destructive",
         });
+      } else if (action === "send_for_endorsements") {
+        toast({ title: "Sent to Endorsing", description: "The check is in Endorsing and this loss draft file is closed." });
+      } else if ((data as { release_recorded?: boolean } | null)?.release_recorded === false) {
+        toast({
+          title: "Release recorded",
+          description: "The amount was recorded, but the draw could not be added to the Draws list.",
+          variant: "destructive",
+        });
       } else {
         toast({ title: "Action completed", description: `${action.replace(/_/g, " ")} applied successfully.` });
       }
@@ -136,7 +180,9 @@ export function LossDraftActionsTab({ lossDraftId, draft, onChanged }: Props) {
       setActionAmount("");
       setActionNotes("");
       setActionTracking("");
-      onChanged();
+      setEndorsePromptOpen(false);
+      if (action === "send_for_endorsements") afterFileClosed();
+      else onChanged();
     } catch (e: any) {
       toast({ title: "Error", description: e.message, variant: "destructive" });
     } finally {
@@ -181,13 +227,15 @@ export function LossDraftActionsTab({ lossDraftId, draft, onChanged }: Props) {
       });
       if (error) throw error;
       toast({
-        title: "Status reset",
-        description: `Status changed to ${adminTargetStatus.replace(/_/g, " ")}`,
+        title: "Loss draft closed",
+        description: adminTargetStatus === LOSS_DRAFT_OVERRIDE_REVIEW
+          ? "The check was moved to Review."
+          : "The check was moved to Endorsing.",
       });
       setShowAdminEdit(false);
       setAdminTargetStatus("");
       setAdminResetNotes("");
-      onChanged();
+      afterFileClosed();
     } catch (e: any) {
       toast({ title: "Error", description: e.message, variant: "destructive" });
     } finally {
@@ -242,9 +290,38 @@ export function LossDraftActionsTab({ lossDraftId, draft, onChanged }: Props) {
               draft.escrow_status === "check_received_back" ||
               !!draft.check_received_back_date
             }
-            onUploaded={onChanged}
+            onUploaded={(recorded) => {
+              onChanged();
+              // Not monitored: the endorsed back is the evidence the check came back,
+              // so offer to send it to Endorsing right away (monitored never goes there).
+              if (recorded && !isMonitored && isOpen) setEndorsePromptOpen(true);
+            }}
           />
         )}
+
+        <AlertDialog open={endorsePromptOpen} onOpenChange={setEndorsePromptOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Send this check to Endorsing?</AlertDialogTitle>
+              <AlertDialogDescription>
+                The endorsed back of the check is on file. Sending it moves the check to
+                Endorsing and closes this loss draft file.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={submitting}>Not now</AlertDialogCancel>
+              <AlertDialogAction
+                disabled={submitting}
+                onClick={(e) => {
+                  e.preventDefault();
+                  executeAction("send_for_endorsements");
+                }}
+              >
+                {submitting ? "Sending..." : "Send to Endorsing"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
 
         {isMonitored && (
@@ -259,41 +336,6 @@ export function LossDraftActionsTab({ lossDraftId, draft, onChanged }: Props) {
             />
           </div>
         )}
-
-        <Separator />
-
-        {/* Claim Ledger */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <p className="text-xs font-medium text-muted-foreground flex items-center gap-1">
-              <FileText className="h-3 w-3" /> Claim Ledger
-            </p>
-            {draft.claim_id && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-6 px-2 text-[10px]"
-                onClick={() => setLedgerEditorOpen(true)}
-              >
-                <DollarSign className="h-3 w-3 mr-1" /> Edit Ledger
-              </Button>
-            )}
-          </div>
-          <ClaimLedgerCard
-            checkIntakeItemId={draft.check_intake_item_id!}
-            claimId={draft.claim_id}
-            detectedClaimNumber={draft.check_intake_items?.detected_claim_number ?? null}
-            onLinked={onChanged}
-          />
-          {draft.claim_id && (
-            <ClaimSettlementEditor
-              open={ledgerEditorOpen}
-              onOpenChange={setLedgerEditorOpen}
-              claimId={draft.claim_id}
-              settlement={settlement}
-            />
-          )}
-        </div>
 
         <Separator />
 
@@ -349,7 +391,7 @@ export function LossDraftActionsTab({ lossDraftId, draft, onChanged }: Props) {
                       size="sm"
                       className="text-xs"
                       disabled={submitting}
-                      onClick={() => executeAction(a.action)}
+                      onClick={() => executeAction(a.action, a)}
                     >
                       {submitting ? "Saving..." : "Confirm"}
                     </Button>
@@ -400,21 +442,20 @@ export function LossDraftActionsTab({ lossDraftId, draft, onChanged }: Props) {
               {showAdminEdit && (
                 <div className="border border-destructive/30 rounded-lg p-3 space-y-2 bg-destructive/5">
                   <p className="text-[10px] text-destructive">
-                    Change the escrow status and monitoring type. This overrides normal workflow.
+                    Send the check to another lane. This closes the loss draft file and overrides normal workflow.
                   </p>
                   <div>
-                    <Label className="text-xs">Override Status</Label>
+                    <Label className="text-xs">Send check to</Label>
                     <select
                       className="w-full h-8 rounded-md border border-input bg-background px-3 text-xs"
                       value={adminTargetStatus}
                       onChange={e => setAdminTargetStatus(e.target.value)}
                     >
                       <option value="">Select status...</option>
-                      <option value="pending_send">Review</option>
-                      <option value="endorsing">Endorsing</option>
-                      <option value="escrowed">Loss Draft</option>
-                      <option value="pending_reissue">Reissue</option>
-                      <option value="void">Void</option>
+                      <option value={LOSS_DRAFT_OVERRIDE_REVIEW}>Review</option>
+                      {!isMonitored && (
+                        <option value={LOSS_DRAFT_OVERRIDE_ENDORSING}>Endorsing</option>
+                      )}
                     </select>
                   </div>
                   <div>
@@ -485,7 +526,8 @@ function EndorsedCheckUpload({
 }: {
   checkId: string;
   highlighted: boolean;
-  onUploaded: () => void;
+  /** recorded: the upload is in the check audit log (the API's evidence for Endorsing). */
+  onUploaded: (recorded: boolean) => void;
 }) {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -526,7 +568,7 @@ function EndorsedCheckUpload({
         .eq("id", checkId);
       if (updateErr) throw updateErr;
 
-      await supabase.from("check_audit_log").insert({
+      const { error: auditErr } = await supabase.from("check_audit_log").insert({
         check_id: checkId,
         event_type: "back_image_reuploaded",
         actor_id: user?.id ?? null,
@@ -534,11 +576,19 @@ function EndorsedCheckUpload({
         event_data: { old_path: existing?.back_image_path ?? null, new_path: newPath },
       });
 
-      toast({
-        title: "Endorsed check uploaded",
-        description: "Back of check updated with mortgage endorsement.",
-      });
-      onUploaded();
+      if (auditErr) {
+        toast({
+          title: "Endorsed check uploaded, but not recorded",
+          description: `The audit log entry failed (${auditErr.message}); it cannot be sent to Endorsing until it is recorded.`,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Endorsed check uploaded",
+          description: "Back of check updated with mortgage endorsement.",
+        });
+      }
+      onUploaded(!auditErr);
     } catch (e: any) {
       toast({ title: "Upload failed", description: e.message, variant: "destructive" });
     } finally {

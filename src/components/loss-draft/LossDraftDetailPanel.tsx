@@ -57,10 +57,13 @@ export function LossDraftDetailPanel({
   lossDraftId,
   onUpdate,
   onSelectId,
+  onClosed,
 }: {
   lossDraftId: string;
   onUpdate: () => void;
   onSelectId?: (id: string) => void;
+  /** The file was closed (Endorsing or Review): the list clears the selection. */
+  onClosed?: () => void;
 }) {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -424,11 +427,10 @@ export function LossDraftDetailPanel({
           <TabsTrigger value="docs" className="flex-1 text-xs">
             Docs ({docs.filter(d => d.is_required && !d.is_submitted).length})
           </TabsTrigger>
-          {isMonitored && (
-            <TabsTrigger value="releases" className="flex-1 text-xs">
-              Draws ({releases.length})
-            </TabsTrigger>
-          )}
+          {/* The claim ledger lives on this tab, so every file has it; only monitored files have draws. */}
+          <TabsTrigger value="releases" className="flex-1 text-xs">
+            {isMonitored ? `Draws (${releases.length})` : "Ledger"}
+          </TabsTrigger>
           <TabsTrigger value="partners" className="flex-1 text-xs gap-1">
             <Share2 className="h-3 w-3" /> Partners
           </TabsTrigger>
@@ -445,6 +447,7 @@ export function LossDraftDetailPanel({
             lossDraftId={lossDraftId}
             draft={draft}
             onChanged={handleChanged}
+            onClosed={onClosed}
           />
         </TabsContent>
 
@@ -465,7 +468,12 @@ export function LossDraftDetailPanel({
           value="releases"
           className="mt-0 min-h-0 flex-1 overflow-hidden data-[state=inactive]:hidden"
         >
-          <LossDraftReleasesTab releases={releases} />
+          <LossDraftReleasesTab
+            releases={releases}
+            draft={draft}
+            onChanged={handleChanged}
+            showDraws={isMonitored}
+          />
         </TabsContent>
 
         <TabsContent
