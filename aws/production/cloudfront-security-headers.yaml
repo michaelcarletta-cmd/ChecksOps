@@ -1,7 +1,21 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >
-  ChecksOps production browser security response headers policy. Source-only
-  definition: this template does not attach the policy to any CloudFront behavior.
+  ChecksOps production browser security response headers policy (SH-1 baseline).
+  Source-only definition: this template does not attach the policy to any CloudFront
+  behavior. Runbook: ops/deployment-guard/PRODUCTION_CSP_HEADERS.md.
+
+# The Content-Security-Policy is no longer deferred: it is managed in place on the live policy
+# 756a8f23-68dd-4f8a-8293-5a2fd08f919a (default behavior, /prep, /prep/*) by the guarded tool
+# guarded-production-csp-headers.yml (scripts/deployment-guard/production-csp-headers.mjs):
+#   enforce: this SecurityHeadersConfig plus
+#            ContentSecurityPolicy: { ContentSecurityPolicy: buildCsp({ environment: 'production',
+#                                     indexHtml: <live production index.html>, enforce: true }),
+#                                     Override: true }
+#            and the comment "Low-risk browser security headers plus the enforcing SPA CSP
+#            (guarded-production-csp-headers.yml)."
+#   revert:  exactly this config again (no CSP, the comment below).
+# This resource stays the SH-1 baseline and the revert target, so it never sets a CSP itself
+# (loadTemplatePolicy refuses one); every other header here is sent byte-for-byte on enforce.
 
 Resources:
   ProductionBrowserSecurityHeadersPolicy:

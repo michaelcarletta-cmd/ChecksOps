@@ -9,8 +9,10 @@ if injected content ever reaches the page.
 | `scripts/deployment-guard/lib/spa-csp.mjs` | builds the policy for staging or production; hashes `index.html`'s inline script |
 | `aws/staging/cloudfront-security-headers.yaml` | source-only staging response headers policy: the production baseline headers plus `Content-Security-Policy-Report-Only` |
 | `.github/workflows/guarded-staging-csp-headers.yml` | the guarded staging tool for step 1: inspect, apply (create the policy, attach it), rollback (detach); `ops/deployment-guard/STAGING_CSP_HEADERS.md` |
+| `.github/workflows/guarded-production-csp-headers.yml` | the guarded production tool for step 5: inspect, enforce, revert, in place on policy `756a8f23-…`; `ops/deployment-guard/PRODUCTION_CSP_HEADERS.md` |
 
-Tests: `aws/tests/spa-csp.test.mjs`, `aws/tests/github-staging-csp-headers.test.mjs`.
+Tests: `aws/tests/spa-csp.test.mjs`, `aws/tests/github-staging-csp-headers.test.mjs`,
+`aws/tests/github-production-csp-headers.test.mjs`.
 
 ## Live state (read-only, 2026-10-30, `user/claude-code`)
 
@@ -84,8 +86,15 @@ Tests: `aws/tests/spa-csp.test.mjs`, `aws/tests/github-staging-csp-headers.test.
    report-only policy again), or `mode: rollback`, "DETACH CSP FROM STAGING" (no policy at all).
    Inspect reports `ENFORCING_CURRENT` after it, `ENFORCING_STALE` once a new `index.html` changes
    the inline-script hash (enforce again refreshes it); `apply` is refused while enforcing.
-4. **Production report-only**, then **production enforce**, on the production policy
-   `756a8f23-…`, each on the owner's approval of that change.
+4. **Production report-only**: skipped. Owner, 2026-10-31: "Production CSP: whether to roll it out
+   now. It has been enforced on staging without problems. - roll out"; there is no report endpoint
+   (open decision 2), so report-only on production would only show in visitors' consoles.
+5. **Production enforce**, in place on the production policy `756a8f23-…` (owner, 2026-10-31: "build
+   the production CSP tooling, in place"): `guarded-production-csp-headers.yml`, `mode: inspect`
+   (expect `BASELINE`), then `mode: enforce` with the inspect's snapshot SHA-256, staging acceptance
+   `https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/41086648035` and the owner's words
+   "ENFORCE CSP ON PRODUCTION". Way back: `mode: revert`, "REMOVE CSP FROM PRODUCTION" (the SH-1
+   baseline, no CSP). `ops/deployment-guard/PRODUCTION_CSP_HEADERS.md`.
 
 ## Staging click-through (2026-10-30)
 
@@ -119,7 +128,20 @@ object stays. Report-only never blocks anything. From enforcing, `mode: revert` 
 REPORT-ONLY ON STAGING" goes back to report-only instead (policy only); rollback also works from
 enforcing.
 
+## Staging enforce (2026-10-30)
+
+Run 41086648035 (`mode: enforce`, main `927c79d59c7de3f4a76b41ec217c08018b253500`, operator
+`michaelcarletta-cmd`), after run 41085684008 on the same commit. From its log: the writer printed
+`"ok":true,"action":"enforce"` on policy `d3f84b15-c4db-481c-98cb-64eb541619fe`, `before_fingerprint`
+`fec5d708b69825371db1f018ed37ce02599a17119b4ae8a534e31beac4f6ba7f`, `after_fingerprint`
+`7a222f594b383ee3d07062f382e8f1fa8100af29c000c3157200a7e383e59d5d`, `index_html_sha256`
+`36bedd1fc9cffac3d270992539c220ee593fd5467d7379899ec4d569887d30c6`; the verify step printed
+`"state": "VERIFIED"` (distribution ETag `E3AEGXETSR30VB`) and the public staging check passed with
+the expected enforcing `Content-Security-Policy`. Owner, 2026-10-31: "It has been enforced on
+staging without problems." This cleared step 3 and is the staging acceptance reference for step 5.
+
 ## Not done yet
 
-Staging enforce is in source (`mode: enforce`) but not run: it waits for the owner's "ENFORCE CSP ON
-STAGING" on a fresh inspect. Production report-only and production enforce. No production change.
+Production enforce (step 5) is in source only: it waits for the owner to create the role
+(`ops/deployment-guard/production-csp-headers/README.md`), then a fresh inspect and the owner's
+"ENFORCE CSP ON PRODUCTION". No production change.
