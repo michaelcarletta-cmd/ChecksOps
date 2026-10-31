@@ -95,6 +95,7 @@ node scripts/deployment-guard/sql131-financial-totp-functions-no-public-producti
 node scripts/deployment-guard/sql132-financial-totp-code-check-lockout-production-apply.mjs --inspect   # financial TOTP lockout: ten code checks without a success lock the enrollment for 15 minutes (ops/production-sql-132-apply.md)
 node scripts/deployment-guard/sql133-financial-totp-admin-reset-enrollment-production-apply.mjs --inspect   # teammate reset of a financial TOTP enrollment: the DEFINER function re-checks the API's gate and deletes the target's row (ops/production-sql-133-apply.md)
 node scripts/deployment-guard/sql134-loss-draft-escrow-write-grants-production-apply.mjs --inspect   # Loss Draft escrow and draw records: column UPDATE on loss_draft_tracking, column INSERT on loss_draft_releases (ops/production-sql-134-apply.md)
+node scripts/deployment-guard/sql135-check-create-insert-grant-production-apply.mjs --inspect   # check create: column INSERT on the twenty-four check_intake_items columns the create names, for checksops; authenticated INSERT on them revoked (ops/production-sql-135-apply.md)
 # Production SQL 71, 77-89 and 90-102 on the runner, one invocation (ops/production-sql-one-shot.md)
 node scripts/deployment-guard/production-sql-one-shot.mjs --migration sql80 --phase inspect ...
 node scripts/deployment-guard/verify-live.mjs --input path/to/live.json
