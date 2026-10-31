@@ -11,6 +11,7 @@ import { MoovError, withMoovContext } from '../parity/moov-client.mjs';
 import { fail, jsonResult, moovProductionReadContext } from '../parity/caller.mjs';
 import { loadMoovAccount } from '../parity/db.mjs';
 import { readWallet, syncWalletReadOnly } from '../parity/moov-wallet.mjs';
+import { setMoneyWriteFlag } from '../../money-write-flag.mjs';
 
 const ENVIRONMENT = 'production';
 
@@ -81,6 +82,9 @@ export async function handleProductionMoovWalletSync(event, deps = {}) {
       'request.aws_financial_permissions_activated',
       financialPermissionsActivated() ? '1' : '0',
     ]);
+    // The SQL 72 pair above is active only with AWS_FINANCIAL_PERMISSIONS_ACTIVATED; the
+    // server-only money-write flag covers the payment_wallets save either way (finding 14).
+    await setMoneyWriteFlag(client);
     const fetchImpl = deps.fetchImpl || fetch;
     try {
       const result = await withMoovContext({ ...ctx.moovContext, fetchImpl }, () => syncProductionWallet({

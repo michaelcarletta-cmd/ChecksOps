@@ -350,6 +350,16 @@ test('moov-transfer-create ports production facilitator POST, integer cents, per
     const transferCallOrder = calls.findIndex((c) => c.url.includes('/transfers') && c.method === 'POST');
     assert.ok(insertIdx >= 0);
     assert.equal(typeof transferCallOrder, 'number');
+    // Finding 14 step 1: the parity dispatch sets the server-only money-write flag in this
+    // transaction (after BEGIN) before the handler's first transfer write and every later one.
+    const flagIdx = client.queries.findIndex((q) => q.sql === "SELECT set_config('request.money_write', '1', true)");
+    const beginIdx = client.queries.map((q) => q.sql).lastIndexOf('BEGIN');
+    assert.ok(flagIdx > beginIdx && beginIdx >= 0, 'money-write flag set inside the transaction');
+    assert.ok(flagIdx < insertIdx, 'money-write flag set before the payment_transfers insert');
+    const transferUpdates = client.queries
+      .map((q, i) => (q.sql.includes('UPDATE public.payment_transfers') ? i : -1))
+      .filter((i) => i >= 0);
+    for (const i of transferUpdates) assert.ok(flagIdx < i);
   });
 });
 

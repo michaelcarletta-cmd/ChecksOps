@@ -5,6 +5,8 @@
  * Production monthly billing POST remains independently gated.
  * This module never treats SUBMITTED / PENDING / ORIGINATED as received.
  */
+import { setMoneyWriteFlag } from './money-write-flag.mjs';
+
 export const COLLECTION_CONTRACT_ID = 'tenant-collection-v2';
 export const COLLECTION_CONTRACT_VERSION = '2.0.0';
 export const COLLECTION_CONTRACT_STATUS = 'PROPOSED / STAGING';
@@ -226,6 +228,7 @@ export async function createPostgresCollectionStore(client) {
     async putObligation(row) {
       if (!row?.id) return row;
       const notesSuffix = row.collection_notes ? ` · collection_v2:${row.collection_notes}` : '';
+      await setMoneyWriteFlag(client).catch(() => {});
       return (await client.query(
         `UPDATE public.tenant_maintenance_payments SET
            status = COALESCE($2, status),
@@ -273,6 +276,7 @@ export async function createPostgresCollectionStore(client) {
         source_account_id: row.source_account_id || null,
       });
       const existing = await this.getLeg(row.idempotency_key);
+      await setMoneyWriteFlag(client).catch(() => {});
       if (existing) {
         return (await client.query(
           `UPDATE public.payment_transfers SET

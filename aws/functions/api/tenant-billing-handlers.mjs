@@ -13,6 +13,7 @@
  * `destination-set`). There is no scheduled billing (manual_billing_only).
  */
 import { ignoredSpoof, parseBody, withIdentityWrite } from './data.mjs';
+import { setMoneyWriteFlag } from './money-write-flag.mjs';
 import {
   actorIsPlatformOwner,
   applyBillingProviderEvent,
@@ -609,6 +610,7 @@ export const handleTenantBillingAuthorize = async (event, deps = {}) => {
       });
     }
     if (body.action === 'pause' || body.auto_debit_enabled === false) {
+      await setMoneyWriteFlag(client);
       await client.query(
         `UPDATE public.tenant_billing_accounts
          SET auto_debit_enabled = false, updated_at = now()

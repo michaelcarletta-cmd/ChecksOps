@@ -61,6 +61,22 @@ const APPLY_EVENT_STAGING_ONLY_REL = 'aws/tests/fixtures/production-billing-appl
 const APPLY_EVENT_STAGING_ONLY_APPLIED_REL = 'aws/tests/fixtures/production-billing-apply-event-staging-only-applied-manifest-2026-10-30.json';
 // tenant-billing-handlers.mjs as the tenant lifecycle production run 40425235000 applied it.
 const TENANT_LIFECYCLE_APPLIED_BYTES = 'b3d8594416e257a8ff6658c677c9d8435ad18f92e0ad34968838f2b275ccb824';
+// Money-write flag (2026-10-31, finding 14 step 1 of 2): planned ADD of money-write-flag.mjs and REPLACE of
+// seven members from the bytes their rows recorded (its own test below). Earlier tests whose row it moved on
+// follow the row there with assertMovedToMoneyWrite.
+const MONEY_WRITE_FLAG_REL = 'aws/tests/fixtures/production-money-write-flag-manifest-2026-10-31.json';
+const MONEY_WRITE_FLAG = JSON.parse(fs.readFileSync(path.join(ROOT, MONEY_WRITE_FLAG_REL), 'utf8'));
+const assertMovedToMoneyWrite = (member, { live, previous }) => {
+  const row = PLAN.members[member];
+  assert.equal(row.operation, 'replace', member);
+  assert.equal(row.manifest, MONEY_WRITE_FLAG_REL, member);
+  assert.equal(row.accepted_sha256, sha(`aws/functions/api/${member}`), member);
+  assert.notEqual(row.accepted_sha256, live, member);
+  assert.equal(row.expected_live_sha256, live, member);
+  assert.deepEqual(MONEY_WRITE_FLAG.members[member], {
+    live_sha256: live, accepted_sha256: row.accepted_sha256, operation: 'replace', previous_manifest: previous,
+  }, member);
+};
 // data.mjs as production run 40945542902 applied it (the contractor verification status gate).
 const CONTRACTOR_GATE_BYTES = 'e2415f9046e3288e2bf3e296bf716a9f3e0c2777fe930590b316c8aec79559eb';
 // Public partner codes (2026-10-29, finding 9): planned REPLACE of data.mjs from the contractor gate's applied bytes.
@@ -1077,6 +1093,12 @@ test('fee collection: eleven members on the fee manifest, collection-v2 then des
       assert.equal(row.sql_before, SQL98);
       continue;
     }
+    if (MONEY_WRITE_FLAG.members[member]) {
+      // Moved on to the money-write flag REPLACE (finding 14 step 1), which starts from the fee bytes.
+      assertMovedToMoneyWrite(member, { live: fees.members[member].accepted_sha256, previous: MANIFEST_FEES });
+      assert.equal(resolvePlannedMember(member, { root: ROOT, plan: PLAN }).ok, true, member);
+      continue;
+    }
     assert.equal(row.manifest, MANIFEST_FEES, member);
     assert.equal(row.operation, ADDS.has(member) ? 'add' : 'replace', member);
     assert.equal(sha(`aws/functions/api/${member}`), row.accepted_sha256, member);
@@ -1087,8 +1109,9 @@ test('fee collection: eleven members on the fee manifest, collection-v2 then des
     assert.equal(fees.members[member].supersedes_unapplied_manifest, MANIFEST_RELEASE, member);
     assert.equal(fees.members[member].live_sha256, release.members[member].live_sha256, member);
   }
-  // New to the plan: the 2026-10-11 live snapshot values.
-  assert.equal(PLAN.members[COLLECTION].expected_live_sha256, '8a66f54d3c2785162a1643218e18b4d3c251230cf2a7f98a1ecb4ede8939fb66');
+  // New to the plan: the 2026-10-11 live snapshot values (the collection row has since moved on to the
+  // money-write flag REPLACE, which expects the fee bytes live; checked above).
+  assert.equal(fees.members[COLLECTION].live_sha256, '8a66f54d3c2785162a1643218e18b4d3c251230cf2a7f98a1ecb4ede8939fb66');
   assert.equal(PLAN.members[DESTINATION].expected_live_sha256, '7f9f24569d8d3112bcb829380de17b56ac5076fe8a8b38fd6a7633b44bcdfd80');
   // provider-flags.mjs (locked) is main's bytes and never an overlay member. The 2026-10-21 full-package
   // rebuilds (lambda-rebuild-plan.json) put main's 122b8769... bytes live in both environments; the
@@ -1764,11 +1787,11 @@ test('send-fee billing: tenant-billing-engine.mjs replaced the 43d9a162 bytes; p
   const row = PLAN.members[ENGINE];
   assert.equal(row.operation, 'replace');
   // The row then followed the finding 25 REPLACE (billing database errors redacted, its own test),
-  // which started from these applied bytes and was applied 2026-10-31 (production run 41227499349):
-  // the row expects main's bytes and names their applied record.
-  assert.equal(row.manifest, BILLING_DB_ERROR_REDACTION_APPLIED_REL);
-  assert.equal(row.expected_live_sha256, row.accepted_sha256);
-  assert.equal(row.accepted_sha256, sha(`aws/functions/api/${ENGINE}`));
+  // which started from these applied bytes and was applied 2026-10-31 (production run 41227499349),
+  // and then the money-write flag REPLACE (finding 14 step 1, its own test), which starts from the
+  // finding 25 applied bytes.
+  const redacted = JSON.parse(fs.readFileSync(path.join(ROOT, BILLING_DB_ERROR_REDACTION_APPLIED_REL), 'utf8')).members[ENGINE].accepted_sha256;
+  assertMovedToMoneyWrite(ENGINE, { live: redacted, previous: BILLING_DB_ERROR_REDACTION_APPLIED_REL });
   assert.notEqual(row.accepted_sha256, LIVE);
   // The engine bills the fee SQL 120 writes at send time: SQL 120 stays its prerequisite.
   assert.equal(row.sql_before, 'aws/workflows/sql/120_usage_events_at_approval_and_send.sql');
@@ -2814,9 +2837,12 @@ test('Tenant lifecycle: tenant-billing-handlers.mjs replaced the bytes productio
   for (const runId of ['40424663073', '40425119783', '40425235000', '40425379817']) assert.match(applied.notes, new RegExp(`run ${runId}`), runId);
   assert.match(applied.notes, /RevisionId 70379dc2-6a82-4deb-944a-3de6b2bda245/);
   assert.match(PLAN.notes, /Tenant lifecycle applied 2026-10-27 on main 89159a7e2/);
-  // The row now follows the finding 6 REPLACE, which started from these applied bytes and was applied
-  // 2026-10-30 (production run 40992697854): the row expects its bytes and names that record.
-  assert.deepEqual(PLAN.members[HANDLERS], { operation: 'replace', accepted_sha256: sha(`aws/functions/api/${HANDLERS}`), expected_live_sha256: sha(`aws/functions/api/${HANDLERS}`), sql_before: SQL102, manifest: APPLY_EVENT_STAGING_ONLY_APPLIED_REL });
+  // The row then followed the finding 6 REPLACE, which started from these applied bytes and was applied
+  // 2026-10-30 (production run 40992697854), and then the money-write flag REPLACE (finding 14 step 1,
+  // its own test), which starts from the finding 6 applied bytes.
+  const finding6 = JSON.parse(fs.readFileSync(path.join(ROOT, APPLY_EVENT_STAGING_ONLY_APPLIED_REL), 'utf8')).members[HANDLERS].accepted_sha256;
+  assertMovedToMoneyWrite(HANDLERS, { live: finding6, previous: APPLY_EVENT_STAGING_ONLY_APPLIED_REL });
+  assert.equal(PLAN.members[HANDLERS].sql_before, SQL102);
   assert.match(fs.readFileSync(path.join(API, HANDLERS), 'utf8'), /needs database update SQL 117/);
   assert.equal(resolvePlannedMember(HANDLERS, { root: ROOT, plan: PLAN }).ok, true);
   const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: HANDLERS };
@@ -2824,7 +2850,7 @@ test('Tenant lifecycle: tenant-billing-handlers.mjs replaced the bytes productio
   for (const other of [LIVE, onMain]) {
     await assert.rejects(run(inspect, { root: ROOT, inspectLive: liveFor(HANDLERS, { sha256: other }) }), (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED, other);
   }
-  const now = await run(inspect, { root: ROOT, inspectLive: liveFor(HANDLERS) });
+  const now = await run(inspect, { root: ROOT, inspectLive: liveFor(HANDLERS, { sha256: PLAN.members[HANDLERS].accepted_sha256 }) });
   assert.equal(now.state, 'ALREADY_ACCEPTED');
 });
 
@@ -3991,7 +4017,9 @@ test('Public partner codes 2026-10-29: data.mjs applied on its own phrase, recor
 test('Billing apply-event staging only (finding 6): tenant-billing-handlers.mjs REPLACE from the tenant lifecycle applied bytes, SQL 102 still first, applied 2026-10-30', async () => {
   const MEMBER = 'tenant-billing-handlers.mjs';
   const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, APPLY_EVENT_STAGING_ONLY_REL), 'utf8'));
-  const accepted = sha(`aws/functions/api/${MEMBER}`);
+  // The bytes the finding 6 apply put live (its record); main has since moved on to the money-write flag.
+  const accepted = JSON.parse(fs.readFileSync(path.join(ROOT, APPLY_EVENT_STAGING_ONLY_APPLIED_REL), 'utf8')).members[MEMBER].accepted_sha256;
+  assert.notEqual(accepted, sha(`aws/functions/api/${MEMBER}`));
   const PREVIOUS = 'aws/tests/fixtures/production-tenant-lifecycle-applied-manifest-2026-10-27.json';
   const SQL102 = 'aws/workflows/sql/102_platform_owner_tenant_profile.sql';
   // The planning manifest keeps the pre-apply state.
@@ -4011,13 +4039,9 @@ test('Billing apply-event staging only (finding 6): tenant-billing-handlers.mjs 
     assert.ok(applied.notes.includes(evidence), evidence);
   }
   assert.deepEqual(applied.members, { [MEMBER]: { live_sha256: accepted, accepted_sha256: accepted, operation: 'replace', previous_manifest: APPLY_EVENT_STAGING_ONLY_REL } });
-  assert.deepEqual(PLAN.members[MEMBER], {
-    operation: 'replace',
-    accepted_sha256: accepted,
-    expected_live_sha256: accepted,
-    sql_before: SQL102,
-    manifest: APPLY_EVENT_STAGING_ONLY_APPLIED_REL,
-  });
+  // The row then moved on to the money-write flag REPLACE (finding 14 step 1), which starts from these bytes.
+  assertMovedToMoneyWrite(MEMBER, { live: accepted, previous: APPLY_EVENT_STAGING_ONLY_APPLIED_REL });
+  assert.equal(PLAN.members[MEMBER].sql_before, SQL102);
   assert.ok(PLAN.notes.includes('Billing apply-event staging only applied 2026-10-30 (production run 40992697854'));
   assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
   const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
@@ -4027,8 +4051,9 @@ test('Billing apply-event staging only (finding 6): tenant-billing-handlers.mjs 
   const ready = await run(inspect, { root: ROOT, plan: before, inspectLive: liveFor(MEMBER, { plan: before, sha256: TENANT_LIFECYCLE_APPLIED_BYTES }) });
   assert.equal(ready.state, 'READY');
   assert.equal(ready.mutation, false);
-  const done = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER) });
-  assert.equal(done.state, 'ALREADY_ACCEPTED');
+  // The applied bytes are now the money-write flag REPLACE's starting point: READY, not done.
+  const done = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: accepted }) });
+  assert.equal(done.state, 'READY');
   assert.equal(done.mutation, false);
   // The pre-apply bytes are no longer an accepted live state.
   for (const other of [TENANT_LIFECYCLE_APPLIED_BYTES, 'c'.repeat(64)]) {
@@ -4556,6 +4581,9 @@ test('Moov webhook body confirmation (2026-10-31): ADD moov-webhook-confirm.mjs 
   const PREVIOUS = 'aws/tests/fixtures/production-moov-transfer-returns-manifest-2026-10-21.json';
   const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, REL), 'utf8'));
   const accepted = Object.fromEntries([CONFIRM, WEBHOOKS, SETTLEMENT].map((m) => [m, sha(`aws/functions/api/${m}`)]));
+  // Settlement: the bytes its apply put live (the record); main has since moved on to the money-write flag.
+  accepted[SETTLEMENT] = JSON.parse(fs.readFileSync(path.join(ROOT, 'aws/tests/fixtures/production-moov-webhook-body-auth-applied-manifest-2026-10-31.json'), 'utf8')).members[SETTLEMENT].accepted_sha256;
+  assert.notEqual(accepted[SETTLEMENT], sha(`aws/functions/api/${SETTLEMENT}`));
   assert.equal(manifest.workstream_id, 'moov-webhook-body-auth');
   assert.equal(manifest.deploy_authorized, false);
   assert.match(manifest.authorization, /^Pending owner review/);
@@ -4625,6 +4653,13 @@ test('Moov webhook body confirmation (2026-10-31): ADD moov-webhook-confirm.mjs 
   for (const member of [CONFIRM, WEBHOOKS, SETTLEMENT]) {
     const live = manifest.members[member].live_sha256;
     const recorded = live !== null && APPLIED_MEMBERS.includes(member);
+    if (member === SETTLEMENT) {
+      // Moved on to the money-write flag REPLACE (finding 14 step 1), which starts from the applied bytes.
+      assertMovedToMoneyWrite(member, { live: accepted[member], previous: APPLIED_REL });
+      assert.equal(PLAN.members[member].sql_before, null);
+      assert.equal(resolvePlannedMember(member, { root: ROOT, plan: PLAN }).ok, true, member);
+      continue;
+    }
     assert.deepEqual(PLAN.members[member], {
       operation: live === null ? 'add' : 'replace',
       accepted_sha256: accepted[member],
@@ -4667,7 +4702,8 @@ test('Moov webhook body confirmation (2026-10-31): ADD moov-webhook-confirm.mjs 
     assert.equal(pre.state, 'READY', member);
     assert.equal(pre.mutation, false, member);
     const done = await run(inspect(member), { root: ROOT, inspectLive: liveFor(member, { sha256: accepted[member], extra: [CONFIRM] }) });
-    assert.equal(done.state, 'ALREADY_ACCEPTED', member);
+    // Settlement's applied bytes are now the money-write flag REPLACE's starting point.
+    assert.equal(done.state, member === SETTLEMENT ? 'READY' : 'ALREADY_ACCEPTED', member);
     // Once applied, the pre-apply bytes are a reconciliation stop too, never an apply.
     for (const other of APPLIED_MEMBERS.includes(member) ? [live, 'c'.repeat(64)] : ['c'.repeat(64)]) {
       await assert.rejects(
@@ -4710,7 +4746,9 @@ test('Billing database errors redacted (finding 25): tenant-billing-engine.mjs R
   // tenant-billing-engine.mjs as the send-fee billing production run 40577608750 applied it.
   const SEND_FEE_APPLIED_BYTES = 'bccffbe7aa9b21d3052a832f1d2c4b9ec4b333b1727156773b1ac034be96860c';
   const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, MANIFEST_REL), 'utf8'));
-  const accepted = sha(`aws/functions/api/${MEMBER}`);
+  // The bytes the finding 25 apply put live (its record); main has since moved on to the money-write flag.
+  const accepted = JSON.parse(fs.readFileSync(path.join(ROOT, BILLING_DB_ERROR_REDACTION_APPLIED_REL), 'utf8')).members[MEMBER].accepted_sha256;
+  assert.notEqual(accepted, sha(`aws/functions/api/${MEMBER}`));
   assert.notEqual(accepted, SEND_FEE_APPLIED_BYTES);
   assert.equal(manifest.workstream_id, 'billing-db-error-redaction');
   assert.equal(manifest.deploy_authorized, false);
@@ -4735,13 +4773,9 @@ test('Billing database errors redacted (finding 25): tenant-billing-engine.mjs R
     assert.ok(applied.notes.includes(evidence), evidence);
   }
   assert.deepEqual(applied.members, { [MEMBER]: { live_sha256: accepted, accepted_sha256: accepted, operation: 'replace', previous_manifest: MANIFEST_REL } });
-  assert.deepEqual(PLAN.members[MEMBER], {
-    operation: 'replace',
-    accepted_sha256: accepted,
-    expected_live_sha256: accepted,
-    sql_before: 'aws/workflows/sql/120_usage_events_at_approval_and_send.sql',
-    manifest: BILLING_DB_ERROR_REDACTION_APPLIED_REL,
-  });
+  // The row then moved on to the money-write flag REPLACE (finding 14 step 1), which starts from these bytes.
+  assertMovedToMoneyWrite(MEMBER, { live: accepted, previous: BILLING_DB_ERROR_REDACTION_APPLIED_REL });
+  assert.equal(PLAN.members[MEMBER].sql_before, 'aws/workflows/sql/120_usage_events_at_approval_and_send.sql');
   assert.ok(PLAN.notes.includes('Billing database errors redacted tenant-billing-engine.mjs applied 2026-10-31 (production run 41227499349'));
   // The one new import (data.mjs, for sanitizeLogText) is a member recorded live at its accepted bytes.
   const source = fs.readFileSync(path.join(API, MEMBER), 'utf8');
@@ -4756,8 +4790,9 @@ test('Billing database errors redacted (finding 25): tenant-billing-engine.mjs R
   const ready = await run(inspect, { root: ROOT, plan: before, inspectLive: liveFor(MEMBER, { plan: before, sha256: SEND_FEE_APPLIED_BYTES }) });
   assert.equal(ready.state, 'READY');
   assert.equal(ready.mutation, false);
-  const done = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER) });
-  assert.equal(done.state, 'ALREADY_ACCEPTED');
+  // The applied bytes are now the money-write flag REPLACE's starting point: READY, not done.
+  const done = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: accepted }) });
+  assert.equal(done.state, 'READY');
   assert.equal(done.mutation, false);
   // The pre-apply bccffbe7 bytes, or anything else, live: a reconciliation stop, never an apply.
   for (const other of [SEND_FEE_APPLIED_BYTES, 'c'.repeat(64)]) {
@@ -4769,4 +4804,82 @@ test('Billing database errors redacted (finding 25): tenant-billing-engine.mjs R
   }
   assert.doesNotMatch(source, /detail:\s*error\.message/);
   assert.match(source, /export const logBillingDbFailure/);
+});
+
+test('Money-write flag (finding 14 step 1, 2026-10-31): ADD money-write-flag.mjs before its first importer, REPLACE seven members from their recorded bytes, planning only', async () => {
+  const ADD = 'money-write-flag.mjs';
+  const REPLACES = [
+    'providers/production/moov-wallet-sync.mjs',
+    'providers/parity/moov-functions.mjs',
+    'tenant-settings-handlers.mjs',
+    'tenant-collection-v2-settlement.mjs',
+    'tenant-collection-v2.mjs',
+    'tenant-billing-engine.mjs',
+    'tenant-billing-handlers.mjs',
+  ];
+  const manifest = MONEY_WRITE_FLAG;
+  assert.equal(manifest.workstream_id, 'money-write-flag');
+  assert.equal(manifest.deploy_authorized, false);
+  assert.match(manifest.authorization, /^Pending owner review \(2026-10-31\)/);
+  assert.equal(manifest.live_lambda, FUNCTION_NAME);
+  for (const evidence of ['finding 14', 'request.money_write', 'SQL 136', '39669873076', 'behavior-neutral']) assert.ok(manifest.notes.includes(evidence), evidence);
+  assert.deepEqual(Object.keys(manifest.members), [ADD, ...REPLACES]);
+  assert.deepEqual(manifest.members[ADD], { live_sha256: null, accepted_sha256: sha(`aws/functions/api/${ADD}`), operation: 'add' });
+  assert.deepEqual(PLAN.members[ADD], { operation: 'add', accepted_sha256: sha(`aws/functions/api/${ADD}`), expected_live_sha256: null, sql_before: null, manifest: MONEY_WRITE_FLAG_REL });
+  for (const member of REPLACES) {
+    const entry = manifest.members[member];
+    // Each REPLACE starts from the bytes its previous manifest accepted (live by the third rebuild or a recorded apply).
+    assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, entry.previous_manifest), 'utf8')).members[member].accepted_sha256, entry.live_sha256, member);
+    assertMovedToMoneyWrite(member, { live: entry.live_sha256, previous: entry.previous_manifest });
+    assert.equal(resolvePlannedMember(member, { root: ROOT, plan: PLAN }).ok, true, member);
+    // Every member imports the added module at load, which comes earlier in plan order.
+    assert.ok(localImports(fs.readFileSync(path.join(API, member), 'utf8'), member).includes(ADD), member);
+    assert.ok(PLAN.order.indexOf(ADD) < PLAN.order.indexOf(member), member);
+  }
+  // SQL holds are unchanged (SQL 120 for the engine, SQL 102 for the handlers); nothing waits for SQL 136.
+  assert.equal(PLAN.members['tenant-billing-engine.mjs'].sql_before, 'aws/workflows/sql/120_usage_events_at_approval_and_send.sql');
+  assert.equal(PLAN.members['tenant-billing-handlers.mjs'].sql_before, 'aws/workflows/sql/102_platform_owner_tenant_profile.sql');
+  for (const member of [ADD, 'providers/production/moov-wallet-sync.mjs', 'providers/parity/moov-functions.mjs', 'tenant-settings-handlers.mjs', 'tenant-collection-v2-settlement.mjs', 'tenant-collection-v2.mjs']) {
+    assert.equal(PLAN.members[member].sql_before, null, member);
+  }
+  // The added module is placed just before the first member that imports it and imports nothing itself.
+  assert.equal(PLAN.order.indexOf(ADD) + 1, PLAN.order.indexOf('providers/production/moov-wallet-sync.mjs'));
+  assert.deepEqual(localImports(fs.readFileSync(path.join(API, ADD), 'utf8'), ADD), []);
+  for (const name of PLAN.order) {
+    if (localImports(fs.readFileSync(path.join(API, name), 'utf8'), name).includes(ADD)) assert.ok(REPLACES.includes(name), name);
+  }
+  assert.ok(WORKFLOW.includes(`          - ${ADD}\n          - providers/production/moov-wallet-sync.mjs\n`));
+  // The non-member writers that changed reach a function only with a rebuilt ZIP.
+  for (const name of ['invoice-provider.mjs', 'mortgage-ops-usage.mjs', 'tenant-collection-v2-uat.mjs']) {
+    assert.equal(PLAN.order.includes(name), false, name);
+    assert.ok(PLAN.notes.includes(name), name);
+  }
+  assert.ok(PLAN.notes.includes('Money-write flag (2026-10-31, security audit finding 14 step 1 of 2; planning only, pending owner review)'));
+  const inspect = (member) => ({ ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: member });
+  // Not applied: the added module is absent (READY), and each REPLACE reads READY on its recorded live bytes.
+  const absent = await run(inspect(ADD), { root: ROOT, inspectLive: liveFor(ADD) });
+  assert.equal(absent.state, 'READY');
+  assert.equal(absent.mutation, false);
+  for (const member of REPLACES) {
+    const ready = await run(inspect(member), { root: ROOT, inspectLive: liveFor(member, { extra: [ADD] }) });
+    assert.equal(ready.state, 'READY', member);
+    await assert.rejects(
+      run(inspect(member), { root: ROOT, inspectLive: liveFor(member, { sha256: 'c'.repeat(64), extra: [ADD] }) }),
+      (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+      member,
+    );
+  }
+  // An importer is refused while the added module is not live yet.
+  await assert.rejects(
+    run(applyEnv('providers/production/moov-wallet-sync.mjs'), applyDeps('providers/production/moov-wallet-sync.mjs', { pending: [ADD] }).deps),
+    (error) => error.code === CODES.DEPLOYMENT_COLLISION,
+  );
+  // Each apply replays in plan order (dry: no mutation), one receipt per member.
+  for (const member of [ADD, ...REPLACES]) {
+    const { deps, calls } = applyDeps(member, member === ADD ? {} : { extra: [ADD] });
+    const result = await run(applyEnv(member), withSql98(member, deps));
+    assert.equal(result.mutation, false, member);
+    const op = PLAN.members[member].operation;
+    assert.deepEqual(calls.receipt.owned_member_ops, { replace: op === 'replace' ? [member] : [], add: op === 'add' ? [member] : [] }, member);
+  }
 });

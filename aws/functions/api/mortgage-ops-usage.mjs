@@ -10,6 +10,12 @@
  * This module does not import destination/collection engines or
  * provider posting paths.
  */
+
+// Server-only money-write flag (finding 14): the same statement as
+// money-write-flag.mjs SET_MONEY_WRITE_SQL, inlined because this module stays
+// import-free (mortgage-ops-usage.test.mjs asserts both).
+export const MORTGAGE_USAGE_MONEY_WRITE_SQL = "SELECT set_config('request.money_write', '1', true)";
+
 export const DEFAULT_MORTGAGE_INITIAL_RATE_CENTS = 1000;
 export const DEFAULT_MORTGAGE_ADDITIONAL_RATE_CENTS = 500;
 export const FEE_MORTGAGE_INITIAL = 'mortgage_ops_initial';
@@ -193,6 +199,8 @@ export async function accrueMortgageOpsAcceptedRequest(client, {
         preview: true,
       };
     }
+    // Server-only money-write flag for the check_billing_events insert (finding 14).
+    await client.query(MORTGAGE_USAGE_MONEY_WRITE_SQL).catch(() => {});
     return (await client.query(
       `INSERT INTO public.check_billing_events (
          tenant_id, check_intake_item_id, payment_transfer_id, event_type,

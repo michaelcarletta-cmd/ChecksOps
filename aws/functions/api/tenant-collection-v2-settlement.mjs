@@ -13,6 +13,7 @@ import {
   classifyCollectionStatus,
   receivedCentsFromLegs,
 } from './tenant-collection-v2.mjs';
+import { setMoneyWriteFlag } from './money-write-flag.mjs';
 
 export const COLLECTION_V2_COMPLETION_EVENT = 'collection_v2.completed';
 export const CHECKSOPS_KIND_MONTHLY = 'monthly_subscription';
@@ -244,6 +245,7 @@ export async function applyBillingProviderEvent(client, {
 
   if (collectionLeg && mapped) {
     const settledAt = asIso(completedAt);
+    await setMoneyWriteFlag(client).catch(() => {});
     await client.query(
       `UPDATE public.payment_transfers SET
          status = $2,
@@ -325,6 +327,7 @@ export async function applyBillingProviderEvent(client, {
   }
 
   const settledAt = nextStatus === 'settled' ? (asIso(completedAt) || null) : null;
+  await setMoneyWriteFlag(client);
   const saved = (await client.query(
     `UPDATE public.tenant_maintenance_payments SET
        status = $2,

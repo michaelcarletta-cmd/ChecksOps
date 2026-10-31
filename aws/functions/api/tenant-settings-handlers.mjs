@@ -4,6 +4,7 @@
  */
 import { ignoredSpoof, parseBody, withIdentity } from './data.mjs';
 import { resolveTenantAccess } from './tenant-email-domain.mjs';
+import { setMoneyWriteFlag } from './money-write-flag.mjs';
 
 export const BILLING_ACH_CONSENT_VERSION = '2026-01-ach-debit-v1';
 
@@ -203,6 +204,8 @@ export const saveTenantBillingAuthorization = async (client, {
     account_number_encrypted: existing?.account_number_encrypted || '',
   };
 
+  // Server-only money-write flag for the tenant_billing_accounts write (finding 14).
+  await setMoneyWriteFlag(client);
   const saved = existing
     ? (await client.query(
       `UPDATE public.tenant_billing_accounts SET
@@ -256,6 +259,7 @@ export const saveTenantBillingAuthorization = async (client, {
 export const toggleTenantAutoDebit = async (client, { tenantId, enabled }) => {
   const existing = await loadAuthorization(client, tenantId);
   if (!existing) return { ok: false, statusCode: 404, error: 'missing_authorization' };
+  await setMoneyWriteFlag(client);
   const rows = (await client.query(
     `UPDATE public.tenant_billing_accounts
      SET auto_debit_enabled = $2::boolean, updated_at = now()

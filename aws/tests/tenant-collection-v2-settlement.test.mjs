@@ -396,6 +396,13 @@ test('existing payment-transfer legs synchronize without manufacturing a new one
   assert.equal(client.state.leg.status, 'settled');
   assert.equal(client.state.leg.completed_at, SETTLED_AT);
   assert.equal(client.queries.filter((query) => query.sql.includes('INSERT INTO public.payment_transfers')).length, 0);
+  // Finding 14 step 1: the server-only money-write flag is set before each settlement write.
+  const flag = "SELECT set_config('request.money_write', '1', true)";
+  for (const table of ['payment_transfers', 'tenant_maintenance_payments']) {
+    const at = client.queries.findIndex((query) => query.sql.includes(`UPDATE public.${table}`));
+    assert.ok(at > 0, table);
+    assert.equal(client.queries[at - 1].sql, flag, table);
+  }
 });
 
 test('webhook router uses durable transfer id and skips dry-run / pending', async () => {

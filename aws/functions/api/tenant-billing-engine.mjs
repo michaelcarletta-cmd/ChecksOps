@@ -17,6 +17,7 @@
  */
 import { createHash } from 'node:crypto';
 import { sanitizeLogText } from './data.mjs';
+import { setMoneyWriteFlag } from './money-write-flag.mjs';
 import { queueFeeInvoiceEmail } from './tenant-fee-invoice-email.mjs';
 import {
   billingEnvironment,
@@ -735,6 +736,7 @@ export async function persistMoovUsageForPeriod(client, { tenant, period, persis
       billed.set(`preview:${transfer.id}`, preview);
       continue;
     }
+    await setMoneyWriteFlag(client).catch(() => {});
     const inserted = (await client.query(
       `INSERT INTO public.check_billing_events (
          tenant_id, check_intake_item_id, payment_transfer_id, event_type,
@@ -872,6 +874,7 @@ export async function accrueMortgageOpsAcceptedRequest(client, {
         preview: true,
       };
     }
+    await setMoneyWriteFlag(client).catch(() => {});
     return (await client.query(
       `INSERT INTO public.check_billing_events (
          tenant_id, check_intake_item_id, payment_transfer_id, event_type,
@@ -1104,6 +1107,7 @@ export async function allocateInvoiceLines(client, { invoice, invoiceBuild }) {
       allocated += 1;
     }
     if (line.source_id) {
+      await setMoneyWriteFlag(client).catch(() => {});
       await client.query(
         `UPDATE public.check_billing_events
          SET invoice_id = $2::uuid, billing_period = COALESCE(billing_period, $3), status = CASE
@@ -1142,6 +1146,7 @@ export async function createOrGetOccurrence(client, {
   if (existing) return { ok: true, occurrence: existing, created: false, idempotency_key: key };
 
   const invoice = readiness.invoice || {};
+  await setMoneyWriteFlag(client);
   const inserted = (await client.query(
     `INSERT INTO public.tenant_maintenance_payments (
        tenant_id, amount_cents, monthly_rate_cents, discount_cents,
@@ -1397,6 +1402,7 @@ export async function submitOccurrence(client, {
     : (collected.error === 'RECONCILIATION_REQUIRED' ? 'failed' : 'failed');
   const failure = collected.ok ? null : collected.error;
 
+  await setMoneyWriteFlag(client);
   const saved = (await client.query(
     `UPDATE public.tenant_maintenance_payments SET
        status = $2,
@@ -1455,6 +1461,7 @@ export async function createOrGetVerificationOccurrence(client, {
     return { ok: true, occurrence: existing, created: false, idempotency_key: key };
   }
 
+  await setMoneyWriteFlag(client);
   const inserted = (await client.query(
     `INSERT INTO public.tenant_maintenance_payments (
        tenant_id, amount_cents, monthly_rate_cents, discount_cents,
@@ -1574,6 +1581,7 @@ export async function submitVerificationOccurrence(client, {
     }
   }
 
+  await setMoneyWriteFlag(client);
   const saved = (await client.query(
     `UPDATE public.tenant_maintenance_payments SET
        status = $2,
@@ -2151,6 +2159,7 @@ export async function applyBillingProviderEvent(client, {
     [providerTransferId],
   ).catch(() => ({ rows: [] }))).rows[0] || null;
   if (collectionLeg) {
+    await setMoneyWriteFlag(client).catch(() => {});
     await client.query(
       `UPDATE public.payment_transfers SET
          status = $2,
@@ -2208,6 +2217,7 @@ export async function applyBillingProviderEvent(client, {
           : mapped;
   }
 
+  await setMoneyWriteFlag(client);
   const saved = (await client.query(
     `UPDATE public.tenant_maintenance_payments SET
        status = $2,
@@ -2429,6 +2439,7 @@ export async function saveBillingAuthorization(client, {
     method.holder_name || 'Billing account',
   ];
 
+  await setMoneyWriteFlag(client);
   const saved = existing
     ? (await client.query(
       `UPDATE public.tenant_billing_accounts SET
