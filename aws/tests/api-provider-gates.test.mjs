@@ -454,14 +454,34 @@ test('webhook HTTP apply stays off unless sandbox execution is enabled', async (
     AWS_PROVIDER_EXECUTION_ENABLED: 'false',
     AWS_PROVIDER_WEBHOOK_DRY_RUN: 'true',
   }, async () => {
+    // The body is not signed: the apply reads the transfer back from the sandbox Moov account
+    // (moov-webhook-confirm.mjs) and writes Moov's status, not the body's.
+    const moovCalls = [];
+    const fetchImpl = async (url) => {
+      moovCalls.push(String(url));
+      const json = String(url).endsWith('/oauth2/token')
+        ? { access_token: 'tok', expires_in: 300 }
+        : { transferID: 'tr_sandbox_1', status: 'pending' };
+      return { ok: true, status: 200, text: async () => JSON.stringify(json) };
+    };
     const applied = await handleProviderRequest(event, '/webhooks/moov', 'POST', {
-      loadProviderSecrets: async () => ({ MOOV_WEBHOOK_SECRET: secret }),
+      loadProviderSecrets: async () => ({
+        MOOV_WEBHOOK_SECRET: secret,
+        MOOV_SANDBOX_PUBLIC_KEY: 'pk', MOOV_SANDBOX_SECRET_KEY: 'sk', MOOV_SANDBOX_PLATFORM_ACCOUNT_ID: 'platform-sbx',
+      }),
       loadDatabaseCredentials: async () => ({ host: 'localhost', username: 'checksops', password: 'x', database: 'checksops' }),
       createClient: () => client,
+      fetchImpl,
     });
     assert.equal(applied.applied, true);
     assert.equal(applied.productionRecordsMutated, false);
+    assert.equal(applied.liveProviderCalled, true);
     assert.ok(applied.apply_mutations.includes('payment_transfers'));
+    assert.ok(moovCalls.some((url) => url.endsWith('/accounts/platform-sbx/transfers/tr_sandbox_1')), JSON.stringify(moovCalls));
+    const update = client.queries.find((q) => q.sql.includes('UPDATE public.payment_transfers'));
+    // Moov says pending; the body said completed.
+    assert.equal(update.params[1], 'pending');
+    assert.equal(update.params[2], 'pending');
   });
 });
 
