@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -13,7 +14,7 @@ import {
   MFA_AUTH_ROUTES,
 } from '../functions/api/auth-mfa.mjs';
 import { AUTH_ROUTES } from '../functions/api/auth-cognito.mjs';
-import { TOTP_CODE_CHECK_RATE_ACTION } from '../functions/api/auth-financial-totp.mjs';
+import { ENROLL_EMAIL_CODE_RATE_ACTION, TOTP_CODE_CHECK_RATE_ACTION } from '../functions/api/auth-financial-totp.mjs';
 import { timestepOf, totpAt, wrapKeyFromHex } from '../functions/api/financial-totp.mjs';
 import { CHECKALT_TOTP_ACTION } from '../functions/api/providers/production/checkalt-authz.mjs';
 
@@ -51,8 +52,12 @@ const createStore = ({
 } = {}) => {
   const enrollments = new Map();
   const rates = new Map();
+  // Each upsert gets its own enrolled_at, as now() in a new transaction does.
+  let upserts = 0;
   const stepups = [];
   const cognitoCalls = [];
+  // Emails the handlers send (finding 8: the enrollment code and the enrolled notice).
+  const mail = [];
   // SQL 132 applied (the function exists) unless a test says otherwise.
   const flags = { lockoutFunction };
   const client = {
@@ -89,7 +94,7 @@ const createStore = ({
           key_id: keyId,
           last_used_timestep: null,
           verified_at: null,
-          enrolled_at: new Date(NOW).toISOString(),
+          enrolled_at: new Date(NOW + (upserts += 1) * 1000).toISOString(),
           failed_attempts: 0,
           locked_until: null,
         });
@@ -175,6 +180,7 @@ const createStore = ({
     stepups,
     cognitoCalls,
     flags,
+    mail,
     mapping: {
       application_user_id: userId,
       email,
@@ -197,16 +203,39 @@ const depsOf = (store, extra = {}) => ({
   },
   loadWrapKey: async () => ({ key: wrapKeyFromHex(WRAP_HEX), keyId: 'test' }),
   listPasskeys: async () => 0,
+  sendViaSesOrSink: async (message) => {
+    store.mail.push(message);
+    return { mode: 'ses', results: [{ to: message.to, delivery: 'ses', status: 'sent', messageId: `ses-${store.mail.length}` }] };
+  },
   nowMs: NOW,
   ...extra,
 });
 
-const enrollTester = async (store) => {
-  const started = await handleMfaAssociate(eventOf({ email: TESTER_EMAIL }), depsOf(store));
+/** The code in the latest enrollment-code email. */
+const emailedCode = (store) => {
+  const sent = [...store.mail].reverse().find((m) => /setup code/.test(m.subject));
+  assert.ok(sent, 'an enrollment code email was sent');
+  return sent.text.match(/setup code is (\d{6})/)[1];
+};
+
+/** Finding 8: first associate emails a code (428), the second with the code issues the secret. */
+const associateWithEmailCode = async (store) => {
+  const challenged = await handleMfaAssociate(eventOf({ email: TESTER_EMAIL }), depsOf(store));
+  assert.equal(challenged.statusCode, 428, JSON.stringify(challenged));
+  assert.equal(challenged.error, 'email_code_required');
+  const started = await handleMfaAssociate(eventOf({
+    emailChallenge: challenged.emailChallenge,
+    emailCode: emailedCode(store),
+  }), depsOf(store));
   assert.equal(started.ok, true, JSON.stringify(started));
+  return { challenged, started };
+};
+
+const enrollTester = async (store) => {
+  const { started } = await associateWithEmailCode(store);
   const secret = started.totp.secret;
   const code = totpAt(secret, timestepOf(NOW));
-  const verified = await handleMfaVerify(eventOf({ code }), depsOf(store));
+  const verified = await handleMfaVerify(eventOf({ code, enrollmentTicket: started.enrollmentTicket }), depsOf(store));
   assert.equal(verified.ok, true, JSON.stringify(verified));
   return { secret, code, started, verified };
 };
@@ -519,7 +548,7 @@ test('enroll and step-up handlers never call Cognito software-token APIs', async
 
 test('enroll-start encrypts the secret at rest and never returns ciphertext', async () => {
   const store = createStore();
-  const started = await handleMfaAssociate(eventOf({ email: TESTER_EMAIL }), depsOf(store));
+  const { started } = await associateWithEmailCode(store);
   assert.equal(started.ok, true);
   const secret = started.totp.secret;
   const row = store.enrollments.get(TESTER_APP);
@@ -630,8 +659,9 @@ test('verified enrollment cannot be overwritten without an explicit reset', asyn
 
 test('unverified enroll-start may retry and replace the pending secret', async () => {
   const store = createStore();
-  const first = await handleMfaAssociate(eventOf({ email: TESTER_EMAIL }), depsOf(store));
-  const second = await handleMfaAssociate(eventOf({ email: TESTER_EMAIL }), depsOf(store));
+  // Each pending setup needs its own fresh email code (finding 8).
+  const { started: first } = await associateWithEmailCode(store);
+  const { started: second } = await associateWithEmailCode(store);
   assert.equal(first.ok, true);
   assert.equal(second.ok, true);
   assert.notEqual(second.totp.secret, first.totp.secret);
@@ -671,10 +701,10 @@ test('rate-limit storage returning no row fails closed', async () => {
 
 test('enroll-confirm does not write financial_stepup_log or burn last_used_timestep', async () => {
   const store = createStore();
-  const started = await handleMfaAssociate(eventOf({ email: TESTER_EMAIL }), depsOf(store));
+  const { started } = await associateWithEmailCode(store);
   const secret = started.totp.secret;
   const code = totpAt(secret, timestepOf(NOW));
-  const verified = await handleMfaVerify(eventOf({ code }), depsOf(store));
+  const verified = await handleMfaVerify(eventOf({ code, enrollmentTicket: started.enrollmentTicket }), depsOf(store));
   assert.equal(verified.ok, true);
   assert.equal(verified.recorded, false);
   assert.equal(store.stepups.length, 0);
@@ -728,7 +758,8 @@ test('enroll confirm and step-up share one budget of 5 code checks (audit findin
   assert.equal(store.stepups.length, 0);
   assert.equal(store.rates.get(`${TESTER_APP}:${TOTP_CODE_CHECK_RATE_ACTION}`), 7);
   assert.equal(store.rates.has(`${TESTER_APP}:step_up`), false);
-  assert.equal(store.rates.has(`${TESTER_APP}:enroll_confirm`), false);
+  // enroll_confirm counts the emailed setup code only (finding 8: one check in enrollTester), never a TOTP code.
+  assert.equal(store.rates.get(`${TESTER_APP}:enroll_confirm`), 1);
 });
 
 const wrongCodeFor = (code) => (code === '000000' ? '111111' : '000000');
@@ -863,4 +894,260 @@ test('a locked_until already on the row is refused with the wrong-code answer ev
   assert.equal(locked.error, 'mfa_step_up_failed');
   assert.equal(order.includes('mark'), false);
   assert.equal(store.stepups.length, 0);
+});
+
+// Finding 8 (security audit 2026-10-29): first-time enrollment needs a fresh email code. Owner
+// 2026-10-31: "First-time financial authenticator enrollment: whether it should require a fresh email
+// code. - yes".
+const withClock = async (offsetMs, fn) => {
+  const real = Date.now;
+  Date.now = () => real() + offsetMs;
+  try { return await fn(); } finally { Date.now = real; }
+};
+
+test('finding 8: associate without a fresh email code issues no secret, writes no row and emails a code to the verified address only', async () => {
+  const store = createStore();
+  // A spoofed body address is ignored: the code goes to the identity mapping's email.
+  const challenged = await handleMfaAssociate(eventOf({ email: 'attacker@example.com' }), depsOf(store));
+  assert.equal(challenged.ok, false);
+  assert.equal(challenged.statusCode, 428);
+  assert.equal(challenged.error, 'email_code_required');
+  assert.equal(challenged.emailCodeRequired, true);
+  assert.equal(challenged.totp, undefined);
+  assert.equal(challenged.enrollmentTicket, undefined);
+  assert.equal(store.enrollments.size, 0);
+  assert.equal(store.mail.length, 1);
+  assert.equal(store.mail[0].to, TESTER_EMAIL);
+  assert.equal(challenged.emailHint, 'c******@freedomadj.com');
+  const code = emailedCode(store);
+  // Neither the code nor its plain hash is in the answer (the challenge carries an HMAC only).
+  const blob = JSON.stringify(challenged);
+  assert.equal(blob.includes(code), false);
+  assert.equal(blob.includes(createHash('sha256').update(code).digest('hex')), false);
+  assert.equal(challenged.stagingDebugCode, undefined);
+  assert.ok(Date.parse(challenged.expiresAt) - Date.now() <= 10 * 60 * 1000);
+  // The send counts against enroll_start.
+  assert.equal(store.rates.get(`${TESTER_APP}:enroll_start`), 1);
+  // A code without its challenge, or a challenge without a code, is refused.
+  const noChallenge = await handleMfaAssociate(eventOf({ emailCode: code }), depsOf(store));
+  assert.equal(noChallenge.error, 'email_code_invalid');
+  const noCode = await handleMfaAssociate(eventOf({ emailChallenge: challenged.emailChallenge }), depsOf(store));
+  assert.equal(noCode.error, 'email_code_invalid');
+  assert.equal(store.enrollments.size, 0);
+});
+
+test('finding 8: a valid email code issues the secret and a ticket; verify activates and the user is emailed that an authenticator was added', async () => {
+  const store = createStore();
+  const { started } = await associateWithEmailCode(store);
+  assert.ok(started.totp.secret);
+  assert.match(started.enrollmentTicket, /^v1\./);
+  assert.equal(store.enrollments.get(TESTER_APP).verified_at, null);
+  const code = totpAt(started.totp.secret, timestepOf(NOW));
+  const verified = await handleMfaVerify(eventOf({ code, enrollmentTicket: started.enrollmentTicket }), depsOf(store));
+  assert.equal(verified.ok, true, JSON.stringify(verified));
+  assert.ok(store.enrollments.get(TESTER_APP).verified_at);
+  assert.deepEqual(verified.enrollmentNotice, { sent: true, status: 'sent' });
+  const notice = store.mail.at(-1);
+  assert.equal(notice.to, TESTER_EMAIL);
+  assert.match(notice.subject, /An authenticator was added to your ChecksOps account/);
+  assert.match(notice.text, /support@checksops\.com/);
+  assert.equal(notice.text.includes(started.totp.secret), false);
+});
+
+test('finding 8: a wrong email code, a challenge for another user or a tampered challenge is refused and issues nothing', async () => {
+  const store = createStore();
+  const challenged = await handleMfaAssociate(eventOf({}), depsOf(store));
+  const code = emailedCode(store);
+  const wrongCode = code === '000000' ? '111111' : '000000';
+  const wrong = await handleMfaAssociate(eventOf({ emailChallenge: challenged.emailChallenge, emailCode: wrongCode }), depsOf(store));
+  assert.equal(wrong.statusCode, 401);
+  assert.equal(wrong.error, 'email_code_invalid');
+  assert.equal(wrong.totp, undefined);
+  for (const bad of ['12345', 'abcdef', 123456]) {
+    const malformed = await handleMfaAssociate(eventOf({ emailChallenge: challenged.emailChallenge, emailCode: bad }), depsOf(store));
+    assert.equal(malformed.error, 'email_code_invalid', String(bad));
+  }
+  // Another user's session cannot use this challenge, even with the right code.
+  const other = createStore({ userId: '99999999-9999-4999-8999-999999999999', email: 'other@freedomadj.com' });
+  const otherTry = await handleMfaAssociate(eventOf({ emailChallenge: challenged.emailChallenge, emailCode: code }), depsOf(other));
+  assert.equal(otherTry.error, 'email_code_invalid');
+  assert.equal(other.enrollments.size, 0);
+  // Changing the payload (for example, pushing the expiry out) breaks the tag.
+  const [v, body, tag] = challenged.emailChallenge.split('.');
+  const payload = JSON.parse(Buffer.from(body, 'base64url').toString('utf8'));
+  const forged = `${v}.${Buffer.from(JSON.stringify({ ...payload, x: payload.x + 86400000 })).toString('base64url')}.${tag}`;
+  const tampered = await handleMfaAssociate(eventOf({ emailChallenge: forged, emailCode: code }), depsOf(store));
+  assert.equal(tampered.error, 'email_code_invalid');
+  assert.equal(store.enrollments.size, 0);
+});
+
+test('finding 8: an expired email code is refused', async () => {
+  const store = createStore();
+  const challenged = await handleMfaAssociate(eventOf({}), depsOf(store));
+  const code = emailedCode(store);
+  const late = await withClock(10 * 60 * 1000 + 1000, () => handleMfaAssociate(
+    eventOf({ emailChallenge: challenged.emailChallenge, emailCode: code }),
+    depsOf(store),
+  ));
+  assert.equal(late.statusCode, 410);
+  assert.equal(late.error, 'email_code_expired');
+  assert.equal(store.enrollments.size, 0);
+});
+
+test('finding 8: an email code works once; a pending setup without its ticket, or with an older ticket, cannot be activated', async () => {
+  const store = createStore();
+  const { challenged, started } = await associateWithEmailCode(store);
+  const code = emailedCode(store);
+  const reused = await handleMfaAssociate(eventOf({ emailChallenge: challenged.emailChallenge, emailCode: code }), depsOf(store));
+  assert.equal(reused.statusCode, 409);
+  assert.equal(reused.error, 'email_code_used');
+  assert.equal(reused.totp, undefined);
+  const totp = totpAt(started.totp.secret, timestepOf(NOW));
+  // The old SPA flow (verify with no ticket) is refused without activating the row.
+  const noTicket = await handleMfaVerify(eventOf({ code: totp }), depsOf(store));
+  assert.equal(noTicket.statusCode, 403);
+  assert.equal(noTicket.error, 'enrollment_email_code_required');
+  assert.equal(store.enrollments.get(TESTER_APP).verified_at, null);
+  // A ticket for a row that was replaced since is refused too.
+  const { started: again } = await associateWithEmailCode(store);
+  const againCode = totpAt(again.totp.secret, timestepOf(NOW));
+  const stale = await handleMfaVerify(eventOf({ code: againCode, enrollmentTicket: started.enrollmentTicket }), depsOf(store));
+  assert.equal(stale.error, 'enrollment_email_code_required');
+  // An expired ticket is refused.
+  const expired = await withClock(30 * 60 * 1000 + 1000, () => handleMfaVerify(
+    eventOf({ code: againCode, enrollmentTicket: again.enrollmentTicket }),
+    depsOf(store),
+  ));
+  assert.equal(expired.error, 'enrollment_email_code_required');
+  assert.equal(store.enrollments.get(TESTER_APP).verified_at, null);
+  const ok = await handleMfaVerify(eventOf({ code: againCode, enrollmentTicket: again.enrollmentTicket }), depsOf(store));
+  assert.equal(ok.ok, true, JSON.stringify(ok));
+  // Once verified, the challenge is refused as before (no reset).
+  const afterVerify = await handleMfaAssociate(eventOf({ emailChallenge: challenged.emailChallenge, emailCode: code }), depsOf(store));
+  assert.equal(afterVerify.error, 'enrollment_reset_required');
+});
+
+test('finding 8: a pending row set up before this change (no email code) cannot be activated', async () => {
+  const store = createStore();
+  const { encryptSecret, generateTotpSecret } = await import('../functions/api/financial-totp.mjs');
+  const secret = generateTotpSecret();
+  const wrapped = encryptSecret(secret, wrapKeyFromHex(WRAP_HEX), 'test');
+  store.enrollments.set(TESTER_APP, {
+    ciphertext: wrapped.ciphertext, nonce: wrapped.nonce, key_id: 'test', last_used_timestep: null,
+    verified_at: null, enrolled_at: new Date(NOW - 3600000).toISOString(), failed_attempts: 0, locked_until: null,
+  });
+  const refused = await handleMfaVerify(eventOf({ code: totpAt(secret, timestepOf(NOW)) }), depsOf(store));
+  assert.equal(refused.error, 'enrollment_email_code_required');
+  assert.equal(store.enrollments.get(TESTER_APP).verified_at, null);
+  // A new setup emails a code bound to that pending row and replaces it.
+  const { started } = await associateWithEmailCode(store);
+  assert.notEqual(started.totp.secret, secret);
+});
+
+test('finding 8: email code guesses share the enroll_confirm limit (5 per 300 s), counted and committed before the compare', async () => {
+  const store = createStore();
+  const challenged = await handleMfaAssociate(eventOf({}), depsOf(store));
+  const code = emailedCode(store);
+  const wrongCode = code === '000000' ? '111111' : '000000';
+  for (let i = 0; i < 5; i += 1) {
+    const wrong = await handleMfaAssociate(eventOf({ emailChallenge: challenged.emailChallenge, emailCode: wrongCode }), depsOf(store));
+    assert.equal(wrong.error, 'email_code_invalid', `guess ${i}`);
+  }
+  const right = await handleMfaAssociate(eventOf({ emailChallenge: challenged.emailChallenge, emailCode: code }), depsOf(store));
+  assert.equal(right.error, 'rate_limited');
+  assert.equal(right.statusCode, 429);
+  assert.equal(store.enrollments.size, 0);
+  assert.equal(store.rates.get(`${TESTER_APP}:${ENROLL_EMAIL_CODE_RATE_ACTION}`), 6);
+  // The count is committed before the code is compared (a wrong code rolls the request back).
+  const fresh = createStore();
+  const c2 = await handleMfaAssociate(eventOf({}), depsOf(fresh));
+  const order = [];
+  const base = fresh.client.query;
+  fresh.client.query = async (sql, params) => {
+    const text = String(sql);
+    if (text.includes('consume_financial_totp_rate_limit')) order.push(`rate:${params[1]}`);
+    if (text === 'COMMIT') order.push('commit');
+    if (text.includes('financial_totp_upsert_enrollment')) order.push('upsert');
+    if (text === 'COMMIT' || text === 'BEGIN' || text.startsWith('SET TRANSACTION') || text.startsWith('SELECT set_config')) {
+      return { command: text, rows: [] };
+    }
+    return base(sql, params);
+  };
+  await handleMfaAssociate(eventOf({ emailChallenge: c2.emailChallenge, emailCode: wrongCode }), depsOf(fresh));
+  assert.deepEqual(order, ['rate:enroll_confirm', 'commit']);
+});
+
+test('finding 8: enrolled users are unaffected: verify and step-up need no email code or ticket and send no email', async () => {
+  const store = createStore();
+  const { secret } = await enrollTester(store);
+  const mailed = store.mail.length;
+  const step = timestepOf(NOW) + 1;
+  const reverify = await handleMfaVerify(eventOf({ code: totpAt(secret, step) }), depsOf(store, { nowMs: NOW + 30000 }));
+  assert.equal(reverify.ok, true, JSON.stringify(reverify));
+  assert.equal(reverify.enrollmentNotice, undefined);
+  const stepped = await handleMfaStepUp(eventOf({ code: totpAt(secret, step + 1), check_intake_item_id: CHECK }), depsOf(store, { nowMs: NOW + 60000 }));
+  assert.equal(stepped.ok, true, JSON.stringify(stepped));
+  assert.equal(store.mail.length, mailed);
+  assert.equal(store.rates.get(`${TESTER_APP}:${ENROLL_EMAIL_CODE_RATE_ACTION}`), 1);
+});
+
+test('finding 8: after a teammate reset (SQL 133 deletes the row) re-enrollment needs a fresh email code', async () => {
+  const store = createStore();
+  const first = await enrollTester(store);
+  store.enrollments.delete(TESTER_APP);
+  const challenged = await handleMfaAssociate(eventOf({}), depsOf(store));
+  assert.equal(challenged.error, 'email_code_required');
+  assert.equal(store.enrollments.size, 0);
+  // The first setup's ticket is not an email challenge.
+  const old = await handleMfaAssociate(eventOf({ emailChallenge: first.started.enrollmentTicket, emailCode: '123456' }), depsOf(store));
+  assert.equal(old.error, 'email_code_invalid');
+  const again = await enrollTester(store);
+  assert.notEqual(again.secret, first.secret);
+});
+
+test('finding 8: production never answers without a delivered email; a staging sink shows the code as homeowner-otp.mjs does', async () => {
+  const prevEnv = process.env.CHECKSOPS_ENV;
+  const prevMode = process.env.AWS_EMAIL_MODE;
+  const sunk = async (message) => ({ mode: 'sink', results: [{ to: 'staging-sink@checksops.invalid', originalTo: message.to, delivery: 'sink', status: 'sunk' }] });
+  try {
+    process.env.CHECKSOPS_ENV = 'production-prep';
+    process.env.AWS_EMAIL_MODE = 'sink';
+    const prod = createStore();
+    const refused = await handleMfaAssociate(eventOf({}), depsOf(prod, { sendViaSesOrSink: sunk }));
+    assert.equal(refused.statusCode, 503);
+    assert.equal(refused.error, 'email_code_send_failed');
+    assert.equal(refused.emailChallenge, undefined);
+    assert.equal(refused.stagingDebugCode, undefined);
+    const failed = await handleMfaAssociate(eventOf({}), depsOf(prod, { sendViaSesOrSink: async () => { throw new Error('ses down'); } }));
+    assert.equal(failed.error, 'email_code_send_failed');
+    process.env.CHECKSOPS_ENV = 'staging';
+    const staging = createStore();
+    const shown = await handleMfaAssociate(eventOf({}), depsOf(staging, { sendViaSesOrSink: sunk }));
+    assert.equal(shown.statusCode, 428);
+    assert.match(shown.stagingDebugCode, /^\d{6}$/);
+    const started = await handleMfaAssociate(eventOf({ emailChallenge: shown.emailChallenge, emailCode: shown.stagingDebugCode }), depsOf(staging, { sendViaSesOrSink: sunk }));
+    assert.equal(started.ok, true, JSON.stringify(started));
+  } finally {
+    if (prevEnv === undefined) delete process.env.CHECKSOPS_ENV;
+    else process.env.CHECKSOPS_ENV = prevEnv;
+    if (prevMode === undefined) delete process.env.AWS_EMAIL_MODE;
+    else process.env.AWS_EMAIL_MODE = prevMode;
+  }
+});
+
+test('finding 8: no verified email refuses setup; a failed enrolled notice never undoes the activation', async () => {
+  const noEmail = createStore({ email: null });
+  const refused = await handleMfaAssociate(eventOf({}), depsOf(noEmail, { claims: { sub: TESTER_SUB, origin_jti: ORIGIN_JTI } }));
+  assert.equal(refused.statusCode, 409);
+  assert.equal(refused.error, 'verified_email_required');
+  assert.equal(noEmail.mail.length, 0);
+  const store = createStore();
+  const { started } = await associateWithEmailCode(store);
+  const verified = await handleMfaVerify(
+    eventOf({ code: totpAt(started.totp.secret, timestepOf(NOW)), enrollmentTicket: started.enrollmentTicket }),
+    depsOf(store, { sendViaSesOrSink: async () => { throw new Error('ses down'); } }),
+  );
+  assert.equal(verified.ok, true);
+  assert.deepEqual(verified.enrollmentNotice, { sent: false, status: 'failed' });
+  assert.ok(store.enrollments.get(TESTER_APP).verified_at);
 });
