@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
 import { CheckOpsLogo } from "@/components/marketing/CheckOpsLogo";
 import { isAwsStaging } from "@/lib/awsStaging";
+import { safeRedirectPath } from "@/lib/safeRedirect";
 
 export default function CheckOpsResetPassword() {
   const navigate = useNavigate();
@@ -72,14 +73,10 @@ export default function CheckOpsResetPassword() {
       }
       toast({ title: "Password updated", description: "Signing you in..." });
       const params = new URLSearchParams(window.location.search);
-      const next = params.get("next");
-      if (next && /^https?:\/\//.test(next)) {
-        window.location.replace(next);
-      } else if (next) {
-        navigate(next, { replace: true });
-      } else {
-        navigate("/login", { replace: true });
-      }
+      // Same-origin paths only (finding 24): an external ?next= goes to /login.
+      navigate(safeRedirectPath(params.get("next"), window.location.origin, "/login"), {
+        replace: true,
+      });
     } catch (err: any) {
       toast({
         title: "Couldn't update password",
