@@ -83,7 +83,31 @@ Recorded in the staging pin (`expected_live_definition_sha256`, `execute: true`,
 owner's words of 2026-10-31, "the SQL 135 staging pin", then "apply SQL 135 in staging". The staging
 apply itself is a separate run after this pin is merged.
 
-**Status:** staging pin execute-authorized (wave 31); nothing applied yet; production pin pending.
+**Staging executor refreshed for the pin (2026-10-31).** The staging pin (wave 31, PR #1485) merged
+as `11d2a12cd57cb0d8e2c25f6a4abe7e8f1950bbc2`. Inspect run 41216723611 (main `11d2a12cd`) found the
+live executor at `5FlB5t/EKAjx8OGEoia4nooAyExOnXewmXXG5+8OsIo=` (`executor_current` false; main's
+package superseded `lib/sql-executor-auth.mjs` only). Deploy run 41216952483
+(`expected_executor_code_sha256` `5FlB5t…` matched) updated `checksops-staging-guarded-sql-executor`
+to main's package (`kMYf1oP4mKP/zAPAREg0imlMC/cdheEWC8V5P9viUtg=`).
+
+**Staging apply (2026-10-31).** Apply run 41217214392 (main `11d2a12cd`, executor `kMYf1oP4…`,
+`executor_current` true, pin commit `71cda1678`, `expected_live_definition_sha256`
+`4dac49398757060deee5d636f193059e30cbe1ffdb33890122f79f026d144f33`): success. The receipt
+(job 124584153851) prints `result` `applied`, `before_hash` `4dac4939…`, `after_hash`
+`946e84beb5a459f55bdc1fb90d839dcfeb292901573e3e5fb6ceb24a65213a6d`, `executor_identity`
+`checksops-staging-guarded-sql-executor`; every one of the twenty-four columns is in state
+`intended`: `claim_id`, `cash_job_id`, `check_source` and `cash_job_payment_class` now hold
+`checksops INSERT`, and no `authenticated INSERT` remains on any of the twenty-four. Read-live run
+41217437005 (main `11d2a12cd`): `already_applied` true, `live_definition_sha256`
+`946e84be…` equal to the intended hash, `precondition_failures` `[]`. Staging acceptance: the owner
+reported on 2026-10-31 "Upload worked in staging" (Check Command Center Upload & Analyze, the flow
+that returned 403 on `POST /staging/workflow/checks` at 13:06:40Z and 13:15:40Z). Recorded under the
+owner's words of 2026-10-31, "Record the SQL 135 staging apply and inspect storage-write.mjs in
+production". As with SQL 133, the staging pin keeps `execute: true`; the staging runs are recorded in
+the production pin's `staging_acceptance` if the owner decides to apply SQL 135 in production
+(production already holds table-level INSERT, so there it would only narrow privileges).
+
+**Status:** applied in staging (wave 31, 2026-10-31); staging acceptance: owner retested Upload & Analyze successfully; production pin pending (production apply not yet decided by the owner)
 
 ## Fingerprint
 
