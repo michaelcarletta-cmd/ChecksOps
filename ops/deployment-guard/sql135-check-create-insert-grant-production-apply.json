@@ -1,0 +1,62 @@
+{
+  "id": "sql135-check-create-insert-grant-production-apply",
+  "migration": "sql135",
+  "authorization": "pending",
+  "execute": false,
+  "target_environment": "production",
+  "target_component": "production-sql",
+  "deployment_type": "sql-apply",
+  "filename": "aws/workflows/sql/135_check_create_insert_grant.sql",
+  "migration_id": "135_check_create_insert_grant",
+  "staging_pin_commit": "71cda1678ed2a0d4b2314815ad65e2a5f2cad03f",
+  "source_sha256": "a71a5f7f9da8c5784d517ebe198a91c3bbf8591a5f4824705c075317a47967e8",
+  "function_identities": [],
+  "expected_live_definition_sha256": null,
+  "intended_replacement_sha256": "946e84beb5a459f55bdc1fb90d839dcfeb292901573e3e5fb6ceb24a65213a6d",
+  "authorization_phrase": "APPLY_CHECK_CREATE_INSERT_GRANT",
+  "predecessors": [],
+  "order_note": "No predecessor and no order on this engine. SQL 135 needs public.check_intake_items with id, tenant_id, uploaded_by, status, check_stage, ocr_status, front_image_path, back_image_path, ocr_needs_verification, carrier_name, check_number, payee_line, property_address, funds_type, review_notes, payee_address, expiration_days, is_multi_payee, issue_date, amount, claim_id, cash_job_id, check_source and cash_job_payment_class (restored Supabase schema; the cash-job columns from supabase/migrations/20260522142101_*.sql), owned by checksops_admin, and the roles checksops and authenticated; the file itself raises sql135_table_missing, sql135_column_missing or sql135_role_missing otherwise. The check create (handleCreateCheck, POST /workflow/checks, aws/functions/api/workflow.mjs) inserts those columns as checksops: the first twenty on every create, claim_id on every create since #1317 (2026-10-27), and the three cash-job columns for a check uploaded from a cash job. SQL 50 granted column INSERT on the first twenty to checksops and authenticated, SQL 51 revokes INSERT on the table from both where it is run, and no migration grants INSERT on claim_id or the cash-job columns, so on staging PostgreSQL refuses the create before row-level security (/aws/lambda/checksops-staging-api 2026-10-31 13:06:40Z and 13:15:40Z: 403, permission denied for table check_intake_items). Production's checksops held table-level INSERT at the SQL 89 inspect (ACL checksops=arwd, ard after SQL 89), so the create is not refused there; SQL 135 makes both environments the same column state: checksops INSERT on the twenty-four columns, no authenticated INSERT on them, SQL 89's checksops UPDATE on seventeen of them unchanged. The policies aws_write_check_intake_items (aws/rls/sql/21_proposed_write_policies.sql: aws_can_write_tenant(tenant_id)) and aws_select_check_intake_items stay the authorization boundary and are not changed; the table ACL is not changed (production's table-level INSERT stays). If the read-only inspect finds every pinned line held and no authenticated INSERT it reports already_applied true and nothing is applied (the pin is then recorded as verified live, not applied). No later migration revokes these grants. Other API inserts into check_intake_items (aws/functions/api/homeowner.mjs: claim_id, tenant_id, uploaded_by, front_image_path, back_image_path, amount, status, check_stage, check_source) name a subset of these columns.",
+  "admin_login": "checksops_admin",
+  "rds_identifier": "checksops-production",
+  "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
+  "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
+  "tooling": {
+    "status": "built",
+    "production_tool": "scripts/deployment-guard/sql135-check-create-insert-grant-production-apply.mjs",
+    "production_lib": "scripts/deployment-guard/lib/release-sql-production-apply.mjs",
+    "staging_executor_handler": "aws/write-path/guarded-sql-executor/index.mjs handleReleaseSqlMigration",
+    "staging_workflow_choice": "sql135-check-create-insert-grant",
+    "one_shot_migration": "sql135",
+    "fingerprint_engine": "scripts/deployment-guard/lib/release-sql-state.mjs",
+    "runbook": "ops/production-sql-135-apply.md",
+    "tests": [
+      "aws/tests/release-sql135-executor.test.mjs",
+      "aws/tests/release-sql135-production-apply.test.mjs",
+      "aws/tests/release-sql90-97-executor.test.mjs",
+      "aws/tests/release-sql90-97-production-apply.test.mjs",
+      "aws/tests/sql135-check-create-insert-grant-pg.test.mjs"
+    ],
+    "note": "Guarded tooling for SQL 135: sql135-check-create-insert-grant-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql135-check-create-insert-grant); production-sql-one-shot.mjs --migration sql135. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): the column ACL of the twenty-four check_intake_items columns, each exactly checksops INSERT, plus checksops UPDATE on the seventeen SQL 89 grants UPDATE on (status, check_stage, ocr_status, front_image_path, back_image_path, ocr_needs_verification, carrier_name, check_number, payee_line, property_address, funds_type, review_notes, payee_address, expiration_days, is_multi_payee, issue_date, amount) (spec column_acl, as SQL 92, SQL 114 and SQL 134; authenticated INSERT is the line the file revokes, as SQL 100). The pre-conditions refuse any other live grant on those twenty-four columns (column_acl_replaceable), so a column missing SQL 89's checksops UPDATE would fail the post-condition and roll back; the table's own ACL, every other column, its RLS flag and its policies are in the unrelated-catalog snapshot and must be unchanged. The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
+  },
+  "production_inspect": {
+    "status": "pending",
+    "date": null,
+    "ssm_command_id": null,
+    "source_commit": null,
+    "read_only": true,
+    "connected_as": "checksops_admin",
+    "live_definition_sha256": null,
+    "apply_preconditions_met": null,
+    "precondition_failures": null,
+    "note": "Pending: no read-only production inspect has been run for SQL 135 yet. Expected: check_intake_items present with the twenty-four columns and owned by checksops_admin, roles checksops and authenticated present, SQL 89's checksops UPDATE on the seventeen columns it grants and no other column grant on the twenty-four (checksops' INSERT is table-level there: ACL checksops=ard at SQL 89's post-state). Expected release-engine fingerprint of that state under sql135: 5e147e3929d9f3ae9a8edbf9e3a1b1b896993a9b9ff88cb7d093b2e7273305e4 (derived by aws/tests/release-sql135-executor.test.mjs and read back on PostgreSQL 16). Record the one-shot --phase inspect's date, SSM command id, source commit, live_definition_sha256, prerequisites_missing, release_sql_inspect.columns, precondition_failures and apply_preconditions_met here. If already_applied is true, record the inspect as the verified-live evidence and leave execute false; otherwise copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. Also read, from the same inspect's unrelated snapshot, the table ACL of check_intake_items (checksops' table-level INSERT): this file does not change it. If precondition_failures is not [] stop: that needs its own reviewed change."
+  },
+  "intended_post_state": {
+    "fingerprint": "946e84beb5a459f55bdc1fb90d839dcfeb292901573e3e5fb6ceb24a65213a6d",
+    "note": "public.check_intake_items: the columns id, tenant_id, uploaded_by, claim_id, cash_job_id, check_source and cash_job_payment_class each carry exactly the column grant checksops INSERT; status, check_stage, ocr_status, front_image_path, back_image_path, ocr_needs_verification, carrier_name, check_number, payee_line, property_address, funds_type, review_notes, payee_address, expiration_days, is_multi_payee, issue_date and amount each carry exactly checksops INSERT and checksops UPDATE (SQL 89's). None of the twenty-four carries authenticated INSERT. The table ACL, every other column's ACL, the RLS flag and the policies (aws_write_check_intake_items and aws_select_check_intake_items stay the authorization boundary) are unchanged; no other table, function, policy, column or row changes. The fingerprint is releaseIntendedHash('sql135', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): 946e84beb5a459f55bdc1fb90d839dcfeb292901573e3e5fb6ceb24a65213a6d."
+  },
+  "staging_acceptance": {
+    "ok": false,
+    "reference": null,
+    "basis": "Pending: record the guarded staging SQL executor read-live and the staging apply of SQL 135 (choice sql135-check-create-insert-grant) here in the reviewed change that sets execute true. The grants are covered on PostgreSQL 16 by aws/tests/sql135-check-create-insert-grant-pg.test.mjs. Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+  }
+}

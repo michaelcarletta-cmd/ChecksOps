@@ -1,5 +1,5 @@
 /**
- * Specs of the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108 to SQL 134) for the shared engine in
+ * Specs of the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108 to SQL 135) for the shared engine in
  * release-sql-state.mjs: what each pinned file creates, replaces or drops, the reviewed
  * EXECUTE ACLs, the prerequisites and predecessors, and the PostgreSQL renderings the file
  * leaves (policy expressions, view, column, constraint, index and trigger definitions as
@@ -6151,6 +6151,322 @@ export const RELEASE_SQL_SPECS = deepFreeze({
     "altered_relations": [
       "public.loss_draft_tracking",
       "public.loss_draft_releases"
+    ]
+  },
+  // SQL 135 (staging "Upload & Analyze" refused: /aws/lambda/checksops-staging-api 2026-10-31,
+  // POST /staging/workflow/checks 403 "permission denied for table check_intake_items"): the column
+  // INSERT the check create needs. handleCreateCheck (aws/functions/api/workflow.mjs) names id,
+  // tenant_id, uploaded_by, status, check_stage, ocr_status, front_image_path, back_image_path,
+  // ocr_needs_verification, carrier_name, check_number, payee_line, property_address, funds_type,
+  // review_notes, payee_address, expiration_days, is_multi_payee, issue_date, amount and claim_id, and
+  // for a cash-job check cash_job_id, check_source and cash_job_payment_class. The file grants INSERT on
+  // those twenty-four columns to checksops and revokes their INSERT from authenticated (SQL 50 granted
+  // twenty of them to both; SQL 51 revokes both where it is run), so both environments reach one state.
+  // Like SQL 92, SQL 114 and SQL 134 its fingerprint is each named column's ACL (column_acl:
+  // pg_attribute.attacl, every grantee): checksops INSERT on all twenty-four, plus SQL 89's checksops
+  // UPDATE on the seventeen of them SQL 89 grants (the file does not touch UPDATE); authenticated INSERT
+  // is the line the file revokes (as SQL 100 revokes SQL 50's authenticated UPDATE); any other live
+  // grant on those columns refuses the pre-conditions (column_acl_replaceable). The table ACL
+  // (production: checksops table-level INSERT), every other column and the policies are in the
+  // unrelated snapshot. No predecessor, policy, function or trigger.
+  sql135: {
+    "key": "sql135",
+    "label": "SQL 135",
+    "choice": "sql135-check-create-insert-grant",
+    "production_pin_rel": "ops/deployment-guard/sql135-check-create-insert-grant-production-apply.json",
+    "script": "sql135-check-create-insert-grant-production-apply",
+    "prerequisites": [
+      "public.check_intake_items",
+      "column public.check_intake_items.id",
+      "column public.check_intake_items.tenant_id",
+      "column public.check_intake_items.uploaded_by",
+      "column public.check_intake_items.status",
+      "column public.check_intake_items.check_stage",
+      "column public.check_intake_items.ocr_status",
+      "column public.check_intake_items.front_image_path",
+      "column public.check_intake_items.back_image_path",
+      "column public.check_intake_items.ocr_needs_verification",
+      "column public.check_intake_items.carrier_name",
+      "column public.check_intake_items.check_number",
+      "column public.check_intake_items.payee_line",
+      "column public.check_intake_items.property_address",
+      "column public.check_intake_items.funds_type",
+      "column public.check_intake_items.review_notes",
+      "column public.check_intake_items.payee_address",
+      "column public.check_intake_items.expiration_days",
+      "column public.check_intake_items.is_multi_payee",
+      "column public.check_intake_items.issue_date",
+      "column public.check_intake_items.amount",
+      "column public.check_intake_items.claim_id",
+      "column public.check_intake_items.cash_job_id",
+      "column public.check_intake_items.check_source",
+      "column public.check_intake_items.cash_job_payment_class",
+      "role checksops",
+      "role authenticated"
+    ],
+    "predecessors": [],
+    "functions": [],
+    "column_acl": [
+      {
+        "table": "public.check_intake_items",
+        "column": "id",
+        "acl": [
+          "checksops INSERT"
+        ],
+        "revokes": [
+          "authenticated INSERT"
+        ]
+      },
+      {
+        "table": "public.check_intake_items",
+        "column": "tenant_id",
+        "acl": [
+          "checksops INSERT"
+        ],
+        "revokes": [
+          "authenticated INSERT"
+        ]
+      },
+      {
+        "table": "public.check_intake_items",
+        "column": "uploaded_by",
+        "acl": [
+          "checksops INSERT"
+        ],
+        "revokes": [
+          "authenticated INSERT"
+        ]
+      },
+      {
+        "table": "public.check_intake_items",
+        "column": "status",
+        "acl": [
+          "checksops INSERT",
+          "checksops UPDATE"
+        ],
+        "revokes": [
+          "authenticated INSERT"
+        ]
+      },
+      {
+        "table": "public.check_intake_items",
+        "column": "check_stage",
+        "acl": [
+          "checksops INSERT",
+          "checksops UPDATE"
+        ],
+        "revokes": [
+          "authenticated INSERT"
+        ]
+      },
+      {
+        "table": "public.check_intake_items",
+        "column": "ocr_status",
+        "acl": [
+          "checksops INSERT",
+          "checksops UPDATE"
+        ],
+        "revokes": [
+          "authenticated INSERT"
+        ]
+      },
+      {
+        "table": "public.check_intake_items",
+        "column": "front_image_path",
+        "acl": [
+          "checksops INSERT",
+          "checksops UPDATE"
+        ],
+        "revokes": [
+          "authenticated INSERT"
+        ]
+      },
+      {
+        "table": "public.check_intake_items",
+        "column": "back_image_path",
+        "acl": [
+          "checksops INSERT",
+          "checksops UPDATE"
+        ],
+        "revokes": [
+          "authenticated INSERT"
+        ]
+      },
+      {
+        "table": "public.check_intake_items",
+        "column": "ocr_needs_verification",
+        "acl": [
+          "checksops INSERT",
+          "checksops UPDATE"
+        ],
+        "revokes": [
+          "authenticated INSERT"
+        ]
+      },
+      {
+        "table": "public.check_intake_items",
+        "column": "carrier_name",
+        "acl": [
+          "checksops INSERT",
+          "checksops UPDATE"
+        ],
+        "revokes": [
+          "authenticated INSERT"
+        ]
+      },
+      {
+        "table": "public.check_intake_items",
+        "column": "check_number",
+        "acl": [
+          "checksops INSERT",
+          "checksops UPDATE"
+        ],
+        "revokes": [
+          "authenticated INSERT"
+        ]
+      },
+      {
+        "table": "public.check_intake_items",
+        "column": "payee_line",
+        "acl": [
+          "checksops INSERT",
+          "checksops UPDATE"
+        ],
+        "revokes": [
+          "authenticated INSERT"
+        ]
+      },
+      {
+        "table": "public.check_intake_items",
+        "column": "property_address",
+        "acl": [
+          "checksops INSERT",
+          "checksops UPDATE"
+        ],
+        "revokes": [
+          "authenticated INSERT"
+        ]
+      },
+      {
+        "table": "public.check_intake_items",
+        "column": "funds_type",
+        "acl": [
+          "checksops INSERT",
+          "checksops UPDATE"
+        ],
+        "revokes": [
+          "authenticated INSERT"
+        ]
+      },
+      {
+        "table": "public.check_intake_items",
+        "column": "review_notes",
+        "acl": [
+          "checksops INSERT",
+          "checksops UPDATE"
+        ],
+        "revokes": [
+          "authenticated INSERT"
+        ]
+      },
+      {
+        "table": "public.check_intake_items",
+        "column": "payee_address",
+        "acl": [
+          "checksops INSERT",
+          "checksops UPDATE"
+        ],
+        "revokes": [
+          "authenticated INSERT"
+        ]
+      },
+      {
+        "table": "public.check_intake_items",
+        "column": "expiration_days",
+        "acl": [
+          "checksops INSERT",
+          "checksops UPDATE"
+        ],
+        "revokes": [
+          "authenticated INSERT"
+        ]
+      },
+      {
+        "table": "public.check_intake_items",
+        "column": "is_multi_payee",
+        "acl": [
+          "checksops INSERT",
+          "checksops UPDATE"
+        ],
+        "revokes": [
+          "authenticated INSERT"
+        ]
+      },
+      {
+        "table": "public.check_intake_items",
+        "column": "issue_date",
+        "acl": [
+          "checksops INSERT",
+          "checksops UPDATE"
+        ],
+        "revokes": [
+          "authenticated INSERT"
+        ]
+      },
+      {
+        "table": "public.check_intake_items",
+        "column": "amount",
+        "acl": [
+          "checksops INSERT",
+          "checksops UPDATE"
+        ],
+        "revokes": [
+          "authenticated INSERT"
+        ]
+      },
+      {
+        "table": "public.check_intake_items",
+        "column": "claim_id",
+        "acl": [
+          "checksops INSERT"
+        ],
+        "revokes": [
+          "authenticated INSERT"
+        ]
+      },
+      {
+        "table": "public.check_intake_items",
+        "column": "cash_job_id",
+        "acl": [
+          "checksops INSERT"
+        ],
+        "revokes": [
+          "authenticated INSERT"
+        ]
+      },
+      {
+        "table": "public.check_intake_items",
+        "column": "check_source",
+        "acl": [
+          "checksops INSERT"
+        ],
+        "revokes": [
+          "authenticated INSERT"
+        ]
+      },
+      {
+        "table": "public.check_intake_items",
+        "column": "cash_job_payment_class",
+        "acl": [
+          "checksops INSERT"
+        ],
+        "revokes": [
+          "authenticated INSERT"
+        ]
+      }
+    ],
+    "altered_relations": [
+      "public.check_intake_items"
     ]
   },
 });
