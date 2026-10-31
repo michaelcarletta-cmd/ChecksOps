@@ -302,8 +302,18 @@ test('order: predecessor SQL 130 (untouched); the one new function, its prerequi
   }
   assert.equal(plan.members['auth-financial-totp.mjs'].sql_before, SQL132_FILE);
   assert.equal(plan.members['providers/production/checkalt-register.mjs'].sql_before, 'aws/workflows/sql/81_checkalt_production_register.sql');
+  // The lockout REPLACEs ran after SQL 132 was recorded live: an applied member's row expects its accepted bytes
+  // and names the applied record (production-financial-totp-lockout-applied-manifest-2026-10-31.json).
+  const LOCKOUT_APPLIED = 'aws/tests/fixtures/production-financial-totp-lockout-applied-manifest-2026-10-31.json';
+  const lockoutApplied = readJson(LOCKOUT_APPLIED).members;
+  assert.ok(lockoutApplied['providers/production/checkalt-register.mjs'], 'checkalt-register.mjs is recorded applied (production run 41156679208)');
   for (const member of ['auth-financial-totp.mjs', 'providers/production/checkalt-register.mjs']) {
-    assert.notEqual(plan.members[member].expected_live_sha256, plan.members[member].accepted_sha256, `${member} pends the lockout REPLACE`);
+    if (lockoutApplied[member]) {
+      assert.equal(plan.members[member].expected_live_sha256, plan.members[member].accepted_sha256, `${member} records the applied lockout bytes`);
+      assert.equal(plan.members[member].manifest, LOCKOUT_APPLIED, member);
+    } else {
+      assert.notEqual(plan.members[member].expected_live_sha256, plan.members[member].accepted_sha256, `${member} pends the lockout REPLACE`);
+    }
   }
   // The API: the same count call and the same existence check in both members, as checksops.
   const call = 'SELECT allowed, failed_attempts, retry_after_seconds FROM public.financial_totp_count_code_check($1::uuid)';
