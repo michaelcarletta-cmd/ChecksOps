@@ -1,0 +1,15 @@
+{
+  "workstream_id": "loss-draft-escrow-close-applied",
+  "authorization": "Record only (2026-10-31): the bytes below are live. Nothing is planned or authorized by this manifest; any later change to this member needs its own manifest, staging acceptance and owner approval.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Loss Draft escrow records and file close (#1464, owner decisions 2026-10-30), applied 2026-10-31 through the guarded overlay path to checksops-production-prep-api on the owner's approval (the workflow refuses an apply unless approval_phrase is exactly \"DEPLOY workflow-rpc.mjs TO PRODUCTION\"): production apply run 41190658796 VERIFIED on main 446f5f0a3, owner \"DEPLOY workflow-rpc.mjs TO PRODUCTION\", staging acceptance run 41118383982, production inspect run 41190590950 READY (live acb5fc06, RevisionId 74ce06ca-eb54-4735-887d-4fa9d2a4b9bb); CodeSha256 uzM4I3iOU+rcTBdwcF9JbpML78IeA+AyQ1GwVBlQwJ8=, RevisionId ed75889d-102a-4584-b7b9-9001aaf5abe8; /health and /db-health ok. Two earlier applies with the same words were refused before any write by the plan order gate (DEPLOYMENT_COLLISION; run 41155563959 named providers/production/checkalt-register.mjs, admin-reset-totp.mjs and auth-financial-totp.mjs pending), and the guarded path deployed those first. SQL 134 (the escrow and draw column grants the amount actions need) was applied in production on 2026-10-31 (ops/deployment-guard/sql134-loss-draft-escrow-write-grants-production-apply.json, applied). sql_before stays SQL 98.",
+  "members": {
+    "workflow-rpc.mjs": {
+      "live_sha256": "0e77f1f6a33a78c3be406622e16cc74fc6e8374cf5f505cf865453784b467dc0",
+      "accepted_sha256": "0e77f1f6a33a78c3be406622e16cc74fc6e8374cf5f505cf865453784b467dc0",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-loss-draft-escrow-close-manifest-2026-10-30.json"
+    }
+  }
+}

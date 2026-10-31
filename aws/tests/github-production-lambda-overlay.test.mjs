@@ -1226,7 +1226,8 @@ test('live reconciliation 2026-10-19: ten members expect the bytes inspect run 3
   // workflow-rpc.mjs moved on the same way: its fee-branch 79b7e4de bytes went live (inspect run
   // 39935902507, ALREADY_ACCEPTED), the plan row replaced them for the Refer & Earn routes, and production
   // run 39942182669 applied those (6902fe6f); production run 40618897308 then replaced them for the
-  // Mortgage Desk return (acb5fc06, now recorded live).
+  // Mortgage Desk return (acb5fc06), and production run 41190658796 (2026-10-31) replaced those for the
+  // Loss Draft escrow records and file close (0e77f1f6, now recorded live).
   // write-allowlist.mjs and write-check-workflow.mjs moved on too: their release bytes went live with
   // the 2026-10-21 production rebuilds, and production runs 40189236116 and 40189657073 replaced them
   // for the stakeholder settings edit (1fc4a43e and e1227c96, now recorded live).
@@ -1236,7 +1237,7 @@ test('live reconciliation 2026-10-19: ten members expect the bytes inspect run 3
     'homeowner.mjs': { accepted: 'c51ea27a37a72b18aed7881ae349212257b790e6ff400cbe675949574504a80c', liveNow: 'd7117e18fb42efb0ab6cf2b1847b2d57f22878927ceda5155d4165dcd1f442a2' },
     'write-allowlist.mjs': { accepted: '5f84c5634190ebade1ee6ae10d3420e09548efac78f2a72eb98886d2f0341189', liveNow: '1fc4a43eda4455d406edd4566d7a2bada352d241e88ba01cb4ff2cd3afb2884a' },
     'write-check-workflow.mjs': { accepted: 'fa2c6aef0e4e6c8713f60a24804309b4cf7f9e4b9d69a379498ef9acaf621fc2', liveNow: 'e1227c967906496519db1fe9c996514c03ca04a79378ff77e93b92ecf470544a' },
-    'workflow-rpc.mjs': { accepted: '79b7e4de653eb9d391afca9d27769b3b7c8e3d10d67af43e829ee32398797485', liveNow: 'acb5fc06ca01ddb5ad3294ee5840443c1747798f06c1990c174c469dbb5534e0' },
+    'workflow-rpc.mjs': { accepted: '79b7e4de653eb9d391afca9d27769b3b7c8e3d10d67af43e829ee32398797485', liveNow: '0e77f1f6a33a78c3be406622e16cc74fc6e8374cf5f505cf865453784b467dc0' },
     // app-services.mjs moved on too: its daab02f7 release bytes were live (the order gate of production
     // run 40577608750), and production run 40621229388 replaced them for the Mortgage Desk return email
     // route (d1faa212); production run 40778196802 then replaced those for the Mortgage Desk e-sign route
@@ -2950,9 +2951,9 @@ test('Mortgage Desk return: ADD mortgage-desk-return.mjs held on SQL 122 (record
   // storage-write-auth.mjs has moved on too: the partner storage writes plan REPLACEd it from these
   // applied bytes (production run 40908770516), recorded in the security hardening applied manifest.
   const PENDING = { 'storage-write-auth.mjs': PARTNER_STORAGE_WRITES_REL };
-  // workflow-rpc.mjs moves on from these applied bytes: the Loss Draft escrow records and file close plan
-  // (owner decisions 2026-10-30) REPLACEs it, planning only, expecting the applied bytes live.
-  const PLANNED = { 'workflow-rpc.mjs': 'aws/tests/fixtures/production-loss-draft-escrow-close-manifest-2026-10-30.json' };
+  // workflow-rpc.mjs moved on from these applied bytes: the Loss Draft escrow records and file close plan
+  // (owner decisions 2026-10-30) REPLACEd it (production run 41190658796, 2026-10-31), recorded applied.
+  const LOSS_DRAFT = { 'workflow-rpc.mjs': ['aws/tests/fixtures/production-loss-draft-escrow-close-manifest-2026-10-30.json', 'aws/tests/fixtures/production-loss-draft-escrow-close-applied-manifest-2026-10-31.json'] };
   const appliedAt = (member) => appliedManifest.members[member].accepted_sha256;
   const addRow = PLAN.members[ADD];
   assert.deepEqual(addRow, { operation: 'add', accepted_sha256: sha(`aws/functions/api/${ADD}`), expected_live_sha256: null, sql_before: SQL122, manifest: MANIFEST_REL });
@@ -2967,12 +2968,14 @@ test('Mortgage Desk return: ADD mortgage-desk-return.mjs held on SQL 122 (record
   for (const member of REPLACES) {
     const row = PLAN.members[member];
     assert.equal(row.operation, 'replace', member);
-    if (PLANNED[member]) {
-      assert.equal(row.expected_live_sha256, appliedAt(member), member);
+    if (LOSS_DRAFT[member]) {
+      const [plannedRel, appliedRel] = LOSS_DRAFT[member];
+      assert.equal(row.expected_live_sha256, row.accepted_sha256, member);
       assert.notEqual(row.accepted_sha256, appliedAt(member), member);
-      assert.equal(row.manifest, PLANNED[member], member);
-      const next = JSON.parse(fs.readFileSync(path.join(ROOT, PLANNED[member]), 'utf8')).members[member];
+      assert.equal(row.manifest, appliedRel, member);
+      const next = JSON.parse(fs.readFileSync(path.join(ROOT, plannedRel), 'utf8')).members[member];
       assert.deepEqual(next, { live_sha256: appliedAt(member), accepted_sha256: row.accepted_sha256, operation: 'replace', previous_manifest: APPLIED_REL }, member);
+      assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, appliedRel), 'utf8')).members[member].previous_manifest, plannedRel, member);
     } else if (PENDING[member]) {
       assert.equal(row.expected_live_sha256, row.accepted_sha256, member);
       assert.equal(row.manifest, SECURITY_HARDENING_APPLIED_REL, member);
@@ -3008,7 +3011,7 @@ test('Mortgage Desk return: ADD mortgage-desk-return.mjs held on SQL 122 (record
   assert.match(appliedManifest.authorization, /^Record only/);
   assert.deepEqual(Object.keys(appliedManifest.members), [ADD, ...REPLACES]);
   for (const member of [ADD, ...REPLACES]) {
-    const accepted = MOVED_ON.includes(member) || PENDING[member] || PLANNED[member] ? manifest.members[member].accepted_sha256 : sha(`aws/functions/api/${member}`);
+    const accepted = MOVED_ON.includes(member) || PENDING[member] || LOSS_DRAFT[member] ? manifest.members[member].accepted_sha256 : sha(`aws/functions/api/${member}`);
     assert.deepEqual(appliedManifest.members[member], { live_sha256: accepted, accepted_sha256: accepted, operation: PLAN.members[member].operation, previous_manifest: MANIFEST_REL }, member);
     assert.ok(appliedManifest.notes.includes(`"DEPLOY ${member} TO PRODUCTION"`), member);
   }
@@ -4180,9 +4183,10 @@ test('Financial TOTP lockout (SQL 132): auth-financial-totp.mjs and checkalt-reg
   assert.match(register, /if \(enrollment\.locked_until && new Date\(enrollment\.locked_until\)\.getTime\(\) > Date\.now\(\)\) return rejected;/);
 });
 
-test('Loss Draft escrow records and file close (owner decisions 2026-10-30): workflow-rpc.mjs REPLACE from the applied Mortgage Desk return bytes, planning only, SQL 98 still first', async () => {
+test('Loss Draft escrow records and file close (owner decisions 2026-10-30): workflow-rpc.mjs REPLACE from the applied Mortgage Desk return bytes, SQL 98 still first; production run 41190658796 applied it', async () => {
   const MEMBER = 'workflow-rpc.mjs';
   const REL = 'aws/tests/fixtures/production-loss-draft-escrow-close-manifest-2026-10-30.json';
+  const APPLIED_REL = 'aws/tests/fixtures/production-loss-draft-escrow-close-applied-manifest-2026-10-31.json';
   const PREVIOUS = 'aws/tests/fixtures/production-mortgage-desk-return-applied-manifest-2026-10-28.json';
   // The Mortgage Desk return bytes, applied 2026-10-28 (production run 40618897308, VERIFIED).
   const LIVE = 'acb5fc06ca01ddb5ad3294ee5840443c1747798f06c1990c174c469dbb5534e0';
@@ -4196,12 +4200,13 @@ test('Loss Draft escrow records and file close (owner decisions 2026-10-30): wor
   assert.deepEqual(manifest.members, { [MEMBER]: { live_sha256: LIVE, accepted_sha256: accepted, operation: 'replace', previous_manifest: PREVIOUS } });
   const previous = JSON.parse(fs.readFileSync(path.join(ROOT, PREVIOUS), 'utf8')).members[MEMBER];
   assert.deepEqual([previous.live_sha256, previous.accepted_sha256], [LIVE, LIVE], 'the previous manifest is its applied record');
+  // Applied 2026-10-31: the row records the applied bytes live and names the applied record.
   assert.deepEqual(PLAN.members[MEMBER], {
     operation: 'replace',
     accepted_sha256: accepted,
-    expected_live_sha256: LIVE,
+    expected_live_sha256: accepted,
     sql_before: 'aws/workflows/sql/98_tenant_fee_collection.sql',
-    manifest: REL,
+    manifest: APPLIED_REL,
   });
   assert.equal(PLAN.sql_prerequisites['aws/workflows/sql/98_tenant_fee_collection.sql'].verified_live, true);
   assert.ok(PLAN.notes.includes(`Loss Draft escrow records and file close (2026-10-30, owner decisions): REPLACE ${MEMBER} ${LIVE.slice(0, 8)} -> ${accepted.slice(0, 8)}`));
@@ -4221,27 +4226,56 @@ test('Loss Draft escrow records and file close (owner decisions 2026-10-30): wor
     'write-claim-settlement.mjs',
   ]);
   const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
-  const ready = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: LIVE }) });
+  // Before the apply, the planned row took the Mortgage Desk return applied bytes as READY.
+  const before = structuredClone(PLAN);
+  before.members[MEMBER] = { ...PLAN.members[MEMBER], expected_live_sha256: LIVE, manifest: REL };
+  const ready = await run(inspect, { root: ROOT, plan: before, inspectLive: liveFor(MEMBER, { sha256: LIVE, plan: before }) });
   assert.equal(ready.state, 'READY');
   assert.equal(ready.mutation, false);
   const done = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: accepted }) });
   assert.equal(done.state, 'ALREADY_ACCEPTED');
-  for (const other of ['6902fe6f89f91c52f251ae1218257a387d6d7dd1fdb0e07687f6c99dfd5591d3', 'c'.repeat(64)]) {
+  for (const other of [LIVE, '6902fe6f89f91c52f251ae1218257a387d6d7dd1fdb0e07687f6c99dfd5591d3', 'c'.repeat(64)]) {
     await assert.rejects(
       run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: other }) }),
       (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
       other,
     );
   }
-  // The apply replays from the committed plan (not the Mortgage Desk return pre-apply rewind the generic
-  // replays use): it passes the order, SQL 98 and link gates from the live acb5fc06 bytes.
-  const { deps, calls } = applyDeps(MEMBER, { sha256: LIVE, plan: structuredClone(PLAN) });
+  // The apply replays from the pre-apply plan (expected_live acb5fc06): it passes the order, SQL 98 and
+  // link gates from the live acb5fc06 bytes.
+  const { deps, calls } = applyDeps(MEMBER, { sha256: LIVE, plan: structuredClone(before) });
   const applied = await run(applyEnv(MEMBER, { CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: LIVE }), deps);
   assert.equal(applied.mutation, false);
   assert.deepEqual(calls.receipt.owned_member_ops, { replace: [MEMBER], add: [] });
   const source = fs.readFileSync(path.join(API, MEMBER), 'utf8');
   assert.match(source, /export const LOSS_DRAFT_REVIEW_TARGET = 'review';/);
   assert.match(source, /error: 'monitored_no_endorsing'/);
+});
+
+test('Loss Draft escrow records and file close 2026-10-31: workflow-rpc.mjs applied on its own phrase after SQL 134, recorded in an applied manifest', () => {
+  const MEMBER = 'workflow-rpc.mjs';
+  const REL = 'aws/tests/fixtures/production-loss-draft-escrow-close-manifest-2026-10-30.json';
+  const APPLIED_REL = 'aws/tests/fixtures/production-loss-draft-escrow-close-applied-manifest-2026-10-31.json';
+  const applied = JSON.parse(fs.readFileSync(path.join(ROOT, APPLIED_REL), 'utf8'));
+  const accepted = sha(`aws/functions/api/${MEMBER}`);
+  assert.equal(applied.workstream_id, 'loss-draft-escrow-close-applied');
+  assert.equal(applied.deploy_authorized, false);
+  assert.match(applied.authorization, /^Record only/);
+  assert.equal(applied.live_lambda, 'checksops-production-prep-api');
+  assert.deepEqual(applied.members, { [MEMBER]: { live_sha256: accepted, accepted_sha256: accepted, operation: 'replace', previous_manifest: REL } });
+  assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, REL), 'utf8')).members[MEMBER].accepted_sha256, accepted);
+  assert.ok(applied.notes.includes('"DEPLOY workflow-rpc.mjs TO PRODUCTION"'));
+  // The apply, its pre-apply inspect and staging acceptance, the VERIFIED bytes, the refused earlier attempt, and SQL 134.
+  for (const evidence of ['41190658796', '41190590950', '41118383982', '41155563959', 'ed75889d-102a-4584-b7b9-9001aaf5abe8', 'uzM4I3iOU+rcTBdwcF9JbpML78IeA+AyQ1GwVBlQwJ8=', 'SQL 134']) {
+    assert.ok(applied.notes.includes(evidence), evidence);
+  }
+  for (const evidence of ['41190658796', '41190590950', '41118383982', 'ed75889d-102a-4584-b7b9-9001aaf5abe8']) {
+    assert.ok(PLAN.notes.includes(evidence), evidence);
+  }
+  // SQL 134 is recorded applied in production.
+  const sql134 = JSON.parse(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/sql134-loss-draft-escrow-write-grants-production-apply.json'), 'utf8'));
+  assert.equal(sql134.applied.result, 'applied');
+  assert.equal(sql134.execute, false);
 });
 
 test('Financial TOTP teammate reset (SQL 133): admin-reset-totp.mjs REPLACE from the live 9e85ae9a bytes (the release 2026-10-17 accepted bytes), planning only, SQL 133 first', async () => {
