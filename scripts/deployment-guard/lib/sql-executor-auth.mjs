@@ -3099,8 +3099,8 @@ export const AUTHORIZED_SQL137_PLATFORM_OWNER_IDENTITY = Object.freeze({
 // Payee setup link staging pin: SQL 138 (security audit 2026-10-29 finding 18; owner 2026-10-31, "Okay,
 // let's do option A and fix it correctly for SQL 138"): SQL 113's aws_public_payee_record refuses every
 // event once the payee is verified (already_verified), so a leaked link cannot swap a verified bank. Needs
-// SQL 113, whose function it replaces (release-sql-specs.mjs supersedes). Pending until a reviewed pin
-// change records a staging read-live.
+// SQL 113, whose function it replaces (release-sql-specs.mjs supersedes). Staging apply authorized
+// (wave 33) from staging read-live run 41239902526.
 export const AUTHORIZED_SQL138_PAYEE_SETUP_LINK_CLOSED_AFTER_VERIFICATION = Object.freeze({
   key: 'sql138',
   filename: 'aws/workflows/sql/138_payee_setup_link_closed_after_verification.sql',
@@ -3108,9 +3108,12 @@ export const AUTHORIZED_SQL138_PAYEE_SETUP_LINK_CLOSED_AFTER_VERIFICATION = Obje
   // The commit that last authored the file bytes.
   commit: 'c7c960f856c949a74eae9781573525828bada010',
   source_sha256: 'b4b3da5a22c18d69c143cf7e9f2add93be197304c65b70e11213d45b24392ef9',
-  authorization: 'pending',
-  execute: false,
-  expected_live_definition_sha256: null,
+  authorization: 'Owner approved 2026-10-31: staging apply (wave 33) from staging read-live run 41239902526',
+  execute: true,
+  // Staging read-live run 41239902526 (main ca7de0ab9, executor deploy run 41239673718):
+  // aws_public_payee_record(text, text, jsonb) "different", EXECUTE for checksops and the owner, SQL 113
+  // present, no successor applied, every prerequisite present. Equal to the derived staging prediction.
+  expected_live_definition_sha256: 'ec36c29e3472a9777b4a1d08ff7c3da5c00b1dc70cb4b754ef5b04ff0e73633c',
   // Code-derived: releaseIntendedHash('sql138', file bytes) (release-sql-state.mjs); re-derived by the tests.
   intended_replacement_sha256: '9acaf809824101d8ef62098e6440ca5d06cda1bec4117118c53931130efadf48',
   // Code-derived: releaseSupersededIntendedHash('sql113', SQL 113 bytes, 'sql138', these bytes). After

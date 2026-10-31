@@ -171,6 +171,12 @@ export const STAGING_WAVE1 = Object.freeze({
   // identity_accounts, every prerequisite present, no predecessor. NOT the pre-state the executor test derives
   // (7349393d..., aws/rls/sql/10's body with those grants): the grants match, the live function definition does not.
   sql137: Object.freeze({ wave: 32, approved: '2026-10-31', run: '41234275408', live: 'a2c2d856a21c52d47544fad05e0f0275a24a093421c8a7a7fbeea0e4bb329dfc' }),
+  // Wave 33 (owner approved 2026-10-31, "record the SQL 138 staging pin"): SQL 138, the payee setup link
+  // closed once the payee is verified. Read at main ca7de0ab9 after the executor carried it (deploy run
+  // 41239673718): aws_public_payee_record(text, text, jsonb) with EXECUTE for checksops and the owner,
+  // predecessors.sql113 true, no successor applied, every prerequisite present, both definer writes ok
+  // (the pre-state the executor test derives).
+  sql138: Object.freeze({ wave: 33, approved: '2026-10-31', run: '41239902526', live: 'ec36c29e3472a9777b4a1d08ff7c3da5c00b1dc70cb4b754ef5b04ff0e73633c' }),
   sql98: Object.freeze({ wave: 3, approved: '2026-10-18', run: '39083278136', live: '296c3d6a274e10f66005fb9eaecf93fa17b81bd8db3607037ca07698fddd3275', apply_run: '39085677318' }),
 });
 
@@ -182,7 +188,7 @@ export const pendingPin = (pin) => Object.freeze({
 });
 
 /**
- * The committed staging pin's apply state: waves 1-32 recorded and approved, wave 6 approved with
+ * The committed staging pin's apply state: waves 1-33 recorded and approved, wave 6 approved with
  * its read-live still to record (pending until then), wave 18 (SQL 117) retired, SQL 129 retired
  * before any read-live was recorded, the rest pending.
  */
