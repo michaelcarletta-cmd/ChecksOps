@@ -103,10 +103,12 @@ function createSettlementClient({
       if (sql.includes('FROM public.tenant_maintenance_payments WHERE id = $1')) {
         return { rows: state.obligation?.id === params[0] ? [state.obligation] : [] };
       }
-      if (sql.includes('notes LIKE')) {
-        const token = String(params[0] || '').replaceAll('%', '');
-        return { rows: String(state.obligation?.notes || '').includes(token) ? [state.obligation] : [] };
+      if (sql.includes("string_to_array(COALESCE(notes, ''), ' · ')")) {
+        // ('moov:' || $1) = ANY (string_to_array(COALESCE(notes, ''), ' · ')): an exact token.
+        const tokens = String(state.obligation?.notes || '').split(' · ');
+        return { rows: tokens.includes(`moov:${params[0]}`) ? [state.obligation] : [] };
       }
+      assert.ok(!sql.includes('LIKE'), `settlement must not match with LIKE: ${sql}`);
       if (sql.includes('UPDATE public.tenant_maintenance_payments')) {
         if (!state.obligation || state.obligation.id !== params[0]) return { rows: [] };
         const nextStatus = params[1];

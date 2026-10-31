@@ -102,7 +102,9 @@ on:
           - providers/catalog.mjs
           - providers/webhook-apply.mjs
           - providers/moov-transfer-webhook.mjs
+          - providers/moov-webhook-confirm.mjs
           - providers/webhooks.mjs
+          - tenant-collection-v2-settlement.mjs
           - tenant-collection-v2.mjs
           - tenant-billing-destination.mjs
           - tenant-fee-invoice-email.mjs

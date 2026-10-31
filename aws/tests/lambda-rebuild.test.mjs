@@ -130,6 +130,22 @@ const CHANGED_SINCE_SECOND_REBUILD = {
   // rebuild section.
   'signature-submit.mjs': 'changed',
   'homeowner-signing-integration.mjs': 'changed',
+  // Moov webhook body confirmation (2026-10-31, security audit finding): Collection V2 settlement
+  // matches the ` · moov:<id>` notes token exactly instead of LIKE '%id%'; a REPLACE row of the
+  // production overlay plan, not a rebuild section.
+  'tenant-collection-v2-settlement.mjs': 'changed',
+};
+// Members of the current (third) rebuild sections that main changed after those rebuilds were
+// applied (staging run 39666390516, production run 39669873076 of main 008af40e2). The sections keep
+// the accepted hash they recorded as evidence; the new bytes go through the production overlay plan.
+const CHANGED_SINCE_THIRD_REBUILD = new Set([
+  // Moov webhook body confirmation (2026-10-31): a REPLACE row of the production overlay plan.
+  'providers/webhooks.mjs',
+]);
+const assertThirdSectionAccepted = (apiRoot, name, accepted) => {
+  const onMain = sha256(fs.readFileSync(path.join(apiRoot, name)));
+  if (CHANGED_SINCE_THIRD_REBUILD.has(name)) assert.notEqual(onMain, accepted, `${name} is listed as changed since the third rebuild but main still has the accepted bytes`);
+  else assert.equal(onMain, accepted, name);
 };
 // Listed changes that go through the production overlay plan, never the current rebuild section.
 const OVERLAY_PLAN_CHANGES = new Set([
@@ -156,6 +172,8 @@ const OVERLAY_PLAN_CHANGES = new Set([
   // Homeowner portal signing (2026-10-29): REPLACE rows of the production plan, held on SQL 127.
   'signature-submit.mjs',
   'homeowner-signing-integration.mjs',
+  // Moov webhook body confirmation (2026-10-31): a REPLACE row of the production plan.
+  'tenant-collection-v2-settlement.mjs',
 ]);
 const assertSectionAcceptedIsMain = (apiRoot, name, accepted) => {
   const onMain = sha256(fs.readFileSync(path.join(apiRoot, name)));
@@ -378,7 +396,7 @@ test('the production plan section accepts inspect run 39666717878: Moov transfer
   assert.deepEqual(section.added, staging.added);
   const apiRoot = path.join(REPO_ROOT, 'aws/functions/api');
   for (const [name, entry] of Object.entries(section.members)) {
-    assert.equal(sha256(fs.readFileSync(path.join(apiRoot, name))), entry.accepted_sha256, name);
+    assertThirdSectionAccepted(apiRoot, name, entry.accepted_sha256);
     assert.equal(entry.live_sha256, second.members[name].accepted_sha256, name);
   }
   for (const [name, hash] of Object.entries(section.added)) {
@@ -517,8 +535,8 @@ test('the staging plan section accepts inspect run 39663300105: Moov transfer re
   assert.deepEqual(staging.inspect.dependency_counts, { live: 54, candidate: 54 });
   const apiRoot = path.join(REPO_ROOT, 'aws/functions/api');
   for (const [name, entry] of Object.entries(section.members)) {
-    // Accepted is main's bytes; live is the bytes the second rebuild accepted and put live.
-    assert.equal(sha256(fs.readFileSync(path.join(apiRoot, name))), entry.accepted_sha256, name);
+    // Accepted is main's bytes (unless main changed it since); live is the bytes the second rebuild accepted and put live.
+    assertThirdSectionAccepted(apiRoot, name, entry.accepted_sha256);
     assert.equal(entry.live_sha256, second.members[name].accepted_sha256, name);
   }
   for (const [name, hash] of Object.entries(section.added)) {

@@ -154,11 +154,14 @@ const lookupObligation = async (client, { providerTransferId, collectionLeg }) =
     if (byId) return byId;
   }
 
+  // The submit appends ` · moov:<transfer id>` to notes (tenant-billing-engine.mjs). Match that
+  // token exactly: a LIKE '%id%' also matched an id that is a substring of another transfer's
+  // id, and treated % and _ in the id as wildcards.
   return (await client.query(
     `SELECT * FROM public.tenant_maintenance_payments
-     WHERE notes LIKE $1
+     WHERE ('moov:' || $1) = ANY (string_to_array(COALESCE(notes, ''), ' · '))
      LIMIT 1`,
-    [`%${providerTransferId}%`],
+    [providerTransferId],
   ).catch(() => ({ rows: [] }))).rows[0] || null;
 };
 

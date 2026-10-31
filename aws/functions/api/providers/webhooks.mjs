@@ -9,6 +9,8 @@ import { applyCheckAltWebhook, applyMoovWebhook, sandboxWebhookApplyEnabled } fr
 import { productionOnboardingWebhookApplyEnabled } from './onboarding/flags.mjs';
 import { applyProductionOnboardingWebhook } from './onboarding/webhook-status.mjs';
 import { applyCollectionV2ProviderCompletion } from '../tenant-collection-v2-settlement.mjs';
+import { billingEnvironment } from '../tenant-billing-destination.mjs';
+import { MoovConfirmationRetry, confirmMoovWebhookPayload } from './moov-webhook-confirm.mjs';
 import {
   applyProductionMoovTransferWebhook,
   isMoovTransferEvent,
@@ -51,8 +53,14 @@ const parseJson = (rawBody) => {
 
 const eventTypeOf = (payload) => payload?.type || payload?.eventType || payload?.webhook_type || payload?.webhook_code || 'unknown';
 
-const externalIdOf = (payload, verifiedId) => (
-  payload?.eventID || payload?.event_id || payload?.id || verifiedId || null
+/**
+ * The receipt key. Moov: the signed X-Webhook-ID only (the body is not signed, so a body
+ * eventID could be anything). CheckAlt signs the body, so its body id stays first.
+ */
+const externalIdOf = (provider, payload, verifiedId) => (
+  provider === 'moov'
+    ? (verifiedId || null)
+    : (payload?.eventID || payload?.event_id || payload?.id || verifiedId || null)
 );
 
 const providerAccountOf = (provider, payload) => {
@@ -166,7 +174,7 @@ export const handleProviderWebhook = async (event, provider, deps = {}) => {
   }
 
   const dryRun = providerWebhookDryRun();
-  const externalEventId = externalIdOf(parsed.payload, verified.eventId);
+  const externalEventId = externalIdOf(provider, parsed.payload, verified.eventId);
   if (!externalEventId) {
     return { ok: false, statusCode: 400, error: 'malformed_webhook', message: 'Webhook is missing an event id' };
   }
@@ -200,35 +208,51 @@ export const handleProviderWebhook = async (event, provider, deps = {}) => {
       financialTablesMutated: false,
       skipped: 'sandbox_apply_disabled',
     };
-    if (!stored.duplicate && sandboxWebhookApplyEnabled()) {
-      if (provider === 'moov') {
-        applyResult = await applyMoovWebhook(client, parsed.payload, {
-          mappedTenantId: mapped.mapped_tenant_id,
-        });
-      } else if (provider === 'checkalt') {
-        applyResult = await applyCheckAltWebhook(client, parsed.payload);
-      }
-    } else if (
-      !stored.duplicate && provider === 'moov'
-      && isMoovTransferEvent(eventTypeOf(parsed.payload)) && productionTransferWebhookApplyEnabled()
-    ) {
-      // Production: status, ACH return and NOC of a funding or send leg (SQL 109 writer).
-      // Records only; never moves money.
-      applyResult = await applyProductionMoovTransferWebhook(client, parsed.payload, {
-        eventId: String(externalEventId),
-      });
-    } else if (!stored.duplicate && provider === 'moov' && productionOnboardingWebhookApplyEnabled()) {
-      // Production: onboarding status only (account / capability / verification),
-      // behind AWS_MOOV_ONBOARDING_PRODUCTION_ENABLED. Money movement is never applied here.
-      applyResult = await applyProductionOnboardingWebhook(client, parsed.payload);
-    } else if (stored.duplicate) {
-      applyResult = { applied: false, skipped: 'duplicate', financialTablesMutated: false };
-    }
-
     let collectionV2Settlement = { applied: false, skipped: 'not_attempted' };
-    if (provider === 'moov' && !dryRun) {
-      collectionV2Settlement = await applyCollectionV2ProviderCompletion(client, parsed.payload, { dryRun });
-    } else if (provider === 'moov' && dryRun) {
+    let confirmation = null;
+    const moovApplyWanted = provider === 'moov' && (
+      sandboxWebhookApplyEnabled() || !dryRun || productionOnboardingWebhookApplyEnabled()
+    );
+    if (stored.duplicate) {
+      applyResult = { applied: false, skipped: 'duplicate', financialTablesMutated: false };
+      if (provider === 'moov') collectionV2Settlement = { applied: false, skipped: 'duplicate' };
+    } else if (provider === 'checkalt' && sandboxWebhookApplyEnabled()) {
+      applyResult = await applyCheckAltWebhook(client, parsed.payload);
+    } else if (moovApplyWanted) {
+      // Never write from the body: read the named transfer / account back from Moov and
+      // apply only what Moov returned (moov-webhook-confirm.mjs).
+      confirmation = await (deps.confirmMoovWebhook || confirmMoovWebhookPayload)(parsed.payload, {
+        environment: sandboxWebhookApplyEnabled() ? 'sandbox' : billingEnvironment(),
+        secrets,
+        fetchImpl: deps.fetchImpl || fetch,
+        loadSandbox: deps.loadSandboxCredentials || null,
+      });
+      if (!confirmation.ok) {
+        applyResult = { applied: false, skipped: confirmation.skipped, financialTablesMutated: false };
+        collectionV2Settlement = { applied: false, skipped: confirmation.skipped };
+      } else {
+        const trusted = confirmation.payload;
+        if (sandboxWebhookApplyEnabled()) {
+          applyResult = await applyMoovWebhook(client, trusted, {
+            mappedTenantId: mapped.mapped_tenant_id,
+          });
+        } else if (isMoovTransferEvent(eventTypeOf(trusted)) && productionTransferWebhookApplyEnabled()) {
+          // Production: status, ACH return and NOC of a funding or send leg (SQL 109 writer).
+          // Records only; never moves money.
+          applyResult = await applyProductionMoovTransferWebhook(client, trusted, {
+            eventId: String(externalEventId),
+          });
+        } else if (productionOnboardingWebhookApplyEnabled()) {
+          // Production: onboarding status only (account / capability / verification),
+          // behind AWS_MOOV_ONBOARDING_PRODUCTION_ENABLED. Money movement is never applied here.
+          applyResult = await applyProductionOnboardingWebhook(client, trusted);
+        }
+        if (!dryRun) {
+          collectionV2Settlement = await applyCollectionV2ProviderCompletion(client, trusted, { dryRun });
+        }
+      }
+    }
+    if (provider === 'moov' && dryRun && collectionV2Settlement.skipped === 'not_attempted') {
       collectionV2Settlement = { applied: false, skipped: 'dry_run' };
     }
 
@@ -253,12 +277,24 @@ export const handleProviderWebhook = async (event, provider, deps = {}) => {
       payload: sanitized,
       financialTablesMutated: Boolean(applyResult.financialTablesMutated || collectionV2Settlement.applied),
       productionRecordsMutated: Boolean(collectionV2Settlement.productionRecordsMutated),
-      liveProviderCalled: false,
+      liveProviderCalled: Boolean(confirmation?.liveProviderCalled),
+      provider_confirmation: confirmation ? { ok: confirmation.ok, resource: confirmation.resource || null, skipped: confirmation.skipped || null } : null,
       collection_v2_settlement: collectionV2Settlement,
     };
   } catch (error) {
     if (client && !didCommit) {
       try { await client.query('ROLLBACK'); } catch { /* ignore */ }
+    }
+    if (error instanceof MoovConfirmationRetry) {
+      // Nothing was kept (the receipt rolled back); Moov delivers the webhook again.
+      return {
+        ok: false,
+        statusCode: 503,
+        error: error.code,
+        message: 'Moov could not be read to confirm the webhook; it will be retried',
+        provider,
+        financialTablesMutated: false,
+      };
     }
     return {
       ok: false,

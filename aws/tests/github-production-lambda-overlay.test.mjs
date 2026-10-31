@@ -4435,3 +4435,91 @@ test('Financial TOTP teammate reset (SQL 133): admin-reset-totp.mjs REPLACE from
   assert.equal(replay.mutation, false);
   assert.deepEqual(calls.receipt.owned_member_ops, { replace: [MEMBER], add: [] });
 });
+
+test('Moov webhook body confirmation (2026-10-31): ADD moov-webhook-confirm.mjs before webhooks.mjs, REPLACE webhooks.mjs and tenant-collection-v2-settlement.mjs from the third rebuild bytes, planning only', async () => {
+  const REL = 'aws/tests/fixtures/production-moov-webhook-body-auth-manifest-2026-10-31.json';
+  const CONFIRM = 'providers/moov-webhook-confirm.mjs';
+  const WEBHOOKS = 'providers/webhooks.mjs';
+  const SETTLEMENT = 'tenant-collection-v2-settlement.mjs';
+  // The bytes the third full-package production rebuild put live (run 39669873076 of main 008af40e2).
+  const WEBHOOKS_LIVE = 'f7353ee1673364d45ce564dd8b7f102273e9a871c63f8398d03bd7226360d97f';
+  const SETTLEMENT_LIVE = '075d96d0826beb55a36261a799b80aa4898486b6322949b705017769151d7b40';
+  const PREVIOUS = 'aws/tests/fixtures/production-moov-transfer-returns-manifest-2026-10-21.json';
+  const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, REL), 'utf8'));
+  const accepted = Object.fromEntries([CONFIRM, WEBHOOKS, SETTLEMENT].map((m) => [m, sha(`aws/functions/api/${m}`)]));
+  assert.equal(manifest.workstream_id, 'moov-webhook-body-auth');
+  assert.equal(manifest.deploy_authorized, false);
+  assert.match(manifest.authorization, /^Pending owner review/);
+  assert.equal(manifest.live_lambda, FUNCTION_NAME);
+  for (const evidence of ['39669873076', '008af40e2', 'X-Webhook-ID', 'not the body']) assert.ok(manifest.notes.includes(evidence), evidence);
+  assert.deepEqual(manifest.members, {
+    [CONFIRM]: { live_sha256: null, accepted_sha256: accepted[CONFIRM], operation: 'add' },
+    [WEBHOOKS]: { live_sha256: WEBHOOKS_LIVE, accepted_sha256: accepted[WEBHOOKS], operation: 'replace', previous_manifest: PREVIOUS },
+    [SETTLEMENT]: { live_sha256: SETTLEMENT_LIVE, accepted_sha256: accepted[SETTLEMENT], operation: 'replace' },
+  });
+  // webhooks.mjs live is what the transfer returns manifest accepted; the rebuild plan records both live bytes.
+  assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, PREVIOUS), 'utf8')).members[WEBHOOKS].accepted_sha256, WEBHOOKS_LIVE);
+  const rebuild = JSON.parse(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/lambda-rebuild-plan.json'), 'utf8')).environments.production;
+  assert.equal(rebuild.applied.run_id, '39669873076');
+  assert.equal(rebuild.members[WEBHOOKS].accepted_sha256, WEBHOOKS_LIVE);
+  assert.equal(rebuild.applied.main_commit, '008af40e2465eb68fdfeab72eaf06f2efb1d5b45');
+  // Settlement was the same live and on main at every production rebuild (never a changed member) ...
+  for (const section of [rebuild, ...rebuild.history]) {
+    assert.equal(section.members[SETTLEMENT], undefined);
+    assert.equal(section.added[SETTLEMENT], undefined);
+  }
+  // ... and these are the bytes its production ADD accepted (collection-v2-settlement-prod-compose.test.mjs).
+  assert.match(fs.readFileSync(path.join(ROOT, 'aws/tests/collection-v2-settlement-prod-compose.test.mjs'), 'utf8'), new RegExp(`ACCEPTED_SETTLEMENT_SHA = '${SETTLEMENT_LIVE}'`));
+  for (const member of [CONFIRM, WEBHOOKS, SETTLEMENT]) {
+    const live = manifest.members[member].live_sha256;
+    assert.deepEqual(PLAN.members[member], {
+      operation: live === null ? 'add' : 'replace',
+      accepted_sha256: accepted[member],
+      expected_live_sha256: live,
+      sql_before: null,
+      manifest: REL,
+    }, member);
+    assert.equal(resolvePlannedMember(member, { root: ROOT, plan: PLAN }).ok, true, member);
+  }
+  assert.ok(PLAN.notes.includes(`Moov webhook body confirmation (2026-10-31, security audit 2026-10-29): ADD ${CONFIRM} ${accepted[CONFIRM].slice(0, 8)}, REPLACE ${SETTLEMENT} ${SETTLEMENT_LIVE.slice(0, 8)} -> ${accepted[SETTLEMENT].slice(0, 8)} and REPLACE ${WEBHOOKS} ${WEBHOOKS_LIVE.slice(0, 8)} -> ${accepted[WEBHOOKS].slice(0, 8)}`));
+  // webhooks.mjs imports the added module at load, so it comes first; settlement follows webhooks.mjs.
+  assert.ok(localImports(fs.readFileSync(path.join(API, WEBHOOKS), 'utf8'), WEBHOOKS).includes(CONFIRM));
+  assert.equal(PLAN.order.indexOf(CONFIRM) + 1, PLAN.order.indexOf(WEBHOOKS));
+  assert.equal(PLAN.order.indexOf(WEBHOOKS) + 1, PLAN.order.indexOf(SETTLEMENT));
+  // The added module imports only modules already in the live ZIP (no planned ADD among them).
+  const confirmImports = localImports(fs.readFileSync(path.join(API, CONFIRM), 'utf8'), CONFIRM);
+  assert.deepEqual(confirmImports.sort(), ['providers/onboarding/webhook-status.mjs', 'providers/parity/moov-client.mjs', 'sandbox-credentials.mjs', 'tenant-billing-destination.mjs']);
+  for (const dep of confirmImports) assert.notEqual(PLAN.members[dep]?.operation, 'add', dep);
+  const inspect = (member) => ({ ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: member });
+  const ready = await run(inspect(CONFIRM), { root: ROOT, inspectLive: liveFor(CONFIRM) });
+  assert.equal(ready.state, 'READY');
+  assert.equal(ready.mutation, false);
+  for (const [member, live] of [[WEBHOOKS, WEBHOOKS_LIVE], [SETTLEMENT, SETTLEMENT_LIVE]]) {
+    const before = await run(inspect(member), { root: ROOT, inspectLive: liveFor(member, { sha256: live, extra: [CONFIRM] }) });
+    assert.equal(before.state, 'READY', member);
+    assert.equal(before.mutation, false, member);
+    const done = await run(inspect(member), { root: ROOT, inspectLive: liveFor(member, { sha256: accepted[member], extra: [CONFIRM] }) });
+    assert.equal(done.state, 'ALREADY_ACCEPTED', member);
+    await assert.rejects(
+      run(inspect(member), { root: ROOT, inspectLive: liveFor(member, { sha256: 'c'.repeat(64), extra: [CONFIRM] }) }),
+      (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+      member,
+    );
+  }
+  // Applies replay in order; webhooks.mjs is refused while the added module is not live yet.
+  for (const member of [CONFIRM, WEBHOOKS, SETTLEMENT]) {
+    const { deps, calls } = applyDeps(member);
+    const result = await run(applyEnv(member), deps);
+    assert.equal(result.mutation, false, member);
+    const op = PLAN.members[member].operation;
+    assert.deepEqual(calls.receipt.owned_member_ops, { replace: op === 'replace' ? [member] : [], add: op === 'add' ? [member] : [] }, member);
+  }
+  await assert.rejects(
+    run(applyEnv(WEBHOOKS), applyDeps(WEBHOOKS, { pending: [CONFIRM] }).deps),
+    (error) => error.code === CODES.DEPLOYMENT_COLLISION,
+  );
+  const source = fs.readFileSync(path.join(API, WEBHOOKS), 'utf8');
+  assert.match(source, /confirmMoovWebhookPayload/);
+  assert.match(source, /provider === 'moov'\n    \? \(verifiedId \|\| null\)/);
+  assert.equal(/notes LIKE/.test(fs.readFileSync(path.join(API, SETTLEMENT), 'utf8')), false);
+});

@@ -1,0 +1,25 @@
+{
+  "workstream_id": "moov-webhook-body-auth",
+  "authorization": "Pending owner review (2026-10-31). Planning only: nothing is live or verified. Each production apply still needs its own owner approval and staging acceptance.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Moov webhook body confirmation (2026-10-31, security audit 2026-10-29): Moov signs timestamp|nonce|webhookID, not the body, so one set of signed headers could be resent for five minutes with any body and set a transfer's status, a Collection V2 obligation's settlement or an account's onboarding status. The accepted bytes: providers/webhooks.mjs keys the Moov receipt on the signed X-Webhook-ID only (never the body eventID) and, before any apply, reads the transfer, account or bank account the body names back from Moov through the added providers/moov-webhook-confirm.mjs (GET only, the calls and credentials the existing code already uses: resolveBillingMoovContext, production keys only on the production runtime) and applies only what Moov returned; a resource Moov does not know is not applied, a Moov outage rolls the receipt back and answers 503 so Moov delivers again. tenant-collection-v2-settlement.mjs matches the ' · moov:<transfer id>' notes token exactly instead of notes LIKE '%id%'. No SQL; no money movement; no other member changes. webhooks.mjs live_sha256 f7353ee1 and tenant-collection-v2-settlement.mjs live_sha256 075d96d0 are the bytes the third full-package production rebuild put live (ops/deployment-guard/lambda-rebuild-plan.json, production run 39669873076 of main 008af40e2, CodeSha256 pNCewAaF...); neither file changed on main since, and no overlay of either has been planned or applied since. webhooks.mjs chains to the manifest that planned f7353ee1 (previous_manifest). moov-webhook-confirm.mjs is new, so it has no live bytes; webhooks.mjs imports it at load, so it is ordered just before webhooks.mjs. A read-only production overlay inspect must confirm each live member before any apply.",
+  "members": {
+    "providers/moov-webhook-confirm.mjs": {
+      "live_sha256": null,
+      "accepted_sha256": "0cf58ecb51b3f2a3ea43c514e1c90a9f98ea16db8c94fb9f2bc5791995cfdcaf",
+      "operation": "add"
+    },
+    "providers/webhooks.mjs": {
+      "live_sha256": "f7353ee1673364d45ce564dd8b7f102273e9a871c63f8398d03bd7226360d97f",
+      "accepted_sha256": "59b586744332df62524a25b4602966686c9ba9ae869cc644ab9046bfc1ae63b0",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-moov-transfer-returns-manifest-2026-10-21.json"
+    },
+    "tenant-collection-v2-settlement.mjs": {
+      "live_sha256": "075d96d0826beb55a36261a799b80aa4898486b6322949b705017769151d7b40",
+      "accepted_sha256": "dece31d7bbed756c714ebe7740645d5f426048e318c8f2ac6e3ec42498fc999d",
+      "operation": "replace"
+    }
+  }
+}

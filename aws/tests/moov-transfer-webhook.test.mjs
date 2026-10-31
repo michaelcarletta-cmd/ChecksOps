@@ -44,6 +44,7 @@ const withEnv = async (vars, fn) => {
   }
 };
 const PRODUCTION_ENV = {
+  CHECKSOPS_ENV: 'production',
   AWS_PROVIDER_EXECUTION_ENABLED: 'true',
   AWS_MOOV_ENABLED: 'true',
   AWS_PROVIDER_WEBHOOK_DRY_RUN: 'false',
@@ -234,7 +235,22 @@ test('apply: nothing is called without a transfer id, an event id or a status / 
 });
 
 /** A signed Moov webhook through handleProviderWebhook with a fake database. */
-async function deliver(payload, { writerResult, duplicate = false } = {}) {
+/** Moov as the route reads it back: the transfer (or account) the body names. */
+const fakeMoov = (records = {}) => {
+  const calls = [];
+  const fetchImpl = async (url) => {
+    const u = String(url);
+    calls.push(u);
+    if (u.endsWith('/oauth2/token')) return { ok: true, status: 200, text: async () => JSON.stringify({ access_token: 'tok', expires_in: 300 }) };
+    const key = Object.keys(records).find((path) => u.endsWith(path));
+    if (!key) return { ok: false, status: 404, text: async () => '{}' };
+    return { ok: true, status: 200, text: async () => JSON.stringify(records[key]) };
+  };
+  return { calls, fetchImpl };
+};
+const MOOV_SECRETS = { MOOV_PUBLIC_KEY: 'pk', MOOV_SECRET_KEY: 'sk', MOOV_ACCOUNT_ID: 'platform-prod' };
+
+async function deliver(payload, { writerResult, duplicate = false, moov = fakeMoov() } = {}) {
   const secret = 'moov-webhook-secret';
   const webhookId = payload.eventID;
   const timestamp = String(Math.floor(Date.now() / 1000));
@@ -263,9 +279,10 @@ async function deliver(payload, { writerResult, duplicate = false } = {}) {
     requestContext: { stage: 'production', http: { method: 'POST', path: '/webhooks/moov' } },
   };
   const result = await handleProviderWebhook(event, 'moov', {
-    loadProviderSecrets: async () => ({ MOOV_WEBHOOK_SECRET: secret }),
+    loadProviderSecrets: async () => ({ MOOV_WEBHOOK_SECRET: secret, ...MOOV_SECRETS }),
     loadDatabaseCredentials: async () => ({ host: 'localhost', username: 'checksops', password: 'x', database: 'checksops' }),
     createClient: () => client,
+    fetchImpl: moov.fetchImpl,
   });
   return { result, client };
 }
@@ -276,16 +293,18 @@ test('webhook route: a production transfer.updated return is written back once; 
     data: { transferID: 'tr_prod_1', status: 'failed', source: { achDetails: { status: 'returned', return: { code: 'R01', reason: 'Insufficient funds' } } } },
   };
   const writerResult = { transfer_id: TRANSFER, tenant_id: TENANT, leg_role: 'send_bank', previous_status: 'submitted', new_status: 'returned', outcome: 'applied', notify: true };
+  // Moov holds the same transfer the body describes; the route writes what Moov returns.
+  const moov = () => fakeMoov({ '/accounts/platform-prod/transfers/tr_prod_1': { transferID: 'tr_prod_1', ...payload.data } });
   const originalWarn = console.warn;
   console.warn = () => {};
   try {
     await withEnv(PRODUCTION_ENV, async () => {
-      const { result, client } = await deliver(payload, { writerResult });
+      const { result, client } = await deliver(payload, { writerResult, moov: moov() });
       assert.equal(result.ok, true, JSON.stringify(result));
       assert.equal(result.applied, true);
       assert.deepEqual(result.apply_mutations, ['payment_transfers', 'payment_event_log']);
       assert.equal(result.apply_environment, 'production');
-      assert.equal(result.liveProviderCalled, false);
+      assert.equal(result.liveProviderCalled, true);
       assert.deepEqual(writerCall(client).params.slice(0, 7), ['production', 'tr_prod_1', 'returned', 'failed', 'evt-route-1', 'transfer.updated', 'R01']);
       // The writer runs before the Collection V2 step, which no longer sees the apply GUC.
       const sqls = client.calls.map((c) => c.sql);
@@ -295,12 +314,14 @@ test('webhook route: a production transfer.updated return is written back once; 
       assert.ok(iWriter >= 0 && iReset > iWriter && iCollection > iReset, JSON.stringify(sqls));
       assert.equal(sqls.at(-1), 'COMMIT');
 
-      const again = await deliver(payload, { writerResult, duplicate: true });
+      const again = await deliver(payload, { writerResult, duplicate: true, moov: moov() });
       assert.equal(again.result.duplicate, true);
       assert.equal(again.result.apply_skipped, 'duplicate');
       assert.equal(writerCall(again.client), undefined);
 
-      const account = await deliver({ eventID: 'evt-route-2', type: 'account.updated', accountID: 'acct-prod', data: {} }, { writerResult });
+      const account = await deliver({ eventID: 'evt-route-2', type: 'account.updated', accountID: 'acct-prod', data: {} }, {
+        writerResult, moov: fakeMoov({ '/accounts/acct-prod': { accountID: 'acct-prod' } }),
+      });
       assert.equal(writerCall(account.client), undefined);
     });
     await withEnv({ ...PRODUCTION_ENV, AWS_PROVIDER_WEBHOOK_DRY_RUN: 'true' }, async () => {

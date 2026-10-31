@@ -18,7 +18,15 @@ const FORBIDDEN_MEMBERS = [
 const sha256 = (rel) => createHash('sha256').update(readFileSync(new URL(rel, import.meta.url))).digest('hex');
 
 test('accepted settlement module is the production add member', () => {
-  assert.equal(sha256('../functions/api/tenant-collection-v2-settlement.mjs'), ACCEPTED_SETTLEMENT_SHA);
+  // The add put these bytes live (production rebuilds since keep them). Main has since moved on to
+  // the exact notes-token match (Moov webhook body confirmation, 2026-10-31): the overlay plan
+  // REPLACEs from these bytes to main's.
+  const plan = JSON.parse(readFileSync(new URL('../../ops/deployment-guard/production-api-overlay-plan.json', import.meta.url), 'utf8'));
+  const row = plan.members['tenant-collection-v2-settlement.mjs'];
+  assert.equal(row.operation, 'replace');
+  assert.equal(row.expected_live_sha256, ACCEPTED_SETTLEMENT_SHA);
+  assert.equal(row.accepted_sha256, sha256('../functions/api/tenant-collection-v2-settlement.mjs'));
+  assert.notEqual(row.accepted_sha256, ACCEPTED_SETTLEMENT_SHA);
 });
 
 test('production webhook dispatcher activates settlement with dry-run skip', () => {
