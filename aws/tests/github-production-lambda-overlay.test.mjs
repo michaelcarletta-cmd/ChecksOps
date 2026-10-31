@@ -165,6 +165,11 @@ const SQL133_FILE = 'aws/workflows/sql/133_financial_totp_admin_reset_enrollment
 const ADMIN_RESET_REL = 'aws/tests/fixtures/production-financial-totp-admin-reset-manifest-2026-10-30.json';
 const ADMIN_RESET_MANIFEST = JSON.parse(fs.readFileSync(path.join(ROOT, ADMIN_RESET_REL), 'utf8'));
 const withSql133 = (plan) => { plan.sql_prerequisites[SQL133_FILE] = { verified_live: true, evidence: 'test' }; return plan; };
+// admin-reset-totp.mjs records its applied teammate reset bytes live (production run 41189659812, 2026-10-31):
+// every apply replay of it starts from the pre-apply live bytes (9e85ae9a, the planning manifest's live_sha256).
+const ADMIN_RESET_APPLIED_REL = 'aws/tests/fixtures/production-financial-totp-admin-reset-applied-manifest-2026-10-31.json';
+const ADMIN_RESET_PRE = ADMIN_RESET_MANIFEST.members['admin-reset-totp.mjs'].live_sha256;
+const adminResetPre = (plan) => { plan.members['admin-reset-totp.mjs'].expected_live_sha256 = ADMIN_RESET_PRE; return withSql133(plan); };
 const SQL121_FILE = 'aws/workflows/sql/121_cash_jobs_production_grants.sql';
 const WORKFLOW_PRE_PLAN = (() => {
   const plan = structuredClone(PLAN);
@@ -179,7 +184,7 @@ function applyDeps(member, liveOpts = {}) {
   if (Object.hasOwn(MORTGAGE_DESK_PRE, member) && liveOpts.plan === undefined) liveOpts = { ...liveOpts, plan: mortgageDeskPre(structuredClone(PLAN)) };
   if (member === 'auth-financial-totp.mjs' && liveOpts.plan === undefined) liveOpts = { ...liveOpts, plan: totpPre(structuredClone(PLAN)) };
   if (member === 'providers/production/checkalt-register.mjs' && liveOpts.plan === undefined) liveOpts = { ...liveOpts, plan: registerPre(structuredClone(PLAN)) };
-  if (member === 'admin-reset-totp.mjs' && liveOpts.plan === undefined) liveOpts = { ...liveOpts, plan: withSql133(structuredClone(PLAN)) };
+  if (member === 'admin-reset-totp.mjs' && liveOpts.plan === undefined) liveOpts = { ...liveOpts, plan: adminResetPre(structuredClone(PLAN)) };
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'prod-overlay-'));
   fs.mkdirSync(path.join(root, 'ops/deployment-guard'), { recursive: true });
   fs.mkdirSync(path.join(root, 'aws/functions/api'), { recursive: true });
@@ -221,7 +226,7 @@ const applyEnv = (member, extra = {}) => ({
   ...ENV,
   CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'apply',
   CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: member,
-  CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: (member === 'providers.mjs' ? PROVIDERS_PRE : member === 'workflow.mjs' ? WORKFLOW_PRE : member === 'auth-financial-totp.mjs' ? TOTP_PRE : member === 'providers/production/checkalt-register.mjs' ? REGISTER_PRE : MORTGAGE_DESK_PRE[member] ?? PLAN.members[member].expected_live_sha256) || '',
+  CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: (member === 'providers.mjs' ? PROVIDERS_PRE : member === 'workflow.mjs' ? WORKFLOW_PRE : member === 'auth-financial-totp.mjs' ? TOTP_PRE : member === 'providers/production/checkalt-register.mjs' ? REGISTER_PRE : member === 'admin-reset-totp.mjs' ? ADMIN_RESET_PRE : MORTGAGE_DESK_PRE[member] ?? PLAN.members[member].expected_live_sha256) || '',
   CHECKSOPS_STAGING_ACCEPTANCE_REFERENCE: ACCEPTANCE,
   CHECKSOPS_PRODUCTION_APPROVAL: approvalPhrase(member),
   ...extra,
@@ -4312,7 +4317,7 @@ test('Loss Draft escrow records and file close 2026-10-31: workflow-rpc.mjs appl
   assert.equal(sql134.execute, false);
 });
 
-test('Financial TOTP teammate reset (SQL 133): admin-reset-totp.mjs REPLACE from the live 9e85ae9a bytes (the release 2026-10-17 accepted bytes), planning only, SQL 133 first', async () => {
+test('Financial TOTP teammate reset (SQL 133): admin-reset-totp.mjs REPLACE from the live 9e85ae9a bytes (the release 2026-10-17 accepted bytes), SQL 133 first, applied 2026-10-31', async () => {
   const MEMBER = 'admin-reset-totp.mjs';
   const RELEASE = 'aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json';
   // The release 2026-10-17 accepted bytes (that manifest's REPLACE a1d8a54a -> 9e85ae9a), which read-only
@@ -4364,7 +4369,21 @@ test('Financial TOTP teammate reset (SQL 133): admin-reset-totp.mjs REPLACE from
   assert.match(ADMIN_RESET_MANIFEST.notes, /inspect run 41157189136/);
   assert.deepEqual(ADMIN_RESET_MANIFEST.members[MEMBER], { live_sha256: LIVE, accepted_sha256: accepted, operation: 'replace', previous_manifest: RELEASE });
   assert.deepEqual([release.members[MEMBER].live_sha256, release.members[MEMBER].accepted_sha256], [STALE, LIVE], "the previous manifest's accepted bytes are the live bytes");
-  assert.deepEqual(PLAN.members[MEMBER], { operation: 'replace', accepted_sha256: accepted, expected_live_sha256: LIVE, sql_before: SQL133_FILE, manifest: ADMIN_RESET_REL });
+  // Applied 2026-10-31 (production run 41189659812): the record names the runs and the verified state; the row
+  // records the applied bytes live and names the record.
+  const applied = JSON.parse(fs.readFileSync(path.join(ROOT, ADMIN_RESET_APPLIED_REL), 'utf8'));
+  assert.equal(applied.workstream_id, 'financial-totp-admin-reset-applied');
+  assert.equal(applied.deploy_authorized, false);
+  assert.match(applied.authorization, /^Record only/);
+  assert.equal(applied.live_lambda, 'checksops-production-prep-api');
+  for (const evidence of ['run 41156823635', 'run 41156965405', 'run 41157044386', 'run 41158705237', 'run 41189659812', 'run 41189746193', 'run 41157189136', '#1476', '#1474', '"DEPLOY admin-reset-totp.mjs TO PRODUCTION"', 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/41156965405', '4fmmLtjN0X4G0Lb6cKpMFUtndJFVUiG7DVcziaSpBdQ=', '75d90879-582c-4c18-b9d1-b28be0c3d6ae', 'a590b7a7-1fe5-421d-a899-aab0767c7cc0', 'SQL 133', 'Not verified']) {
+    assert.ok(applied.notes.includes(evidence), evidence);
+  }
+  assert.deepEqual(applied.members, { [MEMBER]: { live_sha256: accepted, accepted_sha256: accepted, operation: 'replace', previous_manifest: ADMIN_RESET_REL } });
+  assert.deepEqual(PLAN.members[MEMBER], { operation: 'replace', accepted_sha256: accepted, expected_live_sha256: accepted, sql_before: SQL133_FILE, manifest: ADMIN_RESET_APPLIED_REL });
+  assert.ok(PLAN.notes.includes('Financial TOTP teammate reset admin-reset-totp.mjs applied 2026-10-31 (production run 41189659812'));
+  const before = structuredClone(PLAN);
+  before.members[MEMBER] = { ...before.members[MEMBER], expected_live_sha256: LIVE, manifest: ADMIN_RESET_REL };
   assert.ok(PLAN.notes.includes(`REPLACE ${MEMBER} ${LIVE.slice(0, 8)} -> ${accepted.slice(0, 8)}`));
   // The correction note names the inspect that found 9e85ae9a live where the row had recorded a1d8a54a.
   assert.ok(PLAN.notes.includes(`inspect run 41157189136 (2026-10-31, main 79ebc9ab0) refused with SOURCE_RECONCILIATION_REQUIRED, live ${MEMBER} ${LIVE.slice(0, 8)}`));
@@ -4380,30 +4399,34 @@ test('Financial TOTP teammate reset (SQL 133): admin-reset-totp.mjs REPLACE from
   assert.equal([...source.matchAll(/financialTotpCleared: financial\.cleared/g)].length, 3);
   assert.deepEqual(localImports(source, MEMBER).sort(), ['data.mjs', 'providers/production/moov-fund-authz.mjs']);
   const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
-  const ready = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: LIVE }) });
+  // Before the apply, the planned row read READY on the bytes production held.
+  const ready = await run(inspect, { root: ROOT, plan: before, inspectLive: liveFor(MEMBER, { plan: before, sha256: LIVE }) });
   assert.equal(ready.state, 'READY');
   assert.equal(ready.mutation, false);
-  const done = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: accepted }) });
+  const done = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER) });
   assert.equal(done.state, 'ALREADY_ACCEPTED');
-  // The stale a1d8a54a bytes the row first recorded, or anything else, live: a reconciliation stop, never an apply.
-  for (const other of [STALE, 'c'.repeat(64)]) {
+  assert.equal(done.mutation, false);
+  // The pre-apply 9e85ae9a bytes, the stale a1d8a54a bytes the row first recorded, or anything else, live: a
+  // reconciliation stop, never an apply.
+  for (const other of [LIVE, STALE, 'c'.repeat(64)]) {
     await assert.rejects(
       run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: other }) }),
       (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
       other,
     );
   }
-  // The apply was refused while SQL 133 was not recorded verified live (the plan before the SQL 133 record change,
-  // replayed on a copy) ...
-  const pending = structuredClone(sql133Pending);
+  // The apply was refused while SQL 133 was not recorded verified live (the pre-apply plan before the SQL 133
+  // record change, replayed on a copy) ...
+  const pending = structuredClone(before);
+  pending.sql_prerequisites[SQL133_FILE] = structuredClone(sql133Pending.sql_prerequisites[SQL133_FILE]);
   await assert.rejects(
     run(applyEnv(MEMBER), { ...applyDeps(MEMBER, { sha256: LIVE, plan: pending }).deps, plan: pending }),
     (error) => error.code === CODES.PRODUCTION_APPROVAL_REQUIRED && error.details.sql_before === SQL133_FILE,
   );
-  // ... and passes the order and link gates now that it is (the committed plan, as the replay copy states).
+  // ... and, replayed from the pre-apply bytes, passes the order and link gates now that it is.
   assert.equal(PLAN.sql_prerequisites[SQL133_FILE].verified_live, true);
   const { deps, calls } = applyDeps(MEMBER);
-  const applied = await run(applyEnv(MEMBER), deps);
-  assert.equal(applied.mutation, false);
+  const replay = await run(applyEnv(MEMBER), deps);
+  assert.equal(replay.mutation, false);
   assert.deepEqual(calls.receipt.owned_member_ops, { replace: [MEMBER], add: [] });
 });
