@@ -3051,8 +3051,8 @@ export const AUTHORIZED_SQL134_LOSS_DRAFT_ESCROW_WRITE_GRANTS = Object.freeze({
 // Check create staging pin: SQL 135 (staging "Upload & Analyze" refused 2026-10-31, POST
 // /staging/workflow/checks 403 "permission denied for table check_intake_items"; INSERT on the
 // twenty-four columns handleCreateCheck names, to checksops, and the same columns' INSERT revoked
-// from authenticated). No predecessor. Pending until a reviewed pin change records a staging
-// read-live (the staging column ACL of those columns is not recorded in this repository).
+// from authenticated). No predecessor. Staging apply authorized (wave 31) from staging read-live
+// run 41214330222.
 export const AUTHORIZED_SQL135_CHECK_CREATE_INSERT_GRANT = Object.freeze({
   key: 'sql135',
   filename: 'aws/workflows/sql/135_check_create_insert_grant.sql',
@@ -3060,9 +3060,11 @@ export const AUTHORIZED_SQL135_CHECK_CREATE_INSERT_GRANT = Object.freeze({
   // The commit that last authored the file bytes.
   commit: '71cda1678ed2a0d4b2314815ad65e2a5f2cad03f',
   source_sha256: 'a71a5f7f9da8c5784d517ebe198a91c3bbf8591a5f4824705c075317a47967e8',
-  authorization: 'pending',
-  execute: false,
-  expected_live_definition_sha256: null,
+  authorization: 'Owner approved 2026-10-31: staging apply (wave 31) from staging read-live run 41214330222',
+  execute: true,
+  // Staging read-live run 41214330222 (main c92da0bc5, executor 5FlB5t...): SQL 50's authenticated and checksops
+  // INSERT on its twenty columns and SQL 89's checksops UPDATE on seventeen (SQL 51 never run in staging).
+  expected_live_definition_sha256: '4dac49398757060deee5d636f193059e30cbe1ffdb33890122f79f026d144f33',
   // Code-derived: releaseIntendedHash('sql135', file bytes) (release-sql-state.mjs); re-derived by the tests.
   intended_replacement_sha256: '946e84beb5a459f55bdc1fb90d839dcfeb292901573e3e5fb6ceb24a65213a6d',
   // The file creates, replaces and sets the ACL of no function.

@@ -235,7 +235,8 @@ test('order: no predecessor; no function; exactly the columns the check create n
   const runbook = read(COMMITTED.tooling.runbook);
   assert.ok(runbook.includes(COMMITTED.intended_replacement_sha256));
   assert.ok(runbook.includes(COMMITTED.source_sha256));
-  assert.match(runbook, /\*\*Status:\*\* not applied anywhere\. The staging pin and the production pin are pending\./);
+  assert.match(runbook, /\*\*Status:\*\* staging pin execute-authorized \(wave 31\)/);
+  assert.match(runbook, /read-live \(2026-10-31\)\.\*\* Run 41214330222/);
   assert.match(runbook, /APPLY_CHECK_CREATE_INSERT_GRANT/);
   assert.match(runbook, /13:06:40Z and 13:15:40Z/);
   const oneShot = read('ops/production-sql-one-shot.md');
