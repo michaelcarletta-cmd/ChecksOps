@@ -1,0 +1,15 @@
+{
+  "workstream_id": "storage-upload-signed-size",
+  "authorization": "Pending owner review (2026-10-31). Planning only: nothing is live or verified. The production apply still needs its own owner approval and staging acceptance.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Storage upload signed size (2026-10-31, security audit 2026-10-29 finding 26): /storage/upload-url signed the declared size (ContentLength) into the presigned PUT only for the Document Library (tenant-documents); every other upload kind got a URL with no size bound, so a client could PUT an arbitrarily large object. The accepted storage-write.mjs bytes require contentLength for every bucket (an integer from 1 byte to the bucket's maximum, else 400 invalid_field contentLength before anything is presigned) and sign it into every PUT (X-Amz-SignedHeaders content-length): tenant-logos and company-branding 5 MB (the SPA's logo and letterhead limits), homeowner-uploads 15 MB (the homeowner portal's limit; the bucket is still refused here), claim-files, endorsement-packets, loss-draft-documents, tenant-documents and deposit-attachments 25 MB (the Document Library limit). The response shape is unchanged and the SPA already sends contentLength (file.size). REPLACE from the bytes production run 40911380838 applied (04dac9a4, production-security-hardening-applied-manifest-2026-10-29.json). No SQL change; sql_before stays SQL 94. storage-write-auth.mjs (finding 3) is unchanged.",
+  "members": {
+    "storage-write.mjs": {
+      "live_sha256": "04dac9a46334ec2b219623c41ca620524546bcc3343c163da306f2ca1d42395f",
+      "accepted_sha256": "43956c3ed0b1fc2146ad301dcb7ba245dc341992d171a728dc266a98fc3d9f92",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-security-hardening-applied-manifest-2026-10-29.json"
+    }
+  }
+}
