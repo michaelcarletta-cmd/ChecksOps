@@ -156,7 +156,7 @@ test('pin: the release pin shape, pending, in step with the staging pin, the one
   assert.doesNotMatch(JSON.stringify(tool), /[0-9a-f]{64}/);
   const rows = JSON.stringify(readJson('ops/deployment-guard/bypass-inventory.json'));
   assert.match(rows, /"path":"scripts\/deployment-guard\/sql135-check-create-insert-grant-production-apply\.mjs","classification":"GUARDED","capabilities":\["sql135-production-apply"\]/);
-  assert.match(rows, /sql132, sql133, sql134, sql135\)/);
+  assert.match(rows, /sql132, sql133, sql134, sql135, sql137\)/);
   const scripts = readJson('package.json').scripts;
   const workflow = read('.github/workflows/deployment-guard.yml');
   for (const name of ['aws/tests/release-sql135-executor.test.mjs', 'aws/tests/release-sql135-production-apply.test.mjs', 'aws/tests/sql135-check-create-insert-grant-pg.test.mjs']) {
@@ -242,7 +242,7 @@ test('order: no predecessor; no function; exactly the columns the check create n
   assert.match(runbook, /13:06:40Z and 13:15:40Z/);
   const oneShot = read('ops/production-sql-one-shot.md');
   assert.match(oneShot, /\| `sql135` \|/);
-  assert.match(oneShot, /`sql133`, `sql134`, `sql135`\) \|/);
+  assert.match(oneShot, /`sql133`, `sql134`, `sql135`, `sql137`\) \|/);
   assert.match(read('ops/deployment-guard/README.md'), /sql135-check-create-insert-grant-production-apply\.mjs --inspect/);
 });
 
