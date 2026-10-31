@@ -170,11 +170,11 @@ const withSql133 = (plan) => { plan.sql_prerequisites[SQL133_FILE] = { verified_
 const ADMIN_RESET_APPLIED_REL = 'aws/tests/fixtures/production-financial-totp-admin-reset-applied-manifest-2026-10-31.json';
 const ADMIN_RESET_PRE = ADMIN_RESET_MANIFEST.members['admin-reset-totp.mjs'].live_sha256;
 const adminResetPre = (plan) => { plan.members['admin-reset-totp.mjs'].expected_live_sha256 = ADMIN_RESET_PRE; return withSql133(plan); };
-// The Moov webhook body confirmation REPLACEs record their applied bytes live (production run 41219106461 for
-// providers/webhooks.mjs, 2026-10-31): every apply replay starts from the pre-apply live bytes (the planning
-// manifest's live_sha256).
+// The Moov webhook body confirmation REPLACEs record their applied bytes live (production runs 41219106461 for
+// providers/webhooks.mjs and 41223513762 for tenant-collection-v2-settlement.mjs, 2026-10-31): every apply replay
+// starts from the pre-apply live bytes (the planning manifest's live_sha256).
 const MOOV_WEBHOOK_BODY_AUTH_MANIFEST = JSON.parse(fs.readFileSync(path.join(ROOT, 'aws/tests/fixtures/production-moov-webhook-body-auth-manifest-2026-10-31.json'), 'utf8'));
-const MOOV_WEBHOOK_PRE = Object.freeze(Object.fromEntries(['providers/webhooks.mjs']
+const MOOV_WEBHOOK_PRE = Object.freeze(Object.fromEntries(['providers/webhooks.mjs', 'tenant-collection-v2-settlement.mjs']
   .map((name) => [name, MOOV_WEBHOOK_BODY_AUTH_MANIFEST.members[name].live_sha256])));
 const moovWebhookPre = (plan) => { for (const [name, pre] of Object.entries(MOOV_WEBHOOK_PRE)) plan.members[name].expected_live_sha256 = pre; return plan; };
 const SQL121_FILE = 'aws/workflows/sql/121_cash_jobs_production_grants.sql';
@@ -4532,7 +4532,7 @@ test('Financial TOTP teammate reset (SQL 133): admin-reset-totp.mjs REPLACE from
   assert.deepEqual(calls.receipt.owned_member_ops, { replace: [MEMBER], add: [] });
 });
 
-test('Moov webhook body confirmation (2026-10-31): ADD moov-webhook-confirm.mjs before webhooks.mjs, REPLACE webhooks.mjs and tenant-collection-v2-settlement.mjs from the third rebuild bytes; moov-webhook-confirm.mjs and webhooks.mjs applied 2026-10-31', async () => {
+test('Moov webhook body confirmation (2026-10-31): ADD moov-webhook-confirm.mjs before webhooks.mjs, REPLACE webhooks.mjs and tenant-collection-v2-settlement.mjs from the third rebuild bytes, applied 2026-10-31', async () => {
   const REL = 'aws/tests/fixtures/production-moov-webhook-body-auth-manifest-2026-10-31.json';
   const CONFIRM = 'providers/moov-webhook-confirm.mjs';
   const WEBHOOKS = 'providers/webhooks.mjs';
@@ -4570,7 +4570,7 @@ test('Moov webhook body confirmation (2026-10-31): ADD moov-webhook-confirm.mjs 
   // state. An applied REPLACE row expects the applied bytes and names the record; the applied ADD row keeps its
   // planning manifest, as mortgage-desk-esign.mjs's did.
   const APPLIED_REL = 'aws/tests/fixtures/production-moov-webhook-body-auth-applied-manifest-2026-10-31.json';
-  const APPLIED_MEMBERS = [CONFIRM, WEBHOOKS];
+  const APPLIED_MEMBERS = [CONFIRM, WEBHOOKS, SETTLEMENT];
   const applied = JSON.parse(fs.readFileSync(path.join(ROOT, APPLIED_REL), 'utf8'));
   assert.equal(applied.workstream_id, 'moov-webhook-body-auth-applied');
   assert.equal(applied.deploy_authorized, false);
@@ -4594,11 +4594,21 @@ test('Moov webhook body confirmation (2026-10-31): ADD moov-webhook-confirm.mjs 
     'run 41202670517', 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/41202670517', 'Isn4LTclYBy/62acTNhrxBbNt5nWucF5EqHwOZl9zO0=',
     'run 41218865288', 'member PRESENT f7353ee1', 'run 41219106461', 'job 124589757529', '8mXH1fquI6TeidgsPbka93Ct6K8Au2U4pm+zv+XOWIY=',
     '95e49b41-36af-409c-92b4-86f7a52dd20d', '940f0bf8-d2c9-477b-b108-184f66144303', 'member PRESENT 59b58674',
+    // tenant-collection-v2-settlement.mjs: staging apply and confirming inspect, the production inspect (075d96d0
+    // live), the apply on main 2c00a1876 and its verify.
+    'run 41203177999', 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/41203177999', 'run 41203266307',
+    'dSzfyMFXMQjPchrpsSr57FavZhS6qwhfsjRi+770DTA=', 'run 41219228317', 'member PRESENT 075d96d0', 'run 41223513762', 'job 124602783737',
+    '2c00a18767e852ab9c57d5e97087224df87ac9e4', 'ZOEV957sqD2oNWTJ9C7cYwviuT0a+JIqkT1xl+XDiVk=', '0ed1e8da-e580-43e9-b56d-7fb5f7edd029',
+    '07c4efde-ad8d-4b90-9f6f-1d9a931518dd', 'member PRESENT dece31d7', 'run 41203723098',
   ]) {
     assert.ok(applied.notes.includes(evidence), evidence);
   }
   assert.ok(PLAN.notes.includes('Moov webhook body confirmation providers/moov-webhook-confirm.mjs applied 2026-10-31 (production run 41218725024'));
   assert.ok(PLAN.notes.includes('Moov webhook body confirmation providers/webhooks.mjs applied 2026-10-31 (production run 41219106461'));
+  assert.ok(PLAN.notes.includes('Moov webhook body confirmation tenant-collection-v2-settlement.mjs applied 2026-10-31 (production run 41223513762'));
+  // The settlement apply's package equals the staging package the storage-write.mjs staging apply recorded.
+  const storageApplied = JSON.parse(fs.readFileSync(path.join(ROOT, STORAGE_UPLOAD_SIGNED_SIZE_APPLIED_REL), 'utf8'));
+  assert.ok(storageApplied.notes.includes('staging apply run 41203723098 on main b6a682161a3ef40c5b2948a90cff9fba02edde7b (the staging acceptance, https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/41203723098; CodeSha256 ZOEV957sqD2oNWTJ9C7cYwviuT0a+JIqkT1xl+XDiVk=)'));
   for (const member of [CONFIRM, WEBHOOKS, SETTLEMENT]) {
     const live = manifest.members[member].live_sha256;
     const recorded = live !== null && APPLIED_MEMBERS.includes(member);
