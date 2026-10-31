@@ -677,6 +677,8 @@ test('checkalt-eligibility.mjs expected_live records the bytes production run 39
 // bytes production run 40911380838 applied (partner storage writes, finding 3).
 const STORAGE_UPLOAD_SIGNED_SIZE_REL = 'aws/tests/fixtures/production-storage-upload-signed-size-manifest-2026-10-31.json';
 const STORAGE_WRITE_APPLIED_BYTES = '04dac9a46334ec2b219623c41ca620524546bcc3343c163da306f2ca1d42395f';
+// storage-write.mjs records its applied signed upload size bytes live (production run 41218291776, 2026-10-31).
+const STORAGE_UPLOAD_SIGNED_SIZE_APPLIED_REL = 'aws/tests/fixtures/production-storage-upload-signed-size-applied-manifest-2026-10-31.json';
 
 test('storage-write.mjs expected_live records the bytes production run 39707778256 applied', async () => {
   const STORAGE_WRITE = 'storage-write.mjs';
@@ -699,9 +701,10 @@ test('storage-write.mjs expected_live records the bytes production run 397077782
   assert.match(manifest.notes, /run 39707778256/);
   // The plan row moved on to the partner storage writes change (checked in its own test), planned
   // over the bytes this apply put live and applied 2026-10-29 (production run 40911380838), and then
-  // to the signed upload size REPLACE from those applied bytes (finding 26, its own test).
-  assert.equal(row.expected_live_sha256, STORAGE_WRITE_APPLIED_BYTES);
-  assert.equal(row.manifest, STORAGE_UPLOAD_SIGNED_SIZE_REL);
+  // to the signed upload size REPLACE from those applied bytes (finding 26, its own test), applied
+  // 2026-10-31 (production run 41218291776): the row expects those bytes and names their applied record.
+  assert.equal(row.expected_live_sha256, row.accepted_sha256);
+  assert.equal(row.manifest, STORAGE_UPLOAD_SIGNED_SIZE_APPLIED_REL);
   const next = JSON.parse(fs.readFileSync(path.join(ROOT, PARTNER_STORAGE_WRITES_REL), 'utf8'));
   assert.equal(next.members[STORAGE_WRITE].live_sha256, LIVE);
   assert.equal(next.members[STORAGE_WRITE].previous_manifest, MANIFEST_REL);
@@ -736,14 +739,14 @@ test('partner storage writes: storage-write-auth.mjs then storage-write.mjs repl
     // From the bytes the previous manifest recorded applied, to main's bytes.
     const applied = JSON.parse(fs.readFileSync(path.join(ROOT, PREVIOUS[member]), 'utf8')).members[member].accepted_sha256;
     // storage-write.mjs has moved on to the signed upload size REPLACE (finding 26, its own test) from the
-    // bytes this plan put live (production run 40911380838).
+    // bytes this plan put live (production run 40911380838), applied 2026-10-31 (production run 41218291776).
     const movedOn = member === WRITE;
     const thisPlan = movedOn ? STORAGE_WRITE_APPLIED_BYTES : sha(`aws/functions/api/${member}`);
     assert.deepEqual(manifest.members[member], { live_sha256: applied, accepted_sha256: thisPlan, operation: 'replace', previous_manifest: PREVIOUS[member] }, member);
     assert.equal(row.operation, 'replace', member);
     // Applied 2026-10-29: the row records the applied bytes and names the applied manifest.
-    assert.equal(row.manifest, movedOn ? STORAGE_UPLOAD_SIGNED_SIZE_REL : SECURITY_HARDENING_APPLIED_REL, member);
-    assert.equal(row.expected_live_sha256, thisPlan, member);
+    assert.equal(row.manifest, movedOn ? STORAGE_UPLOAD_SIGNED_SIZE_APPLIED_REL : SECURITY_HARDENING_APPLIED_REL, member);
+    assert.equal(row.expected_live_sha256, movedOn ? row.accepted_sha256 : thisPlan, member);
     assert.equal(row.accepted_sha256, sha(`aws/functions/api/${member}`), member);
     assert.notEqual(row.accepted_sha256, applied, member);
     assert.equal(resolvePlannedMember(member, { root: ROOT, plan: PLAN }).ok, true, member);
@@ -768,7 +771,7 @@ test('partner storage writes: storage-write-auth.mjs then storage-write.mjs repl
   assert.match(PLAN.notes, /Partner storage writes \(2026-10-29, security audit finding 3, pending owner review\)/);
 });
 
-test('Storage upload signed size (finding 26): storage-write.mjs REPLACE from the bytes production run 40911380838 applied, planning only, SQL 94 still first', async () => {
+test('Storage upload signed size (finding 26): storage-write.mjs REPLACE from the bytes production run 40911380838 applied, SQL 94 still first, applied 2026-10-31', async () => {
   const MEMBER = 'storage-write.mjs';
   const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, STORAGE_UPLOAD_SIGNED_SIZE_REL), 'utf8'));
   const accepted = sha(`aws/functions/api/${MEMBER}`);
@@ -783,26 +786,46 @@ test('Storage upload signed size (finding 26): storage-write.mjs REPLACE from th
   assert.equal(previous.members[MEMBER].accepted_sha256, STORAGE_WRITE_APPLIED_BYTES);
   assert.match(previous.notes, /production apply run 40911380838 VERIFIED 04dac9a4/);
   assert.notEqual(accepted, STORAGE_WRITE_APPLIED_BYTES);
+  // Applied 2026-10-31 (production run 41218291776): the record names the runs and the verified state; the row
+  // records the applied bytes live and names the record.
+  const applied = JSON.parse(fs.readFileSync(path.join(ROOT, STORAGE_UPLOAD_SIGNED_SIZE_APPLIED_REL), 'utf8'));
+  assert.equal(applied.workstream_id, 'storage-upload-signed-size-applied');
+  assert.equal(applied.deploy_authorized, false);
+  assert.match(applied.authorization, /^Record only/);
+  assert.equal(applied.live_lambda, 'checksops-production-prep-api');
+  for (const evidence of ['run 41203723098', 'run 41203840880', 'run 41217214392', 'run 41218025198', 'run 41218291776', 'job 124587341747', '#1481', '22b5801e', '"DEPLOY storage-write.mjs TO PRODUCTION"', 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/41203723098', 'uzM4I3iOU+rcTBdwcF9JbpML78IeA+AyQ1GwVBlQwJ8=', 'ed75889d-102a-4584-b7b9-9001aaf5abe8', '+RCObzSB6Q/VJLhlNg4GuoaonCCp6LLBvFCv+5gZdrc=', '6a93f3ed-e8cf-469d-96e1-6f67912579cd', '6b15a47c-dc5b-449e-bb1a-b50c0c41a4b8', 'VERIFIED', 'SQL 135', 'finding 26', 'Not verified']) {
+    assert.ok(applied.notes.includes(evidence), evidence);
+  }
+  assert.deepEqual(applied.members, { [MEMBER]: { live_sha256: accepted, accepted_sha256: accepted, operation: 'replace', previous_manifest: STORAGE_UPLOAD_SIGNED_SIZE_REL } });
   assert.deepEqual(PLAN.members[MEMBER], {
     operation: 'replace',
     accepted_sha256: accepted,
-    expected_live_sha256: STORAGE_WRITE_APPLIED_BYTES,
+    expected_live_sha256: accepted,
     sql_before: 'aws/workflows/sql/94_document_library_restore.sql',
-    manifest: STORAGE_UPLOAD_SIGNED_SIZE_REL,
+    manifest: STORAGE_UPLOAD_SIGNED_SIZE_APPLIED_REL,
   });
+  assert.ok(PLAN.notes.includes('Storage upload signed size storage-write.mjs applied 2026-10-31 (production run 41218291776'));
   assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
   // Still after storage-write-auth.mjs (its authorizeObjectWrite import, finding 3), which is unchanged.
   assert.ok(PLAN.order.indexOf('storage-write-auth.mjs') < PLAN.order.indexOf(MEMBER));
   const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
-  const ready = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: STORAGE_WRITE_APPLIED_BYTES }) });
+  // Before the apply, the planned row read READY on the bytes production held (production inspect run 41218025198).
+  const before = structuredClone(PLAN);
+  before.members[MEMBER] = { ...before.members[MEMBER], expected_live_sha256: STORAGE_WRITE_APPLIED_BYTES, manifest: STORAGE_UPLOAD_SIGNED_SIZE_REL };
+  const ready = await run(inspect, { root: ROOT, plan: before, inspectLive: liveFor(MEMBER, { plan: before, sha256: STORAGE_WRITE_APPLIED_BYTES }) });
   assert.equal(ready.state, 'READY');
   assert.equal(ready.mutation, false);
-  const done = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: accepted }) });
+  const done = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER) });
   assert.equal(done.state, 'ALREADY_ACCEPTED');
-  await assert.rejects(
-    run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: 'c'.repeat(64) }) }),
-    (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
-  );
+  assert.equal(done.mutation, false);
+  // The pre-apply 04dac9a4 bytes, or anything else, live: a reconciliation stop, never an apply.
+  for (const other of [STORAGE_WRITE_APPLIED_BYTES, 'c'.repeat(64)]) {
+    await assert.rejects(
+      run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: other }) }),
+      (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+      other,
+    );
+  }
   const source = fs.readFileSync(path.join(API, MEMBER), 'utf8');
   assert.match(source, /export const UPLOAD_MAX_BYTES_BY_BUCKET/);
   assert.match(source, /ContentLength: contentLength,\n/);
@@ -3384,10 +3407,11 @@ test('Security hardening 2026-10-29 (audit findings 2-4): five members applied i
       assert.notEqual(row.accepted_sha256, accepted, member);
       assert.equal(row.manifest, PORTAL_SIGNING_APPLIED_REL, member);
     } else if (writeMovedOn) {
+      // The signed upload size REPLACE from these bytes was applied 2026-10-31 (production run 41218291776).
       assert.equal(row.accepted_sha256, sha(`aws/functions/api/${member}`), member);
       assert.notEqual(row.accepted_sha256, accepted, member);
-      assert.equal(row.expected_live_sha256, accepted, member);
-      assert.equal(row.manifest, STORAGE_UPLOAD_SIGNED_SIZE_REL, member);
+      assert.equal(row.expected_live_sha256, row.accepted_sha256, member);
+      assert.equal(row.manifest, STORAGE_UPLOAD_SIGNED_SIZE_APPLIED_REL, member);
     } else {
       assert.equal(row.accepted_sha256, dataMovedOn ? sha(`aws/functions/api/${member}`) : accepted, member);
       assert.equal(row.expected_live_sha256, dataMovedOn ? sha(`aws/functions/api/${member}`) : accepted, member);
@@ -3401,13 +3425,14 @@ test('Security hardening 2026-10-29 (audit findings 2-4): five members applied i
     assert.ok(applied.notes.includes(`${planned.live_sha256.slice(0, 8)} -> ${accepted.slice(0, 8)}`), member);
     assert.ok(PLAN.notes.includes(`${member} ${planned.live_sha256.slice(0, 8)} -> ${accepted.slice(0, 8)}`), member);
     const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: member };
-    // The applied bytes are accepted live. data.mjs and storage.mjs (moved on, and applied again) are
-    // inspected at their current accepted live bytes (the public partner codes, the portal signing).
-    // storage-write.mjs's applied bytes are the next REPLACE's starting point (READY).
-    const done = await run(inspect, { root: ROOT, inspectLive: dataMovedOn || movedOn.has(member) ? liveFor(member) : liveFor(member, { sha256: accepted }) });
-    assert.equal(done.state, writeMovedOn ? 'READY' : 'ALREADY_ACCEPTED', member);
+    // The applied bytes are accepted live. data.mjs, storage.mjs and storage-write.mjs (moved on, and applied
+    // again) are inspected at their current accepted live bytes (the public partner codes, the portal signing,
+    // the signed upload size).
+    const appliedAgain = dataMovedOn || writeMovedOn || movedOn.has(member);
+    const done = await run(inspect, { root: ROOT, inspectLive: appliedAgain ? liveFor(member) : liveFor(member, { sha256: accepted }) });
+    assert.equal(done.state, 'ALREADY_ACCEPTED', member);
     assert.equal(done.mutation, false, member);
-    for (const other of dataMovedOn || movedOn.has(member) ? [planned.live_sha256, accepted] : [planned.live_sha256]) {
+    for (const other of appliedAgain ? [planned.live_sha256, accepted] : [planned.live_sha256]) {
       await assert.rejects(
         run(inspect, { root: ROOT, inspectLive: liveFor(member, { sha256: other }) }),
         (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
