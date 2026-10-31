@@ -1,0 +1,15 @@
+{
+  "workstream_id": "auth-email-verified",
+  "authorization": "Pending owner review (2026-10-31). Planning only: nothing is live or verified. The production apply still needs its own owner approval and staging acceptance.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "auth.email() verified email only (2026-10-31, security audit finding 17): withIdentity set request.jwt.claim.email (auth.email(), which the aws_select_homeowner_check_uploads and aws_select_homeowner_intro_requests policies match on) to the identity mapping's email or, when the mapping had none, to the raw Cognito email claim, which a user can change on their own Cognito user without verifying it. The accepted data.mjs bytes set it through appUserEmailForGuc: the identity_accounts email when the mapping has one (unchanged for every mapped user with an email), else the token email only when Cognito marks it verified (email_verified true, or \"true\" in the authorizer claims), else empty, so auth.email() is NULL. resolveClaims now carries email_verified on the claims (from the authorizer claims, or from the payload of a bearer token verifyCognitoIdToken has accepted). No SQL. data.mjs live_sha256 c652e317 is the bytes the public partner codes production run 40963109952 applied (previous_manifest); no data.mjs change has been planned or applied since. sql_before stays SQL 53. A read-only production overlay inspect must confirm the live member before any apply.",
+  "members": {
+    "data.mjs": {
+      "live_sha256": "c652e317e2de5a14b32bf6aecfc5b76438b2ff23d6c3a282f3c1cbaedf115fe0",
+      "accepted_sha256": "2478416940176b4530afda58f6b3cd002c1b26286ecb916871339b3f8ea83d44",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-public-partner-codes-applied-manifest-2026-10-29.json"
+    }
+  }
+}
