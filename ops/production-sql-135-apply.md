@@ -60,7 +60,30 @@ inspect is recorded as the verified-live evidence and the pin stays `execute: fa
 (a precondition failure, such as another role's grant on one of the columns, a missing table,
 column or role) stops and needs its own reviewed change.
 
-**Status:** not applied anywhere. The staging pin and the production pin are pending.
+**Staging executor refreshed (2026-10-31).** Inspect run 41213856434 (main `c92da0bc5`) found the live
+executor at `PPZJFH/UBvNACkdfIyCBNG4T9g0z69dc/WnNkJC+nRg=` (LastModified 2026-10-30T21:45:43Z,
+`executor_current` false) without `sql/135_check_create_insert_grant.sql` (main's package also
+superseded `lib/release-sql-specs.mjs`, `lib/release-sql-state.mjs` and `lib/sql-executor-auth.mjs`;
+`collisions` `[]`, `dropped` `[]`). Deploy run 41214086396 (main
+`c92da0bc53232379053ca93f8ea0bb753f9fde04`, `expected_executor_code_sha256` `PPZJFH/…` matched) updated
+`checksops-staging-guarded-sql-executor` to main's package
+(`5FlB5t/EKAjx8OGEoia4nooAyExOnXewmXXG5+8OsIo=`, RevisionId `c895b177-f301-4d09-8f26-7988928ef0ce`,
+LastModified 2026-10-31T15:19:21Z).
+
+**Staging read-live (2026-10-31).** Run 41214330222 (main `c92da0bc5`, executor `5FlB5t…`,
+`executor_current` true, pin commit `71cda1678`): the twenty columns `id` through `amount` each hold
+`authenticated INSERT` and `checksops INSERT` (SQL 50's lines), the seventeen SQL 89 covers also
+`checksops UPDATE` (`id`, `tenant_id` and `uploaded_by` have no UPDATE); `claim_id`, `cash_job_id`,
+`check_source` and `cash_job_payment_class` have no column grant (acl `[]`), the cause of the staging
+403 on `/workflow/checks`. SQL 51 was never run in staging. Live
+`4dac49398757060deee5d636f193059e30cbe1ffdb33890122f79f026d144f33` (the staging pre-state derived
+below, SQL 50's lines plus SQL 89's), intended `946e84be…`, `already_applied` false,
+`precondition_failures` `[]`, `prerequisites_missing` `[]`, `predecessors` `{}`, `mutation` false.
+Recorded in the staging pin (`expected_live_definition_sha256`, `execute: true`, wave 31) under the
+owner's words of 2026-10-31, "the SQL 135 staging pin", then "apply SQL 135 in staging". The staging
+apply itself is a separate run after this pin is merged.
+
+**Status:** staging pin execute-authorized (wave 31); nothing applied yet; production pin pending.
 
 ## Fingerprint
 

@@ -159,6 +159,12 @@ export const STAGING_WAVE1 = Object.freeze({
   // escrow and draw column grants. Read at main 564b7baee with the executor current (inspect run 41130389562):
   // none of the fourteen columns granted, every prerequisite present (the pre-state the executor test derives).
   sql134: Object.freeze({ wave: 30, approved: '2026-10-30', run: '41130749260', live: '7827f4c87e5bc9e7bd0def01d5f201a0a1fc26365480921896aa452e1403466d' }),
+  // Wave 31 (owner approved 2026-10-31, "the SQL 135 staging pin", then "apply SQL 135 in staging"): SQL 135,
+  // the check create INSERT grant. Read at main c92da0bc5 after the executor carried it (deploy run
+  // 41214086396): SQL 50's authenticated and checksops INSERT on its twenty columns, SQL 89's checksops
+  // UPDATE on seventeen, claim_id and the cash-job columns ungranted (SQL 51 never run in staging; the
+  // pre-state the executor test derives), every prerequisite present, no predecessor.
+  sql135: Object.freeze({ wave: 31, approved: '2026-10-31', run: '41214330222', live: '4dac49398757060deee5d636f193059e30cbe1ffdb33890122f79f026d144f33' }),
   sql98: Object.freeze({ wave: 3, approved: '2026-10-18', run: '39083278136', live: '296c3d6a274e10f66005fb9eaecf93fa17b81bd8db3607037ca07698fddd3275', apply_run: '39085677318' }),
 });
 
@@ -170,7 +176,7 @@ export const pendingPin = (pin) => Object.freeze({
 });
 
 /**
- * The committed staging pin's apply state: waves 1-30 recorded and approved, wave 6 approved with
+ * The committed staging pin's apply state: waves 1-31 recorded and approved, wave 6 approved with
  * its read-live still to record (pending until then), wave 18 (SQL 117) retired, SQL 129 retired
  * before any read-live was recorded, the rest pending.
  */
