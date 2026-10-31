@@ -81,8 +81,8 @@
       "evidence": "Guarded staging SQL executor apply of sql132-financial-totp-code-check-lockout on 2026-10-30 (run 41117004966, main 42068df3f, wave 29, executor aBuDhgGl…; read-live run 41117375887 already_applied true): receipt before e1a1d4ed…, after 88828cb4… = the pin's intended_replacement_sha256; precondition_failures [], prerequisites_missing []."
     },
     "aws/workflows/sql/133_financial_totp_admin_reset_enrollment.sql": {
-      "verified_live": false,
-      "evidence": null
+      "verified_live": true,
+      "evidence": "Guarded staging SQL executor apply of sql133-financial-totp-admin-reset-enrollment on 2026-10-30 (run 41133471065, main 746074fb1, wave 30, executor PPZJFH/U…; read-live run 41133803430 already_applied true): receipt before f3b1671e…, after edfef132… = the pin's intended_replacement_sha256; precondition_failures [], prerequisites_missing []."
     }
   }
 }

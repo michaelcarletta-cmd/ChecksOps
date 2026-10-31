@@ -510,12 +510,12 @@ test('staging SQL record: every sql_before of the plan has an entry; the pending
     assert.ok(fs.existsSync(new URL(`../../${file}`, import.meta.url)), file);
   }
   // Release 2026-10-17 waves 1-3 are applied in staging: every sql_before of the plan is live there, except
-  // a SQL the plan itself records as not yet live anywhere (SQL 133, the financial TOTP teammate reset, pending in
-  // both environments): the staging overlay refuses its members until a reviewed change records its apply. SQL 132
-  // (the financial TOTP lockout) was such a SQL until its record change (staging run 41117004966, production
-  // 2026-10-30).
+  // a SQL the plan itself records as not yet live anywhere: the staging overlay refuses its members until a reviewed
+  // change records its apply. SQL 132 (the financial TOTP lockout) was such a SQL until its record change (staging
+  // run 41117004966, production 2026-10-30), and SQL 133 (the financial TOTP teammate reset) until its record change
+  // (staging run 41133471065, production 2026-10-31); nothing is pending everywhere now.
   const pendingEverywhere = Object.entries(PLAN.sql_prerequisites).filter(([, record]) => record.verified_live === false).map(([file]) => file).sort();
-  assert.deepEqual(pendingEverywhere, ['aws/workflows/sql/133_financial_totp_admin_reset_enrollment.sql']);
+  assert.deepEqual(pendingEverywhere, []);
   for (const [file, record] of Object.entries(STAGING_SQL.sql)) assert.equal(record.verified_live, !pendingEverywhere.includes(file), file);
   // A SQL recorded true here is either recorded live in production (with its staging acceptance)
   // or, staging first (release 2026-10-17), names its guarded staging SQL executor apply run and

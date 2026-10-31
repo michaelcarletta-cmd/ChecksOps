@@ -108,7 +108,31 @@ SQL 133 in staging", "merge 1470", "run the SQL 133 production inspect") name th
 staging step and the inspect, not the production apply. The owner merges the pin change; the apply still
 needs the owner's words for that run and runs only after that merge is on main and staged.
 
-**Status:** applied to staging (wave 30); production pin execute-authorized; not applied to production.
+**Production apply (2026-10-31).** After the pin change (#1472, merged to main as `d0ac2e079` on the
+owner's "merge 1472"), transfer run 41149979809 staged main `d0ac2e079` (tarball sha256
+`abb179d5613b6bf008c35f74576561edd929535045c9956dc72e6c713ffb3fe7`). A read-only one-shot
+`--phase inspect` of the same commit (SSM `6b265063-e6ab-48cc-843c-8969d9c6e62f`, run
+`12e7bf02-c2c1-4306-950c-9c4cd6287e67`) found live `f3b1671e…` (the pinned pre-state), the function
+`absent`, `predecessors` `{}`, `already_applied` false, `precondition_failures` `[]`, the four definer
+writes ok, contracts 4/4, 6/6 and 43/43. One-shot `--phase apply` run
+`45f0bf20-56a7-4573-ad09-d88d98bbacb3` through SSM `8bfa1019-ce57-452a-a537-000162bb5485`, workstream
+`prod-sql133-financial-totp-admin-reset-20261031`, under the owner's words "apply SQL 133 in production"
+(the apply clause of "run the SQL 133 production inspect then apply SQL 133 in production", passed
+verbatim): every step ok; manifest `d3cf8c77…`; receipt `f3b1671e…` →
+`edfef132ffea2b00a1b22e452b35a4232a14c81fbba832325d22ce8656a45459` (intended), result `applied`,
+unrelated catalog `2a0f4e9a…` (functions 1355, triggers 184); post-apply inspect `already_applied` true,
+`precondition_failures` `[]`. SSM returned the first 24000 characters of the command's output, which cut
+the one-shot JSON inside its `applied.receipt.release_sql_inspect`; the pin records the run's top-level
+`apply_result` and `post_apply_inspect` (the same objects, printed whole; the printed prefix of
+`applied.receipt` equals `apply_result` byte for byte) and says so in `applied.one_shot_note`, as the
+SQL 131 record did. A separate read-only inspect (SSM `5d73b482-dded-47e2-91da-782019a47fff`) reported
+`financial_totp_admin_reset_enrollment(uuid, uuid)` `intended`, EXECUTE for `checksops` and the owner only
+(`PUBLIC` revoked), all four `definer_writes` ok. Runner state: started for these runs at 2026-10-31
+00:26:04 UTC (SSM online 00:26:42 UTC) and stopped at 00:27:47 UTC.
+
+**Status:** applied to staging (wave 30) and to production (2026-10-31); the production pin is retired
+(`execute: false`). Next: the API change (`admin-reset-totp.mjs`) through the guarded Lambda path after
+its own read-only inspect; the overlay plan records SQL 133 verified live.
 
 ## Fingerprint
 

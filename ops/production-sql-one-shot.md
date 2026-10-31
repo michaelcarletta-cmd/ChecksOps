@@ -119,11 +119,9 @@ An unexpected exception also ends in one failure summary:
    (owner-approved pin change of 2026-10-31: the read-only production inspect of 2026-10-31, SSM
    `6a2f2c2c-cf5b-4e6f-9df6-12fe8221a1e9`, recorded as its pre-state, on its guarded staging apply
    run 41134571358; see `ops/production-sql-134-apply.md`) until its record-and-retire change; the
-   production apply still needs the owner's words for that run. SQL 133's pin is `execute: true`
-   (owner-approved pin change of 2026-10-30: the read-only production inspect of 2026-10-30, SSM
-   `a28009c3-db1c-4567-b7b6-7fe01f7d06f4`, recorded as its pre-state, on its guarded staging apply
-   run 41133471065; see `ops/production-sql-133-apply.md`) until its record-and-retire change; the
-   production apply still needs the owner's words for that run. SQL 132's pin is `execute: false`
+   production apply still needs the owner's words for that run. SQL 133's pin is `execute: false`
+   again since its 2026-10-31 apply (owner statement "apply SQL 133 in production"; see
+   `ops/production-sql-133-apply.md`). SQL 132's pin is `execute: false`
    again since its 2026-10-30 apply (owner statement "apply SQL 132 in production"; see
    `ops/production-sql-132-apply.md`). SQL 131's pin is `execute: false`
    again since its 2026-10-30 apply (owner statement "apply SQL 131 in production"; see
