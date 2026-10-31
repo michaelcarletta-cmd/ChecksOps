@@ -4524,7 +4524,7 @@ test('Financial TOTP teammate reset (SQL 133): admin-reset-totp.mjs REPLACE from
   assert.deepEqual(calls.receipt.owned_member_ops, { replace: [MEMBER], add: [] });
 });
 
-test('Moov webhook body confirmation (2026-10-31): ADD moov-webhook-confirm.mjs before webhooks.mjs, REPLACE webhooks.mjs and tenant-collection-v2-settlement.mjs from the third rebuild bytes, planning only', async () => {
+test('Moov webhook body confirmation (2026-10-31): ADD moov-webhook-confirm.mjs before webhooks.mjs, REPLACE webhooks.mjs and tenant-collection-v2-settlement.mjs from the third rebuild bytes; moov-webhook-confirm.mjs applied 2026-10-31', async () => {
   const REL = 'aws/tests/fixtures/production-moov-webhook-body-auth-manifest-2026-10-31.json';
   const CONFIRM = 'providers/moov-webhook-confirm.mjs';
   const WEBHOOKS = 'providers/webhooks.mjs';
@@ -4558,16 +4558,50 @@ test('Moov webhook body confirmation (2026-10-31): ADD moov-webhook-confirm.mjs 
   }
   // ... and these are the bytes its production ADD accepted (collection-v2-settlement-prod-compose.test.mjs).
   assert.match(fs.readFileSync(path.join(ROOT, 'aws/tests/collection-v2-settlement-prod-compose.test.mjs'), 'utf8'), new RegExp(`ACCEPTED_SETTLEMENT_SHA = '${SETTLEMENT_LIVE}'`));
+  // Applied 2026-10-31 one member per run in plan order (PR #1483): the record names the runs and the verified
+  // state. An applied REPLACE row expects the applied bytes and names the record; the applied ADD row keeps its
+  // planning manifest, as mortgage-desk-esign.mjs's did.
+  const APPLIED_REL = 'aws/tests/fixtures/production-moov-webhook-body-auth-applied-manifest-2026-10-31.json';
+  const APPLIED_MEMBERS = [CONFIRM];
+  const applied = JSON.parse(fs.readFileSync(path.join(ROOT, APPLIED_REL), 'utf8'));
+  assert.equal(applied.workstream_id, 'moov-webhook-body-auth-applied');
+  assert.equal(applied.deploy_authorized, false);
+  assert.match(applied.authorization, /^Record only/);
+  assert.equal(applied.live_lambda, FUNCTION_NAME);
+  assert.deepEqual(Object.keys(applied.members), APPLIED_MEMBERS);
+  for (const member of APPLIED_MEMBERS) {
+    assert.deepEqual(applied.members[member], { live_sha256: accepted[member], accepted_sha256: accepted[member], operation: PLAN.members[member].operation, previous_manifest: REL }, member);
+    assert.ok(applied.notes.includes(`"DEPLOY ${member} TO PRODUCTION"`), member);
+  }
+  for (const evidence of [
+    '#1483', 'b6a682161a3ef40c5b2948a90cff9fba02edde7b',
+    // moov-webhook-confirm.mjs: staging ADD apply and confirming inspect, the refused first production apply, the
+    // production inspect (ABSENT), the apply and its verify.
+    'run 41201497188', 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/41201497188', 'run 41202758188',
+    'run 41203444636', 'DEPLOYMENT_COLLISION', 'pending ["storage-write.mjs"]',
+    'run 41218515028', '11d2a12cd57cb0d8e2c25f6a4abe7e8f1950bbc2', 'member ABSENT', '6b15a47c-dc5b-449e-bb1a-b50c0c41a4b8',
+    'run 41218725024', 'job 124588625700', '482607a1c96ddc92be4a1efd3c547c5dc70e8725', 'O00YMSncwpLhBJ5AKnXoojLaBzWRnGkrKeJr+tDDDm0=',
+    '3f4ad017-ded1-4222-8dd1-661e55453c8a', '8c0f8c69-cc00-498e-95ec-03a0664fdd60', 'errors []', 'VERIFIED',
+  ]) {
+    assert.ok(applied.notes.includes(evidence), evidence);
+  }
+  assert.ok(PLAN.notes.includes('Moov webhook body confirmation providers/moov-webhook-confirm.mjs applied 2026-10-31 (production run 41218725024'));
   for (const member of [CONFIRM, WEBHOOKS, SETTLEMENT]) {
     const live = manifest.members[member].live_sha256;
+    const recorded = live !== null && APPLIED_MEMBERS.includes(member);
     assert.deepEqual(PLAN.members[member], {
       operation: live === null ? 'add' : 'replace',
       accepted_sha256: accepted[member],
-      expected_live_sha256: live,
+      expected_live_sha256: recorded ? accepted[member] : live,
       sql_before: null,
-      manifest: REL,
+      manifest: recorded ? APPLIED_REL : REL,
     }, member);
     assert.equal(resolvePlannedMember(member, { root: ROOT, plan: PLAN }).ok, true, member);
+  }
+  // The plan before these records: each REPLACE row expects the planning manifest's live bytes.
+  const before = structuredClone(PLAN);
+  for (const member of [WEBHOOKS, SETTLEMENT]) {
+    before.members[member] = { ...before.members[member], expected_live_sha256: manifest.members[member].live_sha256, manifest: REL };
   }
   assert.ok(PLAN.notes.includes(`Moov webhook body confirmation (2026-10-31, security audit 2026-10-29): ADD ${CONFIRM} ${accepted[CONFIRM].slice(0, 8)}, REPLACE ${SETTLEMENT} ${SETTLEMENT_LIVE.slice(0, 8)} -> ${accepted[SETTLEMENT].slice(0, 8)} and REPLACE ${WEBHOOKS} ${WEBHOOKS_LIVE.slice(0, 8)} -> ${accepted[WEBHOOKS].slice(0, 8)}`));
   // webhooks.mjs imports the added module at load, so it comes first; settlement follows webhooks.mjs.
@@ -4579,20 +4613,33 @@ test('Moov webhook body confirmation (2026-10-31): ADD moov-webhook-confirm.mjs 
   assert.deepEqual(confirmImports.sort(), ['providers/onboarding/webhook-status.mjs', 'providers/parity/moov-client.mjs', 'sandbox-credentials.mjs', 'tenant-billing-destination.mjs']);
   for (const dep of confirmImports) assert.notEqual(PLAN.members[dep]?.operation, 'add', dep);
   const inspect = (member) => ({ ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: member });
+  // Before its apply the added module was absent and READY (production inspect run 41218515028); now its accepted
+  // bytes read as done, and any other bytes present are refused.
   const ready = await run(inspect(CONFIRM), { root: ROOT, inspectLive: liveFor(CONFIRM) });
   assert.equal(ready.state, 'READY');
   assert.equal(ready.mutation, false);
+  const added = await run(inspect(CONFIRM), { root: ROOT, inspectLive: liveFor(CONFIRM, { sha256: accepted[CONFIRM] }) });
+  assert.equal(added.state, 'ALREADY_ACCEPTED');
+  assert.equal(added.mutation, false);
+  await assert.rejects(
+    run(inspect(CONFIRM), { root: ROOT, inspectLive: liveFor(CONFIRM, { sha256: 'c'.repeat(64) }) }),
+    (error) => error.code === CODES.DEPLOYMENT_COLLISION,
+  );
   for (const [member, live] of [[WEBHOOKS, WEBHOOKS_LIVE], [SETTLEMENT, SETTLEMENT_LIVE]]) {
-    const before = await run(inspect(member), { root: ROOT, inspectLive: liveFor(member, { sha256: live, extra: [CONFIRM] }) });
-    assert.equal(before.state, 'READY', member);
-    assert.equal(before.mutation, false, member);
+    // Before its apply the planned row read READY on the bytes production held.
+    const pre = await run(inspect(member), { root: ROOT, plan: before, inspectLive: liveFor(member, { plan: before, sha256: live, extra: [CONFIRM] }) });
+    assert.equal(pre.state, 'READY', member);
+    assert.equal(pre.mutation, false, member);
     const done = await run(inspect(member), { root: ROOT, inspectLive: liveFor(member, { sha256: accepted[member], extra: [CONFIRM] }) });
     assert.equal(done.state, 'ALREADY_ACCEPTED', member);
-    await assert.rejects(
-      run(inspect(member), { root: ROOT, inspectLive: liveFor(member, { sha256: 'c'.repeat(64), extra: [CONFIRM] }) }),
-      (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
-      member,
-    );
+    // Once applied, the pre-apply bytes are a reconciliation stop too, never an apply.
+    for (const other of APPLIED_MEMBERS.includes(member) ? [live, 'c'.repeat(64)] : ['c'.repeat(64)]) {
+      await assert.rejects(
+        run(inspect(member), { root: ROOT, inspectLive: liveFor(member, { sha256: other, extra: [CONFIRM] }) }),
+        (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+        `${member} ${other}`,
+      );
+    }
   }
   // Applies replay in order; webhooks.mjs is refused while the added module is not live yet.
   for (const member of [CONFIRM, WEBHOOKS, SETTLEMENT]) {
@@ -4605,6 +4652,14 @@ test('Moov webhook body confirmation (2026-10-31): ADD moov-webhook-confirm.mjs 
   await assert.rejects(
     run(applyEnv(WEBHOOKS), applyDeps(WEBHOOKS, { pending: [CONFIRM] }).deps),
     (error) => error.code === CODES.DEPLOYMENT_COLLISION,
+  );
+  // The first production ADD apply (run 41203444636) was refused by the order gate before any write, while
+  // storage-write.mjs was still on its pre-apply bytes (replayed on a plan copy that states them).
+  const storagePending = structuredClone(PLAN);
+  storagePending.members['storage-write.mjs'] = { ...storagePending.members['storage-write.mjs'], expected_live_sha256: STORAGE_WRITE_APPLIED_BYTES };
+  await assert.rejects(
+    run(applyEnv(CONFIRM), { ...applyDeps(CONFIRM, { pending: ['storage-write.mjs'], plan: storagePending }).deps, plan: storagePending }),
+    (error) => error.code === CODES.DEPLOYMENT_COLLISION && JSON.stringify(error.details.pending) === JSON.stringify(['storage-write.mjs']),
   );
   const source = fs.readFileSync(path.join(API, WEBHOOKS), 'utf8');
   assert.match(source, /confirmMoovWebhookPayload/);
