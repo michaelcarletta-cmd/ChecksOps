@@ -153,15 +153,17 @@ test('pin: SQL 113 staging-authorized from its read-live, code-derived, selectab
   assert.equal(spec.runs_before, undefined);
   assert.equal(spec.supersedes, undefined);
   assert.equal(spec.refuse_after, undefined);
-  // Nothing in the release refuses after SQL 113, supersedes it or needs it.
-  assert.deepEqual(RELEASE_SQL_KEYS.filter((key) => (RELEASE_SQL_SPECS[key].supersedes || []).includes(KEY)
-    || (RELEASE_SQL_SPECS[key].refuse_after || []).some((m) => m.key === KEY)
-    || (RELEASE_SQL_SPECS[key].predecessors || []).includes(KEY)), []);
-  // No other release migration creates, replaces or drops one of SQL 113's functions.
+  // Nothing in the release refuses after SQL 113.
+  assert.deepEqual(RELEASE_SQL_KEYS.filter((key) => (RELEASE_SQL_SPECS[key].refuse_after || []).some((m) => m.key === KEY)), []);
+  // SQL 138 (the payee setup link closed after verification) replaces aws_public_payee_record: it names
+  // SQL 113 as predecessor and supersedes it (as SQL 101 does SQL 90); nothing else does.
+  assert.deepEqual(RELEASE_SQL_KEYS.filter((key) => (RELEASE_SQL_SPECS[key].supersedes || []).includes(KEY)), ['sql138']);
+  assert.deepEqual(RELEASE_SQL_KEYS.filter((key) => (RELEASE_SQL_SPECS[key].predecessors || []).includes(KEY)), ['sql138']);
+  // No other release migration creates, replaces or drops one of SQL 113's functions; SQL 138 replaces one.
   for (const key of RELEASE_SQL_KEYS.filter((k) => k !== KEY)) {
     const other = RELEASE_SQL_SPECS[key];
     const touched = [...other.functions.map((fn) => fn.identity), ...(other.dropped_functions || []), ...(other.acl_functions || []).map((fn) => fn.identity)];
-    assert.deepEqual(touched.filter((identity) => FUNCTIONS.includes(identity)), [], key);
+    assert.deepEqual(touched.filter((identity) => FUNCTIONS.includes(identity)), key === 'sql138' ? ['public.aws_public_payee_record(text, text, jsonb)'] : [], key);
   }
   const prod = productionPin();
   assert.equal(prod.intended_replacement_sha256, pin.intended_replacement_sha256);
