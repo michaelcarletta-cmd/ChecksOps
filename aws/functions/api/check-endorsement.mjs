@@ -65,6 +65,57 @@ export const DEFAULT_CONSENT_TEXT = 'I agree to use electronic records and elect
 
 export const RATE_LIMIT_MS = 5 * 60 * 1000;
 
+/**
+ * A public /endorse link is valid for 30 days from when it was (re)sent
+ * (owner decision 2026-10-31, audit 2026-10-29 finding 22). Sending or
+ * resending stamps check_endorsements.token_expires_at (and the payee's
+ * endorsement_token_expires_at) to send time + 30 days, so a resend restarts
+ * the clock for the same token. The public routes refuse a link at or past
+ * that time with 410 link_expired.
+ */
+export const ENDORSEMENT_LINK_TTL_DAYS = 30;
+export const ENDORSEMENT_LINK_TTL_MS = ENDORSEMENT_LINK_TTL_DAYS * 24 * 60 * 60 * 1000;
+export const ENDORSEMENT_LINK_EXPIRED_CODE = 'link_expired';
+export const ENDORSEMENT_LINK_EXPIRED_MESSAGE = 'This endorsement link has expired. Ask the sender to resend it.';
+
+export const endorsementLinkExpiresAt = (issuedAt = Date.now()) => (
+  new Date(new Date(issuedAt).getTime() + ENDORSEMENT_LINK_TTL_MS).toISOString()
+);
+
+const timeMs = (value) => {
+  if (value === null || value === undefined || value === '') return null;
+  const ms = new Date(value).getTime();
+  return Number.isNaN(ms) ? Number.NaN : ms;
+};
+
+/**
+ * When the row's link stops working (epoch ms), or null when the row carries no
+ * issue time at all. token_expires_at wins; a link sent before expiry was stamped
+ * falls back to request_sent_at + 30 days. An unreadable timestamp fails closed.
+ */
+export const endorsementLinkExpiryMs = (row) => {
+  const explicit = timeMs(row?.token_expires_at);
+  if (explicit !== null) return Number.isNaN(explicit) ? 0 : explicit;
+  const sent = timeMs(row?.request_sent_at);
+  if (sent === null) return null;
+  return Number.isNaN(sent) ? 0 : sent + ENDORSEMENT_LINK_TTL_MS;
+};
+
+export const isEndorsementLinkExpired = (row, now = Date.now()) => {
+  const expiry = endorsementLinkExpiryMs(row);
+  return expiry !== null && now >= expiry;
+};
+
+const linkExpiredResult = (spoof) => ({
+  ok: false,
+  statusCode: 410,
+  error: ENDORSEMENT_LINK_EXPIRED_MESSAGE,
+  code: ENDORSEMENT_LINK_EXPIRED_CODE,
+  spoofFieldsIgnored: spoof,
+});
+
+const nowFrom = (deps = {}) => (typeof deps.now === 'function' ? deps.now() : Date.now());
+
 export const denyDepositAdvance = () => ({
   depositAdvanceDenied: true,
   advance_check_on_endorsement_complete: 'denied',
@@ -636,13 +687,26 @@ const bindPublicWriter = async (client, endorsement) => {
   return true;
 };
 
+// The token lookup function returns token_expires_at but not request_sent_at. A link
+// sent before expiry was stamped has token_expires_at NULL; read its send time so the
+// 30 days still run from when it was sent. Best effort: an unreadable row keeps NULL.
+const withLegacySentAt = async (client, row) => {
+  if (!row?.id || row.token_expires_at || row.request_sent_at !== undefined) return row;
+  const sent = (await safeQuery(
+    client,
+    `SELECT request_sent_at FROM public.check_endorsements WHERE id = $1::uuid LIMIT 1`,
+    [row.id],
+  )).rows[0];
+  return sent && sent.request_sent_at !== undefined ? { ...row, request_sent_at: sent.request_sent_at } : row;
+};
+
 const lookupPublicEndorsement = async (client, token) => {
   const doc = (await safeQuery(
     client,
     'SELECT public.aws_public_endorsement_by_token($1) AS doc',
     [token],
   )).rows[0]?.doc;
-  if (doc?.id) return doc;
+  if (doc?.id) return withLegacySentAt(client, doc);
   const byToken = (await safeQuery(
     client,
     `SELECT * FROM public.check_endorsements WHERE token = $1 LIMIT 1`,
@@ -667,7 +731,7 @@ const lookupPublicEndorsement = async (client, token) => {
   )).rows[0] || null;
 };
 
-export const runGetEndorsementData = async (client, token, spoof) => {
+export const runGetEndorsementData = async (client, token, spoof, deps = {}) => {
   if (!token) return { ok: false, statusCode: 400, error: 'Token required', spoofFieldsIgnored: spoof };
   const row = await lookupPublicEndorsement(client, token);
   if (!row) {
@@ -679,6 +743,7 @@ export const runGetEndorsementData = async (client, token, spoof) => {
       spoofFieldsIgnored: spoof,
     };
   }
+  if (isEndorsementLinkExpired(row, nowFrom(deps))) return linkExpiredResult(spoof);
   return {
     ok: true,
     statusCode: 200,
@@ -704,6 +769,7 @@ export const runSubmitEndorsement = async (client, event, body, spoof, deps = {}
   if (!endorsement) {
     return { ok: false, statusCode: 404, error: 'Invalid or already-used token', spoofFieldsIgnored: spoof };
   }
+  if (isEndorsementLinkExpired(endorsement, nowFrom(deps))) return linkExpiredResult(spoof);
   await bindPublicWriter(client, endorsement);
   if (endorsement.status === 'signed') {
     return { ok: true, statusCode: 200, success: true, message: 'Already endorsed', ...denyDepositAdvance(), spoofFieldsIgnored: spoof };
@@ -784,13 +850,14 @@ export const runSubmitEndorsement = async (client, event, body, spoof, deps = {}
   };
 };
 
-export const runRejectEndorsement = async (client, event, body, spoof) => {
+export const runRejectEndorsement = async (client, event, body, spoof, deps = {}) => {
   const token = String(body.token || '').trim();
   if (!token) return { ok: false, statusCode: 400, error: 'Token required', spoofFieldsIgnored: spoof };
   const endorsement = await lookupPublicEndorsement(client, token);
   if (!endorsement) {
     return { ok: false, statusCode: 404, error: 'Invalid or already-used token', spoofFieldsIgnored: spoof };
   }
+  if (isEndorsementLinkExpired(endorsement, nowFrom(deps))) return linkExpiredResult(spoof);
   await bindPublicWriter(client, endorsement);
   const newToken = rotateToken();
   const ip = clientIpFromEvent(event);
@@ -847,11 +914,11 @@ export const runPublicEndorsement = async (event, deps = {}) => {
     }
     let result;
     if (action === 'get_endorsement_data') {
-      result = await runGetEndorsementData(client, String(body.token || '').trim(), spoof);
+      result = await runGetEndorsementData(client, String(body.token || '').trim(), spoof, deps);
     } else if (action === 'submit_endorsement') {
       result = await runSubmitEndorsement(client, event, body, spoof, deps);
     } else if (action === 'reject_endorsement') {
-      result = await runRejectEndorsement(client, event, body, spoof);
+      result = await runRejectEndorsement(client, event, body, spoof, deps);
     } else {
       result = { ok: false, statusCode: 400, error: 'Unknown action', spoofFieldsIgnored: spoof };
     }
@@ -922,7 +989,7 @@ const sendEndorsementEmail = async ({ endorsement, check, email, url, branding, 
 };
 
 export const runAuthenticatedEndorsement = async ({
-  client, mapping, body, spoof, event, send, fetchImpl, compositeDeps = {},
+  client, mapping, body, spoof, event, send, fetchImpl, compositeDeps = {}, now,
 }) => {
   const action = body.action;
   if (!AUTH_ENDORSEMENT_ACTIONS.has(action)) {
@@ -1075,23 +1142,27 @@ export const runAuthenticatedEndorsement = async ({
     if (!email) {
       return { ok: false, statusCode: 502, success: false, error: 'Email delivery failed', details: { emailError: 'Missing payee email address' }, spoofFieldsIgnored: spoof };
     }
+    // Resend keeps the same token and restarts its 30 days, so every link already
+    // sent for this endorsement works again until the new expiry. A failed send
+    // returns 502 and the write transaction rolls this back.
     let activeToken = endorsement.token || rotateToken();
+    const linkExpiresAt = endorsementLinkExpiresAt(typeof now === 'function' ? now() : Date.now());
     await client.query(
       `UPDATE public.check_endorsements
-       SET token = $2, token_expires_at = NULL, updated_at = now()
+       SET token = $2, token_expires_at = $3::timestamptz, updated_at = now()
        WHERE id = $1::uuid`,
-      [endorsement.id, activeToken],
+      [endorsement.id, activeToken, linkExpiresAt],
     );
     if (endorsement.payee_id) {
       await safeQuery(
         client,
         `UPDATE public.check_payees
-         SET endorsement_token = $2, endorsement_token_expires_at = NULL,
+         SET endorsement_token = $2, endorsement_token_expires_at = $5::timestamptz,
              contact_email = COALESCE($3, contact_email),
              contact_phone = COALESCE($4, contact_phone),
              updated_at = now()
          WHERE id = $1::uuid`,
-        [endorsement.payee_id, activeToken, email, phone],
+        [endorsement.payee_id, activeToken, email, phone, linkExpiresAt],
       );
     }
     const endorsementUrl = `${appUrl()}/endorse?token=${activeToken}`;
@@ -1247,6 +1318,7 @@ export const runAuthenticatedEndorsement = async ({
       emailSent: true,
       delivery_status: deliveryStatus,
       emailProvider: sendResult?.provider || sendResult?.mode || (endorsementResendEnabled() ? 'resend' : 'sink'),
+      linkExpiresAt,
       ...denyDepositAdvance(),
       spoofFieldsIgnored: spoof,
     };
@@ -1379,5 +1451,6 @@ export const handleCheckEndorsement = async (event, deps = {}) => {
     send: deps.sendViaSesOrSink || deps.send,
     fetchImpl: deps.fetchImpl || deps.fetch,
     compositeDeps: deps.compositeDeps || {},
+    now: deps.now,
   }), deps);
 };

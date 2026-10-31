@@ -1,0 +1,64 @@
+{
+  "id": "sql137-platform-owner-identity-production-apply",
+  "migration": "sql137",
+  "authorization": "pending",
+  "execute": false,
+  "target_environment": "production",
+  "target_component": "production-sql",
+  "deployment_type": "sql-apply",
+  "filename": "aws/workflows/sql/137_platform_owner_identity.sql",
+  "migration_id": "137_platform_owner_identity",
+  "staging_pin_commit": "556626cb5135cc5cd8787c42edec8a3c5b07bc91",
+  "source_sha256": "f1308cbdcb58ddcca23be9139dc32ebb28bc912ce5541327777a8027b843d5bb",
+  "function_identities": [
+    "public.is_platform_owner()"
+  ],
+  "expected_live_definition_sha256": null,
+  "intended_replacement_sha256": "9a88fca29d21f5537052f475f4133f05e89e002bdf00b22cfc3cf2cf78c6d8da",
+  "authorization_phrase": "APPLY_PLATFORM_OWNER_IDENTITY",
+  "predecessors": [],
+  "order_note": "No predecessor and no order on this engine. SQL 137 (security audit 2026-10-29, finding 15, medium, database access only) needs public.identity_accounts (application_user_id, email, status) with its unique index identity_accounts_email_lower_key on lower(email) (aws/identity/sql/01_identity_accounts.sql), public.profiles (id, email), auth.uid(), public.is_platform_owner() (aws/rls/sql/10_owner_helpers_from_identity.sql, no later migration redefines it) owned by checksops_admin, and the roles checksops and authenticated; the file itself raises sql137_table_missing, sql137_column_missing, sql137_function_missing, sql137_role_missing or sql137_owner_email_not_unique otherwise. It also refuses unless exactly one identity_accounts row in status active or isolated_test carries checksopsadmin@gmail.com (sql137_owner_identity_count) and no profiles row carries that mailbox without that identity row (sql137_owner_profile_without_identity), so every user is_platform_owner() recognizes before the file is recognized after it. Those two row checks run inside the file, not in the read-only inspect (which reads no table rows): an apply that meets them fails closed and rolls back. Today is_platform_owner() is true when the caller's identity_accounts row OR its profiles row carries the mailbox, and checksops holds table-level UPDATE on profiles (SQL 66, aws/identity/sql/07) and, where aws/identity/sql/07 ran, on identity_accounts: a session holding the checksops credentials could make any user the platform owner by rewriting an email. SQL 137 keeps only the identity branch (same mailbox, same row: the owner is identified exactly as today) and revokes UPDATE, DELETE and TRUNCATE on identity_accounts from PUBLIC, anon, authenticated and checksops. No API path updates either email column or updates, deletes or truncates identity_accounts (aws/functions/api: profiles UPDATEs set only full_name, phone and totp_enrolled_at; identity_accounts is inserted with ON CONFLICT (cognito_sub) DO NOTHING); the invite function (SQL 90 / SQL 101) writes identity_accounts as its SECURITY DEFINER owner and is not affected. profiles' grants are not changed (its email no longer decides is_platform_owner()); is_master_owner() delegates and is not changed. If the read-only inspect finds the function already identity-only with the pinned EXECUTE ACL and none of the revoked lines it reports already_applied true and nothing is applied (the pin is then recorded as verified live, not applied).",
+  "admin_login": "checksops_admin",
+  "rds_identifier": "checksops-production",
+  "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
+  "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
+  "tooling": {
+    "status": "built",
+    "production_tool": "scripts/deployment-guard/sql137-platform-owner-identity-production-apply.mjs",
+    "production_lib": "scripts/deployment-guard/lib/release-sql-production-apply.mjs",
+    "staging_executor_handler": "aws/write-path/guarded-sql-executor/index.mjs handleReleaseSqlMigration",
+    "staging_workflow_choice": "sql137-platform-owner-identity",
+    "one_shot_migration": "sql137",
+    "fingerprint_engine": "scripts/deployment-guard/lib/release-sql-state.mjs",
+    "runbook": "ops/production-sql-137-apply.md",
+    "tests": [
+      "aws/tests/release-sql137-executor.test.mjs",
+      "aws/tests/release-sql137-production-apply.test.mjs",
+      "aws/tests/release-sql90-97-executor.test.mjs",
+      "aws/tests/release-sql90-97-production-apply.test.mjs",
+      "aws/tests/sql137-platform-owner-identity-pg.test.mjs"
+    ],
+    "note": "Guarded tooling for SQL 137: sql137-platform-owner-identity-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql137-platform-owner-identity); production-sql-one-shot.mjs --migration sql137. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): public.is_platform_owner() as the file leaves it (LANGUAGE sql, STABLE, SECURITY DEFINER, result boolean, proconfig row_security=off and search_path=public, the identity-only body, EXECUTE authenticated, checksops and the owner) and the UPDATE / DELETE / TRUNCATE lines of PUBLIC, anon, authenticated and checksops on public.identity_accounts, which must be none (spec table_privileges, as SQL 106). The pre-conditions refuse any other live EXECUTE grant on the function than the kept ones and PUBLIC, anon and service_role (function_acl_replaceable); every other grant on identity_accounts (SELECT, INSERT, the owner's) must be unchanged (other_table_privileges_unchanged), and every other object, column ACL included, is in the unrelated-catalog snapshot. The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
+  },
+  "production_inspect": {
+    "status": "pending",
+    "date": null,
+    "ssm_command_id": null,
+    "source_commit": null,
+    "read_only": true,
+    "connected_as": "checksops_admin",
+    "live_definition_sha256": null,
+    "apply_preconditions_met": null,
+    "precondition_failures": null,
+    "note": "Pending: no read-only production inspect has been run for SQL 137 yet. Expected: identity_accounts, profiles, identity_accounts_email_lower_key, auth.uid() and is_platform_owner() present, the table and the function owned by checksops_admin, roles checksops and authenticated present. Expected release-engine fingerprint under sql137 if production carries aws/rls/sql/10's is_platform_owner() with EXECUTE for PUBLIC, authenticated, checksops and the owner and no UPDATE, DELETE or TRUNCATE on identity_accounts for PUBLIC, anon, authenticated or checksops (aws/identity/sql/03's SELECT only): 9862a392054d3adb7069949dac490f6423be86632abf0ac9d9d6c99d81ffdada; with aws/identity/sql/07's checksops UPDATE as well (staging's expected state): 7349393da7ae7f94cd63f6796c76c5df2686f5274b84d7f6ad4a6ea405021f37 (both derived by aws/tests/release-sql137-executor.test.mjs and read back on PostgreSQL 16). Production's live function body and ACL are not recorded in this repository: the inspect reads them. Record the one-shot --phase inspect's date, SSM command id, source commit, live_definition_sha256, prerequisites_missing, release_sql_inspect.functions, release_sql_inspect.privileges, precondition_failures and apply_preconditions_met here. If already_applied is true, record the inspect as the verified-live evidence and leave execute false; otherwise copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. The inspect does not read rows, so it cannot show the file's owner-row checks (sql137_owner_identity_count, sql137_owner_profile_without_identity): the apply runs them and rolls back if they fail. If precondition_failures is not [] stop: that needs its own reviewed change."
+  },
+  "intended_post_state": {
+    "fingerprint": "9a88fca29d21f5537052f475f4133f05e89e002bdf00b22cfc3cf2cf78c6d8da",
+    "note": "public.is_platform_owner(): LANGUAGE sql, STABLE, SECURITY DEFINER, search_path = public, row_security = off, result boolean, owned by checksops_admin; true only when an identity_accounts row with application_user_id = auth.uid(), status active or isolated_test and lower(email) = checksopsadmin@gmail.com exists (profiles is not read); EXECUTE for authenticated, checksops and the owner only. public.identity_accounts: no UPDATE, DELETE or TRUNCATE for PUBLIC, anon, authenticated or checksops; its SELECT and INSERT grants, its index, columns and rows unchanged. is_master_owner(), profiles and every other table, function, policy, column or row unchanged. The fingerprint is releaseIntendedHash('sql137', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): 9a88fca29d21f5537052f475f4133f05e89e002bdf00b22cfc3cf2cf78c6d8da."
+  },
+  "staging_acceptance": {
+    "ok": false,
+    "reference": null,
+    "basis": "Pending: record the guarded staging SQL executor read-live and the staging apply of SQL 137 (choice sql137-platform-owner-identity) here in the reviewed change that sets execute true. The function and the grants are covered on PostgreSQL 16 by aws/tests/sql137-platform-owner-identity-pg.test.mjs. Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+  }
+}
