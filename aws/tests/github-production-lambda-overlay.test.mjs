@@ -155,7 +155,7 @@ const totpPre = (plan) => { plan.members['auth-financial-totp.mjs'].expected_liv
 // live_sha256).
 const REGISTER_PRE = LOCKOUT_MANIFEST.members['providers/production/checkalt-register.mjs'].live_sha256;
 const registerPre = (plan) => { plan.members['providers/production/checkalt-register.mjs'].expected_live_sha256 = REGISTER_PRE; return withSql132(plan); };
-// SQL 133 (financial TOTP teammate reset): admin-reset-totp.mjs pends a REPLACE from the release 2026-10-17 live
+// SQL 133 (financial TOTP teammate reset): admin-reset-totp.mjs pends a REPLACE from the live 9e85ae9a bytes (the release 2026-10-17 accepted
 // bytes; the committed plan records SQL 133 verified live (the SQL 133 record change, from its 2026-10-31 production
 // apply), and a replay of its apply still runs on a plan copy that states it, as PLAN_SQL98_LIVE does for SQL 98.
 const SQL133_FILE = 'aws/workflows/sql/133_financial_totp_admin_reset_enrollment.sql';
@@ -4244,13 +4244,14 @@ test('Loss Draft escrow records and file close (owner decisions 2026-10-30): wor
   assert.match(source, /error: 'monitored_no_endorsing'/);
 });
 
-test('Financial TOTP teammate reset (SQL 133): admin-reset-totp.mjs REPLACE from the release 2026-10-17 live bytes, planning only, SQL 133 first', async () => {
+test('Financial TOTP teammate reset (SQL 133): admin-reset-totp.mjs REPLACE from the live 9e85ae9a bytes (the release 2026-10-17 accepted bytes), planning only, SQL 133 first', async () => {
   const MEMBER = 'admin-reset-totp.mjs';
   const RELEASE = 'aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json';
-  // The release 2026-10-17 reconciliation bytes, still live: that manifest planned a REPLACE (9e85ae9a) over them
-  // which was never applied, so this row supersedes it from the same live bytes.
-  const LIVE = 'a1d8a54a0f686be926498cf823cfd55bfc1fe4caf919ab66ce49810d63bcb450';
-  const SUPERSEDED = '9e85ae9a1393a73aa83ed8df12f26544bd47f44de6db0c234fb56c29ee9f2a09';
+  // The release 2026-10-17 accepted bytes (that manifest's REPLACE a1d8a54a -> 9e85ae9a), which read-only
+  // production overlay inspect run 41157189136 (2026-10-31) found live; the row had expected a1d8a54a.
+  const LIVE = '9e85ae9a1393a73aa83ed8df12f26544bd47f44de6db0c234fb56c29ee9f2a09';
+  // The release 2026-10-17 reconciliation bytes the row first recorded as live, no longer live.
+  const STALE = 'a1d8a54a0f686be926498cf823cfd55bfc1fe4caf919ab66ce49810d63bcb450';
   const CALL = 'SELECT cleared FROM public.financial_totp_admin_reset_enrollment($1::uuid, $2::uuid)';
   const PRESENT = 'SELECT pg_catalog.to_regprocedure($1) IS NOT NULL AS present';
   const release = JSON.parse(fs.readFileSync(path.join(ROOT, RELEASE), 'utf8'));
@@ -4291,11 +4292,14 @@ test('Financial TOTP teammate reset (SQL 133): admin-reset-totp.mjs REPLACE from
   assert.ok(PLAN.notes.includes('Financial TOTP teammate reset (2026-10-30, SQL 133; owner "ok build the reset after SQL 131 and the lockout fix")'));
   const accepted = sha(`aws/functions/api/${MEMBER}`);
   assert.notEqual(accepted, LIVE);
-  assert.notEqual(accepted, SUPERSEDED);
+  assert.notEqual(accepted, STALE);
+  assert.match(ADMIN_RESET_MANIFEST.notes, /inspect run 41157189136/);
   assert.deepEqual(ADMIN_RESET_MANIFEST.members[MEMBER], { live_sha256: LIVE, accepted_sha256: accepted, operation: 'replace', previous_manifest: RELEASE });
-  assert.deepEqual([release.members[MEMBER].live_sha256, release.members[MEMBER].accepted_sha256], [LIVE, SUPERSEDED], 'the previous manifest planned over the same live bytes');
+  assert.deepEqual([release.members[MEMBER].live_sha256, release.members[MEMBER].accepted_sha256], [STALE, LIVE], "the previous manifest's accepted bytes are the live bytes");
   assert.deepEqual(PLAN.members[MEMBER], { operation: 'replace', accepted_sha256: accepted, expected_live_sha256: LIVE, sql_before: SQL133_FILE, manifest: ADMIN_RESET_REL });
   assert.ok(PLAN.notes.includes(`REPLACE ${MEMBER} ${LIVE.slice(0, 8)} -> ${accepted.slice(0, 8)}`));
+  // The correction note names the inspect that found 9e85ae9a live where the row had recorded a1d8a54a.
+  assert.ok(PLAN.notes.includes(`inspect run 41157189136 (2026-10-31, main 79ebc9ab0) refused with SOURCE_RECONCILIATION_REQUIRED, live ${MEMBER} ${LIVE.slice(0, 8)}`));
   assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
   // The accepted bytes ask the catalog for the function, then send the one call, after the step-up consumption
   // and before Cognito; every success answer says whether the authenticator was cleared; no new local import.
@@ -4313,8 +4317,8 @@ test('Financial TOTP teammate reset (SQL 133): admin-reset-totp.mjs REPLACE from
   assert.equal(ready.mutation, false);
   const done = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: accepted }) });
   assert.equal(done.state, 'ALREADY_ACCEPTED');
-  // The superseded planned bytes, or anything else, live: a reconciliation stop, never an apply.
-  for (const other of [SUPERSEDED, 'c'.repeat(64)]) {
+  // The stale a1d8a54a bytes the row first recorded, or anything else, live: a reconciliation stop, never an apply.
+  for (const other of [STALE, 'c'.repeat(64)]) {
     await assert.rejects(
       run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: other }) }),
       (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
