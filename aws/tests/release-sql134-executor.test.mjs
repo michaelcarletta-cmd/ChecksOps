@@ -5,7 +5,8 @@
  * file covers what is new:
  *
  *   - the pin: staging-authorized from its read-live (wave 30), code-derived, selectable, packed, in step
- *     with the pending production pin; the pinned commit authored the bytes; no predecessor;
+ *     with the production pin (execute true on production's own pre-state, the same one staging had,
+ *     derived from the spec); the pinned commit authored the bytes; no predecessor;
  *   - the spec's fourteen column_acl entries (SQL 134 creates or replaces no function), as SQL 92's
  *     and SQL 114's: the fingerprint is the column ACL (every grantee) of five loss_draft_tracking
  *     columns (UPDATE) and nine loss_draft_releases columns (INSERT); the expected pre-state (no
@@ -161,10 +162,17 @@ test('pin: SQL 134 staging-authorized from its read-live, code-derived, selectab
   assert.equal(prod.staging_pin_commit, pin.commit);
   assert.equal(prod.source_sha256, pin.source_sha256);
   assert.deepEqual(prod.predecessors, []);
-  assert.equal(prod.execute, false);
-  assert.equal(prod.authorization, 'pending');
-  assert.equal(prod.expected_live_definition_sha256, null);
-  assert.equal(prod.production_inspect.status, 'pending');
+  // Production pin execute-authorized (owner-approved pin change of 2026-10-31) on the staging apply. Its
+  // pre-state is production's own (read-only inspect SSM 6a2f2c2c): no grant on the fourteen columns,
+  // derived here from the spec; the same pre-state staging recorded (read-live run 41130749260).
+  assert.equal(prod.execute, true);
+  assert.match(prod.authorization, /^Owner approved 2026-10-31 /);
+  assert.equal(prod.expected_live_definition_sha256, '7827f4c87e5bc9e7bd0def01d5f201a0a1fc26365480921896aa452e1403466d');
+  assert.equal(prod.expected_live_definition_sha256, prod.production_inspect.live_definition_sha256);
+  assert.equal(prod.expected_live_definition_sha256, ABSENT_GRANTS);
+  assert.equal(prod.expected_live_definition_sha256, pin.expected_live_definition_sha256);
+  assert.notEqual(prod.expected_live_definition_sha256, prod.intended_replacement_sha256);
+  assert.equal(prod.production_inspect.status, 'recorded');
   assert.ok(prod.production_inspect.note.includes(ABSENT_GRANTS));
   let bytes = null;
   if (/^[0-9a-f]{40}$/.test(pin.commit)) {
@@ -264,7 +272,7 @@ async function withPg(t, prefix, port, fn) {
   }
 }
 
-test('PostgreSQL 16: SQL 134 through the executor: the derived pre-state, a pending pin cannot apply, drift refused, one apply on the intended fingerprint keeps the table ACLs, then refused as in place', { timeout: 600000 }, async (t) => withPg(t, 'pg-sql134-exec-', 59234, async ({ admin, connectAs }) => {
+test('PostgreSQL 16: SQL 134 through the executor: the derived pre-state, production\'s as recorded, a pending pin cannot apply, drift refused, one apply on the intended fingerprint keeps the table ACLs, then refused as in place', { timeout: 600000 }, async (t) => withPg(t, 'pg-sql134-exec-', 59234, async ({ admin, connectAs }) => {
   const seen = [];
   const connect = async () => {
     const client = await connectAs('checksops_admin');
@@ -299,6 +307,8 @@ test('PostgreSQL 16: SQL 134 through the executor: the derived pre-state, a pend
   assert.deepEqual(r.release_sql_inspect.predecessors, {});
   assert.equal(r.already_applied, false);
   assert.equal(r.live_definition_sha256, ABSENT_GRANTS);
+  // The production pin's recorded pre-state (read-only inspect of 2026-10-31, SSM 6a2f2c2c).
+  assert.equal(r.live_definition_sha256, productionPin().expected_live_definition_sha256);
   const before = await acls();
   assert.deepEqual(before[RELEASES].table, ['authenticated SELECT', 'checksops SELECT']);
   assert.ok(Object.values(before[RELEASES].columns).every((acl) => acl.length === 0));
