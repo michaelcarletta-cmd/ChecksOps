@@ -214,7 +214,9 @@ test('order: no predecessor; one function, defined only in aws/rls/sql/10 before
   const runbook = read(COMMITTED.tooling.runbook);
   assert.ok(runbook.includes(COMMITTED.intended_replacement_sha256));
   assert.ok(runbook.includes(COMMITTED.source_sha256));
-  assert.match(runbook, /\*\*Status:\*\* not applied anywhere\. The staging pin and the production pin are pending\./);
+  assert.match(runbook, /\*\*Status:\*\* staging pin execute-authorized \(wave 32\)/);
+  assert.match(runbook, /read-live \(2026-10-31\)\.\*\* Run 41234275408/);
+  assert.ok(runbook.includes('a2c2d856a21c52d47544fad05e0f0275a24a093421c8a7a7fbeea0e4bb329dfc'));
   assert.match(runbook, /APPLY_PLATFORM_OWNER_IDENTITY/);
   assert.match(runbook, /finding 15/);
   const oneShot = read('ops/production-sql-one-shot.md');

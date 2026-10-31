@@ -4,8 +4,9 @@
  * release-sql90-97-executor.test.mjs runs what every release key shares (SQL 137 included); this file
  * covers what is new:
  *
- *   - the pin: pending (no read-live yet), code-derived, selectable, packed, in step with the pending
- *     production pin; the pinned commit authored the bytes; no predecessor;
+ *   - the pin: staging-authorized from its read-live (wave 32), code-derived, selectable, packed, in
+ *     step with the production pin (pending still); the pinned commit authored the bytes; no predecessor;
+ *     the recorded staging pre-state is the read-live's, not the derived staging prediction;
  *   - the spec: one replaced function (public.is_platform_owner(), EXECUTE for authenticated, checksops
  *     and the owner; PUBLIC, anon and service_role revoked) and one table_privileges entry
  *     (identity_accounts: UPDATE / DELETE / TRUNCATE of PUBLIC, anon, authenticated and checksops,
@@ -67,6 +68,14 @@ const PRIVILEGES = Object.freeze(['UPDATE', 'DELETE', 'TRUNCATE']);
 /** Expected pre-states, derived below and read back on PostgreSQL 16. */
 const PRE_PRODUCTION = '9862a392054d3adb7069949dac490f6423be86632abf0ac9d9d6c99d81ffdada';
 const PRE_STAGING = '7349393da7ae7f94cd63f6796c76c5df2686f5274b84d7f6ad4a6ea405021f37';
+/**
+ * Observed, not derived: LIVE_DEFINITION_SHA256 of staging read-live run 41234275408 (main 7d845915e,
+ * executor m30FadRm...). It differs from PRE_STAGING: the run reported the predicted grants (EXECUTE for
+ * PUBLIC, authenticated, checksops and the owner; checksops UPDATE on identity_accounts), so the live
+ * is_platform_owner() definition is not aws/rls/sql/10's (the read-live does not print the body; neither
+ * Supabase-era body in supabase/migrations reproduces it either). SQL 137 replaces the function whole.
+ */
+const STAGING_READ_LIVE = 'a2c2d856a21c52d47544fad05e0f0275a24a093421c8a7a7fbeea0e4bb329dfc';
 const sha = (text) => createHash('sha256').update(text).digest('hex');
 const TEXT = fs.readFileSync(path.join(ROOT, PINS[KEY].filename), 'utf8');
 const SQL10 = fs.readFileSync(SQL10_FILE, 'utf8');
@@ -131,7 +140,7 @@ function handlerFor(connect, { pins = {} } = {}) {
   return createHandler({ connect, now: () => Date.parse(NOW), releaseSqlFiles: FILES, releaseSqlPins: { ...PINS, ...pins } });
 }
 
-test('pin: SQL 137 pending, code-derived, selectable, packed, in step with the pending production pin; no predecessor', () => {
+test('pin: SQL 137 staging-authorized from its read-live, code-derived, selectable, packed, in step with the pending production pin; no predecessor', () => {
   const pin = PINS[KEY];
   const spec = RELEASE_SQL_SPECS[KEY];
   const packed = Object.fromEntries(EXECUTOR_PACK_MEMBERS);
@@ -141,11 +150,17 @@ test('pin: SQL 137 pending, code-derived, selectable, packed, in step with the p
   assert.equal(pin.migration_id, '137_platform_owner_identity');
   assert.equal(spec.choice, 'sql137-platform-owner-identity');
   assert.equal(sha(TEXT), pin.source_sha256);
-  // Pending: no staging read-live recorded yet.
+  // Staging apply authorized (owner approved 2026-10-31, "record the SQL 137 staging pin") from staging
+  // read-live run 41234275408: already_applied false, precondition_failures [], prerequisites_missing [].
   assertStagingPinState(assert, KEY, pin);
-  assert.equal(pin.execute, false);
-  assert.equal(pin.authorization, 'pending');
-  assert.equal(pin.expected_live_definition_sha256, null);
+  assert.equal(pin.execute, true);
+  assert.equal(pin.authorization, 'Owner approved 2026-10-31: staging apply (wave 32) from staging read-live run 41234275408');
+  assert.equal(pin.expected_live_definition_sha256, STAGING_READ_LIVE);
+  assert.notEqual(pin.expected_live_definition_sha256, pin.intended_replacement_sha256);
+  // The recorded pre-state is the read-live's, not the derived staging prediction (nor the production one):
+  // staging's is_platform_owner() definition is not aws/rls/sql/10's. The prediction stays derived below.
+  assert.notEqual(pin.expected_live_definition_sha256, PRE_STAGING);
+  assert.notEqual(pin.expected_live_definition_sha256, PRE_PRODUCTION);
   assert.equal(releaseIntendedHash(KEY, TEXT), pin.intended_replacement_sha256);
   assert.equal(pin.intended_replacement_sha256, '9a88fca29d21f5537052f475f4133f05e89e002bdf00b22cfc3cf2cf78c6d8da');
   for (const pre of [PRE_PRODUCTION, PRE_STAGING]) assert.notEqual(pre, pin.intended_replacement_sha256);
@@ -358,7 +373,7 @@ test('PostgreSQL 16: SQL 137 through the executor: the derived staging pre-state
   const before = await acls();
   assert.deepEqual(before.function, [...SQL10_ACL]);
   assert.deepEqual(before.table, ['authenticated SELECT', 'checksops INSERT', 'checksops SELECT', 'checksops UPDATE']);
-  // A pending pin cannot apply (the committed pin is pending; pend a copy anyway).
+  // A pending pin cannot apply (the committed pin is staging-authorized, so pend a copy).
   const pendingCopy = pendingPin(PINS[KEY]);
   const pending = await handlerFor(connect, { pins: { [KEY]: pendingCopy } })(releaseEvent({ pin: pendingCopy, expected_live_definition_sha256: r.live_definition_sha256 }));
   assert.equal(pending.ok, false);
