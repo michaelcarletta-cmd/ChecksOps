@@ -61,7 +61,31 @@ derives), `already_applied` false, `precondition_failures` `[]`. Recorded in the
 (`expected_live_definition_sha256`, `execute: true`, wave 30) under the owner's words of 2026-10-30,
 "start the SQL 134 staging apply".
 
-**Status:** staging pin execute-authorized (wave 30); nothing applied yet; production pin pending.
+**Staging apply (2026-10-30).** Run 41134571358 (main `746074fb1b8f799b6cd413ccf9e4e7fad5694c0d`, staging
+pin PR #1471, on the live executor `PPZJFH/U…` deployed by run 41133133498, current with main per inspect
+run 41134289523; workstream `github-staging-sql-41134571358`) under the owner's words "start the SQL 134
+staging apply": receipt before `7827f4c87e5bc9e7bd0def01d5f201a0a1fc26365480921896aa452e1403466d`, after
+`c046d1c91cc79596c103f154b043b5421cb1dc6ceaef45d87f2f6ea1c0073c7c` (intended), result `applied`; all
+fourteen columns `intended`. Read-live run 41134851274: `already_applied` true, live `c046d1c9…`,
+`precondition_failures` `[]`.
+
+**Production inspect (2026-10-31).** Read-only `--inspect` through SSM
+`6a2f2c2c-cf5b-4e6f-9df6-12fe8221a1e9` on `i-0c35557c4e5385406`, main `d0ac2e079` (tarball sha256
+`abb179d5613b6bf008c35f74576561edd929535045c9956dc72e6c713ffb3fe7`, transfer run 41149979809, migration
+source `a9082d13…` == pin), connected as `checksops_admin`: all fourteen column ACLs `[]`; every
+prerequisite present; `predecessors` `{}`; live
+`7827f4c87e5bc9e7bd0def01d5f201a0a1fc26365480921896aa452e1403466d`, `already_applied` false,
+`precondition_failures` `[]`. That is the pre-state derived above (no grant on the fourteen columns), the
+same one staging had, so the staging apply took the path production will. The inspect prints neither table
+ACL nor SQL 50's `loss_draft_tracking` column grants (`escrow_status`, `check_received_date`,
+`updated_at`); they were not read, and SQL 134 does not change them (the apply requires the unrelated
+snapshot unchanged). Recorded in the production pin with the staging apply as its staging acceptance and
+`execute: true`; the owner's words so far ("Merge 1468 when green", "start the SQL 134 staging apply",
+"merge 1471 when green", "Yes" to the production inspect, "Yes" to this pin change) name the merges, the
+staging step, the inspect and the pin change, not the production apply. The owner merges the pin change;
+the apply still needs the owner's words for that run and runs only after that merge is on main and staged.
+
+**Status:** applied to staging (wave 30); production pin execute-authorized; not applied to production.
 
 ## Fingerprint
 
