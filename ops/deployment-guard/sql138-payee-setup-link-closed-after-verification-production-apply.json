@@ -1,0 +1,66 @@
+{
+  "id": "sql138-payee-setup-link-closed-after-verification-production-apply",
+  "migration": "sql138",
+  "authorization": "pending",
+  "execute": false,
+  "target_environment": "production",
+  "target_component": "production-sql",
+  "deployment_type": "sql-apply",
+  "filename": "aws/workflows/sql/138_payee_setup_link_closed_after_verification.sql",
+  "migration_id": "138_payee_setup_link_closed_after_verification",
+  "staging_pin_commit": "c7c960f856c949a74eae9781573525828bada010",
+  "source_sha256": "b4b3da5a22c18d69c143cf7e9f2add93be197304c65b70e11213d45b24392ef9",
+  "function_identities": [
+    "public.aws_public_payee_record(text, text, jsonb)"
+  ],
+  "expected_live_definition_sha256": null,
+  "intended_replacement_sha256": "9acaf809824101d8ef62098e6440ca5d06cda1bec4117118c53931130efadf48",
+  "authorization_phrase": "APPLY_PAYEE_SETUP_LINK_CLOSED_AFTER_VERIFICATION",
+  "predecessors": [
+    "sql113"
+  ],
+  "order_note": "Predecessor and supersedes SQL 113 (applied to production on 2026-10-23, pin retired): SQL 138 replaces one of SQL 113's six functions, public.aws_public_payee_record(text, text, jsonb), so the engine refuses SQL 138 (predecessors_applied) until SQL 113's objects are at SQL 113's intended state, and after SQL 138 SQL 113 counts as applied only while every other SQL 113 object still matches (staging pin superseded_intended_sha256.sql113, releaseSupersededIntendedHash). The spec prerequisites are public.external_payment_recipients and public.payment_provider_methods with the columns the function reads and writes, SQL 113's aws_public_payee_record(text, text, jsonb) and aws_public_payee_by_token(text) (which it returns through), and role checksops; the file itself raises sql138_prerequisite_missing, sql138_definer_cannot_write or sql138_function_not_owned otherwise. The applying login must be able to write both tables as the function's owner (definer_can_write_relations) and must own the function (functions_owned_by_login); the function must keep its jsonb result (function_results_match) and hold no EXECUTE grant other than checksops and the owner, which the file keeps, and PUBLIC, which it revokes (function_acl_replaceable). Expected production pre-state: the function as SQL 113 left it (release sql138 v1 with SQL 113's body, ec36c29e3472a9777b4a1d08ff7c3da5c00b1dc70cb4b754ef5b04ff0e73633c, derived from SQL 113's bytes by aws/tests/release-sql138-executor.test.mjs and read back on PostgreSQL 16). The change: once verified_at is set, every event through the link (tos_accepted, identity_submitted, bank_linked, bank_verified, any other) returns already_verified and writes nothing; SQL 113's body is otherwise byte for byte the same. aws_public_payee_by_token, aws_payee_create, aws_payee_reissue_link, aws_payee_disconnect and aws_payee_apply_status are not touched. Known API residue (not part of this pin): publicBankAdd in aws/functions/api/providers/payees/handlers.mjs creates the bank account at the payment provider before it calls aws_public_payee_record, so after SQL 138 a leaked link can still attach an unverified extra bank to a verified payee's provider account; the refusal stops the API before its disableBank of the verified bank and the database keeps the verified bank. No API, Lambda or SPA change is part of this pin. Adds no trigger.",
+  "admin_login": "checksops_admin",
+  "rds_identifier": "checksops-production",
+  "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
+  "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
+  "tooling": {
+    "status": "built",
+    "production_tool": "scripts/deployment-guard/sql138-payee-setup-link-closed-after-verification-production-apply.mjs",
+    "production_lib": "scripts/deployment-guard/lib/release-sql-production-apply.mjs",
+    "staging_executor_handler": "aws/write-path/guarded-sql-executor/index.mjs handleReleaseSqlMigration",
+    "staging_workflow_choice": "sql138-payee-setup-link-closed-after-verification",
+    "one_shot_migration": "sql138",
+    "fingerprint_engine": "scripts/deployment-guard/lib/release-sql-state.mjs",
+    "runbook": "ops/production-sql-138-apply.md",
+    "tests": [
+      "aws/tests/release-sql138-executor.test.mjs",
+      "aws/tests/release-sql138-production-apply.test.mjs",
+      "aws/tests/release-sql90-97-executor.test.mjs",
+      "aws/tests/release-sql90-97-production-apply.test.mjs",
+      "aws/tests/sql138-payee-setup-link-closed-pg.test.mjs"
+    ],
+    "note": "Guarded tooling for SQL 138: sql138-payee-setup-link-closed-after-verification-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql138-payee-setup-link-closed-after-verification); production-sql-one-shot.mjs --migration sql138. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): aws_public_payee_record(text, text, jsonb) plpgsql, VOLATILE, SECURITY DEFINER, search_path=public, result jsonb, SQL 138's body, EXECUTE checksops and the owner. SQL 138 supersedes SQL 113 (release-sql-specs.mjs; staging pin superseded_intended_sha256.sql113): once SQL 138 is in place SQL 113 counts as applied only while every other SQL 113 object still matches. The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
+  },
+  "production_inspect": {
+    "status": "pending",
+    "date": null,
+    "ssm_command_id": null,
+    "source_commit": null,
+    "read_only": true,
+    "connected_as": "checksops_admin",
+    "live_definition_sha256": null,
+    "apply_preconditions_met": null,
+    "precondition_failures": null,
+    "note": "Pending: no read-only production inspect has been run for SQL 138 yet. Expected: SQL 113 applied (predecessors {\"sql113\": true}), every prerequisite present (prerequisites_missing []), the two tables writable by the definer (definer_can_write_relations), aws_public_payee_record owned by checksops_admin (functions_owned_by_login) with its jsonb result (function_results_match) and EXECUTE for checksops and the owner only (function_acl_replaceable), already_applied false. Expected release-engine fingerprint of that state under sql138: ec36c29e3472a9777b4a1d08ff7c3da5c00b1dc70cb4b754ef5b04ff0e73633c (the function as SQL 113 left it; derived by aws/tests/release-sql138-executor.test.mjs and read back on PostgreSQL 16). Record the one-shot --phase inspect's date, SSM command id, source commit, live_definition_sha256, prerequisites_missing, predecessors, precondition_failures and apply_preconditions_met here, and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. If precondition_failures is not [] or the pre-state differs, stop: that needs its own reviewed change."
+  },
+  "intended_post_state": {
+    "fingerprint": "9acaf809824101d8ef62098e6440ca5d06cda1bec4117118c53931130efadf48",
+    "note": "public.aws_public_payee_record(text, text, jsonb): plpgsql, VOLATILE, SECURITY DEFINER, SET search_path = public, RETURNS jsonb, owned by checksops_admin, EXECUTE checksops and the owner (PUBLIC revoked), SQL 113's body plus the check that returns already_verified for every event once external_payment_recipients.verified_at is set. Every other SQL 113 object (columns, origin check, SELECT grant, the other five functions) and everything else in schema public are unchanged; no table, column, policy, grant, trigger or row changes. The fingerprint is releaseIntendedHash('sql138', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): 9acaf809824101d8ef62098e6440ca5d06cda1bec4117118c53931130efadf48."
+  },
+  "staging_acceptance": {
+    "ok": false,
+    "reference": null,
+    "basis": "Pending: record the guarded staging SQL executor read-live and the staging apply of SQL 138 (choice sql138-payee-setup-link-closed-after-verification) here in the reviewed change that sets execute true. The behavior is covered on PostgreSQL 16 by aws/tests/sql138-payee-setup-link-closed-pg.test.mjs. Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+  }
+}

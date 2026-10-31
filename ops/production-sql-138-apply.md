@@ -1,0 +1,124 @@
+# Production SQL 138 (payee setup link records no step once the payee is verified)
+
+| key | file | what it does |
+|---|---|---|
+| `sql138` | `aws/workflows/sql/138_payee_setup_link_closed_after_verification.sql` (sha256 `b4b3da5a22c18d69c143cf7e9f2add93be197304c65b70e11213d45b24392ef9`) | Refuses without SQL 113's payee setup (`55000 sql138_prerequisite_missing`), when the applying login could not write `external_payment_recipients` and `payment_provider_methods` as a DEFINER owner (`55000 sql138_definer_cannot_write`) or does not own `aws_public_payee_record` (`55000 sql138_function_not_owned`). Then `CREATE OR REPLACE` of SQL 113's `aws_public_payee_record(text, text, jsonb)` (`plpgsql`, `VOLATILE`, `SECURITY DEFINER`, `search_path = public`, `RETURNS jsonb`, unchanged), `REVOKE ALL ... FROM PUBLIC`, `GRANT EXECUTE ... TO checksops` and `COMMENT ON FUNCTION` on it. No other statement. |
+
+**Why.** Security audit 2026-10-29, finding 18 (low). SQL 113's public link writer
+`aws_public_payee_record(_token, _event, _data)` checks only that the payee is not disconnected, that
+the link has not expired (`token_expires_at`, 14 days from the email) and the attempt counter; it
+never looks at `verified_at`, and `aws_payee_apply_status('verified')` keeps `secure_token`. Until the
+link expires, a `bank_linked` event for a verified payee disconnects the verified bank's
+`payment_provider_methods` row and connects another one (`onboarding_status` stays `verified`), and
+the API (`aws/functions/api/providers/payees/handlers.mjs`, `publicBankAdd` with `replace_bank: true`)
+then removes the previous bank at the payment provider. A leaked link can therefore replace a
+verified payee's bank. Owner 2026-10-31: "Okay, let's do option A and fix it correctly for SQL 138".
+
+The product has no verified bank change through a link: `aws_payee_reissue_link` refuses a verified
+payee (`already_verified`), the API's `publicIdentity` refuses one, and the page
+(`src/pages/RecipientPaymentSetup.tsx`) offers "Use a different bank account" only on the Verify step,
+before setup is complete. No call of the legitimate flow records a step after verification.
+
+**What it changes.** One function, `aws_public_payee_record(text, text, jsonb)`: SQL 113's body plus
+one check after the row is read `FOR UPDATE` (so an event that waited on a concurrent
+`aws_payee_apply_status` sees its `verified_at`):
+
+```sql
+IF rec.verified_at IS NOT NULL THEN RETURN jsonb_build_object('error', 'already_verified'); END IF;
+```
+
+Once the payee is verified, every event (`tos_accepted`, `identity_submitted`, `bank_linked`,
+`bank_verified`, any other) is refused and nothing is written: no `setup_attempts` increment, no
+`payment_provider_methods` row, no payee column. The `not_found`, `disconnected`, `expired` and
+`rate_limited` answers and every step of an unverified payee (including replacing a bank that is not
+yet verified) are unchanged.
+
+- Why `verified_at`: the column the product reads as setup complete (reissue, the API, the page).
+  `token_used_at` is set in the same `UPDATE`, but reissue does not clear it and the column predates
+  SQL 113, so it could be set on a payee still setting up.
+- Why `already_verified`: the code SQL 113 already uses for this state (`aws_payee_reissue_link`). The
+  public handlers map a code outside `LINK_ERRORS` to 400 `setup_step_refused` "This step could not
+  be saved." (inline, not a 500, not a terminal page); `syncPayee` ignores a refused record. `expired`
+  or `disconnected` would tell a verified payee something untrue, and the legitimate flow never
+  reaches this answer.
+
+EXECUTE stays `checksops` and the owner (`CREATE OR REPLACE` keeps the ACL; the file restates SQL 113's
+`REVOKE` from `PUBLIC` and `GRANT` to `checksops`).
+
+Not changed: `aws_public_payee_by_token` (the link still reads the payee's state, so the page still
+shows "You're all set" after verification), `aws_payee_create`, `aws_payee_reissue_link` (a tenant's
+new link for an unverified payee still replaces `secure_token`, closing the old link),
+`aws_payee_disconnect`, `aws_payee_apply_status`; no table, column, constraint, policy, RLS setting,
+table grant, trigger or row. No API, Lambda or SPA change is part of this file or its pins.
+
+**Known API residue (outside this file).** `publicBankAdd` creates the bank account at the payment
+provider (`addPayeeBank`) before it calls `aws_public_payee_record`. After SQL 138 a leaked link can
+still attach an unverified extra bank account to a verified payee's provider account; the refused
+record stops the API before its `disableBank` of the verified bank (which runs only after the record
+succeeds), and the database keeps the verified bank on the stakeholder and `payment_provider_methods`
+rows. Closing that needs an API check before the provider call: a separate guarded Lambda change.
+
+**Predecessor.** SQL 113 (`ops/production-sql-113-apply.md`, applied to production on 2026-10-23): the
+engine refuses SQL 138 (`predecessors_applied`) until SQL 113's objects are at SQL 113's intended
+state. SQL 138 supersedes SQL 113 (as SQL 101 supersedes SQL 90): after SQL 138, SQL 113 counts as
+applied only while every other SQL 113 object still matches (staging pin
+`superseded_intended_sha256.sql113` `b4e3cf0c6dec304d3121a45b964537abdc364391e279486046b48fe9e88464fa`,
+`releaseSupersededIntendedHash`).
+
+**Status:** not applied anywhere. The staging pin and the production pin are pending.
+
+## Fingerprint
+
+Code-derived on the release engine (`scripts/deployment-guard/lib/release-sql-state.mjs`, spec
+`sql138` in `release-sql-specs.mjs`). Intended
+`9acaf809824101d8ef62098e6440ca5d06cda1bec4117118c53931130efadf48`:
+
+```
+release sql138 v1
+function public.aws_public_payee_record(text, text, jsonb): lang=plpgsql vol=v parallel=u secdef=true result=jsonb config=search_path=public prosrc=1bdad3c1f54bcd97932451e8bf0d4d40e86ea4ad69b286b927a934cac91d9b07 acl=checksops EXECUTE;owner EXECUTE
+```
+
+**Expected pre-state (both environments).** The function as SQL 113 left it:
+
+```
+release sql138 v1
+function public.aws_public_payee_record(text, text, jsonb): lang=plpgsql vol=v parallel=u secdef=true result=jsonb config=search_path=public prosrc=7a0aa3199e3e4da53d3a563288e80f98b8a8f7465855961b2f14a16b27b6d2f2 acl=checksops EXECUTE;owner EXECUTE
+```
+
+That is `ec36c29e3472a9777b4a1d08ff7c3da5c00b1dc70cb4b754ef5b04ff0e73633c`, derived from SQL 113's
+bytes by `aws/tests/release-sql138-executor.test.mjs` and read back from a PostgreSQL 16 database with
+SQL 113 applied. Each pin records its own environment's read; neither value is written into a pin
+before a run reads it. A pre-state other than this one is a stop: read its per-function report and
+ACL and return to the owner.
+
+## Preconditions (both environments; production adds the pinned `checksops_admin` login)
+
+`prerequisites_present` (`external_payment_recipients` and `payment_provider_methods` with the columns
+the function uses, `aws_public_payee_record(text, text, jsonb)`, `aws_public_payee_by_token(text)`,
+role `checksops`); `predecessors_applied` (SQL 113); `definer_can_write_relations` (the applying login
+owns both tables without `FORCE ROW LEVEL SECURITY`, or is a superuser or `BYPASSRLS`);
+`functions_owned_by_login`, `function_results_match` (`jsonb`) and `function_acl_replaceable` (no
+EXECUTE grant outside `checksops` and the owner, which the file keeps, and `PUBLIC`, which it revokes).
+
+Post-conditions: the intended fingerprint; the function owned by the login; everything else in schema
+`public` (and the functions of `auth`) unchanged. The tools roll back otherwise.
+
+## Steps
+
+1. Staging: the staging executor must carry SQL 138 first (executor package refresh through the
+   guarded staging executor `deploy` mode, its own reviewed run). Then run the guarded staging SQL
+   executor with `read-live` for `sql138-payee-setup-link-closed-after-verification`. Expected:
+   `already_applied` false, `predecessors` `{ sql113: true }`, `precondition_failures` `[]`,
+   `live_definition_sha256` `ec36c29e…` (above). If it reports `prerequisites_missing` other than
+   `[]`, `precondition_failures` other than `[]` or another pre-state, stop. Otherwise record
+   `LIVE_DEFINITION_SHA256` in the staging pin (`expected_live_definition_sha256`, owner-approved
+   `authorization`, `execute: true`) in a reviewed change, `apply`, then `read-live` again.
+2. Production: run the read-only inspect on the runner
+   (`node scripts/deployment-guard/production-sql-one-shot.mjs --migration sql138 … --phase inspect`);
+   record `production_inspect` and copy `live_definition_sha256` into
+   `expected_live_definition_sha256`; record the staging runs in `staging_acceptance`; set an
+   owner-approved `authorization` and `execute: true`, in one reviewed change.
+3. Apply with the one-shot (`ops/production-sql-one-shot.md`): `production-sql-one-shot.mjs
+   --migration sql138 --approval-scope sql138 … --phase apply` with the owner's words
+   (authorization phrase `APPLY_PAYEE_SETUP_LINK_CLOSED_AFTER_VERIFICATION`).
+4. Record the apply and retire the pin (`execute: false`).
