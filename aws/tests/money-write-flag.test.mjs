@@ -140,14 +140,20 @@ test('the helper sets the transaction-local server-only GUC request.money_write 
   assert.equal(MORTGAGE_USAGE_MONEY_WRITE_SQL, SET_MONEY_WRITE_SQL);
 });
 
-test('request.money_write is a new name: no other server GUC or SQL file uses it', () => {
+test('request.money_write is a new name: no other server GUC or SQL file uses it but SQL 136, which reads it', () => {
   const users = apiFiles().filter((rel) => read(rel).includes('request.money_write'));
   assert.deepEqual(users, ['money-write-flag.mjs', 'mortgage-ops-usage.mjs']);
+  // Step 2 (SQL 136): the one SQL file that names it, and it only reads it (current_setting), never sets it.
+  const SQL136 = '136_money_write_restrictive_policies.sql';
   for (const dir of ['aws/workflows/sql', 'aws/rls/sql', 'aws/financial/sql']) {
     for (const name of fs.readdirSync(path.join(ROOT, dir))) {
+      if (dir === 'aws/workflows/sql' && name === SQL136) continue;
       assert.equal(fs.readFileSync(path.join(ROOT, dir, name), 'utf8').includes('money_write'), false, `${dir}/${name}`);
     }
   }
+  const sql136 = fs.readFileSync(path.join(ROOT, 'aws/workflows/sql', SQL136), 'utf8').replace(/--[^\n]*/g, '');
+  assert.match(sql136, /current_setting\('request\.money_write', true\) = '1'/);
+  assert.doesNotMatch(sql136, /set_config\(\s*'request\.money_write'/);
 });
 
 test('inventory: every API money-table write is in a classified file', () => {

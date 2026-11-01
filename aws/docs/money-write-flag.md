@@ -1,6 +1,6 @@
 # Money-write flag (finding 14, step 1 of 2)
 
-Status: **step 1 (API) prepared, not deployed. Step 2 (SQL 136) not written.**
+Status: **step 1 (API) merged (#1498), not deployed. Step 2 (SQL 136, `aws/workflows/sql/136_money_write_restrictive_policies.sql`, `ops/production-sql-136-apply.md`) written, not applied: it must wait until step 1 is live in each environment.**
 
 Security audit 2026-10-29, finding 14 (medium): SQL 90 made `aws_can_write_tenant()` plain
 tenant membership, so the SQL 24 `FOR ALL TO authenticated USING/WITH CHECK

@@ -1,5 +1,5 @@
 /**
- * Specs of the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108 to SQL 135, SQL 137, SQL 138) for the shared engine in
+ * Specs of the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108 to SQL 138) for the shared engine in
  * release-sql-state.mjs: what each pinned file creates, replaces or drops, the reviewed
  * EXECUTE ACLs, the prerequisites and predecessors, and the PostgreSQL renderings the file
  * leaves (policy expressions, view, column, constraint, index and trigger definitions as
@@ -6469,6 +6469,903 @@ export const RELEASE_SQL_SPECS = deepFreeze({
       "public.check_intake_items"
     ]
   },
+  // SQL 136 (security audit 2026-10-29 finding 14, step 2 of 2; owner decision 2026-10-31 (a), API first; owner
+  // 2026-11-01, "Complete sql 138 and 136"): the 24 SQL 24 FOR ALL money tables get three RESTRICTIVE policies TO
+  // authenticated each (INSERT WITH CHECK; UPDATE USING and WITH CHECK; DELETE USING), all calling the new
+  // SECURITY INVOKER public.aws_money_write_allowed() (request.money_write, request.financial_execution, SQL 91's
+  // onboarding and webhook GUCs). The permissive policies stay; SELECT is unchanged. No predecessor: SQL 91's two
+  // GUC helpers are prerequisites. altered_relations: CREATE POLICY needs the table owner. extra_preconditions /
+  // counts (read-only catalog counts, never rows): no money table FORCE RLS, every DEFINER writer of a money table
+  // owned by a role that bypasses its RLS, no SECURITY INVOKER trigger function writing a money table (the
+  // live-only tg_accrue_mortgage_ops_billing); money_invoker_function_writers is reported, not a stop. Must not be
+  // applied anywhere before #1498's API is live there (ops/production-sql-136-apply.md).
+  sql136: {
+    "key": "sql136",
+    "label": "SQL 136",
+    "choice": "sql136-money-write-restrictive-policies",
+    "production_pin_rel": "ops/deployment-guard/sql136-money-write-restrictive-policies-production-apply.json",
+    "script": "sql136-money-write-restrictive-policies-production-apply",
+    "prerequisites": [
+      "public.ach_authorizations",
+      "public.actum_transactions",
+      "public.check_billing_events",
+      "public.claim_check_payments",
+      "public.disbursement_splits",
+      "public.external_payment_recipients",
+      "public.micro_deposit_verifications",
+      "public.moov_invoice_customers",
+      "public.moov_invoices",
+      "public.payment_method_verifications",
+      "public.payment_provider_methods",
+      "public.payment_sweep_configs",
+      "public.payment_transfer_groups",
+      "public.payment_transfers",
+      "public.payment_wallet_sub_ledgers",
+      "public.payment_wallets",
+      "public.payroll_runs",
+      "public.stakeholder_limit_requests",
+      "public.tenant_bank_accounts",
+      "public.tenant_billing_accounts",
+      "public.tenant_credit_balances",
+      "public.tenant_credit_transactions",
+      "public.tenant_maintenance_payments",
+      "public.tenant_wallet_funding_settings",
+      "public.aws_moov_onboarding_active()",
+      "public.aws_moov_webhook_apply_active()",
+      "role checksops",
+      "role authenticated"
+    ],
+    "predecessors": [],
+    "extra_preconditions": [
+      "money_tables_not_forced_rls",
+      "money_definer_writers_bypass_rls",
+      "no_invoker_trigger_money_writers"
+    ],
+    "counts": {
+      "money_tables_forced_rls": {
+        "sql": "SELECT count(*)::int AS n FROM (SELECT c.oid, c.relname, c.relowner, c.relforcerowsecurity FROM pg_catalog.pg_class c WHERE c.oid = ANY (SELECT pg_catalog.to_regclass(t) FROM pg_catalog.unnest(ARRAY['public.ach_authorizations', 'public.actum_transactions', 'public.check_billing_events', 'public.claim_check_payments', 'public.disbursement_splits', 'public.external_payment_recipients', 'public.micro_deposit_verifications', 'public.moov_invoice_customers', 'public.moov_invoices', 'public.payment_method_verifications', 'public.payment_provider_methods', 'public.payment_sweep_configs', 'public.payment_transfer_groups', 'public.payment_transfers', 'public.payment_wallet_sub_ledgers', 'public.payment_wallets', 'public.payroll_runs', 'public.stakeholder_limit_requests', 'public.tenant_bank_accounts', 'public.tenant_billing_accounts', 'public.tenant_credit_balances', 'public.tenant_credit_transactions', 'public.tenant_maintenance_payments', 'public.tenant_wallet_funding_settings']::text[]) AS t)) m WHERE m.relforcerowsecurity"
+      },
+      "money_definer_writers_without_bypass": {
+        "sql": "SELECT count(DISTINCT p.oid)::int AS n FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace ns ON ns.oid = p.pronamespace AND ns.nspname = 'public' JOIN pg_catalog.pg_roles o ON o.oid = p.proowner JOIN (SELECT c.oid, c.relname, c.relowner, c.relforcerowsecurity FROM pg_catalog.pg_class c WHERE c.oid = ANY (SELECT pg_catalog.to_regclass(t) FROM pg_catalog.unnest(ARRAY['public.ach_authorizations', 'public.actum_transactions', 'public.check_billing_events', 'public.claim_check_payments', 'public.disbursement_splits', 'public.external_payment_recipients', 'public.micro_deposit_verifications', 'public.moov_invoice_customers', 'public.moov_invoices', 'public.payment_method_verifications', 'public.payment_provider_methods', 'public.payment_sweep_configs', 'public.payment_transfer_groups', 'public.payment_transfers', 'public.payment_wallet_sub_ledgers', 'public.payment_wallets', 'public.payroll_runs', 'public.stakeholder_limit_requests', 'public.tenant_bank_accounts', 'public.tenant_billing_accounts', 'public.tenant_credit_balances', 'public.tenant_credit_transactions', 'public.tenant_maintenance_payments', 'public.tenant_wallet_funding_settings']::text[]) AS t)) m ON true WHERE p.prosecdef AND p.prosrc OPERATOR(pg_catalog.~*) ('\\m(insert\\s+into|update|delete\\s+from)\\s+(public\\.)?' || m.relname || '\\M') AND NOT (o.rolsuper OR o.rolbypassrls OR pg_catalog.pg_has_role(p.proowner, m.relowner, 'USAGE'))"
+      },
+      "money_invoker_trigger_writers": {
+        "sql": "SELECT count(DISTINCT p.oid)::int AS n FROM pg_catalog.pg_proc p JOIN (SELECT c.oid, c.relname, c.relowner, c.relforcerowsecurity FROM pg_catalog.pg_class c WHERE c.oid = ANY (SELECT pg_catalog.to_regclass(t) FROM pg_catalog.unnest(ARRAY['public.ach_authorizations', 'public.actum_transactions', 'public.check_billing_events', 'public.claim_check_payments', 'public.disbursement_splits', 'public.external_payment_recipients', 'public.micro_deposit_verifications', 'public.moov_invoice_customers', 'public.moov_invoices', 'public.payment_method_verifications', 'public.payment_provider_methods', 'public.payment_sweep_configs', 'public.payment_transfer_groups', 'public.payment_transfers', 'public.payment_wallet_sub_ledgers', 'public.payment_wallets', 'public.payroll_runs', 'public.stakeholder_limit_requests', 'public.tenant_bank_accounts', 'public.tenant_billing_accounts', 'public.tenant_credit_balances', 'public.tenant_credit_transactions', 'public.tenant_maintenance_payments', 'public.tenant_wallet_funding_settings']::text[]) AS t)) m ON true WHERE NOT p.prosecdef AND p.prorettype = 'pg_catalog.trigger'::pg_catalog.regtype AND EXISTS (SELECT 1 FROM pg_catalog.pg_trigger tg WHERE tg.tgfoid = p.oid AND NOT tg.tgisinternal) AND p.prosrc OPERATOR(pg_catalog.~*) ('\\m(insert\\s+into|update|delete\\s+from)\\s+(public\\.)?' || m.relname || '\\M')"
+      },
+      "money_invoker_function_writers": {
+        "sql": "SELECT count(DISTINCT p.oid)::int AS n FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace ns ON ns.oid = p.pronamespace AND ns.nspname = 'public' JOIN (SELECT c.oid, c.relname, c.relowner, c.relforcerowsecurity FROM pg_catalog.pg_class c WHERE c.oid = ANY (SELECT pg_catalog.to_regclass(t) FROM pg_catalog.unnest(ARRAY['public.ach_authorizations', 'public.actum_transactions', 'public.check_billing_events', 'public.claim_check_payments', 'public.disbursement_splits', 'public.external_payment_recipients', 'public.micro_deposit_verifications', 'public.moov_invoice_customers', 'public.moov_invoices', 'public.payment_method_verifications', 'public.payment_provider_methods', 'public.payment_sweep_configs', 'public.payment_transfer_groups', 'public.payment_transfers', 'public.payment_wallet_sub_ledgers', 'public.payment_wallets', 'public.payroll_runs', 'public.stakeholder_limit_requests', 'public.tenant_bank_accounts', 'public.tenant_billing_accounts', 'public.tenant_credit_balances', 'public.tenant_credit_transactions', 'public.tenant_maintenance_payments', 'public.tenant_wallet_funding_settings']::text[]) AS t)) m ON true WHERE NOT p.prosecdef AND p.prorettype <> 'pg_catalog.trigger'::pg_catalog.regtype AND p.prosrc OPERATOR(pg_catalog.~*) ('\\m(insert\\s+into|update|delete\\s+from)\\s+(public\\.)?' || m.relname || '\\M')"
+      }
+    },
+    "functions": [
+      {
+        "identity": "public.aws_money_write_allowed()",
+        "acl": [
+          "authenticated EXECUTE",
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ]
+      }
+    ],
+    "policies": [
+      {
+        "table": "public.ach_authorizations",
+        "name": "aws_money_write_gate_insert_ach_authorizations",
+        "cmd": "INSERT",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": false,
+        "qual": null,
+        "with_check": "public.aws_money_write_allowed()"
+      },
+      {
+        "table": "public.ach_authorizations",
+        "name": "aws_money_write_gate_update_ach_authorizations",
+        "cmd": "UPDATE",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": false,
+        "qual": "public.aws_money_write_allowed()",
+        "with_check": "public.aws_money_write_allowed()"
+      },
+      {
+        "table": "public.ach_authorizations",
+        "name": "aws_money_write_gate_delete_ach_authorizations",
+        "cmd": "DELETE",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": false,
+        "qual": "public.aws_money_write_allowed()",
+        "with_check": null
+      },
+      {
+        "table": "public.actum_transactions",
+        "name": "aws_money_write_gate_insert_actum_transactions",
+        "cmd": "INSERT",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": false,
+        "qual": null,
+        "with_check": "public.aws_money_write_allowed()"
+      },
+      {
+        "table": "public.actum_transactions",
+        "name": "aws_money_write_gate_update_actum_transactions",
+        "cmd": "UPDATE",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": false,
+        "qual": "public.aws_money_write_allowed()",
+        "with_check": "public.aws_money_write_allowed()"
+      },
+      {
+        "table": "public.actum_transactions",
+        "name": "aws_money_write_gate_delete_actum_transactions",
+        "cmd": "DELETE",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": false,
+        "qual": "public.aws_money_write_allowed()",
+        "with_check": null
+      },
+      {
+        "table": "public.check_billing_events",
+        "name": "aws_money_write_gate_insert_check_billing_events",
+        "cmd": "INSERT",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": false,
+        "qual": null,
+        "with_check": "public.aws_money_write_allowed()"
+      },
+      {
+        "table": "public.check_billing_events",
+        "name": "aws_money_write_gate_update_check_billing_events",
+        "cmd": "UPDATE",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": false,
+        "qual": "public.aws_money_write_allowed()",
+        "with_check": "public.aws_money_write_allowed()"
+      },
+      {
+        "table": "public.check_billing_events",
+        "name": "aws_money_write_gate_delete_check_billing_events",
+        "cmd": "DELETE",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": false,
+        "qual": "public.aws_money_write_allowed()",
+        "with_check": null
+      },
+      {
+        "table": "public.claim_check_payments",
+        "name": "aws_money_write_gate_insert_claim_check_payments",
+        "cmd": "INSERT",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": false,
+        "qual": null,
+        "with_check": "public.aws_money_write_allowed()"
+      },
+      {
+        "table": "public.claim_check_payments",
+        "name": "aws_money_write_gate_update_claim_check_payments",
+        "cmd": "UPDATE",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": false,
+        "qual": "public.aws_money_write_allowed()",
+        "with_check": "public.aws_money_write_allowed()"
+      },
+      {
+        "table": "public.claim_check_payments",
+        "name": "aws_money_write_gate_delete_claim_check_payments",
+        "cmd": "DELETE",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": false,
+        "qual": "public.aws_money_write_allowed()",
+        "with_check": null
+      },
+      {
+        "table": "public.disbursement_splits",
+        "name": "aws_money_write_gate_insert_disbursement_splits",
+        "cmd": "INSERT",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": false,
+        "qual": null,
+        "with_check": "public.aws_money_write_allowed()"
+      },
+      {
+        "table": "public.disbursement_splits",
+        "name": "aws_money_write_gate_update_disbursement_splits",
+        "cmd": "UPDATE",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": false,
+        "qual": "public.aws_money_write_allowed()",
+        "with_check": "public.aws_money_write_allowed()"
+      },
+      {
+        "table": "public.disbursement_splits",
+        "name": "aws_money_write_gate_delete_disbursement_splits",
+        "cmd": "DELETE",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": false,
+        "qual": "public.aws_money_write_allowed()",
+        "with_check": null
+      },
+      {
+        "table": "public.external_payment_recipients",
+        "name": "aws_money_write_gate_insert_external_payment_recipients",
+        "cmd": "INSERT",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": false,
+        "qual": null,
+        "with_check": "public.aws_money_write_allowed()"
+      },
+      {
+        "table": "public.external_payment_recipients",
+        "name": "aws_money_write_gate_update_external_payment_recipients",
+        "cmd": "UPDATE",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": false,
+        "qual": "public.aws_money_write_allowed()",
+        "with_check": "public.aws_money_write_allowed()"
+      },
+      {
+        "table": "public.external_payment_recipients",
+        "name": "aws_money_write_gate_delete_external_payment_recipients",
+        "cmd": "DELETE",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": false,
+        "qual": "public.aws_money_write_allowed()",
+        "with_check": null
+      },
+      {
+        "table": "public.micro_deposit_verifications",
+        "name": "aws_money_write_gate_insert_micro_deposit_verifications",
+        "cmd": "INSERT",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": false,
+        "qual": null,
+        "with_check": "public.aws_money_write_allowed()"
+      },
+      {
+        "table": "public.micro_deposit_verifications",
+        "name": "aws_money_write_gate_update_micro_deposit_verifications",
+        "cmd": "UPDATE",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": false,
+        "qual": "public.aws_money_write_allowed()",
+        "with_check": "public.aws_money_write_allowed()"
+      },
+      {
+        "table": "public.micro_deposit_verifications",
+        "name": "aws_money_write_gate_delete_micro_deposit_verifications",
+        "cmd": "DELETE",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": false,
+        "qual": "public.aws_money_write_allowed()",
+        "with_check": null
+      },
+      {
+        "table": "public.moov_invoice_customers",
+        "name": "aws_money_write_gate_insert_moov_invoice_customers",
+        "cmd": "INSERT",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": false,
+        "qual": null,
+        "with_check": "public.aws_money_write_allowed()"
+      },
+      {
+        "table": "public.moov_invoice_customers",
+        "name": "aws_money_write_gate_update_moov_invoice_customers",
+        "cmd": "UPDATE",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": false,
+        "qual": "public.aws_money_write_allowed()",
+        "with_check": "public.aws_money_write_allowed()"
+      },
+      {
+        "table": "public.moov_invoice_customers",
+        "name": "aws_money_write_gate_delete_moov_invoice_customers",
+        "cmd": "DELETE",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": false,
+        "qual": "public.aws_money_write_allowed()",
+        "with_check": null
+      },
+      {
+        "table": "public.moov_invoices",
+        "name": "aws_money_write_gate_insert_moov_invoices",
+        "cmd": "INSERT",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": false,
+        "qual": null,
+        "with_check": "public.aws_money_write_allowed()"
+      },
+      {
+        "table": "public.moov_invoices",
+        "name": "aws_money_write_gate_update_moov_invoices",
+        "cmd": "UPDATE",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": false,
+        "qual": "public.aws_money_write_allowed()",
+        "with_check": "public.aws_money_write_allowed()"
+      },
+      {
+        "table": "public.moov_invoices",
+        "name": "aws_money_write_gate_delete_moov_invoices",
+        "cmd": "DELETE",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": false,
+        "qual": "public.aws_money_write_allowed()",
+        "with_check": null
+      },
+      {
+        "table": "public.payment_method_verifications",
+        "name": "aws_money_write_gate_insert_payment_method_verifications",
+        "cmd": "INSERT",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": false,
+        "qual": null,
+        "with_check": "public.aws_money_write_allowed()"
+      },
+      {
+        "table": "public.payment_method_verifications",
+        "name": "aws_money_write_gate_update_payment_method_verifications",
+        "cmd": "UPDATE",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": false,
+        "qual": "public.aws_money_write_allowed()",
+        "with_check": "public.aws_money_write_allowed()"
+      },
+      {
+        "table": "public.payment_method_verifications",
+        "name": "aws_money_write_gate_delete_payment_method_verifications",
+        "cmd": "DELETE",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": false,
+        "qual": "public.aws_money_write_allowed()",
+        "with_check": null
+      },
+      {
+        "table": "public.payment_provider_methods",
+        "name": "aws_money_write_gate_insert_payment_provider_methods",
+        "cmd": "INSERT",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": false,
+        "qual": null,
+        "with_check": "public.aws_money_write_allowed()"
+      },
+      {
+        "table": "public.payment_provider_methods",
+        "name": "aws_money_write_gate_update_payment_provider_methods",
+        "cmd": "UPDATE",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": false,
+        "qual": "public.aws_money_write_allowed()",
+        "with_check": "public.aws_money_write_allowed()"
+      },
+      {
+        "table": "public.payment_provider_methods",
+        "name": "aws_money_write_gate_delete_payment_provider_methods",
+        "cmd": "DELETE",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": false,
+        "qual": "public.aws_money_write_allowed()",
+        "with_check": null
+      },
+      {
+        "table": "public.payment_sweep_configs",
+        "name": "aws_money_write_gate_insert_payment_sweep_configs",
+        "cmd": "INSERT",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": false,
+        "qual": null,
+        "with_check": "public.aws_money_write_allowed()"
+      },
+      {
+        "table": "public.payment_sweep_configs",
+        "name": "aws_money_write_gate_update_payment_sweep_configs",
+        "cmd": "UPDATE",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": false,
+        "qual": "public.aws_money_write_allowed()",
+        "with_check": "public.aws_money_write_allowed()"
+      },
+      {
+        "table": "public.payment_sweep_configs",
+        "name": "aws_money_write_gate_delete_payment_sweep_configs",
+        "cmd": "DELETE",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": false,
+        "qual": "public.aws_money_write_allowed()",
+        "with_check": null
+      },
+      {
+        "table": "public.payment_transfer_groups",
+        "name": "aws_money_write_gate_insert_payment_transfer_groups",
+        "cmd": "INSERT",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": false,
+        "qual": null,
+        "with_check": "public.aws_money_write_allowed()"
+      },
+      {
+        "table": "public.payment_transfer_groups",
+        "name": "aws_money_write_gate_update_payment_transfer_groups",
+        "cmd": "UPDATE",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": false,
+        "qual": "public.aws_money_write_allowed()",
+        "with_check": "public.aws_money_write_allowed()"
+      },
+      {
+        "table": "public.payment_transfer_groups",
+        "name": "aws_money_write_gate_delete_payment_transfer_groups",
+        "cmd": "DELETE",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": false,
+        "qual": "public.aws_money_write_allowed()",
+        "with_check": null
+      },
+      {
+        "table": "public.payment_transfers",
+        "name": "aws_money_write_gate_insert_payment_transfers",
+        "cmd": "INSERT",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": false,
+        "qual": null,
+        "with_check": "public.aws_money_write_allowed()"
+      },
+      {
+        "table": "public.payment_transfers",
+        "name": "aws_money_write_gate_update_payment_transfers",
+        "cmd": "UPDATE",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": false,
+        "qual": "public.aws_money_write_allowed()",
+        "with_check": "public.aws_money_write_allowed()"
+      },
+      {
+        "table": "public.payment_transfers",
+        "name": "aws_money_write_gate_delete_payment_transfers",
+        "cmd": "DELETE",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": false,
+        "qual": "public.aws_money_write_allowed()",
+        "with_check": null
+      },
+      {
+        "table": "public.payment_wallet_sub_ledgers",
+        "name": "aws_money_write_gate_insert_payment_wallet_sub_ledgers",
+        "cmd": "INSERT",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": false,
+        "qual": null,
+        "with_check": "public.aws_money_write_allowed()"
+      },
+      {
+        "table": "public.payment_wallet_sub_ledgers",
+        "name": "aws_money_write_gate_update_payment_wallet_sub_ledgers",
+        "cmd": "UPDATE",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": false,
+        "qual": "public.aws_money_write_allowed()",
+        "with_check": "public.aws_money_write_allowed()"
+      },
+      {
+        "table": "public.payment_wallet_sub_ledgers",
+        "name": "aws_money_write_gate_delete_payment_wallet_sub_ledgers",
+        "cmd": "DELETE",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": false,
+        "qual": "public.aws_money_write_allowed()",
+        "with_check": null
+      },
+      {
+        "table": "public.payment_wallets",
+        "name": "aws_money_write_gate_insert_payment_wallets",
+        "cmd": "INSERT",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": false,
+        "qual": null,
+        "with_check": "public.aws_money_write_allowed()"
+      },
+      {
+        "table": "public.payment_wallets",
+        "name": "aws_money_write_gate_update_payment_wallets",
+        "cmd": "UPDATE",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": false,
+        "qual": "public.aws_money_write_allowed()",
+        "with_check": "public.aws_money_write_allowed()"
+      },
+      {
+        "table": "public.payment_wallets",
+        "name": "aws_money_write_gate_delete_payment_wallets",
+        "cmd": "DELETE",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": false,
+        "qual": "public.aws_money_write_allowed()",
+        "with_check": null
+      },
+      {
+        "table": "public.payroll_runs",
+        "name": "aws_money_write_gate_insert_payroll_runs",
+        "cmd": "INSERT",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": false,
+        "qual": null,
+        "with_check": "public.aws_money_write_allowed()"
+      },
+      {
+        "table": "public.payroll_runs",
+        "name": "aws_money_write_gate_update_payroll_runs",
+        "cmd": "UPDATE",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": false,
+        "qual": "public.aws_money_write_allowed()",
+        "with_check": "public.aws_money_write_allowed()"
+      },
+      {
+        "table": "public.payroll_runs",
+        "name": "aws_money_write_gate_delete_payroll_runs",
+        "cmd": "DELETE",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": false,
+        "qual": "public.aws_money_write_allowed()",
+        "with_check": null
+      },
+      {
+        "table": "public.stakeholder_limit_requests",
+        "name": "aws_money_write_gate_insert_stakeholder_limit_requests",
+        "cmd": "INSERT",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": false,
+        "qual": null,
+        "with_check": "public.aws_money_write_allowed()"
+      },
+      {
+        "table": "public.stakeholder_limit_requests",
+        "name": "aws_money_write_gate_update_stakeholder_limit_requests",
+        "cmd": "UPDATE",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": false,
+        "qual": "public.aws_money_write_allowed()",
+        "with_check": "public.aws_money_write_allowed()"
+      },
+      {
+        "table": "public.stakeholder_limit_requests",
+        "name": "aws_money_write_gate_delete_stakeholder_limit_requests",
+        "cmd": "DELETE",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": false,
+        "qual": "public.aws_money_write_allowed()",
+        "with_check": null
+      },
+      {
+        "table": "public.tenant_bank_accounts",
+        "name": "aws_money_write_gate_insert_tenant_bank_accounts",
+        "cmd": "INSERT",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": false,
+        "qual": null,
+        "with_check": "public.aws_money_write_allowed()"
+      },
+      {
+        "table": "public.tenant_bank_accounts",
+        "name": "aws_money_write_gate_update_tenant_bank_accounts",
+        "cmd": "UPDATE",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": false,
+        "qual": "public.aws_money_write_allowed()",
+        "with_check": "public.aws_money_write_allowed()"
+      },
+      {
+        "table": "public.tenant_bank_accounts",
+        "name": "aws_money_write_gate_delete_tenant_bank_accounts",
+        "cmd": "DELETE",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": false,
+        "qual": "public.aws_money_write_allowed()",
+        "with_check": null
+      },
+      {
+        "table": "public.tenant_billing_accounts",
+        "name": "aws_money_write_gate_insert_tenant_billing_accounts",
+        "cmd": "INSERT",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": false,
+        "qual": null,
+        "with_check": "public.aws_money_write_allowed()"
+      },
+      {
+        "table": "public.tenant_billing_accounts",
+        "name": "aws_money_write_gate_update_tenant_billing_accounts",
+        "cmd": "UPDATE",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": false,
+        "qual": "public.aws_money_write_allowed()",
+        "with_check": "public.aws_money_write_allowed()"
+      },
+      {
+        "table": "public.tenant_billing_accounts",
+        "name": "aws_money_write_gate_delete_tenant_billing_accounts",
+        "cmd": "DELETE",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": false,
+        "qual": "public.aws_money_write_allowed()",
+        "with_check": null
+      },
+      {
+        "table": "public.tenant_credit_balances",
+        "name": "aws_money_write_gate_insert_tenant_credit_balances",
+        "cmd": "INSERT",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": false,
+        "qual": null,
+        "with_check": "public.aws_money_write_allowed()"
+      },
+      {
+        "table": "public.tenant_credit_balances",
+        "name": "aws_money_write_gate_update_tenant_credit_balances",
+        "cmd": "UPDATE",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": false,
+        "qual": "public.aws_money_write_allowed()",
+        "with_check": "public.aws_money_write_allowed()"
+      },
+      {
+        "table": "public.tenant_credit_balances",
+        "name": "aws_money_write_gate_delete_tenant_credit_balances",
+        "cmd": "DELETE",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": false,
+        "qual": "public.aws_money_write_allowed()",
+        "with_check": null
+      },
+      {
+        "table": "public.tenant_credit_transactions",
+        "name": "aws_money_write_gate_insert_tenant_credit_transactions",
+        "cmd": "INSERT",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": false,
+        "qual": null,
+        "with_check": "public.aws_money_write_allowed()"
+      },
+      {
+        "table": "public.tenant_credit_transactions",
+        "name": "aws_money_write_gate_update_tenant_credit_transactions",
+        "cmd": "UPDATE",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": false,
+        "qual": "public.aws_money_write_allowed()",
+        "with_check": "public.aws_money_write_allowed()"
+      },
+      {
+        "table": "public.tenant_credit_transactions",
+        "name": "aws_money_write_gate_delete_tenant_credit_transactions",
+        "cmd": "DELETE",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": false,
+        "qual": "public.aws_money_write_allowed()",
+        "with_check": null
+      },
+      {
+        "table": "public.tenant_maintenance_payments",
+        "name": "aws_money_write_gate_insert_tenant_maintenance_payments",
+        "cmd": "INSERT",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": false,
+        "qual": null,
+        "with_check": "public.aws_money_write_allowed()"
+      },
+      {
+        "table": "public.tenant_maintenance_payments",
+        "name": "aws_money_write_gate_update_tenant_maintenance_payments",
+        "cmd": "UPDATE",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": false,
+        "qual": "public.aws_money_write_allowed()",
+        "with_check": "public.aws_money_write_allowed()"
+      },
+      {
+        "table": "public.tenant_maintenance_payments",
+        "name": "aws_money_write_gate_delete_tenant_maintenance_payments",
+        "cmd": "DELETE",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": false,
+        "qual": "public.aws_money_write_allowed()",
+        "with_check": null
+      },
+      {
+        "table": "public.tenant_wallet_funding_settings",
+        "name": "aws_money_write_gate_insert_tenant_wallet_funding_settings",
+        "cmd": "INSERT",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": false,
+        "qual": null,
+        "with_check": "public.aws_money_write_allowed()"
+      },
+      {
+        "table": "public.tenant_wallet_funding_settings",
+        "name": "aws_money_write_gate_update_tenant_wallet_funding_settings",
+        "cmd": "UPDATE",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": false,
+        "qual": "public.aws_money_write_allowed()",
+        "with_check": "public.aws_money_write_allowed()"
+      },
+      {
+        "table": "public.tenant_wallet_funding_settings",
+        "name": "aws_money_write_gate_delete_tenant_wallet_funding_settings",
+        "cmd": "DELETE",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": false,
+        "qual": "public.aws_money_write_allowed()",
+        "with_check": null
+      }
+    ],
+    "altered_relations": [
+      "public.ach_authorizations",
+      "public.actum_transactions",
+      "public.check_billing_events",
+      "public.claim_check_payments",
+      "public.disbursement_splits",
+      "public.external_payment_recipients",
+      "public.micro_deposit_verifications",
+      "public.moov_invoice_customers",
+      "public.moov_invoices",
+      "public.payment_method_verifications",
+      "public.payment_provider_methods",
+      "public.payment_sweep_configs",
+      "public.payment_transfer_groups",
+      "public.payment_transfers",
+      "public.payment_wallet_sub_ledgers",
+      "public.payment_wallets",
+      "public.payroll_runs",
+      "public.stakeholder_limit_requests",
+      "public.tenant_bank_accounts",
+      "public.tenant_billing_accounts",
+      "public.tenant_credit_balances",
+      "public.tenant_credit_transactions",
+      "public.tenant_maintenance_payments",
+      "public.tenant_wallet_funding_settings"
+    ]
+  },
   // SQL 137 (security audit 2026-10-29, finding 15, database access only): is_platform_owner() decided
   // by the identity account only (the profiles.email branch removed; the same mailbox on the same
   // identity_accounts row, so today's owner is recognized as before), and UPDATE, DELETE and TRUNCATE
@@ -6615,4 +7512,5 @@ export const RELEASE_SQL_SPECS = deepFreeze({
       "public.payment_provider_methods"
     ]
   },
+
 });
