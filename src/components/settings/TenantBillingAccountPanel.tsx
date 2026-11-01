@@ -110,6 +110,33 @@ export function billingDiagnosticCode(diagnostic: BillingDiagnostic | null | und
     const trial = diagnostic.trial_update as { rows?: unknown; error?: unknown };
     parts.push(`trial:${"error" in trial ? `err${String(trial.error)}` : show(trial.rows)}`);
   }
+  // Lock probe, policy hashes, trigger function detail and aws_can_write_tenant overloads: counts, names, y|n and
+  // 12-char hash prefixes only; never an expression, a function body or an id.
+  if (diagnostic.lock_probe && typeof diagnostic.lock_probe === "object") {
+    const lock = diagnostic.lock_probe as { rows?: unknown; error?: unknown };
+    parts.push(`lock:${"error" in lock ? `err${String(lock.error)}` : show(lock.rows)}`);
+  }
+  if (Array.isArray(diagnostic.policy_detail)) {
+    for (const p of diagnostic.policy_detail as Array<{ name?: unknown; qual_sha256?: unknown; check_sha256?: unknown; calls_can_write_tenant?: unknown }>) {
+      parts.push(`pol:${String(p.name ?? "?")}/${String(p.qual_sha256 ?? "-")}/${String(p.check_sha256 ?? "-")}/${yn(p.calls_can_write_tenant)}`);
+    }
+  } else if ("policy_detail" in diagnostic) {
+    parts.push(`pol:${show(diagnostic.policy_detail)}`);
+  }
+  if (Array.isArray(diagnostic.trigger_fn_detail)) {
+    const fns = diagnostic.trigger_fn_detail as Array<{ lang?: unknown; secdef?: unknown; prosrc_sha256?: unknown; prosrc_matches_repo?: unknown }>;
+    if (fns.length === 0) parts.push("trgfn:none");
+    for (const f of fns) {
+      parts.push(`trgfn:${String(f.lang ?? "?")}/${yn(f.secdef)}/${String(f.prosrc_sha256 ?? "-")}/${yn(f.prosrc_matches_repo)}`);
+    }
+  } else if ("trigger_fn_detail" in diagnostic) {
+    parts.push(`trgfn:${show(diagnostic.trigger_fn_detail)}`);
+  }
+  if (diagnostic.fn_overloads && typeof diagnostic.fn_overloads === "object" && !("error" in diagnostic.fn_overloads)) {
+    parts.push(`cwt:${show((diagnostic.fn_overloads as { count?: unknown }).count)}`);
+  } else if ("fn_overloads" in diagnostic) {
+    parts.push(`cwt:${show(diagnostic.fn_overloads)}`);
+  }
   parts.push(`policies:${policies || "none"}`);
   return parts.join(" ");
 }

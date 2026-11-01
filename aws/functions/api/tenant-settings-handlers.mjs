@@ -184,6 +184,53 @@ const BILLING_DIAGNOSTIC_PROBES = Object.freeze([
        'nothing', (r.definition ~* 'NOTHING')
      ) ORDER BY r.rulename), '[]'::json) AS v
      FROM pg_catalog.pg_rules r WHERE r.schemaname = 'public' AND r.tablename = 'tenant_billing_accounts'`, () => []],
+  // Policy detail (owner report, staging 2026-11-01: no rule, only the repo's updated_at trigger, and even a no-op
+  // update of the visible row returned no row). Per policy: the name, command, permissive and roles as above, the
+  // first 12 hex chars of the sha256 of its USING and WITH CHECK renderings (null when absent), whether it depends on
+  // public.aws_can_write_tenant(uuid), and the names of the functions it depends on (pg_depend; USING and WITH CHECK
+  // together). Hashes and names only; never the expression text.
+  ['policy_detail', `SELECT COALESCE(json_agg(json_build_object(
+       'name', p.polname,
+       'cmd', pp.cmd,
+       'permissive', pp.permissive,
+       'roles', pp.roles,
+       'qual_sha256', left(encode(sha256(convert_to(pg_get_expr(p.polqual, p.polrelid), 'UTF8')), 'hex'), 12),
+       'check_sha256', left(encode(sha256(convert_to(pg_get_expr(p.polwithcheck, p.polrelid), 'UTF8')), 'hex'), 12),
+       'calls_can_write_tenant', EXISTS (SELECT 1 FROM pg_catalog.pg_depend d
+         WHERE d.classid = 'pg_catalog.pg_policy'::regclass AND d.objid = p.oid
+           AND d.refclassid = 'pg_catalog.pg_proc'::regclass
+           AND d.refobjid = to_regprocedure('public.aws_can_write_tenant(uuid)')),
+       'qual_fn_names', (SELECT COALESCE(json_agg(DISTINCT fn.nspname || '.' || fp.proname ORDER BY fn.nspname || '.' || fp.proname), '[]'::json)
+         FROM pg_catalog.pg_depend d
+         JOIN pg_catalog.pg_proc fp ON fp.oid = d.refobjid
+         JOIN pg_catalog.pg_namespace fn ON fn.oid = fp.pronamespace
+         WHERE d.classid = 'pg_catalog.pg_policy'::regclass AND d.objid = p.oid AND d.refclassid = 'pg_catalog.pg_proc'::regclass)
+     ) ORDER BY p.polname), '[]'::json) AS v
+     FROM pg_catalog.pg_policy p
+     JOIN pg_catalog.pg_policies pp ON pp.schemaname = 'public' AND pp.tablename = 'tenant_billing_accounts' AND pp.policyname = p.polname
+     WHERE p.polrelid = 'public.tenant_billing_accounts'::regclass`, () => []],
+  // The functions the table's user triggers run: language, SECURITY DEFINER, the first 12 hex chars of the sha256 of
+  // the body, and whether the body, whitespace collapsed, is the repo's update_updated_at_column body. Never the body.
+  ['trigger_fn_detail', `SELECT COALESCE(json_agg(json_build_object(
+       'name', t.tgname,
+       'fn', n.nspname || '.' || p.proname,
+       'lang', l.lanname,
+       'secdef', p.prosecdef,
+       'prosrc_sha256', left(encode(sha256(convert_to(p.prosrc, 'UTF8')), 'hex'), 12),
+       'prosrc_matches_repo', (btrim(regexp_replace(p.prosrc, '\\s+', ' ', 'g')) = 'BEGIN NEW.updated_at = NOW(); RETURN NEW; END;')
+     ) ORDER BY t.tgname), '[]'::json) AS v
+     FROM pg_catalog.pg_trigger t
+     JOIN pg_catalog.pg_proc p ON p.oid = t.tgfoid
+     JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+     JOIN pg_catalog.pg_language l ON l.oid = p.prolang
+     WHERE t.tgrelid = 'public.tenant_billing_accounts'::regclass AND NOT t.tgisinternal`, () => []],
+  // Overloads of public.aws_can_write_tenant: how many, and their argument types only.
+  ['fn_overloads', `SELECT json_build_object(
+       'count', count(*)::int,
+       'args', COALESCE(json_agg(pg_get_function_identity_arguments(p.oid) ORDER BY pg_get_function_identity_arguments(p.oid)), '[]'::json)
+     ) AS v
+     FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+     WHERE n.nspname = 'public' AND p.proname = 'aws_can_write_tenant'`, () => []],
 ]);
 
 export const billingWriteDiagnostic = async (client, { tenantId, userId = null, returned = undefined }) => {
@@ -220,6 +267,24 @@ export const billingWriteDiagnostic = async (client, { tenantId, userId = null, 
     await client.query('ROLLBACK TO SAVEPOINT billing_diag_trial_update');
   } catch (error) {
     if (!out.trial_update) out.trial_update = { error: String(error?.code || 'probe_failed') };
+  }
+  // lock_probe: this tenant's row locked FOR UPDATE, which applies the UPDATE USING policies but fires no trigger,
+  // always rolled back to its own savepoint; reports only the row count, or its SQLSTATE. It tells "the update
+  // policies hide the row" apart from "a trigger drops the update".
+  try {
+    await client.query('SAVEPOINT billing_diag_lock_probe');
+    try {
+      const row = (await client.query(
+        'SELECT count(*)::int AS v FROM (SELECT 1 FROM public.tenant_billing_accounts WHERE tenant_id = $1::uuid FOR UPDATE) s',
+        [tenantId],
+      )).rows?.[0];
+      out.lock_probe = { rows: Number(row?.v ?? 0) };
+    } catch (error) {
+      out.lock_probe = { error: String(error?.code || 'probe_failed') };
+    }
+    await client.query('ROLLBACK TO SAVEPOINT billing_diag_lock_probe');
+  } catch (error) {
+    if (!out.lock_probe) out.lock_probe = { error: String(error?.code || 'probe_failed') };
   }
   if (returned !== undefined) {
     out.returned_row = Boolean(returned);
