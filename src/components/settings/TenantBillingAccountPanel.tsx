@@ -56,10 +56,51 @@ function storedBilling(data: unknown) {
   };
 }
 
+type BillingDiagnostic = Record<string, unknown>;
+
+/**
+ * A compact, phone-readable summary of the route's read-only diagnostic for a write the database did not
+ * apply (billing_update_not_applied). Counts, yes/no, the role name and policy names only; no ids.
+ */
+export function billingDiagnosticCode(diagnostic: BillingDiagnostic | null | undefined): string {
+  if (!diagnostic || typeof diagnostic !== "object") return "";
+  const show = (value: unknown): string => {
+    if (value === true) return "yes";
+    if (value === false) return "no";
+    if (value === null || value === undefined) return "-";
+    if (typeof value === "object" && value && "error" in value) return `err${String((value as { error: unknown }).error)}`;
+    return String(value);
+  };
+  const policies = Array.isArray(diagnostic.policies)
+    ? (diagnostic.policies as Array<{ name?: unknown; permissive?: unknown; cmd?: unknown; roles?: unknown }>)
+      .map((p) => `${String(p.name ?? "?")}/${String(p.cmd ?? "?")}/${String(p.permissive ?? "").toUpperCase() === "RESTRICTIVE" ? "restr" : "perm"}/${Array.isArray(p.roles) ? p.roles.join("+") : String(p.roles ?? "")}`)
+      .join(", ")
+    : show(diagnostic.policies);
+  const parts = [
+    `row:${show(diagnostic.row_visible)}`,
+    `write:${show(diagnostic.can_write_tenant)}`,
+    `member:${show(diagnostic.is_tenant_member)}`,
+    `uid:${show(diagnostic.auth_uid_set)}`,
+    `caller:${show(diagnostic.auth_uid_matches_caller)}`,
+    `role:${show(diagnostic.current_user)}`,
+    `rls:${show(diagnostic.rls_enabled)}/${show(diagnostic.rls_forced)}`,
+  ];
+  if ("returned_row" in diagnostic) {
+    parts.push(`ret:${show(diagnostic.returned_row)}/${show(diagnostic.returned_auto_debit_enabled)}`);
+  }
+  parts.push(`policies:${policies || "none"}`);
+  return parts.join(" ");
+}
+
 function billingErrorMessage(error: { message?: string } | null, data: unknown): string {
-  const payload = data && typeof data === "object" ? data as { error?: string; message?: string } : null;
+  const payload = data && typeof data === "object" ? data as { error?: string; message?: string; diagnostic?: BillingDiagnostic } : null;
   const code = payload?.error || "";
-  return BILLING_ERRORS[code] || payload?.message || error?.message || "The billing account could not be saved.";
+  const base = BILLING_ERRORS[code] || payload?.message || error?.message || "The billing account could not be saved.";
+  if (code === "billing_update_not_applied") {
+    const detail = billingDiagnosticCode(payload?.diagnostic);
+    if (detail) return `${base} (${detail})`;
+  }
+  return base;
 }
 
 async function saveBillingAccount(body: Record<string, unknown>) {
@@ -135,7 +176,7 @@ export function TenantBillingAccountPanel() {
       setAuthorized(false);
       qc.invalidateQueries({ queryKey: ["tenant-billing-account", tenantId] });
     },
-    onError: (e: any) => toast.error(e?.message ?? "Failed to link account"),
+    onError: (e: any) => toast.error(e?.message ?? "Failed to link account", { duration: 30000 }),
   });
 
   const toggleAutoDebit = useMutation({
@@ -149,7 +190,7 @@ export function TenantBillingAccountPanel() {
       qc.invalidateQueries({ queryKey: ["tenant-billing-account", tenantId] });
     },
     onError: (e: Error) => {
-      toast.error(e?.message ?? "Failed to update auto-debit");
+      toast.error(e?.message ?? "Failed to update auto-debit", { duration: 30000 });
       qc.invalidateQueries({ queryKey: ["tenant-billing-account", tenantId] });
     },
   });
