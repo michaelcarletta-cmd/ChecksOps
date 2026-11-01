@@ -32,7 +32,29 @@ const BILLING_ERRORS: Record<string, string> = {
   account_inactive: "That bank account is inactive.",
   missing_authorization: "Link a billing account first.",
   cross_tenant_denied: "That bank account belongs to another company.",
+  billing_update_not_applied: "The change was not saved. Contact ChecksOps support.",
 };
+
+type StoredAuthorization = {
+  id?: string;
+  stakeholder_account_id?: string | null;
+  ach_authorized_at?: string | null;
+  auto_debit_enabled?: boolean;
+  verification_status?: string | null;
+};
+
+/** The billing row exactly as the server stored it (the route's `authorization`), for the card's cache. */
+function storedBilling(data: unknown) {
+  const auth = data && typeof data === "object" ? (data as { authorization?: StoredAuthorization | null }).authorization : null;
+  if (!auth || !auth.id) return null;
+  return {
+    id: auth.id,
+    stakeholder_account_id: auth.stakeholder_account_id ?? null,
+    ach_authorized_at: auth.ach_authorized_at ?? null,
+    auto_debit_enabled: auth.auto_debit_enabled === true,
+    verification_status: auth.verification_status ?? null,
+  };
+}
 
 function billingErrorMessage(error: { message?: string } | null, data: unknown): string {
   const payload = data && typeof data === "object" ? data as { error?: string; message?: string } : null;
@@ -98,7 +120,7 @@ export function TenantBillingAccountPanel() {
       if (!authorized) throw new Error("You must authorize ACH debits");
 
       if (!accounts.some((a: any) => a.id === selectedId)) throw new Error("Account not found");
-      await saveBillingAccount({
+      return saveBillingAccount({
         action: "save",
         tenant_id: tenantId,
         stakeholder_account_id: selectedId,
@@ -106,7 +128,9 @@ export function TenantBillingAccountPanel() {
         authorized: true,
       });
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      const stored = storedBilling(data);
+      if (stored) qc.setQueryData(["tenant-billing-account", tenantId], stored);
       toast.success("Billing account linked — auto-debit is on");
       setAuthorized(false);
       qc.invalidateQueries({ queryKey: ["tenant-billing-account", tenantId] });
@@ -116,9 +140,11 @@ export function TenantBillingAccountPanel() {
 
   const toggleAutoDebit = useMutation({
     mutationFn: async (enabled: boolean) => {
-      await saveBillingAccount({ action: "toggle_auto_debit", tenant_id: tenantId, auto_debit_enabled: enabled });
+      return saveBillingAccount({ action: "toggle_auto_debit", tenant_id: tenantId, auto_debit_enabled: enabled });
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      const stored = storedBilling(data);
+      if (stored) qc.setQueryData(["tenant-billing-account", tenantId], stored);
       toast.success("Auto-debit preference updated");
       qc.invalidateQueries({ queryKey: ["tenant-billing-account", tenantId] });
     },

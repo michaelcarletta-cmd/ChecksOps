@@ -37,9 +37,19 @@ test('link and auto-debit go through save-tenant-billing-account with the fields
   // A refusal ({ ok: false }) is shown, not swallowed.
   assert.match(panel, /\(data as \{ ok\?: boolean \}\)\.ok === false/);
   assert.match(panel, /toast\.error\(e\?\.message \?\? "Failed to update auto-debit"\)/);
-  // The client no longer sends the server-owned fields (the read still selects and shows some of them).
-  for (const field of ['ach_authorized_at', 'verification_status', 'entity_type', 'account_holder_name']) {
-    assert.doesNotMatch(panel, new RegExp(`\\b${field}: `), field);
+  // A change the database did not make is named, not shown as saved.
+  assert.match(panel, /billing_update_not_applied: "The change was not saved\. Contact ChecksOps support\."/);
+  // On success both actions write the row the server stored into the card's cache.
+  assert.equal((panel.match(/qc\.setQueryData\(\["tenant-billing-account", tenantId\], stored\)/g) || []).length, 2);
+  assert.match(panel, /function storedBilling\(data: unknown\)/);
+  assert.match(panel, /return saveBillingAccount\(\{ action: "toggle_auto_debit"/);
+  // The request bodies carry no server-owned field (the read and the stored-row cache still name some).
+  const requests = [...panel.matchAll(/saveBillingAccount\(\{([\s\S]*?)\}\)/g)].map((m) => m[1]);
+  assert.equal(requests.length, 2);
+  for (const body of requests) {
+    for (const field of ['ach_authorized_at', 'verification_status', 'entity_type', 'account_holder_name']) {
+      assert.doesNotMatch(body, new RegExp(`\\b${field}\\b`), field);
+    }
   }
 });
 
@@ -52,4 +62,6 @@ test('the route exists, is dispatched, and reads exactly what the panel sends', 
   assert.match(handlers, /authorized: body\.authorized === true \|\| body\.authorize_ach === true/);
   // The route sets the server-only money-write flag before each write.
   assert.equal((handlers.match(/await setMoneyWriteFlag\(client\);/g) || []).length, 2);
+  // A write that changed no row is refused, never reported as saved.
+  assert.equal((handlers.match(/error: 'billing_update_not_applied'/g) || []).length, 2);
 });

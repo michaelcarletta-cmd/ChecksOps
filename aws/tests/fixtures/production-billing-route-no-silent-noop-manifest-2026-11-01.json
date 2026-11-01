@@ -1,0 +1,15 @@
+{
+  "workstream_id": "billing-route-no-silent-noop",
+  "authorization": "Pending owner review (2026-11-01). Planning only: nothing is live or verified. Each production apply still needs its own owner approval and staging acceptance.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Billing route refuses a silent no-op (2026-11-01; owner 2026-11-01 \"fix the billing route\"): in staging the owner, a member of Freedom Adjustment, unchecked monthly auto-debit on the billing panel (PR #1511, which calls save-tenant-billing-account) and was told \"Auto-debit preference updated\" while the box stayed checked after reload. toggleTenantAutoDebit returned ok with rows[0] || existing, and saveTenantBillingAuthorization returned ok, even when the UPDATE/INSERT ... RETURNING changed no row. The accepted bytes return 409 billing_update_not_applied when no row was written (or, for the toggle, the written row does not hold the requested value), so nothing is committed or reported as saved; on success both return the row actually written. Who may call the route is unchanged, and the money-write flag is still set before each write. No SQL change; no other member changes. live_sha256 is the production bytes before the money-write flag (what the release-lock pin manifest accepted, aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json; the money-write-flag manifest's live value for this member): production has not applied #1498's c813c6dc5dac144f2d10d9409a4cb31cb47789080969e1c2e35f0579004d3caa. Staging runs those #1498 bytes (staging overlay run 41309896387), so the staging overlay of this member is c813c6dc -> the accepted bytes. A read-only production overlay inspect must confirm the live member before any apply.",
+  "members": {
+    "tenant-settings-handlers.mjs": {
+      "live_sha256": "9766306dfccffbb515c6dd1f0a329b91a407f53eb97c1ed148c9dcc5b9f24717",
+      "accepted_sha256": "976f8f14158757af0d1865da9bce70e5812a939502bdc2586209dfac67cccc65",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
+    }
+  }
+}

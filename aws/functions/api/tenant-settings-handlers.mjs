@@ -245,6 +245,11 @@ export const saveTenantBillingAuthorization = async (client, {
         row.routing_number, row.account_number_encrypted,
       ],
     )).rows[0];
+  // A write that changed no row (filtered by row security or anything else) is not a success: report it,
+  // so the caller never shows "saved" for a change the database did not make (owner report, 2026-11-01).
+  if (!saved || saved.tenant_id !== tenantId) {
+    return { ok: false, statusCode: 409, error: 'billing_update_not_applied' };
+  }
 
   return {
     ok: true,
@@ -267,11 +272,16 @@ export const toggleTenantAutoDebit = async (client, { tenantId, enabled }) => {
      RETURNING *`,
     [tenantId, enabled === true],
   )).rows;
+  // No row changed, or the row does not hold the requested value: not a success (see saveTenantBillingAuthorization).
+  const written = rows[0];
+  if (!written || written.auto_debit_enabled !== (enabled === true)) {
+    return { ok: false, statusCode: 409, error: 'billing_update_not_applied' };
+  }
   return {
     ok: true,
     charged: false,
     collection_initiated: false,
-    authorization: publicAuthorization(rows[0] || existing),
+    authorization: publicAuthorization(written),
   };
 };
 
