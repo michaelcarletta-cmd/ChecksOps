@@ -2112,14 +2112,23 @@ test('Moov payees: four added modules, providers/catalog.mjs and providers.mjs r
   assert.ok(at(CATALOG) < at(ADDS[0]));
   assert.equal(PLAN.order.at(-1), 'providers.mjs');
   const inspect = (name) => ({ ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: name });
+  // handlers.mjs has since moved on to the payee bank-add verified guard (2026-11-01), whose REPLACE starts
+  // from these applied bytes (its own test below): its row expects them live and accepts main's newer bytes.
+  const ADDS_MOVED_ON = { 'providers/payees/handlers.mjs': 'aws/tests/fixtures/production-payee-bank-add-verified-guard-manifest-2026-11-01.json' };
   for (const name of ADDS) {
-    const LIVE = sha(`aws/functions/api/${name}`);
+    const LIVE = applied.members[name].accepted_sha256;
+    if (!ADDS_MOVED_ON[name]) assert.equal(sha(`aws/functions/api/${name}`), LIVE, name);
     assert.equal(manifest.members[name].live_sha256, null, name);
     assert.equal(manifest.members[name].accepted_sha256, LIVE, name);
     assert.deepEqual(applied.members[name], { live_sha256: LIVE, accepted_sha256: LIVE, operation: 'add', previous_manifest: MANIFEST_REL }, name);
-    // The ADD rows stay as planned (precedent: secret-columns.mjs); inspect of the live module is a no-op.
-    assert.deepEqual(PLAN.members[name], { operation: 'add', accepted_sha256: LIVE, expected_live_sha256: null, sql_before: null, manifest: MANIFEST_REL }, name);
-    assert.equal((await run(inspect(name), { root: ROOT, inspectLive: liveFor(name, { sha256: LIVE }) })).state, 'ALREADY_ACCEPTED', name);
+    if (ADDS_MOVED_ON[name]) {
+      assert.deepEqual(PLAN.members[name], { operation: 'replace', accepted_sha256: sha(`aws/functions/api/${name}`), expected_live_sha256: LIVE, sql_before: null, manifest: ADDS_MOVED_ON[name] }, name);
+      assert.equal((await run(inspect(name), { root: ROOT, inspectLive: liveFor(name, { sha256: LIVE }) })).state, 'READY', name);
+    } else {
+      // The ADD rows stay as planned (precedent: secret-columns.mjs); inspect of the live module is a no-op.
+      assert.deepEqual(PLAN.members[name], { operation: 'add', accepted_sha256: LIVE, expected_live_sha256: null, sql_before: null, manifest: MANIFEST_REL }, name);
+      assert.equal((await run(inspect(name), { root: ROOT, inspectLive: liveFor(name, { sha256: LIVE }) })).state, 'ALREADY_ACCEPTED', name);
+    }
     // Each added module imports only members that are live or planned earlier.
     for (const dep of localImports(fs.readFileSync(path.join(API, name), 'utf8'), name)) {
       if (PLAN.members[dep]?.operation === 'add') assert.ok(at(dep) < at(name), `${dep} before ${name}`);
@@ -4804,6 +4813,43 @@ test('Moov webhook body confirmation (2026-10-31): ADD moov-webhook-confirm.mjs 
   assert.match(source, /confirmMoovWebhookPayload/);
   assert.match(source, /provider === 'moov'\n    \? \(verifiedId \|\| null\)/);
   assert.equal(/notes LIKE/.test(fs.readFileSync(path.join(API, SETTLEMENT), 'utf8')), false);
+});
+
+test('Payee bank-add verified guard (finding 18, SQL 138 API half): REPLACE providers/payees/handlers.mjs from the Moov payees applied bytes, planning only', async () => {
+  const REL = 'aws/tests/fixtures/production-payee-bank-add-verified-guard-manifest-2026-11-01.json';
+  const MEMBER = 'providers/payees/handlers.mjs';
+  const PREVIOUS = 'aws/tests/fixtures/production-moov-payees-manifest-2026-10-23.json';
+  const APPLIED = JSON.parse(fs.readFileSync(path.join(ROOT, 'aws/tests/fixtures/production-moov-payees-applied-manifest-2026-10-24.json'), 'utf8'));
+  // The bytes the Moov payees production overlay applied (run 40140113163): what the previous manifest accepted.
+  const LIVE = '8b44e120a8d9b611c1892a7b4e7e9dce2fb5950287d1ccba50c8215b2357992d';
+  const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, REL), 'utf8'));
+  assert.equal(manifest.workstream_id, 'payee-bank-add-verified-guard');
+  assert.equal(manifest.deploy_authorized, false);
+  assert.match(manifest.authorization, /^Pending owner review/);
+  assert.equal(manifest.live_lambda, FUNCTION_NAME);
+  for (const evidence of ['finding 18', 'SQL 138', 'already_verified', '40140113163', 'No SQL change']) assert.ok(manifest.notes.includes(evidence), evidence);
+  assert.equal(APPLIED.members[MEMBER].accepted_sha256, LIVE);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, PREVIOUS), 'utf8')).members[MEMBER].accepted_sha256, LIVE);
+  const accepted = sha(`aws/functions/api/${MEMBER}`);
+  assert.notEqual(accepted, LIVE);
+  assert.deepEqual(Object.keys(manifest.members), [MEMBER]);
+  assert.deepEqual(manifest.members[MEMBER], { live_sha256: LIVE, accepted_sha256: accepted, operation: 'replace', previous_manifest: PREVIOUS });
+  assert.deepEqual(PLAN.members[MEMBER], { operation: 'replace', accepted_sha256: accepted, expected_live_sha256: LIVE, sql_before: null, manifest: REL });
+  assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
+  const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
+  const ready = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: LIVE }) });
+  assert.equal(ready.state, 'READY');
+  assert.equal(ready.mutation, false);
+  assert.equal((await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: accepted }) })).state, 'ALREADY_ACCEPTED');
+  await assert.rejects(
+    run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: 'c'.repeat(64) }) }),
+    (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+  );
+  // The guard: bank add refuses a verified payee before its first provider call.
+  const source = fs.readFileSync(path.join(API, MEMBER), 'utf8');
+  const bankAdd = source.slice(source.indexOf('async function publicBankAdd'), source.indexOf('async function publicBankVerify'));
+  assert.ok(bankAdd.indexOf("if (rec.verified_at) return fail('already_verified'") < bankAdd.indexOf('readPayeeLive('));
+  assert.ok(PLAN.notes.includes('Payee bank-add verified guard (2026-11-01, security audit finding 18'));
 });
 
 test('Money step-up window (finding 7): REPLACE moov-fund-authz.mjs then checkalt-authz.mjs from the third rebuild bytes, planning only', async () => {

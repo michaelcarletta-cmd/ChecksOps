@@ -623,6 +623,8 @@ async function publicTosAccept(ctx) {
     const sync = await syncPayee(ctx);
     return ok({ already_accepted: true, terms_accepted: true, ...statusOut(sync), liveProviderCalled: true });
   }
+  // SQL 138: a verified payee's link refuses every event; refuse before the Moov call too.
+  if (ctx.rec.verified_at) return fail('already_verified', 409, { message: 'Your payment details are already verified.' });
   const accepted = await acceptPayeeTerms(ctx.rec.provider_account_id, { ip: clientIp(event), userAgent: userAgent(event), fetchImpl });
   if (!accepted.confirmed) return fail(accepted.error || 'terms_not_recorded', 502, { liveProviderCalled: true });
   const next = await record(client, token, 'tos_accepted');
@@ -693,6 +695,9 @@ async function publicIdentity(ctx) {
 
 async function publicBankAdd(ctx) {
   const { body, client, token, fetchImpl, rec } = ctx;
+  // SQL 138: a verified payee's link refuses every event. Refuse before Moov sees the bank, so a leaked
+  // link cannot attach an extra (unverified) bank account to the verified payee's Moov account.
+  if (rec.verified_at) return fail('already_verified', 409, { message: 'Your payment details are already verified.' });
   const accountId = rec.provider_account_id;
   if (!rec.identity_submitted_at) {
     return fail('identity_required', 409, { message: 'Verify your identity before adding a bank account.' });
@@ -760,6 +765,8 @@ async function publicBankAdd(ctx) {
 
 async function publicBankVerify(ctx) {
   const { body, client, token, fetchImpl } = ctx;
+  // SQL 138: a verified payee's link refuses every event; no micro-deposit initiate or confirm at Moov.
+  if (ctx.rec.verified_at) return fail('already_verified', 409, { message: 'Your payment details are already verified.' });
   const action = String(body.action ?? '').toLowerCase();
   if (action !== 'initiate' && action !== 'confirm') return fail('invalid_action', 400, { message: 'action must be initiate or confirm.' });
   const { provider_account_id: accountId, provider_bank_account_id: bankAccountId } = ctx.rec;
