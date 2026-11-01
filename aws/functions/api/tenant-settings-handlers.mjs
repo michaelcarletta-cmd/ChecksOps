@@ -156,6 +156,34 @@ const BILLING_DIAGNOSTIC_PROBES = Object.freeze([
      WHERE n.nspname = 'public' AND c.relname = 'tenant_billing_accounts'`, () => []],
   ['rls_forced', `SELECT c.relforcerowsecurity AS v FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
      WHERE n.nspname = 'public' AND c.relname = 'tenant_billing_accounts'`, () => []],
+  // User triggers on the table (owner report, staging 2026-11-01: the row was visible and the write policy admitted it,
+  // yet UPDATE ... RETURNING returned no row and no error, which a BEFORE ROW trigger returning NULL or a DO INSTEAD
+  // NOTHING rule does). Names, timing, events, level, enabled state, the function name and whether its body has a
+  // `return null` path; never the body text.
+  ['triggers', `SELECT COALESCE(json_agg(json_build_object(
+       'name', t.tgname,
+       'timing', CASE WHEN (t.tgtype::int & 2) <> 0 THEN 'BEFORE' WHEN (t.tgtype::int & 64) <> 0 THEN 'INSTEAD' ELSE 'AFTER' END,
+       'events', concat_ws('+',
+         CASE WHEN (t.tgtype::int & 4) <> 0 THEN 'INSERT' END,
+         CASE WHEN (t.tgtype::int & 8) <> 0 THEN 'DELETE' END,
+         CASE WHEN (t.tgtype::int & 16) <> 0 THEN 'UPDATE' END,
+         CASE WHEN (t.tgtype::int & 32) <> 0 THEN 'TRUNCATE' END),
+       'level', CASE WHEN (t.tgtype::int & 1) <> 0 THEN 'ROW' ELSE 'STATEMENT' END,
+       'enabled', t.tgenabled::text,
+       'fn', n.nspname || '.' || p.proname,
+       'fn_returns_null_on_some_path', (p.prosrc ~* 'return\\s+null')
+     ) ORDER BY t.tgname), '[]'::json) AS v
+     FROM pg_catalog.pg_trigger t
+     JOIN pg_catalog.pg_proc p ON p.oid = t.tgfoid
+     JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+     WHERE t.tgrelid = 'public.tenant_billing_accounts'::regclass AND NOT t.tgisinternal`, () => []],
+  // Rewrite rules on the table: the name and whether it is DO INSTEAD and NOTHING; never the definition text.
+  ['rules', `SELECT COALESCE(json_agg(json_build_object(
+       'name', r.rulename,
+       'is_instead', (r.definition ~* 'DO\\s+INSTEAD'),
+       'nothing', (r.definition ~* 'NOTHING')
+     ) ORDER BY r.rulename), '[]'::json) AS v
+     FROM pg_catalog.pg_rules r WHERE r.schemaname = 'public' AND r.tablename = 'tenant_billing_accounts'`, () => []],
 ]);
 
 export const billingWriteDiagnostic = async (client, { tenantId, userId = null, returned = undefined }) => {
@@ -171,6 +199,27 @@ export const billingWriteDiagnostic = async (client, { tenantId, userId = null, 
       out[key] = { error: String(error?.code || 'probe_failed') };
       try { await client.query(`ROLLBACK TO SAVEPOINT ${savepoint}`); } catch { /* the outer transaction is rolled back anyway */ }
     }
+  }
+  // trial_update: a no-op write of this tenant's row (updated_at = updated_at), always rolled back to its own
+  // savepoint, that reports only how many rows the UPDATE returned, or its SQLSTATE. It tells "every update of this
+  // row is skipped" apart from "only this payload is skipped". It runs with the money-write flag, like the refused
+  // write it diagnoses, set inside the savepoint so the rollback restores the transaction's own flag state; the outer
+  // transaction is rolled back as well.
+  try {
+    await client.query('SAVEPOINT billing_diag_trial_update');
+    try {
+      await setMoneyWriteFlag(client);
+      const result = await client.query(
+        'UPDATE public.tenant_billing_accounts SET updated_at = updated_at WHERE tenant_id = $1::uuid RETURNING 1',
+        [tenantId],
+      );
+      out.trial_update = { rows: Number(result?.rowCount ?? result?.rows?.length ?? 0) };
+    } catch (error) {
+      out.trial_update = { error: String(error?.code || 'probe_failed') };
+    }
+    await client.query('ROLLBACK TO SAVEPOINT billing_diag_trial_update');
+  } catch (error) {
+    if (!out.trial_update) out.trial_update = { error: String(error?.code || 'probe_failed') };
   }
   if (returned !== undefined) {
     out.returned_row = Boolean(returned);

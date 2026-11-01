@@ -88,6 +88,28 @@ export function billingDiagnosticCode(diagnostic: BillingDiagnostic | null | und
   if ("returned_row" in diagnostic) {
     parts.push(`ret:${show(diagnostic.returned_row)}/${show(diagnostic.returned_auto_debit_enabled)}`);
   }
+  const yn = (value: unknown): string => (value === true ? "y" : value === false ? "n" : "-");
+  if (Array.isArray(diagnostic.triggers)) {
+    const triggers = diagnostic.triggers as Array<{ name?: unknown; timing?: unknown; events?: unknown; enabled?: unknown; fn_returns_null_on_some_path?: unknown }>;
+    if (triggers.length === 0) parts.push("trg:none");
+    for (const t of triggers) {
+      parts.push(`trg:${String(t.name ?? "?")}/${String(t.timing ?? "?")}/${String(t.events ?? "?")}/${String(t.enabled ?? "?")}/${yn(t.fn_returns_null_on_some_path)}`);
+    }
+  } else if ("triggers" in diagnostic) {
+    parts.push(`trg:${show(diagnostic.triggers)}`);
+  }
+  if (Array.isArray(diagnostic.rules)) {
+    const rules = (diagnostic.rules as Array<{ name?: unknown; is_instead?: unknown; nothing?: unknown }>)
+      .map((r) => `${String(r.name ?? "?")}/${yn(r.is_instead)}/${yn(r.nothing)}`)
+      .join(", ");
+    parts.push(`rules:${rules || "none"}`);
+  } else if ("rules" in diagnostic) {
+    parts.push(`rules:${show(diagnostic.rules)}`);
+  }
+  if (diagnostic.trial_update && typeof diagnostic.trial_update === "object") {
+    const trial = diagnostic.trial_update as { rows?: unknown; error?: unknown };
+    parts.push(`trial:${"error" in trial ? `err${String(trial.error)}` : show(trial.rows)}`);
+  }
   parts.push(`policies:${policies || "none"}`);
   return parts.join(" ");
 }

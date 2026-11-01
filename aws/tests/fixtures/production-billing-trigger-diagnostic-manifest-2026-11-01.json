@@ -1,0 +1,15 @@
+{
+  "workstream_id": "billing-trigger-diagnostic",
+  "authorization": "Pending owner review (2026-11-01). Planning only: nothing is live or verified. Each production apply still needs its own owner approval and staging acceptance.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Billing trigger diagnostic (2026-11-01; owner 2026-11-01 \"add the trigger diagnostic\"): with the billing route diagnostic live in staging (PR #1513, 2fd838410f41287f75181ec3597bde89f27144e466a7a8847128ef34cbbd18a1, staging overlay run 41345784259) the owner unticked monthly auto-debit on Freedom Adjustment and got \"row:1 write:yes member:yes uid:yes caller:yes role:checksops rls:yes/no ret:no/-\" with four permissive policies: the row is visible and the write policy admits it, yet UPDATE ... RETURNING returned no row and no SQL error. The remaining causes are a BEFORE ROW trigger that returns NULL or a rewrite rule on public.tenant_billing_accounts, present live but not in the repo. These bytes add three probes to billingWriteDiagnostic: triggers (pg_trigger/pg_proc for the table, non-internal: name, timing, events, level, tgenabled, function name and whether its body matches return\\s+null; never the body), rules (pg_rules for the table: name, DO INSTEAD, NOTHING; never the definition) and trial_update (a no-op UPDATE ... SET updated_at = updated_at for the tenant, bound by parameter, RETURNING 1, with the money-write flag like the refused write, always rolled back to its own savepoint; reports the row count or the SQLSTATE). Names, flags and counts only: no ids, no SQL or function text; each probe in its own savepoint, and the whole transaction is still rolled back by withIdentity because the result is ok:false. The billing panel adds trg:, rules: and trial: segments to the compact code. Success paths and who may call the route are unchanged. REPLACE from production's live bytes 9766306d (the same expected_live as the billing route diagnostic manifest; neither 2fd83841 nor 976f8f14 reached production). Staging runs 2fd83841 (overlay run 41345784259), so the staging overlay is 2fd83841 -> these bytes. No SQL change. No release-lock change.",
+  "members": {
+    "tenant-settings-handlers.mjs": {
+      "live_sha256": "9766306dfccffbb515c6dd1f0a329b91a407f53eb97c1ed148c9dcc5b9f24717",
+      "accepted_sha256": "d57b15dc664a0a82fbbfa50beafe01861a8acf137204b66afa8bf218ab9e03b8",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
+    }
+  }
+}
