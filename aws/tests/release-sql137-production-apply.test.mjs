@@ -214,7 +214,8 @@ test('order: no predecessor; one function, defined only in aws/rls/sql/10 before
   const runbook = read(COMMITTED.tooling.runbook);
   assert.ok(runbook.includes(COMMITTED.intended_replacement_sha256));
   assert.ok(runbook.includes(COMMITTED.source_sha256));
-  assert.match(runbook, /\*\*Status:\*\* staging pin execute-authorized \(wave 32\)/);
+  assert.match(runbook, /\*\*Status:\*\* applied in staging \(wave 32, 2026-10-31\); staging acceptance: owner signed in as the platform owner and loaded \/admin\/tenants; production pin pending \(production inspect next\)/);
+  assert.match(runbook, /\*\*Staging apply \(2026-10-31\)\.\*\* Apply run 41236898030/);
   assert.match(runbook, /read-live \(2026-10-31\)\.\*\* Run 41234275408/);
   assert.ok(runbook.includes('a2c2d856a21c52d47544fad05e0f0275a24a093421c8a7a7fbeea0e4bb329dfc'));
   assert.match(runbook, /APPLY_PLATFORM_OWNER_IDENTITY/);
