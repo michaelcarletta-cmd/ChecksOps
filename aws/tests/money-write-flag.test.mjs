@@ -259,11 +259,14 @@ test('collection v2 store: the flag runs before the obligation update and each l
 });
 
 test('billing auto-debit toggle sets the flag before the tenant_billing_accounts update', async () => {
-  const client = recordingClient((sql) => (
-    sql.includes('FROM public.tenant_billing_accounts') && sql.trim().startsWith('SELECT')
-      ? { rows: [{ id: 'a', tenant_id: 't', auto_debit_enabled: true }] }
-      : null
-  ));
+  const client = recordingClient((sql) => {
+    if (sql.includes('FROM public.tenant_billing_accounts') && sql.trim().startsWith('SELECT')) {
+      return { rows: [{ id: 'a', tenant_id: 't', auto_debit_enabled: true }] };
+    }
+    // The update applies: it returns the row with the requested value (a no-op update is refused).
+    if (/UPDATE public\.tenant_billing_accounts/.test(sql)) return { rows: [{ id: 'a', tenant_id: 't', auto_debit_enabled: false }] };
+    return null;
+  });
   const result = await toggleTenantAutoDebit(client, { tenantId: '33333333-3333-4333-8333-333333333333', enabled: false });
   assert.equal(result.ok, true);
   assertFlagBefore(client.queries, /UPDATE public\.tenant_billing_accounts/, 'toggleTenantAutoDebit');
