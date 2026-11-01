@@ -65,7 +65,25 @@ applied only while every other SQL 113 object still matches (staging pin
 `superseded_intended_sha256.sql113` `b4e3cf0c6dec304d3121a45b964537abdc364391e279486046b48fe9e88464fa`,
 `releaseSupersededIntendedHash`).
 
-**Status:** not applied anywhere. The staging pin and the production pin are pending.
+**Status:** staging pin execute-authorized (wave 33); not applied anywhere. The production pin is pending.
+
+**Staging executor refreshed (2026-10-31).** Inspect run 41239489521 (main `ca7de0ab9`) found the live
+executor at `m30FadRmX2njQ2GTbBbysuzIG99OyHxXIIFu2OL2uZ4=` without
+`sql/138_payee_setup_link_closed_after_verification.sql` (main's package also superseded three
+libraries). Deploy run 41239673718 (main `ca7de0ab91152d512115b0a111bb4e92d29ee6d1`,
+`expected_executor_code_sha256` `m30FadRm…` matched) updated `checksops-staging-guarded-sql-executor`
+to main's package (`sIf1rFWcrsTF2+B9dYSRe1c6Ydn1qI+V/8o8lG5ceXE=`).
+
+**Staging read-live (2026-10-31).** Run 41239902526 (main `ca7de0ab9`, executor `sIf1rFWc…`, pin
+commit `c7c960f85`): `aws_public_payee_record(text, text, jsonb)` state `different`, its EXECUTE ACL
+`checksops EXECUTE`, `owner EXECUTE`; `predecessors.sql113` true, `successors_applied` `[]`, both
+definer writes (`external_payment_recipients`, `payment_provider_methods`) ok. Live
+`ec36c29e3472a9777b4a1d08ff7c3da5c00b1dc70cb4b754ef5b04ff0e73633c`, equal to the derived
+pre-state below; intended `9acaf809…`, `already_applied` false, `precondition_failures` `[]`,
+`prerequisites_missing` `[]`. Recorded in the staging pin (`expected_live_definition_sha256`,
+`execute: true`, wave 33) under the owner's words of 2026-10-31, "record the SQL 138 staging pin".
+The staging apply itself is a separate run after this pin is merged and the executor carries it, on
+the owner's words for that run. Production is read by its own inspect.
 
 ## Fingerprint
 

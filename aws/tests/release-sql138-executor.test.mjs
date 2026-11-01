@@ -4,8 +4,8 @@
  * release-sql90-97-executor.test.mjs runs what every release key shares (SQL 138 included); this file
  * covers what is new:
  *
- *   - the pin: pending (no read-live yet), code-derived, selectable, packed, in step with the pending
- *     production pin; the pinned commit authored the bytes; predecessor and supersedes SQL 113 (as SQL 101
+ *   - the pin: staging-authorized from its read-live (wave 33), code-derived, selectable, packed, in
+ *     step with the production pin (pending still); the recorded staging pre-state is the derived one; the pinned commit authored the bytes; predecessor and supersedes SQL 113 (as SQL 101
  *     for SQL 90), with superseded_intended_sha256.sql113 derived from both files;
  *   - the file and spec: SQL 113's aws_public_payee_record(text, text, jsonb) only, with the same
  *     attributes, result and ACL and SQL 113's body plus the one verified_at check; the prerequisite DO
@@ -77,6 +77,11 @@ const productionPin = () => JSON.parse(fs.readFileSync(path.join(ROOT, RELEASE_S
 const SQL113_FN = releaseIntendedState('sql113', SQL113).functions[IDENTITY];
 const PRE = releaseStateHash(KEY, { functions: { [IDENTITY]: SQL113_FN } });
 const PRE_EXPECTED = 'ec36c29e3472a9777b4a1d08ff7c3da5c00b1dc70cb4b754ef5b04ff0e73633c';
+/**
+ * Observed: LIVE_DEFINITION_SHA256 of staging read-live run 41239902526 (main ca7de0ab9, executor deploy
+ * run 41239673718). It equals the derived pre-state PRE.
+ */
+const STAGING_READ_LIVE = 'ec36c29e3472a9777b4a1d08ff7c3da5c00b1dc70cb4b754ef5b04ff0e73633c';
 
 const { module: executorModule } = await importGuardedSqlExecutor();
 const { createHandler } = executorModule;
@@ -119,7 +124,7 @@ function handlerFor(connect, { pins = {} } = {}) {
   return createHandler({ connect, now: () => Date.parse(NOW), releaseSqlFiles: FILES, releaseSqlPins: { ...PINS, ...pins } });
 }
 
-test('pin: SQL 138 pending, code-derived, selectable, packed, in step with the pending production pin; predecessor and supersedes SQL 113', () => {
+test('pin: SQL 138 staging-authorized from its read-live, code-derived, selectable, packed, in step with the pending production pin; predecessor and supersedes SQL 113', () => {
   const pin = PINS[KEY];
   const spec = RELEASE_SQL_SPECS[KEY];
   const packed = Object.fromEntries(EXECUTOR_PACK_MEMBERS);
@@ -130,11 +135,14 @@ test('pin: SQL 138 pending, code-derived, selectable, packed, in step with the p
   assert.equal(spec.choice, 'sql138-payee-setup-link-closed-after-verification');
   assert.doesNotMatch(spec.choice, /production/);
   assert.equal(sha(TEXT), pin.source_sha256);
-  // Pending: no staging read-live recorded yet.
+  // Staging apply authorized (owner approved 2026-10-31, "record the SQL 138 staging pin") from staging
+  // read-live run 41239902526: already_applied false, precondition_failures [], prerequisites_missing [].
   assertStagingPinState(assert, KEY, pin);
-  assert.equal(pin.execute, false);
-  assert.equal(pin.authorization, 'pending');
-  assert.equal(pin.expected_live_definition_sha256, null);
+  assert.equal(pin.execute, true);
+  assert.equal(pin.authorization, 'Owner approved 2026-10-31: staging apply (wave 33) from staging read-live run 41239902526');
+  assert.equal(pin.expected_live_definition_sha256, STAGING_READ_LIVE);
+  assert.equal(pin.expected_live_definition_sha256, PRE);
+  assert.notEqual(pin.expected_live_definition_sha256, pin.intended_replacement_sha256);
   assert.equal(releaseIntendedHash(KEY, TEXT), pin.intended_replacement_sha256);
   assert.equal(pin.intended_replacement_sha256, '9acaf809824101d8ef62098e6440ca5d06cda1bec4117118c53931130efadf48');
   // The expected pre-state: SQL 113's function, derived from SQL 113's bytes (read back on PostgreSQL 16 below).
