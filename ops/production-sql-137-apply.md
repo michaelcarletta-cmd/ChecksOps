@@ -136,7 +136,29 @@ and staged. A fresh inspect immediately before the apply must still report `15fe
 owner-row checks (`sql137_owner_identity_count`, `sql137_owner_profile_without_identity`) roll it back if
 they fail.
 
-**Status:** applied in staging (wave 32, 2026-10-31); staging acceptance: owner signed in as the platform owner and loaded /admin/tenants; production pin execute-authorized; not applied to production
+**Production apply (2026-11-01).** After the pin change (#1502, merged to main as `e8ef1f52d` on the
+owner's "Merge 1502 and A"), transfer run 41263811958 staged main `e8ef1f52d` (tarball sha256
+`af52eb51781970da1b36757c9dc4e120d989cf2c96626ac8d93159486dba0552`). Under the owner's words
+"apply SQL 137 in production" (passed verbatim), a one-shot `--phase inspect` (SSM `b5f541cd-6eaf-4c26-88ef-d49270f9b458`,
+run `a9ce8db7-5df5-47d8-8d22-7961c8032341`, nothing written) read live `15fecb5b…` (the pinned pre-state,
+`live_matches_expected` true, `apply_preconditions_met` true, `precondition_failures` `[]`); then one-shot
+`--phase apply` run `a7cd33a1-855c-43f4-aa52-58f196dea7cc` through SSM `217d0d6a-c505-40ff-9808-12f9bf21ccba`,
+workstream `prod-sql137-platform-owner-identity-20261101`, one_use_id
+`sql137-prod-bff421b2-1636-4a3e-9a71-bc51f7157b49`: its own inspect step read the same pre-state; contracts
+4/4, 6/6 and 43/43; every step ok; manifest `ae572838…`; the file's owner-row checks
+(`sql137_owner_identity_count`, `sql137_owner_profile_without_identity`) passed; receipt `15fecb5b…` →
+`9a88fca29d21f5537052f475f4133f05e89e002bdf00b22cfc3cf2cf78c6d8da` (intended), result `applied`, unrelated
+catalog `762c2754…` (functions 1355, triggers 184); post-apply inspect `already_applied` true,
+`precondition_failures` `[]`: `is_platform_owner()` `intended` with EXECUTE for `authenticated`,
+`checksops` and the owner (PUBLIC revoked), and `identity_accounts` with no `UPDATE`, `DELETE` or
+`TRUNCATE` line (production's `checksops DELETE` and `checksops UPDATE` removed). The run's JSON arrived
+whole (19698 characters, under SSM's 24000-character limit). Runner state: started from stopped at
+2026-11-01 11:17:58 UTC (SSM online 11:18:14 UTC) and stopped again at 11:20:00 UTC. Production
+acceptance: the owner reported on 2026-11-01 "Admin tenants works in production, record SQL 137" (signed
+in as the platform owner and loaded `/admin/tenants`).
+
+**Status:** applied to staging (wave 32) and to production (2026-11-01); the production pin is retired
+(`execute: false`).
 
 ## Fingerprint
 
