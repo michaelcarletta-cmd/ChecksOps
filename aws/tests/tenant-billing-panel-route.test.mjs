@@ -40,7 +40,7 @@ test('link and auto-debit go through save-tenant-billing-account with the fields
   // billing_update_not_applied shows the route's read-only diagnostic as a compact code (no ids).
   assert.match(panel, /export function billingDiagnosticCode\(/);
   assert.match(panel, /if \(code === "billing_update_not_applied"\) \{\s*const detail = billingDiagnosticCode\(payload\?\.diagnostic\);/);
-  for (const key of ['row_visible', 'can_write_tenant', 'is_tenant_member', 'auth_uid_set', 'auth_uid_matches_caller', 'current_user', 'rls_enabled', 'rls_forced', 'returned_row', 'policies', 'triggers', 'rules', 'trial_update']) {
+  for (const key of ['row_visible', 'can_write_tenant', 'is_tenant_member', 'auth_uid_set', 'auth_uid_matches_caller', 'current_user', 'rls_enabled', 'rls_forced', 'returned_row', 'policies', 'triggers', 'rules', 'trial_update', 'lock_probe', 'policy_detail', 'trigger_fn_detail', 'fn_overloads']) {
     assert.ok(panel.includes(`diagnostic.${key}`), key);
   }
   // Triggers, rules and the trial update: one trg: segment per trigger (name/timing/events/enabled/null-path y|n),
@@ -51,7 +51,17 @@ test('link and auto-debit go through save-tenant-billing-account with the fields
   assert.match(code, /`\$\{String\(r\.name \?\? "\?"\)\}\/\$\{yn\(r\.is_instead\)\}\/\$\{yn\(r\.nothing\)\}`/);
   assert.match(code, /parts\.push\(`rules:\$\{rules \|\| "none"\}`\)/);
   assert.match(code, /parts\.push\(`trial:\$\{"error" in trial \? `err\$\{String\(trial\.error\)\}` : show\(trial\.rows\)\}`\)/);
-  const order = ['`ret:', '`trg:', '`rules:', '`trial:', '`policies:'].map((s) => code.indexOf(s));
+  // Lock probe, policy hashes, trigger function detail and overload count (policy diagnostic): lock:<rows>|lock:err<SQLSTATE>,
+  // pol:<name>/<qual12>/<check12>/<calls aws_can_write_tenant y|n> per policy, trgfn:<lang>/<secdef y|n>/<src12>/<repo y|n>
+  // per trigger, cwt:<count>; all after trial: and before policies:.
+  assert.match(code, /parts\.push\(`lock:\$\{"error" in lock \? `err\$\{String\(lock\.error\)\}` : show\(lock\.rows\)\}`\)/);
+  assert.match(code, /parts\.push\(`pol:\$\{String\(p\.name \?\? "\?"\)\}\/\$\{String\(p\.qual_sha256 \?\? "-"\)\}\/\$\{String\(p\.check_sha256 \?\? "-"\)\}\/\$\{yn\(p\.calls_can_write_tenant\)\}`\)/);
+  assert.match(code, /parts\.push\(`trgfn:\$\{String\(f\.lang \?\? "\?"\)\}\/\$\{yn\(f\.secdef\)\}\/\$\{String\(f\.prosrc_sha256 \?\? "-"\)\}\/\$\{yn\(f\.prosrc_matches_repo\)\}`\)/);
+  assert.match(code, /if \(fns\.length === 0\) parts\.push\("trgfn:none"\);/);
+  assert.match(code, /parts\.push\(`cwt:\$\{show\(\(diagnostic\.fn_overloads as \{ count\?: unknown \}\)\.count\)\}`\)/);
+  // The overload argument types and the function names a policy depends on stay in the JSON, off the phone toast.
+  assert.doesNotMatch(code, /qual_fn_names|\.args\b/);
+  const order = ['`ret:', '`trg:', '`rules:', '`trial:', '`lock:', '`pol:', '`trgfn:', '`cwt:', '`policies:'].map((s) => code.indexOf(s));
   assert.ok(order.every((i) => i > 0), JSON.stringify(order));
   assert.deepEqual([...order].sort((a, b) => a - b), order);
   // A change the database did not make is named, not shown as saved.

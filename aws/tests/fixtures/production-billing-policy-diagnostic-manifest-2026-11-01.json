@@ -1,0 +1,15 @@
+{
+  "workstream_id": "billing-policy-diagnostic",
+  "authorization": "Pending owner review (2026-11-01). Planning only: nothing is live or verified. Each production apply still needs its own owner approval and staging acceptance.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Billing policy diagnostic (2026-11-01; owner 2026-11-01 \"add the policy diagnostic\"): with the billing trigger diagnostic live in staging (PR #1514, d57b15dc664a0a82fbbfa50beafe01861a8acf137204b66afa8bf218ab9e03b8, staging overlay run 41348983031 at 8fb2d267) the owner's toast read \"row:1 write:yes member:yes uid:yes caller:yes role:checksops rls:yes/no ret:no/- trg:update_tenant_billing_accounts_updated_at/BEFORE/UPDATE/O/n rules:none trial:0\" with four permissive policies: the row is visible, aws_can_write_tenant is true, the only trigger is the repo's updated_at trigger and there is no rule, yet even the flagged no-op trial update returned no row and no SQL error. The remaining suspects are a live write policy expression, or the function it binds to, that differs from the repo, or a live trigger function body that differs from the repo. These bytes add four read-only probes to billingWriteDiagnostic: lock_probe (this tenant's row SELECT ... FOR UPDATE, bound by parameter, which applies the UPDATE USING policies and fires no trigger, always rolled back to its own savepoint; reports the row count or the SQLSTATE), policy_detail (per pg_policy row on the table: name, cmd, permissive, roles, the first 12 hex chars of the sha256 of pg_get_expr of USING and WITH CHECK, whether it depends on public.aws_can_write_tenant(uuid) in pg_depend, and the names of the functions it depends on), trigger_fn_detail (per non-internal trigger: language, SECURITY DEFINER, the first 12 hex chars of the sha256 of prosrc and whether prosrc with whitespace collapsed equals the repo body) and fn_overloads (the number of public.aws_can_write_tenant functions and their argument types). Names, flags, counts and hash prefixes only: no ids, no SQL, expression or function text; each probe in its own savepoint, and the whole transaction is still rolled back by withIdentity because the result is ok:false. The billing panel adds lock:, pol:, trgfn: and cwt: segments to the compact code. Success paths and who may call the route are unchanged. REPLACE from production's live bytes 9766306d (the same expected_live as the billing trigger diagnostic manifest; neither d57b15dc, 2fd83841 nor 976f8f14 reached production). Staging runs d57b15dc (overlay run 41348983031), so the staging overlay is d57b15dc -> these bytes. No SQL change. No release-lock change.",
+  "members": {
+    "tenant-settings-handlers.mjs": {
+      "live_sha256": "9766306dfccffbb515c6dd1f0a329b91a407f53eb97c1ed148c9dcc5b9f24717",
+      "accepted_sha256": "12aff321a2d703e1c45c3cd0cf3751ff051888332ce01b0570dadfe05458de58",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
+    }
+  }
+}
