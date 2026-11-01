@@ -112,7 +112,7 @@ function handlerFor(connect, { pins = {} } = {}) {
   return createHandler({ connect, now: () => Date.parse(NOW), releaseSqlFiles: FILES, releaseSqlPins: { ...PINS, ...pins } });
 }
 
-test('pin: SQL 136 pending, code-derived, selectable, packed, in step with the pending production pin; no predecessor', () => {
+test('pin: SQL 136 staging-authorized from its read-live, code-derived, selectable, packed, in step with the pending production pin; no predecessor', () => {
   const pin = PINS[KEY];
   const spec = RELEASE_SQL_SPECS[KEY];
   const packed = Object.fromEntries(EXECUTOR_PACK_MEMBERS);
@@ -123,11 +123,13 @@ test('pin: SQL 136 pending, code-derived, selectable, packed, in step with the p
   assert.equal(spec.choice, 'sql136-money-write-restrictive-policies');
   assert.doesNotMatch(spec.choice, /production/);
   assert.equal(sha(TEXT), pin.source_sha256);
-  // Pending: no staging read-live recorded yet (and none before #1498's API is live in staging).
+  // Staging apply authorized (owner approved 2026-11-01, "record the SQL 136 staging pin") from staging read-live
+  // run 41313668204, taken after #1498's API was live in staging: already_applied false, precondition_failures [].
   assertStagingPinState(assert, KEY, pin);
-  assert.equal(pin.execute, false);
-  assert.equal(pin.authorization, 'pending');
-  assert.equal(pin.expected_live_definition_sha256, null);
+  assert.equal(pin.execute, true);
+  assert.equal(pin.authorization, 'Owner approved 2026-11-01: staging apply (wave 34) from staging read-live run 41313668204');
+  assert.equal(pin.expected_live_definition_sha256, PRE);
+  assert.notEqual(pin.expected_live_definition_sha256, pin.intended_replacement_sha256);
   assert.equal(releaseIntendedHash(KEY, TEXT), pin.intended_replacement_sha256);
   assert.equal(pin.intended_replacement_sha256, 'f8269d3e1f788d50ad0cbbb4b95829b3ee83b05cda91798c5f57491c8e5d26a7');
   assert.equal(PRE, PRE_EXPECTED);
@@ -168,7 +170,8 @@ test('pin: SQL 136 pending, code-derived, selectable, packed, in step with the p
   // The runbook: the STOP gate, the pre-state and intended fingerprints and texts, the source.
   const runbook = fs.readFileSync(path.join(ROOT, 'ops/production-sql-136-apply.md'), 'utf8');
   assert.match(runbook, /## STOP: the API first/);
-  assert.match(runbook, /\*\*Status:\*\* not applied anywhere\. The staging pin and the production pin are pending/);
+  assert.match(runbook, /\*\*Status:\*\* staging pin execute-authorized \(wave 34\); not applied anywhere\. The production pin is pending/);
+  assert.match(runbook, /read-live \(2026-11-01\)\.\*\* Run 41313668204/);
   for (const value of [PRE, pin.intended_replacement_sha256, pin.source_sha256]) assert.ok(runbook.includes(value), value);
   assert.ok(runbook.includes(`\`\`\`\n${releaseStateText(KEY, INTENDED)}\n\`\`\``));
   assert.ok(runbook.includes(`\`\`\`\n${releaseStateText(KEY, absent())}\n\`\`\``));

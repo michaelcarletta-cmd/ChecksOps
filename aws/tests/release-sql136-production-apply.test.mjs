@@ -180,7 +180,7 @@ test('order: no predecessor; the one gate and 72 restrictive policies on finding
   assert.ok(runbook.includes(COMMITTED.intended_replacement_sha256));
   assert.ok(runbook.includes(COMMITTED.source_sha256));
   assert.match(runbook, /## STOP: the API first/);
-  assert.match(runbook, /\*\*Status:\*\* not applied anywhere\./);
+  assert.match(runbook, /\*\*Status:\*\* staging pin execute-authorized \(wave 34\); not applied anywhere\./);
   assert.match(runbook, /APPLY_MONEY_WRITE_RESTRICTIVE_POLICIES/);
   assert.match(runbook, /finding 14/);
   assert.match(runbook, /\*\*Revert \(if a money flow breaks after the apply\)\.\*\*/);
