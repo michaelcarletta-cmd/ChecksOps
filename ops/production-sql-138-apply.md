@@ -106,10 +106,15 @@ SQL 138 in staging": success. The receipt (job 124712852864) prints `result` `ap
 `intended`, its EXECUTE ACL `checksops EXECUTE`, `owner EXECUTE`; `predecessors.sql113` true; both
 definer writes ok. Read-live run 41260787304 (main `6120c6480`): `already_applied` true,
 `live_definition_sha256` `9acaf809…` equal to the intended hash, `precondition_failures` `[]`.
-Staging acceptance by the owner (a verified payee's setup link refused with `already_verified`, an
-unverified payee's setup unchanged) is not recorded yet. The staging pin keeps `execute: true`.
+Staging acceptance: a hands-on check is not possible in staging (the setup link is only emailed, never
+returned to the browser, and staging email is `AWS_EMAIL_MODE=sink` by the owner's choice). The owner
+accepted on 2026-11-01, "accept SQL 138 staging on the tests": the staging apply and read-live above,
+and `aws/tests/sql138-payee-setup-link-closed-pg.test.mjs` on PostgreSQL 16 in CI (a verified payee's
+link refused with `already_verified` for every write, reads unchanged, an unverified payee's setup and
+reissue unchanged). The staging pin keeps `execute: true`; the staging runs are recorded in the
+production pin's `staging_acceptance` by the production pin PR.
 
-**Status:** applied in staging (wave 33, 2026-11-01); owner staging acceptance pending; production pin pending
+**Status:** applied in staging (wave 33, 2026-11-01); staging acceptance: owner accepted on the tests; production pin pending (production inspect next)
 
 ## Fingerprint
 
