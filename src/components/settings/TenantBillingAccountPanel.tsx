@@ -16,7 +16,38 @@ import { useTenantFilter } from "@/hooks/useTenantFilter";
  * Maintenance-fee billing: pick which of your already-verified bank accounts
  * (added via Moov in the Bank Account panel) should be
  * debited monthly. No manual routing/account entry — ever.
+ *
+ * Writes go through the API route `save-tenant-billing-account`
+ * (tenant-settings-handlers.mjs). tenant_billing_accounts is a money table: the
+ * generic browser write path refuses it, and SQL 136 lets it be written only
+ * by server handlers that set the money-write flag. The route re-checks that
+ * the caller may manage the tenant, that the bank account is the tenant's own
+ * and verified, and records who authorized ACH and when (server clock).
  */
+const BILLING_ERRORS: Record<string, string> = {
+  ach_authorization_required: "Tick the ACH authorization box to continue.",
+  funding_source_not_found: "That bank account was not found for this company.",
+  bank_not_verified: "That bank account is not verified yet.",
+  bank_disconnected: "That bank account is disconnected. Reconnect it in the Bank Account section.",
+  account_inactive: "That bank account is inactive.",
+  missing_authorization: "Link a billing account first.",
+  cross_tenant_denied: "That bank account belongs to another company.",
+};
+
+function billingErrorMessage(error: { message?: string } | null, data: unknown): string {
+  const payload = data && typeof data === "object" ? data as { error?: string; message?: string } : null;
+  const code = payload?.error || "";
+  return BILLING_ERRORS[code] || payload?.message || error?.message || "The billing account could not be saved.";
+}
+
+async function saveBillingAccount(body: Record<string, unknown>) {
+  const { data, error } = await supabase.functions.invoke("save-tenant-billing-account", { body });
+  if (error || (data && typeof data === "object" && (data as { ok?: boolean }).ok === false)) {
+    throw new Error(billingErrorMessage(error, data));
+  }
+  return data;
+}
+
 export function TenantBillingAccountPanel() {
   const { tenantId } = useTenantFilter();
   const qc = useQueryClient();
@@ -66,33 +97,14 @@ export function TenantBillingAccountPanel() {
       if (!selectedId) throw new Error("Select a verified bank account");
       if (!authorized) throw new Error("You must authorize ACH debits");
 
-      const acct = accounts.find((a: any) => a.id === selectedId);
-      if (!acct) throw new Error("Account not found");
-
-      const payload = {
+      if (!accounts.some((a: any) => a.id === selectedId)) throw new Error("Account not found");
+      await saveBillingAccount({
+        action: "save",
         tenant_id: tenantId,
         stakeholder_account_id: selectedId,
-        nickname: acct.nickname,
-        account_holder_name: acct.custname,
-        account_type: acct.acct_type === "C" ? "checking" : "savings",
-        entity_type: "business",
-        verification_status: acct.verification_status,
-        ach_authorized_at: new Date().toISOString(),
         auto_debit_enabled: true,
-      };
-
-      if (billing?.id) {
-        const { error } = await supabase
-          .from("tenant_billing_accounts")
-          .update(payload)
-          .eq("id", billing.id);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase
-          .from("tenant_billing_accounts")
-          .insert(payload as any);
-        if (error) throw error;
-      }
+        authorized: true,
+      });
     },
     onSuccess: () => {
       toast.success("Billing account linked — auto-debit is on");
@@ -104,14 +116,14 @@ export function TenantBillingAccountPanel() {
 
   const toggleAutoDebit = useMutation({
     mutationFn: async (enabled: boolean) => {
-      const { error } = await supabase
-        .from("tenant_billing_accounts")
-        .update({ auto_debit_enabled: enabled })
-        .eq("tenant_id", tenantId!);
-      if (error) throw error;
+      await saveBillingAccount({ action: "toggle_auto_debit", tenant_id: tenantId, auto_debit_enabled: enabled });
     },
     onSuccess: () => {
       toast.success("Auto-debit preference updated");
+      qc.invalidateQueries({ queryKey: ["tenant-billing-account", tenantId] });
+    },
+    onError: (e: Error) => {
+      toast.error(e?.message ?? "Failed to update auto-debit");
       qc.invalidateQueries({ queryKey: ["tenant-billing-account", tenantId] });
     },
   });
