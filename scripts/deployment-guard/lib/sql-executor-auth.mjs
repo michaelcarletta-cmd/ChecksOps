@@ -3074,9 +3074,9 @@ export const AUTHORIZED_SQL135_CHECK_CREATE_INSERT_GRANT = Object.freeze({
 // Money-write staging pin: SQL 136 (security audit 2026-10-29 finding 14, step 2 of 2; owner decision
 // 2026-10-31 (a), API first; owner 2026-11-01, "Complete sql 138 and 136"): three RESTRICTIVE policies TO
 // authenticated on each of the 24 money tables, through the new SECURITY INVOKER aws_money_write_allowed().
-// No predecessor (SQL 91's two GUC helpers are prerequisites). Pending until a reviewed pin change records a
-// staging read-live; that read-live and the apply must wait until #1498's API is live in staging
-// (ops/production-sql-136-apply.md).
+// No predecessor (SQL 91's two GUC helpers are prerequisites). Staging apply authorized (wave 34) from staging
+// read-live run 41313668204, taken after #1498's API was live in staging (overlay runs 41309572005 to
+// 41310178084 and rebuild run 41313204838; ops/production-sql-136-apply.md).
 export const AUTHORIZED_SQL136_MONEY_WRITE_RESTRICTIVE_POLICIES = Object.freeze({
   key: 'sql136',
   filename: 'aws/workflows/sql/136_money_write_restrictive_policies.sql',
@@ -3084,9 +3084,12 @@ export const AUTHORIZED_SQL136_MONEY_WRITE_RESTRICTIVE_POLICIES = Object.freeze(
   // The commit that last authored the file bytes.
   commit: '49c98b84a6e1ed66ca895e7c23d590ee736fcbdc',
   source_sha256: 'b10a380812a2708886c04d7cc24b74a329b2d1f566105dcf9b1e9f8c595e82e2',
-  authorization: 'pending',
-  execute: false,
-  expected_live_definition_sha256: null,
+  authorization: 'Owner approved 2026-11-01: staging apply (wave 34) from staging read-live run 41313668204',
+  execute: true,
+  // Staging read-live run 41313668204 (main 0e7488263, executor deploy run 41313488374): aws_money_write_allowed()
+  // and all 72 gate policies absent, every prerequisite present, the four catalog counts 0 (no forced RLS, no
+  // DEFINER writer without bypass, no INVOKER trigger or function writer). Equal to the derived pre-state.
+  expected_live_definition_sha256: '6b404964de5ee203e126bc3ce78395c9a9e2fbf3a1e41eb0b5ccd8fa3e3ea150',
   // Code-derived: releaseIntendedHash('sql136', file bytes) (release-sql-state.mjs); re-derived by the tests.
   intended_replacement_sha256: 'f8269d3e1f788d50ad0cbbb4b95829b3ee83b05cda91798c5f57491c8e5d26a7',
   function_identities: Object.freeze(['public.aws_money_write_allowed()']),

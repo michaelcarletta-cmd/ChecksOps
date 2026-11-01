@@ -71,8 +71,35 @@ they show before any apply. `money_invoker_function_writers` (SECURITY INVOKER, 
 `public` whose body writes a money table) is reported, not a stop: such a function works only when its
 caller set a flag first, so a non-zero count must be read and reviewed before the apply.
 
-**Status:** not applied anywhere. The staging pin and the production pin are pending, and neither may move
-before #1498's API is live in that environment.
+**#1498's API live in staging (2026-11-01).** Guarded staging overlays, each VERIFIED with `/health`,
+`/db-health` and `/db-readonly-validate` 200: `money-write-flag.mjs` ADD (run 41309572005), then
+`providers/production/moov-wallet-sync.mjs`, `providers/parity/moov-functions.mjs`, `tenant-settings-handlers.mjs`,
+`tenant-collection-v2-settlement.mjs`, `tenant-collection-v2.mjs`, `tenant-billing-engine.mjs` and
+`tenant-billing-handlers.mjs` (runs 41309712728 to 41310178084), each from its recorded pre-#1498 bytes. Then
+the full-package staging rebuild for `invoice-provider.mjs`, `mortgage-ops-usage.mjs` and
+`tenant-collection-v2-uat.mjs` (plan PR #1508; inspect run 41313107352 READY; apply run 41313204838 on main
+`0e748826336d3d1b2d4054831aa54a5d90294bde`, owner phrase "DEPLOY FULL API PACKAGE TO STAGING", VERIFIED,
+CodeSha256 `Zj7edKlG…` -> `XGpxDVjHtE2eue/VM8+XSTjW+Yk3vQCRBU66vyQmerY=`, smoke 200). Production has none of it yet.
+
+**Staging executor refreshed (2026-11-01).** Inspect run 41313299247 (main `0e7488263`) found the live
+executor at `9Hk1JOXAxS5SFjfXeEp7PXItiqVY5Z7jOuWuYXk0dZE=` without
+`sql/136_money_write_restrictive_policies.sql` (main also superseded three libraries). Deploy run 41313488374
+(`expected_executor_code_sha256` `9Hk1JOXA…` matched) updated `checksops-staging-guarded-sql-executor` to
+`ODAzQ8ftXKSMX18xlkCNHgJ+PUwUi3Q4gr7L4GFpev8=` (RevisionId `c202708e-a6e9-4531-9fb8-95f8532dba14`).
+
+**Staging read-live (2026-11-01).** Run 41313668204 (main `0e7488263`, executor `ODAzQ8ft…`): the gate
+function `aws_money_write_allowed()` and all 72 policies `absent`, `prerequisites_missing` `[]`,
+`predecessors` `{}`, counts `money_tables_forced_rls` 0, `money_definer_writers_without_bypass` 0,
+`money_invoker_trigger_writers` 0 (so no SECURITY INVOKER trigger, `tg_accrue_mortgage_ops_billing` included,
+writes a money table in staging), `money_invoker_function_writers` 0. Live
+`6b404964de5ee203e126bc3ce78395c9a9e2fbf3a1e41eb0b5ccd8fa3e3ea150`, equal to the derived pre-state; intended `f8269d3e…`,
+`already_applied` false, `precondition_failures` `[]`. Recorded in the staging pin
+(`expected_live_definition_sha256`, `execute: true`, wave 34) under the owner's words of 2026-11-01,
+"record the SQL 136 staging pin". The staging apply is a separate run after this pin is merged and the
+executor carries it, on the owner's words for that run. The production pin stays pending: it must not move
+before #1498's API is live in production.
+
+**Status:** staging pin execute-authorized (wave 34); not applied anywhere. The production pin is pending.
 
 ## Fingerprint
 
