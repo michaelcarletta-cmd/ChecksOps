@@ -85,7 +85,31 @@ Told this, the owner chose to record the read-live value. Recorded in the stagin
 on the owner's words for that run. Production is read by its own inspect; the production prediction
 (`9862a392…`) may differ in the same way.
 
-**Status:** staging pin execute-authorized (wave 32); nothing applied yet; production pin pending.
+**Staging executor refreshed for the pin (2026-10-31).** The staging pin (wave 32, PR #1499) merged
+as `41827fcc42eb00cfe8591087aab3fc8ea798c648`. Inspect run 41236403102 (main `41827fcc4`) found the
+live executor at `m30FadRmX2njQ2GTbBbysuzIG99OyHxXIIFu2OL2uZ4=` (`executor_current` false; main's
+package superseded `lib/sql-executor-auth.mjs` only). Deploy run 41236640767
+(`expected_executor_code_sha256` `m30FadRm…` matched) updated `checksops-staging-guarded-sql-executor`
+to main's package (`sIf1rFWcrsTF2+B9dYSRe1c6Ydn1qI+V/8o8lG5ceXE=`, RevisionId
+`efe8b01a-0ab2-4eb1-97c5-603a0db0e007`, LastModified 2026-10-31T20:00:13Z).
+
+**Staging apply (2026-10-31).** Apply run 41236898030 (main `41827fcc4`, executor `sIf1rFWc…`,
+`executor_current` true, pin commit `556626cb5`, `expected_live_definition_sha256`
+`a2c2d856a21c52d47544fad05e0f0275a24a093421c8a7a7fbeea0e4bb329dfc`): success. The receipt
+(job 124642458662) prints `result` `applied`, `before_hash` `a2c2d856…`, `after_hash`
+`9a88fca29d21f5537052f475f4133f05e89e002bdf00b22cfc3cf2cf78c6d8da`, `executor_identity`
+`checksops-staging-guarded-sql-executor`; `is_platform_owner()` in state `intended` with EXECUTE for
+`authenticated`, `checksops` and the owner only (no `PUBLIC EXECUTE`), and `identity_accounts`
+holding no `UPDATE`, `DELETE` or `TRUNCATE` grant (`other_write_grants` `[]`). The apply's owner-row
+checks (`sql137_owner_identity_count`, `sql137_owner_profile_without_identity`) passed. Read-live
+run 41237134081 (main `41827fcc4`): `already_applied` true, `live_definition_sha256` `9a88fca2…`
+equal to the intended hash, `precondition_failures` `[]`. Staging acceptance: the owner reported on
+2026-11-01 "SQL 137 works in staging" (signed in on staging as the platform owner and loaded
+`/admin/tenants`, the platform-owner tenant list that `is_platform_owner()` gates). The staging pin
+keeps `execute: true`; the staging runs are recorded in the production pin's `staging_acceptance`
+by the production pin PR.
+
+**Status:** applied in staging (wave 32, 2026-10-31); staging acceptance: owner signed in as the platform owner and loaded /admin/tenants; production pin pending (production inspect next)
 
 ## Fingerprint
 
