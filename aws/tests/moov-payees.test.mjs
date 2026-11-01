@@ -895,6 +895,38 @@ test('public links: malformed, unknown, expired and disconnected tokens are refu
   });
 });
 
+test('SQL 138: a verified payee\'s link refuses terms, bank add and bank verify with already_verified before any Moov call; unverified setup unchanged', async () => {
+  await withEnv(STAGING, async () => {
+    const h = makeHarness();
+    await h.call('moov-recipient-create', { tenant_id: TENANT, name: 'Hannah Owner', email: 'hannah@example.com' }, USERS.owner);
+    const token = h.tokenFromEmail();
+    const rec = h.db.state.recipients[0];
+    // Unverified: bank add still reaches its own gate (identity first), as before.
+    assert.equal((await h.call('moov-recipient-bank-add', { token, ...BANK })).error, 'identity_required');
+    // Verified payee (terms accepted at Moov's side unknown to the row, so the terms path is a Moov write).
+    const at = new Date().toISOString();
+    Object.assign(rec, { identity_submitted_at: at, bank_verified_at: at, provider_bank_account_id: 'bank-1111-aaaa-bbbb', verified_at: at, onboarding_status: 'verified' });
+    const cases = [
+      ['moov-recipient-tos-accept', { token, accepted: true }],
+      ['moov-recipient-bank-add', { token, ...BANK, replace_bank: true }],
+      ['moov-recipient-bank-verify', { token, action: 'initiate' }],
+      ['moov-recipient-bank-verify', { token, action: 'confirm', code: '1234' }],
+      ['moov-recipient-kyc-update', { token, ...INDIVIDUAL }],
+    ];
+    for (const [name, body] of cases) {
+      const before = h.moov.calls.length;
+      const r = await h.call(name, body);
+      assert.equal(r.statusCode, 409, `${name} ${JSON.stringify(r)}`);
+      assert.equal(r.error, 'already_verified', name);
+      assert.deepEqual(h.moov.calls.slice(before).map((c) => `${c.method} ${c.path}`), [], `${name}: no Moov call`);
+    }
+    assert.equal(h.moov.accounts.get(rec.provider_account_id).banks.length, 0, 'no bank attached at Moov');
+    assert.equal(rec.tos_accepted_at ?? null, null, 'no terms recorded');
+    // Reads still work.
+    assert.equal((await h.call('moov-recipient-session', { token })).ok, true);
+  });
+});
+
 test('disconnect still succeeds when Moov is down', async () => {
   await withEnv(STAGING, async () => {
     const h = makeHarness();
