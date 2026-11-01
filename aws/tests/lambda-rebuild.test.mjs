@@ -194,7 +194,7 @@ const OVERLAY_PLAN_CHANGES = new Set([
   // (moov-functions, moov-wallet-sync, tenant-billing-handlers, tenant-collection-v2,
   // tenant-settings-handlers). invoice-provider.mjs, mortgage-ops-usage.mjs and
   // tenant-collection-v2-uat.mjs are not overlay members: they reach a function only with a
-  // later rebuild, never the current rebuild section.
+  // rebuild (the fourth staging section, inspect 41311016111, lists exactly these three).
   'invoice-provider.mjs',
   'mortgage-ops-usage.mjs',
   'providers/parity/moov-functions.mjs',
@@ -397,9 +397,10 @@ test('the production plan section accepts inspect run 39666717878: Moov transfer
   const second = production.history[1];
   assert.equal(production.status, 'applied');
   assert.equal(production.applied.run_id, '39669873076');
-  assert.equal(production.applied.staging_acceptance, staging.applied.run_url);
+  const stagingThird = staging.history[2];
+  assert.equal(production.applied.staging_acceptance, stagingThird.applied.run_url);
   assert.equal(production.applied.code_sha256_before, production.inspect.live_code_sha256);
-  assert.equal(production.applied.code_sha256_after, staging.applied.code_sha256_after);
+  assert.equal(production.applied.code_sha256_after, stagingThird.applied.code_sha256_after);
   assert.equal(production.applied.candidate_zip_sha256, production.inspect.candidate_zip_sha256);
   assert.equal(production.inspect.run_id, '39666717878');
   assert.equal(production.inspect.main_commit, '96361081c5458bf4de46330b87285fa954b25bbb');
@@ -411,8 +412,8 @@ test('the production plan section accepts inspect run 39666717878: Moov transfer
   // overlay run 39663019340): the same package staging inspected before its third rebuild. The
   // candidate is the ZIP staging accepted.
   assert.notEqual(production.inspect.live_code_sha256, second.applied.code_sha256_after);
-  assert.equal(production.inspect.live_code_sha256, staging.inspect.live_code_sha256);
-  assert.equal(production.inspect.candidate_zip_sha256, staging.inspect.candidate_zip_sha256);
+  assert.equal(production.inspect.live_code_sha256, stagingThird.inspect.live_code_sha256);
+  assert.equal(production.inspect.candidate_zip_sha256, stagingThird.inspect.candidate_zip_sha256);
   const section = loadRebuildPlan(REPO_ROOT, 'production');
   assert.deepEqual(Object.keys(section.members), ['providers/webhooks.mjs']);
   assert.deepEqual(Object.keys(section.added), ['providers/moov-transfer-webhook.mjs']);
@@ -423,8 +424,8 @@ test('the production plan section accepts inspect run 39666717878: Moov transfer
   assert.equal(production.inspect.removed, 0);
   assert.deepEqual(production.inspect.dependency_counts, { live: 54, candidate: 54 });
   // Production and staging ran the same package before this rebuild, so the differences match.
-  assert.deepEqual(section.members, staging.members);
-  assert.deepEqual(section.added, staging.added);
+  assert.deepEqual(section.members, stagingThird.members);
+  assert.deepEqual(section.added, stagingThird.added);
   const apiRoot = path.join(REPO_ROOT, 'aws/functions/api');
   for (const [name, entry] of Object.entries(section.members)) {
     assertThirdSectionAccepted(apiRoot, name, entry.accepted_sha256);
@@ -451,7 +452,7 @@ test('the production plan section accepts inspect run 39666717878: Moov transfer
 test('the staging history keeps the first rebuild (inspect 39585059839, apply 39587414391) and every accepted hash is the bytes on main or a listed later change', () => {
   const raw = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'ops/deployment-guard/lambda-rebuild-plan.json'), 'utf8'));
   const staging = raw.environments.staging;
-  assert.equal(staging.history.length, 2);
+  assert.equal(staging.history.length, 3);
   const first = staging.history[0];
   assert.equal(first.status, 'applied');
   assert.equal(first.applied.run_id, '39587414391');
@@ -538,32 +539,33 @@ test('the staging history keeps the second rebuild (inspect 39630308266, apply 3
   assert.equal(result.details.state, 'READY');
 });
 
-test('the staging plan section accepts inspect run 39663300105: Moov transfer returns (1 changed, 1 added, 0 removed)', () => {
+test('the staging history keeps the third rebuild (inspect 39663300105, apply 39666390516): Moov transfer returns (1 changed, 1 added, 0 removed)', () => {
   const raw = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'ops/deployment-guard/lambda-rebuild-plan.json'), 'utf8'));
   const staging = raw.environments.staging;
   const second = staging.history[1];
-  assert.equal(staging.status, 'applied');
-  assert.equal(staging.applied.run_id, '39666390516');
-  assert.equal(staging.applied.code_sha256_before, staging.inspect.live_code_sha256);
-  assert.equal(staging.applied.code_sha256_after, 'pNCewAaFU1W1I6F2ZpAo7ElwEn1vFFmXvft9j6vsr/c=');
-  assert.equal(staging.applied.candidate_zip_sha256, staging.inspect.candidate_zip_sha256);
-  assert.equal(staging.inspect.run_id, '39663300105');
-  assert.equal(staging.inspect.main_commit, 'c92fe457b13ca49340dfbd0239f0cf72f029f6fb');
-  assert.equal(staging.inspect.live_code_sha256, '+cyvVRtA46woHP4FwFBBZoN80aXR4A8Vo6adu5E1/NE=');
-  assert.equal(staging.inspect.live_revision_id, '3686cef2-0dd1-4fa2-9976-f6dbc139a46e');
-  assert.equal(staging.inspect.candidate_zip_sha256, 'a4d09ec006855355b523a176669028ec4970127d6f145997bdfb7d8fabecaff7');
+  const third = staging.history[2];
+  assert.equal(third.status, 'applied');
+  assert.equal(third.applied.run_id, '39666390516');
+  assert.equal(third.applied.code_sha256_before, third.inspect.live_code_sha256);
+  assert.equal(third.applied.code_sha256_after, 'pNCewAaFU1W1I6F2ZpAo7ElwEn1vFFmXvft9j6vsr/c=');
+  assert.equal(third.applied.candidate_zip_sha256, third.inspect.candidate_zip_sha256);
+  assert.equal(third.inspect.run_id, '39663300105');
+  assert.equal(third.inspect.main_commit, 'c92fe457b13ca49340dfbd0239f0cf72f029f6fb');
+  assert.equal(third.inspect.live_code_sha256, '+cyvVRtA46woHP4FwFBBZoN80aXR4A8Vo6adu5E1/NE=');
+  assert.equal(third.inspect.live_revision_id, '3686cef2-0dd1-4fa2-9976-f6dbc139a46e');
+  assert.equal(third.inspect.candidate_zip_sha256, 'a4d09ec006855355b523a176669028ec4970127d6f145997bdfb7d8fabecaff7');
   // The package the rebuild starts from is the second rebuild's, plus the #1124 overlay of
   // checkalt-eligibility.mjs (staging overlay run 39662525342), which already equals main.
-  assert.notEqual(staging.inspect.live_code_sha256, second.applied.code_sha256_after);
-  const section = loadRebuildPlan(REPO_ROOT, 'staging');
+  assert.notEqual(third.inspect.live_code_sha256, second.applied.code_sha256_after);
+  const section = third;
   assert.deepEqual(Object.keys(section.members), ['providers/webhooks.mjs']);
   assert.deepEqual(Object.keys(section.added), ['providers/moov-transfer-webhook.mjs']);
   assert.deepEqual(section.removed, {});
   assert.deepEqual(section.dependencies, { added: {}, removed: {}, changed: {} });
-  assert.equal(staging.inspect.changed, 1);
-  assert.equal(staging.inspect.added, 1);
-  assert.equal(staging.inspect.removed, 0);
-  assert.deepEqual(staging.inspect.dependency_counts, { live: 54, candidate: 54 });
+  assert.equal(third.inspect.changed, 1);
+  assert.equal(third.inspect.added, 1);
+  assert.equal(third.inspect.removed, 0);
+  assert.deepEqual(third.inspect.dependency_counts, { live: 54, candidate: 54 });
   const apiRoot = path.join(REPO_ROOT, 'aws/functions/api');
   for (const [name, entry] of Object.entries(section.members)) {
     // Accepted is main's bytes (unless main changed it since); live is the bytes the second rebuild accepted and put live.
@@ -580,14 +582,64 @@ test('the staging plan section accepts inspect run 39663300105: Moov transfer re
     if (OVERLAY_PLAN_CHANGES.has(name)) assert.equal(section.members[name], undefined, name);
     else assert.ok(section.members[name], `${name} changed on main but is not a staging member`);
   }
-  // The plan as committed makes the inspected live package READY, not BLOCKED.
+  // The recorded section still made the third inspected live package READY, not BLOCKED.
   const live = {};
   const candidate = {};
   for (const [name, entry] of Object.entries(section.members)) { live[name] = entry.live_sha256; candidate[name] = entry.accepted_sha256; }
   for (const [name, hash] of Object.entries(section.added)) candidate[name] = hash;
+  const result = evaluateRebuild({ plan: { environments: { staging: { function_name: staging.function_name, ...third } } }, environment: 'staging', liveMemberHashes: live, candidateMemberHashes: candidate, liveInventory: {}, candidateInventory: {} });
+  assert.equal(result.ok, true, result.message);
+  assert.equal(result.details.state, 'READY');
+});
+
+test('the staging plan section accepts inspect run 41311016111: the money-write flag rebuild (3 changed, 0 added, 0 removed)', () => {
+  const raw = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'ops/deployment-guard/lambda-rebuild-plan.json'), 'utf8'));
+  const staging = raw.environments.staging;
+  const third = staging.history[2];
+  assert.equal(staging.status, 'accepted');
+  assert.equal(staging.applied, undefined);
+  assert.equal(staging.inspect.run_id, '41311016111');
+  assert.equal(staging.inspect.main_commit, '2caf8b22ebbc1009c7d0be6f687e6e8cb4f21fca');
+  assert.equal(staging.inspect.live_code_sha256, 'Zj7edKlGxXAEuB9OuHTdVlTH3rUkK5gPBUW+CuC7srg=');
+  assert.equal(staging.inspect.live_revision_id, '5aa9b001-cc57-42d2-a0fd-12e0466ef711');
+  assert.equal(staging.inspect.candidate_zip_sha256, '5c6a710d58c7b44d9eb9efd533cf974938d6f98937bd0091054ebabf24267ab6');
+  // The package the rebuild starts from is the third rebuild's plus later single-member overlays
+  // (each VERIFIED and already main's bytes, counted as same), not the third rebuild's own package.
+  assert.notEqual(staging.inspect.live_code_sha256, third.applied.code_sha256_after);
+  for (const run of ['41309572005', '41310178084', '41310941335', '41202670517']) assert.match(staging.inspect.notes, new RegExp(run), run);
+  const section = loadRebuildPlan(REPO_ROOT, 'staging');
+  const THREE = ['invoice-provider.mjs', 'mortgage-ops-usage.mjs', 'tenant-collection-v2-uat.mjs'];
+  assert.deepEqual(Object.keys(section.members), THREE);
+  assert.deepEqual(section.added, {});
+  assert.deepEqual(section.removed, {});
+  assert.deepEqual(section.dependencies, { added: {}, removed: {}, changed: {} });
+  assert.equal(staging.inspect.same, 203);
+  assert.equal(staging.inspect.changed, 3);
+  assert.equal(staging.inspect.added, 0);
+  assert.equal(staging.inspect.removed, 0);
+  assert.deepEqual(staging.inspect.dependency_counts, { live: 54, candidate: 54 });
+  const apiRoot = path.join(REPO_ROOT, 'aws/functions/api');
+  // Accepted is main's bytes: the money-write flag (#1498) in the three files that are not overlay members.
+  for (const [name, entry] of Object.entries(section.members)) {
+    assert.equal(sha256(fs.readFileSync(path.join(apiRoot, name))), entry.accepted_sha256, name);
+    assert.notEqual(entry.live_sha256, entry.accepted_sha256, name);
+    assert.ok(OVERLAY_PLAN_CHANGES.has(name), name);
+  }
+  // providers/webhooks.mjs was a third-section member at f7353ee1...; the guarded staging overlay of
+  // the Moov webhook body confirmation (run 41202670517) put main's bytes live, so it is not a member here.
+  assert.equal(section.members['providers/webhooks.mjs'], undefined);
+  assert.equal(third.members['providers/webhooks.mjs'].accepted_sha256, 'f7353ee1673364d45ce564dd8b7f102273e9a871c63f8398d03bd7226360d97f');
+  assert.equal(sha256(fs.readFileSync(path.join(apiRoot, 'providers/webhooks.mjs'))), '59b586744332df62524a25b4602966686c9ba9ae869cc644ab9046bfc1ae63b0');
+  // The plan as committed makes the inspected live package READY, not BLOCKED.
+  const live = {};
+  const candidate = {};
+  for (const [name, entry] of Object.entries(section.members)) { live[name] = entry.live_sha256; candidate[name] = entry.accepted_sha256; }
   const result = evaluateRebuild({ plan: raw, environment: 'staging', liveMemberHashes: live, candidateMemberHashes: candidate, liveInventory: {}, candidateInventory: {} });
   assert.equal(result.ok, true, result.message);
   assert.equal(result.details.state, 'READY');
+  // The webhooks.mjs bytes the inspect reported as drifted against the third section now read as same.
+  const withWebhooks = evaluateRebuild({ plan: raw, environment: 'staging', liveMemberHashes: { ...live, 'providers/webhooks.mjs': '59b586744332df62524a25b4602966686c9ba9ae869cc644ab9046bfc1ae63b0' }, candidateMemberHashes: { ...candidate, 'providers/webhooks.mjs': '59b586744332df62524a25b4602966686c9ba9ae869cc644ab9046bfc1ae63b0' }, liveInventory: {}, candidateInventory: {} });
+  assert.equal(withWebhooks.details.state, 'READY', withWebhooks.message);
 });
 
 test('member and dependency diffs classify every live-vs-candidate difference', () => {
