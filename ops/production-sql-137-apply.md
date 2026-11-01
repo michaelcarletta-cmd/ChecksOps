@@ -109,7 +109,34 @@ equal to the intended hash, `precondition_failures` `[]`. Staging acceptance: th
 keeps `execute: true`; the staging runs are recorded in the production pin's `staging_acceptance`
 by the production pin PR.
 
-**Status:** applied in staging (wave 32, 2026-10-31); staging acceptance: owner signed in as the platform owner and loaded /admin/tenants; production pin pending (production inspect next)
+**Production inspect (2026-11-01).** Read-only `--inspect` through SSM
+`9d865a2c-c032-4f8c-8d81-d7420e6edb90` on `i-0c35557c4e5385406` (started 2026-11-01T01:42:05Z under the
+owner's words "start the SQL runner for the SQL 137 production inspect", stopped again 01:43:46Z), main
+`6120c6480` (tarball sha256 `4c70eed24bb1448fe652cc6b10e0a486a18cc2313d8492c5e4721122606b4572`, transfer
+run 41261427070, migration source `f1308cbd…` == pin), connected as `checksops_admin`:
+`is_platform_owner()` `different`, its EXECUTE ACL `PUBLIC EXECUTE`, `checksops EXECUTE`, `owner EXECUTE`
+(no `authenticated EXECUTE`: signed-in callers reach it through PUBLIC); `identity_accounts` holds
+`checksops DELETE` and `checksops UPDATE` (`other_write_grants` `[]`); every prerequisite present;
+`predecessors` `{}`; live `15fecb5b913a30860ae5fc03d58b4108c27f1692c07b5edf2f90e0a9f9b1c095`,
+`already_applied` false, `precondition_failures` `[]`.
+
+**The production pre-state is neither the predicted one nor staging's.** The prediction (`9862a392…`,
+`aws/rls/sql/10`'s body with EXECUTE for PUBLIC, authenticated, checksops and the owner and no write grant
+on `identity_accounts`) and staging's recorded pre-state (`a2c2d856…`) both differ. `aws/rls/sql/10`'s body
+with the grants this inspect reports fingerprints as `cbf76897…`, so production's function definition is
+not `aws/rls/sql/10`'s either (the inspect prints its fingerprint, not its body). SQL 137 replaces the whole
+function and sets its ACL and the `identity_accounts` grants explicitly, so it reaches the intended state
+(`9a88fca2…`) that staging reached; it also removes production's `checksops DELETE`, which staging never
+had. No API code updates or deletes `identity_accounts`. Told this, the owner chose on 2026-11-01 to record
+the read value ("Merge 1591 and I choose option A"; 1591 read as #1501). Recorded in the production pin
+with the staging apply (run 41236898030) as its staging acceptance and `execute: true`; the owner's words
+so far name the staging steps, the inspect and this pin, not the production apply. The owner merges the
+pin change; the apply still needs the owner's words for that run and runs only after that merge is on main
+and staged. A fresh inspect immediately before the apply must still report `15fecb5b…`; the apply's
+owner-row checks (`sql137_owner_identity_count`, `sql137_owner_profile_without_identity`) roll it back if
+they fail.
+
+**Status:** applied in staging (wave 32, 2026-10-31); staging acceptance: owner signed in as the platform owner and loaded /admin/tenants; production pin execute-authorized; not applied to production
 
 ## Fingerprint
 
