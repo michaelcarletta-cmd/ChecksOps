@@ -1,0 +1,15 @@
+{
+  "workstream_id": "payee-bank-add-verified-guard",
+  "authorization": "Pending owner review (2026-11-01). Planning only: nothing is live or verified. Each production apply still needs its own owner approval and staging acceptance.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Payee setup link closed after verification, API half (2026-11-01, security audit 2026-10-29 finding 18; owner 2026-11-01 \"Complete sql 138 and 136\"): SQL 138 (applied to staging and production on 2026-11-01) makes aws_public_payee_record refuse every event once the payee is verified (already_verified), but publicBankAdd called Moov addPayeeBank before that record, so a leaked setup link could still attach an extra, unverified bank account to a verified payee's Moov account. The accepted bytes refuse a verified payee (rec.verified_at) with 409 already_verified before any Moov call in publicBankAdd, publicBankVerify (initiate and confirm) and publicTosAccept (after its already-accepted read-only branch), as publicIdentity already did; publicSession (read-only) is unchanged. No SQL change; no other member changes. live_sha256 is the bytes the Moov payees production overlay applied (run 40140113163, applied manifest aws/tests/fixtures/production-moov-payees-applied-manifest-2026-10-24.json), what the previous manifest accepted; the file did not change on main since and no rebuild section carries it. A read-only production overlay inspect must confirm the live member before any apply.",
+  "members": {
+    "providers/payees/handlers.mjs": {
+      "live_sha256": "8b44e120a8d9b611c1892a7b4e7e9dce2fb5950287d1ccba50c8215b2357992d",
+      "accepted_sha256": "b73bccdf68bf9959e63cf219063d6818c74ffe9d4ccc0393a437f2216146dc89",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-moov-payees-manifest-2026-10-23.json"
+    }
+  }
+}
