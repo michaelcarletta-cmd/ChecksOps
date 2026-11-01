@@ -5,7 +5,7 @@
  * covers what is new:
  *
  *   - the pin: staging-authorized from its read-live (wave 33), code-derived, selectable, packed, in
- *     step with the production pin (pending still); the recorded staging pre-state is the derived one; the pinned commit authored the bytes; predecessor and supersedes SQL 113 (as SQL 101
+ *     step with the production pin (execute true on production's own pre-state, the same one staging had); the recorded staging pre-state is the derived one; the pinned commit authored the bytes; predecessor and supersedes SQL 113 (as SQL 101
  *     for SQL 90), with superseded_intended_sha256.sql113 derived from both files;
  *   - the file and spec: SQL 113's aws_public_payee_record(text, text, jsonb) only, with the same
  *     attributes, result and ACL and SQL 113's body plus the one verified_at check; the prerequisite DO
@@ -182,10 +182,16 @@ test('pin: SQL 138 staging-authorized from its read-live, code-derived, selectab
   assert.equal(prod.source_sha256, pin.source_sha256);
   assert.deepEqual(prod.function_identities, [IDENTITY]);
   assert.deepEqual(prod.predecessors, ['sql113']);
-  assert.equal(prod.execute, false);
-  assert.equal(prod.authorization, 'pending');
-  assert.equal(prod.expected_live_definition_sha256, null);
-  assert.equal(prod.production_inspect.status, 'pending');
+  // Production pin execute-authorized (owner-approved pin change of 2026-11-01) on the staging apply. Its pre-state is
+  // production's own (read-only inspect SSM 0cbe4c6b): the function as SQL 113 left it, derived here, the same
+  // pre-state staging recorded (read-live run 41239902526).
+  assert.equal(prod.execute, true);
+  assert.match(prod.authorization, /^Owner approved 2026-11-01 /);
+  assert.equal(prod.expected_live_definition_sha256, PRE);
+  assert.equal(prod.expected_live_definition_sha256, prod.production_inspect.live_definition_sha256);
+  assert.equal(prod.expected_live_definition_sha256, pin.expected_live_definition_sha256);
+  assert.notEqual(prod.expected_live_definition_sha256, prod.intended_replacement_sha256);
+  assert.equal(prod.production_inspect.status, 'recorded');
   assert.ok(prod.production_inspect.note.includes(PRE));
   assert.ok(prod.order_note.includes(PRE));
   // The runbook names the pre-state, the intended fingerprint, the source and both bodies.
