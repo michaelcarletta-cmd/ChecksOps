@@ -65,16 +65,19 @@ applied only while every other SQL 113 object still matches (staging pin
 `superseded_intended_sha256.sql113` `b4e3cf0c6dec304d3121a45b964537abdc364391e279486046b48fe9e88464fa`,
 `releaseSupersededIntendedHash`).
 
-**Status:** staging pin execute-authorized (wave 33); not applied anywhere. The production pin is pending.
-
 **Staging executor refreshed (2026-10-31).** Inspect run 41239489521 (main `ca7de0ab9`) found the live
-executor at `m30FadRmX2njQ2GTbBbysuzIG99OyHxXIIFu2OL2uZ4=` without
-`sql/138_payee_setup_link_closed_after_verification.sql` (main's package also superseded three
-libraries). Deploy run 41239673718 (main `ca7de0ab91152d512115b0a111bb4e92d29ee6d1`,
-`expected_executor_code_sha256` `m30FadRm…` matched) updated `checksops-staging-guarded-sql-executor`
-to main's package (`sIf1rFWcrsTF2+B9dYSRe1c6Ydn1qI+V/8o8lG5ceXE=`).
+executor at `sIf1rFWcrsTF2+B9dYSRe1c6Ydn1qI+V/8o8lG5ceXE=` (LastModified 2026-10-31T20:00:13Z, the
+SQL 137 pin's executor) without `sql/138_payee_setup_link_closed_after_verification.sql` (main's
+package also superseded three libraries). Deploy run 41239673718 (main
+`ca7de0ab91152d512115b0a111bb4e92d29ee6d1`, `expected_executor_code_sha256` `sIf1rFWc…` matched)
+updated `checksops-staging-guarded-sql-executor` to main's package
+(`ceZWvwT9XGRuGDhID92gv8qB/PGFcv6sLi2fJukgixk=`, LastModified 2026-10-31T20:38:33Z). Corrected
+2026-11-01: the version of this paragraph merged with the staging pin (#1500) named the SQL 137
+runs' executor hashes (`m30FadRm…` before, `sIf1rFWc…` after), read from the wrong logs; the values
+above are from runs 41239489521, 41239673718 and 41239902526 themselves. The staging pin's recorded
+values (`expected_live_definition_sha256`, run 41239902526) are unaffected.
 
-**Staging read-live (2026-10-31).** Run 41239902526 (main `ca7de0ab9`, executor `sIf1rFWc…`, pin
+**Staging read-live (2026-10-31).** Run 41239902526 (main `ca7de0ab9`, executor `ceZWvwT9…`, pin
 commit `c7c960f85`): `aws_public_payee_record(text, text, jsonb)` state `different`, its EXECUTE ACL
 `checksops EXECUTE`, `owner EXECUTE`; `predecessors.sql113` true, `successors_applied` `[]`, both
 definer writes (`external_payment_recipients`, `payment_provider_methods`) ok. Live
@@ -84,6 +87,34 @@ pre-state below; intended `9acaf809…`, `already_applied` false, `precondition_
 `execute: true`, wave 33) under the owner's words of 2026-10-31, "record the SQL 138 staging pin".
 The staging apply itself is a separate run after this pin is merged and the executor carries it, on
 the owner's words for that run. Production is read by its own inspect.
+
+**Staging executor refreshed for the pin (2026-11-01).** The staging pin (wave 33, PR #1500) merged as
+`6120c6480c49839c1450cdd74b49ae16fb624fb7`. Inspect run 41259961304 (main `6120c6480`) found the live
+executor at `ceZWvwT9XGRuGDhID92gv8qB/PGFcv6sLi2fJukgixk=` (`executor_current` false; main's package
+superseded `lib/sql-executor-auth.mjs` only). Deploy run 41260150790 (`expected_executor_code_sha256`
+`ceZWvwT9…` matched) updated `checksops-staging-guarded-sql-executor` to main's package
+(`9Hk1JOXAxS5SFjfXeEp7PXItiqVY5Z7jOuWuYXk0dZE=`, RevisionId `6b55618b-bb19-4596-9749-9455f7975590`;
+`staging_api_untouched` true).
+
+**Staging apply (2026-11-01).** Apply run 41260586254 (main `6120c6480`, executor `9Hk1JOXA…`,
+`executor_current` true, pin commit `c7c960f85`, `expected_live_definition_sha256`
+`ec36c29e3472a9777b4a1d08ff7c3da5c00b1dc70cb4b754ef5b04ff0e73633c`) under the owner's words "apply
+SQL 138 in staging": success. The receipt (job 124712852864) prints `result` `applied`,
+`before_hash` `ec36c29e…`, `after_hash`
+`9acaf809824101d8ef62098e6440ca5d06cda1bec4117118c53931130efadf48`, `executor_identity`
+`checksops-staging-guarded-sql-executor`; `aws_public_payee_record(text, text, jsonb)` in state
+`intended`, its EXECUTE ACL `checksops EXECUTE`, `owner EXECUTE`; `predecessors.sql113` true; both
+definer writes ok. Read-live run 41260787304 (main `6120c6480`): `already_applied` true,
+`live_definition_sha256` `9acaf809…` equal to the intended hash, `precondition_failures` `[]`.
+Staging acceptance: a hands-on check is not possible in staging (the setup link is only emailed, never
+returned to the browser, and staging email is `AWS_EMAIL_MODE=sink` by the owner's choice). The owner
+accepted on 2026-11-01, "accept SQL 138 staging on the tests": the staging apply and read-live above,
+and `aws/tests/sql138-payee-setup-link-closed-pg.test.mjs` on PostgreSQL 16 in CI (a verified payee's
+link refused with `already_verified` for every write, reads unchanged, an unverified payee's setup and
+reissue unchanged). The staging pin keeps `execute: true`; the staging runs are recorded in the
+production pin's `staging_acceptance` by the production pin PR.
+
+**Status:** applied in staging (wave 33, 2026-11-01); staging acceptance: owner accepted on the tests; production pin pending (production inspect next)
 
 ## Fingerprint
 

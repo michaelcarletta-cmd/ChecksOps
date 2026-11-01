@@ -215,7 +215,10 @@ test('order: predecessor and supersedes SQL 113 (untouched); the one replaced fu
   const runbook = fs.readFileSync(path.join(ROOT, COMMITTED.tooling.runbook), 'utf8');
   assert.ok(runbook.includes(COMMITTED.intended_replacement_sha256));
   assert.ok(runbook.includes(COMMITTED.source_sha256));
-  assert.match(runbook, /\*\*Status:\*\* staging pin execute-authorized \(wave 33\)/);
+  assert.match(runbook, /\*\*Status:\*\* applied in staging \(wave 33, 2026-11-01\); staging acceptance: owner accepted on the tests; production pin pending \(production inspect next\)/);
+  assert.match(runbook, /"accept SQL 138 staging on the tests"/);
+  assert.match(runbook, /\*\*Staging apply \(2026-11-01\)\.\*\* Apply run 41260586254/);
+  assert.match(runbook, /Read-live run 41260787304/);
   assert.match(runbook, /read-live \(2026-10-31\)\.\*\* Run 41239902526/);
   assert.ok(runbook.includes('ec36c29e3472a9777b4a1d08ff7c3da5c00b1dc70cb4b754ef5b04ff0e73633c'));
   assert.match(runbook, /\*\*Predecessor\.\*\* SQL 113/);
