@@ -3071,6 +3071,27 @@ export const AUTHORIZED_SQL135_CHECK_CREATE_INSERT_GRANT = Object.freeze({
   function_identities: Object.freeze([]),
 });
 
+// Money-write staging pin: SQL 136 (security audit 2026-10-29 finding 14, step 2 of 2; owner decision
+// 2026-10-31 (a), API first; owner 2026-11-01, "Complete sql 138 and 136"): three RESTRICTIVE policies TO
+// authenticated on each of the 24 money tables, through the new SECURITY INVOKER aws_money_write_allowed().
+// No predecessor (SQL 91's two GUC helpers are prerequisites). Pending until a reviewed pin change records a
+// staging read-live; that read-live and the apply must wait until #1498's API is live in staging
+// (ops/production-sql-136-apply.md).
+export const AUTHORIZED_SQL136_MONEY_WRITE_RESTRICTIVE_POLICIES = Object.freeze({
+  key: 'sql136',
+  filename: 'aws/workflows/sql/136_money_write_restrictive_policies.sql',
+  migration_id: '136_money_write_restrictive_policies',
+  // The commit that last authored the file bytes.
+  commit: '49c98b84a6e1ed66ca895e7c23d590ee736fcbdc',
+  source_sha256: 'b10a380812a2708886c04d7cc24b74a329b2d1f566105dcf9b1e9f8c595e82e2',
+  authorization: 'pending',
+  execute: false,
+  expected_live_definition_sha256: null,
+  // Code-derived: releaseIntendedHash('sql136', file bytes) (release-sql-state.mjs); re-derived by the tests.
+  intended_replacement_sha256: 'f8269d3e1f788d50ad0cbbb4b95829b3ee83b05cda91798c5f57491c8e5d26a7',
+  function_identities: Object.freeze(['public.aws_money_write_allowed()']),
+});
+
 // Platform owner identity staging pin: SQL 137 (security audit 2026-10-29, finding 15: is_platform_owner()
 // decided by the identity_accounts row only, the profiles.email branch removed; UPDATE, DELETE and
 // TRUNCATE on identity_accounts revoked from PUBLIC, anon, authenticated and checksops). No predecessor.
@@ -3168,6 +3189,7 @@ export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql133: AUTHORIZED_SQL133_FINANCIAL_TOTP_ADMIN_RESET_ENROLLMENT,
   sql134: AUTHORIZED_SQL134_LOSS_DRAFT_ESCROW_WRITE_GRANTS,
   sql135: AUTHORIZED_SQL135_CHECK_CREATE_INSERT_GRANT,
+  sql136: AUTHORIZED_SQL136_MONEY_WRITE_RESTRICTIVE_POLICIES,
   sql137: AUTHORIZED_SQL137_PLATFORM_OWNER_IDENTITY,
   sql138: AUTHORIZED_SQL138_PAYEE_SETUP_LINK_CLOSED_AFTER_VERIFICATION,
 });
@@ -3185,7 +3207,7 @@ export function isSql30TenantDocumentsDocType(input = {}) {
   return pinIdentifiersMatch(input, AUTHORIZED_SQL30_TENANT_DOCUMENTS_DOC_TYPE);
 }
 
-/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql135, sql137, sql138) an input names, or null. */
+/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql138) an input names, or null. */
 export function releaseSqlMigrationKey(input = {}) {
   return Object.keys(RELEASE_2026_10_17_PENDING_SQL_PINS)
     .find((key) => pinIdentifiersMatch(input, RELEASE_2026_10_17_PENDING_SQL_PINS[key])) || null;
