@@ -36,7 +36,13 @@ test('link and auto-debit go through save-tenant-billing-account with the fields
   assert.match(panel, /action: "toggle_auto_debit", tenant_id: tenantId, auto_debit_enabled: enabled/);
   // A refusal ({ ok: false }) is shown, not swallowed.
   assert.match(panel, /\(data as \{ ok\?: boolean \}\)\.ok === false/);
-  assert.match(panel, /toast\.error\(e\?\.message \?\? "Failed to update auto-debit"\)/);
+  assert.match(panel, /toast\.error\(e\?\.message \?\? "Failed to update auto-debit", \{ duration: 30000 \}\)/);
+  // billing_update_not_applied shows the route's read-only diagnostic as a compact code (no ids).
+  assert.match(panel, /export function billingDiagnosticCode\(/);
+  assert.match(panel, /if \(code === "billing_update_not_applied"\) \{\s*const detail = billingDiagnosticCode\(payload\?\.diagnostic\);/);
+  for (const key of ['row_visible', 'can_write_tenant', 'is_tenant_member', 'auth_uid_set', 'auth_uid_matches_caller', 'current_user', 'rls_enabled', 'rls_forced', 'returned_row', 'policies']) {
+    assert.ok(panel.includes(`diagnostic.${key}`), key);
+  }
   // A change the database did not make is named, not shown as saved.
   assert.match(panel, /billing_update_not_applied: "The change was not saved\. Contact ChecksOps support\."/);
   // On success both actions write the row the server stored into the card's cache.

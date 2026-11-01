@@ -133,6 +133,52 @@ const publicAuthorization = (row) => {
   };
 };
 
+/**
+ * Read-only diagnostic for a billing write the database did not apply (owner report, staging 2026-11-01:
+ * a member's auto-debit toggle came back billing_update_not_applied with no SQL error). Runs in the same
+ * session and transaction, which withIdentity rolls back because the result is ok:false. It reads only
+ * this tenant's row count, the session's own write and membership checks, the role name and the table's
+ * row-security metadata; it returns booleans, counts and names, never an id, a value of another tenant or
+ * a policy expression. Each probe runs in its own savepoint so one failing probe reports its SQLSTATE and
+ * does not abort the others or throw.
+ */
+const BILLING_DIAGNOSTIC_PROBES = Object.freeze([
+  ['row_visible', 'SELECT count(*)::int AS v FROM public.tenant_billing_accounts WHERE tenant_id = $1::uuid', (t) => [t]],
+  ['can_write_tenant', 'SELECT public.aws_can_write_tenant($1::uuid) AS v', (t) => [t]],
+  ['is_tenant_member', 'SELECT public.aws_is_tenant_member($1::uuid) AS v', (t) => [t]],
+  ['auth_uid_set', 'SELECT (auth.uid() IS NOT NULL) AS v', () => []],
+  ['auth_uid_matches_caller', 'SELECT (auth.uid() IS NOT DISTINCT FROM $1::uuid) AS v', (_t, u) => [u]],
+  ['current_user', 'SELECT current_user::text AS v', () => []],
+  ['policies', `SELECT COALESCE(json_agg(json_build_object('name', policyname, 'permissive', permissive, 'cmd', cmd, 'roles', roles)
+     ORDER BY policyname), '[]'::json) AS v
+     FROM pg_catalog.pg_policies WHERE schemaname = 'public' AND tablename = 'tenant_billing_accounts'`, () => []],
+  ['rls_enabled', `SELECT c.relrowsecurity AS v FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+     WHERE n.nspname = 'public' AND c.relname = 'tenant_billing_accounts'`, () => []],
+  ['rls_forced', `SELECT c.relforcerowsecurity AS v FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+     WHERE n.nspname = 'public' AND c.relname = 'tenant_billing_accounts'`, () => []],
+]);
+
+export const billingWriteDiagnostic = async (client, { tenantId, userId = null, returned = undefined }) => {
+  const out = {};
+  for (const [key, sql, params] of BILLING_DIAGNOSTIC_PROBES) {
+    const savepoint = `billing_diag_${key}`;
+    try {
+      await client.query(`SAVEPOINT ${savepoint}`);
+      const row = (await client.query(sql, params(tenantId, isUuid(userId) ? userId : null))).rows?.[0];
+      out[key] = row ? (row.v ?? null) : null;
+      await client.query(`RELEASE SAVEPOINT ${savepoint}`);
+    } catch (error) {
+      out[key] = { error: String(error?.code || 'probe_failed') };
+      try { await client.query(`ROLLBACK TO SAVEPOINT ${savepoint}`); } catch { /* the outer transaction is rolled back anyway */ }
+    }
+  }
+  if (returned !== undefined) {
+    out.returned_row = Boolean(returned);
+    out.returned_auto_debit_enabled = returned ? returned.auto_debit_enabled === true : null;
+  }
+  return out;
+};
+
 const loadAuthorization = async (client, tenantId) => (
   (await client.query(
     `SELECT id, tenant_id, stakeholder_account_id, nickname, account_holder_name,
@@ -248,7 +294,12 @@ export const saveTenantBillingAuthorization = async (client, {
   // A write that changed no row (filtered by row security or anything else) is not a success: report it,
   // so the caller never shows "saved" for a change the database did not make (owner report, 2026-11-01).
   if (!saved || saved.tenant_id !== tenantId) {
-    return { ok: false, statusCode: 409, error: 'billing_update_not_applied' };
+    return {
+      ok: false,
+      statusCode: 409,
+      error: 'billing_update_not_applied',
+      diagnostic: await billingWriteDiagnostic(client, { tenantId, userId, returned: saved || null }),
+    };
   }
 
   return {
@@ -261,7 +312,7 @@ export const saveTenantBillingAuthorization = async (client, {
   };
 };
 
-export const toggleTenantAutoDebit = async (client, { tenantId, enabled }) => {
+export const toggleTenantAutoDebit = async (client, { tenantId, enabled, userId = null }) => {
   const existing = await loadAuthorization(client, tenantId);
   if (!existing) return { ok: false, statusCode: 404, error: 'missing_authorization' };
   await setMoneyWriteFlag(client);
@@ -275,7 +326,12 @@ export const toggleTenantAutoDebit = async (client, { tenantId, enabled }) => {
   // No row changed, or the row does not hold the requested value: not a success (see saveTenantBillingAuthorization).
   const written = rows[0];
   if (!written || written.auto_debit_enabled !== (enabled === true)) {
-    return { ok: false, statusCode: 409, error: 'billing_update_not_applied' };
+    return {
+      ok: false,
+      statusCode: 409,
+      error: 'billing_update_not_applied',
+      diagnostic: await billingWriteDiagnostic(client, { tenantId, userId, returned: written || null }),
+    };
   }
   return {
     ok: true,
@@ -307,6 +363,7 @@ export const runSaveTenantBillingAccount = async ({ client, mapping, body, spoof
     const toggled = await toggleTenantAutoDebit(client, {
       tenantId: resolved.tenantId,
       enabled: body.auto_debit_enabled === true,
+      userId: mapping.application_user_id,
     });
     if (!toggled.ok) return denied(spoof, toggled);
     return { ok: true, statusCode: 200, spoofFieldsIgnored: spoof, ...toggled };

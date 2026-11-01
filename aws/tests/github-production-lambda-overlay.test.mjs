@@ -4832,11 +4832,15 @@ test('Billing route no silent no-op (2026-11-01): REPLACE tenant-settings-handle
   assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, PREVIOUS), 'utf8')).members[MEMBER].accepted_sha256, LIVE);
   assert.equal(MONEY_WRITE_FLAG.members[MEMBER].live_sha256, LIVE);
   assert.equal(MONEY_WRITE_FLAG.members[MEMBER].accepted_sha256, MONEY_WRITE_BYTES);
+  // This manifest's recorded bytes (live in staging by overlay run 41343492201). The member has since moved on to
+  // the billing route diagnostic (2026-11-01, its own test below): its row keeps this manifest's production live
+  // value and accepts main's newer bytes; this manifest keeps its recorded bytes.
+  const NOOP_BYTES = '976f8f14158757af0d1865da9bce70e5812a939502bdc2586209dfac67cccc65';
   const accepted = sha(`aws/functions/api/${MEMBER}`);
-  for (const other of [LIVE, MONEY_WRITE_BYTES]) assert.notEqual(accepted, other);
+  for (const other of [LIVE, MONEY_WRITE_BYTES, NOOP_BYTES]) assert.notEqual(accepted, other);
   assert.deepEqual(Object.keys(manifest.members), [MEMBER]);
-  assert.deepEqual(manifest.members[MEMBER], { live_sha256: LIVE, accepted_sha256: accepted, operation: 'replace', previous_manifest: PREVIOUS });
-  assert.deepEqual(PLAN.members[MEMBER], { operation: 'replace', accepted_sha256: accepted, expected_live_sha256: LIVE, sql_before: null, manifest: REL });
+  assert.deepEqual(manifest.members[MEMBER], { live_sha256: LIVE, accepted_sha256: NOOP_BYTES, operation: 'replace', previous_manifest: PREVIOUS });
+  assert.deepEqual(PLAN.members[MEMBER], { operation: 'replace', accepted_sha256: accepted, expected_live_sha256: LIVE, sql_before: null, manifest: 'aws/tests/fixtures/production-billing-route-diagnostic-manifest-2026-11-01.json' });
   assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
   // Still after money-write-flag.mjs in plan order (it imports it at load).
   assert.ok(PLAN.order.indexOf('money-write-flag.mjs') < PLAN.order.indexOf(MEMBER));
@@ -4845,14 +4849,59 @@ test('Billing route no silent no-op (2026-11-01): REPLACE tenant-settings-handle
   assert.equal(ready.state, 'READY');
   assert.equal(ready.mutation, false);
   assert.equal((await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: accepted, extra: ['money-write-flag.mjs'] }) })).state, 'ALREADY_ACCEPTED');
-  // #1498's unapplied bytes are not a production pre-state.
-  await assert.rejects(
-    run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: MONEY_WRITE_BYTES, extra: ['money-write-flag.mjs'] }) }),
-    (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
-  );
+  // #1498's unapplied bytes, and this manifest's own (staging-only) bytes, are not a production pre-state.
+  for (const notLive of [MONEY_WRITE_BYTES, NOOP_BYTES]) {
+    await assert.rejects(
+      run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: notLive, extra: ['money-write-flag.mjs'] }) }),
+      (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+      notLive,
+    );
+  }
   const source = fs.readFileSync(path.join(API, MEMBER), 'utf8');
   assert.equal((source.match(/error: 'billing_update_not_applied'/g) || []).length, 2);
   assert.ok(PLAN.notes.includes('Billing route no silent no-op (2026-11-01'));
+});
+
+test('Billing route diagnostic (2026-11-01): REPLACE tenant-settings-handlers.mjs from the production live bytes, superseding the staging-only no-silent-no-op bytes, planning only', async () => {
+  const REL = 'aws/tests/fixtures/production-billing-route-diagnostic-manifest-2026-11-01.json';
+  const MEMBER = 'tenant-settings-handlers.mjs';
+  const PREVIOUS = 'aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json';
+  const LIVE = '9766306dfccffbb515c6dd1f0a329b91a407f53eb97c1ed148c9dcc5b9f24717';
+  // The no-silent-no-op bytes (PR #1512): live in staging (overlay run 41343492201), never applied in production.
+  const NOOP_BYTES = '976f8f14158757af0d1865da9bce70e5812a939502bdc2586209dfac67cccc65';
+  const MONEY_WRITE_BYTES = 'c813c6dc5dac144f2d10d9409a4cb31cb47789080969e1c2e35f0579004d3caa';
+  const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, REL), 'utf8'));
+  assert.equal(manifest.workstream_id, 'billing-route-diagnostic');
+  assert.equal(manifest.deploy_authorized, false);
+  assert.match(manifest.authorization, /^Pending owner review/);
+  assert.equal(manifest.live_lambda, FUNCTION_NAME);
+  for (const evidence of ['billing_update_not_applied', '41343492201', NOOP_BYTES, '#1512', 'No SQL change', 'no ids']) assert.ok(manifest.notes.includes(evidence), evidence);
+  const accepted = sha(`aws/functions/api/${MEMBER}`);
+  for (const other of [LIVE, NOOP_BYTES, MONEY_WRITE_BYTES]) assert.notEqual(accepted, other);
+  assert.deepEqual(Object.keys(manifest.members), [MEMBER]);
+  assert.deepEqual(manifest.members[MEMBER], { live_sha256: LIVE, accepted_sha256: accepted, operation: 'replace', previous_manifest: PREVIOUS });
+  assert.deepEqual(PLAN.members[MEMBER], { operation: 'replace', accepted_sha256: accepted, expected_live_sha256: LIVE, sql_before: null, manifest: REL });
+  assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
+  assert.ok(PLAN.order.indexOf('money-write-flag.mjs') < PLAN.order.indexOf(MEMBER));
+  const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
+  const ready = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: LIVE, extra: ['money-write-flag.mjs'] }) });
+  assert.equal(ready.state, 'READY');
+  assert.equal(ready.mutation, false);
+  assert.equal((await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: accepted, extra: ['money-write-flag.mjs'] }) })).state, 'ALREADY_ACCEPTED');
+  for (const notLive of [MONEY_WRITE_BYTES, NOOP_BYTES]) {
+    await assert.rejects(
+      run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: notLive, extra: ['money-write-flag.mjs'] }) }),
+      (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+      notLive,
+    );
+  }
+  const source = fs.readFileSync(path.join(API, MEMBER), 'utf8');
+  // Both refusals carry the diagnostic; the probes are SELECTs only.
+  assert.equal((source.match(/diagnostic: await billingWriteDiagnostic\(client, \{ tenantId, userId, returned: /g) || []).length, 2);
+  const probes = source.slice(source.indexOf('const BILLING_DIAGNOSTIC_PROBES'), source.indexOf('export const billingWriteDiagnostic'));
+  assert.doesNotMatch(probes, /\b(INSERT|UPDATE|DELETE|TRUNCATE|ALTER|GRANT|REVOKE|CREATE|DROP)\b/);
+  assert.doesNotMatch(probes, /\bqual\b|with_check/);
+  assert.ok(PLAN.notes.includes('Billing route diagnostic (2026-11-01'));
 });
 
 test('Payee bank-add verified guard (finding 18, SQL 138 API half): REPLACE providers/payees/handlers.mjs from the Moov payees applied bytes, planning only', async () => {
@@ -5034,10 +5083,10 @@ test('Money-write flag (finding 14 step 1, 2026-10-31): ADD money-write-flag.mjs
   assert.deepEqual(Object.keys(manifest.members), [ADD, ...REPLACES]);
   assert.deepEqual(manifest.members[ADD], { live_sha256: null, accepted_sha256: sha(`aws/functions/api/${ADD}`), operation: 'add' });
   assert.deepEqual(PLAN.members[ADD], { operation: 'add', accepted_sha256: sha(`aws/functions/api/${ADD}`), expected_live_sha256: null, sql_before: null, manifest: MONEY_WRITE_FLAG_REL });
-  // tenant-settings-handlers.mjs has since moved on to the billing route no-silent-no-op fix (2026-11-01), whose
+  // tenant-settings-handlers.mjs has since moved on (2026-11-01: the billing route no-silent-no-op fix, then its diagnostic), whose
   // REPLACE starts from the same production live bytes (its own test below): its row keeps this manifest's live
   // value and accepts main's newer bytes; this manifest keeps its recorded #1498 bytes.
-  const MOVED_ON = { 'tenant-settings-handlers.mjs': 'aws/tests/fixtures/production-billing-route-no-silent-noop-manifest-2026-11-01.json' };
+  const MOVED_ON = { 'tenant-settings-handlers.mjs': 'aws/tests/fixtures/production-billing-route-diagnostic-manifest-2026-11-01.json' };
   for (const member of REPLACES) {
     const entry = manifest.members[member];
     // Each REPLACE starts from the bytes its previous manifest accepted (live by the third rebuild or a recorded apply).

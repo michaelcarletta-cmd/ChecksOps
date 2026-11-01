@@ -1,0 +1,15 @@
+{
+  "workstream_id": "billing-route-diagnostic",
+  "authorization": "Pending owner review (2026-11-01). Planning only: nothing is live or verified. Each production apply still needs its own owner approval and staging acceptance.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Billing route diagnostic (2026-11-01; owner 2026-11-01 \"add the billing diagnostic\"): after the no-silent-no-op fix (PR #1512, 976f8f14158757af0d1865da9bce70e5812a939502bdc2586209dfac67cccc65, staging overlay run 41343492201) the owner, a tenant_users member of Freedom Adjustment, unchecked monthly auto-debit in staging and got \"The change was not saved\" (409 billing_update_not_applied): the UPDATE on tenant_billing_accounts returned no row with no SQL error. These bytes add billingWriteDiagnostic to that refusal (toggle and save): a read-only probe, in the same session and transaction (rolled back by withIdentity because the result is ok:false), of the visible row count for the tenant, public.aws_can_write_tenant, public.aws_is_tenant_member, whether auth.uid() is set and equals the caller, current_user, the pg_policies names/permissive/cmd/roles and pg_class relrowsecurity/relforcerowsecurity for public.tenant_billing_accounts. Booleans, counts and names only: no ids, no policy expressions, no other tenant's data; each probe in its own savepoint, a failing probe reports only its SQLSTATE. The billing panel shows it as a compact code. Success paths and who may call the route are unchanged; no new write. REPLACE from production's live bytes 9766306d (the same expected_live as the no-silent-no-op manifest; neither 976f8f14 nor #1498's c813c6dc reached production). Staging runs 976f8f14, so the staging overlay is 976f8f14 -> these bytes. No SQL change. No release-lock change.",
+  "members": {
+    "tenant-settings-handlers.mjs": {
+      "live_sha256": "9766306dfccffbb515c6dd1f0a329b91a407f53eb97c1ed148c9dcc5b9f24717",
+      "accepted_sha256": "2fd838410f41287f75181ec3597bde89f27144e466a7a8847128ef34cbbd18a1",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
+    }
+  }
+}
