@@ -40,9 +40,20 @@ test('link and auto-debit go through save-tenant-billing-account with the fields
   // billing_update_not_applied shows the route's read-only diagnostic as a compact code (no ids).
   assert.match(panel, /export function billingDiagnosticCode\(/);
   assert.match(panel, /if \(code === "billing_update_not_applied"\) \{\s*const detail = billingDiagnosticCode\(payload\?\.diagnostic\);/);
-  for (const key of ['row_visible', 'can_write_tenant', 'is_tenant_member', 'auth_uid_set', 'auth_uid_matches_caller', 'current_user', 'rls_enabled', 'rls_forced', 'returned_row', 'policies']) {
+  for (const key of ['row_visible', 'can_write_tenant', 'is_tenant_member', 'auth_uid_set', 'auth_uid_matches_caller', 'current_user', 'rls_enabled', 'rls_forced', 'returned_row', 'policies', 'triggers', 'rules', 'trial_update']) {
     assert.ok(panel.includes(`diagnostic.${key}`), key);
   }
+  // Triggers, rules and the trial update: one trg: segment per trigger (name/timing/events/enabled/null-path y|n),
+  // rules:<name>/<instead y|n>/<nothing y|n> or rules:none, trial:<rows>; all placed after ret: and before policies:.
+  const code = panel.slice(panel.indexOf('export function billingDiagnosticCode('), panel.indexOf('function billingErrorMessage('));
+  assert.match(code, /parts\.push\(`trg:\$\{String\(t\.name \?\? "\?"\)\}\/\$\{String\(t\.timing \?\? "\?"\)\}\/\$\{String\(t\.events \?\? "\?"\)\}\/\$\{String\(t\.enabled \?\? "\?"\)\}\/\$\{yn\(t\.fn_returns_null_on_some_path\)\}`\)/);
+  assert.match(code, /if \(triggers\.length === 0\) parts\.push\("trg:none"\);/);
+  assert.match(code, /`\$\{String\(r\.name \?\? "\?"\)\}\/\$\{yn\(r\.is_instead\)\}\/\$\{yn\(r\.nothing\)\}`/);
+  assert.match(code, /parts\.push\(`rules:\$\{rules \|\| "none"\}`\)/);
+  assert.match(code, /parts\.push\(`trial:\$\{"error" in trial \? `err\$\{String\(trial\.error\)\}` : show\(trial\.rows\)\}`\)/);
+  const order = ['`ret:', '`trg:', '`rules:', '`trial:', '`policies:'].map((s) => code.indexOf(s));
+  assert.ok(order.every((i) => i > 0), JSON.stringify(order));
+  assert.deepEqual([...order].sort((a, b) => a - b), order);
   // A change the database did not make is named, not shown as saved.
   assert.match(panel, /billing_update_not_applied: "The change was not saved\. Contact ChecksOps support\."/);
   // On success both actions write the row the server stored into the card's cache.
@@ -67,7 +78,11 @@ test('the route exists, is dispatched, and reads exactly what the panel sends', 
   assert.match(handlers, /stakeholderId: body\.stakeholder_account_id \|\| body\.stakeholderAccountId \|\| null/);
   assert.match(handlers, /authorized: body\.authorized === true \|\| body\.authorize_ach === true/);
   // The route sets the server-only money-write flag before each write.
-  assert.equal((handlers.match(/await setMoneyWriteFlag\(client\);/g) || []).length, 2);
+  // Two writes, plus the diagnostic's no-op trial update (rolled back to its own savepoint), which runs flagged like
+  // the refused write it diagnoses.
+  assert.equal((handlers.match(/await setMoneyWriteFlag\(client\);/g) || []).length, 3);
+  const diagnostic = handlers.slice(handlers.indexOf('export const billingWriteDiagnostic'), handlers.indexOf('const loadAuthorization'));
+  assert.match(diagnostic, /await client\.query\('SAVEPOINT billing_diag_trial_update'\);\s*try \{\s*await setMoneyWriteFlag\(client\);/);
   // A write that changed no row is refused, never reported as saved.
   assert.equal((handlers.match(/error: 'billing_update_not_applied'/g) || []).length, 2);
 });
