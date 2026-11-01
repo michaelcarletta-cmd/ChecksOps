@@ -83,6 +83,7 @@ on:
           - sql133-financial-totp-admin-reset-enrollment
           - sql134-loss-draft-escrow-write-grants
           - sql135-check-create-insert-grant
+          - sql136-money-write-restrictive-policies
           - sql137-platform-owner-identity
           - sql138-payee-setup-link-closed-after-verification
       approved_commit:
@@ -221,6 +222,7 @@ jobs:
           node --test aws/tests/release-sql133-executor.test.mjs
           node --test aws/tests/release-sql134-executor.test.mjs
           node --test aws/tests/release-sql135-executor.test.mjs
+          node --test aws/tests/release-sql136-executor.test.mjs
           node --test aws/tests/release-sql137-executor.test.mjs
           node --test aws/tests/release-sql138-executor.test.mjs
           node --test aws/tests/mortgage-executor-commit-outcome.test.mjs

@@ -1,5 +1,5 @@
 /**
- * One engine for the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108 to SQL 135, SQL 137, SQL 138), shared by the staging
+ * One engine for the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108 to SQL 138), shared by the staging
  * guarded executor (aws/write-path/guarded-sql-executor/index.mjs) and the production tools
  * (release-sql-production-apply.mjs): the catalog state reader, the code-derived
  * fingerprints, the pre- and post-conditions, the predecessor rules and the unrelated-catalog
@@ -896,6 +896,13 @@ export function releaseSharedPreconditionFailures(key, state, text, { environmen
         || c.platform_billing_destination_rows === 0
         || reviewedRow === true]);
     }
+    // SQL 136: the restrictive money-write policies do not apply to a SECURITY DEFINER writer owned by a
+    // role that bypasses the table's RLS, as long as no money table is FORCE RLS; a SECURITY INVOKER
+    // trigger function writing a money table would be refused on any write that did not set the flag.
+    // Read-only catalog counts (never rows); an unreadable count (null) fails closed.
+    if (extra === 'money_tables_not_forced_rls') checks.push(['money_tables_not_forced_rls', s.counts?.money_tables_forced_rls === 0]);
+    if (extra === 'money_definer_writers_bypass_rls') checks.push(['money_definer_writers_bypass_rls', s.counts?.money_definer_writers_without_bypass === 0]);
+    if (extra === 'no_invoker_trigger_money_writers') checks.push(['no_invoker_trigger_money_writers', s.counts?.money_invoker_trigger_writers === 0]);
     // SQL 98: the per-check default price exists (an active row), or the file seeds it (no row).
     if (extra === 'check_billing_config_active_or_empty') {
       checks.push(['check_billing_config_active_or_empty', s.counts?.check_billing_config_active_rows > 0 || s.counts?.check_billing_config_rows === 0]);

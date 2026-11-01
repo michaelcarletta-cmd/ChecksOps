@@ -1,0 +1,64 @@
+{
+  "id": "sql136-money-write-restrictive-policies-production-apply",
+  "migration": "sql136",
+  "authorization": "pending",
+  "execute": false,
+  "target_environment": "production",
+  "target_component": "production-sql",
+  "deployment_type": "sql-apply",
+  "filename": "aws/workflows/sql/136_money_write_restrictive_policies.sql",
+  "migration_id": "136_money_write_restrictive_policies",
+  "staging_pin_commit": "49c98b84a6e1ed66ca895e7c23d590ee736fcbdc",
+  "source_sha256": "b10a380812a2708886c04d7cc24b74a329b2d1f566105dcf9b1e9f8c595e82e2",
+  "function_identities": [
+    "public.aws_money_write_allowed()"
+  ],
+  "expected_live_definition_sha256": null,
+  "intended_replacement_sha256": "f8269d3e1f788d50ad0cbbb4b95829b3ee83b05cda91798c5f57491c8e5d26a7",
+  "authorization_phrase": "APPLY_MONEY_WRITE_RESTRICTIVE_POLICIES",
+  "predecessors": [],
+  "order_note": "No predecessor; SQL 91's public.aws_moov_onboarding_active() and public.aws_moov_webhook_apply_active() are prerequisites (spec prerequisites, with the 24 money tables and roles checksops and authenticated; the file raises sql136_table_missing, sql136_function_missing or sql136_role_missing otherwise). MUST NOT be applied in production before #1498's API is live in production: the eight overlay members (money-write-flag.mjs ADD, then providers/production/moov-wallet-sync.mjs, providers/parity/moov-functions.mjs, tenant-settings-handlers.mjs, tenant-collection-v2-settlement.mjs, tenant-collection-v2.mjs, tenant-billing-engine.mjs, tenant-billing-handlers.mjs, each through its own guarded production overlay run, in plan order) AND a full production Lambda rebuild carrying invoice-provider.mjs, mortgage-ops-usage.mjs and tenant-collection-v2-uat.mjs. Nothing in this tool can check the Lambda; the reviewed change that sets execute true must record the overlay run ids and the rebuild run id that put them live. The applying login must own every money table (altered_relations_owned_by_login: CREATE POLICY needs the owner) and the new function (functions_owned_by_login). The engine's read-only catalog counts must be 0 before any apply: money_tables_forced_rls (money_tables_not_forced_rls; file: sql136_force_rls), money_definer_writers_without_bypass (money_definer_writers_bypass_rls; file: sql136_definer_writer_cannot_bypass_rls) and money_invoker_trigger_writers (no_invoker_trigger_money_writers; file: sql136_invoker_trigger_writes_money_table: the live-only tg_accrue_mortgage_ops_billing, if SECURITY INVOKER, stops it here); money_invoker_function_writers is reported only (a SECURITY INVOKER non-trigger function writing a money table works only when its caller set a flag first; a non-zero count must be reviewed before the apply). Expected production pre-state if no object of the file exists yet: 6b404964de5ee203e126bc3ce78395c9a9e2fbf3a1e41eb0b5ccd8fa3e3ea150 (aws_money_write_allowed() and the 72 policies absent; derived by aws/tests/release-sql136-executor.test.mjs and read back on PostgreSQL 16). Adds no trigger, changes no existing policy, grant, table, column or row.",
+  "admin_login": "checksops_admin",
+  "rds_identifier": "checksops-production",
+  "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
+  "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
+  "tooling": {
+    "status": "built",
+    "production_tool": "scripts/deployment-guard/sql136-money-write-restrictive-policies-production-apply.mjs",
+    "production_lib": "scripts/deployment-guard/lib/release-sql-production-apply.mjs",
+    "staging_executor_handler": "aws/write-path/guarded-sql-executor/index.mjs handleReleaseSqlMigration",
+    "staging_workflow_choice": "sql136-money-write-restrictive-policies",
+    "one_shot_migration": "sql136",
+    "fingerprint_engine": "scripts/deployment-guard/lib/release-sql-state.mjs",
+    "runbook": "ops/production-sql-136-apply.md",
+    "tests": [
+      "aws/tests/release-sql136-executor.test.mjs",
+      "aws/tests/release-sql136-production-apply.test.mjs",
+      "aws/tests/release-sql90-97-executor.test.mjs",
+      "aws/tests/release-sql90-97-production-apply.test.mjs",
+      "aws/tests/sql136-money-write-restrictive-pg.test.mjs"
+    ],
+    "note": "Guarded tooling for SQL 136: sql136-money-write-restrictive-policies-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql136-money-write-restrictive-policies); production-sql-one-shot.mjs --migration sql136. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): public.aws_money_write_allowed() (sql, STABLE, SECURITY INVOKER, EXECUTE authenticated, checksops and the owner) and the 72 RESTRICTIVE policies TO authenticated (INSERT WITH CHECK, UPDATE USING and WITH CHECK, DELETE USING, each public.aws_money_write_allowed()). The tooling does not authorize anything: this pin stays execute false until a reviewed change records the API rollout, the staging acceptance, the production inspect and an owner approval."
+  },
+  "production_inspect": {
+    "status": "pending",
+    "date": null,
+    "ssm_command_id": null,
+    "source_commit": null,
+    "read_only": true,
+    "connected_as": "checksops_admin",
+    "live_definition_sha256": null,
+    "apply_preconditions_met": null,
+    "precondition_failures": null,
+    "note": "Pending: no read-only production inspect has been run for SQL 136 yet, and none is useful before #1498's API is live in production. Expected: every prerequisite present (prerequisites_missing []), the 24 tables and the function owned by checksops_admin, counts money_tables_forced_rls 0, money_definer_writers_without_bypass 0, money_invoker_trigger_writers 0 (money_invoker_function_writers reported), already_applied false. Expected release-engine fingerprint under sql136: 6b404964de5ee203e126bc3ce78395c9a9e2fbf3a1e41eb0b5ccd8fa3e3ea150 (the function and the 72 policies absent). Record the one-shot --phase inspect's date, SSM command id, source commit, live_definition_sha256, prerequisites_missing, counts, precondition_failures and apply_preconditions_met here, and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. If precondition_failures is not [], a count is not 0 or the pre-state differs, stop: that needs its own reviewed change."
+  },
+  "intended_post_state": {
+    "fingerprint": "f8269d3e1f788d50ad0cbbb4b95829b3ee83b05cda91798c5f57491c8e5d26a7",
+    "note": "public.aws_money_write_allowed(): LANGUAGE sql, STABLE, SECURITY INVOKER, RETURNS boolean, owned by checksops_admin, EXECUTE authenticated, checksops and the owner (PUBLIC revoked), true only while request.money_write, request.financial_execution, request.moov_onboarding or request.provider_webhook_apply is 1. On each of the 24 money tables three RESTRICTIVE policies TO authenticated: aws_money_write_gate_insert_<table> (INSERT WITH CHECK), aws_money_write_gate_update_<table> (UPDATE USING and WITH CHECK), aws_money_write_gate_delete_<table> (DELETE USING), each public.aws_money_write_allowed(). Every existing policy, grant, table, column, trigger and row unchanged. The fingerprint is releaseIntendedHash('sql136', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): f8269d3e1f788d50ad0cbbb4b95829b3ee83b05cda91798c5f57491c8e5d26a7."
+  },
+  "staging_acceptance": {
+    "ok": false,
+    "reference": null,
+    "basis": "Pending: record the guarded staging SQL executor read-live and the staging apply of SQL 136 (choice sql136-money-write-restrictive-policies) here in the reviewed change that sets execute true, after #1498's API is live in staging, with an owner check that the staging money flows (billing, collection, invoices, wallet sync, payee and onboarding) still write. The behavior is covered on PostgreSQL 16 by aws/tests/sql136-money-write-restrictive-pg.test.mjs. Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+  }
+}
