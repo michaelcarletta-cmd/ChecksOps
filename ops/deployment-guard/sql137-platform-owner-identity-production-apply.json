@@ -1,8 +1,8 @@
 {
   "id": "sql137-platform-owner-identity-production-apply",
   "migration": "sql137",
-  "authorization": "Owner approved 2026-11-01 (the owner's words for SQL 137: \"Merge 1492, 1493, then continue with SQL137 staging\" (2026-10-31), \"record the SQL 137 staging pin\" (2026-10-31), \"apply SQL 137 in staging\" (2026-10-31), \"SQL 137 works in staging\" (2026-11-01), \"start the SQL runner for the SQL 137 production inspect\" (2026-11-01) and \"Merge 1591 and I choose option A\" (2026-11-01: option A, record the read production pre-state although it is not the predicted one; 1591 read as 1501), none of them words for the production apply; the change itself is reviewed and merged by the owner): production apply of SQL 137 after the staging acceptance below (production 15fecb5b913a30860ae5fc03d58b4108c27f1692c07b5edf2f90e0a9f9b1c095 -> 9a88fca29d21f5537052f475f4133f05e89e002bdf00b22cfc3cf2cf78c6d8da); execute true takes effect only when the owner reviews and merges this change. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
-  "execute": true,
+  "authorization": "Applied to production on 2026-11-01; execute is false again, so this pin is no longer a standing authorization and a re-apply needs a new reviewed pin change. The owner approved the SQL 137 production pin change on 2026-11-01 in the words \"Merge 1492, 1493, then continue with SQL137 staging\", \"record the SQL 137 staging pin\", \"apply SQL 137 in staging\", \"SQL 137 works in staging\", \"start the SQL runner for the SQL 137 production inspect\" and \"Merge 1591 and I choose option A\" (1591 read as #1501; option A: record the read production pre-state although it is not the predicted one; none of them words for the production apply; 15fecb5b -> 9a88fca2, #1502, merged on \"Merge 1502 and A\") and the one apply run recorded in applied (workstream prod-sql137-platform-owner-identity-20261101) in the words \"apply SQL 137 in production\", passed to it verbatim. That approval covered that run only.",
+  "execute": false,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -60,5 +60,257 @@
     "ok": true,
     "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/41236898030",
     "basis": "Guarded staging SQL executor apply of sql137-platform-owner-identity, run 41236898030 (2026-10-31, main 41827fcc42eb00cfe8591087aab3fc8ea798c648, wave 32, workstream github-staging-sql-41236898030, staging pin commit 556626cb5135cc5cd8787c42edec8a3c5b07bc91, staging pin PR #1499, on the executor deployed by deploy run 41236640767: sIf1rFWcrsTF2+B9dYSRe1c6Ydn1qI+V/8o8lG5ceXE=, RevisionId efe8b01a-0ab2-4eb1-97c5-603a0db0e007, previous m30FadRmX2njQ2GTbBbysuzIG99OyHxXIIFu2OL2uZ4= / e6b92528-c9bb-41c6-a499-13e00d67ee2d), from the staging pre-state recorded by read-live run 41234275408 (a2c2d856a21c52d47544fad05e0f0275a24a093421c8a7a7fbeea0e4bb329dfc): receipt before a2c2d856a21c52d47544fad05e0f0275a24a093421c8a7a7fbeea0e4bb329dfc, after 9a88fca29d21f5537052f475f4133f05e89e002bdf00b22cfc3cf2cf78c6d8da == intended, result applied; is_platform_owner() intended, function_acl authenticated EXECUTE, checksops EXECUTE and owner EXECUTE, identity_accounts with no UPDATE, DELETE or TRUNCATE grant (other_write_grants []); the owner-row checks passed. Read-live run 41237134081 then reported already_applied true, live 9a88fca29d21f5537052f475f4133f05e89e002bdf00b22cfc3cf2cf78c6d8da, precondition_failures []. Owner acceptance 2026-11-01: \"SQL 137 works in staging\" (signed in on staging as the platform owner and loaded /admin/tenants). Production's pre-state (production_inspect) differs from staging's: production has no authenticated EXECUTE, has checksops DELETE as well as UPDATE on identity_accounts, and its function definition is neither staging's nor aws/rls/sql/10's; SQL 137 replaces the function whole and sets every grant it covers, so it reaches the same intended state from either (owner-accepted 2026-11-01, option A). The function and grants are covered on PostgreSQL 16 by aws/tests/sql137-platform-owner-identity-pg.test.mjs and through the executor by aws/tests/release-sql137-executor.test.mjs. The same file bytes (source_sha256) are pinned in both."
+  },
+  "applied": {
+    "date": "2026-11-01",
+    "result": "applied",
+    "source_commit": "e8ef1f52dfaafd812b86aead3e6063f8f95d72c7",
+    "source_commit_basis": "SOURCE_COMMIT in the tarball (written by sql53-temporary-transfer) equals --commit, and the tarball sha256 equals --expected-tarball-sha256 as copied by the operator from that transfer run's log (TARBALL_SHA256 line); the run log itself was not read by the one-shot.",
+    "source_tarball": {
+      "file": "source-e8ef1f52dfaafd812b86aead3e6063f8f95d72c7.tar.gz",
+      "sha256": "af52eb51781970da1b36757c9dc4e120d989cf2c96626ac8d93159486dba0552"
+    },
+    "migration_source_sha256": "f1308cbdcb58ddcca23be9139dc32ebb28bc912ce5541327777a8027b843d5bb",
+    "migration_source_sha256_note": "The one-shot source step hashed aws/workflows/sql/137_platform_owner_identity.sql in the transfer tarball: equal to source_sha256 (the pin; migration_matches_pin true).",
+    "runner": "i-0c35557c4e5385406",
+    "runner_basis": "operator-supplied --runner (not verified by the one-shot)",
+    "workstream_id": "prod-sql137-platform-owner-identity-20261101",
+    "one_use_id": "sql137-prod-bff421b2-1636-4a3e-9a71-bc51f7157b49",
+    "one_use_id_consumed": true,
+    "one_use_id_consumed_basis": "Inferred from the successful apply (the tool records the one_use_id after COMMIT and only warns if that write fails); the consumed-registry entry was not read back separately.",
+    "owner_approval": "apply SQL 137 in production",
+    "owner_approval_basis": "As passed in --approval-statement for --approval-scope sql137; the one-shot cannot verify who said it. The owner's words of 2026-11-01 for this run were \"apply SQL 137 in production\", given after the pin change (#1502, merged to main as e8ef1f52d on the owner's \"Merge 1502 and A\") whose authorization recorded that no words for the production apply had been given yet; they were passed verbatim as the approval statement for the --phase inspect run and the --phase apply run.",
+    "operator": "michaelcarletta-cmd",
+    "apply_ssm_command_id": "217d0d6a-c505-40ff-9808-12f9bf21ccba",
+    "one_shot_run_id": "a7cd33a1-855c-43f4-aa52-58f196dea7cc",
+    "one_shot_note": "One SSM command (217d0d6a-c505-40ff-9808-12f9bf21ccba on i-0c35557c4e5385406, comment \"SQL 137 one-shot apply (owner: apply SQL 137 in production)\", sent 2026-11-01, Success, the command printed EXIT=0; the runner was started from stopped for this run at 2026-11-01T11:17:58Z, SSM online at 11:18:14Z, and stopped again at 11:20:00Z, StateTransitionReason \"User initiated (2026-11-01 11:19:29 GMT)\", with no SSM command left in progress) ran the production-sql-one-shot --phase apply (run_id a7cd33a1-855c-43f4-aa52-58f196dea7cc) from main e8ef1f52d (transfer run 41263811958, sql53-temporary-transfer.yml on main after the #1502 merge; tarball sha256 af52eb51781970da1b36757c9dc4e120d989cf2c96626ac8d93159486dba0552). Before it, a separate one-shot --phase inspect on the same tarball and the same approval statement (SSM b5f541cd-6eaf-4c26-88ef-d49270f9b458, run_id a9ce8db7-5df5-47d8-8d22-7961c8032341, EXIT=0, steps pin, source, inspect and contracts ok, nothing written) read live 15fecb5b913a30860ae5fc03d58b4108c27f1692c07b5edf2f90e0a9f9b1c095 (live_matches_expected true, already_applied false, apply_preconditions_met true, precondition_failures [], prerequisites_missing [], predecessors {} (none)), the pre-state the read-only inspect recorded in production_inspect (SSM 9d865a2c-c032-4f8c-8d81-d7420e6edb90). The apply run's own inspect step read the same. Steps pin (execute true, staging_acceptance run 41236898030), source (tarball sha256 matches the sidecar and --expected-tarball-sha256, tree matches the tarball, migration source == pin), inspect, contracts (claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43), manifest, source-recheck-before-preflight, preflight, evaluate, source-recheck-before-apply, apply (applied) and post-apply-inspect all ok. The run's JSON arrived whole (19698 characters of SSM output, under the 24000-character limit): every field of the applied object is recorded as printed, except this note and owner_approval_basis, which are extended as in the SQL 127 to SQL 134 records (the one-shot's own one_shot_note read: \"One production-sql-one-shot run verified the source, ran the read-only inspect and the runner contracts, built the manifest, issued the receipt and lease (preflight), evaluated (sql137_production_apply_allowed true), applied (exit 0) and ran the post-apply inspect.\"; its owner_approval_basis read: \"As passed in --approval-statement for --approval-scope sql137; the one-shot cannot verify who said it.\"). The printed applied.receipt equals the run's top-level details.apply_result, and applied.post_apply_inspect, pre_apply_inspect and contract_results equal the top-level objects of the same name. This block adds migration_source_sha256 (with its note), apply_ssm_command_id, steps and manifest_sha256 from the same run's details, as the SQL 127 to SQL 134 records do. The run's not_observed_by_this_run list names ssm_command_id and source_staged_by, supplied here as apply_ssm_command_id and transfer run 41263811958. The post-apply inspect reported live 9a88fca29d21f5537052f475f4133f05e89e002bdf00b22cfc3cf2cf78c6d8da == intended, already_applied true, precondition_failures []: is_platform_owner() intended with EXECUTE for authenticated, checksops and the owner only (PUBLIC revoked), and identity_accounts with no UPDATE, DELETE or TRUNCATE line (other_write_grants []). Owner acceptance in production, 2026-11-01: \"Admin tenants works in production, record SQL 137\" (signed in as the platform owner and loaded /admin/tenants).",
+    "steps": [
+      "pin",
+      "source",
+      "inspect",
+      "contracts",
+      "manifest",
+      "source-recheck-before-preflight",
+      "preflight",
+      "evaluate",
+      "source-recheck-before-apply",
+      "apply",
+      "post-apply-inspect"
+    ],
+    "contract_results": {
+      "claim-ledger": {
+        "ok": true,
+        "test": "aws/tests/claim-ledger-accepted-contract.test.mjs",
+        "evidence": "4/4 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at e8ef1f52dfaafd812b86aead3e6063f8f95d72c7 (production-sql-one-shot a7cd33a1-855c-43f4-aa52-58f196dea7cc, node --test)"
+      },
+      "tenant-isolation": {
+        "ok": true,
+        "test": "aws/tests/tenant-security-compliance.test.mjs",
+        "evidence": "6/6 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at e8ef1f52dfaafd812b86aead3e6063f8f95d72c7 (production-sql-one-shot a7cd33a1-855c-43f4-aa52-58f196dea7cc, node --test)"
+      },
+      "financial-write-protections": {
+        "ok": true,
+        "test": "aws/tests/api-write.test.mjs",
+        "evidence": "43/43 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at e8ef1f52dfaafd812b86aead3e6063f8f95d72c7 (production-sql-one-shot a7cd33a1-855c-43f4-aa52-58f196dea7cc, node --test)"
+      }
+    },
+    "pre_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "15fecb5b913a30860ae5fc03d58b4108c27f1692c07b5edf2f90e0a9f9b1c095",
+      "live_matches_expected": true,
+      "already_applied": false,
+      "predecessors": {},
+      "predecessors_applied": true,
+      "missing_dependencies": [],
+      "apply_preconditions_met": true,
+      "precondition_failures": [],
+      "current_user": "checksops_admin",
+      "session_user": "checksops_admin",
+      "counts": null,
+      "successors_applied": [],
+      "release_sql_inspect": {
+        "live_definition_sha256": "15fecb5b913a30860ae5fc03d58b4108c27f1692c07b5edf2f90e0a9f9b1c095",
+        "prerequisites_missing": [],
+        "predecessors": {},
+        "successors_applied": [],
+        "functions": [
+          {
+            "name": "is_platform_owner()",
+            "state": "different"
+          }
+        ],
+        "policies": [],
+        "views": [],
+        "tables": [],
+        "columns": [],
+        "constraints": [],
+        "triggers": [],
+        "table_privileges": [
+          {
+            "name": "identity_accounts",
+            "lines": [
+              "checksops DELETE",
+              "checksops UPDATE"
+            ],
+            "other_write_grants": []
+          }
+        ],
+        "function_acl": [
+          {
+            "name": "is_platform_owner()",
+            "acl": [
+              "PUBLIC EXECUTE",
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          }
+        ],
+        "acl_functions": [],
+        "indexes": [],
+        "unique_covers": [],
+        "definer_writes": [],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": null
+      }
+    },
+    "manifest_sha256": "ae5728388cf443b5e8520bd4dd0059f4cb26d2da4d88f7feade2e63698848fe9",
+    "receipt": {
+      "migration": "sql137",
+      "workstream": "prod-sql137-platform-owner-identity-20261101",
+      "commit": "e8ef1f52dfaafd812b86aead3e6063f8f95d72c7",
+      "sql_file": "aws/workflows/sql/137_platform_owner_identity.sql",
+      "before_hash": "15fecb5b913a30860ae5fc03d58b4108c27f1692c07b5edf2f90e0a9f9b1c095",
+      "after_hash": "9a88fca29d21f5537052f475f4133f05e89e002bdf00b22cfc3cf2cf78c6d8da",
+      "release_sql_inspect": {
+        "live_definition_sha256": "9a88fca29d21f5537052f475f4133f05e89e002bdf00b22cfc3cf2cf78c6d8da",
+        "prerequisites_missing": [],
+        "predecessors": {},
+        "successors_applied": [],
+        "functions": [
+          {
+            "name": "is_platform_owner()",
+            "state": "intended"
+          }
+        ],
+        "policies": [],
+        "views": [],
+        "tables": [],
+        "columns": [],
+        "constraints": [],
+        "triggers": [],
+        "table_privileges": [
+          {
+            "name": "identity_accounts",
+            "lines": [],
+            "other_write_grants": []
+          }
+        ],
+        "function_acl": [
+          {
+            "name": "is_platform_owner()",
+            "acl": [
+              "authenticated EXECUTE",
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          }
+        ],
+        "acl_functions": [],
+        "indexes": [],
+        "unique_covers": [],
+        "definer_writes": [],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": null
+      },
+      "unrelated_catalog_sha256": "762c27549421f43f427f0cab6f51ca1154cd252d610bc6c876528d3651a321b2",
+      "unrelated_catalog_counts": {
+        "relations": 892,
+        "columns": 3550,
+        "constraints": 2239,
+        "policies": 404,
+        "functions": 1355,
+        "indexes": 655,
+        "default_acl": 0,
+        "role_memberships": 15,
+        "roles": 29,
+        "triggers": 184,
+        "views": 25,
+        "types": 18,
+        "schema": 2
+      },
+      "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/41236898030",
+      "result": "applied"
+    },
+    "post_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "9a88fca29d21f5537052f475f4133f05e89e002bdf00b22cfc3cf2cf78c6d8da",
+      "live_matches_expected": false,
+      "already_applied": true,
+      "predecessors": {},
+      "predecessors_applied": true,
+      "missing_dependencies": [],
+      "apply_preconditions_met": false,
+      "precondition_failures": [],
+      "current_user": "checksops_admin",
+      "session_user": "checksops_admin",
+      "counts": null,
+      "successors_applied": [],
+      "release_sql_inspect": {
+        "live_definition_sha256": "9a88fca29d21f5537052f475f4133f05e89e002bdf00b22cfc3cf2cf78c6d8da",
+        "prerequisites_missing": [],
+        "predecessors": {},
+        "successors_applied": [],
+        "functions": [
+          {
+            "name": "is_platform_owner()",
+            "state": "intended"
+          }
+        ],
+        "policies": [],
+        "views": [],
+        "tables": [],
+        "columns": [],
+        "constraints": [],
+        "triggers": [],
+        "table_privileges": [
+          {
+            "name": "identity_accounts",
+            "lines": [],
+            "other_write_grants": []
+          }
+        ],
+        "function_acl": [
+          {
+            "name": "is_platform_owner()",
+            "acl": [
+              "authenticated EXECUTE",
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          }
+        ],
+        "acl_functions": [],
+        "indexes": [],
+        "unique_covers": [],
+        "definer_writes": [],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": null
+      }
+    }
+  },
+  "production_evidence": {
+    "2026-11-01 apply": "Guarded production SQL one-shot on i-0c35557c4e5385406, workstream prod-sql137-platform-owner-identity-20261101, main e8ef1f52d (tarball af52eb51…, transfer run 41263811958, migration source f1308cbd… == pin), owner-approved run (\"apply SQL 137 in production\"), pre-apply --phase inspect SSM b5f541cd-6eaf-4c26-88ef-d49270f9b458 (run_id a9ce8db7-5df5-47d8-8d22-7961c8032341, live 15fecb5b…, live_matches_expected true), apply SSM 217d0d6a-c505-40ff-9808-12f9bf21ccba, run_id a7cd33a1-855c-43f4-aa52-58f196dea7cc, one_use_id sql137-prod-bff421b2-1636-4a3e-9a71-bc51f7157b49 (spent): every step ok; contracts claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43; pre-apply inspect live 15fecb5b… (live_matches_expected true, precondition_failures [], predecessors {} (none)); the owner-row checks in the file passed (the apply committed); manifest ae572838…; 15fecb5b… -> 9a88fca2…, result applied, unrelated catalog 762c2754… (functions 1355, triggers 184); post-apply inspect already_applied true, precondition_failures []; the run's JSON arrived whole. After: is_platform_owner() decided by the identity_accounts row only, EXECUTE for authenticated, checksops and the owner (PUBLIC revoked); identity_accounts carries no UPDATE, DELETE or TRUNCATE for PUBLIC, anon, authenticated or checksops (production's checksops DELETE and UPDATE removed). Runner started 2026-11-01T11:17:58Z and stopped 11:20:00Z. Owner acceptance: \"Admin tenants works in production, record SQL 137\". execute is false so the pin is no longer a standing authorization."
   }
 }
