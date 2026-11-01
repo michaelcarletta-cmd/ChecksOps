@@ -114,7 +114,25 @@ link refused with `already_verified` for every write, reads unchanged, an unveri
 reissue unchanged). The staging pin keeps `execute: true`; the staging runs are recorded in the
 production pin's `staging_acceptance` by the production pin PR.
 
-**Status:** applied in staging (wave 33, 2026-11-01); staging acceptance: owner accepted on the tests; production pin pending (production inspect next)
+**Production inspect (2026-11-01).** Read-only `--inspect` through SSM
+`0cbe4c6b-5765-4f37-a543-1849ebcfe584` on `i-0c35557c4e5385406` (started 2026-11-01T11:50:46Z under the
+owner's words "start the SQL runner for the SQL 138 production inspect", stopped again 11:51:49Z), main
+`e8ef1f52d` (tarball sha256 `af52eb51781970da1b36757c9dc4e120d989cf2c96626ac8d93159486dba0552`, transfer
+run 41263811958, migration source `b4b3da5a…` == pin), connected as `checksops_admin`:
+`aws_public_payee_record(text, text, jsonb)` `different`, its EXECUTE ACL `checksops EXECUTE`,
+`owner EXECUTE`; `predecessors` `{"sql113": true}`, `successors_applied` `[]`; both definer writes
+(`external_payment_recipients`, `payment_provider_methods`) ok; every prerequisite present; live
+`ec36c29e3472a9777b4a1d08ff7c3da5c00b1dc70cb4b754ef5b04ff0e73633c`, `already_applied` false,
+`precondition_failures` `[]`. That is the pre-state derived above (the function as SQL 113 left it), the
+same one staging had, so the staging apply took the path production will
+(`aws/tests/sql138-payee-setup-link-closed-pg.test.mjs`). Recorded in the production pin with the staging
+apply (run 41260586254) as its staging acceptance and `execute: true` under the owner's words "record the
+SQL 138 production pin"; the owner's words so far name the staging steps, the inspect and this pin, not
+the production apply. The owner merges the pin change; the apply still needs the owner's words for that
+run and runs only after that merge is on main and staged. The known API residue above is unchanged by
+this pin.
+
+**Status:** applied in staging (wave 33, 2026-11-01); staging acceptance: owner accepted on the tests; production pin execute-authorized; not applied to production
 
 ## Fingerprint
 
