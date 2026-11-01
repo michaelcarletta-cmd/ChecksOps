@@ -132,7 +132,30 @@ the production apply. The owner merges the pin change; the apply still needs the
 run and runs only after that merge is on main and staged. The known API residue above is unchanged by
 this pin.
 
-**Status:** applied in staging (wave 33, 2026-11-01); staging acceptance: owner accepted on the tests; production pin execute-authorized; not applied to production
+**Production apply (2026-11-01).** After the pin change (#1505, merged to main as `10a8cd68c` on the
+owner's "Merge the SQL 138 production pin when green"), transfer run 41305933006 staged main `10a8cd68c`
+(tarball sha256 `3863477e0a72d9f8d23a1cd9308227975a4e66d64a61d68f7ab344883859d160`). Under the owner's
+words "apply SQL 138 in production" (passed verbatim), a one-shot `--phase inspect` (SSM
+`80ed0c70-4062-4474-bf6e-acce03997592`, run `b60c9f68-9fd6-448e-911d-976d904bc0c4`, nothing written) read
+live `ec36c29e…` (the pinned pre-state, `live_matches_expected` true, `apply_preconditions_met` true,
+`precondition_failures` `[]`); then one-shot `--phase apply` run `b3e76f4b-510f-4340-84c9-1a01cb3a48c4`
+through SSM `baf10f52-3883-4261-babc-667e0cdf1b2b`, workstream
+`prod-sql138-payee-setup-link-closed-20261101`, one_use_id
+`sql138-prod-77b84091-f40c-4762-ba16-e4b192825b00`: its own inspect step read the same pre-state;
+contracts 4/4, 6/6 and 43/43; every step ok; manifest `9d007c7f…`; receipt `ec36c29e…` →
+`9acaf809824101d8ef62098e6440ca5d06cda1bec4117118c53931130efadf48` (intended), result `applied`,
+unrelated catalog `fabd8bfc…` (functions 1355, triggers 184); post-apply inspect `already_applied` true,
+`precondition_failures` `[]`: `aws_public_payee_record(text, text, jsonb)` `intended` with EXECUTE for
+`checksops` and the owner, `predecessors.sql113` true, both definer writes ok. The run's JSON arrived whole
+(20422 characters, under SSM's 24000-character limit). Runner state: started from stopped at 2026-11-01
+12:20:43 UTC (SSM online 12:20:59 UTC) and stopped again at 12:22:14 UTC. Production acceptance: no
+hands-on check is possible (the payee setup link is only emailed, never returned to the browser); the
+owner recorded the apply on 2026-11-01, "record SQL 138", on the post-apply inspect at the intended state
+and `aws/tests/sql138-payee-setup-link-closed-pg.test.mjs`. The known API residue above (the API creates
+the Moov bank before the database refuses) is unchanged: closing it is a separate guarded Lambda change.
+
+**Status:** applied to staging (wave 33) and to production (2026-11-01); the production pin is retired
+(`execute: false`).
 
 ## Fingerprint
 

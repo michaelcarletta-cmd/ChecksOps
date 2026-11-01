@@ -1,8 +1,8 @@
 {
   "id": "sql138-payee-setup-link-closed-after-verification-production-apply",
   "migration": "sql138",
-  "authorization": "Owner approved 2026-11-01 (the owner's words for SQL 138: \"Okay, let's do option A and fix it correctly for SQL 138\" (2026-10-31), \"record the SQL 138 staging pin\" (2026-10-31), \"Merge 1500 when green\" (2026-11-01), \"apply SQL 138 in staging\" (2026-11-01), \"accept SQL 138 staging on the tests\" (2026-11-01), \"start the SQL runner for the SQL 138 production inspect\" (2026-11-01) and \"record the SQL 138 production pin\" (2026-11-01), none of them words for the production apply; the change itself is reviewed and merged by the owner): production apply of SQL 138 after the staging acceptance below (production ec36c29e3472a9777b4a1d08ff7c3da5c00b1dc70cb4b754ef5b04ff0e73633c -> 9acaf809824101d8ef62098e6440ca5d06cda1bec4117118c53931130efadf48); execute true takes effect only when the owner reviews and merges this change. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
-  "execute": true,
+  "authorization": "Applied to production on 2026-11-01; execute is false again, so this pin is no longer a standing authorization and a re-apply needs a new reviewed pin change. The owner approved the SQL 138 production pin change on 2026-11-01 in the words \"Okay, let's do option A and fix it correctly for SQL 138\", \"record the SQL 138 staging pin\", \"Merge 1500 when green\", \"apply SQL 138 in staging\", \"accept SQL 138 staging on the tests\", \"start the SQL runner for the SQL 138 production inspect\" and \"record the SQL 138 production pin\" (none of them words for the production apply; ec36c29e -> 9acaf809, #1505, merged on \"Merge the SQL 138 production pin when green\") and the one apply run recorded in applied (workstream prod-sql138-payee-setup-link-closed-20261101) in the words \"apply SQL 138 in production\", passed to it verbatim. That approval covered that run only.",
+  "execute": false,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -62,5 +62,270 @@
     "ok": true,
     "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/41260586254",
     "basis": "Guarded staging SQL executor apply of sql138-payee-setup-link-closed-after-verification, run 41260586254 (2026-11-01, main 6120c6480c49839c1450cdd74b49ae16fb624fb7, wave 33, workstream github-staging-sql-41260586254, staging pin commit c7c960f856c949a74eae9781573525828bada010, staging pin PR #1500, on the executor deployed by deploy run 41260150790: 9Hk1JOXAxS5SFjfXeEp7PXItiqVY5Z7jOuWuYXk0dZE=, RevisionId 6b55618b-bb19-4596-9749-9455f7975590, previous ceZWvwT9XGRuGDhID92gv8qB/PGFcv6sLi2fJukgixk=), from the staging pre-state recorded by read-live run 41239902526 (ec36c29e3472a9777b4a1d08ff7c3da5c00b1dc70cb4b754ef5b04ff0e73633c): receipt (job 124712852864) before ec36c29e3472a9777b4a1d08ff7c3da5c00b1dc70cb4b754ef5b04ff0e73633c, after 9acaf809824101d8ef62098e6440ca5d06cda1bec4117118c53931130efadf48 == intended, result applied; aws_public_payee_record(text, text, jsonb) intended, function_acl checksops EXECUTE and owner EXECUTE, predecessors sql113 true, definer_writes ok. Read-live run 41260787304 then reported already_applied true, live 9acaf809824101d8ef62098e6440ca5d06cda1bec4117118c53931130efadf48, precondition_failures []. Owner acceptance 2026-11-01: \"accept SQL 138 staging on the tests\" (a hands-on check is not possible in staging: the setup link is only emailed, never returned to the browser, and staging email is a sink by the owner's choice); the behavior (a verified payee's link refused with already_verified for every write, reads unchanged, an unverified payee's setup and reissue unchanged) is covered on PostgreSQL 16 by aws/tests/sql138-payee-setup-link-closed-pg.test.mjs and through the executor by aws/tests/release-sql138-executor.test.mjs. Production's pre-state (production_inspect) equals staging's, so the same path applies there. The same file bytes (source_sha256) are pinned in both."
+  },
+  "applied": {
+    "date": "2026-11-01",
+    "result": "applied",
+    "source_commit": "10a8cd68cdc322a9a4e25c1786a39022d1d1b44f",
+    "source_commit_basis": "SOURCE_COMMIT in the tarball (written by sql53-temporary-transfer) equals --commit, and the tarball sha256 equals --expected-tarball-sha256 as copied by the operator from that transfer run's log (TARBALL_SHA256 line); the run log itself was not read by the one-shot.",
+    "source_tarball": {
+      "file": "source-10a8cd68cdc322a9a4e25c1786a39022d1d1b44f.tar.gz",
+      "sha256": "3863477e0a72d9f8d23a1cd9308227975a4e66d64a61d68f7ab344883859d160"
+    },
+    "migration_source_sha256": "b4b3da5a22c18d69c143cf7e9f2add93be197304c65b70e11213d45b24392ef9",
+    "migration_source_sha256_note": "The one-shot source step hashed aws/workflows/sql/138_payee_setup_link_closed_after_verification.sql in the transfer tarball: equal to source_sha256 (the pin; migration_matches_pin true).",
+    "runner": "i-0c35557c4e5385406",
+    "runner_basis": "operator-supplied --runner (not verified by the one-shot)",
+    "workstream_id": "prod-sql138-payee-setup-link-closed-20261101",
+    "one_use_id": "sql138-prod-77b84091-f40c-4762-ba16-e4b192825b00",
+    "one_use_id_consumed": true,
+    "one_use_id_consumed_basis": "Inferred from the successful apply (the tool records the one_use_id after COMMIT and only warns if that write fails); the consumed-registry entry was not read back separately.",
+    "owner_approval": "apply SQL 138 in production",
+    "owner_approval_basis": "As passed in --approval-statement for --approval-scope sql138; the one-shot cannot verify who said it. The owner's words of 2026-11-01 for this run were \"apply SQL 138 in production\", given after the pin change (#1505, merged to main as 10a8cd68c on the owner's \"Merge the SQL 138 production pin when green\") whose authorization recorded that no words for the production apply had been given yet; they were passed verbatim as the approval statement for the --phase inspect run and the --phase apply run.",
+    "operator": "michaelcarletta-cmd",
+    "apply_ssm_command_id": "baf10f52-3883-4261-babc-667e0cdf1b2b",
+    "one_shot_run_id": "b3e76f4b-510f-4340-84c9-1a01cb3a48c4",
+    "one_shot_note": "One SSM command (baf10f52-3883-4261-babc-667e0cdf1b2b on i-0c35557c4e5385406, comment \"SQL 138 one-shot apply\", sent 2026-11-01, Success, the command printed EXIT=0; the runner was started from stopped for this run at 2026-11-01T12:20:43Z, SSM online at 12:20:59Z, and stopped again at 12:22:14Z, StateTransitionReason \"User initiated (2026-11-01 12:21:58 GMT)\", with no SSM command left in progress) ran the production-sql-one-shot --phase apply (run_id b3e76f4b-510f-4340-84c9-1a01cb3a48c4) from main 10a8cd68c (transfer run 41305933006, sql53-temporary-transfer.yml on main after the #1505 merge; tarball sha256 3863477e0a72d9f8d23a1cd9308227975a4e66d64a61d68f7ab344883859d160). Before it, a separate one-shot --phase inspect on the same tarball and the same approval statement (SSM 80ed0c70-4062-4474-bf6e-acce03997592, run_id b60c9f68-9fd6-448e-911d-976d904bc0c4, EXIT=0, steps pin, source, inspect and contracts ok, nothing written) read live ec36c29e3472a9777b4a1d08ff7c3da5c00b1dc70cb4b754ef5b04ff0e73633c (live_matches_expected true, already_applied false, apply_preconditions_met true, precondition_failures [], prerequisites_missing [], predecessors sql113 true), the pre-state the read-only inspect recorded in production_inspect (SSM 0cbe4c6b-5765-4f37-a543-1849ebcfe584). The apply run's own inspect step read the same. Steps pin (execute true, staging_acceptance run 41260586254), source (tarball sha256 matches the sidecar and --expected-tarball-sha256, tree matches the tarball, migration source == pin), inspect, contracts (claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43), manifest, source-recheck-before-preflight, preflight, evaluate, source-recheck-before-apply, apply (applied) and post-apply-inspect all ok. The run's JSON arrived whole (20422 characters of SSM output, under the 24000-character limit): every field of the applied object is recorded as printed, except this note and owner_approval_basis, which are extended as in the SQL 127 to SQL 137 records (the one-shot's own one_shot_note read: \"One production-sql-one-shot run verified the source, ran the read-only inspect and the runner contracts, built the manifest, issued the receipt and lease (preflight), evaluated (sql138_production_apply_allowed true), applied (exit 0) and ran the post-apply inspect.\"; its owner_approval_basis read: \"As passed in --approval-statement for --approval-scope sql138; the one-shot cannot verify who said it.\"). The printed applied.receipt equals the run's top-level details.apply_result, and applied.post_apply_inspect, pre_apply_inspect and contract_results equal the top-level objects of the same name. This block adds migration_source_sha256 (with its note), apply_ssm_command_id, steps and manifest_sha256 from the same run's details, as the SQL 127 to SQL 137 records do. The run's not_observed_by_this_run list names ssm_command_id and source_staged_by, supplied here as apply_ssm_command_id and transfer run 41305933006. The post-apply inspect reported live 9acaf809824101d8ef62098e6440ca5d06cda1bec4117118c53931130efadf48 == intended, already_applied true, precondition_failures []: aws_public_payee_record(text, text, jsonb) intended with EXECUTE for checksops and the owner only, predecessors sql113 true, definer writes on external_payment_recipients and payment_provider_methods ok. Production acceptance: no hands-on check is possible (the payee setup link is only emailed, never returned to the browser); the owner recorded the apply on 2026-11-01 (\"record SQL 138\") on the post-apply inspect at the intended state and aws/tests/sql138-payee-setup-link-closed-pg.test.mjs (a verified payee's link refused with already_verified for every write; reads, unverified setup and reissue unchanged).",
+    "steps": [
+      "pin",
+      "source",
+      "inspect",
+      "contracts",
+      "manifest",
+      "source-recheck-before-preflight",
+      "preflight",
+      "evaluate",
+      "source-recheck-before-apply",
+      "apply",
+      "post-apply-inspect"
+    ],
+    "contract_results": {
+      "claim-ledger": {
+        "ok": true,
+        "test": "aws/tests/claim-ledger-accepted-contract.test.mjs",
+        "evidence": "4/4 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at 10a8cd68cdc322a9a4e25c1786a39022d1d1b44f (production-sql-one-shot b3e76f4b-510f-4340-84c9-1a01cb3a48c4, node --test)"
+      },
+      "tenant-isolation": {
+        "ok": true,
+        "test": "aws/tests/tenant-security-compliance.test.mjs",
+        "evidence": "6/6 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at 10a8cd68cdc322a9a4e25c1786a39022d1d1b44f (production-sql-one-shot b3e76f4b-510f-4340-84c9-1a01cb3a48c4, node --test)"
+      },
+      "financial-write-protections": {
+        "ok": true,
+        "test": "aws/tests/api-write.test.mjs",
+        "evidence": "43/43 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at 10a8cd68cdc322a9a4e25c1786a39022d1d1b44f (production-sql-one-shot b3e76f4b-510f-4340-84c9-1a01cb3a48c4, node --test)"
+      }
+    },
+    "pre_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "ec36c29e3472a9777b4a1d08ff7c3da5c00b1dc70cb4b754ef5b04ff0e73633c",
+      "live_matches_expected": true,
+      "already_applied": false,
+      "predecessors": {
+        "sql113": true
+      },
+      "predecessors_applied": true,
+      "missing_dependencies": [],
+      "apply_preconditions_met": true,
+      "precondition_failures": [],
+      "current_user": "checksops_admin",
+      "session_user": "checksops_admin",
+      "counts": null,
+      "successors_applied": [],
+      "release_sql_inspect": {
+        "live_definition_sha256": "ec36c29e3472a9777b4a1d08ff7c3da5c00b1dc70cb4b754ef5b04ff0e73633c",
+        "prerequisites_missing": [],
+        "predecessors": {
+          "sql113": true
+        },
+        "successors_applied": [],
+        "functions": [
+          {
+            "name": "aws_public_payee_record(text, text, jsonb)",
+            "state": "different"
+          }
+        ],
+        "policies": [],
+        "views": [],
+        "tables": [],
+        "columns": [],
+        "constraints": [],
+        "triggers": [],
+        "table_privileges": [],
+        "function_acl": [
+          {
+            "name": "aws_public_payee_record(text, text, jsonb)",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          }
+        ],
+        "acl_functions": [],
+        "indexes": [],
+        "unique_covers": [],
+        "definer_writes": [
+          {
+            "name": "external_payment_recipients",
+            "ok": true
+          },
+          {
+            "name": "payment_provider_methods",
+            "ok": true
+          }
+        ],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": null
+      }
+    },
+    "manifest_sha256": "9d007c7f302b66425816de8f4efd4f2016b072a4e34e1bf18e984574bd1f842c",
+    "receipt": {
+      "migration": "sql138",
+      "workstream": "prod-sql138-payee-setup-link-closed-20261101",
+      "commit": "10a8cd68cdc322a9a4e25c1786a39022d1d1b44f",
+      "sql_file": "aws/workflows/sql/138_payee_setup_link_closed_after_verification.sql",
+      "before_hash": "ec36c29e3472a9777b4a1d08ff7c3da5c00b1dc70cb4b754ef5b04ff0e73633c",
+      "after_hash": "9acaf809824101d8ef62098e6440ca5d06cda1bec4117118c53931130efadf48",
+      "release_sql_inspect": {
+        "live_definition_sha256": "9acaf809824101d8ef62098e6440ca5d06cda1bec4117118c53931130efadf48",
+        "prerequisites_missing": [],
+        "predecessors": {
+          "sql113": true
+        },
+        "successors_applied": [],
+        "functions": [
+          {
+            "name": "aws_public_payee_record(text, text, jsonb)",
+            "state": "intended"
+          }
+        ],
+        "policies": [],
+        "views": [],
+        "tables": [],
+        "columns": [],
+        "constraints": [],
+        "triggers": [],
+        "table_privileges": [],
+        "function_acl": [
+          {
+            "name": "aws_public_payee_record(text, text, jsonb)",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          }
+        ],
+        "acl_functions": [],
+        "indexes": [],
+        "unique_covers": [],
+        "definer_writes": [
+          {
+            "name": "external_payment_recipients",
+            "ok": true
+          },
+          {
+            "name": "payment_provider_methods",
+            "ok": true
+          }
+        ],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": null
+      },
+      "unrelated_catalog_sha256": "fabd8bfc44642720fe5b544c174330d641fcc542effc85e6f38759a1fe586623",
+      "unrelated_catalog_counts": {
+        "relations": 892,
+        "columns": 3550,
+        "constraints": 2239,
+        "policies": 404,
+        "functions": 1355,
+        "indexes": 655,
+        "default_acl": 0,
+        "role_memberships": 15,
+        "roles": 29,
+        "triggers": 184,
+        "views": 25,
+        "types": 18,
+        "schema": 2
+      },
+      "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/41260586254",
+      "result": "applied"
+    },
+    "post_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "9acaf809824101d8ef62098e6440ca5d06cda1bec4117118c53931130efadf48",
+      "live_matches_expected": false,
+      "already_applied": true,
+      "predecessors": {
+        "sql113": true
+      },
+      "predecessors_applied": true,
+      "missing_dependencies": [],
+      "apply_preconditions_met": false,
+      "precondition_failures": [],
+      "current_user": "checksops_admin",
+      "session_user": "checksops_admin",
+      "counts": null,
+      "successors_applied": [],
+      "release_sql_inspect": {
+        "live_definition_sha256": "9acaf809824101d8ef62098e6440ca5d06cda1bec4117118c53931130efadf48",
+        "prerequisites_missing": [],
+        "predecessors": {
+          "sql113": true
+        },
+        "successors_applied": [],
+        "functions": [
+          {
+            "name": "aws_public_payee_record(text, text, jsonb)",
+            "state": "intended"
+          }
+        ],
+        "policies": [],
+        "views": [],
+        "tables": [],
+        "columns": [],
+        "constraints": [],
+        "triggers": [],
+        "table_privileges": [],
+        "function_acl": [
+          {
+            "name": "aws_public_payee_record(text, text, jsonb)",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          }
+        ],
+        "acl_functions": [],
+        "indexes": [],
+        "unique_covers": [],
+        "definer_writes": [
+          {
+            "name": "external_payment_recipients",
+            "ok": true
+          },
+          {
+            "name": "payment_provider_methods",
+            "ok": true
+          }
+        ],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": null
+      }
+    }
+  },
+  "production_evidence": {
+    "2026-11-01 apply": "Guarded production SQL one-shot on i-0c35557c4e5385406, workstream prod-sql138-payee-setup-link-closed-20261101, main 10a8cd68c (tarball 3863477e…, transfer run 41305933006, migration source b4b3da5a… == pin), owner-approved run (\"apply SQL 138 in production\"), pre-apply --phase inspect SSM 80ed0c70-4062-4474-bf6e-acce03997592 (run_id b60c9f68-9fd6-448e-911d-976d904bc0c4, live ec36c29e…, live_matches_expected true), apply SSM baf10f52-3883-4261-babc-667e0cdf1b2b, run_id b3e76f4b-510f-4340-84c9-1a01cb3a48c4, one_use_id sql138-prod-77b84091-f40c-4762-ba16-e4b192825b00 (spent): every step ok; contracts claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43; pre-apply inspect live ec36c29e… (live_matches_expected true, precondition_failures [], predecessors sql113 true); manifest 9d007c7f…; ec36c29e… -> 9acaf809…, result applied, unrelated catalog fabd8bfc… (functions 1355, triggers 184); post-apply inspect already_applied true, precondition_failures []; the run's JSON arrived whole. After: aws_public_payee_record(text, text, jsonb) refuses every event once the payee is verified (already_verified), EXECUTE for checksops and the owner; SQL 113 still applied through SQL 138. Runner started 2026-11-01T12:20:43Z and stopped 12:22:14Z. Owner recording: \"record SQL 138\" (no hands-on production check possible; the setup link is only emailed). execute is false so the pin is no longer a standing authorization."
   }
 }
