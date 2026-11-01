@@ -5,7 +5,7 @@
  * covers what is new:
  *
  *   - the pin: staging-authorized from its read-live (wave 32), code-derived, selectable, packed, in
- *     step with the production pin (pending still); the pinned commit authored the bytes; no predecessor;
+ *     step with the production pin (execute true on production's own observed pre-state, option A); the pinned commit authored the bytes; no predecessor;
  *     the recorded staging pre-state is the read-live's, not the derived staging prediction;
  *   - the spec: one replaced function (public.is_platform_owner(), EXECUTE for authenticated, checksops
  *     and the owner; PUBLIC, anon and service_role revoked) and one table_privileges entry
@@ -191,10 +191,15 @@ test('pin: SQL 137 staging-authorized from its read-live, code-derived, selectab
   assert.equal(prod.source_sha256, pin.source_sha256);
   assert.deepEqual(prod.function_identities, [...pin.function_identities]);
   assert.deepEqual(prod.predecessors, []);
-  assert.equal(prod.execute, false);
-  assert.equal(prod.authorization, 'pending');
-  assert.equal(prod.expected_live_definition_sha256, null);
-  assert.equal(prod.production_inspect.status, 'pending');
+  // Production pin execute-authorized (owner-approved pin change of 2026-11-01, option A) on the staging apply. Its
+  // pre-state is production's own (read-only inspect SSM 9d865a2c), observed, not derived: neither the derived
+  // production prediction nor staging's recorded pre-state.
+  assert.equal(prod.execute, true);
+  assert.match(prod.authorization, /^Owner approved 2026-11-01 /);
+  assert.equal(prod.expected_live_definition_sha256, '15fecb5b913a30860ae5fc03d58b4108c27f1692c07b5edf2f90e0a9f9b1c095');
+  assert.equal(prod.expected_live_definition_sha256, prod.production_inspect.live_definition_sha256);
+  for (const other of [PRE_PRODUCTION, PRE_STAGING, STAGING_READ_LIVE, pin.intended_replacement_sha256]) assert.notEqual(prod.expected_live_definition_sha256, other);
+  assert.equal(prod.production_inspect.status, 'recorded');
   assert.ok(prod.production_inspect.note.includes(PRE_PRODUCTION));
   assert.ok(prod.production_inspect.note.includes(PRE_STAGING));
   let bytes = null;
