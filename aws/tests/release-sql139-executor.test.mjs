@@ -4,9 +4,9 @@
  * release-sql90-97-executor.test.mjs runs what every release key shares (SQL 139 included); this file covers what
  * is new:
  *
- *   - the pin: pending (no read-live yet; the pre-state is the live drifted policy, whose text is unknown, so it is
- *     not derivable), code-derived, selectable, packed, in step with the pending production pin; the pinned commit
- *     authored the bytes; no predecessor;
+ *   - the pin: staging-authorized (wave 35) from staging read-live run 41367825238 (the pre-state is the live
+ *     drifted policy, whose text is unknown, so it is recorded as read, not derived), code-derived, selectable,
+ *     packed, in step with the pending production pin; the pinned commit authored the bytes; no predecessor;
  *   - the spec: no function, one PERMISSIVE FOR ALL policy TO authenticated (SQL 24's), the table as
  *     altered_relations; the three extra preconditions read catalog counts and fail closed unless each is 1;
  *   - on PostgreSQL 16 (helpers/sql139-billing-schema.mjs, owned by checksops_admin): the read-live reads the
@@ -110,7 +110,7 @@ function handlerFor(connect, { pins = {} } = {}) {
   return createHandler({ connect, now: () => Date.parse(NOW), releaseSqlFiles: FILES, releaseSqlPins: { ...PINS, ...pins } });
 }
 
-test('pin: SQL 139 pending (pre-state not derivable), code-derived, selectable, packed, in step with the pending production pin; no predecessor', () => {
+test('pin: SQL 139 staging-authorized from its read-live (pre-state recorded, not derivable), code-derived, selectable, packed, in step with the pending production pin; no predecessor', () => {
   const pin = PINS[KEY];
   const spec = RELEASE_SQL_SPECS[KEY];
   const packed = Object.fromEntries(EXECUTOR_PACK_MEMBERS);
@@ -121,11 +121,14 @@ test('pin: SQL 139 pending (pre-state not derivable), code-derived, selectable, 
   assert.equal(spec.choice, 'sql139-tenant-billing-accounts-write-policy-reconcile');
   assert.doesNotMatch(spec.choice, /production/);
   assert.equal(sha(TEXT), pin.source_sha256);
-  // Pending: no staging read-live recorded yet.
+  // Staging apply authorized (owner approved 2026-11-02, "record the SQL 139 staging pin") from staging read-live
+  // run 41367825238: already_applied false, precondition_failures []. The pre-state is the live drifted policy,
+  // whose text is unknown: it is the value that run reported, not derivable from the fixture or any file.
   assertStagingPinState(assert, KEY, pin);
-  assert.equal(pin.execute, false);
-  assert.equal(pin.authorization, 'pending');
-  assert.equal(pin.expected_live_definition_sha256, null);
+  assert.equal(pin.execute, true);
+  assert.equal(pin.authorization, 'Owner approved 2026-11-02: staging apply (wave 35) from staging read-live run 41367825238');
+  assert.equal(pin.expected_live_definition_sha256, '8727ecb1f834f9623c1ea7f568621f64a4212dadf3d28a5a7741a6a542cdb22f');
+  assert.notEqual(pin.expected_live_definition_sha256, pin.intended_replacement_sha256);
   assert.equal(releaseIntendedHash(KEY, TEXT), pin.intended_replacement_sha256);
   assert.equal(pin.intended_replacement_sha256, '17f07a31e274899a50f53877dc1df48839614ba6148047a4321000e474bd446d');
   assert.notEqual(FIXTURE_PRE, pin.intended_replacement_sha256);
@@ -162,7 +165,9 @@ test('pin: SQL 139 pending (pre-state not derivable), code-derived, selectable, 
   assert.match(prod.order_note, /The production pre-state cannot be derived/);
   // The runbook: the intended fingerprint and text, the source, the evidence; no derived pre-state.
   const runbook = fs.readFileSync(path.join(ROOT, 'ops/production-sql-139-apply.md'), 'utf8');
-  assert.match(runbook, /\*\*Status:\*\* not applied anywhere\. The staging pin and the production pin are pending\./);
+  assert.match(runbook, /\*\*Status:\*\* staging pin execute-authorized \(wave 35\); not applied anywhere\. The production pin is pending\./);
+  assert.match(runbook, /read-live \(2026-11-02\)\.\*\* Run 41367825238/);
+  assert.ok(runbook.includes(pin.expected_live_definition_sha256));
   assert.match(runbook, /\*\*Pre-state: not derivable\.\*\*/);
   assert.match(runbook, /\*\*Production: unverified\.\*\*/);
   for (const value of [pin.intended_replacement_sha256, pin.source_sha256, '8c72ef93d1e5', '1c3f7a3edd76', '7b9c86002fdd', '#1515']) assert.ok(runbook.includes(value), value);

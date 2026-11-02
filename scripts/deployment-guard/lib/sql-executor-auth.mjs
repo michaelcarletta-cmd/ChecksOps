@@ -3150,8 +3150,8 @@ export const AUTHORIZED_SQL138_PAYEE_SETUP_LINK_CLOSED_AFTER_VERIFICATION = Obje
 // member could not lock or update its own tenant_billing_accounts row; the authenticated write policy did not
 // call aws_can_write_tenant): aws_write_tenant_billing_accounts replaced with the repository's SQL 24 policy,
 // refused unless the live-only aws_write_tenant_billing_accounts_job is intact (as SQL 39). No predecessor.
-// Pending until a reviewed pin change records a staging read-live: the pre-state is the live drifted policy,
-// whose text is unknown, so it cannot be derived (ops/production-sql-139-apply.md).
+// Staging apply authorized (wave 35) from staging read-live run 41367825238: the pre-state is the live drifted
+// policy, whose text is unknown, so it is recorded as read, never derived (ops/production-sql-139-apply.md).
 export const AUTHORIZED_SQL139_TENANT_BILLING_ACCOUNTS_WRITE_POLICY_RECONCILE = Object.freeze({
   key: 'sql139',
   filename: 'aws/workflows/sql/139_tenant_billing_accounts_write_policy_reconcile.sql',
@@ -3159,9 +3159,12 @@ export const AUTHORIZED_SQL139_TENANT_BILLING_ACCOUNTS_WRITE_POLICY_RECONCILE = 
   // The commit that last authored the file bytes.
   commit: '6f72d3e25ad63bab6b78551ec8932d4f42c32093',
   source_sha256: 'cfe8e15d93b0461d27f31d5c0652e08bb42a4c19ea53932e1ed7306ca1e5e776',
-  authorization: 'pending',
-  execute: false,
-  expected_live_definition_sha256: null,
+  authorization: 'Owner approved 2026-11-02: staging apply (wave 35) from staging read-live run 41367825238',
+  execute: true,
+  // Staging read-live run 41367825238 (main 383f8a89, executor deploy run 41367591449): already_applied false,
+  // precondition_failures [], prerequisites_missing [], billing_table_rls_enabled, billing_write_policy_permissive_all
+  // and billing_job_policy_intact 1. The live drifted policy as read; not derivable from any file.
+  expected_live_definition_sha256: '8727ecb1f834f9623c1ea7f568621f64a4212dadf3d28a5a7741a6a542cdb22f',
   // Code-derived: releaseIntendedHash('sql139', file bytes) (release-sql-state.mjs); re-derived by the tests.
   intended_replacement_sha256: '17f07a31e274899a50f53877dc1df48839614ba6148047a4321000e474bd446d',
   function_identities: Object.freeze([]),

@@ -37,7 +37,23 @@ table. The release engine's unrelated-catalog snapshot holds every other policy 
 `aws_monthly_billing_job()`. A read-only production inspect decides that; if production already has the repository
 policy the inspect reports `already_applied` true and there is nothing to apply.
 
-**Status:** not applied anywhere. The staging pin and the production pin are pending.
+**Staging executor refreshed (2026-11-02).** Inspect run 41367344136 (main `383f8a89`) found the live
+executor at `ODAzQ8ftXKSMX18xlkCNHgJ+PUwUi3Q4gr7L4GFpev8=` (current false: without
+`sql/139_tenant_billing_accounts_write_policy_reconcile.sql`). Deploy run 41367591449
+(`expected_executor_code_sha256` `ODAzQ8ft…` matched) updated `checksops-staging-guarded-sql-executor` to
+`e/7IOeV85/ABLNfaECLrtGwKOQV6yC+ZeVLLkyejFdw=`.
+
+**Staging read-live (2026-11-02).** Run 41367825238 (main `383f8a89`, executor `e/7IOeV8…`): `already_applied`
+false, `precondition_failures` `[]`, `prerequisites_missing` `[]`, counts `billing_table_rls_enabled` 1,
+`billing_write_policy_permissive_all` 1, `billing_job_policy_intact` 1. Live
+`8727ecb1f834f9623c1ea7f568621f64a4212dadf3d28a5a7741a6a542cdb22f`: staging's drifted policy as that run read it
+(not derivable, see the pre-state below); intended `17f07a31…`. Recorded in the staging pin
+(`expected_live_definition_sha256`, `execute: true`, wave 35) under the owner's words of 2026-11-02, "record the
+SQL 139 staging pin". The staging apply is a separate run after this pin is merged and the executor is redeployed
+carrying it, on the owner's words for that run, "apply SQL 139 in staging". The production pin stays pending: a
+read-only production inspect decides production's pre-state.
+
+**Status:** staging pin execute-authorized (wave 35); not applied anywhere. The production pin is pending.
 
 ## Fingerprint
 
