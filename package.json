@@ -109,7 +109,7 @@
     "react-intersection-observer": "^10.0.3",
     "react-pdf": "9.2.1",
     "react-resizable-panels": "2.1.9",
-    "react-router-dom": "7.18.0",
+    "react-router-dom": "7.18.5",
     "recharts": "3.0.0",
     "sonner": "1.7.4",
     "tailwind-merge": "2.6.0",
