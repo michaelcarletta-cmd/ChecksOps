@@ -57,7 +57,23 @@ verified-live evidence and the pin stays `execute: false`). Anything else (a pre
 such as another role's grant on one of the columns, a missing table, column or role) stops and needs
 its own reviewed change.
 
-**Status:** guarded tooling built; not applied anywhere. The staging pin is pending (no read-live yet); the production pin is pending.
+**Staging executor refreshed (2026-11-02).** Inspect run 41450723805 (main `d2b7fb756`, the merged #1525) found
+the live executor at `7x52PS7o2AbqXrTW+TBY0hKcix1vW/+iOi8RxtVDeYE=` (current false: without
+`sql/140_wallet_funding_settings_write_grants.sql`; main also superseded `lib/release-sql-specs.mjs`,
+`lib/release-sql-state.mjs` and `lib/sql-executor-auth.mjs`). Deploy run 41451778243
+(`expected_executor_code_sha256` `7x52PS7o…` matched) updated `checksops-staging-guarded-sql-executor` to
+`OauFqZ8FWSA+Yja2IW65AHHXHcfIbG1pwyDZAUVYWWU=` (RevisionId `a5a65ead-00a6-4730-8f65-aa77eaec1a13`).
+
+**Staging read-live (2026-11-02).** Run 41452217978 (main `d2b7fb756`, executor `OauFqZ8F…`, `executor_current`
+true): `already_applied` false, `precondition_failures` `[]`, `prerequisites_missing` `[]`, `predecessors` `{}`;
+all thirteen columns `acl` `[]` (no column grant, the restore's state). Live
+`fa08a3db73806391d757885c9165d0f1bf56a4571a22b1a32e2e63c73578952d`, equal to the derived pre-state below;
+intended `6157ad0d…`. Recorded in the staging pin (`expected_live_definition_sha256`, `execute: true`, wave 36)
+under the owner's words of 2026-11-02, "record the SQL 140 staging pin". The staging apply is a separate run after
+this pin is merged and the executor is redeployed carrying it, on the owner's words for that run, "apply SQL 140
+in staging". The production pin stays pending: a read-only production inspect decides production's pre-state.
+
+**Status:** staging pin execute-authorized (wave 36); not applied anywhere. The production pin is pending.
 
 ## Fingerprint
 

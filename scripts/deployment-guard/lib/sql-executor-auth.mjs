@@ -3173,8 +3173,9 @@ export const AUTHORIZED_SQL139_TENANT_BILLING_ACCOUNTS_WRITE_POLICY_RECONCILE = 
 // Wallet funding settings staging pin: SQL 140 (staging WalletOps automatic funding save refused 2026-11-02,
 // POST /staging/functions/v1/save-tenant-wallet-funding-settings 403 "permission denied for table
 // tenant_wallet_funding_settings"; column INSERT on the twelve columns the save inserts and column UPDATE on
-// the twelve it updates, to checksops). No predecessor. Pending until a reviewed pin change records a staging
-// read-live (ops/production-sql-140-apply.md).
+// the twelve it updates, to checksops). No predecessor. Staging apply authorized (wave 36) from staging
+// read-live run 41452217978: no column grant on the thirteen columns, the derived pre-state
+// (ops/production-sql-140-apply.md).
 export const AUTHORIZED_SQL140_WALLET_FUNDING_SETTINGS_WRITE_GRANTS = Object.freeze({
   key: 'sql140',
   filename: 'aws/workflows/sql/140_wallet_funding_settings_write_grants.sql',
@@ -3182,9 +3183,11 @@ export const AUTHORIZED_SQL140_WALLET_FUNDING_SETTINGS_WRITE_GRANTS = Object.fre
   // The commit that last authored the file bytes.
   commit: 'c49746755be9f05015a8967790624d040276477d',
   source_sha256: '7961cf7c68d56555f7135eb290a29c2c4d71fc3accead6d77908306f600d24c3',
-  authorization: 'pending',
-  execute: false,
-  expected_live_definition_sha256: null,
+  authorization: 'Owner approved 2026-11-02: staging apply (wave 36) from staging read-live run 41452217978',
+  execute: true,
+  // Staging read-live run 41452217978 (main d2b7fb756, executor deploy run 41451778243): already_applied false,
+  // precondition_failures [], prerequisites_missing [], all thirteen columns acl []. Equal to the derived pre-state.
+  expected_live_definition_sha256: 'fa08a3db73806391d757885c9165d0f1bf56a4571a22b1a32e2e63c73578952d',
   // Code-derived: releaseIntendedHash('sql140', file bytes) (release-sql-state.mjs); re-derived by the tests.
   intended_replacement_sha256: '6157ad0d9a04d119c2f4c6b289470c302f16626de6b5d3e32ff25a93f161ea5b',
   // The file creates, replaces and sets the ACL of no function.
