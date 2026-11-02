@@ -449,13 +449,29 @@ test('the production history keeps the third rebuild (inspect 39666717878, apply
   assert.equal(result.details.state, 'READY');
 });
 
-test('the production plan section accepts inspect run 41463084601: the fourth rebuild (16 changed, 1 added, 0 removed), staging already on the same candidate', () => {
+test('the production plan section accepts inspect run 41463084601 and records apply 41469896446: the fourth rebuild (16 changed, 1 added, 0 removed), staging already on the same candidate', () => {
   const raw = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'ops/deployment-guard/lambda-rebuild-plan.json'), 'utf8'));
   const production = raw.environments.production;
   const third = production.history[2];
   const staging = raw.environments.staging;
-  assert.equal(production.status, 'accepted');
-  assert.equal(production.applied, undefined);
+  // Applied 2026-11-02 (run 41469896446) on the owner's phrase, from the staging reference the section names.
+  assert.equal(production.status, 'applied');
+  assert.equal(production.applied.run_id, '41469896446');
+  assert.equal(production.applied.main_commit, '1364af787f2e00b8578a6fbed3c52989eca7121a');
+  assert.equal(production.applied.approval_phrase, 'DEPLOY FULL API PACKAGE TO PRODUCTION');
+  assert.equal(production.applied.staging_acceptance, production.inspect.staging_acceptance);
+  assert.equal(production.applied.code_sha256_before, production.inspect.live_code_sha256);
+  assert.equal(production.applied.revision_id_before, production.inspect.live_revision_id);
+  assert.equal(production.applied.candidate_zip_sha256, production.inspect.candidate_zip_sha256);
+  assert.equal(production.applied.code_sha256_after, 'TQowoiwSTGO+SBFVbzpKabESHfDOF5+pLOBXwT7Y0No=');
+  assert.equal(production.applied.revision_id_after, '870cc791-522b-49ee-bb04-4dd4fecc8510');
+  assert.equal(production.applied.state, 'VERIFIED');
+  assert.deepEqual(production.applied.smoke, ['/health', '/db-health']);
+  for (const evidence of ['41468682423', '125360398863', '57321d90-58b5-46ec-98ea-8fa5873591c9', 'TQowoiwS', 'no error-level event', 'SQL 136', 'SQL 140', 'Not verified']) {
+    assert.ok(production.applied.notes.includes(evidence), evidence);
+  }
+  // Production now runs the package staging runs (staging rebuild inspect 41463556950, ALREADY_ACCEPTED on the same candidate).
+  assert.ok(production.inspect.notes.includes('TQowoiwSTGO+SBFVbzpKabESHfDOF5+pLOBXwT7Y0No='));
   assert.equal(production.inspect.run_id, '41463084601');
   assert.equal(production.inspect.main_commit, 'ba78d1ddf7a68ac42ff2bfe49e5f07ccd4f8bb11');
   assert.equal(production.inspect.live_code_sha256, '+X7Idizd5DT2QbQJAzC3oi8l52es021M3z/zh5R5Wuc=');
