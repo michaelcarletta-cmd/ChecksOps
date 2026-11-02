@@ -499,6 +499,188 @@ export const runSaveTenantBillingAccount = async ({ client, mapping, body, spoof
 // branding through write-app-metadata executeTenantsNarrow, and app-services
 // answers the old route with 410 Gone.
 
+// Automatic wallet funding settings (tenant_wallet_funding_settings, one row per tenant). A money table
+// (finding 14): the generic /data/write route refuses it (FINANCIAL_OR_PROVIDER_TABLES) and SQL 136 lets
+// only a flagged server write through, so the WalletOps auto-funding panel saves through this route
+// (save-tenant-wallet-funding-settings), never through a browser upsert (owner, staging 2026-11-02:
+// "Couldn't save target wallet balance").
+export const WALLET_FUNDING_STRATEGIES = Object.freeze(['payment_shortage', 'target_balance', 'manual']);
+const WALLET_FUNDING_BOOLEAN_FIELDS = Object.freeze(['auto_funding_enabled', 'require_payment_approval']);
+const WALLET_FUNDING_CENTS_FIELDS = Object.freeze([
+  'target_wallet_balance_cents',
+  'maximum_single_pull_cents',
+  'maximum_daily_pull_cents',
+]);
+// Largest amount the panel can store, in cents (one billion dollars): above it the value is a typo, not a limit.
+const WALLET_FUNDING_MAX_CENTS = 100_000_000_000;
+// Client timestamps and ids are never stored: the server stamps the acceptance.
+const WALLET_FUNDING_IGNORED_CLIENT_FIELDS = Object.freeze([
+  'id', 'tenant_id', 'tenantId', 'action', 'authorization_accepted_at', 'authorization_accepted_by', 'created_at', 'updated_at',
+]);
+
+const publicWalletFundingSettings = (row) => (row ? {
+  id: row.id,
+  tenant_id: row.tenant_id,
+  auto_funding_enabled: row.auto_funding_enabled === true,
+  funding_bank_account_id: row.funding_bank_account_id ?? null,
+  funding_payment_method_id: row.funding_payment_method_id ?? null,
+  funding_strategy: row.funding_strategy,
+  target_wallet_balance_cents: Number(row.target_wallet_balance_cents ?? 0),
+  maximum_single_pull_cents: Number(row.maximum_single_pull_cents ?? 0),
+  maximum_daily_pull_cents: Number(row.maximum_daily_pull_cents ?? 0),
+  require_payment_approval: row.require_payment_approval !== false,
+  authorization_accepted_at: row.authorization_accepted_at ?? null,
+  authorization_accepted_by: row.authorization_accepted_by ?? null,
+  authorization_version: row.authorization_version ?? null,
+  created_at: row.created_at ?? null,
+  updated_at: row.updated_at ?? null,
+} : null);
+
+const loadWalletFundingSettings = async (client, tenantId) => (
+  (await client.query(
+    `SELECT * FROM public.tenant_wallet_funding_settings WHERE tenant_id = $1::uuid LIMIT 1`,
+    [tenantId],
+  )).rows[0] || null
+);
+
+const invalidWalletFundingField = (field, message) => ({ ok: false, statusCode: 400, error: 'invalid_field', field, message });
+
+/**
+ * The columns the panel may set, from the request body: booleans, non-negative integer cents, the
+ * strategy, the funding bank (a uuid or null) and the authorization version. Anything else is ignored
+ * and reported. Returns { ok, patch, ignoredClientFields } or an invalid_field refusal.
+ */
+export const parseWalletFundingPatch = (body = {}) => {
+  const patch = {};
+  const known = new Set([
+    ...WALLET_FUNDING_BOOLEAN_FIELDS, ...WALLET_FUNDING_CENTS_FIELDS,
+    'funding_strategy', 'funding_bank_account_id', 'funding_payment_method_id', 'authorization_version',
+  ]);
+  const ignoredClientFields = Object.keys(body).filter((key) => !known.has(key));
+  for (const field of WALLET_FUNDING_BOOLEAN_FIELDS) {
+    if (!(field in body)) continue;
+    if (typeof body[field] !== 'boolean') return invalidWalletFundingField(field, `${field} must be true or false`);
+    patch[field] = body[field];
+  }
+  for (const field of WALLET_FUNDING_CENTS_FIELDS) {
+    if (!(field in body)) continue;
+    const cents = Number(body[field]);
+    if (!Number.isSafeInteger(cents) || cents < 0 || cents > WALLET_FUNDING_MAX_CENTS) {
+      return invalidWalletFundingField(field, `${field} must be a whole number of cents from 0 to ${WALLET_FUNDING_MAX_CENTS}`);
+    }
+    patch[field] = cents;
+  }
+  if ('funding_strategy' in body) {
+    const strategy = String(body.funding_strategy || '');
+    if (!WALLET_FUNDING_STRATEGIES.includes(strategy)) {
+      return invalidWalletFundingField('funding_strategy', `funding_strategy must be one of ${WALLET_FUNDING_STRATEGIES.join(', ')}`);
+    }
+    patch.funding_strategy = strategy;
+  }
+  if ('funding_bank_account_id' in body) {
+    const bank = body.funding_bank_account_id;
+    if (bank != null && !isUuid(bank)) return invalidWalletFundingField('funding_bank_account_id', 'funding_bank_account_id must be a uuid or null');
+    patch.funding_bank_account_id = bank == null ? null : String(bank);
+  }
+  if ('funding_payment_method_id' in body) {
+    const method = body.funding_payment_method_id;
+    if (method != null && (typeof method !== 'string' || method.length === 0 || method.length > 128)) {
+      return invalidWalletFundingField('funding_payment_method_id', 'funding_payment_method_id must be a short string or null');
+    }
+    patch.funding_payment_method_id = method == null ? null : method;
+  }
+  if ('authorization_version' in body) {
+    const version = body.authorization_version;
+    if (typeof version !== 'string' || version.length === 0 || version.length > 64) {
+      return invalidWalletFundingField('authorization_version', 'authorization_version must be a short string');
+    }
+    patch.authorization_version = version;
+  }
+  if (Object.keys(patch).length === 0) return { ok: false, statusCode: 400, error: 'empty_patch', ignoredClientFields };
+  return { ok: true, patch, ignoredClientFields };
+};
+
+export const saveTenantWalletFundingSettings = async (client, { tenantId, userId = null, body = {} }) => {
+  const parsed = parseWalletFundingPatch(body);
+  if (!parsed.ok) return parsed;
+  const { patch, ignoredClientFields } = parsed;
+  if (patch.funding_bank_account_id) {
+    // The funding bank is one of this tenant's connected Moov payment methods (the list the panel shows).
+    const bank = (await client.query(
+      `SELECT id, tenant_id, provider, connection_status
+       FROM public.payment_provider_methods
+       WHERE id = $1::uuid AND tenant_id = $2::uuid
+       LIMIT 1`,
+      [patch.funding_bank_account_id, tenantId],
+    )).rows[0] || null;
+    if (!bank) return { ok: false, statusCode: 404, error: 'funding_source_not_found' };
+    if (bank.connection_status != null && String(bank.connection_status) !== 'connected') {
+      return { ok: false, statusCode: 409, error: 'funding_source_not_connected' };
+    }
+  }
+  // The server stamps the acceptance when a version is sent; client timestamps are ignored.
+  const columns = Object.keys(patch);
+  const values = columns.map((column) => patch[column]);
+  const acceptance = patch.authorization_version
+    ? ', authorization_accepted_at = now(), authorization_accepted_by = $' + (columns.length + 2) + '::uuid'
+    : '';
+  const params = [tenantId, ...values];
+  if (patch.authorization_version) params.push(isUuid(userId) ? userId : null);
+  const insertColumns = ['tenant_id', ...columns, ...(patch.authorization_version ? ['authorization_accepted_at', 'authorization_accepted_by'] : [])];
+  const insertValues = [
+    '$1::uuid',
+    ...columns.map((column, index) => `$${index + 2}`),
+    ...(patch.authorization_version ? ['now()', `$${columns.length + 2}::uuid`] : []),
+  ];
+  const updates = columns.map((column) => `${column} = EXCLUDED.${column}`).join(', ');
+  await setMoneyWriteFlag(client);
+  const rows = (await client.query(
+    `INSERT INTO public.tenant_wallet_funding_settings (${insertColumns.join(', ')})
+     VALUES (${insertValues.join(', ')})
+     ON CONFLICT (tenant_id) DO UPDATE SET ${updates}${acceptance}, updated_at = now()
+     RETURNING *`,
+    params,
+  )).rows;
+  const written = rows[0];
+  // No row returned: the database did not apply the change (row security or anything else filtered it).
+  if (!written) return { ok: false, statusCode: 409, error: 'wallet_funding_update_not_applied' };
+  for (const column of columns) {
+    if (column === 'funding_payment_method_id' || column === 'funding_bank_account_id') {
+      if ((written[column] ?? null) !== patch[column]) return { ok: false, statusCode: 409, error: 'wallet_funding_update_not_applied' };
+    } else if (WALLET_FUNDING_CENTS_FIELDS.includes(column)) {
+      if (Number(written[column]) !== patch[column]) return { ok: false, statusCode: 409, error: 'wallet_funding_update_not_applied' };
+    } else if (written[column] !== patch[column]) {
+      return { ok: false, statusCode: 409, error: 'wallet_funding_update_not_applied' };
+    }
+  }
+  return {
+    ok: true,
+    settings: publicWalletFundingSettings(written),
+    ignoredClientFields: [...new Set([...ignoredClientFields, ...WALLET_FUNDING_IGNORED_CLIENT_FIELDS.filter((key) => key in body)])],
+  };
+};
+
+export const runSaveTenantWalletFundingSettings = async ({ client, mapping, body, spoof }) => {
+  const resolved = await requireTenant(client, mapping, body, spoof);
+  if (resolved.error) return resolved.error;
+  if (!canManageTenantSettings(resolved.access)) {
+    return denied(spoof, { message: 'Only a member of this organization can change automatic funding.' });
+  }
+  const action = String(body.action || 'save').toLowerCase();
+  if (action === 'get') {
+    const settings = publicWalletFundingSettings(await loadWalletFundingSettings(client, resolved.tenantId));
+    return { ok: true, statusCode: 200, settings, spoofFieldsIgnored: spoof };
+  }
+  if (action !== 'save') return denied(spoof, { statusCode: 400, error: 'invalid_action', message: 'action must be get or save' });
+  const saved = await saveTenantWalletFundingSettings(client, {
+    tenantId: resolved.tenantId,
+    userId: mapping.application_user_id,
+    body,
+  });
+  if (!saved.ok) return denied(spoof, saved);
+  return { ok: true, statusCode: 200, spoofFieldsIgnored: spoof, ...saved };
+};
+
 const withSettingsWrite = (fn) => (event, deps = {}) => withIdentity(event, fn, {
   write: true,
   commit: true,
@@ -506,6 +688,7 @@ const withSettingsWrite = (fn) => (event, deps = {}) => withIdentity(event, fn, 
 });
 
 export const handleSaveTenantBillingAccount = withSettingsWrite(runSaveTenantBillingAccount);
+export const handleSaveTenantWalletFundingSettings = withSettingsWrite(runSaveTenantWalletFundingSettings);
 
 /**
  * Deprecated compatibility export (release 2026-10-17): the retired

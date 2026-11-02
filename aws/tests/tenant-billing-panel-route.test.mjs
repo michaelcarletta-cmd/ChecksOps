@@ -89,8 +89,9 @@ test('the route exists, is dispatched, and reads exactly what the panel sends', 
   assert.match(handlers, /authorized: body\.authorized === true \|\| body\.authorize_ach === true/);
   // The route sets the server-only money-write flag before each write.
   // Two writes, plus the diagnostic's no-op trial update (rolled back to its own savepoint), which runs flagged like
-  // the refused write it diagnoses.
-  assert.equal((handlers.match(/await setMoneyWriteFlag\(client\);/g) || []).length, 3);
+  // the refused write it diagnoses, plus the wallet funding settings upsert (save-tenant-wallet-funding-settings,
+  // aws/tests/tenant-wallet-funding-settings-route.test.mjs).
+  assert.equal((handlers.match(/await setMoneyWriteFlag\(client\);/g) || []).length, 4);
   const diagnostic = handlers.slice(handlers.indexOf('export const billingWriteDiagnostic'), handlers.indexOf('const loadAuthorization'));
   assert.match(diagnostic, /await client\.query\('SAVEPOINT billing_diag_trial_update'\);\s*try \{\s*await setMoneyWriteFlag\(client\);/);
   // A write that changed no row is refused, never reported as saved.

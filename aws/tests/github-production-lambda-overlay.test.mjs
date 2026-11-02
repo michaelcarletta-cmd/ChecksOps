@@ -3138,12 +3138,16 @@ test('Mortgage Desk return: ADD mortgage-desk-return.mjs held on SQL 122 (record
       assert.deepEqual(next, { live_sha256: appliedAt(member), accepted_sha256: row.accepted_sha256, operation: 'replace', previous_manifest: APPLIED_REL }, member);
       assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, SECURITY_HARDENING_APPLIED_REL), 'utf8')).members[member].previous_manifest, PENDING[member], member);
     } else if (MOVED_ON.includes(member)) {
-      // Applied 2026-10-28; the next REPLACE started from those applied bytes and is recorded applied too.
-      assert.equal(row.expected_live_sha256, row.accepted_sha256, member);
-      assert.equal(row.manifest, NEXT_APPLIED_REL, member);
+      // Applied 2026-10-28; the next REPLACE started from those applied bytes and is recorded applied too
+      // (the e-sign applied manifest). The row has since moved on again: the wallet funding settings route
+      // (2026-11-02, its own test below) REPLACEs it from the applied e-sign bytes.
+      const nextApplied = JSON.parse(fs.readFileSync(path.join(ROOT, NEXT_APPLIED_REL), 'utf8')).members[member];
+      assert.equal(row.expected_live_sha256, nextApplied.accepted_sha256, member);
+      assert.notEqual(row.accepted_sha256, nextApplied.accepted_sha256, member);
+      assert.equal(row.manifest, 'aws/tests/fixtures/production-wallet-funding-settings-route-manifest-2026-11-02.json', member);
       const next = JSON.parse(fs.readFileSync(path.join(ROOT, NEXT_REL), 'utf8')).members[member];
-      assert.deepEqual(next, { live_sha256: appliedAt(member), accepted_sha256: row.accepted_sha256, operation: 'replace', previous_manifest: APPLIED_REL }, member);
-      assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, NEXT_APPLIED_REL), 'utf8')).members[member].previous_manifest, NEXT_REL, member);
+      assert.deepEqual(next, { live_sha256: appliedAt(member), accepted_sha256: nextApplied.accepted_sha256, operation: 'replace', previous_manifest: APPLIED_REL }, member);
+      assert.equal(nextApplied.previous_manifest, NEXT_REL, member);
     } else {
       // Applied 2026-10-28: the row records the applied bytes and names the applied manifest.
       assert.equal(row.expected_live_sha256, row.accepted_sha256, member);
@@ -3232,9 +3236,15 @@ test('Mortgage Desk e-sign: ADD mortgage-desk-esign.mjs held on SQL 124 (recorde
   // Applied 2026-10-28: the row records the applied bytes and names the applied manifest.
   const routerRow = PLAN.members[ROUTER];
   const appliedAt = JSON.parse(fs.readFileSync(path.join(ROOT, RETURN_APPLIED_REL), 'utf8')).members[ROUTER].accepted_sha256;
-  assert.deepEqual(routerRow, { operation: 'replace', accepted_sha256: sha(`aws/functions/api/${ROUTER}`), expected_live_sha256: sha(`aws/functions/api/${ROUTER}`), sql_before: null, manifest: APPLIED_REL });
-  assert.notEqual(routerRow.accepted_sha256, appliedAt);
-  assert.deepEqual(manifest.members[ROUTER], { live_sha256: appliedAt, accepted_sha256: routerRow.accepted_sha256, operation: 'replace', previous_manifest: RETURN_APPLIED_REL });
+  // app-services.mjs has since moved on: the wallet funding settings route (2026-11-02, its own test below)
+  // REPLACEs it from these applied e-sign bytes, so its row keeps them as expected_live, accepts main's newer
+  // bytes and names that manifest; the e-sign manifests keep their recorded bytes.
+  const ESIGN_BYTES = JSON.parse(fs.readFileSync(path.join(ROOT, APPLIED_REL), 'utf8')).members[ROUTER].accepted_sha256;
+  const WALLET_FUNDING_REL = 'aws/tests/fixtures/production-wallet-funding-settings-route-manifest-2026-11-02.json';
+  assert.deepEqual(routerRow, { operation: 'replace', accepted_sha256: sha(`aws/functions/api/${ROUTER}`), expected_live_sha256: ESIGN_BYTES, sql_before: null, manifest: WALLET_FUNDING_REL });
+  assert.notEqual(routerRow.accepted_sha256, ESIGN_BYTES);
+  assert.notEqual(ESIGN_BYTES, appliedAt);
+  assert.deepEqual(manifest.members[ROUTER], { live_sha256: appliedAt, accepted_sha256: ESIGN_BYTES, operation: 'replace', previous_manifest: RETURN_APPLIED_REL });
   assert.ok(localImports(fs.readFileSync(path.join(API, ROUTER), 'utf8'), ROUTER).includes(ADD));
   assert.ok(PLAN.order.indexOf(ADD) < PLAN.order.indexOf(ROUTER));
   assert.equal(PLAN.order.indexOf('tenant-management-v2.mjs') + 1, PLAN.order.indexOf(ROUTER));
@@ -3264,7 +3274,7 @@ test('Mortgage Desk e-sign: ADD mortgage-desk-esign.mjs held on SQL 124 (recorde
   assert.match(appliedManifest.authorization, /^Record only/);
   assert.deepEqual(Object.keys(appliedManifest.members), [ADD, ROUTER]);
   for (const member of [ADD, ROUTER]) {
-    const accepted = sha(`aws/functions/api/${member}`);
+    const accepted = member === ROUTER ? ESIGN_BYTES : sha(`aws/functions/api/${member}`);
     assert.deepEqual(appliedManifest.members[member], { live_sha256: accepted, accepted_sha256: accepted, operation: PLAN.members[member].operation, previous_manifest: MANIFEST_REL }, member);
     assert.ok(appliedManifest.notes.includes(`"DEPLOY ${member} TO PRODUCTION"`), member);
   }
@@ -4840,7 +4850,7 @@ test('Billing route no silent no-op (2026-11-01): REPLACE tenant-settings-handle
   for (const other of [LIVE, MONEY_WRITE_BYTES, NOOP_BYTES]) assert.notEqual(accepted, other);
   assert.deepEqual(Object.keys(manifest.members), [MEMBER]);
   assert.deepEqual(manifest.members[MEMBER], { live_sha256: LIVE, accepted_sha256: NOOP_BYTES, operation: 'replace', previous_manifest: PREVIOUS });
-  assert.deepEqual(PLAN.members[MEMBER], { operation: 'replace', accepted_sha256: accepted, expected_live_sha256: LIVE, sql_before: null, manifest: 'aws/tests/fixtures/production-billing-policy-diagnostic-manifest-2026-11-01.json' });
+  assert.deepEqual(PLAN.members[MEMBER], { operation: 'replace', accepted_sha256: accepted, expected_live_sha256: LIVE, sql_before: null, manifest: 'aws/tests/fixtures/production-wallet-funding-settings-route-manifest-2026-11-02.json' });
   assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
   // Still after money-write-flag.mjs in plan order (it imports it at load).
   assert.ok(PLAN.order.indexOf('money-write-flag.mjs') < PLAN.order.indexOf(MEMBER));
@@ -4884,7 +4894,7 @@ test('Billing route diagnostic (2026-11-01): REPLACE tenant-settings-handlers.mj
   for (const other of [LIVE, NOOP_BYTES, MONEY_WRITE_BYTES, DIAG_BYTES]) assert.notEqual(accepted, other);
   assert.deepEqual(Object.keys(manifest.members), [MEMBER]);
   assert.deepEqual(manifest.members[MEMBER], { live_sha256: LIVE, accepted_sha256: DIAG_BYTES, operation: 'replace', previous_manifest: PREVIOUS });
-  assert.deepEqual(PLAN.members[MEMBER], { operation: 'replace', accepted_sha256: accepted, expected_live_sha256: LIVE, sql_before: null, manifest: 'aws/tests/fixtures/production-billing-policy-diagnostic-manifest-2026-11-01.json' });
+  assert.deepEqual(PLAN.members[MEMBER], { operation: 'replace', accepted_sha256: accepted, expected_live_sha256: LIVE, sql_before: null, manifest: 'aws/tests/fixtures/production-wallet-funding-settings-route-manifest-2026-11-02.json' });
   assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
   assert.ok(PLAN.order.indexOf('money-write-flag.mjs') < PLAN.order.indexOf(MEMBER));
   const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
@@ -4937,7 +4947,7 @@ test('Billing trigger diagnostic (2026-11-01): REPLACE tenant-settings-handlers.
   for (const other of [LIVE, DIAG_BYTES, NOOP_BYTES, MONEY_WRITE_BYTES, TRIGGER_DIAG_BYTES]) assert.notEqual(accepted, other);
   assert.deepEqual(Object.keys(manifest.members), [MEMBER]);
   assert.deepEqual(manifest.members[MEMBER], { live_sha256: LIVE, accepted_sha256: TRIGGER_DIAG_BYTES, operation: 'replace', previous_manifest: PREVIOUS });
-  assert.deepEqual(PLAN.members[MEMBER], { operation: 'replace', accepted_sha256: accepted, expected_live_sha256: LIVE, sql_before: null, manifest: 'aws/tests/fixtures/production-billing-policy-diagnostic-manifest-2026-11-01.json' });
+  assert.deepEqual(PLAN.members[MEMBER], { operation: 'replace', accepted_sha256: accepted, expected_live_sha256: LIVE, sql_before: null, manifest: 'aws/tests/fixtures/production-wallet-funding-settings-route-manifest-2026-11-02.json' });
   assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
   assert.ok(PLAN.order.indexOf('money-write-flag.mjs') < PLAN.order.indexOf(MEMBER));
   const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
@@ -4979,6 +4989,10 @@ test('Billing policy diagnostic (2026-11-01): REPLACE tenant-settings-handlers.m
   const DIAG_BYTES = '2fd838410f41287f75181ec3597bde89f27144e466a7a8847128ef34cbbd18a1';
   const NOOP_BYTES = '976f8f14158757af0d1865da9bce70e5812a939502bdc2586209dfac67cccc65';
   const MONEY_WRITE_BYTES = 'c813c6dc5dac144f2d10d9409a4cb31cb47789080969e1c2e35f0579004d3caa';
+  // This manifest's recorded bytes (live in staging, #1515). The member has since moved on to the wallet funding
+  // settings route (2026-11-02, its own test below): its row keeps this manifest's production live value and
+  // accepts main's newer bytes; this manifest keeps its recorded bytes.
+  const POLICY_DIAG_BYTES = '12aff321a2d703e1c45c3cd0cf3751ff051888332ce01b0570dadfe05458de58';
   const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, REL), 'utf8'));
   assert.equal(manifest.workstream_id, 'billing-policy-diagnostic');
   assert.equal(manifest.deploy_authorized, false);
@@ -4986,10 +5000,10 @@ test('Billing policy diagnostic (2026-11-01): REPLACE tenant-settings-handlers.m
   assert.equal(manifest.live_lambda, FUNCTION_NAME);
   for (const evidence of ['add the policy diagnostic', '41348983031', TRIGGER_DIAG_BYTES, '#1514', 'rules:none trial:0', 'No SQL change', 'no ids']) assert.ok(manifest.notes.includes(evidence), evidence);
   const accepted = sha(`aws/functions/api/${MEMBER}`);
-  for (const other of [LIVE, TRIGGER_DIAG_BYTES, DIAG_BYTES, NOOP_BYTES, MONEY_WRITE_BYTES]) assert.notEqual(accepted, other);
+  for (const other of [LIVE, TRIGGER_DIAG_BYTES, DIAG_BYTES, NOOP_BYTES, MONEY_WRITE_BYTES, POLICY_DIAG_BYTES]) assert.notEqual(accepted, other);
   assert.deepEqual(Object.keys(manifest.members), [MEMBER]);
-  assert.deepEqual(manifest.members[MEMBER], { live_sha256: LIVE, accepted_sha256: accepted, operation: 'replace', previous_manifest: PREVIOUS });
-  assert.deepEqual(PLAN.members[MEMBER], { operation: 'replace', accepted_sha256: accepted, expected_live_sha256: LIVE, sql_before: null, manifest: REL });
+  assert.deepEqual(manifest.members[MEMBER], { live_sha256: LIVE, accepted_sha256: POLICY_DIAG_BYTES, operation: 'replace', previous_manifest: PREVIOUS });
+  assert.deepEqual(PLAN.members[MEMBER], { operation: 'replace', accepted_sha256: accepted, expected_live_sha256: LIVE, sql_before: null, manifest: 'aws/tests/fixtures/production-wallet-funding-settings-route-manifest-2026-11-02.json' });
   assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
   assert.ok(PLAN.order.indexOf('money-write-flag.mjs') < PLAN.order.indexOf(MEMBER));
   const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
@@ -4997,7 +5011,7 @@ test('Billing policy diagnostic (2026-11-01): REPLACE tenant-settings-handlers.m
   assert.equal(ready.state, 'READY');
   assert.equal(ready.mutation, false);
   assert.equal((await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: accepted, extra: ['money-write-flag.mjs'] }) })).state, 'ALREADY_ACCEPTED');
-  for (const notLive of [MONEY_WRITE_BYTES, NOOP_BYTES, DIAG_BYTES, TRIGGER_DIAG_BYTES]) {
+  for (const notLive of [MONEY_WRITE_BYTES, NOOP_BYTES, DIAG_BYTES, TRIGGER_DIAG_BYTES, POLICY_DIAG_BYTES]) {
     await assert.rejects(
       run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: notLive, extra: ['money-write-flag.mjs'] }) }),
       (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
@@ -5185,6 +5199,94 @@ test('Billing database errors redacted (finding 25): tenant-billing-engine.mjs R
   assert.match(source, /export const logBillingDbFailure/);
 });
 
+test('Wallet funding settings route (2026-11-02): REPLACE tenant-settings-handlers.mjs from the production live bytes and app-services.mjs from its applied e-sign bytes, the handlers first, planning only', async () => {
+  const REL = 'aws/tests/fixtures/production-wallet-funding-settings-route-manifest-2026-11-02.json';
+  const HANDLERS = 'tenant-settings-handlers.mjs';
+  const ROUTER = 'app-services.mjs';
+  const LIVE_HANDLERS = '9766306dfccffbb515c6dd1f0a329b91a407f53eb97c1ed148c9dcc5b9f24717';
+  const LIVE_ROUTER = 'dd6e1797dc00dc2beaf15585b481c76a33c415212e7be5d2efe3fd170d48121e';
+  // The billing policy diagnostic bytes (PR #1515): live in staging, never applied in production.
+  const POLICY_DIAG_BYTES = '12aff321a2d703e1c45c3cd0cf3751ff051888332ce01b0570dadfe05458de58';
+  const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, REL), 'utf8'));
+  assert.equal(manifest.workstream_id, 'wallet-funding-settings-route');
+  assert.equal(manifest.deploy_authorized, false);
+  assert.match(manifest.authorization, /^Pending owner review/);
+  assert.equal(manifest.live_lambda, FUNCTION_NAME);
+  for (const evidence of ["Couldn't save target wallet balance", '41387219884', 'save-tenant-wallet-funding-settings', 'table_not_allowlisted', 'wallet_funding_update_not_applied', 'request.money_write', 'No SQL change', 'No release-lock change']) {
+    assert.ok(manifest.notes.includes(evidence), evidence);
+  }
+  assert.deepEqual(Object.keys(manifest.members), [HANDLERS, ROUTER]);
+  const acceptedHandlers = sha(`aws/functions/api/${HANDLERS}`);
+  const acceptedRouter = sha(`aws/functions/api/${ROUTER}`);
+  for (const other of [LIVE_HANDLERS, POLICY_DIAG_BYTES]) assert.notEqual(acceptedHandlers, other);
+  assert.notEqual(acceptedRouter, LIVE_ROUTER);
+  // Each REPLACE starts from the bytes its previous manifest accepted: production's live handlers bytes and the
+  // applied Mortgage Desk e-sign router bytes.
+  assert.deepEqual(manifest.members[HANDLERS], { live_sha256: LIVE_HANDLERS, accepted_sha256: acceptedHandlers, operation: 'replace', previous_manifest: 'aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json' });
+  assert.deepEqual(manifest.members[ROUTER], { live_sha256: LIVE_ROUTER, accepted_sha256: acceptedRouter, operation: 'replace', previous_manifest: 'aws/tests/fixtures/production-mortgage-desk-esign-applied-manifest-2026-10-28.json' });
+  for (const member of [HANDLERS, ROUTER]) {
+    const entry = manifest.members[member];
+    assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, entry.previous_manifest), 'utf8')).members[member].accepted_sha256, entry.live_sha256, member);
+    assert.deepEqual(PLAN.members[member], { operation: 'replace', accepted_sha256: entry.accepted_sha256, expected_live_sha256: entry.live_sha256, sql_before: null, manifest: REL }, member);
+    assert.equal(resolvePlannedMember(member, { root: ROOT, plan: PLAN }).ok, true, member);
+  }
+  // The router imports the new handler name statically, so the handlers come first in order, after what they
+  // import (data.mjs, tenant-email-domain.mjs, the money-write flag ADD), and the Desk e-sign trio stays adjacent.
+  assert.ok(localImports(fs.readFileSync(path.join(API, ROUTER), 'utf8'), ROUTER).includes(HANDLERS));
+  assert.match(fs.readFileSync(path.join(API, ROUTER), 'utf8'), /handleSaveTenantWalletFundingSettings,\n\} from '\.\/tenant-settings-handlers\.mjs';/);
+  assert.ok(PLAN.order.indexOf(HANDLERS) < PLAN.order.indexOf(ROUTER));
+  for (const dep of localImports(fs.readFileSync(path.join(API, HANDLERS), 'utf8'), HANDLERS).filter((name) => PLAN.members[name])) {
+    assert.ok(PLAN.order.indexOf(dep) < PLAN.order.indexOf(HANDLERS), dep);
+  }
+  assert.equal(PLAN.order.indexOf('tenant-email-domain.mjs') + 1, PLAN.order.indexOf(HANDLERS));
+  assert.equal(PLAN.order.indexOf('tenant-management-v2.mjs') + 1, PLAN.order.indexOf(ROUTER));
+  assert.ok(WORKFLOW.includes(`          - tenant-email-domain.mjs\n          - ${HANDLERS}\n          - mortgage-desk-esign.mjs\n          - tenant-management-v2.mjs\n          - ${ROUTER}\n`));
+  // Inspect: each member READY from its recorded pre-state, ALREADY_ACCEPTED at the accepted bytes; the
+  // superseded staging-only policy diagnostic bytes are not a production pre-state.
+  const inspect = (member) => ({ ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: member });
+  const readyHandlers = await run(inspect(HANDLERS), { root: ROOT, inspectLive: liveFor(HANDLERS, { sha256: LIVE_HANDLERS }) });
+  assert.equal(readyHandlers.state, 'READY');
+  assert.equal(readyHandlers.mutation, false);
+  assert.equal((await run(inspect(HANDLERS), { root: ROOT, inspectLive: liveFor(HANDLERS, { sha256: acceptedHandlers }) })).state, 'ALREADY_ACCEPTED');
+  await assert.rejects(
+    run(inspect(HANDLERS), { root: ROOT, inspectLive: liveFor(HANDLERS, { sha256: POLICY_DIAG_BYTES }) }),
+    (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+  );
+  const readyRouter = await run(inspect(ROUTER), { root: ROOT, inspectLive: liveFor(ROUTER, { sha256: LIVE_ROUTER }) });
+  assert.equal(readyRouter.state, 'READY');
+  assert.equal(readyRouter.mutation, false);
+  assert.equal((await run(inspect(ROUTER), { root: ROOT, inspectLive: liveFor(ROUTER, { sha256: acceptedRouter }) })).state, 'ALREADY_ACCEPTED');
+  // Apply: the router is refused while the handlers are not yet the accepted bytes (its import would not link) ...
+  await assert.rejects(
+    run(applyEnv(ROUTER), applyDeps(ROUTER, { pending: [HANDLERS] }).deps),
+    (error) => error.code === CODES.DEPLOYMENT_COLLISION,
+  );
+  // ... the handlers REPLACE applies over the live production bytes ...
+  const { deps: replaceDeps, calls } = applyDeps(HANDLERS);
+  const replaced = await run(applyEnv(HANDLERS), replaceDeps);
+  assert.equal(replaced.mutation, false);
+  assert.deepEqual(calls.receipt.owned_member_ops, { replace: [HANDLERS], add: [] });
+  // ... and the router then links.
+  const router = await run(applyEnv(ROUTER), applyDeps(ROUTER).deps);
+  assert.equal(router.mutation, false);
+  // The bytes: one flagged upsert of the money table in the handlers, the route registered and dispatched, and
+  // the generic write route still refusing the table.
+  const source = fs.readFileSync(path.join(API, HANDLERS), 'utf8');
+  assert.equal((source.match(/INSERT INTO public\.tenant_wallet_funding_settings/g) || []).length, 1);
+  const save = source.slice(source.indexOf('export const saveTenantWalletFundingSettings'), source.indexOf('export const runSaveTenantWalletFundingSettings'));
+  assert.ok(save.indexOf('await setMoneyWriteFlag(client);') > 0);
+  assert.ok(save.indexOf('await setMoneyWriteFlag(client);') < save.indexOf('INSERT INTO public.tenant_wallet_funding_settings'));
+  assert.match(save, /ON CONFLICT \(tenant_id\) DO UPDATE SET /);
+  assert.match(save, /error: 'wallet_funding_update_not_applied'/);
+  assert.match(source, /export const handleSaveTenantWalletFundingSettings = withSettingsWrite\(runSaveTenantWalletFundingSettings\);/);
+  const routerSource = fs.readFileSync(path.join(API, ROUTER), 'utf8');
+  assert.match(routerSource, /^  'save-tenant-wallet-funding-settings',$/m);
+  assert.match(routerSource, /case 'save-tenant-wallet-funding-settings':\n\s+return handleSaveTenantWalletFundingSettings\(event\);/);
+  const allowlist = fs.readFileSync(path.join(API, 'write-allowlist.mjs'), 'utf8');
+  assert.doesNotMatch(allowlist.slice(0, allowlist.indexOf('export const FINANCIAL_OR_PROVIDER_TABLES')), /tenant_wallet_funding_settings/);
+  assert.ok(PLAN.notes.includes('Wallet funding settings route (2026-11-02'));
+});
+
 test('Money-write flag (finding 14 step 1, 2026-10-31): ADD money-write-flag.mjs before its first importer, REPLACE seven members from their recorded bytes, planning only', async () => {
   const ADD = 'money-write-flag.mjs';
   const REPLACES = [
@@ -5205,10 +5307,10 @@ test('Money-write flag (finding 14 step 1, 2026-10-31): ADD money-write-flag.mjs
   assert.deepEqual(Object.keys(manifest.members), [ADD, ...REPLACES]);
   assert.deepEqual(manifest.members[ADD], { live_sha256: null, accepted_sha256: sha(`aws/functions/api/${ADD}`), operation: 'add' });
   assert.deepEqual(PLAN.members[ADD], { operation: 'add', accepted_sha256: sha(`aws/functions/api/${ADD}`), expected_live_sha256: null, sql_before: null, manifest: MONEY_WRITE_FLAG_REL });
-  // tenant-settings-handlers.mjs has since moved on (2026-11-01: the billing route no-silent-no-op fix, its diagnostic, the trigger diagnostic, then the policy diagnostic), whose
+  // tenant-settings-handlers.mjs has since moved on (2026-11-01: the billing route no-silent-no-op fix, its diagnostic, the trigger diagnostic, the policy diagnostic; 2026-11-02: the wallet funding settings route), whose
   // REPLACE starts from the same production live bytes (its own test below): its row keeps this manifest's live
   // value and accepts main's newer bytes; this manifest keeps its recorded #1498 bytes.
-  const MOVED_ON = { 'tenant-settings-handlers.mjs': 'aws/tests/fixtures/production-billing-policy-diagnostic-manifest-2026-11-01.json' };
+  const MOVED_ON = { 'tenant-settings-handlers.mjs': 'aws/tests/fixtures/production-wallet-funding-settings-route-manifest-2026-11-02.json' };
   for (const member of REPLACES) {
     const entry = manifest.members[member];
     // Each REPLACE starts from the bytes its previous manifest accepted (live by the third rebuild or a recorded apply).

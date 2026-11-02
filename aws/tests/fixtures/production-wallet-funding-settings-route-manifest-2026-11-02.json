@@ -1,0 +1,21 @@
+{
+  "workstream_id": "wallet-funding-settings-route",
+  "authorization": "Pending owner review (2026-11-02). Planning only: nothing is live or verified. Each production apply still needs its own owner approval and staging acceptance.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Wallet funding settings route (2026-11-02; owner 2026-11-02 \"Finish the remaining steps and open separate draft for auto funding\"): after the SQL 136 staging apply (run 41387219884) the owner's staging test reported \"Couldn't save target wallet balance\". The WalletOps auto-funding panel (useAutoFunding.ts) saved tenant_wallet_funding_settings through a browser upsert on the generic /data/write route, which refuses the table (FINANCIAL_OR_PROVIDER_TABLES, table_not_allowlisted) before any SQL runs; no API route wrote the table. These bytes add the route save-tenant-wallet-funding-settings: tenant-settings-handlers.mjs saveTenantWalletFundingSettings validates the patch (booleans, whole non-negative cents, the strategy, a funding bank that is one of this tenant's connected payment_provider_methods, the authorization version; client timestamps and ids ignored and reported), sets request.money_write in the transaction (money-write-flag.mjs) and runs one INSERT ... ON CONFLICT (tenant_id) DO UPDATE ... RETURNING *, refusing with 409 wallet_funding_update_not_applied when no row or a row without the requested values comes back; the server stamps authorization_accepted_at/by. runSaveTenantWalletFundingSettings requires the tenant and a member of it (resolveTenantAccess canConfigure), action get or save; app-services.mjs registers the route (Class A) and dispatches it. The hook invokes the route instead of upserting. The generic route still refuses the table. tenant-settings-handlers.mjs REPLACE from production's live bytes 9766306d (expected_live unchanged; 12aff321, the billing policy diagnostic, is superseded before it reached production); app-services.mjs REPLACE from its applied Mortgage Desk e-sign bytes dd6e1797 (expected_live unchanged). app-services.mjs imports the new handler name statically, so tenant-settings-handlers.mjs moves earlier in order, just after tenant-email-domain.mjs (which it imports) and before mortgage-desk-esign.mjs, tenant-management-v2.mjs and app-services.mjs; the staging overlay is 12aff321 -> the accepted bytes for the handlers and staging's live app-services bytes -> the accepted bytes, each read by its staging inspect first. No SQL change. No release-lock change.",
+  "members": {
+    "tenant-settings-handlers.mjs": {
+      "live_sha256": "9766306dfccffbb515c6dd1f0a329b91a407f53eb97c1ed148c9dcc5b9f24717",
+      "accepted_sha256": "56946fd060e41cc4c46c421f2f47820b7dc8dccba9a68058fe656477686ec38c",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
+    },
+    "app-services.mjs": {
+      "live_sha256": "dd6e1797dc00dc2beaf15585b481c76a33c415212e7be5d2efe3fd170d48121e",
+      "accepted_sha256": "e63cfe2d48cd1f428513bc8de4d8a2934bd6c4889c9d1ffd71660ac089938713",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-mortgage-desk-esign-applied-manifest-2026-10-28.json"
+    }
+  }
+}
