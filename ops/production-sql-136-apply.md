@@ -157,7 +157,25 @@ staging"); billing accrual, collection, invoices and wallet sync were not record
 apply. The owner merges the pin change; the apply still needs the owner's words for that run and runs only after that
 merge is on main and staged.
 
-**Status:** applied in staging (wave 34, 2026-11-02); staging test: the two reported failures are not gate refusals (the auto-funding settings write path is a separate PR); production pin execute-authorized (#1498's API live in production since rebuild run 41469896446); not applied to production
+**Production apply (2026-11-02).** After the pin change (#1536, merged to main as `a58f492cb`), transfer run
+41490435319 staged main `a58f492cb` (tarball sha256
+`7cb66c8f742f31a36653ae9e7cbed669604bcb57082c4b5bc8c45d735f91dbd4`). Under the owner's words
+"apply SQL 136 in production" (passed verbatim), one-shot `--phase apply` run `b47f4c29-c5bf-4288-82ff-870f057489d9`
+through SSM `d52b099a-56c7-4148-828c-2530b48c40fb`, workstream `prod-sql136-money-write-restrictive-20261102`,
+one_use_id `sql136-prod-95f82a7b-8350-43c3-a4c5-8bda2c344673`: its own inspect step read live `6b404964…` (the pinned
+pre-state, `live_matches_expected` true, `apply_preconditions_met` true, `precondition_failures` `[]`, the four counts
+0); no separate `--phase inspect` ran before it. Contracts 4/4, 6/6 and 43/43; all 11 steps ok; manifest
+`0af2580c…`; receipt `6b404964…` → `f8269d3e1f788d50ad0cbbb4b95829b3ee83b05cda91798c5f57491c8e5d26a7` (intended),
+result `applied`, unrelated catalog `48c5268b…`; post-apply inspect `already_applied` true, `aws_money_write_allowed()`
+and all 72 gate policies `intended`, the four counts 0, `precondition_failures` `[]`. The run's JSON arrived whole
+(87934 bytes on the runner, read back by SSM `e5a2d206` with the same sha256 `980b5944…`, then deleted). The runner
+`i-0c35557c4e5385406` was started for this work at 17:21:57Z and stopped at 17:24:10Z. A read-only search of the
+production API log from 17:23Z found no `rls_denied`, `42501`, row-level security or permission denied event.
+Production acceptance, tested in production: after this apply the owner exercised the production money flows and
+recorded the apply on 2026-11-02, "It saved, record SQL 136". Finding 14 is closed in production (API and database).
+
+**Status:** applied to staging (wave 34) and to production (2026-11-02); the production pin is retired
+(`execute: false`).
 
 ## Fingerprint
 
