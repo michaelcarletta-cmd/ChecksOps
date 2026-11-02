@@ -1,0 +1,62 @@
+{
+  "id": "sql140-wallet-funding-settings-write-grants-production-apply",
+  "migration": "sql140",
+  "authorization": "pending",
+  "execute": false,
+  "target_environment": "production",
+  "target_component": "production-sql",
+  "deployment_type": "sql-apply",
+  "filename": "aws/workflows/sql/140_wallet_funding_settings_write_grants.sql",
+  "migration_id": "140_wallet_funding_settings_write_grants",
+  "staging_pin_commit": "c49746755be9f05015a8967790624d040276477d",
+  "source_sha256": "7961cf7c68d56555f7135eb290a29c2c4d71fc3accead6d77908306f600d24c3",
+  "function_identities": [],
+  "expected_live_definition_sha256": null,
+  "intended_replacement_sha256": "6157ad0d9a04d119c2f4c6b289470c302f16626de6b5d3e32ff25a93f161ea5b",
+  "authorization_phrase": "APPLY_WALLET_FUNDING_SETTINGS_WRITE_GRANTS",
+  "predecessors": [],
+  "order_note": "No predecessor and no order on this engine. SQL 140 needs public.tenant_wallet_funding_settings with tenant_id, auto_funding_enabled, funding_bank_account_id, funding_payment_method_id, funding_strategy, target_wallet_balance_cents, maximum_single_pull_cents, maximum_daily_pull_cents, require_payment_approval, authorization_accepted_at, authorization_accepted_by, authorization_version, updated_at (restored Supabase schema, supabase/migrations/20260828201816_*.sql), owned by checksops_admin, and the role checksops; the file itself raises sql140_table_missing, sql140_column_missing or sql140_role_missing otherwise. The WalletOps automatic funding save (save-tenant-wallet-funding-settings, saveTenantWalletFundingSettings in aws/functions/api/tenant-settings-handlers.mjs, #1524) runs, as checksops and after setting request.money_write, one INSERT ... ON CONFLICT (tenant_id) DO UPDATE ... RETURNING * naming tenant_id and the request's columns (authorization_accepted_at and authorization_accepted_by when a version is sent; updated_at on every update). The restored AWS databases gave checksops SELECT only on every table (aws/db-copy/sql/02_grant_readonly_application_role.sql) and no repository migration grants INSERT or UPDATE on this table, so on staging PostgreSQL refuses the save before row-level security (/aws/lambda/checksops-staging-api 2026-11-02 12:31:40Z: 403, permission denied for table tenant_wallet_funding_settings). Production's grants on this table are not recorded in this repository: the read-only inspect reads them. SQL 140 grants checksops column INSERT on the twelve columns the save inserts and column UPDATE on the twelve it updates; the table ACL, the policies aws_write_tenant_wallet_funding_settings (aws/rls/sql/24_complete_write_policies.sql: aws_can_write_tenant(tenant_id)), aws_select_tenant_wallet_funding_settings and SQL 136's aws_money_write_gate_*_tenant_wallet_funding_settings stay the authorization boundary and are not changed. If the read-only inspect finds every pinned line held it reports already_applied true and nothing is applied (the pin is then recorded as verified live, not applied). No later migration revokes these grants.",
+  "admin_login": "checksops_admin",
+  "rds_identifier": "checksops-production",
+  "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
+  "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
+  "tooling": {
+    "status": "built",
+    "production_tool": "scripts/deployment-guard/sql140-wallet-funding-settings-write-grants-production-apply.mjs",
+    "production_lib": "scripts/deployment-guard/lib/release-sql-production-apply.mjs",
+    "staging_executor_handler": "aws/write-path/guarded-sql-executor/index.mjs handleReleaseSqlMigration",
+    "staging_workflow_choice": "sql140-wallet-funding-settings-write-grants",
+    "one_shot_migration": "sql140",
+    "fingerprint_engine": "scripts/deployment-guard/lib/release-sql-state.mjs",
+    "runbook": "ops/production-sql-140-apply.md",
+    "tests": [
+      "aws/tests/release-sql140-executor.test.mjs",
+      "aws/tests/release-sql140-production-apply.test.mjs",
+      "aws/tests/release-sql90-97-executor.test.mjs",
+      "aws/tests/release-sql90-97-production-apply.test.mjs",
+      "aws/tests/sql140-wallet-funding-settings-write-grants-pg.test.mjs"
+    ],
+    "note": "Guarded tooling for SQL 140: sql140-wallet-funding-settings-write-grants-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql140-wallet-funding-settings-write-grants); production-sql-one-shot.mjs --migration sql140. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): the column ACL of the thirteen tenant_wallet_funding_settings columns, tenant_id exactly checksops INSERT, updated_at exactly checksops UPDATE, the other eleven exactly checksops INSERT and checksops UPDATE (spec column_acl, as SQL 92, SQL 114, SQL 134 and SQL 135; nothing revoked). The pre-conditions refuse any other live grant on those thirteen columns (column_acl_replaceable); the table's own ACL, every other column, its RLS flag and its policies are in the unrelated-catalog snapshot and must be unchanged. The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
+  },
+  "production_inspect": {
+    "status": "pending",
+    "date": null,
+    "ssm_command_id": null,
+    "source_commit": null,
+    "read_only": true,
+    "connected_as": "checksops_admin",
+    "live_definition_sha256": null,
+    "apply_preconditions_met": null,
+    "precondition_failures": null,
+    "note": "Pending: no read-only production inspect has been run for SQL 140 yet. Expected: tenant_wallet_funding_settings present with the thirteen columns and owned by checksops_admin, role checksops present, no column grant on the thirteen (the restore gave checksops table SELECT only). Expected release-engine fingerprint of that state under sql140: fa08a3db73806391d757885c9165d0f1bf56a4571a22b1a32e2e63c73578952d (derived by aws/tests/release-sql140-executor.test.mjs and read back on PostgreSQL 16). Record the one-shot --phase inspect's date, SSM command id, source commit, live_definition_sha256, prerequisites_missing, release_sql_inspect.columns, precondition_failures and apply_preconditions_met here. If already_applied is true, record the inspect as the verified-live evidence and leave execute false; otherwise copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. Also read, from the same inspect's unrelated snapshot, the table ACL of tenant_wallet_funding_settings (a table-level write checksops may hold from the restore): this file does not change it. If precondition_failures is not [] stop: that needs its own reviewed change."
+  },
+  "intended_post_state": {
+    "fingerprint": "6157ad0d9a04d119c2f4c6b289470c302f16626de6b5d3e32ff25a93f161ea5b",
+    "note": "public.tenant_wallet_funding_settings: tenant_id carries exactly the column grant checksops INSERT; updated_at exactly checksops UPDATE; auto_funding_enabled, funding_bank_account_id, funding_payment_method_id, funding_strategy, target_wallet_balance_cents, maximum_single_pull_cents, maximum_daily_pull_cents, require_payment_approval, authorization_accepted_at, authorization_accepted_by and authorization_version each exactly checksops INSERT and checksops UPDATE. The table ACL, every other column's ACL (id, created_at), the RLS flag and the policies (aws_write_tenant_wallet_funding_settings, aws_select_tenant_wallet_funding_settings and SQL 136's gates stay the authorization boundary) are unchanged; no other table, function, policy, column or row changes. The fingerprint is releaseIntendedHash('sql140', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): 6157ad0d9a04d119c2f4c6b289470c302f16626de6b5d3e32ff25a93f161ea5b."
+  },
+  "staging_acceptance": {
+    "ok": false,
+    "reference": null,
+    "basis": "Pending: record the guarded staging SQL executor read-live and the staging apply of SQL 140 (choice sql140-wallet-funding-settings-write-grants) here in the reviewed change that sets execute true. The grants are covered on PostgreSQL 16 by aws/tests/sql140-wallet-funding-settings-write-grants-pg.test.mjs. Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+  }
+}
