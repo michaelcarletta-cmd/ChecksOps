@@ -1,5 +1,5 @@
 /**
- * One engine for the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108 to SQL 138), shared by the staging
+ * One engine for the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108 to SQL 139), shared by the staging
  * guarded executor (aws/write-path/guarded-sql-executor/index.mjs) and the production tools
  * (release-sql-production-apply.mjs): the catalog state reader, the code-derived
  * fingerprints, the pre- and post-conditions, the predecessor rules and the unrelated-catalog
@@ -903,6 +903,13 @@ export function releaseSharedPreconditionFailures(key, state, text, { environmen
     if (extra === 'money_tables_not_forced_rls') checks.push(['money_tables_not_forced_rls', s.counts?.money_tables_forced_rls === 0]);
     if (extra === 'money_definer_writers_bypass_rls') checks.push(['money_definer_writers_bypass_rls', s.counts?.money_definer_writers_without_bypass === 0]);
     if (extra === 'no_invoker_trigger_money_writers') checks.push(['no_invoker_trigger_money_writers', s.counts?.money_invoker_trigger_writers === 0]);
+    // SQL 139: the billing table is an RLS-enabled ordinary table, its authenticated write policy PERMISSIVE FOR ALL,
+    // and the machine write policy aws_write_tenant_billing_accounts_job intact (PERMISSIVE FOR ALL TO exactly
+    // {checksops}, aws_monthly_billing_job()), so replacing the authenticated policy cannot remove the billing job's
+    // write path. Read-only catalog counts (never rows); each must be exactly 1, an unreadable count (null) fails closed.
+    if (extra === 'billing_table_rls_enabled') checks.push(['billing_table_rls_enabled', s.counts?.billing_table_rls_enabled === 1]);
+    if (extra === 'billing_write_policy_permissive_all') checks.push(['billing_write_policy_permissive_all', s.counts?.billing_write_policy_permissive_all === 1]);
+    if (extra === 'billing_job_policy_intact') checks.push(['billing_job_policy_intact', s.counts?.billing_job_policy_intact === 1]);
     // SQL 98: the per-check default price exists (an active row), or the file seeds it (no row).
     if (extra === 'check_billing_config_active_or_empty') {
       checks.push(['check_billing_config_active_or_empty', s.counts?.check_billing_config_active_rows > 0 || s.counts?.check_billing_config_rows === 0]);

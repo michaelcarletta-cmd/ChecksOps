@@ -156,7 +156,7 @@ test('pin: the release pin shape, pending, the API-first gate, in step with the 
   assert.doesNotMatch(JSON.stringify(tool), /[0-9a-f]{64}/);
   const rows = JSON.stringify(readJson('ops/deployment-guard/bypass-inventory.json'));
   assert.match(rows, /"path":"scripts\/deployment-guard\/sql136-money-write-restrictive-policies-production-apply\.mjs","classification":"GUARDED","capabilities":\["sql136-production-apply"\]/);
-  assert.match(rows, /sql134, sql135, sql136, sql137, sql138\)/);
+  assert.match(rows, /sql134, sql135, sql136, sql137, sql138, sql139\)/);
   const scripts = readJson('package.json').scripts;
   const workflow = read('.github/workflows/deployment-guard.yml');
   for (const name of ['aws/tests/release-sql136-executor.test.mjs', 'aws/tests/release-sql136-production-apply.test.mjs', 'aws/tests/sql136-money-write-restrictive-pg.test.mjs']) {
@@ -186,7 +186,7 @@ test('order: no predecessor; the one gate and 72 restrictive policies on finding
   assert.match(runbook, /\*\*Revert \(if a money flow breaks after the apply\)\.\*\*/);
   const oneShot = read('ops/production-sql-one-shot.md');
   assert.match(oneShot, /\| `sql136` \|/);
-  assert.match(oneShot, /`sql134`, `sql135`, `sql136`, `sql137`, `sql138`\) \|/);
+  assert.match(oneShot, /`sql134`, `sql135`, `sql136`, `sql137`, `sql138`, `sql139`\) \|/);
   assert.match(read('ops/deployment-guard/README.md'), /sql136-money-write-restrictive-policies-production-apply\.mjs --inspect/);
 });
 

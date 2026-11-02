@@ -1,5 +1,5 @@
 /**
- * Specs of the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108 to SQL 138) for the shared engine in
+ * Specs of the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108 to SQL 139) for the shared engine in
  * release-sql-state.mjs: what each pinned file creates, replaces or drops, the reviewed
  * EXECUTE ACLs, the prerequisites and predecessors, and the PostgreSQL renderings the file
  * leaves (policy expressions, view, column, constraint, index and trigger definitions as
@@ -7510,6 +7510,68 @@ export const RELEASE_SQL_SPECS = deepFreeze({
     "definer_writes": [
       "public.external_payment_recipients",
       "public.payment_provider_methods"
+    ]
+  },
+
+  // SQL 139 (staging billing write diagnostic #1515, main 1e51f8d3): public.tenant_billing_accounts' authenticated
+  // write policy aws_write_tenant_billing_accounts had a live condition (sha256-12 8c72ef93d1e5, text unknown) that
+  // does not call aws_can_write_tenant, so a tenant member could not lock or update its own row (lock:0). The file
+  // replaces it with the repository's SQL 24 policy, FOR ALL TO authenticated USING / WITH CHECK
+  // (public.aws_can_write_tenant(tenant_id)), as SQL 39 did for tenant_maintenance_payments. The pre-state is the
+  // live policy as a staging read-live records it (no derived pre-state: the drifted text is unknown). No predecessor.
+  // altered_relations: DROP / CREATE POLICY need the table owner. extra_preconditions / counts (read-only catalog
+  // counts, never rows): the table is an RLS-enabled ordinary table, the write policy is PERMISSIVE FOR ALL, and the
+  // live-only machine policy aws_write_tenant_billing_accounts_job is PERMISSIVE FOR ALL TO exactly {checksops} with
+  // USING and WITH CHECK aws_monthly_billing_job() (the file raises sql139_* otherwise). The SELECT policies, the
+  // _job policies and SQL 136's RESTRICTIVE aws_money_write_gate_*_tenant_billing_accounts are not touched (the
+  // unrelated snapshot holds them). No function, table, column, grant or trigger.
+  sql139: {
+    "key": "sql139",
+    "label": "SQL 139",
+    "choice": "sql139-tenant-billing-accounts-write-policy-reconcile",
+    "production_pin_rel": "ops/deployment-guard/sql139-tenant-billing-accounts-write-policy-reconcile-production-apply.json",
+    "script": "sql139-tenant-billing-accounts-write-policy-reconcile-production-apply",
+    "prerequisites": [
+      "public.tenant_billing_accounts",
+      "column public.tenant_billing_accounts.tenant_id",
+      "public.aws_can_write_tenant(uuid)",
+      "public.aws_monthly_billing_job()",
+      "role checksops",
+      "role authenticated"
+    ],
+    "predecessors": [],
+    "extra_preconditions": [
+      "billing_table_rls_enabled",
+      "billing_write_policy_permissive_all",
+      "billing_job_policy_intact"
+    ],
+    "counts": {
+      "billing_table_rls_enabled": {
+        "sql": "SELECT count(*)::int AS n FROM pg_catalog.pg_class c WHERE c.oid = pg_catalog.to_regclass('public.tenant_billing_accounts') AND c.relkind = 'r' AND c.relrowsecurity"
+      },
+      "billing_write_policy_permissive_all": {
+        "sql": "SELECT count(*)::int AS n FROM pg_catalog.pg_policy pol WHERE pol.polrelid = pg_catalog.to_regclass('public.tenant_billing_accounts') AND pol.polname = 'aws_write_tenant_billing_accounts' AND pol.polpermissive AND pol.polcmd = '*'"
+      },
+      "billing_job_policy_intact": {
+        "sql": "SELECT count(*)::int AS n FROM pg_catalog.pg_policy pol WHERE pol.polrelid = pg_catalog.to_regclass('public.tenant_billing_accounts') AND pol.polname = 'aws_write_tenant_billing_accounts_job' AND pol.polpermissive AND pol.polcmd = '*' AND pol.polroles = ARRAY(SELECT r.oid FROM pg_catalog.pg_roles r WHERE r.rolname = 'checksops') AND pg_catalog.pg_get_expr(pol.polqual, pol.polrelid) = ANY (ARRAY['aws_monthly_billing_job()', '(aws_monthly_billing_job())', 'public.aws_monthly_billing_job()', '(public.aws_monthly_billing_job())']::text[]) AND pg_catalog.pg_get_expr(pol.polwithcheck, pol.polrelid) = ANY (ARRAY['aws_monthly_billing_job()', '(aws_monthly_billing_job())', 'public.aws_monthly_billing_job()', '(public.aws_monthly_billing_job())']::text[])"
+      }
+    },
+    "functions": [],
+    "policies": [
+      {
+        "table": "public.tenant_billing_accounts",
+        "name": "aws_write_tenant_billing_accounts",
+        "cmd": "ALL",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": true,
+        "qual": "public.aws_can_write_tenant(tenant_id)",
+        "with_check": "public.aws_can_write_tenant(tenant_id)"
+      }
+    ],
+    "altered_relations": [
+      "public.tenant_billing_accounts"
     ]
   },
 

@@ -224,7 +224,7 @@ test('pin: the release pin shape, applied and retired (owner approved 2026-10-30
   assert.doesNotMatch(JSON.stringify(tool), /[0-9a-f]{64}/);
   const rows = JSON.stringify(readJson('ops/deployment-guard/bypass-inventory.json'));
   assert.match(rows, /"path":"scripts\/deployment-guard\/sql130-financial-totp-rate-limit-code-check-no-public-production-apply\.mjs","classification":"GUARDED","capabilities":\["sql130-production-apply"\]/);
-  assert.match(rows, /sql123, sql124, sql125, sql126, sql127, sql128, sql129, sql130, sql131, sql132, sql133, sql134, sql135, sql136, sql137, sql138\)/);
+  assert.match(rows, /sql123, sql124, sql125, sql126, sql127, sql128, sql129, sql130, sql131, sql132, sql133, sql134, sql135, sql136, sql137, sql138, sql139\)/);
   const scripts = readJson('package.json').scripts;
   const workflow = fs.readFileSync(path.join(ROOT, '.github/workflows/deployment-guard.yml'), 'utf8');
   for (const name of ['aws/tests/release-sql130-executor.test.mjs', 'aws/tests/release-sql130-production-apply.test.mjs', 'aws/tests/sql130-financial-totp-rate-limit-pg.test.mjs']) {
@@ -288,7 +288,7 @@ test('order: no predecessor and no order; supersedes SQL 129; the function and i
   assert.match(runbook, /"New combined\s+fix"/);
   const oneShot = fs.readFileSync(path.join(ROOT, 'ops/production-sql-one-shot.md'), 'utf8');
   assert.match(oneShot, /\| `sql130` \|/);
-  assert.match(oneShot, /`sql127`, `sql128`, `sql129`, `sql130`, `sql131`, `sql132`, `sql133`, `sql134`, `sql135`, `sql136`, `sql137`, `sql138`\) \|/);
+  assert.match(oneShot, /`sql127`, `sql128`, `sql129`, `sql130`, `sql131`, `sql132`, `sql133`, `sql134`, `sql135`, `sql136`, `sql137`, `sql138`, `sql139`\) \|/);
   assert.match(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/README.md'), 'utf8'), /sql130-financial-totp-rate-limit-code-check-no-public-production-apply\.mjs --inspect/);
 });
 

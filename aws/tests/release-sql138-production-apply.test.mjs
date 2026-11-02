@@ -250,7 +250,7 @@ test('pin: the release pin shape, applied and retired (owner approved 2026-11-01
   assert.doesNotMatch(JSON.stringify(tool), /[0-9a-f]{64}/);
   const rows = JSON.stringify(readJson('ops/deployment-guard/bypass-inventory.json'));
   assert.match(rows, /"path":"scripts\/deployment-guard\/sql138-payee-setup-link-closed-after-verification-production-apply\.mjs","classification":"GUARDED","capabilities":\["sql138-production-apply"\]/);
-  assert.match(rows, /sql134, sql135, sql136, sql137, sql138\)/);
+  assert.match(rows, /sql134, sql135, sql136, sql137, sql138, sql139\)/);
   const scripts = readJson('package.json').scripts;
   const workflow = fs.readFileSync(path.join(ROOT, '.github/workflows/deployment-guard.yml'), 'utf8');
   for (const name of ['aws/tests/release-sql138-executor.test.mjs', 'aws/tests/release-sql138-production-apply.test.mjs', 'aws/tests/sql138-payee-setup-link-closed-pg.test.mjs']) {
@@ -335,7 +335,7 @@ test('order: predecessor and supersedes SQL 113 (untouched); the one replaced fu
   assert.match(runbook, /\*\*Known API residue \(outside this file\)\.\*\*/);
   const oneShot = fs.readFileSync(path.join(ROOT, 'ops/production-sql-one-shot.md'), 'utf8');
   assert.match(oneShot, /\| `sql138` \|/);
-  assert.match(oneShot, /`sql134`, `sql135`, `sql136`, `sql137`, `sql138`\) \|/);
+  assert.match(oneShot, /`sql134`, `sql135`, `sql136`, `sql137`, `sql138`, `sql139`\) \|/);
   assert.match(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/README.md'), 'utf8'), /sql138-payee-setup-link-closed-after-verification-production-apply\.mjs --inspect/);
 });
 

@@ -110,7 +110,7 @@ const neverConnect = async () => { throw new Error('should-not-connect'); };
 test('pins: the reviewed bytes, pending pre-states, code-derived post-states, selectable, packed and in step with the production pins', () => {
   const packed = Object.fromEntries(EXECUTOR_PACK_MEMBERS);
   const workflow = fs.readFileSync(path.join(ROOT, '.github/workflows/guarded-staging-sql-executor.yml'), 'utf8');
-  assert.deepEqual(RELEASE_SQL_KEYS, ['sql90', 'sql91', 'sql92', 'sql93', 'sql94', 'sql95', 'sql96', 'sql97', 'sql98', 'sql99', 'sql100', 'sql101', 'sql102', 'sql103', 'sql104', 'sql105', 'sql106', 'sql108', 'sql109', 'sql110', 'sql111', 'sql112', 'sql113', 'sql114', 'sql115', 'sql116', 'sql117', 'sql118', 'sql119', 'sql120', 'sql121', 'sql122', 'sql123', 'sql124', 'sql125', 'sql126', 'sql127', 'sql128', 'sql129', 'sql130', 'sql131', 'sql132', 'sql133', 'sql134', 'sql135', 'sql136', 'sql137', 'sql138']);
+  assert.deepEqual(RELEASE_SQL_KEYS, ['sql90', 'sql91', 'sql92', 'sql93', 'sql94', 'sql95', 'sql96', 'sql97', 'sql98', 'sql99', 'sql100', 'sql101', 'sql102', 'sql103', 'sql104', 'sql105', 'sql106', 'sql108', 'sql109', 'sql110', 'sql111', 'sql112', 'sql113', 'sql114', 'sql115', 'sql116', 'sql117', 'sql118', 'sql119', 'sql120', 'sql121', 'sql122', 'sql123', 'sql124', 'sql125', 'sql126', 'sql127', 'sql128', 'sql129', 'sql130', 'sql131', 'sql132', 'sql133', 'sql134', 'sql135', 'sql136', 'sql137', 'sql138', 'sql139']);
   for (const key of RELEASE_SQL_KEYS) {
     const pin = PINS[key];
     const spec = RELEASE_SQL_SPECS[key];

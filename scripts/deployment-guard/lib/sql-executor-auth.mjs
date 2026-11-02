@@ -3146,6 +3146,27 @@ export const AUTHORIZED_SQL138_PAYEE_SETUP_LINK_CLOSED_AFTER_VERIFICATION = Obje
   function_identities: Object.freeze(['public.aws_public_payee_record(text, text, jsonb)']),
 });
 
+// Billing write policy staging pin: SQL 139 (staging billing write diagnostic #1515, main 1e51f8d3: a tenant
+// member could not lock or update its own tenant_billing_accounts row; the authenticated write policy did not
+// call aws_can_write_tenant): aws_write_tenant_billing_accounts replaced with the repository's SQL 24 policy,
+// refused unless the live-only aws_write_tenant_billing_accounts_job is intact (as SQL 39). No predecessor.
+// Pending until a reviewed pin change records a staging read-live: the pre-state is the live drifted policy,
+// whose text is unknown, so it cannot be derived (ops/production-sql-139-apply.md).
+export const AUTHORIZED_SQL139_TENANT_BILLING_ACCOUNTS_WRITE_POLICY_RECONCILE = Object.freeze({
+  key: 'sql139',
+  filename: 'aws/workflows/sql/139_tenant_billing_accounts_write_policy_reconcile.sql',
+  migration_id: '139_tenant_billing_accounts_write_policy_reconcile',
+  // The commit that last authored the file bytes.
+  commit: '6f72d3e25ad63bab6b78551ec8932d4f42c32093',
+  source_sha256: 'cfe8e15d93b0461d27f31d5c0652e08bb42a4c19ea53932e1ed7306ca1e5e776',
+  authorization: 'pending',
+  execute: false,
+  expected_live_definition_sha256: null,
+  // Code-derived: releaseIntendedHash('sql139', file bytes) (release-sql-state.mjs); re-derived by the tests.
+  intended_replacement_sha256: '17f07a31e274899a50f53877dc1df48839614ba6148047a4321000e474bd446d',
+  function_identities: Object.freeze([]),
+});
+
 export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql90: AUTHORIZED_SQL90_USERS_ONLY_TENANT_ROLES,
   sql91: AUTHORIZED_SQL91_MOOV_ONBOARDING,
@@ -3195,6 +3216,7 @@ export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql136: AUTHORIZED_SQL136_MONEY_WRITE_RESTRICTIVE_POLICIES,
   sql137: AUTHORIZED_SQL137_PLATFORM_OWNER_IDENTITY,
   sql138: AUTHORIZED_SQL138_PAYEE_SETUP_LINK_CLOSED_AFTER_VERIFICATION,
+  sql139: AUTHORIZED_SQL139_TENANT_BILLING_ACCOUNTS_WRITE_POLICY_RECONCILE,
 });
 
 // The fee collection pin under its earlier map name (the same object as the release map's sql98).
@@ -3210,7 +3232,7 @@ export function isSql30TenantDocumentsDocType(input = {}) {
   return pinIdentifiersMatch(input, AUTHORIZED_SQL30_TENANT_DOCUMENTS_DOC_TYPE);
 }
 
-/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql138) an input names, or null. */
+/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql139) an input names, or null. */
 export function releaseSqlMigrationKey(input = {}) {
   return Object.keys(RELEASE_2026_10_17_PENDING_SQL_PINS)
     .find((key) => pinIdentifiersMatch(input, RELEASE_2026_10_17_PENDING_SQL_PINS[key])) || null;
