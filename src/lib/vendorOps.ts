@@ -7,12 +7,24 @@
  * session, so the same Cognito/AWS adapter (or Supabase client off AWS), the
  * same API authorization and the same tenant-scoped wallet and ledger
  * components apply. Nothing here adds a role, a table or a policy.
+ *
+ * Access is limited to the organizations in VENDOR_OPS_ENABLED_TENANT_IDS (owner,
+ * 2026-11-02: regular tenants use their ChecksOps login; Freedom Adjustment keeps
+ * the portal while the owner tests it). This is a UX gate only: the same member
+ * already reaches the same wallet and ledger through /{slug}, and the API and RLS
+ * enforce tenant membership either way.
  */
 import {
   classifyLoginMemberships,
   type LoginMembershipResult,
   type LoginMembershipRow,
 } from "./loginMembership.ts";
+
+/** Freedom Adjustment (same id as FREEDOM_TENANT_ID in aws/functions/api/authorization.mjs). */
+export const FREEDOM_ADJUSTMENT_TENANT_ID = "2eff5f1a-929d-4ce3-9a8b-cd96b98df42a";
+
+/** Organizations whose members may open the Vendor Portal. */
+export const VENDOR_OPS_ENABLED_TENANT_IDS: readonly string[] = [FREEDOM_ADJUSTMENT_TENANT_ID];
 
 export const VENDOR_OPS_BASE_PATH = "/vendor-ops";
 export const VENDOR_OPS_LOGIN_PATH = `${VENDOR_OPS_BASE_PATH}/login`;
@@ -33,7 +45,25 @@ export function isVendorOpsPath(pathname: string | null | undefined): boolean {
   return p === VENDOR_OPS_BASE_PATH || p.startsWith(`${VENDOR_OPS_BASE_PATH}/`);
 }
 
-/** Which organization the Vendor Portal opens: the member's active organization. */
-export function resolveVendorWorkspace(rows: LoginMembershipRow[] | null | undefined): LoginMembershipResult {
-  return classifyLoginMemberships(rows);
+export type VendorWorkspaceResult = LoginMembershipResult | { kind: "not_enabled" };
+
+export const VENDOR_OPS_NOT_ENABLED_MESSAGE = {
+  title: "Vendor Portal not available",
+  description: "The Vendor Portal isn't enabled for your organization. Sign in to ChecksOps at /login instead.",
+} as const;
+
+/**
+ * Which organization the Vendor Portal opens: the member's active organization among
+ * the enabled ones. A member of only other organizations gets "not_enabled"; a member
+ * of no organization gets "none", as on the ChecksOps login.
+ */
+export function resolveVendorWorkspace(
+  rows: LoginMembershipRow[] | null | undefined,
+  enabledTenantIds: readonly string[] = VENDOR_OPS_ENABLED_TENANT_IDS,
+): VendorWorkspaceResult {
+  const list = (rows ?? []).filter((m) => m && (m.tenant_id || m.tenants));
+  if (list.length === 0) return { kind: "none" };
+  const enabled = list.filter((m) => !!m.tenant_id && enabledTenantIds.includes(String(m.tenant_id)));
+  if (enabled.length === 0) return { kind: "not_enabled" };
+  return classifyLoginMemberships(enabled);
 }
