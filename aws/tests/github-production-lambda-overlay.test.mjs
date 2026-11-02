@@ -4709,7 +4709,9 @@ test('Moov webhook body confirmation (2026-10-31): ADD moov-webhook-confirm.mjs 
   });
   // webhooks.mjs live is what the transfer returns manifest accepted; the rebuild plan records both live bytes.
   assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, PREVIOUS), 'utf8')).members[WEBHOOKS].accepted_sha256, WEBHOOKS_LIVE);
-  const rebuild = JSON.parse(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/lambda-rebuild-plan.json'), 'utf8')).environments.production;
+  // The third production rebuild (now history[2]; the fourth section accepts inspect 41463084601).
+  const rebuildPlan = JSON.parse(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/lambda-rebuild-plan.json'), 'utf8')).environments.production;
+  const rebuild = { ...rebuildPlan.history[2], history: rebuildPlan.history.slice(0, 2) };
   assert.equal(rebuild.applied.run_id, '39669873076');
   assert.equal(rebuild.members[WEBHOOKS].accepted_sha256, WEBHOOKS_LIVE);
   assert.equal(rebuild.applied.main_commit, '008af40e2465eb68fdfeab72eaf06f2efb1d5b45');
@@ -5126,7 +5128,9 @@ test('Money step-up window (finding 7): REPLACE moov-fund-authz.mjs then checkal
   for (const evidence of ['finding 7', '15 minutes', '39669873076', '008af40e2', 'totp_required', 'step_up_required', 'No SQL change']) {
     assert.ok(manifest.notes.includes(evidence), evidence);
   }
-  const rebuild = JSON.parse(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/lambda-rebuild-plan.json'), 'utf8')).environments.production;
+  // The third production rebuild (now history[2]; the fourth section accepts inspect 41463084601).
+  const rebuildPlan = JSON.parse(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/lambda-rebuild-plan.json'), 'utf8')).environments.production;
+  const rebuild = { ...rebuildPlan.history[2], history: rebuildPlan.history.slice(0, 2) };
   assert.equal(rebuild.applied.run_id, '39669873076');
   assert.equal(rebuild.applied.state, 'VERIFIED');
   assert.equal(rebuild.applied.main_commit, '008af40e2465eb68fdfeab72eaf06f2efb1d5b45');
