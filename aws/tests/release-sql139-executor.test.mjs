@@ -6,7 +6,7 @@
  *
  *   - the pin: staging-authorized (wave 35) from staging read-live run 41367825238 (the pre-state is the live
  *     drifted policy, whose text is unknown, so it is recorded as read, not derived), code-derived, selectable,
- *     packed, in step with the production pin (execute true on production's own pre-state, the same one staging had);
+ *     packed, in step with the production pin (applied 2026-11-02 and retired, from production's own pre-state, the same one staging had);
  *     the pinned commit authored the bytes; no predecessor;
  *   - the spec: no function, one PERMISSIVE FOR ALL policy TO authenticated (SQL 24's), the table as
  *     altered_relations; the three extra preconditions read catalog counts and fail closed unless each is 1;
@@ -158,11 +158,15 @@ test('pin: SQL 139 staging-authorized from its read-live (pre-state recorded, no
   assert.equal(prod.source_sha256, pin.source_sha256);
   assert.deepEqual(prod.function_identities, []);
   assert.deepEqual(prod.predecessors, []);
-  // Production pin execute-authorized (owner-approved pin change of 2026-11-02) on the staging apply. Its pre-state is
-  // production's own (read-only inspect SSM 5eb60937), recorded as read (not derivable), the same pre-state staging
-  // recorded (read-live run 41367825238).
-  assert.equal(prod.execute, true);
-  assert.match(prod.authorization, /^Owner approved 2026-11-02 /);
+  // Production pin applied 2026-11-02 and retired (owner-approved pin change of 2026-11-02, #1519, on the staging apply).
+  // Its pre-state is production's own (read-only inspect SSM 5eb60937), recorded as read (not derivable), the same
+  // pre-state staging recorded (read-live run 41367825238).
+  assert.equal(prod.execute, false);
+  assert.match(prod.authorization, /^Applied to production on 2026-11-02; execute is false again/);
+  assert.equal(prod.applied.result, 'applied');
+  assert.equal(prod.applied.receipt.before_hash, prod.expected_live_definition_sha256);
+  assert.equal(prod.applied.receipt.after_hash, prod.intended_replacement_sha256);
+  assert.equal(prod.applied.post_apply_inspect.already_applied, true);
   assert.equal(prod.expected_live_definition_sha256, prod.production_inspect.live_definition_sha256);
   assert.equal(prod.expected_live_definition_sha256, pin.expected_live_definition_sha256);
   assert.notEqual(prod.expected_live_definition_sha256, prod.intended_replacement_sha256);
@@ -172,7 +176,7 @@ test('pin: SQL 139 staging-authorized from its read-live (pre-state recorded, no
   assert.match(prod.order_note, /The production pre-state cannot be derived/);
   // The runbook: the intended fingerprint and text, the source, the evidence; no derived pre-state.
   const runbook = fs.readFileSync(path.join(ROOT, 'ops/production-sql-139-apply.md'), 'utf8');
-  assert.match(runbook, /\*\*Status:\*\* applied in staging \(wave 35, 2026-11-02\); staging acceptance: owner tested in staging \(the billing account saved\); production pin execute-authorized; not applied to production/);
+  assert.match(runbook, /\*\*Status:\*\* applied to staging \(wave 35\) and to production \(2026-11-02\); the production pin is retired/);
   assert.match(runbook, /read-live \(2026-11-02\)\.\*\* Run 41367825238/);
   assert.ok(runbook.includes(pin.expected_live_definition_sha256));
   assert.match(runbook, /\*\*Pre-state: not derivable\.\*\*/);

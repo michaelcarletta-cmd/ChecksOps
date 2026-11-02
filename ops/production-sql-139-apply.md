@@ -91,7 +91,30 @@ pin"; the owner's words so far name the staging steps, the inspect and this pin,
 owner merges the pin change; the apply still needs the owner's words for that run and runs only after that merge is
 on main and staged.
 
-**Status:** applied in staging (wave 35, 2026-11-02); staging acceptance: owner tested in staging (the billing account saved); production pin execute-authorized; not applied to production
+**Production apply (2026-11-02).** After the pin change (#1519, merged to main as `4ca522a24`), transfer run
+41375148472 staged main `4ca522a24` (tarball sha256
+`498976ae828ac4811e4ec57ae934b28565b15b410ce8ce5697092dbead313b09`). Under the owner's words
+"apply SQL 139 in production" (passed verbatim), a one-shot `--phase inspect` (SSM
+`f680a0c4-a5d2-4b2f-8478-9563fdb3d08c`, run `80568c5f-e151-48c1-95b5-1e8d6bca475d`, nothing written) read live `8727ecb1…` (the pinned pre-state,
+`live_matches_expected` true, `apply_preconditions_met` true, `precondition_failures` `[]`, the three counts 1);
+then one-shot `--phase apply` run `13ba0ae8-454d-45a3-b712-abd392662cad` through SSM
+`4d608cbc-a23a-40d6-8b33-7b08992f0847`, workstream `prod-sql139-billing-write-policy-20261102`, one_use_id
+`sql139-prod-aa1f80e5-958e-414e-8987-271e20846eac`: its own inspect step read the same pre-state; contracts 4/4,
+6/6 and 43/43; all 11 steps ok; manifest `b3c43367…`; receipt `8727ecb1…` →
+`17f07a31e274899a50f53877dc1df48839614ba6148047a4321000e474bd446d` (intended), result `applied`, unrelated
+catalog `059e581e…` (policies 403, functions 1356); post-apply inspect `already_applied` true,
+`precondition_failures` `[]`: the policy `tenant_billing_accounts aws_write_tenant_billing_accounts` `intended`,
+counts `billing_table_rls_enabled` 1, `billing_write_policy_permissive_all` 1, `billing_job_policy_intact` 1,
+`prerequisites_missing` `[]`. The run's JSON arrived whole (19086 characters, under SSM's 24000-character limit).
+The runner `i-0c35557c4e5385406` was started for this work and stopped afterwards. Production acceptance, tested
+in production: production website upload run 41377891839 (main `9ba9a8e4`, "DEPLOY WEBSITE TO PRODUCTION";
+`index.html` `d83bc564…` → `55733c79…`, bundle `index-BAfCsjEp.js`) put into production the billing panel that
+saves through the server route; after it the owner linked the billing account in production and it saved, and
+recorded the apply on 2026-11-02, "It saved, record SQL 139". Before that website deploy the old panel's direct
+table write returned `writes_disabled`: that came from the old SPA, not the database.
+
+**Status:** applied to staging (wave 35) and to production (2026-11-02); the production pin is retired
+(`execute: false`).
 
 ## Fingerprint
 
