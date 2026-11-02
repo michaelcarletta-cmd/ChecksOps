@@ -5,8 +5,8 @@
  * covers what is new:
  *
  *   - the pin: staging-authorized (wave 36) from staging read-live run 41452217978 (the derived pre-state: no
- *     column grant), code-derived, selectable, packed, in step with the production pin (pending); the pinned
- *     commit authored the bytes; no predecessor;
+ *     column grant), code-derived, selectable, packed, in step with the production pin (execute true on
+ *     production's own pre-state, the same one staging had); the pinned commit authored the bytes; no predecessor;
  *   - the spec's thirteen column_acl entries (SQL 140 creates or replaces no function), as SQL 92's,
  *     SQL 114's, SQL 134's and SQL 135's, nothing revoked: the fingerprint is the column ACL (every
  *     grantee) of the tenant_wallet_funding_settings columns the automatic funding save writes;
@@ -112,7 +112,7 @@ function handlerFor(connect, { pins = {} } = {}) {
   return createHandler({ connect, now: () => Date.parse(NOW), releaseSqlFiles: FILES, releaseSqlPins: { ...PINS, ...pins } });
 }
 
-test('pin: SQL 140 staging-authorized from its read-live, code-derived, selectable, packed, in step with the pending production pin; no predecessor', () => {
+test('pin: SQL 140 staging-authorized from its read-live, code-derived, selectable, packed, in step with the production pin; no predecessor', () => {
   const pin = PINS[KEY];
   const spec = RELEASE_SQL_SPECS[KEY];
   const packed = Object.fromEntries(EXECUTOR_PACK_MEMBERS);
@@ -160,11 +160,18 @@ test('pin: SQL 140 staging-authorized from its read-live, code-derived, selectab
   assert.equal(prod.staging_pin_commit, pin.commit);
   assert.equal(prod.source_sha256, pin.source_sha256);
   assert.deepEqual(prod.predecessors, []);
-  assert.equal(prod.execute, false);
-  assert.equal(prod.authorization, 'pending');
-  assert.equal(prod.expected_live_definition_sha256, null);
-  assert.equal(prod.production_inspect.status, 'pending');
+  // Production pin execute-authorized (owner-approved pin change of 2026-11-02) on the staging apply. Its pre-state is
+  // production's own (read-only inspect SSM e89960f1), the same pre-state staging recorded (read-live run 41452217978)
+  // and the one derived from the file.
+  assert.equal(prod.execute, true);
+  assert.match(prod.authorization, /^Owner approved 2026-11-02 /);
+  assert.equal(prod.expected_live_definition_sha256, prod.production_inspect.live_definition_sha256);
+  assert.equal(prod.expected_live_definition_sha256, pin.expected_live_definition_sha256);
+  assert.equal(prod.expected_live_definition_sha256, PRE_NONE);
+  assert.notEqual(prod.expected_live_definition_sha256, prod.intended_replacement_sha256);
+  assert.equal(prod.production_inspect.status, 'recorded');
   assert.ok(prod.production_inspect.note.includes(PRE_NONE));
+  assert.match(prod.production_inspect.note, / Earlier: Pending: no read-only production inspect has been run for SQL 140 yet\./);
   let bytes = null;
   if (/^[0-9a-f]{40}$/.test(pin.commit)) {
     try {
