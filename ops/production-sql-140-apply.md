@@ -109,7 +109,28 @@ staging acceptance and `execute: true`; the owner's words so far name the stagin
 get SQL 140 and 136 on production") and the runner, not the production apply. The owner merges the pin change; the
 apply still needs the owner's words for that run and runs only after that merge is on main and staged.
 
-**Status:** applied in staging (wave 36, 2026-11-02); staging acceptance: owner tested in staging (the target wallet balance saved); production pin execute-authorized; not applied to production
+**Production apply (2026-11-02).** After the pin change (#1532, merged to main as `675458dea`), transfer run
+41476325899 staged main `675458dea` (tarball sha256
+`6d8c07248bc2e1f99c5f5cbd8eae355ea7a72e9e65f5e57b6c5477c075063b61`). Under the owner's words
+"apply SQL 140 in production" (passed verbatim), one-shot `--phase apply` run `5ca07ccf-fac8-47df-a3a2-e7b1ecdaa99a` through SSM
+`9fab01de-bd6c-4cfc-a3ff-35155be346f3`, workstream `prod-sql140-wallet-funding-write-grants-20261102`, one_use_id
+`sql140-prod-89171939-44dc-469d-b86a-48f616bfe652`: its own inspect step read live `fa08a3db…` (the pinned
+pre-state, `live_matches_expected` true, `apply_preconditions_met` true, `precondition_failures` `[]`); no separate
+`--phase inspect` ran before it. Contracts 4/4, 6/6 and 43/43; all 11 steps ok; manifest `2e108af6…`; receipt
+`fa08a3db…` → `6157ad0d9a04d119c2f4c6b289470c302f16626de6b5d3e32ff25a93f161ea5b` (intended), result `applied`,
+unrelated catalog `667bf7b9…` (policies 404, functions 1356); post-apply inspect `already_applied` true,
+`precondition_failures` `[]`, all thirteen columns `intended`, `prerequisites_missing` `[]`. The run's JSON did not
+arrive whole: SSM returns at most 24000 characters, and the output stopped inside `details.applied.receipt`; the
+recorded values come from the part that arrived (the pin's `applied.one_shot_note` says which). The runner
+`i-0c35557c4e5385406` was started for this work at 15:56:44Z and stopped at 16:09:28Z, after an AWS-managed Amazon
+Inspector plugin command (`b2f735e3`) had ended on it (Failed, InvalidPlatform). Production acceptance, tested in
+production: production website upload run 41472980949 (main `1364af787`, "DEPLOY WEBSITE TO PRODUCTION";
+`index.html` `55733c79…` → `c761d806…`, bundle `index-6eURntiH.js`, lock #1533) put into production the automatic
+funding panel that saves through the server route; after this apply the owner saved the target wallet balance in
+production and recorded the apply on 2026-11-02, "It saved, record SQL 140".
+
+**Status:** applied to staging (wave 36) and to production (2026-11-02); the production pin is retired
+(`execute: false`).
 
 ## Fingerprint
 
