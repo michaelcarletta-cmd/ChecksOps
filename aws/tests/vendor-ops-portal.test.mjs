@@ -2,7 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {
+  FREEDOM_ADJUSTMENT_TENANT_ID,
   isVendorOpsPath,
+  VENDOR_OPS_ENABLED_TENANT_IDS,
   resolveVendorWorkspace,
   VENDOR_OPS_HOME_PATH,
   VENDOR_OPS_LOGIN_PATH,
@@ -22,14 +24,40 @@ test('vendor portal paths are static /vendor-ops paths', () => {
   assert.equal(isVendorOpsPath('/acme/wallet-ops'), false);
 });
 
-test('vendor workspace resolves like the ChecksOps login: active slug, inactive, or none', () => {
+const FA = FREEDOM_ADJUSTMENT_TENANT_ID;
+
+test('only Freedom Adjustment is enabled, and its id matches the API constant', () => {
+  assert.deepEqual([...VENDOR_OPS_ENABLED_TENANT_IDS], [FA]);
+  const api = read('aws/functions/api/authorization.mjs');
+  assert.match(api, new RegExp(`FREEDOM_TENANT_ID = '${FA}'`));
+});
+
+test('Freedom Adjustment member opens its workspace; inactive and none behave like the login', () => {
   assert.deepEqual(
-    resolveVendorWorkspace([{ tenant_id: 't1', tenants: { slug: 'acme', subscription_status: 'active' } }]),
-    { kind: 'active', slug: 'acme' },
+    resolveVendorWorkspace([{ tenant_id: FA, tenants: { slug: 'freedom', subscription_status: 'active' } }]),
+    { kind: 'active', slug: 'freedom' },
   );
-  assert.deepEqual(resolveVendorWorkspace([{ tenant_id: 't1', tenants: null }]), { kind: 'inactive' });
+  assert.deepEqual(resolveVendorWorkspace([{ tenant_id: FA, tenants: null }]), { kind: 'inactive' });
   assert.deepEqual(resolveVendorWorkspace([]), { kind: 'none' });
+  assert.deepEqual(resolveVendorWorkspace(null), { kind: 'none' });
   assert.doesNotMatch(VENDOR_OPS_MEMBERSHIP_SELECT, /!inner/);
+});
+
+test('regular tenant members are refused, even with an active organization', () => {
+  assert.deepEqual(
+    resolveVendorWorkspace([{ tenant_id: 't-acme', tenants: { slug: 'acme', subscription_status: 'active' } }]),
+    { kind: 'not_enabled' },
+  );
+});
+
+test('a member of a regular tenant and Freedom Adjustment opens Freedom Adjustment, never the other', () => {
+  assert.deepEqual(
+    resolveVendorWorkspace([
+      { tenant_id: 't-acme', tenants: { slug: 'acme', subscription_status: 'active' } },
+      { tenant_id: FA, tenants: { slug: 'freedom', subscription_status: 'active' } },
+    ]),
+    { kind: 'active', slug: 'freedom' },
+  );
 });
 
 test('App declares /vendor-ops routes before the /:slug/* tenant catch-all', () => {
@@ -51,5 +79,6 @@ test('vendor portal uses the main ChecksOps session and mounts its own TenantPro
     assert.doesNotMatch(src, /vendorClient|useVendorAuth/);
   }
   assert.match(layout, /<TenantProvider slug=\{workspace\.slug\}>/);
+  assert.match(layout, /VENDOR_OPS_NOT_ENABLED_MESSAGE/);
   assert.doesNotMatch(layout, /useParams/);
 });
