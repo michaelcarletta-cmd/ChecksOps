@@ -221,7 +221,7 @@ test('pin: the release pin shape, applied and retired (owner approved 2026-10-30
   assert.doesNotMatch(JSON.stringify(tool), /[0-9a-f]{64}/);
   const rows = JSON.stringify(readJson('ops/deployment-guard/bypass-inventory.json'));
   assert.match(rows, /"path":"scripts\/deployment-guard\/sql128-contractor-verification-from-compliance-production-apply\.mjs","classification":"GUARDED","capabilities":\["sql128-production-apply"\]/);
-  assert.match(rows, /sql122, sql123, sql124, sql125, sql126, sql127, sql128, sql129, sql130, sql131, sql132, sql133, sql134, sql135, sql136, sql137, sql138\)/);
+  assert.match(rows, /sql122, sql123, sql124, sql125, sql126, sql127, sql128, sql129, sql130, sql131, sql132, sql133, sql134, sql135, sql136, sql137, sql138, sql139\)/);
   const scripts = readJson('package.json').scripts;
   const workflow = fs.readFileSync(path.join(ROOT, '.github/workflows/deployment-guard.yml'), 'utf8');
   for (const name of ['aws/tests/release-sql128-executor.test.mjs', 'aws/tests/release-sql128-production-apply.test.mjs', 'aws/tests/sql128-contractor-verification-pg.test.mjs']) {
@@ -276,7 +276,7 @@ test('order: no predecessor and no order; the function, its prerequisites and th
   assert.match(runbook, /read-live \(2026-10-30\)\.\*\* Run 41042517205/);
   const oneShot = fs.readFileSync(path.join(ROOT, 'ops/production-sql-one-shot.md'), 'utf8');
   assert.match(oneShot, /\| `sql128` \|/);
-  assert.match(oneShot, /`sql126`, `sql127`, `sql128`, `sql129`, `sql130`, `sql131`, `sql132`, `sql133`, `sql134`, `sql135`, `sql136`, `sql137`, `sql138`\) \|/);
+  assert.match(oneShot, /`sql126`, `sql127`, `sql128`, `sql129`, `sql130`, `sql131`, `sql132`, `sql133`, `sql134`, `sql135`, `sql136`, `sql137`, `sql138`, `sql139`\) \|/);
   assert.match(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/README.md'), 'utf8'), /sql128-contractor-verification-from-compliance-production-apply\.mjs --inspect/);
 });
 

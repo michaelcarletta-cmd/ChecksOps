@@ -110,6 +110,7 @@ export const EXECUTOR_PACK_MEMBERS = Object.freeze([
   ['aws/workflows/sql/136_money_write_restrictive_policies.sql', 'sql/136_money_write_restrictive_policies.sql'],
   ['aws/workflows/sql/137_platform_owner_identity.sql', 'sql/137_platform_owner_identity.sql'],
   ['aws/workflows/sql/138_payee_setup_link_closed_after_verification.sql', 'sql/138_payee_setup_link_closed_after_verification.sql'],
+  ['aws/workflows/sql/139_tenant_billing_accounts_write_policy_reconcile.sql', 'sql/139_tenant_billing_accounts_write_policy_reconcile.sql'],
   ['aws/functions/api/rds-global-bundle.pem', 'rds-global-bundle.pem'],
   ['scripts/deployment-guard/lib/sql-apply.mjs', 'lib/sql-apply.mjs'],
   ['scripts/deployment-guard/lib/sql-executor-auth.mjs', 'lib/sql-executor-auth.mjs'],
