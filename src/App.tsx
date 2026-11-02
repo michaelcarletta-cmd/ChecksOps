@@ -48,6 +48,11 @@ const HomeownerLedger = lazy(() => import("./pages/HomeownerLedger"));
 const PublicInvoicePage = lazy(() => import("./pages/PublicInvoicePage"));
 const MortgageOpsLogin = lazy(() => import("./pages/mortgage-ops/MortgageOpsLogin"));
 const MortgageOpsQueue = lazy(() => import("./pages/mortgage-ops/MortgageOpsQueue"));
+const VendorOpsLogin = lazy(() => import("./pages/vendor-ops/VendorOpsLogin"));
+const VendorOpsLayout = lazy(() => import("./pages/vendor-ops/VendorOpsLayout"));
+const VendorSettings = lazy(() => import("./pages/vendor-ops/VendorSettings"));
+const VendorWallet = lazy(() => import("./pages/WalletOps"));
+const VendorPayments = lazy(() => import("./pages/Payments"));
 
 
 export const queryClient = new QueryClient({
@@ -119,6 +124,16 @@ function CheckOpsRoutes() {
       <Route path="/mortgage-ops/login" element={<Suspense fallback={<PageLoader />}><MortgageOpsLogin /></Suspense>} />
       <Route path="/mortgage-ops/queue" element={<Suspense fallback={<PageLoader />}><MortgageOpsQueue /></Suspense>} />
       <Route path="/mortgage-ops" element={<Navigate to="/mortgage-ops/login" replace />} />
+      {/* Vendor Portal: finance view of the signed-in member's organization. Declared as
+          static /vendor-ops routes so /:slug/* (TenantContext) never treats it as a slug. */}
+      <Route path="/vendor-ops/login" element={<Suspense fallback={<PageLoader />}><VendorOpsLogin /></Suspense>} />
+      <Route path="/vendor-ops" element={<Suspense fallback={<PageLoader />}><VendorOpsLayout /></Suspense>}>
+        <Route index element={<Navigate to="/vendor-ops/wallet" replace />} />
+        <Route path="wallet" element={<Suspense fallback={<PageLoader />}><VendorWallet /></Suspense>} />
+        <Route path="payments" element={<Suspense fallback={<PageLoader />}><VendorPayments /></Suspense>} />
+        <Route path="settings" element={<Suspense fallback={<PageLoader />}><VendorSettings /></Suspense>} />
+        <Route path="*" element={<Navigate to="/vendor-ops/wallet" replace />} />
+      </Route>
       <Route path="/invoice/:token" element={<Suspense fallback={<PageLoader />}><PublicInvoicePage /></Suspense>} />
       <Route path="/wl/:slug/*" element={<LegacyWlRedirect />} />
       <Route path="/:slug/*" element={<Suspense fallback={<PageLoader />}><WhiteLabelApp /></Suspense>} />
