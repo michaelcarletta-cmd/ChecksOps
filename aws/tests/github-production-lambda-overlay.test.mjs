@@ -87,6 +87,8 @@ const PUBLIC_PARTNER_CODES_APPLIED_REL = 'aws/tests/fixtures/production-public-p
 const PUBLIC_PARTNER_CODES_BYTES = 'c652e317e2de5a14b32bf6aecfc5b76438b2ff23d6c3a282f3c1cbaedf115fe0';
 // auth.email() verified email only (2026-10-31, finding 17): planned REPLACE of data.mjs from the public partner codes' applied bytes.
 const AUTH_EMAIL_VERIFIED_REL = 'aws/tests/fixtures/production-auth-email-verified-manifest-2026-10-31.json';
+// Applied 2026-10-31 (production run 41234874570, revision 91745cda), recorded 2026-11-02.
+const AUTH_EMAIL_VERIFIED_APPLIED_REL = 'aws/tests/fixtures/production-auth-email-verified-applied-manifest-2026-10-31.json';
 function repoModules(dir = API, prefix = '') {
   const out = {};
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -2268,13 +2270,14 @@ test('Data API credential columns: data.mjs expected_live records the bytes prod
   // was applied 2026-10-29 (production run 40945542902), and on again to the public partner codes
   // REPLACE (its own test below), which started from the contractor gate's applied bytes and was applied
   // 2026-10-29 (production run 40963109952), and on again to the auth.email() verified email only
-  // REPLACE (finding 17, its own test below), which starts from the public partner codes' applied bytes.
+  // REPLACE (finding 17, its own test below), which started from the public partner codes' applied bytes
+  // and was applied 2026-10-31 (production run 41234874570): the row records main's bytes live.
   const GATES_REL = 'aws/tests/fixtures/production-data-rpc-access-gates-manifest-2026-10-29.json';
   const row = PLAN.members[MEMBER];
   assert.equal(row.operation, 'replace');
-  assert.equal(row.manifest, AUTH_EMAIL_VERIFIED_REL);
+  assert.equal(row.manifest, AUTH_EMAIL_VERIFIED_APPLIED_REL);
   assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, GATES_REL), 'utf8')).members[MEMBER].previous_manifest, APPLIED_REL);
-  assert.equal(row.expected_live_sha256, PUBLIC_PARTNER_CODES_BYTES);
+  assert.equal(row.expected_live_sha256, row.accepted_sha256);
   assert.notEqual(row.accepted_sha256, LIVE);
   assert.equal(sha(`aws/functions/api/${MEMBER}`), row.accepted_sha256);
   assert.equal(row.sql_before, 'aws/workflows/sql/53_claim_settlement_breakdown.sql');
@@ -2282,8 +2285,9 @@ test('Data API credential columns: data.mjs expected_live records the bytes prod
   assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
   assert.ok(PLAN.order.indexOf('claim-settlement-rpc.mjs') < PLAN.order.indexOf(MEMBER));
   const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
+  // The auth.email() REPLACE was applied 2026-10-31 (production run 41234874570): main's bytes are done.
   const ready = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER) });
-  assert.equal(ready.state, 'READY');
+  assert.equal(ready.state, 'ALREADY_ACCEPTED');
   assert.equal(ready.mutation, false);
   for (const other of [LIVE, BEFORE]) {
     await assert.rejects(
@@ -2322,14 +2326,15 @@ test('Data API RPC access gates: data.mjs REPLACE planned over the bytes product
   // was applied 2026-10-29 (production run 40945542902); it now follows the public partner codes
   // REPLACE, which started from the contractor gate's applied bytes and was applied 2026-10-29
   // (production run 40963109952); it now follows the auth.email() verified email only REPLACE
-  // (finding 17), which starts from the public partner codes' applied bytes.
+  // (finding 17), which started from the public partner codes' applied bytes and was applied 2026-10-31
+  // (production run 41234874570).
   const row = PLAN.members[MEMBER];
   assert.deepEqual(row, {
     operation: 'replace',
     accepted_sha256: sha(`aws/functions/api/${MEMBER}`),
-    expected_live_sha256: PUBLIC_PARTNER_CODES_BYTES,
+    expected_live_sha256: sha(`aws/functions/api/${MEMBER}`),
     sql_before: 'aws/workflows/sql/53_claim_settlement_breakdown.sql',
-    manifest: AUTH_EMAIL_VERIFIED_REL,
+    manifest: AUTH_EMAIL_VERIFIED_APPLIED_REL,
   });
   assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, CONTRACTOR_GATE_REL), 'utf8')).members[MEMBER].previous_manifest, SECURITY_HARDENING_APPLIED_REL);
   assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
@@ -3492,8 +3497,9 @@ test('Security hardening 2026-10-29 (audit findings 2-4): five members applied i
       assert.equal(row.manifest, STORAGE_UPLOAD_SIGNED_SIZE_APPLIED_REL, member);
     } else {
       assert.equal(row.accepted_sha256, dataMovedOn ? sha(`aws/functions/api/${member}`) : accepted, member);
-      assert.equal(row.expected_live_sha256, dataMovedOn ? PUBLIC_PARTNER_CODES_BYTES : accepted, member);
-      assert.equal(row.manifest, dataMovedOn ? AUTH_EMAIL_VERIFIED_REL : SECURITY_HARDENING_APPLIED_REL, member);
+      // data.mjs: the auth.email() REPLACE from the public partner codes' bytes was applied 2026-10-31 (run 41234874570).
+      assert.equal(row.expected_live_sha256, dataMovedOn ? sha(`aws/functions/api/${member}`) : accepted, member);
+      assert.equal(row.manifest, dataMovedOn ? AUTH_EMAIL_VERIFIED_APPLIED_REL : SECURITY_HARDENING_APPLIED_REL, member);
     }
     // The planning manifest keeps the pre-apply state, and that state is not an accepted live state any more.
     const planned = JSON.parse(fs.readFileSync(path.join(ROOT, planningRel), 'utf8')).members[member];
@@ -3505,10 +3511,10 @@ test('Security hardening 2026-10-29 (audit findings 2-4): five members applied i
     const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: member };
     // The applied bytes are accepted live. data.mjs, storage.mjs and storage-write.mjs (moved on, and applied
     // again) are inspected at their current accepted live bytes (the public partner codes, the portal signing,
-    // the signed upload size); data.mjs is READY for the planned auth.email() REPLACE from its live bytes.
+    // the signed upload size, the auth.email() REPLACE applied 2026-10-31 by production run 41234874570).
     const appliedAgain = dataMovedOn || writeMovedOn || movedOn.has(member);
     const done = await run(inspect, { root: ROOT, inspectLive: appliedAgain ? liveFor(member) : liveFor(member, { sha256: accepted }) });
-    assert.equal(done.state, dataMovedOn ? 'READY' : 'ALREADY_ACCEPTED', member);
+    assert.equal(done.state, 'ALREADY_ACCEPTED', member);
     assert.equal(done.mutation, false, member);
     for (const other of appliedAgain ? [planned.live_sha256, accepted] : [planned.live_sha256]) {
       await assert.rejects(
@@ -3906,14 +3912,15 @@ test('Contractor verification status gate: data.mjs REPLACE planned from the sec
   assert.ok(PLAN.notes.includes(`Contractor verification status gate (2026-10-29): REPLACE data.mjs ${DATA_GATES_APPLIED.slice(0, 8)} -> ${accepted.slice(0, 8)}`));
   // Applied 2026-10-29; the row has since moved on to the public partner codes REPLACE, which starts
   // from these applied bytes and was applied 2026-10-29 (production run 40963109952), and on again to the
-  // auth.email() verified email only REPLACE (finding 17) from the public partner codes' applied bytes.
+  // auth.email() verified email only REPLACE (finding 17) from the public partner codes' applied bytes,
+  // applied 2026-10-31 (production run 41234874570).
   const row = PLAN.members[MEMBER];
   assert.deepEqual(row, {
     operation: 'replace',
     accepted_sha256: sha(`aws/functions/api/${MEMBER}`),
-    expected_live_sha256: PUBLIC_PARTNER_CODES_BYTES,
+    expected_live_sha256: sha(`aws/functions/api/${MEMBER}`),
     sql_before: 'aws/workflows/sql/53_claim_settlement_breakdown.sql',
-    manifest: AUTH_EMAIL_VERIFIED_REL,
+    manifest: AUTH_EMAIL_VERIFIED_APPLIED_REL,
   });
   assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, PUBLIC_PARTNER_CODES_REL), 'utf8')).members[MEMBER].previous_manifest, CONTRACTOR_GATE_APPLIED_REL);
   assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
@@ -3925,8 +3932,9 @@ test('Contractor verification status gate: data.mjs REPLACE planned from the sec
   assert.equal(ready.state, 'READY');
   assert.equal(ready.mutation, false);
   // Production has moved on from these applied bytes, so they are no longer an accepted live state.
+  // The row has since moved on and that REPLACE was applied too (production run 41234874570): main's bytes are done.
   const now = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER) });
-  assert.equal(now.state, 'READY');
+  assert.equal(now.state, 'ALREADY_ACCEPTED');
   assert.equal(now.mutation, false);
   for (const other of [DATA_GATES_APPLIED, accepted, 'c'.repeat(64)]) {
     await assert.rejects(
@@ -3984,15 +3992,16 @@ test('Public partner codes (finding 9): data.mjs REPLACE from the contractor gat
   assert.match(manifest.notes, /aws_connect_partner_by_code\) is unchanged/);
   assert.deepEqual(manifest.members, { [MEMBER]: { live_sha256: CONTRACTOR_GATE_BYTES, accepted_sha256: accepted, operation: 'replace', previous_manifest: CONTRACTOR_GATE_APPLIED_REL } });
   assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, CONTRACTOR_GATE_APPLIED_REL), 'utf8')).members[MEMBER].accepted_sha256, CONTRACTOR_GATE_BYTES);
-  // Applied 2026-10-29: the row records the applied bytes live. It now plans the auth.email() verified
-  // email only REPLACE (finding 17) from them.
+  // Applied 2026-10-29: the row recorded the applied bytes live. It then planned the auth.email() verified
+  // email only REPLACE (finding 17) from them, applied 2026-10-31 (production run 41234874570).
   assert.deepEqual(PLAN.members[MEMBER], {
     operation: 'replace',
     accepted_sha256: sha(`aws/functions/api/${MEMBER}`),
-    expected_live_sha256: accepted,
+    expected_live_sha256: sha(`aws/functions/api/${MEMBER}`),
     sql_before: 'aws/workflows/sql/53_claim_settlement_breakdown.sql',
-    manifest: AUTH_EMAIL_VERIFIED_REL,
+    manifest: AUTH_EMAIL_VERIFIED_APPLIED_REL,
   });
+  assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, AUTH_EMAIL_VERIFIED_REL), 'utf8')).members[MEMBER].live_sha256, accepted);
   assert.ok(PLAN.notes.includes(`Public partner codes (2026-10-29, finding 9): REPLACE data.mjs ${CONTRACTOR_GATE_BYTES.slice(0, 8)} -> ${accepted.slice(0, 8)}`));
   assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
   const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
@@ -4002,8 +4011,9 @@ test('Public partner codes (finding 9): data.mjs REPLACE from the contractor gat
   const ready = await run(inspect, { root: ROOT, plan: before, inspectLive: liveFor(MEMBER, { plan: before }) });
   assert.equal(ready.state, 'READY');
   assert.equal(ready.mutation, false);
+  // The auth.email() REPLACE planned from these bytes was applied 2026-10-31 (production run 41234874570).
   const done = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER) });
-  assert.equal(done.state, 'READY');
+  assert.equal(done.state, 'ALREADY_ACCEPTED');
   for (const other of [CONTRACTOR_GATE_BYTES, 'c'.repeat(64)]) {
     await assert.rejects(
       run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: other }) }),
@@ -4048,7 +4058,7 @@ test('Public partner codes 2026-10-29: data.mjs applied on its own phrase, recor
   assert.ok(PLAN.notes.includes('W+UPxMWbyAS0tFNdlBQxKBcGBM7juAS8W3VN0og3oRA=, RevisionId 9fa0f26f-4edd-4302-bfef-742331676253'));
 });
 
-test('auth.email() verified email only (finding 17): data.mjs REPLACE planned from the public partner codes applied bytes, SQL 53 still first, not authorized', async () => {
+test('auth.email() verified email only (finding 17): data.mjs REPLACE from the public partner codes applied bytes, SQL 53 still first, applied 2026-10-31 (production run 41234874570, revision 91745cda)', async () => {
   const MEMBER = 'data.mjs';
   const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, AUTH_EMAIL_VERIFIED_REL), 'utf8'));
   const accepted = sha(`aws/functions/api/${MEMBER}`);
@@ -4061,23 +4071,40 @@ test('auth.email() verified email only (finding 17): data.mjs REPLACE planned fr
   assert.deepEqual(manifest.members, { [MEMBER]: { live_sha256: PUBLIC_PARTNER_CODES_BYTES, accepted_sha256: accepted, operation: 'replace', previous_manifest: PUBLIC_PARTNER_CODES_APPLIED_REL } });
   assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, PUBLIC_PARTNER_CODES_APPLIED_REL), 'utf8')).members[MEMBER].accepted_sha256, PUBLIC_PARTNER_CODES_BYTES);
   assert.notEqual(accepted, PUBLIC_PARTNER_CODES_BYTES);
+  // Applied 2026-10-31 (production run 41234874570): the row records the applied bytes live and names the
+  // applied record; the planning manifest keeps the pre-apply state.
   assert.deepEqual(PLAN.members[MEMBER], {
     operation: 'replace',
     accepted_sha256: accepted,
-    expected_live_sha256: PUBLIC_PARTNER_CODES_BYTES,
+    expected_live_sha256: accepted,
     sql_before: 'aws/workflows/sql/53_claim_settlement_breakdown.sql',
-    manifest: AUTH_EMAIL_VERIFIED_REL,
+    manifest: AUTH_EMAIL_VERIFIED_APPLIED_REL,
   });
   assert.ok(PLAN.notes.includes(`auth.email() verified email only (2026-10-31, finding 17; planning only, not authorized): REPLACE data.mjs ${PUBLIC_PARTNER_CODES_BYTES.slice(0, 8)} -> ${accepted.slice(0, 8)}`));
+  assert.ok(PLAN.notes.includes(`Applied 2026-10-31 (production-auth-email-verified-applied-manifest-2026-10-31.json, recorded 2026-11-02): data.mjs ${PUBLIC_PARTNER_CODES_BYTES.slice(0, 8)} -> ${accepted.slice(0, 8)}`));
+  assert.ok(PLAN.notes.includes('RevisionId 91745cda-2b27-4ff4-9655-1f5754d00e7a'));
   assert.ok(PLAN.do_not_overlay.every((name) => name !== MEMBER));
   assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
+  const record = JSON.parse(fs.readFileSync(path.join(ROOT, AUTH_EMAIL_VERIFIED_APPLIED_REL), 'utf8'));
+  assert.equal(record.workstream_id, 'auth-email-verified-applied');
+  assert.equal(record.deploy_authorized, false);
+  assert.match(record.authorization, /^Record only/);
+  assert.deepEqual(record.members, { [MEMBER]: { live_sha256: accepted, accepted_sha256: accepted, operation: 'replace', previous_manifest: AUTH_EMAIL_VERIFIED_REL } });
+  for (const evidence of ['"DEPLOY data.mjs TO PRODUCTION"', '41233117705', '41233363981', '41233507938', '41234724020', '41234874570', '41461531605',
+    '+X7Idizd5DT2QbQJAzC3oi8l52es021M3z/zh5R5Wuc=', '91745cda-2b27-4ff4-9655-1f5754d00e7a', '112742af-91d9-4595-9c9b-cc39e0b0a71c', '7d845915e89c6ea21b98a0ed720c93a871b974aa', 'No SQL change']) {
+    assert.ok(record.notes.includes(evidence), evidence);
+  }
   const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
-  const ready = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER) });
+  // Before the apply (inspect run 41234724020), the planned row took the public partner codes' applied bytes as READY.
+  const before = structuredClone(PLAN);
+  before.members[MEMBER] = { ...PLAN.members[MEMBER], expected_live_sha256: PUBLIC_PARTNER_CODES_BYTES, manifest: AUTH_EMAIL_VERIFIED_REL };
+  const ready = await run(inspect, { root: ROOT, plan: before, inspectLive: liveFor(MEMBER, { plan: before }) });
   assert.equal(ready.state, 'READY');
   assert.equal(ready.mutation, false);
+  // Now the applied bytes are done (re-inspect run 41461531605), and the pre-apply bytes are no longer an accepted live state.
   const done = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: accepted }) });
   assert.equal(done.state, 'ALREADY_ACCEPTED');
-  for (const other of [CONTRACTOR_GATE_BYTES, 'c'.repeat(64)]) {
+  for (const other of [PUBLIC_PARTNER_CODES_BYTES, CONTRACTOR_GATE_BYTES, 'c'.repeat(64)]) {
     await assert.rejects(
       run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: other }) }),
       (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
@@ -5176,7 +5203,8 @@ test('Billing database errors redacted (finding 25): tenant-billing-engine.mjs R
   // applied bytes, which export it; the planned auth.email() REPLACE keeps the export).
   const source = fs.readFileSync(path.join(API, MEMBER), 'utf8');
   assert.ok(localImports(source, MEMBER).includes('data.mjs'));
-  assert.equal(PLAN.members['data.mjs'].expected_live_sha256, PUBLIC_PARTNER_CODES_BYTES);
+  // (Since 2026-10-31 data.mjs is the auth.email() bytes, production run 41234874570; sanitizeLogText is in both.)
+  assert.equal(PLAN.members['data.mjs'].expected_live_sha256, PLAN.members['data.mjs'].accepted_sha256);
   assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, PUBLIC_PARTNER_CODES_APPLIED_REL), 'utf8')).members['data.mjs'].live_sha256, PUBLIC_PARTNER_CODES_BYTES);
   assert.match(fs.readFileSync(path.join(API, 'data.mjs'), 'utf8'), /export const sanitizeLogText/);
   assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
