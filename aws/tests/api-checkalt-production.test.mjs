@@ -2181,23 +2181,17 @@ test('auto-approve: always on; tenant setting off, blank ceiling and amounts ove
   }
 });
 
-test('auto-approve: flagged and missing reference skip and stay pending_approval, whatever the tenant setting', async () => {
+test('auto-approve (Option 1, owner 2026-11-02): duplicate, amount mismatch, Decline and missing reference skip and stay pending_approval, whatever the tenant setting', async () => {
   const cases = [
-    { name: 'exceptions, setting off', store: autoApproveStore({ enabled: false, payload: PROCESS_40(9001, { exceptions: ['possible duplicate'] }) }), reason: 'flagged_by_checkalt' },
-    { name: 'warnings, blank ceiling', store: autoApproveStore({ maxCents: null, payload: PROCESS_40(9001, { warnings: ['x'] }) }), reason: 'flagged_by_checkalt' },
-    { name: 'exceptions', store: autoApproveStore({ payload: PROCESS_40(9001, { exceptions: ['possible duplicate'] }) }), reason: 'flagged_by_checkalt' },
-    { name: 'warnings', store: autoApproveStore({ payload: PROCESS_40(9001, { warnings: ['x'] }) }), reason: 'flagged_by_checkalt' },
-    { name: 'riskFactors', store: autoApproveStore({ payload: PROCESS_40(9001, { riskFactors: ['velocity'] }) }), reason: 'flagged_by_checkalt' },
-    { name: 'errors', store: autoApproveStore({ payload: PROCESS_40(9001, { errors: ['e'] }) }), reason: 'flagged_by_checkalt' },
-    { name: 'amountDiscrepancyDetected', store: autoApproveStore({ payload: PROCESS_40(9001, { amountDiscrepancyDetected: true }) }), reason: 'flagged_by_checkalt' },
-    { name: 'statusDescription text', store: autoApproveStore({ payload: PROCESS_40(9001, { statusDescription: 'Pending Approval - Suspect Item' }) }), reason: 'flagged_by_checkalt' },
-    { name: 'riskRating Decline', store: autoApproveStore({ payload: PROCESS_40(9001, { riskRating: 'Decline' }) }), reason: 'flagged_by_checkalt' },
-    { name: 'riskRating Warning', store: autoApproveStore({ payload: PROCESS_40(9001, { riskRating: 'Warning' }) }), reason: 'flagged_by_checkalt' },
-    { name: 'duplicateStatus true', store: autoApproveStore({ payload: PROCESS_40(9001, { duplicateStatus: true }) }), reason: 'flagged_by_checkalt' },
-    { name: 'duplicateStatus "true"', store: autoApproveStore({ payload: PROCESS_40(9001, { duplicateStatus: 'true' }) }), reason: 'flagged_by_checkalt' },
-    { name: 'ocrAmountStatus False', store: autoApproveStore({ payload: PROCESS_40(9001, { ocrAmountStatus: 'False' }) }), reason: 'flagged_by_checkalt' },
-    { name: 'ocrAmountStatus false', store: autoApproveStore({ payload: PROCESS_40(9001, { ocrAmountStatus: false }) }), reason: 'flagged_by_checkalt' },
-    { name: 'errors object', store: autoApproveStore({ payload: PROCESS_40(9001, { errors: [{ code: 1, message: 'x' }] }) }), reason: 'flagged_by_checkalt' },
+    { name: 'duplicate exceptions text, setting off', store: autoApproveStore({ enabled: false, payload: PROCESS_40(9001, { exceptions: ['possible duplicate'] }) }), reason: 'held_duplicate' },
+    { name: 'duplicate warning text, blank ceiling', store: autoApproveStore({ maxCents: null, payload: PROCESS_40(9001, { warnings: ['Duplicate item'] }) }), reason: 'held_duplicate' },
+    { name: 'amountDiscrepancyDetected', store: autoApproveStore({ payload: PROCESS_40(9001, { amountDiscrepancyDetected: true }) }), reason: 'held_amount_mismatch' },
+    { name: 'mismatch error text', store: autoApproveStore({ payload: PROCESS_40(9001, { errors: [{ code: 4, message: 'Amount mismatch' }] }) }), reason: 'held_amount_mismatch' },
+    { name: 'riskRating Decline', store: autoApproveStore({ payload: PROCESS_40(9001, { riskRating: 'Decline' }) }), reason: 'held_risk_decline' },
+    { name: 'duplicateStatus true', store: autoApproveStore({ payload: PROCESS_40(9001, { duplicateStatus: true }) }), reason: 'held_duplicate' },
+    { name: 'duplicateStatus "true"', store: autoApproveStore({ payload: PROCESS_40(9001, { duplicateStatus: 'true' }) }), reason: 'held_duplicate' },
+    { name: 'ocrAmountStatus False', store: autoApproveStore({ payload: PROCESS_40(9001, { ocrAmountStatus: 'False' }) }), reason: 'held_ocr_amount_mismatch' },
+    { name: 'ocrAmountStatus false', store: autoApproveStore({ payload: PROCESS_40(9001, { ocrAmountStatus: false }) }), reason: 'held_ocr_amount_mismatch' },
     { name: 'missing reference', store: autoApproveStore({ payload: { status: 40, statusDescription: 'Pending Approval' } }), reason: 'missing_reference' },
   ];
   for (const { name, store, reason } of cases) {
@@ -2211,6 +2205,29 @@ test('auto-approve: flagged and missing reference skip and stay pending_approval
     assert.equal(store.deposits[0].status, 'pending_approval', name);
     assert.equal(store.deposits[0].approved_at, undefined, name);
     assert.equal(store.deposits[0].last_status_payload._auto_approve.skip_reason, reason, name);
+  }
+});
+
+test('auto-approve (Option 1): Check Alt Review All (0: Validation Failure), warnings, errors, exceptions, risk factors, a Warning rating and other words now approve', async () => {
+  const cases = [
+    { name: 'Review All validation failure', payload: PROCESS_40(9001, { statusDescription: '0: Validation Failure', reasonCode: 0, reasonDescription: 'Validation Failure' }) },
+    { name: 'validation failure error object', payload: PROCESS_40(9001, { errors: [{ code: 0, message: 'Validation Failure' }] }) },
+    { name: 'warnings', payload: PROCESS_40(9001, { warnings: ['x'] }) },
+    { name: 'exceptions', payload: PROCESS_40(9001, { exceptions: ['Review All'] }) },
+    { name: 'riskFactors', payload: PROCESS_40(9001, { riskFactors: ['velocity'] }) },
+    { name: 'errors', payload: PROCESS_40(9001, { errors: ['e'] }) },
+    { name: 'riskRating Warning', payload: PROCESS_40(9001, { riskRating: 'Warning' }) },
+    { name: 'suspect status text', payload: PROCESS_40(9001, { statusDescription: 'Pending Approval - Suspect Item' }) },
+  ];
+  for (const { name, payload } of cases) {
+    const store = autoApproveStore({ payload });
+    const result = await submitOnce(store);
+    assert.equal(result.status, 'submitted', name);
+    assert.equal(result.auto_approve.approved, true, name);
+    assert.equal(result.auto_approve.skipReason, null, name);
+    assert.equal(store.processPosts, 1, name);
+    assert.equal(store.approvePosts, 1, name);
+    assert.equal(store.deposits[0].last_status_payload._auto_approve.approved, true, name);
   }
 });
 
@@ -2238,7 +2255,7 @@ test('auto-approve: replayed submit neither re-processes nor approves a second t
   // A row parked pending_approval (skipped or failed auto-approve) replays without an approve.
   const parked = autoApproveStore({ payload: PROCESS_40(9001, { exceptions: ['possible duplicate'] }) });
   const parkedFirst = await submitOnce(parked);
-  assert.equal(parkedFirst.auto_approve.skipReason, 'flagged_by_checkalt');
+  assert.equal(parkedFirst.auto_approve.skipReason, 'held_duplicate');
   parked.processPayload = PROCESS_40();
   const parkedReplay = await submitOnce(parked);
   assert.equal(parkedReplay.status, 'pending_approval');

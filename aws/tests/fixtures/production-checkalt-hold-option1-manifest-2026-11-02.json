@@ -1,0 +1,15 @@
+{
+  "workstream_id": "checkalt-hold-option1",
+  "authorization": "Pending owner review (2026-11-02). Planning only: nothing is live or verified. The production apply needs its own owner approval and staging acceptance.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Owner decision 2026-11-02 (\"Option 1\"), after the $3,457.74 deposit of 2026-11-02 (checkalt_deposits e895a7a2) was held with skip_reason flagged_by_checkalt (read-only production lookup, SSM 8a7dd73f-a20a-4acc-b68b-71ee4283711a) while Check Alt showed only its Review All hold \"Reject Reason 0: Validation Failure\": only a duplicate (duplicateStatus true, or \"duplicate\" in the status, warning, exception or error text), an amount mismatch (amountDiscrepancyDetected true, ocrAmountStatus False, or \"mismatch\" in that text) or a Decline risk rating holds a deposit, each with its own skip_reason (held_duplicate, held_amount_mismatch, held_ocr_amount_mismatch, held_risk_decline). Non-empty warnings / errors / exceptions / riskFactors, a Warning risk rating, the Review All validation failure and other status words (hold, risk, suspect, exception, warning, unreadable, fraud) no longer hold. depositIsFlagged is kept as depositHoldReason !== null; flagged_by_checkalt stays listed for older rows. Unchanged: not_pending_approval, missing/invalid reference, invalid_amount, the lock retry/backoff, per-request timeout, overall deadline and the durable attempting marker before the approve POST; replays return before any provider HTTP. live_sha256 1b98060b is the plan row expected_live (the Option A bytes applied 2026-10-24, previous_manifest); a read-only production overlay inspect must confirm the live member before any apply. No SQL prerequisite; no import change. The website text for the new reason codes (src/lib/checkAltAutoApproveSkip.ts) ships with the next website upload.",
+  "members": {
+    "providers/production/checkalt-submit.mjs": {
+      "live_sha256": "1b98060beb0645f31dabd7d366d914c95017028b993b01093de0c4d1422e47d1",
+      "accepted_sha256": "938c16695dd762e3cb7c0526c9496b7d5b28356d3f4ead301addaefb1b2d8266",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-checkalt-auto-approve-option-a-applied-manifest-2026-10-24.json"
+    }
+  }
+}

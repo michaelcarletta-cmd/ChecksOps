@@ -1569,19 +1569,23 @@ test('Check Alt auto-approve Option A: checkalt-submit.mjs expected_live records
   assert.deepEqual(Object.keys(manifest.members), [SUBMIT]);
   assert.deepEqual(manifest.members[SUBMIT], { live_sha256: BEFORE, accepted_sha256: LIVE, operation: 'replace' });
   assert.match(PLAN.notes, /Check Alt auto-approve Option A/);
+  // The row has moved on: the Check Alt hold Option 1 plan (2026-11-02) REPLACEs these applied bytes,
+  // planning only, expecting them live (its own test below).
+  const OPTION1_REL = 'aws/tests/fixtures/production-checkalt-hold-option1-manifest-2026-11-02.json';
+  const option1 = JSON.parse(fs.readFileSync(path.join(ROOT, OPTION1_REL), 'utf8'));
   assert.equal(row.operation, 'replace');
-  assert.equal(row.manifest, APPLIED_REL);
+  assert.equal(row.manifest, OPTION1_REL);
+  assert.equal(option1.members[SUBMIT].previous_manifest, APPLIED_REL);
   assert.equal(row.sql_before, null);
   assert.equal(row.expected_live_sha256, LIVE);
-  assert.equal(row.accepted_sha256, LIVE);
-  assert.equal(sha(`aws/functions/api/${SUBMIT}`), LIVE);
+  assert.notEqual(row.accepted_sha256, LIVE);
   assert.equal(approvalPhrase(SUBMIT), `DEPLOY ${SUBMIT} TO PRODUCTION`);
   assert.ok(PLAN.order.indexOf(POLL) < PLAN.order.indexOf(SUBMIT));
   assert.ok(localImports(fs.readFileSync(path.join(API, SUBMIT), 'utf8'), SUBMIT).includes(POLL));
   const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: SUBMIT };
-  const done = await run(inspect, { root: ROOT, inspectLive: liveFor(SUBMIT, { sha256: LIVE }) });
-  assert.equal(done.state, 'ALREADY_ACCEPTED');
-  assert.equal(done.mutation, false);
+  const ready = await run(inspect, { root: ROOT, inspectLive: liveFor(SUBMIT, { sha256: LIVE }) });
+  assert.equal(ready.state, 'READY');
+  assert.equal(ready.mutation, false);
   for (const stale of [BEFORE, PRE_ALWAYS_ON]) {
     await assert.rejects(
       run(inspect, { root: ROOT, inspectLive: liveFor(SUBMIT, { sha256: stale }) }),
@@ -1589,6 +1593,40 @@ test('Check Alt auto-approve Option A: checkalt-submit.mjs expected_live records
       stale,
     );
   }
+});
+
+test('Check Alt hold Option 1 (owner 2026-11-02): checkalt-submit.mjs REPLACE from the applied Option A bytes, planning only, no SQL', async () => {
+  const SUBMIT = 'providers/production/checkalt-submit.mjs';
+  const REL = 'aws/tests/fixtures/production-checkalt-hold-option1-manifest-2026-11-02.json';
+  const PREVIOUS = 'aws/tests/fixtures/production-checkalt-auto-approve-option-a-applied-manifest-2026-10-24.json';
+  // The Option A bytes, applied 2026-10-24 (production run 40054316712).
+  const LIVE = '1b98060beb0645f31dabd7d366d914c95017028b993b01093de0c4d1422e47d1';
+  const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, REL), 'utf8'));
+  const accepted = sha(`aws/functions/api/${SUBMIT}`);
+  assert.notEqual(accepted, LIVE);
+  assert.equal(manifest.workstream_id, 'checkalt-hold-option1');
+  assert.equal(manifest.deploy_authorized, false);
+  assert.match(manifest.authorization, /^Pending owner review/);
+  assert.match(manifest.notes, /Option 1/);
+  assert.match(manifest.notes, /SSM 8a7dd73f-a20a-4acc-b68b-71ee4283711a/);
+  assert.deepEqual(manifest.members, { [SUBMIT]: { live_sha256: LIVE, accepted_sha256: accepted, operation: 'replace', previous_manifest: PREVIOUS } });
+  const previous = JSON.parse(fs.readFileSync(path.join(ROOT, PREVIOUS), 'utf8')).members[SUBMIT];
+  assert.deepEqual([previous.live_sha256, previous.accepted_sha256], [LIVE, LIVE], 'the previous manifest is its applied record');
+  assert.deepEqual(PLAN.members[SUBMIT], { operation: 'replace', accepted_sha256: accepted, expected_live_sha256: LIVE, sql_before: null, manifest: REL });
+  assert.ok(PLAN.notes.includes(`Check Alt hold Option 1 (2026-11-02, owner "Option 1"): REPLACE ${SUBMIT} ${LIVE.slice(0, 8)} -> ${accepted.slice(0, 8)}`));
+  assert.equal(resolvePlannedMember(SUBMIT, { root: ROOT, plan: PLAN }).ok, true);
+  const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: SUBMIT };
+  const ready = await run(inspect, { root: ROOT, inspectLive: liveFor(SUBMIT, { sha256: LIVE }) });
+  assert.equal(ready.state, 'READY');
+  const done = await run(inspect, { root: ROOT, inspectLive: liveFor(SUBMIT, { sha256: accepted }) });
+  assert.equal(done.state, 'ALREADY_ACCEPTED');
+  await assert.rejects(
+    run(inspect, { root: ROOT, inspectLive: liveFor(SUBMIT, { sha256: 'c'.repeat(64) }) }),
+    (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+  );
+  const source = fs.readFileSync(path.join(API, SUBMIT), 'utf8');
+  assert.match(source, /export const depositHoldReason = /);
+  assert.match(source, /'held_risk_decline'/);
 });
 
 test('Check Alt scheduled status check: poll, status-reconcile, scheduled REPLACE the bytes found in the live package', async () => {
