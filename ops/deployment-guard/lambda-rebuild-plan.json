@@ -780,15 +780,75 @@
     },
     "production": {
       "function_name": "checksops-production-prep-api",
-      "status": "applied",
+      "status": "accepted",
       "members": {
-        "providers/webhooks.mjs": {
-          "live_sha256": "479cedf8fc6989bf713d61d452dd9f68eca03e45faa1143a3dd049c3b67bafb0",
-          "accepted_sha256": "f7353ee1673364d45ce564dd8b7f102273e9a871c63f8398d03bd7226360d97f"
+        "app-services.mjs": {
+          "live_sha256": "dd6e1797dc00dc2beaf15585b481c76a33c415212e7be5d2efe3fd170d48121e",
+          "accepted_sha256": "e63cfe2d48cd1f428513bc8de4d8a2934bd6c4889c9d1ffd71660ac089938713"
+        },
+        "auth-financial-totp.mjs": {
+          "live_sha256": "3edfea2a0328eda03466cad4c13c1075aa2a020c4164eee0564ade2dee06319b",
+          "accepted_sha256": "ae72b8087aab2bf112b812afefb40206d112ea8843682017e4de831fa777dce0"
+        },
+        "check-endorsement.mjs": {
+          "live_sha256": "85f4bec43620e574498a289e6d245ddd02301603fd6698a1d6bacb915e922677",
+          "accepted_sha256": "edd20078ffdfcdb2ae44bf25542ab3068f606e1abdc12fbbc638ddb9a678047d"
+        },
+        "invoice-provider.mjs": {
+          "live_sha256": "e6ef5db0f418d473af630a9b0f44d4d38452f7bb37eacc9d14b106a6cea7f8da",
+          "accepted_sha256": "27ee5709505eace64dc9a47fbbeee1eab9050922a11cc5f8431172f8ddcabf6e"
+        },
+        "mortgage-ops-usage.mjs": {
+          "live_sha256": "9856f51fa1a71a909689b7420001c6f7f4bb7eff3711ea4dedbefda6b68dadb2",
+          "accepted_sha256": "e24900070c080032469c7383338efd26b37c522ec6ba68d3f7b6051539d1fd74"
+        },
+        "providers/parity/moov-functions.mjs": {
+          "live_sha256": "3d17efb4f680a675a97231709e4379a4478641a46c744bf2fee5796c24fcd6be",
+          "accepted_sha256": "16376b457a8558f7b8ba15b9480ea5bac1a459186d14a420aa33a280f6d25e45"
+        },
+        "providers/payees/handlers.mjs": {
+          "live_sha256": "8b44e120a8d9b611c1892a7b4e7e9dce2fb5950287d1ccba50c8215b2357992d",
+          "accepted_sha256": "b73bccdf68bf9959e63cf219063d6818c74ffe9d4ccc0393a437f2216146dc89"
+        },
+        "providers/production/checkalt-authz.mjs": {
+          "live_sha256": "259802f8f0af515d75b139f8bf6a4bbe24a9d7b9ae12b11b3eeae879b7107c71",
+          "accepted_sha256": "b5e0dc3d2446a7d7cc8d8965d39940fc25f3a8974b823488f5fbb3408b878fc2"
+        },
+        "providers/production/moov-fund-authz.mjs": {
+          "live_sha256": "290da0d4c085cfc93b849d33ec8606f61f48f128c14a17ddf484f69b9c7c7afb",
+          "accepted_sha256": "27d9c674e8b439fd85741981e957a01797cc9ebe6d4df58f7cf302b8c5ea43dc"
+        },
+        "providers/production/moov-wallet-sync.mjs": {
+          "live_sha256": "812c9dfd3af0a0dfc945ea320118a8a86362d8e98165e0045b158f4743f18c5e",
+          "accepted_sha256": "05ea75f7876167a95a7eaa913f53fce62ef3474bf0fbd4f3ac24d4314d174d8c"
+        },
+        "tenant-billing-engine.mjs": {
+          "live_sha256": "c5e9b0bd5b5e04eac304337918dfd772477319dc5d5357cd8a0282e277119f80",
+          "accepted_sha256": "5a4327cadbc4537a269f0d249eae233dad441c2a177dd7f0aa105fd6891a4364"
+        },
+        "tenant-billing-handlers.mjs": {
+          "live_sha256": "70241b083fc373d626fa73082aebafcb6933837376f7228709ab8fb3f90b931f",
+          "accepted_sha256": "a7b0a448938bac7661ae25da3f2fc26aa4d6d00d7815f6447053f051a27f7199"
+        },
+        "tenant-collection-v2-settlement.mjs": {
+          "live_sha256": "dece31d7bbed756c714ebe7740645d5f426048e318c8f2ac6e3ec42498fc999d",
+          "accepted_sha256": "e899ee989632dd4c7845bda5d073354f4e7bf40b86a14764aead1dd5ab691579"
+        },
+        "tenant-collection-v2-uat.mjs": {
+          "live_sha256": "7a0c9bc1a7e23647a9834ab7b5735e7323fcd16a7911624f8f45fb967bdb1d49",
+          "accepted_sha256": "978cf079fee1b5c10db6db99a60298b5453b1a6a04d3a0cfe4de1a5dd288b6d2"
+        },
+        "tenant-collection-v2.mjs": {
+          "live_sha256": "6b4a415fe38a49243f31a2ab9495ab72bc62e1f1e69afae37c48d67147e2a20a",
+          "accepted_sha256": "7354856763a29fddf058cfc1677e73c62d28b8ce829b6c8927de74a03ccf8ff1"
+        },
+        "tenant-settings-handlers.mjs": {
+          "live_sha256": "9766306dfccffbb515c6dd1f0a329b91a407f53eb97c1ed148c9dcc5b9f24717",
+          "accepted_sha256": "56946fd060e41cc4c46c421f2f47820b7dc8dccba9a68058fe656477686ec38c"
         }
       },
       "added": {
-        "providers/moov-transfer-webhook.mjs": "90772a9202ad5df12de5564fd89f0cd7f0f4a3f2da03f5ecd5b205fdedd2de39"
+        "money-write-flag.mjs": "d3073e5de067155aa419d6ab666261f9d4b87eeeac0980050da3ecbd8d677dbf"
       },
       "removed": {},
       "dependencies": {
@@ -797,43 +857,24 @@
         "changed": {}
       },
       "inspect": {
-        "run_id": "39666717878",
-        "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39666717878",
-        "main_commit": "96361081c5458bf4de46330b87285fa954b25bbb",
-        "live_code_sha256": "+cyvVRtA46woHP4FwFBBZoN80aXR4A8Vo6adu5E1/NE=",
-        "live_revision_id": "e8820705-bb70-45ab-ae84-8cc43ee8fd86",
-        "live_member_count": 6770,
-        "candidate_zip_sha256": "a4d09ec006855355b523a176669028ec4970127d6f145997bdfb7d8fabecaff7",
-        "candidate_member_count": 6771,
-        "same": 193,
-        "changed": 1,
+        "run_id": "41463084601",
+        "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/41463084601",
+        "main_commit": "ba78d1ddf7a68ac42ff2bfe49e5f07ccd4f8bb11",
+        "live_code_sha256": "+X7Idizd5DT2QbQJAzC3oi8l52es021M3z/zh5R5Wuc=",
+        "live_revision_id": "91745cda-2b27-4ff4-9655-1f5754d00e7a",
+        "live_member_count": 6781,
+        "candidate_zip_sha256": "4d0a30a22c124c63be4811556f3a4a69b1121df0ce179fa92ce057c13ed8d0da",
+        "candidate_member_count": 6782,
+        "same": 189,
+        "changed": 16,
         "added": 1,
         "removed": 0,
         "dependency_counts": {
           "live": 54,
           "candidate": 54
         },
-        "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39666390516",
-        "notes": "Third production rebuild, for Moov transfer returns (#1116). The live CodeSha256 is not the one the second rebuild left behind (history[1].applied, run 39636816351, Bh/f7zaI...): the guarded production overlay run 39663019340 (#1124, REPLACE providers/production/checkalt-eligibility.mjs) replaced that one member at 2026-10-21T19:36:21Z and left CodeSha256 +cyvVRtA..., which this inspect reads (the same package staging ran before its third rebuild); the overlay member already equals main and is counted as same. The RevisionId differs through that overlay. providers/webhooks.mjs live equals sha256 of the same path at e4daedefe (479cedf8..., the bytes the second production rebuild accepted and put live) and its accepted hash equals sha256 at main_commit on an LF checkout (f7353ee1...). providers/moov-transfer-webhook.mjs is absent live and added at main bytes (90772a92...). These are exactly the two files #1116 changed or added under aws/functions/api, with the same live and accepted hashes as the staging section; nothing else differs (no live drift). Nothing is removed. Dependencies are identical by package path and version (54 live, 54 candidate). The candidate ZIP is byte-identical to the one staging run 39666390516 applied and verified (a4d09ec0...). The second rebuild section moves verbatim into history. SQL 109 is not a prerequisite: the writer call is isolated in a savepoint and answers status_writer_unavailable while the function is absent."
-      },
-      "applied": {
-        "run_id": "39669873076",
-        "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39669873076",
-        "main_commit": "008af40e2465eb68fdfeab72eaf06f2efb1d5b45",
-        "approval_phrase": "DEPLOY FULL API PACKAGE TO PRODUCTION",
-        "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39666390516",
-        "code_sha256_before": "+cyvVRtA46woHP4FwFBBZoN80aXR4A8Vo6adu5E1/NE=",
-        "revision_id_before": "e8820705-bb70-45ab-ae84-8cc43ee8fd86",
-        "code_sha256_after": "pNCewAaFU1W1I6F2ZpAo7ElwEn1vFFmXvft9j6vsr/c=",
-        "revision_id_after": "945817bb-5075-46b1-a1bf-38657adb3f8a",
-        "candidate_zip_sha256": "a4d09ec006855355b523a176669028ec4970127d6f145997bdfb7d8fabecaff7",
-        "applied_at": "2026-10-21T20:24:08.525Z",
-        "state": "VERIFIED",
-        "smoke": [
-          "/health",
-          "/db-health"
-        ],
-        "notes": "Pre-inspect run 39666717878 (main 96361081c) reported the same differences; the apply job's own inspect step on main 008af40e2 reported READY (1 changed, 1 added, 0 removed, 0 unlisted problems; live 6770 members, candidate 6771). The apply re-downloaded the package and found it equal to the candidate member for member (6771 members); configuration unchanged (the writer's before and after configuration are the same 45 variable names, variables_sha256 6f2dbdc0... both times). Live read-back through the owner's AWS connector (GetFunctionConfiguration) after the apply: CodeSha256 pNCewAaF..., RevisionId 945817bb, LastModified 2026-10-21T20:24:12Z, LastUpdateStatus Successful, 45 variables. Production and staging again run the same package bytes (CodeSha256 pNCewAaF...). This rebuild applied no SQL: until SQL 109 is applied in production the transfer status writer answers status_writer_unavailable and the webhook is accepted and logged as before. A later inspect against an unchanged main reports ALREADY_ACCEPTED; the next rebuild starts from a new inspect and a new reviewed plan section."
+        "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/41463556950",
+        "notes": "Fourth production rebuild, for everything merged to main since the third production rebuild and its overlays that production does not run yet, taken as one full-package apply on the owner's choice of 2026-11-02 (\"One full rebuild\", for getting SQL 140 and SQL 136 to production: both need the API changes below live first). Live CodeSha256 +X7Idizd5DT2QbQJAzC3oi8l52es021M3z/zh5R5Wuc=, RevisionId 91745cda-2b27-4ff4-9655-1f5754d00e7a: the third rebuild's package plus the guarded production overlays since, the last being the data.mjs auth.email() apply (run 41234874570, recorded by PR #1529); every overlaid member already equals main and is counted as same. Sixteen files differ, each live at the bytes the production overlay plan records as expected_live (or, for the three files that are not overlay members, the bytes the staging section's fourth rebuild started from) and each accepted at main's bytes on an LF checkout: the money-write flag (#1498: providers/production/moov-wallet-sync.mjs, providers/parity/moov-functions.mjs, tenant-collection-v2-settlement.mjs, tenant-collection-v2.mjs, tenant-billing-engine.mjs, tenant-billing-handlers.mjs, invoice-provider.mjs, mortgage-ops-usage.mjs, tenant-collection-v2-uat.mjs, and money-write-flag.mjs added); tenant-settings-handlers.mjs (#1498, the billing route changes #1512-#1515 and the automatic funding settings route #1524) and app-services.mjs (#1524); providers/production/moov-fund-authz.mjs and providers/production/checkalt-authz.mjs (money step-up window #1496); auth-financial-totp.mjs (first enrollment needs an email code, finding 8); check-endorsement.mjs (endorsement link expiry, finding 22; live 85f4bec4 is the release-lock-pin manifest's accepted bytes and main's bytes at the third production rebuild's commit 008af40e2, which that rebuild's inspect counted as same, so production has run them since 2026-10-21 at the latest; the overlay plan's row and the endorsement-link-expiry manifest record 7c6ae301 as live, a recording error a single-member overlay would refuse with SOURCE_RECONCILIATION_REQUIRED; the rebuild takes main's bytes from what is live, and the record after it corrects the row); providers/payees/handlers.mjs (SQL 138's API half, a verified payee's link refuses Moov calls). providers/webhooks.mjs is not a member: the third section listed it at f7353ee1, and the guarded production overlay of the Moov webhook body confirmation (applied 2026-10-31) put main's 59b58674 live, so the inspect's listed_member_drifted for it is resolved by moving the third section into history (as the staging fourth section did). Nothing is removed. Dependencies are identical by package path and version (54 live, 54 candidate). The candidate ZIP (4d0a30a2...) is byte-identical to the one staging rebuild inspect run 41463556950 of the same main commit built, and staging already runs exactly that package (ALREADY_ACCEPTED: 206 same, 0 changed, 0 added, 0 removed; staging CodeSha256 TQowoiwSTGO+SBFVbzpKabESHfDOF5+pLOBXwT7Y0No=), through the staging fourth rebuild (run 41313204838) and the staging overlays since; that run is the staging acceptance reference. Owner tests in staging on that package: SQL 139 billing save (\"It saved, record SQL 139 staging\"), the SQL 136 money flows, and the automatic funding save after SQL 140 (\"It saved, record SQL 140 staging\"). The third production section moves verbatim into history[2]. Filling this section deploys nothing; the apply is its own run with approved_commit, the inspect CodeSha256, this staging reference and the owner's \"DEPLOY FULL API PACKAGE TO PRODUCTION\". SQL 136 must not be applied in production before this rebuild is applied and verified; SQL 140 is useful only after it."
       },
       "history": [
         {
@@ -1081,6 +1122,63 @@
               "/db-health"
             ],
             "notes": "No separate pre-inspect run: the apply job's own inspect step on main e4daedefe reported READY (19 changed, 0 added, 4 removed, 0 unlisted problems; live 6774 members, candidate 6770). The apply re-downloaded the package and found it equal to the candidate member for member (6770 members); configuration unchanged (the writer's before and after configuration are the same 46 variables). Live read-back through the owner's AWS connector (GetFunctionConfiguration) after the apply: CodeSha256 Bh/f7zaI..., RevisionId 4945c256, LastModified 2026-10-21T16:40:44Z, LastUpdateStatus Successful, 46 variables. Production and staging again run the same package bytes (CodeSha256 Bh/f7zaI...). A later inspect against an unchanged main reports ALREADY_ACCEPTED; the next rebuild starts from a new inspect and a new reviewed plan section."
+          }
+        },
+        {
+          "status": "applied",
+          "members": {
+            "providers/webhooks.mjs": {
+              "live_sha256": "479cedf8fc6989bf713d61d452dd9f68eca03e45faa1143a3dd049c3b67bafb0",
+              "accepted_sha256": "f7353ee1673364d45ce564dd8b7f102273e9a871c63f8398d03bd7226360d97f"
+            }
+          },
+          "added": {
+            "providers/moov-transfer-webhook.mjs": "90772a9202ad5df12de5564fd89f0cd7f0f4a3f2da03f5ecd5b205fdedd2de39"
+          },
+          "removed": {},
+          "dependencies": {
+            "added": {},
+            "removed": {},
+            "changed": {}
+          },
+          "inspect": {
+            "run_id": "39666717878",
+            "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39666717878",
+            "main_commit": "96361081c5458bf4de46330b87285fa954b25bbb",
+            "live_code_sha256": "+cyvVRtA46woHP4FwFBBZoN80aXR4A8Vo6adu5E1/NE=",
+            "live_revision_id": "e8820705-bb70-45ab-ae84-8cc43ee8fd86",
+            "live_member_count": 6770,
+            "candidate_zip_sha256": "a4d09ec006855355b523a176669028ec4970127d6f145997bdfb7d8fabecaff7",
+            "candidate_member_count": 6771,
+            "same": 193,
+            "changed": 1,
+            "added": 1,
+            "removed": 0,
+            "dependency_counts": {
+              "live": 54,
+              "candidate": 54
+            },
+            "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39666390516",
+            "notes": "Third production rebuild, for Moov transfer returns (#1116). The live CodeSha256 is not the one the second rebuild left behind (history[1].applied, run 39636816351, Bh/f7zaI...): the guarded production overlay run 39663019340 (#1124, REPLACE providers/production/checkalt-eligibility.mjs) replaced that one member at 2026-10-21T19:36:21Z and left CodeSha256 +cyvVRtA..., which this inspect reads (the same package staging ran before its third rebuild); the overlay member already equals main and is counted as same. The RevisionId differs through that overlay. providers/webhooks.mjs live equals sha256 of the same path at e4daedefe (479cedf8..., the bytes the second production rebuild accepted and put live) and its accepted hash equals sha256 at main_commit on an LF checkout (f7353ee1...). providers/moov-transfer-webhook.mjs is absent live and added at main bytes (90772a92...). These are exactly the two files #1116 changed or added under aws/functions/api, with the same live and accepted hashes as the staging section; nothing else differs (no live drift). Nothing is removed. Dependencies are identical by package path and version (54 live, 54 candidate). The candidate ZIP is byte-identical to the one staging run 39666390516 applied and verified (a4d09ec0...). The second rebuild section moves verbatim into history. SQL 109 is not a prerequisite: the writer call is isolated in a savepoint and answers status_writer_unavailable while the function is absent."
+          },
+          "applied": {
+            "run_id": "39669873076",
+            "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39669873076",
+            "main_commit": "008af40e2465eb68fdfeab72eaf06f2efb1d5b45",
+            "approval_phrase": "DEPLOY FULL API PACKAGE TO PRODUCTION",
+            "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/39666390516",
+            "code_sha256_before": "+cyvVRtA46woHP4FwFBBZoN80aXR4A8Vo6adu5E1/NE=",
+            "revision_id_before": "e8820705-bb70-45ab-ae84-8cc43ee8fd86",
+            "code_sha256_after": "pNCewAaFU1W1I6F2ZpAo7ElwEn1vFFmXvft9j6vsr/c=",
+            "revision_id_after": "945817bb-5075-46b1-a1bf-38657adb3f8a",
+            "candidate_zip_sha256": "a4d09ec006855355b523a176669028ec4970127d6f145997bdfb7d8fabecaff7",
+            "applied_at": "2026-10-21T20:24:08.525Z",
+            "state": "VERIFIED",
+            "smoke": [
+              "/health",
+              "/db-health"
+            ],
+            "notes": "Pre-inspect run 39666717878 (main 96361081c) reported the same differences; the apply job's own inspect step on main 008af40e2 reported READY (1 changed, 1 added, 0 removed, 0 unlisted problems; live 6770 members, candidate 6771). The apply re-downloaded the package and found it equal to the candidate member for member (6771 members); configuration unchanged (the writer's before and after configuration are the same 45 variable names, variables_sha256 6f2dbdc0... both times). Live read-back through the owner's AWS connector (GetFunctionConfiguration) after the apply: CodeSha256 pNCewAaF..., RevisionId 945817bb, LastModified 2026-10-21T20:24:12Z, LastUpdateStatus Successful, 45 variables. Production and staging again run the same package bytes (CodeSha256 pNCewAaF...). This rebuild applied no SQL: until SQL 109 is applied in production the transfer status writer answers status_writer_unavailable and the webhook is accepted and logged as before. A later inspect against an unchanged main reports ALREADY_ACCEPTED; the next rebuild starts from a new inspect and a new reviewed plan section."
           }
         }
       ]
