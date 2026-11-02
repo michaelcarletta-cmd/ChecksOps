@@ -15,6 +15,7 @@ import {
   VENDOR_OPS_LOGIN_PATH,
   VENDOR_OPS_MEMBERSHIP_SELECT,
   VENDOR_OPS_NAV,
+  VENDOR_OPS_NOT_ENABLED_MESSAGE,
   VENDOR_OPS_TITLE,
 } from "@/lib/vendorOps";
 
@@ -75,7 +76,12 @@ export default function VendorOpsLayout() {
   if (isLoading || !workspace) return <Spinner />;
 
   if (workspace.kind !== "active") {
-    const message = workspace.kind === "inactive" ? INACTIVE_ORG_LOGIN_MESSAGE : NO_MEMBERSHIP_LOGIN_MESSAGE;
+    const message =
+      workspace.kind === "not_enabled"
+        ? VENDOR_OPS_NOT_ENABLED_MESSAGE
+        : workspace.kind === "inactive"
+          ? INACTIVE_ORG_LOGIN_MESSAGE
+          : NO_MEMBERSHIP_LOGIN_MESSAGE;
     return <Blocked title={message.title} description={message.description} onSignOut={() => void handleSignOut()} />;
   }
 
