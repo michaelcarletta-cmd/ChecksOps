@@ -4,6 +4,7 @@ import {
   AUTO_APPROVE_POLICY_SOURCE,
   AUTO_APPROVE_SKIP_REASONS,
   decideAutoApprove,
+  depositHoldReason,
   depositIsFlagged,
   isCheckAltApproveLockError,
   resolveAutoApprovePolicy,
@@ -47,6 +48,12 @@ test('decideAutoApprove: always on, no ceiling, no Low Risk gate; approves every
   assert.equal(skip({ amountCents: '500' }), 'invalid_amount');
   // Guard order: a flagged item never reaches the amount check.
   assert.equal(skip({ flagged: true, amountCents: 0 }), 'flagged_by_checkalt');
+  // Option 1 (owner 2026-11-02): each hold records its own reason code, ahead of the amount check.
+  for (const holdReason of ['held_duplicate', 'held_amount_mismatch', 'held_ocr_amount_mismatch', 'held_risk_decline']) {
+    assert.equal(skip({ holdReason }), holdReason);
+    assert.equal(skip({ holdReason, amountCents: 0 }), holdReason);
+  }
+  assert.deepEqual(decideAutoApprove({ ...clean, holdReason: null }), { approve: true, skipReason: null });
   assert.equal(skip({ riskLow: false, amountCents: 0 }), 'invalid_amount');
 });
 
@@ -64,16 +71,17 @@ test('AUTO_APPROVE_SKIP_REASONS: the setting and ceiling reasons are gone; risk_
   for (const gone of ['auto_approve_disabled', 'missing_auto_approve_ceiling', 'over_max_amount']) {
     assert.equal(AUTO_APPROVE_SKIP_REASONS.includes(gone), false, gone);
   }
-  for (const kept of ['not_pending_approval', 'missing_reference', 'invalid_reference', 'flagged_by_checkalt', 'risk_not_low', 'invalid_amount']) {
+  for (const kept of ['not_pending_approval', 'missing_reference', 'invalid_reference', 'flagged_by_checkalt', 'risk_not_low', 'invalid_amount',
+    'held_duplicate', 'held_amount_mismatch', 'held_ocr_amount_mismatch', 'held_risk_decline']) {
     assert.equal(AUTO_APPROVE_SKIP_REASONS.includes(kept), true, kept);
   }
 });
 
-test('depositIsFlagged: CheckAlt flags block; clean riskRating keys do not', () => {
-  assert.equal(depositIsFlagged({
+test('depositHoldReason (Option 1, owner 2026-11-02): only a duplicate, an amount mismatch or Decline holds, each with its own code', () => {
+  assert.equal(depositHoldReason({
     status: 40, statusDescription: 'Pending Approval', riskRating: 2, riskRatingDescription: 'Low Risk', errors: [],
-  }), false);
-  assert.equal(depositIsFlagged({
+  }), null);
+  assert.equal(depositHoldReason({
     status: 40,
     statusDescription: 'Pending Approval',
     riskRating: 'Accepted',
@@ -82,47 +90,57 @@ test('depositIsFlagged: CheckAlt flags block; clean riskRating keys do not', () 
     ocrAmountStatus: 'True',
     amountDiscrepancyDetected: false,
     errors: [],
-  }), false);
-  assert.equal(depositIsFlagged({ exceptions: ['x'] }), true);
-  assert.equal(depositIsFlagged({ warnings: ['x'] }), true);
-  assert.equal(depositIsFlagged({ riskFactors: ['x'] }), true);
-  assert.equal(depositIsFlagged({ errors: ['x'] }), true);
-  assert.equal(depositIsFlagged({ amountDiscrepancyDetected: true }), true);
-  assert.equal(depositIsFlagged({ amountDiscrepancyDetected: 'true' }), true);
-  assert.equal(depositIsFlagged({ statusDescription: 'Possible duplicate item' }), true);
-  assert.equal(depositIsFlagged(null), false);
-});
-
-test('depositIsFlagged: FinCapture duplicateStatus, riskRating Decline/Warning and ocrAmountStatus False flag', () => {
+  }), null);
   for (const duplicateStatus of [true, 'true', 'True', ' TRUE ']) {
-    assert.equal(depositIsFlagged({ duplicateStatus }), true, String(duplicateStatus));
+    assert.equal(depositHoldReason({ duplicateStatus }), 'held_duplicate', String(duplicateStatus));
   }
   for (const duplicateStatus of [false, 'false', 'False', null, undefined, '']) {
-    assert.equal(depositIsFlagged({ duplicateStatus }), false, String(duplicateStatus));
+    assert.equal(depositHoldReason({ duplicateStatus }), null, String(duplicateStatus));
   }
-  for (const riskRating of ['Decline', 'decline', 'Warning', ' WARNING ']) {
-    assert.equal(depositIsFlagged({ riskRating }), true, riskRating);
-  }
-  for (const riskRating of ['Accepted', 'accepted', 2, null, '']) {
-    assert.equal(depositIsFlagged({ riskRating }), false, String(riskRating));
+  for (const amountDiscrepancyDetected of [true, 'true']) {
+    assert.equal(depositHoldReason({ amountDiscrepancyDetected }), 'held_amount_mismatch', String(amountDiscrepancyDetected));
   }
   for (const ocrAmountStatus of [false, 'False', 'false']) {
-    assert.equal(depositIsFlagged({ ocrAmountStatus }), true, String(ocrAmountStatus));
+    assert.equal(depositHoldReason({ ocrAmountStatus }), 'held_ocr_amount_mismatch', String(ocrAmountStatus));
   }
   for (const ocrAmountStatus of [true, 'True', null, undefined]) {
-    assert.equal(depositIsFlagged({ ocrAmountStatus }), false, String(ocrAmountStatus));
+    assert.equal(depositHoldReason({ ocrAmountStatus }), null, String(ocrAmountStatus));
   }
-  assert.equal(depositIsFlagged({ errors: [{ code: 1, message: 'x' }] }), true);
-  assert.equal(depositIsFlagged({ errors: [] }), false);
+  for (const riskRating of ['Decline', 'decline', ' DECLINE ']) {
+    assert.equal(depositHoldReason({ riskRating }), 'held_risk_decline', riskRating);
+  }
+  // A Warning risk rating no longer holds (Option 1).
+  for (const riskRating of ['Warning', ' WARNING ', 'Accepted', 'accepted', 2, null, '']) {
+    assert.equal(depositHoldReason({ riskRating }), null, String(riskRating));
+  }
+  // Duplicate or mismatch named in CheckAlt's status, warning, exception or error text still holds.
+  assert.equal(depositHoldReason({ statusDescription: 'Possible duplicate item' }), 'held_duplicate');
+  assert.equal(depositHoldReason({ warnings: ['Duplicate item detected'] }), 'held_duplicate');
+  assert.equal(depositHoldReason({ exceptions: [{ message: 'Amount mismatch' }] }), 'held_amount_mismatch');
+  assert.equal(depositHoldReason({ errors: [{ code: 4, message: 'CAR/LAR mismatch' }] }), 'held_amount_mismatch');
+  // Order: the structured duplicate flag wins over an amount flag.
+  assert.equal(depositHoldReason({ duplicateStatus: true, ocrAmountStatus: false }), 'held_duplicate');
+  assert.equal(depositHoldReason(null), null);
 });
 
-test('depositIsFlagged: Pending, Pending Approval and Validation Failure status text is not a flag', () => {
-  for (const statusDescription of ['Pending', 'Pending Approval', 'Validation Failure', '0: Validation Failure']) {
-    assert.equal(depositIsFlagged({ status: 40, statusDescription }), false, statusDescription);
+test('depositHoldReason: Check Alt Review All ("0: Validation Failure"), warnings, errors, exceptions, risk factors and other words no longer hold', () => {
+  for (const statusDescription of ['Pending', 'Pending Approval', 'Validation Failure', '0: Validation Failure',
+    'Item on hold for review', 'Risk review', 'Exception', 'Warning', 'Suspect', 'Unreadable', 'Fraud check']) {
+    assert.equal(depositHoldReason({ status: 40, statusDescription }), null, statusDescription);
+  }
+  assert.equal(depositHoldReason({ status: 40, reasonCode: 0, reasonDescription: 'Validation Failure', warnings: ['Review All'], errors: [{ code: 0, message: 'Validation Failure' }] }), null);
+  for (const key of ['exceptions', 'warnings', 'riskFactors', 'errors']) {
+    assert.equal(depositHoldReason({ [key]: ['x'] }), null, key);
   }
   // riskRatingDescription is free text and never decides on its own.
-  for (const riskRatingDescription of ['High Risk', 'Medium Risk', 'Risk review', '']) {
-    assert.equal(depositIsFlagged({ riskRatingDescription }), false, riskRatingDescription);
+  for (const riskRatingDescription of ['High Risk', 'Medium Risk', 'Risk review', 'duplicate', '']) {
+    assert.equal(depositHoldReason({ riskRatingDescription }), null, riskRatingDescription);
+  }
+});
+
+test('depositIsFlagged is depositHoldReason !== null', () => {
+  for (const json of [{ duplicateStatus: true }, { ocrAmountStatus: false }, { riskRating: 'Decline' }, { warnings: ['x'] }, { statusDescription: '0: Validation Failure' }, null]) {
+    assert.equal(depositIsFlagged(json), depositHoldReason(json) !== null, JSON.stringify(json));
   }
 });
 
@@ -144,6 +162,10 @@ test('safeCheckAltReference: positive safe integers only', () => {
 test('checkAltAutoApproveSkipText: plain words for every server skip reason, none once approved', () => {
   const text = (skip_reason, extra = {}) => checkAltAutoApproveSkipText({ _auto_approve: { phase: 'skipped', approved: false, skip_reason, ...extra } });
   assert.equal(text('flagged_by_checkalt'), 'Check Alt flagged this check');
+  assert.equal(text('held_duplicate'), 'Check Alt reported a possible duplicate');
+  assert.equal(text('held_amount_mismatch'), 'Check Alt reported an amount mismatch');
+  assert.equal(text('held_ocr_amount_mismatch'), 'The amount Check Alt read does not match the entered amount');
+  assert.equal(text('held_risk_decline'), 'Check Alt rated this check Decline');
   assert.match(text('risk_not_low'), /before 2026-10-24/);
   for (const reason of AUTO_APPROVE_SKIP_REASONS) {
     const words = text(reason);

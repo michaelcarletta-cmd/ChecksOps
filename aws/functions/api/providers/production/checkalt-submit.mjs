@@ -73,15 +73,19 @@ const referenceOf = (json) => {
  * checkalt_tenant_accounts.auto_approve_enabled and auto_approve_max_cents stay
  * in place but no longer decide anything. Owner decision 2026-10-24 ("Option A",
  * the legacy Lovable/Supabase behaviour): every deposit CheckAlt parked as
- * pending_approval is approved unless CheckAlt flagged it. There is no "Low Risk"
+ * pending_approval is approved unless CheckAlt flagged it. Owner decision 2026-11-02 ("Option 1"):
+ * only a duplicate, an amount mismatch (amountDiscrepancyDetected, ocrAmountStatus False, or
+ * duplicate / mismatch in CheckAlt's status or warning text) or a Decline risk rating holds a
+ * deposit; Check Alt's own Review All hold ("0: Validation Failure"), non-empty warnings / errors /
+ * exceptions / riskFactors, a Warning risk rating and any other status words are approved. Each
+ * hold records its own reason code (depositHoldReason). There is no "Low Risk"
  * gate any more: CheckAlt's FinCapture Status & Reject Reference documents
  * riskRating as Accepted / Decline / Warning and riskRatingDescription as free
  * text, so an exact "Low Risk" never matched. The submit flow makes the approve
  * call itself only after its own committed /deposit/process parked the item, the
  * reference is a positive integer, the server-side amount is a positive integer,
- * and CheckAlt did not flag it (depositIsFlagged: a duplicate, an amount mismatch,
- * a Decline or Warning risk rating, errors, exceptions, warnings, risk factors, or
- * flag words in the status text). A flagged item stays pending_approval and is
+ * and CheckAlt did not flag it as a duplicate, an amount mismatch or a Decline (depositHoldReason).
+ * A held item stays pending_approval and is
  * handled in the Check Alt portal. It never POSTs /deposit/process, never inserts
  * a deposit, and never requires or satisfies the manual-approve TOTP
  * (checkalt-approve.mjs). Replays never reach it (they return before any provider
@@ -104,7 +108,13 @@ export const AUTO_APPROVE_SKIP_REASONS = Object.freeze([
   'not_pending_approval',
   'missing_reference',
   'invalid_reference',
+  // Rows submitted before 2026-11-02, when any CheckAlt warning, error or flag word held a deposit.
   'flagged_by_checkalt',
+  // Option 1 (2026-11-02): the only holds, one code each.
+  'held_duplicate',
+  'held_amount_mismatch',
+  'held_ocr_amount_mismatch',
+  'held_risk_decline',
   // Recorded on rows submitted before 2026-10-24 (the removed "Low Risk" gate); no longer produced.
   'risk_not_low',
   'invalid_amount',
@@ -116,8 +126,8 @@ export const AUTO_APPROVE_SKIP_REASONS = Object.freeze([
   'auto_approve_persist_failed',
 ]);
 
-const AUTO_APPROVE_FLAG_TEXT_RE = /duplicate|fraud|risk|exception|warning|hold|suspect|mismatch|unreadable/;
-const FLAGGED_RISK_RATINGS = new Set(['decline', 'warning']);
+const HOLD_DUPLICATE_TEXT_RE = /duplicate/;
+const HOLD_MISMATCH_TEXT_RE = /mismatch/;
 
 export const AUTO_APPROVE_POLICY_SOURCE = 'always_on';
 
@@ -134,26 +144,34 @@ export const resolveAutoApprovePolicy = () => ({
 const isTrueFlag = (value) => value === true || (typeof value === 'string' && value.trim().toLowerCase() === 'true');
 const isFalseFlag = (value) => value === false || (typeof value === 'string' && value.trim().toLowerCase() === 'false');
 
-export const depositIsFlagged = (providerJson = {}) => {
+/**
+ * Option 1 (owner, 2026-11-02): the one reason CheckAlt's process response holds a deposit, or null.
+ * Only a duplicate, an amount mismatch or a Decline risk rating holds. Check Alt's Review All hold
+ * ("0: Validation Failure"), non-empty warnings / errors / exceptions / riskFactors, a Warning risk
+ * rating and other status words do not.
+ */
+export const depositHoldReason = (providerJson = {}) => {
   const json = providerJson && typeof providerJson === 'object' ? providerJson : {};
-  for (const key of ['exceptions', 'warnings', 'riskFactors', 'errors']) {
-    if (Array.isArray(json[key]) && json[key].length > 0) return true;
-  }
-  if (isTrueFlag(json.amountDiscrepancyDetected)) return true;
   // FinCapture Status & Reject Reference: duplicateStatus true marks a duplicate item.
-  if (isTrueFlag(json.duplicateStatus)) return true;
-  // riskRating is Accepted / Decline / Warning; Decline and Warning are CheckAlt risk flags.
-  if (typeof json.riskRating === 'string' && FLAGGED_RISK_RATINGS.has(json.riskRating.trim().toLowerCase())) return true;
+  if (isTrueFlag(json.duplicateStatus)) return 'held_duplicate';
+  if (isTrueFlag(json.amountDiscrepancyDetected)) return 'held_amount_mismatch';
   // ocrAmountStatus False: the recognized amount does not match the keyed amount.
-  if (isFalseFlag(json.ocrAmountStatus)) return true;
-  // riskRatingDescription is free text and is not regexed here.
-  const flagText = [
+  if (isFalseFlag(json.ocrAmountStatus)) return 'held_ocr_amount_mismatch';
+  // riskRating is Accepted / Decline / Warning; only Decline holds.
+  if (typeof json.riskRating === 'string' && json.riskRating.trim().toLowerCase() === 'decline') return 'held_risk_decline';
+  // riskRatingDescription is free text and is not read here.
+  const text = [
     json.statusDescription,
     JSON.stringify(json.warnings ?? ''),
     JSON.stringify(json.exceptions ?? ''),
+    JSON.stringify(json.errors ?? ''),
   ].join(' ').toLowerCase();
-  return AUTO_APPROVE_FLAG_TEXT_RE.test(flagText);
+  if (HOLD_DUPLICATE_TEXT_RE.test(text)) return 'held_duplicate';
+  if (HOLD_MISMATCH_TEXT_RE.test(text)) return 'held_amount_mismatch';
+  return null;
 };
+
+export const depositIsFlagged = (providerJson = {}) => depositHoldReason(providerJson) !== null;
 
 /** CheckAlt references are positive integers sent as JSON numbers. */
 export const safeCheckAltReference = (reference) => {
@@ -168,12 +186,14 @@ export const decideAutoApprove = ({
   reference = null,
   amountCents = null,
   flagged = false,
+  holdReason = null,
 } = {}) => {
   if (!processRequiresApproval) return { approve: false, skipReason: 'not_pending_approval' };
   if (reference === null || reference === undefined || String(reference).trim() === '') {
     return { approve: false, skipReason: 'missing_reference' };
   }
   if (safeCheckAltReference(reference) === null) return { approve: false, skipReason: 'invalid_reference' };
+  if (holdReason) return { approve: false, skipReason: holdReason };
   if (flagged) return { approve: false, skipReason: 'flagged_by_checkalt' };
   if (!Number.isInteger(amountCents) || amountCents <= 0) return { approve: false, skipReason: 'invalid_amount' };
   return { approve: true, skipReason: null };
@@ -297,7 +317,7 @@ export async function maybeAutoApproveAfterProcess({
     processRequiresApproval: row?.status === 'pending_approval',
     reference: row?.checkalt_reference ?? null,
     amountCents,
-    flagged: depositIsFlagged(providerJson),
+    holdReason: depositHoldReason(providerJson),
   });
   if (decision.approve && deadline - now() < AUTO_APPROVE_MIN_REQUEST_MS) {
     decision = { approve: false, skipReason: 'auto_approve_timeout' };
