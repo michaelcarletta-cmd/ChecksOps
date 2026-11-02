@@ -5,8 +5,8 @@
  * covers what is new:
  *
  *   - the pin: pending (no read-live yet, and none before #1498's API is live in staging), code-derived,
- *     selectable, packed, in step with the production pin (execute true on production's own pre-state, the
- *     same one staging had); the pinned commit authored the bytes;
+ *     selectable, packed, in step with the production pin (applied 2026-11-02 and retired, from production's
+ *     own pre-state, the same one staging had); the pinned commit authored the bytes;
  *     no predecessor;
  *   - the spec: one new SECURITY INVOKER function (aws_money_write_allowed(), EXECUTE authenticated,
  *     checksops and the owner) and 72 RESTRICTIVE policies TO authenticated (INSERT / UPDATE / DELETE on
@@ -163,8 +163,12 @@ test('pin: SQL 136 staging-authorized from its read-live, code-derived, selectab
   // Production pin execute-authorized (owner-approved pin change of 2026-11-02) on the staging apply, after #1498's API
   // went live in production (full rebuild run 41469896446). Its pre-state is production's own (read-only inspect SSM
   // 5c25a263), the same pre-state staging recorded and the one derived here.
-  assert.equal(prod.execute, true);
-  assert.match(prod.authorization, /^Owner approved 2026-11-02 /);
+  assert.equal(prod.execute, false);
+  assert.match(prod.authorization, /^Applied to production on 2026-11-02; execute is false again/);
+  assert.equal(prod.applied.result, 'applied');
+  assert.equal(prod.applied.receipt.before_hash, prod.expected_live_definition_sha256);
+  assert.equal(prod.applied.receipt.after_hash, prod.intended_replacement_sha256);
+  assert.equal(prod.applied.post_apply_inspect.already_applied, true);
   assert.equal(prod.expected_live_definition_sha256, prod.production_inspect.live_definition_sha256);
   assert.equal(prod.expected_live_definition_sha256, pin.expected_live_definition_sha256);
   assert.equal(prod.expected_live_definition_sha256, PRE);
@@ -177,7 +181,7 @@ test('pin: SQL 136 staging-authorized from its read-live, code-derived, selectab
   // The runbook: the STOP gate, the pre-state and intended fingerprints and texts, the source.
   const runbook = fs.readFileSync(path.join(ROOT, 'ops/production-sql-136-apply.md'), 'utf8');
   assert.match(runbook, /## STOP: the API first/);
-  assert.match(runbook, /\*\*Status:\*\* applied in staging \(wave 34, 2026-11-02\); staging test: the two reported failures are not gate refusals \(the auto-funding settings write path is a separate PR\); production pin execute-authorized \(#1498's API live in production since rebuild run 41469896446\); not applied to production/);
+  assert.match(runbook, /\*\*Status:\*\* applied to staging \(wave 34\) and to production \(2026-11-02\); the production pin is retired/);
   assert.match(runbook, /read-live \(2026-11-01\)\.\*\* Run 41313668204/);
   for (const value of [PRE, pin.intended_replacement_sha256, pin.source_sha256]) assert.ok(runbook.includes(value), value);
   assert.ok(runbook.includes(`\`\`\`\n${releaseStateText(KEY, INTENDED)}\n\`\`\``));
