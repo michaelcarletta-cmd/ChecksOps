@@ -1,8 +1,8 @@
 {
   "id": "sql139-tenant-billing-accounts-write-policy-reconcile-production-apply",
   "migration": "sql139",
-  "authorization": "Owner approved 2026-11-02 (the owner's words for SQL 139: \"record the SQL 139 staging pin\" (2026-11-02), \"apply SQL 139 in staging\" (2026-11-02), \"It saved, record SQL 139 staging\" (2026-11-02), \"start the SQL runner for the SQL 139 production inspect\" (2026-11-02) and \"record the SQL 139 production pin\" (2026-11-02), none of them words for the production apply; the change itself is reviewed and merged by the owner): production apply of SQL 139 after the staging acceptance below (production 8727ecb1f834f9623c1ea7f568621f64a4212dadf3d28a5a7741a6a542cdb22f -> 17f07a31e274899a50f53877dc1df48839614ba6148047a4321000e474bd446d); execute true takes effect only when the owner reviews and merges this change. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
-  "execute": true,
+  "authorization": "Applied to production on 2026-11-02; execute is false again, so this pin is no longer a standing authorization and a re-apply needs a new reviewed pin change. The owner approved the SQL 139 production pin change on 2026-11-02 in the words \"record the SQL 139 staging pin\", \"apply SQL 139 in staging\", \"It saved, record SQL 139 staging\", \"start the SQL runner for the SQL 139 production inspect\" and \"record the SQL 139 production pin\" (none of them words for the production apply; 8727ecb1 -> 17f07a31, #1519, merged to main as 4ca522a24) and the one apply run recorded in applied (workstream prod-sql139-billing-write-policy-20261102) in the words \"apply SQL 139 in production\", passed to it verbatim. That approval covered that run only.",
+  "execute": false,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -58,5 +58,229 @@
     "ok": true,
     "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/41369892057",
     "basis": "Guarded staging SQL executor apply of sql139-tenant-billing-accounts-write-policy-reconcile, run 41369892057 (2026-11-02, main 75b0b9f1c30cc05933cd95a0603e4a90fdb20ae3, wave 35, workstream github-staging-sql-41369892057, staging pin commit 6f72d3e25ad63bab6b78551ec8932d4f42c32093, staging pin PR #1517, on the executor deployed by deploy run 41369655188: 7x52PS7o2AbqXrTW+TBY0hKcix1vW/+iOi8RxtVDeYE=, previous e/7IOeV85/ABLNfaECLrtGwKOQV6yC+ZeVLLkyejFdw=), from the staging pre-state recorded by read-live run 41367825238 (8727ecb1f834f9623c1ea7f568621f64a4212dadf3d28a5a7741a6a542cdb22f): receipt before 8727ecb1f834f9623c1ea7f568621f64a4212dadf3d28a5a7741a6a542cdb22f, after 17f07a31e274899a50f53877dc1df48839614ba6148047a4321000e474bd446d == intended, result applied; policy tenant_billing_accounts aws_write_tenant_billing_accounts intended, prerequisites_missing []. Read-live run 41370841522 then reported already_applied true, live 17f07a31e274899a50f53877dc1df48839614ba6148047a4321000e474bd446d, precondition_failures [], counts billing_table_rls_enabled 1, billing_write_policy_permissive_all 1, billing_job_policy_intact 1. Owner acceptance 2026-11-02, tested in staging: \"It saved, record SQL 139 staging\" (after the apply, unticking auto-debit on Freedom Adjustment's billing account saved; before the apply the same save returned 409 billing_update_not_applied with the diagnostic lock:0); staging record PR #1518. The behaviour is covered on PostgreSQL 16 by aws/tests/sql139-billing-write-policy-pg.test.mjs and through the executor by aws/tests/release-sql139-executor.test.mjs. Production's pre-state (production_inspect) equals staging's, so the same path applies there. The same file bytes (source_sha256) are pinned in both."
+  },
+  "applied": {
+    "date": "2026-11-02",
+    "result": "applied",
+    "source_commit": "4ca522a24178887d912f5676fb352f665d9ed450",
+    "source_commit_basis": "SOURCE_COMMIT in the tarball (written by sql53-temporary-transfer) equals --commit, and the tarball sha256 equals --expected-tarball-sha256 as copied by the operator from that transfer run's log (TARBALL_SHA256 line); the run log itself was not read by the one-shot.",
+    "source_tarball": {
+      "file": "source-4ca522a24178887d912f5676fb352f665d9ed450.tar.gz",
+      "sha256": "498976ae828ac4811e4ec57ae934b28565b15b410ce8ce5697092dbead313b09"
+    },
+    "migration_source_sha256": "cfe8e15d93b0461d27f31d5c0652e08bb42a4c19ea53932e1ed7306ca1e5e776",
+    "migration_source_sha256_note": "The one-shot source step hashed aws/workflows/sql/139_tenant_billing_accounts_write_policy_reconcile.sql in the transfer tarball: equal to source_sha256 (the pin; migration_matches_pin true).",
+    "runner": "i-0c35557c4e5385406",
+    "runner_basis": "operator-supplied --runner (not verified by the one-shot)",
+    "workstream_id": "prod-sql139-billing-write-policy-20261102",
+    "one_use_id": "sql139-prod-aa1f80e5-958e-414e-8987-271e20846eac",
+    "one_use_id_consumed": true,
+    "one_use_id_consumed_basis": "Inferred from the successful apply (the tool records the one_use_id after COMMIT and only warns if that write fails); the consumed-registry entry was not read back separately.",
+    "owner_approval": "apply SQL 139 in production",
+    "owner_approval_basis": "As passed in --approval-statement for --approval-scope sql139; the one-shot cannot verify who said it. The owner's words of 2026-11-02 for this run were \"apply SQL 139 in production\", given after the pin change (#1519, merged to main as 4ca522a24) whose authorization recorded that no words for the production apply had been given yet; they were passed verbatim as the approval statement for the --phase inspect run and the --phase apply run.",
+    "operator": "michaelcarletta-cmd",
+    "apply_ssm_command_id": "4d608cbc-a23a-40d6-8b33-7b08992f0847",
+    "one_shot_run_id": "13ba0ae8-454d-45a3-b712-abd392662cad",
+    "one_shot_note": "One SSM command (4d608cbc-a23a-40d6-8b33-7b08992f0847 on i-0c35557c4e5385406, comment \"SQL 139 one-shot apply\", sent 2026-11-02; the command printed EXIT=0; the runner was started from stopped for this work and stopped again afterwards, with no SSM command left in progress; the start and stop times are not recorded here) ran the production-sql-one-shot --phase apply (run_id 13ba0ae8-454d-45a3-b712-abd392662cad) from main 4ca522a24 (transfer run 41375148472, sql53-temporary-transfer.yml on main after the #1519 merge; tarball sha256 498976ae828ac4811e4ec57ae934b28565b15b410ce8ce5697092dbead313b09). Before it, a separate one-shot --phase inspect on the same tarball and the same approval statement (SSM f680a0c4-a5d2-4b2f-8478-9563fdb3d08c, run_id 80568c5f-e151-48c1-95b5-1e8d6bca475d, EXIT=0, steps pin, source, inspect and contracts ok, nothing written) read live 8727ecb1f834f9623c1ea7f568621f64a4212dadf3d28a5a7741a6a542cdb22f (live_matches_expected true, already_applied false, apply_preconditions_met true, precondition_failures [], prerequisites_missing [], predecessors {}, counts billing_table_rls_enabled 1, billing_write_policy_permissive_all 1, billing_job_policy_intact 1), the pre-state the read-only inspect recorded in production_inspect (SSM 5eb60937-5d3d-4196-93b8-bd874aac63db). The apply run's own inspect step read the same. Steps pin (execute true, staging_acceptance run 41369892057), source (tarball sha256 matches the sidecar and --expected-tarball-sha256, tree matches the tarball, migration source == pin), inspect, contracts (claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43), manifest, source-recheck-before-preflight, preflight, evaluate, source-recheck-before-apply, apply (applied) and post-apply-inspect all ok. The run's JSON arrived whole (19086 characters of SSM output, under the 24000-character limit): every field of the applied object is recorded as printed, except this note and owner_approval_basis, which are extended as in the SQL 127 to SQL 138 records (the one-shot's own one_shot_note read: \"One production-sql-one-shot run verified the source, ran the read-only inspect and the runner contracts, built the manifest, issued the receipt and lease (preflight), evaluated (sql139_production_apply_allowed true), applied (exit 0) and ran the post-apply inspect.\"; its owner_approval_basis read: \"As passed in --approval-statement for --approval-scope sql139; the one-shot cannot verify who said it.\"). The printed applied.receipt equals the run's top-level details.apply_result, and applied.post_apply_inspect, pre_apply_inspect and contract_results equal the top-level objects of the same name. This block adds migration_source_sha256 (with its note), apply_ssm_command_id, steps and manifest_sha256 from the same run's details, as the SQL 127 to SQL 138 records do. The run's not_observed_by_this_run list names ssm_command_id and source_staged_by, supplied here as apply_ssm_command_id and transfer run 41375148472. The post-apply inspect reported live 17f07a31e274899a50f53877dc1df48839614ba6148047a4321000e474bd446d == intended, already_applied true, precondition_failures []: policy tenant_billing_accounts aws_write_tenant_billing_accounts intended (PERMISSIVE FOR ALL TO authenticated, USING and WITH CHECK aws_can_write_tenant(tenant_id)), counts billing_table_rls_enabled 1, billing_write_policy_permissive_all 1, billing_job_policy_intact 1, prerequisites_missing []. Production acceptance, tested in production: production website upload run 41377891839 (main 9ba9a8e4, \"DEPLOY WEBSITE TO PRODUCTION\"; index.html d83bc564… -> 55733c79…, bundle index-BAfCsjEp.js) put into production the billing panel that saves through the server route; after it the owner linked the billing account in production and it saved, and recorded the apply on 2026-11-02 (\"It saved, record SQL 139\"). Before that website deploy the old panel's direct table write returned writes_disabled: that came from the old SPA, not the database.",
+    "steps": [
+      "pin",
+      "source",
+      "inspect",
+      "contracts",
+      "manifest",
+      "source-recheck-before-preflight",
+      "preflight",
+      "evaluate",
+      "source-recheck-before-apply",
+      "apply",
+      "post-apply-inspect"
+    ],
+    "contract_results": {
+      "claim-ledger": {
+        "ok": true,
+        "test": "aws/tests/claim-ledger-accepted-contract.test.mjs",
+        "evidence": "4/4 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at 4ca522a24178887d912f5676fb352f665d9ed450 (production-sql-one-shot 13ba0ae8-454d-45a3-b712-abd392662cad, node --test)"
+      },
+      "tenant-isolation": {
+        "ok": true,
+        "test": "aws/tests/tenant-security-compliance.test.mjs",
+        "evidence": "6/6 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at 4ca522a24178887d912f5676fb352f665d9ed450 (production-sql-one-shot 13ba0ae8-454d-45a3-b712-abd392662cad, node --test)"
+      },
+      "financial-write-protections": {
+        "ok": true,
+        "test": "aws/tests/api-write.test.mjs",
+        "evidence": "43/43 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at 4ca522a24178887d912f5676fb352f665d9ed450 (production-sql-one-shot 13ba0ae8-454d-45a3-b712-abd392662cad, node --test)"
+      }
+    },
+    "pre_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "8727ecb1f834f9623c1ea7f568621f64a4212dadf3d28a5a7741a6a542cdb22f",
+      "live_matches_expected": true,
+      "already_applied": false,
+      "predecessors": {},
+      "predecessors_applied": true,
+      "missing_dependencies": [],
+      "apply_preconditions_met": true,
+      "precondition_failures": [],
+      "current_user": "checksops_admin",
+      "session_user": "checksops_admin",
+      "counts": {
+        "billing_table_rls_enabled": 1,
+        "billing_write_policy_permissive_all": 1,
+        "billing_job_policy_intact": 1
+      },
+      "successors_applied": [],
+      "release_sql_inspect": {
+        "live_definition_sha256": "8727ecb1f834f9623c1ea7f568621f64a4212dadf3d28a5a7741a6a542cdb22f",
+        "prerequisites_missing": [],
+        "predecessors": {},
+        "successors_applied": [],
+        "functions": [],
+        "policies": [
+          {
+            "name": "tenant_billing_accounts aws_write_tenant_billing_accounts",
+            "state": "different"
+          }
+        ],
+        "views": [],
+        "tables": [],
+        "columns": [],
+        "constraints": [],
+        "triggers": [],
+        "table_privileges": [],
+        "function_acl": [],
+        "acl_functions": [],
+        "indexes": [],
+        "unique_covers": [],
+        "definer_writes": [],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": {
+          "billing_table_rls_enabled": 1,
+          "billing_write_policy_permissive_all": 1,
+          "billing_job_policy_intact": 1
+        }
+      }
+    },
+    "manifest_sha256": "b3c43367d16ca0c02f45074578f55938b6a9dc3df3ae6b73ea552fee1c3cb5c5",
+    "receipt": {
+      "migration": "sql139",
+      "workstream": "prod-sql139-billing-write-policy-20261102",
+      "commit": "4ca522a24178887d912f5676fb352f665d9ed450",
+      "sql_file": "aws/workflows/sql/139_tenant_billing_accounts_write_policy_reconcile.sql",
+      "before_hash": "8727ecb1f834f9623c1ea7f568621f64a4212dadf3d28a5a7741a6a542cdb22f",
+      "after_hash": "17f07a31e274899a50f53877dc1df48839614ba6148047a4321000e474bd446d",
+      "release_sql_inspect": {
+        "live_definition_sha256": "17f07a31e274899a50f53877dc1df48839614ba6148047a4321000e474bd446d",
+        "prerequisites_missing": [],
+        "predecessors": {},
+        "successors_applied": [],
+        "functions": [],
+        "policies": [
+          {
+            "name": "tenant_billing_accounts aws_write_tenant_billing_accounts",
+            "state": "intended"
+          }
+        ],
+        "views": [],
+        "tables": [],
+        "columns": [],
+        "constraints": [],
+        "triggers": [],
+        "table_privileges": [],
+        "function_acl": [],
+        "acl_functions": [],
+        "indexes": [],
+        "unique_covers": [],
+        "definer_writes": [],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": {
+          "billing_table_rls_enabled": 1,
+          "billing_write_policy_permissive_all": 1,
+          "billing_job_policy_intact": 1
+        }
+      },
+      "unrelated_catalog_sha256": "059e581ebce22beceab2c04896f760736c301b7f3f9566708cb55e35d522ab2e",
+      "unrelated_catalog_counts": {
+        "relations": 892,
+        "columns": 3550,
+        "constraints": 2239,
+        "policies": 403,
+        "functions": 1356,
+        "indexes": 655,
+        "default_acl": 0,
+        "role_memberships": 15,
+        "roles": 29,
+        "triggers": 184,
+        "views": 25,
+        "types": 18,
+        "schema": 2
+      },
+      "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/41369892057",
+      "result": "applied"
+    },
+    "post_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "17f07a31e274899a50f53877dc1df48839614ba6148047a4321000e474bd446d",
+      "live_matches_expected": false,
+      "already_applied": true,
+      "predecessors": {},
+      "predecessors_applied": true,
+      "missing_dependencies": [],
+      "apply_preconditions_met": false,
+      "precondition_failures": [],
+      "current_user": "checksops_admin",
+      "session_user": "checksops_admin",
+      "counts": {
+        "billing_table_rls_enabled": 1,
+        "billing_write_policy_permissive_all": 1,
+        "billing_job_policy_intact": 1
+      },
+      "successors_applied": [],
+      "release_sql_inspect": {
+        "live_definition_sha256": "17f07a31e274899a50f53877dc1df48839614ba6148047a4321000e474bd446d",
+        "prerequisites_missing": [],
+        "predecessors": {},
+        "successors_applied": [],
+        "functions": [],
+        "policies": [
+          {
+            "name": "tenant_billing_accounts aws_write_tenant_billing_accounts",
+            "state": "intended"
+          }
+        ],
+        "views": [],
+        "tables": [],
+        "columns": [],
+        "constraints": [],
+        "triggers": [],
+        "table_privileges": [],
+        "function_acl": [],
+        "acl_functions": [],
+        "indexes": [],
+        "unique_covers": [],
+        "definer_writes": [],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": {
+          "billing_table_rls_enabled": 1,
+          "billing_write_policy_permissive_all": 1,
+          "billing_job_policy_intact": 1
+        }
+      }
+    }
+  },
+  "production_evidence": {
+    "2026-11-02 apply": "Guarded production SQL one-shot on i-0c35557c4e5385406, workstream prod-sql139-billing-write-policy-20261102, main 4ca522a24 (tarball 498976ae…, transfer run 41375148472, migration source cfe8e15d… == pin), owner-approved run (\"apply SQL 139 in production\"), pre-apply --phase inspect SSM f680a0c4-a5d2-4b2f-8478-9563fdb3d08c (run_id 80568c5f-e151-48c1-95b5-1e8d6bca475d, live 8727ecb1…, live_matches_expected true), apply SSM 4d608cbc-a23a-40d6-8b33-7b08992f0847, run_id 13ba0ae8-454d-45a3-b712-abd392662cad, one_use_id sql139-prod-aa1f80e5-958e-414e-8987-271e20846eac (spent): every step ok; contracts claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43; pre-apply inspect live 8727ecb1… (live_matches_expected true, precondition_failures [], counts 1/1/1); manifest b3c43367…; 8727ecb1… -> 17f07a31…, result applied, unrelated catalog 059e581e… (policies 403, functions 1356); post-apply inspect already_applied true, precondition_failures []; the run's JSON arrived whole. After: aws_write_tenant_billing_accounts on tenant_billing_accounts is SQL 24's (PERMISSIVE FOR ALL TO authenticated, USING and WITH CHECK aws_can_write_tenant(tenant_id)); aws_write_tenant_billing_accounts_job intact. Production acceptance, tested in production after website upload run 41377891839 (main 9ba9a8e4, bundle index-BAfCsjEp.js, the billing panel that saves through the server route): the owner linked the billing account and it saved. Owner recording: \"It saved, record SQL 139\". execute is false so the pin is no longer a standing authorization."
   }
 }
