@@ -166,7 +166,10 @@ test('order: no predecessor; no function; SQL 24\'s one policy on tenant_billing
   const runbook = read(COMMITTED.tooling.runbook);
   assert.ok(runbook.includes(COMMITTED.intended_replacement_sha256));
   assert.ok(runbook.includes(COMMITTED.source_sha256));
-  assert.match(runbook, /\*\*Status:\*\* staging pin execute-authorized \(wave 35\); not applied anywhere\./);
+  assert.match(runbook, /\*\*Status:\*\* applied in staging \(wave 35, 2026-11-02\); staging acceptance: owner tested in staging \(the billing account saved\); production pin pending \(production inspect next\)/);
+  assert.match(runbook, /"It saved, record SQL 139 staging"/);
+  assert.match(runbook, /\*\*Staging apply \(2026-11-02\)\.\*\* Apply run 41369892057/);
+  assert.match(runbook, /Read-live run 41370841522/);
   assert.match(runbook, /APPLY_TENANT_BILLING_ACCOUNTS_WRITE_POLICY_RECONCILE/);
   assert.match(runbook, /#1515/);
   const oneShot = read('ops/production-sql-one-shot.md');

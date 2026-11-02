@@ -165,7 +165,7 @@ test('pin: SQL 139 staging-authorized from its read-live (pre-state recorded, no
   assert.match(prod.order_note, /The production pre-state cannot be derived/);
   // The runbook: the intended fingerprint and text, the source, the evidence; no derived pre-state.
   const runbook = fs.readFileSync(path.join(ROOT, 'ops/production-sql-139-apply.md'), 'utf8');
-  assert.match(runbook, /\*\*Status:\*\* staging pin execute-authorized \(wave 35\); not applied anywhere\. The production pin is pending\./);
+  assert.match(runbook, /\*\*Status:\*\* applied in staging \(wave 35, 2026-11-02\); staging acceptance: owner tested in staging \(the billing account saved\); production pin pending \(production inspect next\)/);
   assert.match(runbook, /read-live \(2026-11-02\)\.\*\* Run 41367825238/);
   assert.ok(runbook.includes(pin.expected_live_definition_sha256));
   assert.match(runbook, /\*\*Pre-state: not derivable\.\*\*/);

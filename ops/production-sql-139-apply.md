@@ -53,7 +53,28 @@ SQL 139 staging pin". The staging apply is a separate run after this pin is merg
 carrying it, on the owner's words for that run, "apply SQL 139 in staging". The production pin stays pending: a
 read-only production inspect decides production's pre-state.
 
-**Status:** staging pin execute-authorized (wave 35); not applied anywhere. The production pin is pending.
+**Staging executor refreshed for the pin (2026-11-02).** The staging pin (wave 35, PR #1517) merged as
+`75b0b9f1c30cc05933cd95a0603e4a90fdb20ae3`. Inspect run 41369442859 (main `75b0b9f1`) found the live
+executor at `e/7IOeV85/ABLNfaECLrtGwKOQV6yC+ZeVLLkyejFdw=` (`executor_current` false). Deploy run 41369655188
+(`expected_executor_code_sha256` `e/7IOeV8…` matched) updated `checksops-staging-guarded-sql-executor` to
+`7x52PS7o2AbqXrTW+TBY0hKcix1vW/+iOi8RxtVDeYE=`.
+
+**Staging apply (2026-11-02).** Apply run 41369892057 (2026-11-02T00:59Z, main `75b0b9f1`, workstream
+`github-staging-sql-41369892057`, pin commit `6f72d3e25`, `expected_live_definition_sha256`
+`8727ecb1f834f9623c1ea7f568621f64a4212dadf3d28a5a7741a6a542cdb22f`) under the owner's words "apply SQL 139 in
+staging": success. The receipt prints `result` `applied`, `before_hash` `8727ecb1…`, `after_hash`
+`17f07a31e274899a50f53877dc1df48839614ba6148047a4321000e474bd446d`; the policy
+`tenant_billing_accounts aws_write_tenant_billing_accounts` in state `intended`; `prerequisites_missing` `[]`.
+Read-live run 41370841522 (main `75b0b9f1`, executor `7x52PS7o…`): `already_applied` true,
+`live_definition_sha256` `17f07a31…` equal to the intended hash, `precondition_failures` `[]`,
+`prerequisites_missing` `[]`, counts `billing_table_rls_enabled` 1, `billing_write_policy_permissive_all` 1,
+`billing_job_policy_intact` 1. Staging acceptance: the owner tested in staging on 2026-11-02,
+"It saved, record SQL 139 staging": after the apply, unticking auto-debit on Freedom Adjustment's billing account
+saved; before the apply the same save returned 409 `billing_update_not_applied` with the diagnostic `lock:0`. The
+staging pin keeps `execute: true`; the staging runs are recorded in the production pin's `staging_acceptance` by the
+production pin PR.
+
+**Status:** applied in staging (wave 35, 2026-11-02); staging acceptance: owner tested in staging (the billing account saved); production pin pending (production inspect next)
 
 ## Fingerprint
 
