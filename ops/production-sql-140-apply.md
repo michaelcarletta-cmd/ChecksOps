@@ -93,7 +93,23 @@ automatic funding panel saved; before the apply the same save returned 403 `rls_
 `permission denied for table tenant_wallet_funding_settings` (12:31:40Z). The staging pin keeps `execute: true`;
 the staging runs are recorded in the production pin's `staging_acceptance` by the production pin PR.
 
-**Status:** applied in staging (wave 36, 2026-11-02); staging acceptance: owner tested in staging (the target wallet balance saved); production pin pending (production inspect next)
+**Production inspect (2026-11-02).** Read-only `--inspect` through SSM
+`e89960f1-fa5a-4e1f-a243-82d09d91f404` on `i-0c35557c4e5385406` (under the owner's words "start the production SQL
+runner for SQL 140"; the runner started at 15:34:18Z and stopped again at 15:36:34Z), main `1364af787` (tarball
+sha256 `8f5471f3107221fccd2c4833b541fcd6bce3cf80cfd2695cd2ae9aa929d4f3d5`, staged by `sql53-temporary-transfer.yml`
+run 41472860321, migration source `7961cf7c…` == pin), connected as `checksops_admin`: all thirteen columns
+`different` with `acl` `[]` (no column grant, the restore's state); `table_privileges` `[]`, `prerequisites_missing`
+`[]`, `predecessors` `{}`, `successors_applied` `[]`; live
+`fa08a3db73806391d757885c9165d0f1bf56a4571a22b1a32e2e63c73578952d`, `already_applied` false,
+`precondition_failures` `[]`. Production's pre-state equals staging's (read-live run 41452217978) and the derived
+one, so the staging apply took the path production will. The table ACL of `tenant_wallet_funding_settings` is not
+in the tool's `--inspect` output; this file does not change it, and the apply's unrelated-catalog snapshot refuses
+any change outside the fingerprint. Recorded in the production pin with the staging apply (run 41456507778) as its
+staging acceptance and `execute: true`; the owner's words so far name the staging steps, the production path ("lets
+get SQL 140 and 136 on production") and the runner, not the production apply. The owner merges the pin change; the
+apply still needs the owner's words for that run and runs only after that merge is on main and staged.
+
+**Status:** applied in staging (wave 36, 2026-11-02); staging acceptance: owner tested in staging (the target wallet balance saved); production pin execute-authorized; not applied to production
 
 ## Fingerprint
 
