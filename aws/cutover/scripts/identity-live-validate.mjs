@@ -9,9 +9,20 @@ import { EXPECTED_EIGHT, NINTH_ID } from '../../identity/expected-mappings.mjs';
 
 const REGION = process.env.AWS_REGION || 'us-east-1';
 const SECRET_ID = process.env.STORAGE_MIGRATION_SECRET_ID || 'checksops/staging/storage-migration-token';
-const BRIDGE = 'https://nbcqwpysqgyxrrbgtmkw.supabase.co/functions/v1/aws-staging-db-bridge';
-const ANON = process.env.SUPABASE_ANON_KEY
-  || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5iY3F3cHlzcWd5eHJyYmd0bWt3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxNDQ2NTgsImV4cCI6MjA5MjcyMDY1OH0.9GNh6OK6l6vSIBgkDY-bJuqNtfHJsLNW-dc7jfRUwgw';
+const BRIDGE = process.env.SUPABASE_DB_BRIDGE_URL
+  || 'https://nbcqwpysqgyxrrbgtmkw.supabase.co/functions/v1/aws-staging-db-bridge';
+// The Supabase API key is configuration, never source: supply it through the environment.
+const ANON = String(process.env.SUPABASE_ANON_KEY || '').trim();
+
+if (!ANON) {
+  console.log(JSON.stringify({
+    ok: false,
+    skipped: true,
+    reason: 'supabase_anon_key_missing',
+    hint: 'set SUPABASE_ANON_KEY in the environment',
+  }, null, 2));
+  process.exit(1);
+}
 
 const expectedIds = new Set(EXPECTED_EIGHT.map((row) => row.applicationUserId));
 
