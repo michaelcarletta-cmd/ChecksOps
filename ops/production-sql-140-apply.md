@@ -73,7 +73,27 @@ under the owner's words of 2026-11-02, "record the SQL 140 staging pin". The sta
 this pin is merged and the executor is redeployed carrying it, on the owner's words for that run, "apply SQL 140
 in staging". The production pin stays pending: a read-only production inspect decides production's pre-state.
 
-**Status:** staging pin execute-authorized (wave 36); not applied anywhere. The production pin is pending.
+**Staging executor refreshed for the pin (2026-11-02).** The staging pin (wave 36, PR #1526) merged as
+`ac86cb8278a142833074b1e2b5e148bd2f68f801`. Inspect run 41455308661 (main `ac86cb82`) found the live
+executor at `OauFqZ8FWSA+Yja2IW65AHHXHcfIbG1pwyDZAUVYWWU=` (`executor_current` false; main's package superseded
+`lib/sql-executor-auth.mjs` only). Deploy run 41456040431 (`expected_executor_code_sha256` `OauFqZ8F…` matched)
+updated `checksops-staging-guarded-sql-executor` to `R3yjuac3v8TGuLB/au2EsQlkSwiTg+ym3txzyZwSU0M=`
+(RevisionId `d46a1e06-da07-44b9-847a-5245c37c25f5`).
+
+**Staging apply (2026-11-02).** Apply run 41456507778 (2026-11-02T13:50Z, main `ac86cb82`, executor
+`R3yjuac3…`, workstream `github-staging-sql-41456507778`, pin commit `c4974675`, `expected_live_definition_sha256`
+`fa08a3db73806391d757885c9165d0f1bf56a4571a22b1a32e2e63c73578952d`) under the owner's words "apply SQL 140 in
+staging": success. The receipt prints `result` `applied`, `before_hash` `fa08a3db…`, `after_hash`
+`6157ad0d9a04d119c2f4c6b289470c302f16626de6b5d3e32ff25a93f161ea5b` (the intended hash); all thirteen columns in
+state `intended`; `prerequisites_missing` `[]`. Read-live run 41456862628 (main `ac86cb82`, executor `R3yjuac3…`,
+`executor_current` true): `already_applied` true, `live_definition_sha256` `6157ad0d…` equal to the intended hash,
+`precondition_failures` `[]`, `prerequisites_missing` `[]`. Staging acceptance: the owner tested in staging on
+2026-11-02, "It saved, record SQL 140 staging": after the apply, the target wallet balance on the WalletOps
+automatic funding panel saved; before the apply the same save returned 403 `rls_denied` with the PostgreSQL error
+`permission denied for table tenant_wallet_funding_settings` (12:31:40Z). The staging pin keeps `execute: true`;
+the staging runs are recorded in the production pin's `staging_acceptance` by the production pin PR.
+
+**Status:** applied in staging (wave 36, 2026-11-02); staging acceptance: owner tested in staging (the target wallet balance saved); production pin pending (production inspect next)
 
 ## Fingerprint
 

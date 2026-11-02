@@ -229,7 +229,10 @@ test('order: no predecessor; no function; exactly the columns the automatic fund
   const runbook = read(COMMITTED.tooling.runbook);
   assert.ok(runbook.includes(COMMITTED.intended_replacement_sha256));
   assert.ok(runbook.includes(COMMITTED.source_sha256));
-  assert.match(runbook, /\*\*Status:\*\* staging pin execute-authorized \(wave 36\); not applied anywhere\. The production pin is pending\./);
+  assert.match(runbook, /\*\*Status:\*\* applied in staging \(wave 36, 2026-11-02\); staging acceptance: owner tested in staging \(the target wallet balance saved\); production pin pending \(production inspect next\)/);
+  assert.match(runbook, /"It saved, record SQL 140 staging"/);
+  assert.match(runbook, /\*\*Staging apply \(2026-11-02\)\.\*\* Apply run 41456507778/);
+  assert.match(runbook, /Read-live run 41456862628/);
   assert.match(runbook, /read-live \(2026-11-02\)\.\*\* Run 41452217978/);
   assert.ok(runbook.includes(STAGING[KEY].expected_live_definition_sha256));
   assert.match(runbook, /APPLY_WALLET_FUNDING_SETTINGS_WRITE_GRANTS/);
