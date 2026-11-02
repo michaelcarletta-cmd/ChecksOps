@@ -31,8 +31,10 @@ const cmp = (a, b) => {
   for (let i = 0; i < 3; i += 1) if (pa[i] !== pb[i]) return pa[i] - pb[i];
   return 0;
 };
+// Escapes every regular-expression metacharacter, backslash included.
+const escapeRegExp = (text) => text.replace(/[\\^$.*+?()[\]{}|/]/g, '\\$&');
 // Every version bun.lock records for a package name, nested entries included.
-const bunVersions = (name) => [...bunLock.matchAll(new RegExp(`\\["${name.replace(/[/@.]/g, '\\$&')}@([0-9][^"]*)"`, 'g'))].map((m) => m[1]);
+const bunVersions = (name) => [...bunLock.matchAll(new RegExp(`\\["${escapeRegExp(name)}@([0-9][^"]*)"`, 'g'))].map((m) => m[1]);
 const npmVersions = (name) => Object.entries(npmLock)
   .filter(([key]) => key === `node_modules/${name}` || key.endsWith(`/node_modules/${name}`))
   .map(([, value]) => value.version);
@@ -43,7 +45,7 @@ test('package.json pins pdfjs-dist at the patched version', () => {
 
 test('both lockfiles install the top-level pdfjs-dist at the patched version, without canvas 2', () => {
   assert.equal(npmLock['node_modules/pdfjs-dist'].version, PDFJS_FLOOR);
-  assert.match(bunLock, new RegExp(`"pdfjs-dist": \\["pdfjs-dist@${PDFJS_FLOOR.replace(/\./g, '\\.')}"`));
+  assert.match(bunLock, new RegExp(`"pdfjs-dist": \\["pdfjs-dist@${escapeRegExp(PDFJS_FLOOR)}"`));
   assert.equal(npmLock['node_modules/pdfjs-dist'].optionalDependencies?.canvas, undefined);
 });
 
