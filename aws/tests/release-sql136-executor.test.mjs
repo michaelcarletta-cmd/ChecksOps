@@ -170,7 +170,7 @@ test('pin: SQL 136 staging-authorized from its read-live, code-derived, selectab
   // The runbook: the STOP gate, the pre-state and intended fingerprints and texts, the source.
   const runbook = fs.readFileSync(path.join(ROOT, 'ops/production-sql-136-apply.md'), 'utf8');
   assert.match(runbook, /## STOP: the API first/);
-  assert.match(runbook, /\*\*Status:\*\* staging pin execute-authorized \(wave 34\); not applied anywhere\. The production pin is pending/);
+  assert.match(runbook, /\*\*Status:\*\* applied in staging \(wave 34, 2026-11-02\); staging test: the two reported failures are not gate refusals \(the auto-funding settings write path is a separate PR\); production pin pending \(waits for #1498's API in production, then the production inspect\)/);
   assert.match(runbook, /read-live \(2026-11-01\)\.\*\* Run 41313668204/);
   for (const value of [PRE, pin.intended_replacement_sha256, pin.source_sha256]) assert.ok(runbook.includes(value), value);
   assert.ok(runbook.includes(`\`\`\`\n${releaseStateText(KEY, INTENDED)}\n\`\`\``));

@@ -180,7 +180,11 @@ test('order: no predecessor; the one gate and 72 restrictive policies on finding
   assert.ok(runbook.includes(COMMITTED.intended_replacement_sha256));
   assert.ok(runbook.includes(COMMITTED.source_sha256));
   assert.match(runbook, /## STOP: the API first/);
-  assert.match(runbook, /\*\*Status:\*\* staging pin execute-authorized \(wave 34\); not applied anywhere\./);
+  assert.match(runbook, /\*\*Status:\*\* applied in staging \(wave 34, 2026-11-02\); staging test: the two reported failures are not gate refusals \(the auto-funding settings write path is a separate PR\); production pin pending \(waits for #1498's API in production, then the production inspect\)/);
+  assert.match(runbook, /"apply SQL 136 in staging"/);
+  assert.match(runbook, /\*\*Staging apply \(2026-11-02\)\.\*\* Apply run 41387219884/);
+  assert.match(runbook, /Read-live run\n41387417809/);
+  assert.match(runbook, /"Finish the remaining steps and open separate draft for auto funding"/);
   assert.match(runbook, /APPLY_MONEY_WRITE_RESTRICTIVE_POLICIES/);
   assert.match(runbook, /finding 14/);
   assert.match(runbook, /\*\*Revert \(if a money flow breaks after the apply\)\.\*\*/);

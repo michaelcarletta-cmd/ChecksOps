@@ -99,7 +99,39 @@ writes a money table in staging), `money_invoker_function_writers` 0. Live
 executor carries it, on the owner's words for that run. The production pin stays pending: it must not move
 before #1498's API is live in production.
 
-**Status:** staging pin execute-authorized (wave 34); not applied anywhere. The production pin is pending.
+**Staging executor checked for the apply (2026-11-02).** Inspect run 41386640953 (main
+`3183e465d9c049aa20829e54e9ae7053d61c4b52`, the merged SQL 139 record and production lock) found the live executor at
+`7x52PS7o2AbqXrTW+TBY0hKcix1vW/+iOi8RxtVDeYE=` (RevisionId `4859ecd3-78f6-4bf8-b1aa-c74237893139`, the SQL 139 deploy
+run 41369655188), `executor_current` true, `superseded` `[]`, `added` `[]`: main's package, SQL 136 included, so no
+deploy run was needed. Read-live run 41386887427 (executor `7x52PS7o…`), taken after the SQL 139 staging apply:
+`already_applied` false, `live_definition_sha256` `6b404964…` equal to the pinned pre-state, `precondition_failures`
+`[]`, `prerequisites_missing` `[]`, the four counts 0.
+
+**Staging apply (2026-11-02).** Apply run 41387219884 (2026-11-02T04:13Z, main `3183e465`, workstream
+`github-staging-sql-41387219884`, pin commit `49c98b84a`, `expected_executor_code_sha256` `7x52PS7o…`,
+`expected_live_definition_sha256` `6b404964de5ee203e126bc3ce78395c9a9e2fbf3a1e41eb0b5ccd8fa3e3ea150`) under the owner's
+words "apply SQL 136 in staging": success. The receipt prints `result` `applied`, `before_hash` `6b404964…`,
+`after_hash` `f8269d3e1f788d50ad0cbbb4b95829b3ee83b05cda91798c5f57491c8e5d26a7` (the intended hash);
+`aws_money_write_allowed()` and all 72 gate policies in state `intended`; `prerequisites_missing` `[]`. Read-live run
+41387417809 (executor `7x52PS7o…`): `already_applied` true, `live_definition_sha256` `f8269d3e…` equal to the intended
+hash, `precondition_failures` `[]`, `prerequisites_missing` `[]`, counts `money_tables_forced_rls` 0,
+`money_definer_writers_without_bypass` 0, `money_invoker_trigger_writers` 0, `money_invoker_function_writers` 0.
+
+**Owner's staging test (2026-11-02).** The owner exercised the staging money flows after the apply and reported two
+failures: "3. Couldn't save target wallet balance" and "6. Couldn't send the onboard link to stakeholder it mentioned
+resend". Neither is a gate refusal. The staging API log (`/aws/lambda/checksops-staging-api`) from the apply at
+04:13Z onward has no `rls_denied`, `42501` or "row-level security" event. (3) The auto-funding panel saves through a
+generic upsert on `tenant_wallet_funding_settings`; that table is in the API's `FINANCIAL_OR_PROVIDER_TABLES`
+deny-list (since #1468, 2026-10-30), not in `WRITE_ALLOWLIST`, so the generic write route refuses it with
+`table_not_allowlisted` before any SQL runs, and no API route writes the table. The save fails with or without SQL
+136; the owner asked for a separate draft PR that adds an API write path for the auto-funding settings. (6) The
+payee row was written and committed (`aws_payee_create`), then the setup email was blocked by the staging email
+allowlist: log event `payee_setup_email_not_sent`, `status` `blocked`, `reason` `recipient_not_allowlisted` at
+11:11:52Z (staging email stays in sink mode); the money-table write itself passed the gate. The owner's words after
+the report, 2026-11-02: "Finish the remaining steps and open separate draft for auto funding". The staging pin keeps
+`execute: true`; the staging runs are recorded in the production pin's `staging_acceptance` by the production pin PR.
+
+**Status:** applied in staging (wave 34, 2026-11-02); staging test: the two reported failures are not gate refusals (the auto-funding settings write path is a separate PR); production pin pending (waits for #1498's API in production, then the production inspect)
 
 ## Fingerprint
 
