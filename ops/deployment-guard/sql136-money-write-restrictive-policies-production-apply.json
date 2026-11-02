@@ -1,8 +1,8 @@
 {
   "id": "sql136-money-write-restrictive-policies-production-apply",
   "migration": "sql136",
-  "authorization": "Owner approved 2026-11-02 (the owner's words for SQL 136: \"record the SQL 136 staging pin\" (2026-11-01), \"apply SQL 136 in staging\" (2026-11-02), \"Finish the remaining steps and open separate draft for auto funding\" (2026-11-02, after the staging test), \"lets get SQL 140 and 136 on production\" (2026-11-02), \"DEPLOY FULL API PACKAGE TO PRODUCTION\" (2026-11-02, the rebuild that put #1498's API live in production), \"start the production SQL runner for SQL 136\" (2026-11-02) and \"record the SQL 136 production pin\" (2026-11-02), none of them words for the production apply; the change itself is reviewed and merged by the owner): production apply of SQL 136 after the staging acceptance below (production 6b404964de5ee203e126bc3ce78395c9a9e2fbf3a1e41eb0b5ccd8fa3e3ea150 -> f8269d3e1f788d50ad0cbbb4b95829b3ee83b05cda91798c5f57491c8e5d26a7); execute true takes effect only when the owner reviews and merges this change. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
-  "execute": true,
+  "authorization": "Applied to production on 2026-11-02; execute is false again, so this pin is no longer a standing authorization and a re-apply needs a new reviewed pin change. The owner approved the SQL 136 production pin change on 2026-11-02 in the words \"record the SQL 136 staging pin\", \"apply SQL 136 in staging\", \"lets get SQL 140 and 136 on production\", \"DEPLOY FULL API PACKAGE TO PRODUCTION\", \"start the production SQL runner for SQL 136\" and \"record the SQL 136 production pin\" (none of them words for the production apply; 6b404964 -> f8269d3e, #1536, merged to main as a58f492cb) and the one apply run recorded in applied (workstream prod-sql136-money-write-restrictive-20261102) in the words \"apply SQL 136 in production\", passed to it verbatim. That approval covered that run only.",
+  "execute": false,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -60,5 +60,1124 @@
     "ok": true,
     "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/41387219884",
     "basis": "Guarded staging SQL executor apply of sql136-money-write-restrictive-policies, run 41387219884 (2026-11-02T04:13Z, main 3183e465d9c049aa20829e54e9ae7053d61c4b52, wave 34, workstream github-staging-sql-41387219884, staging pin commit 49c98b84a6e1ed66ca895e7c23d590ee736fcbdc, on the executor 7x52PS7o2AbqXrTW+TBY0hKcix1vW/+iOi8RxtVDeYE= that inspect run 41386640953 found current, so no deploy run was needed), from the staging pre-state recorded by read-live run 41386887427 (6b404964de5ee203e126bc3ce78395c9a9e2fbf3a1e41eb0b5ccd8fa3e3ea150): receipt before 6b404964de5ee203e126bc3ce78395c9a9e2fbf3a1e41eb0b5ccd8fa3e3ea150, after f8269d3e1f788d50ad0cbbb4b95829b3ee83b05cda91798c5f57491c8e5d26a7 == intended, result applied; aws_money_write_allowed() and all 72 gate policies intended, prerequisites_missing []. Read-live run 41387417809 then reported already_applied true, live f8269d3e1f788d50ad0cbbb4b95829b3ee83b05cda91798c5f57491c8e5d26a7, precondition_failures [], prerequisites_missing [], the four counts 0. #1498's API was live in staging before the apply: guarded staging overlays money-write-flag.mjs ADD (run 41309572005) and the seven REPLACE members (runs 41309712728 to 41310178084), then the staging full-package rebuild (apply run 41313204838) for invoice-provider.mjs, mortgage-ops-usage.mjs and tenant-collection-v2-uat.mjs. Owner's staging test after the apply (2026-11-02): two reported failures, neither a gate refusal (no rls_denied, 42501 or row-level security event in /aws/lambda/checksops-staging-api from 04:13Z): (3) the auto-funding target wallet balance was refused by the API's table deny-list before any SQL ran; (6) the stakeholder onboarding payee row was written and committed through the gate (aws_payee_create), and only its setup email was blocked by the staging email allowlist (recipient_not_allowlisted). After SQL 140 (staging apply run 41456507778, 13:50Z, with SQL 136 in place), the owner saved the target wallet balance in staging through the server route save-tenant-wallet-funding-settings, which sets request.money_write and writes the money table tenant_wallet_funding_settings (\"It saved, record SQL 140 staging\"): a money write that passed the SQL 136 gate. Not exercised in staging after the apply, as far as recorded: billing accrual, collection, invoices and wallet sync. The owner accepted the staging result for production in the words \"record the SQL 136 production pin\" (2026-11-02). The behaviour is covered on PostgreSQL 16 by aws/tests/sql136-money-write-restrictive-pg.test.mjs and through the executor by aws/tests/release-sql136-executor.test.mjs. Production's pre-state (production_inspect) equals staging's, so the same path applies there. The same file bytes (source_sha256) are pinned in both."
+  },
+  "applied": {
+    "date": "2026-11-02",
+    "result": "applied",
+    "source_commit": "a58f492cbfc00e8330671e0b25637b175069e896",
+    "source_commit_basis": "SOURCE_COMMIT in the tarball (written by sql53-temporary-transfer) equals --commit, and the tarball sha256 equals --expected-tarball-sha256 as copied by the operator from that transfer run's log (TARBALL_SHA256 line); the run log itself was not read by the one-shot.",
+    "source_tarball": {
+      "file": "source-a58f492cbfc00e8330671e0b25637b175069e896.tar.gz",
+      "sha256": "7cb66c8f742f31a36653ae9e7cbed669604bcb57082c4b5bc8c45d735f91dbd4"
+    },
+    "migration_source_sha256": "b10a380812a2708886c04d7cc24b74a329b2d1f566105dcf9b1e9f8c595e82e2",
+    "migration_source_sha256_note": "The one-shot source step hashed aws/workflows/sql/136_money_write_restrictive_policies.sql in the transfer tarball: equal to source_sha256 (the pin; migration_matches_pin true).",
+    "runner": "i-0c35557c4e5385406",
+    "runner_basis": "operator-supplied --runner (not verified by the one-shot)",
+    "workstream_id": "prod-sql136-money-write-restrictive-20261102",
+    "one_use_id": "sql136-prod-95f82a7b-8350-43c3-a4c5-8bda2c344673",
+    "one_use_id_consumed": true,
+    "one_use_id_consumed_basis": "Inferred from the successful apply (the tool records the one_use_id after COMMIT and only warns if that write fails); the consumed-registry entry was not read back separately.",
+    "owner_approval": "apply SQL 136 in production",
+    "owner_approval_basis": "As passed in --approval-statement for --approval-scope sql136; the one-shot cannot verify who said it. The owner's words of 2026-11-02 for this run were \"apply SQL 136 in production\", given after the pin change (#1536, merged to main as a58f492cb) whose authorization recorded that no words for the production apply had been given yet; they were passed verbatim as the approval statement.",
+    "operator": "michaelcarletta-cmd",
+    "apply_ssm_command_id": "d52b099a-56c7-4148-828c-2530b48c40fb",
+    "one_shot_run_id": "b47f4c29-c5bf-4288-82ff-870f057489d9",
+    "one_shot_note": "One SSM command (d52b099a-56c7-4148-828c-2530b48c40fb on i-0c35557c4e5385406, comment \"SQL 136 one-shot apply\", 2026-11-02T17:23:05Z to 17:23:16Z, status Success; the command printed EXIT=0) ran the production-sql-one-shot --phase apply (run_id b47f4c29-c5bf-4288-82ff-870f057489d9) from main a58f492cb (the merge of the pin change #1536), staged by transfer run 41490435319 (tarball sha256 7cb66c8f742f31a36653ae9e7cbed669604bcb57082c4b5bc8c45d735f91dbd4). No separate one-shot --phase inspect ran before it: the read-only production inspect recorded in production_inspect (SSM 5c25a263, 2026-11-02, main cf7c3b64d) is the pre-state the pin change recorded, and the apply's own inspect step read the same pre-state (6b404964de5ee203e126bc3ce78395c9a9e2fbf3a1e41eb0b5ccd8fa3e3ea150, live_matches_expected true, apply_preconditions_met true, precondition_failures [], the four counts 0) before writing. All 11 steps ok; contracts 4/4, 6/6 and 43/43; receipt 6b404964de5ee203e126bc3ce78395c9a9e2fbf3a1e41eb0b5ccd8fa3e3ea150 -> f8269d3e1f788d50ad0cbbb4b95829b3ee83b05cda91798c5f57491c8e5d26a7 (intended), result applied, unrelated catalog 48c5268b3779e6f8f151e479f067d11f6d0841da885eecd3ffbcd8e1b5b0d7d0; post-apply inspect already_applied true, aws_money_write_allowed() and all 72 gate policies intended, the four counts 0. The run's JSON arrived whole: the one-shot wrote it to a file on the runner (87934 bytes, sha256 980b59449accf8eb77c535170d7a4fee48d5d2822c2279d9462c4c340dfc907a), a second, read-only SSM command (e5a2d206) returned it gzip+base64 and the decoded bytes had the same sha256, and a third (988ba651) deleted the file. This applied block is the run's details.applied, with migration_source_sha256, apply_ssm_command_id, steps and manifest_sha256 from the same run's details. The runner was started from stopped for this work (StartInstances 17:21:57Z, running 17:22:14Z, SSM Online) and stopped afterwards (StopInstances 17:23:54Z, stopped 17:24:10Z), with no invocation in progress on it. #1498's API was live in production before the apply (full rebuild run 41469896446; the pin's order_note); a read-only GetFunctionConfiguration at 17:21Z still read CodeSha256 TQowoiwSTGO+SBFVbzpKabESHfDOF5+pLOBXwT7Y0No=. A read-only search of /aws/lambda/checksops-production-prep-api from 17:23Z found no rls_denied, 42501, row-level security or permission denied event. Production acceptance, tested in production: after this apply the owner exercised the production money flows and recorded the apply on 2026-11-02, \"It saved, record SQL 136\".",
+    "steps": [
+      "pin",
+      "source",
+      "inspect",
+      "contracts",
+      "manifest",
+      "source-recheck-before-preflight",
+      "preflight",
+      "evaluate",
+      "source-recheck-before-apply",
+      "apply",
+      "post-apply-inspect"
+    ],
+    "contract_results": {
+      "claim-ledger": {
+        "ok": true,
+        "test": "aws/tests/claim-ledger-accepted-contract.test.mjs",
+        "evidence": "4/4 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at a58f492cbfc00e8330671e0b25637b175069e896 (production-sql-one-shot b47f4c29-c5bf-4288-82ff-870f057489d9, node --test)"
+      },
+      "tenant-isolation": {
+        "ok": true,
+        "test": "aws/tests/tenant-security-compliance.test.mjs",
+        "evidence": "6/6 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at a58f492cbfc00e8330671e0b25637b175069e896 (production-sql-one-shot b47f4c29-c5bf-4288-82ff-870f057489d9, node --test)"
+      },
+      "financial-write-protections": {
+        "ok": true,
+        "test": "aws/tests/api-write.test.mjs",
+        "evidence": "43/43 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at a58f492cbfc00e8330671e0b25637b175069e896 (production-sql-one-shot b47f4c29-c5bf-4288-82ff-870f057489d9, node --test)"
+      }
+    },
+    "pre_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "6b404964de5ee203e126bc3ce78395c9a9e2fbf3a1e41eb0b5ccd8fa3e3ea150",
+      "live_matches_expected": true,
+      "already_applied": false,
+      "predecessors": {},
+      "predecessors_applied": true,
+      "missing_dependencies": [],
+      "apply_preconditions_met": true,
+      "precondition_failures": [],
+      "current_user": "checksops_admin",
+      "session_user": "checksops_admin",
+      "counts": {
+        "money_tables_forced_rls": 0,
+        "money_definer_writers_without_bypass": 0,
+        "money_invoker_trigger_writers": 0,
+        "money_invoker_function_writers": 0
+      },
+      "successors_applied": [],
+      "release_sql_inspect": {
+        "live_definition_sha256": "6b404964de5ee203e126bc3ce78395c9a9e2fbf3a1e41eb0b5ccd8fa3e3ea150",
+        "prerequisites_missing": [],
+        "predecessors": {},
+        "successors_applied": [],
+        "functions": [
+          {
+            "name": "aws_money_write_allowed()",
+            "state": "absent"
+          }
+        ],
+        "policies": [
+          {
+            "name": "ach_authorizations aws_money_write_gate_insert_ach_authorizations",
+            "state": "absent"
+          },
+          {
+            "name": "ach_authorizations aws_money_write_gate_update_ach_authorizations",
+            "state": "absent"
+          },
+          {
+            "name": "ach_authorizations aws_money_write_gate_delete_ach_authorizations",
+            "state": "absent"
+          },
+          {
+            "name": "actum_transactions aws_money_write_gate_insert_actum_transactions",
+            "state": "absent"
+          },
+          {
+            "name": "actum_transactions aws_money_write_gate_update_actum_transactions",
+            "state": "absent"
+          },
+          {
+            "name": "actum_transactions aws_money_write_gate_delete_actum_transactions",
+            "state": "absent"
+          },
+          {
+            "name": "check_billing_events aws_money_write_gate_insert_check_billing_events",
+            "state": "absent"
+          },
+          {
+            "name": "check_billing_events aws_money_write_gate_update_check_billing_events",
+            "state": "absent"
+          },
+          {
+            "name": "check_billing_events aws_money_write_gate_delete_check_billing_events",
+            "state": "absent"
+          },
+          {
+            "name": "claim_check_payments aws_money_write_gate_insert_claim_check_payments",
+            "state": "absent"
+          },
+          {
+            "name": "claim_check_payments aws_money_write_gate_update_claim_check_payments",
+            "state": "absent"
+          },
+          {
+            "name": "claim_check_payments aws_money_write_gate_delete_claim_check_payments",
+            "state": "absent"
+          },
+          {
+            "name": "disbursement_splits aws_money_write_gate_insert_disbursement_splits",
+            "state": "absent"
+          },
+          {
+            "name": "disbursement_splits aws_money_write_gate_update_disbursement_splits",
+            "state": "absent"
+          },
+          {
+            "name": "disbursement_splits aws_money_write_gate_delete_disbursement_splits",
+            "state": "absent"
+          },
+          {
+            "name": "external_payment_recipients aws_money_write_gate_insert_external_payment_recipients",
+            "state": "absent"
+          },
+          {
+            "name": "external_payment_recipients aws_money_write_gate_update_external_payment_recipients",
+            "state": "absent"
+          },
+          {
+            "name": "external_payment_recipients aws_money_write_gate_delete_external_payment_recipients",
+            "state": "absent"
+          },
+          {
+            "name": "micro_deposit_verifications aws_money_write_gate_insert_micro_deposit_verifications",
+            "state": "absent"
+          },
+          {
+            "name": "micro_deposit_verifications aws_money_write_gate_update_micro_deposit_verifications",
+            "state": "absent"
+          },
+          {
+            "name": "micro_deposit_verifications aws_money_write_gate_delete_micro_deposit_verifications",
+            "state": "absent"
+          },
+          {
+            "name": "moov_invoice_customers aws_money_write_gate_insert_moov_invoice_customers",
+            "state": "absent"
+          },
+          {
+            "name": "moov_invoice_customers aws_money_write_gate_update_moov_invoice_customers",
+            "state": "absent"
+          },
+          {
+            "name": "moov_invoice_customers aws_money_write_gate_delete_moov_invoice_customers",
+            "state": "absent"
+          },
+          {
+            "name": "moov_invoices aws_money_write_gate_insert_moov_invoices",
+            "state": "absent"
+          },
+          {
+            "name": "moov_invoices aws_money_write_gate_update_moov_invoices",
+            "state": "absent"
+          },
+          {
+            "name": "moov_invoices aws_money_write_gate_delete_moov_invoices",
+            "state": "absent"
+          },
+          {
+            "name": "payment_method_verifications aws_money_write_gate_insert_payment_method_verifications",
+            "state": "absent"
+          },
+          {
+            "name": "payment_method_verifications aws_money_write_gate_update_payment_method_verifications",
+            "state": "absent"
+          },
+          {
+            "name": "payment_method_verifications aws_money_write_gate_delete_payment_method_verifications",
+            "state": "absent"
+          },
+          {
+            "name": "payment_provider_methods aws_money_write_gate_insert_payment_provider_methods",
+            "state": "absent"
+          },
+          {
+            "name": "payment_provider_methods aws_money_write_gate_update_payment_provider_methods",
+            "state": "absent"
+          },
+          {
+            "name": "payment_provider_methods aws_money_write_gate_delete_payment_provider_methods",
+            "state": "absent"
+          },
+          {
+            "name": "payment_sweep_configs aws_money_write_gate_insert_payment_sweep_configs",
+            "state": "absent"
+          },
+          {
+            "name": "payment_sweep_configs aws_money_write_gate_update_payment_sweep_configs",
+            "state": "absent"
+          },
+          {
+            "name": "payment_sweep_configs aws_money_write_gate_delete_payment_sweep_configs",
+            "state": "absent"
+          },
+          {
+            "name": "payment_transfer_groups aws_money_write_gate_insert_payment_transfer_groups",
+            "state": "absent"
+          },
+          {
+            "name": "payment_transfer_groups aws_money_write_gate_update_payment_transfer_groups",
+            "state": "absent"
+          },
+          {
+            "name": "payment_transfer_groups aws_money_write_gate_delete_payment_transfer_groups",
+            "state": "absent"
+          },
+          {
+            "name": "payment_transfers aws_money_write_gate_insert_payment_transfers",
+            "state": "absent"
+          },
+          {
+            "name": "payment_transfers aws_money_write_gate_update_payment_transfers",
+            "state": "absent"
+          },
+          {
+            "name": "payment_transfers aws_money_write_gate_delete_payment_transfers",
+            "state": "absent"
+          },
+          {
+            "name": "payment_wallet_sub_ledgers aws_money_write_gate_insert_payment_wallet_sub_ledgers",
+            "state": "absent"
+          },
+          {
+            "name": "payment_wallet_sub_ledgers aws_money_write_gate_update_payment_wallet_sub_ledgers",
+            "state": "absent"
+          },
+          {
+            "name": "payment_wallet_sub_ledgers aws_money_write_gate_delete_payment_wallet_sub_ledgers",
+            "state": "absent"
+          },
+          {
+            "name": "payment_wallets aws_money_write_gate_insert_payment_wallets",
+            "state": "absent"
+          },
+          {
+            "name": "payment_wallets aws_money_write_gate_update_payment_wallets",
+            "state": "absent"
+          },
+          {
+            "name": "payment_wallets aws_money_write_gate_delete_payment_wallets",
+            "state": "absent"
+          },
+          {
+            "name": "payroll_runs aws_money_write_gate_insert_payroll_runs",
+            "state": "absent"
+          },
+          {
+            "name": "payroll_runs aws_money_write_gate_update_payroll_runs",
+            "state": "absent"
+          },
+          {
+            "name": "payroll_runs aws_money_write_gate_delete_payroll_runs",
+            "state": "absent"
+          },
+          {
+            "name": "stakeholder_limit_requests aws_money_write_gate_insert_stakeholder_limit_requests",
+            "state": "absent"
+          },
+          {
+            "name": "stakeholder_limit_requests aws_money_write_gate_update_stakeholder_limit_requests",
+            "state": "absent"
+          },
+          {
+            "name": "stakeholder_limit_requests aws_money_write_gate_delete_stakeholder_limit_requests",
+            "state": "absent"
+          },
+          {
+            "name": "tenant_bank_accounts aws_money_write_gate_insert_tenant_bank_accounts",
+            "state": "absent"
+          },
+          {
+            "name": "tenant_bank_accounts aws_money_write_gate_update_tenant_bank_accounts",
+            "state": "absent"
+          },
+          {
+            "name": "tenant_bank_accounts aws_money_write_gate_delete_tenant_bank_accounts",
+            "state": "absent"
+          },
+          {
+            "name": "tenant_billing_accounts aws_money_write_gate_insert_tenant_billing_accounts",
+            "state": "absent"
+          },
+          {
+            "name": "tenant_billing_accounts aws_money_write_gate_update_tenant_billing_accounts",
+            "state": "absent"
+          },
+          {
+            "name": "tenant_billing_accounts aws_money_write_gate_delete_tenant_billing_accounts",
+            "state": "absent"
+          },
+          {
+            "name": "tenant_credit_balances aws_money_write_gate_insert_tenant_credit_balances",
+            "state": "absent"
+          },
+          {
+            "name": "tenant_credit_balances aws_money_write_gate_update_tenant_credit_balances",
+            "state": "absent"
+          },
+          {
+            "name": "tenant_credit_balances aws_money_write_gate_delete_tenant_credit_balances",
+            "state": "absent"
+          },
+          {
+            "name": "tenant_credit_transactions aws_money_write_gate_insert_tenant_credit_transactions",
+            "state": "absent"
+          },
+          {
+            "name": "tenant_credit_transactions aws_money_write_gate_update_tenant_credit_transactions",
+            "state": "absent"
+          },
+          {
+            "name": "tenant_credit_transactions aws_money_write_gate_delete_tenant_credit_transactions",
+            "state": "absent"
+          },
+          {
+            "name": "tenant_maintenance_payments aws_money_write_gate_insert_tenant_maintenance_payments",
+            "state": "absent"
+          },
+          {
+            "name": "tenant_maintenance_payments aws_money_write_gate_update_tenant_maintenance_payments",
+            "state": "absent"
+          },
+          {
+            "name": "tenant_maintenance_payments aws_money_write_gate_delete_tenant_maintenance_payments",
+            "state": "absent"
+          },
+          {
+            "name": "tenant_wallet_funding_settings aws_money_write_gate_insert_tenant_wallet_funding_settings",
+            "state": "absent"
+          },
+          {
+            "name": "tenant_wallet_funding_settings aws_money_write_gate_update_tenant_wallet_funding_settings",
+            "state": "absent"
+          },
+          {
+            "name": "tenant_wallet_funding_settings aws_money_write_gate_delete_tenant_wallet_funding_settings",
+            "state": "absent"
+          }
+        ],
+        "views": [],
+        "tables": [],
+        "columns": [],
+        "constraints": [],
+        "triggers": [],
+        "table_privileges": [],
+        "function_acl": [
+          {
+            "name": "aws_money_write_allowed()",
+            "acl": []
+          }
+        ],
+        "acl_functions": [],
+        "indexes": [],
+        "unique_covers": [],
+        "definer_writes": [],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": {
+          "money_tables_forced_rls": 0,
+          "money_definer_writers_without_bypass": 0,
+          "money_invoker_trigger_writers": 0,
+          "money_invoker_function_writers": 0
+        }
+      }
+    },
+    "manifest_sha256": "0af2580c14590feefb8ba894bc5ee05afcd39673631ca6fb2a94a7cefcda02c8",
+    "receipt": {
+      "migration": "sql136",
+      "workstream": "prod-sql136-money-write-restrictive-20261102",
+      "commit": "a58f492cbfc00e8330671e0b25637b175069e896",
+      "sql_file": "aws/workflows/sql/136_money_write_restrictive_policies.sql",
+      "before_hash": "6b404964de5ee203e126bc3ce78395c9a9e2fbf3a1e41eb0b5ccd8fa3e3ea150",
+      "after_hash": "f8269d3e1f788d50ad0cbbb4b95829b3ee83b05cda91798c5f57491c8e5d26a7",
+      "release_sql_inspect": {
+        "live_definition_sha256": "f8269d3e1f788d50ad0cbbb4b95829b3ee83b05cda91798c5f57491c8e5d26a7",
+        "prerequisites_missing": [],
+        "predecessors": {},
+        "successors_applied": [],
+        "functions": [
+          {
+            "name": "aws_money_write_allowed()",
+            "state": "intended"
+          }
+        ],
+        "policies": [
+          {
+            "name": "ach_authorizations aws_money_write_gate_insert_ach_authorizations",
+            "state": "intended"
+          },
+          {
+            "name": "ach_authorizations aws_money_write_gate_update_ach_authorizations",
+            "state": "intended"
+          },
+          {
+            "name": "ach_authorizations aws_money_write_gate_delete_ach_authorizations",
+            "state": "intended"
+          },
+          {
+            "name": "actum_transactions aws_money_write_gate_insert_actum_transactions",
+            "state": "intended"
+          },
+          {
+            "name": "actum_transactions aws_money_write_gate_update_actum_transactions",
+            "state": "intended"
+          },
+          {
+            "name": "actum_transactions aws_money_write_gate_delete_actum_transactions",
+            "state": "intended"
+          },
+          {
+            "name": "check_billing_events aws_money_write_gate_insert_check_billing_events",
+            "state": "intended"
+          },
+          {
+            "name": "check_billing_events aws_money_write_gate_update_check_billing_events",
+            "state": "intended"
+          },
+          {
+            "name": "check_billing_events aws_money_write_gate_delete_check_billing_events",
+            "state": "intended"
+          },
+          {
+            "name": "claim_check_payments aws_money_write_gate_insert_claim_check_payments",
+            "state": "intended"
+          },
+          {
+            "name": "claim_check_payments aws_money_write_gate_update_claim_check_payments",
+            "state": "intended"
+          },
+          {
+            "name": "claim_check_payments aws_money_write_gate_delete_claim_check_payments",
+            "state": "intended"
+          },
+          {
+            "name": "disbursement_splits aws_money_write_gate_insert_disbursement_splits",
+            "state": "intended"
+          },
+          {
+            "name": "disbursement_splits aws_money_write_gate_update_disbursement_splits",
+            "state": "intended"
+          },
+          {
+            "name": "disbursement_splits aws_money_write_gate_delete_disbursement_splits",
+            "state": "intended"
+          },
+          {
+            "name": "external_payment_recipients aws_money_write_gate_insert_external_payment_recipients",
+            "state": "intended"
+          },
+          {
+            "name": "external_payment_recipients aws_money_write_gate_update_external_payment_recipients",
+            "state": "intended"
+          },
+          {
+            "name": "external_payment_recipients aws_money_write_gate_delete_external_payment_recipients",
+            "state": "intended"
+          },
+          {
+            "name": "micro_deposit_verifications aws_money_write_gate_insert_micro_deposit_verifications",
+            "state": "intended"
+          },
+          {
+            "name": "micro_deposit_verifications aws_money_write_gate_update_micro_deposit_verifications",
+            "state": "intended"
+          },
+          {
+            "name": "micro_deposit_verifications aws_money_write_gate_delete_micro_deposit_verifications",
+            "state": "intended"
+          },
+          {
+            "name": "moov_invoice_customers aws_money_write_gate_insert_moov_invoice_customers",
+            "state": "intended"
+          },
+          {
+            "name": "moov_invoice_customers aws_money_write_gate_update_moov_invoice_customers",
+            "state": "intended"
+          },
+          {
+            "name": "moov_invoice_customers aws_money_write_gate_delete_moov_invoice_customers",
+            "state": "intended"
+          },
+          {
+            "name": "moov_invoices aws_money_write_gate_insert_moov_invoices",
+            "state": "intended"
+          },
+          {
+            "name": "moov_invoices aws_money_write_gate_update_moov_invoices",
+            "state": "intended"
+          },
+          {
+            "name": "moov_invoices aws_money_write_gate_delete_moov_invoices",
+            "state": "intended"
+          },
+          {
+            "name": "payment_method_verifications aws_money_write_gate_insert_payment_method_verifications",
+            "state": "intended"
+          },
+          {
+            "name": "payment_method_verifications aws_money_write_gate_update_payment_method_verifications",
+            "state": "intended"
+          },
+          {
+            "name": "payment_method_verifications aws_money_write_gate_delete_payment_method_verifications",
+            "state": "intended"
+          },
+          {
+            "name": "payment_provider_methods aws_money_write_gate_insert_payment_provider_methods",
+            "state": "intended"
+          },
+          {
+            "name": "payment_provider_methods aws_money_write_gate_update_payment_provider_methods",
+            "state": "intended"
+          },
+          {
+            "name": "payment_provider_methods aws_money_write_gate_delete_payment_provider_methods",
+            "state": "intended"
+          },
+          {
+            "name": "payment_sweep_configs aws_money_write_gate_insert_payment_sweep_configs",
+            "state": "intended"
+          },
+          {
+            "name": "payment_sweep_configs aws_money_write_gate_update_payment_sweep_configs",
+            "state": "intended"
+          },
+          {
+            "name": "payment_sweep_configs aws_money_write_gate_delete_payment_sweep_configs",
+            "state": "intended"
+          },
+          {
+            "name": "payment_transfer_groups aws_money_write_gate_insert_payment_transfer_groups",
+            "state": "intended"
+          },
+          {
+            "name": "payment_transfer_groups aws_money_write_gate_update_payment_transfer_groups",
+            "state": "intended"
+          },
+          {
+            "name": "payment_transfer_groups aws_money_write_gate_delete_payment_transfer_groups",
+            "state": "intended"
+          },
+          {
+            "name": "payment_transfers aws_money_write_gate_insert_payment_transfers",
+            "state": "intended"
+          },
+          {
+            "name": "payment_transfers aws_money_write_gate_update_payment_transfers",
+            "state": "intended"
+          },
+          {
+            "name": "payment_transfers aws_money_write_gate_delete_payment_transfers",
+            "state": "intended"
+          },
+          {
+            "name": "payment_wallet_sub_ledgers aws_money_write_gate_insert_payment_wallet_sub_ledgers",
+            "state": "intended"
+          },
+          {
+            "name": "payment_wallet_sub_ledgers aws_money_write_gate_update_payment_wallet_sub_ledgers",
+            "state": "intended"
+          },
+          {
+            "name": "payment_wallet_sub_ledgers aws_money_write_gate_delete_payment_wallet_sub_ledgers",
+            "state": "intended"
+          },
+          {
+            "name": "payment_wallets aws_money_write_gate_insert_payment_wallets",
+            "state": "intended"
+          },
+          {
+            "name": "payment_wallets aws_money_write_gate_update_payment_wallets",
+            "state": "intended"
+          },
+          {
+            "name": "payment_wallets aws_money_write_gate_delete_payment_wallets",
+            "state": "intended"
+          },
+          {
+            "name": "payroll_runs aws_money_write_gate_insert_payroll_runs",
+            "state": "intended"
+          },
+          {
+            "name": "payroll_runs aws_money_write_gate_update_payroll_runs",
+            "state": "intended"
+          },
+          {
+            "name": "payroll_runs aws_money_write_gate_delete_payroll_runs",
+            "state": "intended"
+          },
+          {
+            "name": "stakeholder_limit_requests aws_money_write_gate_insert_stakeholder_limit_requests",
+            "state": "intended"
+          },
+          {
+            "name": "stakeholder_limit_requests aws_money_write_gate_update_stakeholder_limit_requests",
+            "state": "intended"
+          },
+          {
+            "name": "stakeholder_limit_requests aws_money_write_gate_delete_stakeholder_limit_requests",
+            "state": "intended"
+          },
+          {
+            "name": "tenant_bank_accounts aws_money_write_gate_insert_tenant_bank_accounts",
+            "state": "intended"
+          },
+          {
+            "name": "tenant_bank_accounts aws_money_write_gate_update_tenant_bank_accounts",
+            "state": "intended"
+          },
+          {
+            "name": "tenant_bank_accounts aws_money_write_gate_delete_tenant_bank_accounts",
+            "state": "intended"
+          },
+          {
+            "name": "tenant_billing_accounts aws_money_write_gate_insert_tenant_billing_accounts",
+            "state": "intended"
+          },
+          {
+            "name": "tenant_billing_accounts aws_money_write_gate_update_tenant_billing_accounts",
+            "state": "intended"
+          },
+          {
+            "name": "tenant_billing_accounts aws_money_write_gate_delete_tenant_billing_accounts",
+            "state": "intended"
+          },
+          {
+            "name": "tenant_credit_balances aws_money_write_gate_insert_tenant_credit_balances",
+            "state": "intended"
+          },
+          {
+            "name": "tenant_credit_balances aws_money_write_gate_update_tenant_credit_balances",
+            "state": "intended"
+          },
+          {
+            "name": "tenant_credit_balances aws_money_write_gate_delete_tenant_credit_balances",
+            "state": "intended"
+          },
+          {
+            "name": "tenant_credit_transactions aws_money_write_gate_insert_tenant_credit_transactions",
+            "state": "intended"
+          },
+          {
+            "name": "tenant_credit_transactions aws_money_write_gate_update_tenant_credit_transactions",
+            "state": "intended"
+          },
+          {
+            "name": "tenant_credit_transactions aws_money_write_gate_delete_tenant_credit_transactions",
+            "state": "intended"
+          },
+          {
+            "name": "tenant_maintenance_payments aws_money_write_gate_insert_tenant_maintenance_payments",
+            "state": "intended"
+          },
+          {
+            "name": "tenant_maintenance_payments aws_money_write_gate_update_tenant_maintenance_payments",
+            "state": "intended"
+          },
+          {
+            "name": "tenant_maintenance_payments aws_money_write_gate_delete_tenant_maintenance_payments",
+            "state": "intended"
+          },
+          {
+            "name": "tenant_wallet_funding_settings aws_money_write_gate_insert_tenant_wallet_funding_settings",
+            "state": "intended"
+          },
+          {
+            "name": "tenant_wallet_funding_settings aws_money_write_gate_update_tenant_wallet_funding_settings",
+            "state": "intended"
+          },
+          {
+            "name": "tenant_wallet_funding_settings aws_money_write_gate_delete_tenant_wallet_funding_settings",
+            "state": "intended"
+          }
+        ],
+        "views": [],
+        "tables": [],
+        "columns": [],
+        "constraints": [],
+        "triggers": [],
+        "table_privileges": [],
+        "function_acl": [
+          {
+            "name": "aws_money_write_allowed()",
+            "acl": [
+              "authenticated EXECUTE",
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          }
+        ],
+        "acl_functions": [],
+        "indexes": [],
+        "unique_covers": [],
+        "definer_writes": [],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": {
+          "money_tables_forced_rls": 0,
+          "money_definer_writers_without_bypass": 0,
+          "money_invoker_trigger_writers": 0,
+          "money_invoker_function_writers": 0
+        }
+      },
+      "unrelated_catalog_sha256": "48c5268b3779e6f8f151e479f067d11f6d0841da885eecd3ffbcd8e1b5b0d7d0",
+      "unrelated_catalog_counts": {
+        "relations": 892,
+        "columns": 3550,
+        "constraints": 2239,
+        "policies": 404,
+        "functions": 1356,
+        "indexes": 655,
+        "default_acl": 0,
+        "role_memberships": 15,
+        "roles": 29,
+        "triggers": 184,
+        "views": 25,
+        "types": 18,
+        "schema": 2
+      },
+      "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/41387219884",
+      "result": "applied"
+    },
+    "post_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "f8269d3e1f788d50ad0cbbb4b95829b3ee83b05cda91798c5f57491c8e5d26a7",
+      "live_matches_expected": false,
+      "already_applied": true,
+      "predecessors": {},
+      "predecessors_applied": true,
+      "missing_dependencies": [],
+      "apply_preconditions_met": false,
+      "precondition_failures": [],
+      "current_user": "checksops_admin",
+      "session_user": "checksops_admin",
+      "counts": {
+        "money_tables_forced_rls": 0,
+        "money_definer_writers_without_bypass": 0,
+        "money_invoker_trigger_writers": 0,
+        "money_invoker_function_writers": 0
+      },
+      "successors_applied": [],
+      "release_sql_inspect": {
+        "live_definition_sha256": "f8269d3e1f788d50ad0cbbb4b95829b3ee83b05cda91798c5f57491c8e5d26a7",
+        "prerequisites_missing": [],
+        "predecessors": {},
+        "successors_applied": [],
+        "functions": [
+          {
+            "name": "aws_money_write_allowed()",
+            "state": "intended"
+          }
+        ],
+        "policies": [
+          {
+            "name": "ach_authorizations aws_money_write_gate_insert_ach_authorizations",
+            "state": "intended"
+          },
+          {
+            "name": "ach_authorizations aws_money_write_gate_update_ach_authorizations",
+            "state": "intended"
+          },
+          {
+            "name": "ach_authorizations aws_money_write_gate_delete_ach_authorizations",
+            "state": "intended"
+          },
+          {
+            "name": "actum_transactions aws_money_write_gate_insert_actum_transactions",
+            "state": "intended"
+          },
+          {
+            "name": "actum_transactions aws_money_write_gate_update_actum_transactions",
+            "state": "intended"
+          },
+          {
+            "name": "actum_transactions aws_money_write_gate_delete_actum_transactions",
+            "state": "intended"
+          },
+          {
+            "name": "check_billing_events aws_money_write_gate_insert_check_billing_events",
+            "state": "intended"
+          },
+          {
+            "name": "check_billing_events aws_money_write_gate_update_check_billing_events",
+            "state": "intended"
+          },
+          {
+            "name": "check_billing_events aws_money_write_gate_delete_check_billing_events",
+            "state": "intended"
+          },
+          {
+            "name": "claim_check_payments aws_money_write_gate_insert_claim_check_payments",
+            "state": "intended"
+          },
+          {
+            "name": "claim_check_payments aws_money_write_gate_update_claim_check_payments",
+            "state": "intended"
+          },
+          {
+            "name": "claim_check_payments aws_money_write_gate_delete_claim_check_payments",
+            "state": "intended"
+          },
+          {
+            "name": "disbursement_splits aws_money_write_gate_insert_disbursement_splits",
+            "state": "intended"
+          },
+          {
+            "name": "disbursement_splits aws_money_write_gate_update_disbursement_splits",
+            "state": "intended"
+          },
+          {
+            "name": "disbursement_splits aws_money_write_gate_delete_disbursement_splits",
+            "state": "intended"
+          },
+          {
+            "name": "external_payment_recipients aws_money_write_gate_insert_external_payment_recipients",
+            "state": "intended"
+          },
+          {
+            "name": "external_payment_recipients aws_money_write_gate_update_external_payment_recipients",
+            "state": "intended"
+          },
+          {
+            "name": "external_payment_recipients aws_money_write_gate_delete_external_payment_recipients",
+            "state": "intended"
+          },
+          {
+            "name": "micro_deposit_verifications aws_money_write_gate_insert_micro_deposit_verifications",
+            "state": "intended"
+          },
+          {
+            "name": "micro_deposit_verifications aws_money_write_gate_update_micro_deposit_verifications",
+            "state": "intended"
+          },
+          {
+            "name": "micro_deposit_verifications aws_money_write_gate_delete_micro_deposit_verifications",
+            "state": "intended"
+          },
+          {
+            "name": "moov_invoice_customers aws_money_write_gate_insert_moov_invoice_customers",
+            "state": "intended"
+          },
+          {
+            "name": "moov_invoice_customers aws_money_write_gate_update_moov_invoice_customers",
+            "state": "intended"
+          },
+          {
+            "name": "moov_invoice_customers aws_money_write_gate_delete_moov_invoice_customers",
+            "state": "intended"
+          },
+          {
+            "name": "moov_invoices aws_money_write_gate_insert_moov_invoices",
+            "state": "intended"
+          },
+          {
+            "name": "moov_invoices aws_money_write_gate_update_moov_invoices",
+            "state": "intended"
+          },
+          {
+            "name": "moov_invoices aws_money_write_gate_delete_moov_invoices",
+            "state": "intended"
+          },
+          {
+            "name": "payment_method_verifications aws_money_write_gate_insert_payment_method_verifications",
+            "state": "intended"
+          },
+          {
+            "name": "payment_method_verifications aws_money_write_gate_update_payment_method_verifications",
+            "state": "intended"
+          },
+          {
+            "name": "payment_method_verifications aws_money_write_gate_delete_payment_method_verifications",
+            "state": "intended"
+          },
+          {
+            "name": "payment_provider_methods aws_money_write_gate_insert_payment_provider_methods",
+            "state": "intended"
+          },
+          {
+            "name": "payment_provider_methods aws_money_write_gate_update_payment_provider_methods",
+            "state": "intended"
+          },
+          {
+            "name": "payment_provider_methods aws_money_write_gate_delete_payment_provider_methods",
+            "state": "intended"
+          },
+          {
+            "name": "payment_sweep_configs aws_money_write_gate_insert_payment_sweep_configs",
+            "state": "intended"
+          },
+          {
+            "name": "payment_sweep_configs aws_money_write_gate_update_payment_sweep_configs",
+            "state": "intended"
+          },
+          {
+            "name": "payment_sweep_configs aws_money_write_gate_delete_payment_sweep_configs",
+            "state": "intended"
+          },
+          {
+            "name": "payment_transfer_groups aws_money_write_gate_insert_payment_transfer_groups",
+            "state": "intended"
+          },
+          {
+            "name": "payment_transfer_groups aws_money_write_gate_update_payment_transfer_groups",
+            "state": "intended"
+          },
+          {
+            "name": "payment_transfer_groups aws_money_write_gate_delete_payment_transfer_groups",
+            "state": "intended"
+          },
+          {
+            "name": "payment_transfers aws_money_write_gate_insert_payment_transfers",
+            "state": "intended"
+          },
+          {
+            "name": "payment_transfers aws_money_write_gate_update_payment_transfers",
+            "state": "intended"
+          },
+          {
+            "name": "payment_transfers aws_money_write_gate_delete_payment_transfers",
+            "state": "intended"
+          },
+          {
+            "name": "payment_wallet_sub_ledgers aws_money_write_gate_insert_payment_wallet_sub_ledgers",
+            "state": "intended"
+          },
+          {
+            "name": "payment_wallet_sub_ledgers aws_money_write_gate_update_payment_wallet_sub_ledgers",
+            "state": "intended"
+          },
+          {
+            "name": "payment_wallet_sub_ledgers aws_money_write_gate_delete_payment_wallet_sub_ledgers",
+            "state": "intended"
+          },
+          {
+            "name": "payment_wallets aws_money_write_gate_insert_payment_wallets",
+            "state": "intended"
+          },
+          {
+            "name": "payment_wallets aws_money_write_gate_update_payment_wallets",
+            "state": "intended"
+          },
+          {
+            "name": "payment_wallets aws_money_write_gate_delete_payment_wallets",
+            "state": "intended"
+          },
+          {
+            "name": "payroll_runs aws_money_write_gate_insert_payroll_runs",
+            "state": "intended"
+          },
+          {
+            "name": "payroll_runs aws_money_write_gate_update_payroll_runs",
+            "state": "intended"
+          },
+          {
+            "name": "payroll_runs aws_money_write_gate_delete_payroll_runs",
+            "state": "intended"
+          },
+          {
+            "name": "stakeholder_limit_requests aws_money_write_gate_insert_stakeholder_limit_requests",
+            "state": "intended"
+          },
+          {
+            "name": "stakeholder_limit_requests aws_money_write_gate_update_stakeholder_limit_requests",
+            "state": "intended"
+          },
+          {
+            "name": "stakeholder_limit_requests aws_money_write_gate_delete_stakeholder_limit_requests",
+            "state": "intended"
+          },
+          {
+            "name": "tenant_bank_accounts aws_money_write_gate_insert_tenant_bank_accounts",
+            "state": "intended"
+          },
+          {
+            "name": "tenant_bank_accounts aws_money_write_gate_update_tenant_bank_accounts",
+            "state": "intended"
+          },
+          {
+            "name": "tenant_bank_accounts aws_money_write_gate_delete_tenant_bank_accounts",
+            "state": "intended"
+          },
+          {
+            "name": "tenant_billing_accounts aws_money_write_gate_insert_tenant_billing_accounts",
+            "state": "intended"
+          },
+          {
+            "name": "tenant_billing_accounts aws_money_write_gate_update_tenant_billing_accounts",
+            "state": "intended"
+          },
+          {
+            "name": "tenant_billing_accounts aws_money_write_gate_delete_tenant_billing_accounts",
+            "state": "intended"
+          },
+          {
+            "name": "tenant_credit_balances aws_money_write_gate_insert_tenant_credit_balances",
+            "state": "intended"
+          },
+          {
+            "name": "tenant_credit_balances aws_money_write_gate_update_tenant_credit_balances",
+            "state": "intended"
+          },
+          {
+            "name": "tenant_credit_balances aws_money_write_gate_delete_tenant_credit_balances",
+            "state": "intended"
+          },
+          {
+            "name": "tenant_credit_transactions aws_money_write_gate_insert_tenant_credit_transactions",
+            "state": "intended"
+          },
+          {
+            "name": "tenant_credit_transactions aws_money_write_gate_update_tenant_credit_transactions",
+            "state": "intended"
+          },
+          {
+            "name": "tenant_credit_transactions aws_money_write_gate_delete_tenant_credit_transactions",
+            "state": "intended"
+          },
+          {
+            "name": "tenant_maintenance_payments aws_money_write_gate_insert_tenant_maintenance_payments",
+            "state": "intended"
+          },
+          {
+            "name": "tenant_maintenance_payments aws_money_write_gate_update_tenant_maintenance_payments",
+            "state": "intended"
+          },
+          {
+            "name": "tenant_maintenance_payments aws_money_write_gate_delete_tenant_maintenance_payments",
+            "state": "intended"
+          },
+          {
+            "name": "tenant_wallet_funding_settings aws_money_write_gate_insert_tenant_wallet_funding_settings",
+            "state": "intended"
+          },
+          {
+            "name": "tenant_wallet_funding_settings aws_money_write_gate_update_tenant_wallet_funding_settings",
+            "state": "intended"
+          },
+          {
+            "name": "tenant_wallet_funding_settings aws_money_write_gate_delete_tenant_wallet_funding_settings",
+            "state": "intended"
+          }
+        ],
+        "views": [],
+        "tables": [],
+        "columns": [],
+        "constraints": [],
+        "triggers": [],
+        "table_privileges": [],
+        "function_acl": [
+          {
+            "name": "aws_money_write_allowed()",
+            "acl": [
+              "authenticated EXECUTE",
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          }
+        ],
+        "acl_functions": [],
+        "indexes": [],
+        "unique_covers": [],
+        "definer_writes": [],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": {
+          "money_tables_forced_rls": 0,
+          "money_definer_writers_without_bypass": 0,
+          "money_invoker_trigger_writers": 0,
+          "money_invoker_function_writers": 0
+        }
+      }
+    }
+  },
+  "production_evidence": {
+    "2026-11-02 apply": "Guarded production SQL one-shot on i-0c35557c4e5385406, workstream prod-sql136-money-write-restrictive-20261102, main a58f492cb (tarball 7cb66c8f..., transfer run 41490435319, migration source b10a3808... == pin), owner-approved run (\"apply SQL 136 in production\"), SSM d52b099a-56c7-4148-828c-2530b48c40fb, one-shot run b47f4c29-c5bf-4288-82ff-870f057489d9, one_use_id sql136-prod-95f82a7b-8350-43c3-a4c5-8bda2c344673: pre-apply inspect (the run's own inspect step) 6b404964de5ee203e126bc3ce78395c9a9e2fbf3a1e41eb0b5ccd8fa3e3ea150 (the pre-state recorded from read-only inspect SSM 5c25a263-7133-42cf-827b-3e13e0176f58), receipt 6b404964de5ee203e126bc3ce78395c9a9e2fbf3a1e41eb0b5ccd8fa3e3ea150 -> f8269d3e1f788d50ad0cbbb4b95829b3ee83b05cda91798c5f57491c8e5d26a7 (intended), post-apply inspect already_applied true, public.aws_money_write_allowed() and the 72 RESTRICTIVE gate policies on the 24 money tables intended, the four counts 0, precondition_failures []. #1498's API live in production since full rebuild run 41469896446. Production acceptance: after this apply the owner exercised the production money flows, \"It saved, record SQL 136\"."
   }
 }
