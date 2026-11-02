@@ -145,6 +145,7 @@ export const MIGRATIONS = Object.freeze({
   'sql137-platform-owner-identity': RELEASE_2026_10_17_PENDING_SQL_PINS.sql137,
   'sql138-payee-setup-link-closed-after-verification': RELEASE_2026_10_17_PENDING_SQL_PINS.sql138,
   'sql139-tenant-billing-accounts-write-policy-reconcile': RELEASE_2026_10_17_PENDING_SQL_PINS.sql139,
+  'sql140-wallet-funding-settings-write-grants': RELEASE_2026_10_17_PENDING_SQL_PINS.sql140,
 });
 
 const LAMBDA_CODE_SHA_RE = /^[A-Za-z0-9+/]{43}=$/;

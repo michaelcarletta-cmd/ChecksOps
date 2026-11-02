@@ -7574,5 +7574,151 @@ export const RELEASE_SQL_SPECS = deepFreeze({
       "public.tenant_billing_accounts"
     ]
   },
+  // SQL 140 (staging WalletOps automatic funding save refused: /aws/lambda/checksops-staging-api 2026-11-02
+  // 12:31:40Z, POST /staging/functions/v1/save-tenant-wallet-funding-settings 403 "permission denied for table
+  // tenant_wallet_funding_settings"): the column INSERT and UPDATE the save needs. saveTenantWalletFundingSettings
+  // (aws/functions/api/tenant-settings-handlers.mjs, #1524) upserts tenant_id, auto_funding_enabled,
+  // funding_bank_account_id, funding_payment_method_id, funding_strategy, target_wallet_balance_cents,
+  // maximum_single_pull_cents, maximum_daily_pull_cents, require_payment_approval, authorization_accepted_at,
+  // authorization_accepted_by and authorization_version, and on conflict updates the same (not tenant_id) plus
+  // updated_at. The restored AWS databases gave checksops SELECT only; no repository migration grants a write on
+  // this table. The file grants INSERT on the twelve and UPDATE on the twelve to checksops. Like SQL 92, SQL 114,
+  // SQL 134 and SQL 135 its fingerprint is each named column's ACL (column_acl: pg_attribute.attacl, every
+  // grantee); any other live grant on those thirteen columns refuses the pre-conditions (column_acl_replaceable).
+  // The table ACL, every other column, the RLS flag and the policies (SQL 24's write policy, the SELECT policy and
+  // SQL 136's gates) are in the unrelated snapshot. No predecessor, policy, function or trigger.
+  sql140: {
+    "key": "sql140",
+    "label": "SQL 140",
+    "choice": "sql140-wallet-funding-settings-write-grants",
+    "production_pin_rel": "ops/deployment-guard/sql140-wallet-funding-settings-write-grants-production-apply.json",
+    "script": "sql140-wallet-funding-settings-write-grants-production-apply",
+    "prerequisites": [
+      "public.tenant_wallet_funding_settings",
+      "column public.tenant_wallet_funding_settings.tenant_id",
+      "column public.tenant_wallet_funding_settings.auto_funding_enabled",
+      "column public.tenant_wallet_funding_settings.funding_bank_account_id",
+      "column public.tenant_wallet_funding_settings.funding_payment_method_id",
+      "column public.tenant_wallet_funding_settings.funding_strategy",
+      "column public.tenant_wallet_funding_settings.target_wallet_balance_cents",
+      "column public.tenant_wallet_funding_settings.maximum_single_pull_cents",
+      "column public.tenant_wallet_funding_settings.maximum_daily_pull_cents",
+      "column public.tenant_wallet_funding_settings.require_payment_approval",
+      "column public.tenant_wallet_funding_settings.authorization_accepted_at",
+      "column public.tenant_wallet_funding_settings.authorization_accepted_by",
+      "column public.tenant_wallet_funding_settings.authorization_version",
+      "column public.tenant_wallet_funding_settings.updated_at",
+      "role checksops"
+    ],
+    "predecessors": [],
+    "functions": [],
+    "column_acl": [
+      {
+        "table": "public.tenant_wallet_funding_settings",
+        "column": "tenant_id",
+        "acl": [
+          "checksops INSERT"
+        ]
+      },
+      {
+        "table": "public.tenant_wallet_funding_settings",
+        "column": "auto_funding_enabled",
+        "acl": [
+          "checksops INSERT",
+          "checksops UPDATE"
+        ]
+      },
+      {
+        "table": "public.tenant_wallet_funding_settings",
+        "column": "funding_bank_account_id",
+        "acl": [
+          "checksops INSERT",
+          "checksops UPDATE"
+        ]
+      },
+      {
+        "table": "public.tenant_wallet_funding_settings",
+        "column": "funding_payment_method_id",
+        "acl": [
+          "checksops INSERT",
+          "checksops UPDATE"
+        ]
+      },
+      {
+        "table": "public.tenant_wallet_funding_settings",
+        "column": "funding_strategy",
+        "acl": [
+          "checksops INSERT",
+          "checksops UPDATE"
+        ]
+      },
+      {
+        "table": "public.tenant_wallet_funding_settings",
+        "column": "target_wallet_balance_cents",
+        "acl": [
+          "checksops INSERT",
+          "checksops UPDATE"
+        ]
+      },
+      {
+        "table": "public.tenant_wallet_funding_settings",
+        "column": "maximum_single_pull_cents",
+        "acl": [
+          "checksops INSERT",
+          "checksops UPDATE"
+        ]
+      },
+      {
+        "table": "public.tenant_wallet_funding_settings",
+        "column": "maximum_daily_pull_cents",
+        "acl": [
+          "checksops INSERT",
+          "checksops UPDATE"
+        ]
+      },
+      {
+        "table": "public.tenant_wallet_funding_settings",
+        "column": "require_payment_approval",
+        "acl": [
+          "checksops INSERT",
+          "checksops UPDATE"
+        ]
+      },
+      {
+        "table": "public.tenant_wallet_funding_settings",
+        "column": "authorization_accepted_at",
+        "acl": [
+          "checksops INSERT",
+          "checksops UPDATE"
+        ]
+      },
+      {
+        "table": "public.tenant_wallet_funding_settings",
+        "column": "authorization_accepted_by",
+        "acl": [
+          "checksops INSERT",
+          "checksops UPDATE"
+        ]
+      },
+      {
+        "table": "public.tenant_wallet_funding_settings",
+        "column": "authorization_version",
+        "acl": [
+          "checksops INSERT",
+          "checksops UPDATE"
+        ]
+      },
+      {
+        "table": "public.tenant_wallet_funding_settings",
+        "column": "updated_at",
+        "acl": [
+          "checksops UPDATE"
+        ]
+      }
+    ],
+    "altered_relations": [
+      "public.tenant_wallet_funding_settings"
+    ]
+  },
 
 });
