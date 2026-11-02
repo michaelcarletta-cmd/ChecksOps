@@ -98,7 +98,7 @@
     "next-themes": "0.3.0",
     "papaparse": "5.5.3",
     "pdf-lib": "^1.17.1",
-    "pdfjs-dist": "4.7.76",
+    "pdfjs-dist": "4.10.38",
     "pg": "^8.23.0",
     "pngjs": "^7.0.0",
     "qrcode": "^1.5.4",
