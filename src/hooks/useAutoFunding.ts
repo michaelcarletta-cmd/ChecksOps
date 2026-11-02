@@ -123,16 +123,19 @@ export function useAutoFunding() {
     },
   });
 
+  // tenant_wallet_funding_settings is a money table: the generic data route refuses browser writes to
+  // it and SQL 136 lets only the flagged server handler write it, so the save goes through the API
+  // route save-tenant-wallet-funding-settings (tenant-settings-handlers.mjs). The server stamps the
+  // authorization acceptance when authorization_version is sent.
   const saveSettings = useMutation({
     mutationFn: async (patch: Partial<AutoFundingSettings>) => {
       if (!tenantId) throw new Error("No organization selected.");
-      const { data, error } = await supabase
-        .from("tenant_wallet_funding_settings")
-        .upsert({ tenant_id: tenantId, ...patch } as any, { onConflict: "tenant_id" })
-        .select()
-        .single();
-      if (error) throw error;
-      return data;
+      const out = await invoke<{ ok?: boolean; error?: string; message?: string; settings?: AutoFundingSettings | null }>(
+        "save-tenant-wallet-funding-settings",
+        { action: "save", tenant_id: tenantId, ...patch },
+      );
+      if (out?.ok === false) throw new Error(out.message || out.error || "Could not save automatic funding settings.");
+      return out?.settings ?? null;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["auto-funding-settings", tenantId] }),
   });

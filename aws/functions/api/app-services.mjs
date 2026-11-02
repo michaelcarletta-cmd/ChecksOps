@@ -88,6 +88,7 @@ import { handleTaxProfiles } from './tax-profiles.mjs';
 import { handleTenantManagementV2 } from './tenant-management-v2.mjs';
 import {
   handleSaveTenantBillingAccount,
+  handleSaveTenantWalletFundingSettings,
 } from './tenant-settings-handlers.mjs';
 import {
   handleTenantBillingAdmin,
@@ -189,6 +190,9 @@ export const CLASS_A_FUNCTIONS = new Set([
   'mortgage-agent-compensation',
   'tenant-tax-profiles',
   'save-tenant-billing-account',
+  // WalletOps automatic funding settings (tenant_wallet_funding_settings, a money table): the
+  // flagged server write, since the generic /data/write route refuses the table.
+  'save-tenant-wallet-funding-settings',
   'tenant-company-branding-save',
   'tenant-billing-admin',
   'tenant-billing-authorize',
@@ -378,6 +382,8 @@ export const handleAppServiceRequest = async (event, path, method) => {
       return handleTaxProfiles(event);
     case 'save-tenant-billing-account':
       return handleSaveTenantBillingAccount(event);
+    case 'save-tenant-wallet-funding-settings':
+      return handleSaveTenantWalletFundingSettings(event);
     case 'tenant-company-branding-save':
       // Retired 2026-10-17: the SPA saves tenant branding through /data/write
       // (write-app-metadata executeTenantsNarrow). Nothing is written here.

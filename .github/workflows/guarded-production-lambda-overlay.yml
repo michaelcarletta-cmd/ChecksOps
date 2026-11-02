@@ -85,11 +85,11 @@ on:
           - tax-secrets.mjs
           - tax-profiles.mjs
           - tenant-email-domain.mjs
+          - tenant-settings-handlers.mjs
           - mortgage-desk-esign.mjs
           - tenant-management-v2.mjs
           - app-services.mjs
           - mortgage-agent-compensation.mjs
-          - tenant-settings-handlers.mjs
           - ingest-shared-check.mjs
           - providers/onboarding/flags.mjs
           - providers/onboarding/crypto.mjs
