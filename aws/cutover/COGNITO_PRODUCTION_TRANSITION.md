@@ -44,6 +44,7 @@ Identity dry-run (no users created):
 ```bash
 node aws/cutover/scripts/identity-migration-dry-run.mjs
 # --apply is refused
+# needs SUPABASE_ANON_KEY in the environment (not stored in source)
 node aws/cutover/scripts/identity-live-validate.mjs
 # live identity_map: 8/8 expected UUIDs; ninth excluded
 ```
