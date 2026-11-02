@@ -1,0 +1,15 @@
+{
+  "workstream_id": "checkalt-hold-option1-applied",
+  "authorization": "Record only (2026-11-02): the bytes below are live. Nothing is planned or authorized by this manifest; any later change to this member needs its own manifest, staging acceptance and owner approval.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Check Alt hold Option 1 (#1558, owner decision 2026-11-02), applied 2026-11-02 through the guarded overlay path to checksops-production-prep-api on the owner's approval (the workflow refuses an apply unless approval_phrase is exactly \"DEPLOY providers/production/checkalt-submit.mjs TO PRODUCTION\"): production apply run 41535714283 VERIFIED on main 65290ba2d, owner \"DEPLOY providers/production/checkalt-submit.mjs TO PRODUCTION\", staging acceptance run 41534326934, production inspect run 41535567459 READY (live 1b98060b, RevisionId 870cc791-522b-49ee-bb04-4dd4fecc8510); CodeSha256 11pbZI/+g/ZoSBNdZgqzS7TMOIib8g6vjz4+YzyIN2k=, RevisionId d282dc1f-38c4-4c6e-8d5b-ad88c1cf9e41; /health and /db-health ok. Staging apply run 41534326934 replaced staging 1b98060b with the same bytes (staging inspect run 41534180040). Only a duplicate, an amount mismatch or a Decline risk rating now holds a Check Alt deposit, each with its own skip_reason.",
+  "members": {
+    "providers/production/checkalt-submit.mjs": {
+      "live_sha256": "938c16695dd762e3cb7c0526c9496b7d5b28356d3f4ead301addaefb1b2d8266",
+      "accepted_sha256": "938c16695dd762e3cb7c0526c9496b7d5b28356d3f4ead301addaefb1b2d8266",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-checkalt-hold-option1-manifest-2026-11-02.json"
+    }
+  }
+}
