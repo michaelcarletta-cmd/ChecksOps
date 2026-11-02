@@ -11,7 +11,7 @@ import { acquireLease } from '../../scripts/deployment-guard/lib/lease.mjs';
 import { repoRootFrom } from '../../scripts/deployment-guard/lib/paths.mjs';
 import { issueReceipt, validateReceipt } from '../../scripts/deployment-guard/lib/receipt.mjs';
 import { refuseUnguardedDeploy } from '../../scripts/deployment-guard/require-guard.mjs';
-import { scanRepository } from '../../scripts/deployment-guard/scan-bypass.mjs';
+import { readListedFile, scanRepository } from '../../scripts/deployment-guard/scan-bypass.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const SHA = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
@@ -268,6 +268,30 @@ test('CI scanner accepts registered hooked writers and rejects an unregistered s
   const rogue = scanRepository(probeDir);
   assert.equal(rogue.ok, false);
   assert.ok(rogue.errors.some((row) => /unregistered/.test(row)));
+});
+
+test('CI scanner skips a file that vanished after the listing, and still fails closed on any other read error', () => {
+  // CI run 41453768940 (PR #1526): vite deleted its vite.config.ts.timestamp-*.mjs between the scanner's
+  // directory listing and its read, and the scan threw ENOENT. A dangling symlink is listed but reads ENOENT,
+  // the same window made deterministic.
+  const probeDir = tmpRoot();
+  fs.mkdirSync(path.join(probeDir, 'ops/deployment-guard'), { recursive: true });
+  fs.writeFileSync(path.join(probeDir, 'ops/deployment-guard/bypass-inventory.json'), JSON.stringify({ scripts: [] }));
+  fs.symlinkSync(path.join(probeDir, 'gone.mjs'), path.join(probeDir, 'vite.config.ts.timestamp-1-a.mjs'));
+  const vanished = scanRepository(probeDir);
+  assert.equal(vanished.ok, true, vanished.errors.join('\n'));
+  // The skip is by read outcome, never by name: a present writer named like vite's temporary file is still caught.
+  fs.writeFileSync(path.join(probeDir, 'vite.config.ts.timestamp-2-b.mjs'), "execFileSync('aws', ['lambda', 'update-function-code']);\n");
+  const named = scanRepository(probeDir);
+  assert.equal(named.ok, false);
+  assert.ok(named.errors.some((row) => /unregistered shared-target writer: vite\.config\.ts\.timestamp-2-b\.mjs/.test(row)), named.errors.join('\n'));
+  // Any other read error is thrown, not skipped (EISDIR from a listed symlink to a directory; EACCES as injected).
+  fs.mkdirSync(path.join(probeDir, 'real-dir'));
+  fs.symlinkSync(path.join(probeDir, 'real-dir'), path.join(probeDir, 'dir-link.mjs'));
+  assert.throws(() => scanRepository(probeDir), (error) => error.code === 'EISDIR');
+  assert.equal(readListedFile('/x', () => { const e = new Error('gone'); e.code = 'ENOENT'; throw e; }), null);
+  assert.throws(() => readListedFile('/x', () => { const e = new Error('denied'); e.code = 'EACCES'; throw e; }), (error) => error.code === 'EACCES');
+  assert.equal(readListedFile('/x', () => 'text'), 'text');
 });
 
 test('package.json has no unguarded deploy command', () => {

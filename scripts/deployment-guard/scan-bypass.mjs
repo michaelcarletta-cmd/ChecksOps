@@ -58,6 +58,16 @@ export function loadInventory(root) {
   return JSON.parse(fs.readFileSync(path.join(root, 'ops/deployment-guard/bypass-inventory.json'), 'utf8'));
 }
 
+/** The listed file's text, or null when it no longer exists (ENOENT); any other error is thrown. */
+export function readListedFile(abs, readFile = fs.readFileSync) {
+  try {
+    return readFile(abs, 'utf8');
+  } catch (error) {
+    if (error?.code === 'ENOENT') return null;
+    throw error;
+  }
+}
+
 export function scanRepository(root) {
   const inventory = loadInventory(root);
   const byPath = Object.fromEntries((inventory.scripts || []).map((row) => [row.path, row]));
@@ -70,7 +80,11 @@ export function scanRepository(root) {
     if (rel.startsWith('scripts/deployment-guard/lib/')) continue;
     if (rel === 'scripts/deployment-guard/scan-bypass.mjs') continue;
     if (rel === 'scripts/lib/production-spa-baseline.mjs') continue;
-    const text = fs.readFileSync(abs, 'utf8');
+    const text = readListedFile(abs);
+    // Gone between the directory listing and the read (a build tool's temporary file, such as
+    // vite's vite.config.ts.timestamp-*.mjs while another test builds): a file that no longer exists
+    // is not a writer in the tree. Only ENOENT is skipped; every other read error still fails closed.
+    if (text === null) continue;
     const hits = scanFile(text, rel);
     if (!hits.length) continue;
     const row = byPath[rel];
