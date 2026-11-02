@@ -7,7 +7,7 @@ import {
 } from "@/lib/checkaltDepositOrchestrator";
 import { useVirtualizer } from "@tanstack/react-virtual";
 
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { DEPOSITS_DISABLED_MESSAGE, useTenantDepositsEnabled } from "@/lib/tenantDeposits";
 import { DepositsDisabledNotice } from "@/components/deposit-ops/DepositsDisabledNotice";
 import { supabase } from "@/integrations/supabase/client";
@@ -2920,7 +2920,10 @@ function CheckDetailPanel({
     isFetching: endorsementAdjusterImageUrlFetching,
     refetch: refetchEndorsementAdjusterImageUrl,
   } = useQuery({
-    queryKey: ["check-back-img-original-for-adjuster", check?.id, check?.back_image_path, (check as any)?.back_image_original_path, (check as any)?.back_image_deposit_path],
+    // Keyed on the clean original only. Generating a deposit image writes back_image_deposit_path,
+    // and the check's live update then refetches the check; keying on that column re-resolved this
+    // image, unmounted the adjuster and dropped the generated preview before it could be approved.
+    queryKey: ["check-back-img-original-for-adjuster", check?.id, check?.back_image_path, (check as any)?.back_image_original_path],
     // Prefetch on mount so opening the adjuster is instant — resolving the
     // original back-image path can cost 1-2 round trips (audit lookup + signed
     // URL) plus a full image download to read dimensions.
@@ -2931,6 +2934,8 @@ function CheckDetailPanel({
     ) && !isSharedView,
     staleTime: 5 * 60 * 1000,
     retry: 1,
+    // Keep the open adjuster mounted while a changed key resolves.
+    placeholderData: keepPreviousData,
     queryFn: async () => {
       const record: CleanBackOriginalRecord = {
         back_image_original_path: ((check as any)?.back_image_original_path as string | null) ?? null,
