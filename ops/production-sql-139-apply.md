@@ -74,7 +74,24 @@ saved; before the apply the same save returned 409 `billing_update_not_applied` 
 staging pin keeps `execute: true`; the staging runs are recorded in the production pin's `staging_acceptance` by the
 production pin PR.
 
-**Status:** applied in staging (wave 35, 2026-11-02); staging acceptance: owner tested in staging (the billing account saved); production pin pending (production inspect next)
+**Production inspect (2026-11-02).** Read-only `--inspect` through SSM
+`5eb60937-5d3d-4196-93b8-bd874aac63db` on `i-0c35557c4e5385406` (under the owner's words "start the SQL runner for
+the SQL 139 production inspect"), main `0984b4049` (tarball sha256
+`3f0588a912f05605b93098573641f89b0eab7cde90bcae2296ee1bf1b7e8c46d`, staged by `sql53-temporary-transfer.yml`,
+migration source `cfe8e15d…` == pin), connected as `checksops_admin`: the policy
+`tenant_billing_accounts aws_write_tenant_billing_accounts` `different`; counts `billing_table_rls_enabled` 1,
+`billing_write_policy_permissive_all` 1, `billing_job_policy_intact` 1; every prerequisite present
+(`aws_monthly_billing_job()` included); `predecessors` `{}`, `successors_applied` `[]`; live
+`8727ecb1f834f9623c1ea7f568621f64a4212dadf3d28a5a7741a6a542cdb22f`, `already_applied` false,
+`precondition_failures` `[]`. Production has the same drift as staging: its pre-state equals staging's (read-live
+run 41367825238), so the staging apply took the path production will
+(`aws/tests/sql139-billing-write-policy-pg.test.mjs`). Recorded in the production pin with the staging apply (run
+41369892057) as its staging acceptance and `execute: true` under the owner's words "record the SQL 139 production
+pin"; the owner's words so far name the staging steps, the inspect and this pin, not the production apply. The
+owner merges the pin change; the apply still needs the owner's words for that run and runs only after that merge is
+on main and staged.
+
+**Status:** applied in staging (wave 35, 2026-11-02); staging acceptance: owner tested in staging (the billing account saved); production pin execute-authorized; not applied to production
 
 ## Fingerprint
 
