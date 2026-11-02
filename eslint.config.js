@@ -18,9 +18,16 @@ export default tseslint.config(
       "react-refresh": reactRefresh,
     },
     rules: {
-      ...reactHooks.configs.recommended.rules,
+      // The two rules eslint-plugin-react-hooks 5 recommended; version 7's recommended set adds the
+      // React Compiler rules, which would change what this repository lints.
+      "react-hooks/rules-of-hooks": "error",
+      "react-hooks/exhaustive-deps": "warn",
       "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
       "@typescript-eslint/no-unused-vars": "off",
+      // New in eslint 10's js.configs.recommended; off so the eslint 10 upgrade lints exactly what eslint 9 did.
+      // Enabling them (28 and 13 findings on 2026-11-02) is a separate change.
+      "no-useless-assignment": "off",
+      "preserve-caught-error": "off",
     },
   },
 );
