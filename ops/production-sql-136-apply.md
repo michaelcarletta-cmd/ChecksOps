@@ -131,7 +131,33 @@ allowlist: log event `payee_setup_email_not_sent`, `status` `blocked`, `reason` 
 the report, 2026-11-02: "Finish the remaining steps and open separate draft for auto funding". The staging pin keeps
 `execute: true`; the staging runs are recorded in the production pin's `staging_acceptance` by the production pin PR.
 
-**Status:** applied in staging (wave 34, 2026-11-02); staging test: the two reported failures are not gate refusals (the auto-funding settings write path is a separate PR); production pin pending (waits for #1498's API in production, then the production inspect)
+**#1498's API live in production (2026-11-02).** No production overlay run carried it. The fourth full production
+Lambda rebuild, apply run 41469896446 (main `1364af787`, the owner's "DEPLOY FULL API PACKAGE TO PRODUCTION", staging
+acceptance run 41463556950, recorded in `ops/deployment-guard/lambda-rebuild-plan.json` by #1531), carried all eleven
+files at once: `money-write-flag.mjs` as its one added member, the seven other overlay members and
+`invoice-provider.mjs`, `mortgage-ops-usage.mjs` and `tenant-collection-v2-uat.mjs` among its 16 changed members
+(inspect run 41463084601, #1530). CodeSha256 `+X7Idizd5…` → `TQowoiwSTGO+SBFVbzpKabESHfDOF5+pLOBXwT7Y0No=` (the
+package staging runs), state VERIFIED, `/health` and `/db-health` 200; a read-only GetFunctionConfiguration before the
+production inspect below still read `TQowoiwS…`.
+
+**Production inspect (2026-11-02).** Read-only `--inspect` through SSM
+`5c25a263-7133-42cf-827b-3e13e0176f58` on `i-0c35557c4e5385406` (under the owner's words "start the production SQL
+runner for SQL 136"; the runner started at 16:39:28Z and stopped again at 16:41:31Z), main `cf7c3b64d` (tarball
+sha256 `0e59110afb79b8f36ca412ddc65ac6b18a38ac05d8911b1df3089bd898bd8527`, staged by `sql53-temporary-transfer.yml`
+run 41483574890, migration source `b10a3808…` == pin), connected as `checksops_admin`: `aws_money_write_allowed()`
+and all 72 gate policies `absent`; counts `money_tables_forced_rls` 0, `money_definer_writers_without_bypass` 0,
+`money_invoker_trigger_writers` 0, `money_invoker_function_writers` 0; `prerequisites_missing` `[]`, `predecessors`
+`{}`, `successors_applied` `[]`; live `6b404964de5ee203e126bc3ce78395c9a9e2fbf3a1e41eb0b5ccd8fa3e3ea150`,
+`already_applied` false, `precondition_failures` `[]`. Production's pre-state equals staging's (read-live run
+41386887427) and the derived one, so the staging apply took the path production will. Recorded in the production pin
+with the staging apply (run 41387219884) as its staging acceptance and `execute: true` under the owner's words
+"record the SQL 136 production pin". After the staging apply the owner's staging test found no gate refusal, and the
+auto-funding save, a money write through the server route, saved in staging after SQL 140 ("It saved, record SQL 140
+staging"); billing accrual, collection, invoices and wallet sync were not recorded as exercised in staging after the
+apply. The owner merges the pin change; the apply still needs the owner's words for that run and runs only after that
+merge is on main and staged.
+
+**Status:** applied in staging (wave 34, 2026-11-02); staging test: the two reported failures are not gate refusals (the auto-funding settings write path is a separate PR); production pin execute-authorized (#1498's API live in production since rebuild run 41469896446); not applied to production
 
 ## Fingerprint
 

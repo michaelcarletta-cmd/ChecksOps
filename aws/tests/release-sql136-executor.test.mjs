@@ -5,7 +5,8 @@
  * covers what is new:
  *
  *   - the pin: pending (no read-live yet, and none before #1498's API is live in staging), code-derived,
- *     selectable, packed, in step with the pending production pin; the pinned commit authored the bytes;
+ *     selectable, packed, in step with the production pin (execute true on production's own pre-state, the
+ *     same one staging had); the pinned commit authored the bytes;
  *     no predecessor;
  *   - the spec: one new SECURITY INVOKER function (aws_money_write_allowed(), EXECUTE authenticated,
  *     checksops and the owner) and 72 RESTRICTIVE policies TO authenticated (INSERT / UPDATE / DELETE on
@@ -112,7 +113,7 @@ function handlerFor(connect, { pins = {} } = {}) {
   return createHandler({ connect, now: () => Date.parse(NOW), releaseSqlFiles: FILES, releaseSqlPins: { ...PINS, ...pins } });
 }
 
-test('pin: SQL 136 staging-authorized from its read-live, code-derived, selectable, packed, in step with the pending production pin; no predecessor', () => {
+test('pin: SQL 136 staging-authorized from its read-live, code-derived, selectable, packed, in step with the production pin; no predecessor', () => {
   const pin = PINS[KEY];
   const spec = RELEASE_SQL_SPECS[KEY];
   const packed = Object.fromEntries(EXECUTOR_PACK_MEMBERS);
@@ -159,10 +160,16 @@ test('pin: SQL 136 staging-authorized from its read-live, code-derived, selectab
   assert.equal(prod.source_sha256, pin.source_sha256);
   assert.deepEqual(prod.function_identities, [FUNCTION]);
   assert.deepEqual(prod.predecessors, []);
-  assert.equal(prod.execute, false);
-  assert.equal(prod.authorization, 'pending');
-  assert.equal(prod.expected_live_definition_sha256, null);
-  assert.equal(prod.production_inspect.status, 'pending');
+  // Production pin execute-authorized (owner-approved pin change of 2026-11-02) on the staging apply, after #1498's API
+  // went live in production (full rebuild run 41469896446). Its pre-state is production's own (read-only inspect SSM
+  // 5c25a263), the same pre-state staging recorded and the one derived here.
+  assert.equal(prod.execute, true);
+  assert.match(prod.authorization, /^Owner approved 2026-11-02 /);
+  assert.equal(prod.expected_live_definition_sha256, prod.production_inspect.live_definition_sha256);
+  assert.equal(prod.expected_live_definition_sha256, pin.expected_live_definition_sha256);
+  assert.equal(prod.expected_live_definition_sha256, PRE);
+  assert.notEqual(prod.expected_live_definition_sha256, prod.intended_replacement_sha256);
+  assert.equal(prod.production_inspect.status, 'recorded');
   assert.ok(prod.production_inspect.note.includes(PRE));
   assert.ok(prod.order_note.includes(PRE));
   for (const text of [prod.order_note, prod.staging_acceptance.basis, prod.production_inspect.note]) assert.match(text, /#1498/);
@@ -170,7 +177,7 @@ test('pin: SQL 136 staging-authorized from its read-live, code-derived, selectab
   // The runbook: the STOP gate, the pre-state and intended fingerprints and texts, the source.
   const runbook = fs.readFileSync(path.join(ROOT, 'ops/production-sql-136-apply.md'), 'utf8');
   assert.match(runbook, /## STOP: the API first/);
-  assert.match(runbook, /\*\*Status:\*\* applied in staging \(wave 34, 2026-11-02\); staging test: the two reported failures are not gate refusals \(the auto-funding settings write path is a separate PR\); production pin pending \(waits for #1498's API in production, then the production inspect\)/);
+  assert.match(runbook, /\*\*Status:\*\* applied in staging \(wave 34, 2026-11-02\); staging test: the two reported failures are not gate refusals \(the auto-funding settings write path is a separate PR\); production pin execute-authorized \(#1498's API live in production since rebuild run 41469896446\); not applied to production/);
   assert.match(runbook, /read-live \(2026-11-01\)\.\*\* Run 41313668204/);
   for (const value of [PRE, pin.intended_replacement_sha256, pin.source_sha256]) assert.ok(runbook.includes(value), value);
   assert.ok(runbook.includes(`\`\`\`\n${releaseStateText(KEY, INTENDED)}\n\`\`\``));
