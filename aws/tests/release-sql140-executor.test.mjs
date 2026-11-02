@@ -5,8 +5,8 @@
  * covers what is new:
  *
  *   - the pin: staging-authorized (wave 36) from staging read-live run 41452217978 (the derived pre-state: no
- *     column grant), code-derived, selectable, packed, in step with the production pin (execute true on
- *     production's own pre-state, the same one staging had); the pinned commit authored the bytes; no predecessor;
+ *     column grant), code-derived, selectable, packed, in step with the production pin (applied 2026-11-02 and
+ *     retired, from production's own pre-state, the same one staging had); the pinned commit authored the bytes; no predecessor;
  *   - the spec's thirteen column_acl entries (SQL 140 creates or replaces no function), as SQL 92's,
  *     SQL 114's, SQL 134's and SQL 135's, nothing revoked: the fingerprint is the column ACL (every
  *     grantee) of the tenant_wallet_funding_settings columns the automatic funding save writes;
@@ -160,11 +160,15 @@ test('pin: SQL 140 staging-authorized from its read-live, code-derived, selectab
   assert.equal(prod.staging_pin_commit, pin.commit);
   assert.equal(prod.source_sha256, pin.source_sha256);
   assert.deepEqual(prod.predecessors, []);
-  // Production pin execute-authorized (owner-approved pin change of 2026-11-02) on the staging apply. Its pre-state is
-  // production's own (read-only inspect SSM e89960f1), the same pre-state staging recorded (read-live run 41452217978)
-  // and the one derived from the file.
-  assert.equal(prod.execute, true);
-  assert.match(prod.authorization, /^Owner approved 2026-11-02 /);
+  // Production pin applied 2026-11-02 and retired (owner-approved pin change of 2026-11-02, #1532, on the staging apply).
+  // Its pre-state is production's own (read-only inspect SSM e89960f1), the same pre-state staging recorded (read-live
+  // run 41452217978) and the one derived from the file.
+  assert.equal(prod.execute, false);
+  assert.match(prod.authorization, /^Applied to production on 2026-11-02; execute is false again/);
+  assert.equal(prod.applied.result, 'applied');
+  assert.equal(prod.applied.receipt.before_hash, prod.expected_live_definition_sha256);
+  assert.equal(prod.applied.receipt.after_hash, prod.intended_replacement_sha256);
+  assert.equal(prod.applied.post_apply_inspect.already_applied, true);
   assert.equal(prod.expected_live_definition_sha256, prod.production_inspect.live_definition_sha256);
   assert.equal(prod.expected_live_definition_sha256, pin.expected_live_definition_sha256);
   assert.equal(prod.expected_live_definition_sha256, PRE_NONE);
