@@ -106,15 +106,13 @@ workflows:
         script: cd mobile && npx cap sync ios
       - name: Apply the signing profile
         script: xcode-project use-profiles
-      - name: Set the build number
-        script: |
-          cd mobile/ios/App
-          agvtool new-version -all "$BUILD_NUMBER"
       - name: Build the signed IPA
+        # CURRENT_PROJECT_VERSION feeds CFBundleVersion, so every upload gets a new build number.
         script: |
           xcode-project build-ipa \
             --project mobile/ios/App/App.xcodeproj \
-            --scheme App
+            --scheme App \
+            --archive-xcargs "COMPILER_INDEX_STORE_ENABLE=NO CURRENT_PROJECT_VERSION=$BUILD_NUMBER"
     artifacts:
       - build/ios/ipa/*.ipa
     publishing:
