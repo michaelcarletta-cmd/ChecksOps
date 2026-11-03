@@ -702,19 +702,40 @@ const sendMortgageAgentInvite = async ({ client, send, email, fullName }) => {
  * only a login linked to this same agent, only in that state. Returns null when
  * there is nothing to repair; any other login is never touched.
  */
-const repairUnconfirmedAgentLogin = async ({ client, adminCognito, email, appUserId }) => {
+/**
+ * Re-hire of an existing agent: make this agent's own login usable again.
+ * Only a Cognito login whose identity mapping already points at this agent is
+ * touched. Production sign-in (/identity/me) resolves through
+ * identity_production_cognito_locks, so a missing lock is bound here (the same
+ * contract as the tenant invite). A login still waiting on its first password
+ * is confirmed for email-code sign-in. Returns null when there is nothing safe
+ * to do.
+ */
+const relinkExistingAgentLogin = async ({ client, adminCognito, email, appUserId, identityScope }) => {
   let login;
   try {
     login = await adminCognito('AdminGetUser', { UserPoolId: POOL_ID(), Username: email });
   } catch {
     return null;
   }
-  if (login?.UserStatus !== 'FORCE_CHANGE_PASSWORD') return null;
-  const sub = (login.UserAttributes || []).find((a) => a.Name === 'sub')?.Value || login.Username;
-  if (!sub) return null;
+  const sub = (login?.UserAttributes || []).find((a) => a.Name === 'sub')?.Value || login?.Username;
+  if (!sub || String(sub) === String(appUserId)) return null;
   const linkedUserId = (await client.query(IDENTITY_BY_SUB_SQL, [String(sub)])).rows[0]?.application_user_id || null;
   if (!linkedUserId || String(linkedUserId) !== String(appUserId)) return null;
-  return { confirmed: await confirmInvitedLogin({ email, cognitoJson: adminCognito }) };
+
+  const lock = await bindProductionCognitoLock(client, {
+    cognitoSub: String(sub),
+    applicationUserId: appUserId,
+    identityScope,
+  });
+  if (!lock.ok) return { error: lock.error, message: lock.message };
+  const loginLinked = lock.bound === true && lock.idempotent === false;
+  const needsConfirm = login?.UserStatus === 'FORCE_CHANGE_PASSWORD';
+  if (!loginLinked && !needsConfirm) return null;
+  return {
+    loginLinked,
+    confirmed: needsConfirm ? await confirmInvitedLogin({ email, cognitoJson: adminCognito }) : null,
+  };
 };
 
 /**
@@ -726,7 +747,7 @@ const repairUnconfirmedAgentLogin = async ({ client, adminCognito, email, appUse
  * confirms a login this hire created once the hire has committed.
  */
 export const runHireMortgageAgent = async ({
-  client, mapping, body, spoof, send, cognitoJson: cognitoFn,
+  client, mapping, body, spoof, send, cognitoJson: cognitoFn, identityScope,
 }) => {
   const adminCognito = cognitoFn || cognitoJson;
   // Hiring a mortgage agent grants a platform role (user_roles): the platform
@@ -772,7 +793,7 @@ export const runHireMortgageAgent = async ({
       };
     }
     if (roles.includes('mortgage_agent')) {
-      const repair = await repairUnconfirmedAgentLogin({ client, adminCognito, email, appUserId });
+      const repair = await relinkExistingAgentLogin({ client, adminCognito, email, appUserId, identityScope });
       if (!repair) {
         return {
           ok: false,
@@ -781,7 +802,16 @@ export const runHireMortgageAgent = async ({
           spoofFieldsIgnored: spoof,
         };
       }
-      if (!repair.confirmed) {
+      if (repair.error) {
+        return {
+          ok: false,
+          statusCode: repair.error === 'identity_lock_conflict' ? 409 : 500,
+          error: repair.error,
+          message: repair.message ? String(repair.message).slice(0, 240) : undefined,
+          spoofFieldsIgnored: spoof,
+        };
+      }
+      if (repair.confirmed === false) {
         return {
           ok: false,
           statusCode: 502,
@@ -799,7 +829,8 @@ export const runHireMortgageAgent = async ({
         email,
         full_name: fullName,
         created: false,
-        login_repaired: true,
+        login_repaired: repair.confirmed === true,
+        login_linked: repair.loginLinked,
         login_ready: true,
         invitationSent: true,
         applicationUserId: appUserId,
@@ -917,6 +948,24 @@ export const runHireMortgageAgent = async ({
     [cognitoSub, appUserId, email],
   );
 
+  // Production /identity/me resolves via identity_production_cognito_locks, not
+  // identity_accounts: without this lock a hired agent's sign-in fails with
+  // identity_not_linked. Same contract as the tenant invite; staging is a no-op.
+  const lock = await bindProductionCognitoLock(client, {
+    cognitoSub: String(cognitoSub),
+    applicationUserId: appUserId,
+    identityScope,
+  });
+  if (!lock.ok) {
+    return {
+      ok: false,
+      statusCode: lock.error === 'identity_lock_conflict' ? 409 : 500,
+      error: lock.error,
+      message: lock.message ? String(lock.message).slice(0, 240) : undefined,
+      spoofFieldsIgnored: spoof,
+    };
+  }
+
   await client.query(
     `INSERT INTO public.profiles (id, email, full_name, created_at, updated_at)
      VALUES ($1::uuid, $2, $3, now(), now())
@@ -1005,6 +1054,7 @@ export const handleHireMortgageAgent = async (event, deps = {}) => {
   const result = await withIdentity(event, (ctx) => (
     runHireMortgageAgent({
       ...ctx,
+      identityScope: deps.identityScope,
       send: deps.sendViaSesOrSink,
       cognitoJson: deps.cognitoJson,
     })

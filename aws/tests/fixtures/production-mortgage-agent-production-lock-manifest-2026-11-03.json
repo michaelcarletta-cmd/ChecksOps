@@ -1,0 +1,15 @@
+{
+  "workstream_id": "mortgage-agent-production-lock",
+  "authorization": "Pending owner review (2026-11-03). Planning only: nothing is live or verified. The production apply needs its own owner approval and staging acceptance.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Owner report 2026-11-03: a hired mortgage agent cannot sign in to production; the sign-in shows identity_not_linked. Production /identity/me resolves the Cognito sub through identity_production_cognito_locks (identity-env.mjs LOOKUP_PRODUCTION_IDENTITY_SQL), but runHireMortgageAgent wrote only identity_accounts, which staging reads; the tenant invite binds the production lock (bindProductionCognitoLock), the hire did not. The hire now binds the lock with the server-resolved Cognito sub and application user (the same contract and write GUC as the tenant invite; staging is a no-op), and refuses on identity_lock_conflict. Re-hiring an existing agent (the owner's Hire again) binds a missing lock when the agent's Cognito login is already mapped to this agent in identity_accounts, and still confirms a login waiting on its first password; anything else stays 409 as before. Unchanged: platform-owner-only hire, staff/admin refusal, identity_link_conflict checks, role and compensation-account writes, passwordless invite. live_sha256 93fc4177 is the plan row expected_live (the mortgage agent login bytes applied 2026-10-23, previous_manifest); a read-only production overlay inspect must confirm the live member before any apply. No SQL prerequisite (identity_production_cognito_locks and its write trigger are live; the tenant invite writes it in production); no import change.",
+  "members": {
+    "tenant-admin.mjs": {
+      "live_sha256": "93fc41776f70c4c29349c74c4130bbafb2b87fdd7e353989ed2911be19893ed8",
+      "accepted_sha256": "28b9b27e33404758a8bfdad3ed6f6cddd3d4d32dbbce1027866702e22c39458e",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-mortgage-agent-login-applied-manifest-2026-10-23.json"
+    }
+  }
+}
