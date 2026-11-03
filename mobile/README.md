@@ -22,14 +22,15 @@ cd mobile && npm ci && npx cap sync && npx cap open android
 
 ## Build on Codemagic
 
-`codemagic.yaml` in the repo root defines `android-staging` and `ios-staging`. Neither has a
-trigger: a build starts only when someone presses Start in Codemagic. The one-time setup
+`codemagic.yaml` in the repo root defines `android-staging-build` (signed APK and AAB, no
+upload), `android-staging` and `ios-staging`. None has a trigger: a build starts only when someone presses Start in Codemagic. The one-time setup
 (App Store Connect API key, iOS signing, Android upload keystore, Play service account) is
 listed at the top of that file.
 
 - iOS: the build is signed and sent to TestFlight. Install it on an iPhone with the TestFlight app.
-- Android: the first `.aab` must be uploaded by hand in the Play Console (internal testing);
-  later builds upload to the internal track as drafts.
+- Android: `android-staging-build` needs only the keystore. Its `.apk` installs directly on a
+  phone; its `.aab` is the first upload, done by hand in the Play Console (internal testing).
+  After that, `android-staging` uploads each build to the internal track as a draft.
 
 ## Not done yet
 

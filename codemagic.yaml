@@ -11,7 +11,8 @@
 #   - Environment variables, group "google_play": GCLOUD_SERVICE_ACCOUNT_CREDENTIALS (a Play
 #     Console service account JSON, marked secure).
 # Google Play accepts API uploads only after the first AAB has been uploaded by hand in the
-# Play Console, so download the first android-staging artifact and upload it there.
+# Play Console, so take the AAB from an android-staging-build run and upload it there; after
+# that, android-staging uploads each build to the internal track.
 
 definitions:
   scripts:
@@ -31,6 +32,31 @@ definitions:
       script: npm ci --prefix mobile
 
 workflows:
+  # Build only, no Play upload: works before the Play Console account exists. The signed APK
+  # installs directly on an Android phone; the AAB is the file for the first manual Play upload.
+  android-staging-build:
+    name: Android (staging, build only)
+    instance_type: linux_x2
+    max_build_duration: 60
+    environment:
+      node: 22
+      java: 21
+      android_signing:
+        - checksops_upload
+    scripts:
+      - *install_bun
+      - *build_web
+      - *install_capacitor
+      - name: Copy the website into the Android project
+        script: cd mobile && npx cap sync android
+      - name: Build the signed APK and Android App Bundle
+        script: |
+          cd mobile/android
+          ./gradlew assembleRelease bundleRelease -PversionCode="$BUILD_NUMBER"
+    artifacts:
+      - mobile/android/app/build/outputs/**/*.apk
+      - mobile/android/app/build/outputs/**/*.aab
+
   android-staging:
     name: Android (staging)
     instance_type: linux_x2
