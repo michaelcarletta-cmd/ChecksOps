@@ -237,6 +237,31 @@ Read 2026-11-03 12:17 UTC: `lambda:ListFunctions` and CloudWatch `AWS/Lambda Inv
 | `checksops-staging-v2-provider-collect-2d41` | nodejs20.x | 0 | 2026-09-29 | yes |
 | `checksops-textract-parser-test-504e` | nodejs22.x | 0 | 2026-09-18 | no |
 
+## Applied: step 1, staging guarded SQL executor (2026-11-03)
+
+- **Code:** #1575 made `sql-executor-ensure.mjs` set `nodejs22.x`.
+- **First deploy, refused:** run 41638385079, on main `fe184b89`, was refused by its preflight with `STALE_PACKAGE`. The gate only allowed a deploy when the package differed, so a runtime-only change could not pass. Nothing changed.
+- **Gate fix:** #1576 made the gate count a runtime difference, and made the post-deploy check require `nodejs22.x`.
+- **Runs on main `ec2a2f49`:**
+  - inspect, run 41648436017: live `nodejs20.x`, package current;
+  - deploy, run 41648874948, at 13:59:04 UTC: live `nodejs22.x`, RevisionId `8e1f5836-3b11-46f9-b1c1-09e5fb211185`, CodeSha256 `VdiYmwJj…` (the same package, re-zipped). The post-deploy check confirmed the package and the runtime.
+  - read-live, run 41649456133: the report was identical to the runs before the change: live definition `03fcea3c…`, `already_applied` true, `missing_ledger_trigger_count` 0.
+- **After:** timeout, memory, subnets and environment variable names are unchanged.
+
+## Applied: step 2, production origin-verify authorizer (2026-11-03)
+
+Owner's go phrase, verbatim: "production authorizer: Node 22".
+
+- **P0 (Claude, 14:33 UTC):** the function was on `nodejs20.x` with CodeSha256 `4ppMwMgI…`, the exact package tested, and RevisionId `fdbc8b41…`. It had 0 errors and 0 throttles in 30 minutes, and 115 valid authorizations in 10 minutes.
+- **P1 (owner, CloudShell):** a RevisionId-pinned runtime change, applied at 14:34:05 UTC. Afterwards: `nodejs22.x`, `LastUpdateStatus` Successful, RevisionId `ed5aba12-fefe-4ef1-8fc8-b77c7c204e2e`, CodeSha256 unchanged. New instances logged `INIT_START Runtime Version: nodejs:22.mainline.v158`.
+- **P2 (owner):** `/prep/health` returned 200. The owner signed in, opened a check and clicked through its tabs.
+- **P3 (Claude, 14:34:05–14:50:17 UTC):** runtime `nodejs22.x` at every check; 523 log lines with `originHeaderValid: true`, 0 with false; 0 error lines and 0 CloudWatch errors.
+- **Cleanup:** the owner removed the copy of the package from the transfer bucket (`review/`) and the temporary `lambda:GetFunction` policy.
+
+## Applied: step 3, retirement (2026-11-03)
+
+See `LAMBDA_RETIREMENT_REVIEW_2026_11.md`, section "Applied". 78 functions and 2 CloudFormation stacks were retired after a verified archive. 6 functions remain.
+
 ## Applied: step 4, SQL runner (2026-11-03)
 
 Owner's phrase, verbatim: "start the production SQL runner for the Node upgrade". No SQL was run.
