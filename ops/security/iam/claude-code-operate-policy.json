@@ -41,6 +41,24 @@
       "Effect": "Allow",
       "Action": ["ssm:GetCommandInvocation", "ssm:ListCommandInvocations", "ssm:ListCommands", "ssm:CancelCommand"],
       "Resource": "*"
+    },
+    {
+      "Sid": "DenyPrivateFilesBucketListing",
+      "Effect": "Deny",
+      "Action": ["s3:ListBucket", "s3:ListBucketVersions", "s3:ListBucketMultipartUploads"],
+      "Resource": [
+        "arn:aws:s3:::checksops-production-privatefiles-806168576068",
+        "arn:aws:s3:::checksops-staging-privatefilesbucket-erzqsolpucjp"
+      ]
+    },
+    {
+      "Sid": "DenyPrivateFilesObjectReads",
+      "Effect": "Deny",
+      "Action": ["s3:GetObject*", "s3:ListMultipartUploadParts"],
+      "Resource": [
+        "arn:aws:s3:::checksops-production-privatefiles-806168576068/*",
+        "arn:aws:s3:::checksops-staging-privatefilesbucket-erzqsolpucjp/*"
+      ]
     }
   ]
 }

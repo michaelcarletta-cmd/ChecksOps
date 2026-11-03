@@ -36,8 +36,8 @@ This change is for the owner to apply. Claude does not change its own permission
 
 | Attach | What it gives |
 |---|---|
-| AWS managed `SecurityAudit` | Account-wide metadata reads: CloudTrail lookups, Security Hub, GuardDuty and Inspector findings, describes for EC2, RDS, Lambda, IAM, S3 settings, CloudFront and KMS. **No object or secret contents.** |
-| AWS managed `ViewOnlyAccess` | List and describe across remaining services, for orientation. |
+| AWS managed `SecurityAudit` | Account-wide metadata reads: CloudTrail lookups, Security Hub, GuardDuty and Inspector findings, describes for EC2, RDS, Lambda, IAM, S3 settings, CloudFront and KMS. No object or secret contents, but it does list object names and read object ACLs and tags in every bucket; `ClaudeCodeOperate` denies that for the private-files buckets. |
+| AWS managed `ViewOnlyAccess` | List and describe across remaining services, for orientation. Includes `s3:ListBucket` on every bucket. |
 | Inline `ClaudeCodeOperate`, from [`iam/claude-code-operate-policy.json`](iam/claude-code-operate-policy.json) | See below. |
 
 `ClaudeCodeOperate` allows only:
@@ -51,10 +51,19 @@ This change is for the owner to apply. Claude does not change its own permission
   only on `i-0c35557c4e5385406`.
 - **Its own SSM commands:** reading their results, and cancelling them.
 
-The policy passes IAM Access Analyzer `ValidatePolicy` with no findings.
+It also **denies**, overriding both managed policies, any listing of or object read in the two
+private-files buckets (`checksops-production-privatefiles-806168576068` and
+`checksops-staging-privatefilesbucket-erzqsolpucjp`). That covers `s3:ListBucket`,
+`ListBucketVersions`, `ListBucketMultipartUploads`, `ListMultipartUploadParts` and every
+`s3:GetObject*`, including ACLs, tags and attributes. Bucket-level settings, such as the bucket
+policy, Block Public Access and encryption, stay readable for security checks.
+
+The first version of the policy passed IAM Access Analyzer `ValidatePolicy` with no findings. The
+two deny statements were added after the apply, when this user could no longer call `ValidatePolicy`.
+They were checked with `iam:SimulatePrincipalPolicy` instead (see below).
 
 **What this user can no longer do:**
-- read the private-files buckets or any secret value;
+- read, list, or read the ACLs or tags of anything in the private-files buckets, or read any secret value;
 - change IAM, Cognito, RDS, security groups or account security settings;
 - deploy anything.
 
@@ -87,6 +96,51 @@ After step 3, Claude verifies from a session, read-only:
 - an IAM write such as `iam:CreatePolicy` with a dry-run name, which is never created, is refused.
 
 **Rollback:** re-attach `PowerUserAccess` and `IAMFullAccess`.
+
+## Applied, and the private-files follow-up (2026-11-03)
+
+The owner applied the steps above in CloudShell on 2026-11-03. Afterwards the user had
+`SecurityAudit`, `ViewOnlyAccess` and the inline `ClaudeCodeOperate`, and nothing else.
+
+Claude's read-only check from a session:
+- **Still works:** identity is `user/claude-code`. Security Hub, IAM, logs, SSM and EC2 reads
+  work, and so does `HeadObject` on the production website's `index.html`.
+- **The SQL runner:** a dry-run `StartInstances` on the runner is allowed, and a dry-run
+  `CreateSecurityGroup` is refused. Simulation allows `StopInstances` and `SendCommand` on
+  the runner, and refuses them on any other instance.
+- **Refused by simulation:** `iam:CreatePolicy`, `AttachUserPolicy`, `PutUserPolicy` and
+  `CreateAccessKey`; `cognito-idp:AdminDeleteUser`; `rds:ModifyDBInstance` and
+  `ModifyDBSubnetGroup`; `ec2:AuthorizeSecurityGroupIngress`; `s3:PutObject` and
+  `PutBucketPolicy`; `secretsmanager:GetSecretValue`; and `lambda:UpdateFunctionCode`.
+- **Gap found:** `s3:ListBucket` on both private-files buckets was allowed, and listing
+  the production bucket returned an object name. Both managed policies grant it.
+  `GetObjectAcl`, `GetObjectVersionAcl` and `GetObjectTagging` were also allowed, by
+  `SecurityAudit`. Object contents were refused: `HeadObject` returned 403.
+
+The two deny statements in the policy file close that gap. A simulation with them added refuses
+all 15 actions it covers, on both buckets. These are `s3:ListBucket`, `ListBucketVersions`,
+`ListBucketMultipartUploads` and `ListMultipartUploadParts`, plus `GetObject`, `GetObjectVersion`,
+`GetObjectAcl`, `GetObjectVersionAcl`, `GetObjectTagging`, `GetObjectVersionTagging`,
+`GetObjectAttributes`, `GetObjectVersionAttributes`, `GetObjectRetention`, `GetObjectLegalHold`
+and `GetObjectTorrent`. The same simulation still allows `GetObject` and `ListBucket` on the
+production website bucket, `GetObject` on the SQL transfer bucket, and `GetBucketPolicy` and
+`GetBucketPublicAccessBlock` on the private-files bucket.
+
+To apply it (owner, in CloudShell), re-run the `put-user-policy` line with the updated file. It
+replaces the whole inline policy, and nothing else changes:
+
+```bash
+aws iam put-user-policy --user-name claude-code --policy-name ClaudeCodeOperate \
+  --policy-document file://claude-code-operate-policy.json   # this repository's ops/security/iam/ file
+aws iam get-user-policy --user-name claude-code --policy-name ClaudeCodeOperate \
+  --query 'PolicyDocument.Statement[].Sid'
+```
+
+Afterwards, Claude confirms from a session that listing the production private-files bucket is
+refused, and that the website bucket can still be read.
+
+**Rollback:** re-run `put-user-policy` with the previous version of the file, the one without the
+two `Deny` statements.
 
 ## Rotate the key (owner, after the policy change)
 
