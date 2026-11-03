@@ -29,7 +29,13 @@ import {
   handleHireMortgageAgent,
   handleTenantInviteUser,
 } from '../functions/api/tenant-admin.mjs';
-import { resolveTrustedIdentityScope } from '../functions/api/identity-env.mjs';
+import {
+  INSERT_PRODUCTION_LOCK_SQL,
+  PRODUCTION_IDENTITY_WRITE_GUC,
+  SELECT_PRODUCTION_LOCK_BY_SUB_SQL,
+  SELECT_PRODUCTION_LOCK_BY_USER_SQL,
+  resolveTrustedIdentityScope,
+} from '../functions/api/identity-env.mjs';
 import { platformBank } from '../functions/api/providers/parity/moov-onboard.mjs';
 
 const USER = 'abd3c2a0-6dc0-4680-92dd-a013e1141c91';
@@ -775,6 +781,7 @@ const AGENT = '55555555-5555-4555-8555-555555555555';
 const OTHER_USER = '66666666-6666-4666-8666-666666666666';
 const hireThroughHandler = async ({
   existingAgent = false, loginStatus = null, linkedUserId = null, commitTag = 'COMMIT', failConfirm = false, password = null,
+  env = 'staging', locks = [],
 } = {}) => {
   const CALLER_SUB = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
   const team = teamClient({ platformOwner: true, linkedUserId });
@@ -789,7 +796,7 @@ const hireThroughHandler = async ({
       requestContext: { authorizer: { jwt: { claims: { sub: CALLER_SUB } } } },
       body: JSON.stringify({ email: 'Agent@Example.com', full_name: 'Mo Agent', ...(password ? { password } : {}) }),
     }, {
-      identityScope: resolveTrustedIdentityScope({ checksopsEnv: 'staging', userPoolId: '' }),
+      identityScope: resolveTrustedIdentityScope({ checksopsEnv: env, userPoolId: '' }),
       loadDatabaseCredentials: async () => ({ host: 'db.invalid', port: 5432, username: 'u', password: 'p', dbname: 'd' }),
       createClient: () => ({
         connect: async () => {},
@@ -798,6 +805,16 @@ const hireThroughHandler = async ({
         query: async (sql, params = []) => {
           if (sql === 'COMMIT') { team.queries.push({ sql, params }); return { command: commitTag }; }
           if (params[0] === CALLER_SUB) return { rows: [{ application_user_id: USER }] };
+          if (sql === SELECT_PRODUCTION_LOCK_BY_SUB_SQL || sql === SELECT_PRODUCTION_LOCK_BY_USER_SQL) {
+            team.queries.push({ sql, params });
+            const key = sql === SELECT_PRODUCTION_LOCK_BY_SUB_SQL ? 'cognito_sub' : 'application_user_id';
+            return { rows: locks.filter((l) => l[key] === params[0]) };
+          }
+          if (sql === INSERT_PRODUCTION_LOCK_SQL) {
+            team.queries.push({ sql, params });
+            locks.push({ application_user_id: params[0], cognito_sub: params[1] });
+            return { rows: [], rowCount: 1 };
+          }
           if (/FROM public\.profiles WHERE lower\(email\)/.test(sql)) {
             team.queries.push({ sql, params });
             return { rows: existingAgent ? [{ id: AGENT }] : [] };
@@ -828,7 +845,9 @@ const hireThroughHandler = async ({
         throw new Error(`unexpected ${target}`);
       },
     });
-    return { result, cognitoCalls, passwords, sent, logs, sqls: team.queries.map((q) => q.sql) };
+    return {
+      result, cognitoCalls, passwords, sent, logs, locks, queries: team.queries, sqls: team.queries.map((q) => q.sql),
+    };
   } finally {
     console.warn = origWarn;
   }
@@ -904,6 +923,78 @@ test('hire mortgage agent: re-hiring repairs only this agent\'s unconfirmed logi
   assert.equal(refused.result.statusCode, 502);
   assert.equal(refused.result.error, 'login_repair_failed');
   assert.equal(refused.sent.length, 0);
+});
+
+test('hire mortgage agent (production): the hire binds the production Cognito lock that sign-in resolves through', async () => {
+  const hired = await hireThroughHandler({ env: 'production' });
+  assert.equal(hired.result.ok, true);
+  assert.deepEqual(hired.locks, [{ application_user_id: hired.result.applicationUserId, cognito_sub: COGNITO_SUB }]);
+  const guc = hired.queries.findIndex((q) => /set_config/.test(q.sql) && q.params[0] === PRODUCTION_IDENTITY_WRITE_GUC);
+  const insert = hired.queries.findIndex((q) => q.sql === INSERT_PRODUCTION_LOCK_SQL);
+  assert.ok(guc >= 0 && guc < insert, 'the write GUC is set before the lock insert');
+  assert.ok(insert < hired.sqls.indexOf('COMMIT'));
+
+  // Staging resolves through identity_accounts: no lock read or write.
+  const staging = await hireThroughHandler();
+  assert.equal(staging.result.ok, true);
+  assert.equal(staging.sqls.some((sql) => /identity_production_cognito_locks/.test(sql)), false);
+
+  // A sub already locked to another user refuses the hire; nothing commits.
+  const conflict = await hireThroughHandler({
+    env: 'production',
+    locks: [{ application_user_id: OTHER_USER, cognito_sub: COGNITO_SUB }],
+  });
+  assert.equal(conflict.result.ok, false);
+  assert.equal(conflict.result.error, 'identity_lock_conflict');
+  assert.equal(conflict.sqls.includes(INSERT_PRODUCTION_LOCK_SQL), false);
+  assert.equal(conflict.sent.length, 0);
+});
+
+test('hire mortgage agent (production): re-hiring an agent whose login has no production lock binds it and resends the invite', async () => {
+  const relinked = await hireThroughHandler({
+    env: 'production', existingAgent: true, loginStatus: 'CONFIRMED', linkedUserId: AGENT,
+  });
+  assert.equal(relinked.result.ok, true);
+  assert.equal(relinked.result.login_linked, true);
+  assert.equal(relinked.result.login_repaired, false);
+  assert.equal(relinked.result.created, false);
+  assert.deepEqual(relinked.locks, [{ application_user_id: AGENT, cognito_sub: COGNITO_SUB }]);
+  assert.deepEqual(relinked.cognitoCalls, ['AdminGetUser']);
+  assert.equal(relinked.sent.length, 1);
+  assert.equal(relinked.sqls.some((sql) => /INSERT INTO public\.(identity_accounts|profiles|user_roles)/.test(sql)), false);
+
+  // Unconfirmed as well: bound and confirmed in the same re-hire.
+  const both = await hireThroughHandler({
+    env: 'production', existingAgent: true, loginStatus: 'FORCE_CHANGE_PASSWORD', linkedUserId: AGENT,
+  });
+  assert.equal(both.result.login_linked, true);
+  assert.equal(both.result.login_repaired, true);
+  assert.deepEqual(both.cognitoCalls, ['AdminGetUser', 'AdminSetUserPassword']);
+
+  // Already locked and confirmed: nothing to repair, as before.
+  const done = await hireThroughHandler({
+    env: 'production', existingAgent: true, loginStatus: 'CONFIRMED', linkedUserId: AGENT,
+    locks: [{ application_user_id: AGENT, cognito_sub: COGNITO_SUB }],
+  });
+  assert.equal(done.result.statusCode, 409);
+  assert.equal(done.result.error, 'User already has mortgage ops access.');
+  assert.equal(done.sqls.includes(INSERT_PRODUCTION_LOCK_SQL), false);
+
+  // The login is mapped to someone else, or not mapped: never bound.
+  for (const linkedUserId of [OTHER_USER, null]) {
+    const kept = await hireThroughHandler({ env: 'production', existingAgent: true, loginStatus: 'CONFIRMED', linkedUserId });
+    assert.equal(kept.result.statusCode, 409, String(linkedUserId));
+    assert.deepEqual(kept.locks, []);
+  }
+
+  // This agent is already locked to a different login: refused, nothing sent.
+  const clash = await hireThroughHandler({
+    env: 'production', existingAgent: true, loginStatus: 'CONFIRMED', linkedUserId: AGENT,
+    locks: [{ application_user_id: AGENT, cognito_sub: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd' }],
+  });
+  assert.equal(clash.result.statusCode, 409);
+  assert.equal(clash.result.error, 'identity_lock_conflict');
+  assert.equal(clash.sent.length, 0);
 });
 
 test('hire mortgage agent: an owner-set password is made permanent by the hire itself; no second confirm', async () => {

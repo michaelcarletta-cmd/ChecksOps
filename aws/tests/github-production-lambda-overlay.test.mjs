@@ -2278,19 +2278,61 @@ test('Mortgage agent login: tenant-admin.mjs expected_live records the bytes pro
   assert.deepEqual(applied.members[MEMBER], { live_sha256: LIVE, accepted_sha256: LIVE, operation: 'replace', previous_manifest: MANIFEST_REL });
   // The login manifest keeps the pre-apply record.
   assert.deepEqual(manifest.members[MEMBER], { live_sha256: BEFORE, accepted_sha256: LIVE, operation: 'replace' });
+  // The row has moved on: the mortgage agent production lock plan (2026-11-03) REPLACEs these applied
+  // bytes, planning only, expecting them live (its own test below).
+  const LOCK_REL = 'aws/tests/fixtures/production-mortgage-agent-production-lock-manifest-2026-11-03.json';
+  const lockPlan = JSON.parse(fs.readFileSync(path.join(ROOT, LOCK_REL), 'utf8'));
   assert.equal(row.operation, 'replace');
-  assert.equal(row.manifest, APPLIED_REL);
+  assert.equal(row.manifest, LOCK_REL);
+  assert.equal(lockPlan.members[MEMBER].previous_manifest, APPLIED_REL);
   assert.equal(row.expected_live_sha256, LIVE);
-  assert.equal(row.accepted_sha256, LIVE);
+  assert.notEqual(row.accepted_sha256, LIVE);
   assert.equal(row.sql_before, 'aws/workflows/sql/90_users_only_tenant_roles.sql');
-  assert.equal(sha(`aws/functions/api/${MEMBER}`), LIVE);
   assert.equal(PLAN.order.at(-1), 'providers.mjs');
   const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
-  const done = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: LIVE }) });
-  assert.equal(done.state, 'ALREADY_ACCEPTED');
-  assert.equal(done.mutation, false);
+  // The pre-apply bytes of that record stay refused.
+  const before = structuredClone(PLAN);
+  before.members[MEMBER] = { ...PLAN.members[MEMBER], accepted_sha256: LIVE, manifest: APPLIED_REL };
   await assert.rejects(
-    run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: BEFORE }) }),
+    run(inspect, { root: ROOT, plan: before, inspectLive: liveFor(MEMBER, { sha256: BEFORE, plan: before }) }),
+    (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+  );
+});
+
+test('Mortgage agent production lock (owner report 2026-11-03): tenant-admin.mjs REPLACE from the 2026-10-23 applied bytes, no SQL, planning only', async () => {
+  const MEMBER = 'tenant-admin.mjs';
+  const REL = 'aws/tests/fixtures/production-mortgage-agent-production-lock-manifest-2026-11-03.json';
+  const PREVIOUS = 'aws/tests/fixtures/production-mortgage-agent-login-applied-manifest-2026-10-23.json';
+  // The bytes production run 40013182981 applied (2026-10-23).
+  const LIVE = '93fc41776f70c4c29349c74c4130bbafb2b87fdd7e353989ed2911be19893ed8';
+  const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, REL), 'utf8'));
+  const accepted = sha(`aws/functions/api/${MEMBER}`);
+  assert.notEqual(accepted, LIVE);
+  assert.equal(manifest.workstream_id, 'mortgage-agent-production-lock');
+  assert.equal(manifest.deploy_authorized, false);
+  assert.match(manifest.authorization, /^Pending owner review/);
+  assert.match(manifest.notes, /identity_not_linked/);
+  assert.match(manifest.notes, /identity_production_cognito_locks/);
+  assert.deepEqual(manifest.members, { [MEMBER]: { live_sha256: LIVE, accepted_sha256: accepted, operation: 'replace', previous_manifest: PREVIOUS } });
+  const previous = JSON.parse(fs.readFileSync(path.join(ROOT, PREVIOUS), 'utf8')).members[MEMBER];
+  assert.deepEqual([previous.live_sha256, previous.accepted_sha256], [LIVE, LIVE], 'the previous manifest is its applied record');
+  assert.deepEqual(PLAN.members[MEMBER], {
+    operation: 'replace',
+    accepted_sha256: accepted,
+    expected_live_sha256: LIVE,
+    sql_before: 'aws/workflows/sql/90_users_only_tenant_roles.sql',
+    manifest: REL,
+  });
+  assert.ok(PLAN.notes.includes(`Mortgage agent production lock (2026-11-03, owner report identity_not_linked): REPLACE ${MEMBER} ${LIVE.slice(0, 8)} -> ${accepted.slice(0, 8)}`));
+  assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
+  assert.equal(approvalPhrase(MEMBER), `DEPLOY ${MEMBER} TO PRODUCTION`);
+  const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
+  const ready = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: LIVE }) });
+  assert.equal(ready.state, 'READY');
+  const done = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: accepted }) });
+  assert.equal(done.state, 'ALREADY_ACCEPTED');
+  await assert.rejects(
+    run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: 'c'.repeat(64) }) }),
     (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
   );
 });
