@@ -170,3 +170,40 @@ Read 2026-11-03 12:17 UTC: `lambda:ListFunctions` and CloudWatch `AWS/Lambda Inv
 | `checksops-staging-tenant-onboard-59ff` | nodejs20.x | 0 | 2026-09-24 | yes |
 | `checksops-staging-v2-provider-collect-2d41` | nodejs20.x | 0 | 2026-09-29 | yes |
 | `checksops-textract-parser-test-504e` | nodejs22.x | 0 | 2026-09-18 | no |
+
+## Applied: step 4, SQL runner (2026-11-03)
+
+Owner's phrase, verbatim: "start the production SQL runner for the Node upgrade". No SQL was run.
+
+**Timeline (UTC):**
+- **Start:** `StartInstances` at 12:20:26; `running` at 12:20:42.
+- **Stop:** requested at 12:21:57; `stopped` at 12:22:29, reason "User initiated".
+- Before starting, the runner was stopped, with no pending SSM commands.
+
+**Before:** SSM command `fe8dd212-aebb-4899-a744-083b86409be9`.
+- The default `node` was `v18.20.8` (`/usr/bin/node-18`, alternatives `auto`).
+- `nodejs20` 20.20.2 was also installed, but not as the default.
+- `nodejs22` 22.23.4 and `nodejs24` 24.22.1 were available from the `amazonlinux` repository.
+- The root disk had 2.0 GB free.
+- **Baseline:** the most recently staged main tarball, `source-a58f492c…`, staged 2026-11-02 17:22. Its sha256 `7cb66c8f…` matched its sidecar. Extracted into a fresh directory, `node --test aws/tests/production-sql-one-shot.test.mjs` passed 54 of 54 on Node 18.
+
+**Change:** SSM command `6a997c0a-c3c0-4468-86c4-f1209dffbf6a`.
+- `dnf install -y nodejs22` installed `nodejs22`, `nodejs22-libs`, `nodejs22-docs`, `nodejs22-full-i18n` and `nodejs22-npm` 22.23.4 (217 MB installed).
+- `alternatives --set node /usr/bin/node-22`.
+
+**After:**
+- The default `node` is `v22.23.4` (`/usr/bin/node-22`, alternatives `manual`). `node-18` is still installed for rollback.
+- **Tests:** the same one-shot suite passed 54 of 54 on Node 22.
+- **Dependencies:** `pg` 8.23.0 loads.
+- **Identity:** `assumed-role/ChecksOpsSql53TemporaryRunner/i-0c35557c4e5385406`.
+- **Network:** the Secrets Manager endpoint is reachable on 443.
+- **Database:** SSM command `d28a0230-15f7-4548-a31a-d8a4872b1d41`. The production endpoint `checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com` resolves to `172.31.75.86`, the primary's ENI in 1f, and is reachable on 5432. The first check in the change command used a hostname Claude had mistyped, and reported "NOT reachable". The re-check used the endpoint read from `describe-db-instances`.
+- **Disk:** 1.8 GB free after the work directory was removed.
+
+**Not run:** a real `--phase inspect`. No pin is executable, so the one-shot would refuse at step 1. The next production SQL run will be the first real use of the tool on Node 22.
+
+**Unrelated command:** Inspector's automatic `AmazonInspector2-ConfigureInspectorSsmPlugin` (`a0438d29…`, 12:20:59) failed with `InvalidPlatform` on start, as it did before (see the hardening runbook, item 7). It changed nothing.
+
+**Rollback:** `alternatives --set node /usr/bin/node-18`, in a runner session started on the owner's words.
+
+**Still on the runner:** `nodejs` 18 and `nodejs20`, both end of life, kept installed but not the default. Removing them is a later step, once Node 22 has handled a real run.
