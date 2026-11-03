@@ -2278,14 +2278,13 @@ test('Mortgage agent login: tenant-admin.mjs expected_live records the bytes pro
   assert.deepEqual(applied.members[MEMBER], { live_sha256: LIVE, accepted_sha256: LIVE, operation: 'replace', previous_manifest: MANIFEST_REL });
   // The login manifest keeps the pre-apply record.
   assert.deepEqual(manifest.members[MEMBER], { live_sha256: BEFORE, accepted_sha256: LIVE, operation: 'replace' });
-  // The row has moved on: the mortgage agent production lock plan (2026-11-03) REPLACEs these applied
-  // bytes, planning only, expecting them live (its own test below).
+  // The row has moved on: the mortgage agent production lock (2026-11-03, production run 41668926439)
+  // REPLACEd these applied bytes (its own test below).
   const LOCK_REL = 'aws/tests/fixtures/production-mortgage-agent-production-lock-manifest-2026-11-03.json';
   const lockPlan = JSON.parse(fs.readFileSync(path.join(ROOT, LOCK_REL), 'utf8'));
   assert.equal(row.operation, 'replace');
-  assert.equal(row.manifest, LOCK_REL);
   assert.equal(lockPlan.members[MEMBER].previous_manifest, APPLIED_REL);
-  assert.equal(row.expected_live_sha256, LIVE);
+  assert.notEqual(row.expected_live_sha256, LIVE);
   assert.notEqual(row.accepted_sha256, LIVE);
   assert.equal(row.sql_before, 'aws/workflows/sql/90_users_only_tenant_roles.sql');
   assert.equal(PLAN.order.at(-1), 'providers.mjs');
@@ -2299,9 +2298,10 @@ test('Mortgage agent login: tenant-admin.mjs expected_live records the bytes pro
   );
 });
 
-test('Mortgage agent production lock (owner report 2026-11-03): tenant-admin.mjs REPLACE from the 2026-10-23 applied bytes, no SQL, planning only', async () => {
+test('Mortgage agent production lock (owner report 2026-11-03): tenant-admin.mjs REPLACE from the 2026-10-23 applied bytes, no SQL; production run 41668926439 applied it', async () => {
   const MEMBER = 'tenant-admin.mjs';
   const REL = 'aws/tests/fixtures/production-mortgage-agent-production-lock-manifest-2026-11-03.json';
+  const APPLIED_REL = 'aws/tests/fixtures/production-mortgage-agent-production-lock-applied-manifest-2026-11-03.json';
   const PREVIOUS = 'aws/tests/fixtures/production-mortgage-agent-login-applied-manifest-2026-10-23.json';
   // The bytes production run 40013182981 applied (2026-10-23).
   const LIVE = '93fc41776f70c4c29349c74c4130bbafb2b87fdd7e353989ed2911be19893ed8';
@@ -2316,25 +2316,42 @@ test('Mortgage agent production lock (owner report 2026-11-03): tenant-admin.mjs
   assert.deepEqual(manifest.members, { [MEMBER]: { live_sha256: LIVE, accepted_sha256: accepted, operation: 'replace', previous_manifest: PREVIOUS } });
   const previous = JSON.parse(fs.readFileSync(path.join(ROOT, PREVIOUS), 'utf8')).members[MEMBER];
   assert.deepEqual([previous.live_sha256, previous.accepted_sha256], [LIVE, LIVE], 'the previous manifest is its applied record');
+  // Applied 2026-11-03: the row records the applied bytes live and names the applied record.
   assert.deepEqual(PLAN.members[MEMBER], {
     operation: 'replace',
     accepted_sha256: accepted,
-    expected_live_sha256: LIVE,
+    expected_live_sha256: accepted,
     sql_before: 'aws/workflows/sql/90_users_only_tenant_roles.sql',
-    manifest: REL,
+    manifest: APPLIED_REL,
   });
   assert.ok(PLAN.notes.includes(`Mortgage agent production lock (2026-11-03, owner report identity_not_linked): REPLACE ${MEMBER} ${LIVE.slice(0, 8)} -> ${accepted.slice(0, 8)}`));
   assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
   assert.equal(approvalPhrase(MEMBER), `DEPLOY ${MEMBER} TO PRODUCTION`);
   const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
-  const ready = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: LIVE }) });
+  // Before the apply, the planned row took the 2026-10-23 applied bytes as READY.
+  const before = structuredClone(PLAN);
+  before.members[MEMBER] = { ...PLAN.members[MEMBER], expected_live_sha256: LIVE, manifest: REL };
+  const ready = await run(inspect, { root: ROOT, plan: before, inspectLive: liveFor(MEMBER, { sha256: LIVE, plan: before }) });
   assert.equal(ready.state, 'READY');
   const done = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: accepted }) });
   assert.equal(done.state, 'ALREADY_ACCEPTED');
-  await assert.rejects(
-    run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: 'c'.repeat(64) }) }),
-    (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
-  );
+  for (const other of [LIVE, 'c'.repeat(64)]) {
+    await assert.rejects(
+      run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: other }) }),
+      (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+      other,
+    );
+  }
+  const applied = JSON.parse(fs.readFileSync(path.join(ROOT, APPLIED_REL), 'utf8'));
+  assert.equal(applied.workstream_id, 'mortgage-agent-production-lock-applied');
+  assert.equal(applied.deploy_authorized, false);
+  assert.match(applied.authorization, /^Record only/);
+  assert.deepEqual(applied.members, { [MEMBER]: { live_sha256: accepted, accepted_sha256: accepted, operation: 'replace', previous_manifest: REL } });
+  assert.ok(applied.notes.includes(`"DEPLOY ${MEMBER} TO PRODUCTION"`));
+  for (const evidence of ['41668926439', '41667259310', '41666807323', '41669137138', 'c46785b4-bf2d-48c3-b3bd-a1de6eb93ffd']) {
+    assert.ok(applied.notes.includes(evidence), evidence);
+    assert.ok(PLAN.notes.includes(evidence), evidence);
+  }
 });
 
 test('Data API credential columns: data.mjs expected_live records the bytes production run 40086704439 applied, keeping its SQL 53 hold', async () => {
