@@ -133,6 +133,48 @@ waited an hour. At 03:28 P0 passed again: latest restorable time 03:23:05, no RD
 database errors in the production Lambda's logs for 65 minutes. P1 was not run; it waits for the
 owner to repeat the phrase.
 
+## Applied: production (2026-11-03)
+
+The owner gave all three phrases at once: "production database: Multi-AZ off", "production
+database: private subnets", "production database: Multi-AZ on". The steps ran one at a time, with a
+read-only check between them. Claude cannot change RDS, so the owner ran each step in CloudShell.
+
+- **P0 (Claude, 11:41 UTC, read-only).** The instance was `available`, Multi-AZ, primary in 1f and
+  standby in 1b, not publicly accessible, with no pending modifications. The latest restorable time
+  was 3 minutes old (11:38:02). There had been no RDS events for 5 hours, and the production Lambda
+  logged no database errors in the previous 60 minutes. The backup window had passed, and the
+  maintenance window is Thursday.
+- **P1, Multi-AZ off.** CloudTrail records `ModifyDBInstance` by root at 11:43:07. RDS reported
+  "Applying modification to convert to a standard (Single-AZ) DB Instance" at 11:43:09 and
+  "Finished" at 11:46:17. Afterwards the instance was `available`, single-AZ, primary still in 1f.
+  The 1b standby's ENI was gone; only `eni-0a3a1fc82dae14950` (1f) remained. The production Lambda
+  ran 19 times in 10 minutes with 0 database errors.
+- **P2, private subnets.** CloudTrail records `ModifyDBSubnetGroup` by root at 11:48:54.
+  `checksops-production-db-subnets` was `Complete`, holding only `subnet-0df2518070c5b9ff0` (1a) and
+  `subnet-092e4e41821fba6c4` (1f), and only this instance uses it. The Lambda ran 21 times in 10
+  minutes with 0 errors.
+- **P3, Multi-AZ on.** The first paste never reached AWS: no CloudTrail event, no pending
+  modification. The re-run was recorded by CloudTrail at 12:01:39 and returned
+  `["available", false, {"MultiAZ": true}]`. RDS reported "Applying modification to convert to a
+  Multi-AZ DB Instance" at 12:01:41 and "Finished" at 12:10:59. The instance was `available` at
+  12:12:30.
+- **Two RDS events at 12:12:03** read "Performance Insights has been enabled" and "Monitoring
+  Interval changed to 0". These were RDS restating existing settings, not changes: Performance
+  Insights has been on (7-day retention) and the monitoring interval 0 since `CreateDBInstance` on
+  2026-09-22, and both P1 and P3 requests changed only `multiAZ`.
+- **During the move:** the production Lambda ran 72 times between 11:40 and 12:13 with 0 database
+  errors, and the latest restorable time stayed within 5 minutes.
+
+**Final state (read-only, 17:01 UTC):**
+- **Instance:** `available`, Multi-AZ, primary `us-east-1f`, `SecondaryAvailabilityZone`
+  `us-east-1a`, not publicly accessible, nothing pending.
+- **Network:** the subnet group is 1a and 1f only. The ENIs are `eni-0a3a1fc82dae14950` (1f) and
+  `eni-0eb5f9aedfd7f9657` (1a, the new standby).
+- **Health:** no RDS events since 12:13. The production Lambda had 0 errors and 0 database-connection
+  errors from 11:40 to 17:01.
+- **Security Hub RDS.46:** `checksops-staging` PASSED. `checksops-production` still showed the
+  pre-move FAILED from its last evaluation at 04:44 UTC; it had not re-evaluated by 17:01 UTC.
+
 ## After both
 
 - Security Hub RDS.46 should pass for both instances at its next evaluation.
