@@ -1,0 +1,97 @@
+# Codemagic builds for the ChecksOps iOS and Android apps (Capacitor shell in mobile/).
+#
+# No triggering section: every build is started by hand in Codemagic. Nothing here touches
+# AWS, the database or the website; the builds read the repo, build the staging website
+# bundle (.env.aws.example, public identifiers only) and package it into the apps.
+#
+# Set up once in the Codemagic UI before the first build:
+#   - Team integrations > Developer Portal: an App Store Connect API key named "ChecksOps".
+#   - Code signing identities > iOS: let Codemagic fetch an App Store profile for com.checksops.app.
+#   - Code signing identities > Android keystores: an upload keystore with reference "checksops_upload".
+#   - Environment variables, group "google_play": GCLOUD_SERVICE_ACCOUNT_CREDENTIALS (a Play
+#     Console service account JSON, marked secure).
+# Google Play accepts API uploads only after the first AAB has been uploaded by hand in the
+# Play Console, so download the first android-staging artifact and upload it there.
+
+definitions:
+  scripts:
+    - &install_bun
+      name: Install bun (the version CI uses)
+      script: |
+        curl -fsSL https://bun.sh/install | bash -s "bun-v1.4.2"
+        echo "PATH=$HOME/.bun/bin:$PATH" >> "$CM_ENV"
+    - &build_web
+      name: Build the staging website bundle
+      script: |
+        bun install --frozen-lockfile
+        cp .env.aws.example .env.aws
+        bun run build:aws
+    - &install_capacitor
+      name: Install Capacitor
+      script: npm ci --prefix mobile
+
+workflows:
+  android-staging:
+    name: Android (staging)
+    instance_type: linux_x2
+    max_build_duration: 60
+    environment:
+      node: 22
+      java: 21
+      android_signing:
+        - checksops_upload
+      groups:
+        - google_play
+    scripts:
+      - *install_bun
+      - *build_web
+      - *install_capacitor
+      - name: Copy the website into the Android project
+        script: cd mobile && npx cap sync android
+      - name: Build the signed Android App Bundle
+        script: |
+          cd mobile/android
+          ./gradlew bundleRelease -PversionCode="$BUILD_NUMBER"
+    artifacts:
+      - mobile/android/app/build/outputs/**/*.aab
+    publishing:
+      google_play:
+        credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
+        track: internal
+        submit_as_draft: true
+
+  ios-staging:
+    name: iOS (staging)
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    integrations:
+      app_store_connect: ChecksOps
+    environment:
+      node: 22
+      xcode: latest
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.checksops.app
+    scripts:
+      - *install_bun
+      - *build_web
+      - *install_capacitor
+      - name: Copy the website into the iOS project
+        script: cd mobile && npx cap sync ios
+      - name: Apply the signing profile
+        script: xcode-project use-profiles
+      - name: Set the build number
+        script: |
+          cd mobile/ios/App
+          agvtool new-version -all "$BUILD_NUMBER"
+      - name: Build the signed IPA
+        script: |
+          xcode-project build-ipa \
+            --project mobile/ios/App/App.xcodeproj \
+            --scheme App
+    artifacts:
+      - build/ios/ipa/*.ipa
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true

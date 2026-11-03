@@ -1,0 +1,19 @@
+{
+  "name": "checksops-mobile",
+  "private": true,
+  "version": "0.0.0",
+  "description": "iOS and Android shell for the ChecksOps website (Capacitor). Builds run on Codemagic.",
+  "scripts": {
+    "build:web": "cd .. && bun run build:aws",
+    "sync": "cap sync",
+    "build": "npm run build:web && cap sync"
+  },
+  "dependencies": {
+    "@capacitor/android": "8.5.3",
+    "@capacitor/core": "8.5.3",
+    "@capacitor/ios": "8.5.3"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.5.3"
+  }
+}

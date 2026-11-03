@@ -1,0 +1,40 @@
+# ChecksOps mobile (iOS and Android)
+
+A Capacitor shell that packages the ChecksOps website into iOS and Android apps.
+
+- App ID (Apple Bundle ID and Google Application ID): `com.checksops.app`. It is permanent
+  once a build is uploaded to either store.
+- Web assets: `../dist`, the output of `bun run build:aws` in the repo root. Builds use the
+  staging configuration (`.env.aws.example`), so the apps talk to the staging API and Cognito pool.
+- iOS uses Swift Package Manager (no CocoaPods). Builds run on Codemagic, so no Mac is needed.
+- This folder has its own `package.json` and `package-lock.json`; the website's dependencies
+  and lockfiles are not touched.
+
+## Build locally (Android Studio, optional)
+
+```bash
+bun run build:aws
+```
+
+```bash
+cd mobile && npm ci && npx cap sync && npx cap open android
+```
+
+## Build on Codemagic
+
+`codemagic.yaml` in the repo root defines `android-staging` and `ios-staging`. Neither has a
+trigger: a build starts only when someone presses Start in Codemagic. The one-time setup
+(App Store Connect API key, iOS signing, Android upload keystore, Play service account) is
+listed at the top of that file.
+
+- iOS: the build is signed and sent to TestFlight. Install it on an iPhone with the TestFlight app.
+- Android: the first `.aab` must be uploaded by hand in the Play Console (internal testing);
+  later builds upload to the internal track as drafts.
+
+## Not done yet
+
+- App icons and splash screens are Capacitor's defaults.
+- Sign-in, CORS and passkeys for the app's origins (`capacitor://localhost` on iOS,
+  `https://localhost` on Android) are untested. Any production change for them goes through
+  the guarded workflows after the security hardening work lands.
+- No native plugins (camera, push, Face ID) yet.
