@@ -110,6 +110,29 @@ skipped.
 - P1: `--multi-az`. The new standby may then land in any AZ of the group.
 - P3: needs no rollback; it restores the original redundancy.
 
+## Applied: staging (2026-11-03)
+
+Owner's go phrase: "move the staging database to private subnets". Claude cannot change RDS since the
+least-privilege change, so the owner ran S1 and S2 in CloudShell.
+
+- **S0, before 02:11 UTC, read-only:**
+  - `checksops-staging` was `available` in us-east-1f, single-AZ, not publicly accessible, with no pending changes.
+  - `default-vpc-09f2268778966ce97` was used only by this instance (no clusters) and held the six subnets listed above.
+  - The only RDS ENI in a subnet to be removed (`eni-01cedb9d6ff35faf7`, 1b) carries `checksops-production-rds` and is production's standby. It belongs to production's own subnet group, which S1 does not touch.
+- **S1, owner, 02:11:07 UTC:** CloudTrail records `ModifyDBSubnetGroup` by root.
+- **S2:**
+  - The group is `Complete`, holding only `subnet-0df2518070c5b9ff0` (1a) and `subnet-092e4e41821fba6c4` (1f), both `Active`.
+  - The instance is still `available` in 1f.
+  - Production is unchanged: six subnets, primary 1f, standby 1b.
+- **Application path:** guarded read-live run 41564778049 (main `4068a8cd`, 02:15 UTC) reached the staging database through the executor. Its report was identical to the read-live from before the change, run 41540079590: live definition `03fcea3c…`, `already_applied` true, `missing_ledger_trigger_count` 0.
+- **Security Hub, 06:45 UTC:** RDS.46 PASSED for `checksops-staging`.
+
+Production: on 11-03 the owner gave the P1 phrase at about 02:23 UTC. P0 then held it: `LatestRestorableTime`
+was over 5 minutes old (02:18:11, still unchanged at 02:25). At the owner's request the session
+waited an hour. At 03:28 P0 passed again: latest restorable time 03:23:05, no RDS events, no
+database errors in the production Lambda's logs for 65 minutes. P1 was not run; it waits for the
+owner to repeat the phrase.
+
 ## After both
 
 - Security Hub RDS.46 should pass for both instances at its next evaluation.
