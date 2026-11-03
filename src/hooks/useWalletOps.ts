@@ -10,7 +10,8 @@ import {
   type PaymentMethodLabel,
   type WalletOpsTransferRow,
 } from "@/lib/payments/walletRelativeTransfers";
-import { invoicesInFlight, type InvoicePendingRow } from "@/lib/payments/invoicePendingIn";
+import { invoicesInFlight } from "@/lib/payments/invoicePendingIn";
+import { invoiceWalletActivity, type InvoiceActivitySourceRow } from "@/lib/payments/invoiceWalletActivity";
 import {
   PaymentWalletSelectionError,
   resolveWalletOpsEnvironment,
@@ -77,7 +78,7 @@ export function useWalletOpsTransfers(limit = 25) {
         // Invoices a customer is paying through the hosted link write no payment_transfers row.
         supabase
           .from("moov_invoices")
-          .select("id, tenant_id, environment, status, total_amount, paid_amount, invoice_number, customer_name")
+          .select("id, tenant_id, environment, status, total_amount, paid_amount, invoice_number, customer_name, paid_at, sent_at, last_synced_at, updated_at, created_at")
           .eq("tenant_id", tenantId!)
           .order("created_at", { ascending: false })
           .limit(200),
@@ -143,10 +144,10 @@ export function useWalletOpsTransfers(limit = 25) {
         tenantName: tenant?.name || "Organization",
       });
 
-      const invoices = invoicesInFlight(
-        (invoicesRes.error ? [] : invoicesRes.data ?? []) as InvoicePendingRow[],
-        { tenantId: tenantId!, environment: walletEnvironment },
-      );
+      const invoiceRows = (invoicesRes.error ? [] : invoicesRes.data ?? []) as InvoiceActivitySourceRow[];
+      const invoices = invoicesInFlight(invoiceRows, { tenantId: tenantId!, environment: walletEnvironment });
+      // Paid invoices write no transfer or ledger row: they show in activity from the invoice itself.
+      const invoiceActivity = invoiceWalletActivity(invoiceRows, { tenantId: tenantId!, environment: walletEnvironment });
       const invoicePendingInCents = invoices.reduce((sum, row) => sum + row.pending_cents, 0);
 
       return {
@@ -158,6 +159,7 @@ export function useWalletOpsTransfers(limit = 25) {
         transferPendingInCents: summary.pendingInCents,
         invoicePendingInCents,
         invoicesInFlight: invoices,
+        invoiceActivity,
         tenantWalletPaymentMethodId,
       };
     },
