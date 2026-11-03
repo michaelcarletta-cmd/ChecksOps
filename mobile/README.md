@@ -32,9 +32,22 @@ listed at the top of that file.
   phone; its `.aab` is the first upload, done by hand in the Play Console (internal testing).
   After that, `android-staging` uploads each build to the internal track as a draft.
 
+## Icons and splash screens
+
+`assets/` holds the sources, made from the ChecksOps target mark (`public/pwa-192.png`): the
+iOS icon is opaque (Apple rejects transparency), and the Android adaptive foreground is
+transparent because Android adds its own safe-zone inset. To regenerate every size after
+changing them:
+
+```bash
+cd mobile && npx @capacitor/assets@3.0.5 generate --ios --android --iconBackgroundColor '#ffffff' --splashBackgroundColor '#ffffff' --splashBackgroundColorDark '#ffffff'
+```
+
+The tool reformats `android/app/src/main/AndroidManifest.xml` without changing it; discard that
+diff (`git checkout -- android/app/src/main/AndroidManifest.xml`).
+
 ## Not done yet
 
-- App icons and splash screens are Capacitor's defaults.
 - Sign-in, CORS and passkeys for the app's origins (`capacitor://localhost` on iOS,
   `https://localhost` on Android) are untested. Any production change for them goes through
   the guarded workflows after the security hardening work lands.
