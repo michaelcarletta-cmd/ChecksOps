@@ -1,0 +1,15 @@
+{
+  "workstream_id": "mortgage-agent-production-lock-applied",
+  "authorization": "Record only (2026-11-03): the bytes below are live. Nothing is planned or authorized by this manifest; any later change to this member needs its own manifest, staging acceptance and owner approval.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Mortgage agent production lock (#1579, owner report 2026-11-03 identity_not_linked), applied 2026-11-03 through the guarded overlay path to checksops-production-prep-api on the owner's approval (the workflow refuses an apply unless approval_phrase is exactly \"DEPLOY tenant-admin.mjs TO PRODUCTION\"): production apply run 41668926439 VERIFIED on main 04f0ad734, owner \"DEPLOY tenant-admin.mjs TO PRODUCTION\", staging acceptance run 41666807323, production inspect run 41667259310 READY (live 93fc4177, RevisionId d282dc1f-38c4-4c6e-8d5b-ad88c1cf9e41); CodeSha256 B1v984xdTgUdzlWwtWey6n7885+J6Xl2Tunc1wdhwaI=, RevisionId c46785b4-bf2d-48c3-b3bd-a1de6eb93ffd; /health and /db-health ok; post-apply inspect run 41669137138 ALREADY_ACCEPTED (live 28b9b27e). An earlier apply run 41667943869 on the owner's first approval was refused before any write (PRODUCTION_APPROVAL_REQUIRED: the staging acceptance reference was given as a bare run id, not a run URL); read-only inspect run 41668196968 then showed production unchanged (live 93fc4177, RevisionId d282dc1f) and the owner approved again. Staging apply run 41666807323 replaced staging 93fc4177 with the same bytes (staging inspect run 41666553483 before, 41666989731 after: 28b9b27e). A mortgage agent hire now binds identity_production_cognito_locks, and re-hiring an existing agent binds a missing lock.",
+  "members": {
+    "tenant-admin.mjs": {
+      "live_sha256": "28b9b27e33404758a8bfdad3ed6f6cddd3d4d32dbbce1027866702e22c39458e",
+      "accepted_sha256": "28b9b27e33404758a8bfdad3ed6f6cddd3d4d32dbbce1027866702e22c39458e",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-mortgage-agent-production-lock-manifest-2026-11-03.json"
+    }
+  }
+}
