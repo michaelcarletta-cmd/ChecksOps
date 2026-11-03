@@ -34,13 +34,16 @@ listed at the top of that file.
 
 ## Icons and splash screens
 
-`assets/` holds the sources, made from the ChecksOps target mark (`public/pwa-192.png`): the
-iOS icon is opaque (Apple rejects transparency), and the Android adaptive foreground is
-transparent because Android adds its own safe-zone inset. To regenerate every size after
-changing them:
+`assets/icon-source.png` is the owner's artwork. The other files in `assets/` are made from it:
+`icon-only.png` (iOS and legacy Android) drops the baked-in bevelled frame, shrinks the design to
+86% and fades its edges into the texture's near-black (#0e0e0c), keeping the wordmark band sharp,
+so the platform masks round the corners without clipping the first or last letter. It is opaque
+RGB (Apple rejects transparency). On Android the same image is the adaptive background layer
+and the foreground is empty. The splash screens show the full badge, frame and all, on black.
+To regenerate every size after changing them:
 
 ```bash
-cd mobile && npx @capacitor/assets@3.0.5 generate --ios --android --iconBackgroundColor '#ffffff' --splashBackgroundColor '#ffffff' --splashBackgroundColorDark '#ffffff'
+cd mobile && npx @capacitor/assets@3.0.5 generate --ios --android --iconBackgroundColor '#0e0e0c' --splashBackgroundColor '#000000' --splashBackgroundColorDark '#000000'
 ```
 
 The tool reformats `android/app/src/main/AndroidManifest.xml` without changing it; discard that
