@@ -1,0 +1,46 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReadDeployAndEvidenceBuckets",
+      "Effect": "Allow",
+      "Action": ["s3:GetObject", "s3:GetObjectVersion", "s3:ListBucket", "s3:ListBucketVersions"],
+      "Resource": [
+        "arn:aws:s3:::checksops-production-frontend-806168576068",
+        "arn:aws:s3:::checksops-production-frontend-806168576068/*",
+        "arn:aws:s3:::checksops-staging-frontend-c48b",
+        "arn:aws:s3:::checksops-staging-frontend-c48b/*",
+        "arn:aws:s3:::checksops-production-access-logs-806168576068",
+        "arn:aws:s3:::checksops-sql53-transfer-806168576068",
+        "arn:aws:s3:::checksops-sql53-transfer-806168576068/*"
+      ]
+    },
+    {
+      "Sid": "ReadLogs",
+      "Effect": "Allow",
+      "Action": ["logs:FilterLogEvents", "logs:GetLogEvents", "logs:StartQuery", "logs:GetQueryResults", "logs:StopQuery"],
+      "Resource": "arn:aws:logs:us-east-1:806168576068:log-group:*"
+    },
+    {
+      "Sid": "OperateSqlRunnerInstance",
+      "Effect": "Allow",
+      "Action": ["ec2:StartInstances", "ec2:StopInstances", "ec2:RebootInstances"],
+      "Resource": "arn:aws:ec2:us-east-1:806168576068:instance/i-0c35557c4e5385406"
+    },
+    {
+      "Sid": "RunShellOnSqlRunnerOnly",
+      "Effect": "Allow",
+      "Action": "ssm:SendCommand",
+      "Resource": [
+        "arn:aws:ec2:us-east-1:806168576068:instance/i-0c35557c4e5385406",
+        "arn:aws:ssm:us-east-1::document/AWS-RunShellScript"
+      ]
+    },
+    {
+      "Sid": "ReadAndCancelOwnCommands",
+      "Effect": "Allow",
+      "Action": ["ssm:GetCommandInvocation", "ssm:ListCommandInvocations", "ssm:ListCommands", "ssm:CancelCommand"],
+      "Resource": "*"
+    }
+  ]
+}
