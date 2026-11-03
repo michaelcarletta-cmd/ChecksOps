@@ -262,8 +262,8 @@ else: no SQL.
 
 1. Start the instance and wait until SSM reports it online.
 2. Before: record `uname -r`, `cat /etc/os-release`, `node --version`, `rpm -q nodejs` and
-   `dnf check-release-update`. Also record
-   `dnf updateinfo list --security --sec-severity Critical,Important | wc -l`.
+   `dnf check-release-update`. Also record the count of open Critical and Important security
+   advisories: `dnf -q updateinfo list --security | grep -cE '(Critical|Important)/Sec\.'`.
 3. Patch: `sudo dnf upgrade --releasever=latest -y`. Amazon Linux 2023 delivers fixes in release
    versions, so the security updates need the latest release. Record the transaction summary.
 4. Reboot with `aws ec2 reboot-instances`, wait until SSM is online, and confirm the new `uname -r`.
@@ -272,7 +272,12 @@ else: no SQL.
    - `node --version`; if it changed, record both versions;
    - the one-shot tool's `--inspect` against production, which proves the runner still reaches the
      database;
-   - `dnf updateinfo list --security --sec-severity Critical,Important | wc -l`, expected 0.
+   - `dnf -q updateinfo list --security | grep -cE '(Critical|Important)/Sec\.'`, expected 0.
+
+   The first version of this runbook used `--sec-severity Critical,Important`. On the runner that
+   printed dnf's usage message instead of a list, so its `wc -l` of 16 counted usage lines, not
+   advisories. The corrected command lists all security advisories and counts the Critical and
+   Important ones from the severity column. It has not yet been run on the runner.
 6. Stop the instance and confirm `stopped`. Inspector refreshes the instance's findings the next
    time it scans the running instance. The earlier Inspector SSM plugin run failed with
    `InvalidPlatform`, so record the before/after package versions here as the evidence, not only
@@ -281,6 +286,61 @@ else: no SQL.
 Rollback: Amazon Linux 2023 keeps the previous kernel. If the instance does not come back healthy,
 select the previous kernel with `grubby --set-default` through the serial console, or rebuild the
 runner from the same image.
+
+## Applied (2026-11-02 and 2026-11-03)
+
+Times are UTC. "Claude" means a session using `user/claude-code` on the owner's go phrase for that
+step. "Owner" means the owner in AWS CloudShell. The evidence was read live, read-only, before and
+after each change.
+
+| Item | Who, when | Before | Change | Verified |
+|---|---|---|---|---|
+| 1 | Claude, 11-02 22:31 | `launch-wizard-1` (`vpc-09f2268778966ce97`, created 2026-06-28): inbound 22, 80 and 443 from `0.0.0.0/0`, all outbound. No ENIs, no references from other groups, no launch templates. | `delete-security-group`, request `89d1042a-6679-450a-b4de-1ee3eb8be363` | `InvalidGroup.NotFound` |
+| 2 | Claude, 11-02 22:32 | SSM public sharing `Enable`. The only account-owned document, `SSM-SessionManagerRunShell`, was shared with no one. | `update-service-setting` to `Disable` | `Disable` |
+| 4 | Claude, 11-02 22:32 | Snapshot block public access `unblocked`; no public snapshots | `enable-snapshot-block-public-access --state block-all-sharing` | `block-all-sharing` |
+| 3a | Owner, 11-03 ~00:04 | Bucket BPA: staging frontend all four off; access-logs bucket `BlockPublicPolicy` and `RestrictPublicBuckets` on, ACL settings off. Neither policy public, no AllUsers or AuthenticatedUsers grants. | `put-public-access-block`, all four on, on both buckets | Both all on (read 00:05) |
+| 3b | Owner, 11-03 ~00:04 | Staging bucket website configuration `{"IndexDocument":{"Suffix":"index.html"},"ErrorDocument":{"Key":"index.html"}}`. CloudFront uses the REST endpoint. | `delete-bucket-website` | No website configuration. The staging distribution is `Deployed` on the REST origin, and the owner confirmed staging.checksops.com loads. |
+| 3c | Owner, 11-03 ~00:40 | No account-level BPA | `s3control put-public-access-block`, all four on | All four on (read 00:43). All 11 buckets have bucket BPA fully on. |
+| 5a | Claude, 11-02 22:44 | Staging database groups `sg-0e9332faa87c1d059` (rds-ec2-1) and `sg-0a90b85366facd041` (default) | `modify-db-instance --vpc-security-group-ids sg-0e9332faa87c1d059` | Only rds-ec2-1, `active`. A staging Lambda still reached the database through rds-ec2-1: guarded read-live run 41540079590. |
+| 5b | Claude, 11-02 22:50 | Default group: inbound all from itself, outbound all to `0.0.0.0/0`. No members after 5a. | Both rules revoked | Inbound `[]`, outbound `[]` |
+| 8 | Claude, 11-02 22:50 | Inspector `lambdaCode` `DISABLED`; GuardDuty `EBS_MALWARE_PROTECTION` `DISABLED` | Inspector `enable LAMBDA_CODE`; GuardDuty `update-detector`. In AFSBP 1.0.0, GuardDuty.7 and GuardDuty.11 disabled with the reasons in the table above. | `ENABLED`, `ENABLED`; both controls `DISABLED` (22:52:07) |
+| 7 | Claude through SSM, 11-02 21:00–21:07 | Amazon Linux 2023.12.20260930, kernel `6.18.51-120.163`, node `v18.20.8`, disk 87% used (2.2 GB free). Before-state command `6b02f5fd-b19c-4d40-b3ee-c26b2b11b76b`. | `dnf upgrade --releasever=2023.12.20261102 -y`, command `d71a29b0-2b6d-4d50-9c26-d06784901a99`: 96 packages upgraded, 2 installed (`kernel6.18-6.18.56-125.164`, `libxcrypt-compat`). Then reboot. | Command `1c6c9117-10b5-4d27-829d-7720b1c95207`: kernel `6.18.56-125.164`, Amazon Linux 2023.12.20261102, `needs-restarting` reports no reboot needed, node unchanged at `v18.20.8`, instance role identity correct, TCP to the database on 5432 and to the Secrets Manager endpoint on 443 both reachable, no failed units, SSM agent active. Instance stopped at 21:07:40. |
+
+**Item 7 differences from the plan:**
+- **Release:** the upgrade pinned the release shown by `dnf check-release-update` (2023.12.20261102) instead of `latest`.
+- **Smoke check:** TCP reachability to the database and the Secrets Manager endpoint, not the one-shot's `--inspect`.
+- **Advisory count:** not measured. The severity-filter command was invalid; see the fix in step 2 above.
+- **Old kernel:** `6.18.51` is still installed and can be selected for rollback.
+
+**Item 3:** a first attempt from a Claude session (11-02 22:32) got `403 Forbidden` on
+`PutPublicAccessBlock` and changed nothing. The state was checked unchanged afterwards. The owner
+then ran 3a, 3b and 3c in CloudShell. CloudFront access logs kept arriving after each change: new
+objects at 00:09 and 00:14, and 4 objects in the 20 minutes before 00:43.
+
+**Item 6:** the production change is still to do. It follows its own plan,
+`RDS_PRIVATE_SUBNETS_PLAN_2026_11.md`, which supersedes the "dedicated subnet group" idea above:
+edit the existing groups, with Multi-AZ off and on again for production. Staging was done on
+11-03; see that plan's "Applied" section.
+
+### Security Hub, read-only, 2026-11-03 06:45
+
+| Control | Status |
+|---|---|
+| EC2.19 | PASSED (15 findings resolved) |
+| EC2.13 | PASSED (15) |
+| EC2.18 | PASSED |
+| SSM.7 | PASSED |
+| S3.8 | PASSED (11) |
+| S3.1 | PASSED |
+| EC2.182 | PASSED |
+| EC2.2 | PASSED |
+| Inspector.3 | PASSED |
+| GuardDuty.8 | PASSED |
+| GuardDuty.7, GuardDuty.11 | Controls `DISABLED` with reasons (22:52:07). Each still shows one active `FAILED` finding last updated 11-02 16:16–16:18, from before the disable; Security Hub archives findings of disabled controls. |
+| RDS.46 | `checksops-staging` PASSED. `checksops-production` FAILED, as expected until the production steps run. |
+
+- **Inspector:** 0 active CRITICAL or HIGH findings. Before item 7, the runner had about 80 HIGH package CVEs.
+- **GuardDuty:** one active finding, `Policy:IAMUser/RootCredentialUsage` (LOW): `PutCredentials` through `cloudshell.amazonaws.com`, last at 11-03 02:12:58, from a Comcast address in Naples, FL. It has been recurring since 2026-09-07, with a count of 10,353. That is the owner's root CloudShell use, which the owner confirmed. It stops only when CloudShell is used from a non-root login.
 
 ## Not in this runbook
 

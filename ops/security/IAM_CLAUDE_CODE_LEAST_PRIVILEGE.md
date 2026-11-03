@@ -136,8 +136,16 @@ aws iam get-user-policy --user-name claude-code --policy-name ClaudeCodeOperate 
   --query 'PolicyDocument.Statement[].Sid'
 ```
 
-Afterwards, Claude confirms from a session that listing the production private-files bucket is
-refused, and that the website bucket can still be read.
+Applied by the owner on 2026-11-03: CloudTrail `PutUserPolicy` by root at 02:06:19 UTC. The first
+apply was at 01:14:34–01:14:38 UTC: `AttachUserPolicy` ×2, `PutUserPolicy`, then `DetachUserPolicy` ×2. The policy file the owner applied had the same sha256
+as this repository's file: `9d8d1679b34c530cc9bc4de59abb90be86bdd2303d9cb31449a93782af522e08`. The
+inline policy now lists seven statements. Claude's read-only check afterwards:
+- **Refused (`AccessDenied`):** listing either private-files bucket, and listing the production
+  bucket's object versions.
+- **Still allowed:** reading that bucket's Block Public Access setting, `HeadObject` on the production
+  website's `index.html`, and listing the website and SQL transfer buckets.
+- **Simulation:** `GetObjectAcl`, `GetObjectTagging` and `GetObject` on a private-files object are
+  each an `explicitDeny`.
 
 **Rollback:** re-run `put-user-policy` with the previous version of the file, the one without the
 two `Deny` statements.
