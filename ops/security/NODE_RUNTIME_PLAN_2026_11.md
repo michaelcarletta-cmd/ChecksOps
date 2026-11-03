@@ -78,6 +78,72 @@ Phrase: "start the production SQL runner for the Node upgrade". It covers one ru
 4. Record the result and stop the runner.
 5. **Rollback:** switch the default back to Node 18, which stays installed.
 
+## Step 2 in detail: production origin-verify authorizer (evidence 2026-11-03)
+
+### What is live (read-only)
+
+- **`checksops-production-origin-verify`:** `nodejs20.x`, handler `authorizer.handler`, x86_64, 256 MB,
+  10 s timeout, not in the VPC.
+- **Live code:** CodeSha256 `4ppMwMgI8pN/wCp10aTNEpw7EVLbcSxRks8nVgHrniQ=`, RevisionId
+  `fdbc8b41-0466-44dd-a9e2-68b3efa9c9a3`, last modified 2026-09-09 02:07:14 UTC.
+- **No canary is possible:** the function has no published versions or aliases. API Gateway
+  authorizer `0dwrwx` on API `kiqojucc02` invokes `$LATEST`, so a runtime change applies to the next
+  invocation. The repo's `aws/origin-verify/authorizer-config.json` sets a 0-second result cache, so
+  every production API request runs it. The live API Gateway setting could not be read, because
+  `claude-code` has no `apigateway:GET`.
+- **`ORIGIN_VERIFY_REQUIRE=true`:** a wrong or missing header is denied. If the secret cannot be
+  loaded, the handler fails closed, which would deny every request.
+
+### The live package was tested on Node 22
+
+- **Download:** with a temporary `lambda:GetFunction` grant on this one function, which the owner
+  added and removed in CloudShell on 2026-11-03, the owner copied the live package to
+  `s3://checksops-sql53-transfer-806168576068/review/origin-verify-live.zip` (2,504,685 bytes). Its
+  SHA-256 equals the live CodeSha256.
+- **Contents:** the package holds `authorizer.mjs`, `package.json` and `node_modules`, including
+  `@aws-sdk/client-secrets-manager` 3.1127.0. `authorizer.mjs` is byte-identical to
+  `aws/functions/origin-verify/authorizer.mjs` on main.
+- **The harness:** `origin-verify-node22-harness.mjs` (next to this file) imports the live
+  `authorizer.mjs` from the unpacked package. It points the bundled SDK at a local fake Secrets
+  Manager through `AWS_ENDPOINT_URL_SECRETS_MANAGER`. The fake accepts only a SigV4-signed
+  `GetSecretValue` for `checksops/production/cloudfront-origin-verify`.
+- **What it runs:** five requests with `require` true and five with `require` false (current header,
+  next header, mixed-case header name, wrong header, missing header), the 30-second secret cache, and
+  the fail-closed path when the secrets endpoint returns 500.
+- **Result:** on Node `v20.20.2` and Node `v22.23.4`, all 13 results are identical, and no log line
+  contains a header value. The SDK prints its own warning on Node 20: SDK releases after the first
+  week of January 2027 require Node 22 or later.
+
+### Procedure
+
+Go phrase: **"production authorizer: Node 22"**. The owner runs the change in CloudShell, because no
+guarded workflow covers this function's configuration and Claude cannot change Lambda. Pick a
+low-traffic window. The whole procedure takes about 5 minutes.
+
+1. **P0 (Claude, read-only).** Confirm the function is still `nodejs20.x` with CodeSha256
+   `4ppMwMgI…`, and record the current RevisionId. Read the authorizer's CloudWatch `Errors` and
+   `Throttles` and the production API Lambda's invocations for the previous 30 minutes, as the
+   baseline.
+2. **P1 (owner).** Run the change, then wait for it to finish:
+   ```bash
+   aws lambda update-function-configuration --function-name checksops-production-origin-verify --runtime nodejs22.x --revision-id <RevisionId from P0>
+   ```
+   ```bash
+   aws lambda wait function-updated --function-name checksops-production-origin-verify
+   ```
+3. **P2 (owner).** Check the site.
+   `curl -sS -o /dev/null -w '%{http_code}\n' https://checksops.com/prep/health` must print `200`.
+   Then sign in to checksops.com and open a check.
+4. **P3 (Claude, read-only, for 15 minutes).** The function must show `nodejs22.x`,
+   `LastUpdateStatus: Successful` and an unchanged CodeSha256. The authorizer's `Errors` must stay at
+   0. Its log lines must keep showing `originHeaderValid: true`, which proves the secret still loads.
+   Production API invocations must continue at the baseline rate.
+5. **Rollback (owner).** Run the same command with `--runtime nodejs20.x` and the new RevisionId.
+   Roll back on any `/prep/health` result other than `200`, on authorizer errors, or on a drop in
+   API invocations. It takes effect within seconds.
+
+**Cleanup (owner):** `aws s3 rm s3://checksops-sql53-transfer-806168576068/review/origin-verify-live.zip`.
+
 ## Inventory
 
 Read 2026-11-03 12:17 UTC: `lambda:ListFunctions` and CloudWatch `AWS/Lambda Invocations`, summed over 30 days.
