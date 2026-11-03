@@ -28,6 +28,7 @@ import { evaluateDeployment } from './lib/guard.mjs';
 import { signReceiptWithKms } from './lib/kms-issuer.mjs';
 import { acquireLease } from './lib/lease.mjs';
 import { issueReceiptWithSigner } from './lib/receipt.mjs';
+import { EXECUTOR_RUNTIME } from './sql-executor-ensure.mjs';
 import {
   READ_LIVE_ACTION,
   READ_LIVE_EXPECTED_SENTINEL,
@@ -318,11 +319,16 @@ export async function run(env = process.env, deps = {}) {
     historyOf: deps.historyOf || gitHistory(repoRoot),
   });
   const summary = reconcile.details || {};
+  // The Lambda runtime is configuration, not package content: a live executor can carry
+  // main's package and still run a runtime main has moved off (nodejs20.x -> nodejs22.x).
+  const runtimeCurrent = config.Runtime === EXECUTOR_RUNTIME;
   appendGithubOutput({
     live_code_sha256: config.CodeSha256,
     live_revision_id: config.RevisionId || '',
     live_last_modified: config.LastModified || '',
     executor_current: summary.current === true,
+    live_runtime: config.Runtime || '',
+    runtime_current: runtimeCurrent,
     superseded_members: (summary.superseded || []).join(' '),
     added_members: (summary.added || []).join(' '),
   }, env);
@@ -330,7 +336,7 @@ export async function run(env = process.env, deps = {}) {
     mode,
     migration: migrationKey,
     identity,
-    live_executor: { code_sha256: config.CodeSha256, revision_id: config.RevisionId, last_modified: config.LastModified },
+    live_executor: { code_sha256: config.CodeSha256, revision_id: config.RevisionId, last_modified: config.LastModified, runtime: config.Runtime || null, runtime_current: runtimeCurrent },
     inventory: summary,
   };
   if (!reconcile.ok) throw new GuardError(reconcile.code, reconcile.message, summary);
@@ -338,6 +344,11 @@ export async function run(env = process.env, deps = {}) {
   if (mode === 'inspect') {
     if (env.CHECKSOPS_REQUIRE_EXECUTOR_CURRENT === '1' && summary.current !== true) {
       throw new GuardError(CODES.STALE_PACKAGE, 'live executor does not carry main\'s package', summary);
+    }
+    if (env.CHECKSOPS_REQUIRE_EXECUTOR_CURRENT === '1' && !runtimeCurrent) {
+      throw new GuardError(CODES.STALE_PACKAGE, `live executor runtime is not ${EXECUTOR_RUNTIME}`, {
+        live_runtime: config.Runtime || null, expected_runtime: EXECUTOR_RUNTIME,
+      });
     }
     return { ok: true, ...report, mutation: false };
   }
@@ -352,13 +363,14 @@ export async function run(env = process.env, deps = {}) {
   }
 
   if (mode === 'deploy') {
-    if (summary.current === true) {
-      throw new GuardError(CODES.STALE_PACKAGE, 'live executor already carries main\'s package; nothing to deploy');
+    if (summary.current === true && runtimeCurrent) {
+      throw new GuardError(CODES.STALE_PACKAGE, 'live executor already carries main\'s package and runtime; nothing to deploy');
     }
     const intended = executorEnvironment(aws.getConfig(REHEARSAL_FUNCTION, env));
     const environment = environmentMatches(config.Environment, intended);
     if (!environment.ok) throw new GuardError(environment.code, environment.message, environment.details);
-    return { ok: true, ...report, deploy_allowed: true, mutation: false };
+    const deployReason = summary.current === true ? 'runtime' : 'package';
+    return { ok: true, ...report, deploy_allowed: true, deploy_reason: deployReason, mutation: false };
   }
 
   // apply and read-live

@@ -68,14 +68,14 @@ function liveZip(overrides = {}, drop = []) {
   return writeZipMembers(members);
 }
 
-function fakeAws(zip, { env = LIVE_ENV, reportedSha } = {}) {
+function fakeAws(zip, { env = LIVE_ENV, reportedSha, runtime = 'nodejs22.x' } = {}) {
   const codeSha = lambdaCodeSha256(zip);
   return {
     calls: [],
     getConfig(name) {
       this.calls.push(name);
       if (name === 'checksops-staging-guarded-sql-executor') {
-        return { CodeSha256: codeSha, RevisionId: 'rev-1', LastModified: '2026-10-09T17:47:48.000+0000', Environment: env };
+        return { CodeSha256: codeSha, RevisionId: 'rev-1', LastModified: '2026-10-09T17:47:48.000+0000', Environment: env, Runtime: runtime };
       }
       if (name === 'checksops-staging-rehearsal-oneshot') {
         return { Environment: { Variables: { ...LIVE_ENV.Variables, PROD_ADMIN_SECRET_ARN: 'not-copied' } } };
@@ -224,6 +224,34 @@ test('deploy is allowed only when every live member is equal or superseded by ma
     CHECKSOPS_SQL_EXECUTOR_MODE: 'deploy',
     CHECKSOPS_EXPECTED_EXECUTOR_CODE_SHA256: lambdaCodeSha256(current),
   }, { root, aws: fakeAws(current), historyOf: () => new Set() }), (error) => error.code === CODES.STALE_PACKAGE);
+});
+
+test('a runtime-only change deploys; the post-deploy check requires main\'s runtime', async (t) => {
+  const root = tempRoot(t);
+  const current = liveZip();
+  const deployEnv = {
+    ...BASE_ENV,
+    CHECKSOPS_SQL_EXECUTOR_MODE: 'deploy',
+    CHECKSOPS_EXPECTED_EXECUTOR_CODE_SHA256: lambdaCodeSha256(current),
+  };
+  // main's package is live but on the old runtime: deploy is allowed, for the runtime only
+  const allowed = await run(deployEnv, { root, aws: fakeAws(current, { runtime: 'nodejs20.x' }), historyOf: () => new Set() });
+  assert.equal(allowed.deploy_allowed, true);
+  assert.equal(allowed.deploy_reason, 'runtime');
+  assert.equal(allowed.live_executor.runtime, 'nodejs20.x');
+  assert.equal(allowed.live_executor.runtime_current, false);
+  // package and runtime both current: still nothing to deploy
+  await assert.rejects(run(deployEnv, { root, aws: fakeAws(current), historyOf: () => new Set() }),
+    (error) => error.code === CODES.STALE_PACKAGE);
+  // the workflow's post-deploy inspect fails while the runtime is not main's
+  const verifyEnv = { ...BASE_ENV, CHECKSOPS_SQL_EXECUTOR_MODE: 'inspect', CHECKSOPS_REQUIRE_EXECUTOR_CURRENT: '1' };
+  await assert.rejects(run(verifyEnv, { root, aws: fakeAws(current, { runtime: 'nodejs20.x' }), historyOf: () => new Set() }),
+    (error) => error.code === CODES.STALE_PACKAGE && /runtime/.test(error.message));
+  const verified = await run(verifyEnv, { root, aws: fakeAws(current), historyOf: () => new Set() });
+  assert.equal(verified.live_executor.runtime_current, true);
+  // a plain inspect only reports the runtime
+  const plain = await run({ ...BASE_ENV, CHECKSOPS_SQL_EXECUTOR_MODE: 'inspect' }, { root, aws: fakeAws(current, { runtime: 'nodejs20.x' }), historyOf: () => new Set() });
+  assert.equal(plain.live_executor.runtime, 'nodejs20.x');
 });
 
 test('apply refuses a stale executor and an unpinned live definition', async (t) => {
