@@ -18,6 +18,9 @@ import { repoRootFrom } from './lib/paths.mjs';
 const AWS = process.env.AWS_CLI || process.env.AWS || 'aws';
 const REGION = process.env.AWS_REGION || 'us-east-1';
 const ACCOUNT = '806168576068';
+// Lambda runtime for the executor. nodejs20.x was deprecated on 2026-04-30
+// (ops/security/NODE_RUNTIME_PLAN_2026_11.md); CI already packs and tests on Node 22.
+export const EXECUTOR_RUNTIME = 'nodejs22.x';
 const FORBIDDEN = new Set([
   'checksops-staging-api',
   'checksops-staging-sql44-2d41',
@@ -204,7 +207,7 @@ export function deployExecutor({ functionName, zip, environment, roleArn, vpcCon
     run([
       'lambda', 'create-function',
       '--function-name', functionName,
-      '--runtime', 'nodejs20.x',
+      '--runtime', EXECUTOR_RUNTIME,
       '--role', roleArn,
       '--handler', 'index.handler',
       '--timeout', '120',
@@ -236,6 +239,7 @@ export function deployExecutor({ functionName, zip, environment, roleArn, vpcCon
   run([
     'lambda', 'update-function-configuration',
     '--function-name', functionName,
+    '--runtime', EXECUTOR_RUNTIME,
     '--timeout', '120',
     '--memory-size', '256',
     '--environment', JSON.stringify(environment),

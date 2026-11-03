@@ -540,7 +540,21 @@ test('deployExecutor updates in place pinned to the inspected code and RevisionI
   assert.equal(code[code.indexOf('--revision-id') + 1], 'rev-1');
   const config = seen.find((a) => a[1] === 'update-function-configuration');
   assert.equal(config[config.indexOf('--revision-id') + 1], 'rev-3');
+  assert.equal(config[config.indexOf('--runtime') + 1], 'nodejs22.x');
   assert.equal(lambda.calls.includes('lambda create-function'), false);
+});
+
+test('the executor runtime is nodejs22.x on create and on update (nodejs20.x is deprecated)', async () => {
+  const { deployExecutor, EXECUTOR_RUNTIME } = await import('../../scripts/deployment-guard/sql-executor-ensure.mjs');
+  assert.equal(EXECUTOR_RUNTIME, 'nodejs22.x');
+  const notFound = Object.assign(new Error('x'), { stderr: 'ResourceNotFoundException' });
+  const seen = [];
+  const absent = fakeLambda({ readError: notFound });
+  deployExecutor(deployArgs((args) => { seen.push(args); return absent.run(args); }));
+  const create = seen.find((a) => a[1] === 'create-function');
+  assert.equal(create[create.indexOf('--runtime') + 1], 'nodejs22.x');
+  const src = fs.readFileSync(new URL('../../scripts/deployment-guard/sql-executor-ensure.mjs', import.meta.url), 'utf8');
+  assert.equal(src.includes("'nodejs20.x'"), false);
 });
 
 test('deployExecutor refuses when the live executor is not the inspected code or changes mid-deploy', async () => {
