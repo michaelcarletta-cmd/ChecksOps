@@ -162,5 +162,5 @@ Rollback data for every row, covering the configuration, CodeSha256, role, VPC a
 **Unrelated deploys during the window.** Another workstream deployed through the guarded overlay workflows: `checksops-staging-api` at 15:43:58 UTC (run 41666807323), then `checksops-production-prep-api` at 15:56:36 UTC (run 41668926439). Both carry code `B1v984xd…`. These were not part of this retirement.
 
 **Still open.**
-- **Roles:** `checksops-staging-pr129-sql70-3a4a`, which can read the staging admin secret, and `checksops-staging-mortgage-desk-e2e-harness-role` are now used by no function, and can be removed in a follow-up.
+- **Roles, removed.** On the owner's "delete the two unused roles", the owner deleted both in CloudShell after removing their policies: `checksops-staging-pr129-sql70-3a4a` (CloudTrail `DeleteRole` 16:17:57 UTC), which could read the staging admin secret, and `checksops-staging-mortgage-desk-e2e-harness-role` (16:18:06 UTC). Beforehand, Claude checked read-only that both trusted only `lambda.amazonaws.com`, were last used in September, had no instance profiles and were used by no remaining function. Afterwards IAM returns `NoSuchEntity` for both, and all 6 remaining functions still resolve their roles.
 - **Archive:** the archive prefix stays as the restore source.
