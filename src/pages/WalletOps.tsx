@@ -222,6 +222,22 @@ export default function WalletOps() {
       walletCents: null as number | null,
       bankCents: null as number | null,
     })),
+    ...(transferData?.invoiceActivity ?? []).map((row) => ({
+      key: row.key,
+      at: row.at,
+      title: row.title,
+      subtitle: row.subtitle,
+      detail: null as string | null,
+      route: null as string | null,
+      kind: "invoice" as const,
+      credit: true,
+      amountCents: row.amountCents,
+      balanceCents: null as number | null,
+      status: row.status,
+      issue: null as string | null,
+      walletCents: null as number | null,
+      bankCents: null as number | null,
+    })),
     ...sweepActivity.rows.map((row) => ({
       key: row.key,
       at: row.at,
@@ -558,7 +574,7 @@ export default function WalletOps() {
           >
             {recentActivity.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                No wallet activity yet. Billing, funding, payouts, transfers, and automatic payouts appear here.
+                No wallet activity yet. Billing, funding, invoice payments, payouts, transfers, and automatic payouts appear here.
               </p>
             ) : (
               <div className="max-h-[28rem] overflow-y-auto divide-y rounded-md border">
