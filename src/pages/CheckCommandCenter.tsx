@@ -17,6 +17,7 @@ import { getFunctionErrorMessage } from "@/lib/edgeFunctionError";
 import { FunctionsHttpError, FunctionsRelayError, FunctionsFetchError } from "@supabase/supabase-js";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
+import { isPlatformOwner } from "@/lib/masterMerchant";
 import { useTenantFilter } from "@/hooks/useTenantFilter";
 import { useAwsPollingFallback } from "@/hooks/useAwsPollingFallback";
 import {
@@ -2809,6 +2810,8 @@ function CheckDetailPanel({
   const [showForceMove, setShowForceMove] = useState(false);
   const [detailShareOpen, setDetailShareOpen] = useState(false);
   const { user } = useAuth();
+  // The Audit tab is for management (the platform owner), also when viewing a tenant; tenants do not see it.
+  const showAuditTab = isPlatformOwner(user?.email, user?.id);
   const { toast } = useToast();
   const qc = useQueryClient();
   const { tenantId } = useTenantFilter();
@@ -3882,7 +3885,9 @@ function CheckDetailPanel({
                 <Share2 className="h-3 w-3" /> Partners
                 <MessageSquare className="h-3 w-3 ml-0.5 opacity-70" />
               </TabsTrigger>
-              <TabsTrigger value="audit" className="text-xs whitespace-nowrap px-2 sm:px-3">Audit</TabsTrigger>
+              {showAuditTab && (
+                <TabsTrigger value="audit" className="text-xs whitespace-nowrap px-2 sm:px-3">Audit</TabsTrigger>
+              )}
             </TabsList>
           </div>
 
@@ -4535,27 +4540,29 @@ function CheckDetailPanel({
               </Suspense>
             </TabsContent>
 
-            <TabsContent value="audit" className="p-4 space-y-3 mt-0">
-              <div className="space-y-2">
-              {auditLog.map((entry) => (
-                <div key={entry.id} className="flex gap-3 text-sm">
-                  <div className="w-1 rounded-full bg-primary/30 shrink-0" />
-                  <div>
-                    <p className="font-medium">{entry.event_type.replace(/_/g, " ")}</p>
-                    {entry.event_description && (
-                      <p className="text-muted-foreground text-xs">{entry.event_description}</p>
-                    )}
-                    <p className="text-muted-foreground text-[10px]">
-                      {format(new Date(entry.created_at), "MMM d, yyyy h:mm a")}
-                    </p>
+            {showAuditTab && (
+              <TabsContent value="audit" className="p-4 space-y-3 mt-0">
+                <div className="space-y-2">
+                {auditLog.map((entry) => (
+                  <div key={entry.id} className="flex gap-3 text-sm">
+                    <div className="w-1 rounded-full bg-primary/30 shrink-0" />
+                    <div>
+                      <p className="font-medium">{entry.event_type.replace(/_/g, " ")}</p>
+                      {entry.event_description && (
+                        <p className="text-muted-foreground text-xs">{entry.event_description}</p>
+                      )}
+                      <p className="text-muted-foreground text-[10px]">
+                        {format(new Date(entry.created_at), "MMM d, yyyy h:mm a")}
+                      </p>
+                    </div>
                   </div>
+                ))}
+                {auditLog.length === 0 && (
+                  <p className="text-sm text-muted-foreground text-center py-4">No audit events</p>
+                )}
                 </div>
-              ))}
-              {auditLog.length === 0 && (
-                <p className="text-sm text-muted-foreground text-center py-4">No audit events</p>
-              )}
-              </div>
-            </TabsContent>
+              </TabsContent>
+            )}
 
             <TabsContent value="partners" className="p-4 mt-0 space-y-4">
               <div>
