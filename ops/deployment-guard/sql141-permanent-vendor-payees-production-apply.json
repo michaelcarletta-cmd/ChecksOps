@@ -1,0 +1,67 @@
+{
+  "id": "sql141-permanent-vendor-payees-production-apply",
+  "migration": "sql141",
+  "authorization": "pending",
+  "execute": false,
+  "target_environment": "production",
+  "target_component": "production-sql",
+  "deployment_type": "sql-apply",
+  "filename": "aws/workflows/sql/141_permanent_vendor_payees.sql",
+  "migration_id": "141_permanent_vendor_payees",
+  "staging_pin_commit": "506b72e271622ba12cb56bb17326d8450d90141a",
+  "source_sha256": "547a1ffe3ec4d6ae9aaa00432486791e721c712c07733bd72a7ba9408708fa88",
+  "function_identities": [
+    "public.aws_vendor_payee_add(uuid, text)",
+    "public.aws_vendor_payee_remove(uuid, uuid)",
+    "public.aws_platform_owner_set_tenant_vendor(uuid, boolean)"
+  ],
+  "expected_live_definition_sha256": null,
+  "intended_replacement_sha256": "4d50013eb0b30808a2a13a97b4a1700b33a833a943bbad865627b77aaf836729",
+  "authorization_phrase": "APPLY_PERMANENT_VENDOR_PAYEES",
+  "predecessors": [],
+  "order_note": "No predecessor and no order on this engine. SQL 141 (owner decision 2026-11-03: the platform owner creates permanent vendor organizations; a tenant enters a vendor's Partner Code to add that vendor as a payee, immediately, without the vendor approving; the code never creates a tenant partnership and never shares a check, a claim or any other record) needs public.tenants (id, name, partner_code, subscription_status), public.tenant_users (tenant_id, user_id), public.tenant_partner_code_aliases (tenant_id, code), auth.uid(), public.aws_user_tenant_ids(), public.is_platform_owner() and the roles checksops and authenticated, and an applying login that reads public.tenants and public.tenant_partner_code_aliases without row security (it owns them with no FORCE ROW LEVEL SECURITY, or is a superuser or BYPASSRLS); the file itself raises sql141_prerequisite_missing or sql141_definer_cannot_read (55000) otherwise, before any change. It creates public.vendor_tenants and public.tenant_vendor_payees (both new; RLS on, not forced; one SELECT policy each TO authenticated; every non-owner grant revoked, the default privileges of a new table included, the cause of SQL 117's staging rollback fixed in SQL 118, then SELECT only to checksops and authenticated) and three SECURITY DEFINER functions, aws_vendor_payee_add(uuid, text), aws_vendor_payee_remove(uuid, uuid) and aws_platform_owner_set_tenant_vendor(uuid, boolean), EXECUTE checksops and the owner only. public.tenants (columns, triggers, grants, rows), tenant_partnerships, shared_checks, stakeholder_accounts, external_payment_recipients and every existing policy and function (lookup_tenant_by_partner_code and aws_tenants_member_column_guard included) are not changed. Nothing moves money, creates a Moov account or reads one; the send endpoint accepting a vendor payee link (aws/functions/api/providers/production/moov-send.mjs) is a separate API change, not in this file. If the read-only inspect finds both tables, both policies and the three functions as intended it reports already_applied true and nothing is applied (the pin is then recorded as verified live, not applied). No later migration replaces these objects.",
+  "admin_login": "checksops_admin",
+  "rds_identifier": "checksops-production",
+  "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
+  "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
+  "tooling": {
+    "status": "built",
+    "production_tool": "scripts/deployment-guard/sql141-permanent-vendor-payees-production-apply.mjs",
+    "production_lib": "scripts/deployment-guard/lib/release-sql-production-apply.mjs",
+    "staging_executor_handler": "aws/write-path/guarded-sql-executor/index.mjs handleReleaseSqlMigration",
+    "staging_workflow_choice": "sql141-permanent-vendor-payees",
+    "one_shot_migration": "sql141",
+    "fingerprint_engine": "scripts/deployment-guard/lib/release-sql-state.mjs",
+    "runbook": "ops/production-sql-141-apply.md",
+    "tests": [
+      "aws/tests/release-sql141-executor.test.mjs",
+      "aws/tests/release-sql141-production-apply.test.mjs",
+      "aws/tests/release-sql90-97-executor.test.mjs",
+      "aws/tests/release-sql90-97-production-apply.test.mjs",
+      "aws/tests/sql141-permanent-vendor-payees-pg.test.mjs",
+      "aws/tests/sql141-permanent-vendor-payees-tool-pg.test.mjs"
+    ],
+    "note": "Guarded tooling for SQL 141: sql141-permanent-vendor-payees-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql141-permanent-vendor-payees); production-sql-one-shot.mjs --migration sql141. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): the three functions as the file defines them (plpgsql, VOLATILE, SECURITY DEFINER, result jsonb, search_path public and row_security off, the body hashes, EXECUTE exactly checksops and the owner), the two SELECT policies TO authenticated, and the two new tables (columns, constraints, indexes, RLS on and not forced, the policy and trigger lists, table ACL exactly authenticated SELECT and checksops SELECT besides the owner). The pre-conditions refuse a table, policy or function of the same name in any other shape, a missing prerequisite, and a login that cannot read public.tenants and public.tenant_partner_code_aliases past row security (definer_can_write_relations, the file's own sql141_definer_cannot_read rule); every other object in schema public is in the unrelated-catalog snapshot and must be unchanged. The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
+  },
+  "production_inspect": {
+    "status": "pending",
+    "date": null,
+    "ssm_command_id": null,
+    "source_commit": null,
+    "read_only": true,
+    "connected_as": "checksops_admin",
+    "live_definition_sha256": null,
+    "apply_preconditions_met": null,
+    "precondition_failures": null,
+    "note": "Pending: no read-only production inspect has been run for SQL 141 yet. Expected: public.tenants, public.tenant_users and public.tenant_partner_code_aliases present with the named columns and owned by checksops_admin (no FORCE ROW LEVEL SECURITY), auth.uid(), aws_user_tenant_ids(), is_platform_owner() and the roles checksops and authenticated present; public.vendor_tenants, public.tenant_vendor_payees, their two policies and the three functions absent. Expected release-engine fingerprint of that state under sql141: 16522f0a99f22410a73e4a80e10e48a10a08162171345d72e0f72bc47338982f (every object absent; derived by aws/tests/release-sql141-executor.test.mjs and read back on PostgreSQL 16). Record the one-shot --phase inspect's date, SSM command id, source commit, live_definition_sha256, prerequisites_missing, release_sql_inspect.definer_writes, precondition_failures and apply_preconditions_met here. If already_applied is true, record the inspect as the verified-live evidence and leave execute false; otherwise copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. Also read, from the same inspect, whether the production database's default privileges grant new tables to other roles: the file revokes every non-owner grant on the two new tables either way. If precondition_failures is not [] stop: that needs its own reviewed change."
+  },
+  "intended_post_state": {
+    "fingerprint": "4d50013eb0b30808a2a13a97b4a1700b33a833a943bbad865627b77aaf836729",
+    "note": "public.vendor_tenants (tenant_id uuid PRIMARY KEY REFERENCES public.tenants(id) ON DELETE CASCADE, created_at timestamptz NOT NULL DEFAULT now(), created_by uuid) and public.tenant_vendor_payees (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), tenant_id and vendor_tenant_id uuid NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE, partner_code_used text, added_by uuid, created_at timestamptz NOT NULL DEFAULT now(), removed_at timestamptz, removed_by uuid, CHECK tenant_vendor_payees_not_self, the partial unique index tenant_vendor_payees_live_pair_key (tenant_id, vendor_tenant_id) WHERE removed_at IS NULL and the index tenant_vendor_payees_vendor_idx), both RLS on and not forced, one SELECT policy each TO authenticated (aws_select_vendor_tenants, aws_select_tenant_vendor_payees: tenant_id IN aws_user_tenant_ids() OR is_platform_owner()), table ACL the owner plus SELECT for checksops and authenticated, no trigger; the SECURITY DEFINER functions aws_vendor_payee_add(uuid, text), aws_vendor_payee_remove(uuid, uuid) and aws_platform_owner_set_tenant_vendor(uuid, boolean) (plpgsql, VOLATILE, search_path public, row_security off, returns jsonb), EXECUTE exactly checksops and the owner. No row is written (no organization is a vendor until the platform owner marks one); public.tenants and every other table, function, policy, column and row are unchanged. The fingerprint is releaseIntendedHash('sql141', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): 4d50013eb0b30808a2a13a97b4a1700b33a833a943bbad865627b77aaf836729."
+  },
+  "staging_acceptance": {
+    "ok": false,
+    "reference": null,
+    "basis": "Pending: record the guarded staging SQL executor read-live and the staging apply of SQL 141 (choice sql141-permanent-vendor-payees) here in the reviewed change that sets execute true. The objects are covered on PostgreSQL 16 by aws/tests/sql141-permanent-vendor-payees-pg.test.mjs (the file applied directly) and aws/tests/sql141-permanent-vendor-payees-tool-pg.test.mjs (through this production tool). Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+  }
+}
