@@ -55,3 +55,17 @@ adds the result here. Then the tenant retries the upload (document type **Bank s
 
 **Rollback.** Run the `put-bucket-encryption` line with `before-2026-11-04.json`. That brings back
 the refused uploads.
+
+## Applied 2026-11-04 (record)
+
+- The owner ran the block as `michael-admin` from main `789b75230` and saw "LIVE MATCHES AFTER". An
+  earlier run, from main before this runbook merged, stopped at the first check (the rule files were
+  not there yet) and changed nothing; a read-only check then showed `BucketKeyEnabled` still true.
+- CloudTrail `PutBucketEncryption` on `checksops-production-privatefiles-806168576068` at
+  2026-11-04T15:24:50Z, request id `GEH2VMS6ATPM6BTD`, no error code.
+- Read-only check afterwards (`GetBucketEncryption` as `claude-code`): the live rules equal
+  `ops/production-files-bucket-encryption/after.json`.
+- Tenant test upload (Condition One, three bank statements, 2026-11-04 15:41Z): API Gateway access
+  log shows `moov-document-upload-url` 200 and `moov-document-finalize` 200 for each of the three;
+  CloudTrail shows `GenerateDataKey` and `Decrypt` on the compliance documents key for the API role
+  via S3 with no error; the API logged no document or Moov failure.
