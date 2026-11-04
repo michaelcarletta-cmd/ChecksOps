@@ -10,6 +10,8 @@ const STATUS_STYLE: Record<string, string> = {
   submitted: "bg-blue-500/10 text-blue-600 border-blue-500/20",
   completed: "bg-emerald-500/10 text-emerald-600 border-emerald-500/20",
   failed: "bg-destructive/10 text-destructive border-destructive/20",
+  partial: "bg-amber-500/10 text-amber-600 border-amber-500/20",
+  unknown: "bg-amber-500/10 text-amber-600 border-amber-500/20",
 };
 
 const SPEED_LABEL: Record<string, string> = { next_day: "Next Day", same_day: "Same Day", instant: "Instant" };
@@ -72,7 +74,7 @@ export function PayrollHistoryTable() {
                     <td className="py-2 pr-3">{SPEED_LABEL[r.speed] ?? r.speed}</td>
                     <td className="py-2 pr-3">
                       <Badge variant="outline" className={STATUS_STYLE[r.status] ?? ""}>{r.status}</Badge>
-                      {r.status === "failed" && r.error && (
+                      {["failed", "partial", "unknown"].includes(r.status) && r.error && (
                         <div className="text-xs text-destructive mt-1 max-w-xs truncate" title={r.error}>{r.error}</div>
                       )}
                     </td>
