@@ -11,7 +11,11 @@ import {
   type WalletOpsTransferRow,
 } from "@/lib/payments/walletRelativeTransfers";
 import { invoicesInFlight } from "@/lib/payments/invoicePendingIn";
-import { invoiceWalletActivity, type InvoiceActivitySourceRow } from "@/lib/payments/invoiceWalletActivity";
+import {
+  invoiceWalletActivity,
+  paidInvoiceRevenue,
+  type InvoiceActivitySourceRow,
+} from "@/lib/payments/invoiceWalletActivity";
 import {
   PaymentWalletSelectionError,
   resolveWalletOpsEnvironment,
@@ -162,6 +166,38 @@ export function useWalletOpsTransfers(limit = 25) {
         invoiceActivity,
         tenantWalletPaymentMethodId,
       };
+    },
+  });
+}
+
+/**
+ * Paid invoices for Payments & Financials revenue: money a customer paid into this organization's
+ * wallet through an invoice's hosted payment link (no payment_transfers row exists for it). Only
+ * the live payments environment counts, the same one WalletOps shows; with no payment provider the
+ * list is empty.
+ */
+export function usePaidInvoiceRevenue() {
+  const { tenantId, enabled, tenantMoovEnvironment, environmentReady } = usePaymentProviderEligibility();
+  const hostname = typeof window === "undefined" ? "" : window.location.hostname;
+  const environment = resolveWalletOpsEnvironment({
+    hostname,
+    tenantMoovEnvironment,
+    appUrl: import.meta.env.VITE_APP_URL,
+  });
+
+  return useQuery({
+    queryKey: ["paid-invoice-revenue", tenantId, environment],
+    enabled: !!tenantId && enabled && environmentReady,
+    staleTime: 30_000,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("moov_invoices")
+        .select("id, tenant_id, environment, status, total_amount, paid_amount, invoice_number, customer_name, paid_at, last_synced_at, updated_at, created_at")
+        .eq("tenant_id", tenantId!)
+        .order("created_at", { ascending: false })
+        .limit(1000);
+      if (error) throw error;
+      return paidInvoiceRevenue((data ?? []) as InvoiceActivitySourceRow[], { tenantId: tenantId!, environment });
     },
   });
 }
