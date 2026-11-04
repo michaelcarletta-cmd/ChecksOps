@@ -24,6 +24,13 @@
  *   remaining legs are canceled unsent, so the user sends the rest with a new click.
  * - Nothing is recorded or sent while AWS_MOOV_SEND_POST_ENABLED (or the general
  *   AWS_MOOV_TRANSFER_POST_ENABLED) is off.
+ *
+ * Payroll (purpose 'payroll', owner decision 2026-11-04): the same send, not tied to a check,
+ * to exactly one stakeholder (partners stay check-bound). Same once-per-login step-up,
+ * idempotency, per-organization lock, top-up and legs. The payroll_runs row is written in the
+ * same transaction as the legs (request.financial_execution is set, so SQL 136's money-write
+ * gate admits it) and its status follows the legs: pending until the send finishes, then
+ * submitted, failed, partial or unknown.
  */
 import { createHash } from 'node:crypto';
 import { APP_USER_EMAIL_GUC, APP_USER_ID_GUC } from '../../cognito.mjs';
@@ -88,12 +95,23 @@ export function isTenantAccountFor(account, tenantId) {
     && !metadata.checksops_recipient_id;
 }
 
+export const SEND_PURPOSES = Object.freeze(['send', 'payroll']);
+/** payroll_runs.speed keeps the payroll screen's names: the standard ACH credit is its Next Day. */
+export const PAYROLL_SPEED = Object.freeze({ standard: 'next_day', same_day: 'same_day' });
+
 /** Validated request, or { error }. Recipients keep the order the user gave. */
 export function parseSendRequest(body = {}) {
   const clickKey = String(body.idempotency_key || '').trim().toLowerCase();
   if (!isUuid(clickKey)) return { error: 'idempotency_key is required' };
-  const checkId = String(body.check_id || '').trim();
-  if (!isUuid(checkId)) return { error: 'check_id is required' };
+  const purpose = body.purpose === undefined || body.purpose === null || body.purpose === '' ? 'send' : String(body.purpose);
+  if (!SEND_PURPOSES.includes(purpose)) return { error: "purpose must be 'send' or 'payroll'" };
+  let checkId = null;
+  if (purpose === 'send') {
+    checkId = String(body.check_id || '').trim();
+    if (!isUuid(checkId)) return { error: 'check_id is required' };
+  } else if (body.check_id !== undefined && body.check_id !== null && body.check_id !== '') {
+    return { error: 'A payroll payment is not tied to a check.' };
+  }
   const speed = String(body.speed || 'standard');
   if (!SPEEDS.has(speed)) return { error: "speed must be 'standard' or 'same_day'" };
   const list = Array.isArray(body.recipients) ? body.recipients : [];
@@ -117,7 +135,10 @@ export function parseSendRequest(body = {}) {
     seen.add(unique);
     recipients.push(recipient);
   }
-  return { clickKey, checkId, speed, recipients, description: String(body.description || '').slice(0, 100) };
+  if (purpose === 'payroll' && (recipients.length !== 1 || recipients[0].kind !== 'stakeholder')) {
+    return { error: 'A payroll payment pays exactly one stakeholder.' };
+  }
+  return { clickKey, purpose, checkId, speed, recipients, description: String(body.description || '').slice(0, 100) };
 }
 
 /** Fingerprint of what this click asked for; a reused key must ask for the same thing. */
@@ -126,6 +147,7 @@ export function requestHash(request) {
     check: request.checkId,
     speed: request.speed,
     recipients: request.recipients.map((r) => [r.kind, r.id, r.amount_cents]),
+    ...(request.purpose === 'payroll' ? { purpose: 'payroll' } : {}),
   });
   return createHash('sha256').update(canonical).digest('hex');
 }
@@ -580,6 +602,36 @@ async function runLegs({ client, mapping, claims, tenantId, environment, prefix,
 export const MOOV_READ_TIMEOUT_MS = 8_000;
 const withReadTimeout = (fetchImpl) => (url, init = {}) => fetchImpl(url, { ...init, signal: init.signal || AbortSignal.timeout(MOOV_READ_TIMEOUT_MS) });
 
+/** The payroll_runs status for a payroll's legs, or null while the send is still going. */
+export function payrollOutcome(legs, { incomplete = false } = {}) {
+  if (incomplete || !legs.length || legs.some((leg) => String(leg.status) === 'ready')) return null;
+  const summary = summarizeSend(legs);
+  if (summary.unknown_cents > 0) {
+    return { status: 'unknown', error: 'Moov did not confirm the result; check the payment history before paying again.' };
+  }
+  if (summary.sent_cents === 0) {
+    const reason = legs.map((leg) => leg.failure_reason).find(Boolean);
+    return { status: 'failed', error: String(reason || 'The payment did not go through. Nothing was sent.').slice(0, 500) };
+  }
+  if (summary.unsent_cents > 0) {
+    return { status: 'partial', error: `Partially sent. $${(summary.unsent_cents / 100).toFixed(2)} was not sent.` };
+  }
+  return { status: 'submitted', error: null };
+}
+
+/** Record a payroll's outcome on its payroll_runs row and commit it (the reply may be a 409). */
+async function recordPayrollOutcome(client, mapping, claims, tenantId, legs, opts) {
+  const runId = legs.map((leg) => leg.provider_metadata?.payroll_run_id).find(Boolean);
+  const outcome = payrollOutcome(legs, opts);
+  if (!runId || !outcome) return;
+  await client.query(
+    `UPDATE public.payroll_runs SET status = $3, error = $4
+     WHERE id = $1::uuid AND tenant_id = $2::uuid AND status IS DISTINCT FROM $3`,
+    [runId, tenantId, outcome.status, outcome.error],
+  );
+  await commitAndContinue(client, mapping, claims);
+}
+
 async function runSend({ client, mapping, claims, ctx, body, fetchImpl: postFetch, clock }) {
   const fetchImpl = withReadTimeout(postFetch);
   const tenantId = ctx.tenantId;
@@ -597,12 +649,15 @@ async function runSend({ client, mapping, claims, ctx, body, fetchImpl: postFetc
   }
 
   await bindRequestGucs(client, mapping, claims);
+  const payroll = request.purpose === 'payroll';
 
-  const check = (await client.query(
-    'SELECT id, tenant_id FROM public.check_intake_items WHERE id = $1::uuid',
-    [request.checkId],
-  )).rows[0];
-  if (!check || String(check.tenant_id) !== String(tenantId)) return fail('check_not_found', 404, { message: 'Check not found for this organization.' });
+  if (!payroll) {
+    const check = (await client.query(
+      'SELECT id, tenant_id FROM public.check_intake_items WHERE id = $1::uuid',
+      [request.checkId],
+    )).rows[0];
+    if (!check || String(check.tenant_id) !== String(tenantId)) return fail('check_not_found', 404, { message: 'Check not found for this organization.' });
+  }
 
   const existing = await legsByPrefix(client, tenantId, prefix);
   if (existing.length && existing.some((leg) => leg.provider_metadata?.request_hash !== hash)) {
@@ -612,6 +667,7 @@ async function runSend({ client, mapping, claims, ctx, body, fetchImpl: postFetc
     return fail('send_post_held', 403, { message: 'Sending payments is switched off. Nothing was recorded or sent.' });
   }
   if (existing.length && !existing.some((leg) => String(leg.status) === 'ready')) {
+    if (payroll) await recordPayrollOutcome(client, mapping, claims, tenantId, existing, {});
     return sendResult(existing, { duplicate: true });
   }
 
@@ -687,6 +743,22 @@ async function runSend({ client, mapping, claims, ctx, body, fetchImpl: postFetc
       };
     }
 
+    let payrollRunId = null;
+    if (payroll) {
+      const [only] = plan;
+      payrollRunId = (await client.query(
+        `INSERT INTO public.payroll_runs
+          (tenant_id, stakeholder_account_id, disbursement_batch_id, amount, speed, memo, initiated_by, status)
+         VALUES ($1::uuid, $2::uuid, NULL, $3::numeric, $4, $5, $6::uuid, 'pending')
+         RETURNING id`,
+        [
+          tenantId, only.id, (Number(only.amount_cents) / 100).toFixed(2), PAYROLL_SPEED[request.speed],
+          request.description || null, mapping.application_user_id,
+        ],
+      )).rows[0]?.id ?? null;
+      if (!payrollRunId) return fail('payroll_not_recorded', 500, { message: 'The payroll could not be recorded. Nothing was sent.' });
+    }
+
     let legIndex = 0;
     for (const [recipientIndex, p] of plan.entries()) {
       const parts = [['wallet', p.wallet_cents], ['bank', p.bank_cents]].filter(([, cents]) => cents > 0);
@@ -702,12 +774,13 @@ async function runSend({ client, mapping, claims, ctx, body, fetchImpl: postFetc
                    $7, $8::uuid, $9::uuid, $10::uuid, $11, $12::uuid, $13::uuid, $14::jsonb, $15::uuid)`,
           [
             tenantId, environment, `${prefix}${legIndex}:${source}`, cents, request.speed,
-            String(request.description || `ChecksOps payment to ${p.name}`).slice(0, 128),
+            String(request.description || (payroll ? `Payroll to ${p.name}` : `ChecksOps payment to ${p.name}`)).slice(0, 128),
             account.provider_account_id, source === 'bank' ? bank.localId : null,
             p.kind === 'partner' ? p.id : null,
             source === 'wallet' ? wallet.id : null, role, request.checkId, null,
             JSON.stringify({
               checksops_kind: 'send',
+              ...(payroll ? { purpose: 'payroll', payroll_run_id: payrollRunId } : {}),
               request_hash: hash,
               leg_index: legIndex,
               recipient_index: recipientIndex,
@@ -745,6 +818,7 @@ async function runSend({ client, mapping, claims, ctx, body, fetchImpl: postFetc
   }
   try {
     const run = await runLegs({ client, mapping, claims, tenantId, environment, prefix, facilitatorId, fetchImpl: postFetch, clock });
+    if (payroll) await recordPayrollOutcome(client, mapping, claims, tenantId, run.legs, { incomplete: run.incomplete });
     return sendResult(run.legs, { duplicate: false, incomplete: run.incomplete });
   } finally {
     await client.query('SELECT pg_advisory_unlock(hashtext($1))', [lockKey]).catch(() => {});

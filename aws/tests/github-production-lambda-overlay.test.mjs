@@ -40,6 +40,11 @@ const MORTGAGE_EDITOR_REL = 'aws/tests/fixtures/production-mortgage-company-edit
 const MORTGAGE_EDITOR = JSON.parse(fs.readFileSync(path.join(ROOT, MORTGAGE_EDITOR_REL), 'utf8'));
 const appliedBytes = (member) => MORTGAGE_EDITOR.members[member]?.live_sha256 ?? sha(`aws/functions/api/${member}`);
 const MORTGAGE_EDITOR_APPLIED_REL = 'aws/tests/fixtures/production-mortgage-company-editor-applied-manifest-2026-11-04.json';
+// Payroll send (2026-11-04): moov-send.mjs REPLACEs the 2026-10-26 payee sends applied bytes, planning only
+// (its own test). Those applied bytes are the planned manifest's live_sha256, no longer main's.
+const PAYROLL_SEND_REL = 'aws/tests/fixtures/production-payroll-send-manifest-2026-11-04.json';
+const PAYROLL_SEND = JSON.parse(fs.readFileSync(path.join(ROOT, PAYROLL_SEND_REL), 'utf8'));
+const PAYROLL_SEND_MEMBER = 'providers/production/moov-send.mjs';
 // Security audit finding 3 (2026-10-29): planned REPLACE of storage-write-auth.mjs, then storage-write.mjs.
 const PARTNER_STORAGE_WRITES_REL = 'aws/tests/fixtures/production-partner-storage-writes-manifest-2026-10-29.json';
 // Security audit findings 2-4, applied in production 2026-10-29 (one run per member, in plan order).
@@ -2862,9 +2867,13 @@ test('Staging sends: moov-send.mjs and providers.mjs record the bytes production
     assert.deepEqual(applied.members[name], { live_sha256: LIVE, accepted_sha256: LIVE, operation: 'replace', previous_manifest: MANIFEST_REL }, name);
     // The plan row expects the applied bytes and names the applied manifest (or the one it moved on to).
     const row = PLAN.members[name];
+    // moov-send.mjs moved on again: the payroll send plan (2026-11-04) REPLACEs the payee sends applied
+    // bytes, planning only, expecting them live.
+    const payroll = name === PAYROLL_SEND_MEMBER ? PAYROLL_SEND.members[name] : null;
     assert.equal(row.operation, 'replace', name);
-    assert.equal(row.manifest, MOVED_ON[name] || APPLIED_REL, name);
-    assert.equal(row.expected_live_sha256, MOVED_ON[name] ? row.accepted_sha256 : LIVE, name);
+    assert.equal(row.manifest, payroll ? PAYROLL_SEND_REL : MOVED_ON[name] || APPLIED_REL, name);
+    if (payroll) assert.equal(payroll.previous_manifest, MOVED_ON[name], name);
+    assert.equal(row.expected_live_sha256, payroll ? payroll.live_sha256 : MOVED_ON[name] ? row.accepted_sha256 : LIVE, name);
     assert.equal(row.accepted_sha256, sha(`aws/functions/api/${name}`), name);
     assert.equal(resolvePlannedMember(name, { root: ROOT, plan: PLAN }).ok, true, name);
     for (const runId of RUNS[name]) {
@@ -2894,7 +2903,8 @@ test('Payee sends: moov-send.mjs replaced the bytes production run 40222560555 a
   const SEND = 'providers/production/moov-send.mjs';
   // The live bytes, from their recorded evidence: the staging sends applied manifest.
   const LIVE = readJson('aws/tests/fixtures/production-sandbox-send-applied-manifest-2026-10-25.json').members[SEND].accepted_sha256;
-  const onMain = sha(`aws/functions/api/${SEND}`);
+  // The bytes this change applied: main's until the payroll send plan (2026-11-04) moved the row on.
+  const onMain = PAYROLL_SEND.members[SEND].live_sha256;
   assert.equal(manifest.workstream_id, 'production-payee-send');
   assert.equal(manifest.deploy_authorized, false);
   assert.match(manifest.authorization, /^Pending owner review \(2026-10-26\)/);
@@ -2908,13 +2918,15 @@ test('Payee sends: moov-send.mjs replaced the bytes production run 40222560555 a
   assert.match(applied.notes, /production apply run 40391523374/);
   assert.match(applied.notes, /staging apply run 40381567460/);
   const row = PLAN.members[SEND];
-  assert.deepEqual(row, { operation: 'replace', accepted_sha256: onMain, expected_live_sha256: onMain, sql_before: null, manifest: APPLIED_REL });
+  // The row has moved on to the payroll send plan, which expects these applied bytes live.
+  assert.equal(PAYROLL_SEND.members[SEND].previous_manifest, APPLIED_REL);
+  assert.deepEqual(row, { operation: 'replace', accepted_sha256: sha(`aws/functions/api/${SEND}`), expected_live_sha256: onMain, sql_before: null, manifest: PAYROLL_SEND_REL });
   assert.equal(resolvePlannedMember(SEND, { root: ROOT, plan: PLAN }).ok, true);
   const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: SEND };
   // The pre-apply bytes are no longer an accepted live state.
   await assert.rejects(run(inspect, { root: ROOT, inspectLive: liveFor(SEND, { sha256: LIVE }) }), (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED);
-  const done = await run(inspect, { root: ROOT, inspectLive: liveFor(SEND, { sha256: onMain }) });
-  assert.equal(done.state, 'ALREADY_ACCEPTED');
+  const ready = await run(inspect, { root: ROOT, inspectLive: liveFor(SEND, { sha256: onMain }) });
+  assert.equal(ready.state, 'READY');
   assert.deepEqual(PLAN.order.slice(-2), [SEND, 'providers.mjs']);
 });
 
@@ -5676,4 +5688,37 @@ test('Mortgage company editor (owner report 2026-11-04): write-allowlist.mjs, th
   }
   assert.ok(PLAN.notes.includes('Mortgage company editor (2026-11-04, owner report "Failed to update company"): REPLACE write-app-metadata.mjs'));
   assert.ok(PLAN.notes.includes('Mortgage company editor applied (2026-11-04)'));
+});
+
+test('Payroll send (owner report 2026-11-04): moov-send.mjs REPLACE from the 2026-10-26 applied bytes, no SQL, planning only', async () => {
+  const MEMBER = PAYROLL_SEND_MEMBER;
+  const PREVIOUS = 'aws/tests/fixtures/production-onboarding-payee-send-applied-manifest-2026-10-26.json';
+  const previous = JSON.parse(fs.readFileSync(path.join(ROOT, PREVIOUS), 'utf8')).members[MEMBER];
+  const LIVE = previous.accepted_sha256;
+  assert.equal(previous.live_sha256, LIVE, 'the previous manifest is its applied record');
+  const accepted = sha(`aws/functions/api/${MEMBER}`);
+  assert.notEqual(accepted, LIVE);
+  const manifest = PAYROLL_SEND;
+  assert.equal(manifest.workstream_id, 'payroll-send');
+  assert.equal(manifest.deploy_authorized, false);
+  assert.match(manifest.authorization, /^Pending owner review \(2026-11-04\)/);
+  assert.match(manifest.notes, /action_mismatch/);
+  assert.match(manifest.notes, /9a8a8e10-a970-45da-8681-72298c5f5adf/);
+  assert.deepEqual(manifest.members, { [MEMBER]: { live_sha256: LIVE, accepted_sha256: accepted, operation: 'replace', previous_manifest: PREVIOUS } });
+  assert.deepEqual(PLAN.members[MEMBER], {
+    operation: 'replace', accepted_sha256: accepted, expected_live_sha256: LIVE, sql_before: null, manifest: PAYROLL_SEND_REL,
+  });
+  assert.ok(manifest.notes.includes(`${MEMBER} ${LIVE.slice(0, 8)} -> ${accepted.slice(0, 8)}`));
+  assert.ok(PLAN.notes.includes(`Payroll send (2026-11-04, owner report \"authenticator not accepting the code\"): REPLACE ${MEMBER} ${LIVE.slice(0, 8)} -> ${accepted.slice(0, 8)}`));
+  assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
+  assert.equal(approvalPhrase(MEMBER), `DEPLOY ${MEMBER} TO PRODUCTION`);
+  // The route is unchanged (providers.mjs moov-disburse), so moov-send.mjs is the only member.
+  assert.deepEqual(PLAN.order.slice(-2), [MEMBER, 'providers.mjs']);
+  const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
+  assert.equal((await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: LIVE }) })).state, 'READY');
+  assert.equal((await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: accepted }) })).state, 'ALREADY_ACCEPTED');
+  await assert.rejects(
+    run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: 'c'.repeat(64) }) }),
+    (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+  );
 });
