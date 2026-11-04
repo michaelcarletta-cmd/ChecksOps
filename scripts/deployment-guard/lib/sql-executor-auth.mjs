@@ -3194,6 +3194,31 @@ export const AUTHORIZED_SQL140_WALLET_FUNDING_SETTINGS_WRITE_GRANTS = Object.fre
   function_identities: Object.freeze([]),
 });
 
+// Permanent vendor payees staging pin: SQL 141 (owner decision 2026-11-03: the platform owner marks permanent
+// vendor organizations; a tenant adds a vendor as a payee by its Partner Code, with no partnership and no shared
+// record; nothing moves money). Two new tables (vendor_tenants, tenant_vendor_payees; RLS on, one SELECT policy
+// each, SELECT for checksops and authenticated) and three SECURITY DEFINER functions (EXECUTE checksops and the
+// owner). No predecessor. Pending until a reviewed pin change records a staging read-live
+// (ops/production-sql-141-apply.md).
+export const AUTHORIZED_SQL141_PERMANENT_VENDOR_PAYEES = Object.freeze({
+  key: 'sql141',
+  filename: 'aws/workflows/sql/141_permanent_vendor_payees.sql',
+  migration_id: '141_permanent_vendor_payees',
+  // The commit that last authored the file bytes.
+  commit: '506b72e271622ba12cb56bb17326d8450d90141a',
+  source_sha256: '547a1ffe3ec4d6ae9aaa00432486791e721c712c07733bd72a7ba9408708fa88',
+  authorization: 'pending',
+  execute: false,
+  expected_live_definition_sha256: null,
+  // Code-derived: releaseIntendedHash('sql141', file bytes) (release-sql-state.mjs); re-derived by the tests.
+  intended_replacement_sha256: '4d50013eb0b30808a2a13a97b4a1700b33a833a943bbad865627b77aaf836729',
+  function_identities: Object.freeze([
+    'public.aws_vendor_payee_add(uuid, text)',
+    'public.aws_vendor_payee_remove(uuid, uuid)',
+    'public.aws_platform_owner_set_tenant_vendor(uuid, boolean)',
+  ]),
+});
+
 export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql90: AUTHORIZED_SQL90_USERS_ONLY_TENANT_ROLES,
   sql91: AUTHORIZED_SQL91_MOOV_ONBOARDING,
@@ -3245,6 +3270,7 @@ export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql138: AUTHORIZED_SQL138_PAYEE_SETUP_LINK_CLOSED_AFTER_VERIFICATION,
   sql139: AUTHORIZED_SQL139_TENANT_BILLING_ACCOUNTS_WRITE_POLICY_RECONCILE,
   sql140: AUTHORIZED_SQL140_WALLET_FUNDING_SETTINGS_WRITE_GRANTS,
+  sql141: AUTHORIZED_SQL141_PERMANENT_VENDOR_PAYEES,
 });
 
 // The fee collection pin under its earlier map name (the same object as the release map's sql98).
@@ -3260,7 +3286,7 @@ export function isSql30TenantDocumentsDocType(input = {}) {
   return pinIdentifiersMatch(input, AUTHORIZED_SQL30_TENANT_DOCUMENTS_DOC_TYPE);
 }
 
-/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql140) an input names, or null. */
+/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql141) an input names, or null. */
 export function releaseSqlMigrationKey(input = {}) {
   return Object.keys(RELEASE_2026_10_17_PENDING_SQL_PINS)
     .find((key) => pinIdentifiersMatch(input, RELEASE_2026_10_17_PENDING_SQL_PINS[key])) || null;

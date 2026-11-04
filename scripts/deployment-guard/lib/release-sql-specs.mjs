@@ -7721,4 +7721,129 @@ export const RELEASE_SQL_SPECS = deepFreeze({
     ]
   },
 
+  // SQL 141 (owner decision 2026-11-03: permanent vendors; a tenant adds a vendor as a payee by its Partner Code,
+  // with no partnership and nothing shared): two new tables and three SECURITY DEFINER functions. Creates
+  // public.vendor_tenants (one row per vendor organization) and public.tenant_vendor_payees (one row per tenant ->
+  // vendor payee link; one live link per pair, partial unique index), each RLS on, not forced, one SELECT policy TO
+  // authenticated (the organization's members via aws_user_tenant_ids() or the platform owner), and table ACL
+  // exactly SELECT for checksops and authenticated (every other non-owner grant revoked, the default privileges of
+  // a new table included: the cause of SQL 117's staging rollback). The functions aws_vendor_payee_add(uuid, text),
+  // aws_vendor_payee_remove(uuid, uuid) and aws_platform_owner_set_tenant_vendor(uuid, boolean) (VOLATILE,
+  // search_path public, row_security off; EXECUTE checksops and the owner) write only the two tables the file
+  // creates, which the login owns. definer_writes lists the two existing relations the file's own
+  // sql141_definer_cannot_read check names (the add function reads tenants and tenant_partner_code_aliases past
+  // RLS), as SQL 133 lists the relations its DEFINER gate reads; the new tables cannot be listed (absent in the
+  // pre-state). public.tenants and every existing object are unchanged (no altered_relations). No predecessor.
+  sql141: {
+    "key": "sql141",
+    "label": "SQL 141",
+    "choice": "sql141-permanent-vendor-payees",
+    "production_pin_rel": "ops/deployment-guard/sql141-permanent-vendor-payees-production-apply.json",
+    "script": "sql141-permanent-vendor-payees-production-apply",
+    "prerequisites": [
+      "public.tenants",
+      "public.tenant_users",
+      "public.tenant_partner_code_aliases",
+      "auth.uid()",
+      "public.aws_user_tenant_ids()",
+      "public.is_platform_owner()",
+      "role checksops",
+      "role authenticated",
+      "column public.tenants.id",
+      "column public.tenants.name",
+      "column public.tenants.partner_code",
+      "column public.tenants.subscription_status",
+      "column public.tenant_users.tenant_id",
+      "column public.tenant_users.user_id",
+      "column public.tenant_partner_code_aliases.tenant_id",
+      "column public.tenant_partner_code_aliases.code"
+    ],
+    "predecessors": [],
+    "functions": [
+      {
+        "identity": "public.aws_vendor_payee_add(uuid, text)",
+        "acl": ["checksops EXECUTE", "owner EXECUTE"]
+      },
+      {
+        "identity": "public.aws_vendor_payee_remove(uuid, uuid)",
+        "acl": ["checksops EXECUTE", "owner EXECUTE"]
+      },
+      {
+        "identity": "public.aws_platform_owner_set_tenant_vendor(uuid, boolean)",
+        "acl": ["checksops EXECUTE", "owner EXECUTE"]
+      }
+    ],
+    "policies": [
+      {
+        "table": "public.vendor_tenants",
+        "name": "aws_select_vendor_tenants",
+        "cmd": "SELECT",
+        "roles": ["authenticated"],
+        "permissive": true,
+        "qual": "((tenant_id IN ( SELECT public.aws_user_tenant_ids() AS aws_user_tenant_ids)) OR public.is_platform_owner())",
+        "with_check": null
+      },
+      {
+        "table": "public.tenant_vendor_payees",
+        "name": "aws_select_tenant_vendor_payees",
+        "cmd": "SELECT",
+        "roles": ["authenticated"],
+        "permissive": true,
+        "qual": "((tenant_id IN ( SELECT public.aws_user_tenant_ids() AS aws_user_tenant_ids)) OR public.is_platform_owner())",
+        "with_check": null
+      }
+    ],
+    "tables": [
+      {
+        "name": "public.vendor_tenants",
+        "rls": true,
+        "forced": false,
+        "columns": [
+          ["tenant_id", "uuid", true, null],
+          ["created_at", "timestamp with time zone", true, "now()"],
+          ["created_by", "uuid", false, null]
+        ],
+        "constraints": [
+          ["vendor_tenants_pkey", "PRIMARY KEY (tenant_id)"],
+          ["vendor_tenants_tenant_id_fkey", "FOREIGN KEY (tenant_id) REFERENCES public.tenants(id) ON DELETE CASCADE"]
+        ],
+        "indexes": [
+          ["vendor_tenants_pkey", "CREATE UNIQUE INDEX vendor_tenants_pkey ON public.vendor_tenants USING btree (tenant_id)"]
+        ],
+        "acl": ["authenticated SELECT", "checksops SELECT"]
+      },
+      {
+        "name": "public.tenant_vendor_payees",
+        "rls": true,
+        "forced": false,
+        "columns": [
+          ["id", "uuid", true, "gen_random_uuid()"],
+          ["tenant_id", "uuid", true, null],
+          ["vendor_tenant_id", "uuid", true, null],
+          ["partner_code_used", "text", false, null],
+          ["added_by", "uuid", false, null],
+          ["created_at", "timestamp with time zone", true, "now()"],
+          ["removed_at", "timestamp with time zone", false, null],
+          ["removed_by", "uuid", false, null]
+        ],
+        "constraints": [
+          ["tenant_vendor_payees_not_self", "CHECK ((tenant_id <> vendor_tenant_id))"],
+          ["tenant_vendor_payees_pkey", "PRIMARY KEY (id)"],
+          ["tenant_vendor_payees_tenant_id_fkey", "FOREIGN KEY (tenant_id) REFERENCES public.tenants(id) ON DELETE CASCADE"],
+          ["tenant_vendor_payees_vendor_tenant_id_fkey", "FOREIGN KEY (vendor_tenant_id) REFERENCES public.tenants(id) ON DELETE CASCADE"]
+        ],
+        "indexes": [
+          ["tenant_vendor_payees_live_pair_key", "CREATE UNIQUE INDEX tenant_vendor_payees_live_pair_key ON public.tenant_vendor_payees USING btree (tenant_id, vendor_tenant_id) WHERE (removed_at IS NULL)"],
+          ["tenant_vendor_payees_pkey", "CREATE UNIQUE INDEX tenant_vendor_payees_pkey ON public.tenant_vendor_payees USING btree (id)"],
+          ["tenant_vendor_payees_vendor_idx", "CREATE INDEX tenant_vendor_payees_vendor_idx ON public.tenant_vendor_payees USING btree (vendor_tenant_id)"]
+        ],
+        "acl": ["authenticated SELECT", "checksops SELECT"]
+      }
+    ],
+    "definer_writes": [
+      "public.tenants",
+      "public.tenant_partner_code_aliases"
+    ]
+  },
+
 });
