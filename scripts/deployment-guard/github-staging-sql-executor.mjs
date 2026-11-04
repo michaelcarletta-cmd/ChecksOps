@@ -148,6 +148,7 @@ export const MIGRATIONS = Object.freeze({
   'sql139-tenant-billing-accounts-write-policy-reconcile': RELEASE_2026_10_17_PENDING_SQL_PINS.sql139,
   'sql140-wallet-funding-settings-write-grants': RELEASE_2026_10_17_PENDING_SQL_PINS.sql140,
   'sql141-permanent-vendor-payees': RELEASE_2026_10_17_PENDING_SQL_PINS.sql141,
+  'sql142-mortgage-companies-tenant-admin-write': RELEASE_2026_10_17_PENDING_SQL_PINS.sql142,
 });
 
 const LAMBDA_CODE_SHA_RE = /^[A-Za-z0-9+/]{43}=$/;

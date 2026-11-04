@@ -3219,6 +3219,27 @@ export const AUTHORIZED_SQL141_PERMANENT_VENDOR_PAYEES = Object.freeze({
   ]),
 });
 
+// Mortgage company tenant-admin write staging pin: SQL 142 (owner decision 2026-11-04, "Option 2": tenant admins
+// may add and edit the shared mortgage company directory; deactivating, reactivating and deleting stay
+// platform-owner only). Two PERMISSIVE policies TO authenticated on public.mortgage_companies
+// (aws_insert_mortgage_companies_tenant_admin FOR INSERT, aws_update_mortgage_companies_tenant_admin FOR UPDATE),
+// on public.aws_is_tenant_manager_admin() AND is_active; the platform-owner policy unchanged. No predecessor.
+// Pending until a reviewed pin change records a staging read-live (ops/production-sql-142-apply.md).
+export const AUTHORIZED_SQL142_MORTGAGE_COMPANIES_TENANT_ADMIN_WRITE = Object.freeze({
+  key: 'sql142',
+  filename: 'aws/workflows/sql/142_mortgage_companies_tenant_admin_write.sql',
+  migration_id: '142_mortgage_companies_tenant_admin_write',
+  // The commit that last authored the file bytes.
+  commit: '10ef4ea130bf4f601132f61f1a00cfa1f08721f2',
+  source_sha256: 'f140e75d67cdb67efa4c4ab21aa5d6bb04fb924a0b010c4496b48ab9fc4b156b',
+  authorization: 'pending',
+  execute: false,
+  expected_live_definition_sha256: null,
+  // Code-derived: releaseIntendedHash('sql142', file bytes) (release-sql-state.mjs); re-derived by the tests.
+  intended_replacement_sha256: '2cff3727e102a6dd7ed116b9ae6348a3725362b573c62fcc5050acec0bf10a69',
+  function_identities: Object.freeze([]),
+});
+
 export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql90: AUTHORIZED_SQL90_USERS_ONLY_TENANT_ROLES,
   sql91: AUTHORIZED_SQL91_MOOV_ONBOARDING,
@@ -3271,6 +3292,7 @@ export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql139: AUTHORIZED_SQL139_TENANT_BILLING_ACCOUNTS_WRITE_POLICY_RECONCILE,
   sql140: AUTHORIZED_SQL140_WALLET_FUNDING_SETTINGS_WRITE_GRANTS,
   sql141: AUTHORIZED_SQL141_PERMANENT_VENDOR_PAYEES,
+  sql142: AUTHORIZED_SQL142_MORTGAGE_COMPANIES_TENANT_ADMIN_WRITE,
 });
 
 // The fee collection pin under its earlier map name (the same object as the release map's sql98).
@@ -3286,7 +3308,7 @@ export function isSql30TenantDocumentsDocType(input = {}) {
   return pinIdentifiersMatch(input, AUTHORIZED_SQL30_TENANT_DOCUMENTS_DOC_TYPE);
 }
 
-/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql141) an input names, or null. */
+/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql142) an input names, or null. */
 export function releaseSqlMigrationKey(input = {}) {
   return Object.keys(RELEASE_2026_10_17_PENDING_SQL_PINS)
     .find((key) => pinIdentifiersMatch(input, RELEASE_2026_10_17_PENDING_SQL_PINS[key])) || null;
