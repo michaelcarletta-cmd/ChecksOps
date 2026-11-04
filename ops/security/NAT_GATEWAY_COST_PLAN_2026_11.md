@@ -17,12 +17,12 @@ two of them carry traffic, and nothing that routes through it runs in the other 
 | | today (4 AZs) | proposed (2 AZs) |
 |---|---|---|
 | NAT hours, 730 h × $0.045 per AZ-hour | $131.40 | $65.70 |
-| Public IPv4, $0.005/h per address | $14.60 (4) | $7.30 (2), after step 2 releases the other two |
+| Public IPv4, $0.005/h per address | $14.60 (4) | $7.30 (2) |
 | Data processing, ~5.5 GB / 30 days × $0.045 | ~$0.25 | ~$0.25 |
-| **Estimated monthly** | **~$146** | **~$80 after step 1, ~$73 after step 2** |
+| **Estimated monthly** | **~$146** | **~$73** (after step 4 below) |
 
-An Elastic IP is billed whether or not it is attached, so the 1b and 1c addresses keep costing
-$3.65/month each from step 1 until step 2 releases them.
+An Elastic IP is billed whether or not it is attached, so the old addresses keep costing
+$3.65/month each until step 4 releases them.
 
 These are list-price estimates (us-east-1). They are not from the bill: the `claude-code` IAM user
 has no `ce:GetCostAndUsage` or `pricing:GetProducts`. The owner can confirm the per-AZ charge in
@@ -64,73 +64,117 @@ the production API. Any change to it is a production change.
 **Also seen:** Elastic IP `100.50.171.44` (`eipalloc-01f1f9b72ac281ce9`, no tags) is attached to
 nothing (~$3.65/month). Out of scope here; its own go phrase if wanted.
 
-## Proposal
+## Answers to the open questions (2026-11-04)
 
-**Switch the NAT to manual AZ mode, keeping 1a and 1f with their current addresses, and drop 1b
-and 1c.**
+1. **Partner IP allowlists: none.** Owner, 2026-11-04: "no partner allowlists our IPs". The
+   egress addresses may change.
+2. **The existing NAT cannot be switched to manual mode.** The EC2 API (botocore 1.43.123 service
+   model) has no `ModifyNatGateway`. The NAT operations are `CreateNatGateway`,
+   `DeleteNatGateway`, `DescribeNatGateways`, `AssociateNatGatewayAddress`,
+   `DisassociateNatGatewayAddress` and the private-address pair. Manual AZ coverage is set only by
+   `CreateNatGateway`'s `AvailabilityZoneAddresses`: "If not specified, the NAT gateway will
+   automatically expand to new AZs and associate EIPs upon detection of an elastic network
+   interface. If you specify this parameter, auto-expansion is disabled and you must manually manage
+   AZ coverage." Removing the 1b and 1c addresses from the current NAT is not a fix: while 1b and 1c
+   hold network interfaces, automatic mode is documented to expand to them again.
+3. **The Cognito endpoint cannot move to 1a/1f.** `describe-vpc-endpoint-services` lists
+   `com.amazonaws.us-east-1.cognito-idp` only in us-east-1b, 1c and 1d. Its interfaces will stay
+   in AZs the Lambdas do not use, so an automatic-mode NAT in this VPC will always cover at least
+   one extra AZ.
 
-- No route change: `rtb-057702ecbb292845f` keeps pointing at the same NAT id.
-- No egress IP change for any workload: the Lambdas run only in 1a and 1f, and those keep
-  `184.193.58.15` and `54.198.228.212`. 1b and 1c have carried zero bytes for 30 days.
-- In manual mode the gateway serves only the listed AZs and stops expanding, so every AZ with a
-  private subnet routed through it must be listed. Today that is exactly 1a and 1f.
-- A future Lambda subnet in another AZ would then need its AZ added explicitly
-  (`associate-nat-gateway-address --availability-zone ...`). Record that in the Lambda
-  subnet procedure when it changes.
+So the original step 1 (switch in place) is withdrawn. The only way to a two-AZ NAT is a new
+manual-mode regional NAT and a route swap.
 
-### Alternatives considered
+## Revised proposal
 
-- **Move the Cognito endpoint's interfaces from 1b/1c into 1a/1f** and leave automatic mode on.
-  It should contract by itself, but the endpoint has private DNS on, so the production API's
-  Cognito JWKS calls may use it too. It changes a second shared resource, and the next interface
-  anyone creates in another AZ silently brings the cost back. Not preferred.
-- **Replace it with one zonal NAT in a public subnet** (~$33 + 1 address). Cheapest, but it
-  needs a new NAT, a `ReplaceRoute` cutover with dropped connections, new egress IPs, and it makes
-  the production API's egress depend on a single AZ. Not preferred while production shares it.
-- **Bring it under the `checksops-staging` template.** Wrong home: production depends on it. If it
-  is brought under IaC, it belongs in a stack of its own, as a separate reviewed change.
+Create a second regional NAT in **manual mode covering only us-east-1a and us-east-1f**, point the
+Lambda route table at it, then delete the old NAT after a soak period.
 
-## Open questions for the owner (before step 1)
+- One route changes: 0.0.0.0/0 on `checksops-staging-lambda-private` (`rtb-057702ecbb292845f`).
+  It is the only route to the NAT, and it carries both staging and `checksops-production-prep-api`
+  egress.
+- The egress addresses change to two new Elastic IPs (allowed: answer 1).
+- At the route swap, connections already open through the old NAT stop working, so outbound
+  keep-alive connections from the Lambdas are reset once and reopened by their clients. New
+  connections use the new NAT at once.
+- Until step 3 the old NAT stays running and is the rollback.
+- A future Lambda subnet in another AZ needs that AZ added to the new NAT explicitly
+  (`associate-nat-gateway-address --availability-zone ...`).
 
-1. **Partner IP allowlists.** Does any provider (Moov, CheckAlt, a bank, Resend) allowlist our
-   egress IPs? The repository has no record of one. If one lists `13.219.134.91` or
-   `100.61.101.135`, it can be removed from their list after this change, since no traffic leaves
-   from them.
-2. **Can the mode be changed in place?** The AWS docs describe manual mode and removing addresses,
-   but Claude did not confirm that an existing automatic-mode regional NAT can be switched to
-   manual without recreating it. Step 1 reads the current documentation and the CLI reference
-   (`aws ec2 modify-nat-gateway help`, `disassociate-nat-gateway-address help`) first. If an
-   in-place switch is not supported, **stop**: the fallback is a new NAT and a route cutover, which
-   needs its own plan.
-3. **Window.** Changes to 1b/1c should not touch 1a/1f traffic. Even so, run it at low traffic,
-   outside the production database maintenance window (Thu 07:30–08:00 UTC), with no other
-   production change in flight.
+Cost after step 4: 2 AZs × $0.045 × 730 h = $65.70, plus 2 addresses × $3.65 = $7.30, so
+about **$73/month**, against about $146 today. While the two NATs overlap (steps 1–3) the cost is
+about $0.10/hour higher, which is negligible.
 
 ## Steps (each on its own go phrase)
 
-**Step 0, read-only (no phrase needed).** Re-run the live-state checks above and stop if anything
-differs: NAT id, state `available`, the four addresses and their AZs, the single route, the VPC
-Lambda subnets, zero bytes in 1b/1c over the last 7 days.
+Commands are AWS CLI, run in CloudShell by the owner or by Claude through boto3 with the same
+parameters. The new ids (`<NEW_NAT>`, `<EIP_1A>`, `<EIP_1F>`) are printed by step 1 and recorded
+here in the record PR. Nothing else is decided at run time.
 
-**Step 1, "NAT: manual mode, keep 1a and 1f".** Confirm the commands in the current
-documentation (open question 2), then turn off automatic zone expansion keeping the 1a and 1f
-addresses, and remove the 1b and 1c addresses from the gateway. The exact commands are written into
-this note in a follow-up PR once confirmed; nothing is improvised at run time.
+**Step 0, read-only (no phrase).** Done 2026-11-04 (live state above). Repeat immediately before
+step 1 and stop if anything differs: old NAT `available` with the four addresses, the single route
+to it, VPC Lambdas only in `subnet-0df2518070c5b9ff0` and `subnet-092e4e41821fba6c4`.
 
-Verify:
-- `describe-nat-gateways`: `AutoProvisionZones` disabled, `NatGatewayAddresses` lists only 1a
-  (`184.193.58.15`) and 1f (`54.198.228.212`), both `succeeded`.
-- Egress works from both AZs: `GET /providers/egress` on `checksops-staging-api`, and a
-  read-only production health check that makes an outbound call.
-- `BytesOutToDestination` continues in 1a and 1f over the next hour.
+**Step 1, "NAT: create the two-AZ NAT".** Nothing routes to it yet, so no traffic changes.
 
-Rollback: re-enable automatic mode, or `associate-nat-gateway-address` for 1b and 1c with the
-same allocation ids (`eipalloc-001bd1b5e1c454c13`, `eipalloc-0facc2a9a85845505`), which stay
-allocated after step 1.
+```bash
+aws ec2 allocate-address --domain vpc --tag-specifications 'ResourceType=elastic-ip,Tags=[{Key=Name,Value=checksops-vpc-nat-1a}]'
+aws ec2 allocate-address --domain vpc --tag-specifications 'ResourceType=elastic-ip,Tags=[{Key=Name,Value=checksops-vpc-nat-1f}]'
+aws ec2 create-nat-gateway --vpc-id vpc-09f2268778966ce97 --availability-mode regional \
+  --availability-zone-addresses 'AvailabilityZone=us-east-1a,AllocationIds=<EIP_1A>' 'AvailabilityZone=us-east-1f,AllocationIds=<EIP_1F>' \
+  --tag-specifications 'ResourceType=natgateway,Tags=[{Key=Name,Value=checksops-vpc-nat}]'
+aws ec2 wait nat-gateway-available --nat-gateway-ids <NEW_NAT>
+```
 
-**Step 2, "NAT: release 1b and 1c addresses"** (optional, after a week without issues).
-Release `eipalloc-001bd1b5e1c454c13` and `eipalloc-0facc2a9a85845505`. Released addresses cannot
-be recovered, so this waits until open question 1 is settled.
+Verify: `describe-nat-gateways` for `<NEW_NAT>` shows `available`, `AvailabilityMode regional`,
+`AutoProvisionZones disabled`, and addresses only in us-east-1a and us-east-1f. If any of these
+differ, stop: delete `<NEW_NAT>` and release the two addresses.
+
+**Step 2, "NAT: switch the Lambda route".**
+
+```bash
+aws ec2 replace-route --route-table-id rtb-057702ecbb292845f --destination-cidr-block 0.0.0.0/0 --nat-gateway-id <NEW_NAT>
+```
+
+Verify within 15 minutes:
+- the route shows `<NEW_NAT>`, `active`;
+- `GET /providers/egress` on `checksops-staging-api` succeeds;
+- a read-only production request that makes an outbound call succeeds;
+- `AWS/NATGateway` `BytesOutToDestination` for `<NEW_NAT>` is non-zero in 1a and/or 1f, and the old
+  NAT's falls to zero.
+
+Rollback: the same `replace-route` with `--nat-gateway-id nat-15f538197c4a75331`.
+
+**Step 3, "NAT: delete the old NAT"**, after at least 24 hours with no egress errors.
+
+```bash
+aws ec2 delete-nat-gateway --nat-gateway-id nat-15f538197c4a75331
+```
+
+After this there is no fast rollback. A problem from here on is fixed on `<NEW_NAT>`, for example
+by adding an AZ.
+
+**Step 4, "NAT: release the old addresses".** Released addresses cannot be recovered.
+
+```bash
+aws ec2 release-address --allocation-id eipalloc-00522d181fe59bb1d   # 184.193.58.15 (1a)
+aws ec2 release-address --allocation-id eipalloc-06781d2314441cec9   # 54.198.228.212 (1f)
+aws ec2 release-address --allocation-id eipalloc-001bd1b5e1c454c13   # 13.219.134.91 (1b)
+aws ec2 release-address --allocation-id eipalloc-0facc2a9a85845505   # 100.61.101.135 (1c)
+```
+
+Deleting the NAT should leave these four unattached. Verify with `describe-addresses` that each
+has no association before releasing it. The unrelated idle `100.50.171.44`
+(`eipalloc-01f1f9b72ac281ce9`) is not part of this step.
+
+## Alternatives considered
+
+- **Leave it as it is** (~$146/month). No risk, no saving.
+- **A single zonal NAT** (~$37/month). Cheaper still, but the production API's egress would then
+  depend on one AZ, and the other AZ's traffic would cross AZs. Not preferred while production
+  shares it.
+- **Bring the NAT under IaC.** Wrong home in the `checksops-staging` stack, because production
+  depends on it. A stack of its own is a separate reviewed change.
 
 ## What this note does not do
 
