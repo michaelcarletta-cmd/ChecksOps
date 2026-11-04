@@ -1,0 +1,27 @@
+{
+  "CORSRules": [
+    {
+      "ID": "SpaPresignedUploads",
+      "AllowedHeaders": [
+        "content-type",
+        "content-length",
+        "x-amz-server-side-encryption",
+        "x-amz-server-side-encryption-aws-kms-key-id"
+      ],
+      "AllowedMethods": [
+        "PUT",
+        "GET"
+      ],
+      "AllowedOrigins": [
+        "https://staging.checksops.com",
+        "capacitor://localhost",
+        "https://localhost"
+      ],
+      "ExposeHeaders": [
+        "ETag",
+        "x-amz-version-id"
+      ],
+      "MaxAgeSeconds": 600
+    }
+  ]
+}
