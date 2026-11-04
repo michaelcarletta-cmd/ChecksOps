@@ -1,0 +1,21 @@
+{
+  "workstream_id": "mortgage-company-editor-applied",
+  "authorization": "Record only (2026-11-04): the bytes below are live. Nothing is planned or authorized by this manifest; any later change to these members needs its own manifest, staging acceptance and owner approval.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Mortgage company editor applied 2026-11-04 through the guarded overlay path, after #1597 (main edab8f9d7) and on main 31a7464ae (#1598, which changed only the SPA lock record). An earlier production apply of write-app-metadata.mjs, run 41901274411 on main edab8f9d7, was refused before any write (DEPLOYMENT_COLLISION: apply plan members in order; write-allowlist.mjs pending), so on the owner's choice the plan order was kept: write-allowlist.mjs first. write-allowlist.mjs: staging apply run 41903168079 (the staging acceptance; staging re-inspect run 41903294285 read 4eb9c025 live); production preflight inspect run 41903408880 (READY, 1fc4a43e live, RevisionId c46785b4-bf2d-48c3-b3bd-a1de6eb93ffd); production apply run 41903718714 (1fc4a43e -> 4eb9c025) on the owner's \"DEPLOY write-allowlist.mjs TO PRODUCTION\". write-app-metadata.mjs: staging apply run 41900776989 (the staging acceptance; staging re-inspect run 41900959404 read 72c95cac live); production preflight inspect run 41903906669 (READY, 0e535bee live); production apply run 41905275534 (0e535bee -> 72c95cac, pre-apply RevisionId e562b7e0-ca5c-4fa4-8772-f2ee9f14758c) on the owner's \"DEPLOY write-app-metadata.mjs TO PRODUCTION\". Each apply run concluded success including its \"Verify live member is the accepted bytes\" step (state VERIFIED) and the public production smoke. Read live after the last apply: CodeSha256 CpvChAmSn38wTbVnA3xr+dXS229HJzU4WMZA15EVLI0=, RevisionId d2596333-8468-4548-bc03-23a026ea42f3, LastModified 2026-11-04T20:18:31Z. Each row records the applied bytes as live_sha256 and accepted_sha256 and chains to the manifest that planned it (previous_manifest), which keeps the pre-apply state.",
+  "members": {
+    "write-allowlist.mjs": {
+      "live_sha256": "4eb9c0251ee2003508419360010d9051d2e7b5de8abe72a79b20ae4f616ea2ab",
+      "accepted_sha256": "4eb9c0251ee2003508419360010d9051d2e7b5de8abe72a79b20ae4f616ea2ab",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-mortgage-company-editor-manifest-2026-11-04.json"
+    },
+    "write-app-metadata.mjs": {
+      "live_sha256": "72c95cacb533bbb22b697a84012608e585b9a15aa46682693c2bf75ede872960",
+      "accepted_sha256": "72c95cacb533bbb22b697a84012608e585b9a15aa46682693c2bf75ede872960",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-mortgage-company-editor-manifest-2026-11-04.json"
+    }
+  }
+}
