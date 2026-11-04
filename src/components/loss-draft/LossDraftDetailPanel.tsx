@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CheckCircle2, Landmark, Pencil, Share2, MessageSquare } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { isPlatformOwner } from "@/lib/masterMerchant";
 import { useToast } from "@/hooks/use-toast";
 import { escrowStatusConfig } from "./LossDraftDashboard";
 import {
@@ -67,6 +68,8 @@ export function LossDraftDetailPanel({
   onClosed?: () => void;
 }) {
   const { user } = useAuth();
+  // The Audit tab is for management (the platform owner), also when viewing a tenant; tenants do not see it.
+  const showAuditTab = isPlatformOwner(user?.email, user?.id);
   const { toast } = useToast();
   const { tenantId } = useTenantFilter();
   const { data: draft } = useLossDraftDetail(lossDraftId);
@@ -437,9 +440,11 @@ export function LossDraftDetailPanel({
           <TabsTrigger value="partners" className="flex-1 text-xs gap-1">
             <Share2 className="h-3 w-3" /> Partners
           </TabsTrigger>
-          <TabsTrigger value="audit" className="flex-1 text-xs">
-            Audit
-          </TabsTrigger>
+          {showAuditTab && (
+            <TabsTrigger value="audit" className="flex-1 text-xs">
+              Audit
+            </TabsTrigger>
+          )}
         </TabsList>
 
         <TabsContent
@@ -500,12 +505,14 @@ export function LossDraftDetailPanel({
           </div>
         </TabsContent>
 
-        <TabsContent
-          value="audit"
-          className="mt-0 min-h-0 flex-1 overflow-hidden data-[state=inactive]:hidden"
-        >
-          <LossDraftAuditTab audit={audit} />
-        </TabsContent>
+        {showAuditTab && (
+          <TabsContent
+            value="audit"
+            className="mt-0 min-h-0 flex-1 overflow-hidden data-[state=inactive]:hidden"
+          >
+            <LossDraftAuditTab audit={audit} />
+          </TabsContent>
+        )}
       </Tabs>
 
       {draft.check_intake_item_id && (
