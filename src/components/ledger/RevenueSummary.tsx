@@ -9,6 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { displayCase } from "@/lib/displayCase";
+import { usePaidInvoiceRevenue } from "@/hooks/useWalletOps";
 
 export function RevenueSummary() {
   const { tenant } = useTenant();
@@ -44,16 +45,45 @@ export function RevenueSummary() {
     },
   });
 
+  // Invoices a customer paid into the wallet are revenue too (no check is deposited for them).
+  const { data: paidInvoices, isLoading: invoicesLoading } = usePaidInvoiceRevenue();
+
+  const revenueSources = useMemo(() => {
+    const checks = (revenueData ?? []).map((check) => ({
+      key: `check-${check.id}`,
+      at: check.deposited_at as string | null,
+      title: check.freedom_claim_number || displayCase(check.carrier_name) || "—",
+      subtitle: check.carrier_name ? displayCase(check.carrier_name) : null,
+      reference: check.check_number || "—",
+      amount: Number(check.amount || 0),
+      status: check.status === "deposited" ? "Deposited" : "Released",
+    }));
+    const invoices = (paidInvoices ?? []).map((invoice) => ({
+      key: `invoice-${invoice.id}`,
+      at: invoice.at as string | null,
+      title: invoice.customerName || "Invoice payment",
+      subtitle: "Invoice payment",
+      reference: invoice.invoiceNumber || "—",
+      amount: invoice.amountCents / 100,
+      status: "Invoice paid",
+    }));
+    return [...checks, ...invoices].sort(
+      (a, b) => (b.at ? new Date(b.at).getTime() : 0) - (a.at ? new Date(a.at).getTime() : 0),
+    );
+  }, [revenueData, paidInvoices]);
+
   const stats = useMemo(() => {
-    const totalIncoming = revenueData?.reduce((sum, item) => sum + Number(item.amount || 0), 0) || 0;
+    const checkIncoming = revenueData?.reduce((sum, item) => sum + Number(item.amount || 0), 0) || 0;
+    const invoiceIncoming = (paidInvoices ?? []).reduce((sum, invoice) => sum + invoice.amountCents, 0) / 100;
+    const totalIncoming = checkIncoming + invoiceIncoming;
     const totalOutgoing = disbursementData?.reduce((sum, item) => sum + Number(item.amount || 0), 0) || 0;
     const profit = totalIncoming - totalOutgoing;
     const margin = totalIncoming > 0 ? (profit / totalIncoming) * 100 : 0;
 
     return { totalIncoming, totalOutgoing, profit, margin };
-  }, [revenueData, disbursementData]);
+  }, [revenueData, paidInvoices, disbursementData]);
 
-  if (revenueLoading || disbursementLoading) {
+  if (revenueLoading || disbursementLoading || invoicesLoading) {
     return (
       <div className="grid gap-4 md:grid-cols-3">
         {[1, 2, 3].map((i) => (
@@ -83,7 +113,7 @@ export function RevenueSummary() {
             <div className="text-2xl font-bold">
               ${stats.totalIncoming.toLocaleString("en-US", { minimumFractionDigits: 2 })}
             </div>
-            <p className="text-xs text-muted-foreground">From deposited checks</p>
+            <p className="text-xs text-muted-foreground">From deposited checks and paid invoices</p>
           </CardContent>
         </Card>
 
@@ -130,35 +160,35 @@ export function RevenueSummary() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b text-xs text-muted-foreground">
-                  <th className="text-left p-3 font-medium">Date Deposited</th>
-                  <th className="text-left p-3 font-medium">Claim / Carrier</th>
-                  <th className="text-left p-3 font-medium">Check #</th>
+                  <th className="text-left p-3 font-medium">Date Received</th>
+                  <th className="text-left p-3 font-medium">Claim / Carrier / Customer</th>
+                  <th className="text-left p-3 font-medium">Check / Invoice #</th>
                   <th className="text-right p-3 font-medium">Amount</th>
                   <th className="text-right p-3 font-medium">Status</th>
                 </tr>
               </thead>
               <tbody>
-                {revenueData?.length === 0 ? (
+                {revenueSources.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="p-8 text-center text-muted-foreground italic">No deposited checks found.</td>
+                    <td colSpan={5} className="p-8 text-center text-muted-foreground italic">No deposited checks or paid invoices found.</td>
                   </tr>
                 ) : (
-                  revenueData?.map((check) => (
-                    <tr key={check.id} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
+                  revenueSources.map((source) => (
+                    <tr key={source.key} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
                       <td className="p-3 text-xs text-muted-foreground whitespace-nowrap">
-                        {check.deposited_at ? format(new Date(check.deposited_at), "MMM d, yyyy") : "—"}
+                        {source.at ? format(new Date(source.at), "MMM d, yyyy") : "—"}
                       </td>
                       <td className="p-3">
-                        <p className="font-medium text-xs">{check.freedom_claim_number || displayCase(check.carrier_name) || "—"}</p>
-                        {check.carrier_name && <p className="text-[10px] text-muted-foreground">{displayCase(check.carrier_name)}</p>}
+                        <p className="font-medium text-xs">{source.title}</p>
+                        {source.subtitle && <p className="text-[10px] text-muted-foreground">{source.subtitle}</p>}
                       </td>
-                      <td className="p-3 text-xs font-mono">{check.check_number || "—"}</td>
+                      <td className="p-3 text-xs font-mono">{source.reference}</td>
                       <td className="p-3 text-right font-medium text-sm text-emerald-600">
-                        +${Number(check.amount).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                        +${source.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}
                       </td>
                       <td className="p-3 text-right">
                         <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
-                          {check.status === "deposited" ? "Deposited" : "Released"}
+                          {source.status}
                         </Badge>
                       </td>
                     </tr>
