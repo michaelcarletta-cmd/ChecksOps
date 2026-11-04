@@ -384,12 +384,16 @@ Resources:
       CorsConfiguration:
         CorsRules:
           - Id: SpaPresignedUploads
-            # Staging stack: the staging SPA only; production stack: production SPA only.
+            # Staging stack: the staging SPA and the iOS/Android apps (Capacitor serves the bundled
+            # SPA from capacitor://localhost on iOS, https://localhost on Android); production
+            # stack: production SPA only (ops/staging-files-bucket-cors.md).
             AllowedOrigins: !If
               - IsProductionEnvironment
               - - https://checksops.com
                 - https://www.checksops.com
               - - https://staging.checksops.com
+                - capacitor://localhost
+                - https://localhost
             AllowedMethods:
               - PUT
               - GET

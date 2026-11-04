@@ -4,7 +4,7 @@
  * release-sql90-97-executor.test.mjs runs what every release key shares (SQL 142 included); this file covers what
  * is new:
  *
- *   - the pin: pending (no read-live yet), code-derived, selectable, packed, in step with the pending production pin;
+ *   - the pin: staging-authorized (wave 37) from staging read-live run 41927312617, code-derived, selectable, packed, in step with the pending production pin;
  *     the pinned commit authored the bytes; no predecessor; the expected pre-state (both policies absent) is derived
  *     here;
  *   - the spec: no function, two PERMISSIVE policies TO authenticated (INSERT and UPDATE on
@@ -108,7 +108,7 @@ function handlerFor(connect, { pins = {} } = {}) {
   return createHandler({ connect, now: () => Date.parse(NOW), releaseSqlFiles: FILES, releaseSqlPins: { ...PINS, ...pins } });
 }
 
-test('pin: SQL 142 pending, code-derived, selectable, packed, in step with the pending production pin; no predecessor; the derived pre-state', () => {
+test('pin: SQL 142 staging-authorized from its read-live, code-derived, selectable, packed, in step with the pending production pin; no predecessor; the derived pre-state', () => {
   const pin = PINS[KEY];
   const spec = RELEASE_SQL_SPECS[KEY];
   const packed = Object.fromEntries(EXECUTOR_PACK_MEMBERS);
@@ -119,11 +119,13 @@ test('pin: SQL 142 pending, code-derived, selectable, packed, in step with the p
   assert.equal(spec.choice, 'sql142-mortgage-companies-tenant-admin-write');
   assert.doesNotMatch(spec.choice, /production/);
   assert.equal(sha(TEXT), pin.source_sha256);
-  // Pending: no staging read-live recorded yet.
+  // Staging apply authorized (owner approved 2026-11-04, "record the SQL 142 staging pin") from staging read-live
+  // run 41927312617: already_applied false, precondition_failures []. It read the derived pre-state (both absent).
   assertStagingPinState(assert, KEY, pin);
-  assert.equal(pin.execute, false);
-  assert.equal(pin.authorization, 'pending');
-  assert.equal(pin.expected_live_definition_sha256, null);
+  assert.equal(pin.execute, true);
+  assert.equal(pin.authorization, 'Owner approved 2026-11-04: staging apply (wave 37) from staging read-live run 41927312617');
+  assert.equal(pin.expected_live_definition_sha256, PRE_ABSENT);
+  assert.notEqual(pin.expected_live_definition_sha256, pin.intended_replacement_sha256);
   assert.equal(releaseIntendedHash(KEY, TEXT), pin.intended_replacement_sha256);
   assert.equal(pin.intended_replacement_sha256, '2cff3727e102a6dd7ed116b9ae6348a3725362b573c62fcc5050acec0bf10a69');
   // The pre-state is derivable: both policies absent.
@@ -162,7 +164,9 @@ test('pin: SQL 142 pending, code-derived, selectable, packed, in step with the p
   assert.ok(prod.order_note.includes(PRE_ABSENT));
   // The runbook: the intended fingerprint and text, the source, the derived pre-state, the evidence.
   const runbook = fs.readFileSync(path.join(ROOT, 'ops/production-sql-142-apply.md'), 'utf8');
-  assert.match(runbook, /\*\*Status:\*\* not applied anywhere\. The staging pin and the production pin are pending\./);
+  assert.match(runbook, /\*\*Status:\*\* staging pin execute-authorized \(wave 37\); not applied anywhere\. The production pin is pending\./);
+  assert.match(runbook, /read-live \(2026-11-04\)\.\*\* Run 41927312617/);
+  assert.ok(runbook.includes(pin.expected_live_definition_sha256));
   assert.match(runbook, /\*\*Pre-state: derivable\.\*\*/);
   for (const value of [pin.intended_replacement_sha256, pin.source_sha256, PRE_ABSENT, 'da2687b5', 'f90ee490', sha(ADMIN_ACTIVE)]) assert.ok(runbook.includes(value), value);
   assert.ok(runbook.includes(`\`\`\`\n${releaseStateText(KEY, INTENDED)}\n\`\`\``));
