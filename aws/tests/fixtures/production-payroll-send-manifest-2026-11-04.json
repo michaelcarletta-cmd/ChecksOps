@@ -1,0 +1,15 @@
+{
+  "workstream_id": "payroll-send",
+  "authorization": "Pending owner review (2026-11-04). Planning only: nothing is live or verified. The production apply needs its own owner approval, a staging acceptance reference and a read-only production inspect that confirms the live bytes.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Owner report 2026-11-04: the payroll authenticator did not accept the code. Production API Gateway access log: POST /prep/auth/mfa/step-up 409 at 21:08:19Z, 21:08:37Z and 21:08:44Z: RunPayrollDialog asked for the step-up action payroll.run, which resolveFinancialStepUpBinding refuses (action_mismatch) before any code check; the dialog then wrote disbursement_batches, disbursement_splits and payroll_runs through the generic data route (FINANCIAL_OR_PROVIDER_TABLES, refused by design) and called the legacy moov-disburse body. Owner decisions 2026-11-04 (\"1 once per login, 2 yes, 3 yes\"): the once-per-login wallet.fund step-up (docs/MOOV_PAYMENTS_RULES.md), a check-less single-stakeholder purpose payroll mode in moov-send.mjs, and a read-only production lookup (SSM 9a8a8e10-a970-45da-8681-72298c5f5adf: checksops holds INSERT, UPDATE, SELECT, DELETE on public.payroll_runs; the SQL 136 restrictive money-write gate admits a session with request.financial_execution, which the send path sets). REPLACE providers/production/moov-send.mjs 178988b5 -> 1b204d62: purpose payroll, exactly one stakeholder, no check_id, the same step-up, idempotency, per-organization lock, top-up and legs; the payroll_runs row (disbursement_batch_id NULL, speed next_day or same_day) is written with the legs and its status follows them (submitted, failed, partial, unknown), committed before the reply. Check sends are unchanged (same request hash). No SQL. Not authorized, not applied.",
+  "members": {
+    "providers/production/moov-send.mjs": {
+      "live_sha256": "178988b5a372011a128473025c2426323931c58cf4d68a5d33faaf1894431573",
+      "accepted_sha256": "1b204d621a06c87f95aa888833470d86e157e78b431a3a9d1a51e8d2e064a2a0",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-onboarding-payee-send-applied-manifest-2026-10-26.json"
+    }
+  }
+}

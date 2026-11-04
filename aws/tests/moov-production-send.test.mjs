@@ -5,6 +5,7 @@ import { LOOKUP_MAPPING_SQL } from '../functions/api/identity.mjs';
 import { handleProviderRequest } from '../functions/api/providers.mjs';
 import {
   parseSendRequest,
+  payrollOutcome,
   planSendLegs,
   requestHash,
   selectCreditMethod,
@@ -92,10 +93,17 @@ const fakeDb = ({
   // Simulates a parallel request with the same key: these legs become committed
   // right after this request's first read of its legs.
   plantAfterFirstRead = null,
+  payrollRuns = [],
 } = {}) => {
-  const committed = { transfers: transfers.map((t) => ({ ...t })), events: [] };
+  const committed = { transfers: transfers.map((t) => ({ ...t })), events: [], payroll: payrollRuns.map((r) => ({ ...r })) };
   let pending = null;
-  const begin = () => { pending = { transfers: committed.transfers.map((t) => ({ ...t })), events: [...committed.events] }; };
+  const begin = () => {
+    pending = {
+      transfers: committed.transfers.map((t) => ({ ...t })),
+      events: [...committed.events],
+      payroll: committed.payroll.map((r) => ({ ...r })),
+    };
+  };
   const state = () => pending || committed;
   const log = [];
   let nextId = committed.transfers.length + 1;
@@ -109,7 +117,7 @@ const fakeDb = ({
       log.push({ sql, params });
       if (sql === 'BEGIN') { begin(); return { rows: [] }; }
       if (sql === 'COMMIT') {
-        if (pending) { committed.transfers = pending.transfers; committed.events = pending.events; }
+        if (pending) { committed.transfers = pending.transfers; committed.events = pending.events; committed.payroll = pending.payroll; }
         pending = null;
         return { command: 'COMMIT', rows: [] };
       }
@@ -218,6 +226,21 @@ const fakeDb = ({
         const row = state().transfers.find((t) => t.id === params[0]);
         Object.assign(row, { provider_transfer_id: params[1], provider_status: params[2], status: params[3] });
         return { rows: [{ ...row }] };
+      }
+      if (sql.includes('INSERT INTO public.payroll_runs')) {
+        const row = {
+          id: `00000000-0000-4000-9000-${String(state().payroll.length + 1).padStart(12, '0')}`,
+          tenant_id: params[0], stakeholder_account_id: params[1], disbursement_batch_id: null, amount: params[2],
+          speed: params[3], memo: params[4], initiated_by: params[5], status: 'pending', error: null,
+          financial_execution: client.log.some((l) => /request\.financial_execution/.test(l.sql)),
+        };
+        state().payroll.push(row);
+        return { rows: [{ id: row.id }] };
+      }
+      if (sql.includes('UPDATE public.payroll_runs')) {
+        const row = state().payroll.find((r) => r.id === params[0] && r.tenant_id === params[1]);
+        if (row && row.status !== params[2]) { row.status = params[2]; row.error = params[3]; }
+        return { rows: [] };
       }
       if (sql.includes('INSERT INTO public.payment_event_log')) {
         state().events.push({ environment: params[0], type: params[2], status: params[3] });
@@ -843,4 +866,194 @@ test('staging: with sandbox execution off, a send meets the hard block and nothi
     assert.equal(moov.calls.length, 0);
     assert.equal(client.committed.transfers.length, 0);
   });
+});
+
+
+// Payroll (owner decision 2026-11-04): the same send, not tied to a check, to one stakeholder.
+const payroll = (body = {}) => ({
+  check_id: undefined, purpose: 'payroll', speed: 'standard', recipients: [stakeholder(150_000)], description: 'Payroll: Nov 1-15', ...body,
+});
+
+test('payroll: parse accepts exactly one stakeholder and no check; check sends still need a check', () => {
+  const ok = parseSendRequest({ idempotency_key: CLICK, ...payroll() });
+  assert.equal(ok.error, undefined);
+  assert.equal(ok.purpose, 'payroll');
+  assert.equal(ok.checkId, null);
+  assert.equal(parseSendRequest({ idempotency_key: CLICK, ...payroll({ check_id: CHECK }) }).error, 'A payroll payment is not tied to a check.');
+  assert.equal(parseSendRequest({ idempotency_key: CLICK, ...payroll({ recipients: [partner(100)] }) }).error, 'A payroll payment pays exactly one stakeholder.');
+  assert.equal(parseSendRequest({ idempotency_key: CLICK, ...payroll({ recipients: [stakeholder(100), stakeholder(100, STAKEHOLDER_2)] }) }).error, 'A payroll payment pays exactly one stakeholder.');
+  assert.equal(parseSendRequest({ idempotency_key: CLICK, purpose: 'other', check_id: CHECK, recipients: [stakeholder(1)] }).error, "purpose must be 'send' or 'payroll'");
+  assert.equal(parseSendRequest({ idempotency_key: CLICK, recipients: [stakeholder(1)] }).error, 'check_id is required');
+  // A check send hashes as before; a payroll for the same payee and amount is a different request.
+  const send = parseSendRequest({ idempotency_key: CLICK, check_id: CHECK, recipients: [stakeholder(150_000)] });
+  assert.equal(send.purpose, 'send');
+  assert.notEqual(requestHash(send), requestHash(ok));
+});
+
+test('payroll: one wallet → stakeholder ACH credit, no check lookup, payroll_runs row written under the money-write GUC and marked submitted', async () => {
+  await withEnv(FLAGS, async () => {
+    const client = fakeDb();
+    const moov = moovStub();
+    const result = await run(client, moov, payroll());
+    assert.equal(result.ok, true, JSON.stringify(result));
+    assert.equal(result.send.sent_cents, 150_000);
+    assert.equal(client.log.some((l) => l.sql.includes('FROM public.check_intake_items')), false);
+    const [post] = moov.posts();
+    assert.deepEqual(post.body.destination, { paymentMethodID: 'pm-stk-std' });
+    assert.deepEqual(post.body.amount, { currency: 'USD', value: 150_000 });
+    const [leg] = client.committed.transfers;
+    assert.equal(leg.check_id, null);
+    assert.equal(leg.speed, 'standard');
+    assert.equal(leg.description, 'Payroll: Nov 1-15');
+    assert.equal(leg.provider_metadata.purpose, 'payroll');
+    const [row] = client.committed.payroll;
+    assert.equal(leg.provider_metadata.payroll_run_id, row.id);
+    assert.deepEqual(
+      { tenant: row.tenant_id, payee: row.stakeholder_account_id, amount: row.amount, speed: row.speed, memo: row.memo, by: row.initiated_by, status: row.status, batch: row.disbursement_batch_id },
+      { tenant: TENANT, payee: STAKEHOLDER, amount: '1500.00', speed: 'next_day', memo: 'Payroll: Nov 1-15', by: APP_USER, status: 'submitted', batch: null },
+    );
+    assert.equal(row.financial_execution, true, 'request.financial_execution was set before the payroll_runs insert');
+  });
+});
+
+test('payroll: same_day uses the same-day rail and records same_day', async () => {
+  await withEnv(FLAGS, async () => {
+    const client = fakeDb();
+    const moov = moovStub();
+    const result = await run(client, moov, payroll({ speed: 'same_day' }));
+    assert.equal(result.ok, true, JSON.stringify(result));
+    assert.deepEqual(moov.posts()[0].body.destination, { paymentMethodID: 'pm-stk-sd' });
+    assert.equal(client.committed.payroll[0].speed, 'same_day');
+  });
+});
+
+test('payroll: without this login\'s two-factor nothing is recorded or sent', async () => {
+  await withEnv(FLAGS, async () => {
+    const client = fakeDb({ stepUps: [] });
+    const moov = moovStub();
+    const result = await run(client, moov, payroll());
+    assert.equal(result.statusCode, 401);
+    assert.equal(result.error, 'totp_required');
+    assert.equal(result.actionKey, 'wallet.fund');
+    assert.equal(moov.posts().length, 0);
+    assert.equal(client.committed.payroll.length, 0);
+    assert.equal(client.committed.transfers.length, 0);
+  });
+});
+
+test('payroll: a step-up from another tenant or another login does not authorize it', async () => {
+  await withEnv(FLAGS, async () => {
+    for (const stepUps of [
+      [{ id: 's', user_id: APP_USER, tenant_id: OTHER_TENANT, action_key: 'wallet.fund', login_session: LOGIN }],
+      [{ id: 's', user_id: APP_USER, tenant_id: TENANT, action_key: 'wallet.fund', login_session: `${SUB}:jti:other` }],
+      [{ id: 's', user_id: APP_USER, tenant_id: TENANT, action_key: 'payroll.run', login_session: LOGIN }],
+    ]) {
+      const client = fakeDb({ stepUps });
+      const result = await run(client, moovStub(), payroll());
+      assert.equal(result.error, 'totp_required', JSON.stringify(stepUps));
+      assert.equal(client.committed.payroll.length, 0);
+    }
+  });
+});
+
+test('payroll: a member of another tenant cannot run this tenant\'s payroll', async () => {
+  await withEnv(FLAGS, async () => {
+    const client = fakeDb({ memberships: [{ tenant_id: OTHER_TENANT, role: 'member', tenant_name: 'Other', tenant_slug: 'other' }] });
+    const moov = moovStub();
+    const result = await run(client, moov, payroll());
+    assert.equal(result.statusCode, 403);
+    assert.equal(moov.posts().length, 0);
+    assert.equal(client.committed.payroll.length, 0);
+  });
+});
+
+test('payroll: a stakeholder of another tenant is not paid and no run is recorded', async () => {
+  await withEnv(FLAGS, async () => {
+    const client = fakeDb({ stakeholders: STAKEHOLDERS.map((st) => ({ ...st, tenant_id: OTHER_TENANT })) });
+    const moov = moovStub();
+    const result = await run(client, moov, payroll());
+    assert.equal(result.error, 'recipient_not_found');
+    assert.equal(moov.posts().length, 0);
+    assert.equal(client.committed.payroll.length, 0);
+  });
+});
+
+test('payroll: the same click replayed pays once and keeps one run; a different payroll on that key is refused', async () => {
+  await withEnv(FLAGS, async () => {
+    const client = fakeDb();
+    const moov = moovStub();
+    assert.equal((await run(client, moov, payroll())).ok, true);
+    const again = await run(client, moov, payroll());
+    assert.equal(again.ok, true, JSON.stringify(again));
+    assert.equal(again.duplicate, true);
+    assert.equal(moov.posts().length, 1);
+    assert.equal(client.committed.payroll.length, 1);
+    assert.equal(client.committed.payroll[0].status, 'submitted');
+    const other = await run(client, moov, payroll({ recipients: [stakeholder(99_999)] }));
+    assert.equal(other.error, 'idempotency_key_reused');
+    assert.equal(moov.posts().length, 1);
+  });
+});
+
+test('payroll: a Moov refusal is recorded on the run as failed (committed, although the reply is a 409)', async () => {
+  await withEnv(FLAGS, async () => {
+    const client = fakeDb();
+    const moov = moovStub({ posts: [{ status: 422, body: { error: 'insufficient funds' } }] });
+    const result = await run(client, moov, payroll());
+    assert.equal(result.ok, false);
+    assert.equal(result.error, 'send_failed');
+    const [row] = client.committed.payroll;
+    assert.equal(row.status, 'failed');
+    assert.ok(row.error);
+    assert.equal(client.committed.transfers[0].status, 'failed');
+  });
+});
+
+test('payroll: an unclear Moov result is recorded as unknown and never retried', async () => {
+  await withEnv(FLAGS, async () => {
+    const client = fakeDb();
+    const moov = moovStub({ posts: [{ throw: new Error('socket hang up') }] });
+    const result = await run(client, moov, payroll());
+    assert.equal(result.error, 'provider_outcome_unknown');
+    assert.equal(client.committed.payroll[0].status, 'unknown');
+    const again = await run(client, moov, payroll());
+    assert.equal(again.duplicate, true);
+    assert.equal(moov.posts().length, 1);
+  });
+});
+
+test('payroll: held sends record nothing', async () => {
+  await withEnv({ ...FLAGS, AWS_MOOV_SEND_POST_ENABLED: undefined }, async () => {
+    const client = fakeDb();
+    const moov = moovStub();
+    const result = await run(client, moov, payroll());
+    assert.equal(result.error, 'send_post_held');
+    assert.equal(client.committed.payroll.length, 0);
+    assert.equal(client.committed.transfers.length, 0);
+  });
+});
+
+test('payrollOutcome maps the legs to the run status', () => {
+  const leg = (status, extra = {}) => ({ status, amount_cents: 100, provider_metadata: { recipient_index: 0 }, ...extra });
+  assert.equal(payrollOutcome([leg('ready')]), null);
+  assert.equal(payrollOutcome([leg('submitted')], { incomplete: true }), null);
+  assert.deepEqual(payrollOutcome([leg('submitted')]), { status: 'submitted', error: null });
+  assert.equal(payrollOutcome([leg('failed', { failure_reason: 'refused' })]).status, 'failed');
+  assert.equal(payrollOutcome([leg('unknown')]).status, 'unknown');
+  assert.equal(payrollOutcome([leg('submitted'), leg('canceled')]).status, 'partial');
+});
+
+test('the payroll dialog pays through the send route with the once-per-login wallet.fund step-up', () => {
+  const dialog = fs.readFileSync(new URL('../../src/components/payroll/RunPayrollDialog.tsx', import.meta.url), 'utf8');
+  const sends = fs.readFileSync(new URL('../../src/lib/payments/sends.ts', import.meta.url), 'utf8');
+  assert.doesNotMatch(dialog, /payroll\.run/);
+  assert.doesNotMatch(dialog, /useFinancialGuard/);
+  assert.doesNotMatch(dialog, /supabase\.from\(/, 'no browser writes to money tables');
+  assert.doesNotMatch(dialog, /functions\.invoke/);
+  assert.match(dialog, /sendPayrollPayment\(/);
+  assert.match(dialog, /actionKey: "wallet\.fund"/);
+  assert.match(dialog, /next_day: "standard", same_day: "same_day"/);
+  assert.match(dialog, /SPEED_FEES: Record<Speed, number> = \{ next_day: 0\.75, same_day: 1\.00 \}/);
+  assert.match(sends, /purpose: "payroll"/);
+  assert.match(sends, /functions\.invoke\("moov-disburse"/);
 });

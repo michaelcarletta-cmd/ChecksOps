@@ -1,8 +1,7 @@
-import { useState, useMemo } from "react";
-import { useFinancialGuard } from "@/hooks/useFinancialGuard";
+import { useState, useMemo, useRef } from "react";
+import { useStepUp } from "@/hooks/useStepUp";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/hooks/useAuth";
+import { sendPayrollPayment, SendPaymentError } from "@/lib/payments/sends";
 import { useTenant } from "@/contexts/TenantContext";
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
@@ -23,6 +22,8 @@ type Speed = "next_day" | "same_day";
 // Moov pricing — same schedule used by the claim-check disbursement console.
 const SPEED_FEES: Record<Speed, number> = { next_day: 0.75, same_day: 1.00 };
 const SPEED_LABELS: Record<Speed, string> = { next_day: "Next Day", same_day: "Same Day" };
+// The Moov rail for each payroll speed: Next Day is the standard ACH credit.
+const SEND_SPEED: Record<Speed, "standard" | "same_day"> = { next_day: "standard", same_day: "same_day" };
 
 interface Props {
   open: boolean;
@@ -31,7 +32,6 @@ interface Props {
 }
 
 export function RunPayrollDialog({ open, onOpenChange, onDone }: Props) {
-  const { user } = useAuth();
   const { tenant } = useTenant();
   const { toast } = useToast();
   const { enabled: moovEnabled } = usePaymentProviderEligibility();
@@ -67,94 +67,61 @@ export function RunPayrollDialog({ open, onOpenChange, onDone }: Props) {
   const total = amount + fee;
   const canContinue = !!selected && amount > 0 && Number.isFinite(amount);
 
-  const guardFinancial = useFinancialGuard(tenant?.id);
+
+  const { requireStepUp } = useStepUp();
+  // One key per payment: retrying the same payment never pays twice.
+  const pending = useRef<{ signature: string; key: string } | null>(null);
 
   const runMutation = useMutation({
     mutationFn: async () => {
-      await guardFinancial("payroll.run");
-      if (!tenant?.id || !user?.id || !selected) throw new Error("Missing context");
-
-      // Create disbursement batch (no claim linkage)
-      const { data: batch, error: batchErr } = await supabase
-        .from("disbursement_batches")
-        .insert({
-          tenant_id: tenant.id,
-          created_by: user.id,
-          check_amount: amount,
-          reserve_held: 0,
-          available_amount: amount,
-          delivery_speed: speed,
-          status: "pending",
-          notes: memo ? `Payroll: ${memo}` : "Payroll disbursement",
-        })
-        .select("id")
-        .single();
-      if (batchErr) throw batchErr;
-
-      // Insert single split
-      const { error: splitErr } = await supabase.from("disbursement_splits").insert({
-        batch_id: batch.id,
-        tenant_id: tenant.id,
-        stakeholder_account_id: selected.id,
-        amount,
-        pct_of_total: 100,
-        idempotence_key: `payroll_${batch.id}_${Date.now()}`,
-      });
-      if (splitErr) throw splitErr;
-
-      // Create payroll_runs record (pending)
-      const { data: runRow, error: runErr } = await supabase
-        .from("payroll_runs")
-        .insert({
-          tenant_id: tenant.id,
-          stakeholder_account_id: selected.id,
-          disbursement_batch_id: batch.id,
-          amount,
-          speed,
+      if (!tenant?.id || !selected) throw new Error("Missing context");
+      const amountCents = Math.round(amount * 100);
+      const signature = JSON.stringify([selected.id, amountCents, speed, memo]);
+      if (pending.current?.signature !== signature) pending.current = { signature, key: crypto.randomUUID() };
+      const idempotencyKey = pending.current.key;
+      const send = () =>
+        sendPayrollPayment({
+          tenantId: tenant.id,
+          stakeholderAccountId: selected.id,
+          amountCents,
+          speed: SEND_SPEED[speed],
           memo: memo || null,
-          initiated_by: user.id,
-          status: "pending",
-        })
-        .select("id")
-        .single();
-      if (runErr) throw runErr;
-
-      // Primary rail: Moov. Falls back to the legacy rail only when the
-      // recipient/payer still needs payment setup.
-      if (moovEnabled) {
-        const { data: moovData, error: moovErr } = await supabase.functions.invoke("moov-disburse", {
-          body: { batch_id: batch.id, source_kind: "bank" },
+          idempotencyKey,
         });
-
-        if (!moovErr && (moovData as any)?.success) {
-          await supabase.from("payroll_runs").update({ status: "submitted" }).eq("id", runRow.id);
-          return runRow.id;
-        }
-
-        let reason: any = (moovData as any) ?? null;
-        if (moovErr) {
-          try {
-            reason = await (moovErr as any).context?.json?.();
-          } catch {
-            reason = null;
+      const attempt = async () => {
+        try {
+          return await send();
+        } catch (error) {
+          // The server decides whether this login has confirmed two-factor; ask only when it says so.
+          if (!(error instanceof SendPaymentError) || error.code !== "totp_required") throw error;
+          const confirmed = await requireStepUp(
+            {
+              actionKey: "wallet.fund",
+              checkId: null,
+              tenantId: tenant.id,
+              title: "Confirm payroll payment",
+              description: "Enter the 6-digit code from your authenticator app. You'll only be asked once until you sign out.",
+            },
+            { force: true },
+          );
+          if (!confirmed) {
+            pending.current = null;
+            throw new Error("Payroll was cancelled. Two-factor confirmation is required.");
           }
+          return send();
         }
-        const code = reason?.error ?? "";
-        const recoverable = ["recipient_setup_required", "payer_setup_required", "insufficient_balance"].includes(code);
-
-        if (!recoverable) {
-          const msg = reason?.message ?? reason?.error ?? moovErr?.message ?? "Payment failed";
-          await supabase.from("payroll_runs").update({ status: "failed", error: msg }).eq("id", runRow.id);
-          throw new Error(msg);
+      };
+      // A long payment is finished in steps; each step continues the same payment.
+      for (let step = 0; ; step += 1) {
+        try {
+          const result = await attempt();
+          pending.current = null;
+          return result;
+        } catch (error) {
+          if (error instanceof SendPaymentError && error.code === "send_incomplete" && step < 8) continue;
+          throw error;
         }
-        
-        const msg = reason?.message ?? "Recipient not ready for Moov payroll. Please connect their bank account via Moov first.";
-        await supabase.from("payroll_runs").update({ status: "failed", error: msg }).eq("id", runRow.id);
-        throw new Error(msg);
       }
-
-      await supabase.from("payroll_runs").update({ status: "submitted" }).eq("id", runRow.id);
-      return runRow.id;
     },
     onSuccess: () => {
       toast({ title: "Payment submitted", description: `$${amount.toFixed(2)} sent to ${selected ? activeStakeholderName(selected) : "the payee"}.` });
