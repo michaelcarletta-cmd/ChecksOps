@@ -3224,7 +3224,8 @@ export const AUTHORIZED_SQL141_PERMANENT_VENDOR_PAYEES = Object.freeze({
 // platform-owner only). Two PERMISSIVE policies TO authenticated on public.mortgage_companies
 // (aws_insert_mortgage_companies_tenant_admin FOR INSERT, aws_update_mortgage_companies_tenant_admin FOR UPDATE),
 // on public.aws_is_tenant_manager_admin() AND is_active; the platform-owner policy unchanged. No predecessor.
-// Pending until a reviewed pin change records a staging read-live (ops/production-sql-142-apply.md).
+// Staging apply authorized (wave 37) from staging read-live run 41927312617: the pre-state, both policies absent,
+// equals the derived one (ops/production-sql-142-apply.md).
 export const AUTHORIZED_SQL142_MORTGAGE_COMPANIES_TENANT_ADMIN_WRITE = Object.freeze({
   key: 'sql142',
   filename: 'aws/workflows/sql/142_mortgage_companies_tenant_admin_write.sql',
@@ -3232,9 +3233,11 @@ export const AUTHORIZED_SQL142_MORTGAGE_COMPANIES_TENANT_ADMIN_WRITE = Object.fr
   // The commit that last authored the file bytes.
   commit: '10ef4ea130bf4f601132f61f1a00cfa1f08721f2',
   source_sha256: 'f140e75d67cdb67efa4c4ab21aa5d6bb04fb924a0b010c4496b48ab9fc4b156b',
-  authorization: 'pending',
-  execute: false,
-  expected_live_definition_sha256: null,
+  authorization: 'Owner approved 2026-11-04: staging apply (wave 37) from staging read-live run 41927312617',
+  execute: true,
+  // Staging read-live run 41927312617 (main 7e17ab760, executor deploy run 41926865597): already_applied false,
+  // precondition_failures [], prerequisites_missing []. Equal to the derived pre-state (both policies absent).
+  expected_live_definition_sha256: 'ae3be52e6cdd57b9ba779e573a0e1cdab53c793a63893044fb124efbe81238f3',
   // Code-derived: releaseIntendedHash('sql142', file bytes) (release-sql-state.mjs); re-derived by the tests.
   intended_replacement_sha256: '2cff3727e102a6dd7ed116b9ae6348a3725362b573c62fcc5050acec0bf10a69',
   function_identities: Object.freeze([]),
