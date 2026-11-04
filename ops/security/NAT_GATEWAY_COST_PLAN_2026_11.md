@@ -167,6 +167,27 @@ Deleting the NAT should leave these four unattached. Verify with `describe-addre
 has no association before releasing it. The unrelated idle `100.50.171.44`
 (`eipalloc-01f1f9b72ac281ce9`) is not part of this step.
 
+## Applied: step 1 (2026-11-04)
+
+Owner's go phrase: "NAT: create the two-AZ NAT".
+
+- Claude's first attempt (boto3 as `user/claude-code`) was refused at `ec2:AllocateAddress`
+  (`UnauthorizedOperation`, no identity-based policy allows it) before anything was created.
+  The owner then ran the commands in CloudShell.
+- Addresses: `checksops-vpc-nat-1a` `eipalloc-0d8fff9a8ff036785` (52.4.42.236) and
+  `checksops-vpc-nat-1f` `eipalloc-0dc609cf225a38c23` (23.20.96.103).
+- A first `create-nat-gateway` with the placeholders left in failed with
+  `InvalidElasticIpID.Malformed` and created nothing. The second, with client token
+  `checksops-vpc-nat-step1-20261104-b`, created **`nat-1f2d1e419482e2737`** (`checksops-vpc-nat`)
+  at 2026-11-04 20:38:09 UTC.
+- Verified read-only by Claude (boto3): `available`, `AvailabilityMode regional`,
+  `AutoProvisionZones disabled`, `AutoScalingIps disabled`, addresses only us-east-1a
+  (52.4.42.236) and us-east-1f (23.20.96.103), both `succeeded`. No route table points at it.
+  `rtb-057702ecbb292845f` still sends 0.0.0.0/0 to `nat-15f538197c4a75331`, which is `available`
+  with its four addresses. No traffic changed.
+
+For steps 2 and 3, `<NEW_NAT>` is `nat-1f2d1e419482e2737`.
+
 ## Alternatives considered
 
 - **Leave it as it is** (~$146/month). No risk, no saving.
