@@ -52,16 +52,40 @@ export async function sendPayment(input: {
   recipients: SendRecipient[];
   idempotencyKey: string;
 }): Promise<{ send: SendSummary; duplicate: boolean; message?: string }> {
-  const { data, error } = await supabase.functions.invoke("moov-disburse", {
-    body: {
-      tenant_id: input.tenantId,
-      check_id: input.checkId,
-      claim_id: input.claimId ?? null,
-      speed: input.speed,
-      recipients: input.recipients,
-      idempotency_key: input.idempotencyKey,
-    },
+  return invokeSend({
+    tenant_id: input.tenantId,
+    check_id: input.checkId,
+    claim_id: input.claimId ?? null,
+    speed: input.speed,
+    recipients: input.recipients,
+    idempotency_key: input.idempotencyKey,
   });
+}
+
+/**
+ * Payroll: the same send route and two-factor (once per login), not tied to a check, to exactly
+ * one stakeholder. The server records the payroll_runs row with the payment.
+ */
+export async function sendPayrollPayment(input: {
+  tenantId: string;
+  stakeholderAccountId: string;
+  amountCents: number;
+  speed: "standard" | "same_day";
+  memo?: string | null;
+  idempotencyKey: string;
+}): Promise<{ send: SendSummary; duplicate: boolean; message?: string }> {
+  return invokeSend({
+    tenant_id: input.tenantId,
+    purpose: "payroll",
+    speed: input.speed,
+    recipients: [{ kind: "stakeholder", stakeholder_account_id: input.stakeholderAccountId, amount_cents: input.amountCents }],
+    description: input.memo ? `Payroll: ${input.memo}` : "Payroll",
+    idempotency_key: input.idempotencyKey,
+  });
+}
+
+async function invokeSend(body: Record<string, unknown>): Promise<{ send: SendSummary; duplicate: boolean; message?: string }> {
+  const { data, error } = await supabase.functions.invoke("moov-disburse", { body });
   const failure = (reply: SendReply | null | undefined, fallback: string) => {
     const code = typeof reply?.error === "string" ? reply.error : null;
     const message = typeof reply?.message === "string" && reply.message ? reply.message : code || fallback;
