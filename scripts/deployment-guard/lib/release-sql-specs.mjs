@@ -7846,4 +7846,82 @@ export const RELEASE_SQL_SPECS = deepFreeze({
     ]
   },
 
+  // SQL 142 (owner decision 2026-11-04, "Option 2"): tenant admins may add and edit the shared mortgage company
+  // directory. public.mortgage_companies' only write policy (aws/rls/sql/24_complete_write_policies.sql,
+  // aws_write_mortgage_companies FOR ALL TO authenticated, aws_is_authenticated() AND aws_is_cross_tenant_reader())
+  // admits the platform owner alone, so a tenant admin's add or edit from Manager or a Loss Draft check answered
+  // rls_denied (production API log 2026-11-04T20:28:16Z; read-only production lookups SSM da2687b5 and f90ee490).
+  // The file adds two PERMISSIVE policies TO authenticated on public.aws_is_tenant_manager_admin() (the platform
+  // owner, a user_roles admin or a tenant_users owner/admin): aws_insert_mortgage_companies_tenant_admin FOR INSERT
+  // WITH CHECK (admin AND is_active) and aws_update_mortgage_companies_tenant_admin FOR UPDATE USING / WITH CHECK
+  // (admin AND is_active). Deactivating, reactivating and deleting stay platform-owner only: the owner policy is not
+  // changed (it is in the unrelated snapshot) and must be intact before any apply. The pre-state is derivable (the
+  // two policies absent). No predecessor. altered_relations: CREATE POLICY needs the table owner. extra_preconditions
+  // / counts (read-only catalog counts, never rows; each exactly 1): RLS enabled on the ordinary table, is_active a
+  // boolean column, the owner policy in its exact form, and no policy on the table other than the SELECT policy, the
+  // owner policy and this file's two (the file raises sql142_* otherwise). No function, table, column, grant or trigger.
+  sql142: {
+    "key": "sql142",
+    "label": "SQL 142",
+    "choice": "sql142-mortgage-companies-tenant-admin-write",
+    "production_pin_rel": "ops/deployment-guard/sql142-mortgage-companies-tenant-admin-write-production-apply.json",
+    "script": "sql142-mortgage-companies-tenant-admin-write-production-apply",
+    "prerequisites": [
+      "public.mortgage_companies",
+      "column public.mortgage_companies.is_active",
+      "public.aws_is_tenant_manager_admin()",
+      "public.aws_is_authenticated()",
+      "public.aws_is_cross_tenant_reader()",
+      "role authenticated"
+    ],
+    "predecessors": [],
+    "extra_preconditions": [
+      "mortgage_companies_rls_enabled",
+      "mortgage_companies_is_active_boolean",
+      "mortgage_companies_owner_policy_intact",
+      "mortgage_companies_no_unexpected_policy"
+    ],
+    "counts": {
+      "mortgage_companies_rls_enabled": {
+        "sql": "SELECT count(*)::int AS n FROM pg_catalog.pg_class c WHERE c.oid = pg_catalog.to_regclass('public.mortgage_companies') AND c.relkind = 'r' AND c.relrowsecurity"
+      },
+      "mortgage_companies_is_active_boolean": {
+        "sql": "SELECT count(*)::int AS n FROM pg_catalog.pg_attribute a WHERE a.attrelid = pg_catalog.to_regclass('public.mortgage_companies') AND a.attname = 'is_active' AND NOT a.attisdropped AND a.atttypid = 'pg_catalog.bool'::pg_catalog.regtype"
+      },
+      "mortgage_companies_owner_policy_intact": {
+        "sql": "SELECT count(*)::int AS n FROM pg_catalog.pg_policy pol WHERE pol.polrelid = pg_catalog.to_regclass('public.mortgage_companies') AND pol.polname = 'aws_write_mortgage_companies' AND pol.polpermissive AND pol.polcmd = '*' AND pol.polroles = ARRAY(SELECT r.oid FROM pg_catalog.pg_roles r WHERE r.rolname = 'authenticated') AND pg_catalog.pg_get_expr(pol.polqual, pol.polrelid) = ANY (ARRAY['(aws_is_authenticated() AND aws_is_cross_tenant_reader())', '(public.aws_is_authenticated() AND public.aws_is_cross_tenant_reader())']::text[]) AND pg_catalog.pg_get_expr(pol.polwithcheck, pol.polrelid) = ANY (ARRAY['(aws_is_authenticated() AND aws_is_cross_tenant_reader())', '(public.aws_is_authenticated() AND public.aws_is_cross_tenant_reader())']::text[])"
+      },
+      "mortgage_companies_no_unexpected_policy": {
+        "sql": "SELECT count(*)::int AS n FROM pg_catalog.pg_class c WHERE c.oid = pg_catalog.to_regclass('public.mortgage_companies') AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_policy pol WHERE pol.polrelid = c.oid AND pol.polname NOT IN ('aws_select_mortgage_companies', 'aws_write_mortgage_companies', 'aws_insert_mortgage_companies_tenant_admin', 'aws_update_mortgage_companies_tenant_admin'))"
+      }
+    },
+    "functions": [],
+    "policies": [
+      {
+        "table": "public.mortgage_companies",
+        "name": "aws_insert_mortgage_companies_tenant_admin",
+        "cmd": "INSERT",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": true,
+        "qual": null,
+        "with_check": "(public.aws_is_tenant_manager_admin() AND is_active)"
+      },
+      {
+        "table": "public.mortgage_companies",
+        "name": "aws_update_mortgage_companies_tenant_admin",
+        "cmd": "UPDATE",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": true,
+        "qual": "(public.aws_is_tenant_manager_admin() AND is_active)",
+        "with_check": "(public.aws_is_tenant_manager_admin() AND is_active)"
+      }
+    ],
+    "altered_relations": [
+      "public.mortgage_companies"
+    ]
+  },
 });
