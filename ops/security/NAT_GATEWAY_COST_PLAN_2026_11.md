@@ -188,6 +188,41 @@ Owner's go phrase: "NAT: create the two-AZ NAT".
 
 For steps 2 and 3, `<NEW_NAT>` is `nat-1f2d1e419482e2737`.
 
+## Applied: step 2 (2026-11-04)
+
+The owner ran the step 2 command in CloudShell. CloudTrail `ReplaceRoute` on
+`rtb-057702ecbb292845f`, all three by `root` from 3.236.155.90:
+
+| time (UTC) | `natGatewayId` |
+|---|---|
+| 20:43:09 | `nat-1f2d1e419482e2737` (new) |
+| 20:43:16 | `nat-15f538197c4a75331` (the rollback command, run along with step 2) |
+| 20:44:24 | `nat-1f2d1e419482e2737` (new, final) |
+
+Egress therefore switched twice within about 75 seconds before settling on the new NAT.
+
+Verified:
+- **Route.** 0.0.0.0/0 → `nat-1f2d1e419482e2737`, `active`. Read by Claude six times
+  20:45–20:48 UTC and again at 20:50.
+- **Staging egress.** The owner ran `aws lambda invoke` on `checksops-staging-api`,
+  `GET /providers/egress`: `ok true`, `moovReachable true`, `checkaltUatReachable true`
+  (`api.moov.io` HTTP 403 in 384 ms, `uatapi.checkalt.com` HTTP 403 in 170 ms).
+- **Production egress.** The owner ran the same invoke on `checksops-production-prep-api`
+  (`environment production-prep`): `ok true`, Moov HTTP 403 in 340 ms, CheckAlt UAT HTTP 403 in
+  156 ms. A 403 means the host was reached. The probe sends no credentials and changes nothing.
+- **NAT metrics** (`AWS/NATGateway`, 1-minute sums, read at 20:50 UTC):
+  - The new NAT carries traffic in us-east-1f from 20:45 (`ConnectionEstablishedCount` 9, 2, 1)
+    with no `ErrorPortAllocation`.
+  - The old NAT has had no traffic since 20:42.
+  - The new NAT's us-east-1a showed `PacketsDropCount` 38, 49, 27, 21, 2 at 20:41–20:45, falling
+    to 2 by 20:45, with no connections there yet. The 20:41–20:42 counts come before any route
+    pointed at it and are not explained. The 20:43–20:44 counts fit the switch-back and forth.
+  - **us-east-1a has not yet carried a connection through the new NAT.** It is to be confirmed
+    during the soak, before step 3.
+
+The 24-hour soak runs from 20:44:24 UTC. Step 3 ("NAT: delete the old NAT") is due no earlier
+than 2026-11-05 20:44 UTC, and only after us-east-1a traffic on the new NAT is confirmed.
+
 ## Alternatives considered
 
 - **Leave it as it is** (~$146/month). No risk, no saving.
