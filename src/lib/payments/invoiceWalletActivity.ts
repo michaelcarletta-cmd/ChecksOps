@@ -102,3 +102,34 @@ export function invoiceWalletActivity(
   }
   return rows;
 }
+
+export interface PaidInvoiceRevenueRow {
+  id: string;
+  at: string;
+  invoiceNumber: string | null;
+  customerName: string | null;
+  amountCents: number;
+}
+
+/**
+ * Revenue & Profit: money received from paid invoices (the completed rows above, one per invoice).
+ * Pending payments are not revenue yet. Same tenant, environment and status rules as the wallet.
+ */
+export function paidInvoiceRevenue(
+  invoices: InvoiceActivitySourceRow[],
+  options: { tenantId: string; environment?: string | null },
+): PaidInvoiceRevenueRow[] {
+  const byId = new Map((invoices || []).filter(Boolean).map((row) => [row.id, row]));
+  return invoiceWalletActivity(invoices, options)
+    .filter((row) => row.status === "completed")
+    .map((row) => {
+      const source = byId.get(row.invoiceId);
+      return {
+        id: row.invoiceId,
+        at: row.at,
+        invoiceNumber: String(source?.invoice_number || "").trim() || null,
+        customerName: String(source?.customer_name || "").trim() || null,
+        amountCents: row.amountCents,
+      };
+    });
+}

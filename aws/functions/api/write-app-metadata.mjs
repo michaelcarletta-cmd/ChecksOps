@@ -290,49 +290,49 @@ export const executeLossDraftDocuments = async ({ client, mapping, op, values, f
   return { rows };
 };
 
+// Text columns the mortgage company writes accept, with their length caps. The first block is the
+// Loss Draft desk; the second is MortgageCompanyEditorDialog (Manager and a Loss Draft check):
+// the directory contact and the mailing address.
+const MORTGAGE_COMPANY_TEXT_COLUMNS = [
+  ['name', 200], ['website', 300], ['phone', 40],
+  ['loss_draft_email', 200], ['loss_draft_phone', 40], ['loss_draft_fax', 40], ['loss_draft_contact', 200],
+  ['contact_name', 200], ['email', 200], ['phone_extension', 20], ['mortgage_site', 300],
+  ['address_line_1', 200], ['address_line_2', 200], ['address_line_3', 200], ['address_line_4', 200], ['address_line_5', 200],
+];
+
+const mortgageCompanyText = (values) => {
+  const out = {};
+  for (const [col, max] of MORTGAGE_COMPANY_TEXT_COLUMNS) {
+    if (col in values) {
+      const text = clip(values[col], max);
+      if (text?.error) return { error: text };
+      out[col] = text;
+    }
+  }
+  return { out };
+};
+
 export const executeMortgageCompanies = async ({ client, mapping, op, values, filters }) => {
   if (op === 'insert') {
     const name = clip(values.name, 200);
     if (name?.error || !name) return name?.error || { error: 'missing_required_field', field: 'name' };
-    const website = clip(values.website, 300);
-    if (website?.error) return website;
-    const phone = clip(values.phone, 40);
-    if (phone?.error) return phone;
-    const email = clip(values.loss_draft_email, 200);
-    if (email?.error) return email;
-    const ldPhone = clip(values.loss_draft_phone, 40);
-    if (ldPhone?.error) return ldPhone;
-    const fax = clip(values.loss_draft_fax, 40);
-    if (fax?.error) return fax;
+    const text = mortgageCompanyText(values);
+    if (text.error) return text.error;
+    const columns = { ...text.out, name, is_active: !(values.is_active === false || values.is_active === 'false') };
+    const names = Object.keys(columns);
     const rows = (await client.query(
-      `INSERT INTO public.mortgage_companies (name, is_active, website, phone, loss_draft_email, loss_draft_phone, loss_draft_fax)
-       VALUES ($1::text, COALESCE($2::boolean, true), $3::text, $4::text, $5::text, $6::text, $7::text)
+      `INSERT INTO public.mortgage_companies (${names.map((c) => ident(c, 'column')).join(', ')})
+       VALUES (${names.map((c, i) => `$${i + 1}::${c === 'is_active' ? 'boolean' : 'text'}`).join(', ')})
        RETURNING *`,
-      [
-        name,
-        values.is_active === false || values.is_active === 'false' ? false : true,
-        website,
-        phone,
-        email,
-        ldPhone,
-        fax,
-      ],
+      names.map((c) => columns[c]),
     )).rows;
     return { rows };
   }
   const id = eqFilter(filters, 'id');
   if (!isUuid(id)) return { error: 'invalid_uuid', field: 'id' };
-  const out = {};
-  for (const [col, max] of [
-    ['name', 200], ['website', 300], ['phone', 40],
-    ['loss_draft_email', 200], ['loss_draft_phone', 40], ['loss_draft_fax', 40], ['loss_draft_contact', 200],
-  ]) {
-    if (col in values) {
-      const text = clip(values[col], max);
-      if (text?.error) return text;
-      out[col] = text;
-    }
-  }
+  const text = mortgageCompanyText(values);
+  if (text.error) return text.error;
+  const out = text.out;
   if ('is_active' in values) out.is_active = values.is_active === true || values.is_active === 'true';
   if (!Object.keys(out).length) return { error: 'missing_required_field', field: 'values' };
   const built = buildSet(out, { is_active: 'boolean' });

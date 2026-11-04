@@ -17,6 +17,7 @@ import { getFunctionErrorMessage } from "@/lib/edgeFunctionError";
 import { FunctionsHttpError, FunctionsRelayError, FunctionsFetchError } from "@supabase/supabase-js";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
+import { isPlatformOwner } from "@/lib/masterMerchant";
 import { useTenantFilter } from "@/hooks/useTenantFilter";
 import { useAwsPollingFallback } from "@/hooks/useAwsPollingFallback";
 import {
@@ -208,6 +209,7 @@ import {
 } from "@/features/check-command/status";
 import { useCheckCommandRealtime } from "@/features/check-command/useCheckCommandRealtime";
 import { optimisticStage, optimisticRemove } from "@/features/check-command/optimistic";
+import { sharedReleasedRows } from "@/features/check-command/sharedFundsReleased";
 import { displayCase, displayCaseOrNull } from "@/lib/displayCase";
 import { useDuplicateChecks } from "@/hooks/useDuplicateChecks";
 import { DuplicateCheckBadge, DuplicateCheckBanner } from "@/components/checks/DuplicateCheckFlag";
@@ -1140,12 +1142,12 @@ export default function CheckCommandCenter() {
 
   const filteredFundsReleased = useMemo(
     () => {
-      const splits = (fundsReleased as any[]).filter(matchesSplitSearch);
-      // We also want to include checks that were marked as disbursed_externally 
-      // but might not have a split record yet (though recording external creates one).
-      return splits;
+      // A partner's shared check whose funds the source released has no split of ours: list it
+      // from the check itself, or it would leave every tab (sharedFundsReleased.ts).
+      const sharedReleased = sharedReleasedRows(sharedChecks as any[], fundsReleased as any[]);
+      return [...(fundsReleased as any[]), ...sharedReleased].filter(matchesSplitSearch);
     },
-    [fundsReleased, matchesSplitSearch],
+    [fundsReleased, sharedChecks, matchesSplitSearch],
   );
   const filteredFundsReceived = useMemo(
     () => (fundsReceived as any[]).filter(matchesSplitSearch),
@@ -1568,7 +1570,9 @@ export default function CheckCommandCenter() {
                               const checkId = batch?.check_intake_item_id;
                               const isSelected = !!checkId && selectedCheck === checkId;
                               const acct = split.stakeholder_accounts;
-                              const party = `To ${split.recipient_name ?? acct?.nickname ?? acct?.custname ?? "—"}`;
+                              const party = split._sharedReleasedBy
+                                ? `Released by ${split._sharedReleasedBy}`
+                                : `To ${split.recipient_name ?? acct?.nickname ?? acct?.custname ?? "—"}`;
                               const carrier = displayCase(check?.carrier_name) || "—";
                               return (
                                 <CompactCheckRow
@@ -1593,7 +1597,11 @@ export default function CheckCommandCenter() {
                                         {split.external_check_number ? ` · Ck #${split.external_check_number}` : ""}
                                       </Badge>
                                       <Badge variant="outline" className="text-[10px]">
-                                        Settled {split.settled_at ? format(new Date(split.settled_at), "MMM d, yyyy") : "—"}
+                                        {split._sharedReleasedBy ? (
+                                          <>Updated {split.updated_at ? format(new Date(split.updated_at), "MMM d, yyyy") : "—"}</>
+                                        ) : (
+                                          <>Settled {split.settled_at ? format(new Date(split.settled_at), "MMM d, yyyy") : "—"}</>
+                                        )}
                                       </Badge>
                                       {fundsLabel && (
                                         <Badge variant="outline" className="text-[10px]">{fundsLabel}</Badge>
@@ -2802,6 +2810,8 @@ function CheckDetailPanel({
   const [showForceMove, setShowForceMove] = useState(false);
   const [detailShareOpen, setDetailShareOpen] = useState(false);
   const { user } = useAuth();
+  // The Audit tab is for management (the platform owner), also when viewing a tenant; tenants do not see it.
+  const showAuditTab = isPlatformOwner(user?.email, user?.id);
   const { toast } = useToast();
   const qc = useQueryClient();
   const { tenantId } = useTenantFilter();
@@ -3875,7 +3885,9 @@ function CheckDetailPanel({
                 <Share2 className="h-3 w-3" /> Partners
                 <MessageSquare className="h-3 w-3 ml-0.5 opacity-70" />
               </TabsTrigger>
-              <TabsTrigger value="audit" className="text-xs whitespace-nowrap px-2 sm:px-3">Audit</TabsTrigger>
+              {showAuditTab && (
+                <TabsTrigger value="audit" className="text-xs whitespace-nowrap px-2 sm:px-3">Audit</TabsTrigger>
+              )}
             </TabsList>
           </div>
 
@@ -4528,27 +4540,29 @@ function CheckDetailPanel({
               </Suspense>
             </TabsContent>
 
-            <TabsContent value="audit" className="p-4 space-y-3 mt-0">
-              <div className="space-y-2">
-              {auditLog.map((entry) => (
-                <div key={entry.id} className="flex gap-3 text-sm">
-                  <div className="w-1 rounded-full bg-primary/30 shrink-0" />
-                  <div>
-                    <p className="font-medium">{entry.event_type.replace(/_/g, " ")}</p>
-                    {entry.event_description && (
-                      <p className="text-muted-foreground text-xs">{entry.event_description}</p>
-                    )}
-                    <p className="text-muted-foreground text-[10px]">
-                      {format(new Date(entry.created_at), "MMM d, yyyy h:mm a")}
-                    </p>
+            {showAuditTab && (
+              <TabsContent value="audit" className="p-4 space-y-3 mt-0">
+                <div className="space-y-2">
+                {auditLog.map((entry) => (
+                  <div key={entry.id} className="flex gap-3 text-sm">
+                    <div className="w-1 rounded-full bg-primary/30 shrink-0" />
+                    <div>
+                      <p className="font-medium">{entry.event_type.replace(/_/g, " ")}</p>
+                      {entry.event_description && (
+                        <p className="text-muted-foreground text-xs">{entry.event_description}</p>
+                      )}
+                      <p className="text-muted-foreground text-[10px]">
+                        {format(new Date(entry.created_at), "MMM d, yyyy h:mm a")}
+                      </p>
+                    </div>
                   </div>
+                ))}
+                {auditLog.length === 0 && (
+                  <p className="text-sm text-muted-foreground text-center py-4">No audit events</p>
+                )}
                 </div>
-              ))}
-              {auditLog.length === 0 && (
-                <p className="text-sm text-muted-foreground text-center py-4">No audit events</p>
-              )}
-              </div>
-            </TabsContent>
+              </TabsContent>
+            )}
 
             <TabsContent value="partners" className="p-4 mt-0 space-y-4">
               <div>

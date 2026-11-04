@@ -7721,4 +7721,207 @@ export const RELEASE_SQL_SPECS = deepFreeze({
     ]
   },
 
+  // SQL 141 (owner decision 2026-11-03: permanent vendors; a tenant adds a vendor as a payee by its Partner Code,
+  // with no partnership and nothing shared): two new tables and three SECURITY DEFINER functions. Creates
+  // public.vendor_tenants (one row per vendor organization) and public.tenant_vendor_payees (one row per tenant ->
+  // vendor payee link; one live link per pair, partial unique index), each RLS on, not forced, one SELECT policy TO
+  // authenticated (the organization's members via aws_user_tenant_ids() or the platform owner), and table ACL
+  // exactly SELECT for checksops and authenticated (every other non-owner grant revoked, the default privileges of
+  // a new table included: the cause of SQL 117's staging rollback). The functions aws_vendor_payee_add(uuid, text),
+  // aws_vendor_payee_remove(uuid, uuid) and aws_platform_owner_set_tenant_vendor(uuid, boolean) (VOLATILE,
+  // search_path public, row_security off; EXECUTE checksops and the owner) write only the two tables the file
+  // creates, which the login owns. definer_writes lists the two existing relations the file's own
+  // sql141_definer_cannot_read check names (the add function reads tenants and tenant_partner_code_aliases past
+  // RLS), as SQL 133 lists the relations its DEFINER gate reads; the new tables cannot be listed (absent in the
+  // pre-state). public.tenants and every existing object are unchanged (no altered_relations). No predecessor.
+  sql141: {
+    "key": "sql141",
+    "label": "SQL 141",
+    "choice": "sql141-permanent-vendor-payees",
+    "production_pin_rel": "ops/deployment-guard/sql141-permanent-vendor-payees-production-apply.json",
+    "script": "sql141-permanent-vendor-payees-production-apply",
+    "prerequisites": [
+      "public.tenants",
+      "public.tenant_users",
+      "public.tenant_partner_code_aliases",
+      "auth.uid()",
+      "public.aws_user_tenant_ids()",
+      "public.is_platform_owner()",
+      "role checksops",
+      "role authenticated",
+      "column public.tenants.id",
+      "column public.tenants.name",
+      "column public.tenants.partner_code",
+      "column public.tenants.subscription_status",
+      "column public.tenant_users.tenant_id",
+      "column public.tenant_users.user_id",
+      "column public.tenant_partner_code_aliases.tenant_id",
+      "column public.tenant_partner_code_aliases.code"
+    ],
+    "predecessors": [],
+    "functions": [
+      {
+        "identity": "public.aws_vendor_payee_add(uuid, text)",
+        "acl": ["checksops EXECUTE", "owner EXECUTE"]
+      },
+      {
+        "identity": "public.aws_vendor_payee_remove(uuid, uuid)",
+        "acl": ["checksops EXECUTE", "owner EXECUTE"]
+      },
+      {
+        "identity": "public.aws_platform_owner_set_tenant_vendor(uuid, boolean)",
+        "acl": ["checksops EXECUTE", "owner EXECUTE"]
+      }
+    ],
+    "policies": [
+      {
+        "table": "public.vendor_tenants",
+        "name": "aws_select_vendor_tenants",
+        "cmd": "SELECT",
+        "roles": ["authenticated"],
+        "permissive": true,
+        "qual": "((tenant_id IN ( SELECT public.aws_user_tenant_ids() AS aws_user_tenant_ids)) OR public.is_platform_owner())",
+        "with_check": null
+      },
+      {
+        "table": "public.tenant_vendor_payees",
+        "name": "aws_select_tenant_vendor_payees",
+        "cmd": "SELECT",
+        "roles": ["authenticated"],
+        "permissive": true,
+        "qual": "((tenant_id IN ( SELECT public.aws_user_tenant_ids() AS aws_user_tenant_ids)) OR public.is_platform_owner())",
+        "with_check": null
+      }
+    ],
+    "tables": [
+      {
+        "name": "public.vendor_tenants",
+        "rls": true,
+        "forced": false,
+        "columns": [
+          ["tenant_id", "uuid", true, null],
+          ["created_at", "timestamp with time zone", true, "now()"],
+          ["created_by", "uuid", false, null]
+        ],
+        "constraints": [
+          ["vendor_tenants_pkey", "PRIMARY KEY (tenant_id)"],
+          ["vendor_tenants_tenant_id_fkey", "FOREIGN KEY (tenant_id) REFERENCES public.tenants(id) ON DELETE CASCADE"]
+        ],
+        "indexes": [
+          ["vendor_tenants_pkey", "CREATE UNIQUE INDEX vendor_tenants_pkey ON public.vendor_tenants USING btree (tenant_id)"]
+        ],
+        "acl": ["authenticated SELECT", "checksops SELECT"]
+      },
+      {
+        "name": "public.tenant_vendor_payees",
+        "rls": true,
+        "forced": false,
+        "columns": [
+          ["id", "uuid", true, "gen_random_uuid()"],
+          ["tenant_id", "uuid", true, null],
+          ["vendor_tenant_id", "uuid", true, null],
+          ["partner_code_used", "text", false, null],
+          ["added_by", "uuid", false, null],
+          ["created_at", "timestamp with time zone", true, "now()"],
+          ["removed_at", "timestamp with time zone", false, null],
+          ["removed_by", "uuid", false, null]
+        ],
+        "constraints": [
+          ["tenant_vendor_payees_not_self", "CHECK ((tenant_id <> vendor_tenant_id))"],
+          ["tenant_vendor_payees_pkey", "PRIMARY KEY (id)"],
+          ["tenant_vendor_payees_tenant_id_fkey", "FOREIGN KEY (tenant_id) REFERENCES public.tenants(id) ON DELETE CASCADE"],
+          ["tenant_vendor_payees_vendor_tenant_id_fkey", "FOREIGN KEY (vendor_tenant_id) REFERENCES public.tenants(id) ON DELETE CASCADE"]
+        ],
+        "indexes": [
+          ["tenant_vendor_payees_live_pair_key", "CREATE UNIQUE INDEX tenant_vendor_payees_live_pair_key ON public.tenant_vendor_payees USING btree (tenant_id, vendor_tenant_id) WHERE (removed_at IS NULL)"],
+          ["tenant_vendor_payees_pkey", "CREATE UNIQUE INDEX tenant_vendor_payees_pkey ON public.tenant_vendor_payees USING btree (id)"],
+          ["tenant_vendor_payees_vendor_idx", "CREATE INDEX tenant_vendor_payees_vendor_idx ON public.tenant_vendor_payees USING btree (vendor_tenant_id)"]
+        ],
+        "acl": ["authenticated SELECT", "checksops SELECT"]
+      }
+    ],
+    "definer_writes": [
+      "public.tenants",
+      "public.tenant_partner_code_aliases"
+    ]
+  },
+
+  // SQL 142 (owner decision 2026-11-04, "Option 2"): tenant admins may add and edit the shared mortgage company
+  // directory. public.mortgage_companies' only write policy (aws/rls/sql/24_complete_write_policies.sql,
+  // aws_write_mortgage_companies FOR ALL TO authenticated, aws_is_authenticated() AND aws_is_cross_tenant_reader())
+  // admits the platform owner alone, so a tenant admin's add or edit from Manager or a Loss Draft check answered
+  // rls_denied (production API log 2026-11-04T20:28:16Z; read-only production lookups SSM da2687b5 and f90ee490).
+  // The file adds two PERMISSIVE policies TO authenticated on public.aws_is_tenant_manager_admin() (the platform
+  // owner, a user_roles admin or a tenant_users owner/admin): aws_insert_mortgage_companies_tenant_admin FOR INSERT
+  // WITH CHECK (admin AND is_active) and aws_update_mortgage_companies_tenant_admin FOR UPDATE USING / WITH CHECK
+  // (admin AND is_active). Deactivating, reactivating and deleting stay platform-owner only: the owner policy is not
+  // changed (it is in the unrelated snapshot) and must be intact before any apply. The pre-state is derivable (the
+  // two policies absent). No predecessor. altered_relations: CREATE POLICY needs the table owner. extra_preconditions
+  // / counts (read-only catalog counts, never rows; each exactly 1): RLS enabled on the ordinary table, is_active a
+  // boolean column, the owner policy in its exact form, and no policy on the table other than the SELECT policy, the
+  // owner policy and this file's two (the file raises sql142_* otherwise). No function, table, column, grant or trigger.
+  sql142: {
+    "key": "sql142",
+    "label": "SQL 142",
+    "choice": "sql142-mortgage-companies-tenant-admin-write",
+    "production_pin_rel": "ops/deployment-guard/sql142-mortgage-companies-tenant-admin-write-production-apply.json",
+    "script": "sql142-mortgage-companies-tenant-admin-write-production-apply",
+    "prerequisites": [
+      "public.mortgage_companies",
+      "column public.mortgage_companies.is_active",
+      "public.aws_is_tenant_manager_admin()",
+      "public.aws_is_authenticated()",
+      "public.aws_is_cross_tenant_reader()",
+      "role authenticated"
+    ],
+    "predecessors": [],
+    "extra_preconditions": [
+      "mortgage_companies_rls_enabled",
+      "mortgage_companies_is_active_boolean",
+      "mortgage_companies_owner_policy_intact",
+      "mortgage_companies_no_unexpected_policy"
+    ],
+    "counts": {
+      "mortgage_companies_rls_enabled": {
+        "sql": "SELECT count(*)::int AS n FROM pg_catalog.pg_class c WHERE c.oid = pg_catalog.to_regclass('public.mortgage_companies') AND c.relkind = 'r' AND c.relrowsecurity"
+      },
+      "mortgage_companies_is_active_boolean": {
+        "sql": "SELECT count(*)::int AS n FROM pg_catalog.pg_attribute a WHERE a.attrelid = pg_catalog.to_regclass('public.mortgage_companies') AND a.attname = 'is_active' AND NOT a.attisdropped AND a.atttypid = 'pg_catalog.bool'::pg_catalog.regtype"
+      },
+      "mortgage_companies_owner_policy_intact": {
+        "sql": "SELECT count(*)::int AS n FROM pg_catalog.pg_policy pol WHERE pol.polrelid = pg_catalog.to_regclass('public.mortgage_companies') AND pol.polname = 'aws_write_mortgage_companies' AND pol.polpermissive AND pol.polcmd = '*' AND pol.polroles = ARRAY(SELECT r.oid FROM pg_catalog.pg_roles r WHERE r.rolname = 'authenticated') AND pg_catalog.pg_get_expr(pol.polqual, pol.polrelid) = ANY (ARRAY['(aws_is_authenticated() AND aws_is_cross_tenant_reader())', '(public.aws_is_authenticated() AND public.aws_is_cross_tenant_reader())']::text[]) AND pg_catalog.pg_get_expr(pol.polwithcheck, pol.polrelid) = ANY (ARRAY['(aws_is_authenticated() AND aws_is_cross_tenant_reader())', '(public.aws_is_authenticated() AND public.aws_is_cross_tenant_reader())']::text[])"
+      },
+      "mortgage_companies_no_unexpected_policy": {
+        "sql": "SELECT count(*)::int AS n FROM pg_catalog.pg_class c WHERE c.oid = pg_catalog.to_regclass('public.mortgage_companies') AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_policy pol WHERE pol.polrelid = c.oid AND pol.polname NOT IN ('aws_select_mortgage_companies', 'aws_write_mortgage_companies', 'aws_insert_mortgage_companies_tenant_admin', 'aws_update_mortgage_companies_tenant_admin'))"
+      }
+    },
+    "functions": [],
+    "policies": [
+      {
+        "table": "public.mortgage_companies",
+        "name": "aws_insert_mortgage_companies_tenant_admin",
+        "cmd": "INSERT",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": true,
+        "qual": null,
+        "with_check": "(public.aws_is_tenant_manager_admin() AND is_active)"
+      },
+      {
+        "table": "public.mortgage_companies",
+        "name": "aws_update_mortgage_companies_tenant_admin",
+        "cmd": "UPDATE",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": true,
+        "qual": "(public.aws_is_tenant_manager_admin() AND is_active)",
+        "with_check": "(public.aws_is_tenant_manager_admin() AND is_active)"
+      }
+    ],
+    "altered_relations": [
+      "public.mortgage_companies"
+    ]
+  },
 });

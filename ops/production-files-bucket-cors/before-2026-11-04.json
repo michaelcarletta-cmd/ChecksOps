@@ -1,0 +1,37 @@
+{
+  "CORSRules": [
+    {
+      "AllowedHeaders": [
+        "*"
+      ],
+      "AllowedMethods": [
+        "GET",
+        "HEAD"
+      ],
+      "AllowedOrigins": [
+        "https://checksops.com",
+        "https://www.checksops.com"
+      ],
+      "ExposeHeaders": [
+        "Content-Type",
+        "Content-Length",
+        "ETag",
+        "Content-Disposition"
+      ],
+      "MaxAgeSeconds": 300
+    },
+    {
+      "AllowedHeaders": [
+        "content-type"
+      ],
+      "AllowedMethods": [
+        "PUT"
+      ],
+      "AllowedOrigins": [
+        "https://checksops.com",
+        "https://www.checksops.com"
+      ],
+      "MaxAgeSeconds": 300
+    }
+  ]
+}

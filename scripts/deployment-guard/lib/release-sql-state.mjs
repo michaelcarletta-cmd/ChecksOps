@@ -1,5 +1,5 @@
 /**
- * One engine for the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108 to SQL 140), shared by the staging
+ * One engine for the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108 to SQL 142), shared by the staging
  * guarded executor (aws/write-path/guarded-sql-executor/index.mjs) and the production tools
  * (release-sql-production-apply.mjs): the catalog state reader, the code-derived
  * fingerprints, the pre- and post-conditions, the predecessor rules and the unrelated-catalog
@@ -910,6 +910,13 @@ export function releaseSharedPreconditionFailures(key, state, text, { environmen
     if (extra === 'billing_table_rls_enabled') checks.push(['billing_table_rls_enabled', s.counts?.billing_table_rls_enabled === 1]);
     if (extra === 'billing_write_policy_permissive_all') checks.push(['billing_write_policy_permissive_all', s.counts?.billing_write_policy_permissive_all === 1]);
     if (extra === 'billing_job_policy_intact') checks.push(['billing_job_policy_intact', s.counts?.billing_job_policy_intact === 1]);
+    // SQL 142: public.mortgage_companies an RLS-enabled ordinary table with a boolean is_active, its platform-owner
+    // write policy aws_write_mortgage_companies intact (PERMISSIVE FOR ALL TO exactly {authenticated},
+    // aws_is_authenticated() AND aws_is_cross_tenant_reader()), and no policy beyond the SELECT policy, the owner
+    // policy and the file's two. Read-only catalog counts (never rows); each must be exactly 1, null fails closed.
+    for (const name of ['mortgage_companies_rls_enabled', 'mortgage_companies_is_active_boolean', 'mortgage_companies_owner_policy_intact', 'mortgage_companies_no_unexpected_policy']) {
+      if (extra === name) checks.push([name, s.counts?.[name] === 1]);
+    }
     // SQL 98: the per-check default price exists (an active row), or the file seeds it (no row).
     if (extra === 'check_billing_config_active_or_empty') {
       checks.push(['check_billing_config_active_or_empty', s.counts?.check_billing_config_active_rows > 0 || s.counts?.check_billing_config_rows === 0]);

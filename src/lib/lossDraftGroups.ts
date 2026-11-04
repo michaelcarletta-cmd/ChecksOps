@@ -45,13 +45,28 @@ export function groupLossDraftsByClaim<T extends LossDraftGroupInput>(
       groups.set(key, {
         key,
         claimNumber: claimNumber || "Unlinked claim",
-        policyholderName:
-          d.policyholder_name || insuredFromPayeeLine(d.payee_line) || d.payee_line || "Unknown insured",
+        policyholderName: lossDraftInsuredName(d, insuredFromPayeeLine),
         drafts: [d],
       });
     }
   }
   return Array.from(groups.values());
+}
+
+/**
+ * The insured's name for a loss draft. The loss_draft_dashboard view falls back to the check's
+ * whole payee line when the draft has no claim (COALESCE(claims.policyholder_name, payee_line)),
+ * so a name equal to the payee line is treated as no name and the insured is taken from the payee
+ * line, as the check tabs do (extractInsuredName). The full payee line is the last resort.
+ */
+export function lossDraftInsuredName(
+  d: Pick<LossDraftGroupInput, "policyholder_name" | "payee_line">,
+  insuredFromPayeeLine: (payeeLine: string | null | undefined) => string | null = () => null,
+): string {
+  const name = (d.policyholder_name ?? "").trim();
+  const payee = (d.payee_line ?? "").trim();
+  const fromClaim = name && name !== payee ? name : "";
+  return fromClaim || insuredFromPayeeLine(payee || name) || name || payee || "Unknown insured";
 }
 
 function money(amount: number): string {

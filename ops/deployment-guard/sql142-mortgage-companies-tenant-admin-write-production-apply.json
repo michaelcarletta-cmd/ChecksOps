@@ -1,0 +1,62 @@
+{
+  "id": "sql142-mortgage-companies-tenant-admin-write-production-apply",
+  "migration": "sql142",
+  "authorization": "pending",
+  "execute": false,
+  "target_environment": "production",
+  "target_component": "production-sql",
+  "deployment_type": "sql-apply",
+  "filename": "aws/workflows/sql/142_mortgage_companies_tenant_admin_write.sql",
+  "migration_id": "142_mortgage_companies_tenant_admin_write",
+  "staging_pin_commit": "10ef4ea130bf4f601132f61f1a00cfa1f08721f2",
+  "source_sha256": "f140e75d67cdb67efa4c4ab21aa5d6bb04fb924a0b010c4496b48ab9fc4b156b",
+  "function_identities": [],
+  "expected_live_definition_sha256": null,
+  "intended_replacement_sha256": "2cff3727e102a6dd7ed116b9ae6348a3725362b573c62fcc5050acec0bf10a69",
+  "authorization_phrase": "APPLY_MORTGAGE_COMPANIES_TENANT_ADMIN_WRITE",
+  "predecessors": [],
+  "order_note": "No predecessor and no order on this engine. SQL 142 (owner decision 2026-11-04, \"Option 2\": tenant admins may add and edit the shared mortgage company directory; a tenant admin's add or edit from Manager or a Loss Draft check answered rls_denied, production API log 2026-11-04T20:28:16Z) needs public.mortgage_companies with a boolean is_active, public.aws_is_tenant_manager_admin(), public.aws_is_authenticated(), public.aws_is_cross_tenant_reader() and the role authenticated (spec prerequisites). The applying login must own public.mortgage_companies (altered_relations_owned_by_login: CREATE POLICY needs the owner). The engine's read-only catalog counts must each be 1 before any apply: mortgage_companies_rls_enabled (an ordinary table with ROW LEVEL SECURITY enabled; file: sql142_table_missing, sql142_rls_disabled), mortgage_companies_is_active_boolean (file: sql142_is_active_missing), mortgage_companies_owner_policy_intact (aws_write_mortgage_companies PERMISSIVE FOR ALL TO exactly {authenticated} with USING and WITH CHECK aws_is_authenticated() AND aws_is_cross_tenant_reader(); file: sql142_owner_policy_missing, sql142_owner_policy_collision) and mortgage_companies_no_unexpected_policy (no policy other than aws_select_mortgage_companies, aws_write_mortgage_companies and the file's two; file: sql142_unexpected_policy); the file also raises sql142_function_missing without aws_is_tenant_manager_admin(). It creates two PERMISSIVE policies TO authenticated: aws_insert_mortgage_companies_tenant_admin FOR INSERT WITH CHECK (aws_is_tenant_manager_admin() AND is_active) and aws_update_mortgage_companies_tenant_admin FOR UPDATE USING / WITH CHECK (aws_is_tenant_manager_admin() AND is_active). Deactivating, reactivating and deleting stay with aws_write_mortgage_companies (platform owner only), which is not changed. The pre-state is derivable: both policies absent (ae3be52e6cdd57b9ba779e573a0e1cdab53c793a63893044fb124efbe81238f3, derived by aws/tests/release-sql142-executor.test.mjs and read back on PostgreSQL 16). If the read-only inspect finds both policies as intended it reports already_applied true and nothing is applied. Changes no other policy, grant, RLS flag, function, table, column or row; the API allowlist (write-allowlist.mjs) still decides which columns a write may carry.",
+  "admin_login": "checksops_admin",
+  "rds_identifier": "checksops-production",
+  "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
+  "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
+  "tooling": {
+    "status": "built",
+    "production_tool": "scripts/deployment-guard/sql142-mortgage-companies-tenant-admin-write-production-apply.mjs",
+    "production_lib": "scripts/deployment-guard/lib/release-sql-production-apply.mjs",
+    "staging_executor_handler": "aws/write-path/guarded-sql-executor/index.mjs handleReleaseSqlMigration",
+    "staging_workflow_choice": "sql142-mortgage-companies-tenant-admin-write",
+    "one_shot_migration": "sql142",
+    "fingerprint_engine": "scripts/deployment-guard/lib/release-sql-state.mjs",
+    "runbook": "ops/production-sql-142-apply.md",
+    "tests": [
+      "aws/tests/release-sql142-executor.test.mjs",
+      "aws/tests/release-sql142-production-apply.test.mjs",
+      "aws/tests/release-sql90-97-executor.test.mjs",
+      "aws/tests/release-sql90-97-production-apply.test.mjs",
+      "aws/tests/sql142-mortgage-companies-tenant-admin-tool-pg.test.mjs"
+    ],
+    "note": "Guarded tooling for SQL 142: sql142-mortgage-companies-tenant-admin-write-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql142-mortgage-companies-tenant-admin-write); production-sql-one-shot.mjs --migration sql142. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): aws_insert_mortgage_companies_tenant_admin PERMISSIVE FOR INSERT TO authenticated WITH CHECK (public.aws_is_tenant_manager_admin() AND is_active), and aws_update_mortgage_companies_tenant_admin PERMISSIVE FOR UPDATE TO authenticated USING and WITH CHECK the same. The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
+  },
+  "production_inspect": {
+    "status": "pending",
+    "date": null,
+    "ssm_command_id": null,
+    "source_commit": null,
+    "read_only": true,
+    "connected_as": "checksops_admin",
+    "live_definition_sha256": null,
+    "apply_preconditions_met": null,
+    "precondition_failures": null,
+    "note": "Pending: no read-only production inspect has been run for SQL 142 yet. Production is unverified through the release engine; the read-only lookups of 2026-11-04 (SSM da2687b5 and f90ee490) showed aws_select_mortgage_companies and aws_write_mortgage_companies in the repository's forms, no other policy, and checksops a member of authenticated with table SELECT, INSERT, UPDATE and DELETE. Expected: every prerequisite present (prerequisites_missing []), the table owned by checksops_admin, counts mortgage_companies_rls_enabled 1, mortgage_companies_is_active_boolean 1, mortgage_companies_owner_policy_intact 1, mortgage_companies_no_unexpected_policy 1, already_applied false and live_definition_sha256 the derived pre-state ae3be52e6cdd57b9ba779e573a0e1cdab53c793a63893044fb124efbe81238f3 (both policies absent). Record the one-shot --phase inspect's date, SSM command id, source commit, live_definition_sha256, already_applied, prerequisites_missing, counts, precondition_failures and apply_preconditions_met here, and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. If already_applied is true there is nothing to apply. If precondition_failures is not [] or a count is not 1, stop: that needs its own reviewed change."
+  },
+  "intended_post_state": {
+    "fingerprint": "2cff3727e102a6dd7ed116b9ae6348a3725362b573c62fcc5050acec0bf10a69",
+    "note": "On public.mortgage_companies: aws_insert_mortgage_companies_tenant_admin PERMISSIVE, FOR INSERT, TO authenticated, WITH CHECK (public.aws_is_tenant_manager_admin() AND is_active); aws_update_mortgage_companies_tenant_admin PERMISSIVE, FOR UPDATE, TO authenticated, USING and WITH CHECK (public.aws_is_tenant_manager_admin() AND is_active). aws_select_mortgage_companies, aws_write_mortgage_companies (platform owner only: deactivate, reactivate, delete) and every grant, RLS flag, function, table, column, trigger and row unchanged. The fingerprint is releaseIntendedHash('sql142', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): 2cff3727e102a6dd7ed116b9ae6348a3725362b573c62fcc5050acec0bf10a69."
+  },
+  "staging_acceptance": {
+    "ok": false,
+    "reference": null,
+    "basis": "Pending: record the guarded staging SQL executor read-live and the staging apply of SQL 142 (choice sql142-mortgage-companies-tenant-admin-write) here in the reviewed change that sets execute true. The policies are covered on PostgreSQL 16 by aws/tests/sql142-mortgage-companies-tenant-admin-tool-pg.test.mjs (through this production tool) and through the executor by aws/tests/release-sql142-executor.test.mjs. Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+  }
+}
