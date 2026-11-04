@@ -208,6 +208,7 @@ import {
 } from "@/features/check-command/status";
 import { useCheckCommandRealtime } from "@/features/check-command/useCheckCommandRealtime";
 import { optimisticStage, optimisticRemove } from "@/features/check-command/optimistic";
+import { sharedReleasedRows } from "@/features/check-command/sharedFundsReleased";
 import { displayCase, displayCaseOrNull } from "@/lib/displayCase";
 import { useDuplicateChecks } from "@/hooks/useDuplicateChecks";
 import { DuplicateCheckBadge, DuplicateCheckBanner } from "@/components/checks/DuplicateCheckFlag";
@@ -1140,12 +1141,12 @@ export default function CheckCommandCenter() {
 
   const filteredFundsReleased = useMemo(
     () => {
-      const splits = (fundsReleased as any[]).filter(matchesSplitSearch);
-      // We also want to include checks that were marked as disbursed_externally 
-      // but might not have a split record yet (though recording external creates one).
-      return splits;
+      // A partner's shared check whose funds the source released has no split of ours: list it
+      // from the check itself, or it would leave every tab (sharedFundsReleased.ts).
+      const sharedReleased = sharedReleasedRows(sharedChecks as any[], fundsReleased as any[]);
+      return [...(fundsReleased as any[]), ...sharedReleased].filter(matchesSplitSearch);
     },
-    [fundsReleased, matchesSplitSearch],
+    [fundsReleased, sharedChecks, matchesSplitSearch],
   );
   const filteredFundsReceived = useMemo(
     () => (fundsReceived as any[]).filter(matchesSplitSearch),
@@ -1568,7 +1569,9 @@ export default function CheckCommandCenter() {
                               const checkId = batch?.check_intake_item_id;
                               const isSelected = !!checkId && selectedCheck === checkId;
                               const acct = split.stakeholder_accounts;
-                              const party = `To ${split.recipient_name ?? acct?.nickname ?? acct?.custname ?? "—"}`;
+                              const party = split._sharedReleasedBy
+                                ? `Released by ${split._sharedReleasedBy}`
+                                : `To ${split.recipient_name ?? acct?.nickname ?? acct?.custname ?? "—"}`;
                               const carrier = displayCase(check?.carrier_name) || "—";
                               return (
                                 <CompactCheckRow
@@ -1593,7 +1596,11 @@ export default function CheckCommandCenter() {
                                         {split.external_check_number ? ` · Ck #${split.external_check_number}` : ""}
                                       </Badge>
                                       <Badge variant="outline" className="text-[10px]">
-                                        Settled {split.settled_at ? format(new Date(split.settled_at), "MMM d, yyyy") : "—"}
+                                        {split._sharedReleasedBy ? (
+                                          <>Updated {split.updated_at ? format(new Date(split.updated_at), "MMM d, yyyy") : "—"}</>
+                                        ) : (
+                                          <>Settled {split.settled_at ? format(new Date(split.settled_at), "MMM d, yyyy") : "—"}</>
+                                        )}
                                       </Badge>
                                       {fundsLabel && (
                                         <Badge variant="outline" className="text-[10px]">{fundsLabel}</Badge>
