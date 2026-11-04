@@ -41,3 +41,9 @@ test('4 the runbook checks the live state before and after and stops on the firs
   assert.match(RUNBOOK, /after\.json\)\necho "LIVE MATCHES AFTER"/);
   assert.match(RUNBOOK, /e5882379-206a-43f2-ad6d-f691dd772f77/);
 });
+
+test('5 the runbook records the applied change, its CloudTrail event and the tenant test upload', () => {
+  assert.match(RUNBOOK, /## Applied 2026-11-04 \(record\)/);
+  assert.match(RUNBOOK, /PutBucketEncryption[\s\S]*2026-11-04T15:24:50Z, request id `GEH2VMS6ATPM6BTD`/);
+  assert.match(RUNBOOK, /moov-document-finalize` 200 for each of the three/);
+});
