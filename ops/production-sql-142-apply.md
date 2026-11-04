@@ -46,7 +46,26 @@ SQL 142 staging pin". The staging apply is a separate run after this pin is merg
 carrying it, on the owner's words for that run, "apply SQL 142 in staging". The production pin stays pending: a
 read-only production inspect decides production's pre-state.
 
-**Status:** staging pin execute-authorized (wave 37); not applied anywhere. The production pin is pending.
+**Staging executor refreshed for the pin (2026-11-04).** The staging pin (wave 37, PR #1606) merged as
+`362db9e4276a76e1fa04adb43071e3a22102be97`. Inspect run 41930257623 (main `362db9e4`) found the live executor at
+`UjZrML4kF/gQw1g8T4CsgT8O6tHFpreLkS+o81JzpII=`. Deploy run 41930617688 (`expected_executor_code_sha256`
+`UjZrML4k…` matched) updated `checksops-staging-guarded-sql-executor`; inspect run 41931001410 read it at
+`UMj/UNO8tqBoGuGnflpp8VrdimQy0qmFMVA7i6/fABc=`. Read-live run 41931277648 (executor `UMj/UNO8…`): `already_applied`
+false, `precondition_failures` `[]`, live `ae3be52e…`, equal to the pin.
+
+**Staging apply (2026-11-04).** Apply run 41931631914 (2026-11-04T23:10:57Z, main `362db9e4`, workstream
+`github-staging-sql-41931631914`, pin commit `10ef4ea13`, `expected_live_definition_sha256`
+`ae3be52e6cdd57b9ba779e573a0e1cdab53c793a63893044fb124efbe81238f3`) under the owner's words "apply SQL 142 in
+staging": success. The receipt prints `result` `applied`, `before_hash` `ae3be52e…`, `after_hash`
+`2cff3727e102a6dd7ed116b9ae6348a3725362b573c62fcc5050acec0bf10a69`; the policies
+`mortgage_companies aws_insert_mortgage_companies_tenant_admin` and
+`mortgage_companies aws_update_mortgage_companies_tenant_admin` in state `intended`; `prerequisites_missing` `[]`.
+Read-live run 41932005822 (executor `UMj/UNO8…`): `already_applied` true, `live_definition_sha256` `2cff3727…`
+equal to the intended hash, `precondition_failures` `[]`. Staging acceptance: the owner tested in staging on
+2026-11-04, "SQL 142 accepted in staging". The staging pin keeps `execute: true`; the staging runs are recorded in the
+production pin's `staging_acceptance` by the production pin PR.
+
+**Status:** applied in staging (wave 37, 2026-11-04); staging acceptance: owner tested in staging ("SQL 142 accepted in staging"); production pin pending (production inspect next)
 
 ## Fingerprint
 
