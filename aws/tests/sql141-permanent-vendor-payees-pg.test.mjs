@@ -4,11 +4,15 @@
  * functions called as checksops (the API login) for an application user, as the API calls DEFINER
  * functions:
  *
- *   - the applying login must own tenants: run as checksops the file fails closed (55000) and
- *     changes nothing; a missing prerequisite (no tenant_partner_code_aliases) fails closed too;
- *   - applied twice: every organization stays a regular one (is_vendor false), the second run is a
- *     no-op; the functions are SECURITY DEFINER with EXECUTE for checksops only (not PUBLIC or
- *     authenticated); checksops cannot write tenant_vendor_payees directly;
+ *   - the applying login must read tenants without row security: run as checksops the file fails
+ *     closed (55000) and changes nothing; a missing prerequisite (no tenant_partner_code_aliases)
+ *     fails closed too;
+ *   - applied twice, with default privileges that grant every new table to checksops and
+ *     authenticated (as on the restored databases; the cause of SQL 117's staging rollback): no
+ *     organization is a vendor, both new tables keep only the owner's grant plus SELECT for
+ *     checksops and authenticated, public.tenants (columns, grants, rows) is exactly as before, the
+ *     second run is a no-op; the functions are SECURITY DEFINER with EXECUTE for checksops only (not
+ *     PUBLIC or authenticated); checksops cannot write either table directly;
  *   - only the platform owner marks an organization as a vendor;
  *   - a member adds a vendor by its Partner Code or a Partner Code alias; a replay returns the same
  *     link; a regular organization's code, an unknown code and a malformed code are all answered
@@ -44,7 +48,8 @@ CREATE TABLE IF NOT EXISTS public.tenant_partner_code_aliases (
   tenant_id uuid NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
   code text NOT NULL,
   created_at timestamptz NOT NULL DEFAULT now());
-ALTER TABLE public.tenant_partner_code_aliases ENABLE ROW LEVEL SECURITY;`;
+ALTER TABLE public.tenant_partner_code_aliases ENABLE ROW LEVEL SECURITY;
+ALTER DEFAULT PRIVILEGES FOR ROLE checksops_admin IN SCHEMA public GRANT ALL ON TABLES TO checksops, authenticated;`;
 const SEED = `
 UPDATE public.tenants SET partner_code = 'ALPHA141' WHERE id = '${TENANT_A}';
 UPDATE public.tenants SET partner_code = 'BRAVO141' WHERE id = '${TENANT_B}';
@@ -104,16 +109,35 @@ test('PostgreSQL 16: SQL 141 permanent vendors and vendor payees by Partner Code
   // tenant_partner_code_aliases, so information_schema hides its columns and the prerequisite
   // check refuses first; either refusal is 55000 before any change.)
   const api = await connectAs('checksops');
-  await assert.rejects(api.query(TEXT), (e) => e.code === '55000' && /sql141_(definer_cannot_write|prerequisite_missing)/.test(e.message));
+  await assert.rejects(api.query(TEXT), (e) => e.code === '55000' && /sql141_(definer_cannot_read|prerequisite_missing)/.test(e.message));
   await api.end();
   assert.equal((await admin.query("SELECT to_regclass('public.tenant_vendor_payees') AS r")).rows[0].r, null);
+  assert.equal((await admin.query("SELECT to_regclass('public.vendor_tenants') AS r")).rows[0].r, null);
+
+  const tenantsState = async () => (await admin.query(
+    `SELECT (SELECT relacl::text FROM pg_class WHERE oid = 'public.tenants'::regclass) AS acl,
+            (SELECT string_agg(column_name, ',' ORDER BY ordinal_position) FROM information_schema.columns
+              WHERE table_schema = 'public' AND table_name = 'tenants') AS cols,
+            (SELECT md5(string_agg(t::text, '|' ORDER BY t.id)) FROM public.tenants t) AS rows`)).rows[0];
+  const tenantsBefore = await tenantsState();
 
   // Applied twice by the owner.
   const owner = await connectAs('checksops_admin');
   await owner.query(TEXT);
   await owner.query(TEXT);
   await owner.end();
-  assert.deepEqual((await admin.query('SELECT count(*)::int AS n FROM public.tenants WHERE is_vendor')).rows[0].n, 0);
+  assert.equal((await admin.query('SELECT count(*)::int AS n FROM public.vendor_tenants')).rows[0].n, 0);
+  assert.deepEqual(await tenantsState(), tenantsBefore, 'public.tenants is not changed');
+  for (const table of ['public.vendor_tenants', 'public.tenant_vendor_payees']) {
+    const acl = (await admin.query(
+      `SELECT array_agg(CASE WHEN a.grantee = c.relowner THEN 'owner' ELSE pg_get_userbyid(a.grantee) END || ' ' || a.privilege_type
+) AS acl
+         FROM pg_class c CROSS JOIN LATERAL aclexplode(c.relacl) a WHERE c.oid = $1::regclass
+          AND (a.grantee <> c.relowner OR a.privilege_type = 'SELECT')`, [table])).rows[0].acl;
+    assert.deepEqual([...acl].sort(), ['authenticated SELECT', 'checksops SELECT', 'owner SELECT'], table);
+    const rls = (await admin.query('SELECT relrowsecurity AS on, relforcerowsecurity AS forced FROM pg_class WHERE oid = $1::regclass', [table])).rows[0];
+    assert.deepEqual(rls, { on: true, forced: false }, table);
+  }
 
   // Function properties and ACLs.
   for (const sig of ['aws_vendor_payee_add(uuid,text)', 'aws_vendor_payee_remove(uuid,uuid)', 'aws_platform_owner_set_tenant_vendor(uuid,boolean)']) {
@@ -128,6 +152,9 @@ test('PostgreSQL 16: SQL 141 permanent vendors and vendor payees by Partner Code
   const direct = await asApi(connectAs, MEMBER_A, (c) => c.query(
     'INSERT INTO public.tenant_vendor_payees (tenant_id, vendor_tenant_id) VALUES ($1, $2)', [TENANT_A, VENDOR]));
   assert.equal(direct.error?.code, '42501');
+  const directVendor = await asApi(connectAs, PLATFORM_OWNER, (c) => c.query(
+    'INSERT INTO public.vendor_tenants (tenant_id) VALUES ($1)', [VENDOR]));
+  assert.equal(directVendor.error?.code, '42501');
 
   // Only the platform owner marks vendors.
   assert.equal((await setVendor(connectAs, MEMBER_A, VENDOR, true)).value.error, 'forbidden');
@@ -164,6 +191,10 @@ test('PostgreSQL 16: SQL 141 permanent vendors and vendor payees by Partner Code
   assert.deepEqual((await visible(connectAs, MEMBER_B)).value, [{ tenant_id: TENANT_B, vendor_tenant_id: VENDOR }]);
   assert.deepEqual((await visible(connectAs, VENDOR_MEMBER)).value, []);
   assert.equal((await visible(connectAs, PLATFORM_OWNER)).value.length, 2);
+  const vendorRows = (user) => asApi(connectAs, user, async (c) => (await c.query('SELECT tenant_id FROM public.vendor_tenants ORDER BY tenant_id')).rows, { commit: false });
+  assert.deepEqual((await vendorRows(VENDOR_MEMBER)).value, [{ tenant_id: VENDOR }]);
+  assert.deepEqual((await vendorRows(MEMBER_A)).value, []);
+  assert.equal((await vendorRows(PLATFORM_OWNER)).value.length, 2);
 
   // Remove, history kept, add again.
   assert.equal((await remove(connectAs, MEMBER_B, TENANT_A, VENDOR)).value.error, 'forbidden');
@@ -180,6 +211,8 @@ test('PostgreSQL 16: SQL 141 permanent vendors and vendor payees by Partner Code
   assert.equal((await setVendor(connectAs, PLATFORM_OWNER, VENDOR, false)).value.ok, true);
   assert.equal((await admin.query('SELECT count(*)::int AS n FROM public.tenant_vendor_payees WHERE vendor_tenant_id = $1', [VENDOR])).rows[0].n, 3);
   assert.equal((await add(connectAs, MEMBER_B, TENANT_B, 'VEND141')).value.error, 'vendor_not_found');
+  assert.equal((await admin.query('SELECT count(*)::int AS n FROM public.vendor_tenants WHERE tenant_id = $1', [VENDOR])).rows[0].n, 0);
+  assert.deepEqual(await tenantsState(), tenantsBefore, 'public.tenants is still not changed');
 }));
 
 test('PostgreSQL 16: SQL 141 fails closed without tenant_partner_code_aliases', { timeout: 600000 }, async (t) => withPg(t, 'pg-sql141-pre-', 61142, [], async ({ admin, connectAs }) => {
@@ -187,5 +220,5 @@ test('PostgreSQL 16: SQL 141 fails closed without tenant_partner_code_aliases', 
   await assert.rejects(owner.query(TEXT), (e) => e.code === '55000' && /sql141_prerequisite_missing/.test(e.message) && /tenant_partner_code_aliases/.test(e.message));
   await owner.end();
   assert.equal((await admin.query("SELECT to_regclass('public.tenant_vendor_payees') AS r")).rows[0].r, null);
-  assert.equal((await admin.query("SELECT count(*)::int AS n FROM information_schema.columns WHERE table_name = 'tenants' AND column_name = 'is_vendor'")).rows[0].n, 0);
+  assert.equal((await admin.query("SELECT to_regclass('public.vendor_tenants') AS r")).rows[0].r, null);
 }));
