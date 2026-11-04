@@ -1,0 +1,24 @@
+{
+  "read_at": "2026-11-04T23:57:24Z",
+  "read_by": "user/claude-code (iam:ListRolePolicies, iam:SimulatePrincipalPolicy)",
+  "role": "checksops-staging-ApiFunctionRole-7E7XRyLe3nyi",
+  "user_pool_arn": "arn:aws:cognito-idp:us-east-1:806168576068:userpool/us-east-1_vPmQ7cL1F",
+  "inline_policy_names": [
+    "ApiFunctionRolePolicy0",
+    "ApiFunctionRolePolicy1",
+    "ApiFunctionRolePolicy2",
+    "ApiFunctionRolePolicy3",
+    "ApiFunctionRolePolicy4",
+    "ApiFunctionRolePolicy5",
+    "ApiFunctionRolePolicyClassA",
+    "ApiFunctionRolePolicyS3Delete",
+    "ApiFunctionRolePolicySesIdentity",
+    "AzureDiStagingSecretRead",
+    "StagingFinancialTotpWrapKeyRead"
+  ],
+  "policy_TeamTwoFactorResetCognito": "absent",
+  "simulate": {
+    "cognito-idp:AdminSetUserMFAPreference": "implicitDeny",
+    "cognito-idp:AdminUserGlobalSignOut": "implicitDeny"
+  }
+}
