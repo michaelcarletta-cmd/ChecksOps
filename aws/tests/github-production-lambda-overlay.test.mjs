@@ -32,6 +32,12 @@ const ENV = {
 };
 
 const API = path.join(ROOT, 'aws/functions/api');
+// Mortgage company editor (2026-11-04): write-app-metadata.mjs and write-allowlist.mjs REPLACE the
+// 2026-10-25 stakeholder settings edit applied bytes, planning only (its own test). For those two
+// members the applied bytes are the manifest's live_sha256, no longer main's.
+const MORTGAGE_EDITOR_REL = 'aws/tests/fixtures/production-mortgage-company-editor-manifest-2026-11-04.json';
+const MORTGAGE_EDITOR = JSON.parse(fs.readFileSync(path.join(ROOT, MORTGAGE_EDITOR_REL), 'utf8'));
+const appliedBytes = (member) => MORTGAGE_EDITOR.members[member]?.live_sha256 ?? sha(`aws/functions/api/${member}`);
 // Security audit finding 3 (2026-10-29): planned REPLACE of storage-write-auth.mjs, then storage-write.mjs.
 const PARTNER_STORAGE_WRITES_REL = 'aws/tests/fixtures/production-partner-storage-writes-manifest-2026-10-29.json';
 // Security audit findings 2-4, applied in production 2026-10-29 (one run per member, in plan order).
@@ -939,8 +945,12 @@ test('#901 Review financial edits: write-allowlist.mjs, then write-check-workflo
     assert.equal(release.members[member].live_sha256, accepted, member);
     // The release bytes went live with the 2026-10-21 production rebuilds; the stakeholder settings
     // edit replaced them in production (2026-10-25), so the row now expects that edit's applied bytes.
-    assert.equal(row.manifest, MANIFEST_STAKEHOLDER_SETTINGS_APPLIED, member);
-    assert.equal(row.expected_live_sha256, row.accepted_sha256, member);
+    // write-allowlist.mjs has moved on again: the mortgage company editor plan (2026-11-04) REPLACEs
+    // those applied bytes, planning only, expecting them live.
+    const movedOn = MORTGAGE_EDITOR.members[member];
+    assert.equal(row.manifest, movedOn ? MORTGAGE_EDITOR_REL : MANIFEST_STAKEHOLDER_SETTINGS_APPLIED, member);
+    if (movedOn) assert.equal(movedOn.previous_manifest, MANIFEST_STAKEHOLDER_SETTINGS_APPLIED, member);
+    assert.equal(row.expected_live_sha256, movedOn ? movedOn.live_sha256 : row.accepted_sha256, member);
     assert.notEqual(row.expected_live_sha256, release.members[member].accepted_sha256, member);
     assert.notEqual(row.expected_live_sha256, live, member);
     assert.equal(sha(`aws/functions/api/${member}`), row.accepted_sha256, member);
@@ -2713,11 +2723,15 @@ test('Write echo secret columns: secret-columns.mjs, write-app-metadata.mjs and 
     assert.deepEqual(manifest.members[name], { live_sha256: BEFORE[name], accepted_sha256: LIVE, operation: 'replace' }, name);
     assert.deepEqual(applied.members[name], { live_sha256: LIVE, accepted_sha256: LIVE, operation: 'replace', previous_manifest: MANIFEST_REL }, name);
     const row = PLAN.members[name];
+    // write-app-metadata.mjs moved on again: the mortgage company editor plan (2026-11-04) REPLACEs the
+    // stakeholder settings edit applied bytes, planning only, expecting them live.
+    const editor = MORTGAGE_EDITOR.members[name];
     assert.equal(row.operation, 'replace', name);
-    assert.equal(row.manifest, MOVED_ON[name] || APPLIED_REL, name);
+    assert.equal(row.manifest, editor ? MORTGAGE_EDITOR_REL : MOVED_ON[name] || APPLIED_REL, name);
+    if (editor) assert.equal(editor.previous_manifest, MOVED_ON[name], name);
     assert.equal(row.accepted_sha256, sha(`aws/functions/api/${name}`), name);
-    assert.equal(row.expected_live_sha256, MOVED_ON[name] ? row.accepted_sha256 : LIVE, name);
-    const done = await run(inspect(name), { root: ROOT, inspectLive: liveFor(name, { sha256: row.expected_live_sha256 }) });
+    assert.equal(row.expected_live_sha256, MOVED_ON[name] ? appliedBytes(name) : LIVE, name);
+    const done = await run(inspect(name), { root: ROOT, inspectLive: liveFor(name, { sha256: row.accepted_sha256 }) });
     assert.equal(done.state, 'ALREADY_ACCEPTED', name);
     await assert.rejects(
       run(inspect(name), { root: ROOT, inspectLive: liveFor(name, { sha256: BEFORE[name] }) }),
@@ -2762,13 +2776,20 @@ test('Stakeholder settings edit: write-allowlist.mjs, write-app-metadata.mjs and
   }
   const inspect = (name) => ({ ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: name });
   for (const name of [ALLOWLIST, APP, WORKFLOW_WRITES]) {
-    const onMain = sha(`aws/functions/api/${name}`);
+    // The bytes this edit accepted and applied: main's, except where the mortgage company editor plan
+    // (2026-11-04) has since moved the row on.
+    const onMain = appliedBytes(name);
+    const editor = MORTGAGE_EDITOR.members[name];
     assert.notEqual(onMain, LIVE[name], name);
     assert.deepEqual(manifest.members[name], { live_sha256: LIVE[name], accepted_sha256: onMain, operation: 'replace' }, name);
-    // Applied 2026-10-25 (next test): the row expects main's bytes and names the applied manifest, so
-    // the pre-apply bytes this manifest planned to replace are now drift.
+    // Applied 2026-10-25 (next test): the row expects the applied bytes, so the pre-apply bytes this
+    // manifest planned to replace are now drift.
     assert.deepEqual(PLAN.members[name], {
-      operation: 'replace', accepted_sha256: onMain, expected_live_sha256: onMain, sql_before: SQL_BEFORE[name], manifest: APPLIED_REL,
+      operation: 'replace',
+      accepted_sha256: sha(`aws/functions/api/${name}`),
+      expected_live_sha256: onMain,
+      sql_before: SQL_BEFORE[name],
+      manifest: editor ? MORTGAGE_EDITOR_REL : APPLIED_REL,
     }, name);
     assert.equal(resolvePlannedMember(name, { root: ROOT, plan: PLAN }).ok, true, name);
     await assert.rejects(
@@ -2776,7 +2797,7 @@ test('Stakeholder settings edit: write-allowlist.mjs, write-app-metadata.mjs and
       (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
       name,
     );
-    assert.equal((await run(inspect(name), { root: ROOT, inspectLive: liveFor(name, { sha256: onMain }) })).state, 'ALREADY_ACCEPTED', name);
+    assert.equal((await run(inspect(name), { root: ROOT, inspectLive: liveFor(name, { sha256: onMain }) })).state, editor ? 'READY' : 'ALREADY_ACCEPTED', name);
   }
   // Each in its existing place: the allowlist, then the writer, then the forwarder that opens the
   // route; the Moov send module and providers.mjs stay last.
@@ -3005,13 +3026,16 @@ test('Stakeholder settings edit: the three members record the bytes production r
   };
   assert.deepEqual(Object.keys(applied.members), Object.keys(RUNS));
   for (const [member, runs] of Object.entries(RUNS)) {
-    const onMain = sha(`aws/functions/api/${member}`);
+    const onMain = appliedBytes(member);
     const row = PLAN.members[member];
-    // The plan row expects the applied bytes, which are main's bytes, and names the applied manifest.
+    // The plan row expects the applied bytes and names the applied manifest, or, for the two members the
+    // mortgage company editor plan (2026-11-04) moves on, that plan, which chains back to this record.
+    const editor = MORTGAGE_EDITOR.members[member];
     assert.equal(row.operation, 'replace', member);
-    assert.equal(row.accepted_sha256, onMain, member);
+    assert.equal(row.accepted_sha256, sha(`aws/functions/api/${member}`), member);
     assert.equal(row.expected_live_sha256, onMain, member);
-    assert.equal(row.manifest, APPLIED_REL, member);
+    assert.equal(row.manifest, editor ? MORTGAGE_EDITOR_REL : APPLIED_REL, member);
+    if (editor) assert.equal(editor.previous_manifest, APPLIED_REL, member);
     assert.deepEqual(applied.members[member], {
       live_sha256: onMain, accepted_sha256: onMain, operation: 'replace', previous_manifest: PLANNED_REL,
     }, member);
@@ -5573,4 +5597,45 @@ test('First financial authenticator enrollment needs a fresh email code (finding
   const replay = await run(applyEnv(MEMBER), deps);
   assert.equal(replay.mutation, false);
   assert.deepEqual(calls.receipt.owned_member_ops, { replace: [MEMBER], add: [] });
+});
+
+test('Mortgage company editor (owner report 2026-11-04): write-app-metadata.mjs, then write-allowlist.mjs REPLACE the 2026-10-25 applied bytes, no SQL, planning only', async () => {
+  const PREVIOUS = 'aws/tests/fixtures/production-stakeholder-settings-edit-applied-manifest-2026-10-25.json';
+  const previous = JSON.parse(fs.readFileSync(path.join(ROOT, PREVIOUS), 'utf8'));
+  const manifest = MORTGAGE_EDITOR;
+  assert.equal(manifest.workstream_id, 'mortgage-company-editor');
+  assert.equal(manifest.deploy_authorized, false);
+  assert.match(manifest.authorization, /^Pending owner review \(2026-11-04\)/);
+  assert.match(manifest.notes, /Failed to update company/);
+  assert.match(manifest.notes, /column_not_allowlisted/);
+  // The writer goes first, so the allowlist never lets through a column the live writer would drop.
+  assert.deepEqual(Object.keys(manifest.members), ['write-app-metadata.mjs', 'write-allowlist.mjs']);
+  const inspect = (name) => ({ ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: name });
+  for (const name of Object.keys(manifest.members)) {
+    // The bytes production runs 40189560481 and 40189236116 applied (2026-10-25).
+    const LIVE = previous.members[name].accepted_sha256;
+    assert.equal(previous.members[name].live_sha256, LIVE, `${name}: the previous manifest is its applied record`);
+    const accepted = sha(`aws/functions/api/${name}`);
+    assert.notEqual(accepted, LIVE, name);
+    assert.deepEqual(manifest.members[name], { live_sha256: LIVE, accepted_sha256: accepted, operation: 'replace', previous_manifest: PREVIOUS }, name);
+    assert.deepEqual(PLAN.members[name], {
+      operation: 'replace',
+      accepted_sha256: accepted,
+      expected_live_sha256: LIVE,
+      sql_before: 'aws/workflows/sql/93_tenant_company_info.sql',
+      manifest: MORTGAGE_EDITOR_REL,
+    }, name);
+    assert.ok(manifest.notes.includes(`${name} ${LIVE.slice(0, 8)} -> ${accepted.slice(0, 8)}`), name);
+    assert.ok(PLAN.notes.includes(`${name} ${LIVE.slice(0, 8)} -> ${accepted.slice(0, 8)}`), name);
+    assert.equal(resolvePlannedMember(name, { root: ROOT, plan: PLAN }).ok, true, name);
+    assert.equal(approvalPhrase(name), `DEPLOY ${name} TO PRODUCTION`);
+    assert.equal((await run(inspect(name), { root: ROOT, inspectLive: liveFor(name, { sha256: LIVE }) })).state, 'READY', name);
+    assert.equal((await run(inspect(name), { root: ROOT, inspectLive: liveFor(name, { sha256: accepted }) })).state, 'ALREADY_ACCEPTED', name);
+    await assert.rejects(
+      run(inspect(name), { root: ROOT, inspectLive: liveFor(name, { sha256: 'c'.repeat(64) }) }),
+      (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+      name,
+    );
+  }
+  assert.ok(PLAN.notes.includes('Mortgage company editor (2026-11-04, owner report "Failed to update company"): REPLACE write-app-metadata.mjs'));
 });
