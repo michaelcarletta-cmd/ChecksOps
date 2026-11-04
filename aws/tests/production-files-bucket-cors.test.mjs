@@ -56,3 +56,9 @@ test('5 the runbook checks the live state before and after, against these files'
   assert.match(RUNBOOK, /--cors-configuration file:\/\/ops\/production-files-bucket-cors\/after\.json/);
   assert.match(RUNBOOK, /after\.json\) \\\n\s+&& echo "LIVE MATCHES AFTER"/);
 });
+
+test('6 the runbook records the applied change with its CloudTrail event and the read-back', () => {
+  assert.match(RUNBOOK, /## Applied 2026-11-04 \(record\)/);
+  assert.match(RUNBOOK, /PutBucketCors[\s\S]*2026-11-04T15:01:52Z, request id `WW1RDNV6ZT00ZW8J`/);
+  assert.match(RUNBOOK, /live configuration equals\s+`ops\/production-files-bucket-cors\/after\.json`/);
+});

@@ -76,3 +76,18 @@ On the Windows desktop, run each command inside WSL (`wsl -d Ubuntu -- bash -ic 
    The upload shows "Submitted, in review" (sent to Moov as `merchant_underwriting`).
 
 **Rollback.** Run step 2 with `before-2026-11-04.json`. That brings back the refused uploads.
+
+## Applied 2026-11-04 (record)
+
+- The owner ran steps 1 to 3 as `michael-admin` (SSO role
+  `AWSReservedSSO_AdministratorAccess_e5a8a8393214f964`) from main `4bf662235`. A first attempt
+  changed nothing: every `aws` call failed with "Token has expired and refresh failed" before the
+  SSO login was renewed.
+- CloudTrail `PutBucketCors` on `checksops-production-privatefiles-806168576068` at
+  2026-11-04T15:01:52Z, request id `WW1RDNV6ZT00ZW8J`, no error code.
+- Read-only check afterwards (`GetBucketCors` as `claude-code`): the live configuration equals
+  `ops/production-files-bucket-cors/after.json` and no longer equals
+  `before-2026-11-04.json`. The PUT rule allows `content-type`, `content-length`,
+  `x-amz-server-side-encryption` and `x-amz-server-side-encryption-aws-kms-key-id`. Origins,
+  methods, the GET/HEAD rule, exposed headers and max ages are unchanged.
+- Remaining: step 5, the tenant's test upload on Compliance & Docs in production.
