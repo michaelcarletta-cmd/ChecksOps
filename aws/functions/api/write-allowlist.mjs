@@ -601,11 +601,18 @@ export const WRITE_ALLOWLIST = {
     columns: new Set([
       'name', 'is_active', 'website', 'phone', 'loss_draft_email', 'loss_draft_phone',
       'loss_draft_fax', 'loss_draft_contact',
+      // MortgageCompanyEditorDialog (Manager and Loss Draft): contact and mailing address.
+      'contact_name', 'email', 'phone_extension', 'mortgage_site',
+      'address_line_1', 'address_line_2', 'address_line_3', 'address_line_4', 'address_line_5',
     ]),
     identityColumn: null,
     requiredForWrite: { insert: ['name'] },
     filterColumns: new Set(['id']),
-    frontend: { file: 'MortgageOpsDirectory', op: 'insert/update', reason: 'Directory contact metadata.' },
+    frontend: {
+      file: 'MortgageOpsDirectory, MortgageCompanyEditorDialog',
+      op: 'insert/update',
+      reason: 'Directory contact and mailing-address metadata.',
+    },
   },
   shared_check_messages: {
     tranche: 6,

@@ -1,0 +1,21 @@
+{
+  "workstream_id": "mortgage-company-editor",
+  "authorization": "Pending owner review (2026-11-04). Planning only: nothing is live or verified. Each production apply needs its own owner approval, a staging acceptance reference and a read-only production inspect that confirms the live bytes.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Owner report 2026-11-04: editing a mortgage company in Manager or from a Loss Draft check shows \"Failed to update company\". MortgageCompanyEditorDialog writes contact_name, email, phone_extension, mortgage_site and address_line_1..5 through /data/write mortgage_companies; WRITE_ALLOWLIST.mortgage_companies did not list them, so every save answered column_not_allowlisted, and executeMortgageCompanies wrote only the Loss Draft desk columns. REPLACE write-app-metadata.mjs 0e535bee -> 72c95cac first (its insert and update write the dialog columns, with length caps), then write-allowlist.mjs 1fc4a43e -> 4eb9c025 (allowlists them). In that order each step is safe alone: until the allowlist lists a column the write is refused as today, so the writer never reports a save it dropped. Both rows expect the 2026-10-25 stakeholder settings edit applied bytes live. No SQL: the columns exist and checksops holds table-level SELECT, INSERT, UPDATE on public.mortgage_companies. Not authorized, not applied.",
+  "members": {
+    "write-app-metadata.mjs": {
+      "live_sha256": "0e535bee701c9f0b17c0af79c1997493c80c40a011517d7e13eca6fce54563b1",
+      "accepted_sha256": "72c95cacb533bbb22b697a84012608e585b9a15aa46682693c2bf75ede872960",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-stakeholder-settings-edit-applied-manifest-2026-10-25.json"
+    },
+    "write-allowlist.mjs": {
+      "live_sha256": "1fc4a43eda4455d406edd4566d7a2bada352d241e88ba01cb4ff2cd3afb2884a",
+      "accepted_sha256": "4eb9c0251ee2003508419360010d9051d2e7b5de8abe72a79b20ae4f616ea2ab",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-stakeholder-settings-edit-applied-manifest-2026-10-25.json"
+    }
+  }
+}
