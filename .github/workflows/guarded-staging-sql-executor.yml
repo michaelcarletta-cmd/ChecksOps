@@ -89,6 +89,7 @@ on:
           - sql139-tenant-billing-accounts-write-policy-reconcile
           - sql140-wallet-funding-settings-write-grants
           - sql141-permanent-vendor-payees
+          - sql142-mortgage-companies-tenant-admin-write
       approved_commit:
         description: "Required for deploy/apply/read-live: exact main commit approved for this run"
         required: false
@@ -231,6 +232,7 @@ jobs:
           node --test aws/tests/release-sql139-executor.test.mjs
           node --test aws/tests/release-sql140-executor.test.mjs
           node --test aws/tests/release-sql141-executor.test.mjs
+          node --test aws/tests/release-sql142-executor.test.mjs
           node --test aws/tests/mortgage-executor-commit-outcome.test.mjs
           node --test aws/tests/deployment-guard-kms-receipt.test.mjs
           node --test aws/tests/deployment-guard-signed-receipt.test.mjs
