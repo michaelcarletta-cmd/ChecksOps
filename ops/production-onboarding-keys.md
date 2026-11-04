@@ -91,6 +91,11 @@ write and delete object versions.
    `APPLY API CONFIGURATION TO PRODUCTION`. This PR does not add those plan rows: the ARNs do
    not exist until the keys are created.
 
+5b. **Bucket CORS for the upload headers** (added 2026-11-04). The browser's presigned PUT sends the
+   SSE-KMS headers, so the production files bucket's CORS must allow them, as staging's does. It
+   was missed in this rollout and every production upload failed with "Network error while
+   uploading."; the fix is `ops/production-files-bucket-cors.md`.
+
 6. **Test upload.** The owner, or a tenant, uploads one document on Compliance & Docs in
    production. The upload returns no `document_storage_unavailable`; the object under
    `files/verification-docs/` is SSE-KMS with the compliance documents key.
