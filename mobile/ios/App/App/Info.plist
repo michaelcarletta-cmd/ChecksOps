@@ -68,5 +68,9 @@
 	<true/>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>NSCameraUsageDescription</key>
+	<string>ChecksOps uses the camera to photograph checks and documents you upload.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>ChecksOps lets you choose photos of checks and documents from your library to upload.</string>
 </dict>
 </plist>
