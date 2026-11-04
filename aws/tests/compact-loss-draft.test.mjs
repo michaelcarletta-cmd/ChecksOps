@@ -3,7 +3,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { groupLossDraftsByClaim, lossDraftGroupDetails } from '../../src/lib/lossDraftGroups.ts';
+import { groupLossDraftsByClaim, lossDraftGroupDetails, lossDraftInsuredName } from '../../src/lib/lossDraftGroups.ts';
+import { extractInsuredName } from '../../src/features/check-command/status.ts';
 
 // Owner request: Loss Draft looks like the other check tabs (#1358): a title,
 // the filter with one count/total line, a compact header per claim file and a
@@ -107,4 +108,18 @@ test('lossDraftGroupDetails gives the status and the unreleased total', () => {
     lossDraftGroupDetails([row('a'), row('b', { escrow_status: 'disputed' }), row('c', { escrow_status: 'partial_release' })], label)[0],
     '3 statuses',
   );
+});
+
+test('a loss draft sent from a check shows the insured name, not the whole payee line (owner 2026-11-04)', () => {
+  const payee = 'JOHN SMITH AND FREEDOM ADJUSTMENT AND LOANDEPOT ISAOA ATIMA';
+  // The view falls back to the payee line as policyholder_name when the draft has no claim.
+  assert.equal(lossDraftInsuredName({ policyholder_name: payee, payee_line: payee }, extractInsuredName), 'JOHN SMITH');
+  const [g] = groupLossDraftsByClaim([row('x', { policyholder_name: payee, payee_line: payee })], extractInsuredName);
+  assert.equal(g.policyholderName, 'JOHN SMITH');
+  // A claim's policyholder name is kept as it is.
+  assert.equal(lossDraftInsuredName({ policyholder_name: 'Jane Roe', payee_line: payee }, extractInsuredName), 'Jane Roe');
+  // Nothing to go on.
+  assert.equal(lossDraftInsuredName({ policyholder_name: null, payee_line: null }, extractInsuredName), 'Unknown insured');
+  const panel = fs.readFileSync(new URL('../../src/components/loss-draft/LossDraftDetailPanel.tsx', import.meta.url), 'utf8');
+  assert.match(panel, /extractInsuredName\(draft\.check_intake_items\.payee_line\)/);
 });
