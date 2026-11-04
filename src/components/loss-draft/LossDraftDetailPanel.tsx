@@ -38,6 +38,7 @@ import { useAcknowledgeMortgageDeskReturn, useMortgageDeskReturnAlert } from "@/
 import { useTenantFilter } from "@/hooks/useTenantFilter";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { displayCase } from "@/lib/displayCase";
+import { extractInsuredName } from "@/features/check-command/status";
 
 const isUnknownServicer = (value?: string | null) =>
   !value || value.trim().toLowerCase().includes("unknown");
@@ -240,7 +241,9 @@ export function LossDraftDetailPanel({
               )}
             </div>
             {draft.check_intake_items.payee_line && (
-              <div className="text-muted-foreground truncate">{displayCase(draft.check_intake_items.payee_line)}</div>
+              <div className="text-muted-foreground truncate">
+                {displayCase(extractInsuredName(draft.check_intake_items.payee_line) || draft.check_intake_items.payee_line)}
+              </div>
             )}
             {draft.check_intake_items.carrier_name && (
               <div className="text-muted-foreground truncate">{displayCase(draft.check_intake_items.carrier_name)}</div>
