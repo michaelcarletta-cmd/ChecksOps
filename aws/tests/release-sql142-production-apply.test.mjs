@@ -166,7 +166,7 @@ test('order: no predecessor; no function; the two tenant-admin policies on mortg
   const runbook = read(COMMITTED.tooling.runbook);
   assert.ok(runbook.includes(COMMITTED.intended_replacement_sha256));
   assert.ok(runbook.includes(COMMITTED.source_sha256));
-  assert.match(runbook, /\*\*Status:\*\* not applied anywhere\./);
+  assert.match(runbook, /\*\*Status:\*\* staging pin execute-authorized \(wave 37\); not applied anywhere\./);
   assert.match(runbook, /APPLY_MORTGAGE_COMPANIES_TENANT_ADMIN_WRITE/);
   assert.match(runbook, /da2687b5/);
   const oneShot = read('ops/production-sql-one-shot.md');
