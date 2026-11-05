@@ -325,11 +325,15 @@ test('order: no predecessor; the one new function, its prerequisites and the fou
   // The reset REPLACE ran after SQL 133 was recorded live (production run 41189659812, 2026-10-31): the row expects
   // its accepted bytes and names the applied record.
   const ADMIN_RESET_APPLIED = 'aws/tests/fixtures/production-financial-totp-admin-reset-applied-manifest-2026-10-31.json';
-  // The teammate reset savepoint plan (2026-11-05) moves the row on: it expects these applied bytes live and names
-  // its own manifest, which chains back to the applied record.
+  // The teammate reset savepoint (production run 42058117752, 2026-11-05) moved the row on: it replaced these applied
+  // bytes, so the row expects the savepoint's applied bytes live and names that record, which chains through the
+  // savepoint plan back to the applied record.
   const SAVEPOINT = 'aws/tests/fixtures/production-totp-reset-savepoint-manifest-2026-11-05.json';
-  assert.equal(readJson(ADMIN_RESET_APPLIED).members['admin-reset-totp.mjs'].accepted_sha256, plan.members['admin-reset-totp.mjs'].expected_live_sha256, 'admin-reset-totp.mjs expects the applied reset bytes live');
-  assert.equal(plan.members['admin-reset-totp.mjs'].manifest, SAVEPOINT);
+  const SAVEPOINT_APPLIED = 'aws/tests/fixtures/production-totp-reset-savepoint-applied-manifest-2026-11-05.json';
+  assert.equal(readJson(ADMIN_RESET_APPLIED).members['admin-reset-totp.mjs'].accepted_sha256, readJson(SAVEPOINT).members['admin-reset-totp.mjs'].live_sha256, 'the savepoint replaced the applied reset bytes');
+  assert.equal(readJson(SAVEPOINT_APPLIED).members['admin-reset-totp.mjs'].accepted_sha256, plan.members['admin-reset-totp.mjs'].expected_live_sha256, 'admin-reset-totp.mjs expects the savepoint applied bytes live');
+  assert.equal(plan.members['admin-reset-totp.mjs'].manifest, SAVEPOINT_APPLIED);
+  assert.equal(readJson(SAVEPOINT_APPLIED).members['admin-reset-totp.mjs'].previous_manifest, SAVEPOINT);
   assert.equal(readJson(SAVEPOINT).members['admin-reset-totp.mjs'].previous_manifest, ADMIN_RESET_APPLIED);
   // The API: the one call and the existence check, as checksops, inside the reset transaction before Cognito.
   const call = 'SELECT cleared FROM public.financial_totp_admin_reset_enrollment($1::uuid, $2::uuid)';
