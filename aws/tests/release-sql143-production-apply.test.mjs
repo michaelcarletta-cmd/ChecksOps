@@ -310,6 +310,9 @@ test('order: predecessor SQL 142, which it supersedes; the two functions, the th
   assert.ok(runbook.includes(COMMITTED.source_sha256));
   assert.ok(runbook.includes(PRE_SQL142));
   assert.match(runbook, /\*\*Status:\*\* applied to staging \(wave 38\) and to production \(2026-11-05\); the production pin is retired/);
+  // Owner production acceptance, recorded after the fact without changing the applied record: "1 and 2 work."
+  assert.match(runbook, /\*\*Production acceptance \(2026-11-05\)\.\*\*[\s\S]*"1 and 2 work\."/);
+  assert.match(runbook, /owner production acceptance 2026-11-05\./);
   assert.match(runbook, /\*\*Production apply \(2026-11-05\)\.\*\*/);
   for (const evidence of [SQL143_APPLIED.ssm, SQL143_APPLIED.run, SQL143_APPLIED.workstream, PRE_INSPECT_SSM, '42053822728', `"${SQL143_APPLIED.approval}"`]) {
     assert.ok(runbook.includes(evidence), evidence);

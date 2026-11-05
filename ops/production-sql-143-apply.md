@@ -112,8 +112,14 @@ overlay plan's `sql_prerequisites`, which lifts that member's hold. The API and 
 not yet deployed to production. Production acceptance had not been reported by the owner when this record was
 written; this record does not claim it.
 
+**Production acceptance (2026-11-05).** The API and website that use SQL 143 (#1617) were deployed to production on
+the owner's per-run words (`write-allowlist.mjs` run 42057609583, `write-app-metadata.mjs` run 42058501143,
+`db-readonly-validate.mjs` run 42058917794, website run 42059289942). The owner then tested adding, editing and
+removing mortgage companies in production and reported, verbatim, "1 and 2 work." (item 2: mortgage companies). The record
+above, written before that test, is unchanged.
+
 **Status:** applied to staging (wave 38) and to production (2026-11-05); the production pin is retired
-(`execute: false`).
+(`execute: false`); owner production acceptance 2026-11-05.
 
 ## Fingerprint
 

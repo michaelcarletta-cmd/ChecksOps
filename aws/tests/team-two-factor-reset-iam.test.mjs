@@ -66,5 +66,6 @@ for (const [env, { role, pool, other }] of Object.entries(ENVS)) {
 
 test('5 staging comes first; the runbook records nothing applied yet', () => {
   assert.ok(RUNBOOK.indexOf('## Staging (first)') < RUNBOOK.indexOf('## Production (a separate owner step'));
-  assert.match(RUNBOOK, /\*\*Status:\*\* not applied anywhere\./);
+  assert.match(RUNBOOK, /\*\*Status:\*\* applied in staging and production \(2026-11-05\)\./);
+  assert.ok(RUNBOOK.includes('f117f9b9-63c5-4865-844d-07e0c04736b0') && RUNBOOK.includes('9516ecc1-0741-4c13-bd57-26e6886d2541'));
 });
