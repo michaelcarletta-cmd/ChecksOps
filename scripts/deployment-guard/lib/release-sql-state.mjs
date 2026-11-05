@@ -1,5 +1,5 @@
 /**
- * One engine for the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108 to SQL 142), shared by the staging
+ * One engine for the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108 to SQL 143), shared by the staging
  * guarded executor (aws/write-path/guarded-sql-executor/index.mjs) and the production tools
  * (release-sql-production-apply.mjs): the catalog state reader, the code-derived
  * fingerprints, the pre- and post-conditions, the predecessor rules and the unrelated-catalog
@@ -915,6 +915,14 @@ export function releaseSharedPreconditionFailures(key, state, text, { environmen
     // aws_is_authenticated() AND aws_is_cross_tenant_reader()), and no policy beyond the SELECT policy, the owner
     // policy and the file's two. Read-only catalog counts (never rows); each must be exactly 1, null fails closed.
     for (const name of ['mortgage_companies_rls_enabled', 'mortgage_companies_is_active_boolean', 'mortgage_companies_owner_policy_intact', 'mortgage_companies_no_unexpected_policy']) {
+      if (extra === name) checks.push([name, s.counts?.[name] === 1]);
+    }
+    // SQL 143: the same table checks with a uuid id, the three referencing tables (claims, loss_draft_tracking,
+    // check_cases) with a uuid mortgage_company_id, SQL 142's two policies in SQL 142's form (or, on a re-run, absent
+    // with the file's three present), no other policy, and the login (the in-use guard's owner) reading the three
+    // referencing tables past row level security. Read-only catalog counts (never rows); each must be exactly 1, null
+    // fails closed.
+    for (const name of ['mortgage_companies_id_uuid_is_active_boolean', 'mortgage_company_references_uuid', 'mortgage_companies_sql142_policies_replaceable', 'mortgage_company_references_readable_by_login']) {
       if (extra === name) checks.push([name, s.counts?.[name] === 1]);
     }
     // SQL 98: the per-check default price exists (an active row), or the file seeds it (no row).

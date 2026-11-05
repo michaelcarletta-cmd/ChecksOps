@@ -1,0 +1,67 @@
+{
+  "id": "sql143-mortgage-companies-member-delete-unused-production-apply",
+  "migration": "sql143",
+  "authorization": "pending",
+  "execute": false,
+  "target_environment": "production",
+  "target_component": "production-sql",
+  "deployment_type": "sql-apply",
+  "filename": "aws/workflows/sql/143_mortgage_companies_member_delete_unused.sql",
+  "migration_id": "143_mortgage_companies_member_delete_unused",
+  "staging_pin_commit": "7abd8b6edf470525baf3fad8f5be05597364fe33",
+  "source_sha256": "77705dd93494f4353a70b99b0db956ce764aaca0f38e5916b0187f7eb7bbb76c",
+  "function_identities": [
+    "public.aws_can_edit_mortgage_company_directory()",
+    "public.aws_mortgage_company_in_use_guard()"
+  ],
+  "expected_live_definition_sha256": null,
+  "intended_replacement_sha256": "d14d6ac55a8cc18c49d502cb508ddcb3a03969b7d196843224156d4ef0483029",
+  "authorization_phrase": "APPLY_MORTGAGE_COMPANIES_MEMBER_DELETE_UNUSED",
+  "predecessors": [
+    "sql142"
+  ],
+  "order_note": "After SQL 142 (its predecessor, applied in production 2026-11-05), which it supersedes: the file requires SQL 142's two policies (aws_insert_mortgage_companies_tenant_admin, aws_update_mortgage_companies_tenant_admin) in SQL 142's exact form and replaces them. SQL 143 (owner decisions 2026-11-05: \"Remove should delete it. It can always be added again later, anyone can do this, mortgage agents should be able to share and edit list\", then \"1\" = delete only when unused) needs public.mortgage_companies (uuid id, boolean is_active), public.claims, public.loss_draft_tracking and public.check_cases (each a uuid mortgage_company_id), public.aws_is_authenticated(), public.aws_is_cross_tenant_reader(), public.aws_has_any_tenant_membership(), public.aws_is_active_mortgage_agent(uuid), auth.uid() and the roles authenticated and checksops (spec prerequisites). The applying login must own public.mortgage_companies (altered_relations_owned_by_login: CREATE POLICY and CREATE TRIGGER need the owner). The engine's read-only catalog counts must each be 1 before any apply: mortgage_companies_rls_enabled (file: sql143_table_missing, sql143_rls_disabled), mortgage_companies_id_uuid_is_active_boolean (file: sql143_column_missing), mortgage_company_references_uuid (file: sql143_reference_missing), mortgage_companies_owner_policy_intact (aws_write_mortgage_companies PERMISSIVE FOR ALL TO exactly {authenticated}, aws_is_authenticated() AND aws_is_cross_tenant_reader(); file: sql143_owner_policy_missing, sql143_owner_policy_collision), mortgage_companies_sql142_policies_replaceable (SQL 142's two in SQL 142's form, or on a re-run absent with the file's three present; file: sql143_sql142_policy_collision, sql143_sql142_policy_missing), mortgage_companies_no_unexpected_policy (file: sql143_unexpected_policy) and mortgage_company_references_readable_by_login (the login, which owns the in-use guard, reads claims, loss_draft_tracking and check_cases past row level security: owner without FORCE ROW LEVEL SECURITY, or superuser / BYPASSRLS, with SELECT; file verify: sql143_guard_cannot_see_all_rows). The file also raises sql143_function_missing without the three helper functions. It creates public.aws_can_edit_mortgage_company_directory() (SECURITY DEFINER sql, EXECUTE authenticated and checksops) and public.aws_mortgage_company_in_use_guard() (SECURITY DEFINER plpgsql, row_security off, EXECUTE revoked from PUBLIC, authenticated and checksops), the trigger aws_mortgage_company_in_use_guard BEFORE DELETE OR UPDATE OF id FOR EACH ROW, and three PERMISSIVE policies TO authenticated on (aws_can_edit_mortgage_company_directory() AND is_active): aws_insert_mortgage_companies_member FOR INSERT, aws_update_mortgage_companies_member FOR UPDATE, aws_delete_mortgage_companies_member FOR DELETE; it drops SQL 142's two. Deactivating and reactivating stay with aws_write_mortgage_companies (platform owner only), which is not changed; its deletes are guarded by the same trigger. The pre-state after SQL 142 is derivable: SQL 142's two policies as SQL 142 created them and nothing of SQL 143 (c62a1b0b337cca713cd8551f1a1c70f507ef451e40731baa6e8479abae51038d, derived by aws/tests/release-sql143-executor.test.mjs and read back on PostgreSQL 16). If the read-only inspect finds SQL 143's state as intended it reports already_applied true and nothing is applied. Changes no other policy, grant, RLS flag, table, column or row; the API allowlist (write-allowlist.mjs) still decides which columns a write may carry.",
+  "admin_login": "checksops_admin",
+  "rds_identifier": "checksops-production",
+  "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
+  "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
+  "tooling": {
+    "status": "built",
+    "production_tool": "scripts/deployment-guard/sql143-mortgage-companies-member-delete-unused-production-apply.mjs",
+    "production_lib": "scripts/deployment-guard/lib/release-sql-production-apply.mjs",
+    "staging_executor_handler": "aws/write-path/guarded-sql-executor/index.mjs handleReleaseSqlMigration",
+    "staging_workflow_choice": "sql143-mortgage-companies-member-delete-unused",
+    "one_shot_migration": "sql143",
+    "fingerprint_engine": "scripts/deployment-guard/lib/release-sql-state.mjs",
+    "runbook": "ops/production-sql-143-apply.md",
+    "tests": [
+      "aws/tests/release-sql143-executor.test.mjs",
+      "aws/tests/release-sql143-production-apply.test.mjs",
+      "aws/tests/release-sql90-97-executor.test.mjs",
+      "aws/tests/release-sql90-97-production-apply.test.mjs",
+      "aws/tests/sql143-mortgage-companies-member-delete-tool-pg.test.mjs"
+    ],
+    "note": "Guarded tooling for SQL 143: sql143-mortgage-companies-member-delete-unused-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql143-mortgage-companies-member-delete-unused); production-sql-one-shot.mjs --migration sql143. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): the two functions (attributes, body sha256 and EXECUTE ACL), the three member policies, SQL 142's two policies absent, and the trigger. The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
+  },
+  "production_inspect": {
+    "status": "pending",
+    "date": null,
+    "ssm_command_id": null,
+    "source_commit": null,
+    "read_only": true,
+    "connected_as": "checksops_admin",
+    "live_definition_sha256": null,
+    "apply_preconditions_met": null,
+    "precondition_failures": null,
+    "note": "Pending: no read-only production inspect has been run for SQL 143 yet. Production is unverified through the release engine for SQL 143's objects, the referencing tables' columns, ownership and FORCE ROW LEVEL SECURITY. Expected: every prerequisite present (prerequisites_missing []), predecessors {sql142: true}, the table owned by checksops_admin, the seven counts 1, already_applied false and live_definition_sha256 the derived pre-state c62a1b0b337cca713cd8551f1a1c70f507ef451e40731baa6e8479abae51038d (SQL 142's two policies as SQL 142 created them, nothing of SQL 143). Record the one-shot --phase inspect's date, SSM command id, source commit, live_definition_sha256, already_applied, prerequisites_missing, counts, precondition_failures and apply_preconditions_met here, and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. If already_applied is true there is nothing to apply. If precondition_failures is not [] or a count is not 1, stop: that needs its own reviewed change."
+  },
+  "intended_post_state": {
+    "fingerprint": "d14d6ac55a8cc18c49d502cb508ddcb3a03969b7d196843224156d4ef0483029",
+    "note": "On public.mortgage_companies: aws_insert_mortgage_companies_member PERMISSIVE, FOR INSERT, TO authenticated, WITH CHECK (public.aws_can_edit_mortgage_company_directory() AND is_active); aws_update_mortgage_companies_member PERMISSIVE, FOR UPDATE, TO authenticated, USING and WITH CHECK the same; aws_delete_mortgage_companies_member PERMISSIVE, FOR DELETE, TO authenticated, USING the same; aws_insert_mortgage_companies_tenant_admin and aws_update_mortgage_companies_tenant_admin absent; the trigger aws_mortgage_company_in_use_guard BEFORE DELETE OR UPDATE OF id FOR EACH ROW EXECUTE FUNCTION public.aws_mortgage_company_in_use_guard(), enabled. public.aws_can_edit_mortgage_company_directory(): sql, STABLE, SECURITY DEFINER, search_path=public, row_security=off, EXECUTE authenticated, checksops and the owner. public.aws_mortgage_company_in_use_guard(): plpgsql, VOLATILE, SECURITY DEFINER, search_path=public, row_security=off, EXECUTE the owner only. aws_select_mortgage_companies, aws_write_mortgage_companies and every grant, RLS flag, table, column and row unchanged. The fingerprint is releaseIntendedHash('sql143', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): d14d6ac55a8cc18c49d502cb508ddcb3a03969b7d196843224156d4ef0483029."
+  },
+  "staging_acceptance": {
+    "ok": false,
+    "reference": null,
+    "basis": "Pending: record the guarded staging SQL executor read-live and the staging apply of SQL 143 (choice sql143-mortgage-companies-member-delete-unused) here in the reviewed change that sets execute true. The file is covered on PostgreSQL 16 by aws/tests/sql143-mortgage-companies-member-delete-tool-pg.test.mjs (through this production tool) and through the executor by aws/tests/release-sql143-executor.test.mjs. Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+  }
+}
