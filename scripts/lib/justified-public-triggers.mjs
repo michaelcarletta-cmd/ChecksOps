@@ -166,10 +166,16 @@ export const POST_RESTORE_PUBLIC_TRIGGERS = Object.freeze([
     table: 'checkalt_deposits',
     trigger: 'aws_checkalt_deposit_apply_check_status',
     functionName: 'aws_apply_checkalt_check_status',
+  }),  // SQL 143 (143_mortgage_companies_member_delete_unused.sql), applied to staging 2026-11-05 (run 42023495275):
+  // a mortgage company a claim, loss draft or check case uses is not deleted.
+  Object.freeze({
+    table: 'mortgage_companies',
+    trigger: 'aws_mortgage_company_in_use_guard',
+    functionName: 'aws_mortgage_company_in_use_guard',
   }),
 ]);
 
-export const JUSTIFIED_PUBLIC_TRIGGER_COUNT = 184;
+export const JUSTIFIED_PUBLIC_TRIGGER_COUNT = 185;
 
 const unqualified = (value) => {
   const text = String(value || '');

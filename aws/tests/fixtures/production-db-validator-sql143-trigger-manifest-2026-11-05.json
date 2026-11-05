@@ -1,0 +1,15 @@
+{
+  "workstream_id": "production-db-validator-sql143-trigger",
+  "authorization": "Pending owner review (2026-11-05). Planning only: nothing is live or verified. The production apply needs its own owner approval, a staging acceptance reference and a read-only production inspect that confirms the live bytes, and only after SQL 143 is recorded verified live in production.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "SQL 143 (143_mortgage_companies_member_delete_unused.sql) adds one public trigger, mortgage_companies.aws_mortgage_company_in_use_guard (function aws_mortgage_company_in_use_guard). Applied to staging 2026-11-05 (guarded staging SQL executor apply run 42023495275, read-live run 42023847018 already_applied true, after d14d6ac5…); the staging Lambda overlay inspect run 42024185549 then failed its public smoke because /db-readonly-validate expects the named 184-set and answered 503. These bytes add the trigger to the justified set and raise EXPECTED_PUBLIC_TRIGGERS to 185, as 4a3f4658e did for SQL 123. REPLACE db-readonly-validate.mjs d897c206 -> c7aa9f1b: live_sha256 is the SQL 123 validator production run 40743616203 applied (previous_manifest, the applied record). sql_before is SQL 143: production has 184 public triggers until SQL 143 is applied there, so these bytes would answer 503 before it; after the SQL 143 production apply the live bytes answer 503 until this REPLACE runs, as production did between the SQL 123 apply (#1336) and run 40743616203. A read-only production overlay inspect must confirm the live member before any apply.",
+  "members": {
+    "db-readonly-validate.mjs": {
+      "live_sha256": "d897c206e07a90c06815689e9926eb70a5aabb9fe10efdc74048991e146a850c",
+      "accepted_sha256": "c7aa9f1bfbcf99fe84e8fd56ba932d98d7db2c706d4e98e45b469d444590c55a",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-db-validator-sql123-trigger-applied-manifest-2026-10-28.json"
+    }
+  }
+}

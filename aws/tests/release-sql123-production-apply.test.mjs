@@ -238,11 +238,11 @@ test('order: no predecessor and no order; the check, deposit, audit and usage ta
     assert.doesNotMatch(fs.readFileSync(path.join(ROOT, file), 'utf8'), /aws_checkalt_mark_check_deposited|aws_apply_checkalt_check_status/, file);
   }
   // One trigger, on checkalt_deposits: the DB validator followed the staging (run 40721665524) and
-  // production applies, as #1309 did for SQL 120 and 6a4bfa328 for SQL 121, and justifies it by name (184).
+  // production applies, as #1309 did for SQL 120 and 6a4bfa328 for SQL 121, and justifies it by name (184; 185 since SQL 143's trigger followed).
   assert.deepEqual(spec.triggers.map((t) => [t.table, t.name]), [['public.checkalt_deposits', 'aws_checkalt_deposit_apply_check_status']]);
   const validator = fs.readFileSync(path.join(ROOT, 'aws/functions/api/db-readonly-validate.mjs'), 'utf8');
   assert.match(validator, /trigger: 'aws_checkalt_deposit_apply_check_status',\n\s+functionName: 'aws_apply_checkalt_check_status'/);
-  assert.match(validator, /export const EXPECTED_PUBLIC_TRIGGERS = 184;/);
+  assert.match(validator, /export const EXPECTED_PUBLIC_TRIGGERS = 185;/);
   const runbook = fs.readFileSync(path.join(ROOT, COMMITTED.tooling.runbook), 'utf8');
   assert.ok(runbook.includes(COMMITTED.intended_replacement_sha256));
   assert.ok(runbook.includes(COMMITTED.source_sha256));
