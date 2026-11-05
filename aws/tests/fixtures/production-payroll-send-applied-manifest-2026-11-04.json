@@ -1,0 +1,15 @@
+{
+  "workstream_id": "payroll-send-applied",
+  "authorization": "Record only (2026-11-04): the bytes below are live. Nothing is planned or authorized by this manifest; any later change to this member needs its own manifest, staging acceptance and owner approval.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Payroll send applied 2026-11-04 through the guarded overlay path on main c8832e178 (#1607, then #1608, which changed only the SQL 142 runbook and tests). providers/production/moov-send.mjs: staging apply run 41934510831 (the staging acceptance; staging re-inspect run 41934633507 read 1b204d62 live); production preflight inspect run 41937438871 (READY, 178988b5 live, RevisionId d2596333-8468-4548-bc03-23a026ea42f3); production apply run 41937571704 (178988b5 -> 1b204d62) on the owner's \"DEPLOY providers/production/moov-send.mjs TO PRODUCTION\". The apply run concluded success including its \"Verify live member is the accepted bytes\" step (state VERIFIED) and the public production smoke. Read live after the apply: CodeSha256 D2Oydyt7kQ3yOYg62fxjdTEJWO1qrA1eIQCSznFZkEE=, RevisionId 15005d35-03bd-4e8e-89f7-44d99762372f, LastModified 2026-11-04T23:56:57Z. Sends were then switched on by the production configuration change (AWS_MOOV_SEND_POST_ENABLED, plan #1610, apply run 41953736410), and the owner ran a $1 production payroll on 2026-11-05: \"Payroll worked\". The row records the applied bytes as live_sha256 and accepted_sha256 and chains to the manifest that planned it (previous_manifest), which keeps the pre-apply state.",
+  "members": {
+    "providers/production/moov-send.mjs": {
+      "live_sha256": "1b204d621a06c87f95aa888833470d86e157e78b431a3a9d1a51e8d2e064a2a0",
+      "accepted_sha256": "1b204d621a06c87f95aa888833470d86e157e78b431a3a9d1a51e8d2e064a2a0",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-payroll-send-manifest-2026-11-04.json"
+    }
+  }
+}

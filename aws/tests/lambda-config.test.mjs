@@ -173,7 +173,7 @@ test('the committed plan keeps the dead credential-key removals (runs 3965802303
     assert.equal(row.inspect.live_revision_id, want.revision);
     assert.equal(row.inspect.live_variable_count, want.count);
     // The earlier changes stay in history, oldest first.
-    assert.deepEqual(section.history.map((entry) => entry.applied.run_id), environment === 'staging' ? ['39594167097', '39616453836', want.run] : ['39594352935', '39617806126', want.run, '40148243435']);
+    assert.deepEqual(section.history.map((entry) => entry.applied.run_id), environment === 'staging' ? ['39594167097', '39616453836', want.run] : ['39594352935', '39617806126', want.run, '40148243435', '41106380051']);
     assert.equal(row.applied.run_id, want.run);
     assert.equal(row.applied.main_commit, 'fdde89459b5fb3a6669427677141ce955eaa9aac');
     assert.equal(row.applied.state, 'VERIFIED');
@@ -194,7 +194,7 @@ test('the committed plan records production payees on (run 40148243435); product
   const raw = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, CONFIG_PLAN_REL), 'utf8'));
   const section = raw.environments.production;
   const row = section.history[3];
-  assert.deepEqual(section.history.map((entry) => entry.applied.run_id), ['39594352935', '39617806126', '39658423786', '40148243435']);
+  assert.deepEqual(section.history.map((entry) => entry.applied.run_id), ['39594352935', '39617806126', '39658423786', '40148243435', '41106380051']);
   assert.equal(row.inspect.run_id, '40147060785');
   assert.equal(row.inspect.main_commit, '2670a22d3ff077b3dc199be30afe638429d44ad8');
   // The inspect starts from the revision the credential-key removal left behind.
@@ -214,15 +214,12 @@ test('the committed plan records production payees on (run 40148243435); product
   assert.equal(row.applied.staging_acceptance, 'https://github.com/michaelcarletta-cmd/ChecksOps/pull/1228');
 });
 
-test('the committed plan records the production onboarding keys config (run 41106380051) and starts the next change empty', () => {
+test('the committed plan records the production onboarding keys config (run 41106380051); production keeps it in history', () => {
   const raw = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, CONFIG_PLAN_REL), 'utf8'));
-  const section = loadConfigPlan(REPO_ROOT, 'production');
   const documents = 'arn:aws:kms:us-east-1:806168576068:key/59d713da-72f3-43a6-8a48-a826d432d53f';
   const pii = 'arn:aws:kms:us-east-1:806168576068:key/30d2da88-e7bc-4280-a594-bcacf2a2a934';
-  assert.equal(section.status, 'applied');
-  assert.deepEqual(section.set, {});
-  assert.deepEqual(section.unset, {});
-  const row = raw.environments.production;
+  const section = raw.environments.production;
+  const row = section.history[4];
   assert.equal(row.inspect.run_id, '41105016517');
   assert.equal(row.inspect.main_commit, '2ae712c6fec9fadc59bae563d2a7110c4c3fc279');
   assert.equal(row.inspect.live_revision_id, '71a89043-17b0-4ff7-bf76-31f518429e20');
@@ -242,7 +239,7 @@ test('the committed plan records the production onboarding keys config (run 4110
     unset: {},
   });
   // The recorded change hash is the one the run's receipt owned.
-  assert.equal(changeSha256({ function_name: row.function_name, ...row.applied.applied_change }), row.applied.change_sha256);
+  assert.equal(changeSha256({ function_name: section.function_name, ...row.applied.applied_change }), row.applied.change_sha256);
   assert.equal(row.applied.staging_acceptance, 'https://github.com/michaelcarletta-cmd/ChecksOps/pull/1456');
   // The keys the code reads: documents.mjs (documentsKeyArn) and crypto.mjs (PII_KMS_KEY_ENV).
   const documentsSource = fs.readFileSync(path.join(REPO_ROOT, 'aws/functions/api/providers/onboarding/documents.mjs'), 'utf8');
@@ -251,6 +248,43 @@ test('the committed plan records the production onboarding keys config (run 4110
   assert.match(cryptoSource, /export const PII_KMS_KEY_ENV = 'MOOV_ONBOARDING_PII_KMS_KEY_ARN';/);
   // Both values are production KMS key ARNs, never a staging key.
   for (const arn of [documents, pii]) assert.match(arn, /^arn:aws:kms:us-east-1:806168576068:key\/[0-9a-f-]{36}$/);
+  // Staging needs no change.
+  const staging = loadConfigPlan(REPO_ROOT, 'staging');
+  assert.deepEqual(staging.set, {});
+  assert.deepEqual(staging.unset, {});
+});
+
+test('the committed plan records production sends on (run 41953736410) and starts the next change empty', () => {
+  const raw = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, CONFIG_PLAN_REL), 'utf8'));
+  const section = loadConfigPlan(REPO_ROOT, 'production');
+  assert.equal(section.status, 'applied');
+  assert.deepEqual(section.set, {});
+  assert.deepEqual(section.unset, {});
+  const row = raw.environments.production;
+  assert.equal(row.inspect.run_id, '41952626066');
+  assert.equal(row.inspect.main_commit, 'a75c5ab6e6c7cfea5575b3e7721cb79ceb704f60');
+  // The inspect starts from the revision the payroll overlay (run 41937571704) left behind.
+  assert.equal(row.inspect.live_revision_id, '15005d35-03bd-4e8e-89f7-44d99762372f');
+  assert.equal(row.inspect.live_code_sha256, 'D2Oydyt7kQ3yOYg62fxjdTEJWO1qrA1eIQCSznFZkEE=');
+  assert.equal(row.inspect.live_configuration_sha256, '6f03a3d981be84749160a65df3fdd8f969fe1b564afc2887bed8527d7d825383');
+  assert.equal(row.inspect.live_variable_count, 48);
+  assert.equal(row.applied.run_id, '41953736410');
+  assert.equal(row.applied.main_commit, '30b2909cbf4b9ba4117a9bd37e400550c9f1553e');
+  assert.equal(row.applied.state, 'VERIFIED');
+  assert.equal(row.applied.revision_id_before, row.inspect.live_revision_id);
+  assert.equal(row.applied.revision_id_after, '8686ad5f-369a-4a8d-9331-2a08326e50ea');
+  assert.equal(row.applied.configuration_sha256_before, row.inspect.live_configuration_sha256);
+  assert.equal(row.applied.code_sha256, row.inspect.live_code_sha256);
+  // Only the send switch: every other variable was carried over untouched.
+  assert.deepEqual(row.applied.applied_change, { set: { AWS_MOOV_SEND_POST_ENABLED: { from: null, to: 'true' } }, unset: {} });
+  // The recorded change hash is the one the run's receipt owned.
+  assert.equal(changeSha256({ function_name: row.function_name, ...row.applied.applied_change }), row.applied.change_sha256);
+  assert.equal(row.applied.staging_acceptance, 'https://github.com/michaelcarletta-cmd/ChecksOps/pull/1610');
+  assert.equal(row.applied.approval_phrase, 'APPLY API CONFIGURATION TO PRODUCTION');
+  assert.match(row.applied.notes, /"Payroll worked"/);
+  // The key the send route reads (moov-send.mjs), on top of the general transfer switch.
+  const sendSource = fs.readFileSync(path.join(REPO_ROOT, 'aws/functions/api/providers/production/moov-send.mjs'), 'utf8');
+  assert.match(sendSource, /export const sendPostEnabled = \(\) => transferPostEnabled\(\) && flagTrue\('AWS_MOOV_SEND_POST_ENABLED'\);/);
   // Staging needs no change.
   const staging = loadConfigPlan(REPO_ROOT, 'staging');
   assert.deepEqual(staging.set, {});

@@ -193,47 +193,14 @@
       "set": {},
       "unset": {},
       "inspect": {
-        "run_id": "41105016517",
-        "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/41105016517",
-        "main_commit": "2ae712c6fec9fadc59bae563d2a7110c4c3fc279",
-        "live_code_sha256": "tv4MPH9krg8AAQSJGNSP/j4aWyUfEQn4pZ6SCwr/QXI=",
-        "live_revision_id": "71a89043-17b0-4ff7-bf76-31f518429e20",
-        "live_configuration_sha256": "00578768112a006348bdb5f3174916ba7701c3449a179c794ca2f641470a5c5f",
-        "live_variable_count": 46,
-        "notes": "Owner decision 2026-10-30: production Compliance & Docs uploads fail with 503 document_storage_unavailable (Condition One Commercial, bank statements) because the production API has no COMPLIANCE_DOCUMENTS_KMS_KEY_ARN and no MOOV_ONBOARDING_PII_KMS_KEY_ARN. The owner approved \"CREATE ONBOARDING KEYS IN PRODUCTION\": guarded-production-onboarding-keys.yml run 41104570442 (main 2ae712c6f, PR #1454) created stack checksops-production-onboarding-keys, CREATE_COMPLETE and VERIFIED, with alias/checksops-production-compliance-documents -> arn:aws:kms:us-east-1:806168576068:key/59d713da-72f3-43a6-8a48-a826d432d53f and alias/checksops-production-moov-onboarding-pii -> arn:aws:kms:us-east-1:806168576068:key/30d2da88-e7bc-4280-a594-bcacf2a2a934; their key policies name checksops-production-api-execution directly. The inspect (state PENDING_PLAN, 46 variables) lists neither key, so both from are null. documents.mjs reads COMPLIANCE_DOCUMENTS_KMS_KEY_ARN (documentsKeyArn) and crypto.mjs reads MOOV_ONBOARDING_PII_KMS_KEY_ARN (PII_KMS_KEY_ENV). Neither name is credential-like; both values are key ARNs, not secrets. Staging already has both variables on checksops-staging-api (its own staging keys) and Compliance & Docs uploads work there, so staging needs no change; this reviewed plan PR is the staging acceptance reference."
-      },
-      "applied": {
-        "run_id": "41106380051",
-        "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/41106380051",
-        "main_commit": "342eb3922289a5aa239b5d7633728cc2cc674ed5",
-        "approval_phrase": "APPLY API CONFIGURATION TO PRODUCTION",
-        "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/pull/1456",
-        "change_sha256": "53d8e5f0f6734b65122ed76d587d366eebdac107858682dd0a66656134fa25c0",
-        "revision_id_before": "71a89043-17b0-4ff7-bf76-31f518429e20",
-        "revision_id_after": "4015e4b6-6c4d-4840-bafc-67fe53123424",
-        "configuration_sha256_before": "00578768112a006348bdb5f3174916ba7701c3449a179c794ca2f641470a5c5f",
-        "configuration_sha256_after": "48cbc8ad128a52669f22ad651443940d94419071f7f228eb31fc763a0d28ccbf",
-        "applied_at": "2026-10-30T18:22:57.475Z",
-        "smoke": [
-          "/health",
-          "/db-health"
-        ],
-        "code_sha256": "tv4MPH9krg8AAQSJGNSP/j4aWyUfEQn4pZ6SCwr/QXI=",
-        "state": "VERIFIED",
-        "notes": "Owner approval: \"merge 1456 when green\" and \"APPLY API CONFIGURATION TO PRODUCTION\". Pre-apply inspect 41106205160 on main 342eb3922: both keys listed, 0 problems, RevisionId 71a89043, configuration 00578768, 46 variables, change sha256 53d8e5f0. The run re-read the same immediately before the write. Verify step VERIFIED (48 variables: 46 + 2 set; COMPLIANCE_DOCUMENTS_KMS_KEY_ARN and MOOV_ONBOARDING_PII_KMS_KEY_ARN already_accepted at their planned ARNs). Smoke /health and /db-health 200. Read-back after the apply (boto3 GetFunctionConfiguration, user/claude-code): both variables equal the planned ARNs, FILES_BUCKET unchanged, RevisionId 4015e4b6, 48 variables, CodeSha256 unchanged; both aliases point at Enabled keys with rotation on.",
-        "applied_change": {
-          "set": {
-            "COMPLIANCE_DOCUMENTS_KMS_KEY_ARN": {
-              "from": null,
-              "to": "arn:aws:kms:us-east-1:806168576068:key/59d713da-72f3-43a6-8a48-a826d432d53f"
-            },
-            "MOOV_ONBOARDING_PII_KMS_KEY_ARN": {
-              "from": null,
-              "to": "arn:aws:kms:us-east-1:806168576068:key/30d2da88-e7bc-4280-a594-bcacf2a2a934"
-            }
-          },
-          "unset": {}
-        }
+        "run_id": "41952626066",
+        "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/41952626066",
+        "main_commit": "a75c5ab6e6c7cfea5575b3e7721cb79ceb704f60",
+        "live_code_sha256": "D2Oydyt7kQ3yOYg62fxjdTEJWO1qrA1eIQCSznFZkEE=",
+        "live_revision_id": "15005d35-03bd-4e8e-89f7-44d99762372f",
+        "live_configuration_sha256": "6f03a3d981be84749160a65df3fdd8f969fe1b564afc2887bed8527d7d825383",
+        "live_variable_count": 48,
+        "notes": "Owner decision 2026-11-05: \"yes prepare the PR to turn on sending\". A $1 production payroll (#1607, moov-send.mjs 1b204d62 live since production overlay run 41937571704) was refused 403 send_post_held (\"Sending payments is switched off. Nothing was recorded or sent.\"). moov-send.mjs sendPostEnabled() = transferPostEnabled() && flagTrue('AWS_MOOV_SEND_POST_ENABLED'), and postsEnabled() requires it only when environment is 'production'. The inspect (state PENDING_PLAN, 48 variables) lists no AWS_MOOV_SEND_POST_ENABLED, so from is null; AWS_MOOV_TRANSFER_POST_ENABLED is already \"true\" (wallet funding works). Setting it to the string \"true\" opens every production send to a payee through providers/production/moov-send.mjs: check payouts to stakeholders and partners and payroll. It does not change funding, onboarding, payees setup or any other function, and production never falls back to sandbox. Staging needs no change: postsEnabled() is true outside production and staging sends use the Moov sandbox (staging carries no AWS_MOOV_SEND_POST_ENABLED and AWS_MOOV_ENABLED \"false\"); staging acceptance is this reviewed plan PR. Not verified end to end in staging: the owner could not complete a staging payroll because the staging two-factor reset is blocked on IAM (#1609, not yet applied). Rollback: a plan with from and to swapped."
       },
       "history": [
         {
@@ -420,8 +387,82 @@
               "unset": {}
             }
           }
+        },
+        {
+          "inspect": {
+            "run_id": "41105016517",
+            "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/41105016517",
+            "main_commit": "2ae712c6fec9fadc59bae563d2a7110c4c3fc279",
+            "live_code_sha256": "tv4MPH9krg8AAQSJGNSP/j4aWyUfEQn4pZ6SCwr/QXI=",
+            "live_revision_id": "71a89043-17b0-4ff7-bf76-31f518429e20",
+            "live_configuration_sha256": "00578768112a006348bdb5f3174916ba7701c3449a179c794ca2f641470a5c5f",
+            "live_variable_count": 46,
+            "notes": "Owner decision 2026-10-30: production Compliance & Docs uploads fail with 503 document_storage_unavailable (Condition One Commercial, bank statements) because the production API has no COMPLIANCE_DOCUMENTS_KMS_KEY_ARN and no MOOV_ONBOARDING_PII_KMS_KEY_ARN. The owner approved \"CREATE ONBOARDING KEYS IN PRODUCTION\": guarded-production-onboarding-keys.yml run 41104570442 (main 2ae712c6f, PR #1454) created stack checksops-production-onboarding-keys, CREATE_COMPLETE and VERIFIED, with alias/checksops-production-compliance-documents -> arn:aws:kms:us-east-1:806168576068:key/59d713da-72f3-43a6-8a48-a826d432d53f and alias/checksops-production-moov-onboarding-pii -> arn:aws:kms:us-east-1:806168576068:key/30d2da88-e7bc-4280-a594-bcacf2a2a934; their key policies name checksops-production-api-execution directly. The inspect (state PENDING_PLAN, 46 variables) lists neither key, so both from are null. documents.mjs reads COMPLIANCE_DOCUMENTS_KMS_KEY_ARN (documentsKeyArn) and crypto.mjs reads MOOV_ONBOARDING_PII_KMS_KEY_ARN (PII_KMS_KEY_ENV). Neither name is credential-like; both values are key ARNs, not secrets. Staging already has both variables on checksops-staging-api (its own staging keys) and Compliance & Docs uploads work there, so staging needs no change; this reviewed plan PR is the staging acceptance reference."
+          },
+          "applied": {
+            "run_id": "41106380051",
+            "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/41106380051",
+            "main_commit": "342eb3922289a5aa239b5d7633728cc2cc674ed5",
+            "approval_phrase": "APPLY API CONFIGURATION TO PRODUCTION",
+            "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/pull/1456",
+            "change_sha256": "53d8e5f0f6734b65122ed76d587d366eebdac107858682dd0a66656134fa25c0",
+            "revision_id_before": "71a89043-17b0-4ff7-bf76-31f518429e20",
+            "revision_id_after": "4015e4b6-6c4d-4840-bafc-67fe53123424",
+            "configuration_sha256_before": "00578768112a006348bdb5f3174916ba7701c3449a179c794ca2f641470a5c5f",
+            "configuration_sha256_after": "48cbc8ad128a52669f22ad651443940d94419071f7f228eb31fc763a0d28ccbf",
+            "applied_at": "2026-10-30T18:22:57.475Z",
+            "smoke": [
+              "/health",
+              "/db-health"
+            ],
+            "code_sha256": "tv4MPH9krg8AAQSJGNSP/j4aWyUfEQn4pZ6SCwr/QXI=",
+            "state": "VERIFIED",
+            "notes": "Owner approval: \"merge 1456 when green\" and \"APPLY API CONFIGURATION TO PRODUCTION\". Pre-apply inspect 41106205160 on main 342eb3922: both keys listed, 0 problems, RevisionId 71a89043, configuration 00578768, 46 variables, change sha256 53d8e5f0. The run re-read the same immediately before the write. Verify step VERIFIED (48 variables: 46 + 2 set; COMPLIANCE_DOCUMENTS_KMS_KEY_ARN and MOOV_ONBOARDING_PII_KMS_KEY_ARN already_accepted at their planned ARNs). Smoke /health and /db-health 200. Read-back after the apply (boto3 GetFunctionConfiguration, user/claude-code): both variables equal the planned ARNs, FILES_BUCKET unchanged, RevisionId 4015e4b6, 48 variables, CodeSha256 unchanged; both aliases point at Enabled keys with rotation on.",
+            "applied_change": {
+              "set": {
+                "COMPLIANCE_DOCUMENTS_KMS_KEY_ARN": {
+                  "from": null,
+                  "to": "arn:aws:kms:us-east-1:806168576068:key/59d713da-72f3-43a6-8a48-a826d432d53f"
+                },
+                "MOOV_ONBOARDING_PII_KMS_KEY_ARN": {
+                  "from": null,
+                  "to": "arn:aws:kms:us-east-1:806168576068:key/30d2da88-e7bc-4280-a594-bcacf2a2a934"
+                }
+              },
+              "unset": {}
+            }
+          }
         }
-      ]
+      ],
+      "applied": {
+        "run_id": "41953736410",
+        "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/41953736410",
+        "main_commit": "30b2909cbf4b9ba4117a9bd37e400550c9f1553e",
+        "approval_phrase": "APPLY API CONFIGURATION TO PRODUCTION",
+        "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/pull/1610",
+        "change_sha256": "b264c6ade061c0d193ecd195bc455b282eccc851674a76e1e5f2d1447d9160f7",
+        "revision_id_before": "15005d35-03bd-4e8e-89f7-44d99762372f",
+        "revision_id_after": "8686ad5f-369a-4a8d-9331-2a08326e50ea",
+        "configuration_sha256_before": "6f03a3d981be84749160a65df3fdd8f969fe1b564afc2887bed8527d7d825383",
+        "configuration_sha256_after": "0ebe408b988c7a8406abbb1a91c61ffbb025a820fab765493417234c3f1f02c5",
+        "applied_at": "2026-11-05T02:13:36.034Z",
+        "smoke": [
+          "/health",
+          "/db-health"
+        ],
+        "code_sha256": "D2Oydyt7kQ3yOYg62fxjdTEJWO1qrA1eIQCSznFZkEE=",
+        "state": "VERIFIED",
+        "notes": "Owner approval: \"merge 1610\" and \"APPLY API CONFIGURATION TO PRODUCTION\". Pre-apply inspect 41953642584 on main 30b2909cb: state READY, RevisionId 15005d35, configuration 6f03a3d9, 48 variables, change sha256 b264c6ad. The run re-read the same immediately before the write. Verify step VERIFIED (49 variables: 48 + 1 set; AWS_MOOV_SEND_POST_ENABLED \"true\"). Smoke /health and /db-health 200. Read-back after the apply (boto3 GetFunctionConfiguration, user/claude-code): AWS_MOOV_SEND_POST_ENABLED \"true\", AWS_MOOV_TRANSFER_POST_ENABLED \"true\" unchanged, RevisionId 8686ad5f-369a-4a8d-9331-2a08326e50ea, 49 variables, CodeSha256 unchanged, LastModified 2026-11-05T02:13:36Z. Owner end-to-end acceptance 2026-11-05: a $1 production payroll through providers/production/moov-send.mjs, \"Payroll worked\".",
+        "applied_change": {
+          "set": {
+            "AWS_MOOV_SEND_POST_ENABLED": {
+              "from": null,
+              "to": "true"
+            }
+          },
+          "unset": {}
+        }
+      }
     }
   }
 }
