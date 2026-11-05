@@ -179,7 +179,7 @@ test('order: predecessor SQL 142, which it supersedes; the two functions, the th
   assert.ok(runbook.includes(COMMITTED.intended_replacement_sha256));
   assert.ok(runbook.includes(COMMITTED.source_sha256));
   assert.ok(runbook.includes(PRE_SQL142));
-  assert.match(runbook, /\*\*Status:\*\* not applied anywhere\./);
+  assert.match(runbook, /\*\*Status:\*\* staging pin execute-authorized \(wave 38\); not applied anywhere\./);
   assert.match(runbook, /APPLY_MORTGAGE_COMPANIES_MEMBER_DELETE_UNUSED/);
   const oneShot = read('ops/production-sql-one-shot.md');
   assert.match(oneShot, /\| `sql143` \|/);

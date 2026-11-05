@@ -3250,8 +3250,8 @@ export const AUTHORIZED_SQL142_MORTGAGE_COMPANIES_TENANT_ADMIN_WRITE = Object.fr
 // three PERMISSIVE policies TO authenticated replace SQL 142's two), and the BEFORE DELETE OR UPDATE OF id trigger
 // aws_mortgage_company_in_use_guard (public.aws_mortgage_company_in_use_guard(), SECURITY DEFINER, row_security off)
 // refuses a delete while a claim, loss draft or check case uses the company (SQLSTATE MC143). Predecessor and
-// supersedes SQL 142. Pending until a reviewed pin change records a staging read-live
-// (ops/production-sql-143-apply.md).
+// supersedes SQL 142. Staging apply authorized (wave 38) from staging read-live run 42020037212: the pre-state, SQL 142's
+// two policies and nothing of SQL 143, equals the derived one (ops/production-sql-143-apply.md).
 export const AUTHORIZED_SQL143_MORTGAGE_COMPANIES_MEMBER_DELETE_UNUSED = Object.freeze({
   key: 'sql143',
   filename: 'aws/workflows/sql/143_mortgage_companies_member_delete_unused.sql',
@@ -3259,9 +3259,11 @@ export const AUTHORIZED_SQL143_MORTGAGE_COMPANIES_MEMBER_DELETE_UNUSED = Object.
   // The commit that last authored the file bytes.
   commit: '7abd8b6edf470525baf3fad8f5be05597364fe33',
   source_sha256: '77705dd93494f4353a70b99b0db956ce764aaca0f38e5916b0187f7eb7bbb76c',
-  authorization: 'pending',
-  execute: false,
-  expected_live_definition_sha256: null,
+  authorization: 'Owner approved 2026-11-05: staging apply (wave 38) from staging read-live run 42020037212',
+  execute: true,
+  // Staging read-live run 42020037212 (main 6498b1fb0, executor deploy run 42019363178): already_applied false,
+  // precondition_failures []. Equal to the derived pre-state (SQL 142's two policies, nothing of SQL 143).
+  expected_live_definition_sha256: 'c62a1b0b337cca713cd8551f1a1c70f507ef451e40731baa6e8479abae51038d',
   // Code-derived: releaseIntendedHash('sql143', file bytes) (release-sql-state.mjs); re-derived by the tests.
   intended_replacement_sha256: 'd14d6ac55a8cc18c49d502cb508ddcb3a03969b7d196843224156d4ef0483029',
   function_identities: Object.freeze([
