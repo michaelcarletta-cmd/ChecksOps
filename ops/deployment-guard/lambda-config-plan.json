@@ -189,13 +189,8 @@
     },
     "production": {
       "function_name": "checksops-production-prep-api",
-      "status": "accepted",
-      "set": {
-        "AWS_MOOV_SEND_POST_ENABLED": {
-          "from": null,
-          "to": "true"
-        }
-      },
+      "status": "applied",
+      "set": {},
       "unset": {},
       "inspect": {
         "run_id": "41952626066",
@@ -438,7 +433,36 @@
             }
           }
         }
-      ]
+      ],
+      "applied": {
+        "run_id": "41953736410",
+        "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/41953736410",
+        "main_commit": "30b2909cbf4b9ba4117a9bd37e400550c9f1553e",
+        "approval_phrase": "APPLY API CONFIGURATION TO PRODUCTION",
+        "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/pull/1610",
+        "change_sha256": "b264c6ade061c0d193ecd195bc455b282eccc851674a76e1e5f2d1447d9160f7",
+        "revision_id_before": "15005d35-03bd-4e8e-89f7-44d99762372f",
+        "revision_id_after": "8686ad5f-369a-4a8d-9331-2a08326e50ea",
+        "configuration_sha256_before": "6f03a3d981be84749160a65df3fdd8f969fe1b564afc2887bed8527d7d825383",
+        "configuration_sha256_after": "0ebe408b988c7a8406abbb1a91c61ffbb025a820fab765493417234c3f1f02c5",
+        "applied_at": "2026-11-05T02:13:36.034Z",
+        "smoke": [
+          "/health",
+          "/db-health"
+        ],
+        "code_sha256": "D2Oydyt7kQ3yOYg62fxjdTEJWO1qrA1eIQCSznFZkEE=",
+        "state": "VERIFIED",
+        "notes": "Owner approval: \"merge 1610\" and \"APPLY API CONFIGURATION TO PRODUCTION\". Pre-apply inspect 41953642584 on main 30b2909cb: state READY, RevisionId 15005d35, configuration 6f03a3d9, 48 variables, change sha256 b264c6ad. The run re-read the same immediately before the write. Verify step VERIFIED (49 variables: 48 + 1 set; AWS_MOOV_SEND_POST_ENABLED \"true\"). Smoke /health and /db-health 200. Read-back after the apply (boto3 GetFunctionConfiguration, user/claude-code): AWS_MOOV_SEND_POST_ENABLED \"true\", AWS_MOOV_TRANSFER_POST_ENABLED \"true\" unchanged, RevisionId 8686ad5f-369a-4a8d-9331-2a08326e50ea, 49 variables, CodeSha256 unchanged, LastModified 2026-11-05T02:13:36Z. Owner end-to-end acceptance 2026-11-05: a $1 production payroll through providers/production/moov-send.mjs, \"Payroll worked\".",
+        "applied_change": {
+          "set": {
+            "AWS_MOOV_SEND_POST_ENABLED": {
+              "from": null,
+              "to": "true"
+            }
+          },
+          "unset": {}
+        }
+      }
     }
   }
 }
