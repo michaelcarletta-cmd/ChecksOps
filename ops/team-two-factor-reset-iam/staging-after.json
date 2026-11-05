@@ -1,0 +1,14 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "StagingTeamTwoFactorResetCognito",
+      "Effect": "Allow",
+      "Action": [
+        "cognito-idp:AdminSetUserMFAPreference",
+        "cognito-idp:AdminUserGlobalSignOut"
+      ],
+      "Resource": "arn:aws:cognito-idp:us-east-1:806168576068:userpool/us-east-1_vPmQ7cL1F"
+    }
+  ]
+}
