@@ -200,7 +200,7 @@ export const STAGING_WAVE1 = Object.freeze({
   // desk agent may add, edit and delete unused mortgage companies. Read at main 6498b1fb0 after the executor carried
   // it (deploy run 42019363178): already_applied false, precondition_failures [], SQL 142's two policies present.
   // Equal to the derived pre-state.
-  sql143: Object.freeze({ wave: 38, approved: '2026-11-05', run: '42020037212', live: 'c62a1b0b337cca713cd8551f1a1c70f507ef451e40731baa6e8479abae51038d' }),
+  sql143: Object.freeze({ wave: 38, approved: '2026-11-05', run: '42020037212', live: 'c62a1b0b337cca713cd8551f1a1c70f507ef451e40731baa6e8479abae51038d', apply_run: '42023495275' }),
   sql98: Object.freeze({ wave: 3, approved: '2026-10-18', run: '39083278136', live: '296c3d6a274e10f66005fb9eaecf93fa17b81bd8db3607037ca07698fddd3275', apply_run: '39085677318' }),
 });
 

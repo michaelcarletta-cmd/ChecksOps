@@ -83,6 +83,10 @@
     "aws/workflows/sql/133_financial_totp_admin_reset_enrollment.sql": {
       "verified_live": true,
       "evidence": "Guarded staging SQL executor apply of sql133-financial-totp-admin-reset-enrollment on 2026-10-30 (run 41133471065, main 746074fb1, wave 30, executor PPZJFH/U…; read-live run 41133803430 already_applied true): receipt before f3b1671e…, after edfef132… = the pin's intended_replacement_sha256; precondition_failures [], prerequisites_missing []."
+    },
+    "aws/workflows/sql/143_mortgage_companies_member_delete_unused.sql": {
+      "verified_live": true,
+      "evidence": "Guarded staging SQL executor apply of sql143-mortgage-companies-member-delete-unused on 2026-11-05 (run 42023495275, main 5de159cab, wave 38, executor 5aWzE+Sj…; read-live run 42023847018 already_applied true): receipt before c62a1b0b…, after d14d6ac5… = the pin's intended_replacement_sha256; precondition_failures [], prerequisites_missing []."
     }
   }
 }

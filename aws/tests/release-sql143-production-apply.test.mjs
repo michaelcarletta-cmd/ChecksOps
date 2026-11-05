@@ -173,8 +173,19 @@ test('order: predecessor SQL 142, which it supersedes; the two functions, the th
   for (const none of ['tables', 'views', 'dropped_functions', 'dropped_triggers', 'added_columns', 'column_acl', 'table_privileges', 'indexes', 'acl_functions']) {
     assert.ok(spec[none] === undefined || spec[none].length === 0, none);
   }
+  // The DB validator followed the staging apply (run 42023495275), as 4a3f4658e did for SQL 123, and justifies the
+  // trigger by name (185). Its production overlay row waits for SQL 143 in production (sql_before), and staging
+  // records SQL 143 live (read-live run 42023847018).
+  const validator = read('aws/functions/api/db-readonly-validate.mjs');
+  assert.match(validator, /trigger: 'aws_mortgage_company_in_use_guard',\n\s+functionName: 'aws_mortgage_company_in_use_guard'/);
+  assert.match(validator, /export const EXPECTED_PUBLIC_TRIGGERS = 185;/);
   const plan = readJson('ops/deployment-guard/production-api-overlay-plan.json');
-  assert.ok(!JSON.stringify(plan).includes(SQL143_FILE));
+  assert.deepEqual(Object.keys(plan.members).filter((m) => plan.members[m].sql_before === SQL143_FILE), ['db-readonly-validate.mjs']);
+  const stagingLive = readJson('ops/deployment-guard/staging-sql-live.json').sql[SQL143_FILE];
+  assert.equal(stagingLive.verified_live, true);
+  for (const evidence of ['run 42023495275', 'read-live run 42023847018', `after ${COMMITTED.intended_replacement_sha256.slice(0, 8)}…`]) {
+    assert.ok(stagingLive.evidence.includes(evidence), evidence);
+  }
   const runbook = read(COMMITTED.tooling.runbook);
   assert.ok(runbook.includes(COMMITTED.intended_replacement_sha256));
   assert.ok(runbook.includes(COMMITTED.source_sha256));
