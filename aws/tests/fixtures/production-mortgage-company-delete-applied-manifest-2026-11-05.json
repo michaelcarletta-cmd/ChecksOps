@@ -1,0 +1,21 @@
+{
+  "workstream_id": "mortgage-company-delete-applied",
+  "authorization": "Record only (2026-11-05): the bytes below are live. Nothing is planned or authorized by this manifest; any later change to these members needs its own manifest, staging acceptance and owner approval.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Mortgage company Remove (#1617) applied after SQL 143 (production apply SSM fecb38b8-9305-41e2-a44b-6e3a0a928f06, recorded by #1625). Applied 2026-11-05 from main 1b57eaa9c (the merge of #1625, which recorded SQL 143 live in production) in plan order: write-allowlist.mjs, admin-reset-totp.mjs, write-app-metadata.mjs, db-readonly-validate.mjs. Earlier runs refused before any write (DEPLOYMENT_COLLISION: apply plan members in order): admin-reset-totp.mjs run 42049692474 (main 9e2b0da69; write-allowlist.mjs pending) and db-readonly-validate.mjs run 42057312568 (main 1b57eaa9c; three earlier members pending). Each apply run concluded success including its \"Verify live member is the accepted bytes\" step (state VERIFIED) and the public production smoke. write-allowlist.mjs: staging acceptance run 42027076925; production preflight inspect run 42057508967 (READY, 4eb9c025 live, RevisionId 8686ad5f-369a-4a8d-9331-2a08326e50ea); production apply run 42057609583 (4eb9c025 -> 3f9259d2) on the owner's \"DEPLOY write-allowlist.mjs TO PRODUCTION\", VERIFIED, after CodeSha256 vbnoRVKozguTUrsf5N5Ja5h0G6D0HwohazedsUVwI18= RevisionId 1af21096-4ed9-45e2-97b7-a5edcf909c7b; re-inspect run 42057771491 read 3f9259d2 live. write-app-metadata.mjs: staging acceptance run 42027400258; production preflight inspect run 42058372359 (READY, 72c95cac live, RevisionId 6fa6f05d-bbf2-4c11-8d02-d55dc3a7734a); production apply run 42058501143 (72c95cac -> 1af906b0) on the owner's \"DEPLOY write-app-metadata.mjs TO PRODUCTION\", VERIFIED, after CodeSha256 ntNWO2qqMq0b091NARQLnHwICilKtb+079Y2HDUx5a4= RevisionId a51375cd-b94d-42ab-8c1e-d04f76fc51e9; re-inspect run 42058660529 read 1af906b0 live. Each row records the applied bytes as live_sha256 and accepted_sha256 and chains to the manifest that planned it (previous_manifest), which keeps the pre-apply state.",
+  "members": {
+    "write-allowlist.mjs": {
+      "live_sha256": "3f9259d275761d0fc08b0b07ae17c23e8f733c0c7661877d9c06aed7da147904",
+      "accepted_sha256": "3f9259d275761d0fc08b0b07ae17c23e8f733c0c7661877d9c06aed7da147904",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-mortgage-company-delete-manifest-2026-11-05.json"
+    },
+    "write-app-metadata.mjs": {
+      "live_sha256": "1af906b0aad358ee819d70f2ba28b8f2487a1bf2a2667562fed366ce3ac0e0f6",
+      "accepted_sha256": "1af906b0aad358ee819d70f2ba28b8f2487a1bf2a2667562fed366ce3ac0e0f6",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-mortgage-company-delete-manifest-2026-11-05.json"
+    }
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "workstream_id": "db-validator-sql143-trigger-applied",
+  "authorization": "Record only (2026-11-05): the bytes below are live. Nothing is planned or authorized by this manifest; any later change to these members needs its own manifest, staging acceptance and owner approval.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "DB validator justifies the SQL 143 in-use guard trigger (185 public triggers, #1621), applied after SQL 143 (recorded live by #1625). Applied 2026-11-05 from main 1b57eaa9c (the merge of #1625, which recorded SQL 143 live in production) in plan order: write-allowlist.mjs, admin-reset-totp.mjs, write-app-metadata.mjs, db-readonly-validate.mjs. Earlier runs refused before any write (DEPLOYMENT_COLLISION: apply plan members in order): admin-reset-totp.mjs run 42049692474 (main 9e2b0da69; write-allowlist.mjs pending) and db-readonly-validate.mjs run 42057312568 (main 1b57eaa9c; three earlier members pending). Each apply run concluded success including its \"Verify live member is the accepted bytes\" step (state VERIFIED) and the public production smoke. db-readonly-validate.mjs: staging acceptance run 42026743112; production preflight inspect run 42058788689 (READY, d897c206 live, RevisionId a51375cd-b94d-42ab-8c1e-d04f76fc51e9); production apply run 42058917794 (d897c206 -> c7aa9f1b) on the owner's \"DEPLOY db-readonly-validate.mjs TO PRODUCTION\", VERIFIED, after CodeSha256 tmsZPM6ruXLfwLH8pryWP3YC7uJoULSlMU8ilDIZpTY= RevisionId cad4286d-58c1-4047-9ebc-4cd5d5795b8e; re-inspect run 42059079959 read c7aa9f1b live. Each row records the applied bytes as live_sha256 and accepted_sha256 and chains to the manifest that planned it (previous_manifest), which keeps the pre-apply state.",
+  "members": {
+    "db-readonly-validate.mjs": {
+      "live_sha256": "c7aa9f1bfbcf99fe84e8fd56ba932d98d7db2c706d4e98e45b469d444590c55a",
+      "accepted_sha256": "c7aa9f1bfbcf99fe84e8fd56ba932d98d7db2c706d4e98e45b469d444590c55a",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-db-validator-sql143-trigger-manifest-2026-11-05.json"
+    }
+  }
+}
