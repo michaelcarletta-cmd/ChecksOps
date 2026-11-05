@@ -7924,4 +7924,158 @@ export const RELEASE_SQL_SPECS = deepFreeze({
       "public.mortgage_companies"
     ]
   },
+
+  // SQL 143 (owner decisions 2026-11-05: "Remove should delete it. It can always be added again later, anyone can do
+  // this, mortgage agents should be able to share and edit list", then "1" = delete only when unused): any member of
+  // any tenant or an active mortgage desk agent may add, edit and delete active rows of the shared mortgage company
+  // directory, and a company is deleted (or its id changed) only while no claim, loss draft or check case uses it.
+  // Two functions: public.aws_can_edit_mortgage_company_directory() (SECURITY DEFINER sql helper, EXECUTE
+  // authenticated, checksops and the owner) and the trigger function public.aws_mortgage_company_in_use_guard()
+  // (SECURITY DEFINER, row_security off, EXECUTE the owner only); the BEFORE DELETE OR UPDATE OF id row trigger
+  // aws_mortgage_company_in_use_guard; three PERMISSIVE policies TO authenticated on the helper AND is_active
+  // (aws_insert / aws_update / aws_delete_mortgage_companies_member); SQL 142's two tenant-admin policies dropped.
+  // Predecessor and supersedes SQL 142 (the file requires SQL 142's two policies in their exact form and replaces
+  // them): after SQL 143, SQL 142 counts as applied while SQL 143 is. No superseded_intended_sha256 is pinned: SQL
+  // 142 has no object SQL 143 keeps (its fingerprint after SQL 143 is its own pre-state, both policies absent).
+  // altered_relations: CREATE POLICY and CREATE TRIGGER need the table owner. extra_preconditions / counts
+  // (read-only catalog counts, never rows; each exactly 1, null fails closed) mirror the file's preconditions: RLS
+  // enabled on the ordinary table, a uuid id and a boolean is_active, the three referencing tables with a uuid
+  // mortgage_company_id, the owner policy intact, SQL 142's two policies in SQL 142's form (or, on a re-run, absent
+  // with this file's three present), no other policy, and the login (the guard's owner) reading the three referencing
+  // tables past row level security (owner without FORCE, or superuser / BYPASSRLS, with SELECT): the file's verify
+  // raises sql143_guard_cannot_see_all_rows otherwise. No table, column, grant or row changes.
+  sql143: {
+    "key": "sql143",
+    "label": "SQL 143",
+    "choice": "sql143-mortgage-companies-member-delete-unused",
+    "production_pin_rel": "ops/deployment-guard/sql143-mortgage-companies-member-delete-unused-production-apply.json",
+    "script": "sql143-mortgage-companies-member-delete-unused-production-apply",
+    "prerequisites": [
+      "public.mortgage_companies",
+      "column public.mortgage_companies.id",
+      "column public.mortgage_companies.is_active",
+      "public.claims",
+      "column public.claims.mortgage_company_id",
+      "public.loss_draft_tracking",
+      "column public.loss_draft_tracking.mortgage_company_id",
+      "public.check_cases",
+      "column public.check_cases.mortgage_company_id",
+      "public.aws_is_authenticated()",
+      "public.aws_is_cross_tenant_reader()",
+      "public.aws_has_any_tenant_membership()",
+      "public.aws_is_active_mortgage_agent(uuid)",
+      "auth.uid()",
+      "role authenticated",
+      "role checksops"
+    ],
+    "predecessors": [
+      "sql142"
+    ],
+    "supersedes": [
+      "sql142"
+    ],
+    "extra_preconditions": [
+      "mortgage_companies_rls_enabled",
+      "mortgage_companies_id_uuid_is_active_boolean",
+      "mortgage_company_references_uuid",
+      "mortgage_companies_owner_policy_intact",
+      "mortgage_companies_sql142_policies_replaceable",
+      "mortgage_companies_no_unexpected_policy",
+      "mortgage_company_references_readable_by_login"
+    ],
+    "counts": {
+      "mortgage_companies_rls_enabled": {
+        "sql": "SELECT count(*)::int AS n FROM pg_catalog.pg_class c WHERE c.oid = pg_catalog.to_regclass('public.mortgage_companies') AND c.relkind = 'r' AND c.relrowsecurity"
+      },
+      "mortgage_companies_id_uuid_is_active_boolean": {
+        "sql": "SELECT (count(*) = 2)::int AS n FROM pg_catalog.pg_attribute a WHERE a.attrelid = pg_catalog.to_regclass('public.mortgage_companies') AND NOT a.attisdropped AND ((a.attname = 'id' AND a.atttypid = 'pg_catalog.uuid'::pg_catalog.regtype) OR (a.attname = 'is_active' AND a.atttypid = 'pg_catalog.bool'::pg_catalog.regtype))"
+      },
+      "mortgage_company_references_uuid": {
+        "sql": "SELECT (count(*) = 3)::int AS n FROM pg_catalog.pg_class c JOIN pg_catalog.pg_attribute a ON a.attrelid = c.oid AND a.attname = 'mortgage_company_id' AND NOT a.attisdropped AND a.atttypid = 'pg_catalog.uuid'::pg_catalog.regtype WHERE c.relkind = 'r' AND c.oid IN (pg_catalog.to_regclass('public.claims'), pg_catalog.to_regclass('public.loss_draft_tracking'), pg_catalog.to_regclass('public.check_cases'))"
+      },
+      "mortgage_companies_owner_policy_intact": {
+        "sql": "SELECT count(*)::int AS n FROM pg_catalog.pg_policy pol WHERE pol.polrelid = pg_catalog.to_regclass('public.mortgage_companies') AND pol.polname = 'aws_write_mortgage_companies' AND pol.polpermissive AND pol.polcmd = '*' AND pol.polroles = ARRAY(SELECT r.oid FROM pg_catalog.pg_roles r WHERE r.rolname = 'authenticated') AND pg_catalog.pg_get_expr(pol.polqual, pol.polrelid) = ANY (ARRAY['(aws_is_authenticated() AND aws_is_cross_tenant_reader())', '(public.aws_is_authenticated() AND public.aws_is_cross_tenant_reader())']::text[]) AND pg_catalog.pg_get_expr(pol.polwithcheck, pol.polrelid) = ANY (ARRAY['(aws_is_authenticated() AND aws_is_cross_tenant_reader())', '(public.aws_is_authenticated() AND public.aws_is_cross_tenant_reader())']::text[])"
+      },
+      "mortgage_companies_sql142_policies_replaceable": {
+        "sql": "WITH f AS (SELECT ARRAY['(aws_is_tenant_manager_admin() AND is_active)', '(public.aws_is_tenant_manager_admin() AND is_active)']::text[] AS forms), p AS (SELECT pol.polname, pol.polpermissive, pol.polcmd, pol.polroles, pg_catalog.pg_get_expr(pol.polqual, pol.polrelid) AS q, pg_catalog.pg_get_expr(pol.polwithcheck, pol.polrelid) AS w FROM pg_catalog.pg_policy pol WHERE pol.polrelid = pg_catalog.to_regclass('public.mortgage_companies')), r AS (SELECT ARRAY(SELECT x.oid FROM pg_catalog.pg_roles x WHERE x.rolname = 'authenticated') AS roles) SELECT (((SELECT count(*) FROM p, f, r WHERE p.polname = 'aws_insert_mortgage_companies_tenant_admin' AND p.polpermissive AND p.polcmd = 'a' AND p.polroles = r.roles AND p.q IS NULL AND p.w = ANY (f.forms)) = 1 AND (SELECT count(*) FROM p, f, r WHERE p.polname = 'aws_update_mortgage_companies_tenant_admin' AND p.polpermissive AND p.polcmd = 'w' AND p.polroles = r.roles AND p.q = ANY (f.forms) AND p.w = ANY (f.forms)) = 1 AND (SELECT count(*) FROM p WHERE p.polname IN ('aws_insert_mortgage_companies_tenant_admin', 'aws_update_mortgage_companies_tenant_admin')) = 2) OR ((SELECT count(*) FROM p WHERE p.polname IN ('aws_insert_mortgage_companies_tenant_admin', 'aws_update_mortgage_companies_tenant_admin')) = 0 AND (SELECT count(*) FROM p WHERE p.polname IN ('aws_insert_mortgage_companies_member', 'aws_update_mortgage_companies_member', 'aws_delete_mortgage_companies_member')) = 3))::int AS n"
+      },
+      "mortgage_companies_no_unexpected_policy": {
+        "sql": "SELECT count(*)::int AS n FROM pg_catalog.pg_class c WHERE c.oid = pg_catalog.to_regclass('public.mortgage_companies') AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_policy pol WHERE pol.polrelid = c.oid AND pol.polname NOT IN ('aws_select_mortgage_companies', 'aws_write_mortgage_companies', 'aws_insert_mortgage_companies_tenant_admin', 'aws_update_mortgage_companies_tenant_admin', 'aws_insert_mortgage_companies_member', 'aws_update_mortgage_companies_member', 'aws_delete_mortgage_companies_member'))"
+      },
+      "mortgage_company_references_readable_by_login": {
+        "sql": "SELECT (count(*) = 3)::int AS n FROM pg_catalog.pg_class c JOIN pg_catalog.pg_roles l ON l.rolname = current_user WHERE c.oid IN (pg_catalog.to_regclass('public.claims'), pg_catalog.to_regclass('public.loss_draft_tracking'), pg_catalog.to_regclass('public.check_cases')) AND pg_catalog.has_table_privilege(l.oid, c.oid, 'SELECT') AND ((c.relowner = l.oid AND NOT c.relforcerowsecurity) OR l.rolsuper OR l.rolbypassrls)"
+      }
+    },
+    "functions": [
+      {
+        "identity": "public.aws_can_edit_mortgage_company_directory()",
+        "acl": [
+          "authenticated EXECUTE",
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ]
+      },
+      {
+        "identity": "public.aws_mortgage_company_in_use_guard()",
+        "acl": [
+          "owner EXECUTE"
+        ]
+      }
+    ],
+    "policies": [
+      {
+        "table": "public.mortgage_companies",
+        "name": "aws_insert_mortgage_companies_member",
+        "cmd": "INSERT",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": true,
+        "qual": null,
+        "with_check": "(public.aws_can_edit_mortgage_company_directory() AND is_active)"
+      },
+      {
+        "table": "public.mortgage_companies",
+        "name": "aws_update_mortgage_companies_member",
+        "cmd": "UPDATE",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": true,
+        "qual": "(public.aws_can_edit_mortgage_company_directory() AND is_active)",
+        "with_check": "(public.aws_can_edit_mortgage_company_directory() AND is_active)"
+      },
+      {
+        "table": "public.mortgage_companies",
+        "name": "aws_delete_mortgage_companies_member",
+        "cmd": "DELETE",
+        "roles": [
+          "authenticated"
+        ],
+        "permissive": true,
+        "qual": "(public.aws_can_edit_mortgage_company_directory() AND is_active)",
+        "with_check": null
+      }
+    ],
+    "dropped_policies": [
+      {
+        "table": "public.mortgage_companies",
+        "name": "aws_insert_mortgage_companies_tenant_admin"
+      },
+      {
+        "table": "public.mortgage_companies",
+        "name": "aws_update_mortgage_companies_tenant_admin"
+      }
+    ],
+    "triggers": [
+      {
+        "table": "public.mortgage_companies",
+        "name": "aws_mortgage_company_in_use_guard",
+        "def": "CREATE TRIGGER aws_mortgage_company_in_use_guard BEFORE DELETE OR UPDATE OF id ON public.mortgage_companies FOR EACH ROW EXECUTE FUNCTION public.aws_mortgage_company_in_use_guard()"
+      }
+    ],
+    "altered_relations": [
+      "public.mortgage_companies"
+    ]
+  },
 });

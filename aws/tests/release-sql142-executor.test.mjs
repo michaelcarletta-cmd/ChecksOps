@@ -140,11 +140,14 @@ test('pin: SQL 142 staging-authorized from its read-live, code-derived, selectab
   assert.deepEqual([...pin.function_identities], []);
   assert.deepEqual(spec.predecessors, []);
   for (const none of ['supersedes', 'runs_before', 'refuse_after', 'definer_writes', 'table_privileges', 'whole_tables', 'dropped_policies']) assert.equal(spec[none], undefined, none);
-  // Nothing supersedes, refuses after or depends on SQL 142; no other release key fingerprints a mortgage_companies policy.
+  // SQL 143 alone has SQL 142 as predecessor and supersedes it (it drops SQL 142's two policies, as SQL 138 replaces
+  // SQL 113's function); nothing refuses after SQL 142. No other release key fingerprints a mortgage_companies policy.
   assert.deepEqual(RELEASE_SQL_KEYS.filter((key) => (RELEASE_SQL_SPECS[key].supersedes || []).includes(KEY)
     || (RELEASE_SQL_SPECS[key].refuse_after || []).some((m) => m.key === KEY)
-    || (RELEASE_SQL_SPECS[key].predecessors || []).includes(KEY)), []);
-  for (const key of RELEASE_SQL_KEYS.filter((k) => k !== KEY)) {
+    || (RELEASE_SQL_SPECS[key].predecessors || []).includes(KEY)), ['sql143']);
+  assert.deepEqual(RELEASE_SQL_SPECS.sql143.supersedes, [KEY]);
+  assert.deepEqual(RELEASE_SQL_SPECS.sql143.predecessors, [KEY]);
+  for (const key of RELEASE_SQL_KEYS.filter((k) => k !== KEY && k !== 'sql143')) {
     const other = RELEASE_SQL_SPECS[key];
     assert.ok(![...(other.policies || []), ...(other.dropped_policies || [])].some((p) => p.table === TABLE), key);
     assert.ok(!(other.whole_tables || []).some((w) => w.table === TABLE), key);

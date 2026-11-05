@@ -3243,6 +3243,33 @@ export const AUTHORIZED_SQL142_MORTGAGE_COMPANIES_TENANT_ADMIN_WRITE = Object.fr
   function_identities: Object.freeze([]),
 });
 
+// Mortgage company member write and delete-when-unused staging pin: SQL 143 (owner decisions 2026-11-05: "Remove
+// should delete it. It can always be added again later, anyone can do this, mortgage agents should be able to share
+// and edit list", then "1" = delete only when unused). Any member of any tenant or an active mortgage desk agent may
+// add, edit and delete active rows of public.mortgage_companies (public.aws_can_edit_mortgage_company_directory();
+// three PERMISSIVE policies TO authenticated replace SQL 142's two), and the BEFORE DELETE OR UPDATE OF id trigger
+// aws_mortgage_company_in_use_guard (public.aws_mortgage_company_in_use_guard(), SECURITY DEFINER, row_security off)
+// refuses a delete while a claim, loss draft or check case uses the company (SQLSTATE MC143). Predecessor and
+// supersedes SQL 142. Pending until a reviewed pin change records a staging read-live
+// (ops/production-sql-143-apply.md).
+export const AUTHORIZED_SQL143_MORTGAGE_COMPANIES_MEMBER_DELETE_UNUSED = Object.freeze({
+  key: 'sql143',
+  filename: 'aws/workflows/sql/143_mortgage_companies_member_delete_unused.sql',
+  migration_id: '143_mortgage_companies_member_delete_unused',
+  // The commit that last authored the file bytes.
+  commit: '7abd8b6edf470525baf3fad8f5be05597364fe33',
+  source_sha256: '77705dd93494f4353a70b99b0db956ce764aaca0f38e5916b0187f7eb7bbb76c',
+  authorization: 'pending',
+  execute: false,
+  expected_live_definition_sha256: null,
+  // Code-derived: releaseIntendedHash('sql143', file bytes) (release-sql-state.mjs); re-derived by the tests.
+  intended_replacement_sha256: 'd14d6ac55a8cc18c49d502cb508ddcb3a03969b7d196843224156d4ef0483029',
+  function_identities: Object.freeze([
+    'public.aws_can_edit_mortgage_company_directory()',
+    'public.aws_mortgage_company_in_use_guard()',
+  ]),
+});
+
 export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql90: AUTHORIZED_SQL90_USERS_ONLY_TENANT_ROLES,
   sql91: AUTHORIZED_SQL91_MOOV_ONBOARDING,
@@ -3296,6 +3323,7 @@ export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql140: AUTHORIZED_SQL140_WALLET_FUNDING_SETTINGS_WRITE_GRANTS,
   sql141: AUTHORIZED_SQL141_PERMANENT_VENDOR_PAYEES,
   sql142: AUTHORIZED_SQL142_MORTGAGE_COMPANIES_TENANT_ADMIN_WRITE,
+  sql143: AUTHORIZED_SQL143_MORTGAGE_COMPANIES_MEMBER_DELETE_UNUSED,
 });
 
 // The fee collection pin under its earlier map name (the same object as the release map's sql98).
@@ -3311,7 +3339,7 @@ export function isSql30TenantDocumentsDocType(input = {}) {
   return pinIdentifiersMatch(input, AUTHORIZED_SQL30_TENANT_DOCUMENTS_DOC_TYPE);
 }
 
-/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql142) an input names, or null. */
+/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql143) an input names, or null. */
 export function releaseSqlMigrationKey(input = {}) {
   return Object.keys(RELEASE_2026_10_17_PENDING_SQL_PINS)
     .find((key) => pinIdentifiersMatch(input, RELEASE_2026_10_17_PENDING_SQL_PINS[key])) || null;
