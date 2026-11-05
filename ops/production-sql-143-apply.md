@@ -52,7 +52,27 @@ apply is a separate run after this pin is merged and the executor is redeployed 
 for that run, "apply SQL 143 in staging". The production pin stays pending: a read-only production inspect decides
 production's pre-state.
 
-**Status:** staging pin execute-authorized (wave 38); not applied anywhere. The production pin is pending.
+**Staging executor refreshed for the pin (2026-11-05).** The staging pin (wave 38, PR #1620) merged as
+`5de159cab082193c9c0f9c7a078e485dfee3949c`. Inspect run 42022190786 (main `5de159cab`) found the live executor at
+`SS564lomN093k/jPs/Hczu1uzGY8hGZxQ3/O2uAgolY=`. Deploy run 42022476995 (`expected_executor_code_sha256`
+`SS564lom…` matched) updated `checksops-staging-guarded-sql-executor`; inspect run 42022862289 read it at
+`5aWzE+Sj5D8/I6L8pnECbyXvzZu9Q4VwmVMWkfiuAT8=`. Read-live run 42023189620 (executor `5aWzE+Sj…`): `already_applied`
+false, `precondition_failures` `[]`, live `c62a1b0b…`, equal to the pin.
+
+**Staging apply (2026-11-05).** Apply run 42023495275 (2026-11-05T12:00:21Z, main `5de159cab`, workstream
+`github-staging-sql-42023495275`, pin commit `407ca2264`, `expected_live_definition_sha256`
+`c62a1b0b337cca713cd8551f1a1c70f507ef451e40731baa6e8479abae51038d`) under the owner's words "apply SQL 143 in
+staging": success. The receipt prints `result` `applied`, `before_hash` `c62a1b0b…`, `after_hash`
+`d14d6ac55a8cc18c49d502cb508ddcb3a03969b7d196843224156d4ef0483029`; both functions, the three member policies, SQL
+142's two policies and the trigger in state `intended`. Read-live run 42023847018 (executor `5aWzE+Sj…`):
+`already_applied` true, `live_definition_sha256` `d14d6ac5…` equal to the intended hash, `precondition_failures`
+`[]`. The staging live record is in `ops/deployment-guard/staging-sql-live.json` (#1621). The API change (#1617) and
+the website followed in staging after it (validator run 42026743112, `write-allowlist.mjs` run 42027076925,
+`write-app-metadata.mjs` run 42027400258, SPA run 42027746031). Staging acceptance: the owner tested in staging on
+2026-11-05, "SQL 143 accepted in staging". The staging pin keeps `execute: true`; the staging runs are recorded in the
+production pin's `staging_acceptance` by the production pin PR.
+
+**Status:** applied in staging (wave 38, 2026-11-05); staging acceptance: owner tested in staging ("SQL 143 accepted in staging"); production pin pending (production inspect next)
 
 ## Fingerprint
 

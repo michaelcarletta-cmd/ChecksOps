@@ -191,7 +191,7 @@ test('pin: SQL 143 staging-authorized from its read-live, code-derived, selectab
   assert.ok(prod.order_note.includes(PRE_SQL142));
   // The runbook: the intended fingerprint and text, the source, the derived pre-state.
   const runbook = fs.readFileSync(path.join(ROOT, 'ops/production-sql-143-apply.md'), 'utf8');
-  assert.match(runbook, /\*\*Status:\*\* staging pin execute-authorized \(wave 38\); not applied anywhere\. The production pin is pending\./);
+  assert.match(runbook, /\*\*Status:\*\* applied in staging \(wave 38, 2026-11-05\); staging acceptance: owner tested in staging \("SQL 143 accepted in staging"\); production pin pending \(production inspect next\)/);
   assert.match(runbook, /read-live \(2026-11-05\)\.\*\* Run 42020037212/);
   assert.ok(runbook.includes(pin.expected_live_definition_sha256));
   assert.match(runbook, /\*\*Pre-state: derivable\.\*\*/);
