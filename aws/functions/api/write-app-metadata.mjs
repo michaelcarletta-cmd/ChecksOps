@@ -312,7 +312,49 @@ const mortgageCompanyText = (values) => {
   return { out };
 };
 
+// SQL 143's trigger refuses deleting a company (or changing its id) while any claim, loss draft or
+// check case uses it: SQLSTATE MC143, DETAIL {"files": N, "claims", "loss_drafts", "check_cases"}.
+// It counts every tenant's files, so the caller learns how many files use the shared company even
+// when they cannot see them; nothing is deleted or unlinked.
+export const mortgageCompanyInUse = (error) => {
+  if (error?.code !== 'MC143' && !/sql143_company_in_use/.test(String(error?.message || ''))) return null;
+  let files = null;
+  try {
+    const detail = JSON.parse(String(error?.detail || ''));
+    if (Number.isInteger(detail?.files) && detail.files >= 0) files = detail.files;
+  } catch { /* fall back to the message */ }
+  if (files === null) {
+    const match = /used by (\d+) files/.exec(String(error?.message || ''));
+    if (match) files = Number(match[1]);
+  }
+  return {
+    error: 'mortgage_company_in_use',
+    statusCode: 409,
+    files,
+    message: files === null
+      ? 'This company is used by files and was not deleted'
+      : `This company is used by ${files} ${files === 1 ? 'file' : 'files'}`,
+  };
+};
+
 export const executeMortgageCompanies = async ({ client, mapping, op, values, filters }) => {
+  if (op === 'delete') {
+    const id = eqFilter(filters, 'id');
+    if (!isUuid(id)) return { error: 'invalid_uuid', field: 'id' };
+    let rows;
+    try {
+      rows = (await client.query(
+        'DELETE FROM public.mortgage_companies WHERE id = $1::uuid RETURNING *',
+        [id],
+      )).rows;
+    } catch (error) {
+      const inUse = mortgageCompanyInUse(error);
+      if (inUse) return inUse;
+      throw error;
+    }
+    if (!rows.length) return { error: 'rls_denied', message: 'mortgage company not deletable' };
+    return { rows };
+  }
   if (op === 'insert') {
     const name = clip(values.name, 200);
     if (name?.error || !name) return name?.error || { error: 'missing_required_field', field: 'name' };

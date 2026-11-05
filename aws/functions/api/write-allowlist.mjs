@@ -597,7 +597,9 @@ export const WRITE_ALLOWLIST = {
   },
   mortgage_companies: {
     tranche: 6,
-    ops: new Set(['insert', 'update']),
+    // delete: SQL 143 (any tenant member or active mortgage desk agent; refused while a claim, loss
+    // draft or check case uses the company, answered 409 mortgage_company_in_use).
+    ops: new Set(['insert', 'update', 'delete']),
     columns: new Set([
       'name', 'is_active', 'website', 'phone', 'loss_draft_email', 'loss_draft_phone',
       'loss_draft_fax', 'loss_draft_contact',
@@ -610,7 +612,7 @@ export const WRITE_ALLOWLIST = {
     filterColumns: new Set(['id']),
     frontend: {
       file: 'MortgageOpsDirectory, MortgageCompanyEditorDialog',
-      op: 'insert/update',
+      op: 'insert/update/delete',
       reason: 'Directory contact and mailing-address metadata.',
     },
   },

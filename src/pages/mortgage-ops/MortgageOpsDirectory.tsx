@@ -69,14 +69,19 @@ export function MortgageOpsDirectory() {
   const openNew = () => { setEditing(null); setDialogOpen(true); };
   const openEdit = (c: MortgageCompanyRecord) => { setEditing(c); setDialogOpen(true); };
 
+  // Remove deletes the company permanently (SQL 143), only when no claim, loss draft or check case
+  // uses it. When one does, the database refuses and nothing changes: the API answers 409
+  // mortgage_company_in_use with "This company is used by N files", and the row stays listed.
   const confirmDeactivate = async () => {
     if (!deactivateTarget) return;
     const { error } = await supabase
       .from("mortgage_companies")
-      .update({ is_active: false })
+      .delete()
       .eq("id", deactivateTarget.id);
     if (error) {
-      toast.error("Failed to remove company");
+      const inUse = (error as { code?: string }).code === "mortgage_company_in_use";
+      toast.error(inUse ? error.message : "Failed to remove company");
+      if (inUse) setDeactivateTarget(null);
     } else {
       toast.success(`${deactivateTarget.name} removed from directory`);
       setDeactivateTarget(null);
@@ -237,8 +242,8 @@ export function MortgageOpsDirectory() {
           <AlertDialogHeader>
             <AlertDialogTitle>Remove {deactivateTarget?.name}?</AlertDialogTitle>
             <AlertDialogDescription>
-              This hides the company from the directory. Existing loss drafts and mortgage requests
-              tied to this company are not affected. You can re-add it later.
+              This deletes the company from the directory permanently. A company that a claim, loss
+              draft or check case uses cannot be removed. You can add it again later.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
