@@ -18,6 +18,7 @@ import { RemoteChangeCursor } from "./hooks/useRemoteChangeCursor";
 
 
 import { isPublicTokenRoute } from "./lib/publicTokenRoutes";
+import { isNativeApp } from "./lib/nativeApp";
 
 // ChecksOps-only route tree
 const Sign = lazy(() => import("./pages/Sign"));
@@ -78,7 +79,7 @@ const PageLoader = () => (
 
 /**
  * ChecksOps-only route tree.
- * - /             → ChecksOps marketing landing (with Sign In CTA)
+ * - /             → ChecksOps marketing landing (with Sign In CTA); in the iOS/Android app, /login
  * - /login        → ChecksOps login (resolves tenant, redirects to /{slug}/checks)
  * - /sign         → Document signing flow (public token-based)
  * - /endorse      → Check endorsement flow (public token-based)
@@ -90,7 +91,10 @@ const PageLoader = () => (
 function CheckOpsRoutes() {
   return (
     <Routes>
-      <Route path="/" element={<Suspense fallback={<PageLoader />}><CheckOpsLanding /></Suspense>} />
+      <Route
+        path="/"
+        element={isNativeApp() ? <Navigate to="/login" replace /> : <Suspense fallback={<PageLoader />}><CheckOpsLanding /></Suspense>}
+      />
       <Route path="/login" element={<Suspense fallback={<PageLoader />}><CheckOpsLogin /></Suspense>} />
       <Route path="/signup" element={<Suspense fallback={<PageLoader />}><CheckOpsSignup /></Suspense>} />
       <Route path="/account/security" element={<Suspense fallback={<PageLoader />}><AccountSecurity /></Suspense>} />
