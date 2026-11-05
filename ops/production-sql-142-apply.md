@@ -80,7 +80,28 @@ production pin"; the owner's words so far name the staging steps, the inspect an
 The owner merges the pin change; the apply still needs the owner's words for that run and runs only after that merge is
 on main and staged.
 
-**Status:** applied in staging (wave 37, 2026-11-04); staging acceptance: owner tested in staging ("SQL 142 accepted in staging"); production pin execute-authorized; not applied to production
+**Production apply (2026-11-05).** After the pin change (#1614, merged to main as `2284a5e77`), transfer run
+41959100471 staged main `2284a5e77` (tarball sha256
+`b454cb3d006dd2bdbc6d3559d871b4df43c493b7198671bca5891a2574fc5445`). Under the owner's words
+"apply SQL 142 in production" (passed verbatim), a one-shot `--phase inspect` (SSM
+`0c6dc81e-bf30-4153-978e-b771fe3b83c1`, run `d2bccc09-17dd-430d-9e49-09b9207773c6`, nothing written) read live `ae3be52e…` (the pinned pre-state,
+`live_matches_expected` true, `apply_preconditions_met` true, `precondition_failures` `[]`, the four counts 1);
+then one-shot `--phase apply` run `d1a23219-f0c1-4a9b-92bd-4694b99e1d9f` through SSM
+`9162c542-13a6-4a2b-8aa7-336a355edef5`, workstream `prod-sql142-mortgage-companies-tenant-admin-20261105`, one_use_id
+`sql142-prod-4ba0d62c-0745-4a88-b2f8-4dafb53617e9`: its own inspect step read the same pre-state; contracts 4/4,
+6/6 and 43/43; all 11 steps ok; manifest `8b9d7f48…`; receipt `ae3be52e…` →
+`2cff3727e102a6dd7ed116b9ae6348a3725362b573c62fcc5050acec0bf10a69` (intended), result `applied`, unrelated
+catalog `28044dcf…` (policies 476, functions 1357); post-apply inspect `already_applied` true,
+`precondition_failures` `[]`: the policies `mortgage_companies aws_insert_mortgage_companies_tenant_admin` and
+`mortgage_companies aws_update_mortgage_companies_tenant_admin` `intended`, counts `mortgage_companies_rls_enabled` 1,
+`mortgage_companies_is_active_boolean` 1, `mortgage_companies_owner_policy_intact` 1,
+`mortgage_companies_no_unexpected_policy` 1, `prerequisites_missing` `[]`. The run's JSON arrived whole (20374
+characters, under SSM's 24000-character limit). The runner `i-0c35557c4e5385406` was started for this work at
+03:04:42Z and stopped at 03:05:30Z. Production acceptance (saving a mortgage company in production) had not been
+reported by the owner when this record was written; this record does not claim it.
+
+**Status:** applied to staging (wave 37) and to production (2026-11-05); the production pin is retired
+(`execute: false`).
 
 ## Fingerprint
 
