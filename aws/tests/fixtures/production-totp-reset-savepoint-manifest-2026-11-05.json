@@ -1,0 +1,15 @@
+{
+  "workstream_id": "totp-reset-savepoint",
+  "authorization": "Pending owner review (2026-11-05). Planning only: nothing is live or verified. Each production apply needs its own owner approval, a staging acceptance reference and a read-only production inspect that confirms the live bytes.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Owner report 2026-11-05: a teammate two-factor reset in staging answered \"Write transaction did not commit\". Staging API log 2026-11-05T14:29:08Z (route /staging/functions/v1/admin-reset-totp, event write_transaction_not_committed): SQLSTATE 42703 on UPDATE profiles, column \"totp_enrolled_at\" of relation \"profiles\" does not exist. The handler ran that optional update through safeQuery, which caught the JavaScript error, but PostgreSQL had already aborted the transaction, so COMMIT failed and the step-up consumption and the SQL 133 clear rolled back after Cognito had reset. admin-reset-totp.mjs now runs each optional statement under a savepoint (SAVEPOINT admin_reset_totp_optional; ROLLBACK TO it on error, RELEASE on success), so an optional failure never poisons the transaction; where the column exists the update behaves as before. REPLACE admin-reset-totp.mjs 688ceddf -> 87cd0534, from the financial TOTP teammate reset applied bytes (2026-10-31). sql_before stays SQL 133 (verified live in production).",
+  "members": {
+    "admin-reset-totp.mjs": {
+      "live_sha256": "688ceddff31adc27c29918549a339de325c8fefea689e995a5732d99a074cae9",
+      "accepted_sha256": "87cd053436731e6ed873befcef3c63946b064db92e1cf6999d79c2c56efbdf95",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-financial-totp-admin-reset-applied-manifest-2026-10-31.json"
+    }
+  }
+}

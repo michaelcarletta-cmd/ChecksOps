@@ -23,10 +23,24 @@ export const MFA_RESET_PREFERENCE = {
   SMSMfaSettings: { Enabled: false, PreferredMfa: false },
 };
 
-const safeQuery = async (client, sql, params = []) => {
+/**
+ * An optional statement inside withIdentityWrite's transaction. A failed statement aborts a
+ * PostgreSQL transaction even when the JavaScript error is caught, so every later statement and the
+ * COMMIT fail ("Write transaction did not commit"): staging 2026-11-05, 42703 on
+ * profiles.totp_enrolled_at, rolled back the step-up consumption and the SQL 133 clear after Cognito
+ * had already reset. Each optional statement therefore runs under its own savepoint and a failure
+ * rolls back to it, so it never poisons the transaction.
+ */
+export const OPTIONAL_QUERY_SAVEPOINT = 'admin_reset_totp_optional';
+export const safeQuery = async (client, sql, params = []) => {
+  await client.query(`SAVEPOINT ${OPTIONAL_QUERY_SAVEPOINT}`);
   try {
-    return await client.query(sql, params);
+    const result = await client.query(sql, params);
+    await client.query(`RELEASE SAVEPOINT ${OPTIONAL_QUERY_SAVEPOINT}`);
+    return result;
   } catch {
+    await client.query(`ROLLBACK TO SAVEPOINT ${OPTIONAL_QUERY_SAVEPOINT}`);
+    await client.query(`RELEASE SAVEPOINT ${OPTIONAL_QUERY_SAVEPOINT}`);
     return { rows: [], rowCount: 0 };
   }
 };
