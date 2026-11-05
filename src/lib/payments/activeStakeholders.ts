@@ -53,6 +53,8 @@ export interface RecipientTotalRow {
   type: string;
   total: number;
   count: number;
+  /** How many of `count` are payroll runs (not editable split rows). */
+  payrollCount?: number;
   /** null when nothing was paid in the selected range. */
   last: string | null;
 }

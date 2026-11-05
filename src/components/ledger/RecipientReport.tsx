@@ -14,6 +14,12 @@ import { toast } from "@/hooks/use-toast";
 import { format, startOfYear, endOfYear, startOfMonth, endOfMonth, subMonths } from "date-fns";
 import { useActiveStakeholders } from "@/hooks/useActiveStakeholders";
 import { withActiveStakeholders, type RecipientTotalRow } from "@/lib/payments/activeStakeholders";
+import {
+  PAYROLL_FINANCE_QUERY_KEY,
+  PAYROLL_SOURCE_LABEL,
+  fetchPayrollRuns,
+  payrollRecipientReportRows,
+} from "@/lib/payments/payrollRows";
 
 
 const TYPE_LABELS: Record<string, string> = {
@@ -134,8 +140,20 @@ export function RecipientReport() {
     },
   });
 
+  // Payroll sends record payroll_runs, not disbursement_splits. Their rows use the payee's
+  // name and type, so they group with that payee's other payments.
+  const { data: payrollRuns = [] } = useQuery({
+    queryKey: [PAYROLL_FINANCE_QUERY_KEY, "recipient-report", tenant?.id, dateRange],
+    enabled: !!tenant?.id,
+    queryFn: () => fetchPayrollRuns(
+      supabase,
+      tenant!.id,
+      dateFilters ? { from: dateFilters.from.toISOString(), to: dateFilters.to.toISOString() } : null,
+    ),
+  });
+
   const normalized = useMemo(() => {
-    return (rows as any[]).map((r) => {
+    const splitRows = (rows as any[]).map((r) => {
       const acct = r.stakeholder_accounts;
       const name = acct?.nickname ?? acct?.custname ?? r.recipient_name ?? "—";
       const type = acct?.account_type ?? r.recipient_type ?? "other";
@@ -151,7 +169,8 @@ export function RecipientReport() {
         method: r.method ?? "ach",
       };
     });
-  }, [rows]);
+    return [...splitRows, ...payrollRecipientReportRows(payrollRuns)];
+  }, [rows, payrollRuns]);
 
   const filtered = useMemo(() => normalized.filter((r) => {
     const matchSearch = !search || r.name.toLowerCase().includes(search.toLowerCase());
@@ -182,9 +201,10 @@ export function RecipientReport() {
     for (const r of filtered) {
       if (r.status !== "settled") continue;
       const k = `${r.type}|${r.name}`;
-      if (!acc[k]) acc[k] = { name: r.name, type: r.type, total: 0, count: 0, last: r.date };
+      if (!acc[k]) acc[k] = { name: r.name, type: r.type, total: 0, count: 0, payrollCount: 0, last: r.date };
       acc[k].total += r.amount;
       acc[k].count += 1;
+      if (r.method === "payroll") acc[k].payrollCount = (acc[k].payrollCount ?? 0) + 1;
       if (new Date(r.date) > new Date(acc[k].last)) acc[k].last = r.date;
     }
     const paid = Object.values(acc).sort((a, b) => b.total - a.total);
@@ -360,7 +380,14 @@ export function RecipientReport() {
                 <tbody>
                   {byRecipient.map((r, i) => (
                     <tr key={i} className="border-b last:border-0 hover:bg-muted/30">
-                      <td className="p-3 font-medium text-xs">{r.name}</td>
+                      <td className="p-3 font-medium text-xs">
+                        {r.name}
+                        {(r.payrollCount ?? 0) > 0 && (
+                          <Badge variant="outline" className="ml-1.5 text-[9px] py-0 h-4 align-middle">
+                            {PAYROLL_SOURCE_LABEL}{r.payrollCount !== r.count ? ` ×${r.payrollCount}` : ""}
+                          </Badge>
+                        )}
+                      </td>
                       <td className="p-3">
                         <Badge variant="outline" className={`text-[10px] ${TYPE_COLORS[r.type] ?? ""}`}>
                           {TYPE_LABELS[r.type] ?? r.type}
@@ -374,13 +401,14 @@ export function RecipientReport() {
                         {r.last ? format(new Date(r.last), "MMM d, yyyy") : "—"}
                       </td>
                       <td className="p-3 text-right">
-                        {r.count > 0 && (
+                        {/* Only split rows are renamed; payroll runs keep the payee's account name. */}
+                        {r.count - (r.payrollCount ?? 0) > 0 && (
                           <Button
                             size="sm"
                             variant="ghost"
                             className="h-7 w-7 p-0"
                             title="Edit recipient"
-                            onClick={() => openEdit(r.name, r.type, r.count)}
+                            onClick={() => openEdit(r.name, r.type, r.count - (r.payrollCount ?? 0))}
                           >
                             <Pencil className="h-3.5 w-3.5" />
                           </Button>

@@ -11,6 +11,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { format, startOfYear, endOfYear, startOfMonth, endOfMonth, subMonths } from "date-fns";
 import { Download, Search, TrendingUp, TrendingDown, DollarSign } from "lucide-react";
 import { displayCaseOrNull } from "@/lib/displayCase";
+import {
+  PAYROLL_FINANCE_QUERY_KEY,
+  PAYROLL_SOURCE_LABEL,
+  fetchPayrollRuns,
+  payrollLedgerRows,
+} from "@/lib/payments/payrollRows";
 
 const STATUS_COLORS: Record<string, string> = {
   submitted: "text-blue-600 border-blue-500/30 bg-blue-500/10",
@@ -59,6 +65,7 @@ export function PaymentLedger() {
   const [dateRange, setDateRange] = useState<DateRange>("this_year");
 
   const updateType = async (id: string, newType: string) => {
+    if (id.startsWith("payroll:")) return; // payroll runs take the payee's account type
     const { error } = await (supabase as any)
       .from("disbursement_splits")
       .update({ recipient_type: newType })
@@ -83,7 +90,18 @@ export function PaymentLedger() {
     }
   }, [dateRange]);
 
-  const { data: payments = [], isLoading } = useQuery({
+  // Payroll sends record payroll_runs, not disbursement_splits; list them here as "Payroll".
+  const { data: payrollRuns = [] } = useQuery({
+    queryKey: [PAYROLL_FINANCE_QUERY_KEY, "payment-ledger", tenant?.id, dateRange],
+    enabled: !!tenant?.id,
+    queryFn: () => fetchPayrollRuns(
+      supabase,
+      tenant!.id,
+      dateFilters ? { from: dateFilters.from.toISOString(), to: dateFilters.to.toISOString() } : null,
+    ),
+  });
+
+  const { data: splitPayments = [], isLoading } = useQuery({
     queryKey: ["payment-ledger", tenant?.id, dateRange],
     enabled: !!tenant?.id,
     queryFn: async () => {
@@ -120,6 +138,13 @@ export function PaymentLedger() {
     },
   });
 
+  const payments = useMemo(
+    () => [...splitPayments, ...payrollLedgerRows(payrollRuns)].sort(
+      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+    ),
+    [splitPayments, payrollRuns],
+  );
+
   const filtered = useMemo(() => {
     return payments.filter((p: any) => {
       const acct = p.stakeholder_accounts;
@@ -132,7 +157,10 @@ export function PaymentLedger() {
         name.toLowerCase().includes(search.toLowerCase()) ||
         check?.check_number?.toLowerCase().includes(search.toLowerCase()) ||
         check?.carrier_name?.toLowerCase().includes(search.toLowerCase()) ||
-        p.external_check_number?.toLowerCase().includes(search.toLowerCase());
+        p.external_check_number?.toLowerCase().includes(search.toLowerCase()) ||
+        (p.source === "payroll" &&
+          (PAYROLL_SOURCE_LABEL.toLowerCase().includes(search.toLowerCase()) ||
+            p.memo?.toLowerCase().includes(search.toLowerCase())));
 
       const matchType = typeFilter === "all" || type === typeFilter;
       const matchStatus = statusFilter === "all" || p.status === statusFilter;
@@ -163,8 +191,8 @@ export function PaymentLedger() {
         acct?.nickname ?? acct?.custname ?? "—",
         ACCOUNT_TYPE_LABELS[acct?.account_type] ?? "—",
         acct?.chk_acct ? `••••${acct.chk_acct.slice(-4)}` : "—",
-        check?.check_number ?? "—",
-        check?.carrier_name ?? "—",
+        p.source === "payroll" ? PAYROLL_SOURCE_LABEL : (check?.check_number ?? "—"),
+        p.source === "payroll" ? (p.memo ?? "—") : (check?.carrier_name ?? "—"),
         Number(p.amount).toFixed(2),
         p.status,
         p.return_code ?? "—",
@@ -290,6 +318,7 @@ export function PaymentLedger() {
                     const check = p.disbursement_batches?.check_intake_items;
                     const name = acct?.nickname ?? acct?.custname ?? p.recipient_name ?? "—";
                     const type = acct?.account_type ?? p.recipient_type ?? null;
+                    const isPayroll = p.source === "payroll";
                     const acctLabel = acct?.chk_acct
                       ? `••••${acct.chk_acct.slice(-4)}`
                       : p.method === "external_check"
@@ -303,7 +332,7 @@ export function PaymentLedger() {
                           {acctLabel && <p className="text-[10px] text-muted-foreground font-mono">{acctLabel}</p>}
                         </td>
                         <td className="p-3 hidden md:table-cell">
-                          {acct ? (
+                          {acct || isPayroll ? (
                             <Badge variant="outline" className={`text-[10px] ${TYPE_COLORS[type ?? ""] ?? ""}`}>
                               {type ? (ACCOUNT_TYPE_LABELS[type] ?? type) : "—"}
                             </Badge>
@@ -320,8 +349,19 @@ export function PaymentLedger() {
                             </Select>
                           )}
                         </td>
-                        <td className="p-3 text-xs font-mono hidden md:table-cell">{check?.check_number ?? "—"}</td>
-                        <td className="p-3 text-xs hidden lg:table-cell text-muted-foreground">{displayCaseOrNull(check?.carrier_name) ?? "—"}</td>
+                        {isPayroll ? (
+                          <>
+                            <td className="p-3 hidden md:table-cell">
+                              <Badge variant="outline" className="text-[10px]">{PAYROLL_SOURCE_LABEL}</Badge>
+                            </td>
+                            <td className="p-3 text-xs hidden lg:table-cell text-muted-foreground">{p.memo || "—"}</td>
+                          </>
+                        ) : (
+                          <>
+                            <td className="p-3 text-xs font-mono hidden md:table-cell">{check?.check_number ?? "—"}</td>
+                            <td className="p-3 text-xs hidden lg:table-cell text-muted-foreground">{displayCaseOrNull(check?.carrier_name) ?? "—"}</td>
+                          </>
+                        )}
                         <td className="p-3 text-right font-medium text-sm">${Number(p.amount).toLocaleString("en-US", { minimumFractionDigits: 2 })}</td>
                         <td className="p-3">
                           <Badge variant="outline" className={`text-[10px] ${STATUS_COLORS[p.status] ?? ""}`}>

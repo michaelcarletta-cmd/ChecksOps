@@ -20,6 +20,7 @@ import {
   buildPaymentReportingCsv,
   type RecipientRow,
 } from "@/lib/taxYtdSummary";
+import { PAYROLL_FINANCE_QUERY_KEY, fetchPayrollRuns, payrollExpenseTotal } from "@/lib/payments/payrollRows";
 import {
   taxProfileMutationVariables,
   type TaxProfileMutationVariables,
@@ -230,6 +231,16 @@ export function TaxSummary() {
     },
   });
 
+  // Payroll sends record payroll_runs, not disbursement_splits; paid runs count for the payee.
+  const { data: payrollRuns = [] } = useQuery({
+    queryKey: [PAYROLL_FINANCE_QUERY_KEY, "tax-summary", tenant?.id, year],
+    enabled: !!tenant?.id,
+    queryFn: () => fetchPayrollRuns(supabase, tenant!.id, {
+      from: startOfYear(new Date(year, 0, 1)).toISOString(),
+      to: endOfYear(new Date(year, 0, 1)).toISOString(),
+    }),
+  });
+
   const { data: depositedChecks = [] } = useQuery({
     queryKey: ["tax-summary-income", tenant?.id, year],
     enabled: !!tenant?.id,
@@ -247,8 +258,8 @@ export function TaxSummary() {
   });
 
   const recipients: RecipientRow[] = useMemo(
-    () => aggregateRecipientRows({ payments: payments as any[], cashPayments: cashPayments as any[], year }),
-    [payments, cashPayments, year],
+    () => aggregateRecipientRows({ payments: payments as any[], cashPayments: cashPayments as any[], payrollRuns, year }),
+    [payments, cashPayments, payrollRuns, year],
   );
 
   const visibleRecipients = useMemo(() => {
@@ -270,6 +281,7 @@ export function TaxSummary() {
 
   const flag1099Count = recipients.filter(r => r.needs_1099).length;
   const totalPaid = recipients.reduce((s, r) => s + r.total, 0);
+  const payrollPaid = useMemo(() => payrollExpenseTotal(payrollRuns), [payrollRuns]);
   const totalIncome = (depositedChecks as any[]).reduce((s, c) => s + Number(c.amount ?? 0), 0);
   const depositedCount = (depositedChecks as any[]).length;
   const netRetained = totalIncome - totalPaid;
@@ -409,7 +421,11 @@ export function TaxSummary() {
           <div>
             <p className="text-[11px] text-muted-foreground">Total disbursed</p>
             <p className="text-lg font-semibold">${totalPaid.toLocaleString("en-US", { minimumFractionDigits: 2 })}</p>
-            <p className="text-[10px] text-muted-foreground">to subs, vendors & reps</p>
+            <p className="text-[10px] text-muted-foreground">
+              to subs, vendors & reps
+              {payrollPaid.count > 0 &&
+                `, incl. $${payrollPaid.total.toLocaleString("en-US", { minimumFractionDigits: 2 })} payroll`}
+            </p>
           </div>
           <div>
             <p className="text-[11px] text-muted-foreground">Net retained</p>
