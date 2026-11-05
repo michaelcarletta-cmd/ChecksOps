@@ -39,7 +39,20 @@ applied there.
 **Production: unverified** through the release engine for SQL 143. A read-only production inspect decides the
 pre-state, the referencing tables' columns and ownership, and FORCE ROW LEVEL SECURITY.
 
-**Status:** not applied anywhere. The staging pin and the production pin are pending.
+**Staging executor refreshed (2026-11-05).** Inspect run 42019009492 (main `6498b1fb0`) found the live
+executor at `UMj/UNO8tqBoGuGnflpp8VrdimQy0qmFMVA7i6/fABc=`. Deploy run 42019363178
+(`expected_executor_code_sha256` `UMj/UNO8…` matched) updated `checksops-staging-guarded-sql-executor` to
+`SS564lomN093k/jPs/Hczu1uzGY8hGZxQ3/O2uAgolY=` (inspect run 42019761339).
+
+**Staging read-live (2026-11-05).** Run 42020037212 (main `6498b1fb0`, executor `SS564lom…`): `already_applied`
+false, `precondition_failures` `[]`. Live `c62a1b0b337cca713cd8551f1a1c70f507ef451e40731baa6e8479abae51038d`: SQL 142's two policies, nothing of SQL 143, equal to the
+derived pre-state; intended `d14d6ac5…`. Recorded in the staging pin (`expected_live_definition_sha256`,
+`execute: true`, wave 38) under the owner's words of 2026-11-05, "record the SQL 143 staging pin". The staging
+apply is a separate run after this pin is merged and the executor is redeployed carrying it, on the owner's words
+for that run, "apply SQL 143 in staging". The production pin stays pending: a read-only production inspect decides
+production's pre-state.
+
+**Status:** staging pin execute-authorized (wave 38); not applied anywhere. The production pin is pending.
 
 ## Fingerprint
 
