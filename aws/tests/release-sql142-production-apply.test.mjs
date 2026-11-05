@@ -273,6 +273,9 @@ test('order: no predecessor; no function; the two tenant-admin policies on mortg
   assert.ok(runbook.includes(COMMITTED.intended_replacement_sha256));
   assert.ok(runbook.includes(COMMITTED.source_sha256));
   assert.match(runbook, /\*\*Status:\*\* applied to staging \(wave 37\) and to production \(2026-11-05\); the production pin is retired/);
+  // Owner production acceptance, recorded after the fact without changing the applied record: "1 and 2 work."
+  assert.match(runbook, /\*\*Production acceptance \(2026-11-05\)\.\*\*[\s\S]*"1 and 2 work\."/);
+  assert.match(runbook, /owner production acceptance 2026-11-05\./);
   assert.match(runbook, /\*\*Production apply \(2026-11-05\)\.\*\*/);
   for (const evidence of [SQL142_APPLIED.ssm, SQL142_APPLIED.run, SQL142_APPLIED.workstream, PRE_INSPECT_SSM, '41959100471', `"${SQL142_APPLIED.approval}"`]) {
     assert.ok(runbook.includes(evidence), evidence);

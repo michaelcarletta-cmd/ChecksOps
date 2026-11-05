@@ -100,8 +100,12 @@ characters, under SSM's 24000-character limit). The runner `i-0c35557c4e5385406`
 03:04:42Z and stopped at 03:05:30Z. Production acceptance (saving a mortgage company in production) had not been
 reported by the owner when this record was written; this record does not claim it.
 
+**Production acceptance (2026-11-05).** After SQL 143 (which supersedes SQL 142's two policies) and its API and
+website were deployed to production, the owner tested adding, editing and removing mortgage companies in production
+and reported, verbatim, "1 and 2 work." (item 2: mortgage companies). The record above, written before that test, is unchanged.
+
 **Status:** applied to staging (wave 37) and to production (2026-11-05); the production pin is retired
-(`execute: false`).
+(`execute: false`); owner production acceptance 2026-11-05.
 
 ## Fingerprint
 

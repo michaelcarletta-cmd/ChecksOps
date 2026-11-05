@@ -79,4 +79,18 @@ aws iam simulate-principal-policy --policy-source-arn "$(aws iam get-role --role
 After each environment, tell Claude: a read-only check re-reads the policy and CloudTrail `PutRolePolicy`, and a
 record PR adds the result here.
 
-**Status:** not applied anywhere.
+**Applied (2026-11-05), by the owner from the Ubuntu terminal as `michael-admin`.**
+
+- Staging: the staging block printed `BEFORE: policy absent`, `LIVE MATCHES AFTER`,
+  `cognito-idp:AdminSetUserMFAPreference allowed`, `cognito-idp:AdminUserGlobalSignOut allowed`. CloudTrail
+  `PutRolePolicy` on `checksops-staging-ApiFunctionRole-7E7XRyLe3nyi`, 2026-11-05T14:27:07Z, event
+  `f117f9b9-63c5-4865-844d-07e0c04736b0`, no error. A read-only `GetRolePolicy` afterwards equalled
+  `staging-after.json`. The first staging reset then failed with "Write transaction did not commit" (an optional
+  `profiles.totp_enrolled_at` update aborted the transaction); #1622 fixed it (staging overlay run 42047282542) and the
+  staging reset of `mcarletta@freedomadj.com` succeeded.
+- Production: the production block printed the same four lines. CloudTrail `PutRolePolicy` on
+  `checksops-production-api-execution`, 2026-11-05T15:56:33Z, event `9516ecc1-0741-4c13-bd57-26e6886d2541`, no error. A
+  read-only `GetRolePolicy` afterwards equalled `production-after.json`. The #1622 fix is live in production
+  (`admin-reset-totp.mjs` run 42058117752).
+
+**Status:** applied in staging and production (2026-11-05).
