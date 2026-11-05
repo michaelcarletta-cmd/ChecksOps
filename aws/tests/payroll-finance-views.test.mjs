@@ -14,6 +14,12 @@ import {
   payrollTaxPayments,
 } from '../../src/lib/payments/payrollRows.ts';
 import { aggregateRecipientRows } from '../../src/lib/taxYtdSummary.ts';
+import { PAYROLL_RUN_COLUMNS, payrollSpeedFeeExpenseTotal } from '../../src/lib/payments/payrollRows.ts';
+import {
+  PAYROLL_SPEED_FEES,
+  PAYROLL_SPEED_FEES_LABEL,
+  payrollSpeedFee,
+} from '../../src/lib/payments/payrollSpeedFees.ts';
 
 const read = (file) => fs.readFileSync(new URL(`../../${file}`, import.meta.url), 'utf8');
 
@@ -152,4 +158,59 @@ test('the four finance screens read payroll, and a payroll send refreshes them',
   const dialog = read('src/components/payroll/RunPayrollDialog.tsx');
   assert.match(dialog, /invalidateQueries\(\{ queryKey: \[PAYROLL_FINANCE_QUERY_KEY\] \}\)/);
   assert.equal(PAYROLL_FINANCE_QUERY_KEY, 'payroll-finance');
+});
+
+test('speed fee mapping: next_day 0.75, same_day 1.00, anything else 0', () => {
+  assert.deepEqual({ ...PAYROLL_SPEED_FEES }, { next_day: 0.75, same_day: 1 });
+  assert.equal(payrollSpeedFee('next_day'), 0.75);
+  assert.equal(payrollSpeedFee('same_day'), 1);
+  assert.equal(payrollSpeedFee('instant'), 0);
+  assert.equal(payrollSpeedFee('NEXT_DAY'), 0);
+  assert.equal(payrollSpeedFee(''), 0);
+  assert.equal(payrollSpeedFee(null), 0);
+  assert.equal(payrollSpeedFee(undefined), 0);
+  assert.equal(PAYROLL_SPEED_FEES_LABEL, 'Payroll speed fees');
+});
+
+test('Revenue & Profit: speed fees of paid runs only, a separate expense line', () => {
+  const speedRuns = [
+    run('s1', 'submitted', 400, undefined, { speed: 'next_day' }),
+    run('s2', 'completed', 150, undefined, { speed: 'same_day' }),
+    run('s3', 'submitted', 10, undefined, { speed: 'next_day' }),
+    run('s4', 'completed', 20, undefined, { speed: 'warp' }),
+    run('s5', 'submitted', 30, undefined, { speed: null }),
+    run('s6', 'failed', 999, undefined, { speed: 'same_day' }),
+    run('s7', 'pending', 75, undefined, { speed: 'same_day' }),
+    run('s8', 'partial', 60, undefined, { speed: 'next_day' }),
+    run('s9', 'unknown', 40, undefined, { speed: 'same_day' }),
+  ];
+  assert.deepEqual(payrollSpeedFeeExpenseTotal(speedRuns), { total: 2.5, count: 3 });
+  assert.deepEqual(payrollSpeedFeeExpenseTotal(null), { total: 0, count: 0 });
+  // The payee amount line is unchanged by the fee.
+  assert.deepEqual(payrollExpenseTotal(speedRuns), { total: 610, count: 5 });
+  // Summed in cents: ten next-day fees are exactly 7.50.
+  const many = Array.from({ length: 10 }, (_, i) => run(`m${i}`, 'submitted', 1, undefined, { speed: 'next_day' }));
+  assert.deepEqual(payrollSpeedFeeExpenseTotal(many), { total: 7.5, count: 10 });
+});
+
+test('the speed fee never reaches the payee views (Payment History, By Recipient, Tax & 1099)', () => {
+  const paid = [run('p1', 'submitted', 400, undefined, { speed: 'same_day' }), run('p2', 'completed', 200, undefined, { speed: 'next_day' })];
+  assert.deepEqual(payrollLedgerRows(paid).map((r) => r.amount), [400, 200]);
+  assert.deepEqual(payrollRecipientReportRows(paid).map((r) => r.amount), [400, 200]);
+  assert.deepEqual(payrollTaxPayments(paid).map((p) => p.amount), [400, 200]);
+  assert.equal(aggregateRecipientRows({ payrollRuns: paid, year: 2026 })[0].total, 600);
+});
+
+test('one fee schedule: the dialog and Revenue & Profit read the shared helper, and the query selects speed', () => {
+  const dialog = read('src/components/payroll/RunPayrollDialog.tsx');
+  assert.match(dialog, /from "@\/lib\/payments\/payrollSpeedFees"/);
+  assert.doesNotMatch(dialog, /next_day:\s*0\.75/);
+  const revenue = read('src/components/ledger/RevenueSummary.tsx');
+  assert.match(revenue, /payrollSpeedFeeExpenseTotal\(payrollRuns\)/);
+  assert.match(revenue, /PAYROLL_SPEED_FEES_LABEL/);
+  assert.match(revenue, /totalOutgoing = disbursementOutgoing \+ payroll\.total \+ speedFees\.total/);
+  for (const file of ['src/components/ledger/PaymentLedger.tsx', 'src/components/ledger/RecipientReport.tsx', 'src/components/ledger/TaxSummary.tsx']) {
+    assert.doesNotMatch(read(file), /SpeedFee|payrollSpeedFees/, file);
+  }
+  assert.match(PAYROLL_RUN_COLUMNS, /\bspeed\b/);
 });

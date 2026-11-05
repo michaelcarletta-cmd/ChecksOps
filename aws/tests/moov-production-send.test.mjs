@@ -1053,7 +1053,10 @@ test('the payroll dialog pays through the send route with the once-per-login wal
   assert.match(dialog, /sendPayrollPayment\(/);
   assert.match(dialog, /actionKey: "wallet\.fund"/);
   assert.match(dialog, /next_day: "standard", same_day: "same_day"/);
-  assert.match(dialog, /SPEED_FEES: Record<Speed, number> = \{ next_day: 0\.75, same_day: 1\.00 \}/);
+  // The fee schedule lives in the shared helper (one source for the dialog and Revenue & Profit).
+  const speedFees = fs.readFileSync(new URL('../../src/lib/payments/payrollSpeedFees.ts', import.meta.url), 'utf8');
+  assert.match(dialog, /const SPEED_FEES = PAYROLL_SPEED_FEES;/);
+  assert.match(speedFees, /PAYROLL_SPEED_FEES: Readonly<Record<PayrollSpeed, number>> = \{ next_day: 0\.75, same_day: 1\.0 \}/);
   assert.match(sends, /purpose: "payroll"/);
   assert.match(sends, /functions\.invoke\("moov-disburse"/);
 });
