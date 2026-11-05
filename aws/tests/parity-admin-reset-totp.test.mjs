@@ -457,3 +457,71 @@ test('SQL 133: a Cognito failure after the database clear answers ok false, so t
   assert.equal(result.financialTotpCleared, undefined);
   assert.equal(financialReset.calls.length, 1, 'the clear ran inside the transaction that ok false now rolls back');
 });
+
+/**
+ * A PostgreSQL transaction in miniature: any failed statement aborts it, and until ROLLBACK TO a live
+ * savepoint every later statement, COMMIT included, fails with 25P02. `failing` makes matching
+ * statements fail as staging's profiles.totp_enrolled_at update did (42703).
+ */
+const pgTransaction = (inner, failing) => {
+  let aborted = false;
+  const savepoints = [];
+  const statements = [];
+  const fail = (code, message) => { throw Object.assign(new Error(message), { code }); };
+  return {
+    statements,
+    query: async (sql, params) => {
+      const compact = String(sql).replace(/\s+/g, ' ').trim();
+      statements.push(compact);
+      const sp = compact.match(/^(SAVEPOINT|RELEASE SAVEPOINT|ROLLBACK TO SAVEPOINT) (\w+)$/);
+      if (sp && sp[1] === 'ROLLBACK TO SAVEPOINT') {
+        if (!savepoints.includes(sp[2])) fail('3B001', `savepoint "${sp[2]}" does not exist`);
+        aborted = false;
+        return { rows: [] };
+      }
+      if (aborted) fail('25P02', 'current transaction is aborted, commands ignored until end of transaction block');
+      if (sp && sp[1] === 'SAVEPOINT') { savepoints.push(sp[2]); return { rows: [] }; }
+      if (sp) { savepoints.splice(savepoints.lastIndexOf(sp[2]), 1); return { rows: [] }; }
+      if (compact === 'COMMIT') return { rows: [] };
+      if (failing.test(compact)) { aborted = true; fail('42703', 'column "totp_enrolled_at" of relation "profiles" does not exist'); }
+      try {
+        return await inner.query(sql, params);
+      } catch (error) {
+        aborted = true;
+        throw error;
+      }
+    },
+  };
+};
+
+test('staging 2026-11-05: a failing optional statement (42703, profiles.totp_enrolled_at missing) no longer aborts the transaction, so the step-up consumption and the SQL 133 clear commit', async () => {
+  const financialReset = { rows: new Set([USER_ID]), calls: [] };
+  const consumed = [];
+  const tx = pgTransaction(teamClient({ memberships: TEAM, account: ACCOUNT, financialReset, consumed }), /UPDATE public\.profiles SET totp_enrolled_at/);
+  const cognito = [];
+  const result = await reset(tx, { poolId: 'p', cognitoClient: cognitoSpy(cognito) });
+  assert.equal(result.ok, true);
+  assert.equal(result.financialTotpCleared, true);
+  assert.ok(cognito.includes('AdminSetUserMFAPreferenceCommand'));
+  // withIdentityWrite commits an ok result: the transaction must still be usable.
+  await tx.query('COMMIT');
+  assert.equal(consumed.length, 1, 'the step-up consumption commits');
+  assert.ok(!financialReset.rows.has(USER_ID), 'the financial authenticator clear commits');
+  const update = tx.statements.findIndex((s) => s.startsWith('UPDATE public.profiles SET totp_enrolled_at'));
+  assert.equal(tx.statements[update - 1], 'SAVEPOINT admin_reset_totp_optional');
+  assert.equal(tx.statements[update + 1], 'ROLLBACK TO SAVEPOINT admin_reset_totp_optional');
+});
+
+test('optional statements run under a savepoint that is released on success, so where the column exists the update behaves as before', async () => {
+  const tx = pgTransaction(teamClient({ memberships: TEAM, account: ACCOUNT }), /^$/);
+  const result = await reset(tx, { poolId: 'p', cognitoClient: cognitoSpy([]) });
+  assert.equal(result.ok, true);
+  await tx.query('COMMIT');
+  const update = tx.statements.findIndex((s) => s.startsWith('UPDATE public.profiles SET totp_enrolled_at'));
+  assert.deepEqual(tx.statements.slice(update - 1, update + 2), [
+    'SAVEPOINT admin_reset_totp_optional',
+    tx.statements[update],
+    'RELEASE SAVEPOINT admin_reset_totp_optional',
+  ]);
+  assert.equal(tx.statements.some((s) => s.startsWith('ROLLBACK TO SAVEPOINT')), false);
+});
