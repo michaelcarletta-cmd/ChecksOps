@@ -72,7 +72,24 @@ the website followed in staging after it (validator run 42026743112, `write-allo
 2026-11-05, "SQL 143 accepted in staging". The staging pin keeps `execute: true`; the staging runs are recorded in the
 production pin's `staging_acceptance` by the production pin PR.
 
-**Status:** applied in staging (wave 38, 2026-11-05); staging acceptance: owner tested in staging ("SQL 143 accepted in staging"); production pin pending (production inspect next)
+**Production inspect (2026-11-05).** Read-only `--inspect` through SSM
+`34e080cb-a508-4f8f-9969-a7433619d673` on `i-0c35557c4e5385406` (under the owner's words "run the read-only production check
+for SQL 143"; runner started 14:43:50Z, stopped 14:44:18Z), main `9e2b0da69` (tarball sha256
+`9b38212579bb7fc90b819c81256cbc978cf0ae3fd53d1596209d021eb997f5b3`, staged by `sql53-temporary-transfer.yml` run
+42047541991, migration source `77705dd9…` == pin), connected as `checksops_admin`: both functions, the three member
+policies and the trigger `absent`, SQL 142's two policies `present`; the seven counts 1
+(`mortgage_companies_rls_enabled`, `mortgage_companies_id_uuid_is_active_boolean`, `mortgage_company_references_uuid`,
+`mortgage_companies_owner_policy_intact`, `mortgage_companies_sql142_policies_replaceable`,
+`mortgage_companies_no_unexpected_policy`, `mortgage_company_references_readable_by_login`); every prerequisite
+present; `predecessors` `{sql142: true}`, `successors_applied` `[]`; live `c62a1b0b337cca713cd8551f1a1c70f507ef451e40731baa6e8479abae51038d`, `already_applied` false,
+`precondition_failures` `[]`. Production's pre-state equals staging's (read-live runs 42020037212 and 42023189620),
+so the staging apply took the path production will (`aws/tests/sql143-mortgage-companies-member-delete-tool-pg.test.mjs`).
+Recorded in the production pin with the staging apply (run 42023495275) as its staging acceptance and `execute: true`
+under the owner's words "record the SQL 143 production pin"; the owner's words so far name the staging steps, the
+inspect and this pin, not the production apply. The owner merges the pin change; the apply still needs the owner's
+words for that run and runs only after that merge is on main and staged.
+
+**Status:** applied in staging (wave 38, 2026-11-05); staging acceptance: owner tested in staging ("SQL 143 accepted in staging"); production pin execute-authorized; not applied to production
 
 ## Fingerprint
 
