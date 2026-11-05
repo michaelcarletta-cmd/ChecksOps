@@ -163,6 +163,13 @@ const assertThirdSectionAccepted = (apiRoot, name, accepted) => {
   if (CHANGED_SINCE_THIRD_REBUILD.has(name)) assert.notEqual(onMain, accepted, `${name} is listed as changed since the third rebuild but main still has the accepted bytes`);
   else assert.equal(onMain, accepted, name);
 };
+// Members of the fourth production rebuild section (apply run 41469896446, 2026-11-02) that main changed after
+// it was applied. The section keeps the accepted hash it recorded as evidence; the new bytes go through the
+// production overlay plan, whose row expects the bytes the rebuild put live.
+const CHANGED_SINCE_FOURTH_PRODUCTION_REBUILD = new Set([
+  // Public marketing demo request (2026-11-05): the Class A name demo-request routed to public-demo-request.mjs.
+  'app-services.mjs',
+]);
 // Listed changes that go through the production overlay plan, never the current rebuild section.
 const OVERLAY_PLAN_CHANGES = new Set([
   'providers/production/checkalt-eligibility.mjs',
@@ -503,9 +510,11 @@ test('the production plan section accepts inspect run 41463084601 and records ap
   assert.equal(production.inspect.removed, 0);
   assert.deepEqual(production.inspect.dependency_counts, { live: 54, candidate: 54 });
   const apiRoot = path.join(REPO_ROOT, 'aws/functions/api');
-  // Accepted is main's bytes; live is what production runs.
+  // Accepted is main's bytes, unless main changed the member since (listed); live is what production ran before.
   for (const [name, entry] of Object.entries(section.members)) {
-    assert.equal(sha256(fs.readFileSync(path.join(apiRoot, name))), entry.accepted_sha256, name);
+    const onMain = sha256(fs.readFileSync(path.join(apiRoot, name)));
+    if (CHANGED_SINCE_FOURTH_PRODUCTION_REBUILD.has(name)) assert.notEqual(onMain, entry.accepted_sha256, `${name} is listed as changed but main still has the accepted bytes`);
+    else assert.equal(onMain, entry.accepted_sha256, name);
     assert.notEqual(entry.live_sha256, entry.accepted_sha256, name);
   }
   for (const [name, hash] of Object.entries(section.added)) assert.equal(sha256(fs.readFileSync(path.join(apiRoot, name))), hash, name);
@@ -515,6 +524,12 @@ test('the production plan section accepts inspect run 41463084601 and records ap
   for (const [name, entry] of Object.entries(section.members)) {
     const row = overlay.members[name];
     if (!row) { assert.ok(['invoice-provider.mjs', 'mortgage-ops-usage.mjs', 'tenant-collection-v2-uat.mjs'].includes(name), name); continue; }
+    if (CHANGED_SINCE_FOURTH_PRODUCTION_REBUILD.has(name)) {
+      // The row moved on after the rebuild: main's bytes accepted, the bytes the rebuild put live expected.
+      assert.equal(row.accepted_sha256, sha256(fs.readFileSync(path.join(apiRoot, name))), name);
+      assert.equal(row.expected_live_sha256, entry.accepted_sha256, name);
+      continue;
+    }
     assert.equal(row.accepted_sha256, entry.accepted_sha256, name);
     if (name === 'check-endorsement.mjs') {
       assert.equal(entry.live_sha256, '85f4bec43620e574498a289e6d245ddd02301603fd6698a1d6bacb915e922677');

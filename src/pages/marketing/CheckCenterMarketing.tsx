@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { supabase } from "@/integrations/supabase/client";
+import { submitDemoRequest } from "@/lib/demoRequest";
 import { toast } from "sonner";
 import {
   ScanLine,
@@ -266,7 +266,7 @@ export default function CheckCenterMarketing() {
   const supportEmail = "support@checksops.com";
   const [menuOpen, setMenuOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [form, setForm] = useState({ name: "", email: "", company: "", role: "", notes: "" });
+  const [form, setForm] = useState({ name: "", email: "", company: "", role: "", notes: "", website: "" });
 
   const handleDemoSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -282,28 +282,18 @@ export default function CheckCenterMarketing() {
 
     setSubmitting(true);
     try {
-      const idempotencyKey = `demo-request-${form.email}-${Date.now()}`;
-      const { error } = await supabase.functions.invoke("send-transactional-email", {
-        body: {
-          templateName: "demo-request",
-          recipientEmail: supportEmail,
-          idempotencyKey,
-          templateData: {
-            name: form.name,
-            email: form.email,
-            company: form.company,
-            role: form.role,
-            notes: form.notes,
-          },
-        },
-      });
-      if (error) {
+      const result = await submitDemoRequest(form);
+      if (!result.ok) {
+        if (result.status === 400) {
+          toast.error("Please check your name and email and try again.");
+          return;
+        }
         window.location.href = `mailto:${supportEmail}?subject=${encodeURIComponent(subject)}&body=${body}`;
         return;
       }
 
       toast.success("Request received. We'll be in touch shortly.");
-      setForm({ name: "", email: "", company: "", role: "", notes: "" });
+      setForm({ name: "", email: "", company: "", role: "", notes: "", website: "" });
     } catch (err) {
       window.location.href = `mailto:${supportEmail}?subject=${encodeURIComponent(subject)}&body=${body}`;
     } finally {
@@ -793,6 +783,10 @@ export default function CheckCenterMarketing() {
                 <div className="space-y-1.5">
                   <Label htmlFor="notes" className="text-xs">What would you like to see?</Label>
                   <Textarea id="notes" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="Volume of checks, partner sharing interest, loss draft use case…" rows={3} />
+                </div>
+                <div aria-hidden="true" style={{ position: "absolute", left: "-10000px", width: 1, height: 1, overflow: "hidden" }}>
+                  <label htmlFor="website">Website</label>
+                  <input id="website" name="website" type="text" tabIndex={-1} autoComplete="off" value={form.website} onChange={(e) => setForm({ ...form, website: e.target.value })} />
                 </div>
                 <Button type="submit" size="lg" className="w-full" disabled={submitting}>
                   {submitting ? "Sending…" : "Request demo"}
