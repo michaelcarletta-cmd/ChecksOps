@@ -10,6 +10,12 @@ import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { displayCase } from "@/lib/displayCase";
 import { usePaidInvoiceRevenue } from "@/hooks/useWalletOps";
+import {
+  PAYROLL_FINANCE_QUERY_KEY,
+  PAYROLL_SOURCE_LABEL,
+  fetchPayrollRuns,
+  payrollExpenseTotal,
+} from "@/lib/payments/payrollRows";
 
 export function RevenueSummary() {
   const { tenant } = useTenant();
@@ -45,6 +51,13 @@ export function RevenueSummary() {
     },
   });
 
+  // Payroll sends record payroll_runs, not disbursement_splits; paid payroll is an expense.
+  const { data: payrollRuns, isLoading: payrollLoading } = useQuery({
+    queryKey: [PAYROLL_FINANCE_QUERY_KEY, "revenue-summary", tenant?.id],
+    enabled: !!tenant?.id,
+    queryFn: () => fetchPayrollRuns(supabase, tenant!.id),
+  });
+
   // Invoices a customer paid into the wallet are revenue too (no check is deposited for them).
   const { data: paidInvoices, isLoading: invoicesLoading } = usePaidInvoiceRevenue();
 
@@ -76,14 +89,16 @@ export function RevenueSummary() {
     const checkIncoming = revenueData?.reduce((sum, item) => sum + Number(item.amount || 0), 0) || 0;
     const invoiceIncoming = (paidInvoices ?? []).reduce((sum, invoice) => sum + invoice.amountCents, 0) / 100;
     const totalIncoming = checkIncoming + invoiceIncoming;
-    const totalOutgoing = disbursementData?.reduce((sum, item) => sum + Number(item.amount || 0), 0) || 0;
+    const disbursementOutgoing = disbursementData?.reduce((sum, item) => sum + Number(item.amount || 0), 0) || 0;
+    const payroll = payrollExpenseTotal(payrollRuns);
+    const totalOutgoing = disbursementOutgoing + payroll.total;
     const profit = totalIncoming - totalOutgoing;
     const margin = totalIncoming > 0 ? (profit / totalIncoming) * 100 : 0;
 
-    return { totalIncoming, totalOutgoing, profit, margin };
-  }, [revenueData, paidInvoices, disbursementData]);
+    return { totalIncoming, disbursementOutgoing, payrollOutgoing: payroll.total, payrollCount: payroll.count, totalOutgoing, profit, margin };
+  }, [revenueData, paidInvoices, disbursementData, payrollRuns]);
 
-  if (revenueLoading || disbursementLoading || invoicesLoading) {
+  if (revenueLoading || disbursementLoading || invoicesLoading || payrollLoading) {
     return (
       <div className="grid gap-4 md:grid-cols-3">
         {[1, 2, 3].map((i) => (
@@ -126,7 +141,20 @@ export function RevenueSummary() {
             <div className="text-2xl font-bold">
               ${stats.totalOutgoing.toLocaleString("en-US", { minimumFractionDigits: 2 })}
             </div>
-            <p className="text-xs text-muted-foreground">Settled disbursements</p>
+            {stats.payrollCount > 0 ? (
+              <div className="text-xs text-muted-foreground space-y-0.5">
+                <p className="flex justify-between gap-2">
+                  <span>Settled disbursements</span>
+                  <span>${stats.disbursementOutgoing.toLocaleString("en-US", { minimumFractionDigits: 2 })}</span>
+                </p>
+                <p className="flex justify-between gap-2">
+                  <span>{PAYROLL_SOURCE_LABEL}</span>
+                  <span>${stats.payrollOutgoing.toLocaleString("en-US", { minimumFractionDigits: 2 })}</span>
+                </p>
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">Settled disbursements and payroll</p>
+            )}
           </CardContent>
         </Card>
 

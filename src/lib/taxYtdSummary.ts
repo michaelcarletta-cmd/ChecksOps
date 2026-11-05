@@ -1,4 +1,5 @@
 import { parseIssueDate } from "./issueDate.ts";
+import { payrollTaxPayments, type PayrollRun } from "./payments/payrollRows.ts";
 /**
  * Non-sensitive year-to-date payment reporting helpers.
  * Must never include TIN, EIN, SSN, or other tax-identifier values.
@@ -75,11 +76,14 @@ type CashPayment = {
 export function aggregateRecipientRows({
   payments = [],
   cashPayments = [],
+  payrollRuns = [],
   year,
   threshold = LEGACY_INFORMATIONAL_THRESHOLD,
 }: {
   payments?: SplitPayment[];
   cashPayments?: CashPayment[];
+  /** payroll_runs rows; only paid runs count, keyed acct:<stakeholder_account_id>. */
+  payrollRuns?: PayrollRun[];
   year: number;
   threshold?: number;
 }): RecipientRow[] {
@@ -106,7 +110,7 @@ export function aggregateRecipientRows({
     map[key].monthly[monthIdx] += amount;
   };
 
-  for (const p of payments) {
+  for (const p of [...payments, ...payrollTaxPayments(payrollRuns)] as SplitPayment[]) {
     const acct = p.stakeholder_accounts;
     const dateStr = p.settled_at ?? p.created_at;
     if (!dateStr) continue;

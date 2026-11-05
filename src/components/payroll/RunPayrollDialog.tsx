@@ -16,6 +16,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { usePaymentProviderEligibility } from "@/hooks/usePaymentProviderEligibility";
 import { useActiveStakeholders } from "@/hooks/useActiveStakeholders";
 import { activeStakeholderName, isPayableStakeholder } from "@/lib/payments/activeStakeholders";
+import { PAYROLL_FINANCE_QUERY_KEY } from "@/lib/payments/payrollRows";
 
 type Speed = "next_day" | "same_day";
 
@@ -126,12 +127,17 @@ export function RunPayrollDialog({ open, onOpenChange, onDone }: Props) {
     onSuccess: () => {
       toast({ title: "Payment submitted", description: `$${amount.toFixed(2)} sent to ${selected ? activeStakeholderName(selected) : "the payee"}.` });
       qc.invalidateQueries({ queryKey: ["payroll-runs"] });
+      // Payment History, Revenue & Profit, By Recipient and Tax & 1099 read payroll_runs too.
+      qc.invalidateQueries({ queryKey: [PAYROLL_FINANCE_QUERY_KEY] });
       resetForm();
       onOpenChange(false);
       onDone?.();
     },
     onError: (e: any) => {
       toast({ title: "Payroll failed", description: e.message ?? String(e), variant: "destructive" });
+      // A failed or partial send may still have recorded a payroll run.
+      qc.invalidateQueries({ queryKey: ["payroll-runs"] });
+      qc.invalidateQueries({ queryKey: [PAYROLL_FINANCE_QUERY_KEY] });
       setStep("form");
     },
   });
