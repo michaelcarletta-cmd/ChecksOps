@@ -1,0 +1,15 @@
+{
+  "workstream_id": "totp-reset-savepoint-applied",
+  "authorization": "Record only (2026-11-05): the bytes below are live. Nothing is planned or authorized by this manifest; any later change to these members needs its own manifest, staging acceptance and owner approval.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Teammate two-factor reset savepoint fix (#1622) applied. Applied 2026-11-05 from main 1b57eaa9c (the merge of #1625, which recorded SQL 143 live in production) in plan order: write-allowlist.mjs, admin-reset-totp.mjs, write-app-metadata.mjs, db-readonly-validate.mjs. Earlier runs refused before any write (DEPLOYMENT_COLLISION: apply plan members in order): admin-reset-totp.mjs run 42049692474 (main 9e2b0da69; write-allowlist.mjs pending) and db-readonly-validate.mjs run 42057312568 (main 1b57eaa9c; three earlier members pending). Each apply run concluded success including its \"Verify live member is the accepted bytes\" step (state VERIFIED) and the public production smoke. admin-reset-totp.mjs: staging acceptance run 42047282542; production preflight inspect run 42057900927 (READY, 688ceddf live, RevisionId 1af21096-4ed9-45e2-97b7-a5edcf909c7b); production apply run 42058117752 (688ceddf -> 87cd0534) on the owner's \"DEPLOY admin-reset-totp.mjs TO PRODUCTION\", VERIFIED, after CodeSha256 W/PVPdXqeEQv0KAwWcKM4FRuLlAlYNQKfY/W86Rntuo= RevisionId d264b0aa-6b7a-4caf-b4e9-a6fb08eae27c; re-inspect run 42058268344 read 87cd0534 live (RevisionId 6fa6f05d-bbf2-4c11-8d02-d55dc3a7734a, same CodeSha256). Each row records the applied bytes as live_sha256 and accepted_sha256 and chains to the manifest that planned it (previous_manifest), which keeps the pre-apply state.",
+  "members": {
+    "admin-reset-totp.mjs": {
+      "live_sha256": "87cd053436731e6ed873befcef3c63946b064db92e1cf6999d79c2c56efbdf95",
+      "accepted_sha256": "87cd053436731e6ed873befcef3c63946b064db92e1cf6999d79c2c56efbdf95",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-totp-reset-savepoint-manifest-2026-11-05.json"
+    }
+  }
+}
