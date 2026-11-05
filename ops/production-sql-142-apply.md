@@ -65,7 +65,22 @@ equal to the intended hash, `precondition_failures` `[]`. Staging acceptance: th
 2026-11-04, "SQL 142 accepted in staging". The staging pin keeps `execute: true`; the staging runs are recorded in the
 production pin's `staging_acceptance` by the production pin PR.
 
-**Status:** applied in staging (wave 37, 2026-11-04); staging acceptance: owner tested in staging ("SQL 142 accepted in staging"); production pin pending (production inspect next)
+**Production inspect (2026-11-04).** Read-only `--inspect` through SSM
+`1252efe9-757d-4366-ad9e-9901488b4a7a` on `i-0c35557c4e5385406` (under the owner's words "merge 1608 and run the
+read-only production check"; runner started 23:30:34Z, stopped 23:31:17Z), main `c8832e178` (tarball sha256
+`2e56a4ee375d835e8814a88154aa78da34a211ebc69737d558b26554120e2b74`, staged by `sql53-temporary-transfer.yml` run
+41934032301, migration source `f140e75d…` == pin), connected as `checksops_admin`: both policies `absent`; counts
+`mortgage_companies_rls_enabled` 1, `mortgage_companies_is_active_boolean` 1, `mortgage_companies_owner_policy_intact`
+1, `mortgage_companies_no_unexpected_policy` 1; every prerequisite present; `predecessors` `{}`, `successors_applied`
+`[]`; live `ae3be52e6cdd57b9ba779e573a0e1cdab53c793a63893044fb124efbe81238f3`, `already_applied` false, `precondition_failures` `[]`. Production's pre-state equals staging's
+(read-live runs 41927312617 and 41931277648), so the staging apply took the path production will
+(`aws/tests/sql142-mortgage-companies-tenant-admin-tool-pg.test.mjs`). Recorded in the production pin with the staging
+apply (run 41931631914) as its staging acceptance and `execute: true` under the owner's words "record the SQL 142
+production pin"; the owner's words so far name the staging steps, the inspect and this pin, not the production apply.
+The owner merges the pin change; the apply still needs the owner's words for that run and runs only after that merge is
+on main and staged.
+
+**Status:** applied in staging (wave 37, 2026-11-04); staging acceptance: owner tested in staging ("SQL 142 accepted in staging"); production pin execute-authorized; not applied to production
 
 ## Fingerprint
 
