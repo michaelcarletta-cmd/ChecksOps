@@ -202,8 +202,9 @@ test('PostgreSQL 16: SQL 143 through its production tool: the derived pre-state 
   assert.equal(s.already_applied, false);
   assert.deepEqual(s.predecessors, { sql142: true });
   assert.equal(s.live_definition_sha256, PRE_SQL142);
-  // A pending pin (not execute-authorized) refuses before any change.
-  const pendingPin = { ...PIN, expected_live_definition_sha256: PRE_SQL142 };
+  // A pending pin (not execute-authorized) refuses before any change. The committed pin is authorized
+  // since the production pin PR, so the pending copy is built here rather than read from it.
+  const pendingPin = { ...PIN, authorization: 'pending', execute: false, expected_live_definition_sha256: PRE_SQL142 };
   assert.equal(pendingPin.execute, false);
   const pendingApply = await executeReleaseProductionApply(KEY, manifest(pendingPin), { root: ROOT, pin: pendingPin, connect, consumedPath: consumedPath() });
   assert.equal(pendingApply.ok, false);
