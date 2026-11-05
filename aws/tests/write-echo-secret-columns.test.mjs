@@ -147,6 +147,7 @@ const CASES = [
   ['tenants', { op: 'insert', values: { name: 'X', slug: 'x' } }],
   ['mortgage_companies', { op: 'update', values: { name: 'X' }, filters: [{ column: 'id', value: ID }] }],
   ['mortgage_companies', { op: 'insert', values: { name: 'X' } }],
+  ['mortgage_companies', { op: 'delete', filters: [{ column: 'id', value: ID }] }],
   ['claims', { op: 'update', values: { claim_number: '123' }, filters: [{ column: 'id', value: ID }] }],
   ['user_sessions', { op: 'insert', values: { session_token: 'client-minted-token', device_info: 'd' } }],
   ['user_sessions', { op: 'update', values: { is_active: false }, filters: [{ column: 'id', value: ID }] }],
@@ -186,6 +187,31 @@ for (const [table, body] of CASES) {
     assert.deepEqual(result.data, [echoRow(table, false)]);
   });
 }
+
+// SQL 143: a company that a claim, loss draft or check case uses is not deleted; the database's refusal
+// (SQLSTATE MC143, DETAIL the counts) reaches the SPA as 409 mortgage_company_in_use with the count, and the
+// write transaction is rolled back, not committed.
+test('POST /data/write mortgage_companies delete: a company in use answers 409 mortgage_company_in_use and rolls back', async () => {
+  const client = mockClient('mortgage_companies');
+  const query = client.query;
+  client.query = async (sql, params) => {
+    if (/^DELETE FROM public\.mortgage_companies/.test(String(sql))) {
+      client.queries.push({ sql: String(sql), params });
+      throw Object.assign(new Error('sql143_company_in_use: this company is used by 2 files'), {
+        code: 'MC143', detail: JSON.stringify({ files: 2, claims: 0, loss_drafts: 1, check_cases: 1 }),
+      });
+    }
+    return query(sql, params);
+  };
+  const result = await handleWrite(jwtEvent({ table: 'mortgage_companies', op: 'delete', filters: [{ column: 'id', value: ID }] }), depsFor(client));
+  assert.equal(result.statusCode, 409, JSON.stringify(result));
+  assert.equal(result.ok, false);
+  assert.equal(result.error, 'mortgage_company_in_use');
+  assert.equal(result.files, 2);
+  assert.equal(result.message, 'This company is used by 2 files');
+  assert.ok(client.queries.some((q) => q.sql === 'ROLLBACK'), 'rolled back');
+  assert.ok(!client.queries.some((q) => q.sql === 'COMMIT'), 'not committed');
+});
 
 test('single: true returns the stripped row object', async () => {
   const client = mockClient('profiles');

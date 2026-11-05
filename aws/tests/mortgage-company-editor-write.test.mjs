@@ -29,7 +29,8 @@ test('2 every column the dialog writes is allowlisted, so its insert and update 
 
 test('3 the table keeps its ops, filter and other columns; unknown columns are still refused', () => {
   const spec = WRITE_ALLOWLIST.mortgage_companies;
-  assert.deepEqual([...spec.ops].sort(), ['insert', 'update']);
+  // delete: SQL 143 (owner decision 2026-11-05, "Remove should delete it", delete only when unused).
+  assert.deepEqual([...spec.ops].sort(), ['delete', 'insert', 'update']);
   assert.deepEqual([...spec.filterColumns], ['id']);
   for (const c of ['website', 'is_active', 'loss_draft_email', 'loss_draft_phone', 'loss_draft_fax', 'loss_draft_contact']) {
     assert.ok(spec.columns.has(c), c);
@@ -85,4 +86,69 @@ test('6 length caps and the name requirement still refuse', async () => {
   assert.deepEqual(await executeMortgageCompanies({ client, op: 'insert', values: { contact_name: 'x' }, filters: [] }), { error: 'missing_required_field', field: 'name' });
   assert.deepEqual(await executeMortgageCompanies({ client, op: 'update', values: { address_line_1: 'x'.repeat(201) }, filters: [{ column: 'id', op: 'eq', value: ID }] }), { error: 'invalid_field', field: 'length' });
   assert.equal(calls.length, 0);
+});
+
+// Owner decisions 2026-11-05: "Remove should delete it ... anyone can do this, mortgage agents should be able to
+// share and edit list", then "1": delete only when no claim, loss draft or check case uses the company; otherwise
+// refuse ("This company is used by N files"), nothing deleted or unlinked. SQL 143's trigger enforces it in the
+// database (SQLSTATE MC143, DETAIL the counts as JSON); the API maps that refusal to a 409.
+const { mortgageCompanyInUse } = await import('../functions/api/write-app-metadata.mjs');
+const inUseError = (files, extra = {}) => Object.assign(new Error(`sql143_company_in_use: this company is used by ${files} files`), {
+  code: 'MC143', detail: JSON.stringify({ files, claims: files, loss_drafts: 0, check_cases: 0 }), ...extra,
+});
+const throwing = (error) => {
+  const calls = [];
+  return { calls, client: { query: async (sql, params) => { calls.push({ sql, params }); throw error; } } };
+};
+const byId = [{ column: 'id', op: 'eq', value: ID }];
+
+test('7 delete by id deletes the one row and returns it', async () => {
+  const { calls, client } = recorder();
+  const out = await executeMortgageCompanies({ client, op: 'delete', values: {}, filters: byId });
+  assert.deepEqual(out, { rows: [{ id: ID }] });
+  assert.equal(calls.length, 1);
+  assert.match(calls[0].sql, /^DELETE FROM public\.mortgage_companies WHERE id = \$1::uuid RETURNING \*$/);
+  assert.deepEqual(calls[0].params, [ID]);
+});
+
+test('8 a company in use answers 409 mortgage_company_in_use with the count; nothing else is tried', async () => {
+  for (const files of [1, 3]) {
+    const { calls, client } = throwing(inUseError(files));
+    const out = await executeMortgageCompanies({ client, op: 'delete', values: {}, filters: byId });
+    assert.deepEqual(out, {
+      error: 'mortgage_company_in_use',
+      statusCode: 409,
+      files,
+      message: `This company is used by ${files} ${files === 1 ? 'file' : 'files'}`,
+    });
+    assert.equal(calls.length, 1);
+  }
+  // Without a readable DETAIL the count comes from the message; without either it is not invented.
+  assert.equal(mortgageCompanyInUse(inUseError(4, { detail: undefined })).files, 4);
+  const bare = mortgageCompanyInUse({ code: 'MC143', message: 'x' });
+  assert.equal(bare.files, null);
+  assert.equal(bare.statusCode, 409);
+  assert.equal(mortgageCompanyInUse({ code: '23503', message: 'fk' }), null);
+});
+
+test('9 delete refuses a bad id before the database; no row (RLS) is rls_denied; other errors are not hidden', async () => {
+  const none = recorder();
+  assert.deepEqual(await executeMortgageCompanies({ client: none.client, op: 'delete', values: {}, filters: [{ column: 'id', op: 'eq', value: 'x' }] }), { error: 'invalid_uuid', field: 'id' });
+  assert.equal(none.calls.length, 0);
+  const empty = { query: async () => ({ rows: [] }) };
+  assert.deepEqual(await executeMortgageCompanies({ client: empty, op: 'delete', values: {}, filters: byId }), { error: 'rls_denied', message: 'mortgage company not deletable' });
+  const other = Object.assign(new Error('boom'), { code: '57014' });
+  await assert.rejects(executeMortgageCompanies({ client: throwing(other).client, op: 'delete', values: {}, filters: byId }), /boom/);
+});
+
+test('10 the directory Remove deletes by id and shows the in-use message, keeping the row', () => {
+  const page = readFileSync(new URL('../../src/pages/mortgage-ops/MortgageOpsDirectory.tsx', import.meta.url), 'utf8');
+  const remove = page.slice(page.indexOf('const confirmDeactivate'), page.indexOf('return (', page.indexOf('const confirmDeactivate')));
+  assert.match(remove, /\.from\("mortgage_companies"\)\s*\.delete\(\)\s*\.eq\("id", deactivateTarget\.id\)/);
+  assert.doesNotMatch(remove, /is_active: false/);
+  assert.match(remove, /code === "mortgage_company_in_use"/);
+  assert.match(remove, /toast\.error\(inUse \? error\.message : "Failed to remove company"\)/);
+  // The list reloads only after a successful delete.
+  assert.ok(remove.indexOf('fetchCompanies()') > remove.indexOf('} else {'));
+  assert.match(page, /cannot be removed/);
 });
