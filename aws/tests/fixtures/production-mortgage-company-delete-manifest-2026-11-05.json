@@ -1,0 +1,21 @@
+{
+  "workstream_id": "mortgage-company-delete",
+  "authorization": "Pending owner review (2026-11-05). Planning only: nothing is live or verified. Each production apply needs its own owner approval, a staging acceptance reference and a read-only production inspect that confirms the live bytes. Apply only after SQL 143 is applied in the same environment.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Owner decisions 2026-11-05: \"Remove should delete it. It can always be added again later, anyone can do this, mortgage agents should be able to share and edit list\", then \"1\": delete a mortgage company only when no claim, loss draft or check case uses it; otherwise refuse (\"This company is used by N files\"), nothing deleted or unlinked. write-allowlist.mjs lists delete for mortgage_companies; write-app-metadata.mjs deletes by id and answers the SQL 143 trigger's refusal (SQLSTATE MC143, DETAIL the counts) as 409 mortgage_company_in_use with the count; a delete that matches no row (RLS) answers rls_denied. REPLACE write-allowlist.mjs 4eb9c025 -> 3f9259d2, then write-app-metadata.mjs 72c95cac -> 1af906b0, from the mortgage company editor applied bytes (2026-11-04), in plan order. SQL 143 must be applied first in each environment: without it a tenant delete matches no row (no DELETE policy), and the platform owner's delete of a company a loss draft uses would unlink it (ON DELETE SET NULL).",
+  "members": {
+    "write-allowlist.mjs": {
+      "live_sha256": "4eb9c0251ee2003508419360010d9051d2e7b5de8abe72a79b20ae4f616ea2ab",
+      "accepted_sha256": "3f9259d275761d0fc08b0b07ae17c23e8f733c0c7661877d9c06aed7da147904",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-mortgage-company-editor-applied-manifest-2026-11-04.json"
+    },
+    "write-app-metadata.mjs": {
+      "live_sha256": "72c95cacb533bbb22b697a84012608e585b9a15aa46682693c2bf75ede872960",
+      "accepted_sha256": "1af906b0aad358ee819d70f2ba28b8f2487a1bf2a2667562fed366ce3ac0e0f6",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-mortgage-company-editor-applied-manifest-2026-11-04.json"
+    }
+  }
+}
