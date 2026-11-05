@@ -45,6 +45,8 @@ const MORTGAGE_EDITOR_APPLIED_REL = 'aws/tests/fixtures/production-mortgage-comp
 const PAYROLL_SEND_REL = 'aws/tests/fixtures/production-payroll-send-manifest-2026-11-04.json';
 const PAYROLL_SEND = JSON.parse(fs.readFileSync(path.join(ROOT, PAYROLL_SEND_REL), 'utf8'));
 const PAYROLL_SEND_MEMBER = 'providers/production/moov-send.mjs';
+// Payroll send applied 2026-11-04 (production run 41937571704): the row expects main's bytes and names this record.
+const PAYROLL_SEND_APPLIED_REL = 'aws/tests/fixtures/production-payroll-send-applied-manifest-2026-11-04.json';
 // Security audit finding 3 (2026-10-29): planned REPLACE of storage-write-auth.mjs, then storage-write.mjs.
 const PARTNER_STORAGE_WRITES_REL = 'aws/tests/fixtures/production-partner-storage-writes-manifest-2026-10-29.json';
 // Security audit findings 2-4, applied in production 2026-10-29 (one run per member, in plan order).
@@ -2867,13 +2869,13 @@ test('Staging sends: moov-send.mjs and providers.mjs record the bytes production
     assert.deepEqual(applied.members[name], { live_sha256: LIVE, accepted_sha256: LIVE, operation: 'replace', previous_manifest: MANIFEST_REL }, name);
     // The plan row expects the applied bytes and names the applied manifest (or the one it moved on to).
     const row = PLAN.members[name];
-    // moov-send.mjs moved on again: the payroll send plan (2026-11-04) REPLACEs the payee sends applied
-    // bytes, planning only, expecting them live.
+    // moov-send.mjs moved on again: the payroll send (2026-11-04, production run 41937571704) REPLACEd the
+    // payee sends applied bytes; the row expects main's bytes and names the payroll send applied record.
     const payroll = name === PAYROLL_SEND_MEMBER ? PAYROLL_SEND.members[name] : null;
     assert.equal(row.operation, 'replace', name);
-    assert.equal(row.manifest, payroll ? PAYROLL_SEND_REL : MOVED_ON[name] || APPLIED_REL, name);
+    assert.equal(row.manifest, payroll ? PAYROLL_SEND_APPLIED_REL : MOVED_ON[name] || APPLIED_REL, name);
     if (payroll) assert.equal(payroll.previous_manifest, MOVED_ON[name], name);
-    assert.equal(row.expected_live_sha256, payroll ? payroll.live_sha256 : MOVED_ON[name] ? row.accepted_sha256 : LIVE, name);
+    assert.equal(row.expected_live_sha256, MOVED_ON[name] ? row.accepted_sha256 : LIVE, name);
     assert.equal(row.accepted_sha256, sha(`aws/functions/api/${name}`), name);
     assert.equal(resolvePlannedMember(name, { root: ROOT, plan: PLAN }).ok, true, name);
     for (const runId of RUNS[name]) {
@@ -2918,15 +2920,18 @@ test('Payee sends: moov-send.mjs replaced the bytes production run 40222560555 a
   assert.match(applied.notes, /production apply run 40391523374/);
   assert.match(applied.notes, /staging apply run 40381567460/);
   const row = PLAN.members[SEND];
-  // The row has moved on to the payroll send plan, which expects these applied bytes live.
+  // The row has moved on: the payroll send (production run 41937571704) replaced these applied bytes; the
+  // row expects main's bytes and names the payroll send applied record.
   assert.equal(PAYROLL_SEND.members[SEND].previous_manifest, APPLIED_REL);
-  assert.deepEqual(row, { operation: 'replace', accepted_sha256: sha(`aws/functions/api/${SEND}`), expected_live_sha256: onMain, sql_before: null, manifest: PAYROLL_SEND_REL });
+  assert.deepEqual(row, { operation: 'replace', accepted_sha256: sha(`aws/functions/api/${SEND}`), expected_live_sha256: sha(`aws/functions/api/${SEND}`), sql_before: null, manifest: PAYROLL_SEND_APPLIED_REL });
   assert.equal(resolvePlannedMember(SEND, { root: ROOT, plan: PLAN }).ok, true);
   const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: SEND };
   // The pre-apply bytes are no longer an accepted live state.
   await assert.rejects(run(inspect, { root: ROOT, inspectLive: liveFor(SEND, { sha256: LIVE }) }), (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED);
-  const ready = await run(inspect, { root: ROOT, inspectLive: liveFor(SEND, { sha256: onMain }) });
-  assert.equal(ready.state, 'READY');
+  // The bytes this change applied are now drift too; main's are accepted.
+  await assert.rejects(run(inspect, { root: ROOT, inspectLive: liveFor(SEND, { sha256: onMain }) }), (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED);
+  const done = await run(inspect, { root: ROOT, inspectLive: liveFor(SEND, { sha256: sha(`aws/functions/api/${SEND}`) }) });
+  assert.equal(done.state, 'ALREADY_ACCEPTED');
   assert.deepEqual(PLAN.order.slice(-2), [SEND, 'providers.mjs']);
 });
 
@@ -5690,7 +5695,7 @@ test('Mortgage company editor (owner report 2026-11-04): write-allowlist.mjs, th
   assert.ok(PLAN.notes.includes('Mortgage company editor applied (2026-11-04)'));
 });
 
-test('Payroll send (owner report 2026-11-04): moov-send.mjs REPLACE from the 2026-10-26 applied bytes, no SQL, planning only', async () => {
+test('Payroll send (owner report 2026-11-04): moov-send.mjs REPLACE from the 2026-10-26 applied bytes, no SQL; production run 41937571704 applied it', async () => {
   const MEMBER = PAYROLL_SEND_MEMBER;
   const PREVIOUS = 'aws/tests/fixtures/production-onboarding-payee-send-applied-manifest-2026-10-26.json';
   const previous = JSON.parse(fs.readFileSync(path.join(ROOT, PREVIOUS), 'utf8')).members[MEMBER];
@@ -5705,20 +5710,37 @@ test('Payroll send (owner report 2026-11-04): moov-send.mjs REPLACE from the 202
   assert.match(manifest.notes, /action_mismatch/);
   assert.match(manifest.notes, /9a8a8e10-a970-45da-8681-72298c5f5adf/);
   assert.deepEqual(manifest.members, { [MEMBER]: { live_sha256: LIVE, accepted_sha256: accepted, operation: 'replace', previous_manifest: PREVIOUS } });
+  const applied = JSON.parse(fs.readFileSync(path.join(ROOT, PAYROLL_SEND_APPLIED_REL), 'utf8'));
+  assert.equal(applied.workstream_id, 'payroll-send-applied');
+  assert.equal(applied.deploy_authorized, false);
+  assert.match(applied.authorization, /^Record only/);
+  assert.deepEqual(applied.members, { [MEMBER]: { live_sha256: accepted, accepted_sha256: accepted, operation: 'replace', previous_manifest: PAYROLL_SEND_REL } });
+  for (const runId of ['41934510831', '41937438871', '41937571704']) {
+    assert.match(applied.notes, new RegExp(`run ${runId}`), runId);
+    assert.match(PLAN.notes, new RegExp(runId), runId);
+  }
+  assert.match(applied.notes, /RevisionId 15005d35-03bd-4e8e-89f7-44d99762372f/);
+  assert.match(applied.notes, /"Payroll worked"/);
+  // Applied 2026-11-04: the row records the applied bytes live and names the applied record.
   assert.deepEqual(PLAN.members[MEMBER], {
-    operation: 'replace', accepted_sha256: accepted, expected_live_sha256: LIVE, sql_before: null, manifest: PAYROLL_SEND_REL,
+    operation: 'replace', accepted_sha256: accepted, expected_live_sha256: accepted, sql_before: null, manifest: PAYROLL_SEND_APPLIED_REL,
   });
   assert.ok(manifest.notes.includes(`${MEMBER} ${LIVE.slice(0, 8)} -> ${accepted.slice(0, 8)}`));
   assert.ok(PLAN.notes.includes(`Payroll send (2026-11-04, owner report \"authenticator not accepting the code\"): REPLACE ${MEMBER} ${LIVE.slice(0, 8)} -> ${accepted.slice(0, 8)}`));
+  assert.ok(PLAN.notes.includes('Payroll send applied (2026-11-04)'));
   assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
   assert.equal(approvalPhrase(MEMBER), `DEPLOY ${MEMBER} TO PRODUCTION`);
-  // The route is unchanged (providers.mjs moov-disburse), so moov-send.mjs is the only member.
   assert.deepEqual(PLAN.order.slice(-2), [MEMBER, 'providers.mjs']);
   const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
-  assert.equal((await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: LIVE }) })).state, 'READY');
+  // Before the apply, the planned row took the 2026-10-26 applied bytes as READY.
+  const before = structuredClone(PLAN);
+  before.members[MEMBER] = { ...PLAN.members[MEMBER], expected_live_sha256: LIVE, manifest: PAYROLL_SEND_REL };
+  assert.equal((await run(inspect, { root: ROOT, plan: before, inspectLive: liveFor(MEMBER, { sha256: LIVE, plan: before }) })).state, 'READY');
   assert.equal((await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: accepted }) })).state, 'ALREADY_ACCEPTED');
-  await assert.rejects(
-    run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: 'c'.repeat(64) }) }),
-    (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
-  );
+  for (const other of [LIVE, 'c'.repeat(64)]) {
+    await assert.rejects(
+      run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: other }) }),
+      (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+    );
+  }
 });
