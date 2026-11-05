@@ -15,6 +15,7 @@ import {
 } from './email.mjs';
 import { handleNotifyMortgageDeskReturn } from './mortgage-desk-return.mjs';
 import { handleMortgageDeskEsign } from './mortgage-desk-esign.mjs';
+import { handlePublicDemoRequest } from './public-demo-request.mjs';
 import {
   handleProcessEmailQueue,
   handleEmailSuppression,
@@ -201,6 +202,8 @@ export const CLASS_A_FUNCTIONS = new Set([
   // Public directory
   'public-contractor-directory',
   'contractor-directory-search',
+  // Public marketing "Request demo" form (checksops.com#demo): anonymous, fixed recipient
+  'demo-request',
 ]);
 
 export const functionNameFromPath = (path) => {
@@ -238,6 +241,8 @@ export const handleAppServiceRequest = async (event, path, method) => {
   }
 
   switch (name) {
+    case 'demo-request':
+      return handlePublicDemoRequest(event);
     case 'send-transactional-email':
       return handleSendTransactionalEmail(event);
     case 'send-email':

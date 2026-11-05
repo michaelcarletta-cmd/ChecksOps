@@ -1,0 +1,26 @@
+{
+  "workstream_id": "public-demo-request",
+  "authorization": "Pending owner review (2026-11-05). Planning only: nothing is live or verified. Each production apply needs its own owner approval, a staging acceptance reference and a read-only production inspect that confirms the live bytes.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Public demo request (2026-11-05; owner \"fix the request demo to send email to support@checksops.com\"): the checksops.com marketing form called send-transactional-email, which is identity-bound (withIdentity); visitors are not signed in, so production API Gateway answered POST /prep/functions/v1/send-transactional-email 401 and the page fell back to the visitor's mailto client. ADD public-demo-request.mjs (no identity, no database: fixed recipient support@checksops.com, the demo-request template only, length-bounded fields, CR/LF stripped, honeypot, per-IP and per-instance rate limit, Reply-To the visitor), then REPLACE app-services.mjs e63cfe2d -> 1cb62ccc (the Class A name demo-request routed to it). Pre-state: e63cfe2d, the wallet funding settings route bytes, put live by the fourth production rebuild (apply run 41469896446, VERIFIED 2026-11-02); the row's earlier expected_live dd6e1797 is the pre-rebuild state. index.mjs is untouched. No SQL. Planning only.",
+  "members": {
+    "public-demo-request.mjs": {
+      "live_sha256": null,
+      "accepted_sha256": "5e0998742fe1fa258f2b835c6c4dc07e5809406560fa3f93116c71972aab469f",
+      "operation": "add",
+      "required_imports": [
+        "data.mjs",
+        "email-branding.mjs",
+        "email-templates.mjs",
+        "email.mjs"
+      ]
+    },
+    "app-services.mjs": {
+      "live_sha256": "e63cfe2d48cd1f428513bc8de4d8a2934bd6c4889c9d1ffd71660ac089938713",
+      "accepted_sha256": "1cb62cccf0c2fe96d47eeef04fc6b7d43ef1cfef137b94a76370991e7ce6b607",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-wallet-funding-settings-route-manifest-2026-11-02.json"
+    }
+  }
+}
