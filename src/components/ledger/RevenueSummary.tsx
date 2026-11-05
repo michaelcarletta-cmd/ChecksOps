@@ -18,6 +18,11 @@ import {
   payrollSpeedFeeExpenseTotal,
 } from "@/lib/payments/payrollRows";
 import { PAYROLL_SPEED_FEES_LABEL } from "@/lib/payments/payrollSpeedFees";
+import {
+  REVENUE_EXPENSE_SPLIT_COLUMNS,
+  revenueExpenseRows,
+  type ExpenseSplit,
+} from "@/lib/payments/revenueExpenseRows";
 
 export function RevenueSummary() {
   const { tenant } = useTenant();
@@ -42,14 +47,15 @@ export function RevenueSummary() {
     queryKey: ["revenue-summary-outgoing", tenant?.id],
     enabled: !!tenant?.id,
     queryFn: async () => {
-      const { data, error } = await supabase
+      // Same filters as before (tenant, settled); the extra columns only feed the Expenses list.
+      const { data, error } = await (supabase as any)
         .from("disbursement_splits")
-        .select("amount, status")
+        .select(REVENUE_EXPENSE_SPLIT_COLUMNS)
         .eq("tenant_id", tenant!.id)
         .eq("status", "settled");
 
       if (error) throw error;
-      return data ?? [];
+      return (data ?? []) as ExpenseSplit[];
     },
   });
 
@@ -86,6 +92,12 @@ export function RevenueSummary() {
       (a, b) => (b.at ? new Date(b.at).getTime() : 0) - (a.at ? new Date(a.at).getTime() : 0),
     );
   }, [revenueData, paidInvoices]);
+
+  // The items behind Total Paid (Expenses): settled splits, paid payroll, payroll speed fees.
+  const expenseRows = useMemo(
+    () => revenueExpenseRows({ splits: disbursementData, payrollRuns }),
+    [disbursementData, payrollRuns],
+  );
 
   const stats = useMemo(() => {
     const checkIncoming = revenueData?.reduce((sum, item) => sum + Number(item.amount || 0), 0) || 0;
@@ -227,6 +239,57 @@ export function RevenueSummary() {
                       <td className="p-3 text-right">
                         <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
                           {source.status}
+                        </Badge>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            <TrendingDown className="h-4 w-4" /> Expenses
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b text-xs text-muted-foreground">
+                  <th className="text-left p-3 font-medium">Date Paid</th>
+                  <th className="text-left p-3 font-medium">Paid To / Description</th>
+                  <th className="text-left p-3 font-medium">Check # or Type</th>
+                  <th className="text-right p-3 font-medium">Amount</th>
+                  <th className="text-right p-3 font-medium">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {expenseRows.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="p-8 text-center text-muted-foreground italic">No paid expenses found.</td>
+                  </tr>
+                ) : (
+                  expenseRows.map((expense) => (
+                    <tr key={expense.key} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
+                      <td className="p-3 text-xs text-muted-foreground whitespace-nowrap">
+                        {expense.at ? format(new Date(expense.at), "MMM d, yyyy") : "—"}
+                      </td>
+                      <td className="p-3">
+                        <p className="font-medium text-xs">{expense.title}</p>
+                        {expense.subtitle && <p className="text-[10px] text-muted-foreground">{expense.subtitle}</p>}
+                      </td>
+                      <td className="p-3 text-xs font-mono">{expense.reference}</td>
+                      <td className="p-3 text-right font-medium text-sm text-rose-600">
+                        -${expense.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                      </td>
+                      <td className="p-3 text-right">
+                        <Badge variant="outline" className="text-[10px] bg-rose-500/10 text-rose-600 border-rose-500/20">
+                          {expense.status}
                         </Badge>
                       </td>
                     </tr>
