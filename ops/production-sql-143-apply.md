@@ -89,7 +89,31 @@ under the owner's words "record the SQL 143 production pin"; the owner's words s
 inspect and this pin, not the production apply. The owner merges the pin change; the apply still needs the owner's
 words for that run and runs only after that merge is on main and staged.
 
-**Status:** applied in staging (wave 38, 2026-11-05); staging acceptance: owner tested in staging ("SQL 143 accepted in staging"); production pin execute-authorized; not applied to production
+**Production apply (2026-11-05).** After the pin change (#1624, merged to main as `5446fd292`), transfer run
+42053822728 staged main `5446fd292` (tarball sha256
+`4e1e2a207bd1385798615bb8123e4e9c5d99a257b48c0633cbfea02d6ce8f196`). Under the owner's words
+"apply SQL 143 in production" (passed verbatim), a one-shot `--phase inspect` (SSM
+`8faa26ab-2dd5-4cf4-922a-a41275a975fe`, run `6bfcd677-9a89-4ac9-904b-c7791dec933b`, nothing written) read live `c62a1b0b…` (the pinned pre-state,
+`live_matches_expected` true, `apply_preconditions_met` true, `precondition_failures` `[]`, the seven counts 1);
+then one-shot `--phase apply` run `2bdbab74-39ad-46a1-8371-f51ce6c532c0` through SSM
+`fecb38b8-9305-41e2-a44b-6e3a0a928f06`, workstream `prod-sql143-mortgage-companies-member-delete-unused-20261105`, one_use_id
+`sql143-prod-f74ec3d8-c8f5-413b-aef3-ea69b54c7155`: its own inspect step read the same pre-state; contracts 4/4,
+6/6 and 43/43; all 11 steps ok; manifest `6391c149…`; receipt `c62a1b0b…` →
+`d14d6ac55a8cc18c49d502cb508ddcb3a03969b7d196843224156d4ef0483029` (intended), result `applied`, unrelated
+catalog `28044dcf…` (policies 476, functions 1357); post-apply inspect `already_applied` true,
+`precondition_failures` `[]`: both functions, the three member policies and the trigger
+`mortgage_companies aws_mortgage_company_in_use_guard` `intended`, SQL 142's two policies dropped, the seven counts 1,
+`prerequisites_missing` `[]`. SSM returned the first 24000 characters of the run's JSON, cut inside
+`applied.receipt`; the receipt and post-apply inspect are recorded from the run's top-level `details.apply_result`
+and `details.post_apply_inspect`, which arrived whole (as for SQL 134). The runner `i-0c35557c4e5385406` was started
+for this work at 15:21:10Z and stopped at 15:22:19Z. Production's `/db-readonly-validate` expects 184 public triggers
+until `db-readonly-validate.mjs` (185, #1621) is deployed; this record states SQL 143 verified live in the production
+overlay plan's `sql_prerequisites`, which lifts that member's hold. The API and website that use SQL 143 (#1617) are
+not yet deployed to production. Production acceptance had not been reported by the owner when this record was
+written; this record does not claim it.
+
+**Status:** applied to staging (wave 38) and to production (2026-11-05); the production pin is retired
+(`execute: false`).
 
 ## Fingerprint
 
