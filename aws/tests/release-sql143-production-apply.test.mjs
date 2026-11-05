@@ -190,7 +190,10 @@ test('order: predecessor SQL 142, which it supersedes; the two functions, the th
   assert.ok(runbook.includes(COMMITTED.intended_replacement_sha256));
   assert.ok(runbook.includes(COMMITTED.source_sha256));
   assert.ok(runbook.includes(PRE_SQL142));
-  assert.match(runbook, /\*\*Status:\*\* staging pin execute-authorized \(wave 38\); not applied anywhere\./);
+  assert.match(runbook, /\*\*Status:\*\* applied in staging \(wave 38, 2026-11-05\); staging acceptance: owner tested in staging \("SQL 143 accepted in staging"\); production pin pending \(production inspect next\)/);
+  assert.match(runbook, /"SQL 143 accepted in staging"/);
+  assert.match(runbook, /\*\*Staging apply \(2026-11-05\)\.\*\* Apply run 42023495275/);
+  assert.match(runbook, /Read-live run 42023847018/);
   assert.match(runbook, /APPLY_MORTGAGE_COMPANIES_MEMBER_DELETE_UNUSED/);
   const oneShot = read('ops/production-sql-one-shot.md');
   assert.match(oneShot, /\| `sql143` \|/);
