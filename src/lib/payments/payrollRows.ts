@@ -4,9 +4,12 @@
  * A payroll send records one `payroll_runs` row per payee (amount in dollars, status
  * pending -> submitted / failed / partial / unknown) and its payment_transfers legs. It writes
  * no disbursement_splits, so the finance views read payroll_runs next to their split rows.
- * These helpers turn payroll_runs rows into each view's row shape. Amount only: the speed fee
- * is neither charged nor stored on the run.
+ * These helpers turn payroll_runs rows into each view's row shape. The payee views (Payment
+ * History, By Recipient, Tax & 1099) use the amount only. The speed fee is neither charged nor
+ * stored on the run; Revenue & Profit derives it from `speed` as a separate expense line.
  */
+
+import { payrollSpeedFee } from "./payrollSpeedFees.ts";
 
 export const PAYROLL_SOURCE_LABEL = "Payroll";
 
@@ -14,7 +17,7 @@ export const PAYROLL_SOURCE_LABEL = "Payroll";
 export const PAYROLL_FINANCE_QUERY_KEY = "payroll-finance";
 
 export const PAYROLL_RUN_COLUMNS = `
-  id, amount, status, memo, created_at, stakeholder_account_id,
+  id, amount, speed, status, memo, created_at, stakeholder_account_id,
   stakeholder_accounts (id, nickname, custname, account_type, chk_acct)
 `;
 
@@ -29,6 +32,7 @@ export type PayrollAccount = {
 export type PayrollRun = {
   id: string;
   amount?: number | string | null;
+  speed?: string | null;
   status?: string | null;
   memo?: string | null;
   created_at?: string | null;
@@ -182,6 +186,23 @@ export function payrollExpenseTotal(runs: PayrollRun[] | null | undefined): { to
     count += 1;
   }
   return { total, count };
+}
+
+/**
+ * Revenue & Profit: the speed fee of each paid run (derived from `speed`), a separate expense
+ * line. Same status rule as payrollExpenseTotal; `count` is the paid runs that carry a fee.
+ */
+export function payrollSpeedFeeExpenseTotal(runs: PayrollRun[] | null | undefined): { total: number; count: number } {
+  let cents = 0;
+  let count = 0;
+  for (const run of runs ?? []) {
+    if (!isPayrollPaid(run)) continue;
+    const fee = payrollSpeedFee(run.speed);
+    if (fee <= 0) continue;
+    cents += Math.round(fee * 100);
+    count += 1;
+  }
+  return { total: cents / 100, count };
 }
 
 /**

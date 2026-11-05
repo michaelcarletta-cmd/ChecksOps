@@ -17,12 +17,14 @@ import { usePaymentProviderEligibility } from "@/hooks/usePaymentProviderEligibi
 import { useActiveStakeholders } from "@/hooks/useActiveStakeholders";
 import { activeStakeholderName, isPayableStakeholder } from "@/lib/payments/activeStakeholders";
 import { PAYROLL_FINANCE_QUERY_KEY } from "@/lib/payments/payrollRows";
+import { PAYROLL_SPEED_FEES, PAYROLL_SPEED_LABELS, type PayrollSpeed } from "@/lib/payments/payrollSpeedFees";
 
-type Speed = "next_day" | "same_day";
+type Speed = PayrollSpeed;
 
-// Moov pricing — same schedule used by the claim-check disbursement console.
-const SPEED_FEES: Record<Speed, number> = { next_day: 0.75, same_day: 1.00 };
-const SPEED_LABELS: Record<Speed, string> = { next_day: "Next Day", same_day: "Same Day" };
+// Moov pricing — same schedule used by the claim-check disbursement console. One source,
+// shared with Revenue & Profit, which counts the fee of each paid run as an expense.
+const SPEED_FEES = PAYROLL_SPEED_FEES;
+const SPEED_LABELS = PAYROLL_SPEED_LABELS;
 // The Moov rail for each payroll speed: Next Day is the standard ACH credit.
 const SEND_SPEED: Record<Speed, "standard" | "same_day"> = { next_day: "standard", same_day: "same_day" };
 

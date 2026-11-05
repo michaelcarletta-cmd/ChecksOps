@@ -15,7 +15,9 @@ import {
   PAYROLL_SOURCE_LABEL,
   fetchPayrollRuns,
   payrollExpenseTotal,
+  payrollSpeedFeeExpenseTotal,
 } from "@/lib/payments/payrollRows";
+import { PAYROLL_SPEED_FEES_LABEL } from "@/lib/payments/payrollSpeedFees";
 
 export function RevenueSummary() {
   const { tenant } = useTenant();
@@ -91,11 +93,13 @@ export function RevenueSummary() {
     const totalIncoming = checkIncoming + invoiceIncoming;
     const disbursementOutgoing = disbursementData?.reduce((sum, item) => sum + Number(item.amount || 0), 0) || 0;
     const payroll = payrollExpenseTotal(payrollRuns);
-    const totalOutgoing = disbursementOutgoing + payroll.total;
+    // Speed fees are not charged by ChecksOps or stored; derived from each paid run's speed.
+    const speedFees = payrollSpeedFeeExpenseTotal(payrollRuns);
+    const totalOutgoing = disbursementOutgoing + payroll.total + speedFees.total;
     const profit = totalIncoming - totalOutgoing;
     const margin = totalIncoming > 0 ? (profit / totalIncoming) * 100 : 0;
 
-    return { totalIncoming, disbursementOutgoing, payrollOutgoing: payroll.total, payrollCount: payroll.count, totalOutgoing, profit, margin };
+    return { totalIncoming, disbursementOutgoing, payrollOutgoing: payroll.total, payrollCount: payroll.count, speedFeeOutgoing: speedFees.total, speedFeeCount: speedFees.count, totalOutgoing, profit, margin };
   }, [revenueData, paidInvoices, disbursementData, payrollRuns]);
 
   if (revenueLoading || disbursementLoading || invoicesLoading || payrollLoading) {
@@ -151,6 +155,12 @@ export function RevenueSummary() {
                   <span>{PAYROLL_SOURCE_LABEL}</span>
                   <span>${stats.payrollOutgoing.toLocaleString("en-US", { minimumFractionDigits: 2 })}</span>
                 </p>
+                {stats.speedFeeCount > 0 && (
+                  <p className="flex justify-between gap-2">
+                    <span>{PAYROLL_SPEED_FEES_LABEL} ({stats.speedFeeCount})</span>
+                    <span>${stats.speedFeeOutgoing.toLocaleString("en-US", { minimumFractionDigits: 2 })}</span>
+                  </p>
+                )}
               </div>
             ) : (
               <p className="text-xs text-muted-foreground">Settled disbursements and payroll</p>
