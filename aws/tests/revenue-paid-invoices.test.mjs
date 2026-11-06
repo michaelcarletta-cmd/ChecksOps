@@ -47,10 +47,11 @@ test('3 drafts, unpaid, overdue, canceled, void, other tenants and sandbox invoi
 
 test('4 Revenue & Profit adds paid invoices to revenue (and so to profit) and lists them as revenue sources', () => {
   assert.match(summary, /usePaidInvoiceRevenue\(\)/);
-  assert.match(summary, /const totalIncoming = checkIncoming \+ invoiceIncoming;/);
+  // Partner payments into the wallet are income too (transfer-finance-rows.test.mjs).
+  assert.match(summary, /const totalIncoming = checkIncoming \+ invoiceIncoming \+ partnerIncoming;/);
   assert.match(summary, /const profit = totalIncoming - totalOutgoing;/);
   assert.match(summary, /revenueSources\.map/);
-  assert.match(summary, /From deposited checks and paid invoices/);
+  assert.match(summary, /From deposited checks, paid invoices and partner payments/);
   assert.match(summary, /revenueLoading \|\| disbursementLoading \|\| invoicesLoading/);
   // The hook reads the live payments environment and the paid-at date.
   const fn = hook.slice(hook.indexOf('export function usePaidInvoiceRevenue'), hook.indexOf('export function useSyncOpenInvoicesOnOpen'));
