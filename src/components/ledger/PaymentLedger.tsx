@@ -24,6 +24,8 @@ import {
   fetchPayrollRuns,
   payrollLedgerRows,
 } from "@/lib/payments/payrollRows";
+import { INCOMING_SOURCE_LABEL, SEND_SOURCE_LABEL, incomingLedgerRows, sendLedgerRows } from "@/lib/payments/transferFinanceRows";
+import { inRange, useIncomingTransfers, useSentPaymentLegs } from "@/hooks/useTransferFinance";
 
 const STATUS_COLORS: Record<string, string> = {
   submitted: "text-blue-600 border-blue-500/30 bg-blue-500/10",
@@ -44,6 +46,7 @@ const ACCOUNT_TYPE_LABELS: Record<string, string> = {
   insured: "Insured",
   overhead: "Overhead",
   operating: "Operating",
+  partner: "Partner",
   other: "Other",
 };
 
@@ -73,6 +76,7 @@ export function PaymentLedger() {
 
   const updateType = async (id: string, newType: string) => {
     if (id.startsWith("payroll:")) return; // payroll runs take the payee's account type
+    if (id.startsWith("send:")) return; // sends are payment_transfers legs, not editable splits
     const { error } = await (supabase as any)
       .from("disbursement_splits")
       .update({ recipient_type: newType })
@@ -145,6 +149,15 @@ export function PaymentLedger() {
     },
   });
 
+  // Payments sent from the Funds tab write payment_transfers legs, not splits: an expense too
+  // (owner 2026-11-06). Payments partners sent into this wallet are listed under Payments received.
+  const { data: sentLegs } = useSentPaymentLegs();
+  const { data: incomingTransfers } = useIncomingTransfers();
+  const received = useMemo(
+    () => inRange(incomingLedgerRows(incomingTransfers), (r) => r.at, dateFilters),
+    [incomingTransfers, dateFilters],
+  );
+
   // Customer (insured) name of each payment's source check, same rule as the Deposited Checks report.
   const caseInsuredNames = useCaseInsuredNames(
     depositCaseIds(splitPayments.map((p) => p.disbursement_batches?.check_intake_items)),
@@ -161,10 +174,11 @@ export function PaymentLedger() {
         return { ...p, _customerName: customerName, _party: party };
       }),
       ...payrollLedgerRows(payrollRuns),
+      ...inRange(sendLedgerRows(sentLegs), (r) => r.created_at, dateFilters),
     ].sort(
       (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
     ),
-    [splitPayments, payrollRuns, caseInsuredNames],
+    [splitPayments, payrollRuns, sentLegs, dateFilters, caseInsuredNames],
   );
 
   const filtered = useMemo(() => {
@@ -183,7 +197,8 @@ export function PaymentLedger() {
         p.external_check_number?.toLowerCase().includes(search.toLowerCase()) ||
         (p.source === "payroll" &&
           (PAYROLL_SOURCE_LABEL.toLowerCase().includes(search.toLowerCase()) ||
-            p.memo?.toLowerCase().includes(search.toLowerCase())));
+            p.memo?.toLowerCase().includes(search.toLowerCase()))) ||
+        (p.source === "send" && SEND_SOURCE_LABEL.toLowerCase().includes(search.toLowerCase()));
 
       const matchType = typeFilter === "all" || type === typeFilter;
       const matchStatus = statusFilter === "all" || p.status === statusFilter;
@@ -343,6 +358,7 @@ export function PaymentLedger() {
                     const name = acct?.nickname ?? acct?.custname ?? p.recipient_name ?? "—";
                     const type = acct?.account_type ?? p.recipient_type ?? null;
                     const isPayroll = p.source === "payroll";
+                    const isSend = p.source === "send";
                     const acctLabel = acct?.chk_acct
                       ? `••••${acct.chk_acct.slice(-4)}`
                       : p.method === "external_check"
@@ -356,7 +372,7 @@ export function PaymentLedger() {
                           {acctLabel && <p className="text-[10px] text-muted-foreground font-mono">{acctLabel}</p>}
                         </td>
                         <td className="p-3 hidden md:table-cell">
-                          {acct || isPayroll ? (
+                          {acct || isPayroll || isSend ? (
                             <Badge variant="outline" className={`text-[10px] ${TYPE_COLORS[type ?? ""] ?? ""}`}>
                               {type ? (ACCOUNT_TYPE_LABELS[type] ?? type) : "—"}
                             </Badge>
@@ -384,7 +400,7 @@ export function PaymentLedger() {
                           <>
                             <td className="p-3 text-xs font-mono hidden md:table-cell">{check?.check_number ?? "—"}</td>
                             <td className="p-3 text-xs hidden lg:table-cell">
-                              <p className="font-medium">{p._party?.primary ?? "—"}</p>
+                              <p className="font-medium">{p._party?.primary ?? (isSend ? (displayCase(check?.carrier_name) || SEND_SOURCE_LABEL) : "—")}</p>
                               {p._party?.secondary && <p className="text-[10px] text-muted-foreground">{p._party.secondary}</p>}
                             </td>
                           </>
@@ -392,7 +408,7 @@ export function PaymentLedger() {
                         <td className="p-3 text-right font-medium text-sm">${Number(p.amount).toLocaleString("en-US", { minimumFractionDigits: 2 })}</td>
                         <td className="p-3">
                           <Badge variant="outline" className={`text-[10px] ${STATUS_COLORS[p.status] ?? ""}`}>
-                            {p.status}{p.return_code && ` · ${p.return_code}`}
+                            {isSend && p.send_status === "in_transit" ? "sent" : p.status}{p.return_code && ` · ${p.return_code}`}
                           </Badge>
                         </td>
                       </tr>
@@ -413,6 +429,57 @@ export function PaymentLedger() {
           )}
         </CardContent>
       </Card>
+
+      {received.length > 0 && (
+        <Card>
+          <CardContent className="p-0">
+            <div className="px-3 pt-3 pb-2 flex items-center gap-2">
+              <TrendingUp className="h-4 w-4 text-emerald-600" />
+              <p className="text-sm font-medium">Payments received</p>
+              <p className="text-xs text-muted-foreground">{INCOMING_SOURCE_LABEL}s other organizations sent into this wallet (income, not 1099 payments)</p>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b text-xs text-muted-foreground">
+                    <th className="text-left p-3 font-medium">Date</th>
+                    <th className="text-left p-3 font-medium">From</th>
+                    <th className="text-left p-3 font-medium hidden md:table-cell">Check #</th>
+                    <th className="text-left p-3 font-medium hidden lg:table-cell">Carrier</th>
+                    <th className="text-right p-3 font-medium">Amount</th>
+                    <th className="text-left p-3 font-medium">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {received.map((r) => (
+                    <tr key={r.id} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
+                      <td className="p-3 text-xs text-muted-foreground whitespace-nowrap">{format(new Date(r.at), "MMM d, yyyy")}</td>
+                      <td className="p-3 text-xs font-medium">{r.senderName}</td>
+                      <td className="p-3 text-xs font-mono hidden md:table-cell">{r.checkNumber ?? "—"}</td>
+                      <td className="p-3 text-xs hidden lg:table-cell">{displayCase(r.carrier) || "—"}</td>
+                      <td className="p-3 text-right font-medium text-sm text-emerald-600">+${r.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}</td>
+                      <td className="p-3">
+                        <Badge variant="outline" className={`text-[10px] ${STATUS_COLORS[r.status === "completed" ? "settled" : r.status === "returned" ? "returned" : "submitted"]}`}>
+                          {r.status === "completed" ? "received" : r.status === "returned" ? "returned" : "in transit"}
+                        </Badge>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t bg-muted/20">
+                    <td colSpan={4} className="p-3 text-xs text-muted-foreground">{received.length} payment{received.length !== 1 ? "s" : ""} received</td>
+                    <td className="p-3 text-right font-semibold text-sm">
+                      ${received.filter((r) => r.counted).reduce((s, r) => s + r.amount, 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                    </td>
+                    <td className="p-3 text-xs text-muted-foreground">not returned</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
