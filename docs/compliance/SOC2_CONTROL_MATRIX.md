@@ -82,8 +82,8 @@ period.
 | CC6.2 | Users added and removed through a controlled process | Invites through the API (Cognito admin create only: `ops/deployment-guard/cognito-admin-create-only`); two-factor reset with global sign-out (`aws/functions/api/admin-reset-totp.mjs`, `ops/team-two-factor-reset-iam.md`) | Partial: no written offboarding procedure with a time limit. |
 | CC6.3 | Least privilege for people and machine identities | Per-workflow GitHub OIDC roles (`ops/deployment-guard/github-oidc-trust`); read-only inspect role; `ops/security/IAM_CLAUDE_CODE_LEAST_PRIVILEGE.md` | Partial: confirm the least-privilege change for `user/claude-code` is applied and record it. |
 | CC6.3 | Quarterly access review of admin, staff and AWS identities | WISP §3.1 | Gap: no review on file. First review this quarter (row A-1). |
-| CC6.1 | Login MFA required for admin and staff | WISP §3.1 and the public security page (`src/pages/checkops/CheckOpsSecurity.tsx`) both say so. On AWS, login is Cognito EMAIL_OTP or passkey (WebAuthn); the docs record the pool's MFA setting as OFF (`aws/cutover/COGNITO_PRODUCTION_TRANSITION.md`). Financial actions require an app-level TOTP step-up (`financial_stepup_log`, SQL 97, 106, 129–133). | **Verify**: read the production pool's MFA configuration. If MFA is not required for admin and staff, either enforce it or correct the WISP and the public page. |
-| CC6.1 | Root account protected | GuardDuty `Policy:IAMUser/RootCredentialUsage`, recurring since 2026-09-07 (owner's CloudShell use); a separate admin login `michael-admin` exists | Gap: record that root has MFA, and stop day-to-day use of root (use `michael-admin`). |
+| CC6.1 | Login MFA required for admin and staff | WISP §3.1 and the public security page (`src/pages/checkops/CheckOpsSecurity.tsx`) both say so. On AWS, login is Cognito EMAIL_OTP or passkey (WebAuthn); the docs record the pool's MFA setting as OFF (`aws/cutover/COGNITO_PRODUCTION_TRANSITION.md`). Financial actions require an app-level TOTP step-up (`financial_stepup_log`, SQL 97, 106, 129–133). | **Gap**: read live 2026-11-06 18:16 UTC, the pool's `MfaConfiguration` is `OPTIONAL` (13 users). Either enforce MFA for admin and staff, or correct the WISP and the public page. |
+| CC6.1 | Root account protected | GuardDuty `Policy:IAMUser/RootCredentialUsage`, recurring since 2026-09-07 (owner's CloudShell use); a separate admin login `michael-admin` exists | Partial: root MFA confirmed 2026-11-06 (`AccountMFAEnabled` = 1). Still to do: stop day-to-day use of root (use `michael-admin`). |
 | CC6.6 | Network perimeter | CloudFront with WAF `checksops-production-cloudfront-waf` (`ops/security/SH1_ACCEPTED_PRODUCTION_BASELINE.md`); RDS not publicly accessible and only in private subnets (`RDS_PRIVATE_SUBNETS_PLAN_2026_11.md`, applied 2026-11-03); account-wide S3 Block Public Access and EBS snapshot block (hardening items 3c, 4); empty default security group (item 5) | In place |
 | CC6.7 | Encryption in transit; browser security headers | TLS through CloudFront; response headers policy `checksops-production-browser-security-headers`; CSP (`ops/deployment-guard/PRODUCTION_CSP_HEADERS.md`, `ops/security/SPA_CSP_ROLLOUT.md`) | In place |
 | CC6.8 | Malicious and unauthorized software | Inspector (Lambda code on), GuardDuty malware protection for EC2, CodeQL (`.github/workflows/codeql.yml`), SQL runner patching (hardening item 7) | In place; the runner needs a patch cadence (row V-3). |
@@ -146,18 +146,17 @@ In rough order of audit risk:
 
 1. **Retention purge does not run on AWS** (C1.2), although the policy and the WISP say it runs
    nightly.
-2. **Login MFA**: the policy and the public security page say MFA is required for admin and staff;
-   confirm against the live Cognito pool (CC6.1).
+2. **Login MFA is optional**, while the policy and the public security page say it is required for
+   admin and staff (CC6.1). Read live 2026-11-06: `MfaConfiguration` `OPTIONAL`.
 3. **Policies out of date for AWS** (CC1.1): WISP and data retention. Separate PR.
 4. **No records yet for the recurring controls** (CC1.5, CC3.1, CC4.1, CC6.3, CC7.4, A1.3): start
    them from `docs/compliance/EVIDENCE_CALENDAR.md`.
-5. **Root account** in daily use; MFA not recorded (CC6.1).
+5. **Root account** in daily use (CC6.1). Root MFA is on (confirmed 2026-11-06).
 6. **Missing documents**: HR security policy, BCP/DR with recovery targets, emergency change rule,
    system description, complementary user-entity controls.
 7. **Vendor SOC reports and addenda** not on file (CC9.2).
-8. **Security Hub**: zero active CRITICAL/HIGH findings has not been confirmed since the 2026-11-03
-   production database move. RDS.46 for `checksops-production` had not re-evaluated at 17:01 UTC
-   that day. Record a snapshot (row V-1).
+8. ~~Security Hub~~ **Closed 2026-11-06 18:16 UTC**: 0 active CRITICAL/HIGH findings; RDS.46 PASSED for
+   `checksops-production` and `checksops-staging` (evaluated 17:00 UTC). Keep the monthly snapshot (row V-1).
 
 ## Not covered here
 
