@@ -29,6 +29,7 @@ export const DEPLOYMENT_TYPES = Object.freeze([
   'apigateway-update',
   'apigateway-cors-update',
   'cloudfront-response-headers-policy',
+  'cloudfront-function',
   'infra-mutate',
   'verify-only',
 ]);
