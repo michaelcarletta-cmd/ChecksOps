@@ -77,8 +77,7 @@ Written addenda and an annual security review (SOC 2 report or questionnaire) on
 | OpenAI | AI inference, only for tenants who add their own API key (stored per tenant in Secrets Manager) | Claim text the tenant sends |
 | GitHub | Source code, CI, deployment workflows | Source and configuration; no customer data |
 
-- **Supabase / Lovable:** the previous hosting. The old Supabase project remains only for the temporary migration bridges, which are read-only or sign-only, until the teardown in `aws/cutover/BRIDGE_TEARDOWN.md`. **OWNER TO CONFIRM** the teardown date and what customer data remains in that project. Remove this row once it is torn down.
-- **Retired:** Actum Processing, Plaid and QuickBooks were retired in October 2026 and are no longer vendors; their historical tables remain in the database (`docs/ACH_RISK_FRAUD_MONITORING.md` §1). Tavily and Mailgun are not called by the AWS API.
+- **Retired:** Supabase and Lovable, the previous hosting, were retired on 2026-11-06: the Supabase project held no data, the subscription is cancelled and Lovable's GitHub access is removed (`ops/supabase-project-shutdown.md`, "Applied"). Actum Processing, Plaid and QuickBooks were retired in October 2026 and are no longer vendors; their historical tables remain in the database (`docs/ACH_RISK_FRAUD_MONITORING.md` §1). Tavily and Mailgun are not called by the AWS API.
 - **OWNER TO CONFIRM:** written addenda on file for Moov, CheckAlt, Azure and Resend.
 
 ### 3.7 Logging and Monitoring
