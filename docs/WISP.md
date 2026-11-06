@@ -29,12 +29,12 @@ A written risk assessment is performed at least annually and after any material 
 ### 3.1 Access Controls
 - Role-based access (`admin`, `staff`, `client`) enforced by Postgres row-level security scoped to `tenant_id`, on RDS `checksops-production`
 - Sign-in through Amazon Cognito (pool `us-east-1_h00WorYMT`) with an email one-time code or a passkey (WebAuthn)
-- **Multi-factor authentication for `admin` and `staff`:** required by this policy. **OWNER TO CONFIRM** that the production Cognito pool enforces it. The AWS cutover documents record the pool's MFA setting as OFF (`aws/cutover/COGNITO_PRODUCTION_TRANSITION.md`). If the pool does not enforce it, enforce it, or change this line and the public security page (`src/pages/checkops/CheckOpsSecurity.tsx`) to match.
+- **Multi-factor authentication for `admin` and `staff`:** required by this policy. **Not met today.** Read live 2026-11-06 18:16 UTC: the production Cognito pool `us-east-1_h00WorYMT` (13 users) has `MfaConfiguration` `OPTIONAL`, so sign-in does not require a second factor for any role. The owner decides whether to enforce it (a production change through its own reviewed step) or to change this line and the public security page (`src/pages/checkops/CheckOpsSecurity.tsx`) to match.
 - Financial actions (wallet funding, disbursements, bank changes, CheckAlt deposit submit and approve) need an application-level TOTP step-up, recorded in `financial_stepup_log`, with rate limiting and lockout (SQL 97, 106, 129–133)
 - Administrators can reset a teammate's two-factor, which also signs that teammate out everywhere (`aws/functions/api/admin-reset-totp.mjs`)
 - Quarterly access reviews of application admins and staff, Cognito users, AWS IAM users and roles, and GitHub collaborators (evidence calendar row A-1)
 - Access removed within 24 hours of a person leaving (row A-2)
-- AWS root account: MFA on, and not used for day-to-day work. Daily administration uses a named admin login. **OWNER TO CONFIRM** root MFA. GuardDuty has recorded root CloudShell use since 2026-09-07.
+- AWS root account: MFA on, and not used for day-to-day work. Daily administration uses a named admin login. Root MFA confirmed on 2026-11-06 (IAM account summary `AccountMFAEnabled` = 1). GuardDuty has recorded root CloudShell use since 2026-09-07; that day-to-day use should move to the named admin login.
 - Machine access is least privilege: each GitHub workflow assumes its own OIDC role (`ops/deployment-guard/github-oidc-trust`), and the AI-agent IAM user is limited per `ops/security/IAM_CLAUDE_CODE_LEAST_PRIVILEGE.md`
 - 4-digit PINs for the client portal are rate-limited and scoped to a single claim
 
