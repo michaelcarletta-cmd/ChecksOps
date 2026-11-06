@@ -49,9 +49,15 @@ production values are those in §2 above.
    - an AWS Backup plan with a cross-region copy and Vault Lock.
    Each is a production change for its own reviewed runbook.
 2. **No restore test recorded.** The first test sets the measured RTO (row B-1).
-3. **Single operator.** The owner is the only person who can approve a production change. Write
-   down who acts if the owner is unavailable (a break-glass contact with sealed credentials).
-   **OWNER TO CONFIRM.**
+3. **Backup person: Austin Sukanick** (owner's decision, 2026-11-06). Acts for the owner on an
+   incident, an outage or a restore when the owner cannot be reached. Before the role is real, Austin
+   needs, and the evidence calendar records:
+   - a named AWS IAM login with MFA, with the permissions to run the steps in §3 (no root access);
+   - access to GitHub with permission to run the guarded workflows;
+   - the security alert emails (SNS `checksops-production-security-alerts`);
+   - a read of this document, `aws/cutover/INCIDENT_RESPONSE_AWS.md` and
+     `docs/compliance/CHANGE_MANAGEMENT.md` §4, and the personnel steps in
+     `docs/compliance/PERSONNEL_SECURITY.md` §1.
 
 ## 5. Testing
 
