@@ -95,7 +95,9 @@ operate for ChecksOps's controls to meet the criteria.
 
 Each tenant is responsible for:
 
-1. Adding and removing its own users promptly, and giving each user only the role they need.
+1. Adding only people who should have full access to the company's ChecksOps data and money
+   actions (every member has the same full access; there are no limited roles), and removing
+   leavers promptly.
 2. Making sure its users protect their sign-in factors (email account, passkey device, authenticator
    app) and enroll the financial two-factor before handling money.
 3. Reviewing its users at least quarterly.
@@ -109,7 +111,7 @@ Each tenant is responsible for:
 
 To be completed for the report period. Known now:
 - Production moved from Supabase and Lovable to AWS in 2026.
-- Login MFA is optional on the production pool although the WISP requires it for admin and staff
+- Login MFA is optional on the production pool although the WISP requires it for every user
   (matrix CC6.1).
 - The automated retention purge has not been rebuilt on AWS (matrix C1.2).
 - Log retention does not match the retention policy (matrix CC7.1, read 2026-11-06).
