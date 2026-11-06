@@ -101,7 +101,6 @@ const vendors = [
   { name: "CheckAlt", purpose: "Remote check deposit" },
   { name: "Microsoft Azure", purpose: "Reading check images" },
   { name: "Resend", purpose: "Transactional email delivery" },
-  { name: "OpenAI", purpose: "AI features, only for companies that add their own OpenAI key" },
 ];
 
 export default function CheckOpsSecurity() {
