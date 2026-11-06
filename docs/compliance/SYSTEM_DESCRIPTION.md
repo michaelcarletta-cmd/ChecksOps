@@ -111,7 +111,7 @@ Each tenant is responsible for:
 
 To be completed for the report period. Known now:
 - Production moved from Supabase and Lovable to AWS in 2026.
-- Login MFA is optional on the production pool although the WISP requires it for every user
-  (matrix CC6.1).
+- Login MFA became required for every user on 2026-11-06 (matrix CC6.1). Before that it was
+  optional, although the WISP required it.
 - The automated retention purge has not been rebuilt on AWS (matrix C1.2).
-- Log retention does not match the retention policy (matrix CC7.1, read 2026-11-06).
+- Log retention was brought in line with the retention policy on 2026-11-06 (matrix CC7.1).

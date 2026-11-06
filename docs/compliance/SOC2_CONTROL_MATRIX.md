@@ -36,7 +36,7 @@ period.
 | ID | Control | Evidence | Status |
 |---|---|---|---|
 | CC1.1 | Written information security program, reviewed at least annually | `docs/WISP.md` (last reviewed 2026-10-21); git history of the file | Partial: the WISP still describes Supabase and Lovable. The AWS rewrite is a separate PR. |
-| CC1.2 | Named security owner who reports on the program | WISP §1, §7: the Qualified Individual delivers a written annual report | Gap: no annual report on file. The owner is also the CEO, so the report goes to the board, or is self-certified if there is no board. |
+| CC1.2 | Named security owner who reports on the program | WISP §1, §7: the Qualified Individual delivers a written annual report | Partial: 2026 report drafted (`docs/compliance/QI_ANNUAL_REPORT_2026.md`, 2026-11-06); in place once the Qualified Individual signs it. The owner is also the CEO, so the report goes to the board, or is self-certified if there is no board. |
 | CC1.3 | Roles and responsibilities for security and operations | WISP §1; `docs/INCIDENT_RESPONSE.md` §2 roles; `CLAUDE.md` / `AGENTS.md` for changes made through AI agents | In place |
 | CC1.4 | Hiring, background checks, onboarding and offboarding | `docs/compliance/PERSONNEL_SECURITY.md` (adopted 2026-11-06) | Partial: policy written; no records yet of checks, agreements or acknowledgments. |
 | CC1.5 | Security training at onboarding and annually; phishing tests twice a year | WISP §3.11 says HR keeps records | Gap: no training record. Start the record (calendar row T-1, T-2). |
@@ -53,7 +53,7 @@ period.
 
 | ID | Control | Evidence | Status |
 |---|---|---|---|
-| CC3.1–3.2 | Written risk assessment, at least annually and after material change | WISP §2 describes it | Gap: no assessment on file. The move to AWS is a material change. Write a risk register (calendar row R-1). |
+| CC3.1–3.2 | Written risk assessment, at least annually and after material change | WISP §2 describes it | Partial: first assessment drafted after the move to AWS (`docs/compliance/RISK_REGISTER.md`, 2026-11-06, 12 risks); in place once the owner approves it (row R-1). |
 | CC3.3 | Fraud risk | `docs/ACH_RISK_FRAUD_MONITORING.md`, `docs/AML_PROGRAM.md` | In place (policy). Its own recurring reviews go in the calendar (row R-3). |
 | CC3.4 | Risk from changes: vendors, architecture, people | WISP §5; per-change runbooks in `ops/` and `aws/cutover/` | Partial: covered for infrastructure changes, not for vendor or staffing changes. |
 
@@ -81,8 +81,8 @@ period.
 | CC6.1 | Sensitive fields masked; every reveal logged | `src/components/ui/masked-field.tsx`, `src/hooks/usePIIMasking.tsx`, `pii_reveal_logs`; CheckAlt account numbers returned as last four only (`aws/functions/api/providers/checkalt-account-mask.mjs`) | In place |
 | CC6.2 | Users added and removed through a controlled process | Invites through the API (Cognito admin create only: `ops/deployment-guard/cognito-admin-create-only`); two-factor reset with global sign-out (`aws/functions/api/admin-reset-totp.mjs`, `ops/team-two-factor-reset-iam.md`) | Partial: offboarding within 24 hours is now written (`docs/compliance/PERSONNEL_SECURITY.md` §5); no records yet (row A-2). |
 | CC6.3 | Least privilege for people and machine identities | Per-workflow GitHub OIDC roles (`ops/deployment-guard/github-oidc-trust`); read-only inspect role; `ops/security/IAM_CLAUDE_CODE_LEAST_PRIVILEGE.md` | Partial: confirm the least-privilege change for `user/claude-code` is applied and record it. |
-| CC6.3 | Quarterly access review of tenant member lists, platform owner accounts and AWS identities (every tenant member has full access within the tenant; there are no roles to review) | WISP §3.1 | Gap: no review on file. First review this quarter (row A-1). |
-| CC6.1 | Login MFA required for every user | WISP §3.1 and the public security page (`src/pages/checkops/CheckOpsSecurity.tsx`) both say so. On AWS, login is Cognito EMAIL_OTP or passkey (WebAuthn); the docs record the pool's MFA setting as OFF (`aws/cutover/COGNITO_PRODUCTION_TRANSITION.md`). Financial actions require an app-level TOTP step-up (`financial_stepup_log`, SQL 97, 106, 129–133). | **Gap**: read live 2026-11-06 18:16 UTC, the pool's `MfaConfiguration` is `OPTIONAL` (13 users). Owner decision 2026-11-06: MFA for every user, enforced by the application (WISP §3.1); not met until it ships. |
+| CC6.3 | Quarterly access review of tenant member lists, platform owner accounts and AWS identities (every tenant member has full access within the tenant; there are no roles to review) | WISP §3.1; `docs/compliance/evidence/2026-11-06-A-1-access-review.md` | Partial: first review prepared 2026-11-06 (13 production users, 2 Identity Center admins, 1 IAM user, 30 IAM roles, 1 GitHub collaborator; 8 roles flagged as unused); in place once the owner signs it off and the decided removals are made (row A-1). |
+| CC6.1 | Login MFA required for every user | WISP §3.1. Sign-in is a Cognito email code or passkey, then an authenticator-app (TOTP) code: `aws/functions/api/login-mfa.mjs` refuses every signed-in request until this sign-in has passed the code (`financial_stepup_log`, action `login.mfa`), and the sign-in screen (`src/components/auth/LoginMfaGate.tsx`) enrolls users who have no authenticator. Code: PR #1657; production overlay runs 42283495148, 42284228921, 42284721201; website upload 42285187951. Switch: `AWS_LOGIN_MFA_REQUIRED` `"true"`, staging run 42283026717 (owner tested: "staging MFA works"), production run 42293184319 (#1664, record #1667). Financial actions keep their own TOTP step-up (SQL 97, 106, 129–133). | In place since 2026-11-06 21:01 UTC: read back from the production API configuration as `"true"` (50 variables, RevisionId `eb9f5362`). The Cognito pool's own `MfaConfiguration` stays `OPTIONAL` by design (Cognito cannot require MFA with email-code sign-in); the application enforces it. |
 | CC6.1 | Root account protected | GuardDuty `Policy:IAMUser/RootCredentialUsage`, recurring since 2026-09-07 (owner's CloudShell use); a separate admin login `michael-admin` exists | Partial: root MFA confirmed 2026-11-06 (`AccountMFAEnabled` = 1). Still to do: stop day-to-day use of root (use `michael-admin`). |
 | CC6.6 | Network perimeter | CloudFront with WAF `checksops-production-cloudfront-waf` (`ops/security/SH1_ACCEPTED_PRODUCTION_BASELINE.md`); RDS not publicly accessible and only in private subnets (`RDS_PRIVATE_SUBNETS_PLAN_2026_11.md`, applied 2026-11-03); account-wide S3 Block Public Access and EBS snapshot block (hardening items 3c, 4); empty default security group (item 5) | In place |
 | CC6.7 | Encryption in transit; browser security headers | TLS through CloudFront; response headers policy `checksops-production-browser-security-headers`; CSP (`ops/deployment-guard/PRODUCTION_CSP_HEADERS.md`, `ops/security/SPA_CSP_ROLLOUT.md`) | In place |
@@ -146,12 +146,12 @@ In rough order of audit risk:
 
 1. **Retention purge does not run on AWS** (C1.2). Since #1648 the policy says so, and that until
    it is rebuilt each purge is an approved one-off. No closed claim is due before about 2032.
-2. **Login MFA is optional**, while the policy and the public security page say it is required for
-   every user (CC6.1). Read live 2026-11-06: `MfaConfiguration` `OPTIONAL`. Every tenant member has
-   full access, money included, so this is the highest-risk gap.
+2. ~~Login MFA is optional~~ closed 2026-11-06 (see Closed).
 3. ~~Log retention~~ closed 2026-11-06 (see Closed).
-4. **No records yet for the recurring controls** (CC1.5, CC3.1, CC4.1, CC6.3, CC7.4, A1.3): start
-   them from `docs/compliance/EVIDENCE_CALENDAR.md`.
+4. **No records yet for the recurring controls** (CC1.5, CC4.1, CC7.4, A1.3): start them from
+   `docs/compliance/EVIDENCE_CALENDAR.md`. The risk register (CC3.1), the first access review
+   (CC6.3) and the QI report (CC1.2) were drafted 2026-11-06 and wait for the owner's sign-off.
+   Route to the audit: `docs/compliance/AUDIT_READINESS_PLAN.md`.
 5. **Files not copied outside `us-east-1`** (CC9.1). The database is, since 2026-11-06.
 6. **Root account** in daily use (CC6.1). Root MFA is on (confirmed 2026-11-06).
 7. **Vendor SOC reports and addenda** not on file (CC9.2).
@@ -160,6 +160,8 @@ In rough order of audit risk:
    controls.
 
 Closed:
+- **Login MFA** (CC6.1): required for every user since 2026-11-06 21:01 UTC (production configuration
+  run 42293184319), enforced by the application after the email-code or passkey sign-in.
 - **Log retention** (CC7.1): matches the policy since 2026-11-06.
 - **Policies out of date for AWS** (CC1.1): WISP and data retention rewritten, #1648 (2026-11-06).
 - **Security Hub** (CC4.1): 2026-11-06 18:16 UTC, 0 active CRITICAL/HIGH findings; RDS.46 PASSED for
