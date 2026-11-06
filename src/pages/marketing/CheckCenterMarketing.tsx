@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -24,8 +24,6 @@ import {
   RotateCcw,
   Sparkles,
   LogIn,
-  Menu,
-  X,
   Users,
   Lock,
   Zap,
@@ -37,6 +35,61 @@ import {
   Camera,
 } from "lucide-react";
 import { CheckOpsLogo } from "@/components/marketing/CheckOpsLogo";
+import { MarketingMenuButton, MarketingMobileMenu } from "@/components/marketing/MarketingMobileMenu";
+import {
+  ExternalSignalStrip,
+  FounderBlock,
+  FounderFooterLink,
+  TestimonialWall,
+  UsageStatStrip,
+} from "@/components/marketing/MarketingProof";
+import { usePageMeta } from "@/hooks/usePageMeta";
+import { PUBLISHED_PRICING } from "@/pages/marketing/marketingPricing";
+
+const HOME_TITLE = "ChecksOps - Claim check workflow for public adjusting firms";
+const HOME_DESCRIPTION =
+  "Claim check workflow for public adjusting firms and their restoration partners: every insurance check filed by claim, payee endorsements captured, deposit readiness and loss drafts tracked.";
+
+const NAV_ITEMS = [
+  { label: "Capabilities", href: "#capabilities" },
+  { label: "Workflow", href: "#workflow" },
+  { label: "Money Movement", href: "#money-movement" },
+  { label: "Partners", href: "#partners" },
+  { label: "Security", href: "#security" },
+  { label: "Pricing", href: "/pricing" },
+  { label: "Demo", href: "#demo" },
+];
+
+// Plain answers built only from what this site already states (footer disclaimer,
+// money-movement note, /pricing). Rendered on the page and as FAQPage JSON-LD.
+const FAQ = [
+  {
+    q: "Is ChecksOps a bank or a payment processor?",
+    a: "No. ChecksOps is workflow software, not a bank, lender, escrow service, or payment processor. Your company owns the process and controls all communications with carriers, mortgage companies, payees, and banks.",
+  },
+  {
+    q: "Who holds the money in the wallet?",
+    a: "Each organization gets its own wallet, separate and owned by your company. Money movement is powered by Moov, a regulated money services provider, and your company remains the merchant of record.",
+  },
+  {
+    q: "What does it cost?",
+    a: `A ${PUBLISHED_PRICING.platformFee} one-time platform fee per company, ${PUBLISHED_PRICING.perCheck} per check processed, and support and updates at ${PUBLISHED_PRICING.supportMonthly} a month or ${PUBLISHED_PRICING.supportAnnual} a year. Unlimited users, no minimums, no caps.`,
+  },
+  {
+    q: "How long does setup take?",
+    a: "We set up your environment, migrate historical data, and train your team. Most companies are live within two weeks.",
+  },
+];
+
+const FAQ_JSON_LD = {
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  mainEntity: FAQ.map((f) => ({
+    "@type": "Question",
+    name: f.q,
+    acceptedAnswer: { "@type": "Answer", text: f.a },
+  })),
+};
 
 const DepositMockup = () => (
   <div className="rounded-xl border border-border/60 bg-card/80 shadow-xl overflow-hidden">
@@ -265,6 +318,16 @@ const HeroMockup = () => {
 export default function CheckCenterMarketing() {
   const supportEmail = "support@checksops.com";
   const [menuOpen, setMenuOpen] = useState(false);
+  const location = useLocation();
+  usePageMeta({ title: HOME_TITLE, description: HOME_DESCRIPTION, path: "/", jsonLd: FAQ_JSON_LD });
+
+  // Links such as /#demo from /pricing land here after a client-side navigation,
+  // which does not scroll to the anchor on its own.
+  useEffect(() => {
+    if (!location.hash) return;
+    const el = document.getElementById(decodeURIComponent(location.hash.slice(1)));
+    if (el) el.scrollIntoView();
+  }, [location.hash]);
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState({ name: "", email: "", company: "", role: "", notes: "", website: "" });
 
@@ -305,7 +368,7 @@ export default function CheckCenterMarketing() {
     {
       icon: ScanLine,
       title: "OCR-powered intake",
-      desc: "Drop a photo or PDF. ChecksOps extracts amount, check number, carrier, issue date, and every payee line — then flags anomalies before they reach deposit review.",
+      desc: "No more checks sitting in an inbox or a desk drawer. Drop a photo or PDF. ChecksOps extracts amount, check number, carrier, issue date, and every payee line — then flags anomalies before they reach deposit review.",
     },
     {
       icon: ClipboardCheck,
@@ -354,27 +417,17 @@ export default function CheckCenterMarketing() {
             <a href="#money-movement" className="hover:text-foreground transition-colors">Money Movement</a>
             <a href="#partners" className="hover:text-foreground transition-colors">Partners</a>
             <a href="#security" className="hover:text-foreground transition-colors">Security</a>
+            <Link to="/pricing" className="hover:text-foreground transition-colors">Pricing</Link>
             <a href="#demo" className="hover:text-foreground transition-colors">Demo</a>
           </nav>
           <div className="flex items-center gap-2">
             <Button asChild size="sm">
               <Link to="/login"><LogIn className="h-4 w-4 mr-1.5" />Sign in</Link>
             </Button>
-            <button className="md:hidden p-2" onClick={() => setMenuOpen(!menuOpen)} aria-label="Menu">
-              {menuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-            </button>
+            <MarketingMenuButton open={menuOpen} onToggle={() => setMenuOpen(!menuOpen)} />
           </div>
         </div>
-        {menuOpen && (
-          <div className="md:hidden border-t border-border/40 bg-background/95 backdrop-blur px-4 py-3 space-y-2 text-sm">
-            {["capabilities", "workflow", "money-movement", "partners", "security", "demo"].map((s) => (
-              <a key={s} href={`#${s}`} onClick={() => setMenuOpen(false)} className="block py-1.5 capitalize text-muted-foreground">
-                {s}
-              </a>
-            ))}
-            <Link to="/login" className="block py-1.5 text-foreground font-medium">Log in</Link>
-          </div>
-        )}
+        <MarketingMobileMenu open={menuOpen} onClose={() => setMenuOpen(false)} items={NAV_ITEMS} demoHref="#demo" />
       </header>
 
       {/* Hero */}
@@ -390,7 +443,7 @@ export default function CheckCenterMarketing() {
           <div className="min-w-0">
             <Badge variant="outline" className="mb-5 gap-1.5 border-primary/30 bg-primary/5 text-primary">
               <Sparkles className="h-3 w-3" />
-              The command center for insurance check operations
+              For public adjusting firms and their restoration partners
             </Badge>
             <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight leading-[1.05]">
               Every claim check.
@@ -400,7 +453,8 @@ export default function CheckCenterMarketing() {
               </span>
             </h1>
             <p className="mt-5 text-lg text-muted-foreground max-w-xl leading-relaxed break-words">
-              ChecksOps organizes insurance checks by claim, captures endorsements, shows deposit
+              Stop tracking claim checks in inboxes and spreadsheets. ChecksOps organizes insurance
+              checks by claim, captures endorsements, shows deposit
               readiness, and gives loss draft visibility without taking mortgage-company communication
               away from your team.
             </p>
@@ -409,9 +463,12 @@ export default function CheckCenterMarketing() {
                 <a href="#demo">Book a live demo<ArrowRight className="h-4 w-4 ml-2" /></a>
               </Button>
               <Button asChild size="lg" variant="outline" className="text-base">
-                <Link to="/login">Sign in</Link>
+                <Link to="/pricing">See pricing</Link>
               </Button>
             </div>
+            <p className="mt-4 text-sm text-muted-foreground max-w-xl">
+              20-minute walkthrough, no commitment. Your money never leaves your bank - your company stays the merchant of record.
+            </p>
             <div className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-3 text-xs text-muted-foreground">
               <div className="flex items-center gap-1.5"><ShieldCheck className="h-3.5 w-3.5" /> Audit trail on every action</div>
               <div className="flex items-center gap-1.5"><Lock className="h-3.5 w-3.5" /> Role-based access</div>
@@ -467,6 +524,9 @@ export default function CheckCenterMarketing() {
           ))}
         </div>
       </section>
+
+      {/* Quantity proof: hidden until marketingProof.ts USAGE_STATS has real numbers */}
+      <UsageStatStrip />
 
       {/* Capabilities */}
       <section id="capabilities" className="mx-auto max-w-7xl px-4 md:px-6 py-20 md:py-28">
@@ -524,6 +584,10 @@ export default function CheckCenterMarketing() {
           </div>
         </div>
       </section>
+
+      {/* Customer proof: hidden until marketingProof.ts has real entries */}
+      <TestimonialWall />
+      <ExternalSignalStrip />
 
       {/* Partners */}
       <section id="partners" className="mx-auto max-w-7xl px-4 md:px-6 py-20 md:py-28">
@@ -732,6 +796,28 @@ export default function CheckCenterMarketing() {
         </div>
       </section>
 
+      {/* Common questions */}
+      <section id="faq" className="border-t border-border/40">
+        <div className="mx-auto max-w-4xl px-4 md:px-6 py-20 md:py-24">
+          <Badge variant="outline" className="mb-4">Common questions</Badge>
+          <h2 className="text-3xl md:text-4xl font-bold tracking-tight">Before you book a demo.</h2>
+          <div className="mt-10 space-y-6">
+            {FAQ.map((f) => (
+              <div key={f.q} className="rounded-xl border border-border/50 bg-card/60 p-5">
+                <h3 className="font-semibold">{f.q}</h3>
+                <p className="mt-2 text-sm text-muted-foreground leading-relaxed">{f.a}</p>
+              </div>
+            ))}
+          </div>
+          <p className="mt-6 text-sm text-muted-foreground">
+            Full price breakdown on the <Link to="/pricing" className="underline underline-offset-2 hover:text-foreground">pricing page</Link>.
+          </p>
+        </div>
+      </section>
+
+      {/* Founder: hidden until marketingProof.ts FOUNDER is filled in */}
+      <FounderBlock />
+
       {/* Demo CTA */}
       <section id="demo" className="mx-auto max-w-7xl px-4 md:px-6 py-20 md:py-28">
         <div className="grid lg:grid-cols-2 gap-10 lg:gap-16 items-start">
@@ -749,6 +835,7 @@ export default function CheckCenterMarketing() {
                 "Tailored to your workflow — PA firm or restoration partner",
                 "See live OCR, endorsement flows, and loss-draft tracking",
                 "Q&A on pricing, onboarding, and white-label options",
+                "20 minutes, no commitment",
               ].map((t) => (
                 <div key={t} className="flex items-start gap-2.5">
                   <CheckCircle2 className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
@@ -756,6 +843,10 @@ export default function CheckCenterMarketing() {
                 </div>
               ))}
             </div>
+            <p className="mt-6 text-sm text-muted-foreground">
+              Built for firms that process insurance claim checks at scale. Not built for a solo
+              adjuster handling a few checks a month.
+            </p>
           </div>
           <Card className="border-border/50 bg-card/60">
             <CardContent className="p-6 md:p-8">
@@ -793,7 +884,8 @@ export default function CheckCenterMarketing() {
                   <ArrowRight className="h-4 w-4 ml-2" />
                 </Button>
                 <p className="text-[10px] text-muted-foreground text-center">
-                  By submitting, you agree to be contacted about ChecksOps.
+                  By submitting, you agree to be contacted about ChecksOps. See our{" "}
+                  <Link to="/privacy-notice" className="underline underline-offset-2 hover:text-foreground">Privacy Notice</Link>.
                 </p>
                 <p className="text-[10px] text-muted-foreground text-center">
                   Support: <a href={`mailto:${supportEmail}`} className="underline underline-offset-2 hover:text-foreground">{supportEmail}</a>
@@ -816,6 +908,9 @@ export default function CheckCenterMarketing() {
               <a href={`mailto:${supportEmail}`} className="hover:text-foreground">Support</a>
               <Link to="/login" className="hover:text-foreground">Sign in</Link>
               <a href="#demo" className="hover:text-foreground">Book demo</a>
+              <Link to="/pricing" className="hover:text-foreground">Pricing</Link>
+              <Link to="/vs/checksops-vs-iink-payments" className="hover:text-foreground">ChecksOps vs iink Payments</Link>
+              <FounderFooterLink />
               <Link to="/privacy-notice" className="hover:text-foreground">Privacy Notice</Link>
               <Link to="/terms" className="hover:text-foreground">Terms of Service</Link>
             </div>

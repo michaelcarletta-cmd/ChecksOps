@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -15,6 +16,20 @@ import {
   Building2,
 } from "lucide-react";
 import { CheckOpsLogo } from "@/components/marketing/CheckOpsLogo";
+import { MarketingMenuButton, MarketingMobileMenu } from "@/components/marketing/MarketingMobileMenu";
+import { usePageMeta } from "@/hooks/usePageMeta";
+import { PUBLISHED_PRICING } from "@/pages/marketing/marketingPricing";
+
+const PRICING_TITLE = `ChecksOps Pricing - ${PUBLISHED_PRICING.platformFee} platform + ${PUBLISHED_PRICING.perCheck} per check`;
+const PRICING_DESCRIPTION =
+  `ChecksOps pricing for public adjusting firms: ${PUBLISHED_PRICING.platformFee} one-time platform fee per company, ${PUBLISHED_PRICING.perCheck} per claim check, unlimited users. Endorsements, deposit readiness and loss draft tracking included.`;
+
+const PRICING_NAV_ITEMS = [
+  { label: "Capabilities", href: "/#capabilities" },
+  { label: "Workflow", href: "/#workflow" },
+  { label: "Security", href: "/#security" },
+  { label: "Pricing", href: "/pricing" },
+];
 
 const platformIncludes = [
   "Unlimited users across your company",
@@ -28,13 +43,15 @@ const platformIncludes = [
 ];
 
 export default function CheckOpsPricing() {
+  const [menuOpen, setMenuOpen] = useState(false);
+  usePageMeta({ title: PRICING_TITLE, description: PRICING_DESCRIPTION, path: "/pricing" });
   return (
     <div className="min-h-screen bg-background text-foreground">
       {/* Header — mirrors marketing */}
       <header className="sticky top-0 z-50 border-b border-border/40 bg-background/80 backdrop-blur-xl">
         <div className="mx-auto max-w-7xl px-4 md:px-6 h-14 flex items-center justify-between">
           <Link to="/">
-            <CheckOpsLogo className="text-foreground text-base" />
+            <CheckOpsLogo className="text-foreground h-9 sm:h-10 md:h-12" />
           </Link>
           <nav className="hidden md:flex items-center gap-6 text-sm text-muted-foreground">
             <Link to="/#capabilities" className="hover:text-foreground transition-colors">Capabilities</Link>
@@ -49,8 +66,10 @@ export default function CheckOpsPricing() {
             <Button asChild size="sm">
               <Link to="/#demo">Talk to us<ArrowRight className="h-4 w-4 ml-1.5" /></Link>
             </Button>
+            <MarketingMenuButton open={menuOpen} onToggle={() => setMenuOpen(!menuOpen)} />
           </div>
         </div>
+        <MarketingMobileMenu open={menuOpen} onClose={() => setMenuOpen(false)} items={PRICING_NAV_ITEMS} demoHref="/#demo" />
       </header>
 
       {/* Hero */}
@@ -65,7 +84,7 @@ export default function CheckOpsPricing() {
         <div className="relative mx-auto max-w-5xl px-4 md:px-6 pt-14 md:pt-20 pb-10 text-center">
           <Badge variant="outline" className="mb-5 gap-1.5 border-primary/30 bg-primary/5 text-primary">
             <Sparkles className="h-3 w-3" />
-            Confidential pricing for ChecksOps prospects
+            Straightforward pricing, published for PA firms evaluating at scale
           </Badge>
           <h1 className="text-4xl md:text-5xl font-bold tracking-tight leading-[1.05]">
             Simple, predictable
@@ -75,8 +94,8 @@ export default function CheckOpsPricing() {
             </span>
           </h1>
           <p className="mt-5 text-lg text-muted-foreground max-w-2xl mx-auto leading-relaxed">
-            One platform fee. One per-check rate. No per-seat charges, no usage caps,
-            no surprises. Built for firms that process insurance claim checks at scale.
+            One platform fee. One per-check rate. One support plan. No per-seat charges,
+            no usage caps, no surprises. Built for firms that process insurance claim checks at scale.
           </p>
         </div>
       </section>
@@ -95,10 +114,13 @@ export default function CheckOpsPricing() {
               <h3 className="text-xl font-bold">ChecksOps System</h3>
               <p className="text-xs text-muted-foreground mt-1">One-time, per company</p>
               <div className="mt-5 flex items-baseline gap-1">
-                <span className="text-4xl md:text-5xl font-bold">$10,000</span>
+                <span className="text-4xl md:text-5xl font-bold">{PUBLISHED_PRICING.platformFee}</span>
               </div>
               <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
                 <InfinityIcon className="h-3.5 w-3.5" /> Unlimited users included
+              </p>
+              <p className="text-xs text-foreground/80 mt-3 leading-relaxed">
+                One platform fee replaces the hours your team loses per check to inbox, printer and bank-branch tracking.
               </p>
               <div className="my-6 h-px bg-border/60" />
               <p className="text-sm text-muted-foreground leading-relaxed">
@@ -113,7 +135,7 @@ export default function CheckOpsPricing() {
           <Card className="border-primary/40 bg-card/80 relative overflow-hidden ring-1 ring-primary/20 md:scale-[1.02]">
             <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-primary via-[#596032] to-primary" />
             <Badge className="absolute top-4 right-4 bg-primary/15 text-primary border-primary/30 hover:bg-primary/15">
-              Usage
+              Recommended
             </Badge>
             <CardContent className="p-6 md:p-8">
               <div className="flex items-center gap-2 text-primary mb-3">
@@ -123,7 +145,7 @@ export default function CheckOpsPricing() {
               <h3 className="text-xl font-bold">Processing Rate</h3>
               <p className="text-xs text-muted-foreground mt-1">Billed monthly on usage</p>
               <div className="mt-5 flex items-baseline gap-1">
-                <span className="text-4xl md:text-5xl font-bold">$3</span>
+                <span className="text-4xl md:text-5xl font-bold">{PUBLISHED_PRICING.perCheck}</span>
                 <span className="text-sm text-muted-foreground">/ check</span>
               </div>
               <p className="text-xs text-muted-foreground mt-1">No minimums, no caps</p>
@@ -148,12 +170,12 @@ export default function CheckOpsPricing() {
               <p className="text-xs text-muted-foreground mt-1">Choose monthly or annual</p>
               <div className="mt-5 space-y-2">
                 <div className="flex items-baseline gap-1">
-                  <span className="text-3xl md:text-4xl font-bold">$100</span>
+                  <span className="text-3xl md:text-4xl font-bold">{PUBLISHED_PRICING.supportMonthly}</span>
                   <span className="text-sm text-muted-foreground">/ month</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-muted-foreground">or</span>
-                  <span className="text-lg font-semibold">$1,000 paid annually</span>
+                  <span className="text-lg font-semibold">{PUBLISHED_PRICING.supportAnnual} paid annually</span>
                   <Badge variant="outline" className="text-[10px] border-success/40 text-success">
                     Save $200
                   </Badge>
@@ -206,6 +228,13 @@ export default function CheckOpsPricing() {
             We'll set up your environment, migrate any historical data, and train your
             team. Most companies are live within two weeks.
           </p>
+          <p className="mt-3 text-sm text-muted-foreground">
+            Comparing per-subscription check services?{" "}
+            <Link to="/vs/checksops-vs-iink-payments" className="underline underline-offset-2 hover:text-foreground">
+              See ChecksOps vs iink Payments
+            </Link>
+            .
+          </p>
           <div className="mt-6 flex flex-col sm:flex-row gap-3 justify-center">
             <Button asChild size="lg">
               <Link to="/#demo">Schedule onboarding<ArrowRight className="h-4 w-4 ml-2" /></Link>
@@ -227,7 +256,12 @@ export default function CheckOpsPricing() {
             <CheckOpsLogo className="text-foreground text-sm" />
             <span>© {new Date().getFullYear()} ChecksOps</span>
           </div>
-          <p>Confidential — pricing intended for prospective customers only.</p>
+          <nav className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <Link to="/" className="hover:text-foreground">Home</Link>
+            <Link to="/vs/checksops-vs-iink-payments" className="hover:text-foreground">ChecksOps vs iink Payments</Link>
+            <Link to="/privacy-notice" className="hover:text-foreground">Privacy Notice</Link>
+            <Link to="/terms" className="hover:text-foreground">Terms of Service</Link>
+          </nav>
         </div>
       </footer>
     </div>

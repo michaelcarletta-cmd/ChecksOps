@@ -6,8 +6,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#0f172a" />
     <link rel="apple-touch-icon" href="/pwa-192.png" />
-    <title>ChecksOps</title>
-    <meta name="description" content="Insurance check endorsement and deposit workflow management.">
+    <title>ChecksOps - Claim check workflow for public adjusting firms</title>
+    <meta name="description" content="Claim check workflow for public adjusting firms and their restoration partners: every insurance check filed by claim, payee endorsements captured, deposit readiness and loss drafts tracked.">
     <link rel="preload" href="/node_modules/@fontsource-variable/inter/files/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
     <meta name="author" content="Freedom Adjustment" />
 
@@ -43,10 +43,59 @@
         }
       })();
     </script>
-    <meta property="og:title" content="ChecksOps">
-  <meta name="twitter:title" content="ChecksOps">
-  <meta property="og:description" content="Insurance check endorsement and deposit workflow management.">
-  <meta name="twitter:description" content="Insurance check endorsement and deposit workflow management.">
+    <meta property="og:title" content="ChecksOps - Claim check workflow for public adjusting firms">
+  <meta name="twitter:title" content="ChecksOps - Claim check workflow for public adjusting firms">
+  <meta property="og:description" content="Claim check workflow for public adjusting firms and their restoration partners: every insurance check filed by claim, payee endorsements captured, deposit readiness and loss drafts tracked.">
+  <meta name="twitter:description" content="Claim check workflow for public adjusting firms and their restoration partners: every insurance check filed by claim, payee endorsements captured, deposit readiness and loss drafts tracked.">
+  <!-- Structured data: only facts the site publishes (home page, /pricing). The prices repeat
+       src/pages/marketing/marketingPricing.ts; change both together. A typed (non-JavaScript)
+       script is not executed, so it adds no hash to the SPA Content-Security-Policy. -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "Organization",
+        "@id": "https://checksops.com/#organization",
+        "name": "ChecksOps",
+        "url": "https://checksops.com/",
+        "logo": "https://checksops.com/checksops-logo.png",
+        "email": "support@checksops.com",
+        "description": "Workflow software for insurance claim checks: claim-centered check files, payee endorsements, deposit readiness and loss draft tracking. Not a bank, lender, escrow service, or payment processor."
+      },
+      {
+        "@type": "Service",
+        "@id": "https://checksops.com/#service",
+        "name": "ChecksOps",
+        "serviceType": "Claim check workflow software",
+        "url": "https://checksops.com/",
+        "provider": { "@id": "https://checksops.com/#organization" },
+        "audience": { "@type": "BusinessAudience", "audienceType": "Public adjusting firms and their restoration partners" },
+        "offers": [
+          {
+            "@type": "Offer",
+            "name": "ChecksOps System: one-time platform fee, per company",
+            "url": "https://checksops.com/pricing",
+            "price": "7500",
+            "priceCurrency": "USD"
+          },
+          {
+            "@type": "Offer",
+            "name": "Processing Rate: per check",
+            "url": "https://checksops.com/pricing",
+            "priceSpecification": { "@type": "UnitPriceSpecification", "price": "4", "priceCurrency": "USD", "unitText": "check" }
+          },
+          {
+            "@type": "Offer",
+            "name": "Support & Updates: monthly",
+            "url": "https://checksops.com/pricing",
+            "priceSpecification": { "@type": "UnitPriceSpecification", "price": "100", "priceCurrency": "USD", "unitText": "month" }
+          }
+        ]
+      }
+    ]
+  }
+  </script>
 </head>
 
   <body>
