@@ -134,3 +134,15 @@ from the replicated backups, to prove the copy works.
 
 Record each step: who, when (UTC), the verification output, and anything that differed. For step 3,
 the KMS key ARN.
+
+All three steps: owner in CloudShell, 2026-11-06, after the owner's decisions that day. Owner pasted the
+output of each; Claude re-read the result live, read-only, as `user/claude-code` at 18:56 UTC.
+
+| Step | Before (pre-check) | After (verified) |
+|---|---|---|
+| 1 | One rule `retain-365`, `Expiration` 365 days | One rule `audit-logs-7-years`: Glacier after 90 days, `Expiration` 2,557 days, `NoncurrentVersionExpiration` 30 days |
+| 2 | 319 log groups with no retention | 0 with no retention. 322 at 90 days (including `/aws/lambda/checksops-production-prep-api`, raised from 30), CloudTrail 365, `RDSOSMetrics` 30, staging test harness 1 |
+| 3 | No automated backups in `us-east-2` | KMS key `arn:aws:kms:us-east-2:806168576068:key/fa42ee4c-2eb1-49a5-805d-30a3468dbea2` (alias `alias/checksops-production-rds-dr`). Replication started for `checksops-production` (`DbiResourceId` `db-E74IAPIUXIIB4WAYMAFJAO4MAE`), 35 days, `BackupTarget` `region`, status `pending` at 18:56 UTC |
+
+**Still to confirm for step 3:** the status reaches `replicating` and `RestoreWindow.LatestTime`
+appears. Re-run the step 3 verification command; record the time here.
