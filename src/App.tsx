@@ -27,6 +27,7 @@ const PaymentDirectionPage = lazy(() => import("./pages/PaymentDirectionPage"));
 const WhiteLabelApp = lazy(() => import("./pages/WhiteLabelApp"));
 const CheckOpsLanding = lazy(() => import("./pages/checkops/CheckOpsLanding"));
 const CheckOpsPricing = lazy(() => import("./pages/checkops/CheckOpsPricing"));
+const ChecksOpsVsIink = lazy(() => import("./pages/marketing/ChecksOpsVsIink"));
 const CheckOpsSecurity = lazy(() => import("./pages/checkops/CheckOpsSecurity"));
 const CheckOpsLogin = lazy(() => import("./pages/checkops/CheckOpsLogin"));
 const CheckOpsSignup = lazy(() => import("./pages/checkops/CheckOpsSignup"));
@@ -109,6 +110,12 @@ function CheckOpsRoutes() {
       <Route path="/pay-setup/:token" element={<Suspense fallback={<PageLoader />}><RecipientPaymentSetup /></Suspense>} />
       <Route path="/unsubscribe" element={<Suspense fallback={<PageLoader />}><Unsubscribe /></Suspense>} />
       <Route path="/pricing" element={<Suspense fallback={<PageLoader />}><CheckOpsPricing /></Suspense>} />
+      <Route path="/vs/checksops-vs-iink-payments" element={<Suspense fallback={<PageLoader />}><ChecksOpsVsIink /></Suspense>} />
+      {/* Marketing paths people guess. Until there is a real about or customers page, send them
+          to the home page instead of letting /:slug/* render "Organization Not Found". */}
+      <Route path="/about" element={<Navigate to="/" replace />} />
+      <Route path="/customers" element={<Navigate to="/" replace />} />
+      <Route path="/features" element={<Navigate to="/#capabilities" replace />} />
       <Route path="/security" element={<Suspense fallback={<PageLoader />}><CheckOpsSecurity /></Suspense>} />
       <Route path="/privacy-notice" element={<Suspense fallback={<PageLoader />}><PrivacyNotice /></Suspense>} />
       <Route path="/terms" element={<Suspense fallback={<PageLoader />}><Terms /></Suspense>} />
