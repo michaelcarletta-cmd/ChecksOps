@@ -248,9 +248,9 @@ test('the committed plan records the production onboarding keys config (run 4110
   assert.match(cryptoSource, /export const PII_KMS_KEY_ENV = 'MOOV_ONBOARDING_PII_KMS_KEY_ARN';/);
   // Both values are production KMS key ARNs, never a staging key.
   for (const arn of [documents, pii]) assert.match(arn, /^arn:aws:kms:us-east-1:806168576068:key\/[0-9a-f-]{36}$/);
-  // Staging needed no change for it (its section since plans login MFA, its own test).
+  // Staging needed no change for it (its login MFA change is recorded, its own test).
   const staging = loadConfigPlan(REPO_ROOT, 'staging');
-  assert.deepEqual(Object.keys(staging.set), ['AWS_LOGIN_MFA_REQUIRED']);
+  assert.deepEqual(staging.set, {});
   assert.deepEqual(staging.unset, {});
 });
 
@@ -282,9 +282,9 @@ test('the committed plan records production sends on (run 41953736410); producti
   // The key the send route reads (moov-send.mjs), on top of the general transfer switch.
   const sendSource = fs.readFileSync(path.join(REPO_ROOT, 'aws/functions/api/providers/production/moov-send.mjs'), 'utf8');
   assert.match(sendSource, /export const sendPostEnabled = \(\) => transferPostEnabled\(\) && flagTrue\('AWS_MOOV_SEND_POST_ENABLED'\);/);
-  // Staging needed no change for it (its section since plans login MFA, its own test).
+  // Staging needed no change for it (its login MFA change is recorded, its own test).
   const staging = loadConfigPlan(REPO_ROOT, 'staging');
-  assert.deepEqual(Object.keys(staging.set), ['AWS_LOGIN_MFA_REQUIRED']);
+  assert.deepEqual(staging.set, {});
   assert.deepEqual(staging.unset, {});
 });
 
@@ -720,15 +720,14 @@ test('the writer refuses a credential that changed since the plan, and its failu
   assert.equal(leaks(plainResult), false);
 });
 
-test('the committed staging section plans login MFA on (AWS_LOGIN_MFA_REQUIRED from absent to "true") from inspect 42281613835', () => {
+test('the committed plan records login MFA on in staging (run 42283026717) and starts the next change empty', () => {
   const raw = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, CONFIG_PLAN_REL), 'utf8'));
   const section = loadConfigPlan(REPO_ROOT, 'staging');
-  assert.equal(section.status, 'accepted');
-  assert.deepEqual(section.set, { AWS_LOGIN_MFA_REQUIRED: { from: null, to: 'true' } });
+  assert.equal(section.status, 'applied');
+  assert.deepEqual(section.set, {});
   assert.deepEqual(section.unset, {});
   const row = raw.environments.staging;
   assert.equal(row.function_name, 'checksops-staging-api');
-  assert.equal(row.applied, undefined);
   assert.equal(row.inspect.run_id, '42281613835');
   assert.equal(row.inspect.main_commit, '1965d9570aaa1ada0514aa74fcea1aa08a5767de');
   // The inspect read the package the three login MFA overlays left behind.
@@ -737,23 +736,32 @@ test('the committed staging section plans login MFA on (AWS_LOGIN_MFA_REQUIRED f
   assert.equal(row.inspect.live_configuration_sha256, '35be33d4fc4921a6dc1cdbdbdf6e90b2fcfd90d5114c4e8b86e56d5c3692b3ca');
   assert.equal(row.inspect.live_variable_count, 45);
   for (const evidence of ['42280564417', '42281031310', '42281420033', 'Login MFA - yes for everyone']) assert.ok(row.inspect.notes.includes(evidence), evidence);
+  assert.equal(row.applied.run_id, '42283026717');
+  assert.equal(row.applied.main_commit, 'fd0776924be2904f2c080989ec4cff6ae5d470ea');
+  assert.equal(row.applied.approval_phrase, 'APPLY API CONFIGURATION TO STAGING');
+  assert.equal(row.applied.state, 'VERIFIED');
+  assert.equal(row.applied.revision_id_before, row.inspect.live_revision_id);
+  assert.equal(row.applied.revision_id_after, '952b8357-228c-437c-944e-05bd3a7375df');
+  assert.equal(row.applied.configuration_sha256_before, row.inspect.live_configuration_sha256);
+  assert.equal(row.applied.code_sha256, row.inspect.live_code_sha256);
+  assert.deepEqual(row.applied.applied_change, { set: { AWS_LOGIN_MFA_REQUIRED: { from: null, to: 'true' } }, unset: {} });
+  // The recorded change hash is the one the run's receipt owned.
+  assert.equal(changeSha256({ function_name: row.function_name, ...row.applied.applied_change }), row.applied.change_sha256);
+  assert.match(row.applied.notes, /"staging MFA works"/);
   // The switch the gate reads, and only the string "true" turns it on.
   const source = fs.readFileSync(path.join(REPO_ROOT, 'aws/functions/api/login-mfa.mjs'), 'utf8');
   assert.match(source, /export const LOGIN_MFA_FLAG = 'AWS_LOGIN_MFA_REQUIRED';/);
   assert.match(source, /export const loginMfaRequired = \(\) => flagTrue\(LOGIN_MFA_FLAG\);/);
-  // Production plans the same switch in its own section (its own test).
-  assert.deepEqual(Object.keys(loadConfigPlan(REPO_ROOT, 'production').set), ['AWS_LOGIN_MFA_REQUIRED']);
 });
 
-test('the committed production section plans login MFA on (AWS_LOGIN_MFA_REQUIRED from absent to "true") from inspect 42290357692', () => {
+test('the committed plan records login MFA on in production (run 42293184319) and starts the next change empty', () => {
   const raw = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, CONFIG_PLAN_REL), 'utf8'));
   const section = loadConfigPlan(REPO_ROOT, 'production');
-  assert.equal(section.status, 'accepted');
-  assert.deepEqual(section.set, { AWS_LOGIN_MFA_REQUIRED: { from: null, to: 'true' } });
+  assert.equal(section.status, 'applied');
+  assert.deepEqual(section.set, {});
   assert.deepEqual(section.unset, {});
   const row = raw.environments.production;
   assert.equal(row.function_name, 'checksops-production-prep-api');
-  assert.equal(row.applied, undefined);
   assert.equal(row.inspect.run_id, '42290357692');
   assert.equal(row.inspect.main_commit, '6c2f5a26552ec842ccd6da30eb127a74226f4f20');
   // The inspect read the package the three production login MFA overlays left behind.
@@ -762,8 +770,17 @@ test('the committed production section plans login MFA on (AWS_LOGIN_MFA_REQUIRE
   assert.equal(row.inspect.live_configuration_sha256, '90840ecde7eefd92832068462bbf1db1c92c3a7bb4317281e246e12a1f2d7178');
   assert.equal(row.inspect.live_variable_count, 49);
   for (const evidence of ['42283495148', '42284228921', '42284721201', '42283026717', 'staging MFA works', 'Login MFA - yes for everyone']) assert.ok(row.inspect.notes.includes(evidence), evidence);
-  // The same switch staging turned on, and only the string "true" turns it on.
-  assert.deepEqual(loadConfigPlan(REPO_ROOT, 'staging').set, section.set);
-  const source = fs.readFileSync(path.join(REPO_ROOT, 'aws/functions/api/login-mfa.mjs'), 'utf8');
-  assert.match(source, /export const loginMfaRequired = \(\) => flagTrue\(LOGIN_MFA_FLAG\);/);
+  assert.equal(row.applied.run_id, '42293184319');
+  assert.equal(row.applied.main_commit, 'b83f21140881c5f0b7e79ecae58dc80cf7f85a09');
+  assert.equal(row.applied.approval_phrase, 'APPLY API CONFIGURATION TO PRODUCTION');
+  assert.equal(row.applied.staging_acceptance, raw.environments.staging.applied.run_url);
+  assert.equal(row.applied.state, 'VERIFIED');
+  assert.equal(row.applied.revision_id_before, row.inspect.live_revision_id);
+  assert.equal(row.applied.revision_id_after, 'eb9f5362-3171-41d0-9343-e6074c1885e9');
+  assert.equal(row.applied.configuration_sha256_before, row.inspect.live_configuration_sha256);
+  assert.equal(row.applied.code_sha256, row.inspect.live_code_sha256);
+  // The same switch staging turned on, and nothing else.
+  assert.deepEqual(row.applied.applied_change, raw.environments.staging.applied.applied_change);
+  // The recorded change hash is the one the run's receipt owned.
+  assert.equal(changeSha256({ function_name: row.function_name, ...row.applied.applied_change }), row.applied.change_sha256);
 });
