@@ -10,7 +10,14 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { format, startOfYear, endOfYear, startOfMonth, endOfMonth, subMonths } from "date-fns";
 import { Download, Search, TrendingUp, TrendingDown, DollarSign } from "lucide-react";
-import { displayCaseOrNull } from "@/lib/displayCase";
+import { displayCase } from "@/lib/displayCase";
+import { useCaseInsuredNames } from "@/hooks/useCaseInsuredNames";
+import {
+  DEPOSIT_CUSTOMER_SELECT,
+  depositCaseIds,
+  depositCustomerName,
+  depositPartyLabel,
+} from "@/lib/depositCustomerLabel";
 import {
   PAYROLL_FINANCE_QUERY_KEY,
   PAYROLL_SOURCE_LABEL,
@@ -118,7 +125,7 @@ export function PaymentLedger() {
             id, check_amount, check_intake_item_id,
             check_intake_items:check_intake_item_id (
               check_number, carrier_name, amount,
-              claim_id
+              claim_id, ${DEPOSIT_CUSTOMER_SELECT}
             )
           )
         `)
@@ -138,11 +145,26 @@ export function PaymentLedger() {
     },
   });
 
+  // Customer (insured) name of each payment's source check, same rule as the Deposited Checks report.
+  const caseInsuredNames = useCaseInsuredNames(
+    depositCaseIds(splitPayments.map((p) => p.disbursement_batches?.check_intake_items)),
+    "payment-ledger",
+  );
+
   const payments = useMemo(
-    () => [...splitPayments, ...payrollLedgerRows(payrollRuns)].sort(
+    () => [
+      ...splitPayments.map((p) => {
+        const check = p.disbursement_batches?.check_intake_items;
+        if (!check) return p;
+        const customerName = depositCustomerName(check, caseInsuredNames);
+        const party = depositPartyLabel({ customerName, carrierName: check.carrier_name, formatCarrier: displayCase });
+        return { ...p, _customerName: customerName, _party: party };
+      }),
+      ...payrollLedgerRows(payrollRuns),
+    ].sort(
       (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
     ),
-    [splitPayments, payrollRuns],
+    [splitPayments, payrollRuns, caseInsuredNames],
   );
 
   const filtered = useMemo(() => {
@@ -157,6 +179,7 @@ export function PaymentLedger() {
         name.toLowerCase().includes(search.toLowerCase()) ||
         check?.check_number?.toLowerCase().includes(search.toLowerCase()) ||
         check?.carrier_name?.toLowerCase().includes(search.toLowerCase()) ||
+        p._customerName?.toLowerCase().includes(search.toLowerCase()) ||
         p.external_check_number?.toLowerCase().includes(search.toLowerCase()) ||
         (p.source === "payroll" &&
           (PAYROLL_SOURCE_LABEL.toLowerCase().includes(search.toLowerCase()) ||
@@ -182,7 +205,7 @@ export function PaymentLedger() {
   }, [filtered]);
 
   const exportCSV = () => {
-    const headers = ["Date", "Recipient", "Type", "Account (last 4)", "Check #", "Carrier", "Amount", "Status", "Return Code"];
+    const headers = ["Date", "Recipient", "Type", "Account (last 4)", "Check #", "Customer", "Carrier", "Amount", "Status", "Return Code"];
     const rows = filtered.map((p: any) => {
       const acct = p.stakeholder_accounts;
       const check = p.disbursement_batches?.check_intake_items;
@@ -192,6 +215,7 @@ export function PaymentLedger() {
         ACCOUNT_TYPE_LABELS[acct?.account_type] ?? "—",
         acct?.chk_acct ? `••••${acct.chk_acct.slice(-4)}` : "—",
         p.source === "payroll" ? PAYROLL_SOURCE_LABEL : (check?.check_number ?? "—"),
+        p.source === "payroll" ? "—" : (p._customerName ?? "—"),
         p.source === "payroll" ? (p.memo ?? "—") : (check?.carrier_name ?? "—"),
         Number(p.amount).toFixed(2),
         p.status,
@@ -255,7 +279,7 @@ export function PaymentLedger() {
           <div className="flex flex-wrap gap-2 items-center">
             <div className="relative flex-1 min-w-48">
               <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-muted-foreground" />
-              <Input className="h-8 text-sm pl-8" placeholder="Search recipient, check #, carrier..." value={search} onChange={(e) => setSearch(e.target.value)} />
+              <Input className="h-8 text-sm pl-8" placeholder="Search recipient, check #, customer, carrier..." value={search} onChange={(e) => setSearch(e.target.value)} />
             </div>
             <Select value={dateRange} onValueChange={(v) => setDateRange(v as DateRange)}>
               <SelectTrigger className="h-8 text-sm w-36"><SelectValue /></SelectTrigger>
@@ -307,7 +331,7 @@ export function PaymentLedger() {
                     <th className="text-left p-3 font-medium">Recipient</th>
                     <th className="text-left p-3 font-medium hidden md:table-cell">Type</th>
                     <th className="text-left p-3 font-medium hidden md:table-cell">Check #</th>
-                    <th className="text-left p-3 font-medium hidden lg:table-cell">Carrier</th>
+                    <th className="text-left p-3 font-medium hidden lg:table-cell">Customer / Carrier</th>
                     <th className="text-right p-3 font-medium">Amount</th>
                     <th className="text-left p-3 font-medium">Status</th>
                   </tr>
@@ -359,7 +383,10 @@ export function PaymentLedger() {
                         ) : (
                           <>
                             <td className="p-3 text-xs font-mono hidden md:table-cell">{check?.check_number ?? "—"}</td>
-                            <td className="p-3 text-xs hidden lg:table-cell text-muted-foreground">{displayCaseOrNull(check?.carrier_name) ?? "—"}</td>
+                            <td className="p-3 text-xs hidden lg:table-cell">
+                              <p className="font-medium">{p._party?.primary ?? "—"}</p>
+                              {p._party?.secondary && <p className="text-[10px] text-muted-foreground">{p._party.secondary}</p>}
+                            </td>
                           </>
                         )}
                         <td className="p-3 text-right font-medium text-sm">${Number(p.amount).toLocaleString("en-US", { minimumFractionDigits: 2 })}</td>
