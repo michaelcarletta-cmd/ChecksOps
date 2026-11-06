@@ -211,6 +211,8 @@ import {
 import { useCheckCommandRealtime } from "@/features/check-command/useCheckCommandRealtime";
 import { optimisticStage, optimisticRemove } from "@/features/check-command/optimistic";
 import { sharedReleasedRows } from "@/features/check-command/sharedFundsReleased";
+import { incomingFundsReceivedRows } from "@/lib/payments/transferFinanceRows";
+import { useIncomingTransfers } from "@/hooks/useTransferFinance";
 import { displayCase, displayCaseOrNull } from "@/lib/displayCase";
 import { useDuplicateChecks } from "@/hooks/useDuplicateChecks";
 import { DuplicateCheckBadge, DuplicateCheckBanner } from "@/components/checks/DuplicateCheckFlag";
@@ -1113,6 +1115,10 @@ export default function CheckCommandCenter() {
     refetchInterval: 60_000,
   });
 
+  // Payments another organization sent into this wallet from a check (SQL 144 via /data/rpc): its
+  // send legs are the sender's rows, so get_tenant_funds_received never has them. Empty until live.
+  const { data: incomingTransfers = [] } = useIncomingTransfers(tenantId);
+
   // Search inside the Funds Released / Funds Received lanes so a searched claim
   // check also surfaces here (and the lane badge reflects the match count).
   const matchesSplitSearch = useCallback((s: any) => {
@@ -1151,8 +1157,8 @@ export default function CheckCommandCenter() {
     [fundsReleased, sharedChecks, matchesSplitSearch],
   );
   const filteredFundsReceived = useMemo(
-    () => (fundsReceived as any[]).filter(matchesSplitSearch),
-    [fundsReceived, matchesSplitSearch],
+    () => [...(fundsReceived as any[]), ...incomingFundsReceivedRows(incomingTransfers)].filter(matchesSplitSearch),
+    [fundsReceived, incomingTransfers, matchesSplitSearch],
   );
 
   // Auto-jump to the tab that contains matches when the user searches and
@@ -1727,7 +1733,13 @@ export default function CheckCommandCenter() {
                                         {split.external_check_number ? ` · Ck #${split.external_check_number}` : ""}
                                       </Badge>
                                       <Badge variant="outline" className="text-[10px]">
-                                        Received {split.settled_at ? format(new Date(split.settled_at), "MMM d, yyyy") : "—"}
+                                        {split._incomingStatus === "returned" ? (
+                                          <>Returned</>
+                                        ) : split._incomingStatus === "in_transit" ? (
+                                          <>Sent {split.created_at ? format(new Date(split.created_at), "MMM d, yyyy") : "—"}</>
+                                        ) : (
+                                          <>Received {split.settled_at ? format(new Date(split.settled_at), "MMM d, yyyy") : "—"}</>
+                                        )}
                                       </Badge>
                                       {fundsLabel && (
                                         <Badge variant="outline" className="text-[10px]">{fundsLabel}</Badge>
