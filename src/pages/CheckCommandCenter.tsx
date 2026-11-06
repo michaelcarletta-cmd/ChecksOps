@@ -88,7 +88,8 @@ import { DepositStatusPanel } from "@/components/check-review/DepositStatusPanel
 import { SignatureStatusPanel } from "@/components/check-review/SignatureStatusPanel";
 import { ReviewSettlementTab } from "@/components/check-review/ReviewSettlementTab";
 import { PostHomeownerUpdateCard } from "@/components/homeowner-ledger/PostHomeownerUpdateCard";
-import { Share2 } from "lucide-react";
+import { Share2, CalendarRange } from "lucide-react";
+import { CheckProjectScheduleTab } from "@/components/homeowner-ledger/CheckProjectScheduleTab";
 import { ShieldCheck } from "lucide-react";
 import { CheckValidityBadge } from "@/components/checks/CheckValidityBadge";
 import { assessCheckValidity } from "@/lib/checkValidity";
@@ -3904,6 +3905,10 @@ function CheckDetailPanel({
                 <Share2 className="h-3 w-3" /> Partners
                 <MessageSquare className="h-3 w-3 ml-0.5 opacity-70" />
               </TabsTrigger>
+              {/* Project Schedule: every stage, before and after deposit (owner, 2026-11-06). */}
+              <TabsTrigger value="schedule" className="text-xs whitespace-nowrap px-2 sm:px-3 gap-1">
+                <CalendarRange className="h-3 w-3" /> Project Schedule
+              </TabsTrigger>
               {showAuditTab && (
                 <TabsTrigger value="audit" className="text-xs whitespace-nowrap px-2 sm:px-3">Audit</TabsTrigger>
               )}
@@ -4600,6 +4605,14 @@ function CheckDetailPanel({
                   <CheckMessageThread checkId={checkId} active={detailTab === "partners"} />
                 </Suspense>
               </div>
+            </TabsContent>
+
+            <TabsContent value="schedule" className="p-4 mt-0 space-y-4">
+              <CheckProjectScheduleTab
+                claimId={check.claim_id ?? null}
+                tenantId={checkOwnerTenantId ?? null}
+                canEdit={isOwner}
+              />
             </TabsContent>
           </ScrollArea>
         </Tabs>

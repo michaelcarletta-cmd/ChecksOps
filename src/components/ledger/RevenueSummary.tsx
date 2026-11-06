@@ -10,6 +10,14 @@ import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { displayCase } from "@/lib/displayCase";
 import { usePaidInvoiceRevenue } from "@/hooks/useWalletOps";
+import { useCaseInsuredNames } from "@/hooks/useCaseInsuredNames";
+import {
+  DEPOSIT_CUSTOMER_SELECT,
+  depositCaseIds,
+  depositCustomerName,
+  depositPartyLabel,
+  type DepositCustomerSource,
+} from "@/lib/depositCustomerLabel";
 import {
   PAYROLL_FINANCE_QUERY_KEY,
   PAYROLL_SOURCE_LABEL,
@@ -24,6 +32,17 @@ import {
   type ExpenseSplit,
 } from "@/lib/payments/revenueExpenseRows";
 
+type RevenueCheck = DepositCustomerSource & {
+  id: string;
+  amount: number | string | null;
+  status: string | null;
+  deposited_at: string | null;
+  check_number: string | null;
+  carrier_name: string | null;
+  claim_id: string | null;
+  freedom_claim_number: string | null;
+};
+
 export function RevenueSummary() {
   const { tenant } = useTenant();
 
@@ -33,15 +52,18 @@ export function RevenueSummary() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("check_intake_items")
-        .select("id, amount, status, deposited_at, check_number, carrier_name, claim_id, freedom_claim_number")
+        .select(`id, amount, status, deposited_at, check_number, carrier_name, claim_id, freedom_claim_number, ${DEPOSIT_CUSTOMER_SELECT}`)
         .eq("tenant_id", tenant!.id)
         .in("status", ["deposited", "funds_released"])
         .order("deposited_at", { ascending: false });
 
       if (error) throw error;
-      return data ?? [];
+      return (data ?? []) as unknown as RevenueCheck[];
     },
   });
+
+  // Customer (insured) name for each deposit: same source as the Deposited Checks report.
+  const caseInsuredNames = useCaseInsuredNames(depositCaseIds(revenueData ?? []), "revenue-summary");
 
   const { data: disbursementData, isLoading: disbursementLoading } = useQuery({
     queryKey: ["revenue-summary-outgoing", tenant?.id],
@@ -70,15 +92,24 @@ export function RevenueSummary() {
   const { data: paidInvoices, isLoading: invoicesLoading } = usePaidInvoiceRevenue();
 
   const revenueSources = useMemo(() => {
-    const checks = (revenueData ?? []).map((check) => ({
-      key: `check-${check.id}`,
-      at: check.deposited_at as string | null,
-      title: check.freedom_claim_number || displayCase(check.carrier_name) || "—",
-      subtitle: check.carrier_name ? displayCase(check.carrier_name) : null,
-      reference: check.check_number || "—",
-      amount: Number(check.amount || 0),
-      status: check.status === "deposited" ? "Deposited" : "Released",
-    }));
+    const checks = (revenueData ?? []).map((check) => {
+      // Customer first, carrier (and claim #) underneath; carrier when there is no customer name.
+      const label = depositPartyLabel({
+        customerName: depositCustomerName(check, caseInsuredNames),
+        carrierName: check.carrier_name,
+        claimNumber: check.freedom_claim_number,
+        formatCarrier: displayCase,
+      });
+      return {
+        key: `check-${check.id}`,
+        at: check.deposited_at as string | null,
+        title: label.primary,
+        subtitle: label.secondary,
+        reference: check.check_number || "—",
+        amount: Number(check.amount || 0),
+        status: check.status === "deposited" ? "Deposited" : "Released",
+      };
+    });
     const invoices = (paidInvoices ?? []).map((invoice) => ({
       key: `invoice-${invoice.id}`,
       at: invoice.at as string | null,
@@ -91,7 +122,7 @@ export function RevenueSummary() {
     return [...checks, ...invoices].sort(
       (a, b) => (b.at ? new Date(b.at).getTime() : 0) - (a.at ? new Date(a.at).getTime() : 0),
     );
-  }, [revenueData, paidInvoices]);
+  }, [revenueData, paidInvoices, caseInsuredNames]);
 
   // The items behind Total Paid (Expenses): settled splits, paid payroll, payroll speed fees.
   const expenseRows = useMemo(
@@ -211,7 +242,7 @@ export function RevenueSummary() {
               <thead>
                 <tr className="border-b text-xs text-muted-foreground">
                   <th className="text-left p-3 font-medium">Date Received</th>
-                  <th className="text-left p-3 font-medium">Claim / Carrier / Customer</th>
+                  <th className="text-left p-3 font-medium">Customer / Carrier / Claim</th>
                   <th className="text-left p-3 font-medium">Check / Invoice #</th>
                   <th className="text-right p-3 font-medium">Amount</th>
                   <th className="text-right p-3 font-medium">Status</th>
