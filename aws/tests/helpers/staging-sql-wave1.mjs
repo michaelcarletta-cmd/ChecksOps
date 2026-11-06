@@ -201,7 +201,7 @@ export const STAGING_WAVE1 = Object.freeze({
   // it (deploy run 42019363178): already_applied false, precondition_failures [], SQL 142's two policies present.
   // Equal to the derived pre-state.
   sql143: Object.freeze({ wave: 38, approved: '2026-11-05', run: '42020037212', live: 'c62a1b0b337cca713cd8551f1a1c70f507ef451e40731baa6e8479abae51038d', apply_run: '42023495275' }),
-  // Wave 39 (owner approved 2026-11-06, "apply SQL 144 in staging"): SQL 144, an organization reads the send legs
+  // Wave 39 (owner approved 2026-11-06, "record the SQL 144 staging pin"): SQL 144, an organization reads the send legs
   // another organization addressed to it (get_tenant_incoming_transfers). Read at main b5912204f after the executor
   // carried it (deploy run 42303787295): already_applied false, precondition_failures [], the function absent.
   // Equal to the derived pre-state.

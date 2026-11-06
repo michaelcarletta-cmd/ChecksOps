@@ -58,9 +58,9 @@ applied in that environment.
 run 42303787295): `already_applied` false, `precondition_failures` `[]`. Live
 `428d394e88ce45840806f7a6c93ed63d40178c0376c8a70843197bf28dccb88e`: the function absent, everything else in
 place, equal to the derived pre-state; intended `ac458869…`. Recorded in the staging pin
-(`expected_live_definition_sha256`, `execute: true`, wave 39) under the owner's words of 2026-11-06, "apply SQL 144
-in staging". The staging apply is a separate run after this pin is merged and the executor is redeployed carrying
-it, on the owner's words for that run. The production pin stays pending: a read-only production inspect decides
+(`expected_live_definition_sha256`, `execute: true`, wave 39) under the owner's words of 2026-11-06, "record the SQL
+144 staging pin". The staging apply is a separate run after this pin is merged and the executor is redeployed
+carrying it, on the owner's words for that run, "apply SQL 144 in staging". The production pin stays pending: a read-only production inspect decides
 production's pre-state.
 
 **Status:** staging pin execute-authorized (wave 39); not applied anywhere. The production pin is pending.

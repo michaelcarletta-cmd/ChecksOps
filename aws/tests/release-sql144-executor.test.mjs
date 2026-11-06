@@ -125,7 +125,7 @@ test('pin: SQL 144 staging-authorized from its read-live, code-derived, selectab
   assert.equal(spec.choice, 'sql144-tenant-incoming-transfers');
   assert.doesNotMatch(spec.choice, /production/);
   assert.equal(sha(TEXT), pin.source_sha256);
-  // Staging apply authorized (owner approved 2026-11-06, "apply SQL 144 in staging") from staging read-live
+  // Staging apply authorized (owner approved 2026-11-06, "record the SQL 144 staging pin") from staging read-live
   // run 42304378701: already_applied false, precondition_failures []. It read the derived pre-state.
   assertStagingPinState(assert, KEY, pin);
   assert.equal(pin.execute, true);
