@@ -51,7 +51,9 @@ database subnet move). For those:
 An emergency change is one needed to stop an active security incident, data loss or an outage, that
 cannot wait for the normal path.
 
-1. **Who may.** Only the owner, or someone the owner authorizes for that incident by name.
+1. **Who may.** The owner, or Austin Sukanick (backup person, `docs/compliance/BCP_DR.md` §4)
+   when the owner cannot be reached. Anyone else only when the owner authorizes them for that
+   incident by name.
 2. **Minimum.** Make the smallest change that contains the problem. Do not fix forward beyond
    containment.
 3. **Record within 2 business days.** A PR that records what was changed, why, when, by whom, the

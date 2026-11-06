@@ -136,3 +136,9 @@ the owner; do not continue. The Step 1 archive means nothing is lost while it is
 
 Record each step here: who, when (UTC), the evidence listed in the step, and anything that differed
 from the plan.
+
+- **2026-11-06, owner report:** "supabase is not working anymore and nothing is there". The project
+  no longer holds data, so Steps 1 and 2 (export and count comparison) cannot run and are closed as
+  not possible. The AWS production database and private-files bucket are therefore the only copy of
+  the pre-AWS records. Remaining: Step 4 items 2–4 (billing, tokens and secrets, Lovable), then
+  Step 5.
