@@ -24,7 +24,7 @@ const pillars = [
   {
     icon: Lock,
     title: "Encryption everywhere",
-    body: "TLS 1.2+ in transit. AES-256 at rest. Bank account and routing numbers are encrypted at the field level with pgsodium (libsodium) before they ever touch disk — a raw database dump reveals only ciphertext.",
+    body: "TLS in transit. The database and file storage are encrypted at rest (AES-256) with keys held in AWS Key Management Service. Full bank account and routing numbers go straight to our payment partner and are never stored by ChecksOps — we keep only the last four digits. EINs and dates of birth are encrypted again at the application level.",
   },
   {
     icon: Database,
@@ -61,18 +61,18 @@ const bankingControls = [
   },
   {
     icon: FileCheck2,
-    title: "Micro-deposit account validation",
-    body: "WEB Debit Rule compliant. Every recipient bank account is validated with micro-deposits before any ACH debit or credit is originated.",
+    title: "Verified bank accounts only",
+    body: "Every bank account is verified through our ACH partner, Moov, before money moves to or from it. Unverified accounts are blocked from funding and from receiving payments.",
   },
   {
     icon: ShieldCheck,
-    title: "Duplicate & fraud screening",
-    body: "Our deposit rail runs duplicate-check detection and image fraud screening on every deposit. Our ACH processor performs OFAC screening and return management on every ACH.",
+    title: "Deposit risk screening",
+    body: "Every deposit is risk-checked by our deposit partner, CheckAlt. Duplicates, amount mismatches and risk warnings are held for manual review instead of being approved automatically.",
   },
   {
     icon: AlertTriangle,
-    title: "Velocity, volume & return-rate monitoring",
-    body: "NACHA-aligned rolling return-rate tracking, per-tenant volume limits, and behavioral flags. Documented in our ACH Risk and Fraud Monitoring Policy (effective 2026-06-22).",
+    title: "Two-factor money movement & return tracking",
+    body: "Funding, payments, bank changes and deposit approvals require an authenticator code. Each click sends exactly one request, so a retry never pays twice. Bank returns are recorded with their reason code and reviewed against NACHA thresholds under our ACH Risk and Fraud Monitoring Policy.",
   },
 ];
 
@@ -96,12 +96,12 @@ const compliance = [
 ];
 
 const vendors = [
-  { name: "Supabase / Lovable Cloud", purpose: "Database, auth, storage, edge compute" },
-  { name: "Bank-grade deposit processor", purpose: "Remote check deposit rail" },
-  { name: "ACH origination partner", purpose: "ACH disbursement rail" },
-  { name: "OpenAI", purpose: "AI inference on redacted claim text" },
-  { name: "Tavily", purpose: "Non-PII web search" },
-  { name: "Resend / Mailgun", purpose: "Transactional email delivery" },
+  { name: "Amazon Web Services", purpose: "Hosting, sign-in, database, file storage, encryption keys and logging (United States)" },
+  { name: "Moov", purpose: "ACH payments, wallet funding, and business, identity and bank verification" },
+  { name: "CheckAlt", purpose: "Remote check deposit" },
+  { name: "Microsoft Azure", purpose: "Reading check images" },
+  { name: "Resend", purpose: "Transactional email delivery" },
+  { name: "OpenAI", purpose: "AI features, only for companies that add their own OpenAI key" },
 ];
 
 export default function CheckOpsSecurity() {
@@ -255,7 +255,7 @@ export default function CheckOpsSecurity() {
       <section className="mx-auto max-w-6xl px-4 md:px-6 py-10 border-t border-border/40">
         <div className="mb-6">
           <h2 className="text-2xl md:text-3xl font-bold tracking-tight">Subprocessors</h2>
-          <p className="text-muted-foreground mt-2">Every vendor operates under a written addendum with annual security review. Access is revoked within 24 hours of contract termination.</p>
+          <p className="text-muted-foreground mt-2">Each vendor is reviewed for security at least once a year. Access is revoked within 24 hours of contract termination.</p>
         </div>
         <div className="rounded-xl border border-border/60 overflow-hidden">
           <table className="w-full text-sm">
@@ -287,7 +287,8 @@ export default function CheckOpsSecurity() {
             </div>
             <p className="text-sm text-muted-foreground leading-relaxed max-w-3xl">
               Documented Detection → Containment → Eradication → Recovery → Post-mortem playbook,
-              tabletop-exercised annually. Retention purge runs nightly against closed claims per each tenant's configured retention window (default seven years).
+              tabletop-exercised annually. Affected companies are notified within 72 hours of a confirmed
+              breach. Claim, check and payment records are kept for seven years, then securely deleted.
             </p>
             <p className="text-sm mt-4">
               Report a security concern:{" "}

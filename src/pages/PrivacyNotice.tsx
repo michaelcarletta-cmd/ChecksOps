@@ -150,12 +150,12 @@ export default function PrivacyNotice() {
 
             <section>
               <h3 className="font-semibold">Your rights</h3>
-              <p>You may request a copy of the personal information we hold about you, request corrections, or ask us to delete information that is no longer required for an active claim or by law. Contact your claims representative or email <strong>privacy@checksops.com</strong>.</p>
+              <p>You may request a copy of the personal information we hold about you, request corrections, or ask us to delete information that is no longer required for an active claim or by law. Contact your claims representative or email <strong>support@checksops.com</strong>.</p>
             </section>
 
             <section>
               <h3 className="font-semibold">Questions?</h3>
-              <p>Email <strong>privacy@checksops.com</strong> or call your claims representative. To report a suspected security incident, email <strong>security@checksops.com</strong>.</p>
+              <p>Email <strong>support@checksops.com</strong> or call your claims representative. To report a suspected security incident, email <strong>security@checksops.com</strong>.</p>
             </section>
           </CardContent>
         </Card>
