@@ -1,0 +1,27 @@
+{
+  "workstream_id": "production-ocr-payee-address-split-applied",
+  "authorization": "Record only (2026-11-06): the bytes below are live. Nothing is planned or authorized by this manifest; any later change to these members needs its own manifest, staging acceptance and owner approval.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "OCR payee address split (#1643, owner check 2f676a72) applied. Applied 2026-11-06 from main 3d008d2a6 (the merge of #1643) in plan order: ocr-parse.mjs, check-ocr-provider.mjs, ocr-descriptive-persist.mjs. Each apply run concluded success including its \"Verify live member is the accepted bytes\" step (state VERIFIED) and the public production smoke. ocr-parse.mjs: staging acceptance run 42257524035; production preflight inspect run 42258549317 (READY, 29e224f5 live, RevisionId 8b2aa74a-a0df-4ef7-9a26-cd4f22fa4551, CodeSha256 /FpP3YaTsEFjyDR9PAiRLKaVwvRoDjeMHEt4rJZQBOA=); production apply run 42258672351 (29e224f5 -> c0c07101) on the owner's \"DEPLOY ocr-parse.mjs TO PRODUCTION\", VERIFIED, after CodeSha256 sqhkJMgBCXgVlpPn4Rb7nwJtXh5zyv5d4OqYGP7g8n4= RevisionId 4ec10aab-fa71-4b6b-a937-43fa3d9b0184; re-inspect run 42258823388 read c0c07101 live (RevisionId 4ec10aab-fa71-4b6b-a937-43fa3d9b0184, same CodeSha256). check-ocr-provider.mjs: staging acceptance run 42257917195; production preflight inspect run 42258980823 (READY, 2d2eaa6a live, RevisionId 4ec10aab-fa71-4b6b-a937-43fa3d9b0184); production apply run 42259071814 (2d2eaa6a -> 34d186fb) on the owner's \"DEPLOY check-ocr-provider.mjs TO PRODUCTION\", VERIFIED, after CodeSha256 yoWNAzeVHAZ1axirBmVmAbBFAYFZCU1qZIhP4aZ/Xxw= RevisionId 11e8573d-1aef-4c68-8a3e-e9d9c98f7464; re-inspect run 42259223932 read 34d186fb live (RevisionId 11e8573d-1aef-4c68-8a3e-e9d9c98f7464, same CodeSha256). ocr-descriptive-persist.mjs: staging acceptance run 42258265261; production preflight inspect run 42259339583 (READY, ba38a287 live, RevisionId 11e8573d-1aef-4c68-8a3e-e9d9c98f7464); production apply run 42259434861 (ba38a287 -> f2fcee92) on the owner's \"DEPLOY ocr-descriptive-persist.mjs TO PRODUCTION\", VERIFIED, after CodeSha256 j3KolFXf7WfYAn0vnr3EXVK0kTrZFJOJJJaFXpPCz9I= RevisionId 66d48b29-71b7-411f-b638-99ca45b48514; re-inspect run 42259553132 read f2fcee92 live (RevisionId 66d48b29-71b7-411f-b638-99ca45b48514, same CodeSha256). No SQL; ocr.mjs and index.mjs untouched. Each row records the applied bytes as live_sha256 and accepted_sha256 and chains to the manifest that planned it (previous_manifest), which keeps the pre-apply state.",
+  "members": {
+    "ocr-parse.mjs": {
+      "live_sha256": "c0c07101ec53395f0d66b4d508c81785a8a0f2700c1ce8e75405b7e9076ddf51",
+      "accepted_sha256": "c0c07101ec53395f0d66b4d508c81785a8a0f2700c1ce8e75405b7e9076ddf51",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-ocr-payee-address-split-manifest-2026-11-06.json"
+    },
+    "check-ocr-provider.mjs": {
+      "live_sha256": "34d186fb9804a1d2d1db91b92ff07a6ee9a817216f1e9046864e33e06c4f939f",
+      "accepted_sha256": "34d186fb9804a1d2d1db91b92ff07a6ee9a817216f1e9046864e33e06c4f939f",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-ocr-payee-address-split-manifest-2026-11-06.json"
+    },
+    "ocr-descriptive-persist.mjs": {
+      "live_sha256": "f2fcee929d3bd6899ca8880b818c697845d7f1991b896af0571e5666f87391e6",
+      "accepted_sha256": "f2fcee929d3bd6899ca8880b818c697845d7f1991b896af0571e5666f87391e6",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-ocr-payee-address-split-manifest-2026-11-06.json"
+    }
+  }
+}

@@ -6080,10 +6080,12 @@ test('Public demo request (owner 2026-11-05): ADD public-demo-request.mjs, then 
   assert.match(routerSource, /case 'demo-request':\n\s+return handlePublicDemoRequest\(event\);/);
 });
 
-test('OCR payee address split (2026-11-06, check 2f676a72): ocr-parse.mjs, check-ocr-provider.mjs, ocr-descriptive-persist.mjs REPLACE the bytes the fourth production rebuild put live, planning only', async () => {
+test('OCR payee address split (2026-11-06, check 2f676a72): ocr-parse.mjs, check-ocr-provider.mjs, ocr-descriptive-persist.mjs REPLACE the bytes the fourth production rebuild put live; production runs 42258672351, 42259071814 and 42259434861 applied them', async () => {
   const MEMBERS = ['ocr-parse.mjs', 'check-ocr-provider.mjs', 'ocr-descriptive-persist.mjs'];
   const MANIFEST_REL = 'aws/tests/fixtures/production-ocr-payee-address-split-manifest-2026-11-06.json';
+  const APPLIED_REL = 'aws/tests/fixtures/production-ocr-payee-address-split-applied-manifest-2026-11-06.json';
   const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, MANIFEST_REL), 'utf8'));
+  const applied = JSON.parse(fs.readFileSync(path.join(ROOT, APPLIED_REL), 'utf8'));
   assert.equal(manifest.workstream_id, 'production-ocr-payee-address-split');
   assert.equal(manifest.deploy_authorized, false);
   assert.match(manifest.authorization, /^Pending owner review \(2026-11-06\)\. Planning only/);
@@ -6091,19 +6093,37 @@ test('OCR payee address split (2026-11-06, check 2f676a72): ocr-parse.mjs, check
     assert.ok(manifest.notes.includes(evidence), evidence);
   }
   assert.deepEqual(Object.keys(manifest.members), MEMBERS);
+  // Applied 2026-11-06 in plan order: the record keeps the run evidence; the rows expect the applied bytes and name it.
+  assert.equal(applied.workstream_id, 'production-ocr-payee-address-split-applied');
+  assert.equal(applied.deploy_authorized, false);
+  assert.match(applied.authorization, /^Record only \(2026-11-06\)/);
+  assert.deepEqual(Object.keys(applied.members), MEMBERS);
+  for (const runId of ['42257524035', '42258549317', '42258672351', '42258823388', '42257917195', '42258980823', '42259071814', '42259223932', '42258265261', '42259339583', '42259434861', '42259553132']) {
+    assert.match(applied.notes, new RegExp(`run ${runId}`), runId);
+    assert.match(PLAN.notes, new RegExp(runId), runId);
+  }
+  for (const evidence of ['"DEPLOY ocr-parse.mjs TO PRODUCTION"', '"DEPLOY check-ocr-provider.mjs TO PRODUCTION"', '"DEPLOY ocr-descriptive-persist.mjs TO PRODUCTION"', '8b2aa74a-a0df-4ef7-9a26-cd4f22fa4551', '4ec10aab-fa71-4b6b-a937-43fa3d9b0184', '11e8573d-1aef-4c68-8a3e-e9d9c98f7464', '66d48b29-71b7-411f-b638-99ca45b48514', 'j3KolFXf7WfYAn0vnr3EXVK0kTrZFJOJJJaFXpPCz9I=', 'VERIFIED']) {
+    assert.ok(applied.notes.includes(evidence), evidence);
+  }
+  assert.ok(PLAN.notes.includes('The three OCR rows expect the applied bytes and name the applied record.'));
   // The OCR members come directly before the portal-signing members (which wait on them in plan order),
   // ocr-parse.mjs first (the other two import separatePayeeAddress from it); the Moov send tail stays last.
   const at = PLAN.order.indexOf('homeowner-signing-integration.mjs');
   assert.deepEqual(PLAN.order.slice(at - 3, at), MEMBERS);
   assert.ok(PLAN.notes.includes('the four portal-signing members (held on SQL 127) now wait on the OCR members in plan order'));
   assert.deepEqual(PLAN.order.slice(-3), ['providers/production/moov-wallet-fund.mjs', 'providers/production/moov-send.mjs', 'providers.mjs']);
+  // The plan as it stood before the applies (the rebuild's bytes expected live, the planning manifest named).
+  const before = structuredClone(PLAN);
   for (const member of MEMBERS) {
     const accepted = sha(`aws/functions/api/${member}`);
     const live = manifest.members[member].live_sha256;
     assert.notEqual(accepted, live, member);
     assert.deepEqual(manifest.members[member], { live_sha256: live, accepted_sha256: accepted, operation: 'replace' }, member);
-    assert.deepEqual(PLAN.members[member], { operation: 'replace', accepted_sha256: accepted, expected_live_sha256: live, sql_before: null, manifest: MANIFEST_REL }, member);
+    assert.deepEqual(applied.members[member], { live_sha256: accepted, accepted_sha256: accepted, operation: 'replace', previous_manifest: MANIFEST_REL }, member);
+    assert.deepEqual(PLAN.members[member], { operation: 'replace', accepted_sha256: accepted, expected_live_sha256: accepted, sql_before: null, manifest: APPLIED_REL }, member);
+    before.members[member] = { ...PLAN.members[member], expected_live_sha256: live, manifest: MANIFEST_REL };
     assert.ok(manifest.notes.includes(`${member} ${live.slice(0, 8)} -> ${accepted.slice(0, 8)}`), member);
+    assert.ok(applied.notes.includes(`${live.slice(0, 8)} -> ${accepted.slice(0, 8)}`), member);
     assert.ok(PLAN.notes.includes(`${member} ${live.slice(0, 8)} -> ${accepted.slice(0, 8)}`), member);
     assert.equal(resolvePlannedMember(member, { root: ROOT, plan: PLAN }).ok, true, member);
   }
@@ -6116,24 +6136,29 @@ test('OCR payee address split (2026-11-06, check 2f676a72): ocr-parse.mjs, check
   assert.ok(PLAN.do_not_overlay.includes('ocr.mjs'));
   assert.ok(PLAN.notes.includes('OCR payee address split (2026-11-06'));
   for (const member of MEMBERS) {
+    const live = manifest.members[member].live_sha256;
     const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: member };
-    assert.equal((await run(inspect, { root: ROOT, inspectLive: liveFor(member) })).state, 'READY', member);
+    // Before the apply, the planned row took the rebuild's bytes as READY.
+    assert.equal((await run(inspect, { root: ROOT, plan: before, inspectLive: liveFor(member, { plan: before }) })).state, 'READY', member);
+    // Now the applied bytes are accepted; the pre-apply bytes, or anything else, are a reconciliation stop.
     assert.equal((await run(inspect, { root: ROOT, inspectLive: liveFor(member, { sha256: sha(`aws/functions/api/${member}`) }) })).state, 'ALREADY_ACCEPTED', member);
-    await assert.rejects(
-      run(inspect, { root: ROOT, inspectLive: liveFor(member, { sha256: 'e'.repeat(64) }) }),
-      (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
-      member,
-    );
-    // With every earlier member at its accepted bytes, the apply is ready (test doubles: no mutation).
-    const { deps, calls } = applyDeps(member);
-    const result = await run(applyEnv(member), deps);
+    for (const other of [live, 'e'.repeat(64)]) {
+      await assert.rejects(
+        run(inspect, { root: ROOT, inspectLive: liveFor(member, { sha256: other }) }),
+        (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+        member,
+      );
+    }
+    // The apply as it stood (with every earlier member at its accepted bytes) was ready (test doubles: no mutation).
+    const { deps, calls } = applyDeps(member, { plan: before });
+    const result = await run(applyEnv(member, { CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: live }), deps);
     assert.equal(result.mutation, false, member);
     assert.deepEqual(calls.receipt.owned_member_ops, { replace: [member], add: [] }, member);
   }
-  // check-ocr-provider.mjs waits for ocr-parse.mjs: until ocr-parse.mjs is the accepted bytes, the order gate refuses.
-  const held = applyDeps('check-ocr-provider.mjs', { pending: ['ocr-parse.mjs'] });
+  // check-ocr-provider.mjs waited for ocr-parse.mjs: until ocr-parse.mjs was the accepted bytes, the order gate refused.
+  const held = applyDeps('check-ocr-provider.mjs', { plan: before, pending: ['ocr-parse.mjs'] });
   await assert.rejects(
-    run(applyEnv('check-ocr-provider.mjs'), held.deps),
+    run(applyEnv('check-ocr-provider.mjs', { CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: manifest.members['check-ocr-provider.mjs'].live_sha256 }), held.deps),
     (error) => error.code === CODES.DEPLOYMENT_COLLISION && error.details.pending.includes('ocr-parse.mjs'),
   );
 });
