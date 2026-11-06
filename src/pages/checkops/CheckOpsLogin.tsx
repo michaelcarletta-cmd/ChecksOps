@@ -18,6 +18,7 @@ import { signInWithAwsPasskey } from "@/lib/awsPasskeys";
 import { passkeysSupported, sendMagicLink, signInWithPasskey } from "@/lib/passkeys";
 import { classifyLoginMemberships, INACTIVE_ORG_LOGIN_MESSAGE, NO_MEMBERSHIP_LOGIN_MESSAGE, type LoginMembershipRow } from "@/lib/loginMembership";
 import { readPendingAwsEmailOtp, startAwsEmailOtp, verifyAwsEmailOtp } from "@/lib/awsPasswordless";
+import { isNativeApp } from "@/lib/nativeApp";
 
 /** Passwordless ChecksOps sign-in. AWS staging: Cognito WebAuthn + EMAIL_OTP only. No password path. */
 export default function CheckOpsLogin() {
@@ -171,7 +172,7 @@ export default function CheckOpsLogin() {
                 : "Two-factor verification is still required before any money moves."}</p>
             </form>
           )}
-          <div className="mt-6 pt-4 border-t border-border/40 flex flex-col items-center gap-1"><Button variant="ghost" size="sm" asChild className="text-xs text-muted-foreground"><Link to="/signup">Need an account? Create one</Link></Button><Button variant="ghost" size="sm" asChild className="text-xs text-muted-foreground"><Link to="/"><ArrowLeft className="h-3 w-3 mr-1" /> Back to checksops.com</Link></Button></div>
+          <div className="mt-6 pt-4 border-t border-border/40 flex flex-col items-center gap-1"><Button variant="ghost" size="sm" asChild className="text-xs text-muted-foreground"><Link to="/signup">Need an account? Create one</Link></Button>{/* In the app, / is this login screen, so there is no website to go back to. */}{!isNativeApp() && <Button variant="ghost" size="sm" asChild className="text-xs text-muted-foreground"><Link to="/"><ArrowLeft className="h-3 w-3 mr-1" /> Back to checksops.com</Link></Button>}</div>
         </CardContent>
       </Card>
     </div>

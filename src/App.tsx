@@ -222,7 +222,7 @@ const App = () => (
           <AuthProvider>
             <RemoteChangeCursor />
             <StepUpProvider>
-              <ThemeScope>
+              <ThemeScope className="app-shell">
                 <AwsStagingBanner />
                 <RecoveryHashRedirect />
                 <PlatformAnnouncementBanner />

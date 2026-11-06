@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import { AppErrorBoundary } from "./components/AppErrorBoundary";
 import { isCheckOpsHost, isMortgageOpsHost } from "./lib/checkopsHost";
+import { applyNativeAppShell } from "./lib/nativeApp";
 import "@fontsource/dancing-script/latin-400.css";
 import "@fontsource/dancing-script/latin-700.css";
 import "./index.css";
@@ -25,6 +26,9 @@ if (typeof window !== "undefined") {
     if (twitterTitle) twitterTitle.setAttribute("content", "ChecksOps");
   }
 }
+
+// iOS/Android app only: app-only styles and safe-area insets (the website is unchanged).
+applyNativeAppShell();
 
 createRoot(document.getElementById("root")!).render(
   <AppErrorBoundary>
