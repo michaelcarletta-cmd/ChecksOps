@@ -2,7 +2,14 @@
  * Dual-provider check OCR: Textract (descriptive fallback + printed/claim)
  * + Azure (structured MICR and Azure-native descriptive fields).
  */
-import { cleanPayeeLine, digitsOnly, parseCheckFields, sanitizeCarrierName, splitPayees } from './ocr-parse.mjs';
+import {
+  cleanPayeeLine,
+  digitsOnly,
+  parseCheckFields,
+  sanitizeCarrierName,
+  separatePayeeAddress,
+  splitPayees,
+} from './ocr-parse.mjs';
 import { runTextract } from './textract-check-ocr.mjs';
 import { analyzeAzureCheck, redactOcrLog } from './azure-check-ocr.mjs';
 import { emptyAzureMicr, normalizeAzureMicr } from './ocr-normalize-azure.mjs';
@@ -114,6 +121,7 @@ export const mergeCheckExtraction = ({
     claim_number: textractSnap.claim_number,
     detected_claim_number: textractSnap.detected_claim_number,
     payee_line: textractSnap.payee_line,
+    payee_address: null,
     payees: textractSnap.payees,
     bank_name: textractSnap.bank_name,
     memo: textractSnap.memo,
@@ -176,7 +184,11 @@ export const mergeCheckExtraction = ({
       const azurePayee = cleanPayeeLine(supp.payee_line);
       const textractPayee = cleanPayeeLine(textractSnap.payee_line);
       if (azurePayee) {
-        canonical.payee_line = azurePayee;
+        // Store only the names on payee_line; the mailing address scanned
+        // after them goes to payee_address.
+        const split = separatePayeeAddress(azurePayee);
+        canonical.payee_line = split.names;
+        canonical.payee_address = split.address;
         canonical.payees = splitPayees(azurePayee);
         canonical.filled_from_azure.push(key);
         if (!canonical.filled_from_azure.includes('payees')) canonical.filled_from_azure.push('payees');
@@ -186,11 +198,14 @@ export const mergeCheckExtraction = ({
           canonical.field_confidence[key] = azureMicr.field_confidence[key];
         }
       } else if (textractPayee) {
-        canonical.payee_line = textractPayee;
+        const split = separatePayeeAddress(textractPayee);
+        canonical.payee_line = split.names;
+        canonical.payee_address = split.address;
         canonical.payees = splitPayees(textractPayee);
         descriptive_sources[key] = texLabel;
       } else {
         canonical.payee_line = null;
+        canonical.payee_address = null;
         descriptive_sources[key] = 'none';
       }
       continue;

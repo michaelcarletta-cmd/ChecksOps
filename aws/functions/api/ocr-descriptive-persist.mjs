@@ -12,6 +12,10 @@
  *
  * S14: payee_line writes go through resolveWritablePayeeLine so deposited
  * checks cannot change payee_line.
+ *
+ * payee_line holds only the payee names. A mailing address scanned after the
+ * names (separatePayeeAddress) goes to payee_address, and only when that
+ * column is still empty and the check is not deposited.
  */
 import {
   cleanPayeeLine,
@@ -20,6 +24,7 @@ import {
   matchKnownCarrier,
   normalizeAmount,
   sanitizeCarrierName,
+  separatePayeeAddress,
 } from './ocr-parse.mjs';
 import {
   normalizeClaimNumber,
@@ -30,6 +35,7 @@ import { resolveWritablePayeeLine } from './check-deposited.mjs';
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MAX_PAYEE_NAME = 200;
+const MAX_PAYEE_ADDRESS = 2000;
 
 const isUuid = (value) => UUID_RE.test(String(value || ''));
 
@@ -96,6 +102,23 @@ const persistCode = ({
   `date_${issueDatePersisted ? 1 : 0}_ins_${inserted}_skip_${skipped}_multi_${multiPayeeSet ? 1 : 0}_claim_${claim}_amt_${amount}`
 );
 
+/**
+ * Names-only payee_line plus the separated mailing address. Uses the
+ * canonical payee_address when check-ocr-provider already split it,
+ * otherwise separates the scanned line here.
+ */
+export const splitPayeeLineAddress = (parsed = {}) => {
+  const raw = cleanPayeeLine(parsed.payee_line) || parsed.payee_line;
+  const split = separatePayeeAddress(raw);
+  const names = normalizeDescriptiveText(split.names);
+  const addressSource = parsed.payee_address || split.address;
+  // Addresses keep their scanned case (state codes stay upper case).
+  const address = addressSource
+    ? String(addressSource).replace(/\s+/g, ' ').trim().slice(0, MAX_PAYEE_ADDRESS)
+    : null;
+  return { names: names || null, address: address || null };
+};
+
 export const persistOcrDescriptiveHandoff = async ({
   client,
   checkId,
@@ -123,12 +146,15 @@ export const persistOcrDescriptiveHandoff = async ({
   const alias = matchKnownCarrier(parsed.carrier_name);
   const carrierGate = sanitizeCarrierName(parsed.carrier_name);
   const carrierName = alias || (carrierGate ? normalizeDescriptiveText(parsed.carrier_name) : null);
+  const payeeSplit = splitPayeeLineAddress(parsed);
   const resolvedPayee = await resolveWritablePayeeLine(
     client,
     checkId,
-    normalizeDescriptiveText(cleanPayeeLine(parsed.payee_line) || parsed.payee_line),
+    payeeSplit.names,
   );
   const payeeLine = resolvedPayee.value;
+  const payeeAddress = payeeSplit.address;
+  let payeeAddressCode = 'none';
   const clearBadCarrier = !carrierName && (
     looksLikeSecurityDisclaimer(parsed.carrier_name)
     || looksLikeBankName(parsed.carrier_name)
@@ -214,6 +240,30 @@ export const persistOcrDescriptiveHandoff = async ({
     );
   }
 
+  if (payeeAddress && (resolvedPayee.locked === true || resolvedPayee.deposited === true)) {
+    payeeAddressCode = 'deposited';
+  } else if (payeeAddress) {
+    // Fill payee_address only while it is empty and the check is not
+    // deposited (re-checked in the UPDATE, as for payee_line); a value
+    // someone already entered is never replaced.
+    try {
+      await client.query('SAVEPOINT ocr_payee_address');
+      const res = await client.query(
+        `UPDATE public.check_intake_items
+         SET payee_address = $2::text, updated_at = now()
+         WHERE id = $1::uuid
+           AND deposited_at IS NULL
+           AND (payee_address IS NULL OR btrim(payee_address) = '')`,
+        [checkId, payeeAddress],
+      );
+      payeeAddressCode = Number(res?.rowCount) > 0 ? 'written' : 'kept';
+      await client.query('RELEASE SAVEPOINT ocr_payee_address');
+    } catch {
+      try { await client.query('ROLLBACK TO SAVEPOINT ocr_payee_address'); } catch { /* ignore */ }
+      payeeAddressCode = 'unavailable';
+    }
+  }
+
   const existing = (await client.query(
     `SELECT id, payee_name
      FROM public.check_payees
@@ -263,6 +313,7 @@ export const persistOcrDescriptiveHandoff = async ({
     claim_code: claimCode,
     amount_persisted: amountPersisted,
     amount_code: amountCode,
+    payee_address_code: payeeAddressCode,
     code: persistCode({
       issueDatePersisted,
       inserted,
@@ -287,5 +338,6 @@ export const __test__ = {
   normalizePayeeName,
   normalizeIssueDate,
   collectOcrPayeeCandidates,
+  splitPayeeLineAddress,
   persistCode,
 };

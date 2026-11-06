@@ -1,0 +1,24 @@
+{
+  "workstream_id": "production-ocr-payee-address-split",
+  "authorization": "Pending owner review (2026-11-06). Planning only: nothing is live or verified. Each production apply needs its own owner approval, a staging acceptance reference and a read-only production inspect that confirms the live bytes.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Owner report 2026-11-06, production check 2f676a72: the scanned payee line was \"Freedom Adjustment And Karen Lovett 865 Route 33 Business Ste Freehold Nj 07728\". splitPayees tested looksLikeAddress on the whole part \"Karen Lovett 865 Route 33 ... 07728\" before the trailing-address trim, so that payee was dropped and only Freedom Adjustment was inserted (production log ocr_descriptive_persist code date_1_ins_1_skip_0_multi_0). Owner ask: \"Can the system differentiate between names and address for the pay e-line? I don't want the address to keep showing up on a pay e-line, even though it's there\". ocr-parse.mjs adds separatePayeeAddress (conservative: a street number followed by a street or unit word, a PO Box, or a street address ending in a state and ZIP; entity suffixes N.A., ISAOA/ATIMA, LLC, Inc are kept; ordinals such as 21st never start an address) and splitPayees trims the address per part before the address skip. check-ocr-provider.mjs sets the canonical payee_line to the names only and payee_address to the separated address. ocr-descriptive-persist.mjs writes the names to payee_line (S14 lock unchanged) and the address to check_intake_items.payee_address only when that column is empty and the check is not deposited, under its own savepoint. payee_address is in the API write allowlist and in the SQL 89 column UPDATE grant (applied in production 2026-10-16); no SQL. REPLACE ocr-parse.mjs 29e224f5 -> c0c07101, check-ocr-provider.mjs 2d2eaa6a -> 34d186fb, ocr-descriptive-persist.mjs ba38a287 -> f2fcee92, in that order (check-ocr-provider.mjs and ocr-descriptive-persist.mjs import separatePayeeAddress from ocr-parse.mjs, so ocr-parse.mjs must be live first). live_sha256 is main's bytes since the 2026-10-21 reconciliation (f6a45889f), which every production full-package rebuild since carried; the last, apply run 41469896446 (2026-11-02, main 1364af787, VERIFIED, CodeSha256 TQowoiwSTGO+SBFVbzpKabESHfDOF5+pLOBXwT7Y0No=, RevisionId 870cc791-522b-49ee-bb04-4dd4fecc8510), lists none of the three as changed (pre-inspect 41463084601: 189 same, 16 changed). A read-only production overlay inspect must confirm each live member before any apply. ocr.mjs (do_not_overlay) is unchanged and imports these modules as before. Staging acceptance: not yet run.",
+  "members": {
+    "ocr-parse.mjs": {
+      "live_sha256": "29e224f5cec8f29f9d19a9eba115e2ca340b78cc5f53444f4ada4382140070e5",
+      "accepted_sha256": "c0c07101ec53395f0d66b4d508c81785a8a0f2700c1ce8e75405b7e9076ddf51",
+      "operation": "replace"
+    },
+    "check-ocr-provider.mjs": {
+      "live_sha256": "2d2eaa6a4deb02b257f2928d71cc6b6d3f501ee480adb479266bd0930f41e2dc",
+      "accepted_sha256": "34d186fb9804a1d2d1db91b92ff07a6ee9a817216f1e9046864e33e06c4f939f",
+      "operation": "replace"
+    },
+    "ocr-descriptive-persist.mjs": {
+      "live_sha256": "ba38a287cd5d0ef01fd828e9ca796e7027821ac91bf73fcef98671088aaf43fd",
+      "accepted_sha256": "f2fcee929d3bd6899ca8880b818c697845d7f1991b896af0571e5666f87391e6",
+      "operation": "replace"
+    }
+  }
+}
