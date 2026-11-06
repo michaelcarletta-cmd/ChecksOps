@@ -447,9 +447,11 @@ const listPasskeys = async (accessToken) => {
 
 export const handleMfaStatus = async (event, deps = {}) => {
   const identity = deps.withIdentityWrite || withIdentityWrite;
-  return identity(event, async ({ client, mapping }) => {
+  return identity(event, async ({ client, mapping, claims }) => {
     try {
       const row = await statusRow(client, mapping.application_user_id);
+      const { loginMfaState } = await import('./login-mfa.mjs');
+      const loginMfa = await (deps.loginMfaState || loginMfaState)({ client, mapping, claims });
       // Cognito MFA list is injected as enabled to prove enrollment ignores it.
       const enrollment = evaluateFinancialTotpEnrollment({
         verifiedAt: row?.verified_at || null,
@@ -476,6 +478,7 @@ export const handleMfaStatus = async (event, deps = {}) => {
           passkeyCount,
         }),
         source: 'financial_totp_enrollments',
+        loginMfa: { required: loginMfa.required, satisfied: loginMfa.satisfied },
         ...publicStatus,
         ...financialGate(),
       };
@@ -703,6 +706,13 @@ export const resolveFinancialStepUpBinding = async ({ client, mapping, claims, b
     serverAmountCentsFromCheck,
   } = await import('./providers/production/checkalt-authz.mjs');
   const actionKey = String(body.action_key || body.actionKey || CHECKALT_TOTP_ACTION);
+  const { LOGIN_MFA_ACTION } = await import('./login-mfa.mjs');
+  if (actionKey === LOGIN_MFA_ACTION) {
+    // Login MFA: bound to this login only, no tenant (login-mfa.mjs).
+    const session = await resolveLoginSessionBinding({ claims, spoof });
+    if (!session.ok) return session;
+    return { ok: true, kind: 'login_session', tenantId: null, loginSession: session.loginSession, actionKey: LOGIN_MFA_ACTION };
+  }
   const { WALLET_FUND_TOTP_ACTION } = await import('./providers/production/moov-fund-authz.mjs');
   if (actionKey === WALLET_FUND_TOTP_ACTION) {
     return resolveWalletFundStepUpBinding({ client, mapping, claims, body, spoof });

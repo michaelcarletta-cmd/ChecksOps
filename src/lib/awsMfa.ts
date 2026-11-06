@@ -1,14 +1,37 @@
-import { AWS_STAGING_AUTH_SESSION_KEY, awsApiBaseUrl, isAwsStaging } from "@/lib/awsStaging";
+import {
+  AWS_STAGING_AUTH_SESSION_KEY,
+  AWS_STAGING_MORTGAGE_AUTH_SESSION_KEY,
+  awsApiBaseUrl,
+  isAwsStaging,
+} from "@/lib/awsStaging";
 import { normalizeTotpCode, totpUserFailureMessage } from "@/lib/totpCode";
 
 export type AwsMfaStatus = {
   totpEnrolled: boolean;
   preferredMfa: string | null;
+  /** Login MFA (aws/functions/api/login-mfa.mjs): the API requires the authenticator code after sign-in. */
+  loginMfaRequired: boolean;
+  /** This sign-in has passed the authenticator check. */
+  loginMfaSatisfied: boolean;
 };
+
+/** Step-up purpose for the authenticator check after every sign-in. */
+export const LOGIN_MFA_ACTION = "login.mfa";
 
 export { awsTotpEnrollmentDisplay } from "@/lib/totpEnrollment";
 
-const readSession = (sessionKey = AWS_STAGING_AUTH_SESSION_KEY): {
+/**
+ * The Cognito session the two-factor calls use: Mortgage Desk pages sign in with their own
+ * session (useMortgageAuth), everything else with the default one.
+ */
+export const mfaSessionKey = (pathname?: string): string => {
+  const path = pathname ?? (typeof window !== "undefined" ? window.location.pathname : "");
+  return String(path).startsWith("/mortgage-ops")
+    ? AWS_STAGING_MORTGAGE_AUTH_SESSION_KEY
+    : AWS_STAGING_AUTH_SESSION_KEY;
+};
+
+const readSession = (sessionKey = mfaSessionKey()): {
   accessToken: string | null;
   idToken: string | null;
   userId: string | null;
@@ -61,6 +84,8 @@ export const getAwsMfaStatus = async (): Promise<AwsMfaStatus> => {
   return {
     totpEnrolled: payload.totpEnrolled === true,
     preferredMfa: payload.preferredMfa ? String(payload.preferredMfa) : null,
+    loginMfaRequired: payload.loginMfa?.required === true,
+    loginMfaSatisfied: payload.loginMfa?.satisfied === true,
   };
 };
 

@@ -175,6 +175,8 @@ const assertThirdSectionAccepted = (apiRoot, name, accepted) => {
 const CHANGED_SINCE_FOURTH_PRODUCTION_REBUILD = new Set([
   // Public marketing demo request (2026-11-05): the Class A name demo-request routed to public-demo-request.mjs.
   'app-services.mjs',
+  // Login MFA (2026-11-06): the login.mfa step-up binding and loginMfa in /auth/mfa/status.
+  'auth-financial-totp.mjs',
 ]);
 // Listed changes that go through the production overlay plan, never the current rebuild section.
 const OVERLAY_PLAN_CHANGES = new Set([

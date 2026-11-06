@@ -10,7 +10,6 @@ import {
   KeyRound,
   Database,
   FileCheck2,
-  Building2,
   Users,
   Eye,
   AlertTriangle,
@@ -39,8 +38,8 @@ const pillars = [
   },
   {
     icon: KeyRound,
-    title: "MFA, SSO, and leaked-password protection",
-    body: "TOTP available for every user, required for admin and staff. SAML SSO for enterprise tenants. Have-I-Been-Pwned checks block compromised passwords at signup and reset.",
+    title: "Two-factor sign-in for every user",
+    body: "Passwordless sign-in with an emailed code or a passkey, then a code from an authenticator app, for every user on every sign-in. Money movement asks for the authenticator code again.",
   },
   {
     icon: Eye,
@@ -214,17 +213,16 @@ export default function CheckOpsSecurity() {
           <div>
             <h2 className="text-2xl md:text-3xl font-bold tracking-tight">Access control</h2>
             <p className="text-muted-foreground mt-2">
-              Least-privilege by default. Every role — admin, staff, mortgage agent, contractor, homeowner —
-              only sees what it needs to do its job.
+              Each company is walled off from every other company in the database. Inside a company,
+              every member has the same full access, so who belongs to the company is the control.
             </p>
           </div>
           <div className="space-y-3">
             {[
-              { icon: Users, label: "Role-based permissions enforced in the database (RLS), not just the UI" },
-              { icon: KeyRound, label: "MFA required for admin and staff; TOTP for every user" },
-              { icon: Building2, label: "SAML SSO available for enterprise tenants" },
-              { icon: Server, label: "Idle-timeout, server-side session validation, and remote revocation" },
-              { icon: Eye, label: "Quarterly access reviews of admin and staff lists" },
+              { icon: Users, label: "Company isolation enforced in the database (RLS), not just the UI" },
+              { icon: KeyRound, label: "Authenticator-app code required for every user after every sign-in" },
+              { icon: Server, label: "Server-side session validation, and remote sign-out of a teammate's sessions" },
+              { icon: Eye, label: "Quarterly review of each company's member list" },
             ].map((row) => (
               <div key={row.label} className="flex items-start gap-3 p-3 rounded-lg border border-border/50 bg-card/40">
                 <row.icon className="h-4 w-4 text-primary mt-0.5 shrink-0" />

@@ -17,6 +17,7 @@ import {
   resolveTrustedIdentityScope,
 } from './identity.mjs';
 import { assertTrustedIssuer } from './identity-env.mjs';
+import { enforceLoginMfa } from './login-mfa.mjs';
 import { denyTaxSecretQuery, denyTaxSecretRpc } from './tax-secrets.mjs';
 import { maskAccountNumber, maskTenantAccountRow } from './providers/checkalt-account-mask.mjs';
 
@@ -391,6 +392,14 @@ export const withIdentity = async (event, fn, deps = {}) => {
     refuseSubAsApplicationId(mapping.application_user_id, claimsResult.claims.sub);
     await client.query('SELECT set_config($1, $2, true)', [APP_USER_ID_GUC, mapping.application_user_id]);
     await client.query('SELECT set_config($1, $2, true)', [APP_USER_EMAIL_GUC, appUserEmailForGuc(mapping, claimsResult.claims)]);
+    // Login MFA (login-mfa.mjs): off unless AWS_LOGIN_MFA_REQUIRED is 'true'.
+    const loginMfaRefusal = await (deps.enforceLoginMfa || enforceLoginMfa)({
+      event, client, mapping, claims: claimsResult.claims, spoof,
+    });
+    if (loginMfaRefusal) {
+      await client.query('ROLLBACK');
+      return loginMfaRefusal;
+    }
     const result = await fn({ client, mapping, claims: claimsResult.claims, body, spoof });
     const status = Number(result?.statusCode || (result?.ok === false ? 400 : 200));
     if (commit && result?.ok !== false && status < 400) {

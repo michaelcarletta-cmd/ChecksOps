@@ -17,6 +17,7 @@ import { AUTH_ROUTES } from '../functions/api/auth-cognito.mjs';
 import { ENROLL_EMAIL_CODE_RATE_ACTION, TOTP_CODE_CHECK_RATE_ACTION } from '../functions/api/auth-financial-totp.mjs';
 import { timestepOf, totpAt, wrapKeyFromHex } from '../functions/api/financial-totp.mjs';
 import { CHECKALT_TOTP_ACTION } from '../functions/api/providers/production/checkalt-authz.mjs';
+import { LOGIN_MFA_ACTION, resetLoginMfaCache } from '../functions/api/login-mfa.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const TESTER_EMAIL = 'checksops-tester@freedomadj.com';
@@ -157,6 +158,12 @@ const createStore = ({
       }
       if (text.includes('FROM public.tenant_users')) {
         return { rows: memberships };
+      }
+      if (text.includes('FROM public.financial_stepup_log') && params[1] === 'login.mfa') {
+        const [uid, action, session] = params;
+        const row = [...stepups].reverse().find((s) => s.user_id === uid && s.action_key === action
+          && s.metadata.login_session === session && s.metadata.source === 'app_financial_totp');
+        return { rows: row ? [{ id: row.id, created_at: row.created_at }] : [] };
       }
       if (text.includes('INSERT INTO public.financial_stepup_log')) {
         const row = {
@@ -1150,4 +1157,60 @@ test('finding 8: no verified email refuses setup; a failed enrolled notice never
   assert.equal(verified.ok, true);
   assert.deepEqual(verified.enrollmentNotice, { sent: false, status: 'failed' });
   assert.ok(store.enrollments.get(TESTER_APP).verified_at);
+});
+
+test('login MFA: a login.mfa step-up is recorded against this login with no tenant, and status reports it', async () => {
+  resetLoginMfaCache();
+  const store = createStore();
+  const { code } = await enrollTester(store);
+  const before = await handleMfaStatus(eventOf({}), depsOf(store));
+  assert.deepEqual(before.loginMfa, { required: false, satisfied: false });
+  const stepped = await handleMfaStepUp(eventOf({
+    code,
+    action_key: LOGIN_MFA_ACTION,
+    tenant_id: OTHER_TENANT,
+    check_intake_item_id: CHECK,
+  }), depsOf(store));
+  assert.equal(stepped.ok, true, JSON.stringify(stepped));
+  assert.equal(stepped.recorded, true);
+  assert.equal(stepped.tenant_id, null);
+  assert.equal(stepped.check_id, null);
+  assert.equal(store.stepups.length, 1);
+  assert.equal(store.stepups[0].action_key, LOGIN_MFA_ACTION);
+  assert.equal(store.stepups[0].tenant_id, null);
+  assert.equal(store.stepups[0].metadata.login_session, LOGIN_SESSION);
+  assert.equal(store.stepups[0].metadata.source, 'app_financial_totp');
+  const after = await handleMfaStatus(eventOf({}), depsOf(store));
+  assert.deepEqual(after.loginMfa, { required: false, satisfied: true });
+});
+
+test('login MFA: a step-up from another login does not satisfy this one', async () => {
+  resetLoginMfaCache();
+  const store = createStore();
+  const { code } = await enrollTester(store);
+  await handleMfaStepUp(eventOf({ code, action_key: LOGIN_MFA_ACTION }), depsOf(store));
+  const other = await handleMfaStatus(eventOf({}), depsOf(store, {
+    claims: { sub: TESTER_SUB, email: TESTER_EMAIL, origin_jti: 'origin-jti-login-2' },
+  }));
+  assert.deepEqual(other.loginMfa, { required: false, satisfied: false });
+});
+
+test('login MFA: wrong code and missing login session are refused and record nothing', async () => {
+  resetLoginMfaCache();
+  const store = createStore();
+  await enrollTester(store);
+  const wrong = await handleMfaStepUp(eventOf({ code: '000000', action_key: LOGIN_MFA_ACTION }), depsOf(store));
+  assert.equal(wrong.ok, false);
+  const unbound = await handleMfaStepUp(eventOf({ code: '123456', action_key: LOGIN_MFA_ACTION }), depsOf(store, {
+    claims: { sub: TESTER_SUB, email: TESTER_EMAIL },
+  }));
+  assert.equal(unbound.ok, false);
+  assert.equal(unbound.error, 'login_session_unbound');
+  assert.equal(store.stepups.length, 0);
+});
+
+test('login MFA: a login.mfa step-up does not satisfy the money step-ups (they keep their own check)', async () => {
+  const { WALLET_FUND_TOTP_ACTION } = await import('../functions/api/providers/production/moov-fund-authz.mjs');
+  assert.notEqual(LOGIN_MFA_ACTION, WALLET_FUND_TOTP_ACTION);
+  assert.notEqual(LOGIN_MFA_ACTION, CHECKALT_TOTP_ACTION);
 });
