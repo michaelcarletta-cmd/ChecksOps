@@ -34,7 +34,11 @@ import {
   assertTenantBankSource,
   collectTenantObligation,
   classifyCollectionStatus,
+  idempotentReplayTransfer,
+  logPullStatementFailure,
   receivedCentsFromLegs,
+  savepointQuery,
+  withSavepoint,
 } from './tenant-collection-v2.mjs';
 
 export const BILLING_STATUSES = ['due', 'submitted', 'settled', 'failed', 'returned'];
@@ -1079,20 +1083,30 @@ export async function buildConsolidatedInvoice(client, {
   };
 }
 
+/**
+ * Runs after the pull booked its occurrence, inside the pull's transaction:
+ * each statement has its own savepoint (withSavepoint), so a failed allocation
+ * is logged and skipped without aborting the pull (incident 2026-11-06).
+ */
 export async function allocateInvoiceLines(client, { invoice, invoiceBuild }) {
   if (!invoice?.id || !invoiceBuild?.allocations) return { allocated: 0 };
   let allocated = 0;
   for (const line of invoiceBuild.allocations) {
     if (!line.source_id) continue;
-    const existing = (await client.query(
+    const existing = (await savepointQuery(
+      client,
+      'billing_allocation_lookup',
       `SELECT invoice_id FROM public.tenant_invoice_allocations
        WHERE source_kind = $1 AND source_id = $2::uuid AND fee_type = $3
        LIMIT 1`,
       [line.source_kind, line.source_id, line.fee_type],
-    ).catch(() => ({ rows: [] }))).rows[0];
+      { fallback: { rows: [] } },
+    )).rows[0];
     if (existing && existing.invoice_id !== invoice.id) continue;
     if (!existing) {
-      await client.query(
+      await savepointQuery(
+        client,
+        'billing_allocation_insert',
         `INSERT INTO public.tenant_invoice_allocations (
            invoice_id, tenant_id, billing_period, source_kind, source_id, fee_type,
            unit_price_cents, amount_cents, billed_at
@@ -1103,18 +1117,21 @@ export async function allocateInvoiceLines(client, { invoice, invoiceBuild }) {
           line.source_kind, line.source_id, line.fee_type,
           line.unit_price_cents, line.amount_cents, line.billed_at,
         ],
-      ).catch(() => {});
+        { fallback: null },
+      );
       allocated += 1;
     }
     if (line.source_id) {
-      await setMoneyWriteFlag(client).catch(() => {});
-      await client.query(
-        `UPDATE public.check_billing_events
-         SET invoice_id = $2::uuid, billing_period = COALESCE(billing_period, $3), status = CASE
-           WHEN status = 'recorded' THEN 'invoiced' ELSE status END
-         WHERE id = $1::uuid AND invoice_id IS NULL`,
-        [line.source_id, invoice.id, invoice.billing_period],
-      ).catch(() => {});
+      await withSavepoint(client, 'billing_event_invoice_link', async () => {
+        await setMoneyWriteFlag(client);
+        return client.query(
+          `UPDATE public.check_billing_events
+           SET invoice_id = $2::uuid, billing_period = COALESCE(billing_period, $3), status = CASE
+             WHEN status = 'recorded' THEN 'invoiced' ELSE status END
+           WHERE id = $1::uuid AND invoice_id IS NULL`,
+          [line.source_id, invoice.id, invoice.billing_period],
+        );
+      }, { fallback: null });
     }
   }
   return { allocated };
@@ -1231,7 +1248,9 @@ export async function resolveBillingDebitSource(client, {
     });
   }
 
-  const source = (await client.query(
+  const source = (await savepointQuery(
+    client,
+    'billing_debit_source_lookup',
     `SELECT id, tenant_id, provider_account_id, provider_payment_method_id, provider_bank_account_id,
             rail_payment_method_ids, rails_synced_at
      FROM public.payment_provider_methods
@@ -1239,7 +1258,8 @@ export async function resolveBillingDebitSource(client, {
        AND provider_payment_method_id = $2
      LIMIT 1`,
     [tenantId, storedMethodId],
-  ).catch(() => ({ rows: [] }))).rows[0];
+    { fallback: { rows: [] } },
+  )).rows[0];
   if (!source) {
     return fail('billing_debit_source_unavailable', {
       statusCode: 409,
@@ -1263,13 +1283,16 @@ export async function resolveBillingDebitSource(client, {
   }
 
   const refreshed = source.id
-    ? (await client.query(
+    ? (await savepointQuery(
+      client,
+      'billing_debit_rails_lookup',
       `SELECT rail_payment_method_ids
        FROM public.payment_provider_methods
        WHERE id = $1::uuid
        LIMIT 1`,
       [source.id],
-    ).catch(() => ({ rows: [] }))).rows[0]
+      { fallback: { rows: [] } },
+    )).rows[0]
     : null;
   const freshRails = refreshed?.rail_payment_method_ids;
   const freshDebit = debitRailFromMap(freshRails);
@@ -1401,38 +1424,51 @@ export async function submitOccurrence(client, {
       : 'submitted')
     : (collected.error === 'RECONCILIATION_REQUIRED' ? 'failed' : 'failed');
   const failure = collected.ok ? null : collected.error;
+  // Moov created a transfer whose leg row did not save (or answered with the
+  // transfer an earlier attempt created): the note says so; the status and the
+  // transfer id stay those of money in flight.
+  const legNote = `${collected.persist_failed ? ' · leg_persist_failed' : ''}${collected.idempotent_replay ? ' · moov_idempotent_replay' : ''}`;
 
-  await setMoneyWriteFlag(client);
-  const saved = (await client.query(
-    `UPDATE public.tenant_maintenance_payments SET
-       status = $2,
-       provider_transfer_id = COALESCE($3, provider_transfer_id),
-       submitted_at = CASE WHEN $2 IN ('submitted', 'failed') THEN COALESCE(submitted_at, now()) ELSE submitted_at END,
-       failure_reason = $4,
-       notes = COALESCE(notes, '') || $5
-     WHERE id = $1::uuid
-     RETURNING *`,
-    [
-      occurrence.id,
-      // collected.occurrence is the row as passed in (still due); the collector's
-      // obligation_status is the outcome.
-      collected.obligation_status || providerStatus,
-      providerTransferId,
-      failure,
-      failure
-        ? ` · fail:${failure}`
-        : (providerTransferId ? ` · moov:${providerTransferId}` : ''),
-    ],
-  ).catch(() => ({ rows: [occurrence] }))).rows[0];
+  // Each statement after the provider call runs in its own savepoint
+  // (withSavepoint): a failure is logged and never aborts the pull's
+  // transaction, so the occurrence row and the audit row still commit
+  // (incident 2026-11-06).
+  const saved = (await withSavepoint(client, 'billing_occurrence_submit_update', async () => {
+    await setMoneyWriteFlag(client);
+    return client.query(
+      `UPDATE public.tenant_maintenance_payments SET
+         status = $2,
+         provider_transfer_id = COALESCE($3, provider_transfer_id),
+         submitted_at = CASE WHEN $2 IN ('submitted', 'failed') THEN COALESCE(submitted_at, now()) ELSE submitted_at END,
+         failure_reason = $4,
+         notes = COALESCE(notes, '') || $5
+       WHERE id = $1::uuid
+       RETURNING *`,
+      [
+        occurrence.id,
+        // collected.occurrence is the row as passed in (still due); the collector's
+        // obligation_status is the outcome.
+        collected.obligation_status || providerStatus,
+        providerTransferId,
+        failure,
+        (failure
+          ? ` · fail:${failure}`
+          : (providerTransferId ? ` · moov:${providerTransferId}` : '')) + legNote,
+      ],
+    );
+  }, { fallback: { rows: [occurrence] } })).rows[0];
 
   if ((saved?.status === 'submitted' || collected.ok) && readiness.settings) {
     const nextStart = nextBillingDate(readiness.settings.billing_day_of_month || 1, new Date());
-    await client.query(
+    await savepointQuery(
+      client,
+      'billing_settings_next_period',
       `UPDATE public.tenant_billing_settings
        SET next_period_start = $2::date, updated_at = now()
        WHERE tenant_id = $1::uuid`,
       [occurrence.tenant_id, nextStart],
-    ).catch(() => {});
+      { fallback: null },
+    );
   }
 
   return {
@@ -1554,19 +1590,20 @@ export async function submitVerificationOccurrence(client, {
       return fail(asserted.errors[0], { statusCode: 409, errors: asserted.errors, liveProviderCalled: false });
     }
     debitSource = debit;
+    const metadata = {
+      checksops_kind: 'billing_verification',
+      checksops_tenant_id: occurrence.tenant_id,
+      checksops_verification_id: String(deps.verificationId || '').trim()
+        || String(occurrence.idempotence_key || '').split(':').pop(),
+      checksops_payment_id: occurrence.id,
+    };
     try {
       const created = await postTransfer({
         sourceMethodId: debit.sourceMethodId,
         destMethodId: destination.paymentMethodId,
         amount: BILLING_VERIFICATION_AMOUNT_CENTS,
         description: 'ChecksOps billing verification $1.00',
-        metadata: {
-          checksops_kind: 'billing_verification',
-          checksops_tenant_id: occurrence.tenant_id,
-          checksops_verification_id: String(deps.verificationId || '').trim()
-            || String(occurrence.idempotence_key || '').split(':').pop(),
-          checksops_payment_id: occurrence.id,
-        },
+        metadata,
         idempotencyKey: occurrence.idempotence_key,
         fetchImpl,
         facilitatorAccountId: destination.accountId,
@@ -1576,8 +1613,30 @@ export async function submitVerificationOccurrence(client, {
       providerTransferId = created?.transferID || created?.transferId || providerTransferId;
       providerStatus = 'submitted';
     } catch (error) {
-      failure = error.message || 'moov_request_rejected';
-      providerStatus = 'failed';
+      // Moov's answer to a repeated idempotency key is the transfer it already
+      // created: the same verification debit, so it is submitted, not failed.
+      // Any difference (amount, tenant, kind, verification or payment id)
+      // fails closed.
+      const replay = idempotentReplayTransfer(error, {
+        amountCents: BILLING_VERIFICATION_AMOUNT_CENTS,
+        metadata,
+      });
+      if (replay.replay && replay.ok) {
+        providerTransferId = replay.transferId;
+        providerStatus = 'submitted';
+      } else if (replay.replay) {
+        logPullStatementFailure('moov_transfer_idempotent_replay', { message: 'provider_idempotent_replay_mismatch' }, {
+          kind: 'billing_verification',
+          provider_status_code: replay.status,
+          mismatches: replay.paymentIdMismatch ? [...replay.mismatches, 'checksops_payment_id'] : replay.mismatches,
+          swallowed: false,
+        });
+        failure = 'provider_idempotent_replay_mismatch';
+        providerStatus = 'failed';
+      } else {
+        failure = error.message || 'moov_request_rejected';
+        providerStatus = 'failed';
+      }
     }
   }
 
@@ -1928,6 +1987,7 @@ export async function recordBillingAudit(client, entry, { required = false } = {
     return { ok: true, id: row?.id || null };
   } catch (error) {
     await client.query('ROLLBACK TO SAVEPOINT billing_audit').catch(() => {});
+    logPullStatementFailure('billing_audit', error, { audit_event: entry.event || null, swallowed: true });
     return { ok: false, error: 'billing_audit_failed', message: error.message };
   }
 }
