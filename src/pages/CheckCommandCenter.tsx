@@ -211,6 +211,16 @@ import {
 import { useCheckCommandRealtime } from "@/features/check-command/useCheckCommandRealtime";
 import { optimisticStage, optimisticRemove } from "@/features/check-command/optimistic";
 import { sharedReleasedRows } from "@/features/check-command/sharedFundsReleased";
+import {
+  DISBURSED_SEND_STATUSES,
+  SEND_LEG_ROLES,
+  disbursedCheckIds,
+  sentReleasedRows,
+  sentStillDeposited,
+  NO_CHECK_SENDS,
+  type SendLegLike,
+  type SentCheckLike,
+} from "@/features/check-command/sentFundsReleased";
 import { displayCase, displayCaseOrNull } from "@/lib/displayCase";
 import { useDuplicateChecks } from "@/hooks/useDuplicateChecks";
 import { DuplicateCheckBadge, DuplicateCheckBanner } from "@/components/checks/DuplicateCheckFlag";
@@ -752,6 +762,38 @@ export default function CheckCommandCenter() {
     return () => { supabase.removeChannel(channel); };
   }, [tenantId, sharedIdsKey, qc]);
 
+  // Sends from this organization's own checks (payment_transfers send legs). A check with one
+  // disbursed send moves to Funds Released; Send stays available on it (sentFundsReleased.ts).
+  const { data: checkSends = NO_CHECK_SENDS } = useQuery({
+    queryKey: ["funds-released-sends", tenantId],
+    queryFn: async () => {
+      const { data: legData, error: legErr } = await supabase
+        .from("payment_transfers")
+        .select("id, check_id, leg_role, status, amount_cents, created_at, submitted_at, completed_at, destination_tenant_id, provider_metadata")
+        .eq("tenant_id", tenantId!)
+        .in("leg_role", [...SEND_LEG_ROLES])
+        .in("status", [...DISBURSED_SEND_STATUSES])
+        .order("created_at", { ascending: false })
+        .limit(1000);
+      if (legErr) throw legErr;
+      const legs = ((legData ?? []) as unknown as SendLegLike[]).filter((l) => l?.check_id);
+      const ids = [...disbursedCheckIds(legs)];
+      if (!ids.length) return { legs, checks: [] as SentCheckLike[] };
+      const { data: checkData, error: checkErr } = await supabase
+        .from("check_intake_items")
+        .select(
+          "id, tenant_id, check_number, carrier_name, property_address, funds_type, amount, claim_id, detected_claim_number, payee_line, status, check_stage, claims:claim_id ( claim_number, policyholder_name )",
+        )
+        .eq("tenant_id", tenantId!)
+        .in("id", ids);
+      if (checkErr) throw checkErr;
+      return { legs, checks: (checkData ?? []) as unknown as SentCheckLike[] };
+    },
+    enabled: !!tenantId,
+    refetchInterval: 60_000,
+  });
+  const sentCheckIds = useMemo(() => disbursedCheckIds(checkSends.legs), [checkSends]);
+
   // Fetch claim numbers + policyholder names for any linked claims so search works on them
   const linkedClaimIds = useMemo(() => {
     const ids = new Set<string>();
@@ -881,8 +923,9 @@ export default function CheckCommandCenter() {
     const stage = c.check_stage;
     const checkAltStatus = getCheckAltStatus(c);
     // Once funds have been disbursed, the check belongs in the Funds Released
-    // tab — do NOT show it in Deposited anymore.
+    // tab — do NOT show it in Deposited anymore. One disbursed send is enough.
     if (stage === "funds_released" || stage === "disbursed_externally") return false;
+    if (sentCheckIds.has(c.id)) return false;
     return (s === "deposited" || stage === "deposited" || checkAltStatus === "pending_approval") && matchesSearch(c);
   });
   // On the Deposited tab, merge the paginated owned deposited rows with any
@@ -893,7 +936,7 @@ export default function CheckCommandCenter() {
     // arrive before this paginated query refetches; never let a stale deposited
     // row keep a funds-released check visible in this lane.
     const ownedFiltered = (depositedRows as CheckItem[]).filter(
-      (c) => c.check_stage !== "funds_released" && c.check_stage !== "disbursed_externally" && matchesSearch(c),
+      (c) => c.check_stage !== "funds_released" && c.check_stage !== "disbursed_externally" && !sentCheckIds.has(c.id) && matchesSearch(c),
     );
     const ownedIds = new Set(ownedFiltered.map((c) => c.id));
     const extras = depositedFromAll.filter((c) => !ownedIds.has(c.id));
@@ -952,15 +995,25 @@ export default function CheckCommandCenter() {
   // search or class filter, which the server does not know about.
   const useAggregate = !searchQuery.trim() && classFilter === "all" && !!stageTotals;
   const queueCapped = checks.length >= QUEUE_ROW_CAP;
+  // The server still counts a sent check (check_stage deposited) as Deposited: leave it out.
+  const sentDeposited = sentStillDeposited(checkSends.checks, sentCheckIds);
   const laneCountFor = (key: string, inMemory: CheckItem[]) => {
     if (!stageTotals) return inMemory.length;
-    if (key === "deposited" || queueCapped) return stageTotals.get(key)?.count ?? inMemory.length;
+    if (key === "deposited") {
+      const server = stageTotals.get(key)?.count;
+      return server == null ? inMemory.length : Math.max(0, server - sentDeposited.count);
+    }
+    if (queueCapped) return stageTotals.get(key)?.count ?? inMemory.length;
     return inMemory.length;
   };
   const laneTotalFor = (key: string, inMemory: CheckItem[]) => {
     const inMemoryTotal = inMemory.reduce((s, c) => s + (c.amount ?? 0), 0);
     if (!stageTotals) return inMemoryTotal;
-    if (key === "deposited" || queueCapped) return stageTotals.get(key)?.total ?? inMemoryTotal;
+    if (key === "deposited") {
+      const server = stageTotals.get(key)?.total;
+      return server == null ? inMemoryTotal : Math.max(0, server - sentDeposited.total);
+    }
+    if (queueCapped) return stageTotals.get(key)?.total ?? inMemoryTotal;
     return inMemoryTotal;
   };
   const activeLaneKey =
@@ -1146,9 +1199,11 @@ export default function CheckCommandCenter() {
       // A partner's shared check whose funds the source released has no split of ours: list it
       // from the check itself, or it would leave every tab (sharedFundsReleased.ts).
       const sharedReleased = sharedReleasedRows(sharedChecks as any[], fundsReleased as any[]);
-      return [...(fundsReleased as any[]), ...sharedReleased].filter(matchesSplitSearch);
+      // Sends write payment_transfers legs, not splits: one row per sent check and recipient.
+      const sentReleased = sentReleasedRows(checkSends.legs, checkSends.checks);
+      return [...(fundsReleased as any[]), ...sentReleased, ...sharedReleased].filter(matchesSplitSearch);
     },
-    [fundsReleased, sharedChecks, matchesSplitSearch],
+    [fundsReleased, checkSends, sharedChecks, matchesSplitSearch],
   );
   const filteredFundsReceived = useMemo(
     () => (fundsReceived as any[]).filter(matchesSplitSearch),
@@ -1200,6 +1255,7 @@ export default function CheckCommandCenter() {
   const pollCheckOpsRealtime = useCallback(() => {
     if (!tenantId) return;
     qc.invalidateQueries({ queryKey: ["funds-released", tenantId] });
+    qc.invalidateQueries({ queryKey: ["funds-released-sends", tenantId] });
     qc.invalidateQueries({ queryKey: ["check-intake-items"] });
     qc.invalidateQueries({ queryKey: ["check-intake-items-deposited"] });
     qc.invalidateQueries({ queryKey: ["check-intake-items", "disbursed_externally"] });
@@ -1600,6 +1656,8 @@ export default function CheckCommandCenter() {
                                       <Badge variant="outline" className="text-[10px]">
                                         {split._sharedReleasedBy ? (
                                           <>Updated {split.updated_at ? format(new Date(split.updated_at), "MMM d, yyyy") : "—"}</>
+                                        ) : split._sendStatus ? (
+                                          <>{split._sendStatus === "completed" ? "Settled" : "Sent"} {split._sentAt ? format(new Date(split._sentAt), "MMM d, yyyy") : "—"}</>
                                         ) : (
                                           <>Settled {split.settled_at ? format(new Date(split.settled_at), "MMM d, yyyy") : "—"}</>
                                         )}
@@ -4503,7 +4561,10 @@ function CheckDetailPanel({
               {(() => {
                 const stage = (check as any).check_stage ?? null;
                 const status = (check as any).status ?? null;
-                const isDeposited = stage === "deposited" || status === "deposited";
+                // Released checks stay sendable: money can be sent from a check again after the
+                // first disbursement moved it to Funds Released (owner request 2026-11-06).
+                const isDeposited = stage === "deposited" || status === "deposited"
+                  || stage === "funds_released" || stage === "disbursed_externally";
                 const checkAmt = Number(check.amount ?? 0);
 
                 if (!isOwner) {
