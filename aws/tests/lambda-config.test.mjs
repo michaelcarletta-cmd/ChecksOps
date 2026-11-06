@@ -173,7 +173,7 @@ test('the committed plan keeps the dead credential-key removals (runs 3965802303
     assert.equal(row.inspect.live_revision_id, want.revision);
     assert.equal(row.inspect.live_variable_count, want.count);
     // The earlier changes stay in history, oldest first.
-    assert.deepEqual(section.history.map((entry) => entry.applied.run_id), environment === 'staging' ? ['39594167097', '39616453836', want.run] : ['39594352935', '39617806126', want.run, '40148243435', '41106380051']);
+    assert.deepEqual(section.history.map((entry) => entry.applied.run_id), environment === 'staging' ? ['39594167097', '39616453836', want.run, '40219217811'] : ['39594352935', '39617806126', want.run, '40148243435', '41106380051']);
     assert.equal(row.applied.run_id, want.run);
     assert.equal(row.applied.main_commit, 'fdde89459b5fb3a6669427677141ce955eaa9aac');
     assert.equal(row.applied.state, 'VERIFIED');
@@ -248,9 +248,9 @@ test('the committed plan records the production onboarding keys config (run 4110
   assert.match(cryptoSource, /export const PII_KMS_KEY_ENV = 'MOOV_ONBOARDING_PII_KMS_KEY_ARN';/);
   // Both values are production KMS key ARNs, never a staging key.
   for (const arn of [documents, pii]) assert.match(arn, /^arn:aws:kms:us-east-1:806168576068:key\/[0-9a-f-]{36}$/);
-  // Staging needs no change.
+  // Staging needed no change for it (its section since plans login MFA, its own test).
   const staging = loadConfigPlan(REPO_ROOT, 'staging');
-  assert.deepEqual(staging.set, {});
+  assert.deepEqual(Object.keys(staging.set), ['AWS_LOGIN_MFA_REQUIRED']);
   assert.deepEqual(staging.unset, {});
 });
 
@@ -285,20 +285,17 @@ test('the committed plan records production sends on (run 41953736410) and start
   // The key the send route reads (moov-send.mjs), on top of the general transfer switch.
   const sendSource = fs.readFileSync(path.join(REPO_ROOT, 'aws/functions/api/providers/production/moov-send.mjs'), 'utf8');
   assert.match(sendSource, /export const sendPostEnabled = \(\) => transferPostEnabled\(\) && flagTrue\('AWS_MOOV_SEND_POST_ENABLED'\);/);
-  // Staging needs no change.
+  // Staging needed no change for it (its section since plans login MFA, its own test).
   const staging = loadConfigPlan(REPO_ROOT, 'staging');
-  assert.deepEqual(staging.set, {});
+  assert.deepEqual(Object.keys(staging.set), ['AWS_LOGIN_MFA_REQUIRED']);
   assert.deepEqual(staging.unset, {});
 });
 
-test('the committed plan records the staging financial TOTP wrap key (run 40219217811) and starts the next change empty', () => {
+test('the committed plan records the staging financial TOTP wrap key (run 40219217811); staging keeps it in history', () => {
   const raw = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, CONFIG_PLAN_REL), 'utf8'));
-  const section = loadConfigPlan(REPO_ROOT, 'staging');
-  assert.equal(section.status, 'applied');
-  assert.deepEqual(section.set, {});
-  assert.deepEqual(section.unset, {});
+  const section = raw.environments.staging;
   const arn = 'arn:aws:secretsmanager:us-east-1:806168576068:secret:checksops/staging/financial-totp-wrap-key-CAVZnt';
-  const row = raw.environments.staging;
+  const row = section.history[3];
   assert.equal(row.inspect.run_id, '40218256258');
   assert.equal(row.inspect.main_commit, 'c380e305c91b5ad9692abb47f1008407c924a79d');
   assert.equal(row.inspect.live_revision_id, '3fe1e7c6-dac5-4b94-bd29-d2bebec858cc');
@@ -312,7 +309,7 @@ test('the committed plan records the staging financial TOTP wrap key (run 402192
   assert.equal(row.applied.code_sha256, row.inspect.live_code_sha256);
   assert.deepEqual(row.applied.applied_change, { set: { FINANCIAL_TOTP_WRAP_KEY_ARN: { from: null, to: arn } }, unset: {} });
   // The recorded change hash is the one the run's receipt owned.
-  assert.equal(changeSha256({ function_name: row.function_name, ...row.applied.applied_change }), row.applied.change_sha256);
+  assert.equal(changeSha256({ function_name: section.function_name, ...row.applied.applied_change }), row.applied.change_sha256);
   // The ARN names the staging secret; staging never points at the production key.
   assert.match(arn, /:secret:checksops\/staging\//);
   assert.doesNotMatch(arn, /production/);
@@ -724,4 +721,29 @@ test('the writer refuses a credential that changed since the plan, and its failu
   const plainResult = await applyLambdaConfig(applyInput(receipt, { plan: plain }), applyCtx(root, fakeLambda({ variables: SECRET_LIVE }), receipt.file));
   assert.equal(plainResult.code, CODES.UNRELATED_MUTATION);
   assert.equal(leaks(plainResult), false);
+});
+
+test('the committed staging section plans login MFA on (AWS_LOGIN_MFA_REQUIRED from absent to "true") from inspect 42281613835', () => {
+  const raw = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, CONFIG_PLAN_REL), 'utf8'));
+  const section = loadConfigPlan(REPO_ROOT, 'staging');
+  assert.equal(section.status, 'accepted');
+  assert.deepEqual(section.set, { AWS_LOGIN_MFA_REQUIRED: { from: null, to: 'true' } });
+  assert.deepEqual(section.unset, {});
+  const row = raw.environments.staging;
+  assert.equal(row.function_name, 'checksops-staging-api');
+  assert.equal(row.applied, undefined);
+  assert.equal(row.inspect.run_id, '42281613835');
+  assert.equal(row.inspect.main_commit, '1965d9570aaa1ada0514aa74fcea1aa08a5767de');
+  // The inspect read the package the three login MFA overlays left behind.
+  assert.equal(row.inspect.live_revision_id, '9aa2fe96-ce60-49ff-9b9a-7ba7885b0f5d');
+  assert.equal(row.inspect.live_code_sha256, '9rqeIav9wcbQOUVTJC/TOzianf9suunTmEmoZ6E+W9k=');
+  assert.equal(row.inspect.live_configuration_sha256, '35be33d4fc4921a6dc1cdbdbdf6e90b2fcfd90d5114c4e8b86e56d5c3692b3ca');
+  assert.equal(row.inspect.live_variable_count, 45);
+  for (const evidence of ['42280564417', '42281031310', '42281420033', 'Login MFA - yes for everyone']) assert.ok(row.inspect.notes.includes(evidence), evidence);
+  // The switch the gate reads, and only the string "true" turns it on.
+  const source = fs.readFileSync(path.join(REPO_ROOT, 'aws/functions/api/login-mfa.mjs'), 'utf8');
+  assert.match(source, /export const LOGIN_MFA_FLAG = 'AWS_LOGIN_MFA_REQUIRED';/);
+  assert.match(source, /export const loginMfaRequired = \(\) => flagTrue\(LOGIN_MFA_FLAG\);/);
+  // Production is untouched by this section.
+  assert.deepEqual(loadConfigPlan(REPO_ROOT, 'production').set, {});
 });
