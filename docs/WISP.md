@@ -97,7 +97,7 @@ Written addenda and an annual security review (SOC 2 report or questionnaire) on
 - `financial_stepup_log` — financial two-factor step-ups (server-written only, append-only; SQL 97, 106)
 - `aws_provider_webhook_receipts` — every signature-verified Moov and CheckAlt webhook, once per event
 
-**Retention:** audit logs are kept 7 years (`docs/DATA_RETENTION.md` §2). **OWNER TO CONFIRM** that the security-logs bucket lifecycle and the CloudWatch log group retention match.
+**Retention:** audit logs are kept 7 years (`docs/DATA_RETENTION.md` §2). Confirmed 2026-11-06: the security-logs bucket keeps CloudTrail and Config 7 years (Glacier after 90 days) and every CloudWatch log group has a retention set (`ops/security/LOG_RETENTION_AND_DR_2026_11.md`).
 
 ### 3.8 Secure Disposal
 See `docs/DATA_RETENTION.md`. Default retention is 7 years after claim closure, configurable per tenant via `tenants.data_retention_years`. The automated purge from the Supabase era has not been rebuilt on AWS; `docs/DATA_RETENTION.md` §4 says what applies until it is.

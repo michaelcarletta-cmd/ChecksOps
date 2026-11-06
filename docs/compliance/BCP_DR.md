@@ -11,7 +11,7 @@
 | Recovery point objective, files | 0 for overwrites and deletes | S3 versioning on the private-files bucket |
 | Recovery time objective (RTO), single data center (AZ) failure | 5 minutes | Multi-AZ RDS fails over automatically; Lambda and API Gateway are multi-AZ by design |
 | RTO, database corruption or bad change | 4 hours | Point-in-time restore to a new instance, then repoint the API after review. **To be measured** by the first restore test (row B-1). |
-| RTO, loss of region `us-east-1` | **Not met today** | See §4 |
+| RPO / RTO, loss of region `us-east-1` | Database: restorable in `us-east-2` once replication reaches `replicating`; the gap behind the source (`RestoreWindow.LatestTime`) and the restore time are to be measured. Files: **not covered** | §4 |
 
 **OWNER TO CONFIRM** these targets against what tenant contracts promise.
 
@@ -42,12 +42,11 @@ production values are those in §2 above.
 
 ## 4. Known gaps (decisions for the owner)
 
-1. **No copy outside `us-east-1`.** No cross-region RDS backup replication, no S3 replication, no
-   AWS Backup plan. Losing the region loses the data until AWS restores it. Options, cheapest first:
-   - RDS cross-region automated backup replication (for example to `us-east-2`), 7 days;
-   - S3 Cross-Region Replication of the private-files bucket;
-   - an AWS Backup plan with a cross-region copy and Vault Lock.
-   Each is a production change for its own reviewed runbook.
+1. **Database copied to `us-east-2`** since 2026-11-06: RDS cross-region automated backup replication,
+   35 days, KMS key `alias/checksops-production-rds-dr`
+   (`ops/security/LOG_RETENTION_AND_DR_2026_11.md`). **Still single-region:** the private-files
+   bucket (check images, documents) and Secrets Manager. S3 Cross-Region Replication of the bucket
+   is the remaining option, a separate decision.
 2. **No restore test recorded.** The first test sets the measured RTO (row B-1).
 3. **Backup person: Austin Sukanick** (owner's decision, 2026-11-06). Acts for the owner on an
    incident, an outage or a restore when the owner cannot be reached. Before the role is real, Austin
