@@ -586,6 +586,29 @@
       "note": "Official production-only writer for the enforcing SPA CSP, run from guarded-production-csp-headers.yml (owner 2026-10-31: in place). Requires a production-spa cloudfront-response-headers-policy receipt owning exactly response-headers-policy:756a8f23-… + active lease + the production gate (staging acceptance, approval for this workstream, second fingerprint); refuses any distribution but E1B0ZWWO5559U5 and any policy but 756a8f23-… (staging ids by name); CAS-checks the signed snapshot before and immediately before its only write (UpdateResponseHeadersPolicy with If-Match), sets ContentSecurityPolicy only equal to buildCsp(production, live index.html, enforce) with the SH-1 headers byte-for-byte, revert restores exactly the SH-1 baseline, and verifies the distribution config is unchanged."
     },
     {
+      "path": "scripts/deployment-guard/github-production-spa-fallback.mjs",
+      "classification": "SAFE",
+      "capabilities": [
+        "production-spa-fallback-preflight"
+      ],
+      "note": "GitHub-hosted preflight for the production CloudFront Function checksops-production-spa-fallback (ops/deployment-guard/PRODUCTION_SPA_FALLBACK.md). Reads both function stages, production distribution E1B0ZWWO5559U5 and the marketing page objects in the production bucket; for publish/revert requires the inspect snapshot SHA-256, the exact phrase and a staging acceptance reference, then takes the production-spa lease and issues a KMS-signed cloudfront-function receipt whose preflight fingerprint is the whole snapshot. Never writes AWS; production-spa-fallback.mjs is the only writer."
+    },
+    {
+      "path": "scripts/deployment-guard/production-spa-fallback.mjs",
+      "classification": "GUARDED",
+      "capabilities": ["cloudfront-function"],
+      "shared_target": true,
+      "note": "Official production-only writer for the CloudFront Function checksops-production-spa-fallback, run from guarded-production-spa-fallback.yml. Requires a production-spa cloudfront-function receipt owning exactly cloudfront-function:checksops-production-spa-fallback + active lease + the production gate (staging acceptance, approval for this workstream, second fingerprint); refuses any function, distribution, bucket or key but its own (staging ids by name); CAS-checks the signed snapshot before and immediately before its first write; writes only code from aws/cloudfront/spa-fallback.js (publish) or spa-fallback.baseline.js (revert): UpdateFunction on DEVELOPMENT with If-Match, TestFunction for every sample URI against the rules, PublishFunction with If-Match; verifies LIVE runs the desired bytes and the distribution config is unchanged. Never changes the distribution or its association."
+    },
+    {
+      "path": "scripts/deployment-guard/spa-fallback-public-probe.mjs",
+      "classification": "SAFE",
+      "capabilities": [
+        "production-spa-fallback-public-probe"
+      ],
+      "note": "Read-only public HTTPS probe for guarded-production-spa-fallback.yml: staging marketing pages (inspect, staging acceptance) and, after a change, checksops.com marketing pages, /, /login, the entry bundle and /prep/health. No AWS credentials, no writes."
+    },
+    {
       "path": "scripts/deployment-guard/github-production-checkalt-schedule.mjs",
       "classification": "SAFE",
       "capabilities": [

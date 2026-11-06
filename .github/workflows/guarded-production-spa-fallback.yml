@@ -1,0 +1,258 @@
+name: Guarded production SPA fallback
+
+# Runbook ops/deployment-guard/PRODUCTION_SPA_FALLBACK.md: the CloudFront Function
+# checksops-production-spa-fallback (viewer-request on the default behavior of distribution
+# E1B0ZWWO5559U5, checksops.com). publish puts aws/cloudfront/spa-fallback.js LIVE, which passes the
+# public marketing pages through to their own S3 objects instead of rewriting them to /index.html;
+# revert puts aws/cloudfront/spa-fallback.baseline.js (the code LIVE before this tool) back.
+# The distribution is never changed and no function is created or deleted. Code comes only from
+# those two repository files.
+# inspect reads both function stages, the distribution and the page objects, and probes the public
+# staging pages (a green inspect run is the staging acceptance reference). Each change is refused
+# unless the live snapshot still matches the inspect, the exact phrase and a staging acceptance
+# reference are given, and the production environment reviewer approves.
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "inspect the live production state, publish the repo function, or revert to the baseline"
+        required: true
+        default: inspect
+        type: choice
+        options:
+          - inspect
+          - publish
+          - revert
+      approved_commit:
+        description: "Required for a change: exact main commit approved for this run"
+        required: false
+        default: ""
+        type: string
+      expected_snapshot_sha256:
+        description: "Required for a change: snapshot SHA-256 from a prior inspect run"
+        required: false
+        default: ""
+        type: string
+      staging_acceptance_reference:
+        description: "Required for a change: ChecksOps GitHub run or PR URL (publish: the green inspect run with the staging probe)"
+        required: false
+        default: ""
+        type: string
+      approval_phrase:
+        description: "publish: PUBLISH SPA FALLBACK TO PRODUCTION / revert: REVERT SPA FALLBACK ON PRODUCTION"
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+# Shares the production SPA upload's group: both change what checksops.com serves, and the pages
+# this function passes through are the objects that upload writes.
+concurrency:
+  group: guarded-production-spa-upload
+  cancel-in-progress: false
+
+jobs:
+  production-spa-fallback:
+    environment: production
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check out exact workflow commit
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Refuse non-main or incomplete change
+        shell: bash
+        # Inputs reach the script only through env, never as interpolated shell source.
+        env:
+          INPUT_MODE: ${{ inputs.mode }}
+          INPUT_APPROVED_COMMIT: ${{ inputs.approved_commit }}
+          INPUT_EXPECTED_SNAPSHOT_SHA256: ${{ inputs.expected_snapshot_sha256 }}
+          INPUT_STAGING_ACCEPTANCE: ${{ inputs.staging_acceptance_reference }}
+          INPUT_APPROVAL_PHRASE: ${{ inputs.approval_phrase }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/main" || { echo "Guarded production SPA fallback change only runs from main"; exit 2; }
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA" || { echo "Checkout SHA mismatch"; exit 2; }
+          case "$INPUT_MODE" in
+            inspect) ;;
+            publish) PHRASE="PUBLISH SPA FALLBACK TO PRODUCTION" ;;
+            revert) PHRASE="REVERT SPA FALLBACK ON PRODUCTION" ;;
+            *) echo "mode must be inspect, publish or revert"; exit 2 ;;
+          esac
+          if [ "$INPUT_MODE" != "inspect" ]; then
+            [[ "$INPUT_APPROVED_COMMIT" =~ ^[0-9a-f]{40}$ ]] || { echo "$INPUT_MODE requires a 40-character approved_commit"; exit 2; }
+            test "$INPUT_APPROVED_COMMIT" = "$GITHUB_SHA" || { echo "main moved or approved commit does not match workflow SHA"; exit 2; }
+            [[ "$INPUT_EXPECTED_SNAPSHOT_SHA256" =~ ^[0-9a-f]{64}$ ]] || { echo "$INPUT_MODE requires expected_snapshot_sha256 from inspect"; exit 2; }
+            [[ "$INPUT_STAGING_ACCEPTANCE" =~ ^https://github\.com/michaelcarletta-cmd/ChecksOps/(actions/runs/[0-9]+(/job/[0-9]+)?|pull/[0-9]+)$ ]] || { echo "$INPUT_MODE requires staging_acceptance_reference (a ChecksOps run or PR URL)"; exit 2; }
+            test "$INPUT_APPROVAL_PHRASE" = "$PHRASE" || { echo "approval_phrase must be exactly: $PHRASE"; exit 2; }
+          fi
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "22"
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: "1.4.2"
+
+      - name: Install locked dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run deployment safety tests
+        run: |
+          node --experimental-strip-types --test aws/tests/github-production-spa-fallback.test.mjs
+          node --experimental-strip-types --test aws/tests/marketing-static-head.test.mjs
+          node --test aws/tests/deployment-guard-kms-receipt.test.mjs
+          node --test aws/tests/deployment-guard-signed-receipt.test.mjs
+          node scripts/deployment-guard/scan-bypass.mjs
+
+      - name: Validate production OIDC inputs
+        shell: bash
+        env:
+          PRODUCTION_SPA_FALLBACK_ROLE_ARN: ${{ vars.CHECKSOPS_PRODUCTION_SPA_FALLBACK_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          test "$PRODUCTION_SPA_FALLBACK_ROLE_ARN" = "arn:aws:iam::806168576068:role/ChecksOpsGitHubProductionSpaFallback" || { echo "CHECKSOPS_PRODUCTION_SPA_FALLBACK_ROLE_ARN must be the dedicated production SPA fallback role"; exit 2; }
+          test -n "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" || { echo "GitHub did not provide an OIDC request URL"; exit 2; }
+
+      - name: Configure read-only production AWS session (inspect)
+        if: ${{ inputs.mode == 'inspect' }}
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a
+        with:
+          role-to-assume: ${{ vars.CHECKSOPS_PRODUCTION_SPA_FALLBACK_ROLE_ARN }}
+          aws-region: us-east-1
+          role-session-name: checksops-production-spa-fallback-${{ github.run_id }}
+          inline-session-policy: >-
+            {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["cloudfront:GetDistribution"],"Resource":"arn:aws:cloudfront::806168576068:distribution/E1B0ZWWO5559U5"},{"Effect":"Allow","Action":["cloudfront:DescribeFunction","cloudfront:GetFunction"],"Resource":"arn:aws:cloudfront::806168576068:function/checksops-production-spa-fallback"},{"Effect":"Allow","Action":["s3:GetObject"],"Resource":["arn:aws:s3:::checksops-production-frontend-806168576068/pricing","arn:aws:s3:::checksops-production-frontend-806168576068/vs/checksops-vs-iink-payments","arn:aws:s3:::checksops-production-frontend-806168576068/vs/checksops-vs-snapsheet","arn:aws:s3:::checksops-production-frontend-806168576068/vs/checksops-vs-guidewire-claimcenter","arn:aws:s3:::checksops-production-frontend-806168576068/claim-check-tracking","arn:aws:s3:::checksops-production-frontend-806168576068/index.html"]}]}
+
+      - name: Configure production SPA fallback session (publish / revert)
+        if: ${{ inputs.mode != 'inspect' }}
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a
+        with:
+          role-to-assume: ${{ vars.CHECKSOPS_PRODUCTION_SPA_FALLBACK_ROLE_ARN }}
+          aws-region: us-east-1
+          role-session-name: checksops-production-spa-fallback-${{ github.run_id }}
+          inline-session-policy: >-
+            {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["cloudfront:GetDistribution"],"Resource":"arn:aws:cloudfront::806168576068:distribution/E1B0ZWWO5559U5"},{"Effect":"Allow","Action":["cloudfront:DescribeFunction","cloudfront:GetFunction","cloudfront:UpdateFunction","cloudfront:TestFunction","cloudfront:PublishFunction"],"Resource":"arn:aws:cloudfront::806168576068:function/checksops-production-spa-fallback"},{"Effect":"Allow","Action":["s3:GetObject"],"Resource":["arn:aws:s3:::checksops-production-frontend-806168576068/pricing","arn:aws:s3:::checksops-production-frontend-806168576068/vs/checksops-vs-iink-payments","arn:aws:s3:::checksops-production-frontend-806168576068/vs/checksops-vs-snapsheet","arn:aws:s3:::checksops-production-frontend-806168576068/vs/checksops-vs-guidewire-claimcenter","arn:aws:s3:::checksops-production-frontend-806168576068/claim-check-tracking","arn:aws:s3:::checksops-production-frontend-806168576068/index.html"]},{"Effect":"Allow","Action":["kms:Sign","kms:GetPublicKey"],"Resource":"arn:aws:kms:us-east-1:806168576068:key/*"}]}
+
+      - name: Verify AWS identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          ARN="$(aws sts get-caller-identity --query Arn --output text)"
+          test "$ARN" = "arn:aws:sts::806168576068:assumed-role/ChecksOpsGitHubProductionSpaFallback/checksops-production-spa-fallback-$GITHUB_RUN_ID" || { echo "Unexpected AWS role identity"; exit 2; }
+
+      - name: Load production KMS verifier
+        if: ${{ inputs.mode != 'inspect' }}
+        shell: bash
+        env:
+          KMS_KEY_ARN: ${{ vars.CHECKSOPS_PRODUCTION_DEPLOYMENT_GUARD_KMS_KEY_ARN }}
+        run: |
+          set -euo pipefail
+          case "$KMS_KEY_ARN" in
+            arn:aws:kms:us-east-1:806168576068:key/*) ;;
+            *) echo "invalid production deployment-guard KMS key ARN"; exit 2 ;;
+          esac
+          PUBLIC_KEY_B64="$(aws kms get-public-key --region us-east-1 --key-id "$KMS_KEY_ARN" --query PublicKey --output text)"
+          test -n "$PUBLIC_KEY_B64" || { echo "KMS public key is missing"; exit 2; }
+          {
+            echo "CHECKSOPS_DEPLOYMENT_GUARD_KMS_KEY_ARN=$KMS_KEY_ARN"
+            echo "CHECKSOPS_DEPLOYMENT_GUARD_KMS_PUBLIC_KEY_DER_B64=$PUBLIC_KEY_B64"
+          } >> "$GITHUB_ENV"
+
+      - name: Inspect the live production function
+        id: preflight
+        shell: bash
+        env:
+          CHECKSOPS_PRODUCTION_SPA_FALLBACK_MODE: ${{ inputs.mode }}
+          CHECKSOPS_EXPECTED_SNAPSHOT_SHA256: ${{ inputs.expected_snapshot_sha256 }}
+          CHECKSOPS_STAGING_ACCEPTANCE_REFERENCE: ${{ inputs.staging_acceptance_reference }}
+          CHECKSOPS_PRODUCTION_SPA_FALLBACK_APPROVAL: ${{ inputs.approval_phrase }}
+        run: node scripts/deployment-guard/github-production-spa-fallback.mjs
+
+      - name: Record inspected live state
+        if: ${{ always() }}
+        shell: bash
+        env:
+          INPUT_MODE: ${{ inputs.mode }}
+          STATE: ${{ steps.preflight.outputs.state }}
+          SNAPSHOT_SHA256: ${{ steps.preflight.outputs.snapshot_sha256 }}
+          DISTRIBUTION_ETAG: ${{ steps.preflight.outputs.distribution_etag }}
+          LIVE_ETAG: ${{ steps.preflight.outputs.live_etag }}
+          DEVELOPMENT_ETAG: ${{ steps.preflight.outputs.development_etag }}
+          LIVE_CODE_SHA256: ${{ steps.preflight.outputs.live_code_sha256 }}
+          DEVELOPMENT_CODE_SHA256: ${{ steps.preflight.outputs.development_code_sha256 }}
+          BASELINE_CODE_SHA256: ${{ steps.preflight.outputs.baseline_code_sha256 }}
+          CURRENT_CODE_SHA256: ${{ steps.preflight.outputs.current_code_sha256 }}
+          PROBLEMS: ${{ steps.preflight.outputs.problems }}
+          PAGE_PROBLEMS: ${{ steps.preflight.outputs.page_problems }}
+        run: |
+          {
+            echo "### Production SPA fallback preflight"
+            echo "- Mode: \`$INPUT_MODE\` / state: \`$STATE\`"
+            echo "- Commit: \`$GITHUB_SHA\`"
+            echo "- Snapshot SHA-256: \`$SNAPSHOT_SHA256\`"
+            echo "- Distribution ETag: \`$DISTRIBUTION_ETAG\` / function ETag LIVE \`$LIVE_ETAG\`, DEVELOPMENT \`$DEVELOPMENT_ETAG\`"
+            echo "- Code SHA-256: LIVE \`$LIVE_CODE_SHA256\`, DEVELOPMENT \`$DEVELOPMENT_CODE_SHA256\`"
+            echo "- Repository: baseline \`$BASELINE_CODE_SHA256\`, current \`$CURRENT_CODE_SHA256\`"
+            echo "- Drift: \`${PROBLEMS:-none}\` / page objects: \`${PAGE_PROBLEMS:-none}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Public staging acceptance probe (inspect)
+        if: ${{ inputs.mode == 'inspect' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Staging serves each marketing page's own S3 object (its 403/404 mapping applies only to
+          # missing keys): a green inspect run is the staging acceptance reference for publish.
+          echo "### Public staging acceptance" >> "$GITHUB_STEP_SUMMARY"
+          node --experimental-strip-types scripts/deployment-guard/spa-fallback-public-probe.mjs --origin https://staging.checksops.com --expect own --tag "$GITHUB_RUN_ID" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Change through the official receipt-gated production SPA fallback writer
+        if: ${{ inputs.mode != 'inspect' }}
+        shell: bash
+        env:
+          CHECKSOPS_PRODUCTION_SPA_FALLBACK_EXECUTE: "1"
+          CHECKSOPS_DEPLOYMENT_GUARD_APPLY: "1"
+          CHECKSOPS_DEPLOYMENT_GUARD_RECEIPT: ${{ steps.preflight.outputs.receipt_path }}
+          CHECKSOPS_WORKSTREAM_ID: ${{ steps.preflight.outputs.workstream_id }}
+          CHECKSOPS_COMMIT: ${{ github.sha }}
+          CHECKSOPS_BRANCH: main
+          CHECKSOPS_OPERATOR: ${{ github.actor }}
+          CHECKSOPS_PRODUCTION_SPA_FALLBACK_INPUT: ${{ steps.preflight.outputs.fallback_input }}
+        run: |
+          set -euo pipefail
+          node scripts/deployment-guard/production-spa-fallback.mjs | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Verify the production state and that nothing else moved
+        if: ${{ inputs.mode != 'inspect' }}
+        shell: bash
+        env:
+          CHECKSOPS_PRODUCTION_SPA_FALLBACK_MODE: verify
+          CHECKSOPS_PRODUCTION_SPA_FALLBACK_VERIFY_EXPECT: ${{ inputs.mode == 'publish' && 'current' || 'baseline' }}
+        run: node scripts/deployment-guard/github-production-spa-fallback.mjs
+
+      - name: Public production check
+        if: ${{ inputs.mode != 'inspect' }}
+        shell: bash
+        env:
+          PROBE_EXPECT: ${{ inputs.mode == 'publish' && 'own' || 'home' }}
+        run: |
+          set -euo pipefail
+          # publish: each marketing path serves its own page; revert: index.html again. Both: "/" and
+          # "/login" serve index.html, the entry bundle loads, /prep/health is 200 ok. CloudFront
+          # propagates a function change to edges over a few minutes.
+          echo "### Public production check" >> "$GITHUB_STEP_SUMMARY"
+          node --experimental-strip-types scripts/deployment-guard/spa-fallback-public-probe.mjs --origin https://checksops.com --expect "$PROBE_EXPECT" --attempts 20 --delay 30 --tag "$GITHUB_RUN_ID" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Cleanup ephemeral deployment-guard state
+        if: ${{ always() }}
+        run: rm -rf .deployment-guard

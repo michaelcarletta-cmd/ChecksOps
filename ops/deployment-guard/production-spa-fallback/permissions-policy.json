@@ -1,0 +1,99 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReadProductionDistributionOnly",
+      "Effect": "Allow",
+      "Action": "cloudfront:GetDistribution",
+      "Resource": "arn:aws:cloudfront::806168576068:distribution/E1B0ZWWO5559U5"
+    },
+    {
+      "Sid": "ReadTestUpdatePublishTheProductionSpaFallbackOnly",
+      "Effect": "Allow",
+      "Action": [
+        "cloudfront:DescribeFunction",
+        "cloudfront:GetFunction",
+        "cloudfront:UpdateFunction",
+        "cloudfront:TestFunction",
+        "cloudfront:PublishFunction"
+      ],
+      "Resource": "arn:aws:cloudfront::806168576068:function/checksops-production-spa-fallback"
+    },
+    {
+      "Sid": "ReadTheProductionPageObjectsOnly",
+      "Effect": "Allow",
+      "Action": "s3:GetObject",
+      "Resource": [
+        "arn:aws:s3:::checksops-production-frontend-806168576068/pricing",
+        "arn:aws:s3:::checksops-production-frontend-806168576068/vs/checksops-vs-iink-payments",
+        "arn:aws:s3:::checksops-production-frontend-806168576068/vs/checksops-vs-snapsheet",
+        "arn:aws:s3:::checksops-production-frontend-806168576068/vs/checksops-vs-guidewire-claimcenter",
+        "arn:aws:s3:::checksops-production-frontend-806168576068/claim-check-tracking",
+        "arn:aws:s3:::checksops-production-frontend-806168576068/index.html"
+      ]
+    },
+    {
+      "Sid": "SignProductionGuardReceipts",
+      "Effect": "Allow",
+      "Action": "kms:Sign",
+      "Resource": "arn:aws:kms:us-east-1:806168576068:key/*",
+      "Condition": {
+        "StringEquals": {
+          "kms:SigningAlgorithm": "ECDSA_SHA_256"
+        },
+        "ForAnyValue:StringEquals": {
+          "kms:ResourceAliases": "alias/checksops-production-deployment-guard"
+        }
+      }
+    },
+    {
+      "Sid": "ReadProductionGuardPublicKey",
+      "Effect": "Allow",
+      "Action": "kms:GetPublicKey",
+      "Resource": "arn:aws:kms:us-east-1:806168576068:key/*",
+      "Condition": {
+        "ForAnyValue:StringEquals": {
+          "kms:ResourceAliases": "alias/checksops-production-deployment-guard"
+        }
+      }
+    },
+    {
+      "Sid": "NeverCreateDeleteOrAssociateFunctionsOrChangeDistributions",
+      "Effect": "Deny",
+      "Action": [
+        "cloudfront:CreateFunction",
+        "cloudfront:DeleteFunction",
+        "cloudfront:UpdateDistribution",
+        "cloudfront:CreateDistribution",
+        "cloudfront:DeleteDistribution",
+        "cloudfront:CreateInvalidation"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "NeverTouchStaging",
+      "Effect": "Deny",
+      "Action": [
+        "cloudfront:*",
+        "s3:*"
+      ],
+      "Resource": [
+        "arn:aws:cloudfront::806168576068:distribution/E1CG52WRQZI7X1",
+        "arn:aws:s3:::checksops-staging-frontend-c48b",
+        "arn:aws:s3:::checksops-staging-frontend-c48b/*"
+      ]
+    },
+    {
+      "Sid": "NeverWriteS3OrIam",
+      "Effect": "Deny",
+      "Action": [
+        "s3:PutObject",
+        "s3:DeleteObject",
+        "s3:PutBucketPolicy",
+        "s3:DeleteBucketPolicy",
+        "iam:*"
+      ],
+      "Resource": "*"
+    }
+  ]
+}

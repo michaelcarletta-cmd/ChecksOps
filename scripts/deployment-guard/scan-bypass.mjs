@@ -12,6 +12,8 @@ export const SCAN_PATTERNS = Object.freeze([
   { id: 'lambda-update-function-code', re: /(?:^|[\s'"`])update-function-code(?:$|[\s'"`])/ },
   { id: 'cloudfront-update-distribution', re: /(?:^|[\s'"`])update-distribution(?:$|[\s'"`])/ },
   { id: 'cloudfront-create-invalidation', re: /create-invalidation/ },
+  // CloudFront Functions (Lambda's update-function-code / -configuration do not match the exact token).
+  { id: 'cloudfront-function-mutate', re: /(?:^|[\s'"`])(?:update-function|publish-function)(?:$|[\s'"`])/ },
   { id: 'sam-deploy', re: /\bsam\s+deploy\b/ },
   { id: 'cloudformation-mutate', re: /(?:create-stack|update-stack|cloudformation\s+deploy)\b/ },
   { id: 's3-spa-index', re: /s3(?:api)?[\s'"` ,]+(?:sync|cp|put-object)[\s\S]{0,160}index\.html|index\.html[\s\S]{0,120}s3(?:api)?[\s'"` ,]+(?:sync|cp|put-object)/ },
