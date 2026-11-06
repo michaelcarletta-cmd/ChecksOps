@@ -1,12 +1,13 @@
 import { useEffect } from "react";
+import { MARKETING_SITE_ORIGIN, PAGE_JSON_LD_ID } from "@/pages/marketing/marketingStaticHead";
 
 /**
  * Per-page title, description, canonical URL and optional JSON-LD for the public
- * marketing pages (home, /pricing, /vs/...). index.html carries the home page's
- * values for crawlers that do not run JavaScript; this hook sets each page's own
- * values once the SPA renders.
+ * marketing pages (home, /pricing, /vs/...). The build writes the same values into
+ * each page's served HTML (marketingStaticHead.ts) for crawlers and link previews that
+ * do not run JavaScript; this hook keeps them right as the SPA navigates between pages.
  */
-export const MARKETING_SITE_ORIGIN = "https://checksops.com";
+export { MARKETING_SITE_ORIGIN };
 
 export interface PageMeta {
   title: string;
@@ -17,7 +18,7 @@ export interface PageMeta {
   jsonLd?: Record<string, unknown>;
 }
 
-const JSON_LD_ID = "page-json-ld";
+const JSON_LD_ID = PAGE_JSON_LD_ID;
 
 function setMeta(selector: string, attr: "name" | "property", key: string, content: string) {
   let el = document.head.querySelector<HTMLMetaElement>(selector);

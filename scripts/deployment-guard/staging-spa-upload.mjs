@@ -13,6 +13,7 @@ import { parseArgs, printResult } from './lib/cli.mjs';
 import { CODES, fail, ok } from './lib/errors.mjs';
 import { enforceS3Target, enforceScriptGuard } from './require-guard.mjs';
 import { evaluateIndexToctou } from './lib/spa-promote.mjs';
+import { isStaticPageKey, spaUploadContentType } from './lib/production-spa-upload.mjs';
 
 const AWS = process.env.AWS_CLI || process.env.AWS || 'aws';
 const REGION = process.env.AWS_REGION || 'us-east-1';
@@ -59,7 +60,7 @@ export function readLiveIndexFingerprint(bucket = STAGING_BUCKET, env = process.
 }
 
 function uploadTree(distDir, bucket, env) {
-  const uploaded = [];
+  const files = [];
   const walk = (dir, prefix = '') => {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
       const abs = path.join(dir, entry.name);
@@ -69,29 +70,29 @@ function uploadTree(distDir, bucket, env) {
         continue;
       }
       if (key === 'index.html') continue;
-      // .mjs: the pdf.js worker is a module worker, which browsers load only with a JavaScript type.
-      const contentType = key.endsWith('.js') || key.endsWith('.mjs')
-        ? 'application/javascript'
-        : key.endsWith('.css')
-          ? 'text/css'
-          : key.endsWith('.svg')
-            ? 'image/svg+xml'
-            : key.endsWith('.json')
-              ? 'application/json'
-              : undefined;
-      const args = [
-        '--region', REGION, 's3api', 'put-object',
-        '--bucket', bucket,
-        '--key', key,
-        '--body', abs,
-      ];
-      if (contentType) args.push('--content-type', contentType);
-      if (key.startsWith('assets/')) args.push('--cache-control', 'public,max-age=31536000,immutable');
-      execFileSync(AWS, args, { encoding: 'utf8', env });
-      uploaded.push(key);
+      files.push({ abs, key });
     }
   };
   walk(distDir);
+  // Marketing pages (extensionless keys) reference the new assets, so they go up last.
+  files.sort((a, b) => Number(isStaticPageKey(a.key)) - Number(isStaticPageKey(b.key)));
+  const uploaded = [];
+  for (const { abs, key } of files) {
+    // Same content types as production (lib/production-spa-upload.mjs); .mjs is JavaScript
+    // because the pdf.js worker is a module worker.
+    const contentType = spaUploadContentType(key);
+    const args = [
+      '--region', REGION, 's3api', 'put-object',
+      '--bucket', bucket,
+      '--key', key,
+      '--body', abs,
+    ];
+    if (contentType) args.push('--content-type', contentType);
+    if (key.startsWith('assets/')) args.push('--cache-control', 'public,max-age=31536000,immutable');
+    else if (isStaticPageKey(key)) args.push('--cache-control', 'no-cache,no-store,must-revalidate');
+    execFileSync(AWS, args, { encoding: 'utf8', env });
+    uploaded.push(key);
+  }
   return uploaded;
 }
 
@@ -154,7 +155,8 @@ export function main(argv = process.argv.slice(2), env = process.env) {
   const invalidation = awsJson([
     'cloudfront', 'create-invalidation',
     '--distribution-id', opts.distribution || STAGING_DISTRIBUTION,
-    '--paths', '/index.html', '/assets/*',
+    // '/*' as in production: also refreshes the marketing pages, llms.txt, robots.txt and sitemap.xml.
+    '--paths', '/*',
   ], env);
 
   const after = readLiveIndexFingerprint(bucket, env);

@@ -18,11 +18,11 @@ import {
 import { CheckOpsLogo } from "@/components/marketing/CheckOpsLogo";
 import { MarketingMenuButton, MarketingMobileMenu } from "@/components/marketing/MarketingMobileMenu";
 import { usePageMeta } from "@/hooks/usePageMeta";
-import { PUBLISHED_PRICING } from "@/pages/marketing/marketingPricing";
+import { TestimonialWall } from "@/components/marketing/MarketingProof";
+import { COMPARISON_LINKS, PRICING_EXAMPLE, PRICING_PAGE } from "@/pages/marketing/marketingPages";
+import { PUBLISHED_PRICING, ROLLOUT_GUARANTEE } from "@/pages/marketing/marketingPricing";
 
-const PRICING_TITLE = `ChecksOps Pricing - ${PUBLISHED_PRICING.platformFee} platform + ${PUBLISHED_PRICING.perCheck} per check`;
-const PRICING_DESCRIPTION =
-  `ChecksOps pricing for public adjusting firms: ${PUBLISHED_PRICING.platformFee} one-time platform fee per company, ${PUBLISHED_PRICING.perCheck} per claim check, unlimited users. Endorsements, deposit readiness and loss draft tracking included.`;
+const usd = (n: number) => `$${n.toLocaleString("en-US")}`;
 
 const PRICING_NAV_ITEMS = [
   { label: "Capabilities", href: "/#capabilities" },
@@ -44,13 +44,13 @@ const platformIncludes = [
 
 export default function CheckOpsPricing() {
   const [menuOpen, setMenuOpen] = useState(false);
-  usePageMeta({ title: PRICING_TITLE, description: PRICING_DESCRIPTION, path: "/pricing" });
+  usePageMeta(PRICING_PAGE);
   return (
     <div className="min-h-screen bg-background text-foreground">
       {/* Header — mirrors marketing */}
       <header className="sticky top-0 z-50 border-b border-border/40 bg-background/80 backdrop-blur-xl">
         <div className="mx-auto max-w-7xl px-4 md:px-6 h-14 flex items-center justify-between">
-          <Link to="/">
+          <Link to="/" className="flex items-center min-h-[44px]">
             <CheckOpsLogo className="text-foreground h-9 sm:h-10 md:h-12" />
           </Link>
           <nav className="hidden md:flex items-center gap-6 text-sm text-muted-foreground">
@@ -63,7 +63,7 @@ export default function CheckOpsPricing() {
             <Button asChild variant="ghost" size="sm" className="hidden sm:inline-flex">
               <Link to="/login"><LogIn className="h-4 w-4 mr-1.5" />Log in</Link>
             </Button>
-            <Button asChild size="sm">
+            <Button asChild size="sm" className="h-11 sm:h-9">
               <Link to="/#demo">Talk to us<ArrowRight className="h-4 w-4 ml-1.5" /></Link>
             </Button>
             <MarketingMenuButton open={menuOpen} onToggle={() => setMenuOpen(!menuOpen)} />
@@ -192,6 +192,50 @@ export default function CheckOpsPricing() {
         </div>
       </section>
 
+      {/* Worked example: the first-year total a buyer actually needs */}
+      <section className="mx-auto max-w-5xl px-4 md:px-6 pb-14 md:pb-20">
+        <div className="rounded-2xl border border-border/50 bg-card/60 p-6 md:p-8">
+          <Badge variant="outline" className="mb-4">Worked example</Badge>
+          <h2 className="text-2xl md:text-3xl font-bold tracking-tight">
+            A firm processing {PRICING_EXAMPLE.checksPerMonth} checks a month
+          </h2>
+          <p className="mt-3 text-sm md:text-base text-muted-foreground leading-relaxed">
+            pays {PUBLISHED_PRICING.platformFee} once, plus {usd(PRICING_EXAMPLE.checksMonthly)} a month in checks
+            and {PUBLISHED_PRICING.supportMonthly} a month in support.
+          </p>
+          <div className="mt-6 grid sm:grid-cols-3 gap-3">
+            <div className="rounded-lg border border-border/50 bg-background/40 p-4">
+              <p className="text-xs text-muted-foreground">First year, support paid monthly</p>
+              <p className="mt-1 text-2xl font-bold">{usd(PRICING_EXAMPLE.firstYearMonthlySupport)}</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {PUBLISHED_PRICING.platformFee} + {PRICING_EXAMPLE.checksPerYear.toLocaleString("en-US")} checks × {PUBLISHED_PRICING.perCheck} + 12 × {PUBLISHED_PRICING.supportMonthly}
+              </p>
+            </div>
+            <div className="rounded-lg border border-border/50 bg-background/40 p-4">
+              <p className="text-xs text-muted-foreground">First year, support paid annually</p>
+              <p className="mt-1 text-2xl font-bold">{usd(PRICING_EXAMPLE.firstYearAnnualSupport)}</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {PUBLISHED_PRICING.platformFee} + {PRICING_EXAMPLE.checksPerYear.toLocaleString("en-US")} checks × {PUBLISHED_PRICING.perCheck} + {PUBLISHED_PRICING.supportAnnual}
+              </p>
+            </div>
+            <div className="rounded-lg border border-border/50 bg-background/40 p-4">
+              <p className="text-xs text-muted-foreground">Every year after, support paid annually</p>
+              <p className="mt-1 text-2xl font-bold">{usd(PRICING_EXAMPLE.yearTwoAnnualSupport)}</p>
+              <p className="mt-1 text-xs text-muted-foreground">No platform fee again. Same {PUBLISHED_PRICING.perCheck} per check.</p>
+            </div>
+          </div>
+          <p className="mt-6 text-sm md:text-base text-muted-foreground leading-relaxed">
+            Weigh that against what each check costs your team today: the hours lost to inbox, printer
+            and bank-branch tracking, chasing payee signatures, and answering "where is my check?"
+            calls. The platform fee is paid once; after that, a check costs {PUBLISHED_PRICING.perCheck}{" "}
+            whatever its amount or payee, with no percentage on mortgage checks.
+          </p>
+        </div>
+      </section>
+
+      {/* Customer proof: hidden until marketingProof.ts TESTIMONIALS has real quotes */}
+      <TestimonialWall />
+
       {/* What's included */}
       <section className="border-y border-border/40 bg-muted/20">
         <div className="mx-auto max-w-7xl px-4 md:px-6 py-14 md:py-20 grid gap-10 lg:grid-cols-[0.9fr_1.1fr] items-start">
@@ -228,12 +272,20 @@ export default function CheckOpsPricing() {
             We'll set up your environment, migrate any historical data, and train your
             team. Most companies are live within two weeks.
           </p>
+          {ROLLOUT_GUARANTEE && (
+            <p className="mt-3 text-sm text-foreground/90">
+              {ROLLOUT_GUARANTEE.text}{" "}
+              <Link to={ROLLOUT_GUARANTEE.termsPath} className="underline underline-offset-2 hover:text-foreground">Terms</Link>
+            </p>
+          )}
           <p className="mt-3 text-sm text-muted-foreground">
-            Comparing per-subscription check services?{" "}
-            <Link to="/vs/checksops-vs-iink-payments" className="underline underline-offset-2 hover:text-foreground">
-              See ChecksOps vs iink Payments
-            </Link>
-            .
+            Comparing options?{" "}
+            {COMPARISON_LINKS.map((l, i) => (
+              <span key={l.to}>
+                {i > 0 && " · "}
+                <Link to={l.to} className="underline underline-offset-2 hover:text-foreground">{l.label}</Link>
+              </span>
+            ))}
           </p>
           <div className="mt-6 flex flex-col sm:flex-row gap-3 justify-center">
             <Button asChild size="lg">
@@ -256,9 +308,11 @@ export default function CheckOpsPricing() {
             <CheckOpsLogo className="text-foreground text-sm" />
             <span>© {new Date().getFullYear()} ChecksOps</span>
           </div>
-          <nav className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <nav className="flex flex-wrap items-center gap-x-4 gap-y-2 [&>a]:inline-flex [&>a]:items-center [&>a]:min-h-[44px] sm:[&>a]:min-h-0">
             <Link to="/" className="hover:text-foreground">Home</Link>
-            <Link to="/vs/checksops-vs-iink-payments" className="hover:text-foreground">ChecksOps vs iink Payments</Link>
+            {COMPARISON_LINKS.map((l) => (
+              <Link key={l.to} to={l.to} className="hover:text-foreground">{l.label}</Link>
+            ))}
             <Link to="/privacy-notice" className="hover:text-foreground">Privacy Notice</Link>
             <Link to="/terms" className="hover:text-foreground">Terms of Service</Link>
           </nav>

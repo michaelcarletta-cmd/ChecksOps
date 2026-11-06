@@ -50,6 +50,21 @@ test('both SPA uploaders give the .mjs worker a JavaScript content type', () => 
   // Without it S3 serves binary/octet-stream and the browser refuses the module worker.
   const production = fs.readFileSync(path.join(ROOT, 'scripts/deployment-guard/lib/production-spa-upload.mjs'), 'utf8');
   assert.match(production, /if \(key\.endsWith\('\.js'\) \|\| key\.endsWith\('\.mjs'\)\) return 'application\/javascript';/);
+  // Staging uses the same function as production.
   const staging = fs.readFileSync(path.join(ROOT, 'scripts/deployment-guard/staging-spa-upload.mjs'), 'utf8');
-  assert.match(staging, /const contentType = key\.endsWith\('\.js'\) \|\| key\.endsWith\('\.mjs'\)\n\s*\? 'application\/javascript'/);
+  assert.match(staging, /import \{ isStaticPageKey, spaUploadContentType \} from '\.\/lib\/production-spa-upload\.mjs';/);
+  assert.match(staging, /const contentType = spaUploadContentType\(key\);/);
+});
+
+test('SPA uploads serve marketing pages as HTML and the text and XML files with their types', async () => {
+  const { isStaticPageKey, spaUploadContentType } = await import('../../scripts/deployment-guard/lib/production-spa-upload.mjs');
+  assert.equal(spaUploadContentType('assets/pdf.worker.min-abc.mjs'), 'application/javascript');
+  assert.equal(spaUploadContentType('llms.txt'), 'text/plain; charset=utf-8');
+  assert.equal(spaUploadContentType('robots.txt'), 'text/plain; charset=utf-8');
+  assert.equal(spaUploadContentType('sitemap.xml'), 'application/xml');
+  assert.equal(spaUploadContentType('pricing'), 'text/html; charset=utf-8');
+  assert.equal(spaUploadContentType('vs/checksops-vs-iink-payments'), 'text/html; charset=utf-8');
+  assert.equal(isStaticPageKey('pricing'), true);
+  assert.equal(isStaticPageKey('assets/index-abc.js'), false);
+  assert.equal(isStaticPageKey('favicon.png'), false);
 });

@@ -67,7 +67,22 @@ function contentTypeForKey(key) {
   if (key.endsWith('.png')) return 'image/png';
   if (key.endsWith('.jpg') || key.endsWith('.jpeg')) return 'image/jpeg';
   if (key.endsWith('.webp')) return 'image/webp';
+  // llms.txt, robots.txt and sitemap.xml: served as binary/octet-stream without a type.
+  if (key.endsWith('.txt')) return 'text/plain; charset=utf-8';
+  if (key.endsWith('.xml')) return 'application/xml';
+  // Extensionless keys are marketing pages with their own head (e.g. "pricing"); see
+  // src/pages/marketing/marketingStaticHead.ts.
+  if (isStaticPageKey(key)) return 'text/html; charset=utf-8';
   return undefined;
+}
+
+export function isStaticPageKey(key) {
+  const last = key.split('/').pop() || '';
+  return last.length > 0 && !last.includes('.');
+}
+
+export function spaUploadContentType(key) {
+  return contentTypeForKey(key);
 }
 
 function walkDistFiles(distDir) {
@@ -345,12 +360,17 @@ export async function applyProductionSpaUpload(input = {}, ctx = {}) {
   // Upload assets first (non-index.html) with per-object put.
   const uploads = [];
   const files = walkDistFiles(dist.details.dist);
-  const nonIndex = files.filter((f) => f.key !== 'index.html');
+  // Marketing pages reference the new assets, so they go up after every other file.
+  const nonIndex = files
+    .filter((f) => f.key !== 'index.html')
+    .sort((a, b) => Number(isStaticPageKey(a.key)) - Number(isStaticPageKey(b.key)));
   for (const file of nonIndex) {
     const contentType = contentTypeForKey(file.key);
     const cacheControl = file.key.startsWith('assets/')
       ? 'public,max-age=31536000,immutable'
-      : undefined;
+      : isStaticPageKey(file.key)
+        ? 'no-cache,no-store,must-revalidate'
+        : undefined;
     const put = await aws.putObject({
       bucket: target.s3_bucket,
       key: file.key,

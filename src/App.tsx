@@ -28,6 +28,14 @@ const WhiteLabelApp = lazy(() => import("./pages/WhiteLabelApp"));
 const CheckOpsLanding = lazy(() => import("./pages/checkops/CheckOpsLanding"));
 const CheckOpsPricing = lazy(() => import("./pages/checkops/CheckOpsPricing"));
 const ChecksOpsVsIink = lazy(() => import("./pages/marketing/ChecksOpsVsIink"));
+const ChecksOpsVsSnapsheet = lazy(() =>
+  import("./pages/marketing/ChecksOpsVsCarrierPlatform").then((m) => ({ default: m.ChecksOpsVsSnapsheet })),
+);
+const ChecksOpsVsGuidewire = lazy(() =>
+  import("./pages/marketing/ChecksOpsVsCarrierPlatform").then((m) => ({ default: m.ChecksOpsVsGuidewire })),
+);
+const ClaimCheckTracking = lazy(() => import("./pages/marketing/ClaimCheckTracking"));
+const MarketingAbout = lazy(() => import("./pages/marketing/MarketingAbout"));
 const CheckOpsSecurity = lazy(() => import("./pages/checkops/CheckOpsSecurity"));
 const CheckOpsLogin = lazy(() => import("./pages/checkops/CheckOpsLogin"));
 const CheckOpsSignup = lazy(() => import("./pages/checkops/CheckOpsSignup"));
@@ -111,9 +119,13 @@ function CheckOpsRoutes() {
       <Route path="/unsubscribe" element={<Suspense fallback={<PageLoader />}><Unsubscribe /></Suspense>} />
       <Route path="/pricing" element={<Suspense fallback={<PageLoader />}><CheckOpsPricing /></Suspense>} />
       <Route path="/vs/checksops-vs-iink-payments" element={<Suspense fallback={<PageLoader />}><ChecksOpsVsIink /></Suspense>} />
-      {/* Marketing paths people guess. Until there is a real about or customers page, send them
-          to the home page instead of letting /:slug/* render "Organization Not Found". */}
-      <Route path="/about" element={<Navigate to="/" replace />} />
+      <Route path="/vs/checksops-vs-snapsheet" element={<Suspense fallback={<PageLoader />}><ChecksOpsVsSnapsheet /></Suspense>} />
+      <Route path="/vs/checksops-vs-guidewire-claimcenter" element={<Suspense fallback={<PageLoader />}><ChecksOpsVsGuidewire /></Suspense>} />
+      <Route path="/claim-check-tracking" element={<Suspense fallback={<PageLoader />}><ClaimCheckTracking /></Suspense>} />
+      {/* /about shows the founder page once marketingProof.ts FOUNDER is filled in, and sends
+          visitors home until then. Paths people guess (/customers, /features) go home instead of
+          letting /:slug/* render "Organization Not Found". */}
+      <Route path="/about" element={<Suspense fallback={<PageLoader />}><MarketingAbout /></Suspense>} />
       <Route path="/customers" element={<Navigate to="/" replace />} />
       <Route path="/features" element={<Navigate to="/#capabilities" replace />} />
       <Route path="/security" element={<Suspense fallback={<PageLoader />}><CheckOpsSecurity /></Suspense>} />
