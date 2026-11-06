@@ -99,9 +99,26 @@ const TENANT_LIFECYCLE_APPLIED_BYTES = 'b3d8594416e257a8ff6658c677c9d8435ad18f92
 // follow the row there with assertMovedToMoneyWrite.
 const MONEY_WRITE_FLAG_REL = 'aws/tests/fixtures/production-money-write-flag-manifest-2026-10-31.json';
 const MONEY_WRITE_FLAG = JSON.parse(fs.readFileSync(path.join(ROOT, MONEY_WRITE_FLAG_REL), 'utf8'));
+// Fee pull savepoints (production incident 2026-11-06): the collection v2 and billing engine rows moved on again,
+// from the money-write bytes the fourth production rebuild put live (apply 41469896446) to main's bytes, naming
+// their own manifest (its own test below). The money-write manifest keeps the bytes it recorded.
+const FEE_PULL_SAVEPOINTS_REL = 'aws/tests/fixtures/production-fee-pull-savepoints-manifest-2026-11-06.json';
+const FEE_PULL_SAVEPOINTS_MEMBERS = ['tenant-collection-v2.mjs', 'tenant-billing-engine.mjs'];
 const assertMovedToMoneyWrite = (member, { live, previous }) => {
   const row = PLAN.members[member];
   assert.equal(row.operation, 'replace', member);
+  if (FEE_PULL_SAVEPOINTS_MEMBERS.includes(member)) {
+    const recorded = MONEY_WRITE_FLAG.members[member];
+    assert.deepEqual(recorded, {
+      live_sha256: live, accepted_sha256: recorded.accepted_sha256, operation: 'replace', previous_manifest: previous,
+    }, member);
+    assert.notEqual(recorded.accepted_sha256, live, member);
+    assert.equal(row.manifest, FEE_PULL_SAVEPOINTS_REL, member);
+    assert.equal(row.accepted_sha256, sha(`aws/functions/api/${member}`), member);
+    assert.equal(row.expected_live_sha256, recorded.accepted_sha256, member);
+    assert.notEqual(row.accepted_sha256, recorded.accepted_sha256, member);
+    return;
+  }
   assert.equal(row.manifest, MONEY_WRITE_FLAG_REL, member);
   assert.equal(row.accepted_sha256, sha(`aws/functions/api/${member}`), member);
   assert.notEqual(row.accepted_sha256, live, member);
@@ -5528,12 +5545,16 @@ test('Billing database errors redacted (finding 25): tenant-billing-engine.mjs R
   const ready = await run(inspect, { root: ROOT, plan: before, inspectLive: liveFor(MEMBER, { plan: before, sha256: SEND_FEE_APPLIED_BYTES }) });
   assert.equal(ready.state, 'READY');
   assert.equal(ready.mutation, false);
-  // The applied bytes are now the money-write flag REPLACE's starting point: READY, not done.
-  const done = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: accepted }) });
+  // The applied bytes were the money-write flag REPLACE's starting point; the fourth production rebuild (apply
+  // 41469896446) then put the money-write bytes live, and the fee pull savepoints row (2026-11-06) starts from
+  // those: READY on them, and the finding 25 applied bytes are now a reconciliation stop like anything older.
+  const moneyWriteBytes = MONEY_WRITE_FLAG.members[MEMBER].accepted_sha256;
+  const done = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: moneyWriteBytes }) });
   assert.equal(done.state, 'READY');
   assert.equal(done.mutation, false);
-  // The pre-apply bccffbe7 bytes, or anything else, live: a reconciliation stop, never an apply.
-  for (const other of [SEND_FEE_APPLIED_BYTES, 'c'.repeat(64)]) {
+  // The pre-apply bccffbe7 bytes, the finding 25 applied bytes, or anything else, live: a reconciliation stop,
+  // never an apply.
+  for (const other of [SEND_FEE_APPLIED_BYTES, accepted, 'c'.repeat(64)]) {
     await assert.rejects(
       run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: other }) }),
       (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
@@ -6276,4 +6297,73 @@ test('Login MFA (owner 2026-11-06): ADD login-mfa.mjs, then data.mjs REPLACE fro
   assert.match(source, /export const LOGIN_MFA_FLAG = 'AWS_LOGIN_MFA_REQUIRED';/);
   assert.match(source, /export const LOGIN_MFA_ACTION = 'login\.mfa';/);
   assert.match(fs.readFileSync(path.join(API, DATA), 'utf8'), /const loginMfaRefusal = await \(deps\.enforceLoginMfa \|\| enforceLoginMfa\)\(\{/);
+});
+
+test('Fee pull savepoints (production incident 2026-11-06): tenant-collection-v2.mjs then tenant-billing-engine.mjs REPLACE from the money-write bytes the fourth production rebuild put live, planning only', async () => {
+  const COLLECTION = 'tenant-collection-v2.mjs';
+  const ENGINE = 'tenant-billing-engine.mjs';
+  const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, FEE_PULL_SAVEPOINTS_REL), 'utf8'));
+  assert.equal(manifest.workstream_id, 'fee-pull-savepoints');
+  assert.equal(manifest.deploy_authorized, false);
+  assert.match(manifest.authorization, /^Pending owner review/);
+  assert.equal(manifest.live_lambda, FUNCTION_NAME);
+  assert.deepEqual(Object.keys(manifest.members), FEE_PULL_SAVEPOINTS_MEMBERS);
+  // The pre-state of each row is what the fourth production rebuild (apply 41469896446, VERIFIED) accepted and put
+  // live: the money-write flag bytes.
+  const rebuild = JSON.parse(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/lambda-rebuild-plan.json'), 'utf8')).environments.production;
+  assert.equal(rebuild.status, 'applied');
+  assert.equal(rebuild.applied.run_id, '41469896446');
+  assert.equal(rebuild.applied.state, 'VERIFIED');
+  for (const member of FEE_PULL_SAVEPOINTS_MEMBERS) {
+    const pre = MONEY_WRITE_FLAG.members[member].accepted_sha256;
+    const accepted = sha(`aws/functions/api/${member}`);
+    assert.equal(rebuild.members[member].accepted_sha256, pre, member);
+    assert.notEqual(accepted, pre, member);
+    assert.deepEqual(manifest.members[member], { live_sha256: pre, accepted_sha256: accepted, operation: 'replace', previous_manifest: MONEY_WRITE_FLAG_REL }, member);
+    assert.deepEqual(PLAN.members[member], {
+      operation: 'replace',
+      accepted_sha256: accepted,
+      expected_live_sha256: pre,
+      sql_before: member === ENGINE ? 'aws/workflows/sql/120_usage_events_at_approval_and_send.sql' : null,
+      manifest: FEE_PULL_SAVEPOINTS_REL,
+    }, member);
+    const evidence = `${member} ${pre.slice(0, 8)} -> ${accepted.slice(0, 8)}`;
+    assert.ok(manifest.notes.includes(evidence), evidence);
+    assert.ok(PLAN.notes.includes(evidence), evidence);
+    assert.equal(resolvePlannedMember(member, { root: ROOT, plan: PLAN }).ok, true, member);
+  }
+  for (const evidence of ['a4d1ca95', '25P02', '41469896446', 'No SQL', 'Planning only']) {
+    assert.ok(PLAN.notes.includes(evidence), evidence);
+  }
+  for (const evidence of ['a4d1ca95', '25P02', '41469896446', 'No SQL', 'billing_pull_statement_failed']) {
+    assert.ok(manifest.notes.includes(evidence), evidence);
+  }
+  // The engine imports the new savepoint and replay helpers from collection v2: collection v2 goes first.
+  assert.ok(PLAN.order.indexOf(COLLECTION) < PLAN.order.indexOf(ENGINE));
+  const engineSource = fs.readFileSync(path.join(API, ENGINE), 'utf8');
+  assert.match(engineSource, /idempotentReplayTransfer,\n\s+logPullStatementFailure,\n\s+receivedCentsFromLegs,\n\s+savepointQuery,\n\s+withSavepoint,\n\} from '\.\/tenant-collection-v2\.mjs';/);
+  // Collection v2's one new import is sanitizeLogText from data.mjs. Production's data.mjs (the auth.email() bytes,
+  // run 41234874570) exports it: the live engine bytes already import it from there (finding 25); the planned
+  // login MFA data.mjs keeps it. Neither order nor the data.mjs row changes.
+  const collectionSource = fs.readFileSync(path.join(API, COLLECTION), 'utf8');
+  assert.deepEqual(localImports(collectionSource, COLLECTION).sort(), ['data.mjs', 'money-write-flag.mjs', 'providers/parity/moov-wallet.mjs']);
+  assert.match(collectionSource, /^import \{ sanitizeLogText \} from '\.\/data\.mjs';$/m);
+  assert.equal(PLAN.members['data.mjs'].expected_live_sha256, AUTH_EMAIL_VERIFIED_BYTES);
+  assert.match(fs.readFileSync(path.join(API, 'data.mjs'), 'utf8'), /export const sanitizeLogText/);
+  // Inspect: READY on the rebuild's bytes, ALREADY_ACCEPTED on main's, a reconciliation stop for anything else.
+  for (const member of FEE_PULL_SAVEPOINTS_MEMBERS) {
+    const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: member };
+    const pre = PLAN.members[member].expected_live_sha256;
+    const ready = await run(inspect, { root: ROOT, inspectLive: liveFor(member, { sha256: pre }) });
+    assert.equal(ready.state, 'READY', member);
+    assert.equal(ready.mutation, false, member);
+    assert.equal((await run(inspect, { root: ROOT, inspectLive: liveFor(member, { sha256: sha(`aws/functions/api/${member}`) }) })).state, 'ALREADY_ACCEPTED', member);
+    for (const other of [MONEY_WRITE_FLAG.members[member].live_sha256, 'c'.repeat(64)]) {
+      await assert.rejects(
+        run(inspect, { root: ROOT, inspectLive: liveFor(member, { sha256: other }) }),
+        (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+        `${member} ${other}`,
+      );
+    }
+  }
 });

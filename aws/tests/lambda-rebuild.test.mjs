@@ -177,6 +177,10 @@ const CHANGED_SINCE_FOURTH_PRODUCTION_REBUILD = new Set([
   'app-services.mjs',
   // Login MFA (2026-11-06): the login.mfa step-up binding and loginMfa in /auth/mfa/status.
   'auth-financial-totp.mjs',
+  // Fee pull savepoints (production incident 2026-11-06): every pull statement after the provider call under its
+  // own savepoint, and a Moov 409 idempotent replay recorded as the leg.
+  'tenant-billing-engine.mjs',
+  'tenant-collection-v2.mjs',
 ]);
 // Listed changes that go through the production overlay plan, never the current rebuild section.
 const OVERLAY_PLAN_CHANGES = new Set([

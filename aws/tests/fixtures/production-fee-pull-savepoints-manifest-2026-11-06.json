@@ -1,0 +1,21 @@
+{
+  "workstream_id": "fee-pull-savepoints",
+  "authorization": "Pending owner review (2026-11-06). Planning only: nothing is live or verified. Each production apply needs its own owner approval, a staging acceptance reference and a read-only production inspect that confirms the live bytes.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Production incident 2026-11-06, tenant fee pull (Freedom Adjustment, period 2026-10, $132.00): attempt 1 at 19:18:03Z, Moov created ACH debit a4d1ca95 (CCD), then a statement in the pull's transaction failed and was swallowed by .catch(); PostgreSQL had aborted the transaction, the API logged data_query_failed \"current transaction is aborted\" (25P02) and answered 503, and everything rolled back (no leg, no occurrence). Attempt 2 at 19:18:37Z reused idempotency key billing-2026-10-<tenant>-bank; Moov answered non-2xx with the transfer it had already created, moovFetch threw it and the collector committed the occurrence as failed with the transfer JSON as its reason. tenant-collection-v2.mjs: withSavepoint / savepointQuery run every collection store statement (getObligation, putObligation, getLeg, putLeg insert and update, listLegs) in its own SAVEPOINT, ROLLBACK TO it on error and log billing_pull_statement_failed with the statement label and SQLSTATE; each money write sets the money-write flag inside its savepoint. A leg insert that fails after Moov created the transfer is rethrown with the transaction intact: the obligation still records the transfer id, status submitted, note persist_failed. idempotentReplayTransfer: a 4xx MoovError whose body is a transfer with the same amount (USD), tenant, period and leg is this leg's transfer (idempotent replay, submitted); a different checksops_payment_id is accepted only when no row has that id (a rolled-back attempt); anything else fails closed as provider_idempotent_replay_mismatch. tenant-billing-engine.mjs: submitOccurrence's occurrence update and the tenant_billing_settings update, allocateInvoiceLines and the two resolveBillingDebitSource reads run under savepoints; recordBillingAudit logs a swallowed audit failure; submitVerificationOccurrence treats the same 409 replay as submitted. REPLACE tenant-collection-v2.mjs 73548567 -> 45a78f0e, then tenant-billing-engine.mjs 5a4327ca -> 32cc099e (the engine imports withSavepoint, savepointQuery, idempotentReplayTransfer and logPullStatementFailure from tenant-collection-v2.mjs, so collection v2 goes first). Pre-state: the bytes the fourth production rebuild put live (apply run 41469896446, VERIFIED 2026-11-02). tenant-collection-v2.mjs now imports sanitizeLogText from data.mjs (live, unchanged). sql_before unchanged (engine: SQL 120, applied). No SQL. No migration, no money-write policy change.",
+  "members": {
+    "tenant-collection-v2.mjs": {
+      "live_sha256": "7354856763a29fddf058cfc1677e73c62d28b8ce829b6c8927de74a03ccf8ff1",
+      "accepted_sha256": "45a78f0e66acb4cbd94b991f530870362644068a3b0e3ced8e88530e37083592",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-money-write-flag-manifest-2026-10-31.json"
+    },
+    "tenant-billing-engine.mjs": {
+      "live_sha256": "5a4327cadbc4537a269f0d249eae233dad441c2a177dd7f0aa105fd6891a4364",
+      "accepted_sha256": "32cc099e9dcd448921fcb0d36d7893d25195c2dee58b0faafb1b5c78ce6c1310",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-money-write-flag-manifest-2026-10-31.json"
+    }
+  }
+}
