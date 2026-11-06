@@ -3276,8 +3276,9 @@ export const AUTHORIZED_SQL143_MORTGAGE_COMPANIES_MEMBER_DELETE_UNUSED = Object.
 // not tax"). The new SECURITY DEFINER public.get_tenant_incoming_transfers(uuid) lets an organization read the send
 // legs another organization addressed to it (payment_transfers destination_tenant_id), under the API's tenant gate
 // re-checked in the database (aws_can_access_tenant, 42501); narrow columns, check context only for a check the sender
-// shares with it; EXECUTE for checksops and the owner. No predecessor. Pending until a reviewed pin change records a
-// staging read-live (expected: the function absent, everything else in place).
+// shares with it; EXECUTE for checksops and the owner. No predecessor. Staging apply authorized (wave 39) from staging
+// read-live run 42304378701: the pre-state, the function absent and everything else in place, equals the derived one
+// (ops/production-sql-144-apply.md).
 export const AUTHORIZED_SQL144_TENANT_INCOMING_TRANSFERS = Object.freeze({
   key: 'sql144',
   filename: 'aws/workflows/sql/144_tenant_incoming_transfers.sql',
@@ -3285,9 +3286,11 @@ export const AUTHORIZED_SQL144_TENANT_INCOMING_TRANSFERS = Object.freeze({
   // The commit that last authored the file bytes.
   commit: '87c3e193b8a962022df8ca2306e71b94721c3e6a',
   source_sha256: '9192e338ea4e54d2690e0ebde71754292394c52f1bac09c3af5fd3fb4b309865',
-  authorization: 'pending',
-  execute: false,
-  expected_live_definition_sha256: null,
+  authorization: 'Owner approved 2026-11-06: staging apply (wave 39) from staging read-live run 42304378701',
+  execute: true,
+  // Staging read-live run 42304378701 (main b5912204f, executor deploy run 42303787295): already_applied false,
+  // precondition_failures []. Equal to the derived pre-state (the function absent).
+  expected_live_definition_sha256: '428d394e88ce45840806f7a6c93ed63d40178c0376c8a70843197bf28dccb88e',
   // Code-derived: releaseIntendedHash('sql144', file bytes) (release-sql-state.mjs); re-derived by the tests.
   intended_replacement_sha256: 'ac458869cda99ec85cb42e31f5ba80ced29cbf227a81058379e086b0ffb924c2',
   function_identities: Object.freeze([

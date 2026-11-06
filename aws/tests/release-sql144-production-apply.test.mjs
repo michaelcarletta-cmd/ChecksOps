@@ -199,7 +199,7 @@ test('order: no predecessor; the one new read function, its prerequisites and th
   const runbook = fs.readFileSync(path.join(ROOT, COMMITTED.tooling.runbook), 'utf8');
   assert.ok(runbook.includes(COMMITTED.intended_replacement_sha256));
   assert.ok(runbook.includes(COMMITTED.source_sha256));
-  assert.match(runbook, /\*\*Status:\*\* not applied anywhere/);
+  assert.match(runbook, /\*\*Status:\*\* staging pin execute-authorized \(wave 39\); not applied anywhere\./);
   assert.match(runbook, /\*\*Predecessor\.\*\* None/);
   assert.match(runbook, /"yes build it, include\s+partner payments as income not tax\."/);
   assert.match(runbook, /APPLY_TENANT_INCOMING_TRANSFERS/);
