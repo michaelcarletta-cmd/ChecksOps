@@ -1,4 +1,5 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PaymentLedger } from "@/components/ledger/PaymentLedger";
 import { RecipientReport } from "@/components/ledger/RecipientReport";
@@ -24,6 +25,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PageShell } from "@/components/shell";
+import { isNativeApp } from "@/lib/nativeApp";
 
 
 const SectionCard = ({ 
@@ -70,6 +72,15 @@ const Payments = () => {
   // (payroll and tax included). Platform roles give no shortcut.
   const { isMember: isAdmin } = useCurrentTenantMembership();
   const canTax = canAccessTaxUi({ isTenantMember: isAdmin });
+  const nativeApp = isNativeApp();
+  const sections = [
+    { value: "ledger", label: "Payment History", Icon: Receipt },
+    { value: "invoices", label: "Invoices", Icon: FileSpreadsheet },
+    { value: "revenue", label: "Revenue & Profit", Icon: Landmark },
+    { value: "recipients", label: "By Recipient", Icon: Users },
+    ...(canTax ? [{ value: "tax", label: "Tax & 1099", Icon: FileText }] : []),
+    ...(isAdmin ? [{ value: "payroll", label: "Payroll", Icon: Wallet }] : []),
+  ];
 
   useEffect(() => {
     const tab = searchParams.get("tab");
@@ -99,36 +110,33 @@ const Payments = () => {
 
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="bg-muted/50 p-1 mb-8 overflow-x-auto w-full justify-start sm:w-auto h-auto">
-          <TabsTrigger value="ledger" className="gap-2 py-2">
-            <Receipt className="h-4 w-4" />
-            Payment History
-          </TabsTrigger>
-          <TabsTrigger value="invoices" className="gap-2 py-2">
-            <FileSpreadsheet className="h-4 w-4" />
-            Invoices
-          </TabsTrigger>
-          <TabsTrigger value="revenue" className="gap-2 py-2">
-            <Landmark className="h-4 w-4" />
-            Revenue & Profit
-          </TabsTrigger>
-          <TabsTrigger value="recipients" className="gap-2 py-2">
-            <Users className="h-4 w-4" />
-            By Recipient
-          </TabsTrigger>
-          {canTax && (
-            <TabsTrigger value="tax" className="gap-2 py-2">
-              <FileText className="h-4 w-4" />
-              Tax & 1099
-            </TabsTrigger>
-          )}
-          {isAdmin && (
-            <TabsTrigger value="payroll" className="gap-2 py-2">
-              <Wallet className="h-4 w-4" />
-              Payroll
-            </TabsTrigger>
-          )}
-        </TabsList>
+        {/* The app picks the section from a dropdown; the website keeps the tab strip. */}
+        {nativeApp ? (
+          <Select value={activeTab} onValueChange={setActiveTab}>
+            <SelectTrigger className="mb-6 h-12 w-full text-base" aria-label="Financials section">
+              <SelectValue placeholder="Choose a section" />
+            </SelectTrigger>
+            <SelectContent>
+              {sections.map(({ value, label, Icon }) => (
+                <SelectItem key={value} value={value} className="py-3 text-base">
+                  <span className="flex items-center gap-2">
+                    <Icon className="h-4 w-4" />
+                    {label}
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : (
+          <TabsList className="bg-muted/50 p-1 mb-8 overflow-x-auto w-full justify-start sm:w-auto h-auto">
+            {sections.map(({ value, label, Icon }) => (
+              <TabsTrigger key={value} value={value} className="gap-2 py-2">
+                <Icon className="h-4 w-4" />
+                {label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        )}
 
         <TabsContent value="ledger" className="mt-0">
           <SectionCard 

@@ -28,7 +28,7 @@ interface PageShellProps {
  */
 export function PageShell({ children, width = "default", className }: PageShellProps) {
   return (
-    <div className={cn("mx-auto w-full min-w-0 space-y-6 pb-12", widthClass[width], className)}>
+    <div className={cn("page-shell mx-auto w-full min-w-0 space-y-6 pb-12", widthClass[width], className)}>
       {children}
     </div>
   );

@@ -1,8 +1,5 @@
 {
   "appId": "com.checksops.app",
   "appName": "ChecksOps",
-  "webDir": "../dist",
-  "ios": {
-    "contentInset": "always"
-  }
+  "webDir": "../dist"
 }

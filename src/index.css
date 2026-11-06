@@ -537,3 +537,88 @@ html.light body {
 .font-mono {
   font-variant-numeric: tabular-nums slashed-zero;
 }
+
+/* ── iOS / Android app only (mobile/, Capacitor) ─────────────────────────────────────────────
+   applyNativeAppShell() in src/lib/nativeApp.ts sets html.native-app at startup inside the app.
+   A browser never has the class, so none of this applies to the website. */
+html.native-app {
+  /* iOS reports the status bar through env(); Capacitor's Android SystemBars sets the variables. */
+  --app-safe-top: max(env(safe-area-inset-top, 0px), var(--safe-area-inset-top, 0px));
+  --app-safe-bottom: max(env(safe-area-inset-bottom, 0px), var(--safe-area-inset-bottom, 0px));
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+}
+
+/* No rubber-band bounce, and no page scroll when the screen's content fits. */
+html.native-app,
+html.native-app body {
+  overscroll-behavior: none;
+}
+
+/* Text is not selectable by accident; fields still are. */
+html.native-app body {
+  -webkit-user-select: none;
+  user-select: none;
+}
+html.native-app :is(input, textarea, select, [contenteditable="true"]) {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* The shell is exactly one screen: status bar inset, banner, then the page filling the rest.
+   A page sized `min-h-screen` (login, for one) takes the remaining space instead of a full
+   extra screen, so it no longer scrolls by the banner's height. */
+html.native-app .app-shell {
+  box-sizing: border-box;
+  min-height: 100dvh;
+  padding-top: var(--app-safe-top);
+  padding-bottom: var(--app-safe-bottom);
+  display: flex;
+  flex-direction: column;
+}
+html.native-app .app-shell > .min-h-screen {
+  min-height: 0;
+  flex: 1 0 auto;
+}
+
+/* Content scrolls under an opaque strip, not behind the clock; sticky page headers stop below it. */
+html.native-app body::before {
+  content: "";
+  position: fixed;
+  inset: 0 0 auto 0;
+  height: var(--app-safe-top);
+  background: hsl(var(--background));
+  z-index: 70;
+  pointer-events: none;
+}
+html.native-app header.sticky.top-0 {
+  top: var(--app-safe-top);
+}
+
+/* Taps press in. */
+html.native-app :is(button, a, [role="button"], [role="tab"], [role="menuitem"], [role="option"]) {
+  transition: transform 120ms ease-out, opacity 120ms ease-out;
+}
+html.native-app :is(button, a, [role="button"], [role="tab"]):active:not(:disabled):not([aria-disabled="true"]) {
+  transform: scale(0.97);
+  opacity: 0.85;
+}
+
+/* Pages and tab sections slide up and fade in when they open. */
+@keyframes native-enter {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+html.native-app .page-shell,
+html.native-app [role="tabpanel"][data-state="active"] {
+  animation: native-enter 220ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.native-app *,
+  html.native-app *::before,
+  html.native-app *::after {
+    animation-duration: 1ms !important;
+    transition-duration: 1ms !important;
+  }
+}
