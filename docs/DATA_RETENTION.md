@@ -21,7 +21,7 @@ Defines how long ChecksOps retains consumer financial information ("NPI") under 
 
 Per-tenant override: `tenants.data_retention_years` (default 7; minimum 7 unless local law allows shorter).
 
-**OWNER TO CONFIRM:** the CloudWatch log group retention settings and the lifecycle rules on `checksops-production-security-logs-806168576068` match the rows above.
+**Applied 2026-11-06** (`ops/security/LOG_RETENTION_AND_DR_2026_11.md`): `checksops-production-security-logs-806168576068` keeps CloudTrail and AWS Config 2,557 days (Glacier after 90); application log groups keep 90 days; the CloudWatch copy of CloudTrail keeps 365 days for searching. New log groups start with no retention; the monthly review (evidence calendar row V-1) catches them.
 
 ## 3. Triggering Events
 - **Claim closed** — when `claims.status` transitions to `closed`, `settled`, `denied`, or `archived`, the trigger `set_claim_retention_purge_after` computes `retention_purge_after = now() + tenant.data_retention_years`.

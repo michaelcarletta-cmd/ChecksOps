@@ -142,3 +142,14 @@ from the plan.
   not possible. The AWS production database and private-files bucket are therefore the only copy of
   the pre-AWS records. Remaining: Step 4 items 2–4 (billing, tokens and secrets, Lovable), then
   Step 5.
+- **2026-11-06, owner report:** "Supabase is cancelled" and "lovable is removed from github". Step 4
+  item 2 (subscription) and the GitHub side of item 4 (Lovable's repository access) are done.
+  Checked in the repository the same day: no GitHub workflow reads a Supabase secret (`.github/`
+  references `supabase/` only as paths for the tax-profile migration guard), so item 3 has nothing to
+  remove from Actions. Not verified from here: Supabase personal access tokens (moot once the account
+  holds no project) and the Lovable project itself.
+- **Step 5, decided 2026-11-06:** the `src/integrations/supabase/` modules stay. On AWS builds they are
+  the compatibility layer the SPA calls, backed by the AWS API, not a Supabase connection (the live
+  bundle holds no `supabase.co` URL, read 2026-11-06). The `supabase/` directory stays as the history
+  the restored schema came from and is still read by the tax-profile migration guard. Removing either is
+  a refactor, not part of retiring the vendor.

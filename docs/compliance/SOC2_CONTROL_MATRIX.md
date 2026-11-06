@@ -93,7 +93,7 @@ period.
 
 | ID | Control | Evidence | Status |
 |---|---|---|---|
-| CC7.1 | Audit logging of the cloud account | CloudTrail `checksops-production-mgmt-events`: multi-region, log-file validation on, into `checksops-production-security-logs-806168576068` (`aws/cutover/OPERATOR_SECURITY_SERVICES.md`); VPC flow log `fl-0913268bc96a95205` | Partial: logging is on, but retention does not match `docs/DATA_RETENTION.md` §2 (read 2026-11-06 18:20 UTC): the security-logs bucket expires objects after 365 days (policy: 7 years); the CloudTrail log group keeps 365 days; 319 of 325 CloudWatch log groups never expire (policy: 90 days for application logs). The owner decides whether to change the lifecycle rules or the policy. |
+| CC7.1 | Audit logging of the cloud account | CloudTrail `checksops-production-mgmt-events`: multi-region, log-file validation on, into `checksops-production-security-logs-806168576068` (`aws/cutover/OPERATOR_SECURITY_SERVICES.md`); VPC flow log `fl-0913268bc96a95205` | In place: retention matches `docs/DATA_RETENTION.md` §2 since 2026-11-06 (security-logs bucket 7 years, Glacier after 90 days; every log group has a retention; `ops/security/LOG_RETENTION_AND_DR_2026_11.md`). |
 | CC7.2 | Application audit logging | `audit_logs`, `pii_reveal_logs`, `glba_security_events`, `check_audit_log`, `check_status_audit`, `deposit_audit_log`, `payment_event_log`, `financial_stepup_log` (append-only, SQL 106), `aws_provider_webhook_receipts` | In place |
 | CC7.2 | Alerts reach a person | 14 CloudWatch security alarms to SNS `checksops-production-security-alerts`, subscription confirmed (`OPERATOR_SECURITY_HANDOFF_2TO6.md`) | In place. Record a test alert once a year (row I-3). |
 | CC7.3–7.4 | Incident response plan; post-mortems | `docs/INCIDENT_RESPONSE.md`, `aws/cutover/INCIDENT_RESPONSE_AWS.md`; post-mortems due in `docs/incidents/YYYY-MM-DD.md` | Partial: `docs/incidents/` does not exist yet, and there is no tabletop record (row I-1). |
@@ -114,7 +114,7 @@ period.
 
 | ID | Control | Evidence | Status |
 |---|---|---|---|
-| CC9.1 | Business continuity and disaster recovery | `docs/compliance/BCP_DR.md`; Multi-AZ RDS (primary 1f, standby 1a), 35-day backups, deletion protection; private-files bucket versioning on; `aws/cutover/WRITE_FREEZE_DRILL.md` | Partial: targets written. No copy outside `us-east-1` (no cross-region backup, S3 replication or AWS Backup plan, read 2026-11-06), and no named backup operator if the owner is unavailable. |
+| CC9.1 | Business continuity and disaster recovery | `docs/compliance/BCP_DR.md`; Multi-AZ RDS (primary 1f, standby 1a), 35-day backups, deletion protection; private-files bucket versioning on; `aws/cutover/WRITE_FREEZE_DRILL.md` | Partial: targets written; database backups replicated to `us-east-2` since 2026-11-06. Still single-region: the private-files bucket. Backup person named (Austin Sukanick); access not yet set up. No restore test yet. |
 | CC9.2 | Vendor inventory, contracts and annual review | WISP §3.6 vendor table | Gap: collect each vendor's SOC 2 report and the contract addendum, and record an annual review (row S-1). The WISP still marks Moov and CheckAlt addenda "OWNER TO CONFIRM". |
 | CC9.2 | Complementary user-entity controls | `docs/compliance/SYSTEM_DESCRIPTION.md` §5 | Partial: drafted; to be reflected in tenant terms. |
 
@@ -149,11 +149,10 @@ In rough order of audit risk:
 2. **Login MFA is optional**, while the policy and the public security page say it is required for
    every user (CC6.1). Read live 2026-11-06: `MfaConfiguration` `OPTIONAL`. Every tenant member has
    full access, money included, so this is the highest-risk gap.
-3. **Log retention** does not match the policy (CC7.1): CloudTrail 365 days against 7 years; most
-   CloudWatch log groups never expire.
+3. ~~Log retention~~ closed 2026-11-06 (see Closed).
 4. **No records yet for the recurring controls** (CC1.5, CC3.1, CC4.1, CC6.3, CC7.4, A1.3): start
    them from `docs/compliance/EVIDENCE_CALENDAR.md`.
-5. **No disaster recovery outside `us-east-1`** (CC9.1).
+5. **Files not copied outside `us-east-1`** (CC9.1). The database is, since 2026-11-06.
 6. **Root account** in daily use (CC6.1). Root MFA is on (confirmed 2026-11-06).
 7. **Vendor SOC reports and addenda** not on file (CC9.2).
 8. **Documents drafted 2026-11-06, to adopt and keep records for**: personnel security, BCP/DR,
@@ -161,6 +160,7 @@ In rough order of audit risk:
    controls.
 
 Closed:
+- **Log retention** (CC7.1): matches the policy since 2026-11-06.
 - **Policies out of date for AWS** (CC1.1): WISP and data retention rewritten, #1648 (2026-11-06).
 - **Security Hub** (CC4.1): 2026-11-06 18:16 UTC, 0 active CRITICAL/HIGH findings; RDS.46 PASSED for
   `checksops-production` and `checksops-staging`. Keep the monthly snapshot (row V-1).

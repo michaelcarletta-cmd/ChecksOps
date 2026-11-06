@@ -23,6 +23,7 @@ its PR or ticket.
 
 | Row | Control (matrix ID) | How often | What the record shows | Next due |
 |---|---|---|---|---|
+| 2026-11-06 | CC7.1, CC9.1 | Owner (CloudShell); verified by Claude read-only 18:56 UTC | Log retention to policy and database backups to `us-east-2`: `ops/security/LOG_RETENTION_AND_DR_2026_11.md` "Applied" |
 | V-1 | Security Hub, GuardDuty and Inspector review (CC4.1, CC4.2) | Monthly | Count of active CRITICAL and HIGH findings per source, each open one with an owner and a target date | 2026-11-30 |
 | V-2 | Third-party penetration test (CC4.1) | Annually | Report (stored outside), findings and their fixes | Before the Type II window starts |
 | V-3 | SQL runner OS patching (CC6.8) | Monthly, and on any CRITICAL Inspector finding | Before and after kernel and release versions, SSM command ids (as in hardening item 7) | 2026-12-02 |
