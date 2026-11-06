@@ -3,6 +3,36 @@ import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import { componentTagger } from "lovable-tagger";
 import { VitePWA } from "vite-plugin-pwa";
+import fs from "node:fs";
+import type { Plugin } from "vite";
+import { MARKETING_PAGES } from "./src/pages/marketing/marketingPages.ts";
+import { renderStaticHead, staticPageKey } from "./src/pages/marketing/marketingStaticHead.ts";
+
+/**
+ * After a build, give every public marketing page its own served HTML head (title, share
+ * preview, canonical, JSON-LD): index.html for "/", and an extensionless copy such as
+ * dist/pricing for the others. See src/pages/marketing/marketingStaticHead.ts.
+ */
+function marketingStaticHeads(): Plugin {
+  let outDir = "dist";
+  return {
+    name: "checksops-marketing-static-heads",
+    apply: "build",
+    configResolved(config) {
+      outDir = path.resolve(config.root, config.build.outDir);
+    },
+    closeBundle() {
+      const indexPath = path.join(outDir, "index.html");
+      if (!fs.existsSync(indexPath)) return;
+      const indexHtml = fs.readFileSync(indexPath, "utf8");
+      for (const page of MARKETING_PAGES) {
+        const target = path.join(outDir, staticPageKey(page.path));
+        fs.mkdirSync(path.dirname(target), { recursive: true });
+        fs.writeFileSync(target, renderStaticHead(indexHtml, page));
+      }
+    },
+  };
+}
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
@@ -69,6 +99,7 @@ export default defineConfig(({ mode }) => {
   },
   plugins: [
     react(),
+    marketingStaticHeads(),
     !awsMode && mode === "development" && componentTagger(),
     !awsMode && VitePWA({
       registerType: "autoUpdate",

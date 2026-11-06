@@ -7,6 +7,7 @@ import { CheckOpsLogo } from "@/components/marketing/CheckOpsLogo";
 import { MarketingMenuButton, MarketingMobileMenu } from "@/components/marketing/MarketingMobileMenu";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import { PUBLISHED_PRICING } from "@/pages/marketing/marketingPricing";
+import { COMPARISON_LINKS, VS_IINK_FAQ as FAQ, VS_IINK_PAGE } from "@/pages/marketing/marketingPages";
 
 /**
  * /vs/checksops-vs-iink-payments: an honest side-by-side for a firm owner choosing between
@@ -19,10 +20,6 @@ import { PUBLISHED_PRICING } from "@/pages/marketing/marketingPricing";
  * (src/lib/financial/iink.ts lists 3% on the Basic tier and 2% on the others).
  */
 const IINK_FACTS_AS_OF = "November 6, 2026";
-
-const TITLE = "ChecksOps vs iink Payments - Claim check workflow compared";
-const DESCRIPTION =
-  `ChecksOps vs iink Payments for public adjusting firms: a control layer your firm runs at a flat ${PUBLISHED_PRICING.perCheck} per check, versus a payments network with monthly tiers and a 1% fee on mortgage checks.`;
 
 const NAV_ITEMS = [
   { label: "Capabilities", href: "/#capabilities" },
@@ -76,46 +73,17 @@ const ROWS: Row[] = [
 const EXAMPLE_CHECK = 20000;
 const IINK_MORTGAGE_FEE = Math.max(25, EXAMPLE_CHECK * 0.01);
 
-const FAQ = [
-  {
-    q: "Is ChecksOps a payment processor like iink?",
-    a: "No. ChecksOps is workflow software, not a bank, lender, escrow service, or payment processor. Your company owns the process and controls all communications with carriers, mortgage companies, payees, and banks.",
-  },
-  {
-    q: "How does the cost of a mortgage check compare?",
-    a: `iink charges 1% of the check amount on checks with a mortgage company payee, with a $25 minimum and a cap of $299 to $329 depending on tier. ChecksOps charges ${PUBLISHED_PRICING.perCheck} per check whatever the amount or payee.`,
-  },
-  {
-    q: "Which is cheaper for a small firm?",
-    a: `For a firm with a handful of checks a month, iink's $45-a-month Basic tier is the lower start. ChecksOps has a ${PUBLISHED_PRICING.platformFee} one-time platform fee and is built for firms that process insurance claim checks at scale.`,
-  },
-  {
-    q: "Who controls the money and the mortgage company relationship?",
-    a: "With ChecksOps, your company does. Each organization has its own wallet, your company stays the merchant of record, and your team keeps mortgage-company communication.",
-  },
-];
-
-const JSON_LD = {
-  "@context": "https://schema.org",
-  "@type": "FAQPage",
-  mainEntity: FAQ.map((f) => ({
-    "@type": "Question",
-    name: f.q,
-    acceptedAnswer: { "@type": "Answer", text: f.a },
-  })),
-};
-
 const usd = (n: number) => `$${n.toLocaleString("en-US")}`;
 
 export default function ChecksOpsVsIink() {
   const [menuOpen, setMenuOpen] = useState(false);
-  usePageMeta({ title: TITLE, description: DESCRIPTION, path: "/vs/checksops-vs-iink-payments", jsonLd: JSON_LD });
+  usePageMeta(VS_IINK_PAGE);
 
   return (
     <div className="min-h-screen max-w-full overflow-x-hidden bg-background text-foreground">
       <header className="sticky top-0 z-50 border-b border-border/40 bg-background/80 backdrop-blur-xl">
         <div className="mx-auto max-w-7xl px-4 md:px-6 h-14 flex items-center justify-between">
-          <Link to="/">
+          <Link to="/" className="flex items-center min-h-[44px]">
             <CheckOpsLogo className="text-foreground h-9 sm:h-10" />
           </Link>
           <nav className="hidden md:flex items-center gap-6 text-sm text-muted-foreground">
@@ -127,7 +95,7 @@ export default function ChecksOpsVsIink() {
             <Button asChild variant="ghost" size="sm" className="hidden sm:inline-flex">
               <Link to="/login"><LogIn className="h-4 w-4 mr-1.5" />Sign in</Link>
             </Button>
-            <Button asChild size="sm">
+            <Button asChild size="sm" className="h-11 sm:h-9">
               <Link to="/#demo">Book a demo</Link>
             </Button>
             <MarketingMenuButton open={menuOpen} onToggle={() => setMenuOpen(!menuOpen)} />
@@ -239,9 +207,12 @@ export default function ChecksOpsVsIink() {
       <footer className="border-t border-border/40">
         <div className="mx-auto max-w-7xl px-4 md:px-6 py-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-muted-foreground">
           <span>© {new Date().getFullYear()} ChecksOps</span>
-          <nav className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <nav className="flex flex-wrap items-center gap-x-4 gap-y-2 [&>a]:inline-flex [&>a]:items-center [&>a]:min-h-[44px] sm:[&>a]:min-h-0">
             <Link to="/" className="hover:text-foreground">Home</Link>
             <Link to="/pricing" className="hover:text-foreground">Pricing</Link>
+            {COMPARISON_LINKS.filter((l) => l.to !== VS_IINK_PAGE.path).map((l) => (
+              <Link key={l.to} to={l.to} className="hover:text-foreground">{l.label}</Link>
+            ))}
             <Link to="/privacy-notice" className="hover:text-foreground">Privacy Notice</Link>
             <Link to="/terms" className="hover:text-foreground">Terms of Service</Link>
           </nav>

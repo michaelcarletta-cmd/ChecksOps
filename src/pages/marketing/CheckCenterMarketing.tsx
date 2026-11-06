@@ -41,14 +41,12 @@ import {
   FounderBlock,
   FounderFooterLink,
   TestimonialWall,
-  UsageStatStrip,
+  HeroUsageLine,
 } from "@/components/marketing/MarketingProof";
 import { usePageMeta } from "@/hooks/usePageMeta";
-import { PUBLISHED_PRICING } from "@/pages/marketing/marketingPricing";
-
-const HOME_TITLE = "ChecksOps - Claim check workflow for public adjusting firms";
-const HOME_DESCRIPTION =
-  "Claim check workflow for public adjusting firms and their restoration partners: every insurance check filed by claim, payee endorsements captured, deposit readiness and loss drafts tracked.";
+import { COMPARISON_LINKS, HOME_FAQ as FAQ, HOME_PAGE } from "@/pages/marketing/marketingPages";
+import { HERO_SCREENSHOT } from "@/pages/marketing/marketingProof";
+import { ROLLOUT_GUARANTEE } from "@/pages/marketing/marketingPricing";
 
 const NAV_ITEMS = [
   { label: "Capabilities", href: "#capabilities" },
@@ -59,37 +57,6 @@ const NAV_ITEMS = [
   { label: "Pricing", href: "/pricing" },
   { label: "Demo", href: "#demo" },
 ];
-
-// Plain answers built only from what this site already states (footer disclaimer,
-// money-movement note, /pricing). Rendered on the page and as FAQPage JSON-LD.
-const FAQ = [
-  {
-    q: "Is ChecksOps a bank or a payment processor?",
-    a: "No. ChecksOps is workflow software, not a bank, lender, escrow service, or payment processor. Your company owns the process and controls all communications with carriers, mortgage companies, payees, and banks.",
-  },
-  {
-    q: "Who holds the money in the wallet?",
-    a: "Each organization gets its own wallet, separate and owned by your company. Money movement is powered by Moov, a regulated money services provider, and your company remains the merchant of record.",
-  },
-  {
-    q: "What does it cost?",
-    a: `A ${PUBLISHED_PRICING.platformFee} one-time platform fee per company, ${PUBLISHED_PRICING.perCheck} per check processed, and support and updates at ${PUBLISHED_PRICING.supportMonthly} a month or ${PUBLISHED_PRICING.supportAnnual} a year. Unlimited users, no minimums, no caps.`,
-  },
-  {
-    q: "How long does setup take?",
-    a: "We set up your environment, migrate historical data, and train your team. Most companies are live within two weeks.",
-  },
-];
-
-const FAQ_JSON_LD = {
-  "@context": "https://schema.org",
-  "@type": "FAQPage",
-  mainEntity: FAQ.map((f) => ({
-    "@type": "Question",
-    name: f.q,
-    acceptedAnswer: { "@type": "Answer", text: f.a },
-  })),
-};
 
 const DepositMockup = () => (
   <div className="rounded-xl border border-border/60 bg-card/80 shadow-xl overflow-hidden">
@@ -170,7 +137,7 @@ const PayoutMockup = () => (
           <span>Verified · tokenized account</span>
         </div>
       </div>
-      <Button size="sm" className="w-full gap-1.5 bg-[#596032] hover:bg-[#596032]/90 text-white">
+      <Button type="button" tabIndex={-1} aria-hidden="true" size="sm" className="pointer-events-none w-full gap-1.5 bg-[#596032] hover:bg-[#596032]/90 text-white">
         <Send className="h-3.5 w-3.5" /> Send $8,420.00
       </Button>
     </div>
@@ -203,7 +170,7 @@ const WalletMockup = () => (
           <span className="font-mono">Chase ••4210</span>
         </div>
       </div>
-      <Button size="sm" variant="outline" className="w-full gap-1.5 border-[#596032]/30 text-[#7d8548] hover:bg-[#596032]/10 hover:text-[#7d8548]">
+      <Button type="button" tabIndex={-1} aria-hidden="true" size="sm" variant="outline" className="pointer-events-none w-full gap-1.5 border-[#596032]/30 text-[#7d8548] hover:bg-[#596032]/10 hover:text-[#7d8548]">
         <Banknote className="h-3.5 w-3.5" /> Add funds
       </Button>
     </div>
@@ -319,7 +286,7 @@ export default function CheckCenterMarketing() {
   const supportEmail = "support@checksops.com";
   const [menuOpen, setMenuOpen] = useState(false);
   const location = useLocation();
-  usePageMeta({ title: HOME_TITLE, description: HOME_DESCRIPTION, path: "/", jsonLd: FAQ_JSON_LD });
+  usePageMeta(HOME_PAGE);
 
   // Links such as /#demo from /pricing land here after a client-side navigation,
   // which does not scroll to the anchor on its own.
@@ -421,7 +388,7 @@ export default function CheckCenterMarketing() {
             <a href="#demo" className="hover:text-foreground transition-colors">Demo</a>
           </nav>
           <div className="flex items-center gap-2">
-            <Button asChild size="sm">
+            <Button asChild size="sm" className="h-11 sm:h-9">
               <Link to="/login"><LogIn className="h-4 w-4 mr-1.5" />Sign in</Link>
             </Button>
             <MarketingMenuButton open={menuOpen} onToggle={() => setMenuOpen(!menuOpen)} />
@@ -443,13 +410,16 @@ export default function CheckCenterMarketing() {
           <div className="min-w-0">
             <Badge variant="outline" className="mb-5 gap-1.5 border-primary/30 bg-primary/5 text-primary">
               <Sparkles className="h-3 w-3" />
-              For public adjusting firms and their restoration partners
+              Claim check workflow software
             </Badge>
             <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight leading-[1.05]">
               Every claim check.
               <br />
               <span className="bg-gradient-to-r from-primary via-[#7d8548] to-[#c4cb92] bg-clip-text text-transparent">
                 Under control.
+              </span>
+              <span className="mt-3 block text-2xl md:text-3xl lg:text-4xl font-semibold text-foreground/90">
+                For public adjusting firms and their restoration partners.
               </span>
             </h1>
             <p className="mt-5 text-lg text-muted-foreground max-w-xl leading-relaxed break-words">
@@ -469,6 +439,14 @@ export default function CheckCenterMarketing() {
             <p className="mt-4 text-sm text-muted-foreground max-w-xl">
               20-minute walkthrough, no commitment. Your company stays the merchant of record.
             </p>
+            {ROLLOUT_GUARANTEE && (
+              <p className="mt-2 text-sm text-foreground/90 max-w-xl">
+                {ROLLOUT_GUARANTEE.text}{" "}
+                <Link to={ROLLOUT_GUARANTEE.termsPath} className="underline underline-offset-2 hover:text-foreground">Terms</Link>
+              </p>
+            )}
+            {/* Quantity proof: hidden until marketingProof.ts USAGE_STATS has real numbers */}
+            <HeroUsageLine />
             <div className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-3 text-xs text-muted-foreground">
               <div className="flex items-center gap-1.5"><ShieldCheck className="h-3.5 w-3.5" /> Audit trail on every action</div>
               <div className="flex items-center gap-1.5"><Lock className="h-3.5 w-3.5" /> Role-based access</div>
@@ -477,7 +455,17 @@ export default function CheckCenterMarketing() {
           <div className="relative min-w-0 max-w-full">
             <div className="absolute -inset-6 bg-gradient-to-tr from-primary/20 via-transparent to-[#7d8548]/10 blur-3xl" />
             <div className="relative">
-              <HeroMockup />
+              {HERO_SCREENSHOT ? (
+                <img
+                  src={HERO_SCREENSHOT.src}
+                  alt={HERO_SCREENSHOT.alt}
+                  width={HERO_SCREENSHOT.width}
+                  height={HERO_SCREENSHOT.height}
+                  className="w-full h-auto rounded-xl border border-border/60 shadow-xl"
+                />
+              ) : (
+                <HeroMockup />
+              )}
             </div>
           </div>
         </div>
@@ -490,6 +478,9 @@ export default function CheckCenterMarketing() {
             <h2 className="text-2xl md:text-3xl font-bold tracking-tight">Control without outsourcing the claim relationship.</h2>
             <p className="mt-3 text-sm md:text-base text-muted-foreground leading-relaxed">
               Some platforms center the payment processor. ChecksOps centers the professional managing the claim. Your company keeps the mortgage, carrier, payee, and banking decisions while ChecksOps provides the organized workflow, evidence, and status visibility.
+            </p>
+            <p className="mt-3 text-sm md:text-base text-foreground/90 leading-relaxed">
+              When a carrier, a lender or a homeowner asks where a check stands, your team answers in one look, with the audit trail to back it up.
             </p>
           </div>
           <div className="grid sm:grid-cols-3 gap-3">
@@ -507,26 +498,6 @@ export default function CheckCenterMarketing() {
           </div>
         </div>
       </section>
-
-      {/* Stat strip */}
-      <section className="border-y border-border/40 bg-card/30">
-        <div className="mx-auto max-w-7xl px-4 md:px-6 py-8 grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
-          {[
-            { n: "Claim", l: "Centered files" },
-            { n: "100%", l: "Audit-logged" },
-            { n: "Payee", l: "Signature tracking" },
-            { n: "1 view", l: "Funds visibility" },
-          ].map((s) => (
-            <div key={s.l}>
-              <p className="text-2xl md:text-3xl font-bold bg-gradient-to-b from-foreground to-muted-foreground bg-clip-text text-transparent">{s.n}</p>
-              <p className="text-xs text-muted-foreground mt-1">{s.l}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* Quantity proof: hidden until marketingProof.ts USAGE_STATS has real numbers */}
-      <UsageStatStrip />
 
       {/* Capabilities */}
       <section id="capabilities" className="mx-auto max-w-7xl px-4 md:px-6 py-20 md:py-28">
@@ -648,7 +619,7 @@ export default function CheckCenterMarketing() {
                       </div>
                     ))}
                   </div>
-                  <Button variant="outline" size="sm" className="w-full text-xs">
+                  <Button type="button" tabIndex={-1} aria-hidden="true" variant="outline" size="sm" className="pointer-events-none w-full text-xs">
                     <ClipboardCheck className="h-3.5 w-3.5 mr-1.5" />
                     Upload loss-draft documents
                   </Button>
@@ -854,21 +825,21 @@ export default function CheckCenterMarketing() {
                 <div className="grid sm:grid-cols-2 gap-3">
                   <div className="space-y-1.5">
                     <Label htmlFor="name" className="text-xs">Name *</Label>
-                    <Input id="name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Jane Doe" required />
+                    <Input id="name" autoComplete="name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Jane Doe" required />
                   </div>
                   <div className="space-y-1.5">
                     <Label htmlFor="email" className="text-xs">Work email *</Label>
-                    <Input id="email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="jane@firm.com" required />
+                    <Input id="email" type="email" inputMode="email" autoComplete="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="jane@firm.com" required />
                   </div>
                 </div>
                 <div className="grid sm:grid-cols-2 gap-3">
                   <div className="space-y-1.5">
                     <Label htmlFor="company" className="text-xs">Company</Label>
-                    <Input id="company" value={form.company} onChange={(e) => setForm({ ...form, company: e.target.value })} placeholder="Firm or contractor" />
+                    <Input id="company" autoComplete="organization" value={form.company} onChange={(e) => setForm({ ...form, company: e.target.value })} placeholder="Firm or contractor" />
                   </div>
                   <div className="space-y-1.5">
                     <Label htmlFor="role" className="text-xs">Role</Label>
-                    <Input id="role" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })} placeholder="PA, Owner, Ops" />
+                    <Input id="role" autoComplete="organization-title" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })} placeholder="PA, Owner, Ops" />
                   </div>
                 </div>
                 <div className="space-y-1.5">
@@ -904,13 +875,15 @@ export default function CheckCenterMarketing() {
             <p className="text-xs text-muted-foreground">
               © {new Date().getFullYear()} ChecksOps. All rights reserved.
             </p>
-            <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
+            <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-xs text-muted-foreground [&>a]:inline-flex [&>a]:items-center [&>a]:min-h-[44px] sm:[&>a]:min-h-0">
               <a href={`mailto:${supportEmail}`} className="hover:text-foreground">Support</a>
+              <FounderFooterLink />
               <Link to="/login" className="hover:text-foreground">Sign in</Link>
               <a href="#demo" className="hover:text-foreground">Book demo</a>
               <Link to="/pricing" className="hover:text-foreground">Pricing</Link>
-              <Link to="/vs/checksops-vs-iink-payments" className="hover:text-foreground">ChecksOps vs iink Payments</Link>
-              <FounderFooterLink />
+              {COMPARISON_LINKS.map((l) => (
+                <Link key={l.to} to={l.to} className="hover:text-foreground">{l.label}</Link>
+              ))}
               <Link to="/privacy-notice" className="hover:text-foreground">Privacy Notice</Link>
               <Link to="/terms" className="hover:text-foreground">Terms of Service</Link>
             </div>

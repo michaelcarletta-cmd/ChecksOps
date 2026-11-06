@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { Linkedin } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -58,22 +59,19 @@ export function ExternalSignalStrip() {
   );
 }
 
-export function UsageStatStrip() {
+/** One line of real usage numbers under the hero CTA. Hidden until USAGE_STATS is filled in. */
+export function HeroUsageLine() {
   if (USAGE_STATS.length === 0 || !USAGE_STATS_UPDATED_ON) return null;
   return (
-    <section className="border-b border-border/40 bg-card/30">
-      <div className="mx-auto max-w-7xl px-4 md:px-6 py-8">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 text-center">
-          {USAGE_STATS.map((s) => (
-            <div key={s.label}>
-              <p className="text-2xl md:text-3xl font-bold">{s.value}</p>
-              <p className="text-xs text-muted-foreground mt-1">{s.label}</p>
-            </div>
-          ))}
-        </div>
-        <p className="mt-4 text-center text-[11px] text-muted-foreground">Updated {USAGE_STATS_UPDATED_ON}</p>
-      </div>
-    </section>
+    <p className="mt-4 text-sm text-muted-foreground max-w-xl">
+      {USAGE_STATS.map((s, i) => (
+        <span key={s.label}>
+          {i > 0 && " · "}
+          <span className="font-semibold text-foreground">{s.value}</span> {s.label}
+        </span>
+      ))}
+      <span className="text-xs"> (as of {USAGE_STATS_UPDATED_ON})</span>
+    </p>
   );
 }
 
@@ -98,12 +96,12 @@ export function FounderBlock() {
   );
 }
 
-/** Footer line naming the founder, once FOUNDER is filled in. */
+/** Footer link to /about naming the founder, once FOUNDER is filled in. */
 export function FounderFooterLink() {
   if (!FOUNDER) return null;
   return (
-    <a href={FOUNDER.linkedInUrl} target="_blank" rel="noopener noreferrer" className="hover:text-foreground">
-      Founded by {FOUNDER.name}
-    </a>
+    <Link to="/about" className="hover:text-foreground">
+      About: founded by {FOUNDER.name}
+    </Link>
   );
 }

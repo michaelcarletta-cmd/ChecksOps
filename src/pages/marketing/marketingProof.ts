@@ -58,3 +58,17 @@ export interface ExternalSignal {
 // TODO(owner): add dated third-party signals (review-site rating with review count, a
 // Product Hunt badge, a trade-press mention). The strip stays hidden while this is empty.
 export const EXTERNAL_SIGNALS: ExternalSignal[] = [];
+
+export interface HeroScreenshot {
+  /** Image in public/, e.g. "/marketing/hero-dashboard.png". */
+  src: string;
+  /** What the screen shows, e.g. "ChecksOps check pipeline for a public adjusting firm: 12 checks ready for deposit". */
+  alt: string;
+  width: number;
+  height: number;
+}
+
+// TODO(owner): add a real, permission-cleared screenshot of a firm's ChecksOps dashboard
+// (payee names and claim numbers blurred or cleared with the firm). The hero shows the sample
+// mock until this is set.
+export const HERO_SCREENSHOT: HeroScreenshot | null = null;
