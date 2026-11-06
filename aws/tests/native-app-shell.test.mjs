@@ -76,11 +76,12 @@ test('the shell and page wrappers carry the classes the app styles target', () =
   assert.match(read('src/components/shell/PageShell.tsx'), /cn\("page-shell /);
 });
 
-test('Payments: a dropdown in the app, the same tab strip on the website, one list of sections', () => {
+test('Payments: a dropdown on phones (app, and the website below sm), the tab strip on wider screens', () => {
   const src = read('src/pages/Payments.tsx');
   assert.match(src, /const nativeApp = isNativeApp\(\);/);
-  assert.match(src, /\{nativeApp \? \(\s*<Select value=\{activeTab\} onValueChange=\{setActiveTab\}>/);
-  assert.match(src, /<TabsList className="bg-muted\/50 p-1 mb-8 overflow-x-auto w-full justify-start sm:w-auto h-auto">/);
+  assert.match(src, /<Select value=\{activeTab\} onValueChange=\{setActiveTab\}>/);
+  assert.match(src, /className=\{cn\("mb-6 h-12 w-full text-base", !nativeApp && "sm:hidden"\)\}/);
+  assert.match(src, /\{!nativeApp && \(\s*<TabsList className="hidden sm:inline-flex bg-muted\/50 p-1 mb-8 overflow-x-auto w-full justify-start sm:w-auto h-auto">/);
   for (const value of ['ledger', 'invoices', 'revenue', 'recipients', 'tax', 'payroll']) {
     assert.match(src, new RegExp(`value: "${value}"`), value);
     assert.match(src, new RegExp(`<TabsContent value="${value}"`), `${value} content`);
