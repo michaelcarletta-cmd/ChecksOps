@@ -658,9 +658,11 @@ test('the public probe: own og:title per marketing page, home og:title for / and
   const urls = [];
   const recording = (fetcher) => async (url) => { urls.push(url); return fetcher(url); };
   assert.equal((await probeOnce({ origin: 'https://checksops.com', expect: 'own', tag: 't', fetcher: recording(site('published')) })).ok, true);
-  assert.ok(urls.includes('https://checksops.com/prep/health'));
-  assert.ok(urls.includes('https://checksops.com/assets/index-AbC123.js'));
-  assert.ok(urls.includes('https://checksops.com/login?probe=t'));
+  // Exact URLs the probe fetched (element equality, not a substring check).
+  const fetched = (want) => urls.some((url) => url === want);
+  assert.ok(fetched('https://checksops.com/prep/health'));
+  assert.ok(fetched('https://checksops.com/assets/index-AbC123.js'));
+  assert.ok(fetched('https://checksops.com/login?probe=t'));
   assert.equal((await probeOnce({ origin: 'https://checksops.com', expect: 'home', tag: 't', fetcher: site('baseline') })).ok, true);
   const notYet = await probeOnce({ origin: 'https://checksops.com', expect: 'own', tag: 't', fetcher: site('baseline') });
   assert.equal(notYet.ok, false);

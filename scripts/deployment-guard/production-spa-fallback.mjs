@@ -235,7 +235,8 @@ export function classify(snapshot, sources) {
   const pageProblems = [];
   const d = snapshot.distribution;
   if (d.Id !== DISTRIBUTION_ID) problems.push(d.Id === STAGING_DISTRIBUTION_ID ? 'staging_distribution' : 'distribution_not_production');
-  if (!d.Aliases.includes(PRODUCTION_ALIAS)) problems.push('aliases_drift');
+  // Exact element match on the alias list (not a URL substring check).
+  if (!d.Aliases.some((alias) => alias === PRODUCTION_ALIAS)) problems.push('aliases_drift');
   if (d.WebACLId !== PRODUCTION_WEB_ACL_ID) problems.push('waf_drift');
   if (d.Status !== 'Deployed') problems.push('distribution_not_deployed');
   if (!d.ETag) problems.push('distribution_etag_missing');
