@@ -52,6 +52,7 @@ starting point.
 
 | Date (UTC) | Row | Who | Record |
 |---|---|---|---|
+| 2026-11-06 | V-1 (R11) | Claude (`npm audit` on every lockfile); owner to sign | Dependency triage: `docs/compliance/evidence/2026-11-06-V-1-dependency-triage.md`. 13 open alerts (2 high, 7 moderate, 4 low), 0 in the production API. 2 reach users (`xlsx`, fix by 2026-11-30), 5 patch fixes, 6 build-only accepted |
 | 2026-11-06 | R-1, R-4 | Claude (draft) | Risk register `docs/compliance/RISK_REGISTER.md` and Qualified Individual's report `docs/compliance/QI_ANNUAL_REPORT_2026.md` drafted; each becomes the record once the owner signs it |
 | 2026-11-06 | A-1 | Claude (read-only, `user/claude-code`); owner to sign | First access review prepared: `docs/compliance/evidence/2026-11-06-A-1-access-review.md` (counts); the named list was given to the owner for the restricted folder |
 | 2026-11-06 | CC6.1 | Owner approval; guarded workflows | Login MFA required for every user: production configuration run 42293184319 at 21:01 UTC (staging run 42283026717, owner-tested), read back `AWS_LOGIN_MFA_REQUIRED` `"true"`; record #1667 |
