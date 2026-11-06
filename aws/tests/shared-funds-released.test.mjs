@@ -38,8 +38,9 @@ test('2 only released shared checks: other stages, own checks, and checks alread
 
 test('3 the Funds Released tab lists own splits plus released shared checks, and labels them as released by the partner', () => {
   assert.match(page, /sharedReleasedRows\(sharedChecks as any\[\], fundsReleased as any\[\]\)/);
-  assert.match(page, /\[\.\.\.\(fundsReleased as any\[\]\), \.\.\.sharedReleased\]\.filter\(matchesSplitSearch\)/);
-  assert.match(page, /\[fundsReleased, sharedChecks, matchesSplitSearch\]/);
+  // Own sends (sent-funds-released.test.mjs) are listed between own splits and shared checks.
+  assert.match(page, /\[\.\.\.\(fundsReleased as any\[\]\), \.\.\.sentReleased, \.\.\.sharedReleased\]\.filter\(matchesSplitSearch\)/);
+  assert.match(page, /\[fundsReleased, checkSends, sharedChecks, matchesSplitSearch\]/);
   assert.match(page, /`Released by \$\{split\._sharedReleasedBy\}`/);
   // The Deposited tab still drops released checks (they now belong to Funds Released).
   assert.match(page, /if \(stage === "funds_released" \|\| stage === "disbursed_externally"\) return false;/);
