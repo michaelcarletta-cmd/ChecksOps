@@ -77,8 +77,7 @@ Written addenda and an annual security review (SOC 2 report or questionnaire) on
 | OpenAI | AI inference, only for tenants who add their own API key (stored per tenant in Secrets Manager) | Claim text the tenant sends |
 | GitHub | Source code, CI, deployment workflows | Source and configuration; no customer data |
 
-- **Supabase / Lovable:** the previous hosting. The old Supabase project remains only for the temporary migration bridges, which are read-only or sign-only, until the teardown in `aws/cutover/BRIDGE_TEARDOWN.md`. **OWNER TO CONFIRM** the teardown date and what customer data remains in that project. Remove this row once it is torn down.
-- **Retired:** Actum Processing, Plaid and QuickBooks were retired in October 2026 and are no longer vendors; their historical tables remain in the database (`docs/ACH_RISK_FRAUD_MONITORING.md` §1). Tavily and Mailgun are not called by the AWS API.
+- **Retired:** Supabase and Lovable, the previous hosting, were retired on 2026-11-06: the Supabase project held no data, the subscription is cancelled and Lovable's GitHub access is removed (`ops/supabase-project-shutdown.md`, "Applied"). Actum Processing, Plaid and QuickBooks were retired in October 2026 and are no longer vendors; their historical tables remain in the database (`docs/ACH_RISK_FRAUD_MONITORING.md` §1). Tavily and Mailgun are not called by the AWS API.
 - **OWNER TO CONFIRM:** written addenda on file for Moov, CheckAlt, Azure and Resend.
 
 ### 3.7 Logging and Monitoring
@@ -97,7 +96,7 @@ Written addenda and an annual security review (SOC 2 report or questionnaire) on
 - `financial_stepup_log` — financial two-factor step-ups (server-written only, append-only; SQL 97, 106)
 - `aws_provider_webhook_receipts` — every signature-verified Moov and CheckAlt webhook, once per event
 
-**Retention:** audit logs are kept 7 years (`docs/DATA_RETENTION.md` §2). **OWNER TO CONFIRM** that the security-logs bucket lifecycle and the CloudWatch log group retention match.
+**Retention:** audit logs are kept 7 years (`docs/DATA_RETENTION.md` §2). Confirmed 2026-11-06: the security-logs bucket keeps CloudTrail and Config 7 years (Glacier after 90 days) and every CloudWatch log group has a retention set (`ops/security/LOG_RETENTION_AND_DR_2026_11.md`).
 
 ### 3.8 Secure Disposal
 See `docs/DATA_RETENTION.md`. Default retention is 7 years after claim closure, configurable per tenant via `tenants.data_retention_years`. The automated purge from the Supabase era has not been rebuilt on AWS; `docs/DATA_RETENTION.md` §4 says what applies until it is.
