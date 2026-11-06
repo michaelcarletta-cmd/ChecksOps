@@ -11,6 +11,7 @@ import { useCustomDomainTenant } from "./hooks/useCustomDomainTenant";
 import { CustomDomainWhiteLabelApp } from "./components/white-label/CustomDomainWhiteLabelApp";
 import { AuthProvider } from "./hooks/useAuth";
 import { StepUpProvider } from "./hooks/useStepUp";
+import { LoginMfaGate, MortgageLoginMfaGate } from "./components/auth/LoginMfaGate";
 import { ThemeProvider, ThemeScope } from "./hooks/useTheme";
 import { AwsStagingBanner } from "./components/AwsStagingBanner";
 import { LiveDataRefresh } from "./hooks/useLiveDataRefresh";
@@ -145,7 +146,7 @@ function CheckOpsRoutes() {
       <Route path="/ledger/:token" element={<Suspense fallback={<PageLoader />}><HomeownerLedger /></Suspense>} />
       <Route path="/start-claim/:token" element={<Suspense fallback={<PageLoader />}><HomeownerLedger preClaim /></Suspense>} />
       <Route path="/mortgage-ops/login" element={<Suspense fallback={<PageLoader />}><MortgageOpsLogin /></Suspense>} />
-      <Route path="/mortgage-ops/queue" element={<Suspense fallback={<PageLoader />}><MortgageOpsQueue /></Suspense>} />
+      <Route path="/mortgage-ops/queue" element={<Suspense fallback={<PageLoader />}><MortgageLoginMfaGate><MortgageOpsQueue /></MortgageLoginMfaGate></Suspense>} />
       <Route path="/mortgage-ops" element={<Navigate to="/mortgage-ops/login" replace />} />
       {/* Vendor Portal: finance view of the signed-in member's organization. Declared as
           static /vendor-ops routes so /:slug/* (TenantContext) never treats it as a slug. */}
@@ -245,7 +246,9 @@ const App = () => (
                 <AwsStagingBanner />
                 <RecoveryHashRedirect />
                 <PlatformAnnouncementBanner />
-                <AppRoutes />
+                <LoginMfaGate>
+                  <AppRoutes />
+                </LoginMfaGate>
               </ThemeScope>
             </StepUpProvider>
           </AuthProvider>
