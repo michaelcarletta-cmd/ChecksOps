@@ -8078,4 +8078,88 @@ export const RELEASE_SQL_SPECS = deepFreeze({
       "public.mortgage_companies"
     ]
   },
+
+  // SQL 144 (owner 2026-11-06: "yes build it, include partner payments as income not tax"): an organization
+  // reads the payments other organizations sent into its wallet. A send writes its payment_transfers legs under
+  // the sender's tenant_id with destination_tenant_id = the partner it pays, and aws_select_payment_transfers
+  // lets a member read only its own tenant_id, so the recipient saw them nowhere. One new SECURITY DEFINER read,
+  // public.get_tenant_incoming_transfers(uuid) (plpgsql, STABLE, search_path public, pg_temp): caller gate
+  // aws_can_access_tenant(_tenant_id) (42501 otherwise); rows destination_tenant_id = _tenant_id, another
+  // sender, leg_role send_wallet / send_bank, status submitted / pending / processing / completed / returned;
+  // narrow columns (never provider_metadata or payment method ids); check and claim context only for a check
+  // the sender shares with _tenant_id (active shared_checks row) or for the platform owner. EXECUTE checksops
+  // and the owner (PUBLIC, anon, authenticated and service_role revoked, as SQL 126). definer_writes lists the
+  // five relations the DEFINER function must reach past RLS as their owner (a read filtered by RLS would show
+  // the recipient nothing). No predecessor. No table, column, policy, grant, trigger or row change.
+  sql144: {
+    "key": "sql144",
+    "label": "SQL 144",
+    "choice": "sql144-tenant-incoming-transfers",
+    "production_pin_rel": "ops/deployment-guard/sql144-tenant-incoming-transfers-production-apply.json",
+    "script": "sql144-tenant-incoming-transfers-production-apply",
+    "prerequisites": [
+      "public.payment_transfers",
+      "public.tenants",
+      "public.shared_checks",
+      "public.check_intake_items",
+      "public.claims",
+      "public.aws_can_access_tenant(uuid)",
+      "public.is_platform_owner()",
+      "role checksops",
+      "column public.payment_transfers.id",
+      "column public.payment_transfers.tenant_id",
+      "column public.payment_transfers.destination_tenant_id",
+      "column public.payment_transfers.leg_role",
+      "column public.payment_transfers.status",
+      "column public.payment_transfers.amount_cents",
+      "column public.payment_transfers.speed",
+      "column public.payment_transfers.environment",
+      "column public.payment_transfers.check_id",
+      "column public.payment_transfers.created_at",
+      "column public.payment_transfers.submitted_at",
+      "column public.payment_transfers.completed_at",
+      "column public.tenants.id",
+      "column public.tenants.name",
+      "column public.shared_checks.check_id",
+      "column public.shared_checks.source_tenant_id",
+      "column public.shared_checks.target_tenant_id",
+      "column public.shared_checks.revoked_at",
+      "column public.check_intake_items.id",
+      "column public.check_intake_items.check_number",
+      "column public.check_intake_items.carrier_name",
+      "column public.check_intake_items.property_address",
+      "column public.check_intake_items.funds_type",
+      "column public.check_intake_items.amount",
+      "column public.check_intake_items.claim_id",
+      "column public.check_intake_items.detected_claim_number",
+      "column public.check_intake_items.payee_line",
+      "column public.claims.id",
+      "column public.claims.claim_number",
+      "column public.claims.policyholder_name"
+    ],
+    "predecessors": [],
+    "functions": [
+      {
+        "identity": "public.get_tenant_incoming_transfers(uuid)",
+        "result": "TABLE(id uuid, amount_cents bigint, status text, speed text, environment text, leg_role text, created_at timestamp with time zone, submitted_at timestamp with time zone, completed_at timestamp with time zone, check_id uuid, sender_tenant_id uuid, sender_name text, check_number text, carrier_name text, property_address text, funds_type text, check_amount numeric, claim_id uuid, detected_claim_number text, payee_line text, claim_number text, policyholder_name text)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ],
+        "revokes": [
+          "PUBLIC EXECUTE",
+          "anon EXECUTE",
+          "authenticated EXECUTE",
+          "service_role EXECUTE"
+        ]
+      }
+    ],
+    "definer_writes": [
+      "public.payment_transfers",
+      "public.tenants",
+      "public.shared_checks",
+      "public.check_intake_items",
+      "public.claims"
+    ]
+  },
 });
