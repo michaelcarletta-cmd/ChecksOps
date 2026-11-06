@@ -51,6 +51,7 @@ starting point.
 
 | Date (UTC) | Row | Who | Record |
 |---|---|---|---|
+| 2026-11-06 | CC7.1, CC9.1 | Claude (read-only, `user/claude-code`) | 18:20 UTC: security-logs bucket lifecycle expires after 365 days, versioning on, no Object Lock; CloudTrail log group 365 days; 319 of 325 log groups never expire; private-files bucket versioning on, no replication; no AWS Backup plans; RDS Multi-AZ, 35-day backups, no cross-region backup replication. Recorded in the matrix and `docs/compliance/BCP_DR.md` |
 | 2026-11-06 | V-1, CC6.1 | Claude (read-only, `user/claude-code`) | 18:16 UTC: Security Hub 0 active CRITICAL/HIGH; RDS.46 PASSED for both databases; root `AccountMFAEnabled` = 1; Cognito pool `us-east-1_h00WorYMT` `MfaConfiguration` `OPTIONAL` (13 users). Recorded in `docs/compliance/SOC2_CONTROL_MATRIX.md` and `docs/WISP.md` §3.1 |
 | 2026-11-04 | CC6.1 | Owner | Private-files bucket SSE-KMS applied: `ops/production-files-bucket-encryption.md` "Applied" |
 | 2026-11-03 | V-1 | Claude (read-only) | Security Hub read after hardening: `ops/security/AWS_ACCOUNT_HARDENING_2026_11.md` "Security Hub, read-only, 2026-11-03 06:45" |

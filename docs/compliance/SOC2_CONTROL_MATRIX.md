@@ -38,14 +38,14 @@ period.
 | CC1.1 | Written information security program, reviewed at least annually | `docs/WISP.md` (last reviewed 2026-10-21); git history of the file | Partial: the WISP still describes Supabase and Lovable. The AWS rewrite is a separate PR. |
 | CC1.2 | Named security owner who reports on the program | WISP §1, §7: the Qualified Individual delivers a written annual report | Gap: no annual report on file. The owner is also the CEO, so the report goes to the board, or is self-certified if there is no board. |
 | CC1.3 | Roles and responsibilities for security and operations | WISP §1; `docs/INCIDENT_RESPONSE.md` §2 roles; `CLAUDE.md` / `AGENTS.md` for changes made through AI agents | In place |
-| CC1.4 | Hiring, background checks, onboarding and offboarding | none | Gap: write an HR security policy (background checks, confidentiality agreements, offboarding checklist). |
+| CC1.4 | Hiring, background checks, onboarding and offboarding | `docs/compliance/PERSONNEL_SECURITY.md` (adopted 2026-11-06) | Partial: policy written; no records yet of checks, agreements or acknowledgments. |
 | CC1.5 | Security training at onboarding and annually; phishing tests twice a year | WISP §3.11 says HR keeps records | Gap: no training record. Start the record (calendar row T-1, T-2). |
 
 ## CC2 — Communication and information
 
 | ID | Control | Evidence | Status |
 |---|---|---|---|
-| CC2.1 | System description and data inventory | WISP §3.2 and §3.6; `aws/production/LIVE_RESOURCES.md`; this file's system boundary | Partial: the auditor needs one system description (SOC 2 "Section III"). Draft it from these. |
+| CC2.1 | System description and data inventory | WISP §3.2 and §3.6; `aws/production/LIVE_RESOURCES.md`; this file's system boundary | Partial: draft in `docs/compliance/SYSTEM_DESCRIPTION.md`; headcount and contract commitments still OWNER TO CONFIRM. |
 | CC2.2 | Internal communication of policies and of how changes ship | `CLAUDE.md`, `AGENTS.md`, `ops/deployment-guard/README.md`, the runbooks in `ops/` | In place |
 | CC2.3 | External communication: privacy notice, security contact, status | `src/pages/PrivacyNotice.tsx`, acknowledgments in `privacy_notice_acknowledgments`; WISP acknowledgment in `tenants.wisp_acknowledged_at`; `/status.json` notices (`ops/status-notice.md`); security@checksops.com | Partial: the annual January privacy-notice email (WISP §8) has no record yet. |
 
@@ -79,7 +79,7 @@ period.
 | CC6.1 | Tenant isolation in the database | Postgres row-level security scoped to `tenant_id`; tenant-scope migrations (for example SQL 87, 88, 125, 126, 136) with production apply records in `ops/deployment-guard/sql*-production-apply.json` | In place |
 | CC6.1 | Encryption at rest | RDS storage encrypted (`RDS_PRIVATE_SUBNETS_PLAN_2026_11.md` live state); private-files bucket SSE-KMS (`ops/production-files-bucket-encryption.md`, applied 2026-11-04); Moov onboarding EIN and date of birth KMS-encrypted (`aws/functions/api/providers/onboarding/crypto.mjs`) | In place |
 | CC6.1 | Sensitive fields masked; every reveal logged | `src/components/ui/masked-field.tsx`, `src/hooks/usePIIMasking.tsx`, `pii_reveal_logs`; CheckAlt account numbers returned as last four only (`aws/functions/api/providers/checkalt-account-mask.mjs`) | In place |
-| CC6.2 | Users added and removed through a controlled process | Invites through the API (Cognito admin create only: `ops/deployment-guard/cognito-admin-create-only`); two-factor reset with global sign-out (`aws/functions/api/admin-reset-totp.mjs`, `ops/team-two-factor-reset-iam.md`) | Partial: no written offboarding procedure with a time limit. |
+| CC6.2 | Users added and removed through a controlled process | Invites through the API (Cognito admin create only: `ops/deployment-guard/cognito-admin-create-only`); two-factor reset with global sign-out (`aws/functions/api/admin-reset-totp.mjs`, `ops/team-two-factor-reset-iam.md`) | Partial: offboarding within 24 hours is now written (`docs/compliance/PERSONNEL_SECURITY.md` §5); no records yet (row A-2). |
 | CC6.3 | Least privilege for people and machine identities | Per-workflow GitHub OIDC roles (`ops/deployment-guard/github-oidc-trust`); read-only inspect role; `ops/security/IAM_CLAUDE_CODE_LEAST_PRIVILEGE.md` | Partial: confirm the least-privilege change for `user/claude-code` is applied and record it. |
 | CC6.3 | Quarterly access review of admin, staff and AWS identities | WISP §3.1 | Gap: no review on file. First review this quarter (row A-1). |
 | CC6.1 | Login MFA required for admin and staff | WISP §3.1 and the public security page (`src/pages/checkops/CheckOpsSecurity.tsx`) both say so. On AWS, login is Cognito EMAIL_OTP or passkey (WebAuthn); the docs record the pool's MFA setting as OFF (`aws/cutover/COGNITO_PRODUCTION_TRANSITION.md`). Financial actions require an app-level TOTP step-up (`financial_stepup_log`, SQL 97, 106, 129–133). | **Gap**: read live 2026-11-06 18:16 UTC, the pool's `MfaConfiguration` is `OPTIONAL` (13 users). Either enforce MFA for admin and staff, or correct the WISP and the public page. |
@@ -93,7 +93,7 @@ period.
 
 | ID | Control | Evidence | Status |
 |---|---|---|---|
-| CC7.1 | Audit logging of the cloud account | CloudTrail `checksops-production-mgmt-events`: multi-region, log-file validation on, into `checksops-production-security-logs-806168576068` (`aws/cutover/OPERATOR_SECURITY_SERVICES.md`); VPC flow log `fl-0913268bc96a95205` | In place |
+| CC7.1 | Audit logging of the cloud account | CloudTrail `checksops-production-mgmt-events`: multi-region, log-file validation on, into `checksops-production-security-logs-806168576068` (`aws/cutover/OPERATOR_SECURITY_SERVICES.md`); VPC flow log `fl-0913268bc96a95205` | Partial: logging is on, but retention does not match `docs/DATA_RETENTION.md` §2 (read 2026-11-06 18:20 UTC): the security-logs bucket expires objects after 365 days (policy: 7 years); the CloudTrail log group keeps 365 days; 319 of 325 CloudWatch log groups never expire (policy: 90 days for application logs). The owner decides whether to change the lifecycle rules or the policy. |
 | CC7.2 | Application audit logging | `audit_logs`, `pii_reveal_logs`, `glba_security_events`, `check_audit_log`, `check_status_audit`, `deposit_audit_log`, `payment_event_log`, `financial_stepup_log` (append-only, SQL 106), `aws_provider_webhook_receipts` | In place |
 | CC7.2 | Alerts reach a person | 14 CloudWatch security alarms to SNS `checksops-production-security-alerts`, subscription confirmed (`OPERATOR_SECURITY_HANDOFF_2TO6.md`) | In place. Record a test alert once a year (row I-3). |
 | CC7.3–7.4 | Incident response plan; post-mortems | `docs/INCIDENT_RESPONSE.md`, `aws/cutover/INCIDENT_RESPONSE_AWS.md`; post-mortems due in `docs/incidents/YYYY-MM-DD.md` | Partial: `docs/incidents/` does not exist yet, and there is no tabletop record (row I-1). |
@@ -108,15 +108,15 @@ period.
 | CC8.1 | Automated checks before merge | `aws-migration-ci.yml`, `release-locks.yml`, `deployment-guard.yml`, `tax-profile-migration-guard.yml`, `codeql.yml` | In place |
 | CC8.1 | Branch protection on `main` (required review, required checks) | Configured in GitHub, not in the repository | **Verify**: export the branch protection or ruleset settings and keep them as evidence (row C-2). |
 | CC8.1 | Migrations and applied evidence are append-only | `AGENTS.md` rules; hash pins checked by `scripts/hash-report.mjs` and `scripts/validate-release-locks.mjs` | In place |
-| CC8.1 | Emergency changes | AWS account changes made by the owner in CloudShell are recorded after the fact in the runbook's "Applied" section with CloudTrail events | Partial: write down the emergency-change rule (who may, what must be recorded, by when). |
+| CC8.1 | Emergency changes | AWS account changes made by the owner in CloudShell are recorded after the fact in the runbook's "Applied" section with CloudTrail events | In place (policy): `docs/compliance/CHANGE_MANAGEMENT.md` §3–4. No emergency change recorded under it yet. |
 
 ## CC9 — Risk mitigation and vendors
 
 | ID | Control | Evidence | Status |
 |---|---|---|---|
-| CC9.1 | Business continuity and disaster recovery | Multi-AZ RDS (primary 1f, standby 1a), 35-day backups, deletion protection, `aws/cutover/WRITE_FREEZE_DRILL.md` | Gap: no BCP/DR document with recovery time and recovery point targets. |
+| CC9.1 | Business continuity and disaster recovery | `docs/compliance/BCP_DR.md`; Multi-AZ RDS (primary 1f, standby 1a), 35-day backups, deletion protection; private-files bucket versioning on; `aws/cutover/WRITE_FREEZE_DRILL.md` | Partial: targets written. No copy outside `us-east-1` (no cross-region backup, S3 replication or AWS Backup plan, read 2026-11-06), and no named backup operator if the owner is unavailable. |
 | CC9.2 | Vendor inventory, contracts and annual review | WISP §3.6 vendor table | Gap: collect each vendor's SOC 2 report and the contract addendum, and record an annual review (row S-1). The WISP still marks Moov and CheckAlt addenda "OWNER TO CONFIRM". |
-| CC9.2 | Complementary user-entity controls | none | Gap: list what tenants must do themselves (manage their own users, protect devices). Goes in the system description. |
+| CC9.2 | Complementary user-entity controls | `docs/compliance/SYSTEM_DESCRIPTION.md` §5 | Partial: drafted; to be reflected in tenant terms. |
 
 ## A1 — Availability
 
@@ -144,19 +144,25 @@ period.
 
 In rough order of audit risk:
 
-1. **Retention purge does not run on AWS** (C1.2), although the policy and the WISP say it runs
-   nightly.
+1. **Retention purge does not run on AWS** (C1.2). Since #1648 the policy says so, and that until
+   it is rebuilt each purge is an approved one-off. No closed claim is due before about 2032.
 2. **Login MFA is optional**, while the policy and the public security page say it is required for
    admin and staff (CC6.1). Read live 2026-11-06: `MfaConfiguration` `OPTIONAL`.
-3. **Policies out of date for AWS** (CC1.1): WISP and data retention. Separate PR.
+3. **Log retention** does not match the policy (CC7.1): CloudTrail 365 days against 7 years; most
+   CloudWatch log groups never expire.
 4. **No records yet for the recurring controls** (CC1.5, CC3.1, CC4.1, CC6.3, CC7.4, A1.3): start
    them from `docs/compliance/EVIDENCE_CALENDAR.md`.
-5. **Root account** in daily use (CC6.1). Root MFA is on (confirmed 2026-11-06).
-6. **Missing documents**: HR security policy, BCP/DR with recovery targets, emergency change rule,
-   system description, complementary user-entity controls.
+5. **No disaster recovery outside `us-east-1`** (CC9.1).
+6. **Root account** in daily use (CC6.1). Root MFA is on (confirmed 2026-11-06).
 7. **Vendor SOC reports and addenda** not on file (CC9.2).
-8. ~~Security Hub~~ **Closed 2026-11-06 18:16 UTC**: 0 active CRITICAL/HIGH findings; RDS.46 PASSED for
-   `checksops-production` and `checksops-staging` (evaluated 17:00 UTC). Keep the monthly snapshot (row V-1).
+8. **Documents drafted 2026-11-06, to adopt and keep records for**: personnel security, BCP/DR,
+   change management with the emergency rule, system description with complementary user-entity
+   controls.
+
+Closed:
+- **Policies out of date for AWS** (CC1.1): WISP and data retention rewritten, #1648 (2026-11-06).
+- **Security Hub** (CC4.1): 2026-11-06 18:16 UTC, 0 active CRITICAL/HIGH findings; RDS.46 PASSED for
+  `checksops-production` and `checksops-staging`. Keep the monthly snapshot (row V-1).
 
 ## Not covered here
 
