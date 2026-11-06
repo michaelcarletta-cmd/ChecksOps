@@ -31,6 +31,13 @@ import {
   revenueExpenseRows,
   type ExpenseSplit,
 } from "@/lib/payments/revenueExpenseRows";
+import {
+  incomingRevenueRows,
+  incomingRevenueTotal,
+  sendExpenseRows,
+  sendExpenseTotal,
+} from "@/lib/payments/transferFinanceRows";
+import { useIncomingTransfers, useSentPaymentLegs } from "@/hooks/useTransferFinance";
 
 type RevenueCheck = DepositCustomerSource & {
   id: string;
@@ -91,6 +98,12 @@ export function RevenueSummary() {
   // Invoices a customer paid into the wallet are revenue too (no check is deposited for them).
   const { data: paidInvoices, isLoading: invoicesLoading } = usePaidInvoiceRevenue();
 
+  // Owner 2026-11-06: "Payment being sent to partners or anyone is an expense for that company and any
+  // money coming in is income." Sends write payment_transfers legs, not splits; partner payments into
+  // this wallet come from SQL 144's read (none until it is live). Neither blocks the page.
+  const { data: sentLegs } = useSentPaymentLegs();
+  const { data: incomingTransfers } = useIncomingTransfers();
+
   const revenueSources = useMemo(() => {
     const checks = (revenueData ?? []).map((check) => {
       // Customer first, carrier (and claim #) underneath; carrier when there is no customer name.
@@ -119,31 +132,34 @@ export function RevenueSummary() {
       amount: invoice.amountCents / 100,
       status: "Invoice paid",
     }));
-    return [...checks, ...invoices].sort(
+    return [...checks, ...invoices, ...incomingRevenueRows(incomingTransfers)].sort(
       (a, b) => (b.at ? new Date(b.at).getTime() : 0) - (a.at ? new Date(a.at).getTime() : 0),
     );
-  }, [revenueData, paidInvoices, caseInsuredNames]);
+  }, [revenueData, paidInvoices, incomingTransfers, caseInsuredNames]);
 
-  // The items behind Total Paid (Expenses): settled splits, paid payroll, payroll speed fees.
+  // The items behind Total Paid (Expenses): settled splits, paid payroll, payroll speed fees, paid sends.
   const expenseRows = useMemo(
-    () => revenueExpenseRows({ splits: disbursementData, payrollRuns }),
-    [disbursementData, payrollRuns],
+    () => [...revenueExpenseRows({ splits: disbursementData, payrollRuns }), ...sendExpenseRows(sentLegs)]
+      .sort((a, b) => (b.at ? new Date(b.at).getTime() : 0) - (a.at ? new Date(a.at).getTime() : 0)),
+    [disbursementData, payrollRuns, sentLegs],
   );
 
   const stats = useMemo(() => {
     const checkIncoming = revenueData?.reduce((sum, item) => sum + Number(item.amount || 0), 0) || 0;
     const invoiceIncoming = (paidInvoices ?? []).reduce((sum, invoice) => sum + invoice.amountCents, 0) / 100;
-    const totalIncoming = checkIncoming + invoiceIncoming;
+    const partnerIncoming = incomingRevenueTotal(incomingTransfers).total;
+    const totalIncoming = checkIncoming + invoiceIncoming + partnerIncoming;
     const disbursementOutgoing = disbursementData?.reduce((sum, item) => sum + Number(item.amount || 0), 0) || 0;
     const payroll = payrollExpenseTotal(payrollRuns);
     // Speed fees are not charged by ChecksOps or stored; derived from each paid run's speed.
     const speedFees = payrollSpeedFeeExpenseTotal(payrollRuns);
-    const totalOutgoing = disbursementOutgoing + payroll.total + speedFees.total;
+    const sends = sendExpenseTotal(sentLegs);
+    const totalOutgoing = disbursementOutgoing + payroll.total + speedFees.total + sends.total;
     const profit = totalIncoming - totalOutgoing;
     const margin = totalIncoming > 0 ? (profit / totalIncoming) * 100 : 0;
 
-    return { totalIncoming, disbursementOutgoing, payrollOutgoing: payroll.total, payrollCount: payroll.count, speedFeeOutgoing: speedFees.total, speedFeeCount: speedFees.count, totalOutgoing, profit, margin };
-  }, [revenueData, paidInvoices, disbursementData, payrollRuns]);
+    return { totalIncoming, disbursementOutgoing, payrollOutgoing: payroll.total, payrollCount: payroll.count, speedFeeOutgoing: speedFees.total, speedFeeCount: speedFees.count, sendOutgoing: sends.total, sendCount: sends.count, totalOutgoing, profit, margin };
+  }, [revenueData, paidInvoices, incomingTransfers, disbursementData, payrollRuns, sentLegs]);
 
   if (revenueLoading || disbursementLoading || invoicesLoading || payrollLoading) {
     return (
@@ -175,7 +191,7 @@ export function RevenueSummary() {
             <div className="text-2xl font-bold">
               ${stats.totalIncoming.toLocaleString("en-US", { minimumFractionDigits: 2 })}
             </div>
-            <p className="text-xs text-muted-foreground">From deposited checks and paid invoices</p>
+            <p className="text-xs text-muted-foreground">From deposited checks, paid invoices and partner payments</p>
           </CardContent>
         </Card>
 
@@ -188,16 +204,24 @@ export function RevenueSummary() {
             <div className="text-2xl font-bold">
               ${stats.totalOutgoing.toLocaleString("en-US", { minimumFractionDigits: 2 })}
             </div>
-            {stats.payrollCount > 0 ? (
+            {stats.payrollCount > 0 || stats.sendCount > 0 ? (
               <div className="text-xs text-muted-foreground space-y-0.5">
                 <p className="flex justify-between gap-2">
                   <span>Settled disbursements</span>
                   <span>${stats.disbursementOutgoing.toLocaleString("en-US", { minimumFractionDigits: 2 })}</span>
                 </p>
-                <p className="flex justify-between gap-2">
-                  <span>{PAYROLL_SOURCE_LABEL}</span>
-                  <span>${stats.payrollOutgoing.toLocaleString("en-US", { minimumFractionDigits: 2 })}</span>
-                </p>
+                {stats.sendCount > 0 && (
+                  <p className="flex justify-between gap-2">
+                    <span>Payments sent ({stats.sendCount})</span>
+                    <span>${stats.sendOutgoing.toLocaleString("en-US", { minimumFractionDigits: 2 })}</span>
+                  </p>
+                )}
+                {stats.payrollCount > 0 && (
+                  <p className="flex justify-between gap-2">
+                    <span>{PAYROLL_SOURCE_LABEL}</span>
+                    <span>${stats.payrollOutgoing.toLocaleString("en-US", { minimumFractionDigits: 2 })}</span>
+                  </p>
+                )}
                 {stats.speedFeeCount > 0 && (
                   <p className="flex justify-between gap-2">
                     <span>{PAYROLL_SPEED_FEES_LABEL} ({stats.speedFeeCount})</span>
@@ -206,7 +230,7 @@ export function RevenueSummary() {
                 )}
               </div>
             ) : (
-              <p className="text-xs text-muted-foreground">Settled disbursements and payroll</p>
+              <p className="text-xs text-muted-foreground">Settled disbursements, payments sent and payroll</p>
             )}
           </CardContent>
         </Card>
@@ -251,7 +275,7 @@ export function RevenueSummary() {
               <tbody>
                 {revenueSources.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="p-8 text-center text-muted-foreground italic">No deposited checks or paid invoices found.</td>
+                    <td colSpan={5} className="p-8 text-center text-muted-foreground italic">No deposited checks, paid invoices or partner payments found.</td>
                   </tr>
                 ) : (
                   revenueSources.map((source) => (
