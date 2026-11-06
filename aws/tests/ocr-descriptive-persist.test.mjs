@@ -6,10 +6,12 @@ import { fileURLToPath } from 'node:url';
 import { INTAKE_PROHIBITED_COLUMNS, REVIEW_FINANCIAL_COLUMNS } from '../functions/api/write-allowlist.mjs';
 import {
   collectOcrPayeeCandidates,
+  splitPayeeLineAddress,
   normalizeIssueDate,
   normalizePayeeKey,
   persistOcrDescriptiveHandoff,
 } from '../functions/api/ocr-descriptive-persist.mjs';
+import { mergeCheckExtraction } from '../functions/api/check-ocr-provider.mjs';
 import {
   claimNumbersEqual,
   normalizeClaimNumber,
@@ -33,6 +35,7 @@ const createClient = ({ existingPayees = [] } = {}) => {
     account_number: null,
     carrier_name: null,
     payee_line: null,
+    payee_address: null,
     deposited_at: null,
     confirmedDeposit: false,
     detected_claim_number: null,
@@ -88,6 +91,16 @@ const createClient = ({ existingPayees = [] } = {}) => {
         const guarded = /payee_line = CASE[\s\S]*deposited_at IS NULL[\s\S]*END/.test(text);
         if (params[2] != null && (!guarded || store.deposited_at == null)) store.payee_line = params[2];
         return { rows: [{ id: CHECK_ID, carrier_name: store.carrier_name, payee_line: store.payee_line }] };
+      }
+      if (/UPDATE public\.check_intake_items/.test(text) && /SET payee_address = \$2/.test(text)) {
+        // Model the SQL as written: only an empty payee_address on an undeposited row moves.
+        assert.match(text, /deposited_at IS NULL/);
+        assert.match(text, /payee_address IS NULL OR btrim\(payee_address\) = ''/);
+        if (store.deposited_at == null && !String(store.payee_address || '').trim()) {
+          store.payee_address = params[1];
+          return { rowCount: 1, rows: [] };
+        }
+        return { rowCount: 0, rows: [] };
       }
       if (/UPDATE public\.check_intake_items/.test(text) && /is_multi_payee = true/.test(text)) {
         store.is_multi_payee = true;
@@ -638,6 +651,114 @@ test('OCR descriptive persist keeps payee_line when a deposit lands after the S1
   const update = client.statements.find((row) => /COALESCE\(\$2, carrier_name\)/.test(row.sql));
   assert.ok(update, 'descriptive UPDATE ran');
   assert.match(update.sql, /payee_line = CASE[\s\S]*deposited_at IS NULL[\s\S]*ELSE payee_line[\s\S]*END/);
+});
+
+// Production check 2f676a72 (owner report 2026-11-06): the scanned payee line carried the
+// second payee's mailing address, and only "Freedom Adjustment" was inserted.
+const PROD_PAYEE_LINE = 'Freedom Adjustment And Karen Lovett 865 Route 33 Business Ste Freehold Nj 07728';
+const PROD_ADDRESS = '865 Route 33 Business Ste, Freehold NJ 07728';
+
+test('payee address split: names go to payee_line, the address to an empty payee_address, both payees inserted', async () => {
+  const client = createClient();
+  const parsed = mergeCheckExtraction({
+    textractParsed: { payee_line: PROD_PAYEE_LINE, payees: [] },
+    descriptiveEngine: 'aws_textract_analyze',
+  });
+  const logs = [];
+  const out = await persistOcrDescriptiveHandoff({
+    client,
+    checkId: CHECK_ID,
+    tenantId: TENANT_ID,
+    parsed,
+    log: (row) => logs.push(row),
+  });
+  assert.equal(client.store.payee_line, 'Freedom Adjustment And Karen Lovett');
+  assert.equal(client.store.payee_address, PROD_ADDRESS);
+  assert.deepEqual(client.store.payees.map((row) => row.payee_name), ['Freedom Adjustment', 'Karen Lovett']);
+  assert.equal(out.payees_inserted, 2);
+  assert.equal(out.multi_payee_set, true);
+  assert.equal(out.payee_address_code, 'written');
+  assert.ok(client.statements.some((row) => /SAVEPOINT ocr_payee_address/.test(row.sql)));
+  // The log stays count/status only: no names, no address.
+  const blob = JSON.stringify(logs);
+  assert.equal(blob.includes('Karen'), false);
+  assert.equal(blob.includes('Route 33'), false);
+});
+
+test('payee address split: a raw scanned line (no canonical split) is separated in the persist step too', async () => {
+  const client = createClient();
+  await persistOcrDescriptiveHandoff({
+    client,
+    checkId: CHECK_ID,
+    tenantId: TENANT_ID,
+    parsed: { payee_line: PROD_PAYEE_LINE, payees: [] },
+  });
+  assert.equal(client.store.payee_line, 'Freedom Adjustment And Karen Lovett');
+  assert.equal(client.store.payee_address, PROD_ADDRESS);
+  assert.deepEqual(splitPayeeLineAddress({ payee_line: 'Gleitman Family Trust' }), { names: 'Gleitman Family Trust', address: null });
+  assert.deepEqual(splitPayeeLineAddress({ payee_line: '865 Route 33 Business Ste Freehold NJ 07728' }), { names: null, address: PROD_ADDRESS });
+});
+
+test('payee address split: an existing payee_address is never replaced', async () => {
+  const client = createClient();
+  client.store.payee_address = '1 Entered By Hand Rd, Trenton NJ 08608';
+  const out = await persistOcrDescriptiveHandoff({
+    client,
+    checkId: CHECK_ID,
+    tenantId: TENANT_ID,
+    parsed: { payee_line: PROD_PAYEE_LINE, payees: [] },
+  });
+  assert.equal(client.store.payee_address, '1 Entered By Hand Rd, Trenton NJ 08608');
+  assert.equal(client.store.payee_line, 'Freedom Adjustment And Karen Lovett');
+  assert.equal(out.payee_address_code, 'kept');
+});
+
+test('payee address split: no address means no payee_address statement', async () => {
+  const client = createClient();
+  const out = await persistOcrDescriptiveHandoff({
+    client,
+    checkId: CHECK_ID,
+    tenantId: TENANT_ID,
+    parsed: { payee_line: 'Gleitman Family Trust', payees: [] },
+  });
+  assert.equal(client.store.payee_line, 'Gleitman Family Trust');
+  assert.equal(client.store.payee_address, null);
+  assert.equal(out.payee_address_code, 'none');
+  assert.equal(client.statements.some((row) => /payee_address/.test(row.sql)), false);
+});
+
+test('payee address split: a deposited check keeps payee_line (S14) and gets no payee_address', async () => {
+  const client = createClient();
+  client.store.payee_line = 'Corrected Payee Line';
+  client.store.confirmedDeposit = true;
+  const out = await persistOcrDescriptiveHandoff({
+    client,
+    checkId: CHECK_ID,
+    tenantId: TENANT_ID,
+    parsed: { payee_line: PROD_PAYEE_LINE, payees: [] },
+  });
+  assert.equal(client.store.payee_line, 'Corrected Payee Line');
+  assert.equal(client.store.payee_address, null);
+  assert.equal(out.payee_address_code, 'deposited');
+  assert.equal(client.statements.some((row) => /SET payee_address/.test(row.sql)), false);
+});
+
+test('payee address split: a failed payee_address write rolls back to its own savepoint and payees still insert', async () => {
+  const client = createClient();
+  const query = client.query;
+  client.query = async (sql, params) => {
+    if (/SET payee_address = \$2/.test(String(sql))) throw new Error('permission denied for column payee_address');
+    return query(sql, params);
+  };
+  const out = await persistOcrDescriptiveHandoff({
+    client,
+    checkId: CHECK_ID,
+    tenantId: TENANT_ID,
+    parsed: { payee_line: PROD_PAYEE_LINE, payees: [{ name: 'Freedom Adjustment' }, { name: 'Karen Lovett' }] },
+  });
+  assert.equal(out.payee_address_code, 'unavailable');
+  assert.ok(client.statements.some((row) => /ROLLBACK TO SAVEPOINT ocr_payee_address/.test(row.sql)));
+  assert.equal(out.payees_inserted, 2);
 });
 
 test('generic /data/write still prohibits detected_claim_number', () => {

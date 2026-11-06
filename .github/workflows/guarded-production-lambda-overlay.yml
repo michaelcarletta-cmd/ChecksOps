@@ -124,6 +124,9 @@ on:
           - db-readonly-validate.mjs
           - check-reconciliation.mjs
           - endorsement-parity.mjs
+          - ocr-parse.mjs
+          - check-ocr-provider.mjs
+          - ocr-descriptive-persist.mjs
           - homeowner-signing-integration.mjs
           - storage.mjs
           - signature-submit.mjs

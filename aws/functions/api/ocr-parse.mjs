@@ -11,7 +11,7 @@
 const STANDARD_CAPS_ACRONYMS = new Set([
   'LLC', 'INC', 'LP', 'LLP', 'PA', 'PC', 'CO', 'CORP', 'NA', 'USA',
   'II', 'III', 'IV', 'DBA', 'LTD', 'JR', 'SR', 'US', 'PLLC',
-  'USAA', 'NJM', 'AAA', 'CSAA', 'AIG', 'GEICO',
+  'USAA', 'NJM', 'AAA', 'CSAA', 'AIG', 'GEICO', 'ISAOA', 'ATIMA',
 ]);
 
 const toStandardCaps = (input) => {
@@ -200,25 +200,163 @@ export const cleanPayeeLine = (text) => {
   return s;
 };
 
+// --- Payee name / address separation -------------------------------------
+// A scanned payee line often carries the payee's mailing address after the
+// names ("Freedom Adjustment And Karen Lovett 865 Route 33 Business Ste
+// Freehold Nj 07728"). These helpers find that trailing address per payee
+// segment so the names and the address can be stored apart. They are
+// deliberately conservative: when a tail does not clearly look like an
+// address, the text is left unchanged.
+const US_STATE_CODES = new Set([
+  'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'DC', 'FL', 'GA', 'HI', 'ID', 'IL',
+  'IN', 'IA', 'KS', 'KY', 'LA', 'ME', 'MD', 'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE',
+  'NV', 'NH', 'NJ', 'NM', 'NY', 'NC', 'ND', 'OH', 'OK', 'OR', 'PA', 'RI', 'SC', 'SD',
+  'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY', 'PR', 'VI', 'GU',
+]);
+const STREET_WORD_RE = /^(?:st|street|ave|av|avenue|rd|road|blvd|boulevard|dr|drive|ln|lane|ct|court|way|pl|place|pkwy|parkway|cir|circle|ter|terrace|trl|trail|hwy|highway|route|rte|rt|plaza|sq|square|pike|tpke|turnpike)$/i;
+const UNIT_WORD_RE = /^(?:suite|ste|unit|apt|apartment|fl|floor|bldg|building|rm|room)$/i;
+const ENTITY_WORD_RE = /^(?:llc|l\.l\.c|inc|incorporated|corp|corporation|co|company|ltd|lp|llp|pllc|pc|pa|na|n\.a|bank|trust|fund|isaoa|atima|fsb|cu|credit|mortgage|insurance|group|partners|holdings)$/i;
+const PO_BOX_RE = /\b(?:p\.?\s*o\.?\s*box|post\s+office\s+box)\s*#?\s*\d+/i;
+const STATE_ZIP_TAIL_RE = /\b([A-Za-z]{2})\.?,?\s+(\d{5}(?:-\d{4})?)$/;
+const LENDER_CLAUSE_PROTECT_RE = /\b(ISAOA)\s*\/\s*(ATIMA)\b/gi;
+const PAYEE_SEGMENT_SPLIT_RE = /(\s*(?:\band\b|&|＆|﹠|／|\/|;|；)\s*)/i;
+
+const protectLenderClause = (text) => String(text || '').replace(
+  LENDER_CLAUSE_PROTECT_RE,
+  (_m, a, b) => `${a}\u0001${b}`,
+);
+const restoreLenderClause = (text) => String(text || '').replace(/\u0001/g, '/');
+
+const tokenWord = (token) => String(token || '').replace(/[.,#:;]+$/g, '').replace(/^[#]+/, '');
+
+const endsWithStateZip = (tail) => {
+  const m = String(tail || '').match(STATE_ZIP_TAIL_RE);
+  return Boolean(m && US_STATE_CODES.has(m[1].toUpperCase()));
+};
+
+const formatPayeeAddress = (tail) => {
+  let s = String(tail || '').replace(/\s+/g, ' ').replace(/[,\s]+$/g, '').trim();
+  if (!s) return null;
+  const m = s.match(STATE_ZIP_TAIL_RE);
+  if (m && US_STATE_CODES.has(m[1].toUpperCase())) {
+    s = `${s.slice(0, m.index).replace(/[,\s]+$/g, '')} ${m[1].toUpperCase()} ${m[2]}`.trim();
+    if (!s.includes(',')) {
+      // Put a comma between the street part and the city: after the last
+      // street word / unit marker (and the unit number that follows it).
+      const tokens = s.split(' ');
+      const stateIdx = tokens.length - 2;
+      let cut = -1;
+      for (let i = 0; i < stateIdx; i += 1) {
+        const w = tokenWord(tokens[i]);
+        if (UNIT_WORD_RE.test(w) || STREET_WORD_RE.test(w) || /^box$/i.test(w)) {
+          cut = i;
+          if (i + 1 < stateIdx && /^#?\d+[A-Za-z]?$/.test(tokens[i + 1])) cut = i + 1;
+        }
+      }
+      if (cut >= 0 && cut < stateIdx - 1) {
+        tokens[cut] = `${tokens[cut]},`;
+        s = tokens.join(' ');
+      }
+    }
+  }
+  return s;
+};
+
+// Returns the index (into `tokens`) where a trailing address starts, or -1.
+const findAddressStart = (tokens) => {
+  const text = tokens.join(' ');
+  const box = text.match(PO_BOX_RE);
+  if (box) {
+    const before = text.slice(0, box.index);
+    return before.trim() ? before.trim().split(' ').length : 0;
+  }
+  for (let i = 0; i < tokens.length; i += 1) {
+    const tok = tokens[i];
+    // Street numbers are plain digits ("865", "123", "12-14"); ordinals such
+    // as "21st" are part of names and never start an address.
+    if (!/^#?\d{1,6}(?:-\d{1,6})?[A-Za-z]?$/.test(tok) || /^\d+(?:st|nd|rd|th)$/i.test(tok)) continue;
+    const rest = tokens.slice(i + 1).map(tokenWord);
+    if (!rest.length) continue;
+    // "Station 12 LLC ..." - a number followed by an entity word is a name.
+    if (ENTITY_WORD_RE.test(rest[0])) continue;
+    // Never cut an entity: the tail must not hold entity suffixes.
+    if (rest.some((w) => ENTITY_WORD_RE.test(w) || /\u0001/.test(w))) continue;
+    const nearStreet = rest.slice(0, 4).some((w) => STREET_WORD_RE.test(w) || UNIT_WORD_RE.test(w));
+    const tail = tokens.slice(i).join(' ');
+    if (nearStreet && (endsWithStateZip(tail) || rest.length <= 6)) return i;
+    if (endsWithStateZip(tail) && rest.some((w) => STREET_WORD_RE.test(w) || UNIT_WORD_RE.test(w))) return i;
+  }
+  return -1;
+};
+
+const separateSegmentAddress = (segment) => {
+  const s = String(segment || '').replace(/\s+/g, ' ').trim();
+  if (!s) return { name: s, address: null };
+  const tokens = s.split(' ');
+  const start = findAddressStart(tokens);
+  if (start < 0) return { name: s, address: null };
+  const name = tokens.slice(0, start).join(' ').replace(/[,\s]+$/g, '').trim();
+  const address = formatPayeeAddress(tokens.slice(start).join(' '));
+  if (!address) return { name: s, address: null };
+  return { name, address };
+};
+
+/**
+ * Split a scanned payee line into the payee names and a trailing mailing
+ * address. `names` keeps the original separators ("And", "&") and entity
+ * suffixes (N.A., ISAOA/ATIMA, LLC, Inc); `address` is null when no address
+ * was found, and `names` is null when the line is only an address.
+ */
+export const separatePayeeAddress = (line) => {
+  if (line == null) return { names: null, address: null };
+  const s = String(line).replace(/\s+/g, ' ').trim();
+  if (!s) return { names: null, address: null };
+  const pieces = protectLenderClause(s).split(PAYEE_SEGMENT_SPLIT_RE);
+  const addresses = [];
+  const kept = [];
+  for (let i = 0; i < pieces.length; i += 2) {
+    const { name, address } = separateSegmentAddress(pieces[i]);
+    if (address) addresses.push(restoreLenderClause(address));
+    if (name) {
+      if (kept.length && i > 0) kept.push(pieces[i - 1]);
+      kept.push(name);
+    }
+  }
+  if (!addresses.length) return { names: s, address: null };
+  const names = restoreLenderClause(kept.join('')).replace(/\s+/g, ' ').trim() || null;
+  return { names, address: addresses.join('; ') };
+};
+
 export const splitPayees = (payeeLine) => {
   if (!payeeLine) return [];
   const cleaned = cleanPayeeLine(payeeLine) || '';
   if (!cleaned) return [];
   // Split on AND/&/slash/semicolon but keep commas inside entity names (e.g. "Bank, N.A.")
-  const parts = cleaned
+  // and keep the lender clause "ISAOA/ATIMA" in one piece.
+  const parts = protectLenderClause(cleaned)
     .split(PAYEE_SPLIT_RE)
-    .map((p) => p.trim())
+    .map((p) => restoreLenderClause(p).trim())
     .filter(Boolean);
   const payees = [];
   for (const p of parts) {
     if (!p) continue;
-    // Do not treat obvious address strings as payees.
-    if (looksLikeAddress(p)) continue;
-    // Strip trailing address fragments after the first long digit run,
-    // but keep entity suffixes like "N.A." / "ISAOA-ATIMA".
-    let out = p;
-    const digitIdx = out.search(/\d{3,}/);
-    if (digitIdx > 0) out = out.slice(0, digitIdx).trim();
+    // Separate a trailing mailing address first, so "Karen Lovett 865 Route
+    // 33 ... 07728" keeps "Karen Lovett"; a part that is only an address
+    // yields no name and is dropped.
+    const separated = separateSegmentAddress(protectLenderClause(p));
+    let out;
+    if (separated.address) {
+      out = restoreLenderClause(separated.name);
+      if (!out) continue;
+    } else {
+      // Do not treat obvious address strings as payees.
+      if (looksLikeAddress(p)) continue;
+      // Strip trailing address fragments after the first long digit run,
+      // but keep entity suffixes like "N.A." / "ISAOA-ATIMA".
+      out = p;
+      const digitIdx = out.search(/\d{3,}/);
+      if (digitIdx > 0) out = out.slice(0, digitIdx).trim();
+    }
     out = out.replace(/[,\s]+$/g, '').replace(/\s+/g, ' ').trim();
     out = cleanPayeeLine(out) || '';
     if (out.length < 2 || ORDER_FRAGMENT_RE.test(out) || looksLikeSecurityDisclaimer(out)) continue;
@@ -1241,6 +1379,7 @@ export const __test__ = {
   classifyDateLabel,
   cleanBankName,
   splitPayees,
+  separatePayeeAddress,
   cleanPayeeLine,
   sanitizeCarrierName,
   looksLikeSecurityDisclaimer,

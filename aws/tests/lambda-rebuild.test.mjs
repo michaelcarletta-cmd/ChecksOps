@@ -150,6 +150,12 @@ const CHANGED_SINCE_SECOND_REBUILD = {
   // Money step-up window (2026-10-31, security audit finding 7): every money step-up must be
   // verified within 15 minutes; a REPLACE row of the production overlay plan, not a rebuild section.
   'providers/production/moov-fund-authz.mjs': 'changed',
+  // OCR payee address split (2026-11-06, production check 2f676a72): the payee names stay on
+  // payee_line and the scanned mailing address goes to payee_address; REPLACE rows of the production
+  // overlay plan, not a rebuild section.
+  'ocr-parse.mjs': 'changed',
+  'check-ocr-provider.mjs': 'changed',
+  'ocr-descriptive-persist.mjs': 'changed',
 };
 // Members of the current (third) rebuild sections that main changed after those rebuilds were
 // applied (staging run 39666390516, production run 39669873076 of main 008af40e2). The sections keep
@@ -212,6 +218,10 @@ const OVERLAY_PLAN_CHANGES = new Set([
   'tenant-settings-handlers.mjs',
   // Money step-up window (2026-10-31, finding 7): a REPLACE row of the production plan.
   'providers/production/moov-fund-authz.mjs',
+  // OCR payee address split (2026-11-06): REPLACE rows of the production plan.
+  'ocr-parse.mjs',
+  'check-ocr-provider.mjs',
+  'ocr-descriptive-persist.mjs',
 ]);
 const assertSectionAcceptedIsMain = (apiRoot, name, accepted) => {
   const onMain = sha256(fs.readFileSync(path.join(apiRoot, name)));
