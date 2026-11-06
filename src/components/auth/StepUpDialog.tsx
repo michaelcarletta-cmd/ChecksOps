@@ -21,6 +21,7 @@ import {
   normalizeEmailSetupCode,
   stepUpAwsTotp,
   verifyAwsTotp,
+  LOGIN_MFA_ACTION,
   type AwsTotpAssociation,
 } from "@/lib/awsMfa";
 import { isCheckBoundAction } from "@/lib/financialStepUp";
@@ -223,6 +224,7 @@ export function StepUpDialog({ request, onResolved, onFactorsChanged }: Props) {
           if (
             request?.actionKey === "wallet.fund" ||
             request?.actionKey === "team.reset_totp" ||
+            request?.actionKey === LOGIN_MFA_ACTION ||
             isCheckBoundAction(request?.actionKey)
           ) {
             // Setup checks the code without using it up, so the same code also
@@ -248,7 +250,9 @@ export function StepUpDialog({ request, onResolved, onFactorsChanged }: Props) {
         await onFactorsChanged();
         toast({
           title: "Verified",
-          description: request?.actionKey === "wallet.fund" || isCheckBoundAction(request?.actionKey)
+          description: request?.actionKey === "wallet.fund"
+            || request?.actionKey === LOGIN_MFA_ACTION
+            || isCheckBoundAction(request?.actionKey)
             ? "Two-factor confirmed until you sign out."
             : "Two-factor confirmed for this session. Production CheckAlt still requires membership of the check's company server-side.",
         });

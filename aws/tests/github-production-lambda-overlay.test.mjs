@@ -122,6 +122,19 @@ const PUBLIC_PARTNER_CODES_BYTES = 'c652e317e2de5a14b32bf6aecfc5b76438b2ff23d6c3
 const AUTH_EMAIL_VERIFIED_REL = 'aws/tests/fixtures/production-auth-email-verified-manifest-2026-10-31.json';
 // Applied 2026-10-31 (production run 41234874570, revision 91745cda), recorded 2026-11-02.
 const AUTH_EMAIL_VERIFIED_APPLIED_REL = 'aws/tests/fixtures/production-auth-email-verified-applied-manifest-2026-10-31.json';
+// data.mjs as production run 41234874570 applied it (auth.email() verified email only), from its applied record.
+const AUTH_EMAIL_VERIFIED_BYTES = JSON.parse(fs.readFileSync(path.join(ROOT, AUTH_EMAIL_VERIFIED_APPLIED_REL), 'utf8')).members['data.mjs'].accepted_sha256;
+// Login MFA (2026-11-06, planning only): ADD login-mfa.mjs, REPLACE data.mjs from the auth.email() applied bytes and
+// auth-financial-totp.mjs from the bytes the fourth production rebuild put live.
+const LOGIN_MFA_REL = 'aws/tests/fixtures/production-login-mfa-manifest-2026-11-06.json';
+// The data.mjs row as the login MFA REPLACE leaves it: main's bytes accepted, the auth.email() applied bytes expected live.
+const dataRowNow = () => ({
+  operation: 'replace',
+  accepted_sha256: sha('aws/functions/api/data.mjs'),
+  expected_live_sha256: AUTH_EMAIL_VERIFIED_BYTES,
+  sql_before: 'aws/workflows/sql/53_claim_settlement_breakdown.sql',
+  manifest: LOGIN_MFA_REL,
+});
 function repoModules(dir = API, prefix = '') {
   const out = {};
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -212,6 +225,9 @@ const withSql132 = (plan) => { plan.sql_prerequisites[SQL132_FILE] = { verified_
 const ENROLL_EMAIL_REL = 'aws/tests/fixtures/production-financial-totp-enroll-email-code-manifest-2026-10-31.json';
 const ENROLL_EMAIL_MANIFEST = JSON.parse(fs.readFileSync(path.join(ROOT, ENROLL_EMAIL_REL), 'utf8'));
 const TOTP_PRE = ENROLL_EMAIL_MANIFEST.members['auth-financial-totp.mjs'].live_sha256;
+// The finding 8 bytes: the fourth production rebuild (apply run 41469896446, VERIFIED 2026-11-02) put them live, and
+// the login MFA REPLACE (2026-11-06, planning only) starts from them.
+const FINDING8_BYTES = ENROLL_EMAIL_MANIFEST.members['auth-financial-totp.mjs'].accepted_sha256;
 const totpPre = (plan) => { plan.members['auth-financial-totp.mjs'].expected_live_sha256 = TOTP_PRE; return withSql132(plan); };
 // checkalt-register.mjs records its applied finding 13 bytes live (production run 41047251544, 2026-10-30):
 // every apply replay of it starts from the pre-apply live bytes (8f06c079, the planning manifest's
@@ -2433,13 +2449,14 @@ test('Data API credential columns: data.mjs expected_live records the bytes prod
   // REPLACE (its own test below), which started from the contractor gate's applied bytes and was applied
   // 2026-10-29 (production run 40963109952), and on again to the auth.email() verified email only
   // REPLACE (finding 17, its own test below), which started from the public partner codes' applied bytes
-  // and was applied 2026-10-31 (production run 41234874570): the row records main's bytes live.
+  // and was applied 2026-10-31 (production run 41234874570), and on again to the login MFA REPLACE
+  // (2026-11-06, planning only) from those applied bytes: main's bytes accepted, the applied bytes expected live.
   const GATES_REL = 'aws/tests/fixtures/production-data-rpc-access-gates-manifest-2026-10-29.json';
   const row = PLAN.members[MEMBER];
   assert.equal(row.operation, 'replace');
-  assert.equal(row.manifest, AUTH_EMAIL_VERIFIED_APPLIED_REL);
+  assert.equal(row.manifest, LOGIN_MFA_REL);
   assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, GATES_REL), 'utf8')).members[MEMBER].previous_manifest, APPLIED_REL);
-  assert.equal(row.expected_live_sha256, row.accepted_sha256);
+  assert.equal(row.expected_live_sha256, AUTH_EMAIL_VERIFIED_BYTES);
   assert.notEqual(row.accepted_sha256, LIVE);
   assert.equal(sha(`aws/functions/api/${MEMBER}`), row.accepted_sha256);
   assert.equal(row.sql_before, 'aws/workflows/sql/53_claim_settlement_breakdown.sql');
@@ -2447,10 +2464,12 @@ test('Data API credential columns: data.mjs expected_live records the bytes prod
   assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
   assert.ok(PLAN.order.indexOf('claim-settlement-rpc.mjs') < PLAN.order.indexOf(MEMBER));
   const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
-  // The auth.email() REPLACE was applied 2026-10-31 (production run 41234874570): main's bytes are done.
+  // The auth.email() REPLACE was applied 2026-10-31 (production run 41234874570): those bytes are the login MFA
+  // REPLACE's pre-state (READY), and main's bytes are done once it is applied.
   const ready = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER) });
-  assert.equal(ready.state, 'ALREADY_ACCEPTED');
+  assert.equal(ready.state, 'READY');
   assert.equal(ready.mutation, false);
+  assert.equal((await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: sha(`aws/functions/api/${MEMBER}`) }) })).state, 'ALREADY_ACCEPTED');
   for (const other of [LIVE, BEFORE]) {
     await assert.rejects(
       run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: other }) }),
@@ -2491,13 +2510,8 @@ test('Data API RPC access gates: data.mjs REPLACE planned over the bytes product
   // (finding 17), which started from the public partner codes' applied bytes and was applied 2026-10-31
   // (production run 41234874570).
   const row = PLAN.members[MEMBER];
-  assert.deepEqual(row, {
-    operation: 'replace',
-    accepted_sha256: sha(`aws/functions/api/${MEMBER}`),
-    expected_live_sha256: sha(`aws/functions/api/${MEMBER}`),
-    sql_before: 'aws/workflows/sql/53_claim_settlement_breakdown.sql',
-    manifest: AUTH_EMAIL_VERIFIED_APPLIED_REL,
-  });
+  // The login MFA REPLACE (2026-11-06, planning only) then moved the row on from the auth.email() applied bytes.
+  assert.deepEqual(row, dataRowNow());
   assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, CONTRACTOR_GATE_REL), 'utf8')).members[MEMBER].previous_manifest, SECURITY_HARDENING_APPLIED_REL);
   assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
   const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
@@ -3780,9 +3794,10 @@ test('Security hardening 2026-10-29 (audit findings 2-4): five members applied i
       assert.equal(row.manifest, STORAGE_UPLOAD_SIGNED_SIZE_APPLIED_REL, member);
     } else {
       assert.equal(row.accepted_sha256, dataMovedOn ? sha(`aws/functions/api/${member}`) : accepted, member);
-      // data.mjs: the auth.email() REPLACE from the public partner codes' bytes was applied 2026-10-31 (run 41234874570).
-      assert.equal(row.expected_live_sha256, dataMovedOn ? sha(`aws/functions/api/${member}`) : accepted, member);
-      assert.equal(row.manifest, dataMovedOn ? AUTH_EMAIL_VERIFIED_APPLIED_REL : SECURITY_HARDENING_APPLIED_REL, member);
+      // data.mjs: the auth.email() REPLACE from the public partner codes' bytes was applied 2026-10-31 (run 41234874570);
+      // the login MFA REPLACE (2026-11-06, planning only) starts from those applied bytes.
+      assert.equal(row.expected_live_sha256, dataMovedOn ? AUTH_EMAIL_VERIFIED_BYTES : accepted, member);
+      assert.equal(row.manifest, dataMovedOn ? LOGIN_MFA_REL : SECURITY_HARDENING_APPLIED_REL, member);
     }
     // The planning manifest keeps the pre-apply state, and that state is not an accepted live state any more.
     const planned = JSON.parse(fs.readFileSync(path.join(ROOT, planningRel), 'utf8')).members[member];
@@ -3796,7 +3811,9 @@ test('Security hardening 2026-10-29 (audit findings 2-4): five members applied i
     // again) are inspected at their current accepted live bytes (the public partner codes, the portal signing,
     // the signed upload size, the auth.email() REPLACE applied 2026-10-31 by production run 41234874570).
     const appliedAgain = dataMovedOn || writeMovedOn || movedOn.has(member);
-    const done = await run(inspect, { root: ROOT, inspectLive: appliedAgain ? liveFor(member) : liveFor(member, { sha256: accepted }) });
+    // data.mjs: its row now plans the login MFA REPLACE, so its accepted bytes (main's) are what ALREADY_ACCEPTED means.
+    const doneLive = dataMovedOn ? liveFor(member, { sha256: sha(`aws/functions/api/${member}`) }) : appliedAgain ? liveFor(member) : liveFor(member, { sha256: accepted });
+    const done = await run(inspect, { root: ROOT, inspectLive: doneLive });
     assert.equal(done.state, 'ALREADY_ACCEPTED', member);
     assert.equal(done.mutation, false, member);
     for (const other of appliedAgain ? [planned.live_sha256, accepted] : [planned.live_sha256]) {
@@ -4198,13 +4215,8 @@ test('Contractor verification status gate: data.mjs REPLACE planned from the sec
   // auth.email() verified email only REPLACE (finding 17) from the public partner codes' applied bytes,
   // applied 2026-10-31 (production run 41234874570).
   const row = PLAN.members[MEMBER];
-  assert.deepEqual(row, {
-    operation: 'replace',
-    accepted_sha256: sha(`aws/functions/api/${MEMBER}`),
-    expected_live_sha256: sha(`aws/functions/api/${MEMBER}`),
-    sql_before: 'aws/workflows/sql/53_claim_settlement_breakdown.sql',
-    manifest: AUTH_EMAIL_VERIFIED_APPLIED_REL,
-  });
+  // The login MFA REPLACE (2026-11-06, planning only) then moved the row on from the auth.email() applied bytes.
+  assert.deepEqual(row, dataRowNow());
   assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, PUBLIC_PARTNER_CODES_REL), 'utf8')).members[MEMBER].previous_manifest, CONTRACTOR_GATE_APPLIED_REL);
   assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
   const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
@@ -4215,9 +4227,10 @@ test('Contractor verification status gate: data.mjs REPLACE planned from the sec
   assert.equal(ready.state, 'READY');
   assert.equal(ready.mutation, false);
   // Production has moved on from these applied bytes, so they are no longer an accepted live state.
-  // The row has since moved on and that REPLACE was applied too (production run 41234874570): main's bytes are done.
+  // The row has since moved on and that REPLACE was applied too (production run 41234874570); the login MFA REPLACE
+  // (2026-11-06, planning only) starts from those applied bytes (READY).
   const now = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER) });
-  assert.equal(now.state, 'ALREADY_ACCEPTED');
+  assert.equal(now.state, 'READY');
   assert.equal(now.mutation, false);
   for (const other of [DATA_GATES_APPLIED, accepted, 'c'.repeat(64)]) {
     await assert.rejects(
@@ -4277,13 +4290,8 @@ test('Public partner codes (finding 9): data.mjs REPLACE from the contractor gat
   assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, CONTRACTOR_GATE_APPLIED_REL), 'utf8')).members[MEMBER].accepted_sha256, CONTRACTOR_GATE_BYTES);
   // Applied 2026-10-29: the row recorded the applied bytes live. It then planned the auth.email() verified
   // email only REPLACE (finding 17) from them, applied 2026-10-31 (production run 41234874570).
-  assert.deepEqual(PLAN.members[MEMBER], {
-    operation: 'replace',
-    accepted_sha256: sha(`aws/functions/api/${MEMBER}`),
-    expected_live_sha256: sha(`aws/functions/api/${MEMBER}`),
-    sql_before: 'aws/workflows/sql/53_claim_settlement_breakdown.sql',
-    manifest: AUTH_EMAIL_VERIFIED_APPLIED_REL,
-  });
+  // The login MFA REPLACE (2026-11-06, planning only) then moved the row on from the auth.email() applied bytes.
+  assert.deepEqual(PLAN.members[MEMBER], dataRowNow());
   assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, AUTH_EMAIL_VERIFIED_REL), 'utf8')).members[MEMBER].live_sha256, accepted);
   assert.ok(PLAN.notes.includes(`Public partner codes (2026-10-29, finding 9): REPLACE data.mjs ${CONTRACTOR_GATE_BYTES.slice(0, 8)} -> ${accepted.slice(0, 8)}`));
   assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
@@ -4294,9 +4302,10 @@ test('Public partner codes (finding 9): data.mjs REPLACE from the contractor gat
   const ready = await run(inspect, { root: ROOT, plan: before, inspectLive: liveFor(MEMBER, { plan: before }) });
   assert.equal(ready.state, 'READY');
   assert.equal(ready.mutation, false);
-  // The auth.email() REPLACE planned from these bytes was applied 2026-10-31 (production run 41234874570).
+  // The auth.email() REPLACE planned from these bytes was applied 2026-10-31 (production run 41234874570); those
+  // applied bytes are the login MFA REPLACE's pre-state (2026-11-06, planning only).
   const done = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER) });
-  assert.equal(done.state, 'ALREADY_ACCEPTED');
+  assert.equal(done.state, 'READY');
   for (const other of [CONTRACTOR_GATE_BYTES, 'c'.repeat(64)]) {
     await assert.rejects(
       run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: other }) }),
@@ -4344,7 +4353,9 @@ test('Public partner codes 2026-10-29: data.mjs applied on its own phrase, recor
 test('auth.email() verified email only (finding 17): data.mjs REPLACE from the public partner codes applied bytes, SQL 53 still first, applied 2026-10-31 (production run 41234874570, revision 91745cda)', async () => {
   const MEMBER = 'data.mjs';
   const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, AUTH_EMAIL_VERIFIED_REL), 'utf8'));
-  const accepted = sha(`aws/functions/api/${MEMBER}`);
+  // The bytes this REPLACE accepted and production run 41234874570 applied; main has since moved on (login MFA).
+  const accepted = AUTH_EMAIL_VERIFIED_BYTES;
+  assert.notEqual(accepted, sha(`aws/functions/api/${MEMBER}`));
   assert.equal(manifest.workstream_id, 'auth-email-verified');
   assert.equal(manifest.deploy_authorized, false);
   assert.match(manifest.authorization, /^Pending owner review/);
@@ -4354,15 +4365,11 @@ test('auth.email() verified email only (finding 17): data.mjs REPLACE from the p
   assert.deepEqual(manifest.members, { [MEMBER]: { live_sha256: PUBLIC_PARTNER_CODES_BYTES, accepted_sha256: accepted, operation: 'replace', previous_manifest: PUBLIC_PARTNER_CODES_APPLIED_REL } });
   assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, PUBLIC_PARTNER_CODES_APPLIED_REL), 'utf8')).members[MEMBER].accepted_sha256, PUBLIC_PARTNER_CODES_BYTES);
   assert.notEqual(accepted, PUBLIC_PARTNER_CODES_BYTES);
-  // Applied 2026-10-31 (production run 41234874570): the row records the applied bytes live and names the
-  // applied record; the planning manifest keeps the pre-apply state.
-  assert.deepEqual(PLAN.members[MEMBER], {
-    operation: 'replace',
-    accepted_sha256: accepted,
-    expected_live_sha256: accepted,
-    sql_before: 'aws/workflows/sql/53_claim_settlement_breakdown.sql',
-    manifest: AUTH_EMAIL_VERIFIED_APPLIED_REL,
-  });
+  // Applied 2026-10-31 (production run 41234874570): the row recorded the applied bytes live and named the
+  // applied record; the planning manifest keeps the pre-apply state. The login MFA REPLACE (2026-11-06, planning
+  // only) has since moved the row on from these applied bytes.
+  assert.deepEqual(PLAN.members[MEMBER], dataRowNow());
+  assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, LOGIN_MFA_REL), 'utf8')).members[MEMBER].previous_manifest, AUTH_EMAIL_VERIFIED_APPLIED_REL);
   assert.ok(PLAN.notes.includes(`auth.email() verified email only (2026-10-31, finding 17; planning only, not authorized): REPLACE data.mjs ${PUBLIC_PARTNER_CODES_BYTES.slice(0, 8)} -> ${accepted.slice(0, 8)}`));
   assert.ok(PLAN.notes.includes(`Applied 2026-10-31 (production-auth-email-verified-applied-manifest-2026-10-31.json, recorded 2026-11-02): data.mjs ${PUBLIC_PARTNER_CODES_BYTES.slice(0, 8)} -> ${accepted.slice(0, 8)}`));
   assert.ok(PLAN.notes.includes('RevisionId 91745cda-2b27-4ff4-9655-1f5754d00e7a'));
@@ -4384,9 +4391,10 @@ test('auth.email() verified email only (finding 17): data.mjs REPLACE from the p
   const ready = await run(inspect, { root: ROOT, plan: before, inspectLive: liveFor(MEMBER, { plan: before }) });
   assert.equal(ready.state, 'READY');
   assert.equal(ready.mutation, false);
-  // Now the applied bytes are done (re-inspect run 41461531605), and the pre-apply bytes are no longer an accepted live state.
+  // The applied bytes were done (re-inspect run 41461531605); they are now the login MFA REPLACE's pre-state
+  // (READY), and the pre-apply bytes are no longer an accepted live state.
   const done = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: accepted }) });
-  assert.equal(done.state, 'ALREADY_ACCEPTED');
+  assert.equal(done.state, 'READY');
   for (const other of [PUBLIC_PARTNER_CODES_BYTES, CONTRACTOR_GATE_BYTES, 'c'.repeat(64)]) {
     await assert.rejects(
       run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: other }) }),
@@ -4490,10 +4498,12 @@ test('TOTP shared rate limit (finding 7): auth-financial-totp.mjs REPLACE from t
   // The SQL 132 lockout REPLACE started from these applied bytes and was applied 2026-10-31 (production run
   // 41190246725): the committed row expects the lockout bytes live and names the lockout applied record.
   const LOCKOUT_ACCEPTED = '3edfea2a0328eda03466cad4c13c1075aa2a020c4164eee0564ade2dee06319b';
-  assert.equal(PLAN.members[MEMBER].expected_live_sha256, LOCKOUT_ACCEPTED);
-  // The row now follows the finding 8 REPLACE (first enrollment needs an email code, its own test), which
-  // starts from the lockout bytes; main has moved on.
-  assert.equal(PLAN.members[MEMBER].manifest, ENROLL_EMAIL_REL);
+  // The row then followed the finding 8 REPLACE (first enrollment needs an email code, its own test), which
+  // started from the lockout bytes; the fourth production rebuild put the finding 8 bytes live, and the row now
+  // follows the login MFA REPLACE (2026-11-06, planning only) from them. Main has moved on.
+  assert.equal(ENROLL_EMAIL_MANIFEST.members[MEMBER].live_sha256, LOCKOUT_ACCEPTED);
+  assert.equal(PLAN.members[MEMBER].expected_live_sha256, FINDING8_BYTES);
+  assert.equal(PLAN.members[MEMBER].manifest, LOGIN_MFA_REL);
   assert.ok(PLAN.notes.includes('TOTP shared rate limit applied 2026-10-30 (production run 40992441506'));
   assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
   const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
@@ -4573,7 +4583,10 @@ test('Check Alt deposit account change step-up (finding 13): checkalt-register.m
     assert.ok(imports.includes(dep), dep);
   }
   const totp = PLAN.members['auth-financial-totp.mjs'];
-  assert.equal(totp.expected_live_sha256, '3edfea2a0328eda03466cad4c13c1075aa2a020c4164eee0564ade2dee06319b', 'auth-financial-totp.mjs: the SQL 132 lockout bytes are live (production run 41190246725, below)');
+  // auth-financial-totp.mjs: the SQL 132 lockout bytes went live (production run 41190246725, below); the fourth production
+  // rebuild (apply run 41469896446) then put the finding 8 bytes live, the login MFA REPLACE's pre-state.
+  assert.equal(ENROLL_EMAIL_MANIFEST.members['auth-financial-totp.mjs'].live_sha256, '3edfea2a0328eda03466cad4c13c1075aa2a020c4164eee0564ade2dee06319b');
+  assert.equal(totp.expected_live_sha256, FINDING8_BYTES, 'auth-financial-totp.mjs: the finding 8 bytes are live (fourth production rebuild)');
   const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
   // Before the apply, the planned row read READY on the bytes production held.
   const before = structuredClone(PLAN);
@@ -4695,7 +4708,9 @@ test('Financial TOTP lockout (SQL 132): auth-financial-totp.mjs and checkalt-reg
     // The committed row records the applied bytes live and names the applied record; the pre-apply row is
     // replayed on a plan copy.
     assert.deepEqual(PLAN.members[MEMBER], movedOn
-      ? { operation: 'replace', accepted_sha256: sha(`aws/functions/api/${MEMBER}`), expected_live_sha256: accepted, sql_before: sqlBefore, manifest: ENROLL_EMAIL_REL }
+      // auth-financial-totp.mjs moved on twice: the finding 8 bytes (live since the fourth production rebuild), then the
+      // login MFA REPLACE (2026-11-06, planning only) from them.
+      ? { operation: 'replace', accepted_sha256: sha(`aws/functions/api/${MEMBER}`), expected_live_sha256: FINDING8_BYTES, sql_before: sqlBefore, manifest: LOGIN_MFA_REL }
       : { operation: 'replace', accepted_sha256: accepted, expected_live_sha256: isApplied ? accepted : live, sql_before: sqlBefore, manifest: isApplied ? LOCKOUT_APPLIED_REL : LOCKOUT_REL }, MEMBER);
     const before = structuredClone(PLAN);
     before.members[MEMBER] = { ...before.members[MEMBER], expected_live_sha256: live, manifest: LOCKOUT_REL };
@@ -4717,10 +4732,19 @@ test('Financial TOTP lockout (SQL 132): auth-financial-totp.mjs and checkalt-reg
     const ready = await run(inspect, { root: ROOT, plan: before, inspectLive: liveFor(MEMBER, { plan: before, sha256: live }) });
     assert.equal(ready.state, 'READY', MEMBER);
     assert.equal(ready.mutation, false);
-    const done = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: accepted }) });
-    // The lockout bytes live: done for checkalt-register.mjs, the finding 8 starting point for auth-financial-totp.mjs.
-    assert.equal(done.state, movedOn ? 'READY' : 'ALREADY_ACCEPTED', MEMBER);
-    assert.equal(done.mutation, false);
+    // The lockout bytes live: done for checkalt-register.mjs. auth-financial-totp.mjs has moved past them (the fourth
+    // production rebuild put the finding 8 bytes live; the login MFA REPLACE starts there), so they are a stop.
+    if (movedOn) {
+      await assert.rejects(
+        run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: accepted }) }),
+        (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+        MEMBER,
+      );
+    } else {
+      const done = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: accepted }) });
+      assert.equal(done.state, 'ALREADY_ACCEPTED', MEMBER);
+      assert.equal(done.mutation, false);
+    }
     // Once applied, the pre-apply bytes are no longer an accepted live state either.
     for (const other of [...(isApplied ? [live] : []), stale, 'c'.repeat(64)]) {
       await assert.rejects(
@@ -5491,8 +5515,9 @@ test('Billing database errors redacted (finding 25): tenant-billing-engine.mjs R
   // applied bytes, which export it; the planned auth.email() REPLACE keeps the export).
   const source = fs.readFileSync(path.join(API, MEMBER), 'utf8');
   assert.ok(localImports(source, MEMBER).includes('data.mjs'));
-  // (Since 2026-10-31 data.mjs is the auth.email() bytes, production run 41234874570; sanitizeLogText is in both.)
-  assert.equal(PLAN.members['data.mjs'].expected_live_sha256, PLAN.members['data.mjs'].accepted_sha256);
+  // (Since 2026-10-31 data.mjs is the auth.email() bytes, production run 41234874570; sanitizeLogText is in both,
+  // and in the login MFA bytes planned from them.)
+  assert.equal(PLAN.members['data.mjs'].expected_live_sha256, AUTH_EMAIL_VERIFIED_BYTES);
   assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, PUBLIC_PARTNER_CODES_APPLIED_REL), 'utf8')).members['data.mjs'].live_sha256, PUBLIC_PARTNER_CODES_BYTES);
   assert.match(fs.readFileSync(path.join(API, 'data.mjs'), 'utf8'), /export const sanitizeLogText/);
   assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
@@ -5714,8 +5739,14 @@ test('First financial authenticator enrollment needs a fresh email code (finding
   const MEMBER = 'auth-financial-totp.mjs';
   // auth-financial-totp.mjs as the SQL 132 lockout production run 41190246725 applied it.
   const LOCKOUT_APPLIED_BYTES = '3edfea2a0328eda03466cad4c13c1075aa2a020c4164eee0564ade2dee06319b';
-  const accepted = sha(`aws/functions/api/${MEMBER}`);
+  // The bytes this REPLACE accepted; the fourth production rebuild (apply run 41469896446) put them live, and main has
+  // since moved on to the login MFA bytes.
+  const accepted = FINDING8_BYTES;
   assert.notEqual(accepted, LOCKOUT_APPLIED_BYTES);
+  assert.notEqual(accepted, sha(`aws/functions/api/${MEMBER}`));
+  const rebuild = JSON.parse(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/lambda-rebuild-plan.json'), 'utf8')).environments.production;
+  assert.equal(rebuild.applied.run_id, '41469896446');
+  assert.deepEqual([rebuild.members[MEMBER].live_sha256, rebuild.members[MEMBER].accepted_sha256], [LOCKOUT_APPLIED_BYTES, accepted]);
   assert.equal(ENROLL_EMAIL_MANIFEST.workstream_id, 'financial-totp-enroll-email-code');
   assert.equal(ENROLL_EMAIL_MANIFEST.deploy_authorized, false);
   assert.match(ENROLL_EMAIL_MANIFEST.authorization, /^Pending owner review/);
@@ -5724,12 +5755,13 @@ test('First financial authenticator enrollment needs a fresh email code (finding
   }
   assert.deepEqual(ENROLL_EMAIL_MANIFEST.members, { [MEMBER]: { live_sha256: LOCKOUT_APPLIED_BYTES, accepted_sha256: accepted, operation: 'replace', previous_manifest: LOCKOUT_APPLIED_REL } });
   assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, LOCKOUT_APPLIED_REL), 'utf8')).members[MEMBER].accepted_sha256, LOCKOUT_APPLIED_BYTES);
+  // The row has moved on: the login MFA REPLACE (2026-11-06, planning only) from the bytes the rebuild put live.
   assert.deepEqual(PLAN.members[MEMBER], {
     operation: 'replace',
-    accepted_sha256: accepted,
-    expected_live_sha256: LOCKOUT_APPLIED_BYTES,
+    accepted_sha256: sha(`aws/functions/api/${MEMBER}`),
+    expected_live_sha256: accepted,
     sql_before: SQL132_FILE,
-    manifest: ENROLL_EMAIL_REL,
+    manifest: LOGIN_MFA_REL,
   });
   // The new static imports link against modules the live package already has: email.mjs and email-layout.mjs
   // are not overlay members, email-policy.mjs is live at its accepted bytes, and email-branding.mjs
@@ -5749,16 +5781,17 @@ test('First financial authenticator enrollment needs a fresh email code (finding
     /p_action NOT IN \('enroll_start', 'enroll_confirm', 'step_up', 'code_check'\)/);
   assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
   const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
-  const ready = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: LOCKOUT_APPLIED_BYTES }) });
-  assert.equal(ready.state, 'READY');
-  assert.equal(ready.mutation, false);
-  const done = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: accepted }) });
-  assert.equal(done.state, 'ALREADY_ACCEPTED');
-  await assert.rejects(
-    run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: 'c'.repeat(64) }) }),
-    (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
-  );
-  // The apply replay from the lockout bytes passes the order and link gates.
+  // These bytes are live (the rebuild): the login MFA REPLACE's pre-state, READY; the lockout bytes are a stop.
+  const now = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: accepted }) });
+  assert.equal(now.state, 'READY');
+  for (const other of [LOCKOUT_APPLIED_BYTES, 'c'.repeat(64)]) {
+    await assert.rejects(
+      run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: other }) }),
+      (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+      other,
+    );
+  }
+  // An apply replay on a plan copy that expects the lockout bytes live (totpPre) still passes the order and link gates.
   const { deps, calls } = applyDeps(MEMBER);
   const replay = await run(applyEnv(MEMBER), deps);
   assert.equal(replay.mutation, false);
@@ -6161,4 +6194,86 @@ test('OCR payee address split (2026-11-06, check 2f676a72): ocr-parse.mjs, check
     run(applyEnv('check-ocr-provider.mjs', { CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: manifest.members['check-ocr-provider.mjs'].live_sha256 }), held.deps),
     (error) => error.code === CODES.DEPLOYMENT_COLLISION && error.details.pending.includes('ocr-parse.mjs'),
   );
+});
+
+test('Login MFA (owner 2026-11-06): ADD login-mfa.mjs, then data.mjs REPLACE from the auth.email() applied bytes and auth-financial-totp.mjs REPLACE from the bytes the fourth production rebuild put live, planning only', async () => {
+  const ADD = 'login-mfa.mjs';
+  const DATA = 'data.mjs';
+  const TOTP = 'auth-financial-totp.mjs';
+  const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, LOGIN_MFA_REL), 'utf8'));
+  const acceptedAdd = sha(`aws/functions/api/${ADD}`);
+  const acceptedData = sha(`aws/functions/api/${DATA}`);
+  const acceptedTotp = sha(`aws/functions/api/${TOTP}`);
+  assert.equal(manifest.workstream_id, 'login-mfa');
+  assert.equal(manifest.deploy_authorized, false);
+  assert.match(manifest.authorization, /^Pending owner review \(2026-11-06\)/);
+  assert.equal(manifest.live_lambda, FUNCTION_NAME);
+  for (const evidence of ['Login MFA - yes for everyone', 'AWS_LOGIN_MFA_REQUIRED', 'MfaConfiguration OPTIONAL', '41469896446', 'No SQL', 'index.mjs is untouched',
+    `${AUTH_EMAIL_VERIFIED_BYTES.slice(0, 8)} -> ${acceptedData.slice(0, 8)}`, `${FINDING8_BYTES.slice(0, 8)} -> ${acceptedTotp.slice(0, 8)}`]) {
+    assert.ok(manifest.notes.includes(evidence), evidence);
+    assert.ok(PLAN.notes.includes(evidence), evidence);
+  }
+  // The pre-states: data.mjs as production run 41234874570 applied it; auth-financial-totp.mjs as the fourth production
+  // rebuild (apply 41469896446, VERIFIED) put it live, which accepted exactly the finding 8 bytes.
+  const rebuild = JSON.parse(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/lambda-rebuild-plan.json'), 'utf8')).environments.production;
+  assert.equal(rebuild.status, 'applied');
+  assert.equal(rebuild.applied.run_id, '41469896446');
+  assert.equal(rebuild.applied.state, 'VERIFIED');
+  assert.equal(rebuild.members[TOTP].accepted_sha256, FINDING8_BYTES);
+  assert.equal(rebuild.members[DATA], undefined);
+  assert.deepEqual(manifest.members[DATA], { live_sha256: AUTH_EMAIL_VERIFIED_BYTES, accepted_sha256: acceptedData, operation: 'replace', previous_manifest: AUTH_EMAIL_VERIFIED_APPLIED_REL });
+  assert.deepEqual(manifest.members[TOTP], { live_sha256: FINDING8_BYTES, accepted_sha256: acceptedTotp, operation: 'replace', previous_manifest: ENROLL_EMAIL_REL });
+  assert.deepEqual(PLAN.members[DATA], dataRowNow());
+  assert.deepEqual(PLAN.members[TOTP], { operation: 'replace', accepted_sha256: acceptedTotp, expected_live_sha256: FINDING8_BYTES, sql_before: SQL132_FILE, manifest: LOGIN_MFA_REL });
+  const addImports = localImports(fs.readFileSync(path.join(API, ADD), 'utf8'), ADD).sort();
+  assert.deepEqual(addImports, ['ops-readiness.mjs', 'providers/production/moov-fund-authz.mjs']);
+  assert.deepEqual(manifest.members[ADD], { live_sha256: null, accepted_sha256: acceptedAdd, operation: 'add', required_imports: addImports });
+  assert.deepEqual(PLAN.members[ADD], { operation: 'add', accepted_sha256: acceptedAdd, expected_live_sha256: null, sql_before: null, manifest: LOGIN_MFA_REL });
+  for (const member of [ADD, DATA, TOTP]) assert.equal(resolvePlannedMember(member, { root: ROOT, plan: PLAN }).ok, true, member);
+  // The ADD comes before both members that import it; index.mjs (never overlaid) is untouched.
+  for (const importer of [DATA, TOTP]) {
+    assert.ok(localImports(fs.readFileSync(path.join(API, importer), 'utf8'), importer).includes(ADD), importer);
+    assert.ok(PLAN.order.indexOf(ADD) < PLAN.order.indexOf(importer), importer);
+  }
+  assert.ok(PLAN.do_not_overlay.includes('index.mjs'));
+  assert.ok(!fs.readFileSync(path.join(API, 'index.mjs'), 'utf8').includes('login-mfa'));
+  assert.ok(WORKFLOW.includes(`          - providers/checkalt-account-mask.mjs\n          - ${ADD}\n          - ${DATA}\n`));
+  const inspect = (member) => ({ ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: member });
+  // The ADD: READY while absent, ALREADY_ACCEPTED at the accepted bytes, a collision for anything else present.
+  assert.equal((await run(inspect(ADD), { root: ROOT, inspectLive: liveFor(ADD) })).state, 'READY');
+  assert.equal((await run(inspect(ADD), { root: ROOT, inspectLive: liveFor(ADD, { sha256: acceptedAdd }) })).state, 'ALREADY_ACCEPTED');
+  await assert.rejects(
+    run(inspect(ADD), { root: ROOT, inspectLive: liveFor(ADD, { sha256: 'c'.repeat(64) }) }),
+    (error) => error.code === CODES.DEPLOYMENT_COLLISION,
+  );
+  // Each REPLACE: READY from its recorded pre-state, ALREADY_ACCEPTED at main's bytes, a stop for anything else.
+  for (const [member, pre, accepted] of [[DATA, AUTH_EMAIL_VERIFIED_BYTES, acceptedData], [TOTP, FINDING8_BYTES, acceptedTotp]]) {
+    const ready = await run(inspect(member), { root: ROOT, inspectLive: liveFor(member, { sha256: pre }) });
+    assert.equal(ready.state, 'READY', member);
+    assert.equal(ready.mutation, false, member);
+    assert.equal((await run(inspect(member), { root: ROOT, inspectLive: liveFor(member, { sha256: accepted }) })).state, 'ALREADY_ACCEPTED', member);
+    await assert.rejects(
+      run(inspect(member), { root: ROOT, inspectLive: liveFor(member, { sha256: 'c'.repeat(64) }) }),
+      (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+      member,
+    );
+  }
+  // Apply: data.mjs is refused while the ADD is not live (its import would not link) ...
+  await assert.rejects(
+    run(applyEnv(DATA), applyDeps(DATA, { pending: [ADD] }).deps),
+    (error) => error.code === CODES.DEPLOYMENT_COLLISION,
+  );
+  // ... the ADD applies into the live package ...
+  const { deps: addDeps, calls } = applyDeps(ADD);
+  const added = await run(applyEnv(ADD), addDeps);
+  assert.equal(added.mutation, false);
+  assert.deepEqual(calls.receipt.owned_member_ops, { replace: [], add: [ADD] });
+  // ... and data.mjs then links.
+  const data = await run(applyEnv(DATA), applyDeps(DATA).deps);
+  assert.equal(data.mutation, false);
+  // The bytes: off unless the flag is 'true'; the gate sits in withIdentity between the mapping and the handler.
+  const source = fs.readFileSync(path.join(API, ADD), 'utf8');
+  assert.match(source, /export const LOGIN_MFA_FLAG = 'AWS_LOGIN_MFA_REQUIRED';/);
+  assert.match(source, /export const LOGIN_MFA_ACTION = 'login\.mfa';/);
+  assert.match(fs.readFileSync(path.join(API, DATA), 'utf8'), /const loginMfaRefusal = await \(deps\.enforceLoginMfa \|\| enforceLoginMfa\)\(\{/);
 });

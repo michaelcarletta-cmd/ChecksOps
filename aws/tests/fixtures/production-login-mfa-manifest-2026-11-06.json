@@ -1,0 +1,30 @@
+{
+  "workstream_id": "login-mfa",
+  "authorization": "Pending owner review (2026-11-06). Planning only: nothing is live or verified. Each production apply needs its own owner approval, a staging acceptance reference and a read-only production inspect that confirms the live bytes.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Owner, 2026-11-06: \"Login MFA - yes for everyone\", design \"Email code + authenticator\". Cognito cannot require MFA while users sign in with EMAIL_OTP (production pool us-east-1_h00WorYMT reads MfaConfiguration OPTIONAL, 13 users, 2026-11-06), so the API enforces it: login-mfa.mjs (new) records a login.mfa step-up in financial_stepup_log against this login (sub + origin_jti, no tenant) through /auth/mfa/step-up, and withIdentity (data.mjs) refuses every identity-backed request of a login without one (403 login_mfa_required), except /auth/mfa/status, /auth/mfa/associate, /auth/mfa/verify, /auth/mfa/step-up, /identity/me and /identity/session. Off unless the Lambda's AWS_LOGIN_MFA_REQUIRED is 'true' (a separate guarded configuration change, staging first), so these bytes change nothing until then. auth-financial-totp.mjs: the login.mfa binding and loginMfa in /auth/mfa/status. Money step-ups keep their own action keys and window. ADD login-mfa.mjs before data.mjs; REPLACE data.mjs 24784169 -> daf31fa2 from the auth.email() verified email applied bytes (SQL 53 still first); REPLACE auth-financial-totp.mjs ae72b808 -> f5104282 from the bytes the fourth production rebuild put live (apply run 41469896446, VERIFIED 2026-11-02; the row still recorded the pre-rebuild 3edfea2a). No SQL. index.mjs is untouched.",
+  "members": {
+    "login-mfa.mjs": {
+      "live_sha256": null,
+      "accepted_sha256": "a2bdeea9ba70d382f7e3a386aa35731d9a1dafd7badba0ccc1c2a65e11bce316",
+      "operation": "add",
+      "required_imports": [
+        "ops-readiness.mjs",
+        "providers/production/moov-fund-authz.mjs"
+      ]
+    },
+    "data.mjs": {
+      "live_sha256": "2478416940176b4530afda58f6b3cd002c1b26286ecb916871339b3f8ea83d44",
+      "accepted_sha256": "daf31fa213e0fa903cfcbd46fb4f8a8116a423eb91201f3210cf67ae6a032028",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-auth-email-verified-applied-manifest-2026-10-31.json"
+    },
+    "auth-financial-totp.mjs": {
+      "live_sha256": "ae72b8087aab2bf112b812afefb40206d112ea8843682017e4de831fa777dce0",
+      "accepted_sha256": "f5104282e508cffd88d8994b208e75846e27ce284c5de1884474d8dc803e5883",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-financial-totp-enroll-email-code-manifest-2026-10-31.json"
+    }
+  }
+}

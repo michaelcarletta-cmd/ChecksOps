@@ -24,6 +24,7 @@ on:
           - check-deposited.mjs
           - claim-settlement-rpc.mjs
           - providers/checkalt-account-mask.mjs
+          - login-mfa.mjs
           - data.mjs
           - providers/parity/moov-wallet.mjs
           - money-write-flag.mjs

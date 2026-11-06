@@ -309,10 +309,13 @@ test('order: predecessor SQL 130 (untouched); the one new function, its prerequi
   assert.ok(lockoutApplied['providers/production/checkalt-register.mjs'], 'checkalt-register.mjs is recorded applied (production run 41156679208)');
   for (const member of ['auth-financial-totp.mjs', 'providers/production/checkalt-register.mjs']) {
     if (member === 'auth-financial-totp.mjs') {
-      // Moved on to the finding 8 REPLACE (first enrollment needs an email code), which starts from the applied
-      // lockout bytes: the row expects those bytes live and names its own planning manifest.
-      assert.equal(plan.members[member].expected_live_sha256, lockoutApplied[member].accepted_sha256, `${member} expects the applied lockout bytes live`);
-      assert.equal(plan.members[member].manifest, 'aws/tests/fixtures/production-financial-totp-enroll-email-code-manifest-2026-10-31.json', member);
+      // Moved on to the finding 8 REPLACE (first enrollment needs an email code), which started from the applied
+      // lockout bytes; the fourth production rebuild (apply run 41469896446) put the finding 8 bytes live, and the
+      // row now plans the login MFA REPLACE (2026-11-06) from them, naming its own planning manifest.
+      const enroll = readJson('aws/tests/fixtures/production-financial-totp-enroll-email-code-manifest-2026-10-31.json').members[member];
+      assert.equal(enroll.live_sha256, lockoutApplied[member].accepted_sha256, `${member}: finding 8 started from the applied lockout bytes`);
+      assert.equal(plan.members[member].expected_live_sha256, enroll.accepted_sha256, `${member} expects the finding 8 bytes live`);
+      assert.equal(plan.members[member].manifest, 'aws/tests/fixtures/production-login-mfa-manifest-2026-11-06.json', member);
     } else if (lockoutApplied[member]) {
       assert.equal(plan.members[member].expected_live_sha256, plan.members[member].accepted_sha256, `${member} records the applied lockout bytes`);
       assert.equal(plan.members[member].manifest, LOCKOUT_APPLIED, member);
