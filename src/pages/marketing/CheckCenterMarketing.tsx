@@ -467,7 +467,7 @@ export default function CheckCenterMarketing() {
               </Button>
             </div>
             <p className="mt-4 text-sm text-muted-foreground max-w-xl">
-              20-minute walkthrough, no commitment. Your money never leaves your bank - your company stays the merchant of record.
+              20-minute walkthrough, no commitment. Your company stays the merchant of record.
             </p>
             <div className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-3 text-xs text-muted-foreground">
               <div className="flex items-center gap-1.5"><ShieldCheck className="h-3.5 w-3.5" /> Audit trail on every action</div>
