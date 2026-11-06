@@ -102,8 +102,8 @@ test('packExecutor retains live-only members and adds SQL 53 and the ledger migr
     members['sql/76_tenant_partnership_invitee_consent.sql'],
     AUTHORIZED_SQL76_PARTNERSHIP_CONSENT.source_sha256,
   );
-  // 24 reviewed pins plus the fifty-three release 2026-10-17 pins (SQL 90-106, 108-143).
-  assert.equal(AUTHORIZED_STAGING_SQL.length, 77);
+  // 24 reviewed pins plus the fifty-four release 2026-10-17 pins (SQL 90-106, 108-144).
+  assert.equal(AUTHORIZED_STAGING_SQL.length, 78);
 });
 
 test('unmatched authorization never falls through to SQL 44', () => {

@@ -4,13 +4,8 @@
   "environments": {
     "staging": {
       "function_name": "checksops-staging-api",
-      "status": "accepted",
-      "set": {
-        "AWS_LOGIN_MFA_REQUIRED": {
-          "from": null,
-          "to": "true"
-        }
-      },
+      "status": "applied",
+      "set": {},
       "unset": {},
       "inspect": {
         "run_id": "42281613835",
@@ -202,17 +197,41 @@
             }
           }
         }
-      ]
+      ],
+      "applied": {
+        "run_id": "42283026717",
+        "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/42283026717",
+        "main_commit": "fd0776924be2904f2c080989ec4cff6ae5d470ea",
+        "approval_phrase": "APPLY API CONFIGURATION TO STAGING",
+        "change_sha256": "028962f228e4151af2762ed4e98db60e0f6077bb232ef5d8bff47d7d3161aae6",
+        "revision_id_before": "9aa2fe96-ce60-49ff-9b9a-7ba7885b0f5d",
+        "revision_id_after": "952b8357-228c-437c-944e-05bd3a7375df",
+        "configuration_sha256_before": "35be33d4fc4921a6dc1cdbdbdf6e90b2fcfd90d5114c4e8b86e56d5c3692b3ca",
+        "configuration_sha256_after": "ffaf8ec479d4a9eb7877306e07d7b7c3f2ee23035a5c8cc143a494d8a6d38f28",
+        "applied_at": "2026-11-06T19:50:01.576Z",
+        "smoke": [
+          "/health",
+          "/db-health",
+          "/db-readonly-validate"
+        ],
+        "code_sha256": "9rqeIav9wcbQOUVTJC/TOzianf9suunTmEmoZ6E+W9k=",
+        "state": "VERIFIED",
+        "notes": "Owner approval: \"deploy MFA to staging\" and \"merge the staging config plan PR when ready\" (#1659 merged as fd0776924 on green CI). The run preflight on main fd0776924 reported READY (RevisionId 9aa2fe96, configuration 35be33d4, 45 variables, change sha256 028962f2) and re-read the same immediately before the write. Verify step VERIFIED (46 variables: 45 + 1 set; AWS_LOGIN_MFA_REQUIRED already_accepted, \"true\"). CodeSha256 unchanged. Smoke /health, /db-health and /db-readonly-validate 200. Read-back after the apply (boto3 GetFunctionConfiguration, user/claude-code): AWS_LOGIN_MFA_REQUIRED \"true\", 46 variables, RevisionId 952b8357-228c-437c-944e-05bd3a7375df. Owner end-to-end acceptance 2026-11-06: signed in to staging with the email code, was asked for the authenticator code and got in, \"staging MFA works\".",
+        "applied_change": {
+          "set": {
+            "AWS_LOGIN_MFA_REQUIRED": {
+              "from": null,
+              "to": "true"
+            }
+          },
+          "unset": {}
+        }
+      }
     },
     "production": {
       "function_name": "checksops-production-prep-api",
-      "status": "accepted",
-      "set": {
-        "AWS_LOGIN_MFA_REQUIRED": {
-          "from": null,
-          "to": "true"
-        }
-      },
+      "status": "applied",
+      "set": {},
       "unset": {},
       "inspect": {
         "run_id": "42290357692",
@@ -496,7 +515,36 @@
             }
           }
         }
-      ]
+      ],
+      "applied": {
+        "run_id": "42293184319",
+        "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/42293184319",
+        "main_commit": "b83f21140881c5f0b7e79ecae58dc80cf7f85a09",
+        "approval_phrase": "APPLY API CONFIGURATION TO PRODUCTION",
+        "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/42283026717",
+        "change_sha256": "b10be2ace261cb1d395228c66b451d244393da2bdc7321e0629d1ea4abca3579",
+        "revision_id_before": "52828f5f-5a3d-460f-95e9-329cf723d3a1",
+        "revision_id_after": "eb9f5362-3171-41d0-9343-e6074c1885e9",
+        "configuration_sha256_before": "90840ecde7eefd92832068462bbf1db1c92c3a7bb4317281e246e12a1f2d7178",
+        "configuration_sha256_after": "4d8f9919838daed998b7ba76d94ae49949e67dee71a7fde9f688cc654a82d0d7",
+        "applied_at": "2026-11-06T21:01:26.094Z",
+        "smoke": [
+          "/health",
+          "/db-health"
+        ],
+        "code_sha256": "9rqeIav9wcbQOUVTJC/TOzianf9suunTmEmoZ6E+W9k=",
+        "state": "VERIFIED",
+        "notes": "Owner approval: \"merge 1664\" and \"APPLY API CONFIGURATION TO PRODUCTION\". #1664 merged as b83f21140 on green CI. Pre-apply inspect 42293077530 on main b83f21140: state READY, RevisionId 52828f5f, configuration 90840ecd, 49 variables, change sha256 b10be2ac. The run re-read the same immediately before the write. Verify step VERIFIED (50 variables: 49 + 1 set; AWS_LOGIN_MFA_REQUIRED already_accepted, \"true\"). CodeSha256 unchanged. Smoke /health and /db-health 200. Read-back after the apply (boto3 GetFunctionConfiguration, user/claude-code): AWS_LOGIN_MFA_REQUIRED \"true\", 50 variables, RevisionId eb9f5362-3171-41d0-9343-e6074c1885e9, LastUpdateStatus Successful. Staging acceptance: staging apply run 42283026717 and the owner's \"staging MFA works\".",
+        "applied_change": {
+          "set": {
+            "AWS_LOGIN_MFA_REQUIRED": {
+              "from": null,
+              "to": "true"
+            }
+          },
+          "unset": {}
+        }
+      }
     }
   }
 }
