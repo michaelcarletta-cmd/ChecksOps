@@ -206,18 +206,23 @@
     },
     "production": {
       "function_name": "checksops-production-prep-api",
-      "status": "applied",
-      "set": {},
+      "status": "accepted",
+      "set": {
+        "AWS_LOGIN_MFA_REQUIRED": {
+          "from": null,
+          "to": "true"
+        }
+      },
       "unset": {},
       "inspect": {
-        "run_id": "41952626066",
-        "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/41952626066",
-        "main_commit": "a75c5ab6e6c7cfea5575b3e7721cb79ceb704f60",
-        "live_code_sha256": "D2Oydyt7kQ3yOYg62fxjdTEJWO1qrA1eIQCSznFZkEE=",
-        "live_revision_id": "15005d35-03bd-4e8e-89f7-44d99762372f",
-        "live_configuration_sha256": "6f03a3d981be84749160a65df3fdd8f969fe1b564afc2887bed8527d7d825383",
-        "live_variable_count": 48,
-        "notes": "Owner decision 2026-11-05: \"yes prepare the PR to turn on sending\". A $1 production payroll (#1607, moov-send.mjs 1b204d62 live since production overlay run 41937571704) was refused 403 send_post_held (\"Sending payments is switched off. Nothing was recorded or sent.\"). moov-send.mjs sendPostEnabled() = transferPostEnabled() && flagTrue('AWS_MOOV_SEND_POST_ENABLED'), and postsEnabled() requires it only when environment is 'production'. The inspect (state PENDING_PLAN, 48 variables) lists no AWS_MOOV_SEND_POST_ENABLED, so from is null; AWS_MOOV_TRANSFER_POST_ENABLED is already \"true\" (wallet funding works). Setting it to the string \"true\" opens every production send to a payee through providers/production/moov-send.mjs: check payouts to stakeholders and partners and payroll. It does not change funding, onboarding, payees setup or any other function, and production never falls back to sandbox. Staging needs no change: postsEnabled() is true outside production and staging sends use the Moov sandbox (staging carries no AWS_MOOV_SEND_POST_ENABLED and AWS_MOOV_ENABLED \"false\"); staging acceptance is this reviewed plan PR. Not verified end to end in staging: the owner could not complete a staging payroll because the staging two-factor reset is blocked on IAM (#1609, not yet applied). Rollback: a plan with from and to swapped."
+        "run_id": "42290357692",
+        "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/42290357692",
+        "main_commit": "6c2f5a26552ec842ccd6da30eb127a74226f4f20",
+        "live_code_sha256": "9rqeIav9wcbQOUVTJC/TOzianf9suunTmEmoZ6E+W9k=",
+        "live_revision_id": "52828f5f-5a3d-460f-95e9-329cf723d3a1",
+        "live_configuration_sha256": "90840ecde7eefd92832068462bbf1db1c92c3a7bb4317281e246e12a1f2d7178",
+        "live_variable_count": 49,
+        "notes": "Owner, 2026-11-06: \"Login MFA - yes for everyone\", \"deploy MFA to production when staging is done\" and, after signing in to staging with the email code and then the authenticator code, \"staging MFA works\". login-mfa.mjs (PR #1657) refuses every identity-backed request of a sign-in that has not passed the authenticator check only while AWS_LOGIN_MFA_REQUIRED is the string \"true\" (loginMfaRequired = flagTrue). The three members are live in production: login-mfa.mjs ADD (overlay run 42283495148, VERIFIED a2bdeea9), data.mjs REPLACE 24784169 -> daf31fa2 (run 42284228921), auth-financial-totp.mjs REPLACE ae72b808 -> f5104282 (run 42284721201); the sign-in screen (LoginMfaGate) is live in the production SPA /assets/index-BMlsQuA0.js (upload run 42285187951, lock PR #1661). Staging acceptance: staging configuration apply run 42283026717 set the same key from absent to \"true\" (VERIFIED) and the owner confirmed the staging sign-in. The inspect (state PENDING_PLAN, 49 variables) lists no AWS_LOGIN_MFA_REQUIRED, so from is null. The name is not credential-like; the value is a switch. Effect: every production user is asked for the authenticator code after each sign-in; a user with no authenticator is walked through enrollment (emailed setup code, QR code, first code) before the app loads. Public token links (sign, endorse, invoice) and the /auth/mfa and /identity routes stay exempt. Rollback: a plan with from and to swapped (the gate is off again at once; no data changes)."
       },
       "history": [
         {
@@ -449,37 +454,49 @@
               "unset": {}
             }
           }
-        }
-      ],
-      "applied": {
-        "run_id": "41953736410",
-        "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/41953736410",
-        "main_commit": "30b2909cbf4b9ba4117a9bd37e400550c9f1553e",
-        "approval_phrase": "APPLY API CONFIGURATION TO PRODUCTION",
-        "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/pull/1610",
-        "change_sha256": "b264c6ade061c0d193ecd195bc455b282eccc851674a76e1e5f2d1447d9160f7",
-        "revision_id_before": "15005d35-03bd-4e8e-89f7-44d99762372f",
-        "revision_id_after": "8686ad5f-369a-4a8d-9331-2a08326e50ea",
-        "configuration_sha256_before": "6f03a3d981be84749160a65df3fdd8f969fe1b564afc2887bed8527d7d825383",
-        "configuration_sha256_after": "0ebe408b988c7a8406abbb1a91c61ffbb025a820fab765493417234c3f1f02c5",
-        "applied_at": "2026-11-05T02:13:36.034Z",
-        "smoke": [
-          "/health",
-          "/db-health"
-        ],
-        "code_sha256": "D2Oydyt7kQ3yOYg62fxjdTEJWO1qrA1eIQCSznFZkEE=",
-        "state": "VERIFIED",
-        "notes": "Owner approval: \"merge 1610\" and \"APPLY API CONFIGURATION TO PRODUCTION\". Pre-apply inspect 41953642584 on main 30b2909cb: state READY, RevisionId 15005d35, configuration 6f03a3d9, 48 variables, change sha256 b264c6ad. The run re-read the same immediately before the write. Verify step VERIFIED (49 variables: 48 + 1 set; AWS_MOOV_SEND_POST_ENABLED \"true\"). Smoke /health and /db-health 200. Read-back after the apply (boto3 GetFunctionConfiguration, user/claude-code): AWS_MOOV_SEND_POST_ENABLED \"true\", AWS_MOOV_TRANSFER_POST_ENABLED \"true\" unchanged, RevisionId 8686ad5f-369a-4a8d-9331-2a08326e50ea, 49 variables, CodeSha256 unchanged, LastModified 2026-11-05T02:13:36Z. Owner end-to-end acceptance 2026-11-05: a $1 production payroll through providers/production/moov-send.mjs, \"Payroll worked\".",
-        "applied_change": {
-          "set": {
-            "AWS_MOOV_SEND_POST_ENABLED": {
-              "from": null,
-              "to": "true"
-            }
+        },
+        {
+          "inspect": {
+            "run_id": "41952626066",
+            "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/41952626066",
+            "main_commit": "a75c5ab6e6c7cfea5575b3e7721cb79ceb704f60",
+            "live_code_sha256": "D2Oydyt7kQ3yOYg62fxjdTEJWO1qrA1eIQCSznFZkEE=",
+            "live_revision_id": "15005d35-03bd-4e8e-89f7-44d99762372f",
+            "live_configuration_sha256": "6f03a3d981be84749160a65df3fdd8f969fe1b564afc2887bed8527d7d825383",
+            "live_variable_count": 48,
+            "notes": "Owner decision 2026-11-05: \"yes prepare the PR to turn on sending\". A $1 production payroll (#1607, moov-send.mjs 1b204d62 live since production overlay run 41937571704) was refused 403 send_post_held (\"Sending payments is switched off. Nothing was recorded or sent.\"). moov-send.mjs sendPostEnabled() = transferPostEnabled() && flagTrue('AWS_MOOV_SEND_POST_ENABLED'), and postsEnabled() requires it only when environment is 'production'. The inspect (state PENDING_PLAN, 48 variables) lists no AWS_MOOV_SEND_POST_ENABLED, so from is null; AWS_MOOV_TRANSFER_POST_ENABLED is already \"true\" (wallet funding works). Setting it to the string \"true\" opens every production send to a payee through providers/production/moov-send.mjs: check payouts to stakeholders and partners and payroll. It does not change funding, onboarding, payees setup or any other function, and production never falls back to sandbox. Staging needs no change: postsEnabled() is true outside production and staging sends use the Moov sandbox (staging carries no AWS_MOOV_SEND_POST_ENABLED and AWS_MOOV_ENABLED \"false\"); staging acceptance is this reviewed plan PR. Not verified end to end in staging: the owner could not complete a staging payroll because the staging two-factor reset is blocked on IAM (#1609, not yet applied). Rollback: a plan with from and to swapped."
           },
-          "unset": {}
+          "applied": {
+            "run_id": "41953736410",
+            "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/41953736410",
+            "main_commit": "30b2909cbf4b9ba4117a9bd37e400550c9f1553e",
+            "approval_phrase": "APPLY API CONFIGURATION TO PRODUCTION",
+            "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/pull/1610",
+            "change_sha256": "b264c6ade061c0d193ecd195bc455b282eccc851674a76e1e5f2d1447d9160f7",
+            "revision_id_before": "15005d35-03bd-4e8e-89f7-44d99762372f",
+            "revision_id_after": "8686ad5f-369a-4a8d-9331-2a08326e50ea",
+            "configuration_sha256_before": "6f03a3d981be84749160a65df3fdd8f969fe1b564afc2887bed8527d7d825383",
+            "configuration_sha256_after": "0ebe408b988c7a8406abbb1a91c61ffbb025a820fab765493417234c3f1f02c5",
+            "applied_at": "2026-11-05T02:13:36.034Z",
+            "smoke": [
+              "/health",
+              "/db-health"
+            ],
+            "code_sha256": "D2Oydyt7kQ3yOYg62fxjdTEJWO1qrA1eIQCSznFZkEE=",
+            "state": "VERIFIED",
+            "notes": "Owner approval: \"merge 1610\" and \"APPLY API CONFIGURATION TO PRODUCTION\". Pre-apply inspect 41953642584 on main 30b2909cb: state READY, RevisionId 15005d35, configuration 6f03a3d9, 48 variables, change sha256 b264c6ad. The run re-read the same immediately before the write. Verify step VERIFIED (49 variables: 48 + 1 set; AWS_MOOV_SEND_POST_ENABLED \"true\"). Smoke /health and /db-health 200. Read-back after the apply (boto3 GetFunctionConfiguration, user/claude-code): AWS_MOOV_SEND_POST_ENABLED \"true\", AWS_MOOV_TRANSFER_POST_ENABLED \"true\" unchanged, RevisionId 8686ad5f-369a-4a8d-9331-2a08326e50ea, 49 variables, CodeSha256 unchanged, LastModified 2026-11-05T02:13:36Z. Owner end-to-end acceptance 2026-11-05: a $1 production payroll through providers/production/moov-send.mjs, \"Payroll worked\".",
+            "applied_change": {
+              "set": {
+                "AWS_MOOV_SEND_POST_ENABLED": {
+                  "from": null,
+                  "to": "true"
+                }
+              },
+              "unset": {}
+            }
+          }
         }
-      }
+      ]
     }
   }
 }
