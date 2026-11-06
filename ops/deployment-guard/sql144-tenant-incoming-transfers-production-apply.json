@@ -1,0 +1,64 @@
+{
+  "id": "sql144-tenant-incoming-transfers-production-apply",
+  "migration": "sql144",
+  "authorization": "pending",
+  "execute": false,
+  "target_environment": "production",
+  "target_component": "production-sql",
+  "deployment_type": "sql-apply",
+  "filename": "aws/workflows/sql/144_tenant_incoming_transfers.sql",
+  "migration_id": "144_tenant_incoming_transfers",
+  "staging_pin_commit": "87c3e193b8a962022df8ca2306e71b94721c3e6a",
+  "source_sha256": "9192e338ea4e54d2690e0ebde71754292394c52f1bac09c3af5fd3fb4b309865",
+  "function_identities": [
+    "public.get_tenant_incoming_transfers(uuid)"
+  ],
+  "expected_live_definition_sha256": null,
+  "intended_replacement_sha256": "ac458869cda99ec85cb42e31f5ba80ced29cbf227a81058379e086b0ffb924c2",
+  "authorization_phrase": "APPLY_TENANT_INCOMING_TRANSFERS",
+  "predecessors": [],
+  "order_note": "No predecessor: SQL 144 creates one new read function, get_tenant_incoming_transfers(uuid), on the payment transfer, tenant, check sharing and check schema the AWS databases already have (payment_transfers with destination_tenant_id, leg_role, status, environment, check_id and the dates; tenants (id, name); shared_checks (check_id, source_tenant_id, target_tenant_id, revoked_at); check_intake_items and claims for the check context) and the access helpers aws_can_access_tenant(uuid) and is_platform_owner(), with role checksops; a read-only production inspect confirms them. The applying login must be able to reach all five relations as the function's owner past RLS (definer_can_write_relations on each: the table owner without FORCE ROW LEVEL SECURITY, or a superuser or BYPASSRLS): a DEFINER read filtered by RLS would show the recipient nothing. Expected pre-state in both environments: the function absent (release sql144 v1 / function public.get_tenant_incoming_transfers(uuid): absent). Where it already exists (a re-run) it must be owned by the applying login (functions_owned_by_login), keep its TABLE result (function_results_match) and hold no EXECUTE grant other than checksops and the owner, which the file keeps, and PUBLIC, anon, authenticated and service_role, which it revokes (function_acl_replaceable). The ACL after the apply is checksops and the owner. The API change that exposes the function (aws/functions/api/data.mjs READ_RPCS and RPC_ACCESS_GATES, its own reviewed change) and the website change that reads it tolerate its absence (the RPC fails and the screens show what they show today) and need the guarded Lambda and SPA paths after this pin is applied in that environment; no API, Lambda or SPA change is part of this pin. Adds no trigger.",
+  "admin_login": "checksops_admin",
+  "rds_identifier": "checksops-production",
+  "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
+  "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
+  "tooling": {
+    "status": "built",
+    "production_tool": "scripts/deployment-guard/sql144-tenant-incoming-transfers-production-apply.mjs",
+    "production_lib": "scripts/deployment-guard/lib/release-sql-production-apply.mjs",
+    "staging_executor_handler": "aws/write-path/guarded-sql-executor/index.mjs handleReleaseSqlMigration",
+    "staging_workflow_choice": "sql144-tenant-incoming-transfers",
+    "one_shot_migration": "sql144",
+    "fingerprint_engine": "scripts/deployment-guard/lib/release-sql-state.mjs",
+    "runbook": "ops/production-sql-144-apply.md",
+    "tests": [
+      "aws/tests/release-sql144-executor.test.mjs",
+      "aws/tests/release-sql144-production-apply.test.mjs",
+      "aws/tests/release-sql90-97-executor.test.mjs",
+      "aws/tests/release-sql90-97-production-apply.test.mjs",
+      "aws/tests/sql144-tenant-incoming-transfers-pg.test.mjs"
+    ],
+    "note": "Guarded tooling for SQL 144: sql144-tenant-incoming-transfers-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql144-tenant-incoming-transfers); production-sql-one-shot.mjs --migration sql144. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): the new function with the file's body and attributes and EXECUTE for checksops and the owner. The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
+  },
+  "production_inspect": {
+    "status": "pending",
+    "date": null,
+    "ssm_command_id": null,
+    "source_commit": null,
+    "read_only": true,
+    "connected_as": "checksops_admin",
+    "live_definition_sha256": null,
+    "apply_preconditions_met": null,
+    "precondition_failures": null,
+    "note": "Pending: no release-engine production inspect has been run for SQL 144 yet. Expected release-engine fingerprint of the pre-state under sql144: 428d394e88ce45840806f7a6c93ed63d40178c0376c8a70843197bf28dccb88e (the function absent; derived by aws/tests/release-sql144-executor.test.mjs). Record the one-shot --phase inspect's date, SSM command id, source commit, live_definition_sha256, prerequisites_missing, release_sql_inspect.functions, release_sql_inspect.function_acl, release_sql_inspect.definer_writes (all five relations must read ok true), precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. Stop if prerequisites_missing is not [] or precondition_failures is not [] (prerequisites_present, definer_can_write_relations; on a re-run also functions_owned_by_login, function_results_match, function_acl_replaceable): that needs its own reviewed change."
+  },
+  "intended_post_state": {
+    "fingerprint": "ac458869cda99ec85cb42e31f5ba80ced29cbf227a81058379e086b0ffb924c2",
+    "note": "get_tenant_incoming_transfers(uuid) owned by checksops_admin, plpgsql, STABLE, SECURITY DEFINER, search_path public, pg_temp, RETURNS TABLE(id, amount_cents, status, speed, environment, leg_role, created_at, submitted_at, completed_at, check_id, sender_tenant_id, sender_name, check_number, carrier_name, property_address, funds_type, check_amount, claim_id, detected_claim_number, payee_line, claim_number, policyholder_name), EXECUTE for checksops and the owner (PUBLIC, anon, authenticated and service_role revoked): for a caller who may access _tenant_id (aws_can_access_tenant), the payment_transfers send legs (send_wallet, send_bank) another organization addressed to _tenant_id with status submitted, pending, processing, completed or returned, newest first, at most 1000; the check and claim columns only for a check the sender shares with _tenant_id (active shared_checks row) or for the platform owner, NULL otherwise; any other caller raises 42501 incoming_transfers_forbidden. No other function, table, column, policy, RLS setting, grant, trigger or row change. The fingerprint is releaseIntendedHash('sql144', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): ac458869cda99ec85cb42e31f5ba80ced29cbf227a81058379e086b0ffb924c2."
+  },
+  "staging_acceptance": {
+    "ok": false,
+    "reference": null,
+    "basis": "Pending: record the guarded staging SQL executor read-live and the staging apply of SQL 144 (choice sql144-tenant-incoming-transfers) here in the reviewed change that sets execute true. The behavior is covered on PostgreSQL 16 by aws/tests/sql144-tenant-incoming-transfers-pg.test.mjs. Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+  }
+}
