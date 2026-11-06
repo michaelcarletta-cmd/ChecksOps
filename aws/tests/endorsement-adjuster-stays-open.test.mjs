@@ -23,3 +23,18 @@ test('generating does not close the adjuster; only approve (or the user) does', 
   assert.doesNotMatch(generate, /onClose\?\.\(|onClose\(/);
   assert.match(generate, /back_image_deposit_path: persist\.back_image_deposit_path/);
 });
+
+// Any server push (useLiveDataRefresh) refetches every active query. Refetching the adjuster's
+// source returns a new signed URL for the same image; that used to reset the image dimensions,
+// unmount the adjuster and drop the generated deposit image before Approve.
+test('while the adjuster is open its source URL stays the same unless the clean original path changes', () => {
+  const src = readFileSync('src/pages/CheckCommandCenter.tsx', 'utf8');
+  assert.match(src, /if \(showEndorsementAdjuster && prev && prev\.path === next\.path\) return prev;/);
+  assert.match(src, /const adjusterSource = pinnedAdjusterSource \?\? endorsementAdjusterImageSource \?\? null;/);
+  assert.match(src, /: \(adjusterSource\?\.url \?\? null\);/);
+  assert.doesNotMatch(src, /: \(endorsementAdjusterImageSource\?\.url \?\? null\);/);
+  const retry = src.slice(src.indexOf('const retryEndorsementPrep = useCallback'), src.indexOf('}, [qc,', src.indexOf('const retryEndorsementPrep = useCallback')));
+  assert.match(retry, /setPinnedAdjusterSource\(null\);/);
+  const live = readFileSync('src/hooks/useLiveDataRefresh.ts', 'utf8');
+  assert.match(live, /invalidateQueries\(\{ refetchType: "active" \}/, 'the live refresh still refetches every active query, which is why the pin is needed');
+});

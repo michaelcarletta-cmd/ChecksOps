@@ -3010,13 +3010,30 @@ function CheckDetailPanel({
     },
   });
 
+  // While the adjuster is open, hold on to the source it opened with for as long as the clean
+  // original path is the same. Any server push (useLiveDataRefresh) refetches every active query,
+  // including this one, and a refetch returns a new signed URL for the same image. A new URL reset
+  // backImageDimensions, unmounted the adjuster and dropped the generated deposit image before it
+  // could be approved. The adjuster mints its own fresh URL before rendering, so an older URL
+  // here is safe; a different path (a re-upload) still replaces it.
+  const [pinnedAdjusterSource, setPinnedAdjusterSource] = useState<{ url: string; path: string } | null>(null);
+  useEffect(() => {
+    const next = endorsementAdjusterImageSource ?? null;
+    setPinnedAdjusterSource((prev) => {
+      if (!next) return showEndorsementAdjuster ? prev : null;
+      if (showEndorsementAdjuster && prev && prev.path === next.path) return prev;
+      return next;
+    });
+  }, [endorsementAdjusterImageSource, showEndorsementAdjuster]);
+  const adjusterSource = pinnedAdjusterSource ?? endorsementAdjusterImageSource ?? null;
+
   const backImageUrl = isSharedView
     ? (sharedBackImageUrl ?? null)
-    : (endorsementAdjusterImageSource?.url ?? null);
+    : (adjusterSource?.url ?? null);
 
   const endorsementAdjusterSourceUrl = backImageUrl;
   const endorsementAdjusterSourcePath =
-    endorsementAdjusterImageSource?.path ??
+    adjusterSource?.path ??
     toStorageObjectPath(((check as any)?.back_image_original_path as string | null) ?? check?.back_image_path ?? null);
 
   const [backImageDimError, setBackImageDimError] = useState<string | null>(null);
@@ -3075,6 +3092,8 @@ function CheckDetailPanel({
     setEndorsementPrepTimedOut(false);
     setBackImageDimError(null);
     setBackImageDimensions(null);
+    // A retry wants a fresh signed URL, not the one the open adjuster is holding.
+    setPinnedAdjusterSource(null);
     qc.invalidateQueries({ queryKey: ["check-back-img-shared", check?.id] });
     qc.invalidateQueries({ queryKey: ["check-back-img-original-for-adjuster", check?.id] });
     void refetchBackImageUrl();
