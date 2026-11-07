@@ -363,8 +363,9 @@ const PLAN_SQL98_LIVE = (() => {
   return plan;
 })();
 const withSql98 = (member, deps) => (PLAN.members[member]?.sql_before === SQL98_FILE ? { ...deps, plan: PLAN_SQL98_LIVE } : deps);
-// tenant-collection-v2.mjs waits for SQL 145 (fee leg API, its own test below): apply replays run on a plan copy that
-// records SQL 145 verified live; the committed plan does not (SQL 145 is not applied anywhere).
+// tenant-collection-v2.mjs waits for SQL 145 (fee leg API, its own test below): the committed plan records SQL 145
+// verified live (the SQL 145 record change, from its 2026-11-07 production apply), and apply replays still run on a
+// plan copy that states it, as PLAN_SQL98_LIVE does for SQL 98.
 const withSql145 = (member, deps) => {
   if (PLAN.members[member]?.sql_before !== SQL145_FILE) return deps;
   const plan = structuredClone(deps.plan || PLAN);
@@ -6599,9 +6600,36 @@ test('Fee leg API (SQL 145, 2026-11-07): tenant-collection-v2.mjs REPLACE from t
     sql_before: SQL145_FILE,
     manifest: FEE_LEG_API_REL,
   });
-  // SQL 145 is not applied anywhere: recorded not verified live, so an apply refuses until its record marks it live.
-  assert.deepEqual(PLAN.sql_prerequisites[SQL145_FILE], { verified_live: false, evidence: null });
+  // SQL 145 is recorded verified live in production (2026-11-07, the SQL 145 record change) from its retired pin: the
+  // same file bytes the pin and the one-shot hashed. The gate the apply below is checked against is shown on a plan
+  // copy where it is not yet recorded.
   assert.ok(fs.existsSync(path.join(ROOT, SQL145_FILE)));
+  const PIN145 = 'ops/deployment-guard/sql145-platform-owner-billing-collection-leg-production-apply.json';
+  const readJson = (rel) => JSON.parse(fs.readFileSync(path.join(ROOT, rel), 'utf8'));
+  const pin145 = readJson(PIN145);
+  assert.equal(pin145.source_sha256, sha(SQL145_FILE));
+  assert.equal(pin145.applied.migration_source_sha256, sha(SQL145_FILE));
+  assert.equal(pin145.execute, false);
+  assert.equal(pin145.applied.result, 'applied');
+  assert.equal(pin145.applied.receipt.before_hash, pin145.expected_live_definition_sha256);
+  assert.equal(pin145.applied.receipt.after_hash, pin145.intended_replacement_sha256);
+  assert.equal(pin145.staging_acceptance.reference, 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/42334108246');
+  const prerequisite145 = PLAN.sql_prerequisites[SQL145_FILE];
+  assert.equal(prerequisite145.verified_live, true);
+  assert.equal(prerequisite145.pin, PIN145);
+  const fromTo145 = `${pin145.expected_live_definition_sha256.slice(0, 8)}… -> ${pin145.intended_replacement_sha256.slice(0, 8)}…`;
+  for (const evidence of [pin145.applied.apply_ssm_command_id, pin145.applied.one_shot_run_id, pin145.applied.workstream_id, pin145.applied.one_use_id, pin145.applied.runner, fromTo145, 'staging acceptance run 42334108246', PIN145]) {
+    assert.ok(prerequisite145.evidence.includes(evidence), evidence);
+  }
+  assert.ok(prerequisite145.note.includes(`REPLACE ${FEE_PULL_COLLECTION_BYTES.slice(0, 8)}… -> ${accepted.slice(0, 8)}…`));
+  assert.ok(prerequisite145.note.includes('"DEPLOY tenant-collection-v2.mjs TO PRODUCTION"'));
+  const staging145 = readJson('ops/deployment-guard/staging-sql-live.json').sql[SQL145_FILE];
+  assert.equal(staging145.verified_live, true);
+  for (const evidence of ['run 42334108246', 'read-live run 42334267158', `receipt before ${pin145.expected_live_definition_sha256.slice(0, 8)}…`, `after ${pin145.intended_replacement_sha256.slice(0, 8)}…`]) {
+    assert.ok(staging145.evidence.includes(evidence), evidence);
+  }
+  const sql145Pending = structuredClone(PLAN);
+  sql145Pending.sql_prerequisites[SQL145_FILE] = { verified_live: false, evidence: null };
   const evidence = `REPLACE tenant-collection-v2.mjs ${FEE_PULL_COLLECTION_BYTES.slice(0, 8)} -> ${accepted.slice(0, 8)}`;
   assert.ok(manifest.notes.includes(evidence), evidence);
   assert.ok(PLAN.notes.includes(evidence), evidence);
@@ -6629,14 +6657,20 @@ test('Fee leg API (SQL 145, 2026-11-07): tenant-collection-v2.mjs REPLACE from t
       other,
     );
   }
-  // Apply: refused on the committed plan until SQL 145 is recorded verified live; a plan copy that records it replays
-  // (dry: no mutation), one receipt for this member.
+  // Apply: it was refused while SQL 145 was not recorded verified live (the plan before the SQL 145 record change,
+  // replayed on a copy) ...
+  // (applyDeps starts the committed plan's replays from the fee pull savepoints pre-apply bytes; the same here).
+  const pending = recorded2026_11Pre(structuredClone(sql145Pending));
   await assert.rejects(
-    run(applyEnv(MEMBER), applyDeps(MEMBER).deps),
+    run(applyEnv(MEMBER), { ...applyDeps(MEMBER, { plan: pending }).deps, plan: pending }),
     (error) => error.code === CODES.PRODUCTION_APPROVAL_REQUIRED && error.details?.sql_before === SQL145_FILE,
   );
+  // ... and passes the SQL gate now that the committed plan records it (the same replay without a plan override of
+  // SQL 145; dry: no mutation), one receipt for this member.
+  assert.equal(PLAN.sql_prerequisites[SQL145_FILE].verified_live, true);
   const { deps, calls } = applyDeps(MEMBER);
-  const replay = await run(applyEnv(MEMBER), withSql145(MEMBER, deps));
+  assert.equal(deps.plan.sql_prerequisites[SQL145_FILE].verified_live, true);
+  const replay = await run(applyEnv(MEMBER), deps);
   assert.equal(replay.mutation, false);
   assert.deepEqual(calls.receipt.owned_member_ops, { replace: [MEMBER], add: [] });
 });

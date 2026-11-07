@@ -117,7 +117,42 @@ SQL 145 production pin"; the owner's words so far name the staging steps, the st
 this pin, not the production apply. The owner merges the pin change; the apply still needs the owner's words for
 that run ("apply SQL 145 in production") and runs only after that merge is on main and staged.
 
-**Status:** applied in staging (wave 40, 2026-11-07); staging acceptance: owner ("SQL 145 accepted in staging"); production pin execute-authorized; not applied to production
+**Read-only fee obligation policy check (2026-11-07).** Before the apply, under the owner's words "yes, run the
+read-only fee obligation policy check", a read-only catalog query (SSM `8a2063ee-4dbf-49fe-b35a-e3a767666621` on
+`i-0c35557c4e5385406`, nothing written) read the production policies. `tenant_maintenance_payments` (row level
+security on, not forced) has the permissive `aws_write_tenant_maintenance_payments` FOR ALL to `authenticated`, whose
+USING and WITH CHECK allow `is_platform_owner()` (or the monthly billing job, or the provider webhook apply), plus the
+restrictive `aws_money_write_gate_*` policies (`aws_money_write_allowed()`): the platform owner's obligation update on
+a server write path is allowed. `payment_transfers`' permissive INSERT policies are membership-only
+(`aws_write_payment_transfers` FOR ALL via `aws_can_write_tenant(tenant_id)`, and `aws_member_insert_payment_transfers`
+via `aws_user_tenant_ids()`): the platform owner is not a member of the billed tenant, so the API's direct collection
+leg INSERT is refused. That is the root cause SQL 145's SECURITY DEFINER writer addresses.
+
+**Production apply (2026-11-07).** After the pin change (#1685, merged to main as `fda298fa3` on the owner's words
+"merge 1685"), transfer run 42364538127 staged main `fda298fa3` (tarball sha256
+`bf0cd2e1b166ef4398085bdc149f1a3c4f50628bc332285a04d0a76613f96725`). Under the owner's words
+"apply SQL 145 in production" (passed verbatim), a one-shot `--phase inspect` (SSM
+`a05bd401-5731-4e5e-88c2-1698529d496f`, run `bc75684f-874a-4327-a71c-1ff01752ac0d`, nothing written) read live
+`c622469d…` (the pinned pre-state, `live_matches_expected` true, `apply_preconditions_met` true,
+`precondition_failures` `[]`, the function absent, `definer_writes` ok on both relations);
+then one-shot `--phase apply` run `8d17051e-163f-43c6-a2d7-0f174fb6c2dd` through SSM
+`937dcbbd-13f5-4f27-8a27-c522bbd34813`, workstream `prod-sql145-platform-owner-billing-collection-leg-20261107`,
+one_use_id `sql145-prod-4c3e24cf-8250-4e96-bf49-b8121ca5b8bd`: its own inspect step read the same pre-state; contracts
+4/4, 6/6 and 43/43; all 11 steps ok; manifest `19a72725…`; receipt `c622469d…` →
+`a44d93bddc3a90149ec2eaa9279d4695193db8f5eb190463f239d7cb130f435a` (intended), result `applied`, unrelated
+catalog `fdf7d3cb…` (policies 479, functions 1360); post-apply inspect `already_applied` true,
+`precondition_failures` `[]`: the function `aws_platform_owner_insert_billing_collection_leg(...)` `intended`, its
+EXECUTE ACL `checksops` and the owner, `definer_writes` ok on both relations, `counts` null, `prerequisites_missing`
+`[]`. The run's JSON arrived whole (20586 characters of SSM output, under the 24000-character limit; read back
+read-only from SSM get-command-invocation). The runner `i-0c35557c4e5385406` was started for this work at 10:36:00Z
+and stopped at 10:36:54Z. The API change that calls the function (`tenant-collection-v2.mjs`, REPLACE `45a78f0e…` →
+`f22fd96b…`) is not part of this pin and is not deployed by this record: the overlay plan now records SQL 145 verified
+live, so that member's guarded production apply passes its SQL gate, and it still needs its own read-only inspect and
+the owner's words "DEPLOY tenant-collection-v2.mjs TO PRODUCTION". Production acceptance had not been reported by the
+owner when this record was written; this record does not claim it.
+
+**Status:** applied to staging (wave 40) and to production (2026-11-07); the production pin is retired
+(`execute: false`).
 
 ## Fingerprint
 
