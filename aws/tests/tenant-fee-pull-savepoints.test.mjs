@@ -29,6 +29,7 @@ import {
 } from '../functions/api/tenant-billing-engine.mjs';
 import {
   CHECKSOPS_SANDBOX_MERCHANT_ACCOUNT_ID,
+  COLLECTION_INSERT_LEG_SQL,
   bankLegIdempotencyKey,
   idempotentReplayTransfer,
   savepointQuery,
@@ -46,7 +47,11 @@ const PERIOD = '2026-10';
 const AMOUNT = 13200;
 const BANK_KEY = bankLegIdempotencyKey({ tenantId: TENANT, billingPeriod: PERIOD });
 
-const MONEY_WRITE_RE = /\b(?:INSERT\s+INTO|UPDATE)\s+public\.(payment_transfers|tenant_maintenance_payments|check_billing_events)\b/;
+// The collection leg is written by SQL 145's DEFINER function (the platform owner is not a member of the
+// billed tenant, and no payment_transfers INSERT policy admits it since SQL 90); the function refuses
+// without the money-write flag as SQL 136's policy refuses a direct write.
+const LEG_INSERT_RE = /^SELECT \* FROM public\.aws_platform_owner_insert_billing_collection_leg\(/;
+const MONEY_WRITE_RE = /\b(?:(?:INSERT\s+INTO|UPDATE)\s+public\.(payment_transfers|tenant_maintenance_payments|check_billing_events)\b|public\.aws_platform_owner_insert_billing_collection_leg\()/;
 
 const pgError = (code, message) => Object.assign(new Error(message), { code, severity: 'ERROR' });
 
@@ -110,7 +115,8 @@ const pgTransaction = ({ failOn = [], rows = () => null } = {}) => {
       if (MONEY_WRITE_RE.test(text) && state.flag !== '1') {
         state.aborted = true;
         entry.error = '42501';
-        throw pgError('42501', `new row violates row-level security policy for table "${text.match(MONEY_WRITE_RE)[1]}"`);
+        const table = text.match(MONEY_WRITE_RE)[1];
+        throw pgError('42501', table ? `new row violates row-level security policy for table "${table}"` : 'billing_collection_leg_not_server_write');
       }
       return rows(text, params) || { rows: [] };
     },
@@ -126,7 +132,7 @@ const occurrenceRows = (live = {}) => (sql, params) => {
   if (/^SELECT \* FROM public\.tenant_maintenance_payments WHERE id = \$1::uuid/.test(sql)) {
     return { rows: live[params[0]] ? [live[params[0]]] : [] };
   }
-  if (/^INSERT INTO public\.payment_transfers/.test(sql)) {
+  if (LEG_INSERT_RE.test(sql)) {
     return { rows: [{ id: 'leg-1', idempotency_key: params[3], provider_transfer_id: params[9], status: params[2], amount_cents: params[4] }] };
   }
   return null;
@@ -244,7 +250,7 @@ test('the miniature transaction aborts like PostgreSQL: 25P02 until ROLLBACK TO 
 
 test('incident attempt 1: the leg INSERT fails after Moov created the transfer; the transaction stays usable and the occurrence records the transfer as submitted', async () => {
   const client = pgTransaction({
-    failOn: [{ re: /^INSERT INTO public\.payment_transfers/, code: 'P0001', message: 'send speed fee trigger refused the leg' }],
+    failOn: [{ re: LEG_INSERT_RE, code: 'P0001', message: 'send speed fee trigger refused the leg' }],
     rows: occurrenceRows(),
   });
   const moov = fakeMoov();
@@ -278,6 +284,48 @@ test('incident attempt 1: the leg INSERT fails after Moov created the transfer; 
   assertFlagScopedToWrites(client);
 });
 
+test('incident 2026-11-06T22:53:11Z: the leg goes through SQL 145 (no direct INSERT INTO payment_transfers); the values are the earlier INSERT\'s, in its order', async () => {
+  const client = pgTransaction({ rows: occurrenceRows() });
+  const { result } = await captureErrors(() => pull(client, fakeMoov()));
+  assert.equal(result.ok, true, JSON.stringify(result.error));
+  assert.equal(result.persist_failed, false);
+  assert.equal(ran(client, /INSERT\s+INTO\s+public\.payment_transfers/).length, 0, 'no direct leg INSERT');
+  const [leg] = ran(client, LEG_INSERT_RE);
+  assert.ok(leg, 'the leg ran through the function');
+  assert.equal(leg.sql, COLLECTION_INSERT_LEG_SQL);
+  assert.equal(leg.savepoint, 'collection_insert_leg');
+  const metadata = JSON.parse(leg.params[12]);
+  assert.deepEqual(leg.params.slice(0, 12), [
+    TENANT, 'sandbox', 'submitted', BANK_KEY, AMOUNT, `ChecksOps collection v2 ${PERIOD} ach_debit`,
+    'acct-tenant', null, 'ach_debit', TRANSFER, 'created', null,
+  ]);
+  assert.deepEqual(
+    [metadata.collection_contract, metadata.obligation_id, metadata.billing_period, metadata.leg_type],
+    ['tenant-collection-v2', OCCURRENCE, PERIOD, 'ach_debit'],
+  );
+  assertFlagScopedToWrites(client);
+});
+
+test('the leg function refused (42501, as before SQL 145 or for a non-owner) or absent (42883, the API live before SQL 145): rolled back to its savepoint, logged, the occurrence still records the transfer as submitted', async () => {
+  for (const [code, message] of [
+    ['42501', 'new row violates row-level security policy for table "payment_transfers"'],
+    ['42883', 'function public.aws_platform_owner_insert_billing_collection_leg(uuid, text, text, text, bigint, text, text, uuid, text, text, text, text, jsonb) does not exist'],
+  ]) {
+    const client = pgTransaction({ failOn: [{ re: LEG_INSERT_RE, code, message }], rows: occurrenceRows() });
+    const { result, lines } = await captureErrors(() => pull(client, fakeMoov()));
+    assert.equal(result.ok, true, code);
+    assert.equal(result.persist_failed, true, code);
+    assert.equal(result.obligation_status, 'submitted', code);
+    assert.equal(client.state.aborted, false, code);
+    assert.equal(ran(client, /^ROLLBACK TO SAVEPOINT collection_insert_leg$/).length, 1, code);
+    const submit = ran(client, /^UPDATE public\.tenant_maintenance_payments/).at(-1);
+    assert.deepEqual([submit.params[1], submit.params[2]], ['submitted', TRANSFER], code);
+    assert.match(submit.params[4], /leg_persist_failed$/, code);
+    const logged = parsedLogs(lines).filter((l) => l.event === 'billing_pull_statement_failed');
+    assert.deepEqual(logged.map((l) => [l.statement, l.sqlstate, l.swallowed]), [['collection_insert_leg', code, false]], code);
+  }
+});
+
 test('the tenant_billing_settings UPDATE failing is logged and rolled back to its savepoint; the pull still succeeds', async () => {
   const client = pgTransaction({
     failOn: [{ re: /^UPDATE public\.tenant_billing_settings/, code: '42501', message: 'permission denied for table tenant_billing_settings' }],
@@ -288,7 +336,7 @@ test('the tenant_billing_settings UPDATE failing is logged and rolled back to it
   assert.equal(result.persist_failed, false);
   assert.equal(result.occurrence.status, 'submitted');
   assert.equal(client.state.aborted, false);
-  const leg = ran(client, /^INSERT INTO public\.payment_transfers/);
+  const leg = ran(client, LEG_INSERT_RE);
   assert.equal(leg.length, 1);
   assert.equal(leg[0].params[9], TRANSFER);
   // A statement after the failure still runs (what recordBillingAudit's SAVEPOINT would be next).
@@ -307,7 +355,7 @@ test('a failed read in the collection store (listLegs) no longer aborts the pull
   const { result } = await captureErrors(() => pull(client, fakeMoov()));
   assert.equal(result.ok, true);
   assert.equal(client.state.aborted, false);
-  assert.equal(ran(client, /^INSERT INTO public\.payment_transfers/).length, 1);
+  assert.equal(ran(client, LEG_INSERT_RE).length, 1);
   assert.equal(ran(client, /^UPDATE public\.tenant_maintenance_payments/).length, 2);
 });
 
@@ -321,7 +369,7 @@ test('incident attempt 2: Moov answers the repeated idempotency key with 409 and
   assert.equal(result.idempotent_replay, true);
   assert.equal(result.obligation_status, 'submitted');
   assert.equal(result.occurrence.status, 'submitted');
-  const leg = ran(client, /^INSERT INTO public\.payment_transfers/);
+  const leg = ran(client, LEG_INSERT_RE);
   assert.equal(leg.length, 1);
   assert.equal(leg[0].params[3], BANK_KEY);
   assert.equal(leg[0].params[9], TRANSFER);
@@ -344,7 +392,7 @@ test('409 replay of a transfer whose payment id belongs to a rolled-back attempt
   // The lookup ran (and found nothing) before the transfer was accepted.
   const lookup = ran(client, /^SELECT \* FROM public\.tenant_maintenance_payments WHERE id = \$1::uuid/);
   assert.deepEqual(lookup.map((q) => q.params[0]), [ROLLED_BACK_OCCURRENCE]);
-  const leg = ran(client, /^INSERT INTO public\.payment_transfers/)[0];
+  const leg = ran(client, LEG_INSERT_RE)[0];
   assert.equal(JSON.parse(leg.params[12]).replayed_from_payment_id, ROLLED_BACK_OCCURRENCE);
 });
 
@@ -363,7 +411,7 @@ test('409 replay whose body does not match this leg fails closed, without the tr
     assert.equal(result.ok, false, label);
     assert.equal(result.error, 'provider_idempotent_replay_mismatch', label);
     assert.equal(result.obligation_status, 'failed', label);
-    assert.equal(ran(client, /^INSERT INTO public\.payment_transfers/).length, 0, label);
+    assert.equal(ran(client, LEG_INSERT_RE).length, 0, label);
     const submit = ran(client, /^UPDATE public\.tenant_maintenance_payments/).at(-1);
     assert.equal(submit.params[1], 'failed', label);
     assert.equal(submit.params[3], 'provider_idempotent_replay_mismatch', label);
@@ -384,7 +432,7 @@ test('a real Moov rejection (no transfer in the body) still fails as before', as
   assert.equal(result.ok, false);
   assert.equal(result.error, 'insufficient funds');
   assert.equal(result.obligation_status, 'failed');
-  assert.equal(ran(client, /^INSERT INTO public\.payment_transfers/).length, 0);
+  assert.equal(ran(client, LEG_INSERT_RE).length, 0);
 });
 
 test('idempotentReplayTransfer reads MoovError bodies (object or text) and ignores anything without a transfer', () => {
