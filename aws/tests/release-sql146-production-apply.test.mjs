@@ -208,7 +208,7 @@ test('order: no predecessor; the two new DEFINER functions, their prerequisites 
   const runbook = fs.readFileSync(path.join(ROOT, COMMITTED.tooling.runbook), 'utf8');
   assert.ok(runbook.includes(COMMITTED.intended_replacement_sha256));
   assert.ok(runbook.includes(COMMITTED.source_sha256));
-  assert.match(runbook, /\*\*Status:\*\* not applied anywhere/);
+  assert.match(runbook, /\*\*Status:\*\* staging pin execute-authorized \(wave 41\); not applied anywhere\./);
   assert.match(runbook, /\*\*Predecessor\.\*\* None/);
   assert.match(runbook, /Owner\s+2026-11-07: "build the catch-up update fix"/);
   for (const evidence of ['42395703811', '42395949680', '236f3dd28e0e108219f75e566acbac4bb60a80ddfb8e673b1df0c6422c8b2331', 'catch_up_state_changed_since_plan']) {
