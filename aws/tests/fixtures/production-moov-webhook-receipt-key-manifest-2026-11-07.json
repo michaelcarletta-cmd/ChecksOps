@@ -1,0 +1,15 @@
+{
+  "workstream_id": "moov-webhook-receipt-key",
+  "authorization": "Pending owner review (2026-11-07). Planning only: nothing is live or verified. Each production apply needs its own owner approval, a staging acceptance reference and a read-only production inspect that confirms the live bytes.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Owner 2026-11-07: \"build the webhook receipt fix\". Production evidence (read-only): the API Gateway access log /aws/apigateway/checksops-production-prep-http shows POST /prep/webhooks/moov answered 200 about 100 times since 2026-10-31, while public.aws_provider_webhook_receipts (SSM 6db9b33b-e076-4735-96ba-0c1dd545030c) holds only 2 Moov rows (event.test 2026-10-31, balance.updated 2026-11-01) and no transfer.* receipt. The live webhooks.mjs (59b58674, PR #1483, applied 2026-10-31 by production run 41219106461) keys a Moov receipt on the signed X-Webhook-ID alone, ON CONFLICT DO NOTHING, and answers 200 skipped 'duplicate': X-Webhook-ID repeats across events, so real transfer events were dropped. REPLACE providers/webhooks.mjs 59b58674 -> 117495bc: the Moov receipt key is evt:<body eventID>:<sha256 of [event type, resource kind, account, transfer, bank account, capability]> (189 characters at most), or body:<sha256 of the raw body> without a usable eventID; it does not depend on X-Webhook-ID. Nothing is written from the body (moov-webhook-confirm.mjs reads the named resource back from Moov, unchanged). The SQL 109 writer's event id is the same key. No new import; order unchanged. No SQL, no schema change, no backfill or replay. Planning only.",
+  "members": {
+    "providers/webhooks.mjs": {
+      "live_sha256": "59b586744332df62524a25b4602966686c9ba9ae869cc644ab9046bfc1ae63b0",
+      "accepted_sha256": "117495bc5285a6fb39fb5e4b20526a0e24b00f67f8bf7ed78d0d5fff84b8f471",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-moov-webhook-body-auth-applied-manifest-2026-10-31.json"
+    }
+  }
+}
