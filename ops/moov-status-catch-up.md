@@ -129,6 +129,18 @@ The two open questions above are answered from the record:
 Any other value is a stop (`SOURCE_RECONCILIATION_REQUIRED`). Each apply also needs a staging
 acceptance reference and the owner's `DEPLOY <member> TO PRODUCTION` for that run.
 
+**Applied (2026-11-07, main `050db7b33`).** Both members are live in production, recorded in
+`aws/tests/fixtures/production-moov-status-catch-up-applied-manifest-2026-11-07.json`:
+
+- `providers/moov-status-catch-up.mjs`: inspect run 42370515427 (`READY`, `ABSENT`), apply run
+  42370581114 (`VERIFIED`, `502995f6…` present), re-inspect run 42370641735 (`ALREADY_ACCEPTED`).
+  Staging acceptance: run 42370270563.
+- `scheduled.mjs`: inspect run 42370698741 (`READY`, `458ba424…` live), apply run 42370751130
+  (`VERIFIED`, `39d7c568…` live), re-inspect run 42370821197 (`ALREADY_ACCEPTED`). Staging
+  acceptance: run 42370407042.
+
+Step 0 below is done. The catch-up itself has not been run.
+
 **Invoke identity.** A principal needs `lambda:InvokeFunction` on
 `arn:aws:lambda:us-east-1:806168576068:function:checksops-production-prep-api`. The owner chose
 a dedicated limited role (2026-11-07: "Dedicated limited role for status catch up"):
