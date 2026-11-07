@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { Link } from "react-router-dom";
 import { CheckOpsLogo } from "@/components/marketing/CheckOpsLogo";
 
-const EFFECTIVE_DATE = "August 5, 2026";
+const EFFECTIVE_DATE = "November 6, 2026";
 const CONTACT_EMAIL = "support@checksops.com";
 
 function Section({ id, title, children }: { id: string; title: string; children: React.ReactNode }) {
@@ -269,9 +269,9 @@ export default function Terms() {
 
         <Section id="law" title="16. Governing law and disputes">
           <p>
-            These Terms are governed by the laws of the State of New Jersey, without regard to
-            conflict-of-law rules. The parties submit to the exclusive jurisdiction of the state and
-            federal courts located in New Jersey. Each party waives any right to a jury trial and to
+            These Terms are governed by the laws of the State of Florida, without regard to
+            conflict-of-law rules, wherever you are located. The parties submit to the exclusive
+            jurisdiction of the state and federal courts located in Collier County, Florida. Each party waives any right to a jury trial and to
             participate in a class action to the extent permitted by law.
           </p>
         </Section>
