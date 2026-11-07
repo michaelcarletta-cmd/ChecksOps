@@ -513,9 +513,10 @@ test('staging SQL record: every sql_before of the plan has an entry; the pending
   // a SQL the plan itself records as not yet live anywhere: the staging overlay refuses its members until a reviewed
   // change records its apply. SQL 132 (the financial TOTP lockout) was such a SQL until its record change (staging
   // run 41117004966, production 2026-10-30), and SQL 133 (the financial TOTP teammate reset) until its record change
-  // (staging run 41133471065, production 2026-10-31); nothing is pending everywhere now.
+  // (staging run 41133471065, production 2026-10-31). SQL 145 (the platform owner's fee collection leg, 2026-11-07)
+  // is such a SQL now: tenant-collection-v2.mjs waits for it in both environments until its record change.
   const pendingEverywhere = Object.entries(PLAN.sql_prerequisites).filter(([, record]) => record.verified_live === false).map(([file]) => file).sort();
-  assert.deepEqual(pendingEverywhere, []);
+  assert.deepEqual(pendingEverywhere, ['aws/workflows/sql/145_platform_owner_billing_collection_leg.sql']);
   for (const [file, record] of Object.entries(STAGING_SQL.sql)) assert.equal(record.verified_live, !pendingEverywhere.includes(file), file);
   // A SQL recorded true here is either recorded live in production (with its staging acceptance)
   // or, staging first (release 2026-10-17), names its guarded staging SQL executor apply run and

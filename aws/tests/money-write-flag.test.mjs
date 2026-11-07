@@ -145,12 +145,18 @@ test('request.money_write is a new name: no other server GUC or SQL file uses it
   assert.deepEqual(users, ['money-write-flag.mjs', 'mortgage-ops-usage.mjs']);
   // Step 2 (SQL 136): the one SQL file that names it, and it only reads it (current_setting), never sets it.
   const SQL136 = '136_money_write_restrictive_policies.sql';
+  // SQL 145's DEFINER collection-leg writer (RLS does not apply to it) calls SQL 136's gate function, and only that.
+  const SQL145 = '145_platform_owner_billing_collection_leg.sql';
   for (const dir of ['aws/workflows/sql', 'aws/rls/sql', 'aws/financial/sql']) {
     for (const name of fs.readdirSync(path.join(ROOT, dir))) {
-      if (dir === 'aws/workflows/sql' && name === SQL136) continue;
+      if (dir === 'aws/workflows/sql' && (name === SQL136 || name === SQL145)) continue;
       assert.equal(fs.readFileSync(path.join(ROOT, dir, name), 'utf8').includes('money_write'), false, `${dir}/${name}`);
     }
   }
+  const sql145 = fs.readFileSync(path.join(ROOT, 'aws/workflows/sql', SQL145), 'utf8').replace(/--[^\n]*/g, '');
+  assert.deepEqual([...sql145.matchAll(/[a-z_.]*money_write[a-z_]*(?:\(\))?/g)].map((m) => m[0]),
+    ['public.aws_money_write_allowed()', 'public.aws_money_write_allowed()', 'public.aws_money_write_allowed()']);
+  assert.doesNotMatch(sql145, /request\.money_write/);
   const sql136 = fs.readFileSync(path.join(ROOT, 'aws/workflows/sql', SQL136), 'utf8').replace(/--[^\n]*/g, '');
   assert.match(sql136, /current_setting\('request\.money_write', true\) = '1'/);
   assert.doesNotMatch(sql136, /set_config\(\s*'request\.money_write'/);
@@ -253,7 +259,9 @@ test('collection v2 store: the flag runs before the obligation update and each l
   await store.putObligation({ id: '11111111-1111-4111-8111-111111111111', status: 'submitted' });
   assertFlagBefore(client.queries, /UPDATE public\.tenant_maintenance_payments/, 'putObligation');
   await store.putLeg({ idempotency_key: 'leg-new', tenant_id: '22222222-2222-4222-8222-222222222222', amount_cents: 100, leg_type: 'bank' });
-  assertFlagBefore(client.queries, /INSERT INTO public\.payment_transfers/, 'putLeg insert');
+  // The leg insert is SQL 145's DEFINER function (the platform owner is not a member of the billed tenant).
+  assertFlagBefore(client.queries, /^SELECT \* FROM public\.aws_platform_owner_insert_billing_collection_leg\(/, 'putLeg insert');
+  assert.equal(client.queries.some((q) => /INSERT\s+INTO\s+public\.payment_transfers/.test(q.sql)), false, 'no direct leg INSERT');
   await store.putLeg({ idempotency_key: 'leg-existing', amount_cents: 100, leg_type: 'wallet' });
   assertFlagBefore(client.queries, /UPDATE public\.payment_transfers/, 'putLeg update');
 });

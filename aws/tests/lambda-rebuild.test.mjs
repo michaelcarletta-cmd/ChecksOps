@@ -551,6 +551,18 @@ test('the production plan section accepts inspect run 41463084601 and records ap
       // The row moved on after the rebuild: main's bytes accepted, the bytes the rebuild put live expected ...
       assert.equal(row.accepted_sha256, sha256(fs.readFileSync(path.join(apiRoot, name))), name);
       const appliedRel = APPLIED_SINCE_FOURTH_PRODUCTION_REBUILD[name];
+      if (name === 'tenant-collection-v2.mjs') {
+        // Moved on twice: the fee pull savepoints REPLACE from the rebuild's bytes, applied 2026-11-06 (its applied
+        // record), then the fee leg REPLACE (SQL 145, planning only) from those applied bytes.
+        const recorded = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, appliedRel), 'utf8')).members[name];
+        const planned = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, recorded.previous_manifest), 'utf8')).members[name];
+        assert.equal(planned.live_sha256, entry.accepted_sha256, name);
+        assert.equal(row.expected_live_sha256, recorded.accepted_sha256, name);
+        assert.equal(row.manifest, 'aws/tests/fixtures/production-fee-leg-api-manifest-2026-11-07.json', name);
+        const feeLeg = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, row.manifest), 'utf8')).members[name];
+        assert.equal(feeLeg.previous_manifest, appliedRel, name);
+        continue;
+      }
       if (appliedRel) {
         // ... unless that REPLACE has been applied since: main's bytes expected live, naming the applied record,
         // whose planning manifest started from the bytes the rebuild put live.
