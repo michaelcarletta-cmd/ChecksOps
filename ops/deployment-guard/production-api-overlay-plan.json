@@ -976,10 +976,10 @@
     },
     "providers/webhooks.mjs": {
       "operation": "replace",
-      "accepted_sha256": "59b586744332df62524a25b4602966686c9ba9ae869cc644ab9046bfc1ae63b0",
+      "accepted_sha256": "117495bc5285a6fb39fb5e4b20526a0e24b00f67f8bf7ed78d0d5fff84b8f471",
       "expected_live_sha256": "59b586744332df62524a25b4602966686c9ba9ae869cc644ab9046bfc1ae63b0",
       "sql_before": null,
-      "manifest": "aws/tests/fixtures/production-moov-webhook-body-auth-applied-manifest-2026-10-31.json"
+      "manifest": "aws/tests/fixtures/production-moov-webhook-receipt-key-manifest-2026-11-07.json"
     },
     "tenant-billing-engine.mjs": {
       "operation": "replace",

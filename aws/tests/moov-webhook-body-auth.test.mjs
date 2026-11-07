@@ -3,15 +3,19 @@
  * `timestamp|nonce|webhookID` only. These tests drive providers/webhooks.mjs with a fake database
  * and a fake Moov (no network, no AWS) and prove:
  *   - a genuine webhook is applied once, from what Moov returns;
- *   - the same signed headers with another body are deduplicated on the signed webhook id, and a
- *     body that was never seen is applied only as Moov's own record (never the body's status);
- *   - a body eventID is not the receipt key;
+ *   - the receipt key is the Moov event (body eventID bound to its type and resource), not the
+ *     signed X-Webhook-ID, which repeats across events (production 2026-10-31..11-06: ~100
+ *     accepted deliveries, 2 receipt rows): two events under one X-Webhook-ID are both stored and
+ *     applied, and a redelivery of one event is a duplicate whatever its X-Webhook-ID;
+ *   - a forged body under replayed signed headers is applied only as Moov's own record and cannot
+ *     suppress a later genuine event;
+ *   - signature failures are still 401 and store nothing;
  *   - Collection V2 settlement matches a transfer id exactly, not as a substring of notes.
  */
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { handleProviderWebhook } from '../functions/api/providers/webhooks.mjs';
+import { handleProviderWebhook, moovReceiptKey } from '../functions/api/providers/webhooks.mjs';
 import { hmacHex } from '../functions/api/providers/hmac.mjs';
 import { TRANSFER_STATUS_WRITER_SQL } from '../functions/api/providers/moov-transfer-webhook.mjs';
 import {
@@ -149,7 +153,9 @@ const RETURNED_AT_MOOV = {
   destination: { account: { accountID: PLATFORM } },
 };
 
-test('a genuine transfer webhook is applied once, from Moov; a redelivery of the same signed id is a duplicate and reads nothing', async () => {
+const keyOf = (body) => moovReceiptKey(body, JSON.stringify(body));
+
+test('a genuine transfer webhook is applied once, from Moov; a redelivery of the same event is a duplicate and reads nothing', async () => {
   resetMoovTokenCache();
   await withEnv(PRODUCTION_ENV, async () => {
     const db = fakeDatabase();
@@ -163,39 +169,92 @@ test('a genuine transfer webhook is applied once, from Moov; a redelivery of the
     assert.deepEqual(first.provider_confirmation, { ok: true, resource: 'transfer', skipped: null });
     assert.deepEqual(moov.reads(), [`https://api.moov.io/accounts/${PLATFORM}/transfers/tr_prod_1`]);
     const [writer] = writerCalls(db);
-    // environment, transfer, status, Moov status, event id (the signed webhook id), type, return code
-    assert.deepEqual(writer.params.slice(0, 7), ['production', 'tr_prod_1', 'returned', 'failed', 'wh-genuine-1', 'transfer.updated', 'R01']);
-    assert.deepEqual([...db.receipts.keys()], ['moov|wh-genuine-1']);
+    // environment, transfer, status, Moov status, event id (the receipt key), type, return code
+    assert.deepEqual(writer.params.slice(0, 7), ['production', 'tr_prod_1', 'returned', 'failed', keyOf(body), 'transfer.updated', 'R01']);
+    assert.deepEqual([...db.receipts.keys()], [`moov|${keyOf(body)}`]);
 
-    const again = await deliver(db, moov, signedEvent(headers, body));
-    assert.equal(again.duplicate, true);
-    assert.equal(again.apply_skipped, 'duplicate');
-    assert.equal(again.collection_v2_settlement.skipped, 'duplicate');
+    // Moov redelivers the same event: a duplicate whether or not it reuses the X-Webhook-ID.
+    for (const redelivery of [headers, { webhookId: 'wh-genuine-1-retry' }]) {
+      const again = await deliver(db, moov, signedEvent(redelivery, body));
+      assert.equal(again.ok, true);
+      assert.equal(again.duplicate, true);
+      assert.equal(again.apply_skipped, 'duplicate');
+      assert.equal(again.collection_v2_settlement.skipped, 'duplicate');
+    }
+    assert.equal(db.receipts.size, 1);
     assert.equal(writerCalls(db).length, 1);
     assert.equal(moov.reads().length, 1);
   });
 });
 
-test('the same signed headers with a different body are refused as a duplicate of the signed webhook id', async () => {
+test('two different events under the same X-Webhook-ID are both stored and both applied (the production bug)', async () => {
   resetMoovTokenCache();
   await withEnv(PRODUCTION_ENV, async () => {
     const db = fakeDatabase();
     const moov = fakeMoov({
       [`/accounts/${PLATFORM}/transfers/tr_prod_1`]: RETURNED_AT_MOOV,
+      [`/accounts/${PLATFORM}/transfers/tr_prod_2`]: { transferID: 'tr_prod_2', status: 'completed', completedOn: '2026-11-02T15:00:00Z' },
+    });
+    // Moov's X-Webhook-ID repeated across every delivery in production; each delivery has its own nonce.
+    const first = { eventID: 'evt-p1', type: 'transfer.updated', data: { transferID: 'tr_prod_1', status: 'failed' } };
+    const second = { eventID: 'evt-p2', type: 'transfer.updated', data: { transferID: 'tr_prod_2', status: 'completed' } };
+    const third = { eventID: 'evt-p3', type: 'transfer.updated', data: { transferID: 'tr_prod_1', status: 'failed' } };
+    const results = [];
+    for (const [i, body] of [first, second, third].entries()) {
+      results.push(await deliver(db, moov, signedEvent({ webhookId: 'wh-subscription', nonce: `n-${i}` }, body)));
+    }
+    for (const result of results) {
+      assert.equal(result.ok, true, JSON.stringify(result));
+      assert.equal(result.duplicate, false);
+      assert.equal(result.liveProviderCalled, true);
+    }
+    assert.equal(results[0].applied, true);
+    assert.equal(results[1].applied, true);
+    assert.deepEqual([...db.receipts.keys()], [first, second, third].map((b) => `moov|${keyOf(b)}`));
+    const writes = writerCalls(db).map((w) => [w.params[1], w.params[2], w.params[4]]);
+    assert.deepEqual(writes, [
+      ['tr_prod_1', 'returned', keyOf(first)],
+      ['tr_prod_2', 'completed', keyOf(second)],
+      ['tr_prod_1', 'returned', keyOf(third)],
+    ]);
+    assert.equal(writerCalls(db)[1].params[10], '2026-11-02T15:00:00.000Z');
+  });
+});
+
+test('a forged body under replayed signed headers is read back from Moov and cannot suppress a later genuine event', async () => {
+  resetMoovTokenCache();
+  await withEnv(PRODUCTION_ENV, async () => {
+    const db = fakeDatabase({ writerResult: { outcome: 'unchanged' } });
+    const moov = fakeMoov({
+      [`/accounts/${PLATFORM}/transfers/tr_prod_1`]: RETURNED_AT_MOOV,
       [`/accounts/${PLATFORM}/transfers/tr_victim`]: { transferID: 'tr_victim', status: 'pending' },
     });
     const headers = { webhookId: 'wh-replayed', nonce: 'n-fixed', timestamp: String(Math.floor(Date.now() / 1000)) };
-    await deliver(db, moov, signedEvent(headers, { eventID: 'evt-a', type: 'transfer.updated', data: { transferID: 'tr_prod_1', status: 'failed' } }));
-    // Same headers (still inside the 5-minute window), new body, new body eventID.
+    const genuine = { eventID: 'evt-a', type: 'transfer.updated', data: { transferID: 'tr_prod_1', status: 'failed' } };
+    await deliver(db, moov, signedEvent(headers, genuine));
+    // Same headers (still inside the 5-minute window), new body, new body eventID: a receipt of its own,
+    // and the only write is what Moov says about tr_victim (pending), never the body's completed.
     const forged = await deliver(db, moov, signedEvent(headers, {
-      eventID: 'evt-forged', type: 'transfer.completed', data: { transferID: 'tr_victim', status: 'completed' },
+      eventID: 'evt-forged', type: 'transfer.completed', data: { transferID: 'tr_victim', status: 'completed', completedOn: '2026-11-01T00:00:00Z' },
     }));
     assert.equal(forged.ok, true);
-    assert.equal(forged.duplicate, true);
-    assert.equal(forged.applied, false);
-    assert.equal(writerCalls(db).length, 1);
-    assert.equal(writerCalls(db)[0].params[1], 'tr_prod_1');
-    assert.ok(!moov.reads().some((u) => u.includes('tr_victim')));
+    assert.equal(forged.duplicate, false);
+    const victimWrite = writerCalls(db).find((w) => w.params[1] === 'tr_victim');
+    assert.deepEqual([victimWrite.params[2], victimWrite.params[3], victimWrite.params[10]], ['pending', 'pending', null]);
+    // A forged body that reuses a genuine eventID with another type or resource is a different key:
+    // the genuine event, delivered after it, is still stored and applied.
+    const later = { eventID: 'evt-b', type: 'transfer.updated', data: { transferID: 'tr_prod_1', status: 'failed' } };
+    const squat = await deliver(db, moov, signedEvent(headers, { ...later, data: { transferID: 'tr_victim' } }));
+    assert.equal(squat.duplicate, false);
+    const squatType = await deliver(db, moov, signedEvent(headers, { ...later, type: 'transfer.created' }));
+    assert.equal(squatType.duplicate, false);
+    const genuineLater = await deliver(db, moov, signedEvent({ webhookId: 'wh-replayed', nonce: 'n-later' }, later));
+    assert.equal(genuineLater.ok, true);
+    assert.equal(genuineLater.duplicate, false);
+    assert.equal(genuineLater.apply_skipped, 'unchanged');
+    const last = writerCalls(db).at(-1);
+    assert.deepEqual([last.params[1], last.params[2], last.params[4]], ['tr_prod_1', 'returned', keyOf(later)]);
+    assert.ok(db.receipts.has(`moov|${keyOf(later)}`));
   });
 });
 
@@ -246,7 +305,7 @@ test('a forged settled body does not settle a Collection V2 obligation; Moov\'s 
   }
 });
 
-test('the receipt key is the signed X-Webhook-ID, not the body eventID', async () => {
+test('the receipt key is the Moov event (eventID, type, resource), never the X-Webhook-ID; it fits the table and never matches a legacy key', async () => {
   resetMoovTokenCache();
   await withEnv(PRODUCTION_ENV, async () => {
     const db = fakeDatabase();
@@ -255,10 +314,64 @@ test('the receipt key is the signed X-Webhook-ID, not the body eventID', async (
     const a = await deliver(db, moov, signedEvent({ webhookId: 'wh-a' }, body));
     const b = await deliver(db, moov, signedEvent({ webhookId: 'wh-b' }, body));
     assert.equal(a.duplicate, false);
-    assert.equal(b.duplicate, false);
-    assert.deepEqual([...db.receipts.keys()], ['moov|wh-a', 'moov|wh-b']);
+    assert.equal(b.duplicate, true);
+    assert.deepEqual([...db.receipts.keys()], [`moov|${keyOf(body)}`]);
     const inserted = db.statements.filter((s) => s.sql.includes('INSERT INTO public.aws_provider_webhook_receipts')).map((s) => s.params[1]);
-    assert.deepEqual(inserted, ['wh-a', 'wh-b']);
+    assert.deepEqual(inserted, [keyOf(body), keyOf(body)]);
+    assert.ok(!inserted.some((k) => k.includes('wh-a') || k.includes('wh-b')));
+  });
+  // Format: evt:<eventID>:<64 hex>; the same event whatever the status text or key order of the body.
+  const key = keyOf({ eventID: 'b31c7752-031f-4b8b-9b6e-82dd0aaed2cb', type: 'transfer.updated', data: { transferID: 'tr_1', status: 'completed' } });
+  assert.match(key, /^evt:b31c7752-031f-4b8b-9b6e-82dd0aaed2cb:[0-9a-f]{64}$/);
+  assert.equal(keyOf({ data: { status: 'pending', transferID: 'tr_1' }, type: 'transfer.updated', eventID: 'b31c7752-031f-4b8b-9b6e-82dd0aaed2cb' }), key);
+  // Bound to the type and every resource id the confirmation reads.
+  for (const other of [
+    { eventID: 'b31c7752-031f-4b8b-9b6e-82dd0aaed2cb', type: 'transfer.created', data: { transferID: 'tr_1' } },
+    { eventID: 'b31c7752-031f-4b8b-9b6e-82dd0aaed2cb', type: 'transfer.updated', data: { transferID: 'tr_2' } },
+    { eventID: 'b31c7752-031f-4b8b-9b6e-82dd0aaed2cb', type: 'transfer.updated', accountID: 'acct', data: { transferID: 'tr_1' } },
+    { eventID: 'other', type: 'transfer.updated', data: { transferID: 'tr_1' } },
+  ]) assert.notEqual(keyOf(other), key, JSON.stringify(other));
+  assert.notEqual(
+    keyOf({ eventID: 'e', type: 'capability.updated', accountID: 'a', data: { capabilityID: 'transfers' } }),
+    keyOf({ eventID: 'e', type: 'capability.updated', accountID: 'a', data: { capabilityID: 'wallet' } }),
+  );
+  assert.notEqual(
+    keyOf({ eventID: 'e', type: 'bankAccount.updated', accountID: 'a', data: { bankAccountID: 'b1' } }),
+    keyOf({ eventID: 'e', type: 'bankAccount.updated', accountID: 'a', data: { bankAccountID: 'b2' } }),
+  );
+  // The longest accepted eventID stays inside the 200 characters SQL 109 keeps; external_event_id is text.
+  assert.equal(keyOf({ eventID: 'x'.repeat(120), type: 'transfer.updated', data: { transferID: 'tr_1' } }).length, 189);
+  // No usable eventID: the raw body's sha256 (an identical redelivery is still a duplicate).
+  for (const body of [{ type: 'balance.updated' }, { eventID: 'x'.repeat(121), type: 't' }, { eventID: 'a b', type: 't' }, { eventID: { $ne: 1 }, type: 't' }]) {
+    assert.match(keyOf(body), /^body:[0-9a-f]{64}$/, JSON.stringify(body));
+  }
+  assert.equal(moovReceiptKey({}, '{"type":"balance.updated"}'), moovReceiptKey({}, '{"type":"balance.updated"}'));
+  // Keys stored before this change are the bare X-Webhook-ID (a uuid); the new forms never equal one.
+  assert.ok(!/^[0-9a-f-]{36}$/.test(key));
+});
+
+test('signature failures are still 401 and store nothing', async () => {
+  resetMoovTokenCache();
+  await withEnv(PRODUCTION_ENV, async () => {
+    const db = fakeDatabase();
+    const moov = fakeMoov({ [`/accounts/${PLATFORM}/transfers/tr_prod_1`]: RETURNED_AT_MOOV });
+    const body = { eventID: 'evt-sig', type: 'transfer.updated', data: { transferID: 'tr_prod_1' } };
+    const good = signedEvent({ webhookId: 'wh-sig' }, body);
+    const cases = {
+      invalid_signature: { ...good, headers: { ...good.headers, 'x-signature': 'f'.repeat(128) } },
+      tampered_webhook_id: { ...good, headers: { ...good.headers, 'x-webhook-id': 'wh-other' } },
+      stale_timestamp: signedEvent({ webhookId: 'wh-sig', timestamp: String(Math.floor(Date.now() / 1000) - 3600) }, body),
+      missing_signature_headers: { ...good, headers: { 'x-webhook-id': 'wh-sig' } },
+    };
+    for (const [name, event] of Object.entries(cases)) {
+      const result = await deliver(db, moov, event);
+      assert.equal(result.ok, false, name);
+      assert.equal(result.statusCode, 401, name);
+      assert.equal(result.error, name === 'missing_signature_headers' ? 'missing_signature_headers' : 'invalid_signature', name);
+    }
+    assert.equal(db.statements.length, 0);
+    assert.equal(db.receipts.size, 0);
+    assert.equal(moov.calls.length, 0);
   });
 });
 

@@ -15,7 +15,7 @@ import {
   mapMoovTransferStatus,
   productionTransferWebhookApplyEnabled,
 } from '../functions/api/providers/moov-transfer-webhook.mjs';
-import { handleProviderWebhook } from '../functions/api/providers/webhooks.mjs';
+import { handleProviderWebhook, moovReceiptKey } from '../functions/api/providers/webhooks.mjs';
 import { hmacHex } from '../functions/api/providers/hmac.mjs';
 import {
   isBouncedTransferStatus,
@@ -305,7 +305,10 @@ test('webhook route: a production transfer.updated return is written back once; 
       assert.deepEqual(result.apply_mutations, ['payment_transfers', 'payment_event_log']);
       assert.equal(result.apply_environment, 'production');
       assert.equal(result.liveProviderCalled, true);
-      assert.deepEqual(writerCall(client).params.slice(0, 7), ['production', 'tr_prod_1', 'returned', 'failed', 'evt-route-1', 'transfer.updated', 'R01']);
+      // The writer's event id is the receipt key: the body eventID bound to the event type and transfer.
+      const eventKey = moovReceiptKey(payload, JSON.stringify(payload));
+      assert.match(eventKey, /^evt:evt-route-1:[0-9a-f]{64}$/);
+      assert.deepEqual(writerCall(client).params.slice(0, 7), ['production', 'tr_prod_1', 'returned', 'failed', eventKey, 'transfer.updated', 'R01']);
       // The writer runs before the Collection V2 step, which no longer sees the apply GUC.
       const sqls = client.calls.map((c) => c.sql);
       const iWriter = sqls.indexOf(TRANSFER_STATUS_WRITER_SQL);
