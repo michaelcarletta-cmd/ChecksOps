@@ -36,8 +36,8 @@ const READ_RPCS = new Set([
   'get_check_unread_counts',
   'get_loss_draft_dashboard_counts_for_tenant',
   'get_tenant_funds_received',
-  // SQL 144 (SECURITY DEFINER, its own aws_can_access_tenant check): the send legs other organizations
-  // addressed to this one. Until SQL 144 is applied the function is absent and the call fails.
+  // SQL 144 (SECURITY DEFINER, its own aws_can_access_tenant check; applied in staging 2026-11-06 and in
+  // production 2026-11-07): the send legs other organizations addressed to this one.
   'get_tenant_incoming_transfers',
   'get_tenant_check_usage',
   'get_deposit_ops_kpis',
