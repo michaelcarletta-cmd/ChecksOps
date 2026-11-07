@@ -70,6 +70,17 @@ It runs in the **production API Lambda** (`checksops-production-prep-api`), star
   apply to `checksops` with no user. Like the Check Alt scheduled job, the catch-up binds
   one reviewed actor, `actor_application_user_id`, as `request.app_user_id`. It refuses
   unless `public.is_platform_owner()` is true for that actor.
+- **SQL 146 (the update fix, 2026-11-07).** The platform owner reads every tenant's rows but is
+  not a member of them, and `payment_transfers`' UPDATE policies are membership-only since
+  SQL 90. PostgreSQL applies them to `SELECT ... FOR UPDATE`, so the apply's lock read no row:
+  production apply run 42395949680 refused its first transfer with
+  `catch_up_state_changed_since_plan`, `found {legs: {}, obligations: {}}`, and wrote nothing.
+  The apply now locks through SQL 146's `aws_moov_catch_up_lock_rows` and writes a fee leg
+  through `aws_moov_apply_collection_leg_status` (both SECURITY DEFINER, in the Moov webhook
+  apply context), and runs the settlement code in that context so its `payment_event_log` row
+  is admitted. Until SQL 146 is applied and the REPLACE of this module is deployed, an apply
+  refuses its first transfer and writes nothing (`ops/production-sql-146-apply.md`). A plan
+  made before the fix is not reused: plan again after the deploy.
 
 ## Deploy prerequisite (a separate, owner-approved step)
 

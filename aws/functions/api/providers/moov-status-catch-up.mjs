@@ -28,8 +28,10 @@
  *   apply  only with the owner's approval statement (verbatim) and the plan's manifest_sha256
  *          and transfer ids. It plans again; if the new manifest's hash differs (the database or
  *          Moov moved since the reviewed plan) or the ids differ, it refuses and writes nothing.
- *          Then, per transfer, one transaction: lock the rows, re-check the planned pre-state,
- *          run the two apply functions, re-read the rows and require exactly the planned
+ *          Then, per transfer, one transaction: lock the rows (SQL 146's
+ *          aws_moov_catch_up_lock_rows), re-check the planned pre-state, run the SQL 109 writer,
+ *          write a fee collection leg's status (SQL 146's aws_moov_apply_collection_leg_status)
+ *          and run the settlement code, re-read the rows and require exactly the planned
  *          post-state, COMMIT. Anything else rolls that transaction back and stops the run.
  *          Idempotent: an applied transfer is no longer a candidate, the SQL 109 writer records
  *          the catch-up event id once, and an old manifest hash no longer matches.
@@ -42,6 +44,17 @@
  *   - reads and writes run as one reviewed platform-owner actor (request.app_user_id, refused
  *     unless public.is_platform_owner() is true for it), as the scheduled Check Alt status job
  *     does, because the payment tables are under row security and the webhook has no user.
+ *
+ * Why SQL 146: the platform owner reads every tenant's payment rows (SELECT policies), but is not
+ * a member of those tenants, and payment_transfers' UPDATE policies are membership-only since
+ * SQL 90. PostgreSQL applies them to SELECT ... FOR UPDATE too, so a plain lock returned no row
+ * (production run 42395949680: catch_up_state_changed_since_plan, found {legs: {}}), and the
+ * settlement code's own UPDATE of a fee leg finds no row. SQL 146's two SECURITY DEFINER
+ * functions lock the rows and write the fee leg, only for the platform owner (or no user) in the
+ * Moov webhook apply context (request.provider_webhook_apply = '1', SQL 91), which this module
+ * sets around them and around the settlement code, whose payment_event_log row needs it (SQL 91's
+ * aws_webhook_insert_payment_event_log), and clears again. Funding and send legs keep SQL 109's
+ * writer. Until SQL 146 is applied the lock call fails and the transfer rolls back.
  *
  * Output: ids, statuses, cents and ACH codes only. Never a secret, an account or routing number,
  * a payment method id, a Moov account id, notes or a hostname.
@@ -67,6 +80,7 @@ import {
   isCollectionV2Leg,
   isCollectionV2Obligation,
   mapProviderStatusToBilling,
+  providerCompletionTimestamp,
 } from '../tenant-collection-v2-settlement.mjs';
 import { MoovConfirmationRetry, confirmMoovWebhookPayload } from './moov-webhook-confirm.mjs';
 import {
@@ -148,12 +162,20 @@ export const RELATED_OBLIGATIONS_SQL = `SELECT id, tenant_id, status, amount_cen
   FROM public.tenant_maintenance_payments /* moov_status_catch_up_related_obligations */
  WHERE provider_transfer_id = ANY ($1::text[]) OR id::text = ANY ($2::text[])`;
 
-export const LOCK_LEGS_SQL = `SELECT id, status FROM public.payment_transfers /* moov_status_catch_up_lock */
- WHERE provider = 'moov' AND environment = $1 AND provider_transfer_id = $2
- ORDER BY id FOR UPDATE`;
-export const LOCK_OBLIGATIONS_SQL = `SELECT id, status FROM public.tenant_maintenance_payments /* moov_status_catch_up_lock */
- WHERE id::text = ANY ($1::text[])
- ORDER BY id FOR UPDATE`;
+/**
+ * The apply's row lock (SQL 146, SECURITY DEFINER): this transfer's legs and the named obligations, FOR UPDATE, as
+ * {legs: {id: status}, obligations: {id: status}}. A plain SELECT ... FOR UPDATE here returned no row for the platform
+ * owner (PostgreSQL applies the UPDATE policies to it, and payment_transfers' are membership-only since SQL 90;
+ * production run 42395949680). Only the platform owner, in the webhook apply context.
+ */
+export const LOCK_ROWS_SQL = 'SELECT public.aws_moov_catch_up_lock_rows($1, $2, $3::uuid[]) AS locked';
+/**
+ * A tenant fee collection leg's Moov status (SQL 146, SECURITY DEFINER): the UPDATE applyBillingProviderEvent makes,
+ * for the row with this transfer id and Moov's confirmed amount, never backwards. The settlement code's own UPDATE
+ * finds no row for the platform owner (the same UPDATE policies), so the catch-up writes the leg first.
+ */
+export const COLLECTION_LEG_STATUS_SQL = `SELECT public.aws_moov_apply_collection_leg_status(
+  $1, $2, $3::bigint, $4, $5, $6, $7::timestamptz) AS result`;
 export const READ_LEGS_SQL = `SELECT id, status FROM public.payment_transfers /* moov_status_catch_up_verify */
  WHERE provider = 'moov' AND environment = $1 AND provider_transfer_id = $2
  ORDER BY id`;
@@ -165,6 +187,9 @@ export const BIND_ACTOR_SQL = "SELECT set_config('request.app_user_id', $1, true
 export const PLATFORM_OWNER_SQL = 'SELECT public.is_platform_owner() AS ok';
 export const READ_ONLY_PROBE_SQL = "SELECT current_setting('transaction_read_only') AS transaction_read_only";
 export const WEBHOOK_GUC_SQL = "SELECT set_config('request.provider_webhook', '1', true)";
+/** The Moov webhook apply context (SQL 91), which SQL 146's functions and the event log's webhook INSERT policy ask for. */
+export const WEBHOOK_APPLY_ON_SQL = "SELECT set_config('request.provider_webhook_apply', '1', true)";
+export const WEBHOOK_APPLY_OFF_SQL = "SELECT set_config('request.provider_webhook_apply', '0', true)";
 
 // ------------------------------------------------------------------ pure helpers
 
@@ -574,6 +599,34 @@ export async function runCatchUpPlan({ client, environment, actorId, limit, secr
 }
 
 const statusMap = (rows) => Object.fromEntries(rows.map((row) => [String(row.id), String(row.status ?? '')]));
+/** SQL 146's {id: status} object as the same map. */
+const asStatusMap = (value) => (value && typeof value === 'object' && !Array.isArray(value)
+  ? Object.fromEntries(Object.entries(value).map(([id, status]) => [String(id), String(status ?? '')]))
+  : {});
+
+/**
+ * The fee collection leg's Moov status through SQL 146, when the plan predicted the leg changes and it is not a SQL 109
+ * leg: Moov's status mapped as applyBillingProviderEvent maps it, Moov's confirmed amount, the same reason and
+ * completion time. Returns SQL 146's result, or null when there is nothing to write. An error rolls the transfer back.
+ */
+async function applyCollectionLegStatus(client, { entry, payload, environment }) {
+  const leg = entry.legs.length === 1 ? entry.legs[0] : null;
+  if (!leg || SQL109_OWNED_LEG_ROLES.includes(String(leg.leg_role || ''))) return null;
+  if ((leg.predicted_status ?? leg.status) === leg.status) return null;
+  const providerStatus = lower(extractProviderStatus(payload));
+  const mapped = mapProviderStatusToBilling(providerStatus);
+  if (!mapped) return null;
+  const row = (await client.query(COLLECTION_LEG_STATUS_SQL, [
+    environment,
+    entry.provider_transfer_id,
+    entry.moov?.amount_cents ?? null,
+    mapped,
+    providerStatus,
+    payload?.type || payload?.eventType || 'provider_webhook',
+    providerCompletionTimestamp(payload),
+  ])).rows[0]?.result;
+  return row || null;
+}
 
 /** One transfer, one transaction. Returns { ok: true, result } or { ok: false, error, ... } after ROLLBACK. */
 export async function applyOneTransfer(client, { entry, payload, environment, actorId, log = console }) {
@@ -596,10 +649,10 @@ export async function applyOneTransfer(client, { entry, payload, environment, ac
     await client.query('SET TRANSACTION READ WRITE');
     await client.query(WEBHOOK_GUC_SQL);
     if (!(await bindActor(client, actorId))) return fail('catch_up_actor_not_platform_owner');
-    const lockedLegs = statusMap((await client.query(LOCK_LEGS_SQL, [environment, entry.provider_transfer_id])).rows);
-    const lockedObligations = statusMap(obligationIds.length
-      ? (await client.query(LOCK_OBLIGATIONS_SQL, [obligationIds])).rows
-      : []);
+    await client.query(WEBHOOK_APPLY_ON_SQL);
+    const locked = (await client.query(LOCK_ROWS_SQL, [environment, entry.provider_transfer_id, obligationIds])).rows[0]?.locked || {};
+    const lockedLegs = asStatusMap(locked.legs);
+    const lockedObligations = asStatusMap(locked.obligations);
     if (canonicalJson(Object.keys(lockedLegs).sort()) !== canonicalJson(legIds)
         || canonicalJson(lockedLegs) !== canonicalJson(expectedBefore.legs)
         || canonicalJson(lockedObligations) !== canonicalJson(expectedBefore.obligations)) {
@@ -607,8 +660,18 @@ export async function applyOneTransfer(client, { entry, payload, environment, ac
     }
 
     const eventId = catchUpEventId(entry.provider_transfer_id, entry.moov?.provider_status);
+    // The SQL 109 writer (funding and send legs) sets the webhook apply context and clears it again itself.
     const transfer = await applyProductionMoovTransferWebhook(client, payload, { eventId, environment, log });
-    const collection = await applyCollectionV2ProviderCompletion(client, payload, { dryRun: false });
+    // The fee leg first (SQL 146), then the settlement code, in the webhook apply context its event row needs.
+    let collectionLeg = null;
+    let collection = null;
+    await client.query(WEBHOOK_APPLY_ON_SQL);
+    try {
+      collectionLeg = await applyCollectionLegStatus(client, { entry, payload, environment });
+      collection = await applyCollectionV2ProviderCompletion(client, payload, { dryRun: false });
+    } finally {
+      await client.query(WEBHOOK_APPLY_OFF_SQL);
+    }
 
     const afterLegs = statusMap((await client.query(READ_LEGS_SQL, [environment, entry.provider_transfer_id])).rows);
     const afterObligations = statusMap(obligationIds.length
@@ -620,6 +683,7 @@ export async function applyOneTransfer(client, { entry, payload, environment, ac
         expected: expectedAfter,
         found: { legs: afterLegs, obligations: afterObligations },
         transfer_outcome: transfer?.outcome || transfer?.skipped || null,
+        collection_leg_outcome: collectionLeg?.outcome || null,
         collection_outcome: collection?.skipped || (collection?.applied ? 'applied' : null),
       });
     }
@@ -630,6 +694,7 @@ export async function applyOneTransfer(client, { entry, payload, environment, ac
         provider_transfer_id: entry.provider_transfer_id,
         event_id: eventId,
         transfer_outcome: transfer?.outcome || transfer?.skipped || null,
+        collection_leg_outcome: collectionLeg?.outcome || null,
         collection_outcome: collection?.applied ? (collection.duplicate ? 'duplicate' : 'applied') : (collection?.skipped || null),
         before: expectedBefore,
         after: { legs: afterLegs, obligations: afterObligations },

@@ -13,8 +13,8 @@ import {
   CANDIDATE_OBLIGATIONS_SQL,
   CATCH_UP_PATH,
   CATCH_UP_PLAN_STATEMENT,
-  LOCK_LEGS_SQL,
-  LOCK_OBLIGATIONS_SQL,
+  COLLECTION_LEG_STATUS_SQL,
+  LOCK_ROWS_SQL,
   PLATFORM_OWNER_SQL,
   READ_LEGS_SQL,
   READ_OBLIGATIONS_SQL,
@@ -28,6 +28,8 @@ import {
   manifestSha256,
   parseCatchUpRequest,
   sql109Rank,
+  WEBHOOK_APPLY_OFF_SQL,
+  WEBHOOK_APPLY_ON_SQL,
 } from '../functions/api/providers/moov-status-catch-up.mjs';
 import { TRANSFER_STATUS_WRITER_SQL } from '../functions/api/providers/moov-transfer-webhook.mjs';
 import { resetMoovTokenCache } from '../functions/api/providers/parity/moov-client.mjs';
@@ -96,12 +98,20 @@ const RANK_SQL = sql109Rank;
 const OWNED = new Set(['wallet_funding', 'send_wallet', 'send_bank']);
 const TERMINAL = ['completed', 'settled', 'failed', 'canceled', 'cancelled', 'returned', 'reversed'];
 
-/** A database with transactions (BEGIN snapshot, ROLLBACK restores), read-only enforcement and the SQL 109 rule. */
-function fakeDatabase({ legs = [], obligations = [], writerThrowsFor = new Set() } = {}) {
+/**
+ * A database with transactions (BEGIN snapshot, ROLLBACK restores), read-only enforcement, the SQL 109 rule, SQL 146's
+ * two functions and the production row security the catch-up meets as the platform owner (who is not a member of the
+ * tenant): the settlement code's own payment_transfers UPDATE finds no row, and a payment_event_log INSERT needs the
+ * webhook apply context, else 42501 aborts the transaction (25P02 until ROLLBACK), as on PostgreSQL. `sql146: false`
+ * leaves SQL 146 unapplied (42883).
+ */
+function fakeDatabase({ legs = [], obligations = [], writerThrowsFor = new Set(), sql146 = true } = {}) {
   let state = { legs: structuredClone(legs), obligations: structuredClone(obligations), events: [] };
   let snapshot = null;
   let readOnly = false;
   let actor = null;
+  let webhookApply = '0';
+  let aborted = false;
   const statements = [];
   const writes = [];
   const flat = (row) => ({
@@ -119,17 +129,23 @@ function fakeDatabase({ legs = [], obligations = [], writerThrowsFor = new Set()
     }
     writes.push(sql);
   };
+  const pgError = (code, message) => Object.assign(new Error(message), { code });
+  const end = () => { snapshot = null; readOnly = false; actor = null; webhookApply = '0'; aborted = false; };
   const query = async (sql, params = []) => {
     const s = String(sql);
     statements.push({ sql: s, params });
-    if (s === 'BEGIN READ ONLY') { snapshot = structuredClone(state); readOnly = true; return { rows: [] }; }
-    if (s === 'BEGIN') { snapshot = structuredClone(state); readOnly = false; return { rows: [] }; }
+    if (aborted && !/^(ROLLBACK|COMMIT)/.test(s)) throw pgError('25P02', 'current transaction is aborted, commands ignored until end of transaction block');
+    if (s === 'BEGIN READ ONLY') { snapshot = structuredClone(state); readOnly = true; webhookApply = '0'; return { rows: [] }; }
+    if (s === 'BEGIN') { snapshot = structuredClone(state); readOnly = false; webhookApply = '0'; return { rows: [] }; }
     if (s === 'SET TRANSACTION READ WRITE') return { rows: [] };
-    if (s === 'COMMIT') { snapshot = null; readOnly = false; actor = null; return { rows: [] }; }
-    if (s === 'ROLLBACK') { if (snapshot) state = snapshot; snapshot = null; readOnly = false; actor = null; return { rows: [] }; }
-    if (/^(SAVEPOINT|RELEASE SAVEPOINT|ROLLBACK TO SAVEPOINT)/.test(s)) return { rows: [] };
+    if (s === 'COMMIT') { if (aborted && snapshot) state = snapshot; end(); return { rows: [] }; }
+    if (s === 'ROLLBACK') { if (snapshot) state = snapshot; end(); return { rows: [] }; }
+    if (/^ROLLBACK TO SAVEPOINT/.test(s)) { aborted = false; return { rows: [] }; }
+    if (/^(SAVEPOINT|RELEASE SAVEPOINT)/.test(s)) return { rows: [] };
     if (s === READ_ONLY_PROBE_SQL) return { rows: [{ transaction_read_only: readOnly ? 'on' : 'off' }] };
     if (s.includes("set_config('request.app_user_id'")) { actor = params[0]; return { rows: [] }; }
+    if (s.includes("set_config('request.provider_webhook_apply', '1'")) { webhookApply = '1'; return { rows: [] }; }
+    if (s.includes("set_config('request.provider_webhook_apply', '0'")) { webhookApply = '0'; return { rows: [] }; }
     if (s === PLATFORM_OWNER_SQL) return { rows: [{ ok: actor === OWNER }] };
     if (s.includes('set_config')) return { rows: [] };
     if (s.includes('aws_provider_webhook_receipts')) throw new Error('the catch-up must not touch webhook receipts');
@@ -147,11 +163,48 @@ function fakeDatabase({ legs = [], obligations = [], writerThrowsFor = new Set()
     if (s === RELATED_OBLIGATIONS_SQL) {
       return { rows: state.obligations.filter((r) => params[0].includes(r.provider_transfer_id) || params[1].includes(r.id)) };
     }
-    if (s === LOCK_LEGS_SQL || s === READ_LEGS_SQL) {
+    if (s === READ_LEGS_SQL) {
       return { rows: state.legs.filter((r) => r.environment === params[0] && r.provider_transfer_id === params[1]).map(({ id, status }) => ({ id, status })) };
     }
-    if (s === LOCK_OBLIGATIONS_SQL || s === READ_OBLIGATIONS_SQL) {
+    if (s === READ_OBLIGATIONS_SQL) {
       return { rows: state.obligations.filter((r) => params[0].includes(r.id)).map(({ id, status }) => ({ id, status })) };
+    }
+
+    // SQL 146 (aws/workflows/sql/146_moov_status_catch_up_writes.sql), as definers.
+    if ((s === LOCK_ROWS_SQL || s === COLLECTION_LEG_STATUS_SQL) && !sql146) {
+      aborted = true;
+      throw pgError('42883', 'function public.aws_moov_catch_up_lock_rows(unknown, unknown, uuid[]) does not exist');
+    }
+    if (s === LOCK_ROWS_SQL) {
+      if (webhookApply !== '1') { aborted = true; throw pgError('42501', 'moov_catch_up_webhook_apply_required'); }
+      if (actor !== OWNER) { aborted = true; throw pgError('42501', 'moov_catch_up_forbidden'); }
+      const map = (rows) => Object.fromEntries(rows.map((r) => [r.id, r.status]));
+      return { rows: [{ locked: {
+        legs: map(state.legs.filter((r) => r.provider === 'moov' && r.environment === params[0] && r.provider_transfer_id === params[1])),
+        obligations: map(state.obligations.filter((r) => (params[2] || []).includes(r.id))),
+      } }] };
+    }
+    if (s === COLLECTION_LEG_STATUS_SQL) {
+      if (webhookApply !== '1') { aborted = true; throw pgError('42501', 'moov_collection_leg_webhook_apply_required'); }
+      if (actor && actor !== OWNER) { aborted = true; throw pgError('42501', 'moov_collection_leg_forbidden'); }
+      const [env, transferId, amount, status, providerStatus] = params;
+      const row = state.legs.find((r) => r.provider === 'moov' && r.environment === env && r.provider_transfer_id === transferId);
+      if (!row) return { rows: [{ result: { outcome: 'unknown_transfer' } }] };
+      const meta = row.provider_metadata || {};
+      if (OWNED.has(row.leg_role) || !(meta.collection_contract === 'tenant-collection-v2' || meta.checksops_kind === 'monthly_subscription')) {
+        return { rows: [{ result: { outcome: 'not_owned', transfer_id: row.id } }] };
+      }
+      if (row.amount_cents !== amount) return { rows: [{ result: { outcome: 'amount_mismatch', transfer_id: row.id } }] };
+      const rank = (v) => ({ submitted: 1, pending: 2, processing: 2, settled: 3, completed: 3, failed: 4, canceled: 4, cancelled: 4, returned: 5, reversed: 5 })[v] || 0;
+      const previous = row.status;
+      let outcome = previous === status ? 'unchanged' : 'stale';
+      if (rank(status) > rank(previous)) {
+        write(s);
+        row.status = status;
+        row.provider_status = providerStatus;
+        outcome = 'applied';
+      }
+      return { rows: [{ result: { outcome, transfer_id: row.id, tenant_id: row.tenant_id, leg_role: row.leg_role, previous_status: previous, new_status: row.status } }] };
     }
 
     // The SQL 109 writer (aws/workflows/sql/109_moov_transfer_webhook_status.sql), as a definer.
@@ -182,10 +235,13 @@ function fakeDatabase({ legs = [], obligations = [], writerThrowsFor = new Set()
       return { rows: state.legs.filter((r) => r.provider_metadata?.obligation_id === params[0]) };
     }
     if (s.includes('UPDATE public.payment_transfers SET')) {
+      // The settlement code's own UPDATE: the UPDATE policies are membership-only (SQL 90) and the platform owner is
+      // no member, so it finds no row, without an error.
+      if (actor === OWNER) return { rows: [], rowCount: 0 };
       write(s);
       const row = state.legs.find((r) => r.id === params[0]);
       if (row) { row.status = params[1]; row.provider_status = params[2]; }
-      return { rows: [] };
+      return { rows: [], rowCount: row ? 1 : 0 };
     }
     if (s.includes('FROM public.tenant_maintenance_payments') && s.includes('WHERE provider_transfer_id = $1')) {
       return { rows: state.obligations.filter((r) => r.provider_transfer_id === params[0]).slice(0, 1) };
@@ -204,6 +260,11 @@ function fakeDatabase({ legs = [], obligations = [], writerThrowsFor = new Set()
     }
     if (s.includes('FROM public.payment_event_log')) return { rows: [] };
     if (s.includes('INSERT INTO public.payment_event_log')) {
+      // INSERT policies: a member's (SQL 72), the onboarding writer's and the webhook apply context's (SQL 91).
+      if (webhookApply !== '1') {
+        aborted = true;
+        throw pgError('42501', 'new row violates row-level security policy for table "payment_event_log"');
+      }
       write(s);
       state.events.push({ provider_transfer_id: params[3], event_type: params[4], new_status: params[6] });
       return { rows: [{ id: `pel-${state.events.length}` }] };
@@ -586,4 +647,72 @@ test('invoker script: plan event, apply event bound to the plan file, refusals',
   });
   assert.equal(out.code, 0);
   assert.equal(invoked.functionName, 'checksops-staging-api');
+});
+
+test('SQL 146 in the webhook apply context: the lock for every transfer, the fee leg writer only for the fee transfer with Moov\'s amount, the context cleared before the post-state read', async () => {
+  await withEnv(PRODUCTION_ENV, async () => {
+    const { db, moov } = mixedFixture();
+    const plan = await run(db, moov, { phase: 'plan' });
+    const result = await run(db, moov, { phase: 'apply', approval_statement: APPROVAL, manifest_sha256: plan.manifest_sha256, transfer_ids: plan.transfer_ids });
+    assert.equal(result.ok, true, JSON.stringify(result));
+    const locks = db.statements.filter((s) => s.sql === LOCK_ROWS_SQL);
+    assert.deepEqual(locks.map((s) => s.params), [
+      ['production', T(1), []], ['production', T(2), []], ['production', T(3), []], ['production', SEPT_TRANSFER, [SEPT_OBLIGATION]],
+    ]);
+    const legWrites = db.statements.filter((s) => s.sql === COLLECTION_LEG_STATUS_SQL);
+    assert.deepEqual(legWrites.map((s) => s.params), [
+      ['production', SEPT_TRANSFER, 9900, 'settled', 'completed', 'transfer.updated', '2026-09-05T15:00:00.000Z'],
+    ]);
+    assert.deepEqual(result.applied.map((r) => r.collection_leg_outcome), [null, null, null, 'applied']);
+    // Per transaction: context on, lock, SQL 109 (sets and clears it itself), on again, leg writer and settlement, off,
+    // then the post-state read; never a read with the context left on.
+    const sept = db.statements.findIndex((s) => s.sql === LOCK_ROWS_SQL && s.params[1] === SEPT_TRANSFER);
+    const begin = db.statements.slice(0, sept).map((s) => s.sql).lastIndexOf('BEGIN');
+    const tx = db.statements.slice(begin, db.statements.findIndex((s, i) => i > sept && s.sql === 'COMMIT') + 1).map((s) => s.sql);
+    const at = (sql, from = 0) => tx.indexOf(sql, from);
+    assert.ok(at(WEBHOOK_APPLY_ON_SQL) < at(LOCK_ROWS_SQL));
+    assert.ok(at(LOCK_ROWS_SQL) < at(TRANSFER_STATUS_WRITER_SQL));
+    const on2 = at(WEBHOOK_APPLY_ON_SQL, at(TRANSFER_STATUS_WRITER_SQL));
+    assert.ok(on2 > at(TRANSFER_STATUS_WRITER_SQL) && on2 < at(COLLECTION_LEG_STATUS_SQL));
+    const off = at(WEBHOOK_APPLY_OFF_SQL, at(COLLECTION_LEG_STATUS_SQL));
+    assert.ok(off > tx.findIndex((sql) => sql.includes('INSERT INTO public.payment_event_log')));
+    assert.ok(off < at(READ_LEGS_SQL));
+  });
+});
+
+test('before SQL 146 is applied: the first transfer\'s lock fails (42883), that transaction rolls back, nothing is written and the run stops', async () => {
+  await withEnv(PRODUCTION_ENV, async () => {
+    const sept = septemberRows();
+    const db = fakeDatabase({ legs: [...sept.legs, leg(L(1), T(1))], obligations: sept.obligations, sql146: false });
+    const moov = fakeMoov({ [SEPT_TRANSFER]: moovTransfer(SEPT_TRANSFER, 'completed', 9900), [T(1)]: moovTransfer(T(1), 'completed', 2500) });
+    const plan = await run(db, moov, { phase: 'plan' });
+    const before = structuredClone(db.state);
+    const result = await run(db, moov, { phase: 'apply', approval_statement: APPROVAL, manifest_sha256: plan.manifest_sha256, transfer_ids: plan.transfer_ids });
+    assert.equal(result.ok, false);
+    assert.equal(result.error, 'catch_up_apply_exception');
+    assert.equal(result.failure.sqlstate, '42883');
+    assert.equal(result.failure.rolled_back, true);
+    assert.equal(result.attempted, 1);
+    assert.deepEqual(result.applied, []);
+    assert.deepEqual(db.state, before);
+    assert.deepEqual(db.writes, []);
+  });
+});
+
+test('the production failure modes, modeled: as the platform owner the settlement code alone leaves the fee leg and its event row is refused outside the webhook apply context (the transaction aborts)', async () => {
+  const { applyCollectionV2ProviderCompletion } = await import('../functions/api/tenant-collection-v2-settlement.mjs');
+  const db = fakeDatabase(septemberRows());
+  const client = db.newClient();
+  await client.query('BEGIN');
+  await client.query("SELECT set_config('request.app_user_id', $1, true)", [OWNER]);
+  const payload = { type: 'transfer.updated', accountID: null, data: { ...moovTransfer(SEPT_TRANSFER, 'completed', 9900), transferID: SEPT_TRANSFER } };
+  const outcome = await applyCollectionV2ProviderCompletion(client, payload, { dryRun: false });
+  // The leg stays submitted (no row for the owner's UPDATE), so the obligation is only 'submitted', and the event INSERT
+  // was refused: the transaction is aborted and the next statement fails.
+  assert.equal(outcome.occurrence?.status, 'submitted');
+  assert.equal(outcome.event.written, false);
+  await assert.rejects(client.query(READ_LEGS_SQL, ['production', SEPT_TRANSFER]), (e) => e.code === '25P02');
+  await client.query('ROLLBACK');
+  assert.equal(db.state.legs[0].status, 'submitted');
+  assert.equal(db.state.obligations[0].status, 'due');
 });

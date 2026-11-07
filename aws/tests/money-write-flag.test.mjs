@@ -147,9 +147,12 @@ test('request.money_write is a new name: no other server GUC or SQL file uses it
   const SQL136 = '136_money_write_restrictive_policies.sql';
   // SQL 145's DEFINER collection-leg writer (RLS does not apply to it) calls SQL 136's gate function, and only that.
   const SQL145 = '145_platform_owner_billing_collection_leg.sql';
+  // SQL 146's header comment names SQL 136's gate to explain the incident; its code names neither the gate nor the GUC
+  // (its DEFINER functions gate on SQL 91's webhook apply context instead).
+  const SQL146 = '146_moov_status_catch_up_writes.sql';
   for (const dir of ['aws/workflows/sql', 'aws/rls/sql', 'aws/financial/sql']) {
     for (const name of fs.readdirSync(path.join(ROOT, dir))) {
-      if (dir === 'aws/workflows/sql' && (name === SQL136 || name === SQL145)) continue;
+      if (dir === 'aws/workflows/sql' && (name === SQL136 || name === SQL145 || name === SQL146)) continue;
       assert.equal(fs.readFileSync(path.join(ROOT, dir, name), 'utf8').includes('money_write'), false, `${dir}/${name}`);
     }
   }
@@ -157,6 +160,9 @@ test('request.money_write is a new name: no other server GUC or SQL file uses it
   assert.deepEqual([...sql145.matchAll(/[a-z_.]*money_write[a-z_]*(?:\(\))?/g)].map((m) => m[0]),
     ['public.aws_money_write_allowed()', 'public.aws_money_write_allowed()', 'public.aws_money_write_allowed()']);
   assert.doesNotMatch(sql145, /request\.money_write/);
+  const sql146 = fs.readFileSync(path.join(ROOT, 'aws/workflows/sql', SQL146), 'utf8');
+  assert.match(sql146, /^--[^\n]*public\.aws_money_write_allowed\(\)/m);
+  assert.doesNotMatch(sql146.replace(/--[^\n]*/g, ''), /money_write/);
   const sql136 = fs.readFileSync(path.join(ROOT, 'aws/workflows/sql', SQL136), 'utf8').replace(/--[^\n]*/g, '');
   assert.match(sql136, /current_setting\('request\.money_write', true\) = '1'/);
   assert.doesNotMatch(sql136, /set_config\(\s*'request\.money_write'/);

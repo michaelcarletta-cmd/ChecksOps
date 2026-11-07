@@ -1,0 +1,65 @@
+{
+  "id": "sql146-moov-status-catch-up-writes-production-apply",
+  "migration": "sql146",
+  "authorization": "pending",
+  "execute": false,
+  "target_environment": "production",
+  "target_component": "production-sql",
+  "deployment_type": "sql-apply",
+  "filename": "aws/workflows/sql/146_moov_status_catch_up_writes.sql",
+  "migration_id": "146_moov_status_catch_up_writes",
+  "staging_pin_commit": "9229c8f9e1413d43114c5a6879e8f628d6f95c53",
+  "source_sha256": "327ee73d4ce01a4b2050c98accb439588fcddb20ed2d645ca62922e13431bc8c",
+  "function_identities": [
+    "public.aws_moov_catch_up_lock_rows(text, text, uuid[])",
+    "public.aws_moov_apply_collection_leg_status(text, text, bigint, text, text, text, timestamp with time zone)"
+  ],
+  "expected_live_definition_sha256": null,
+  "intended_replacement_sha256": "ef55e1feace25188bff4890393be472deac6cdfe64e06951e53279f12641488b",
+  "authorization_phrase": "APPLY_MOOV_STATUS_CATCH_UP_WRITES",
+  "predecessors": [],
+  "order_note": "No predecessor: SQL 146 creates two new SECURITY DEFINER functions, aws_moov_catch_up_lock_rows(...) and aws_moov_apply_collection_leg_status(...), on the payment transfer and fee obligation schema the AWS databases already have (payment_transfers with id, tenant_id, provider, environment, provider_transfer_id, provider_status, status, leg_role, amount_cents, failure_reason, provider_metadata, completed_at and updated_at; tenant_maintenance_payments with id and status), the helpers is_platform_owner() and auth.uid(), SQL 91's aws_moov_webhook_apply_active() (SQL 91 applied in production) and role checksops; a read-only production inspect confirms them. The applying login must reach both relations as the functions' owner past RLS (definer_can_write_relations: the table owner without FORCE ROW LEVEL SECURITY, or a superuser or BYPASSRLS): a DEFINER lock or update filtered by RLS would find no row, exactly as the catch-up's own statements do today. Expected pre-state in both environments: both functions absent (release sql146 v1, derived: 1ef789645da5ce865cbb095bea1eff6775a4bedc87251e8152f41a771e659c40). Where they already exist (a re-run) they must be owned by the applying login (functions_owned_by_login), keep their jsonb result (function_results_match) and hold no EXECUTE grant other than checksops and the owner, which the file keeps, and PUBLIC, anon, authenticated and service_role, which it revokes (function_acl_replaceable). The ACL after the apply is checksops and the owner. The API change that calls them (aws/functions/api/providers/moov-status-catch-up.mjs) needs the guarded Lambda path after this pin is applied in that environment; until then (and if the API is deployed first) the catch-up apply refuses each transfer and rolls it back, as today. No API, Lambda or SPA change is part of this pin. Adds no trigger.",
+  "admin_login": "checksops_admin",
+  "rds_identifier": "checksops-production",
+  "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
+  "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
+  "tooling": {
+    "status": "built",
+    "production_tool": "scripts/deployment-guard/sql146-moov-status-catch-up-writes-production-apply.mjs",
+    "production_lib": "scripts/deployment-guard/lib/release-sql-production-apply.mjs",
+    "staging_executor_handler": "aws/write-path/guarded-sql-executor/index.mjs handleReleaseSqlMigration",
+    "staging_workflow_choice": "sql146-moov-status-catch-up-writes",
+    "one_shot_migration": "sql146",
+    "fingerprint_engine": "scripts/deployment-guard/lib/release-sql-state.mjs",
+    "runbook": "ops/production-sql-146-apply.md",
+    "tests": [
+      "aws/tests/release-sql146-executor.test.mjs",
+      "aws/tests/release-sql146-production-apply.test.mjs",
+      "aws/tests/release-sql90-97-executor.test.mjs",
+      "aws/tests/release-sql90-97-production-apply.test.mjs",
+      "aws/tests/sql146-moov-status-catch-up-writes-pg.test.mjs"
+    ],
+    "note": "Guarded tooling for SQL 146: sql146-moov-status-catch-up-writes-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql146-moov-status-catch-up-writes); production-sql-one-shot.mjs --migration sql146. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): the two new functions with the file's bodies and attributes and EXECUTE for checksops and the owner. The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
+  },
+  "production_inspect": {
+    "status": "pending",
+    "date": null,
+    "ssm_command_id": null,
+    "source_commit": null,
+    "read_only": true,
+    "connected_as": "checksops_admin",
+    "live_definition_sha256": null,
+    "apply_preconditions_met": null,
+    "precondition_failures": null,
+    "note": "Pending: no release-engine production inspect has been run for SQL 146 yet. Expected release-engine fingerprint of the pre-state under sql146: 1ef789645da5ce865cbb095bea1eff6775a4bedc87251e8152f41a771e659c40 (both functions absent; derived by aws/tests/release-sql146-executor.test.mjs). Record the one-shot --phase inspect's date, SSM command id, source commit, live_definition_sha256, prerequisites_missing, release_sql_inspect.functions, release_sql_inspect.function_acl, release_sql_inspect.definer_writes (both relations must read ok true), precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. Stop if prerequisites_missing is not [] or precondition_failures is not [] (prerequisites_present, definer_can_write_relations; on a re-run also functions_owned_by_login, function_results_match, function_acl_replaceable): that needs its own reviewed change."
+  },
+  "intended_post_state": {
+    "fingerprint": "ef55e1feace25188bff4890393be472deac6cdfe64e06951e53279f12641488b",
+    "note": "aws_moov_catch_up_lock_rows(text, text, uuid[]) and aws_moov_apply_collection_leg_status(text, text, bigint, text, text, text, timestamp with time zone), owned by checksops_admin, plpgsql, VOLATILE, SECURITY DEFINER, search_path public, pg_temp, RETURNS jsonb, EXECUTE for checksops and the owner (PUBLIC, anon, authenticated and service_role revoked). Both only in the Moov webhook apply context (aws_moov_webhook_apply_active(); 42501 otherwise). The lock: only for the platform owner (auth.uid() and is_platform_owner(); 42501 moov_catch_up_forbidden), environment production or sandbox, a transfer id, at most 50 obligation ids (22023); locks the transfer's payment_transfers rows (provider moov, that environment) and the named tenant_maintenance_payments rows FOR UPDATE in id order and returns their statuses; writes nothing. The leg writer: with a user only the platform owner (42501 moov_collection_leg_forbidden), status settled, failed or returned and an amount > 0 (22023); the one payment_transfers row of that transfer id and environment, FOR UPDATE; unknown_transfer, not_owned (a SQL 109 leg or not a tenant-collection-v2 leg) and amount_mismatch write nothing; otherwise never backwards (applied / unchanged / stale), and on applied applyBillingProviderEvent's leg UPDATE (status, provider_status, completed_at for settled, failure_reason for failed / returned, updated_at). No other function, table, column, policy, RLS setting, grant, trigger or row change. The fingerprint is releaseIntendedHash('sql146', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): ef55e1feace25188bff4890393be472deac6cdfe64e06951e53279f12641488b."
+  },
+  "staging_acceptance": {
+    "ok": false,
+    "reference": null,
+    "basis": "Pending: record the guarded staging SQL executor read-live and the staging apply of SQL 146 (choice sql146-moov-status-catch-up-writes) here in the reviewed change that sets execute true. The behavior is covered on PostgreSQL 16 by aws/tests/sql146-moov-status-catch-up-writes-pg.test.mjs. Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+  }
+}

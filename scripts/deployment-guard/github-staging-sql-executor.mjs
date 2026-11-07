@@ -152,6 +152,7 @@ export const MIGRATIONS = Object.freeze({
   'sql143-mortgage-companies-member-delete-unused': RELEASE_2026_10_17_PENDING_SQL_PINS.sql143,
   'sql144-tenant-incoming-transfers': RELEASE_2026_10_17_PENDING_SQL_PINS.sql144,
   'sql145-platform-owner-billing-collection-leg': RELEASE_2026_10_17_PENDING_SQL_PINS.sql145,
+  'sql146-moov-status-catch-up-writes': RELEASE_2026_10_17_PENDING_SQL_PINS.sql146,
 });
 
 const LAMBDA_CODE_SHA_RE = /^[A-Za-z0-9+/]{43}=$/;

@@ -3325,6 +3325,33 @@ export const AUTHORIZED_SQL145_PLATFORM_OWNER_BILLING_COLLECTION_LEG = Object.fr
   ]),
 });
 
+// Moov status catch-up writes staging pin: SQL 146 (owner 2026-11-07: "build the catch-up update fix"). The catch-up
+// apply runs as the platform owner, who is not a member of the tenants; payment_transfers' UPDATE policies are
+// membership-only since SQL 90 and apply to SELECT ... FOR UPDATE, so its lock found no row (production run
+// 42395949680, catch_up_state_changed_since_plan) and a fee leg's UPDATE finds none either. The new SECURITY DEFINER
+// public.aws_moov_catch_up_lock_rows(...) and public.aws_moov_apply_collection_leg_status(...) lock the rows and write
+// one tenant-collection-v2 leg's Moov status, only for the platform owner (the leg writer also with no user) in the
+// Moov webhook apply context; EXECUTE for checksops and the owner. No predecessor (SQL 91's
+// aws_moov_webhook_apply_active() is a prerequisite). Pending until a reviewed pin change records a staging read-live
+// (expected: both functions absent, everything else in place).
+export const AUTHORIZED_SQL146_MOOV_STATUS_CATCH_UP_WRITES = Object.freeze({
+  key: 'sql146',
+  filename: 'aws/workflows/sql/146_moov_status_catch_up_writes.sql',
+  migration_id: '146_moov_status_catch_up_writes',
+  // The commit that last authored the file bytes.
+  commit: '9229c8f9e1413d43114c5a6879e8f628d6f95c53',
+  source_sha256: '327ee73d4ce01a4b2050c98accb439588fcddb20ed2d645ca62922e13431bc8c',
+  authorization: 'pending',
+  execute: false,
+  expected_live_definition_sha256: null,
+  // Code-derived: releaseIntendedHash('sql146', file bytes) (release-sql-state.mjs); re-derived by the tests.
+  intended_replacement_sha256: 'ef55e1feace25188bff4890393be472deac6cdfe64e06951e53279f12641488b',
+  function_identities: Object.freeze([
+    'public.aws_moov_catch_up_lock_rows(text, text, uuid[])',
+    'public.aws_moov_apply_collection_leg_status(text, text, bigint, text, text, text, timestamp with time zone)',
+  ]),
+});
+
 export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql90: AUTHORIZED_SQL90_USERS_ONLY_TENANT_ROLES,
   sql91: AUTHORIZED_SQL91_MOOV_ONBOARDING,
@@ -3381,6 +3408,7 @@ export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql143: AUTHORIZED_SQL143_MORTGAGE_COMPANIES_MEMBER_DELETE_UNUSED,
   sql144: AUTHORIZED_SQL144_TENANT_INCOMING_TRANSFERS,
   sql145: AUTHORIZED_SQL145_PLATFORM_OWNER_BILLING_COLLECTION_LEG,
+  sql146: AUTHORIZED_SQL146_MOOV_STATUS_CATCH_UP_WRITES,
 });
 
 // The fee collection pin under its earlier map name (the same object as the release map's sql98).
@@ -3396,7 +3424,7 @@ export function isSql30TenantDocumentsDocType(input = {}) {
   return pinIdentifiersMatch(input, AUTHORIZED_SQL30_TENANT_DOCUMENTS_DOC_TYPE);
 }
 
-/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql145) an input names, or null. */
+/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql146) an input names, or null. */
 export function releaseSqlMigrationKey(input = {}) {
   return Object.keys(RELEASE_2026_10_17_PENDING_SQL_PINS)
     .find((key) => pinIdentifiersMatch(input, RELEASE_2026_10_17_PENDING_SQL_PINS[key])) || null;

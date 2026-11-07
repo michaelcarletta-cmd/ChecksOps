@@ -310,6 +310,21 @@ const moovWebhookPre = (plan) => { for (const [name, pre] of Object.entries(MOOV
 // Moov status catch-up (2026-11-07): planning manifest; the scheduled.mjs REPLACE was applied 2026-11-07 (production
 // run 42370751130, VERIFIED) and its row names the catch-up applied record (the catch-up test checks it).
 const MOOV_STATUS_CATCH_UP_REL = 'aws/tests/fixtures/production-moov-status-catch-up-manifest-2026-11-07.json';
+// Moov status catch-up update fix (SQL 146, owner 2026-11-07 "build the catch-up update fix", planning only): the catch-up
+// row moved on from the ADD production run 42370581114 applied (its applied record) to a REPLACE of main's bytes, held for
+// SQL 146 (its own test below). The catch-up manifests keep what they recorded.
+const CATCH_UP_MEMBER = 'providers/moov-status-catch-up.mjs';
+const CATCH_UP_UPDATE_FIX_REL = 'aws/tests/fixtures/production-moov-status-catch-up-update-fix-manifest-2026-11-07.json';
+const CATCH_UP_APPLIED_REL = 'aws/tests/fixtures/production-moov-status-catch-up-applied-manifest-2026-11-07.json';
+const CATCH_UP_APPLIED_BYTES = JSON.parse(fs.readFileSync(path.join(ROOT, CATCH_UP_APPLIED_REL), 'utf8')).members[CATCH_UP_MEMBER].accepted_sha256;
+const SQL146_FILE = 'aws/workflows/sql/146_moov_status_catch_up_writes.sql';
+// The plan as it stood before the update fix: the catch-up row the ADD (replayed with main's bytes, as other replays are).
+const catchUpAddPre = (plan) => {
+  plan.members[CATCH_UP_MEMBER] = {
+    operation: 'add', accepted_sha256: sha(`aws/functions/api/${CATCH_UP_MEMBER}`), expected_live_sha256: null, sql_before: null, manifest: MOOV_STATUS_CATCH_UP_REL,
+  };
+  return plan;
+};
 // The fee pull savepoint REPLACEs (production runs 42302929689, 42303279340, 2026-11-06), the incoming transfers
 // data.mjs REPLACE (production run 42323230515, 2026-11-07), the Moov webhook receipt key providers/webhooks.mjs
 // REPLACE (production run 42330359623, 2026-11-07) and the Moov status catch-up scheduled.mjs REPLACE (production run
@@ -379,6 +394,14 @@ const withSql145 = (member, deps) => {
   if (PLAN.members[member]?.sql_before !== SQL145_FILE) return deps;
   const plan = structuredClone(deps.plan || PLAN);
   plan.sql_prerequisites[SQL145_FILE] = { verified_live: true, evidence: 'test' };
+  return { ...deps, plan };
+};
+// providers/moov-status-catch-up.mjs waits for SQL 146 (the catch-up update fix, its own test below), not applied
+// anywhere: apply replays run on a plan copy that records it live.
+const withSql146 = (member, deps) => {
+  if (PLAN.members[member]?.sql_before !== SQL146_FILE) return deps;
+  const plan = structuredClone(deps.plan || PLAN);
+  plan.sql_prerequisites[SQL146_FILE] = { verified_live: true, evidence: 'test' };
   return { ...deps, plan };
 };
 // The plan before SQL 98 was recorded verified live (2026-10-19): the held-member refusals start from it.
@@ -6809,7 +6832,10 @@ test('Moov status catch-up (2026-11-07): ADD providers/moov-status-catch-up.mjs,
   // not one of that section's changed members, and main's scheduled.mjs at 1364af787 is these bytes.
   const SCHEDULED_LIVE = '458ba42455afe324ba4e8169bf23cdbd15498b180ada279286a8a92be6193791';
   const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, REL), 'utf8'));
-  const accepted = Object.fromEntries([ADD, SCHEDULED].map((m) => [m, sha(`aws/functions/api/${m}`)]));
+  // The catch-up row has since moved on to the update fix REPLACE (SQL 146, its own test below): the ADD's accepted bytes
+  // are the applied record's, and main has moved on from them.
+  const accepted = { [ADD]: CATCH_UP_APPLIED_BYTES, [SCHEDULED]: sha(`aws/functions/api/${SCHEDULED}`) };
+  assert.notEqual(sha(`aws/functions/api/${ADD}`), accepted[ADD]);
   assert.equal(manifest.workstream_id, 'moov-status-catch-up');
   assert.equal(manifest.deploy_authorized, false);
   assert.match(manifest.authorization, /^Pending owner review \(2026-11-07\)\. Planning only/);
@@ -6860,12 +6886,19 @@ test('Moov status catch-up (2026-11-07): ADD providers/moov-status-catch-up.mjs,
     assert.ok(applied.notes.includes(evidence), evidence);
   }
   for (const member of [ADD, SCHEDULED]) {
-    assert.deepEqual(PLAN.members[member], {
-      operation: member === ADD ? 'add' : 'replace',
+    // The ADD row moved on to the update fix REPLACE: the applied bytes expected live, held for SQL 146, its own manifest.
+    assert.deepEqual(PLAN.members[member], member === ADD ? {
+      operation: 'replace',
+      accepted_sha256: sha(`aws/functions/api/${ADD}`),
+      expected_live_sha256: accepted[ADD],
+      sql_before: SQL146_FILE,
+      manifest: CATCH_UP_UPDATE_FIX_REL,
+    } : {
+      operation: 'replace',
       accepted_sha256: accepted[member],
-      expected_live_sha256: member === ADD ? null : accepted[member],
+      expected_live_sha256: accepted[member],
       sql_before: null,
-      manifest: member === ADD ? REL : APPLIED_REL,
+      manifest: APPLIED_REL,
     }, member);
     assert.equal(resolvePlannedMember(member, { root: ROOT, plan: PLAN }).ok, true, member);
     assert.equal(approvalPhrase(member), `DEPLOY ${member} TO PRODUCTION`);
@@ -6904,15 +6937,17 @@ test('Moov status catch-up (2026-11-07): ADD providers/moov-status-catch-up.mjs,
   // accepted bytes (re-inspect run 42370641735), other bytes present a collision. scheduled.mjs was READY on 458ba424
   // before its apply (inspect run 42370698741, replayed on the pre-apply plan) and is ALREADY_ACCEPTED on main's
   // (re-inspect run 42370821197); 458ba424, 4b06d4cd (the row's old expectation) or anything else is a reconciliation stop.
+  // Replayed on the plan as it stood before the update fix (the ADD row, main's bytes).
+  const addPlan = catchUpAddPre(structuredClone(PLAN));
   const inspect = (member) => ({ ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: member });
-  const absent = await run(inspect(ADD), { root: ROOT, inspectLive: liveFor(ADD) });
+  const absent = await run(inspect(ADD), { root: ROOT, plan: addPlan, inspectLive: liveFor(ADD, { plan: addPlan }) });
   assert.equal(absent.state, 'READY');
   assert.equal(absent.mutation, false);
-  const added = await run(inspect(ADD), { root: ROOT, inspectLive: liveFor(ADD, { sha256: accepted[ADD] }) });
+  const added = await run(inspect(ADD), { root: ROOT, plan: addPlan, inspectLive: liveFor(ADD, { plan: addPlan, sha256: addPlan.members[ADD].accepted_sha256 }) });
   assert.equal(added.state, 'ALREADY_ACCEPTED');
   assert.equal(added.mutation, false);
   await assert.rejects(
-    run(inspect(ADD), { root: ROOT, inspectLive: liveFor(ADD, { sha256: 'c'.repeat(64) }) }),
+    run(inspect(ADD), { root: ROOT, plan: addPlan, inspectLive: liveFor(ADD, { plan: addPlan, sha256: 'c'.repeat(64) }) }),
     (error) => error.code === CODES.DEPLOYMENT_COLLISION,
   );
   const ready = await run(inspect(SCHEDULED), { root: ROOT, plan: before, inspectLive: liveFor(SCHEDULED, { plan: before, sha256: SCHEDULED_LIVE, extra: [ADD] }) });
@@ -6929,14 +6964,84 @@ test('Moov status catch-up (2026-11-07): ADD providers/moov-status-catch-up.mjs,
   // Applies replay in order (scheduled.mjs on the pre-apply plan, through the shared replay helper); scheduled.mjs is
   // refused while the added module is not live yet.
   for (const member of [ADD, SCHEDULED]) {
-    const { deps, calls } = applyDeps(member);
+    const { deps, calls } = applyDeps(member, member === ADD ? { plan: addPlan } : {});
     const result = await run(applyEnv(member), deps);
     assert.equal(result.mutation, false, member);
-    const op = PLAN.members[member].operation;
+    const op = (member === ADD ? addPlan : PLAN).members[member].operation;
     assert.deepEqual(calls.receipt.owned_member_ops, { replace: op === 'replace' ? [member] : [], add: op === 'add' ? [member] : [] }, member);
   }
   await assert.rejects(
     run(applyEnv(SCHEDULED), applyDeps(SCHEDULED, { pending: [ADD] }).deps),
     (error) => error.code === CODES.DEPLOYMENT_COLLISION,
   );
+});
+
+test('Moov status catch-up update fix (SQL 146, 2026-11-07): providers/moov-status-catch-up.mjs REPLACE from the bytes production run 42370581114 applied, held for SQL 146, planning only', async () => {
+  const MEMBER = CATCH_UP_MEMBER;
+  const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, CATCH_UP_UPDATE_FIX_REL), 'utf8'));
+  const accepted = sha(`aws/functions/api/${MEMBER}`);
+  assert.equal(manifest.workstream_id, 'moov-status-catch-up-update-fix');
+  assert.equal(manifest.deploy_authorized, false);
+  assert.match(manifest.authorization, /^Pending owner review \(2026-11-07\)\. Planning only/);
+  assert.equal(manifest.live_lambda, FUNCTION_NAME);
+  // The pre-state is the ADD's accepted bytes, applied 2026-11-07 (production run 42370581114, its applied record); both
+  // catch-up manifests keep what they recorded.
+  const applied = JSON.parse(fs.readFileSync(path.join(ROOT, CATCH_UP_APPLIED_REL), 'utf8')).members[MEMBER];
+  assert.deepEqual(applied, { live_sha256: CATCH_UP_APPLIED_BYTES, accepted_sha256: CATCH_UP_APPLIED_BYTES, operation: 'add', previous_manifest: MOOV_STATUS_CATCH_UP_REL });
+  assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, MOOV_STATUS_CATCH_UP_REL), 'utf8')).members[MEMBER].accepted_sha256, CATCH_UP_APPLIED_BYTES);
+  assert.equal(CATCH_UP_APPLIED_BYTES, '502995f6b75266be1ab304e4633c898d30a2679c9cd6de0dfe71cc64e4dabc57');
+  assert.notEqual(accepted, CATCH_UP_APPLIED_BYTES);
+  assert.deepEqual(manifest.members, { [MEMBER]: { live_sha256: CATCH_UP_APPLIED_BYTES, accepted_sha256: accepted, operation: 'replace', previous_manifest: CATCH_UP_APPLIED_REL } });
+  assert.deepEqual(PLAN.members[MEMBER], {
+    operation: 'replace',
+    accepted_sha256: accepted,
+    expected_live_sha256: CATCH_UP_APPLIED_BYTES,
+    sql_before: SQL146_FILE,
+    manifest: CATCH_UP_UPDATE_FIX_REL,
+  });
+  // SQL 146 is not applied anywhere: recorded not verified live, so an apply refuses until its record marks it live.
+  assert.deepEqual(PLAN.sql_prerequisites[SQL146_FILE], { verified_live: false, evidence: null });
+  assert.ok(fs.existsSync(path.join(ROOT, SQL146_FILE)));
+  const evidence = `REPLACE ${MEMBER} ${CATCH_UP_APPLIED_BYTES.slice(0, 8)} -> ${accepted.slice(0, 8)}`;
+  assert.ok(manifest.notes.includes(evidence), evidence);
+  assert.ok(PLAN.notes.includes(evidence), evidence);
+  for (const text of ['build the catch-up update fix', '42395949680', 'catch_up_state_changed_since_plan', 'aws_moov_catch_up_lock_rows',
+    'aws_moov_apply_collection_leg_status', '42370581114', 'Planning only']) {
+    assert.ok(manifest.notes.includes(text), text);
+    assert.ok(PLAN.notes.includes(text), text);
+  }
+  for (const text of ['42395703811', '236f3dd28e0e108219f75e566acbac4bb60a80ddfb8e673b1df0c6422c8b2331', 'FOR UPDATE']) {
+    assert.ok(manifest.notes.includes(text), text);
+  }
+  // No new import: the order is unchanged (still after the members it imports and just before scheduled.mjs).
+  const source = fs.readFileSync(path.join(API, MEMBER), 'utf8');
+  assert.deepEqual(localImports(source, MEMBER).sort(), [
+    'db-health.mjs', 'provider-flags.mjs', 'provider-secrets.mjs', 'providers/moov-transfer-webhook.mjs', 'providers/moov-webhook-confirm.mjs',
+    'secrets.mjs', 'tenant-billing-destination.mjs', 'tenant-collection-v2-settlement.mjs', 'tenant-collection-v2.mjs',
+  ]);
+  assert.equal(PLAN.order.indexOf(MEMBER) + 1, PLAN.order.indexOf('scheduled.mjs'));
+  assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
+  assert.match(source, /SELECT public\.aws_moov_catch_up_lock_rows\(\$1, \$2, \$3::uuid\[\]\) AS locked/);
+  assert.match(source, /SELECT public\.aws_moov_apply_collection_leg_status\(/);
+  assert.doesNotMatch(source, /FOR UPDATE`/);
+  // Inspect: READY on the applied ADD bytes, ALREADY_ACCEPTED on main's, a reconciliation stop for anything else.
+  const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
+  const ready = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: CATCH_UP_APPLIED_BYTES }) });
+  assert.equal(ready.state, 'READY');
+  assert.equal(ready.mutation, false);
+  assert.equal((await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: accepted }) })).state, 'ALREADY_ACCEPTED');
+  await assert.rejects(
+    run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: 'c'.repeat(64) }) }),
+    (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+  );
+  // Apply: refused on the committed plan until SQL 146 is recorded verified live; a plan copy that records it replays
+  // (dry: no mutation), one receipt for this member.
+  await assert.rejects(
+    run(applyEnv(MEMBER), applyDeps(MEMBER).deps),
+    (error) => error.code === CODES.PRODUCTION_APPROVAL_REQUIRED && error.details?.sql_before === SQL146_FILE,
+  );
+  const { deps, calls } = applyDeps(MEMBER);
+  const replay = await run(applyEnv(MEMBER), withSql146(MEMBER, deps));
+  assert.equal(replay.mutation, false);
+  assert.deepEqual(calls.receipt.owned_member_ops, { replace: [MEMBER], add: [] });
 });
