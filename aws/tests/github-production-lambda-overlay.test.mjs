@@ -107,10 +107,12 @@ const FEE_PULL_SAVEPOINTS_REL = 'aws/tests/fixtures/production-fee-pull-savepoin
 // name this record; the planning manifest keeps the pre-apply state.
 const FEE_PULL_SAVEPOINTS_APPLIED_REL = 'aws/tests/fixtures/production-fee-pull-savepoints-applied-manifest-2026-11-06.json';
 const FEE_PULL_SAVEPOINTS_MEMBERS = ['tenant-collection-v2.mjs', 'tenant-billing-engine.mjs'];
-// Fee leg API (SQL 145, 2026-11-07, planning only): the collection v2 row moved on again, from the fee pull savepoints
-// bytes (applied 2026-11-06, production run 42302929689) to main's bytes, held for SQL 145 (its own test below). The
-// fee pull savepoints manifests keep the bytes they recorded.
+// Fee leg API (SQL 145, 2026-11-07): the collection v2 row moved on again, from the fee pull savepoints bytes (applied
+// 2026-11-06, production run 42302929689) to main's bytes, held for SQL 145 (its own test below). The fee pull
+// savepoints manifests keep the bytes they recorded.
 const FEE_LEG_API_REL = 'aws/tests/fixtures/production-fee-leg-api-manifest-2026-11-07.json';
+// Applied 2026-11-07 (production run 42366401914, VERIFIED): the row expects main's bytes and names this record.
+const FEE_LEG_API_APPLIED_REL = 'aws/tests/fixtures/production-fee-leg-api-applied-manifest-2026-11-07.json';
 const FEE_LEG_MEMBER = 'tenant-collection-v2.mjs';
 const FEE_PULL_COLLECTION_BYTES = JSON.parse(fs.readFileSync(path.join(ROOT, FEE_PULL_SAVEPOINTS_REL), 'utf8')).members[FEE_LEG_MEMBER].accepted_sha256;
 const SQL145_FILE = 'aws/workflows/sql/145_platform_owner_billing_collection_leg.sql';
@@ -123,11 +125,13 @@ const assertMovedToMoneyWrite = (member, { live, previous }) => {
       live_sha256: live, accepted_sha256: recorded.accepted_sha256, operation: 'replace', previous_manifest: previous,
     }, member);
     assert.notEqual(recorded.accepted_sha256, live, member);
-    // Collection v2's row has since moved on to the fee leg REPLACE (SQL 145), which starts from the applied bytes.
+    // Collection v2's row has since moved on to the fee leg REPLACE (SQL 145), which started from the applied bytes
+    // and was applied 2026-11-07 (production run 42366401914): main's bytes expected live, naming its applied record.
     const feeLeg = member === FEE_LEG_MEMBER;
-    assert.equal(row.manifest, feeLeg ? FEE_LEG_API_REL : FEE_PULL_SAVEPOINTS_APPLIED_REL, member);
+    assert.equal(row.manifest, feeLeg ? FEE_LEG_API_APPLIED_REL : FEE_PULL_SAVEPOINTS_APPLIED_REL, member);
     assert.equal(row.accepted_sha256, sha(`aws/functions/api/${member}`), member);
-    assert.equal(row.expected_live_sha256, feeLeg ? FEE_PULL_COLLECTION_BYTES : row.accepted_sha256, member);
+    assert.equal(row.expected_live_sha256, row.accepted_sha256, member);
+    if (feeLeg) assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, FEE_LEG_API_REL), 'utf8')).members[member].live_sha256, FEE_PULL_COLLECTION_BYTES, member);
     assert.notEqual(row.accepted_sha256, recorded.accepted_sha256, member);
     return;
   }
@@ -6452,9 +6456,12 @@ test('Fee pull savepoints (production incident 2026-11-06): tenant-collection-v2
     assert.deepEqual(manifest.members[member], { live_sha256: pre, accepted_sha256: accepted, operation: 'replace', previous_manifest: MONEY_WRITE_FLAG_REL }, member);
     assert.deepEqual(applied.members[member], { live_sha256: accepted, accepted_sha256: accepted, operation: 'replace', previous_manifest: FEE_PULL_SAVEPOINTS_REL }, member);
     if (member === FEE_LEG_MEMBER) {
-      // The row has since moved on to the fee leg REPLACE (SQL 145): the applied bytes expected live, its own manifest.
-      assert.equal(PLAN.members[member].manifest, FEE_LEG_API_REL, member);
-      assert.equal(PLAN.members[member].expected_live_sha256, accepted, member);
+      // The row has since moved on to the fee leg REPLACE (SQL 145), which started from the applied bytes (its planning
+      // manifest's live bytes) and was applied 2026-11-07 (production run 42366401914): main's bytes expected live,
+      // naming the fee leg applied record.
+      assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, FEE_LEG_API_REL), 'utf8')).members[member].live_sha256, accepted, member);
+      assert.equal(PLAN.members[member].manifest, FEE_LEG_API_APPLIED_REL, member);
+      assert.equal(PLAN.members[member].expected_live_sha256, sha(`aws/functions/api/${member}`), member);
     } else {
       assert.deepEqual(PLAN.members[member], {
         operation: 'replace',
@@ -6584,9 +6591,10 @@ test('Incoming transfers API (SQL 144, 2026-11-07): data.mjs REPLACE from the lo
   }
 });
 
-test('Fee leg API (SQL 145, 2026-11-07): tenant-collection-v2.mjs REPLACE from the fee pull savepoints bytes, held for SQL 145, planning only', async () => {
+test('Fee leg API (SQL 145, 2026-11-07): tenant-collection-v2.mjs REPLACE from the fee pull savepoints bytes, held for SQL 145; production run 42366401914 applied it', async () => {
   const MEMBER = FEE_LEG_MEMBER;
   const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, FEE_LEG_API_REL), 'utf8'));
+  const applied = JSON.parse(fs.readFileSync(path.join(ROOT, FEE_LEG_API_APPLIED_REL), 'utf8'));
   const accepted = sha(`aws/functions/api/${MEMBER}`);
   assert.equal(manifest.workstream_id, 'fee-leg-api');
   assert.equal(manifest.deploy_authorized, false);
@@ -6600,13 +6608,33 @@ test('Fee leg API (SQL 145, 2026-11-07): tenant-collection-v2.mjs REPLACE from t
   assert.deepEqual(feePullApplied, { live_sha256: FEE_PULL_COLLECTION_BYTES, accepted_sha256: FEE_PULL_COLLECTION_BYTES, operation: 'replace', previous_manifest: FEE_PULL_SAVEPOINTS_REL });
   assert.notEqual(accepted, FEE_PULL_COLLECTION_BYTES);
   assert.deepEqual(manifest.members, { [MEMBER]: { live_sha256: FEE_PULL_COLLECTION_BYTES, accepted_sha256: accepted, operation: 'replace', previous_manifest: FEE_PULL_SAVEPOINTS_APPLIED_REL } });
+  // Applied 2026-11-07: the record keeps the run evidence; the row expects the applied bytes and names it (sql_before
+  // SQL 145 stays). The planning manifest and the fee pull savepoints records keep what they recorded.
+  assert.equal(applied.workstream_id, 'fee-leg-api-applied');
+  assert.equal(applied.deploy_authorized, false);
+  assert.match(applied.authorization, /^Record only \(2026-11-07\)/);
+  assert.equal(applied.live_lambda, FUNCTION_NAME);
+  assert.deepEqual(applied.members, { [MEMBER]: { live_sha256: accepted, accepted_sha256: accepted, operation: 'replace', previous_manifest: FEE_LEG_API_REL } });
+  assert.equal(FEE_PULL_COLLECTION_BYTES, '45a78f0e66acb4cbd94b991f530870362644068a3b0e3ced8e88530e37083592');
+  assert.equal(accepted, 'f22fd96b72551714b3ab3320290ffbac6ae87524c7c5df0daa7a54d243892fb0');
+  for (const runId of ['42366166239', '42366214743', '42366274627', '42366340686', '42366401914', '42366470388']) {
+    assert.match(applied.notes, new RegExp(`run ${runId}`), runId);
+    assert.match(PLAN.notes, new RegExp(runId), runId);
+  }
+  for (const evidence of ['"DEPLOY tenant-collection-v2.mjs TO PRODUCTION"', '"merge 1686 then DEPLOY tenant-collection-v2.mjs TO PRODUCTION"', '"build the fee leg fix"', 'job 128385278866', 'b5705836-d6b3-407a-b0aa-af2b201a7d03', 'cfea9832-29e2-4952-b58f-efddd195b980', 'jWDF00z34DTzkxE83oUJoFvVrwKyZS5ErjmIN2gG3Ks=', 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/42366214743', 'VERIFIED', 'ALREADY_ACCEPTED', '408abe705', `${FEE_PULL_COLLECTION_BYTES.slice(0, 8)} -> ${accepted.slice(0, 8)}`, 'production-fee-pull-savepoints-applied-manifest-2026-11-06.json keeps what it recorded', 'SQL 145']) {
+    assert.ok(applied.notes.includes(evidence), evidence);
+  }
+  assert.ok(PLAN.notes.includes('the tenant-collection-v2.mjs row expects the applied bytes and names the fee leg API applied record'));
   assert.deepEqual(PLAN.members[MEMBER], {
     operation: 'replace',
     accepted_sha256: accepted,
-    expected_live_sha256: FEE_PULL_COLLECTION_BYTES,
+    expected_live_sha256: accepted,
     sql_before: SQL145_FILE,
-    manifest: FEE_LEG_API_REL,
+    manifest: FEE_LEG_API_APPLIED_REL,
   });
+  // The plan as it stood before the apply (the fee pull savepoints bytes expected live, the planning manifest named).
+  const before = structuredClone(PLAN);
+  before.members[MEMBER] = { ...PLAN.members[MEMBER], expected_live_sha256: FEE_PULL_COLLECTION_BYTES, manifest: FEE_LEG_API_REL };
   // SQL 145 is recorded verified live in production (2026-11-07, the SQL 145 record change) from its retired pin: the
   // same file bytes the pin and the one-shot hashed. The gate the apply below is checked against is shown on a plan
   // copy where it is not yet recorded.
@@ -6651,13 +6679,14 @@ test('Fee leg API (SQL 145, 2026-11-07): tenant-collection-v2.mjs REPLACE from t
   assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
   assert.match(source, /SELECT \* FROM public\.aws_platform_owner_insert_billing_collection_leg\(/);
   assert.doesNotMatch(source, /INSERT INTO public\.payment_transfers/);
-  // Inspect: READY on the fee pull savepoints bytes, ALREADY_ACCEPTED on main's, a reconciliation stop for anything else.
+  // Inspect: before the apply, READY on the fee pull savepoints bytes; now ALREADY_ACCEPTED on main's, and the fee pull
+  // savepoints bytes, or anything else, a reconciliation stop.
   const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
-  const ready = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: FEE_PULL_COLLECTION_BYTES }) });
+  const ready = await run(inspect, { root: ROOT, plan: before, inspectLive: liveFor(MEMBER, { sha256: FEE_PULL_COLLECTION_BYTES, plan: before }) });
   assert.equal(ready.state, 'READY');
   assert.equal(ready.mutation, false);
   assert.equal((await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: accepted }) })).state, 'ALREADY_ACCEPTED');
-  for (const other of [MONEY_WRITE_FLAG.members[MEMBER].accepted_sha256, 'c'.repeat(64)]) {
+  for (const other of [FEE_PULL_COLLECTION_BYTES, MONEY_WRITE_FLAG.members[MEMBER].accepted_sha256, 'c'.repeat(64)]) {
     await assert.rejects(
       run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: other }) }),
       (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
