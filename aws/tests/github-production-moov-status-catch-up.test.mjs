@@ -91,28 +91,108 @@ function fakeInvoke({ plan = planAnswer(), apply = { ok: true, phase: 'apply', a
   return { calls, invoke };
 }
 
-test('the IAM permissions: lambda:InvokeFunction on checksops-production-prep-api and nothing else', () => {
+// An unqualified invoke (FunctionName, no Qualifier) runs $LATEST, and Lambda authorizes it against
+// the ':$LATEST'-qualified ARN: run 42383055459 was refused by the role's own NotResource deny when
+// both statements named only the unqualified ARN. These two strings, and nothing else.
+const INVOKE_RESOURCES = [FUNCTION_ARN, `${FUNCTION_ARN}:$LATEST`];
+
+test('the IAM permissions: lambda:InvokeFunction on checksops-production-prep-api (unqualified and :$LATEST) and nothing else', () => {
   const policy = JSON.parse(read(`${DIR}/permissions-policy.json`));
-  assert.equal(policy.Version, '2012-10-17');
-  const allows = policy.Statement.filter((s) => s.Effect === 'Allow');
-  assert.equal(allows.length, 1);
-  assert.equal(allows[0].Action, 'lambda:InvokeFunction');
-  assert.equal(allows[0].Resource, 'arn:aws:lambda:us-east-1:806168576068:function:checksops-production-prep-api');
-  assert.equal(allows[0].Resource, FUNCTION_ARN);
-  assert.equal(allows[0].Condition, undefined);
-  assert.equal(allows[0].NotAction, undefined);
-  assert.equal(allows[0].NotResource, undefined);
-  // Unqualified: no version, alias or wildcard.
-  assert.equal(/[*?]|:function:checksops-production-prep-api:/.test(JSON.stringify(allows)), false);
-  const denies = policy.Statement.filter((s) => s.Effect === 'Deny');
-  assert.deepEqual(denies.map((s) => s.Sid).sort(), ['NeverAnyOtherAction', 'NeverInvokeAnyOtherFunctionVersionOrAlias']);
-  const other = denies.find((s) => s.Sid === 'NeverAnyOtherAction');
-  assert.equal(other.NotAction, 'lambda:InvokeFunction');
-  assert.equal(other.Resource, '*');
-  const invokeElsewhere = denies.find((s) => s.Sid === 'NeverInvokeAnyOtherFunctionVersionOrAlias');
-  assert.equal(invokeElsewhere.Action, 'lambda:InvokeFunction');
-  assert.equal(invokeElsewhere.NotResource, FUNCTION_ARN);
-  assert.equal(policy.Statement.length, 3);
+  assert.deepEqual(INVOKE_RESOURCES, [
+    'arn:aws:lambda:us-east-1:806168576068:function:checksops-production-prep-api',
+    'arn:aws:lambda:us-east-1:806168576068:function:checksops-production-prep-api:$LATEST',
+  ]);
+  // The whole document: any added action, resource, statement, condition or key fails here.
+  assert.deepEqual(policy, {
+    Version: '2012-10-17',
+    Statement: [
+      { Sid: 'InvokeTheProductionApiLambdaOnly', Effect: 'Allow', Action: 'lambda:InvokeFunction', Resource: INVOKE_RESOURCES },
+      { Sid: 'NeverAnyOtherAction', Effect: 'Deny', NotAction: 'lambda:InvokeFunction', Resource: '*' },
+      { Sid: 'NeverInvokeAnyOtherFunctionVersionOrAlias', Effect: 'Deny', Action: 'lambda:InvokeFunction', NotResource: INVOKE_RESOURCES },
+    ],
+  });
+  // No wildcard in the invoke statements, and no qualifier other than $LATEST.
+  const invoke = policy.Statement.filter((s) => s.Sid !== 'NeverAnyOtherAction');
+  assert.equal(/[*?]/.test(JSON.stringify(invoke)), false);
+  const qualifiers = JSON.stringify(invoke).match(/:function:checksops-production-prep-api:[^"]*/g);
+  assert.deepEqual([...new Set(qualifiers)], [':function:checksops-production-prep-api:$LATEST']);
+});
+
+// A small IAM evaluator over the JSON documents: explicit deny wins, then an allow, else implicit
+// deny. A session policy can only narrow: the request needs an allow in both and no deny in either.
+// Matching is IAM's: case-sensitive resources, '*' and '?' wildcards, string or list values.
+function iamGlob(pattern, value, { ignoreCase = false } = {}) {
+  const re = new RegExp(`^${pattern.split('').map((c) => (c === '*' ? '.*' : c === '?' ? '.' : c.replace(/[.+^${}()|[\]\\]/g, '\\$&'))).join('')}$`, ignoreCase ? 'i' : '');
+  return re.test(value);
+}
+const asList = (value) => (value === undefined ? undefined : [].concat(value));
+function statementMatches(statement, { action, resource }) {
+  assert.equal(statement.Condition, undefined, 'the evaluator does not model conditions');
+  const actions = asList(statement.Action);
+  const notActions = asList(statement.NotAction);
+  const resources = asList(statement.Resource);
+  const notResources = asList(statement.NotResource);
+  const actionHit = actions
+    ? actions.some((a) => iamGlob(a, action, { ignoreCase: true }))
+    : !notActions.some((a) => iamGlob(a, action, { ignoreCase: true }));
+  const resourceHit = resources
+    ? resources.some((r) => iamGlob(r, resource))
+    : !notResources.some((r) => iamGlob(r, resource));
+  return actionHit && resourceHit;
+}
+function evaluatePolicy(policy, request) {
+  const hits = policy.Statement.filter((s) => statementMatches(s, request));
+  if (hits.some((s) => s.Effect === 'Deny')) return 'explicit_deny';
+  if (hits.some((s) => s.Effect === 'Allow')) return 'allow';
+  return 'implicit_deny';
+}
+function evaluateSession(identity, session, request) {
+  const a = evaluatePolicy(identity, request);
+  const b = evaluatePolicy(session, request);
+  if (a === 'explicit_deny' || b === 'explicit_deny') return 'explicit_deny';
+  return a === 'allow' && b === 'allow' ? 'allow' : 'implicit_deny';
+}
+
+test('IAM evaluation: the role and the workflow session allow the unqualified and the :$LATEST invoke, and nothing else', () => {
+  const identity = JSON.parse(read(`${DIR}/permissions-policy.json`));
+  const sessions = STEPS.filter((row) => String(row.uses || '').startsWith('aws-actions/configure-aws-credentials@'));
+  const session = JSON.parse(sessions[0].with['inline-session-policy']);
+  const invoke = (resource) => ({ action: 'lambda:InvokeFunction', resource });
+
+  // The evaluator reproduces run 42383055459 on the policy as first created.
+  const firstVersion = structuredClone(identity);
+  firstVersion.Statement[0].Resource = FUNCTION_ARN;
+  firstVersion.Statement[2].NotResource = FUNCTION_ARN;
+  assert.equal(evaluatePolicy(firstVersion, invoke(`${FUNCTION_ARN}:$LATEST`)), 'explicit_deny');
+  assert.equal(evaluatePolicy(firstVersion, invoke(FUNCTION_ARN)), 'allow');
+
+  for (const resource of [FUNCTION_ARN, `${FUNCTION_ARN}:$LATEST`]) {
+    assert.equal(evaluatePolicy(identity, invoke(resource)), 'allow', resource);
+    assert.equal(evaluatePolicy(session, invoke(resource)), 'allow', resource);
+    assert.equal(evaluateSession(identity, session, invoke(resource)), 'allow', resource);
+  }
+  for (const resource of [
+    `${FUNCTION_ARN}:1`,
+    `${FUNCTION_ARN}:live`,
+    `${FUNCTION_ARN}:$latest`,
+    `${FUNCTION_ARN}:$LATEST:1`,
+    `${FUNCTION_ARN}-other`,
+    `${FUNCTION_ARN}-other:$LATEST`,
+    'arn:aws:lambda:us-east-1:806168576068:function:checksops-staging-prep-api',
+    'arn:aws:lambda:us-east-1:806168576068:function:checksops-staging-prep-api:$LATEST',
+    'arn:aws:lambda:us-west-2:806168576068:function:checksops-production-prep-api',
+    'arn:aws:lambda:us-east-1:111111111111:function:checksops-production-prep-api:$LATEST',
+  ]) {
+    assert.equal(evaluatePolicy(identity, invoke(resource)), 'explicit_deny', resource);
+    assert.equal(evaluateSession(identity, session, invoke(resource)), 'explicit_deny', resource);
+    assert.equal(evaluatePolicy(session, invoke(resource)), 'implicit_deny', resource);
+  }
+  for (const action of ['lambda:UpdateFunctionCode', 'lambda:UpdateFunctionConfiguration', 'lambda:GetFunction', 'lambda:InvokeAsync', 'lambda:InvokeFunctionUrl', 'iam:PassRole', 's3:GetObject']) {
+    for (const resource of [FUNCTION_ARN, `${FUNCTION_ARN}:$LATEST`, '*']) {
+      assert.equal(evaluatePolicy(identity, { action, resource }), 'explicit_deny', `${action} ${resource}`);
+      assert.equal(evaluatePolicy(session, { action, resource }), 'implicit_deny', `${action} ${resource}`);
+    }
+  }
 });
 
 test('the IAM trust: GitHub OIDC, this repository, main, the production environment and only this workflow file', () => {
@@ -169,7 +249,7 @@ test('the workflow: dispatch only, main only, production environment, own concur
   assert.equal(sessions[0].with['role-to-assume'], `\${{ vars.${ROLE_ARN_VARIABLE} }}`);
   assert.equal(sessions[0].with['role-session-name'], 'checksops-production-moov-status-catch-up-${{ github.run_id }}');
   const session = JSON.parse(sessions[0].with['inline-session-policy']);
-  assert.deepEqual(session.Statement, [{ Effect: 'Allow', Action: ['lambda:InvokeFunction'], Resource: FUNCTION_ARN }]);
+  assert.deepEqual(session, { Version: '2012-10-17', Statement: [{ Effect: 'Allow', Action: ['lambda:InvokeFunction'], Resource: INVOKE_RESOURCES }] });
 
   // Inputs reach shell only through env; no secret is read; no write-shaped AWS command.
   for (const row of STEPS.filter((s) => s.run)) assert.equal(/\$\{\{\s*inputs\./.test(row.run), false, row.name);
@@ -381,4 +461,19 @@ test('the owner README and the runbook name the role, the variable, the commands
   assert.ok(runbook.includes(WORKFLOW_FILE));
   assert.ok(runbook.includes(ROLE_NAME));
   assert.match(runbook, /apply the Moov catch-up plan <manifest_sha256> in production/);
+});
+
+test('the owner fix command: a self-contained heredoc of exactly permissions-policy.json and one put-role-policy, in the README and the runbook', () => {
+  const policyText = read(`${DIR}/permissions-policy.json`);
+  const block = "```bash\ncat > /tmp/catchup-permissions.json <<'EOF'\n"
+    + policyText
+    + 'EOF\n'
+    + `aws iam put-role-policy --no-cli-pager --role-name ${ROLE_NAME} --policy-name ChecksOpsProductionMoovStatusCatchUp --policy-document file:///tmp/catchup-permissions.json\n`
+    + '```\n';
+  for (const rel of [`${DIR}/README.md`, 'ops/moov-status-catch-up.md']) {
+    const doc = read(rel);
+    assert.ok(doc.includes(block), rel);
+    assert.ok(doc.includes('42383055459'), rel);
+    assert.ok(doc.includes(`${FUNCTION_ARN}:$LATEST with an`), rel);
+  }
 });

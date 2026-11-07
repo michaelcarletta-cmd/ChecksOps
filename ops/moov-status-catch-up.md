@@ -151,6 +151,56 @@ creates it and sets the GitHub variable `CHECKSOPS_PRODUCTION_MOOV_STATUS_CATCH_
 (`ops/deployment-guard/production-moov-status-catch-up/README.md`). This repository writes the
 policy documents; it never creates IAM.
 
+**Role fix (2026-11-07).** The first read-only plan, workflow run `42383055459`, assumed the role
+and was then refused by its own deny:
+
+> AccessDeniedException: User: arn:aws:sts::806168576068:assumed-role/ChecksOpsGitHubProductionMoovStatusCatchUp/checksops-production-moov-status-catch-up-42383055459
+> is not authorized to perform: lambda:InvokeFunction on resource:
+> arn:aws:lambda:us-east-1:806168576068:function:checksops-production-prep-api:$LATEST with an
+> explicit deny in an identity-based policy
+
+An unqualified invoke is authorized against the `:$LATEST` ARN, and the role's Allow and its
+`NotResource` deny named only the unqualified ARN. Nothing was invoked. `permissions-policy.json`
+and the workflow's session policy now list exactly two strings, the unqualified ARN and
+`...:function:checksops-production-prep-api:$LATEST` (no other version, alias or wildcard). After
+that change is merged the owner replaces the live inline policy with this one command (no checkout
+needed; the trust policy does not change), then runs the plan again:
+
+```bash
+cat > /tmp/catchup-permissions.json <<'EOF'
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "InvokeTheProductionApiLambdaOnly",
+      "Effect": "Allow",
+      "Action": "lambda:InvokeFunction",
+      "Resource": [
+        "arn:aws:lambda:us-east-1:806168576068:function:checksops-production-prep-api",
+        "arn:aws:lambda:us-east-1:806168576068:function:checksops-production-prep-api:$LATEST"
+      ]
+    },
+    {
+      "Sid": "NeverAnyOtherAction",
+      "Effect": "Deny",
+      "NotAction": "lambda:InvokeFunction",
+      "Resource": "*"
+    },
+    {
+      "Sid": "NeverInvokeAnyOtherFunctionVersionOrAlias",
+      "Effect": "Deny",
+      "Action": "lambda:InvokeFunction",
+      "NotResource": [
+        "arn:aws:lambda:us-east-1:806168576068:function:checksops-production-prep-api",
+        "arn:aws:lambda:us-east-1:806168576068:function:checksops-production-prep-api:$LATEST"
+      ]
+    }
+  ]
+}
+EOF
+aws iam put-role-policy --no-cli-pager --role-name ChecksOpsGitHubProductionMoovStatusCatchUp --policy-name ChecksOpsProductionMoovStatusCatchUp --policy-document file:///tmp/catchup-permissions.json
+```
+
 **The workflow.** `production-moov-status-catch-up.yml` (Actions, Run workflow, from `main`) runs
 in the `production` environment, so every run, plan included, waits for the owner's approval of
 that run. Inputs: `phase` (`plan` or `apply`), `actor_application_user_id`, `limit`, and for apply
