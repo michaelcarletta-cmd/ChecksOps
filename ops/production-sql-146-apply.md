@@ -86,7 +86,21 @@ written.
 **Predecessor.** None in the release engine. SQL 91 must be applied first (its
 `aws_moov_webhook_apply_active()` is a prerequisite; applied in production).
 
-**Status:** not applied anywhere. The staging pin and the production pin are pending.
+**Staging executor refreshed (2026-11-07).** Deploy run 42402669624 updated
+`checksops-staging-guarded-sql-executor` to carry SQL 146 (inspect run 42402449898 read CodeSha256
+`GEDJLmf19hpNpWdBJBrSWeUgZAwnZbdO898Rp7ErM0k=` before it, inspect run 42402878458
+`EEc1vtaB6lKlkEXSe99icmontAnuPbZELXVbxZHn4Xg=` after it).
+
+**Staging read-live (2026-11-07).** Run 42403055167 (job 128494797184, main `73610863c`, after executor deploy
+run 42402669624): `already_applied` false, `precondition_failures` `[]`, `prerequisites_missing` `[]`,
+`definer_writes` both `ok true`. Live `1ef789645da5ce865cbb095bea1eff6775a4bedc87251e8152f41a771e659c40`: both
+functions absent, everything else in place, equal to the derived pre-state; intended `ef55e1fe…`. Recorded in the
+staging pin (`expected_live_definition_sha256`, `execute: true`, wave 41) under the owner's words of 2026-11-07,
+"record the SQL 146 staging pin". The staging apply is a separate run after this pin is merged and the executor is
+redeployed carrying it, on the owner's words for that run, "apply SQL 146 in staging". The production pin stays
+pending: a read-only production inspect decides production's pre-state.
+
+**Status:** staging pin execute-authorized (wave 41); not applied anywhere. The production pin is pending.
 
 ## Fingerprint
 

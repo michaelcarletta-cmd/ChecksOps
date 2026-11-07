@@ -3332,8 +3332,9 @@ export const AUTHORIZED_SQL145_PLATFORM_OWNER_BILLING_COLLECTION_LEG = Object.fr
 // public.aws_moov_catch_up_lock_rows(...) and public.aws_moov_apply_collection_leg_status(...) lock the rows and write
 // one tenant-collection-v2 leg's Moov status, only for the platform owner (the leg writer also with no user) in the
 // Moov webhook apply context; EXECUTE for checksops and the owner. No predecessor (SQL 91's
-// aws_moov_webhook_apply_active() is a prerequisite). Pending until a reviewed pin change records a staging read-live
-// (expected: both functions absent, everything else in place).
+// aws_moov_webhook_apply_active() is a prerequisite). Staging apply authorized (wave 41) from staging read-live run
+// 42403055167: the pre-state, both functions absent and everything else in place, equals the derived one
+// (ops/production-sql-146-apply.md).
 export const AUTHORIZED_SQL146_MOOV_STATUS_CATCH_UP_WRITES = Object.freeze({
   key: 'sql146',
   filename: 'aws/workflows/sql/146_moov_status_catch_up_writes.sql',
@@ -3341,9 +3342,11 @@ export const AUTHORIZED_SQL146_MOOV_STATUS_CATCH_UP_WRITES = Object.freeze({
   // The commit that last authored the file bytes.
   commit: '9229c8f9e1413d43114c5a6879e8f628d6f95c53',
   source_sha256: '327ee73d4ce01a4b2050c98accb439588fcddb20ed2d645ca62922e13431bc8c',
-  authorization: 'pending',
-  execute: false,
-  expected_live_definition_sha256: null,
+  authorization: 'Owner approved 2026-11-07: staging apply (wave 41) from staging read-live run 42403055167',
+  execute: true,
+  // Staging read-live run 42403055167 (main 73610863c, executor deploy run 42402669624): already_applied false,
+  // precondition_failures []. Equal to the derived pre-state (both functions absent).
+  expected_live_definition_sha256: '1ef789645da5ce865cbb095bea1eff6775a4bedc87251e8152f41a771e659c40',
   // Code-derived: releaseIntendedHash('sql146', file bytes) (release-sql-state.mjs); re-derived by the tests.
   intended_replacement_sha256: 'ef55e1feace25188bff4890393be472deac6cdfe64e06951e53279f12641488b',
   function_identities: Object.freeze([

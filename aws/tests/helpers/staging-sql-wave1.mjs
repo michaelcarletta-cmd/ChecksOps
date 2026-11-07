@@ -211,6 +211,11 @@ export const STAGING_WAVE1 = Object.freeze({
   // ddb8b1d50 after the executor carried it (deploy run 42330773622): already_applied false, precondition_failures [],
   // the function absent. Equal to the derived pre-state.
   sql145: Object.freeze({ wave: 40, approved: '2026-11-07', run: '42331198486', live: 'c622469dcfbfc0ad8f54c0bb038457b9eb3247a17ee0c855390ddc709ee1d594' }),
+  // Wave 41 (owner approved 2026-11-07, "record the SQL 146 staging pin"): SQL 146, the Moov status catch-up locks its
+  // rows and writes a fee leg's status (aws_moov_catch_up_lock_rows, aws_moov_apply_collection_leg_status). Read at
+  // main 73610863c after the executor carried it (deploy run 42402669624): already_applied false,
+  // precondition_failures [], both functions absent. Equal to the derived pre-state.
+  sql146: Object.freeze({ wave: 41, approved: '2026-11-07', run: '42403055167', live: '1ef789645da5ce865cbb095bea1eff6775a4bedc87251e8152f41a771e659c40' }),
   sql98: Object.freeze({ wave: 3, approved: '2026-10-18', run: '39083278136', live: '296c3d6a274e10f66005fb9eaecf93fa17b81bd8db3607037ca07698fddd3275', apply_run: '39085677318' }),
 });
 
@@ -222,7 +227,7 @@ export const pendingPin = (pin) => Object.freeze({
 });
 
 /**
- * The committed staging pin's apply state: waves 1-40 recorded and approved, wave 6 approved with
+ * The committed staging pin's apply state: waves 1-41 recorded and approved, wave 6 approved with
  * its read-live still to record (pending until then), wave 18 (SQL 117) retired, SQL 129 retired
  * before any read-live was recorded, the rest pending.
  */
