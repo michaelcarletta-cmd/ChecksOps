@@ -665,11 +665,11 @@ test('only the apply child gets the apply variables, and its receipt is the one 
 // "run the read-only SQL 145 production inspect" / "record the SQL 145 production pin", #1685: the read-only production
 // inspect SSM f359138f recorded as its pre-state, the guarded staging apply run 42334108246 from the same pre-state)
 // until its record-and-retire change after its 2026-11-07 apply ("apply SQL 145 in production").
-// SQL 146's pin is execute-authorized (owner-approved pin change of 2026-11-07, "SQL 146 accepted in staging" /
-// "run the read-only SQL 146 production inspect" / "record the SQL 146 production pin": the read-only production
+// SQL 146's pin was execute-authorized (owner-approved pin change of 2026-11-07, "SQL 146 accepted in staging" /
+// "run the read-only SQL 146 production inspect" / "record the SQL 146 production pin", #1694: the read-only production
 // inspect SSM df96f4d3 recorded as its pre-state, the guarded staging apply run 42405866540 from the same pre-state)
-// until its record-and-retire change.
-const EXECUTE_AUTHORIZED = Object.freeze(['sql146']);
+// until its record-and-retire change after its 2026-11-07 apply ("apply SQL 146 in production").
+const EXECUTE_AUTHORIZED = Object.freeze([]);
 // SQL 95's and SQL 99's production applies of 2026-10-21 (main dcd865256) and SQL 106's and SQL 97's
 // (main 7124a160b; both runs passed the SQL 106 workstream id), recorded in applied.
 const APPLIED_2026_10_21 = Object.freeze({
@@ -733,6 +733,8 @@ const APPLIED_2026_10_21 = Object.freeze({
   sql144: Object.freeze({ ssm: '0f602899-55d7-4e1b-a842-4fae04f72013', run: '2c228f5d-61f1-4e91-9268-ea906d5cce3d', one_use_id: 'sql144-prod-254be0ae-db3c-4fbe-bd20-dafba25bb7ef', workstream: 'prod-sql144-tenant-incoming-transfers-20261107', approval: 'apply SQL 144 in production' }),
   // SQL 145's production apply of 2026-11-07 (main fda298fa3), on the owner's "apply SQL 145 in production".
   sql145: Object.freeze({ ssm: '937dcbbd-13f5-4f27-8a27-c522bbd34813', run: '8d17051e-163f-43c6-a2d7-0f174fb6c2dd', one_use_id: 'sql145-prod-4c3e24cf-8250-4e96-bf49-b8121ca5b8bd', workstream: 'prod-sql145-platform-owner-billing-collection-leg-20261107', approval: 'apply SQL 145 in production' }),
+  // SQL 146's production apply of 2026-11-07 (main 83d649ebd), on the owner's "apply SQL 146 in production".
+  sql146: Object.freeze({ ssm: '63e932ed-022b-4286-b900-220d09b2733a', run: 'f405fe8f-6b4c-4a15-86e6-b4de25e013f1', one_use_id: 'sql146-prod-25d04563-c33f-49fa-a9b5-21d3db7316e5', workstream: 'prod-sql146-moov-status-catch-up-writes-20261107', approval: 'apply SQL 146 in production' }),
   // SQL 136's production apply of 2026-11-02 (main a58f492cb), on the owner's "apply SQL 136 in production".
   sql136: Object.freeze({ ssm: 'd52b099a-56c7-4148-828c-2530b48c40fb', run: 'b47f4c29-c5bf-4288-82ff-870f057489d9', one_use_id: 'sql136-prod-95f82a7b-8350-43c3-a4c5-8bda2c344673', workstream: 'prod-sql136-money-write-restrictive-20261102', approval: 'apply SQL 136 in production' }),
   // SQL 118's production apply of 2026-10-27 (main 4d9763eff).
@@ -932,7 +934,7 @@ test('SQL 82 to SQL 86 are retired with a verified_live record; their execute-au
   }
 });
 
-test('the execute-authorized copies of the retired SQL 95, SQL 97, SQL 99, SQL 106, SQL 108, SQL 109, SQL 110, SQL 111, SQL 112, SQL 113, SQL 114, SQL 115, SQL 116, SQL 118, SQL 119, SQL 120, SQL 121, SQL 122, SQL 123, SQL 124, SQL 125, SQL 126, SQL 127, SQL 128, SQL 130, SQL 131, SQL 132, SQL 133, SQL 134, SQL 136, SQL 137, SQL 138, SQL 139, SQL 140, SQL 142, SQL 143, SQL 144 and SQL 145 pins pass the pin stage, and their evaluators allow the manifest built from them', async () => {
+test('the execute-authorized copies of the retired SQL 95, SQL 97, SQL 99, SQL 106, SQL 108, SQL 109, SQL 110, SQL 111, SQL 112, SQL 113, SQL 114, SQL 115, SQL 116, SQL 118, SQL 119, SQL 120, SQL 121, SQL 122, SQL 123, SQL 124, SQL 125, SQL 126, SQL 127, SQL 128, SQL 130, SQL 131, SQL 132, SQL 133, SQL 134, SQL 136, SQL 137, SQL 138, SQL 139, SQL 140, SQL 142, SQL 143, SQL 144, SQL 145 and SQL 146 pins pass the pin stage, and their evaluators allow the manifest built from them', async () => {
   const STAGING_REFERENCE = {
     // SQL 95 / SQL 97: the guarded staging read-live of 2026-10-21 (intended state), owner-accepted
     // substitute evidence (different pre-state; their wave 4 apply runs are not recorded).
@@ -1019,7 +1021,7 @@ test('the execute-authorized copies of the retired SQL 95, SQL 97, SQL 99, SQL 1
     const real = realPin(key);
     let committed = real;
     if (APPLIED_2026_10_21[key]) {
-      // Applied 2026-10-21 (SQL 110: 2026-10-22, SQL 111, SQL 112 and SQL 113: 2026-10-23, SQL 114: 2026-10-25, SQL 116: 2026-10-26, SQL 115, SQL 118, SQL 119, SQL 120 and SQL 121: 2026-10-27, SQL 122, SQL 123 and SQL 124: 2026-10-28, SQL 125, SQL 126 and SQL 127: 2026-10-29, SQL 128, SQL 130, SQL 131 and SQL 132: 2026-10-30, SQL 133 and SQL 134: 2026-10-31, SQL 137 and SQL 138: 2026-11-01, SQL 136, SQL 139 and SQL 140: 2026-11-02, SQL 142 and SQL 143: 2026-11-05, SQL 144 and SQL 145: 2026-11-07) and retired: execute false, the one apply run recorded in applied.
+      // Applied 2026-10-21 (SQL 110: 2026-10-22, SQL 111, SQL 112 and SQL 113: 2026-10-23, SQL 114: 2026-10-25, SQL 116: 2026-10-26, SQL 115, SQL 118, SQL 119, SQL 120 and SQL 121: 2026-10-27, SQL 122, SQL 123 and SQL 124: 2026-10-28, SQL 125, SQL 126 and SQL 127: 2026-10-29, SQL 128, SQL 130, SQL 131 and SQL 132: 2026-10-30, SQL 133 and SQL 134: 2026-10-31, SQL 137 and SQL 138: 2026-11-01, SQL 136, SQL 139 and SQL 140: 2026-11-02, SQL 142 and SQL 143: 2026-11-05, SQL 144, SQL 145 and SQL 146: 2026-11-07) and retired: execute false, the one apply run recorded in applied.
       const run = APPLIED_2026_10_21[key];
       assert.equal(real.execute, false, key);
       assert.match(real.authorization, /^Applied to production on 2026-(10-(2[12356789]|3[01])|11-0[1257]); execute is false again/, key);
