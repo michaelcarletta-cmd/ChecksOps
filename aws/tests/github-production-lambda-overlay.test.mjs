@@ -296,17 +296,21 @@ const TOTP_SAVEPOINT_APPLIED_REL = 'aws/tests/fixtures/production-totp-reset-sav
 const MOOV_WEBHOOK_BODY_AUTH_MANIFEST = JSON.parse(fs.readFileSync(path.join(ROOT, 'aws/tests/fixtures/production-moov-webhook-body-auth-manifest-2026-10-31.json'), 'utf8'));
 const MOOV_WEBHOOK_PRE = Object.freeze(Object.fromEntries(['providers/webhooks.mjs', 'tenant-collection-v2-settlement.mjs']
   .map((name) => [name, MOOV_WEBHOOK_BODY_AUTH_MANIFEST.members[name].live_sha256])));
-// Moov webhook receipt key (owner 2026-11-07, planning only): REPLACE providers/webhooks.mjs from the bytes production
-// run 41219106461 applied (the body confirmation record).
+// Moov webhook receipt key (owner 2026-11-07): REPLACE providers/webhooks.mjs from the bytes production run
+// 41219106461 applied (the body confirmation record).
 const MOOV_WEBHOOK_RECEIPT_KEY_REL = 'aws/tests/fixtures/production-moov-webhook-receipt-key-manifest-2026-11-07.json';
+// Applied 2026-11-07 (production run 42330359623, VERIFIED): the row expects main's bytes and names this record.
+const MOOV_WEBHOOK_RECEIPT_KEY_APPLIED_REL = 'aws/tests/fixtures/production-moov-webhook-receipt-key-applied-manifest-2026-11-07.json';
 const MOOV_WEBHOOK_RECEIPT_KEY_PRE = JSON.parse(fs.readFileSync(path.join(ROOT, 'aws/tests/fixtures/production-moov-webhook-body-auth-applied-manifest-2026-10-31.json'), 'utf8')).members['providers/webhooks.mjs'].accepted_sha256;
 const moovWebhookPre = (plan) => { for (const [name, pre] of Object.entries(MOOV_WEBHOOK_PRE)) plan.members[name].expected_live_sha256 = pre; return plan; };
-// The fee pull savepoint REPLACEs (production runs 42302929689, 42303279340, 2026-11-06) and the incoming transfers
-// data.mjs REPLACE (production run 42323230515, 2026-11-07) record their applied bytes live: replays of the plan as
-// it stood before them start from the pre-apply live bytes (each planning manifest's live_sha256), naming that manifest.
+// The fee pull savepoint REPLACEs (production runs 42302929689, 42303279340, 2026-11-06), the incoming transfers
+// data.mjs REPLACE (production run 42323230515, 2026-11-07) and the Moov webhook receipt key providers/webhooks.mjs
+// REPLACE (production run 42330359623, 2026-11-07) record their applied bytes live: replays of the plan as it stood
+// before them start from the pre-apply live bytes (each planning manifest's live_sha256), naming that manifest.
 const RECORDED_2026_11_PRE = Object.freeze(Object.fromEntries([
   ...FEE_PULL_SAVEPOINTS_MEMBERS.map((name) => [name, FEE_PULL_SAVEPOINTS_REL]),
   ['data.mjs', INCOMING_TRANSFERS_API_REL],
+  ['providers/webhooks.mjs', MOOV_WEBHOOK_RECEIPT_KEY_REL],
 ].map(([name, rel]) => [name, { expected_live_sha256: JSON.parse(fs.readFileSync(path.join(ROOT, rel), 'utf8')).members[name].live_sha256, manifest: rel }])));
 const recorded2026_11Pre = (plan) => {
   for (const [name, pre] of Object.entries(RECORDED_2026_11_PRE)) plan.members[name] = { ...plan.members[name], ...pre };
@@ -5080,7 +5084,8 @@ test('Moov webhook body confirmation (2026-10-31): ADD moov-webhook-confirm.mjs 
   // Settlement: the bytes its apply put live (the record); main has since moved on to the money-write flag.
   accepted[SETTLEMENT] = JSON.parse(fs.readFileSync(path.join(ROOT, 'aws/tests/fixtures/production-moov-webhook-body-auth-applied-manifest-2026-10-31.json'), 'utf8')).members[SETTLEMENT].accepted_sha256;
   assert.notEqual(accepted[SETTLEMENT], sha(`aws/functions/api/${SETTLEMENT}`));
-  // webhooks.mjs: likewise the applied bytes; main has since moved on to the receipt key REPLACE (2026-11-07, its own test).
+  // webhooks.mjs: likewise the applied bytes; main has since moved on to the receipt key REPLACE (2026-11-07, its own
+  // test), applied 2026-11-07 (production run 42330359623).
   accepted[WEBHOOKS] = MOOV_WEBHOOK_RECEIPT_KEY_PRE;
   assert.notEqual(accepted[WEBHOOKS], sha(`aws/functions/api/${WEBHOOKS}`));
   assert.equal(manifest.workstream_id, 'moov-webhook-body-auth');
@@ -5162,9 +5167,12 @@ test('Moov webhook body confirmation (2026-10-31): ADD moov-webhook-confirm.mjs 
       continue;
     }
     if (member === WEBHOOKS) {
-      // Moved on to the receipt key REPLACE (2026-11-07), which starts from the applied bytes.
-      assert.equal(PLAN.members[member].expected_live_sha256, accepted[member]);
-      assert.equal(PLAN.members[member].manifest, MOOV_WEBHOOK_RECEIPT_KEY_REL);
+      // Moved on to the receipt key REPLACE (2026-11-07), which started from the applied bytes and was applied
+      // (production run 42330359623): main's bytes expected live, naming the receipt key applied record.
+      assert.equal(RECORDED_2026_11_PRE[member].expected_live_sha256, accepted[member]);
+      assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, MOOV_WEBHOOK_RECEIPT_KEY_REL), 'utf8')).members[member].live_sha256, accepted[member]);
+      assert.equal(PLAN.members[member].expected_live_sha256, sha(`aws/functions/api/${member}`));
+      assert.equal(PLAN.members[member].manifest, MOOV_WEBHOOK_RECEIPT_KEY_APPLIED_REL);
       assert.equal(resolvePlannedMember(member, { root: ROOT, plan: PLAN }).ok, true, member);
       continue;
     }
@@ -5209,12 +5217,14 @@ test('Moov webhook body confirmation (2026-10-31): ADD moov-webhook-confirm.mjs 
     const pre = await run(inspect(member), { root: ROOT, plan: before, inspectLive: liveFor(member, { plan: before, sha256: live, extra: [CONFIRM] }) });
     assert.equal(pre.state, 'READY', member);
     assert.equal(pre.mutation, false, member);
-    const done = await run(inspect(member), { root: ROOT, inspectLive: liveFor(member, { sha256: accepted[member], extra: [CONFIRM] }) });
-    // Both applied bytes are now a later REPLACE's starting point (settlement: the money-write flag;
-    // webhooks.mjs: the receipt key).
+    // Both applied bytes were a later REPLACE's starting point (settlement: the money-write flag; webhooks.mjs: the
+    // receipt key, replayed as the plan stood before its 2026-11-07 apply, production run 42330359623).
+    const later = member === WEBHOOKS ? recorded2026_11Pre(structuredClone(PLAN)) : PLAN;
+    const done = await run(inspect(member), { root: ROOT, plan: later, inspectLive: liveFor(member, { plan: later, sha256: accepted[member], extra: [CONFIRM] }) });
     assert.equal(done.state, 'READY', member);
-    // Once applied, the pre-apply bytes are a reconciliation stop too, never an apply.
-    for (const other of APPLIED_MEMBERS.includes(member) ? [live, 'c'.repeat(64)] : ['c'.repeat(64)]) {
+    // Once applied, the pre-apply bytes are a reconciliation stop too, never an apply; since the receipt key apply,
+    // so are this workstream's webhooks.mjs bytes.
+    for (const other of [...(APPLIED_MEMBERS.includes(member) ? [live] : []), ...(member === WEBHOOKS ? [accepted[member]] : []), 'c'.repeat(64)]) {
       await assert.rejects(
         run(inspect(member), { root: ROOT, inspectLive: liveFor(member, { sha256: other, extra: [CONFIRM] }) }),
         (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
@@ -6631,10 +6641,11 @@ test('Fee leg API (SQL 145, 2026-11-07): tenant-collection-v2.mjs REPLACE from t
   assert.deepEqual(calls.receipt.owned_member_ops, { replace: [MEMBER], add: [] });
 });
 
-test('Moov webhook receipt key (owner 2026-11-07): providers/webhooks.mjs REPLACE from the body confirmation bytes production run 41219106461 applied, no SQL, planning only', async () => {
+test('Moov webhook receipt key (owner 2026-11-07): providers/webhooks.mjs REPLACE from the body confirmation bytes production run 41219106461 applied, no SQL; production run 42330359623 applied it', async () => {
   const MEMBER = 'providers/webhooks.mjs';
   const CONFIRM = 'providers/moov-webhook-confirm.mjs';
   const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, MOOV_WEBHOOK_RECEIPT_KEY_REL), 'utf8'));
+  const applied = JSON.parse(fs.readFileSync(path.join(ROOT, MOOV_WEBHOOK_RECEIPT_KEY_APPLIED_REL), 'utf8'));
   const accepted = sha(`aws/functions/api/${MEMBER}`);
   const PREVIOUS = 'aws/tests/fixtures/production-moov-webhook-body-auth-applied-manifest-2026-10-31.json';
   assert.equal(MOOV_WEBHOOK_RECEIPT_KEY_PRE, '59b586744332df62524a25b4602966686c9ba9ae869cc644ab9046bfc1ae63b0');
@@ -6648,13 +6659,33 @@ test('Moov webhook receipt key (owner 2026-11-07): providers/webhooks.mjs REPLAC
   for (const text of [evidence, 'build the webhook receipt fix', '6db9b33b-e076-4735-96ba-0c1dd545030c', '41219106461', 'X-Webhook-ID', 'No SQL', 'Planning only']) {
     assert.ok(manifest.notes.includes(text), text);
   }
+  // Applied 2026-11-07: the record keeps the run evidence; the row expects the applied bytes and names it. The body
+  // confirmation record keeps what it recorded.
+  assert.equal(applied.workstream_id, 'moov-webhook-receipt-key-applied');
+  assert.equal(applied.deploy_authorized, false);
+  assert.match(applied.authorization, /^Record only \(2026-11-07\)/);
+  assert.equal(applied.live_lambda, FUNCTION_NAME);
+  assert.deepEqual(applied.members, { [MEMBER]: { live_sha256: accepted, accepted_sha256: accepted, operation: 'replace', previous_manifest: MOOV_WEBHOOK_RECEIPT_KEY_REL } });
+  assert.equal(accepted, '117495bc5285a6fb39fb5e4b20526a0e24b00f67f8bf7ed78d0d5fff84b8f471');
+  for (const runId of ['42330157047', '42330201248', '42330272158', '42330315951', '42330359623', '42330438648']) {
+    assert.match(applied.notes, new RegExp(`run ${runId}`), runId);
+    assert.match(PLAN.notes, new RegExp(runId), runId);
+  }
+  for (const evidence of ['"DEPLOY providers/webhooks.mjs TO PRODUCTION"', '"build the webhook receipt fix"', 'job 128275254271', '58f1d917-b324-4a90-952d-8e4a43cf50d1', 'b5705836-d6b3-407a-b0aa-af2b201a7d03', 'BaKgiVcDSnQpxq3V/hofgn205iOKRvNhW0ar4phe0Dw=', 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/42330201248', 'VERIFIED', 'ALREADY_ACCEPTED', 'a55bd4180', `${MOOV_WEBHOOK_RECEIPT_KEY_PRE.slice(0, 8)} -> ${accepted.slice(0, 8)}`, 'production-moov-webhook-body-auth-applied-manifest-2026-10-31.json keeps what it recorded']) {
+    assert.ok(applied.notes.includes(evidence), evidence);
+  }
+  assert.ok(PLAN.notes.includes('the providers/webhooks.mjs row expects the applied bytes and names the Moov webhook receipt key applied record'));
   assert.deepEqual(PLAN.members[MEMBER], {
     operation: 'replace',
     accepted_sha256: accepted,
-    expected_live_sha256: MOOV_WEBHOOK_RECEIPT_KEY_PRE,
+    expected_live_sha256: accepted,
     sql_before: null,
-    manifest: MOOV_WEBHOOK_RECEIPT_KEY_REL,
+    manifest: MOOV_WEBHOOK_RECEIPT_KEY_APPLIED_REL,
   });
+  // The plan as it stood before the apply (the body confirmation bytes expected live, the planning manifest named).
+  const before = structuredClone(PLAN);
+  before.members[MEMBER] = { ...PLAN.members[MEMBER], expected_live_sha256: MOOV_WEBHOOK_RECEIPT_KEY_PRE, manifest: MOOV_WEBHOOK_RECEIPT_KEY_REL };
+  assert.deepEqual(RECORDED_2026_11_PRE[MEMBER], { expected_live_sha256: MOOV_WEBHOOK_RECEIPT_KEY_PRE, manifest: MOOV_WEBHOOK_RECEIPT_KEY_REL });
   // No new module: the same ten local imports as the applied bytes. The one new name, moovWebhookResource, is
   // exported by the confirmation module production already runs (its applied bytes are main's, unchanged).
   const imports = localImports(fs.readFileSync(path.join(API, MEMBER), 'utf8'), MEMBER).sort();
@@ -6670,13 +6701,14 @@ test('Moov webhook receipt key (owner 2026-11-07): providers/webhooks.mjs REPLAC
   const source = fs.readFileSync(path.join(API, MEMBER), 'utf8');
   assert.match(source, /export const moovReceiptKey = /);
   assert.match(source, /eventId: String\(externalEventId\)/);
-  // Inspect: READY on the applied body confirmation bytes, ALREADY_ACCEPTED on main's, a reconciliation stop otherwise.
+  // Inspect: before the apply, READY on the applied body confirmation bytes; now ALREADY_ACCEPTED on main's, and the
+  // body confirmation bytes, or anything else, a reconciliation stop.
   const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
-  const ready = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: MOOV_WEBHOOK_RECEIPT_KEY_PRE, extra: [CONFIRM] }) });
+  const ready = await run(inspect, { root: ROOT, plan: before, inspectLive: liveFor(MEMBER, { sha256: MOOV_WEBHOOK_RECEIPT_KEY_PRE, extra: [CONFIRM], plan: before }) });
   assert.equal(ready.state, 'READY');
   assert.equal(ready.mutation, false);
   assert.equal((await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: accepted, extra: [CONFIRM] }) })).state, 'ALREADY_ACCEPTED');
-  for (const other of ['f7353ee1673364d45ce564dd8b7f102273e9a871c63f8398d03bd7226360d97f', 'c'.repeat(64)]) {
+  for (const other of [MOOV_WEBHOOK_RECEIPT_KEY_PRE, 'f7353ee1673364d45ce564dd8b7f102273e9a871c63f8398d03bd7226360d97f', 'c'.repeat(64)]) {
     await assert.rejects(
       run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: other, extra: [CONFIRM] }) }),
       (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,

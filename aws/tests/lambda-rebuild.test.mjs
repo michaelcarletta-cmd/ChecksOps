@@ -786,8 +786,8 @@ test('the staging plan section accepts inspect run 41311016111: the money-write 
   // the Moov webhook body confirmation (run 41202670517) put main's bytes live, so it is not a member here.
   assert.equal(section.members['providers/webhooks.mjs'], undefined);
   assert.equal(third.members['providers/webhooks.mjs'].accepted_sha256, 'f7353ee1673364d45ce564dd8b7f102273e9a871c63f8398d03bd7226360d97f');
-  // Those bytes (59b58674, production run 41219106461) are what the receipt key REPLACE (2026-11-07, planning only)
-  // starts from; main has moved on to its bytes.
+  // Those bytes (59b58674, production run 41219106461) are what the receipt key REPLACE (2026-11-07) started from;
+  // main has moved on to its bytes, which production run 42330359623 applied (2026-11-07).
   assert.equal(JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'aws/tests/fixtures/production-moov-webhook-body-auth-applied-manifest-2026-10-31.json'), 'utf8')).members['providers/webhooks.mjs'].accepted_sha256, '59b586744332df62524a25b4602966686c9ba9ae869cc644ab9046bfc1ae63b0');
   // The plan as committed makes the inspected live package READY, not BLOCKED.
   const live = {};
