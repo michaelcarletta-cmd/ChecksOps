@@ -543,6 +543,15 @@ test('the production plan section accepts inspect run 41463084601 and records ap
     if (CHANGED_SINCE_FOURTH_PRODUCTION_REBUILD.has(name)) {
       // The row moved on after the rebuild: main's bytes accepted, the bytes the rebuild put live expected.
       assert.equal(row.accepted_sha256, sha256(fs.readFileSync(path.join(apiRoot, name))), name);
+      if (name === 'tenant-collection-v2.mjs') {
+        // Moved on twice: the fee pull savepoints REPLACE from the rebuild's bytes (its manifest records them live),
+        // then the fee leg REPLACE (SQL 145, planning only) from the savepoint bytes.
+        const feePull = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'aws/tests/fixtures/production-fee-pull-savepoints-manifest-2026-11-06.json'), 'utf8')).members[name];
+        assert.equal(feePull.live_sha256, entry.accepted_sha256, name);
+        assert.equal(row.expected_live_sha256, feePull.accepted_sha256, name);
+        assert.equal(row.manifest, 'aws/tests/fixtures/production-fee-leg-api-manifest-2026-11-07.json', name);
+        continue;
+      }
       assert.equal(row.expected_live_sha256, entry.accepted_sha256, name);
       continue;
     }

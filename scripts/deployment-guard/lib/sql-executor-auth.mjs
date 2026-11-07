@@ -3298,6 +3298,30 @@ export const AUTHORIZED_SQL144_TENANT_INCOMING_TRANSFERS = Object.freeze({
   ]),
 });
 
+// Fee collection leg staging pin: SQL 145 (owner 2026-11-07: "build the fee leg fix"). The platform owner's fee
+// collection could not save its payment_transfers leg since SQL 90 (no INSERT policy admits the platform owner for a
+// tenant it is not a member of; production 2026-11-06T22:53:11Z, 42501 on collection_insert_leg). The new SECURITY
+// DEFINER public.aws_platform_owner_insert_billing_collection_leg(...) inserts only a tenant-collection-v2 leg of an
+// existing obligation, for the platform owner on a server write path; EXECUTE for checksops and the owner. No
+// predecessor (SQL 136's aws_money_write_allowed() is a prerequisite). Pending until a reviewed pin change records a
+// staging read-live (expected: the function absent, everything else in place).
+export const AUTHORIZED_SQL145_PLATFORM_OWNER_BILLING_COLLECTION_LEG = Object.freeze({
+  key: 'sql145',
+  filename: 'aws/workflows/sql/145_platform_owner_billing_collection_leg.sql',
+  migration_id: '145_platform_owner_billing_collection_leg',
+  // The commit that last authored the file bytes.
+  commit: 'e15aef7cc0f826240a1588eabc2a3822a3df94fa',
+  source_sha256: 'ea57a69cf7f2000157898590c5bfbe5224ff1f135b599e82bb18018a8d22cc77',
+  authorization: 'pending',
+  execute: false,
+  expected_live_definition_sha256: null,
+  // Code-derived: releaseIntendedHash('sql145', file bytes) (release-sql-state.mjs); re-derived by the tests.
+  intended_replacement_sha256: 'a44d93bddc3a90149ec2eaa9279d4695193db8f5eb190463f239d7cb130f435a',
+  function_identities: Object.freeze([
+    'public.aws_platform_owner_insert_billing_collection_leg(uuid, text, text, text, bigint, text, text, uuid, text, text, text, text, jsonb)',
+  ]),
+});
+
 export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql90: AUTHORIZED_SQL90_USERS_ONLY_TENANT_ROLES,
   sql91: AUTHORIZED_SQL91_MOOV_ONBOARDING,
@@ -3353,6 +3377,7 @@ export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql142: AUTHORIZED_SQL142_MORTGAGE_COMPANIES_TENANT_ADMIN_WRITE,
   sql143: AUTHORIZED_SQL143_MORTGAGE_COMPANIES_MEMBER_DELETE_UNUSED,
   sql144: AUTHORIZED_SQL144_TENANT_INCOMING_TRANSFERS,
+  sql145: AUTHORIZED_SQL145_PLATFORM_OWNER_BILLING_COLLECTION_LEG,
 });
 
 // The fee collection pin under its earlier map name (the same object as the release map's sql98).
@@ -3368,7 +3393,7 @@ export function isSql30TenantDocumentsDocType(input = {}) {
   return pinIdentifiersMatch(input, AUTHORIZED_SQL30_TENANT_DOCUMENTS_DOC_TYPE);
 }
 
-/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql144) an input names, or null. */
+/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql145) an input names, or null. */
 export function releaseSqlMigrationKey(input = {}) {
   return Object.keys(RELEASE_2026_10_17_PENDING_SQL_PINS)
     .find((key) => pinIdentifiersMatch(input, RELEASE_2026_10_17_PENDING_SQL_PINS[key])) || null;

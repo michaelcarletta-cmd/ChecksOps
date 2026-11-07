@@ -92,6 +92,7 @@ on:
           - sql142-mortgage-companies-tenant-admin-write
           - sql143-mortgage-companies-member-delete-unused
           - sql144-tenant-incoming-transfers
+          - sql145-platform-owner-billing-collection-leg
       approved_commit:
         description: "Required for deploy/apply/read-live: exact main commit approved for this run"
         required: false
@@ -237,6 +238,7 @@ jobs:
           node --test aws/tests/release-sql142-executor.test.mjs
           node --test aws/tests/release-sql143-executor.test.mjs
           node --test aws/tests/release-sql144-executor.test.mjs
+          node --test aws/tests/release-sql145-executor.test.mjs
           node --test aws/tests/mortgage-executor-commit-outcome.test.mjs
           node --test aws/tests/deployment-guard-kms-receipt.test.mjs
           node --test aws/tests/deployment-guard-signed-receipt.test.mjs

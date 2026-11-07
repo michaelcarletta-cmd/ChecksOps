@@ -1,0 +1,64 @@
+{
+  "id": "sql145-platform-owner-billing-collection-leg-production-apply",
+  "migration": "sql145",
+  "authorization": "pending",
+  "execute": false,
+  "target_environment": "production",
+  "target_component": "production-sql",
+  "deployment_type": "sql-apply",
+  "filename": "aws/workflows/sql/145_platform_owner_billing_collection_leg.sql",
+  "migration_id": "145_platform_owner_billing_collection_leg",
+  "staging_pin_commit": "e15aef7cc0f826240a1588eabc2a3822a3df94fa",
+  "source_sha256": "ea57a69cf7f2000157898590c5bfbe5224ff1f135b599e82bb18018a8d22cc77",
+  "function_identities": [
+    "public.aws_platform_owner_insert_billing_collection_leg(uuid, text, text, text, bigint, text, text, uuid, text, text, text, text, jsonb)"
+  ],
+  "expected_live_definition_sha256": null,
+  "intended_replacement_sha256": "a44d93bddc3a90149ec2eaa9279d4695193db8f5eb190463f239d7cb130f435a",
+  "authorization_phrase": "APPLY_PLATFORM_OWNER_BILLING_COLLECTION_LEG",
+  "predecessors": [],
+  "order_note": "No predecessor: SQL 145 creates one new SECURITY DEFINER writer, aws_platform_owner_insert_billing_collection_leg(...), on the payment transfer and fee obligation schema the AWS databases already have (payment_transfers with the columns the API's collection leg writes and its unique index payment_transfers_idempotency_uniq (tenant_id, idempotency_key); tenant_maintenance_payments (id, tenant_id, amount_cents, billing_period)), the helpers is_platform_owner() and auth.uid(), SQL 136's gate aws_money_write_allowed() (SQL 136 applied in production 2026-11-02) and role checksops; a read-only production inspect confirms them. The applying login must reach both relations as the function's owner past RLS (definer_can_write_relations: the table owner without FORCE ROW LEVEL SECURITY, or a superuser or BYPASSRLS): a DEFINER insert filtered by RLS would be refused exactly as the API's insert is today. Expected pre-state in both environments: the function absent (release sql145 v1 / function public.aws_platform_owner_insert_billing_collection_leg(uuid, text, text, text, bigint, text, text, uuid, text, text, text, text, jsonb): absent). Where it already exists (a re-run) it must be owned by the applying login (functions_owned_by_login), keep its public.payment_transfers result (function_results_match) and hold no EXECUTE grant other than checksops and the owner, which the file keeps, and PUBLIC, anon, authenticated and service_role, which it revokes (function_acl_replaceable). The ACL after the apply is checksops and the owner. The API change that calls the function (aws/functions/api/tenant-collection-v2.mjs, savepoint collection_insert_leg) needs the guarded Lambda path after this pin is applied in that environment; until then (and if the API is deployed first) a platform-owner collection leg fails to save exactly as today (logged, rolled back to its savepoint, obligation submitted with leg_persist_failed). No API, Lambda or SPA change is part of this pin. Adds no trigger.",
+  "admin_login": "checksops_admin",
+  "rds_identifier": "checksops-production",
+  "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
+  "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
+  "tooling": {
+    "status": "built",
+    "production_tool": "scripts/deployment-guard/sql145-platform-owner-billing-collection-leg-production-apply.mjs",
+    "production_lib": "scripts/deployment-guard/lib/release-sql-production-apply.mjs",
+    "staging_executor_handler": "aws/write-path/guarded-sql-executor/index.mjs handleReleaseSqlMigration",
+    "staging_workflow_choice": "sql145-platform-owner-billing-collection-leg",
+    "one_shot_migration": "sql145",
+    "fingerprint_engine": "scripts/deployment-guard/lib/release-sql-state.mjs",
+    "runbook": "ops/production-sql-145-apply.md",
+    "tests": [
+      "aws/tests/release-sql145-executor.test.mjs",
+      "aws/tests/release-sql145-production-apply.test.mjs",
+      "aws/tests/release-sql90-97-executor.test.mjs",
+      "aws/tests/release-sql90-97-production-apply.test.mjs",
+      "aws/tests/sql145-platform-owner-billing-collection-leg-pg.test.mjs"
+    ],
+    "note": "Guarded tooling for SQL 145: sql145-platform-owner-billing-collection-leg-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql145-platform-owner-billing-collection-leg); production-sql-one-shot.mjs --migration sql145. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): the new function with the file's body and attributes and EXECUTE for checksops and the owner. The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
+  },
+  "production_inspect": {
+    "status": "pending",
+    "date": null,
+    "ssm_command_id": null,
+    "source_commit": null,
+    "read_only": true,
+    "connected_as": "checksops_admin",
+    "live_definition_sha256": null,
+    "apply_preconditions_met": null,
+    "precondition_failures": null,
+    "note": "Pending: no release-engine production inspect has been run for SQL 145 yet. Expected release-engine fingerprint of the pre-state under sql145: c622469dcfbfc0ad8f54c0bb038457b9eb3247a17ee0c855390ddc709ee1d594 (the function absent; derived by aws/tests/release-sql145-executor.test.mjs). Record the one-shot --phase inspect's date, SSM command id, source commit, live_definition_sha256, prerequisites_missing, release_sql_inspect.functions, release_sql_inspect.function_acl, release_sql_inspect.definer_writes (both relations must read ok true), precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. Stop if prerequisites_missing is not [] or precondition_failures is not [] (prerequisites_present, definer_can_write_relations; on a re-run also functions_owned_by_login, function_results_match, function_acl_replaceable): that needs its own reviewed change."
+  },
+  "intended_post_state": {
+    "fingerprint": "a44d93bddc3a90149ec2eaa9279d4695193db8f5eb190463f239d7cb130f435a",
+    "note": "aws_platform_owner_insert_billing_collection_leg(uuid, text, text, text, bigint, text, text, uuid, text, text, text, text, jsonb) owned by checksops_admin, plpgsql, VOLATILE, SECURITY DEFINER, search_path public, pg_temp, RETURNS public.payment_transfers, EXECUTE for checksops and the owner (PUBLIC, anon, authenticated and service_role revoked): for the platform owner (auth.uid() and is_platform_owner(); 42501 billing_collection_leg_forbidden otherwise) on a server write path (aws_money_write_allowed(); 42501 billing_collection_leg_not_server_write otherwise), a tenant-collection-v2 leg (leg_role wallet or ach_debit, idempotency key billing-<period>-<tenant>-wallet|bank, provider_metadata collection_contract, leg_type and billing_period matching, environment production or sandbox, status due, submitted or settled, amount > 0; 22023 otherwise) of an existing obligation of that tenant and period (provider_metadata.obligation_id) whose amount_cents covers this leg plus the tenant's other non-failed leg for the period (22023 otherwise): the API's INSERT (provider moov, platform_fee_cents 0, net_amount_cents = amount_cents, speed standard, submitted_at now()) with its ON CONFLICT (tenant_id, idempotency_key) update of provider_transfer_id, provider_status, status and updated_at, only over the same kind of leg (23505 billing_collection_leg_conflict otherwise); returns the row. No other function, table, column, policy, RLS setting, grant, trigger or row change. The fingerprint is releaseIntendedHash('sql145', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): a44d93bddc3a90149ec2eaa9279d4695193db8f5eb190463f239d7cb130f435a."
+  },
+  "staging_acceptance": {
+    "ok": false,
+    "reference": null,
+    "basis": "Pending: record the guarded staging SQL executor read-live and the staging apply of SQL 145 (choice sql145-platform-owner-billing-collection-leg) here in the reviewed change that sets execute true. The behavior is covered on PostgreSQL 16 by aws/tests/sql145-platform-owner-billing-collection-leg-pg.test.mjs. Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+  }
+}
