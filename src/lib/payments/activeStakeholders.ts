@@ -55,6 +55,8 @@ export interface RecipientTotalRow {
   count: number;
   /** How many of `count` are payroll runs (not editable split rows). */
   payrollCount?: number;
+  /** How many of `count` are sends from the Funds tab (payment_transfers legs, not editable split rows). */
+  sendCount?: number;
   /** null when nothing was paid in the selected range. */
   last: string | null;
 }

@@ -3272,6 +3272,32 @@ export const AUTHORIZED_SQL143_MORTGAGE_COMPANIES_MEMBER_DELETE_UNUSED = Object.
   ]),
 });
 
+// Incoming transfers read staging pin: SQL 144 (owner 2026-11-06: "yes build it, include partner payments as income
+// not tax"). The new SECURITY DEFINER public.get_tenant_incoming_transfers(uuid) lets an organization read the send
+// legs another organization addressed to it (payment_transfers destination_tenant_id), under the API's tenant gate
+// re-checked in the database (aws_can_access_tenant, 42501); narrow columns, check context only for a check the sender
+// shares with it; EXECUTE for checksops and the owner. No predecessor. Staging apply authorized (wave 39) from staging
+// read-live run 42304378701: the pre-state, the function absent and everything else in place, equals the derived one
+// (ops/production-sql-144-apply.md).
+export const AUTHORIZED_SQL144_TENANT_INCOMING_TRANSFERS = Object.freeze({
+  key: 'sql144',
+  filename: 'aws/workflows/sql/144_tenant_incoming_transfers.sql',
+  migration_id: '144_tenant_incoming_transfers',
+  // The commit that last authored the file bytes.
+  commit: '87c3e193b8a962022df8ca2306e71b94721c3e6a',
+  source_sha256: '9192e338ea4e54d2690e0ebde71754292394c52f1bac09c3af5fd3fb4b309865',
+  authorization: 'Owner approved 2026-11-06: staging apply (wave 39) from staging read-live run 42304378701',
+  execute: true,
+  // Staging read-live run 42304378701 (main b5912204f, executor deploy run 42303787295): already_applied false,
+  // precondition_failures []. Equal to the derived pre-state (the function absent).
+  expected_live_definition_sha256: '428d394e88ce45840806f7a6c93ed63d40178c0376c8a70843197bf28dccb88e',
+  // Code-derived: releaseIntendedHash('sql144', file bytes) (release-sql-state.mjs); re-derived by the tests.
+  intended_replacement_sha256: 'ac458869cda99ec85cb42e31f5ba80ced29cbf227a81058379e086b0ffb924c2',
+  function_identities: Object.freeze([
+    'public.get_tenant_incoming_transfers(uuid)',
+  ]),
+});
+
 export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql90: AUTHORIZED_SQL90_USERS_ONLY_TENANT_ROLES,
   sql91: AUTHORIZED_SQL91_MOOV_ONBOARDING,
@@ -3326,6 +3352,7 @@ export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql141: AUTHORIZED_SQL141_PERMANENT_VENDOR_PAYEES,
   sql142: AUTHORIZED_SQL142_MORTGAGE_COMPANIES_TENANT_ADMIN_WRITE,
   sql143: AUTHORIZED_SQL143_MORTGAGE_COMPANIES_MEMBER_DELETE_UNUSED,
+  sql144: AUTHORIZED_SQL144_TENANT_INCOMING_TRANSFERS,
 });
 
 // The fee collection pin under its earlier map name (the same object as the release map's sql98).
@@ -3341,7 +3368,7 @@ export function isSql30TenantDocumentsDocType(input = {}) {
   return pinIdentifiersMatch(input, AUTHORIZED_SQL30_TENANT_DOCUMENTS_DOC_TYPE);
 }
 
-/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql143) an input names, or null. */
+/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql144) an input names, or null. */
 export function releaseSqlMigrationKey(input = {}) {
   return Object.keys(RELEASE_2026_10_17_PENDING_SQL_PINS)
     .find((key) => pinIdentifiersMatch(input, RELEASE_2026_10_17_PENDING_SQL_PINS[key])) || null;

@@ -20,6 +20,8 @@ import {
   fetchPayrollRuns,
   payrollRecipientReportRows,
 } from "@/lib/payments/payrollRows";
+import { SEND_SOURCE_LABEL, incomingBySender, sendRecipientReportRows } from "@/lib/payments/transferFinanceRows";
+import { inRange, useIncomingTransfers, useSentPaymentLegs } from "@/hooks/useTransferFinance";
 
 
 const TYPE_LABELS: Record<string, string> = {
@@ -34,6 +36,7 @@ const TYPE_LABELS: Record<string, string> = {
   insured: "Insured",
   overhead: "Overhead",
   operating: "Operating",
+  partner: "Partners",
   other: "Other",
 };
 
@@ -152,6 +155,15 @@ export function RecipientReport() {
     ),
   });
 
+  // Sends from the Funds tab (payment_transfers legs, not splits) are payments to their recipient
+  // (owner 2026-11-06); partner payments into this wallet are listed apart, as Received from.
+  const { data: sentLegs } = useSentPaymentLegs();
+  const { data: incomingTransfers } = useIncomingTransfers();
+  const receivedFrom = useMemo(
+    () => incomingBySender(incomingTransfers, (p) => inRange([p], (x) => x.at, dateFilters).length > 0),
+    [incomingTransfers, dateFilters],
+  );
+
   const normalized = useMemo(() => {
     const splitRows = (rows as any[]).map((r) => {
       const acct = r.stakeholder_accounts;
@@ -169,8 +181,9 @@ export function RecipientReport() {
         method: r.method ?? "ach",
       };
     });
-    return [...splitRows, ...payrollRecipientReportRows(payrollRuns)];
-  }, [rows, payrollRuns]);
+    const sendRows = inRange(sendRecipientReportRows(sentLegs), (r) => r.date, dateFilters);
+    return [...splitRows, ...payrollRecipientReportRows(payrollRuns), ...sendRows];
+  }, [rows, payrollRuns, sentLegs, dateFilters]);
 
   const filtered = useMemo(() => normalized.filter((r) => {
     const matchSearch = !search || r.name.toLowerCase().includes(search.toLowerCase());
@@ -201,10 +214,11 @@ export function RecipientReport() {
     for (const r of filtered) {
       if (r.status !== "settled") continue;
       const k = `${r.type}|${r.name}`;
-      if (!acc[k]) acc[k] = { name: r.name, type: r.type, total: 0, count: 0, payrollCount: 0, last: r.date };
+      if (!acc[k]) acc[k] = { name: r.name, type: r.type, total: 0, count: 0, payrollCount: 0, sendCount: 0, last: r.date };
       acc[k].total += r.amount;
       acc[k].count += 1;
       if (r.method === "payroll") acc[k].payrollCount = (acc[k].payrollCount ?? 0) + 1;
+      if (r.method === "send") acc[k].sendCount = (acc[k].sendCount ?? 0) + 1;
       if (new Date(r.date) > new Date(acc[k].last)) acc[k].last = r.date;
     }
     const paid = Object.values(acc).sort((a, b) => b.total - a.total);
@@ -387,6 +401,11 @@ export function RecipientReport() {
                             {PAYROLL_SOURCE_LABEL}{r.payrollCount !== r.count ? ` ×${r.payrollCount}` : ""}
                           </Badge>
                         )}
+                        {(r.sendCount ?? 0) > 0 && (
+                          <Badge variant="outline" className="ml-1.5 text-[9px] py-0 h-4 align-middle">
+                            {SEND_SOURCE_LABEL}{r.sendCount !== r.count ? ` ×${r.sendCount}` : ""}
+                          </Badge>
+                        )}
                       </td>
                       <td className="p-3">
                         <Badge variant="outline" className={`text-[10px] ${TYPE_COLORS[r.type] ?? ""}`}>
@@ -401,14 +420,14 @@ export function RecipientReport() {
                         {r.last ? format(new Date(r.last), "MMM d, yyyy") : "—"}
                       </td>
                       <td className="p-3 text-right">
-                        {/* Only split rows are renamed; payroll runs keep the payee's account name. */}
-                        {r.count - (r.payrollCount ?? 0) > 0 && (
+                        {/* Only split rows are renamed; payroll runs and sends keep their recipient's name. */}
+                        {r.count - (r.payrollCount ?? 0) - (r.sendCount ?? 0) > 0 && (
                           <Button
                             size="sm"
                             variant="ghost"
                             className="h-7 w-7 p-0"
                             title="Edit recipient"
-                            onClick={() => openEdit(r.name, r.type, r.count - (r.payrollCount ?? 0))}
+                            onClick={() => openEdit(r.name, r.type, r.count - (r.payrollCount ?? 0) - (r.sendCount ?? 0))}
                           >
                             <Pencil className="h-3.5 w-3.5" />
                           </Button>
@@ -422,6 +441,45 @@ export function RecipientReport() {
           )}
         </CardContent>
       </Card>
+
+      {receivedFrom.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Users className="h-4 w-4" /> Received from
+            </CardTitle>
+            <p className="text-xs text-muted-foreground">Payments other organizations sent into this wallet: income, not 1099 payments.</p>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b text-xs text-muted-foreground">
+                    <th className="text-left p-3 font-medium">From</th>
+                    <th className="text-right p-3 font-medium hidden sm:table-cell">Payments</th>
+                    <th className="text-right p-3 font-medium">Total received</th>
+                    <th className="text-left p-3 font-medium hidden md:table-cell">Last received</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {receivedFrom.map((r) => (
+                    <tr key={r.name} className="border-b last:border-0 hover:bg-muted/30">
+                      <td className="p-3 font-medium text-xs">{r.name}</td>
+                      <td className="p-3 text-right text-xs hidden sm:table-cell">{r.count}</td>
+                      <td className="p-3 text-right font-semibold text-sm text-emerald-600">
+                        +${r.total.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                      </td>
+                      <td className="p-3 text-xs text-muted-foreground hidden md:table-cell">
+                        {r.last ? format(new Date(r.last), "MMM d, yyyy") : "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Dialog open={!!editTarget} onOpenChange={(o) => !o && setEditTarget(null)}>
         <DialogContent className="max-w-md">
