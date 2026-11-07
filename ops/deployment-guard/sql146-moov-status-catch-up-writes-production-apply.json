@@ -1,8 +1,8 @@
 {
   "id": "sql146-moov-status-catch-up-writes-production-apply",
   "migration": "sql146",
-  "authorization": "Owner approved 2026-11-07 (the owner's words for SQL 146: \"build the catch-up update fix\" (2026-11-07), \"record the SQL 146 staging pin\" (2026-11-07), \"apply SQL 146 in staging\" (2026-11-07), \"SQL 146 accepted in staging\" (2026-11-07), \"run the read-only SQL 146 production inspect\" (2026-11-07) and \"record the SQL 146 production pin\" (2026-11-07), none of them words for the production apply; the change itself is reviewed and merged by the owner): production apply of SQL 146 after the staging acceptance below (production 1ef789645da5ce865cbb095bea1eff6775a4bedc87251e8152f41a771e659c40 -> ef55e1feace25188bff4890393be472deac6cdfe64e06951e53279f12641488b); execute true takes effect only when the owner reviews and merges this change. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
-  "execute": true,
+  "authorization": "Applied to production on 2026-11-07; execute is false again, so this pin is no longer a standing authorization and a re-apply needs a new reviewed pin change. The owner approved the SQL 146 production pin change on 2026-11-07 in the words \"build the catch-up update fix\", \"record the SQL 146 staging pin\", \"apply SQL 146 in staging\", \"SQL 146 accepted in staging\", \"run the read-only SQL 146 production inspect\" and \"record the SQL 146 production pin\" (none of them words for the production apply; 1ef78964 -> ef55e1fe, #1694, merged to main as 83d649ebd on the owner's words \"merge 1694\") and the one apply run recorded in applied (workstream prod-sql146-moov-status-catch-up-writes-20261107) in the words \"apply SQL 146 in production\", passed to it verbatim. That approval covered that run only.",
+  "execute": false,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -61,5 +61,287 @@
     "ok": true,
     "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/42405866540",
     "basis": "Guarded staging SQL executor apply of sql146-moov-status-catch-up-writes, run 42405866540 (job 128503304198, 2026-11-07, main 9772e808e6852ed0a05bdf43f7ceb54a2d23305c, wave 41, workstream github-staging-sql-42405866540, staging pin commit 9229c8f9e1413d43114c5a6879e8f628d6f95c53, staging pin PR #1693, on the executor deployed by deploy run 42405240604: lrvFKRHsbRwmEfAW0kgwr0rKEKOz7pp0MvZCVE7IVXo=, previous EEc1vtaB6lKlkEXSe99icmontAnuPbZELXVbxZHn4Xg= (inspect runs 42405045010 and 42405445608)), under the owner's words \"apply SQL 146 in staging\", from the staging pre-state recorded by read-live run 42403055167 and re-read by read-live run 42405651492 (1ef789645da5ce865cbb095bea1eff6775a4bedc87251e8152f41a771e659c40, already_applied false, precondition_failures []): receipt before 1ef789645da5ce865cbb095bea1eff6775a4bedc87251e8152f41a771e659c40, after ef55e1feace25188bff4890393be472deac6cdfe64e06951e53279f12641488b == intended, result applied; both functions intended, their EXECUTE ACL checksops and the owner, definer_writes ok true on both relations, prerequisites_missing []. Read-live run 42406066179 then reported already_applied true, live ef55e1feace25188bff4890393be472deac6cdfe64e06951e53279f12641488b, precondition_failures []. Owner acceptance 2026-11-07: \"SQL 146 accepted in staging\". No separate staging record PR: these staging runs are recorded here and in ops/production-sql-146-apply.md by the production pin PR. The API change that calls the functions (aws/functions/api/providers/moov-status-catch-up.mjs) is not part of this pin. The behavior is covered on PostgreSQL 16 by aws/tests/sql146-moov-status-catch-up-writes-pg.test.mjs and through the executor by aws/tests/release-sql146-executor.test.mjs. Production's pre-state (production_inspect) equals staging's, so the same path applies there. The same file bytes (source_sha256) are pinned in both."
+  },
+  "applied": {
+    "date": "2026-11-07",
+    "result": "applied",
+    "source_commit": "83d649ebd9740c2ecd40e275d8561523b5c14b5d",
+    "source_commit_basis": "SOURCE_COMMIT in the tarball (written by sql53-temporary-transfer) equals --commit, and the tarball sha256 equals --expected-tarball-sha256 as copied by the operator from that transfer run's log (TARBALL_SHA256 line); the run log itself was not read by the one-shot.",
+    "source_tarball": {
+      "file": "source-83d649ebd9740c2ecd40e275d8561523b5c14b5d.tar.gz",
+      "sha256": "7ae1335f6ee9e7bcd83559953e447a330ef0e7e135eabe9f5a3c3a29871c22a7"
+    },
+    "migration_source_sha256": "327ee73d4ce01a4b2050c98accb439588fcddb20ed2d645ca62922e13431bc8c",
+    "migration_source_sha256_note": "The one-shot source step hashed aws/workflows/sql/146_moov_status_catch_up_writes.sql in the transfer tarball: equal to source_sha256 (the pin; migration_matches_pin true).",
+    "runner": "i-0c35557c4e5385406",
+    "runner_basis": "operator-supplied --runner (not verified by the one-shot)",
+    "workstream_id": "prod-sql146-moov-status-catch-up-writes-20261107",
+    "one_use_id": "sql146-prod-25d04563-c33f-49fa-a9b5-21d3db7316e5",
+    "one_use_id_consumed": true,
+    "one_use_id_consumed_basis": "Inferred from the successful apply (the tool records the one_use_id after COMMIT and only warns if that write fails); the consumed-registry entry was not read back separately.",
+    "owner_approval": "apply SQL 146 in production",
+    "owner_approval_basis": "As passed in --approval-statement for --approval-scope sql146; the one-shot cannot verify who said it. The owner's words of 2026-11-07 for this run were \"apply SQL 146 in production\", given after the pin change (#1694, merged to main as 83d649ebd on the owner's words \"merge 1694\") whose authorization recorded that no words for the production apply had been given yet; they were passed verbatim as the approval statement for the --phase inspect run and the --phase apply run.",
+    "operator": "michaelcarletta-cmd",
+    "apply_ssm_command_id": "63e932ed-022b-4286-b900-220d09b2733a",
+    "one_shot_run_id": "f405fe8f-6b4c-4a15-86e6-b4de25e013f1",
+    "one_shot_note": "One SSM command (63e932ed-022b-4286-b900-220d09b2733a on i-0c35557c4e5385406, comment \"SQL 146 production one-shot apply (owner: apply SQL 146 in production)\", sent 2026-11-07 19:49:32Z, Success, ResponseCode 0, execution ended 19:49:44Z; the runner was started from stopped for this work at 19:49:13Z and stopped again at 19:50:07Z, after both SSM commands had ended) ran the production-sql-one-shot --phase apply (run_id f405fe8f-6b4c-4a15-86e6-b4de25e013f1) from main 83d649ebd (transfer run 42407947861, sql53-temporary-transfer.yml on main after the #1694 merge; tarball sha256 7ae1335f6ee9e7bcd83559953e447a330ef0e7e135eabe9f5a3c3a29871c22a7). Before it, a separate one-shot --phase inspect on the same tarball and the same approval statement (SSM 66c50e8c-d812-4583-b276-4e4a176558ea, run_id 1d09509b-dcd9-4741-abcb-db5de221f6fb, EXIT=0, steps pin, source, inspect and contracts ok, nothing written) read live 1ef789645da5ce865cbb095bea1eff6775a4bedc87251e8152f41a771e659c40 (live_matches_expected true, already_applied false, apply_preconditions_met true, precondition_failures [], prerequisites_missing [], predecessors {}, both functions absent, their function_acl [], definer_writes ok true on both relations, counts null), the pre-state the read-only inspect recorded in production_inspect (SSM df96f4d3-ef1c-4a02-9684-19bfaac45101). The apply run's own inspect step read the same pre-state. Steps pin (execute true, staging_acceptance run 42405866540), source (tarball sha256 matches the sidecar and --expected-tarball-sha256, tree matches the tarball, migration source == pin), inspect, contracts (claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43), manifest, source-recheck-before-preflight, preflight (receipt_issued), evaluate (sql146_production_apply_allowed true), source-recheck-before-apply, apply (applied) and post-apply-inspect all ok. The run's JSON arrived whole (22002 characters of SSM output, under the 24000-character limit; the operator's session saved each phase's output tail-truncated at 30000 characters, which held all of it, and the whole output was read back read-only from SSM get-command-invocation for 63e932ed-022b-4286-b900-220d09b2733a and 66c50e8c-d812-4583-b276-4e4a176558ea, equal to what was saved): every field of the applied object is recorded as printed, except this note and owner_approval_basis, which are extended as in the SQL 127 to SQL 145 records (the one-shot's own one_shot_note read: \"One production-sql-one-shot run verified the source, ran the read-only inspect and the runner contracts, built the manifest, issued the receipt and lease (preflight), evaluated (sql146_production_apply_allowed true), applied (exit 0) and ran the post-apply inspect.\"; its owner_approval_basis read: \"As passed in --approval-statement for --approval-scope sql146; the one-shot cannot verify who said it.\"). The printed applied.receipt equals the run's top-level details.apply_result, and applied.post_apply_inspect, pre_apply_inspect and contract_results equal the top-level objects of the same name. This block adds migration_source_sha256 (with its note), apply_ssm_command_id, steps and manifest_sha256 from the same run's details, as the SQL 127 to SQL 145 records do. The run's not_observed_by_this_run list names ssm_command_id and source_staged_by, supplied here as apply_ssm_command_id and transfer run 42407947861. The post-apply inspect reported live ef55e1feace25188bff4890393be472deac6cdfe64e06951e53279f12641488b == intended, already_applied true, precondition_failures []: functions aws_moov_catch_up_lock_rows(text, text, uuid[]) and aws_moov_apply_collection_leg_status(text, text, bigint, text, text, text, timestamp with time zone) intended, their EXECUTE ACL checksops and the owner, definer_writes ok true on both relations (payment_transfers, tenant_maintenance_payments), counts null (the spec has none), prerequisites_missing []. Unrelated catalog 8b21e2775dc084311e8a83e772e8f58c6c0045b5c5628ead47c7ff09bc1f71e9 (policies 479, functions 1361, triggers 185 outside SQL 146's own). Production acceptance: not yet reported by the owner when this record was written (the API change that calls the functions, providers/moov-status-catch-up.mjs, is not part of this pin and is not deployed by this record); this record does not claim it.",
+    "steps": [
+      "pin",
+      "source",
+      "inspect",
+      "contracts",
+      "manifest",
+      "source-recheck-before-preflight",
+      "preflight",
+      "evaluate",
+      "source-recheck-before-apply",
+      "apply",
+      "post-apply-inspect"
+    ],
+    "contract_results": {
+      "claim-ledger": {
+        "ok": true,
+        "test": "aws/tests/claim-ledger-accepted-contract.test.mjs",
+        "evidence": "4/4 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at 83d649ebd9740c2ecd40e275d8561523b5c14b5d (production-sql-one-shot f405fe8f-6b4c-4a15-86e6-b4de25e013f1, node --test)"
+      },
+      "tenant-isolation": {
+        "ok": true,
+        "test": "aws/tests/tenant-security-compliance.test.mjs",
+        "evidence": "6/6 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at 83d649ebd9740c2ecd40e275d8561523b5c14b5d (production-sql-one-shot f405fe8f-6b4c-4a15-86e6-b4de25e013f1, node --test)"
+      },
+      "financial-write-protections": {
+        "ok": true,
+        "test": "aws/tests/api-write.test.mjs",
+        "evidence": "43/43 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at 83d649ebd9740c2ecd40e275d8561523b5c14b5d (production-sql-one-shot f405fe8f-6b4c-4a15-86e6-b4de25e013f1, node --test)"
+      }
+    },
+    "pre_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "1ef789645da5ce865cbb095bea1eff6775a4bedc87251e8152f41a771e659c40",
+      "live_matches_expected": true,
+      "already_applied": false,
+      "predecessors": {},
+      "predecessors_applied": true,
+      "missing_dependencies": [],
+      "apply_preconditions_met": true,
+      "precondition_failures": [],
+      "current_user": "checksops_admin",
+      "session_user": "checksops_admin",
+      "counts": null,
+      "successors_applied": [],
+      "release_sql_inspect": {
+        "live_definition_sha256": "1ef789645da5ce865cbb095bea1eff6775a4bedc87251e8152f41a771e659c40",
+        "prerequisites_missing": [],
+        "predecessors": {},
+        "successors_applied": [],
+        "functions": [
+          {
+            "name": "aws_moov_catch_up_lock_rows(text, text, uuid[])",
+            "state": "absent"
+          },
+          {
+            "name": "aws_moov_apply_collection_leg_status(text, text, bigint, text, text, text, timestamp with time zone)",
+            "state": "absent"
+          }
+        ],
+        "policies": [],
+        "views": [],
+        "tables": [],
+        "columns": [],
+        "constraints": [],
+        "triggers": [],
+        "table_privileges": [],
+        "function_acl": [
+          {
+            "name": "aws_moov_catch_up_lock_rows(text, text, uuid[])",
+            "acl": []
+          },
+          {
+            "name": "aws_moov_apply_collection_leg_status(text, text, bigint, text, text, text, timestamp with time zone)",
+            "acl": []
+          }
+        ],
+        "acl_functions": [],
+        "indexes": [],
+        "unique_covers": [],
+        "definer_writes": [
+          {
+            "name": "payment_transfers",
+            "ok": true
+          },
+          {
+            "name": "tenant_maintenance_payments",
+            "ok": true
+          }
+        ],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": null
+      }
+    },
+    "manifest_sha256": "aa11c442e0af7a195a84946fd561344acca32d8878d89def738d664feaacc74b",
+    "receipt": {
+      "migration": "sql146",
+      "workstream": "prod-sql146-moov-status-catch-up-writes-20261107",
+      "commit": "83d649ebd9740c2ecd40e275d8561523b5c14b5d",
+      "sql_file": "aws/workflows/sql/146_moov_status_catch_up_writes.sql",
+      "before_hash": "1ef789645da5ce865cbb095bea1eff6775a4bedc87251e8152f41a771e659c40",
+      "after_hash": "ef55e1feace25188bff4890393be472deac6cdfe64e06951e53279f12641488b",
+      "release_sql_inspect": {
+        "live_definition_sha256": "ef55e1feace25188bff4890393be472deac6cdfe64e06951e53279f12641488b",
+        "prerequisites_missing": [],
+        "predecessors": {},
+        "successors_applied": [],
+        "functions": [
+          {
+            "name": "aws_moov_catch_up_lock_rows(text, text, uuid[])",
+            "state": "intended"
+          },
+          {
+            "name": "aws_moov_apply_collection_leg_status(text, text, bigint, text, text, text, timestamp with time zone)",
+            "state": "intended"
+          }
+        ],
+        "policies": [],
+        "views": [],
+        "tables": [],
+        "columns": [],
+        "constraints": [],
+        "triggers": [],
+        "table_privileges": [],
+        "function_acl": [
+          {
+            "name": "aws_moov_catch_up_lock_rows(text, text, uuid[])",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          },
+          {
+            "name": "aws_moov_apply_collection_leg_status(text, text, bigint, text, text, text, timestamp with time zone)",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          }
+        ],
+        "acl_functions": [],
+        "indexes": [],
+        "unique_covers": [],
+        "definer_writes": [
+          {
+            "name": "payment_transfers",
+            "ok": true
+          },
+          {
+            "name": "tenant_maintenance_payments",
+            "ok": true
+          }
+        ],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": null
+      },
+      "unrelated_catalog_sha256": "8b21e2775dc084311e8a83e772e8f58c6c0045b5c5628ead47c7ff09bc1f71e9",
+      "unrelated_catalog_counts": {
+        "relations": 892,
+        "columns": 3550,
+        "constraints": 2239,
+        "policies": 479,
+        "functions": 1361,
+        "indexes": 655,
+        "default_acl": 0,
+        "role_memberships": 15,
+        "roles": 29,
+        "triggers": 185,
+        "views": 25,
+        "types": 18,
+        "schema": 2
+      },
+      "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/42405866540",
+      "result": "applied"
+    },
+    "post_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "ef55e1feace25188bff4890393be472deac6cdfe64e06951e53279f12641488b",
+      "live_matches_expected": false,
+      "already_applied": true,
+      "predecessors": {},
+      "predecessors_applied": true,
+      "missing_dependencies": [],
+      "apply_preconditions_met": false,
+      "precondition_failures": [],
+      "current_user": "checksops_admin",
+      "session_user": "checksops_admin",
+      "counts": null,
+      "successors_applied": [],
+      "release_sql_inspect": {
+        "live_definition_sha256": "ef55e1feace25188bff4890393be472deac6cdfe64e06951e53279f12641488b",
+        "prerequisites_missing": [],
+        "predecessors": {},
+        "successors_applied": [],
+        "functions": [
+          {
+            "name": "aws_moov_catch_up_lock_rows(text, text, uuid[])",
+            "state": "intended"
+          },
+          {
+            "name": "aws_moov_apply_collection_leg_status(text, text, bigint, text, text, text, timestamp with time zone)",
+            "state": "intended"
+          }
+        ],
+        "policies": [],
+        "views": [],
+        "tables": [],
+        "columns": [],
+        "constraints": [],
+        "triggers": [],
+        "table_privileges": [],
+        "function_acl": [
+          {
+            "name": "aws_moov_catch_up_lock_rows(text, text, uuid[])",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          },
+          {
+            "name": "aws_moov_apply_collection_leg_status(text, text, bigint, text, text, text, timestamp with time zone)",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          }
+        ],
+        "acl_functions": [],
+        "indexes": [],
+        "unique_covers": [],
+        "definer_writes": [
+          {
+            "name": "payment_transfers",
+            "ok": true
+          },
+          {
+            "name": "tenant_maintenance_payments",
+            "ok": true
+          }
+        ],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": null
+      }
+    }
+  },
+  "production_evidence": {
+    "2026-11-07 apply": "Guarded production SQL one-shot on i-0c35557c4e5385406, workstream prod-sql146-moov-status-catch-up-writes-20261107, main 83d649ebd (tarball 7ae1335f…, transfer run 42407947861, migration source 327ee73d… == pin), owner-approved run (\"apply SQL 146 in production\"), pre-apply --phase inspect SSM 66c50e8c-d812-4583-b276-4e4a176558ea (run_id 1d09509b-dcd9-4741-abcb-db5de221f6fb, live 1ef78964…, live_matches_expected true), apply SSM 63e932ed-022b-4286-b900-220d09b2733a, run_id f405fe8f-6b4c-4a15-86e6-b4de25e013f1, one_use_id sql146-prod-25d04563-c33f-49fa-a9b5-21d3db7316e5 (spent): every step ok; contracts claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43; pre-apply inspect live 1ef78964… (live_matches_expected true, precondition_failures [], definer_writes ok on both relations); manifest aa11c442…; 1ef78964… -> ef55e1fe…, result applied, unrelated catalog 8b21e277… (policies 479, functions 1361); post-apply inspect already_applied true, precondition_failures []; the run's JSON arrived whole. After: public.aws_moov_catch_up_lock_rows(text, text, uuid[]) and public.aws_moov_apply_collection_leg_status(text, text, bigint, text, text, text, timestamp with time zone) exist as intended (SECURITY DEFINER, VOLATILE, RETURNS jsonb, EXECUTE for checksops and the owner; PUBLIC, anon, authenticated and service_role revoked), and the applying login reaches both relations past row level security. The API change that calls them (providers/moov-status-catch-up.mjs) is not part of this pin and is not deployed by this record; it needs the guarded Lambda path and the owner's words \"DEPLOY providers/moov-status-catch-up.mjs TO PRODUCTION\". Production acceptance was not yet reported by the owner when this was recorded. execute is false so the pin is no longer a standing authorization."
   }
 }

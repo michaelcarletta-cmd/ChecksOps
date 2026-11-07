@@ -135,7 +135,32 @@ SQL 146 production pin"; the owner's words so far name the staging steps, the st
 this pin, not the production apply. The owner merges the pin change; the apply still needs
 the owner's words for that run ("apply SQL 146 in production") and runs only after that merge is on main and staged.
 
-**Status:** applied in staging (wave 41, 2026-11-07); staging acceptance: owner ("SQL 146 accepted in staging"); production pin execute-authorized; not applied to production
+**Production apply (2026-11-07).** After the pin change (#1694, merged to main as `83d649ebd` on the owner's words
+"merge 1694"), transfer run 42407947861 staged main `83d649ebd` (tarball sha256
+`7ae1335f6ee9e7bcd83559953e447a330ef0e7e135eabe9f5a3c3a29871c22a7`). Under the owner's words
+"apply SQL 146 in production" (passed verbatim), a one-shot `--phase inspect` (SSM
+`66c50e8c-d812-4583-b276-4e4a176558ea`, run `1d09509b-dcd9-4741-abcb-db5de221f6fb`, nothing written) read live
+`1ef78964…` (the pinned pre-state, `live_matches_expected` true, `apply_preconditions_met` true,
+`precondition_failures` `[]`, both functions absent, `definer_writes` ok on both relations);
+then one-shot `--phase apply` run `f405fe8f-6b4c-4a15-86e6-b4de25e013f1` through SSM
+`63e932ed-022b-4286-b900-220d09b2733a`, workstream `prod-sql146-moov-status-catch-up-writes-20261107`,
+one_use_id `sql146-prod-25d04563-c33f-49fa-a9b5-21d3db7316e5`: its own inspect step read the same pre-state; contracts
+4/4, 6/6 and 43/43; all 11 steps ok; manifest `aa11c442…`; receipt `1ef78964…` →
+`ef55e1feace25188bff4890393be472deac6cdfe64e06951e53279f12641488b` (intended), result `applied`, unrelated
+catalog `8b21e277…` (policies 479, functions 1361); post-apply inspect `already_applied` true,
+`precondition_failures` `[]`: both functions `aws_moov_catch_up_lock_rows(...)` and
+`aws_moov_apply_collection_leg_status(...)` `intended`, their EXECUTE ACL `checksops` and the owner, `definer_writes`
+ok on both relations, `counts` null, `prerequisites_missing` `[]`. The run's JSON arrived whole (22002 characters of
+SSM output, under the 24000-character limit; read back read-only from SSM get-command-invocation). The runner
+`i-0c35557c4e5385406` was started for this work at 19:49:13Z and stopped at 19:50:07Z. The API change that calls the
+functions (`providers/moov-status-catch-up.mjs`, REPLACE `502995f6…` → `6083f54b…`) is not part of this pin and is not
+deployed by this record: the overlay plan now records SQL 146 verified live, so that member's guarded production apply
+passes its SQL gate, and it still needs its own read-only inspect and the owner's words
+"DEPLOY providers/moov-status-catch-up.mjs TO PRODUCTION". Production acceptance had not been reported by the owner
+when this record was written; this record does not claim it.
+
+**Status:** applied to staging (wave 41) and to production (2026-11-07); the production pin is retired
+(`execute: false`).
 
 ## Fingerprint
 

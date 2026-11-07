@@ -396,14 +396,9 @@ const withSql145 = (member, deps) => {
   plan.sql_prerequisites[SQL145_FILE] = { verified_live: true, evidence: 'test' };
   return { ...deps, plan };
 };
-// providers/moov-status-catch-up.mjs waits for SQL 146 (the catch-up update fix, its own test below), not applied
-// anywhere: apply replays run on a plan copy that records it live.
-const withSql146 = (member, deps) => {
-  if (PLAN.members[member]?.sql_before !== SQL146_FILE) return deps;
-  const plan = structuredClone(deps.plan || PLAN);
-  plan.sql_prerequisites[SQL146_FILE] = { verified_live: true, evidence: 'test' };
-  return { ...deps, plan };
-};
+// providers/moov-status-catch-up.mjs waits for SQL 146 (the catch-up update fix, its own test below): the committed
+// plan records SQL 146 verified live (the SQL 146 record change, from its 2026-11-07 production apply), so its apply
+// replay runs on the committed plan; the refusal it had before is replayed there on a plan copy where it is pending.
 // The plan before SQL 98 was recorded verified live (2026-10-19): the held-member refusals start from it.
 const PLAN_SQL98_PENDING = (() => {
   const plan = providersPre(structuredClone(PLAN));
@@ -6999,9 +6994,36 @@ test('Moov status catch-up update fix (SQL 146, 2026-11-07): providers/moov-stat
     sql_before: SQL146_FILE,
     manifest: CATCH_UP_UPDATE_FIX_REL,
   });
-  // SQL 146 is not applied anywhere: recorded not verified live, so an apply refuses until its record marks it live.
-  assert.deepEqual(PLAN.sql_prerequisites[SQL146_FILE], { verified_live: false, evidence: null });
+  // SQL 146 is recorded verified live in production (2026-11-07, the SQL 146 record change) from its retired pin: the
+  // same file bytes the pin and the one-shot hashed. The gate the apply below is checked against is shown on a plan
+  // copy where it is not yet recorded.
   assert.ok(fs.existsSync(path.join(ROOT, SQL146_FILE)));
+  const PIN146 = 'ops/deployment-guard/sql146-moov-status-catch-up-writes-production-apply.json';
+  const readJson = (rel) => JSON.parse(fs.readFileSync(path.join(ROOT, rel), 'utf8'));
+  const pin146 = readJson(PIN146);
+  assert.equal(pin146.source_sha256, sha(SQL146_FILE));
+  assert.equal(pin146.applied.migration_source_sha256, sha(SQL146_FILE));
+  assert.equal(pin146.execute, false);
+  assert.equal(pin146.applied.result, 'applied');
+  assert.equal(pin146.applied.receipt.before_hash, pin146.expected_live_definition_sha256);
+  assert.equal(pin146.applied.receipt.after_hash, pin146.intended_replacement_sha256);
+  assert.equal(pin146.staging_acceptance.reference, 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/42405866540');
+  const prerequisite146 = PLAN.sql_prerequisites[SQL146_FILE];
+  assert.equal(prerequisite146.verified_live, true);
+  assert.equal(prerequisite146.pin, PIN146);
+  const fromTo146 = `${pin146.expected_live_definition_sha256.slice(0, 8)}… -> ${pin146.intended_replacement_sha256.slice(0, 8)}…`;
+  for (const evidence of [pin146.applied.apply_ssm_command_id, pin146.applied.one_shot_run_id, pin146.applied.workstream_id, pin146.applied.one_use_id, pin146.applied.runner, fromTo146, 'staging acceptance run 42405866540', PIN146]) {
+    assert.ok(prerequisite146.evidence.includes(evidence), evidence);
+  }
+  assert.ok(prerequisite146.note.includes(`REPLACE ${CATCH_UP_APPLIED_BYTES.slice(0, 8)}… -> ${accepted.slice(0, 8)}…`));
+  assert.ok(prerequisite146.note.includes('"DEPLOY providers/moov-status-catch-up.mjs TO PRODUCTION"'));
+  const staging146 = readJson('ops/deployment-guard/staging-sql-live.json').sql[SQL146_FILE];
+  assert.equal(staging146.verified_live, true);
+  for (const evidence of ['run 42405866540', 'read-live run 42406066179', `receipt before ${pin146.expected_live_definition_sha256.slice(0, 8)}…`, `after ${pin146.intended_replacement_sha256.slice(0, 8)}…`]) {
+    assert.ok(staging146.evidence.includes(evidence), evidence);
+  }
+  const sql146Pending = structuredClone(PLAN);
+  sql146Pending.sql_prerequisites[SQL146_FILE] = { verified_live: false, evidence: null };
   const evidence = `REPLACE ${MEMBER} ${CATCH_UP_APPLIED_BYTES.slice(0, 8)} -> ${accepted.slice(0, 8)}`;
   assert.ok(manifest.notes.includes(evidence), evidence);
   assert.ok(PLAN.notes.includes(evidence), evidence);
@@ -7034,14 +7056,19 @@ test('Moov status catch-up update fix (SQL 146, 2026-11-07): providers/moov-stat
     run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: 'c'.repeat(64) }) }),
     (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
   );
-  // Apply: refused on the committed plan until SQL 146 is recorded verified live; a plan copy that records it replays
-  // (dry: no mutation), one receipt for this member.
+  // Apply: it was refused while SQL 146 was not recorded verified live (the plan before the SQL 146 record change,
+  // replayed on a copy) ...
   await assert.rejects(
-    run(applyEnv(MEMBER), applyDeps(MEMBER).deps),
+    run(applyEnv(MEMBER), { ...applyDeps(MEMBER, { plan: sql146Pending }).deps, plan: sql146Pending }),
     (error) => error.code === CODES.PRODUCTION_APPROVAL_REQUIRED && error.details?.sql_before === SQL146_FILE,
   );
+  // ... and passes the SQL gate now that the committed plan records it (the same replay without a plan override of
+  // SQL 146; dry: no mutation), one receipt for this member. The member row and its hashes are unchanged.
+  assert.equal(PLAN.sql_prerequisites[SQL146_FILE].verified_live, true);
+  // applyDeps copies the committed plan file and passes no plan override for this member.
   const { deps, calls } = applyDeps(MEMBER);
-  const replay = await run(applyEnv(MEMBER), withSql146(MEMBER, deps));
+  assert.equal(deps.plan, undefined);
+  const replay = await run(applyEnv(MEMBER), deps);
   assert.equal(replay.mutation, false);
   assert.deepEqual(calls.receipt.owned_member_ops, { replace: [MEMBER], add: [] });
 });

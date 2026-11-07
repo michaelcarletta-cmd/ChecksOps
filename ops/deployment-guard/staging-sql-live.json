@@ -93,8 +93,8 @@
       "evidence": "Guarded staging SQL executor apply of sql145-platform-owner-billing-collection-leg on 2026-11-07 (run 42334108246, main b65d091a2, wave 40, executor GEDJLmf1…; read-live run 42334267158 already_applied true): receipt before c622469d…, after a44d93bd… = the pin's intended_replacement_sha256; precondition_failures [], prerequisites_missing []."
     },
     "aws/workflows/sql/146_moov_status_catch_up_writes.sql": {
-      "verified_live": false,
-      "evidence": null
+      "verified_live": true,
+      "evidence": "Guarded staging SQL executor apply of sql146-moov-status-catch-up-writes on 2026-11-07 (run 42405866540, main 9772e808e, wave 41, executor lrvFKRHs…; read-live run 42406066179 already_applied true): receipt before 1ef78964…, after ef55e1fe… = the pin's intended_replacement_sha256; precondition_failures [], prerequisites_missing []."
     }
   }
 }
