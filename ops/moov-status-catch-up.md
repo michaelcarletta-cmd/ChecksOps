@@ -92,18 +92,42 @@ production overlay members, planned in their own PR and applied with their own a
    `index.mjs` already routes `/scheduled/*` to `scheduled.mjs`, and `index.mjs` is never
    overlaid.
 
-`scheduled.mjs` is not changed in this PR, for two reasons:
+**Planned (2026-11-07, planning only).** The hook is in `scheduled.mjs` on main, and the
+production overlay plan has both rows. The manifest is
+`aws/tests/fixtures/production-moov-status-catch-up-manifest-2026-11-07.json`.
 
-- Its overlay row expects live `4b06d4cd…`, and the plan accepts `458ba424…`. No applied
-  record shows which of the two is live.
-- `ops/live-api-reconciliation-2026-10-21.md` records a live `scheduled.mjs` that differs
-  from main (`moov-monthly-tenant-billing`).
+- `providers/moov-status-catch-up.mjs`: ADD (expected absent).
+- `scheduled.mjs`: REPLACE `458ba424…` -> the hook bytes.
+- Order: both rows come right after `tenant-billing-destination.mjs`, past the planned ADD rows
+  the catch-up imports. The ADD comes first, because `scheduled.mjs` imports it at load.
+- Release lock: the `auto-deposit` `tree_hash` moves with `scheduled.mjs`.
 
-The hook has to be reconciled against the live bytes, read through a read-only overlay
-inspect, before its bytes are fixed. That follows AGENTS.md: reconcile same-file Lambda
-changes (`SOURCE_RECONCILIATION_REQUIRED`). `scheduled.mjs` is in the `auto-deposit`
-ownership group (UNVERIFIED), so that PR also updates its `tree_hash` with
-`node scripts/validate-release-locks.mjs --print-hashes`.
+The two open questions above are answered from the record:
+
+- **Which bytes are live.** `458ba424…`, not `4b06d4cd…`.
+  - Overlay apply run 39806472626 (2026-10-22) replaced `4b06d4cd…` with `458ba424…`
+    (`VERIFIED`). Inspect run 39806888970 then read `ALREADY_ACCEPTED`. Neither was recorded in
+    git, which is why the row still expected `4b06d4cd…`.
+  - The fourth full-package production rebuild (apply run 41469896446, 2026-11-02, main
+    `1364af787`) kept those bytes. `scheduled.mjs` is not among that section's changed members,
+    and main's `scheduled.mjs` at `1364af787` is `458ba424…`.
+  - No overlay run touched `scheduled.mjs` after 2026-10-22. This is from the logs of every
+    production overlay run from 2026-10-22 to 2026-11-07.
+- **The live copy that `ops/live-api-reconciliation-2026-10-21.md` records**
+  (`moov-monthly-tenant-billing`) is no longer live.
+- **Only the two hook lines differ** from `458ba424…`. A test strips them and gets that hash back.
+- **Every module the catch-up imports is live at main's bytes.** The modules come from the rebuild,
+  and `tenant-collection-v2.mjs` from fee leg apply 42366401914.
+
+**Before each apply**, a read-only overlay inspect (`guarded-production-lambda-overlay.yml`,
+`mode: inspect`) must print:
+
+- `ABSENT` for `providers/moov-status-catch-up.mjs`;
+- `LIVE_MEMBER_SHA256` `458ba42455afe324ba4e8169bf23cdbd15498b180ada279286a8a92be6193791` for
+  `scheduled.mjs`.
+
+Any other value is a stop (`SOURCE_RECONCILIATION_REQUIRED`). Each apply also needs a staging
+acceptance reference and the owner's `DEPLOY <member> TO PRODUCTION` for that run.
 
 **Invoke identity.** A principal needs `lambda:InvokeFunction` on
 `arn:aws:lambda:us-east-1:806168576068:function:checksops-production-prep-api`. The owner
