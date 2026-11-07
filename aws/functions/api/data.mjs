@@ -36,6 +36,9 @@ const READ_RPCS = new Set([
   'get_check_unread_counts',
   'get_loss_draft_dashboard_counts_for_tenant',
   'get_tenant_funds_received',
+  // SQL 144 (SECURITY DEFINER, its own aws_can_access_tenant check; applied in staging 2026-11-06 and in
+  // production 2026-11-07): the send legs other organizations addressed to this one.
+  'get_tenant_incoming_transfers',
   'get_tenant_check_usage',
   'get_deposit_ops_kpis',
   'get_deposit_aging_summary',
@@ -77,6 +80,7 @@ export const RPC_ACCESS_GATES = Object.freeze({
   get_check_dashboard_counts_for_tenant: { tenant: '_tenant_id' },
   get_loss_draft_dashboard_counts_for_tenant: { tenant: '_tenant_id' },
   get_tenant_funds_received: { tenant: '_tenant_id' },
+  get_tenant_incoming_transfers: { tenant: '_tenant_id' },
   get_tenant_check_usage: { tenant: '_tenant_id' },
   get_tenant_users_with_profiles: { tenant: '_tenant_id' },
   is_checkalt_enabled_for_tenant: { tenant: '_tenant_id' },
