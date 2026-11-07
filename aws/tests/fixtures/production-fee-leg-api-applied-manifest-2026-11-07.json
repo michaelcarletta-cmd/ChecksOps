@@ -1,0 +1,15 @@
+{
+  "workstream_id": "fee-leg-api-applied",
+  "authorization": "Record only (2026-11-07): the bytes below are live. Nothing is planned or authorized by this manifest; any later change to this member needs its own manifest, staging acceptance and owner approval.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Fee leg API (#1682; owner 2026-11-07: \"build the fee leg fix\") applied. Held behind SQL 145 until #1686 (merged as 408abe705) recorded SQL 145 verified live; owner 2026-11-07: \"merge 1686 then DEPLOY tenant-collection-v2.mjs TO PRODUCTION\". Applied 2026-11-07 from main 408abe705. The apply run concluded success including its \"Verify live member is the accepted bytes\" step (state VERIFIED) and the public production smoke (/health and /db-health 200). tenant-collection-v2.mjs: staging inspect run 42366166239 (45a78f0e live, RevisionId 87eaad50-6f3f-4dd9-a904-a2f484a6a381, CodeSha256 BaKgiVcDSnQpxq3V/hofgn205iOKRvNhW0ar4phe0Dw=), staging apply run 42366214743 (45a78f0e -> f22fd96b, after CodeSha256 jWDF00z34DTzkxE83oUJoFvVrwKyZS5ErjmIN2gG3Ks= RevisionId 1466fc5e-0202-4e67-9bf9-29b125f19eda), staging re-inspect run 42366274627 read f22fd96b live (RevisionId 1466fc5e-0202-4e67-9bf9-29b125f19eda, same CodeSha256) (all on 408abe705); production preflight inspect run 42366340686 (READY, 45a78f0e live, RevisionId b5705836-d6b3-407a-b0aa-af2b201a7d03, CodeSha256 BaKgiVcDSnQpxq3V/hofgn205iOKRvNhW0ar4phe0Dw=); production apply run 42366401914 (job 128385278866; 45a78f0e -> f22fd96b) on the owner's \"DEPLOY tenant-collection-v2.mjs TO PRODUCTION\" with staging acceptance https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/42366214743, VERIFIED, after CodeSha256 jWDF00z34DTzkxE83oUJoFvVrwKyZS5ErjmIN2gG3Ks= RevisionId cfea9832-29e2-4952-b58f-efddd195b980; re-inspect run 42366470388 read f22fd96b live (ALREADY_ACCEPTED, RevisionId cfea9832-29e2-4952-b58f-efddd195b980, same CodeSha256). The pre-state 45a78f0e is the fee pull savepoints bytes production run 42302929689 applied (production-fee-pull-savepoints-applied-manifest-2026-11-06.json keeps what it recorded). sql_before SQL 145 stays on the row; SQL 145 was applied by its own guarded one-shot (recorded by #1686), not by this run. No SQL in this apply, no schema change, no backfill or replay. The row records the applied bytes as live_sha256 and accepted_sha256 and chains to the manifest that planned it (previous_manifest), which keeps the pre-apply state.",
+  "members": {
+    "tenant-collection-v2.mjs": {
+      "live_sha256": "f22fd96b72551714b3ab3320290ffbac6ae87524c7c5df0daa7a54d243892fb0",
+      "accepted_sha256": "f22fd96b72551714b3ab3320290ffbac6ae87524c7c5df0daa7a54d243892fb0",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-fee-leg-api-manifest-2026-11-07.json"
+    }
+  }
+}
