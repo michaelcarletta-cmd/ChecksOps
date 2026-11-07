@@ -1,0 +1,15 @@
+{
+  "workstream_id": "moov-status-catch-up-update-fix",
+  "authorization": "Pending owner review (2026-11-07). Planning only: nothing is live or verified. Each production apply needs its own owner approval, a staging acceptance reference and a read-only production inspect that confirms the live bytes, and SQL 146 recorded verified live first.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Owner 2026-11-07: \"build the catch-up update fix\". The read-only plan, run 42395703811 (production-moov-status-catch-up.yml, phase plan), listed 9 candidates, 6 to apply, manifest 236f3dd28e0e108219f75e566acbac4bb60a80ddfb8e673b1df0c6422c8b2331; the apply, run 42395949680 (owner approved verbatim), re-planned to the same manifest, then the first transfer (5768ab44, send_wallet) refused with catch_up_state_changed_since_plan, found {legs: {}, obligations: {}}, rolled back; productionRecordsMutated false. Root cause (reproduced on PostgreSQL 16, aws/tests/sql146-moov-status-catch-up-writes-pg.test.mjs): the platform owner reads every tenant's rows through the SELECT policies but is not a member of them, payment_transfers' permissive UPDATE policies are membership-only since SQL 90, and PostgreSQL applies them to SELECT ... FOR UPDATE, so the lock reads no row; behind it the settlement code's fee leg UPDATE finds no row for the owner and its payment_event_log INSERT is refused outside the webhook apply context. REPLACE providers/moov-status-catch-up.mjs 502995f6 -> 6083f54b: the lock through SQL 146's aws_moov_catch_up_lock_rows, the fee leg through aws_moov_apply_collection_leg_status, and the settlement in the Moov webhook apply context, cleared afterwards; plan binding and the per-transfer transaction and stop are unchanged. The pre-state 502995f6 is the ADD production run 42370581114 applied (VERIFIED; aws/tests/fixtures/production-moov-status-catch-up-applied-manifest-2026-11-07.json). Held for SQL 146 (sql_before aws/workflows/sql/146_moov_status_catch_up_writes.sql, not applied anywhere). Planning only.",
+  "members": {
+    "providers/moov-status-catch-up.mjs": {
+      "live_sha256": "502995f6b75266be1ab304e4633c898d30a2679c9cd6de0dfe71cc64e4dabc57",
+      "accepted_sha256": "6083f54bbaf1a72395ab45495b90c3b4f5136b8adbf33d386f7584ea2e95b9ab",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-moov-status-catch-up-applied-manifest-2026-11-07.json"
+    }
+  }
+}

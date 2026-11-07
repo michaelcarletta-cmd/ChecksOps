@@ -8238,4 +8238,83 @@ export const RELEASE_SQL_SPECS = deepFreeze({
       "public.tenant_maintenance_payments"
     ]
   },
+
+  // SQL 146 (owner 2026-11-07: "build the catch-up update fix"): the Moov status catch-up locks its rows and writes a
+  // fee collection leg's Moov status. The catch-up apply (providers/moov-status-catch-up.mjs) runs as the platform
+  // owner, who reads every tenant's payment rows but is not a member of them; payment_transfers' permissive UPDATE
+  // policies are membership-only since SQL 90 and PostgreSQL applies them to SELECT ... FOR UPDATE, so its lock
+  // returned no row (production run 42395949680: catch_up_state_changed_since_plan, found {legs: {}}), and the
+  // settlement code's UPDATE of a fee leg finds no row either. Two new SECURITY DEFINER functions (plpgsql, VOLATILE,
+  // search_path public, pg_temp), RETURNS jsonb: aws_moov_catch_up_lock_rows(text, text, uuid[]) locks a Moov
+  // transfer's payment_transfers rows and the named obligations FOR UPDATE and returns their statuses (the platform
+  // owner only, 42501, in the Moov webhook apply context, 42501); aws_moov_apply_collection_leg_status(text, text,
+  // bigint, text, text, text, timestamptz) writes one tenant-collection-v2 leg's status as applyBillingProviderEvent
+  // does, matching the transfer id and Moov's amount, never backwards (the webhook apply context, and with a user only
+  // the platform owner; 42501). EXECUTE checksops and the owner (PUBLIC, anon, authenticated and service_role revoked,
+  // as SQL 145). definer_writes: the two tables they lock or write, both reached past RLS as their owner. No
+  // predecessor in the release engine (SQL 91's aws_moov_webhook_apply_active() is a prerequisite). No table, column,
+  // policy, grant, trigger or row change.
+  sql146: {
+    "key": "sql146",
+    "label": "SQL 146",
+    "choice": "sql146-moov-status-catch-up-writes",
+    "production_pin_rel": "ops/deployment-guard/sql146-moov-status-catch-up-writes-production-apply.json",
+    "script": "sql146-moov-status-catch-up-writes-production-apply",
+    "prerequisites": [
+      "public.payment_transfers",
+      "public.tenant_maintenance_payments",
+      "public.is_platform_owner()",
+      "public.aws_moov_webhook_apply_active()",
+      "auth.uid()",
+      "role checksops",
+      "column public.payment_transfers.id",
+      "column public.payment_transfers.tenant_id",
+      "column public.payment_transfers.provider",
+      "column public.payment_transfers.environment",
+      "column public.payment_transfers.provider_transfer_id",
+      "column public.payment_transfers.provider_status",
+      "column public.payment_transfers.status",
+      "column public.payment_transfers.leg_role",
+      "column public.payment_transfers.amount_cents",
+      "column public.payment_transfers.failure_reason",
+      "column public.payment_transfers.provider_metadata",
+      "column public.payment_transfers.completed_at",
+      "column public.payment_transfers.updated_at",
+      "column public.tenant_maintenance_payments.id",
+      "column public.tenant_maintenance_payments.status"
+    ],
+    "predecessors": [],
+    "functions": [
+      {
+        "identity": "public.aws_moov_catch_up_lock_rows(text, text, uuid[])",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ],
+        "revokes": [
+          "PUBLIC EXECUTE",
+          "anon EXECUTE",
+          "authenticated EXECUTE",
+          "service_role EXECUTE"
+        ]
+      },
+      {
+        "identity": "public.aws_moov_apply_collection_leg_status(text, text, bigint, text, text, text, timestamp with time zone)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ],
+        "revokes": [
+          "PUBLIC EXECUTE",
+          "anon EXECUTE",
+          "authenticated EXECUTE",
+          "service_role EXECUTE"
+        ]
+      }
+    ],
+    "definer_writes": [
+      "public.payment_transfers",
+      "public.tenant_maintenance_payments"
+    ]
+  },
 });
