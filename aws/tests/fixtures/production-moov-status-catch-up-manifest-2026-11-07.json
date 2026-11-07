@@ -1,0 +1,20 @@
+{
+  "workstream_id": "moov-status-catch-up",
+  "authorization": "Pending owner review (2026-11-07). Planning only: nothing is live or verified. Each production apply still needs its own owner approval and staging acceptance.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Moov status catch-up (2026-11-07, owner: \"build the Moov status catch-up\", then \"Dedicated limited role for status catch up\"): ADD providers/moov-status-catch-up.mjs (#1680, runbook ops/moov-status-catch-up.md), then REPLACE scheduled.mjs with the two-line hook that hands a direct invocation accepted by isMoovStatusCatchUpInvocation (checksops_operator moov-status-catch-up, rawPath /scheduled/moov-status-catch-up, no API Gateway keys) to handleMoovStatusCatchUp, after the Check Alt scheduler check and before the shared-secret check; index.mjs is never overlaid and already routes /scheduled/* to scheduled.mjs. scheduled.mjs live_sha256 is the bytes the fourth full-package production rebuild left live: apply run 41469896446 (2026-11-02) of main 1364af787, whose scheduled.mjs is 458ba424, and scheduled.mjs is not among the 16 changed members of that section (lambda-rebuild-plan.json, inspect same 189), so live equalled main before and after. Those bytes went live on 2026-10-22 through the Check Alt scheduled reconcile manifest: overlay apply run 39806472626 (expected live 4b06d4cd, state VERIFIED) and read-only inspect run 39806888970 (ALREADY_ACCEPTED, LIVE_MEMBER_SHA256 458ba424); that apply had no record in git, which is why the plan row still expected 4b06d4cd. No production overlay run touched scheduled.mjs after 2026-10-22 (run logs of every guarded-production-lambda-overlay run from 2026-10-22 to 2026-11-07 read on 2026-11-07). The live copy that ops/live-api-reconciliation-2026-10-21.md records (moov-monthly-tenant-billing route) is therefore not live any more. providers/moov-status-catch-up.mjs is absent from that rebuild's main and no overlay added it. Its local imports are all live at main's bytes: db-health.mjs, secrets.mjs, provider-secrets.mjs, provider-flags.mjs, tenant-billing-destination.mjs, tenant-collection-v2-settlement.mjs, providers/moov-webhook-confirm.mjs and providers/moov-transfer-webhook.mjs from the rebuild, tenant-collection-v2.mjs from the fee leg apply 42366401914 (inspect 42366470388). Before each apply, a read-only overlay inspect must print LIVE_MEMBER_SHA256 458ba424 for scheduled.mjs and ABSENT for providers/moov-status-catch-up.mjs; a different value is a stop (SOURCE_RECONCILIATION_REQUIRED). Order: right after tenant-billing-destination.mjs, past the planned ADD rows the catch-up imports (providers/moov-transfer-webhook.mjs, providers/moov-webhook-confirm.mjs), the ADD first, then scheduled.mjs (it imports the ADD at load). No SQL prerequisite. Release lock auto-deposit tree_hash moves with scheduled.mjs.",
+  "members": {
+    "providers/moov-status-catch-up.mjs": {
+      "live_sha256": null,
+      "accepted_sha256": "502995f6b75266be1ab304e4633c898d30a2679c9cd6de0dfe71cc64e4dabc57",
+      "operation": "add"
+    },
+    "scheduled.mjs": {
+      "live_sha256": "458ba42455afe324ba4e8169bf23cdbd15498b180ada279286a8a92be6193791",
+      "accepted_sha256": "39d7c56852dfeb2fc59692230f7feb75dd22ee03ddb0bc089da92a5340a6d5df",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-checkalt-scheduled-reconcile-manifest-2026-10-22.json"
+    }
+  }
+}

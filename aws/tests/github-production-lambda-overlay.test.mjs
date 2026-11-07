@@ -1808,6 +1808,13 @@ test('Check Alt scheduled status check: poll, status-reconcile, scheduled REPLAC
       assert.deepEqual(manifest.members[name], { live_sha256: live, accepted_sha256: 'b2e7faa1b641f8898a3dc04c41f7f3e4723f0723157aeb6b95f2d146ee74c01e', operation: 'replace' });
       continue;
     }
+    if (name === SCHEDULED) {
+      // scheduled.mjs moved on to the Moov status catch-up hook (its own test); this manifest keeps its record.
+      // Its accepted 458ba424 went live on 2026-10-22 (overlay apply run 39806472626, inspect 39806888970).
+      assert.deepEqual(manifest.members[name], { live_sha256: live, accepted_sha256: '458ba42455afe324ba4e8169bf23cdbd15498b180ada279286a8a92be6193791', operation: 'replace' });
+      assert.equal(PLAN.members[name].expected_live_sha256, manifest.members[name].accepted_sha256);
+      continue;
+    }
     const row = PLAN.members[name];
     assert.equal(row.operation, 'replace', name);
     assert.equal(row.manifest, MANIFEST_REL, name);
@@ -6778,4 +6785,103 @@ test('Moov webhook receipt key (owner 2026-11-07): providers/webhooks.mjs REPLAC
       other,
     );
   }
+});
+
+test('Moov status catch-up (2026-11-07): ADD providers/moov-status-catch-up.mjs, then REPLACE scheduled.mjs from the bytes the fourth rebuild left live, planning only', async () => {
+  const REL = 'aws/tests/fixtures/production-moov-status-catch-up-manifest-2026-11-07.json';
+  const PREVIOUS = 'aws/tests/fixtures/production-checkalt-scheduled-reconcile-manifest-2026-10-22.json';
+  const ADD = 'providers/moov-status-catch-up.mjs';
+  const SCHEDULED = 'scheduled.mjs';
+  // Live since overlay apply run 39806472626 (2026-10-22, 4b06d4cd -> 458ba424, inspect 39806888970 ALREADY_ACCEPTED),
+  // and what the fourth full-package production rebuild (run 41469896446, main 1364af787) left live: scheduled.mjs is
+  // not one of that section's changed members, and main's scheduled.mjs at 1364af787 is these bytes.
+  const SCHEDULED_LIVE = '458ba42455afe324ba4e8169bf23cdbd15498b180ada279286a8a92be6193791';
+  const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, REL), 'utf8'));
+  const accepted = Object.fromEntries([ADD, SCHEDULED].map((m) => [m, sha(`aws/functions/api/${m}`)]));
+  assert.equal(manifest.workstream_id, 'moov-status-catch-up');
+  assert.equal(manifest.deploy_authorized, false);
+  assert.match(manifest.authorization, /^Pending owner review \(2026-11-07\)\. Planning only/);
+  assert.equal(manifest.live_lambda, FUNCTION_NAME);
+  assert.deepEqual(manifest.members, {
+    [ADD]: { live_sha256: null, accepted_sha256: accepted[ADD], operation: 'add' },
+    [SCHEDULED]: { live_sha256: SCHEDULED_LIVE, accepted_sha256: accepted[SCHEDULED], operation: 'replace', previous_manifest: PREVIOUS },
+  });
+  for (const evidence of ['build the Moov status catch-up', 'Dedicated limited role for status catch up', '41469896446', '1364af787',
+    '39806472626', '39806888970', 'ALREADY_ACCEPTED', 'isMoovStatusCatchUpInvocation', 'LIVE_MEMBER_SHA256 458ba424', `ABSENT for ${ADD}`]) {
+    assert.ok(manifest.notes.includes(evidence), evidence);
+  }
+  // The live bytes come from the record: the Check Alt manifest accepted them, the fourth rebuild section leaves
+  // scheduled.mjs out of its changed members, and the applied rebuild names main 1364af787.
+  assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, PREVIOUS), 'utf8')).members[SCHEDULED].accepted_sha256, SCHEDULED_LIVE);
+  const rebuild = JSON.parse(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/lambda-rebuild-plan.json'), 'utf8')).environments.production;
+  assert.equal(rebuild.applied.run_id, '41469896446');
+  assert.equal(rebuild.applied.main_commit, '1364af787f2e00b8578a6fbed3c52989eca7121a');
+  assert.equal(rebuild.members[SCHEDULED], undefined);
+  assert.equal(rebuild.added[SCHEDULED], undefined);
+  assert.equal(rebuild.added[ADD], undefined);
+  assert.notEqual(accepted[SCHEDULED], SCHEDULED_LIVE);
+  for (const member of [ADD, SCHEDULED]) {
+    assert.deepEqual(PLAN.members[member], {
+      operation: member === ADD ? 'add' : 'replace',
+      accepted_sha256: accepted[member],
+      expected_live_sha256: member === ADD ? null : SCHEDULED_LIVE,
+      sql_before: null,
+      manifest: REL,
+    }, member);
+    assert.equal(resolvePlannedMember(member, { root: ROOT, plan: PLAN }).ok, true, member);
+    assert.equal(approvalPhrase(member), `DEPLOY ${member} TO PRODUCTION`);
+  }
+  assert.ok(PLAN.notes.includes(`Moov status catch-up (2026-11-07, planning only): ADD ${ADD} ${accepted[ADD].slice(0, 8)}, then REPLACE ${SCHEDULED} ${SCHEDULED_LIVE.slice(0, 8)} -> ${accepted[SCHEDULED].slice(0, 8)}`));
+
+  // scheduled.mjs: only the import and the one dispatch line differ from the live bytes; the dispatch sits after
+  // the Check Alt scheduler check and before the shared-secret check.
+  const source = fs.readFileSync(path.join(API, SCHEDULED), 'utf8');
+  assert.ok(source.includes("import { handleMoovStatusCatchUp, isMoovStatusCatchUpInvocation } from './providers/moov-status-catch-up.mjs';\n"));
+  const hook = '  if (isMoovStatusCatchUpInvocation(event)) return handleMoovStatusCatchUp(event, deps);\n';
+  assert.ok(source.indexOf('if (isSchedulerDirectInvocation(event))') < source.indexOf(hook));
+  assert.ok(source.indexOf(hook) < source.indexOf('if (!authorized(event))'));
+  const liveText = source
+    .replace("import { handleMoovStatusCatchUp, isMoovStatusCatchUpInvocation } from './providers/moov-status-catch-up.mjs';\n", '')
+    .replace(hook, '');
+  assert.equal(createHash('sha256').update(liveText).digest('hex'), SCHEDULED_LIVE);
+
+  // Order: the ADD lands after the planned ADD rows it imports and before scheduled.mjs, which imports it at load.
+  const addImports = localImports(fs.readFileSync(path.join(API, ADD), 'utf8'), ADD).sort();
+  assert.deepEqual(addImports, [
+    'db-health.mjs', 'provider-flags.mjs', 'provider-secrets.mjs', 'providers/moov-transfer-webhook.mjs', 'providers/moov-webhook-confirm.mjs',
+    'secrets.mjs', 'tenant-billing-destination.mjs', 'tenant-collection-v2-settlement.mjs', 'tenant-collection-v2.mjs',
+  ]);
+  for (const dep of addImports.filter((dep) => PLAN.members[dep])) assert.ok(PLAN.order.indexOf(dep) < PLAN.order.indexOf(ADD), dep);
+  assert.ok(localImports(source, SCHEDULED).includes(ADD));
+  assert.equal(PLAN.order.indexOf(ADD) + 1, PLAN.order.indexOf(SCHEDULED));
+
+  // Inspect: the ADD is READY while absent, refused once present; scheduled.mjs is READY on the live bytes,
+  // ALREADY_ACCEPTED on main's, and a reconciliation stop on 4b06d4cd (the row's old expectation) or anything else.
+  const inspect = (member) => ({ ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: member });
+  const absent = await run(inspect(ADD), { root: ROOT, inspectLive: liveFor(ADD) });
+  assert.equal(absent.state, 'READY');
+  assert.equal(absent.mutation, false);
+  const before = await run(inspect(SCHEDULED), { root: ROOT, inspectLive: liveFor(SCHEDULED, { sha256: SCHEDULED_LIVE, extra: [ADD] }) });
+  assert.equal(before.state, 'READY');
+  assert.equal(before.mutation, false);
+  assert.equal((await run(inspect(SCHEDULED), { root: ROOT, inspectLive: liveFor(SCHEDULED, { sha256: accepted[SCHEDULED], extra: [ADD] }) })).state, 'ALREADY_ACCEPTED');
+  for (const other of ['4b06d4cd578720a3996dc090cc396bda273c8de07e80cd7064d755af2b214abb', 'c'.repeat(64)]) {
+    await assert.rejects(
+      run(inspect(SCHEDULED), { root: ROOT, inspectLive: liveFor(SCHEDULED, { sha256: other, extra: [ADD] }) }),
+      (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+      other,
+    );
+  }
+  // Applies replay in order; scheduled.mjs is refused while the added module is not live yet.
+  for (const member of [ADD, SCHEDULED]) {
+    const { deps, calls } = applyDeps(member);
+    const result = await run(applyEnv(member), deps);
+    assert.equal(result.mutation, false, member);
+    const op = PLAN.members[member].operation;
+    assert.deepEqual(calls.receipt.owned_member_ops, { replace: op === 'replace' ? [member] : [], add: op === 'add' ? [member] : [] }, member);
+  }
+  await assert.rejects(
+    run(applyEnv(SCHEDULED), applyDeps(SCHEDULED, { pending: [ADD] }).deps),
+    (error) => error.code === CODES.DEPLOYMENT_COLLISION,
+  );
 });

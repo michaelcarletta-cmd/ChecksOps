@@ -8,6 +8,7 @@ import { handleProcessEmailQueue } from './email-queue.mjs';
 import { handleTenantDomainRecheckCron } from './tenant-email-domain-handlers.mjs';
 import { handleCheckOcrBacklog } from './ocr.mjs';
 import { handleCheckAltStatusReconcileJob } from './providers/production/checkalt-status-reconcile.mjs';
+import { handleMoovStatusCatchUp, isMoovStatusCatchUpInvocation } from './providers/moov-status-catch-up.mjs';
 
 const FINANCIAL_JOBS = new Set([
   'deposit-daily-automation',
@@ -60,6 +61,7 @@ export const handleScheduledRequest = async (event, path, deps = {}) => {
   if (isSchedulerDirectInvocation(event)) {
     return handleCheckAltStatusReconcileJob(event, deps);
   }
+  if (isMoovStatusCatchUpInvocation(event)) return handleMoovStatusCatchUp(event, deps);
   if (!authorized(event)) {
     return {
       ok: false,

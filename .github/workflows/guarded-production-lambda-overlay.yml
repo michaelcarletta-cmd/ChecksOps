@@ -55,7 +55,6 @@ on:
           - providers/production/checkalt-status-read.mjs
           - providers/production/checkalt-poll.mjs
           - providers/production/checkalt-status-reconcile.mjs
-          - scheduled.mjs
           - providers/production/checkalt-submit.mjs
           - providers/production/checkalt-approve.mjs
           - providers/production/checkalt-authz.mjs
@@ -110,6 +109,8 @@ on:
           - tenant-collection-v2-settlement.mjs
           - tenant-collection-v2.mjs
           - tenant-billing-destination.mjs
+          - providers/moov-status-catch-up.mjs
+          - scheduled.mjs
           - tenant-fee-invoice-email.mjs
           - tenant-billing-engine.mjs
           - tenant-billing-handlers.mjs
