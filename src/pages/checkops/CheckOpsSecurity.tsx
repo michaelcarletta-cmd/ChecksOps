@@ -62,12 +62,12 @@ const bankingControls = [
   {
     icon: FileCheck2,
     title: "Verified bank accounts only",
-    body: "Every bank account is verified through our ACH partner, Moov, before money moves to or from it. Unverified accounts are blocked from funding and from receiving payments.",
+    body: "Every bank account is verified through our payment processing provider before money moves to or from it. Unverified accounts are blocked from funding and from receiving payments.",
   },
   {
     icon: ShieldCheck,
     title: "Deposit risk screening",
-    body: "Every deposit is risk-checked by our deposit partner, CheckAlt. Duplicates, amount mismatches and risk warnings are held for manual review instead of being approved automatically.",
+    body: "Every deposit is risk-checked by our check processing provider. Duplicates, amount mismatches and risk warnings are held for manual review instead of being approved automatically.",
   },
   {
     icon: AlertTriangle,
@@ -97,8 +97,8 @@ const compliance = [
 
 const vendors = [
   { name: "Amazon Web Services", purpose: "Hosting, sign-in, database, file storage, encryption keys and logging (United States)" },
-  { name: "Moov", purpose: "ACH payments, wallet funding, and business, identity and bank verification" },
-  { name: "CheckAlt", purpose: "Remote check deposit" },
+  { name: "Payment processing provider", purpose: "ACH payments, wallet funding, and business, identity and bank verification" },
+  { name: "Check processing provider", purpose: "Remote check deposit" },
   { name: "Microsoft Azure", purpose: "Reading check images" },
   { name: "Resend", purpose: "Transactional email delivery" },
 ];
