@@ -202,7 +202,7 @@ test('order: no predecessor; the one new DEFINER writer, its prerequisites and t
   const runbook = fs.readFileSync(path.join(ROOT, COMMITTED.tooling.runbook), 'utf8');
   assert.ok(runbook.includes(COMMITTED.intended_replacement_sha256));
   assert.ok(runbook.includes(COMMITTED.source_sha256));
-  assert.match(runbook, /\*\*Status:\*\* not applied anywhere/);
+  assert.match(runbook, /\*\*Status:\*\* staging pin execute-authorized \(wave 40\); not applied anywhere\./);
   assert.match(runbook, /\*\*Predecessor\.\*\* None/);
   assert.match(runbook, /Owner 2026-11-07: "build the fee leg fix"/);
   assert.match(runbook, /2026-11-06T22:53:11Z/);

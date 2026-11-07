@@ -3303,8 +3303,9 @@ export const AUTHORIZED_SQL144_TENANT_INCOMING_TRANSFERS = Object.freeze({
 // tenant it is not a member of; production 2026-11-06T22:53:11Z, 42501 on collection_insert_leg). The new SECURITY
 // DEFINER public.aws_platform_owner_insert_billing_collection_leg(...) inserts only a tenant-collection-v2 leg of an
 // existing obligation, for the platform owner on a server write path; EXECUTE for checksops and the owner. No
-// predecessor (SQL 136's aws_money_write_allowed() is a prerequisite). Pending until a reviewed pin change records a
-// staging read-live (expected: the function absent, everything else in place).
+// predecessor (SQL 136's aws_money_write_allowed() is a prerequisite). Staging apply authorized (wave 40) from staging
+// read-live run 42331198486: the pre-state, the function absent and everything else in place, equals the derived one
+// (ops/production-sql-145-apply.md).
 export const AUTHORIZED_SQL145_PLATFORM_OWNER_BILLING_COLLECTION_LEG = Object.freeze({
   key: 'sql145',
   filename: 'aws/workflows/sql/145_platform_owner_billing_collection_leg.sql',
@@ -3312,9 +3313,11 @@ export const AUTHORIZED_SQL145_PLATFORM_OWNER_BILLING_COLLECTION_LEG = Object.fr
   // The commit that last authored the file bytes.
   commit: 'e15aef7cc0f826240a1588eabc2a3822a3df94fa',
   source_sha256: 'ea57a69cf7f2000157898590c5bfbe5224ff1f135b599e82bb18018a8d22cc77',
-  authorization: 'pending',
-  execute: false,
-  expected_live_definition_sha256: null,
+  authorization: 'Owner approved 2026-11-07: staging apply (wave 40) from staging read-live run 42331198486',
+  execute: true,
+  // Staging read-live run 42331198486 (main ddb8b1d50, executor deploy run 42330773622): already_applied false,
+  // precondition_failures []. Equal to the derived pre-state (the function absent).
+  expected_live_definition_sha256: 'c622469dcfbfc0ad8f54c0bb038457b9eb3247a17ee0c855390ddc709ee1d594',
   // Code-derived: releaseIntendedHash('sql145', file bytes) (release-sql-state.mjs); re-derived by the tests.
   intended_replacement_sha256: 'a44d93bddc3a90149ec2eaa9279d4695193db8f5eb190463f239d7cb130f435a',
   function_identities: Object.freeze([
