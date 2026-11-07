@@ -82,7 +82,42 @@ staging pin (`expected_live_definition_sha256`, `execute: true`, wave 40) under 
 redeployed carrying it, on the owner's words for that run, "apply SQL 145 in staging". The production pin stays
 pending: a read-only production inspect decides production's pre-state.
 
-**Status:** staging pin execute-authorized (wave 40); not applied anywhere. The production pin is pending.
+**Staging executor refreshed for the pin (2026-11-07).** The staging pin (wave 40, PR #1684) merged as
+`b65d091a2925d046b3f160bbdbfc37ff4f8659af`. Inspect run 42333302061 (main `b65d091a2`) found the live executor at
+`1IQ9upfm2JjUv9dq7jQi+AUcAGvKwr9EYHhBFe4LA94=`. Deploy run 42333499880 (`expected_executor_code_sha256`
+`1IQ9upfm…` matched) updated `checksops-staging-guarded-sql-executor`; inspect run 42333743067 read it at
+`GEDJLmf19hpNpWdBJBrSWeUgZAwnZbdO898Rp7ErM0k=`. Read-live run 42333924185 (executor `GEDJLmf1…`): `already_applied`
+false, `precondition_failures` `[]`, live `c622469d…`, equal to the pin.
+
+**Staging apply (2026-11-07).** Apply run 42334108246 (job 128287029859, 2026-11-07T03:27:40Z, main `b65d091a2`,
+workstream `github-staging-sql-42334108246`, pin commit `e15aef7cc`, `expected_live_definition_sha256`
+`c622469dcfbfc0ad8f54c0bb038457b9eb3247a17ee0c855390ddc709ee1d594`) under the owner's words "apply SQL 145 in
+staging": success. The receipt prints `result` `applied`, `before_hash` `c622469d…`, `after_hash`
+`a44d93bddc3a90149ec2eaa9279d4695193db8f5eb190463f239d7cb130f435a`; the function in state `intended`, its EXECUTE
+ACL `checksops` and the owner, `definer_writes` ok on both relations. Read-live run 42334267158 (executor
+`GEDJLmf1…`): `already_applied` true, `live_definition_sha256` `a44d93bd…` equal to the intended hash,
+`precondition_failures` `[]`. Staging acceptance: the owner on 2026-11-07, "SQL 145 accepted in staging". There
+is no separate staging record PR for SQL 145: these staging runs are recorded here and in the production pin's
+`staging_acceptance` by the production pin PR. The staging pin keeps `execute: true`. The API change that calls
+the function (`tenant-collection-v2.mjs`, savepoint `collection_insert_leg`) is not part of this pin.
+
+**Production inspect (2026-11-07).** Read-only `--inspect` through SSM
+`f359138f-4605-4b46-b4fa-cd807fbd3af6` on `i-0c35557c4e5385406` (under the owner's words "run the read-only SQL 145
+production inspect"; runner started 03:19:27Z, stopped 03:20:14Z), main `b65d091a2` (tarball sha256
+`12ac21a3f5af5c4801a06d7dfc7c8ea19edd1bfff34740c43c1bb7bb277dcc6e`, staged by `sql53-temporary-transfer.yml` run
+42333377887, migration source `ea57a69c…` == pin), connected as `checksops_admin`: the function `absent`, its
+EXECUTE ACL empty, `definer_writes` ok on both relations (`payment_transfers`, `tenant_maintenance_payments`);
+`counts` null (the spec has none); every prerequisite present; `predecessors` `{}`, `successors_applied` `[]`; live
+`c622469dcfbfc0ad8f54c0bb038457b9eb3247a17ee0c855390ddc709ee1d594`, `already_applied` false,
+`precondition_failures` `[]`. Production's pre-state equals staging's (read-live runs 42331198486 and 42333924185),
+so the staging apply took the path production will
+(`aws/tests/sql145-platform-owner-billing-collection-leg-pg.test.mjs`). Recorded in the production pin with the
+staging apply (run 42334108246) as its staging acceptance and `execute: true` under the owner's words "record the
+SQL 145 production pin"; the owner's words so far name the staging steps, the staging acceptance, the inspect and
+this pin, not the production apply. The owner merges the pin change; the apply still needs the owner's words for
+that run ("apply SQL 145 in production") and runs only after that merge is on main and staged.
+
+**Status:** applied in staging (wave 40, 2026-11-07); staging acceptance: owner ("SQL 145 accepted in staging"); production pin execute-authorized; not applied to production
 
 ## Fingerprint
 
