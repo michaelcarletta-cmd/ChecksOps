@@ -130,9 +130,23 @@ Any other value is a stop (`SOURCE_RECONCILIATION_REQUIRED`). Each apply also ne
 acceptance reference and the owner's `DEPLOY <member> TO PRODUCTION` for that run.
 
 **Invoke identity.** A principal needs `lambda:InvokeFunction` on
-`arn:aws:lambda:us-east-1:806168576068:function:checksops-production-prep-api`. The owner
-chooses it: the owner's own session, or a dedicated role like the SQL 53 config writer's.
-This repository does not configure one.
+`arn:aws:lambda:us-east-1:806168576068:function:checksops-production-prep-api`. The owner chose
+a dedicated limited role (2026-11-07: "Dedicated limited role for status catch up"):
+`ChecksOpsGitHubProductionMoovStatusCatchUp`, used only by the workflow
+`.github/workflows/production-moov-status-catch-up.yml`. Its only permission is that invoke; its
+trust is pinned to that workflow file on `main` in the `production` environment. The owner
+creates it and sets the GitHub variable `CHECKSOPS_PRODUCTION_MOOV_STATUS_CATCH_UP_ROLE_ARN`
+(`ops/deployment-guard/production-moov-status-catch-up/README.md`). This repository writes the
+policy documents; it never creates IAM.
+
+**The workflow.** `production-moov-status-catch-up.yml` (Actions, Run workflow, from `main`) runs
+in the `production` environment, so every run, plan included, waits for the owner's approval of
+that run. Inputs: `phase` (`plan` or `apply`), `actor_application_user_id`, `limit`, and for apply
+only `manifest_sha256`, `transfer_ids` (comma separated) and `approval_phrase`. It invokes the
+Lambda through `scripts/deployment-guard/github-production-moov-status-catch-up.mjs`, which builds
+the event with `scripts/deployment-guard/moov-status-catch-up.mjs`, and prints the Lambda's JSON in
+the log and the run summary. It reads no secret. The two commands below are the same steps from an
+owner's own AWS session.
 
 ## Steps and approvals
 
@@ -159,6 +173,9 @@ Each step needs its own approval. An approval never carries over to the next ste
    - `action`: `apply`, `skip` or `refuse`, with a `reason`.
 
    It also prints `counts`, the `manifest_sha256` and the `transfer_ids`. It writes nothing.
+
+   Through the workflow: `phase: plan`, the actor id and the limit; leave the apply inputs
+   empty (a plan run with any of them is refused). The plan JSON is in the run summary.
 3. **Review.** Send the owner the plan file: the counts, every `apply` row, and every
    `refuse` row (`amount_mismatch`, `terminal_row_would_change`, `duplicate_legs`). Stop if
    anything looks wrong.
@@ -170,6 +187,13 @@ Each step needs its own approval. An approval never carries over to the next ste
      --phase apply --actor-application-user-id <same uuid> --plan moov-catch-up-plan.json \
      --approval-statement-b64 <base64 of the owner's exact words>
    ```
+
+   Through the workflow: `phase: apply`, the same actor id and limit, the plan run's
+   `manifest_sha256` and `transfer_ids`, and `approval_phrase` exactly
+   `apply the Moov catch-up plan <manifest_sha256> in production` with that hash, the owner's
+   words for that plan. Anything else is refused before any AWS call. The workflow then plans
+   again and invokes the apply only if the fresh plan has exactly that `manifest_sha256` and
+   those transfer ids; the apply event is built from that fresh plan.
 
    The apply first plans again. It refuses and writes nothing if any of these hold:
 
@@ -234,4 +258,5 @@ Each step needs its own approval. An approval never carries over to the next ste
   transfer. That is safe, but the September fee would stay `due` until a reviewed fix (a
   policy or a narrow writer) lands. The same row security means the live webhook, which has
   no user, may not see fee rows at all, so `no_billing_occurrence` is possible there.
-- **Who may invoke the production Lambda** (see "Invoke identity" above).
+- **Who may invoke the production Lambda**: answered, the dedicated role above (see "Invoke
+  identity"). It works only once the owner has created it and set the variable.
