@@ -1,0 +1,15 @@
+{
+  "workstream_id": "incoming-transfers-api-applied",
+  "authorization": "Record only (2026-11-07): the bytes below are live. Nothing is planned or authorized by this manifest; any later change to this member needs its own manifest, staging acceptance and owner approval.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Incoming transfers API (#1677, merged as 914f87bb5 on the owner's \"merge 1677\") applied. Applied 2026-11-07 from main 914f87bb5. The apply run concluded success including its \"Verify live member is the accepted bytes\" step (state VERIFIED) and the public production smoke (/health and /db-health 200). data.mjs: staging inspect run 42322960352 (daf31fa2 live, RevisionId cca27ffa-fc2f-4b1b-ba2f-792852d9dba7), staging apply run 42323031961 (after CodeSha256 OVfABMsoMb1+uzvS5rrHgkaC+8TGrfRQR0dJLzg8Rqw= RevisionId e0a58b85-3f4a-4834-a5cb-ae1c2be698f2), staging re-inspect run 42323105900 read 00da994e live (RevisionId 8a88df45-00bf-4e24-8c5c-61e458a23c7a, same CodeSha256) (all on 914f87bb5); production preflight inspect run 42323176072 (READY, daf31fa2 live, RevisionId b3550adb-920c-46f4-92f1-2da9ea4b1e55, CodeSha256 HivPmxs4XIuDfUBxsDpqXuqcrXcxccUnwt6aBWAvihw=); production apply run 42323230515 (daf31fa2 -> 00da994e) on the owner's \"DEPLOY data.mjs TO PRODUCTION\", VERIFIED, after CodeSha256 OVfABMsoMb1+uzvS5rrHgkaC+8TGrfRQR0dJLzg8Rqw= RevisionId 58f1d917-b324-4a90-952d-8e4a43cf50d1; re-inspect run 42323297612 read 00da994e live (ALREADY_ACCEPTED, RevisionId 58f1d917-b324-4a90-952d-8e4a43cf50d1, same CodeSha256). The pre-state daf31fa2 is the login MFA data.mjs bytes production overlay run 42284228921 put live (24784169 -> daf31fa2); that apply is the login MFA workstream's record, not this one: production-login-mfa-manifest-2026-11-06.json keeps what it recorded and its applied record stays with that workstream. No SQL here (SQL 144 was applied in production first; SQL 53 still first). The row records the applied bytes as live_sha256 and accepted_sha256 and chains to the manifest that planned it (previous_manifest), which keeps the pre-apply state.",
+  "members": {
+    "data.mjs": {
+      "live_sha256": "00da994edde1782a05602b3de43e5839aa44f01dfe4319ca955ad2ec828d4d67",
+      "accepted_sha256": "00da994edde1782a05602b3de43e5839aa44f01dfe4319ca955ad2ec828d4d67",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-incoming-transfers-api-manifest-2026-11-07.json"
+    }
+  }
+}
