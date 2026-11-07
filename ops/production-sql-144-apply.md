@@ -98,7 +98,29 @@ production pin"; the owner's words so far name the staging steps, the staging ac
 not the production apply. The owner merges the pin change; the apply still needs the owner's words for that run
 ("apply SQL 144 in production") and runs only after that merge is on main and staged.
 
-**Status:** applied in staging (wave 39, 2026-11-06); staging acceptance: owner ("SQL 144 accepted in staging"); production pin execute-authorized; not applied to production
+**Production apply (2026-11-07).** After the pin change (#1674, merged to main as `a3a4bbdf7` on the owner's words
+"merge 1674"), transfer run 42315882342 staged main `a3a4bbdf7` (tarball sha256
+`dd249ae5c824062b57cf17595f018cd1bc6b2b80dcbc6e4f66ba55c661f9db6e`). Under the owner's words
+"apply SQL 144 in production" (passed verbatim), a one-shot `--phase inspect` (SSM
+`2c4b80a8-81ea-4e0b-95d7-c5d78db18fe7`, run `dd8a2b8f-a837-44aa-90f3-d0971a67f540`, nothing written) read live `428d394e…` (the pinned pre-state,
+`live_matches_expected` true, `apply_preconditions_met` true, `precondition_failures` `[]`, the function absent,
+`definer_writes` ok on all five relations);
+then one-shot `--phase apply` run `2c228f5d-61f1-4e91-9268-ea906d5cce3d` through SSM
+`0f602899-55d7-4e1b-a842-4fae04f72013`, workstream `prod-sql144-tenant-incoming-transfers-20261107`, one_use_id
+`sql144-prod-254be0ae-db3c-4fbe-bd20-dafba25bb7ef`: its own inspect step read the same pre-state; contracts 4/4,
+6/6 and 43/43; all 11 steps ok; manifest `8775bb7d…`; receipt `428d394e…` →
+`ac458869cda99ec85cb42e31f5ba80ced29cbf227a81058379e086b0ffb924c2` (intended), result `applied`, unrelated
+catalog `34648775…` (policies 479, functions 1359); post-apply inspect `already_applied` true,
+`precondition_failures` `[]`: the function `get_tenant_incoming_transfers(uuid)` `intended`, its EXECUTE ACL
+`checksops` and the owner, `definer_writes` ok on all five relations, `counts` null, `prerequisites_missing` `[]`.
+The run's JSON arrived whole (20832 characters of SSM output, under the 24000-character limit). The runner
+`i-0c35557c4e5385406` was started for this work at 00:05:13Z and stopped at 00:06:07Z. The API change that exposes
+the function and the website change that reads it are not part of this pin and are not deployed by this record.
+Production acceptance had not been reported by the owner when this record was written; this record does not claim
+it.
+
+**Status:** applied to staging (wave 39) and to production (2026-11-07); the production pin is retired
+(`execute: false`).
 
 ## Fingerprint
 

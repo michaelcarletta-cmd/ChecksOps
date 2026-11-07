@@ -1,8 +1,8 @@
 {
   "id": "sql144-tenant-incoming-transfers-production-apply",
   "migration": "sql144",
-  "authorization": "Owner approved 2026-11-06 (the owner's words for SQL 144: \"yes build it, include partner payments as income not tax.\" (2026-11-06), \"record the SQL 144 staging pin\" (2026-11-06), \"apply SQL 144 in staging\" (2026-11-06), \"SQL 144 accepted in staging\" (2026-11-06), \"run the read-only SQL 144 production inspect\" (2026-11-06) and \"record the SQL 144 production pin\" (2026-11-06), none of them words for the production apply; the change itself is reviewed and merged by the owner): production apply of SQL 144 after the staging acceptance below (production 428d394e88ce45840806f7a6c93ed63d40178c0376c8a70843197bf28dccb88e -> ac458869cda99ec85cb42e31f5ba80ced29cbf227a81058379e086b0ffb924c2); execute true takes effect only when the owner reviews and merges this change. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
-  "execute": true,
+  "authorization": "Applied to production on 2026-11-07; execute is false again, so this pin is no longer a standing authorization and a re-apply needs a new reviewed pin change. The owner approved the SQL 144 production pin change on 2026-11-06 in the words \"yes build it, include partner payments as income not tax.\", \"record the SQL 144 staging pin\", \"apply SQL 144 in staging\", \"SQL 144 accepted in staging\", \"run the read-only SQL 144 production inspect\" and \"record the SQL 144 production pin\" (none of them words for the production apply; 428d394e -> ac458869, #1674, merged to main as a3a4bbdf7 on the owner's words \"merge 1674\") and the one apply run recorded in applied (workstream prod-sql144-tenant-incoming-transfers-20261107) in the words \"apply SQL 144 in production\", passed to it verbatim. That approval covered that run only.",
+  "execute": false,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -60,5 +60,293 @@
     "ok": true,
     "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/42309284075",
     "basis": "Guarded staging SQL executor apply of sql144-tenant-incoming-transfers, run 42309284075 (job 128206439607, 2026-11-06, main b69e34cbf6182b4bb186dad278a8636c16182368, wave 39, workstream github-staging-sql-42309284075, staging pin commit 87c3e193b8a962022df8ca2306e71b94721c3e6a, staging pin PR #1672, on the executor deployed by deploy run 42308408155: KrioYjGBZOUHgb5JuAvXaZQ50YidnBpvl0yjn8B5pHc=, previous zEi7sZK4ieD6444PwQTyXSaTnbgqoMW4ny4hYf7mqNs= (inspect runs 42308138229 and 42308688967)), under the owner's words \"apply SQL 144 in staging\", from the staging pre-state recorded by read-live run 42304378701 and re-read by read-live run 42308958516 (428d394e88ce45840806f7a6c93ed63d40178c0376c8a70843197bf28dccb88e, already_applied false, precondition_failures []): receipt before 428d394e88ce45840806f7a6c93ed63d40178c0376c8a70843197bf28dccb88e, after ac458869cda99ec85cb42e31f5ba80ced29cbf227a81058379e086b0ffb924c2 == intended, result applied; the function intended, its EXECUTE ACL checksops and the owner, definer_writes ok true on all five relations, prerequisites_missing []. Read-live run 42309552553 then reported already_applied true, live ac458869cda99ec85cb42e31f5ba80ced29cbf227a81058379e086b0ffb924c2, precondition_failures []. Owner acceptance 2026-11-06: \"SQL 144 accepted in staging\". No separate staging record PR: these staging runs are recorded here and in ops/production-sql-144-apply.md by the production pin PR. The API change that exposes the function and the website change that reads it are not part of this pin. The behavior is covered on PostgreSQL 16 by aws/tests/sql144-tenant-incoming-transfers-pg.test.mjs and through the executor by aws/tests/release-sql144-executor.test.mjs. Production's pre-state (production_inspect) equals staging's, so the same path applies there. The same file bytes (source_sha256) are pinned in both."
+  },
+  "applied": {
+    "date": "2026-11-07",
+    "result": "applied",
+    "source_commit": "a3a4bbdf74031fade6da31072441e8a8acc3b88c",
+    "source_commit_basis": "SOURCE_COMMIT in the tarball (written by sql53-temporary-transfer) equals --commit, and the tarball sha256 equals --expected-tarball-sha256 as copied by the operator from that transfer run's log (TARBALL_SHA256 line); the run log itself was not read by the one-shot.",
+    "source_tarball": {
+      "file": "source-a3a4bbdf74031fade6da31072441e8a8acc3b88c.tar.gz",
+      "sha256": "dd249ae5c824062b57cf17595f018cd1bc6b2b80dcbc6e4f66ba55c661f9db6e"
+    },
+    "migration_source_sha256": "9192e338ea4e54d2690e0ebde71754292394c52f1bac09c3af5fd3fb4b309865",
+    "migration_source_sha256_note": "The one-shot source step hashed aws/workflows/sql/144_tenant_incoming_transfers.sql in the transfer tarball: equal to source_sha256 (the pin; migration_matches_pin true).",
+    "runner": "i-0c35557c4e5385406",
+    "runner_basis": "operator-supplied --runner (not verified by the one-shot)",
+    "workstream_id": "prod-sql144-tenant-incoming-transfers-20261107",
+    "one_use_id": "sql144-prod-254be0ae-db3c-4fbe-bd20-dafba25bb7ef",
+    "one_use_id_consumed": true,
+    "one_use_id_consumed_basis": "Inferred from the successful apply (the tool records the one_use_id after COMMIT and only warns if that write fails); the consumed-registry entry was not read back separately.",
+    "owner_approval": "apply SQL 144 in production",
+    "owner_approval_basis": "As passed in --approval-statement for --approval-scope sql144; the one-shot cannot verify who said it. The owner's words of 2026-11-07 for this run were \"apply SQL 144 in production\", given after the pin change (#1674, merged to main as a3a4bbdf7 on the owner's words \"merge 1674\") whose authorization recorded that no words for the production apply had been given yet; they were passed verbatim as the approval statement for the --phase inspect run and the --phase apply run.",
+    "operator": "michaelcarletta-cmd",
+    "apply_ssm_command_id": "0f602899-55d7-4e1b-a842-4fae04f72013",
+    "one_shot_run_id": "2c228f5d-61f1-4e91-9268-ea906d5cce3d",
+    "one_shot_note": "One SSM command (0f602899-55d7-4e1b-a842-4fae04f72013 on i-0c35557c4e5385406, comment \"SQL 144 production one-shot apply (owner: apply SQL 144 in production)\", sent 2026-11-07 00:05:32Z, Success at 00:05:51Z, ResponseCode 0; the runner was started from stopped for this work at 00:05:13Z and stopped again at 00:06:07Z, after both SSM commands had ended) ran the production-sql-one-shot --phase apply (run_id 2c228f5d-61f1-4e91-9268-ea906d5cce3d) from main a3a4bbdf7 (transfer run 42315882342, sql53-temporary-transfer.yml on main after the #1674 merge; tarball sha256 dd249ae5c824062b57cf17595f018cd1bc6b2b80dcbc6e4f66ba55c661f9db6e). Before it, a separate one-shot --phase inspect on the same tarball and the same approval statement (SSM 2c4b80a8-81ea-4e0b-95d7-c5d78db18fe7, run_id dd8a2b8f-a837-44aa-90f3-d0971a67f540, EXIT=0, steps pin, source, inspect and contracts ok, nothing written) read live 428d394e88ce45840806f7a6c93ed63d40178c0376c8a70843197bf28dccb88e (live_matches_expected true, already_applied false, apply_preconditions_met true, precondition_failures [], prerequisites_missing [], predecessors {}, the function absent, its function_acl [], definer_writes ok true on all five relations, counts null), the pre-state the read-only inspect recorded in production_inspect (SSM 98a2ab2e-d8e0-4756-a6ab-142b0e7acf32). The apply run's own inspect step read the same. Steps pin (execute true, staging_acceptance run 42309284075), source (tarball sha256 matches the sidecar and --expected-tarball-sha256, tree matches the tarball, migration source == pin), inspect, contracts (claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43), manifest, source-recheck-before-preflight, preflight (receipt_issued), evaluate (sql144_production_apply_allowed true), source-recheck-before-apply, apply (applied) and post-apply-inspect all ok. The run's JSON arrived whole (20832 characters of SSM output, under the 24000-character limit; the operator's session printed only its last 11000 characters, and the whole output was read back read-only from SSM get-command-invocation for 0f602899-55d7-4e1b-a842-4fae04f72013, the tail equal to what was printed): every field of the applied object is recorded as printed, except this note and owner_approval_basis, which are extended as in the SQL 127 to SQL 143 records (the one-shot's own one_shot_note read: \"One production-sql-one-shot run verified the source, ran the read-only inspect and the runner contracts, built the manifest, issued the receipt and lease (preflight), evaluated (sql144_production_apply_allowed true), applied (exit 0) and ran the post-apply inspect.\"; its owner_approval_basis read: \"As passed in --approval-statement for --approval-scope sql144; the one-shot cannot verify who said it.\"). The printed applied.receipt equals the run's top-level details.apply_result, and applied.post_apply_inspect, pre_apply_inspect and contract_results equal the top-level objects of the same name. This block adds migration_source_sha256 (with its note), apply_ssm_command_id, steps and manifest_sha256 from the same run's details, as the SQL 127 to SQL 143 records do. The run's not_observed_by_this_run list names ssm_command_id and source_staged_by, supplied here as apply_ssm_command_id and transfer run 42315882342. The post-apply inspect reported live ac458869cda99ec85cb42e31f5ba80ced29cbf227a81058379e086b0ffb924c2 == intended, already_applied true, precondition_failures []: function get_tenant_incoming_transfers(uuid) intended, its EXECUTE ACL checksops and the owner, definer_writes ok true on all five relations (payment_transfers, tenants, shared_checks, check_intake_items, claims), counts null (the spec has none), prerequisites_missing []. Unrelated catalog 34648775f5f5639145ad69d1e600cdffa5b662fedaf75ecf524594f05e78ac90 (policies 479, functions 1359, triggers 185 outside SQL 144's own). Production acceptance: not yet reported by the owner when this record was written (the API change that exposes the function and the website change that reads it are not part of this pin and are not deployed by this record); this record does not claim it.",
+    "steps": [
+      "pin",
+      "source",
+      "inspect",
+      "contracts",
+      "manifest",
+      "source-recheck-before-preflight",
+      "preflight",
+      "evaluate",
+      "source-recheck-before-apply",
+      "apply",
+      "post-apply-inspect"
+    ],
+    "contract_results": {
+      "claim-ledger": {
+        "ok": true,
+        "test": "aws/tests/claim-ledger-accepted-contract.test.mjs",
+        "evidence": "4/4 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at a3a4bbdf74031fade6da31072441e8a8acc3b88c (production-sql-one-shot 2c228f5d-61f1-4e91-9268-ea906d5cce3d, node --test)"
+      },
+      "tenant-isolation": {
+        "ok": true,
+        "test": "aws/tests/tenant-security-compliance.test.mjs",
+        "evidence": "6/6 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at a3a4bbdf74031fade6da31072441e8a8acc3b88c (production-sql-one-shot 2c228f5d-61f1-4e91-9268-ea906d5cce3d, node --test)"
+      },
+      "financial-write-protections": {
+        "ok": true,
+        "test": "aws/tests/api-write.test.mjs",
+        "evidence": "43/43 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at a3a4bbdf74031fade6da31072441e8a8acc3b88c (production-sql-one-shot 2c228f5d-61f1-4e91-9268-ea906d5cce3d, node --test)"
+      }
+    },
+    "pre_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "428d394e88ce45840806f7a6c93ed63d40178c0376c8a70843197bf28dccb88e",
+      "live_matches_expected": true,
+      "already_applied": false,
+      "predecessors": {},
+      "predecessors_applied": true,
+      "missing_dependencies": [],
+      "apply_preconditions_met": true,
+      "precondition_failures": [],
+      "current_user": "checksops_admin",
+      "session_user": "checksops_admin",
+      "counts": null,
+      "successors_applied": [],
+      "release_sql_inspect": {
+        "live_definition_sha256": "428d394e88ce45840806f7a6c93ed63d40178c0376c8a70843197bf28dccb88e",
+        "prerequisites_missing": [],
+        "predecessors": {},
+        "successors_applied": [],
+        "functions": [
+          {
+            "name": "get_tenant_incoming_transfers(uuid)",
+            "state": "absent"
+          }
+        ],
+        "policies": [],
+        "views": [],
+        "tables": [],
+        "columns": [],
+        "constraints": [],
+        "triggers": [],
+        "table_privileges": [],
+        "function_acl": [
+          {
+            "name": "get_tenant_incoming_transfers(uuid)",
+            "acl": []
+          }
+        ],
+        "acl_functions": [],
+        "indexes": [],
+        "unique_covers": [],
+        "definer_writes": [
+          {
+            "name": "payment_transfers",
+            "ok": true
+          },
+          {
+            "name": "tenants",
+            "ok": true
+          },
+          {
+            "name": "shared_checks",
+            "ok": true
+          },
+          {
+            "name": "check_intake_items",
+            "ok": true
+          },
+          {
+            "name": "claims",
+            "ok": true
+          }
+        ],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": null
+      }
+    },
+    "manifest_sha256": "8775bb7d8e578c4860f5fa8406eef25eb7e797412d72e164bd021f18622cb2d9",
+    "receipt": {
+      "migration": "sql144",
+      "workstream": "prod-sql144-tenant-incoming-transfers-20261107",
+      "commit": "a3a4bbdf74031fade6da31072441e8a8acc3b88c",
+      "sql_file": "aws/workflows/sql/144_tenant_incoming_transfers.sql",
+      "before_hash": "428d394e88ce45840806f7a6c93ed63d40178c0376c8a70843197bf28dccb88e",
+      "after_hash": "ac458869cda99ec85cb42e31f5ba80ced29cbf227a81058379e086b0ffb924c2",
+      "release_sql_inspect": {
+        "live_definition_sha256": "ac458869cda99ec85cb42e31f5ba80ced29cbf227a81058379e086b0ffb924c2",
+        "prerequisites_missing": [],
+        "predecessors": {},
+        "successors_applied": [],
+        "functions": [
+          {
+            "name": "get_tenant_incoming_transfers(uuid)",
+            "state": "intended"
+          }
+        ],
+        "policies": [],
+        "views": [],
+        "tables": [],
+        "columns": [],
+        "constraints": [],
+        "triggers": [],
+        "table_privileges": [],
+        "function_acl": [
+          {
+            "name": "get_tenant_incoming_transfers(uuid)",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          }
+        ],
+        "acl_functions": [],
+        "indexes": [],
+        "unique_covers": [],
+        "definer_writes": [
+          {
+            "name": "payment_transfers",
+            "ok": true
+          },
+          {
+            "name": "tenants",
+            "ok": true
+          },
+          {
+            "name": "shared_checks",
+            "ok": true
+          },
+          {
+            "name": "check_intake_items",
+            "ok": true
+          },
+          {
+            "name": "claims",
+            "ok": true
+          }
+        ],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": null
+      },
+      "unrelated_catalog_sha256": "34648775f5f5639145ad69d1e600cdffa5b662fedaf75ecf524594f05e78ac90",
+      "unrelated_catalog_counts": {
+        "relations": 892,
+        "columns": 3550,
+        "constraints": 2239,
+        "policies": 479,
+        "functions": 1359,
+        "indexes": 655,
+        "default_acl": 0,
+        "role_memberships": 15,
+        "roles": 29,
+        "triggers": 185,
+        "views": 25,
+        "types": 18,
+        "schema": 2
+      },
+      "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/42309284075",
+      "result": "applied"
+    },
+    "post_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "ac458869cda99ec85cb42e31f5ba80ced29cbf227a81058379e086b0ffb924c2",
+      "live_matches_expected": false,
+      "already_applied": true,
+      "predecessors": {},
+      "predecessors_applied": true,
+      "missing_dependencies": [],
+      "apply_preconditions_met": false,
+      "precondition_failures": [],
+      "current_user": "checksops_admin",
+      "session_user": "checksops_admin",
+      "counts": null,
+      "successors_applied": [],
+      "release_sql_inspect": {
+        "live_definition_sha256": "ac458869cda99ec85cb42e31f5ba80ced29cbf227a81058379e086b0ffb924c2",
+        "prerequisites_missing": [],
+        "predecessors": {},
+        "successors_applied": [],
+        "functions": [
+          {
+            "name": "get_tenant_incoming_transfers(uuid)",
+            "state": "intended"
+          }
+        ],
+        "policies": [],
+        "views": [],
+        "tables": [],
+        "columns": [],
+        "constraints": [],
+        "triggers": [],
+        "table_privileges": [],
+        "function_acl": [
+          {
+            "name": "get_tenant_incoming_transfers(uuid)",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          }
+        ],
+        "acl_functions": [],
+        "indexes": [],
+        "unique_covers": [],
+        "definer_writes": [
+          {
+            "name": "payment_transfers",
+            "ok": true
+          },
+          {
+            "name": "tenants",
+            "ok": true
+          },
+          {
+            "name": "shared_checks",
+            "ok": true
+          },
+          {
+            "name": "check_intake_items",
+            "ok": true
+          },
+          {
+            "name": "claims",
+            "ok": true
+          }
+        ],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": null
+      }
+    }
+  },
+  "production_evidence": {
+    "2026-11-07 apply": "Guarded production SQL one-shot on i-0c35557c4e5385406, workstream prod-sql144-tenant-incoming-transfers-20261107, main a3a4bbdf7 (tarball dd249ae5…, transfer run 42315882342, migration source 9192e338… == pin), owner-approved run (\"apply SQL 144 in production\"), pre-apply --phase inspect SSM 2c4b80a8-81ea-4e0b-95d7-c5d78db18fe7 (run_id dd8a2b8f-a837-44aa-90f3-d0971a67f540, live 428d394e…, live_matches_expected true), apply SSM 0f602899-55d7-4e1b-a842-4fae04f72013, run_id 2c228f5d-61f1-4e91-9268-ea906d5cce3d, one_use_id sql144-prod-254be0ae-db3c-4fbe-bd20-dafba25bb7ef (spent): every step ok; contracts claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43; pre-apply inspect live 428d394e… (live_matches_expected true, precondition_failures [], definer_writes ok on all five relations); manifest 8775bb7d…; 428d394e… -> ac458869…, result applied, unrelated catalog 34648775… (policies 479, functions 1359); post-apply inspect already_applied true, precondition_failures []; the run's JSON arrived whole. After: public.get_tenant_incoming_transfers(uuid) exists as intended (SECURITY DEFINER, STABLE, EXECUTE for checksops and the owner; PUBLIC, anon, authenticated and service_role revoked), and the applying login reaches all five relations past row level security. The API change that exposes it and the website change that reads it are not part of this pin. Production acceptance was not yet reported by the owner when this was recorded. execute is false so the pin is no longer a standing authorization."
   }
 }
