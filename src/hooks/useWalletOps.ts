@@ -16,6 +16,7 @@ import {
   paidInvoiceRevenue,
   type InvoiceActivitySourceRow,
 } from "@/lib/payments/invoiceWalletActivity";
+import { fetchIncomingTransfers, incomingWalletActivity } from "@/lib/payments/transferFinanceRows";
 import {
   PaymentWalletSelectionError,
   resolveWalletOpsEnvironment,
@@ -54,7 +55,7 @@ export function useWalletOpsTransfers(limit = 25) {
     enabled: !!tenantId && enabled && environmentReady,
     staleTime: 30_000,
     queryFn: async () => {
-      const [transfersRes, walletRes, methodsRes, billingRes, invoicesRes] = await Promise.all([
+      const [transfersRes, walletRes, methodsRes, billingRes, invoicesRes, incomingRows] = await Promise.all([
         supabase
           .from("payment_transfers")
           .select(
@@ -86,6 +87,9 @@ export function useWalletOpsTransfers(limit = 25) {
           .eq("tenant_id", tenantId!)
           .order("created_at", { ascending: false })
           .limit(200),
+        // Payments other organizations sent into this wallet (SQL 144): their legs are the sender's rows,
+        // so the transfers read above never has them. Empty until SQL 144 and its API are live.
+        fetchIncomingTransfers(supabase, tenantId!),
       ]);
 
       if (transfersRes.error) throw transfersRes.error;
@@ -153,6 +157,8 @@ export function useWalletOpsTransfers(limit = 25) {
       // Paid invoices write no transfer or ledger row: they show in activity from the invoice itself.
       const invoiceActivity = invoiceWalletActivity(invoiceRows, { tenantId: tenantId!, environment: walletEnvironment });
       const invoicePendingInCents = invoices.reduce((sum, row) => sum + row.pending_cents, 0);
+      // Credits from partners: "From <sender>", pending until completed, returned shown as returned.
+      const incomingActivity = incomingWalletActivity(incomingRows, { environment: walletEnvironment });
 
       return {
         transfers: rows,
@@ -164,6 +170,7 @@ export function useWalletOpsTransfers(limit = 25) {
         invoicePendingInCents,
         invoicesInFlight: invoices,
         invoiceActivity,
+        incomingActivity,
         tenantWalletPaymentMethodId,
       };
     },

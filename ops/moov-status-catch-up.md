@@ -1,0 +1,213 @@
+# Moov status catch-up
+
+Owner request, 2026-11-07: "build the Moov status catch-up".
+
+## Why
+
+Production has never stored a `transfer.*` Moov webhook. Read-only evidence (SSM
+`6db9b33b-e076-4735-96ba-0c1dd545030c`): `public.aws_provider_webhook_receipts` holds two
+Moov receipts ever, `event.test` (2026-10-31) and `balance.updated` (2026-11-01), while
+`AWS_PROVIDER_WEBHOOK_DRY_RUN` is `false`. The production API Gateway access log answers
+`POST /prep/webhooks/moov` 401 about 290 times from 2026-09-20 to 2026-10-31 and 200 about
+100 times since 2026-10-31. The live `providers/webhooks.mjs` (sha256 `59b58674…`, PR #1483)
+keys a receipt on `X-Webhook-ID` alone and answers 200 `duplicate` on a conflict, so when
+Moov repeats that header every later event, `transfer.*` included, is dropped. That receipt
+key is fixed in a separate PR. Until it is live, webhooks keep dropping events. The catch-up
+does not read `aws_provider_webhook_receipts` at all, so it works either way.
+
+So transfer status never moved. Example: Freedom Adjustment's 2026-09 fee
+(`tenant_maintenance_payments` `72b622f9-b68f-4032-a971-a854dbcfbf57`, status `due`, Moov
+transfer `b31c7752-031f-4b8b-9b6e-82dd0aaed2cb`, leg `ab2895c9…` `submitted`). The owner saw
+it as COMPLETED in the Moov dashboard. Other fee legs, partner sends (`send_wallet`,
+`send_bank`) and wallet funding are probably stuck at `submitted` too.
+
+## What it is
+
+- `aws/functions/api/providers/moov-status-catch-up.mjs`: runs inside the API Lambda.
+- `scripts/deployment-guard/moov-status-catch-up.mjs`: builds the direct-invocation event,
+  calls `lambda:InvokeFunction` and prints the answer.
+- `aws/tests/moov-status-catch-up.test.mjs`: tests for both.
+
+For each candidate Moov transfer, it does what the webhook route (`providers/webhooks.mjs`)
+does with a confirmed `transfer.updated`:
+
+1. Reads the transfer from Moov with `confirmMoovWebhookPayload`
+   (`GET /accounts/{platform}/transfers/{id}`). The trusted payload is built from Moov's
+   record, not from anything ChecksOps holds.
+2. Applies that payload with `applyProductionMoovTransferWebhook` (the SQL 109 writer, for
+   `wallet_funding`, `send_wallet` and `send_bank` legs), then with
+   `applyCollectionV2ProviderCompletion` (fee legs and their obligation), in the webhook's
+   order.
+
+Candidates are:
+
+- `payment_transfers` rows with provider `moov`, this runtime's environment, a
+  `provider_transfer_id`, and a status that is not final (`completed`, `settled`, `failed`,
+  `canceled`, `returned`, `reversed`);
+- `tenant_maintenance_payments` rows with a `provider_transfer_id` that are not `settled`.
+
+Rows are grouped by Moov transfer id, so each transfer is read once.
+
+## Where it runs, and why
+
+It runs in the **production API Lambda** (`checksops-production-prep-api`), started by a
+**direct invocation**.
+
+- **Moov keys.** Only the production API runtime may use the production Moov keys.
+  `resolveBillingMoovContext` refuses them anywhere else (`production_credentials_refused`),
+  and that is how the SQL53 runner `i-0c35557c4e5385406` was refused. The runner keeps the
+  database admin path for SQL. It does not get Moov keys.
+- **No HTTP route.** The repo's privileged one-shots run on direct invocation, not on a
+  route: the SQL 53 read-only inspect, and the Check Alt scheduled status job
+  (`isSchedulerDirectInvocation` in `scheduled.mjs`). `isMoovStatusCatchUpInvocation` uses
+  the same test. The event must have `checksops_operator: "moov-status-catch-up"` and
+  `rawPath: "/scheduled/moov-status-catch-up"`, and it may carry only `requestContext.http.method`
+  set to `POST`. It may not carry `version`, `routeKey`, `headers`, `body`,
+  `queryStringParameters`, `apiId`, `stage` or any key outside the allowed list. API Gateway
+  always adds those, so an internet request can never reach this code. Only a principal with
+  `lambda:InvokeFunction` on the function can start it.
+- **Row security.** `payment_transfers`, `tenant_maintenance_payments` and their policies
+  apply to `checksops` with no user. Like the Check Alt scheduled job, the catch-up binds
+  one reviewed actor, `actor_application_user_id`, as `request.app_user_id`. It refuses
+  unless `public.is_platform_owner()` is true for that actor.
+
+## Deploy prerequisite (a separate, owner-approved step)
+
+This PR is source only. The catch-up cannot run until the Lambda serves it. That needs two
+production overlay members, planned in their own PR and applied with their own approvals
+(`ops/production-lambda-rebuild.md`, `ops/deployment-guard/README.md`):
+
+1. ADD `providers/moov-status-catch-up.mjs`. It imports only members that are already in the
+   live plan: `moov-webhook-confirm.mjs`, `moov-transfer-webhook.mjs`,
+   `tenant-collection-v2*.mjs`, `tenant-billing-destination.mjs`, `db-health.mjs`,
+   `secrets.mjs`, `provider-secrets.mjs` and `provider-flags.mjs`.
+2. REPLACE `scheduled.mjs`, adding this hook next to the existing scheduler check:
+
+   ```js
+   import { handleMoovStatusCatchUp, isMoovStatusCatchUpInvocation } from './providers/moov-status-catch-up.mjs';
+   // in handleScheduledRequest, before the shared-secret check:
+   if (isMoovStatusCatchUpInvocation(event)) return handleMoovStatusCatchUp(event, deps);
+   ```
+
+   `index.mjs` already routes `/scheduled/*` to `scheduled.mjs`, and `index.mjs` is never
+   overlaid.
+
+`scheduled.mjs` is not changed in this PR, for two reasons:
+
+- Its overlay row expects live `4b06d4cd…`, and the plan accepts `458ba424…`. No applied
+  record shows which of the two is live.
+- `ops/live-api-reconciliation-2026-10-21.md` records a live `scheduled.mjs` that differs
+  from main (`moov-monthly-tenant-billing`).
+
+The hook has to be reconciled against the live bytes, read through a read-only overlay
+inspect, before its bytes are fixed. That follows AGENTS.md: reconcile same-file Lambda
+changes (`SOURCE_RECONCILIATION_REQUIRED`). `scheduled.mjs` is in the `auto-deposit`
+ownership group (UNVERIFIED), so that PR also updates its `tree_hash` with
+`node scripts/validate-release-locks.mjs --print-hashes`.
+
+**Invoke identity.** A principal needs `lambda:InvokeFunction` on
+`arn:aws:lambda:us-east-1:806168576068:function:checksops-production-prep-api`. The owner
+chooses it: the owner's own session, or a dedicated role like the SQL 53 config writer's.
+This repository does not configure one.
+
+## Steps and approvals
+
+Each step needs its own approval. An approval never carries over to the next step.
+
+0. **Deploy** the two members above, with the owner's approval of that overlay run.
+1. **Staging rehearsal** (recommended before production). Run
+   `--environment staging --phase plan`. Staging is `sandbox` there, and its
+   apply runs only if `AWS_PROVIDER_WEBHOOK_DRY_RUN` is `false` on staging.
+2. **Plan, read-only.** The owner says: **"run the read-only Moov catch-up plan"**.
+
+   ```bash
+   node scripts/deployment-guard/moov-status-catch-up.mjs --environment production \
+     --phase plan --actor-application-user-id <platform owner application user id> \
+     --limit 50 --out moov-catch-up-plan.json
+   ```
+
+   The plan reads the candidates inside `BEGIN READ ONLY` (it checks
+   `transaction_read_only = on`), then reads Moov. For every transfer it prints:
+
+   - the database status of each leg and obligation;
+   - Moov's status, amount and ACH return or NOC code;
+   - `predicted_status`, the status the apply functions would write;
+   - `action`: `apply`, `skip` or `refuse`, with a `reason`.
+
+   It also prints `counts`, the `manifest_sha256` and the `transfer_ids`. It writes nothing.
+3. **Review.** Send the owner the plan file: the counts, every `apply` row, and every
+   `refuse` row (`amount_mismatch`, `terminal_row_would_change`, `duplicate_legs`). Stop if
+   anything looks wrong.
+4. **Apply.** Only with the owner's exact words for this plan, for example
+   *"apply the Moov catch-up plan &lt;manifest_sha256&gt; in production"*:
+
+   ```bash
+   node scripts/deployment-guard/moov-status-catch-up.mjs --environment production \
+     --phase apply --actor-application-user-id <same uuid> --plan moov-catch-up-plan.json \
+     --approval-statement-b64 <base64 of the owner's exact words>
+   ```
+
+   The apply first plans again. It refuses and writes nothing if any of these hold:
+
+   - the new manifest hash differs from the reviewed one (`catch_up_plan_changed`: the
+     database or Moov moved);
+   - the transfer ids differ;
+   - the plan was truncated;
+   - Moov could not be read.
+
+   Then it runs one transaction per transfer:
+
+   1. Bind the actor and set `request.provider_webhook`.
+   2. Lock the rows with `FOR UPDATE` and re-check the planned pre-state
+      (`catch_up_state_changed_since_plan`).
+   3. Run the two apply functions.
+   4. Re-read the rows and require exactly the planned post-state
+      (`catch_up_outcome_differs_from_plan`).
+   5. `COMMIT`.
+
+   Any failure rolls back that transfer and stops the run (`stopped_at`). Transfers already
+   committed stay committed and are listed in `applied`.
+5. **More than `--limit` candidates.** Repeat steps 2 to 4 with a fresh plan and a fresh
+   approval for each batch.
+6. **Record.** Keep the plan and apply JSON, the invoke request ids and the owner's words in
+   a record PR. No pin or lock changes.
+
+## Idempotent
+
+- A transfer that has been applied is no longer a candidate.
+- The SQL 109 writer records the event id `moov-status-catch-up:<transfer id>:<moov status>`
+  once per transfer.
+- An old `manifest_sha256` no longer matches a new plan.
+- Running apply again is refused and writes nothing. A new plan shows nothing more to apply.
+
+## What it does not do
+
+- It moves no money. It creates, cancels and retries no Moov transfer. Moov is only read with
+  `GET`.
+- It writes nothing that did not come from Moov's read-back.
+- It does not change a transfer Moov has not finished (`created`, `queued`, `pending`:
+  `moov_not_final`).
+- It refuses an amount or currency that differs from Moov's (`amount_mismatch`), and a
+  transfer Moov cannot find (`moov_not_found`).
+- It never rewrites a final row (`terminal_row_would_change`), and it never moves a status
+  backwards (the SQL 109 rank).
+- It inserts no `aws_provider_webhook_receipts` row and does not fix the webhook receipt key
+  (separate PR).
+- It does not change the Moov webhook subscription (the owner does that in Moov).
+- It changes no SQL, policy, grant, Lambda configuration or release lock, and it deploys
+  nothing.
+- Its output never includes secrets, account or routing numbers, payment method ids, Moov
+  account ids, notes or hostnames.
+
+## Open questions (verify in the staging rehearsal)
+
+- **Fee completion event under row security.** `applyCollectionV2ProviderCompletion` inserts
+  a `payment_event_log` row (`collection_v2.completed`). The insert policies on that table
+  accept `request.provider_webhook_apply = '1'`, which the SQL 109 call resets to `0` before
+  the collection call. They also accept a tenant member with `request.financial_execution`.
+  Neither is the platform-owner actor. If production refuses that insert, the transaction
+  aborts. The catch-up then fails its post-state check, rolls back and stops on the first fee
+  transfer. That is safe, but the September fee would stay `due` until a reviewed fix (a
+  policy or a narrow writer) lands. The same row security means the live webhook, which has
+  no user, may not see fee rows at all, so `no_billing_occurrence` is possible there.
+- **Who may invoke the production Lambda** (see "Invoke identity" above).

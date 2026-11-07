@@ -10,7 +10,7 @@ import { productionOnboardingWebhookApplyEnabled } from './onboarding/flags.mjs'
 import { applyProductionOnboardingWebhook } from './onboarding/webhook-status.mjs';
 import { applyCollectionV2ProviderCompletion } from '../tenant-collection-v2-settlement.mjs';
 import { billingEnvironment } from '../tenant-billing-destination.mjs';
-import { MoovConfirmationRetry, confirmMoovWebhookPayload } from './moov-webhook-confirm.mjs';
+import { MoovConfirmationRetry, confirmMoovWebhookPayload, moovWebhookResource } from './moov-webhook-confirm.mjs';
 import {
   applyProductionMoovTransferWebhook,
   isMoovTransferEvent,
@@ -53,13 +53,44 @@ const parseJson = (rawBody) => {
 
 const eventTypeOf = (payload) => payload?.type || payload?.eventType || payload?.webhook_type || payload?.webhook_code || 'unknown';
 
+const MOOV_EVENT_ID = /^[A-Za-z0-9_-]{1,120}$/;
+
 /**
- * The receipt key. Moov: the signed X-Webhook-ID only (the body is not signed, so a body
- * eventID could be anything). CheckAlt signs the body, so its body id stays first.
+ * The Moov receipt key: one per Moov event, the same on every redelivery of that event.
+ *
+ * X-Webhook-ID is signed but is not unique per event: in production about 100 accepted
+ * deliveries (2026-10-31..11-06) left 2 receipt rows, so keying on it alone dropped real
+ * transfer events as duplicates. The key is therefore the event as Moov describes it:
+ *   `evt:<body eventID>:<sha256 of [event type, resource kind, account, transfer, bank account, capability]>`
+ * (at most 189 characters), or `body:<sha256 of the raw body>` when the body has no usable
+ * eventID. It does not depend on whether a redelivery reuses X-Webhook-ID.
+ *
+ * The body is not signed, so these parts are attacker-chosen under a replayed signed header.
+ * That is safe because nothing is written from the body (moov-webhook-confirm.mjs reads the
+ * named resource back from Moov), and a forged body cannot block a later genuine event: it
+ * would need that event's own eventID, type and resource, and then it only makes ChecksOps
+ * read that same resource from Moov. Keys from before this change are a bare X-Webhook-ID and
+ * never collide with the `evt:` / `body:` forms. CheckAlt signs the body, so its body id
+ * stays first.
  */
-const externalIdOf = (provider, payload, verifiedId) => (
+export const moovReceiptKey = (payload, rawBody) => {
+  const eventId = String(payload?.eventID ?? payload?.eventId ?? '').trim();
+  if (!MOOV_EVENT_ID.test(eventId)) return `body:${payloadSha256(rawBody)}`;
+  const resource = moovWebhookResource(payload);
+  const binding = JSON.stringify([
+    String(eventTypeOf(payload)),
+    resource.kind,
+    resource.accountId ?? null,
+    resource.transferId ?? null,
+    resource.bankAccountId ?? null,
+    resource.capabilityId ?? null,
+  ]);
+  return `evt:${eventId}:${createHash('sha256').update(binding).digest('hex')}`;
+};
+
+const externalIdOf = (provider, payload, verifiedId, rawBody) => (
   provider === 'moov'
-    ? (verifiedId || null)
+    ? moovReceiptKey(payload, rawBody)
     : (payload?.eventID || payload?.event_id || payload?.id || verifiedId || null)
 );
 
@@ -174,7 +205,7 @@ export const handleProviderWebhook = async (event, provider, deps = {}) => {
   }
 
   const dryRun = providerWebhookDryRun();
-  const externalEventId = externalIdOf(provider, parsed.payload, verified.eventId);
+  const externalEventId = externalIdOf(provider, parsed.payload, verified.eventId, rawBody);
   if (!externalEventId) {
     return { ok: false, statusCode: 400, error: 'malformed_webhook', message: 'Webhook is missing an event id' };
   }

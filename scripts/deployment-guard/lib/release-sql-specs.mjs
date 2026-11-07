@@ -8162,4 +8162,80 @@ export const RELEASE_SQL_SPECS = deepFreeze({
       "public.claims"
     ]
   },
+
+  // SQL 145 (owner 2026-11-07: "build the fee leg fix"): the platform owner's fee collection records its
+  // payment_transfers leg. Since SQL 90 no permissive INSERT policy on payment_transfers admits the platform owner
+  // for a tenant it is not a member of (aws_write_payment_transfers: aws_can_write_tenant = membership; SQL 72's
+  // aws_member_insert_payment_transfers: membership), so the collection_insert_leg statement of
+  // tenant-collection-v2.mjs failed with 42501 (production 2026-11-06T22:53:11Z, Freedom 2026-10). One new SECURITY
+  // DEFINER writer, public.aws_platform_owner_insert_billing_collection_leg(...) (plpgsql, VOLATILE, search_path
+  // public, pg_temp), RETURNS public.payment_transfers: caller auth.uid() and is_platform_owner() (42501), a server
+  // write path (SQL 136's aws_money_write_allowed(), 42501), a tenant-collection-v2 leg (leg_role wallet / ach_debit,
+  // the billing-<period>-<tenant>-wallet|bank key, metadata contract, period and leg type; 22023), an obligation of
+  // that tenant and period whose amount covers this leg plus the other one (22023); the API's INSERT with its ON
+  // CONFLICT update, only over the same kind of leg (23505 otherwise). EXECUTE checksops and the owner (PUBLIC, anon,
+  // authenticated and service_role revoked, as SQL 144). definer_writes: the table it writes and the obligation table
+  // it reads, both reached past RLS as their owner. No predecessor in the release engine (SQL 136's gate function is a
+  // prerequisite). No table, column, policy, grant, trigger or row change.
+  sql145: {
+    "key": "sql145",
+    "label": "SQL 145",
+    "choice": "sql145-platform-owner-billing-collection-leg",
+    "production_pin_rel": "ops/deployment-guard/sql145-platform-owner-billing-collection-leg-production-apply.json",
+    "script": "sql145-platform-owner-billing-collection-leg-production-apply",
+    "prerequisites": [
+      "public.payment_transfers",
+      "public.payment_transfers_idempotency_uniq",
+      "public.tenant_maintenance_payments",
+      "public.is_platform_owner()",
+      "public.aws_money_write_allowed()",
+      "auth.uid()",
+      "role checksops",
+      "column public.payment_transfers.id",
+      "column public.payment_transfers.tenant_id",
+      "column public.payment_transfers.provider",
+      "column public.payment_transfers.environment",
+      "column public.payment_transfers.status",
+      "column public.payment_transfers.idempotency_key",
+      "column public.payment_transfers.amount_cents",
+      "column public.payment_transfers.platform_fee_cents",
+      "column public.payment_transfers.net_amount_cents",
+      "column public.payment_transfers.speed",
+      "column public.payment_transfers.description",
+      "column public.payment_transfers.source_tenant_account_id",
+      "column public.payment_transfers.wallet_id",
+      "column public.payment_transfers.leg_role",
+      "column public.payment_transfers.provider_transfer_id",
+      "column public.payment_transfers.provider_status",
+      "column public.payment_transfers.failure_reason",
+      "column public.payment_transfers.provider_metadata",
+      "column public.payment_transfers.submitted_at",
+      "column public.payment_transfers.updated_at",
+      "column public.tenant_maintenance_payments.id",
+      "column public.tenant_maintenance_payments.tenant_id",
+      "column public.tenant_maintenance_payments.amount_cents",
+      "column public.tenant_maintenance_payments.billing_period"
+    ],
+    "predecessors": [],
+    "functions": [
+      {
+        "identity": "public.aws_platform_owner_insert_billing_collection_leg(uuid, text, text, text, bigint, text, text, uuid, text, text, text, text, jsonb)",
+        "result": "public.payment_transfers",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ],
+        "revokes": [
+          "PUBLIC EXECUTE",
+          "anon EXECUTE",
+          "authenticated EXECUTE",
+          "service_role EXECUTE"
+        ]
+      }
+    ],
+    "definer_writes": [
+      "public.payment_transfers",
+      "public.tenant_maintenance_payments"
+    ]
+  },
 });

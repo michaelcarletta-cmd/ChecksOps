@@ -103,7 +103,17 @@ const MONEY_WRITE_FLAG = JSON.parse(fs.readFileSync(path.join(ROOT, MONEY_WRITE_
 // from the money-write bytes the fourth production rebuild put live (apply 41469896446) to main's bytes, naming
 // their own manifest (its own test below). The money-write manifest keeps the bytes it recorded.
 const FEE_PULL_SAVEPOINTS_REL = 'aws/tests/fixtures/production-fee-pull-savepoints-manifest-2026-11-06.json';
+// Applied 2026-11-06 in plan order (production runs 42302929689, 42303279340): both rows expect main's bytes and
+// name this record; the planning manifest keeps the pre-apply state.
+const FEE_PULL_SAVEPOINTS_APPLIED_REL = 'aws/tests/fixtures/production-fee-pull-savepoints-applied-manifest-2026-11-06.json';
 const FEE_PULL_SAVEPOINTS_MEMBERS = ['tenant-collection-v2.mjs', 'tenant-billing-engine.mjs'];
+// Fee leg API (SQL 145, 2026-11-07, planning only): the collection v2 row moved on again, from the fee pull savepoints
+// bytes (applied 2026-11-06, production run 42302929689) to main's bytes, held for SQL 145 (its own test below). The
+// fee pull savepoints manifests keep the bytes they recorded.
+const FEE_LEG_API_REL = 'aws/tests/fixtures/production-fee-leg-api-manifest-2026-11-07.json';
+const FEE_LEG_MEMBER = 'tenant-collection-v2.mjs';
+const FEE_PULL_COLLECTION_BYTES = JSON.parse(fs.readFileSync(path.join(ROOT, FEE_PULL_SAVEPOINTS_REL), 'utf8')).members[FEE_LEG_MEMBER].accepted_sha256;
+const SQL145_FILE = 'aws/workflows/sql/145_platform_owner_billing_collection_leg.sql';
 const assertMovedToMoneyWrite = (member, { live, previous }) => {
   const row = PLAN.members[member];
   assert.equal(row.operation, 'replace', member);
@@ -113,9 +123,11 @@ const assertMovedToMoneyWrite = (member, { live, previous }) => {
       live_sha256: live, accepted_sha256: recorded.accepted_sha256, operation: 'replace', previous_manifest: previous,
     }, member);
     assert.notEqual(recorded.accepted_sha256, live, member);
-    assert.equal(row.manifest, FEE_PULL_SAVEPOINTS_REL, member);
+    // Collection v2's row has since moved on to the fee leg REPLACE (SQL 145), which starts from the applied bytes.
+    const feeLeg = member === FEE_LEG_MEMBER;
+    assert.equal(row.manifest, feeLeg ? FEE_LEG_API_REL : FEE_PULL_SAVEPOINTS_APPLIED_REL, member);
     assert.equal(row.accepted_sha256, sha(`aws/functions/api/${member}`), member);
-    assert.equal(row.expected_live_sha256, recorded.accepted_sha256, member);
+    assert.equal(row.expected_live_sha256, feeLeg ? FEE_PULL_COLLECTION_BYTES : row.accepted_sha256, member);
     assert.notEqual(row.accepted_sha256, recorded.accepted_sha256, member);
     return;
   }
@@ -144,13 +156,22 @@ const AUTH_EMAIL_VERIFIED_BYTES = JSON.parse(fs.readFileSync(path.join(ROOT, AUT
 // Login MFA (2026-11-06, planning only): ADD login-mfa.mjs, REPLACE data.mjs from the auth.email() applied bytes and
 // auth-financial-totp.mjs from the bytes the fourth production rebuild put live.
 const LOGIN_MFA_REL = 'aws/tests/fixtures/production-login-mfa-manifest-2026-11-06.json';
-// The data.mjs row as the login MFA REPLACE leaves it: main's bytes accepted, the auth.email() applied bytes expected live.
+// data.mjs as the login MFA REPLACE accepted it; production overlay run 42284228921 put these bytes live (that
+// workstream's applied record is still pending).
+const LOGIN_MFA_DATA_BYTES = JSON.parse(fs.readFileSync(path.join(ROOT, LOGIN_MFA_REL), 'utf8')).members['data.mjs'].accepted_sha256;
+// Incoming transfers API (SQL 144, 2026-11-07, planning only): REPLACE data.mjs from the login MFA bytes.
+const INCOMING_TRANSFERS_API_REL = 'aws/tests/fixtures/production-incoming-transfers-api-manifest-2026-11-07.json';
+// Applied 2026-11-07 (production run 42323230515, VERIFIED): the row expects main's bytes and names this record.
+const INCOMING_TRANSFERS_API_APPLIED_REL = 'aws/tests/fixtures/production-incoming-transfers-api-applied-manifest-2026-11-07.json';
+// data.mjs as production run 42323230515 applied it (the incoming transfers API), from its applied record.
+const INCOMING_TRANSFERS_DATA_BYTES = JSON.parse(fs.readFileSync(path.join(ROOT, INCOMING_TRANSFERS_API_APPLIED_REL), 'utf8')).members['data.mjs'].accepted_sha256;
+// The data.mjs row after the incoming transfers apply: main's bytes accepted and expected live, naming the applied record.
 const dataRowNow = () => ({
   operation: 'replace',
   accepted_sha256: sha('aws/functions/api/data.mjs'),
-  expected_live_sha256: AUTH_EMAIL_VERIFIED_BYTES,
+  expected_live_sha256: INCOMING_TRANSFERS_DATA_BYTES,
   sql_before: 'aws/workflows/sql/53_claim_settlement_breakdown.sql',
-  manifest: LOGIN_MFA_REL,
+  manifest: INCOMING_TRANSFERS_API_APPLIED_REL,
 });
 function repoModules(dir = API, prefix = '') {
   const out = {};
@@ -275,7 +296,26 @@ const TOTP_SAVEPOINT_APPLIED_REL = 'aws/tests/fixtures/production-totp-reset-sav
 const MOOV_WEBHOOK_BODY_AUTH_MANIFEST = JSON.parse(fs.readFileSync(path.join(ROOT, 'aws/tests/fixtures/production-moov-webhook-body-auth-manifest-2026-10-31.json'), 'utf8'));
 const MOOV_WEBHOOK_PRE = Object.freeze(Object.fromEntries(['providers/webhooks.mjs', 'tenant-collection-v2-settlement.mjs']
   .map((name) => [name, MOOV_WEBHOOK_BODY_AUTH_MANIFEST.members[name].live_sha256])));
+// Moov webhook receipt key (owner 2026-11-07): REPLACE providers/webhooks.mjs from the bytes production run
+// 41219106461 applied (the body confirmation record).
+const MOOV_WEBHOOK_RECEIPT_KEY_REL = 'aws/tests/fixtures/production-moov-webhook-receipt-key-manifest-2026-11-07.json';
+// Applied 2026-11-07 (production run 42330359623, VERIFIED): the row expects main's bytes and names this record.
+const MOOV_WEBHOOK_RECEIPT_KEY_APPLIED_REL = 'aws/tests/fixtures/production-moov-webhook-receipt-key-applied-manifest-2026-11-07.json';
+const MOOV_WEBHOOK_RECEIPT_KEY_PRE = JSON.parse(fs.readFileSync(path.join(ROOT, 'aws/tests/fixtures/production-moov-webhook-body-auth-applied-manifest-2026-10-31.json'), 'utf8')).members['providers/webhooks.mjs'].accepted_sha256;
 const moovWebhookPre = (plan) => { for (const [name, pre] of Object.entries(MOOV_WEBHOOK_PRE)) plan.members[name].expected_live_sha256 = pre; return plan; };
+// The fee pull savepoint REPLACEs (production runs 42302929689, 42303279340, 2026-11-06), the incoming transfers
+// data.mjs REPLACE (production run 42323230515, 2026-11-07) and the Moov webhook receipt key providers/webhooks.mjs
+// REPLACE (production run 42330359623, 2026-11-07) record their applied bytes live: replays of the plan as it stood
+// before them start from the pre-apply live bytes (each planning manifest's live_sha256), naming that manifest.
+const RECORDED_2026_11_PRE = Object.freeze(Object.fromEntries([
+  ...FEE_PULL_SAVEPOINTS_MEMBERS.map((name) => [name, FEE_PULL_SAVEPOINTS_REL]),
+  ['data.mjs', INCOMING_TRANSFERS_API_REL],
+  ['providers/webhooks.mjs', MOOV_WEBHOOK_RECEIPT_KEY_REL],
+].map(([name, rel]) => [name, { expected_live_sha256: JSON.parse(fs.readFileSync(path.join(ROOT, rel), 'utf8')).members[name].live_sha256, manifest: rel }])));
+const recorded2026_11Pre = (plan) => {
+  for (const [name, pre] of Object.entries(RECORDED_2026_11_PRE)) plan.members[name] = { ...plan.members[name], ...pre };
+  return plan;
+};
 const SQL121_FILE = 'aws/workflows/sql/121_cash_jobs_production_grants.sql';
 const WORKFLOW_PRE_PLAN = (() => {
   const plan = structuredClone(PLAN);
@@ -292,6 +332,7 @@ function applyDeps(member, liveOpts = {}) {
   if (member === 'providers/production/checkalt-register.mjs' && liveOpts.plan === undefined) liveOpts = { ...liveOpts, plan: registerPre(structuredClone(PLAN)) };
   if (member === 'admin-reset-totp.mjs' && liveOpts.plan === undefined) liveOpts = { ...liveOpts, plan: adminResetPre(structuredClone(PLAN)) };
   if (Object.hasOwn(MOOV_WEBHOOK_PRE, member) && liveOpts.plan === undefined) liveOpts = { ...liveOpts, plan: moovWebhookPre(structuredClone(PLAN)) };
+  if (Object.hasOwn(RECORDED_2026_11_PRE, member) && liveOpts.plan === undefined) liveOpts = { ...liveOpts, plan: recorded2026_11Pre(structuredClone(PLAN)) };
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'prod-overlay-'));
   fs.mkdirSync(path.join(root, 'ops/deployment-guard'), { recursive: true });
   fs.mkdirSync(path.join(root, 'aws/functions/api'), { recursive: true });
@@ -322,6 +363,15 @@ const PLAN_SQL98_LIVE = (() => {
   return plan;
 })();
 const withSql98 = (member, deps) => (PLAN.members[member]?.sql_before === SQL98_FILE ? { ...deps, plan: PLAN_SQL98_LIVE } : deps);
+// tenant-collection-v2.mjs waits for SQL 145 (fee leg API, its own test below): the committed plan records SQL 145
+// verified live (the SQL 145 record change, from its 2026-11-07 production apply), and apply replays still run on a
+// plan copy that states it, as PLAN_SQL98_LIVE does for SQL 98.
+const withSql145 = (member, deps) => {
+  if (PLAN.members[member]?.sql_before !== SQL145_FILE) return deps;
+  const plan = structuredClone(deps.plan || PLAN);
+  plan.sql_prerequisites[SQL145_FILE] = { verified_live: true, evidence: 'test' };
+  return { ...deps, plan };
+};
 // The plan before SQL 98 was recorded verified live (2026-10-19): the held-member refusals start from it.
 const PLAN_SQL98_PENDING = (() => {
   const plan = providersPre(structuredClone(PLAN));
@@ -333,7 +383,7 @@ const applyEnv = (member, extra = {}) => ({
   ...ENV,
   CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'apply',
   CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: member,
-  CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: (member === 'providers.mjs' ? PROVIDERS_PRE : member === 'workflow.mjs' ? WORKFLOW_PRE : member === 'auth-financial-totp.mjs' ? TOTP_PRE : member === 'providers/production/checkalt-register.mjs' ? REGISTER_PRE : member === 'admin-reset-totp.mjs' ? ADMIN_RESET_PRE : MORTGAGE_DESK_PRE[member] ?? MOOV_WEBHOOK_PRE[member] ?? PLAN.members[member].expected_live_sha256) || '',
+  CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: (member === 'providers.mjs' ? PROVIDERS_PRE : member === 'workflow.mjs' ? WORKFLOW_PRE : member === 'auth-financial-totp.mjs' ? TOTP_PRE : member === 'providers/production/checkalt-register.mjs' ? REGISTER_PRE : member === 'admin-reset-totp.mjs' ? ADMIN_RESET_PRE : MORTGAGE_DESK_PRE[member] ?? MOOV_WEBHOOK_PRE[member] ?? RECORDED_2026_11_PRE[member]?.expected_live_sha256 ?? PLAN.members[member].expected_live_sha256) || '',
   CHECKSOPS_STAGING_ACCEPTANCE_REFERENCE: ACCEPTANCE,
   CHECKSOPS_PRODUCTION_APPROVAL: approvalPhrase(member),
   ...extra,
@@ -565,7 +615,7 @@ test('read-only Moov wallet sync members apply in order with nested ZIP paths', 
   assert.ok(!positions.includes(-1));
   for (const member of MOOV) {
     const { deps, calls } = applyDeps(member);
-    const result = await run(applyEnv(member), withSql98(member, deps));
+    const result = await run(applyEnv(member), withSql145(member, withSql98(member, deps)));
     assert.equal(result.mutation, false, member);
     const op = PLAN.members[member].operation;
     assert.deepEqual(calls.receipt.owned_member_ops, { replace: op === 'replace' ? [member] : [], add: op === 'add' ? [member] : [] }, member);
@@ -641,7 +691,7 @@ test('Moov wallet funding members apply in order: wallet sync, added modules, pr
   assert.ok(positions.every((pos, i) => pos >= 0 && (i === 0 || pos > positions[i - 1])), JSON.stringify(positions));
   for (const member of FUND) {
     const { deps, calls } = applyDeps(member);
-    const result = await run(applyEnv(member), withSql98(member, deps));
+    const result = await run(applyEnv(member), withSql145(member, withSql98(member, deps)));
     assert.equal(result.mutation, false, member);
     const op = PLAN.members[member].operation;
     assert.deepEqual(calls.receipt.owned_member_ops, { replace: op === 'replace' ? [member] : [], add: op === 'add' ? [member] : [] }, member);
@@ -1277,7 +1327,9 @@ test('fee collection: eleven members on the fee manifest, collection-v2 then des
   assert.equal(pin102.applied.result, 'applied');
   assert.equal(pin102.applied.apply_ssm_command_id, 'fdf84b2e-8f53-4e9f-b6a4-37a56054175b');
   assert.equal(pin102.filename, SQL102);
-  for (const member of [COLLECTION, DESTINATION]) assert.equal(PLAN.members[member].sql_before, null, member);
+  assert.equal(PLAN.members[DESTINATION].sql_before, null, DESTINATION);
+  // Collection v2 has since moved on to the fee leg REPLACE, which waits for SQL 145 (its own test).
+  assert.equal(PLAN.members[COLLECTION].sql_before, SQL145_FILE, COLLECTION);
   const pre = PLAN.sql_prerequisites[SQL98];
   // SQL 98 is recorded live in production since its guarded apply of 2026-10-19 (#1072).
   assert.equal(pre.verified_live, true);
@@ -1354,7 +1406,8 @@ test('fee collection: eleven members on the fee manifest, collection-v2 then des
   // (identityEnvFromChecksopsEnv, IDENTITY_ENV_PRODUCTION) and no longer imports provider-flags.mjs.
   assert.ok(!localImports(fs.readFileSync(path.join(API, DESTINATION), 'utf8'), DESTINATION).includes('provider-flags.mjs'));
   assert.ok(localImports(fs.readFileSync(path.join(API, DESTINATION), 'utf8'), DESTINATION).includes('identity-env.mjs'));
-  const collection = await run(applyEnv(COLLECTION), applyDeps(COLLECTION).deps);
+  // Collection v2 now waits for SQL 145 (fee leg API): its replay runs on a plan copy that records SQL 145 live.
+  const collection = await run(applyEnv(COLLECTION), withSql145(COLLECTION, applyDeps(COLLECTION).deps));
   assert.equal(collection.mutation, false);
   const destination = await run(applyEnv(DESTINATION), applyDeps(DESTINATION).deps);
   assert.equal(destination.mutation, false);
@@ -2467,13 +2520,16 @@ test('Data API credential columns: data.mjs expected_live records the bytes prod
   // 2026-10-29 (production run 40963109952), and on again to the auth.email() verified email only
   // REPLACE (finding 17, its own test below), which started from the public partner codes' applied bytes
   // and was applied 2026-10-31 (production run 41234874570), and on again to the login MFA REPLACE
-  // (2026-11-06, planning only) from those applied bytes: main's bytes accepted, the applied bytes expected live.
+  // (2026-11-06) from those applied bytes, which production overlay run 42284228921 put live (record pending), and
+  // on again to the incoming transfers REPLACE (SQL 144, 2026-11-07) from the login MFA bytes, applied 2026-11-07
+  // (production run 42323230515): main's bytes accepted and expected live, naming the applied record.
   const GATES_REL = 'aws/tests/fixtures/production-data-rpc-access-gates-manifest-2026-10-29.json';
   const row = PLAN.members[MEMBER];
   assert.equal(row.operation, 'replace');
-  assert.equal(row.manifest, LOGIN_MFA_REL);
+  assert.equal(row.manifest, INCOMING_TRANSFERS_API_APPLIED_REL);
   assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, GATES_REL), 'utf8')).members[MEMBER].previous_manifest, APPLIED_REL);
-  assert.equal(row.expected_live_sha256, AUTH_EMAIL_VERIFIED_BYTES);
+  assert.equal(row.expected_live_sha256, INCOMING_TRANSFERS_DATA_BYTES);
+  assert.equal(row.expected_live_sha256, row.accepted_sha256);
   assert.notEqual(row.accepted_sha256, LIVE);
   assert.equal(sha(`aws/functions/api/${MEMBER}`), row.accepted_sha256);
   assert.equal(row.sql_before, 'aws/workflows/sql/53_claim_settlement_breakdown.sql');
@@ -2481,13 +2537,12 @@ test('Data API credential columns: data.mjs expected_live records the bytes prod
   assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
   assert.ok(PLAN.order.indexOf('claim-settlement-rpc.mjs') < PLAN.order.indexOf(MEMBER));
   const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
-  // The auth.email() REPLACE was applied 2026-10-31 (production run 41234874570): those bytes are the login MFA
-  // REPLACE's pre-state (READY), and main's bytes are done once it is applied.
-  const ready = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER) });
-  assert.equal(ready.state, 'READY');
-  assert.equal(ready.mutation, false);
-  assert.equal((await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: sha(`aws/functions/api/${MEMBER}`) }) })).state, 'ALREADY_ACCEPTED');
-  for (const other of [LIVE, BEFORE]) {
+  // Main's bytes are live since the incoming transfers apply (production run 42323230515): done. The login MFA bytes
+  // (its pre-state, live from overlay run 42284228921) are no longer an accepted live state.
+  const done = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER) });
+  assert.equal(done.state, 'ALREADY_ACCEPTED');
+  assert.equal(done.mutation, false);
+  for (const other of [LIVE, BEFORE, LOGIN_MFA_DATA_BYTES]) {
     await assert.rejects(
       run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: other }) }),
       (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
@@ -3812,9 +3867,10 @@ test('Security hardening 2026-10-29 (audit findings 2-4): five members applied i
     } else {
       assert.equal(row.accepted_sha256, dataMovedOn ? sha(`aws/functions/api/${member}`) : accepted, member);
       // data.mjs: the auth.email() REPLACE from the public partner codes' bytes was applied 2026-10-31 (run 41234874570);
-      // the login MFA REPLACE (2026-11-06, planning only) starts from those applied bytes.
-      assert.equal(row.expected_live_sha256, dataMovedOn ? AUTH_EMAIL_VERIFIED_BYTES : accepted, member);
-      assert.equal(row.manifest, dataMovedOn ? LOGIN_MFA_REL : SECURITY_HARDENING_APPLIED_REL, member);
+      // the login MFA REPLACE (2026-11-06) started from those applied bytes and overlay run 42284228921 put its bytes
+      // live; the incoming transfers REPLACE (SQL 144) started from them and was applied 2026-11-07 (run 42323230515).
+      assert.equal(row.expected_live_sha256, dataMovedOn ? INCOMING_TRANSFERS_DATA_BYTES : accepted, member);
+      assert.equal(row.manifest, dataMovedOn ? INCOMING_TRANSFERS_API_APPLIED_REL : SECURITY_HARDENING_APPLIED_REL, member);
     }
     // The planning manifest keeps the pre-apply state, and that state is not an accepted live state any more.
     const planned = JSON.parse(fs.readFileSync(path.join(ROOT, planningRel), 'utf8')).members[member];
@@ -3828,7 +3884,7 @@ test('Security hardening 2026-10-29 (audit findings 2-4): five members applied i
     // again) are inspected at their current accepted live bytes (the public partner codes, the portal signing,
     // the signed upload size, the auth.email() REPLACE applied 2026-10-31 by production run 41234874570).
     const appliedAgain = dataMovedOn || writeMovedOn || movedOn.has(member);
-    // data.mjs: its row now plans the login MFA REPLACE, so its accepted bytes (main's) are what ALREADY_ACCEPTED means.
+    // data.mjs: its row now plans the incoming transfers REPLACE, so its accepted bytes (main's) are what ALREADY_ACCEPTED means.
     const doneLive = dataMovedOn ? liveFor(member, { sha256: sha(`aws/functions/api/${member}`) }) : appliedAgain ? liveFor(member) : liveFor(member, { sha256: accepted });
     const done = await run(inspect, { root: ROOT, inspectLive: doneLive });
     assert.equal(done.state, 'ALREADY_ACCEPTED', member);
@@ -4244,10 +4300,10 @@ test('Contractor verification status gate: data.mjs REPLACE planned from the sec
   assert.equal(ready.state, 'READY');
   assert.equal(ready.mutation, false);
   // Production has moved on from these applied bytes, so they are no longer an accepted live state.
-  // The row has since moved on and that REPLACE was applied too (production run 41234874570); the login MFA REPLACE
-  // (2026-11-06, planning only) starts from those applied bytes (READY).
+  // The row has since moved on and that REPLACE was applied too (production run 41234874570), then the login MFA
+  // bytes (overlay run 42284228921) and the incoming transfers bytes (production run 42323230515): main's bytes are done.
   const now = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER) });
-  assert.equal(now.state, 'READY');
+  assert.equal(now.state, 'ALREADY_ACCEPTED');
   assert.equal(now.mutation, false);
   for (const other of [DATA_GATES_APPLIED, accepted, 'c'.repeat(64)]) {
     await assert.rejects(
@@ -4320,9 +4376,10 @@ test('Public partner codes (finding 9): data.mjs REPLACE from the contractor gat
   assert.equal(ready.state, 'READY');
   assert.equal(ready.mutation, false);
   // The auth.email() REPLACE planned from these bytes was applied 2026-10-31 (production run 41234874570); those
-  // applied bytes are the login MFA REPLACE's pre-state (2026-11-06, planning only).
+  // applied bytes were the login MFA REPLACE's pre-state, and the incoming transfers apply (production run
+  // 42323230515) has since put main's bytes live: done.
   const done = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER) });
-  assert.equal(done.state, 'READY');
+  assert.equal(done.state, 'ALREADY_ACCEPTED');
   for (const other of [CONTRACTOR_GATE_BYTES, 'c'.repeat(64)]) {
     await assert.rejects(
       run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: other }) }),
@@ -4408,11 +4465,13 @@ test('auth.email() verified email only (finding 17): data.mjs REPLACE from the p
   const ready = await run(inspect, { root: ROOT, plan: before, inspectLive: liveFor(MEMBER, { plan: before }) });
   assert.equal(ready.state, 'READY');
   assert.equal(ready.mutation, false);
-  // The applied bytes were done (re-inspect run 41461531605); they are now the login MFA REPLACE's pre-state
-  // (READY), and the pre-apply bytes are no longer an accepted live state.
-  const done = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: accepted }) });
-  assert.equal(done.state, 'READY');
-  for (const other of [PUBLIC_PARTNER_CODES_BYTES, CONTRACTOR_GATE_BYTES, 'c'.repeat(64)]) {
+  // The applied bytes were done (re-inspect run 41461531605) and were the login MFA REPLACE's pre-state; overlay run
+  // 42284228921 then put the login MFA bytes live, the incoming transfers REPLACE's pre-state, and production run
+  // 42323230515 applied that REPLACE: main's bytes are done. These applied bytes, the login MFA bytes and the
+  // pre-apply bytes are no longer an accepted live state.
+  const done = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: INCOMING_TRANSFERS_DATA_BYTES }) });
+  assert.equal(done.state, 'ALREADY_ACCEPTED');
+  for (const other of [accepted, LOGIN_MFA_DATA_BYTES, PUBLIC_PARTNER_CODES_BYTES, CONTRACTOR_GATE_BYTES, 'c'.repeat(64)]) {
     await assert.rejects(
       run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: other }) }),
       (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
@@ -5026,6 +5085,10 @@ test('Moov webhook body confirmation (2026-10-31): ADD moov-webhook-confirm.mjs 
   // Settlement: the bytes its apply put live (the record); main has since moved on to the money-write flag.
   accepted[SETTLEMENT] = JSON.parse(fs.readFileSync(path.join(ROOT, 'aws/tests/fixtures/production-moov-webhook-body-auth-applied-manifest-2026-10-31.json'), 'utf8')).members[SETTLEMENT].accepted_sha256;
   assert.notEqual(accepted[SETTLEMENT], sha(`aws/functions/api/${SETTLEMENT}`));
+  // webhooks.mjs: likewise the applied bytes; main has since moved on to the receipt key REPLACE (2026-11-07, its own
+  // test), applied 2026-11-07 (production run 42330359623).
+  accepted[WEBHOOKS] = MOOV_WEBHOOK_RECEIPT_KEY_PRE;
+  assert.notEqual(accepted[WEBHOOKS], sha(`aws/functions/api/${WEBHOOKS}`));
   assert.equal(manifest.workstream_id, 'moov-webhook-body-auth');
   assert.equal(manifest.deploy_authorized, false);
   assert.match(manifest.authorization, /^Pending owner review/);
@@ -5104,6 +5167,16 @@ test('Moov webhook body confirmation (2026-10-31): ADD moov-webhook-confirm.mjs 
       assert.equal(resolvePlannedMember(member, { root: ROOT, plan: PLAN }).ok, true, member);
       continue;
     }
+    if (member === WEBHOOKS) {
+      // Moved on to the receipt key REPLACE (2026-11-07), which started from the applied bytes and was applied
+      // (production run 42330359623): main's bytes expected live, naming the receipt key applied record.
+      assert.equal(RECORDED_2026_11_PRE[member].expected_live_sha256, accepted[member]);
+      assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, MOOV_WEBHOOK_RECEIPT_KEY_REL), 'utf8')).members[member].live_sha256, accepted[member]);
+      assert.equal(PLAN.members[member].expected_live_sha256, sha(`aws/functions/api/${member}`));
+      assert.equal(PLAN.members[member].manifest, MOOV_WEBHOOK_RECEIPT_KEY_APPLIED_REL);
+      assert.equal(resolvePlannedMember(member, { root: ROOT, plan: PLAN }).ok, true, member);
+      continue;
+    }
     assert.deepEqual(PLAN.members[member], {
       operation: live === null ? 'add' : 'replace',
       accepted_sha256: accepted[member],
@@ -5145,11 +5218,14 @@ test('Moov webhook body confirmation (2026-10-31): ADD moov-webhook-confirm.mjs 
     const pre = await run(inspect(member), { root: ROOT, plan: before, inspectLive: liveFor(member, { plan: before, sha256: live, extra: [CONFIRM] }) });
     assert.equal(pre.state, 'READY', member);
     assert.equal(pre.mutation, false, member);
-    const done = await run(inspect(member), { root: ROOT, inspectLive: liveFor(member, { sha256: accepted[member], extra: [CONFIRM] }) });
-    // Settlement's applied bytes are now the money-write flag REPLACE's starting point.
-    assert.equal(done.state, member === SETTLEMENT ? 'READY' : 'ALREADY_ACCEPTED', member);
-    // Once applied, the pre-apply bytes are a reconciliation stop too, never an apply.
-    for (const other of APPLIED_MEMBERS.includes(member) ? [live, 'c'.repeat(64)] : ['c'.repeat(64)]) {
+    // Both applied bytes were a later REPLACE's starting point (settlement: the money-write flag; webhooks.mjs: the
+    // receipt key, replayed as the plan stood before its 2026-11-07 apply, production run 42330359623).
+    const later = member === WEBHOOKS ? recorded2026_11Pre(structuredClone(PLAN)) : PLAN;
+    const done = await run(inspect(member), { root: ROOT, plan: later, inspectLive: liveFor(member, { plan: later, sha256: accepted[member], extra: [CONFIRM] }) });
+    assert.equal(done.state, 'READY', member);
+    // Once applied, the pre-apply bytes are a reconciliation stop too, never an apply; since the receipt key apply,
+    // so are this workstream's webhooks.mjs bytes.
+    for (const other of [...(APPLIED_MEMBERS.includes(member) ? [live] : []), ...(member === WEBHOOKS ? [accepted[member]] : []), 'c'.repeat(64)]) {
       await assert.rejects(
         run(inspect(member), { root: ROOT, inspectLive: liveFor(member, { sha256: other, extra: [CONFIRM] }) }),
         (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
@@ -5179,7 +5255,8 @@ test('Moov webhook body confirmation (2026-10-31): ADD moov-webhook-confirm.mjs 
   );
   const source = fs.readFileSync(path.join(API, WEBHOOKS), 'utf8');
   assert.match(source, /confirmMoovWebhookPayload/);
-  assert.match(source, /provider === 'moov'\n    \? \(verifiedId \|\| null\)/);
+  // The header-only receipt key this workstream applied (59b58674) is replaced by the event key (2026-11-07).
+  assert.match(source, /provider === 'moov'\n    \? moovReceiptKey\(payload, rawBody\)/);
   assert.equal(/notes LIKE/.test(fs.readFileSync(path.join(API, SETTLEMENT), 'utf8')), false);
 });
 
@@ -5532,9 +5609,9 @@ test('Billing database errors redacted (finding 25): tenant-billing-engine.mjs R
   // applied bytes, which export it; the planned auth.email() REPLACE keeps the export).
   const source = fs.readFileSync(path.join(API, MEMBER), 'utf8');
   assert.ok(localImports(source, MEMBER).includes('data.mjs'));
-  // (Since 2026-10-31 data.mjs is the auth.email() bytes, production run 41234874570; sanitizeLogText is in both,
-  // and in the login MFA bytes planned from them.)
-  assert.equal(PLAN.members['data.mjs'].expected_live_sha256, AUTH_EMAIL_VERIFIED_BYTES);
+  // (Since 2026-10-31 data.mjs is the auth.email() bytes, production run 41234874570, since overlay run 42284228921
+  // the login MFA bytes, and since production run 42323230515 the incoming transfers bytes; sanitizeLogText is in all three.)
+  assert.equal(PLAN.members['data.mjs'].expected_live_sha256, INCOMING_TRANSFERS_DATA_BYTES);
   assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, PUBLIC_PARTNER_CODES_APPLIED_REL), 'utf8')).members['data.mjs'].live_sha256, PUBLIC_PARTNER_CODES_BYTES);
   assert.match(fs.readFileSync(path.join(API, 'data.mjs'), 'utf8'), /export const sanitizeLogText/);
   assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
@@ -5546,15 +5623,16 @@ test('Billing database errors redacted (finding 25): tenant-billing-engine.mjs R
   assert.equal(ready.state, 'READY');
   assert.equal(ready.mutation, false);
   // The applied bytes were the money-write flag REPLACE's starting point; the fourth production rebuild (apply
-  // 41469896446) then put the money-write bytes live, and the fee pull savepoints row (2026-11-06) starts from
-  // those: READY on them, and the finding 25 applied bytes are now a reconciliation stop like anything older.
+  // 41469896446) then put the money-write bytes live, and the fee pull savepoints REPLACE (2026-11-06) started from
+  // those and was applied (production run 42303279340): main's bytes are done, and the money-write bytes and the
+  // finding 25 applied bytes are now a reconciliation stop like anything older.
   const moneyWriteBytes = MONEY_WRITE_FLAG.members[MEMBER].accepted_sha256;
-  const done = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: moneyWriteBytes }) });
-  assert.equal(done.state, 'READY');
+  const done = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: sha(`aws/functions/api/${MEMBER}`) }) });
+  assert.equal(done.state, 'ALREADY_ACCEPTED');
   assert.equal(done.mutation, false);
-  // The pre-apply bccffbe7 bytes, the finding 25 applied bytes, or anything else, live: a reconciliation stop,
-  // never an apply.
-  for (const other of [SEND_FEE_APPLIED_BYTES, accepted, 'c'.repeat(64)]) {
+  // The pre-apply bccffbe7 bytes, the finding 25 applied bytes, the money-write bytes, or anything else, live: a
+  // reconciliation stop, never an apply.
+  for (const other of [SEND_FEE_APPLIED_BYTES, accepted, moneyWriteBytes, 'c'.repeat(64)]) {
     await assert.rejects(
       run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: other }) }),
       (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
@@ -5711,9 +5789,11 @@ test('Money-write flag (finding 14 step 1, 2026-10-31): ADD money-write-flag.mjs
   // SQL holds are unchanged (SQL 120 for the engine, SQL 102 for the handlers); nothing waits for SQL 136.
   assert.equal(PLAN.members['tenant-billing-engine.mjs'].sql_before, 'aws/workflows/sql/120_usage_events_at_approval_and_send.sql');
   assert.equal(PLAN.members['tenant-billing-handlers.mjs'].sql_before, 'aws/workflows/sql/102_platform_owner_tenant_profile.sql');
-  for (const member of [ADD, 'providers/production/moov-wallet-sync.mjs', 'providers/parity/moov-functions.mjs', 'tenant-settings-handlers.mjs', 'tenant-collection-v2-settlement.mjs', 'tenant-collection-v2.mjs']) {
+  for (const member of [ADD, 'providers/production/moov-wallet-sync.mjs', 'providers/parity/moov-functions.mjs', 'tenant-settings-handlers.mjs', 'tenant-collection-v2-settlement.mjs']) {
     assert.equal(PLAN.members[member].sql_before, null, member);
   }
+  // Collection v2's row has since moved on to the fee leg REPLACE, which waits for SQL 145 (its own test below).
+  assert.equal(PLAN.members[FEE_LEG_MEMBER].sql_before, SQL145_FILE);
   // The added module is placed just before the first member that imports it and imports nothing itself.
   assert.equal(PLAN.order.indexOf(ADD) + 1, PLAN.order.indexOf('providers/production/moov-wallet-sync.mjs'));
   assert.deepEqual(localImports(fs.readFileSync(path.join(API, ADD), 'utf8'), ADD), []);
@@ -5728,15 +5808,17 @@ test('Money-write flag (finding 14 step 1, 2026-10-31): ADD money-write-flag.mjs
   }
   assert.ok(PLAN.notes.includes('Money-write flag (2026-10-31, security audit finding 14 step 1 of 2; planning only, pending owner review)'));
   const inspect = (member) => ({ ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: member });
-  // Not applied: the added module is absent (READY), and each REPLACE reads READY on its recorded live bytes.
+  // Not applied: the added module is absent (READY), and each REPLACE reads READY on its recorded live bytes. The
+  // fee pull rows are replayed as they stood before their 2026-11-06 applies (they record main's bytes live now).
   const absent = await run(inspect(ADD), { root: ROOT, inspectLive: liveFor(ADD) });
   assert.equal(absent.state, 'READY');
   assert.equal(absent.mutation, false);
+  const pre = recorded2026_11Pre(structuredClone(PLAN));
   for (const member of REPLACES) {
-    const ready = await run(inspect(member), { root: ROOT, inspectLive: liveFor(member, { extra: [ADD] }) });
+    const ready = await run(inspect(member), { root: ROOT, plan: pre, inspectLive: liveFor(member, { extra: [ADD], plan: pre }) });
     assert.equal(ready.state, 'READY', member);
     await assert.rejects(
-      run(inspect(member), { root: ROOT, inspectLive: liveFor(member, { sha256: 'c'.repeat(64), extra: [ADD] }) }),
+      run(inspect(member), { root: ROOT, plan: pre, inspectLive: liveFor(member, { sha256: 'c'.repeat(64), extra: [ADD], plan: pre }) }),
       (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
       member,
     );
@@ -5749,7 +5831,7 @@ test('Money-write flag (finding 14 step 1, 2026-10-31): ADD money-write-flag.mjs
   // Each apply replays in plan order (dry: no mutation), one receipt per member.
   for (const member of [ADD, ...REPLACES]) {
     const { deps, calls } = applyDeps(member, member === ADD ? {} : { extra: [ADD] });
-    const result = await run(applyEnv(member), withSql98(member, deps));
+    const result = await run(applyEnv(member), withSql145(member, withSql98(member, deps)));
     assert.equal(result.mutation, false, member);
     const op = PLAN.members[member].operation;
     assert.deepEqual(calls.receipt.owned_member_ops, { replace: op === 'replace' ? [member] : [], add: op === 'add' ? [member] : [] }, member);
@@ -6223,7 +6305,10 @@ test('Login MFA (owner 2026-11-06): ADD login-mfa.mjs, then data.mjs REPLACE fro
   const TOTP = 'auth-financial-totp.mjs';
   const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, LOGIN_MFA_REL), 'utf8'));
   const acceptedAdd = sha(`aws/functions/api/${ADD}`);
-  const acceptedData = sha(`aws/functions/api/${DATA}`);
+  // The data.mjs bytes this REPLACE accepted (overlay run 42284228921 put them live; the record is still pending in
+  // this workstream). Main has since moved on (incoming transfers, SQL 144, its own test below).
+  const acceptedData = LOGIN_MFA_DATA_BYTES;
+  assert.notEqual(acceptedData, sha(`aws/functions/api/${DATA}`));
   const acceptedTotp = sha(`aws/functions/api/${TOTP}`);
   assert.equal(manifest.workstream_id, 'login-mfa');
   assert.equal(manifest.deploy_authorized, false);
@@ -6244,7 +6329,10 @@ test('Login MFA (owner 2026-11-06): ADD login-mfa.mjs, then data.mjs REPLACE fro
   assert.equal(rebuild.members[DATA], undefined);
   assert.deepEqual(manifest.members[DATA], { live_sha256: AUTH_EMAIL_VERIFIED_BYTES, accepted_sha256: acceptedData, operation: 'replace', previous_manifest: AUTH_EMAIL_VERIFIED_APPLIED_REL });
   assert.deepEqual(manifest.members[TOTP], { live_sha256: FINDING8_BYTES, accepted_sha256: acceptedTotp, operation: 'replace', previous_manifest: ENROLL_EMAIL_REL });
+  // The data.mjs row has moved on from these bytes to the incoming transfers REPLACE (SQL 144), which started from them
+  // and was applied 2026-11-07 (production run 42323230515); this workstream's manifest keeps what it recorded.
   assert.deepEqual(PLAN.members[DATA], dataRowNow());
+  assert.equal(RECORDED_2026_11_PRE[DATA].expected_live_sha256, acceptedData);
   assert.deepEqual(PLAN.members[TOTP], { operation: 'replace', accepted_sha256: acceptedTotp, expected_live_sha256: FINDING8_BYTES, sql_before: SQL132_FILE, manifest: LOGIN_MFA_REL });
   const addImports = localImports(fs.readFileSync(path.join(API, ADD), 'utf8'), ADD).sort();
   assert.deepEqual(addImports, ['ops-readiness.mjs', 'providers/production/moov-fund-authz.mjs']);
@@ -6268,7 +6356,22 @@ test('Login MFA (owner 2026-11-06): ADD login-mfa.mjs, then data.mjs REPLACE fro
     (error) => error.code === CODES.DEPLOYMENT_COLLISION,
   );
   // Each REPLACE: READY from its recorded pre-state, ALREADY_ACCEPTED at main's bytes, a stop for anything else.
-  for (const [member, pre, accepted] of [[DATA, AUTH_EMAIL_VERIFIED_BYTES, acceptedData], [TOTP, FINDING8_BYTES, acceptedTotp]]) {
+  // data.mjs: before the incoming transfers apply its row started from this REPLACE's accepted bytes (READY on them);
+  // main's bytes are live now, and this REPLACE's bytes and the auth.email() bytes are a reconciliation stop like
+  // anything older.
+  const dataPre = recorded2026_11Pre(structuredClone(PLAN));
+  const dataReady = await run(inspect(DATA), { root: ROOT, plan: dataPre, inspectLive: liveFor(DATA, { sha256: acceptedData, plan: dataPre }) });
+  assert.equal(dataReady.state, 'READY');
+  assert.equal(dataReady.mutation, false);
+  assert.equal((await run(inspect(DATA), { root: ROOT, inspectLive: liveFor(DATA, { sha256: sha(`aws/functions/api/${DATA}`) }) })).state, 'ALREADY_ACCEPTED');
+  for (const other of [acceptedData, AUTH_EMAIL_VERIFIED_BYTES, 'c'.repeat(64)]) {
+    await assert.rejects(
+      run(inspect(DATA), { root: ROOT, inspectLive: liveFor(DATA, { sha256: other }) }),
+      (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+      other,
+    );
+  }
+  for (const [member, pre, accepted] of [[TOTP, FINDING8_BYTES, acceptedTotp]]) {
     const ready = await run(inspect(member), { root: ROOT, inspectLive: liveFor(member, { sha256: pre }) });
     assert.equal(ready.state, 'READY', member);
     assert.equal(ready.mutation, false, member);
@@ -6299,10 +6402,11 @@ test('Login MFA (owner 2026-11-06): ADD login-mfa.mjs, then data.mjs REPLACE fro
   assert.match(fs.readFileSync(path.join(API, DATA), 'utf8'), /const loginMfaRefusal = await \(deps\.enforceLoginMfa \|\| enforceLoginMfa\)\(\{/);
 });
 
-test('Fee pull savepoints (production incident 2026-11-06): tenant-collection-v2.mjs then tenant-billing-engine.mjs REPLACE from the money-write bytes the fourth production rebuild put live, planning only', async () => {
+test('Fee pull savepoints (production incident 2026-11-06): tenant-collection-v2.mjs then tenant-billing-engine.mjs REPLACE from the money-write bytes the fourth production rebuild put live; production runs 42302929689 and 42303279340 applied them', async () => {
   const COLLECTION = 'tenant-collection-v2.mjs';
   const ENGINE = 'tenant-billing-engine.mjs';
   const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, FEE_PULL_SAVEPOINTS_REL), 'utf8'));
+  const applied = JSON.parse(fs.readFileSync(path.join(ROOT, FEE_PULL_SAVEPOINTS_APPLIED_REL), 'utf8'));
   assert.equal(manifest.workstream_id, 'fee-pull-savepoints');
   assert.equal(manifest.deploy_authorized, false);
   assert.match(manifest.authorization, /^Pending owner review/);
@@ -6314,21 +6418,50 @@ test('Fee pull savepoints (production incident 2026-11-06): tenant-collection-v2
   assert.equal(rebuild.status, 'applied');
   assert.equal(rebuild.applied.run_id, '41469896446');
   assert.equal(rebuild.applied.state, 'VERIFIED');
+  // Applied 2026-11-06 in plan order: the record keeps the run evidence; the rows expect the applied bytes and name it.
+  assert.equal(applied.workstream_id, 'fee-pull-savepoints-applied');
+  assert.equal(applied.deploy_authorized, false);
+  assert.match(applied.authorization, /^Record only \(2026-11-06\)/);
+  assert.equal(applied.live_lambda, FUNCTION_NAME);
+  assert.deepEqual(Object.keys(applied.members), FEE_PULL_SAVEPOINTS_MEMBERS);
+  for (const runId of ['42283798092', '42283910495', '42284040646', '42302831040', '42302929689', '42303127509', '42284171581', '42284255536', '42284361398', '42303201743', '42303279340', '42303399650']) {
+    assert.match(applied.notes, new RegExp(`run ${runId}`), runId);
+    assert.match(PLAN.notes, new RegExp(runId), runId);
+  }
+  for (const evidence of ['"DEPLOY tenant-collection-v2.mjs TO PRODUCTION"', '"DEPLOY tenant-billing-engine.mjs TO PRODUCTION"', 'acb086d6-0f43-487d-b4eb-eac260c1c6f8', 'b3550adb-920c-46f4-92f1-2da9ea4b1e55', 'VERIFIED', 'aae6dda62', '2db02f2b6']) {
+    assert.ok(applied.notes.includes(evidence), evidence);
+  }
+  assert.ok(PLAN.notes.includes('The two fee pull rows expect the applied bytes and name the applied record.'));
+  // The plan as it stood before the applies (the money-write bytes expected live, the planning manifest named).
+  const before = structuredClone(PLAN);
   for (const member of FEE_PULL_SAVEPOINTS_MEMBERS) {
     const pre = MONEY_WRITE_FLAG.members[member].accepted_sha256;
-    const accepted = sha(`aws/functions/api/${member}`);
+    // Collection v2's row has since moved on to the fee leg REPLACE (SQL 145, its own test below): this manifest's
+    // accepted bytes are that row's pre-state, and main has moved on from them.
+    const accepted = member === FEE_LEG_MEMBER ? FEE_PULL_COLLECTION_BYTES : sha(`aws/functions/api/${member}`);
+    if (member === FEE_LEG_MEMBER) assert.notEqual(sha(`aws/functions/api/${member}`), accepted, member);
     assert.equal(rebuild.members[member].accepted_sha256, pre, member);
     assert.notEqual(accepted, pre, member);
     assert.deepEqual(manifest.members[member], { live_sha256: pre, accepted_sha256: accepted, operation: 'replace', previous_manifest: MONEY_WRITE_FLAG_REL }, member);
-    assert.deepEqual(PLAN.members[member], {
-      operation: 'replace',
-      accepted_sha256: accepted,
-      expected_live_sha256: pre,
-      sql_before: member === ENGINE ? 'aws/workflows/sql/120_usage_events_at_approval_and_send.sql' : null,
-      manifest: FEE_PULL_SAVEPOINTS_REL,
-    }, member);
+    assert.deepEqual(applied.members[member], { live_sha256: accepted, accepted_sha256: accepted, operation: 'replace', previous_manifest: FEE_PULL_SAVEPOINTS_REL }, member);
+    if (member === FEE_LEG_MEMBER) {
+      // The row has since moved on to the fee leg REPLACE (SQL 145): the applied bytes expected live, its own manifest.
+      assert.equal(PLAN.members[member].manifest, FEE_LEG_API_REL, member);
+      assert.equal(PLAN.members[member].expected_live_sha256, accepted, member);
+    } else {
+      assert.deepEqual(PLAN.members[member], {
+        operation: 'replace',
+        accepted_sha256: accepted,
+        expected_live_sha256: accepted,
+        sql_before: member === ENGINE ? 'aws/workflows/sql/120_usage_events_at_approval_and_send.sql' : null,
+        manifest: FEE_PULL_SAVEPOINTS_APPLIED_REL,
+      }, member);
+    }
+    before.members[member] = { ...PLAN.members[member], expected_live_sha256: pre, manifest: FEE_PULL_SAVEPOINTS_REL };
+    assert.deepEqual(RECORDED_2026_11_PRE[member], { expected_live_sha256: pre, manifest: FEE_PULL_SAVEPOINTS_REL }, member);
     const evidence = `${member} ${pre.slice(0, 8)} -> ${accepted.slice(0, 8)}`;
     assert.ok(manifest.notes.includes(evidence), evidence);
+    assert.ok(applied.notes.includes(`${pre.slice(0, 8)} -> ${accepted.slice(0, 8)}`), evidence);
     assert.ok(PLAN.notes.includes(evidence), evidence);
     assert.equal(resolvePlannedMember(member, { root: ROOT, plan: PLAN }).ok, true, member);
   }
@@ -6343,27 +6476,277 @@ test('Fee pull savepoints (production incident 2026-11-06): tenant-collection-v2
   const engineSource = fs.readFileSync(path.join(API, ENGINE), 'utf8');
   assert.match(engineSource, /idempotentReplayTransfer,\n\s+logPullStatementFailure,\n\s+receivedCentsFromLegs,\n\s+savepointQuery,\n\s+withSavepoint,\n\} from '\.\/tenant-collection-v2\.mjs';/);
   // Collection v2's one new import is sanitizeLogText from data.mjs. Production's data.mjs (the auth.email() bytes,
-  // run 41234874570) exports it: the live engine bytes already import it from there (finding 25); the planned
-  // login MFA data.mjs keeps it. Neither order nor the data.mjs row changes.
+  // run 41234874570) exports it: the live engine bytes already import it from there (finding 25); the login MFA
+  // data.mjs (live since overlay run 42284228921) and the incoming transfers data.mjs (live since production run
+  // 42323230515) keep it. Neither order nor the data.mjs row changed for this workstream.
   const collectionSource = fs.readFileSync(path.join(API, COLLECTION), 'utf8');
   assert.deepEqual(localImports(collectionSource, COLLECTION).sort(), ['data.mjs', 'money-write-flag.mjs', 'providers/parity/moov-wallet.mjs']);
   assert.match(collectionSource, /^import \{ sanitizeLogText \} from '\.\/data\.mjs';$/m);
-  assert.equal(PLAN.members['data.mjs'].expected_live_sha256, AUTH_EMAIL_VERIFIED_BYTES);
+  assert.equal(PLAN.members['data.mjs'].expected_live_sha256, INCOMING_TRANSFERS_DATA_BYTES);
   assert.match(fs.readFileSync(path.join(API, 'data.mjs'), 'utf8'), /export const sanitizeLogText/);
-  // Inspect: READY on the rebuild's bytes, ALREADY_ACCEPTED on main's, a reconciliation stop for anything else.
+  // Inspect: before the applies, READY on the rebuild's bytes; now ALREADY_ACCEPTED on main's, and the rebuild's
+  // bytes, or anything else, a reconciliation stop.
   for (const member of FEE_PULL_SAVEPOINTS_MEMBERS) {
     const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: member };
-    const pre = PLAN.members[member].expected_live_sha256;
-    const ready = await run(inspect, { root: ROOT, inspectLive: liveFor(member, { sha256: pre }) });
+    const pre = before.members[member].expected_live_sha256;
+    const ready = await run(inspect, { root: ROOT, plan: before, inspectLive: liveFor(member, { sha256: pre, plan: before }) });
     assert.equal(ready.state, 'READY', member);
     assert.equal(ready.mutation, false, member);
     assert.equal((await run(inspect, { root: ROOT, inspectLive: liveFor(member, { sha256: sha(`aws/functions/api/${member}`) }) })).state, 'ALREADY_ACCEPTED', member);
-    for (const other of [MONEY_WRITE_FLAG.members[member].live_sha256, 'c'.repeat(64)]) {
+    for (const other of [pre, MONEY_WRITE_FLAG.members[member].live_sha256, 'c'.repeat(64)]) {
       await assert.rejects(
         run(inspect, { root: ROOT, inspectLive: liveFor(member, { sha256: other }) }),
         (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
         `${member} ${other}`,
       );
     }
+  }
+});
+
+test('Incoming transfers API (SQL 144, 2026-11-07): data.mjs REPLACE from the login MFA bytes overlay run 42284228921 put live, SQL 53 still first; production run 42323230515 applied it', async () => {
+  const MEMBER = 'data.mjs';
+  const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, INCOMING_TRANSFERS_API_REL), 'utf8'));
+  const applied = JSON.parse(fs.readFileSync(path.join(ROOT, INCOMING_TRANSFERS_API_APPLIED_REL), 'utf8'));
+  const accepted = sha(`aws/functions/api/${MEMBER}`);
+  assert.equal(manifest.workstream_id, 'incoming-transfers-api');
+  assert.equal(manifest.deploy_authorized, false);
+  assert.match(manifest.authorization, /^Pending owner review \(2026-11-07\)/);
+  assert.equal(manifest.live_lambda, FUNCTION_NAME);
+  // The pre-state is the login MFA REPLACE's accepted bytes; that workstream's manifest keeps what it recorded.
+  const loginMfa = JSON.parse(fs.readFileSync(path.join(ROOT, LOGIN_MFA_REL), 'utf8')).members[MEMBER];
+  assert.deepEqual(loginMfa, { live_sha256: AUTH_EMAIL_VERIFIED_BYTES, accepted_sha256: LOGIN_MFA_DATA_BYTES, operation: 'replace', previous_manifest: AUTH_EMAIL_VERIFIED_APPLIED_REL });
+  assert.notEqual(accepted, LOGIN_MFA_DATA_BYTES);
+  assert.deepEqual(manifest.members, { [MEMBER]: { live_sha256: LOGIN_MFA_DATA_BYTES, accepted_sha256: accepted, operation: 'replace', previous_manifest: LOGIN_MFA_REL } });
+  // Applied 2026-11-07: the record keeps the run evidence; the row expects the applied bytes and names it. The login
+  // MFA apply of data.mjs (overlay run 42284228921) stays that workstream's record.
+  assert.equal(applied.workstream_id, 'incoming-transfers-api-applied');
+  assert.equal(applied.deploy_authorized, false);
+  assert.match(applied.authorization, /^Record only \(2026-11-07\)/);
+  assert.equal(applied.live_lambda, FUNCTION_NAME);
+  assert.deepEqual(applied.members, { [MEMBER]: { live_sha256: accepted, accepted_sha256: accepted, operation: 'replace', previous_manifest: INCOMING_TRANSFERS_API_REL } });
+  assert.equal(INCOMING_TRANSFERS_DATA_BYTES, accepted);
+  for (const runId of ['42322960352', '42323031961', '42323105900', '42323176072', '42323230515', '42323297612']) {
+    assert.match(applied.notes, new RegExp(`run ${runId}`), runId);
+    assert.match(PLAN.notes, new RegExp(runId), runId);
+  }
+  for (const evidence of ['"DEPLOY data.mjs TO PRODUCTION"', 'b3550adb-920c-46f4-92f1-2da9ea4b1e55', '58f1d917-b324-4a90-952d-8e4a43cf50d1', 'VERIFIED', '914f87bb5', `${LOGIN_MFA_DATA_BYTES.slice(0, 8)} -> ${accepted.slice(0, 8)}`, 'production-login-mfa-manifest-2026-11-06.json keeps what it recorded']) {
+    assert.ok(applied.notes.includes(evidence), evidence);
+  }
+  assert.ok(PLAN.notes.includes('The data.mjs row expects the applied bytes and names the incoming transfers applied record'));
+  assert.deepEqual(PLAN.members[MEMBER], dataRowNow());
+  assert.deepEqual(PLAN.members[MEMBER], {
+    operation: 'replace',
+    accepted_sha256: accepted,
+    expected_live_sha256: accepted,
+    sql_before: 'aws/workflows/sql/53_claim_settlement_breakdown.sql',
+    manifest: INCOMING_TRANSFERS_API_APPLIED_REL,
+  });
+  // The plan as it stood before the apply (the login MFA bytes expected live, the planning manifest named).
+  const before = structuredClone(PLAN);
+  before.members[MEMBER] = { ...PLAN.members[MEMBER], expected_live_sha256: LOGIN_MFA_DATA_BYTES, manifest: INCOMING_TRANSFERS_API_REL };
+  assert.deepEqual(RECORDED_2026_11_PRE[MEMBER], { expected_live_sha256: LOGIN_MFA_DATA_BYTES, manifest: INCOMING_TRANSFERS_API_REL });
+  assert.equal(PLAN.sql_prerequisites[PLAN.members[MEMBER].sql_before].verified_live, true);
+  const evidence = `REPLACE data.mjs ${LOGIN_MFA_DATA_BYTES.slice(0, 8)} -> ${accepted.slice(0, 8)}`;
+  assert.ok(manifest.notes.includes(evidence), evidence);
+  assert.ok(PLAN.notes.includes(evidence), evidence);
+  for (const text of ['42284228921', 'SQL 144', 'get_tenant_incoming_transfers', 'still pending', 'No SQL']) {
+    assert.ok(manifest.notes.includes(text), text);
+    assert.ok(PLAN.notes.includes(text), text);
+  }
+  assert.ok(PLAN.notes.includes('Planning only'));
+  // No new import: the order is unchanged (login-mfa.mjs and claim-settlement-rpc.mjs still before data.mjs).
+  assert.ok(PLAN.order.indexOf('login-mfa.mjs') < PLAN.order.indexOf(MEMBER));
+  assert.ok(PLAN.order.indexOf('claim-settlement-rpc.mjs') < PLAN.order.indexOf(MEMBER));
+  assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
+  const source = fs.readFileSync(path.join(API, MEMBER), 'utf8');
+  assert.match(source, /'get_tenant_incoming_transfers',/);
+  assert.match(source, /get_tenant_incoming_transfers: \{ tenant: '_tenant_id' \},/);
+  // Inspect: before the apply, READY on the login MFA bytes; now ALREADY_ACCEPTED on main's, and the login MFA bytes,
+  // or anything else, a reconciliation stop.
+  const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
+  const ready = await run(inspect, { root: ROOT, plan: before, inspectLive: liveFor(MEMBER, { sha256: LOGIN_MFA_DATA_BYTES, plan: before }) });
+  assert.equal(ready.state, 'READY');
+  assert.equal(ready.mutation, false);
+  assert.equal((await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: accepted }) })).state, 'ALREADY_ACCEPTED');
+  for (const other of [LOGIN_MFA_DATA_BYTES, AUTH_EMAIL_VERIFIED_BYTES, 'c'.repeat(64)]) {
+    await assert.rejects(
+      run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: other }) }),
+      (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+      other,
+    );
+  }
+});
+
+test('Fee leg API (SQL 145, 2026-11-07): tenant-collection-v2.mjs REPLACE from the fee pull savepoints bytes, held for SQL 145, planning only', async () => {
+  const MEMBER = FEE_LEG_MEMBER;
+  const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, FEE_LEG_API_REL), 'utf8'));
+  const accepted = sha(`aws/functions/api/${MEMBER}`);
+  assert.equal(manifest.workstream_id, 'fee-leg-api');
+  assert.equal(manifest.deploy_authorized, false);
+  assert.match(manifest.authorization, /^Pending owner review \(2026-11-07\)/);
+  assert.equal(manifest.live_lambda, FUNCTION_NAME);
+  // The pre-state is the fee pull savepoints REPLACE's accepted bytes, applied 2026-11-06 (production run 42302929689,
+  // its applied record); both of that workstream's manifests keep what they recorded.
+  const feePull = JSON.parse(fs.readFileSync(path.join(ROOT, FEE_PULL_SAVEPOINTS_REL), 'utf8')).members[MEMBER];
+  assert.deepEqual(feePull, { live_sha256: MONEY_WRITE_FLAG.members[MEMBER].accepted_sha256, accepted_sha256: FEE_PULL_COLLECTION_BYTES, operation: 'replace', previous_manifest: MONEY_WRITE_FLAG_REL });
+  const feePullApplied = JSON.parse(fs.readFileSync(path.join(ROOT, FEE_PULL_SAVEPOINTS_APPLIED_REL), 'utf8')).members[MEMBER];
+  assert.deepEqual(feePullApplied, { live_sha256: FEE_PULL_COLLECTION_BYTES, accepted_sha256: FEE_PULL_COLLECTION_BYTES, operation: 'replace', previous_manifest: FEE_PULL_SAVEPOINTS_REL });
+  assert.notEqual(accepted, FEE_PULL_COLLECTION_BYTES);
+  assert.deepEqual(manifest.members, { [MEMBER]: { live_sha256: FEE_PULL_COLLECTION_BYTES, accepted_sha256: accepted, operation: 'replace', previous_manifest: FEE_PULL_SAVEPOINTS_APPLIED_REL } });
+  assert.deepEqual(PLAN.members[MEMBER], {
+    operation: 'replace',
+    accepted_sha256: accepted,
+    expected_live_sha256: FEE_PULL_COLLECTION_BYTES,
+    sql_before: SQL145_FILE,
+    manifest: FEE_LEG_API_REL,
+  });
+  // SQL 145 is recorded verified live in production (2026-11-07, the SQL 145 record change) from its retired pin: the
+  // same file bytes the pin and the one-shot hashed. The gate the apply below is checked against is shown on a plan
+  // copy where it is not yet recorded.
+  assert.ok(fs.existsSync(path.join(ROOT, SQL145_FILE)));
+  const PIN145 = 'ops/deployment-guard/sql145-platform-owner-billing-collection-leg-production-apply.json';
+  const readJson = (rel) => JSON.parse(fs.readFileSync(path.join(ROOT, rel), 'utf8'));
+  const pin145 = readJson(PIN145);
+  assert.equal(pin145.source_sha256, sha(SQL145_FILE));
+  assert.equal(pin145.applied.migration_source_sha256, sha(SQL145_FILE));
+  assert.equal(pin145.execute, false);
+  assert.equal(pin145.applied.result, 'applied');
+  assert.equal(pin145.applied.receipt.before_hash, pin145.expected_live_definition_sha256);
+  assert.equal(pin145.applied.receipt.after_hash, pin145.intended_replacement_sha256);
+  assert.equal(pin145.staging_acceptance.reference, 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/42334108246');
+  const prerequisite145 = PLAN.sql_prerequisites[SQL145_FILE];
+  assert.equal(prerequisite145.verified_live, true);
+  assert.equal(prerequisite145.pin, PIN145);
+  const fromTo145 = `${pin145.expected_live_definition_sha256.slice(0, 8)}… -> ${pin145.intended_replacement_sha256.slice(0, 8)}…`;
+  for (const evidence of [pin145.applied.apply_ssm_command_id, pin145.applied.one_shot_run_id, pin145.applied.workstream_id, pin145.applied.one_use_id, pin145.applied.runner, fromTo145, 'staging acceptance run 42334108246', PIN145]) {
+    assert.ok(prerequisite145.evidence.includes(evidence), evidence);
+  }
+  assert.ok(prerequisite145.note.includes(`REPLACE ${FEE_PULL_COLLECTION_BYTES.slice(0, 8)}… -> ${accepted.slice(0, 8)}…`));
+  assert.ok(prerequisite145.note.includes('"DEPLOY tenant-collection-v2.mjs TO PRODUCTION"'));
+  const staging145 = readJson('ops/deployment-guard/staging-sql-live.json').sql[SQL145_FILE];
+  assert.equal(staging145.verified_live, true);
+  for (const evidence of ['run 42334108246', 'read-live run 42334267158', `receipt before ${pin145.expected_live_definition_sha256.slice(0, 8)}…`, `after ${pin145.intended_replacement_sha256.slice(0, 8)}…`]) {
+    assert.ok(staging145.evidence.includes(evidence), evidence);
+  }
+  const sql145Pending = structuredClone(PLAN);
+  sql145Pending.sql_prerequisites[SQL145_FILE] = { verified_live: false, evidence: null };
+  const evidence = `REPLACE tenant-collection-v2.mjs ${FEE_PULL_COLLECTION_BYTES.slice(0, 8)} -> ${accepted.slice(0, 8)}`;
+  assert.ok(manifest.notes.includes(evidence), evidence);
+  assert.ok(PLAN.notes.includes(evidence), evidence);
+  for (const text of ['2026-11-06T22:53:11Z', 'collection_insert_leg', 'SQL 145', 'aws_platform_owner_insert_billing_collection_leg', '42302929689', 'Planning only']) {
+    assert.ok(manifest.notes.includes(text), text);
+    assert.ok(PLAN.notes.includes(text), text);
+  }
+  // No new import: the order is unchanged (collection v2 still before the engine that imports it).
+  const source = fs.readFileSync(path.join(API, MEMBER), 'utf8');
+  assert.deepEqual(localImports(source, MEMBER).sort(), ['data.mjs', 'money-write-flag.mjs', 'providers/parity/moov-wallet.mjs']);
+  assert.ok(PLAN.order.indexOf(MEMBER) < PLAN.order.indexOf('tenant-billing-engine.mjs'));
+  assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
+  assert.match(source, /SELECT \* FROM public\.aws_platform_owner_insert_billing_collection_leg\(/);
+  assert.doesNotMatch(source, /INSERT INTO public\.payment_transfers/);
+  // Inspect: READY on the fee pull savepoints bytes, ALREADY_ACCEPTED on main's, a reconciliation stop for anything else.
+  const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
+  const ready = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: FEE_PULL_COLLECTION_BYTES }) });
+  assert.equal(ready.state, 'READY');
+  assert.equal(ready.mutation, false);
+  assert.equal((await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: accepted }) })).state, 'ALREADY_ACCEPTED');
+  for (const other of [MONEY_WRITE_FLAG.members[MEMBER].accepted_sha256, 'c'.repeat(64)]) {
+    await assert.rejects(
+      run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: other }) }),
+      (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+      other,
+    );
+  }
+  // Apply: it was refused while SQL 145 was not recorded verified live (the plan before the SQL 145 record change,
+  // replayed on a copy) ...
+  // (applyDeps starts the committed plan's replays from the fee pull savepoints pre-apply bytes; the same here).
+  const pending = recorded2026_11Pre(structuredClone(sql145Pending));
+  await assert.rejects(
+    run(applyEnv(MEMBER), { ...applyDeps(MEMBER, { plan: pending }).deps, plan: pending }),
+    (error) => error.code === CODES.PRODUCTION_APPROVAL_REQUIRED && error.details?.sql_before === SQL145_FILE,
+  );
+  // ... and passes the SQL gate now that the committed plan records it (the same replay without a plan override of
+  // SQL 145; dry: no mutation), one receipt for this member.
+  assert.equal(PLAN.sql_prerequisites[SQL145_FILE].verified_live, true);
+  const { deps, calls } = applyDeps(MEMBER);
+  assert.equal(deps.plan.sql_prerequisites[SQL145_FILE].verified_live, true);
+  const replay = await run(applyEnv(MEMBER), deps);
+  assert.equal(replay.mutation, false);
+  assert.deepEqual(calls.receipt.owned_member_ops, { replace: [MEMBER], add: [] });
+});
+
+test('Moov webhook receipt key (owner 2026-11-07): providers/webhooks.mjs REPLACE from the body confirmation bytes production run 41219106461 applied, no SQL; production run 42330359623 applied it', async () => {
+  const MEMBER = 'providers/webhooks.mjs';
+  const CONFIRM = 'providers/moov-webhook-confirm.mjs';
+  const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, MOOV_WEBHOOK_RECEIPT_KEY_REL), 'utf8'));
+  const applied = JSON.parse(fs.readFileSync(path.join(ROOT, MOOV_WEBHOOK_RECEIPT_KEY_APPLIED_REL), 'utf8'));
+  const accepted = sha(`aws/functions/api/${MEMBER}`);
+  const PREVIOUS = 'aws/tests/fixtures/production-moov-webhook-body-auth-applied-manifest-2026-10-31.json';
+  assert.equal(MOOV_WEBHOOK_RECEIPT_KEY_PRE, '59b586744332df62524a25b4602966686c9ba9ae869cc644ab9046bfc1ae63b0');
+  assert.notEqual(accepted, MOOV_WEBHOOK_RECEIPT_KEY_PRE);
+  assert.equal(manifest.workstream_id, 'moov-webhook-receipt-key');
+  assert.equal(manifest.deploy_authorized, false);
+  assert.match(manifest.authorization, /^Pending owner review \(2026-11-07\)/);
+  assert.equal(manifest.live_lambda, FUNCTION_NAME);
+  assert.deepEqual(manifest.members, { [MEMBER]: { live_sha256: MOOV_WEBHOOK_RECEIPT_KEY_PRE, accepted_sha256: accepted, operation: 'replace', previous_manifest: PREVIOUS } });
+  const evidence = `REPLACE ${MEMBER} ${MOOV_WEBHOOK_RECEIPT_KEY_PRE.slice(0, 8)} -> ${accepted.slice(0, 8)}`;
+  for (const text of [evidence, 'build the webhook receipt fix', '6db9b33b-e076-4735-96ba-0c1dd545030c', '41219106461', 'X-Webhook-ID', 'No SQL', 'Planning only']) {
+    assert.ok(manifest.notes.includes(text), text);
+  }
+  // Applied 2026-11-07: the record keeps the run evidence; the row expects the applied bytes and names it. The body
+  // confirmation record keeps what it recorded.
+  assert.equal(applied.workstream_id, 'moov-webhook-receipt-key-applied');
+  assert.equal(applied.deploy_authorized, false);
+  assert.match(applied.authorization, /^Record only \(2026-11-07\)/);
+  assert.equal(applied.live_lambda, FUNCTION_NAME);
+  assert.deepEqual(applied.members, { [MEMBER]: { live_sha256: accepted, accepted_sha256: accepted, operation: 'replace', previous_manifest: MOOV_WEBHOOK_RECEIPT_KEY_REL } });
+  assert.equal(accepted, '117495bc5285a6fb39fb5e4b20526a0e24b00f67f8bf7ed78d0d5fff84b8f471');
+  for (const runId of ['42330157047', '42330201248', '42330272158', '42330315951', '42330359623', '42330438648']) {
+    assert.match(applied.notes, new RegExp(`run ${runId}`), runId);
+    assert.match(PLAN.notes, new RegExp(runId), runId);
+  }
+  for (const evidence of ['"DEPLOY providers/webhooks.mjs TO PRODUCTION"', '"build the webhook receipt fix"', 'job 128275254271', '58f1d917-b324-4a90-952d-8e4a43cf50d1', 'b5705836-d6b3-407a-b0aa-af2b201a7d03', 'BaKgiVcDSnQpxq3V/hofgn205iOKRvNhW0ar4phe0Dw=', 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/42330201248', 'VERIFIED', 'ALREADY_ACCEPTED', 'a55bd4180', `${MOOV_WEBHOOK_RECEIPT_KEY_PRE.slice(0, 8)} -> ${accepted.slice(0, 8)}`, 'production-moov-webhook-body-auth-applied-manifest-2026-10-31.json keeps what it recorded']) {
+    assert.ok(applied.notes.includes(evidence), evidence);
+  }
+  assert.ok(PLAN.notes.includes('the providers/webhooks.mjs row expects the applied bytes and names the Moov webhook receipt key applied record'));
+  assert.deepEqual(PLAN.members[MEMBER], {
+    operation: 'replace',
+    accepted_sha256: accepted,
+    expected_live_sha256: accepted,
+    sql_before: null,
+    manifest: MOOV_WEBHOOK_RECEIPT_KEY_APPLIED_REL,
+  });
+  // The plan as it stood before the apply (the body confirmation bytes expected live, the planning manifest named).
+  const before = structuredClone(PLAN);
+  before.members[MEMBER] = { ...PLAN.members[MEMBER], expected_live_sha256: MOOV_WEBHOOK_RECEIPT_KEY_PRE, manifest: MOOV_WEBHOOK_RECEIPT_KEY_REL };
+  assert.deepEqual(RECORDED_2026_11_PRE[MEMBER], { expected_live_sha256: MOOV_WEBHOOK_RECEIPT_KEY_PRE, manifest: MOOV_WEBHOOK_RECEIPT_KEY_REL });
+  // No new module: the same ten local imports as the applied bytes. The one new name, moovWebhookResource, is
+  // exported by the confirmation module production already runs (its applied bytes are main's, unchanged).
+  const imports = localImports(fs.readFileSync(path.join(API, MEMBER), 'utf8'), MEMBER).sort();
+  assert.deepEqual(imports, [
+    'db-health.mjs', 'provider-flags.mjs', 'provider-secrets.mjs', 'providers/hmac.mjs', CONFIRM,
+    'providers/moov-transfer-webhook.mjs', 'providers/onboarding/flags.mjs', 'providers/onboarding/webhook-status.mjs',
+    'providers/webhook-apply.mjs', 'secrets.mjs', 'tenant-billing-destination.mjs', 'tenant-collection-v2-settlement.mjs',
+  ].sort());
+  assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, PREVIOUS), 'utf8')).members[CONFIRM].accepted_sha256, sha(`aws/functions/api/${CONFIRM}`));
+  assert.match(fs.readFileSync(path.join(API, CONFIRM), 'utf8'), /^export function moovWebhookResource\(/m);
+  assert.equal(PLAN.order.indexOf(CONFIRM) + 1, PLAN.order.indexOf(MEMBER));
+  assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
+  const source = fs.readFileSync(path.join(API, MEMBER), 'utf8');
+  assert.match(source, /export const moovReceiptKey = /);
+  assert.match(source, /eventId: String\(externalEventId\)/);
+  // Inspect: before the apply, READY on the applied body confirmation bytes; now ALREADY_ACCEPTED on main's, and the
+  // body confirmation bytes, or anything else, a reconciliation stop.
+  const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
+  const ready = await run(inspect, { root: ROOT, plan: before, inspectLive: liveFor(MEMBER, { sha256: MOOV_WEBHOOK_RECEIPT_KEY_PRE, extra: [CONFIRM], plan: before }) });
+  assert.equal(ready.state, 'READY');
+  assert.equal(ready.mutation, false);
+  assert.equal((await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: accepted, extra: [CONFIRM] }) })).state, 'ALREADY_ACCEPTED');
+  for (const other of [MOOV_WEBHOOK_RECEIPT_KEY_PRE, 'f7353ee1673364d45ce564dd8b7f102273e9a871c63f8398d03bd7226360d97f', 'c'.repeat(64)]) {
+    await assert.rejects(
+      run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: other, extra: [CONFIRM] }) }),
+      (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+      other,
+    );
   }
 });

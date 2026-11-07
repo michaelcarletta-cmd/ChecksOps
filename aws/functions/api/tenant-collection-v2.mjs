@@ -360,6 +360,19 @@ export const createMemoryCollectionStore = () => {
 };
 
 /**
+ * The collection leg insert (savepoint collection_insert_leg): SQL 145's
+ * public.aws_platform_owner_insert_billing_collection_leg, platform owner only,
+ * with the values the earlier direct INSERT wrote, in the same order:
+ * tenant_id, environment, status, idempotency_key, amount_cents, description,
+ * source_tenant_account_id, wallet_id, leg_role, provider_transfer_id,
+ * provider_status, failure_reason, provider_metadata. It inserts (provider
+ * moov, platform fee 0, net = amount, speed standard, submitted now) with the
+ * same ON CONFLICT (tenant_id, idempotency_key) update, and returns the row.
+ */
+export const COLLECTION_INSERT_LEG_SQL = `SELECT * FROM public.aws_platform_owner_insert_billing_collection_leg(
+             $1::uuid, $2, $3, $4, $5::bigint, $6, $7, $8::uuid, $9, $10, $11, $12, $13::jsonb)`;
+
+/**
  * Every statement runs in its own SAVEPOINT (withSavepoint): a failed read or
  * write is logged and rolled back to its savepoint, so the pull's transaction
  * stays usable for the obligation update, the audit row and the commit
@@ -462,22 +475,15 @@ export async function createPostgresCollectionStore(client) {
       // No fallback: a failed leg insert is rethrown after the rollback to its
       // savepoint (transaction intact), and executeCollectionLeg reports
       // persist_failed with the provider transfer id.
+      // The row is written by SQL 145's SECURITY DEFINER function: the actor
+      // is the platform owner, who is not a member of the billed tenant, and
+      // since SQL 90 no payment_transfers INSERT policy admits it (incident
+      // 2026-11-06, 42501 on collection_insert_leg). The function re-checks
+      // the platform owner and the money-write flag set just before it.
       return (await withSavepoint(client, 'collection_insert_leg', async () => {
         await setMoneyWriteFlag(client);
         return client.query(
-          `INSERT INTO public.payment_transfers
-             (tenant_id, provider, environment, status, idempotency_key, amount_cents,
-              platform_fee_cents, net_amount_cents, speed, description,
-              source_tenant_account_id, wallet_id, leg_role, provider_transfer_id,
-              provider_status, failure_reason, provider_metadata, submitted_at)
-           VALUES ($1::uuid, 'moov', $2, $3, $4, $5, 0, $5, 'standard', $6,
-                   $7, $8::uuid, $9, $10, $11, $12, $13::jsonb, now())
-           ON CONFLICT (tenant_id, idempotency_key) DO UPDATE SET
-             provider_transfer_id = COALESCE(EXCLUDED.provider_transfer_id, payment_transfers.provider_transfer_id),
-             provider_status = COALESCE(EXCLUDED.provider_status, payment_transfers.provider_status),
-             status = EXCLUDED.status,
-             updated_at = now()
-           RETURNING *`,
+          COLLECTION_INSERT_LEG_SQL,
           [
             row.tenant_id,
             row.environment || 'sandbox',

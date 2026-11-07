@@ -1,0 +1,15 @@
+{
+  "workstream_id": "incoming-transfers-api",
+  "authorization": "Pending owner review (2026-11-07). Planning only: nothing is live or verified. Each production apply needs its own owner approval, a staging acceptance reference and a read-only production inspect that confirms the live bytes.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Owner 2026-11-06: \"yes build it, include partner payments as income not tax.\" SQL 144 (aws/workflows/sql/144_tenant_incoming_transfers.sql, public.get_tenant_incoming_transfers(_tenant_id uuid), SECURITY DEFINER, applied in staging 2026-11-06 (run 42309284075) and in production 2026-11-07) lets an organization read the send legs another organization addressed to it; the SPA (src/lib/payments/transferFinanceRows.ts) already calls it through /data/rpc and is refused rpc_disabled because data.mjs does not list it. data.mjs: get_tenant_incoming_transfers in READ_RPCS, gated { tenant: '_tenant_id' } in RPC_ACCESS_GATES (aws_can_access_tenant before the function runs, as get_tenant_funds_received); rows returned as the array (no single-column unwrap). REPLACE data.mjs daf31fa2 -> 00da994e from the login MFA bytes production overlay run 42284228921 put live (owner 2026-11-07: proceed although that workstream's applied record is still pending; production-login-mfa-manifest-2026-11-06.json keeps what it recorded). SQL 53 still first. No new import. No SQL.",
+  "members": {
+    "data.mjs": {
+      "live_sha256": "daf31fa213e0fa903cfcbd46fb4f8a8116a423eb91201f3210cf67ae6a032028",
+      "accepted_sha256": "00da994edde1782a05602b3de43e5839aa44f01dfe4319ca955ad2ec828d4d67",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-login-mfa-manifest-2026-11-06.json"
+    }
+  }
+}

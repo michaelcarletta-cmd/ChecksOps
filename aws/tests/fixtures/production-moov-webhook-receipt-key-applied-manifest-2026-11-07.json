@@ -1,0 +1,15 @@
+{
+  "workstream_id": "moov-webhook-receipt-key-applied",
+  "authorization": "Record only (2026-11-07): the bytes below are live. Nothing is planned or authorized by this manifest; any later change to this member needs its own manifest, staging acceptance and owner approval.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Moov webhook receipt key (#1681, merged as a55bd4180; owner 2026-11-07: \"build the webhook receipt fix\") applied. Applied 2026-11-07 from main a55bd4180. The apply run concluded success including its \"Verify live member is the accepted bytes\" step (state VERIFIED) and the public production smoke (/health and /db-health 200). providers/webhooks.mjs: staging inspect run 42330157047 (59b58674 live, RevisionId 8a88df45-00bf-4e24-8c5c-61e458a23c7a, CodeSha256 OVfABMsoMb1+uzvS5rrHgkaC+8TGrfRQR0dJLzg8Rqw=), staging apply run 42330201248 (59b58674 -> 117495bc, after CodeSha256 BaKgiVcDSnQpxq3V/hofgn205iOKRvNhW0ar4phe0Dw= RevisionId 87eaad50-6f3f-4dd9-a904-a2f484a6a381), staging re-inspect run 42330272158 read 117495bc live (RevisionId 87eaad50-6f3f-4dd9-a904-a2f484a6a381, same CodeSha256) (all on a55bd4180); production preflight inspect run 42330315951 (READY, 59b58674 live, RevisionId 58f1d917-b324-4a90-952d-8e4a43cf50d1, CodeSha256 OVfABMsoMb1+uzvS5rrHgkaC+8TGrfRQR0dJLzg8Rqw=); production apply run 42330359623 (job 128275254271; 59b58674 -> 117495bc) on the owner's \"DEPLOY providers/webhooks.mjs TO PRODUCTION\" with staging acceptance https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/42330201248, VERIFIED, after CodeSha256 BaKgiVcDSnQpxq3V/hofgn205iOKRvNhW0ar4phe0Dw= RevisionId b5705836-d6b3-407a-b0aa-af2b201a7d03; re-inspect run 42330438648 read 117495bc live (ALREADY_ACCEPTED, RevisionId b5705836-d6b3-407a-b0aa-af2b201a7d03, same CodeSha256). The pre-state 59b58674 is the body confirmation bytes production run 41219106461 applied (production-moov-webhook-body-auth-applied-manifest-2026-10-31.json keeps what it recorded). No SQL, no schema change, no backfill or replay. The row records the applied bytes as live_sha256 and accepted_sha256 and chains to the manifest that planned it (previous_manifest), which keeps the pre-apply state.",
+  "members": {
+    "providers/webhooks.mjs": {
+      "live_sha256": "117495bc5285a6fb39fb5e4b20526a0e24b00f67f8bf7ed78d0d5fff84b8f471",
+      "accepted_sha256": "117495bc5285a6fb39fb5e4b20526a0e24b00f67f8bf7ed78d0d5fff84b8f471",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-moov-webhook-receipt-key-manifest-2026-11-07.json"
+    }
+  }
+}

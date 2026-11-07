@@ -1,0 +1,15 @@
+{
+  "workstream_id": "fee-leg-api",
+  "authorization": "Pending owner review (2026-11-07). Planning only: nothing is live or verified. Each production apply needs its own owner approval, a staging acceptance reference and a read-only production inspect that confirms the live bytes, and SQL 145 recorded verified live first.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Owner 2026-11-07: \"build the fee leg fix\". Production 2026-11-06T22:53:11Z (/aws/lambda/checksops-production-prep-api): billing_pull_statement_failed, statement collection_insert_leg, sqlstate 42501, routine ExecWithCheckOptions, new row violates row-level security policy for table payment_transfers. The platform owner pressed Collect on Freedom Adjustment's 2026-10 fee and is not a member of Freedom; since SQL 90 no payment_transfers INSERT policy admits the platform owner for another tenant, so the leg row was not written (the obligation kept the Moov transfer id, leg_persist_failed). REPLACE tenant-collection-v2.mjs 45a78f0e -> f22fd96b: the collection_insert_leg savepoint calls SQL 145 public.aws_platform_owner_insert_billing_collection_leg(...) (aws/workflows/sql/145_platform_owner_billing_collection_leg.sql, SECURITY DEFINER, platform owner on a server write path, only a tenant-collection-v2 leg of an existing obligation) with the values the direct INSERT wrote, in the same order; savepoint, money-write flag and logging unchanged. Pre-state: the fee pull savepoints bytes, applied 2026-11-06 by production run 42302929689 (VERIFIED; production-fee-pull-savepoints-applied-manifest-2026-11-06.json); the 2026-11-06T22:53:11Z failure ran on them. sql_before SQL 145: not applied anywhere and recorded not verified live (production-api-overlay-plan.json sql_prerequisites, staging-sql-live.json); the overlay apply refuses until SQL 145 is recorded verified live. Until then (or if the API were deployed first) a platform-owner leg fails to save exactly as today. Order unchanged (no new import). No SQL in this change. Planning only.",
+  "members": {
+    "tenant-collection-v2.mjs": {
+      "live_sha256": "45a78f0e66acb4cbd94b991f530870362644068a3b0e3ced8e88530e37083592",
+      "accepted_sha256": "f22fd96b72551714b3ab3320290ffbac6ae87524c7c5df0daa7a54d243892fb0",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-fee-pull-savepoints-applied-manifest-2026-11-06.json"
+    }
+  }
+}

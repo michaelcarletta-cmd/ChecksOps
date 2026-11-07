@@ -35,7 +35,8 @@ export type ExpenseSplit = {
   disbursement_batches?: { check_intake_items?: { check_number?: string | null } | null } | null;
 };
 
-export type RevenueExpenseKind = "disbursement" | "payroll" | "payroll_speed_fee";
+// "send": a payment sent from the Funds tab (payment_transfers send legs; transferFinanceRows.ts).
+export type RevenueExpenseKind = "disbursement" | "payroll" | "payroll_speed_fee" | "send";
 
 export type RevenueExpenseRow = {
   key: string;

@@ -1,0 +1,316 @@
+{
+  "id": "sql145-platform-owner-billing-collection-leg-production-apply",
+  "migration": "sql145",
+  "authorization": "Applied to production on 2026-11-07; execute is false again, so this pin is no longer a standing authorization and a re-apply needs a new reviewed pin change. The owner approved the SQL 145 production pin change on 2026-11-07 in the words \"build the fee leg fix\", \"record the SQL 145 staging pin\", \"apply SQL 145 in staging\", \"SQL 145 accepted in staging\", \"run the read-only SQL 145 production inspect\" and \"record the SQL 145 production pin\" (none of them words for the production apply; c622469d -> a44d93bd, #1685, merged to main as fda298fa3 on the owner's words \"merge 1685\") and the one apply run recorded in applied (workstream prod-sql145-platform-owner-billing-collection-leg-20261107) in the words \"apply SQL 145 in production\", passed to it verbatim. That approval covered that run only.",
+  "execute": false,
+  "target_environment": "production",
+  "target_component": "production-sql",
+  "deployment_type": "sql-apply",
+  "filename": "aws/workflows/sql/145_platform_owner_billing_collection_leg.sql",
+  "migration_id": "145_platform_owner_billing_collection_leg",
+  "staging_pin_commit": "e15aef7cc0f826240a1588eabc2a3822a3df94fa",
+  "source_sha256": "ea57a69cf7f2000157898590c5bfbe5224ff1f135b599e82bb18018a8d22cc77",
+  "function_identities": [
+    "public.aws_platform_owner_insert_billing_collection_leg(uuid, text, text, text, bigint, text, text, uuid, text, text, text, text, jsonb)"
+  ],
+  "expected_live_definition_sha256": "c622469dcfbfc0ad8f54c0bb038457b9eb3247a17ee0c855390ddc709ee1d594",
+  "intended_replacement_sha256": "a44d93bddc3a90149ec2eaa9279d4695193db8f5eb190463f239d7cb130f435a",
+  "authorization_phrase": "APPLY_PLATFORM_OWNER_BILLING_COLLECTION_LEG",
+  "predecessors": [],
+  "order_note": "No predecessor: SQL 145 creates one new SECURITY DEFINER writer, aws_platform_owner_insert_billing_collection_leg(...), on the payment transfer and fee obligation schema the AWS databases already have (payment_transfers with the columns the API's collection leg writes and its unique index payment_transfers_idempotency_uniq (tenant_id, idempotency_key); tenant_maintenance_payments (id, tenant_id, amount_cents, billing_period)), the helpers is_platform_owner() and auth.uid(), SQL 136's gate aws_money_write_allowed() (SQL 136 applied in production 2026-11-02) and role checksops; a read-only production inspect confirms them. The applying login must reach both relations as the function's owner past RLS (definer_can_write_relations: the table owner without FORCE ROW LEVEL SECURITY, or a superuser or BYPASSRLS): a DEFINER insert filtered by RLS would be refused exactly as the API's insert is today. Expected pre-state in both environments: the function absent (release sql145 v1 / function public.aws_platform_owner_insert_billing_collection_leg(uuid, text, text, text, bigint, text, text, uuid, text, text, text, text, jsonb): absent). Where it already exists (a re-run) it must be owned by the applying login (functions_owned_by_login), keep its public.payment_transfers result (function_results_match) and hold no EXECUTE grant other than checksops and the owner, which the file keeps, and PUBLIC, anon, authenticated and service_role, which it revokes (function_acl_replaceable). The ACL after the apply is checksops and the owner. The API change that calls the function (aws/functions/api/tenant-collection-v2.mjs, savepoint collection_insert_leg) needs the guarded Lambda path after this pin is applied in that environment; until then (and if the API is deployed first) a platform-owner collection leg fails to save exactly as today (logged, rolled back to its savepoint, obligation submitted with leg_persist_failed). No API, Lambda or SPA change is part of this pin. Adds no trigger.",
+  "admin_login": "checksops_admin",
+  "rds_identifier": "checksops-production",
+  "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
+  "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
+  "tooling": {
+    "status": "built",
+    "production_tool": "scripts/deployment-guard/sql145-platform-owner-billing-collection-leg-production-apply.mjs",
+    "production_lib": "scripts/deployment-guard/lib/release-sql-production-apply.mjs",
+    "staging_executor_handler": "aws/write-path/guarded-sql-executor/index.mjs handleReleaseSqlMigration",
+    "staging_workflow_choice": "sql145-platform-owner-billing-collection-leg",
+    "one_shot_migration": "sql145",
+    "fingerprint_engine": "scripts/deployment-guard/lib/release-sql-state.mjs",
+    "runbook": "ops/production-sql-145-apply.md",
+    "tests": [
+      "aws/tests/release-sql145-executor.test.mjs",
+      "aws/tests/release-sql145-production-apply.test.mjs",
+      "aws/tests/release-sql90-97-executor.test.mjs",
+      "aws/tests/release-sql90-97-production-apply.test.mjs",
+      "aws/tests/sql145-platform-owner-billing-collection-leg-pg.test.mjs"
+    ],
+    "note": "Guarded tooling for SQL 145: sql145-platform-owner-billing-collection-leg-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql145-platform-owner-billing-collection-leg); production-sql-one-shot.mjs --migration sql145. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): the new function with the file's body and attributes and EXECUTE for checksops and the owner. The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
+  },
+  "production_inspect": {
+    "status": "recorded",
+    "date": "2026-11-07",
+    "ssm_command_id": "f359138f-4605-4b46-b4fa-cd807fbd3af6",
+    "source_commit": "b65d091a2925d046b3f160bbdbfc37ff4f8659af",
+    "read_only": true,
+    "connected_as": "checksops_admin",
+    "live_definition_sha256": "c622469dcfbfc0ad8f54c0bb038457b9eb3247a17ee0c855390ddc709ee1d594",
+    "apply_preconditions_met": false,
+    "precondition_failures": [],
+    "note": "Recorded from the read-only production inspect of 2026-11-07 (SSM command f359138f-4605-4b46-b4fa-cd807fbd3af6, node scripts/deployment-guard/sql145-platform-owner-billing-collection-leg-production-apply.mjs --inspect on the SQL53 runner i-0c35557c4e5385406, under the owner's words \"run the read-only SQL 145 production inspect\", from main b65d091a2 (tarball source-b65d091a2925d046b3f160bbdbfc37ff4f8659af.tar.gz sha256 12ac21a3f5af5c4801a06d7dfc7c8ea19edd1bfff34740c43c1bb7bb277dcc6e, staged by the transfer workflow sql53-temporary-transfer.yml run 42333377887; migration source sha256 on the runner ea57a69cf7f2000157898590c5bfbe5224ff1f135b599e82bb18018a8d22cc77 == source_sha256), read_only true, source_ok true, pin_execute false, connected as checksops_admin (current_user and session_user checksops_admin); the runner was started at 03:19:27Z for this inspect and stopped at 03:20:14Z). live_definition_sha256 c622469dcfbfc0ad8f54c0bb038457b9eb3247a17ee0c855390ddc709ee1d594 (not the intended a44d93bddc3a90149ec2eaa9279d4695193db8f5eb190463f239d7cb130f435a: already_applied false); release_sql_inspect: function aws_platform_owner_insert_billing_collection_leg(uuid, text, text, text, bigint, text, text, uuid, text, text, text, text, jsonb) absent, its function_acl [], definer_writes ok true on both relations (payment_transfers, tenant_maintenance_payments), no policy, view, table, column, constraint, trigger or table privilege in scope, dropped_function_dependents 0, counts null (the spec has none); prerequisites_missing [], missing_dependencies [], predecessors {} (none), predecessors_applied true, successors_applied [], precondition_failures []. Production is no longer unverified: every prerequisite is present, the applying login reaches both relations past row level security, and the function is absent. The pre-state is the derived one and equals staging's (read-live runs 42331198486 and 42333924185, c622469dcfbfc0ad8f54c0bb038457b9eb3247a17ee0c855390ddc709ee1d594), so the guarded staging apply (run 42334108246, staging_acceptance below) took the same path production will (aws/tests/sql145-platform-owner-billing-collection-leg-pg.test.mjs). apply_preconditions_met and live_matches_expected were false at inspect time only because no pre-state was recorded yet (pin_execute false, expected_live_definition_sha256 null). This reviewed change copies live_definition_sha256 into expected_live_definition_sha256 and, in the same change, sets authorization, execute true and staging_acceptance. A fresh --inspect immediately before apply (the one-shot's inspect step) must still report this live_definition_sha256, prerequisites_missing [], definer_writes ok true on both relations and precondition_failures []; if not, stop. If already_applied is true, or precondition_failures is not [], stop: that needs its own reviewed change. Earlier: Pending: no release-engine production inspect has been run for SQL 145 yet. Expected release-engine fingerprint of the pre-state under sql145: c622469dcfbfc0ad8f54c0bb038457b9eb3247a17ee0c855390ddc709ee1d594 (the function absent; derived by aws/tests/release-sql145-executor.test.mjs). Record the one-shot --phase inspect's date, SSM command id, source commit, live_definition_sha256, prerequisites_missing, release_sql_inspect.functions, release_sql_inspect.function_acl, release_sql_inspect.definer_writes (both relations must read ok true), precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. Stop if prerequisites_missing is not [] or precondition_failures is not [] (prerequisites_present, definer_can_write_relations; on a re-run also functions_owned_by_login, function_results_match, function_acl_replaceable): that needs its own reviewed change."
+  },
+  "intended_post_state": {
+    "fingerprint": "a44d93bddc3a90149ec2eaa9279d4695193db8f5eb190463f239d7cb130f435a",
+    "note": "aws_platform_owner_insert_billing_collection_leg(uuid, text, text, text, bigint, text, text, uuid, text, text, text, text, jsonb) owned by checksops_admin, plpgsql, VOLATILE, SECURITY DEFINER, search_path public, pg_temp, RETURNS public.payment_transfers, EXECUTE for checksops and the owner (PUBLIC, anon, authenticated and service_role revoked): for the platform owner (auth.uid() and is_platform_owner(); 42501 billing_collection_leg_forbidden otherwise) on a server write path (aws_money_write_allowed(); 42501 billing_collection_leg_not_server_write otherwise), a tenant-collection-v2 leg (leg_role wallet or ach_debit, idempotency key billing-<period>-<tenant>-wallet|bank, provider_metadata collection_contract, leg_type and billing_period matching, environment production or sandbox, status due, submitted or settled, amount > 0; 22023 otherwise) of an existing obligation of that tenant and period (provider_metadata.obligation_id) whose amount_cents covers this leg plus the tenant's other non-failed leg for the period (22023 otherwise): the API's INSERT (provider moov, platform_fee_cents 0, net_amount_cents = amount_cents, speed standard, submitted_at now()) with its ON CONFLICT (tenant_id, idempotency_key) update of provider_transfer_id, provider_status, status and updated_at, only over the same kind of leg (23505 billing_collection_leg_conflict otherwise); returns the row. No other function, table, column, policy, RLS setting, grant, trigger or row change. The fingerprint is releaseIntendedHash('sql145', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): a44d93bddc3a90149ec2eaa9279d4695193db8f5eb190463f239d7cb130f435a."
+  },
+  "staging_acceptance": {
+    "ok": true,
+    "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/42334108246",
+    "basis": "Guarded staging SQL executor apply of sql145-platform-owner-billing-collection-leg, run 42334108246 (job 128287029859, 2026-11-07, main b65d091a2925d046b3f160bbdbfc37ff4f8659af, wave 40, workstream github-staging-sql-42334108246, staging pin commit e15aef7cc0f826240a1588eabc2a3822a3df94fa, staging pin PR #1684, on the executor deployed by deploy run 42333499880: GEDJLmf19hpNpWdBJBrSWeUgZAwnZbdO898Rp7ErM0k=, previous 1IQ9upfm2JjUv9dq7jQi+AUcAGvKwr9EYHhBFe4LA94= (inspect runs 42333302061 and 42333743067)), under the owner's words \"apply SQL 145 in staging\", from the staging pre-state recorded by read-live run 42331198486 and re-read by read-live run 42333924185 (c622469dcfbfc0ad8f54c0bb038457b9eb3247a17ee0c855390ddc709ee1d594, already_applied false, precondition_failures []): receipt before c622469dcfbfc0ad8f54c0bb038457b9eb3247a17ee0c855390ddc709ee1d594, after a44d93bddc3a90149ec2eaa9279d4695193db8f5eb190463f239d7cb130f435a == intended, result applied; the function intended, its EXECUTE ACL checksops and the owner, definer_writes ok true on both relations, prerequisites_missing []. Read-live run 42334267158 then reported already_applied true, live a44d93bddc3a90149ec2eaa9279d4695193db8f5eb190463f239d7cb130f435a, precondition_failures []. Owner acceptance 2026-11-07: \"SQL 145 accepted in staging\". No separate staging record PR: these staging runs are recorded here and in ops/production-sql-145-apply.md by the production pin PR. The API change that calls the function (aws/functions/api/tenant-collection-v2.mjs, savepoint collection_insert_leg) is not part of this pin. The behavior is covered on PostgreSQL 16 by aws/tests/sql145-platform-owner-billing-collection-leg-pg.test.mjs and through the executor by aws/tests/release-sql145-executor.test.mjs. Production's pre-state (production_inspect) equals staging's, so the same path applies there. The same file bytes (source_sha256) are pinned in both."
+  },
+  "applied": {
+    "date": "2026-11-07",
+    "result": "applied",
+    "source_commit": "fda298fa34ad03e4cadcb66340183ebfd2f67bcb",
+    "source_commit_basis": "SOURCE_COMMIT in the tarball (written by sql53-temporary-transfer) equals --commit, and the tarball sha256 equals --expected-tarball-sha256 as copied by the operator from that transfer run's log (TARBALL_SHA256 line); the run log itself was not read by the one-shot.",
+    "source_tarball": {
+      "file": "source-fda298fa34ad03e4cadcb66340183ebfd2f67bcb.tar.gz",
+      "sha256": "bf0cd2e1b166ef4398085bdc149f1a3c4f50628bc332285a04d0a76613f96725"
+    },
+    "migration_source_sha256": "ea57a69cf7f2000157898590c5bfbe5224ff1f135b599e82bb18018a8d22cc77",
+    "migration_source_sha256_note": "The one-shot source step hashed aws/workflows/sql/145_platform_owner_billing_collection_leg.sql in the transfer tarball: equal to source_sha256 (the pin; migration_matches_pin true).",
+    "runner": "i-0c35557c4e5385406",
+    "runner_basis": "operator-supplied --runner (not verified by the one-shot)",
+    "workstream_id": "prod-sql145-platform-owner-billing-collection-leg-20261107",
+    "one_use_id": "sql145-prod-4c3e24cf-8250-4e96-bf49-b8121ca5b8bd",
+    "one_use_id_consumed": true,
+    "one_use_id_consumed_basis": "Inferred from the successful apply (the tool records the one_use_id after COMMIT and only warns if that write fails); the consumed-registry entry was not read back separately.",
+    "owner_approval": "apply SQL 145 in production",
+    "owner_approval_basis": "As passed in --approval-statement for --approval-scope sql145; the one-shot cannot verify who said it. The owner's words of 2026-11-07 for this run were \"apply SQL 145 in production\", given after the pin change (#1685, merged to main as fda298fa3 on the owner's words \"merge 1685\") whose authorization recorded that no words for the production apply had been given yet; they were passed verbatim as the approval statement for the --phase inspect run and the --phase apply run.",
+    "operator": "michaelcarletta-cmd",
+    "apply_ssm_command_id": "937dcbbd-13f5-4f27-8a27-c522bbd34813",
+    "one_shot_run_id": "8d17051e-163f-43c6-a2d7-0f174fb6c2dd",
+    "one_shot_note": "One SSM command (937dcbbd-13f5-4f27-8a27-c522bbd34813 on i-0c35557c4e5385406, comment \"SQL 145 production one-shot apply (owner: apply SQL 145 in production)\", sent 2026-11-07 10:36:19Z, Success, ResponseCode 0, execution ended 10:36:31Z; the runner was started from stopped for this work at 10:36:00Z and stopped again at 10:36:54Z, after both SSM commands had ended) ran the production-sql-one-shot --phase apply (run_id 8d17051e-163f-43c6-a2d7-0f174fb6c2dd) from main fda298fa3 (transfer run 42364538127, sql53-temporary-transfer.yml on main after the #1685 merge; tarball sha256 bf0cd2e1b166ef4398085bdc149f1a3c4f50628bc332285a04d0a76613f96725). Before it, a separate one-shot --phase inspect on the same tarball and the same approval statement (SSM a05bd401-5731-4e5e-88c2-1698529d496f, run_id bc75684f-874a-4327-a71c-1ff01752ac0d, EXIT=0, steps pin, source, inspect and contracts ok, nothing written) read live c622469dcfbfc0ad8f54c0bb038457b9eb3247a17ee0c855390ddc709ee1d594 (live_matches_expected true, already_applied false, apply_preconditions_met true, precondition_failures [], prerequisites_missing [], predecessors {}, the function absent, its function_acl [], definer_writes ok true on both relations, counts null), the pre-state the read-only inspect recorded in production_inspect (SSM f359138f-4605-4b46-b4fa-cd807fbd3af6). Before both, under the owner's words \"yes, run the read-only fee obligation policy check\", a read-only catalog query (SSM 8a2063ee-4dbf-49fe-b35a-e3a767666621, nothing written) read the production policies on tenant_maintenance_payments and payment_transfers (see ops/production-sql-145-apply.md); it is context for the apply, not one of its steps. The apply run's own inspect step read the same pre-state. Steps pin (execute true, staging_acceptance run 42334108246), source (tarball sha256 matches the sidecar and --expected-tarball-sha256, tree matches the tarball, migration source == pin), inspect, contracts (claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43), manifest, source-recheck-before-preflight, preflight (receipt_issued), evaluate (sql145_production_apply_allowed true), source-recheck-before-apply, apply (applied) and post-apply-inspect all ok. The run's JSON arrived whole (20586 characters of SSM output, under the 24000-character limit; the operator's session saved each phase's output tail-truncated at 30000 characters, which held all of it, and the whole output was read back read-only from SSM get-command-invocation for 937dcbbd-13f5-4f27-8a27-c522bbd34813 and a05bd401-5731-4e5e-88c2-1698529d496f, equal to what was saved): every field of the applied object is recorded as printed, except this note and owner_approval_basis, which are extended as in the SQL 127 to SQL 144 records (the one-shot's own one_shot_note read: \"One production-sql-one-shot run verified the source, ran the read-only inspect and the runner contracts, built the manifest, issued the receipt and lease (preflight), evaluated (sql145_production_apply_allowed true), applied (exit 0) and ran the post-apply inspect.\"; its owner_approval_basis read: \"As passed in --approval-statement for --approval-scope sql145; the one-shot cannot verify who said it.\"). The printed applied.receipt equals the run's top-level details.apply_result, and applied.post_apply_inspect, pre_apply_inspect and contract_results equal the top-level objects of the same name. This block adds migration_source_sha256 (with its note), apply_ssm_command_id, steps and manifest_sha256 from the same run's details, as the SQL 127 to SQL 144 records do. The run's not_observed_by_this_run list names ssm_command_id and source_staged_by, supplied here as apply_ssm_command_id and transfer run 42364538127. The post-apply inspect reported live a44d93bddc3a90149ec2eaa9279d4695193db8f5eb190463f239d7cb130f435a == intended, already_applied true, precondition_failures []: function aws_platform_owner_insert_billing_collection_leg(uuid, text, text, text, bigint, text, text, uuid, text, text, text, text, jsonb) intended, its EXECUTE ACL checksops and the owner, definer_writes ok true on both relations (payment_transfers, tenant_maintenance_payments), counts null (the spec has none), prerequisites_missing []. Unrelated catalog fdf7d3cb6048bde1e2318f68e63c64c1099fc5df687c33f204f2f09cc44c6dd6 (policies 479, functions 1360, triggers 185 outside SQL 145's own). Production acceptance: not yet reported by the owner when this record was written (the API change that calls the function, tenant-collection-v2.mjs, is not part of this pin and is not deployed by this record); this record does not claim it.",
+    "steps": [
+      "pin",
+      "source",
+      "inspect",
+      "contracts",
+      "manifest",
+      "source-recheck-before-preflight",
+      "preflight",
+      "evaluate",
+      "source-recheck-before-apply",
+      "apply",
+      "post-apply-inspect"
+    ],
+    "contract_results": {
+      "claim-ledger": {
+        "ok": true,
+        "test": "aws/tests/claim-ledger-accepted-contract.test.mjs",
+        "evidence": "4/4 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at fda298fa34ad03e4cadcb66340183ebfd2f67bcb (production-sql-one-shot 8d17051e-163f-43c6-a2d7-0f174fb6c2dd, node --test)"
+      },
+      "tenant-isolation": {
+        "ok": true,
+        "test": "aws/tests/tenant-security-compliance.test.mjs",
+        "evidence": "6/6 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at fda298fa34ad03e4cadcb66340183ebfd2f67bcb (production-sql-one-shot 8d17051e-163f-43c6-a2d7-0f174fb6c2dd, node --test)"
+      },
+      "financial-write-protections": {
+        "ok": true,
+        "test": "aws/tests/api-write.test.mjs",
+        "evidence": "43/43 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at fda298fa34ad03e4cadcb66340183ebfd2f67bcb (production-sql-one-shot 8d17051e-163f-43c6-a2d7-0f174fb6c2dd, node --test)"
+      }
+    },
+    "pre_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "c622469dcfbfc0ad8f54c0bb038457b9eb3247a17ee0c855390ddc709ee1d594",
+      "live_matches_expected": true,
+      "already_applied": false,
+      "predecessors": {},
+      "predecessors_applied": true,
+      "missing_dependencies": [],
+      "apply_preconditions_met": true,
+      "precondition_failures": [],
+      "current_user": "checksops_admin",
+      "session_user": "checksops_admin",
+      "counts": null,
+      "successors_applied": [],
+      "release_sql_inspect": {
+        "live_definition_sha256": "c622469dcfbfc0ad8f54c0bb038457b9eb3247a17ee0c855390ddc709ee1d594",
+        "prerequisites_missing": [],
+        "predecessors": {},
+        "successors_applied": [],
+        "functions": [
+          {
+            "name": "aws_platform_owner_insert_billing_collection_leg(uuid, text, text, text, bigint, text, text, uuid, text, text, text, text, jsonb)",
+            "state": "absent"
+          }
+        ],
+        "policies": [],
+        "views": [],
+        "tables": [],
+        "columns": [],
+        "constraints": [],
+        "triggers": [],
+        "table_privileges": [],
+        "function_acl": [
+          {
+            "name": "aws_platform_owner_insert_billing_collection_leg(uuid, text, text, text, bigint, text, text, uuid, text, text, text, text, jsonb)",
+            "acl": []
+          }
+        ],
+        "acl_functions": [],
+        "indexes": [],
+        "unique_covers": [],
+        "definer_writes": [
+          {
+            "name": "payment_transfers",
+            "ok": true
+          },
+          {
+            "name": "tenant_maintenance_payments",
+            "ok": true
+          }
+        ],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": null
+      }
+    },
+    "manifest_sha256": "19a727250fec1a1eeb3858788c0d528bd87892a14a81a28de7e4d60a1893687b",
+    "receipt": {
+      "migration": "sql145",
+      "workstream": "prod-sql145-platform-owner-billing-collection-leg-20261107",
+      "commit": "fda298fa34ad03e4cadcb66340183ebfd2f67bcb",
+      "sql_file": "aws/workflows/sql/145_platform_owner_billing_collection_leg.sql",
+      "before_hash": "c622469dcfbfc0ad8f54c0bb038457b9eb3247a17ee0c855390ddc709ee1d594",
+      "after_hash": "a44d93bddc3a90149ec2eaa9279d4695193db8f5eb190463f239d7cb130f435a",
+      "release_sql_inspect": {
+        "live_definition_sha256": "a44d93bddc3a90149ec2eaa9279d4695193db8f5eb190463f239d7cb130f435a",
+        "prerequisites_missing": [],
+        "predecessors": {},
+        "successors_applied": [],
+        "functions": [
+          {
+            "name": "aws_platform_owner_insert_billing_collection_leg(uuid, text, text, text, bigint, text, text, uuid, text, text, text, text, jsonb)",
+            "state": "intended"
+          }
+        ],
+        "policies": [],
+        "views": [],
+        "tables": [],
+        "columns": [],
+        "constraints": [],
+        "triggers": [],
+        "table_privileges": [],
+        "function_acl": [
+          {
+            "name": "aws_platform_owner_insert_billing_collection_leg(uuid, text, text, text, bigint, text, text, uuid, text, text, text, text, jsonb)",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          }
+        ],
+        "acl_functions": [],
+        "indexes": [],
+        "unique_covers": [],
+        "definer_writes": [
+          {
+            "name": "payment_transfers",
+            "ok": true
+          },
+          {
+            "name": "tenant_maintenance_payments",
+            "ok": true
+          }
+        ],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": null
+      },
+      "unrelated_catalog_sha256": "fdf7d3cb6048bde1e2318f68e63c64c1099fc5df687c33f204f2f09cc44c6dd6",
+      "unrelated_catalog_counts": {
+        "relations": 892,
+        "columns": 3550,
+        "constraints": 2239,
+        "policies": 479,
+        "functions": 1360,
+        "indexes": 655,
+        "default_acl": 0,
+        "role_memberships": 15,
+        "roles": 29,
+        "triggers": 185,
+        "views": 25,
+        "types": 18,
+        "schema": 2
+      },
+      "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/42334108246",
+      "result": "applied"
+    },
+    "post_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "a44d93bddc3a90149ec2eaa9279d4695193db8f5eb190463f239d7cb130f435a",
+      "live_matches_expected": false,
+      "already_applied": true,
+      "predecessors": {},
+      "predecessors_applied": true,
+      "missing_dependencies": [],
+      "apply_preconditions_met": false,
+      "precondition_failures": [],
+      "current_user": "checksops_admin",
+      "session_user": "checksops_admin",
+      "counts": null,
+      "successors_applied": [],
+      "release_sql_inspect": {
+        "live_definition_sha256": "a44d93bddc3a90149ec2eaa9279d4695193db8f5eb190463f239d7cb130f435a",
+        "prerequisites_missing": [],
+        "predecessors": {},
+        "successors_applied": [],
+        "functions": [
+          {
+            "name": "aws_platform_owner_insert_billing_collection_leg(uuid, text, text, text, bigint, text, text, uuid, text, text, text, text, jsonb)",
+            "state": "intended"
+          }
+        ],
+        "policies": [],
+        "views": [],
+        "tables": [],
+        "columns": [],
+        "constraints": [],
+        "triggers": [],
+        "table_privileges": [],
+        "function_acl": [
+          {
+            "name": "aws_platform_owner_insert_billing_collection_leg(uuid, text, text, text, bigint, text, text, uuid, text, text, text, text, jsonb)",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          }
+        ],
+        "acl_functions": [],
+        "indexes": [],
+        "unique_covers": [],
+        "definer_writes": [
+          {
+            "name": "payment_transfers",
+            "ok": true
+          },
+          {
+            "name": "tenant_maintenance_payments",
+            "ok": true
+          }
+        ],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": null
+      }
+    }
+  },
+  "production_evidence": {
+    "2026-11-07 apply": "Guarded production SQL one-shot on i-0c35557c4e5385406, workstream prod-sql145-platform-owner-billing-collection-leg-20261107, main fda298fa3 (tarball bf0cd2e1…, transfer run 42364538127, migration source ea57a69c… == pin), owner-approved run (\"apply SQL 145 in production\"), pre-apply --phase inspect SSM a05bd401-5731-4e5e-88c2-1698529d496f (run_id bc75684f-874a-4327-a71c-1ff01752ac0d, live c622469d…, live_matches_expected true), apply SSM 937dcbbd-13f5-4f27-8a27-c522bbd34813, run_id 8d17051e-163f-43c6-a2d7-0f174fb6c2dd, one_use_id sql145-prod-4c3e24cf-8250-4e96-bf49-b8121ca5b8bd (spent): every step ok; contracts claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43; pre-apply inspect live c622469d… (live_matches_expected true, precondition_failures [], definer_writes ok on both relations); manifest 19a72725…; c622469d… -> a44d93bd…, result applied, unrelated catalog fdf7d3cb… (policies 479, functions 1360); post-apply inspect already_applied true, precondition_failures []; the run's JSON arrived whole. After: public.aws_platform_owner_insert_billing_collection_leg(uuid, text, text, text, bigint, text, text, uuid, text, text, text, text, jsonb) exists as intended (SECURITY DEFINER, VOLATILE, RETURNS public.payment_transfers, EXECUTE for checksops and the owner; PUBLIC, anon, authenticated and service_role revoked), and the applying login reaches both relations past row level security. The API change that calls it (tenant-collection-v2.mjs) is not part of this pin and is not deployed by this record; it needs the guarded Lambda path and the owner's words \"DEPLOY tenant-collection-v2.mjs TO PRODUCTION\". Production acceptance was not yet reported by the owner when this was recorded. execute is false so the pin is no longer a standing authorization."
+  }
+}

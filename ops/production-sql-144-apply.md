@@ -51,7 +51,76 @@ applied in that environment.
 
 **Predecessor.** None.
 
-**Status:** not applied anywhere. The staging pin and the production pin are pending.
+**Staging executor refreshed (2026-11-06).** Deploy run 42303787295 updated
+`checksops-staging-guarded-sql-executor` to carry SQL 144.
+
+**Staging read-live (2026-11-06).** Run 42304378701 (job 128189899238, main `b5912204f`, after executor deploy
+run 42303787295): `already_applied` false, `precondition_failures` `[]`. Live
+`428d394e88ce45840806f7a6c93ed63d40178c0376c8a70843197bf28dccb88e`: the function absent, everything else in
+place, equal to the derived pre-state; intended `ac458869…`. Recorded in the staging pin
+(`expected_live_definition_sha256`, `execute: true`, wave 39) under the owner's words of 2026-11-06, "record the SQL
+144 staging pin". The staging apply is a separate run after this pin is merged and the executor is redeployed
+carrying it, on the owner's words for that run, "apply SQL 144 in staging". The production pin stays pending: a read-only production inspect decides
+production's pre-state.
+
+**Staging executor refreshed for the pin (2026-11-06).** The staging pin (wave 39, PR #1672) merged as
+`b69e34cbf6182b4bb186dad278a8636c16182368`. Inspect run 42308138229 (main `b69e34cbf`) found the live executor at
+`zEi7sZK4ieD6444PwQTyXSaTnbgqoMW4ny4hYf7mqNs=`. Deploy run 42308408155 (`expected_executor_code_sha256`
+`zEi7sZK4…` matched) updated `checksops-staging-guarded-sql-executor`; inspect run 42308688967 read it at
+`KrioYjGBZOUHgb5JuAvXaZQ50YidnBpvl0yjn8B5pHc=`. Read-live run 42308958516 (executor `KrioYjGB…`): `already_applied`
+false, `precondition_failures` `[]`, live `428d394e…`, equal to the pin.
+
+**Staging apply (2026-11-06).** Apply run 42309284075 (job 128206439607, 2026-11-06T23:04:01Z, main `b69e34cbf`,
+workstream `github-staging-sql-42309284075`, pin commit `87c3e193b`, `expected_live_definition_sha256`
+`428d394e88ce45840806f7a6c93ed63d40178c0376c8a70843197bf28dccb88e`) under the owner's words "apply SQL 144 in
+staging": success. The receipt prints `result` `applied`, `before_hash` `428d394e…`, `after_hash`
+`ac458869cda99ec85cb42e31f5ba80ced29cbf227a81058379e086b0ffb924c2`; the function in state `intended`, its EXECUTE
+ACL `checksops` and the owner, `definer_writes` ok on all five relations. Read-live run 42309552553 (executor
+`KrioYjGB…`): `already_applied` true, `live_definition_sha256` `ac458869…` equal to the intended hash,
+`precondition_failures` `[]`. Staging acceptance: the owner on 2026-11-06, "SQL 144 accepted in staging". There
+is no separate staging record PR for SQL 144: these staging runs are recorded here and in the production pin's
+`staging_acceptance` by the production pin PR. The staging pin keeps `execute: true`. The API change that exposes
+the function and the website change that reads it are not part of this pin.
+
+**Production inspect (2026-11-06).** Read-only `--inspect` through SSM
+`98a2ab2e-d8e0-4756-a6ab-142b0e7acf32` on `i-0c35557c4e5385406` (under the owner's words "run the read-only SQL 144
+production inspect"; runner started 23:44:35Z, stopped 23:45:18Z), main `cf2d6d0cf` (tarball sha256
+`be408a6dabb9d4ddc64be0437da3538611a8f3057966ba6b3c0ca2947e6b197e`, staged by `sql53-temporary-transfer.yml` run
+42313753127, migration source `9192e338…` == pin), connected as `checksops_admin`: the function `absent`, its
+EXECUTE ACL empty, `definer_writes` ok on all five relations (`payment_transfers`, `tenants`, `shared_checks`,
+`check_intake_items`, `claims`); `counts` null (the spec has none); every prerequisite present; `predecessors`
+`{}`, `successors_applied` `[]`; live `428d394e88ce45840806f7a6c93ed63d40178c0376c8a70843197bf28dccb88e`,
+`already_applied` false, `precondition_failures` `[]`. Production's pre-state equals staging's (read-live runs
+42304378701 and 42308958516), so the staging apply took the path production will
+(`aws/tests/sql144-tenant-incoming-transfers-pg.test.mjs`). Recorded in the production pin with the staging apply
+(run 42309284075) as its staging acceptance and `execute: true` under the owner's words "record the SQL 144
+production pin"; the owner's words so far name the staging steps, the staging acceptance, the inspect and this pin,
+not the production apply. The owner merges the pin change; the apply still needs the owner's words for that run
+("apply SQL 144 in production") and runs only after that merge is on main and staged.
+
+**Production apply (2026-11-07).** After the pin change (#1674, merged to main as `a3a4bbdf7` on the owner's words
+"merge 1674"), transfer run 42315882342 staged main `a3a4bbdf7` (tarball sha256
+`dd249ae5c824062b57cf17595f018cd1bc6b2b80dcbc6e4f66ba55c661f9db6e`). Under the owner's words
+"apply SQL 144 in production" (passed verbatim), a one-shot `--phase inspect` (SSM
+`2c4b80a8-81ea-4e0b-95d7-c5d78db18fe7`, run `dd8a2b8f-a837-44aa-90f3-d0971a67f540`, nothing written) read live `428d394e…` (the pinned pre-state,
+`live_matches_expected` true, `apply_preconditions_met` true, `precondition_failures` `[]`, the function absent,
+`definer_writes` ok on all five relations);
+then one-shot `--phase apply` run `2c228f5d-61f1-4e91-9268-ea906d5cce3d` through SSM
+`0f602899-55d7-4e1b-a842-4fae04f72013`, workstream `prod-sql144-tenant-incoming-transfers-20261107`, one_use_id
+`sql144-prod-254be0ae-db3c-4fbe-bd20-dafba25bb7ef`: its own inspect step read the same pre-state; contracts 4/4,
+6/6 and 43/43; all 11 steps ok; manifest `8775bb7d…`; receipt `428d394e…` →
+`ac458869cda99ec85cb42e31f5ba80ced29cbf227a81058379e086b0ffb924c2` (intended), result `applied`, unrelated
+catalog `34648775…` (policies 479, functions 1359); post-apply inspect `already_applied` true,
+`precondition_failures` `[]`: the function `get_tenant_incoming_transfers(uuid)` `intended`, its EXECUTE ACL
+`checksops` and the owner, `definer_writes` ok on all five relations, `counts` null, `prerequisites_missing` `[]`.
+The run's JSON arrived whole (20832 characters of SSM output, under the 24000-character limit). The runner
+`i-0c35557c4e5385406` was started for this work at 00:05:13Z and stopped at 00:06:07Z. The API change that exposes
+the function and the website change that reads it are not part of this pin and are not deployed by this record.
+Production acceptance had not been reported by the owner when this record was written; this record does not claim
+it.
+
+**Status:** applied to staging (wave 39) and to production (2026-11-07); the production pin is retired
+(`execute: false`).
 
 ## Fingerprint
 
