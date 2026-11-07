@@ -34,18 +34,21 @@ owner configures them. The `job_workflow_ref` condition is what keeps every othe
 
 ## Permissions
 
-- Allow `lambda:InvokeFunction` on
-  `arn:aws:lambda:us-east-1:806168576068:function:checksops-production-prep-api` only (unqualified:
-  no version or alias).
+- Allow `lambda:InvokeFunction` on exactly two resource strings for the one function:
+  `arn:aws:lambda:us-east-1:806168576068:function:checksops-production-prep-api` (unqualified) and
+  `arn:aws:lambda:us-east-1:806168576068:function:checksops-production-prep-api:$LATEST`. An
+  unqualified invoke runs `$LATEST`, and Lambda authorizes it against the `:$LATEST`-qualified ARN
+  (run `42383055459`, below). No numbered version, no alias, no wildcard.
 - Deny every other action (`NotAction: lambda:InvokeFunction`), and deny `lambda:InvokeFunction` on
-  any other resource (`NotResource`), so a later broader policy on the role cannot widen it.
+  any resource other than those same two strings (`NotResource`), so a later broader policy on the
+  role cannot widen it.
 - No CloudWatch Logs: the catch-up answers in the invoke response, and the workflow prints that.
   No `lambda:Update*`, `lambda:Get*`, no IAM, KMS, S3, Secrets Manager, RDS or SSM.
   `sts:GetCallerIdentity` (the workflow's identity check) needs no allow and is not affected by a
   deny.
 
 The workflow narrows the session again with an inline session policy that allows only the same
-invoke.
+invoke on the same two resource strings.
 
 What the invoke can do is decided by the Lambda code, not by IAM: `isMoovStatusCatchUpInvocation`
 accepts only the catch-up event, the plan is read-only, and the apply needs the reviewed plan's
@@ -100,6 +103,68 @@ Check: a `phase: plan` run reaches "Verify AWS identity" with
 `assumed-role/ChecksOpsGitHubProductionMoovStatusCatchUp/checksops-production-moov-status-catch-up-<run id>`.
 If STS refuses the web identity, compare the trust conditions with the run's token claims; do not
 widen them without a reviewed PR.
+
+## Fix for the role created on 2026-11-07 (owner, once, after this change is merged)
+
+The role created from the first version of `permissions-policy.json` (Allow and the
+`NeverInvokeAnyOtherFunctionVersionOrAlias` deny named only the unqualified ARN) refused the first
+read-only plan. Workflow run `42383055459` (`phase: plan`) assumed the role and passed "Verify AWS
+identity", then the invoke failed:
+
+> AccessDeniedException: User: arn:aws:sts::806168576068:assumed-role/ChecksOpsGitHubProductionMoovStatusCatchUp/checksops-production-moov-status-catch-up-42383055459
+> is not authorized to perform: lambda:InvokeFunction on resource:
+> arn:aws:lambda:us-east-1:806168576068:function:checksops-production-prep-api:$LATEST with an
+> explicit deny in an identity-based policy
+
+`scripts/deployment-guard/moov-status-catch-up.mjs` invokes with `FunctionName` and no
+`Qualifier`. Lambda checks that call against
+`arn:aws:lambda:us-east-1:806168576068:function:checksops-production-prep-api:$LATEST`, which is
+not the unqualified ARN, so the `NotResource` deny matched it. Nothing was invoked and nothing was
+written. The permissions now list the unqualified ARN and the `:$LATEST` ARN in both the Allow and
+the deny's `NotResource`; the workflow's session policy lists the same two. The trust policy does
+not change.
+
+Replace the inline policy with this one command, from any shell with administrator credentials in
+account `806168576068` (no checkout needed; the quoted `'EOF'` keeps `$LATEST` literal):
+
+```bash
+cat > /tmp/catchup-permissions.json <<'EOF'
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "InvokeTheProductionApiLambdaOnly",
+      "Effect": "Allow",
+      "Action": "lambda:InvokeFunction",
+      "Resource": [
+        "arn:aws:lambda:us-east-1:806168576068:function:checksops-production-prep-api",
+        "arn:aws:lambda:us-east-1:806168576068:function:checksops-production-prep-api:$LATEST"
+      ]
+    },
+    {
+      "Sid": "NeverAnyOtherAction",
+      "Effect": "Deny",
+      "NotAction": "lambda:InvokeFunction",
+      "Resource": "*"
+    },
+    {
+      "Sid": "NeverInvokeAnyOtherFunctionVersionOrAlias",
+      "Effect": "Deny",
+      "Action": "lambda:InvokeFunction",
+      "NotResource": [
+        "arn:aws:lambda:us-east-1:806168576068:function:checksops-production-prep-api",
+        "arn:aws:lambda:us-east-1:806168576068:function:checksops-production-prep-api:$LATEST"
+      ]
+    }
+  ]
+}
+EOF
+aws iam put-role-policy --no-cli-pager --role-name ChecksOpsGitHubProductionMoovStatusCatchUp --policy-name ChecksOpsProductionMoovStatusCatchUp --policy-document file:///tmp/catchup-permissions.json
+```
+
+`put-role-policy` replaces the inline policy of that name; it prints nothing on success. Check it
+with the read-only `aws iam get-role-policy` command above (the document must list the two ARNs
+in `Resource` and in `NotResource`), then run the read-only plan again.
 
 ## Remove it (owner, when the catch-up is no longer needed)
 

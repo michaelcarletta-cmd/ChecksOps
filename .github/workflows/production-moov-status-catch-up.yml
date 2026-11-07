@@ -128,7 +128,7 @@ jobs:
           aws-region: us-east-1
           role-session-name: checksops-production-moov-status-catch-up-${{ github.run_id }}
           inline-session-policy: >-
-            {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["lambda:InvokeFunction"],"Resource":"arn:aws:lambda:us-east-1:806168576068:function:checksops-production-prep-api"}]}
+            {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["lambda:InvokeFunction"],"Resource":["arn:aws:lambda:us-east-1:806168576068:function:checksops-production-prep-api","arn:aws:lambda:us-east-1:806168576068:function:checksops-production-prep-api:$LATEST"]}]}
 
       - name: Verify AWS identity
         shell: bash
