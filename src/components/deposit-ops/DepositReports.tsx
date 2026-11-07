@@ -207,7 +207,7 @@ function DepositedChecksReport() {
         downloadReportFile(depositedChecksPdf(rows, title, tenant?.name ?? ""), `${fileBase}.pdf`, "application/pdf");
       } else {
         downloadReportFile(
-          depositedChecksXlsx(rows, title),
+          await depositedChecksXlsx(rows, title),
           `${fileBase}.xlsx`,
           "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         );
