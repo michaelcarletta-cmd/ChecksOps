@@ -117,7 +117,6 @@
     "uuid": "^14.0.0",
     "vaul": "0.9.9",
     "vite-plugin-pwa": "^1.3.0",
-    "xlsx": "0.18.5",
     "zod": "4.6.7"
   },
   "devDependencies": {

@@ -1,8 +1,12 @@
 /**
  * Deposited Checks report files: Excel (.xlsx, amounts stay numbers) and PDF (landscape letter,
  * repeated header on every page, total on the last). Both return bytes; the caller downloads them.
+ *
+ * Excel is written with exceljs. The SheetJS `xlsx` package it replaced has no fixed release on
+ * npm for GHSA-4r6h-8v6p-xvw6 and GHSA-5pgg-2g8v-p4x9
+ * (docs/compliance/evidence/2026-11-06-V-1-dependency-triage.md).
  */
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 import { jsPDF } from "jspdf";
 import {
   DEPOSITED_CHECKS_COLUMNS,
@@ -13,18 +17,20 @@ import {
   type DepositedCheckRow,
 } from "./depositedChecksReport.ts";
 
-export function depositedChecksXlsx(rows: DepositedCheckRow[], title: string): Uint8Array {
-  const sheet = XLSX.utils.aoa_to_sheet(depositedChecksSheetRows(rows));
+export const DEPOSITED_CHECKS_CURRENCY_FORMAT = '"$"#,##0.00';
+
+export async function depositedChecksXlsx(rows: DepositedCheckRow[], title: string): Promise<Uint8Array> {
+  const book = new ExcelJS.Workbook();
+  book.title = title;
+  const sheet = book.addWorksheet("Deposited Checks");
+  sheet.columns = [34, 15, 14, 16, 22].map((width) => ({ width }));
+  sheet.addRows(depositedChecksSheetRows(rows));
   // Amount column (C) as currency, from the first check row to the total row.
-  for (let r = 1; r <= rows.length + 1; r += 1) {
-    const cell = sheet[XLSX.utils.encode_cell({ r, c: 2 })];
-    if (cell && typeof cell.v === "number") cell.z = '"$"#,##0.00';
+  for (let r = 2; r <= rows.length + 2; r += 1) {
+    const cell = sheet.getCell(r, 3);
+    if (typeof cell.value === "number") cell.numFmt = DEPOSITED_CHECKS_CURRENCY_FORMAT;
   }
-  sheet["!cols"] = [{ wch: 34 }, { wch: 15 }, { wch: 14 }, { wch: 16 }, { wch: 22 }];
-  const book = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(book, sheet, "Deposited Checks");
-  book.Props = { Title: title };
-  return new Uint8Array(XLSX.write(book, { bookType: "xlsx", type: "array" }) as ArrayBuffer);
+  return new Uint8Array(await book.xlsx.writeBuffer());
 }
 
 export function depositedChecksPdf(rows: DepositedCheckRow[], title: string, companyName = ""): Uint8Array {
