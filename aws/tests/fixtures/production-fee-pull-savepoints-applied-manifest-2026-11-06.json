@@ -1,0 +1,21 @@
+{
+  "workstream_id": "fee-pull-savepoints-applied",
+  "authorization": "Record only (2026-11-06): the bytes below are live. Nothing is planned or authorized by this manifest; any later change to these members needs its own manifest, staging acceptance and owner approval.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Fee pull savepoints (#1660, merged as 2db02f2b6 on the owner's \"merge the fee fix when green\") applied. Applied 2026-11-06 from main aae6dda62 (the merge of #1665; both members carry the #1660 bytes) in plan order: tenant-collection-v2.mjs, then tenant-billing-engine.mjs. Each apply run concluded success including its \"Verify live member is the accepted bytes\" step (state VERIFIED) and the public production smoke (/health and /db-health 200). tenant-collection-v2.mjs: staging inspect run 42283798092 (73548567 live, RevisionId 952b8357-228c-437c-944e-05bd3a7375df), staging apply run 42283910495 (after CodeSha256 ezTll+eaSg1EfusuEZwdobPqMlo6H+2zkKa2yp9fbiE= RevisionId 2ea18c4d-55f8-41eb-bd6a-a82b12bd7f20), staging re-inspect run 42284040646 read 45a78f0e live (all on 2db02f2b6); production preflight inspect run 42302831040 (READY, 73548567 live, RevisionId eb9f5362-3171-41d0-9343-e6074c1885e9, CodeSha256 9rqeIav9wcbQOUVTJC/TOzianf9suunTmEmoZ6E+W9k=); production apply run 42302929689 (73548567 -> 45a78f0e) on the owner's \"DEPLOY tenant-collection-v2.mjs TO PRODUCTION\", VERIFIED, after CodeSha256 ezTll+eaSg1EfusuEZwdobPqMlo6H+2zkKa2yp9fbiE= RevisionId acb086d6-0f43-487d-b4eb-eac260c1c6f8; re-inspect run 42303127509 read 45a78f0e live (ALREADY_ACCEPTED, RevisionId acb086d6-0f43-487d-b4eb-eac260c1c6f8, same CodeSha256). tenant-billing-engine.mjs: staging inspect run 42284171581 (5a4327ca live, RevisionId 2ea18c4d-55f8-41eb-bd6a-a82b12bd7f20), staging apply run 42284255536 (after CodeSha256 HivPmxs4XIuDfUBxsDpqXuqcrXcxccUnwt6aBWAvihw= RevisionId 29157fef-b819-4749-a14b-248f8fbd5c60), staging re-inspect run 42284361398 read 32cc099e live (RevisionId cca27ffa-fc2f-4b1b-ba2f-792852d9dba7, same CodeSha256) (all on 2db02f2b6); production preflight inspect run 42303201743 (READY, 5a4327ca live, RevisionId acb086d6-0f43-487d-b4eb-eac260c1c6f8); production apply run 42303279340 (5a4327ca -> 32cc099e) on the owner's \"DEPLOY tenant-billing-engine.mjs TO PRODUCTION\", VERIFIED, after CodeSha256 HivPmxs4XIuDfUBxsDpqXuqcrXcxccUnwt6aBWAvihw= RevisionId b3550adb-920c-46f4-92f1-2da9ea4b1e55; re-inspect run 42303399650 read 32cc099e live (ALREADY_ACCEPTED, RevisionId b3550adb-920c-46f4-92f1-2da9ea4b1e55, same CodeSha256). No SQL (the engine's sql_before, SQL 120, was already applied); index.mjs untouched. Each row records the applied bytes as live_sha256 and accepted_sha256 and chains to the manifest that planned it (previous_manifest), which keeps the pre-apply state.",
+  "members": {
+    "tenant-collection-v2.mjs": {
+      "live_sha256": "45a78f0e66acb4cbd94b991f530870362644068a3b0e3ced8e88530e37083592",
+      "accepted_sha256": "45a78f0e66acb4cbd94b991f530870362644068a3b0e3ced8e88530e37083592",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-fee-pull-savepoints-manifest-2026-11-06.json"
+    },
+    "tenant-billing-engine.mjs": {
+      "live_sha256": "32cc099e9dcd448921fcb0d36d7893d25195c2dee58b0faafb1b5c78ce6c1310",
+      "accepted_sha256": "32cc099e9dcd448921fcb0d36d7893d25195c2dee58b0faafb1b5c78ce6c1310",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-fee-pull-savepoints-manifest-2026-11-06.json"
+    }
+  }
+}
