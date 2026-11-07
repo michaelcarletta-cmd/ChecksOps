@@ -3,14 +3,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import {
   buildDepositedCheckRows,
   depositedChecksSheetRows,
   depositedChecksTitle,
   depositedChecksTotal,
 } from '../../src/lib/depositedChecksReport.ts';
-import { depositedChecksPdf, depositedChecksXlsx } from '../../src/lib/depositedChecksExport.ts';
+import { DEPOSITED_CHECKS_CURRENCY_FORMAT, depositedChecksPdf, depositedChecksXlsx } from '../../src/lib/depositedChecksExport.ts';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
 // Noon UTC keeps the local deposit day the same in any US time zone.
@@ -54,17 +54,43 @@ test('rows follow the Bank Deposits date rule: one date, a range, an end date al
   assert.equal(depositedChecksTitle('', '2026-10-22'), 'Deposited Checks through 10/22/2026');
 });
 
-test('Excel: the five owner columns, numeric amounts in currency format, a total row', () => {
+test('Excel: the five owner columns, numeric amounts in currency format, a total row', async () => {
   const rows = buildDepositedCheckRows(CHECKS, CASES);
   assert.deepEqual(depositedChecksSheetRows(rows)[0], ['Insured Name', 'Date Deposited', 'Amount', 'Check #', 'Claim #']);
-  const book = XLSX.read(depositedChecksXlsx(rows, 'Deposited Checks'), { type: 'array', cellNF: true });
-  const sheet = book.Sheets['Deposited Checks'];
-  const data = XLSX.utils.sheet_to_json(sheet, { header: 1 });
-  assert.deepEqual(data[0], ['Insured Name', 'Date Deposited', 'Amount', 'Check #', 'Claim #']);
-  assert.deepEqual(data[4], ['Jane Smith', '10/20/2026', 1500.5, '1001', 'CLM-1']);
-  assert.deepEqual(data[5], ['Total', '', 1925.49, '4 checks', '']);
-  assert.equal(sheet.C5.t, 'n');
-  assert.equal(sheet.C5.z, '"$"#,##0.00');
+  const bytes = await depositedChecksXlsx(rows, 'Deposited Checks');
+  // A real .xlsx file (a ZIP), read back with exceljs.
+  assert.equal(Buffer.from(bytes.subarray(0, 2)).toString(), 'PK');
+  const book = new ExcelJS.Workbook();
+  await book.xlsx.load(Buffer.from(bytes));
+  assert.equal(book.title, 'Deposited Checks');
+  const sheet = book.getWorksheet('Deposited Checks');
+  const row = (n) => sheet.getRow(n).values.slice(1);
+  assert.deepEqual(row(1), ['Insured Name', 'Date Deposited', 'Amount', 'Check #', 'Claim #']);
+  assert.deepEqual(row(5), ['Jane Smith', '10/20/2026', 1500.5, '1001', 'CLM-1']);
+  // The empty cells of the total row are skipped (sparse), as in the old file.
+  assert.deepEqual([1, 3, 4].map((c) => sheet.getRow(6).getCell(c).value), ['Total', 1925.49, '4 checks']);
+  assert.equal(sheet.rowCount, rows.length + 2);
+  // Amounts are numbers in currency format, from the first check row to the total row.
+  for (let r = 2; r <= rows.length + 2; r += 1) {
+    assert.equal(typeof sheet.getCell(r, 3).value, 'number', `row ${r}`);
+    assert.equal(sheet.getCell(r, 3).numFmt, DEPOSITED_CHECKS_CURRENCY_FORMAT, `row ${r}`);
+  }
+  assert.equal(DEPOSITED_CHECKS_CURRENCY_FORMAT, '"$"#,##0.00');
+  assert.deepEqual(sheet.columns.map((c) => c.width), [34, 15, 14, 16, 22]);
+  // An empty selection still makes a valid file with the header and a zero total.
+  const empty = new ExcelJS.Workbook();
+  await empty.xlsx.load(Buffer.from(await depositedChecksXlsx([], 'Deposited Checks')));
+  assert.equal(empty.getWorksheet('Deposited Checks').rowCount, 2);
+});
+
+test('the SheetJS xlsx package is gone: no source imports it and package.json does not list it', () => {
+  const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
+  assert.equal(pkg.dependencies?.xlsx, undefined);
+  assert.equal(pkg.devDependencies?.xlsx, undefined);
+  const exportSrc = fs.readFileSync(path.join(ROOT, 'src/lib/depositedChecksExport.ts'), 'utf8');
+  assert.doesNotMatch(exportSrc, /from ["']xlsx["']/);
+  assert.match(exportSrc, /import ExcelJS from "exceljs";/);
+  assert.equal(fs.existsSync(path.join(ROOT, 'src/components/settings/ImportSettings.tsx')), false);
 });
 
 test('PDF: a real PDF, one page per screenful, also when empty', () => {
@@ -84,6 +110,7 @@ test('Reports tab mounts Deposited Checks with PDF and Excel export above the Da
   assert.match(src, /exportReport\("pdf"\)/);
   assert.match(src, /exportReport\("xlsx"\)/);
   assert.match(src, /import\("@\/lib\/depositedChecksExport"\)/);
+  assert.match(src, /await depositedChecksXlsx\(rows, title\)/);
   assert.match(src, /claims\(claim_number, policyholder_name\), check_payees\(payee_name, payee_type\)/);
   assert.match(src, /\.not\("deposited_at", "is", null\)/);
   assert.match(src, /\.eq\("tenant_id", tenantId as string\)/);
