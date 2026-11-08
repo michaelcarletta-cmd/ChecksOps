@@ -151,89 +151,92 @@ function WhiteLabelRoutes() {
   // (path + ?tab=...), and sign-in returns there instead of to /checks.
   const loginRedirect = <Navigate to={loginPathWithNext(basePath, location)} replace />;
 
+  // One wrapper per page (keyed by path): in the app each page floats in from the right (index.css).
   return (
-    <Routes>
-      <Route
-        path="login"
-        element={
-          user && !authLoading && isMember
-            ? <Navigate to={postLoginPath(basePath, location.search)} replace />
-            : <WhiteLabelLogin />
-        }
-      />
-      <Route
-        path="checks"
-        element={
-          !user
-            ? loginRedirect
-            : isMember
-              ? <WhiteLabelCheckCenter />
-              : <Navigate to={`${basePath}/login`} replace />
-        }
-      />
-      <Route
-        path="payments"
-        element={
-          !user
-            ? loginRedirect
-            : isMember
-              ? (
-                <div className="min-h-screen bg-background p-2 sm:p-3 md:p-6 max-w-full overflow-x-hidden">
-                  <SubPageHeader basePath={basePath} />
-                  <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">Loading…</div>}>
-                    <Payments />
-                  </Suspense>
-                </div>
-              )
-              : <Navigate to={`${basePath}/login`} replace />
-        }
-      />
-      <Route
-        path="cash-jobs"
-        element={
-          !user
-            ? loginRedirect
-            : isMember
-              ? (
-                <div className="min-h-screen bg-background p-2 sm:p-3 md:p-6 max-w-full overflow-x-hidden">
-                  <SubPageHeader basePath={basePath} />
-                  <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">Loading…</div>}>
-                    <CashJobs />
-                  </Suspense>
-                </div>
-              )
-              : <Navigate to={`${basePath}/login`} replace />
-        }
-      />
-      <Route
-        path="wallet-ops"
-        element={
-          !user
-            ? loginRedirect
-            : isMember
-              ? (
-                <div className="min-h-screen bg-background p-2 sm:p-3 md:p-6 max-w-full overflow-x-hidden">
-                  <SubPageHeader basePath={basePath} />
-                  <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">Loading…</div>}>
-                    <WalletOps />
-                  </Suspense>
-                </div>
-              )
-              : <Navigate to={`${basePath}/login`} replace />
-        }
-      />
-      <Route
-        path="settings"
-        element={
-          !user
-            ? loginRedirect
-            : isMember
-              ? <WhiteLabelSettings />
-              : <Navigate to={`${basePath}/login`} replace />
-        }
-      />
-      <Route path="*" element={<Navigate to={user && isMember ? "checks" : "login"} replace />} />
-    </Routes>
+    <div key={location.pathname} className="route-page">
+      <Routes>
+        <Route
+          path="login"
+          element={
+            user && !authLoading && isMember
+              ? <Navigate to={postLoginPath(basePath, location.search)} replace />
+              : <WhiteLabelLogin />
+          }
+        />
+        <Route
+          path="checks"
+          element={
+            !user
+              ? loginRedirect
+              : isMember
+                ? <WhiteLabelCheckCenter />
+                : <Navigate to={`${basePath}/login`} replace />
+          }
+        />
+        <Route
+          path="payments"
+          element={
+            !user
+              ? loginRedirect
+              : isMember
+                ? (
+                  <div className="min-h-screen bg-background p-2 sm:p-3 md:p-6 max-w-full overflow-x-hidden">
+                    <SubPageHeader basePath={basePath} />
+                    <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">Loading…</div>}>
+                      <Payments />
+                    </Suspense>
+                  </div>
+                )
+                : <Navigate to={`${basePath}/login`} replace />
+          }
+        />
+        <Route
+          path="cash-jobs"
+          element={
+            !user
+              ? loginRedirect
+              : isMember
+                ? (
+                  <div className="min-h-screen bg-background p-2 sm:p-3 md:p-6 max-w-full overflow-x-hidden">
+                    <SubPageHeader basePath={basePath} />
+                    <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">Loading…</div>}>
+                      <CashJobs />
+                    </Suspense>
+                  </div>
+                )
+                : <Navigate to={`${basePath}/login`} replace />
+          }
+        />
+        <Route
+          path="wallet-ops"
+          element={
+            !user
+              ? loginRedirect
+              : isMember
+                ? (
+                  <div className="min-h-screen bg-background p-2 sm:p-3 md:p-6 max-w-full overflow-x-hidden">
+                    <SubPageHeader basePath={basePath} />
+                    <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">Loading…</div>}>
+                      <WalletOps />
+                    </Suspense>
+                  </div>
+                )
+                : <Navigate to={`${basePath}/login`} replace />
+          }
+        />
+        <Route
+          path="settings"
+          element={
+            !user
+              ? loginRedirect
+              : isMember
+                ? <WhiteLabelSettings />
+                : <Navigate to={`${basePath}/login`} replace />
+          }
+        />
+        <Route path="*" element={<Navigate to={user && isMember ? "checks" : "login"} replace />} />
+      </Routes>
+    </div>
   );
 }
 

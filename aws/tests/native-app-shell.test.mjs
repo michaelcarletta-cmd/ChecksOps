@@ -145,11 +145,25 @@ test('app animations: dialogs, sheets, fields, panel; entrances never leave a tr
     'html.native-app [data-app-dialog][data-state="open"] {',
     'html.native-app [data-app-sheet="right"][data-state="open"]',
     'html.native-app .check-detail-panel > * > * {',
-    'html.native-app .page-shell > * {',
+    'html.native-app .route-page {',
     'html.native-app [data-radix-popper-content-wrapper] > [data-state="open"] {',
   ]) assert.ok(block.includes(sel), sel);
   assert.match(block, /textarea, button\[role="combobox"\]\):focus \{\s*animation: native-field-focus/);
   assert.doesNotMatch(block, /animation:[^;]*\bboth;/, 'fill both would leave translate set (a containing block for fixed children)');
   assert.doesNotMatch(block, /@keyframes native-(?:enter|dialog-in|sheet-\w+|pop) \{[^}]*transform/, 'keyframes use translate/scale, not transform');
   assert.match(block, /prefers-reduced-motion: reduce\)[^]*animation-delay: 0ms !important;/);
+});
+
+test('app pages float in from the right, once: one keyed .route-page per path, no double move', () => {
+  const app = read('src/pages/WhiteLabelApp.tsx');
+  assert.match(app, /<div key=\{location\.pathname\} className="route-page">\s*<Routes>/);
+  for (const path of ['checks', 'payments', 'cash-jobs', 'wallet-ops', 'settings']) {
+    assert.match(app, new RegExp(`path="${path}"`), path);
+  }
+  const css = read('src/index.css');
+  const block = css.slice(css.indexOf('/* ── iOS / Android app only'));
+  assert.match(block, /@keyframes native-page-in \{\s*from \{ opacity: 0; translate: 36px 0; \}/);
+  assert.match(block, /html\.native-app \.route-page \{\s*overflow-x: clip;\s*animation: native-page-in /);
+  assert.match(block, /html\.native-app \.route-page \.page-shell \{\s*animation: none;/);
+  assert.doesNotMatch(block, /\.page-shell > /, 'no one-by-one sections on top of the page slide');
 });
