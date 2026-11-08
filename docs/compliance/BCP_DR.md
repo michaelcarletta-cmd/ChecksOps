@@ -11,7 +11,7 @@
 | Recovery point objective, files | 0 for overwrites and deletes | S3 versioning on the private-files bucket |
 | Recovery time objective (RTO), single data center (AZ) failure | 5 minutes | Multi-AZ RDS fails over automatically; Lambda and API Gateway are multi-AZ by design |
 | RTO, database corruption or bad change | 4 hours | Point-in-time restore to a new instance, then repoint the API after review. **To be measured** by the first restore test (row B-1). |
-| RPO / RTO, loss of region `us-east-1` | Database: restorable in `us-east-2`; replication status `replicating` (read 2026-11-06 19:58 UTC: restore window 19:02–19:43 UTC, so about 15 minutes behind the source; 35-day retention). The restore time is to be measured. Files: **not covered** | §4 |
+| RPO / RTO, loss of region `us-east-1` | Database: restorable in `us-east-2`; replication status `replicating` (read 2026-11-06 19:58 UTC: restore window 19:02–19:43 UTC, so about 15 minutes behind the source; 35-day retention). The restore time is to be measured (`ops/security/RESTORE_TEST_RUNBOOK.md`). Files: **not covered yet**; the copy to `us-east-2` is ready to apply (`ops/security/FILES_BUCKET_REPLICATION_2026_11.md`) | §4 |
 
 **OWNER TO CONFIRM** these targets against what tenant contracts promise.
 

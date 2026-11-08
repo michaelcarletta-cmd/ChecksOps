@@ -77,7 +77,7 @@ period.
 | ID | Control | Evidence | Status |
 |---|---|---|---|
 | CC6.1 | Tenant isolation in the database | Postgres row-level security scoped to `tenant_id`; tenant-scope migrations (for example SQL 87, 88, 125, 126, 136) with production apply records in `ops/deployment-guard/sql*-production-apply.json` | In place |
-| CC6.1 | Encryption at rest | RDS storage encrypted (`RDS_PRIVATE_SUBNETS_PLAN_2026_11.md` live state); private-files bucket SSE-KMS (`ops/production-files-bucket-encryption.md`, applied 2026-11-04); Moov onboarding EIN and date of birth KMS-encrypted (`aws/functions/api/providers/onboarding/crypto.mjs`) | In place |
+| CC6.1 | Encryption at rest | RDS storage encrypted (`RDS_PRIVATE_SUBNETS_PLAN_2026_11.md` live state); private-files bucket default SSE-S3 (`AES256`, SSE-C blocked), with compliance documents written SSE-KMS under `alias/checksops-production-compliance-documents` (`ops/production-files-bucket-encryption.md`, Bucket Key change applied 2026-11-04; read live 2026-11-08); Moov onboarding EIN and date of birth KMS-encrypted (`aws/functions/api/providers/onboarding/crypto.mjs`) | In place |
 | CC6.1 | Sensitive fields masked; every reveal logged | `src/components/ui/masked-field.tsx`, `src/hooks/usePIIMasking.tsx`, `pii_reveal_logs`; CheckAlt account numbers returned as last four only (`aws/functions/api/providers/checkalt-account-mask.mjs`) | In place |
 | CC6.2 | Users added and removed through a controlled process | Invites through the API (Cognito admin create only: `ops/deployment-guard/cognito-admin-create-only`); two-factor reset with global sign-out (`aws/functions/api/admin-reset-totp.mjs`, `ops/team-two-factor-reset-iam.md`) | Partial: offboarding within 24 hours is now written (`docs/compliance/PERSONNEL_SECURITY.md` §5); no records yet (row A-2). |
 | CC6.3 | Least privilege for people and machine identities | Per-workflow GitHub OIDC roles (`ops/deployment-guard/github-oidc-trust`); read-only inspect role; `ops/security/IAM_CLAUDE_CODE_LEAST_PRIVILEGE.md` | Partial: confirm the least-privilege change for `user/claude-code` is applied and record it. |
@@ -96,7 +96,7 @@ period.
 | CC7.1 | Audit logging of the cloud account | CloudTrail `checksops-production-mgmt-events`: multi-region, log-file validation on, into `checksops-production-security-logs-806168576068` (`aws/cutover/OPERATOR_SECURITY_SERVICES.md`); VPC flow log `fl-0913268bc96a95205` | In place: retention matches `docs/DATA_RETENTION.md` §2 since 2026-11-06 (security-logs bucket 7 years, Glacier after 90 days; every log group has a retention; `ops/security/LOG_RETENTION_AND_DR_2026_11.md`). |
 | CC7.2 | Application audit logging | `audit_logs`, `pii_reveal_logs`, `glba_security_events`, `check_audit_log`, `check_status_audit`, `deposit_audit_log`, `payment_event_log`, `financial_stepup_log` (append-only, SQL 106), `aws_provider_webhook_receipts` | In place |
 | CC7.2 | Alerts reach a person | 14 CloudWatch security alarms to SNS `checksops-production-security-alerts`, subscription confirmed (`OPERATOR_SECURITY_HANDOFF_2TO6.md`) | In place. Record a test alert once a year (row I-3). |
-| CC7.3–7.4 | Incident response plan; post-mortems | `docs/INCIDENT_RESPONSE.md`, `aws/cutover/INCIDENT_RESPONSE_AWS.md`; post-mortems due in `docs/incidents/YYYY-MM-DD.md` | Partial: `docs/incidents/` does not exist yet, and there is no tabletop record (row I-1). |
+| CC7.3–7.4 | Incident response plan; post-mortems | `docs/INCIDENT_RESPONSE.md`, `aws/cutover/INCIDENT_RESPONSE_AWS.md`; post-mortems due in `docs/incidents/YYYY-MM-DD.md`; tabletop scenario `docs/compliance/INCIDENT_TABLETOP_2026.md` | Partial: `docs/incidents/` does not exist yet; the tabletop is written, not yet held (row I-1). |
 | CC7.5 | Recovery from incidents | `aws/cutover/INCIDENT_RESPONSE_AWS.md` §9 (point-in-time restore to a new instance), `aws/cutover/ROLLBACK.md` | Partial: no recorded restore test (row B-1). |
 
 ## CC8 — Change management
@@ -114,7 +114,7 @@ period.
 
 | ID | Control | Evidence | Status |
 |---|---|---|---|
-| CC9.1 | Business continuity and disaster recovery | `docs/compliance/BCP_DR.md`; Multi-AZ RDS (primary 1f, standby 1a), 35-day backups, deletion protection; private-files bucket versioning on; `aws/cutover/WRITE_FREEZE_DRILL.md` | Partial: targets written; database backups replicated to `us-east-2` since 2026-11-06. Still single-region: the private-files bucket. Backup person named (Austin Sukanick); access not yet set up. No restore test yet. |
+| CC9.1 | Business continuity and disaster recovery | `docs/compliance/BCP_DR.md`; Multi-AZ RDS (primary 1f, standby 1a), 35-day backups, deletion protection; private-files bucket versioning on; `aws/cutover/WRITE_FREEZE_DRILL.md` | Partial: targets written; database backups replicated to `us-east-2` since 2026-11-06. Still single-region: the private-files bucket (replication runbook ready: `ops/security/FILES_BUCKET_REPLICATION_2026_11.md`, phase 1 for every object except the KMS-encrypted compliance documents). Backup person named (Austin Sukanick); access not yet set up. No restore test yet. |
 | CC9.2 | Vendor inventory, contracts and annual review | WISP §3.6 vendor table | Gap: collect each vendor's SOC 2 report and the contract addendum, and record an annual review (row S-1). The WISP still marks Moov and CheckAlt addenda "OWNER TO CONFIRM". |
 | CC9.2 | Complementary user-entity controls | `docs/compliance/SYSTEM_DESCRIPTION.md` §5 | Partial: drafted; to be reflected in tenant terms. |
 
@@ -124,7 +124,7 @@ period.
 |---|---|---|---|
 | A1.1 | Capacity and health monitoring | CloudWatch alarms; API Gateway 5xx and Lambda error metrics (`SH1_ACCEPTED_PRODUCTION_BASELINE.md` acceptance gate) | Partial: no documented capacity review. |
 | A1.2 | Backups and protection against loss | RDS automated backups 35 days with point-in-time restore, encrypted, deletion protection on; WAF | In place |
-| A1.3 | Recovery tested | none | Gap: restore the latest backup into a new instance once a year and record the time taken (row B-1). |
+| A1.3 | Recovery tested | `ops/security/RESTORE_TEST_RUNBOOK.md` (restore to a new instance, read-only data check, delete, record template) | Gap until the first run: runbook ready 2026-11-08; the owner runs it by 2027-01-31 (row B-1). |
 
 ## C1 — Confidentiality
 

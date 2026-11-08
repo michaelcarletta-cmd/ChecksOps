@@ -52,6 +52,8 @@ starting point.
 
 | Date (UTC) | Row | Who | Record |
 |---|---|---|---|
+| 2026-11-08 | V-1 | Claude (read-only); owner to sign | November monthly review: `docs/compliance/evidence/2026-11-08-V-1-monthly-security-review.md`. Security Hub, GuardDuty, Inspector 0 critical and 0 high; 118 medium and 32 low Security Hub controls grouped with decisions; dependencies 0 high (xlsx replaced, #1675) |
+| 2026-11-08 | B-1, I-1, CC9.1 | Claude (documents) | Ready for the owner to run: restore test `ops/security/RESTORE_TEST_RUNBOOK.md`, tabletop `docs/compliance/INCIDENT_TABLETOP_2026.md`, files bucket copy to `us-east-2` `ops/security/FILES_BUCKET_REPLICATION_2026_11.md` |
 | 2026-11-06 | V-1 (R11) | Claude (`npm audit` on every lockfile); owner to sign | Dependency triage: `docs/compliance/evidence/2026-11-06-V-1-dependency-triage.md`. 13 open alerts (2 high, 7 moderate, 4 low), 0 in the production API. 2 reach users (`xlsx`, fix by 2026-11-30), 5 patch fixes, 6 build-only accepted |
 | 2026-11-06 | R-1, R-4 | Claude (draft) | Risk register `docs/compliance/RISK_REGISTER.md` and Qualified Individual's report `docs/compliance/QI_ANNUAL_REPORT_2026.md` drafted; each becomes the record once the owner signs it |
 | 2026-11-06 | A-1 | Claude (read-only, `user/claude-code`); owner to sign | First access review prepared: `docs/compliance/evidence/2026-11-06-A-1-access-review.md` (counts); the named list was given to the owner for the restricted folder |

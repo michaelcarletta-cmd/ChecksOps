@@ -117,7 +117,13 @@ BucketOwnerEnforced). View URLs are ≤300s; uploads 60s.
 
 ## 6. Cognito / account takeover
 
-Pool `us-east-1_h00WorYMT`. MFA **OPTIONAL**. Preferred MFA at login stays
+Pool `us-east-1_h00WorYMT`. Pool MFA **OPTIONAL** by design; since
+2026-11-06 the application requires an authenticator code after every sign-in
+(`aws/functions/api/login-mfa.mjs`, `AWS_LOGIN_MFA_REQUIRED` `"true"`), so an
+email code alone does not get past the sign-in screen. A user with no
+authenticator enrolls one with an emailed setup code, so a taken-over inbox can
+still enroll the attacker's authenticator: check `financial_stepup_log` for the
+user's recent `login.mfa` rows and enrollment time. Preferred MFA at login stays
 **OFF**. First factors: EMAIL_OTP, PASSWORD, WEB_AUTHN. Staging pool
 `us-east-1_vPmQ7cL1F` — do not modify.
 
