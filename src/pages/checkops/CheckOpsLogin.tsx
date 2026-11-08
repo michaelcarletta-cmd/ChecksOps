@@ -16,7 +16,7 @@ import { isAwsStaging, isAwsStagingHttpsPasskeysEnabled } from "@/lib/awsStaging
 import { isAwsStagingSite } from "@/lib/awsStagingSite";
 import { signInWithAwsPasskey } from "@/lib/awsPasskeys";
 import { passkeysSupported, sendMagicLink, signInWithPasskey } from "@/lib/passkeys";
-import { classifyLoginMemberships, INACTIVE_ORG_LOGIN_MESSAGE, NO_MEMBERSHIP_LOGIN_MESSAGE, type LoginMembershipRow } from "@/lib/loginMembership";
+import { classifyLoginMemberships, INACTIVE_ORG_LOGIN_MESSAGE, membershipLookupFailureMessage, NO_MEMBERSHIP_LOGIN_MESSAGE, type LoginMembershipRow } from "@/lib/loginMembership";
 import { readPendingAwsEmailOtp, startAwsEmailOtp, verifyAwsEmailOtp } from "@/lib/awsPasswordless";
 import { isNativeApp } from "@/lib/nativeApp";
 
@@ -57,7 +57,7 @@ export default function CheckOpsLogin() {
       navigate(`/admin/tenants`, { replace: true });
       return;
     }
-    const { data: roleRows } = await supabase.from("user_roles").select("role").eq("user_id", resolvedUserId);
+    const { data: roleRows, error: roleError } = await supabase.from("user_roles").select("role").eq("user_id", resolvedUserId);
     const roles = new Set((roleRows ?? []).map((r) => r.role));
     const hasChecksOpsRole = roles.has("admin") || roles.has("staff") || roles.has("read_only") || roles.has("guided") || roles.has("contractor") || roles.has("client");
     if (!hasChecksOpsRole && roles.has("mortgage_agent")) {
@@ -66,7 +66,15 @@ export default function CheckOpsLogin() {
       return;
     }
     // No `!inner`: keep membership rows whose tenant is inactive (AWS embeds read the active-only tenants_public view).
-    const { data } = await supabase.from("tenant_users").select("tenant_id, tenants(slug, subscription_status)").eq("user_id", resolvedUserId);
+    const { data, error } = await supabase.from("tenant_users").select("tenant_id, tenants(slug, subscription_status)").eq("user_id", resolvedUserId);
+    // A refused lookup (login MFA not finished, session not bound, network) returns no rows: say why
+    // instead of "not a member of any organization".
+    const lookupFailure = membershipLookupFailureMessage(error ?? roleError);
+    if (lookupFailure) {
+      await supabase.auth.signOut();
+      toast({ ...lookupFailure, variant: "destructive" });
+      return;
+    }
     const membership = classifyLoginMemberships(data as LoginMembershipRow[] | null);
     if (membership.kind !== "active") {
       await supabase.auth.signOut();
