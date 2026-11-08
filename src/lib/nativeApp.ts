@@ -29,3 +29,35 @@ export function applyNativeAppShell(
   }
   return true;
 }
+
+/** The check panel slides in from the right and settles, like a pushed screen. */
+export const NATIVE_PANEL_ENTER: Keyframe[] = [
+  { opacity: 0, translate: "40px 0", scale: "0.98" },
+  { opacity: 1, translate: "0 0", scale: "1" },
+];
+export const NATIVE_PANEL_TIMING: KeyframeAnimationOptions = { duration: 380, easing: "cubic-bezier(0.22, 1, 0.36, 1)" };
+
+/**
+ * In the app only: play an entrance on each element matching `selector` (the check panel when a
+ * check is opened or switched). Uses the individual translate/scale properties, so an element's own
+ * transform is untouched. Skipped on the website and when the user asked for reduced motion.
+ * Returns how many elements it animated.
+ */
+export function playNativeAppEntrance(
+  selector: string,
+  keyframes: Keyframe[] = NATIVE_PANEL_ENTER,
+  timing: KeyframeAnimationOptions = NATIVE_PANEL_TIMING,
+  doc: Document | undefined = typeof document === "undefined" ? undefined : document,
+  win: unknown = typeof window === "undefined" ? undefined : window,
+): number {
+  if (!doc || !isNativeApp(win)) return 0;
+  const media = (win as { matchMedia?: (q: string) => { matches: boolean } }).matchMedia;
+  if (typeof media === "function" && media.call(win, "(prefers-reduced-motion: reduce)").matches) return 0;
+  let count = 0;
+  doc.querySelectorAll(selector).forEach((el) => {
+    if (typeof (el as Element & { animate?: unknown }).animate !== "function") return;
+    el.animate(keyframes, timing);
+    count += 1;
+  });
+  return count;
+}

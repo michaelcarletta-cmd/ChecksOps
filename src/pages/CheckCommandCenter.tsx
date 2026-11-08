@@ -47,6 +47,7 @@ import {
 } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useListViewState } from "@/hooks/useListViewState";
+import { playNativeAppEntrance } from "@/lib/nativeApp";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { toast as sonnerToast } from "sonner";
 import { Pencil, Check as CheckIcon, X, Plus } from "lucide-react";
@@ -345,6 +346,12 @@ export default function CheckCommandCenter() {
   // switching tabs keeps the queue's scroll offset, which leaves the panel's
   // first rows (Edit Fields, Claim Ledger title) hidden under those bars.
   const reviewPanelRef = useRef<HTMLDivElement>(null);
+  // In the app, the check panel slides in each time a check is opened or switched (website unchanged).
+  useEffect(() => {
+    if (!selectedCheck && !reviewCheckId) return;
+    const frame = requestAnimationFrame(() => playNativeAppEntrance(".check-detail-panel"));
+    return () => cancelAnimationFrame(frame);
+  }, [selectedCheck, reviewCheckId]);
   const scrollReviewPanelToTop = useCallback(() => {
     if (!isMobile) return;
     requestAnimationFrame(() => reviewPanelRef.current?.scrollIntoView({ block: "start" }));
@@ -1687,7 +1694,7 @@ export default function CheckCommandCenter() {
 
             {selectedCheck && (
               <div
-                className={`transition-all duration-300 ease-in-out md:flex-shrink-0 overflow-hidden w-full ${isMobile && !selectedCheck ? "hidden" : ""}`}
+                className={`check-detail-panel transition-all duration-300 ease-in-out md:flex-shrink-0 overflow-hidden w-full ${isMobile && !selectedCheck ? "hidden" : ""}`}
                 style={!isMobile ? { width: "60%" } : undefined}
               >
                 <div className="space-y-2">
@@ -1818,7 +1825,7 @@ export default function CheckCommandCenter() {
 
             {selectedCheck && (
               <div
-                className={`transition-all duration-300 ease-in-out md:flex-shrink-0 overflow-hidden w-full ${isMobile && !selectedCheck ? "hidden" : ""}`}
+                className={`check-detail-panel transition-all duration-300 ease-in-out md:flex-shrink-0 overflow-hidden w-full ${isMobile && !selectedCheck ? "hidden" : ""}`}
                 style={!isMobile ? { width: "60%" } : undefined}
               >
                 <div className="space-y-2">
@@ -1886,7 +1893,7 @@ export default function CheckCommandCenter() {
               style={!isMobile ? { width: reviewCheckId ? "60%" : "20%" } : undefined}
             >
               {reviewCheckId ? (
-                <Card ref={reviewPanelRef} className="animate-fade-in scroll-mt-14">
+                <Card ref={reviewPanelRef} className="check-detail-panel animate-fade-in scroll-mt-14">
                   {isMobile && (
                     <div className="sticky top-14 z-20 bg-card/95 backdrop-blur border-b px-3 py-2 flex items-center gap-2 rounded-t-lg">
                       <Button
