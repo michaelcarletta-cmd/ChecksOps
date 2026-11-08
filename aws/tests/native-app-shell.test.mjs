@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
-import { applyNativeAppShell } from '../../src/lib/nativeApp.ts';
+import { applyNativeAppShell, NATIVE_PANEL_ENTER, playNativeAppEntrance } from '../../src/lib/nativeApp.ts';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
@@ -98,4 +98,58 @@ test('the iOS project leaves the safe area to the CSS (no contentInset as well)'
 test('login: the "Back to checksops.com" link is hidden in the app, kept on the website', () => {
   const src = read('src/pages/checkops/CheckOpsLogin.tsx');
   assert.match(src, /\{!isNativeApp\(\) && <Button[^]*?Back to checksops\.com<\/Link><\/Button>\}/);
+});
+
+function fakeAnimatedDocument(count) {
+  const played = [];
+  const els = Array.from({ length: count }, (_, i) => ({ animate: (k, t) => played.push({ i, k, t }) }));
+  return { played, querySelectorAll: () => els };
+}
+
+test('check panel entrance plays in the app only, and not with reduced motion', () => {
+  const doc = fakeAnimatedDocument(2);
+  assert.equal(playNativeAppEntrance('.check-detail-panel', undefined, undefined, doc, NATIVE), 2);
+  assert.equal(doc.played.length, 2);
+  assert.equal(doc.played[0].k, NATIVE_PANEL_ENTER);
+  assert.ok(doc.played[0].t.duration > 0);
+  // Individual properties only: the panel's own transform is never animated.
+  for (const frame of NATIVE_PANEL_ENTER) assert.equal(frame.transform, undefined);
+
+  const web = fakeAnimatedDocument(1);
+  assert.equal(playNativeAppEntrance('.check-detail-panel', undefined, undefined, web, {}), 0);
+  assert.equal(web.played.length, 0);
+
+  const reduced = fakeAnimatedDocument(1);
+  const reducedWin = { ...NATIVE, matchMedia: (q) => ({ matches: q.includes('reduce') }) };
+  assert.equal(playNativeAppEntrance('.check-detail-panel', undefined, undefined, reduced, reducedWin), 0);
+  assert.equal(playNativeAppEntrance('.x', undefined, undefined, undefined, NATIVE), 0);
+});
+
+test('the check panel replays its entrance when a check is opened or switched', () => {
+  const src = read('src/pages/CheckCommandCenter.tsx');
+  assert.equal((src.match(/className=\{`check-detail-panel /g) || []).length, 2);
+  assert.match(src, /<Card ref=\{reviewPanelRef\} className="check-detail-panel /);
+  assert.match(src, /playNativeAppEntrance\("\.check-detail-panel"\)\);\s*return \(\) => cancelAnimationFrame\(frame\);\s*\}, \[selectedCheck, reviewCheckId\]\);/);
+});
+
+test('dialogs and sheets carry the markers the app animations target', () => {
+  assert.match(read('src/components/ui/dialog.tsx'), /<DialogPrimitive\.Content\s+ref=\{ref\}\s+data-app-dialog=""/);
+  assert.match(read('src/components/ui/alert-dialog.tsx'), /<AlertDialogPrimitive\.Content\s+ref=\{ref\}\s+data-app-dialog=""/);
+  assert.match(read('src/components/ui/sheet.tsx'), /data-app-sheet=\{side \?\? "right"\}/);
+});
+
+test('app animations: dialogs, sheets, fields, panel; entrances never leave a translate behind', () => {
+  const css = read('src/index.css');
+  const block = css.slice(css.indexOf('/* ── iOS / Android app only'));
+  for (const sel of [
+    'html.native-app [data-app-dialog][data-state="open"] {',
+    'html.native-app [data-app-sheet="right"][data-state="open"]',
+    'html.native-app .check-detail-panel > * > * {',
+    'html.native-app .page-shell > * {',
+    'html.native-app [data-radix-popper-content-wrapper] > [data-state="open"] {',
+  ]) assert.ok(block.includes(sel), sel);
+  assert.match(block, /textarea, button\[role="combobox"\]\):focus \{\s*animation: native-field-focus/);
+  assert.doesNotMatch(block, /animation:[^;]*\bboth;/, 'fill both would leave translate set (a containing block for fixed children)');
+  assert.doesNotMatch(block, /@keyframes native-(?:enter|dialog-in|sheet-\w+|pop) \{[^}]*transform/, 'keyframes use translate/scale, not transform');
+  assert.match(block, /prefers-reduced-motion: reduce\)[^]*animation-delay: 0ms !important;/);
 });

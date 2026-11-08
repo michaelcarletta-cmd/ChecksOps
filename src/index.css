@@ -595,23 +595,105 @@ html.native-app header.sticky.top-0 {
   top: var(--app-safe-top);
 }
 
-/* Taps press in. */
+/* Taps press in, and spring back on release. */
 html.native-app :is(button, a, [role="button"], [role="tab"], [role="menuitem"], [role="option"]) {
-  transition: transform 120ms ease-out, opacity 120ms ease-out;
+  transition: transform 260ms cubic-bezier(0.34, 1.56, 0.64, 1), opacity 160ms ease-out,
+    background-color 160ms ease-out, color 160ms ease-out, border-color 160ms ease-out;
 }
 html.native-app :is(button, a, [role="button"], [role="tab"]):active:not(:disabled):not([aria-disabled="true"]) {
-  transform: scale(0.97);
+  transform: scale(0.96);
   opacity: 0.85;
+  transition-duration: 90ms;
 }
 
-/* Pages and tab sections slide up and fade in when they open. */
+/* Pages and tab sections slide up and fade in when they open; a page's sections follow one by one. */
 @keyframes native-enter {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: none; }
+  from { opacity: 0; translate: 0 14px; }
+  to { opacity: 1; translate: 0 0; }
 }
 html.native-app .page-shell,
 html.native-app [role="tabpanel"][data-state="active"] {
-  animation: native-enter 220ms ease-out both;
+  animation: native-enter 320ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+html.native-app .page-shell > * {
+  animation: native-enter 380ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+html.native-app .page-shell > :nth-child(2) { animation-delay: 50ms; }
+html.native-app .page-shell > :nth-child(3) { animation-delay: 100ms; }
+html.native-app .page-shell > :nth-child(4) { animation-delay: 150ms; }
+html.native-app .page-shell > :nth-child(5) { animation-delay: 200ms; }
+html.native-app .page-shell > :nth-child(n + 6) { animation-delay: 250ms; }
+
+/* The check panel: its sections follow the panel in (the panel itself slides in from the right,
+   played by playNativeAppEntrance each time a check is opened or switched). */
+html.native-app .check-detail-panel > * > * {
+  animation: native-enter 360ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+html.native-app .check-detail-panel > * > :nth-child(2) { animation-delay: 60ms; }
+html.native-app .check-detail-panel > * > :nth-child(3) { animation-delay: 120ms; }
+html.native-app .check-detail-panel > * > :nth-child(n + 4) { animation-delay: 180ms; }
+
+/* Dialogs (send payment, deposit, settings forms, confirmations) rise and settle with a little
+   spring, over a blurred backdrop; their fields follow in order. translate/scale leave the
+   dialog's own centering transform alone. Entrances fill `backwards` only, so no translate stays
+   on an element afterwards (it would become the containing block of fixed descendants). */
+@keyframes native-dialog-in {
+  from { opacity: 0; translate: 0 32px; scale: 0.94; }
+  to { opacity: 1; translate: 0 0; scale: 1; }
+}
+html.native-app [data-app-dialog][data-state="open"] {
+  animation: native-dialog-in 420ms cubic-bezier(0.34, 1.4, 0.64, 1) backwards;
+}
+html.native-app [data-app-dialog][data-state="open"] > * {
+  animation: native-enter 360ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+html.native-app [data-app-dialog][data-state="open"] > :nth-child(2) { animation-delay: 70ms; }
+html.native-app [data-app-dialog][data-state="open"] > :nth-child(3) { animation-delay: 120ms; }
+html.native-app [data-app-dialog][data-state="open"] > :nth-child(4) { animation-delay: 170ms; }
+html.native-app [data-app-dialog][data-state="open"] > :nth-child(n + 5) { animation-delay: 220ms; }
+html.native-app .fixed.inset-0.bg-black\/80[data-state="open"] {
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
+
+/* Side sheets glide in further and settle instead of stopping hard. */
+@keyframes native-sheet-right { from { translate: 100% 0; } to { translate: 0 0; } }
+@keyframes native-sheet-left { from { translate: -100% 0; } to { translate: 0 0; } }
+@keyframes native-sheet-bottom { from { translate: 0 100%; } to { translate: 0 0; } }
+@keyframes native-sheet-top { from { translate: 0 -100%; } to { translate: 0 0; } }
+html.native-app [data-app-sheet="right"][data-state="open"] { animation: native-sheet-right 460ms cubic-bezier(0.22, 1, 0.36, 1) backwards; }
+html.native-app [data-app-sheet="left"][data-state="open"] { animation: native-sheet-left 460ms cubic-bezier(0.22, 1, 0.36, 1) backwards; }
+html.native-app [data-app-sheet="bottom"][data-state="open"] { animation: native-sheet-bottom 460ms cubic-bezier(0.22, 1, 0.36, 1) backwards; }
+html.native-app [data-app-sheet="top"][data-state="open"] { animation: native-sheet-top 460ms cubic-bezier(0.22, 1, 0.36, 1) backwards; }
+
+/* Menus and dropdown lists pop open from where they were tapped. */
+@keyframes native-pop {
+  from { opacity: 0; scale: 0.92; }
+  to { opacity: 1; scale: 1; }
+}
+html.native-app [data-radix-popper-content-wrapper] > [data-state="open"] {
+  transform-origin: var(--radix-popper-transform-origin, top);
+  animation: native-pop 220ms cubic-bezier(0.34, 1.4, 0.64, 1) backwards;
+}
+
+/* Entering info: the field glows as it is focused; switches and checkboxes snap with a spring. */
+@keyframes native-field-focus {
+  from { box-shadow: 0 0 0 0 hsl(var(--ring) / 0.45); }
+  to { box-shadow: 0 0 0 7px hsl(var(--ring) / 0); }
+}
+html.native-app :is(input:not([type="checkbox"]):not([type="radio"]), textarea, button[role="combobox"]) {
+  transition: border-color 180ms ease-out, background-color 180ms ease-out, box-shadow 180ms ease-out;
+}
+html.native-app :is(input:not([type="checkbox"]):not([type="radio"]), textarea, button[role="combobox"]):focus {
+  animation: native-field-focus 520ms ease-out;
+  border-color: hsl(var(--ring));
+}
+html.native-app [role="switch"] > span,
+html.native-app [role="checkbox"] {
+  transition: transform 280ms cubic-bezier(0.34, 1.56, 0.64, 1), background-color 180ms ease-out;
+}
+html.native-app [role="checkbox"][data-state="checked"] > span {
+  animation: native-pop 260ms cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -619,6 +701,8 @@ html.native-app [role="tabpanel"][data-state="active"] {
   html.native-app *::before,
   html.native-app *::after {
     animation-duration: 1ms !important;
+    animation-delay: 0ms !important;
     transition-duration: 1ms !important;
   }
 }
+
