@@ -1,14 +1,18 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Loader2, MessageSquare, Search } from "lucide-react";
+import { ArrowLeft, Loader2, MessageSquare, Search } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { format, formatDistanceToNow } from "date-fns";
 import { CheckMessageThread } from "./CheckMessageThread";
 import { resolveMessageThreadTitle } from "@/lib/messageThreadTitle";
 import { displayCase, displayCaseOrNull } from "@/lib/displayCase";
+import { closeThreadParams, MESSAGE_THREAD_PARAM, openThreadParams } from "@/lib/messageThreadRoute";
 
 interface UnreadRow {
   check_id: string;
@@ -56,7 +60,21 @@ interface CheckMessagesPanelProps {
 
 export function CheckMessagesPanel({ onOpenCheck }: CheckMessagesPanelProps = {}) {
   const [search, setSearch] = useState("");
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  // The open conversation lives in the URL (?thread=<check id>): it fills the screen, and Back (the
+  // button, the browser's, Android's) returns to all messages.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const selectedId = searchParams.get(MESSAGE_THREAD_PARAM);
+  const openThread = useCallback(
+    (checkId: string) =>
+      setSearchParams((prev) => openThreadParams(prev, checkId), { state: { messageThreadPushed: true } }),
+    [setSearchParams],
+  );
+  const closeThread = useCallback(() => {
+    if ((location.state as { messageThreadPushed?: boolean } | null)?.messageThreadPushed) navigate(-1);
+    else setSearchParams((prev) => closeThreadParams(prev), { replace: true });
+  }, [location.state, navigate, setSearchParams]);
 
   // Internal check_messages — unread + last activity (per current user)
   const { data: unreadRows = [], isLoading: unreadLoading } = useQuery({
@@ -184,11 +202,26 @@ export function CheckMessagesPanel({ onOpenCheck }: CheckMessagesPanelProps = {}
   }, [mergedRows, checks, caseNames, search]);
 
   const isLoading = unreadLoading || sharedLoading || checksLoading;
-  const selected = rows.find((r) => r.check_id === selectedId) ?? rows[0];
+  const selected = selectedId ? rows.find((r) => r.check_id === selectedId) : undefined;
+
+  // While a conversation fills the screen: Escape goes back, and the page behind does not scroll.
+  useEffect(() => {
+    if (!selectedId) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeThread();
+    };
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [selectedId, closeThread]);
 
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-3">
+    <div>
       {/* Conversations list */}
       <Card className="bg-card border-border h-[70vh] flex flex-col">
         <CardHeader className="pb-2">
@@ -217,14 +250,14 @@ export function CheckMessagesPanel({ onOpenCheck }: CheckMessagesPanelProps = {}
           ) : (
             rows.map((r) => {
               const c = r.check!;
-              const isActive = (selected?.check_id ?? "") === r.check_id;
+              const isActive = selectedId === r.check_id;
               const threadTitle = displayCaseOrNull(threadTitleForCheck(c, caseNames));
               const claimNumber = claimFromEmbed(c.claims)?.claim_number;
               return (
                 <button
                   key={r.check_id}
                   type="button"
-                  onClick={() => setSelectedId(r.check_id)}
+                  onClick={() => openThread(r.check_id)}
                   className={`w-full text-left p-2 rounded-md transition-colors border ${
                     isActive
                       ? "bg-primary/10 border-primary/40"
@@ -275,52 +308,70 @@ export function CheckMessagesPanel({ onOpenCheck }: CheckMessagesPanelProps = {}
         </CardContent>
       </Card>
 
-      {/* Active thread */}
-      <Card className="bg-card border-border h-[70vh] flex flex-col">
-        <CardHeader className="pb-2">
-          <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0 flex-1">
-              <CardTitle className="text-sm">
-                {selected?.check
-                  ? [
-                      `Check #${selected.check.check_number || "—"}`,
-                      displayCaseOrNull(threadTitleForCheck(selected.check, caseNames)),
-                    ].filter(Boolean).join(" • ")
-                  : "Select a conversation"}
-              </CardTitle>
-              {selected?.check && (
-                <div className="text-[11px] text-muted-foreground">
-                  {claimFromEmbed(selected.check.claims)?.claim_number
-                    ? `Claim ${claimFromEmbed(selected.check.claims)!.claim_number} • `
-                    : ""}
-                  {selected.check.amount != null &&
-                    `$${Number(selected.check.amount).toLocaleString()} • `}
-                  {selected.check.status}
+      {/* The open conversation fills the screen; Back returns to all messages. */}
+      {selectedId &&
+        createPortal(
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Conversation"
+            className="message-thread-screen fixed inset-0 z-50 flex max-w-none flex-col bg-background text-foreground"
+            style={{ paddingTop: "var(--app-safe-top, 0px)", paddingBottom: "var(--app-safe-bottom, 0px)" }}
+          >
+            <header className="flex items-center gap-2 border-b border-border px-2 py-2 sm:px-4">
+              <Button variant="ghost" size="sm" onClick={closeThread} className="gap-1 shrink-0">
+                <ArrowLeft className="h-4 w-4" /> All messages
+              </Button>
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-semibold truncate">
+                  {selected?.check
+                    ? [
+                        `Check #${selected.check.check_number || "—"}`,
+                        displayCaseOrNull(threadTitleForCheck(selected.check, caseNames)),
+                      ].filter(Boolean).join(" • ")
+                    : "Conversation"}
+                </div>
+                {selected?.check && (
+                  <div className="text-[11px] text-muted-foreground truncate">
+                    {claimFromEmbed(selected.check.claims)?.claim_number
+                      ? `Claim ${claimFromEmbed(selected.check.claims)!.claim_number} • `
+                      : ""}
+                    {selected.check.amount != null &&
+                      `$${Number(selected.check.amount).toLocaleString()} • `}
+                    {selected.check.status}
+                  </div>
+                )}
+              </div>
+              {selected?.check && onOpenCheck && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const checkId = selected.check_id;
+                    setSearchParams((prev) => closeThreadParams(prev), { replace: true });
+                    onOpenCheck(checkId);
+                  }}
+                  className="text-[11px] font-medium text-primary hover:underline whitespace-nowrap shrink-0"
+                >
+                  Open check file →
+                </button>
+              )}
+            </header>
+            <div className="mx-auto flex w-full max-w-4xl min-h-0 flex-1 flex-col p-3">
+              {selected?.check ? (
+                <CheckMessageThread checkId={selected.check_id} className="flex-1 min-h-0" />
+              ) : isLoading ? (
+                <div className="flex flex-1 items-center justify-center">
+                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                </div>
+              ) : (
+                <div className="flex flex-1 items-center justify-center text-xs text-muted-foreground">
+                  This conversation isn&apos;t available.
                 </div>
               )}
             </div>
-            {selected?.check && onOpenCheck && (
-              <button
-                type="button"
-                onClick={() => onOpenCheck(selected.check_id)}
-                className="text-[11px] font-medium text-primary hover:underline whitespace-nowrap"
-              >
-                Open check file →
-              </button>
-            )}
-          </div>
-        </CardHeader>
-
-        <CardContent className="flex-1 p-3 pt-0">
-          {selected?.check ? (
-            <CheckMessageThread checkId={selected.check_id} />
-          ) : (
-            <div className="h-full flex items-center justify-center text-xs text-muted-foreground">
-              Pick a conversation on the left, or open a check to start one.
-            </div>
-          )}
-        </CardContent>
-      </Card>
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }
