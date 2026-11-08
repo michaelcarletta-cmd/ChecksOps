@@ -368,8 +368,8 @@
       "production_active": false,
       "environment": "unknown",
       "source": {
-        "git_sha": "229c7cd84d70521c81385b9b927c6745f4ce3993",
-        "tree_hash": "e599594801fb25b1729aa1f4d0caa3f03699dc2ef015d5037c0e6beb68d78054",
+        "git_sha": "e7489d4c6c93b5fceeacd7d1663c28ae186e6bbf",
+        "tree_hash": "55a4963b7865269a39e51e1308d4749ef4472af276384baa72fa5b35cfe21027",
         "merged": true,
         "merged_pr": null
       },
