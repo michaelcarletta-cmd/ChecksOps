@@ -4,6 +4,9 @@ import fs from 'node:fs';
 import {
   classifyLoginMemberships,
   INACTIVE_ORG_LOGIN_MESSAGE,
+  LOGIN_MFA_LOOKUP_MESSAGE,
+  LOGIN_SESSION_LOOKUP_MESSAGE,
+  membershipLookupFailureMessage,
   NO_MEMBERSHIP_LOGIN_MESSAGE,
 } from '../../src/lib/loginMembership.ts';
 
@@ -56,4 +59,28 @@ test('WhiteLabelApp shows Subscription Inactive before Organization Not Found fo
   const notFoundAt = src.indexOf('if (error || !tenant)');
   assert.ok(inactiveAt > 0 && notFoundAt > inactiveAt);
   assert.match(src, /\.from\("tenants"\)\s*\.select\("subscription_status"\)/);
+});
+
+test('a failed membership lookup says why, instead of "not a member of any organization"', () => {
+  assert.equal(membershipLookupFailureMessage(null), null);
+  assert.equal(membershipLookupFailureMessage(undefined), null);
+  // The AWS client's postgrest-shaped error carries the API's error as its code.
+  assert.deepEqual(membershipLookupFailureMessage({ code: 'login_mfa_required', message: 'Enter the code' }), LOGIN_MFA_LOOKUP_MESSAGE);
+  assert.deepEqual(membershipLookupFailureMessage({ code: 'login_session_unbound', message: 'x' }), LOGIN_SESSION_LOOKUP_MESSAGE);
+  const generic = membershipLookupFailureMessage({ code: '42501', message: 'query_failed' });
+  assert.equal(generic.title, "Couldn't check your access");
+  assert.match(generic.description, /\(query_failed\)/);
+  assert.doesNotMatch(membershipLookupFailureMessage({ code: 'x', message: '  ' }).description, /\(/);
+  for (const m of [LOGIN_MFA_LOOKUP_MESSAGE, LOGIN_SESSION_LOOKUP_MESSAGE, generic]) {
+    assert.notEqual(m.title, NO_MEMBERSHIP_LOGIN_MESSAGE.title);
+  }
+});
+
+test('CheckOpsLogin checks the lookup error before classifying memberships', () => {
+  const src = read('src/pages/checkops/CheckOpsLogin.tsx');
+  assert.match(src, /const \{ data: roleRows, error: roleError \} = await supabase\.from\("user_roles"\)/);
+  assert.match(src, /const \{ data, error \} = await supabase\.from\("tenant_users"\)/);
+  const failure = src.indexOf('membershipLookupFailureMessage(error ?? roleError)');
+  assert.ok(failure > -1);
+  assert.ok(failure < src.indexOf('classifyLoginMemberships(data'));
 });

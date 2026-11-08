@@ -35,3 +35,34 @@ export const NO_MEMBERSHIP_LOGIN_MESSAGE = {
   title: "No ChecksOps access",
   description: "This account isn't a member of any active organization. Contact your admin.",
 } as const;
+
+export const LOGIN_MFA_LOOKUP_MESSAGE = {
+  title: "Two-factor sign-in needed",
+  description:
+    "Finish signing in with the code from your authenticator app. If you weren't asked for a code, update the ChecksOps app or reload the page, then sign in again.",
+} as const;
+
+export const LOGIN_SESSION_LOOKUP_MESSAGE = {
+  title: "Sign in again",
+  description: "ChecksOps couldn't confirm this sign-in. Sign in again.",
+} as const;
+
+/** The query error (or thrown error) of the membership lookup; its code is the API's error. */
+export type LoginLookupError = { code?: string | null; message?: string | null } | null | undefined;
+
+/**
+ * Why the membership lookup failed, or null when it did not. A refused or failed lookup returns no
+ * rows, so without this it read as "not a member of any organization": with login MFA on, the API
+ * refuses every data request (login_mfa_required) until the authenticator code is entered.
+ */
+export function membershipLookupFailureMessage(error: LoginLookupError): { title: string; description: string } | null {
+  if (!error) return null;
+  const code = String(error.code ?? "");
+  if (code === "login_mfa_required") return LOGIN_MFA_LOOKUP_MESSAGE;
+  if (code === "login_session_unbound") return LOGIN_SESSION_LOOKUP_MESSAGE;
+  const detail = String(error.message ?? "").trim();
+  return {
+    title: "Couldn't check your access",
+    description: `ChecksOps couldn't load your organization${detail ? ` (${detail})` : ""}. Check your connection and sign in again.`,
+  };
+}
