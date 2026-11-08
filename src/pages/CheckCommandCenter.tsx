@@ -47,7 +47,7 @@ import {
 } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useListViewState } from "@/hooks/useListViewState";
-import { playNativeAppEntrance } from "@/lib/nativeApp";
+import { playPanelEntrance } from "@/lib/nativeApp";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { toast as sonnerToast } from "sonner";
 import { Pencil, Check as CheckIcon, X, Plus } from "lucide-react";
@@ -346,10 +346,10 @@ export default function CheckCommandCenter() {
   // switching tabs keeps the queue's scroll offset, which leaves the panel's
   // first rows (Edit Fields, Claim Ledger title) hidden under those bars.
   const reviewPanelRef = useRef<HTMLDivElement>(null);
-  // In the app, the check panel slides in each time a check is opened or switched (website unchanged).
+  // The check panel slides in each time a check is opened or switched (app and website).
   useEffect(() => {
     if (!selectedCheck && !reviewCheckId) return;
-    const frame = requestAnimationFrame(() => playNativeAppEntrance(".check-detail-panel"));
+    const frame = requestAnimationFrame(() => playPanelEntrance(".check-detail-panel"));
     return () => cancelAnimationFrame(frame);
   }, [selectedCheck, reviewCheckId]);
   const scrollReviewPanelToTop = useCallback(() => {

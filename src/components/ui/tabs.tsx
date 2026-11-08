@@ -2,22 +2,67 @@ import * as React from "react";
 import * as TabsPrimitive from "@radix-ui/react-tabs";
 
 import { cn } from "@/lib/utils";
+import { syncTabIndicator } from "@/lib/tabIndicator";
 
 const Tabs = TabsPrimitive.Root;
 
 const TabsList = React.forwardRef<
   React.ElementRef<typeof TabsPrimitive.List>,
   React.ComponentPropsWithoutRef<typeof TabsPrimitive.List>
->(({ className, ...props }, ref) => (
-  <TabsPrimitive.List
-    ref={ref}
-    className={cn(
-      "inline-flex h-10 items-center justify-center rounded-md bg-muted p-1 text-muted-foreground w-full md:w-auto",
-      className,
-    )}
-    {...props}
-  />
-));
+>(({ className, children, ...props }, ref) => {
+  const listRef = React.useRef<HTMLDivElement | null>(null);
+  const setRefs = React.useCallback(
+    (node: HTMLDivElement | null) => {
+      listRef.current = node;
+      if (typeof ref === "function") ref(node);
+      else if (ref) (ref as React.MutableRefObject<HTMLDivElement | null>).current = node;
+    },
+    [ref],
+  );
+
+  // Website: a highlight slides to the tab you pick (index.css; the app keeps its plain tabs).
+  React.useEffect(() => {
+    const list = listRef.current;
+    if (!list || typeof window === "undefined") return;
+    let frame = 0;
+    const sync = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const wasReady = list.hasAttribute("data-tab-indicator-ready");
+        const ready = syncTabIndicator(list);
+        // No slide from the corner on first show: animate only once it has been placed.
+        if (ready && !wasReady) list.removeAttribute("data-tab-indicator-animate");
+        else if (ready) list.setAttribute("data-tab-indicator-animate", "");
+      });
+    };
+    sync();
+    const mutations = new MutationObserver(sync);
+    mutations.observe(list, { subtree: true, childList: true, attributes: true, attributeFilter: ["data-state"] });
+    const resize = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(sync);
+    resize?.observe(list);
+    window.addEventListener("resize", sync);
+    return () => {
+      cancelAnimationFrame(frame);
+      mutations.disconnect();
+      resize?.disconnect();
+      window.removeEventListener("resize", sync);
+    };
+  }, []);
+
+  return (
+    <TabsPrimitive.List
+      ref={setRefs}
+      className={cn(
+        "relative inline-flex h-10 items-center justify-center rounded-md bg-muted p-1 text-muted-foreground w-full md:w-auto",
+        className,
+      )}
+      {...props}
+    >
+      <span aria-hidden="true" data-tab-indicator="" className="pointer-events-none absolute left-0 top-0 hidden" />
+      {children}
+    </TabsPrimitive.List>
+  );
+});
 TabsList.displayName = TabsPrimitive.List.displayName;
 
 const TabsTrigger = React.forwardRef<
