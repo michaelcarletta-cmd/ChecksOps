@@ -152,6 +152,30 @@ acceptance reference and the owner's `DEPLOY <member> TO PRODUCTION` for that ru
 
 Step 0 below is done. The catch-up itself has not been run.
 
+**Update fix applied (2026-11-07, main `ecf56739d`).** After SQL 146 was recorded live (#1695),
+the REPLACE of `providers/moov-status-catch-up.mjs` (`502995f6…` -> `6083f54b…`) is live in
+production, recorded in
+`aws/tests/fixtures/production-moov-status-catch-up-update-fix-applied-manifest-2026-11-07.json`:
+inspect run 42412902290 (`READY`, `502995f6…` live), apply run 42412965676 (`VERIFIED`,
+`6083f54b…` live), re-inspect run 42413039185 (`ALREADY_ACCEPTED`). Staging acceptance: run
+42412784059.
+
+**Run (2026-11-07).** The first successful catch-up, through `production-moov-status-catch-up.yml`:
+
+- Plan runs 42395703811 and 42415873006 (the second after the update fix) both gave manifest
+  `236f3dd28e0e108219f75e566acbac4bb60a80ddfb8e673b1df0c6422c8b2331`: 9 candidates, 6 `apply`,
+  2 `moov_not_final`, 1 `no_effect`.
+- Apply run 42395949680 (before the update fix) refused its first transfer with
+  `catch_up_state_changed_since_plan`, rolled back and wrote nothing
+  (`productionRecordsMutated: false`). SQL 146 and the update fix above are the fix.
+- Apply run 42417813143, on the owner's words "apply the Moov catch-up plan
+  236f3dd28e0e108219f75e566acbac4bb60a80ddfb8e673b1df0c6422c8b2331 in production", applied 6 of 6:
+  the legs of `5768ab44…`, `59aac74e…`, `9eb1361b…`, `d8c649e7…` and `f09c56d2…` moved
+  `submitted` -> `completed`; for `b31c7752…` the fee leg moved `submitted` -> `settled` and Freedom
+  Adjustment's 2026-09 obligation `due` -> `settled`.
+- Still pending at Moov, so left unchanged: `13089717…` (`send_bank`, 190180 cents) and
+  `a4d1ca95…` (the 2026-10 fee, 13200 cents). They stay candidates for a later plan.
+
 **Invoke identity.** A principal needs `lambda:InvokeFunction` on
 `arn:aws:lambda:us-east-1:806168576068:function:checksops-production-prep-api`. The owner chose
 a dedicated limited role (2026-11-07: "Dedicated limited role for status catch up"):
