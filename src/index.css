@@ -730,23 +730,31 @@ html.native-app :is(button, a, [role="button"], [role="tab"]):active:not(:disabl
   transition-duration: 90ms;
 }
 
-/* Pages and tab sections slide up and fade in when they open; a page's sections follow one by one. */
+/* Pages (checks, cash jobs, wallet, payments, settings) float in from the right as one piece, like a
+   pushed screen: WhiteLabelApp keys a .route-page per path. A page outside it (.page-shell) does the
+   same; a .page-shell inside a .route-page does not move twice. clip keeps the incoming page from
+   adding a sideways scroll while it slides. Tab sections slide up and fade in. */
+@keyframes native-page-in {
+  from { opacity: 0; translate: 36px 0; }
+  to { opacity: 1; translate: 0 0; }
+}
 @keyframes native-enter {
   from { opacity: 0; translate: 0 14px; }
   to { opacity: 1; translate: 0 0; }
 }
-html.native-app .page-shell,
+html.native-app .route-page {
+  overflow-x: clip;
+  animation: native-page-in 380ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+html.native-app .page-shell {
+  animation: native-page-in 380ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+html.native-app .route-page .page-shell {
+  animation: none;
+}
 html.native-app [role="tabpanel"][data-state="active"] {
   animation: native-enter 320ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
 }
-html.native-app .page-shell > * {
-  animation: native-enter 380ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
-}
-html.native-app .page-shell > :nth-child(2) { animation-delay: 50ms; }
-html.native-app .page-shell > :nth-child(3) { animation-delay: 100ms; }
-html.native-app .page-shell > :nth-child(4) { animation-delay: 150ms; }
-html.native-app .page-shell > :nth-child(5) { animation-delay: 200ms; }
-html.native-app .page-shell > :nth-child(n + 6) { animation-delay: 250ms; }
 
 /* An open message conversation fills the screen and floats in from the right, like a pushed screen. */
 @keyframes native-thread-in {
