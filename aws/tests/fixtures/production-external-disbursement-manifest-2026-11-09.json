@@ -1,0 +1,23 @@
+{
+  "workstream_id": "external-disbursement-record",
+  "authorization": "Pending owner review (2026-11-09). Planning only: nothing is live or verified. Each production apply needs its own owner approval, a staging acceptance reference and a read-only production inspect that confirms the live bytes.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "External disbursement record (2026-11-09; owner \"Disburse outside of Checksops should allow them to input the check #, amount, recipient, memo and the funds will move as if they were sent via moov for tracking\"): the Funds tab and the Disbursement Console inserted disbursement_batches / disbursement_splits through /data/write, which refuses both tables (403 table_not_allowlisted, financial_or_provider); production API Gateway answered POST /prep/data/write 403 at 16:56:46Z and 16:56:49Z. ADD external-disbursement.mjs (the route record-external-disbursement: withIdentity, one call to SQL 147's public.aws_record_external_disbursement; no provider call, no payment_transfers or wallet row), held on SQL 147, then REPLACE app-services.mjs e63cfe2d -> 8b91a644 (the Class A name record-external-disbursement routed to it; the router also carries the public demo request route of 1cb62ccc, so public-demo-request.mjs must be live first). Pre-state: e63cfe2d as the plan records it (the fourth production rebuild, apply run 41469896446). Production API Gateway answered POST /prep/functions/v1/demo-request 200 on 2026-11-05 and 2026-11-06, so the demo request REPLACE (1cb62ccc) appears live without an applied record: a read-only production inspect of app-services.mjs must confirm the live bytes first; any other bytes stop as SOURCE_RECONCILIATION_REQUIRED. index.mjs is untouched. Planning only.",
+  "members": {
+    "external-disbursement.mjs": {
+      "live_sha256": null,
+      "accepted_sha256": "344f8d9586694d4524e276913146543cfd8237b69266d4f711e8b54480184d06",
+      "operation": "add",
+      "required_imports": [
+        "data.mjs"
+      ]
+    },
+    "app-services.mjs": {
+      "live_sha256": "e63cfe2d48cd1f428513bc8de4d8a2934bd6c4889c9d1ffd71660ac089938713",
+      "accepted_sha256": "8b91a6444e8b05c7fc5fec9b4d1883b4e042f6c0efeb045f777c934223b22199",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-wallet-funding-settings-route-manifest-2026-11-02.json"
+    }
+  }
+}

@@ -95,6 +95,10 @@
     "aws/workflows/sql/146_moov_status_catch_up_writes.sql": {
       "verified_live": true,
       "evidence": "Guarded staging SQL executor apply of sql146-moov-status-catch-up-writes on 2026-11-07 (run 42405866540, main 9772e808e, wave 41, executor lrvFKRHs…; read-live run 42406066179 already_applied true): receipt before 1ef78964…, after ef55e1fe… = the pin's intended_replacement_sha256; precondition_failures [], prerequisites_missing []."
+    },
+    "aws/workflows/sql/147_external_disbursement_record.sql": {
+      "verified_live": false,
+      "evidence": null
     }
   }
 }

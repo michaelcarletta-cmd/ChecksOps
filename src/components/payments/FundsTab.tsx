@@ -15,9 +15,15 @@ import { SendHomeownerBankLinkDialog } from "@/components/disbursement/SendHomeo
 import { SendCheckTrackingLinkButton } from "@/components/homeowner-ledger/SendCheckTrackingLinkButton";
 import { ProjectPlanCard } from "@/components/homeowner-ledger/ProjectPlanCard";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { toast } from "@/hooks/use-toast";
 import { incomingSplitsForCheck } from "@/lib/fundsReceived";
+import {
+  ExternalDisbursementError,
+  dollarsToCents,
+  newExternalDisbursementKey,
+  recordExternalDisbursement,
+} from "@/lib/payments/externalDisbursement";
 import { homeownerBankLinkQueryKey } from "@/lib/homeownerBankLink";
 
 
@@ -270,54 +276,45 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
   const [extNotes, setExtNotes] = useState("");
   const [extSaving, setExtSaving] = useState(false);
 
+  // One key per payment being recorded: a double click or a retry after an unclear answer reuses it,
+  // so the server records the payment once.
+  const pendingExternal = useRef<{ signature: string; key: string } | null>(null);
+
   const recordExternal = async () => {
-    if (readOnly) return;
-    const amt = toCents(parseFloat(extAmount));
-    if (!extRecipient.trim() || !extCheckNum.trim() || !amt || amt <= 0) {
+    if (readOnly || extSaving) return;
+    const amountCents = dollarsToCents(extAmount);
+    const amt = amountCents / 100;
+    if (!extRecipient.trim() || !extCheckNum.trim() || !amountCents || amountCents <= 0) {
       return toast({ title: "Fill recipient, check #, and amount", variant: "destructive" });
     }
     if (amt > availableForDisbursement + 0.005) {
       return toast({ title: "Amount exceeds available funds", variant: "destructive" });
     }
+    const payment = {
+      amount_cents: amountCents,
+      recipient_name: extRecipient.trim(),
+      recipient_type: extRecipientType,
+      external_check_number: extCheckNum.trim(),
+      memo: extNotes.trim() || null,
+    };
+    const signature = JSON.stringify([checkIntakeItemId, payment]);
+    if (pendingExternal.current?.signature !== signature) {
+      pendingExternal.current = { signature, key: newExternalDisbursementKey() };
+    }
     setExtSaving(true);
     try {
-      const { data: userData } = await supabase.auth.getUser();
-      const uid = userData?.user?.id;
-      if (!uid) throw new Error("Not signed in");
-      // Create a batch for this external payment
-      const { data: batch, error: bErr } = await (supabase as any)
-        .from("disbursement_batches")
-        .insert({
-          tenant_id: tenant!.id,
-          check_intake_item_id: checkIntakeItemId,
-          created_by: uid,
-          check_amount: amt,
-          available_amount: amt,
-          status: "completed",
-          notes: `External check #${extCheckNum} to ${extRecipient}`,
-          completed_at: new Date().toISOString(),
-        })
-        .select("id").single();
-
-      if (bErr) throw bErr;
-      const { error: sErr } = await (supabase as any)
-        .from("disbursement_splits").insert({
-          batch_id: batch.id,
-          tenant_id: tenant!.id,
-          amount: amt,
-          status: "settled",
-          method: "external_check",
-          external_check_number: extCheckNum,
-          recipient_name: extRecipient,
-          recipient_type: extRecipientType,
-          external_notes: extNotes || null,
-          settled_at: new Date().toISOString(),
-        });
-      if (sErr) throw sErr;
-      const remaining = Math.max(0, toCents(availableForDisbursement - amt));
+      // Recorded by the server in one transaction; nothing is sent to the payment provider.
+      const result = await recordExternalDisbursement({
+        tenantId: tenant!.id,
+        checkId: checkIntakeItemId,
+        payments: [payment],
+        idempotencyKey: pendingExternal.current.key,
+      });
+      pendingExternal.current = null;
+      const remaining = Math.max(0, result.remaining_cents / 100);
       toast({
         title: "External disbursement recorded",
-        description: remaining > 0
+        description: remaining > 0.005
           ? `$${remaining.toLocaleString("en-US", { minimumFractionDigits: 2 })} remaining — record another to zero out.`
           : "This check is fully disbursed.",
       });
@@ -326,7 +323,10 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
       if (remaining <= 0.005) setDisburseMode(null);
       qc.invalidateQueries({ queryKey: ["funds-tab-disbursements", checkIntakeItemId, tenant?.id] });
       qc.invalidateQueries({ queryKey: ["recurring-recipients", tenant?.id] });
+      qc.invalidateQueries({ queryKey: ["disbursement-batch-history"] });
     } catch (e: any) {
+      // A final answer from the server starts a new payment next time; an unclear one keeps the key.
+      if (e instanceof ExternalDisbursementError && e.code) pendingExternal.current = null;
       toast({ title: "Couldn't record external disbursement", description: e.message, variant: "destructive" });
     } finally {
       setExtSaving(false);
@@ -620,6 +620,9 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
                 <Input className="h-8 text-sm" placeholder="Memo, date paid, etc." value={extNotes} onChange={(e) => setExtNotes(e.target.value)} />
               </div>
               <p className="text-[10px] text-muted-foreground">Available: ${availableForDisbursement.toLocaleString("en-US", { minimumFractionDigits: 2 })}</p>
+              <p className="text-[10px] text-muted-foreground">
+                For tracking only: it counts as disbursed from this check like a ChecksOps payment, labelled as an external check. ChecksOps moves no money and your balance does not change.
+              </p>
               <Button className="w-full" disabled={extSaving} onClick={recordExternal}>
                 {extSaving ? "Recording..." : "Record Payment"}
               </Button>

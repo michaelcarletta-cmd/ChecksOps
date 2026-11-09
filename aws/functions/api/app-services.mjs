@@ -91,6 +91,7 @@ import {
   handleSaveTenantBillingAccount,
   handleSaveTenantWalletFundingSettings,
 } from './tenant-settings-handlers.mjs';
+import { handleRecordExternalDisbursement } from './external-disbursement.mjs';
 import {
   handleTenantBillingAdmin,
   handleTenantBillingAuthorize,
@@ -194,6 +195,8 @@ export const CLASS_A_FUNCTIONS = new Set([
   // WalletOps automatic funding settings (tenant_wallet_funding_settings, a money table): the
   // flagged server write, since the generic /data/write route refuses the table.
   'save-tenant-wallet-funding-settings',
+  // A payment made outside ChecksOps, recorded against a check (SQL 147; never calls Moov)
+  'record-external-disbursement',
   'tenant-company-branding-save',
   'tenant-billing-admin',
   'tenant-billing-authorize',
@@ -389,6 +392,8 @@ export const handleAppServiceRequest = async (event, path, method) => {
       return handleSaveTenantBillingAccount(event);
     case 'save-tenant-wallet-funding-settings':
       return handleSaveTenantWalletFundingSettings(event);
+    case 'record-external-disbursement':
+      return handleRecordExternalDisbursement(event);
     case 'tenant-company-branding-save':
       // Retired 2026-10-17: the SPA saves tenant branding through /data/write
       // (write-app-metadata executeTenantsNarrow). Nothing is written here.
