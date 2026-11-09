@@ -7115,3 +7115,52 @@ test('Moov status catch-up update fix (SQL 146, 2026-11-07): providers/moov-stat
   assert.equal(replay.mutation, false);
   assert.deepEqual(calls.receipt.owned_member_ops, { replace: [MEMBER], add: [] });
 });
+
+test('Pay to the order of tenant name (owner 2026-11-09): endorsement-composite.mjs REPLACE from the recorded live bytes, no SQL, planning only', async () => {
+  const MEMBER = 'endorsement-composite.mjs';
+  const REL = 'aws/tests/fixtures/production-endorsement-pay-to-order-tenant-name-manifest-2026-11-09.json';
+  const PREVIOUS = 'aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json';
+  const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, REL), 'utf8'));
+  const pre = JSON.parse(fs.readFileSync(path.join(ROOT, PREVIOUS), 'utf8')).members[MEMBER].accepted_sha256;
+  const accepted = sha(`aws/functions/api/${MEMBER}`);
+  assert.notEqual(accepted, pre);
+  assert.equal(manifest.workstream_id, 'endorsement-pay-to-order-tenant-name');
+  assert.equal(manifest.deploy_authorized, false);
+  assert.match(manifest.authorization, /^Pending owner review \(2026-11-09\)/);
+  assert.equal(manifest.live_lambda, FUNCTION_NAME);
+  assert.deepEqual(manifest.members, { [MEMBER]: { live_sha256: pre, accepted_sha256: accepted, operation: 'replace', previous_manifest: PREVIOUS } });
+  const evidence = `REPLACE ${MEMBER} ${pre.slice(0, 8)} -> ${accepted.slice(0, 8)}`;
+  for (const text of [evidence, 'Company Name in Company Profile', 'public.tenants.name', 'No SQL', 'Planning only']) {
+    assert.ok(manifest.notes.includes(text), text);
+  }
+  assert.deepEqual(PLAN.members[MEMBER], {
+    operation: 'replace',
+    accepted_sha256: accepted,
+    expected_live_sha256: pre,
+    sql_before: null,
+    manifest: REL,
+  });
+  // No new module: the same local imports as the recorded live bytes.
+  assert.deepEqual(localImports(fs.readFileSync(path.join(API, MEMBER), 'utf8'), MEMBER).sort(), [
+    'providers/production/checkalt-eligibility.mjs',
+    'providers/production/checkalt-idempotency.mjs',
+    'providers/production/checkalt-image-compliance.mjs',
+    'providers/production/checkalt-images.mjs',
+    'storage-paths.mjs',
+  ]);
+  assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
+  assert.equal(approvalPhrase(MEMBER), 'DEPLOY endorsement-composite.mjs TO PRODUCTION');
+  const source = fs.readFileSync(path.join(API, MEMBER), 'utf8');
+  assert.match(source, /export const resolveEndorsementCompanyName = /);
+  assert.doesNotMatch(source, /'Freedom Adjustment'/);
+  // Inspect: READY on the recorded live bytes, ALREADY_ACCEPTED on main's, a reconciliation stop otherwise.
+  const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
+  const ready = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: pre }) });
+  assert.equal(ready.state, 'READY');
+  assert.equal(ready.mutation, false);
+  assert.equal((await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: accepted }) })).state, 'ALREADY_ACCEPTED');
+  await assert.rejects(
+    run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: 'c'.repeat(64) }) }),
+    (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+  );
+});

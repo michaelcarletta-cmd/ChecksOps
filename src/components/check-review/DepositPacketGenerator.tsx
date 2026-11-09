@@ -7,6 +7,7 @@ import { Printer, FileText } from "lucide-react";
 import { format } from "date-fns";
 import { formatIssueDateDisplay } from "@/lib/issueDate";
 import { displayCase, displayCaseOrNull } from "@/lib/displayCase";
+import { endorsementCompanyNameForCheck, type EndorsementCheckTenant } from "@/lib/endorsementCompanyName";
 import interFontUrl from "@fontsource-variable/inter/files/inter-latin-wght-normal.woff2?url";
 
 /* ------------------------------------------------------------------ */
@@ -31,6 +32,7 @@ interface DepositPacketCheck {
   reviewed_at: string | null;
   front_image_path: string;
   back_image_path: string | null;
+  tenant_id?: string | null;
   check_payees?: {
     id: string;
     payee_name: string;
@@ -156,7 +158,8 @@ export function DepositPacketGenerator({ checkId }: { checkId: string }) {
     ).join("");
 
     const reviewerName = reviewerProfile?.full_name || reviewerProfile?.email || "Staff";
-    const companyName = (check as any).tenants?.name || "Freedom Adjustment";
+    // The check owner's Company Name (tenants.name); never another tenant's.
+    const companyName = endorsementCompanyNameForCheck(check as DepositPacketCheck & EndorsementCheckTenant, null);
     const latestDecision = reviewDecisions[0];
     const decisionHtml = latestDecision ? `
       <h2>Reviewer Decision</h2>
@@ -223,7 +226,7 @@ export function DepositPacketGenerator({ checkId }: { checkId: string }) {
       ${reviewNotesHtml}
       ${frontImgHtml}
       ${backImgHtml}
-      <div class="footer">Generated ${esc(new Date().toLocaleString())} · ${esc(companyName)} Deposit Packet</div>
+      <div class="footer">Generated ${esc(new Date().toLocaleString())} · ${companyName ? `${esc(companyName)} ` : ""}Deposit Packet</div>
     </body></html>`);
     printWindow.document.close();
     // Wait (briefly) for Inter so the printout matches the app; print regardless.
