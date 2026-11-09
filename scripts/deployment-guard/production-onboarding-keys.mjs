@@ -118,6 +118,42 @@ export function canonical(value) {
   return value;
 }
 
+/**
+ * A key policy compared by meaning: keys sorted, and a one-item list written as the item. AWS
+ * treats ["kms:Decrypt"] and "kms:Decrypt" alike and KMS stores a single value as a string, so the
+ * template's list and the live string must compare equal. Only the policy fields where AWS applies
+ * that rule are touched: a statement's Action, NotAction, Resource, NotResource, the values under
+ * Principal and NotPrincipal, and each condition value. A list of two or more is kept as written.
+ */
+const unwrapOne = (v) => (Array.isArray(v) && v.length === 1 ? v[0] : v);
+const unwrapEach = (obj) => (obj && typeof obj === 'object' && !Array.isArray(obj)
+  ? Object.fromEntries(Object.entries(obj).map(([k, v]) => [k, unwrapOne(v)]))
+  : obj);
+
+export function canonicalPolicy(policy) {
+  if (!policy || typeof policy !== 'object' || Array.isArray(policy)) return canonical(policy);
+  const normalizeStatement = (st) => {
+    if (!st || typeof st !== 'object' || Array.isArray(st)) return st;
+    const out = { ...st };
+    for (const field of ['Action', 'NotAction', 'Resource', 'NotResource']) {
+      if (field in out) out[field] = unwrapOne(out[field]);
+    }
+    for (const field of ['Principal', 'NotPrincipal']) {
+      if (field in out) out[field] = unwrapEach(out[field]);
+    }
+    if (out.Condition && typeof out.Condition === 'object' && !Array.isArray(out.Condition)) {
+      out.Condition = Object.fromEntries(Object.entries(out.Condition).map(([op, block]) => [op, unwrapEach(block)]));
+    }
+    return out;
+  };
+  return canonical({
+    ...policy,
+    ...('Statement' in policy
+      ? { Statement: Array.isArray(policy.Statement) ? policy.Statement.map(normalizeStatement) : normalizeStatement(policy.Statement) }
+      : {}),
+  });
+}
+
 /** The owned components bind the requested change (the stack and its two aliases) into the receipt. */
 export function ownedComponentsFor(mode) {
   if (mode === 'create') return [`stack:${STACK_NAME}:create`, ...ALIAS_NAMES.map((a) => `alias:${a}`)];
@@ -207,7 +243,7 @@ export function keyPoliciesFromTemplate(body) {
     if (policyAt < 0 || (nextResource >= 0 && policyAt > at + header.length + nextResource)) {
       throw new Error(`template_key_policy_missing:${key.logicalId}`);
     }
-    out[key.alias] = canonical(resolveSub(JSON.parse(jsonObjectAt(body, policyAt + marker.length - 1))));
+    out[key.alias] = canonicalPolicy(resolveSub(JSON.parse(jsonObjectAt(body, policyAt + marker.length - 1))));
   }
   return out;
 }
@@ -218,7 +254,7 @@ function sortObject(obj) {
 
 function parsePolicy(raw) {
   if (raw == null) return null;
-  try { return canonical(JSON.parse(raw)); } catch { return { unparseable: true }; }
+  try { return canonicalPolicy(JSON.parse(raw)); } catch { return { unparseable: true }; }
 }
 
 /**
