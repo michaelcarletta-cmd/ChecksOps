@@ -32,7 +32,7 @@ const LIVE = {
   entry_bundle: LOCK.spa_bundle,
   etag: 'etag-live',
   last_modified: '2026-10-06T20:27:22.000Z',
-  s3_version_id: 'hua0fcZSjwuAHEDf0lHxJH5ICRhg1mwG',
+  s3_version_id: '5jb5J9zMxmdLMfIZG8SG9R6QOIactbqU',
 };
 const ACCEPTANCE = 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38255758030';
 const BASE_ENV = { GITHUB_SHA: SHA, GITHUB_REF_NAME: 'main', GITHUB_ACTOR: 'operator', GITHUB_RUN_ID: '9876' };
@@ -82,7 +82,7 @@ test('workflow identity is pinned to main with a production SPA workstream id', 
 });
 
 test('the release lock pins the live production baseline and its source', () => {
-  assert.equal(LOCK.spa_bundle, '/assets/index-C6V90YAZ.js');
+  assert.equal(LOCK.spa_bundle, '/assets/index-CHN2oH2H.js');
   assert.match(LOCK.index_html_sha256, /^[0-9a-f]{64}$/);
   assert.match(LOCK.source_git_sha, /^[0-9a-f]{40}$/);
   assert.equal(validateLiveMatchesLock(LIVE, LOCK).ok, true);
