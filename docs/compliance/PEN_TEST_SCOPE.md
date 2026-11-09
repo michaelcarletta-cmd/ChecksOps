@@ -2,8 +2,9 @@
 
 **Owner:** Michael Carletta, CEO (Qualified Individual) — security@checksops.com
 **Drafted:** 2026-11-09 from the repository (no AWS reads)
-**Status:** draft for the owner to complete (the `<...>` placeholders and the checklist in §10) and
-send to penetration-test firms. Nothing here has been agreed with a firm.
+**Status:** ready to send to penetration-test firms. The test window, the testers' addresses and
+the owner's phone number are agreed with the chosen firm (§6, §7); the checklist in §10 is done
+before the window. Nothing here has been agreed with a firm.
 **Basis:** evidence calendar row V-2 (`docs/compliance/EVIDENCE_CALENDAR.md`); matrix CC4.1
 (`docs/compliance/SOC2_CONTROL_MATRIX.md`, "Gap: no report on file"); risk register R2 tenant
 isolation and R11 (`docs/compliance/RISK_REGISTER.md`); `docs/WISP.md` §4 (annual third-party
@@ -52,7 +53,7 @@ The firm tests only the hosts in the target list below and only the accounts in 
 | Target | Production | Staging |
 |---|---|---|
 | Web app | `https://www.checksops.com`, `https://checksops.com` | `https://staging.checksops.com` |
-| API, as the SPA calls it | `https://www.checksops.com/prep/...` | `<staging API base URL>` (the repo's example config uses the staging HTTP API, stage `staging`; owner to confirm the URL the staging SPA uses) |
+| API, as the SPA calls it | `https://www.checksops.com/prep/...` | `https://psr19uhop4.execute-api.us-east-1.amazonaws.com/staging` (the staging SPA's `VITE_CHECKSOPS_API_URL` in `.env.aws.example`) |
 | Direct API endpoint (to confirm it refuses callers that bypass CloudFront) | `https://kiqojucc02.execute-api.us-east-1.amazonaws.com/prep` | `https://psr19uhop4.execute-api.us-east-1.amazonaws.com/staging` |
 
 **Areas:**
@@ -167,16 +168,17 @@ A-1):
 - No platform-owner account is given to the firm.
 - Test data is synthetic: no real homeowner names, check images or bank details. Check images
   are samples the owner provides.
-- Email addresses for the test accounts: `<tester mailbox addresses from the firm>`.
+- Email addresses for the test accounts: mailboxes the firm provides after the statement of work is signed.
 
 ## 7. Rules of engagement
 
-- **Window:** `<start date>` to `<end date>`, testing `<hours and time zone>`. The firm gives
-  `<n>` business days' notice of the start and says when testing stops each day.
+- **Window:** one to two weeks agreed with the firm in the statement of work, testing on weekdays
+  9:00–18:00 US Eastern unless agreed otherwise, and finished by 2027-01-15. The firm gives 3
+  business days' notice of the start and says when testing stops each day.
 - **Source addresses:** the firm lists its egress IP addresses before the start. The owner may
   allow-list them in the WAF for the window or leave the WAF on; the report says which.
 - **Contact:** security@checksops.com for notices, questions and urgent findings. Urgent phone
-  contact: `<owner phone>`. The firm names its own lead and a 24-hour contact.
+  contact: given to the firm in the statement of work (not kept in this repository). The firm names its own lead and a 24-hour contact.
 - **Stop and call** (testing pauses and the firm contacts the owner within one hour) when:
   - real customer data or another tenant than the test tenants becomes visible;
   - a critical finding is confirmed (for example cross-tenant read, authentication bypass, remote
@@ -201,7 +203,7 @@ A-1):
   found.
 - Methodology (OWASP WSTG / OWASP ASVS, OWASP API Security Top 10), tester names and
   qualifications, dates and hours of testing.
-- **Retest included in the price:** within `<60>` days of the report, the firm retests every
+- **Retest included in the price:** within 60 days of the report, the firm retests every
   finding rated medium or higher and issues a retest letter or updated report showing each one
   fixed, accepted or open.
 - A short **attestation letter** that ChecksOps can share with customers under NDA.
@@ -226,7 +228,7 @@ Optional add-ons to ask the firm to price separately: a secure code review of
 
 ## 10. Owner checklist before the window
 
-- [ ] Fill the placeholders in §3, §6 and §7 and confirm the target list.
+- [ ] Agree the window, give the firm the urgent phone number, and confirm the target list (§3, §7).
 - [ ] Confirm staging runs the production Lambda code and migrations, with login MFA on (§5).
 - [ ] Confirm whether staging has the WAF and origin-verify authorizer.
 - [ ] Create test tenants A, B and C and the five test accounts; confirm none has a live Moov
@@ -250,7 +252,7 @@ Optional add-ons to ask the firm to price separately: a secure code review of
 > AWS (CloudFront, API Gateway HTTP API, Lambda, Cognito, PostgreSQL with row-level security,
 > S3). We are preparing for SOC 2 and need our annual third-party penetration test.
 >
-> Scope: the React web app and its HTTP API (about `<n>` routes), authentication with required
+> Scope: the React web app and its HTTP API (about 50 endpoints: 26 API paths and 21 sign-in routes, plus the data RPC operations), authentication with required
 > TOTP login MFA and a TOTP step-up for money actions, cross-tenant isolation testing with two
 > test tenants, file upload and download, public token links for signing, endorsement and
 > invoices, partner sharing between tenants, and webhook verification. Out of scope: AWS
@@ -263,7 +265,7 @@ Optional add-ons to ask the firm to price separately: a secure code review of
 > included in the price, and an attestation letter for customers. Optional add-on prices: secure
 > code review of the API, and a semi-annual vulnerability assessment.
 >
-> We would like testing to finish before `<target date>`.
+> We would like testing to finish before 2027-01-15.
 >
 > Michael Carletta, CEO — security@checksops.com
 
