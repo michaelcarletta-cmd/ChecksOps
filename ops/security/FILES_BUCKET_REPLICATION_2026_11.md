@@ -196,3 +196,177 @@ Run by the owner in CloudShell as `michael-admin` (IAM Identity Center, permissi
 - **Copy**: 1,572 current objects (2.72 GB) in the destination, plus 2 batch report objects. The job's 1,592 tasks are object versions. The source held 1,641 versions (CloudWatch `NumberOfObjects`, 2026-11-07); the 49 not copied are the SSE-KMS compliance documents (no `files/verification-docs/` keys in the copy) and delete markers, which the rule leaves out by design.
 
 **Still open (phase 2):** the SSE-KMS compliance documents. They need a `us-east-2` KMS key, the replication role in the compliance-documents key policy, and `SseKmsEncryptedObjects` on the rule. That is a separate reviewed change. The key policy part is done: the replication role may decrypt `files/verification-docs/*` through S3 since 2026-11-09 12:40 UTC (guarded update run 42618763202, recorded in `ops/production-onboarding-keys.md`, "Applied 2026-11-09").
+
+## Phase 2 — the KMS-encrypted compliance documents (CloudShell)
+
+**What it adds.** Compliance documents under `files/verification-docs/` (Moov onboarding uploads)
+are SSE-KMS with the compliance documents key `59d713da-72f3-43a6-8a48-a826d432d53f`
+(`alias/checksops-production-compliance-documents`), per object, without an S3 Bucket Key
+(`aws/functions/api/providers/onboarding/documents.mjs`), so each object's KMS encryption context
+is its own ARN. Phase 1 copies everything else. Phase 2 copies these with their own key in
+`us-east-2`:
+
+| Piece | Change |
+|---|---|
+| Source key policy | **Done 2026-11-09** (guarded update run 42618763202, `ops/production-onboarding-keys.md`): the replication role may `kms:Decrypt` through S3 in `us-east-1`, only under `files/verification-docs/*`. |
+| `us-east-2` key | New customer managed key `alias/checksops-production-compliance-documents-dr`, rotation on. Its policy mirrors the source key: the account may administer it (the same 24 administration actions, no use), and the replication role may only `kms:Encrypt` through S3 in `us-east-2` under `files/verification-docs/*` of the copy bucket. **Nobody can decrypt the copies** until a recovery adds a statement for the restore role (the administration statement allows that `PutKeyPolicy`). |
+| Replication role | Two statements added to `FilesReplication`: `kms:Decrypt` on the source key and `kms:Encrypt` on the new key, each with the same S3 and prefix conditions as the key policies. |
+| Replication rule | `CopyToUsEast2` gains `SourceSelectionCriteria.SseKmsEncryptedObjects` Enabled and `Destination.EncryptionConfiguration.ReplicaKmsKeyID` = the new key. SSE-S3 objects keep replicating as SSE-S3. Delete markers stay off. |
+| Existing documents | A second S3 Batch Replication job, only `files/verification-docs/`, only objects not yet copied. |
+
+Live state read 2026-11-09 13:20 UTC as `claude-code`: the rule is the phase 1 rule (no
+`SourceSelectionCriteria`, no `EncryptionConfiguration`); the role has only the five phase 1
+statements; no `checksops` alias in `us-east-2` other than `alias/checksops-production-rds-dr`.
+
+Run as `michael-admin` (access portal, not root). Each step stops on the first surprise.
+
+### Phase 2 step 0 — read the current state (read-only)
+
+```bash
+export AWS_REGION=us-east-1
+SRC=checksops-production-privatefiles-806168576068
+DST=checksops-production-privatefiles-dr-806168576068
+ACCOUNT=806168576068
+ROLE=checksops-production-files-replication
+SRC_KEY=arn:aws:kms:us-east-1:$ACCOUNT:key/59d713da-72f3-43a6-8a48-a826d432d53f
+DR_ALIAS=alias/checksops-production-compliance-documents-dr
+aws kms get-key-policy --key-id "$SRC_KEY" --policy-name default --output text | grep -q FilesReplicationRoleDecryptViaS3 && echo "OK: source key policy lets the role decrypt"
+aws kms describe-key --region us-east-2 --key-id "$DR_ALIAS" 2>&1 | grep -q NotFoundException && echo "OK: no us-east-2 documents key yet"
+aws s3api get-bucket-replication --bucket "$SRC" --output json | python3 -c '
+import json,sys; r=json.load(sys.stdin)["ReplicationConfiguration"]["Rules"]
+assert len(r)==1 and r[0]["ID"]=="CopyToUsEast2" and "SourceSelectionCriteria" not in r[0] and "EncryptionConfiguration" not in r[0]["Destination"]
+print("OK: phase 1 rule, no KMS settings yet")'
+aws iam get-role-policy --role-name "$ROLE" --policy-name FilesReplication --query PolicyDocument --output json | python3 -c '
+import json,sys; s=[x["Sid"] for x in json.load(sys.stdin)["Statement"]]
+assert s==["ReadSourceConfig","ReadSourceVersions","WriteReplicas","BatchReports","BatchReportsBucket"], s
+print("OK: role has the five phase 1 statements")'
+# How the compliance documents are encrypted (counts only; keys contain tenant ids, never print them):
+aws s3api list-object-versions --bucket "$SRC" --prefix files/verification-docs/ --query 'Versions[].[Key,VersionId]' --output text \
+ | while read -r k v; do aws s3api head-object --bucket "$SRC" --key "$k" --version-id "$v" \
+     --query '[ServerSideEncryption,SSEKMSKeyId,BucketKeyEnabled,ReplicationStatus]' --output text; done | sort | uniq -c
+```
+
+Stop unless all four print OK, and every line of the count reads
+`aws:kms  arn:aws:kms:us-east-1:806168576068:key/59d713da-…  None  FAILED` (or `None` as the last
+field). `BucketKeyEnabled` must be `None` or `False`: with a Bucket Key the encryption context would
+be the bucket, and the key policies would refuse it.
+
+### Phase 2 step 1 — the `us-east-2` key
+
+```bash
+python3 - <<'PY' > /tmp/dr-key-policy.json
+import json
+acct = "806168576068"
+admin = ["kms:DescribeKey","kms:GetKeyPolicy","kms:PutKeyPolicy","kms:ListKeyPolicies","kms:ListResourceTags",
+  "kms:ListAliases","kms:ListGrants","kms:GetKeyRotationStatus","kms:EnableKeyRotation","kms:DisableKeyRotation",
+  "kms:RotateKeyOnDemand","kms:ListKeyRotations","kms:EnableKey","kms:DisableKey","kms:UpdateKeyDescription",
+  "kms:CreateAlias","kms:UpdateAlias","kms:DeleteAlias","kms:RevokeGrant","kms:RetireGrant","kms:TagResource",
+  "kms:UntagResource","kms:ScheduleKeyDeletion","kms:CancelKeyDeletion"]
+print(json.dumps({"Version": "2012-10-17", "Statement": [
+  {"Sid": "KeyAdministrationOnly", "Effect": "Allow", "Principal": {"AWS": f"arn:aws:iam::{acct}:root"},
+   "Action": admin, "Resource": "*"},
+  {"Sid": "FilesReplicationRoleEncryptViaS3", "Effect": "Allow",
+   "Principal": {"AWS": f"arn:aws:iam::{acct}:role/checksops-production-files-replication"},
+   "Action": "kms:Encrypt", "Resource": "*",
+   "Condition": {"StringEquals": {"kms:ViaService": "s3.us-east-2.amazonaws.com"},
+                 "StringLike": {"kms:EncryptionContext:aws:s3:arn":
+                   f"arn:aws:s3:::checksops-production-privatefiles-dr-{acct}/files/verification-docs/*"}}}]}))
+PY
+DR_KEY=$(aws kms create-key --region us-east-2 \
+  --description "ChecksOps production compliance documents copy (us-east-2). Encrypt-only for S3 replication; no decrypt until a recovery adds it." \
+  --key-spec SYMMETRIC_DEFAULT --key-usage ENCRYPT_DECRYPT --no-multi-region \
+  --policy file:///tmp/dr-key-policy.json \
+  --tags TagKey=checksops-purpose,TagValue=files-replication-dr \
+  --query KeyMetadata.Arn --output text)
+echo "DR_KEY=$DR_KEY"
+aws kms enable-key-rotation --region us-east-2 --key-id "$DR_KEY"
+aws kms create-alias --region us-east-2 --alias-name "$DR_ALIAS" --target-key-id "$DR_KEY"
+aws kms get-key-rotation-status --region us-east-2 --key-id "$DR_KEY" --query KeyRotationEnabled --output text
+```
+
+Keep the printed `DR_KEY` for the next steps. Rotation must print `True`.
+
+### Phase 2 step 2 — the role's KMS rights (read, add two statements, write)
+
+```bash
+aws iam get-role-policy --role-name "$ROLE" --policy-name FilesReplication --query PolicyDocument --output json > /tmp/repl.json
+SRC_KEY="$SRC_KEY" DR_KEY="$DR_KEY" python3 - <<'PY'
+import json, os
+d = json.load(open('/tmp/repl.json'))
+sids = [s["Sid"] for s in d["Statement"]]
+assert "DecryptSourceComplianceDocuments" not in sids and "EncryptReplicaComplianceDocuments" not in sids, "already there"
+src = "checksops-production-privatefiles-806168576068"; dst = "checksops-production-privatefiles-dr-806168576068"
+d["Statement"] += [
+  {"Sid": "DecryptSourceComplianceDocuments", "Effect": "Allow", "Action": "kms:Decrypt", "Resource": os.environ["SRC_KEY"],
+   "Condition": {"StringEquals": {"kms:ViaService": "s3.us-east-1.amazonaws.com"},
+                 "StringLike": {"kms:EncryptionContext:aws:s3:arn": f"arn:aws:s3:::{src}/files/verification-docs/*"}}},
+  {"Sid": "EncryptReplicaComplianceDocuments", "Effect": "Allow", "Action": "kms:Encrypt", "Resource": os.environ["DR_KEY"],
+   "Condition": {"StringEquals": {"kms:ViaService": "s3.us-east-2.amazonaws.com"},
+                 "StringLike": {"kms:EncryptionContext:aws:s3:arn": f"arn:aws:s3:::{dst}/files/verification-docs/*"}}}]
+json.dump(d, open('/tmp/repl-new.json', 'w'))
+print("statements", len(sids), "->", len(d["Statement"]))
+PY
+aws iam put-role-policy --role-name "$ROLE" --policy-name FilesReplication --policy-document file:///tmp/repl-new.json
+sleep 15   # IAM propagation before S3 uses the role
+```
+
+It must print `statements 5 -> 7`.
+
+### Phase 2 step 3 — the rule copies KMS objects with the new key
+
+```bash
+aws s3api put-bucket-replication --bucket "$SRC" --replication-configuration "{
+  \"Role\":\"arn:aws:iam::$ACCOUNT:role/$ROLE\",
+  \"Rules\":[{\"ID\":\"CopyToUsEast2\",\"Priority\":1,\"Status\":\"Enabled\",
+    \"Filter\":{\"Prefix\":\"\"},
+    \"SourceSelectionCriteria\":{\"SseKmsEncryptedObjects\":{\"Status\":\"Enabled\"}},
+    \"DeleteMarkerReplication\":{\"Status\":\"Disabled\"},
+    \"Destination\":{\"Bucket\":\"arn:aws:s3:::$DST\",\"StorageClass\":\"STANDARD\",
+      \"EncryptionConfiguration\":{\"ReplicaKmsKeyID\":\"$DR_KEY\"}}}]}"
+aws s3api get-bucket-replication --bucket "$SRC" --query 'ReplicationConfiguration.Rules[0].[ID,Status,SourceSelectionCriteria.SseKmsEncryptedObjects.Status,DeleteMarkerReplication.Status,Destination.EncryptionConfiguration.ReplicaKmsKeyID]' --output text
+```
+
+It must print `CopyToUsEast2 Enabled Enabled Disabled <DR_KEY>`. Only the two KMS fields differ from
+the phase 1 rule.
+
+### Phase 2 step 4 — copy the existing compliance documents
+
+```bash
+JOB2=$(aws s3control create-job --region us-east-1 --account-id "$ACCOUNT" \
+  --operation '{"S3ReplicateObject":{}}' \
+  --priority 10 --no-confirmation-required \
+  --role-arn "arn:aws:iam::$ACCOUNT:role/$ROLE" \
+  --report "{\"Bucket\":\"arn:aws:s3:::$DST\",\"Prefix\":\"_replication-reports\",\"Format\":\"Report_CSV_20180820\",\"Enabled\":true,\"ReportScope\":\"FailedTasksOnly\"}" \
+  --manifest-generator "{\"S3JobManifestGenerator\":{\"ExpectedBucketOwner\":\"$ACCOUNT\",\"SourceBucket\":\"arn:aws:s3:::$SRC\",
+     \"EnableManifestOutput\":false,
+     \"Filter\":{\"EligibleForReplication\":true,\"ObjectReplicationStatuses\":[\"NONE\",\"FAILED\"],
+       \"KeyNameConstraint\":{\"MatchAnyPrefix\":[\"files/verification-docs/\"]}}}}" \
+  --description "files bucket compliance documents copy to us-east-2" --query JobId --output text)
+echo "JOB2=$JOB2"
+# Check every minute or two until Status is Complete:
+aws s3control describe-job --region us-east-1 --account-id "$ACCOUNT" --job-id "$JOB2" \
+  --query 'Job.[Status,ProgressSummary.TotalNumberOfTasks,ProgressSummary.NumberOfTasksSucceeded,ProgressSummary.NumberOfTasksFailed]' --output text
+```
+
+Expect a few dozen tasks (phase 1 left about 49 versions, some of them delete markers, which the job
+skips) and **0 failed**. If any fail, stop: the report under `_replication-reports/` says why. Do not
+paste it into the record (keys contain tenant ids); count the error codes instead.
+
+### Phase 2 step 5 — check (read-only)
+
+```bash
+aws s3api list-object-versions --bucket "$DST" --region us-east-2 --prefix files/verification-docs/ --query 'length(Versions)' --output text
+aws s3api list-object-versions --bucket "$DST" --region us-east-2 --prefix files/verification-docs/ --query 'Versions[].[Key,VersionId]' --output text \
+ | while read -r k v; do aws s3api head-object --bucket "$DST" --region us-east-2 --key "$k" --version-id "$v" \
+     --query '[ServerSideEncryption,SSEKMSKeyId,ReplicationStatus]' --output text; done | sort | uniq -c
+```
+
+Every replica must read `aws:kms  <DR_KEY>  REPLICA`. Then tell Claude: it re-reads the rule, the
+role, the new key's policy and rotation, and the CloudTrail events read-only, and opens the record PR.
+
+### Phase 2 rollback
+
+- **Rule:** put back the phase 1 rule (step 3 of phase 1). KMS objects stop copying; the copies stay.
+- **Role:** remove the two statements (read, delete those two Sids, write).
+- **Key:** keep it. Scheduling its deletion makes every compliance document copy unreadable; that is
+  an owner decision with its own record, never part of a rollback.
