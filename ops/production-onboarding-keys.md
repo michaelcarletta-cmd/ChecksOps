@@ -171,6 +171,22 @@ outputs, rotation, tags and the API role's statement stay exactly as they are.
 5. **Record PR**, then phase 2 of `ops/security/FILES_BUCKET_REPLICATION_2026_11.md` (the
    `us-east-2` key, the role's KMS rights, the rule and a second batch copy).
 
+### Applied 2026-11-09
+
+| Step | Evidence |
+|---|---|
+| 1. IAM step | Owner in CloudShell as `michael-admin` (Identity Center `AdministratorAccess`, not root): "statements 15 -> 16". CloudTrail `PutRolePolicy` on `ChecksOpsGitHubProductionLambdaOverlay` / `ChecksOpsGitHubProductionLambdaOverlayLeastPrivilege`, 11:37:42 UTC, event `e5b297ad-7a46-4b71-a976-b62b1e60cd04`, no error. Read back as `claude-code`: `UpdateExactOnboardingKeysStack` present, `SetUpNewOnboardingKeysThroughCloudFormation` still present, no other `UpdateStack` statement. |
+| 2. Inspect | Run [42613740402](https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/42613740402) on main `69e29f49d` (#1707): `UPDATE_READY`, no problems, snapshot `2f21e93653b9b5deb6568beee68e95f9787af9941921c16835ec27461c4c4f45`, template `c48853d9…`. |
+| 3a. Update, first run | Run [42613905050](https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/42613905050): failed closed before any write. `RECEIPT_FORGED`: KMS `Sign` refused the receipt (`message` longer than 4,096 bytes; the snapshot carries both live key policies). No `UpdateStack` or `PutKeyPolicy` in CloudTrail from it. Fixed by #1710 (receipts signed over their SHA-256 digest). |
+| 2'. Inspect again | Run [42618609552](https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/42618609552) on main `ac8e34600` (#1710): `UPDATE_READY`, no problems, the same snapshot `2f21e936…`. |
+| 3b. Update | Run [42618763202](https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/42618763202) on main `ac8e34600`, with the owner's words for this run `UPDATE ONBOARDING KEYS IN PRODUCTION`. CloudTrail as `ChecksOpsGitHubProductionLambdaOverlay/checksops-production-onboarding-keys-42618763202`, no error: `UpdateStack` 12:39:38 UTC, event `b5d82c42-25c9-4576-aa12-f66313dce244`; `PutKeyPolicy` on key `59d713da-72f3-43a6-8a48-a826d432d53f` 12:39:42 UTC, event `972f6fca-96e5-4d4b-8bf2-ff321852e743`. Stack events: only `ComplianceDocumentsKey` `UPDATE_IN_PROGRESS` → `UPDATE_COMPLETE`; stack `UPDATE_COMPLETE` 12:40:45 UTC. |
+| 4. Verify | The run's after-write check stopped at `post_write_not_live:key_policy_drift:alias/checksops-production-compliance-documents`: KMS stores the new statement's one-item action list `["kms:Decrypt"]` as the string `"kms:Decrypt"`, and the guard compared literally. Fixed by #1711 (key policies compared the way AWS reads them, tested on the exact policy KMS returned). Read-only inspect [42622069338](https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/42622069338) on main `e7ed53ace` (#1711): **`LIVE`, no problems**, stack `UPDATE_COMPLETE`, template `c48853d9…`, snapshot `e87bc108322e6275960dedd391443f8910199875c0075397a8dc8102a66e1730`, documents key `59d713da-…`, PII key `30d2da88-…` (unchanged), prep Lambda RevisionId `6bd20885-4561-421f-8c0b-8b7ba18aa549` (unmoved). |
+
+The live compliance documents key policy has three statements: `KeyAdministrationOnly`,
+`ProductionApiRoleViaS3` and `FilesReplicationRoleDecryptViaS3`. Next: phase 2 of
+`ops/security/FILES_BUCKET_REPLICATION_2026_11.md` (the `us-east-2` key, the role's KMS rights, the
+rule and a second batch copy).
+
 ## What this does not do
 
 No Lambda code or configuration change, no bucket or bucket policy change, no SQL. The only IAM
