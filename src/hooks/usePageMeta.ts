@@ -3,7 +3,7 @@ import { MARKETING_SITE_ORIGIN, PAGE_JSON_LD_ID } from "@/pages/marketing/market
 
 /**
  * Per-page title, description, canonical URL and optional JSON-LD for the public
- * marketing pages (home, /pricing, /vs/...). The build writes the same values into
+ * marketing pages (home, /vs/..., /claim-check-tracking). The build writes the same values into
  * each page's served HTML (marketingStaticHead.ts) for crawlers and link previews that
  * do not run JavaScript; this hook keeps them right as the SPA navigates between pages.
  */
@@ -12,7 +12,7 @@ export { MARKETING_SITE_ORIGIN };
 export interface PageMeta {
   title: string;
   description: string;
-  /** Path on MARKETING_SITE_ORIGIN, e.g. "/pricing". */
+  /** Path on MARKETING_SITE_ORIGIN, e.g. "/claim-check-tracking". */
   path: string;
   /** Structured data for this page only; removed again when the page unmounts. */
   jsonLd?: Record<string, unknown>;

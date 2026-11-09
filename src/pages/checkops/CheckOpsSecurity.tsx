@@ -116,7 +116,6 @@ export default function CheckOpsSecurity() {
             <Link to="/#capabilities" className="hover:text-foreground transition-colors">Capabilities</Link>
             <Link to="/#workflow" className="hover:text-foreground transition-colors">Workflow</Link>
             <span className="text-foreground font-medium">Security</span>
-            <Link to="/pricing" className="hover:text-foreground transition-colors">Pricing</Link>
           </nav>
           <div className="flex items-center gap-2">
             <Button asChild variant="ghost" size="sm" className="hidden sm:inline-flex">
@@ -309,9 +308,6 @@ export default function CheckOpsSecurity() {
           <Button asChild size="lg">
             <Link to="/#demo">Talk to us<ArrowRight className="h-4 w-4 ml-1.5" /></Link>
           </Button>
-          <Button asChild size="lg" variant="outline">
-            <Link to="/pricing">See pricing</Link>
-          </Button>
         </div>
       </section>
 
@@ -321,7 +317,6 @@ export default function CheckOpsSecurity() {
           <div className="flex gap-4">
             <Link to="/privacy-notice" className="hover:text-foreground">Privacy</Link>
             <Link to="/security" className="hover:text-foreground">Security</Link>
-            <Link to="/pricing" className="hover:text-foreground">Pricing</Link>
           </div>
         </div>
       </footer>

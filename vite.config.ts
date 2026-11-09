@@ -5,13 +5,16 @@ import { componentTagger } from "lovable-tagger";
 import { VitePWA } from "vite-plugin-pwa";
 import fs from "node:fs";
 import type { Plugin } from "vite";
-import { MARKETING_PAGES } from "./src/pages/marketing/marketingPages.ts";
+import { HOME_PAGE, MARKETING_PAGES, RETIRED_MARKETING_PATHS } from "./src/pages/marketing/marketingPages.ts";
 import { renderStaticHead, staticPageKey } from "./src/pages/marketing/marketingStaticHead.ts";
 
 /**
  * After a build, give every public marketing page its own served HTML head (title, share
  * preview, canonical, JSON-LD): index.html for "/", and an extensionless copy such as
- * dist/pricing for the others. See src/pages/marketing/marketingStaticHead.ts.
+ * dist/claim-check-tracking for the others. A retired page (RETIRED_MARKETING_PATHS, e.g.
+ * dist/pricing) gets the home page itself, so the guarded upload, which only puts objects,
+ * overwrites the old prerendered object and the SPA routes the path to "/".
+ * See src/pages/marketing/marketingStaticHead.ts.
  */
 function marketingStaticHeads(): Plugin {
   let outDir = "dist";
@@ -29,6 +32,12 @@ function marketingStaticHeads(): Plugin {
         const target = path.join(outDir, staticPageKey(page.path));
         fs.mkdirSync(path.dirname(target), { recursive: true });
         fs.writeFileSync(target, renderStaticHead(indexHtml, page));
+      }
+      const homeHtml = renderStaticHead(indexHtml, HOME_PAGE);
+      for (const retired of RETIRED_MARKETING_PATHS) {
+        const target = path.join(outDir, staticPageKey(retired));
+        fs.mkdirSync(path.dirname(target), { recursive: true });
+        fs.writeFileSync(target, homeHtml);
       }
     },
   };

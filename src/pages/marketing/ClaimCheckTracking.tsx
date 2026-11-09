@@ -84,9 +84,6 @@ export default function ClaimCheckTracking() {
           <Button asChild size="lg">
             <Link to="/#demo">Book a live demo<ArrowRight className="h-4 w-4 ml-2" /></Link>
           </Button>
-          <Button asChild size="lg" variant="outline">
-            <Link to="/pricing">See pricing</Link>
-          </Button>
         </div>
       </main>
     </MarketingPageShell>

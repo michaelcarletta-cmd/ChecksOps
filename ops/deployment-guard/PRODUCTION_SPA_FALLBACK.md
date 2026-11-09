@@ -26,7 +26,15 @@ The allowlist is `/pricing`, `/vs/checksops-vs-iink-payments`, `/vs/checksops-vs
 `/vs/checksops-vs-guidewire-claimcenter`, `/claim-check-tracking`. `/` still goes to `/index.html`
 (DefaultRootObject and the function agree), and so does `/pricing/` (exact match only).
 `aws/tests/github-production-spa-fallback.test.mjs` keeps the allowlist, the writer's
-`MARKETING_PATHS`, the role's S3 keys and `MARKETING_PAGES` equal, and runs both files in `node:vm`.
+`MARKETING_PATHS`, the role's S3 keys and `MARKETING_PAGES` plus `RETIRED_MARKETING_PATHS` equal,
+and runs both files in `node:vm`.
+
+`/pricing` is retired (owner, 2026-11-09: no public pricing). It stays in the allowlist on purpose:
+the build writes the `pricing` key as a copy of the home page (home head, canonical `/`), the
+guarded upload (put-only, never deletes) overwrites the old prerendered pricing object with it, and
+the SPA routes `/pricing` to `/`. Dropping it from the allowlist would change
+`aws/cloudfront/spa-fallback.js` away from LIVE and needs its own publish; it is not required to
+take the prices down.
 
 Staging needs no change: `E1CG52WRQZI7X1` has no function. It maps 403/404 to `/index.html`, so an
 existing key such as `pricing` is already served as its own object there.

@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 
 export interface MarketingMenuItem {
   label: string;
-  /** In-page anchor ("#workflow") or route ("/pricing", "/#workflow"). */
+  /** In-page anchor ("#workflow") or route ("/claim-check-tracking", "/#workflow"). */
   href: string;
 }
 
@@ -27,7 +27,7 @@ export function MarketingMenuButton({ open, onToggle }: { open: boolean; onToggl
 }
 
 /**
- * The phone-width menu under the marketing header: section links, Pricing, Sign in
+ * The phone-width menu under the marketing header: section links, Sign in
  * and the Book a live demo button. Every row is at least 44px tall.
  */
 export function MarketingMobileMenu({

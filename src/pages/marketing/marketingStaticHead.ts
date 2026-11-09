@@ -1,13 +1,14 @@
 /**
  * Writes a marketing page's own title, description, share preview (Open Graph, Twitter),
  * canonical URL and JSON-LD into the served HTML. The site is a single-page app: without
- * this, every URL is served index.html with the home page's head, so a /pricing link shared
+ * this, every URL is served index.html with the home page's head, so a /vs/... link shared
  * on LinkedIn or Slack previews the home page, and crawlers that do not run JavaScript never
  * see a page's FAQ schema.
  *
  * vite.config.ts calls renderStaticHead() after a build and writes each page to the
- * extensionless S3 key staticPageKey() returns (e.g. "pricing"), which CloudFront serves for
- * https://checksops.com/pricing. The SPA upload scripts give extensionless keys a text/html
+ * extensionless S3 key staticPageKey() returns (e.g. "claim-check-tracking"), which CloudFront
+ * serves for https://checksops.com/claim-check-tracking. A retired page's key (e.g. "pricing",
+ * RETIRED_MARKETING_PATHS) gets a copy of the home page instead. The SPA upload scripts give extensionless keys a text/html
  * content type.
  */
 import type { MarketingPage } from "./marketingPages.ts";
@@ -21,7 +22,7 @@ const escapeText = (v: string) => v.replace(/&/g, "&amp;").replace(/</g, "&lt;")
 // JSON inside <script>: "</" must never close the element early.
 const jsonForScript = (v: unknown) => JSON.stringify(v).replace(/</g, "\\u003c");
 
-/** "/" -> "index.html"; "/pricing" -> "pricing"; "/vs/a-vs-b" -> "vs/a-vs-b". */
+/** "/" -> "index.html"; "/claim-check-tracking" -> "claim-check-tracking"; "/vs/a-vs-b" -> "vs/a-vs-b". */
 export function staticPageKey(path: string): string {
   if (path === "/") return "index.html";
   if (!/^\/[a-z0-9-]+(\/[a-z0-9-]+)*$/.test(path)) {

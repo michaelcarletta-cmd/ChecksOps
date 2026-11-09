@@ -54,7 +54,6 @@ const NAV_ITEMS = [
   { label: "Money Movement", href: "#money-movement" },
   { label: "Partners", href: "#partners" },
   { label: "Security", href: "#security" },
-  { label: "Pricing", href: "/pricing" },
   { label: "Demo", href: "#demo" },
 ];
 
@@ -288,7 +287,7 @@ export default function CheckCenterMarketing() {
   const location = useLocation();
   usePageMeta(HOME_PAGE);
 
-  // Links such as /#demo from /pricing land here after a client-side navigation,
+  // Links such as /#demo from another marketing page land here after a client-side navigation,
   // which does not scroll to the anchor on its own.
   useEffect(() => {
     if (!location.hash) return;
@@ -384,7 +383,6 @@ export default function CheckCenterMarketing() {
             <a href="#money-movement" className="hover:text-foreground transition-colors">Money Movement</a>
             <a href="#partners" className="hover:text-foreground transition-colors">Partners</a>
             <a href="#security" className="hover:text-foreground transition-colors">Security</a>
-            <Link to="/pricing" className="hover:text-foreground transition-colors">Pricing</Link>
             <a href="#demo" className="hover:text-foreground transition-colors">Demo</a>
           </nav>
           <div className="flex items-center gap-2">
@@ -431,9 +429,6 @@ export default function CheckCenterMarketing() {
             <div className="mt-8 flex flex-col sm:flex-row gap-3">
               <Button asChild size="lg" className="text-base">
                 <a href="#demo">Book a live demo<ArrowRight className="h-4 w-4 ml-2" /></a>
-              </Button>
-              <Button asChild size="lg" variant="outline" className="text-base">
-                <Link to="/pricing">See pricing</Link>
               </Button>
             </div>
             <p className="mt-4 text-sm text-muted-foreground max-w-xl">
@@ -780,9 +775,6 @@ export default function CheckCenterMarketing() {
               </div>
             ))}
           </div>
-          <p className="mt-6 text-sm text-muted-foreground">
-            Full price breakdown on the <Link to="/pricing" className="underline underline-offset-2 hover:text-foreground">pricing page</Link>.
-          </p>
         </div>
       </section>
 
@@ -805,7 +797,7 @@ export default function CheckCenterMarketing() {
               {[
                 "Tailored to your workflow — PA firm or restoration partner",
                 "See live OCR, endorsement flows, and loss-draft tracking",
-                "Q&A on pricing, onboarding, and white-label options",
+                "Q&A on onboarding and white-label options",
                 "20 minutes, no commitment",
               ].map((t) => (
                 <div key={t} className="flex items-start gap-2.5">
@@ -880,7 +872,6 @@ export default function CheckCenterMarketing() {
               <FounderFooterLink />
               <Link to="/login" className="hover:text-foreground">Sign in</Link>
               <a href="#demo" className="hover:text-foreground">Book demo</a>
-              <Link to="/pricing" className="hover:text-foreground">Pricing</Link>
               {COMPARISON_LINKS.map((l) => (
                 <Link key={l.to} to={l.to} className="hover:text-foreground">{l.label}</Link>
               ))}

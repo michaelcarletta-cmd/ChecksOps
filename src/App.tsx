@@ -27,7 +27,6 @@ const Endorse = lazy(() => import("./pages/Endorse"));
 const PaymentDirectionPage = lazy(() => import("./pages/PaymentDirectionPage"));
 const WhiteLabelApp = lazy(() => import("./pages/WhiteLabelApp"));
 const CheckOpsLanding = lazy(() => import("./pages/checkops/CheckOpsLanding"));
-const CheckOpsPricing = lazy(() => import("./pages/checkops/CheckOpsPricing"));
 const ChecksOpsVsIink = lazy(() => import("./pages/marketing/ChecksOpsVsIink"));
 const ChecksOpsVsSnapsheet = lazy(() =>
   import("./pages/marketing/ChecksOpsVsCarrierPlatform").then((m) => ({ default: m.ChecksOpsVsSnapsheet })),
@@ -118,7 +117,8 @@ function CheckOpsRoutes() {
       <Route path="/verify-account/:token" element={<Suspense fallback={<PageLoader />}><VerifyAccountStart /></Suspense>} />
       <Route path="/pay-setup/:token" element={<Suspense fallback={<PageLoader />}><RecipientPaymentSetup /></Suspense>} />
       <Route path="/unsubscribe" element={<Suspense fallback={<PageLoader />}><Unsubscribe /></Suspense>} />
-      <Route path="/pricing" element={<Suspense fallback={<PageLoader />}><CheckOpsPricing /></Suspense>} />
+      {/* Public pricing retired 2026-11-09 (owner): old /pricing links land on the home page. */}
+      <Route path="/pricing" element={<Navigate to="/" replace />} />
       <Route path="/vs/checksops-vs-iink-payments" element={<Suspense fallback={<PageLoader />}><ChecksOpsVsIink /></Suspense>} />
       <Route path="/vs/checksops-vs-snapsheet" element={<Suspense fallback={<PageLoader />}><ChecksOpsVsSnapsheet /></Suspense>} />
       <Route path="/vs/checksops-vs-guidewire-claimcenter" element={<Suspense fallback={<PageLoader />}><ChecksOpsVsGuidewire /></Suspense>} />

@@ -5,7 +5,6 @@ import { Badge } from "@/components/ui/badge";
 import { MarketingPageShell } from "@/components/marketing/MarketingPageShell";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import { type CarrierPlatformComparison, VS_GUIDEWIRE, VS_SNAPSHEET } from "@/pages/marketing/marketingPages";
-import { PUBLISHED_PRICING } from "@/pages/marketing/marketingPricing";
 
 /**
  * /vs/checksops-vs-snapsheet and /vs/checksops-vs-guidewire-claimcenter. Both rivals are
@@ -35,11 +34,6 @@ function rows(c: CarrierPlatformComparison) {
       checksops:
         "Your company keeps the mortgage, carrier, payee, and banking decisions. ChecksOps provides the workflow, evidence, and status visibility.",
       them: "The insurer that runs the platform.",
-    },
-    {
-      topic: "Published pricing",
-      checksops: `${PUBLISHED_PRICING.platformFee} one-time platform fee, ${PUBLISHED_PRICING.perCheck} per check, support ${PUBLISHED_PRICING.supportMonthly} a month. Unlimited users.`,
-      them: "Not published. Sold to insurers through enterprise sales.",
     },
   ];
 }
@@ -124,9 +118,6 @@ function ComparisonPage({ c }: { c: CarrierPlatformComparison }) {
         <div className="mt-12 flex flex-col sm:flex-row gap-3">
           <Button asChild size="lg">
             <Link to="/#demo">Book a live demo<ArrowRight className="h-4 w-4 ml-2" /></Link>
-          </Button>
-          <Button asChild size="lg" variant="outline">
-            <Link to="/pricing">See ChecksOps pricing</Link>
           </Button>
         </div>
       </main>
