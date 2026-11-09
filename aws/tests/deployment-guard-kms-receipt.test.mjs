@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { generateKeyPairSync, sign } from 'node:crypto';
+import { createHash, generateKeyPairSync, sign } from 'node:crypto';
 import { test } from 'node:test';
 
 import { canonicalReceiptPayload, verifyReceiptKmsSignature } from '../../scripts/deployment-guard/lib/issuer.mjs';
@@ -70,4 +70,53 @@ test('KMS signer refuses missing config and mismatched KMS response',()=>{
     env:ENV,
     execFile:()=>JSON.stringify({KeyId:'wrong',SigningAlgorithm:'ECDSA_SHA_256',Signature:'abc'}),
   }),/did not match/);
+});
+
+function argAfter(args,flag){
+  const i=args.indexOf(flag);
+  assert.ok(i>=0,`${flag} is passed`);
+  return args[i+1];
+}
+
+test('KMS signer sends the SHA-256 digest of the canonical payload as a DIGEST message',()=>{
+  const calls=[];
+  signReceiptWithKms(receipt(),{
+    env:ENV,
+    execFile:(cmd,args)=>{
+      calls.push(args);
+      const withKey={...receipt(),kms_key_arn:KEY_ARN};
+      return JSON.stringify({
+        KeyId:KEY_ARN,
+        SigningAlgorithm:'ECDSA_SHA_256',
+        Signature:sign('sha256',Buffer.from(canonicalReceiptPayload(withKey)),privateKey).toString('base64'),
+      });
+    },
+  });
+  const args=calls[0];
+  assert.equal(argAfter(args,'--message-type'),'DIGEST');
+  assert.equal(argAfter(args,'--signing-algorithm'),'ECDSA_SHA_256');
+  const expected=createHash('sha256').update(canonicalReceiptPayload({...receipt(),kms_key_arn:KEY_ARN})).digest();
+  assert.deepEqual(Buffer.from(argAfter(args,'--message'),'base64'),expected);
+});
+
+test('a receipt larger than the 4096-byte KMS RAW limit still signs and verifies',()=>{
+  // Shaped like the onboarding-keys update receipt: the preflight fingerprint carries live key policies.
+  const big={...receipt(),preflight_live_fingerprint:{key_policies:{documents:'x'.repeat(3000),pii:'y'.repeat(3000)}}};
+  const withKey={...big,kms_key_arn:KEY_ARN};
+  assert.ok(Buffer.byteLength(canonicalReceiptPayload(withKey))>4096);
+  let sent;
+  const signed=signReceiptWithKms(big,{
+    env:ENV,
+    execFile:(cmd,args)=>{
+      sent=Buffer.from(argAfter(args,'--message'),'base64');
+      return JSON.stringify({
+        KeyId:KEY_ARN,
+        SigningAlgorithm:'ECDSA_SHA_256',
+        Signature:sign('sha256',Buffer.from(canonicalReceiptPayload(withKey)),privateKey).toString('base64'),
+      });
+    },
+  });
+  assert.equal(sent.length,32);
+  assert.equal(verifyReceiptKmsSignature(signed,ENV),true);
+  assert.equal(verifyReceiptKmsSignature({...signed,preflight_live_fingerprint:{key_policies:{documents:'z',pii:'y'}}},ENV),false);
 });

@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { canonicalReceiptPayload } from './issuer.mjs';
 import { CODES, GuardError } from './errors.mjs';
 
@@ -18,14 +19,18 @@ export function signReceiptWithKms(receipt, {
 } = {}) {
   const { keyArn } = validateKmsSignerConfig(env);
   const payload = canonicalReceiptPayload({ ...receipt, kms_key_arn: keyArn });
-  const encoded = Buffer.from(payload).toString('base64');
+  // KMS signs at most 4096 bytes of RAW message, and a receipt that carries live key policies is
+  // larger. Send the SHA-256 digest of the same canonical payload instead: with ECDSA_SHA_256 the
+  // signature over the digest is the signature over the payload, so verifyReceiptKmsSignature is
+  // unchanged.
+  const encoded = createHash('sha256').update(Buffer.from(payload)).digest('base64');
   let raw;
   try {
     raw = execFile('aws', [
       'kms', 'sign',
       '--region', 'us-east-1',
       '--key-id', keyArn,
-      '--message-type', 'RAW',
+      '--message-type', 'DIGEST',
       '--signing-algorithm', KMS_ALGORITHM,
       '--message', encoded,
       '--cli-binary-format', 'base64',

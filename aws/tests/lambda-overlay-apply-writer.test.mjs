@@ -10,7 +10,7 @@ import { buildOverlayReceiptInput } from '../../scripts/deployment-guard/github-
 import { createLiveAwsAdapter } from '../../scripts/deployment-guard/lib/aws-adapter.mjs';
 import { consumedReceiptFile } from '../../scripts/deployment-guard/lib/consumed-receipts.mjs';
 import { CODES } from '../../scripts/deployment-guard/lib/errors.mjs';
-import { signReceipt, verifyReceiptKmsSignature, verifyReceiptMac } from '../../scripts/deployment-guard/lib/issuer.mjs';
+import { canonicalReceiptPayload, signReceipt, verifyReceiptKmsSignature, verifyReceiptMac } from '../../scripts/deployment-guard/lib/issuer.mjs';
 import { signReceiptWithKms } from '../../scripts/deployment-guard/lib/kms-issuer.mjs';
 import { acquireLease } from '../../scripts/deployment-guard/lib/lease.mjs';
 import { applyLambdaOverlay } from '../../scripts/deployment-guard/lib/lambda-overlay-apply.mjs';
@@ -846,10 +846,14 @@ function offlineKmsSigner() {
         assert.deepEqual(args.slice(0, 2), ['kms', 'sign']);
         assert.equal(args[args.indexOf('--key-id') + 1], keyArn);
         assert.equal(args[args.indexOf('--signing-algorithm') + 1], 'ECDSA_SHA_256');
+        assert.equal(args[args.indexOf('--message-type') + 1], 'DIGEST');
+        // KMS signs the SHA-256 digest it is sent; with ECDSA_SHA_256 that equals signing the payload.
+        const payload = Buffer.from(canonicalReceiptPayload({ ...receipt, kms_key_arn: keyArn }));
+        assert.deepEqual(Buffer.from(args[args.indexOf('--message') + 1], 'base64'), createHash('sha256').update(payload).digest());
         return JSON.stringify({
           KeyId: keyArn,
           SigningAlgorithm: 'ECDSA_SHA_256',
-          Signature: sign('sha256', Buffer.from(args[args.indexOf('--message') + 1], 'base64'), privateKey).toString('base64'),
+          Signature: sign('sha256', payload, privateKey).toString('base64'),
         });
       },
     }),
