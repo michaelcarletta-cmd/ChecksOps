@@ -114,7 +114,7 @@ period.
 
 | ID | Control | Evidence | Status |
 |---|---|---|---|
-| CC9.1 | Business continuity and disaster recovery | `docs/compliance/BCP_DR.md`; Multi-AZ RDS (primary 1f, standby 1a), 35-day backups, deletion protection; private-files bucket versioning on; `aws/cutover/WRITE_FREEZE_DRILL.md` | Partial: targets written; database backups replicated to `us-east-2` since 2026-11-06. Still single-region: the private-files bucket (replication runbook ready: `ops/security/FILES_BUCKET_REPLICATION_2026_11.md`, phase 1 for every object except the KMS-encrypted compliance documents). Backup person named (Austin Sukanick); access not yet set up. No restore test yet. |
+| CC9.1 | Business continuity and disaster recovery | `docs/compliance/BCP_DR.md`; Multi-AZ RDS (primary 1f, standby 1a), 35-day backups, deletion protection; private-files bucket versioning on; `aws/cutover/WRITE_FREEZE_DRILL.md` | Partial: targets written; database backups replicated to `us-east-2` since 2026-11-06. Private-files bucket copied to `us-east-2` since 2026-11-09 (1,592 versions, 0 failed; `ops/security/FILES_BUCKET_REPLICATION_2026_11.md` "Applied"); the KMS-encrypted compliance documents are phase 2. Backup person named (Austin Sukanick); access not yet set up. No restore test yet. |
 | CC9.2 | Vendor inventory, contracts and annual review | WISP §3.6 vendor table | Gap: collect each vendor's SOC 2 report and the contract addendum, and record an annual review (row S-1). The WISP still marks Moov and CheckAlt addenda "OWNER TO CONFIRM". |
 | CC9.2 | Complementary user-entity controls | `docs/compliance/SYSTEM_DESCRIPTION.md` §5 | Partial: drafted; to be reflected in tenant terms. |
 
@@ -152,7 +152,7 @@ In rough order of audit risk:
    `docs/compliance/EVIDENCE_CALENDAR.md`. The risk register (CC3.1), the first access review
    (CC6.3) and the QI report (CC1.2) were drafted 2026-11-06 and wait for the owner's sign-off.
    Route to the audit: `docs/compliance/AUDIT_READINESS_PLAN.md`.
-5. **Files not copied outside `us-east-1`** (CC9.1). The database is, since 2026-11-06.
+5. **Files copied outside `us-east-1`** (CC9.1) since 2026-11-09, except the KMS-encrypted compliance documents (phase 2). The database is, since 2026-11-06.
 6. **Root account** in daily use (CC6.1). Root MFA is on (confirmed 2026-11-06).
 7. **Vendor SOC reports and addenda** not on file (CC9.2).
 8. **Documents drafted 2026-11-06, to adopt and keep records for**: personnel security, BCP/DR,
