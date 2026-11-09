@@ -2,8 +2,10 @@
  * Checks page header, white-label tenants (owner's "Option A", 2026-11-09): the
  * WalletOps "Available operating balance" replaces the subtitle
  * "Manage checks, endorsements & deposits" when the wallet is available, with
- * the same hook, query and format as WalletOps. Anyone else, and while the
- * wallet loads, on error, with no wallet or a failed sync, keeps the subtitle.
+ * the same hook, query and format as WalletOps. While the balance can still
+ * arrive the header shows the label with a placeholder bar (no subtitle flash on
+ * a refresh); without payments, on error, with no wallet or a failed sync it
+ * keeps the subtitle.
  * The non-white-label subtitle is unchanged. Fixtures only; no network.
  */
 import assert from 'node:assert/strict';
@@ -15,6 +17,7 @@ import { createRequire } from 'node:module';
 import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import {
+  checksHeaderBalanceView,
   checksHeaderOperatingBalance,
   formatWalletMoney,
   operatingBalanceLabel,
@@ -68,7 +71,8 @@ test('WalletOps and the Checks header share one formatter and one data source', 
 
   const header = read('src/components/checks/ChecksHeaderOperatingBalance.tsx');
   assert.match(header, /useWallet\("operating"\)/);
-  assert.match(header, /checksHeaderOperatingBalance\(\{ enabled, isLoading, error, wallet \}\)/);
+  assert.match(header, /checksHeaderBalanceView\(\{ tenantId, enabled, isPending, error, wallet \}\)/);
+  assert.match(read('src/hooks/useWallet.ts'), /isPending: query\.isPending,/);
   // No other data source: no direct API or Supabase call in the header.
   assert.doesNotMatch(header, /supabase|fetch\(|useQuery|awsApi/);
 });
@@ -129,7 +133,18 @@ async function renderHeader(walletState) {
   }
 }
 
-const ready = { enabled: true, isLoading: false, error: null, wallet };
+const ready = { tenantId: 't1', enabled: true, isLoading: false, isPending: false, error: null, wallet };
+
+test('the header waits (pending) while the balance can still arrive, so the subtitle never flashes', () => {
+  const view = (over) => checksHeaderBalanceView({ ...ready, ...over });
+  assert.deepEqual(view({}), { kind: 'amount', amount: '$12,480.35' });
+  assert.deepEqual(view({ tenantId: null, enabled: false, wallet: null, isPending: true }), { kind: 'pending' }, 'organization not loaded yet');
+  assert.deepEqual(view({ wallet: null, isPending: true }), { kind: 'pending' }, 'wallet query waiting or loading');
+  assert.deepEqual(view({ enabled: false, wallet: null, isPending: true }), { kind: 'subtitle' }, 'payments not enabled');
+  assert.deepEqual(view({ wallet: null, isPending: true, error: new Error('x') }), { kind: 'subtitle' }, 'error');
+  assert.deepEqual(view({ wallet: null }), { kind: 'subtitle' }, 'no wallet');
+  assert.deepEqual(view({ wallet: { ...wallet, status: 'sync_failed' } }), { kind: 'subtitle' }, 'failed sync');
+});
 
 test('renders "Available operating balance $12,480.35" as one readable sentence', async (t) => {
   let html;
@@ -149,10 +164,31 @@ test('renders "Available operating balance $12,480.35" as one readable sentence'
   assert.equal(html.split(/<[^>]*>/).join(''), 'Available operating balance $12,480.35');
 });
 
-test('renders the existing subtitle when not permitted, loading, on error, with no wallet or a failed sync', async (t) => {
+test('renders the label with a placeholder bar, not the subtitle, while loading', async (t) => {
+  for (const [name, state] of Object.entries({
+    'organization loading': { ...ready, tenantId: null, enabled: false, wallet: null, isPending: true },
+    'wallet loading': { ...ready, isLoading: true, isPending: true, wallet: null },
+  })) {
+    let html;
+    try {
+      html = await renderHeader(state);
+    } catch (error) {
+      if (/Cannot find (module|package) 'esbuild'|ERR_MODULE_NOT_FOUND/.test(String(error))) {
+        t.skip('esbuild/react-dom not installed (run bun install)');
+        return;
+      }
+      throw error;
+    }
+    assert.match(html, /^<p class="text-sm" data-testid="checks-header-operating-balance" aria-busy="true">/, name);
+    assert.match(html, /animate-pulse/, name);
+    assert.equal(html.split(/<[^>]*>/).join(''), 'Available operating balance ', name);
+    assert.doesNotMatch(html, /Manage checks|\$/, name);
+  }
+});
+
+test('renders the existing subtitle when not permitted, on error, with no wallet or a failed sync', async (t) => {
   const cases = {
     'payments not enabled': { ...ready, enabled: false, wallet: null },
-    loading: { ...ready, isLoading: true, wallet: null },
     error: { ...ready, error: new Error('wallet read failed'), wallet: null },
     'no wallet': { ...ready, wallet: null },
     'failed sync': { ...ready, wallet: { ...wallet, status: 'sync_failed' } },

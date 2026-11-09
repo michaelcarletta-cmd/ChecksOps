@@ -102,6 +102,8 @@ export function useWallet(walletType: WalletType = "operating") {
     /** Payment account isn't approved/provisioned yet — show a calm empty state. */
     setupRequired: !!query.data?.setup_required,
     isLoading: query.isLoading,
+    /** True until the wallet has data or an error, including while the query waits for the organization or its provider environment. */
+    isPending: query.isPending,
     error: query.error as Error | null,
     refetch: query.refetch,
     refresh,

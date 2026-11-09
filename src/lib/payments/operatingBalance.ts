@@ -51,3 +51,32 @@ export function checksHeaderOperatingBalance(input: {
   if (wallet.status === "sync_failed") return null;
   return formatWalletMoney(wallet.available_cents);
 }
+
+export type ChecksHeaderBalanceView =
+  | { kind: "pending" }
+  | { kind: "amount"; amount: string }
+  | { kind: "subtitle" };
+
+/**
+ * What the white-label Checks header shows on a page load:
+ * - "pending" while the balance can still arrive (the organization, its
+ *   provider environment or the wallet itself is still loading), so the old
+ *   subtitle never flashes before the amount;
+ * - "amount" once WalletOps would show a number;
+ * - "subtitle" only when no balance can be shown (payments not enabled for the
+ *   tenant, an error, no wallet, or a failed sync).
+ */
+export function checksHeaderBalanceView(input: {
+  tenantId: string | null | undefined;
+  enabled: boolean;
+  isPending: boolean;
+  error: unknown;
+  wallet: OperatingBalanceWallet | null | undefined;
+}): ChecksHeaderBalanceView {
+  const { tenantId, enabled, isPending, error, wallet } = input;
+  if (!enabled) return tenantId ? { kind: "subtitle" } : { kind: "pending" };
+  if (error) return { kind: "subtitle" };
+  const amount = checksHeaderOperatingBalance({ enabled, isLoading: false, error, wallet });
+  if (amount) return { kind: "amount", amount };
+  return isPending ? { kind: "pending" } : { kind: "subtitle" };
+}
