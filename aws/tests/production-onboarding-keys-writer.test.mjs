@@ -23,6 +23,7 @@ import {
   aliasArn,
   assertExpectedAfter,
   canonical,
+  canonicalPolicy,
   classify,
   createStackArgs,
   keyPoliciesFromTemplate,
@@ -190,7 +191,8 @@ test('the key policies read from the template: staging administration statement,
     Sid: REPLICATION_STATEMENT_SID,
     Effect: 'Allow',
     Principal: { AWS: FILES_REPLICATION_ROLE_ARN },
-    Action: ['kms:Decrypt'],
+    // The template writes ["kms:Decrypt"]; compared by meaning, as KMS stores it, that is one string.
+    Action: 'kms:Decrypt',
     Resource: '*',
     Condition: {
       StringEquals: { 'kms:ViaService': 's3.us-east-1.amazonaws.com' },
@@ -787,4 +789,37 @@ test('the update writer refuses drift after the receipt, reports a rolled-back u
     const result = await preflightUpdate(root, aws);
     assert.throws(() => writer(writerEnv(result), writerDeps(aws, root)), /post_write_lambda_moved/);
   }
+});
+
+// --- KMS stores a one-item list as a plain string -------------------------------------------------
+
+// The documents key policy exactly as kms get-key-policy returned it after the update run
+// 42618763202 (2026-11-09 12:40 UTC). KMS keeps "Action": "kms:Decrypt", not ["kms:Decrypt"].
+const LIVE_DOCS_POLICY_AFTER_UPDATE = "{\n  \"Version\" : \"2012-10-17\",\n  \"Statement\" : [ {\n    \"Sid\" : \"KeyAdministrationOnly\",\n    \"Effect\" : \"Allow\",\n    \"Principal\" : {\n      \"AWS\" : \"arn:aws:iam::806168576068:root\"\n    },\n    \"Action\" : [ \"kms:DescribeKey\", \"kms:GetKeyPolicy\", \"kms:PutKeyPolicy\", \"kms:ListKeyPolicies\", \"kms:ListResourceTags\", \"kms:ListAliases\", \"kms:ListGrants\", \"kms:GetKeyRotationStatus\", \"kms:EnableKeyRotation\", \"kms:DisableKeyRotation\", \"kms:RotateKeyOnDemand\", \"kms:ListKeyRotations\", \"kms:EnableKey\", \"kms:DisableKey\", \"kms:UpdateKeyDescription\", \"kms:CreateAlias\", \"kms:UpdateAlias\", \"kms:DeleteAlias\", \"kms:RevokeGrant\", \"kms:RetireGrant\", \"kms:TagResource\", \"kms:UntagResource\", \"kms:ScheduleKeyDeletion\", \"kms:CancelKeyDeletion\" ],\n    \"Resource\" : \"*\"\n  }, {\n    \"Sid\" : \"ProductionApiRoleViaS3\",\n    \"Effect\" : \"Allow\",\n    \"Principal\" : {\n      \"AWS\" : \"arn:aws:iam::806168576068:role/checksops-production-api-execution\"\n    },\n    \"Action\" : [ \"kms:GenerateDataKey\", \"kms:Decrypt\" ],\n    \"Resource\" : \"*\",\n    \"Condition\" : {\n      \"StringEquals\" : {\n        \"kms:ViaService\" : \"s3.us-east-1.amazonaws.com\"\n      },\n      \"StringLike\" : {\n        \"kms:EncryptionContext:aws:s3:arn\" : \"arn:aws:s3:::checksops-production-privatefiles-806168576068/files/verification-docs/*\"\n      }\n    }\n  }, {\n    \"Sid\" : \"FilesReplicationRoleDecryptViaS3\",\n    \"Effect\" : \"Allow\",\n    \"Principal\" : {\n      \"AWS\" : \"arn:aws:iam::806168576068:role/checksops-production-files-replication\"\n    },\n    \"Action\" : \"kms:Decrypt\",\n    \"Resource\" : \"*\",\n    \"Condition\" : {\n      \"StringEquals\" : {\n        \"kms:ViaService\" : \"s3.us-east-1.amazonaws.com\"\n      },\n      \"StringLike\" : {\n        \"kms:EncryptionContext:aws:s3:arn\" : \"arn:aws:s3:::checksops-production-privatefiles-806168576068/files/verification-docs/*\"\n      }\n    }\n  } ]\n}";
+
+test('canonicalPolicy: a one-item list equals its item in Action, Resource, Principal and conditions only', () => {
+  const listed = { Version: '2012-10-17', Statement: [{ Sid: 'S', Effect: 'Allow', Principal: { AWS: ['arn:aws:iam::1:root'] }, Action: ['kms:Decrypt'], NotAction: ['kms:Sign'], Resource: ['*'], NotResource: ['x'], Condition: { StringEquals: { 'kms:ViaService': ['s3.us-east-1.amazonaws.com'] } } }] };
+  const scalar = { Version: '2012-10-17', Statement: [{ Sid: 'S', Effect: 'Allow', Principal: { AWS: 'arn:aws:iam::1:root' }, Action: 'kms:Decrypt', NotAction: 'kms:Sign', Resource: '*', NotResource: 'x', Condition: { StringEquals: { 'kms:ViaService': 's3.us-east-1.amazonaws.com' } } }] };
+  assert.deepEqual(canonicalPolicy(listed), canonicalPolicy(scalar));
+  // Two or more values stay a list in their order; a different value is still different.
+  const two = { Statement: [{ Action: ['kms:Decrypt', 'kms:Encrypt'] }] };
+  assert.deepEqual(canonicalPolicy(two), { Statement: [{ Action: ['kms:Decrypt', 'kms:Encrypt'] }] });
+  assert.notDeepEqual(canonicalPolicy({ Statement: [{ Action: ['kms:Encrypt', 'kms:Decrypt'] }] }), canonicalPolicy(two));
+  assert.notDeepEqual(canonicalPolicy({ Statement: [{ Action: 'kms:Encrypt' }] }), canonicalPolicy({ Statement: [{ Action: ['kms:Decrypt'] }] }));
+  // Fields outside the statement rules are left as written.
+  assert.deepEqual(canonicalPolicy({ Statement: [{ Sid: ['S'] }] }), { Statement: [{ Sid: ['S'] }] });
+});
+
+test('the documents key policy KMS returned after the update is the template policy (LIVE, verify passes)', () => {
+  const kmsForm = (alias, d) => { if (alias === DOCS.alias) d.policy.Policy = LIVE_DOCS_POLICY_AFTER_UPDATE; };
+  const after = live({ status: 'UPDATE_COMPLETE', mutateKey: kmsForm });
+  assert.equal(cls(after).state, 'LIVE');
+  assert.doesNotThrow(() => assertExpectedAfter(previous(), after, { mode: 'update', expectedPolicies: POLICIES, previousPolicies: PREVIOUS_POLICIES }));
+  // A real change in that statement is still drift.
+  const widened = live({ status: 'UPDATE_COMPLETE', mutateKey: (alias, d) => {
+    if (alias === DOCS.alias) d.policy.Policy = LIVE_DOCS_POLICY_AFTER_UPDATE.replace('"Action" : "kms:Decrypt"', '"Action" : "kms:*"');
+  } });
+  assert.notEqual(widened.keys[DOCS.alias].Policy, after.keys[DOCS.alias].Policy);
+  assert.equal(cls(widened).state, 'BLOCKED');
+  assert.throws(() => assertExpectedAfter(previous(), widened, { mode: 'update', expectedPolicies: POLICIES, previousPolicies: PREVIOUS_POLICIES }), /post_write_not_live:.*key_policy_drift/);
 });
