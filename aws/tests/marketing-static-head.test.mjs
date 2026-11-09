@@ -34,7 +34,7 @@ test('public pricing is retired: /pricing is no marketing page and no page head 
   for (const page of MARKETING_PAGES) {
     const html = renderStaticHead(indexHtml, page);
     assert.doesNotMatch(html, /7,?500|\$4\b|\$100\b|\$1,000|per-check fee|platform fee/i, page.path);
-    assert.ok(!html.includes('https://checksops.com/pricing'), page.path);
+    assert.doesNotMatch(html, /checksops\.com\/pricing/, page.path);
   }
 });
 
