@@ -62,4 +62,7 @@ production values are those in §2 above.
 
 - Restore test once a year (row B-1): point-in-time restore of `checksops-production` to a new
   instance, record the time to `available`, compare row counts for key tables, delete the copy.
+  The same test reads back the `us-east-2` files copy (one ordinary file, one compliance document
+  under a temporary key policy statement) and compares object counts
+  (`ops/security/RESTORE_TEST_RUNBOOK.md` "Files recovery").
 - Tabletop exercise once a year (row I-1), including one continuity scenario.
