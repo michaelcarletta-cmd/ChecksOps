@@ -24,6 +24,7 @@ test('the deploy role gains exactly these onboarding keys statements', () => {
     'InspectTaggedOnboardingKeys',
     'ListKmsAliasesForOnboardingKeys',
     'SetUpNewOnboardingKeysThroughCloudFormation',
+    'UpdateExactOnboardingKeysStack',
   ]);
   for (const s of statements) {
     assert.equal(s.Effect, 'Allow', s.Sid);
@@ -36,6 +37,7 @@ test('the deploy role gains exactly these onboarding keys statements', () => {
     'cloudformation:DescribeStackResources',
     'cloudformation:DescribeStacks',
     'cloudformation:GetTemplate',
+    'cloudformation:UpdateStack',
     'kms:CreateAlias',
     'kms:CreateAlias',
     'kms:CreateKey',
@@ -60,13 +62,19 @@ test('no delete, update, disable, grant, cryptographic or stack-update right any
     assert.equal(all.includes(forbidden), false, forbidden);
   }
   assert.equal(all.some((a) => /^kms:.*Delet/.test(a)), false);
-  // The onboarding keys stack is create-only: no UpdateStack on it.
+  // UpdateStack on the onboarding keys stack only in its own exact statement (the guarded update
+  // mode); the key policy write it needs is SetUpNewOnboardingKeysThroughCloudFormation's.
   const update = POLICY.Statement.filter((s) => arr(s.Action).includes('cloudformation:UpdateStack'));
-  for (const s of update) assert.doesNotMatch(s.Resource, /onboarding-keys/, s.Sid);
+  for (const s of update) {
+    if (/onboarding-keys/.test(s.Resource)) {
+      assert.equal(s.Sid, 'UpdateExactOnboardingKeysStack');
+      assert.deepEqual(arr(s.Action), ['cloudformation:UpdateStack']);
+    }
+  }
 });
 
 test('CloudFormation rights name only this stack', () => {
-  for (const sid of ['InspectExactOnboardingKeysStack', 'CreateExactOnboardingKeysStack']) {
+  for (const sid of ['InspectExactOnboardingKeysStack', 'CreateExactOnboardingKeysStack', 'UpdateExactOnboardingKeysStack']) {
     assert.equal(bySid[sid].Resource, STACK_ARN, sid);
     assert.equal(bySid[sid].Condition, undefined, sid);
   }

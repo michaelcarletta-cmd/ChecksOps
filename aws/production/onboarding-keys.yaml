@@ -20,6 +20,9 @@ Resources:
   # gets key administration only (PutKeyPolicy kept so the key cannot be
   # locked out; no CreateGrant, Encrypt or Decrypt). Use is limited to the
   # production API Lambda role, through S3 only, under the documents prefix.
+  # The S3 replication role (ops/security/FILES_BUCKET_REPLICATION_2026_11.md)
+  # may only decrypt, through S3 only, under the same prefix, so the documents
+  # can be copied to us-east-2.
   ComplianceDocumentsKey:
     Type: AWS::KMS::Key
     DeletionPolicy: Retain
@@ -73,6 +76,23 @@ Resources:
             "Principal": { "AWS": { "Fn::Sub": "arn:aws:iam::${AWS::AccountId}:role/checksops-production-api-execution" } },
             "Action": [
               "kms:GenerateDataKey",
+              "kms:Decrypt"
+            ],
+            "Resource": "*",
+            "Condition": {
+              "StringEquals": {
+                "kms:ViaService": { "Fn::Sub": "s3.${AWS::Region}.amazonaws.com" }
+              },
+              "StringLike": {
+                "kms:EncryptionContext:aws:s3:arn": { "Fn::Sub": "arn:aws:s3:::checksops-production-privatefiles-${AWS::AccountId}/files/verification-docs/*" }
+              }
+            }
+          },
+          {
+            "Sid": "FilesReplicationRoleDecryptViaS3",
+            "Effect": "Allow",
+            "Principal": { "AWS": { "Fn::Sub": "arn:aws:iam::${AWS::AccountId}:role/checksops-production-files-replication" } },
+            "Action": [
               "kms:Decrypt"
             ],
             "Resource": "*",
