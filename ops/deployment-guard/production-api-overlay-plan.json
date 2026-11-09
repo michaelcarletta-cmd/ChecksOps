@@ -843,10 +843,10 @@
     },
     "endorsement-composite.mjs": {
       "operation": "replace",
-      "accepted_sha256": "9fc79f57dbbbcba134fd8e0c7d7936415fd6c1c83f98fcf18bf50e73def25a80",
+      "accepted_sha256": "15e3f691c547b70da9790872944da67664649bce4b07a3265d020a52e6c6623b",
       "expected_live_sha256": "9fc79f57dbbbcba134fd8e0c7d7936415fd6c1c83f98fcf18bf50e73def25a80",
       "sql_before": null,
-      "manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
+      "manifest": "aws/tests/fixtures/production-endorsement-pay-to-order-tenant-name-manifest-2026-11-09.json"
     },
     "check-endorsement.mjs": {
       "operation": "replace",
