@@ -13,30 +13,31 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "inspect (read-only) or create the stack"
+        description: "inspect (read-only), create the stack, or update it to the pinned template"
         required: true
         default: inspect
         type: choice
         options:
           - inspect
           - create
+          - update
       approved_commit:
-        description: "Required for create: exact main commit approved for this run"
+        description: "Required for create and update: exact main commit approved for this run"
         required: false
         default: ""
         type: string
       expected_snapshot_sha256:
-        description: "Required for create: snapshot SHA-256 from a prior inspect run"
+        description: "Required for create and update: snapshot SHA-256 from a prior inspect run"
         required: false
         default: ""
         type: string
       staging_acceptance_reference:
-        description: "Required for create: ChecksOps GitHub run or PR URL recording the staging evidence the owner accepts (staging keys and uploads)"
+        description: "Required for create and update: ChecksOps GitHub run or PR URL recording the evidence the owner accepts"
         required: false
         default: ""
         type: string
       approval_phrase:
-        description: "create: CREATE ONBOARDING KEYS IN PRODUCTION"
+        description: "create: CREATE ONBOARDING KEYS IN PRODUCTION / update: UPDATE ONBOARDING KEYS IN PRODUCTION"
         required: false
         default: ""
         type: string
@@ -74,15 +75,17 @@ jobs:
           test "$GITHUB_REF" = "refs/heads/main" || { echo "Guarded onboarding keys change only runs from main"; exit 2; }
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA" || { echo "Checkout SHA mismatch"; exit 2; }
           case "$INPUT_MODE" in
-            inspect|create) ;;
-            *) echo "mode must be inspect or create"; exit 2 ;;
+            inspect) ;;
+            create) PHRASE="CREATE ONBOARDING KEYS IN PRODUCTION" ;;
+            update) PHRASE="UPDATE ONBOARDING KEYS IN PRODUCTION" ;;
+            *) echo "mode must be inspect, create or update"; exit 2 ;;
           esac
-          if [ "$INPUT_MODE" = "create" ]; then
-            [[ "$INPUT_APPROVED_COMMIT" =~ ^[0-9a-f]{40}$ ]] || { echo "create requires a 40-character approved_commit"; exit 2; }
+          if [ "$INPUT_MODE" != "inspect" ]; then
+            [[ "$INPUT_APPROVED_COMMIT" =~ ^[0-9a-f]{40}$ ]] || { echo "$INPUT_MODE requires a 40-character approved_commit"; exit 2; }
             test "$INPUT_APPROVED_COMMIT" = "$GITHUB_SHA" || { echo "main moved or approved commit does not match workflow SHA"; exit 2; }
-            [[ "$INPUT_EXPECTED_SNAPSHOT_SHA256" =~ ^[0-9a-f]{64}$ ]] || { echo "create requires expected_snapshot_sha256 from inspect"; exit 2; }
-            test -n "$INPUT_STAGING_ACCEPTANCE" || { echo "create requires staging_acceptance_reference"; exit 2; }
-            test "$INPUT_APPROVAL_PHRASE" = "CREATE ONBOARDING KEYS IN PRODUCTION" || { echo "approval_phrase must be exactly: CREATE ONBOARDING KEYS IN PRODUCTION"; exit 2; }
+            [[ "$INPUT_EXPECTED_SNAPSHOT_SHA256" =~ ^[0-9a-f]{64}$ ]] || { echo "$INPUT_MODE requires expected_snapshot_sha256 from inspect"; exit 2; }
+            test -n "$INPUT_STAGING_ACCEPTANCE" || { echo "$INPUT_MODE requires staging_acceptance_reference"; exit 2; }
+            test "$INPUT_APPROVAL_PHRASE" = "$PHRASE" || { echo "approval_phrase must be exactly: $PHRASE"; exit 2; }
           fi
 
       - name: Set up Node.js
@@ -181,7 +184,7 @@ jobs:
             echo "- Drift: \`${PROBLEMS:-none}\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Create the stack through the official receipt-gated writer
+      - name: Create or update the stack through the official receipt-gated writer
         if: ${{ inputs.mode != 'inspect' }}
         shell: bash
         env:
@@ -210,6 +213,7 @@ jobs:
         if: ${{ always() && inputs.mode != 'inspect' }}
         shell: bash
         env:
+          INPUT_MODE: ${{ inputs.mode }}
           STATE: ${{ steps.verify.outputs.state }}
           SNAPSHOT_SHA256: ${{ steps.verify.outputs.snapshot_sha256 }}
           STACK_STATUS: ${{ steps.verify.outputs.stack_status }}
@@ -218,7 +222,7 @@ jobs:
           LAMBDA_REVISION_ID: ${{ steps.verify.outputs.lambda_revision_id }}
         run: |
           {
-            echo "### Production onboarding keys after the create"
+            echo "### Production onboarding keys after the $INPUT_MODE"
             echo "- Verify: \`${STATE:-not verified}\`"
             echo "- Snapshot SHA-256: \`$SNAPSHOT_SHA256\`"
             echo "- Stack: \`$STACK_STATUS\` / documents key: \`$DOCUMENTS_KEY\` / PII key: \`$PII_KEY\` / prep Lambda RevisionId: \`$LAMBDA_REVISION_ID\`"

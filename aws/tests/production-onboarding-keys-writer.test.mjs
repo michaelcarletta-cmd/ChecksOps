@@ -11,8 +11,11 @@ import {
   KEYS,
   KEYS_DEPLOYMENT_TYPE,
   KEYS_TARGET_COMPONENT,
+  FILES_REPLICATION_ROLE_ARN,
   LAMBDA_QUERY,
   PREP_LAMBDA_ROLE_ARN,
+  PREVIOUS_TEMPLATE_SHA256,
+  REPLICATION_STATEMENT_SID,
   STACK_NAME,
   TAG_KEY,
   TEMPLATE_PATH,
@@ -26,12 +29,16 @@ import {
   main as writer,
   normalizeSnapshot,
   ownedComponentsFor,
+  previousKeyPolicies,
+  previousTemplateBody,
   readTemplate,
   snapshotFingerprint,
+  updateStackArgs,
   waitForStack,
 } from '../../scripts/deployment-guard/production-onboarding-keys.mjs';
 import {
   CREATE_PHRASE,
+  UPDATE_PHRASE,
   approvalPhraseFor,
   run as preflight,
   validateChangeInputs,
@@ -48,6 +55,8 @@ const STAGING_REF = 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/ru
 const WORKFLOW = fs.readFileSync(path.join(REPO_ROOT, '.github/workflows/guarded-production-onboarding-keys.yml'), 'utf8');
 const TEMPLATE = readTemplate(REPO_ROOT);
 const POLICIES = keyPoliciesFromTemplate(TEMPLATE.body);
+const PREVIOUS_BODY = previousTemplateBody(TEMPLATE.body);
+const PREVIOUS_POLICIES = previousKeyPolicies(TEMPLATE.body);
 const [DOCS, PII] = KEYS;
 const KEY_IDS = { [DOCS.alias]: '1a2b3c4d-0000-4000-8000-000000000001', [PII.alias]: '1a2b3c4d-0000-4000-8000-000000000002' };
 const keyArn = (alias) => `arn:aws:kms:us-east-1:806168576068:key/${KEY_IDS[alias]}`;
@@ -67,8 +76,7 @@ function absent(lambda = LAMBDA) {
 }
 
 // The live policy as KMS returns it: a JSON string, keys in template order (not canonical).
-function livePolicyString(alias) {
-  const body = TEMPLATE.body;
+function livePolicyString(alias, body = TEMPLATE.body) {
   const spec = KEYS.find((k) => k.alias === alias);
   const at = body.indexOf(`\n  ${spec.logicalId}:\n`);
   const start = body.indexOf('KeyPolicy: {', at) + 'KeyPolicy: '.length;
@@ -83,7 +91,7 @@ function livePolicyString(alias) {
   return JSON.stringify(JSON.parse(resolved));
 }
 
-function raw({ status = 'CREATE_COMPLETE', templateBody = TEMPLATE.body, lambda = LAMBDA, mutateKey = null, aliases = ALIAS_NAMES } = {}) {
+function raw({ status = 'CREATE_COMPLETE', templateBody = TEMPLATE.body, policyBody = templateBody, lambda = LAMBDA, mutateKey = null, aliases = ALIAS_NAMES } = {}) {
   const keyDetails = {};
   for (const alias of aliases) {
     const spec = KEYS.find((k) => k.alias === alias);
@@ -93,7 +101,7 @@ function raw({ status = 'CREATE_COMPLETE', templateBody = TEMPLATE.body, lambda 
         KeySpec: 'SYMMETRIC_DEFAULT', KeyUsage: 'ENCRYPT_DECRYPT', Origin: 'AWS_KMS', MultiRegion: false, KeyManager: 'CUSTOMER',
         Description: spec.description, CreationDate: '2026-11-01T00:00:00Z',
       } },
-      policy: { PolicyName: 'default', Policy: livePolicyString(alias) },
+      policy: { PolicyName: 'default', Policy: livePolicyString(alias, policyBody) },
       rotation: { KeyRotationEnabled: true, RotationPeriodInDays: 365 },
       tags: { Tags: [{ TagKey: TAG_KEY, TagValue: STACK_NAME }] },
     };
@@ -123,7 +131,10 @@ function raw({ status = 'CREATE_COMPLETE', templateBody = TEMPLATE.body, lambda 
 }
 
 const live = (opts) => normalizeSnapshot(raw(opts));
+// The live stack today: created from the previous template, before the update.
+const previous = (opts = {}) => live({ templateBody: PREVIOUS_BODY, ...opts });
 const cls = (s) => classify(s, { expectedPolicies: POLICIES });
+const clsUpdate = (s) => classify(s, { expectedPolicies: POLICIES, previousPolicies: PREVIOUS_POLICIES });
 
 // --- template pin and shape ---------------------------------------------------------------------
 
@@ -156,7 +167,7 @@ test('the key policies read from the template: staging administration statement,
   for (const k of KEYS) {
     const p = POLICIES[k.alias];
     assert.equal(p.Version, '2012-10-17');
-    assert.equal(p.Statement.length, 2);
+    assert.equal(p.Statement.length, k === DOCS ? 3 : 2);
     const [admin, use] = p.Statement;
     assert.deepEqual(admin, canonical({ Sid: 'KeyAdministrationOnly', Effect: 'Allow', Principal: { AWS: 'arn:aws:iam::806168576068:root' }, Action: adminActions, Resource: '*' }));
     assert.deepEqual(use.Principal, { AWS: role });
@@ -174,6 +185,19 @@ test('the key policies read from the template: staging administration statement,
       StringLike: { 'kms:EncryptionContext:aws:s3:arn': `arn:aws:s3:::${FILES_BUCKET}/files/verification-docs/*` },
     },
   }));
+  // The replication role may only decrypt, only through S3, only under the documents prefix.
+  assert.deepEqual(POLICIES[DOCS.alias].Statement[2], canonical({
+    Sid: REPLICATION_STATEMENT_SID,
+    Effect: 'Allow',
+    Principal: { AWS: FILES_REPLICATION_ROLE_ARN },
+    Action: ['kms:Decrypt'],
+    Resource: '*',
+    Condition: {
+      StringEquals: { 'kms:ViaService': 's3.us-east-1.amazonaws.com' },
+      StringLike: { 'kms:EncryptionContext:aws:s3:arn': `arn:aws:s3:::${FILES_BUCKET}/files/verification-docs/*` },
+    },
+  }));
+  assert.equal(FILES_REPLICATION_ROLE_ARN, 'arn:aws:iam::806168576068:role/checksops-production-files-replication');
   assert.deepEqual(POLICIES[PII.alias].Statement[1], canonical({
     Sid: 'ProductionApiRoleFieldEncryption',
     Effect: 'Allow',
@@ -223,9 +247,11 @@ test('classify: ABSENT before create, LIVE for the pinned stack, BLOCKED on part
   ]) {
     assert.equal(cls(absent(lambda)).state, 'BLOCKED', JSON.stringify(lambda));
   }
-  for (const status of ['CREATE_IN_PROGRESS', 'CREATE_FAILED', 'ROLLBACK_COMPLETE', 'UPDATE_COMPLETE', 'UPDATE_ROLLBACK_COMPLETE']) {
+  for (const status of ['CREATE_IN_PROGRESS', 'CREATE_FAILED', 'ROLLBACK_COMPLETE', 'UPDATE_IN_PROGRESS', 'UPDATE_ROLLBACK_COMPLETE', 'UPDATE_ROLLBACK_FAILED']) {
     assert.equal(cls(live({ status })).state, 'BLOCKED', status);
   }
+  // After this writer's update the stack is UPDATE_COMPLETE from the pinned template: LIVE.
+  assert.equal(cls(live({ status: 'UPDATE_COMPLETE' })).state, 'LIVE');
   assert.equal(cls(live({ templateBody: `${TEMPLATE.body}# edited\n` })).problems.includes('stack_template_drift'), true);
   const keyDrifts = [
     (a, d) => { d.metadata.KeyMetadata.Enabled = false; d.metadata.KeyMetadata.KeyState = 'Disabled'; },
@@ -314,7 +340,7 @@ test('verify: create must produce exactly the pinned stack and keys with the Lam
   assert.throws(() => assertExpectedAfter(absent(), live({ status: 'ROLLBACK_COMPLETE' }), opts), /post_write_not_live/);
   assert.throws(() => assertExpectedAfter(absent(), live({ mutateKey: (a, d) => { d.rotation.KeyRotationEnabled = false; } }), opts), /post_write_not_live/);
   assert.throws(() => assertExpectedAfter(live(), live(), opts), /post_write_create_precondition/);
-  assert.throws(() => assertExpectedAfter(absent(), live(), { ...opts, mode: 'update' }), /unknown_mode/);
+  assert.throws(() => assertExpectedAfter(absent(), live(), { ...opts, mode: 'delete' }), /unknown_mode/);
 });
 
 // --- preflight refusals -------------------------------------------------------------------------
@@ -322,7 +348,9 @@ test('verify: create must produce exactly the pinned stack and keys with the Lam
 test('the approval phrase is exact and appears in the workflow', () => {
   assert.equal(approvalPhraseFor('create'), 'CREATE ONBOARDING KEYS IN PRODUCTION');
   assert.ok(WORKFLOW.includes(CREATE_PHRASE));
-  assert.throws(() => approvalPhraseFor('update'), (e) => e.code === CODES.INVALID_MANIFEST);
+  assert.equal(approvalPhraseFor('update'), 'UPDATE ONBOARDING KEYS IN PRODUCTION');
+  assert.ok(WORKFLOW.includes(UPDATE_PHRASE));
+  assert.throws(() => approvalPhraseFor('delete'), (e) => e.code === CODES.INVALID_MANIFEST);
   const fp = snapshotFingerprint(absent());
   const base = { mode: 'create', approval: CREATE_PHRASE, stagingAcceptance: STAGING_REF, expectedFingerprint: fp, liveFingerprint: fp };
   assert.doesNotThrow(() => validateChangeInputs(base));
@@ -419,7 +447,7 @@ test('preflight refuses template hash drift before reading AWS, and unknown mode
     readSnapshot: () => { reads += 1; return absent(); },
     readTemplate: () => ({ body: `${TEMPLATE.body} `, sha256: 'f'.repeat(64) }),
   }), (e) => e.code === CODES.DEPLOYMENT_COLLISION && /pinned sha256/.test(e.message));
-  for (const mode of ['update', 'delete', 'set-state']) {
+  for (const mode of ['delete', 'set-state', 'rollback']) {
     await assert.rejects(preflight({ ...ENV, CHECKSOPS_ONBOARDING_KEYS_MODE: mode }, { root, readSnapshot: () => { reads += 1; return absent(); } }), (e) => e.code === CODES.INVALID_MANIFEST, mode);
   }
   assert.equal(reads, 0);
@@ -561,7 +589,7 @@ test('the writer refuses without a receipt, with another receipt, with caller-su
     fs.writeFileSync(input, JSON.stringify({ mode: 'create', ...extra }));
     assert.throws(() => writer(noReceipt, writerDeps(aws, root)), /caller_supplied_stack_forbidden/);
   }
-  for (const mode of ['update', 'delete', 'set-state']) {
+  for (const mode of ['delete', 'set-state', 'rollback']) {
     fs.writeFileSync(input, JSON.stringify({ mode }));
     assert.throws(() => writer(noReceipt, writerDeps(aws, root)), /unknown_mode/);
   }
@@ -595,9 +623,10 @@ test('the writer refuses without a receipt, with another receipt, with caller-su
 
 // --- workflow wiring ----------------------------------------------------------------------------
 
-test('the workflow: inspect and create only, main only, production environment, its own concurrency group, these tests', () => {
-  assert.match(WORKFLOW, /options:\n\s+- inspect\n\s+- create\n\s+approved_commit:/);
-  assert.doesNotMatch(WORKFLOW, /- update\n|- delete\n|set-state/);
+test('the workflow: inspect, create and update only, main only, production environment, its own concurrency group, these tests', () => {
+  assert.match(WORKFLOW, /options:\n\s+- inspect\n\s+- create\n\s+- update\n\s+approved_commit:/);
+  assert.doesNotMatch(WORKFLOW, /- delete\n|set-state/);
+  assert.ok(WORKFLOW.includes('update) PHRASE="UPDATE ONBOARDING KEYS IN PRODUCTION" ;;'));
   assert.match(WORKFLOW, /^\s+environment: production$/m);
   assert.match(WORKFLOW, /group: guarded-production-onboarding-keys\n\s+cancel-in-progress: false/);
   assert.match(WORKFLOW, /test "\$GITHUB_REF" = "refs\/heads\/main"/);
@@ -623,4 +652,139 @@ test('the guard lists and the bypass inventory include the new files', () => {
   const byPath = Object.fromEntries(inventory.scripts.map((row) => [row.path, row]));
   assert.equal(byPath['scripts/deployment-guard/production-onboarding-keys.mjs']?.classification, 'GUARDED');
   assert.equal(byPath['scripts/deployment-guard/github-production-onboarding-keys.mjs']?.classification, 'SAFE');
+});
+
+// --- update mode (the files replication role decrypt statement) ---------------------------------
+
+test('update: undoing exactly the reviewed change rebuilds the bytes the live stack was created from', () => {
+  assert.equal(PREVIOUS_TEMPLATE_SHA256, 'e584bb95750afd6a174b76f47288e197316c225aadcadcd4508bb1d21d1d85c2');
+  assert.notEqual(TEMPLATE_SHA256, PREVIOUS_TEMPLATE_SHA256);
+  assert.equal(createHash('sha256').update(Buffer.from(PREVIOUS_BODY, 'utf8')).digest('hex'), PREVIOUS_TEMPLATE_SHA256);
+  // The only policy difference is the one new statement on the compliance documents key.
+  assert.deepEqual(PREVIOUS_POLICIES[PII.alias], POLICIES[PII.alias]);
+  assert.deepEqual(PREVIOUS_POLICIES[DOCS.alias].Statement, POLICIES[DOCS.alias].Statement.slice(0, 2));
+  assert.equal(POLICIES[DOCS.alias].Statement[2].Sid, REPLICATION_STATEMENT_SID);
+  // A template with the change missing or doubled is refused.
+  assert.throws(() => previousTemplateBody(PREVIOUS_BODY), /template_update_change_not_found/);
+  // Any other byte changed anywhere else in the template: the rebuilt previous bytes no longer hash
+  // to the live stack's template, so update is refused.
+  assert.throws(() => previousKeyPolicies(TEMPLATE.body.replace('EnableKeyRotation: true', 'EnableKeyRotation: false')), /previous_template_hash_mismatch/);
+  assert.throws(() => previousKeyPolicies(`${TEMPLATE.body}# extra\n`), /previous_template_hash_mismatch/);
+  // The change doubled: refused before hashing.
+  assert.throws(() => previousTemplateBody(TEMPLATE.body.replace('\n        ]\n      }\n\n  ComplianceDocumentsKeyAlias:', `${'"x"'}\n        ]\n      }\n\n  ComplianceDocumentsKeyAlias:`).replace('can be copied to us-east-2.\n', 'can be copied to us-east-2.\n  # The S3 replication role (ops/security/FILES_BUCKET_REPLICATION_2026_11.md)\n  # may only decrypt, through S3 only, under the same prefix, so the documents\n  # can be copied to us-east-2.\n')), /template_update_change_not_found/);
+});
+
+test('classify: the live stack before the update is UPDATE_READY, and only with exactly the previous shape', () => {
+  assert.equal(clsUpdate(previous()).state, 'UPDATE_READY', clsUpdate(previous()).problems.join(','));
+  assert.equal(clsUpdate(previous({ status: 'UPDATE_COMPLETE' })).state, 'UPDATE_READY');
+  // Without the previous policies, or for the create classifier, it is BLOCKED (template drift).
+  assert.equal(cls(previous()).state, 'BLOCKED');
+  assert.ok(cls(previous()).problems.includes('stack_template_drift'));
+  // Already updated: LIVE, not UPDATE_READY.
+  assert.equal(clsUpdate(live({ status: 'UPDATE_COMPLETE' })).state, 'LIVE');
+  // Previous template but the new policy (a hand edit), or any other drift: BLOCKED.
+  assert.equal(clsUpdate(previous({ policyBody: TEMPLATE.body })).state, 'BLOCKED');
+  for (const opts of [
+    { status: 'UPDATE_ROLLBACK_COMPLETE' },
+    { status: 'UPDATE_IN_PROGRESS' },
+    { templateBody: `${PREVIOUS_BODY}# edited\n`, policyBody: PREVIOUS_BODY },
+    { lambda: { ...LAMBDA, RevisionId: null } },
+    { mutateKey: (a, d) => { if (a === PII.alias) d.rotation.KeyRotationEnabled = false; } },
+  ]) {
+    assert.equal(clsUpdate(previous(opts)).state, 'BLOCKED', JSON.stringify(opts));
+  }
+});
+
+test('update-stack arguments: pinned template body, no parameters, no capabilities', () => {
+  const args = updateStackArgs({ templateBody: TEMPLATE.body });
+  assert.deepEqual(args, ['cloudformation', 'update-stack', '--stack-name', 'checksops-production-onboarding-keys', '--template-body', TEMPLATE.body]);
+  assert.equal(createHash('sha256').update(args[5]).digest('hex'), TEMPLATE_SHA256);
+  assert.deepEqual(ownedComponentsFor('update'), ['stack:checksops-production-onboarding-keys:update', 'key-policy:alias/checksops-production-compliance-documents']);
+});
+
+test('verify (update): same stack, aliases, outputs and keys; only the documents key policy moved', () => {
+  const opts = { mode: 'update', expectedPolicies: POLICIES, previousPolicies: PREVIOUS_POLICIES };
+  const after = live({ status: 'UPDATE_COMPLETE' });
+  assert.doesNotThrow(() => assertExpectedAfter(previous(), after, opts));
+  assert.throws(() => assertExpectedAfter(absent(), after, opts), /post_write_update_precondition/);
+  assert.throws(() => assertExpectedAfter(previous(), live(), opts), /post_write_stack_status/);
+  assert.throws(() => assertExpectedAfter(previous(), live({ status: 'UPDATE_ROLLBACK_COMPLETE' }), opts), /post_write_not_live/);
+  assert.throws(() => assertExpectedAfter(previous(), live({ status: 'UPDATE_COMPLETE', lambda: { ...LAMBDA, RevisionId: 'moved' } }), opts), /post_write_lambda_moved/);
+  const moved = (mutate) => { const s = live({ status: 'UPDATE_COMPLETE' }); mutate(s); return s; };
+  assert.throws(() => assertExpectedAfter(previous(), moved((s) => { s.stack.StackId = `${s.stack.StackId}x`; }), opts), /post_write_stack_moved/);
+  assert.throws(() => assertExpectedAfter(previous(), moved((s) => { s.keys[PII.alias].Tags = { ...s.keys[PII.alias].Tags, extra: 'x' }; }), opts), /post_write_not_live|post_write_pii_key_moved/);
+});
+
+async function preflightUpdate(root, aws, extra = {}) {
+  const fp = snapshotFingerprint(aws.readSnapshot());
+  return preflight({
+    ...ENV,
+    CHECKSOPS_ONBOARDING_KEYS_MODE: 'update',
+    CHECKSOPS_EXPECTED_SNAPSHOT_SHA256: fp,
+    CHECKSOPS_STAGING_ACCEPTANCE_REFERENCE: 'https://github.com/michaelcarletta-cmd/ChecksOps/pull/1705',
+    CHECKSOPS_ONBOARDING_KEYS_APPROVAL: UPDATE_PHRASE,
+    ...extra,
+  }, { root, readSnapshot: aws.readSnapshot, signer: (unsigned) => unsigned });
+}
+
+const updatedAws = (initial, opts = {}) => fakeAws(initial, {
+  onRun: (state, args) => { if (args[1] === 'update-stack') state.snapshot = live({ status: 'UPDATE_COMPLETE' }); },
+  ...opts,
+});
+
+test('update: the receipt binds the snapshot and the key policy; the writer sends exactly one update-stack; verify passes; single use', async () => {
+  const root = tmpRoot();
+  const aws = updatedAws(previous());
+  const inspected = await preflight({ ...ENV, CHECKSOPS_ONBOARDING_KEYS_MODE: 'inspect' }, { root, readSnapshot: aws.readSnapshot });
+  assert.equal(inspected.state, 'UPDATE_READY');
+  const result = await preflightUpdate(root, aws);
+  const receipt = JSON.parse(fs.readFileSync(result.authorization.receiptFile, 'utf8'));
+  assert.deepEqual(receipt.owned_components, ownedComponentsFor('update'));
+  assert.deepEqual(receipt.preflight_live_fingerprint, previous());
+  assert.equal(writer(writerEnv(result), writerDeps(aws, root)), 0);
+  assert.deepEqual(aws.state.calls, [updateStackArgs({ templateBody: TEMPLATE.body })]);
+  const verified = await preflight({ ...ENV, CHECKSOPS_ONBOARDING_KEYS_MODE: 'verify', CHECKSOPS_ONBOARDING_KEYS_INPUT: result.authorization.keysInput }, { root, readSnapshot: aws.readSnapshot });
+  assert.equal(verified.state, 'VERIFIED');
+  assert.equal(verified.stack_status, 'UPDATE_COMPLETE');
+  aws.state.snapshot = previous();
+  assert.throws(() => writer(writerEnv(result), writerDeps(aws, root)), /receipt_consumption_failed|guard_refused/);
+  assert.equal(aws.state.calls.length, 1);
+});
+
+test('update preflight refuses a stack that is not UPDATE_READY, a wrong phrase, a stale inspect and create on a live stack', async () => {
+  const root = tmpRoot();
+  await assert.rejects(preflightUpdate(root, updatedAws(absent())), (e) => e.code === CODES.DEPLOYMENT_COLLISION && /previous pinned template/.test(e.message));
+  await assert.rejects(preflightUpdate(root, updatedAws(live({ status: 'UPDATE_COMPLETE' }))), (e) => e.code === CODES.DEPLOYMENT_COLLISION);
+  await assert.rejects(preflightUpdate(root, updatedAws(previous({ policyBody: TEMPLATE.body }))), (e) => e.code === CODES.DEPLOYMENT_COLLISION);
+  const aws = updatedAws(previous());
+  await assert.rejects(preflightUpdate(root, aws, { CHECKSOPS_ONBOARDING_KEYS_APPROVAL: CREATE_PHRASE }), (e) => e.code === CODES.PRODUCTION_APPROVAL_REQUIRED);
+  await assert.rejects(preflightUpdate(root, aws, { CHECKSOPS_EXPECTED_SNAPSHOT_SHA256: 'b'.repeat(64) }), (e) => e.code === CODES.DEPLOYMENT_COLLISION);
+  await assert.rejects(preflightCreate(root, aws), (e) => e.code === CODES.DEPLOYMENT_COLLISION && /absent/.test(e.message));
+  assert.equal(aws.state.calls.length, 0);
+  assert.equal(fs.existsSync(path.join(root, '.deployment-guard')), false, 'a refused update takes no lease');
+});
+
+test('the update writer refuses drift after the receipt, reports a rolled-back update and never retries', async () => {
+  {
+    const root = tmpRoot();
+    const aws = updatedAws(previous());
+    const result = await preflightUpdate(root, aws);
+    aws.state.snapshot = previous({ lambda: { ...LAMBDA, RevisionId: 'rev-moved' } });
+    assert.throws(() => writer(writerEnv(result), writerDeps(aws, root)), /guard_refused|preflight_state/);
+    assert.equal(aws.state.calls.length, 0);
+  }
+  {
+    const root = tmpRoot();
+    const aws = fakeAws(previous(), { onRun: (state) => { state.snapshot = previous({ status: 'UPDATE_ROLLBACK_COMPLETE' }); }, settle: 'UPDATE_ROLLBACK_COMPLETE' });
+    const result = await preflightUpdate(root, aws);
+    assert.throws(() => writer(writerEnv(result), writerDeps(aws, root)), /stack_update_failed:UPDATE_ROLLBACK_COMPLETE/);
+    assert.equal(aws.state.calls.length, 1);
+    assert.equal(aws.state.calls.some((args) => /delete|create/.test(args[1])), false);
+  }
+  {
+    const root = tmpRoot();
+    const aws = fakeAws(previous(), { onRun: (state) => { state.snapshot = live({ status: 'UPDATE_COMPLETE', lambda: { ...LAMBDA, RevisionId: 'moved' } }); }, settle: 'UPDATE_COMPLETE' });
+    const result = await preflightUpdate(root, aws);
+    assert.throws(() => writer(writerEnv(result), writerDeps(aws, root)), /post_write_lambda_moved/);
+  }
 });
