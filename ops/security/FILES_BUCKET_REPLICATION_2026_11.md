@@ -195,7 +195,7 @@ Run by the owner in CloudShell as `michael-admin` (IAM Identity Center, permissi
 - **Source rule**: `CopyToUsEast2` Enabled, delete marker replication Disabled, role `checksops-production-files-replication`.
 - **Copy**: 1,572 current objects (2.72 GB) in the destination, plus 2 batch report objects. The job's 1,592 tasks are object versions. The source held 1,641 versions (CloudWatch `NumberOfObjects`, 2026-11-07); the 49 not copied are the SSE-KMS compliance documents (no `files/verification-docs/` keys in the copy) and delete markers, which the rule leaves out by design.
 
-**Still open (phase 2):** the SSE-KMS compliance documents. They need a `us-east-2` KMS key, the replication role in the compliance-documents key policy, and `SseKmsEncryptedObjects` on the rule. That is a separate reviewed change. The key policy part is done: the replication role may decrypt `files/verification-docs/*` through S3 since 2026-11-09 12:40 UTC (guarded update run 42618763202, recorded in `ops/production-onboarding-keys.md`, "Applied 2026-11-09").
+**Phase 2 (done 2026-11-09, see "Applied 2026-11-09 (phase 2)" below):** the SSE-KMS compliance documents. They needed a `us-east-2` KMS key, the replication role in the compliance-documents key policy, and `SseKmsEncryptedObjects` on the rule. The key policy part: the replication role may decrypt `files/verification-docs/*` through S3 since 2026-11-09 12:40 UTC (guarded update run 42618763202, recorded in `ops/production-onboarding-keys.md`, "Applied 2026-11-09").
 
 ## Phase 2 — the KMS-encrypted compliance documents (CloudShell)
 
@@ -363,6 +363,32 @@ aws s3api list-object-versions --bucket "$DST" --region us-east-2 --prefix files
 
 Every replica must read `aws:kms  <DR_KEY>  REPLICA`. Then tell Claude: it re-reads the rule, the
 role, the new key's policy and rotation, and the CloudTrail events read-only, and opens the record PR.
+
+### Applied 2026-11-09 (phase 2)
+
+Run by the owner in CloudShell as `michael-admin` (Identity Center `AdministratorAccess`, not root),
+from main `874760ba4` (#1714). Every step printed what the runbook expects. Step 0: all four OK lines,
+and 6 compliance document versions, all `aws:kms` with the source key `59d713da-…`, no Bucket Key,
+not yet replicated.
+
+| Step | CloudTrail (UTC, event id, caller `michael-admin`, no error code) |
+|---|---|
+| 1. `us-east-2` key | `CreateKey` 13:31:49, `9693d463-1f12-4cbf-991e-36c0ddadc5e5`: key `arn:aws:kms:us-east-2:806168576068:key/c5863c6d-61b6-42dd-8a42-837fe17c7b25`; `EnableKeyRotation` 13:31:50, `ae28f3ed-9560-4163-bdc1-9c03d9e277a7`; `CreateAlias` 13:31:51, `f659f46b-b50d-4673-9947-9552fdf0158c` |
+| 2. Role KMS rights | `PutRolePolicy` (`FilesReplication`) 13:39:43, `bd7fd2fd-a37e-4751-8788-57f5081fa49b`; printed `statements 5 -> 7` |
+| 3. Rule | `PutBucketReplication` 13:51:15, `91310b91-dabe-428a-b53c-a6d84d0bd392` |
+| 4. Existing documents | `CreateJob` 13:52:21, `6c365a34-5f71-4b04-91e6-e35057069576`: S3 Batch Replication job `83480284-9ced-4794-943d-7b25f83a950a`, **Complete, 6 tasks, 6 succeeded, 0 failed**, 63 s active |
+| 5. Check | 6 versions under `files/verification-docs/` in the copy bucket, all `aws:kms`, key `c5863c6d-…`, `REPLICA` |
+
+**Read-only checks afterwards (as `claude-code`):**
+- **Key** `c5863c6d-…` (`us-east-2`): Enabled, `SYMMETRIC_DEFAULT`, `ENCRYPT_DECRYPT`, `AWS_KMS`, single-region, customer managed, rotation on, alias `alias/checksops-production-compliance-documents-dr`. Policy: `KeyAdministrationOnly` (the account, the 24 administration actions, no encrypt or decrypt) and `FilesReplicationRoleEncryptViaS3` (`kms:Encrypt` only, `kms:ViaService` `s3.us-east-2.amazonaws.com`, encryption context under `checksops-production-privatefiles-dr-806168576068/files/verification-docs/*`).
+- **Role** `checksops-production-files-replication`: the five phase 1 statements plus `DecryptSourceComplianceDocuments` (`kms:Decrypt` on `59d713da-…`, via S3 in `us-east-1`, under `files/verification-docs/*` of the source) and `EncryptReplicaComplianceDocuments` (`kms:Encrypt` on `c5863c6d-…`, via S3 in `us-east-2`, under `files/verification-docs/*` of the copy).
+- **Rule** `CopyToUsEast2`: Enabled, prefix all, `SseKmsEncryptedObjects` Enabled, `ReplicaKmsKeyID` `c5863c6d-…`, delete marker replication Disabled, storage class STANDARD; nothing else changed from phase 1.
+
+**Result:** the whole production files bucket, compliance documents included, is copied to
+`us-east-2`, and new uploads copy as they arrive. Deletes are not copied, by design. Nobody can
+decrypt the compliance document copies until a recovery adds a decrypt statement to the
+`us-east-2` key policy. **Open:** `ops/security/RESTORE_TEST_RUNBOOK.md` covers the database only;
+a files recovery step (including that key policy statement) is still to be written.
 
 ### Phase 2 rollback
 
