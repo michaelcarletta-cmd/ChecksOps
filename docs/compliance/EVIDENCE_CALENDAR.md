@@ -34,7 +34,7 @@ its PR or ticket.
 | I-1 | Incident response tabletop (CC7.3–7.4) | Annually | Scenario, attendees, gaps found, follow-up PRs | 2027-01-31 |
 | I-2 | Post-mortem for every incident (CC7.4) | Within 14 days of each incident | `docs/incidents/YYYY-MM-DD.md` | As it happens |
 | I-3 | Alert path test (CC7.2) | Annually | A test alarm reached `checksops-production-security-alerts` and the inbox | 2026-12-31 |
-| B-1 | Backup restore test (A1.3, CC7.5) | Annually | Point-in-time restore to a new instance, time taken, row-count check, instance deleted after | 2027-01-31 |
+| B-1 | Backup restore test (A1.3, CC7.5) | Annually | Point-in-time restore to a new instance, time taken, row-count check, instance deleted after; files: `us-east-2` copy counts and read-back of one SSE-S3 object and one compliance document, temporary decrypt statement added and removed (CloudTrail event ids) (`ops/security/RESTORE_TEST_RUNBOOK.md`) | 2027-01-31 |
 | D-1 | Retention purge ran (C1.2) | Each run, plus the quarterly sample of 5 purged claims (`docs/DATA_RETENTION.md` §7) | Counts purged; sample result | After the AWS purge exists |
 | R-1 | Risk assessment and risk register (CC3.1–3.2) | Annually and after material change | Register with likelihood, impact, owner and treatment | 2026-12-31 (the move to AWS is a material change) |
 | R-2 | WISP and policy review (CC1.1) | Annually | PR updating `docs/WISP.md` and related policies | 2027-10-21 |
