@@ -75,3 +75,20 @@ On the Windows desktop, run each command inside WSL (`wsl -d Ubuntu -- bash -ic 
 
 **Rollback.** Run step 2 with `before-2026-11-04.json`. That brings back the refused app uploads; the
 website is unaffected either way.
+
+## Applied 2026-11-09 (record)
+
+- The owner ran steps 1 to 3 as `michael-admin` (SSO role
+  `AWSReservedSSO_AdministratorAccess_e5a8a8393214f964`) from WSL on an LF checkout of main.
+- CloudTrail `PutBucketCors` on `checksops-staging-privatefilesbucket-erzqsolpucjp` at
+  2026-11-09T11:07:19Z, request id `7Z6V0DPTRDBRFPS7`, event id
+  `9a4ad750-abf7-4efd-a224-e4e60902cf06`, user agent `aws-cli/2.38.4`, no error code. Its request
+  body is the rule in `after.json`. It is the only `PutBucketCors` on this bucket since the recorded
+  2026-10-19T15:03:07Z change (`XWYGYYKV144HN4S1`).
+- Read-only check afterwards (`GetBucketCors` as `user/claude-code`): the live configuration equals
+  `ops/staging-files-bucket-cors/after.json` and no longer equals `before-2026-11-04.json`.
+- CORS preflights (`OPTIONS`, `Access-Control-Request-Method: PUT`, `content-type`) to the bucket:
+  `capacitor://localhost`, `https://localhost` and `https://staging.checksops.com` each get 200 with
+  their own origin and `PUT, GET`; an unrelated origin gets 403.
+- Step 5: the owner photographed and uploaded a check in the iOS app (staging build) and it
+  uploaded. The website upload on staging.checksops.com was already allowed and is unchanged.
