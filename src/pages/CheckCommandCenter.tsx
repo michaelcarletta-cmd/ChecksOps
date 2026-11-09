@@ -13,6 +13,7 @@ import { DepositsDisabledNotice } from "@/components/deposit-ops/DepositsDisable
 import { supabase } from "@/integrations/supabase/client";
 import { isAwsStaging, awsApiBaseUrl } from "@/lib/awsStaging";
 import { CheckAltImageComplianceCard } from "@/components/checks/CheckAltImageComplianceCard";
+import { ChecksHeaderOperatingBalance } from "@/components/checks/ChecksHeaderOperatingBalance";
 import { getFunctionErrorMessage } from "@/lib/edgeFunctionError";
 import { FunctionsHttpError, FunctionsRelayError, FunctionsFetchError } from "@supabase/supabase-js";
 import { useToast } from "@/hooks/use-toast";
@@ -1306,9 +1307,11 @@ export default function CheckCommandCenter() {
       <div className="flex flex-wrap items-start sm:items-center justify-between gap-2">
         <div className="min-w-0">
           <h1 className="text-xl md:text-2xl font-bold tracking-tight">ChecksOps</h1>
-          <p className="text-sm text-muted-foreground">
-            {isWhiteLabel ? "Manage checks, endorsements & deposits" : "Insurance check intake, review & deposit readiness"}
-          </p>
+          {isWhiteLabel ? (
+            <ChecksHeaderOperatingBalance />
+          ) : (
+            <p className="text-sm text-muted-foreground">{"Insurance check intake, review & deposit readiness"}</p>
+          )}
         </div>
         <div className="flex flex-wrap items-center gap-1 md:gap-2 w-full sm:w-auto">
           {/* Help moved to Settings → ChecksOps Guide */}
