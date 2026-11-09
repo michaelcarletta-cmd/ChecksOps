@@ -40,6 +40,10 @@ export interface DepositRenderInput {
    */
   refreshOriginalUrl?: () => Promise<string | null>;
   override: EndorsementOverride;
+  /**
+   * The check owner's Company Name (src/lib/endorsementCompanyName.ts). Blank
+   * leaves the "Pay to the order of" and company name lines out.
+   */
   companyName: string;
   clientSignatures: SignatureAsset[];
   companySignature: SignatureAsset | null;
@@ -205,14 +209,17 @@ async function drawEndorsementBlock(
 
   let cy = 0;
   const centerX = blockWidth / 2;
+  const companyName = (input.companyName ?? "").trim();
 
   if (showPayToOrder) {
-    ctx.font = `600 ${fontSize}px Arial, sans-serif`;
-    ctx.fillText("Pay to the order of", centerX, cy);
-    cy += fontSize + lineGap;
-    ctx.font = `700 ${Math.round(fontSize * 1.2)}px Arial, sans-serif`;
-    ctx.fillText(input.companyName, centerX, cy);
-    cy += Math.round(fontSize * 1.2) + lineGap;
+    if (companyName) {
+      ctx.font = `600 ${fontSize}px Arial, sans-serif`;
+      ctx.fillText("Pay to the order of", centerX, cy);
+      cy += fontSize + lineGap;
+      ctx.font = `700 ${Math.round(fontSize * 1.2)}px Arial, sans-serif`;
+      ctx.fillText(companyName, centerX, cy);
+      cy += Math.round(fontSize * 1.2) + lineGap;
+    }
     ctx.font = `700 ${fontSize}px Arial, sans-serif`;
     ctx.fillText("For Mobile Deposit Only", centerX, cy);
     cy += fontSize + rowGap;
@@ -269,10 +276,12 @@ async function drawEndorsementBlock(
 
   // Company signature at bottom
   if (input.companySignature) {
-    ctx.font = `700 ${Math.round(fontSize * 1.2)}px Arial, sans-serif`;
     ctx.textAlign = "center";
-    ctx.fillText(input.companyName, centerX, cy);
-    cy += Math.round(fontSize * 1.2) + lineGap;
+    if (companyName) {
+      ctx.font = `700 ${Math.round(fontSize * 1.2)}px Arial, sans-serif`;
+      ctx.fillText(companyName, centerX, cy);
+      cy += Math.round(fontSize * 1.2) + lineGap;
+    }
 
     const url = input.companySignature.signature_image_url ?? "";
     if (url && !url.startsWith("typed:")) {
@@ -291,11 +300,12 @@ async function drawEndorsementBlock(
 
       } catch {
         ctx.font = `italic 500 ${fontSize}px ${SIGNATURE_FONT_FAMILY}`;
-        ctx.fillText(input.companyName, centerX, cy);
+        ctx.fillText(companyName || input.companySignature.payee_name, centerX, cy);
       }
     } else {
+      const typed = url.startsWith("typed:") ? url.slice(6) : "";
       ctx.font = `italic 500 ${fontSize}px ${SIGNATURE_FONT_FAMILY}`;
-      ctx.fillText(input.companyName, centerX, cy);
+      ctx.fillText(companyName || typed || input.companySignature.payee_name, centerX, cy);
     }
   }
 }
@@ -310,15 +320,19 @@ function estimateBlockHeight(
   showPayToOrder: boolean,
 ): number {
   let h = 0;
+  const hasCompanyName = Boolean((input.companyName ?? "").trim());
   if (showPayToOrder) {
-    h += fontSize + lineGap;
-    h += Math.round(fontSize * 1.2) + lineGap;
+    if (hasCompanyName) {
+      h += fontSize + lineGap;
+      h += Math.round(fontSize * 1.2) + lineGap;
+    }
     h += fontSize + rowGap;
   }
   const rows = Math.ceil(input.clientSignatures.length / columns) || 0;
   h += rows * (fontSize + lineGap * 0.5 + sigHeight + rowGap);
   if (input.companySignature) {
-    h += Math.round(fontSize * 1.2) + lineGap + sigHeight;
+    if (hasCompanyName) h += Math.round(fontSize * 1.2) + lineGap;
+    h += sigHeight;
   }
   return h;
 }

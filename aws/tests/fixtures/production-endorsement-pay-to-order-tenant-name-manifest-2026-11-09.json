@@ -1,0 +1,15 @@
+{
+  "workstream_id": "endorsement-pay-to-order-tenant-name",
+  "authorization": "Pending owner review (2026-11-09). Planning only: nothing is live or verified. Each production apply needs its own owner approval, a staging acceptance reference and a read-only production inspect that confirms the live bytes.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Owner 2026-11-09: \"we need to make sure that pay to the order text is tailored to the tenant name. Whatever the tenant has as their Company Name in Company Profile should show as the name in the Pay to the Order text.\" REPLACE endorsement-composite.mjs 9fc79f57 -> 15e3f691: the deposit image stamps PAY TO THE ORDER OF and the check owner's public.tenants.name (Company Profile saves it there); the hardcoded 'Freedom Adjustment' fallback is gone. A blank name leaves the PAY TO THE ORDER OF and name lines out (FOR MOBILE DEPOSIT ONLY stays) and never matches every payee as the company signer. The legacy Freedom/Carletta company-signer aliases apply to the Freedom Adjustment tenant only. live_sha256 9fc79f57 is the recorded live value (release 2026-10-17 manifest, equal to the 2026-10-11 live production bundle snapshot); not re-read for this manifest: a read-only production inspect must confirm it before any apply. No new import; order unchanged. No SQL, no schema change, no backfill: already-deposited checks are never re-composited. Planning only.",
+  "members": {
+    "endorsement-composite.mjs": {
+      "live_sha256": "9fc79f57dbbbcba134fd8e0c7d7936415fd6c1c83f98fcf18bf50e73def25a80",
+      "accepted_sha256": "15e3f691c547b70da9790872944da67664649bce4b07a3265d020a52e6c6623b",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json"
+    }
+  }
+}

@@ -523,15 +523,19 @@ export const drawBitmapText = (dest, text, centerX, topY, pixelSize) => {
 
 const estimateBlockHeight = (input, fontSize, lineGap, rowGap, sigHeight, columns, showPayToOrder) => {
   let h = 0;
+  const hasCompanyName = Boolean(String(input.companyName || '').trim());
   if (showPayToOrder) {
-    h += fontSize + lineGap;
-    h += Math.round(fontSize * 1.2) + lineGap;
+    if (hasCompanyName) {
+      h += fontSize + lineGap;
+      h += Math.round(fontSize * 1.2) + lineGap;
+    }
     h += fontSize + rowGap;
   }
   const rows = Math.ceil(input.clientSignatures.length / columns) || 0;
   h += rows * (fontSize + lineGap * 0.5 + sigHeight + rowGap);
   if (input.companySignature) {
-    h += Math.round(fontSize * 1.2) + lineGap + sigHeight;
+    if (hasCompanyName) h += Math.round(fontSize * 1.2) + lineGap;
+    h += sigHeight;
   }
   return h;
 };
@@ -612,11 +616,14 @@ export const renderEndorsementRaster = (backImg, input) => {
   let cy = originY;
   const mid = originX + blockWidth / 2;
 
+  const companyName = String(input.companyName || '').trim();
   if (override.showPayToOrder) {
-    drawBitmapText(dest, 'PAY TO THE ORDER OF', mid, cy, preset.fontSize);
-    cy += preset.fontSize + preset.lineGap;
-    drawBitmapText(dest, String(input.companyName || '').toUpperCase(), mid, cy, Math.round(preset.fontSize * 1.2));
-    cy += Math.round(preset.fontSize * 1.2) + preset.lineGap;
+    if (companyName) {
+      drawBitmapText(dest, 'PAY TO THE ORDER OF', mid, cy, preset.fontSize);
+      cy += preset.fontSize + preset.lineGap;
+      drawBitmapText(dest, companyName.toUpperCase(), mid, cy, Math.round(preset.fontSize * 1.2));
+      cy += Math.round(preset.fontSize * 1.2) + preset.lineGap;
+    }
     drawBitmapText(dest, 'FOR MOBILE DEPOSIT ONLY', mid, cy, preset.fontSize);
     cy += preset.fontSize + preset.rowGap;
   }
@@ -640,8 +647,10 @@ export const renderEndorsementRaster = (backImg, input) => {
   }
 
   if (input.companySignature) {
-    drawBitmapText(dest, String(input.companyName || '').toUpperCase(), mid, cy, Math.round(preset.fontSize * 1.2));
-    cy += Math.round(preset.fontSize * 1.2) + preset.lineGap;
+    if (companyName) {
+      drawBitmapText(dest, companyName.toUpperCase(), mid, cy, Math.round(preset.fontSize * 1.2));
+      cy += Math.round(preset.fontSize * 1.2) + preset.lineGap;
+    }
     drawSignatureAsset(dest, input.companySignature, mid, cy, signatureBoxWidths.company, preset.signatureHeight);
   }
 
@@ -747,10 +756,27 @@ export const invalidateOfficialRearImage = async (client, checkId, deps = {}) =>
   return { ok: true, restoredOriginalPath: restore };
 };
 
-const isCompanyName = (name, companyName) => {
+/**
+ * The tenant whose company signer rows predate the tenant-name match
+ * ("Freedom ..." / "Carletta" payee rows). Same id as FREEDOM_TENANT_ID in
+ * authorization.mjs; kept local so this module gains no import edge.
+ */
+export const LEGACY_COMPANY_SIGNER_TENANT_ID = '2eff5f1a-929d-4ce3-9a8b-cd96b98df42a';
+
+/**
+ * The name drawn after "PAY TO THE ORDER OF" (owner request 2026-11-09): the
+ * check's owning tenant's Company Name (Company Profile saves public.tenants.name).
+ * Blank or missing gives '' and the renderer omits the pay-to-order name lines;
+ * it never falls back to another tenant's name.
+ */
+export const resolveEndorsementCompanyName = (tenant) => String(tenant?.name ?? '').trim();
+
+const isCompanyName = (name, companyName, tenantId = null) => {
   const lc = String(name || '').toLowerCase();
-  const company = String(companyName || '').toLowerCase();
-  return lc.includes('freedom') || lc.includes('carletta') || (company && lc.includes(company));
+  const company = String(companyName || '').trim().toLowerCase();
+  if (company && lc.includes(company)) return true;
+  return String(tenantId || '') === LEGACY_COMPANY_SIGNER_TENANT_ID
+    && (lc.includes('freedom') || lc.includes('carletta'));
 };
 
 const visibleSignatureAsset = (row) => {
@@ -776,10 +802,10 @@ const visibleSignatureAsset = (row) => {
   return null;
 };
 
-export const selectVisibleSignatures = (rows = [], companyName = '') => {
+export const selectVisibleSignatures = (rows = [], companyName = '', tenantId = null) => {
   const visible = rows.map(visibleSignatureAsset).filter(Boolean);
-  const clientSignatures = visible.filter((row) => !isCompanyName(row.payee_name, companyName));
-  const companySignature = visible.find((row) => isCompanyName(row.payee_name, companyName)) || null;
+  const clientSignatures = visible.filter((row) => !isCompanyName(row.payee_name, companyName, tenantId));
+  const companySignature = visible.find((row) => isCompanyName(row.payee_name, companyName, tenantId)) || null;
   return { clientSignatures, companySignature };
 };
 
@@ -865,16 +891,21 @@ export const compositeEndorsementSignatures = async ({
     };
   }
 
-  let companyName = 'Freedom Adjustment';
+  // The check's owning tenant's Company Name, also for a partner-shared check.
+  let companyName = '';
   if (check.tenant_id) {
     const tenant = (await client.query(
       `SELECT name FROM public.tenants WHERE id = $1::uuid LIMIT 1`,
       [check.tenant_id],
     )).rows[0];
-    if (tenant?.name) companyName = tenant.name;
+    companyName = resolveEndorsementCompanyName(tenant);
   }
 
-  const { clientSignatures, companySignature } = selectVisibleSignatures(endorsementRows, companyName);
+  const { clientSignatures, companySignature } = selectVisibleSignatures(
+    endorsementRows,
+    companyName,
+    check.tenant_id,
+  );
   const override = clampEndorsementOverride(overrideData || check.endorsement_override || DEFAULT_OVERRIDE);
   const download = deps.downloadClaimFile || downloadClaimFileBytes;
   const backBytes = await download(originalPath, deps);

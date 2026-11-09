@@ -20,6 +20,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { isPlatformOwner } from "@/lib/masterMerchant";
 import { useTenantFilter } from "@/hooks/useTenantFilter";
+import { useTenant } from "@/contexts/TenantContext";
+import { endorsementCompanyNameForCheck } from "@/lib/endorsementCompanyName";
 import { useAwsPollingFallback } from "@/hooks/useAwsPollingFallback";
 import {
   PARTNER_CHECK_ENDORSEMENTS,
@@ -116,6 +118,14 @@ const LossDraftDashboard = lazy(() =>
 import { EndorsementAdjuster } from "@/components/checks/EndorsementAdjuster";
 import { SHOW_CHECKALT } from "@/lib/depositRails";
 const preloadEndorsementAdjuster = () => Promise.resolve();
+
+/**
+ * The check detail row. `tenants(name)` is the check OWNER's Company Name (on
+ * AWS it is served from tenants_public, so a partner viewing a shared check
+ * reads it too): the endorsement preview shows the same name the server stamps.
+ */
+const CHECK_DETAIL_SELECT =
+  "*, check_payees(*), checkalt_deposits(id, status, submitted_at, approved_at, updated_at, last_status_payload), tenants(name)";
 const EndorsementChecklist = lazy(() =>
   import("@/components/check-review/EndorsementChecklist").then(m => ({ default: m.EndorsementChecklist }))
 );
@@ -404,7 +414,7 @@ export default function CheckCommandCenter() {
       queryFn: async () => {
         const { data, error } = await supabase
           .from("check_intake_items")
-          .select("*, check_payees(*), checkalt_deposits(id, status, submitted_at, approved_at, updated_at, last_status_payload)")
+          .select(CHECK_DETAIL_SELECT)
           .eq("id", id)
           .single();
         if (error) throw error;
@@ -2896,6 +2906,7 @@ function CheckDetailPanel({
   const { toast } = useToast();
   const qc = useQueryClient();
   const { tenantId } = useTenantFilter();
+  const { tenant: currentTenant } = useTenant();
 
    const { data: check } = useQuery({
     queryKey: ["check-detail", checkId],
@@ -2903,7 +2914,7 @@ function CheckDetailPanel({
       const t0 = performance.now();
       const { data, error } = await supabase
         .from("check_intake_items")
-        .select("*, check_payees(*), checkalt_deposits(id, status, submitted_at, approved_at, updated_at, last_status_payload)")
+        .select(CHECK_DETAIL_SELECT)
         .eq("id", checkId)
         .single();
       if (error) throw error;
@@ -2953,6 +2964,9 @@ function CheckDetailPanel({
   // Ownership: only the tenant that uploaded the check can edit it. Partners with whom
   // the check is shared are strictly read-only.
   const checkOwnerTenantId = (check as any)?.tenant_id as string | null | undefined;
+  // "Pay to the order of" name: the owning tenant's Company Name (tenants.name),
+  // the same name endorsement-composite.mjs stamps on the deposit image.
+  const endorsementCompanyName = endorsementCompanyNameForCheck(check, currentTenant);
   const isOwner = !!tenantId && !!checkOwnerTenantId && tenantId === checkOwnerTenantId;
   const isSharedView = !!check && !isOwner;
   // Check Alt Deposit/Resubmit is only for owner/admin/manager/operator members
@@ -4492,7 +4506,8 @@ function CheckDetailPanel({
                           }
                           imageWidth={backImageDimensions.width}
                           imageHeight={backImageDimensions.height}
-                          companyName={check?.external_origin?.tenant_name as string || "Freedom Adjustment"}
+                          companyName={endorsementCompanyName}
+                          companyTenantId={checkOwnerTenantId ?? null}
                           initialOverride={
                             (check?.endorsement_override as unknown as EndorsementOverride | null) ?? null
                           }

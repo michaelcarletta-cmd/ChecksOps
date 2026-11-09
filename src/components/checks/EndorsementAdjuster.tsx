@@ -36,6 +36,7 @@ import { assertCleanBackOriginalPath, depositImagePersistPatch } from "@/lib/che
 import { logAudit } from "@/hooks/useAuditLog";
 import { displayCase } from "@/lib/displayCase";
 import { SIGNATURE_FONT_FAMILY } from "@/lib/signatureFont";
+import { isCompanyEndorsementName } from "@/lib/endorsementCompanyName";
 
 /** Max height of the source viewer at 100% zoom (matches CheckImageCropper's 70vh). */
 const VIEWER_FIT_HEIGHT_VH = 70;
@@ -63,7 +64,14 @@ export type EndorsementAdjusterProps = {
   originalImagePath: string | null;
   imageWidth: number;
   imageHeight: number;
+  /**
+   * The check owner's Company Name (Company Profile, `tenants.name`), the same
+   * name the server stamps after "Pay to the order of". Blank leaves the
+   * pay-to-order name lines out. See src/lib/endorsementCompanyName.ts.
+   */
   companyName: string;
+  /** The tenant that owns the check (`check_intake_items.tenant_id`). */
+  companyTenantId?: string | null;
   initialOverride?: EndorsementOverride | null;
   /**
    * Called after the user approves the flattened deposit image.
@@ -89,12 +97,14 @@ export function EndorsementAdjuster({
   originalImagePath,
   imageWidth,
   imageHeight,
-  companyName,
+  companyName: companyNameProp,
+  companyTenantId = null,
   initialOverride,
   onDepositImageApproved,
   onUnapprovedDepositChange,
   onClose,
 }: EndorsementAdjusterProps) {
+  const companyName = (companyNameProp ?? "").trim();
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const rafRef = useRef<number | null>(null);
   const overrideRef = useRef<EndorsementOverride>(
@@ -280,14 +290,8 @@ export function EndorsementAdjuster({
   }, [checkId]);
 
 
-  const isCompanyEndorsement = (name: string) => {
-    const lc = name.toLowerCase();
-    return (
-      lc.includes("freedom") ||
-      lc.includes("carletta") ||
-      lc.includes(companyName.toLowerCase())
-    );
-  };
+  const isCompanyEndorsement = (name: string) =>
+    isCompanyEndorsementName(name, companyName, companyTenantId);
 
   const hasVisibleSignature = (e: SignedEndorsementAsset) => {
     const statusValue = (e.status ?? "").toLowerCase();
@@ -928,12 +932,16 @@ export function EndorsementAdjuster({
         >
           {override.showPayToOrder && (
             <>
-              <div style={{ fontSize: payToFontPx, fontWeight: 600, marginBottom: lineGapPx }}>
-                Pay to the order of
-              </div>
-              <div style={{ fontSize: companyFontPx, fontWeight: 700, marginBottom: lineGapPx }}>
-                {companyName}
-              </div>
+              {companyName && (
+                <>
+                  <div style={{ fontSize: payToFontPx, fontWeight: 600, marginBottom: lineGapPx }}>
+                    Pay to the order of
+                  </div>
+                  <div style={{ fontSize: companyFontPx, fontWeight: 700, marginBottom: lineGapPx }}>
+                    {companyName}
+                  </div>
+                </>
+              )}
               <div style={{ fontSize: payToFontPx, fontWeight: 700, marginBottom: sectionGapPx }}>
                 For Mobile Deposit Only
               </div>
@@ -984,9 +992,11 @@ export function EndorsementAdjuster({
 
           {companyEndorsement && (
             <>
-              <div style={{ fontSize: companyFontPx, fontWeight: 700, marginBottom: lineGapPx }}>
-                {companyName}
-              </div>
+              {companyName && (
+                <div style={{ fontSize: companyFontPx, fontWeight: 700, marginBottom: lineGapPx }}>
+                  {companyName}
+                </div>
+              )}
               {companyEndorsement.signature_image_url?.startsWith("typed:") ? (
                 <div
                   style={{
@@ -995,12 +1005,12 @@ export function EndorsementAdjuster({
                     fontFamily: SIGNATURE_FONT_FAMILY,
                   }}
                 >
-                  {companyName}
+                  {companyName || companyEndorsement.signature_image_url.slice(6) || companyEndorsement.payee_name}
                 </div>
               ) : (
                 <img
                   src={companyEndorsement.signature_image_url ?? undefined}
-                  alt={`${companyName} signature`}
+                  alt={`${companyName || displayCase(companyEndorsement.payee_name)} signature`}
                   style={{
                     height: sigHeightPx,
                     width: companySignatureWidthPx,

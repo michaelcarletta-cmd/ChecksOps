@@ -63,6 +63,10 @@ export type SignatureInput = {
   clientSignature?: HTMLImageElement | null;
   ownerName: string;
   ownerSignature?: HTMLImageElement | null;
+  /**
+   * The check owner's Company Name (src/lib/endorsementCompanyName.ts). Blank
+   * leaves the "Pay to the order of" and company name lines out.
+   */
   companyName: string;
 };
 
@@ -109,16 +113,19 @@ export function renderBackCheckEndorsementToCanvas(
   ctx.textAlign = "left";
 
   let cy = L.y;
+  const companyName = (sig.companyName ?? "").trim();
 
-  // Pay to the order of
-  ctx.font = `600 ${L.payToFont}px Arial, sans-serif`;
-  ctx.fillText("Pay to the order of", L.x, cy);
-  cy += L.payToFont + L.lineGap;
+  if (companyName) {
+    // Pay to the order of
+    ctx.font = `600 ${L.payToFont}px Arial, sans-serif`;
+    ctx.fillText("Pay to the order of", L.x, cy);
+    cy += L.payToFont + L.lineGap;
 
-  // Company name
-  ctx.font = `700 ${L.companyFont}px Arial, sans-serif`;
-  ctx.fillText(sig.companyName, L.x, cy);
-  cy += L.companyFont + L.lineGap;
+    // Company name
+    ctx.font = `700 ${L.companyFont}px Arial, sans-serif`;
+    ctx.fillText(companyName, L.x, cy);
+    cy += L.companyFont + L.lineGap;
+  }
 
   // For Mobile Deposit Only
   ctx.font = `700 ${L.mobileOnlyFont}px Arial, sans-serif`;
@@ -139,9 +146,11 @@ export function renderBackCheckEndorsementToCanvas(
   }
 
   // Company + owner grouped together
-  ctx.font = `700 ${L.companyFont}px Arial, sans-serif`;
-  ctx.fillText(sig.companyName, L.x, cy);
-  cy += L.companyFont + L.sectionGap;
+  if (companyName) {
+    ctx.font = `700 ${L.companyFont}px Arial, sans-serif`;
+    ctx.fillText(companyName, L.x, cy);
+    cy += L.companyFont + L.sectionGap;
+  }
 
   // Owner signature/name
   if (sig.ownerSignature) {
@@ -152,7 +161,7 @@ export function renderBackCheckEndorsementToCanvas(
     cy += L.signatureHeight;
   } else {
     ctx.font = `italic 500 ${L.signatureFont}px ${SIGNATURE_FONT_FAMILY}`;
-    ctx.fillText(sig.companyName, L.x, cy);
+    ctx.fillText(companyName || sig.ownerName, L.x, cy);
     cy += L.signatureFont;
   }
 
