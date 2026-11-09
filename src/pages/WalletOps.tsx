@@ -36,14 +36,10 @@ import { MoovTreasuryPanel } from "@/components/payments/MoovTreasuryPanel";
 import { isCheckOpsHost } from "@/lib/checkopsHost";
 import { displayCaseOrNull } from "@/lib/displayCase";
 import { transferDisplayStatus, transferIssueText } from "@/lib/payments/transferReturn";
+import { formatWalletMoney, operatingBalanceLabel } from "@/lib/payments/operatingBalance";
 
-const money = (cents: number) =>
-  (Number(cents || 0) / 100).toLocaleString("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
+// Shared with the Checks page header balance: one format, one rule.
+const money = formatWalletMoney;
 
 const ENTRY_LABEL: Record<string, string> = {
   funding: "Balance funded",
@@ -136,13 +132,7 @@ export default function WalletOps() {
     : "";
 
   const syncFailed = wallet?.status === "sync_failed";
-  const balanceLabel = syncFailed
-    ? "Balance unavailable"
-    : wallet
-      ? money(wallet.available_cents)
-      : setupRequired
-        ? "Pending setup"
-        : "Pending sync";
+  const balanceLabel = operatingBalanceLabel({ wallet, setupRequired });
 
   const payoutControl = automaticPayoutControl(config);
   const sweepsOn = payoutControl.sweepsOn;
