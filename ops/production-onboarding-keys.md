@@ -50,8 +50,9 @@ write and delete object versions.
      `AliasTaggedOnboardingKeysThroughCloudFormation`: `kms:CreateAlias` for the two alias names
      only, onto a key tagged for this stack, through CloudFormation.
 
-   There is no `ScheduleKeyDeletion`, `DisableKey`, `DeleteAlias`, `UpdateStack` or
-   `DeleteStack` right. Until the statements are attached, inspect fails with `AccessDenied`
+   There is no `ScheduleKeyDeletion`, `DisableKey`, `DeleteAlias` or `DeleteStack` right.
+   `UpdateStack` came later, for the reviewed update in "Update 2026-11" below
+   (`UpdateExactOnboardingKeysStack`). Until the statements are attached, inspect fails with `AccessDenied`
    and nothing changes. After the create, `CreateExactOnboardingKeysStack`,
    `CreateOnboardingKeysThroughCloudFormation`, `SetUpNewOnboardingKeysThroughCloudFormation`
    and both CreateAlias statements can be detached again.
@@ -59,9 +60,10 @@ write and delete object versions.
 2. **Inspect** through `.github/workflows/guarded-production-onboarding-keys.yml`
    (`mode: inspect`, production environment). Preflight
    `scripts/deployment-guard/github-production-onboarding-keys.mjs` (read-only). It checks the
-   template bytes against the pinned sha256
-   (`e584bb95750afd6a174b76f47288e197316c225aadcadcd4508bb1d21d1d85c2`, `sha256sum` of the file
-   on an LF checkout), and reads the stack, both aliases and the prep Lambda configuration
+   template bytes against the pinned sha256 (at the create, 2026-11-01:
+   `e584bb95750afd6a174b76f47288e197316c225aadcadcd4508bb1d21d1d85c2`; since the update below:
+   `c48853d998a494ee5766e5f069365c3a11dceaac2e25f26429817fd91a950b11`; `sha256sum` of the file on an
+   LF checkout), and reads the stack, both aliases and the prep Lambda configuration
    (RevisionId, role, `FILES_BUCKET`, and whether the two key variables are set). `ABSENT`
    (no stack, no alias) means create may proceed. The run summary shows the snapshot SHA-256.
 
@@ -100,8 +102,78 @@ write and delete object versions.
    production. The upload returns no `document_storage_unavailable`; the object under
    `files/verification-docs/` is SSE-KMS with the compliance documents key.
 
+## Update 2026-11: let the files replication role decrypt compliance documents
+
+**Why.** The production files bucket is copied to `us-east-2`
+(`ops/security/FILES_BUCKET_REPLICATION_2026_11.md`, phase 1 applied 2026-11-09). Compliance
+documents under `files/verification-docs/` are SSE-KMS with this stack's compliance documents key,
+whose policy lets only the production API role use it, so S3 replication cannot read them. Phase 2
+of that runbook needs the replication role `checksops-production-files-replication` to decrypt them.
+
+**The change** (`aws/production/onboarding-keys.yaml`, pinned sha256 `c48853d9…`). One statement
+added to the compliance documents key policy, `FilesReplicationRoleDecryptViaS3`: `kms:Decrypt`
+only, for that role only, only through S3 in `us-east-1` (`kms:ViaService`), only for objects under
+`files/verification-docs/` (`kms:EncryptionContext:aws:s3:arn`), plus a three-line comment. Nothing
+else changes: the writer rebuilds the previous template by removing exactly those two pieces and
+requires the result to hash to the live stack's template (`e584bb95…`). The PII key, both aliases, the
+outputs, rotation, tags and the API role's statement stay exactly as they are.
+
+**Steps (each is its own owner approval):**
+
+1. **One-time IAM step (owner, CloudShell, as `michael-admin`).** Add the single statement
+   `UpdateExactOnboardingKeysStack` (`cloudformation:UpdateStack` on this stack only) to the live
+   inline policy `ChecksOpsGitHubProductionLambdaOverlayLeastPrivilege` of
+   `ChecksOpsGitHubProductionLambdaOverlay`. Do **not** upload
+   `aws/production-lambda-overlay/policies/permissions-policy.json` as a whole: the live policy
+   differs from it in other workstreams' statements (read 2026-11-09). Add only this statement:
+
+   ```bash
+   ROLE=ChecksOpsGitHubProductionLambdaOverlay
+   POLICY=ChecksOpsGitHubProductionLambdaOverlayLeastPrivilege
+   aws iam get-role-policy --role-name "$ROLE" --policy-name "$POLICY" --query PolicyDocument --output json > /tmp/live.json
+   python3 - <<'PY2'
+   import json
+   d = json.load(open('/tmp/live.json'))
+   sids = [s.get('Sid') for s in d['Statement']]
+   assert 'UpdateExactOnboardingKeysStack' not in sids, 'already there'
+   assert 'SetUpNewOnboardingKeysThroughCloudFormation' in sids, 'PutKeyPolicy through CloudFormation is missing'
+   d['Statement'].append({
+     'Sid': 'UpdateExactOnboardingKeysStack', 'Effect': 'Allow', 'Action': 'cloudformation:UpdateStack',
+     'Resource': 'arn:aws:cloudformation:us-east-1:806168576068:stack/checksops-production-onboarding-keys/*'})
+   json.dump(d, open('/tmp/new.json', 'w'))
+   print('statements', len(sids), '->', len(d['Statement']))
+   PY2
+   aws iam put-role-policy --role-name "$ROLE" --policy-name "$POLICY" --policy-document file:///tmp/new.json
+   ```
+
+   The key policy write itself uses the existing `SetUpNewOnboardingKeysThroughCloudFormation`
+   (`kms:PutKeyPolicy` only through CloudFormation, only on keys tagged for this stack); the role
+   still has it (read 2026-11-09).
+
+2. **Inspect** (`mode: inspect`). Expect state `UPDATE_READY`: the live stack holds the previous
+   template and its key policies, with nothing else drifted. Record the snapshot SHA-256.
+
+3. **Update** (`mode: update`) with `approved_commit` = main, `expected_snapshot_sha256` from the
+   inspect, `staging_acceptance_reference` = this change's reviewed PR (staging has no replication;
+   the evidence is the reviewed change and its tests), and `approval_phrase` exactly the owner's
+   words for this run:
+
+   `UPDATE ONBOARDING KEYS IN PRODUCTION`
+
+   The writer sends one `UpdateStack` with the pinned bytes, no parameters and no capabilities,
+   and waits for `UPDATE_COMPLETE`. On any other end state (CloudFormation rolls a failed update
+   back by itself) it prints the failed events and stops: no retry.
+
+4. **Verify** (same run): the stack is `UPDATE_COMPLETE` from the pinned template; the same stack,
+   aliases, outputs and keys; the PII key unchanged in every field; the compliance documents key
+   unchanged except its policy, which now equals the template's; the prep Lambda unmoved.
+
+5. **Record PR**, then phase 2 of `ops/security/FILES_BUCKET_REPLICATION_2026_11.md` (the
+   `us-east-2` key, the role's KMS rights, the rule and a second batch copy).
+
 ## What this does not do
 
-No Lambda code or configuration change, no IAM role change, no bucket or bucket policy change,
-no SQL. The workflow cannot update or delete the stack or the keys. Removing them is a separate
+No Lambda code or configuration change, no bucket or bucket policy change, no SQL. The only IAM
+changes are the one-time deploy-role statements above. The workflow cannot delete the stack or the
+keys; its only update is the reviewed one above. Removing them is a separate
 operator step with its own approval (the keys are retained even if the stack is deleted).

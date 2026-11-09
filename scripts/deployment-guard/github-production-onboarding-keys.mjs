@@ -12,10 +12,14 @@
  *          approval phrase and a staging acceptance reference; takes the production lease and issues
  *          a KMS-signed receipt whose preflight fingerprint is the whole snapshot and whose owned
  *          components are the stack and its two aliases.
- * verify:  the stack is CREATE_COMPLETE from the pinned template, both aliases target enabled,
- *          rotation-on keys whose key policies equal the template's, and the prep Lambda did not move
- *          from the pre-write snapshot recorded by the create run.
- * There is no update and no delete mode. production-onboarding-keys.mjs is the only writer.
+ * update:  same read, then requires UPDATE_READY (the live stack holds the previous pinned template and
+ *          its key policies), the inspect snapshot SHA-256, the exact update phrase and a staging
+ *          acceptance reference; takes the lease and issues a receipt whose owned components are the
+ *          stack update and the compliance documents key policy.
+ * verify:  the stack is CREATE_COMPLETE (create) or UPDATE_COMPLETE (update) from the pinned template,
+ *          both aliases target enabled, rotation-on keys whose key policies equal the template's, and
+ *          nothing else moved from the pre-write snapshot recorded by the change run.
+ * There is no delete mode. production-onboarding-keys.mjs is the only writer.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -35,18 +39,21 @@ import {
   classify,
   keyPoliciesFromTemplate,
   ownedComponentsFor,
+  previousKeyPolicies,
   readSnapshot,
   readTemplate,
   snapshotFingerprint,
 } from './production-onboarding-keys.mjs';
 
 export const CREATE_PHRASE = 'CREATE ONBOARDING KEYS IN PRODUCTION';
+export const UPDATE_PHRASE = 'UPDATE ONBOARDING KEYS IN PRODUCTION';
 const STAGING_ACCEPTANCE_RE = /^https:\/\/github\.com\/michaelcarletta-cmd\/ChecksOps\/(actions\/runs\/\d+(\/job\/\d+)?|pull\/\d+)$/;
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 export function approvalPhraseFor(mode) {
   if (mode === 'create') return CREATE_PHRASE;
-  throw new GuardError(CODES.INVALID_MANIFEST, 'only create needs an approval phrase');
+  if (mode === 'update') return UPDATE_PHRASE;
+  throw new GuardError(CODES.INVALID_MANIFEST, 'only create and update need an approval phrase');
 }
 
 export function workflowIdentity(env = process.env) {
@@ -67,7 +74,7 @@ export function validateChangeInputs({ mode, approval, stagingAcceptance, expect
     throw new GuardError(CODES.PRODUCTION_APPROVAL_REQUIRED, `${mode} requires the exact approval phrase`, { expected: phrase });
   }
   if (!STAGING_ACCEPTANCE_RE.test(String(stagingAcceptance || ''))) {
-    throw new GuardError(CODES.PRODUCTION_APPROVAL_REQUIRED, 'production onboarding keys create requires a staging acceptance reference (a ChecksOps GitHub run or PR URL)');
+    throw new GuardError(CODES.PRODUCTION_APPROVAL_REQUIRED, `production onboarding keys ${mode} requires a staging acceptance reference (a ChecksOps GitHub run or PR URL)`);
   }
   const expected = String(expectedFingerprint || '').trim();
   if (!/^[0-9a-f]{64}$/.test(expected)) throw new GuardError(CODES.INVALID_MANIFEST, `${mode} requires expected_snapshot_sha256 from a prior inspect run`);
@@ -93,8 +100,8 @@ function writeState(root, name, data) {
 export async function run(env = process.env, deps = {}) {
   const root = deps.root || repoRoot;
   const mode = String(env.CHECKSOPS_ONBOARDING_KEYS_MODE || 'inspect').trim();
-  if (!['inspect', 'create', 'verify'].includes(mode)) {
-    throw new GuardError(CODES.INVALID_MANIFEST, 'mode must be inspect, create or verify');
+  if (!['inspect', 'create', 'update', 'verify'].includes(mode)) {
+    throw new GuardError(CODES.INVALID_MANIFEST, 'mode must be inspect, create, update or verify');
   }
   const identity = workflowIdentity(env);
   const template = (deps.readTemplate || readTemplate)(deps.templateRoot || repoRoot);
@@ -102,8 +109,9 @@ export async function run(env = process.env, deps = {}) {
     throw new GuardError(CODES.DEPLOYMENT_COLLISION, 'template bytes differ from the pinned sha256; the template is not changed by this workflow', { expected: TEMPLATE_SHA256, actual: template.sha256 });
   }
   const expectedPolicies = keyPoliciesFromTemplate(template.body);
+  const previousPolicies = previousKeyPolicies(template.body);
   const snapshot = (deps.readSnapshot || readSnapshot)(env);
-  const { state, problems, fingerprint } = classify(snapshot, { expectedPolicies });
+  const { state, problems, fingerprint } = classify(snapshot, { expectedPolicies, previousPolicies });
   const summary = {
     stack: STACK_NAME,
     template_sha256: template.sha256,
@@ -119,7 +127,7 @@ export async function run(env = process.env, deps = {}) {
     if (!file) throw new GuardError(CODES.INVALID_MANIFEST, 'verify requires the change input recorded by the create run');
     const input = JSON.parse(fs.readFileSync(file, 'utf8'));
     try {
-      assertExpectedAfter(input.before_snapshot, snapshot, { mode: input.mode, expectedPolicies });
+      assertExpectedAfter(input.before_snapshot, snapshot, { mode: input.mode, expectedPolicies, previousPolicies });
     } catch (error) {
       throw new GuardError(CODES.DEPLOYMENT_COLLISION, 'post-change snapshot does not hold the pinned stack with nothing else moved', { reason: error.message, state, problems });
     }
@@ -130,8 +138,11 @@ export async function run(env = process.env, deps = {}) {
   appendGithubOutput({ ...summary, state, problem_count: problems.length, problems: problems.join(',') }, env);
   if (mode === 'inspect') return { ok: true, mode, identity, ...summary, state, problems, mutation: false };
 
-  if (state !== 'ABSENT') {
+  if (mode === 'create' && state !== 'ABSENT') {
     throw new GuardError(CODES.DEPLOYMENT_COLLISION, 'create requires the stack and both aliases to be absent and the prep Lambda unchanged', { state, problems });
+  }
+  if (mode === 'update' && state !== 'UPDATE_READY') {
+    throw new GuardError(CODES.DEPLOYMENT_COLLISION, 'update requires the live stack to hold the previous pinned template and key policies, with nothing else drifted', { state, problems });
   }
   validateChangeInputs({
     mode,
