@@ -1,6 +1,17 @@
-import { useState, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
+import { useToast } from "@/hooks/use-toast";
+import { awsAuthUserId } from "@/lib/awsMfa";
+import {
+  monitoringTypeOf,
+  resolveLossDraftActorId,
+  saveLossDraftMonitoringType,
+  withMonitoringType,
+  type LossDraftMonitoringType,
+  type LossDraftRpcClient,
+} from "@/lib/lossDraftActions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -78,11 +89,15 @@ function getTimestamp(
 }
 
 export function CheckStatusWorkflow({ claimId }: CheckStatusWorkflowProps) {
-  const [path, setPath] = useState<"monitored" | "not_monitored">("monitored");
   const [hoveredStep, setHoveredStep] = useState<number | null>(null);
+  const [savingMonitoring, setSavingMonitoring] = useState<LossDraftMonitoringType | null>(null);
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const workflowKey = ["claim-loss-draft-workflow", claimId] as const;
 
   const { data: lossDraft } = useQuery({
-    queryKey: ["claim-loss-draft-workflow", claimId],
+    queryKey: workflowKey,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("loss_draft_tracking")
@@ -98,12 +113,32 @@ export function CheckStatusWorkflow({ claimId }: CheckStatusWorkflowProps) {
 
   const checkStatus = (lossDraft as any)?.check_intake_items?.status ?? null;
 
-  // Auto-detect path from data
-  const effectivePath = useMemo(() => {
-    if (lossDraft?.monitoring_type === "not_monitored") return "not_monitored";
-    if (lossDraft?.monitoring_type === "monitored") return "monitored";
-    return path;
-  }, [lossDraft, path]);
+  // The saved monitoring type; the toggle changes it through the same action as the
+  // Loss Draft Actions tab (set_monitoring_type) and then shows what was saved.
+  const effectivePath = monitoringTypeOf(lossDraft?.monitoring_type);
+
+  const setMonitoringType = async (next: LossDraftMonitoringType) => {
+    if (!lossDraft?.id || savingMonitoring) return;
+    setSavingMonitoring(next);
+    try {
+      const saved = await saveLossDraftMonitoringType({
+        client: supabase as unknown as LossDraftRpcClient,
+        toast,
+        lossDraftId: lossDraft.id,
+        actorId: resolveLossDraftActorId(user, awsAuthUserId),
+        current: lossDraft.monitoring_type,
+        next,
+      });
+      if (!saved) return;
+      qc.setQueryData(workflowKey, (old: typeof lossDraft | undefined) =>
+        withMonitoringType(old as unknown as Record<string, unknown> | undefined, saved) as unknown as typeof lossDraft);
+      qc.invalidateQueries({ queryKey: workflowKey });
+      qc.invalidateQueries({ queryKey: ["loss-draft-detail", lossDraft.id] });
+      qc.invalidateQueries({ queryKey: ["loss-draft-dashboard"] });
+    } finally {
+      setSavingMonitoring(null);
+    }
+  };
 
   const steps = effectivePath === "monitored" ? MONITORED_STEPS : NON_MONITORED_STEPS;
   const activeStep = resolveActiveStep(effectivePath, lossDraft, checkStatus);
@@ -118,20 +153,23 @@ export function CheckStatusWorkflow({ claimId }: CheckStatusWorkflowProps) {
           <ToggleGroup
             type="single"
             value={effectivePath}
-            onValueChange={(v) => v && setPath(v as "monitored" | "not_monitored")}
+            disabled={savingMonitoring !== null}
+            onValueChange={(v) => {
+              if (v === "monitored" || v === "not_monitored") void setMonitoringType(v);
+            }}
             className="bg-muted rounded-lg p-0.5"
           >
             <ToggleGroupItem
               value="monitored"
               className="text-xs px-3 py-1 h-7 rounded-md data-[state=on]:bg-background data-[state=on]:shadow-sm"
             >
-              Monitored
+              {savingMonitoring === "monitored" ? "Saving..." : "Monitored"}
             </ToggleGroupItem>
             <ToggleGroupItem
               value="not_monitored"
               className="text-xs px-3 py-1 h-7 rounded-md data-[state=on]:bg-background data-[state=on]:shadow-sm"
             >
-              Not Monitored
+              {savingMonitoring === "not_monitored" ? "Saving..." : "Not Monitored"}
             </ToggleGroupItem>
           </ToggleGroup>
         </div>

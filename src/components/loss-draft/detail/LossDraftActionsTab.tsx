@@ -30,6 +30,18 @@ import { useQueryClient } from "@tanstack/react-query";
 import { refreshCheckQueues } from "@/lib/checkQueueRefresh";
 import { formatIssueDateDisplay } from "@/lib/issueDate";
 import { useAcknowledgeMortgageDeskReturn, useMortgageDeskReturnAlert } from "@/hooks/useMortgageDeskReturnAlert";
+import { awsAuthUserId } from "@/lib/awsMfa";
+import { queryKeys } from "@/lib/queryKeys";
+import {
+  monitoringTypeOf,
+  resolveLossDraftActorId,
+  runLossDraftAction,
+  saveLossDraftMonitoringType,
+  toastLossDraftFailure,
+  withMonitoringType,
+  type LossDraftMonitoringType,
+  type LossDraftRpcClient,
+} from "@/lib/lossDraftActions";
 
 
 
@@ -100,11 +112,13 @@ export function LossDraftActionsTab({ lossDraftId, draft, onChanged, onClosed }:
   const [adminTargetStatus, setAdminTargetStatus] = useState("");
   const [adminResetNotes, setAdminResetNotes] = useState("");
   const [endorsePromptOpen, setEndorsePromptOpen] = useState(false);
+  const [savingMonitoring, setSavingMonitoring] = useState<LossDraftMonitoringType | null>(null);
 
 
   const { data: returnAlert } = useMortgageDeskReturnAlert(draft.check_intake_item_id);
   const acknowledgeReturn = useAcknowledgeMortgageDeskReturn();
-  const isMonitored = draft.monitoring_type !== "not_monitored";
+  const monitoringType = monitoringTypeOf(draft.monitoring_type);
+  const isMonitored = monitoringType === "monitored";
   const actionButtons = isMonitored ? MONITORED_ACTIONS : NOT_MONITORED_ACTIONS;
   const availableActions = actionButtons.filter(a =>
     a.fromStatuses.includes(draft.escrow_status)
@@ -125,8 +139,11 @@ export function LossDraftActionsTab({ lossDraftId, draft, onChanged, onClosed }:
     onClosed?.();
   };
 
+  const rpcClient = supabase as unknown as LossDraftRpcClient;
+  /** The signed-in user (auth context, else the stored AWS session); null shows an error. */
+  const actorId = () => resolveLossDraftActorId(user, awsAuthUserId);
+
   const executeAction = async (action: string, def?: ActionDef) => {
-    if (!user?.id) return;
     const amountText = actionAmount.trim();
     if (def?.needsAmount && !/^\d{1,10}(\.\d{1,2})?$/.test(amountText)) {
       toast({ title: "Enter an amount", description: "Use dollars and cents, for example 2500.00.", variant: "destructive" });
@@ -136,26 +153,31 @@ export function LossDraftActionsTab({ lossDraftId, draft, onChanged, onClosed }:
       toast({ title: "Enter an amount", description: "The amount must be more than zero.", variant: "destructive" });
       return;
     }
+    const actor = actorId();
     setSubmitting(true);
     try {
       const extra: Record<string, string> = {};
       if (actionTracking) extra.tracking_number = actionTracking;
-      const { data, error } = await supabase.rpc("loss_draft_action", {
-        p_loss_draft_id: lossDraftId,
-        p_action: action,
-        p_actor_id: user.id,
+      const outcome = await runLossDraftAction(rpcClient, {
+        lossDraftId,
+        action,
+        actorId: actor,
         // At most 2 decimals (checked above), so the number serializes back to the same cents.
-        p_amount: def?.needsAmount ? Number(amountText) : null,
-        p_notes: actionNotes || null,
-        p_extra: extra,
+        amount: def?.needsAmount ? Number(amountText) : null,
+        notes: actionNotes || null,
+        extra,
       });
-      if (error) throw error;
+      if (!outcome.ok) {
+        toastLossDraftFailure(toast, outcome);
+        return;
+      }
+      const data = outcome.data;
       let ackError: string | null = null;
       if (draft.check_intake_item_id && returnAlert?.actionRequired && returnAlert.unackedRequestIds.length) {
         const ack = await acknowledgeReturn({
           checkId: draft.check_intake_item_id,
           requestIds: returnAlert.unackedRequestIds,
-          senderId: user.id,
+          senderId: actor,
         });
         if (ack.error) ackError = ack.error.message || "unknown error";
       }
@@ -190,42 +212,49 @@ export function LossDraftActionsTab({ lossDraftId, draft, onChanged, onClosed }:
     }
   };
 
-  const toggleMonitoringType = async () => {
-    if (!user?.id) return;
-    const newType = isMonitored ? "not_monitored" : "monitored";
+  /** Monitored / Not Monitored: saves set_monitoring_type; every outcome is shown. */
+  const setMonitoringType = async (next: LossDraftMonitoringType) => {
+    if (savingMonitoring) return;
+    setSavingMonitoring(next);
     try {
-      const { error } = await supabase.rpc("loss_draft_action", {
-        p_loss_draft_id: lossDraftId,
-        p_action: "set_monitoring_type",
-        p_actor_id: user.id,
-        p_amount: null,
-        p_notes: `Changed to ${newType}`,
-        p_extra: { monitoring_type: newType },
+      const saved = await saveLossDraftMonitoringType({
+        client: rpcClient,
+        toast,
+        lossDraftId,
+        actorId: actorId(),
+        current: draft.monitoring_type,
+        next,
       });
-      if (error) throw error;
-      toast({
-        title: "Monitoring type updated",
-        description: `Set to ${newType === "monitored" ? "Monitored" : "Not Monitored"}`,
-      });
+      if (!saved) return;
+      // Show the saved type now; the refetch below confirms it from the API.
+      qc.setQueryData(queryKeys.lossDraft.detail(lossDraftId), (old: LossDraftRecord | undefined) =>
+        withMonitoringType(old as unknown as Record<string, unknown> | undefined, saved) as unknown as LossDraftRecord | undefined);
+      qc.invalidateQueries({ queryKey: ["loss-draft-dashboard"] });
+      qc.invalidateQueries({ queryKey: ["claim-loss-draft-workflow"] });
       onChanged();
-    } catch (e: any) {
-      toast({ title: "Error", description: e.message, variant: "destructive" });
+    } finally {
+      setSavingMonitoring(null);
     }
   };
 
   const adminResetStatus = async () => {
-    if (!user?.id || !adminTargetStatus) return;
+    if (!adminTargetStatus) {
+      toast({ title: "Pick where the check goes", description: "Choose Review or Endorsing first.", variant: "destructive" });
+      return;
+    }
     setSubmitting(true);
     try {
-      const { error } = await supabase.rpc("loss_draft_action", {
-        p_loss_draft_id: lossDraftId,
-        p_action: "admin_reset_status",
-        p_actor_id: user.id,
-        p_amount: null,
-        p_notes: adminResetNotes || `Admin reset to ${adminTargetStatus}`,
-        p_extra: { target_status: adminTargetStatus },
+      const outcome = await runLossDraftAction(rpcClient, {
+        lossDraftId,
+        action: "admin_reset_status",
+        actorId: actorId(),
+        notes: adminResetNotes || `Admin reset to ${adminTargetStatus}`,
+        extra: { target_status: adminTargetStatus },
       });
-      if (error) throw error;
+      if (!outcome.ok) {
+        toastLossDraftFailure(toast, outcome);
+        return;
+      }
       toast({
         title: "Loss draft closed",
         description: adminTargetStatus === LOSS_DRAFT_OVERRIDE_REVIEW
@@ -252,17 +281,21 @@ export function LossDraftActionsTab({ lossDraftId, draft, onChanged, onClosed }:
             size="sm"
             variant={isMonitored ? "default" : "outline"}
             className="flex-1 text-xs"
-            onClick={() => !isMonitored && toggleMonitoringType()}
+            aria-pressed={isMonitored}
+            disabled={savingMonitoring !== null}
+            onClick={() => setMonitoringType("monitored")}
           >
-            <Eye className="h-3.5 w-3.5 mr-1" /> Monitored
+            <Eye className="h-3.5 w-3.5 mr-1" /> {savingMonitoring === "monitored" ? "Saving..." : "Monitored"}
           </Button>
           <Button
             size="sm"
             variant={!isMonitored ? "default" : "outline"}
             className="flex-1 text-xs"
-            onClick={() => isMonitored && toggleMonitoringType()}
+            aria-pressed={!isMonitored}
+            disabled={savingMonitoring !== null}
+            onClick={() => setMonitoringType("not_monitored")}
           >
-            <EyeOff className="h-3.5 w-3.5 mr-1" /> Not Monitored
+            <EyeOff className="h-3.5 w-3.5 mr-1" /> {savingMonitoring === "not_monitored" ? "Saving..." : "Not Monitored"}
           </Button>
         </div>
         <p className="text-[10px] text-muted-foreground">
