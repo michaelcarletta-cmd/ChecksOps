@@ -3,11 +3,16 @@
  * Receipt-gated writer for the production CloudFormation stack checksops-production-onboarding-keys
  * (the KMS keys for Compliance & Docs uploads and onboarding PII field encryption).
  *
- * Exact permitted mutation:
+ * Exact permitted mutations:
  *   create: CreateStack with exactly the bytes of aws/production/onboarding-keys.yaml (sha256 pinned
  *           below), no parameters, no capabilities (the template creates no IAM resource),
  *           OnFailure DO_NOTHING.
- * There is no update and no delete. The keys are DeletionPolicy/UpdateReplacePolicy Retain.
+ *   update: UpdateStack with exactly those bytes, no parameters, no capabilities, only when the live
+ *           stack still holds the previous pinned template (PREVIOUS_TEMPLATE_SHA256) and the only
+ *           difference is the reviewed change: the FilesReplicationRoleDecryptViaS3 statement in the
+ *           compliance documents key policy (and its comment). Same keys, aliases and outputs;
+ *           CloudFormation rolls a failed update back by itself, and the writer never retries.
+ * There is no delete. The keys are DeletionPolicy/UpdateReplacePolicy Retain.
  *
  * The stack, the two aliases (and the key each one targets: metadata, key policy, rotation, tags)
  * and the prep Lambda configuration (RevisionId, role, FILES_BUCKET and the two KMS key variables)
@@ -44,7 +49,36 @@ export const TEMPLATE_PATH = 'aws/production/onboarding-keys.yaml';
 // sha256 of the template bytes on an LF checkout, computed from the file with sha256sum and checked
 // by the test against readTemplate(). A different file is a new reviewed change, never an updated
 // number here.
-export const TEMPLATE_SHA256 = 'e584bb95750afd6a174b76f47288e197316c225aadcadcd4508bb1d21d1d85c2';
+export const TEMPLATE_SHA256 = 'c48853d998a494ee5766e5f069365c3a11dceaac2e25f26429817fd91a950b11';
+// The bytes the live stack was created from (create run, 2026-11; ops/production-onboarding-keys.md).
+// update requires the live stack template to hash to exactly this, and previousTemplateBody() must
+// rebuild these bytes from the current template by undoing exactly the reviewed change.
+export const PREVIOUS_TEMPLATE_SHA256 = 'e584bb95750afd6a174b76f47288e197316c225aadcadcd4508bb1d21d1d85c2';
+export const FILES_REPLICATION_ROLE_ARN = 'arn:aws:iam::806168576068:role/checksops-production-files-replication';
+export const REPLICATION_STATEMENT_SID = 'FilesReplicationRoleDecryptViaS3';
+// The exact text the update adds to the template (a comment and one key policy statement).
+export const UPDATE_COMMENT_LINES = `  # The S3 replication role (ops/security/FILES_BUCKET_REPLICATION_2026_11.md)
+  # may only decrypt, through S3 only, under the same prefix, so the documents
+  # can be copied to us-east-2.
+`;
+export const UPDATE_STATEMENT_TEXT = `,
+          {
+            "Sid": "FilesReplicationRoleDecryptViaS3",
+            "Effect": "Allow",
+            "Principal": { "AWS": { "Fn::Sub": "arn:aws:iam::\${AWS::AccountId}:role/checksops-production-files-replication" } },
+            "Action": [
+              "kms:Decrypt"
+            ],
+            "Resource": "*",
+            "Condition": {
+              "StringEquals": {
+                "kms:ViaService": { "Fn::Sub": "s3.\${AWS::Region}.amazonaws.com" }
+              },
+              "StringLike": {
+                "kms:EncryptionContext:aws:s3:arn": { "Fn::Sub": "arn:aws:s3:::checksops-production-privatefiles-\${AWS::AccountId}/files/verification-docs/*" }
+              }
+            }
+          }`;
 export const KEYS_DEPLOYMENT_TYPE = 'cloudformation';
 export const KEYS_TARGET_COMPONENT = 'production-onboarding-keys';
 export const TAG_KEY = 'checksops-stack';
@@ -87,7 +121,28 @@ export function canonical(value) {
 /** The owned components bind the requested change (the stack and its two aliases) into the receipt. */
 export function ownedComponentsFor(mode) {
   if (mode === 'create') return [`stack:${STACK_NAME}:create`, ...ALIAS_NAMES.map((a) => `alias:${a}`)];
+  if (mode === 'update') return [`stack:${STACK_NAME}:update`, `key-policy:${KEYS[0].alias}`];
   throw new Error('unknown_mode');
+}
+
+/**
+ * The previous template bytes, rebuilt from the current template by removing exactly the update's
+ * comment lines and key policy statement (each must occur once). Its sha256 must be
+ * PREVIOUS_TEMPLATE_SHA256: that proves the update changes nothing else.
+ */
+export function previousTemplateBody(body) {
+  for (const part of [UPDATE_COMMENT_LINES, UPDATE_STATEMENT_TEXT]) {
+    const at = body.indexOf(part);
+    if (at < 0 || body.indexOf(part, at + 1) >= 0) throw new Error('template_update_change_not_found');
+  }
+  return body.replace(UPDATE_COMMENT_LINES, '').replace(UPDATE_STATEMENT_TEXT, '');
+}
+
+/** Key policies of the previous template (the live stack before the update), checked by hash. */
+export function previousKeyPolicies(body) {
+  const previous = previousTemplateBody(body);
+  if (sha256(Buffer.from(previous, 'utf8')) !== PREVIOUS_TEMPLATE_SHA256) throw new Error('previous_template_hash_mismatch');
+  return keyPoliciesFromTemplate(previous);
 }
 
 export function readTemplate(root = repoRoot) {
@@ -245,32 +300,48 @@ export function keyShapeErrors(key, alias, { expectedPolicy, expectedArn }) {
   return errors;
 }
 
+// A settled stack: created, or updated by this writer's update mode.
+const SETTLED_STATUSES = Object.freeze(['CREATE_COMPLETE', 'UPDATE_COMPLETE']);
+
 /**
- * ABSENT:  stack and both aliases absent, prep Lambda present with its role and FILES_BUCKET and
- *          neither KMS variable set -> create may proceed.
- * LIVE:    stack CREATE_COMPLETE from the pinned template; each alias targets the key named in the
- *          stack outputs; each key enabled, rotation on, key policy equal to the template's; the
- *          Lambda variables unset or equal to those key ARNs.
- * BLOCKED: anything else (partial create, rollback, in-progress, drift, an alias held by another key).
+ * ABSENT:       stack and both aliases absent, prep Lambda present with its role and FILES_BUCKET and
+ *               neither KMS variable set -> create may proceed.
+ * LIVE:         stack CREATE_COMPLETE or UPDATE_COMPLETE from the pinned template; each alias targets
+ *               the key named in the stack outputs; each key enabled, rotation on, key policy equal to
+ *               the template's; the Lambda variables unset or equal to those key ARNs.
+ * UPDATE_READY: the same, except the stack holds the previous pinned template and the key policies
+ *               equal the previous template's (previousPolicies) -> update may proceed.
+ * BLOCKED:      anything else (partial create, rollback, in-progress, drift, an alias held by another key).
  */
-export function classify(s, { expectedPolicies } = {}) {
-  const errors = [];
-  lambdaShape(s, errors);
-  if (s.repository_template_sha256 !== TEMPLATE_SHA256) errors.push('template_pin_drift');
+export function classify(s, { expectedPolicies, previousPolicies } = {}) {
+  const base = [];
+  lambdaShape(s, base);
+  if (s.repository_template_sha256 !== TEMPLATE_SHA256) base.push('template_pin_drift');
   const anyAlias = ALIAS_NAMES.some((a) => s.aliases?.[a]);
   if (!s.stack && !anyAlias) {
-    for (const k of KEYS) if (s.lambda && s.lambda[k.lambdaVariable] !== '') errors.push(`prep_lambda_${k.lambdaVariable}_already_set`);
-    return { state: errors.length ? 'BLOCKED' : 'ABSENT', problems: errors, fingerprint: hash(s) };
+    for (const k of KEYS) if (s.lambda && s.lambda[k.lambdaVariable] !== '') base.push(`prep_lambda_${k.lambdaVariable}_already_set`);
+    return { state: base.length ? 'BLOCKED' : 'ABSENT', problems: base, fingerprint: hash(s) };
   }
+  const liveProblems = [...base, ...stackProblems(s, { templateSha256: TEMPLATE_SHA256, policies: expectedPolicies })];
+  if (!liveProblems.length) return { state: 'LIVE', problems: [], fingerprint: hash(s) };
+  if (previousPolicies) {
+    const previousProblems = [...base, ...stackProblems(s, { templateSha256: PREVIOUS_TEMPLATE_SHA256, policies: previousPolicies })];
+    if (!previousProblems.length) return { state: 'UPDATE_READY', problems: [], fingerprint: hash(s) };
+  }
+  return { state: 'BLOCKED', problems: liveProblems, fingerprint: hash(s) };
+}
+
+function stackProblems(s, { templateSha256, policies: expected }) {
+  const errors = [];
   if (!s.stack) errors.push('stack_missing_but_aliases_present');
   else {
     if (s.stack.StackName !== STACK_NAME) errors.push('stack_name_drift');
-    if (s.stack.StackStatus !== 'CREATE_COMPLETE') errors.push(`stack_status_${s.stack.StackStatus}`);
-    if (s.stack.TemplateSha256 !== TEMPLATE_SHA256) errors.push('stack_template_drift');
+    if (!SETTLED_STATUSES.includes(s.stack.StackStatus)) errors.push(`stack_status_${s.stack.StackStatus}`);
+    if (s.stack.TemplateSha256 !== templateSha256) errors.push('stack_template_drift');
     if (Object.keys(s.stack.Parameters || {}).length) errors.push('stack_parameters_drift');
     const outputs = s.stack.Outputs || {};
     if (!eq(Object.keys(outputs).sort(), KEYS.flatMap((k) => [k.aliasOutput, k.arnOutput]).sort())) errors.push('stack_outputs_drift');
-    const policies = expectedPolicies || {};
+    const policies = expected || {};
     for (const k of KEYS) {
       const alias = s.aliases?.[k.alias];
       const expectedArn = outputs[k.arnOutput];
@@ -286,18 +357,32 @@ export function classify(s, { expectedPolicies } = {}) {
       if (variable !== '' && variable !== expectedArn) errors.push(`prep_lambda_${k.lambdaVariable}_drift`);
     }
   }
-  return { state: errors.length ? 'BLOCKED' : 'LIVE', problems: errors, fingerprint: hash(s) };
+  return errors;
 }
 
 /** The post-write snapshot holds exactly the pinned stack and nothing else moved. */
-export function assertExpectedAfter(before, after, { mode, expectedPolicies }) {
-  if (mode !== 'create') throw new Error('unknown_mode');
+export function assertExpectedAfter(before, after, { mode, expectedPolicies, previousPolicies }) {
+  if (mode !== 'create' && mode !== 'update') throw new Error('unknown_mode');
   const live = classify(after, { expectedPolicies });
   if (live.state !== 'LIVE') throw new Error('post_write_not_live:' + live.problems.join(','));
   if (!eq(after.lambda, before.lambda)) throw new Error('post_write_lambda_moved');
   if (after.repository_template_sha256 !== before.repository_template_sha256) throw new Error('post_write_template_moved');
-  if (before.stack || ALIAS_NAMES.some((a) => before.aliases?.[a] || before.keys?.[a])) throw new Error('post_write_create_precondition');
-  if (after.stack.StackStatus !== 'CREATE_COMPLETE') throw new Error('post_write_stack_status');
+  if (mode === 'create') {
+    if (before.stack || ALIAS_NAMES.some((a) => before.aliases?.[a] || before.keys?.[a])) throw new Error('post_write_create_precondition');
+    if (after.stack.StackStatus !== 'CREATE_COMPLETE') throw new Error('post_write_stack_status');
+    return;
+  }
+  // update: the stack was UPDATE_READY; the same stack, aliases, outputs and keys; only the
+  // compliance documents key policy moved, to the template's.
+  if (classify(before, { expectedPolicies, previousPolicies }).state !== 'UPDATE_READY') throw new Error('post_write_update_precondition');
+  if (after.stack.StackStatus !== 'UPDATE_COMPLETE') throw new Error('post_write_stack_status');
+  if (after.stack.StackId !== before.stack.StackId || !eq(after.stack.Outputs, before.stack.Outputs)) throw new Error('post_write_stack_moved');
+  if (!eq(after.aliases, before.aliases)) throw new Error('post_write_aliases_moved');
+  const [docs, pii] = KEYS;
+  if (!eq(after.keys[pii.alias], before.keys[pii.alias])) throw new Error('post_write_pii_key_moved');
+  const { Policy: _beforePolicy, ...docsBefore } = before.keys[docs.alias];
+  const { Policy: _afterPolicy, ...docsAfter } = after.keys[docs.alias];
+  if (!eq(docsAfter, docsBefore)) throw new Error('post_write_documents_key_moved');
 }
 
 function awsJson(args, env = process.env) {
@@ -337,6 +422,15 @@ export function readSnapshot(env = process.env) {
   }
   const lambda = awsJson(['lambda', 'get-function-configuration', '--function-name', PREP_LAMBDA, '--query', LAMBDA_QUERY], env);
   return normalizeSnapshot({ stack, stackTemplateBody: template?.TemplateBody ?? null, aliases, keyDetails, lambda });
+}
+
+/** The exact UpdateStack call. Nothing caller-supplied reaches it. */
+export function updateStackArgs({ templateBody }) {
+  return [
+    'cloudformation', 'update-stack',
+    '--stack-name', STACK_NAME,
+    '--template-body', templateBody,
+  ];
 }
 
 /** The exact CreateStack call. Nothing caller-supplied reaches it. */
@@ -395,15 +489,17 @@ export function main(env = process.env, deps = {}) {
     throw new Error('caller_supplied_stack_forbidden');
   }
   const mode = input.mode;
-  if (mode !== 'create') throw new Error('unknown_mode');
+  if (mode !== 'create' && mode !== 'update') throw new Error('unknown_mode');
+  const requiredState = mode === 'create' ? 'ABSENT' : 'UPDATE_READY';
 
   const template = (deps.readTemplate || readTemplate)(deps.repoRoot || repoRoot);
   assertPinnedTemplate(template);
   const expectedPolicies = keyPoliciesFromTemplate(template.body);
+  const previousPolicies = mode === 'update' ? previousKeyPolicies(template.body) : undefined;
 
   const first = read(env);
-  const checked = classify(first, { expectedPolicies });
-  if (checked.state !== 'ABSENT') throw new Error(`preflight_state:${checked.state}:${checked.problems.join(',')}`);
+  const checked = classify(first, { expectedPolicies, previousPolicies });
+  if (checked.state !== requiredState) throw new Error(`preflight_state:${checked.state}:${checked.problems.join(',')}`);
 
   const authorized = refuseUnguardedDeploy({
     target_environment: 'production',
@@ -423,8 +519,8 @@ export function main(env = process.env, deps = {}) {
 
   // Mandatory TOCTOU read immediately before the only mutation.
   const second = read(env);
-  const rechecked = classify(second, { expectedPolicies });
-  if (rechecked.state !== 'ABSENT' || rechecked.fingerprint !== checked.fingerprint) {
+  const rechecked = classify(second, { expectedPolicies, previousPolicies });
+  if (rechecked.state !== requiredState || rechecked.fingerprint !== checked.fingerprint) {
     throw new Error('toctou_drift:' + rechecked.problems.join(','));
   }
 
@@ -446,17 +542,19 @@ export function main(env = process.env, deps = {}) {
   });
   if (!consumed.ok) throw new Error('receipt_consumption_failed:' + (consumed.code || 'unknown'));
 
-  runAws(createStackArgs({ templateBody: template.body }));
+  runAws(mode === 'create' ? createStackArgs({ templateBody: template.body }) : updateStackArgs({ templateBody: template.body }));
 
   const status = wait();
-  if (status !== 'CREATE_COMPLETE') {
-    // Report and stop: no retry, no delete, no rollback by this writer.
+  const done = mode === 'create' ? 'CREATE_COMPLETE' : 'UPDATE_COMPLETE';
+  if (status !== done) {
+    // Report and stop: no retry, no delete, no rollback by this writer (CloudFormation rolls a
+    // failed update back to the previous template by itself).
     process.stderr.write(JSON.stringify({ ok: false, stack: STACK_NAME, status, failure_events: events() }) + '\n');
-    throw new Error(`stack_create_failed:${status}`);
+    throw new Error(`stack_${mode}_failed:${status}`);
   }
 
   const after = read(env);
-  assertExpectedAfter(second, after, { mode, expectedPolicies });
+  assertExpectedAfter(second, after, { mode, expectedPolicies, previousPolicies });
   process.stdout.write(JSON.stringify({
     ok: true,
     stack: STACK_NAME,

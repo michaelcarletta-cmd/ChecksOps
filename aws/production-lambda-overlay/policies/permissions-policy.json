@@ -130,6 +130,12 @@
       "Resource": "arn:aws:cloudformation:us-east-1:806168576068:stack/checksops-production-onboarding-keys/*"
     },
     {
+      "Sid": "UpdateExactOnboardingKeysStack",
+      "Effect": "Allow",
+      "Action": "cloudformation:UpdateStack",
+      "Resource": "arn:aws:cloudformation:us-east-1:806168576068:stack/checksops-production-onboarding-keys/*"
+    },
+    {
       "Sid": "ListKmsAliasesForOnboardingKeys",
       "Effect": "Allow",
       "Action": "kms:ListAliases",
