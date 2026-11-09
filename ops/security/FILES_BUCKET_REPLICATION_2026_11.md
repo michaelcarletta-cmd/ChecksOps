@@ -177,8 +177,22 @@ Each piece can be removed without touching the source objects:
 - The destination bucket and the role can then be deleted. Only do this on purpose: the copy is
   the point.
 
-## Applied
+## Applied 2026-11-09 (phase 1)
 
-_Not yet applied._ Record here: who ran it, the UTC time of each step, the CloudTrail event ids for
-`CreateBucket`, `CreateRole`, `PutBucketReplication` and `CreateJob`, the batch job id and its task
-counts (succeeded, failed), and the read-only check afterwards.
+Run by the owner in CloudShell as `michael-admin` (IAM Identity Center, permission set
+`AdministratorAccess`, not root), from main `4b4c05863`. Step 0 printed all four OK lines.
+
+| Step | CloudTrail (UTC, event id, caller `michael-admin`, no error code) |
+|---|---|
+| 1. Destination bucket | `CreateBucket` (us-east-2) 11:13:45, `c83f873b-5872-464c-bb4f-8e99fa34a3c5`; `PutBucketPolicy` 11:13:49, `b7ebc0de-1a8b-4375-9845-e7245ecfbf00` |
+| 2. Replication role | `CreateRole` 11:17:02, `83f2accd-7cf9-4188-9bec-82b3828d311d`; `PutRolePolicy` 11:17:03, `8f97a401-7ac8-4d50-b3e8-d42f0c2ad6d0` |
+| 3. Replication rule | `PutBucketReplication` 11:18:19, `443e6541-7fc6-4a71-a944-33886b615c42` |
+| 4. Existing objects | `CreateJob` 11:19:08, `f33da9d6-8c7e-41d5-9df2-1dd12cd4d61a`: S3 Batch Replication job `465449a6-41df-4ed5-a36f-694da9d1a4c7`, **Complete, 1,592 tasks, 1,592 succeeded, 0 failed**, 144 s active |
+
+**Read-only checks afterwards (as `claude-code`):**
+- **Destination bucket** `checksops-production-privatefiles-dr-806168576068`: region `us-east-2`; versioning Enabled; Block Public Access all four on; SSE-S3 with Bucket Key off and SSE-C blocked; BucketOwnerEnforced; policy `DenyInsecureTransport` only; lifecycle aborts incomplete uploads after 7 days.
+- **Role** `checksops-production-files-replication`: trust limited to `s3.amazonaws.com` and `batchoperations.s3.amazonaws.com` with `aws:SourceAccount` 806168576068; one inline policy `FilesReplication` with exactly the five statements in step 2; no managed policies.
+- **Source rule**: `CopyToUsEast2` Enabled, delete marker replication Disabled, role `checksops-production-files-replication`.
+- **Copy**: 1,572 current objects (2.72 GB) in the destination, plus 2 batch report objects. The job's 1,592 tasks are object versions. The source held 1,641 versions (CloudWatch `NumberOfObjects`, 2026-11-07); the 49 not copied are the SSE-KMS compliance documents (no `files/verification-docs/` keys in the copy) and delete markers, which the rule leaves out by design.
+
+**Still open (phase 2):** the SSE-KMS compliance documents. They need a `us-east-2` KMS key, the replication role in the compliance-documents key policy (`aws/production/onboarding-keys.yaml`, guarded workflow), and `SseKmsEncryptedObjects` on the rule. That is a separate reviewed change.
