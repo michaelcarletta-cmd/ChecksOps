@@ -51,7 +51,8 @@ test('override: Review always, Endorsing only when not monitored; Loss Draft, Re
     assert.ok(!actions.includes(gone), gone);
   }
   // The override calls the bridge with the chosen target (the API branch accepts "review").
-  assert.match(actions, /p_action: "admin_reset_status",[\s\S]*?p_extra: \{ target_status: adminTargetStatus \}/);
+  // (src/lib/lossDraftActions.ts runLossDraftAction maps action/extra to p_action/p_extra.)
+  assert.match(actions, /action: "admin_reset_status",[\s\S]*?extra: \{ target_status: adminTargetStatus \}/);
 });
 
 test('override and send to Endorsing clear the selection and refresh the check queues', () => {
@@ -83,7 +84,7 @@ test('not monitored: the endorsed back upload prompts to send the check to Endor
 
 test('amounts are checked before the call and sent with at most two decimals', () => {
   assert.match(actions, /def\?\.needsAmount && !\/\^\\d\{1,10\}\(\\\.\\d\{1,2\}\)\?\$\/\.test\(amountText\)/);
-  assert.match(actions, /p_amount: def\?\.needsAmount \? Number\(amountText\) : null,/);
+  assert.match(actions, /amount: def\?\.needsAmount \? Number\(amountText\) : null,/);
   assert.match(actions, /onClick=\{\(\) => executeAction\(a\.action, a\)\}/);
   assert.match(actions, /release_recorded === false/);
 });
