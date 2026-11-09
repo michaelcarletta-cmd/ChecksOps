@@ -4,15 +4,11 @@
 
 ChecksOps is workflow software, not a bank, lender, escrow service, or payment processor. Your company owns the process, controls all communications with carriers, mortgage companies, payees, and banks, and is responsible for deposit, endorsement, compliance, and release decisions. Money movement is powered by Moov, a regulated money services provider; your company remains the merchant of record.
 
-Pricing: $7,500 one-time platform fee per company; $4 per check, no minimums, no caps; support and updates $100 per month or $1,000 paid annually. Unlimited users.
-
 Contact: support@checksops.com
 
 ## Pages
 
 - [Home](https://checksops.com/): capabilities, five-stage workflow (upload, review, endorse, deposit, monitor), partner sharing, money movement, security, demo request
-- [Pricing](https://checksops.com/pricing): platform fee, per-check rate, support plan
-- [Pricing worked example](https://checksops.com/pricing): a firm processing 100 checks a month pays $7,500 once, plus $400 a month in checks and $100 a month in support; first year $13,500 with monthly support or $13,300 with annual support
 - [ChecksOps vs iink Payments](https://checksops.com/vs/checksops-vs-iink-payments): side-by-side comparison
 - [ChecksOps vs Snapsheet](https://checksops.com/vs/checksops-vs-snapsheet): Snapsheet is a claims system for carriers; ChecksOps is for the public adjusting firm that receives the check
 - [ChecksOps vs Guidewire ClaimCenter](https://checksops.com/vs/checksops-vs-guidewire-claimcenter): ClaimCenter runs an insurer's core claims operations; ChecksOps is for the public adjusting firm that receives the check

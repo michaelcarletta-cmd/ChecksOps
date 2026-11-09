@@ -6,13 +6,13 @@ import { Badge } from "@/components/ui/badge";
 import { CheckOpsLogo } from "@/components/marketing/CheckOpsLogo";
 import { MarketingMenuButton, MarketingMobileMenu } from "@/components/marketing/MarketingMobileMenu";
 import { usePageMeta } from "@/hooks/usePageMeta";
-import { PUBLISHED_PRICING } from "@/pages/marketing/marketingPricing";
 import { COMPARISON_LINKS, VS_IINK_FAQ as FAQ, VS_IINK_PAGE } from "@/pages/marketing/marketingPages";
 
 /**
  * /vs/checksops-vs-iink-payments: an honest side-by-side for a firm owner choosing between
- * the two. ChecksOps facts come from this site (home page, /pricing). iink Payments facts come
- * from the website audit of iink's public pages.
+ * the two. ChecksOps facts come from this site (home page). iink Payments facts come from the
+ * website audit of iink's public pages. No ChecksOps price figures: the owner keeps pricing off
+ * the public site (2026-11-09); ChecksOps pricing is quoted on a demo.
  *
  * TODO(owner): confirm every iink figure below against iink.com/pricing before publishing and
  * update IINK_FACTS_AS_OF. Two points to check in particular: the $25 minimum on the mortgage
@@ -25,7 +25,6 @@ const NAV_ITEMS = [
   { label: "Capabilities", href: "/#capabilities" },
   { label: "Workflow", href: "/#workflow" },
   { label: "Security", href: "/#security" },
-  { label: "Pricing", href: "/pricing" },
 ];
 
 interface Row {
@@ -43,17 +42,17 @@ const ROWS: Row[] = [
   },
   {
     topic: "Entry price",
-    checksops: `${PUBLISHED_PRICING.platformFee} one-time platform fee per company, plus support at ${PUBLISHED_PRICING.supportMonthly} a month or ${PUBLISHED_PRICING.supportAnnual} a year. Unlimited users.`,
+    checksops: "Quoted on a live demo. Unlimited users.",
     iink: "Monthly subscription tiers, from Basic at $45/month (2 checks) to Premium at $375/month (50 checks). Enterprise on request.",
   },
   {
     topic: "Per check",
-    checksops: `${PUBLISHED_PRICING.perCheck} per check, the same for every check. No minimums, no caps.`,
+    checksops: "One flat rate per check, the same for every check.",
     iink: "Checks included in the monthly tier.",
   },
   {
     topic: "Checks with a mortgage company payee",
-    checksops: `${PUBLISHED_PRICING.perCheck} per check. No percentage of the check amount.`,
+    checksops: "The same flat rate per check. No percentage of the check amount.",
     iink: "1% of the check amount, with a $25 minimum and a cap of $299 to $329 per check depending on tier.",
   },
   {
@@ -157,7 +156,7 @@ export default function ChecksOpsVsIink() {
           <h2 className="text-xl md:text-2xl font-bold tracking-tight">Example: one {usd(EXAMPLE_CHECK)} check with a mortgage company payee</h2>
           <ul className="mt-4 space-y-2 text-sm text-muted-foreground">
             <li>iink: 1% of {usd(EXAMPLE_CHECK)} = {usd(IINK_MORTGAGE_FEE)}, on top of the monthly subscription.</li>
-            <li>ChecksOps: {PUBLISHED_PRICING.perCheck}, on top of the one-time platform fee and support plan.</li>
+            <li>ChecksOps: the same flat per-check rate as any other check, with no percentage of the amount.</li>
           </ul>
         </section>
 
@@ -198,9 +197,6 @@ export default function ChecksOpsVsIink() {
           <Button asChild size="lg">
             <Link to="/#demo">Book a live demo<ArrowRight className="h-4 w-4 ml-2" /></Link>
           </Button>
-          <Button asChild size="lg" variant="outline">
-            <Link to="/pricing">See ChecksOps pricing</Link>
-          </Button>
         </div>
       </main>
 
@@ -209,7 +205,6 @@ export default function ChecksOpsVsIink() {
           <span>© {new Date().getFullYear()} ChecksOps</span>
           <nav className="flex flex-wrap items-center gap-x-4 gap-y-2 [&>a]:inline-flex [&>a]:items-center [&>a]:min-h-[44px] sm:[&>a]:min-h-0">
             <Link to="/" className="hover:text-foreground">Home</Link>
-            <Link to="/pricing" className="hover:text-foreground">Pricing</Link>
             {COMPARISON_LINKS.filter((l) => l.to !== VS_IINK_PAGE.path).map((l) => (
               <Link key={l.to} to={l.to} className="hover:text-foreground">{l.label}</Link>
             ))}

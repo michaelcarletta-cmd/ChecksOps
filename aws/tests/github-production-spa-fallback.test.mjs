@@ -2,7 +2,8 @@
  * Guarded production SPA fallback (ops/deployment-guard/PRODUCTION_SPA_FALLBACK.md): the CloudFront
  * Function checksops-production-spa-fallback on the default behavior of E1B0ZWWO5559U5 only; code
  * only from aws/cloudfront/spa-fallback.js (publish) or spa-fallback.baseline.js (revert); the
- * allowlist is every MARKETING_PAGES path but "/"; update on DEVELOPMENT, test-function against the
+ * allowlist is every MARKETING_PAGES path but "/", plus the retired paths whose key the build still
+ * writes (RETIRED_MARKETING_PATHS); update on DEVELOPMENT, test-function against the
  * rules, then publish, each with If-Match; the distribution never changes; never a staging id;
  * each change needs its exact phrase, the inspect's snapshot and a staging acceptance reference.
  *
@@ -56,7 +57,7 @@ import { APPROVAL_PHRASES, run as preflight, validateChangeInputs, verifyState, 
 import { checkPage, entryBundlePath, main as probeMain, ogTitleTag, pageExpectations, parseArgs, probeOnce } from '../../scripts/deployment-guard/spa-fallback-public-probe.mjs';
 import { CODES } from '../../scripts/deployment-guard/lib/errors.mjs';
 import { DEPLOYMENT_TYPES } from '../../scripts/deployment-guard/lib/identity.mjs';
-import { HOME_PAGE, MARKETING_PAGES } from '../../src/pages/marketing/marketingPages.ts';
+import { HOME_PAGE, MARKETING_PAGES, RETIRED_MARKETING_PATHS } from '../../src/pages/marketing/marketingPages.ts';
 import { staticPageKey } from '../../src/pages/marketing/marketingStaticHead.ts';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -71,6 +72,9 @@ const ENV = { GITHUB_SHA: SHA, GITHUB_REF_NAME: 'main', GITHUB_ACTOR: 'owner', G
 const WORKFLOW = read('.github/workflows/guarded-production-spa-fallback.yml');
 const STAGING_REFERENCE = 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/42000000001';
 const PAGE_PATHS = MARKETING_PAGES.filter((page) => page.path !== '/').map((page) => page.path);
+// Every path the build writes as its own S3 key and the function passes through: the retired
+// paths (a copy of the home page, so the guarded upload overwrites the old object) then the pages.
+const SERVED_PATHS = [...RETIRED_MARKETING_PATHS, ...PAGE_PATHS];
 const LIVE_COMMENT = 'SPA deep-link fallback for S3 default behavior only. Does not run on /prep.';
 // The code LIVE before this tool: aws/cloudfront/spa-fallback.js as Step 1 (commit 2ba5c6fc1) uploaded it.
 const BASELINE_SHA256 = '0cf839198b024b943b2834e6de414e2d0deea59d88c23373886561575f9269a1';
@@ -192,14 +196,14 @@ function functionContext(code) {
 }
 const rewrite = (code, uri) => functionContext(code).handler({ request: { method: 'GET', uri, querystring: {}, headers: {}, cookies: {} } }).uri;
 
-test('the function allowlist is exactly every MARKETING_PAGES path but "/", and the writer, the role and the sessions agree', () => {
+test('the function allowlist is exactly every MARKETING_PAGES path but "/" plus the retired paths, and the writer, the role and the sessions agree', () => {
   const allowlist = Object.keys(functionContext(CURRENT).MARKETING_PAGES);
-  assert.deepEqual(allowlist, PAGE_PATHS);
+  assert.deepEqual(allowlist, SERVED_PATHS);
   assert.ok(Object.values(functionContext(CURRENT).MARKETING_PAGES).every((value) => value === true));
-  assert.deepEqual([...MARKETING_PATHS], PAGE_PATHS);
-  assert.deepEqual([...MARKETING_KEYS], PAGE_PATHS.map(staticPageKey));
-  assert.deepEqual([...OBJECT_KEYS], [...PAGE_PATHS.map(staticPageKey), staticPageKey('/')]);
-  assert.ok(PAGE_PATHS.length >= 5);
+  assert.deepEqual([...MARKETING_PATHS], SERVED_PATHS);
+  assert.deepEqual([...MARKETING_KEYS], SERVED_PATHS.map(staticPageKey));
+  assert.deepEqual([...OBJECT_KEYS], [...SERVED_PATHS.map(staticPageKey), staticPageKey('/')]);
+  assert.ok(SERVED_PATHS.length >= 5);
   const objectArns = OBJECT_KEYS.map((key) => `arn:aws:s3:::${PRODUCTION_BUCKET}/${key}`);
   const role = JSON.parse(read('ops/deployment-guard/production-spa-fallback/permissions-policy.json'));
   assert.deepEqual(role.Statement.find((s) => [].concat(s.Action).includes('s3:GetObject')).Resource, objectArns);
@@ -210,7 +214,7 @@ test('the function allowlist is exactly every MARKETING_PAGES path but "/", and 
 });
 
 test('the repo function: marketing paths unchanged, everything else extensionless to /index.html, /prep and files untouched', () => {
-  for (const uri of PAGE_PATHS) assert.equal(rewrite(CURRENT, uri), uri, uri);
+  for (const uri of SERVED_PATHS) assert.equal(rewrite(CURRENT, uri), uri, uri);
   for (const [uri, want] of [
     ['/', '/index.html'],
     ['/login', '/index.html'],
@@ -239,7 +243,7 @@ test('the baseline file is byte-for-byte the pre-tool function and still rewrite
   assert.equal(SOURCES.baseline_sha256, BASELINE_SHA256);
   assert.equal(SOURCES.current_sha256, sha256(CURRENT));
   assert.notEqual(SOURCES.current_sha256, SOURCES.baseline_sha256);
-  for (const uri of [...PAGE_PATHS, '/', '/login', '/pricing/']) assert.equal(rewrite(BASELINE, uri), '/index.html', uri);
+  for (const uri of [...SERVED_PATHS, '/', '/login', '/pricing/']) assert.equal(rewrite(BASELINE, uri), '/index.html', uri);
   for (const uri of ['/assets/x.js', '/prep', '/prep/health']) assert.equal(rewrite(BASELINE, uri), uri, uri);
   // The writer's oracle agrees with both files on every sample URI, and catches a wrong one.
   assertSourceBehaves(CURRENT, 'current');
@@ -247,7 +251,7 @@ test('the baseline file is byte-for-byte the pre-tool function and still rewrite
   assert.throws(() => assertSourceBehaves(BASELINE, 'current'), /function_source_behavior:current:\/pricing/);
   assert.throws(() => assertSourceBehaves(CURRENT, 'baseline'), /function_source_behavior:baseline/);
   for (const uri of SAMPLE_URIS) assert.equal(expectedUri('current', uri), rewrite(CURRENT, uri), uri);
-  assert.deepEqual([...SAMPLE_URIS], [...PAGE_PATHS, '/', '/login', '/pricing/', '/assets/index-x.js', '/prep/health']);
+  assert.deepEqual([...SAMPLE_URIS], [...SERVED_PATHS, '/', '/login', '/pricing/', '/assets/index-x.js', '/prep/health']);
 });
 
 test('the deployment type is registered, the scripts are in the bypass inventory, and the receipt is production/production-spa', () => {

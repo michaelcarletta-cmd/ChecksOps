@@ -7,15 +7,13 @@
  * Relative imports only: vite.config.ts imports this file, and the "@/" alias does not
  * resolve there.
  */
-import { PUBLISHED_PRICING } from "./marketingPricing.ts";
-
 export interface FaqEntry {
   q: string;
   a: string;
 }
 
 export interface MarketingPage {
-  /** Path on checksops.com, e.g. "/pricing". */
+  /** Path on checksops.com, e.g. "/claim-check-tracking". */
   path: string;
   title: string;
   description: string;
@@ -36,7 +34,8 @@ export function faqJsonLd(faq: readonly FaqEntry[]): Record<string, unknown> {
 }
 
 // Home. Plain answers built only from what this site already states (footer disclaimer,
-// money-movement note, /pricing). Rendered on the page and as FAQPage JSON-LD.
+// money-movement note). Rendered on the page and as FAQPage JSON-LD. No prices: the owner keeps
+// pricing off the public site (2026-11-09).
 export const HOME_FAQ: readonly FaqEntry[] = [
   {
     q: "Is ChecksOps a bank or a payment processor?",
@@ -45,10 +44,6 @@ export const HOME_FAQ: readonly FaqEntry[] = [
   {
     q: "Who holds the money in the wallet?",
     a: "Each organization gets its own wallet, separate and owned by your company. Money movement is powered by Moov, a regulated money services provider, and your company remains the merchant of record.",
-  },
-  {
-    q: "What does it cost?",
-    a: `A ${PUBLISHED_PRICING.platformFee} one-time platform fee per company, ${PUBLISHED_PRICING.perCheck} per check processed, and support and updates at ${PUBLISHED_PRICING.supportMonthly} a month or ${PUBLISHED_PRICING.supportAnnual} a year. Unlimited users, no minimums, no caps.`,
   },
   {
     q: "How long does setup take?",
@@ -64,36 +59,6 @@ export const HOME_PAGE: MarketingPage = {
   jsonLd: faqJsonLd(HOME_FAQ),
 };
 
-export const PRICING_PAGE: MarketingPage = {
-  path: "/pricing",
-  title: `ChecksOps Pricing - ${PUBLISHED_PRICING.platformFee} platform + ${PUBLISHED_PRICING.perCheck} per check`,
-  description:
-    `ChecksOps pricing for public adjusting firms: ${PUBLISHED_PRICING.platformFee} one-time platform fee per company, ${PUBLISHED_PRICING.perCheck} per claim check, support ${PUBLISHED_PRICING.supportMonthly} a month. Unlimited users, no minimums, no caps, with a worked first-year example.`,
-};
-
-/**
- * Worked first-year example for the pricing page: a firm processing 100 checks a month.
- * Every figure is derived from PUBLISHED_PRICING.
- */
-export const PRICING_EXAMPLE = (() => {
-  const checksPerMonth = 100;
-  const supportMonthlyAmount = 100;
-  const supportAnnualAmount = 1000;
-  const checksMonthly = checksPerMonth * PUBLISHED_PRICING.perCheckAmount;
-  const firstYearMonthlySupport = PUBLISHED_PRICING.platformFeeAmount + 12 * checksMonthly + 12 * supportMonthlyAmount;
-  const firstYearAnnualSupport = PUBLISHED_PRICING.platformFeeAmount + 12 * checksMonthly + supportAnnualAmount;
-  const yearTwoAnnualSupport = 12 * checksMonthly + supportAnnualAmount;
-  return {
-    checksPerMonth,
-    checksMonthly,
-    supportMonthlyAmount,
-    firstYearMonthlySupport,
-    firstYearAnnualSupport,
-    yearTwoAnnualSupport,
-    checksPerYear: 12 * checksPerMonth,
-  };
-})();
-
 // /vs/checksops-vs-iink-payments. iink facts come from the website audit of iink's public
 // pages; see the TODO in ChecksOpsVsIink.tsx.
 export const VS_IINK_FAQ: readonly FaqEntry[] = [
@@ -103,11 +68,11 @@ export const VS_IINK_FAQ: readonly FaqEntry[] = [
   },
   {
     q: "How does the cost of a mortgage check compare?",
-    a: `iink charges 1% of the check amount on checks with a mortgage company payee, with a $25 minimum and a cap of $299 to $329 depending on tier. ChecksOps charges ${PUBLISHED_PRICING.perCheck} per check whatever the amount or payee.`,
+    a: "iink charges 1% of the check amount on checks with a mortgage company payee, with a $25 minimum and a cap of $299 to $329 depending on tier. ChecksOps charges the same flat rate per check whatever the amount or payee.",
   },
   {
     q: "Which is cheaper for a small firm?",
-    a: `For a firm with a handful of checks a month, iink's $45-a-month Basic tier is the lower start. ChecksOps has a ${PUBLISHED_PRICING.platformFee} one-time platform fee and is built for firms that process insurance claim checks at scale.`,
+    a: "For a firm with a handful of checks a month, iink's $45-a-month Basic tier is a low monthly start. ChecksOps is built for firms that process insurance claim checks at scale; its pricing is quoted on a live demo.",
   },
   {
     q: "Who controls the money and the mortgage company relationship?",
@@ -119,7 +84,7 @@ export const VS_IINK_PAGE: MarketingPage = {
   path: "/vs/checksops-vs-iink-payments",
   title: "ChecksOps vs iink Payments - Claim check workflow compared",
   description:
-    `ChecksOps vs iink Payments for public adjusting firms: a control layer your firm runs at a flat ${PUBLISHED_PRICING.perCheck} per check, versus a payments network with monthly tiers and a 1% fee on mortgage checks.`,
+    "ChecksOps vs iink Payments for public adjusting firms: a control layer your firm runs at a flat rate per check, versus a payments network with monthly tiers and a 1% fee on mortgage checks.",
   jsonLd: faqJsonLd(VS_IINK_FAQ),
 };
 
@@ -149,10 +114,6 @@ const carrierSideFaq = (name: string): FaqEntry[] => [
   {
     q: "Is ChecksOps a claims system for carriers?",
     a: "No. ChecksOps is built for public adjusting firms and their restoration partners. It does not adjust claims or issue carrier payments. It is workflow software, not a bank, lender, escrow service, or payment processor.",
-  },
-  {
-    q: "What does ChecksOps cost?",
-    a: `A ${PUBLISHED_PRICING.platformFee} one-time platform fee per company, ${PUBLISHED_PRICING.perCheck} per check processed, and support and updates at ${PUBLISHED_PRICING.supportMonthly} a month or ${PUBLISHED_PRICING.supportAnnual} a year. Unlimited users, no minimums, no caps.`,
   },
 ];
 
@@ -207,7 +168,7 @@ export const CLAIM_CHECK_TRACKING_FAQ: readonly FaqEntry[] = [
     q: "How does ChecksOps track loss drafts?",
     a: "Each loss draft stays on its claim file with the mortgage company, the amount held, draw requests and every status change in the audit log, while your team keeps the mortgage-company communication.",
   },
-  ...HOME_FAQ.slice(2, 4),
+  ...HOME_FAQ.slice(2, 3),
 ];
 
 export const CLAIM_CHECK_TRACKING_PAGE: MarketingPage = {
@@ -221,14 +182,23 @@ export const CLAIM_CHECK_TRACKING_PAGE: MarketingPage = {
 /** Every page that gets its own served HTML head at build time (home is index.html itself). */
 export const MARKETING_PAGES: readonly MarketingPage[] = [
   HOME_PAGE,
-  PRICING_PAGE,
   VS_IINK_PAGE,
   VS_SNAPSHEET.page,
   VS_GUIDEWIRE.page,
   CLAIM_CHECK_TRACKING_PAGE,
 ];
 
-/** Footer and pricing-page links to the comparison and category pages. */
+/**
+ * Paths that used to be public marketing pages and are retired. The SPA routes each to "/", and
+ * the build still writes a copy of the home page (home head, canonical "/") to its S3 key, so a
+ * guarded upload overwrites the old prerendered object: the uploader only puts objects and never
+ * deletes, and the production CloudFront function serves these keys as they are
+ * (aws/cloudfront/spa-fallback.js). /pricing: retired 2026-11-09, the owner keeps pricing off
+ * the public site.
+ */
+export const RETIRED_MARKETING_PATHS: readonly string[] = ["/pricing"];
+
+/** Footer links to the comparison and category pages. */
 export const COMPARISON_LINKS: readonly { label: string; to: string }[] = [
   { label: "ChecksOps vs iink Payments", to: VS_IINK_PAGE.path },
   { label: "ChecksOps vs Snapsheet", to: VS_SNAPSHEET.page.path },

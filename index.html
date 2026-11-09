@@ -47,9 +47,9 @@
   <meta name="twitter:title" content="ChecksOps - Claim check workflow for public adjusting firms">
   <meta property="og:description" content="Claim check workflow for public adjusting firms and their restoration partners: every insurance check filed by claim, payee endorsements captured, deposit readiness and loss drafts tracked.">
   <meta name="twitter:description" content="Claim check workflow for public adjusting firms and their restoration partners: every insurance check filed by claim, payee endorsements captured, deposit readiness and loss drafts tracked.">
-  <!-- Structured data: only facts the site publishes (home page, /pricing). The prices repeat
-       src/pages/marketing/marketingPricing.ts; change both together. A typed (non-JavaScript)
-       script is not executed, so it adds no hash to the SPA Content-Security-Policy. -->
+  <!-- Structured data: only facts the site publishes (home page). No prices: the owner keeps
+       pricing off the public site (2026-11-09). A typed (non-JavaScript) script is not
+       executed, so it adds no hash to the SPA Content-Security-Policy. -->
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
@@ -70,28 +70,7 @@
         "serviceType": "Claim check workflow software",
         "url": "https://checksops.com/",
         "provider": { "@id": "https://checksops.com/#organization" },
-        "audience": { "@type": "BusinessAudience", "audienceType": "Public adjusting firms and their restoration partners" },
-        "offers": [
-          {
-            "@type": "Offer",
-            "name": "ChecksOps System: one-time platform fee, per company",
-            "url": "https://checksops.com/pricing",
-            "price": "7500",
-            "priceCurrency": "USD"
-          },
-          {
-            "@type": "Offer",
-            "name": "Processing Rate: per check",
-            "url": "https://checksops.com/pricing",
-            "priceSpecification": { "@type": "UnitPriceSpecification", "price": "4", "priceCurrency": "USD", "unitText": "check" }
-          },
-          {
-            "@type": "Offer",
-            "name": "Support & Updates: monthly",
-            "url": "https://checksops.com/pricing",
-            "priceSpecification": { "@type": "UnitPriceSpecification", "price": "100", "priceCurrency": "USD", "unitText": "month" }
-          }
-        ]
+        "audience": { "@type": "BusinessAudience", "audienceType": "Public adjusting firms and their restoration partners" }
       }
     ]
   }

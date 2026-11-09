@@ -10,7 +10,6 @@ const NAV_ITEMS = [
   { label: "Capabilities", href: "/#capabilities" },
   { label: "Workflow", href: "/#workflow" },
   { label: "Security", href: "/#security" },
-  { label: "Pricing", href: "/pricing" },
 ];
 
 /**
@@ -59,7 +58,6 @@ export function MarketingPageShell({
           <span>© {new Date().getFullYear()} ChecksOps</span>
           <nav className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 [&>a]:inline-flex [&>a]:items-center [&>a]:min-h-[44px] sm:[&>a]:min-h-0">
             <Link to="/" className="hover:text-foreground">Home</Link>
-            <Link to="/pricing" className="hover:text-foreground">Pricing</Link>
             {COMPARISON_LINKS.filter((l) => l.to !== currentPath).map((l) => (
               <Link key={l.to} to={l.to} className="hover:text-foreground">{l.label}</Link>
             ))}
