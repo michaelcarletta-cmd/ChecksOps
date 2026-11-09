@@ -146,7 +146,7 @@ test('renders "Available operating balance $12,480.35" as one readable sentence'
   assert.match(html, /<span class="text-muted-foreground">Available operating balance<\/span> <span class="ml-1\.5 text-base font-bold tabular-nums text-foreground">\$12,480\.35<\/span>/);
   assert.doesNotMatch(html, /Manage checks/);
   // Text a screen reader announces: the label, a space, the amount.
-  assert.equal(html.replace(/<[^>]+>/g, ''), 'Available operating balance $12,480.35');
+  assert.equal(html.split(/<[^>]*>/).join(''), 'Available operating balance $12,480.35');
 });
 
 test('renders the existing subtitle when not permitted, loading, on error, with no wallet or a failed sync', async (t) => {
