@@ -704,20 +704,20 @@
       "production_active": true,
       "environment": "production",
       "source": {
-        "git_sha": "1966c993be129c43c5b9cdfbf7ff1afe7556eea2",
+        "git_sha": "a30955a8b96f7c5bdb8fd5b7aa39316bdf03cf8f",
         "tree_hash": "3cad89d8a2e828fc1c711228df00f22f2c36bb3a5584054caa2caa84f463b1e0",
         "merged": true,
-        "merged_pr": 1740
+        "merged_pr": 1749
       },
       "required_sql": [],
       "artifact": {
         "type": "spa",
-        "name": "/assets/index-DqAv0fU2.js",
-        "version": "N5AsgUXpYOAG0ex8a1hGBFsM4tEQdfiC",
-        "hash": "129ce44e7194cd5687bd349aa166035094e3bdd73b519d22ebbff6f07378567a",
+        "name": "/assets/index-DFza2aqg.js",
+        "version": "LJmwkzgJyQXuI1a.V1vqf.tVmHiBH7PG",
+        "hash": "61d2305ecebc84c11ebf2ca0d2fd31d62873971ff6b46a56398f69af5f9ea939",
         "cloudfront_distribution": "E1B0ZWWO5559U5",
         "lambda_name": "checksops-production-prep-api",
-        "lambda_version": "7494ae68-30ab-485d-a2dc-682036954556",
+        "lambda_version": "708c019d-4189-4db9-81b2-3c3063af126d",
         "lambda_alias": null
       },
       "production_validation": {
@@ -726,34 +726,34 @@
           "ops/release-locks/proof/production-spa-baseline.md",
           "ops/production-spa-deploy.md"
         ],
-        "recorded_at": "2026-11-10T19:25:56Z",
+        "recorded_at": "2026-11-10T22:20:48Z",
         "environment": "production",
         "component": "production-spa",
-        "git_sha": "1966c993be129c43c5b9cdfbf7ff1afe7556eea2",
-        "artifact_identity": "/assets/index-DqAv0fU2.js",
-        "evidence_producer": "guarded-production-spa-upload run 42884456929 (host-verified)",
+        "git_sha": "a30955a8b96f7c5bdb8fd5b7aa39316bdf03cf8f",
+        "artifact_identity": "/assets/index-DFza2aqg.js",
+        "evidence_producer": "guarded-production-spa-upload run 42913115009 (host-verified)",
         "evidence_type": "guarded production SPA upload of a fresh main build"
       },
       "deployment_fingerprint": {
         "recorded": true,
-        "spa_bundle": "/assets/index-DqAv0fU2.js",
-        "spa_sha256": "129ce44e7194cd5687bd349aa166035094e3bdd73b519d22ebbff6f07378567a",
+        "spa_bundle": "/assets/index-DFza2aqg.js",
+        "spa_sha256": "61d2305ecebc84c11ebf2ca0d2fd31d62873971ff6b46a56398f69af5f9ea939",
         "cloudfront_id": "E1B0ZWWO5559U5",
         "cloudfront_distribution": "E1B0ZWWO5559U5",
-        "cloudfront_deployment_fingerprint": "N5AsgUXpYOAG0ex8a1hGBFsM4tEQdfiC",
+        "cloudfront_deployment_fingerprint": "LJmwkzgJyQXuI1a.V1vqf.tVmHiBH7PG",
         "lambda_name": "checksops-production-prep-api",
-        "lambda_version": "7494ae68-30ab-485d-a2dc-682036954556",
+        "lambda_version": "708c019d-4189-4db9-81b2-3c3063af126d",
         "lambda_code_hash": null,
         "applied_sql_hash": null,
         "database_evidence_record": null,
-        "config_hash": "6ac8db55c28c0ab8c234f0f47002e95346a31ef54f3cdbced10b00f04c72cf35",
-        "notes": "Guarded production SPA upload 2026-11-10T19:25:56Z (the writer's finished_at 2026-11-10T19:25:56.939Z, started_at 19:23:06.696Z; run 42884456929, job 130068990225, owner-approved \"DEPLOY WEBSITE TO PRODUCTION\" (the owner's words on 2026-11-10, also the workflow input approval_phrase), approved_commit 1966c993be129c43c5b9cdfbf7ff1afe7556eea2, expected_live_index_sha256 6bab8dde00238370e01bef7d78233470bca59c31d7f0983ddcb158236e65c80f, staging acceptance run 42879548397 (Guarded staging SPA upload, apply, of main 031e10d5a, the merge of PR #1738, 18:52Z; it moved staging from /assets/index-DVEIu7Lv.js to /assets/index-xuivyFvE.js, index.html sha256 b59733cd4a90e16680e5b4e5238baac36fe3ed93964b8426d0aee73c00497426, invalidation I7U6FD4G4KE3IZ8RQDW6Y86TCY; 031e10d5a is an ancestor of 1966c993b and git diff 031e10d5a 1966c993b -- src index.html public vite.config.ts package.json bun.lock is empty), accepted by the apply's staging-acceptance check) of main 1966c993b (the merge of PR #1740), whose history contains the previous locked source cc48ca0bf. Staging acceptance is a run on 031e10d5a, not on 1966c993b: staging inspect run 42883928951 (19:18Z) read staging live b59733cd... /assets/index-xuivyFvE.js, and the staging re-upload of 1966c993b, run 42884046550 (19:19Z), was refused by the staging writer with STALE_PACKAGE (\"candidate entry bundle equals the live entry; refuse redeploying the same build\") before any write, because staging already served the identical build. Pre-apply read-only inspect run 42884339370 (job 130068599162) on 1966c993b showed live equal to the previous lock (index.html sha256 6bab8dde00238370e01bef7d78233470bca59c31d7f0983ddcb158236e65c80f, entry /assets/index-BIzIBkyM.js, S3 version ASsGxX8qpkpVUKcIg7Ko1225dK5mngkY, live_matches_lock true). The writer re-read live before the first write and immediately before the switch (both 6bab8dde..., S3 version ASsGxX8qpkpVUKcIg7Ko1225dK5mngkY), uploaded assets first and index.html last (no delete); CloudFront invalidation I2I27GDIK9UVFSQZTI5SUSMQEA; index.html etag f81349023bc5e3393d6e14eaaebc1558, S3 version N5AsgUXpYOAG0ex8a1hGBFsM4tEQdfiC (the writer's index_put); entry asset assets/index-DqAv0fU2.js etag d88477bd78748e60e75562f0bac8fe92, S3 version PnMB9XEVZW1jEjjftC7n38.arUjJ2RYy; the writer also put the extensionless marketing keys claim-check-tracking, vs/checksops-vs-iink-payments and the retired keys pricing, vs/checksops-vs-guidewire-claimcenter and vs/checksops-vs-snapsheet (each retired key's etag is f81349023bc5e3393d6e14eaaebc1558, the same as index.html: a copy of the home page, as #1726 and #1733 build them for RETIRED_MARKETING_PATHS; pricing S3 version PjYbC8IPdgvQbsg0MVO_zEUSVSTFCAVv); rollback false; the public production smoke passed (https://checksops.com/ serves /assets/index-DqAv0fU2.js, /prep/health ok). The index.html sha256 6ac8db55c28c0ab8c234f0f47002e95346a31ef54f3cdbced10b00f04c72cf35 and the entry bundle sha256 129ce44e7194cd5687bd349aa166035094e3bdd73b519d22ebbff6f07378567a are the writer's after_s3_fingerprint (index.html etag and version equal to the writer's index_put, last_modified 2026-11-10T19:25:53Z; it references /assets/index-DqAv0fU2.js) and equal its candidate and after_host fingerprints; a public fetch of https://checksops.com/, /pricing, /login and /assets/index-DqAv0fU2.js at 2026-11-10T19:29:41Z returned the same two sha256 values. The writer reported lock_advance advanced false, so the lock is advanced by this record. Ships, since cc48ca0bf: PR #1729 (record a payment made outside ChecksOps; src/components/disbursement/DisbursementConsole.tsx, src/components/payments/FundsTab.tsx, src/lib/payments/externalDisbursement.ts (new)) and PR #1734 (package.json: the test:deployment-guard script also lists the SQL 147 tests; no runtime change). The other merges between cc48ca0bf and 1966c993b (#1730, #1735, #1736, #1737, #1738, #1739 and #1740, the previous SPA lock record) changed no SPA source. lambda_version moves from 8179e535-6127-4016-96f3-2da63567f289 to 7494ae68-30ab-485d-a2dc-682036954556, the RevisionId current when this upload ran (19:23:06Z-19:25:56Z), as #1731 and #1740 record the RevisionId current at the upload. Guarded production Lambda overlay applies after the previous upload moved it: run 42878793968 (external-disbursement.mjs, 18:47Z) to c020cea9-af6e-45e8-a3e4-8c3289f040d6, run 42879179121 (app-services.mjs, 18:50Z) to 56b51b78-498b-414f-af39-d271d3ff8ffc, run 42881220799 (write-allowlist.mjs, 19:02Z) to 6774f7cf-2036-4941-9eae-62fe35fee747, and run 42881616413 (write-check-workflow.mjs, 19:04Z; its verify read RevisionId 7494ae68-30ab-485d-a2dc-682036954556, CodeSha256 6zwgYoaKVapErFmIZdD2QvILz3+7Wqg56AEYtHjYz4s=) to 7494ae68-30ab-485d-a2dc-682036954556; read-only overlay inspect run 42881803003 (19:06Z) read the same RevisionId and CodeSha256. No guarded production Lambda overlay, configuration or rebuild run ran after 42881803003 (finished 19:06:20Z) through this upload, and a read-only GetFunctionConfiguration as user/claude-code at 2026-11-10T19:30:15Z returned RevisionId 7494ae68-30ab-485d-a2dc-682036954556, CodeSha256 6zwgYoaKVapErFmIZdD2QvILz3+7Wqg56AEYtHjYz4s=, LastModified 2026-11-10T19:05:20Z; the upload workflow makes no Lambda call. Those member deploys are recorded by their own overlay records, not by this SPA lock. Previous lock /assets/index-BIzIBkyM.js is the rollback."
+        "config_hash": "bab44d4846d30efc3b80d7b4cd455d8b6e5b48e59e1f7aaaa2f14ac543cb57b3",
+        "notes": "Guarded production SPA upload 2026-11-10T22:20:48Z (the writer's finished_at 2026-11-10T22:20:48.112Z, started_at 22:18:35.093Z; run 42913115009, job 130168587552, owner-approved \"DEPLOY WEBSITE TO PRODUCTION\" (the owner's words on 2026-11-10, \"DEPLOY workflow-rpc.mjs TO PRODUCTION then DEPLOY WEBSITE TO PRODUCTION\"; also the workflow input approval_phrase), approved_commit a30955a8b96f7c5bdb8fd5b7aa39316bdf03cf8f, expected_live_index_sha256 6ac8db55c28c0ab8c234f0f47002e95346a31ef54f3cdbced10b00f04c72cf35, staging acceptance run 42912452615 (Guarded staging SPA upload, apply, of the same main a30955a8b, job 130166326589, after staging inspect run 42912347896 read staging live b59733cd4a90e16680e5b4e5238baac36fe3ed93964b8426d0aee73c00497426), accepted by the apply's staging-acceptance check) of main a30955a8b (the merge of PR #1749), whose history contains the previous locked source 1966c993b. Pre-apply read-only inspect run 42913008471 (job 130168222004) on a30955a8b showed live equal to the previous lock (index.html sha256 6ac8db55c28c0ab8c234f0f47002e95346a31ef54f3cdbced10b00f04c72cf35, entry /assets/index-DqAv0fU2.js, live_matches_lock true). The writer re-read live before the first write and immediately before the switch (both 6ac8db55..., S3 version N5AsgUXpYOAG0ex8a1hGBFsM4tEQdfiC), uploaded assets first and index.html last (no delete); CloudFront invalidation IA3LTG26NHFEZMEROUQ9ZJK1MP; index.html etag 768a41ee391e6ed9c9cefd7da7efb002, S3 version LJmwkzgJyQXuI1a.V1vqf.tVmHiBH7PG (the writer's index_put); entry asset assets/index-DFza2aqg.js etag d5731b60e0f25c4b4b8c05e6d00eba36, S3 version RkhgSH_PT66qXxSkPkEF14xLrqIir1i5; the writer also put the extensionless marketing keys claim-check-tracking, vs/checksops-vs-iink-payments and the retired keys pricing, vs/checksops-vs-guidewire-claimcenter and vs/checksops-vs-snapsheet (each retired key's etag is 768a41ee391e6ed9c9cefd7da7efb002, the same as index.html: a copy of the home page, as #1726 and #1733 build them for RETIRED_MARKETING_PATHS; pricing S3 version 1N1S5A0TQswuQ4oeD3G.tdbkqMv2wXZU); rollback false; the workflow's public production smoke passed (https://checksops.com/ serves /assets/index-DFza2aqg.js). The index.html sha256 bab44d4846d30efc3b80d7b4cd455d8b6e5b48e59e1f7aaaa2f14ac543cb57b3 and the entry bundle sha256 61d2305ecebc84c11ebf2ca0d2fd31d62873971ff6b46a56398f69af5f9ea939 are the writer's after_s3_fingerprint (index.html etag and version equal to the writer's index_put, last_modified 2026-11-10T22:20:45Z; it references /assets/index-DFza2aqg.js) and equal its candidate and after_host fingerprints; a public fetch of https://checksops.com/, /pricing and /login after the run served /assets/index-DFza2aqg.js. The writer reported lock_advance advanced false, so the lock is advanced by this record. Ships, since 1966c993b: PR #1742 (the second mortgagee link; src/components/loss-draft/SendToMortgageDeskButton.tsx calls the RPC link_second_mortgagee) and PR #1745 (package.json: the test:deployment-guard script also lists the SQL 148 tests; no runtime change). The other merges between 1966c993b and a30955a8b (#1741, #1743, #1744, the previous SPA lock record, #1746, #1748 and #1749) changed no SPA source. lambda_version moves from 7494ae68-30ab-485d-a2dc-682036954556 to 708c019d-4189-4db9-81b2-3c3063af126d, the RevisionId current when this upload ran (22:18:35Z-22:20:48Z), as #1740 and #1744 record the RevisionId current at the upload. The guarded production Lambda overlay apply run 42912070859 (workflow-rpc.mjs, REPLACE 0e77f1f6... -> b2976326..., 22:10Z, owner \"DEPLOY workflow-rpc.mjs TO PRODUCTION\") moved it; re-inspect run 42912192599 (22:11Z) read ALREADY_ACCEPTED. No other guarded production Lambda overlay, configuration or rebuild run ran after 42881803003 (19:06Z) through this upload, and a read-only GetFunctionConfiguration as user/claude-code at 2026-11-10T22:22:14Z returned RevisionId 708c019d-4189-4db9-81b2-3c3063af126d, CodeSha256 TWO/b+hTsd935FcQlljwiZhOzxC+f9Y4Ttwmq79Vf7I=, LastModified 2026-11-10T22:11:04Z; the upload workflow makes no Lambda call. That member deploy is recorded by its own overlay record, not by this SPA lock. Previous lock /assets/index-DqAv0fU2.js is the rollback."
 
       },
       "rollback": {
-        "git_sha": "cc48ca0bf1c2430eef8ede6842a8437e550883ff",
-        "artifact": "/assets/index-BIzIBkyM.js",
-        "notes": "Immediate previous locked baseline is /assets/index-BIzIBkyM.js (S3 index.html version ASsGxX8qpkpVUKcIg7Ko1225dK5mngkY, index.html sha256 6bab8dde00238370e01bef7d78233470bca59c31d7f0983ddcb158236e65c80f, bundle sha256 f36faa731f994e2157829c0e8603c9bcc2db30a490bcd885751fe41231621492; its assets were not deleted). Do not restore it unless a separately authorized guarded rollback names that exact artifact."
+        "git_sha": "1966c993be129c43c5b9cdfbf7ff1afe7556eea2",
+        "artifact": "/assets/index-DqAv0fU2.js",
+        "notes": "Immediate previous locked baseline is /assets/index-DqAv0fU2.js (S3 index.html version N5AsgUXpYOAG0ex8a1hGBFsM4tEQdfiC, index.html sha256 6ac8db55c28c0ab8c234f0f47002e95346a31ef54f3cdbced10b00f04c72cf35, bundle sha256 129ce44e7194cd5687bd349aa166035094e3bdd73b519d22ebbff6f07378567a; its assets were not deleted). Do not restore it unless a separately authorized guarded rollback names that exact artifact."
       },
       "missing_evidence": [],
       "open_pr_overlap": [],
@@ -767,7 +767,7 @@
       "environment": "unknown",
       "source": {
         "git_sha": "faa61f63cf718fba036247267aa00a854d114ec0",
-        "tree_hash": "c35a367348200ee89e75812c1d11147da5fee1adbd8d1f1519121ca3119ed28f",
+        "tree_hash": "9ffa02b4253e658fe803f8dc58961d6ca6f47a817d9205734f122ebf436af6de",
         "merged": true,
         "merged_pr": null
       },
