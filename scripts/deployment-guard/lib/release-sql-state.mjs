@@ -1,5 +1,5 @@
 /**
- * One engine for the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108 to SQL 147), shared by the staging
+ * One engine for the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108 to SQL 148), shared by the staging
  * guarded executor (aws/write-path/guarded-sql-executor/index.mjs) and the production tools
  * (release-sql-production-apply.mjs): the catalog state reader, the code-derived
  * fingerprints, the pre- and post-conditions, the predecessor rules and the unrelated-catalog
@@ -20,7 +20,10 @@
  *   column     (added to an existing table) absent, or type, NOT NULL, default, column ACL
  *   constraint / trigger on an existing table: absent, or the collapsed definition
  *   privileges the pinned grantees' pinned table privileges (SQL 97, SQL 100)
- *   index      (created on an existing table) absent, or the collapsed pg_get_indexdef (SQL 98)
+ *   index      (created on an existing table) absent, or the collapsed pg_get_indexdef (SQL 98);
+ *              an index the file redefines in place (spec indexes[].replaces, SQL 148) has the
+ *              same line: the live definition's hash tells the accepted pre-state (a replaced
+ *              definition) from the file's own
  *   unique     whether a unique index covers the named columns (SQL 98: the file adds one only
  *              when none does)
  *   function_acl
@@ -664,6 +667,41 @@ export function releaseIntendedHash(key, text) {
 }
 
 /**
+ * Which accepted definition an index the file redefines in place (spec indexes[].replaces,
+ * SQL 148) has live: 'intended' (the file's own), the label of a replaced definition,
+ * 'absent' or 'other'. A label, never the definition.
+ */
+export function replacedIndexLabel(index, live) {
+  if (!live?.exists) return 'absent';
+  if (live.def === collapse(index.def)) return 'intended';
+  const replaced = (index.replaces || []).find((r) => live.def === collapse(r.def));
+  return replaced ? replaced.label : 'other';
+}
+
+/**
+ * The code-derived pre-state of a migration that only creates functions and redefines indexes
+ * in place (SQL 148): every function absent, every index at the replaced definition `label`
+ * names (default: each index's first). Refuses specs with any other kind of object.
+ */
+export function releaseReplacedPreState(key, label = null) {
+  const spec = releaseSpec(key);
+  const other = ['dropped_functions', 'acl_functions', 'policies', 'dropped_policies', 'views', 'tables', 'added_columns', 'column_acl',
+    'constraints', 'triggers', 'dropped_triggers', 'table_privileges', 'unique_covers', 'whole_tables'].filter((k) => (spec[k] || []).length);
+  const indexes = spec.indexes || [];
+  if (other.length || !indexes.length || !indexes.every((i) => (i.replaces || []).length)) {
+    throw new Error(`${key}: releaseReplacedPreState covers only new functions and indexes redefined in place`);
+  }
+  const functions = Object.fromEntries(spec.functions.map((fn) => [fn.identity, { exists: false }]));
+  const state = {};
+  for (const i of indexes) {
+    const replaced = label == null ? i.replaces[0] : i.replaces.find((r) => r.label === label);
+    if (!replaced) throw new Error(`${key}: ${i.name} replaces no definition labelled ${label}`);
+    state[objKey(i.table, i.name)] = { exists: true, def: collapse(replaced.def) };
+  }
+  return { functions, indexes: state };
+}
+
+/**
  * The fingerprint `key` has once `laterKey` replaced some of its functions (SQL 101 replaces
  * one of SQL 90's): every object of `key` as its own file renders it, with the functions both
  * files define as the later file renders them. Pinned on the later migration
@@ -857,9 +895,16 @@ export function releaseSharedPreconditionFailures(key, state, text, { environmen
       const live = s.columns?.[`${c.table}.${c.column}`];
       return live?.exists === true && (live.acl || []).every((line) => c.acl.includes(line) || (c.revokes || []).includes(line));
     })],
-    ['added_indexes_absent_or_intended', (spec.indexes || []).every((i) => {
+    ['added_indexes_absent_or_intended', (spec.indexes || []).filter((i) => !i.replaces).every((i) => {
       const live = s.indexes?.[objKey(i.table, i.name)];
       return !live?.exists || live.def === collapse(i.def);
+    })],
+    // SQL 148: an index the file redefines in place must be live as one of the definitions it
+    // replaces or as its own; absent or any other definition refuses (the file would refuse
+    // another definition with sql148_unexpected_index).
+    ['replaced_indexes_replaceable', (spec.indexes || []).filter((i) => i.replaces).every((i) => {
+      const label = replacedIndexLabel(i, s.indexes?.[objKey(i.table, i.name)]);
+      return label !== 'absent' && label !== 'other';
     })],
     ['definer_can_write_relations', (spec.definer_writes || []).every((table) => s.definer?.[table] === true)],
     // SQL 98: with duplicates and no covering unique index the file only warns and skips the
@@ -925,6 +970,10 @@ export function releaseSharedPreconditionFailures(key, state, text, { environmen
     for (const name of ['mortgage_companies_id_uuid_is_active_boolean', 'mortgage_company_references_uuid', 'mortgage_companies_sql142_policies_replaceable', 'mortgage_company_references_readable_by_login']) {
       if (extra === name) checks.push([name, s.counts?.[name] === 1]);
     }
+    // SQL 148: no other valid unique index keys public.mortgage_handling_requests on
+    // check_intake_item_id alone (it would keep refusing a 2nd mortgagee; the file refuses with
+    // sql148_other_per_check_unique). A read-only catalog count; null fails closed.
+    if (extra === 'no_other_per_check_unique_index') checks.push(['no_other_per_check_unique_index', s.counts?.other_per_check_unique_indexes === 0]);
     // SQL 98: the per-check default price exists (an active row), or the file seeds it (no row).
     if (extra === 'check_billing_config_active_or_empty') {
       checks.push(['check_billing_config_active_or_empty', s.counts?.check_billing_config_active_rows > 0 || s.counts?.check_billing_config_rows === 0]);
@@ -1192,6 +1241,14 @@ export function releaseSqlReport(key, state, text) {
       };
     }),
     indexes: objectLabels((spec.indexes || []).map((i) => [objKey(i.table, i.name).replace(/^public\./, ''), s.indexes?.[objKey(i.table, i.name)], want?.indexes?.[objKey(i.table, i.name)]])),
+    // SQL 148: which accepted definition each index the file redefines in place has live, by
+    // label ('intended', a replaced definition's label, 'absent' or 'other'; never the definition).
+    ...((spec.indexes || []).some((i) => i.replaces) ? {
+      index_definitions: (spec.indexes || []).filter((i) => i.replaces).map((i) => ({
+        name: objKey(i.table, i.name).replace(/^public\./, ''),
+        definition: replacedIndexLabel(i, s.indexes?.[objKey(i.table, i.name)]),
+      })),
+    } : {}),
     unique_covers: (spec.unique_covers || []).map((u) => ({
       name: objKey(u.table, u.name).replace(/^public\./, ''), columns: [...u.contains], covered: s.covers?.[objKey(u.table, u.name)]?.covered === true,
     })),

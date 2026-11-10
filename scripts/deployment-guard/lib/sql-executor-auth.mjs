@@ -3384,6 +3384,33 @@ export const AUTHORIZED_SQL147_EXTERNAL_DISBURSEMENT_RECORD = Object.freeze({
   ]),
 });
 
+// Second mortgagee link staging pin: SQL 148 (owner 2026-11-10: "build the second-mortgagee fix"; tooling: "build the
+// SQL 148 tooling and merge it when green"). Send to Mortgage Desk could not send a 2nd mortgagee while the 1st request
+// was open: the unique index public.mortgage_handling_requests_one_open_per_check (Supabase migration 20260715110727)
+// allows one open request per check, and no tenant may UPDATE endorsement_order / total_mortgagees. The file
+// redefines that index in place, keyed on (check_intake_item_id, COALESCE(endorsement_order, 1)) for open requests
+// (only from the Supabase definition or its own; anything else refuses), and adds the SECURITY DEFINER
+// public.aws_link_second_mortgagee(uuid, uuid), which links the two requests 1 of 2 / 2 of 2 for a member of the tenant
+// (SQL 90's aws_can_write_tenant), both rows locked FOR UPDATE; EXECUTE for checksops and the owner. No predecessor.
+// Pending until a reviewed pin change records a staging read-live (expected: the function absent and the index at the
+// Supabase definition, everything else in place).
+export const AUTHORIZED_SQL148_SECOND_MORTGAGEE_LINK = Object.freeze({
+  key: 'sql148',
+  filename: 'aws/workflows/sql/148_second_mortgagee_link.sql',
+  migration_id: '148_second_mortgagee_link',
+  // The commit that last authored the file bytes.
+  commit: 'ac6567f2aecb8af11e50b6d8a3dc1d8e0f302751',
+  source_sha256: 'f87ea6d7b9284b86abf4fdd1aea8e219cdf51329b6a24ac73dc5cebcd64999c5',
+  authorization: 'pending',
+  execute: false,
+  expected_live_definition_sha256: null,
+  // Code-derived: releaseIntendedHash('sql148', file bytes) (release-sql-state.mjs); re-derived by the tests.
+  intended_replacement_sha256: '0ea9b78f674241215a46bbcfd5452ade00d472416b51cefdcd423258b525127b',
+  function_identities: Object.freeze([
+    'public.aws_link_second_mortgagee(uuid, uuid)',
+  ]),
+});
+
 export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql90: AUTHORIZED_SQL90_USERS_ONLY_TENANT_ROLES,
   sql91: AUTHORIZED_SQL91_MOOV_ONBOARDING,
@@ -3442,6 +3469,7 @@ export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql145: AUTHORIZED_SQL145_PLATFORM_OWNER_BILLING_COLLECTION_LEG,
   sql146: AUTHORIZED_SQL146_MOOV_STATUS_CATCH_UP_WRITES,
   sql147: AUTHORIZED_SQL147_EXTERNAL_DISBURSEMENT_RECORD,
+  sql148: AUTHORIZED_SQL148_SECOND_MORTGAGEE_LINK,
 });
 
 // The fee collection pin under its earlier map name (the same object as the release map's sql98).
@@ -3457,7 +3485,7 @@ export function isSql30TenantDocumentsDocType(input = {}) {
   return pinIdentifiersMatch(input, AUTHORIZED_SQL30_TENANT_DOCUMENTS_DOC_TYPE);
 }
 
-/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql147) an input names, or null. */
+/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql148) an input names, or null. */
 export function releaseSqlMigrationKey(input = {}) {
   return Object.keys(RELEASE_2026_10_17_PENDING_SQL_PINS)
     .find((key) => pinIdentifiersMatch(input, RELEASE_2026_10_17_PENDING_SQL_PINS[key])) || null;
