@@ -322,3 +322,17 @@ test('wiring: the pull only queues; the handler sends after commit; preview and 
   assert.ok(wrapper.indexOf('handleTenantBillingAdminInTransaction(event, deps)') < wrapper.indexOf('deliverFeeInvoiceEmail('));
   assert.match(handlers, /action === 'invoice-resend'[\s\S]*?body\.confirm !== true/);
 });
+
+test('SQL 149: invoices sent and failed deposits are lines of the fee invoice email', async () => {
+  const { occurrenceInvoiceLines } = await import('../functions/api/tenant-fee-invoice-email.mjs');
+  const lines = occurrenceInvoiceLines({
+    monthly_rate_cents: 10000, check_count: 2, check_usage_cents: 800,
+    invoice_fee_count: 3, invoice_fee_amount_cents: 90, failed_deposit_count: 1, failed_deposit_amount_cents: 200,
+  });
+  assert.deepEqual(lines.slice(-2), [
+    { label: 'Invoices sent', count: 3, amount_cents: 90 },
+    { label: 'Failed deposits', count: 1, amount_cents: 200 },
+  ]);
+  // A row booked before SQL 149 has no such columns: no lines.
+  assert.equal(occurrenceInvoiceLines({ monthly_rate_cents: 10000 }).some((l) => /Invoices sent|Failed deposits/.test(l.label)), false);
+});

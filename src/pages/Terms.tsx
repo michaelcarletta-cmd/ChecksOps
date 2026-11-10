@@ -46,10 +46,10 @@ export default function Terms() {
 
         <Section id="service" title="1. The Service">
           <p>
-            ChecksOps is workflow software for the insurance restoration industry. It supports check
-            intake and data extraction, endorsement collection, loss draft and mortgage
-            correspondence, deposit submission, and disbursement instructions to third-party
-            payment providers.
+            ChecksOps is workflow software for contractors, restoration companies, and public
+            adjusters. It supports intake and data extraction for insurance and non-insurance checks,
+            endorsement collection, loss draft and mortgage correspondence, deposit submission, cash
+            job tracking, and payment and payroll instructions to third-party payment providers.
           </p>
           <p>
             ChecksOps is not a bank, lender, escrow agent, money transmitter, insurance carrier,
@@ -110,13 +110,13 @@ export default function Terms() {
           </p>
           <p>
             <strong className="text-foreground">Role clarification.</strong> ChecksOps is a software
-            platform used by restoration contractors and public adjusters to manage their own claim
-            proceeds. ChecksOps is not a payment facilitator, payfac, or aggregator: we do not
+            platform used by contractors, restoration companies, and public adjusters to manage their
+            own claim proceeds, customer payments, and payroll. ChecksOps is not a payment facilitator, payfac, or aggregator: we do not
             underwrite, sponsor, or onboard sub-merchants, and we do not settle funds on behalf of
             unaffiliated merchants. Each customer contracts directly with the applicable financial
             partner and is onboarded and underwritten by that partner. Funds move from a customer's
-            own verified account to that customer's own payees — contractors, subcontractors,
-            vendors, sales representatives, and policyholders they work with.
+            own verified account to that customer's own payees — employees and crews, contractors,
+            subcontractors, vendors, sales representatives, and policyholders they work with.
           </p>
           <p>
             <strong className="text-foreground">No carrier or lender relationship.</strong> ChecksOps
@@ -131,8 +131,8 @@ export default function Terms() {
           </p>
           <p>
             <strong className="text-foreground">Customer Sourcing.</strong> ChecksOps sources
-            customers through direct sales, industry partnerships, and marketing within the
-            insurance restoration and public adjusting sectors. We do not rely on relationships
+            customers through direct sales, industry partnerships, and marketing to contractors,
+            restoration companies, and public adjusters. We do not rely on relationships
             with insurance carriers or mortgage companies for customer acquisition.
           </p>
         </Section>

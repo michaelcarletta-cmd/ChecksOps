@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { BarChart3, Receipt, Landmark, ArrowDownCircle, CheckCircle2, Calendar } from "lucide-react";
+import { BarChart3, Receipt, Landmark, ArrowDownCircle, CheckCircle2, Calendar, FileText } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { format, startOfMonth, endOfMonth } from "date-fns";
 import { displayCase } from "@/lib/displayCase";
@@ -22,6 +22,7 @@ import {
   type UsageCheck,
   type UsageClaim,
   type UsageFeeEvent,
+  usageCategory,
 } from "@/lib/billing/usageDisbursements";
 import { FeeScheduleCard } from "@/components/billing/FeeScheduleCard";
 
@@ -114,6 +115,43 @@ export function TenantUsageTracker() {
     enabled: !!tenant?.id,
   });
 
+  // Failed deposit fees (SQL 149) are linked to the deposit (source_id), not to the check, so a
+  // check whose deposit fails twice is charged twice. Load the deposits' checks for the log.
+  const { data: failedDepositChecks } = useQuery({
+    queryKey: ["tenant-usage-failed-deposits", tenant?.id, monthStart, monthEnd],
+    queryFn: async () => {
+      const { data: events, error } = await supabase
+        .from("check_billing_events")
+        .select("id, source_id")
+        .eq("tenant_id", tenant!.id)
+        .eq("event_type", "failed_deposit")
+        .gte("billed_at", monthStart)
+        .lte("billed_at", monthEnd);
+      if (error) throw error;
+      const rows = (events ?? []) as unknown as { id: string; source_id: string | null }[];
+      const depositIds = [...new Set(rows.map((e) => e.source_id).filter(Boolean))] as string[];
+      const byEvent = new Map<string, string | null>();
+      if (!depositIds.length) return byEvent;
+      const { data: deposits, error: depositError } = await supabase
+        .from("checkalt_deposits")
+        .select("id, check_intake_item_id")
+        .in("id", depositIds);
+      if (depositError) throw depositError;
+      const depositRows = (deposits ?? []) as unknown as { id: string; check_intake_item_id: string | null }[];
+      const checkIds = [...new Set(depositRows.map((d) => d.check_intake_item_id).filter(Boolean))] as string[];
+      const { data: checkRows, error: checkError } = checkIds.length
+        ? await supabase.from("check_intake_items").select("id, check_number").in("id", checkIds)
+        : { data: [], error: null };
+      if (checkError) throw checkError;
+      const checkList = (checkRows ?? []) as unknown as { id: string; check_number: string | null }[];
+      const checkNumber = new Map(checkList.map((c) => [c.id, c.check_number ?? null]));
+      const depositCheck = new Map(depositRows.map((d) => [d.id, d.check_intake_item_id ? checkNumber.get(d.check_intake_item_id) ?? null : null]));
+      for (const e of rows) byEvent.set(e.id, e.source_id ? depositCheck.get(e.source_id) ?? null : null);
+      return byEvent;
+    },
+    enabled: !!tenant?.id,
+  });
+
   // Mortgage-ops usage — completed requests inside the current billing month.
   // Each row contributes services_cents (default $10) + shipping_cents.
   const { data: mortgageOpsUsage } = useQuery({
@@ -156,6 +194,14 @@ export function TenantUsageTracker() {
     .map((e: { unit_price_cents?: number | string | null }) => Number(e.unit_price_cents))
     .find((cents: number) => Number.isFinite(cents)) ?? null;
 
+  // Invoice fees and failed deposit fees (SQL 149) for the month.
+  type FeeRow = { event_type?: string | null; unit_price_cents?: number | string | null };
+  const feeRows = (usage?.events ?? []) as FeeRow[];
+  const sumFees = (rows: FeeRow[]) => rows.reduce((s, e) => s + Number(e.unit_price_cents ?? 0), 0) / 100;
+  const invoiceFeeRows = feeRows.filter((e) => e.event_type === "invoice_sent");
+  const failedDepositRows = feeRows.filter((e) => e.event_type === "failed_deposit");
+  const mortgageRows = feeRows.filter((e) => usageCategory(e.event_type) === "mortgage");
+
   // The log shows the chosen month's charges, all or one category, with their total.
   type UsageRow = { id: string; event_type?: string | null; unit_price_cents?: number | string | null };
   const shownEvents = filterUsageEvents<UsageRow>(usage?.events as UsageRow[] | undefined, category);
@@ -166,7 +212,7 @@ export function TenantUsageTracker() {
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
         <Card
           role="button"
           tabIndex={0}
@@ -217,14 +263,14 @@ export function TenantUsageTracker() {
           <CardContent>
             <div className="flex items-baseline gap-2">
               <span className="text-3xl font-bold">
-                {usage?.events?.filter((e: any) => e.event_type === 'mortgage_handling').length ?? 0}
+                {mortgageRows.length}
               </span>
               <span className="text-xs text-muted-foreground">mortgage requests</span>
             </div>
             <p className="text-xs text-muted-foreground mt-2">
               Month-end total (services + shipping):{" "}
               <span className="font-semibold text-foreground">
-                {formatCurrency((usage?.events?.filter((e: any) => e.event_type === 'mortgage_handling').reduce((s: number, e: any) => s + (e.unit_price_cents ?? 0), 0) ?? 0) / 100)}
+                {formatCurrency(sumFees(mortgageRows))}
               </span>
             </p>
           </CardContent>
@@ -258,6 +304,37 @@ export function TenantUsageTracker() {
             </p>
             <p className="text-xs text-muted-foreground mt-1">
               Amount sent: <span className="font-semibold text-foreground">{formatCurrency(disbursementVolume)}</span>
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card
+          role="button"
+          tabIndex={0}
+          aria-pressed={category === "invoices" || category === "failed_deposits"}
+          title={category === "invoices" ? "Show only failed deposits" : category === "failed_deposits" ? "Show all charges" : "Show only invoice fees"}
+          onClick={() => setCategory((c) => (c === "invoices" ? "failed_deposits" : c === "failed_deposits" ? "all" : "invoices"))}
+          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setCategory((c) => (c === "invoices" ? "failed_deposits" : c === "failed_deposits" ? "all" : "invoices")); } }}
+          className={`bg-gradient-to-br from-slate-500/10 to-slate-400/5 border-slate-500/20 cursor-pointer transition hover:shadow-md ${category === "invoices" || category === "failed_deposits" ? "ring-2 ring-slate-500" : ""}`}
+        >
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <FileText className="h-4 w-4 text-slate-500" />
+              Invoices & Failed Deposits
+            </CardTitle>
+            <CardDescription className="text-[10px]">Usage for {format(now, "MMMM yyyy")}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-baseline gap-2">
+              <span className="text-3xl font-bold">{invoiceFeeRows.length}</span>
+              <span className="text-xs text-muted-foreground">invoices sent</span>
+              <span className="text-xl font-bold ml-2">{failedDepositRows.length}</span>
+              <span className="text-xs text-muted-foreground">failed deposits</span>
+            </div>
+            <p className="text-xs text-muted-foreground mt-2">
+              Estimated fees: <span className="font-semibold text-foreground">
+                {formatCurrency(sumFees(invoiceFeeRows) + sumFees(failedDepositRows))}
+              </span>
             </p>
           </CardContent>
         </Card>
@@ -322,7 +399,8 @@ export function TenantUsageTracker() {
                 ) : (
                   shownEvents.map((row: any) => {
                     const sent = isSendFeeEvent(row.event_type) ? disbursements?.get(row.id) : undefined;
-                    const checkNumber = row.check_number || sent?.check_number;
+                    const checkNumber = row.check_number || sent?.check_number
+                      || (row.event_type === "failed_deposit" ? failedDepositChecks?.get(row.id) : undefined);
                     const details = sent
                       ? [
                           sent.insured_name && `Insured: ${displayCase(sent.insured_name)}`,
@@ -341,7 +419,7 @@ export function TenantUsageTracker() {
                             <Badge variant="secondary" className="text-[9px] h-4 px-1 py-0 mr-2">
                               {usageEventLabel(row.event_type)}
                             </Badge>
-                            Check #{checkNumber || "—"}
+                            {row.event_type === "invoice_sent" ? "Invoice to a customer" : `Check #${checkNumber || "—"}`}
                             {sent?.claim_number && (
                               <span className="text-muted-foreground font-normal"> · Claim {sent.claim_number}</span>
                             )}

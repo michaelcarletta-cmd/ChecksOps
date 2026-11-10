@@ -79,6 +79,9 @@ export function occurrenceInvoiceLines(row) {
     { label: 'Same-day deposits', count: int(row.same_day_count), amount_cents: int(row.same_day_usage_cents) },
     { label: 'MortgageOps initial requests', count: int(row.mortgage_ops_initial_count), amount_cents: int(row.mortgage_ops_initial_amount_cents) },
     { label: 'MortgageOps additional requests', count: int(row.mortgage_ops_additional_count), amount_cents: int(row.mortgage_ops_additional_amount_cents) },
+    // SQL 149 columns (absent, so 0, on a row booked before it).
+    { label: 'Invoices sent', count: int(row.invoice_fee_count), amount_cents: int(row.invoice_fee_amount_cents) },
+    { label: 'Failed deposits', count: int(row.failed_deposit_count), amount_cents: int(row.failed_deposit_amount_cents) },
   ].filter((line) => line.count > 0 || line.amount_cents !== 0);
 }
 

@@ -12,6 +12,7 @@ import {
   isSendFeeEvent,
   usageCategory,
   usageEventLabel,
+  USAGE_CATEGORIES,
 } from '../../src/lib/billing/usageDisbursements.ts';
 
 const CHECK = 'c0000000-0000-4000-8000-000000000001';
@@ -119,4 +120,14 @@ test('5 clicking a usage card filters the log to its charges; the fee table sits
   assert.match(page, /<Select value=\{month\} onValueChange=\{setMonth\}>/);
   // The fee table is the last thing on the page, after the usage log.
   assert.ok(page.indexOf('<FeeScheduleCard') > page.indexOf('Usage & Processing Log'));
+});
+
+test('SQL 149: invoice and failed deposit fees have their own labels and categories', () => {
+  assert.equal(usageEventLabel('invoice_sent'), 'Invoice sent');
+  assert.equal(usageEventLabel('failed_deposit'), 'Failed deposit');
+  assert.equal(usageCategory('invoice_sent'), 'invoices');
+  assert.equal(usageCategory('failed_deposit'), 'failed_deposits');
+  const events = [{ event_type: 'invoice_sent' }, { event_type: 'failed_deposit' }, { event_type: 'check_processing' }];
+  assert.deepEqual(filterUsageEvents(events, 'failed_deposits'), [{ event_type: 'failed_deposit' }]);
+  assert.ok(USAGE_CATEGORIES.some((c) => c.value === 'invoices'));
 });

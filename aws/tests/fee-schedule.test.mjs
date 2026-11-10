@@ -5,8 +5,12 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
-import { checkProcessingCents, feeScheduleRows } from '../../src/lib/billing/feeSchedule.ts';
 import {
+  FAILED_DEPOSIT_FEE_CENTS, INVOICE_FEE_CENTS, checkProcessingCents, feeScheduleRows,
+} from '../../src/lib/billing/feeSchedule.ts';
+import {
+  DEFAULT_FAILED_DEPOSIT_FEE_CENTS,
+  DEFAULT_INVOICE_FEE_CENTS,
   DEFAULT_MORTGAGE_ADDITIONAL_RATE_CENTS,
   DEFAULT_MORTGAGE_INITIAL_RATE_CENTS,
   DEFAULT_NEXT_DAY_RATE_CENTS,
@@ -30,7 +34,21 @@ test('2 the tenant\'s own rates win; an explicit 0 is free, not the default', ()
     monthly_rate_cents: 10000, referral_discount_cents: 2500, per_check_billing_enabled: true, per_check_rate_cents: 400,
     next_day_rate_cents: 0, same_day_rate_cents: 150, mortgage_ops_initial_rate_cents: 0, mortgage_ops_additional_rate_cents: 300,
   }));
-  assert.deepEqual(rows, { monthly: 7500, check_processing: 400, next_day: 0, same_day: 150, mortgage_initial: 0, mortgage_additional: 300 });
+  assert.deepEqual(rows, {
+    monthly: 7500, check_processing: 400, next_day: 0, same_day: 150, mortgage_initial: 0, mortgage_additional: 300,
+    invoice_sent: 30, failed_deposit: 200,
+  });
+});
+
+test('2b invoice fee $0.30 and failed deposit fee $2.00 (agreement 3.6, 3.7) match the engine and SQL 149', () => {
+  const rows = byKey(feeScheduleRows({}));
+  assert.equal(rows.invoice_sent, INVOICE_FEE_CENTS);
+  assert.equal(rows.failed_deposit, FAILED_DEPOSIT_FEE_CENTS);
+  assert.equal(INVOICE_FEE_CENTS, DEFAULT_INVOICE_FEE_CENTS);
+  assert.equal(FAILED_DEPOSIT_FEE_CENTS, DEFAULT_FAILED_DEPOSIT_FEE_CENTS);
+  const sql = readFileSync(new URL('../workflows/sql/149_invoice_and_failed_deposit_fees.sql', import.meta.url), 'utf8');
+  assert.match(sql, new RegExp(`aws_invoice_fee_cents\\(\\)\\s+RETURNS integer[\\s\\S]*?SELECT ${DEFAULT_INVOICE_FEE_CENTS} \\$\\$`));
+  assert.match(sql, new RegExp(`aws_failed_deposit_fee_cents\\(\\)\\s+RETURNS integer[\\s\\S]*?SELECT ${DEFAULT_FAILED_DEPOSIT_FEE_CENTS} \\$\\$`));
 });
 
 test('3 per-check billing off: the price on the latest charge, else "set by your plan"', () => {
