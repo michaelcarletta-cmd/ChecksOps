@@ -1,0 +1,64 @@
+{
+  "id": "sql147-external-disbursement-record-production-apply",
+  "migration": "sql147",
+  "authorization": "pending",
+  "execute": false,
+  "target_environment": "production",
+  "target_component": "production-sql",
+  "deployment_type": "sql-apply",
+  "filename": "aws/workflows/sql/147_external_disbursement_record.sql",
+  "migration_id": "147_external_disbursement_record",
+  "staging_pin_commit": "8898fa5c63516d125d1742528616893b1540c9c4",
+  "source_sha256": "d503b5b6cc1e92b727dee5a6a47f754a4bda864e831d6b47b1d21f082f2f4c4f",
+  "function_identities": [
+    "public.aws_record_external_disbursement(uuid, uuid, jsonb, text)"
+  ],
+  "expected_live_definition_sha256": null,
+  "intended_replacement_sha256": "8080fbd7c4c24ed07251584b47b6507b0ee07095645c73c3cded7f12f3acd499",
+  "authorization_phrase": "APPLY_EXTERNAL_DISBURSEMENT_RECORD",
+  "predecessors": [],
+  "order_note": "No predecessor: SQL 147 creates one new SECURITY DEFINER function, aws_record_external_disbursement(uuid, uuid, jsonb, text), on the disbursement, check, transfer and stakeholder schema the AWS databases already have (disbursement_batches with id, tenant_id, check_intake_item_id, created_by, check_amount, available_amount, reserve_held, status, notes, completed_at, approved_at, approved_by and approved_amount_cents; disbursement_splits with id, batch_id, tenant_id, amount, status, method, external_check_number, recipient_name, recipient_type, external_notes, stakeholder_account_id, idempotence_key and settled_at; check_intake_items with id, tenant_id, amount, pa_fee_pct and pa_fee_amount; payment_transfers with tenant_id, check_id, leg_role, status and amount_cents; stakeholder_accounts with id, tenant_id and nickname; check_stakeholders with check_intake_item_id, tenant_id and stakeholder_account_id), SQL 90's aws_can_write_tenant(uuid) (SQL 90 applied in production), auth.uid() and role checksops; a read-only production inspect confirms them. The applying login must reach all six relations as the function's owner past RLS (definer_can_write_relations: the table owner without FORCE ROW LEVEL SECURITY, or a superuser or BYPASSRLS): a DEFINER filtered by RLS would under-count what was already paid. Expected pre-state in both environments: the function absent (release sql147 v1, derived: a60b06089007f083007ac7b24ae41cdd1cd33b0cbd04c63985c09faa9b666286). Where it already exists (a re-run) it must be owned by the applying login (functions_owned_by_login), keep its jsonb result (function_results_match) and hold no EXECUTE grant other than checksops and the owner, which the file keeps, and PUBLIC, anon, authenticated and service_role, which it revokes (function_acl_replaceable). The ACL after the apply is checksops and the owner. The API change that calls it (aws/functions/api/external-disbursement.mjs, overlay member external-disbursement.mjs with sql_before SQL 147) needs the guarded Lambda path after this pin is applied in that environment; until then recording an external payment fails, as today. No API, Lambda or SPA change is part of this pin. Adds no trigger.",
+  "admin_login": "checksops_admin",
+  "rds_identifier": "checksops-production",
+  "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
+  "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
+  "tooling": {
+    "status": "built",
+    "production_tool": "scripts/deployment-guard/sql147-external-disbursement-record-production-apply.mjs",
+    "production_lib": "scripts/deployment-guard/lib/release-sql-production-apply.mjs",
+    "staging_executor_handler": "aws/write-path/guarded-sql-executor/index.mjs handleReleaseSqlMigration",
+    "staging_workflow_choice": "sql147-external-disbursement-record",
+    "one_shot_migration": "sql147",
+    "fingerprint_engine": "scripts/deployment-guard/lib/release-sql-state.mjs",
+    "runbook": "ops/production-sql-147-apply.md",
+    "tests": [
+      "aws/tests/release-sql147-executor.test.mjs",
+      "aws/tests/release-sql147-production-apply.test.mjs",
+      "aws/tests/release-sql90-97-executor.test.mjs",
+      "aws/tests/release-sql90-97-production-apply.test.mjs",
+      "aws/tests/sql147-external-disbursement-pg.test.mjs"
+    ],
+    "note": "Guarded tooling for SQL 147: sql147-external-disbursement-record-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql147-external-disbursement-record); production-sql-one-shot.mjs --migration sql147. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): the new function with the file's body and attributes and EXECUTE for checksops and the owner. The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
+  },
+  "production_inspect": {
+    "status": "pending",
+    "date": null,
+    "ssm_command_id": null,
+    "source_commit": null,
+    "read_only": true,
+    "connected_as": "checksops_admin",
+    "live_definition_sha256": null,
+    "apply_preconditions_met": null,
+    "precondition_failures": null,
+    "note": "Pending: no release-engine production inspect has been run for SQL 147 yet. Expected release-engine fingerprint of the pre-state under sql147: a60b06089007f083007ac7b24ae41cdd1cd33b0cbd04c63985c09faa9b666286 (the function absent; derived by aws/tests/release-sql147-executor.test.mjs). Record the one-shot --phase inspect's date, SSM command id, source commit, live_definition_sha256, prerequisites_missing, release_sql_inspect.functions, release_sql_inspect.function_acl, release_sql_inspect.definer_writes (all six relations must read ok true), precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. Stop if prerequisites_missing is not [] or precondition_failures is not [] (prerequisites_present, definer_can_write_relations; on a re-run also functions_owned_by_login, function_results_match, function_acl_replaceable): that needs its own reviewed change."
+  },
+  "intended_post_state": {
+    "fingerprint": "8080fbd7c4c24ed07251584b47b6507b0ee07095645c73c3cded7f12f3acd499",
+    "note": "aws_record_external_disbursement(uuid, uuid, jsonb, text), owned by checksops_admin, plpgsql, VOLATILE, SECURITY DEFINER, search_path public, pg_temp, RETURNS jsonb, EXECUTE for checksops and the owner (PUBLIC, anon, authenticated and service_role revoked). Only for a signed-in member of the tenant (auth.uid() and aws_can_write_tenant(_tenant_id); 42501 external_disbursement_forbidden); inputs checked (22023 external_disbursement_invalid: an idempotency key of 8-100 characters, 1-10 payments, whole-cent amounts > 0, a recipient name or a stakeholder account of the tenant or of its check_stakeholders row for this check, the Funds tab's recipient types, length limits); the check locked FOR UPDATE and owned by the tenant (P0002 external_disbursement_check_not_found); the same key returns the recorded batch (duplicate true) and other payments under it are 23505 external_disbursement_key_reused; a total above the amount available (check amount - PA fee - the tenant's live splits and Moov send legs on the check) is P0001 external_disbursement_exceeds_available; otherwise one completed disbursement_batches row and one settled external_check disbursement_splits row per payee. No other function, table, column, policy, RLS setting, grant, trigger or row change; no payment_transfers row. The fingerprint is releaseIntendedHash('sql147', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): 8080fbd7c4c24ed07251584b47b6507b0ee07095645c73c3cded7f12f3acd499."
+  },
+  "staging_acceptance": {
+    "ok": false,
+    "reference": null,
+    "basis": "Pending: record the guarded staging SQL executor read-live and the staging apply of SQL 147 (choice sql147-external-disbursement-record) here in the reviewed change that sets execute true. The behavior is covered on PostgreSQL 16 by aws/tests/sql147-external-disbursement-pg.test.mjs. Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+  }
+}

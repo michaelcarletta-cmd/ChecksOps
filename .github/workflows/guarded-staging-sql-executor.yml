@@ -94,6 +94,7 @@ on:
           - sql144-tenant-incoming-transfers
           - sql145-platform-owner-billing-collection-leg
           - sql146-moov-status-catch-up-writes
+          - sql147-external-disbursement-record
       approved_commit:
         description: "Required for deploy/apply/read-live: exact main commit approved for this run"
         required: false
@@ -241,6 +242,7 @@ jobs:
           node --test aws/tests/release-sql144-executor.test.mjs
           node --test aws/tests/release-sql145-executor.test.mjs
           node --test aws/tests/release-sql146-executor.test.mjs
+          node --test aws/tests/release-sql147-executor.test.mjs
           node --test aws/tests/mortgage-executor-commit-outcome.test.mjs
           node --test aws/tests/deployment-guard-kms-receipt.test.mjs
           node --test aws/tests/deployment-guard-signed-receipt.test.mjs

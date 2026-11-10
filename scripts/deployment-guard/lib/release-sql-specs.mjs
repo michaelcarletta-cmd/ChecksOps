@@ -8317,4 +8317,102 @@ export const RELEASE_SQL_SPECS = deepFreeze({
       "public.tenant_maintenance_payments"
     ]
   },
+
+  // SQL 147 (owner 2026-11-09: "apply SQL 147 in staging"; owner report 2026-11-09: "i could not record an external
+  // payment"): a payment made outside ChecksOps is recorded against a check in one server transaction. Both screens
+  // that record one wrote public.disbursement_batches / public.disbursement_splits from the browser through
+  // /data/write, which refuses both tables on AWS (write-allowlist FINANCIAL_OR_PROVIDER_TABLES). One new SECURITY
+  // DEFINER function (plpgsql, VOLATILE, search_path public, pg_temp), RETURNS jsonb:
+  // aws_record_external_disbursement(uuid, uuid, jsonb, text) writes one completed batch and one settled
+  // external_check split per payee, only for a member of the tenant (SQL 90's aws_can_write_tenant, 42501), with the
+  // check locked FOR UPDATE, an idempotency key and the amount still available (check amount - PA fee - this
+  // tenant's live splits and Moov send legs). EXECUTE checksops and the owner (PUBLIC, anon, authenticated and
+  // service_role revoked, as SQL 145 / SQL 146). definer_writes: the six relations it reads or writes, all reached
+  // past RLS as their owner (the file refuses otherwise: a DEFINER filtered by RLS would under-count what was paid).
+  // No predecessor in the release engine (SQL 90's aws_can_write_tenant(uuid) is a prerequisite). No table, column,
+  // policy, grant, trigger or row change.
+  sql147: {
+      "key": "sql147",
+      "label": "SQL 147",
+      "choice": "sql147-external-disbursement-record",
+      "production_pin_rel": "ops/deployment-guard/sql147-external-disbursement-record-production-apply.json",
+      "script": "sql147-external-disbursement-record-production-apply",
+      "prerequisites": [
+        "public.disbursement_batches",
+        "public.disbursement_splits",
+        "public.check_intake_items",
+        "public.payment_transfers",
+        "public.stakeholder_accounts",
+        "public.check_stakeholders",
+        "public.aws_can_write_tenant(uuid)",
+        "auth.uid()",
+        "role checksops",
+        "column public.disbursement_batches.id",
+        "column public.disbursement_batches.tenant_id",
+        "column public.disbursement_batches.check_intake_item_id",
+        "column public.disbursement_batches.created_by",
+        "column public.disbursement_batches.check_amount",
+        "column public.disbursement_batches.available_amount",
+        "column public.disbursement_batches.reserve_held",
+        "column public.disbursement_batches.status",
+        "column public.disbursement_batches.notes",
+        "column public.disbursement_batches.completed_at",
+        "column public.disbursement_batches.approved_at",
+        "column public.disbursement_batches.approved_by",
+        "column public.disbursement_batches.approved_amount_cents",
+        "column public.disbursement_splits.id",
+        "column public.disbursement_splits.batch_id",
+        "column public.disbursement_splits.tenant_id",
+        "column public.disbursement_splits.amount",
+        "column public.disbursement_splits.status",
+        "column public.disbursement_splits.method",
+        "column public.disbursement_splits.external_check_number",
+        "column public.disbursement_splits.recipient_name",
+        "column public.disbursement_splits.recipient_type",
+        "column public.disbursement_splits.external_notes",
+        "column public.disbursement_splits.stakeholder_account_id",
+        "column public.disbursement_splits.idempotence_key",
+        "column public.disbursement_splits.settled_at",
+        "column public.check_intake_items.id",
+        "column public.check_intake_items.tenant_id",
+        "column public.check_intake_items.amount",
+        "column public.check_intake_items.pa_fee_pct",
+        "column public.check_intake_items.pa_fee_amount",
+        "column public.payment_transfers.tenant_id",
+        "column public.payment_transfers.check_id",
+        "column public.payment_transfers.leg_role",
+        "column public.payment_transfers.status",
+        "column public.payment_transfers.amount_cents",
+        "column public.stakeholder_accounts.id",
+        "column public.stakeholder_accounts.tenant_id",
+        "column public.stakeholder_accounts.nickname",
+        "column public.check_stakeholders.check_intake_item_id",
+        "column public.check_stakeholders.tenant_id",
+        "column public.check_stakeholders.stakeholder_account_id"
+      ],
+      "predecessors": [],
+      "functions": [
+        {
+          "identity": "public.aws_record_external_disbursement(uuid, uuid, jsonb, text)",
+          "acl": [
+            "checksops EXECUTE",
+            "owner EXECUTE"
+          ],
+          "revokes": [
+            "PUBLIC EXECUTE",
+            "anon EXECUTE",
+            "authenticated EXECUTE",
+            "service_role EXECUTE"
+          ]
+        }
+      ],
+      "definer_writes": [
+        "public.disbursement_batches",
+        "public.disbursement_splits",
+        "public.check_intake_items",
+        "public.payment_transfers",
+        "public.stakeholder_accounts",
+        "public.check_stakeholders"
+      ]
+  },
 });
