@@ -1196,6 +1196,91 @@ const executeLossDraft = async ({ client, mapping, op, values, filters }) => {
   return { rows };
 };
 
+// Send to Mortgage Desk (SendToMortgageDeskButton) context: written on insert only. No tenant
+// UPDATE policy or UPDATE grant covers them live (SQL 100), so an update naming one is refused
+// here, as it was before they were allowlisted, instead of failing in the database.
+const MORTGAGE_REQUEST_INSERT_ONLY = [
+  'policy_number',
+  'loss_type',
+  'date_of_loss',
+  'homeowner_ssn_last_four',
+  'endorsement_order',
+  'total_mortgagees',
+  'predecessor_request_id',
+];
+
+const MORTGAGE_REQUEST_INSERT_TEXT = [
+  ['property_address', 2000],
+  ['claim_number', 80],
+  ['insurance_company', 200],
+  ['homeowner_name', 200],
+  ['homeowner_email', 200],
+  ['homeowner_phone', 40],
+  ['policy_number', 80],
+  ['loss_type', 80],
+];
+
+const isCalendarDate = (text) => {
+  if (!DATE_RE.test(text)) return false;
+  const parsed = new Date(`${text}T00:00:00.000Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === text;
+};
+
+/** endorsement_order / total_mortgagees: the two-mortgagee flow, an integer 1 or 2 (or empty). */
+const asMortgageeCount = (value, field) => {
+  if (value === undefined || value === null || value === '') return { value: null };
+  const n = typeof value === 'number' ? value : (/^\d{1,2}$/.test(String(value)) ? Number(value) : NaN);
+  if (!Number.isInteger(n) || n < 1 || n > 2) return { error: 'invalid_field', field };
+  return { value: n };
+};
+
+const mortgageRequestInsertContext = async (client, check, values) => {
+  const out = {};
+  for (const [column, max] of MORTGAGE_REQUEST_INSERT_TEXT) {
+    const text = asText(values[column], max);
+    if (text.error) return text;
+    out[column] = text.value;
+  }
+  if (values.date_of_loss === undefined || values.date_of_loss === null || values.date_of_loss === '') {
+    out.date_of_loss = null;
+  } else if (typeof values.date_of_loss !== 'string' || !isCalendarDate(values.date_of_loss)) {
+    return { error: 'invalid_field', field: 'date_of_loss' };
+  } else {
+    out.date_of_loss = values.date_of_loss;
+  }
+  // The value is never logged or echoed in an error: only the field name is.
+  const ssn = values.homeowner_ssn_last_four;
+  if (ssn === undefined || ssn === null || ssn === '') out.homeowner_ssn_last_four = null;
+  else if (typeof ssn !== 'string' || !/^[0-9]{4}$/.test(ssn)) {
+    return { error: 'invalid_field', field: 'homeowner_ssn_last_four', message: 'expected exactly 4 digits' };
+  } else out.homeowner_ssn_last_four = ssn;
+  for (const column of ['endorsement_order', 'total_mortgagees']) {
+    const count = asMortgageeCount(values[column], column);
+    if (count.error) return count;
+    out[column] = count.value;
+  }
+  if (out.endorsement_order != null && out.total_mortgagees != null && out.endorsement_order > out.total_mortgagees) {
+    return { error: 'invalid_field', field: 'endorsement_order', message: 'endorsement_order exceeds total_mortgagees' };
+  }
+  out.predecessor_request_id = null;
+  const predecessor = values.predecessor_request_id;
+  if (predecessor !== undefined && predecessor !== null && predecessor !== '') {
+    const invalid = requireUuid('predecessor_request_id', predecessor);
+    if (invalid) return invalid;
+    // Scoped reference: the predecessor must be a request of the same check and the check's tenant.
+    const found = (await client.query(
+      `SELECT r.id FROM public.mortgage_handling_requests r
+       WHERE r.id = $1::uuid AND r.tenant_id = $2::uuid AND r.check_intake_item_id = $3::uuid`,
+      [predecessor, check.tenant_id, check.id],
+    )).rows[0];
+    if (!found) {
+      return { error: 'rls_denied', message: 'predecessor mortgage request not found for this check' };
+    }
+    out.predecessor_request_id = found.id;
+  }
+  return { values: out };
+};
+
 const executeMortgageRequests = async ({ client, mapping, op, values, filters }) => {
   if (op === 'insert') {
     const looked = await lookupCheck(client, values.check_intake_item_id);
@@ -1206,13 +1291,22 @@ const executeMortgageRequests = async ({ client, mapping, op, values, filters })
     if (loan.error) return loan;
     const note = asText(values.note, 2000);
     if (note.error) return note;
+    const context = await mortgageRequestInsertContext(client, looked.check, values);
+    if (context.error) return context;
+    const c = context.values;
     const rows = (await client.query(
       `INSERT INTO public.mortgage_handling_requests (
          tenant_id, check_intake_item_id, mortgage_company, loan_number, note,
-         requested_by, status, claim_id
+         requested_by, status, claim_id,
+         property_address, claim_number, insurance_company, homeowner_name, homeowner_email, homeowner_phone,
+         policy_number, loss_type, date_of_loss, homeowner_ssn_last_four,
+         endorsement_order, total_mortgagees, predecessor_request_id
        ) VALUES (
          $1::uuid, $2::uuid, $3::text, $4::text, $5::text,
-         $6::uuid, 'requested', $7::uuid
+         $6::uuid, 'requested', $7::uuid,
+         $8::text, $9::text, $10::text, $11::text, $12::text, $13::text,
+         $14::text, $15::text, $16::date, $17::text,
+         $18::integer, $19::integer, $20::uuid
        ) RETURNING *`,
       [
         looked.check.tenant_id,
@@ -1222,11 +1316,28 @@ const executeMortgageRequests = async ({ client, mapping, op, values, filters })
         note.value,
         mapping.application_user_id,
         looked.check.claim_id || null,
+        c.property_address,
+        c.claim_number,
+        c.insurance_company,
+        c.homeowner_name,
+        c.homeowner_email,
+        c.homeowner_phone,
+        c.policy_number,
+        c.loss_type,
+        c.date_of_loss,
+        c.homeowner_ssn_last_four,
+        c.endorsement_order,
+        c.total_mortgagees,
+        c.predecessor_request_id,
       ],
     )).rows;
     return { rows };
   }
 
+  const insertOnly = MORTGAGE_REQUEST_INSERT_ONLY.filter((column) => column in values);
+  if (insertOnly.length) {
+    return { error: 'column_not_allowlisted', columns: insertOnly, table: 'mortgage_handling_requests' };
+  }
   const id = eqFilter(filters, 'id');
   const invalid = requireUuid('id', id);
   if (invalid) return invalid;

@@ -337,6 +337,17 @@ export const WRITE_ALLOWLIST = {
       'homeowner_phone',
       'status',
       'updated_at',
+      // Send to Mortgage Desk context (SendToMortgageDeskButton). Insert-only: the executor
+      // (write-check-workflow.mjs MORTGAGE_REQUEST_INSERT_ONLY) validates them on insert
+      // (date, 4-digit SSN last four, order/total 1..2, predecessor of the same tenant and
+      // check) and refuses them on update; no tenant UPDATE grant or policy covers them live.
+      'policy_number',
+      'loss_type',
+      'date_of_loss',
+      'homeowner_ssn_last_four',
+      'endorsement_order',
+      'total_mortgagees',
+      'predecessor_request_id',
     ]),
     identityColumn: 'requested_by',
     requiredForWrite: { insert: ['check_intake_item_id'] },
