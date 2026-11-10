@@ -255,6 +255,8 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
   }, [paFeeMode, paFeePct, paFeeAmt, totalReceived]);
 
   const availableForDisbursement = Math.max(0, toCents(toCents(totalReceived) - paFeeComputed - totalDisbursed));
+  // A payment made outside ChecksOps can be recorded up to the check amount: the PA fee is not held back (SQL 150).
+  const availableForExternal = Math.max(0, toCents(toCents(totalReceived) - totalDisbursed));
 
   const savePaFee = async () => {
     if (readOnly) return;
@@ -287,7 +289,7 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
     if (!extRecipient.trim() || !extCheckNum.trim() || !amountCents || amountCents <= 0) {
       return toast({ title: "Fill recipient, check #, and amount", variant: "destructive" });
     }
-    if (amt > availableForDisbursement + 0.005) {
+    if (amt > availableForExternal + 0.005) {
       return toast({ title: "Amount exceeds available funds", variant: "destructive" });
     }
     const payment = {
@@ -481,7 +483,7 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
       )}
 
       {/* Disburse buttons */}
-      {!readOnly && availableForDisbursement > 0 && disburseMode === null && (
+      {!readOnly && (availableForDisbursement > 0 || availableForExternal > 0) && disburseMode === null && (
         <div className="space-y-2">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <Button
@@ -550,7 +552,7 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
               </Button>
             </div>
             <div className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-[11px] text-emerald-700 dark:text-emerald-300">
-              Remaining to zero out: <span className="font-semibold">${availableForDisbursement.toLocaleString("en-US", { minimumFractionDigits: 2 })}</span>
+              Remaining to zero out: <span className="font-semibold">${availableForExternal.toLocaleString("en-US", { minimumFractionDigits: 2 })}</span>
             </div>
 
             <div className="space-y-2">
@@ -619,7 +621,7 @@ export function FundsTab({ checkIntakeItemId, checkNumber, carrierName, claimId,
                 <Label className="text-[11px]">Notes (optional)</Label>
                 <Input className="h-8 text-sm" placeholder="Memo, date paid, etc." value={extNotes} onChange={(e) => setExtNotes(e.target.value)} />
               </div>
-              <p className="text-[10px] text-muted-foreground">Available: ${availableForDisbursement.toLocaleString("en-US", { minimumFractionDigits: 2 })}</p>
+              <p className="text-[10px] text-muted-foreground">Available: ${availableForExternal.toLocaleString("en-US", { minimumFractionDigits: 2 })} (up to the check amount; the PA fee is not held back for a payment made outside ChecksOps)</p>
               <p className="text-[10px] text-muted-foreground">
                 For tracking only: it counts as disbursed from this check like a ChecksOps payment, labelled as an external check. ChecksOps moves no money and your balance does not change.
               </p>
