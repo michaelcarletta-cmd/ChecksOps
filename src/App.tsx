@@ -28,14 +28,10 @@ const PaymentDirectionPage = lazy(() => import("./pages/PaymentDirectionPage"));
 const WhiteLabelApp = lazy(() => import("./pages/WhiteLabelApp"));
 const CheckOpsLanding = lazy(() => import("./pages/checkops/CheckOpsLanding"));
 const ChecksOpsVsIink = lazy(() => import("./pages/marketing/ChecksOpsVsIink"));
-const ChecksOpsVsSnapsheet = lazy(() =>
-  import("./pages/marketing/ChecksOpsVsCarrierPlatform").then((m) => ({ default: m.ChecksOpsVsSnapsheet })),
-);
-const ChecksOpsVsGuidewire = lazy(() =>
-  import("./pages/marketing/ChecksOpsVsCarrierPlatform").then((m) => ({ default: m.ChecksOpsVsGuidewire })),
-);
 const ClaimCheckTracking = lazy(() => import("./pages/marketing/ClaimCheckTracking"));
 const MarketingAbout = lazy(() => import("./pages/marketing/MarketingAbout"));
+const BlogIndex = lazy(() => import("./pages/marketing/BlogIndex"));
+const BlogPost = lazy(() => import("./pages/marketing/BlogPost"));
 const CheckOpsSecurity = lazy(() => import("./pages/checkops/CheckOpsSecurity"));
 const CheckOpsLogin = lazy(() => import("./pages/checkops/CheckOpsLogin"));
 const CheckOpsSignup = lazy(() => import("./pages/checkops/CheckOpsSignup"));
@@ -94,6 +90,7 @@ const PageLoader = () => (
  * - /endorse      → Check endorsement flow (public token-based)
  * - /payment-direction/:token → Payment direction flow (public token-based)
  * - /h/ledger/:token → Homeowner tracking ledger (AWS send URL; not a tenant slug)
+ * - /blog, /blog/:slug → HeyCatch blog (articles read live from the HeyCatch API)
  * - /:slug/*      → Tenant Check Center (white-label)
  * - /wl/:slug/*   → Legacy redirect to /:slug/*
  */
@@ -120,13 +117,17 @@ function CheckOpsRoutes() {
       {/* Public pricing retired 2026-11-09 (owner): old /pricing links land on the home page. */}
       <Route path="/pricing" element={<Navigate to="/" replace />} />
       <Route path="/vs/checksops-vs-iink-payments" element={<Suspense fallback={<PageLoader />}><ChecksOpsVsIink /></Suspense>} />
-      <Route path="/vs/checksops-vs-snapsheet" element={<Suspense fallback={<PageLoader />}><ChecksOpsVsSnapsheet /></Suspense>} />
-      <Route path="/vs/checksops-vs-guidewire-claimcenter" element={<Suspense fallback={<PageLoader />}><ChecksOpsVsGuidewire /></Suspense>} />
+      {/* Carrier-system comparisons retired 2026-11-10 (owner): old links land on the home page. */}
+      <Route path="/vs/checksops-vs-snapsheet" element={<Navigate to="/" replace />} />
+      <Route path="/vs/checksops-vs-guidewire-claimcenter" element={<Navigate to="/" replace />} />
       <Route path="/claim-check-tracking" element={<Suspense fallback={<PageLoader />}><ClaimCheckTracking /></Suspense>} />
       {/* /about shows the founder page once marketingProof.ts FOUNDER is filled in, and sends
           visitors home until then. Paths people guess (/customers, /features) go home instead of
           letting /:slug/* render "Organization Not Found". */}
       <Route path="/about" element={<Suspense fallback={<PageLoader />}><MarketingAbout /></Suspense>} />
+      {/* HeyCatch blog: must stay above /:slug/* so "blog" is never read as a tenant slug. */}
+      <Route path="/blog" element={<Suspense fallback={<PageLoader />}><BlogIndex /></Suspense>} />
+      <Route path="/blog/:slug" element={<Suspense fallback={<PageLoader />}><BlogPost /></Suspense>} />
       <Route path="/customers" element={<Navigate to="/" replace />} />
       <Route path="/features" element={<Navigate to="/#capabilities" replace />} />
       <Route path="/security" element={<Suspense fallback={<PageLoader />}><CheckOpsSecurity /></Suspense>} />
