@@ -341,6 +341,14 @@ const catchUpAddPre = (plan) => {
 const ENDORSEMENT_MEMBER = 'endorsement-composite.mjs';
 const ENDORSEMENT_PAY_TO_ORDER_REL = 'aws/tests/fixtures/production-endorsement-pay-to-order-tenant-name-manifest-2026-11-09.json';
 const ENDORSEMENT_PAY_TO_ORDER_APPLIED_REL = 'aws/tests/fixtures/production-endorsement-pay-to-order-tenant-name-applied-manifest-2026-11-09.json';
+// Public demo request (#1635, owner 2026-11-05): ADD public-demo-request.mjs and REPLACE app-services.mjs e63cfe2d ->
+// 1cb62ccc, applied 2026-11-05 (production runs 42104477391 and 42105010522, VERIFIED) and recorded 2026-11-10, after
+// the read-only production inspect run 42849448973 stopped on the live router bytes (SOURCE_RECONCILIATION_REQUIRED).
+// The external disbursement router REPLACE (#1729) now starts from those applied bytes, restated in its reconciled
+// planning manifest.
+const PUBLIC_DEMO_REQUEST_APPLIED_REL = 'aws/tests/fixtures/production-public-demo-request-applied-manifest-2026-11-05.json';
+const EXTERNAL_DISBURSEMENT_ROUTER_REL = 'aws/tests/fixtures/production-external-disbursement-router-reconciled-manifest-2026-11-10.json';
+const DEMO_REQUEST_ROUTER_BYTES = JSON.parse(fs.readFileSync(path.join(ROOT, PUBLIC_DEMO_REQUEST_APPLIED_REL), 'utf8')).members['app-services.mjs'].accepted_sha256;
 // The fee pull savepoint REPLACEs (production runs 42302929689, 42303279340, 2026-11-06), the incoming transfers
 // data.mjs REPLACE (production run 42323230515, 2026-11-07), the Moov webhook receipt key providers/webhooks.mjs
 // REPLACE (production run 42330359623, 2026-11-07), the Moov status catch-up scheduled.mjs REPLACE (production run
@@ -1549,9 +1557,10 @@ test('live reconciliation 2026-10-19: ten members expect the bytes inspect run 3
     // run 40577608750), and production run 40621229388 replaced them for the Mortgage Desk return email
     // route (d1faa212); production run 40778196802 then replaced those for the Mortgage Desk e-sign route
     // (dd6e1797); the fourth production rebuild (apply run 41469896446, VERIFIED 2026-11-02) then put the wallet
-    // funding settings route bytes live (e63cfe2d, the rebuild section's accepted, now the public demo request
-    // row's expected live).
-    'app-services.mjs': { accepted: 'daab02f7199fef3a66b727ed0ac4ebc8315c675ea9b5025f18c1a53b197555f7', liveNow: 'e63cfe2d48cd1f428513bc8de4d8a2934bd6c4889c9d1ffd71660ac089938713' },
+    // funding settings route bytes live (e63cfe2d, the rebuild section's accepted), and production run 42105010522
+    // (2026-11-05, recorded 2026-11-10) replaced them with the public demo request bytes (1cb62ccc, now the external
+    // disbursement row's expected live).
+    'app-services.mjs': { accepted: 'daab02f7199fef3a66b727ed0ac4ebc8315c675ea9b5025f18c1a53b197555f7', liveNow: DEMO_REQUEST_ROUTER_BYTES },
     // checkalt-register.mjs moved on: its 8f06c079 onboarding re-pin went live (read-only production
     // overlay inspect run 41045502925, 2026-10-30; the applying run is not identified), and production run
     // 41047251544 (2026-10-30) replaced it with the deposit account change step-up (finding 13, d011e50b);
@@ -3491,13 +3500,15 @@ test('Mortgage Desk return: ADD mortgage-desk-return.mjs held on SQL 122 (record
       // Applied 2026-10-28; the next REPLACE started from those applied bytes and is recorded applied too
       // (the e-sign applied manifest). The row has since moved on again: the wallet funding settings route
       // (2026-11-02, its own test below) REPLACEd it from the applied e-sign bytes; the fourth production rebuild
-      // (apply 41469896446) put those bytes live, the public demo request (2026-11-05) REPLACEd them, and the
-      // external disbursement record (2026-11-09, its own test below) REPLACEs them again, naming its own manifest.
+      // (apply 41469896446) put those bytes live, the public demo request REPLACEd them (production run 42105010522,
+      // 2026-11-05, recorded applied), and the external disbursement record (2026-11-09, its own test below) REPLACEs
+      // those applied bytes, naming its reconciled manifest.
       const nextApplied = JSON.parse(fs.readFileSync(path.join(ROOT, NEXT_APPLIED_REL), 'utf8')).members[member];
       const walletFundingBytes = JSON.parse(fs.readFileSync(path.join(ROOT, 'aws/tests/fixtures/production-wallet-funding-settings-route-manifest-2026-11-02.json'), 'utf8')).members[member].accepted_sha256;
-      assert.equal(row.expected_live_sha256, walletFundingBytes, member);
+      assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, 'aws/tests/fixtures/production-public-demo-request-manifest-2026-11-05.json'), 'utf8')).members[member].live_sha256, walletFundingBytes, member);
+      assert.equal(row.expected_live_sha256, DEMO_REQUEST_ROUTER_BYTES, member);
       assert.notEqual(row.accepted_sha256, nextApplied.accepted_sha256, member);
-      assert.equal(row.manifest, 'aws/tests/fixtures/production-external-disbursement-manifest-2026-11-09.json', member);
+      assert.equal(row.manifest, EXTERNAL_DISBURSEMENT_ROUTER_REL, member);
       const next = JSON.parse(fs.readFileSync(path.join(ROOT, NEXT_REL), 'utf8')).members[member];
       assert.deepEqual(next, { live_sha256: appliedAt(member), accepted_sha256: nextApplied.accepted_sha256, operation: 'replace', previous_manifest: APPLIED_REL }, member);
       assert.equal(nextApplied.previous_manifest, NEXT_REL, member);
@@ -3595,13 +3606,14 @@ test('Mortgage Desk e-sign: ADD mortgage-desk-esign.mjs held on SQL 124 (recorde
   const ESIGN_BYTES = JSON.parse(fs.readFileSync(path.join(ROOT, APPLIED_REL), 'utf8')).members[ROUTER].accepted_sha256;
   const WALLET_FUNDING_REL = 'aws/tests/fixtures/production-wallet-funding-settings-route-manifest-2026-11-02.json';
   // The fourth production rebuild (apply 41469896446) put the wallet funding bytes live; the public demo request
-  // (2026-11-05) REPLACEd them and the external disbursement record (2026-11-09) REPLACEs them again: they are
-  // its expected live, main's bytes are accepted, its own manifest is named.
+  // REPLACEd them (production run 42105010522, 2026-11-05, recorded applied) and the external disbursement record
+  // (2026-11-09) REPLACEs those applied bytes: they are its expected live, main's bytes are accepted, its reconciled
+  // manifest is named.
   const DEMO_REQUEST_REL = 'aws/tests/fixtures/production-public-demo-request-manifest-2026-11-05.json';
   const EXTERNAL_DISBURSEMENT_REL = 'aws/tests/fixtures/production-external-disbursement-manifest-2026-11-09.json';
   const WALLET_FUNDING_BYTES = JSON.parse(fs.readFileSync(path.join(ROOT, WALLET_FUNDING_REL), 'utf8')).members[ROUTER].accepted_sha256;
-  assert.deepEqual(routerRow, { operation: 'replace', accepted_sha256: sha(`aws/functions/api/${ROUTER}`), expected_live_sha256: WALLET_FUNDING_BYTES, sql_before: null, manifest: EXTERNAL_DISBURSEMENT_REL });
-  assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, DEMO_REQUEST_REL), 'utf8')).members[ROUTER].previous_manifest, WALLET_FUNDING_REL);
+  assert.deepEqual(routerRow, { operation: 'replace', accepted_sha256: sha(`aws/functions/api/${ROUTER}`), expected_live_sha256: DEMO_REQUEST_ROUTER_BYTES, sql_before: null, manifest: EXTERNAL_DISBURSEMENT_ROUTER_REL });
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(ROOT, DEMO_REQUEST_REL), 'utf8')).members[ROUTER], { live_sha256: WALLET_FUNDING_BYTES, accepted_sha256: DEMO_REQUEST_ROUTER_BYTES, operation: 'replace', previous_manifest: WALLET_FUNDING_REL });
   assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, EXTERNAL_DISBURSEMENT_REL), 'utf8')).members[ROUTER].previous_manifest, WALLET_FUNDING_REL);
   assert.notEqual(routerRow.accepted_sha256, ESIGN_BYTES);
   assert.notEqual(ESIGN_BYTES, appliedAt);
@@ -5741,9 +5753,12 @@ test('Wallet funding settings route (2026-11-02): REPLACE tenant-settings-handle
     assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, entry.previous_manifest), 'utf8')).members[member].accepted_sha256, entry.live_sha256, member);
     if (member === ROUTER) {
       // The fourth production rebuild (apply 41469896446) put these accepted bytes live; the public demo request
-      // (2026-11-05) and then the external disbursement record (2026-11-09) moved the router row on from them:
-      // main's bytes accepted, these bytes expected live.
-      assert.deepEqual(PLAN.members[member], { operation: 'replace', accepted_sha256: sha(`aws/functions/api/${member}`), expected_live_sha256: entry.accepted_sha256, sql_before: null, manifest: 'aws/tests/fixtures/production-external-disbursement-manifest-2026-11-09.json' }, member);
+      // REPLACEd them (production run 42105010522, 2026-11-05, recorded applied), and the external disbursement record
+      // (2026-11-09) moved the router row on from those applied bytes: main's bytes accepted, them expected live.
+      const demo = JSON.parse(fs.readFileSync(path.join(ROOT, 'aws/tests/fixtures/production-public-demo-request-manifest-2026-11-05.json'), 'utf8')).members[member];
+      assert.equal(demo.live_sha256, entry.accepted_sha256, member);
+      assert.equal(demo.accepted_sha256, DEMO_REQUEST_ROUTER_BYTES, member);
+      assert.deepEqual(PLAN.members[member], { operation: 'replace', accepted_sha256: sha(`aws/functions/api/${member}`), expected_live_sha256: DEMO_REQUEST_ROUTER_BYTES, sql_before: null, manifest: EXTERNAL_DISBURSEMENT_ROUTER_REL }, member);
     } else {
       assert.deepEqual(PLAN.members[member], { operation: 'replace', accepted_sha256: entry.accepted_sha256, expected_live_sha256: entry.live_sha256, sql_before: null, manifest: REL }, member);
     }
@@ -5771,13 +5786,17 @@ test('Wallet funding settings route (2026-11-02): REPLACE tenant-settings-handle
     run(inspect(HANDLERS), { root: ROOT, inspectLive: liveFor(HANDLERS, { sha256: POLICY_DIAG_BYTES }) }),
     (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
   );
-  // The router row has moved on (the public demo request, 2026-11-05): the wallet funding bytes the fourth production
-  // rebuild put live are now its pre-state (READY), the pre-rebuild bytes a reconciliation stop, main's bytes accepted.
-  await assert.rejects(
-    run(inspect(ROUTER), { root: ROOT, inspectLive: liveFor(ROUTER, { sha256: LIVE_ROUTER }) }),
-    (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
-  );
-  const readyRouter = await run(inspect(ROUTER), { root: ROOT, inspectLive: liveFor(ROUTER, { sha256: acceptedRouter }) });
+  // The router row has moved on (the public demo request, applied 2026-11-05, then the external disbursement record):
+  // the applied demo request bytes are its pre-state (READY); the wallet funding bytes the fourth production rebuild
+  // put live and the pre-rebuild bytes are reconciliation stops; main's bytes accepted.
+  for (const other of [LIVE_ROUTER, acceptedRouter]) {
+    await assert.rejects(
+      run(inspect(ROUTER), { root: ROOT, inspectLive: liveFor(ROUTER, { sha256: other }) }),
+      (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+      other,
+    );
+  }
+  const readyRouter = await run(inspect(ROUTER), { root: ROOT, inspectLive: liveFor(ROUTER, { sha256: DEMO_REQUEST_ROUTER_BYTES }) });
   assert.equal(readyRouter.state, 'READY');
   assert.equal(readyRouter.mutation, false);
   assert.equal((await run(inspect(ROUTER), { root: ROOT, inspectLive: liveFor(ROUTER, { sha256: sha(`aws/functions/api/${ROUTER}`) }) })).state, 'ALREADY_ACCEPTED');
@@ -6211,7 +6230,7 @@ test('Teammate reset savepoint (owner report 2026-11-05): admin-reset-totp.mjs R
   }
 });
 
-test('Public demo request (owner 2026-11-05): ADD public-demo-request.mjs, then app-services.mjs REPLACE from the wallet funding bytes the fourth production rebuild put live, planning only', async () => {
+test('Public demo request (owner 2026-11-05): ADD public-demo-request.mjs, then app-services.mjs REPLACE from the wallet funding bytes the fourth production rebuild put live; production runs 42104477391 and 42105010522 applied them', async () => {
   const REL = 'aws/tests/fixtures/production-public-demo-request-manifest-2026-11-05.json';
   const WALLET_FUNDING_REL = 'aws/tests/fixtures/production-wallet-funding-settings-route-manifest-2026-11-02.json';
   const ADD = 'public-demo-request.mjs';
@@ -6219,9 +6238,10 @@ test('Public demo request (owner 2026-11-05): ADD public-demo-request.mjs, then 
   const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, REL), 'utf8'));
   const walletFunding = JSON.parse(fs.readFileSync(path.join(ROOT, WALLET_FUNDING_REL), 'utf8')).members[ROUTER];
   const acceptedAdd = sha(`aws/functions/api/${ADD}`);
-  // The router bytes as this manifest recorded them; main has since moved on (the external disbursement record,
-  // 2026-11-09, REPLACEs the router from the same pre-state; its own test below).
+  // The router bytes as this manifest recorded them, applied 2026-11-05; main has since moved on (the external
+  // disbursement record, 2026-11-09, REPLACEs the router from these applied bytes; its own test below).
   const acceptedRouter = manifest.members[ROUTER].accepted_sha256;
+  const applied = JSON.parse(fs.readFileSync(path.join(ROOT, PUBLIC_DEMO_REQUEST_APPLIED_REL), 'utf8'));
   const mainRouter = sha(`aws/functions/api/${ROUTER}`);
   assert.notEqual(acceptedRouter, mainRouter);
   assert.equal(manifest.workstream_id, 'public-demo-request');
@@ -6242,7 +6262,37 @@ test('Public demo request (owner 2026-11-05): ADD public-demo-request.mjs, then 
   const PRE = walletFunding.accepted_sha256;
   assert.deepEqual(manifest.members[ROUTER], { live_sha256: PRE, accepted_sha256: acceptedRouter, operation: 'replace', previous_manifest: WALLET_FUNDING_REL });
   assert.notEqual(acceptedRouter, PRE);
-  assert.deepEqual(PLAN.members[ROUTER], { operation: 'replace', accepted_sha256: mainRouter, expected_live_sha256: PRE, sql_before: null, manifest: 'aws/tests/fixtures/production-external-disbursement-manifest-2026-11-09.json' });
+  // Applied 2026-11-05 on main 19b9e82ce, recorded 2026-11-10 (owner "DEPLOY app-services.mjs TO PRODUCTION", then
+  // "build the demo-request reconciliation record"): the record keeps the run evidence; the planning manifest keeps
+  // what it recorded. The ADD row keeps its planning manifest; the router row expects the applied bytes and names the
+  // external disbursement router manifest reconciled to them.
+  assert.equal(applied.workstream_id, 'public-demo-request-applied');
+  assert.equal(applied.deploy_authorized, false);
+  assert.match(applied.authorization, /^Record only \(2026-11-10\)/);
+  assert.equal(applied.live_lambda, FUNCTION_NAME);
+  assert.deepEqual(applied.members, {
+    [ADD]: { live_sha256: acceptedAdd, accepted_sha256: acceptedAdd, operation: 'add', previous_manifest: REL },
+    [ROUTER]: { live_sha256: acceptedRouter, accepted_sha256: acceptedRouter, operation: 'replace', previous_manifest: REL },
+  });
+  assert.equal(acceptedAdd, '5e0998742fe1fa258f2b835c6c4dc07e5809406560fa3f93116c71972aab469f');
+  assert.equal(acceptedRouter, '1cb62cccf0c2fe96d47eeef04fc6b7d43ef1cfef137b94a76370991e7ce6b607');
+  assert.equal(acceptedRouter, DEMO_REQUEST_ROUTER_BYTES);
+  assert.equal(PRE, 'e63cfe2d48cd1f428513bc8de4d8a2934bd6c4889c9d1ffd71660ac089938713');
+  for (const runId of ['42100191121', '42101159617', '42103646042', '42104477391', '42100196662', '42101714512', '42103651880', '42105010522', '42849448973', '42849617748', '42849280072']) {
+    assert.match(applied.notes, new RegExp(`run ${runId}`), runId);
+    assert.match(PLAN.notes, new RegExp(runId), runId);
+  }
+  for (const evidence of ['"DEPLOY public-demo-request.mjs TO PRODUCTION"', '"DEPLOY app-services.mjs TO PRODUCTION"', '"build the demo-request reconciliation record"',
+    '19b9e82ceaf7ee710ca2e85194e740b4aa4ed126', 'a402a17b72b72c3df91a5f24bf412cc5bb35a0d1', 'job 127515566060', 'job 127517663589', 'job 129945753304', 'job 129946365298',
+    'cad4286d-58c1-4047-9ebc-4cd5d5795b8e', '84721bf7-816f-4e72-8159-d7ec97505cc7', 'f5d6e0fa-f4ae-4aa4-8165-da7e98151d61', '537f94fa-803e-4ba6-8103-940fbf9552df', '8b2aa74a-a0df-4ef7-9a26-cd4f22fa4551',
+    'b3c30742-2342-4bf6-b2be-026c5b369eb2', 'ee08e73a-b8a1-41d6-b725-8a38f23ea876', 'a0bf2cfd-60e0-42f1-813c-e7eb3bc123f5', '21e51685-a31c-4741-815f-8b0104964d44', '8179e535-6127-4016-96f3-2da63567f289',
+    'tmsZPM6ruXLfwLH8pryWP3YC7uJoULSlMU8ilDIZpTY=', 'SWoi8VO55SGrwtUV7jUvlhT0ZRV+YhSBhn29Zc8dQU4=', '/FpP3YaTsEFjyDR9PAiRLKaVwvRoDjeMHEt4rJZQBOA=', 'ydY9gzAljz9Zg4JfxHv3JCN5rMoEfFap0jFd9xZ3Sys=',
+    'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/42101159617', 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/42101714512',
+    'errors []', 'VERIFIED', 'ALREADY_ACCEPTED', 'SOURCE_RECONCILIATION_REQUIRED', '#1636', `${PRE.slice(0, 8)} -> ${acceptedRouter.slice(0, 8)}`, 'No SQL']) {
+    assert.ok(applied.notes.includes(evidence), evidence);
+  }
+  assert.ok(PLAN.notes.includes('Recorded in aws/tests/fixtures/production-public-demo-request-applied-manifest-2026-11-05.json. The public-demo-request.mjs row keeps its planning manifest and expected_live null'));
+  assert.deepEqual(PLAN.members[ROUTER], { operation: 'replace', accepted_sha256: mainRouter, expected_live_sha256: acceptedRouter, sql_before: null, manifest: EXTERNAL_DISBURSEMENT_ROUTER_REL });
   const addImports = localImports(fs.readFileSync(path.join(API, ADD), 'utf8'), ADD).sort();
   assert.deepEqual(manifest.members[ADD], { live_sha256: null, accepted_sha256: acceptedAdd, operation: 'add', required_imports: addImports });
   assert.deepEqual(PLAN.members[ADD], { operation: 'add', accepted_sha256: acceptedAdd, expected_live_sha256: null, sql_before: null, manifest: REL });
@@ -6264,19 +6314,33 @@ test('Public demo request (owner 2026-11-05): ADD public-demo-request.mjs, then 
     run(inspect(ADD), { root: ROOT, inspectLive: liveFor(ADD, { sha256: 'c'.repeat(64) }) }),
     (error) => error.code === CODES.DEPLOYMENT_COLLISION,
   );
-  // The router row has moved on (the external disbursement record): READY from the recorded pre-state, ALREADY_ACCEPTED
-  // at main's bytes; these demo request bytes, if they are live, are a reconciliation stop for an inspect first.
-  const readyRouter = await run(inspect(ROUTER), { root: ROOT, inspectLive: liveFor(ROUTER, { sha256: PRE }) });
+  // The router row has moved on (the external disbursement record): READY from these applied demo request bytes (the
+  // live bytes inspect run 42849448973 read), ALREADY_ACCEPTED at main's bytes; the pre-apply wallet funding bytes, or
+  // anything else, a reconciliation stop.
+  const readyRouter = await run(inspect(ROUTER), { root: ROOT, inspectLive: liveFor(ROUTER, { sha256: acceptedRouter }) });
   assert.equal(readyRouter.state, 'READY');
   assert.equal(readyRouter.mutation, false);
   assert.equal((await run(inspect(ROUTER), { root: ROOT, inspectLive: liveFor(ROUTER, { sha256: mainRouter }) })).state, 'ALREADY_ACCEPTED');
-  for (const other of [acceptedRouter, 'c'.repeat(64)]) {
+  for (const other of [PRE, 'c'.repeat(64)]) {
     await assert.rejects(
       run(inspect(ROUTER), { root: ROOT, inspectLive: liveFor(ROUTER, { sha256: other }) }),
       (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+      other,
     );
   }
-  // Apply: the ADD applies into the live package (the router's own apply is covered by the external disbursement test).
+  // The plan as it stood before this record (the router row expecting e63cfe2d, naming the external disbursement
+  // manifest) stops on the live demo request bytes exactly as inspect run 42849448973 did.
+  const beforeRecord = structuredClone(PLAN);
+  beforeRecord.members[ROUTER] = { ...PLAN.members[ROUTER], expected_live_sha256: PRE, manifest: 'aws/tests/fixtures/production-external-disbursement-manifest-2026-11-09.json' };
+  await assert.rejects(
+    run(inspect(ROUTER), { root: ROOT, plan: beforeRecord, inspectLive: liveFor(ROUTER, { sha256: acceptedRouter, plan: beforeRecord }) }),
+    (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED
+      && error.details.expected_live_sha256 === PRE && error.details.actual_live_sha256 === acceptedRouter,
+  );
+  // The ADD is live at the accepted bytes (inspect run 42849617748): nothing left to apply.
+  assert.equal((await run(inspect(ADD), { root: ROOT, inspectLive: liveFor(ADD, { sha256: acceptedAdd }) })).state, 'ALREADY_ACCEPTED');
+  // Apply replay (as production run 42104477391 did): the ADD applies into the live package while absent (the router's
+  // own apply is covered by the external disbursement test).
   const { deps: addDeps, calls } = applyDeps(ADD);
   const added = await run(applyEnv(ADD), addDeps);
   assert.equal(added.mutation, false);
@@ -7147,7 +7211,7 @@ test('Moov status catch-up update fix (SQL 146, 2026-11-07): providers/moov-stat
   assert.deepEqual(calls.receipt.owned_member_ops, { replace: [MEMBER], add: [] });
 });
 
-test('External disbursement record (owner 2026-11-09): ADD external-disbursement.mjs held on SQL 147, then app-services.mjs REPLACE from the recorded wallet funding bytes, planning only', async () => {
+test('External disbursement record (owner 2026-11-09): ADD external-disbursement.mjs held on SQL 147, then app-services.mjs REPLACE from the applied public demo request bytes (reconciled 2026-11-10), planning only', async () => {
   const REL = 'aws/tests/fixtures/production-external-disbursement-manifest-2026-11-09.json';
   const WALLET_FUNDING_REL = 'aws/tests/fixtures/production-wallet-funding-settings-route-manifest-2026-11-02.json';
   const DEMO_REL = 'aws/tests/fixtures/production-public-demo-request-manifest-2026-11-05.json';
@@ -7168,18 +7232,60 @@ test('External disbursement record (owner 2026-11-09): ADD external-disbursement
     assert.ok(manifest.notes.includes(evidence), evidence);
     assert.ok(PLAN.notes.includes(evidence), evidence);
   }
-  // The router: from the pre-state the plan records (the wallet funding bytes the fourth production rebuild put live) to
-  // main's bytes, which carry the demo request route too, so its ADD comes first as well.
+  // The router: this manifest planned it from the pre-state the plan recorded then (the wallet funding bytes the fourth
+  // production rebuild put live) to main's bytes, which carry the demo request route too, so its ADD comes first as
+  // well. The read-only production inspect run 42849448973 (2026-11-10) found the demo request bytes live instead
+  // (SOURCE_RECONCILIATION_REQUIRED): production run 42105010522 applied them on 2026-11-05, recorded applied since.
+  // The row now starts from them and names the reconciled manifest; this manifest keeps what it recorded.
   assert.deepEqual(manifest.members[ROUTER], { live_sha256: PRE, accepted_sha256: acceptedRouter, operation: 'replace', previous_manifest: WALLET_FUNDING_REL });
-  assert.deepEqual(PLAN.members[ROUTER], { operation: 'replace', accepted_sha256: acceptedRouter, expected_live_sha256: PRE, sql_before: null, manifest: REL });
+  assert.equal(DEMO_ROUTER, DEMO_REQUEST_ROUTER_BYTES);
+  const reconciled = JSON.parse(fs.readFileSync(path.join(ROOT, EXTERNAL_DISBURSEMENT_ROUTER_REL), 'utf8'));
+  assert.equal(reconciled.workstream_id, 'external-disbursement-router-reconciled');
+  assert.equal(reconciled.deploy_authorized, false);
+  assert.match(reconciled.authorization, /^Pending owner review \(2026-11-10\)\. Planning only/);
+  assert.equal(reconciled.live_lambda, FUNCTION_NAME);
+  assert.deepEqual(reconciled.members, { [ROUTER]: { live_sha256: DEMO_ROUTER, accepted_sha256: acceptedRouter, operation: 'replace', previous_manifest: PUBLIC_DEMO_REQUEST_APPLIED_REL } });
+  assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, PUBLIC_DEMO_REQUEST_APPLIED_REL), 'utf8')).members[ROUTER].live_sha256, DEMO_ROUTER);
+  for (const evidence of ['42849448973', 'job 129945753304', 'SOURCE_RECONCILIATION_REQUIRED', '42105010522', `${DEMO_ROUTER.slice(0, 8)} -> ${acceptedRouter.slice(0, 8)}`, 'SQL 147', 'index.mjs is untouched', 'Planning only']) {
+    assert.ok(reconciled.notes.includes(evidence), evidence);
+  }
+  assert.ok(PLAN.notes.includes(`names ${EXTERNAL_DISBURSEMENT_ROUTER_REL} (REPLACE app-services.mjs ${DEMO_ROUTER.slice(0, 8)} -> ${acceptedRouter.slice(0, 8)})`));
+  assert.deepEqual(PLAN.members[ROUTER], { operation: 'replace', accepted_sha256: acceptedRouter, expected_live_sha256: DEMO_ROUTER, sql_before: null, manifest: EXTERNAL_DISBURSEMENT_ROUTER_REL });
   for (const other of [PRE, DEMO_ROUTER]) assert.notEqual(acceptedRouter, other);
-  // The ADD: held on SQL 147, which is not recorded live.
+  // The ADD: held on SQL 147 (sql_before), now recorded verified live in production (2026-11-10, the SQL 147 record
+  // change) from its retired pin: the same file bytes the pin and the one-shot hashed. The gate the apply below is
+  // checked against is shown on a plan copy where it is not yet recorded.
   const addImports = localImports(fs.readFileSync(path.join(API, ADD), 'utf8'), ADD).sort();
   assert.deepEqual(addImports, ['data.mjs']);
   assert.deepEqual(manifest.members[ADD], { live_sha256: null, accepted_sha256: acceptedAdd, operation: 'add', required_imports: addImports });
   assert.deepEqual(PLAN.members[ADD], { operation: 'add', accepted_sha256: acceptedAdd, expected_live_sha256: null, sql_before: SQL147_FILE, manifest: REL });
-  assert.deepEqual(PLAN.sql_prerequisites[SQL147_FILE], { verified_live: false, evidence: null });
   assert.ok(fs.existsSync(path.join(ROOT, SQL147_FILE)));
+  const PIN147 = 'ops/deployment-guard/sql147-external-disbursement-record-production-apply.json';
+  const readJson = (rel) => JSON.parse(fs.readFileSync(path.join(ROOT, rel), 'utf8'));
+  const pin147 = readJson(PIN147);
+  assert.equal(pin147.source_sha256, sha(SQL147_FILE));
+  assert.equal(pin147.applied.migration_source_sha256, sha(SQL147_FILE));
+  assert.equal(pin147.execute, false);
+  assert.equal(pin147.applied.result, 'applied');
+  assert.equal(pin147.applied.receipt.before_hash, pin147.expected_live_definition_sha256);
+  assert.equal(pin147.applied.receipt.after_hash, pin147.intended_replacement_sha256);
+  assert.equal(pin147.staging_acceptance.reference, 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/42838778413');
+  const prerequisite147 = PLAN.sql_prerequisites[SQL147_FILE];
+  assert.equal(prerequisite147.verified_live, true);
+  assert.equal(prerequisite147.pin, PIN147);
+  const fromTo147 = `${pin147.expected_live_definition_sha256.slice(0, 8)}… -> ${pin147.intended_replacement_sha256.slice(0, 8)}…`;
+  for (const evidence of [pin147.applied.apply_ssm_command_id, pin147.applied.one_shot_run_id, pin147.applied.workstream_id, pin147.applied.one_use_id, pin147.applied.runner, fromTo147, 'staging acceptance run 42838778413', PIN147]) {
+    assert.ok(prerequisite147.evidence.includes(evidence), evidence);
+  }
+  assert.ok(prerequisite147.note.includes(`ADD ${acceptedAdd.slice(0, 8)}…`));
+  assert.ok(prerequisite147.note.includes('"DEPLOY external-disbursement.mjs TO PRODUCTION"'));
+  const staging147 = readJson('ops/deployment-guard/staging-sql-live.json').sql[SQL147_FILE];
+  assert.equal(staging147.verified_live, true);
+  for (const evidence of ['run 42838778413', 'read-live run 42839223253', `receipt before ${pin147.expected_live_definition_sha256.slice(0, 8)}…`, `after ${pin147.intended_replacement_sha256.slice(0, 8)}…`]) {
+    assert.ok(staging147.evidence.includes(evidence), evidence);
+  }
+  const sql147Pending = structuredClone(PLAN);
+  sql147Pending.sql_prerequisites[SQL147_FILE] = { verified_live: false, evidence: null };
   for (const member of [ADD, ROUTER]) assert.equal(resolvePlannedMember(member, { root: ROOT, plan: PLAN }).ok, true, member);
   const routerImports = localImports(fs.readFileSync(path.join(API, ROUTER), 'utf8'), ROUTER);
   for (const added of [DEMO_ADD, ADD]) {
@@ -7190,29 +7296,51 @@ test('External disbursement record (owner 2026-11-09): ADD external-disbursement
   assert.ok(!fs.readFileSync(path.join(API, 'index.mjs'), 'utf8').includes('record-external-disbursement'));
   assert.ok(WORKFLOW.includes(`          - ${DEMO_ADD}\n          - ${ADD}\n          - tenant-email-domain.mjs\n`));
   const inspect = (member) => ({ ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: member });
-  // Inspect: the ADD is READY while absent; the router READY only from the recorded pre-state; the demo request
-  // bytes (if live) or anything else stop for reconciliation.
+  // Inspect: the ADD is READY while absent; the router READY only from the reconciled pre-state (the applied demo
+  // request bytes, live today); the superseded wallet funding pre-state or anything else stops for reconciliation.
   const readyAdd = await run(inspect(ADD), { root: ROOT, inspectLive: liveFor(ADD) });
   assert.equal(readyAdd.state, 'READY');
   assert.equal(readyAdd.mutation, false);
-  assert.equal((await run(inspect(ROUTER), { root: ROOT, inspectLive: liveFor(ROUTER, { sha256: PRE }) })).state, 'READY');
+  const readyRouter = await run(inspect(ROUTER), { root: ROOT, inspectLive: liveFor(ROUTER, { sha256: DEMO_ROUTER }) });
+  assert.equal(readyRouter.state, 'READY');
+  assert.equal(readyRouter.mutation, false);
   assert.equal((await run(inspect(ROUTER), { root: ROOT, inspectLive: liveFor(ROUTER, { sha256: acceptedRouter }) })).state, 'ALREADY_ACCEPTED');
-  for (const other of [DEMO_ROUTER, 'c'.repeat(64)]) {
+  for (const other of [PRE, 'c'.repeat(64)]) {
     await assert.rejects(
       run(inspect(ROUTER), { root: ROOT, inspectLive: liveFor(ROUTER, { sha256: other }) }),
       (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+      other,
     );
   }
-  // Apply: the ADD is refused until SQL 147 is recorded verified live ...
+  // Apply as production stands today (the router at the demo request bytes, public-demo-request.mjs live,
+  // external-disbursement.mjs not yet added): refused before any write, the new router's
+  // import of external-disbursement.mjs is not in the live package.
+  // (Replayed on the committed plan, not the shared Mortgage Desk pre-apply helper.)
+  const today = applyDeps(ROUTER, { sha256: DEMO_ROUTER, pending: [ADD], plan: PLAN });
+  assert.equal(today.deps.plan.members[ROUTER].expected_live_sha256, DEMO_ROUTER);
   await assert.rejects(
-    run(applyEnv(ADD), applyDeps(ADD).deps),
+    run(applyEnv(ROUTER, { CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: DEMO_ROUTER }), today.deps),
+    (error) => error.code === CODES.DEPLOYMENT_COLLISION && error.details.missing.includes(ADD),
+  );
+  // Once external-disbursement.mjs is live at its accepted bytes, the same apply from the demo request bytes proceeds.
+  const later = applyDeps(ROUTER, { sha256: DEMO_ROUTER, plan: PLAN });
+  const fromDemo = await run(applyEnv(ROUTER, { CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: DEMO_ROUTER }), later.deps);
+  assert.equal(fromDemo.mutation, false);
+  assert.deepEqual(later.calls.receipt.owned_member_ops, { replace: [ROUTER], add: [] });
+  // Apply: the ADD was refused while SQL 147 was not recorded verified live (the plan before the SQL 147 record change,
+  // replayed on a copy) ...
+  await assert.rejects(
+    run(applyEnv(ADD), { ...applyDeps(ADD, { plan: sql147Pending }).deps, plan: sql147Pending }),
     (error) => error.code === CODES.PRODUCTION_APPROVAL_REQUIRED && error.details.sql_before === SQL147_FILE,
   );
-  // ... then applies; the router is refused while either ADD is not live, and links once both are.
-  const sql147Live = structuredClone(PLAN);
-  sql147Live.sql_prerequisites[SQL147_FILE] = { verified_live: true, evidence: 'test' };
+  // ... and passes the SQL gate now that the committed plan records it (the same replay without a plan override of
+  // SQL 147; dry: no mutation), one receipt for this member. The member row and its hashes are unchanged. The router is
+  // refused while either ADD is not live, and links once both are.
+  assert.equal(PLAN.sql_prerequisites[SQL147_FILE].verified_live, true);
+  // applyDeps copies the committed plan file and passes no plan override for this member.
   const { deps: addDeps, calls } = applyDeps(ADD);
-  const added = await run(applyEnv(ADD), { ...addDeps, plan: sql147Live });
+  assert.equal(addDeps.plan, undefined);
+  const added = await run(applyEnv(ADD), addDeps);
   assert.equal(added.mutation, false);
   assert.deepEqual(calls.receipt.owned_member_ops, { replace: [], add: [ADD] });
   // (The router has no sql_before; its apply runs on the helper's own plan copy.)
