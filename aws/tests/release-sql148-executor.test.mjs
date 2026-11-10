@@ -5,8 +5,8 @@
  * new:
  *
  *   - the pin: staging-authorized (wave 43) from staging read-live run 42901109448, code-derived, selectable, packed,
- *     in step with the production pin (pending); the pinned commit authored the bytes; no predecessor; nothing
- *     supersedes or names it;
+ *     in step with the production pin (execute true on production's own pre-state, the same one staging had); the
+ *     pinned commit authored the bytes; no predecessor; nothing supersedes or names it;
  *   - the file and spec: the unique index public.mortgage_handling_requests_one_open_per_check redefined in place
  *     (the spec's two definitions are the file's own constants) and one new DEFINER function,
  *     aws_link_second_mortgagee(uuid, uuid): plpgsql, VOLATILE, SECURITY DEFINER, search_path public, pg_temp, RETURNS
@@ -195,7 +195,7 @@ test('pin: SQL 148 staging-authorized from its read-live, code-derived, selectab
   assert.equal(releaseStateHash(KEY, releaseReplacedPreState(KEY, SUPABASE_LABEL)), PRE);
   // The runbook and the production pin name the expected pre-state (derived here) and the intended fingerprint.
   const runbook = fs.readFileSync(path.join(ROOT, 'ops/production-sql-148-apply.md'), 'utf8');
-  assert.match(runbook, /\*\*Status:\*\* staging pin execute-authorized \(wave 43\); not applied anywhere\. The production pin is pending\./);
+  assert.match(runbook, /\*\*Status:\*\* applied in staging \(wave 43, 2026-11-10\); staging acceptance: owner \("SQL 148 accepted in staging"\); production pin execute-authorized; not applied to production/);
   assert.match(runbook, /read-live \(2026-11-10\)\.\*\* Run 42901109448/);
   assert.ok(runbook.includes(pin.expected_live_definition_sha256));
   for (const value of [PRE, pin.intended_replacement_sha256, pin.source_sha256, sha(SUPABASE_DEF), sha(SQL148_DEF), SUPABASE_DEF, SQL148_DEF, SUPABASE_LABEL]) {
@@ -234,11 +234,18 @@ test('pin: SQL 148 staging-authorized from its read-live, code-derived, selectab
   assert.equal(prod.source_sha256, pin.source_sha256);
   assert.deepEqual(prod.function_identities, [...IDENTITIES]);
   assert.deepEqual(prod.predecessors, []);
-  assert.equal(prod.execute, false);
-  assert.equal(prod.authorization, 'pending');
-  assert.equal(prod.expected_live_definition_sha256, null);
-  assert.equal(prod.production_inspect.status, 'pending');
+  // Production pin execute-authorized (owner-approved pin change of 2026-11-10) on the staging apply. Its pre-state is
+  // production's own (read-only inspect SSM 3fc740fd), the derived one (the function absent, the Supabase index), the
+  // same pre-state staging recorded (read-live run 42901109448).
+  assert.equal(prod.execute, true);
+  assert.match(prod.authorization, /^Owner approved 2026-11-10 /);
+  assert.equal(prod.expected_live_definition_sha256, prod.production_inspect.live_definition_sha256);
+  assert.equal(prod.expected_live_definition_sha256, pin.expected_live_definition_sha256);
+  assert.equal(prod.expected_live_definition_sha256, PRE);
+  assert.notEqual(prod.expected_live_definition_sha256, prod.intended_replacement_sha256);
+  assert.equal(prod.production_inspect.status, 'recorded');
   assert.ok(prod.production_inspect.note.includes(PRE));
+  assert.match(prod.production_inspect.note, / Earlier: Pending: no release-engine production inspect has been run for SQL 148 yet./);
   assert.ok(prod.order_note.includes(PRE));
   let bytes = null;
   if (/^[0-9a-f]{40}$/.test(pin.commit)) {

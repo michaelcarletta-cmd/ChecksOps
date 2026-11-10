@@ -73,7 +73,46 @@ the staging pin (`expected_live_definition_sha256`, `execute: true`, wave 43) un
 this pin is merged and the executor is redeployed carrying it, on the owner's words for that run, "apply SQL 148
 in staging". The production pin stays pending: a read-only production inspect decides production's pre-state.
 
-**Status:** staging pin execute-authorized (wave 43); not applied anywhere. The production pin is pending.
+**Staging executor refreshed for the pin (2026-11-10).** The staging pin (wave 43, PR #1746) merged as
+`7f7ae312a0a68ad8e1bfd99db3a579a91de7744b`. Inspect run 42904287736 (main `7f7ae312a`) found the live executor at
+`mLwFCDaJmUr71PVRz6KXULEhEJtK0iDLvgf/oTvTI8E=`. Deploy run 42904644950 (`expected_executor_code_sha256`
+`mLwFCDaJ…` matched) updated `checksops-staging-guarded-sql-executor`; inspect run 42905116795 read it at
+`X2Z+6Nkj0qI3pYc/jY7/YZVKBGu5+YjdN3wr6NA1hho=`. Read-live run 42905486022 (executor `X2Z+6Nkj…`): `already_applied`
+false, `precondition_failures` `[]`, live `508588e6…`, equal to the pin.
+
+**Staging apply (2026-11-10).** Apply run 42905846810 (job 130143491289, main `7f7ae312a`, workstream
+`github-staging-sql-42905846810`, pin commit `ac6567f2a`, `expected_live_definition_sha256`
+`508588e6cd7d48ca74411aba8e0220842e0490bde69a881d362966f77e54d862`) under the owner's words "apply SQL 148 in
+staging": success. The receipt prints `result` `applied`, `before_hash` `508588e6…`, `after_hash`
+`0ea9b78f674241215a46bbcfd5452ade00d472416b51cefdcd423258b525127b`; the function in state `intended`, its EXECUTE
+ACL `checksops` and the owner, `index_definitions` `intended`, `definer_writes` ok, `prerequisites_missing` `[]`.
+Read-live run 42906285342 (job 130145005929, executor `X2Z+6Nkj…`): `already_applied` true, `live_definition_sha256`
+`0ea9b78f…` equal to the intended hash, `precondition_failures` `[]`, `index_definitions` `intended`,
+`other_per_check_unique_indexes` 0. Staging acceptance: the owner on 2026-11-10, "SQL 148 accepted in staging",
+given before the staging apply ran and taken as an acceptance only because the apply ended exactly at the intended
+fingerprint with no precondition failure, as it did. There is no separate staging record PR for SQL 148: these
+staging runs are recorded here and in the production pin's `staging_acceptance` by the production pin PR. The
+staging pin keeps `execute: true`. The API change that calls the function (`workflow-rpc.mjs`) and the SPA change are
+not part of this pin.
+
+**Production inspect (2026-11-10).** Read-only `--inspect` through SSM
+`3fc740fd-06b8-4bdb-be60-3042a406c25e` on `i-0c35557c4e5385406` (under the owner's words "run the read-only SQL 148
+production inspect"; command sent 21:06:49Z, Success 21:07:00Z, runner stopped 21:07:16Z), main `952c4139e` (tarball
+sha256 `332e1b48c238a0b517b83e77bd0549cbc06940829b04c406e9af263abeff86de`, staged by `sql53-temporary-transfer.yml`
+run 42901557628, migration source `f87ea6d7…` == pin), `read_only` true: live
+`508588e6cd7d48ca74411aba8e0220842e0490bde69a881d362966f77e54d862` (the function absent and the index at the Supabase
+definition, the derived pre-state), `index_definitions` `supabase_20260715110727`, `other_per_check_unique_indexes`
+0, `definer_writes` ok, `already_applied` false, `live_matches_expected` false, `precondition_failures` `[]`,
+`apply_preconditions_met` false, `errors` `[]`. `precondition_failures` `[]` means every production precondition
+passed: the pinned `checksops_admin` login, `prerequisites_present` (`prerequisites_missing` `[]`),
+`predecessors_applied`, `successors_not_applied`, `replaced_indexes_replaceable`, `no_other_per_check_unique_index`
+and `definer_can_write_relations`. Production's pre-state equals staging's (read-live runs 42901109448 and
+42905486022), so the staging apply took the path production will. Recorded in the production pin with the staging
+apply (run 42905846810) as its staging acceptance and `execute: true` under the owner's words "record the SQL 148
+production pin". The owner merges the pin change; the apply runs only after that merge is on main and staged, under
+the owner's words for that run ("apply SQL 148 in production").
+
+**Status:** applied in staging (wave 43, 2026-11-10); staging acceptance: owner ("SQL 148 accepted in staging"); production pin execute-authorized; not applied to production
 
 ## The index in the release engine
 
