@@ -27,7 +27,7 @@ test('every marketing page gets its own title, share preview, canonical and JSON
 });
 
 test('public pricing is retired: /pricing is no marketing page and no page head states a price', () => {
-  assert.deepEqual([...RETIRED_MARKETING_PATHS], ['/pricing']);
+  assert.deepEqual([...RETIRED_MARKETING_PATHS], ['/pricing', '/vs/checksops-vs-snapsheet', '/vs/checksops-vs-guidewire-claimcenter']);
   assert.ok(!MARKETING_PAGES.some((page) => page.path === '/pricing'));
   for (const name of ['PRICING_PAGE', 'PRICING_EXAMPLE']) assert.equal(name in marketingPages, false, name);
   assert.equal('PUBLISHED_PRICING' in marketingPricing, false);
@@ -75,7 +75,9 @@ test('every marketing page is in the sitemap and llms.txt, and no retired page i
     assert.ok(sitemap.includes(`<loc>${url}</loc>`), url);
     assert.ok(llms.includes(`(${url})`), url);
   }
-  assert.equal((sitemap.match(/<loc>/g) || []).length, MARKETING_PAGES.length);
+  // Plus /blog: its articles come live from HeyCatch, so it has no build-time head of its own.
+  assert.ok(sitemap.includes('<loc>https://checksops.com/blog</loc>'));
+  assert.equal((sitemap.match(/<loc>/g) || []).length, MARKETING_PAGES.length + 1);
   for (const retired of RETIRED_MARKETING_PATHS) {
     assert.ok(!sitemap.includes(`https://checksops.com${retired}<`), retired);
     assert.ok(!llms.includes(`https://checksops.com${retired})`), retired);
@@ -104,7 +106,6 @@ test('the SPA sends /pricing to the home page and no public page links to it', (
   for (const rel of [
     'src/pages/marketing/CheckCenterMarketing.tsx',
     'src/pages/marketing/ChecksOpsVsIink.tsx',
-    'src/pages/marketing/ChecksOpsVsCarrierPlatform.tsx',
     'src/pages/marketing/ClaimCheckTracking.tsx',
     'src/components/marketing/MarketingPageShell.tsx',
     'src/pages/checkops/CheckOpsSecurity.tsx',
@@ -112,5 +113,22 @@ test('the SPA sends /pricing to the home page and no public page links to it', (
     const src = fs.readFileSync(path.join(ROOT, rel), 'utf8');
     assert.ok(!/["'`]\/pricing["'`]/.test(src), `${rel} links to /pricing`);
     assert.ok(!/See (ChecksOps )?pricing|PUBLISHED_PRICING|7,500/.test(src), `${rel} shows pricing`);
+  }
+});
+
+test('the carrier-system comparisons are retired: old links land home and no public page names them', () => {
+  const app = fs.readFileSync(path.join(ROOT, 'src/App.tsx'), 'utf8');
+  for (const p of ['/vs/checksops-vs-snapsheet', '/vs/checksops-vs-guidewire-claimcenter']) {
+    assert.ok(app.includes(`<Route path="${p}" element={<Navigate to="/" replace />} />`), p);
+    assert.ok(!MARKETING_PAGES.some((page) => page.path === p), p);
+  }
+  assert.equal(fs.existsSync(path.join(ROOT, 'src/pages/marketing/ChecksOpsVsCarrierPlatform.tsx')), false);
+  for (const rel of ['src/pages/marketing/marketingPages.ts', 'public/sitemap.xml', 'public/llms.txt',
+    'src/pages/marketing/CheckCenterMarketing.tsx', 'src/components/marketing/MarketingPageShell.tsx']) {
+    const src = fs.readFileSync(path.join(ROOT, rel), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    assert.ok(!/ChecksOps vs (Snapsheet|Guidewire)/.test(src), `${rel} still links a carrier comparison`);
+  }
+  for (const rel of ['public/sitemap.xml', 'public/llms.txt']) {
+    assert.ok(!/snapsheet|guidewire/i.test(fs.readFileSync(path.join(ROOT, rel), 'utf8')), rel);
   }
 });

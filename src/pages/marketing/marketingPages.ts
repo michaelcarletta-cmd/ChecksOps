@@ -88,72 +88,6 @@ export const VS_IINK_PAGE: MarketingPage = {
   jsonLd: faqJsonLd(VS_IINK_FAQ),
 };
 
-/**
- * The two carrier-side claims platforms the audit research names (Snapsheet, Guidewire
- * ClaimCenter). Their facts are limited to what the website audit quotes from their own
- * public pages; nothing about their pricing or payment features is claimed.
- */
-export interface CarrierPlatformComparison {
-  page: MarketingPage;
-  /** Product name as the vendor writes it. */
-  name: string;
-  /** Short name for table headers. */
-  shortName: string;
-  /** What the vendor's own site says, quoted. */
-  ownWords: string[];
-  /** Who it is built for, in plain words. */
-  builtFor: string;
-  faq: readonly FaqEntry[];
-}
-
-const carrierSideFaq = (name: string): FaqEntry[] => [
-  {
-    q: `Do I have to choose between ChecksOps and ${name}?`,
-    a: `Usually not. ${name} is software for the insurer's side of the claim. ChecksOps is for the public adjusting firm that receives the claim check: filing it by claim, collecting payee endorsements, getting it deposited and tracking loss drafts held by a mortgage company.`,
-  },
-  {
-    q: "Is ChecksOps a claims system for carriers?",
-    a: "No. ChecksOps is built for public adjusting firms and their restoration partners. It does not adjust claims or issue carrier payments. It is workflow software, not a bank, lender, escrow service, or payment processor.",
-  },
-];
-
-export const VS_SNAPSHEET: CarrierPlatformComparison = {
-  name: "Snapsheet",
-  shortName: "Snapsheet",
-  ownWords: [
-    "Replace patchwork solutions with a complete claims system.",
-    "One claim view. Total visibility.",
-    "Trusted by 170+ customers & investors, including 16 of the top 20 P&C carriers.",
-  ],
-  builtFor: "Carriers and claims organizations running the claim from the insurer's side.",
-  faq: carrierSideFaq("Snapsheet"),
-  page: {
-    path: "/vs/checksops-vs-snapsheet",
-    title: "ChecksOps vs Snapsheet - Claim check workflow for PA firms",
-    description:
-      "ChecksOps vs Snapsheet: Snapsheet is a claims system for carriers. ChecksOps is the claim check workflow for public adjusting firms, from payee endorsements to deposit and loss draft tracking.",
-  },
-};
-VS_SNAPSHEET.page.jsonLd = faqJsonLd(VS_SNAPSHEET.faq);
-
-export const VS_GUIDEWIRE: CarrierPlatformComparison = {
-  name: "Guidewire ClaimCenter",
-  shortName: "Guidewire",
-  ownWords: [
-    "The P&C platform, built for AI",
-    "570+ insurers trust to run their core operations.",
-  ],
-  builtFor: "Property and casualty insurers running their core claims operations.",
-  faq: carrierSideFaq("Guidewire ClaimCenter"),
-  page: {
-    path: "/vs/checksops-vs-guidewire-claimcenter",
-    title: "ChecksOps vs Guidewire ClaimCenter - For PA firms, not carriers",
-    description:
-      "ChecksOps vs Guidewire ClaimCenter: ClaimCenter runs an insurer's core claims operations. ChecksOps is the claim check workflow for public adjusting firms: endorsements, deposit readiness, loss drafts.",
-  },
-};
-VS_GUIDEWIRE.page.jsonLd = faqJsonLd(VS_GUIDEWIRE.faq);
-
 // Category page for "claim check tracking" and "loss draft tracking" searches.
 export const CLAIM_CHECK_TRACKING_FAQ: readonly FaqEntry[] = [
   {
@@ -183,8 +117,6 @@ export const CLAIM_CHECK_TRACKING_PAGE: MarketingPage = {
 export const MARKETING_PAGES: readonly MarketingPage[] = [
   HOME_PAGE,
   VS_IINK_PAGE,
-  VS_SNAPSHEET.page,
-  VS_GUIDEWIRE.page,
   CLAIM_CHECK_TRACKING_PAGE,
 ];
 
@@ -194,14 +126,17 @@ export const MARKETING_PAGES: readonly MarketingPage[] = [
  * guarded upload overwrites the old prerendered object: the uploader only puts objects and never
  * deletes, and the production CloudFront function serves these keys as they are
  * (aws/cloudfront/spa-fallback.js). /pricing: retired 2026-11-09, the owner keeps pricing off
- * the public site.
+ * the public site. The Snapsheet and Guidewire ClaimCenter comparisons: retired 2026-11-10, the
+ * owner says those are carrier systems and not relevant to ChecksOps.
  */
-export const RETIRED_MARKETING_PATHS: readonly string[] = ["/pricing"];
+export const RETIRED_MARKETING_PATHS: readonly string[] = [
+  "/pricing",
+  "/vs/checksops-vs-snapsheet",
+  "/vs/checksops-vs-guidewire-claimcenter",
+];
 
 /** Footer links to the comparison and category pages. */
 export const COMPARISON_LINKS: readonly { label: string; to: string }[] = [
   { label: "ChecksOps vs iink Payments", to: VS_IINK_PAGE.path },
-  { label: "ChecksOps vs Snapsheet", to: VS_SNAPSHEET.page.path },
-  { label: "ChecksOps vs Guidewire ClaimCenter", to: VS_GUIDEWIRE.page.path },
   { label: "Claim check tracking", to: CLAIM_CHECK_TRACKING_PAGE.path },
 ];

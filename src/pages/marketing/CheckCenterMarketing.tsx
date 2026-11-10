@@ -44,6 +44,7 @@ import {
   HeroUsageLine,
 } from "@/components/marketing/MarketingProof";
 import { usePageMeta } from "@/hooks/usePageMeta";
+import { useBlogHasArticles, useNavItemsWithBlog } from "@/hooks/useBlogArticles";
 import { COMPARISON_LINKS, HOME_FAQ as FAQ, HOME_PAGE } from "@/pages/marketing/marketingPages";
 import { HERO_SCREENSHOT } from "@/pages/marketing/marketingProof";
 import { ROLLOUT_GUARANTEE } from "@/pages/marketing/marketingPricing";
@@ -284,6 +285,8 @@ const HeroMockup = () => {
 export default function CheckCenterMarketing() {
   const supportEmail = "support@checksops.com";
   const [menuOpen, setMenuOpen] = useState(false);
+  const blogVisible = useBlogHasArticles();
+  const navItems = useNavItemsWithBlog(NAV_ITEMS);
   const location = useLocation();
   usePageMeta(HOME_PAGE);
 
@@ -384,6 +387,7 @@ export default function CheckCenterMarketing() {
             <a href="#partners" className="hover:text-foreground transition-colors">Partners</a>
             <a href="#security" className="hover:text-foreground transition-colors">Security</a>
             <a href="#demo" className="hover:text-foreground transition-colors">Demo</a>
+            {blogVisible && <Link to="/blog" className="hover:text-foreground transition-colors">Blog</Link>}
           </nav>
           <div className="flex items-center gap-2">
             <Button asChild size="sm" className="h-11 sm:h-9">
@@ -392,7 +396,7 @@ export default function CheckCenterMarketing() {
             <MarketingMenuButton open={menuOpen} onToggle={() => setMenuOpen(!menuOpen)} />
           </div>
         </div>
-        <MarketingMobileMenu open={menuOpen} onClose={() => setMenuOpen(false)} items={NAV_ITEMS} demoHref="#demo" />
+        <MarketingMobileMenu open={menuOpen} onClose={() => setMenuOpen(false)} items={navItems} demoHref="#demo" />
       </header>
 
       {/* Hero */}
@@ -867,7 +871,7 @@ export default function CheckCenterMarketing() {
             <p className="text-xs text-muted-foreground">
               © {new Date().getFullYear()} ChecksOps. All rights reserved.
             </p>
-            <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-xs text-muted-foreground [&>a]:inline-flex [&>a]:items-center [&>a]:min-h-[44px] sm:[&>a]:min-h-0">
+            <div className="grid w-full max-w-sm grid-cols-2 gap-x-6 text-left [&>a]:flex [&>a]:items-center [&>a]:min-h-[44px] sm:flex sm:w-auto sm:max-w-none sm:flex-wrap sm:items-center sm:justify-center sm:gap-x-4 sm:gap-y-2 sm:[&>a]:min-h-0 text-xs text-muted-foreground">
               <a href={`mailto:${supportEmail}`} className="hover:text-foreground">Support</a>
               <FounderFooterLink />
               <Link to="/login" className="hover:text-foreground">Sign in</Link>
