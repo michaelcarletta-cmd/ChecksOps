@@ -327,11 +327,17 @@ const catchUpAddPre = (plan) => {
   };
   return plan;
 };
+// Pay to the order of tenant name (owner 2026-11-09): the planning manifest; applied 2026-11-09 (production run
+// 42698388215, VERIFIED): the row expects main's bytes and names the applied record.
+const ENDORSEMENT_MEMBER = 'endorsement-composite.mjs';
+const ENDORSEMENT_PAY_TO_ORDER_REL = 'aws/tests/fixtures/production-endorsement-pay-to-order-tenant-name-manifest-2026-11-09.json';
+const ENDORSEMENT_PAY_TO_ORDER_APPLIED_REL = 'aws/tests/fixtures/production-endorsement-pay-to-order-tenant-name-applied-manifest-2026-11-09.json';
 // The fee pull savepoint REPLACEs (production runs 42302929689, 42303279340, 2026-11-06), the incoming transfers
 // data.mjs REPLACE (production run 42323230515, 2026-11-07), the Moov webhook receipt key providers/webhooks.mjs
 // REPLACE (production run 42330359623, 2026-11-07), the Moov status catch-up scheduled.mjs REPLACE (production run
-// 42370751130, 2026-11-07) and the catch-up update fix providers/moov-status-catch-up.mjs REPLACE (production run
-// 42412965676, 2026-11-07) record their applied bytes live: replays of the plan as it stood before them start from the
+// 42370751130, 2026-11-07), the catch-up update fix providers/moov-status-catch-up.mjs REPLACE (production run
+// 42412965676, 2026-11-07) and the pay to the order of tenant name endorsement-composite.mjs REPLACE (production run
+// 42698388215, 2026-11-09) record their applied bytes live: replays of the plan as it stood before them start from the
 // pre-apply live bytes (each planning manifest's live_sha256), naming that manifest.
 const RECORDED_2026_11_PRE = Object.freeze(Object.fromEntries([
   ...FEE_PULL_SAVEPOINTS_MEMBERS.map((name) => [name, FEE_PULL_SAVEPOINTS_REL]),
@@ -339,6 +345,7 @@ const RECORDED_2026_11_PRE = Object.freeze(Object.fromEntries([
   ['providers/webhooks.mjs', MOOV_WEBHOOK_RECEIPT_KEY_REL],
   ['scheduled.mjs', MOOV_STATUS_CATCH_UP_REL],
   [CATCH_UP_MEMBER, CATCH_UP_UPDATE_FIX_REL],
+  [ENDORSEMENT_MEMBER, ENDORSEMENT_PAY_TO_ORDER_REL],
 ].map(([name, rel]) => [name, { expected_live_sha256: JSON.parse(fs.readFileSync(path.join(ROOT, rel), 'utf8')).members[name].live_sha256, manifest: rel }])));
 const recorded2026_11Pre = (plan) => {
   for (const [name, pre] of Object.entries(RECORDED_2026_11_PRE)) plan.members[name] = { ...plan.members[name], ...pre };
@@ -7116,11 +7123,12 @@ test('Moov status catch-up update fix (SQL 146, 2026-11-07): providers/moov-stat
   assert.deepEqual(calls.receipt.owned_member_ops, { replace: [MEMBER], add: [] });
 });
 
-test('Pay to the order of tenant name (owner 2026-11-09): endorsement-composite.mjs REPLACE from the recorded live bytes, no SQL, planning only', async () => {
-  const MEMBER = 'endorsement-composite.mjs';
-  const REL = 'aws/tests/fixtures/production-endorsement-pay-to-order-tenant-name-manifest-2026-11-09.json';
+test('Pay to the order of tenant name (owner 2026-11-09): endorsement-composite.mjs REPLACE from the recorded live bytes, no SQL; production run 42698388215 applied it', async () => {
+  const MEMBER = ENDORSEMENT_MEMBER;
+  const REL = ENDORSEMENT_PAY_TO_ORDER_REL;
   const PREVIOUS = 'aws/tests/fixtures/production-release-lock-pin-manifest-2026-10-17.json';
   const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, REL), 'utf8'));
+  const applied = JSON.parse(fs.readFileSync(path.join(ROOT, ENDORSEMENT_PAY_TO_ORDER_APPLIED_REL), 'utf8'));
   const pre = JSON.parse(fs.readFileSync(path.join(ROOT, PREVIOUS), 'utf8')).members[MEMBER].accepted_sha256;
   const accepted = sha(`aws/functions/api/${MEMBER}`);
   assert.notEqual(accepted, pre);
@@ -7133,13 +7141,40 @@ test('Pay to the order of tenant name (owner 2026-11-09): endorsement-composite.
   for (const text of [evidence, 'Company Name in Company Profile', 'public.tenants.name', 'No SQL', 'Planning only']) {
     assert.ok(manifest.notes.includes(text), text);
   }
+  // Applied 2026-11-09: the record keeps the run evidence; the row expects the applied bytes and names it. The planning
+  // manifest keeps what it recorded.
+  assert.equal(applied.workstream_id, 'endorsement-pay-to-order-tenant-name-applied');
+  assert.equal(applied.deploy_authorized, false);
+  assert.match(applied.authorization, /^Record only \(2026-11-09\)/);
+  assert.equal(applied.live_lambda, FUNCTION_NAME);
+  assert.deepEqual(applied.members, { [MEMBER]: { live_sha256: accepted, accepted_sha256: accepted, operation: 'replace', previous_manifest: REL } });
+  assert.equal(accepted, '15e3f691c547b70da9790872944da67664649bce4b07a3265d020a52e6c6623b');
+  assert.equal(pre, '9fc79f57dbbbcba134fd8e0c7d7936415fd6c1c83f98fcf18bf50e73def25a80');
+  for (const runId of ['42697885552', '42698003156', '42698142494', '42698258472', '42698388215', '42698545198']) {
+    assert.match(applied.notes, new RegExp(`run ${runId}`), runId);
+    assert.match(PLAN.notes, new RegExp(runId), runId);
+  }
+  for (const evidence of ['"DEPLOY endorsement-composite.mjs TO PRODUCTION"', '"merge 1728"',
+    '902d0690e803f7ac721af93ba7d91ed1634611d7', 'job 129436265849', '6bd20885-4561-421f-8c0b-8b7ba18aa549', 'b0ccdd4a-6325-47d8-a8f7-e1766765980b',
+    '8179e535-6127-4016-96f3-2da63567f289', '86ea4ce1-5d49-461d-b83b-040c6191b0f7', 'f47608d3-b179-49c4-8997-e7155042f2be', 'c1320344-c6a0-417e-be21-9fd2fdf4f6de',
+    'Z7NVFUyRIkay+iCBRgH/fSx2HGv6KNRBu46LaZ9AW3c=', 'ydY9gzAljz9Zg4JfxHv3JCN5rMoEfFap0jFd9xZ3Sys=',
+    'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/42698003156', 'errors []', 'VERIFIED', 'ALREADY_ACCEPTED',
+    `${pre.slice(0, 8)} -> ${accepted.slice(0, 8)}`, 'No SQL']) {
+    assert.ok(applied.notes.includes(evidence), evidence);
+  }
+  assert.ok(PLAN.notes.includes('the endorsement-composite.mjs row expects the applied bytes and names the Pay to the order of tenant name applied record'));
   assert.deepEqual(PLAN.members[MEMBER], {
     operation: 'replace',
     accepted_sha256: accepted,
-    expected_live_sha256: pre,
+    expected_live_sha256: accepted,
     sql_before: null,
-    manifest: REL,
+    manifest: ENDORSEMENT_PAY_TO_ORDER_APPLIED_REL,
   });
+  // The plan as it stood before the apply (the recorded live bytes expected, the planning manifest named): the shared
+  // replay helper states exactly that.
+  const before = structuredClone(PLAN);
+  before.members[MEMBER] = { ...PLAN.members[MEMBER], expected_live_sha256: pre, manifest: REL };
+  assert.deepEqual(recorded2026_11Pre(structuredClone(PLAN)).members[MEMBER], before.members[MEMBER]);
   // No new module: the same local imports as the recorded live bytes.
   assert.deepEqual(localImports(fs.readFileSync(path.join(API, MEMBER), 'utf8'), MEMBER).sort(), [
     'providers/production/checkalt-eligibility.mjs',
@@ -7153,14 +7188,26 @@ test('Pay to the order of tenant name (owner 2026-11-09): endorsement-composite.
   const source = fs.readFileSync(path.join(API, MEMBER), 'utf8');
   assert.match(source, /export const resolveEndorsementCompanyName = /);
   assert.doesNotMatch(source, /'Freedom Adjustment'/);
-  // Inspect: READY on the recorded live bytes, ALREADY_ACCEPTED on main's, a reconciliation stop otherwise.
+  // Inspect: before the apply, READY on the recorded live bytes (production inspect run 42698258472, replayed on the
+  // pre-apply plan); now ALREADY_ACCEPTED on main's (re-inspect run 42698545198), and the pre-apply bytes, or anything
+  // else, a reconciliation stop.
   const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
-  const ready = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: pre }) });
+  const ready = await run(inspect, { root: ROOT, plan: before, inspectLive: liveFor(MEMBER, { sha256: pre, plan: before }) });
   assert.equal(ready.state, 'READY');
   assert.equal(ready.mutation, false);
   assert.equal((await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: accepted }) })).state, 'ALREADY_ACCEPTED');
-  await assert.rejects(
-    run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: 'c'.repeat(64) }) }),
-    (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
-  );
+  for (const other of [pre, 'c'.repeat(64)]) {
+    await assert.rejects(
+      run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: other }) }),
+      (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+      other,
+    );
+  }
+  // Apply replays start from the pre-apply plan (the shared replay helper): the expected live bytes are the pre-state.
+  assert.equal(applyEnv(MEMBER).CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256, pre);
+  const { deps, calls } = applyDeps(MEMBER);
+  assert.equal(deps.plan.members[MEMBER].expected_live_sha256, pre);
+  const replay = await run(applyEnv(MEMBER), deps);
+  assert.equal(replay.mutation, false);
+  assert.deepEqual(calls.receipt.owned_member_ops, { replace: [MEMBER], add: [] });
 });
