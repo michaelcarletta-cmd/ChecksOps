@@ -202,7 +202,7 @@ test('order: no predecessor; the one new DEFINER function, its prerequisites and
   const runbook = fs.readFileSync(path.join(ROOT, COMMITTED.tooling.runbook), 'utf8');
   assert.ok(runbook.includes(COMMITTED.intended_replacement_sha256));
   assert.ok(runbook.includes(COMMITTED.source_sha256));
-  assert.match(runbook, /\*\*Status:\*\* not applied anywhere/);
+  assert.match(runbook, /\*\*Status:\*\* staging pin execute-authorized \(wave 42\); not applied anywhere\./);
   assert.match(runbook, /\*\*Predecessor\.\*\* None/);
   assert.match(runbook, /Owner\s+2026-11-09: "apply SQL 147 in\s+staging"/);
   for (const evidence of ['FINANCIAL_OR_PROVIDER_TABLES', 'table_not_allowlisted', 'external-disbursement.mjs', '#1729']) {

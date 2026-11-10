@@ -4,8 +4,9 @@
  * release-sql90-97-executor.test.mjs runs what every release key shares (SQL 147 included); this file covers what is
  * new:
  *
- *   - the pin: pending, code-derived, selectable, packed, in step with the production pin (pending too); the pinned
- *     commit authored the bytes; no predecessor; nothing supersedes or names it;
+ *   - the pin: staging-authorized (wave 42) from staging read-live run 42833250784, code-derived, selectable, packed,
+ *     in step with the production pin (pending); the pinned commit authored the bytes; no predecessor; nothing
+ *     supersedes or names it;
  *   - the file and spec: one new DEFINER function, aws_record_external_disbursement(uuid, uuid, jsonb, text): plpgsql,
  *     VOLATILE, SECURITY DEFINER, search_path public, pg_temp, RETURNS jsonb; the member gate, the input checks, the
  *     check lock (FOR UPDATE), the idempotency key, the amount available and its two INSERTs (the batch and the
@@ -144,7 +145,7 @@ function handlerFor(connect, { pins = {} } = {}) {
   return createHandler({ connect, now: () => Date.parse(NOW), releaseSqlFiles: FILES, releaseSqlPins: { ...PINS, ...pins } });
 }
 
-test('pin: SQL 147 pending, code-derived, selectable, packed, in step with the production pin; no predecessor; nothing names it', () => {
+test('pin: SQL 147 staging-authorized from its read-live, code-derived, selectable, packed, in step with the production pin; no predecessor; nothing names it', () => {
   const pin = PINS[KEY];
   const spec = RELEASE_SQL_SPECS[KEY];
   const packed = Object.fromEntries(EXECUTOR_PACK_MEMBERS);
@@ -155,11 +156,13 @@ test('pin: SQL 147 pending, code-derived, selectable, packed, in step with the p
   assert.equal(spec.choice, 'sql147-external-disbursement-record');
   assert.doesNotMatch(spec.choice, /production/);
   assert.equal(sha(TEXT), pin.source_sha256);
-  // Pending: no staging read-live recorded yet (and no apply authorized).
+  // Staging apply authorized (owner approved 2026-11-10, "record the SQL 147 staging pin") from staging read-live
+  // run 42833250784: already_applied false, precondition_failures []. It read the derived pre-state.
   assertStagingPinState(assert, KEY, pin);
-  assert.equal(pin.execute, false);
-  assert.equal(pin.authorization, 'pending');
-  assert.equal(pin.expected_live_definition_sha256, null);
+  assert.equal(pin.execute, true);
+  assert.equal(pin.authorization, 'Owner approved 2026-11-10: staging apply (wave 42) from staging read-live run 42833250784');
+  assert.equal(pin.expected_live_definition_sha256, ABSENT_PRE);
+  assert.notEqual(pin.expected_live_definition_sha256, pin.intended_replacement_sha256);
   assert.equal(releaseIntendedHash(KEY, TEXT), pin.intended_replacement_sha256);
   // The pre-state (the function absent) has a fingerprint of its own, and renders as absent.
   assert.notEqual(ABSENT_PRE, pin.intended_replacement_sha256);
@@ -169,6 +172,9 @@ test('pin: SQL 147 pending, code-derived, selectable, packed, in step with the p
   // The runbook and the production pin name the expected pre-state (derived here) and the intended fingerprint.
   const runbook = fs.readFileSync(path.join(ROOT, 'ops/production-sql-147-apply.md'), 'utf8');
   assert.ok(runbook.includes(ABSENT_PRE));
+  assert.match(runbook, /\*\*Status:\*\* staging pin execute-authorized \(wave 42\); not applied anywhere\. The production pin is pending\./);
+  assert.match(runbook, /read-live \(2026-11-10\)\.\*\* Run 42833250784/);
+  assert.ok(runbook.includes(pin.expected_live_definition_sha256));
   assert.ok(runbook.includes(pin.intended_replacement_sha256));
   assert.ok(runbook.includes(pin.source_sha256));
   const defs = releaseFunctionDefinitions(TEXT);
@@ -405,7 +411,7 @@ test('PostgreSQL 16: SQL 147 through the executor: the pre-state as derived; ref
     assert.deepEqual((await inspect()).precondition_failures, []);
     assert.equal(await present(), false);
 
-    // A pending pin cannot apply (the committed pin is pending; pend a copy with the pre-state recorded).
+    // A pending pin cannot apply (pend a copy of the committed pin, the pre-state kept recorded).
     const pendingCopy = Object.freeze({ ...pendingPin(PINS[KEY]), expected_live_definition_sha256: ABSENT_PRE });
     const pending = await handlerFor(connect, { pins: { [KEY]: pendingCopy } })(releaseEvent({ pin: pendingCopy }));
     assert.equal(pending.ok, false);

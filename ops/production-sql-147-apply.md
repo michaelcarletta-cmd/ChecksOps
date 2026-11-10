@@ -48,7 +48,21 @@ function. Until SQL 147 is applied in an environment, the API route there fails 
 **Predecessor.** None in the release engine. SQL 90 must be applied first (its membership-only
 `aws_can_write_tenant(uuid)` is a prerequisite; applied in production).
 
-**Status:** not applied anywhere. The staging pin and the production pin are pending.
+**Staging executor refreshed (2026-11-10).** Deploy run 42830157593 updated
+`checksops-staging-guarded-sql-executor` to carry SQL 147 (inspect run 42829753443 read CodeSha256
+`lrvFKRHsbRwmEfAW0kgwr0rKEKOz7pp0MvZCVE7IVXo=` before it, inspect run 42832878488
+`OWSm2d7xoqibFq0w5dGyZyWjT3+7P/g2slu9kEhp35E=` after it).
+
+**Staging read-live (2026-11-10).** Run 42833250784 (job 129888573290, main `3fe023b75`, after executor deploy
+run 42830157593): `already_applied` false, `precondition_failures` `[]`, `prerequisites_missing` `[]`,
+`definer_writes` all six `ok true`. Live `a60b06089007f083007ac7b24ae41cdd1cd33b0cbd04c63985c09faa9b666286`: the
+function absent, everything else in place, equal to the derived pre-state; intended `8080fbd7…`. Recorded in the
+staging pin (`expected_live_definition_sha256`, `execute: true`, wave 42) under the owner's words of 2026-11-10,
+"record the SQL 147 staging pin". The staging apply is a separate run after this pin is merged and the executor is
+redeployed carrying it, on the owner's words for that run, "apply SQL 147 in staging". The production pin stays
+pending: a read-only production inspect decides production's pre-state.
+
+**Status:** staging pin execute-authorized (wave 42); not applied anywhere. The production pin is pending.
 
 ## Fingerprint
 
