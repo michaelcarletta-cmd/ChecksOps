@@ -1,0 +1,21 @@
+{
+  "workstream_id": "mortgage-desk-send-allowlist",
+  "authorization": "Pending owner review (2026-11-10). Planning only: nothing is live or verified. Each production apply needs its own owner approval, a staging acceptance reference and a read-only production inspect that confirms the live bytes.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Owner 2026-11-10: \"MortgageOps needs fixing. When sending a check to the Mortgage Desk, when I click that button i received an error, could not create request, column-not_allowlisted\". REPLACE write-allowlist.mjs 3f9259d2 -> 8c2a6886: mortgage_handling_requests allowlists the Send to Mortgage Desk columns policy_number, loss_type, date_of_loss, homeowner_ssn_last_four, endorsement_order, total_mortgagees, predecessor_request_id (they were refused with 403 column_not_allowlisted). REPLACE write-check-workflow.mjs e1227c96 -> e11a5a0e: the mortgage_handling_requests insert writes them with validation (date_of_loss a calendar date, homeowner_ssn_last_four exactly 4 digits and never logged, endorsement_order/total_mortgagees integers 1..2 with order <= total, predecessor_request_id a request of the same tenant and check) and also writes the already-allowlisted property_address, claim_number, insurance_company, homeowner_name, homeowner_email, homeowner_phone that the insert used to drop; tenant_id, requested_by and claim_id stay server-derived. The seven columns are insert-only: an update naming them is refused (the 2nd-mortgagee backfill of order/total on the first request stays refused; no tenant UPDATE policy or column grant is live per SQL 100). live_sha256 values are the recorded applied values (write-allowlist.mjs: mortgage company delete applied record 2026-11-05; write-check-workflow.mjs: stakeholder settings edit applied record 2026-10-25); not re-read for this manifest: a read-only production inspect must confirm them before any apply. No new import; order unchanged. No SQL: the columns exist (Supabase migrations 20260715194054, 20260715200935, 20260716193831, carried by the database copy). Planning only.",
+  "members": {
+    "write-allowlist.mjs": {
+      "live_sha256": "3f9259d275761d0fc08b0b07ae17c23e8f733c0c7661877d9c06aed7da147904",
+      "accepted_sha256": "8c2a688652feec4bb97eb7032a0f5d3b6a1661a4d8e99c73f255ed6161a80e21",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-mortgage-company-delete-applied-manifest-2026-11-05.json"
+    },
+    "write-check-workflow.mjs": {
+      "live_sha256": "e1227c967906496519db1fe9c996514c03ca04a79378ff77e93b92ecf470544a",
+      "accepted_sha256": "e11a5a0ec86b43f67c320e8ec6ec09d4ca7e9c0392e2529b8a39d8574bc4ff78",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-stakeholder-settings-edit-applied-manifest-2026-10-25.json"
+    }
+  }
+}
