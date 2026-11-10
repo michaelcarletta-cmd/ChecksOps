@@ -73,8 +73,11 @@ const WORKFLOW = read('.github/workflows/guarded-production-spa-fallback.yml');
 const STAGING_REFERENCE = 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/42000000001';
 const PAGE_PATHS = MARKETING_PAGES.filter((page) => page.path !== '/').map((page) => page.path);
 // Every path the build writes as its own S3 key and the function passes through: the retired
-// paths (a copy of the home page, so the guarded upload overwrites the old object) then the pages.
-const SERVED_PATHS = [...RETIRED_MARKETING_PATHS, ...PAGE_PATHS];
+// paths (a copy of the home page, so the guarded upload overwrites the old object) and the pages.
+// A retired page keeps its place in the function's allowlist (retiring one changes no deployed
+// bytes), so the order is the function's; the set must be exactly the retired paths plus the pages.
+const SERVED_PATHS = [...MARKETING_PATHS];
+const BUILD_PATHS = [...RETIRED_MARKETING_PATHS, ...PAGE_PATHS];
 const LIVE_COMMENT = 'SPA deep-link fallback for S3 default behavior only. Does not run on /prep.';
 // The code LIVE before this tool: aws/cloudfront/spa-fallback.js as Step 1 (commit 2ba5c6fc1) uploaded it.
 const BASELINE_SHA256 = '0cf839198b024b943b2834e6de414e2d0deea59d88c23373886561575f9269a1';
@@ -199,6 +202,8 @@ const rewrite = (code, uri) => functionContext(code).handler({ request: { method
 test('the function allowlist is exactly every MARKETING_PAGES path but "/" plus the retired paths, and the writer, the role and the sessions agree', () => {
   const allowlist = Object.keys(functionContext(CURRENT).MARKETING_PAGES);
   assert.deepEqual(allowlist, SERVED_PATHS);
+  assert.equal(new Set(BUILD_PATHS).size, BUILD_PATHS.length);
+  assert.deepEqual([...SERVED_PATHS].sort(), [...BUILD_PATHS].sort());
   assert.ok(Object.values(functionContext(CURRENT).MARKETING_PAGES).every((value) => value === true));
   assert.deepEqual([...MARKETING_PATHS], SERVED_PATHS);
   assert.deepEqual([...MARKETING_KEYS], SERVED_PATHS.map(staticPageKey));

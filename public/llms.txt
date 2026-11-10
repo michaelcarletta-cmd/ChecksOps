@@ -10,7 +10,5 @@ Contact: support@checksops.com
 
 - [Home](https://checksops.com/): capabilities, five-stage workflow (upload, review, endorse, deposit, monitor), partner sharing, money movement, security, demo request
 - [ChecksOps vs iink Payments](https://checksops.com/vs/checksops-vs-iink-payments): side-by-side comparison
-- [ChecksOps vs Snapsheet](https://checksops.com/vs/checksops-vs-snapsheet): Snapsheet is a claims system for carriers; ChecksOps is for the public adjusting firm that receives the check
-- [ChecksOps vs Guidewire ClaimCenter](https://checksops.com/vs/checksops-vs-guidewire-claimcenter): ClaimCenter runs an insurer's core claims operations; ChecksOps is for the public adjusting firm that receives the check
 - [Claim check tracking](https://checksops.com/claim-check-tracking): claim check and loss draft tracking for public adjusting firms
 - [Blog](https://checksops.com/blog): articles on claim check workflow for public adjusting firms

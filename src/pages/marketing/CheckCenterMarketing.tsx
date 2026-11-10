@@ -871,7 +871,7 @@ export default function CheckCenterMarketing() {
             <p className="text-xs text-muted-foreground">
               © {new Date().getFullYear()} ChecksOps. All rights reserved.
             </p>
-            <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-xs text-muted-foreground [&>a]:inline-flex [&>a]:items-center [&>a]:min-h-[44px] sm:[&>a]:min-h-0">
+            <div className="grid w-full max-w-sm grid-cols-2 gap-x-6 text-left [&>a]:flex [&>a]:items-center [&>a]:min-h-[44px] sm:flex sm:w-auto sm:max-w-none sm:flex-wrap sm:items-center sm:justify-center sm:gap-x-4 sm:gap-y-2 sm:[&>a]:min-h-0 text-xs text-muted-foreground">
               <a href={`mailto:${supportEmail}`} className="hover:text-foreground">Support</a>
               <FounderFooterLink />
               <Link to="/login" className="hover:text-foreground">Sign in</Link>
