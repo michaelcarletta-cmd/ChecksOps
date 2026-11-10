@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { CheckOpsLogo } from "@/components/marketing/CheckOpsLogo";
 import { MarketingMenuButton, MarketingMobileMenu } from "@/components/marketing/MarketingMobileMenu";
 import { COMPARISON_LINKS } from "@/pages/marketing/marketingPages";
+import { useNavItemsWithBlog } from "@/hooks/useBlogArticles";
 
 const NAV_ITEMS = [
   { label: "Capabilities", href: "/#capabilities" },
@@ -13,7 +14,7 @@ const NAV_ITEMS = [
 ];
 
 /**
- * Header and footer for the secondary marketing pages (/vs/..., /claim-check-tracking).
+ * Header and footer for the secondary marketing pages (/vs/..., /claim-check-tracking, /blog).
  * Same nav, mobile menu and footer links as the iink comparison page.
  */
 export function MarketingPageShell({
@@ -26,6 +27,7 @@ export function MarketingPageShell({
   children: ReactNode;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const navItems = useNavItemsWithBlog(NAV_ITEMS);
   return (
     <div className="min-h-screen max-w-full overflow-x-hidden bg-background text-foreground">
       <header className="sticky top-0 z-50 border-b border-border/40 bg-background/80 backdrop-blur-xl">
@@ -34,7 +36,7 @@ export function MarketingPageShell({
             <CheckOpsLogo className="text-foreground h-9 sm:h-10" />
           </Link>
           <nav className="hidden md:flex items-center gap-6 text-sm text-muted-foreground">
-            {NAV_ITEMS.map((item) => (
+            {navItems.map((item) => (
               <Link key={item.href} to={item.href} className="hover:text-foreground transition-colors">{item.label}</Link>
             ))}
           </nav>
@@ -48,7 +50,7 @@ export function MarketingPageShell({
             <MarketingMenuButton open={menuOpen} onToggle={() => setMenuOpen(!menuOpen)} />
           </div>
         </div>
-        <MarketingMobileMenu open={menuOpen} onClose={() => setMenuOpen(false)} items={NAV_ITEMS} demoHref="/#demo" />
+        <MarketingMobileMenu open={menuOpen} onClose={() => setMenuOpen(false)} items={navItems} demoHref="/#demo" />
       </header>
 
       {children}
