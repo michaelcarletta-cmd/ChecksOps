@@ -5,7 +5,7 @@
  * new:
  *
  *   - the pin: staging-authorized (wave 42) from staging read-live run 42833250784, code-derived, selectable, packed,
- *     in step with the production pin (execute true on production's own pre-state, the same one staging had); the
+ *     in step with the production pin (applied 2026-11-10 and retired, from production's own pre-state, the same one staging had); the
  *     pinned commit authored the bytes; no predecessor; nothing supersedes or names it;
  *   - the file and spec: one new DEFINER function, aws_record_external_disbursement(uuid, uuid, jsonb, text): plpgsql,
  *     VOLATILE, SECURITY DEFINER, search_path public, pg_temp, RETURNS jsonb; the member gate, the input checks, the
@@ -172,7 +172,7 @@ test('pin: SQL 147 staging-authorized from its read-live, code-derived, selectab
   // The runbook and the production pin name the expected pre-state (derived here) and the intended fingerprint.
   const runbook = fs.readFileSync(path.join(ROOT, 'ops/production-sql-147-apply.md'), 'utf8');
   assert.ok(runbook.includes(ABSENT_PRE));
-  assert.match(runbook, /\*\*Status:\*\* applied in staging \(wave 42, 2026-11-10\); staging acceptance: owner \("SQL 147 accepted in staging"\); production pin execute-authorized; not applied to production/);
+  assert.match(runbook, /\*\*Status:\*\* applied to staging \(wave 42\) and to production \(2026-11-10\); the production pin is retired/);
   assert.match(runbook, /read-live \(2026-11-10\)\.\*\* Run 42833250784/);
   assert.ok(runbook.includes(pin.expected_live_definition_sha256));
   assert.ok(runbook.includes(pin.intended_replacement_sha256));
@@ -206,11 +206,15 @@ test('pin: SQL 147 staging-authorized from its read-live, code-derived, selectab
   assert.equal(prod.source_sha256, pin.source_sha256);
   assert.deepEqual(prod.function_identities, [...IDENTITIES]);
   assert.deepEqual(prod.predecessors, []);
-  // Production pin execute-authorized (owner-approved pin change of 2026-11-10) on the staging apply. Its pre-state is
-  // production's own (read-only inspect SSM ea4ffd03), the derived one (the function absent), the same pre-state
-  // staging recorded (read-live run 42833250784).
-  assert.equal(prod.execute, true);
-  assert.match(prod.authorization, /^Owner approved 2026-11-10 /);
+  // Production pin applied 2026-11-10 and retired (owner-approved pin change of 2026-11-10, #1736, on the staging apply).
+  // Its pre-state is production's own (read-only inspect SSM ea4ffd03), the derived one (the function absent), the
+  // same pre-state staging recorded (read-live run 42833250784).
+  assert.equal(prod.execute, false);
+  assert.match(prod.authorization, /^Applied to production on 2026-11-10; execute is false again/);
+  assert.equal(prod.applied.result, 'applied');
+  assert.equal(prod.applied.receipt.before_hash, prod.expected_live_definition_sha256);
+  assert.equal(prod.applied.receipt.after_hash, prod.intended_replacement_sha256);
+  assert.equal(prod.applied.post_apply_inspect.already_applied, true);
   assert.equal(prod.expected_live_definition_sha256, prod.production_inspect.live_definition_sha256);
   assert.equal(prod.expected_live_definition_sha256, pin.expected_live_definition_sha256);
   assert.equal(prod.expected_live_definition_sha256, ABSENT_PRE);

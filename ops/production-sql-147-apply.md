@@ -98,7 +98,33 @@ pin"; the owner's words so far name the staging steps, the staging acceptance, t
 production apply. The owner merges the pin change; the apply still needs the owner's words for that run ("apply SQL
 147 in production") and runs only after that merge is on main and staged.
 
-**Status:** applied in staging (wave 42, 2026-11-10); staging acceptance: owner ("SQL 147 accepted in staging"); production pin execute-authorized; not applied to production
+**Production apply (2026-11-10).** After the pin change (#1736, on the staging acceptance of apply run 42838778413,
+"SQL 147 accepted in staging"; merged to main as `c80bfff4b` on the owner's words "merge it when green"), transfer
+run 42851941315 staged main `c80bfff4b` (tarball sha256
+`205c6e9d19155f7344daef9ddd65743a1eeb2a5e64ae89ede3b6f831ca540d27`). Under the owner's words
+"apply SQL 147 in production" (passed verbatim), a one-shot `--phase inspect` (SSM
+`d9e9595d-13df-4d7c-be50-00f16d2f1a99`, run `1504752a-f2e8-4dec-9576-e13ff77127b0`, nothing written) read live
+`a60b0608…` (the pinned pre-state, `live_matches_expected` true, `apply_preconditions_met` true,
+`precondition_failures` `[]`, the function absent, `definer_writes` ok on all six relations);
+then one-shot `--phase apply` run `0ca1d312-a5a4-4671-a1fa-cda94a5f8c53` through SSM
+`746d8c0b-fa12-484a-bcc5-fc00260d55d1`, workstream `prod-sql147-external-disbursement-record-20261110`,
+one_use_id `sql147-prod-f6fa5c00-7940-4534-8cc4-00b942e6841a`: its own inspect step read the same pre-state; contracts
+4/4, 6/6 and 43/43; all 11 steps ok; manifest `9020b9b4…`; receipt `a60b0608…` →
+`8080fbd7c4c24ed07251584b47b6507b0ee07095645c73c3cded7f12f3acd499` (intended), result `applied`, unrelated
+catalog `c4608194…` (policies 479, functions 1363); post-apply inspect `already_applied` true,
+`precondition_failures` `[]`: the function `aws_record_external_disbursement(uuid, uuid, jsonb, text)` `intended`, its
+EXECUTE ACL `checksops` and the owner, `definer_writes` ok on all six relations, `counts` null, `prerequisites_missing`
+`[]`. The run's JSON arrived whole (21882 characters of SSM output, under the 24000-character limit; read back
+read-only from SSM get-command-invocation). The runner `i-0c35557c4e5385406` was started for this work at 16:12:08Z
+and stopped at 16:13:02Z. The API change that calls the function (`external-disbursement.mjs`, ADD `344f8d95…`, then
+the `app-services.mjs` REPLACE that routes `record-external-disbursement` to it) is not part of this pin and is not
+deployed by this record: the overlay plan now records SQL 147 verified live, so that member's guarded production apply
+passes its SQL gate, and it still needs its own read-only inspect and the owner's words
+"DEPLOY external-disbursement.mjs TO PRODUCTION". Production acceptance had not been reported by the owner
+when this record was written; this record does not claim it.
+
+**Status:** applied to staging (wave 42) and to production (2026-11-10); the production pin is retired
+(`execute: false`).
 
 ## Fingerprint
 
