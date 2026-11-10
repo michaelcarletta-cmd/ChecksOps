@@ -1,0 +1,15 @@
+{
+  "workstream_id": "external-disbursement-router-reconciled",
+  "authorization": "Pending owner review (2026-11-10). Planning only: nothing is live or verified. Each production apply needs its own owner approval, a staging acceptance reference and a read-only production inspect that confirms the live bytes.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "External disbursement router, reconciled pre-state (2026-11-10; owner \"DEPLOY app-services.mjs TO PRODUCTION\", then \"build the demo-request reconciliation record\"). The external disbursement record (#1729, production-external-disbursement-manifest-2026-11-09.json) planned REPLACE app-services.mjs e63cfe2d -> 8b91a644 from the pre-state the plan recorded. Read-only production inspect run 42849448973 (job 129945753304, main a402a17b72b72c3df91a5f24bf412cc5bb35a0d1) stopped with SOURCE_RECONCILIATION_REQUIRED: expected_live e63cfe2d, actual_live 1cb62ccc. 1cb62ccc is the public demo request router bytes production apply run 42105010522 put live on 2026-11-05 (VERIFIED), recorded by production-public-demo-request-applied-manifest-2026-11-05.json. This manifest restates the same REPLACE from those reconciled bytes: 1cb62ccc -> 8b91a644 (main's app-services.mjs, which keeps the demo-request route and adds record-external-disbursement). Its apply still needs external-disbursement.mjs live first (an import of the new bytes, and earlier in plan order), and that ADD is held on SQL 147 (sql_before). index.mjs is untouched. No SQL in this member. production-external-disbursement-manifest-2026-11-09.json keeps what it recorded, and still plans the external-disbursement.mjs ADD. Planning only.",
+  "members": {
+    "app-services.mjs": {
+      "live_sha256": "1cb62cccf0c2fe96d47eeef04fc6b7d43ef1cfef137b94a76370991e7ce6b607",
+      "accepted_sha256": "8b91a6444e8b05c7fc5fec9b4d1883b4e042f6c0efeb045f777c934223b22199",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-public-demo-request-applied-manifest-2026-11-05.json"
+    }
+  }
+}
