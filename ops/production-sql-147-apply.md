@@ -62,7 +62,43 @@ staging pin (`expected_live_definition_sha256`, `execute: true`, wave 42) under 
 redeployed carrying it, on the owner's words for that run, "apply SQL 147 in staging". The production pin stays
 pending: a read-only production inspect decides production's pre-state.
 
-**Status:** staging pin execute-authorized (wave 42); not applied anywhere. The production pin is pending.
+**Staging executor refreshed for the pin (2026-11-10).** The staging pin (wave 42, PR #1735) merged as
+`a402a17b72b72c3df91a5f24bf412cc5bb35a0d1`. Inspect run 42836957391 (main `a402a17b7`) found the live executor at
+`OWSm2d7xoqibFq0w5dGyZyWjT3+7P/g2slu9kEhp35E=`. Deploy run 42837424211 (`expected_executor_code_sha256`
+`OWSm2d7x…` matched) updated `checksops-staging-guarded-sql-executor`; inspect run 42837957738 read it at
+`TWeOpTCGp4xsaakiGe65SIpa5fpL3ursGTvwHTyZJdM=`. Read-live run 42838391624 (executor `TWeOpTCG…`): `already_applied`
+false, `precondition_failures` `[]`, live `a60b0608…`, equal to the pin.
+
+**Staging apply (2026-11-10).** Apply run 42838778413 (job 129908026101, 2026-11-10T14:56:22Z, main `a402a17b7`,
+workstream `github-staging-sql-42838778413`, pin commit `8898fa5c6`, `expected_live_definition_sha256`
+`a60b06089007f083007ac7b24ae41cdd1cd33b0cbd04c63985c09faa9b666286`) under the owner's words "apply SQL 147 in
+staging": success. The receipt prints `result` `applied`, `before_hash` `a60b0608…`, `after_hash`
+`8080fbd7c4c24ed07251584b47b6507b0ee07095645c73c3cded7f12f3acd499`; the function in state `intended`, its EXECUTE
+ACL `checksops` and the owner, `definer_writes` ok on all six relations, `prerequisites_missing` `[]`.
+Read-live run 42839223253 (job 129909612430, executor `TWeOpTCG…`): `already_applied` true, `live_definition_sha256`
+`8080fbd7…` equal to the intended hash, `precondition_failures` `[]`. Staging acceptance: the owner on 2026-11-10, "SQL 147
+accepted in staging". There is no separate staging record PR for SQL 147: these staging runs are recorded here and in
+the production pin's `staging_acceptance` by the production pin PR. The staging pin keeps `execute: true`. The API
+change that calls the function (`external-disbursement.mjs`) and the SPA change are not part of this pin.
+
+**Production inspect (2026-11-10).** Read-only `--inspect` through SSM
+`ea4ffd03-2f1d-4e05-9439-793653e554b1` on `i-0c35557c4e5385406` (under the owner's words "run the read-only SQL 147
+production inspect"; command sent 14:26:52Z, Success 14:27:02Z, runner stopped 14:27:34Z), main `3fe023b75` (tarball
+sha256 `a82f5980c33dad76b413b3365b8914da4ae81178fa587c26daf0e3bf81e3ddf3`, staged by `sql53-temporary-transfer.yml`
+run 42833917486, migration source `d503b5b6…` == pin), `read_only` true: live
+`a60b06089007f083007ac7b24ae41cdd1cd33b0cbd04c63985c09faa9b666286` (the function absent, the derived pre-state),
+`already_applied` false, `live_matches_expected` false, `precondition_failures` `[]`, `apply_preconditions_met`
+false, `errors` `[]`. `precondition_failures` `[]` means every production precondition passed: the pinned
+`checksops_admin` login, `prerequisites_present` (`prerequisites_missing` `[]`), `predecessors_applied`,
+`successors_not_applied` and `definer_can_write_relations` on all six relations. Production's pre-state equals
+staging's (read-live runs 42833250784 and 42838391624), so the staging apply took the path production will
+(`aws/tests/sql147-external-disbursement-pg.test.mjs`). Recorded in the production pin with the staging apply (run
+42838778413) as its staging acceptance and `execute: true` under the owner's words "record the SQL 147 production
+pin"; the owner's words so far name the staging steps, the staging acceptance, the inspect and this pin, not the
+production apply. The owner merges the pin change; the apply still needs the owner's words for that run ("apply SQL
+147 in production") and runs only after that merge is on main and staged.
+
+**Status:** applied in staging (wave 42, 2026-11-10); staging acceptance: owner ("SQL 147 accepted in staging"); production pin execute-authorized; not applied to production
 
 ## Fingerprint
 
