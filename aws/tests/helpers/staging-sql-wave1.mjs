@@ -216,6 +216,11 @@ export const STAGING_WAVE1 = Object.freeze({
   // main 73610863c after the executor carried it (deploy run 42402669624): already_applied false,
   // precondition_failures [], both functions absent. Equal to the derived pre-state.
   sql146: Object.freeze({ wave: 41, approved: '2026-11-07', run: '42403055167', live: '1ef789645da5ce865cbb095bea1eff6775a4bedc87251e8152f41a771e659c40' }),
+  // Wave 42 (owner approved 2026-11-10, "record the SQL 147 staging pin"): SQL 147, a payment made outside ChecksOps is
+  // recorded as a completed batch and settled external_check splits (aws_record_external_disbursement). Read at main
+  // 3fe023b75 after the executor carried it (deploy run 42830157593): already_applied false,
+  // precondition_failures [], the function absent. Equal to the derived pre-state.
+  sql147: Object.freeze({ wave: 42, approved: '2026-11-10', run: '42833250784', live: 'a60b06089007f083007ac7b24ae41cdd1cd33b0cbd04c63985c09faa9b666286' }),
   sql98: Object.freeze({ wave: 3, approved: '2026-10-18', run: '39083278136', live: '296c3d6a274e10f66005fb9eaecf93fa17b81bd8db3607037ca07698fddd3275', apply_run: '39085677318' }),
 });
 
@@ -227,7 +232,7 @@ export const pendingPin = (pin) => Object.freeze({
 });
 
 /**
- * The committed staging pin's apply state: waves 1-41 recorded and approved, wave 6 approved with
+ * The committed staging pin's apply state: waves 1-42 recorded and approved, wave 6 approved with
  * its read-live still to record (pending until then), wave 18 (SQL 117) retired, SQL 129 retired
  * before any read-live was recorded, the rest pending.
  */

@@ -3362,8 +3362,9 @@ export const AUTHORIZED_SQL146_MOOV_STATUS_CATCH_UP_WRITES = Object.freeze({
 // text) writes one completed batch and one settled external_check split per payee in one transaction, only for a
 // member of the tenant (SQL 90's aws_can_write_tenant), the check locked FOR UPDATE, idempotent by key and never
 // above the amount still available; EXECUTE for checksops and the owner. No predecessor (SQL 90's
-// aws_can_write_tenant(uuid) is a prerequisite). Pending until a reviewed pin change records a staging read-live
-// (expected: the function absent, everything else in place).
+// aws_can_write_tenant(uuid) is a prerequisite). Staging apply authorized (wave 42) from staging read-live run
+// 42833250784: the pre-state, the function absent and everything else in place, equals the derived one
+// (ops/production-sql-147-apply.md).
 export const AUTHORIZED_SQL147_EXTERNAL_DISBURSEMENT_RECORD = Object.freeze({
   key: 'sql147',
   filename: 'aws/workflows/sql/147_external_disbursement_record.sql',
@@ -3371,9 +3372,11 @@ export const AUTHORIZED_SQL147_EXTERNAL_DISBURSEMENT_RECORD = Object.freeze({
   // The commit that last authored the file bytes.
   commit: '8898fa5c63516d125d1742528616893b1540c9c4',
   source_sha256: 'd503b5b6cc1e92b727dee5a6a47f754a4bda864e831d6b47b1d21f082f2f4c4f',
-  authorization: 'pending',
-  execute: false,
-  expected_live_definition_sha256: null,
+  authorization: 'Owner approved 2026-11-10: staging apply (wave 42) from staging read-live run 42833250784',
+  execute: true,
+  // Staging read-live run 42833250784 (main 3fe023b75, executor deploy run 42830157593): already_applied false,
+  // precondition_failures []. Equal to the derived pre-state (the function absent).
+  expected_live_definition_sha256: 'a60b06089007f083007ac7b24ae41cdd1cd33b0cbd04c63985c09faa9b666286',
   // Code-derived: releaseIntendedHash('sql147', file bytes) (release-sql-state.mjs); re-derived by the tests.
   intended_replacement_sha256: '8080fbd7c4c24ed07251584b47b6507b0ee07095645c73c3cded7f12f3acd499',
   function_identities: Object.freeze([
