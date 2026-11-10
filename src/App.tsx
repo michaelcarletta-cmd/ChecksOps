@@ -28,12 +28,6 @@ const PaymentDirectionPage = lazy(() => import("./pages/PaymentDirectionPage"));
 const WhiteLabelApp = lazy(() => import("./pages/WhiteLabelApp"));
 const CheckOpsLanding = lazy(() => import("./pages/checkops/CheckOpsLanding"));
 const ChecksOpsVsIink = lazy(() => import("./pages/marketing/ChecksOpsVsIink"));
-const ChecksOpsVsSnapsheet = lazy(() =>
-  import("./pages/marketing/ChecksOpsVsCarrierPlatform").then((m) => ({ default: m.ChecksOpsVsSnapsheet })),
-);
-const ChecksOpsVsGuidewire = lazy(() =>
-  import("./pages/marketing/ChecksOpsVsCarrierPlatform").then((m) => ({ default: m.ChecksOpsVsGuidewire })),
-);
 const ClaimCheckTracking = lazy(() => import("./pages/marketing/ClaimCheckTracking"));
 const MarketingAbout = lazy(() => import("./pages/marketing/MarketingAbout"));
 const BlogIndex = lazy(() => import("./pages/marketing/BlogIndex"));
@@ -123,8 +117,9 @@ function CheckOpsRoutes() {
       {/* Public pricing retired 2026-11-09 (owner): old /pricing links land on the home page. */}
       <Route path="/pricing" element={<Navigate to="/" replace />} />
       <Route path="/vs/checksops-vs-iink-payments" element={<Suspense fallback={<PageLoader />}><ChecksOpsVsIink /></Suspense>} />
-      <Route path="/vs/checksops-vs-snapsheet" element={<Suspense fallback={<PageLoader />}><ChecksOpsVsSnapsheet /></Suspense>} />
-      <Route path="/vs/checksops-vs-guidewire-claimcenter" element={<Suspense fallback={<PageLoader />}><ChecksOpsVsGuidewire /></Suspense>} />
+      {/* Carrier-system comparisons retired 2026-11-10 (owner): old links land on the home page. */}
+      <Route path="/vs/checksops-vs-snapsheet" element={<Navigate to="/" replace />} />
+      <Route path="/vs/checksops-vs-guidewire-claimcenter" element={<Navigate to="/" replace />} />
       <Route path="/claim-check-tracking" element={<Suspense fallback={<PageLoader />}><ClaimCheckTracking /></Suspense>} />
       {/* /about shows the founder page once marketingProof.ts FOUNDER is filled in, and sends
           visitors home until then. Paths people guess (/customers, /features) go home instead of
