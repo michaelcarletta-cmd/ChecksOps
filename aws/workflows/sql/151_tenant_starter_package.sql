@@ -1,4 +1,4 @@
--- AWS: the optional Starter Package (SQL 150).
+-- AWS: the optional Starter Package (SQL 151).
 -- Forward migration on top of SQL 102 (the tenants column guard), SQL 120 and SQL 149 (the usage
 -- events). AWS only: nothing under supabase/migrations changes.
 --
@@ -41,7 +41,7 @@
 -- 7) The tenants column guard (SQL 102's, replaced here): SQL 102's body unchanged except that the
 --    platform owner may also change the four package columns. Members still cannot. Re-running SQL
 --    102 after this file puts back SQL 102's guard (fail closed: the package could no longer be
---    changed; nothing else changes) until SQL 150 is re-run.
+--    changed; nothing else changes) until SQL 151 is re-run.
 --
 -- Maintenance: the API (tenant-billing-engine.mjs) charges no Monthly Maintenance for a billing month
 -- that lies wholly inside starts_on .. maintenance_ends_on while the package is enabled.
@@ -49,10 +49,10 @@
 -- Not changed: no grant to checksops beyond EXECUTE on the setter (the platform owner's path, as SQL
 -- 98's) and on aws_starter_package_checks_used for the usage page; no existing event is repriced. No
 -- BEGIN/COMMIT: the guarded SQL executor runs it in one transaction. Refuses to run (55000
--- sql150_prerequisite_missing) without SQL 102's guard, SQL 120's and SQL 149's price functions and
+-- sql151_prerequisite_missing) without SQL 102's guard, SQL 120's and SQL 149's price functions and
 -- tenant_pricing_audit. Idempotent. Not applied by this change.
 
-DO $sql150_prerequisites$
+DO $sql151_prerequisites$
 DECLARE
   v_missing text[] := ARRAY[]::text[];
 BEGIN
@@ -78,11 +78,11 @@ BEGIN
     v_missing := array_append(v_missing, 'public.aws_failed_deposit_fee_cents() (SQL 149)');
   END IF;
   IF cardinality(v_missing) > 0 THEN
-    RAISE EXCEPTION 'sql150_prerequisite_missing: %', array_to_string(v_missing, ', ')
+    RAISE EXCEPTION 'sql151_prerequisite_missing: %', array_to_string(v_missing, ', ')
       USING ERRCODE = '55000';
   END IF;
 END
-$sql150_prerequisites$;
+$sql151_prerequisites$;
 
 -- 1) the package on the tenant ------------------------------------------------------
 ALTER TABLE public.tenants
@@ -90,7 +90,7 @@ ALTER TABLE public.tenants
   ADD COLUMN IF NOT EXISTS starter_package_starts_on date,
   ADD COLUMN IF NOT EXISTS starter_package_maintenance_ends_on date,
   ADD COLUMN IF NOT EXISTS starter_package_included_checks integer NOT NULL DEFAULT 250;
-DO $sql150_package_check$
+DO $sql151_package_check$
 BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM pg_catalog.pg_constraint
@@ -103,19 +103,19 @@ BEGIN
                AND starter_package_maintenance_ends_on >= starter_package_starts_on)));
   END IF;
 END
-$sql150_package_check$;
+$sql151_package_check$;
 COMMENT ON COLUMN public.tenants.starter_package_enabled IS
-  'SQL 150: the tenant is on the optional Starter Package (platform owner only; audited in tenant_pricing_audit).';
+  'SQL 151: the tenant is on the optional Starter Package (platform owner only; audited in tenant_pricing_audit).';
 COMMENT ON COLUMN public.tenants.starter_package_maintenance_ends_on IS
-  'SQL 150: the last day of Monthly Maintenance the Starter Package covers (inclusive).';
+  'SQL 151: the last day of Monthly Maintenance the Starter Package covers (inclusive).';
 COMMENT ON COLUMN public.tenants.starter_package_included_checks IS
-  'SQL 150: Checks the Starter Package includes (each check fee or failed deposit fee uses one; they do not expire).';
+  'SQL 151: Checks the Starter Package includes (each check fee or failed deposit fee uses one; they do not expire).';
 
 -- 2) the event used an included Check -----------------------------------------------
 ALTER TABLE public.check_billing_events
   ADD COLUMN IF NOT EXISTS package_included boolean NOT NULL DEFAULT false;
 COMMENT ON COLUMN public.check_billing_events.package_included IS
-  'SQL 150: this check fee or failed deposit fee used one of the Starter Package''s included Checks (priced 0).';
+  'SQL 151: this check fee or failed deposit fee used one of the Starter Package''s included Checks (priced 0).';
 
 -- 3) Checks used ----------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.aws_starter_package_checks_used(p_tenant_id uuid)
@@ -134,7 +134,7 @@ AS $$
 $$;
 REVOKE ALL ON FUNCTION public.aws_starter_package_checks_used(uuid) FROM PUBLIC;
 COMMENT ON FUNCTION public.aws_starter_package_checks_used(uuid) IS
-  'SQL 150: the Starter Package Checks a tenant has used (its package_included events that are not voided).';
+  'SQL 151: the Starter Package Checks a tenant has used (its package_included events that are not voided).';
 
 -- 4) price new events against the package ---------------------------------------------
 CREATE OR REPLACE FUNCTION public.aws_apply_starter_package_to_event()
@@ -169,7 +169,7 @@ BEGIN
 
   IF v_pkg.enabled IS TRUE AND v_pkg.starts_on IS NOT NULL
      AND v_pkg.starts_on <= (COALESCE(NEW.billed_at, now()) AT TIME ZONE 'UTC')::date THEN
-    PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('sql150_starter_package:' || NEW.tenant_id::text, 0));
+    PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('sql151_starter_package:' || NEW.tenant_id::text, 0));
     SELECT count(*)::integer INTO v_used
       FROM public.check_billing_events e
      WHERE e.tenant_id = NEW.tenant_id
@@ -194,7 +194,7 @@ END
 $$;
 REVOKE ALL ON FUNCTION public.aws_apply_starter_package_to_event() FROM PUBLIC;
 COMMENT ON FUNCTION public.aws_apply_starter_package_to_event() IS
-  'SQL 150: a check fee or failed deposit fee uses one of the Starter Package''s included Checks (priced 0) while the package is on, started and has Checks left.';
+  'SQL 151: a check fee or failed deposit fee uses one of the Starter Package''s included Checks (priced 0) while the package is on, started and has Checks left.';
 
 DROP TRIGGER IF EXISTS aws_check_billing_event_starter_package ON public.check_billing_events;
 CREATE TRIGGER aws_check_billing_event_starter_package
@@ -267,7 +267,7 @@ $body$;
 REVOKE ALL ON FUNCTION public.aws_platform_owner_set_tenant_starter_package(uuid, boolean, date, date, integer) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.aws_platform_owner_set_tenant_starter_package(uuid, boolean, date, date, integer) TO checksops;
 COMMENT ON FUNCTION public.aws_platform_owner_set_tenant_starter_package(uuid, boolean, date, date, integer) IS
-  'SQL 150: the platform owner turns a tenant''s Starter Package on or off and sets its dates and included Checks. Everyone else is refused (42501). Audited in tenant_pricing_audit.';
+  'SQL 151: the platform owner turns a tenant''s Starter Package on or off and sets its dates and included Checks. Everyone else is refused (42501). Audited in tenant_pricing_audit.';
 
 -- 6) audit ---------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.aws_tenant_starter_package_audit_row()
@@ -352,4 +352,4 @@ BEGIN
 END
 $$;
 COMMENT ON FUNCTION public.aws_tenants_member_column_guard() IS
-  'SQL 150 (replaces SQL 102): members change only display/branding/company-info columns; the platform owner only pricing columns, deposits_enabled, the profile fields (aws_tenant_profile_columns()), moov_environment and the Starter Package columns; everything else, slug and partner_code included, is refused (42501).';
+  'SQL 151 (replaces SQL 102): members change only display/branding/company-info columns; the platform owner only pricing columns, deposits_enabled, the profile fields (aws_tenant_profile_columns()), moov_environment and the Starter Package columns; everything else, slug and partner_code included, is refused (42501).';

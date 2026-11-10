@@ -16,7 +16,7 @@ import {
 } from "@/lib/starterPackage";
 
 /**
- * Tenant Management (platform owner only): the optional Starter Package (SQL 150). A toggle with the
+ * Tenant Management (platform owner only): the optional Starter Package (SQL 151). A toggle with the
  * start date, the last day of included maintenance and the included checks. Saved through
  * tenant-billing-admin and audited.
  */
@@ -71,7 +71,7 @@ export function TenantStarterPackageCard({ tenantId, tenantName }: { tenantId: s
       {isLoading ? (
         <p className="text-xs text-muted-foreground">Loading…</p>
       ) : pkg === null ? (
-        <p className="text-xs text-muted-foreground">Available once the Starter Package database update (SQL 150) is applied.</p>
+        <p className="text-xs text-muted-foreground">Available once the Starter Package database update (SQL 151) is applied.</p>
       ) : (
         <div className="space-y-4">
           <div className="flex items-center justify-between gap-4">

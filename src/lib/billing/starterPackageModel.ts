@@ -1,5 +1,5 @@
 /**
- * The optional Starter Package (SQL 150, owner 2026-11-10): one-time $3,500 covering setup,
+ * The optional Starter Package (SQL 151, owner 2026-11-10): one-time $3,500 covering setup,
  * 12 months of Monthly Maintenance and 250 included checks. Included checks do not expire; each
  * check processed and each failed deposit uses one; other fees are still charged. Only the
  * ChecksOps platform owner turns it on (Tenant Management -> Billing), with its dates.
@@ -22,7 +22,7 @@ export interface StarterPackageInput {
   included_checks: number | null;
 }
 
-/** The last day of 12 months of maintenance from a start date (YYYY-MM-DD), as SQL 150 defaults it. */
+/** The last day of 12 months of maintenance from a start date (YYYY-MM-DD), as SQL 151 defaults it. */
 export function defaultMaintenanceEndsOn(startsOn: string | null | undefined): string | null {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(startsOn || ""));
   if (!m) return null;
@@ -38,7 +38,7 @@ export type StarterPackageRow = {
   starter_package_included_checks?: number | null;
 };
 
-/** Builds the package from the tenant's columns and the included checks used; null before SQL 150. */
+/** Builds the package from the tenant's columns and the included checks used; null before SQL 151. */
 export function starterPackageFromRow(row: StarterPackageRow | null | undefined, checksUsed: number): StarterPackage | null {
   if (!row || !("starter_package_enabled" in row)) return null;
   const included = Math.max(0, Number(row.starter_package_included_checks ?? STARTER_PACKAGE_DEFAULT_CHECKS));

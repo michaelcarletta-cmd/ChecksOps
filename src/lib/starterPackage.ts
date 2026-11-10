@@ -22,7 +22,7 @@ type Row = Parameters<typeof starterPackageFromRow>[0];
 const PACKAGE_COLUMNS =
   "starter_package_enabled, starter_package_starts_on, starter_package_maintenance_ends_on, starter_package_included_checks";
 
-/** The tenant's Starter Package (tenants columns plus its included checks used); null before SQL 150. */
+/** The tenant's Starter Package (tenants columns plus its included checks used); null before SQL 151. */
 export async function fetchStarterPackage(tenantId: string): Promise<StarterPackage | null> {
   const { data, error } = await supabase
     .from("tenants")
@@ -48,7 +48,7 @@ export function useStarterPackage(tenantId: string | null | undefined) {
   });
 }
 
-/** Platform owner only: tenant-billing-admin update (SQL 150 setter, audited). */
+/** Platform owner only: tenant-billing-admin update (SQL 151 setter, audited). */
 export async function saveStarterPackage(tenantId: string, input: StarterPackageInput): Promise<void> {
   const { data, error } = await supabase.functions.invoke("tenant-billing-admin", {
     body: { action: "update", tenant_id: tenantId, starter_package: input },

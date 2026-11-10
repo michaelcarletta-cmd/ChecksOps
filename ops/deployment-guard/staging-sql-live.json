@@ -108,7 +108,7 @@
       "verified_live": false,
       "evidence": null
     },
-    "aws/workflows/sql/150_tenant_starter_package.sql": {
+    "aws/workflows/sql/151_tenant_starter_package.sql": {
       "verified_live": false,
       "evidence": null
     }

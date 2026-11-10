@@ -116,7 +116,7 @@ export function TenantUsageTracker() {
     enabled: !!tenant?.id,
   });
 
-  // Starter Package (SQL 150): included checks left and the months of maintenance it covers.
+  // Starter Package (SQL 151): included checks left and the months of maintenance it covers.
   const { data: starterPackage } = useStarterPackage(tenant?.id);
   // The month's fees that used an included check (priced 0), to mark them in the log.
   const { data: includedIds } = useQuery({

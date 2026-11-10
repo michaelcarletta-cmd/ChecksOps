@@ -463,13 +463,13 @@ const USAGE_FEES_REL = 'aws/tests/fixtures/production-usage-fees-manifest-2026-1
 const USAGE_FEES = JSON.parse(fs.readFileSync(path.join(ROOT, USAGE_FEES_REL), 'utf8'));
 const SQL149_FILE = 'aws/workflows/sql/149_invoice_and_failed_deposit_fees.sql';
 // Starter Package (owner 2026-11-10): tenant-billing-engine.mjs (superseding the usage fees plan's unapplied bytes) and
-// tenant-billing-handlers.mjs REPLACE their live bytes, held on SQL 150 (not live), planning only (its own test, at the end).
+// tenant-billing-handlers.mjs REPLACE their live bytes, held on SQL 151 (not live), planning only (its own test, at the end).
 const STARTER_PACKAGE_REL = 'aws/tests/fixtures/production-starter-package-manifest-2026-11-10.json';
 const STARTER_PACKAGE = JSON.parse(fs.readFileSync(path.join(ROOT, STARTER_PACKAGE_REL), 'utf8'));
-const SQL150_FILE = 'aws/workflows/sql/150_tenant_starter_package.sql';
-/** The pending plan that holds a member now (planning only): SQL 150's, else SQL 149's, else null. */
+const SQL151_FILE = 'aws/workflows/sql/151_tenant_starter_package.sql';
+/** The pending plan that holds a member now (planning only): SQL 151's, else SQL 149's, else null. */
 const laterPlan = (member) => {
-  if (STARTER_PACKAGE.members[member]) return { rel: STARTER_PACKAGE_REL, entry: STARTER_PACKAGE.members[member], sql: SQL150_FILE };
+  if (STARTER_PACKAGE.members[member]) return { rel: STARTER_PACKAGE_REL, entry: STARTER_PACKAGE.members[member], sql: SQL151_FILE };
   if (USAGE_FEES.members[member]) return { rel: USAGE_FEES_REL, entry: USAGE_FEES.members[member], sql: SQL149_FILE };
   return null;
 };
@@ -511,10 +511,10 @@ const withSql145 = (member, deps) => {
 // The usage fees members wait for SQL 149 (not live, planning only, its own test at the end): apply replays of older
 // workstreams run on a plan copy that states it live, as withSql145 does for SQL 145.
 const withSql149 = (member, deps) => {
-  if (![SQL149_FILE, SQL150_FILE].includes(PLAN.members[member]?.sql_before)) return deps;
+  if (![SQL149_FILE, SQL151_FILE].includes(PLAN.members[member]?.sql_before)) return deps;
   const plan = structuredClone(deps.plan || PLAN);
   plan.sql_prerequisites[SQL149_FILE] = { verified_live: true, evidence: 'test' };
-  plan.sql_prerequisites[SQL150_FILE] = { verified_live: true, evidence: 'test' };
+  plan.sql_prerequisites[SQL151_FILE] = { verified_live: true, evidence: 'test' };
   return { ...deps, plan };
 };
 // providers/moov-status-catch-up.mjs waits for SQL 146 (the catch-up update fix, its own test below): the committed
@@ -1548,7 +1548,7 @@ test('fee collection: eleven members on the fee manifest, collection-v2 then des
   const HANDLERS_PRE = fees.members[HANDLERS].accepted_sha256;
   const plan102Pending = enginePre(structuredClone(PLAN_SQL98_PENDING));
   plan102Pending.members[HANDLERS].expected_live_sha256 = HANDLERS_PRE;
-  // (The Starter Package plan, 2026-11-10, moved the handlers' hold on to SQL 150; the replay restores the SQL 102 hold.)
+  // (The Starter Package plan, 2026-11-10, moved the handlers' hold on to SQL 151; the replay restores the SQL 102 hold.)
   plan102Pending.members[HANDLERS].sql_before = SQL102;
   plan102Pending.sql_prerequisites[SQL102] = { ...plan102Pending.sql_prerequisites[SQL102], verified_live: false, evidence: null };
   const handlersEnv = () => applyEnv(HANDLERS, { CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: HANDLERS_PRE });
@@ -6763,7 +6763,7 @@ test('Fee pull savepoints (production incident 2026-11-06): tenant-collection-v2
       assert.equal(PLAN.members[member].manifest, FEE_LEG_API_APPLIED_REL, member);
       assert.equal(PLAN.members[member].expected_live_sha256, sha(`aws/functions/api/${member}`), member);
     } else if (laterPlan(member)) {
-      // (Since moved on again by the Starter Package plan, SQL 150, which supersedes the usage fees bytes, never applied.)
+      // (Since moved on again by the Starter Package plan, SQL 151, which supersedes the usage fees bytes, never applied.)
       const later = laterPlan(member);
       assert.deepEqual(PLAN.members[member], {
         operation: 'replace',

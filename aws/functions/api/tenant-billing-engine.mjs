@@ -477,7 +477,7 @@ export async function loadTenantBillingContext(client, tenantId) {
      FROM public.tenant_billing_accounts WHERE tenant_id = $1::uuid`,
     [tenantId],
   )).rows[0] || null;
-  // SQL 150: the optional Starter Package. Before it is applied no row comes back: no package.
+  // SQL 151: the optional Starter Package. Before it is applied no row comes back: no package.
   const pkg = (await optionalQuery(
     client,
     'tenant_starter_package_read',
@@ -493,7 +493,7 @@ export async function loadTenantBillingContext(client, tenantId) {
   return { ok: true, tenant, settings, authorization, checkDefaultCents };
 }
 
-/** The tenant's Starter Package (SQL 150) as the API shows it; null before SQL 150. */
+/** The tenant's Starter Package (SQL 151) as the API shows it; null before SQL 151. */
 export function starterPackageFromRow(row) {
   if (!row || !Object.hasOwn(row, 'starter_package_enabled')) return null;
   const included = Math.max(0, Number(row.starter_package_included_checks ?? 0));
@@ -1022,7 +1022,7 @@ export function assembleInvoiceTotals({
   tenant, period, checks, nextDay, sameDay, mortgageInitial = [], mortgageAdditional = [],
   invoiceFees = [], failedDeposits = [], checkDefaultCents = null,
 }) {
-  // SQL 150: a month the Starter Package covers carries no Monthly Maintenance (and so no discount).
+  // SQL 151: a month the Starter Package covers carries no Monthly Maintenance (and so no discount).
   const maintenance_included = starterPackageCoversMaintenance(tenant.starter_package, period);
   const maintenance_rate_cents = maintenance_included ? 0 : Number(tenant.monthly_rate_cents || 0);
   const discount_cents = maintenance_included ? 0 : maintenanceDiscountCents(tenant);
@@ -2466,7 +2466,7 @@ export const SET_TENANT_PRICING_SQL = 'SELECT public.aws_platform_owner_set_tena
 /** SQL 98: the platform owner's deposits switch setter (audited in tenant_pricing_audit). */
 export const SET_TENANT_DEPOSITS_ENABLED_SQL = 'SELECT public.aws_platform_owner_set_tenant_deposits_enabled($1::uuid, $2::boolean) AS result';
 
-/** SQL 150: the platform owner's Starter Package setter (audited in tenant_pricing_audit). */
+/** SQL 151: the platform owner's Starter Package setter (audited in tenant_pricing_audit). */
 export const SET_TENANT_STARTER_PACKAGE_SQL = 'SELECT public.aws_platform_owner_set_tenant_starter_package($1::uuid, $2::boolean, $3::date, $4::date, $5::integer) AS result';
 const ISO_DATE_RE = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
 
@@ -2628,7 +2628,7 @@ export async function saveBillingSettings(client, {
       if (String(error?.code || '') === '42883') {
         return fail('starter_package_setter_missing', {
           statusCode: 503,
-          message: 'The Starter Package cannot be saved until SQL 150 is applied.',
+          message: 'The Starter Package cannot be saved until SQL 151 is applied.',
         });
       }
       if (String(error?.code || '') === '22023') {
@@ -2863,7 +2863,7 @@ export async function buildTenantBillingSnapshot(client, tenantId, dest, { now =
     check_billing_default_cents: ctx.checkDefaultCents,
     // SQL 98 deposits switch (platform owner sets it; NOT NULL DEFAULT true).
     deposits_enabled: ctx.tenant.deposits_enabled !== false,
-    // SQL 150 Starter Package (null before SQL 150 is applied).
+    // SQL 151 Starter Package (null before SQL 151 is applied).
     starter_package: ctx.tenant.starter_package || null,
     next_day_rate_cents: resolveNextDayRateCents(ctx.tenant),
     same_day_rate_cents: resolveSameDayRateCents(ctx.tenant),

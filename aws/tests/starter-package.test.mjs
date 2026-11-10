@@ -1,5 +1,5 @@
 /**
- * Starter Package (SQL 150, owner 2026-11-10): the API waives Monthly Maintenance for the months the
+ * Starter Package (SQL 151, owner 2026-11-10): the API waives Monthly Maintenance for the months the
  * package covers, validates what the platform owner saves, and the usage page summarizes it. Fixtures only.
  */
 import assert from 'node:assert/strict';
@@ -50,13 +50,13 @@ test('2 a covered month charges usage only (no maintenance, no discount); other 
   assert.equal(after.maintenance_included, false);
   assert.equal(after.maintenance_net_cents, 7500);
   assert.equal(after.amount_cents, 7500 + 475);
-  // No package (or before SQL 150): exactly as before.
+  // No package (or before SQL 151): exactly as before.
   const plain = assembleInvoiceTotals({ tenant: { monthly_rate_cents: 10000 }, period: '2027-01', checks: [], nextDay: [], sameDay: [] });
   assert.equal(plain.maintenance_included, false);
   assert.equal(plain.amount_cents, 10000);
 });
 
-test('3 the package read: null before SQL 150, checks left never negative', () => {
+test('3 the package read: null before SQL 151, checks left never negative', () => {
   assert.equal(starterPackageFromRow(undefined), null);
   assert.equal(starterPackageFromRow({}), null);
   assert.deepEqual(starterPackageFromRow({
@@ -75,7 +75,7 @@ test('4 what the platform owner saves is validated before the database sees it',
   }
 });
 
-test('5 saveBillingSettings calls the SQL 150 setter with the parsed values; a missing setter is a clear 503', async () => {
+test('5 saveBillingSettings calls the SQL 151 setter with the parsed values; a missing setter is a clear 503', async () => {
   const calls = [];
   const client = {
     async query(sql, params) {

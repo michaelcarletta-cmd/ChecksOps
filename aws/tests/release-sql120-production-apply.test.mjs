@@ -237,13 +237,13 @@ test('order: no predecessor and no order; SQL 98 / SQL 96 objects are prerequisi
   // which refuses to run without SQL 120 (sql149_prerequisite_missing), so SQL 120 still comes first.
   const SQL149_FILE = 'aws/workflows/sql/149_invoice_and_failed_deposit_fees.sql';
   const held120 = Object.keys(plan.members).filter((m) => plan.members[m].sql_before === SQL120_FILE);
-  // The Starter Package plan (2026-11-10) then moved it on to SQL 150, which refuses to run without SQL 149.
-  const SQL150_FILE = 'aws/workflows/sql/150_tenant_starter_package.sql';
-  if ([SQL149_FILE, SQL150_FILE].includes(plan.members['tenant-billing-engine.mjs'].sql_before)) {
+  // The Starter Package plan (2026-11-10) then moved it on to SQL 151, which refuses to run without SQL 149.
+  const SQL151_FILE = 'aws/workflows/sql/151_tenant_starter_package.sql';
+  if ([SQL149_FILE, SQL151_FILE].includes(plan.members['tenant-billing-engine.mjs'].sql_before)) {
     assert.deepEqual(held120, []);
     assert.match(fs.readFileSync(path.join(ROOT, SQL149_FILE), 'utf8'), /to_regprocedure\('public\.aws_record_checkalt_billing_event\(\)'\) IS NULL/);
-    if (plan.members['tenant-billing-engine.mjs'].sql_before === SQL150_FILE) {
-      assert.match(fs.readFileSync(path.join(ROOT, SQL150_FILE), 'utf8'), /to_regprocedure\('public\.aws_failed_deposit_fee_cents\(\)'\) IS NULL/);
+    if (plan.members['tenant-billing-engine.mjs'].sql_before === SQL151_FILE) {
+      assert.match(fs.readFileSync(path.join(ROOT, SQL151_FILE), 'utf8'), /to_regprocedure\('public\.aws_failed_deposit_fee_cents\(\)'\) IS NULL/);
     }
   } else {
     assert.deepEqual(held120, ['tenant-billing-engine.mjs']);

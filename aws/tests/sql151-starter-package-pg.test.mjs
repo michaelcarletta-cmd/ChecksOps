@@ -1,5 +1,5 @@
 /**
- * SQL 150 against PostgreSQL 16: the optional Starter Package. Objects are owned by a non-superuser
+ * SQL 151 against PostgreSQL 16: the optional Starter Package. Objects are owned by a non-superuser
  * checksops_admin LOGIN (production's admin login, which applies the file); the API login checksops
  * writes checkalt_deposits and moov_invoices and calls the platform owner's setter as the signed-in
  * user (request.app_user_id). SQL 120 and SQL 149 are applied first, as on staging and production;
@@ -16,7 +16,7 @@ import { AWS_ROOT, pgSkipReason, startPg } from './helpers/stakeholder-policies-
 
 const SQL_120 = path.join(AWS_ROOT, 'workflows/sql/120_usage_events_at_approval_and_send.sql');
 const SQL_149 = path.join(AWS_ROOT, 'workflows/sql/149_invoice_and_failed_deposit_fees.sql');
-const SQL_150 = path.join(AWS_ROOT, 'workflows/sql/150_tenant_starter_package.sql');
+const SQL_150 = path.join(AWS_ROOT, 'workflows/sql/151_tenant_starter_package.sql');
 
 const T = '11111111-1111-4111-8111-111111111111'; // on the package
 const T_OFF = '22222222-2222-4222-8222-222222222222'; // not on it
@@ -106,9 +106,9 @@ INSERT INTO public.check_intake_items (id, tenant_id, status, claim_id, check_nu
 RESET ROLE;
 `;
 
-test('SQL 150: the Starter Package includes Checks, a failed deposit uses one, the setter is the platform owner\'s (PostgreSQL 16)', { timeout: 240000, skip: pgSkipReason() || false }, async () => {
+test('SQL 151: the Starter Package includes Checks, a failed deposit uses one, the setter is the platform owner\'s (PostgreSQL 16)', { timeout: 240000, skip: pgSkipReason() || false }, async () => {
   const { default: pg } = await import('pg');
-  const server = startPg('pg-sql150-starter-', 56600);
+  const server = startPg('pg-sql151-starter-', 56600);
   const superuser = new pg.Client({ host: server.host, port: server.port, user: 'ubuntu', database: 'postgres' });
   const owner = new pg.Client({ host: server.host, port: server.port, user: 'checksops_admin', database: 'postgres' });
   const api = new pg.Client({ host: server.host, port: server.port, user: 'checksops', database: 'postgres' });
@@ -230,16 +230,16 @@ test('SQL 150: the Starter Package includes Checks, a failed deposit uses one, t
   }
 });
 
-test('SQL 150 refuses to run without SQL 149', { timeout: 120000, skip: pgSkipReason() || false }, async () => {
+test('SQL 151 refuses to run without SQL 149', { timeout: 120000, skip: pgSkipReason() || false }, async () => {
   const { default: pg } = await import('pg');
-  const server = startPg('pg-sql150-prereq-', 56700);
+  const server = startPg('pg-sql151-prereq-', 56700);
   const superuser = new pg.Client({ host: server.host, port: server.port, user: 'ubuntu', database: 'postgres' });
   try {
     await superuser.connect();
     await superuser.query(SCHEMA);
     await superuser.query(fs.readFileSync(SQL_120, 'utf8'));
     await assert.rejects(superuser.query(fs.readFileSync(SQL_150, 'utf8')), (err) => (
-      err.code === '55000' && /sql150_prerequisite_missing: .*SQL 149/.test(err.message)));
+      err.code === '55000' && /sql151_prerequisite_missing: .*SQL 149/.test(err.message)));
   } finally {
     await superuser.end().catch(() => {});
     server.stop();

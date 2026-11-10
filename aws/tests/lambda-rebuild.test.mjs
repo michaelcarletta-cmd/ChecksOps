@@ -181,7 +181,7 @@ const CHANGED_SINCE_FOURTH_PRODUCTION_REBUILD = new Set([
   // own savepoint, and a Moov 409 idempotent replay recorded as the leg.
   'tenant-billing-engine.mjs',
   'tenant-collection-v2.mjs',
-  // Starter Package (2026-11-10, SQL 150, planning only): tenant-billing-admin update passes starter_package.
+  // Starter Package (2026-11-10, SQL 151, planning only): tenant-billing-admin update passes starter_package.
   'tenant-billing-handlers.mjs',
 ]);
 // Of those, the members whose overlay REPLACE has since been applied in production and recorded: the row expects main's
@@ -595,7 +595,7 @@ test('the production plan section accepts inspect run 41463084601 and records ap
       ].includes(row.manifest)) {
         // Moved on twice: the fee pull savepoints REPLACE from the rebuild's bytes, applied 2026-11-06 (its applied
         // record), then the usage fees REPLACE (SQL 149, 2026-11-10, planning only) from those applied bytes, which the
-        // Starter Package REPLACE (SQL 150, planning only) supersedes from the same applied bytes.
+        // Starter Package REPLACE (SQL 151, planning only) supersedes from the same applied bytes.
         const recorded = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, appliedRel), 'utf8')).members[name];
         const planned = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, recorded.previous_manifest), 'utf8')).members[name];
         assert.equal(planned.live_sha256, entry.accepted_sha256, name);
@@ -609,7 +609,7 @@ test('the production plan section accepts inspect run 41463084601 and records ap
         continue;
       }
       if (name === 'tenant-billing-handlers.mjs') {
-        // Not applied since the rebuild: the Starter Package REPLACE (SQL 150, planning only) starts from the bytes the
+        // Not applied since the rebuild: the Starter Package REPLACE (SQL 151, planning only) starts from the bytes the
         // rebuild put live, main's bytes accepted.
         assert.equal(row.expected_live_sha256, entry.accepted_sha256, name);
         assert.equal(row.manifest, 'aws/tests/fixtures/production-starter-package-manifest-2026-11-10.json', name);
