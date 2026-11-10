@@ -3355,6 +3355,32 @@ export const AUTHORIZED_SQL146_MOOV_STATUS_CATCH_UP_WRITES = Object.freeze({
   ]),
 });
 
+// External disbursement record staging pin: SQL 147 (owner 2026-11-09: "apply SQL 147 in staging"). A payment made
+// outside ChecksOps could not be recorded on AWS: both screens wrote public.disbursement_batches and
+// public.disbursement_splits from the browser through /data/write, which refuses both tables (write-allowlist
+// FINANCIAL_OR_PROVIDER_TABLES). The new SECURITY DEFINER public.aws_record_external_disbursement(uuid, uuid, jsonb,
+// text) writes one completed batch and one settled external_check split per payee in one transaction, only for a
+// member of the tenant (SQL 90's aws_can_write_tenant), the check locked FOR UPDATE, idempotent by key and never
+// above the amount still available; EXECUTE for checksops and the owner. No predecessor (SQL 90's
+// aws_can_write_tenant(uuid) is a prerequisite). Pending until a reviewed pin change records a staging read-live
+// (expected: the function absent, everything else in place).
+export const AUTHORIZED_SQL147_EXTERNAL_DISBURSEMENT_RECORD = Object.freeze({
+  key: 'sql147',
+  filename: 'aws/workflows/sql/147_external_disbursement_record.sql',
+  migration_id: '147_external_disbursement_record',
+  // The commit that last authored the file bytes.
+  commit: '8898fa5c63516d125d1742528616893b1540c9c4',
+  source_sha256: 'd503b5b6cc1e92b727dee5a6a47f754a4bda864e831d6b47b1d21f082f2f4c4f',
+  authorization: 'pending',
+  execute: false,
+  expected_live_definition_sha256: null,
+  // Code-derived: releaseIntendedHash('sql147', file bytes) (release-sql-state.mjs); re-derived by the tests.
+  intended_replacement_sha256: '8080fbd7c4c24ed07251584b47b6507b0ee07095645c73c3cded7f12f3acd499',
+  function_identities: Object.freeze([
+    'public.aws_record_external_disbursement(uuid, uuid, jsonb, text)',
+  ]),
+});
+
 export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql90: AUTHORIZED_SQL90_USERS_ONLY_TENANT_ROLES,
   sql91: AUTHORIZED_SQL91_MOOV_ONBOARDING,
@@ -3412,6 +3438,7 @@ export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql144: AUTHORIZED_SQL144_TENANT_INCOMING_TRANSFERS,
   sql145: AUTHORIZED_SQL145_PLATFORM_OWNER_BILLING_COLLECTION_LEG,
   sql146: AUTHORIZED_SQL146_MOOV_STATUS_CATCH_UP_WRITES,
+  sql147: AUTHORIZED_SQL147_EXTERNAL_DISBURSEMENT_RECORD,
 });
 
 // The fee collection pin under its earlier map name (the same object as the release map's sql98).
@@ -3427,7 +3454,7 @@ export function isSql30TenantDocumentsDocType(input = {}) {
   return pinIdentifiersMatch(input, AUTHORIZED_SQL30_TENANT_DOCUMENTS_DOC_TYPE);
 }
 
-/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql146) an input names, or null. */
+/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql147) an input names, or null. */
 export function releaseSqlMigrationKey(input = {}) {
   return Object.keys(RELEASE_2026_10_17_PENDING_SQL_PINS)
     .find((key) => pinIdentifiersMatch(input, RELEASE_2026_10_17_PENDING_SQL_PINS[key])) || null;
