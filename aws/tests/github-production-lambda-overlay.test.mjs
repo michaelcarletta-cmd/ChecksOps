@@ -7232,13 +7232,40 @@ test('External disbursement record (owner 2026-11-09): ADD external-disbursement
   assert.ok(PLAN.notes.includes(`names ${EXTERNAL_DISBURSEMENT_ROUTER_REL} (REPLACE app-services.mjs ${DEMO_ROUTER.slice(0, 8)} -> ${acceptedRouter.slice(0, 8)})`));
   assert.deepEqual(PLAN.members[ROUTER], { operation: 'replace', accepted_sha256: acceptedRouter, expected_live_sha256: DEMO_ROUTER, sql_before: null, manifest: EXTERNAL_DISBURSEMENT_ROUTER_REL });
   for (const other of [PRE, DEMO_ROUTER]) assert.notEqual(acceptedRouter, other);
-  // The ADD: held on SQL 147, which is not recorded live.
+  // The ADD: held on SQL 147 (sql_before), now recorded verified live in production (2026-11-10, the SQL 147 record
+  // change) from its retired pin: the same file bytes the pin and the one-shot hashed. The gate the apply below is
+  // checked against is shown on a plan copy where it is not yet recorded.
   const addImports = localImports(fs.readFileSync(path.join(API, ADD), 'utf8'), ADD).sort();
   assert.deepEqual(addImports, ['data.mjs']);
   assert.deepEqual(manifest.members[ADD], { live_sha256: null, accepted_sha256: acceptedAdd, operation: 'add', required_imports: addImports });
   assert.deepEqual(PLAN.members[ADD], { operation: 'add', accepted_sha256: acceptedAdd, expected_live_sha256: null, sql_before: SQL147_FILE, manifest: REL });
-  assert.deepEqual(PLAN.sql_prerequisites[SQL147_FILE], { verified_live: false, evidence: null });
   assert.ok(fs.existsSync(path.join(ROOT, SQL147_FILE)));
+  const PIN147 = 'ops/deployment-guard/sql147-external-disbursement-record-production-apply.json';
+  const readJson = (rel) => JSON.parse(fs.readFileSync(path.join(ROOT, rel), 'utf8'));
+  const pin147 = readJson(PIN147);
+  assert.equal(pin147.source_sha256, sha(SQL147_FILE));
+  assert.equal(pin147.applied.migration_source_sha256, sha(SQL147_FILE));
+  assert.equal(pin147.execute, false);
+  assert.equal(pin147.applied.result, 'applied');
+  assert.equal(pin147.applied.receipt.before_hash, pin147.expected_live_definition_sha256);
+  assert.equal(pin147.applied.receipt.after_hash, pin147.intended_replacement_sha256);
+  assert.equal(pin147.staging_acceptance.reference, 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/42838778413');
+  const prerequisite147 = PLAN.sql_prerequisites[SQL147_FILE];
+  assert.equal(prerequisite147.verified_live, true);
+  assert.equal(prerequisite147.pin, PIN147);
+  const fromTo147 = `${pin147.expected_live_definition_sha256.slice(0, 8)}… -> ${pin147.intended_replacement_sha256.slice(0, 8)}…`;
+  for (const evidence of [pin147.applied.apply_ssm_command_id, pin147.applied.one_shot_run_id, pin147.applied.workstream_id, pin147.applied.one_use_id, pin147.applied.runner, fromTo147, 'staging acceptance run 42838778413', PIN147]) {
+    assert.ok(prerequisite147.evidence.includes(evidence), evidence);
+  }
+  assert.ok(prerequisite147.note.includes(`ADD ${acceptedAdd.slice(0, 8)}…`));
+  assert.ok(prerequisite147.note.includes('"DEPLOY external-disbursement.mjs TO PRODUCTION"'));
+  const staging147 = readJson('ops/deployment-guard/staging-sql-live.json').sql[SQL147_FILE];
+  assert.equal(staging147.verified_live, true);
+  for (const evidence of ['run 42838778413', 'read-live run 42839223253', `receipt before ${pin147.expected_live_definition_sha256.slice(0, 8)}…`, `after ${pin147.intended_replacement_sha256.slice(0, 8)}…`]) {
+    assert.ok(staging147.evidence.includes(evidence), evidence);
+  }
+  const sql147Pending = structuredClone(PLAN);
+  sql147Pending.sql_prerequisites[SQL147_FILE] = { verified_live: false, evidence: null };
   for (const member of [ADD, ROUTER]) assert.equal(resolvePlannedMember(member, { root: ROOT, plan: PLAN }).ok, true, member);
   const routerImports = localImports(fs.readFileSync(path.join(API, ROUTER), 'utf8'), ROUTER);
   for (const added of [DEMO_ADD, ADD]) {
@@ -7266,7 +7293,7 @@ test('External disbursement record (owner 2026-11-09): ADD external-disbursement
     );
   }
   // Apply as production stands today (the router at the demo request bytes, public-demo-request.mjs live,
-  // external-disbursement.mjs absent because SQL 147 is not applied): refused before any write, the new router's
+  // external-disbursement.mjs not yet added): refused before any write, the new router's
   // import of external-disbursement.mjs is not in the live package.
   // (Replayed on the committed plan, not the shared Mortgage Desk pre-apply helper.)
   const today = applyDeps(ROUTER, { sha256: DEMO_ROUTER, pending: [ADD], plan: PLAN });
@@ -7280,16 +7307,20 @@ test('External disbursement record (owner 2026-11-09): ADD external-disbursement
   const fromDemo = await run(applyEnv(ROUTER, { CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: DEMO_ROUTER }), later.deps);
   assert.equal(fromDemo.mutation, false);
   assert.deepEqual(later.calls.receipt.owned_member_ops, { replace: [ROUTER], add: [] });
-  // Apply: the ADD is refused until SQL 147 is recorded verified live ...
+  // Apply: the ADD was refused while SQL 147 was not recorded verified live (the plan before the SQL 147 record change,
+  // replayed on a copy) ...
   await assert.rejects(
-    run(applyEnv(ADD), applyDeps(ADD).deps),
+    run(applyEnv(ADD), { ...applyDeps(ADD, { plan: sql147Pending }).deps, plan: sql147Pending }),
     (error) => error.code === CODES.PRODUCTION_APPROVAL_REQUIRED && error.details.sql_before === SQL147_FILE,
   );
-  // ... then applies; the router is refused while either ADD is not live, and links once both are.
-  const sql147Live = structuredClone(PLAN);
-  sql147Live.sql_prerequisites[SQL147_FILE] = { verified_live: true, evidence: 'test' };
+  // ... and passes the SQL gate now that the committed plan records it (the same replay without a plan override of
+  // SQL 147; dry: no mutation), one receipt for this member. The member row and its hashes are unchanged. The router is
+  // refused while either ADD is not live, and links once both are.
+  assert.equal(PLAN.sql_prerequisites[SQL147_FILE].verified_live, true);
+  // applyDeps copies the committed plan file and passes no plan override for this member.
   const { deps: addDeps, calls } = applyDeps(ADD);
-  const added = await run(applyEnv(ADD), { ...addDeps, plan: sql147Live });
+  assert.equal(addDeps.plan, undefined);
+  const added = await run(applyEnv(ADD), addDeps);
   assert.equal(added.mutation, false);
   assert.deepEqual(calls.receipt.owned_member_ops, { replace: [], add: [ADD] });
   // (The router has no sql_before; its apply runs on the helper's own plan copy.)
