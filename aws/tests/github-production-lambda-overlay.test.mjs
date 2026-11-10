@@ -434,7 +434,7 @@ function applyDeps(member, liveOpts = {}) {
 // collection test below). Tests about member order and links run them with SQL 98 recorded live.
 const SQL98_FILE = 'aws/workflows/sql/98_tenant_fee_collection.sql';
 // Second mortgagee (owner 2026-11-10): workflow-rpc.mjs REPLACEs the Loss Draft escrow close applied bytes, held on
-// SQL 148 (recorded live 2026-11-10), planning only (its own test, at the end). Until then its row was held on SQL 98 (live).
+// SQL 148 (recorded live 2026-11-10); production run 42912070859 applied it (its own test, at the end). Until then its row was held on SQL 98 (live).
 const SECOND_MORTGAGEE_REL = 'aws/tests/fixtures/production-second-mortgagee-link-manifest-2026-11-10.json';
 const SECOND_MORTGAGEE = JSON.parse(fs.readFileSync(path.join(ROOT, SECOND_MORTGAGEE_REL), 'utf8'));
 const SQL148_FILE = 'aws/workflows/sql/148_second_mortgagee_link.sql';
@@ -455,6 +455,16 @@ const beforeUsageFees = (member) => USAGE_FEES.members[member]?.live_sha256 ?? s
  */
 const usageFeesPre = (plan, member, row) => {
   if (USAGE_FEES.members[member]) plan.members[member] = { ...row };
+  return plan;
+};
+// Second mortgagee applied 2026-11-10 (production run 42912070859, VERIFIED): the row expects main's bytes and names the
+// second mortgagee applied record, which chains to the planning manifest above (it keeps the pre-apply state). Replays
+// of the plan as it stood before the apply start from secondMortgageePre.
+const SECOND_MORTGAGEE_APPLIED_REL = 'aws/tests/fixtures/production-second-mortgagee-link-applied-manifest-2026-11-10.json';
+const secondMortgageePre = (plan) => {
+  for (const member of Object.keys(SECOND_MORTGAGEE.members)) {
+    plan.members[member] = { ...plan.members[member], expected_live_sha256: escrowApplied(member), manifest: SECOND_MORTGAGEE_REL };
+  }
   return plan;
 };
 const PLAN_SQL98_LIVE = (() => {
@@ -1628,7 +1638,9 @@ test('live reconciliation 2026-10-19: ten members expect the bytes inspect run 3
     'homeowner.mjs': { accepted: 'c51ea27a37a72b18aed7881ae349212257b790e6ff400cbe675949574504a80c', liveNow: 'd7117e18fb42efb0ab6cf2b1847b2d57f22878927ceda5155d4165dcd1f442a2' },
     'write-allowlist.mjs': { accepted: '5f84c5634190ebade1ee6ae10d3420e09548efac78f2a72eb98886d2f0341189', liveNow: '8c2a688652feec4bb97eb7032a0f5d3b6a1661a4d8e99c73f255ed6161a80e21' },
     'write-check-workflow.mjs': { accepted: 'fa2c6aef0e4e6c8713f60a24804309b4cf7f9e4b9d69a379498ef9acaf621fc2', liveNow: 'e11a5a0ec86b43f67c320e8ec6ec09d4ca7e9c0392e2529b8a39d8574bc4ff78' },
-    'workflow-rpc.mjs': { accepted: '79b7e4de653eb9d391afca9d27769b3b7c8e3d10d67af43e829ee32398797485', liveNow: '0e77f1f6a33a78c3be406622e16cc74fc6e8374cf5f505cf865453784b467dc0' },
+    // workflow-rpc.mjs: production run 42912070859 (2026-11-10) replaced the Loss Draft escrow close bytes (0e77f1f6)
+    // for the second mortgagee link (b2976326, recorded applied).
+    'workflow-rpc.mjs': { accepted: '79b7e4de653eb9d391afca9d27769b3b7c8e3d10d67af43e829ee32398797485', liveNow: 'b2976326f05097e3974563ee8e89db327d88d12e801501595992f02bd38a8741' },
     // app-services.mjs moved on too: its daab02f7 release bytes were live (the order gate of production
     // run 40577608750), and production run 40621229388 replaced them for the Mortgage Desk return email
     // route (d1faa212); production run 40778196802 then replaced those for the Mortgage Desk e-sign route
@@ -3564,11 +3576,12 @@ test('Mortgage Desk return: ADD mortgage-desk-return.mjs held on SQL 122 (record
     assert.equal(row.operation, 'replace', member);
     if (LOSS_DRAFT[member]) {
       const [plannedRel, appliedRel] = LOSS_DRAFT[member];
-      // The second mortgagee plan (2026-11-10) moves it on again, planning only, expecting the escrow close bytes.
+      // The second mortgagee plan (2026-11-10) moved it on again, applied 2026-11-10 (production run 42912070859):
+      // main's bytes expected live, the second mortgagee applied record named.
       const moved = SECOND_MORTGAGEE.members[member];
-      assert.equal(row.expected_live_sha256, escrowApplied(member), member);
+      assert.equal(row.expected_live_sha256, moved ? sha(`aws/functions/api/${member}`) : escrowApplied(member), member);
       assert.notEqual(row.accepted_sha256, appliedAt(member), member);
-      assert.equal(row.manifest, moved ? SECOND_MORTGAGEE_REL : appliedRel, member);
+      assert.equal(row.manifest, moved ? SECOND_MORTGAGEE_APPLIED_REL : appliedRel, member);
       if (moved) assert.equal(moved.previous_manifest, appliedRel, member);
       const next = JSON.parse(fs.readFileSync(path.join(ROOT, plannedRel), 'utf8')).members[member];
       assert.deepEqual(next, { live_sha256: appliedAt(member), accepted_sha256: escrowApplied(member), operation: 'replace', previous_manifest: APPLIED_REL }, member);
@@ -5046,13 +5059,14 @@ test('Loss Draft escrow records and file close (owner decisions 2026-10-30): wor
   const previous = JSON.parse(fs.readFileSync(path.join(ROOT, PREVIOUS), 'utf8')).members[MEMBER];
   assert.deepEqual([previous.live_sha256, previous.accepted_sha256], [LIVE, LIVE], 'the previous manifest is its applied record');
   // Applied 2026-10-31: the row records the applied bytes live and names the applied record, or, once the second
-  // mortgagee plan moves it on (held on SQL 148), that plan, which chains back to this record.
+  // mortgagee plan moved it on (held on SQL 148; applied 2026-11-10, production run 42912070859), main's bytes and the
+  // second mortgagee applied record, which chains back through that plan to this record.
   assert.deepEqual(PLAN.members[MEMBER], {
     operation: 'replace',
     accepted_sha256: sha(`aws/functions/api/${MEMBER}`),
-    expected_live_sha256: accepted,
+    expected_live_sha256: moved ? sha(`aws/functions/api/${MEMBER}`) : accepted,
     sql_before: holdNow(MEMBER, 'aws/workflows/sql/98_tenant_fee_collection.sql'),
-    manifest: moved ? SECOND_MORTGAGEE_REL : APPLIED_REL,
+    manifest: moved ? SECOND_MORTGAGEE_APPLIED_REL : APPLIED_REL,
   });
   if (moved) assert.equal(moved.previous_manifest, APPLIED_REL);
   assert.equal(PLAN.sql_prerequisites['aws/workflows/sql/98_tenant_fee_collection.sql'].verified_live, true);
@@ -5081,10 +5095,16 @@ test('Loss Draft escrow records and file close (owner decisions 2026-10-30): wor
   const ready = await run(inspect, { root: ROOT, plan: before, inspectLive: liveFor(MEMBER, { sha256: LIVE, plan: before }) });
   assert.equal(ready.state, 'READY');
   assert.equal(ready.mutation, false);
-  // The escrow close bytes: accepted live, or READY for the second mortgagee plan.
-  const done = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: accepted }) });
-  assert.equal(done.state, moved ? 'READY' : 'ALREADY_ACCEPTED');
-  for (const other of [LIVE, '6902fe6f89f91c52f251ae1218257a387d6d7dd1fdb0e07687f6c99dfd5591d3', 'c'.repeat(64)]) {
+  // The escrow close bytes: accepted live, or READY for the second mortgagee plan (replayed on the plan as it stood
+  // before that apply); since it (production run 42912070859), main's bytes are ALREADY_ACCEPTED and the escrow close
+  // bytes a reconciliation stop.
+  if (moved) {
+    const beforeSecond = secondMortgageePre(structuredClone(PLAN));
+    assert.equal((await run(inspect, { root: ROOT, plan: beforeSecond, inspectLive: liveFor(MEMBER, { sha256: accepted, plan: beforeSecond }) })).state, 'READY');
+  }
+  const done = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: sha(`aws/functions/api/${MEMBER}`) }) });
+  assert.equal(done.state, 'ALREADY_ACCEPTED');
+  for (const other of moved ? [LIVE, accepted, '6902fe6f89f91c52f251ae1218257a387d6d7dd1fdb0e07687f6c99dfd5591d3', 'c'.repeat(64)] : [LIVE, '6902fe6f89f91c52f251ae1218257a387d6d7dd1fdb0e07687f6c99dfd5591d3', 'c'.repeat(64)]) {
     await assert.rejects(
       run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: other }) }),
       (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
@@ -7738,7 +7758,7 @@ test('Mortgage Desk send (owner report 2026-11-10): write-allowlist.mjs, then wr
   assert.match(fs.readFileSync(path.join(API, WORKFLOW_WRITES), 'utf8'), /const MORTGAGE_REQUEST_INSERT_ONLY = \[/);
 });
 
-test('Second mortgagee (owner 2026-11-10): workflow-rpc.mjs REPLACE from the Loss Draft escrow close applied bytes, held on SQL 148 (recorded live 2026-11-10), planning only', async () => {
+test('Second mortgagee (owner 2026-11-10): workflow-rpc.mjs REPLACE from the Loss Draft escrow close applied bytes, held on SQL 148 (recorded live 2026-11-10); production run 42912070859 applied it', async () => {
   const MEMBER = 'workflow-rpc.mjs';
   const manifest = SECOND_MORTGAGEE;
   const PREVIOUS = 'aws/tests/fixtures/production-loss-draft-escrow-close-applied-manifest-2026-10-31.json';
@@ -7756,7 +7776,38 @@ test('Second mortgagee (owner 2026-11-10): workflow-rpc.mjs REPLACE from the Los
   const accepted = sha(`aws/functions/api/${MEMBER}`);
   assert.notEqual(accepted, live.accepted_sha256);
   assert.deepEqual(manifest.members[MEMBER], { live_sha256: live.accepted_sha256, accepted_sha256: accepted, operation: 'replace', previous_manifest: PREVIOUS });
+  // Applied 2026-11-10 on main a30955a8b (#1749 merge; owner "DEPLOY workflow-rpc.mjs TO PRODUCTION"): the record keeps
+  // the run evidence; this planning manifest keeps what it recorded. The row expects the applied bytes and names the
+  // applied record; secondMortgageePre restates the plan as it stood before the apply.
+  const appliedRecord = JSON.parse(fs.readFileSync(path.join(ROOT, SECOND_MORTGAGEE_APPLIED_REL), 'utf8'));
+  assert.equal(appliedRecord.workstream_id, 'second-mortgagee-link-applied');
+  assert.equal(appliedRecord.deploy_authorized, false);
+  assert.match(appliedRecord.authorization, /^Record only \(2026-11-10\)/);
+  assert.equal(appliedRecord.live_lambda, FUNCTION_NAME);
+  assert.deepEqual(appliedRecord.members, { [MEMBER]: { live_sha256: accepted, accepted_sha256: accepted, operation: 'replace', previous_manifest: SECOND_MORTGAGEE_REL } });
+  for (const runId of ['42911590660', '42911728437', '42911843219', '42911952545', '42912070859', '42912192599']) {
+    assert.match(appliedRecord.notes, new RegExp(`run ${runId}`), runId);
+    assert.match(PLAN.notes, new RegExp(runId), runId);
+  }
+  for (const text of ['"DEPLOY workflow-rpc.mjs TO PRODUCTION then DEPLOY WEBSITE TO PRODUCTION"', '"merge the record PRs when green"',
+    'a30955a8b96f7c5bdb8fd5b7aa39316bdf03cf8f', 'job 130164994503',
+    '9a3f1d8e-6e82-4596-ab97-13d6b5dcfea3', '8b47e079-0c38-4b6c-a3e8-cf5104f8c76a', '2a725ea4-7c91-4c7b-b36a-88765d70e0f5',
+    '7494ae68-30ab-485d-a2dc-682036954556', 'fa0a12e3-ee8d-42fe-811f-f5afa69c7d3c', '708c019d-4189-4db9-81b2-3c3063af126d',
+    '6zwgYoaKVapErFmIZdD2QvILz3+7Wqg56AEYtHjYz4s=', 'TWO/b+hTsd935FcQlljwiZhOzxC+f9Y4Ttwmq79Vf7I=',
+    'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/42911728437', 'errors []', 'VERIFIED', 'ALREADY_ACCEPTED',
+    `${MEMBER} REPLACE ${live.accepted_sha256.slice(0, 8)} -> ${accepted.slice(0, 8)}`, 'index.mjs is untouched']) {
+    assert.ok(appliedRecord.notes.includes(text), text);
+  }
+  assert.ok(PLAN.notes.includes(`Recorded in ${SECOND_MORTGAGEE_APPLIED_REL}. The row expects the applied bytes and names the second mortgagee link applied record; its SQL 148 hold is unchanged.`));
   assert.deepEqual(PLAN.members[MEMBER], {
+    operation: 'replace',
+    accepted_sha256: accepted,
+    expected_live_sha256: accepted,
+    sql_before: SQL148_FILE,
+    manifest: SECOND_MORTGAGEE_APPLIED_REL,
+  });
+  const before = secondMortgageePre(structuredClone(PLAN));
+  assert.deepEqual(before.members[MEMBER], {
     operation: 'replace',
     accepted_sha256: accepted,
     expected_live_sha256: live.accepted_sha256,
@@ -7793,7 +7844,7 @@ test('Second mortgagee (owner 2026-11-10): workflow-rpc.mjs REPLACE from the Los
   for (const text of ['run 42905846810', 'read-live run 42906285342', `receipt before ${pin148.expected_live_definition_sha256.slice(0, 8)}…`, `after ${pin148.intended_replacement_sha256.slice(0, 8)}…`]) {
     assert.ok(staging148.evidence.includes(text), text);
   }
-  const sql148Pending = structuredClone(PLAN);
+  const sql148Pending = structuredClone(before);
   sql148Pending.sql_prerequisites[SQL148_FILE] = { verified_live: false, evidence: null };
   assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
   assert.equal(approvalPhrase(MEMBER), `DEPLOY ${MEMBER} TO PRODUCTION`);
@@ -7804,22 +7855,28 @@ test('Second mortgagee (owner 2026-11-10): workflow-rpc.mjs REPLACE from the Los
     'write-claim-settlement.mjs',
   ]);
   const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
-  const ready = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: live.accepted_sha256 }) });
+  // Inspect: before the apply, READY on the recorded live bytes (production inspect run 42911952545, replayed on the
+  // pre-apply plan); now ALREADY_ACCEPTED on main's (re-inspect run 42912192599), and the escrow close bytes are drift.
+  const ready = await run(inspect, { root: ROOT, plan: before, inspectLive: liveFor(MEMBER, { sha256: live.accepted_sha256, plan: before }) });
   assert.equal(ready.state, 'READY');
   assert.equal(ready.mutation, false);
   assert.equal((await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: accepted }) })).state, 'ALREADY_ACCEPTED');
-  await assert.rejects(
-    run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: 'c'.repeat(64) }) }),
-    (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
-  );
+  for (const other of [live.accepted_sha256, 'c'.repeat(64)]) {
+    await assert.rejects(
+      run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: other }) }),
+      (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+      other,
+    );
+  }
   // An apply was refused while SQL 148 was not recorded live in production (the plan before the SQL 148 record change,
   // replayed on a copy) ...
   await assert.rejects(
     run(applyEnv(MEMBER, { CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: live.accepted_sha256 }), applyDeps(MEMBER, { sha256: live.accepted_sha256, plan: sql148Pending }).deps),
     (error) => error.code === CODES.PRODUCTION_APPROVAL_REQUIRED && error.details.sql_before === SQL148_FILE,
   );
-  // ... and passes the SQL gate now that the committed plan records it (dry: no mutation), one receipt for this member.
-  const { deps: liveDeps, calls: liveCalls } = applyDeps(MEMBER, { sha256: live.accepted_sha256, plan: structuredClone(PLAN) });
+  // ... and passed the SQL gate once the plan recorded it (the pre-apply plan with SQL 148 recorded; dry: no mutation),
+  // one receipt for this member.
+  const { deps: liveDeps, calls: liveCalls } = applyDeps(MEMBER, { sha256: live.accepted_sha256, plan: structuredClone(before) });
   const applied = await run(applyEnv(MEMBER, { CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: live.accepted_sha256 }), liveDeps);
   assert.equal(applied.mutation, false);
   assert.deepEqual(liveCalls.receipt.owned_member_ops, { replace: [MEMBER], add: [] });
