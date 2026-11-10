@@ -233,7 +233,16 @@ test('order: no predecessor and no order; SQL 98 / SQL 96 objects are prerequisi
   assert.equal(pre.verified_live, true);
   assert.equal(pre.pin, 'ops/deployment-guard/sql120-usage-events-at-approval-and-send-production-apply.json');
   assert.match(pre.evidence, /SSM 0c164128-b7cb-4e42-b1a4-28c3fa42d7eb/);
-  assert.deepEqual(Object.keys(plan.members).filter((m) => plan.members[m].sql_before === SQL120_FILE), ['tenant-billing-engine.mjs']);
+  // The billing engine was the one member held on SQL 120; the usage fees plan (2026-11-10) moved its hold on to SQL 149,
+  // which refuses to run without SQL 120 (sql149_prerequisite_missing), so SQL 120 still comes first.
+  const SQL149_FILE = 'aws/workflows/sql/149_invoice_and_failed_deposit_fees.sql';
+  const held120 = Object.keys(plan.members).filter((m) => plan.members[m].sql_before === SQL120_FILE);
+  if (plan.members['tenant-billing-engine.mjs'].sql_before === SQL149_FILE) {
+    assert.deepEqual(held120, []);
+    assert.match(fs.readFileSync(path.join(ROOT, SQL149_FILE), 'utf8'), /to_regprocedure\('public\.aws_record_checkalt_billing_event\(\)'\) IS NULL/);
+  } else {
+    assert.deepEqual(held120, ['tenant-billing-engine.mjs']);
+  }
   const runbook = fs.readFileSync(path.join(ROOT, COMMITTED.tooling.runbook), 'utf8');
   assert.ok(runbook.includes(COMMITTED.intended_replacement_sha256));
   assert.ok(runbook.includes(COMMITTED.source_sha256));

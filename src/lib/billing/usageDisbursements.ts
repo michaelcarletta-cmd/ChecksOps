@@ -64,6 +64,8 @@ const LABELS: Record<string, string> = {
   mortgage_shipping_label: "Mortgage shipping label",
   mortgage_ops_initial: "Mortgage handling",
   mortgage_ops_additional_check: "Mortgage handling, additional check",
+  invoice_sent: "Invoice sent",
+  failed_deposit: "Failed deposit",
 };
 
 /** A tenant-facing name for a usage event type (never a provider name). */
@@ -141,6 +143,8 @@ export const USAGE_CATEGORIES = [
   { value: "check_processing", label: "Check processing" },
   { value: "payments", label: "Next-day / same-day payments" },
   { value: "mortgage", label: "Mortgage handling" },
+  { value: "invoices", label: "Invoices sent" },
+  { value: "failed_deposits", label: "Failed deposits" },
   { value: "other", label: "Other" },
 ] as const;
 
@@ -151,6 +155,8 @@ export function usageCategory(eventType: string | null | undefined): Exclude<Usa
   if (key === "check_processing") return "check_processing";
   if (isSendFeeEvent(key)) return "payments";
   if (key.startsWith("mortgage")) return "mortgage";
+  if (key === "invoice_sent") return "invoices";
+  if (key === "failed_deposit") return "failed_deposits";
   return "other";
 }
 
