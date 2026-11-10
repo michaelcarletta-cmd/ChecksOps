@@ -571,16 +571,19 @@ test('the production plan section accepts inspect run 41463084601 and records ap
       }
       if (name === 'app-services.mjs') {
         // Moved on twice: the public demo request REPLACE from the rebuild's bytes, applied 2026-11-05 (production run
-        // 42105010522, its applied record), then the external disbursement REPLACE (#1729, not applied) from those
-        // applied bytes: the applied demo request bytes expected live, naming the reconciled planning manifest.
+        // 42105010522, its applied record), then the external disbursement REPLACE (#1729) from those applied bytes,
+        // applied 2026-11-10 (production run 42879179121): main's bytes expected live, naming the external disbursement
+        // applied record, whose reconciled planning manifest started from the applied demo request bytes.
         const recorded = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, appliedRel), 'utf8')).members[name];
         const planned = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, recorded.previous_manifest), 'utf8')).members[name];
         assert.equal(planned.live_sha256, entry.accepted_sha256, name);
         assert.equal(recorded.live_sha256, recorded.accepted_sha256, name);
-        assert.equal(row.expected_live_sha256, recorded.accepted_sha256, name);
+        assert.equal(row.expected_live_sha256, row.accepted_sha256, name);
         assert.notEqual(row.accepted_sha256, recorded.accepted_sha256, name);
-        assert.equal(row.manifest, 'aws/tests/fixtures/production-external-disbursement-router-reconciled-manifest-2026-11-10.json', name);
-        const next = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, row.manifest), 'utf8')).members[name];
+        assert.equal(row.manifest, 'aws/tests/fixtures/production-external-disbursement-applied-manifest-2026-11-10.json', name);
+        const externalApplied = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, row.manifest), 'utf8')).members[name];
+        assert.deepEqual(externalApplied, { live_sha256: row.accepted_sha256, accepted_sha256: row.accepted_sha256, operation: 'replace', previous_manifest: 'aws/tests/fixtures/production-external-disbursement-router-reconciled-manifest-2026-11-10.json' }, name);
+        const next = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, externalApplied.previous_manifest), 'utf8')).members[name];
         assert.deepEqual(next, { live_sha256: recorded.accepted_sha256, accepted_sha256: row.accepted_sha256, operation: 'replace', previous_manifest: appliedRel }, name);
         continue;
       }
