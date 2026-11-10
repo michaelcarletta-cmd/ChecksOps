@@ -1,0 +1,64 @@
+{
+  "id": "sql148-second-mortgagee-link-production-apply",
+  "migration": "sql148",
+  "authorization": "pending",
+  "execute": false,
+  "target_environment": "production",
+  "target_component": "production-sql",
+  "deployment_type": "sql-apply",
+  "filename": "aws/workflows/sql/148_second_mortgagee_link.sql",
+  "migration_id": "148_second_mortgagee_link",
+  "staging_pin_commit": "ac6567f2aecb8af11e50b6d8a3dc1d8e0f302751",
+  "source_sha256": "f87ea6d7b9284b86abf4fdd1aea8e219cdf51329b6a24ac73dc5cebcd64999c5",
+  "function_identities": [
+    "public.aws_link_second_mortgagee(uuid, uuid)"
+  ],
+  "expected_live_definition_sha256": null,
+  "intended_replacement_sha256": "0ea9b78f674241215a46bbcfd5452ade00d472416b51cefdcd423258b525127b",
+  "authorization_phrase": "APPLY_SECOND_MORTGAGEE_LINK",
+  "predecessors": [],
+  "order_note": "No predecessor: SQL 148 redefines one existing unique index in place and creates one new SECURITY DEFINER function, aws_link_second_mortgagee(uuid, uuid), on the Mortgage Desk schema the AWS databases already have (mortgage_handling_requests with id, tenant_id, check_intake_item_id, status, endorsement_order, total_mortgagees and predecessor_request_id), SQL 90's aws_can_write_tenant(uuid) (SQL 90 applied in production), auth.uid() and role checksops; a read-only production inspect confirms them. The index public.mortgage_handling_requests_one_open_per_check must be live as the Supabase definition (migration 20260715110727: (check_intake_item_id) WHERE status IN ('requested', 'in_progress'), label supabase_20260715110727) or as SQL 148's own ((check_intake_item_id, COALESCE(endorsement_order, 1)) for the same statuses); absent or any other definition is refused (replaced_indexes_replaceable), and the inspect's release_sql_inspect.index_definitions names which one is live. No other valid unique index may key the table on check_intake_item_id alone (no_other_per_check_unique_index: the catalog count other_per_check_unique_indexes must be 0). The applying login must own public.mortgage_handling_requests without FORCE ROW LEVEL SECURITY, or be a superuser or BYPASSRLS (definer_can_write_relations): the DEFINER updates rows no tenant policy lets it update, and only the owner may redefine the index. Expected pre-state in both environments: the function absent and the index at the Supabase definition (release sql148 v1, derived: 508588e6cd7d48ca74411aba8e0220842e0490bde69a881d362966f77e54d862). Where the function already exists (a re-run) it must be owned by the applying login (functions_owned_by_login), keep its jsonb result (function_results_match) and hold no EXECUTE grant other than checksops and the owner, which the file keeps, and PUBLIC, anon, authenticated and service_role, which it revokes (function_acl_replaceable). The ACL after the apply is checksops and the owner. The API change that calls it (aws/functions/api/workflow-rpc.mjs, RPC link_second_mortgagee, overlay member workflow-rpc.mjs with sql_before SQL 148) needs the guarded Lambda path after this pin is applied in that environment; until then the 2nd mortgagee's request is still refused while the 1st is open, as today. No API, Lambda or SPA change is part of this pin. Adds no trigger.",
+  "admin_login": "checksops_admin",
+  "rds_identifier": "checksops-production",
+  "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
+  "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
+  "tooling": {
+    "status": "built",
+    "production_tool": "scripts/deployment-guard/sql148-second-mortgagee-link-production-apply.mjs",
+    "production_lib": "scripts/deployment-guard/lib/release-sql-production-apply.mjs",
+    "staging_executor_handler": "aws/write-path/guarded-sql-executor/index.mjs handleReleaseSqlMigration",
+    "staging_workflow_choice": "sql148-second-mortgagee-link",
+    "one_shot_migration": "sql148",
+    "fingerprint_engine": "scripts/deployment-guard/lib/release-sql-state.mjs",
+    "runbook": "ops/production-sql-148-apply.md",
+    "tests": [
+      "aws/tests/release-sql148-executor.test.mjs",
+      "aws/tests/release-sql148-production-apply.test.mjs",
+      "aws/tests/release-sql90-97-executor.test.mjs",
+      "aws/tests/release-sql90-97-production-apply.test.mjs",
+      "aws/tests/sql148-second-mortgagee-link-pg.test.mjs"
+    ],
+    "note": "Guarded tooling for SQL 148: sql148-second-mortgagee-link-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql148-second-mortgagee-link); production-sql-one-shot.mjs --migration sql148. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): the new function with the file's body and attributes and EXECUTE for checksops and the owner, and the index at SQL 148's definition. The engine's index entry carries replaces (the Supabase definition), so an index redefined in place is accepted only from that definition or the file's own. The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
+  },
+  "production_inspect": {
+    "status": "pending",
+    "date": null,
+    "ssm_command_id": null,
+    "source_commit": null,
+    "read_only": true,
+    "connected_as": "checksops_admin",
+    "live_definition_sha256": null,
+    "apply_preconditions_met": null,
+    "precondition_failures": null,
+    "note": "Pending: no release-engine production inspect has been run for SQL 148 yet. Expected release-engine fingerprint of the pre-state under sql148: 508588e6cd7d48ca74411aba8e0220842e0490bde69a881d362966f77e54d862 (the function absent and the index at the Supabase definition; derived by aws/tests/release-sql148-executor.test.mjs). Record the one-shot --phase inspect's date, SSM command id, source commit, live_definition_sha256, prerequisites_missing, release_sql_inspect.functions, release_sql_inspect.function_acl, release_sql_inspect.index_definitions (expected supabase_20260715110727), release_sql_inspect.definer_writes (must read ok true), counts.other_per_check_unique_indexes (must be 0), precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. Stop if prerequisites_missing is not [] or precondition_failures is not [] (prerequisites_present, replaced_indexes_replaceable, no_other_per_check_unique_index, definer_can_write_relations; on a re-run also functions_owned_by_login, function_results_match, function_acl_replaceable): that needs its own reviewed change."
+  },
+  "intended_post_state": {
+    "fingerprint": "0ea9b78f674241215a46bbcfd5452ade00d472416b51cefdcd423258b525127b",
+    "note": "aws_link_second_mortgagee(uuid, uuid), owned by checksops_admin, plpgsql, VOLATILE, SECURITY DEFINER, search_path public, pg_temp, RETURNS jsonb, EXECUTE for checksops and the owner (PUBLIC, anon, authenticated and service_role revoked). Only for a signed-in user (42501 mortgagee_link_forbidden); two different request ids (22023 mortgagee_link_invalid: request ids); both requests locked FOR UPDATE in id order, each existing and of a tenant the caller is a member of (aws_can_write_tenant; P0002 mortgagee_link_request_not_found, the same answer for another tenant's request); same tenant and check (22023 mortgagee_link_invalid: different check); neither cancelled, the 1st with no predecessor, order NULL or 1 and total NULL or 2, the 2nd with order NULL or 2, total NULL or 2 and predecessor NULL or the 1st (22023 mortgagee_link_invalid); no other live request of the check already in 2nd place (23505 mortgagee_link_conflict); then the 1st set to 1 of 2 and the 2nd to 2 of 2 with the 1st as predecessor, each only where it differs. public.mortgage_handling_requests_one_open_per_check: CREATE UNIQUE INDEX ... USING btree (check_intake_item_id, COALESCE(endorsement_order, 1)) WHERE (status = ANY (ARRAY['requested'::text, 'in_progress'::text])), owned with the table. No other function, index, table, column, policy, RLS setting, grant, trigger or row change. The fingerprint is releaseIntendedHash('sql148', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): 0ea9b78f674241215a46bbcfd5452ade00d472416b51cefdcd423258b525127b."
+  },
+  "staging_acceptance": {
+    "ok": false,
+    "reference": null,
+    "basis": "Pending: record the guarded staging SQL executor read-live and the staging apply of SQL 148 (choice sql148-second-mortgagee-link) here in the reviewed change that sets execute true. The behavior is covered on PostgreSQL 16 by aws/tests/sql148-second-mortgagee-link-pg.test.mjs. Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+  }
+}

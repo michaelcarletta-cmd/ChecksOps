@@ -41,6 +41,11 @@
  *   whole_tables       tables whose whole access surface is fingerprinted (SQL 100): RLS flags,
  *                      every policy, every non-owner table grant and every unlisted column grant
  *   indexes            created on an existing table: name and pg_get_indexdef (SQL 98)
+ *   indexes[].replaces an index the file redefines in place under the same name (SQL 148):
+ *                      [{ label, def }], the only live definitions it accepts besides its own
+ *                      (replaced_indexes_replaceable: the index must be live as one of them or
+ *                      as the file's own; absent or any other definition refuses); the inspect
+ *                      reports which one is live by label (index_definitions)
  *   unique_covers      a unique index covering columns (contains, none outside within) that the
  *                      file adds only when none exists; duplicates_count names the count that
  *                      must be 0 otherwise (SQL 98)
@@ -8413,6 +8418,89 @@ export const RELEASE_SQL_SPECS = deepFreeze({
         "public.payment_transfers",
         "public.stakeholder_accounts",
         "public.check_stakeholders"
+      ]
+  },
+
+  // SQL 148 (owner 2026-11-10: "build the second-mortgagee fix"; tooling: "build the SQL 148 tooling and merge it when
+  // green"): Send to Mortgage Desk can send a 2nd mortgagee while the 1st request is open, and the two requests are
+  // linked. Two changes in one transaction:
+  //   1) the unique index public.mortgage_handling_requests_one_open_per_check is redefined in place, same name, from
+  //      the Supabase definition (migration 20260715110727: (check_intake_item_id) WHERE status IN ('requested',
+  //      'in_progress'), carried by the database copy) to (check_intake_item_id, COALESCE(endorsement_order, 1)) for
+  //      the same open statuses. indexes[].replaces names the Supabase definition: the engine accepts only that one
+  //      or the file's own live (replaced_indexes_replaceable), and the inspect reports which is live
+  //      (index_definitions). Absent is refused too: both databases carry the Supabase index, and the file's
+  //      duplicate check for that case would need a row count this spec does not take. The file's other gate (no
+  //      other valid unique index keying the table on check_intake_item_id alone) is the catalog count
+  //      other_per_check_unique_indexes, which must be 0 (no_other_per_check_unique_index).
+  //   2) one new SECURITY DEFINER function (plpgsql, VOLATILE, search_path public, pg_temp), RETURNS jsonb:
+  //      aws_link_second_mortgagee(uuid, uuid) marks the 1st request 1 of 2 and the 2nd 2 of 2 with the 1st as
+  //      predecessor, only for a member of the requests' tenant (SQL 90's aws_can_write_tenant), both rows locked FOR
+  //      UPDATE. EXECUTE checksops and the owner (PUBLIC, anon, authenticated and service_role revoked).
+  // definer_writes: the table it updates past RLS as its owner (the file refuses otherwise; only the owner may redefine
+  // the index). No predecessor in the release engine (SQL 90's aws_can_write_tenant(uuid) is a prerequisite). No table,
+  // column, policy, grant, trigger or row change.
+  sql148: {
+      "key": "sql148",
+      "label": "SQL 148",
+      "choice": "sql148-second-mortgagee-link",
+      "production_pin_rel": "ops/deployment-guard/sql148-second-mortgagee-link-production-apply.json",
+      "script": "sql148-second-mortgagee-link-production-apply",
+      "prerequisites": [
+        "public.mortgage_handling_requests",
+        "public.aws_can_write_tenant(uuid)",
+        "auth.uid()",
+        "role checksops",
+        "column public.mortgage_handling_requests.id",
+        "column public.mortgage_handling_requests.tenant_id",
+        "column public.mortgage_handling_requests.check_intake_item_id",
+        "column public.mortgage_handling_requests.status",
+        "column public.mortgage_handling_requests.endorsement_order",
+        "column public.mortgage_handling_requests.total_mortgagees",
+        "column public.mortgage_handling_requests.predecessor_request_id"
+      ],
+      "predecessors": [],
+      "functions": [
+        {
+          "identity": "public.aws_link_second_mortgagee(uuid, uuid)",
+          "acl": [
+            "checksops EXECUTE",
+            "owner EXECUTE"
+          ],
+          "revokes": [
+            "PUBLIC EXECUTE",
+            "anon EXECUTE",
+            "authenticated EXECUTE",
+            "service_role EXECUTE"
+          ]
+        }
+      ],
+      "indexes": [
+        {
+          "table": "public.mortgage_handling_requests",
+          "name": "mortgage_handling_requests_one_open_per_check",
+          "def": "CREATE UNIQUE INDEX mortgage_handling_requests_one_open_per_check ON public.mortgage_handling_requests USING btree (check_intake_item_id, COALESCE(endorsement_order, 1)) WHERE (status = ANY (ARRAY['requested'::text, 'in_progress'::text]))",
+          "replaces": [
+            {
+              "label": "supabase_20260715110727",
+              "def": "CREATE UNIQUE INDEX mortgage_handling_requests_one_open_per_check ON public.mortgage_handling_requests USING btree (check_intake_item_id) WHERE (status = ANY (ARRAY['requested'::text, 'in_progress'::text]))"
+            }
+          ]
+        }
+      ],
+      "extra_preconditions": [
+        "no_other_per_check_unique_index"
+      ],
+      "counts": {
+        "other_per_check_unique_indexes": {
+          "requires": [
+            "public.mortgage_handling_requests"
+          ],
+          "sql": "SELECT count(*)::int AS n FROM pg_catalog.pg_index i JOIN pg_catalog.pg_class c ON c.oid = i.indexrelid WHERE i.indrelid = pg_catalog.to_regclass('public.mortgage_handling_requests') AND i.indisunique AND i.indisvalid AND i.indnkeyatts = 1 AND i.indexprs IS NULL AND i.indkey[0] = (SELECT a.attnum FROM pg_catalog.pg_attribute a WHERE a.attrelid = i.indrelid AND a.attname = 'check_intake_item_id' AND NOT a.attisdropped) AND c.relname <> 'mortgage_handling_requests_one_open_per_check'"
+        }
+      },
+      "definer_writes": [
+        "public.mortgage_handling_requests"
       ]
   },
 });
