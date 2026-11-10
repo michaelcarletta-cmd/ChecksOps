@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { CheckOpsLogo } from "@/components/marketing/CheckOpsLogo";
 import { MarketingMenuButton, MarketingMobileMenu } from "@/components/marketing/MarketingMobileMenu";
+import { useNavItemsWithBlog } from "@/hooks/useBlogArticles";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import { COMPARISON_LINKS, VS_IINK_FAQ as FAQ, VS_IINK_PAGE } from "@/pages/marketing/marketingPages";
 
@@ -76,6 +77,7 @@ const usd = (n: number) => `$${n.toLocaleString("en-US")}`;
 
 export default function ChecksOpsVsIink() {
   const [menuOpen, setMenuOpen] = useState(false);
+  const navItems = useNavItemsWithBlog(NAV_ITEMS);
   usePageMeta(VS_IINK_PAGE);
 
   return (
@@ -86,7 +88,7 @@ export default function ChecksOpsVsIink() {
             <CheckOpsLogo className="text-foreground h-9 sm:h-10" />
           </Link>
           <nav className="hidden md:flex items-center gap-6 text-sm text-muted-foreground">
-            {NAV_ITEMS.map((item) => (
+            {navItems.map((item) => (
               <Link key={item.href} to={item.href} className="hover:text-foreground transition-colors">{item.label}</Link>
             ))}
           </nav>
@@ -100,7 +102,7 @@ export default function ChecksOpsVsIink() {
             <MarketingMenuButton open={menuOpen} onToggle={() => setMenuOpen(!menuOpen)} />
           </div>
         </div>
-        <MarketingMobileMenu open={menuOpen} onClose={() => setMenuOpen(false)} items={NAV_ITEMS} demoHref="/#demo" />
+        <MarketingMobileMenu open={menuOpen} onClose={() => setMenuOpen(false)} items={navItems} demoHref="/#demo" />
       </header>
 
       <main className="mx-auto max-w-5xl px-4 md:px-6 py-14 md:py-20">

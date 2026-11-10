@@ -75,7 +75,9 @@ test('every marketing page is in the sitemap and llms.txt, and no retired page i
     assert.ok(sitemap.includes(`<loc>${url}</loc>`), url);
     assert.ok(llms.includes(`(${url})`), url);
   }
-  assert.equal((sitemap.match(/<loc>/g) || []).length, MARKETING_PAGES.length);
+  // Plus /blog: its articles come live from HeyCatch, so it has no build-time head of its own.
+  assert.ok(sitemap.includes('<loc>https://checksops.com/blog</loc>'));
+  assert.equal((sitemap.match(/<loc>/g) || []).length, MARKETING_PAGES.length + 1);
   for (const retired of RETIRED_MARKETING_PATHS) {
     assert.ok(!sitemap.includes(`https://checksops.com${retired}<`), retired);
     assert.ok(!llms.includes(`https://checksops.com${retired})`), retired);

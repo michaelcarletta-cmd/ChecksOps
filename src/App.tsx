@@ -36,6 +36,8 @@ const ChecksOpsVsGuidewire = lazy(() =>
 );
 const ClaimCheckTracking = lazy(() => import("./pages/marketing/ClaimCheckTracking"));
 const MarketingAbout = lazy(() => import("./pages/marketing/MarketingAbout"));
+const BlogIndex = lazy(() => import("./pages/marketing/BlogIndex"));
+const BlogPost = lazy(() => import("./pages/marketing/BlogPost"));
 const CheckOpsSecurity = lazy(() => import("./pages/checkops/CheckOpsSecurity"));
 const CheckOpsLogin = lazy(() => import("./pages/checkops/CheckOpsLogin"));
 const CheckOpsSignup = lazy(() => import("./pages/checkops/CheckOpsSignup"));
@@ -94,6 +96,7 @@ const PageLoader = () => (
  * - /endorse      → Check endorsement flow (public token-based)
  * - /payment-direction/:token → Payment direction flow (public token-based)
  * - /h/ledger/:token → Homeowner tracking ledger (AWS send URL; not a tenant slug)
+ * - /blog, /blog/:slug → HeyCatch blog (articles read live from the HeyCatch API)
  * - /:slug/*      → Tenant Check Center (white-label)
  * - /wl/:slug/*   → Legacy redirect to /:slug/*
  */
@@ -127,6 +130,9 @@ function CheckOpsRoutes() {
           visitors home until then. Paths people guess (/customers, /features) go home instead of
           letting /:slug/* render "Organization Not Found". */}
       <Route path="/about" element={<Suspense fallback={<PageLoader />}><MarketingAbout /></Suspense>} />
+      {/* HeyCatch blog: must stay above /:slug/* so "blog" is never read as a tenant slug. */}
+      <Route path="/blog" element={<Suspense fallback={<PageLoader />}><BlogIndex /></Suspense>} />
+      <Route path="/blog/:slug" element={<Suspense fallback={<PageLoader />}><BlogPost /></Suspense>} />
       <Route path="/customers" element={<Navigate to="/" replace />} />
       <Route path="/features" element={<Navigate to="/#capabilities" replace />} />
       <Route path="/security" element={<Suspense fallback={<PageLoader />}><CheckOpsSecurity /></Suspense>} />

@@ -44,6 +44,7 @@ import {
   HeroUsageLine,
 } from "@/components/marketing/MarketingProof";
 import { usePageMeta } from "@/hooks/usePageMeta";
+import { useBlogHasArticles, useNavItemsWithBlog } from "@/hooks/useBlogArticles";
 import { COMPARISON_LINKS, HOME_FAQ as FAQ, HOME_PAGE } from "@/pages/marketing/marketingPages";
 import { HERO_SCREENSHOT } from "@/pages/marketing/marketingProof";
 import { ROLLOUT_GUARANTEE } from "@/pages/marketing/marketingPricing";
@@ -284,6 +285,8 @@ const HeroMockup = () => {
 export default function CheckCenterMarketing() {
   const supportEmail = "support@checksops.com";
   const [menuOpen, setMenuOpen] = useState(false);
+  const blogVisible = useBlogHasArticles();
+  const navItems = useNavItemsWithBlog(NAV_ITEMS);
   const location = useLocation();
   usePageMeta(HOME_PAGE);
 
@@ -384,6 +387,7 @@ export default function CheckCenterMarketing() {
             <a href="#partners" className="hover:text-foreground transition-colors">Partners</a>
             <a href="#security" className="hover:text-foreground transition-colors">Security</a>
             <a href="#demo" className="hover:text-foreground transition-colors">Demo</a>
+            {blogVisible && <Link to="/blog" className="hover:text-foreground transition-colors">Blog</Link>}
           </nav>
           <div className="flex items-center gap-2">
             <Button asChild size="sm" className="h-11 sm:h-9">
@@ -392,7 +396,7 @@ export default function CheckCenterMarketing() {
             <MarketingMenuButton open={menuOpen} onToggle={() => setMenuOpen(!menuOpen)} />
           </div>
         </div>
-        <MarketingMobileMenu open={menuOpen} onClose={() => setMenuOpen(false)} items={NAV_ITEMS} demoHref="#demo" />
+        <MarketingMobileMenu open={menuOpen} onClose={() => setMenuOpen(false)} items={navItems} demoHref="#demo" />
       </header>
 
       {/* Hero */}
