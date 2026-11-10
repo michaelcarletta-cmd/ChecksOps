@@ -28,6 +28,9 @@ export const DEFAULT_NEXT_DAY_RATE_CENTS = 75;
 export const DEFAULT_SAME_DAY_RATE_CENTS = 100;
 export const DEFAULT_MORTGAGE_INITIAL_RATE_CENTS = 1000;
 export const DEFAULT_MORTGAGE_ADDITIONAL_RATE_CENTS = 500;
+// SQL 149 (aws_invoice_fee_cents, aws_failed_deposit_fee_cents): the agreement's rates, same for every tenant.
+export const INVOICE_FEE_CENTS = 30;
+export const FAILED_DEPOSIT_FEE_CENTS = 200;
 
 const rate = (value: number | null | undefined, fallback: number): number => {
   const n = Number(value);
@@ -88,6 +91,18 @@ export function feeScheduleRows(rates: TenantFeeRates | null | undefined, charge
       fee: "Mortgage handling, additional check",
       when: "Each additional check on the same request",
       amount_cents: rate(rates?.mortgage_ops_additional_rate_cents, DEFAULT_MORTGAGE_ADDITIONAL_RATE_CENTS),
+    },
+    {
+      key: "invoice_sent",
+      fee: "Invoice",
+      when: "Each invoice you send to a customer (resending is free)",
+      amount_cents: INVOICE_FEE_CENTS,
+    },
+    {
+      key: "failed_deposit",
+      fee: "Failed deposit",
+      when: "Each deposit that is rejected, returned or fails, instead of the check fee",
+      amount_cents: FAILED_DEPOSIT_FEE_CENTS,
     },
   );
   return rows;

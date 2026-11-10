@@ -1,0 +1,21 @@
+{
+  "workstream_id": "usage-fees",
+  "authorization": "Pending owner review (2026-11-10). Planning only: nothing is live or verified. Each production apply needs its own owner approval, a staging acceptance reference and a read-only production inspect that confirms the live bytes.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Usage fees (owner 2026-11-10 \"work on these fixes\"): the SaaS Subscription Agreement charges $0.30 per invoice sent (3.6) and $2.00 per failed deposit (3.7), and nothing recorded either, so neither reached Settings -> Usage or the monthly invoice. SQL 149 records both as check_billing_events (an invoice when moov_invoices.sent_at is first set; a Check Alt deposit when it is rejected, errors, is a duplicate or is returned, one per deposit) and adds invoice_fee_count, invoice_fee_amount_cents, failed_deposit_count, failed_deposit_amount_cents to tenant_maintenance_payments. REPLACE tenant-fee-invoice-email.mjs c7c1921b -> ed6a66b4: the fee invoice email lists Invoices sent and Failed deposits from those columns. REPLACE tenant-billing-engine.mjs 32cc099e -> c8dd93ef: the monthly invoice reads the two event types into its totals, summary lines, line items and allocations, and writes the new columns (with a fallback without them). Both held on SQL 149 (sql_before). Pre-state: the email's fee collection bytes, put live with the engine; the engine's fee pull savepoints applied bytes (applied 2026-11-06, run 42303279340); a read-only production inspect must confirm each first. No new import; order unchanged (email before engine). The website change (Settings -> Usage card and log, fee schedule) ships with the SPA. Planning only.",
+  "members": {
+    "tenant-fee-invoice-email.mjs": {
+      "live_sha256": "c7c1921bd6be6d311f1d81235911f79a55f0d1bbd1f7b4f9a5365d1324052dc2",
+      "accepted_sha256": "ed6a66b4e9dd3514a717f8df7262c4dda024a7e0a78145f9e24621386868a800",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-fee-collection-pin-manifest-2026-10-17.json"
+    },
+    "tenant-billing-engine.mjs": {
+      "live_sha256": "32cc099e9dcd448921fcb0d36d7893d25195c2dee58b0faafb1b5c78ce6c1310",
+      "accepted_sha256": "c8dd93efab86e3afafad1ddba09521816f236f1d49fbb3405211c7b20abebd76",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-fee-pull-savepoints-applied-manifest-2026-11-06.json"
+    }
+  }
+}

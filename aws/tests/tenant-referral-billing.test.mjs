@@ -117,3 +117,35 @@ test('readiness charges maintenance net of the combined discount and reports bot
   assert.equal(readiness.amountCents, 6400);
   assert.equal(readiness.maintenanceNetCents, 6400);
 });
+
+test('SQL 149: invoice fees and failed deposit fees are on the monthly invoice', async () => {
+  const { invoiceLineItems } = await import('../functions/api/tenant-billing-engine.mjs');
+  const tenant = { monthly_rate_cents: 10000, referral_discount_cents: 0 };
+  const invoiceFees = [
+    { id: 'e1', unit_price_cents: 30, billed_at: '2026-11-03T00:00:00Z' },
+    { id: 'e2', unit_price_cents: 30, billed_at: '2026-11-04T00:00:00Z' },
+  ];
+  const failedDeposits = [{ id: 'e3', unit_price_cents: 200, billed_at: '2026-11-05T00:00:00Z' }];
+  const totals = assembleInvoiceTotals({
+    tenant, period: '2026-11', checks: [{ unit_price_cents: 400 }], nextDay: [], sameDay: [], invoiceFees, failedDeposits,
+  });
+  assert.equal(totals.invoice_fee_count, 2);
+  assert.equal(totals.invoice_fee_amount_cents, 60);
+  assert.equal(totals.failed_deposit_count, 1);
+  assert.equal(totals.failed_deposit_amount_cents, 200);
+  assert.equal(totals.usage_total_cents, 400 + 60 + 200);
+  assert.equal(totals.amount_cents, 10000 + 660);
+  const summary = invoiceSummaryLines({ ok: true, ...totals });
+  assert.deepEqual(summary.filter((l) => ['invoice_sent', 'failed_deposit'].includes(l.key)), [
+    { key: 'invoice_sent', label: 'Invoices sent', count: 2, amount_cents: 60 },
+    { key: 'failed_deposit', label: 'Failed deposits', count: 1, amount_cents: 200 },
+  ]);
+  const items = invoiceLineItems({ lines: { invoices_sent: invoiceFees, failed_deposits: failedDeposits } });
+  assert.deepEqual(items.map((l) => `${l.fee_type}|${l.source}|${l.unit_price_cents}`), [
+    'failed_deposit|event:e3|200', 'invoice_sent|event:e1|30', 'invoice_sent|event:e2|30',
+  ]);
+  // No new events: no new lines, so the preview hash of an existing period is unchanged.
+  const none = assembleInvoiceTotals({ tenant, period: '2026-11', checks: [], nextDay: [], sameDay: [] });
+  assert.equal(invoiceSummaryLines({ ok: true, ...none }).some((l) => ['invoice_sent', 'failed_deposit'].includes(l.key)), false);
+  assert.deepEqual(invoiceLineItems({ lines: {} }), []);
+});

@@ -147,9 +147,13 @@ const assertMovedToMoneyWrite = (member, { live, previous }) => {
     // Collection v2's row has since moved on to the fee leg REPLACE (SQL 145), which started from the applied bytes
     // and was applied 2026-11-07 (production run 42366401914): main's bytes expected live, naming its applied record.
     const feeLeg = member === FEE_LEG_MEMBER;
-    assert.equal(row.manifest, feeLeg ? FEE_LEG_API_APPLIED_REL : FEE_PULL_SAVEPOINTS_APPLIED_REL, member);
+    // The engine's row has since moved on to the usage fees REPLACE (2026-11-10, held on SQL 149, planning only),
+    // which starts from the fee pull savepoints applied bytes and names its own manifest.
+    const usageFees = USAGE_FEES.members[member];
+    assert.equal(row.manifest, feeLeg ? FEE_LEG_API_APPLIED_REL : usageFees ? USAGE_FEES_REL : FEE_PULL_SAVEPOINTS_APPLIED_REL, member);
     assert.equal(row.accepted_sha256, sha(`aws/functions/api/${member}`), member);
-    assert.equal(row.expected_live_sha256, row.accepted_sha256, member);
+    assert.equal(row.expected_live_sha256, usageFees ? usageFees.live_sha256 : row.accepted_sha256, member);
+    if (usageFees) assert.equal(usageFees.previous_manifest, FEE_PULL_SAVEPOINTS_APPLIED_REL, member);
     if (feeLeg) assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, FEE_LEG_API_REL), 'utf8')).members[member].live_sha256, FEE_PULL_COLLECTION_BYTES, member);
     assert.notEqual(row.accepted_sha256, recorded.accepted_sha256, member);
     return;
@@ -438,6 +442,21 @@ const SQL148_FILE = 'aws/workflows/sql/148_second_mortgagee_link.sql';
 const holdNow = (member, was) => (SECOND_MORTGAGEE.members[member] ? SQL148_FILE : was);
 /** The bytes the Loss Draft escrow close applied (2026-10-31): main's, until the second mortgagee plan moved them on. */
 const escrowApplied = (member) => SECOND_MORTGAGEE.members[member]?.live_sha256 ?? sha(`aws/functions/api/${member}`);
+// Usage fees (owner 2026-11-10): tenant-fee-invoice-email.mjs and tenant-billing-engine.mjs REPLACE their live bytes,
+// held on SQL 149 (not live), planning only (its own test, at the end).
+const USAGE_FEES_REL = 'aws/tests/fixtures/production-usage-fees-manifest-2026-11-10.json';
+const USAGE_FEES = JSON.parse(fs.readFileSync(path.join(ROOT, USAGE_FEES_REL), 'utf8'));
+const SQL149_FILE = 'aws/workflows/sql/149_invoice_and_failed_deposit_fees.sql';
+/** The bytes live before the usage fees plan: main's, until that plan moved the member on. */
+const beforeUsageFees = (member) => USAGE_FEES.members[member]?.live_sha256 ?? sha(`aws/functions/api/${member}`);
+/**
+ * A plan row as it stood before the usage fees plan moved it on: the row, with its live bytes accepted and expected,
+ * its previous manifest named and its previous hold restored (`row` is the row before, as each test states it).
+ */
+const usageFeesPre = (plan, member, row) => {
+  if (USAGE_FEES.members[member]) plan.members[member] = { ...row };
+  return plan;
+};
 const PLAN_SQL98_LIVE = (() => {
   const plan = providersPre(structuredClone(PLAN));
   plan.sql_prerequisites[SQL98_FILE] = { verified_live: true, evidence: 'test' };
@@ -451,6 +470,14 @@ const withSql145 = (member, deps) => {
   if (PLAN.members[member]?.sql_before !== SQL145_FILE) return deps;
   const plan = structuredClone(deps.plan || PLAN);
   plan.sql_prerequisites[SQL145_FILE] = { verified_live: true, evidence: 'test' };
+  return { ...deps, plan };
+};
+// The usage fees members wait for SQL 149 (not live, planning only, its own test at the end): apply replays of older
+// workstreams run on a plan copy that states it live, as withSql145 does for SQL 145.
+const withSql149 = (member, deps) => {
+  if (PLAN.members[member]?.sql_before !== SQL149_FILE) return deps;
+  const plan = structuredClone(deps.plan || PLAN);
+  plan.sql_prerequisites[SQL149_FILE] = { verified_live: true, evidence: 'test' };
   return { ...deps, plan };
 };
 // providers/moov-status-catch-up.mjs waits for SQL 146 (the catch-up update fix, its own test below): the committed
@@ -699,7 +726,7 @@ test('read-only Moov wallet sync members apply in order with nested ZIP paths', 
   assert.ok(!positions.includes(-1));
   for (const member of MOOV) {
     const { deps, calls } = applyDeps(member);
-    const result = await run(applyEnv(member), withSql145(member, withSql98(member, deps)));
+    const result = await run(applyEnv(member), withSql149(member, withSql145(member, withSql98(member, deps))));
     assert.equal(result.mutation, false, member);
     const op = PLAN.members[member].operation;
     assert.deepEqual(calls.receipt.owned_member_ops, { replace: op === 'replace' ? [member] : [], add: op === 'add' ? [member] : [] }, member);
@@ -775,7 +802,7 @@ test('Moov wallet funding members apply in order: wallet sync, added modules, pr
   assert.ok(positions.every((pos, i) => pos >= 0 && (i === 0 || pos > positions[i - 1])), JSON.stringify(positions));
   for (const member of FUND) {
     const { deps, calls } = applyDeps(member);
-    const result = await run(applyEnv(member), withSql145(member, withSql98(member, deps)));
+    const result = await run(applyEnv(member), withSql149(member, withSql145(member, withSql98(member, deps))));
     assert.equal(result.mutation, false, member);
     const op = PLAN.members[member].operation;
     assert.deepEqual(calls.receipt.owned_member_ops, { replace: op === 'replace' ? [member] : [], add: op === 'add' ? [member] : [] }, member);
@@ -1324,6 +1351,19 @@ test('fee collection: eleven members on the fee manifest, collection-v2 then des
       assert.equal(resolvePlannedMember(member, { root: ROOT, plan: PLAN }).ok, true, member);
       continue;
     }
+    if (USAGE_FEES.members[member]) {
+      // Moved on to the usage fees REPLACE (2026-11-10, held on SQL 149), which starts from this manifest's bytes.
+      assert.deepEqual(USAGE_FEES.members[member], {
+        live_sha256: fees.members[member].accepted_sha256, accepted_sha256: row.accepted_sha256,
+        operation: 'replace', previous_manifest: MANIFEST_FEES,
+      }, member);
+      assert.equal(row.manifest, USAGE_FEES_REL, member);
+      assert.equal(row.expected_live_sha256, fees.members[member].accepted_sha256, member);
+      assert.equal(row.sql_before, SQL149_FILE, member);
+      assert.equal(sha(`aws/functions/api/${member}`), row.accepted_sha256, member);
+      assert.equal(resolvePlannedMember(member, { root: ROOT, plan: PLAN }).ok, true, member);
+      continue;
+    }
     assert.equal(row.manifest, MANIFEST_FEES, member);
     assert.equal(row.operation, ADDS.has(member) ? 'add' : 'replace', member);
     assert.equal(sha(`aws/functions/api/${member}`), row.accepted_sha256, member);
@@ -1353,9 +1393,13 @@ test('fee collection: eleven members on the fee manifest, collection-v2 then des
   assert.ok(at(COLLECTION) >= 0 && at(COLLECTION) < at(DESTINATION));
   assert.ok(at(DESTINATION) < at(INVOICE_EMAIL) && at(INVOICE_EMAIL) < at(ENGINE) && at(ENGINE) < at(HANDLERS));
   assert.ok(localImports(fs.readFileSync(path.join(API, DESTINATION), 'utf8'), DESTINATION).includes(COLLECTION));
-  // The invoice email module is new (ADD), imports the destination and is imported by the engine.
-  assert.equal(PLAN.members[INVOICE_EMAIL].expected_live_sha256, null);
-  assert.equal(PLAN.members[INVOICE_EMAIL].sql_before, null);
+  // The invoice email module was new (ADD), imports the destination and is imported by the engine. The usage fees
+  // plan (2026-11-10) moved its row on to a REPLACE of these ADD bytes, held on SQL 149 (checked above); the ADD
+  // below is replayed on the row as it stood, with main's bytes.
+  const addRow = { operation: 'add', accepted_sha256: sha(`aws/functions/api/${INVOICE_EMAIL}`), expected_live_sha256: null, sql_before: null, manifest: MANIFEST_FEES };
+  const emailAddPlan = () => usageFeesPre(structuredClone(PLAN), INVOICE_EMAIL, addRow);
+  assert.equal(emailAddPlan().members[INVOICE_EMAIL].expected_live_sha256, null);
+  assert.equal(emailAddPlan().members[INVOICE_EMAIL].sql_before, null);
   assert.ok(localImports(fs.readFileSync(path.join(API, INVOICE_EMAIL), 'utf8'), INVOICE_EMAIL).includes(DESTINATION));
   assert.ok(localImports(fs.readFileSync(path.join(API, ENGINE), 'utf8'), ENGINE).includes(INVOICE_EMAIL));
   // Its email imports are names the live bundle already exports (email.mjs and email-layout.mjs
@@ -1365,10 +1409,10 @@ test('fee collection: eleven members on the fee manifest, collection-v2 then des
   assert.ok(at('email-policy.mjs') > at(INVOICE_EMAIL));
   assert.match(fs.readFileSync(path.join(API, 'email-policy.mjs'), 'utf8'), /^export const normalizeEmail\b/m);
   assert.ok(at('email-branding.mjs') >= 0 && at('email-branding.mjs') < at(INVOICE_EMAIL));
-  const invoiceApply = await run(applyEnv(INVOICE_EMAIL), applyDeps(INVOICE_EMAIL).deps);
+  const invoiceApply = await run(applyEnv(INVOICE_EMAIL), applyDeps(INVOICE_EMAIL, { plan: emailAddPlan() }).deps);
   assert.equal(invoiceApply.mutation, false);
   await assert.rejects(
-    run(applyEnv(INVOICE_EMAIL), applyDeps(INVOICE_EMAIL, { sources: { 'email.mjs': 'export const handleSendEmail = async () => ({});\n' } }).deps),
+    run(applyEnv(INVOICE_EMAIL), applyDeps(INVOICE_EMAIL, { plan: emailAddPlan(), sources: { 'email.mjs': 'export const handleSendEmail = async () => ({});\n' } }).deps),
     (error) => error.code === CODES.DEPLOYMENT_COLLISION
       && error.details.problems.some((row) => row === 'email.mjs does not export sendViaSesOrSink'),
   );
@@ -1401,7 +1445,8 @@ test('fee collection: eleven members on the fee manifest, collection-v2 then des
   assert.equal((await run(applyEnv(DEPOSITS_GATE), applyDeps(DEPOSITS_GATE).deps)).mutation, false);
   // SQL 120 (send-time fees, after SQL 98) now holds the engine; the handlers (profile-update,
   // member-remove) wait on SQL 102, which requires SQL 98 (SQL 98 itself requires SQL 96).
-  assert.equal(PLAN.members[ENGINE].sql_before, 'aws/workflows/sql/120_usage_events_at_approval_and_send.sql');
+  // (The usage fees plan, 2026-11-10, moved the engine's hold on to SQL 149, which needs SQL 120.)
+  assert.equal(PLAN.members[ENGINE].sql_before, USAGE_FEES.members[ENGINE] ? SQL149_FILE : 'aws/workflows/sql/120_usage_events_at_approval_and_send.sql');
   assert.equal(PLAN.members[HANDLERS].sql_before, SQL102);
   // SQL 102 is recorded live in production since its guarded apply of 2026-10-20 (#1079).
   const pre102 = PLAN.sql_prerequisites[SQL102];
@@ -2093,8 +2138,10 @@ test('send-fee billing: tenant-billing-engine.mjs replaced the 43d9a162 bytes; p
   const redacted = JSON.parse(fs.readFileSync(path.join(ROOT, BILLING_DB_ERROR_REDACTION_APPLIED_REL), 'utf8')).members[ENGINE].accepted_sha256;
   assertMovedToMoneyWrite(ENGINE, { live: redacted, previous: BILLING_DB_ERROR_REDACTION_APPLIED_REL });
   assert.notEqual(row.accepted_sha256, LIVE);
-  // The engine bills the fee SQL 120 writes at send time: SQL 120 stays its prerequisite.
-  assert.equal(row.sql_before, 'aws/workflows/sql/120_usage_events_at_approval_and_send.sql');
+  // The engine bills the fee SQL 120 writes at send time: SQL 120 stays its prerequisite (through SQL 149, which needs
+  // SQL 120, once the usage fees plan moved the row on).
+  assert.equal(row.sql_before, USAGE_FEES.members[ENGINE] ? SQL149_FILE : 'aws/workflows/sql/120_usage_events_at_approval_and_send.sql');
+  if (USAGE_FEES.members[ENGINE]) assert.match(fs.readFileSync(path.join(ROOT, SQL149_FILE), 'utf8'), /aws_record_checkalt_billing_event\(\) \(SQL 120\)/);
   assert.equal(resolvePlannedMember(ENGINE, { root: ROOT, plan: PLAN }).ok, true);
   const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: ENGINE };
   // The applied bytes were the finding 25 REPLACE's starting point: READY on the pre-apply row (production
@@ -5733,7 +5780,8 @@ test('Billing database errors redacted (finding 25): tenant-billing-engine.mjs R
   assert.deepEqual(applied.members, { [MEMBER]: { live_sha256: accepted, accepted_sha256: accepted, operation: 'replace', previous_manifest: MANIFEST_REL } });
   // The row then moved on to the money-write flag REPLACE (finding 14 step 1), which starts from these bytes.
   assertMovedToMoneyWrite(MEMBER, { live: accepted, previous: BILLING_DB_ERROR_REDACTION_APPLIED_REL });
-  assert.equal(PLAN.members[MEMBER].sql_before, 'aws/workflows/sql/120_usage_events_at_approval_and_send.sql');
+  // (SQL 149 since the usage fees plan, 2026-11-10, moved the row on; SQL 149 needs SQL 120.)
+  assert.equal(PLAN.members[MEMBER].sql_before, USAGE_FEES.members[MEMBER] ? SQL149_FILE : 'aws/workflows/sql/120_usage_events_at_approval_and_send.sql');
   assert.ok(PLAN.notes.includes('Billing database errors redacted tenant-billing-engine.mjs applied 2026-10-31 (production run 41227499349'));
   // The one new import (data.mjs, for sanitizeLogText) is a member recorded live (the public partner codes'
   // applied bytes, which export it; the planned auth.email() REPLACE keeps the export).
@@ -5927,8 +5975,9 @@ test('Money-write flag (finding 14 step 1, 2026-10-31): ADD money-write-flag.mjs
     assert.ok(localImports(fs.readFileSync(path.join(API, member), 'utf8'), member).includes(ADD), member);
     assert.ok(PLAN.order.indexOf(ADD) < PLAN.order.indexOf(member), member);
   }
-  // SQL holds are unchanged (SQL 120 for the engine, SQL 102 for the handlers); nothing waits for SQL 136.
-  assert.equal(PLAN.members['tenant-billing-engine.mjs'].sql_before, 'aws/workflows/sql/120_usage_events_at_approval_and_send.sql');
+  // SQL holds are unchanged (SQL 120 for the engine, SQL 102 for the handlers); nothing waits for SQL 136. (The usage
+  // fees plan, 2026-11-10, has since moved the engine's hold on to SQL 149, which needs SQL 120.)
+  assert.equal(PLAN.members['tenant-billing-engine.mjs'].sql_before, USAGE_FEES.members['tenant-billing-engine.mjs'] ? SQL149_FILE : 'aws/workflows/sql/120_usage_events_at_approval_and_send.sql');
   assert.equal(PLAN.members['tenant-billing-handlers.mjs'].sql_before, 'aws/workflows/sql/102_platform_owner_tenant_profile.sql');
   for (const member of [ADD, 'providers/production/moov-wallet-sync.mjs', 'providers/parity/moov-functions.mjs', 'tenant-settings-handlers.mjs', 'tenant-collection-v2-settlement.mjs']) {
     assert.equal(PLAN.members[member].sql_before, null, member);
@@ -5972,7 +6021,7 @@ test('Money-write flag (finding 14 step 1, 2026-10-31): ADD money-write-flag.mjs
   // Each apply replays in plan order (dry: no mutation), one receipt per member.
   for (const member of [ADD, ...REPLACES]) {
     const { deps, calls } = applyDeps(member, member === ADD ? {} : { extra: [ADD] });
-    const result = await run(applyEnv(member), withSql145(member, withSql98(member, deps)));
+    const result = await run(applyEnv(member), withSql149(member, withSql145(member, withSql98(member, deps))));
     assert.equal(result.mutation, false, member);
     const op = PLAN.members[member].operation;
     assert.deepEqual(calls.receipt.owned_member_ops, { replace: op === 'replace' ? [member] : [], add: op === 'add' ? [member] : [] }, member);
@@ -6645,8 +6694,10 @@ test('Fee pull savepoints (production incident 2026-11-06): tenant-collection-v2
     const pre = MONEY_WRITE_FLAG.members[member].accepted_sha256;
     // Collection v2's row has since moved on to the fee leg REPLACE (SQL 145, its own test below): this manifest's
     // accepted bytes are that row's pre-state, and main has moved on from them.
-    const accepted = member === FEE_LEG_MEMBER ? FEE_PULL_COLLECTION_BYTES : sha(`aws/functions/api/${member}`);
-    if (member === FEE_LEG_MEMBER) assert.notEqual(sha(`aws/functions/api/${member}`), accepted, member);
+    // The engine's row has since moved on to the usage fees REPLACE (2026-11-10, SQL 149, planning only), which starts
+    // from the applied bytes: main has moved on from them too.
+    const accepted = member === FEE_LEG_MEMBER ? FEE_PULL_COLLECTION_BYTES : beforeUsageFees(member);
+    if (member === FEE_LEG_MEMBER || USAGE_FEES.members[member]) assert.notEqual(sha(`aws/functions/api/${member}`), accepted, member);
     assert.equal(rebuild.members[member].accepted_sha256, pre, member);
     assert.notEqual(accepted, pre, member);
     assert.deepEqual(manifest.members[member], { live_sha256: pre, accepted_sha256: accepted, operation: 'replace', previous_manifest: MONEY_WRITE_FLAG_REL }, member);
@@ -6658,6 +6709,17 @@ test('Fee pull savepoints (production incident 2026-11-06): tenant-collection-v2
       assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, FEE_LEG_API_REL), 'utf8')).members[member].live_sha256, accepted, member);
       assert.equal(PLAN.members[member].manifest, FEE_LEG_API_APPLIED_REL, member);
       assert.equal(PLAN.members[member].expected_live_sha256, sha(`aws/functions/api/${member}`), member);
+    } else if (USAGE_FEES.members[member]) {
+      assert.deepEqual(PLAN.members[member], {
+        operation: 'replace',
+        accepted_sha256: sha(`aws/functions/api/${member}`),
+        expected_live_sha256: accepted,
+        sql_before: SQL149_FILE,
+        manifest: USAGE_FEES_REL,
+      }, member);
+      assert.deepEqual(USAGE_FEES.members[member], {
+        live_sha256: accepted, accepted_sha256: sha(`aws/functions/api/${member}`), operation: 'replace', previous_manifest: FEE_PULL_SAVEPOINTS_APPLIED_REL,
+      }, member);
     } else {
       assert.deepEqual(PLAN.members[member], {
         operation: 'replace',
