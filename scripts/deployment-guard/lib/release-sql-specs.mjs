@@ -8503,4 +8503,106 @@ export const RELEASE_SQL_SPECS = deepFreeze({
         "public.mortgage_handling_requests"
       ]
   },
+
+  // SQL 150 (owner 2026-11-10: "I want to be able to record up to the check amount"; tooling: "build the SQL 150 tooling
+  // and merge it when green"): a payment made outside ChecksOps can be recorded up to the check amount. CREATE OR REPLACE
+  // of SQL 147's public.aws_record_external_disbursement(uuid, uuid, jsonb, text) with one change: the saved PA fee is no
+  // longer subtracted from the amount available (check amount - this tenant's live splits and Moov send legs), so
+  // check_intake_items.pa_fee_pct / pa_fee_amount are no longer read (nor prerequisites). Same identity, attributes
+  // (plpgsql, VOLATILE, SECURITY DEFINER, search_path public, pg_temp, RETURNS jsonb), member gate, input checks, check
+  // lock, idempotency, refusal above what is available, the two INSERTs and EXECUTE checksops and the owner (PUBLIC, anon,
+  // authenticated and service_role revoked), as SQL 147. Predecessor and supersedes SQL 147 (as SQL 138 for SQL 113): the
+  // expected pre-state in both databases is the function exactly as SQL 147 left it (applied in staging and production
+  // 2026-11-10), so the engine refuses SQL 150 (predecessors_applied) unless SQL 147 reads applied; after SQL 150, SQL 147
+  // counts as applied while SQL 150 is. No superseded_intended_sha256 is pinned (as SQL 143 for SQL 142): SQL 147's only
+  // object is the function SQL 150 replaces, so SQL 150's own fingerprint fixes SQL 147's (re-derived by the tests).
+  // definer_writes: SQL 147's six relations, reached past RLS as their owner (the file refuses otherwise with
+  // sql150_definer_cannot_write). No table, column, policy, grant, trigger or row change.
+  sql150: {
+      "key": "sql150",
+      "label": "SQL 150",
+      "choice": "sql150-external-disbursement-up-to-check-amount",
+      "production_pin_rel": "ops/deployment-guard/sql150-external-disbursement-up-to-check-amount-production-apply.json",
+      "script": "sql150-external-disbursement-up-to-check-amount-production-apply",
+      "prerequisites": [
+        "public.disbursement_batches",
+        "public.disbursement_splits",
+        "public.check_intake_items",
+        "public.payment_transfers",
+        "public.stakeholder_accounts",
+        "public.check_stakeholders",
+        "public.aws_can_write_tenant(uuid)",
+        "auth.uid()",
+        "role checksops",
+        "column public.disbursement_batches.id",
+        "column public.disbursement_batches.tenant_id",
+        "column public.disbursement_batches.check_intake_item_id",
+        "column public.disbursement_batches.created_by",
+        "column public.disbursement_batches.check_amount",
+        "column public.disbursement_batches.available_amount",
+        "column public.disbursement_batches.reserve_held",
+        "column public.disbursement_batches.status",
+        "column public.disbursement_batches.notes",
+        "column public.disbursement_batches.completed_at",
+        "column public.disbursement_batches.approved_at",
+        "column public.disbursement_batches.approved_by",
+        "column public.disbursement_batches.approved_amount_cents",
+        "column public.disbursement_splits.id",
+        "column public.disbursement_splits.batch_id",
+        "column public.disbursement_splits.tenant_id",
+        "column public.disbursement_splits.amount",
+        "column public.disbursement_splits.status",
+        "column public.disbursement_splits.method",
+        "column public.disbursement_splits.external_check_number",
+        "column public.disbursement_splits.recipient_name",
+        "column public.disbursement_splits.recipient_type",
+        "column public.disbursement_splits.external_notes",
+        "column public.disbursement_splits.stakeholder_account_id",
+        "column public.disbursement_splits.idempotence_key",
+        "column public.disbursement_splits.settled_at",
+        "column public.check_intake_items.id",
+        "column public.check_intake_items.tenant_id",
+        "column public.check_intake_items.amount",
+        "column public.payment_transfers.tenant_id",
+        "column public.payment_transfers.check_id",
+        "column public.payment_transfers.leg_role",
+        "column public.payment_transfers.status",
+        "column public.payment_transfers.amount_cents",
+        "column public.stakeholder_accounts.id",
+        "column public.stakeholder_accounts.tenant_id",
+        "column public.stakeholder_accounts.nickname",
+        "column public.check_stakeholders.check_intake_item_id",
+        "column public.check_stakeholders.tenant_id",
+        "column public.check_stakeholders.stakeholder_account_id"
+      ],
+      "predecessors": [
+        "sql147"
+      ],
+      "supersedes": [
+        "sql147"
+      ],
+      "functions": [
+        {
+          "identity": "public.aws_record_external_disbursement(uuid, uuid, jsonb, text)",
+          "acl": [
+            "checksops EXECUTE",
+            "owner EXECUTE"
+          ],
+          "revokes": [
+            "PUBLIC EXECUTE",
+            "anon EXECUTE",
+            "authenticated EXECUTE",
+            "service_role EXECUTE"
+          ]
+        }
+      ],
+      "definer_writes": [
+        "public.disbursement_batches",
+        "public.disbursement_splits",
+        "public.check_intake_items",
+        "public.payment_transfers",
+        "public.stakeholder_accounts",
+        "public.check_stakeholders"
+      ]
+  },
 });

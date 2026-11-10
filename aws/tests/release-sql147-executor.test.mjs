@@ -6,7 +6,8 @@
  *
  *   - the pin: staging-authorized (wave 42) from staging read-live run 42833250784, code-derived, selectable, packed,
  *     in step with the production pin (applied 2026-11-10 and retired, from production's own pre-state, the same one staging had); the
- *     pinned commit authored the bytes; no predecessor; nothing supersedes or names it;
+ *     pinned commit authored the bytes; no predecessor; only SQL 150 supersedes or names it (its function replaced in
+ *     place);
  *   - the file and spec: one new DEFINER function, aws_record_external_disbursement(uuid, uuid, jsonb, text): plpgsql,
  *     VOLATILE, SECURITY DEFINER, search_path public, pg_temp, RETURNS jsonb; the member gate, the input checks, the
  *     check lock (FOR UPDATE), the idempotency key, the amount available and its two INSERTs (the batch and the
@@ -187,17 +188,19 @@ test('pin: SQL 147 staging-authorized from its read-live, code-derived, selectab
   assert.match(workflow, /node --test aws\/tests\/release-sql147-executor\.test\.mjs/);
   assert.deepEqual([...pin.function_identities], [...IDENTITIES]);
   assert.deepEqual([...pin.function_identities], spec.functions.map((fn) => fn.identity));
-  // No predecessor; nothing supersedes, refuses after or depends on it.
+  // No predecessor; nothing refuses after it.
   assert.deepEqual(spec.predecessors, []);
   for (const absent of ['runs_before', 'supersedes', 'refuse_after']) assert.equal(spec[absent], undefined, absent);
-  assert.deepEqual(RELEASE_SQL_KEYS.filter((key) => (RELEASE_SQL_SPECS[key].supersedes || []).includes(KEY)
-    || (RELEASE_SQL_SPECS[key].refuse_after || []).some((m) => m.key === KEY)
-    || (RELEASE_SQL_SPECS[key].predecessors || []).includes(KEY)), []);
-  // No other release migration creates, replaces, drops or re-grants the function.
+  assert.deepEqual(RELEASE_SQL_KEYS.filter((key) => (RELEASE_SQL_SPECS[key].refuse_after || []).some((m) => m.key === KEY)), []);
+  // SQL 150 (outside payments up to the check amount) replaces aws_record_external_disbursement in place: it names
+  // SQL 147 as predecessor and supersedes it (as SQL 138 does SQL 113); nothing else does.
+  assert.deepEqual(RELEASE_SQL_KEYS.filter((key) => (RELEASE_SQL_SPECS[key].supersedes || []).includes(KEY)), ['sql150']);
+  assert.deepEqual(RELEASE_SQL_KEYS.filter((key) => (RELEASE_SQL_SPECS[key].predecessors || []).includes(KEY)), ['sql150']);
+  // No other release migration creates, replaces, drops or re-grants the function; SQL 150 replaces it.
   for (const key of RELEASE_SQL_KEYS.filter((k) => k !== KEY)) {
     const other = RELEASE_SQL_SPECS[key];
     const touched = [...(other.functions || []).map((fn) => fn.identity), ...(other.dropped_functions || []), ...(other.acl_functions || []).map((fn) => fn.identity)];
-    assert.ok(!touched.includes(IDENTITY), key);
+    assert.equal(touched.includes(IDENTITY), key === 'sql150', key);
   }
   const prod = productionPin();
   assert.equal(prod.intended_replacement_sha256, pin.intended_replacement_sha256);
