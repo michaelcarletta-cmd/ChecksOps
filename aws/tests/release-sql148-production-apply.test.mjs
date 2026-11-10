@@ -224,7 +224,7 @@ test('order: no predecessor; the one new DEFINER function, the index redefined i
   assert.ok(runbook.includes(COMMITTED.intended_replacement_sha256));
   assert.ok(runbook.includes(COMMITTED.source_sha256));
   assert.ok(runbook.includes(pre));
-  assert.match(runbook, /\*\*Status:\*\* not applied anywhere/);
+  assert.match(runbook, /\*\*Status:\*\* staging pin execute-authorized \(wave 43\); not applied anywhere\./);
   assert.match(runbook, /\*\*Predecessor\.\*\* None/);
   assert.match(runbook, /Owner 2026-11-10: "build the second-mortgagee fix"/);
   assert.match(runbook, /"build the SQL 148\s+tooling and merge it when green"/);

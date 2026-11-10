@@ -58,7 +58,22 @@ environment, the 2nd mortgagee's request is refused there while the 1st is open,
 **Predecessor.** None in the release engine. SQL 90 must be applied first (its membership-only
 `aws_can_write_tenant(uuid)` is a prerequisite; applied in production).
 
-**Status:** not applied anywhere. The staging pin and the production pin are pending.
+**Staging executor refreshed (2026-11-10).** Deploy run 42900220555 updated
+`checksops-staging-guarded-sql-executor` to carry SQL 148 (inspect run 42899819090 read CodeSha256
+`TWeOpTCGp4xsaakiGe65SIpa5fpL3ursGTvwHTyZJdM=` before it, inspect run 42900666063
+`mLwFCDaJmUr71PVRz6KXULEhEJtK0iDLvgf/oTvTI8E=` after it).
+
+**Staging read-live (2026-11-10).** Run 42901109448 (job 130126993947, main `952c4139e`, after executor deploy
+run 42900220555): `already_applied` false, `precondition_failures` `[]`, `prerequisites_missing` `[]`,
+`definer_writes` all `ok true`, `other_per_check_unique_indexes` 0, `index_definitions` the index at
+`supabase_20260715110727`. Live `508588e6cd7d48ca74411aba8e0220842e0490bde69a881d362966f77e54d862`: the function absent and the index at the
+Supabase definition, everything else in place, equal to the derived pre-state; intended `0ea9b78f…`. Recorded in
+the staging pin (`expected_live_definition_sha256`, `execute: true`, wave 43) under the owner's words of
+2026-11-10, "record the SQL 148 staging pin and merge it when green". The staging apply is a separate run after
+this pin is merged and the executor is redeployed carrying it, on the owner's words for that run, "apply SQL 148
+in staging". The production pin stays pending: a read-only production inspect decides production's pre-state.
+
+**Status:** staging pin execute-authorized (wave 43); not applied anywhere. The production pin is pending.
 
 ## The index in the release engine
 
