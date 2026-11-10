@@ -184,7 +184,13 @@ test('plan: SQL 102 holds tenant-billing-handlers.mjs (sql_before); live in stag
   // on SQL 102, which requires SQL 98; the guarded overlays enforce it (production: this plan's
   // record, verified live from the 2026-10-20 apply, #1079; staging: staging-sql-live.json, applied
   // in run 39162625974).
-  assert.equal(plan.members['tenant-billing-handlers.mjs'].sql_before, SQL102_FILE);
+  // (The Starter Package plan, 2026-11-10, moved it on to SQL 150, which refuses to run without SQL 102's guard.)
+  const SQL150_FILE = 'aws/workflows/sql/150_tenant_starter_package.sql';
+  if (plan.members['tenant-billing-handlers.mjs'].sql_before === SQL150_FILE) {
+    assert.match(fs.readFileSync(path.join(ROOT, SQL150_FILE), 'utf8'), /aws_tenants_member_column_guard\(\) \(SQL 102\)/);
+  } else {
+    assert.equal(plan.members['tenant-billing-handlers.mjs'].sql_before, SQL102_FILE);
+  }
   assert.equal(plan.sql_prerequisites[SQL102_FILE].verified_live, true);
   assert.ok(plan.sql_prerequisites[SQL102_FILE].evidence.includes(SQL102_APPLIED.ssm));
   assert.ok(plan.sql_prerequisites[SQL102_FILE].evidence.includes(SQL102_APPLIED.one_use_id));

@@ -8,6 +8,7 @@ import { PlatformTreasuryPanel } from "@/components/admin/PlatformTreasuryPanel"
 import { PlatformFeeDestinationCard, TenantBillingVerifyButton, TenantFeeCollectButton } from "@/components/admin/TenantFeeCollection";
 import { billingPeriodKey } from "@/lib/tenantFeeBilling";
 import { TenantDepositsSwitch } from "@/components/admin/TenantDepositsSwitch";
+import { TenantStarterPackageCard } from "@/components/admin/TenantStarterPackageCard";
 import { TenantOpsBadgeSwitch } from "@/components/admin/TenantOpsBadgeSwitch";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { resolveAdminTenantTab } from "@/lib/adminTenantTab";
@@ -411,6 +412,7 @@ function TenantDetail({ tenant, onBack, onUpdated }: { tenant: Tenant; onBack: (
               depositsEnabled={tenant.deposits_enabled}
               onSaved={(enabled) => onUpdated({ ...tenant, deposits_enabled: enabled })}
             />
+            <TenantStarterPackageCard tenantId={tenant.id} tenantName={tenant.name} />
             <PlatformFeeDestinationCard />
             <TenantBillingBankPanel tenantId={tenant.id} tenantName={tenant.name} />
             <TenantUsageInlinePanel tenantId={tenant.id} tenantName={tenant.name} />

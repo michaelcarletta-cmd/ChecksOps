@@ -477,8 +477,49 @@ export async function loadTenantBillingContext(client, tenantId) {
      FROM public.tenant_billing_accounts WHERE tenant_id = $1::uuid`,
     [tenantId],
   )).rows[0] || null;
+  // SQL 150: the optional Starter Package. Before it is applied no row comes back: no package.
+  const pkg = (await optionalQuery(
+    client,
+    'tenant_starter_package_read',
+    `SELECT t.starter_package_enabled, t.starter_package_starts_on::text AS starter_package_starts_on,
+            t.starter_package_maintenance_ends_on::text AS starter_package_maintenance_ends_on,
+            t.starter_package_included_checks,
+            public.aws_starter_package_checks_used(t.id) AS starter_package_checks_used
+     FROM public.tenants t WHERE t.id = $1::uuid`,
+    [tenantId],
+  )).rows[0];
+  tenant.starter_package = starterPackageFromRow(pkg);
   const checkDefaultCents = await loadCheckBillingDefaultCents(client);
   return { ok: true, tenant, settings, authorization, checkDefaultCents };
+}
+
+/** The tenant's Starter Package (SQL 150) as the API shows it; null before SQL 150. */
+export function starterPackageFromRow(row) {
+  if (!row || !Object.hasOwn(row, 'starter_package_enabled')) return null;
+  const included = Math.max(0, Number(row.starter_package_included_checks ?? 0));
+  const used = Math.max(0, Number(row.starter_package_checks_used ?? 0));
+  return {
+    enabled: row.starter_package_enabled === true,
+    starts_on: row.starter_package_starts_on || null,
+    maintenance_ends_on: row.starter_package_maintenance_ends_on || null,
+    included_checks: included,
+    checks_used: used,
+    checks_left: Math.max(0, included - used),
+  };
+}
+
+/**
+ * Whether the Starter Package covers a billing month's Monthly Maintenance (owner 2026-11-10): the
+ * package is on and the whole month lies within starts_on .. maintenance_ends_on (inclusive), so a
+ * package from Nov 10 2026 to Nov 9 2027 covers 2026-11 through 2027-10: twelve months.
+ */
+export function starterPackageCoversMaintenance(pkg, period) {
+  if (!pkg?.enabled || !pkg.starts_on || !pkg.maintenance_ends_on || !BILLING_PERIOD_RE.test(String(period || ''))) return false;
+  const [y, m] = String(period).split('-').map(Number);
+  const first = `${period}-01`;
+  const last = new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);
+  const startMonth = `${String(pkg.starts_on).slice(0, 7)}-01`;
+  return first >= startMonth && last <= String(pkg.maintenance_ends_on).slice(0, 10);
 }
 
 /** Owner-readable sentence for each readiness reason (billing_not_ready). */
@@ -981,8 +1022,10 @@ export function assembleInvoiceTotals({
   tenant, period, checks, nextDay, sameDay, mortgageInitial = [], mortgageAdditional = [],
   invoiceFees = [], failedDeposits = [], checkDefaultCents = null,
 }) {
-  const maintenance_rate_cents = Number(tenant.monthly_rate_cents || 0);
-  const discount_cents = maintenanceDiscountCents(tenant);
+  // SQL 150: a month the Starter Package covers carries no Monthly Maintenance (and so no discount).
+  const maintenance_included = starterPackageCoversMaintenance(tenant.starter_package, period);
+  const maintenance_rate_cents = maintenance_included ? 0 : Number(tenant.monthly_rate_cents || 0);
+  const discount_cents = maintenance_included ? 0 : maintenanceDiscountCents(tenant);
   const maintenance_net_cents = netFeeCents(maintenance_rate_cents, discount_cents);
   const check_usage_cents = sumCents(checks);
   const next_day_usage_cents = sumCents(nextDay);
@@ -1002,6 +1045,7 @@ export function assembleInvoiceTotals({
   return {
     billing_period: period,
     maintenance_rate_cents,
+    maintenance_included,
     discount_cents,
     maintenance_net_cents,
     check_count: checks.length,
@@ -1919,7 +1963,9 @@ export function invoiceLineItems(invoice) {
 export function invoiceSummaryLines(invoice) {
   if (!invoice?.ok) return [];
   return [
-    { key: 'maintenance', label: 'Monthly maintenance', count: 1, amount_cents: invoice.maintenance_rate_cents },
+    invoice.maintenance_included
+      ? { key: 'maintenance', label: 'Monthly maintenance (included in Starter Package)', count: 1, amount_cents: 0 }
+      : { key: 'maintenance', label: 'Monthly maintenance', count: 1, amount_cents: invoice.maintenance_rate_cents },
     {
       key: 'referral_discount',
       label: 'Referral discount',
@@ -2420,6 +2466,36 @@ export const SET_TENANT_PRICING_SQL = 'SELECT public.aws_platform_owner_set_tena
 /** SQL 98: the platform owner's deposits switch setter (audited in tenant_pricing_audit). */
 export const SET_TENANT_DEPOSITS_ENABLED_SQL = 'SELECT public.aws_platform_owner_set_tenant_deposits_enabled($1::uuid, $2::boolean) AS result';
 
+/** SQL 150: the platform owner's Starter Package setter (audited in tenant_pricing_audit). */
+export const SET_TENANT_STARTER_PACKAGE_SQL = 'SELECT public.aws_platform_owner_set_tenant_starter_package($1::uuid, $2::boolean, $3::date, $4::date, $5::integer) AS result';
+const ISO_DATE_RE = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
+
+/**
+ * Validates the Starter Package fields a save sends: { enabled (boolean, required), starts_on,
+ * maintenance_ends_on (YYYY-MM-DD or null: the database keeps or defaults them), included_checks
+ * (whole number >= 0 or null) }.
+ */
+export function parseStarterPackage(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return fail('invalid_starter_package', { statusCode: 400, field: 'starter_package' });
+  if (typeof value.enabled !== 'boolean') return fail('invalid_starter_package', { statusCode: 400, field: 'starter_package.enabled' });
+  const date = (v, field) => {
+    if (v === undefined || v === null || v === '') return { ok: true, value: null };
+    return ISO_DATE_RE.test(String(v)) ? { ok: true, value: String(v) } : fail('invalid_starter_package', { statusCode: 400, field });
+  };
+  const starts = date(value.starts_on, 'starter_package.starts_on');
+  if (!starts.ok) return starts;
+  const ends = date(value.maintenance_ends_on, 'starter_package.maintenance_ends_on');
+  if (!ends.ok) return ends;
+  let included = null;
+  if (value.included_checks !== undefined && value.included_checks !== null && value.included_checks !== '') {
+    const n = Number(value.included_checks);
+    if (!Number.isInteger(n) || n < 0 || n > 1_000_000) return fail('invalid_starter_package', { statusCode: 400, field: 'starter_package.included_checks' });
+    included = n;
+  }
+  if (value.enabled && !starts.value) return fail('invalid_starter_package', { statusCode: 400, field: 'starter_package.starts_on', message: 'Choose the date the Starter Package starts.' });
+  return { ok: true, enabled: value.enabled, starts_on: starts.value, maintenance_ends_on: ends.value, included_checks: included };
+}
+
 const pricingFieldLabel = (field) => {
   const text = String(field || '').replace(/_cents$/, '').replace(/_/g, ' ').trim();
   return text ? text.charAt(0).toUpperCase() + text.slice(1) : 'A pricing value';
@@ -2480,10 +2556,15 @@ export async function saveBillingSettings(client, {
   tenantId, monthlyRateCents, referralDiscountCents, billingEnabled, billingDay, userId,
   perCheckRateCents, nextDayRateCents, sameDayRateCents,
   mortgageOpsInitialRateCents, mortgageOpsAdditionalRateCents,
-  perCheckBillingEnabled, isFoundingPartner, depositsEnabled,
+  perCheckBillingEnabled, isFoundingPartner, depositsEnabled, starterPackage,
 }) {
   if (depositsEnabled !== undefined && depositsEnabled !== null && typeof depositsEnabled !== 'boolean') {
     return fail('invalid_deposits_enabled', { statusCode: 400, field: 'deposits_enabled' });
+  }
+  let pkg = null;
+  if (starterPackage !== undefined && starterPackage !== null) {
+    pkg = parseStarterPackage(starterPackage);
+    if (!pkg.ok) return pkg;
   }
   const pricing = {};
   const applyRate = (value, field, column) => {
@@ -2540,6 +2621,27 @@ export async function saveBillingSettings(client, {
     }
   }
 
+  if (pkg) {
+    try {
+      await client.query(SET_TENANT_STARTER_PACKAGE_SQL, [tenantId, pkg.enabled, pkg.starts_on, pkg.maintenance_ends_on, pkg.included_checks]);
+    } catch (error) {
+      if (String(error?.code || '') === '42883') {
+        return fail('starter_package_setter_missing', {
+          statusCode: 503,
+          message: 'The Starter Package cannot be saved until SQL 150 is applied.',
+        });
+      }
+      if (String(error?.code || '') === '22023') {
+        return fail('invalid_starter_package', {
+          statusCode: 400,
+          field: error?.detail || 'starter_package',
+          message: String(error?.message || '').replace(/^invalid_value:\s*/, '') || 'The Starter Package has an invalid value.',
+        });
+      }
+      return tenantPricingError(error);
+    }
+  }
+
   const day = billingDay === undefined ? null : Math.min(28, Math.max(1, Number(billingDay) || 1));
   await client.query(
     `INSERT INTO public.tenant_billing_settings (
@@ -2570,6 +2672,7 @@ export async function saveBillingSettings(client, {
   return {
     ...ctx,
     pricing: pricingOut,
+    starter_package: ctx.tenant.starter_package || null,
     billing_settings: {
       billing_enabled: ctx.settings.billing_enabled === true,
       billing_day_of_month: Number(ctx.settings.billing_day_of_month || 1),
@@ -2760,6 +2863,8 @@ export async function buildTenantBillingSnapshot(client, tenantId, dest, { now =
     check_billing_default_cents: ctx.checkDefaultCents,
     // SQL 98 deposits switch (platform owner sets it; NOT NULL DEFAULT true).
     deposits_enabled: ctx.tenant.deposits_enabled !== false,
+    // SQL 150 Starter Package (null before SQL 150 is applied).
+    starter_package: ctx.tenant.starter_package || null,
     next_day_rate_cents: resolveNextDayRateCents(ctx.tenant),
     same_day_rate_cents: resolveSameDayRateCents(ctx.tenant),
     mortgage_ops_initial_rate_cents: resolveMortgageInitialRateCents(ctx.tenant),

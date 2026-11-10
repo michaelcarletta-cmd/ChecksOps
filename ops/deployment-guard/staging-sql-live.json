@@ -107,6 +107,10 @@
     "aws/workflows/sql/149_invoice_and_failed_deposit_fees.sql": {
       "verified_live": false,
       "evidence": null
+    },
+    "aws/workflows/sql/150_tenant_starter_package.sql": {
+      "verified_live": false,
+      "evidence": null
     }
   }
 }
