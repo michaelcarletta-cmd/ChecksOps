@@ -73,7 +73,71 @@ the staging pin (`expected_live_definition_sha256`, `execute: true`, wave 43) un
 this pin is merged and the executor is redeployed carrying it, on the owner's words for that run, "apply SQL 148
 in staging". The production pin stays pending: a read-only production inspect decides production's pre-state.
 
-**Status:** staging pin execute-authorized (wave 43); not applied anywhere. The production pin is pending.
+**Staging executor refreshed for the pin (2026-11-10).** The staging pin (wave 43, PR #1746) merged as
+`7f7ae312a0a68ad8e1bfd99db3a579a91de7744b`. Inspect run 42904287736 (main `7f7ae312a`) found the live executor at
+`mLwFCDaJmUr71PVRz6KXULEhEJtK0iDLvgf/oTvTI8E=`. Deploy run 42904644950 (`expected_executor_code_sha256`
+`mLwFCDaJ…` matched) updated `checksops-staging-guarded-sql-executor`; inspect run 42905116795 read it at
+`X2Z+6Nkj0qI3pYc/jY7/YZVKBGu5+YjdN3wr6NA1hho=`. Read-live run 42905486022 (executor `X2Z+6Nkj…`): `already_applied`
+false, `precondition_failures` `[]`, live `508588e6…`, equal to the pin.
+
+**Staging apply (2026-11-10).** Apply run 42905846810 (job 130143491289, main `7f7ae312a`, workstream
+`github-staging-sql-42905846810`, pin commit `ac6567f2a`, `expected_live_definition_sha256`
+`508588e6cd7d48ca74411aba8e0220842e0490bde69a881d362966f77e54d862`) under the owner's words "apply SQL 148 in
+staging": success. The receipt prints `result` `applied`, `before_hash` `508588e6…`, `after_hash`
+`0ea9b78f674241215a46bbcfd5452ade00d472416b51cefdcd423258b525127b`; the function in state `intended`, its EXECUTE
+ACL `checksops` and the owner, `index_definitions` `intended`, `definer_writes` ok, `prerequisites_missing` `[]`.
+Read-live run 42906285342 (job 130145005929, executor `X2Z+6Nkj…`): `already_applied` true, `live_definition_sha256`
+`0ea9b78f…` equal to the intended hash, `precondition_failures` `[]`, `index_definitions` `intended`,
+`other_per_check_unique_indexes` 0. Staging acceptance: the owner on 2026-11-10, "SQL 148 accepted in staging",
+given before the staging apply ran and taken as an acceptance only because the apply ended exactly at the intended
+fingerprint with no precondition failure, as it did. There is no separate staging record PR for SQL 148: these
+staging runs are recorded here and in the production pin's `staging_acceptance` by the production pin PR. The
+staging pin keeps `execute: true`. The API change that calls the function (`workflow-rpc.mjs`) and the SPA change are
+not part of this pin.
+
+**Production inspect (2026-11-10).** Read-only `--inspect` through SSM
+`3fc740fd-06b8-4bdb-be60-3042a406c25e` on `i-0c35557c4e5385406` (under the owner's words "run the read-only SQL 148
+production inspect"; command sent 21:06:49Z, Success 21:07:00Z, runner stopped 21:07:16Z), main `952c4139e` (tarball
+sha256 `332e1b48c238a0b517b83e77bd0549cbc06940829b04c406e9af263abeff86de`, staged by `sql53-temporary-transfer.yml`
+run 42901557628, migration source `f87ea6d7…` == pin), `read_only` true: live
+`508588e6cd7d48ca74411aba8e0220842e0490bde69a881d362966f77e54d862` (the function absent and the index at the Supabase
+definition, the derived pre-state), `index_definitions` `supabase_20260715110727`, `other_per_check_unique_indexes`
+0, `definer_writes` ok, `already_applied` false, `live_matches_expected` false, `precondition_failures` `[]`,
+`apply_preconditions_met` false, `errors` `[]`. `precondition_failures` `[]` means every production precondition
+passed: the pinned `checksops_admin` login, `prerequisites_present` (`prerequisites_missing` `[]`),
+`predecessors_applied`, `successors_not_applied`, `replaced_indexes_replaceable`, `no_other_per_check_unique_index`
+and `definer_can_write_relations`. Production's pre-state equals staging's (read-live runs 42901109448 and
+42905486022), so the staging apply took the path production will. Recorded in the production pin with the staging
+apply (run 42905846810) as its staging acceptance and `execute: true` under the owner's words "record the SQL 148
+production pin". The owner merges the pin change; the apply runs only after that merge is on main and staged, under
+the owner's words for that run ("apply SQL 148 in production").
+
+**Production apply (2026-11-10).** After the pin change (#1748, on the staging acceptance of apply run 42905846810,
+"SQL 148 accepted in staging"; merged to main as `eb8e1afc2` on the owner's words "merge it when green and apply SQL 148 in production"), transfer
+run 42908791627 staged main `eb8e1afc2` (tarball sha256
+`3204af5192a18ae361789a3a0180ec6bccbb8af93ac1dfd3f3478aecedebf295`). Under the owner's words
+"merge it when green and apply SQL 148 in production" (passed verbatim), a one-shot `--phase inspect` (SSM
+`a8ad09fa-40a1-4242-9eed-3fc03f5430ba`, run `2e5e9a59-a204-4506-ac3a-c48136699374`, nothing written) read live
+`508588e6…` (the pinned pre-state, `live_matches_expected` true, `apply_preconditions_met` true,
+`precondition_failures` `[]`, the function absent, `index_definitions` `supabase_20260715110727`,
+`other_per_check_unique_indexes` 0, `definer_writes` ok); then one-shot `--phase apply` run
+`d727eb12-20f9-49a7-9c14-072b570740a5` through SSM `a07ba9a4-3fbf-4e85-8cc4-d93336c93c23`, workstream `prod-sql148-second-mortgagee-link-20261110`, one_use_id `sql148-prod-6de10e9e-b0a4-428a-af04-467d4e9664b1`: its own inspect
+step read the same pre-state; contracts 4/4, 6/6 and 43/43; all 11 steps ok; manifest `9fa0221b…`; receipt
+`508588e6…` → `0ea9b78f674241215a46bbcfd5452ade00d472416b51cefdcd423258b525127b` (intended), result `applied`,
+unrelated catalog `05b0a1bc…` (policies 479, functions 1364); post-apply inspect `already_applied` true,
+`precondition_failures` `[]`: the function `aws_link_second_mortgagee(uuid, uuid)` `intended`, its EXECUTE ACL
+`checksops` and the owner, `index_definitions` `intended`, `other_per_check_unique_indexes` 0, `definer_writes` ok,
+`prerequisites_missing` `[]`. The run's JSON arrived whole (21630 characters of SSM output, under the
+24000-character limit; read back read-only from SSM get-command-invocation). The runner `i-0c35557c4e5385406` was
+started for this work at 21:51:07Z and stopped at 21:52:23Z. The API change that calls the function
+(`workflow-rpc.mjs`, REPLACE `0e77f1f6…` → `b2976326…`) and the SPA change are not part of this pin and are not
+deployed by this record: the overlay plan now records SQL 148 verified live, so that member's guarded production
+apply passes its SQL gate, and it still needs its own read-only inspect and the owner's words
+"DEPLOY workflow-rpc.mjs TO PRODUCTION". Production acceptance had not been reported by the owner when this record
+was written; this record does not claim it.
+
+**Status:** applied to staging (wave 43) and to production (2026-11-10); the production pin is retired
+(`execute: false`).
 
 ## The index in the release engine
 

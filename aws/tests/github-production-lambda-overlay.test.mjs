@@ -434,7 +434,7 @@ function applyDeps(member, liveOpts = {}) {
 // collection test below). Tests about member order and links run them with SQL 98 recorded live.
 const SQL98_FILE = 'aws/workflows/sql/98_tenant_fee_collection.sql';
 // Second mortgagee (owner 2026-11-10): workflow-rpc.mjs REPLACEs the Loss Draft escrow close applied bytes, held on
-// SQL 148 (not live), planning only (its own test, at the end). Until then its row was held on SQL 98 (live).
+// SQL 148 (recorded live 2026-11-10), planning only (its own test, at the end). Until then its row was held on SQL 98 (live).
 const SECOND_MORTGAGEE_REL = 'aws/tests/fixtures/production-second-mortgagee-link-manifest-2026-11-10.json';
 const SECOND_MORTGAGEE = JSON.parse(fs.readFileSync(path.join(ROOT, SECOND_MORTGAGEE_REL), 'utf8'));
 const SQL148_FILE = 'aws/workflows/sql/148_second_mortgagee_link.sql';
@@ -2228,9 +2228,9 @@ test('Refer & Earn routes: data.mjs and workflow-rpc.mjs expected_live record th
     assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, PREVIOUS[member]), 'utf8')).members[member].accepted_sha256, BEFORE[member], member);
     assert.deepEqual(appliedManifest.members[member], { live_sha256: live, accepted_sha256: live, operation: 'replace', previous_manifest: MANIFEST_REL }, member);
     assert.equal(row.operation, 'replace', member);
-    // workflow-rpc.mjs is held on SQL 148 now (the second mortgagee plan, 2026-11-10, not live).
+    // workflow-rpc.mjs is held on SQL 148 now (the second mortgagee plan, 2026-11-10; recorded live 2026-11-10).
     assert.equal(row.sql_before, holdNow(member, SQL_BEFORE[member]), member);
-    assert.equal(PLAN.sql_prerequisites[row.sql_before].verified_live, !SECOND_MORTGAGEE.members[member], member);
+    assert.equal(PLAN.sql_prerequisites[row.sql_before].verified_live, true, member);
     assert.equal(resolvePlannedMember(member, { root: ROOT, plan: PLAN }).ok, true, member);
     assert.ok(PLAN.order.includes(member), member);
     const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: member };
@@ -7738,7 +7738,7 @@ test('Mortgage Desk send (owner report 2026-11-10): write-allowlist.mjs, then wr
   assert.match(fs.readFileSync(path.join(API, WORKFLOW_WRITES), 'utf8'), /const MORTGAGE_REQUEST_INSERT_ONLY = \[/);
 });
 
-test('Second mortgagee (owner 2026-11-10): workflow-rpc.mjs REPLACE from the Loss Draft escrow close applied bytes, held on SQL 148, planning only', async () => {
+test('Second mortgagee (owner 2026-11-10): workflow-rpc.mjs REPLACE from the Loss Draft escrow close applied bytes, held on SQL 148 (recorded live 2026-11-10), planning only', async () => {
   const MEMBER = 'workflow-rpc.mjs';
   const manifest = SECOND_MORTGAGEE;
   const PREVIOUS = 'aws/tests/fixtures/production-loss-draft-escrow-close-applied-manifest-2026-10-31.json';
@@ -7766,9 +7766,35 @@ test('Second mortgagee (owner 2026-11-10): workflow-rpc.mjs REPLACE from the Los
   const evidence = `REPLACE ${MEMBER} ${live.accepted_sha256.slice(0, 8)} -> ${accepted.slice(0, 8)}`;
   assert.ok(manifest.notes.includes(evidence), evidence);
   assert.ok(PLAN.notes.includes(evidence), evidence);
-  // SQL 148 is new: recorded not live; the member is refused until a record change states it.
-  assert.deepEqual(PLAN.sql_prerequisites[SQL148_FILE], { verified_live: false, evidence: null });
+  // SQL 148 (sql_before) is now recorded verified live in production (2026-11-10, the SQL 148 record change) from its
+  // retired pin: the same file bytes the pin and the one-shot hashed. The gate is shown below on a plan copy where it is
+  // not yet recorded.
   assert.ok(fs.existsSync(path.join(ROOT, SQL148_FILE)));
+  const PIN148 = 'ops/deployment-guard/sql148-second-mortgagee-link-production-apply.json';
+  const pin148 = JSON.parse(fs.readFileSync(path.join(ROOT, PIN148), 'utf8'));
+  assert.equal(pin148.source_sha256, sha(SQL148_FILE));
+  assert.equal(pin148.applied.migration_source_sha256, sha(SQL148_FILE));
+  assert.equal(pin148.execute, false);
+  assert.equal(pin148.applied.result, 'applied');
+  assert.equal(pin148.applied.receipt.before_hash, pin148.expected_live_definition_sha256);
+  assert.equal(pin148.applied.receipt.after_hash, pin148.intended_replacement_sha256);
+  assert.equal(pin148.staging_acceptance.reference, 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/42905846810');
+  const prerequisite148 = PLAN.sql_prerequisites[SQL148_FILE];
+  assert.equal(prerequisite148.verified_live, true);
+  assert.equal(prerequisite148.pin, PIN148);
+  const fromTo148 = `${pin148.expected_live_definition_sha256.slice(0, 8)}… -> ${pin148.intended_replacement_sha256.slice(0, 8)}…`;
+  for (const evidence of [pin148.applied.apply_ssm_command_id, pin148.applied.one_shot_run_id, pin148.applied.workstream_id, pin148.applied.one_use_id, pin148.applied.runner, fromTo148, 'staging acceptance run 42905846810', PIN148]) {
+    assert.ok(prerequisite148.evidence.includes(evidence), evidence);
+  }
+  assert.ok(prerequisite148.note.includes(`REPLACE ${live.accepted_sha256.slice(0, 8)}… -> ${accepted.slice(0, 8)}…`));
+  assert.ok(prerequisite148.note.includes('"DEPLOY workflow-rpc.mjs TO PRODUCTION"'));
+  const staging148 = JSON.parse(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/staging-sql-live.json'), 'utf8')).sql[SQL148_FILE];
+  assert.equal(staging148.verified_live, true);
+  for (const text of ['run 42905846810', 'read-live run 42906285342', `receipt before ${pin148.expected_live_definition_sha256.slice(0, 8)}…`, `after ${pin148.intended_replacement_sha256.slice(0, 8)}…`]) {
+    assert.ok(staging148.evidence.includes(text), text);
+  }
+  const sql148Pending = structuredClone(PLAN);
+  sql148Pending.sql_prerequisites[SQL148_FILE] = { verified_live: false, evidence: null };
   assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
   assert.equal(approvalPhrase(MEMBER), `DEPLOY ${MEMBER} TO PRODUCTION`);
   // No new module: the same local imports as the escrow close bytes.
@@ -7786,11 +7812,17 @@ test('Second mortgagee (owner 2026-11-10): workflow-rpc.mjs REPLACE from the Los
     run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: 'c'.repeat(64) }) }),
     (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
   );
-  // An apply is refused while SQL 148 is not recorded live in production.
+  // An apply was refused while SQL 148 was not recorded live in production (the plan before the SQL 148 record change,
+  // replayed on a copy) ...
   await assert.rejects(
-    run(applyEnv(MEMBER, { CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: live.accepted_sha256 }), applyDeps(MEMBER, { sha256: live.accepted_sha256, plan: structuredClone(PLAN) }).deps),
+    run(applyEnv(MEMBER, { CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: live.accepted_sha256 }), applyDeps(MEMBER, { sha256: live.accepted_sha256, plan: sql148Pending }).deps),
     (error) => error.code === CODES.PRODUCTION_APPROVAL_REQUIRED && error.details.sql_before === SQL148_FILE,
   );
+  // ... and passes the SQL gate now that the committed plan records it (dry: no mutation), one receipt for this member.
+  const { deps: liveDeps, calls: liveCalls } = applyDeps(MEMBER, { sha256: live.accepted_sha256, plan: structuredClone(PLAN) });
+  const applied = await run(applyEnv(MEMBER, { CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: live.accepted_sha256 }), liveDeps);
+  assert.equal(applied.mutation, false);
+  assert.deepEqual(liveCalls.receipt.owned_member_ops, { replace: [MEMBER], add: [] });
   const source = fs.readFileSync(path.join(API, MEMBER), 'utf8');
   assert.match(source, /'SELECT public\.aws_link_second_mortgagee\(\$1::uuid, \$2::uuid\) AS result'/);
 });
