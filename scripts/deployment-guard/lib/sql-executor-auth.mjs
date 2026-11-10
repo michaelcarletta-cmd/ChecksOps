@@ -3392,8 +3392,8 @@ export const AUTHORIZED_SQL147_EXTERNAL_DISBURSEMENT_RECORD = Object.freeze({
 // (only from the Supabase definition or its own; anything else refuses), and adds the SECURITY DEFINER
 // public.aws_link_second_mortgagee(uuid, uuid), which links the two requests 1 of 2 / 2 of 2 for a member of the tenant
 // (SQL 90's aws_can_write_tenant), both rows locked FOR UPDATE; EXECUTE for checksops and the owner. No predecessor.
-// Pending until a reviewed pin change records a staging read-live (expected: the function absent and the index at the
-// Supabase definition, everything else in place).
+// Staging apply authorized (wave 43) from staging read-live run 42901109448: the pre-state, the function absent and the
+// index at the Supabase definition, everything else in place, equals the derived one (ops/production-sql-148-apply.md).
 export const AUTHORIZED_SQL148_SECOND_MORTGAGEE_LINK = Object.freeze({
   key: 'sql148',
   filename: 'aws/workflows/sql/148_second_mortgagee_link.sql',
@@ -3401,9 +3401,11 @@ export const AUTHORIZED_SQL148_SECOND_MORTGAGEE_LINK = Object.freeze({
   // The commit that last authored the file bytes.
   commit: 'ac6567f2aecb8af11e50b6d8a3dc1d8e0f302751',
   source_sha256: 'f87ea6d7b9284b86abf4fdd1aea8e219cdf51329b6a24ac73dc5cebcd64999c5',
-  authorization: 'pending',
-  execute: false,
-  expected_live_definition_sha256: null,
+  authorization: 'Owner approved 2026-11-10: staging apply (wave 43) from staging read-live run 42901109448',
+  execute: true,
+  // Staging read-live run 42901109448 (main 952c4139e, executor deploy run 42900220555): already_applied false,
+  // precondition_failures []. Equal to the derived pre-state (the function absent, the index at the Supabase definition).
+  expected_live_definition_sha256: '508588e6cd7d48ca74411aba8e0220842e0490bde69a881d362966f77e54d862',
   // Code-derived: releaseIntendedHash('sql148', file bytes) (release-sql-state.mjs); re-derived by the tests.
   intended_replacement_sha256: '0ea9b78f674241215a46bbcfd5452ade00d472416b51cefdcd423258b525127b',
   function_identities: Object.freeze([
