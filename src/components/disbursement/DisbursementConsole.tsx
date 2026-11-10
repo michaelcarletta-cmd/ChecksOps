@@ -21,6 +21,11 @@ import { usePaymentProviderEligibility } from "@/hooks/usePaymentProviderEligibi
 import { useWallet } from "@/hooks/useWallet";
 import { useStepUp } from "@/hooks/useStepUp";
 import { sendPayment, SendPaymentError, type SendRecipient } from "@/lib/payments/sends";
+import {
+  ExternalDisbursementError,
+  newExternalDisbursementKey,
+  recordExternalDisbursement,
+} from "@/lib/payments/externalDisbursement";
 import { VERIFICATION_LABEL, VERIFICATION_BADGE_CLASS, type VerificationStatus } from "@/lib/banking";
 import { useSelectedPartners } from "@/lib/payments/selectedPartners";
 import { NOT_SENT, mergeDisbursementPayees } from "@/lib/payments/checkStakeholderList";
@@ -107,6 +112,9 @@ export function DisbursementConsole({
   const pendingSend = useRef<{ signature: string; key: string } | null>(null);
   // Mirrors pendingSend for rendering: the Send button stays usable to finish it.
   const [sendOpen, setSendOpen] = useState(false);
+  // The key of an external payment being recorded: pressing Record again for the same payment
+  // reuses it, so the server records it once.
+  const pendingExternal = useRef<{ signature: string; key: string } | null>(null);
 
 
 
@@ -469,97 +477,40 @@ export function DisbursementConsole({
         }
         return { ...split, stakeholder_account_id: acct.external_stakeholder_account_id };
       });
+      if (deliverySpeed !== "external") {
+        // Nothing is written: without the payment rail there is no bank payment to start.
+        throw new Error("Bank payments are currently unavailable for this organization.");
+      }
+      if (!checkIntakeItemId) throw new Error("External payments can only be recorded from a check.");
       await guardFinancial("disbursement.send");
 
-      // Create the batch
-      const { data: batch, error: batchErr } = await supabase
-        .from("disbursement_batches")
-        .insert({
-          tenant_id: tenant.id,
-          check_intake_item_id: checkIntakeItemId ?? null,
-          deposit_item_id: depositItemId ?? null,
-          created_by: user.id,
-          check_amount: checkAmount,
-          reserve_held: 0,
-          available_amount: availableAmount,
-          delivery_speed: deliverySpeed,
-          status: "pending",
-        })
-        .select("id")
-        .single();
-
-      if (batchErr) throw batchErr;
-
-      // Insert splits
-      const { error: splitsErr } = await supabase
-        .from("disbursement_splits")
-        .insert(externalSplits.map((s) => ({ ...s, batch_id: batch.id })));
-
-      if (splitsErr) throw splitsErr;
-
-      // Record the approval that authorizes any bank debit for this payment.
-      const approvedCents = Math.round(Number(availableAmount || 0) * 100);
-      await supabase
-        .from("disbursement_batches")
-        .update({
-          approved_at: new Date().toISOString(),
-          approved_by: user.id,
-          approved_amount_cents: approvedCents,
-        })
-        .eq("id", batch.id);
-
-      if (deliverySpeed === "external") {
-        console.log("Recording external manual disbursement batch for check:", checkIntakeItemId);
-        
-        // Mark the batch and splits as settled since it was recorded as manual payment
-        // Note: The 'status' check constraint on disbursement_batches doesn't include 'settled',
-        // but the 'advance_check_stage_on_batch_complete' trigger checks for it.
-        // We'll use 'completed' for the batch status to satisfy the constraint while triggering the logic.
-        const { error: updateBatchErr } = await supabase
-          .from("disbursement_batches")
-          .update({ 
-            status: "completed",
-            notes: "Recorded as external manual payment."
-          })
-          .eq("id", batch.id);
-        
-        if (updateBatchErr) {
-          console.error("Error updating batch to completed:", updateBatchErr);
-          throw updateBatchErr;
-        }
-
-        const { error: updateSplitsErr } = await supabase
-          .from("disbursement_splits")
-          .update({ status: "settled" })
-          .eq("batch_id", batch.id);
-        
-        if (updateSplitsErr) {
-          console.error("Error updating splits to settled:", updateSplitsErr);
-          throw updateSplitsErr;
-        }
-
-        // Advance check stage to disbursed_externally if fully balanced
-        if (isBalanced && checkIntakeItemId) {
-          console.log("Advancing check stage to disbursed_externally");
-          const { error: stageUpdateErr1 } = await supabase
-            .from("check_intake_items")
-            .update({ check_stage: "disbursed_externally" as any })
-            .eq("id", checkIntakeItemId);
-          
-          if (stageUpdateErr1) console.error("Error updating intake check_stage:", stageUpdateErr1);
-
-          const { error: stageUpdateErr2 } = await supabase
-            .from("claim_checks")
-            .update({ check_stage: "disbursed_externally" as any })
-            .eq("check_intake_item_id", checkIntakeItemId);
-            
-          if (stageUpdateErr2) console.error("Error updating claim_checks check_stage:", stageUpdateErr2);
-        }
-
-        return { batchId: batch.id, rail: "external" as const, note: "External payment recorded" };
+      // Recorded by the server in one transaction (SQL 147): one completed batch and one settled
+      // external payment per payee, counted like a sent payment. Nothing is sent to the payment
+      // provider and no balance changes. The check moves to Funds Released by the database's own
+      // rule for settled payouts.
+      const payments = externalSplits.map((s) => ({
+        amount_cents: Math.round(s.amount * 100),
+        stakeholder_account_id: s.stakeholder_account_id,
+        recipient_name: (accounts as any[]).find((a) => a.id === s.stakeholder_account_id || a.external_stakeholder_account_id === s.stakeholder_account_id)?.nickname ?? null,
+      }));
+      const externalSignature = JSON.stringify([checkIntakeItemId, payments]);
+      if (pendingExternal.current?.signature !== externalSignature) {
+        pendingExternal.current = { signature: externalSignature, key: newExternalDisbursementKey() };
       }
-
-      throw new Error("Bank payments are currently unavailable for this organization.");
+      try {
+        const recorded = await recordExternalDisbursement({
+          tenantId: tenant.id,
+          checkId: checkIntakeItemId,
+          payments,
+          idempotencyKey: pendingExternal.current.key,
+        });
+        pendingExternal.current = null;
+        return { batchId: recorded.batch_id, rail: "external" as const, note: "External payment recorded. No money was moved by ChecksOps." };
+      } catch (error) {
+        // A final answer from the server starts a new payment next time; an unclear one keeps the key.
+        if (error instanceof ExternalDisbursementError && error.code) pendingExternal.current = null;
+        throw error;
+      }
     },
     onSuccess: (result: any) => {
       toast({
@@ -601,7 +552,11 @@ export function DisbursementConsole({
         });
         return;
       }
-      toast({ title: "Payment not sent", description: e.message, variant: "destructive" });
+      toast({
+        title: e instanceof ExternalDisbursementError ? "External payment not recorded" : "Payment not sent",
+        description: e.message,
+        variant: "destructive",
+      });
     },
     onSettled: () => {
       qc.invalidateQueries({ queryKey: ["check-sends", checkIntakeItemId] });

@@ -515,10 +515,11 @@ test('staging SQL record: every sql_before of the plan has an entry; the pending
   // run 41117004966, production 2026-10-30), and SQL 133 (the financial TOTP teammate reset) until its record change
   // (staging run 41133471065, production 2026-10-31), and SQL 145 (the platform owner's fee collection leg) until its
   // record change (staging run 42334108246, production 2026-11-07), and SQL 146 (the Moov status catch-up's lock and fee
-  // leg writer) until its record change (staging run 42405866540, production 2026-11-07); nothing is pending everywhere
-  // now.
+  // leg writer) until its record change (staging run 42405866540, production 2026-11-07). SQL 147 (the external
+  // disbursement record, 2026-11-09) is such a SQL now: external-disbursement.mjs waits for it in both environments
+  // until its record change.
   const pendingEverywhere = Object.entries(PLAN.sql_prerequisites).filter(([, record]) => record.verified_live === false).map(([file]) => file).sort();
-  assert.deepEqual(pendingEverywhere, []);
+  assert.deepEqual(pendingEverywhere, ['aws/workflows/sql/147_external_disbursement_record.sql']);
   for (const [file, record] of Object.entries(STAGING_SQL.sql)) assert.equal(record.verified_live, !pendingEverywhere.includes(file), file);
   // A SQL recorded true here is either recorded live in production (with its staging acceptance)
   // or, staging first (release 2026-10-17), names its guarded staging SQL executor apply run and

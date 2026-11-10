@@ -85,6 +85,7 @@ on:
           - tax-secrets.mjs
           - tax-profiles.mjs
           - public-demo-request.mjs
+          - external-disbursement.mjs
           - tenant-email-domain.mjs
           - tenant-settings-handlers.mjs
           - mortgage-desk-esign.mjs
