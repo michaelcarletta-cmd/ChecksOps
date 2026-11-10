@@ -262,7 +262,7 @@ test('pin: the release pin shape, applied and retired (owner approved 2026-11-05
   assert.doesNotMatch(JSON.stringify(tool), /[0-9a-f]{64}/);
   const rows = JSON.stringify(readJson('ops/deployment-guard/bypass-inventory.json'));
   assert.match(rows, /"path":"scripts\/deployment-guard\/sql143-mortgage-companies-member-delete-unused-production-apply\.mjs","classification":"GUARDED","capabilities":\["sql143-production-apply"\]/);
-  assert.match(rows, /sql139, sql140, sql141, sql142, sql143, sql144, sql145, sql146, sql147, sql148\)/);
+  assert.match(rows, /sql139, sql140, sql141, sql142, sql143, sql144, sql145, sql146, sql147, sql148, sql150\)/);
   const scripts = readJson('package.json').scripts;
   const workflow = read('.github/workflows/deployment-guard.yml');
   for (const name of ['aws/tests/release-sql143-executor.test.mjs', 'aws/tests/release-sql143-production-apply.test.mjs', 'aws/tests/sql143-mortgage-companies-member-delete-tool-pg.test.mjs']) {
@@ -324,7 +324,7 @@ test('order: predecessor SQL 142, which it supersedes; the two functions, the th
   assert.match(runbook, /APPLY_MORTGAGE_COMPANIES_MEMBER_DELETE_UNUSED/);
   const oneShot = read('ops/production-sql-one-shot.md');
   assert.match(oneShot, /\| `sql143` \|/);
-  assert.match(oneShot, /`sql140`, `sql141`, `sql142`, `sql143`, `sql144`, `sql145`, `sql146`, `sql147`, `sql148`\) \|/);
+  assert.match(oneShot, /`sql140`, `sql141`, `sql142`, `sql143`, `sql144`, `sql145`, `sql146`, `sql147`, `sql148`, `sql150`\) \|/);
   assert.match(read('ops/deployment-guard/README.md'), /sql143-mortgage-companies-member-delete-unused-production-apply\.mjs --inspect/);
 });
 

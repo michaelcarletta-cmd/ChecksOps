@@ -1,0 +1,66 @@
+{
+  "id": "sql150-external-disbursement-up-to-check-amount-production-apply",
+  "migration": "sql150",
+  "authorization": "pending",
+  "execute": false,
+  "target_environment": "production",
+  "target_component": "production-sql",
+  "deployment_type": "sql-apply",
+  "filename": "aws/workflows/sql/150_external_disbursement_up_to_check_amount.sql",
+  "migration_id": "150_external_disbursement_up_to_check_amount",
+  "staging_pin_commit": "07271dfa132474ff8536173fecf4ebde1c2f8245",
+  "source_sha256": "b470f8ecb12d85f2a51d470d9a408d8e2012d720388eb1bcc4d3fbccfc8a31dc",
+  "function_identities": [
+    "public.aws_record_external_disbursement(uuid, uuid, jsonb, text)"
+  ],
+  "expected_live_definition_sha256": null,
+  "intended_replacement_sha256": "48d61bb31da60ca6f52d2691e3f3a95de9ce33347725a32e9b95b4939ff1bb13",
+  "authorization_phrase": "APPLY_EXTERNAL_DISBURSEMENT_UP_TO_CHECK_AMOUNT",
+  "predecessors": [
+    "sql147"
+  ],
+  "order_note": "Predecessor and supersedes SQL 147 (applied to production on 2026-11-10, pin retired): SQL 150 replaces SQL 147's only object, the SECURITY DEFINER aws_record_external_disbursement(uuid, uuid, jsonb, text), in place (CREATE OR REPLACE: same identity, owner, attributes and EXECUTE ACL), so the engine refuses SQL 150 (predecessors_applied) unless SQL 147 reads applied, i.e. the function is exactly as SQL 147 left it, and after SQL 150 SQL 147 counts as applied while SQL 150 is (supersedes; no superseded_intended_sha256 is pinned because SQL 147 has no other object). The one change: the amount available is the check amount less this tenant's live splits and Moov send legs on the check; the saved PA fee (check_intake_items.pa_fee_pct / pa_fee_amount) is no longer subtracted or read. Everything else is SQL 147's: the member gate (SQL 90's aws_can_write_tenant(uuid), 42501), the input checks, the check locked FOR UPDATE, the idempotency key, the refusal above what is available (P0001 external_disbursement_exceeds_available) and the two INSERTs. The spec prerequisites are the file's own: the disbursement, check, transfer and stakeholder schema (disbursement_batches with id, tenant_id, check_intake_item_id, created_by, check_amount, available_amount, reserve_held, status, notes, completed_at, approved_at, approved_by and approved_amount_cents; disbursement_splits with id, batch_id, tenant_id, amount, status, method, external_check_number, recipient_name, recipient_type, external_notes, stakeholder_account_id, idempotence_key and settled_at; check_intake_items with id, tenant_id and amount; payment_transfers with tenant_id, check_id, leg_role, status and amount_cents; stakeholder_accounts with id, tenant_id and nickname; check_stakeholders with check_intake_item_id, tenant_id and stakeholder_account_id), SQL 90's aws_can_write_tenant(uuid), auth.uid() and role checksops; a read-only production inspect confirms them. The applying login must reach all six relations as the function's owner past RLS (definer_can_write_relations: the table owner without FORCE ROW LEVEL SECURITY, or a superuser or BYPASSRLS). Expected pre-state in both environments: the function as SQL 147 left it (release sql150 v1 with SQL 147's body, derived from SQL 147's bytes: 650ad0d486b5eebdf647e4c25a56c8776ed7a412d8735cfc83aad1d449b959fa). The function must be owned by the applying login (functions_owned_by_login), keep its jsonb result (function_results_match) and hold no EXECUTE grant other than checksops and the owner, which the file keeps, and PUBLIC, anon, authenticated and service_role, which it revokes (function_acl_replaceable). The ACL after the apply is checksops and the owner, as before. The API route that calls it (aws/functions/api/external-disbursement.mjs, record-external-disbursement) is unchanged; the Funds tab's outside-payment form applies the same rule (#1752, src/components/payments/FundsTab.tsx) and reaches each environment only through its own guarded SPA path. No API, Lambda or SPA change is part of this pin. Adds no trigger.",
+  "admin_login": "checksops_admin",
+  "rds_identifier": "checksops-production",
+  "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
+  "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
+  "tooling": {
+    "status": "built",
+    "production_tool": "scripts/deployment-guard/sql150-external-disbursement-up-to-check-amount-production-apply.mjs",
+    "production_lib": "scripts/deployment-guard/lib/release-sql-production-apply.mjs",
+    "staging_executor_handler": "aws/write-path/guarded-sql-executor/index.mjs handleReleaseSqlMigration",
+    "staging_workflow_choice": "sql150-external-disbursement-up-to-check-amount",
+    "one_shot_migration": "sql150",
+    "fingerprint_engine": "scripts/deployment-guard/lib/release-sql-state.mjs",
+    "runbook": "ops/production-sql-150-apply.md",
+    "tests": [
+      "aws/tests/release-sql150-executor.test.mjs",
+      "aws/tests/release-sql150-production-apply.test.mjs",
+      "aws/tests/release-sql90-97-executor.test.mjs",
+      "aws/tests/release-sql90-97-production-apply.test.mjs",
+      "aws/tests/sql150-external-disbursement-pg.test.mjs"
+    ],
+    "note": "Guarded tooling for SQL 150: sql150-external-disbursement-up-to-check-amount-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql150-external-disbursement-up-to-check-amount); production-sql-one-shot.mjs --migration sql150. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): the function with SQL 150's body and SQL 147's attributes and EXECUTE for checksops and the owner. The spec names SQL 147 as predecessor and supersedes it, so the pre-state is the function as SQL 147 left it. The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
+  },
+  "production_inspect": {
+    "status": "pending",
+    "date": null,
+    "ssm_command_id": null,
+    "source_commit": null,
+    "read_only": true,
+    "connected_as": "checksops_admin",
+    "live_definition_sha256": null,
+    "apply_preconditions_met": null,
+    "precondition_failures": null,
+    "note": "Pending: no release-engine production inspect has been run for SQL 150 yet. Expected: SQL 147 applied (predecessors {\"sql147\": true}), every prerequisite present (prerequisites_missing []), all six relations reachable by the definer (release_sql_inspect.definer_writes all ok true), aws_record_external_disbursement owned by checksops_admin with its jsonb result and EXECUTE for checksops and the owner only, already_applied false. Expected release-engine fingerprint of that pre-state under sql150: 650ad0d486b5eebdf647e4c25a56c8776ed7a412d8735cfc83aad1d449b959fa (the function as SQL 147 left it; derived from SQL 147's bytes by aws/tests/release-sql150-executor.test.mjs and read back on PostgreSQL 16). Record the one-shot --phase inspect's date, SSM command id, source commit, live_definition_sha256, prerequisites_missing, predecessors, release_sql_inspect.functions, release_sql_inspect.function_acl, release_sql_inspect.definer_writes, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. Stop if the pre-state differs, prerequisites_missing is not [] or precondition_failures is not [] (prerequisites_present, predecessors_applied, definer_can_write_relations, functions_owned_by_login, function_results_match, function_acl_replaceable): that needs its own reviewed change."
+  },
+  "intended_post_state": {
+    "fingerprint": "48d61bb31da60ca6f52d2691e3f3a95de9ce33347725a32e9b95b4939ff1bb13",
+    "note": "aws_record_external_disbursement(uuid, uuid, jsonb, text), owned by checksops_admin, plpgsql, VOLATILE, SECURITY DEFINER, search_path public, pg_temp, RETURNS jsonb, EXECUTE for checksops and the owner (PUBLIC, anon, authenticated and service_role revoked), as SQL 147 left it, with SQL 150's body: a total above the amount available (the check amount - the tenant's live splits and Moov send legs on the check; the saved PA fee is no longer subtracted) is P0001 external_disbursement_exceeds_available; everything else as SQL 147 (only for a signed-in member of the tenant, 42501 external_disbursement_forbidden; the input checks, 22023 external_disbursement_invalid; the check locked FOR UPDATE and owned by the tenant, P0002 external_disbursement_check_not_found; the same key returns the recorded batch and other payments under it are 23505 external_disbursement_key_reused; one completed disbursement_batches row and one settled external_check disbursement_splits row per payee). No other function, table, column, policy, RLS setting, grant, trigger or row change; no payment_transfers row. The fingerprint is releaseIntendedHash('sql150', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): 48d61bb31da60ca6f52d2691e3f3a95de9ce33347725a32e9b95b4939ff1bb13."
+  },
+  "staging_acceptance": {
+    "ok": false,
+    "reference": null,
+    "basis": "Pending: record the guarded staging SQL executor read-live and the staging apply of SQL 150 (choice sql150-external-disbursement-up-to-check-amount) here in the reviewed change that sets execute true. The behavior is covered on PostgreSQL 16 by aws/tests/sql150-external-disbursement-pg.test.mjs. Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+  }
+}
