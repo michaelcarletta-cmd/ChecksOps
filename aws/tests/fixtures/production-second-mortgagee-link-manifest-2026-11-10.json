@@ -1,0 +1,15 @@
+{
+  "workstream_id": "second-mortgagee-link",
+  "authorization": "Pending owner review (2026-11-10). Planning only: nothing is live or verified. Each production apply needs its own owner approval, a staging acceptance reference and a read-only production inspect that confirms the live bytes.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Second mortgagee (owner 2026-11-10 \"build the second-mortgagee fix\"): Send to Mortgage Desk's \"Add 2nd mortgagee\" updated the 1st request to endorsement_order 1 / total_mortgagees 2 through /data/write, which is refused (no tenant UPDATE policy or UPDATE grant on those columns per SQL 100; write-check-workflow.mjs refuses them on update) and the screen ignored the error; and the 2nd request's INSERT is refused while the 1st is open by the unique index mortgage_handling_requests_one_open_per_check. REPLACE workflow-rpc.mjs 0e77f1f6 -> b2976326: the safe write RPC link_second_mortgagee (one call to SQL 148's public.aws_link_second_mortgagee as the verified sign-in; member of the requests' tenant, same check; idempotent; no provider call, no money). Held on SQL 148 (sql_before), which also re-keys the unique index on the endorsement order. Pre-state: the loss draft escrow close applied bytes (applied 2026-10-31, run 41190658796); a read-only production inspect must confirm them first. No new import; order unchanged. The website change (SendToMortgageDeskButton.tsx calls the RPC and shows its error) ships with the SPA, after this member is live; the 2nd request's INSERT also needs write-allowlist.mjs and write-check-workflow.mjs of the Mortgage Desk send plan (2026-11-10) live, so the order columns reach it. Planning only.",
+  "members": {
+    "workflow-rpc.mjs": {
+      "live_sha256": "0e77f1f6a33a78c3be406622e16cc74fc6e8374cf5f505cf865453784b467dc0",
+      "accepted_sha256": "b2976326f05097e3974563ee8e89db327d88d12e801501595992f02bd38a8741",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-loss-draft-escrow-close-applied-manifest-2026-10-31.json"
+    }
+  }
+}

@@ -99,6 +99,10 @@
     "aws/workflows/sql/147_external_disbursement_record.sql": {
       "verified_live": true,
       "evidence": "Guarded staging SQL executor apply of sql147-external-disbursement-record on 2026-11-10 (run 42838778413, main a402a17b7, wave 42, executor TWeOpTCG…; read-live run 42839223253 already_applied true): receipt before a60b0608…, after 8080fbd7… = the pin's intended_replacement_sha256; precondition_failures [], prerequisites_missing []."
+    },
+    "aws/workflows/sql/148_second_mortgagee_link.sql": {
+      "verified_live": false,
+      "evidence": null
     }
   }
 }

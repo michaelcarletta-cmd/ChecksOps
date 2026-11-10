@@ -13,6 +13,14 @@ import { toast } from "@/hooks/use-toast";
 import { Headset, Loader2 } from "lucide-react";
 import { useMortgageDeskReturnAlert } from "@/hooks/useMortgageDeskReturnAlert";
 
+type RpcCall = (name: string, args?: Record<string, unknown>) => Promise<{ data: unknown; error: { message?: string } | null }>;
+// link_second_mortgagee (SQL 148) is AWS-only, so it is not in the generated Supabase function types.
+const linkSecondMortgagee = (firstRequestId: string, secondRequestId: string) =>
+  (supabase.rpc as unknown as RpcCall).call(supabase, "link_second_mortgagee", {
+    p_first_request_id: firstRequestId,
+    p_second_request_id: secondRequestId,
+  });
+
 interface Props {
   checkIntakeItemId: string;
   tenantId: string;
@@ -136,7 +144,7 @@ export function SendToMortgageDeskButton({
     const { data: userData } = await supabase.auth.getUser();
 
     // If adding a 2nd mortgagee, tag the new row order=2 and link to the first.
-    // Also backfill order=1 + total=2 on the existing first request.
+    // The first request is marked order=1 + total=2 by link_second_mortgagee below.
     const orderFields: any = isSecond && firstRequest?.id
       ? {
           endorsement_order: 2,
@@ -147,7 +155,7 @@ export function SendToMortgageDeskButton({
       ? {}
       : {};
 
-    const { error } = await supabase.from("mortgage_handling_requests").insert({
+    const { data: inserted, error } = await supabase.from("mortgage_handling_requests").insert({
       tenant_id: tenantId,
       check_intake_item_id: checkIntakeItemId,
       claim_id: claimId ?? null,
@@ -166,7 +174,7 @@ export function SendToMortgageDeskButton({
       homeowner_ssn_last_four: ssn || null,
       property_address: propertyAddress.trim() || null,
       ...orderFields,
-    } as any);
+    } as any).select("id").maybeSingle();
     if (error) {
       const dup = /duplicate|unique/i.test(error.message);
       toast({
@@ -181,32 +189,49 @@ export function SendToMortgageDeskButton({
       return;
     }
 
-    // If this was the 2nd mortgagee, update the 1st with order=1, total=2
+    const createdId: string | null = (inserted as { id?: string } | null)?.id ?? null;
+
+    // If this was the 2nd mortgagee, mark the 1st "1 of 2" and the new one "2 of 2". Tenants
+    // cannot update these columns directly; the server links both requests in one transaction
+    // (link_second_mortgagee, SQL 148) after checking they belong to this check.
+    let linkError: string | null = null;
     if (isSecond && firstRequest?.id) {
-      await supabase
-        .from("mortgage_handling_requests")
-        .update({ endorsement_order: 1, total_mortgagees: 2 } as any)
-        .eq("id", firstRequest.id);
+      if (!createdId) {
+        linkError = "The 2nd request was created but could not be read back to link it.";
+      } else {
+        const { error: linkErr } = await linkSecondMortgagee(firstRequest.id, createdId);
+        if (linkErr) linkError = linkErr.message || "Could not link the 2nd mortgagee to the 1st.";
+      }
     }
 
-    const { data: created } = await supabase
-      .from("mortgage_handling_requests")
-      .select("id")
-      .eq("check_intake_item_id", checkIntakeItemId)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    const created = createdId
+      ? { id: createdId }
+      : (await supabase
+          .from("mortgage_handling_requests")
+          .select("id")
+          .eq("check_intake_item_id", checkIntakeItemId)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle()).data;
     if (created?.id) {
       supabase.functions.invoke("notify-mortgage-handling-request", {
         body: { request_id: created.id },
       }).catch(() => {});
     }
-    toast({
-      title: isSecond ? "2nd mortgagee sent to Mortgage Desk" : "Sent to ChecksOps Mortgage Desk",
-      description: isSecond
-        ? "Mortgage Ops will hold this one until the 1st mortgagee endorses and returns the check."
-        : "Our team has been notified and will contact the mortgage company.",
-    });
+    if (linkError) {
+      toast({
+        title: "2nd mortgagee sent, but not linked to the 1st",
+        description: `${linkError} Tell Mortgage Ops this request is the 2nd mortgagee.`,
+        variant: "destructive",
+      });
+    } else {
+      toast({
+        title: isSecond ? "2nd mortgagee sent to Mortgage Desk" : "Sent to ChecksOps Mortgage Desk",
+        description: isSecond
+          ? "Mortgage Ops will hold this one until the 1st mortgagee endorses and returns the check."
+          : "Our team has been notified and will contact the mortgage company.",
+      });
+    }
     setOpen(false);
     setIsSecond(false);
     setCompany("");

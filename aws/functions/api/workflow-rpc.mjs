@@ -164,6 +164,9 @@ export const SAFE_WRITE_RPC_CLASSIFICATION = {
   // SQL 111: the redeem runs inside aws_apply_referral_code (SECURITY DEFINER, member check,
   // one referral_events INSERT); it never moves money or changes a tenants row.
   apply_referral_code: 'safe_now',
+  // SQL 148: Send to Mortgage Desk, 2nd mortgagee. aws_link_second_mortgagee (SECURITY DEFINER, member
+  // check) marks the 1st request 1 of 2 and the 2nd 2 of 2; no money, no provider.
+  link_second_mortgagee: 'safe_now',
   add_partner_stakeholder_to_check: 'provider_dependent',
   ensure_partner_stakeholders: 'provider_dependent',
   save_checkalt_settings: 'safe_now',
@@ -196,6 +199,7 @@ export const SAFE_WRITE_RPCS = new Set([
   'admin_override_check_status',
   'apply_referral_code',
   SAVE_CLAIM_SETTLEMENT_BREAKDOWN,
+  'link_second_mortgagee',
 ]);
 
 const SESSION_RPCS = new Set(['register_session', 'validate_session', 'invalidate_session', 'log_audit']);
@@ -1735,6 +1739,54 @@ const executeApplyReferralCode = async ({ client, args }) => {
   return { data: result };
 };
 
+export const LINK_SECOND_MORTGAGEE_SQL = 'SELECT public.aws_link_second_mortgagee($1::uuid, $2::uuid) AS result';
+
+/** SQL 148's refusals, by message prefix; anything else is rethrown (withIdentity answers it). */
+export const mapLinkSecondMortgageeError = (error) => {
+  const message = String(error?.message || '');
+  if (/^mortgagee_link_forbidden/.test(message)) {
+    return { error: 'mortgagee_link_forbidden', message: 'Sign in again to link the mortgage requests.' };
+  }
+  if (/^mortgagee_link_request_not_found/.test(message)) {
+    return { error: 'rls_denied', message: 'mortgage request not found or not writable' };
+  }
+  const invalid = message.match(/^mortgagee_link_invalid: (.*)$/);
+  if (invalid) return { error: 'invalid_field', field: 'mortgage_request', message: `Cannot link these requests: ${invalid[1]}` };
+  if (/^mortgagee_link_conflict/.test(message)) {
+    return { error: 'mortgagee_link_conflict', statusCode: 409, message: 'This check already has a 2nd mortgagee request.' };
+  }
+  if (error?.code === '42883') {
+    // SQL 148 is not applied in this environment yet: nothing was changed.
+    return { error: 'mortgagee_link_unavailable', statusCode: 503, message: 'Linking a 2nd mortgagee is not available yet.' };
+  }
+  throw error;
+};
+
+/**
+ * Send to Mortgage Desk, 2nd mortgagee (owner 2026-11-10, SQL 148). After the 2nd request is
+ * inserted, the screen links it to the 1st: the 1st becomes endorsement_order 1 of 2, the 2nd 2 of 2
+ * with the 1st as predecessor. aws_link_second_mortgagee checks, as the verified sign-in, that the
+ * caller is a member of the requests' tenant and that both belong to the same check; tenants hold
+ * no UPDATE grant or policy on these columns (SQL 100), so the DEFINER is the only writer.
+ */
+const executeLinkSecondMortgagee = async ({ client, args }) => {
+  const first = arg(args, 'p_first_request_id', '_first_request_id', 'first_request_id');
+  const second = arg(args, 'p_second_request_id', '_second_request_id', 'second_request_id');
+  if (!isUuid(first)) return { error: 'invalid_uuid', field: 'p_first_request_id' };
+  if (!isUuid(second)) return { error: 'invalid_uuid', field: 'p_second_request_id' };
+  if (String(first).toLowerCase() === String(second).toLowerCase()) {
+    return { error: 'invalid_field', field: 'p_second_request_id', message: 'Cannot link a request to itself' };
+  }
+  let result;
+  try {
+    result = (await client.query(LINK_SECOND_MORTGAGEE_SQL, [String(first), String(second)])).rows?.[0]?.result;
+  } catch (error) {
+    return mapLinkSecondMortgageeError(error);
+  }
+  if (!result || typeof result !== 'object') return { error: 'mortgagee_link_failed' };
+  return { data: result };
+};
+
 export const executeSafeWriteRpc = async ({ client, mapping, name, args }) => {
   switch (name) {
     case 'log_audit':
@@ -1786,6 +1838,8 @@ export const executeSafeWriteRpc = async ({ client, mapping, name, args }) => {
       return executeAdminOverrideCheckStatus({ client, mapping, args });
     case 'apply_referral_code':
       return executeApplyReferralCode({ client, args });
+    case 'link_second_mortgagee':
+      return executeLinkSecondMortgagee({ client, args });
     default:
       return { error: 'rpc_disabled', name };
   }
