@@ -99,6 +99,12 @@ const featureDisabled = (spoof) => ({
   spoofFieldsIgnored: spoof,
 });
 
+/** Flag check first: no rate-limit consume, SES, or tenant_email_settings writes. */
+const requireDomainFeature = (spoof, sesv2) => {
+  if (tenantEmailDomainEnabled() || sesv2) return null;
+  return featureDisabled(spoof);
+};
+
 const publicDns = (records) => (Array.isArray(records) ? records : [])
   .filter((row) => row && row.type && row.name && row.value)
   .map((row) => ({
@@ -195,9 +201,11 @@ export const runGetEmailBranding = async ({ client, mapping, body, spoof }) => {
   };
 };
 
-export const runSaveEmailBranding = async ({ client, mapping, body, spoof }) => {
+export const runSaveEmailBranding = async ({ client, mapping, body, spoof, sesv2 }) => {
   const resolved = await requireTenant(client, mapping, body, spoof, { configure: true });
   if (resolved.error) return resolved.error;
+  const disabled = requireDomainFeature(spoof, sesv2);
+  if (disabled) return disabled;
   if (displayNameIsUnsafe(body.fromName || body.from_name)) {
     return { ok: false, statusCode: 400, error: 'unsafe_from_name', spoofFieldsIgnored: spoof };
   }
@@ -273,6 +281,8 @@ export const runStartDomainVerification = async ({
 }) => {
   const resolved = await requireTenant(client, mapping, body, spoof, { configure: true });
   if (resolved.error) return resolved.error;
+  const disabled = requireDomainFeature(spoof, sesv2);
+  if (disabled) return disabled;
   const parsed = normalizeSendingDomain(body.domain || body.sending_domain);
   if (!parsed.ok) {
     return {
@@ -306,9 +316,6 @@ export const runStartDomainVerification = async ({
     return { ok: false, statusCode: 409, error: 'domain_already_assigned', spoofFieldsIgnored: spoof };
   }
 
-  if (!tenantEmailDomainEnabled() && !sesv2) {
-    return featureDisabled(spoof);
-  }
   let adapter;
   try {
     adapter = await resolveSesV2(sesv2);
@@ -420,6 +427,8 @@ export const runCheckDomainVerification = async ({
 }) => {
   const resolved = await requireTenant(client, mapping, body, spoof, { configure: true });
   if (resolved.error) return resolved.error;
+  const disabled = requireDomainFeature(spoof, sesv2);
+  if (disabled) return disabled;
   const limited = await requireActionRateLimit(client, mapping, resolved.tenantId, 'domain_check', spoof);
   if (limited) return limited;
 
@@ -440,9 +449,6 @@ export const runCheckDomainVerification = async ({
     };
   }
 
-  if (!tenantEmailDomainEnabled() && !sesv2) {
-    return featureDisabled(spoof);
-  }
   let adapter;
   try {
     adapter = await resolveSesV2(sesv2);
@@ -552,9 +558,11 @@ export const runCheckDomainVerification = async ({
   };
 };
 
-export const runDisableCustomSending = async ({ client, mapping, body, spoof }) => {
+export const runDisableCustomSending = async ({ client, mapping, body, spoof, sesv2 }) => {
   const resolved = await requireTenant(client, mapping, body, spoof, { configure: true });
   if (resolved.error) return resolved.error;
+  const disabled = requireDomainFeature(spoof, sesv2);
+  if (disabled) return disabled;
   const limited = await requireActionRateLimit(client, mapping, resolved.tenantId, 'domain_disable', spoof);
   if (limited) return limited;
   const existing = await loadTenantEmailSettings(client, resolved.tenantId);
@@ -589,6 +597,8 @@ export const runDeleteSesIdentity = async ({
   if (!resolved.access.canDeleteIdentity || !tenantSesIdentityDeleteEnabled()) {
     return denied(spoof, 'operator_delete_required');
   }
+  const disabled = requireDomainFeature(spoof, sesv2);
+  if (disabled) return disabled;
   const limited = await requireActionRateLimit(client, mapping, resolved.tenantId, 'domain_delete', spoof);
   if (limited) return limited;
   const domain = String(body.domain || body.sending_domain || '').trim().toLowerCase();
@@ -605,7 +615,6 @@ export const runDeleteSesIdentity = async ({
       spoofFieldsIgnored: spoof,
     };
   }
-  if (!tenantEmailDomainEnabled() && !sesv2) return featureDisabled(spoof);
   const adapter = await resolveSesV2(sesv2);
   if (!adapter?.deleteEmailIdentity) return featureDisabled(spoof);
   await adapter.deleteEmailIdentity({ EmailIdentity: parsed.domain });
