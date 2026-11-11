@@ -157,6 +157,7 @@ export const MIGRATIONS = Object.freeze({
   'sql148-second-mortgagee-link': RELEASE_2026_10_17_PENDING_SQL_PINS.sql148,
   'sql150-external-disbursement-up-to-check-amount': RELEASE_2026_10_17_PENDING_SQL_PINS.sql150,
   'sql152-invoice-and-failed-deposit-fees': RELEASE_2026_10_17_PENDING_SQL_PINS.sql152,
+  'sql153-second-mortgagee-fee': RELEASE_2026_10_17_PENDING_SQL_PINS.sql153,
   'sql154-tenant-starter-package': RELEASE_2026_10_17_PENDING_SQL_PINS.sql154,
   'sql155-claim-owner-org-stamp': RELEASE_2026_10_17_PENDING_SQL_PINS.sql155,
   'sql156-mortgage-desk-shared-check-library': RELEASE_2026_10_17_PENDING_SQL_PINS.sql156,

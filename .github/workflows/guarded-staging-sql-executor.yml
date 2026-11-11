@@ -98,6 +98,7 @@ on:
           - sql148-second-mortgagee-link
           - sql150-external-disbursement-up-to-check-amount
           - sql152-invoice-and-failed-deposit-fees
+          - sql153-second-mortgagee-fee
           - sql154-tenant-starter-package
           - sql155-claim-owner-org-stamp
           - sql156-mortgage-desk-shared-check-library
@@ -252,6 +253,7 @@ jobs:
           node --test aws/tests/release-sql148-executor.test.mjs
           node --test aws/tests/release-sql150-executor.test.mjs
           node --test aws/tests/release-sql152-executor.test.mjs
+          node --test aws/tests/release-sql153-executor.test.mjs
           node --test aws/tests/release-sql154-executor.test.mjs
           node --test aws/tests/release-sql155-executor.test.mjs
           node --test aws/tests/release-sql156-executor.test.mjs

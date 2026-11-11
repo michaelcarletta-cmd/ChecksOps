@@ -1,5 +1,5 @@
 /**
- * One engine for the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108 to SQL 148, SQL 150, SQL 152, SQL 154, SQL 155, SQL 156), shared by the staging
+ * One engine for the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108 to SQL 148, SQL 150, SQL 152 to SQL 156), shared by the staging
  * guarded executor (aws/write-path/guarded-sql-executor/index.mjs) and the production tools
  * (release-sql-production-apply.mjs): the catalog state reader, the code-derived
  * fingerprints, the pre- and post-conditions, the predecessor rules and the unrelated-catalog
@@ -986,6 +986,10 @@ export function releaseSharedPreconditionFailures(key, state, text, { environmen
     // check_intake_item_id alone (it would keep refusing a 2nd mortgagee; the file refuses with
     // sql148_other_per_check_unique). A read-only catalog count; null fails closed.
     if (extra === 'no_other_per_check_unique_index') checks.push(['no_other_per_check_unique_index', s.counts?.other_per_check_unique_indexes === 0]);
+    // SQL 153: no CHECK on check_billing_events.event_type (the file's own selection: any CHECK of the table whose
+    // columns include event_type). The file would rewrite such a CHECK from its live values, a post-state no spec can
+    // fix, so the tooling requires none and the file's step 1 is a no-op. A read-only catalog count; null fails closed.
+    if (extra === 'no_event_type_check') checks.push(['no_event_type_check', s.counts?.event_type_checks === 0]);
     // SQL 98: the per-check default price exists (an active row), or the file seeds it (no row).
     if (extra === 'check_billing_config_active_or_empty') {
       checks.push(['check_billing_config_active_or_empty', s.counts?.check_billing_config_active_rows > 0 || s.counts?.check_billing_config_rows === 0]);

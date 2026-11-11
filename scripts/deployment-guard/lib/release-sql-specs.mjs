@@ -8791,6 +8791,88 @@ export const RELEASE_SQL_SPECS = deepFreeze({
       "public.tenant_maintenance_payments"
     ]
   },
+  // SQL 153 (owner 2026-11-10/11: "For 2 mortgage companies in check charge $5 for the additional mortgage company",
+  // "Flat $5", "it should be an additional $5 if 2 mortgage companies are on check"; 2026-11-11: pick up the $5
+  // second-mortgage fee, then "Option B" for its tooling): the flat $5 for a check's 2nd mortgage company. The file has
+  // three steps; the engine models two of them:
+  //   1) NOT MODELLED. If check_billing_events carries a CHECK on event_type, the file rewrites it from the values the
+  //      live constraint holds at apply time plus 'mortgage_ops_second_mortgagee' (a multi-column or unrecognised one
+  //      is refused, 55000 sql153_event_type_check_unrecognized). That post-state depends on the live database, so no
+  //      spec entry can fix it. The repository defines no CHECK on that column (Supabase 20260605162924 added it as
+  //      plain text; SQL 120, 149, 151, 152 add event types without one), so the tooling requires none to exist: the
+  //      catalog count event_type_checks (the file's own selection: every CHECK of the table whose columns include
+  //      event_type) must be 0 (no_event_type_check). Step 1 is then a no-op on every database the tooling applies to.
+  //      A database with such a CHECK is a stop for its own reviewed change.
+  //   2) the partial unique index check_billing_events_one_second_mortgagee_per_check (one non-voided 2nd-company
+  //      charge per check; rendered as pg_get_indexdef prints it, as aws/tests/sql153-second-mortgagee-fee-pg.test.mjs
+  //      reads it on PostgreSQL 16);
+  //   3) two integer NOT NULL DEFAULT 0 columns on tenant_maintenance_payments (acl []: no column grant).
+  // The COMMENT ON INDEX / COLUMN statements are not fingerprinted (no category reads comments). Prerequisites the
+  // file's own (55000 sql153_prerequisite_missing). No predecessor: the header's "on top of SQL 84, SQL 98 and SQL 148"
+  // describes the API behaviour the fee joins, not objects the file needs (it creates nothing they create and reads only
+  // the prerequisites above; SQL 84's per-check index has another name in production, check_billing_events_mortgage_ops_
+  // check_uidx, so it is not a prerequisite either). altered_relations: the two tables the file alters as their owner.
+  // No function, trigger, policy, grant or row change.
+  sql153: {
+    "key": "sql153",
+    "label": "SQL 153",
+    "choice": "sql153-second-mortgagee-fee",
+    "production_pin_rel": "ops/deployment-guard/sql153-second-mortgagee-fee-production-apply.json",
+    "script": "sql153-second-mortgagee-fee-production-apply",
+    "prerequisites": [
+      "public.check_billing_events",
+      "public.mortgage_handling_requests",
+      "public.tenant_maintenance_payments",
+      "column public.check_billing_events.event_type",
+      "column public.check_billing_events.status",
+      "column public.check_billing_events.check_intake_item_id",
+      "column public.check_billing_events.claim_id",
+      "column public.check_billing_events.mortgage_request_id",
+      "column public.mortgage_handling_requests.endorsement_order"
+    ],
+    "predecessors": [],
+    "functions": [],
+    "added_columns": [
+      {
+        "table": "public.tenant_maintenance_payments",
+        "column": "mortgage_ops_second_mortgagee_count",
+        "type": "integer",
+        "notnull": true,
+        "default": "0",
+        "acl": []
+      },
+      {
+        "table": "public.tenant_maintenance_payments",
+        "column": "mortgage_ops_second_mortgagee_amount_cents",
+        "type": "integer",
+        "notnull": true,
+        "default": "0",
+        "acl": []
+      }
+    ],
+    "indexes": [
+      {
+        "table": "public.check_billing_events",
+        "name": "check_billing_events_one_second_mortgagee_per_check",
+        "def": "CREATE UNIQUE INDEX check_billing_events_one_second_mortgagee_per_check ON public.check_billing_events USING btree (check_intake_item_id) WHERE ((event_type = 'mortgage_ops_second_mortgagee'::text) AND (status IS DISTINCT FROM 'voided'::text) AND (check_intake_item_id IS NOT NULL))"
+      }
+    ],
+    "extra_preconditions": [
+      "no_event_type_check"
+    ],
+    "counts": {
+      "event_type_checks": {
+        "requires": [
+          "public.check_billing_events"
+        ],
+        "sql": "SELECT count(*)::int AS n FROM pg_catalog.pg_constraint c WHERE c.conrelid = pg_catalog.to_regclass('public.check_billing_events') AND c.contype = 'c' AND (SELECT a.attnum FROM pg_catalog.pg_attribute a WHERE a.attrelid = c.conrelid AND a.attname = 'event_type' AND NOT a.attisdropped) = ANY (c.conkey)"
+      }
+    },
+    "altered_relations": [
+      "public.check_billing_events",
+      "public.tenant_maintenance_payments"
+    ]
+  },
   // SQL 154 (owner 2026-11-10: the optional Starter Package; 2026-11-11: option A, SQL 151 plus EXECUTE on
   // aws_starter_package_checks_used(uuid) for checksops, which the API's billing snapshot calls): $3,500 one time for the
   // setup fee, 12 months of Monthly Maintenance and 250 included Checks. SQL 151 (never applied) has no spec or pin. New:

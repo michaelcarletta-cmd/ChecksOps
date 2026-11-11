@@ -125,6 +125,7 @@ export const EXECUTOR_PACK_MEMBERS = Object.freeze([
   ['aws/workflows/sql/148_second_mortgagee_link.sql', 'sql/148_second_mortgagee_link.sql'],
   ['aws/workflows/sql/150_external_disbursement_up_to_check_amount.sql', 'sql/150_external_disbursement_up_to_check_amount.sql'],
   ['aws/workflows/sql/152_invoice_and_failed_deposit_fees.sql', 'sql/152_invoice_and_failed_deposit_fees.sql'],
+  ['aws/workflows/sql/153_second_mortgagee_fee.sql', 'sql/153_second_mortgagee_fee.sql'],
   ['aws/workflows/sql/154_tenant_starter_package.sql', 'sql/154_tenant_starter_package.sql'],
   ['aws/workflows/sql/155_claim_owner_org_stamp.sql', 'sql/155_claim_owner_org_stamp.sql'],
   ['aws/workflows/sql/156_mortgage_desk_shared_check_library_documents.sql', 'sql/156_mortgage_desk_shared_check_library_documents.sql'],

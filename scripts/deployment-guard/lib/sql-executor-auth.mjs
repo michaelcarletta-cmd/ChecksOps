@@ -3472,6 +3472,28 @@ export const AUTHORIZED_SQL152_INVOICE_AND_FAILED_DEPOSIT_FEES = Object.freeze({
   ]),
 });
 
+// Second mortgage company fee staging pin: SQL 153 (owner 2026-11-10/11: "Flat $5", "it should be an additional $5 if 2
+// mortgage companies are on check"; tooling "Option B"). The partial unique index
+// check_billing_events_one_second_mortgagee_per_check and two integer columns on tenant_maintenance_payments. The file's
+// step 1 (rewrite a live CHECK on check_billing_events.event_type from its live values) is not modelled: the tooling
+// requires that no such CHECK exists (no_event_type_check, release-sql-specs.mjs), so step 1 is a no-op wherever it
+// applies. Pending until a reviewed pin change records a staging read-live.
+export const AUTHORIZED_SQL153_SECOND_MORTGAGEE_FEE = Object.freeze({
+  key: 'sql153',
+  filename: 'aws/workflows/sql/153_second_mortgagee_fee.sql',
+  migration_id: '153_second_mortgagee_fee',
+  // The commit that last authored the file bytes.
+  commit: '5ab496456ff1869a2673c2387a1f9329065e41c8',
+  source_sha256: '57a87e37c153ee27c445cc188752fb493c41e92e144a81043d50e317a9150aec',
+  authorization: 'pending',
+  execute: false,
+  expected_live_definition_sha256: null,
+  // Code-derived: releaseIntendedHash('sql153', file bytes) (release-sql-state.mjs); re-derived by the tests.
+  intended_replacement_sha256: '376feae9f0a6405c54dcb65f65e4119a967da4a34506b75ba1e65d98cad699ac',
+  // The file creates or replaces no function.
+  function_identities: Object.freeze([]),
+});
+
 // Starter Package staging pin: SQL 154 (owner 2026-11-10: the optional Starter Package, "unused check can roll over", "a
 // failed deposit uses one of the 250", "other fees are still charged", "a toggle switch or date start to date end";
 // 2026-11-11: option A). SQL 151 (never applied, no spec or pin) plus EXECUTE on aws_starter_package_checks_used(uuid) for
@@ -3644,6 +3666,7 @@ export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql148: AUTHORIZED_SQL148_SECOND_MORTGAGEE_LINK,
   sql150: AUTHORIZED_SQL150_EXTERNAL_DISBURSEMENT_UP_TO_CHECK_AMOUNT,
   sql152: AUTHORIZED_SQL152_INVOICE_AND_FAILED_DEPOSIT_FEES,
+  sql153: AUTHORIZED_SQL153_SECOND_MORTGAGEE_FEE,
   sql154: AUTHORIZED_SQL154_TENANT_STARTER_PACKAGE,
   sql155: AUTHORIZED_SQL155_CLAIM_OWNER_ORG_STAMP,
   sql156: AUTHORIZED_SQL156_MORTGAGE_DESK_SHARED_CHECK_LIBRARY,
@@ -3663,7 +3686,7 @@ export function isSql30TenantDocumentsDocType(input = {}) {
   return pinIdentifiersMatch(input, AUTHORIZED_SQL30_TENANT_DOCUMENTS_DOC_TYPE);
 }
 
-/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql148, sql150, sql152, sql154, sql155, sql156; sql76 for production) an input names, or null. */
+/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql148, sql150, sql152 ... sql156; sql76 for production) an input names, or null. */
 export function releaseSqlMigrationKey(input = {}) {
   return Object.keys(RELEASE_2026_10_17_PENDING_SQL_PINS)
     .find((key) => pinIdentifiersMatch(input, RELEASE_2026_10_17_PENDING_SQL_PINS[key])) || null;
