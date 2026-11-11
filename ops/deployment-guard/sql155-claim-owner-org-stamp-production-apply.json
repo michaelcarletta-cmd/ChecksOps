@@ -1,0 +1,65 @@
+{
+  "id": "sql155-claim-owner-org-stamp-production-apply",
+  "migration": "sql155",
+  "authorization": "pending",
+  "execute": false,
+  "target_environment": "production",
+  "target_component": "production-sql",
+  "deployment_type": "sql-apply",
+  "filename": "aws/workflows/sql/155_claim_owner_org_stamp.sql",
+  "migration_id": "155_claim_owner_org_stamp",
+  "staging_pin_commit": "0c14fc5aedf3c16a7bbddaf3d25a8e4e6ef848d7",
+  "source_sha256": "847b2e6710050f2ce3ad35289d3ccd2ef72a36b2985881a5039a716d6c60c203",
+  "function_identities": [
+    "public.aws_claim_owner_tenant_id()",
+    "public.aws_stamp_claim_org_id()"
+  ],
+  "expected_live_definition_sha256": null,
+  "intended_replacement_sha256": "d65fcff93a2b9da222dc0fc40118f312c6df3b92d80ab9b7bbec6ed19d448609",
+  "authorization_phrase": "ADOPT_CLAIM_OWNER_ORG_STAMP",
+  "predecessors": [],
+  "order_note": "No predecessor. SQL 155 adopts what production already runs: claims.trg_aws_stamp_claim_org_id and its two functions, applied to production directly on 2026-09-22 from aws/rls/sql/39_claim_owner_org.sql on the unmerged branch cursor/claim-ownership-invariant-7084 (PR #429, commit 6a05191a3), before the guarded path existed; SQL 155 is that file's text byte for byte after its own prerequisite check (owner 2026-11-11: \"Keep it, adopt it through the guarded path\"). The spec prerequisites are the file's own (claims.org_id, tenants.slug, tenant_users(tenant_id, user_id), auth.uid(), aws_is_cross_tenant_reader(), roles checksops and authenticated; the file refuses without them, 55000 sql155_prerequisite_missing). Objects: aws_claim_owner_tenant_id() (plpgsql, STABLE) and aws_stamp_claim_org_id() (plpgsql, VOLATILE, RETURNS trigger), both SECURITY DEFINER, search_path public, row_security off, EXECUTE authenticated, checksops and the owner; the trigger trg_aws_stamp_claim_org_id BEFORE INSERT OR UPDATE ON claims FOR EACH ROW. The applying login must own claims (altered_relations_owned_by_login) and reach tenants and tenant_users as the definer past RLS (definer_can_write_relations). Expected production pre-state: everything already as SQL 155 defines it (already_applied true, live d65fcff93a2b9da222dc0fc40118f312c6df3b92d80ab9b7bbec6ed19d448609); if the inspect reads exactly that, the record is verified_live (as SQL 82 to SQL 86) and nothing is applied. If it reads anything else, stop: that needs its own reviewed change. The trigger is a public trigger: production's db-readonly-validate justified set gains it in its own change. No API, Lambda or SPA change.",
+  "admin_login": "checksops_admin",
+  "rds_identifier": "checksops-production",
+  "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
+  "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
+  "tooling": {
+    "status": "built",
+    "production_tool": "scripts/deployment-guard/sql155-claim-owner-org-stamp-production-apply.mjs",
+    "production_lib": "scripts/deployment-guard/lib/release-sql-production-apply.mjs",
+    "staging_executor_handler": "aws/write-path/guarded-sql-executor/index.mjs handleReleaseSqlMigration",
+    "staging_workflow_choice": "sql155-claim-owner-org-stamp",
+    "one_shot_migration": "sql155",
+    "fingerprint_engine": "scripts/deployment-guard/lib/release-sql-state.mjs",
+    "runbook": "ops/production-sql-155-apply.md",
+    "tests": [
+      "aws/tests/release-sql155-executor.test.mjs",
+      "aws/tests/release-sql155-production-apply.test.mjs",
+      "aws/tests/release-sql90-97-executor.test.mjs",
+      "aws/tests/release-sql90-97-production-apply.test.mjs",
+      "aws/tests/sql155-claim-owner-org-stamp-pg.test.mjs"
+    ],
+    "note": "Guarded tooling for SQL 155: sql155-claim-owner-org-stamp-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql155-claim-owner-org-stamp); production-sql-one-shot.mjs --migration sql155. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): the two functions with their attributes, bodies and ACLs, and the trigger. The tooling does not authorize anything: this pin stays execute false."
+  },
+  "production_inspect": {
+    "status": "pending",
+    "date": null,
+    "ssm_command_id": null,
+    "source_commit": null,
+    "read_only": true,
+    "connected_as": "checksops_admin",
+    "live_definition_sha256": null,
+    "apply_preconditions_met": null,
+    "precondition_failures": null,
+    "note": "Pending: no release-engine production inspect has been run for SQL 155 yet; it needs the owner's OK for that read. Expected: prerequisites_missing [], both functions and the trigger already as SQL 155 defines them (state intended), already_applied true, live_definition_sha256 d65fcff93a2b9da222dc0fc40118f312c6df3b92d80ab9b7bbec6ed19d448609 (releaseIntendedHash('sql155', file bytes)). If so, the record-and-retire change records it as verified_live and nothing is applied. If the live state is anything else (for example everything absent, d63969e2ef8e5c809f2e107c41b61d87b3bedba5fe7a059b2dabb66f65604f54, releaseStateHash('sql155', {})), stop and return to the owner."
+  },
+  "intended_post_state": {
+    "fingerprint": "d65fcff93a2b9da222dc0fc40118f312c6df3b92d80ab9b7bbec6ed19d448609",
+    "note": "public.aws_claim_owner_tenant_id() and public.aws_stamp_claim_org_id() owned by checksops_admin, plpgsql, SECURITY DEFINER, SET search_path = public, SET row_security = off (STABLE RETURNS uuid; VOLATILE RETURNS trigger), EXECUTE authenticated, checksops and the owner, nothing for PUBLIC; the trigger trg_aws_stamp_claim_org_id BEFORE INSERT OR UPDATE ON public.claims FOR EACH ROW, enabled. No other function, table, column, policy, grant or trigger change; no row written. The fingerprint is releaseIntendedHash('sql155', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): d65fcff93a2b9da222dc0fc40118f312c6df3b92d80ab9b7bbec6ed19d448609."
+  },
+  "staging_acceptance": {
+    "ok": false,
+    "reference": null,
+    "basis": "Pending: record the guarded staging SQL executor read-live and the staging apply (or read-live already_applied) of SQL 155 (choice sql155-claim-owner-org-stamp) here. The behavior is covered on PostgreSQL 16 by aws/tests/sql155-claim-owner-org-stamp-pg.test.mjs. Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+  }
+}

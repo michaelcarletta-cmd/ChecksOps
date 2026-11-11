@@ -245,7 +245,7 @@ test('pin: the release pin shape, applied and retired (owner approved 2026-11-02
   assert.doesNotMatch(JSON.stringify(tool), /[0-9a-f]{64}/);
   const rows = JSON.stringify(readJson('ops/deployment-guard/bypass-inventory.json'));
   assert.match(rows, /"path":"scripts\/deployment-guard\/sql140-wallet-funding-settings-write-grants-production-apply\.mjs","classification":"GUARDED","capabilities":\["sql140-production-apply"\]/);
-  assert.match(rows, /sql134, sql135, sql136, sql137, sql138, sql139, sql140, sql141, sql142, sql143, sql144, sql145, sql146, sql147, sql148, sql150, sql152, sql154\)/);
+  assert.match(rows, /sql134, sql135, sql136, sql137, sql138, sql139, sql140, sql141, sql142, sql143, sql144, sql145, sql146, sql147, sql148, sql150, sql152, sql154, sql155\)/);
   const scripts = readJson('package.json').scripts;
   const workflow = read('.github/workflows/deployment-guard.yml');
   for (const name of ['aws/tests/release-sql140-executor.test.mjs', 'aws/tests/release-sql140-production-apply.test.mjs', 'aws/tests/sql140-wallet-funding-settings-write-grants-pg.test.mjs']) {
@@ -338,7 +338,7 @@ test('order: no predecessor; no function; exactly the columns the automatic fund
   assert.match(runbook, /fa08a3db73806391d757885c9165d0f1bf56a4571a22b1a32e2e63c73578952d/);
   const oneShot = read('ops/production-sql-one-shot.md');
   assert.match(oneShot, /\| `sql140` \|/);
-  assert.match(oneShot, /`sql135`, `sql136`, `sql137`, `sql138`, `sql139`, `sql140`, `sql141`, `sql142`, `sql143`, `sql144`, `sql145`, `sql146`, `sql147`, `sql148`, `sql150`, `sql152`, `sql154`\) \|/);
+  assert.match(oneShot, /`sql135`, `sql136`, `sql137`, `sql138`, `sql139`, `sql140`, `sql141`, `sql142`, `sql143`, `sql144`, `sql145`, `sql146`, `sql147`, `sql148`, `sql150`, `sql152`, `sql154`, `sql155`\) \|/);
   assert.match(read('ops/deployment-guard/README.md'), /sql140-wallet-funding-settings-write-grants-production-apply\.mjs --inspect/);
 });
 

@@ -8963,6 +8963,59 @@ export const RELEASE_SQL_SPECS = deepFreeze({
   // trusts connect by the sha256 of its three row writes and by its owner, so connect must be exactly SQL 32's (body,
   // SECURITY DEFINER, search_path=public, row_security=off) and its owner must not be the API login or one it is a
   // member of; no other trigger on the table. No predecessor; no table, column, grant or row change.
+  sql155: {
+    "key": "sql155",
+    "label": "SQL 155",
+    "choice": "sql155-claim-owner-org-stamp",
+    "production_pin_rel": "ops/deployment-guard/sql155-claim-owner-org-stamp-production-apply.json",
+    "script": "sql155-claim-owner-org-stamp-production-apply",
+    "prerequisites": [
+      "public.claims",
+      "public.tenants",
+      "public.tenant_users",
+      "column public.claims.org_id",
+      "column public.tenants.slug",
+      "column public.tenant_users.tenant_id",
+      "column public.tenant_users.user_id",
+      "auth.uid()",
+      "public.aws_is_cross_tenant_reader()",
+      "role checksops",
+      "role authenticated"
+    ],
+    "predecessors": [],
+    "functions": [
+      {
+        "identity": "public.aws_claim_owner_tenant_id()",
+        "acl": [
+          "authenticated EXECUTE",
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ]
+      },
+      {
+        "identity": "public.aws_stamp_claim_org_id()",
+        "acl": [
+          "authenticated EXECUTE",
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ]
+      }
+    ],
+    "triggers": [
+      {
+        "table": "public.claims",
+        "name": "trg_aws_stamp_claim_org_id",
+        "def": "CREATE TRIGGER trg_aws_stamp_claim_org_id BEFORE INSERT OR UPDATE ON public.claims FOR EACH ROW EXECUTE FUNCTION public.aws_stamp_claim_org_id()"
+      }
+    ],
+    "definer_writes": [
+      "public.tenants",
+      "public.tenant_users"
+    ],
+    "altered_relations": [
+      "public.claims"
+    ]
+  },
   sql76: {
     "key": "sql76",
     "label": "SQL 76",
