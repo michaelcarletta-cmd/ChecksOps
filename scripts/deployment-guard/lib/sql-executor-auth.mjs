@@ -3472,6 +3472,40 @@ export const AUTHORIZED_SQL152_INVOICE_AND_FAILED_DEPOSIT_FEES = Object.freeze({
   ]),
 });
 
+// Starter Package staging pin: SQL 154 (owner 2026-11-10: the optional Starter Package, "unused check can roll over", "a
+// failed deposit uses one of the 250", "other fees are still charged", "a toggle switch or date start to date end";
+// 2026-11-11: option A). SQL 151 (never applied, no spec or pin) plus EXECUTE on aws_starter_package_checks_used(uuid) for
+// checksops, which the API's billing snapshot calls. Four package columns and a CHECK on tenants, package_included on
+// check_billing_events, four functions, two triggers, and SQL 102's aws_tenants_member_column_guard() replaced in place
+// (predecessor SQL 102; supersedes SQL 102 and SQL 98, release-sql-specs.mjs). Pending until a reviewed pin change
+// records a staging read-live (expected: SQL 102's guard, everything else absent, with SQL 120 and SQL 152 applied).
+export const AUTHORIZED_SQL154_TENANT_STARTER_PACKAGE = Object.freeze({
+  key: 'sql154',
+  filename: 'aws/workflows/sql/154_tenant_starter_package.sql',
+  migration_id: '154_tenant_starter_package',
+  // The commit that last authored the file bytes.
+  commit: 'ce0b8dc950ca59c17119e1eb69edd627849e3d99',
+  source_sha256: 'd550fb4aaa9a7569cb2ced49e5e8e335f115d147704062b5973ee5d7bdf614f9',
+  authorization: 'pending',
+  execute: false,
+  expected_live_definition_sha256: null,
+  // Code-derived: releaseIntendedHash('sql154', file bytes) (release-sql-state.mjs); re-derived by the tests.
+  intended_replacement_sha256: 'a50c631a5d185103fde4bff9be3aec08d78418f0c8524b535ca6ee794ca79fe2',
+  // Code-derived: releaseSupersededIntendedHash(<key>, its bytes, 'sql154', these bytes). After SQL 154, SQL 102 and
+  // SQL 98 each count as applied only when every other object of their own still matches.
+  superseded_intended_sha256: Object.freeze({
+    sql102: 'c7001f481b8a147ab4a623c9e724d34dd50eaaf11203a96da109b7e28c0fb529',
+    sql98: '4f271a4834ac9fa7809e822e8c8c70c4e0d8903e6318b80d432d248fe341518a',
+  }),
+  function_identities: Object.freeze([
+    'public.aws_starter_package_checks_used(uuid)',
+    'public.aws_apply_starter_package_to_event()',
+    'public.aws_platform_owner_set_tenant_starter_package(uuid, boolean, date, date, integer)',
+    'public.aws_tenant_starter_package_audit_row()',
+    'public.aws_tenants_member_column_guard()',
+  ]),
+});
+
 export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql90: AUTHORIZED_SQL90_USERS_ONLY_TENANT_ROLES,
   sql91: AUTHORIZED_SQL91_MOOV_ONBOARDING,
@@ -3533,6 +3567,7 @@ export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql148: AUTHORIZED_SQL148_SECOND_MORTGAGEE_LINK,
   sql150: AUTHORIZED_SQL150_EXTERNAL_DISBURSEMENT_UP_TO_CHECK_AMOUNT,
   sql152: AUTHORIZED_SQL152_INVOICE_AND_FAILED_DEPOSIT_FEES,
+  sql154: AUTHORIZED_SQL154_TENANT_STARTER_PACKAGE,
 });
 
 // The fee collection pin under its earlier map name (the same object as the release map's sql98).
@@ -3548,7 +3583,7 @@ export function isSql30TenantDocumentsDocType(input = {}) {
   return pinIdentifiersMatch(input, AUTHORIZED_SQL30_TENANT_DOCUMENTS_DOC_TYPE);
 }
 
-/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql148, sql150, sql152) an input names, or null. */
+/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql148, sql150, sql152, sql154) an input names, or null. */
 export function releaseSqlMigrationKey(input = {}) {
   return Object.keys(RELEASE_2026_10_17_PENDING_SQL_PINS)
     .find((key) => pinIdentifiersMatch(input, RELEASE_2026_10_17_PENDING_SQL_PINS[key])) || null;

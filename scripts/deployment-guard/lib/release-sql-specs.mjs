@@ -8791,4 +8791,165 @@ export const RELEASE_SQL_SPECS = deepFreeze({
       "public.tenant_maintenance_payments"
     ]
   },
+  // SQL 154 (owner 2026-11-10: the optional Starter Package; 2026-11-11: option A, SQL 151 plus EXECUTE on
+  // aws_starter_package_checks_used(uuid) for checksops, which the API's billing snapshot calls): $3,500 one time for the
+  // setup fee, 12 months of Monthly Maintenance and 250 included Checks. SQL 151 (never applied) has no spec or pin. New:
+  // four package columns on tenants and the CHECK tenants_starter_package_valid, check_billing_events.package_included,
+  // four functions (the Checks used and the setter with EXECUTE for checksops and the owner; the two trigger functions
+  // for the owner only), the triggers aws_check_billing_event_starter_package (BEFORE, check_billing_events) and
+  // aws_tenant_starter_package_audit (AFTER UPDATE, tenants). It replaces SQL 102's aws_tenants_member_column_guard() in
+  // place (CREATE OR REPLACE, no REVOKE: SQL 102's ACL, PUBLIC and the owner, stays): predecessor SQL 102, and it
+  // supersedes SQL 102 and SQL 98 (both define that guard: SQL 102 replaced SQL 98's), so after SQL 154 each counts as
+  // applied only while every other object of its own still matches (staging pin superseded_intended_sha256). No
+  // refuse_after is added to SQL 102: re-running SQL 102 puts back its guard, which fails closed (the file's step 7).
+  // Prerequisites the file's own (SQL 120's aws_check_processing_price_cents(uuid), SQL 152's
+  // aws_failed_deposit_fee_cents(), SQL 96's and SQL 102's helpers) plus the columns the bodies read and write.
+  sql154: {
+    "key": "sql154",
+    "label": "SQL 154",
+    "choice": "sql154-tenant-starter-package",
+    "production_pin_rel": "ops/deployment-guard/sql154-tenant-starter-package-production-apply.json",
+    "script": "sql154-tenant-starter-package-production-apply",
+    "prerequisites": [
+      "public.tenants",
+      "public.check_billing_events",
+      "public.tenant_pricing_audit",
+      "public.aws_tenants_member_column_guard()",
+      "public.aws_tenant_profile_columns()",
+      "public.aws_tenant_has_moov_account(uuid)",
+      "public.aws_tenant_pricing_columns()",
+      "public.aws_check_processing_price_cents(uuid)",
+      "public.aws_failed_deposit_fee_cents()",
+      "auth.uid()",
+      "public.is_platform_owner()",
+      "public.aws_is_authenticated()",
+      "public.aws_is_tenant_member(uuid)",
+      "role checksops",
+      "column public.tenants.id",
+      "column public.check_billing_events.id",
+      "column public.check_billing_events.tenant_id",
+      "column public.check_billing_events.event_type",
+      "column public.check_billing_events.status",
+      "column public.check_billing_events.unit_price_cents",
+      "column public.check_billing_events.billed_at",
+      "column public.tenant_pricing_audit.tenant_id",
+      "column public.tenant_pricing_audit.actor_id",
+      "column public.tenant_pricing_audit.field",
+      "column public.tenant_pricing_audit.old_value",
+      "column public.tenant_pricing_audit.new_value"
+    ],
+    "predecessors": [
+      "sql102"
+    ],
+    "supersedes": [
+      "sql102",
+      "sql98"
+    ],
+    "functions": [
+      {
+        "identity": "public.aws_starter_package_checks_used(uuid)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ]
+      },
+      {
+        "identity": "public.aws_apply_starter_package_to_event()",
+        "acl": [
+          "owner EXECUTE"
+        ]
+      },
+      {
+        "identity": "public.aws_platform_owner_set_tenant_starter_package(uuid, boolean, date, date, integer)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ]
+      },
+      {
+        "identity": "public.aws_tenant_starter_package_audit_row()",
+        "acl": [
+          "owner EXECUTE"
+        ]
+      },
+      {
+        "identity": "public.aws_tenants_member_column_guard()",
+        "acl": [
+          "PUBLIC EXECUTE",
+          "owner EXECUTE"
+        ],
+        "revokes": []
+      }
+    ],
+    "added_columns": [
+      {
+        "table": "public.tenants",
+        "column": "starter_package_enabled",
+        "type": "boolean",
+        "notnull": true,
+        "default": "false",
+        "acl": []
+      },
+      {
+        "table": "public.tenants",
+        "column": "starter_package_starts_on",
+        "type": "date",
+        "notnull": false,
+        "default": null,
+        "acl": []
+      },
+      {
+        "table": "public.tenants",
+        "column": "starter_package_maintenance_ends_on",
+        "type": "date",
+        "notnull": false,
+        "default": null,
+        "acl": []
+      },
+      {
+        "table": "public.tenants",
+        "column": "starter_package_included_checks",
+        "type": "integer",
+        "notnull": true,
+        "default": "250",
+        "acl": []
+      },
+      {
+        "table": "public.check_billing_events",
+        "column": "package_included",
+        "type": "boolean",
+        "notnull": true,
+        "default": "false",
+        "acl": []
+      }
+    ],
+    "constraints": [
+      {
+        "table": "public.tenants",
+        "name": "tenants_starter_package_valid",
+        "def": "CHECK (((starter_package_included_checks >= 0) AND ((NOT starter_package_enabled) OR ((starter_package_starts_on IS NOT NULL) AND (starter_package_maintenance_ends_on IS NOT NULL) AND (starter_package_maintenance_ends_on >= starter_package_starts_on)))))"
+      }
+    ],
+    "triggers": [
+      {
+        "table": "public.check_billing_events",
+        "name": "aws_check_billing_event_starter_package",
+        "def": "CREATE TRIGGER aws_check_billing_event_starter_package BEFORE INSERT OR UPDATE OF status ON public.check_billing_events FOR EACH ROW EXECUTE FUNCTION public.aws_apply_starter_package_to_event()"
+      },
+      {
+        "table": "public.tenants",
+        "name": "aws_tenant_starter_package_audit",
+        "def": "CREATE TRIGGER aws_tenant_starter_package_audit AFTER UPDATE ON public.tenants FOR EACH ROW EXECUTE FUNCTION public.aws_tenant_starter_package_audit_row()"
+      }
+    ],
+    "definer_writes": [
+      "public.tenants",
+      "public.tenant_pricing_audit",
+      "public.check_billing_events"
+    ],
+    "altered_relations": [
+      "public.tenants",
+      "public.check_billing_events"
+    ]
+  },
 });

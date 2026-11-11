@@ -164,7 +164,7 @@ test('pin: the SQL 90-97 pin shape, applied and retired, in step with the stagin
   assert.equal(ONE_SHOT_TOOLS[KEY].script, RELEASE_PRODUCTION[KEY].cli);
   const rows = JSON.stringify(readJson('ops/deployment-guard/bypass-inventory.json'));
   assert.match(rows, /"path":"scripts\/deployment-guard\/sql102-platform-owner-tenant-profile-production-apply\.mjs","classification":"GUARDED","capabilities":\["sql102-production-apply"\]/);
-  assert.match(rows, /sql99, sql100, sql101, sql102, sql103, sql104, sql105, sql106, sql108, sql109, sql110, sql111, sql112, sql113, sql114, sql115, sql116, sql117, sql118, sql119, sql120, sql121, sql122, sql123, sql124, sql125, sql126, sql127, sql128, sql129, sql130, sql131, sql132, sql133, sql134, sql135, sql136, sql137, sql138, sql139, sql140, sql141, sql142, sql143, sql144, sql145, sql146, sql147, sql148, sql150, sql152\)/);
+  assert.match(rows, /sql99, sql100, sql101, sql102, sql103, sql104, sql105, sql106, sql108, sql109, sql110, sql111, sql112, sql113, sql114, sql115, sql116, sql117, sql118, sql119, sql120, sql121, sql122, sql123, sql124, sql125, sql126, sql127, sql128, sql129, sql130, sql131, sql132, sql133, sql134, sql135, sql136, sql137, sql138, sql139, sql140, sql141, sql142, sql143, sql144, sql145, sql146, sql147, sql148, sql150, sql152, sql154\)/);
   const scripts = readJson('package.json').scripts;
   const workflow = fs.readFileSync(path.join(ROOT, '.github/workflows/deployment-guard.yml'), 'utf8');
   for (const name of ['aws/tests/release-sql102-executor.test.mjs', 'aws/tests/release-sql102-production-apply.test.mjs']) {
@@ -185,9 +185,10 @@ test('plan: SQL 102 holds tenant-billing-handlers.mjs (sql_before); live in stag
   // record, verified live from the 2026-10-20 apply, #1079; staging: staging-sql-live.json, applied
   // in run 39162625974).
   // (The Starter Package plan, 2026-11-10, moved it on to SQL 151, which refuses to run without SQL 102's guard.)
-  const SQL151_FILE = 'aws/workflows/sql/151_tenant_starter_package.sql';
-  if (plan.members['tenant-billing-handlers.mjs'].sql_before === SQL151_FILE) {
-    assert.match(fs.readFileSync(path.join(ROOT, SQL151_FILE), 'utf8'), /aws_tenants_member_column_guard\(\) \(SQL 102\)/);
+  // (SQL 154 since 2026-11-11: it replaces SQL 151, never applied, which gave checksops no EXECUTE on aws_starter_package_checks_used.)
+  const SQL154_FILE = 'aws/workflows/sql/154_tenant_starter_package.sql';
+  if (plan.members['tenant-billing-handlers.mjs'].sql_before === SQL154_FILE) {
+    assert.match(fs.readFileSync(path.join(ROOT, SQL154_FILE), 'utf8'), /aws_tenants_member_column_guard\(\) \(SQL 102\)/);
   } else {
     assert.equal(plan.members['tenant-billing-handlers.mjs'].sql_before, SQL102_FILE);
   }
