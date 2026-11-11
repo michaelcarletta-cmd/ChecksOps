@@ -18,6 +18,7 @@ on:
         required: true
         type: choice
         options:
+          - db-readonly-validate.mjs
           - providers/production/checkalt-eligibility.mjs
           - write-claim-settlement.mjs
           - financial-remaining.mjs
@@ -124,7 +125,6 @@ on:
           - providers/payees/email.mjs
           - providers/payees/handlers.mjs
           - email-policy.mjs
-          - db-readonly-validate.mjs
           - check-reconciliation.mjs
           - endorsement-parity.mjs
           - ocr-parse.mjs
