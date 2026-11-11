@@ -1,0 +1,15 @@
+{
+  "workstream_id": "db-validator-sql152-trigger-applied",
+  "authorization": "Record only (2026-11-11): the bytes below are live. Nothing is planned or authorized by this manifest; any later change to these members needs its own manifest, staging acceptance and owner approval.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "DB validator justifies the SQL 152 fee triggers (187 public triggers; bytes #1766, plan order #1770) applied. Applied 2026-11-11 from main a21972a8540aa24df65623822b1fba2b66d6c468 (the merge of #1770, which moved db-readonly-validate.mjs to the head of the plan order) on the owner's \"DEPLOY db-readonly-validate.mjs TO PRODUCTION\"; record requested by the owner: \"Open the record PR for the production validator apply\". db-readonly-validate.mjs: staging inspect run 43027654768 (c7aa9f1b live, accept_public_validator_unhealthy true for the known /db-readonly-validate 503), staging apply run 43027793805 (c7aa9f1b -> aef88b3b), staging re-inspect run 43028883524 read aef88b3b live (/db-readonly-validate 200 ok); production preflight inspect run 43032257671 (READY, c7aa9f1b live, RevisionId 708c019d-4189-4db9-81b2-3c3063af126d, CodeSha256 TWO/b+hTsd935FcQlljwiZhOzxC+f9Y4Ttwmq79Vf7I=); production apply run 43034879124 (job 130570978776; c7aa9f1b -> aef88b3b) with staging acceptance https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43027793805, errors [], VERIFIED (\"Verify live member is the accepted bytes\"), after RevisionId f8732282-ce62-460f-a0a5-acd2391c6da9, CodeSha256 J1bywipLZy09m/cYU2Zx6Zpb2UKFDtztrgbu4S4YEmk=, public production smoke /health and /db-health 200; re-inspect run 43036534292 read aef88b3b live (ALREADY_ACCEPTED, same RevisionId f8732282-ce62-460f-a0a5-acd2391c6da9). Not fixed by this apply: production https://checksops.com/prep/db-readonly-validate still answered HTTP 503 when observed on 2026-11-11 after run 43034879124. The production public smoke does not check that path. The cause is not known: no repo record shows production answering 200 on that path, and the attribution of the 503 to SQL 152's triggers was verified in staging only (staging answered 200 after its apply). The planning manifest and the plan notes keep what they recorded. No SQL, no IAM, no Lambda configuration change, no schema change. The row expects the applied bytes and names this record. The member here records the applied bytes as live_sha256 and accepted_sha256 and chains to the manifest that planned it (previous_manifest), which keeps the pre-apply state.",
+  "members": {
+    "db-readonly-validate.mjs": {
+      "live_sha256": "aef88b3b7af8962c832f7200c59b84d01823d28e7b8185ab0b5fdf26e1112c2f",
+      "accepted_sha256": "aef88b3b7af8962c832f7200c59b84d01823d28e7b8185ab0b5fdf26e1112c2f",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-db-validator-sql152-trigger-manifest-2026-11-11.json"
+    }
+  }
+}
