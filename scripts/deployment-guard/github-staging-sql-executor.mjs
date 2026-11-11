@@ -158,6 +158,7 @@ export const MIGRATIONS = Object.freeze({
   'sql150-external-disbursement-up-to-check-amount': RELEASE_2026_10_17_PENDING_SQL_PINS.sql150,
   'sql152-invoice-and-failed-deposit-fees': RELEASE_2026_10_17_PENDING_SQL_PINS.sql152,
   'sql154-tenant-starter-package': RELEASE_2026_10_17_PENDING_SQL_PINS.sql154,
+  'sql155-claim-owner-org-stamp': RELEASE_2026_10_17_PENDING_SQL_PINS.sql155,
 });
 
 const LAMBDA_CODE_SHA_RE = /^[A-Za-z0-9+/]{43}=$/;

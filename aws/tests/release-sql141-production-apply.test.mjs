@@ -154,7 +154,7 @@ test('pin: the release pin shape, pending, in step with the staging pin, the one
   assert.doesNotMatch(JSON.stringify(tool), /[0-9a-f]{64}/);
   const rows = JSON.stringify(readJson('ops/deployment-guard/bypass-inventory.json'));
   assert.match(rows, /"path":"scripts\/deployment-guard\/sql141-permanent-vendor-payees-production-apply\.mjs","classification":"GUARDED","capabilities":\["sql141-production-apply"\]/);
-  assert.match(rows, /sql135, sql136, sql137, sql138, sql139, sql140, sql141, sql142, sql143, sql144, sql145, sql146, sql147, sql148, sql150, sql152, sql154\)/);
+  assert.match(rows, /sql135, sql136, sql137, sql138, sql139, sql140, sql141, sql142, sql143, sql144, sql145, sql146, sql147, sql148, sql150, sql152, sql154, sql155\)/);
   const scripts = readJson('package.json').scripts;
   const workflow = read('.github/workflows/deployment-guard.yml');
   for (const name of ['aws/tests/release-sql141-executor.test.mjs', 'aws/tests/release-sql141-production-apply.test.mjs', 'aws/tests/sql141-permanent-vendor-payees-pg.test.mjs', 'aws/tests/sql141-permanent-vendor-payees-tool-pg.test.mjs']) {
@@ -212,7 +212,7 @@ test('order: no predecessor; three functions, two policies, two new tables; no e
   assert.match(runbook, /16522f0a99f22410a73e4a80e10e48a10a08162171345d72e0f72bc47338982f/);
   const oneShot = read('ops/production-sql-one-shot.md');
   assert.match(oneShot, /\| `sql141` \|/);
-  assert.match(oneShot, /`sql136`, `sql137`, `sql138`, `sql139`, `sql140`, `sql141`, `sql142`, `sql143`, `sql144`, `sql145`, `sql146`, `sql147`, `sql148`, `sql150`, `sql152`, `sql154`\) \|/);
+  assert.match(oneShot, /`sql136`, `sql137`, `sql138`, `sql139`, `sql140`, `sql141`, `sql142`, `sql143`, `sql144`, `sql145`, `sql146`, `sql147`, `sql148`, `sql150`, `sql152`, `sql154`, `sql155`\) \|/);
   assert.match(read('ops/deployment-guard/README.md'), /sql141-permanent-vendor-payees-production-apply\.mjs --inspect/);
 });
 

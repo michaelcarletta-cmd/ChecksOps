@@ -126,6 +126,7 @@ export const EXECUTOR_PACK_MEMBERS = Object.freeze([
   ['aws/workflows/sql/150_external_disbursement_up_to_check_amount.sql', 'sql/150_external_disbursement_up_to_check_amount.sql'],
   ['aws/workflows/sql/152_invoice_and_failed_deposit_fees.sql', 'sql/152_invoice_and_failed_deposit_fees.sql'],
   ['aws/workflows/sql/154_tenant_starter_package.sql', 'sql/154_tenant_starter_package.sql'],
+  ['aws/workflows/sql/155_claim_owner_org_stamp.sql', 'sql/155_claim_owner_org_stamp.sql'],
   ['aws/functions/api/rds-global-bundle.pem', 'rds-global-bundle.pem'],
   ['scripts/deployment-guard/lib/sql-apply.mjs', 'lib/sql-apply.mjs'],
   ['scripts/deployment-guard/lib/sql-executor-auth.mjs', 'lib/sql-executor-auth.mjs'],
