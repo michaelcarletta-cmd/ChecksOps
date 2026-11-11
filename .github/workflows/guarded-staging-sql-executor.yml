@@ -98,6 +98,7 @@ on:
           - sql148-second-mortgagee-link
           - sql150-external-disbursement-up-to-check-amount
           - sql152-invoice-and-failed-deposit-fees
+          - sql154-tenant-starter-package
       approved_commit:
         description: "Required for deploy/apply/read-live: exact main commit approved for this run"
         required: false
@@ -249,6 +250,7 @@ jobs:
           node --test aws/tests/release-sql148-executor.test.mjs
           node --test aws/tests/release-sql150-executor.test.mjs
           node --test aws/tests/release-sql152-executor.test.mjs
+          node --test aws/tests/release-sql154-executor.test.mjs
           node --test aws/tests/mortgage-executor-commit-outcome.test.mjs
           node --test aws/tests/deployment-guard-kms-receipt.test.mjs
           node --test aws/tests/deployment-guard-signed-receipt.test.mjs
