@@ -717,6 +717,21 @@ test('committed pins are pending (none execute-authorized; SQL 90, SQL 91, SQL 9
         assert.equal(pin.production_inspect.already_applied, true, key);
         assert.deepEqual(pin.production_inspect.precondition_failures, [], key);
         assert.match(pin.production_inspect.note, / Earlier: Run 2026-10-17 at source commit 969e2b2b1/, key);
+      } else if (key === 'sql155') {
+        // SQL 155 is production_noop too (owner 2026-11-11, "record the SQL 155 production verified_live"): the read-only
+        // production inspect of 2026-11-11 (SSM 373a7d5c, main 18d9ddbaf) found the intended state, applied there directly on
+        // 2026-09-22 from the unmerged PR #429; it is the production record and the pin never becomes execute true.
+        assert.equal(RELEASE_SQL_SPECS[key].production_noop, true, key);
+        assert.equal(pin.production_noop, true, key);
+        assert.equal(pin.production_inspect.status, 'recorded', key);
+        assert.equal(pin.production_inspect.date, '2026-11-11', key);
+        assert.equal(pin.production_inspect.ssm_command_id, '373a7d5c-32b9-49f4-86c0-9ab41537f542', key);
+        assert.equal(pin.production_inspect.source_commit, '18d9ddbafd1e496e2de9abe7dae3716fa3c31d4e', key);
+        assert.equal(pin.production_inspect.live_definition_sha256, pin.intended_replacement_sha256, key);
+        assert.equal(pin.production_inspect.already_applied, true, key);
+        assert.deepEqual(pin.production_inspect.precondition_failures, [], key);
+        assert.match(pin.production_inspect.note, /^Verified live: /, key);
+        assert.match(pin.production_inspect.note, / Earlier: Pending: /, key);
       } else {
         assert.equal(pin.production_inspect.status, 'pending', key);
       }

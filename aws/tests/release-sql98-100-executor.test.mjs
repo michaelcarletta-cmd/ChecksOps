@@ -158,8 +158,10 @@ test('pins: SQL 98-100 code-derived (the SQL 98 and SQL 99 production pins appli
   assert.deepEqual(RELEASE_SQL_SPECS.sql99.predecessors, ['sql90']);
   assert.deepEqual(RELEASE_SQL_SPECS.sql100.predecessors, ['sql90']);
   assert.match(TEXT.sql98, /to_regprocedure\('public\.aws_platform_owner_set_tenant_pricing\(uuid, jsonb\)'\) IS NULL/);
-  // SQL 100 alone is production_noop with grantors and policy comments in its fingerprint.
-  assert.deepEqual(Object.keys(RELEASE_SQL_SPECS).filter((key) => RELEASE_SQL_SPECS[key].production_noop === true), ['sql100']);
+  // SQL 100 is production_noop with grantors and policy comments in its fingerprint. SQL 155 (2026-11-11) is production_noop
+  // too, without render options: production already had its objects (verified live, release-sql155-production-apply.test.mjs).
+  assert.deepEqual(Object.keys(RELEASE_SQL_SPECS).filter((key) => RELEASE_SQL_SPECS[key].production_noop === true), ['sql100', 'sql155']);
+  assert.equal(RELEASE_SQL_SPECS.sql155.render, undefined);
   assert.deepEqual(RELEASE_SQL_SPECS.sql100.render, { grantors: true, policy_comments: true });
   // SQL 103, SQL 119 and SQL 131 render grantors too (each fingerprint is function ACLs only), and SQL 121
   // (function and table ACLs), without policy comments.

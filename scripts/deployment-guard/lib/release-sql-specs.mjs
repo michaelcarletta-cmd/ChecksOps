@@ -8969,6 +8969,7 @@ export const RELEASE_SQL_SPECS = deepFreeze({
     "choice": "sql155-claim-owner-org-stamp",
     "production_pin_rel": "ops/deployment-guard/sql155-claim-owner-org-stamp-production-apply.json",
     "script": "sql155-claim-owner-org-stamp-production-apply",
+    "production_noop": true,
     "prerequisites": [
       "public.claims",
       "public.tenants",

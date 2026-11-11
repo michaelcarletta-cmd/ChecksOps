@@ -30,7 +30,26 @@ rename an existing claim (`claim_number`), which the trigger leaves alone.
 **Public trigger.** `trg_aws_stamp_claim_org_id` is a public trigger. Production's `db-readonly-validate` justified set
 gains it in its own change, once production's state is recorded through this path.
 
-**Status:** staging pin execute-authorized (wave 47); not applied anywhere. The production pin is pending.
+**Status:** applied to staging (wave 47, 2026-11-11); production verified live (2026-11-11, already as intended; nothing applied there).
+
+**Staging apply (2026-11-11).** After the staging pin (#1781, merged to main as `d64014d66`), executor deploy run
+43080808267 (inspect runs 43080350602 and 43081285142), read-live run 43081709377 (`d63969e2…`, `already_applied` false,
+`precondition_failures` `[]`), then apply run 43082131132 under the owner's words "apply SQL 155 in staging": receipt
+`d63969e2…` → `d65fcff93a2b9da222dc0fc40118f312c6df3b92d80ab9b7bbec6ed19d448609` (intended), result `applied`, both functions and
+the trigger `intended`; read-live run 43082578726 `already_applied` true, `precondition_failures` `[]`.
+
+**Production verified live (2026-11-11).** Under the owner's words "run the read-only SQL 155 production inspect": transfer
+run 43083324864 staged main `18d9ddbaf` (tarball `3db836c7…`; the SQL 155 file on the runner `847b2e67…` == the pin), and
+`sql155-claim-owner-org-stamp-production-apply.mjs --inspect` ran read-only on the runner `i-0c35557c4e5385406` (SSM
+`373a7d5c-32b9-49f4-86c0-9ab41537f542`, connected as `checksops_admin`; the runner was started for it at 19:03:15Z and
+stopped at 19:03:42Z): live `d65fcff9…` == intended, `already_applied` true, `precondition_failures` `[]`,
+`prerequisites_missing` `[]`, both functions `intended` with EXECUTE `authenticated`, `checksops` and the owner, the trigger
+`intended`, `definer_writes` ok. Production has run these objects since the direct apply of 2026-09-22 (PR #429); the
+repository holds no record of that run, so this is a verified-live record, not an apply record. Recorded on the owner's
+words "record the SQL 155 production verified_live" in the release engine's form for this case (SQL 100's): the spec is
+`production_noop`, the pin records the inspect as `production_inspect` and stays `execute: false`, and the production tool
+refuses any apply there. Production acceptance of the claim stamp was not reported by the owner when this was recorded;
+this record does not claim it.
 
 **Staging read-live (2026-11-11).** Run 43077253195 (job 130720232170, main `d0548d4af`, after executor deploy run
 43076433402, inspect runs 43076004984 and 43076849830), under the owner's words "Redeploy the staging executor and run
