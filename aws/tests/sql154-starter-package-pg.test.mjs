@@ -1,5 +1,7 @@
 /**
- * SQL 151 against PostgreSQL 16: the optional Starter Package. Objects are owned by a non-superuser
+ * SQL 154 (SQL 151 plus EXECUTE on aws_starter_package_checks_used(uuid) for checksops, which the API's
+ * billing snapshot calls) against PostgreSQL 16: the optional Starter Package. SQL 151 leaves checksops
+ * without that EXECUTE (why it is never applied); SQL 154 grants it. Objects are owned by a non-superuser
  * checksops_admin LOGIN (production's admin login, which applies the file); the API login checksops
  * writes checkalt_deposits and moov_invoices and calls the platform owner's setter as the signed-in
  * user (request.app_user_id). SQL 120 and SQL 152 (SQL 149's replacement) are applied first, as on staging and production;
@@ -16,7 +18,8 @@ import { AWS_ROOT, pgSkipReason, startPg } from './helpers/stakeholder-policies-
 
 const SQL_120 = path.join(AWS_ROOT, 'workflows/sql/120_usage_events_at_approval_and_send.sql');
 const SQL_152 = path.join(AWS_ROOT, 'workflows/sql/152_invoice_and_failed_deposit_fees.sql');
-const SQL_151 = path.join(AWS_ROOT, 'workflows/sql/151_tenant_starter_package.sql');
+const SQL_151 = path.join(AWS_ROOT, 'workflows/sql/' + '151_tenant_starter_package.sql');
+const SQL_154 = path.join(AWS_ROOT, 'workflows/sql/154_tenant_starter_package.sql');
 
 const T = '11111111-1111-4111-8111-111111111111'; // on the package
 const T_OFF = '22222222-2222-4222-8222-222222222222'; // not on it
@@ -106,9 +109,9 @@ INSERT INTO public.check_intake_items (id, tenant_id, status, claim_id, check_nu
 RESET ROLE;
 `;
 
-test('SQL 151: the Starter Package includes Checks, a failed deposit uses one, the setter is the platform owner\'s (PostgreSQL 16)', { timeout: 240000, skip: pgSkipReason() || false }, async () => {
+test('SQL 154: the Starter Package includes Checks, a failed deposit uses one, the setter is the platform owner\'s (PostgreSQL 16)', { timeout: 240000, skip: pgSkipReason() || false }, async () => {
   const { default: pg } = await import('pg');
-  const server = startPg('pg-sql151-starter-', 56600);
+  const server = startPg('pg-sql154-starter-', 56600);
   const superuser = new pg.Client({ host: server.host, port: server.port, user: 'ubuntu', database: 'postgres' });
   const owner = new pg.Client({ host: server.host, port: server.port, user: 'checksops_admin', database: 'postgres' });
   const api = new pg.Client({ host: server.host, port: server.port, user: 'checksops', database: 'postgres' });
@@ -128,8 +131,8 @@ test('SQL 151: the Starter Package includes Checks, a failed deposit uses one, t
     await superuser.connect();
     await superuser.query(SCHEMA);
     await owner.connect();
-    for (const file of [SQL_120, SQL_152, SQL_151]) await owner.query(fs.readFileSync(file, 'utf8'));
-    await owner.query(fs.readFileSync(SQL_151, 'utf8')); // idempotent
+    for (const file of [SQL_120, SQL_152, SQL_154]) await owner.query(fs.readFileSync(file, 'utf8'));
+    await owner.query(fs.readFileSync(SQL_154, 'utf8')); // idempotent
     await api.connect();
 
     // Every tenant starts off the package, with 250 included Checks once it is turned on.
@@ -211,7 +214,12 @@ test('SQL 151: the Starter Package includes Checks, a failed deposit uses one, t
     await deposit(92, 'submitted', T_OFF);
     assert.deepEqual((await fees(T_OFF)).map((r) => r.package_included), [false, false]);
 
-    // The trigger functions run for their owner only; the setter is the API's (checksops).
+    // The API (checksops) reads the Checks used in the billing snapshot (tenant-billing-engine.mjs
+    // loadTenantBillingContext) as itself: SQL 154's one change from SQL 151.
+    assert.equal((await as(null, `SELECT t.starter_package_enabled, public.aws_starter_package_checks_used(t.id) AS used
+      FROM public.tenants t WHERE t.id = $1::uuid`, [T])).rows[0].used,
+      (await superuser.query('SELECT public.aws_starter_package_checks_used($1) AS n', [T])).rows[0].n);
+    // The trigger functions run for their owner only; the setter and the Checks used are the API's (checksops).
     const execs = (await superuser.query(
       `SELECT p.proname, has_function_privilege('checksops', p.oid, 'EXECUTE') AS api_exec
          FROM pg_proc p WHERE p.proname IN ('aws_apply_starter_package_to_event', 'aws_tenant_starter_package_audit_row',
@@ -219,8 +227,20 @@ test('SQL 151: the Starter Package includes Checks, a failed deposit uses one, t
     assert.deepEqual(execs.map((r) => [r.proname, r.api_exec]), [
       ['aws_apply_starter_package_to_event', false],
       ['aws_platform_owner_set_tenant_starter_package', true],
-      ['aws_starter_package_checks_used', false],
+      ['aws_starter_package_checks_used', true],
       ['aws_tenant_starter_package_audit_row', false],
+    ]);
+    // No other grant: only checksops and the owner on the setter and the Checks used, only the owner on the triggers'.
+    const acls = (await superuser.query(
+      `SELECT p.proname, (SELECT array_agg(CASE WHEN a.grantee = 0 THEN 'PUBLIC' ELSE a.grantee::regrole::text END || ':' || a.privilege_type ORDER BY 1)
+                            FROM aclexplode(p.proacl) a) AS acl
+         FROM pg_proc p WHERE p.proname IN ('aws_apply_starter_package_to_event', 'aws_tenant_starter_package_audit_row',
+           'aws_starter_package_checks_used', 'aws_platform_owner_set_tenant_starter_package') ORDER BY p.proname`)).rows;
+    assert.deepEqual(acls.map((r) => [r.proname, [...r.acl].sort()]), [
+      ['aws_apply_starter_package_to_event', ['checksops_admin:EXECUTE']],
+      ['aws_platform_owner_set_tenant_starter_package', ['checksops:EXECUTE', 'checksops_admin:EXECUTE']],
+      ['aws_starter_package_checks_used', ['checksops:EXECUTE', 'checksops_admin:EXECUTE']],
+      ['aws_tenant_starter_package_audit_row', ['checksops_admin:EXECUTE']],
     ]);
   } finally {
     await api.end().catch(() => {});
@@ -230,17 +250,48 @@ test('SQL 151: the Starter Package includes Checks, a failed deposit uses one, t
   }
 });
 
-test('SQL 151 refuses to run without SQL 149', { timeout: 120000, skip: pgSkipReason() || false }, async () => {
+test('SQL 154 refuses to run without SQL 152', { timeout: 120000, skip: pgSkipReason() || false }, async () => {
   const { default: pg } = await import('pg');
-  const server = startPg('pg-sql151-prereq-', 56700);
+  const server = startPg('pg-sql154-prereq-', 56700);
   const superuser = new pg.Client({ host: server.host, port: server.port, user: 'ubuntu', database: 'postgres' });
   try {
     await superuser.connect();
     await superuser.query(SCHEMA);
     await superuser.query(fs.readFileSync(SQL_120, 'utf8'));
-    await assert.rejects(superuser.query(fs.readFileSync(SQL_151, 'utf8')), (err) => (
-      err.code === '55000' && /sql151_prerequisite_missing: .*SQL 149/.test(err.message)));
+    await assert.rejects(superuser.query(fs.readFileSync(SQL_154, 'utf8')), (err) => (
+      err.code === '55000' && /sql154_prerequisite_missing: .*SQL 152/.test(err.message)));
   } finally {
+    await superuser.end().catch(() => {});
+    server.stop();
+  }
+});
+
+test('SQL 151 (never applied) leaves checksops without EXECUTE on aws_starter_package_checks_used, so the API cannot read the package; SQL 154 is SQL 151 plus that grant', { timeout: 120000, skip: pgSkipReason() || false }, async () => {
+  const sql151 = fs.readFileSync(SQL_151, 'utf8');
+  const sql154 = fs.readFileSync(SQL_154, 'utf8');
+  const grant = 'GRANT EXECUTE ON FUNCTION public.aws_starter_package_checks_used(uuid) TO checksops;\n';
+  const code = (text) => text.split('\n').filter((line) => !line.startsWith('--')).join('\n');
+  const normalize = (text) => code(text).replace(/sql15[14]_/g, 'sqlN_').replace(/'SQL 15[14]( \(replaces SQL 102\))?: /g, "'SQL N$1: ")
+    .replace(/'SQL 15[14] \(replaces SQL 102\)/g, "'SQL N (replaces SQL 102)").replace('aws_failed_deposit_fee_cents() (SQL 149)', 'aws_failed_deposit_fee_cents() (SQL 152)');
+  assert.equal(code(sql154).split(grant).length, 2);
+  assert.equal(normalize(code(sql154).replace(grant, '')), normalize(sql151));
+  const { default: pg } = await import('pg');
+  const server = startPg('pg-sql151-acl-', 56800);
+  const superuser = new pg.Client({ host: server.host, port: server.port, user: 'ubuntu', database: 'postgres' });
+  const owner = new pg.Client({ host: server.host, port: server.port, user: 'checksops_admin', database: 'postgres' });
+  const api = new pg.Client({ host: server.host, port: server.port, user: 'checksops', database: 'postgres' });
+  try {
+    await superuser.connect();
+    await superuser.query(SCHEMA);
+    await owner.connect();
+    for (const file of [SQL_120, SQL_152, SQL_151]) await owner.query(fs.readFileSync(file, 'utf8'));
+    await api.connect();
+    await assert.rejects(api.query('SELECT public.aws_starter_package_checks_used($1::uuid) AS n', [T]), (e) => e.code === '42501');
+    await owner.query(sql154);
+    assert.equal((await api.query('SELECT public.aws_starter_package_checks_used($1::uuid) AS n', [T])).rows[0].n, 0);
+  } finally {
+    await api.end().catch(() => {});
+    await owner.end().catch(() => {});
     await superuser.end().catch(() => {});
     server.stop();
   }

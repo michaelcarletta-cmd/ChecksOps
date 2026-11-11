@@ -470,18 +470,19 @@ const SQL152_FILE = 'aws/workflows/sql/152_invoice_and_failed_deposit_fees.sql';
 // tenant-billing-handlers.mjs REPLACE their live bytes, held on SQL 151 (not live), planning only (its own test, at the end).
 const STARTER_PACKAGE_REL = 'aws/tests/fixtures/production-starter-package-manifest-2026-11-10.json';
 const STARTER_PACKAGE = JSON.parse(fs.readFileSync(path.join(ROOT, STARTER_PACKAGE_REL), 'utf8'));
-const SQL151_FILE = 'aws/workflows/sql/151_tenant_starter_package.sql';
+// (SQL 154 since 2026-11-11: it replaces SQL 151, never applied, which gave checksops no EXECUTE on aws_starter_package_checks_used.)
+const SQL154_FILE = 'aws/workflows/sql/154_tenant_starter_package.sql';
 // Second mortgage company fee (owner 2026-11-11, "it should be an additional $5 if 2 mortgage companies are on check",
 // then "Merge it"): tenant-billing-engine.mjs (combining the Starter Package's unapplied bytes) and
 // tenant-fee-invoice-email.mjs (combining the usage fees plan's unapplied bytes) REPLACE their live bytes with the $5,
 // holds unchanged (SQL 151, SQL 152), planning only (its own test, at the end).
 const SECOND_MORTGAGEE_FEE_REL = 'aws/tests/fixtures/production-second-mortgagee-fee-manifest-2026-11-11.json';
 const SECOND_MORTGAGEE_FEE = JSON.parse(fs.readFileSync(path.join(ROOT, SECOND_MORTGAGEE_FEE_REL), 'utf8'));
-const SECOND_MORTGAGEE_FEE_HOLDS = Object.freeze({ 'tenant-billing-engine.mjs': SQL151_FILE, 'tenant-fee-invoice-email.mjs': SQL152_FILE });
+const SECOND_MORTGAGEE_FEE_HOLDS = Object.freeze({ 'tenant-billing-engine.mjs': SQL154_FILE, 'tenant-fee-invoice-email.mjs': SQL152_FILE });
 /** The pending plan that holds a member now (planning only): the 2nd mortgagee fee's, else SQL 151's, else SQL 152's, else null. */
 const laterPlan = (member) => {
   if (SECOND_MORTGAGEE_FEE.members[member]) return { rel: SECOND_MORTGAGEE_FEE_REL, entry: SECOND_MORTGAGEE_FEE.members[member], sql: SECOND_MORTGAGEE_FEE_HOLDS[member] };
-  if (STARTER_PACKAGE.members[member]) return { rel: STARTER_PACKAGE_REL, entry: STARTER_PACKAGE.members[member], sql: SQL151_FILE };
+  if (STARTER_PACKAGE.members[member]) return { rel: STARTER_PACKAGE_REL, entry: STARTER_PACKAGE.members[member], sql: SQL154_FILE };
   if (USAGE_FEES.members[member]) return { rel: USAGE_FEES_REL, entry: USAGE_FEES.members[member], sql: SQL152_FILE };
   return null;
 };
@@ -531,10 +532,10 @@ const withSql145 = (member, deps) => {
 // The usage fees members wait for SQL 152 (recorded live 2026-11-11) or SQL 151 (not live), planning only: apply replays
 // of older workstreams run on a plan copy that states both live, as withSql145 does for SQL 145.
 const withSql149 = (member, deps) => {
-  if (![SQL152_FILE, SQL151_FILE].includes(PLAN.members[member]?.sql_before)) return deps;
+  if (![SQL152_FILE, SQL154_FILE].includes(PLAN.members[member]?.sql_before)) return deps;
   const plan = structuredClone(deps.plan || PLAN);
   plan.sql_prerequisites[SQL152_FILE] = { verified_live: true, evidence: 'test' };
-  plan.sql_prerequisites[SQL151_FILE] = { verified_live: true, evidence: 'test' };
+  plan.sql_prerequisites[SQL154_FILE] = { verified_live: true, evidence: 'test' };
   return { ...deps, plan };
 };
 // providers/moov-status-catch-up.mjs waits for SQL 146 (the catch-up update fix, its own test below): the committed
@@ -975,7 +976,8 @@ test('checkalt-eligibility.mjs expected_live records the bytes production run 39
   assert.match(PLAN.notes, /staging apply run 39662525342/);
   assert.match(PLAN.notes, /inspect run 39662846247/);
   assert.match(PLAN.notes, /production apply run 39663019340/);
-  assert.equal(PLAN.order[0], ELIGIBILITY);
+  // Second since 2026-11-11: db-readonly-validate.mjs heads the order.
+  assert.equal(PLAN.order[1], ELIGIBILITY);
   const row = PLAN.members[ELIGIBILITY];
   assert.equal(row.operation, 'replace');
   assert.equal(row.manifest, MANIFEST_REL);
@@ -2839,7 +2841,9 @@ test('Data API RPC access gates: data.mjs REPLACE planned over the bytes product
     manifest: SECURITY_HARDENING_APPLIED_REL,
   });
   assert.ok(PLAN.order.indexOf(MEMBER) < PLAN.order.indexOf(RECON));
-  assert.equal(PLAN.order.indexOf('db-readonly-validate.mjs') + 1, PLAN.order.indexOf(RECON));
+  // The validator heads the order since 2026-11-11 (its SQL 152 REPLACE is not held behind pending members).
+  assert.equal(PLAN.order.indexOf('db-readonly-validate.mjs'), 0);
+  assert.ok(PLAN.order.indexOf('db-readonly-validate.mjs') < PLAN.order.indexOf(RECON));
   assert.match(fs.readFileSync(path.join(ROOT, '.github/workflows/guarded-production-lambda-overlay.yml'), 'utf8'), /\n {10}- check-reconciliation\.mjs\n/);
   const reconInspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: RECON };
   const reconBefore = structuredClone(PLAN);

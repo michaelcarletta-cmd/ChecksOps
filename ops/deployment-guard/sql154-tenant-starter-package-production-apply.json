@@ -1,0 +1,70 @@
+{
+  "id": "sql154-tenant-starter-package-production-apply",
+  "migration": "sql154",
+  "authorization": "pending",
+  "execute": false,
+  "target_environment": "production",
+  "target_component": "production-sql",
+  "deployment_type": "sql-apply",
+  "filename": "aws/workflows/sql/154_tenant_starter_package.sql",
+  "migration_id": "154_tenant_starter_package",
+  "staging_pin_commit": "ce0b8dc950ca59c17119e1eb69edd627849e3d99",
+  "source_sha256": "d550fb4aaa9a7569cb2ced49e5e8e335f115d147704062b5973ee5d7bdf614f9",
+  "function_identities": [
+    "public.aws_starter_package_checks_used(uuid)",
+    "public.aws_apply_starter_package_to_event()",
+    "public.aws_platform_owner_set_tenant_starter_package(uuid, boolean, date, date, integer)",
+    "public.aws_tenant_starter_package_audit_row()",
+    "public.aws_tenants_member_column_guard()"
+  ],
+  "expected_live_definition_sha256": null,
+  "intended_replacement_sha256": "a50c631a5d185103fde4bff9be3aec08d78418f0c8524b535ca6ee794ca79fe2",
+  "authorization_phrase": "APPLY_TENANT_STARTER_PACKAGE",
+  "predecessors": [
+    "sql102"
+  ],
+  "order_note": "Predecessor and supersedes SQL 102 (applied to production, pin retired): SQL 154 replaces SQL 102's public.aws_tenants_member_column_guard() in place (CREATE OR REPLACE with no REVOKE: same identity, owner, attributes and ACL, PUBLIC and the owner; the body is SQL 102's plus the four Starter Package columns for the platform owner), so the engine refuses SQL 154 (predecessors_applied) unless SQL 102 reads applied, and after SQL 154 SQL 102 and SQL 98 (whose guard SQL 102 replaced) each count as applied only while every other object of their own still matches (staging pin superseded_intended_sha256.sql102 and .sql98, releaseSupersededIntendedHash). No refuse_after is added to SQL 102: re-running SQL 102 after SQL 154 puts back SQL 102's guard, which fails closed (the package columns could no longer be changed) until SQL 154 is re-run. SQL 154 replaces SQL 151, never applied and given no spec or pin: SQL 151 revoked EXECUTE on aws_starter_package_checks_used(uuid) from PUBLIC and granted it to no one, but the API (checksops) calls it in the billing snapshot (tenant-billing-engine.mjs loadTenantBillingContext), so the package would read as absent and Monthly Maintenance would be charged; SQL 154 is SQL 151 plus GRANT EXECUTE on that function to checksops. The spec prerequisites are the file's own (tenants, check_billing_events, tenant_pricing_audit, SQL 102's guard, aws_tenant_profile_columns() and aws_tenant_has_moov_account(uuid), SQL 96's aws_tenant_pricing_columns(), SQL 120's aws_check_processing_price_cents(uuid) and SQL 152's aws_failed_deposit_fee_cents(); the file refuses without them, 55000 sql154_prerequisite_missing) plus the helpers and columns the bodies use and role checksops. New objects: tenants.starter_package_enabled (boolean NOT NULL DEFAULT false), starter_package_starts_on and starter_package_maintenance_ends_on (date), starter_package_included_checks (integer NOT NULL DEFAULT 250) and the CHECK tenants_starter_package_valid; check_billing_events.package_included (boolean NOT NULL DEFAULT false); aws_starter_package_checks_used(uuid) and aws_platform_owner_set_tenant_starter_package(uuid, boolean, date, date, integer) (SECURITY DEFINER, EXECUTE checksops and the owner); aws_apply_starter_package_to_event() and aws_tenant_starter_package_audit_row() (SECURITY DEFINER trigger functions, EXECUTE the owner only) with the triggers aws_check_billing_event_starter_package (BEFORE INSERT OR UPDATE OF status ON check_billing_events) and aws_tenant_starter_package_audit (AFTER UPDATE ON tenants). The applying login must own tenants and check_billing_events (altered_relations_owned_by_login), own the guard (functions_owned_by_login) and reach tenants, tenant_pricing_audit and check_billing_events as the definer functions' owner past RLS (definer_can_write_relations). Expected pre-state in both environments (SQL 102, SQL 120 and SQL 152 applied): the guard as SQL 102 left it and none of SQL 154's other objects present (release sql154 v1: 05fb0b9959f677fb828ee1efaf7ffce3513ea83e6d5ed071417a7511be3231ca, releaseStateHash('sql154', { functions: { guard: SQL 102's } }), derived from SQL 102's bytes and read back on PostgreSQL 16 by aws/tests/release-sql154-executor.test.mjs). The API members held on SQL 154 (tenant-billing-engine.mjs and tenant-billing-handlers.mjs) reach production only through the guarded Lambda overlay after this apply; the website change ships through the guarded SPA path. No API, Lambda or SPA change is part of this pin. The two new triggers are public triggers: the db-readonly-validate trigger count must follow once SQL 154 is applied (its own change).",
+  "admin_login": "checksops_admin",
+  "rds_identifier": "checksops-production",
+  "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
+  "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
+  "tooling": {
+    "status": "built",
+    "production_tool": "scripts/deployment-guard/sql154-tenant-starter-package-production-apply.mjs",
+    "production_lib": "scripts/deployment-guard/lib/release-sql-production-apply.mjs",
+    "staging_executor_handler": "aws/write-path/guarded-sql-executor/index.mjs handleReleaseSqlMigration",
+    "staging_workflow_choice": "sql154-tenant-starter-package",
+    "one_shot_migration": "sql154",
+    "fingerprint_engine": "scripts/deployment-guard/lib/release-sql-state.mjs",
+    "runbook": "ops/production-sql-154-apply.md",
+    "tests": [
+      "aws/tests/release-sql154-executor.test.mjs",
+      "aws/tests/release-sql154-production-apply.test.mjs",
+      "aws/tests/release-sql90-97-executor.test.mjs",
+      "aws/tests/release-sql90-97-production-apply.test.mjs",
+      "aws/tests/sql154-starter-package-pg.test.mjs"
+    ],
+    "note": "Guarded tooling for SQL 154: sql154-tenant-starter-package-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql154-tenant-starter-package); production-sql-one-shot.mjs --migration sql154. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): the five functions with their attributes, bodies and ACLs, the five columns, the CHECK and the two triggers. SQL 154 supersedes SQL 102 and SQL 98 (release-sql-specs.mjs; staging pin superseded_intended_sha256). The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
+  },
+  "production_inspect": {
+    "status": "pending",
+    "date": null,
+    "ssm_command_id": null,
+    "source_commit": null,
+    "read_only": true,
+    "connected_as": "checksops_admin",
+    "live_definition_sha256": null,
+    "apply_preconditions_met": null,
+    "precondition_failures": null,
+    "note": "Pending: no release-engine production inspect has been run for SQL 154 yet. Expected: every prerequisite present (prerequisites_missing [], SQL 120's aws_check_processing_price_cents(uuid) and SQL 152's aws_failed_deposit_fee_cents() among them), predecessors { sql102: true }, the guard as SQL 102 left it (state different) and SQL 154's other functions, columns, CHECK and triggers absent, tenants, tenant_pricing_audit and check_billing_events reachable by the definer (release_sql_inspect.definer_writes ok true), every altered relation owned by checksops_admin, already_applied false. Expected release-engine fingerprint of that pre-state under sql154: 05fb0b9959f677fb828ee1efaf7ffce3513ea83e6d5ed071417a7511be3231ca (derived from SQL 102's bytes, read back on PostgreSQL 16 by aws/tests/release-sql154-executor.test.mjs). Record the one-shot --phase inspect's date, SSM command id, source commit, live_definition_sha256, prerequisites_missing, release_sql_inspect, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. Stop if the pre-state differs, prerequisites_missing is not [] or precondition_failures is not []: that needs its own reviewed change."
+  },
+  "intended_post_state": {
+    "fingerprint": "a50c631a5d185103fde4bff9be3aec08d78418f0c8524b535ca6ee794ca79fe2",
+    "note": "tenants.starter_package_enabled (boolean NOT NULL DEFAULT false), starter_package_starts_on, starter_package_maintenance_ends_on (date), starter_package_included_checks (integer NOT NULL DEFAULT 250), no column grant; CHECK tenants_starter_package_valid (included checks >= 0, and an enabled package has both dates with the end on or after the start); check_billing_events.package_included (boolean NOT NULL DEFAULT false, no column grant); aws_starter_package_checks_used(uuid) (sql, STABLE, SECURITY DEFINER, row_security off) and aws_platform_owner_set_tenant_starter_package(uuid, boolean, date, date, integer) (plpgsql, SECURITY DEFINER), EXECUTE checksops and the owner; aws_apply_starter_package_to_event() and aws_tenant_starter_package_audit_row() (SECURITY DEFINER trigger functions), EXECUTE the owner only; the triggers aws_check_billing_event_starter_package and aws_tenant_starter_package_audit; aws_tenants_member_column_guard() with SQL 154's body (SQL 102's plus the four package columns for the platform owner), not SECURITY DEFINER, search_path public, EXECUTE PUBLIC and the owner as before. No other function, table, column, policy, RLS setting, grant or trigger change; no row written at the apply (every tenant starts off the package). The fingerprint is releaseIntendedHash('sql154', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): a50c631a5d185103fde4bff9be3aec08d78418f0c8524b535ca6ee794ca79fe2."
+  },
+  "staging_acceptance": {
+    "ok": false,
+    "reference": null,
+    "basis": "Pending: record the guarded staging SQL executor read-live and the staging apply of SQL 154 (choice sql154-tenant-starter-package) here in the reviewed change that sets execute true. The behavior is covered on PostgreSQL 16 by aws/tests/sql154-starter-package-pg.test.mjs. Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+  }
+}

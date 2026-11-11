@@ -530,9 +530,10 @@ test('staging SQL record: every sql_before of the plan has an entry; the pending
   // second mortgagee link) until its record change (staging run 42905846810, production 2026-11-10), and SQL 152 (the
   // invoice and failed deposit fees) until its record change (staging run 43005316840, production 2026-11-11). SQL 151
   // (the Starter Package, 2026-11-10, which needs SQL 152) is such a SQL now: tenant-billing-engine.mjs and
-  // tenant-billing-handlers.mjs wait for it in both environments until its record change.
+  // tenant-billing-handlers.mjs wait for it in both environments until its record change. SQL 154 (2026-11-11) replaces
+  // SQL 151, never applied, so the hold is SQL 154's.
   const pendingEverywhere = Object.entries(PLAN.sql_prerequisites).filter(([, record]) => record.verified_live === false).map(([file]) => file).sort();
-  assert.deepEqual(pendingEverywhere, ['aws/workflows/sql/151_tenant_starter_package.sql']);
+  assert.deepEqual(pendingEverywhere, ['aws/workflows/sql/154_tenant_starter_package.sql']);
   for (const [file, record] of Object.entries(STAGING_SQL.sql)) assert.equal(record.verified_live, !pendingEverywhere.includes(file), file);
   // A SQL recorded true here is either recorded live in production (with its staging acceptance)
   // or, staging first (release 2026-10-17), names its guarded staging SQL executor apply run and
@@ -596,9 +597,10 @@ test('staging apply of a member held by sql_before is refused before any AWS cal
   const SQL152 = 'aws/workflows/sql/152_invoice_and_failed_deposit_fees.sql';
   stagingSqlLive.sql[SQL152] = { verified_live: false, evidence: null };
   // The Starter Package plan (2026-11-10) moved the engine and tenant-billing-handlers.mjs (SQL 102 before) on to SQL 151.
-  const SQL151 = 'aws/workflows/sql/151_tenant_starter_package.sql';
-  const PENDING = new Set([SQL151]);
-  for (const [member, sqlBefore] of [['providers.mjs', SQL98], ['workflow-rpc.mjs', SQL148], ['tenant-billing-engine.mjs', SQL151], ['tenant-fee-invoice-email.mjs', SQL152], ['tenant-billing-handlers.mjs', SQL151]]) {
+  // (SQL 154 since 2026-11-11: it replaces SQL 151, never applied, which gave checksops no EXECUTE on aws_starter_package_checks_used.)
+  const SQL154 = 'aws/workflows/sql/154_tenant_starter_package.sql';
+  const PENDING = new Set([SQL154]);
+  for (const [member, sqlBefore] of [['providers.mjs', SQL98], ['workflow-rpc.mjs', SQL148], ['tenant-billing-engine.mjs', SQL154], ['tenant-fee-invoice-email.mjs', SQL152], ['tenant-billing-handlers.mjs', SQL154]]) {
     assert.equal(PLAN.members[member].sql_before, sqlBefore, member);
     assert.equal(stagingSqlBefore(member).verified_live_in_staging, !PENDING.has(sqlBefore), `${member}: released by the committed record unless pending`);
     assert.deepEqual(stagingSqlBefore(member, { stagingSqlLive }), { sql_before: sqlBefore, verified_live_in_staging: false, evidence: null }, member);
