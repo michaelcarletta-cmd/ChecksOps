@@ -3,7 +3,7 @@
  * shared with SQL 90-152 (scripts/deployment-guard/lib/release-sql-state.mjs).
  * release-sql90-97-executor.test.mjs runs what every release key shares (SQL 154 included); this file covers what is new:
  *
- *   - the pin: pending, code-derived, selectable, packed, in step with the pending production pin; the pinned commit
+ *   - the pin: staging-authorized (wave 46) from staging read-live run 43033279908, code-derived, selectable, packed, in step with the pending production pin; the pinned commit
  *     authored the bytes; predecessor SQL 102, supersedes SQL 102 and SQL 98 (both define the tenants column guard
  *     SQL 154 replaces), with superseded_intended_sha256 derived from the files; SQL 151 (never applied) has no spec or
  *     pin;
@@ -154,7 +154,7 @@ ALTER TABLE public.moov_invoices ENABLE ROW LEVEL SECURITY;`;
 // Staging and production give every new table grants through default privileges (SQL 117's failure).
 const DEFAULT_PRIVILEGES = 'ALTER DEFAULT PRIVILEGES FOR ROLE checksops_admin IN SCHEMA public GRANT ALL ON TABLES TO checksops, authenticated;';
 
-test('pin: SQL 154 pending, code-derived, selectable, packed, in step with the pending production pin; predecessor SQL 102, supersedes SQL 102 and SQL 98; the derived pre-state', () => {
+test('pin: SQL 154 staging-authorized from its read-live, code-derived, selectable, packed, in step with the pending production pin; predecessor SQL 102, supersedes SQL 102 and SQL 98; the derived pre-state', () => {
   const pin = PINS[KEY];
   const spec = RELEASE_SQL_SPECS[KEY];
   const packed = Object.fromEntries(EXECUTOR_PACK_MEMBERS);
@@ -165,11 +165,12 @@ test('pin: SQL 154 pending, code-derived, selectable, packed, in step with the p
   assert.equal(spec.choice, 'sql154-tenant-starter-package');
   assert.doesNotMatch(spec.choice, /production/);
   assert.equal(sha(TEXT), pin.source_sha256);
-  // Pending: no staging read-live recorded yet (and no apply authorized).
+  // Staging apply authorized (owner approved 2026-11-11, "Record the SQL 154 staging pin and merge it when green") from
+  // staging read-live run 43033279908: already_applied false, precondition_failures []. It read the derived pre-state.
   assertStagingPinState(assert, KEY, pin);
-  assert.equal(pin.execute, false);
-  assert.equal(pin.authorization, 'pending');
-  assert.equal(pin.expected_live_definition_sha256, null);
+  assert.equal(pin.execute, true);
+  assert.equal(pin.authorization, 'Owner approved 2026-11-11: staging apply (wave 46) from staging read-live run 43033279908');
+  assert.equal(pin.expected_live_definition_sha256, PRE);
   assert.equal(releaseIntendedHash(KEY, TEXT), pin.intended_replacement_sha256);
   assert.notEqual(PRE, pin.intended_replacement_sha256);
   // SQL 102 and SQL 98 after SQL 154: every object of their own, with the guard as SQL 154 renders it.
@@ -186,7 +187,9 @@ test('pin: SQL 154 pending, code-derived, selectable, packed, in step with the p
   }
   assert.ok(runbook.includes(`\`\`\`\n${releaseStateText(KEY, releaseIntendedState(KEY, TEXT))}\n\`\`\``));
   assert.ok(runbook.includes(`\`\`\`\n${releaseStateText(KEY, { functions: { [GUARD]: SQL102_GUARD } })}\n\`\`\``));
-  assert.match(runbook, /\*\*Status:\*\* not applied anywhere/);
+  assert.match(runbook, /\*\*Status:\*\* staging pin execute-authorized \(wave 46\); not applied anywhere\. The production pin is pending\./);
+  assert.match(runbook, /read-live \(2026-11-11\)\.\*\* Run 43033279908/);
+  assert.ok(runbook.includes(pin.expected_live_definition_sha256));
   assert.ok(AUTHORIZED_STAGING_SQL.includes(pin));
   assert.equal(resolveAuthorizedMigration({ filename: pin.filename }), pin);
   assert.equal(MIGRATIONS[spec.choice], pin);

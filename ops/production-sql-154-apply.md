@@ -47,7 +47,17 @@ matches (staging pin `superseded_intended_sha256`: SQL 102 `c7001f481b8a147ab4a6
 154 puts back SQL 102's guard, which fails closed (the package columns could no longer be changed) until SQL 154 is
 re-run. SQL 120 and SQL 152 are prerequisites by their functions (applied in both environments).
 
-**Status:** not applied anywhere. The staging pin and the production pin are pending.
+**Status:** staging pin execute-authorized (wave 46); not applied anywhere. The production pin is pending.
+
+**Staging read-live (2026-11-11).** Run 43033279908 (job 130565516078, main `a21972a85`, after executor deploy run
+43032760894, inspect run 43032307944), under the owner's words "Redeploy the staging executor and run SQL 154 read-live":
+`already_applied` false, `precondition_failures` `[]`, `prerequisites_missing` `[]`, `definer_writes` `tenants`,
+`tenant_pricing_audit` and `check_billing_events` `ok true`. Live
+`05fb0b9959f677fb828ee1efaf7ffce3513ea83e6d5ed071417a7511be3231ca`: SQL 102's guard with everything else absent (SQL 120 and SQL 152 applied), equal to the derived pre-state;
+intended `a50c631a…`. Recorded in the staging pin (`expected_live_definition_sha256`, `execute: true`, wave 46) under
+the owner's words of 2026-11-11, "Record the SQL 154 staging pin and merge it when green". The staging apply is a
+separate run after this pin is merged and the executor is redeployed carrying it, on the owner's words "then apply SQL
+154 in staging". The production pin stays pending: a read-only production inspect decides production's pre-state.
 
 ## Fingerprint
 
