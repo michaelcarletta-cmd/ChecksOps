@@ -298,7 +298,7 @@ test('order: no predecessor; the new table with no grant to anyone, five owner-o
   const validator = fs.readFileSync(path.join(ROOT, 'aws/functions/api/db-readonly-validate.mjs'), 'utf8');
   assert.match(validator, /table: 'moov_invoices',\n\s+trigger: 'aws_moov_invoice_fee',\n\s+functionName: 'aws_record_invoice_fee'/);
   assert.match(validator, /table: 'checkalt_deposits',\n\s+trigger: 'aws_checkalt_deposit_failed_fee',\n\s+functionName: 'aws_record_failed_deposit_fee'/);
-  assert.match(validator, /export const EXPECTED_PUBLIC_TRIGGERS = 189;/);
+  assert.match(validator, /export const EXPECTED_PUBLIC_TRIGGERS = 190;/);
   assert.deepEqual(Object.keys(plan.members).filter((m) => plan.members[m].sql_before === SQL152_FILE).sort(), ['tenant-fee-invoice-email.mjs']);
   assert.equal(plan.sql_prerequisites[SQL149_FILE], undefined);
   // SQL 152's statements outside function bodies: two DO blocks, one table, the launch row, no GRANT or policy.

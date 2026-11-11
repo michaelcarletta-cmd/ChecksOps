@@ -197,9 +197,17 @@ export const POST_RESTORE_PUBLIC_TRIGGERS = Object.freeze([
     trigger: 'aws_tenant_starter_package_audit',
     functionName: 'aws_tenant_starter_package_audit_row',
   }),
+  // SQL 155 (155_claim_owner_org_stamp.sql), applied to staging 2026-11-11 (run 43082131132, wave 47); production
+  // already had it (applied directly on 2026-09-22; verified live as intended, SSM 373a7d5c, nothing applied): a
+  // claim's org_id is stamped from its owning tenant.
+  Object.freeze({
+    table: 'claims',
+    trigger: 'trg_aws_stamp_claim_org_id',
+    functionName: 'aws_stamp_claim_org_id',
+  }),
 ]);
 
-export const JUSTIFIED_PUBLIC_TRIGGER_COUNT = 189;
+export const JUSTIFIED_PUBLIC_TRIGGER_COUNT = 190;
 
 const unqualified = (value) => {
   const text = String(value || '');

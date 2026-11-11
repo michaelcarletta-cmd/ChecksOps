@@ -1,0 +1,16 @@
+{
+  "workstream_id": "production-db-validator-sql155-trigger",
+  "authorization": "Pending owner review (2026-11-11). Planning only: nothing is live or verified in production. The production apply needs its own owner approval, a staging acceptance reference and a read-only production inspect that confirms the live bytes.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "SQL 155 (155_claim_owner_org_stamp.sql) adopts one public trigger, claims.trg_aws_stamp_claim_org_id (function aws_stamp_claim_org_id). Applied to staging 2026-11-11 (apply run 43082131132, wave 47, read-live run 43082578726 already_applied true); production already had it (applied directly on 2026-09-22, verified live as intended by the read-only inspect SSM 373a7d5c-32b9-49f4-86c0-9ab41537f542, nothing applied; the SQL 155 record, #1783). Owner 2026-11-11: \"write the validator fix for SQL 155's trigger\". Observed 2026-11-11: the SQL 154 validator bytes (25d0ee50, the named 189-set, #1778) were overlaid in staging (staging apply run 43089038461, aef88b3b -> 25d0ee50, with the owner-selected accept_public_validator_unhealthy) and staging /db-readonly-validate still answered 503 (staging inspect run 43089785273 read 25d0ee50 live; /health and /db-health 200). The smoke withholds the response body, so the trigger the validator rejected was not read; SQL 155's trigger is the one public trigger staging gained after those bytes were written, and ops/production-sql-155-apply.md gives it as the cause of production's 503. These bytes add it to the justified set and raise EXPECTED_PUBLIC_TRIGGERS to 190. REPLACE db-readonly-validate.mjs aef88b3b -> 096aae7a: live_sha256 is the SQL 152 validator production run 43034879124 applied (previous_manifest, the applied record), read live by the production overlay inspect run 43085438087 (READY, 2026-11-11). It supersedes the SQL 154 validator plan (supersedes_unapplied_manifest; 25d0ee50, never applied to production) and keeps everything those bytes do (SQL 154's two triggers). sql_before stays SQL 154, recorded verified live in production (#1782); SQL 155 has no overlay prerequisite entry (production no-op, recorded in its own pin). The validator keeps its place after tenant-billing-handlers.mjs (owner 2026-11-11: \"B\"). Whether these bytes bring production /db-readonly-validate to 200 is not verified: it is expected from the SQL 155 runbook and must be observed after the apply. A read-only production overlay inspect must confirm the live member before any apply.",
+  "members": {
+    "db-readonly-validate.mjs": {
+      "live_sha256": "aef88b3b7af8962c832f7200c59b84d01823d28e7b8185ab0b5fdf26e1112c2f",
+      "accepted_sha256": "096aae7abfc96b72635c01ea8dcbf2c5898d18820b1d0b876e82863d154c84d7",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-db-validator-sql152-trigger-applied-manifest-2026-11-11.json",
+      "supersedes_unapplied_manifest": "aws/tests/fixtures/production-db-validator-sql154-trigger-manifest-2026-11-11.json"
+    }
+  }
+}
