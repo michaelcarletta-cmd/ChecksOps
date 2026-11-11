@@ -36,7 +36,7 @@ Lambda overlay, after this apply.
 **Predecessor.** None (as SQL 120 for SQL 98): the prerequisites are the file's own, SQL 120's trigger function among
 them. SQL 151 (the Starter Package) needs SQL 152 and must not be applied before it.
 
-**Status:** staging pin execute-authorized (wave 45); not applied anywhere. The production pin is pending.
+**Status:** applied in staging (wave 45, 2026-11-11); staging acceptance: the staging apply under the owner's run approval ("apply SQL 152 in staging"; no separate acceptance statement); production pin execute-authorized; not applied to production.
 
 **Staging read-live (2026-11-11).** Run 42945948226 (job 130278663761, main `6d19dad33`, after executor deploy run
 42945571224, inspect run 42945146098), under the owner's words "apply SQL 152 in staging": `already_applied` false,
@@ -46,6 +46,34 @@ staging pin (`expected_live_definition_sha256`, `execute: true`, wave 45) under 
 the SQL 152 staging pin and merge it when green". The staging apply is a separate run after this pin is merged and the
 executor is redeployed carrying it, on the owner's words "apply SQL 152 in staging". The production pin stays pending:
 a read-only production inspect decides production's pre-state.
+
+**Staging executor refreshed for the pin (2026-11-11).** The staging pin (wave 45, PR #1762) merged as
+`34e4d6983c37b47c06fdfd633d97880ec0a61112`. Inspect run 43004433326 found the live executor at
+`FJ474P+p2chkkq3XerWtY1De6apzeuYAA83Qq1515mw=`, with only `lib/sql-executor-auth.mjs` superseded. Deploy run 43004839952
+updated `checksops-staging-guarded-sql-executor` to `EkfZ5s51spdj4LsXDhjT7DJsnUUmZ5/SPhplnpjZ6Wk=` (revision
+`8b1f98cc-3e9c-4abe-9c67-f1a8b611a30e`), `errors` `[]`.
+
+**Staging apply (2026-11-11).** Apply run 43005316840 (job 130471228593, main `34e4d6983`, workstream
+`github-staging-sql-43005316840`, `expected_live_definition_sha256` `99c391367eaf941dae2a89cf78d72ae87fff5559d2fc3c26ad7acc691f1a4a5e`) under the owner's words "apply SQL 152 in
+staging": success. The receipt prints `result` `applied`, `before_hash` `99c39136…`, `after_hash`
+`6cf7d044d2db1e3e14f44815a573348b4180345d8fecc67079a95d480378ffce`; every object in state `intended`. Read-live run
+43005694458 (job 130472501828): `already_applied` true, `live_definition_sha256` `6cf7d044…` equal to the intended hash,
+`precondition_failures` `[]`, `prerequisites_missing` `[]`. The owner gave the run approval "apply SQL 152 in staging";
+no separate staging acceptance statement was given. There is no separate staging record PR for SQL 152: these staging
+runs are recorded here and in the production pin's `staging_acceptance` by the production pin PR.
+
+**Production inspect (2026-11-11).** Read-only `--inspect` through SSM
+`15087959-5dfe-463d-950a-267eb2039905` on `i-0c35557c4e5385406` (under the owner's words "Yes if that is next", answering
+whether to run the read-only production check; runner started 10:49:10Z, command sent 10:49:50Z, Success 10:49:54Z,
+runner stopped 10:50:27Z), main `9bbe1d2a1` (tarball sha256
+`cf7f2f6761277b065bdeb4e8fd94bc16e38cf8d85d756867bbea116e5cb442ec`, staged by `sql53-temporary-transfer.yml` run
+43006547022, migration source `b646207d…` == pin), `read_only` true: live `99c391367eaf941dae2a89cf78d72ae87fff5559d2fc3c26ad7acc691f1a4a5e` (everything absent, the
+derived pre-state), no predecessor, `prerequisites_missing` `[]`, `already_applied` false, `live_matches_expected` false,
+`precondition_failures` `[]`, `apply_preconditions_met` false, `definer_writes` `check_billing_events` ok, `errors` `[]`.
+Production's pre-state equals staging's (read-live run 42945948226), so the staging apply took the path production will.
+Recorded in the production pin with the staging apply (run 43005316840) as its staging acceptance and `execute: true`
+under the owner's words "record the SQL 152 production pin". The owner merges the pin change; the apply runs only after
+that merge is on main and staged, under the owner's words for that run.
 
 ## Fingerprint
 
