@@ -3477,7 +3477,8 @@ export const AUTHORIZED_SQL152_INVOICE_AND_FAILED_DEPOSIT_FEES = Object.freeze({
 // check_billing_events_one_second_mortgagee_per_check and two integer columns on tenant_maintenance_payments. The file's
 // step 1 (rewrite a live CHECK on check_billing_events.event_type from its live values) is not modelled: the tooling
 // requires that no such CHECK exists (no_event_type_check, release-sql-specs.mjs), so step 1 is a no-op wherever it
-// applies. Pending until a reviewed pin change records a staging read-live.
+// applies. Staging apply authorized (wave 49) from staging read-live run 43115484335: event_type_checks 0, the index and both
+// columns absent, equal to the derived state (ops/production-sql-153-apply.md).
 export const AUTHORIZED_SQL153_SECOND_MORTGAGEE_FEE = Object.freeze({
   key: 'sql153',
   filename: 'aws/workflows/sql/153_second_mortgagee_fee.sql',
@@ -3485,9 +3486,11 @@ export const AUTHORIZED_SQL153_SECOND_MORTGAGEE_FEE = Object.freeze({
   // The commit that last authored the file bytes.
   commit: '5ab496456ff1869a2673c2387a1f9329065e41c8',
   source_sha256: '57a87e37c153ee27c445cc188752fb493c41e92e144a81043d50e317a9150aec',
-  authorization: 'pending',
-  execute: false,
-  expected_live_definition_sha256: null,
+  authorization: 'Owner approved 2026-11-11: staging apply (wave 49) from staging read-live run 43115484335',
+  execute: true,
+  // Staging read-live run 43115484335 (main 830cc142c, executor c6gk7wkT… current, deployed by run 43113284610): already_applied
+  // false, precondition_failures [], event_type_checks 0. Equal to the derived state (the index and both columns absent).
+  expected_live_definition_sha256: 'b2bf6d325a5a50683acc8ecdaef39ec763b591f8db9f10e7d6fe02f9525cb0c3',
   // Code-derived: releaseIntendedHash('sql153', file bytes) (release-sql-state.mjs); re-derived by the tests.
   intended_replacement_sha256: '376feae9f0a6405c54dcb65f65e4119a967da4a34506b75ba1e65d98cad699ac',
   // The file creates or replaces no function.

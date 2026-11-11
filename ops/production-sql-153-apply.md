@@ -39,7 +39,18 @@ the file needs none of their objects (only its own prerequisites, which predate 
 prerequisite: production satisfies SQL 84's gate with `check_billing_events_mortgage_ops_check_uidx`, not the fallback
 name.
 
-**Status:** tooling built; staging and production pins pending (`execute: false`). Nothing applied or read.
+**Status:** staging pin execute-authorized (wave 49); not applied anywhere. The production pin is pending.
+
+**Staging read-live (2026-11-11).** Run 43115484335 (job 130842257054, main `830cc142c`, the executor current at
+`c6gk7wkTC53JMVUwDbybhUyFA0aMTppBC3HT5ImCxfU=` after deploy run 43113284610; the inspect run 43113078593 had found it not current),
+under the owner's words "redeploy the staging SQL executor, then run the SQL 153 staging read-live": `already_applied`
+false, `precondition_failures` `[]`, `prerequisites_missing` `[]`, `counts.event_type_checks` 0 (the `no_event_type_check`
+precondition passes), the index `check_billing_events_one_second_mortgagee_per_check` and both
+`tenant_maintenance_payments` columns `absent`. Live `b2bf6d325a5a50683acc8ecdaef39ec763b591f8db9f10e7d6fe02f9525cb0c3`, equal to the derived state; intended `376feae9…`.
+The deploy run 43113284610 was another workstream's (SQL 156) from the same main commit; no second deploy was needed.
+Recorded in the staging pin (`expected_live_definition_sha256`, `execute: true`, wave 49) under the owner's words of
+2026-11-11, "record the SQL 153 staging pin" and "merge it when green". The staging apply is a separate run after this pin
+is merged and the executor is redeployed carrying it, on the owner's words for that run. The production pin stays pending.
 
 ## Fingerprint
 
