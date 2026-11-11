@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import {
-  FAILED_DEPOSIT_FEE_CENTS, INVOICE_FEE_CENTS, checkProcessingCents, feeScheduleRows,
+  FAILED_DEPOSIT_FEE_CENTS, INVOICE_FEE_CENTS, SECOND_MORTGAGEE_FEE_CENTS, checkProcessingCents, feeScheduleRows,
 } from '../../src/lib/billing/feeSchedule.ts';
 import {
   DEFAULT_FAILED_DEPOSIT_FEE_CENTS,
@@ -15,6 +15,7 @@ import {
   DEFAULT_MORTGAGE_INITIAL_RATE_CENTS,
   DEFAULT_NEXT_DAY_RATE_CENTS,
   DEFAULT_SAME_DAY_RATE_CENTS,
+  SECOND_MORTGAGEE_FEE_CENTS as ENGINE_SECOND_MORTGAGEE_FEE_CENTS,
 } from '../functions/api/tenant-billing-engine.mjs';
 
 const byKey = (rows) => Object.fromEntries(rows.map((r) => [r.key, r.amount_cents]));
@@ -36,8 +37,20 @@ test('2 the tenant\'s own rates win; an explicit 0 is free, not the default', ()
   }));
   assert.deepEqual(rows, {
     monthly: 7500, check_processing: 400, next_day: 0, same_day: 150, mortgage_initial: 0, mortgage_additional: 300,
-    invoice_sent: 30, failed_deposit: 200,
+    mortgage_second_mortgagee: 500, invoice_sent: 30, failed_deposit: 200,
   });
+});
+
+test('2c the 2nd mortgage company on a check is a flat $5 (SQL 153), whatever the tenant\'s Mortgage Ops rates', () => {
+  const rows = feeScheduleRows({ mortgage_ops_initial_rate_cents: 0, mortgage_ops_additional_rate_cents: 0 });
+  const row = rows.find((r) => r.key === 'mortgage_second_mortgagee');
+  assert.equal(row.fee, '2nd mortgage company on a check');
+  assert.equal(row.amount_cents, 500);
+  assert.equal(SECOND_MORTGAGEE_FEE_CENTS, ENGINE_SECOND_MORTGAGEE_FEE_CENTS);
+  assert.equal(byKey(feeScheduleRows({})).mortgage_second_mortgagee, ENGINE_SECOND_MORTGAGEE_FEE_CENTS);
+  // Listed right after the other Mortgage Ops rows.
+  const keys = rows.map((r) => r.key);
+  assert.equal(keys.indexOf('mortgage_second_mortgagee'), keys.indexOf('mortgage_additional') + 1);
 });
 
 test('2b invoice fee $0.30 and failed deposit fee $2.00 (agreement 3.6, 3.7) match the engine and SQL 152 (SQL 149 replaced)', () => {

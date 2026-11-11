@@ -467,8 +467,16 @@ const SQL152_FILE = 'aws/workflows/sql/152_invoice_and_failed_deposit_fees.sql';
 const STARTER_PACKAGE_REL = 'aws/tests/fixtures/production-starter-package-manifest-2026-11-10.json';
 const STARTER_PACKAGE = JSON.parse(fs.readFileSync(path.join(ROOT, STARTER_PACKAGE_REL), 'utf8'));
 const SQL151_FILE = 'aws/workflows/sql/151_tenant_starter_package.sql';
-/** The pending plan that holds a member now (planning only): SQL 151's, else SQL 152's, else null. */
+// Second mortgage company fee (owner 2026-11-11, "it should be an additional $5 if 2 mortgage companies are on check",
+// then "Merge it"): tenant-billing-engine.mjs (combining the Starter Package's unapplied bytes) and
+// tenant-fee-invoice-email.mjs (combining the usage fees plan's unapplied bytes) REPLACE their live bytes with the $5,
+// holds unchanged (SQL 151, SQL 152), planning only (its own test, at the end).
+const SECOND_MORTGAGEE_FEE_REL = 'aws/tests/fixtures/production-second-mortgagee-fee-manifest-2026-11-11.json';
+const SECOND_MORTGAGEE_FEE = JSON.parse(fs.readFileSync(path.join(ROOT, SECOND_MORTGAGEE_FEE_REL), 'utf8'));
+const SECOND_MORTGAGEE_FEE_HOLDS = Object.freeze({ 'tenant-billing-engine.mjs': SQL151_FILE, 'tenant-fee-invoice-email.mjs': SQL152_FILE });
+/** The pending plan that holds a member now (planning only): the 2nd mortgagee fee's, else SQL 151's, else SQL 152's, else null. */
 const laterPlan = (member) => {
+  if (SECOND_MORTGAGEE_FEE.members[member]) return { rel: SECOND_MORTGAGEE_FEE_REL, entry: SECOND_MORTGAGEE_FEE.members[member], sql: SECOND_MORTGAGEE_FEE_HOLDS[member] };
   if (STARTER_PACKAGE.members[member]) return { rel: STARTER_PACKAGE_REL, entry: STARTER_PACKAGE.members[member], sql: SQL151_FILE };
   if (USAGE_FEES.members[member]) return { rel: USAGE_FEES_REL, entry: USAGE_FEES.members[member], sql: SQL152_FILE };
   return null;
@@ -1390,11 +1398,19 @@ test('fee collection: eleven members on the fee manifest, collection-v2 then des
     }
     if (USAGE_FEES.members[member]) {
       // Moved on to the usage fees REPLACE (2026-11-10, held on SQL 152), which starts from this manifest's bytes.
-      assert.deepEqual(USAGE_FEES.members[member], {
-        live_sha256: fees.members[member].accepted_sha256, accepted_sha256: row.accepted_sha256,
+      const usage = USAGE_FEES.members[member];
+      assert.deepEqual(usage, {
+        live_sha256: fees.members[member].accepted_sha256, accepted_sha256: usage.accepted_sha256,
         operation: 'replace', previous_manifest: MANIFEST_FEES,
       }, member);
-      assert.equal(row.manifest, USAGE_FEES_REL, member);
+      // Then on to the second mortgagee fee REPLACE (2026-11-11), which supersedes those unapplied bytes (and keeps
+      // them, adding the $5 line) from the same live bytes and hold: the row names it and accepts main's bytes.
+      assert.deepEqual(SECOND_MORTGAGEE_FEE.members[member], {
+        live_sha256: fees.members[member].accepted_sha256, accepted_sha256: row.accepted_sha256,
+        operation: 'replace', previous_manifest: MANIFEST_FEES, supersedes_unapplied_manifest: USAGE_FEES_REL,
+      }, member);
+      assert.notEqual(usage.accepted_sha256, row.accepted_sha256, member);
+      assert.equal(row.manifest, SECOND_MORTGAGEE_FEE_REL, member);
       assert.equal(row.expected_live_sha256, fees.members[member].accepted_sha256, member);
       assert.equal(row.sql_before, SQL152_FILE, member);
       assert.equal(sha(`aws/functions/api/${member}`), row.accepted_sha256, member);
@@ -6763,7 +6779,8 @@ test('Fee pull savepoints (production incident 2026-11-06): tenant-collection-v2
       assert.equal(PLAN.members[member].manifest, FEE_LEG_API_APPLIED_REL, member);
       assert.equal(PLAN.members[member].expected_live_sha256, sha(`aws/functions/api/${member}`), member);
     } else if (laterPlan(member)) {
-      // (Since moved on again by the Starter Package plan, SQL 151, which supersedes the usage fees bytes, never applied.)
+      // (Since moved on again by the Starter Package plan, SQL 151, which supersedes the usage fees bytes, never applied,
+      // and then by the second mortgagee fee plan, which supersedes the Starter Package bytes, never applied.)
       const later = laterPlan(member);
       assert.deepEqual(PLAN.members[member], {
         operation: 'replace',
@@ -6779,6 +6796,14 @@ test('Fee pull savepoints (production incident 2026-11-06): tenant-collection-v2
         assert.equal(later.entry.supersedes_unapplied_manifest, USAGE_FEES_REL, member);
         assert.equal(USAGE_FEES.members[member].live_sha256, accepted, member);
         assert.notEqual(USAGE_FEES.members[member].accepted_sha256, sha(`aws/functions/api/${member}`), member);
+      }
+      if (later.rel === SECOND_MORTGAGEE_FEE_REL) {
+        // (And on again by the second mortgagee fee plan, 2026-11-11, which supersedes the Starter Package's unapplied
+        // bytes, themselves superseding the usage fees plan's: same live bytes, same hold.)
+        assert.equal(later.entry.supersedes_unapplied_manifest, STARTER_PACKAGE_REL, member);
+        assert.equal(STARTER_PACKAGE.members[member].live_sha256, accepted, member);
+        assert.equal(STARTER_PACKAGE.members[member].supersedes_unapplied_manifest, USAGE_FEES_REL, member);
+        assert.notEqual(STARTER_PACKAGE.members[member].accepted_sha256, sha(`aws/functions/api/${member}`), member);
       }
     } else {
       assert.deepEqual(PLAN.members[member], {

@@ -64,6 +64,7 @@ const LABELS: Record<string, string> = {
   mortgage_shipping_label: "Mortgage shipping label",
   mortgage_ops_initial: "Mortgage handling",
   mortgage_ops_additional_check: "Mortgage handling, additional check",
+  mortgage_ops_second_mortgagee: "Mortgage handling, 2nd mortgage company",
   invoice_sent: "Invoice sent",
   failed_deposit: "Failed deposit",
 };

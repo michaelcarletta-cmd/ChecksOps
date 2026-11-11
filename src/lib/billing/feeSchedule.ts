@@ -28,6 +28,8 @@ export const DEFAULT_NEXT_DAY_RATE_CENTS = 75;
 export const DEFAULT_SAME_DAY_RATE_CENTS = 100;
 export const DEFAULT_MORTGAGE_INITIAL_RATE_CENTS = 1000;
 export const DEFAULT_MORTGAGE_ADDITIONAL_RATE_CENTS = 500;
+// SQL 153 (tenant-billing-engine.mjs SECOND_MORTGAGEE_FEE_CENTS): flat, same for every tenant.
+export const SECOND_MORTGAGEE_FEE_CENTS = 500;
 // SQL 149 (aws_invoice_fee_cents, aws_failed_deposit_fee_cents): the agreement's rates, same for every tenant.
 export const INVOICE_FEE_CENTS = 30;
 export const FAILED_DEPOSIT_FEE_CENTS = 200;
@@ -91,6 +93,12 @@ export function feeScheduleRows(rates: TenantFeeRates | null | undefined, charge
       fee: "Mortgage handling, additional check",
       when: "Each additional check on the same request",
       amount_cents: rate(rates?.mortgage_ops_additional_rate_cents, DEFAULT_MORTGAGE_ADDITIONAL_RATE_CENTS),
+    },
+    {
+      key: "mortgage_second_mortgagee",
+      fee: "2nd mortgage company on a check",
+      when: "When the Mortgage Desk accepts the request for a check's 2nd mortgage company",
+      amount_cents: SECOND_MORTGAGEE_FEE_CENTS,
     },
     {
       key: "invoice_sent",

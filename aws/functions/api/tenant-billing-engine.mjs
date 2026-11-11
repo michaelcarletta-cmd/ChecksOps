@@ -12,6 +12,7 @@
  * Consolidated invoice:
  *   maintenance - discount + check_processing + moov_next_day + moov_same_day
  *   + mortgage_ops_initial + mortgage_ops_additional_check
+ *   + mortgage_ops_second_mortgagee (SQL 153: flat $5 for a check's 2nd mortgage company)
  *   + invoice_sent + failed_deposit (SQL 149: agreement 3.6 and 3.7)
  * Instant is schema-compatible but never generated or billed.
  * Mortgage Ops accrues on Accept (status in_progress + accepted_at), not on submit.
@@ -103,6 +104,15 @@ export const MORTGAGE_EVENT_TYPES = [FEE_MORTGAGE_INITIAL, FEE_MORTGAGE_ADDITION
 export const FEE_INVOICE = 'invoice_sent';
 export const FEE_FAILED_DEPOSIT = 'failed_deposit';
 export const USAGE_FEE_EVENT_TYPES = [FEE_INVOICE, FEE_FAILED_DEPOSIT];
+// SQL 153 (owner 2026-11-10/11, "Flat $5"): the 2nd mortgage company on a check, a flat fee
+// recorded on the accept of its request (endorsement_order 2), not a per-tenant rate. Same
+// constants and accrual as mortgage-ops-usage.mjs.
+export const FEE_MORTGAGE_SECOND_MORTGAGEE = 'mortgage_ops_second_mortgagee';
+export const SECOND_MORTGAGEE_FEE_CENTS = 500;
+export const SECOND_MORTGAGEE_LINE_LABEL = 'Mortgage Ops: 2nd mortgage company';
+// SQL 153's unique index; until it exists the API records no 2nd-company fee.
+export const SECOND_MORTGAGEE_READY_SQL =
+  "SELECT to_regclass('public.check_billing_events_one_second_mortgagee_per_check') IS NOT NULL AS ready";
 
 export const mortgageOpsAcceptedBeforeLaunch = (acceptedAt, launchedAt) => {
   if (!acceptedAt || !launchedAt) return false;
@@ -309,6 +319,9 @@ export const resolveMortgageAdditionalRateCents = (tenant) => {
   const stored = Number(tenant.mortgage_ops_additional_rate_cents);
   return Number.isFinite(stored) ? Math.max(0, stored) : DEFAULT_MORTGAGE_ADDITIONAL_RATE_CENTS;
 };
+
+/** The 2nd mortgage company's request on a check (SQL 148: endorsement_order 2). */
+export const mortgageRequestIsSecondMortgagee = (request) => Number(request?.endorsement_order) === 2;
 
 export const mortgageRequestIsAccepted = (request) => {
   if (!request) return false;
@@ -844,6 +857,115 @@ const loadMortgageEventByCheck = async (client, checkId) => (
   ).catch(() => ({ rows: [] }))).rows[0] || null
 );
 
+const loadSecondMortgageeEventByCheck = async (client, checkId) => (
+  (await client.query(
+    `SELECT id, tenant_id, event_type, unit_price_cents, billed_at, billing_period,
+            invoice_id, status, source_kind, source_id, check_intake_item_id,
+            payment_transfer_id, claim_id, mortgage_request_id
+     FROM public.check_billing_events
+     WHERE check_intake_item_id = $1::uuid
+       AND event_type = 'mortgage_ops_second_mortgagee'
+     ORDER BY (status IS DISTINCT FROM 'voided') DESC
+     LIMIT 1`,
+    [checkId],
+  ).catch(() => ({ rows: [] }))).rows[0] || null
+);
+
+const resolveClaimId = async (client, request) => {
+  if (request.claim_id) return request.claim_id;
+  const check = (await client.query(
+    `SELECT claim_id FROM public.check_intake_items WHERE id = $1::uuid`,
+    [request.check_intake_item_id],
+  ).catch(() => ({ rows: [] }))).rows[0];
+  return check?.claim_id || null;
+};
+
+const lockMortgageOpsClaim = (client, request, claimId) => client.query(
+  `SELECT pg_advisory_xact_lock(hashtext($1::text), hashtext($2::text))`,
+  [String(request.tenant_id), `mortgage_ops:${claimId || request.check_intake_item_id}`],
+).catch(() => ({ rows: [] }));
+
+/** One Mortgage Ops event for the accepted request (a preview row when persist is false). */
+const insertMortgageOpsEvent = async (client, {
+  request, claimId, eventType, unit, persist,
+}) => {
+  const billedAt = request.accepted_at;
+  const period = periodKey(new Date(billedAt));
+  if (!persist) {
+    return {
+      id: null,
+      tenant_id: request.tenant_id,
+      event_type: eventType,
+      unit_price_cents: unit,
+      billed_at: billedAt,
+      billing_period: period,
+      invoice_id: null,
+      status: 'recorded',
+      source_kind: eventType,
+      source_id: request.check_intake_item_id,
+      check_intake_item_id: request.check_intake_item_id,
+      payment_transfer_id: null,
+      claim_id: claimId,
+      mortgage_request_id: request.id,
+      preview: true,
+    };
+  }
+  await setMoneyWriteFlag(client).catch(() => {});
+  return (await client.query(
+    `INSERT INTO public.check_billing_events (
+       tenant_id, check_intake_item_id, payment_transfer_id, event_type,
+       unit_price_cents, currency, status, billed_at, billing_period,
+       source_kind, source_id, claim_id, mortgage_request_id
+     ) VALUES (
+       $1::uuid, $2::uuid, NULL, $3, $4, 'usd', 'recorded', $5::timestamptz, $6,
+       $3, $2::uuid, $7::uuid, $8::uuid
+     )
+     ON CONFLICT DO NOTHING
+     RETURNING id, tenant_id, event_type, unit_price_cents, billed_at, billing_period,
+               invoice_id, status, source_kind, source_id, check_intake_item_id,
+               payment_transfer_id, claim_id, mortgage_request_id`,
+    [
+      request.tenant_id,
+      request.check_intake_item_id,
+      eventType,
+      unit,
+      billedAt,
+      period,
+      claimId,
+      request.id,
+    ],
+  ).catch(() => ({ rows: [] }))).rows[0] || null;
+};
+
+/**
+ * SQL 153: the accept of the 2nd mortgage company's request records one flat
+ * mortgage_ops_second_mortgagee event for the check, in addition to the check's
+ * normal $10 / $5 charge. Nothing of this type before SQL 153 is applied.
+ */
+async function accrueSecondMortgageeAcceptedRequest(client, { request, persist }) {
+  const ready = (await client.query(SECOND_MORTGAGEE_READY_SQL).catch(() => ({ rows: [] }))).rows[0];
+  if (ready?.ready !== true) return { skipped: 'second_mortgagee_fee_not_ready' };
+
+  const existing = await loadSecondMortgageeEventByCheck(client, request.check_intake_item_id);
+  if (existing) return { ok: true, event: asEvent(existing), duplicate: true, created: false };
+
+  const claimId = await resolveClaimId(client, request);
+  await lockMortgageOpsClaim(client, request, claimId);
+
+  const locked = await loadSecondMortgageeEventByCheck(client, request.check_intake_item_id);
+  if (locked) return { ok: true, event: asEvent(locked), duplicate: true, created: false };
+
+  const inserted = await insertMortgageOpsEvent(client, {
+    request, claimId, eventType: FEE_MORTGAGE_SECOND_MORTGAGEE, unit: SECOND_MORTGAGEE_FEE_CENTS, persist,
+  });
+  if (!inserted) {
+    const raced = await loadSecondMortgageeEventByCheck(client, request.check_intake_item_id);
+    if (raced) return { ok: true, event: asEvent(raced), duplicate: true, created: false };
+    return { skipped: 'not_inserted' };
+  }
+  return { ok: true, event: asEvent(inserted), created: !inserted.preview, duplicate: false };
+}
+
 export async function accrueMortgageOpsAcceptedRequest(client, {
   request,
   tenant = null,
@@ -867,22 +989,28 @@ export async function accrueMortgageOpsAcceptedRequest(client, {
     };
   }
 
+  if (!mortgageRequestIsSecondMortgagee(request)) {
+    return accrueCheckMortgageOpsEvent(client, { request, tenant, persist });
+  }
+  // SQL 153 (owner 2026-11-11: "it should be an additional $5 if 2 mortgage companies are on
+  // check"): the 2nd company's accept makes sure the check has its normal $10 / $5 charge (the
+  // same rule as the 1st company's accept; nothing when either request already recorded it), then
+  // adds the flat $5 once per check.
+  const normal = await accrueCheckMortgageOpsEvent(client, { request, tenant, persist });
+  const secondMortgagee = await accrueSecondMortgageeAcceptedRequest(client, { request, persist });
+  return { ...normal, second_mortgagee: secondMortgagee };
+}
+
+/**
+ * The check's normal Mortgage Ops charge: $10 for the claim's first check, $5 for each additional
+ * check (the tenant's rates), once per check whichever of its requests is accepted first.
+ */
+async function accrueCheckMortgageOpsEvent(client, { request, tenant, persist }) {
   const existing = await loadMortgageEventByCheck(client, request.check_intake_item_id);
   if (existing) return { ok: true, event: asEvent(existing), duplicate: true, created: false };
 
-  let claimId = request.claim_id || null;
-  if (!claimId) {
-    const check = (await client.query(
-      `SELECT claim_id FROM public.check_intake_items WHERE id = $1::uuid`,
-      [request.check_intake_item_id],
-    ).catch(() => ({ rows: [] }))).rows[0];
-    claimId = check?.claim_id || null;
-  }
-
-  await client.query(
-    `SELECT pg_advisory_xact_lock(hashtext($1::text), hashtext($2::text))`,
-    [String(request.tenant_id), `mortgage_ops:${claimId || request.check_intake_item_id}`],
-  ).catch(() => ({ rows: [] }));
+  const claimId = await resolveClaimId(client, request);
+  await lockMortgageOpsClaim(client, request, claimId);
 
   const locked = await loadMortgageEventByCheck(client, request.check_intake_item_id);
   if (locked) return { ok: true, event: asEvent(locked), duplicate: true, created: false };
@@ -906,54 +1034,9 @@ export async function accrueMortgageOpsAcceptedRequest(client, {
     : [];
 
   const classifyAdditional = prior.length > 0;
-  const insertEvent = async (eventType, unit) => {
-    const billedAt = request.accepted_at;
-    const period = periodKey(new Date(billedAt));
-    if (!persist) {
-      return {
-        id: null,
-        tenant_id: request.tenant_id,
-        event_type: eventType,
-        unit_price_cents: unit,
-        billed_at: billedAt,
-        billing_period: period,
-        invoice_id: null,
-        status: 'recorded',
-        source_kind: eventType,
-        source_id: request.check_intake_item_id,
-        check_intake_item_id: request.check_intake_item_id,
-        payment_transfer_id: null,
-        claim_id: claimId,
-        mortgage_request_id: request.id,
-        preview: true,
-      };
-    }
-    await setMoneyWriteFlag(client).catch(() => {});
-    return (await client.query(
-      `INSERT INTO public.check_billing_events (
-         tenant_id, check_intake_item_id, payment_transfer_id, event_type,
-         unit_price_cents, currency, status, billed_at, billing_period,
-         source_kind, source_id, claim_id, mortgage_request_id
-       ) VALUES (
-         $1::uuid, $2::uuid, NULL, $3, $4, 'usd', 'recorded', $5::timestamptz, $6,
-         $3, $2::uuid, $7::uuid, $8::uuid
-       )
-       ON CONFLICT DO NOTHING
-       RETURNING id, tenant_id, event_type, unit_price_cents, billed_at, billing_period,
-                 invoice_id, status, source_kind, source_id, check_intake_item_id,
-                 payment_transfer_id, claim_id, mortgage_request_id`,
-      [
-        request.tenant_id,
-        request.check_intake_item_id,
-        eventType,
-        unit,
-        billedAt,
-        period,
-        claimId,
-        request.id,
-      ],
-    ).catch(() => ({ rows: [] }))).rows[0] || null;
-  };
+  const insertEvent = (eventType, unit) => insertMortgageOpsEvent(client, {
+    request, claimId, eventType, unit, persist,
+  });
 
   const preferredType = classifyAdditional ? FEE_MORTGAGE_ADDITIONAL : FEE_MORTGAGE_INITIAL;
   const preferredRate = classifyAdditional
@@ -982,7 +1065,7 @@ export async function loadMortgageOpsUsageForPeriod(client, { tenantId, period }
             e.payment_transfer_id, e.claim_id, e.mortgage_request_id
      FROM public.check_billing_events e
      WHERE e.tenant_id = $1::uuid
-       AND e.event_type IN ('mortgage_ops_initial', 'mortgage_ops_additional_check')
+       AND e.event_type IN ('mortgage_ops_initial', 'mortgage_ops_additional_check', 'mortgage_ops_second_mortgagee')
        AND e.billed_at >= $2::timestamptz
        AND e.billed_at < $3::timestamptz
        AND e.status IS DISTINCT FROM 'voided'`,
@@ -991,6 +1074,7 @@ export async function loadMortgageOpsUsageForPeriod(client, { tenantId, period }
   return {
     initial: rows.filter((row) => row.event_type === FEE_MORTGAGE_INITIAL).map(asEvent),
     additional: rows.filter((row) => row.event_type === FEE_MORTGAGE_ADDITIONAL).map(asEvent),
+    secondMortgagee: rows.filter((row) => row.event_type === FEE_MORTGAGE_SECOND_MORTGAGEE).map(asEvent),
   };
 }
 
@@ -1020,7 +1104,7 @@ export async function loadUsageFeesForPeriod(client, { tenantId, period }) {
 
 export function assembleInvoiceTotals({
   tenant, period, checks, nextDay, sameDay, mortgageInitial = [], mortgageAdditional = [],
-  invoiceFees = [], failedDeposits = [], checkDefaultCents = null,
+  mortgageSecondMortgagee = [], invoiceFees = [], failedDeposits = [], checkDefaultCents = null,
 }) {
   // SQL 151: a month the Starter Package covers carries no Monthly Maintenance (and so no discount).
   const maintenance_included = starterPackageCoversMaintenance(tenant.starter_package, period);
@@ -1032,7 +1116,10 @@ export function assembleInvoiceTotals({
   const same_day_usage_cents = sumCents(sameDay);
   const mortgage_ops_initial_amount_cents = sumCents(mortgageInitial);
   const mortgage_ops_additional_amount_cents = sumCents(mortgageAdditional);
-  const mortgage_ops_usage_cents = mortgage_ops_initial_amount_cents + mortgage_ops_additional_amount_cents;
+  const mortgage_ops_second_mortgagee_amount_cents = sumCents(mortgageSecondMortgagee);
+  const mortgage_ops_usage_cents = mortgage_ops_initial_amount_cents
+    + mortgage_ops_additional_amount_cents
+    + mortgage_ops_second_mortgagee_amount_cents;
   const invoice_fee_amount_cents = sumCents(invoiceFees);
   const failed_deposit_amount_cents = sumCents(failedDeposits);
   const usage_total_cents = check_usage_cents
@@ -1058,6 +1145,8 @@ export function assembleInvoiceTotals({
     mortgage_ops_initial_amount_cents,
     mortgage_ops_additional_count: mortgageAdditional.length,
     mortgage_ops_additional_amount_cents,
+    mortgage_ops_second_mortgagee_count: mortgageSecondMortgagee.length,
+    mortgage_ops_second_mortgagee_amount_cents,
     mortgage_ops_usage_cents,
     invoice_fee_count: invoiceFees.length,
     invoice_fee_amount_cents,
@@ -1070,6 +1159,7 @@ export function assembleInvoiceTotals({
     same_day_rate_cents: resolveSameDayRateCents(tenant),
     mortgage_ops_initial_rate_cents: resolveMortgageInitialRateCents(tenant),
     mortgage_ops_additional_rate_cents: resolveMortgageAdditionalRateCents(tenant),
+    mortgage_ops_second_mortgagee_rate_cents: SECOND_MORTGAGEE_FEE_CENTS,
     invoice_fee_rate_cents: DEFAULT_INVOICE_FEE_CENTS,
     failed_deposit_rate_cents: DEFAULT_FAILED_DEPOSIT_FEE_CENTS,
   };
@@ -1094,6 +1184,7 @@ export async function buildConsolidatedInvoice(client, {
     sameDay: moov.sameDay,
     mortgageInitial: mortgage.initial,
     mortgageAdditional: mortgage.additional,
+    mortgageSecondMortgagee: mortgage.secondMortgagee,
     invoiceFees: usageFees.invoices,
     failedDeposits: usageFees.failedDeposits,
     checkDefaultCents: ctx.checkDefaultCents,
@@ -1150,6 +1241,18 @@ export async function buildConsolidatedInvoice(client, {
       claim_id: row.claim_id,
       mortgage_request_id: row.mortgage_request_id,
     })),
+    // SQL 153: source_id is the usage event, as for the other Mortgage Ops lines.
+    ...mortgage.secondMortgagee.map((row) => ({
+      source_kind: FEE_MORTGAGE_SECOND_MORTGAGEE,
+      source_id: row.id,
+      fee_type: FEE_MORTGAGE_SECOND_MORTGAGEE,
+      unit_price_cents: row.unit_price_cents,
+      amount_cents: row.unit_price_cents,
+      billed_at: row.billed_at,
+      invoice_id: row.invoice_id,
+      claim_id: row.claim_id,
+      mortgage_request_id: row.mortgage_request_id,
+    })),
     // SQL 149: source_id is the usage event (allocateInvoiceLines links it to the invoice).
     ...usageFees.invoices.map((row) => ({
       source_kind: FEE_INVOICE,
@@ -1186,6 +1289,7 @@ export async function buildConsolidatedInvoice(client, {
       same_day: moov.sameDay,
       mortgage_ops_initial: mortgage.initial,
       mortgage_ops_additional: mortgage.additional,
+      mortgage_ops_second_mortgagee: mortgage.secondMortgagee,
       invoices_sent: usageFees.invoices,
       failed_deposits: usageFees.failedDeposits,
     },
@@ -1262,6 +1366,30 @@ export async function listInvoiceAllocations(client, invoiceId) {
   ).catch(() => ({ rows: [] }))).rows;
 }
 
+// The monthly occurrence row (createOrGetOccurrence): the 27 columns every schema has; the optional
+// breakdown columns a later SQL file adds follow them.
+const OCCURRENCE_BASE_COLUMNS = `tenant_id, amount_cents, monthly_rate_cents, discount_cents,
+       period_start, period_end, billing_period, method, status,
+       idempotence_key, recorded_by, notes,
+       funding_source_method_id, destination_account_id, destination_payment_method_id,
+       provider_environment,
+       maintenance_net_cents, check_usage_cents, next_day_usage_cents, same_day_usage_cents,
+       usage_total_cents, check_count, next_day_count, same_day_count,
+       mortgage_ops_initial_count, mortgage_ops_initial_amount_cents,
+       mortgage_ops_additional_count, mortgage_ops_additional_amount_cents,
+       occurrence_kind`;
+const OCCURRENCE_BASE_VALUES = `$1::uuid, $2, $3, $4, $5::date, $6::date, $7, 'moov_ach', 'due',
+       $8, $9::uuid, $10, $11, $12, $13, $14,
+       $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27`;
+// SQL 149.
+const USAGE_FEE_OCCURRENCE_COLUMNS = [
+  'invoice_fee_count', 'invoice_fee_amount_cents', 'failed_deposit_count', 'failed_deposit_amount_cents',
+];
+// SQL 153.
+const SECOND_MORTGAGEE_OCCURRENCE_COLUMNS = [
+  'mortgage_ops_second_mortgagee_count', 'mortgage_ops_second_mortgagee_amount_cents',
+];
+
 export async function createOrGetOccurrence(client, {
   tenantId, period, readiness, destination, recordedBy = null,
 }) {
@@ -1311,55 +1439,49 @@ export async function createOrGetOccurrence(client, {
     invoice.failed_deposit_count ?? 0,
     invoice.failed_deposit_amount_cents ?? 0,
   ];
+  const secondMortgageeParams = [
+    invoice.mortgage_ops_second_mortgagee_count ?? 0,
+    invoice.mortgage_ops_second_mortgagee_amount_cents ?? 0,
+  ];
   await setMoneyWriteFlag(client);
+  // The row's INSERT: the 27 base columns, then the optional breakdown columns given ($28 on).
+  const occurrenceInsertSql = (extraColumns = []) => {
+    const columns = extraColumns.length ? `,\n       ${extraColumns.join(', ')}` : '';
+    const values = extraColumns.length
+      ? `,\n       ${extraColumns.map((_, i) => `$${28 + i}`).join(', ')}`
+      : '';
+    return `INSERT INTO public.tenant_maintenance_payments (
+         ${OCCURRENCE_BASE_COLUMNS}${columns}
+       ) VALUES (
+         ${OCCURRENCE_BASE_VALUES}${values}
+       )
+       ON CONFLICT (tenant_id, billing_period) WHERE billing_period IS NOT NULL
+       DO UPDATE SET updated_at = public.tenant_maintenance_payments.updated_at
+       RETURNING *`;
+  };
   // SQL 149 adds the invoice fee and failed deposit columns; before it is applied the row is
   // written without them (usage_total_cents and amount_cents carry those fees either way).
-  const inserted = (await queryWithColumnFallback(
-    client,
-    'tenant_monthly_occurrence_insert',
-    `INSERT INTO public.tenant_maintenance_payments (
-       tenant_id, amount_cents, monthly_rate_cents, discount_cents,
-       period_start, period_end, billing_period, method, status,
-       idempotence_key, recorded_by, notes,
-       funding_source_method_id, destination_account_id, destination_payment_method_id,
-       provider_environment,
-       maintenance_net_cents, check_usage_cents, next_day_usage_cents, same_day_usage_cents,
-       usage_total_cents, check_count, next_day_count, same_day_count,
-       mortgage_ops_initial_count, mortgage_ops_initial_amount_cents,
-       mortgage_ops_additional_count, mortgage_ops_additional_amount_cents,
-       occurrence_kind,
-       invoice_fee_count, invoice_fee_amount_cents, failed_deposit_count, failed_deposit_amount_cents
-     ) VALUES (
-       $1::uuid, $2, $3, $4, $5::date, $6::date, $7, 'moov_ach', 'due',
-       $8, $9::uuid, $10, $11, $12, $13, $14,
-       $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27,
-       $28, $29, $30, $31
-     )
-     ON CONFLICT (tenant_id, billing_period) WHERE billing_period IS NOT NULL
-     DO UPDATE SET updated_at = public.tenant_maintenance_payments.updated_at
-     RETURNING *`,
-    `INSERT INTO public.tenant_maintenance_payments (
-       tenant_id, amount_cents, monthly_rate_cents, discount_cents,
-       period_start, period_end, billing_period, method, status,
-       idempotence_key, recorded_by, notes,
-       funding_source_method_id, destination_account_id, destination_payment_method_id,
-       provider_environment,
-       maintenance_net_cents, check_usage_cents, next_day_usage_cents, same_day_usage_cents,
-       usage_total_cents, check_count, next_day_count, same_day_count,
-       mortgage_ops_initial_count, mortgage_ops_initial_amount_cents,
-       mortgage_ops_additional_count, mortgage_ops_additional_amount_cents,
-       occurrence_kind
-     ) VALUES (
-       $1::uuid, $2, $3, $4, $5::date, $6::date, $7, 'moov_ach', 'due',
-       $8, $9::uuid, $10, $11, $12, $13, $14,
-       $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27
-     )
-     ON CONFLICT (tenant_id, billing_period) WHERE billing_period IS NOT NULL
-     DO UPDATE SET updated_at = public.tenant_maintenance_payments.updated_at
-     RETURNING *`,
-    [...params, ...usageFeeParams],
-    params,
-  )).rows[0];
+  // SQL 153 adds the 2nd mortgage company columns. They are written only when the period has
+  // such a charge, which the API records only once SQL 153 is applied (SECOND_MORTGAGEE_READY_SQL),
+  // so a period without one writes exactly the columns it wrote before SQL 153.
+  const hasSecondMortgagee = secondMortgageeParams.some((value) => Number(value) !== 0);
+  const inserted = (hasSecondMortgagee
+    ? await queryWithColumnFallback(
+      client,
+      'tenant_monthly_occurrence_insert',
+      occurrenceInsertSql([...USAGE_FEE_OCCURRENCE_COLUMNS, ...SECOND_MORTGAGEE_OCCURRENCE_COLUMNS]),
+      occurrenceInsertSql(SECOND_MORTGAGEE_OCCURRENCE_COLUMNS),
+      [...params, ...usageFeeParams, ...secondMortgageeParams],
+      [...params, ...secondMortgageeParams],
+    )
+    : await queryWithColumnFallback(
+      client,
+      'tenant_monthly_occurrence_insert',
+      occurrenceInsertSql(USAGE_FEE_OCCURRENCE_COLUMNS),
+      occurrenceInsertSql(),
+      [...params, ...usageFeeParams],
+      params,
+    )).rows[0];
   return { ok: true, occurrence: inserted, created: true, idempotency_key: key };
 }
 
@@ -1940,6 +2062,7 @@ export function invoiceLineItems(invoice) {
     [FEE_SAME_DAY, lines.same_day],
     [FEE_MORTGAGE_INITIAL, lines.mortgage_ops_initial],
     [FEE_MORTGAGE_ADDITIONAL, lines.mortgage_ops_additional],
+    [FEE_MORTGAGE_SECOND_MORTGAGEE, lines.mortgage_ops_second_mortgagee],
     [FEE_INVOICE, lines.invoices_sent],
     [FEE_FAILED_DEPOSIT, lines.failed_deposits],
   ];
@@ -1986,6 +2109,12 @@ export function invoiceSummaryLines(invoice) {
       label: 'MortgageOps additional requests',
       count: invoice.mortgage_ops_additional_count,
       amount_cents: invoice.mortgage_ops_additional_amount_cents,
+    },
+    {
+      key: FEE_MORTGAGE_SECOND_MORTGAGEE,
+      label: SECOND_MORTGAGEE_LINE_LABEL,
+      count: invoice.mortgage_ops_second_mortgagee_count ?? 0,
+      amount_cents: invoice.mortgage_ops_second_mortgagee_amount_cents ?? 0,
     },
     { key: FEE_INVOICE, label: 'Invoices sent', count: invoice.invoice_fee_count, amount_cents: invoice.invoice_fee_amount_cents },
     {
@@ -2094,6 +2223,8 @@ export async function previewTenantPeriodCharge(client, {
       mortgage_ops_initial_amount_cents: invoice.mortgage_ops_initial_amount_cents,
       mortgage_ops_additional_count: invoice.mortgage_ops_additional_count,
       mortgage_ops_additional_amount_cents: invoice.mortgage_ops_additional_amount_cents,
+      mortgage_ops_second_mortgagee_count: invoice.mortgage_ops_second_mortgagee_count,
+      mortgage_ops_second_mortgagee_amount_cents: invoice.mortgage_ops_second_mortgagee_amount_cents,
       invoice_fee_count: invoice.invoice_fee_count,
       invoice_fee_amount_cents: invoice.invoice_fee_amount_cents,
       failed_deposit_count: invoice.failed_deposit_count,
@@ -2869,6 +3000,7 @@ export async function buildTenantBillingSnapshot(client, tenantId, dest, { now =
     same_day_rate_cents: resolveSameDayRateCents(ctx.tenant),
     mortgage_ops_initial_rate_cents: resolveMortgageInitialRateCents(ctx.tenant),
     mortgage_ops_additional_rate_cents: resolveMortgageAdditionalRateCents(ctx.tenant),
+    mortgage_ops_second_mortgagee_rate_cents: SECOND_MORTGAGEE_FEE_CENTS,
     instant_rate_cents: null,
     instant_enabled: false,
     billing_enabled: ctx.settings.billing_enabled === true,
@@ -2893,6 +3025,8 @@ export async function buildTenantBillingSnapshot(client, tenantId, dest, { now =
       mortgage_ops_initial_amount_cents: invoice.mortgage_ops_initial_amount_cents,
       mortgage_ops_additional_count: invoice.mortgage_ops_additional_count,
       mortgage_ops_additional_amount_cents: invoice.mortgage_ops_additional_amount_cents,
+      mortgage_ops_second_mortgagee_count: invoice.mortgage_ops_second_mortgagee_count,
+      mortgage_ops_second_mortgagee_amount_cents: invoice.mortgage_ops_second_mortgagee_amount_cents,
       invoice_fee_count: invoice.invoice_fee_count,
       invoice_fee_amount_cents: invoice.invoice_fee_amount_cents,
       failed_deposit_count: invoice.failed_deposit_count,
@@ -2920,6 +3054,8 @@ export async function buildTenantBillingSnapshot(client, tenantId, dest, { now =
       mortgage_ops_initial_amount_cents: pullPreview.mortgage_ops_initial_amount_cents,
       mortgage_ops_additional_count: pullPreview.mortgage_ops_additional_count,
       mortgage_ops_additional_amount_cents: pullPreview.mortgage_ops_additional_amount_cents,
+      mortgage_ops_second_mortgagee_count: pullPreview.mortgage_ops_second_mortgagee_count,
+      mortgage_ops_second_mortgagee_amount_cents: pullPreview.mortgage_ops_second_mortgagee_amount_cents,
       invoice_fee_count: pullPreview.invoice_fee_count,
       invoice_fee_amount_cents: pullPreview.invoice_fee_amount_cents,
       failed_deposit_count: pullPreview.failed_deposit_count,
