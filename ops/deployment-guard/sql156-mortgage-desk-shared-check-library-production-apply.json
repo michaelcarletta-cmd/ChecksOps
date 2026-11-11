@@ -1,8 +1,8 @@
 {
   "id": "sql156-mortgage-desk-shared-check-library-production-apply",
   "migration": "sql156",
-  "authorization": "pending",
-  "execute": false,
+  "authorization": "Owner approved 2026-11-11 (the owner's words for SQL 156: \"It should be everybody shared on that check\", \"Merge 1786 when green\", \"build the SQL 156 tooling and merge it when green\", \"Redeploy the staging executor and run SQL 156 read-live\", \"Record the SQL 156 staging pin and merge it when green, then apply SQL 156 in staging\", \"apply SQL 156 in staging\", \"run the read-only SQL 156 production inspect\", \"record the SQL 156 production pin, merge it when green, and apply SQL 156 in production\"; the change itself is reviewed and merged under those words): production apply of SQL 156 after the staging acceptance below, from the recorded production pre-state (44259316 -> 5f40695d); each apply still needs the owner's run-time approval (the owner's words for that run).",
+  "execute": true,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -14,7 +14,7 @@
     "public.aws_mortgage_desk_shared_library_documents(uuid)",
     "public.aws_mortgage_agent_can_read_shared_library_path(text[], text, uuid)"
   ],
-  "expected_live_definition_sha256": null,
+  "expected_live_definition_sha256": "44259316206f9f591ce8f3a6d63b8627add30153669f612acf539e3eec6cda12",
   "intended_replacement_sha256": "5f40695d3083262c2914d8330877dd6389d7c2c9263ab13f85762476e5dd55bc",
   "authorization_phrase": "SHARE_CHECK_LIBRARY_WITH_MORTGAGE_DESK",
   "predecessors": [],
@@ -42,24 +42,24 @@
     "note": "Guarded tooling for SQL 156: sql156-mortgage-desk-shared-check-library-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql156-mortgage-desk-shared-check-library); production-sql-one-shot.mjs --migration sql156. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): the two functions with their attributes, bodies, results and ACLs. The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
   },
   "production_inspect": {
-    "status": "pending",
-    "date": null,
-    "ssm_command_id": null,
-    "source_commit": null,
+    "status": "recorded",
+    "date": "2026-11-11",
+    "ssm_command_id": "c2003f73-ac62-4706-888f-cbc4dea08a27",
+    "source_commit": "830cc142c9a025653ef7434698154816423d9853",
     "read_only": true,
     "connected_as": "checksops_admin",
-    "live_definition_sha256": null,
-    "apply_preconditions_met": null,
-    "precondition_failures": null,
-    "note": "Pending: no release-engine production inspect has been run for SQL 156 yet. Expected: prerequisites_missing [], both functions absent, definer_writes ok on mortgage_handling_requests, shared_checks, tenant_documents and tenants, already_applied false. Expected release-engine fingerprint of that pre-state under sql156: 44259316206f9f591ce8f3a6d63b8627add30153669f612acf539e3eec6cda12 (releaseStateHash('sql156', {})). Record the one-shot --phase inspect's date, SSM command id, source commit, live_definition_sha256, prerequisites_missing, release_sql_inspect, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. Stop if the pre-state differs, prerequisites_missing is not [] or precondition_failures is not []: that needs its own reviewed change."
+    "live_definition_sha256": "44259316206f9f591ce8f3a6d63b8627add30153669f612acf539e3eec6cda12",
+    "apply_preconditions_met": false,
+    "precondition_failures": [],
+    "note": "Recorded from the read-only production inspect of 2026-11-11 (SSM command c2003f73-ac62-4706-888f-cbc4dea08a27, status Success, ResponseCode 0, node scripts/deployment-guard/sql156-mortgage-desk-shared-check-library-production-apply.mjs --inspect on the SQL53 runner i-0c35557c4e5385406, started from stopped at 22:58:13Z and stopped again at 22:58:55Z, under the owner's words \"run the read-only SQL 156 production inspect\", from main 830cc142c (tarball source-830cc142c9a025653ef7434698154816423d9853.tar.gz sha256 4f284e7f8be98ace024e9839d7d84d62f9cc298e73ddfd6310af123e5387e4a8, transfer run 43115925963; SOURCE_COMMIT 830cc142c9a025653ef7434698154816423d9853; migration source sha256 on the runner e30e20d5d65902403426dbaf11a9467818eeb0151b90a162199687de0d2a4557 == source_sha256)): read_only true, source_ok true, current_user checksops_admin, pin_execute false, missing_dependencies [], prerequisites_missing [], predecessors {} (none), successors_applied []; both functions absent; definer_writes mortgage_handling_requests, shared_checks, tenant_documents and tenants ok true. live_definition_sha256 44259316206f9f591ce8f3a6d63b8627add30153669f612acf539e3eec6cda12 (the derived pre-state releaseStateHash('sql156', {})), already_applied false, live_matches_expected false (the pin had no pre-state yet), precondition_failures [], apply_preconditions_met false (the pin was execute false). Copied into expected_live_definition_sha256 by this change. If already_applied is true, or precondition_failures is not [], stop. Earlier: Pending: no release-engine production inspect has been run for SQL 156 yet. Expected: prerequisites_missing [], both functions absent, definer_writes ok on mortgage_handling_requests, shared_checks, tenant_documents and tenants, already_applied false. Expected release-engine fingerprint of that pre-state under sql156: 44259316206f9f591ce8f3a6d63b8627add30153669f612acf539e3eec6cda12 (releaseStateHash('sql156', {})). Record the one-shot --phase inspect's date, SSM command id, source commit, live_definition_sha256, prerequisites_missing, release_sql_inspect, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. Stop if the pre-state differs, prerequisites_missing is not [] or precondition_failures is not []: that needs its own reviewed change."
   },
   "intended_post_state": {
     "fingerprint": "5f40695d3083262c2914d8330877dd6389d7c2c9263ab13f85762476e5dd55bc",
     "note": "public.aws_mortgage_desk_shared_library_documents(uuid) (plpgsql, STABLE, RETURNS TABLE) and public.aws_mortgage_agent_can_read_shared_library_path(text[], text, uuid) (sql, STABLE, RETURNS boolean), both owned by checksops_admin, SECURITY DEFINER, SET search_path = public, SET row_security = off, EXECUTE checksops and the owner, nothing for PUBLIC or authenticated. No other function, table, column, policy, grant or trigger change; no row written. The fingerprint is releaseIntendedHash('sql156', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): 5f40695d3083262c2914d8330877dd6389d7c2c9263ab13f85762476e5dd55bc."
   },
   "staging_acceptance": {
-    "ok": false,
-    "reference": null,
-    "basis": "Pending: record the guarded staging SQL executor read-live and the staging apply of SQL 156 (choice sql156-mortgage-desk-shared-check-library) here in the reviewed change that sets execute true. The behavior is covered on PostgreSQL 16 by aws/tests/sql156-mortgage-desk-shared-check-library-pg.test.mjs. Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+    "ok": true,
+    "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43114784372",
+    "basis": "Guarded staging SQL executor apply of sql156-mortgage-desk-shared-check-library, run 43114784372 (2026-11-11, main 830cc142c, executor deploy run 43113284610, through the SQL 156 staging pin, wave 48, on the owner's words \"apply SQL 156 in staging\"): read-live before it, run 43114397318, 44259316206f9f591ce8f3a6d63b8627add30153669f612acf539e3eec6cda12 (both functions absent), already_applied false, precondition_failures []; receipt before 44259316206f9f591ce8f3a6d63b8627add30153669f612acf539e3eec6cda12, after 5f40695d3083262c2914d8330877dd6389d7c2c9263ab13f85762476e5dd55bc == intended_replacement_sha256, result applied; read-live after it, run 43115143552, already_applied true, live 5f40695d3083262c2914d8330877dd6389d7c2c9263ab13f85762476e5dd55bc. Production's pre-state is the same one staging had before its apply (44259316206f9f591ce8f3a6d63b8627add30153669f612acf539e3eec6cda12). The behavior is covered on PostgreSQL 16 by aws/tests/sql156-mortgage-desk-shared-check-library-pg.test.mjs and aws/tests/release-sql156-executor.test.mjs."
   }
 }
