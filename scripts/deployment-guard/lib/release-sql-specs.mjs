@@ -8605,4 +8605,190 @@ export const RELEASE_SQL_SPECS = deepFreeze({
         "public.check_stakeholders"
       ]
   },
+  // SQL 152 (owner 2026-11-10: "work on these fixes"; 2026-11-11: "Yes" to SQL 152 and its tooling): the agreement's
+  // $0.30 invoice fee (3.6) and $2.00 failed deposit fee (3.7) as usage events. SQL 149 (never applied, no tooling)
+  // plus SQL 118's revoke of every non-owner grant on the new table public.tenant_usage_fee_launch (SQL 149 revoked
+  // only PUBLIC, so the default-privilege grants staging and production give a new table would have stayed: SQL 117's
+  // failure). New: that table (one row, RLS on, no grant: acl []), five functions (EXECUTE for the owner only), the
+  // triggers aws_moov_invoice_fee on moov_invoices and aws_checkalt_deposit_failed_fee on checkalt_deposits, the partial
+  // unique index check_billing_events_usage_source_uidx, and four integer NOT NULL DEFAULT 0 columns on
+  // tenant_maintenance_payments (acl []: no column grant). Prerequisites the file's own (SQL 120's
+  // aws_record_checkalt_billing_event() among them); no predecessor (as SQL 120 for SQL 98), no supersedes (SQL 149 has
+  // no spec or pin). definer_writes: check_billing_events, which the trigger functions insert into as its owner.
+  sql152: {
+    "key": "sql152",
+    "label": "SQL 152",
+    "choice": "sql152-invoice-and-failed-deposit-fees",
+    "production_pin_rel": "ops/deployment-guard/sql152-invoice-and-failed-deposit-fees-production-apply.json",
+    "script": "sql152-invoice-and-failed-deposit-fees-production-apply",
+    "prerequisites": [
+      "public.tenants",
+      "public.check_intake_items",
+      "public.check_billing_events",
+      "public.checkalt_deposits",
+      "public.moov_invoices",
+      "public.tenant_maintenance_payments",
+      "public.aws_record_checkalt_billing_event()",
+      "column public.check_intake_items.tenant_id",
+      "column public.check_intake_items.claim_id",
+      "column public.check_billing_events.tenant_id",
+      "column public.check_billing_events.check_intake_item_id",
+      "column public.check_billing_events.event_type",
+      "column public.check_billing_events.unit_price_cents",
+      "column public.check_billing_events.currency",
+      "column public.check_billing_events.status",
+      "column public.check_billing_events.billed_at",
+      "column public.check_billing_events.claim_id",
+      "column public.check_billing_events.source_kind",
+      "column public.check_billing_events.source_id",
+      "column public.checkalt_deposits.id",
+      "column public.checkalt_deposits.check_intake_item_id",
+      "column public.checkalt_deposits.tenant_id",
+      "column public.checkalt_deposits.status",
+      "column public.moov_invoices.id",
+      "column public.moov_invoices.tenant_id",
+      "column public.moov_invoices.sent_at",
+      "column public.moov_invoices.claim_id"
+    ],
+    "predecessors": [],
+    "functions": [
+      {
+        "identity": "public.aws_usage_fee_launched_at()",
+        "acl": [
+          "owner EXECUTE"
+        ],
+        "result": "timestamp with time zone"
+      },
+      {
+        "identity": "public.aws_invoice_fee_cents()",
+        "acl": [
+          "owner EXECUTE"
+        ]
+      },
+      {
+        "identity": "public.aws_failed_deposit_fee_cents()",
+        "acl": [
+          "owner EXECUTE"
+        ]
+      },
+      {
+        "identity": "public.aws_record_invoice_fee()",
+        "acl": [
+          "owner EXECUTE"
+        ]
+      },
+      {
+        "identity": "public.aws_record_failed_deposit_fee()",
+        "acl": [
+          "owner EXECUTE"
+        ]
+      }
+    ],
+    "tables": [
+      {
+        "name": "public.tenant_usage_fee_launch",
+        "rls": true,
+        "forced": false,
+        "columns": [
+          [
+            "singleton",
+            "boolean",
+            true,
+            "true"
+          ],
+          [
+            "launched_at",
+            "timestamp with time zone",
+            true,
+            "now()"
+          ],
+          [
+            "note",
+            "text",
+            false,
+            null
+          ]
+        ],
+        "constraints": [
+          [
+            "tenant_usage_fee_launch_pkey",
+            "PRIMARY KEY (singleton)"
+          ],
+          [
+            "tenant_usage_fee_launch_singleton_check",
+            "CHECK (singleton)"
+          ]
+        ],
+        "indexes": [
+          [
+            "tenant_usage_fee_launch_pkey",
+            "CREATE UNIQUE INDEX tenant_usage_fee_launch_pkey ON public.tenant_usage_fee_launch USING btree (singleton)"
+          ]
+        ],
+        "acl": []
+      }
+    ],
+    "added_columns": [
+      {
+        "table": "public.tenant_maintenance_payments",
+        "column": "invoice_fee_count",
+        "type": "integer",
+        "notnull": true,
+        "default": "0",
+        "acl": []
+      },
+      {
+        "table": "public.tenant_maintenance_payments",
+        "column": "invoice_fee_amount_cents",
+        "type": "integer",
+        "notnull": true,
+        "default": "0",
+        "acl": []
+      },
+      {
+        "table": "public.tenant_maintenance_payments",
+        "column": "failed_deposit_count",
+        "type": "integer",
+        "notnull": true,
+        "default": "0",
+        "acl": []
+      },
+      {
+        "table": "public.tenant_maintenance_payments",
+        "column": "failed_deposit_amount_cents",
+        "type": "integer",
+        "notnull": true,
+        "default": "0",
+        "acl": []
+      }
+    ],
+    "indexes": [
+      {
+        "table": "public.check_billing_events",
+        "name": "check_billing_events_usage_source_uidx",
+        "def": "CREATE UNIQUE INDEX check_billing_events_usage_source_uidx ON public.check_billing_events USING btree (source_kind, source_id, event_type) WHERE (event_type = ANY (ARRAY['invoice_sent'::text, 'failed_deposit'::text]))"
+      }
+    ],
+    "triggers": [
+      {
+        "table": "public.moov_invoices",
+        "name": "aws_moov_invoice_fee",
+        "def": "CREATE TRIGGER aws_moov_invoice_fee AFTER INSERT OR UPDATE OF sent_at ON public.moov_invoices FOR EACH ROW EXECUTE FUNCTION public.aws_record_invoice_fee()"
+      },
+      {
+        "table": "public.checkalt_deposits",
+        "name": "aws_checkalt_deposit_failed_fee",
+        "def": "CREATE TRIGGER aws_checkalt_deposit_failed_fee AFTER INSERT OR UPDATE OF status ON public.checkalt_deposits FOR EACH ROW EXECUTE FUNCTION public.aws_record_failed_deposit_fee()"
+      }
+    ],
+    "definer_writes": [
+      "public.check_billing_events"
+    ],
+    "altered_relations": [
+      "public.checkalt_deposits",
+      "public.moov_invoices",
+      "public.check_billing_events",
+      "public.tenant_maintenance_payments"
+    ]
+  },
 });
