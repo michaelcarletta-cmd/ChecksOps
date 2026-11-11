@@ -1,0 +1,15 @@
+{
+  "workstream_id": "production-db-validator-sql154-trigger",
+  "authorization": "Pending owner review (2026-11-11). Planning only: nothing is live or verified. The production apply needs its own owner approval, a staging acceptance reference and a read-only production inspect that confirms the live bytes. Its sql_before, SQL 154, is NOT recorded verified live in production (its production pin is pending), so the apply is held until the SQL 154 production record states it verified live.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "SQL 154 (154_tenant_starter_package.sql) adds two public triggers, check_billing_events.aws_check_billing_event_starter_package (function aws_apply_starter_package_to_event) and tenants.aws_tenant_starter_package_audit (function aws_tenant_starter_package_audit_row). Applied to staging only, 2026-11-11 (owner \"Record the SQL 154 staging pin and merge it when green, then apply SQL 154 in staging\"; staging pin #1771, wave 46; executor deploy run 43062554159, read-live run 43063089164, guarded staging SQL executor apply run 43063499920, receipt 05fb0b99… -> a50c631a…, post-apply read-live run 43064000809 already_applied true). Production has not applied SQL 154; its production pin is pending. After the staging apply, staging /db-readonly-validate answers 503 (observed 2026-11-11) while /health and /db-health answer 200: the validator (aef88b3b, the named 187-set) sees 189 public triggers. These bytes add both triggers to the justified set and raise EXPECTED_PUBLIC_TRIGGERS to 189, as 9e81beda3 did for SQL 152. REPLACE db-readonly-validate.mjs aef88b3b -> 25d0ee50: live_sha256 is the SQL 152 validator production run 43034879124 applied (previous_manifest, the applied record; sha256 of the file at main a21972a85, the applied commit, and at main 33d8e063d). sql_before is SQL 154, recorded verified_live false in production, so the production apply stays held until the SQL 154 production record states it live. Production /db-readonly-validate already answers 503 for a reason not known (the SQL 152 validator applied record, #1774, observed it after run 43034879124); this change is not known to fix that and does not claim to. The staging overlay of these bytes is also refused until staging-sql-live.json records SQL 154 verified live, which the SQL 154 record change does (ops/production-sql-154-apply.md step 4). The apply still runs in plan order: the validator follows tenant-billing-handlers.mjs (owner 2026-11-11: \"B\"), so members before it are not held behind it and every member after it needs these bytes live first. A read-only production overlay inspect must confirm the live member before any apply.",
+  "members": {
+    "db-readonly-validate.mjs": {
+      "live_sha256": "aef88b3b7af8962c832f7200c59b84d01823d28e7b8185ab0b5fdf26e1112c2f",
+      "accepted_sha256": "25d0ee50b7b204504f87b9bc5c8d868a8a4536f9e66017afd6fbb59e8d6e3a77",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-db-validator-sql152-trigger-applied-manifest-2026-11-11.json"
+    }
+  }
+}

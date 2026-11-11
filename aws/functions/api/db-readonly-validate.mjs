@@ -52,7 +52,7 @@ export const EXPECTED_ROW_COUNTS = {
 
 export const EXPECTED_DATABASE = 'checksops';
 export const EXPECTED_SKIPPED_AUTH_USERS_FKS = 47;
-export const EXPECTED_PUBLIC_TRIGGERS = 187;
+export const EXPECTED_PUBLIC_TRIGGERS = 189;
 
 export const SUPERSEDED_PUBLIC_TRIGGERS = Object.freeze([
   Object.freeze({
@@ -198,6 +198,18 @@ export const POST_RESTORE_PUBLIC_TRIGGERS = Object.freeze([
     table: 'checkalt_deposits',
     trigger: 'aws_checkalt_deposit_failed_fee',
     functionName: 'aws_record_failed_deposit_fee',
+  }),  // SQL 154 (154_tenant_starter_package.sql), applied to staging 2026-11-11 (run 43063499920; production
+  // pending): a check fee or failed deposit fee uses one of the Starter Package's included Checks, and a
+  // change to a tenant's Starter Package columns is written to tenant_pricing_audit.
+  Object.freeze({
+    table: 'check_billing_events',
+    trigger: 'aws_check_billing_event_starter_package',
+    functionName: 'aws_apply_starter_package_to_event',
+  }),
+  Object.freeze({
+    table: 'tenants',
+    trigger: 'aws_tenant_starter_package_audit',
+    functionName: 'aws_tenant_starter_package_audit_row',
   }),
 ]);
 
