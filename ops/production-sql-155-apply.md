@@ -30,7 +30,17 @@ rename an existing claim (`claim_number`), which the trigger leaves alone.
 **Public trigger.** `trg_aws_stamp_claim_org_id` is a public trigger. Production's `db-readonly-validate` justified set
 gains it in its own change, once production's state is recorded through this path.
 
-**Status:** tooling built; staging and production pins pending (`execute: false`). Nothing applied or read.
+**Status:** staging pin execute-authorized (wave 47); not applied anywhere. The production pin is pending.
+
+**Staging read-live (2026-11-11).** Run 43077253195 (job 130720232170, main `d0548d4af`, after executor deploy run
+43076433402, inspect runs 43076004984 and 43076849830), under the owner's words "Redeploy the staging executor and run
+SQL 155 read-live": `already_applied` false, `precondition_failures` `[]`, `prerequisites_missing` `[]`,
+`definer_writes` `tenants` and `tenant_users` `ok true`; both functions and the trigger `absent`, no EXECUTE grant. Live
+`d63969e2ef8e5c809f2e107c41b61d87b3bedba5fe7a059b2dabb66f65604f54`: everything SQL 155 creates absent, equal to the derived state; intended
+`d65fcff9…`. Staging never had file 39 (PR #429 named only production). Recorded in the staging pin
+(`expected_live_definition_sha256`, `execute: true`, wave 47) under the owner's words of 2026-11-11, "Record the SQL
+155 staging pin and merge it when green". The staging apply is a separate run after this pin is merged and the
+executor is redeployed carrying it, on the owner's words for that run. The production pin stays pending.
 
 ## Fingerprint
 

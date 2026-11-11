@@ -200,7 +200,7 @@ test('order: no predecessor; two DEFINER functions with their ACLs and the trigg
     '#429', '6a05191a3', 'verified_live']) {
     assert.ok(runbook.includes(value), value);
   }
-  assert.match(runbook, /\*\*Status:\*\* tooling built; staging and production pins pending \(`execute: false`\)\. Nothing applied or read\./);
+  assert.match(runbook, /\*\*Status:\*\* staging pin execute-authorized \(wave 47\); not applied anywhere\. The production pin is pending\./);
   assert.ok(runbook.replace(/\s+/g, ' ').includes('"Keep it, adopt it through the guarded path"'));
   const oneShot = fs.readFileSync(path.join(ROOT, 'ops/production-sql-one-shot.md'), 'utf8');
   assert.match(oneShot, /\| `sql155` \|/);
