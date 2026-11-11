@@ -9017,6 +9017,65 @@ export const RELEASE_SQL_SPECS = deepFreeze({
       "public.claims"
     ]
   },
+  sql156: {
+    "key": "sql156",
+    "label": "SQL 156",
+    "choice": "sql156-mortgage-desk-shared-check-library",
+    "production_pin_rel": "ops/deployment-guard/sql156-mortgage-desk-shared-check-library-production-apply.json",
+    "script": "sql156-mortgage-desk-shared-check-library-production-apply",
+    "prerequisites": [
+      "public.mortgage_handling_requests",
+      "public.shared_checks",
+      "public.tenant_documents",
+      "public.tenants",
+      "column public.mortgage_handling_requests.tenant_id",
+      "column public.mortgage_handling_requests.check_intake_item_id",
+      "column public.mortgage_handling_requests.status",
+      "column public.mortgage_handling_requests.assigned_employee_id",
+      "column public.shared_checks.check_id",
+      "column public.shared_checks.source_tenant_id",
+      "column public.shared_checks.target_tenant_id",
+      "column public.shared_checks.revoked_at",
+      "column public.tenant_documents.tenant_id",
+      "column public.tenant_documents.doc_type",
+      "column public.tenant_documents.file_name",
+      "column public.tenant_documents.file_path",
+      "column public.tenant_documents.mime_type",
+      "column public.tenant_documents.file_size",
+      "column public.tenant_documents.auto_share_mortgage_ops",
+      "column public.tenant_documents.created_at",
+      "column public.tenants.name",
+      "auth.uid()",
+      "public.is_platform_owner()",
+      "public.aws_is_mortgage_ops_agent()",
+      "public.has_role(uuid, public.app_role)",
+      "role checksops"
+    ],
+    "predecessors": [],
+    "functions": [
+      {
+        "identity": "public.aws_mortgage_desk_shared_library_documents(uuid)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ],
+        "result": "TABLE(tenant_id uuid, tenant_name text, requesting_tenant boolean, tenant_document_id uuid, doc_type text, file_name text, file_path text, mime_type text, file_size bigint, created_at timestamp with time zone)"
+      },
+      {
+        "identity": "public.aws_mortgage_agent_can_read_shared_library_path(text[], text, uuid)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ]
+      }
+    ],
+    "definer_writes": [
+      "public.mortgage_handling_requests",
+      "public.shared_checks",
+      "public.tenant_documents",
+      "public.tenants"
+    ]
+  },
   sql76: {
     "key": "sql76",
     "label": "SQL 76",

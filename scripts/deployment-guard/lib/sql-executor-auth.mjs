@@ -3535,6 +3535,28 @@ export const AUTHORIZED_SQL155_CLAIM_OWNER_ORG_STAMP = Object.freeze({
   ]),
 });
 
+// Mortgage Desk shared-check library staging pin: SQL 156 (owner 2026-11-11: "if a tenant uploads a check and shares the check with a partner, both the tenant and that partner's documents that are automatically shared with the mortgage team show up for the mortgage team", "It should be everybody
+// shared on that check"). Two new SECURITY DEFINER read functions: the auto-shared library:mortgage:% documents of every
+// tenant on a request's check (its own tenant and every unrevoked shared_checks partner), and the matching path check for
+// opening one. Nothing existing replaced. Pending until a reviewed pin change records a staging read-live.
+export const AUTHORIZED_SQL156_MORTGAGE_DESK_SHARED_CHECK_LIBRARY = Object.freeze({
+  key: 'sql156',
+  filename: 'aws/workflows/sql/156_mortgage_desk_shared_check_library_documents.sql',
+  migration_id: '156_mortgage_desk_shared_check_library_documents',
+  // The commit that last authored the file bytes.
+  commit: 'c9bbd837960ccbbc43f0dc67c41ef8ddf3830d75',
+  source_sha256: 'e30e20d5d65902403426dbaf11a9467818eeb0151b90a162199687de0d2a4557',
+  authorization: 'pending',
+  execute: false,
+  expected_live_definition_sha256: null,
+  // Code-derived: releaseIntendedHash('sql156', file bytes) (release-sql-state.mjs); re-derived by the tests.
+  intended_replacement_sha256: '5f40695d3083262c2914d8330877dd6389d7c2c9263ab13f85762476e5dd55bc',
+  function_identities: Object.freeze([
+    'public.aws_mortgage_desk_shared_library_documents(uuid)',
+    'public.aws_mortgage_agent_can_read_shared_library_path(text[], text, uuid)',
+  ]),
+});
+
 // SQL 76 through the release engine for production (owner 2026-11-11: "apply SQL 76 to production through the guarded
 // path", then "Option 1"). The same file bytes and authoring commit as AUTHORIZED_SQL76_PARTNERSHIP_CONSENT, which took
 // SQL 76 through staging (apply run 38553052449, 2026-10-14: before 7c5276d8…, after 2f195230… in that pin's own state
@@ -3621,6 +3643,7 @@ export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql152: AUTHORIZED_SQL152_INVOICE_AND_FAILED_DEPOSIT_FEES,
   sql154: AUTHORIZED_SQL154_TENANT_STARTER_PACKAGE,
   sql155: AUTHORIZED_SQL155_CLAIM_OWNER_ORG_STAMP,
+  sql156: AUTHORIZED_SQL156_MORTGAGE_DESK_SHARED_CHECK_LIBRARY,
   sql76: AUTHORIZED_SQL76_RELEASE_TENANT_PARTNERSHIP_CONSENT,
 });
 
@@ -3637,7 +3660,7 @@ export function isSql30TenantDocumentsDocType(input = {}) {
   return pinIdentifiersMatch(input, AUTHORIZED_SQL30_TENANT_DOCUMENTS_DOC_TYPE);
 }
 
-/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql148, sql150, sql152, sql154, sql155; sql76 for production) an input names, or null. */
+/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql148, sql150, sql152, sql154, sql155, sql156; sql76 for production) an input names, or null. */
 export function releaseSqlMigrationKey(input = {}) {
   return Object.keys(RELEASE_2026_10_17_PENDING_SQL_PINS)
     .find((key) => pinIdentifiersMatch(input, RELEASE_2026_10_17_PENDING_SQL_PINS[key])) || null;

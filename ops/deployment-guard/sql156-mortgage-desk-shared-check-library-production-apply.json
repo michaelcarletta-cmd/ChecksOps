@@ -1,0 +1,65 @@
+{
+  "id": "sql156-mortgage-desk-shared-check-library-production-apply",
+  "migration": "sql156",
+  "authorization": "pending",
+  "execute": false,
+  "target_environment": "production",
+  "target_component": "production-sql",
+  "deployment_type": "sql-apply",
+  "filename": "aws/workflows/sql/156_mortgage_desk_shared_check_library_documents.sql",
+  "migration_id": "156_mortgage_desk_shared_check_library_documents",
+  "staging_pin_commit": "c9bbd837960ccbbc43f0dc67c41ef8ddf3830d75",
+  "source_sha256": "e30e20d5d65902403426dbaf11a9467818eeb0151b90a162199687de0d2a4557",
+  "function_identities": [
+    "public.aws_mortgage_desk_shared_library_documents(uuid)",
+    "public.aws_mortgage_agent_can_read_shared_library_path(text[], text, uuid)"
+  ],
+  "expected_live_definition_sha256": null,
+  "intended_replacement_sha256": "5f40695d3083262c2914d8330877dd6389d7c2c9263ab13f85762476e5dd55bc",
+  "authorization_phrase": "SHARE_CHECK_LIBRARY_WITH_MORTGAGE_DESK",
+  "predecessors": [],
+  "order_note": "No predecessor. SQL 156 adds two SECURITY DEFINER read functions and replaces nothing (owner 2026-11-11: \"if a tenant uploads a check and shares the check with a partner, both the tenant and that partner's documents that are automatically shared with the mortgage team show up for the mortgage team\", \"It should be everybody shared on that check\"): aws_mortgage_desk_shared_library_documents(uuid) lists the auto_share_mortgage_ops library:mortgage:% tenant_documents of every tenant on a Desk request's check (its own tenant, then the source and target of every unrevoked shared_checks row), and aws_mortgage_agent_can_read_shared_library_path(text[], text, uuid) is the matching check for opening one; both answer the platform owner or a mortgage agent while the request is open or assigned to them, EXECUTE checksops and the owner only. The spec prerequisites are the file's own (55000 sql156_prerequisite_missing); the applying login must reach mortgage_handling_requests, shared_checks, tenant_documents and tenants as the definer past RLS (definer_can_write_relations; the file refuses otherwise, sql156_definer_cannot_read). No table, column, policy, table grant, trigger or row changes, so the db-readonly-validate trigger count is not affected. Expected pre-state in both environments: both functions absent (release sql156 v1: 44259316206f9f591ce8f3a6d63b8627add30153669f612acf539e3eec6cda12, releaseStateHash('sql156', {})). The API (a Desk list action and the storage signer consulting the new path check) and the Desk page ship after this through their own guarded paths; no API, Lambda or SPA change is part of this pin.",
+  "admin_login": "checksops_admin",
+  "rds_identifier": "checksops-production",
+  "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
+  "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
+  "tooling": {
+    "status": "built",
+    "production_tool": "scripts/deployment-guard/sql156-mortgage-desk-shared-check-library-production-apply.mjs",
+    "production_lib": "scripts/deployment-guard/lib/release-sql-production-apply.mjs",
+    "staging_executor_handler": "aws/write-path/guarded-sql-executor/index.mjs handleReleaseSqlMigration",
+    "staging_workflow_choice": "sql156-mortgage-desk-shared-check-library",
+    "one_shot_migration": "sql156",
+    "fingerprint_engine": "scripts/deployment-guard/lib/release-sql-state.mjs",
+    "runbook": "ops/production-sql-156-apply.md",
+    "tests": [
+      "aws/tests/release-sql156-executor.test.mjs",
+      "aws/tests/release-sql156-production-apply.test.mjs",
+      "aws/tests/release-sql90-97-executor.test.mjs",
+      "aws/tests/release-sql90-97-production-apply.test.mjs",
+      "aws/tests/sql156-mortgage-desk-shared-check-library-pg.test.mjs"
+    ],
+    "note": "Guarded tooling for SQL 156: sql156-mortgage-desk-shared-check-library-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql156-mortgage-desk-shared-check-library); production-sql-one-shot.mjs --migration sql156. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): the two functions with their attributes, bodies, results and ACLs. The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
+  },
+  "production_inspect": {
+    "status": "pending",
+    "date": null,
+    "ssm_command_id": null,
+    "source_commit": null,
+    "read_only": true,
+    "connected_as": "checksops_admin",
+    "live_definition_sha256": null,
+    "apply_preconditions_met": null,
+    "precondition_failures": null,
+    "note": "Pending: no release-engine production inspect has been run for SQL 156 yet. Expected: prerequisites_missing [], both functions absent, definer_writes ok on mortgage_handling_requests, shared_checks, tenant_documents and tenants, already_applied false. Expected release-engine fingerprint of that pre-state under sql156: 44259316206f9f591ce8f3a6d63b8627add30153669f612acf539e3eec6cda12 (releaseStateHash('sql156', {})). Record the one-shot --phase inspect's date, SSM command id, source commit, live_definition_sha256, prerequisites_missing, release_sql_inspect, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. Stop if the pre-state differs, prerequisites_missing is not [] or precondition_failures is not []: that needs its own reviewed change."
+  },
+  "intended_post_state": {
+    "fingerprint": "5f40695d3083262c2914d8330877dd6389d7c2c9263ab13f85762476e5dd55bc",
+    "note": "public.aws_mortgage_desk_shared_library_documents(uuid) (plpgsql, STABLE, RETURNS TABLE) and public.aws_mortgage_agent_can_read_shared_library_path(text[], text, uuid) (sql, STABLE, RETURNS boolean), both owned by checksops_admin, SECURITY DEFINER, SET search_path = public, SET row_security = off, EXECUTE checksops and the owner, nothing for PUBLIC or authenticated. No other function, table, column, policy, grant or trigger change; no row written. The fingerprint is releaseIntendedHash('sql156', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): 5f40695d3083262c2914d8330877dd6389d7c2c9263ab13f85762476e5dd55bc."
+  },
+  "staging_acceptance": {
+    "ok": false,
+    "reference": null,
+    "basis": "Pending: record the guarded staging SQL executor read-live and the staging apply of SQL 156 (choice sql156-mortgage-desk-shared-check-library) here in the reviewed change that sets execute true. The behavior is covered on PostgreSQL 16 by aws/tests/sql156-mortgage-desk-shared-check-library-pg.test.mjs. Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+  }
+}
