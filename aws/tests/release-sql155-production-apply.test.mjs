@@ -6,8 +6,10 @@
  * release-sql90-97-production-apply.test.mjs runs every release key (SQL 155 included) through the shared refusals;
  * this file covers SQL 155's own:
  *
- *   - the pin has the release pin shape, is pending (execute false, no pre-state, no approval) and is in step with the
- *     staging pin, the one-shot, the bypass inventory and the test lists;
+ *   - the pin has the release pin shape plus production_noop, is never execute-authorized (execute false, no pre-state, no
+ *     approval): production is recorded as verified live by the read-only inspect of 2026-11-11 (SSM 373a7d5c, the
+ *     intended state, already_applied true); it is in step with the staging pin, the one-shot, the bypass inventory and
+ *     the test lists;
  *   - no predecessor; two DEFINER functions (EXECUTE authenticated, checksops and the owner) and the trigger on claims;
  *     no table, policy or grant beyond the two functions'; the file is file 39's text after its prerequisite check; no
  *     overlay plan entry; the runbook, one-shot doc and README name it;
@@ -94,28 +96,42 @@ const approved = (extra = {}) => Object.freeze({
   ...extra,
 });
 
-test('pin: the release pin shape, pending, in step with the staging pin, the one-shot, the inventory and the test lists', () => {
+test('pin: the release pin shape, production_noop and verified live (read-only inspect 2026-11-11), in step with the staging pin, the one-shot, the inventory and the test lists', () => {
   const pin = COMMITTED;
   const staging = STAGING[KEY];
   const shape = new Set(keyPaths(SQL96_PIN).filter((k) => !/^(applied|production_evidence)(\.|$)/.test(k)));
   assert.deepEqual([...shape].filter((k) => !keyPaths(pin).includes(k)), [], 'lacks the engine pin shape');
-  assert.deepEqual(keyPaths(pin).filter((k) => !shape.has(k)), []);
+  // production_noop and the recorded inspect's already_applied are the keys beyond the engine pin shape (as SQL 100's pin).
+  assert.deepEqual(keyPaths(pin).filter((k) => !shape.has(k)), ['production_noop', 'production_inspect.already_applied']);
+  assert.equal(pin.production_noop, true);
+  assert.equal(RELEASE_SQL_SPECS[KEY].production_noop, true);
   assert.equal(pin.id, RELEASE_SQL_SPECS[KEY].production_pin_rel.split('/').pop().replace(/\.json$/, ''));
   assert.equal(pin.migration, KEY);
   assert.equal(pin.execute, false);
   assert.equal(pin.authorization, 'pending');
   assert.equal(pin.expected_live_definition_sha256, null);
   assert.equal(pin.applied, undefined);
-  assert.equal(pin.production_inspect.status, 'pending');
-  assert.equal(pin.production_inspect.live_definition_sha256, null);
-  // Production is expected to read the intended state already (applied there directly on 2026-09-22); anything else
-  // is a stop, and the read itself needs the owner's OK.
-  for (const text of ['prerequisites_missing', 'already_applied true', pin.intended_replacement_sha256, 'verified_live', releaseStateHash(KEY, {}),
-    "needs the owner's OK"]) {
-    assert.ok(pin.production_inspect.note.includes(text), text);
+  // Verified live (owner 2026-11-11: "run the read-only SQL 155 production inspect", then "record the SQL 155 production
+  // verified_live"): production already had the intended state (applied there directly on 2026-09-22 from PR #429).
+  const inspect = pin.production_inspect;
+  assert.deepEqual([inspect.status, inspect.date, inspect.ssm_command_id, inspect.source_commit, inspect.read_only, inspect.connected_as],
+    ['recorded', '2026-11-11', '373a7d5c-32b9-49f4-86c0-9ab41537f542', '18d9ddbafd1e496e2de9abe7dae3716fa3c31d4e', true, 'checksops_admin']);
+  assert.equal(inspect.live_definition_sha256, pin.intended_replacement_sha256);
+  assert.equal(inspect.already_applied, true);
+  assert.equal(inspect.apply_preconditions_met, false);
+  assert.deepEqual(inspect.precondition_failures, []);
+  for (const text of ['3db836c724c75e2215de960c7424798839a3adbfb8bd7a8175c7e9e224f848b5', 'transfer run 43083324864', `== source_sha256`,
+    '"run the read-only SQL 155 production inspect"', 'already_applied true', 'precondition_failures []', '#429', 'not an apply record',
+    // The earlier pending note is kept.
+    ' Earlier: Pending: no release-engine production inspect has been run for SQL 155 yet', releaseStateHash(KEY, {})]) {
+    assert.ok(inspect.note.includes(text), text);
   }
+  assert.match(pin.order_note, /Production is a no-op \(spec production_noop, as SQL 100\)/);
+  // The staging apply is named in the basis; ok stays false (the pin never becomes execute true).
   assert.deepEqual([pin.staging_acceptance.ok, pin.staging_acceptance.reference], [false, null]);
-  assert.match(pin.staging_acceptance.basis, /read-live and the staging apply \(or read-live already_applied\) of SQL 155/);
+  for (const text of ['43082131132', '43082578726', releaseStateHash(KEY, {}), pin.intended_replacement_sha256]) {
+    assert.ok(pin.staging_acceptance.basis.includes(text), text);
+  }
   assert.equal(pin.filename, SQL155_FILE);
   assert.equal(pin.source_sha256, staging.source_sha256);
   assert.equal(pin.staging_pin_commit, staging.commit);
@@ -165,6 +181,7 @@ test('order: no predecessor; two DEFINER functions with their ACLs and the trigg
   assert.deepEqual(spec.predecessors, []);
   assert.equal(spec.supersedes, undefined);
   assert.equal(spec.production_only, undefined);
+  assert.equal(spec.production_noop, true);
   assert.deepEqual(spec.functions.map((fn) => [fn.identity, fn.acl]), Object.entries(ACLS));
   assert.deepEqual(spec.functions.filter((fn) => fn.revokes !== undefined), []);
   for (const name of ['public.claims', 'column public.claims.org_id', 'column public.tenants.slug', 'auth.uid()', 'public.aws_is_cross_tenant_reader()', 'role checksops', 'role authenticated']) {
@@ -200,7 +217,7 @@ test('order: no predecessor; two DEFINER functions with their ACLs and the trigg
     '#429', '6a05191a3', 'verified_live']) {
     assert.ok(runbook.includes(value), value);
   }
-  assert.match(runbook, /\*\*Status:\*\* staging pin execute-authorized \(wave 47\); not applied anywhere\. The production pin is pending\./);
+  assert.match(runbook, /\*\*Status:\*\* applied to staging \(wave 47, 2026-11-11\); production verified live \(2026-11-11, already as intended; nothing applied there\)\./);
   assert.ok(runbook.replace(/\s+/g, ' ').includes('"Keep it, adopt it through the guarded path"'));
   const oneShot = fs.readFileSync(path.join(ROOT, 'ops/production-sql-one-shot.md'), 'utf8');
   assert.match(oneShot, /\| `sql155` \|/);

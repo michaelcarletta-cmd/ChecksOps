@@ -135,7 +135,7 @@ test('pin: SQL 155 staging-authorized from its read-live, code-derived, selectab
   // The runbook names the absent and intended states (derived here), the intended fingerprint and the source.
   const runbook = fs.readFileSync(path.join(ROOT, 'ops/production-sql-155-apply.md'), 'utf8');
   for (const value of [ABSENT, pin.intended_replacement_sha256, pin.source_sha256]) assert.ok(runbook.includes(value), value);
-  assert.match(runbook, /\*\*Status:\*\* staging pin execute-authorized \(wave 47\); not applied anywhere\. The production pin is pending\./);
+  assert.match(runbook, /\*\*Status:\*\* applied to staging \(wave 47, 2026-11-11\); production verified live \(2026-11-11, already as intended; nothing applied there\)\./);
   assert.match(runbook, /read-live \(2026-11-11\)\.\*\* Run 43077253195/);
   assert.ok(runbook.includes(`\`\`\`\n${releaseStateText(KEY, releaseIntendedState(KEY, TEXT))}\n\`\`\``));
   assert.ok(runbook.includes(`\`\`\`\n${releaseStateText(KEY, {})}\n\`\`\``));
@@ -149,6 +149,8 @@ test('pin: SQL 155 staging-authorized from its read-live, code-derived, selectab
   assert.deepEqual([...pin.function_identities], spec.functions.map((fn) => fn.identity));
   assert.deepEqual(spec.predecessors, []);
   for (const absent of ['supersedes', 'runs_before', 'refuse_after', 'production_only']) assert.equal(spec[absent], undefined, absent);
+  // Production already had the intended state: the production tool never runs the file there (as SQL 100).
+  assert.equal(spec.production_noop, true);
   // Nothing supersedes, refuses after or depends on SQL 155, and no other release migration touches its objects.
   assert.deepEqual(RELEASE_SQL_KEYS.filter((key) => (RELEASE_SQL_SPECS[key].supersedes || []).includes(KEY)
     || (RELEASE_SQL_SPECS[key].refuse_after || []).some((m) => m.key === KEY)
@@ -171,7 +173,8 @@ test('pin: SQL 155 staging-authorized from its read-live, code-derived, selectab
   assert.equal(prod.authorization, 'pending');
   assert.equal(prod.authorization_phrase, 'ADOPT_CLAIM_OWNER_ORG_STAMP');
   assert.equal(prod.expected_live_definition_sha256, null);
-  assert.equal(prod.production_inspect.status, 'pending');
+  assert.equal(prod.production_inspect.status, 'recorded');
+  assert.equal(prod.production_inspect.live_definition_sha256, pin.intended_replacement_sha256);
   assert.equal(prod.staging_acceptance.ok, false);
   assert.ok(prod.production_inspect.note.includes(ABSENT));
   assert.ok(prod.production_inspect.note.includes(pin.intended_replacement_sha256));
