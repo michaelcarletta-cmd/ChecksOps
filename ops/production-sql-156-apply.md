@@ -25,7 +25,18 @@ db-readonly-validate trigger count is not affected. No API, Lambda or SPA change
 action and the storage signer consulting the new path check) and the Desk page ship afterwards through their own guarded
 paths.
 
-**Status:** staging pin execute-authorized (wave 48); not applied anywhere. The production pin is pending.
+**Staging apply (2026-11-11).** After the staging pin (#1789) and executor deploy run 43113284610 (main `830cc142c`): read-live
+run 43114397318 `44259316…`, apply run 43114784372 under the owner's words "apply SQL 156 in staging" (receipt `44259316…` →
+`5f40695d…`, result `applied`), read-live run 43115143552 `already_applied` true. (An earlier attempt stopped before any database
+call: read-live run 43112542748 was refused because main moved under the run, #1790.)
+
+**Production inspect (2026-11-11).** Read-only, under the owner's words "run the read-only SQL 156 production inspect": transfer run
+43115925963 staged main `830cc142c` (tarball `4f284e7f…`, the SQL 156 file on the runner `e30e20d5…` == the pin), SSM
+`c2003f73-ac62-4706-888f-cbc4dea08a27` on the runner (started 22:58:13Z, stopped 22:58:55Z): live `44259316…` (both functions absent), `already_applied`
+false, `precondition_failures` `[]`, `prerequisites_missing` `[]`, `definer_writes` ok on all four relations.
+
+**Status:** applied to staging (wave 48, 2026-11-11); production pin execute-authorized (owner-approved pin change of 2026-11-11,
+"record the SQL 156 production pin"); not applied to production. The production apply still needs the owner's words for that run.
 
 **Staging read-live (2026-11-11).** Run 43107339208 (job 130813991426, main `79e55a79a`, after executor deploy run
 43106587111, inspect runs 43106173690 and 43107000432), under the owner's words "Redeploy the staging executor and run
