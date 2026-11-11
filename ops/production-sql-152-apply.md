@@ -36,7 +36,8 @@ Lambda overlay, after this apply.
 **Predecessor.** None (as SQL 120 for SQL 98): the prerequisites are the file's own, SQL 120's trigger function among
 them. SQL 151 (the Starter Package) needs SQL 152 and must not be applied before it.
 
-**Status:** applied in staging (wave 45, 2026-11-11); staging acceptance: the staging apply under the owner's run approval ("apply SQL 152 in staging"; no separate acceptance statement); production pin execute-authorized; not applied to production.
+**Status:** applied to staging (wave 45) and to production (2026-11-11); the production pin is retired
+(`execute: false`).
 
 **Staging read-live (2026-11-11).** Run 42945948226 (job 130278663761, main `6d19dad33`, after executor deploy run
 42945571224, inspect run 42945146098), under the owner's words "apply SQL 152 in staging": `already_applied` false,
@@ -74,6 +75,29 @@ Production's pre-state equals staging's (read-live run 42945948226), so the stag
 Recorded in the production pin with the staging apply (run 43005316840) as its staging acceptance and `execute: true`
 under the owner's words "record the SQL 152 production pin". The owner merges the pin change; the apply runs only after
 that merge is on main and staged, under the owner's words for that run.
+
+**Production apply (2026-11-11).** After the pin change (#1763, on the staging apply run 43005316840; merged to main as
+`b5a354925` on the owner's words "merge it when green and apply SQL 152 in production"), transfer run 43009615137 staged
+main `b5a354925` (tarball sha256 `8a6588ad8b8cd90c50c610be63ed4e9316aaab1975031499643b9e9208ebdd29`). The runner
+`i-0c35557c4e5385406` was started at 11:16:43Z; three AWS-managed SSM commands were already in progress on it
+(`AWS-ConfigureAWSPackage`, `AmazonInspector2-ConfigureInspectorSsmPlugin`,
+`AmazonInspector2-ConfigureInspectorSsmPluginLinux`); they were reported to the owner, who answered "Proceed". Under the
+owner's words "merge it when green and apply SQL 152 in production" (passed verbatim), a one-shot `--phase inspect` (SSM
+`bd06cdd2-a497-47a5-b35a-e87f3c1b09de`, run `468607d9-8ea0-486d-944d-823cefbb6891`, nothing written) read live
+`99c39136…` (the pinned pre-state, `live_matches_expected` true, `precondition_failures` `[]`); then one-shot
+`--phase apply` run `02469480-67b5-4d0c-b451-12b1ad103907` through SSM `cae61362-0534-417e-b45c-a8d6175ce3a2`, workstream
+`prod-sql152-invoice-and-failed-deposit-fees-20261111`, one_use_id `sql152-prod-a441e0c6-5be7-468e-b45a-5ea23bd1ba89`:
+contracts 4/4, 6/6 and 43/43; all 11 steps ok; manifest `8b3a1570…`; receipt `99c39136…` →
+`6cf7d044d2db1e3e14f44815a573348b4180345d8fecc67079a95d480378ffce` (intended), result `applied`, unrelated catalog
+`63f88a7f…`; post-apply inspect `already_applied` true, `precondition_failures` `[]`, `prerequisites_missing` `[]`, the
+table, the five functions (EXECUTE for the owner only), the two triggers, the index and the four columns `intended`,
+`definer_writes` `check_billing_events` ok. The runner was stopped at 11:18:09Z. The run's JSON did **not** arrive whole:
+the SSM output is capped at 24000 characters and was cut inside the printed `applied.receipt`. The top-level `details`
+arrived whole, so the record takes `receipt` and `post_apply_inspect` from `details.apply_result` and
+`details.post_apply_inspect`; the rest of the printed `applied` object and anything printed after it (the run's
+`not_observed_by_this_run`, warnings, errors) were not observed. `tenant-fee-invoice-email.mjs` (sql_before SQL 152) is
+not deployed by this record. Production acceptance had not been reported by the owner when this record was written; this
+record does not claim it.
 
 ## Fingerprint
 
