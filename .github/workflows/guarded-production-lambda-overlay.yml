@@ -18,7 +18,6 @@ on:
         required: true
         type: choice
         options:
-          - db-readonly-validate.mjs
           - providers/production/checkalt-eligibility.mjs
           - write-claim-settlement.mjs
           - financial-remaining.mjs
@@ -116,6 +115,7 @@ on:
           - tenant-fee-invoice-email.mjs
           - tenant-billing-engine.mjs
           - tenant-billing-handlers.mjs
+          - db-readonly-validate.mjs
           - write-check-workflow.mjs
           - providers/production/moov-invoice.mjs
           - providers/parity/platform-finance.mjs
