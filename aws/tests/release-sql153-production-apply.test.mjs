@@ -147,10 +147,14 @@ test('pin: the release pin shape, pending, in step with the staging pin, the one
   assert.match(rows, /sql150, sql152, sql153, sql154, sql155, sql156\)/);
   const scripts = readJson('package.json').scripts;
   const workflow = fs.readFileSync(path.join(ROOT, '.github/workflows/deployment-guard.yml'), 'utf8');
-  for (const name of ['aws/tests/release-sql153-executor.test.mjs', 'aws/tests/release-sql153-production-apply.test.mjs', 'aws/tests/sql153-second-mortgagee-fee-pg.test.mjs']) {
+  for (const name of ['aws/tests/release-sql153-executor.test.mjs', 'aws/tests/release-sql153-production-apply.test.mjs']) {
     assert.ok(scripts['test:deployment-guard'].includes(name), name);
     assert.ok(workflow.includes(name), name);
   }
+  // As for SQL 154's: sql153-second-mortgagee-fee-pg.test.mjs imports the billing engine and the fee invoice email, which
+  // need the API's dependencies (@aws-sdk/client-ses), and the deployment-guard job installs only pg; it runs in the full
+  // suite (aws-migration-guards), which installs them.
+  for (const text of [scripts['test:deployment-guard'], workflow]) assert.ok(!text.includes('sql153-second-mortgagee-fee-pg.test.mjs'));
 });
 
 test('order: no predecessor; the index and two columns, no function; the event_type CHECK step not modelled and required absent; no overlay plan entry; the runbook, one-shot doc and README name it', () => {
