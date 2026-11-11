@@ -5,7 +5,7 @@
  * aws/rls/sql/39_claim_owner_org.sql of the unmerged PR #429).
  * release-sql90-97-executor.test.mjs runs what every release key shares (SQL 155 included); this file covers what is new:
  *
- *   - the pin: pending, code-derived, selectable, packed, in step with the pending production pin; the pinned commit
+ *   - the pin: staging-authorized (wave 47) from staging read-live run 43077253195, code-derived, selectable, packed, in step with the pending production pin; the pinned commit
  *     authored the bytes; no predecessor, supersedes nothing;
  *   - the file and spec: two DEFINER functions (EXECUTE authenticated, checksops and the owner) and the trigger on
  *     claims; no other release migration touches them; the everything-absent state and the intended state derived;
@@ -111,7 +111,7 @@ function handlerFor(connect, { pins = {} } = {}) {
 // tenants.slug, which the release fixture lacks (production's tenants has it).
 const SLUG_SCHEMA = 'ALTER TABLE public.tenants ADD COLUMN IF NOT EXISTS slug text;';
 
-test('pin: SQL 155 pending, code-derived, selectable, packed, in step with the pending production pin; no predecessor', () => {
+test('pin: SQL 155 staging-authorized from its read-live, code-derived, selectable, packed, in step with the pending production pin; no predecessor', () => {
   const pin = PINS[KEY];
   const spec = RELEASE_SQL_SPECS[KEY];
   const packed = Object.fromEntries(EXECUTOR_PACK_MEMBERS);
@@ -122,17 +122,21 @@ test('pin: SQL 155 pending, code-derived, selectable, packed, in step with the p
   assert.equal(spec.choice, 'sql155-claim-owner-org-stamp');
   assert.doesNotMatch(spec.choice, /production/);
   assert.equal(sha(TEXT), pin.source_sha256);
-  // Pending until a reviewed pin change records a staging read-live.
+  // Staging apply authorized (owner approved 2026-11-11, "Record the SQL 155 staging pin and merge it when green") from
+  // staging read-live run 43077253195: already_applied false, precondition_failures []. It read the derived state
+  // (everything SQL 155 creates absent).
   assertStagingPinState(assert, KEY, pin);
-  assert.equal(pin.execute, false);
-  assert.equal(pin.authorization, 'pending');
-  assert.equal(pin.expected_live_definition_sha256, null);
+  assert.equal(pin.execute, true);
+  assert.equal(pin.authorization, 'Owner approved 2026-11-11: staging apply (wave 47) from staging read-live run 43077253195');
+  assert.equal(pin.expected_live_definition_sha256, ABSENT);
   assert.equal(releaseIntendedHash(KEY, TEXT), pin.intended_replacement_sha256);
   assert.notEqual(ABSENT, pin.intended_replacement_sha256);
   assert.ok(RELEASE_STAGING_SQL_KEYS.includes(KEY));
   // The runbook names the absent and intended states (derived here), the intended fingerprint and the source.
   const runbook = fs.readFileSync(path.join(ROOT, 'ops/production-sql-155-apply.md'), 'utf8');
   for (const value of [ABSENT, pin.intended_replacement_sha256, pin.source_sha256]) assert.ok(runbook.includes(value), value);
+  assert.match(runbook, /\*\*Status:\*\* staging pin execute-authorized \(wave 47\); not applied anywhere\. The production pin is pending\./);
+  assert.match(runbook, /read-live \(2026-11-11\)\.\*\* Run 43077253195/);
   assert.ok(runbook.includes(`\`\`\`\n${releaseStateText(KEY, releaseIntendedState(KEY, TEXT))}\n\`\`\``));
   assert.ok(runbook.includes(`\`\`\`\n${releaseStateText(KEY, {})}\n\`\`\``));
   assert.ok(AUTHORIZED_STAGING_SQL.includes(pin));

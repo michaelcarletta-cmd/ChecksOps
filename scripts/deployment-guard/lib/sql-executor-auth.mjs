@@ -3513,7 +3513,8 @@ export const AUTHORIZED_SQL154_TENANT_STARTER_PACKAGE = Object.freeze({
 // claims.org_id stamp that production already runs (applied there directly on 2026-09-22 from the unmerged PR #429,
 // aws/rls/sql/39_claim_owner_org.sql at 6a05191a3): aws_claim_owner_tenant_id(), aws_stamp_claim_org_id() and the
 // trigger trg_aws_stamp_claim_org_id on claims, the file's text byte for byte after SQL 155's prerequisite check.
-// Pending until a reviewed pin change records a staging read-live.
+// Staging apply authorized (wave 47) from staging read-live run 43077253195: staging has none of SQL 155's objects
+// (both functions and the trigger absent), equal to the derived state (ops/production-sql-155-apply.md).
 export const AUTHORIZED_SQL155_CLAIM_OWNER_ORG_STAMP = Object.freeze({
   key: 'sql155',
   filename: 'aws/workflows/sql/155_claim_owner_org_stamp.sql',
@@ -3521,9 +3522,11 @@ export const AUTHORIZED_SQL155_CLAIM_OWNER_ORG_STAMP = Object.freeze({
   // The commit that last authored the file bytes.
   commit: '0c14fc5aedf3c16a7bbddaf3d25a8e4e6ef848d7',
   source_sha256: '847b2e6710050f2ce3ad35289d3ccd2ef72a36b2985881a5039a716d6c60c203',
-  authorization: 'pending',
-  execute: false,
-  expected_live_definition_sha256: null,
+  authorization: 'Owner approved 2026-11-11: staging apply (wave 47) from staging read-live run 43077253195',
+  execute: true,
+  // Staging read-live run 43077253195 (main d0548d4af, executor deploy run 43076433402): already_applied false,
+  // precondition_failures []. Equal to the derived state (everything SQL 155 creates absent).
+  expected_live_definition_sha256: 'd63969e2ef8e5c809f2e107c41b61d87b3bedba5fe7a059b2dabb66f65604f54',
   // Code-derived: releaseIntendedHash('sql155', file bytes) (release-sql-state.mjs); re-derived by the tests.
   intended_replacement_sha256: 'd65fcff93a2b9da222dc0fc40118f312c6df3b92d80ab9b7bbec6ed19d448609',
   function_identities: Object.freeze([
