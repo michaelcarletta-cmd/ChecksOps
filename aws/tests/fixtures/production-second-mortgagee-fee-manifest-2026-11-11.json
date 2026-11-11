@@ -1,0 +1,23 @@
+{
+  "workstream_id": "second-mortgagee-fee",
+  "authorization": "Pending owner review (2026-11-11). Planning only: nothing is live or verified. Each production apply needs its own owner approval, a staging acceptance reference and a read-only production inspect that confirms the live bytes.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Second mortgage company fee (owner 2026-11-10/11: \"For 2 mortgage companies in check charge $5 for the additional mortgage company.\", \"Flat $5\", \"Option A and it should be an additional $5 if 2 mortgage companies are on check\", then \"Merge it\" and \"Yes\" to combining it with the pending billing plans): a check with two mortgage companies (SQL 148, endorsement_order 2) gets its normal Mortgage Ops charge plus one flat $5 mortgage_ops_second_mortgagee event, recorded when the 2nd company's request is accepted; SQL 153 adds the one-per-check index and the invoice breakdown columns. REPLACE tenant-billing-engine.mjs 32cc099e -> 5859fc13: the Starter Package bytes (f0a7defd, never applied, which keep the usage fees plan's) plus the $5 accrual copy, the monthly invoice line \"Mortgage Ops: 2nd mortgage company\" and the SQL 153 columns on the booked row. REPLACE tenant-fee-invoice-email.mjs c7c1921b -> 21cd87fc: the usage fees bytes (ed6a66b4, never applied) plus that line. Holds unchanged: the engine on SQL 151, the email on SQL 152. The $5 code is inert until SQL 153's index exists: the accrual records the new type only once public.check_billing_events_one_second_mortgagee_per_check exists, the invoice reads no such event before then, and the booked row writes the SQL 153 columns only when the period has the fee. Pre-state: the engine's fee pull savepoints applied bytes (2026-11-06, run 42303279340) and the email's fee collection bytes; a read-only production inspect must confirm each first. mortgage-ops-usage.mjs (the accrual workflow-rpc.mjs calls) is not an overlay member: it reaches a function only with a rebuild, so the $5 is recorded in production only after a rebuild that carries it (and SQL 153). No new import; order unchanged. The website change (fee schedule row, usage label) ships with the SPA. Planning only.",
+  "members": {
+    "tenant-fee-invoice-email.mjs": {
+      "live_sha256": "c7c1921bd6be6d311f1d81235911f79a55f0d1bbd1f7b4f9a5365d1324052dc2",
+      "accepted_sha256": "21cd87fc142571b6c0d9f855e0586f3d6a160f7f47423f762210e90becab8d89",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-fee-collection-pin-manifest-2026-10-17.json",
+      "supersedes_unapplied_manifest": "aws/tests/fixtures/production-usage-fees-manifest-2026-11-10.json"
+    },
+    "tenant-billing-engine.mjs": {
+      "live_sha256": "32cc099e9dcd448921fcb0d36d7893d25195c2dee58b0faafb1b5c78ce6c1310",
+      "accepted_sha256": "5859fc13399bad9c8f603fee893819ca330f074e7e7c63773beda7899f59a4c8",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-fee-pull-savepoints-applied-manifest-2026-11-06.json",
+      "supersedes_unapplied_manifest": "aws/tests/fixtures/production-starter-package-manifest-2026-11-10.json"
+    }
+  }
+}

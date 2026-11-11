@@ -183,6 +183,15 @@ const CHANGED_SINCE_FOURTH_PRODUCTION_REBUILD = new Set([
   'tenant-collection-v2.mjs',
   // Starter Package (2026-11-10, SQL 151, planning only): tenant-billing-admin update passes starter_package.
   'tenant-billing-handlers.mjs',
+  // Second mortgage company fee (2026-11-11, SQL 153, planning only): the 2nd company's accept records the check's
+  // normal charge and the flat $5. Not an overlay member: it reaches a function only with a rebuild.
+  'mortgage-ops-usage.mjs',
+]);
+// Members of the fourth staging section (accepted, inspect 41311016111) that main changed since: the section keeps
+// the accepted hash it recorded as evidence; the new bytes need a later rebuild.
+const CHANGED_SINCE_FOURTH_STAGING_SECTION = new Set([
+  // Second mortgage company fee (2026-11-11, SQL 153, planning only).
+  'mortgage-ops-usage.mjs',
 ]);
 // Of those, the members whose overlay REPLACE has since been applied in production and recorded: the row expects main's
 // bytes and names the applied record, whose previous_manifest (the planning manifest) started from the rebuild's bytes.
@@ -592,10 +601,12 @@ test('the production plan section accepts inspect run 41463084601 and records ap
       if (name === 'tenant-billing-engine.mjs' && [
         'aws/tests/fixtures/production-usage-fees-manifest-2026-11-10.json',
         'aws/tests/fixtures/production-starter-package-manifest-2026-11-10.json',
+        'aws/tests/fixtures/production-second-mortgagee-fee-manifest-2026-11-11.json',
       ].includes(row.manifest)) {
         // Moved on twice: the fee pull savepoints REPLACE from the rebuild's bytes, applied 2026-11-06 (its applied
         // record), then the usage fees REPLACE (SQL 149, 2026-11-10, planning only) from those applied bytes, which the
-        // Starter Package REPLACE (SQL 151, planning only) supersedes from the same applied bytes.
+        // Starter Package REPLACE (SQL 151, planning only) supersedes from the same applied bytes, and the second
+        // mortgagee fee REPLACE (2026-11-11, planning only) supersedes in turn.
         const recorded = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, appliedRel), 'utf8')).members[name];
         const planned = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, recorded.previous_manifest), 'utf8')).members[name];
         assert.equal(planned.live_sha256, entry.accepted_sha256, name);
@@ -605,7 +616,13 @@ test('the production plan section accepts inspect run 41463084601 and records ap
         const usageFees = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, row.manifest), 'utf8')).members[name];
         const { supersedes_unapplied_manifest: superseded, ...planned2 } = usageFees;
         assert.deepEqual(planned2, { live_sha256: recorded.accepted_sha256, accepted_sha256: row.accepted_sha256, operation: 'replace', previous_manifest: appliedRel }, name);
-        if (superseded) assert.equal(superseded, 'aws/tests/fixtures/production-usage-fees-manifest-2026-11-10.json', name);
+        if (row.manifest === 'aws/tests/fixtures/production-second-mortgagee-fee-manifest-2026-11-11.json') {
+          assert.equal(superseded, 'aws/tests/fixtures/production-starter-package-manifest-2026-11-10.json', name);
+          const starter = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, superseded), 'utf8')).members[name];
+          assert.deepEqual([starter.live_sha256, starter.previous_manifest, starter.supersedes_unapplied_manifest],
+            [recorded.accepted_sha256, appliedRel, 'aws/tests/fixtures/production-usage-fees-manifest-2026-11-10.json'], name);
+          assert.notEqual(starter.accepted_sha256, row.accepted_sha256, name);
+        } else if (superseded) assert.equal(superseded, 'aws/tests/fixtures/production-usage-fees-manifest-2026-11-10.json', name);
         continue;
       }
       if (name === 'tenant-billing-handlers.mjs') {
@@ -830,9 +847,12 @@ test('the staging plan section accepts inspect run 41311016111: the money-write 
   assert.equal(staging.inspect.removed, 0);
   assert.deepEqual(staging.inspect.dependency_counts, { live: 54, candidate: 54 });
   const apiRoot = path.join(REPO_ROOT, 'aws/functions/api');
-  // Accepted is main's bytes: the money-write flag (#1498) in the three files that are not overlay members.
+  // Accepted is main's bytes: the money-write flag (#1498) in the three files that are not overlay members, unless
+  // main changed the member since (listed).
   for (const [name, entry] of Object.entries(section.members)) {
-    assert.equal(sha256(fs.readFileSync(path.join(apiRoot, name))), entry.accepted_sha256, name);
+    const onMain = sha256(fs.readFileSync(path.join(apiRoot, name)));
+    if (CHANGED_SINCE_FOURTH_STAGING_SECTION.has(name)) assert.notEqual(onMain, entry.accepted_sha256, `${name} is listed as changed but main still has the accepted bytes`);
+    else assert.equal(onMain, entry.accepted_sha256, name);
     assert.notEqual(entry.live_sha256, entry.accepted_sha256, name);
     assert.ok(OVERLAY_PLAN_CHANGES.has(name), name);
   }
