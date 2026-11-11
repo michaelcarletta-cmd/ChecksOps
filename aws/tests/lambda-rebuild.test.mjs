@@ -558,7 +558,16 @@ test('the production plan section accepts inspect run 41463084601 and records ap
   // check-endorsement.mjs: production runs 85f4bec4 (main's bytes at the third rebuild's commit), the row records 7c6ae301.
   const overlay = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'ops/deployment-guard/production-api-overlay-plan.json'), 'utf8'));
   for (const [name, entry] of Object.entries(section.members)) {
-    const row = overlay.members[name];
+    // The production record of 2026-11-11 (tenant-billing-engine.mjs, tenant-billing-handlers.mjs and two other members
+    // applied, VERIFIED) moved those rows to their applied records; the checks below read each row as it stood before
+    // that record: the applied record's planning manifest and its live bytes.
+    let row = overlay.members[name];
+    if (row && /-applied-manifest-2026-11-11\.json$/.test(row.manifest) && /second-mortgagee-fee|starter-package/.test(row.manifest)) {
+      const applied = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, row.manifest), 'utf8')).members[name];
+      assert.deepEqual([applied.live_sha256, applied.accepted_sha256], [row.accepted_sha256, row.accepted_sha256], name);
+      const planned0 = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, applied.previous_manifest), 'utf8')).members[name];
+      row = { ...row, expected_live_sha256: planned0.live_sha256, manifest: applied.previous_manifest };
+    }
     if (!row) { assert.ok(['invoice-provider.mjs', 'mortgage-ops-usage.mjs', 'tenant-collection-v2-uat.mjs'].includes(name), name); continue; }
     if (CHANGED_SINCE_FOURTH_PRODUCTION_REBUILD.has(name)) {
       // The row moved on after the rebuild: main's bytes accepted, the bytes the rebuild put live expected ...

@@ -1,0 +1,15 @@
+{
+  "workstream_id": "second-mortgagee-fee-invoice-email-applied",
+  "authorization": "Record only (2026-11-11): the bytes below are live. Nothing is planned or authorized by this manifest; any later change to these members needs its own manifest, staging acceptance and owner approval.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Invoice email with the usage fee and 2nd mortgage company lines (planned by the second mortgagee fee manifest) applied. Owner 2026-11-11: \"apply to staging first if needed, then production\", \"yes, use the inspect run43093570364 as its staging acceptance\" and \"DEPLOY tenant-fee-invoice-email.mjs TO PRODUCTION\". Applied 2026-11-11 from main 18def15628ca7e64467775250c2fbe2d49948cf1 (the #1784 merge). tenant-fee-invoice-email.mjs REPLACE c7c1921b -> 21cd87fc: staging held 21cd87fc already (no staging apply run on record); staging inspect run 43093570364 (job 130776568314; 21cd87fc live, /health, /db-health and /db-readonly-validate 200) is the staging acceptance the owner accepted as substitute evidence. Production inspect run 43094140385 (job 130778520194; READY, c7c1921b live, RevisionId b0849457-dcab-497d-8fb7-98837bb279e7, CodeSha256 70Wc3+LpnouyRYL21ipZFJUQQnfbGldR28ThkZHu12I=); production apply run 43094320664 (job 130779127932; workstream github-production-overlay-43094320664) on the owner's \"DEPLOY tenant-fee-invoice-email.mjs TO PRODUCTION\" with staging acceptance https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43093570364, expected live c7c1921b, errors [], replaced [tenant-fee-invoice-email.mjs], VERIFIED (\"Verify live member is the accepted bytes\"), after CodeSha256 umKgSZ1X45ovqNl7LoySKiIFTMi56vc9i1V9xUliyFI=, RevisionId ce8de275-ca10-4ae7-916a-599f24fb5da1, public production smoke /health and /db-health 200; re-inspect run 43094587614 (job 130780032245) read 21cd87fc live (ALREADY_ACCEPTED, same RevisionId). Its hold, SQL 152, is recorded live. The record keeps the applied bytes as live_sha256 and accepted_sha256 and chains the member to the manifest that planned it (previous_manifest), which keeps the pre-apply state. Production acceptance was not reported by the owner when this record was written; this record does not claim it.",
+  "members": {
+    "tenant-fee-invoice-email.mjs": {
+      "live_sha256": "21cd87fc142571b6c0d9f855e0586f3d6a160f7f47423f762210e90becab8d89",
+      "accepted_sha256": "21cd87fc142571b6c0d9f855e0586f3d6a160f7f47423f762210e90becab8d89",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-second-mortgagee-fee-manifest-2026-11-11.json"
+    }
+  }
+}
