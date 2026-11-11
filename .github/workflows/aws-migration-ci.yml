@@ -58,8 +58,33 @@ jobs:
       - name: Verify publishable-key boundary
         run: bun run check:publish-keys
 
-      - name: Install PDF rasterizer for signature placement tests
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends poppler-utils
+      # pdftoppm (poppler) renders PDFs for the signature placement tests. Ubuntu's apt mirrors are the
+      # usual source; when they cannot be reached (as on 2026-11-11, when DNS for the Ubuntu archive failed
+      # on the hosted runners), install the same tool from conda-forge instead. The tests always run
+      # against a real pdftoppm: the last step fails the job if neither source provided it.
+      - name: Install PDF rasterizer for signature placement tests (Ubuntu apt)
+        id: poppler_apt
+        continue-on-error: true
+        timeout-minutes: 6
+        run: |
+          sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 update
+          sudo apt-get -o Acquire::Retries=2 install -y --no-install-recommends poppler-utils
+
+      - name: Install PDF rasterizer for signature placement tests (conda-forge fallback)
+        if: steps.poppler_apt.outcome != 'success'
+        timeout-minutes: 8
+        run: |
+          set -euo pipefail
+          echo "::warning::Ubuntu apt mirror unavailable; installing poppler from conda-forge"
+          mkdir -p "$RUNNER_TEMP/micromamba"
+          curl -fsSL --retry 3 https://micro.mamba.pm/api/micromamba/linux-64/latest | tar -xj -C "$RUNNER_TEMP/micromamba" bin/micromamba
+          "$RUNNER_TEMP/micromamba/bin/micromamba" create -y -p "$RUNNER_TEMP/poppler" -c conda-forge --override-channels poppler
+          echo "$RUNNER_TEMP/poppler/bin" >> "$GITHUB_PATH"
+
+      - name: Verify PDF rasterizer
+        run: |
+          command -v pdftoppm
+          pdftoppm -v || true
 
       - name: Run AWS API/provider regression suite
         run: bun run test:aws-api
