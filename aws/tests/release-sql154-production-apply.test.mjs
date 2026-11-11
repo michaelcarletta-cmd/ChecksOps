@@ -307,7 +307,7 @@ test('order: predecessor SQL 102 (supersedes SQL 102 and SQL 98); four functions
   const validator = fs.readFileSync(path.join(ROOT, 'aws/functions/api/db-readonly-validate.mjs'), 'utf8');
   assert.match(validator, /table: 'check_billing_events',\n\s+trigger: 'aws_check_billing_event_starter_package',\n\s+functionName: 'aws_apply_starter_package_to_event'/);
   assert.match(validator, /table: 'tenants',\n\s+trigger: 'aws_tenant_starter_package_audit',\n\s+functionName: 'aws_tenant_starter_package_audit_row'/);
-  assert.match(validator, /export const EXPECTED_PUBLIC_TRIGGERS = 189;/);
+  assert.match(validator, /export const EXPECTED_PUBLIC_TRIGGERS = 190;/);
   assert.deepEqual(Object.keys(plan.members).filter((m) => plan.members[m].sql_before === SQL154_FILE).sort(), ['db-readonly-validate.mjs', 'tenant-billing-engine.mjs', 'tenant-billing-handlers.mjs']);
   assert.equal(plan.sql_prerequisites[SQL151_FILE], undefined);
   assert.equal(readJson('ops/deployment-guard/staging-sql-live.json').sql[SQL151_FILE], undefined);

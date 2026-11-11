@@ -92,6 +92,11 @@ const VALIDATOR_SQL152_APPLIED_REL = 'aws/tests/fixtures/production-db-validator
 // (its own test); SQL 154 is applied in staging only. Those applied bytes are the planned manifest's live_sha256, no longer main's.
 const VALIDATOR_SQL154_REL = 'aws/tests/fixtures/production-db-validator-sql154-trigger-manifest-2026-11-11.json';
 const VALIDATOR_SQL154 = JSON.parse(fs.readFileSync(path.join(ROOT, VALIDATOR_SQL154_REL), 'utf8'));
+// DB validator SQL 155 trigger (2026-11-11): db-readonly-validate.mjs REPLACEs the SQL 152 applied bytes with main's,
+// planning only (its own test). It supersedes the SQL 154 validator plan, whose bytes (25d0ee50) were never applied to
+// production; both manifests record the same live_sha256, the SQL 152 applied bytes.
+const VALIDATOR_SQL155_REL = 'aws/tests/fixtures/production-db-validator-sql155-trigger-manifest-2026-11-11.json';
+const VALIDATOR_SQL155 = JSON.parse(fs.readFileSync(path.join(ROOT, VALIDATOR_SQL155_REL), 'utf8'));
 // Payroll send applied 2026-11-04 (production run 41937571704): the row expects main's bytes and names this record.
 const PAYROLL_SEND_APPLIED_REL = 'aws/tests/fixtures/production-payroll-send-applied-manifest-2026-11-04.json';
 // Security audit finding 3 (2026-10-29): planned REPLACE of storage-write-auth.mjs, then storage-write.mjs.
@@ -3906,7 +3911,7 @@ test('DB validator SQL 123 trigger: db-readonly-validate.mjs replaced the bytes 
   // 143 validator (production run 42058917794, 2026-11-05) replaced these bytes, then the SQL 152 validator (production
   // run 43034879124, 2026-11-11) replaced those, and the row is now the SQL 154 validator plan (2026-11-11), which
   // expects the SQL 152 applied bytes live.
-  assert.deepEqual(PLAN.members[MEMBER], { operation: 'replace', accepted_sha256: sha(`aws/functions/api/${MEMBER}`), expected_live_sha256: VALIDATOR_SQL154.members[MEMBER].live_sha256, sql_before: 'aws/workflows/sql/154_tenant_starter_package.sql', manifest: VALIDATOR_SQL154_REL });
+  assert.deepEqual(PLAN.members[MEMBER], { operation: 'replace', accepted_sha256: sha(`aws/functions/api/${MEMBER}`), expected_live_sha256: VALIDATOR_SQL154.members[MEMBER].live_sha256, sql_before: 'aws/workflows/sql/154_tenant_starter_package.sql', manifest: VALIDATOR_SQL155_REL });
   // Staging overlay 40739554272, pre-apply inspect 40743427458, apply 40743616203 (VERIFIED), rebuild inspect 40741101459.
   const appliedManifest = JSON.parse(fs.readFileSync(path.join(ROOT, APPLIED_REL), 'utf8'));
   assert.equal(appliedManifest.workstream_id, 'production-db-validator-sql123-trigger-applied');
@@ -4001,7 +4006,7 @@ test('DB validator SQL 143 trigger (2026-11-05): db-readonly-validate.mjs REPLAC
   // The row recorded the applied bytes and named the applied record; it moved on to the SQL 152 validator plan, which
   // expected these applied bytes live, and that REPLACE was applied (production run 43034879124); the row is now the SQL
   // 154 validator plan, which expects the SQL 152 applied bytes live.
-  assert.deepEqual(PLAN.members[MEMBER], { operation: 'replace', accepted_sha256: sha(`aws/functions/api/${MEMBER}`), expected_live_sha256: VALIDATOR_SQL154.members[MEMBER].live_sha256, sql_before: 'aws/workflows/sql/154_tenant_starter_package.sql', manifest: VALIDATOR_SQL154_REL });
+  assert.deepEqual(PLAN.members[MEMBER], { operation: 'replace', accepted_sha256: sha(`aws/functions/api/${MEMBER}`), expected_live_sha256: VALIDATOR_SQL154.members[MEMBER].live_sha256, sql_before: 'aws/workflows/sql/154_tenant_starter_package.sql', manifest: VALIDATOR_SQL155_REL });
   // The plan as it stood before the apply (the SQL 123 applied bytes expected live, SQL 143 first, the planning manifest
   // named); main's bytes stand in for the applied ones.
   const before = structuredClone(PLAN);
@@ -4089,7 +4094,7 @@ test('DB validator SQL 152 triggers (2026-11-11): db-readonly-validate.mjs REPLA
   }
   // The row expected the applied bytes and named the record (sql_before kept, as the SQL 143 record kept SQL 143); it
   // has moved on to the SQL 154 validator plan, which expects these applied bytes live.
-  assert.deepEqual(PLAN.members[MEMBER], { operation: 'replace', accepted_sha256: sha(`aws/functions/api/${MEMBER}`), expected_live_sha256: accepted, sql_before: 'aws/workflows/sql/154_tenant_starter_package.sql', manifest: VALIDATOR_SQL154_REL });
+  assert.deepEqual(PLAN.members[MEMBER], { operation: 'replace', accepted_sha256: sha(`aws/functions/api/${MEMBER}`), expected_live_sha256: accepted, sql_before: 'aws/workflows/sql/154_tenant_starter_package.sql', manifest: VALIDATOR_SQL155_REL });
   assert.equal(PLAN.order.indexOf(MEMBER), PLAN.order.indexOf('tenant-billing-handlers.mjs') + 1);
   assert.ok(PLAN.notes.includes('the row expects the applied bytes and names the DB validator SQL 152 applied record'));
   assert.ok(PLAN.notes.includes('production /db-readonly-validate still answers 503'));
@@ -4133,7 +4138,7 @@ test('DB validator SQL 152 triggers (2026-11-11): db-readonly-validate.mjs REPLA
   assert.deepEqual(calls.receipt.owned_member_ops, { replace: [MEMBER], add: [] });
 });
 
-test('DB validator SQL 154 triggers (2026-11-11): db-readonly-validate.mjs REPLACE from the SQL 152 applied bytes, planning only; held until SQL 154 was recorded live in production (the SQL 154 record, 2026-11-11)', async () => {
+test('DB validator SQL 154 triggers and SQL 155 trigger (2026-11-11): db-readonly-validate.mjs REPLACE from the SQL 152 applied bytes, planning only; the SQL 155 plan supersedes the SQL 154 plan (never applied to production); held until SQL 154 was recorded live in production (the SQL 154 record, 2026-11-11)', async () => {
   const MEMBER = 'db-readonly-validate.mjs';
   const SQL154 = 'aws/workflows/sql/154_tenant_starter_package.sql';
   const previous = JSON.parse(fs.readFileSync(path.join(ROOT, VALIDATOR_SQL152_APPLIED_REL), 'utf8')).members[MEMBER];
@@ -4143,9 +4148,15 @@ test('DB validator SQL 154 triggers (2026-11-11): db-readonly-validate.mjs REPLA
   assert.equal(LIVE, 'aef88b3b7af8962c832f7200c59b84d01823d28e7b8185ab0b5fdf26e1112c2f');
   const accepted = sha(`aws/functions/api/${MEMBER}`);
   assert.notEqual(accepted, LIVE);
-  // Main's bytes justify SQL 154's two triggers by name and expect 189 public triggers.
+  // The SQL 154 validator plan's bytes (the named 189-set, #1778): overlaid in staging (run 43089038461), never applied
+  // to production, superseded by main's bytes.
+  const superseded = VALIDATOR_SQL154.members[MEMBER].accepted_sha256;
+  assert.equal(superseded, '25d0ee50b7b204504f87b9bc5c8d868a8a4536f9e66017afd6fbb59e8d6e3a77');
+  assert.notEqual(accepted, superseded);
+  // Main's bytes justify SQL 154's two triggers and SQL 155's trigger by name and expect 190 public triggers.
   const bytes = fs.readFileSync(path.join(API, MEMBER), 'utf8');
-  assert.match(bytes, /^export const EXPECTED_PUBLIC_TRIGGERS = 189;$/m);
+  assert.match(bytes, /^export const EXPECTED_PUBLIC_TRIGGERS = 190;$/m);
+  assert.match(bytes, /table: 'claims',\n\s+trigger: 'trg_aws_stamp_claim_org_id',\n\s+functionName: 'aws_stamp_claim_org_id'/);
   assert.match(bytes, /table: 'check_billing_events',\n\s+trigger: 'aws_check_billing_event_starter_package',\n\s+functionName: 'aws_apply_starter_package_to_event'/);
   assert.match(bytes, /table: 'tenants',\n\s+trigger: 'aws_tenant_starter_package_audit',\n\s+functionName: 'aws_tenant_starter_package_audit_row'/);
   const manifest = VALIDATOR_SQL154;
@@ -4158,15 +4169,29 @@ test('DB validator SQL 154 triggers (2026-11-11): db-readonly-validate.mjs REPLA
     '05fb0b99… -> a50c631a…', '9e81beda3', 'run 43034879124', 'a21972a85', '#1774', 'not known']) {
     assert.ok(manifest.notes.includes(evidence), evidence);
   }
-  assert.deepEqual(manifest.members, { [MEMBER]: { live_sha256: LIVE, accepted_sha256: accepted, operation: 'replace', previous_manifest: VALIDATOR_SQL152_APPLIED_REL } });
-  assert.deepEqual(PLAN.members[MEMBER], { operation: 'replace', accepted_sha256: accepted, expected_live_sha256: LIVE, sql_before: SQL154, manifest: VALIDATOR_SQL154_REL });
+  assert.deepEqual(manifest.members, { [MEMBER]: { live_sha256: LIVE, accepted_sha256: superseded, operation: 'replace', previous_manifest: VALIDATOR_SQL152_APPLIED_REL } });
+  // The SQL 155 validator plan: the same live bytes to main's, chained to the SQL 152 applied record, naming the plan
+  // it supersedes.
+  const current = VALIDATOR_SQL155;
+  assert.equal(current.workstream_id, 'production-db-validator-sql155-trigger');
+  assert.equal(current.deploy_authorized, false);
+  assert.equal(current.live_lambda, FUNCTION_NAME);
+  assert.match(current.authorization, /^Pending owner review \(2026-11-11\)/);
+  for (const evidence of ['apply run 43082131132', 'wave 47', '373a7d5c-32b9-49f4-86c0-9ab41537f542', '#1783', '#1778', 'run 43089038461', 'run 43089785273',
+    'run 43034879124', 'run 43085438087', '"write the validator fix for SQL 155\'s trigger"', 'is not verified']) {
+    assert.ok(current.notes.includes(evidence), evidence);
+  }
+  assert.deepEqual(current.members, { [MEMBER]: { live_sha256: LIVE, accepted_sha256: accepted, operation: 'replace', previous_manifest: VALIDATOR_SQL152_APPLIED_REL, supersedes_unapplied_manifest: VALIDATOR_SQL154_REL } });
+  assert.ok(current.notes.includes(`${MEMBER} ${LIVE.slice(0, 8)} -> ${accepted.slice(0, 8)}`));
+  assert.ok(PLAN.notes.includes(`DB validator SQL 155 trigger (2026-11-11): REPLACE ${MEMBER} ${LIVE.slice(0, 8)} -> ${accepted.slice(0, 8)}`));
+  assert.deepEqual(PLAN.members[MEMBER], { operation: 'replace', accepted_sha256: accepted, expected_live_sha256: LIVE, sql_before: SQL154, manifest: VALIDATOR_SQL155_REL });
   // Owner "B" (2026-11-11): just after tenant-billing-handlers.mjs, with the other members held on SQL 154; the
   // invoice email and every earlier member are not held behind it.
   assert.equal(PLAN.order.indexOf(MEMBER), PLAN.order.indexOf('tenant-billing-handlers.mjs') + 1);
   assert.ok(PLAN.order.indexOf('tenant-fee-invoice-email.mjs') < PLAN.order.indexOf(MEMBER));
   assert.ok(PLAN.notes.includes('The validator follows tenant-billing-handlers.mjs in the order (owner 2026-11-11: "B")'));
-  assert.ok(manifest.notes.includes(`${MEMBER} ${LIVE.slice(0, 8)} -> ${accepted.slice(0, 8)}`));
-  assert.ok(PLAN.notes.includes(`DB validator SQL 154 triggers (2026-11-11): REPLACE ${MEMBER} ${LIVE.slice(0, 8)} -> ${accepted.slice(0, 8)}`));
+  assert.ok(manifest.notes.includes(`${MEMBER} ${LIVE.slice(0, 8)} -> ${superseded.slice(0, 8)}`));
+  assert.ok(PLAN.notes.includes(`DB validator SQL 154 triggers (2026-11-11): REPLACE ${MEMBER} ${LIVE.slice(0, 8)} -> ${superseded.slice(0, 8)}`));
   assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
   assert.equal(approvalPhrase(MEMBER), `DEPLOY ${MEMBER} TO PRODUCTION`);
   // The plan was written while SQL 154 was applied in staging only (the manifest says so). The SQL 154 record change

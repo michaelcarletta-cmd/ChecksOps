@@ -52,7 +52,7 @@ export const EXPECTED_ROW_COUNTS = {
 
 export const EXPECTED_DATABASE = 'checksops';
 export const EXPECTED_SKIPPED_AUTH_USERS_FKS = 47;
-export const EXPECTED_PUBLIC_TRIGGERS = 189;
+export const EXPECTED_PUBLIC_TRIGGERS = 190;
 
 export const SUPERSEDED_PUBLIC_TRIGGERS = Object.freeze([
   Object.freeze({
@@ -210,6 +210,14 @@ export const POST_RESTORE_PUBLIC_TRIGGERS = Object.freeze([
     table: 'tenants',
     trigger: 'aws_tenant_starter_package_audit',
     functionName: 'aws_tenant_starter_package_audit_row',
+  }),
+  // SQL 155 (155_claim_owner_org_stamp.sql), applied to staging 2026-11-11 (run 43082131132, wave 47); production
+  // already had it (applied directly on 2026-09-22; verified live as intended, SSM 373a7d5c, nothing applied): a
+  // claim's org_id is stamped from its owning tenant.
+  Object.freeze({
+    table: 'claims',
+    trigger: 'trg_aws_stamp_claim_org_id',
+    functionName: 'aws_stamp_claim_org_id',
   }),
 ]);
 

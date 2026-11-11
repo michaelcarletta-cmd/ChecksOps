@@ -114,7 +114,7 @@ const CHANGED_SINCE_SECOND_REBUILD = {
   // DB validator SQL 120 triggers (2026-10-27): the two usage-event triggers SQL 120 added join the
   // justified public trigger set (182); deployed to staging by the guarded overlay, not a rebuild
   // section. SQL 121 and SQL 123 (#1338) raised it to 184; a REPLACE member of the production
-  // overlay plan (2026-10-28). SQL 143's trigger raised it to 185 (planned REPLACE, 2026-11-05); SQL 152's two triggers to 187 (planned REPLACE, 2026-11-11); SQL 154's two to 189 (planned REPLACE, 2026-11-11).
+  // overlay plan (2026-10-28). SQL 143's trigger raised it to 185 (planned REPLACE, 2026-11-05); SQL 152's two triggers to 187 (planned REPLACE, 2026-11-11); SQL 154's two to 189 and SQL 155's to 190 (planned REPLACE, 2026-11-11).
   'db-readonly-validate.mjs': 'changed',
   // Check reconciliation tenant scope (2026-10-29, security audit finding 4): a non-owner keeps only
   // the stuck checks of its own tenants (get_stuck_checks returns no tenant_id); a REPLACE member of

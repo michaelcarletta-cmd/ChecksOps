@@ -285,13 +285,13 @@ test('order: predecessor SQL 142, which it supersedes; the two functions, the th
     assert.ok(spec[none] === undefined || spec[none].length === 0, none);
   }
   // The DB validator followed the staging apply (run 42023495275), as 4a3f4658e did for SQL 123, and justifies the
-  // trigger by name (185; 187 since SQL 152's two followed; 189 since SQL 154's two). Its production overlay row waited
+  // trigger by name (185; 187 since SQL 152's two followed; 189 since SQL 154's two; 190 since SQL 155's). Its production overlay row waited
   // for SQL 143 in production (sql_before; applied by run 42058917794), moved on to the SQL 152 validator REPLACE
   // (sql_before SQL 152; applied by run 43034879124) and then to the SQL 154 validator REPLACE (sql_before SQL 154);
   // staging records SQL 143 live (read-live run 42023847018).
   const validator = read('aws/functions/api/db-readonly-validate.mjs');
   assert.match(validator, /trigger: 'aws_mortgage_company_in_use_guard',\n\s+functionName: 'aws_mortgage_company_in_use_guard'/);
-  assert.match(validator, /export const EXPECTED_PUBLIC_TRIGGERS = 189;/);
+  assert.match(validator, /export const EXPECTED_PUBLIC_TRIGGERS = 190;/);
   const plan = readJson('ops/deployment-guard/production-api-overlay-plan.json');
   assert.deepEqual(Object.keys(plan.members).filter((m) => plan.members[m].sql_before === SQL143_FILE), []);
   assert.equal(plan.members['db-readonly-validate.mjs'].sql_before, 'aws/workflows/sql/154_tenant_starter_package.sql');
