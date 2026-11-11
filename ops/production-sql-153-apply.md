@@ -39,7 +39,7 @@ the file needs none of their objects (only its own prerequisites, which predate 
 prerequisite: production satisfies SQL 84's gate with `check_billing_events_mortgage_ops_check_uidx`, not the fallback
 name.
 
-**Status:** staging pin execute-authorized (wave 49); not applied anywhere. The production pin is pending.
+**Status:** applied in staging (wave 49, 2026-11-11); staging acceptance: the staging apply under the owner's run approval ("apply SQL 153 in staging"; no separate acceptance statement); production pin execute-authorized; not applied to production.
 
 **Staging read-live (2026-11-11).** Run 43115484335 (job 130842257054, main `830cc142c`, the executor current at
 `c6gk7wkTC53JMVUwDbybhUyFA0aMTppBC3HT5ImCxfU=` after deploy run 43113284610; the inspect run 43113078593 had found it not current),
@@ -51,6 +51,32 @@ The deploy run 43113284610 was another workstream's (SQL 156) from the same main
 Recorded in the staging pin (`expected_live_definition_sha256`, `execute: true`, wave 49) under the owner's words of
 2026-11-11, "record the SQL 153 staging pin" and "merge it when green". The staging apply is a separate run after this pin
 is merged and the executor is redeployed carrying it, on the owner's words for that run. The production pin stays pending.
+
+**Staging executor refreshed for the pin (2026-11-11).** The staging pin (wave 49, PR #1792) merged as
+`acbb4c505d290c93ba0b213bd34a34f405c9a594`. Inspect run 43118569370 found the live executor at
+`c6gk7wkTC53JMVUwDbybhUyFA0aMTppBC3HT5ImCxfU=`, with only `lib/sql-executor-auth.mjs` superseded. Deploy run 43118921219 updated
+`checksops-staging-guarded-sql-executor` to `0idw/ztvop2oY03bUiFFf8uAdEBIjoC1lg+ZadYvPts=`, `errors` `[]`.
+
+**Staging apply (2026-11-11).** Apply run 43119289402 (job 130855320219, main `acbb4c505`, workstream
+`github-staging-sql-43119289402`, `expected_live_definition_sha256` `b2bf6d325a5a50683acc8ecdaef39ec763b591f8db9f10e7d6fe02f9525cb0c3`) under the owner's words "apply SQL 153 in
+staging": success. The receipt prints `result` `applied`, `before_hash` `b2bf6d32…`, `after_hash`
+`376feae9f0a6405c54dcb65f65e4119a967da4a34506b75ba1e65d98cad699ac`; the index and both columns `intended`. Read-live run 43119679139 (job
+130856648244): `already_applied` true, `live_definition_sha256` `376feae9…` equal to the intended hash, `precondition_failures`
+`[]`, `prerequisites_missing` `[]`, `counts.event_type_checks` 0. The owner gave the run approval "apply SQL 153 in staging"; no
+separate staging acceptance statement was given. There is no separate staging record PR for SQL 153: these staging runs are
+recorded here and in the production pin's `staging_acceptance` by the production pin PR.
+
+**Production inspect (2026-11-11).** Read-only `--inspect` through SSM
+`decbb3ce-3b38-49ec-ae6f-ea07d39de7ba` on `i-0c35557c4e5385406` (under the owner's words "the read-only SQL 153 production
+inspect"; runner started by the owner 23:42:53Z, command ran 23:45:53Z to 23:45:57Z, Success, runner stopped by the owner
+23:47:36Z), main `103060468` (tarball sha256 `501cd3dc3c1d5fb9c3cfff6d5dc11deae2690a4808227f41f94935372aef8268`, staged by
+`sql53-temporary-transfer.yml` run 43121960735, migration source `57a87e37…` == pin), `read_only` true: live `b2bf6d325a5a50683acc8ecdaef39ec763b591f8db9f10e7d6fe02f9525cb0c3`
+(the index and both columns absent, the derived pre-state), no predecessor, `prerequisites_missing` `[]`,
+`counts.event_type_checks` 0, `already_applied` false, `live_matches_expected` false, `precondition_failures` `[]`,
+`apply_preconditions_met` false, `errors` `[]`. Production's pre-state equals staging's (read-live run 43115484335), so the
+staging apply took the path production will. Recorded in the production pin with the staging apply (run 43119289402) as its
+staging acceptance and `execute: true` under the owner's words "record the SQL 153 production pin". The owner merges the pin
+change; the apply runs only after that merge is on main and staged, under the owner's words for that run.
 
 ## Fingerprint
 
