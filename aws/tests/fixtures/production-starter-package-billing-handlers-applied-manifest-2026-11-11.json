@@ -1,0 +1,15 @@
+{
+  "workstream_id": "starter-package-billing-handlers-applied",
+  "authorization": "Record only (2026-11-11): the bytes below are live. Nothing is planned or authorized by this manifest; any later change to these members needs its own manifest, staging acceptance and owner approval.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Billing admin handler passing the Starter Package (planned by the Starter Package manifest) applied. Owner 2026-11-11: \"apply to staging first if needed, then production\", \"DEPLOY tenant-billing-handlers.mjs TO PRODUCTION\", then \"Merge 1785 when green\" (the queue rename that let the run start). Applied 2026-11-11 from main a8dac192d8a4c064ec70dfce52de90c8bef89306 (the #1785 merge). tenant-billing-handlers.mjs REPLACE a7b0a448 -> eff36fcf: staging apply run 43093299289 (job 130775633767; a7b0a448 -> eff36fcf, errors []), staging re-inspect run 43093447074 (eff36fcf live, /db-readonly-validate 200). Production inspect run 43100479327 (job 130790178933; READY, a7b0a448 live, RevisionId b450567f-52ed-4849-8f1c-374463c7762b, CodeSha256 A/cnpM0vqLUBhiVuRpS8CkOXza0u9b9zHgAtTc39KBc=); production apply run 43100747668 (job 130791249276; workstream github-production-overlay-43100747668) on the owner's \"DEPLOY tenant-billing-handlers.mjs TO PRODUCTION\" with staging acceptance https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43093299289, expected live a7b0a448, errors [], replaced [tenant-billing-handlers.mjs], VERIFIED with eff36fcf live, CodeSha256 PWqtXKt3oCqf4lnh6C6bfT7IzzggFLZtnpxoUwwn4po=, RevisionId 796d86a3-2f06-4403-b45a-ea585cafa563 (writer update RevisionId 8440342d-e0a6-4572-9aff-56a395999b0e), public production smoke /health and /db-health 200; re-inspect run 43100955632 (job 130791967197) read eff36fcf live (ALREADY_ACCEPTED, RevisionId 796d86a3). Its hold, SQL 154, is recorded live. The website change (Tenant Management Starter Package card, Settings usage summary) ships with the SPA and is not live through this record. The record keeps the applied bytes as live_sha256 and accepted_sha256 and chains the member to the manifest that planned it (previous_manifest), which keeps the pre-apply state. Production acceptance was not reported by the owner when this record was written; this record does not claim it.",
+  "members": {
+    "tenant-billing-handlers.mjs": {
+      "live_sha256": "eff36fcf81eb3629d662c1df0f1903aba32aff5f164d0a75a1ff393ce640f8b1",
+      "accepted_sha256": "eff36fcf81eb3629d662c1df0f1903aba32aff5f164d0a75a1ff393ce640f8b1",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-starter-package-manifest-2026-11-10.json"
+    }
+  }
+}
