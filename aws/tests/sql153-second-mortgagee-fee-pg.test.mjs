@@ -55,8 +55,14 @@ CREATE ROLE checksops_admin LOGIN NOSUPERUSER NOBYPASSRLS;
 GRANT CREATE, USAGE ON SCHEMA public TO checksops_admin;
 SET ROLE checksops_admin;
 CREATE TABLE public.tenants (
-  id uuid PRIMARY KEY, name text, slug text, mortgage_ops_initial_rate_cents integer, mortgage_ops_additional_rate_cents integer);
+  id uuid PRIMARY KEY, name text, slug text, mortgage_ops_initial_rate_cents integer, mortgage_ops_additional_rate_cents integer,
+  subscription_status text, monthly_rate_cents integer, referral_discount_cents integer, is_founding_partner boolean,
+  per_check_rate_cents integer, per_check_billing_enabled boolean, next_day_rate_cents integer, same_day_rate_cents integer,
+  deposits_enabled boolean NOT NULL DEFAULT true);
 CREATE TABLE public.check_intake_items (id uuid PRIMARY KEY, tenant_id uuid, claim_id uuid);
+CREATE TABLE public.check_billing_config (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), price_per_check_cents integer NOT NULL,
+  currency text NOT NULL DEFAULT 'usd', active boolean NOT NULL DEFAULT true, created_at timestamptz NOT NULL DEFAULT now());
 CREATE TABLE public.mortgage_handling_requests (
   id uuid PRIMARY KEY, tenant_id uuid NOT NULL, check_intake_item_id uuid, claim_id uuid,
   status text NOT NULL DEFAULT 'requested', accepted_at timestamptz, assigned_employee_id uuid,
@@ -87,7 +93,8 @@ CREATE TABLE public.tenant_maintenance_payments (${OCCURRENCE_COLUMNS}${usageFee
   failed_deposit_count integer NOT NULL DEFAULT 0, failed_deposit_amount_cents integer NOT NULL DEFAULT 0` : ''});
 CREATE UNIQUE INDEX tenant_maintenance_payments_tenant_period_uidx
   ON public.tenant_maintenance_payments (tenant_id, billing_period) WHERE billing_period IS NOT NULL;
-INSERT INTO public.tenants VALUES ('${T}', 'Tenant', 'tenant', 1200, 700);
+INSERT INTO public.tenants (id, name, slug, mortgage_ops_initial_rate_cents, mortgage_ops_additional_rate_cents)
+  VALUES ('${T}', 'Tenant', 'tenant', 1200, 700);
 INSERT INTO public.check_intake_items VALUES ('${CHECK}', '${T}', '${CLAIM}'), ('${CHECK_2}', '${T}', '${CLAIM}');
 INSERT INTO public.mortgage_ops_billing_launch (launched_at) VALUES ('2026-01-01T00:00:00Z');
 INSERT INTO public.mortgage_handling_requests (id, tenant_id, check_intake_item_id, claim_id, endorsement_order, total_mortgagees, predecessor_request_id) VALUES
@@ -137,8 +144,11 @@ test('SQL 153: the 2nd mortgage company is charged a flat $5 once per check (Pos
     const first = await accept(owner, REQ_1);
     assert.equal((await usage.accrueMortgageOpsAcceptedRequest(owner, { request: first })).event.event_type, 'mortgage_ops_initial');
     const second = await accept(owner, REQ_2);
-    assert.deepEqual(await usage.accrueMortgageOpsAcceptedRequest(owner, { request: second }), { skipped: 'second_mortgagee_fee_not_ready' });
-    assert.deepEqual(await engine.accrueMortgageOpsAcceptedRequest(owner, { request: second }), { skipped: 'second_mortgagee_fee_not_ready' });
+    for (const mod of [usage, engine]) {
+      const before = await mod.accrueMortgageOpsAcceptedRequest(owner, { request: second });
+      assert.equal(before.duplicate, true); // the check's normal charge is the 1st request's
+      assert.deepEqual(before.second_mortgagee, { skipped: 'second_mortgagee_fee_not_ready' });
+    }
     assert.deepEqual((await events(superuser)).map((e) => e.event_type), ['mortgage_ops_initial']);
 
     // The repository's table has no event_type CHECK: SQL 153 adds none.
@@ -151,7 +161,8 @@ test('SQL 153: the 2nd mortgage company is charged a flat $5 once per check (Pos
     // The 2nd company's accept (the API's retry path: the request is already accepted) records
     // one $5 for the check, its claim and the 2nd request, billed when it was accepted.
     const created = await usage.accrueMortgageOpsAcceptedRequest(owner, { request: second });
-    assert.equal(created.created, true);
+    assert.equal(created.duplicate, true);
+    assert.equal(created.second_mortgagee.created, true);
     const rows = await events(superuser, `event_type = '${SECOND}'`);
     assert.equal(rows.length, 1);
     assert.deepEqual(
@@ -167,7 +178,9 @@ test('SQL 153: the 2nd mortgage company is charged a flat $5 once per check (Pos
     for (const mod of [usage, engine]) {
       const again = await mod.accrueMortgageOpsAcceptedRequest(owner, { request: second });
       assert.equal(again.duplicate, true);
+      assert.equal(again.second_mortgagee.duplicate, true);
     }
+    assert.equal((await usage.accrueMortgageOpsAcceptedRequest(owner, { request: first })).duplicate, true);
     assert.equal((await events(superuser, `event_type = '${SECOND}'`)).length, 1);
 
     // Whoever writes it: a second live 2nd-company event for the check is refused by the index.
@@ -193,7 +206,7 @@ test('SQL 153: the 2nd mortgage company is charged a flat $5 once per check (Pos
     assert.equal(mortgage.secondMortgagee.length, 0);
     // A voided 2nd-company event stops a re-charge by the API (as for the $10 / $5 events) but no
     // longer holds the index: only live events count.
-    assert.equal((await usage.accrueMortgageOpsAcceptedRequest(owner, { request: second })).duplicate, true);
+    assert.equal((await usage.accrueMortgageOpsAcceptedRequest(owner, { request: second })).second_mortgagee.duplicate, true);
     await superuser.query(
       `INSERT INTO public.check_billing_events (tenant_id, check_intake_item_id, event_type, unit_price_cents)
        VALUES ($1, $2, '${SECOND}', 500)`, [T, CHECK]);
@@ -229,16 +242,26 @@ test('SQL 153: the 2nd mortgage company is charged a flat $5 once per check (Pos
   });
 });
 
-test('SQL 153 with production\'s unique rules and SQL 149\'s columns', { timeout: 240000, skip: pgSkipReason() || false }, async () => {
+test('SQL 153 with production\'s unique rules and SQL 149\'s columns: 2nd company accepted first', { timeout: 240000, skip: pgSkipReason() || false }, async () => {
   await withServer('pg-sql153-prod-', 60250, { productionUniques: true, usageFeeColumns: true }, async ({ superuser, owner }) => {
     await owner.query(SQL_153);
     await owner.query(SQL_153);
-    await usage.accrueMortgageOpsAcceptedRequest(owner, { request: await accept(owner, REQ_1) });
+    // The 2nd company's request is accepted first: the check's normal charge plus the $5.
     const second = await accept(owner, REQ_2);
-    assert.equal((await engine.accrueMortgageOpsAcceptedRequest(owner, { request: second })).created, true);
-    assert.equal((await usage.accrueMortgageOpsAcceptedRequest(owner, { request: second })).duplicate, true);
-    assert.deepEqual((await events(superuser)).map((e) => [e.event_type, e.unit_price_cents]),
-      [['mortgage_ops_initial', 1200], [SECOND, 500]]);
+    // As in the API, inside the accept's transaction (the engine copy reads the tenant with savepoints).
+    await owner.query('BEGIN');
+    const result = await engine.accrueMortgageOpsAcceptedRequest(owner, { request: second });
+    await owner.query('COMMIT');
+    assert.equal(result.created, true);
+    assert.equal(result.second_mortgagee.created, true);
+    // Then the 1st company's: no second normal charge; repeats add nothing.
+    const first = await accept(owner, REQ_1);
+    assert.equal((await usage.accrueMortgageOpsAcceptedRequest(owner, { request: first })).duplicate, true);
+    const again = await usage.accrueMortgageOpsAcceptedRequest(owner, { request: second });
+    assert.equal(again.duplicate, true);
+    assert.equal(again.second_mortgagee.duplicate, true);
+    assert.deepEqual((await events(superuser)).map((e) => [e.event_type, e.unit_price_cents, e.mortgage_request_id]),
+      [['mortgage_ops_initial', 1200, REQ_2], [SECOND, 500, REQ_2]]);
     const mortgage = await engine.loadMortgageOpsUsageForPeriod(owner, { tenantId: T, period: '2026-11' });
     const totals = engine.assembleInvoiceTotals({
       tenant: { monthly_rate_cents: 0 }, period: '2026-11', checks: [], nextDay: [], sameDay: [],

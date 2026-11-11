@@ -4,7 +4,8 @@
 -- changes.
 --
 -- Why (owner, 2026-11-10/11): "For 2 mortgage companies in check charge $5 for the additional
--- mortgage company." Asked flat $5 or the tenant's rate: "Flat $5". Since SQL 148 a check made out
+-- mortgage company." Asked flat $5 or the tenant's rate: "Flat $5". Then: "it should be an
+-- additional $5 if 2 mortgage companies are on check". Since SQL 148 a check made out
 -- to two mortgage companies has two Mortgage Desk requests (the 2nd: endorsement_order 2,
 -- total_mortgagees 2, predecessor_request_id = the 1st). The Mortgage Ops charge is recorded when
 -- the Mortgage Desk accepts a request (aws/functions/api/workflow-rpc.mjs executeAcceptMortgage ->
@@ -14,7 +15,10 @@
 -- The API (same change) records, when the accepted request is the 2nd mortgagee
 -- (endorsement_order 2), one check_billing_events row of the new event type
 -- 'mortgage_ops_second_mortgagee' at a flat 500 cents (not a per-tenant rate), billed_at =
--- accepted_at, for the check, its claim and that request. The 1st company's $10 / $5 is unchanged.
+-- accepted_at, for the check, its claim and that request, in addition to the check's normal
+-- $10 / $5 charge (recorded by whichever of the two requests is accepted first, as before; the
+-- 2nd company's accept records it when the check has none yet). The 1st company's accept is
+-- unchanged.
 -- The API records nothing of the new type until this file is applied (it looks for the index of
 -- 2) below), so the Lambda and this file may go live in either order.
 --

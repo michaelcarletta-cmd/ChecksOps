@@ -939,8 +939,8 @@ const insertMortgageOpsEvent = async (client, {
 
 /**
  * SQL 153: the accept of the 2nd mortgage company's request records one flat
- * mortgage_ops_second_mortgagee event for the check (never the $10 / $5 types,
- * which stay with the 1st company's request). Nothing before SQL 153 is applied.
+ * mortgage_ops_second_mortgagee event for the check, in addition to the check's
+ * normal $10 / $5 charge. Nothing of this type before SQL 153 is applied.
  */
 async function accrueSecondMortgageeAcceptedRequest(client, { request, persist }) {
   const ready = (await client.query(SECOND_MORTGAGEE_READY_SQL).catch(() => ({ rows: [] }))).rows[0];
@@ -989,10 +989,23 @@ export async function accrueMortgageOpsAcceptedRequest(client, {
     };
   }
 
-  if (mortgageRequestIsSecondMortgagee(request)) {
-    return accrueSecondMortgageeAcceptedRequest(client, { request, persist });
+  if (!mortgageRequestIsSecondMortgagee(request)) {
+    return accrueCheckMortgageOpsEvent(client, { request, tenant, persist });
   }
+  // SQL 153 (owner 2026-11-11: "it should be an additional $5 if 2 mortgage companies are on
+  // check"): the 2nd company's accept makes sure the check has its normal $10 / $5 charge (the
+  // same rule as the 1st company's accept; nothing when either request already recorded it), then
+  // adds the flat $5 once per check.
+  const normal = await accrueCheckMortgageOpsEvent(client, { request, tenant, persist });
+  const secondMortgagee = await accrueSecondMortgageeAcceptedRequest(client, { request, persist });
+  return { ...normal, second_mortgagee: secondMortgagee };
+}
 
+/**
+ * The check's normal Mortgage Ops charge: $10 for the claim's first check, $5 for each additional
+ * check (the tenant's rates), once per check whichever of its requests is accepted first.
+ */
+async function accrueCheckMortgageOpsEvent(client, { request, tenant, persist }) {
   const existing = await loadMortgageEventByCheck(client, request.check_intake_item_id);
   if (existing) return { ok: true, event: asEvent(existing), duplicate: true, created: false };
 

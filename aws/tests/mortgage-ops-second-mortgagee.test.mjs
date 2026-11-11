@@ -2,8 +2,9 @@
  * SQL 153 (owner 2026-11-10/11): "For 2 mortgage companies in check charge $5 for the additional
  * mortgage company." / "Flat $5". The accept of a check's 2nd mortgage company request
  * (endorsement_order 2, SQL 148) records one mortgage_ops_second_mortgagee event at a flat 500
- * cents; the 1st company's $10 / $5 is unchanged; the monthly invoice and its email carry the fee
- * as its own line. Fixtures only (sql153-second-mortgagee-fee-pg.test.mjs runs the same accrual
+ * cents in addition to the check's normal $10 / $5 charge ("it should be an additional $5 if 2
+ * mortgage companies are on check"), which either request's accept records once; the 1st
+ * company's accept is unchanged; the monthly invoice and its email carry the fee as its own line. Fixtures only (sql153-second-mortgagee-fee-pg.test.mjs runs the same accrual
  * against PostgreSQL 16).
  */
 import assert from 'node:assert/strict';
@@ -116,84 +117,119 @@ for (const [name, mod] of [['mortgage-ops-usage.mjs', usage], ['tenant-billing-e
     assert.equal(mod.MORTGAGE_EVENT_TYPES.includes(SECOND), false);
   });
 
-  test(`${name}: the 2nd mortgage company's accept records exactly one flat $5 event`, async () => {
-    const client = usageClient({ events: [firstEvent] });
+  test(`${name}: 1st then 2nd company accepted: the normal charge plus one flat $5`, async () => {
+    const client = usageClient({ events: [] });
+    const first = await mod.accrueMortgageOpsAcceptedRequest(client, { request: request({ endorsement_order: 1, total_mortgagees: 2 }) });
+    assert.equal(first.event.event_type, 'mortgage_ops_initial');
+    assert.equal(first.second_mortgagee, undefined);
     const result = await mod.accrueMortgageOpsAcceptedRequest(client, { request: secondRequest() });
-    assert.equal(result.ok, true);
-    assert.equal(result.created, true);
-    assert.equal(result.duplicate, false);
-    assert.equal(client.inserts.length, 1);
-    const [{ row, sql }] = client.inserts;
+    // The check already has its normal charge (the 1st request's): not charged again.
+    assert.equal(result.duplicate, true);
+    assert.equal(result.event.event_type, 'mortgage_ops_initial');
+    assert.equal(result.second_mortgagee.ok, true);
+    assert.equal(result.second_mortgagee.created, true);
+    assert.equal(client.inserts.length, 2);
+    const { row, sql } = client.inserts[1];
     assert.deepEqual(
       [row.event_type, row.unit_price_cents, row.status, row.billed_at, row.billing_period, row.check_intake_item_id,
         row.claim_id, row.mortgage_request_id, row.source_kind, row.source_id],
       [SECOND, 500, 'recorded', ACCEPTED_AT, '2026-11', CHECK, CLAIM, REQUEST_2, SECOND, CHECK],
     );
     assert.match(sql, /ON CONFLICT DO NOTHING/);
-    // Flat: the tenant's Mortgage Ops rates (here $12 / $7) are never read for it.
-    assert.equal(client.queries.some((q) => /FROM public\.tenants/.test(q.sql)), false);
-    // The money-write flag is set before the insert, as for the other Mortgage Ops events.
-    const flag = client.queries.findIndex((q) => /set_config\('request\.money_write', '1', true\)/.test(q.sql));
-    const insert = client.queries.findIndex((q) => /INSERT INTO public\.check_billing_events/.test(q.sql));
-    assert.ok(flag >= 0 && flag < insert);
+    // The money-write flag is set before each insert.
+    const inserts = client.queries.map((q, i) => (/INSERT INTO public\.check_billing_events/.test(q.sql) ? i : -1)).filter((i) => i >= 0);
+    for (const at of inserts) {
+      assert.match(client.queries[at - 1].sql, /set_config\('request\.money_write', '1', true\)/);
+    }
   });
 
-  test(`${name}: a repeated 2nd accept records nothing new`, async () => {
-    const client = usageClient({ events: [firstEvent] });
+  test(`${name}: the $5 is flat, whatever the tenant's Mortgage Ops rates`, async () => {
+    const client = usageClient({ events: [firstEvent], tenant: { id: TENANT, mortgage_ops_initial_rate_cents: 0, mortgage_ops_additional_rate_cents: 0 } });
+    const result = await mod.accrueMortgageOpsAcceptedRequest(client, { request: secondRequest() });
+    assert.equal(result.second_mortgagee.event.unit_price_cents, 500);
+    assert.deepEqual(client.inserts.map((i) => [i.row.event_type, i.row.unit_price_cents]), [[SECOND, 500]]);
+  });
+
+  test(`${name}: 2nd company accepted first, then the 1st: one normal charge plus one $5`, async () => {
+    const client = usageClient({ events: [] });
+    const result = await mod.accrueMortgageOpsAcceptedRequest(client, { request: secondRequest() });
+    // The check had no charge: the normal one, by the same rule and the tenant's rate ($12 here).
+    assert.equal(result.created, true);
+    assert.equal(result.event.event_type, 'mortgage_ops_initial');
+    assert.equal(result.event.unit_price_cents, 1200);
+    assert.equal(result.second_mortgagee.created, true);
+    const first = await mod.accrueMortgageOpsAcceptedRequest(client, { request: request({ endorsement_order: 1, total_mortgagees: 2 }) });
+    assert.equal(first.duplicate, true);
+    assert.deepEqual(client.inserts.map((i) => [i.row.event_type, i.row.unit_price_cents, i.row.mortgage_request_id]),
+      [['mortgage_ops_initial', 1200, REQUEST_2], [SECOND, 500, REQUEST_2]]);
+  });
+
+  test(`${name}: 2nd company accepted first on an additional check of the claim: $5 additional plus $5`, async () => {
+    const otherCheck = { ...firstEvent, id: 'evt-other', check_intake_item_id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc' };
+    const client = usageClient({ events: [otherCheck] });
+    const result = await mod.accrueMortgageOpsAcceptedRequest(client, { request: secondRequest() });
+    assert.deepEqual(client.inserts.map((i) => [i.row.event_type, i.row.unit_price_cents]),
+      [['mortgage_ops_additional_check', 700], [SECOND, 500]]);
+    assert.equal(result.second_mortgagee.created, true);
+  });
+
+  test(`${name}: repeated accepts record nothing new`, async () => {
+    const client = usageClient({ events: [] });
     await mod.accrueMortgageOpsAcceptedRequest(client, { request: secondRequest() });
-    const again = await mod.accrueMortgageOpsAcceptedRequest(client, { request: secondRequest() });
-    assert.equal(again.ok, true);
-    assert.equal(again.duplicate, true);
-    assert.equal(again.created, false);
-    assert.equal(again.event.event_type, SECOND);
-    assert.equal(client.inserts.length, 1);
+    await mod.accrueMortgageOpsAcceptedRequest(client, { request: request() });
+    for (const req of [secondRequest(), request(), secondRequest()]) {
+      const again = await mod.accrueMortgageOpsAcceptedRequest(client, { request: req });
+      assert.equal(again.duplicate, true);
+      assert.equal(again.created, false);
+      if (req.endorsement_order === 2) {
+        assert.equal(again.second_mortgagee.duplicate, true);
+        assert.equal(again.second_mortgagee.event.event_type, SECOND);
+      }
+    }
+    assert.equal(client.inserts.length, 2);
     // A voided 2nd-company event also stops a re-charge (as for the $10 / $5 events).
     const voided = usageClient({ events: [firstEvent, { ...client.rows[1], status: 'voided' }] });
     const afterVoid = await mod.accrueMortgageOpsAcceptedRequest(voided, { request: secondRequest() });
-    assert.equal(afterVoid.duplicate, true);
+    assert.equal(afterVoid.second_mortgagee.duplicate, true);
     assert.equal(voided.inserts.length, 0);
   });
 
-  test(`${name}: the 2nd accept never records a $10 / $5 event, even with none on the check`, async () => {
-    const client = usageClient({ events: [] });
-    const result = await mod.accrueMortgageOpsAcceptedRequest(client, { request: secondRequest() });
-    assert.equal(result.event.event_type, SECOND);
-    assert.deepEqual(client.inserts.map((i) => i.row.event_type), [SECOND]);
-  });
-
-  test(`${name}: nothing for the 2nd company until SQL 153 is applied`, async () => {
-    const client = usageClient({ ready: false, events: [firstEvent] });
-    const result = await mod.accrueMortgageOpsAcceptedRequest(client, { request: secondRequest() });
-    assert.deepEqual(result, { skipped: 'second_mortgagee_fee_not_ready' });
+  test(`${name}: no $5 until SQL 153 is applied; the normal charge as before`, async () => {
+    let client = usageClient({ ready: false, events: [firstEvent] });
+    let result = await mod.accrueMortgageOpsAcceptedRequest(client, { request: secondRequest() });
+    assert.equal(result.duplicate, true);
+    assert.deepEqual(result.second_mortgagee, { skipped: 'second_mortgagee_fee_not_ready' });
     assert.equal(client.inserts.length, 0);
+    client = usageClient({ ready: false, events: [] });
+    result = await mod.accrueMortgageOpsAcceptedRequest(client, { request: secondRequest() });
+    assert.deepEqual(client.inserts.map((i) => i.row.event_type), ['mortgage_ops_initial']);
   });
 
-  test(`${name}: the 1st company's charge is unchanged ($10 / $5 by claim, one per check)`, async () => {
+  test(`${name}: a single-mortgagee check and the 1st company's accept are unchanged`, async () => {
     for (const order of [null, undefined, 1]) {
       const client = usageClient({ events: [] });
       const result = await mod.accrueMortgageOpsAcceptedRequest(client, { request: request({ endorsement_order: order }) });
       assert.equal(result.event.event_type, 'mortgage_ops_initial');
       assert.equal(result.event.unit_price_cents, 1200);
-      assert.equal(client.queries.some((q) => /one_second_mortgagee_per_check/.test(q.sql)), false, String(order));
+      assert.equal(result.second_mortgagee, undefined);
+      assert.equal(client.inserts.length, 1);
+      assert.equal(client.queries.some((q) => /one_second_mortgagee_per_check|mortgage_ops_second_mortgagee/.test(q.sql)), false, String(order));
     }
-    // A 2nd-company event on the check does not stop (or reclassify) the 1st company's charge.
+    // A 2nd-company event on the check does not stop (or reclassify) the check's normal charge.
     const secondEvent = { ...firstEvent, id: 'evt-2nd', event_type: SECOND, unit_price_cents: 500, mortgage_request_id: REQUEST_2 };
     const client = usageClient({ events: [secondEvent] });
     const result = await mod.accrueMortgageOpsAcceptedRequest(client, { request: request() });
     assert.equal(result.created, true);
     assert.equal(result.event.event_type, 'mortgage_ops_initial');
-    // And the 1st's retry is still a no-op once it has its event.
-    const retry = await mod.accrueMortgageOpsAcceptedRequest(client, { request: request() });
-    assert.equal(retry.duplicate, true);
-    assert.equal(client.inserts.length, 1);
   });
 
-  test(`${name}: persist=false previews the 2nd company's fee without writing`, async () => {
-    const client = usageClient({ events: [firstEvent] });
+  test(`${name}: persist=false previews both without writing`, async () => {
+    const client = usageClient({ events: [] });
     const result = await mod.accrueMortgageOpsAcceptedRequest(client, { request: secondRequest(), persist: false });
-    assert.equal(result.created, false);
-    assert.equal(result.event.event_type, SECOND);
-    assert.equal(result.event.unit_price_cents, 500);
+    assert.equal(result.event.event_type, 'mortgage_ops_initial');
+    assert.equal(result.second_mortgagee.created, false);
+    assert.equal(result.second_mortgagee.event.event_type, SECOND);
+    assert.equal(result.second_mortgagee.event.unit_price_cents, 500);
     assert.equal(client.inserts.length, 0);
   });
 }
