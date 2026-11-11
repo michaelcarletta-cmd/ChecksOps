@@ -204,7 +204,7 @@ test('order: no predecessor; the new table with no grant to anyone, five owner-o
   const runbook = fs.readFileSync(path.join(ROOT, COMMITTED.tooling.runbook), 'utf8');
   assert.ok(runbook.includes(COMMITTED.intended_replacement_sha256));
   assert.ok(runbook.includes(COMMITTED.source_sha256));
-  assert.match(runbook, /\*\*Status:\*\* not applied anywhere/);
+  assert.match(runbook, /\*\*Status:\*\* staging pin execute-authorized \(wave 45\); not applied anywhere\./);
   assert.match(runbook, /\*\*Predecessor\.\*\* None/);
   for (const words of ['"work on these fixes"', '"Yes"', '#1747', '#1758', 'run 40434533070']) {
     assert.ok(runbook.replace(/\s+/g, ' ').includes(words), words);

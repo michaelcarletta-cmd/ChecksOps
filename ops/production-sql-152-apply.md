@@ -36,7 +36,16 @@ Lambda overlay, after this apply.
 **Predecessor.** None (as SQL 120 for SQL 98): the prerequisites are the file's own, SQL 120's trigger function among
 them. SQL 151 (the Starter Package) needs SQL 152 and must not be applied before it.
 
-**Status:** not applied anywhere. The staging pin and the production pin are pending.
+**Status:** staging pin execute-authorized (wave 45); not applied anywhere. The production pin is pending.
+
+**Staging read-live (2026-11-11).** Run 42945948226 (job 130278663761, main `6d19dad33`, after executor deploy run
+42945571224, inspect run 42945146098), under the owner's words "apply SQL 152 in staging": `already_applied` false,
+`precondition_failures` `[]`, `prerequisites_missing` `[]`, `definer_writes` `check_billing_events` `ok true`. Live
+`99c391367eaf941dae2a89cf78d72ae87fff5559d2fc3c26ad7acc691f1a4a5e`: everything absent (SQL 120 applied), equal to the derived pre-state; intended `6cf7d044…`. Recorded in the
+staging pin (`expected_live_definition_sha256`, `execute: true`, wave 45) under the owner's words of 2026-11-11, "record
+the SQL 152 staging pin and merge it when green". The staging apply is a separate run after this pin is merged and the
+executor is redeployed carrying it, on the owner's words "apply SQL 152 in staging". The production pin stays pending:
+a read-only production inspect decides production's pre-state.
 
 ## Fingerprint
 
