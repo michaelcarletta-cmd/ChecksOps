@@ -59,7 +59,8 @@ jobs:
         run: bun run check:publish-keys
 
       - name: Install PDF rasterizer for signature placement tests
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends poppler-utils
+        # Retries, then public fallback mirrors when the runner's default mirror does not resolve (2026-11-11).
+        run: bash scripts/ci/install-poppler.sh
 
       - name: Run AWS API/provider regression suite
         run: bun run test:aws-api
