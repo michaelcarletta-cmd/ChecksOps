@@ -197,7 +197,7 @@ test('order: no predecessor; the index and two columns, no function; the event_t
     'no_event_type_check', 'Step 1, **not modelled by the release engine.**', 'step 1 is therefore a no-op']) {
     assert.ok(runbook.includes(value), value);
   }
-  assert.match(runbook, /\*\*Status:\*\* tooling built; staging and production pins pending \(`execute: false`\)\. Nothing applied or read\./);
+  assert.match(runbook, /\*\*Status:\*\* staging pin execute-authorized \(wave 49\); not applied anywhere\. The production pin is pending\./);
   const oneShot = fs.readFileSync(path.join(ROOT, 'ops/production-sql-one-shot.md'), 'utf8');
   assert.match(oneShot, /\| `sql153` \|/);
   assert.match(oneShot, /`sql152`, `sql153`, `sql154`, `sql155`, `sql156`\) \|/);
