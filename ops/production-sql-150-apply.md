@@ -87,7 +87,24 @@ and `execute: true` under the owner's words "record the SQL 150 production pin".
 apply runs only after that merge is on main and staged, under the owner's words for that run ("merge it when green and
 apply SQL 150 in production").
 
-**Status:** applied in staging (wave 44, 2026-11-11); staging acceptance: owner ("SQL 150 accepted in staging"); production pin execute-authorized; not applied to production
+**Production apply (2026-11-11).** After the pin change (#1756, on the staging acceptance of apply run 42931300437,
+"SQL 150 accepted in staging"; merged to main as `d3103952f` on the owner's words "merge it when green and apply SQL 150 in production"), transfer run
+42935020477 staged main `d3103952f` (tarball sha256 `a421813a912047a2654afa9ae94643bddfd98c8e9504255ef87b9abcbb5cd5ae`).
+Under the owner's words "merge it when green and apply SQL 150 in production" (passed verbatim), a one-shot `--phase inspect` (SSM `8f598d80-bc65-4b79-a550-540e17d76472`, run
+`282a4432-d04e-467c-b970-0b1d7ef1613f`, nothing written) read live `650ad0d4…` (the pinned pre-state, `live_matches_expected` true,
+`precondition_failures` `[]`, SQL 147 applied); then one-shot `--phase apply` run `8be4fdca-7282-4802-87ca-1eca97197648` through SSM `50126850-40cf-4f2f-98de-479e9319f552`,
+workstream `prod-sql150-external-disbursement-up-to-check-amount-20261111`, one_use_id `sql150-prod-c6158d19-21ae-44e8-8ea2-48b509a4fb66`: contracts 4/4, 6/6 and 43/43; all 11 steps ok; manifest `201051c1…`; receipt
+`650ad0d4…` → `48d61bb31da60ca6f52d2691e3f3a95de9ce33347725a32e9b95b4939ff1bb13` (intended), result `applied`,
+unrelated catalog `3f3a1ddc…`; post-apply inspect `already_applied` true, `precondition_failures` `[]`, the function
+`intended`, EXECUTE `checksops` and the owner, `definer_writes` ok on all six relations, SQL 147 still applied. The
+run's JSON arrived whole (22538 characters of SSM output; read back read-only from SSM get-command-invocation). The
+runner `i-0c35557c4e5385406` was started for this work at 00:55:55Z and stopped at 00:57:04Z. The SPA change that
+matches it (`FundsTab.tsx`, #1752) is not part of this pin; it goes out through the guarded SPA path on the owner's
+words "DEPLOY WEBSITE TO PRODUCTION". Production acceptance had not been reported by the owner when this record was
+written; this record does not claim it.
+
+**Status:** applied to staging (wave 44) and to production (2026-11-11); the production pin is retired
+(`execute: false`).
 
 ## Fingerprint
 

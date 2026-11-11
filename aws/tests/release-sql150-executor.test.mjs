@@ -5,7 +5,7 @@
  * new:
  *
  *   - the pin: staging-authorized (wave 44) from staging read-live run 42928033292, code-derived, selectable, packed,
- *     in step with the production pin (execute true on production's own pre-state, the same one staging had); the
+ *     in step with the production pin (applied 2026-11-11 and retired, from production's own pre-state, the same one staging had); the
  *     pinned commit authored the bytes; predecessor and supersedes
  *     SQL 147 (as SQL 138 for SQL 113), no
  *     superseded_intended_sha256 (as SQL 143 for SQL 142: SQL 147 has no object SQL 150 does not replace);
@@ -221,7 +221,7 @@ test('pin: SQL 150 staging-authorized from its read-live, code-derived, selectab
   }
   assert.ok(runbook.includes(`\`\`\`\n${releaseStateText(KEY, releaseIntendedState(KEY, TEXT))}\n\`\`\``));
   assert.ok(runbook.includes(`\`\`\`\n${releaseStateText(KEY, { functions: { [IDENTITY]: SQL147_FN } })}\n\`\`\``));
-  assert.match(runbook, /\*\*Status:\*\* applied in staging \(wave 44, 2026-11-11\); staging acceptance: owner \("SQL 150 accepted in staging"\); production pin execute-authorized; not applied to production/);
+  assert.match(runbook, /\*\*Status:\*\* applied to staging \(wave 44\) and to production \(2026-11-11\); the production pin is retired/);
   assert.match(runbook, /read-live \(2026-11-11\)\.\*\* Run 42928033292/);
   assert.ok(runbook.includes(pin.expected_live_definition_sha256));
   assert.ok(AUTHORIZED_STAGING_SQL.includes(pin));
@@ -256,8 +256,12 @@ test('pin: SQL 150 staging-authorized from its read-live, code-derived, selectab
   assert.deepEqual(prod.predecessors, ['sql147']);
   // Production pin execute-authorized (owner-approved pin change of 2026-11-11) on the staging apply. Its pre-state is
   // production's own (read-only inspect SSM fd54c8e6), the derived one, the same pre-state staging recorded.
-  assert.equal(prod.execute, true);
-  assert.match(prod.authorization, /^Owner approved 2026-11-11 /);
+  assert.equal(prod.execute, false);
+  assert.match(prod.authorization, /^Applied to production on 2026-11-11; execute is false again/);
+  assert.equal(prod.applied.result, 'applied');
+  assert.equal(prod.applied.receipt.before_hash, prod.expected_live_definition_sha256);
+  assert.equal(prod.applied.receipt.after_hash, prod.intended_replacement_sha256);
+  assert.equal(prod.applied.post_apply_inspect.already_applied, true);
   assert.equal(prod.expected_live_definition_sha256, prod.production_inspect.live_definition_sha256);
   assert.equal(prod.expected_live_definition_sha256, pin.expected_live_definition_sha256);
   assert.equal(prod.expected_live_definition_sha256, PRE);
