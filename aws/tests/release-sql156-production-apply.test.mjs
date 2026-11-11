@@ -192,7 +192,7 @@ test('order: no predecessor; two new SECURITY DEFINER read functions with their 
   for (const value of [COMMITTED.intended_replacement_sha256, COMMITTED.source_sha256, releaseStateHash(KEY, {}), 'SHARE_CHECK_LIBRARY_WITH_MORTGAGE_DESK', '#1786']) {
     assert.ok(runbook.includes(value), value);
   }
-  assert.match(runbook, /\*\*Status:\*\* tooling built; staging and production pins pending \(`execute: false`\)\. Nothing applied or read\./);
+  assert.match(runbook, /\*\*Status:\*\* staging pin execute-authorized \(wave 48\); not applied anywhere\. The production pin is pending\./);
   const oneShot = fs.readFileSync(path.join(ROOT, 'ops/production-sql-one-shot.md'), 'utf8');
   assert.match(oneShot, /\| `sql156` \|/);
   assert.match(oneShot, /`sql154`, `sql155`, `sql156`\) \|/);
