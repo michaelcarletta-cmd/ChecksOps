@@ -19,7 +19,6 @@ import {
   Wallet, 
   Landmark, 
   FileSpreadsheet, 
-  Sparkles, 
   TrendingUp, 
   Mail 
 } from "lucide-react";
@@ -90,16 +89,12 @@ const Payments = () => {
   return (
     <PageShell width="wide" className="animate-in fade-in slide-in-from-bottom-2 duration-200">
       {/* Hero Section */}
-      <div className="relative overflow-hidden rounded-3xl border border-primary/10 bg-gradient-to-br from-primary/20 via-background to-background p-6 sm:p-8">
-        <div className="pointer-events-none absolute right-0 top-0 p-8 opacity-10">
-          <Wallet className="h-32 w-32 rotate-12" />
-        </div>
-        <div className="relative z-10 min-w-0 max-w-2xl">
-          <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
-            <Sparkles className="h-3 w-3" />
+      <div className="border-b border-border pb-4">
+        <div className="min-w-0 max-w-2xl">
+          <div className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
             Financial Operations
           </div>
-          <h1 className="text-fluid-2xl mb-3 bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text font-bold tracking-tight text-transparent">
+          <h1 className="text-fluid-2xl mb-2 font-semibold tracking-tight">
             Payments &amp; Financials
           </h1>
           <p className="text-fluid-base leading-relaxed text-muted-foreground">
