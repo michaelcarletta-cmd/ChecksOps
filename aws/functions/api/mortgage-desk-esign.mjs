@@ -18,6 +18,11 @@
  *   action workspace              -> (b), (c) and (d) in one read
  *   action send_signature_request -> (f), the signing emails, then (g)
  *   action post_timeline          -> aws_mortgage_desk_post_timeline       (h)
+ *   action shared_library_documents -> aws_mortgage_desk_shared_library_documents (SQL 156): the auto-shared
+ *                                    library documents of every tenant on the request's check (its own tenant and
+ *                                    every unrevoked partner share). SQL 156 enforces its own rule (the platform
+ *                                    owner, or a mortgage agent while the request is open or assigned to them), so
+ *                                    this action does not take the in-progress working-request gate.
  *
  * Every call runs as the signed-in user (withIdentity: request.app_user_id ->
  * auth.uid()). The caller is checked here first (loadMortgageDeskWorkingRequest,
@@ -84,6 +89,7 @@ export const MORTGAGE_DESK_ESIGN_ACTIONS = Object.freeze([
   ...MORTGAGE_DESK_READ_ACTIONS,
   'send_signature_request',
   'post_timeline',
+  'shared_library_documents',
 ]);
 
 export const DESK_MESSAGES_SQL = 'SELECT * FROM public.aws_mortgage_desk_messages($1::uuid)';
@@ -97,6 +103,8 @@ export const DESK_RECORD_DELIVERY_SQL = 'SELECT public.aws_mortgage_desk_record_
 export const DESK_CAN_READ_PATH_SQL = 'SELECT public.aws_mortgage_desk_can_read_path($1::text[], $2::text) AS ok';
 /** Signed read URLs live at most this long, as storage.mjs's authenticated reads. */
 export const MORTGAGE_DESK_SIGN_EXPIRES = 300;
+/** SQL 156: every check tenant's auto-shared library documents (owner 2026-11-11: "everybody shared on that check"). */
+export const DESK_SHARED_LIBRARY_DOCUMENTS_SQL = 'SELECT * FROM public.aws_mortgage_desk_shared_library_documents($1::uuid)';
 export const DESK_POST_TIMELINE_SQL = 'SELECT public.aws_mortgage_desk_post_timeline($1::uuid, $2::text, $3::text) AS id';
 /** Merge-field context of the signing email, read under RLS from the request the caller works. */
 export const DESK_EMAIL_CONTEXT_SQL = `SELECT claim_number, homeowner_name, policy_number, mortgage_company
@@ -288,6 +296,21 @@ export const runMortgageDeskRead = async ({ client, mapping, body, spoof, action
   const out = await readOne(client, requestId, action);
   if (out.refused) return { ...out.refused, spoofFieldsIgnored: spoof };
   return { ok: true, statusCode: 200, action, requestId, data: out.data, spoofFieldsIgnored: spoof };
+};
+
+// ---- Shared-check library documents (SQL 156) -------------------------------
+
+/**
+ * Lists the auto-shared library documents of every tenant on the request's check. The request id must be a uuid;
+ * who may read is SQL 156's rule (42501 not_authorized otherwise), which also covers a queued (requested) request,
+ * where the library documents are already visible to agents today.
+ */
+export const runMortgageDeskSharedLibraryDocuments = async ({ client, body, spoof }) => {
+  const requestId = requestIdOf(body);
+  if (!isUuid(requestId)) return { ...sqlRefusal('not_authorized'), spoofFieldsIgnored: spoof };
+  const out = await callDefiner(client, DESK_SHARED_LIBRARY_DOCUMENTS_SQL, [requestId]);
+  if (out.refused) return { ...out.refused, spoofFieldsIgnored: spoof };
+  return { ok: true, statusCode: 200, action: 'shared_library_documents', requestId, data: out.rows, spoofFieldsIgnored: spoof };
 };
 
 // ---- Timeline (h) ----------------------------------------------------------
@@ -548,6 +571,9 @@ export const handleMortgageDeskEsign = async (event, deps = {}) => {
   }
   if (MORTGAGE_DESK_READ_ACTIONS.includes(action)) {
     return withIdentity(event, (ctx) => runMortgageDeskRead({ ...ctx, action }), deps);
+  }
+  if (action === 'shared_library_documents') {
+    return withIdentity(event, (ctx) => runMortgageDeskSharedLibraryDocuments(ctx), deps);
   }
   if (action === 'post_timeline') {
     return withIdentityWrite(event, (ctx) => runMortgageDeskPostTimeline(ctx), deps);
