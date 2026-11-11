@@ -3447,7 +3447,8 @@ export const AUTHORIZED_SQL150_EXTERNAL_DISBURSEMENT_UP_TO_CHECK_AMOUNT = Object
 // checkalt_deposits), adds the one-row public.tenant_usage_fee_launch (no grant to anyone: every non-owner grant revoked,
 // default-privilege grants included, as SQL 118) and four breakdown columns on tenant_maintenance_payments. It replaces
 // SQL 149, never applied (its table would have kept the default-privilege grants). No predecessor (release-sql-specs.mjs).
-// Pending until a reviewed pin change records a staging read-live (expected: everything absent, SQL 120 applied).
+// Staging apply authorized (wave 45) from staging read-live run 42945948226: the pre-state, everything absent with SQL 120
+// applied, equals the derived one (ops/production-sql-152-apply.md).
 export const AUTHORIZED_SQL152_INVOICE_AND_FAILED_DEPOSIT_FEES = Object.freeze({
   key: 'sql152',
   filename: 'aws/workflows/sql/152_invoice_and_failed_deposit_fees.sql',
@@ -3455,9 +3456,11 @@ export const AUTHORIZED_SQL152_INVOICE_AND_FAILED_DEPOSIT_FEES = Object.freeze({
   // The commit that last authored the file bytes.
   commit: '3fea91f6f7a6bee0de623ebcc2f0b65de2ccb4f3',
   source_sha256: 'b646207d09771e5b06f28702d1e442591282a434c5f4a9cdebfbb755384feeb8',
-  authorization: 'pending',
-  execute: false,
-  expected_live_definition_sha256: null,
+  authorization: 'Owner approved 2026-11-11: staging apply (wave 45) from staging read-live run 42945948226',
+  execute: true,
+  // Staging read-live run 42945948226 (main 6d19dad33, executor deploy run 42945571224): already_applied false,
+  // precondition_failures []. Equal to the derived pre-state (everything absent).
+  expected_live_definition_sha256: '99c391367eaf941dae2a89cf78d72ae87fff5559d2fc3c26ad7acc691f1a4a5e',
   // Code-derived: releaseIntendedHash('sql152', file bytes) (release-sql-state.mjs); re-derived by the tests.
   intended_replacement_sha256: '6cf7d044d2db1e3e14f44815a573348b4180345d8fecc67079a95d480378ffce',
   function_identities: Object.freeze([
