@@ -501,6 +501,14 @@ const secondMortgageePre = (plan) => {
   }
   return plan;
 };
+// Deposit after payout (owner 2026-11-11, "Yes, start with step 1"): workflow-rpc.mjs REPLACEs the second mortgagee
+// applied bytes again, planning only, hold unchanged (SQL 148, live); its own test is at the end. smApplied is the
+// second mortgagee applied bytes: main's, until this plan moved the member on (its live_sha256).
+const DEPOSIT_RELEASE_REL = 'aws/tests/fixtures/production-deposit-release-after-payout-manifest-2026-11-11.json';
+const DEPOSIT_RELEASE = JSON.parse(fs.readFileSync(path.join(ROOT, DEPOSIT_RELEASE_REL), 'utf8'));
+const smApplied = (member) => DEPOSIT_RELEASE.members[member]?.live_sha256 ?? sha(`aws/functions/api/${member}`);
+/** The row's manifest after the second mortgagee apply: that applied record, or the deposit-release plan chained to it. */
+const smManifest = (member) => (DEPOSIT_RELEASE.members[member] ? DEPOSIT_RELEASE_REL : SECOND_MORTGAGEE_APPLIED_REL);
 const PLAN_SQL98_LIVE = (() => {
   const plan = providersPre(structuredClone(PLAN));
   plan.sql_prerequisites[SQL98_FILE] = { verified_live: true, evidence: 'test' };
@@ -3624,9 +3632,10 @@ test('Mortgage Desk return: ADD mortgage-desk-return.mjs held on SQL 122 (record
       // The second mortgagee plan (2026-11-10) moved it on again, applied 2026-11-10 (production run 42912070859):
       // main's bytes expected live, the second mortgagee applied record named.
       const moved = SECOND_MORTGAGEE.members[member];
-      assert.equal(row.expected_live_sha256, moved ? sha(`aws/functions/api/${member}`) : escrowApplied(member), member);
+      // (The deposit-release plan, 2026-11-11, moves it on once more, planning only: smApplied, smManifest.)
+      assert.equal(row.expected_live_sha256, moved ? smApplied(member) : escrowApplied(member), member);
       assert.notEqual(row.accepted_sha256, appliedAt(member), member);
-      assert.equal(row.manifest, moved ? SECOND_MORTGAGEE_APPLIED_REL : appliedRel, member);
+      assert.equal(row.manifest, moved ? smManifest(member) : appliedRel, member);
       if (moved) assert.equal(moved.previous_manifest, appliedRel, member);
       const next = JSON.parse(fs.readFileSync(path.join(ROOT, plannedRel), 'utf8')).members[member];
       assert.deepEqual(next, { live_sha256: appliedAt(member), accepted_sha256: escrowApplied(member), operation: 'replace', previous_manifest: APPLIED_REL }, member);
@@ -5113,9 +5122,9 @@ test('Loss Draft escrow records and file close (owner decisions 2026-10-30): wor
   assert.deepEqual(PLAN.members[MEMBER], {
     operation: 'replace',
     accepted_sha256: sha(`aws/functions/api/${MEMBER}`),
-    expected_live_sha256: moved ? sha(`aws/functions/api/${MEMBER}`) : accepted,
+    expected_live_sha256: moved ? smApplied(MEMBER) : accepted,
     sql_before: holdNow(MEMBER, 'aws/workflows/sql/98_tenant_fee_collection.sql'),
-    manifest: moved ? SECOND_MORTGAGEE_APPLIED_REL : APPLIED_REL,
+    manifest: moved ? smManifest(MEMBER) : APPLIED_REL,
   });
   if (moved) assert.equal(moved.previous_manifest, APPLIED_REL);
   assert.equal(PLAN.sql_prerequisites['aws/workflows/sql/98_tenant_fee_collection.sql'].verified_live, true);
@@ -5151,8 +5160,9 @@ test('Loss Draft escrow records and file close (owner decisions 2026-10-30): wor
     const beforeSecond = secondMortgageePre(structuredClone(PLAN));
     assert.equal((await run(inspect, { root: ROOT, plan: beforeSecond, inspectLive: liveFor(MEMBER, { sha256: accepted, plan: beforeSecond }) })).state, 'READY');
   }
-  const done = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: sha(`aws/functions/api/${MEMBER}`) }) });
-  assert.equal(done.state, 'ALREADY_ACCEPTED');
+  // (Since the deposit-release plan, 2026-11-11, the second mortgagee bytes are READY for it, planning only.)
+  const done = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: smApplied(MEMBER) }) });
+  assert.equal(done.state, DEPOSIT_RELEASE.members[MEMBER] ? 'READY' : 'ALREADY_ACCEPTED');
   for (const other of moved ? [LIVE, accepted, '6902fe6f89f91c52f251ae1218257a387d6d7dd1fdb0e07687f6c99dfd5591d3', 'c'.repeat(64)] : [LIVE, '6902fe6f89f91c52f251ae1218257a387d6d7dd1fdb0e07687f6c99dfd5591d3', 'c'.repeat(64)]) {
     await assert.rejects(
       run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: other }) }),
@@ -7838,7 +7848,9 @@ test('Second mortgagee (owner 2026-11-10): workflow-rpc.mjs REPLACE from the Los
   // The pre-state: the bytes the last guarded production apply of this member put live, as recorded.
   const live = JSON.parse(fs.readFileSync(path.join(ROOT, PREVIOUS), 'utf8')).members[MEMBER];
   assert.equal(live.live_sha256, live.accepted_sha256, 'the previous manifest is an applied record');
-  const accepted = sha(`aws/functions/api/${MEMBER}`);
+  // The applied bytes: main's, until the deposit-release plan (2026-11-11) moved workflow-rpc.mjs on.
+  const accepted = smApplied(MEMBER);
+  const depositMoved = DEPOSIT_RELEASE.members[MEMBER];
   assert.notEqual(accepted, live.accepted_sha256);
   assert.deepEqual(manifest.members[MEMBER], { live_sha256: live.accepted_sha256, accepted_sha256: accepted, operation: 'replace', previous_manifest: PREVIOUS });
   // Applied 2026-11-10 on main a30955a8b (#1749 merge; owner "DEPLOY workflow-rpc.mjs TO PRODUCTION"): the record keeps
@@ -7864,17 +7876,20 @@ test('Second mortgagee (owner 2026-11-10): workflow-rpc.mjs REPLACE from the Los
     assert.ok(appliedRecord.notes.includes(text), text);
   }
   assert.ok(PLAN.notes.includes(`Recorded in ${SECOND_MORTGAGEE_APPLIED_REL}. The row expects the applied bytes and names the second mortgagee link applied record; its SQL 148 hold is unchanged.`));
+  // (The deposit-release plan, 2026-11-11, moves it on from these applied bytes, planning only: main's bytes accepted,
+  // the applied bytes expected live, its manifest chained to the applied record, SQL 148 hold unchanged.)
   assert.deepEqual(PLAN.members[MEMBER], {
     operation: 'replace',
-    accepted_sha256: accepted,
+    accepted_sha256: sha(`aws/functions/api/${MEMBER}`),
     expected_live_sha256: accepted,
     sql_before: SQL148_FILE,
-    manifest: SECOND_MORTGAGEE_APPLIED_REL,
+    manifest: smManifest(MEMBER),
   });
+  if (depositMoved) assert.equal(depositMoved.previous_manifest, SECOND_MORTGAGEE_APPLIED_REL);
   const before = secondMortgageePre(structuredClone(PLAN));
   assert.deepEqual(before.members[MEMBER], {
     operation: 'replace',
-    accepted_sha256: accepted,
+    accepted_sha256: sha(`aws/functions/api/${MEMBER}`),
     expected_live_sha256: live.accepted_sha256,
     sql_before: SQL148_FILE,
     manifest: SECOND_MORTGAGEE_REL,
@@ -7925,7 +7940,8 @@ test('Second mortgagee (owner 2026-11-10): workflow-rpc.mjs REPLACE from the Los
   const ready = await run(inspect, { root: ROOT, plan: before, inspectLive: liveFor(MEMBER, { sha256: live.accepted_sha256, plan: before }) });
   assert.equal(ready.state, 'READY');
   assert.equal(ready.mutation, false);
-  assert.equal((await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: accepted }) })).state, 'ALREADY_ACCEPTED');
+  // (READY again since the deposit-release plan, 2026-11-11, which starts from these bytes.)
+  assert.equal((await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: accepted }) })).state, depositMoved ? 'READY' : 'ALREADY_ACCEPTED');
   for (const other of [live.accepted_sha256, 'c'.repeat(64)]) {
     await assert.rejects(
       run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: other }) }),
@@ -7946,5 +7962,68 @@ test('Second mortgagee (owner 2026-11-10): workflow-rpc.mjs REPLACE from the Los
   assert.equal(applied.mutation, false);
   assert.deepEqual(liveCalls.receipt.owned_member_ops, { replace: [MEMBER], add: [] });
   const source = fs.readFileSync(path.join(API, MEMBER), 'utf8');
+  assert.match(source, /'SELECT public\.aws_link_second_mortgagee\(\$1::uuid, \$2::uuid\) AS result'/);
+});
+
+test('Deposit after payout (owner 2026-11-11): workflow-rpc.mjs REPLACE from the second mortgagee applied bytes, hold unchanged (SQL 148, live), planning only', async () => {
+  const MEMBER = 'workflow-rpc.mjs';
+  const manifest = DEPOSIT_RELEASE;
+  assert.equal(manifest.workstream_id, 'deposit-release-after-payout');
+  assert.equal(manifest.deploy_authorized, false);
+  assert.match(manifest.authorization, /^Pending owner review \(2026-11-11\)/);
+  assert.equal(manifest.live_lambda, FUNCTION_NAME);
+  assert.deepEqual(Object.keys(manifest.members), [MEMBER]);
+  for (const text of ['"Yes, start with step 1"', 'mark_manual_deposit', 'RELEASE_AFTER_DEPOSIT_SQL', 'recompute_check_release_stage',
+    'savepoint', 'SQL 148', 'No SQL', 'separate, numbered SQL correction', 'Planning only']) {
+    assert.ok(manifest.notes.includes(text), text);
+  }
+  // The pre-state: the second mortgagee applied record's bytes (production run 42912070859).
+  const live = JSON.parse(fs.readFileSync(path.join(ROOT, SECOND_MORTGAGEE_APPLIED_REL), 'utf8')).members[MEMBER];
+  assert.equal(live.live_sha256, live.accepted_sha256, 'the previous manifest is an applied record');
+  const accepted = sha(`aws/functions/api/${MEMBER}`);
+  assert.notEqual(accepted, live.accepted_sha256);
+  assert.deepEqual(manifest.members[MEMBER], {
+    live_sha256: live.accepted_sha256, accepted_sha256: accepted, operation: 'replace', previous_manifest: SECOND_MORTGAGEE_APPLIED_REL,
+  });
+  assert.deepEqual(PLAN.members[MEMBER], {
+    operation: 'replace',
+    accepted_sha256: accepted,
+    expected_live_sha256: live.accepted_sha256,
+    sql_before: SQL148_FILE,
+    manifest: DEPOSIT_RELEASE_REL,
+  });
+  assert.equal(PLAN.sql_prerequisites[SQL148_FILE].verified_live, true);
+  const evidence = `REPLACE ${MEMBER} ${live.accepted_sha256.slice(0, 8)} -> ${accepted.slice(0, 8)}`;
+  assert.ok(manifest.notes.includes(evidence), evidence);
+  assert.ok(PLAN.notes.includes(evidence), evidence);
+  assert.ok(PLAN.notes.includes(`Manifest ${DEPOSIT_RELEASE_REL}. Planning only.`));
+  assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
+  assert.equal(approvalPhrase(MEMBER), `DEPLOY ${MEMBER} TO PRODUCTION`);
+  // No new module, order unchanged.
+  assert.deepEqual(localImports(fs.readFileSync(path.join(API, MEMBER), 'utf8'), MEMBER).sort(), [
+    'admin-override-check-status.mjs', 'data.mjs', 'identity.mjs', 'mortgage-desk-return.mjs', 'mortgage-ops-usage.mjs',
+    'providers/checkalt-account-mask.mjs', 'tenant-deposits-gate.mjs', 'workflow-flags.mjs', 'write-allowlist.mjs',
+    'write-claim-settlement.mjs',
+  ]);
+  const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
+  // Inspect: READY on the recorded live bytes, ALREADY_ACCEPTED on main's, anything else is drift.
+  const ready = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: live.accepted_sha256 }) });
+  assert.equal(ready.state, 'READY');
+  assert.equal(ready.mutation, false);
+  assert.equal((await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: accepted }) })).state, 'ALREADY_ACCEPTED');
+  for (const other of [escrowApplied(MEMBER), 'c'.repeat(64)]) {
+    await assert.rejects(
+      run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: other }) }),
+      (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+      other,
+    );
+  }
+  // The apply (dry: no mutation) passes the gates from the recorded live bytes, one receipt for this member.
+  const { deps, calls } = applyDeps(MEMBER, { sha256: live.accepted_sha256, plan: structuredClone(PLAN) });
+  const applied = await run(applyEnv(MEMBER, { CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: live.accepted_sha256 }), deps);
+  assert.equal(applied.mutation, false);
+  assert.deepEqual(calls.receipt.owned_member_ops, { replace: [MEMBER], add: [] });
+  const source = fs.readFileSync(path.join(API, MEMBER), 'utf8');
+  assert.match(source, /const fundsReleased = await releaseIfPaidOut\(client, item\.check_id\);/);
   assert.match(source, /'SELECT public\.aws_link_second_mortgagee\(\$1::uuid, \$2::uuid\) AS result'/);
 });
