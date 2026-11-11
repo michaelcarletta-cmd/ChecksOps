@@ -3,7 +3,7 @@
  * shared with SQL 90-152 (scripts/deployment-guard/lib/release-sql-state.mjs).
  * release-sql90-97-executor.test.mjs runs what every release key shares (SQL 154 included); this file covers what is new:
  *
- *   - the pin: staging-authorized (wave 46) from staging read-live run 43033279908, code-derived, selectable, packed, in step with the production pin (execute true on production's own pre-state, the same one staging had); the pinned commit
+ *   - the pin: staging-authorized (wave 46) from staging read-live run 43033279908, code-derived, selectable, packed, in step with the production pin (applied 2026-11-11 and retired, from production's own pre-state, the same one staging had); the pinned commit
  *     authored the bytes; predecessor SQL 102, supersedes SQL 102 and SQL 98 (both define the tenants column guard
  *     SQL 154 replaces), with superseded_intended_sha256 derived from the files; SQL 151 (never applied) has no spec or
  *     pin;
@@ -154,7 +154,7 @@ ALTER TABLE public.moov_invoices ENABLE ROW LEVEL SECURITY;`;
 // Staging and production give every new table grants through default privileges (SQL 117's failure).
 const DEFAULT_PRIVILEGES = 'ALTER DEFAULT PRIVILEGES FOR ROLE checksops_admin IN SCHEMA public GRANT ALL ON TABLES TO checksops, authenticated;';
 
-test('pin: SQL 154 staging-authorized from its read-live, code-derived, selectable, packed, in step with the execute-authorized production pin; predecessor SQL 102, supersedes SQL 102 and SQL 98; the derived pre-state', () => {
+test('pin: SQL 154 staging-authorized from its read-live, code-derived, selectable, packed, in step with the applied and retired production pin; predecessor SQL 102, supersedes SQL 102 and SQL 98; the derived pre-state', () => {
   const pin = PINS[KEY];
   const spec = RELEASE_SQL_SPECS[KEY];
   const packed = Object.fromEntries(EXECUTOR_PACK_MEMBERS);
@@ -187,7 +187,7 @@ test('pin: SQL 154 staging-authorized from its read-live, code-derived, selectab
   }
   assert.ok(runbook.includes(`\`\`\`\n${releaseStateText(KEY, releaseIntendedState(KEY, TEXT))}\n\`\`\``));
   assert.ok(runbook.includes(`\`\`\`\n${releaseStateText(KEY, { functions: { [GUARD]: SQL102_GUARD } })}\n\`\`\``));
-  assert.match(runbook, /\*\*Status:\*\* applied in staging \(wave 46, 2026-11-11\); staging acceptance: the staging apply under the owner's run approval \("then apply SQL 154 in staging"; no separate acceptance statement\); production pin execute-authorized; not applied to production/);
+  assert.match(runbook, /\*\*Status:\*\* applied to staging \(wave 46\) and to production \(2026-11-11\); the production pin is retired/);
   assert.match(runbook, /read-live \(2026-11-11\)\.\*\* Run 43033279908/);
   assert.ok(runbook.includes(pin.expected_live_definition_sha256));
   assert.ok(AUTHORIZED_STAGING_SQL.includes(pin));
@@ -230,10 +230,15 @@ test('pin: SQL 154 staging-authorized from its read-live, code-derived, selectab
   assert.equal(prod.source_sha256, pin.source_sha256);
   assert.deepEqual(prod.function_identities, FNS);
   assert.deepEqual(prod.predecessors, ['sql102']);
-  // Production pin execute-authorized (owner-approved pin change of 2026-11-11) on the staging apply. Its pre-state is
-  // production's own (read-only inspect SSM b64a59d7), the derived one, the same pre-state staging recorded.
-  assert.equal(prod.execute, true);
-  assert.match(prod.authorization, /^Owner approved 2026-11-11 /);
+  // Production pin execute-authorized (owner-approved pin change of 2026-11-11, #1780) on the staging apply, then applied
+  // on 2026-11-11 and retired. Its pre-state is production's own (read-only inspect SSM b64a59d7), the derived one, the
+  // same pre-state staging recorded.
+  assert.equal(prod.execute, false);
+  assert.match(prod.authorization, /^Applied to production on 2026-11-11; execute is false again/);
+  assert.equal(prod.applied.result, 'applied');
+  assert.equal(prod.applied.receipt.before_hash, prod.expected_live_definition_sha256);
+  assert.equal(prod.applied.receipt.after_hash, prod.intended_replacement_sha256);
+  assert.equal(prod.applied.post_apply_inspect.already_applied, true);
   assert.equal(prod.authorization_phrase, 'APPLY_TENANT_STARTER_PACKAGE');
   assert.equal(prod.expected_live_definition_sha256, prod.production_inspect.live_definition_sha256);
   assert.equal(prod.expected_live_definition_sha256, pin.expected_live_definition_sha256);

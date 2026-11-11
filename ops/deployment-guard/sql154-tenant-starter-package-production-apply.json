@@ -1,8 +1,8 @@
 {
   "id": "sql154-tenant-starter-package-production-apply",
   "migration": "sql154",
-  "authorization": "Owner approved 2026-11-11 (the owner's words for SQL 154: \"Redeploy the staging executor and run SQL 154 read-live\", \"Record the SQL 154 staging pin and merge it when green\", \"then apply SQL 154 in staging\", \"run the read-only SQL 154 production inspect\", \"record the SQL 154 production pin\"; no separate staging acceptance statement was given; the change itself is reviewed and merged by the owner): production apply of SQL 154 after the staging apply below (production 05fb0b9959f677fb828ee1efaf7ffce3513ea83e6d5ed071417a7511be3231ca -> a50c631a5d185103fde4bff9be3aec08d78418f0c8524b535ca6ee794ca79fe2); execute true takes effect only when the owner reviews and merges this change. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
-  "execute": true,
+  "authorization": "Applied to production on 2026-11-11; execute is false again, so this pin is no longer a standing authorization and a re-apply needs a new reviewed pin change. The owner approved the SQL 154 production pin change on 2026-11-11 in the words \"Redeploy the staging executor and run SQL 154 read-live\", \"Record the SQL 154 staging pin and merge it when green\", \"then apply SQL 154 in staging\", \"run the read-only SQL 154 production inspect\" and \"record the SQL 154 production pin\" (no separate staging acceptance statement was given; the staging apply run 43063499920 is the acceptance; 05fb0b99 -> a50c631a, #1780, merged to main as 863b52230 on the owner's words \"merge 1780 when green and apply SQL 154 in production\") and the one apply run recorded in applied (workstream prod-sql154-tenant-starter-package-20261111) in the words \"merge 1780 when green and apply SQL 154 in production\", passed to it verbatim. That approval covered that run only.",
+  "execute": false,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -66,5 +66,503 @@
     "ok": true,
     "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43063499920",
     "basis": "Guarded staging SQL executor apply of sql154-tenant-starter-package, run 43063499920 (job 130672132427, 2026-11-11, main 94d487268df2402b6976b1dfce46c2153f6e8ce6, wave 46, workstream github-staging-sql-43063499920, staging pin commit ce0b8dc950ca59c17119e1eb69edd627849e3d99, staging pin PR #1771, on the executor deployed by deploy run 43062554159: hweFok2h+EOxn3cQPhYfmL6YGIZw11ojmSDgTMKqBVU=, previous 5iI77IMLTiiEf6fcpcfC/1WvaRDM/MLj3iOIzKswPgc= (inspect run 43062121888)), under the owner's words \"then apply SQL 154 in staging\", from the staging pre-state recorded by read-live run 43033279908 (job 130565516078, main a21972a85; 05fb0b9959f677fb828ee1efaf7ffce3513ea83e6d5ed071417a7511be3231ca, already_applied false, precondition_failures []) and read again by read-live run 43063089164 (job 130670634097; matches_pinned_expected true, already_applied false, precondition_failures [], prerequisites_missing [], predecessors { sql102: true }): receipt before 05fb0b9959f677fb828ee1efaf7ffce3513ea83e6d5ed071417a7511be3231ca, after a50c631a5d185103fde4bff9be3aec08d78418f0c8524b535ca6ee794ca79fe2 == intended, result applied. Read-live run 43064000809 (job 130673917866) then reported already_applied true, live a50c631a5d185103fde4bff9be3aec08d78418f0c8524b535ca6ee794ca79fe2, precondition_failures [], prerequisites_missing []. The owner gave the run approval \"then apply SQL 154 in staging\"; no separate staging acceptance statement was given. No separate staging record PR: these staging runs are recorded here and in ops/production-sql-154-apply.md by the production pin PR. The behavior is covered on PostgreSQL 16 by aws/tests/sql154-starter-package-pg.test.mjs and through the executor by aws/tests/release-sql154-executor.test.mjs. Production's pre-state (production_inspect) equals staging's, so the same path applies there. The same file bytes (source_sha256) are pinned in both."
+  },
+  "applied": {
+    "date": "2026-11-11",
+    "result": "applied",
+    "source_commit": "863b522309b0f78f6dddfa3a5ec49a75b22232a0",
+    "source_commit_basis": "SOURCE_COMMIT in the tarball (written by sql53-temporary-transfer) equals --commit, and the tarball sha256 equals --expected-tarball-sha256 as copied by the operator from that transfer run's log (TARBALL_SHA256 line); the run log itself was not read by the one-shot.",
+    "source_tarball": {
+      "file": "source-863b522309b0f78f6dddfa3a5ec49a75b22232a0.tar.gz",
+      "sha256": "fe45e621f76472ad5ea1f12219e7cc6a4f4e39554e6dce8fbeef1cb980d01f7e"
+    },
+    "migration_source_sha256": "d550fb4aaa9a7569cb2ced49e5e8e335f115d147704062b5973ee5d7bdf614f9",
+    "migration_source_sha256_note": "The one-shot source step hashed aws/workflows/sql/154_tenant_starter_package.sql in the transfer tarball: equal to source_sha256 (the pin; migration_matches_pin true).",
+    "runner": "i-0c35557c4e5385406",
+    "runner_basis": "operator-supplied --runner (not verified by the one-shot)",
+    "workstream_id": "prod-sql154-tenant-starter-package-20261111",
+    "one_use_id": "sql154-prod-deb5606d-8db0-4497-b46d-40016aa8b90b",
+    "one_use_id_consumed": true,
+    "one_use_id_consumed_basis": "Inferred from the successful apply (the tool records the one_use_id after COMMIT and only warns if that write fails); the consumed-registry entry was not read back separately.",
+    "owner_approval": "merge 1780 when green and apply SQL 154 in production",
+    "owner_approval_basis": "As passed in --approval-statement for --approval-scope sql154; the one-shot cannot verify who said it. The owner's words of 2026-11-11 for this run were \"merge 1780 when green and apply SQL 154 in production\", given together with the instruction to merge the pin change (#1780, merged to main as 863b52230 once green); they were passed verbatim as the approval statement for the --phase inspect run and the --phase apply run, which ran only after that merge was on main and staged.",
+    "operator": "michaelcarletta-cmd",
+    "apply_ssm_command_id": "ca26f381-f12f-41c8-a31e-2313a1a4c18b",
+    "one_shot_run_id": "eb19b5c7-9cd9-4925-b7d5-4dbb8f22058a",
+    "one_shot_note": "One SSM command (ca26f381-f12f-41c8-a31e-2313a1a4c18b on i-0c35557c4e5385406, sent 2026-11-11 18:41:17Z, Success, execution ended 18:41:29Z; the runner was started from stopped by the owner for this work at 18:40:15Z, SSM Online at 18:40:30Z, and stopped again by the owner at 18:42:21Z, after both SSM commands had ended) ran the production-sql-one-shot --phase apply (run_id eb19b5c7-9cd9-4925-b7d5-4dbb8f22058a) from main 863b52230 (transfer run 43079287025, sql53-temporary-transfer.yml on main after the #1780 merge; tarball sha256 fe45e621f76472ad5ea1f12219e7cc6a4f4e39554e6dce8fbeef1cb980d01f7e, read by the operator from the .sha256 sidecar that run uploaded, not from its log). Before the apply, a separate one-shot --phase inspect on the same tarball and the same approval statement (SSM 60fc1cf4-fccb-4621-acef-5d24d1ffd68b, sent 18:40:46Z, ended 18:40:58Z, run_id 7bcade84-58d6-48b9-8438-60721e43855a, steps pin, source, inspect and contracts ok, nothing written; its whole output, 7002 characters, arrived) read live 05fb0b9959f677fb828ee1efaf7ffce3513ea83e6d5ed071417a7511be3231ca (live_matches_expected true, already_applied false, apply_preconditions_met true, precondition_failures [], prerequisites_missing [], predecessors { sql102: true }, SQL 102's guard present and none of SQL 154's other objects), the pre-state the read-only inspect recorded in production_inspect (SSM b64a59d7-0704-4750-843d-9971fd927a29). The apply run's own inspect step read the same pre-state (its pre_apply_inspect equals the inspect run's). Steps pin (execute true, staging_acceptance run 43063499920), source (tarball sha256 matches the sidecar and --expected-tarball-sha256, tree matches the tarball, migration source == pin), inspect, contracts (claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43), manifest, source-recheck-before-preflight, preflight (receipt_issued), evaluate (sql154_production_apply_allowed true), source-recheck-before-apply, apply (applied) and post-apply-inspect all ok. The run's JSON did not arrive whole: SSM StandardOutputContent is capped at 24000 characters, and the apply output was cut there, inside the printed applied.receipt (after \"workstream\": \"prod-sql154-t), ending \"--output truncated--\". The top-level details arrived whole (ok, tool, run_id, steps, phase, migration, commit, workstream_id, approval_statement, approval_scope, operator, source, pre_apply_inspect, contract_results, manifest_file, manifest_sha256, one_use_id, receipt_issued, receipt_file, apply_child_started, post_apply_inspect, apply_result). The fields of the printed applied object up to one_shot_note (date to one_shot_note, with pre_apply_inspect and contract_results, which equal the top-level objects of the same name) are recorded as printed, except this note and owner_approval_basis, which are extended as in the SQL 127 to SQL 152 records (the one-shot's own one_shot_note read: \"One production-sql-one-shot run verified the source, ran the read-only inspect and the runner contracts, built the manifest, issued the receipt and lease (preflight), evaluated (sql154_production_apply_allowed true), applied (exit 0) and ran the post-apply inspect.\"; its owner_approval_basis read: \"As passed in --approval-statement for --approval-scope sql154; the one-shot cannot verify who said it.\"). receipt and post_apply_inspect are recorded from the top-level details.apply_result and details.post_apply_inspect, which the one-shot copies into applied (as the SQL 150 record states, its printed applied.receipt equals details.apply_result and its applied.post_apply_inspect equals details.post_apply_inspect). Not observed by this record: the printed applied.receipt after its first two fields, the printed applied.post_apply_inspect copy, and everything the output printed after details.applied (the run's not_observed_by_this_run list, any warnings or errors, the command's EXIT line; SSM reported the command Success with response code 0); the full output was not read back from anywhere else. This block adds migration_source_sha256 (with its note), apply_ssm_command_id, steps and manifest_sha256 from the same run's details, as the SQL 127 to SQL 152 records do; source_staged_by is transfer run 43079287025. The post-apply inspect reported live a50c631a5d185103fde4bff9be3aec08d78418f0c8524b535ca6ee794ca79fe2 == intended, already_applied true, precondition_failures [], prerequisites_missing [], predecessors { sql102: true }: the functions aws_starter_package_checks_used(uuid) and aws_platform_owner_set_tenant_starter_package(uuid, boolean, date, date, integer) intended with EXECUTE for checksops and the owner, aws_apply_starter_package_to_event() and aws_tenant_starter_package_audit_row() intended with EXECUTE for the owner only, aws_tenants_member_column_guard() intended with EXECUTE for PUBLIC and the owner, the four tenants package columns and check_billing_events.package_included intended, the constraint tenants_starter_package_valid intended, the triggers aws_check_billing_event_starter_package on check_billing_events and aws_tenant_starter_package_audit on tenants intended, definer_writes tenants, tenant_pricing_audit and check_billing_events ok. Unrelated catalog 03e7ad54b5fbab4746664c529023525d0e7d0697d07622f0927ed205b83509df (policies 479, functions 1370, triggers 188). Production acceptance: not yet reported by the owner when this record was written; this record does not claim it.",
+    "steps": [
+      "pin",
+      "source",
+      "inspect",
+      "contracts",
+      "manifest",
+      "source-recheck-before-preflight",
+      "preflight",
+      "evaluate",
+      "source-recheck-before-apply",
+      "apply",
+      "post-apply-inspect"
+    ],
+    "contract_results": {
+      "claim-ledger": {
+        "ok": true,
+        "test": "aws/tests/claim-ledger-accepted-contract.test.mjs",
+        "evidence": "4/4 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at 863b522309b0f78f6dddfa3a5ec49a75b22232a0 (production-sql-one-shot eb19b5c7-9cd9-4925-b7d5-4dbb8f22058a, node --test)"
+      },
+      "tenant-isolation": {
+        "ok": true,
+        "test": "aws/tests/tenant-security-compliance.test.mjs",
+        "evidence": "6/6 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at 863b522309b0f78f6dddfa3a5ec49a75b22232a0 (production-sql-one-shot eb19b5c7-9cd9-4925-b7d5-4dbb8f22058a, node --test)"
+      },
+      "financial-write-protections": {
+        "ok": true,
+        "test": "aws/tests/api-write.test.mjs",
+        "evidence": "43/43 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at 863b522309b0f78f6dddfa3a5ec49a75b22232a0 (production-sql-one-shot eb19b5c7-9cd9-4925-b7d5-4dbb8f22058a, node --test)"
+      }
+    },
+    "pre_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "05fb0b9959f677fb828ee1efaf7ffce3513ea83e6d5ed071417a7511be3231ca",
+      "live_matches_expected": true,
+      "already_applied": false,
+      "predecessors": {
+        "sql102": true
+      },
+      "predecessors_applied": true,
+      "missing_dependencies": [],
+      "apply_preconditions_met": true,
+      "precondition_failures": [],
+      "current_user": "checksops_admin",
+      "session_user": "checksops_admin",
+      "counts": null,
+      "successors_applied": [],
+      "release_sql_inspect": {
+        "live_definition_sha256": "05fb0b9959f677fb828ee1efaf7ffce3513ea83e6d5ed071417a7511be3231ca",
+        "prerequisites_missing": [],
+        "predecessors": {
+          "sql102": true
+        },
+        "successors_applied": [],
+        "functions": [
+          {
+            "name": "aws_starter_package_checks_used(uuid)",
+            "state": "absent"
+          },
+          {
+            "name": "aws_apply_starter_package_to_event()",
+            "state": "absent"
+          },
+          {
+            "name": "aws_platform_owner_set_tenant_starter_package(uuid, boolean, date, date, integer)",
+            "state": "absent"
+          },
+          {
+            "name": "aws_tenant_starter_package_audit_row()",
+            "state": "absent"
+          },
+          {
+            "name": "aws_tenants_member_column_guard()",
+            "state": "different"
+          }
+        ],
+        "policies": [],
+        "views": [],
+        "tables": [],
+        "columns": [
+          {
+            "name": "tenants.starter_package_enabled",
+            "state": "absent"
+          },
+          {
+            "name": "tenants.starter_package_starts_on",
+            "state": "absent"
+          },
+          {
+            "name": "tenants.starter_package_maintenance_ends_on",
+            "state": "absent"
+          },
+          {
+            "name": "tenants.starter_package_included_checks",
+            "state": "absent"
+          },
+          {
+            "name": "check_billing_events.package_included",
+            "state": "absent"
+          }
+        ],
+        "constraints": [
+          {
+            "name": "tenants tenants_starter_package_valid",
+            "state": "absent"
+          }
+        ],
+        "triggers": [
+          {
+            "name": "check_billing_events aws_check_billing_event_starter_package",
+            "state": "absent"
+          },
+          {
+            "name": "tenants aws_tenant_starter_package_audit",
+            "state": "absent"
+          }
+        ],
+        "table_privileges": [],
+        "function_acl": [
+          {
+            "name": "aws_starter_package_checks_used(uuid)",
+            "acl": []
+          },
+          {
+            "name": "aws_apply_starter_package_to_event()",
+            "acl": []
+          },
+          {
+            "name": "aws_platform_owner_set_tenant_starter_package(uuid, boolean, date, date, integer)",
+            "acl": []
+          },
+          {
+            "name": "aws_tenant_starter_package_audit_row()",
+            "acl": []
+          },
+          {
+            "name": "aws_tenants_member_column_guard()",
+            "acl": [
+              "PUBLIC EXECUTE",
+              "owner EXECUTE"
+            ]
+          }
+        ],
+        "acl_functions": [],
+        "indexes": [],
+        "unique_covers": [],
+        "definer_writes": [
+          {
+            "name": "tenants",
+            "ok": true
+          },
+          {
+            "name": "tenant_pricing_audit",
+            "ok": true
+          },
+          {
+            "name": "check_billing_events",
+            "ok": true
+          }
+        ],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": null
+      }
+    },
+    "manifest_sha256": "ac9080ba3c1d34dbb91c8655cd6e2dc8d7d8b09e2b5b781e7c6e2ba38b9f2d66",
+    "receipt": {
+      "migration": "sql154",
+      "workstream": "prod-sql154-tenant-starter-package-20261111",
+      "commit": "863b522309b0f78f6dddfa3a5ec49a75b22232a0",
+      "sql_file": "aws/workflows/sql/154_tenant_starter_package.sql",
+      "before_hash": "05fb0b9959f677fb828ee1efaf7ffce3513ea83e6d5ed071417a7511be3231ca",
+      "after_hash": "a50c631a5d185103fde4bff9be3aec08d78418f0c8524b535ca6ee794ca79fe2",
+      "release_sql_inspect": {
+        "live_definition_sha256": "a50c631a5d185103fde4bff9be3aec08d78418f0c8524b535ca6ee794ca79fe2",
+        "prerequisites_missing": [],
+        "predecessors": {
+          "sql102": true
+        },
+        "successors_applied": [],
+        "functions": [
+          {
+            "name": "aws_starter_package_checks_used(uuid)",
+            "state": "intended"
+          },
+          {
+            "name": "aws_apply_starter_package_to_event()",
+            "state": "intended"
+          },
+          {
+            "name": "aws_platform_owner_set_tenant_starter_package(uuid, boolean, date, date, integer)",
+            "state": "intended"
+          },
+          {
+            "name": "aws_tenant_starter_package_audit_row()",
+            "state": "intended"
+          },
+          {
+            "name": "aws_tenants_member_column_guard()",
+            "state": "intended"
+          }
+        ],
+        "policies": [],
+        "views": [],
+        "tables": [],
+        "columns": [
+          {
+            "name": "tenants.starter_package_enabled",
+            "state": "intended"
+          },
+          {
+            "name": "tenants.starter_package_starts_on",
+            "state": "intended"
+          },
+          {
+            "name": "tenants.starter_package_maintenance_ends_on",
+            "state": "intended"
+          },
+          {
+            "name": "tenants.starter_package_included_checks",
+            "state": "intended"
+          },
+          {
+            "name": "check_billing_events.package_included",
+            "state": "intended"
+          }
+        ],
+        "constraints": [
+          {
+            "name": "tenants tenants_starter_package_valid",
+            "state": "intended"
+          }
+        ],
+        "triggers": [
+          {
+            "name": "check_billing_events aws_check_billing_event_starter_package",
+            "state": "intended"
+          },
+          {
+            "name": "tenants aws_tenant_starter_package_audit",
+            "state": "intended"
+          }
+        ],
+        "table_privileges": [],
+        "function_acl": [
+          {
+            "name": "aws_starter_package_checks_used(uuid)",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          },
+          {
+            "name": "aws_apply_starter_package_to_event()",
+            "acl": [
+              "owner EXECUTE"
+            ]
+          },
+          {
+            "name": "aws_platform_owner_set_tenant_starter_package(uuid, boolean, date, date, integer)",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          },
+          {
+            "name": "aws_tenant_starter_package_audit_row()",
+            "acl": [
+              "owner EXECUTE"
+            ]
+          },
+          {
+            "name": "aws_tenants_member_column_guard()",
+            "acl": [
+              "PUBLIC EXECUTE",
+              "owner EXECUTE"
+            ]
+          }
+        ],
+        "acl_functions": [],
+        "indexes": [],
+        "unique_covers": [],
+        "definer_writes": [
+          {
+            "name": "tenants",
+            "ok": true
+          },
+          {
+            "name": "tenant_pricing_audit",
+            "ok": true
+          },
+          {
+            "name": "check_billing_events",
+            "ok": true
+          }
+        ],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": null
+      },
+      "unrelated_catalog_sha256": "03e7ad54b5fbab4746664c529023525d0e7d0697d07622f0927ed205b83509df",
+      "unrelated_catalog_counts": {
+        "relations": 895,
+        "columns": 3557,
+        "constraints": 2247,
+        "policies": 479,
+        "functions": 1370,
+        "indexes": 657,
+        "default_acl": 0,
+        "role_memberships": 15,
+        "roles": 29,
+        "triggers": 188,
+        "views": 25,
+        "types": 18,
+        "schema": 2
+      },
+      "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43063499920",
+      "result": "applied"
+    },
+    "post_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "a50c631a5d185103fde4bff9be3aec08d78418f0c8524b535ca6ee794ca79fe2",
+      "live_matches_expected": false,
+      "already_applied": true,
+      "predecessors": {
+        "sql102": true
+      },
+      "predecessors_applied": true,
+      "missing_dependencies": [],
+      "apply_preconditions_met": false,
+      "precondition_failures": [],
+      "current_user": "checksops_admin",
+      "session_user": "checksops_admin",
+      "counts": null,
+      "successors_applied": [],
+      "release_sql_inspect": {
+        "live_definition_sha256": "a50c631a5d185103fde4bff9be3aec08d78418f0c8524b535ca6ee794ca79fe2",
+        "prerequisites_missing": [],
+        "predecessors": {
+          "sql102": true
+        },
+        "successors_applied": [],
+        "functions": [
+          {
+            "name": "aws_starter_package_checks_used(uuid)",
+            "state": "intended"
+          },
+          {
+            "name": "aws_apply_starter_package_to_event()",
+            "state": "intended"
+          },
+          {
+            "name": "aws_platform_owner_set_tenant_starter_package(uuid, boolean, date, date, integer)",
+            "state": "intended"
+          },
+          {
+            "name": "aws_tenant_starter_package_audit_row()",
+            "state": "intended"
+          },
+          {
+            "name": "aws_tenants_member_column_guard()",
+            "state": "intended"
+          }
+        ],
+        "policies": [],
+        "views": [],
+        "tables": [],
+        "columns": [
+          {
+            "name": "tenants.starter_package_enabled",
+            "state": "intended"
+          },
+          {
+            "name": "tenants.starter_package_starts_on",
+            "state": "intended"
+          },
+          {
+            "name": "tenants.starter_package_maintenance_ends_on",
+            "state": "intended"
+          },
+          {
+            "name": "tenants.starter_package_included_checks",
+            "state": "intended"
+          },
+          {
+            "name": "check_billing_events.package_included",
+            "state": "intended"
+          }
+        ],
+        "constraints": [
+          {
+            "name": "tenants tenants_starter_package_valid",
+            "state": "intended"
+          }
+        ],
+        "triggers": [
+          {
+            "name": "check_billing_events aws_check_billing_event_starter_package",
+            "state": "intended"
+          },
+          {
+            "name": "tenants aws_tenant_starter_package_audit",
+            "state": "intended"
+          }
+        ],
+        "table_privileges": [],
+        "function_acl": [
+          {
+            "name": "aws_starter_package_checks_used(uuid)",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          },
+          {
+            "name": "aws_apply_starter_package_to_event()",
+            "acl": [
+              "owner EXECUTE"
+            ]
+          },
+          {
+            "name": "aws_platform_owner_set_tenant_starter_package(uuid, boolean, date, date, integer)",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          },
+          {
+            "name": "aws_tenant_starter_package_audit_row()",
+            "acl": [
+              "owner EXECUTE"
+            ]
+          },
+          {
+            "name": "aws_tenants_member_column_guard()",
+            "acl": [
+              "PUBLIC EXECUTE",
+              "owner EXECUTE"
+            ]
+          }
+        ],
+        "acl_functions": [],
+        "indexes": [],
+        "unique_covers": [],
+        "definer_writes": [
+          {
+            "name": "tenants",
+            "ok": true
+          },
+          {
+            "name": "tenant_pricing_audit",
+            "ok": true
+          },
+          {
+            "name": "check_billing_events",
+            "ok": true
+          }
+        ],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": null
+      }
+    }
+  },
+  "production_evidence": {
+    "2026-11-11 apply": "Guarded production SQL one-shot on i-0c35557c4e5385406, workstream prod-sql154-tenant-starter-package-20261111, main 863b52230 (tarball fe45e621…, transfer run 43079287025, migration source d550fb4a… == pin), owner-approved run (\"merge 1780 when green and apply SQL 154 in production\"), pre-apply --phase inspect SSM 60fc1cf4-fccb-4621-acef-5d24d1ffd68b (run_id 7bcade84-58d6-48b9-8438-60721e43855a, live 05fb0b99…, live_matches_expected true), apply SSM ca26f381-f12f-41c8-a31e-2313a1a4c18b, run_id eb19b5c7-9cd9-4925-b7d5-4dbb8f22058a, one_use_id sql154-prod-deb5606d-8db0-4497-b46d-40016aa8b90b (spent): every step ok; contracts claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43; pre-apply inspect live 05fb0b99… (live_matches_expected true, precondition_failures [], predecessors { sql102: true }, prerequisites_missing []); manifest ac9080ba…; 05fb0b99… -> a50c631a…, result applied, unrelated catalog 03e7ad54… (policies 479, functions 1370); post-apply inspect already_applied true, precondition_failures []; the run's JSON was cut at the 24000-character SSM output limit inside the printed applied.receipt, so receipt and post_apply_inspect are recorded from the whole top-level details.apply_result and details.post_apply_inspect, and the rest of the printed output was not observed. After: the four tenants Starter Package columns with the CHECK tenants_starter_package_valid, check_billing_events.package_included, the functions aws_starter_package_checks_used(uuid) and aws_platform_owner_set_tenant_starter_package(uuid, boolean, date, date, integer) (EXECUTE checksops and the owner), the owner-only trigger functions aws_apply_starter_package_to_event() and aws_tenant_starter_package_audit_row() with the triggers aws_check_billing_event_starter_package on check_billing_events and aws_tenant_starter_package_audit on tenants, and aws_tenants_member_column_guard() with SQL 154's body exist as SQL 154 defines them; every tenant starts off the package. The API members that wait on it (tenant-billing-engine.mjs, tenant-billing-handlers.mjs, sql_before SQL 154) are not deployed by this record. Production acceptance was not yet reported by the owner when this was recorded. execute is false so the pin is no longer a standing authorization."
   }
 }
