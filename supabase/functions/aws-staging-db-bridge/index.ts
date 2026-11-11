@@ -314,7 +314,9 @@ Deno.serve(async (req) => {
     if (action === "recipient_session_resolve") {
       // Strictly read-only: exact secure_token match, single row, no enumeration,
       // no writes, no token rotation/consumption. secure_token is never returned.
-      const secureToken = typeof body.secure_token === "string" ? body.secure_token : "";
+      const secureToken = typeof body.secure_token === "string" && body.secure_token
+        ? body.secure_token
+        : (typeof body.token === "string" ? body.token : "");
       if (!secureToken || secureToken.length < 16) {
         return json({ ok: false, resolved: false, reason: "invalid_token" }, 404);
       }
