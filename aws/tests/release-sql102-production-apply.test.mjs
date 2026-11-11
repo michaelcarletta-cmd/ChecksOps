@@ -185,9 +185,10 @@ test('plan: SQL 102 holds tenant-billing-handlers.mjs (sql_before); live in stag
   // record, verified live from the 2026-10-20 apply, #1079; staging: staging-sql-live.json, applied
   // in run 39162625974).
   // (The Starter Package plan, 2026-11-10, moved it on to SQL 151, which refuses to run without SQL 102's guard.)
-  const SQL151_FILE = 'aws/workflows/sql/151_tenant_starter_package.sql';
-  if (plan.members['tenant-billing-handlers.mjs'].sql_before === SQL151_FILE) {
-    assert.match(fs.readFileSync(path.join(ROOT, SQL151_FILE), 'utf8'), /aws_tenants_member_column_guard\(\) \(SQL 102\)/);
+  // (SQL 154 since 2026-11-11: it replaces SQL 151, never applied, which gave checksops no EXECUTE on aws_starter_package_checks_used.)
+  const SQL154_FILE = 'aws/workflows/sql/154_tenant_starter_package.sql';
+  if (plan.members['tenant-billing-handlers.mjs'].sql_before === SQL154_FILE) {
+    assert.match(fs.readFileSync(path.join(ROOT, SQL154_FILE), 'utf8'), /aws_tenants_member_column_guard\(\) \(SQL 102\)/);
   } else {
     assert.equal(plan.members['tenant-billing-handlers.mjs'].sql_before, SQL102_FILE);
   }

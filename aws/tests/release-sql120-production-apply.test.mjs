@@ -238,12 +238,13 @@ test('order: no predecessor and no order; SQL 98 / SQL 96 objects are prerequisi
   const SQL152_FILE = 'aws/workflows/sql/152_invoice_and_failed_deposit_fees.sql';
   const held120 = Object.keys(plan.members).filter((m) => plan.members[m].sql_before === SQL120_FILE);
   // The Starter Package plan (2026-11-10) then moved it on to SQL 151, which refuses to run without SQL 152.
-  const SQL151_FILE = 'aws/workflows/sql/151_tenant_starter_package.sql';
-  if ([SQL152_FILE, SQL151_FILE].includes(plan.members['tenant-billing-engine.mjs'].sql_before)) {
+  // (SQL 154 since 2026-11-11: it replaces SQL 151, never applied, which gave checksops no EXECUTE on aws_starter_package_checks_used.)
+  const SQL154_FILE = 'aws/workflows/sql/154_tenant_starter_package.sql';
+  if ([SQL152_FILE, SQL154_FILE].includes(plan.members['tenant-billing-engine.mjs'].sql_before)) {
     assert.deepEqual(held120, []);
     assert.match(fs.readFileSync(path.join(ROOT, SQL152_FILE), 'utf8'), /to_regprocedure\('public\.aws_record_checkalt_billing_event\(\)'\) IS NULL/);
-    if (plan.members['tenant-billing-engine.mjs'].sql_before === SQL151_FILE) {
-      assert.match(fs.readFileSync(path.join(ROOT, SQL151_FILE), 'utf8'), /to_regprocedure\('public\.aws_failed_deposit_fee_cents\(\)'\) IS NULL/);
+    if (plan.members['tenant-billing-engine.mjs'].sql_before === SQL154_FILE) {
+      assert.match(fs.readFileSync(path.join(ROOT, SQL154_FILE), 'utf8'), /to_regprocedure\('public\.aws_failed_deposit_fee_cents\(\)'\) IS NULL/);
     }
   } else {
     assert.deepEqual(held120, ['tenant-billing-engine.mjs']);
