@@ -34,6 +34,7 @@ import {
 } from '../../scripts/deployment-guard/lib/sql-executor-auth.mjs';
 import {
   RELEASE_SQL_KEYS,
+  RELEASE_STAGING_SQL_KEYS,
   RELEASE_SQL_SPECS,
   readReleaseSqlState,
   readReleaseUnrelatedSnapshot,
@@ -110,8 +111,11 @@ const neverConnect = async () => { throw new Error('should-not-connect'); };
 test('pins: the reviewed bytes, pending pre-states, code-derived post-states, selectable, packed and in step with the production pins', () => {
   const packed = Object.fromEntries(EXECUTOR_PACK_MEMBERS);
   const workflow = fs.readFileSync(path.join(ROOT, '.github/workflows/guarded-staging-sql-executor.yml'), 'utf8');
-  assert.deepEqual(RELEASE_SQL_KEYS, ['sql90', 'sql91', 'sql92', 'sql93', 'sql94', 'sql95', 'sql96', 'sql97', 'sql98', 'sql99', 'sql100', 'sql101', 'sql102', 'sql103', 'sql104', 'sql105', 'sql106', 'sql108', 'sql109', 'sql110', 'sql111', 'sql112', 'sql113', 'sql114', 'sql115', 'sql116', 'sql117', 'sql118', 'sql119', 'sql120', 'sql121', 'sql122', 'sql123', 'sql124', 'sql125', 'sql126', 'sql127', 'sql128', 'sql129', 'sql130', 'sql131', 'sql132', 'sql133', 'sql134', 'sql135', 'sql136', 'sql137', 'sql138', 'sql139', 'sql140', 'sql141', 'sql142', 'sql143', 'sql144', 'sql145', 'sql146', 'sql147', 'sql148', 'sql150', 'sql152']);
-  for (const key of RELEASE_SQL_KEYS) {
+  // The staging executor's release keys; SQL 76's release entry is production-only (its staging pin is the original
+  // SQL 76 pin, its handler the executor's own), so it is listed last and excluded here.
+  assert.deepEqual(RELEASE_STAGING_SQL_KEYS, ['sql90', 'sql91', 'sql92', 'sql93', 'sql94', 'sql95', 'sql96', 'sql97', 'sql98', 'sql99', 'sql100', 'sql101', 'sql102', 'sql103', 'sql104', 'sql105', 'sql106', 'sql108', 'sql109', 'sql110', 'sql111', 'sql112', 'sql113', 'sql114', 'sql115', 'sql116', 'sql117', 'sql118', 'sql119', 'sql120', 'sql121', 'sql122', 'sql123', 'sql124', 'sql125', 'sql126', 'sql127', 'sql128', 'sql129', 'sql130', 'sql131', 'sql132', 'sql133', 'sql134', 'sql135', 'sql136', 'sql137', 'sql138', 'sql139', 'sql140', 'sql141', 'sql142', 'sql143', 'sql144', 'sql145', 'sql146', 'sql147', 'sql148', 'sql150', 'sql152']);
+  assert.deepEqual(RELEASE_SQL_KEYS, [...RELEASE_STAGING_SQL_KEYS, 'sql76']);
+  for (const key of RELEASE_STAGING_SQL_KEYS) {
     const pin = PINS[key];
     const spec = RELEASE_SQL_SPECS[key];
     assert.equal(sha(TEXT[key]), pin.source_sha256, key);
@@ -144,7 +148,7 @@ test('pins: the reviewed bytes, pending pre-states, code-derived post-states, se
 });
 
 test('reviewed files: every function body parsed; transaction or role control, extra or renamed functions refuse', () => {
-  for (const key of RELEASE_SQL_KEYS) {
+  for (const key of RELEASE_STAGING_SQL_KEYS) {
     const defs = releaseFunctionDefinitions(TEXT[key]);
     assert.deepEqual(Object.keys(defs).sort(), RELEASE_SQL_SPECS[key].functions.map((fn) => /^public\.([a-z0-9_]+)\(/.exec(fn.identity)[1]).sort(), key);
     assert.equal(releaseSqlExecutableText(key, TEXT[key]), TEXT[key], key);
@@ -171,7 +175,7 @@ test('reviewed files: every function body parsed; transaction or role control, e
 });
 
 test('apply refuses before connecting: no pre-state, a mismatched pin, the read-live sentinel, an unknown action', async () => {
-  for (const key of RELEASE_SQL_KEYS) {
+  for (const key of RELEASE_STAGING_SQL_KEYS) {
     const noPre = await handlerFor(neverConnect, { pins: { [key]: pendingPin(PINS[key]) } })(releaseEvent(key, { expected_live_definition_sha256: 'a'.repeat(64) }));
     assert.equal(noPre.code, CODES.SQL_COLLISION, key);
     assert.match(noPre.message, /no reviewed pre-apply live definition hash/, key);
@@ -191,7 +195,7 @@ test('apply refuses before connecting: no pre-state, a mismatched pin, the read-
 });
 
 test('a staging pin must itself authorize the apply: execute true and an owner-approved authorization; inspect works while pending', async () => {
-  for (const key of RELEASE_SQL_KEYS) {
+  for (const key of RELEASE_STAGING_SQL_KEYS) {
     const live = 'd'.repeat(64);
     // Pre-state recorded but the pin still pending (execute false, authorization pending).
     const pending = Object.freeze({ ...pendingPin(PINS[key]), expected_live_definition_sha256: live });
@@ -236,7 +240,7 @@ test('forbidden statements anywhere in a file refuse it; the eight reviewed file
     in_do_block: "DO $x$ BEGIN EXECUTE 'GRANT checksops_admin TO checksops'; END $x$;",
     in_function_body: "CREATE OR REPLACE FUNCTION public.zz() RETURNS void LANGUAGE plpgsql AS $z$ BEGIN PERFORM set_config('role', 'x', true); END $z$;",
   };
-  for (const key of RELEASE_SQL_KEYS) {
+  for (const key of RELEASE_STAGING_SQL_KEYS) {
     assert.ok(releaseSqlExecutableText(key, TEXT[key]), key);
     for (const [name, statement] of Object.entries(statements)) {
       assert.equal(releaseSqlExecutableText(key, `${TEXT[key]}\n${statement}\n`), null, `${key} ${name}`);
@@ -266,7 +270,7 @@ function recordingConnect() {
 }
 
 test('inspect through the executor is read-only (fake client): BEGIN READ ONLY, only reads, rolled back; read-live keeps the report', async () => {
-  for (const key of RELEASE_SQL_KEYS) {
+  for (const key of RELEASE_STAGING_SQL_KEYS) {
     const rec = recordingConnect();
     const result = await handlerFor(rec.connect)(inspectEvent(key));
     assert.equal(result.ok, true, `${key}: ${JSON.stringify(result)}`);
