@@ -1,0 +1,62 @@
+{
+  "id": "sql153-second-mortgagee-fee-production-apply",
+  "migration": "sql153",
+  "authorization": "pending",
+  "execute": false,
+  "target_environment": "production",
+  "target_component": "production-sql",
+  "deployment_type": "sql-apply",
+  "filename": "aws/workflows/sql/153_second_mortgagee_fee.sql",
+  "migration_id": "153_second_mortgagee_fee",
+  "staging_pin_commit": "5ab496456ff1869a2673c2387a1f9329065e41c8",
+  "source_sha256": "57a87e37c153ee27c445cc188752fb493c41e92e144a81043d50e317a9150aec",
+  "function_identities": [],
+  "expected_live_definition_sha256": null,
+  "intended_replacement_sha256": "376feae9f0a6405c54dcb65f65e4119a967da4a34506b75ba1e65d98cad699ac",
+  "authorization_phrase": "CHARGE_SECOND_MORTGAGEE_FEE",
+  "predecessors": [],
+  "order_note": "No predecessor. SQL 153 records the flat $5 for a check's 2nd mortgage company (owner 2026-11-10/11: \"Flat $5\", \"it should be an additional $5 if 2 mortgage companies are on check\"; tooling \"Option B\"). The header's \"on top of SQL 84, SQL 98 and SQL 148\" names the API behaviour the fee joins (SQL 84's one Mortgage Ops charge per check, SQL 98's fee collection, SQL 148's 2nd mortgagee request), not objects the file needs: it creates nothing they create and reads only its own prerequisites (check_billing_events with event_type, status, check_intake_item_id, claim_id and mortgage_request_id, mortgage_handling_requests.endorsement_order and tenant_maintenance_payments; 55000 sql153_prerequisite_missing), all present before SQL 98 and SQL 148 (both applied in production, as is SQL 84). SQL 84's per-check index is not a prerequisite either: production satisfies SQL 84's gate with check_billing_events_mortgage_ops_check_uidx, not the fallback name. The file's step 1 (rewrite a live CHECK on check_billing_events.event_type from the values it holds at apply time) is NOT modelled by the release engine: its post-state depends on the live database. The repository defines no such CHECK, and the tooling requires none: the catalog count event_type_checks (every CHECK of check_billing_events whose columns include event_type, the file's own selection) must be 0 (no_event_type_check), reported by read-live and inspect before any apply. Step 1 is therefore a no-op on every database this tooling applies to; a database with such a CHECK is a stop that needs its own reviewed change. Steps 2 and 3 are modelled: the unique index check_billing_events_one_second_mortgagee_per_check and the integer NOT NULL DEFAULT 0 columns mortgage_ops_second_mortgagee_count and mortgage_ops_second_mortgagee_amount_cents on tenant_maintenance_payments (no column grant); the login must own both tables (altered_relations_owned_by_login). No function, trigger, policy, table grant or row changes. Expected pre-state in both environments: the index and both columns absent (release sql153 v1: b2bf6d325a5a50683acc8ecdaef39ec763b591f8db9f10e7d6fe02f9525cb0c3, releaseStateHash('sql153', {})). The API (mortgage-ops-usage.mjs records the fee only once the index exists; tenant-billing-engine.mjs and the fee invoice email read the new columns) ships through its own guarded path; no API, Lambda or SPA change is part of this pin.",
+  "admin_login": "checksops_admin",
+  "rds_identifier": "checksops-production",
+  "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
+  "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
+  "tooling": {
+    "status": "built",
+    "production_tool": "scripts/deployment-guard/sql153-second-mortgagee-fee-production-apply.mjs",
+    "production_lib": "scripts/deployment-guard/lib/release-sql-production-apply.mjs",
+    "staging_executor_handler": "aws/write-path/guarded-sql-executor/index.mjs handleReleaseSqlMigration",
+    "staging_workflow_choice": "sql153-second-mortgagee-fee",
+    "one_shot_migration": "sql153",
+    "fingerprint_engine": "scripts/deployment-guard/lib/release-sql-state.mjs",
+    "runbook": "ops/production-sql-153-apply.md",
+    "tests": [
+      "aws/tests/release-sql153-executor.test.mjs",
+      "aws/tests/release-sql153-production-apply.test.mjs",
+      "aws/tests/release-sql90-97-executor.test.mjs",
+      "aws/tests/release-sql90-97-production-apply.test.mjs",
+      "aws/tests/sql153-second-mortgagee-fee-pg.test.mjs"
+    ],
+    "note": "Guarded tooling for SQL 153: sql153-second-mortgagee-fee-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql153-second-mortgagee-fee); production-sql-one-shot.mjs --migration sql153. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): the index and the two columns. The file's event_type CHECK step is not part of the fingerprint; the precondition no_event_type_check (catalog count event_type_checks must be 0) makes it a no-op. The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
+  },
+  "production_inspect": {
+    "status": "pending",
+    "date": null,
+    "ssm_command_id": null,
+    "source_commit": null,
+    "read_only": true,
+    "connected_as": "checksops_admin",
+    "live_definition_sha256": null,
+    "apply_preconditions_met": null,
+    "precondition_failures": null,
+    "note": "Pending: no release-engine production inspect has been run for SQL 153 yet. Expected: prerequisites_missing [], counts.event_type_checks 0 (no_event_type_check), the index and both columns absent, check_billing_events and tenant_maintenance_payments owned by the login, already_applied false. Expected release-engine fingerprint of that pre-state under sql153: b2bf6d325a5a50683acc8ecdaef39ec763b591f8db9f10e7d6fe02f9525cb0c3 (releaseStateHash('sql153', {})). Record the one-shot --phase inspect's date, SSM command id, source commit, live_definition_sha256, prerequisites_missing, release_sql_inspect (with counts), precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. Stop if the pre-state differs, prerequisites_missing is not [], counts.event_type_checks is not 0 or precondition_failures is not []: that needs its own reviewed change."
+  },
+  "intended_post_state": {
+    "fingerprint": "376feae9f0a6405c54dcb65f65e4119a967da4a34506b75ba1e65d98cad699ac",
+    "note": "The unique index public.check_billing_events_one_second_mortgagee_per_check ON check_billing_events (check_intake_item_id) WHERE event_type = 'mortgage_ops_second_mortgagee' AND status IS DISTINCT FROM 'voided' AND check_intake_item_id IS NOT NULL, and public.tenant_maintenance_payments.mortgage_ops_second_mortgagee_count and mortgage_ops_second_mortgagee_amount_cents (integer NOT NULL DEFAULT 0, no column grant). No CHECK on check_billing_events.event_type before or after (step 1 not modelled; required absent). No function, trigger, policy, grant or other change; no row written. The fingerprint is releaseIntendedHash('sql153', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): 376feae9f0a6405c54dcb65f65e4119a967da4a34506b75ba1e65d98cad699ac."
+  },
+  "staging_acceptance": {
+    "ok": false,
+    "reference": null,
+    "basis": "Pending: record the guarded staging SQL executor read-live and the staging apply of SQL 153 (choice sql153-second-mortgagee-fee) here in the reviewed change that sets execute true. The behavior is covered on PostgreSQL 16 by aws/tests/sql153-second-mortgagee-fee-pg.test.mjs. Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+  }
+}
