@@ -1,8 +1,8 @@
 {
   "id": "sql150-external-disbursement-up-to-check-amount-production-apply",
   "migration": "sql150",
-  "authorization": "Owner approved 2026-11-11 (the owner's words for SQL 150: \"I want to be able to record up to the check amount\", \"build the SQL 150 tooling and merge it when green\", \"apply SQL 150 in staging\", \"record the SQL 150 staging pin and merge it when green\", \"run the read-only SQL 150 production inspect\", \"record the SQL 150 production pin\", \"SQL 150 accepted in staging\"; the change itself is reviewed and merged by the owner): production apply of SQL 150 after the staging acceptance below (production 650ad0d486b5eebdf647e4c25a56c8776ed7a412d8735cfc83aad1d449b959fa -> 48d61bb31da60ca6f52d2691e3f3a95de9ce33347725a32e9b95b4939ff1bb13); execute true takes effect only when the owner reviews and merges this change. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
-  "execute": true,
+  "authorization": "Applied to production on 2026-11-11; execute is false again, so this pin is no longer a standing authorization and a re-apply needs a new reviewed pin change. The owner approved the SQL 150 production pin change on 2026-11-11 in the words \"I want to be able to record up to the check amount\", \"build the SQL 150 tooling and merge it when green\", \"apply SQL 150 in staging\", \"record the SQL 150 staging pin and merge it when green\", \"run the read-only SQL 150 production inspect\", \"record the SQL 150 production pin\" and \"SQL 150 accepted in staging\" (given after the staging apply ended exactly at the intended fingerprint; 650ad0d4 -> 48d61bb3, #1756, merged to main as d3103952f on the owner's words \"merge it when green and apply SQL 150 in production\") and the one apply run recorded in applied (workstream prod-sql150-external-disbursement-up-to-check-amount-20261111) in the words \"merge it when green and apply SQL 150 in production\", passed to it verbatim. That approval covered that run only.",
+  "execute": false,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -62,5 +62,318 @@
     "ok": true,
     "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/42931300437",
     "basis": "Guarded staging SQL executor apply of sql150-external-disbursement-up-to-check-amount, run 42931300437 (job 130230428336, 2026-11-11, main e9ec71bdad1f90cac544dc21ec11c5af64e42f5a, wave 44, workstream github-staging-sql-42931300437, staging pin commit 07271dfa132474ff8536173fecf4ebde1c2f8245, staging pin PR #1755, on the executor deployed by deploy run 42930343151: 5l+xb4vlyT2FG7HOxcLcznlXJxqCJkMbc8lOwVpnmtw=, previous aPgcRrWIUqtEN2smVE554q0UlGAMgIbGlf3hxLFOTeE= (inspect runs 42929982947 and 42930676868)), under the owner's words \"apply SQL 150 in staging\", from the staging pre-state recorded by read-live run 42928033292 and re-read by read-live run 42930941348 (650ad0d486b5eebdf647e4c25a56c8776ed7a412d8735cfc83aad1d449b959fa, already_applied false, precondition_failures []): receipt before 650ad0d486b5eebdf647e4c25a56c8776ed7a412d8735cfc83aad1d449b959fa, after 48d61bb31da60ca6f52d2691e3f3a95de9ce33347725a32e9b95b4939ff1bb13 == intended, result applied; the function intended. Read-live run 42931628662 (job 130231543783) then reported already_applied true, live 48d61bb31da60ca6f52d2691e3f3a95de9ce33347725a32e9b95b4939ff1bb13, precondition_failures []. Owner acceptance 2026-11-11: \"SQL 150 accepted in staging\", given after the staging apply ended exactly at the intended fingerprint. No separate staging record PR: these staging runs are recorded here and in ops/production-sql-150-apply.md by the production pin PR. The SPA change that matches it (src/components/payments/FundsTab.tsx, #1752) is not part of this pin. The behavior is covered on PostgreSQL 16 by aws/tests/sql150-external-disbursement-pg.test.mjs and through the executor by aws/tests/release-sql150-executor.test.mjs. Production's pre-state (production_inspect) equals staging's, so the same path applies there. The same file bytes (source_sha256) are pinned in both."
+  },
+  "applied": {
+    "date": "2026-11-11",
+    "result": "applied",
+    "source_commit": "d3103952fc6b5ed4f9277f92c6601d426132ee01",
+    "source_commit_basis": "SOURCE_COMMIT in the tarball (written by sql53-temporary-transfer) equals --commit, and the tarball sha256 equals --expected-tarball-sha256 as copied by the operator from that transfer run's log (TARBALL_SHA256 line); the run log itself was not read by the one-shot.",
+    "source_tarball": {
+      "file": "source-d3103952fc6b5ed4f9277f92c6601d426132ee01.tar.gz",
+      "sha256": "a421813a912047a2654afa9ae94643bddfd98c8e9504255ef87b9abcbb5cd5ae"
+    },
+    "migration_source_sha256": "b470f8ecb12d85f2a51d470d9a408d8e2012d720388eb1bcc4d3fbccfc8a31dc",
+    "migration_source_sha256_note": "The one-shot source step hashed aws/workflows/sql/150_external_disbursement_up_to_check_amount.sql in the transfer tarball: equal to source_sha256 (the pin; migration_matches_pin true).",
+    "runner": "i-0c35557c4e5385406",
+    "runner_basis": "operator-supplied --runner (not verified by the one-shot)",
+    "workstream_id": "prod-sql150-external-disbursement-up-to-check-amount-20261111",
+    "one_use_id": "sql150-prod-c6158d19-21ae-44e8-8ea2-48b509a4fb66",
+    "one_use_id_consumed": true,
+    "one_use_id_consumed_basis": "Inferred from the successful apply (the tool records the one_use_id after COMMIT and only warns if that write fails); the consumed-registry entry was not read back separately.",
+    "owner_approval": "merge it when green and apply SQL 150 in production",
+    "owner_approval_basis": "As passed in --approval-statement for --approval-scope sql150; the one-shot cannot verify who said it. The owner's words of 2026-11-11 for this run were \"merge it when green and apply SQL 150 in production\", given together with the instruction to merge the pin change (#1756, merged to main as d3103952f once green); they were passed verbatim as the approval statement for the --phase inspect run and the --phase apply run, which ran only after that merge was on main and staged.",
+    "operator": "michaelcarletta-cmd",
+    "apply_ssm_command_id": "50126850-40cf-4f2f-98de-479e9319f552",
+    "one_shot_run_id": "8be4fdca-7282-4802-87ca-1eca97197648",
+    "one_shot_note": "One SSM command (50126850-40cf-4f2f-98de-479e9319f552 on i-0c35557c4e5385406, comment \"SQL 150 production one-shot apply (owner: merge it when green and apply SQL 150 in production)\", sent 2026-11-11 00:56:14Z, Success, ResponseCode 0, execution ended 00:56:26Z; the runner was started from stopped for this work at 00:55:55Z and stopped again at 00:57:04Z, after both SSM commands had ended) ran the production-sql-one-shot --phase apply (run_id 8be4fdca-7282-4802-87ca-1eca97197648) from main d3103952f (transfer run 42935020477, sql53-temporary-transfer.yml on main after the #1756 merge; tarball sha256 a421813a912047a2654afa9ae94643bddfd98c8e9504255ef87b9abcbb5cd5ae). Before it, a separate one-shot --phase inspect on the same tarball and the same approval statement (SSM 8f598d80-bc65-4b79-a550-540e17d76472, sent 00:55:55Z, ended 00:56:10Z, run_id 282a4432-d04e-467c-b970-0b1d7ef1613f, EXIT=0, steps pin, source, inspect and contracts ok, nothing written) read live 650ad0d486b5eebdf647e4c25a56c8776ed7a412d8735cfc83aad1d449b959fa (live_matches_expected true, already_applied false, apply_preconditions_met true, precondition_failures [], prerequisites_missing [], SQL 147 applied (predecessors {\"sql147\": true}), the function in SQL 147's form, its function_acl checksops and the owner, definer_writes ok true on all six relations), the pre-state the read-only inspect recorded in production_inspect (SSM fd54c8e6-bbeb-466e-92e4-d45645203570). The apply run's own inspect step read the same pre-state. Steps pin (execute true, staging_acceptance run 42931300437), source (tarball sha256 matches the sidecar and --expected-tarball-sha256, tree matches the tarball, migration source == pin), inspect, contracts (claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43), manifest, source-recheck-before-preflight, preflight (receipt_issued), evaluate (sql148_production_apply_allowed true), source-recheck-before-apply, apply (applied) and post-apply-inspect all ok. The run's JSON arrived whole (22538 characters of SSM output, under the 24000-character limit; the operator's session saved each phase's output, which held all of it, and the whole output was read back read-only from SSM get-command-invocation for 50126850-40cf-4f2f-98de-479e9319f552 and 8f598d80-bc65-4b79-a550-540e17d76472, equal to what was saved): every field of the applied object is recorded as printed, except this note and owner_approval_basis, which are extended as in the SQL 127 to SQL 147 records (the one-shot's own one_shot_note read: \"One production-sql-one-shot run verified the source, ran the read-only inspect and the runner contracts, built the manifest, issued the receipt and lease (preflight), evaluated (sql150_production_apply_allowed true), applied (exit 0) and ran the post-apply inspect.\"; its owner_approval_basis read: \"As passed in --approval-statement for --approval-scope sql150; the one-shot cannot verify who said it.\"). The printed applied.receipt equals the run's top-level details.apply_result, and applied.post_apply_inspect, pre_apply_inspect and contract_results equal the top-level objects of the same name. This block adds migration_source_sha256 (with its note), apply_ssm_command_id, steps and manifest_sha256 from the same run's details, as the SQL 127 to SQL 147 records do. The run's not_observed_by_this_run list names ssm_command_id and source_staged_by, supplied here as apply_ssm_command_id and transfer run 42935020477. The post-apply inspect reported live 48d61bb31da60ca6f52d2691e3f3a95de9ce33347725a32e9b95b4939ff1bb13 == intended, already_applied true, precondition_failures []: function aws_record_external_disbursement(uuid, uuid, jsonb, text) intended (SQL 150's body: the PA fee no longer subtracted), its EXECUTE ACL checksops and the owner, definer_writes ok true on all six relations, SQL 147 still applied (predecessors {\"sql147\": true}), prerequisites_missing []. Unrelated catalog 3f3a1ddce8ba88806d81c4eceae9cbd15e8f34ec73d5d5f8008ac63924558570 (policies 479, functions 1364, triggers 185 outside SQL 150's own). Production acceptance: not yet reported by the owner when this record was written (the SPA change that matches it, src/components/payments/FundsTab.tsx from #1752, is deployed through the guarded SPA path on the owner's words \"DEPLOY WEBSITE TO PRODUCTION\", not by this record); this record does not claim it.",
+    "steps": [
+      "pin",
+      "source",
+      "inspect",
+      "contracts",
+      "manifest",
+      "source-recheck-before-preflight",
+      "preflight",
+      "evaluate",
+      "source-recheck-before-apply",
+      "apply",
+      "post-apply-inspect"
+    ],
+    "contract_results": {
+      "claim-ledger": {
+        "ok": true,
+        "test": "aws/tests/claim-ledger-accepted-contract.test.mjs",
+        "evidence": "4/4 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at d3103952fc6b5ed4f9277f92c6601d426132ee01 (production-sql-one-shot 8be4fdca-7282-4802-87ca-1eca97197648, node --test)"
+      },
+      "tenant-isolation": {
+        "ok": true,
+        "test": "aws/tests/tenant-security-compliance.test.mjs",
+        "evidence": "6/6 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at d3103952fc6b5ed4f9277f92c6601d426132ee01 (production-sql-one-shot 8be4fdca-7282-4802-87ca-1eca97197648, node --test)"
+      },
+      "financial-write-protections": {
+        "ok": true,
+        "test": "aws/tests/api-write.test.mjs",
+        "evidence": "43/43 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at d3103952fc6b5ed4f9277f92c6601d426132ee01 (production-sql-one-shot 8be4fdca-7282-4802-87ca-1eca97197648, node --test)"
+      }
+    },
+    "pre_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "650ad0d486b5eebdf647e4c25a56c8776ed7a412d8735cfc83aad1d449b959fa",
+      "live_matches_expected": true,
+      "already_applied": false,
+      "predecessors": {
+        "sql147": true
+      },
+      "predecessors_applied": true,
+      "missing_dependencies": [],
+      "apply_preconditions_met": true,
+      "precondition_failures": [],
+      "current_user": "checksops_admin",
+      "session_user": "checksops_admin",
+      "counts": null,
+      "successors_applied": [],
+      "release_sql_inspect": {
+        "live_definition_sha256": "650ad0d486b5eebdf647e4c25a56c8776ed7a412d8735cfc83aad1d449b959fa",
+        "prerequisites_missing": [],
+        "predecessors": {
+          "sql147": true
+        },
+        "successors_applied": [],
+        "functions": [
+          {
+            "name": "aws_record_external_disbursement(uuid, uuid, jsonb, text)",
+            "state": "different"
+          }
+        ],
+        "policies": [],
+        "views": [],
+        "tables": [],
+        "columns": [],
+        "constraints": [],
+        "triggers": [],
+        "table_privileges": [],
+        "function_acl": [
+          {
+            "name": "aws_record_external_disbursement(uuid, uuid, jsonb, text)",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          }
+        ],
+        "acl_functions": [],
+        "indexes": [],
+        "unique_covers": [],
+        "definer_writes": [
+          {
+            "name": "disbursement_batches",
+            "ok": true
+          },
+          {
+            "name": "disbursement_splits",
+            "ok": true
+          },
+          {
+            "name": "check_intake_items",
+            "ok": true
+          },
+          {
+            "name": "payment_transfers",
+            "ok": true
+          },
+          {
+            "name": "stakeholder_accounts",
+            "ok": true
+          },
+          {
+            "name": "check_stakeholders",
+            "ok": true
+          }
+        ],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": null
+      }
+    },
+    "manifest_sha256": "201051c135d9b2632a34b9ca8ccfd87306b77921b06fa72d010608aebec7f3f6",
+    "receipt": {
+      "migration": "sql150",
+      "workstream": "prod-sql150-external-disbursement-up-to-check-amount-20261111",
+      "commit": "d3103952fc6b5ed4f9277f92c6601d426132ee01",
+      "sql_file": "aws/workflows/sql/150_external_disbursement_up_to_check_amount.sql",
+      "before_hash": "650ad0d486b5eebdf647e4c25a56c8776ed7a412d8735cfc83aad1d449b959fa",
+      "after_hash": "48d61bb31da60ca6f52d2691e3f3a95de9ce33347725a32e9b95b4939ff1bb13",
+      "release_sql_inspect": {
+        "live_definition_sha256": "48d61bb31da60ca6f52d2691e3f3a95de9ce33347725a32e9b95b4939ff1bb13",
+        "prerequisites_missing": [],
+        "predecessors": {
+          "sql147": true
+        },
+        "successors_applied": [],
+        "functions": [
+          {
+            "name": "aws_record_external_disbursement(uuid, uuid, jsonb, text)",
+            "state": "intended"
+          }
+        ],
+        "policies": [],
+        "views": [],
+        "tables": [],
+        "columns": [],
+        "constraints": [],
+        "triggers": [],
+        "table_privileges": [],
+        "function_acl": [
+          {
+            "name": "aws_record_external_disbursement(uuid, uuid, jsonb, text)",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          }
+        ],
+        "acl_functions": [],
+        "indexes": [],
+        "unique_covers": [],
+        "definer_writes": [
+          {
+            "name": "disbursement_batches",
+            "ok": true
+          },
+          {
+            "name": "disbursement_splits",
+            "ok": true
+          },
+          {
+            "name": "check_intake_items",
+            "ok": true
+          },
+          {
+            "name": "payment_transfers",
+            "ok": true
+          },
+          {
+            "name": "stakeholder_accounts",
+            "ok": true
+          },
+          {
+            "name": "check_stakeholders",
+            "ok": true
+          }
+        ],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": null
+      },
+      "unrelated_catalog_sha256": "3f3a1ddce8ba88806d81c4eceae9cbd15e8f34ec73d5d5f8008ac63924558570",
+      "unrelated_catalog_counts": {
+        "relations": 892,
+        "columns": 3550,
+        "constraints": 2239,
+        "policies": 479,
+        "functions": 1364,
+        "indexes": 655,
+        "default_acl": 0,
+        "role_memberships": 15,
+        "roles": 29,
+        "triggers": 185,
+        "views": 25,
+        "types": 18,
+        "schema": 2
+      },
+      "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/42931300437",
+      "result": "applied"
+    },
+    "post_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "48d61bb31da60ca6f52d2691e3f3a95de9ce33347725a32e9b95b4939ff1bb13",
+      "live_matches_expected": false,
+      "already_applied": true,
+      "predecessors": {
+        "sql147": true
+      },
+      "predecessors_applied": true,
+      "missing_dependencies": [],
+      "apply_preconditions_met": false,
+      "precondition_failures": [],
+      "current_user": "checksops_admin",
+      "session_user": "checksops_admin",
+      "counts": null,
+      "successors_applied": [],
+      "release_sql_inspect": {
+        "live_definition_sha256": "48d61bb31da60ca6f52d2691e3f3a95de9ce33347725a32e9b95b4939ff1bb13",
+        "prerequisites_missing": [],
+        "predecessors": {
+          "sql147": true
+        },
+        "successors_applied": [],
+        "functions": [
+          {
+            "name": "aws_record_external_disbursement(uuid, uuid, jsonb, text)",
+            "state": "intended"
+          }
+        ],
+        "policies": [],
+        "views": [],
+        "tables": [],
+        "columns": [],
+        "constraints": [],
+        "triggers": [],
+        "table_privileges": [],
+        "function_acl": [
+          {
+            "name": "aws_record_external_disbursement(uuid, uuid, jsonb, text)",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          }
+        ],
+        "acl_functions": [],
+        "indexes": [],
+        "unique_covers": [],
+        "definer_writes": [
+          {
+            "name": "disbursement_batches",
+            "ok": true
+          },
+          {
+            "name": "disbursement_splits",
+            "ok": true
+          },
+          {
+            "name": "check_intake_items",
+            "ok": true
+          },
+          {
+            "name": "payment_transfers",
+            "ok": true
+          },
+          {
+            "name": "stakeholder_accounts",
+            "ok": true
+          },
+          {
+            "name": "check_stakeholders",
+            "ok": true
+          }
+        ],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": null
+      }
+    }
+  },
+  "production_evidence": {
+    "2026-11-11 apply": "Guarded production SQL one-shot on i-0c35557c4e5385406, workstream prod-sql150-external-disbursement-up-to-check-amount-20261111, main d3103952f (tarball a421813a…, transfer run 42935020477, migration source b470f8ec… == pin), owner-approved run (\"merge it when green and apply SQL 150 in production\"), pre-apply --phase inspect SSM 8f598d80-bc65-4b79-a550-540e17d76472 (run_id 282a4432-d04e-467c-b970-0b1d7ef1613f, live 650ad0d4…, live_matches_expected true), apply SSM 50126850-40cf-4f2f-98de-479e9319f552, run_id 8be4fdca-7282-4802-87ca-1eca97197648, one_use_id sql150-prod-c6158d19-21ae-44e8-8ea2-48b509a4fb66 (spent): every step ok; contracts claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43; pre-apply inspect live 650ad0d4… (live_matches_expected true, precondition_failures [], SQL 147 applied, definer_writes ok on all six relations); manifest 201051c1…; 650ad0d4… -> 48d61bb3…, result applied, unrelated catalog 3f3a1ddc… (policies 479, functions 1364); post-apply inspect already_applied true, precondition_failures []; the run's JSON arrived whole. After: public.aws_record_external_disbursement(uuid, uuid, jsonb, text) exists as SQL 150 defines it (SECURITY DEFINER, VOLATILE, RETURNS jsonb, EXECUTE for checksops and the owner; the saved PA fee no longer subtracted from the amount available, so a payment made outside ChecksOps can be recorded up to the check amount less what was already paid out of it). The SPA change that matches it (FundsTab.tsx, #1752) is not part of this pin and is not deployed by this record; it goes out through the guarded SPA path on the owner's words \"DEPLOY WEBSITE TO PRODUCTION\". Production acceptance was not yet reported by the owner when this was recorded. execute is false so the pin is no longer a standing authorization."
   }
 }
