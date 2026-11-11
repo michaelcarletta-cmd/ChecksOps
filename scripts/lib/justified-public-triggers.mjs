@@ -172,10 +172,22 @@ export const POST_RESTORE_PUBLIC_TRIGGERS = Object.freeze([
     table: 'mortgage_companies',
     trigger: 'aws_mortgage_company_in_use_guard',
     functionName: 'aws_mortgage_company_in_use_guard',
+  }),  // SQL 152 (152_invoice_and_failed_deposit_fees.sql), applied to staging 2026-11-11 (run 43005316840)
+  // and production (SSM cae61362, #1764): the $0.30 invoice fee once an invoice is sent and the $2.00
+  // failed deposit fee once a Check Alt deposit fails.
+  Object.freeze({
+    table: 'moov_invoices',
+    trigger: 'aws_moov_invoice_fee',
+    functionName: 'aws_record_invoice_fee',
+  }),
+  Object.freeze({
+    table: 'checkalt_deposits',
+    trigger: 'aws_checkalt_deposit_failed_fee',
+    functionName: 'aws_record_failed_deposit_fee',
   }),
 ]);
 
-export const JUSTIFIED_PUBLIC_TRIGGER_COUNT = 185;
+export const JUSTIFIED_PUBLIC_TRIGGER_COUNT = 187;
 
 const unqualified = (value) => {
   const text = String(value || '');
