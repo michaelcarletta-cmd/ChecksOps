@@ -546,8 +546,8 @@ test('every selectable pin refuses apply with the read-live sentinel before conn
     sqlFile89: file(MIGRATIONS['sql89-check-intake-column-update']),
     sqlFile29: file(MIGRATIONS['sql29-mortgage-ops-library-parity']),
     sqlFile30: file(MIGRATIONS['sql30-tenant-documents-doc-type']),
-    // SQL 90-106, 108-148, 150, 152, by migration key.
-    releaseSqlFiles: Object.fromEntries(Object.values(MIGRATIONS).filter((pin) => /^sql(9[0-9]|10[0-6]|108|109|110|111|112|113|114|115|116|117|118|119|120|121|122|123|124|125|126|127|128|129|130|131|132|133|134|135|136|137|138|139|140|141|142|143|144|145|146|147|148|150|152)$/.test(String(pin.key))).map((pin) => [pin.key, file(pin)])),
+    // SQL 90-106, 108-148, 150, 152, 154, by migration key.
+    releaseSqlFiles: Object.fromEntries(Object.values(MIGRATIONS).filter((pin) => /^sql(9[0-9]|10[0-6]|108|109|110|111|112|113|114|115|116|117|118|119|120|121|122|123|124|125|126|127|128|129|130|131|132|133|134|135|136|137|138|139|140|141|142|143|144|145|146|147|148|150|152|154)$/.test(String(pin.key))).map((pin) => [pin.key, file(pin)])),
   });
   for (const [key, pin] of Object.entries(MIGRATIONS)) {
     const event = {

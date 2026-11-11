@@ -138,8 +138,9 @@ test('pin: SQL 102 staging wave 6, code-derived, selectable, packed, in step wit
   assert.deepEqual(spec.functions.map((fn) => fn.identity), IDENTITIES);
   assert.deepEqual(spec.predecessors, ['sql98']);
   assert.deepEqual(spec.supersedes, ['sql98']);
-  // Only SQL 102 supersedes SQL 98, and SQL 98 refuses once SQL 102's setter exists (like SQL 96 after SQL 98).
-  assert.deepEqual(RELEASE_SQL_KEYS.filter((key) => (RELEASE_SQL_SPECS[key].supersedes || []).includes('sql98')), ['sql102']);
+  // SQL 102 supersedes SQL 98, and SQL 98 refuses once SQL 102's setter exists (like SQL 96 after SQL 98). SQL 154
+  // (2026-11-11) replaces the same guard again, so it supersedes both (release-sql154-executor.test.mjs).
+  assert.deepEqual(RELEASE_SQL_KEYS.filter((key) => (RELEASE_SQL_SPECS[key].supersedes || []).includes('sql98')), ['sql102', 'sql154']);
   assert.deepEqual(RELEASE_SQL_SPECS.sql98.refuse_after, [{ key: 'sql102', object: 'public.aws_platform_owner_set_tenant_profile(uuid, jsonb)' }]);
   const prod = productionPin(KEY);
   assert.equal(prod.intended_replacement_sha256, pin.intended_replacement_sha256);
