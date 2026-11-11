@@ -502,7 +502,7 @@ test('staging SQL record: every sql_before of the plan has an entry; the pending
   assert.equal(STAGING_SQL.target_environment, 'staging');
   const required = [...new Set(Object.values(PLAN.members).map((m) => m.sql_before).filter(Boolean))].sort();
   // Records are append-only: a SQL that no longer holds a member keeps its record when it is live in both environments
-  // (SQL 120 since the usage fees plan, 2026-11-10, moved tenant-billing-engine.mjs on to SQL 149, which needs it; SQL 102
+  // (SQL 120 since the usage fees plan, 2026-11-10, moved tenant-billing-engine.mjs on to SQL 152, which needs it; SQL 102
   // since the Starter Package plan, 2026-11-10, moved tenant-billing-handlers.mjs on to SQL 151, which needs it).
   const released = Object.keys(STAGING_SQL.sql).filter((file) => !required.includes(file)).sort();
   assert.deepEqual(released, ['aws/workflows/sql/102_platform_owner_tenant_profile.sql', 'aws/workflows/sql/120_usage_events_at_approval_and_send.sql']);
@@ -526,12 +526,12 @@ test('staging SQL record: every sql_before of the plan has an entry; the pending
   // record change (staging run 42334108246, production 2026-11-07), and SQL 146 (the Moov status catch-up's lock and fee
   // leg writer) until its record change (staging run 42405866540, production 2026-11-07), and SQL 147 (the external
   // disbursement record) until its record change (staging run 42838778413, production 2026-11-10), and SQL 148 (the
-  // second mortgagee link) until its record change (staging run 42905846810, production 2026-11-10). SQL 149 (the
+  // second mortgagee link) until its record change (staging run 42905846810, production 2026-11-10). SQL 152 (the
   // invoice and failed deposit fees, 2026-11-10) is such a SQL now: tenant-fee-invoice-email.mjs waits for it in both
-  // environments until its record change; so is SQL 151 (the Starter Package, 2026-11-10, which needs SQL 149):
+  // environments until its record change; so is SQL 151 (the Starter Package, 2026-11-10, which needs SQL 152):
   // tenant-billing-engine.mjs and tenant-billing-handlers.mjs wait for it.
   const pendingEverywhere = Object.entries(PLAN.sql_prerequisites).filter(([, record]) => record.verified_live === false).map(([file]) => file).sort();
-  assert.deepEqual(pendingEverywhere, ['aws/workflows/sql/149_invoice_and_failed_deposit_fees.sql', 'aws/workflows/sql/151_tenant_starter_package.sql']);
+  assert.deepEqual(pendingEverywhere, ['aws/workflows/sql/151_tenant_starter_package.sql', 'aws/workflows/sql/152_invoice_and_failed_deposit_fees.sql']);
   for (const [file, record] of Object.entries(STAGING_SQL.sql)) assert.equal(record.verified_live, !pendingEverywhere.includes(file), file);
   // A SQL recorded true here is either recorded live in production (with its staging acceptance)
   // or, staging first (release 2026-10-17), names its guarded staging SQL executor apply run and
@@ -590,12 +590,12 @@ test('staging apply of a member held by sql_before is refused before any AWS cal
   const SQL148 = 'aws/workflows/sql/148_second_mortgagee_link.sql';
   stagingSqlLive.sql[SQL148] = { verified_live: false, evidence: null };
   // tenant-billing-engine.mjs waited on SQL 120 (send-time fees; live in staging, run 40547527832); since the usage fees
-  // plan (2026-11-10) it and tenant-fee-invoice-email.mjs wait on SQL 149 (which needs SQL 120), not live in staging.
-  const SQL149 = 'aws/workflows/sql/149_invoice_and_failed_deposit_fees.sql';
+  // plan (2026-11-10) it and tenant-fee-invoice-email.mjs wait on SQL 152 (which needs SQL 120), not live in staging.
+  const SQL152 = 'aws/workflows/sql/152_invoice_and_failed_deposit_fees.sql';
   // The Starter Package plan (2026-11-10) moved the engine and tenant-billing-handlers.mjs (SQL 102 before) on to SQL 151.
   const SQL151 = 'aws/workflows/sql/151_tenant_starter_package.sql';
-  const PENDING = new Set([SQL149, SQL151]);
-  for (const [member, sqlBefore] of [['providers.mjs', SQL98], ['workflow-rpc.mjs', SQL148], ['tenant-billing-engine.mjs', SQL151], ['tenant-fee-invoice-email.mjs', SQL149], ['tenant-billing-handlers.mjs', SQL151]]) {
+  const PENDING = new Set([SQL152, SQL151]);
+  for (const [member, sqlBefore] of [['providers.mjs', SQL98], ['workflow-rpc.mjs', SQL148], ['tenant-billing-engine.mjs', SQL151], ['tenant-fee-invoice-email.mjs', SQL152], ['tenant-billing-handlers.mjs', SQL151]]) {
     assert.equal(PLAN.members[member].sql_before, sqlBefore, member);
     assert.equal(stagingSqlBefore(member).verified_live_in_staging, !PENDING.has(sqlBefore), `${member}: released by the committed record unless pending`);
     assert.deepEqual(stagingSqlBefore(member, { stagingSqlLive }), { sql_before: sqlBefore, verified_live_in_staging: false, evidence: null }, member);
