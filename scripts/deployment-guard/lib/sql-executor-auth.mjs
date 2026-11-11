@@ -3419,8 +3419,9 @@ export const AUTHORIZED_SQL148_SECOND_MORTGAGEE_LINK = Object.freeze({
 // public.aws_record_external_disbursement(uuid, uuid, jsonb, text) subtracts the PA fee from the amount available. The
 // file replaces that function in place with one change, the PA fee no longer subtracted (available = the check amount
 // less this tenant's live splits and Moov send legs); everything else is SQL 147's, EXECUTE for checksops and the owner.
-// Predecessor and supersedes SQL 147 (release-sql-specs.mjs). Pending until a reviewed pin change records a staging
-// read-live (expected: the function exactly as SQL 147 left it, everything else in place).
+// Predecessor and supersedes SQL 147 (release-sql-specs.mjs). Staging apply authorized (wave 44) from staging read-live
+// run 42928033292: the pre-state, the function exactly as SQL 147 left it, equals the derived one
+// (ops/production-sql-150-apply.md).
 export const AUTHORIZED_SQL150_EXTERNAL_DISBURSEMENT_UP_TO_CHECK_AMOUNT = Object.freeze({
   key: 'sql150',
   filename: 'aws/workflows/sql/150_external_disbursement_up_to_check_amount.sql',
@@ -3428,9 +3429,11 @@ export const AUTHORIZED_SQL150_EXTERNAL_DISBURSEMENT_UP_TO_CHECK_AMOUNT = Object
   // The commit that last authored the file bytes.
   commit: '07271dfa132474ff8536173fecf4ebde1c2f8245',
   source_sha256: 'b470f8ecb12d85f2a51d470d9a408d8e2012d720388eb1bcc4d3fbccfc8a31dc',
-  authorization: 'pending',
-  execute: false,
-  expected_live_definition_sha256: null,
+  authorization: 'Owner approved 2026-11-11: staging apply (wave 44) from staging read-live run 42928033292',
+  execute: true,
+  // Staging read-live run 42928033292 (main 1ecbe3452, executor deploy run 42927303051): already_applied false,
+  // precondition_failures []. Equal to the derived pre-state (the function as SQL 147 left it).
+  expected_live_definition_sha256: '650ad0d486b5eebdf647e4c25a56c8776ed7a412d8735cfc83aad1d449b959fa',
   // Code-derived: releaseIntendedHash('sql150', file bytes) (release-sql-state.mjs); re-derived by the tests.
   intended_replacement_sha256: '48d61bb31da60ca6f52d2691e3f3a95de9ce33347725a32e9b95b4939ff1bb13',
   function_identities: Object.freeze([

@@ -217,7 +217,7 @@ test('order: predecessor and supersedes SQL 147 (untouched); SQL 147\'s one DEFI
   const runbook = fs.readFileSync(path.join(ROOT, COMMITTED.tooling.runbook), 'utf8');
   assert.ok(runbook.includes(COMMITTED.intended_replacement_sha256));
   assert.ok(runbook.includes(COMMITTED.source_sha256));
-  assert.match(runbook, /\*\*Status:\*\* not applied anywhere/);
+  assert.match(runbook, /\*\*Status:\*\* staging pin execute-authorized \(wave 44\); not applied anywhere\./);
   assert.match(runbook, /\*\*Predecessor\.\*\* SQL 147/);
   for (const words of ['"I want to be able\nto record up to the check amount"', '"merge 1752 when green"', '"build the SQL 150 tooling\nand merge it when green"']) {
     assert.ok(runbook.replace(/\s+/g, ' ').includes(words.replace(/\s+/g, ' ')), words);
