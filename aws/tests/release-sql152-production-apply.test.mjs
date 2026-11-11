@@ -291,6 +291,14 @@ test('order: no predecessor; the new table with no grant to anyone, five owner-o
     assert.ok(plan.sql_prerequisites[SQL152_FILE].evidence.includes(evidence), evidence);
   }
   assert.equal(plan.members['tenant-fee-invoice-email.mjs'].sql_before, SQL152_FILE);
+  // Two public triggers more once applied: the DB validator followed (the staging overlay inspect run 43014723425 failed
+  // its public smoke, 503, on the named 185-set), as 3255c1de4 did for SQL 143, and justifies both by name (187). Its
+  // production overlay row is a REPLACE with sql_before SQL 152, already recorded live.
+  const validator = fs.readFileSync(path.join(ROOT, 'aws/functions/api/db-readonly-validate.mjs'), 'utf8');
+  assert.match(validator, /table: 'moov_invoices',\n\s+trigger: 'aws_moov_invoice_fee',\n\s+functionName: 'aws_record_invoice_fee'/);
+  assert.match(validator, /table: 'checkalt_deposits',\n\s+trigger: 'aws_checkalt_deposit_failed_fee',\n\s+functionName: 'aws_record_failed_deposit_fee'/);
+  assert.match(validator, /export const EXPECTED_PUBLIC_TRIGGERS = 187;/);
+  assert.deepEqual(Object.keys(plan.members).filter((m) => plan.members[m].sql_before === SQL152_FILE).sort(), ['db-readonly-validate.mjs', 'tenant-fee-invoice-email.mjs']);
   assert.equal(plan.sql_prerequisites[SQL149_FILE], undefined);
   // SQL 152's statements outside function bodies: two DO blocks, one table, the launch row, no GRANT or policy.
   const text = fs.readFileSync(path.join(ROOT, SQL152_FILE), 'utf8').replace(/--[^\n]*/g, '');

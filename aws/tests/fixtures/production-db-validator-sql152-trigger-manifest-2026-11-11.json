@@ -1,0 +1,15 @@
+{
+  "workstream_id": "production-db-validator-sql152-trigger",
+  "authorization": "Pending owner review (2026-11-11). Planning only: nothing is live or verified. The production apply needs its own owner approval, a staging acceptance reference and a read-only production inspect that confirms the live bytes. Its sql_before, SQL 152, is already recorded verified live in production (SSM cae61362-0534-417e-b45c-a8d6175ce3a2, #1764), so that hold is satisfied.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "SQL 152 (152_invoice_and_failed_deposit_fees.sql) adds two public triggers, moov_invoices.aws_moov_invoice_fee (function aws_record_invoice_fee) and checkalt_deposits.aws_checkalt_deposit_failed_fee (function aws_record_failed_deposit_fee). Applied to staging 2026-11-11 (guarded staging SQL executor apply run 43005316840, read-live run 43005694458 already_applied true, after 6cf7d044…) and to production 2026-11-11 (guarded one-shot SSM cae61362-0534-417e-b45c-a8d6175ce3a2, workstream prod-sql152-invoice-and-failed-deposit-fees-20261111, record #1764). The staging Lambda overlay inspect run 43014723425 (main 5164d9f8a, member tenant-fee-invoice-email.mjs) then failed its public smoke: /health and /db-health 200, /db-readonly-validate 503, because the validator expects the named 185-set; production /db-readonly-validate also answers 503 (observed 2026-11-11) with 187 public triggers. These bytes add both triggers to the justified set and raise EXPECTED_PUBLIC_TRIGGERS to 187, as 3255c1de4 did for SQL 143. REPLACE db-readonly-validate.mjs c7aa9f1b -> aef88b3b: live_sha256 is the SQL 143 validator production run 42058917794 applied (previous_manifest, the applied record; sha256 of the file at main 1b57eaa9c, the applied commit). sql_before is SQL 152, already recorded verified live in production, so the hold is satisfied; production answers 503 on /db-readonly-validate until this REPLACE runs, as it did between the SQL 143 production apply and run 42058917794. The apply still runs in plan order (earlier members must be at their accepted bytes). A read-only production overlay inspect must confirm the live member before any apply.",
+  "members": {
+    "db-readonly-validate.mjs": {
+      "live_sha256": "c7aa9f1bfbcf99fe84e8fd56ba932d98d7db2c706d4e98e45b469d444590c55a",
+      "accepted_sha256": "aef88b3b7af8962c832f7200c59b84d01823d28e7b8185ab0b5fdf26e1112c2f",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-db-validator-sql143-trigger-applied-manifest-2026-11-05.json"
+    }
+  }
+}
