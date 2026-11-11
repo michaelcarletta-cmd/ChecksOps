@@ -458,7 +458,7 @@ const holdNow = (member, was) => (SECOND_MORTGAGEE.members[member] ? SQL148_FILE
 /** The bytes the Loss Draft escrow close applied (2026-10-31): main's, until the second mortgagee plan moved them on. */
 const escrowApplied = (member) => SECOND_MORTGAGEE.members[member]?.live_sha256 ?? sha(`aws/functions/api/${member}`);
 // Usage fees (owner 2026-11-10): tenant-fee-invoice-email.mjs and tenant-billing-engine.mjs REPLACE their live bytes,
-// held on SQL 152 (not live), planning only (its own test, at the end).
+// held on SQL 152 (recorded live 2026-11-11, the SQL 152 record change), planning only (its own test, at the end).
 const USAGE_FEES_REL = 'aws/tests/fixtures/production-usage-fees-manifest-2026-11-10.json';
 const USAGE_FEES = JSON.parse(fs.readFileSync(path.join(ROOT, USAGE_FEES_REL), 'utf8'));
 const SQL152_FILE = 'aws/workflows/sql/152_invoice_and_failed_deposit_fees.sql';
@@ -516,8 +516,8 @@ const withSql145 = (member, deps) => {
   plan.sql_prerequisites[SQL145_FILE] = { verified_live: true, evidence: 'test' };
   return { ...deps, plan };
 };
-// The usage fees members wait for SQL 152 (not live, planning only, its own test at the end): apply replays of older
-// workstreams run on a plan copy that states it live, as withSql145 does for SQL 145.
+// The usage fees members wait for SQL 152 (recorded live 2026-11-11) or SQL 151 (not live), planning only: apply replays
+// of older workstreams run on a plan copy that states both live, as withSql145 does for SQL 145.
 const withSql149 = (member, deps) => {
   if (![SQL152_FILE, SQL151_FILE].includes(PLAN.members[member]?.sql_before)) return deps;
   const plan = structuredClone(deps.plan || PLAN);

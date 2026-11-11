@@ -1,8 +1,8 @@
 {
   "id": "sql152-invoice-and-failed-deposit-fees-production-apply",
   "migration": "sql152",
-  "authorization": "Owner approved 2026-11-11 (the owner's words for SQL 152: \"work on these fixes\", \"Yes\", \"Merge it when green\", \"record the SQL 152 staging pin and merge it when green\", \"apply SQL 152 in staging\", \"Yes if that is next\", \"record the SQL 152 production pin\"; \"work on these fixes\" of 2026-11-10 asked for the invoice and failed deposit fees, \"Yes\" approved SQL 152 replacing SQL 149 and its tooling, \"Merge it when green\" merged #1758 and #1760, \"Yes if that is next\" answered the question to run the read-only production inspect; no separate staging acceptance statement was given; the change itself is reviewed and merged by the owner): production apply of SQL 152 after the staging apply below (production 99c391367eaf941dae2a89cf78d72ae87fff5559d2fc3c26ad7acc691f1a4a5e -> 6cf7d044d2db1e3e14f44815a573348b4180345d8fecc67079a95d480378ffce); execute true takes effect only when the owner reviews and merges this change. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
-  "execute": true,
+  "authorization": "Applied to production on 2026-11-11; execute is false again, so this pin is no longer a standing authorization and a re-apply needs a new reviewed pin change. The owner approved the SQL 152 production pin change on 2026-11-11 in the words \"work on these fixes\", \"Yes\", \"Merge it when green\", \"record the SQL 152 staging pin and merge it when green\", \"apply SQL 152 in staging\", \"Yes if that is next\" and \"record the SQL 152 production pin\" (no separate staging acceptance statement was given; the staging apply run 43005316840 is the acceptance; 99c39136 -> 6cf7d044, #1763, merged to main as b5a354925 on the owner's words \"merge it when green and apply SQL 152 in production\") and the one apply run recorded in applied (workstream prod-sql152-invoice-and-failed-deposit-fees-20261111) in the words \"merge it when green and apply SQL 152 in production\", passed to it verbatim. That approval covered that run only.",
+  "execute": false,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -64,5 +64,472 @@
     "ok": true,
     "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43005316840",
     "basis": "Guarded staging SQL executor apply of sql152-invoice-and-failed-deposit-fees, run 43005316840 (job 130471228593, 2026-11-11, main 34e4d6983c37b47c06fdfd633d97880ec0a61112, wave 45, workstream github-staging-sql-43005316840, staging pin commit 3fea91f6f7a6bee0de623ebcc2f0b65de2ccb4f3, staging pin PR #1762, on the executor deployed by deploy run 43004839952: EkfZ5s51spdj4LsXDhjT7DJsnUUmZ5/SPhplnpjZ6Wk=, previous FJ474P+p2chkkq3XerWtY1De6apzeuYAA83Qq1515mw= (inspect run 43004433326)), under the owner's words \"apply SQL 152 in staging\", from the staging pre-state recorded by read-live run 42945948226 (job 130278663761, main 6d19dad33, after executor deploy run 42945571224 and inspect run 42945146098; 99c391367eaf941dae2a89cf78d72ae87fff5559d2fc3c26ad7acc691f1a4a5e, already_applied false, precondition_failures []): receipt before 99c391367eaf941dae2a89cf78d72ae87fff5559d2fc3c26ad7acc691f1a4a5e, after 6cf7d044d2db1e3e14f44815a573348b4180345d8fecc67079a95d480378ffce == intended, result applied. Read-live run 43005694458 (job 130472501828) then reported already_applied true, live 6cf7d044d2db1e3e14f44815a573348b4180345d8fecc67079a95d480378ffce, precondition_failures [], prerequisites_missing []. The owner gave the run approval \"apply SQL 152 in staging\"; no separate staging acceptance statement was given. No separate staging record PR: these staging runs are recorded here and in ops/production-sql-152-apply.md by the production pin PR. The behavior is covered on PostgreSQL 16 by aws/tests/sql152-usage-fees-pg.test.mjs (with default privileges granting every new table) and through the executor by aws/tests/release-sql152-executor.test.mjs. Production's pre-state (production_inspect) equals staging's, so the same path applies there. The same file bytes (source_sha256) are pinned in both."
+  },
+  "applied": {
+    "date": "2026-11-11",
+    "result": "applied",
+    "source_commit": "b5a354925b09b95440e30c5d29abb9a3999b6204",
+    "source_commit_basis": "SOURCE_COMMIT in the tarball (written by sql53-temporary-transfer) equals --commit, and the tarball sha256 equals --expected-tarball-sha256 as copied by the operator from that transfer run's log (TARBALL_SHA256 line); the run log itself was not read by the one-shot.",
+    "source_tarball": {
+      "file": "source-b5a354925b09b95440e30c5d29abb9a3999b6204.tar.gz",
+      "sha256": "8a6588ad8b8cd90c50c610be63ed4e9316aaab1975031499643b9e9208ebdd29"
+    },
+    "migration_source_sha256": "b646207d09771e5b06f28702d1e442591282a434c5f4a9cdebfbb755384feeb8",
+    "migration_source_sha256_note": "The one-shot source step hashed aws/workflows/sql/152_invoice_and_failed_deposit_fees.sql in the transfer tarball: equal to source_sha256 (the pin; migration_matches_pin true).",
+    "runner": "i-0c35557c4e5385406",
+    "runner_basis": "operator-supplied --runner (not verified by the one-shot)",
+    "workstream_id": "prod-sql152-invoice-and-failed-deposit-fees-20261111",
+    "one_use_id": "sql152-prod-a441e0c6-5be7-468e-b45a-5ea23bd1ba89",
+    "one_use_id_consumed": true,
+    "one_use_id_consumed_basis": "Inferred from the successful apply (the tool records the one_use_id after COMMIT and only warns if that write fails); the consumed-registry entry was not read back separately.",
+    "owner_approval": "merge it when green and apply SQL 152 in production",
+    "owner_approval_basis": "As passed in --approval-statement for --approval-scope sql152; the one-shot cannot verify who said it. The owner's words of 2026-11-11 for this run were \"merge it when green and apply SQL 152 in production\", given together with the instruction to merge the pin change (#1763, merged to main as b5a354925 once green); they were passed verbatim as the approval statement for the --phase inspect run and the --phase apply run, which ran only after that merge was on main and staged. The owner's \"Proceed\" answered the report of the three AWS-managed SSM commands already in progress on the runner; it was not passed to the one-shot.",
+    "operator": "michaelcarletta-cmd",
+    "apply_ssm_command_id": "cae61362-0534-417e-b45c-a8d6175ce3a2",
+    "one_shot_run_id": "02469480-67b5-4d0c-b451-12b1ad103907",
+    "one_shot_note": "One SSM command (cae61362-0534-417e-b45c-a8d6175ce3a2 on i-0c35557c4e5385406, sent 2026-11-11 11:17:16Z, Success, execution ended 11:17:32Z; the runner was started from stopped for this work at 11:16:43Z, SSM Online at 11:17:01Z, and stopped again at 11:18:09Z, after both SSM commands had ended) ran the production-sql-one-shot --phase apply (run_id 02469480-67b5-4d0c-b451-12b1ad103907) from main b5a354925 (transfer run 43009615137, sql53-temporary-transfer.yml on main after the #1763 merge; tarball sha256 8a6588ad8b8cd90c50c610be63ed4e9316aaab1975031499643b9e9208ebdd29). Three AWS-managed SSM commands were already InProgress on the runner when it started (ed0cc449-52ce-4dd3-a666-49e43c1d4a2f AWS-ConfigureAWSPackage, 8b8bce23-ef39-4c6d-8fc0-b2397625b1cb AmazonInspector2-ConfigureInspectorSsmPlugin, cc4a5f70-90fb-4dc2-a44d-6f52e346a637 AmazonInspector2-ConfigureInspectorSsmPluginLinux); they were reported to the owner, who answered \"Proceed\", before the inspect was sent. Before the apply, a separate one-shot --phase inspect on the same tarball and the same approval statement (SSM bd06cdd2-a497-47a5-b35a-e87f3c1b09de, sent 11:17:01Z, ended 11:17:13Z, run_id 468607d9-8ea0-486d-944d-823cefbb6891, steps pin, source, inspect and contracts ok, nothing written; its whole output, 6609 characters, arrived) read live 99c391367eaf941dae2a89cf78d72ae87fff5559d2fc3c26ad7acc691f1a4a5e (live_matches_expected true, already_applied false, apply_preconditions_met true, precondition_failures [], prerequisites_missing [], no predecessor, none of SQL 152's objects present), the pre-state the read-only inspect recorded in production_inspect (SSM 15087959-5dfe-463d-950a-267eb2039905). The apply run's own inspect step read the same pre-state (its pre_apply_inspect equals the inspect run's). Steps pin (execute true, staging_acceptance run 43005316840), source (tarball sha256 matches the sidecar and --expected-tarball-sha256, tree matches the tarball, migration source == pin), inspect, contracts (claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43), manifest, source-recheck-before-preflight, preflight (receipt_issued), evaluate (sql152_production_apply_allowed true), source-recheck-before-apply, apply (applied) and post-apply-inspect all ok. The run's JSON did not arrive whole: SSM StandardOutputContent is capped at 24000 characters, and the apply output was cut there, inside the printed applied.receipt.release_sql_inspect.tables entry for tenant_usage_fee_launch (after \"column_count\": 3), ending \"--output truncated--\". The top-level details arrived whole (ok, tool, run_id, steps, phase, migration, commit, workstream_id, approval_statement, approval_scope, operator, source, pre_apply_inspect, contract_results, manifest_file, manifest_sha256, one_use_id, receipt_issued, receipt_file, apply_child_started, post_apply_inspect, apply_result). The fields of the printed applied object up to one_shot_note (date to one_shot_note, with pre_apply_inspect and contract_results, which equal the top-level objects of the same name) are recorded as printed, except this note and owner_approval_basis, which are extended as in the SQL 127 to SQL 150 records (the one-shot's own one_shot_note read: \"One production-sql-one-shot run verified the source, ran the read-only inspect and the runner contracts, built the manifest, issued the receipt and lease (preflight), evaluated (sql152_production_apply_allowed true), applied (exit 0) and ran the post-apply inspect.\"; its owner_approval_basis read: \"As passed in --approval-statement for --approval-scope sql152; the one-shot cannot verify who said it.\"). receipt and post_apply_inspect are recorded from the top-level details.apply_result and details.post_apply_inspect, which the one-shot copies into applied (as the SQL 150 record states, its printed applied.receipt equals details.apply_result and its applied.post_apply_inspect equals details.post_apply_inspect). Not observed by this record: the printed applied.receipt after the tenant_usage_fee_launch table entry, the printed applied.post_apply_inspect copy, and everything the output printed after details.applied (the run's not_observed_by_this_run list, any warnings or errors); the full output was not read back from anywhere else. This block adds migration_source_sha256 (with its note), apply_ssm_command_id, steps and manifest_sha256 from the same run's details, as the SQL 127 to SQL 150 records do; source_staged_by is transfer run 43009615137. The post-apply inspect reported live 6cf7d044d2db1e3e14f44815a573348b4180345d8fecc67079a95d480378ffce == intended, already_applied true, precondition_failures [], prerequisites_missing []: the table tenant_usage_fee_launch intended (RLS on, 3 columns, no policy), the five functions aws_usage_fee_launched_at(), aws_invoice_fee_cents(), aws_failed_deposit_fee_cents(), aws_record_invoice_fee() and aws_record_failed_deposit_fee() intended with EXECUTE for the owner only, the four tenant_maintenance_payments columns intended, the triggers aws_moov_invoice_fee on moov_invoices and aws_checkalt_deposit_failed_fee on checkalt_deposits intended, the index check_billing_events_usage_source_uidx intended, definer_writes check_billing_events ok. Unrelated catalog 63f88a7f3e8276d1bc208389aaa42059a8fa99ef36b0dadb8411449990f6aefc (policies 479, functions 1365, triggers 185). Production acceptance: not yet reported by the owner when this record was written; this record does not claim it.",
+    "steps": [
+      "pin",
+      "source",
+      "inspect",
+      "contracts",
+      "manifest",
+      "source-recheck-before-preflight",
+      "preflight",
+      "evaluate",
+      "source-recheck-before-apply",
+      "apply",
+      "post-apply-inspect"
+    ],
+    "contract_results": {
+      "claim-ledger": {
+        "ok": true,
+        "test": "aws/tests/claim-ledger-accepted-contract.test.mjs",
+        "evidence": "4/4 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at b5a354925b09b95440e30c5d29abb9a3999b6204 (production-sql-one-shot 02469480-67b5-4d0c-b451-12b1ad103907, node --test)"
+      },
+      "tenant-isolation": {
+        "ok": true,
+        "test": "aws/tests/tenant-security-compliance.test.mjs",
+        "evidence": "6/6 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at b5a354925b09b95440e30c5d29abb9a3999b6204 (production-sql-one-shot 02469480-67b5-4d0c-b451-12b1ad103907, node --test)"
+      },
+      "financial-write-protections": {
+        "ok": true,
+        "test": "aws/tests/api-write.test.mjs",
+        "evidence": "43/43 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at b5a354925b09b95440e30c5d29abb9a3999b6204 (production-sql-one-shot 02469480-67b5-4d0c-b451-12b1ad103907, node --test)"
+      }
+    },
+    "pre_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "99c391367eaf941dae2a89cf78d72ae87fff5559d2fc3c26ad7acc691f1a4a5e",
+      "live_matches_expected": true,
+      "already_applied": false,
+      "predecessors": {},
+      "predecessors_applied": true,
+      "missing_dependencies": [],
+      "apply_preconditions_met": true,
+      "precondition_failures": [],
+      "current_user": "checksops_admin",
+      "session_user": "checksops_admin",
+      "counts": null,
+      "successors_applied": [],
+      "release_sql_inspect": {
+        "live_definition_sha256": "99c391367eaf941dae2a89cf78d72ae87fff5559d2fc3c26ad7acc691f1a4a5e",
+        "prerequisites_missing": [],
+        "predecessors": {},
+        "successors_applied": [],
+        "functions": [
+          {
+            "name": "aws_usage_fee_launched_at()",
+            "state": "absent"
+          },
+          {
+            "name": "aws_invoice_fee_cents()",
+            "state": "absent"
+          },
+          {
+            "name": "aws_failed_deposit_fee_cents()",
+            "state": "absent"
+          },
+          {
+            "name": "aws_record_invoice_fee()",
+            "state": "absent"
+          },
+          {
+            "name": "aws_record_failed_deposit_fee()",
+            "state": "absent"
+          }
+        ],
+        "policies": [],
+        "views": [],
+        "tables": [
+          {
+            "name": "tenant_usage_fee_launch",
+            "state": "absent",
+            "rls": false,
+            "column_count": 0,
+            "policy_count": 0
+          }
+        ],
+        "columns": [
+          {
+            "name": "tenant_maintenance_payments.invoice_fee_count",
+            "state": "absent"
+          },
+          {
+            "name": "tenant_maintenance_payments.invoice_fee_amount_cents",
+            "state": "absent"
+          },
+          {
+            "name": "tenant_maintenance_payments.failed_deposit_count",
+            "state": "absent"
+          },
+          {
+            "name": "tenant_maintenance_payments.failed_deposit_amount_cents",
+            "state": "absent"
+          }
+        ],
+        "constraints": [],
+        "triggers": [
+          {
+            "name": "moov_invoices aws_moov_invoice_fee",
+            "state": "absent"
+          },
+          {
+            "name": "checkalt_deposits aws_checkalt_deposit_failed_fee",
+            "state": "absent"
+          }
+        ],
+        "table_privileges": [],
+        "function_acl": [
+          {
+            "name": "aws_usage_fee_launched_at()",
+            "acl": []
+          },
+          {
+            "name": "aws_invoice_fee_cents()",
+            "acl": []
+          },
+          {
+            "name": "aws_failed_deposit_fee_cents()",
+            "acl": []
+          },
+          {
+            "name": "aws_record_invoice_fee()",
+            "acl": []
+          },
+          {
+            "name": "aws_record_failed_deposit_fee()",
+            "acl": []
+          }
+        ],
+        "acl_functions": [],
+        "indexes": [
+          {
+            "name": "check_billing_events check_billing_events_usage_source_uidx",
+            "state": "absent"
+          }
+        ],
+        "unique_covers": [],
+        "definer_writes": [
+          {
+            "name": "check_billing_events",
+            "ok": true
+          }
+        ],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": null
+      }
+    },
+    "manifest_sha256": "8b3a1570be42b1dc593fa92bc647ac465f880558dbf76b0ed4bf08d593b0d0cc",
+    "receipt": {
+      "migration": "sql152",
+      "workstream": "prod-sql152-invoice-and-failed-deposit-fees-20261111",
+      "commit": "b5a354925b09b95440e30c5d29abb9a3999b6204",
+      "sql_file": "aws/workflows/sql/152_invoice_and_failed_deposit_fees.sql",
+      "before_hash": "99c391367eaf941dae2a89cf78d72ae87fff5559d2fc3c26ad7acc691f1a4a5e",
+      "after_hash": "6cf7d044d2db1e3e14f44815a573348b4180345d8fecc67079a95d480378ffce",
+      "release_sql_inspect": {
+        "live_definition_sha256": "6cf7d044d2db1e3e14f44815a573348b4180345d8fecc67079a95d480378ffce",
+        "prerequisites_missing": [],
+        "predecessors": {},
+        "successors_applied": [],
+        "functions": [
+          {
+            "name": "aws_usage_fee_launched_at()",
+            "state": "intended"
+          },
+          {
+            "name": "aws_invoice_fee_cents()",
+            "state": "intended"
+          },
+          {
+            "name": "aws_failed_deposit_fee_cents()",
+            "state": "intended"
+          },
+          {
+            "name": "aws_record_invoice_fee()",
+            "state": "intended"
+          },
+          {
+            "name": "aws_record_failed_deposit_fee()",
+            "state": "intended"
+          }
+        ],
+        "policies": [],
+        "views": [],
+        "tables": [
+          {
+            "name": "tenant_usage_fee_launch",
+            "state": "intended",
+            "rls": true,
+            "column_count": 3,
+            "policy_count": 0
+          }
+        ],
+        "columns": [
+          {
+            "name": "tenant_maintenance_payments.invoice_fee_count",
+            "state": "intended"
+          },
+          {
+            "name": "tenant_maintenance_payments.invoice_fee_amount_cents",
+            "state": "intended"
+          },
+          {
+            "name": "tenant_maintenance_payments.failed_deposit_count",
+            "state": "intended"
+          },
+          {
+            "name": "tenant_maintenance_payments.failed_deposit_amount_cents",
+            "state": "intended"
+          }
+        ],
+        "constraints": [],
+        "triggers": [
+          {
+            "name": "moov_invoices aws_moov_invoice_fee",
+            "state": "intended"
+          },
+          {
+            "name": "checkalt_deposits aws_checkalt_deposit_failed_fee",
+            "state": "intended"
+          }
+        ],
+        "table_privileges": [],
+        "function_acl": [
+          {
+            "name": "aws_usage_fee_launched_at()",
+            "acl": [
+              "owner EXECUTE"
+            ]
+          },
+          {
+            "name": "aws_invoice_fee_cents()",
+            "acl": [
+              "owner EXECUTE"
+            ]
+          },
+          {
+            "name": "aws_failed_deposit_fee_cents()",
+            "acl": [
+              "owner EXECUTE"
+            ]
+          },
+          {
+            "name": "aws_record_invoice_fee()",
+            "acl": [
+              "owner EXECUTE"
+            ]
+          },
+          {
+            "name": "aws_record_failed_deposit_fee()",
+            "acl": [
+              "owner EXECUTE"
+            ]
+          }
+        ],
+        "acl_functions": [],
+        "indexes": [
+          {
+            "name": "check_billing_events check_billing_events_usage_source_uidx",
+            "state": "intended"
+          }
+        ],
+        "unique_covers": [],
+        "definer_writes": [
+          {
+            "name": "check_billing_events",
+            "ok": true
+          }
+        ],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": null
+      },
+      "unrelated_catalog_sha256": "63f88a7f3e8276d1bc208389aaa42059a8fa99ef36b0dadb8411449990f6aefc",
+      "unrelated_catalog_counts": {
+        "relations": 892,
+        "columns": 3550,
+        "constraints": 2239,
+        "policies": 479,
+        "functions": 1365,
+        "indexes": 655,
+        "default_acl": 0,
+        "role_memberships": 15,
+        "roles": 29,
+        "triggers": 185,
+        "views": 25,
+        "types": 18,
+        "schema": 2
+      },
+      "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43005316840",
+      "result": "applied"
+    },
+    "post_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "6cf7d044d2db1e3e14f44815a573348b4180345d8fecc67079a95d480378ffce",
+      "live_matches_expected": false,
+      "already_applied": true,
+      "predecessors": {},
+      "predecessors_applied": true,
+      "missing_dependencies": [],
+      "apply_preconditions_met": false,
+      "precondition_failures": [],
+      "current_user": "checksops_admin",
+      "session_user": "checksops_admin",
+      "counts": null,
+      "successors_applied": [],
+      "release_sql_inspect": {
+        "live_definition_sha256": "6cf7d044d2db1e3e14f44815a573348b4180345d8fecc67079a95d480378ffce",
+        "prerequisites_missing": [],
+        "predecessors": {},
+        "successors_applied": [],
+        "functions": [
+          {
+            "name": "aws_usage_fee_launched_at()",
+            "state": "intended"
+          },
+          {
+            "name": "aws_invoice_fee_cents()",
+            "state": "intended"
+          },
+          {
+            "name": "aws_failed_deposit_fee_cents()",
+            "state": "intended"
+          },
+          {
+            "name": "aws_record_invoice_fee()",
+            "state": "intended"
+          },
+          {
+            "name": "aws_record_failed_deposit_fee()",
+            "state": "intended"
+          }
+        ],
+        "policies": [],
+        "views": [],
+        "tables": [
+          {
+            "name": "tenant_usage_fee_launch",
+            "state": "intended",
+            "rls": true,
+            "column_count": 3,
+            "policy_count": 0
+          }
+        ],
+        "columns": [
+          {
+            "name": "tenant_maintenance_payments.invoice_fee_count",
+            "state": "intended"
+          },
+          {
+            "name": "tenant_maintenance_payments.invoice_fee_amount_cents",
+            "state": "intended"
+          },
+          {
+            "name": "tenant_maintenance_payments.failed_deposit_count",
+            "state": "intended"
+          },
+          {
+            "name": "tenant_maintenance_payments.failed_deposit_amount_cents",
+            "state": "intended"
+          }
+        ],
+        "constraints": [],
+        "triggers": [
+          {
+            "name": "moov_invoices aws_moov_invoice_fee",
+            "state": "intended"
+          },
+          {
+            "name": "checkalt_deposits aws_checkalt_deposit_failed_fee",
+            "state": "intended"
+          }
+        ],
+        "table_privileges": [],
+        "function_acl": [
+          {
+            "name": "aws_usage_fee_launched_at()",
+            "acl": [
+              "owner EXECUTE"
+            ]
+          },
+          {
+            "name": "aws_invoice_fee_cents()",
+            "acl": [
+              "owner EXECUTE"
+            ]
+          },
+          {
+            "name": "aws_failed_deposit_fee_cents()",
+            "acl": [
+              "owner EXECUTE"
+            ]
+          },
+          {
+            "name": "aws_record_invoice_fee()",
+            "acl": [
+              "owner EXECUTE"
+            ]
+          },
+          {
+            "name": "aws_record_failed_deposit_fee()",
+            "acl": [
+              "owner EXECUTE"
+            ]
+          }
+        ],
+        "acl_functions": [],
+        "indexes": [
+          {
+            "name": "check_billing_events check_billing_events_usage_source_uidx",
+            "state": "intended"
+          }
+        ],
+        "unique_covers": [],
+        "definer_writes": [
+          {
+            "name": "check_billing_events",
+            "ok": true
+          }
+        ],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": null
+      }
+    }
+  },
+  "production_evidence": {
+    "2026-11-11 apply": "Guarded production SQL one-shot on i-0c35557c4e5385406, workstream prod-sql152-invoice-and-failed-deposit-fees-20261111, main b5a354925 (tarball 8a6588ad…, transfer run 43009615137, migration source b646207d… == pin), owner-approved run (\"merge it when green and apply SQL 152 in production\"), pre-apply --phase inspect SSM bd06cdd2-a497-47a5-b35a-e87f3c1b09de (run_id 468607d9-8ea0-486d-944d-823cefbb6891, live 99c39136…, live_matches_expected true), apply SSM cae61362-0534-417e-b45c-a8d6175ce3a2, run_id 02469480-67b5-4d0c-b451-12b1ad103907, one_use_id sql152-prod-a441e0c6-5be7-468e-b45a-5ea23bd1ba89 (spent): every step ok; contracts claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43; pre-apply inspect live 99c39136… (live_matches_expected true, precondition_failures [], no predecessor, prerequisites_missing []); manifest 8b3a1570…; 99c39136… -> 6cf7d044…, result applied, unrelated catalog 63f88a7f… (policies 479, functions 1365); post-apply inspect already_applied true, precondition_failures []; the run's JSON was cut at the 24000-character SSM output limit inside the printed applied.receipt, so receipt and post_apply_inspect are recorded from the whole top-level details.apply_result and details.post_apply_inspect, and the rest of the printed output was not observed. After: the table public.tenant_usage_fee_launch (RLS on), the owner-only functions aws_usage_fee_launched_at(), aws_invoice_fee_cents(), aws_failed_deposit_fee_cents(), aws_record_invoice_fee() and aws_record_failed_deposit_fee(), the triggers aws_moov_invoice_fee on moov_invoices and aws_checkalt_deposit_failed_fee on checkalt_deposits, the partial unique index check_billing_events_usage_source_uidx and the four tenant_maintenance_payments columns exist as SQL 152 defines them, so the $0.30 invoice fee and the $2.00 failed deposit fee are recorded as usage events from the launch time. The API member that waits on it (tenant-fee-invoice-email.mjs, sql_before SQL 152) is not deployed by this record. Production acceptance was not yet reported by the owner when this was recorded. execute is false so the pin is no longer a standing authorization."
   }
 }

@@ -4,7 +4,7 @@
  * release-sql90-97-executor.test.mjs runs what every release key shares (SQL 152 included); this file covers what is new:
  *
  *   - the pin: staging-authorized (wave 45) from staging read-live run 42945948226, code-derived, selectable, packed, in
- *     step with the production pin (execute true on production's own pre-state, the same one staging had); the pinned
+ *     step with the production pin (applied 2026-11-11 and retired, from production's own pre-state, the same one staging had); the pinned
  *     commit
  *     authored the bytes; no predecessor; SQL 149 (never applied) has no spec or pin;
  *   - the file and spec: SQL 149 plus SQL 118's revoke of every non-owner grant on the new table; the one-row table
@@ -139,7 +139,7 @@ CREATE FUNCTION public.aws_check_billing_charges_when_per_check_off() RETURNS bo
   SET search_path = public AS $$ SELECT true $$;
 ALTER DEFAULT PRIVILEGES FOR ROLE checksops_admin IN SCHEMA public GRANT ALL ON TABLES TO checksops, authenticated;`;
 
-test('pin: SQL 152 staging-authorized from its read-live, code-derived, selectable, packed, in step with the execute-authorized production pin; no predecessor; the derived pre-state', () => {
+test('pin: SQL 152 staging-authorized from its read-live, code-derived, selectable, packed, in step with the applied and retired production pin; no predecessor; the derived pre-state', () => {
   const pin = PINS[KEY];
   const spec = RELEASE_SQL_SPECS[KEY];
   const packed = Object.fromEntries(EXECUTOR_PACK_MEMBERS);
@@ -164,7 +164,7 @@ test('pin: SQL 152 staging-authorized from its read-live, code-derived, selectab
   for (const value of [PRE, pin.intended_replacement_sha256, pin.source_sha256]) assert.ok(runbook.includes(value), value);
   assert.ok(runbook.includes(`\`\`\`\n${releaseStateText(KEY, releaseIntendedState(KEY, TEXT))}\n\`\`\``));
   assert.ok(runbook.includes(`\`\`\`\n${releaseStateText(KEY, {})}\n\`\`\``));
-  assert.match(runbook, /\*\*Status:\*\* applied in staging \(wave 45, 2026-11-11\); staging acceptance: the staging apply under the owner's run approval \("apply SQL 152 in staging"; no separate acceptance statement\); production pin execute-authorized; not applied to production/);
+  assert.match(runbook, /\*\*Status:\*\* applied to staging \(wave 45\) and to production \(2026-11-11\); the production pin is retired/);
   assert.match(runbook, /read-live \(2026-11-11\)\.\*\* Run 42945948226/);
   assert.ok(runbook.includes(pin.expected_live_definition_sha256));
   assert.ok(AUTHORIZED_STAGING_SQL.includes(pin));
@@ -201,10 +201,15 @@ test('pin: SQL 152 staging-authorized from its read-live, code-derived, selectab
   assert.equal(prod.source_sha256, pin.source_sha256);
   assert.deepEqual(prod.function_identities, FNS);
   assert.deepEqual(prod.predecessors, []);
-  // Production pin execute-authorized (owner-approved pin change of 2026-11-11) on the staging apply. Its pre-state is
-  // production's own (read-only inspect SSM 15087959), the derived one, the same pre-state staging recorded.
-  assert.equal(prod.execute, true);
-  assert.match(prod.authorization, /^Owner approved 2026-11-11 /);
+  // Production pin execute-authorized (owner-approved pin change of 2026-11-11, #1763) on the staging apply, then applied
+  // on 2026-11-11 and retired. Its pre-state is production's own (read-only inspect SSM 15087959), the derived one, the
+  // same pre-state staging recorded.
+  assert.equal(prod.execute, false);
+  assert.match(prod.authorization, /^Applied to production on 2026-11-11; execute is false again/);
+  assert.equal(prod.applied.result, 'applied');
+  assert.equal(prod.applied.receipt.before_hash, prod.expected_live_definition_sha256);
+  assert.equal(prod.applied.receipt.after_hash, prod.intended_replacement_sha256);
+  assert.equal(prod.applied.post_apply_inspect.already_applied, true);
   assert.equal(prod.authorization_phrase, 'APPLY_INVOICE_AND_FAILED_DEPOSIT_FEES');
   assert.equal(prod.expected_live_definition_sha256, prod.production_inspect.live_definition_sha256);
   assert.equal(prod.expected_live_definition_sha256, pin.expected_live_definition_sha256);
