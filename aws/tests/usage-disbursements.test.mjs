@@ -99,6 +99,9 @@ test('5 clicking a usage card filters the log to its charges; the fee table sits
   assert.equal(usageCategory('moov_same_day'), 'payments');
   assert.equal(usageCategory('mortgage_ops_initial'), 'mortgage');
   assert.equal(usageCategory('mortgage_handling'), 'mortgage');
+  // SQL 153: the 2nd mortgage company's $5 is a Mortgage Ops charge, on the Mortgage Ops card.
+  assert.equal(usageCategory('mortgage_ops_second_mortgagee'), 'mortgage');
+  assert.equal(usageEventLabel('mortgage_ops_second_mortgagee'), 'Mortgage handling, 2nd mortgage company');
   assert.equal(usageCategory('something_else'), 'other');
   const events = [
     { id: 'a', event_type: 'check_processing' },
