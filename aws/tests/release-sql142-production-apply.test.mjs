@@ -250,7 +250,7 @@ test('pin: the release pin shape, applied and retired (owner approved 2026-11-05
   assert.doesNotMatch(JSON.stringify(tool), /[0-9a-f]{64}/);
   const rows = JSON.stringify(readJson('ops/deployment-guard/bypass-inventory.json'));
   assert.match(rows, /"path":"scripts\/deployment-guard\/sql142-mortgage-companies-tenant-admin-write-production-apply\.mjs","classification":"GUARDED","capabilities":\["sql142-production-apply"\]/);
-  assert.match(rows, /sql138, sql139, sql140, sql141, sql142, sql143, sql144, sql145, sql146, sql147, sql148, sql150, sql152, sql154\)/);
+  assert.match(rows, /sql138, sql139, sql140, sql141, sql142, sql143, sql144, sql145, sql146, sql147, sql148, sql150, sql152, sql154, sql155\)/);
   const scripts = readJson('package.json').scripts;
   const workflow = read('.github/workflows/deployment-guard.yml');
   for (const name of ['aws/tests/release-sql142-executor.test.mjs', 'aws/tests/release-sql142-production-apply.test.mjs', 'aws/tests/sql142-mortgage-companies-tenant-admin-tool-pg.test.mjs']) {
@@ -288,7 +288,7 @@ test('order: no predecessor; no function; the two tenant-admin policies on mortg
   assert.match(runbook, /da2687b5/);
   const oneShot = read('ops/production-sql-one-shot.md');
   assert.match(oneShot, /\| `sql142` \|/);
-  assert.match(oneShot, /`sql139`, `sql140`, `sql141`, `sql142`, `sql143`, `sql144`, `sql145`, `sql146`, `sql147`, `sql148`, `sql150`, `sql152`, `sql154`\) \|/);
+  assert.match(oneShot, /`sql139`, `sql140`, `sql141`, `sql142`, `sql143`, `sql144`, `sql145`, `sql146`, `sql147`, `sql148`, `sql150`, `sql152`, `sql154`, `sql155`\) \|/);
   assert.match(read('ops/deployment-guard/README.md'), /sql142-mortgage-companies-tenant-admin-write-production-apply\.mjs --inspect/);
 });
 

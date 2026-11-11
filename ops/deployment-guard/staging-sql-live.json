@@ -109,8 +109,8 @@
       "evidence": "Guarded staging SQL executor apply of sql152-invoice-and-failed-deposit-fees on 2026-11-11 (run 43005316840, main 34e4d6983, wave 45, executor EkfZ5s51…; read-live run 43005694458 already_applied true): receipt before 99c39136…, after 6cf7d044… = the pin's intended_replacement_sha256; precondition_failures [], prerequisites_missing []."
     },
     "aws/workflows/sql/154_tenant_starter_package.sql": {
-      "verified_live": false,
-      "evidence": null
+      "verified_live": true,
+      "evidence": "Guarded staging SQL executor apply of sql154-tenant-starter-package on 2026-11-11 (run 43063499920, main 94d487268, wave 46, executor hweFok2h…; read-live run 43064000809 already_applied true): receipt before 05fb0b99…, after a50c631a… = the pin's intended_replacement_sha256; precondition_failures [], prerequisites_missing []."
     }
   }
 }

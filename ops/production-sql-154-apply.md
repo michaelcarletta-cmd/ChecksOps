@@ -47,7 +47,8 @@ matches (staging pin `superseded_intended_sha256`: SQL 102 `c7001f481b8a147ab4a6
 154 puts back SQL 102's guard, which fails closed (the package columns could no longer be changed) until SQL 154 is
 re-run. SQL 120 and SQL 152 are prerequisites by their functions (applied in both environments).
 
-**Status:** staging pin execute-authorized (wave 46); not applied anywhere. The production pin is pending.
+**Status:** applied to staging (wave 46) and to production (2026-11-11); the production pin is retired
+(`execute: false`).
 
 **Staging read-live (2026-11-11).** Run 43033279908 (job 130565516078, main `a21972a85`, after executor deploy run
 43032760894, inspect run 43032307944), under the owner's words "Redeploy the staging executor and run SQL 154 read-live":
@@ -58,6 +59,59 @@ intended `a50c631a…`. Recorded in the staging pin (`expected_live_definition_s
 the owner's words of 2026-11-11, "Record the SQL 154 staging pin and merge it when green". The staging apply is a
 separate run after this pin is merged and the executor is redeployed carrying it, on the owner's words "then apply SQL
 154 in staging". The production pin stays pending: a read-only production inspect decides production's pre-state.
+
+**Staging executor refreshed for the pin (2026-11-11).** The staging pin (wave 46, PR #1771) merged as
+`94d487268df2402b6976b1dfce46c2153f6e8ce6`. Inspect run 43062121888 found the live executor at
+`5iI77IMLTiiEf6fcpcfC/1WvaRDM/MLj3iOIzKswPgc=`, with `lib/release-sql-specs.mjs`, `lib/release-sql-state.mjs` and
+`lib/sql-executor-auth.mjs` superseded. Deploy run 43062554159 updated `checksops-staging-guarded-sql-executor` to
+`hweFok2h+EOxn3cQPhYfmL6YGIZw11ojmSDgTMKqBVU=` (revision `127bdd54-f111-4f37-b968-ae4b3e17ff26`), `errors` `[]`.
+Read-live run 43063089164 (job 130670634097) then read the pinned pre-state again: `matches_pinned_expected` true,
+`already_applied` false, `precondition_failures` `[]`, `prerequisites_missing` `[]`.
+
+**Staging apply (2026-11-11).** Apply run 43063499920 (job 130672132427, main `94d487268`, workstream
+`github-staging-sql-43063499920`, `expected_live_definition_sha256` `05fb0b9959f677fb828ee1efaf7ffce3513ea83e6d5ed071417a7511be3231ca`) under the owner's words "then apply SQL 154
+in staging": success. The receipt prints `result` `applied`, `before_hash` `05fb0b99…`, `after_hash`
+`a50c631a5d185103fde4bff9be3aec08d78418f0c8524b535ca6ee794ca79fe2`; every object in state `intended`. Read-live run
+43064000809 (job 130673917866): `already_applied` true, `live_definition_sha256` `a50c631a…` equal to the intended hash,
+`precondition_failures` `[]`, `prerequisites_missing` `[]`. The owner gave the run approval "then apply SQL 154 in
+staging"; no separate staging acceptance statement was given. There is no separate staging record PR for SQL 154: these
+staging runs are recorded here and in the production pin's `staging_acceptance` by the production pin PR.
+
+**Production inspect (2026-11-11).** Read-only `--inspect` through SSM
+`b64a59d7-0704-4750-843d-9971fd927a29` on `i-0c35557c4e5385406` (under the owner's words "run the read-only SQL 154
+production inspect"; runner started by the owner 18:13:40Z, command ran 18:14:16Z to 18:14:20Z, Success, runner stopped
+by the owner 18:17:33Z), main `928ef7a49` (tarball sha256
+`808af4ffb4101dc483aff05471a0599e11e0d42e5f0517735a097443bdd88760`, staged by `sql53-temporary-transfer.yml` run
+43074602262, migration source `d550fb4a…` == pin), `read_only` true: live `05fb0b9959f677fb828ee1efaf7ffce3513ea83e6d5ed071417a7511be3231ca` (SQL 102's guard, everything else
+absent, the derived pre-state), predecessors `{ sql102: true }`, `prerequisites_missing` `[]`, `already_applied` false,
+`live_matches_expected` false, `precondition_failures` `[]`, `apply_preconditions_met` false, `definer_writes` `tenants`,
+`tenant_pricing_audit` and `check_billing_events` ok, `errors` `[]`. Production's pre-state equals staging's (read-live
+runs 43033279908 and 43063089164), so the staging apply took the path production will. Recorded in the production pin
+with the staging apply (run 43063499920) as its staging acceptance and `execute: true` under the owner's words "record
+the SQL 154 production pin". The owner merges the pin change; the apply runs only after that merge is on main and
+staged, under the owner's words for that run.
+
+**Production apply (2026-11-11).** After the pin change (#1780, on the staging apply run 43063499920; merged to main as
+`863b52230` on the owner's words "merge 1780 when green and apply SQL 154 in production"), transfer run 43079287025 staged
+main `863b52230` (tarball sha256 `fe45e621f76472ad5ea1f12219e7cc6a4f4e39554e6dce8fbeef1cb980d01f7e`, read from the
+sidecar the run uploaded). The owner started the runner `i-0c35557c4e5385406` at 18:40:15Z. Under the owner's words
+"merge 1780 when green and apply SQL 154 in production" (passed verbatim), a one-shot `--phase inspect` (SSM
+`60fc1cf4-fccb-4621-acef-5d24d1ffd68b`, run `7bcade84-58d6-48b9-8438-60721e43855a`, nothing written) read live
+`05fb0b99…` (the pinned pre-state, `live_matches_expected` true, `precondition_failures` `[]`); then one-shot
+`--phase apply` run `eb19b5c7-9cd9-4925-b7d5-4dbb8f22058a` through SSM `ca26f381-f12f-41c8-a31e-2313a1a4c18b`, workstream
+`prod-sql154-tenant-starter-package-20261111`, one_use_id `sql154-prod-deb5606d-8db0-4497-b46d-40016aa8b90b`:
+contracts 4/4, 6/6 and 43/43; all 11 steps ok; manifest `ac9080ba…`; receipt `05fb0b99…` →
+`a50c631a5d185103fde4bff9be3aec08d78418f0c8524b535ca6ee794ca79fe2` (intended), result `applied`, unrelated catalog
+`03e7ad54…`; post-apply inspect `already_applied` true, `precondition_failures` `[]`, `prerequisites_missing` `[]`, the
+five functions (the Checks used and the setter EXECUTE `checksops` and the owner, the two trigger functions the owner
+only, the guard `PUBLIC` and the owner), the five columns, the CHECK and the two triggers `intended`, `definer_writes`
+`tenants`, `tenant_pricing_audit` and `check_billing_events` ok. The owner stopped the runner at 18:42:21Z. The run's
+JSON did **not** arrive whole: the SSM output is capped at 24000 characters and was cut inside the printed
+`applied.receipt`. The top-level `details` arrived whole, so the record takes `receipt` and `post_apply_inspect` from
+`details.apply_result` and `details.post_apply_inspect`; the rest of the printed `applied` object and anything printed
+after it (the run's `not_observed_by_this_run`, warnings, errors) were not observed. `tenant-billing-engine.mjs` and
+`tenant-billing-handlers.mjs` (sql_before SQL 154) are not deployed by this record. Production acceptance had not been
+reported by the owner when this record was written; this record does not claim it.
 
 ## Fingerprint
 
