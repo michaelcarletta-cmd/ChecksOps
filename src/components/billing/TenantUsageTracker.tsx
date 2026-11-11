@@ -25,6 +25,7 @@ import {
   usageCategory,
 } from "@/lib/billing/usageDisbursements";
 import { FeeScheduleCard } from "@/components/billing/FeeScheduleCard";
+import { starterPackageSummary, useStarterPackage } from "@/lib/starterPackage";
 
 
 export function TenantUsageTracker() {
@@ -113,6 +114,25 @@ export function TenantUsageTracker() {
       return disbursementDetails(feeEvents, legs, checks, claims);
     },
     enabled: !!tenant?.id,
+  });
+
+  // Starter Package (SQL 151): included checks left and the months of maintenance it covers.
+  const { data: starterPackage } = useStarterPackage(tenant?.id);
+  // The month's fees that used an included check (priced 0), to mark them in the log.
+  const { data: includedIds } = useQuery({
+    queryKey: ["tenant-usage-package-included", tenant?.id, monthStart, monthEnd],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("check_billing_events")
+        .select("id")
+        .eq("tenant_id", tenant!.id)
+        .eq("package_included" as never, true as never)
+        .gte("billed_at", monthStart)
+        .lte("billed_at", monthEnd);
+      if (error) return new Set<string>();
+      return new Set(((data ?? []) as unknown as { id: string }[]).map((r) => r.id));
+    },
+    enabled: !!tenant?.id && starterPackage?.enabled === true,
   });
 
   // Failed deposit fees (SQL 149) are linked to the deposit (source_id), not to the check, so a
@@ -210,8 +230,18 @@ export function TenantUsageTracker() {
     0,
   ) / 100;
 
+  const packageSummary = starterPackageSummary(starterPackage);
   return (
     <div className="space-y-6">
+      {packageSummary && (
+        <Card className="border-primary/30 bg-primary/5">
+          <CardContent className="py-3 flex flex-wrap items-center gap-2 text-sm">
+            <Badge variant="secondary">Starter Package</Badge>
+            <span>{packageSummary}</span>
+            <span className="text-xs text-muted-foreground">Each check processed and each failed deposit uses one included check. Other fees still apply.</span>
+          </CardContent>
+        </Card>
+      )}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
         <Card
           role="button"
@@ -419,6 +449,11 @@ export function TenantUsageTracker() {
                             <Badge variant="secondary" className="text-[9px] h-4 px-1 py-0 mr-2">
                               {usageEventLabel(row.event_type)}
                             </Badge>
+                            {includedIds?.has(row.id) && (
+                              <Badge variant="outline" className="text-[9px] h-4 px-1 py-0 mr-2">
+                                Included in Starter Package
+                              </Badge>
+                            )}
                             {row.event_type === "invoice_sent" ? "Invoice to a customer" : `Check #${checkNumber || "—"}`}
                             {sent?.claim_number && (
                               <span className="text-muted-foreground font-normal"> · Claim {sent.claim_number}</span>

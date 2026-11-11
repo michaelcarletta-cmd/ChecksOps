@@ -1,0 +1,22 @@
+{
+  "workstream_id": "starter-package",
+  "authorization": "Pending owner review (2026-11-10). Planning only: nothing is live or verified. Each production apply needs its own owner approval, a staging acceptance reference and a read-only production inspect that confirms the live bytes.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Starter Package (owner 2026-11-10: optional package, \"unused check can roll over\", \"a failed deposit uses one of the 250\", \"other fees are still charged\", \"a toggle switch or date start to date end\"): SQL 151 adds the package to tenants (toggle, starts_on, maintenance_ends_on, included checks, default 250), a platform owner setter (audited), and prices a check fee or failed deposit fee at 0 while included checks are left. REPLACE tenant-billing-engine.mjs 32cc099e -> f0a7defd: no Monthly Maintenance for a month the package covers; the package in the billing snapshot; saveBillingSettings saves it through SQL 151's setter. It supersedes the usage fees plan's engine bytes (c8dd93ef, never applied) and keeps everything they do (SQL 149's invoice and failed deposit fees). REPLACE tenant-billing-handlers.mjs a7b0a448 -> eff36fcf: tenant-billing-admin update passes starter_package. Both held on SQL 151 (which needs SQL 149). Pre-state: the engine's fee pull savepoints applied bytes (2026-11-06, run 42303279340); the handlers' money-write bytes, put live by the fourth production rebuild (apply 41469896446); a read-only production inspect must confirm each first. No new import; order unchanged. The website change (Tenant Management Starter Package card, Settings -> Usage summary) ships with the SPA. Planning only.",
+  "members": {
+    "tenant-billing-engine.mjs": {
+      "live_sha256": "32cc099e9dcd448921fcb0d36d7893d25195c2dee58b0faafb1b5c78ce6c1310",
+      "accepted_sha256": "f0a7defdd861a37985654872989d4125627d9f9dc6dee48c60a75b687006e97b",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-fee-pull-savepoints-applied-manifest-2026-11-06.json",
+      "supersedes_unapplied_manifest": "aws/tests/fixtures/production-usage-fees-manifest-2026-11-10.json"
+    },
+    "tenant-billing-handlers.mjs": {
+      "live_sha256": "a7b0a448938bac7661ae25da3f2fc26aa4d6d00d7815f6447053f051a27f7199",
+      "accepted_sha256": "eff36fcf81eb3629d662c1df0f1903aba32aff5f164d0a75a1ff393ce640f8b1",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-money-write-flag-manifest-2026-10-31.json"
+    }
+  }
+}
