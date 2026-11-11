@@ -217,7 +217,7 @@ test('order: predecessor SQL 102 (supersedes SQL 102 and SQL 98); four functions
   assert.ok(runbook.includes(COMMITTED.intended_replacement_sha256));
   assert.ok(runbook.includes(COMMITTED.source_sha256));
   for (const value of Object.values(STAGING[KEY].superseded_intended_sha256)) assert.ok(runbook.includes(value), value);
-  assert.match(runbook, /\*\*Status:\*\* not applied anywhere/);
+  assert.match(runbook, /\*\*Status:\*\* staging pin execute-authorized \(wave 46\); not applied anywhere\./);
   assert.match(runbook, /\*\*Predecessor\.\*\* SQL 102/);
   for (const words of ['option A', '#1753', '"unused check can roll over"', 'db-readonly-validate trigger count']) {
     assert.ok(runbook.replace(/\s+/g, ' ').includes(words), words);

@@ -3477,8 +3477,9 @@ export const AUTHORIZED_SQL152_INVOICE_AND_FAILED_DEPOSIT_FEES = Object.freeze({
 // 2026-11-11: option A). SQL 151 (never applied, no spec or pin) plus EXECUTE on aws_starter_package_checks_used(uuid) for
 // checksops, which the API's billing snapshot calls. Four package columns and a CHECK on tenants, package_included on
 // check_billing_events, four functions, two triggers, and SQL 102's aws_tenants_member_column_guard() replaced in place
-// (predecessor SQL 102; supersedes SQL 102 and SQL 98, release-sql-specs.mjs). Pending until a reviewed pin change
-// records a staging read-live (expected: SQL 102's guard, everything else absent, with SQL 120 and SQL 152 applied).
+// (predecessor SQL 102; supersedes SQL 102 and SQL 98, release-sql-specs.mjs). Staging apply authorized (wave 46) from
+// staging read-live run 43033279908: the pre-state, SQL 102's guard with everything else absent (SQL 120 and SQL 152
+// applied), equals the derived one (ops/production-sql-154-apply.md).
 export const AUTHORIZED_SQL154_TENANT_STARTER_PACKAGE = Object.freeze({
   key: 'sql154',
   filename: 'aws/workflows/sql/154_tenant_starter_package.sql',
@@ -3486,9 +3487,11 @@ export const AUTHORIZED_SQL154_TENANT_STARTER_PACKAGE = Object.freeze({
   // The commit that last authored the file bytes.
   commit: 'ce0b8dc950ca59c17119e1eb69edd627849e3d99',
   source_sha256: 'd550fb4aaa9a7569cb2ced49e5e8e335f115d147704062b5973ee5d7bdf614f9',
-  authorization: 'pending',
-  execute: false,
-  expected_live_definition_sha256: null,
+  authorization: 'Owner approved 2026-11-11: staging apply (wave 46) from staging read-live run 43033279908',
+  execute: true,
+  // Staging read-live run 43033279908 (main a21972a85, executor deploy run 43032760894): already_applied false,
+  // precondition_failures []. Equal to the derived pre-state (SQL 102's guard, everything else absent).
+  expected_live_definition_sha256: '05fb0b9959f677fb828ee1efaf7ffce3513ea83e6d5ed071417a7511be3231ca',
   // Code-derived: releaseIntendedHash('sql154', file bytes) (release-sql-state.mjs); re-derived by the tests.
   intended_replacement_sha256: 'a50c631a5d185103fde4bff9be3aec08d78418f0c8524b535ca6ee794ca79fe2',
   // Code-derived: releaseSupersededIntendedHash(<key>, its bytes, 'sql154', these bytes). After SQL 154, SQL 102 and
