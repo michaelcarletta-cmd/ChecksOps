@@ -4,7 +4,8 @@
  * release-sql90-97-executor.test.mjs runs what every release key shares (SQL 152 included); this file covers what is new:
  *
  *   - the pin: staging-authorized (wave 45) from staging read-live run 42945948226, code-derived, selectable, packed, in
- *     step with the pending production pin; the pinned commit
+ *     step with the production pin (execute true on production's own pre-state, the same one staging had); the pinned
+ *     commit
  *     authored the bytes; no predecessor; SQL 149 (never applied) has no spec or pin;
  *   - the file and spec: SQL 149 plus SQL 118's revoke of every non-owner grant on the new table; the one-row table
  *     with no grant to anyone, five owner-only functions, two triggers, the partial unique index, four columns;
@@ -138,7 +139,7 @@ CREATE FUNCTION public.aws_check_billing_charges_when_per_check_off() RETURNS bo
   SET search_path = public AS $$ SELECT true $$;
 ALTER DEFAULT PRIVILEGES FOR ROLE checksops_admin IN SCHEMA public GRANT ALL ON TABLES TO checksops, authenticated;`;
 
-test('pin: SQL 152 staging-authorized from its read-live, code-derived, selectable, packed, in step with the pending production pin; no predecessor; the derived pre-state', () => {
+test('pin: SQL 152 staging-authorized from its read-live, code-derived, selectable, packed, in step with the execute-authorized production pin; no predecessor; the derived pre-state', () => {
   const pin = PINS[KEY];
   const spec = RELEASE_SQL_SPECS[KEY];
   const packed = Object.fromEntries(EXECUTOR_PACK_MEMBERS);
@@ -163,7 +164,7 @@ test('pin: SQL 152 staging-authorized from its read-live, code-derived, selectab
   for (const value of [PRE, pin.intended_replacement_sha256, pin.source_sha256]) assert.ok(runbook.includes(value), value);
   assert.ok(runbook.includes(`\`\`\`\n${releaseStateText(KEY, releaseIntendedState(KEY, TEXT))}\n\`\`\``));
   assert.ok(runbook.includes(`\`\`\`\n${releaseStateText(KEY, {})}\n\`\`\``));
-  assert.match(runbook, /\*\*Status:\*\* staging pin execute-authorized \(wave 45\); not applied anywhere\. The production pin is pending\./);
+  assert.match(runbook, /\*\*Status:\*\* applied in staging \(wave 45, 2026-11-11\); staging acceptance: the staging apply under the owner's run approval \("apply SQL 152 in staging"; no separate acceptance statement\); production pin execute-authorized; not applied to production/);
   assert.match(runbook, /read-live \(2026-11-11\)\.\*\* Run 42945948226/);
   assert.ok(runbook.includes(pin.expected_live_definition_sha256));
   assert.ok(AUTHORIZED_STAGING_SQL.includes(pin));
@@ -200,12 +201,16 @@ test('pin: SQL 152 staging-authorized from its read-live, code-derived, selectab
   assert.equal(prod.source_sha256, pin.source_sha256);
   assert.deepEqual(prod.function_identities, FNS);
   assert.deepEqual(prod.predecessors, []);
-  assert.equal(prod.execute, false);
-  assert.equal(prod.authorization, 'pending');
+  // Production pin execute-authorized (owner-approved pin change of 2026-11-11) on the staging apply. Its pre-state is
+  // production's own (read-only inspect SSM 15087959), the derived one, the same pre-state staging recorded.
+  assert.equal(prod.execute, true);
+  assert.match(prod.authorization, /^Owner approved 2026-11-11 /);
   assert.equal(prod.authorization_phrase, 'APPLY_INVOICE_AND_FAILED_DEPOSIT_FEES');
-  assert.equal(prod.expected_live_definition_sha256, null);
-  assert.equal(prod.production_inspect.status, 'pending');
-  assert.equal(prod.staging_acceptance.ok, false);
+  assert.equal(prod.expected_live_definition_sha256, prod.production_inspect.live_definition_sha256);
+  assert.equal(prod.expected_live_definition_sha256, pin.expected_live_definition_sha256);
+  assert.equal(prod.expected_live_definition_sha256, PRE);
+  assert.equal(prod.production_inspect.status, 'recorded');
+  assert.equal(prod.staging_acceptance.ok, true);
   assert.ok(prod.production_inspect.note.includes(PRE));
   assert.ok(prod.order_note.includes(PRE));
   assert.ok(prod.intended_post_state.note.includes(pin.intended_replacement_sha256));
