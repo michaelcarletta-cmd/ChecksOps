@@ -4133,7 +4133,7 @@ test('DB validator SQL 152 triggers (2026-11-11): db-readonly-validate.mjs REPLA
   assert.deepEqual(calls.receipt.owned_member_ops, { replace: [MEMBER], add: [] });
 });
 
-test('DB validator SQL 154 triggers (2026-11-11): db-readonly-validate.mjs REPLACE from the SQL 152 applied bytes, planning only; held until SQL 154 is recorded live in production', async () => {
+test('DB validator SQL 154 triggers (2026-11-11): db-readonly-validate.mjs REPLACE from the SQL 152 applied bytes, planning only; held until SQL 154 was recorded live in production (the SQL 154 record, 2026-11-11)', async () => {
   const MEMBER = 'db-readonly-validate.mjs';
   const SQL154 = 'aws/workflows/sql/154_tenant_starter_package.sql';
   const previous = JSON.parse(fs.readFileSync(path.join(ROOT, VALIDATOR_SQL152_APPLIED_REL), 'utf8')).members[MEMBER];
@@ -4169,9 +4169,11 @@ test('DB validator SQL 154 triggers (2026-11-11): db-readonly-validate.mjs REPLA
   assert.ok(PLAN.notes.includes(`DB validator SQL 154 triggers (2026-11-11): REPLACE ${MEMBER} ${LIVE.slice(0, 8)} -> ${accepted.slice(0, 8)}`));
   assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
   assert.equal(approvalPhrase(MEMBER), `DEPLOY ${MEMBER} TO PRODUCTION`);
-  // SQL 154 is applied in staging only: the plan records it verified_live false, so inspect reports READY but the apply
-  // is refused before any write until the SQL 154 production record states it live.
-  assert.deepEqual(PLAN.sql_prerequisites[SQL154], { verified_live: false, evidence: null });
+  // The plan was written while SQL 154 was applied in staging only (the manifest says so). The SQL 154 record change
+  // (2026-11-11, production SSM ca26f381) has since recorded it verified live from its retired pin, which lifts the hold.
+  assert.equal(PLAN.sql_prerequisites[SQL154].verified_live, true);
+  assert.equal(PLAN.sql_prerequisites[SQL154].pin, 'ops/deployment-guard/sql154-tenant-starter-package-production-apply.json');
+  assert.ok(PLAN.sql_prerequisites[SQL154].evidence.includes('ca26f381-f12f-41c8-a31e-2313a1a4c18b'));
   const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
   assert.equal((await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: LIVE }) })).state, 'READY');
   assert.equal((await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: accepted }) })).state, 'ALREADY_ACCEPTED');
@@ -4179,15 +4181,17 @@ test('DB validator SQL 154 triggers (2026-11-11): db-readonly-validate.mjs REPLA
     run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: 'c'.repeat(64) }) }),
     (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
   );
-  const held = applyDeps(MEMBER, { plan: structuredClone(PLAN) });
+  // As the plan stood before that record (SQL 154 verified_live false): inspect reported READY but the apply was
+  // refused before any write.
+  const before = structuredClone(PLAN);
+  before.sql_prerequisites[SQL154] = { verified_live: false, evidence: null };
+  const held = applyDeps(MEMBER, { plan: before });
   await assert.rejects(
     run(applyEnv(MEMBER, { CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: LIVE }), held.deps),
     (error) => error.code === CODES.PRODUCTION_APPROVAL_REQUIRED,
   );
-  // Once a SQL 154 production record states it verified live, the apply is ready.
-  const recorded = structuredClone(PLAN);
-  recorded.sql_prerequisites[SQL154] = { verified_live: true, evidence: 'test: SQL 154 production record' };
-  const { deps, calls } = applyDeps(MEMBER, { plan: recorded });
+  // With the SQL 154 production record on the committed plan, the apply is ready.
+  const { deps, calls } = applyDeps(MEMBER, { plan: structuredClone(PLAN) });
   const result = await run(applyEnv(MEMBER, { CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: LIVE }), deps);
   assert.equal(result.mutation, false);
   assert.deepEqual(calls.receipt.owned_member_ops, { replace: [MEMBER], add: [] });

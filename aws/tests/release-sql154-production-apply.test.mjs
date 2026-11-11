@@ -303,7 +303,7 @@ test('order: predecessor SQL 102 (supersedes SQL 102 and SQL 98); four functions
   assert.equal(plan.members['tenant-billing-handlers.mjs'].sql_before, SQL154_FILE);
   // Two public triggers more once applied: the DB validator followed the staging apply (run 43063499920; staging
   // /db-readonly-validate then answered 503, 189 against the named 187-set), as 9e81beda3 did for SQL 152, and
-  // justifies both by name (189). Its production overlay row is a REPLACE with sql_before SQL 154, not yet recorded live.
+  // justifies both by name (189). Its production overlay row is a REPLACE with sql_before SQL 154, recorded live by the SQL 154 record change.
   const validator = fs.readFileSync(path.join(ROOT, 'aws/functions/api/db-readonly-validate.mjs'), 'utf8');
   assert.match(validator, /table: 'check_billing_events',\n\s+trigger: 'aws_check_billing_event_starter_package',\n\s+functionName: 'aws_apply_starter_package_to_event'/);
   assert.match(validator, /table: 'tenants',\n\s+trigger: 'aws_tenant_starter_package_audit',\n\s+functionName: 'aws_tenant_starter_package_audit_row'/);
