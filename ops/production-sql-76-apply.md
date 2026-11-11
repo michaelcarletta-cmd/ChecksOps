@@ -69,7 +69,14 @@ trigger public.tenant_partnerships aws_tenant_partnership_consent_guard: enabled
   `aws_select_tenant_partnerships` and `aws_write_tenant_partnerships` on the table.
 
 **Status:** not applied to production. The pin `ops/deployment-guard/sql76-tenant-partnership-consent-production-apply.json`
-is pending (execute false).
+is `execute: true` (owner-approved pin change of 2026-11-11, "record the SQL 76 production pin") with:
+
+- `expected_live_definition_sha256` `e1f21bd4…`, from the read-only production inspect of 2026-11-11 (SSM
+  `3ba99c60-cea5-4e71-807f-87122ec557ea`, main `94d48726`, transfer run 43063595712, tarball `ebe20edf…`):
+  `prerequisites_missing []`, the three SQL 76 counts 1, `already_applied false`, `precondition_failures []`;
+- `staging_acceptance` the staging apply run 38553052449 (2026-10-14), with read-live run 43024276076.
+
+The production apply still needs the owner's words for that run.
 
 ## Steps (one reviewed PR per step; each production step waits for the owner)
 

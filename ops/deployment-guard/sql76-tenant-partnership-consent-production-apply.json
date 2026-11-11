@@ -1,8 +1,8 @@
 {
   "id": "sql76-tenant-partnership-consent-production-apply",
   "migration": "sql76",
-  "authorization": "pending",
-  "execute": false,
+  "authorization": "Owner approved 2026-11-11 (the owner's words for SQL 76: \"apply SQL 76 to production through the guarded path\", \"Option 1\", \"merge 1769 when green\", \"run the read-only SQL 76 production inspect\", \"record the SQL 76 production pin\"; the change itself is reviewed and merged by the owner): production apply of SQL 76 after the staging acceptance below, from the recorded production pre-state; each apply still needs the owner's run-time approval (the owner's words for that run).",
+  "execute": true,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -13,7 +13,7 @@
   "function_identities": [
     "public.aws_tenant_partnership_consent_guard()"
   ],
-  "expected_live_definition_sha256": null,
+  "expected_live_definition_sha256": "e1f21bd49f76bf0f619cbfb37f77c01711075e3c030ce1e271ee26052fff92d6",
   "intended_replacement_sha256": "a36222984953e0425dcf8fe2cfa9f261826ee3f1294ba00d56b680613c400645",
   "authorization_phrase": "GUARD_PARTNERSHIP_ACTIVATION",
   "predecessors": [],
@@ -41,24 +41,24 @@
     "note": "Guarded production tooling for SQL 76 on the release engine: sql76-tenant-partnership-consent-production-apply.mjs --inspect (read-only) and the receipt-gated --apply; production-sql-one-shot.mjs --migration sql76. The staging executor keeps routing choice sql76-tenant-partnership-consent to its own SQL 76 handler and pin (resolveAuthorizedMigration checks SQL 76 first); the release entry AUTHORIZED_SQL76_RELEASE_TENANT_PARTNERSHIP_CONSENT (execute false) only carries the engine fingerprint. intended_replacement_sha256 is releaseIntendedHash('sql76', file bytes): a36222984953e0425dcf8fe2cfa9f261826ee3f1294ba00d56b680613c400645. The tooling authorizes nothing: this pin stays execute false until a reviewed change records the production inspect, the staging acceptance and an owner approval."
   },
   "production_inspect": {
-    "status": "pending",
-    "date": null,
-    "ssm_command_id": null,
-    "source_commit": null,
+    "status": "recorded",
+    "date": "2026-11-11",
+    "ssm_command_id": "3ba99c60-cea5-4e71-807f-87122ec557ea",
+    "source_commit": "94d487268df2402b6976b1dfce46c2153f6e8ce6",
     "read_only": true,
     "connected_as": "checksops_admin",
-    "live_definition_sha256": null,
-    "apply_preconditions_met": null,
-    "precondition_failures": null,
-    "note": "Pending: no release-engine production inspect has been run for SQL 76 yet. A read-only pre-check on 2026-11-11 (owner: \"apply SQL 76 to production through the guarded path\"; SSM d04fa1e2-74d4-4795-854e-db5acf14b59b, transfer tarball source d3103952f) ran the staging executor's own readPartnershipConsentState in BEGIN READ ONLY: live 7c5276d8… in that pin's state text, equal to staging's reviewed pre-apply state (guard and trigger absent, marker unset, the five policies absent, connect pinned, no other trigger), connect owned by checksops_admin and checksops not a member, only aws_select_tenant_partnerships and aws_write_tenant_partnerships on the table. Expected release-engine fingerprint of that pre-state under sql76: e1f21bd49f76bf0f619cbfb37f77c01711075e3c030ce1e271ee26052fff92d6 (releaseStateHash('sql76', {}): everything SQL 76 creates absent, the five policies absent; read back on PostgreSQL 16 by aws/tests/release-sql76-production-pg.test.mjs). Record the one-shot --phase inspect's date, SSM command id, source commit, live_definition_sha256, prerequisites_missing, predecessors, the counts partnership_connect_pinned, partnership_connect_not_api_owned and tenant_partnerships_no_other_trigger, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. Stop if the pre-state differs, prerequisites_missing is not [] or precondition_failures is not [] (prerequisites_present, predecessors_applied, partnership_connect_pinned, partnership_connect_not_api_owned, tenant_partnerships_no_other_trigger, functions_owned_by_login, function_acl_replaceable): that needs its own reviewed change."
+    "live_definition_sha256": "e1f21bd49f76bf0f619cbfb37f77c01711075e3c030ce1e271ee26052fff92d6",
+    "apply_preconditions_met": false,
+    "precondition_failures": [],
+    "note": "Recorded from the read-only production inspect of 2026-11-11 (SSM command 3ba99c60-cea5-4e71-807f-87122ec557ea, node scripts/deployment-guard/sql76-tenant-partnership-consent-production-apply.mjs --inspect on the SQL53 runner i-0c35557c4e5385406, under the owner's words \"run the read-only SQL 76 production inspect\", from main 94d48726 (tarball source-94d487268df2402b6976b1dfce46c2153f6e8ce6.tar.gz sha256 ebe20edfe5ebfcd578726223971c857506c277124f801b256fae618ba11375f0, transfer run 43063595712; migration source sha256 on the runner 47ef66fa3b66b07ad1c3fe6a3accc7dc1696efeb85a2d3ca3b3bb9a001f7f3c7 == source_sha256)): read_only true, current_user checksops_admin, missing_dependencies [], prerequisites_missing [], predecessors {} (none), successors_applied [], counts partnership_connect_pinned 1, partnership_connect_not_api_owned 1, tenant_partnerships_no_other_trigger 1, function aws_tenant_partnership_consent_guard() absent, trigger tenant_partnerships.aws_tenant_partnership_consent_guard absent, the five dropped policies already absent (state intended), live_definition_sha256 e1f21bd49f76bf0f619cbfb37f77c01711075e3c030ce1e271ee26052fff92d6 (the derived pre-state releaseStateHash('sql76', {})), already_applied false, live_matches_expected false (the pin had no pre-state yet), precondition_failures [], apply_preconditions_met false (the pin was execute false), errors []. Copied into expected_live_definition_sha256 by this change. If already_applied is true, or precondition_failures is not [], stop. Earlier: Pending: no release-engine production inspect has been run for SQL 76 yet. A read-only pre-check on 2026-11-11 (owner: \"apply SQL 76 to production through the guarded path\"; SSM d04fa1e2-74d4-4795-854e-db5acf14b59b, transfer tarball source d3103952f) ran the staging executor's own readPartnershipConsentState in BEGIN READ ONLY: live 7c5276d8… in that pin's state text, equal to staging's reviewed pre-apply state (guard and trigger absent, marker unset, the five policies absent, connect pinned, no other trigger), connect owned by checksops_admin and checksops not a member, only aws_select_tenant_partnerships and aws_write_tenant_partnerships on the table. Expected release-engine fingerprint of that pre-state under sql76: e1f21bd49f76bf0f619cbfb37f77c01711075e3c030ce1e271ee26052fff92d6 (releaseStateHash('sql76', {}): everything SQL 76 creates absent, the five policies absent; read back on PostgreSQL 16 by aws/tests/release-sql76-production-pg.test.mjs). Record the one-shot --phase inspect's date, SSM command id, source commit, live_definition_sha256, prerequisites_missing, predecessors, the counts partnership_connect_pinned, partnership_connect_not_api_owned and tenant_partnerships_no_other_trigger, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. Stop if the pre-state differs, prerequisites_missing is not [] or precondition_failures is not [] (prerequisites_present, predecessors_applied, partnership_connect_pinned, partnership_connect_not_api_owned, tenant_partnerships_no_other_trigger, functions_owned_by_login, function_acl_replaceable): that needs its own reviewed change."
   },
   "intended_post_state": {
     "fingerprint": "a36222984953e0425dcf8fe2cfa9f261826ee3f1294ba00d56b680613c400645",
     "note": "public.aws_tenant_partnership_consent_guard() owned by checksops_admin, plpgsql, VOLATILE, not SECURITY DEFINER, SET search_path = public, RETURNS trigger, EXECUTE for the owner only; the trigger aws_tenant_partnership_consent_guard BEFORE INSERT OR UPDATE ON public.tenant_partnerships FOR EACH ROW, enabled; the five Supabase-era policies absent. Behavior: a row may become live (status active, revoked_at null) only by a writer of its invitee tenant (42501 partnership_invitee_consent_required) or by one of aws_connect_partner_by_code's own row writes run as its owner (the Partner Code redemption); the tenant pair is fixed on update (42501 partnership_tenants_immutable); pending, decline and revoke are unchanged. No other function, table, column, policy, grant, trigger or row change. The fingerprint is releaseIntendedHash('sql76', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): a36222984953e0425dcf8fe2cfa9f261826ee3f1294ba00d56b680613c400645."
   },
   "staging_acceptance": {
-    "ok": false,
-    "reference": null,
-    "basis": "Pending: record the staging evidence here in the reviewed change that sets execute true. Available: guarded staging SQL executor apply of sql76-tenant-partnership-consent, run 38553052449 (2026-10-14, main 396a83602): before 7c5276d8…, after 2f195230… = AUTHORIZED_SQL76_PARTNERSHIP_CONSENT.intended_replacement_sha256, result applied; read-live run 43024276076 (2026-11-11, main 4fef6ce17): already_applied true, live 2f195230…. Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+    "ok": true,
+    "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38553052449",
+    "basis": "Guarded staging SQL executor apply of sql76-tenant-partnership-consent, run 38553052449 (2026-10-14, main 396a83602818d2cc6afa76d986aa2bd9b79adf98, through the SQL 76 staging pin AUTHORIZED_SQL76_PARTNERSHIP_CONSENT): receipt before 7c5276d8d04973c51f28238ec32091d77b01613c79dc8961d4dbc4bfd92d20d8, after 2f195230b952217546297d932445cb8954b81441ed30222e711b50688a09df3e == that pin's intended state, result applied (that pin's own state text). Read-live run 43024276076 (2026-11-11, main 4fef6ce17) reports already_applied true, live 2f195230…. Production's pre-state equals staging's before its apply: the staging executor's own reader on production (SSM d04fa1e2-74d4-4795-854e-db5acf14b59b, 2026-11-11) reports 7c5276d8…; under the release engine both read as everything SQL 76 creates absent and the five policies absent (e1f21bd49f76bf0f619cbfb37f77c01711075e3c030ce1e271ee26052fff92d6). The behavior is covered on PostgreSQL 16 by aws/tests/release-sql76-production-pg.test.mjs and aws/tests/sql76-tenant-partnership-consent-executor.test.mjs."
   }
 }
