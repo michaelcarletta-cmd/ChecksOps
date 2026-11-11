@@ -45,7 +45,21 @@ SQL 150 (`predecessors_applied`) unless SQL 147 reads applied, that is the funct
 left it; after SQL 150, SQL 147 counts as applied while SQL 150 is. No `superseded_intended_sha256` is
 pinned: SQL 147's only object is the function SQL 150 replaces (as SQL 143 for SQL 142).
 
-**Status:** not applied anywhere. The staging pin and the production pin are pending.
+**Staging executor refreshed (2026-11-11).** Deploy run 42927303051 updated
+`checksops-staging-guarded-sql-executor` to carry SQL 150 (inspect run 42926976972 read CodeSha256
+`X2Z+6Nkj0qI3pYc/jY7/YZVKBGu5+YjdN3wr6NA1hho=` before it, inspect run 42927674258
+`aPgcRrWIUqtEN2smVE554q0UlGAMgIbGlf3hxLFOTeE=` after it).
+
+**Staging read-live (2026-11-11).** Run 42928033292 (job 130219398971, main `1ecbe3452`, after executor deploy run
+42927303051), under the owner's words "apply SQL 150 in staging": `already_applied` false, `precondition_failures`
+`[]`, `prerequisites_missing` `[]`, `definer_writes` all `ok true`. Live `650ad0d486b5eebdf647e4c25a56c8776ed7a412d8735cfc83aad1d449b959fa`: the function exactly
+as SQL 147 left it, equal to the derived pre-state; intended `48d61bb3…`. Recorded in the staging pin
+(`expected_live_definition_sha256`, `execute: true`, wave 44) under the owner's words of 2026-11-11, "record the SQL
+150 staging pin and merge it when green". The staging apply is a separate run after this pin is merged and the
+executor is redeployed carrying it, on the owner's words "apply SQL 150 in staging". The production pin stays pending:
+a read-only production inspect decides production's pre-state.
+
+**Status:** staging pin execute-authorized (wave 44); not applied anywhere. The production pin is pending.
 
 ## Fingerprint
 
