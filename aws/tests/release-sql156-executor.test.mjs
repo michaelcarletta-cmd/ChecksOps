@@ -141,7 +141,7 @@ test('pin: SQL 156 staging-authorized from its read-live, code-derived, selectab
   // The runbook names the absent and intended states (derived here), the intended fingerprint and the source.
   const runbook = fs.readFileSync(path.join(ROOT, 'ops/production-sql-156-apply.md'), 'utf8');
   for (const value of [ABSENT, pin.intended_replacement_sha256, pin.source_sha256]) assert.ok(runbook.includes(value), value);
-  assert.match(runbook, /\*\*Status:\*\* staging pin execute-authorized \(wave 48\); not applied anywhere\. The production pin is pending\./);
+  assert.match(runbook, /\*\*Status:\*\* applied to staging \(wave 48, 2026-11-11\); production pin execute-authorized/);
   assert.match(runbook, /read-live \(2026-11-11\)\.\*\* Run 43107339208/);
   assert.ok(runbook.includes(`\`\`\`\n${releaseStateText(KEY, releaseIntendedState(KEY, TEXT))}\n\`\`\``));
   assert.ok(runbook.includes(`\`\`\`\n${releaseStateText(KEY, {})}\n\`\`\``));
@@ -172,12 +172,12 @@ test('pin: SQL 156 staging-authorized from its read-live, code-derived, selectab
   assert.equal(prod.source_sha256, pin.source_sha256);
   assert.deepEqual(prod.function_identities, FNS);
   assert.deepEqual(prod.predecessors, []);
-  assert.equal(prod.execute, false);
-  assert.equal(prod.authorization, 'pending');
+  assert.equal(prod.execute, true);
+  assert.match(prod.authorization, /^Owner approved 2026-11-11 /);
   assert.equal(prod.authorization_phrase, 'SHARE_CHECK_LIBRARY_WITH_MORTGAGE_DESK');
-  assert.equal(prod.expected_live_definition_sha256, null);
-  assert.equal(prod.production_inspect.status, 'pending');
-  assert.equal(prod.staging_acceptance.ok, false);
+  assert.equal(prod.expected_live_definition_sha256, ABSENT);
+  assert.equal(prod.production_inspect.status, 'recorded');
+  assert.equal(prod.staging_acceptance.ok, true);
   assert.ok(prod.production_inspect.note.includes(ABSENT));
   assert.ok(prod.order_note.includes(ABSENT));
   assert.ok(prod.intended_post_state.note.includes(pin.intended_replacement_sha256));
