@@ -6,7 +6,8 @@ import { ChevronDown } from "lucide-react";
 interface SectionCardProps {
   title: string;
   icon: React.ReactNode;
-  accent: string;
+  /** Kept for existing callers; the coloured accent stripe is no longer drawn. */
+  accent?: string;
   description?: string;
   children: React.ReactNode;
   className?: string;
@@ -19,7 +20,6 @@ interface SectionCardProps {
 export function SectionCard({
   title,
   icon,
-  accent,
   description,
   children,
   className,
@@ -46,7 +46,6 @@ export function SectionCard({
 
   return (
     <Card className={`overflow-hidden border-border/60 shadow-sm ${className || ""}`}>
-      <div className={`h-1.5 ${accent}`} />
       <CardHeader className={`p-4 pb-2 ${collapsible ? 'cursor-pointer hover:bg-muted/50 transition-colors' : ''}`}>
         {collapsible ? (
           <CollapsibleTrigger asChild>

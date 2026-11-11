@@ -18,7 +18,7 @@ import {
   ExternalLink,
   Shield,
   Info,
-  Sparkles,
+  ScanText,
   Plus,
 } from "lucide-react";
 import { format } from "date-fns";
@@ -153,10 +153,10 @@ export function TenantAIKeySettings() {
   return (
     <div className="space-y-6">
       <SettingsHero
-        title="AI Intelligence Engine"
+        title="Check Reading (OCR)"
         description="Configure your OpenAI API key to enable document analysis and OCR intelligence."
-        badge="AI Intelligence"
-        icon={<Sparkles className="h-4 w-4 text-primary" />}
+        badge="Integrations"
+        icon={<ScanText className="h-4 w-4" />}
       />
 
 

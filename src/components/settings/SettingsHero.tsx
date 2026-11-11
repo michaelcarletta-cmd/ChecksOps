@@ -1,5 +1,4 @@
 import React from "react";
-import { Sparkles } from "lucide-react";
 
 interface SettingsHeroProps {
   title: string;
@@ -10,18 +9,13 @@ interface SettingsHeroProps {
 
 export function SettingsHero({ title, description, badge, icon }: SettingsHeroProps) {
   return (
-    <div className="relative overflow-hidden rounded-xl border border-primary/20 bg-gradient-to-br from-primary/15 via-primary/5 to-background p-4 md:p-6 mb-0">
-      <div className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-primary/20 blur-3xl" />
-      <div className="relative flex flex-col gap-2">
-        <div className="flex items-center gap-2">
-          {icon || <Sparkles className="h-4 w-4 text-primary" />}
-          <span className="text-xs font-bold tracking-widest text-primary">{badge}</span>
-        </div>
-        <h1 className="text-3xl font-bold tracking-tight">{title}</h1>
-        <p className="text-sm text-muted-foreground max-w-2xl">
-          {description}
-        </p>
+    <div className="flex flex-col gap-1 border-b border-border pb-4">
+      <div className="flex items-center gap-2 text-muted-foreground">
+        {icon}
+        <span className="text-xs font-medium uppercase tracking-wide">{badge}</span>
       </div>
+      <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
+      <p className="text-sm text-muted-foreground max-w-2xl">{description}</p>
     </div>
   );
 }
