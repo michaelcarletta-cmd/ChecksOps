@@ -2,7 +2,7 @@
  * SQL 151 against PostgreSQL 16: the optional Starter Package. Objects are owned by a non-superuser
  * checksops_admin LOGIN (production's admin login, which applies the file); the API login checksops
  * writes checkalt_deposits and moov_invoices and calls the platform owner's setter as the signed-in
- * user (request.app_user_id). SQL 120 and SQL 149 are applied first, as on staging and production;
+ * user (request.app_user_id). SQL 120 and SQL 152 (SQL 149's replacement) are applied first, as on staging and production;
  * SQL 102's column guard helpers are stand-ins with SQL 102's names.
  *
  * Owner decisions (2026-11-10): 250 included Checks that roll over (no expiry); a failed deposit uses
@@ -15,8 +15,8 @@ import { test } from 'node:test';
 import { AWS_ROOT, pgSkipReason, startPg } from './helpers/stakeholder-policies-pg.mjs';
 
 const SQL_120 = path.join(AWS_ROOT, 'workflows/sql/120_usage_events_at_approval_and_send.sql');
-const SQL_149 = path.join(AWS_ROOT, 'workflows/sql/149_invoice_and_failed_deposit_fees.sql');
-const SQL_150 = path.join(AWS_ROOT, 'workflows/sql/151_tenant_starter_package.sql');
+const SQL_152 = path.join(AWS_ROOT, 'workflows/sql/152_invoice_and_failed_deposit_fees.sql');
+const SQL_151 = path.join(AWS_ROOT, 'workflows/sql/151_tenant_starter_package.sql');
 
 const T = '11111111-1111-4111-8111-111111111111'; // on the package
 const T_OFF = '22222222-2222-4222-8222-222222222222'; // not on it
@@ -128,8 +128,8 @@ test('SQL 151: the Starter Package includes Checks, a failed deposit uses one, t
     await superuser.connect();
     await superuser.query(SCHEMA);
     await owner.connect();
-    for (const file of [SQL_120, SQL_149, SQL_150]) await owner.query(fs.readFileSync(file, 'utf8'));
-    await owner.query(fs.readFileSync(SQL_150, 'utf8')); // idempotent
+    for (const file of [SQL_120, SQL_152, SQL_151]) await owner.query(fs.readFileSync(file, 'utf8'));
+    await owner.query(fs.readFileSync(SQL_151, 'utf8')); // idempotent
     await api.connect();
 
     // Every tenant starts off the package, with 250 included Checks once it is turned on.
@@ -238,7 +238,7 @@ test('SQL 151 refuses to run without SQL 149', { timeout: 120000, skip: pgSkipRe
     await superuser.connect();
     await superuser.query(SCHEMA);
     await superuser.query(fs.readFileSync(SQL_120, 'utf8'));
-    await assert.rejects(superuser.query(fs.readFileSync(SQL_150, 'utf8')), (err) => (
+    await assert.rejects(superuser.query(fs.readFileSync(SQL_151, 'utf8')), (err) => (
       err.code === '55000' && /sql151_prerequisite_missing: .*SQL 149/.test(err.message)));
   } finally {
     await superuser.end().catch(() => {});

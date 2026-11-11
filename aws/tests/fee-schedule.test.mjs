@@ -40,13 +40,13 @@ test('2 the tenant\'s own rates win; an explicit 0 is free, not the default', ()
   });
 });
 
-test('2b invoice fee $0.30 and failed deposit fee $2.00 (agreement 3.6, 3.7) match the engine and SQL 149', () => {
+test('2b invoice fee $0.30 and failed deposit fee $2.00 (agreement 3.6, 3.7) match the engine and SQL 152 (SQL 149 replaced)', () => {
   const rows = byKey(feeScheduleRows({}));
   assert.equal(rows.invoice_sent, INVOICE_FEE_CENTS);
   assert.equal(rows.failed_deposit, FAILED_DEPOSIT_FEE_CENTS);
   assert.equal(INVOICE_FEE_CENTS, DEFAULT_INVOICE_FEE_CENTS);
   assert.equal(FAILED_DEPOSIT_FEE_CENTS, DEFAULT_FAILED_DEPOSIT_FEE_CENTS);
-  const sql = readFileSync(new URL('../workflows/sql/149_invoice_and_failed_deposit_fees.sql', import.meta.url), 'utf8');
+  const sql = readFileSync(new URL('../workflows/sql/152_invoice_and_failed_deposit_fees.sql', import.meta.url), 'utf8');
   assert.match(sql, new RegExp(`aws_invoice_fee_cents\\(\\)\\s+RETURNS integer[\\s\\S]*?SELECT ${DEFAULT_INVOICE_FEE_CENTS} \\$\\$`));
   assert.match(sql, new RegExp(`aws_failed_deposit_fee_cents\\(\\)\\s+RETURNS integer[\\s\\S]*?SELECT ${DEFAULT_FAILED_DEPOSIT_FEE_CENTS} \\$\\$`));
 });

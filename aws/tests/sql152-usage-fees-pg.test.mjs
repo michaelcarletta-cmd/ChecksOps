@@ -1,5 +1,8 @@
 /**
- * SQL 149 against PostgreSQL 16: the invoice fee ($0.30, agreement 3.6) and the failed deposit fee
+ * SQL 152 (SQL 149 plus the revoke of every non-owner grant on its new table, as SQL 118 for SQL 117)
+ * against PostgreSQL 16, with default privileges that grant every new table to checksops, as staging
+ * and production have: SQL 149 keeps that grant (why it is never applied), SQL 152 removes it.
+ * the invoice fee ($0.30, agreement 3.6) and the failed deposit fee
  * ($2.00, agreement 3.7) as usage events. Every object is owned by a non-superuser checksops_admin
  * LOGIN (production's admin login, which applies the file); the API login checksops writes
  * moov_invoices and checkalt_deposits, as the invoice and Check Alt paths do. check_billing_events
@@ -13,6 +16,7 @@ import { AWS_ROOT, pgSkipReason, startPg } from './helpers/stakeholder-policies-
 
 const SQL_120 = path.join(AWS_ROOT, 'workflows/sql/120_usage_events_at_approval_and_send.sql');
 const SQL_149 = path.join(AWS_ROOT, 'workflows/sql/149_invoice_and_failed_deposit_fees.sql');
+const SQL_152 = path.join(AWS_ROOT, 'workflows/sql/152_invoice_and_failed_deposit_fees.sql');
 
 const T = '11111111-1111-4111-8111-111111111111';
 const CLAIM = '66666666-6666-4666-8666-666666666666';
@@ -81,8 +85,14 @@ INSERT INTO public.moov_invoices (id, tenant_id, status, sent_at) VALUES ('${OLD
 INSERT INTO public.checkalt_deposits (check_intake_item_id, tenant_id, status) VALUES ('${CHECK_2}', '${T}', 'rejected');
 RESET ROLE;
 `;
+// Staging and production give every new table grants through default privileges (SQL 117's failure).
+const DEFAULT_PRIVILEGES = 'ALTER DEFAULT PRIVILEGES FOR ROLE checksops_admin IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO checksops;';
+const launchAcl = async (client) => (await client.query(
+  `SELECT coalesce(array_agg(a.grantee::regrole::text || ':' || a.privilege_type ORDER BY 1), '{}') AS acl
+     FROM pg_class c CROSS JOIN LATERAL aclexplode(c.relacl) a
+    WHERE c.oid = 'public.tenant_usage_fee_launch'::regclass AND a.grantee <> c.relowner`)).rows[0].acl;
 
-test('SQL 149: invoice fee and failed deposit fee usage events (PostgreSQL 16)', { timeout: 240000, skip: pgSkipReason() || false }, async () => {
+test('SQL 152: invoice fee and failed deposit fee usage events (PostgreSQL 16)', { timeout: 240000, skip: pgSkipReason() || false }, async () => {
   const { default: pg } = await import('pg');
   const server = startPg('pg-sql149-usage-fees-', 56400);
   const superuser = new pg.Client({ host: server.host, port: server.port, user: 'ubuntu', database: 'postgres' });
@@ -94,17 +104,21 @@ test('SQL 149: invoice fee and failed deposit fee usage events (PostgreSQL 16)',
   try {
     await superuser.connect();
     await superuser.query(SCHEMA);
+    await superuser.query(DEFAULT_PRIVILEGES);
     await owner.connect();
     await owner.query(fs.readFileSync(SQL_120, 'utf8'));
-    await owner.query(fs.readFileSync(SQL_149, 'utf8'));
+    await owner.query(fs.readFileSync(SQL_152, 'utf8'));
     await api.connect();
+    // The default-privilege grants on the new table are gone: no grant to anyone but the owner.
+    assert.deepEqual(await launchAcl(superuser), []);
 
     // No backfill: nothing for the invoice sent or the deposit rejected before the launch.
     assert.deepEqual(await events(), []);
     const launch = (await superuser.query('SELECT launched_at FROM public.tenant_usage_fee_launch')).rows;
     assert.equal(launch.length, 1);
     // Re-running keeps the launch and adds nothing.
-    await owner.query(fs.readFileSync(SQL_149, 'utf8'));
+    await owner.query(fs.readFileSync(SQL_152, 'utf8'));
+    assert.deepEqual(await launchAcl(superuser), []);
     const again = (await superuser.query('SELECT launched_at FROM public.tenant_usage_fee_launch')).rows;
     assert.equal(again[0].launched_at.toISOString(), launch[0].launched_at.toISOString());
     // The API login cannot read or change the launch, nor run the rate or trigger functions.
@@ -209,16 +223,36 @@ test('SQL 149: invoice fee and failed deposit fee usage events (PostgreSQL 16)',
   }
 });
 
-test('SQL 149 refuses to run without SQL 120', { timeout: 120000, skip: pgSkipReason() || false }, async () => {
+test('SQL 152 refuses to run without SQL 120', { timeout: 120000, skip: pgSkipReason() || false }, async () => {
   const { default: pg } = await import('pg');
-  const server = startPg('pg-sql149-prereq-', 56500);
+  const server = startPg('pg-sql152-prereq-', 56900);
   const superuser = new pg.Client({ host: server.host, port: server.port, user: 'ubuntu', database: 'postgres' });
   try {
     await superuser.connect();
     await superuser.query(SCHEMA);
-    await assert.rejects(superuser.query(fs.readFileSync(SQL_149, 'utf8')), (err) => (
-      err.code === '55000' && /sql149_prerequisite_missing: .*SQL 120/.test(err.message)));
+    await assert.rejects(superuser.query(fs.readFileSync(SQL_152, 'utf8')), (err) => (
+      err.code === '55000' && /sql152_prerequisite_missing: .*SQL 120/.test(err.message)));
   } finally {
+    await superuser.end().catch(() => {});
+    server.stop();
+  }
+});
+
+test('SQL 149 keeps the default-privilege grants on its new table (why SQL 152 replaces it, as SQL 118 did SQL 117)', { timeout: 120000, skip: pgSkipReason() || false }, async () => {
+  const { default: pg } = await import('pg');
+  const server = startPg('pg-sql149-acl-', 57000);
+  const superuser = new pg.Client({ host: server.host, port: server.port, user: 'ubuntu', database: 'postgres' });
+  const owner = new pg.Client({ host: server.host, port: server.port, user: 'checksops_admin', database: 'postgres' });
+  try {
+    await superuser.connect();
+    await superuser.query(SCHEMA);
+    await superuser.query(DEFAULT_PRIVILEGES);
+    await owner.connect();
+    await owner.query(fs.readFileSync(SQL_120, 'utf8'));
+    await owner.query(fs.readFileSync(SQL_149, 'utf8'));
+    assert.ok((await launchAcl(superuser)).some((entry) => entry.startsWith('checksops:')));
+  } finally {
+    await owner.end().catch(() => {});
     await superuser.end().catch(() => {});
     server.stop();
   }
