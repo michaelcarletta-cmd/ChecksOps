@@ -285,13 +285,16 @@ test('order: predecessor SQL 142, which it supersedes; the two functions, the th
     assert.ok(spec[none] === undefined || spec[none].length === 0, none);
   }
   // The DB validator followed the staging apply (run 42023495275), as 4a3f4658e did for SQL 123, and justifies the
-  // trigger by name (185). Its production overlay row waits for SQL 143 in production (sql_before), and staging
+  // trigger by name (185; 187 since SQL 152's two). Its production overlay row waits for SQL 143 in production (sql_before), and staging
   // records SQL 143 live (read-live run 42023847018).
   const validator = read('aws/functions/api/db-readonly-validate.mjs');
   assert.match(validator, /trigger: 'aws_mortgage_company_in_use_guard',\n\s+functionName: 'aws_mortgage_company_in_use_guard'/);
-  assert.match(validator, /export const EXPECTED_PUBLIC_TRIGGERS = 185;/);
+  assert.match(validator, /export const EXPECTED_PUBLIC_TRIGGERS = 187;/);
   const plan = readJson('ops/deployment-guard/production-api-overlay-plan.json');
-  assert.deepEqual(Object.keys(plan.members).filter((m) => plan.members[m].sql_before === SQL143_FILE), ['db-readonly-validate.mjs']);
+  // (Since 2026-11-11 the validator's row is held on SQL 152, whose two triggers it justifies; it no longer waits on SQL 143.)
+  const VALIDATOR_ROW_REL = 'aws/tests/fixtures/production-db-validator-sql152-triggers-manifest-2026-11-11.json';
+  const movedOn = plan.members['db-readonly-validate.mjs'].manifest === VALIDATOR_ROW_REL;
+  assert.deepEqual(Object.keys(plan.members).filter((m) => plan.members[m].sql_before === SQL143_FILE), movedOn ? [] : ['db-readonly-validate.mjs']);
   // This record states SQL 143 verified live in production, which lifts the validator's hold.
   const prerequisite = plan.sql_prerequisites[SQL143_FILE];
   assert.equal(prerequisite.verified_live, true);

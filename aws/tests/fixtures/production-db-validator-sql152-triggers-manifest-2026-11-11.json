@@ -1,0 +1,15 @@
+{
+  "workstream_id": "production-db-validator-sql152-triggers",
+  "authorization": "Pending owner review (2026-11-11). Planning only: nothing is live or verified. The production apply needs its own owner approval, a staging acceptance reference and a read-only production inspect that confirms the live bytes.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "SQL 152 (152_invoice_and_failed_deposit_fees.sql) adds two public triggers: moov_invoices.aws_moov_invoice_fee (function aws_record_invoice_fee) and checkalt_deposits.aws_checkalt_deposit_failed_fee (function aws_record_failed_deposit_fee). Applied to staging 2026-11-11 (guarded staging SQL executor apply run 43005316840, read-live run 43005694458 already_applied true) and production (2026-11-11, SSM cae61362-0534-417e-b45c-a8d6175ce3a2). The staging Lambda overlay inspects run 43014723425 and 43018700672 then failed their public smoke because /db-readonly-validate expects the named 185-set and answered 503. A read-only production run of the validator (owner 2026-11-11: \"OK to run the read-only validator on production\"; SSM 615b437c-d87c-4d9f-863e-7db9bc09dce4 and c3f2e951-c3dd-4308-9975-0552fec04950) read 187 public triggers including both, and found tenant_partnerships.aws_tenant_partnership_consent_guard (SQL 76) missing in production. These bytes add the two triggers to the justified set and raise EXPECTED_PUBLIC_TRIGGERS to 187, as 3255c1de4 did for SQL 143. REPLACE db-readonly-validate.mjs c7aa9f1b -> e60a13b0: live_sha256 is the SQL 143 validator production applied (previous_manifest, the applied record). sql_before is SQL 152 (live in production). Production answers 503 until SQL 76 is applied there as well (a separate guarded step). A read-only production overlay inspect must confirm the live member before any apply. Planning only.",
+  "members": {
+    "db-readonly-validate.mjs": {
+      "live_sha256": "c7aa9f1bfbcf99fe84e8fd56ba932d98d7db2c706d4e98e45b469d444590c55a",
+      "accepted_sha256": "e60a13b062fe9c6a8ec627d7baaa2616254d020c8b05248cd47e6aafef949046",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-db-validator-sql143-trigger-applied-manifest-2026-11-05.json"
+    }
+  }
+}

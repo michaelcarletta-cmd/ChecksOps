@@ -52,7 +52,7 @@ export const EXPECTED_ROW_COUNTS = {
 
 export const EXPECTED_DATABASE = 'checksops';
 export const EXPECTED_SKIPPED_AUTH_USERS_FKS = 47;
-export const EXPECTED_PUBLIC_TRIGGERS = 185;
+export const EXPECTED_PUBLIC_TRIGGERS = 187;
 
 export const SUPERSEDED_PUBLIC_TRIGGERS = Object.freeze([
   Object.freeze({
@@ -186,6 +186,17 @@ export const POST_RESTORE_PUBLIC_TRIGGERS = Object.freeze([
     table: 'mortgage_companies',
     trigger: 'aws_mortgage_company_in_use_guard',
     functionName: 'aws_mortgage_company_in_use_guard',
+  }),  // SQL 152 (152_invoice_and_failed_deposit_fees.sql), applied to staging 2026-11-11 (run 43005316840) and
+  // production (2026-11-11, SSM cae61362-0534-417e-b45c-a8d6175ce3a2): the invoice fee and the failed deposit fee.
+  Object.freeze({
+    table: 'moov_invoices',
+    trigger: 'aws_moov_invoice_fee',
+    functionName: 'aws_record_invoice_fee',
+  }),
+  Object.freeze({
+    table: 'checkalt_deposits',
+    trigger: 'aws_checkalt_deposit_failed_fee',
+    functionName: 'aws_record_failed_deposit_fee',
   }),
 ]);
 
