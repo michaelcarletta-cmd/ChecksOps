@@ -252,7 +252,8 @@ test('reviewed file and spec: two owner-only definer functions and one trigger t
   // Fires first: its name sorts before every other trigger the release engine pins on checkalt_deposits.
   const others = RELEASE_SQL_KEYS.filter((key) => key !== KEY)
     .flatMap((key) => (RELEASE_SQL_SPECS[key].triggers || []).filter((t) => t.table === 'public.checkalt_deposits').map((t) => t.name));
-  assert.deepEqual(others, ['aws_checkalt_deposit_billing_event', 'aws_checkalt_deposit_cash_job_payment']);
+  // (SQL 152's failed deposit fee trigger since 2026-11-11: it records a fee and reads no check status.)
+  assert.deepEqual(others, ['aws_checkalt_deposit_billing_event', 'aws_checkalt_deposit_cash_job_payment', 'aws_checkalt_deposit_failed_fee']);
   assert.ok(others.every((name) => spec.triggers[0].name < name));
   assert.deepEqual(spec.definer_writes, ['public.check_intake_items', 'public.check_audit_log']);
   assert.deepEqual(spec.altered_relations, ['public.checkalt_deposits']);
