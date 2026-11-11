@@ -3538,7 +3538,8 @@ export const AUTHORIZED_SQL155_CLAIM_OWNER_ORG_STAMP = Object.freeze({
 // Mortgage Desk shared-check library staging pin: SQL 156 (owner 2026-11-11: "if a tenant uploads a check and shares the check with a partner, both the tenant and that partner's documents that are automatically shared with the mortgage team show up for the mortgage team", "It should be everybody
 // shared on that check"). Two new SECURITY DEFINER read functions: the auto-shared library:mortgage:% documents of every
 // tenant on a request's check (its own tenant and every unrevoked shared_checks partner), and the matching path check for
-// opening one. Nothing existing replaced. Pending until a reviewed pin change records a staging read-live.
+// opening one. Nothing existing replaced. Staging apply authorized (wave 48) from staging read-live run 43107339208:
+// both functions absent, equal to the derived state (ops/production-sql-156-apply.md).
 export const AUTHORIZED_SQL156_MORTGAGE_DESK_SHARED_CHECK_LIBRARY = Object.freeze({
   key: 'sql156',
   filename: 'aws/workflows/sql/156_mortgage_desk_shared_check_library_documents.sql',
@@ -3546,9 +3547,11 @@ export const AUTHORIZED_SQL156_MORTGAGE_DESK_SHARED_CHECK_LIBRARY = Object.freez
   // The commit that last authored the file bytes.
   commit: 'c9bbd837960ccbbc43f0dc67c41ef8ddf3830d75',
   source_sha256: 'e30e20d5d65902403426dbaf11a9467818eeb0151b90a162199687de0d2a4557',
-  authorization: 'pending',
-  execute: false,
-  expected_live_definition_sha256: null,
+  authorization: 'Owner approved 2026-11-11: staging apply (wave 48) from staging read-live run 43107339208',
+  execute: true,
+  // Staging read-live run 43107339208 (main 79e55a79a, executor deploy run 43106587111): already_applied false,
+  // precondition_failures []. Equal to the derived state (both functions absent).
+  expected_live_definition_sha256: '44259316206f9f591ce8f3a6d63b8627add30153669f612acf539e3eec6cda12',
   // Code-derived: releaseIntendedHash('sql156', file bytes) (release-sql-state.mjs); re-derived by the tests.
   intended_replacement_sha256: '5f40695d3083262c2914d8330877dd6389d7c2c9263ab13f85762476e5dd55bc',
   function_identities: Object.freeze([

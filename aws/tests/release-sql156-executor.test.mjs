@@ -5,7 +5,7 @@
  * shared on that check").
  * release-sql90-97-executor.test.mjs runs what every release key shares (SQL 156 included); this file covers what is new:
  *
- *   - the pin: pending, code-derived, selectable, packed, in step with the pending production pin; the pinned commit
+ *   - the pin: staging-authorized (wave 48) from staging read-live run 43107339208, code-derived, selectable, packed, in step with the pending production pin; the pinned commit
  *     authored the bytes; no predecessor, supersedes nothing;
  *   - the file and spec: two new SECURITY DEFINER read functions (EXECUTE checksops and the owner), the list's TABLE
  *     result, nothing else; no other release migration touches them; the absent and intended states derived;
@@ -116,7 +116,7 @@ const HELPERS = [
   sliceFrom('aws/workflows/sql/100_mortgage_desk_live_access.sql', 'CREATE OR REPLACE FUNCTION public.aws_is_mortgage_ops_agent()', '$$;'),
 ].join('\n');
 
-test('pin: SQL 156 pending, code-derived, selectable, packed, in step with the pending production pin; no predecessor', () => {
+test('pin: SQL 156 staging-authorized from its read-live, code-derived, selectable, packed, in step with the pending production pin; no predecessor', () => {
   const pin = PINS[KEY];
   const spec = RELEASE_SQL_SPECS[KEY];
   const packed = Object.fromEntries(EXECUTOR_PACK_MEMBERS);
@@ -128,16 +128,21 @@ test('pin: SQL 156 pending, code-derived, selectable, packed, in step with the p
   assert.doesNotMatch(spec.choice, /production/);
   assert.equal(sha(TEXT), pin.source_sha256);
   // Pending until a reviewed pin change records a staging read-live.
+  // Staging apply authorized (owner approved 2026-11-11, "Record the SQL 156 staging pin and merge it when green, then apply
+  // SQL 156 in staging") from staging read-live run 43107339208: already_applied false, precondition_failures []. It read the
+  // derived state (both functions absent).
   assertStagingPinState(assert, KEY, pin);
-  assert.equal(pin.execute, false);
-  assert.equal(pin.authorization, 'pending');
-  assert.equal(pin.expected_live_definition_sha256, null);
+  assert.equal(pin.execute, true);
+  assert.equal(pin.authorization, 'Owner approved 2026-11-11: staging apply (wave 48) from staging read-live run 43107339208');
+  assert.equal(pin.expected_live_definition_sha256, ABSENT);
   assert.equal(releaseIntendedHash(KEY, TEXT), pin.intended_replacement_sha256);
   assert.notEqual(ABSENT, pin.intended_replacement_sha256);
   assert.ok(RELEASE_STAGING_SQL_KEYS.includes(KEY));
   // The runbook names the absent and intended states (derived here), the intended fingerprint and the source.
   const runbook = fs.readFileSync(path.join(ROOT, 'ops/production-sql-156-apply.md'), 'utf8');
   for (const value of [ABSENT, pin.intended_replacement_sha256, pin.source_sha256]) assert.ok(runbook.includes(value), value);
+  assert.match(runbook, /\*\*Status:\*\* staging pin execute-authorized \(wave 48\); not applied anywhere\. The production pin is pending\./);
+  assert.match(runbook, /read-live \(2026-11-11\)\.\*\* Run 43107339208/);
   assert.ok(runbook.includes(`\`\`\`\n${releaseStateText(KEY, releaseIntendedState(KEY, TEXT))}\n\`\`\``));
   assert.ok(runbook.includes(`\`\`\`\n${releaseStateText(KEY, {})}\n\`\`\``));
   assert.ok(AUTHORIZED_STAGING_SQL.includes(pin));
