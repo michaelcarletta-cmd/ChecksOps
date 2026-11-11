@@ -3441,6 +3441,34 @@ export const AUTHORIZED_SQL150_EXTERNAL_DISBURSEMENT_UP_TO_CHECK_AMOUNT = Object
   ]),
 });
 
+// Invoice fee and failed deposit fee staging pin: SQL 152 (owner 2026-11-10: "work on these fixes"; 2026-11-11: "Yes" to
+// SQL 152 and its tooling). The SaaS Subscription Agreement charges $0.30 per invoice sent (3.6) and $2.00 per failed
+// deposit (3.7), and nothing recorded either. The file records both as check_billing_events (triggers on moov_invoices and
+// checkalt_deposits), adds the one-row public.tenant_usage_fee_launch (no grant to anyone: every non-owner grant revoked,
+// default-privilege grants included, as SQL 118) and four breakdown columns on tenant_maintenance_payments. It replaces
+// SQL 149, never applied (its table would have kept the default-privilege grants). No predecessor (release-sql-specs.mjs).
+// Pending until a reviewed pin change records a staging read-live (expected: everything absent, SQL 120 applied).
+export const AUTHORIZED_SQL152_INVOICE_AND_FAILED_DEPOSIT_FEES = Object.freeze({
+  key: 'sql152',
+  filename: 'aws/workflows/sql/152_invoice_and_failed_deposit_fees.sql',
+  migration_id: '152_invoice_and_failed_deposit_fees',
+  // The commit that last authored the file bytes.
+  commit: '3fea91f6f7a6bee0de623ebcc2f0b65de2ccb4f3',
+  source_sha256: 'b646207d09771e5b06f28702d1e442591282a434c5f4a9cdebfbb755384feeb8',
+  authorization: 'pending',
+  execute: false,
+  expected_live_definition_sha256: null,
+  // Code-derived: releaseIntendedHash('sql152', file bytes) (release-sql-state.mjs); re-derived by the tests.
+  intended_replacement_sha256: '6cf7d044d2db1e3e14f44815a573348b4180345d8fecc67079a95d480378ffce',
+  function_identities: Object.freeze([
+    'public.aws_usage_fee_launched_at()',
+    'public.aws_invoice_fee_cents()',
+    'public.aws_failed_deposit_fee_cents()',
+    'public.aws_record_invoice_fee()',
+    'public.aws_record_failed_deposit_fee()',
+  ]),
+});
+
 export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql90: AUTHORIZED_SQL90_USERS_ONLY_TENANT_ROLES,
   sql91: AUTHORIZED_SQL91_MOOV_ONBOARDING,
@@ -3501,6 +3529,7 @@ export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql147: AUTHORIZED_SQL147_EXTERNAL_DISBURSEMENT_RECORD,
   sql148: AUTHORIZED_SQL148_SECOND_MORTGAGEE_LINK,
   sql150: AUTHORIZED_SQL150_EXTERNAL_DISBURSEMENT_UP_TO_CHECK_AMOUNT,
+  sql152: AUTHORIZED_SQL152_INVOICE_AND_FAILED_DEPOSIT_FEES,
 });
 
 // The fee collection pin under its earlier map name (the same object as the release map's sql98).
@@ -3516,7 +3545,7 @@ export function isSql30TenantDocumentsDocType(input = {}) {
   return pinIdentifiersMatch(input, AUTHORIZED_SQL30_TENANT_DOCUMENTS_DOC_TYPE);
 }
 
-/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql148, sql150) an input names, or null. */
+/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql148, sql150, sql152) an input names, or null. */
 export function releaseSqlMigrationKey(input = {}) {
   return Object.keys(RELEASE_2026_10_17_PENDING_SQL_PINS)
     .find((key) => pinIdentifiersMatch(input, RELEASE_2026_10_17_PENDING_SQL_PINS[key])) || null;

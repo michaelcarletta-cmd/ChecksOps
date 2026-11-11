@@ -1,0 +1,68 @@
+{
+  "id": "sql152-invoice-and-failed-deposit-fees-production-apply",
+  "migration": "sql152",
+  "authorization": "pending",
+  "execute": false,
+  "target_environment": "production",
+  "target_component": "production-sql",
+  "deployment_type": "sql-apply",
+  "filename": "aws/workflows/sql/152_invoice_and_failed_deposit_fees.sql",
+  "migration_id": "152_invoice_and_failed_deposit_fees",
+  "staging_pin_commit": "3fea91f6f7a6bee0de623ebcc2f0b65de2ccb4f3",
+  "source_sha256": "b646207d09771e5b06f28702d1e442591282a434c5f4a9cdebfbb755384feeb8",
+  "function_identities": [
+    "public.aws_usage_fee_launched_at()",
+    "public.aws_invoice_fee_cents()",
+    "public.aws_failed_deposit_fee_cents()",
+    "public.aws_record_invoice_fee()",
+    "public.aws_record_failed_deposit_fee()"
+  ],
+  "expected_live_definition_sha256": null,
+  "intended_replacement_sha256": "6cf7d044d2db1e3e14f44815a573348b4180345d8fecc67079a95d480378ffce",
+  "authorization_phrase": "APPLY_INVOICE_AND_FAILED_DEPOSIT_FEES",
+  "predecessors": [],
+  "order_note": "No predecessor (as SQL 120 for SQL 98): the spec prerequisites are the file's own, SQL 120's trigger function public.aws_record_checkalt_billing_event() among them (the file refuses without it, 55000 sql152_prerequisite_missing), and SQL 120 is applied in staging and production. SQL 152 replaces SQL 149, never applied and given no spec or pin: SQL 149 created public.tenant_usage_fee_launch and revoked only PUBLIC, so the table would have kept the grants the database's default privileges give a new table (SQL 117's staging failure, run 40434533070); SQL 152 is SQL 149 plus SQL 118's revoke of every non-owner grant on that table. New objects: the one-row table public.tenant_usage_fee_launch (RLS on, no policy, no grant to anyone), the functions aws_usage_fee_launched_at(), aws_invoice_fee_cents() (30), aws_failed_deposit_fee_cents() (200), aws_record_invoice_fee() and aws_record_failed_deposit_fee() (EXECUTE for the owner only), the triggers aws_moov_invoice_fee (AFTER INSERT OR UPDATE OF sent_at ON moov_invoices) and aws_checkalt_deposit_failed_fee (AFTER INSERT OR UPDATE OF status ON checkalt_deposits), the partial unique index check_billing_events_usage_source_uidx and four integer NOT NULL DEFAULT 0 columns on tenant_maintenance_payments (invoice_fee_count, invoice_fee_amount_cents, failed_deposit_count, failed_deposit_amount_cents). The applying login must own every altered relation (altered_relations_owned_by_login) and reach check_billing_events as the trigger functions' owner past RLS (definer_can_write_relations). Expected pre-state in both environments: none of SQL 152's objects present (release sql152 v1, everything absent: 99c391367eaf941dae2a89cf78d72ae87fff5559d2fc3c26ad7acc691f1a4a5e, releaseStateHash('sql152', {})). The API members that read the new events (tenant-fee-invoice-email.mjs, held on SQL 152, and tenant-billing-engine.mjs, held on SQL 151, which needs SQL 152) reach production only through the guarded Lambda overlay after this apply; the Settings -> Usage change ships through the guarded SPA path. No API, Lambda or SPA change is part of this pin. SQL 151 (the Starter Package) must not be applied before SQL 152.",
+  "admin_login": "checksops_admin",
+  "rds_identifier": "checksops-production",
+  "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
+  "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
+  "tooling": {
+    "status": "built",
+    "production_tool": "scripts/deployment-guard/sql152-invoice-and-failed-deposit-fees-production-apply.mjs",
+    "production_lib": "scripts/deployment-guard/lib/release-sql-production-apply.mjs",
+    "staging_executor_handler": "aws/write-path/guarded-sql-executor/index.mjs handleReleaseSqlMigration",
+    "staging_workflow_choice": "sql152-invoice-and-failed-deposit-fees",
+    "one_shot_migration": "sql152",
+    "fingerprint_engine": "scripts/deployment-guard/lib/release-sql-state.mjs",
+    "runbook": "ops/production-sql-152-apply.md",
+    "tests": [
+      "aws/tests/release-sql152-executor.test.mjs",
+      "aws/tests/release-sql152-production-apply.test.mjs",
+      "aws/tests/release-sql90-97-executor.test.mjs",
+      "aws/tests/release-sql90-97-production-apply.test.mjs",
+      "aws/tests/sql152-usage-fees-pg.test.mjs"
+    ],
+    "note": "Guarded tooling for SQL 152: sql152-invoice-and-failed-deposit-fees-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql152-invoice-and-failed-deposit-fees); production-sql-one-shot.mjs --migration sql152. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): the new table with no grant to anyone, the five owner-only functions, the two triggers, the partial unique index and the four columns. The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
+  },
+  "production_inspect": {
+    "status": "pending",
+    "date": null,
+    "ssm_command_id": null,
+    "source_commit": null,
+    "read_only": true,
+    "connected_as": "checksops_admin",
+    "live_definition_sha256": null,
+    "apply_preconditions_met": null,
+    "precondition_failures": null,
+    "note": "Pending: no release-engine production inspect has been run for SQL 152 yet. Expected: every prerequisite present (prerequisites_missing [], SQL 120's aws_record_checkalt_billing_event() among them), none of SQL 152's objects present, check_billing_events reachable by the definer (release_sql_inspect.definer_writes ok true), every altered relation owned by checksops_admin, already_applied false. Expected release-engine fingerprint of that pre-state under sql152: 99c391367eaf941dae2a89cf78d72ae87fff5559d2fc3c26ad7acc691f1a4a5e (everything absent; releaseStateHash('sql152', {}), read back on PostgreSQL 16 by aws/tests/release-sql152-executor.test.mjs). Record the one-shot --phase inspect's date, SSM command id, source commit, live_definition_sha256, prerequisites_missing, release_sql_inspect, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. Stop if the pre-state differs, prerequisites_missing is not [] or precondition_failures is not []: that needs its own reviewed change."
+  },
+  "intended_post_state": {
+    "fingerprint": "6cf7d044d2db1e3e14f44815a573348b4180345d8fecc67079a95d480378ffce",
+    "note": "public.tenant_usage_fee_launch (singleton boolean PRIMARY KEY DEFAULT true CHECK (singleton), launched_at timestamptz NOT NULL DEFAULT now(), note text; RLS on, not forced, no policy, no grant to anyone but the owner, one row set at the apply); aws_usage_fee_launched_at() (STABLE, SECURITY DEFINER), aws_invoice_fee_cents() = 30 and aws_failed_deposit_fee_cents() = 200 (IMMUTABLE), aws_record_invoice_fee() and aws_record_failed_deposit_fee() (SECURITY DEFINER trigger functions writing check_billing_events), all EXECUTE for the owner only; the triggers aws_moov_invoice_fee and aws_checkalt_deposit_failed_fee; the unique index check_billing_events_usage_source_uidx ON check_billing_events (source_kind, source_id, event_type) WHERE event_type IN ('invoice_sent', 'failed_deposit'); tenant_maintenance_payments.invoice_fee_count, invoice_fee_amount_cents, failed_deposit_count, failed_deposit_amount_cents (integer NOT NULL DEFAULT 0, no column grant). No other function, table, column, policy, RLS setting, grant or trigger change; no usage event written at the apply (no backfill). The fingerprint is releaseIntendedHash('sql152', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): 6cf7d044d2db1e3e14f44815a573348b4180345d8fecc67079a95d480378ffce."
+  },
+  "staging_acceptance": {
+    "ok": false,
+    "reference": null,
+    "basis": "Pending: record the guarded staging SQL executor read-live and the staging apply of SQL 152 (choice sql152-invoice-and-failed-deposit-fees) here in the reviewed change that sets execute true. The behavior is covered on PostgreSQL 16 by aws/tests/sql152-usage-fees-pg.test.mjs (with default privileges granting every new table, as staging and production have). Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+  }
+}

@@ -275,7 +275,7 @@ test('pin: the release pin shape, applied and retired (owner approved 2026-11-10
   assert.doesNotMatch(JSON.stringify(tool), /[0-9a-f]{64}/);
   const rows = JSON.stringify(readJson('ops/deployment-guard/bypass-inventory.json'));
   assert.match(rows, /"path":"scripts\/deployment-guard\/sql148-second-mortgagee-link-production-apply\.mjs","classification":"GUARDED","capabilities":\["sql148-production-apply"\]/);
-  assert.match(rows, /sql146, sql147, sql148, sql150\)/);
+  assert.match(rows, /sql146, sql147, sql148, sql150, sql152\)/);
   const scripts = readJson('package.json').scripts;
   const workflow = fs.readFileSync(path.join(ROOT, '.github/workflows/deployment-guard.yml'), 'utf8');
   for (const name of ['aws/tests/release-sql148-executor.test.mjs', 'aws/tests/release-sql148-production-apply.test.mjs', 'aws/tests/sql148-second-mortgagee-link-pg.test.mjs']) {
@@ -358,7 +358,7 @@ test('order: no predecessor; the one new DEFINER function, the index redefined i
   assert.match(runbook, /APPLY_SECOND_MORTGAGEE_LINK/);
   const oneShot = fs.readFileSync(path.join(ROOT, 'ops/production-sql-one-shot.md'), 'utf8');
   assert.match(oneShot, /\| `sql148` \|/);
-  assert.match(oneShot, /`sql146`, `sql147`, `sql148`, `sql150`\) \|/);
+  assert.match(oneShot, /`sql146`, `sql147`, `sql148`, `sql150`, `sql152`\) \|/);
   assert.match(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/README.md'), 'utf8'), /sql148-second-mortgagee-link-production-apply\.mjs --inspect/);
 });
 
