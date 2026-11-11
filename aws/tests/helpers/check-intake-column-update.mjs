@@ -158,14 +158,18 @@ export const NOT_GRANTED_COLUMNS = Object.freeze({
   raw_ocr_front: 'jsonb',
 });
 
-/** DDL of the fixture table (owner and grants are the caller's). */
+/**
+ * DDL of the fixture table (owner and grants are the caller's). check_stage carries every value the real type has
+ * (supabase/migrations: funds_released 20260612191543, disbursed_externally 20260818194649, returned 20260901101507).
+ */
 export function checkIntakeTableSql(sql89Columns) {
   const cols = [
     ...Object.entries(NOT_GRANTED_COLUMNS).map(([name, type]) => `${name} ${type}`),
     ...sql89Columns.map((name) => `${name} ${TYPES[name] || 'text'}`),
   ];
   return `
-    CREATE TYPE public.check_stage AS ENUM ('review', 'endorsing', 'ready_for_deposit', 'deposited', 'returned', 'loss_draft');
+    CREATE TYPE public.check_stage AS ENUM ('review', 'endorsing', 'ready_for_deposit', 'deposited', 'returned', 'loss_draft',
+      'funds_released', 'disbursed_externally');
     CREATE TABLE public.check_intake_items (\n      ${cols.join(',\n      ')}\n    );`;
 }
 

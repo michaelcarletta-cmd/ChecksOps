@@ -204,6 +204,67 @@ export const SAFE_WRITE_RPCS = new Set([
 
 const SESSION_RPCS = new Set(['register_session', 'validate_session', 'invalidate_session', 'log_audit']);
 
+/**
+ * Deposit after payout (owner, 2026-11-11): a check that money already went out of belongs in Funds
+ * Released, not Deposited. The database moves a check to Funds Released only when a payout split
+ * changes (recompute_check_release_stage, fired by the split/batch triggers), so a check paid out
+ * first and marked deposited afterwards (paid by outside check 2026-09-24, marked deposited at the
+ * branch 2026-11-10) was left in Deposited for good. Run right after the deposit
+ * write, in the same transaction, this applies the same rule as recompute_check_release_stage: at
+ * least one split in a paid status and none still in flight -> funds_released, on the check and on
+ * its claim_checks rows. A check with no payouts, or a payout still pending, stays deposited.
+ */
+export const RELEASE_AFTER_DEPOSIT_SQL = {
+  // The check's payout splits: paid (submitted .. processed) and still in flight (anything not paid and not ended).
+  payouts: `SELECT count(*) FILTER (
+             WHERE lower(coalesce(s.status, '')) IN ('submitted', 'settled', 'completed', 'paid', 'sent', 'cleared', 'processed')
+           )::int AS paid,
+           count(*) FILTER (
+             WHERE lower(coalesce(s.status, '')) NOT IN (
+               'submitted', 'settled', 'completed', 'paid', 'sent', 'cleared', 'processed',
+               'failed', 'returned', 'rejected', 'declined', 'canceled', 'cancelled', 'voided')
+           )::int AS outstanding
+      FROM public.disbursement_splits s
+      JOIN public.disbursement_batches b ON b.id = s.batch_id
+     WHERE b.check_intake_item_id = $1::uuid`,
+  check: `UPDATE public.check_intake_items
+       SET check_stage = 'funds_released'::public.check_stage, updated_at = now()
+     WHERE id = $1::uuid
+       AND check_stage IS DISTINCT FROM 'funds_released'::public.check_stage
+    RETURNING id`,
+  claimChecks: `UPDATE public.claim_checks
+       SET check_stage = 'funds_released'::public.check_stage, updated_at = now()
+     WHERE check_intake_item_id = $1::uuid
+       AND check_stage IS DISTINCT FROM 'funds_released'::public.check_stage`,
+};
+
+export const RELEASE_AFTER_DEPOSIT_SAVEPOINT = 'deposit_release_after_payout';
+
+/**
+ * Runs RELEASE_AFTER_DEPOSIT_SQL (payouts, then the check, then its claim_checks rows) inside a savepoint; the
+ * deposit's earlier SELECT ... FOR UPDATE already holds the check row. If it cannot run (a grant or policy this login
+ * lacks), the deposit itself still stands, as Deposited, exactly as before this step existed; the
+ * failure is logged with its SQLSTATE only. Returns true when the check was moved.
+ */
+export const releaseIfPaidOut = async (client, checkId) => {
+  await client.query(`SAVEPOINT ${RELEASE_AFTER_DEPOSIT_SAVEPOINT}`);
+  try {
+    const payouts = (await client.query(RELEASE_AFTER_DEPOSIT_SQL.payouts, [checkId])).rows[0] || {};
+    let moved = false;
+    if (Number(payouts.paid) > 0 && Number(payouts.outstanding) === 0) {
+      moved = Boolean((await client.query(RELEASE_AFTER_DEPOSIT_SQL.check, [checkId])).rowCount);
+      if (moved) await client.query(RELEASE_AFTER_DEPOSIT_SQL.claimChecks, [checkId]);
+    }
+    await client.query(`RELEASE SAVEPOINT ${RELEASE_AFTER_DEPOSIT_SAVEPOINT}`);
+    return moved;
+  } catch (error) {
+    await client.query(`ROLLBACK TO SAVEPOINT ${RELEASE_AFTER_DEPOSIT_SAVEPOINT}`);
+    await client.query(`RELEASE SAVEPOINT ${RELEASE_AFTER_DEPOSIT_SAVEPOINT}`);
+    console.warn(JSON.stringify({ event: 'deposit_release_after_payout_skipped', code: error?.code || null }));
+    return false;
+  }
+};
+
 /** Deposit Ops actions that do not move money or call a provider. */
 /**
  * mark_manual_deposit records an out-of-band / branch deposit. It never
@@ -1574,12 +1635,19 @@ const executeDepositAction = async ({ client, mapping, args }) => {
        WHERE id = $1::uuid`,
       [item.check_id],
     );
+    // Already paid out of: Funds Released, not Deposited (RELEASE_AFTER_DEPOSIT_SQL).
+    const fundsReleased = await releaseIfPaidOut(client, item.check_id);
     await client.query(
       `INSERT INTO public.deposit_audit_log (deposit_item_id, batch_id, action, actor_id, amount, notes)
        VALUES ($1::uuid, $2::uuid, 'mark_manual_deposit', $3::uuid, $4::numeric, $5::text)`,
       [depositItemId, item.batch_id || null, actorId, item.amount, notes == null ? null : String(notes).slice(0, 2000)],
     );
-    return { data: { success: true, deposit_item_id: item.id, provider: 'manual_branch', provider_execution: false } };
+    return {
+      data: {
+        success: true, deposit_item_id: item.id, provider: 'manual_branch', provider_execution: false,
+        funds_released: fundsReleased,
+      },
+    };
   }
 
   const depositItemId = arg(args, 'p_deposit_item_id', 'deposit_item_id');

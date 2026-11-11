@@ -1,0 +1,15 @@
+{
+  "workstream_id": "deposit-release-after-payout",
+  "authorization": "Pending owner review (2026-11-11). Planning only: nothing is live or verified. The production apply needs its own owner approval, a staging acceptance reference and a read-only production inspect that confirms the live bytes.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Deposit after payout (owner 2026-11-11: \"9/24 is correct the check never moved to funds released then\", then \"Yes, start with step 1\"): a check paid out of first (an outside check recorded 2026-09-24) and marked deposited at the branch later (2026-11-10) stayed in Deposited, because mark_manual_deposit set check_stage 'deposited' and the database re-checks Funds Released only when a payout split changes. REPLACE workflow-rpc.mjs b2976326 -> 44874858: right after the deposit write, in the same transaction and a savepoint, mark_manual_deposit runs RELEASE_AFTER_DEPOSIT_SQL, the rule of recompute_check_release_stage (a split in a paid status and none in flight -> funds_released on the check and its claim_checks rows); if it cannot run, the deposit stands as Deposited, as before. The response adds funds_released. Hold unchanged: SQL 148 (live). No SQL, no new import, order unchanged. Checks already stuck are not moved by this member: that is a separate, numbered SQL correction through the guarded path. Pre-state: the second mortgagee link applied bytes (b2976326, production run 42912070859, 2026-11-10); a read-only production inspect must confirm them first. Planning only.",
+  "members": {
+    "workflow-rpc.mjs": {
+      "live_sha256": "b2976326f05097e3974563ee8e89db327d88d12e801501595992f02bd38a8741",
+      "accepted_sha256": "44874858da43e4e73f1e57c5d7d7e4864cf6d6c8e42f8805c3866039ff52cd8f",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-second-mortgagee-link-applied-manifest-2026-11-10.json"
+    }
+  }
+}
