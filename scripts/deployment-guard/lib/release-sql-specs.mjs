@@ -8952,4 +8952,77 @@ export const RELEASE_SQL_SPECS = deepFreeze({
       "public.check_billing_events"
     ]
   },
+  // SQL 76 to production (owner 2026-11-11: "apply SQL 76 to production through the guarded path", then "Option 1": SQL 76
+  // itself through this engine, not a renumbered copy). aws/workflows/sql/76_tenant_partnership_invitee_consent.sql,
+  // byte for byte as staging applied it on 2026-10-14 through its own staging pin (AUTHORIZED_SQL76_PARTNERSHIP_CONSENT,
+  // run 38553052449): the BEFORE INSERT OR UPDATE trigger aws_tenant_partnership_consent_guard on tenant_partnerships
+  // (only an invitee-tenant writer, or one of aws_connect_partner_by_code's own three row writes, can make a row live;
+  // the tenant pair is fixed) and its function (EXECUTE for the owner only: REVOKE ALL FROM PUBLIC), and the five
+  // Supabase-era write and admin policies dropped. The staging executor keeps routing the choice to its SQL 76 handler
+  // (resolveAuthorizedMigration checks SQL 76 first); this spec serves the production tool. Preconditions: the guard
+  // trusts connect by the sha256 of its three row writes and by its owner, so connect must be exactly SQL 32's (body,
+  // SECURITY DEFINER, search_path=public, row_security=off) and its owner must not be the API login or one it is a
+  // member of; no other trigger on the table. No predecessor; no table, column, grant or row change.
+  sql76: {
+    "key": "sql76",
+    "label": "SQL 76",
+    "production_only": true,
+    "choice": "sql76-tenant-partnership-consent",
+    "production_pin_rel": "ops/deployment-guard/sql76-tenant-partnership-consent-production-apply.json",
+    "script": "sql76-tenant-partnership-consent-production-apply",
+    "prerequisites": [
+      "public.tenant_partnerships",
+      "column public.tenant_partnerships.inviter_tenant_id",
+      "column public.tenant_partnerships.invitee_tenant_id",
+      "column public.tenant_partnerships.status",
+      "column public.tenant_partnerships.revoked_at",
+      "public.aws_user_tenant_ids()",
+      "public.aws_can_write_tenant(uuid)",
+      "public.aws_connect_partner_by_code(text, uuid)",
+      "auth.uid()",
+      "role checksops"
+    ],
+    "predecessors": [],
+    "extra_preconditions": [
+      "partnership_connect_pinned",
+      "partnership_connect_not_api_owned",
+      "tenant_partnerships_no_other_trigger"
+    ],
+    "counts": {
+      "partnership_connect_pinned": {
+        "sql": "SELECT count(*)::int AS n FROM pg_catalog.pg_proc p WHERE p.oid = pg_catalog.to_regprocedure('public.aws_connect_partner_by_code(text, uuid)') AND p.prosecdef AND pg_catalog.encode(pg_catalog.sha256(pg_catalog.convert_to(p.prosrc, 'UTF8')), 'hex') = '1d8e36deefc46bf447b57f13d510a8a9184f61783c8e181fef4150384c327a08' AND COALESCE(ARRAY(SELECT x FROM pg_catalog.unnest(p.proconfig) x ORDER BY x), ARRAY[]::text[]) = ARRAY['row_security=off', 'search_path=public']::text[]"
+      },
+      "partnership_connect_not_api_owned": {
+        "sql": "SELECT count(*)::int AS n FROM pg_catalog.pg_proc p WHERE p.oid = pg_catalog.to_regprocedure('public.aws_connect_partner_by_code(text, uuid)') AND pg_catalog.pg_get_userbyid(p.proowner) <> 'checksops' AND NOT pg_catalog.pg_has_role('checksops', p.proowner, 'MEMBER')"
+      },
+      "tenant_partnerships_no_other_trigger": {
+        "sql": "SELECT count(*)::int AS n FROM pg_catalog.pg_class c WHERE c.oid = pg_catalog.to_regclass('public.tenant_partnerships') AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_trigger t WHERE t.tgrelid = c.oid AND NOT t.tgisinternal AND t.tgname <> 'aws_tenant_partnership_consent_guard')"
+      }
+    },
+    "functions": [
+      {
+        "identity": "public.aws_tenant_partnership_consent_guard()",
+        "acl": [
+          "owner EXECUTE"
+        ]
+      }
+    ],
+    "triggers": [
+      {
+        "table": "public.tenant_partnerships",
+        "name": "aws_tenant_partnership_consent_guard",
+        "def": "CREATE TRIGGER aws_tenant_partnership_consent_guard BEFORE INSERT OR UPDATE ON public.tenant_partnerships FOR EACH ROW EXECUTE FUNCTION public.aws_tenant_partnership_consent_guard()"
+      }
+    ],
+    "dropped_policies": [
+      { "table": "public.tenant_partnerships", "name": "Inviter can create partnerships" },
+      { "table": "public.tenant_partnerships", "name": "Partners can update partnerships" },
+      { "table": "public.tenant_partnerships", "name": "Admins can create any partnership" },
+      { "table": "public.tenant_partnerships", "name": "Admins can view any partnership" },
+      { "table": "public.tenant_partnerships", "name": "Admins can update any partnership" }
+    ],
+    "altered_relations": [
+      "public.tenant_partnerships"
+    ]
+  },
 });

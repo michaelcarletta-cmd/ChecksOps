@@ -67,6 +67,11 @@ import {
 
 export { RELEASE_SQL_SPECS };
 export const RELEASE_SQL_KEYS = Object.freeze(Object.keys(RELEASE_SQL_SPECS));
+/**
+ * The release keys the staging guarded executor applies: every key but a production-only one (SQL 76, taken through
+ * staging by its own staging pin and handler; the engine serves only its production tool).
+ */
+export const RELEASE_STAGING_SQL_KEYS = Object.freeze(RELEASE_SQL_KEYS.filter((key) => RELEASE_SQL_SPECS[key].production_only !== true));
 export const RELEASE_SQL_PINS = RELEASE_2026_10_17_PENDING_SQL_PINS;
 
 const sha = (text) => createHash('sha256').update(String(text), 'utf8').digest('hex');
@@ -967,6 +972,13 @@ export function releaseSharedPreconditionFailures(key, state, text, { environmen
     // with the file's three present), no other policy, and the login (the in-use guard's owner) reading the three
     // referencing tables past row level security. Read-only catalog counts (never rows); each must be exactly 1, null
     // fails closed.
+    // SQL 76: the guard trusts aws_connect_partner_by_code by the sha256 of its three row writes and by its owner, so
+    // connect must be exactly SQL 32's (body sha256 1d8e36de…, SECURITY DEFINER, search_path=public, row_security=off),
+    // owned by a role that is not the API login and that the API login is not a member of, and the table carries no
+    // other trigger (the staging pin's otherTriggers none). Read-only catalog counts; each must be exactly 1, null fails closed.
+    for (const name of ['partnership_connect_pinned', 'partnership_connect_not_api_owned', 'tenant_partnerships_no_other_trigger']) {
+      if (extra === name) checks.push([name, s.counts?.[name] === 1]);
+    }
     for (const name of ['mortgage_companies_id_uuid_is_active_boolean', 'mortgage_company_references_uuid', 'mortgage_companies_sql142_policies_replaceable', 'mortgage_company_references_readable_by_login']) {
       if (extra === name) checks.push([name, s.counts?.[name] === 1]);
     }

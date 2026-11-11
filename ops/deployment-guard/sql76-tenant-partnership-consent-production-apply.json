@@ -1,0 +1,64 @@
+{
+  "id": "sql76-tenant-partnership-consent-production-apply",
+  "migration": "sql76",
+  "authorization": "pending",
+  "execute": false,
+  "target_environment": "production",
+  "target_component": "production-sql",
+  "deployment_type": "sql-apply",
+  "filename": "aws/workflows/sql/76_tenant_partnership_invitee_consent.sql",
+  "migration_id": "76_tenant_partnership_invitee_consent",
+  "staging_pin_commit": "efbd03b2d3d8187c1dbd15344f786ec81f05ae89",
+  "source_sha256": "47ef66fa3b66b07ad1c3fe6a3accc7dc1696efeb85a2d3ca3b3bb9a001f7f3c7",
+  "function_identities": [
+    "public.aws_tenant_partnership_consent_guard()"
+  ],
+  "expected_live_definition_sha256": null,
+  "intended_replacement_sha256": "a36222984953e0425dcf8fe2cfa9f261826ee3f1294ba00d56b680613c400645",
+  "authorization_phrase": "GUARD_PARTNERSHIP_ACTIVATION",
+  "predecessors": [],
+  "order_note": "No predecessor. SQL 76 was written in October and applied to staging only (2026-10-14, guarded staging SQL executor apply run 38553052449 through AUTHORIZED_SQL76_PARTNERSHIP_CONSENT); production never received it, so the production DB validator requires its trigger and answers 503 (read-only validator run, SSM 615b437c-d87c-4d9f-863e-7db9bc09dce4 and c3f2e951-c3dd-4308-9975-0552fec04950, 2026-11-11). The file is applied byte for byte: CREATE OR REPLACE FUNCTION public.aws_tenant_partnership_consent_guard() (plpgsql, trigger, SET search_path = public, not SECURITY DEFINER), its COMMENT, REVOKE ALL … FROM PUBLIC (EXECUTE for the owner only), DROP TRIGGER IF EXISTS / CREATE TRIGGER aws_tenant_partnership_consent_guard BEFORE INSERT OR UPDATE ON public.tenant_partnerships FOR EACH ROW, and DROP POLICY IF EXISTS of the five Supabase-era policies (Inviter can create partnerships, Partners can update partnerships, Admins can create any partnership, Admins can view any partnership, Admins can update any partnership). The guard trusts aws_connect_partner_by_code (SQL 32) by the sha256 of its three row writes and by its owner, so the engine also requires connect exactly as SQL 32 defines it (body sha256 1d8e36de…, SECURITY DEFINER, search_path=public, row_security=off: partnership_connect_pinned), owned by a role that is not checksops and that checksops is not a member of (partnership_connect_not_api_owned), and no other trigger on the table (tenant_partnerships_no_other_trigger). Prerequisites: tenant_partnerships with inviter_tenant_id, invitee_tenant_id, status and revoked_at; SQL 90's aws_user_tenant_ids() and aws_can_write_tenant(uuid); aws_connect_partner_by_code(text, uuid); auth.uid(); role checksops. No table, column, grant, other policy or row change; no API, Lambda or SPA change is part of this pin. Adds one trigger (the DB validator already requires it).",
+  "admin_login": "checksops_admin",
+  "rds_identifier": "checksops-production",
+  "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
+  "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
+  "tooling": {
+    "status": "built",
+    "production_tool": "scripts/deployment-guard/sql76-tenant-partnership-consent-production-apply.mjs",
+    "production_lib": "scripts/deployment-guard/lib/release-sql-production-apply.mjs",
+    "staging_executor_handler": "aws/write-path/guarded-sql-executor/index.mjs handleSql76PartnershipConsent",
+    "staging_workflow_choice": "sql76-tenant-partnership-consent",
+    "one_shot_migration": "sql76",
+    "fingerprint_engine": "scripts/deployment-guard/lib/release-sql-state.mjs",
+    "runbook": "ops/production-sql-76-apply.md",
+    "tests": [
+      "aws/tests/release-sql76-production-apply.test.mjs",
+      "aws/tests/release-sql76-production-pg.test.mjs",
+      "aws/tests/release-sql90-97-production-apply.test.mjs",
+      "aws/tests/sql76-tenant-partnership-consent-executor.test.mjs",
+      "aws/tests/sql76-tenant-partnership-consent.test.mjs"
+    ],
+    "note": "Guarded production tooling for SQL 76 on the release engine: sql76-tenant-partnership-consent-production-apply.mjs --inspect (read-only) and the receipt-gated --apply; production-sql-one-shot.mjs --migration sql76. The staging executor keeps routing choice sql76-tenant-partnership-consent to its own SQL 76 handler and pin (resolveAuthorizedMigration checks SQL 76 first); the release entry AUTHORIZED_SQL76_RELEASE_TENANT_PARTNERSHIP_CONSENT (execute false) only carries the engine fingerprint. intended_replacement_sha256 is releaseIntendedHash('sql76', file bytes): a36222984953e0425dcf8fe2cfa9f261826ee3f1294ba00d56b680613c400645. The tooling authorizes nothing: this pin stays execute false until a reviewed change records the production inspect, the staging acceptance and an owner approval."
+  },
+  "production_inspect": {
+    "status": "pending",
+    "date": null,
+    "ssm_command_id": null,
+    "source_commit": null,
+    "read_only": true,
+    "connected_as": "checksops_admin",
+    "live_definition_sha256": null,
+    "apply_preconditions_met": null,
+    "precondition_failures": null,
+    "note": "Pending: no release-engine production inspect has been run for SQL 76 yet. A read-only pre-check on 2026-11-11 (owner: \"apply SQL 76 to production through the guarded path\"; SSM d04fa1e2-74d4-4795-854e-db5acf14b59b, transfer tarball source d3103952f) ran the staging executor's own readPartnershipConsentState in BEGIN READ ONLY: live 7c5276d8… in that pin's state text, equal to staging's reviewed pre-apply state (guard and trigger absent, marker unset, the five policies absent, connect pinned, no other trigger), connect owned by checksops_admin and checksops not a member, only aws_select_tenant_partnerships and aws_write_tenant_partnerships on the table. Expected release-engine fingerprint of that pre-state under sql76: e1f21bd49f76bf0f619cbfb37f77c01711075e3c030ce1e271ee26052fff92d6 (releaseStateHash('sql76', {}): everything SQL 76 creates absent, the five policies absent; read back on PostgreSQL 16 by aws/tests/release-sql76-production-pg.test.mjs). Record the one-shot --phase inspect's date, SSM command id, source commit, live_definition_sha256, prerequisites_missing, predecessors, the counts partnership_connect_pinned, partnership_connect_not_api_owned and tenant_partnerships_no_other_trigger, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. Stop if the pre-state differs, prerequisites_missing is not [] or precondition_failures is not [] (prerequisites_present, predecessors_applied, partnership_connect_pinned, partnership_connect_not_api_owned, tenant_partnerships_no_other_trigger, functions_owned_by_login, function_acl_replaceable): that needs its own reviewed change."
+  },
+  "intended_post_state": {
+    "fingerprint": "a36222984953e0425dcf8fe2cfa9f261826ee3f1294ba00d56b680613c400645",
+    "note": "public.aws_tenant_partnership_consent_guard() owned by checksops_admin, plpgsql, VOLATILE, not SECURITY DEFINER, SET search_path = public, RETURNS trigger, EXECUTE for the owner only; the trigger aws_tenant_partnership_consent_guard BEFORE INSERT OR UPDATE ON public.tenant_partnerships FOR EACH ROW, enabled; the five Supabase-era policies absent. Behavior: a row may become live (status active, revoked_at null) only by a writer of its invitee tenant (42501 partnership_invitee_consent_required) or by one of aws_connect_partner_by_code's own row writes run as its owner (the Partner Code redemption); the tenant pair is fixed on update (42501 partnership_tenants_immutable); pending, decline and revoke are unchanged. No other function, table, column, policy, grant, trigger or row change. The fingerprint is releaseIntendedHash('sql76', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): a36222984953e0425dcf8fe2cfa9f261826ee3f1294ba00d56b680613c400645."
+  },
+  "staging_acceptance": {
+    "ok": false,
+    "reference": null,
+    "basis": "Pending: record the staging evidence here in the reviewed change that sets execute true. Available: guarded staging SQL executor apply of sql76-tenant-partnership-consent, run 38553052449 (2026-10-14, main 396a83602): before 7c5276d8…, after 2f195230… = AUTHORIZED_SQL76_PARTNERSHIP_CONSENT.intended_replacement_sha256, result applied; read-live run 43024276076 (2026-11-11, main 4fef6ce17): already_applied true, live 2f195230…. Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+  }
+}

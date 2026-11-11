@@ -3506,6 +3506,29 @@ export const AUTHORIZED_SQL154_TENANT_STARTER_PACKAGE = Object.freeze({
   ]),
 });
 
+// SQL 76 through the release engine for production (owner 2026-11-11: "apply SQL 76 to production through the guarded
+// path", then "Option 1"). The same file bytes and authoring commit as AUTHORIZED_SQL76_PARTNERSHIP_CONSENT, which took
+// SQL 76 through staging (apply run 38553052449, 2026-10-14: before 7c5276d8…, after 2f195230… in that pin's own state
+// text; read-live run 43024276076, 2026-11-11: already_applied true). The staging executor keeps routing the file to
+// that pin (resolveAuthorizedMigration checks SQL 76 first), so this entry never authorizes a staging apply: execute
+// false, no expected live definition. It carries the engine's fingerprint for the production tool.
+export const AUTHORIZED_SQL76_RELEASE_TENANT_PARTNERSHIP_CONSENT = Object.freeze({
+  key: 'sql76',
+  filename: 'aws/workflows/sql/76_tenant_partnership_invitee_consent.sql',
+  migration_id: '76_tenant_partnership_invitee_consent',
+  // The commit that last authored the file bytes (as AUTHORIZED_SQL76_PARTNERSHIP_CONSENT).
+  commit: 'efbd03b2d3d8187c1dbd15344f786ec81f05ae89',
+  source_sha256: '47ef66fa3b66b07ad1c3fe6a3accc7dc1696efeb85a2d3ca3b3bb9a001f7f3c7',
+  authorization: 'Staging applied 2026-10-14 through AUTHORIZED_SQL76_PARTNERSHIP_CONSENT (run 38553052449); no staging apply through this entry',
+  execute: false,
+  expected_live_definition_sha256: null,
+  // Code-derived: releaseIntendedHash('sql76', file bytes) (release-sql-state.mjs); re-derived by the tests.
+  intended_replacement_sha256: 'a36222984953e0425dcf8fe2cfa9f261826ee3f1294ba00d56b680613c400645',
+  function_identities: Object.freeze([
+    'public.aws_tenant_partnership_consent_guard()',
+  ]),
+});
+
 export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql90: AUTHORIZED_SQL90_USERS_ONLY_TENANT_ROLES,
   sql91: AUTHORIZED_SQL91_MOOV_ONBOARDING,
@@ -3568,6 +3591,7 @@ export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql150: AUTHORIZED_SQL150_EXTERNAL_DISBURSEMENT_UP_TO_CHECK_AMOUNT,
   sql152: AUTHORIZED_SQL152_INVOICE_AND_FAILED_DEPOSIT_FEES,
   sql154: AUTHORIZED_SQL154_TENANT_STARTER_PACKAGE,
+  sql76: AUTHORIZED_SQL76_RELEASE_TENANT_PARTNERSHIP_CONSENT,
 });
 
 // The fee collection pin under its earlier map name (the same object as the release map's sql98).
@@ -3583,7 +3607,7 @@ export function isSql30TenantDocumentsDocType(input = {}) {
   return pinIdentifiersMatch(input, AUTHORIZED_SQL30_TENANT_DOCUMENTS_DOC_TYPE);
 }
 
-/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql148, sql150, sql152, sql154) an input names, or null. */
+/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql148, sql150, sql152, sql154; sql76 for production) an input names, or null. */
 export function releaseSqlMigrationKey(input = {}) {
   return Object.keys(RELEASE_2026_10_17_PENDING_SQL_PINS)
     .find((key) => pinIdentifiersMatch(input, RELEASE_2026_10_17_PENDING_SQL_PINS[key])) || null;
@@ -4052,7 +4076,9 @@ export const AUTHORIZED_STAGING_SQL = Object.freeze([
   AUTHORIZED_SQL89_CHECK_INTAKE_COLUMN_UPDATE,
   AUTHORIZED_SQL29_MORTGAGE_OPS_LIBRARY_PARITY,
   AUTHORIZED_SQL30_TENANT_DOCUMENTS_DOC_TYPE,
-  ...Object.values(RELEASE_2026_10_17_PENDING_SQL_PINS),
+  // Every release pin the staging executor can apply. SQL 76's release entry is production-only: its staging pin is
+  // AUTHORIZED_SQL76_PARTNERSHIP_CONSENT above (the same file), and this entry never authorizes a staging apply.
+  ...Object.values(RELEASE_2026_10_17_PENDING_SQL_PINS).filter((pin) => pin !== AUTHORIZED_SQL76_RELEASE_TENANT_PARTNERSHIP_CONSENT),
 ]);
 
 export function pinIdentifiersMatch(input = {}, pin = {}) {
