@@ -207,7 +207,7 @@ function Directory({ gate, onSignOut }: { gate: { email: string; zip: string }; 
               <Badge className="mb-4 gap-1.5" variant="secondary">
                 <ShieldCheck className="h-3.5 w-3.5" strokeWidth={2.5} /> ChecksOps Vetted
               </Badge>
-              <h1 className="text-3xl md:text-5xl font-bold tracking-tight bg-gradient-to-r from-primary via-primary/80 to-white bg-clip-text text-transparent">
+              <h1 className="text-3xl md:text-5xl font-bold tracking-tight">
                 Vetted Restoration Pros
               </h1>
               <p className="text-base text-muted-foreground mt-2">

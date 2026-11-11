@@ -145,7 +145,7 @@ export default function CheckOpsSecurity() {
           <h1 className="text-4xl md:text-5xl font-bold tracking-tight leading-[1.05]">
             Bank-grade protection for
             <br />
-            <span className="bg-gradient-to-r from-primary via-[#7d8548] to-[#c4cb92] bg-clip-text text-transparent">
+            <span className="text-primary">
               every check you upload.
             </span>
           </h1>
