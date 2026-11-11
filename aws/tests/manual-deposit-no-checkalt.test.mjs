@@ -3,7 +3,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { executeSafeWriteRpc, SAFE_DEPOSIT_ACTIONS } from '../functions/api/workflow-rpc.mjs';
+import {
+  executeSafeWriteRpc, RELEASE_AFTER_DEPOSIT_SAVEPOINT, RELEASE_AFTER_DEPOSIT_SQL, SAFE_DEPOSIT_ACTIONS,
+} from '../functions/api/workflow-rpc.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
@@ -228,4 +230,94 @@ test('provider money actions stay disabled', async () => {
     args: { p_action: 'record_submission', p_deposit_item_id: ITEM_ID },
   });
   assert.equal(result.error, 'rpc_financial_disabled');
+});
+
+// Deposit after payout (owner, 2026-11-11): a check already paid out of lands in Funds Released.
+const releaseFlowClient = ({ release }) => {
+  const calls = [];
+  const client = identityClient((sql, params) => {
+    calls.push(sql.trim().replace(/\s+/g, ' '));
+    if (/FROM public.user_roles/.test(sql)) return { rows: [] };
+    if (/FROM public.tenant_users/.test(sql)) return { rows: [{ '?column?': 1 }] };
+    if (/JOIN public.check_intake_items/.test(sql)) {
+      return {
+        rows: [{
+          id: ITEM_ID, status: 'provider_assigned', amount: 25, check_id: CHECK_ID, batch_id: BATCH_ID,
+          provider: 'manual_branch', deposit_slip_number: null, tenant_id: FREEDOM,
+          check_status: 'approved_for_deposit', check_stage: 'ready_for_deposit',
+        }],
+      };
+    }
+    if (Object.values(RELEASE_AFTER_DEPOSIT_SQL).includes(sql)) {
+      assert.deepEqual(params, [CHECK_ID]);
+      return release(sql);
+    }
+    return { rows: [] };
+  });
+  return { client, calls };
+};
+
+const markDeposited = (client) => executeSafeWriteRpc({
+  client,
+  mapping: { application_user_id: APP_ID },
+  name: 'deposit_action',
+  args: { p_action: 'mark_manual_deposit', p_deposit_item_id: ITEM_ID },
+});
+
+test('mark deposited runs the release-after-payout step right after the deposit write, in a savepoint', async () => {
+  const { client, calls } = releaseFlowClient({
+    release: (sql) => (sql === RELEASE_AFTER_DEPOSIT_SQL.payouts ? { rows: [{ paid: 1, outstanding: 0 }] } : { rows: [], rowCount: 1 }),
+  });
+  const result = await markDeposited(client);
+  assert.equal(result.error, undefined);
+  assert.equal(result.data.success, true);
+  assert.equal(result.data.funds_released, true);
+  const at = (prefix) => calls.findIndex((c) => c.startsWith(prefix));
+  const intake = at('UPDATE public.check_intake_items');
+  assert.ok(intake >= 0);
+  assert.equal(at(`SAVEPOINT ${RELEASE_AFTER_DEPOSIT_SAVEPOINT}`), intake + 1);
+  const norm = (sql) => sql.trim().replace(/\s+/g, ' ');
+  assert.deepEqual(calls.slice(intake + 2, intake + 6), [
+    norm(RELEASE_AFTER_DEPOSIT_SQL.payouts), norm(RELEASE_AFTER_DEPOSIT_SQL.check), norm(RELEASE_AFTER_DEPOSIT_SQL.claimChecks),
+    `RELEASE SAVEPOINT ${RELEASE_AFTER_DEPOSIT_SAVEPOINT}`,
+  ]);
+  assert.ok(at('INSERT INTO public.deposit_audit_log') > intake + 5);
+});
+
+test('mark deposited with no payout, or a payout still in flight, stays deposited and says so', async () => {
+  for (const payouts of [{ paid: 0, outstanding: 0 }, { paid: 1, outstanding: 1 }]) {
+    const { client, calls } = releaseFlowClient({ release: () => ({ rows: [payouts] }) });
+    const result = await markDeposited(client);
+    assert.equal(result.data.success, true);
+    assert.equal(result.data.funds_released, false);
+    // Only the payout read ran: the check and its claim_checks rows are not touched.
+    assert.equal(calls.filter((c) => c.startsWith('UPDATE public.claim_checks')).length, 0);
+    assert.equal(calls.filter((c) => c.startsWith('UPDATE public.check_intake_items')).length, 1);
+  }
+});
+
+test('a failing release step never fails the deposit: rolled back to its savepoint, logged by SQLSTATE only', async () => {
+  const warn = console.warn;
+  const warnings = [];
+  console.warn = (line) => warnings.push(line);
+  try {
+    const { client, calls } = releaseFlowClient({
+      release: () => { throw Object.assign(new Error('permission denied for table claim_checks'), { code: '42501' }); },
+    });
+    const result = await markDeposited(client);
+    assert.equal(result.error, undefined);
+    assert.equal(result.data.success, true);
+    assert.equal(result.data.funds_released, false);
+    assert.ok(calls.includes(`ROLLBACK TO SAVEPOINT ${RELEASE_AFTER_DEPOSIT_SAVEPOINT}`));
+    assert.ok(calls.some((c) => c.startsWith('INSERT INTO public.deposit_audit_log')));
+    assert.deepEqual(warnings.map((w) => JSON.parse(w)), [{ event: 'deposit_release_after_payout_skipped', code: '42501' }]);
+  } finally {
+    console.warn = warn;
+  }
+});
+
+test('the release rule is the database\'s own (recompute_check_release_stage status lists)', () => {
+  const recompute = read('supabase/migrations/20260803184659_6c94c093-9fa2-433e-83cb-7db3f0c49cb8.sql');
+  const lists = (src) => [...src.matchAll(/\((?:\s*'[a-z_]+',?)+\s*\)/g)].map((m) => m[0].replace(/\s+/g, ''));
+  assert.deepEqual(lists(RELEASE_AFTER_DEPOSIT_SQL.payouts), lists(recompute.slice(0, recompute.indexOf('v_fully :='))).filter((l) => l.includes("'submitted'")));
 });
