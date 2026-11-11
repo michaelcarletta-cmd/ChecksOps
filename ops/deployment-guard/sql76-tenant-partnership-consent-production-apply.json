@@ -1,8 +1,8 @@
 {
   "id": "sql76-tenant-partnership-consent-production-apply",
   "migration": "sql76",
-  "authorization": "Owner approved 2026-11-11 (the owner's words for SQL 76: \"apply SQL 76 to production through the guarded path\", \"Option 1\", \"merge 1769 when green\", \"run the read-only SQL 76 production inspect\", \"record the SQL 76 production pin\"; the change itself is reviewed and merged by the owner): production apply of SQL 76 after the staging acceptance below, from the recorded production pre-state; each apply still needs the owner's run-time approval (the owner's words for that run).",
-  "execute": true,
+  "authorization": "Applied to production on 2026-11-11; execute is false again, so this pin is no longer a standing authorization and a re-apply needs a new reviewed pin change. The owner approved the SQL 76 production pin change on 2026-11-11 in the words \"apply SQL 76 to production through the guarded path\", \"Option 1\", \"merge 1769 when green\", \"run the read-only SQL 76 production inspect\" and \"record the SQL 76 production pin\" (on the staging apply run 38553052449; e1f21bd4 -> a3622298, #1775, merged to main as 3f7d1cf43 on the owner's words \"merge 1775 when green and apply SQL 76 in production\") and the one apply run recorded in applied (workstream prod-sql76-tenant-partnership-consent-20261111) in the words \"merge 1775 when green and apply SQL 76 in production\", passed to it verbatim. That approval covered that run only.",
+  "execute": false,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -60,5 +60,326 @@
     "ok": true,
     "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38553052449",
     "basis": "Guarded staging SQL executor apply of sql76-tenant-partnership-consent, run 38553052449 (2026-10-14, main 396a83602818d2cc6afa76d986aa2bd9b79adf98, through the SQL 76 staging pin AUTHORIZED_SQL76_PARTNERSHIP_CONSENT): receipt before 7c5276d8d04973c51f28238ec32091d77b01613c79dc8961d4dbc4bfd92d20d8, after 2f195230b952217546297d932445cb8954b81441ed30222e711b50688a09df3e == that pin's intended state, result applied (that pin's own state text). Read-live run 43024276076 (2026-11-11, main 4fef6ce17) reports already_applied true, live 2f195230…. Production's pre-state equals staging's before its apply: the staging executor's own reader on production (SSM d04fa1e2-74d4-4795-854e-db5acf14b59b, 2026-11-11) reports 7c5276d8…; under the release engine both read as everything SQL 76 creates absent and the five policies absent (e1f21bd49f76bf0f619cbfb37f77c01711075e3c030ce1e271ee26052fff92d6). The behavior is covered on PostgreSQL 16 by aws/tests/release-sql76-production-pg.test.mjs and aws/tests/sql76-tenant-partnership-consent-executor.test.mjs."
+  },
+  "applied": {
+    "date": "2026-11-11",
+    "result": "applied",
+    "source_commit": "3f7d1cf434e74e3d3dec5241b433cd5586e3d9fc",
+    "source_commit_basis": "SOURCE_COMMIT in the tarball (written by sql53-temporary-transfer) equals --commit, and the tarball sha256 equals --expected-tarball-sha256 as copied by the operator from that transfer run's log (TARBALL_SHA256 line); the run log itself was not read by the one-shot.",
+    "source_tarball": {
+      "file": "source-3f7d1cf434e74e3d3dec5241b433cd5586e3d9fc.tar.gz",
+      "sha256": "04bcc519300176ee01addac053d9a8b11515e4419d513bccbb9b60364d942cda"
+    },
+    "migration_source_sha256": "47ef66fa3b66b07ad1c3fe6a3accc7dc1696efeb85a2d3ca3b3bb9a001f7f3c7",
+    "migration_source_sha256_note": "The one-shot source step hashed aws/workflows/sql/76_tenant_partnership_invitee_consent.sql in the transfer tarball: equal to source_sha256 (the pin; migration_matches_pin true).",
+    "runner": "i-0c35557c4e5385406",
+    "runner_basis": "operator-supplied --runner (not verified by the one-shot)",
+    "workstream_id": "prod-sql76-tenant-partnership-consent-20261111",
+    "one_use_id": "sql76-prod-9b8d5c5c-6058-4606-b733-0a46bbe7dd73",
+    "one_use_id_consumed": true,
+    "one_use_id_consumed_basis": "Inferred from the successful apply (the tool records the one_use_id after COMMIT and only warns if that write fails); the consumed-registry entry was not read back separately.",
+    "owner_approval": "merge 1775 when green and apply SQL 76 in production",
+    "owner_approval_basis": "As passed in --approval-statement for --approval-scope sql76; the one-shot cannot verify who said it. The owner's words of 2026-11-11 for this run were \"merge 1775 when green and apply SQL 76 in production\", given together with the instruction to merge the pin change (#1775, merged to main as 3f7d1cf43 once green); they were passed verbatim as the approval statement for the --phase inspect run and the --phase apply run, which ran only after that merge was on main and staged.",
+    "operator": "michaelcarletta-cmd",
+    "apply_ssm_command_id": "11317599-23d1-41cc-a773-0e53aace237f",
+    "one_shot_run_id": "7eb98231-35af-4ef3-a705-912f9208ed80",
+    "one_shot_note": "One SSM command (11317599-23d1-41cc-a773-0e53aace237f on i-0c35557c4e5385406, comment \"SQL 76 production one-shot apply (owner approved)\", sent 2026-11-11 17:24:34Z, Success, ResponseCode 0, finished by 17:24:52Z; the runner was started from stopped for this work at 17:24:09Z and stopped again at 17:25:24Z, after both SSM commands had ended) ran the production-sql-one-shot --phase apply (run_id 7eb98231-35af-4ef3-a705-912f9208ed80) from main 3f7d1cf43 (transfer run 43067609844, sql53-temporary-transfer.yml on main after the #1775 merge; tarball sha256 04bcc519300176ee01addac053d9a8b11515e4419d513bccbb9b60364d942cda). Before it, a separate one-shot --phase inspect on the same tarball and the same approval statement (SSM d3ceb2b9-0fec-43fc-b1d3-0a44fbcaf9d4, sent 17:24:09Z, ended by 17:24:34Z, run_id 900c3d88-ef73-4a66-b8b6-41268443ed48, EXIT=0, steps pin, source, inspect and contracts ok, nothing written) read live e1f21bd49f76bf0f619cbfb37f77c01711075e3c030ce1e271ee26052fff92d6 (live_matches_expected true, already_applied false, apply_preconditions_met true, precondition_failures [], prerequisites_missing [], predecessors {} (none), counts partnership_connect_pinned 1, partnership_connect_not_api_owned 1, tenant_partnerships_no_other_trigger 1), the pre-state the read-only inspect recorded in production_inspect (SSM 3ba99c60-cea5-4e71-807f-87122ec557ea). The apply run's own inspect step read the same pre-state. Steps pin (execute true, staging_acceptance run 38553052449), source (tarball sha256 matches the sidecar and --expected-tarball-sha256, tree matches the tarball, migration source == pin), inspect, contracts (claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43), manifest, source-recheck-before-preflight, preflight (receipt_issued), evaluate (sql76_production_apply_allowed true), source-recheck-before-apply, apply (applied) and post-apply-inspect all ok, and the run's top-level ok is true. The run's JSON did NOT arrive whole: SSM keeps at most 24000 characters of standard output and no S3 output location was set, so the output stops inside the one-shot's own printed applied object (within its copy of post_apply_inspect) and the trailing EXIT= line was not captured; ResponseCode 0 is that of the whole shell script, not of the one-shot by itself. Every top-level details field before that object arrived whole and is what this block records: steps, run_id, source, pre_apply_inspect, contract_results, manifest_sha256, one_use_id, post_apply_inspect and apply_result (recorded as receipt, as the SQL 127 to SQL 150 records do). Not captured, and not recorded here: the rest of the one-shot's printed applied object (its own one_shot_note and not_observed_by_this_run list) and anything after it. The other fields of this block (date, source_commit_basis, the notes and bases, runner_basis, one_use_id_consumed) are written in the form the SQL 150 record took from its tool output, not read from this run. The post-apply inspect reported live a36222984953e0425dcf8fe2cfa9f261826ee3f1294ba00d56b680613c400645 == intended, already_applied true, precondition_failures []: function aws_tenant_partnership_consent_guard() intended (EXECUTE for the owner only), the trigger tenant_partnerships.aws_tenant_partnership_consent_guard intended, the five Supabase-era policies absent (intended), prerequisites_missing [], the three counts 1. Unrelated catalog 6c86e774ce4eb6107532ff186aec5c1a4794a9f7cda717ee0518154af3e2f1c3 (policies 479, functions 1370, triggers 187). Production acceptance: not yet reported by the owner when this record was written; this record does not claim it. Production's /db-readonly-validate still answered 503 after the apply: SQL 76's trigger is now present, but production also has a trigger, claims.trg_aws_stamp_claim_org_id, that no file or commit in this repository defines; that is not part of SQL 76 and is left to the owner.",
+    "steps": [
+      "pin",
+      "source",
+      "inspect",
+      "contracts",
+      "manifest",
+      "source-recheck-before-preflight",
+      "preflight",
+      "evaluate",
+      "source-recheck-before-apply",
+      "apply",
+      "post-apply-inspect"
+    ],
+    "contract_results": {
+      "claim-ledger": {
+        "ok": true,
+        "test": "aws/tests/claim-ledger-accepted-contract.test.mjs",
+        "evidence": "4/4 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at 3f7d1cf434e74e3d3dec5241b433cd5586e3d9fc (production-sql-one-shot 7eb98231-35af-4ef3-a705-912f9208ed80, node --test)"
+      },
+      "tenant-isolation": {
+        "ok": true,
+        "test": "aws/tests/tenant-security-compliance.test.mjs",
+        "evidence": "6/6 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at 3f7d1cf434e74e3d3dec5241b433cd5586e3d9fc (production-sql-one-shot 7eb98231-35af-4ef3-a705-912f9208ed80, node --test)"
+      },
+      "financial-write-protections": {
+        "ok": true,
+        "test": "aws/tests/api-write.test.mjs",
+        "evidence": "43/43 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at 3f7d1cf434e74e3d3dec5241b433cd5586e3d9fc (production-sql-one-shot 7eb98231-35af-4ef3-a705-912f9208ed80, node --test)"
+      }
+    },
+    "pre_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "e1f21bd49f76bf0f619cbfb37f77c01711075e3c030ce1e271ee26052fff92d6",
+      "live_matches_expected": true,
+      "already_applied": false,
+      "predecessors": {},
+      "predecessors_applied": true,
+      "missing_dependencies": [],
+      "apply_preconditions_met": true,
+      "precondition_failures": [],
+      "current_user": "checksops_admin",
+      "session_user": "checksops_admin",
+      "counts": {
+        "partnership_connect_pinned": 1,
+        "partnership_connect_not_api_owned": 1,
+        "tenant_partnerships_no_other_trigger": 1
+      },
+      "successors_applied": [],
+      "release_sql_inspect": {
+        "live_definition_sha256": "e1f21bd49f76bf0f619cbfb37f77c01711075e3c030ce1e271ee26052fff92d6",
+        "prerequisites_missing": [],
+        "predecessors": {},
+        "successors_applied": [],
+        "functions": [
+          {
+            "name": "aws_tenant_partnership_consent_guard()",
+            "state": "absent"
+          }
+        ],
+        "policies": [
+          {
+            "name": "tenant_partnerships Inviter can create partnerships",
+            "state": "intended"
+          },
+          {
+            "name": "tenant_partnerships Partners can update partnerships",
+            "state": "intended"
+          },
+          {
+            "name": "tenant_partnerships Admins can create any partnership",
+            "state": "intended"
+          },
+          {
+            "name": "tenant_partnerships Admins can view any partnership",
+            "state": "intended"
+          },
+          {
+            "name": "tenant_partnerships Admins can update any partnership",
+            "state": "intended"
+          }
+        ],
+        "views": [],
+        "tables": [],
+        "columns": [],
+        "constraints": [],
+        "triggers": [
+          {
+            "name": "tenant_partnerships aws_tenant_partnership_consent_guard",
+            "state": "absent"
+          }
+        ],
+        "table_privileges": [],
+        "function_acl": [
+          {
+            "name": "aws_tenant_partnership_consent_guard()",
+            "acl": []
+          }
+        ],
+        "acl_functions": [],
+        "indexes": [],
+        "unique_covers": [],
+        "definer_writes": [],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": {
+          "partnership_connect_pinned": 1,
+          "partnership_connect_not_api_owned": 1,
+          "tenant_partnerships_no_other_trigger": 1
+        }
+      }
+    },
+    "manifest_sha256": "0bb7c5cfb3ef4863de52e50330bf0c59a49adc8ee0c54ffc29efbc6e1390e332",
+    "receipt": {
+      "migration": "sql76",
+      "workstream": "prod-sql76-tenant-partnership-consent-20261111",
+      "commit": "3f7d1cf434e74e3d3dec5241b433cd5586e3d9fc",
+      "sql_file": "aws/workflows/sql/76_tenant_partnership_invitee_consent.sql",
+      "before_hash": "e1f21bd49f76bf0f619cbfb37f77c01711075e3c030ce1e271ee26052fff92d6",
+      "after_hash": "a36222984953e0425dcf8fe2cfa9f261826ee3f1294ba00d56b680613c400645",
+      "release_sql_inspect": {
+        "live_definition_sha256": "a36222984953e0425dcf8fe2cfa9f261826ee3f1294ba00d56b680613c400645",
+        "prerequisites_missing": [],
+        "predecessors": {},
+        "successors_applied": [],
+        "functions": [
+          {
+            "name": "aws_tenant_partnership_consent_guard()",
+            "state": "intended"
+          }
+        ],
+        "policies": [
+          {
+            "name": "tenant_partnerships Inviter can create partnerships",
+            "state": "intended"
+          },
+          {
+            "name": "tenant_partnerships Partners can update partnerships",
+            "state": "intended"
+          },
+          {
+            "name": "tenant_partnerships Admins can create any partnership",
+            "state": "intended"
+          },
+          {
+            "name": "tenant_partnerships Admins can view any partnership",
+            "state": "intended"
+          },
+          {
+            "name": "tenant_partnerships Admins can update any partnership",
+            "state": "intended"
+          }
+        ],
+        "views": [],
+        "tables": [],
+        "columns": [],
+        "constraints": [],
+        "triggers": [
+          {
+            "name": "tenant_partnerships aws_tenant_partnership_consent_guard",
+            "state": "intended"
+          }
+        ],
+        "table_privileges": [],
+        "function_acl": [
+          {
+            "name": "aws_tenant_partnership_consent_guard()",
+            "acl": [
+              "owner EXECUTE"
+            ]
+          }
+        ],
+        "acl_functions": [],
+        "indexes": [],
+        "unique_covers": [],
+        "definer_writes": [],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": {
+          "partnership_connect_pinned": 1,
+          "partnership_connect_not_api_owned": 1,
+          "tenant_partnerships_no_other_trigger": 1
+        }
+      },
+      "unrelated_catalog_sha256": "6c86e774ce4eb6107532ff186aec5c1a4794a9f7cda717ee0518154af3e2f1c3",
+      "unrelated_catalog_counts": {
+        "relations": 895,
+        "columns": 3557,
+        "constraints": 2247,
+        "policies": 479,
+        "functions": 1370,
+        "indexes": 657,
+        "default_acl": 0,
+        "role_memberships": 15,
+        "roles": 29,
+        "triggers": 187,
+        "views": 25,
+        "types": 18,
+        "schema": 2
+      },
+      "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/38553052449",
+      "result": "applied"
+    },
+    "post_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "a36222984953e0425dcf8fe2cfa9f261826ee3f1294ba00d56b680613c400645",
+      "live_matches_expected": false,
+      "already_applied": true,
+      "predecessors": {},
+      "predecessors_applied": true,
+      "missing_dependencies": [],
+      "apply_preconditions_met": false,
+      "precondition_failures": [],
+      "current_user": "checksops_admin",
+      "session_user": "checksops_admin",
+      "counts": {
+        "partnership_connect_pinned": 1,
+        "partnership_connect_not_api_owned": 1,
+        "tenant_partnerships_no_other_trigger": 1
+      },
+      "successors_applied": [],
+      "release_sql_inspect": {
+        "live_definition_sha256": "a36222984953e0425dcf8fe2cfa9f261826ee3f1294ba00d56b680613c400645",
+        "prerequisites_missing": [],
+        "predecessors": {},
+        "successors_applied": [],
+        "functions": [
+          {
+            "name": "aws_tenant_partnership_consent_guard()",
+            "state": "intended"
+          }
+        ],
+        "policies": [
+          {
+            "name": "tenant_partnerships Inviter can create partnerships",
+            "state": "intended"
+          },
+          {
+            "name": "tenant_partnerships Partners can update partnerships",
+            "state": "intended"
+          },
+          {
+            "name": "tenant_partnerships Admins can create any partnership",
+            "state": "intended"
+          },
+          {
+            "name": "tenant_partnerships Admins can view any partnership",
+            "state": "intended"
+          },
+          {
+            "name": "tenant_partnerships Admins can update any partnership",
+            "state": "intended"
+          }
+        ],
+        "views": [],
+        "tables": [],
+        "columns": [],
+        "constraints": [],
+        "triggers": [
+          {
+            "name": "tenant_partnerships aws_tenant_partnership_consent_guard",
+            "state": "intended"
+          }
+        ],
+        "table_privileges": [],
+        "function_acl": [
+          {
+            "name": "aws_tenant_partnership_consent_guard()",
+            "acl": [
+              "owner EXECUTE"
+            ]
+          }
+        ],
+        "acl_functions": [],
+        "indexes": [],
+        "unique_covers": [],
+        "definer_writes": [],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": {
+          "partnership_connect_pinned": 1,
+          "partnership_connect_not_api_owned": 1,
+          "tenant_partnerships_no_other_trigger": 1
+        }
+      }
+    }
+  },
+  "production_evidence": {
+    "2026-11-11 apply": "Guarded production SQL one-shot on i-0c35557c4e5385406, workstream prod-sql76-tenant-partnership-consent-20261111, main 3f7d1cf43 (tarball 04bcc519…, transfer run 43067609844, migration source 47ef66fa… == pin), owner-approved run (\"merge 1775 when green and apply SQL 76 in production\"), pre-apply --phase inspect SSM d3ceb2b9-0fec-43fc-b1d3-0a44fbcaf9d4 (run_id 900c3d88-ef73-4a66-b8b6-41268443ed48, live e1f21bd4…, live_matches_expected true), apply SSM 11317599-23d1-41cc-a773-0e53aace237f, run_id 7eb98231-35af-4ef3-a705-912f9208ed80, one_use_id sql76-prod-9b8d5c5c-6058-4606-b733-0a46bbe7dd73 (spent): every step ok; contracts claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43; pre-apply inspect live e1f21bd4… (live_matches_expected true, precondition_failures [], the three SQL 76 counts 1); manifest 0bb7c5cf…; e1f21bd4… -> a3622298…, result applied, unrelated catalog 6c86e774… (policies 479, functions 1370); post-apply inspect already_applied true, precondition_failures []; the SSM output was cut at 24000 characters inside the one-shot's printed applied object (the fields recorded in applied arrived whole; the EXIT= line did not). After: public.aws_tenant_partnership_consent_guard() exists as SQL 76 defines it (plpgsql, not SECURITY DEFINER, SET search_path = public, EXECUTE for the owner only) with the BEFORE INSERT OR UPDATE trigger aws_tenant_partnership_consent_guard on public.tenant_partnerships, and the five Supabase-era policies are absent: a partnership can become live only from the invitee side or through aws_connect_partner_by_code. No API, Lambda or SPA change. Production acceptance was not yet reported by the owner when this was recorded. execute is false so the pin is no longer a standing authorization."
   }
 }

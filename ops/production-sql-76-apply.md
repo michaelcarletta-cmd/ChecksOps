@@ -68,15 +68,39 @@ trigger public.tenant_partnerships aws_tenant_partnership_consent_guard: enabled
   policies absent, connect pinned and owned by `checksops_admin`, `checksops` not a member, no other trigger, only
   `aws_select_tenant_partnerships` and `aws_write_tenant_partnerships` on the table.
 
-**Status:** not applied to production. The pin `ops/deployment-guard/sql76-tenant-partnership-consent-production-apply.json`
-is `execute: true` (owner-approved pin change of 2026-11-11, "record the SQL 76 production pin") with:
+**Production apply (2026-11-11).** After the pin change (#1775, on the staging apply run 38553052449; merged to main as
+`3f7d1cf43` on the owner's words "merge 1775 when green and apply SQL 76 in production"), transfer run 43067609844 staged
+main `3f7d1cf43` (tarball sha256 `04bcc519300176ee01addac053d9a8b11515e4419d513bccbb9b60364d942cda`). Under the owner's
+words "merge 1775 when green and apply SQL 76 in production" (passed verbatim), a one-shot `--phase inspect` (SSM
+`d3ceb2b9-0fec-43fc-b1d3-0a44fbcaf9d4`, run `900c3d88-ef73-4a66-b8b6-41268443ed48`, EXIT=0, nothing written) read live
+`e1f21bd4…` (the pinned pre-state, `live_matches_expected` true, `precondition_failures` `[]`, the three SQL 76 counts 1);
+then one-shot `--phase apply` run `7eb98231-35af-4ef3-a705-912f9208ed80` through SSM
+`11317599-23d1-41cc-a773-0e53aace237f`, workstream `prod-sql76-tenant-partnership-consent-20261111`, one_use_id
+`sql76-prod-9b8d5c5c-6058-4606-b733-0a46bbe7dd73`: contracts 4/4, 6/6 and 43/43; all 11 steps ok; manifest `0bb7c5cf…`;
+receipt `e1f21bd4…` → `a36222984953e0425dcf8fe2cfa9f261826ee3f1294ba00d56b680613c400645` (intended), result `applied`,
+unrelated catalog `6c86e774…`; post-apply inspect `already_applied` true, `precondition_failures` `[]`, the guard
+function `intended` (EXECUTE for the owner only), the trigger `intended`, the five policies absent. The run's JSON did
+not arrive whole: SSM keeps at most 24000 characters of output, so it stops inside the one-shot's own printed `applied`
+object and the `EXIT=` line is missing; every field recorded in the pin's `applied` block arrived whole before that point
+(the pin's `one_shot_note` lists what was and was not captured). The runner `i-0c35557c4e5385406` was started for this
+work at 17:24:09Z and stopped at 17:25:24Z. No API, Lambda or SPA change goes with it. Production acceptance had not been
+reported by the owner when this record was written; this record does not claim it.
+
+After the apply production's `/db-readonly-validate` still answered 503. SQL 76's trigger is now there, so every
+justified trigger is present, but production also has a trigger, `claims.trg_aws_stamp_claim_org_id`, that no file or
+commit in this repository defines. It is not part of SQL 76; this record does not touch it and leaves it to the owner.
+
+**Status:** applied to staging (2026-10-14) and to production (2026-11-11); the production pin is retired
+(`execute: false`).
+
+Before the apply, the pin `ops/deployment-guard/sql76-tenant-partnership-consent-production-apply.json` was
+`execute: true` (owner-approved pin change of 2026-11-11, "record the SQL 76 production pin") with:
 
 - `expected_live_definition_sha256` `e1f21bd4…`, from the read-only production inspect of 2026-11-11 (SSM
   `3ba99c60-cea5-4e71-807f-87122ec557ea`, main `94d48726`, transfer run 43063595712, tarball `ebe20edf…`):
   `prerequisites_missing []`, the three SQL 76 counts 1, `already_applied false`, `precondition_failures []`;
 - `staging_acceptance` the staging apply run 38553052449 (2026-10-14), with read-live run 43024276076.
 
-The production apply still needs the owner's words for that run.
 
 ## Steps (one reviewed PR per step; each production step waits for the owner)
 
