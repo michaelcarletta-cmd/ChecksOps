@@ -8304,3 +8304,16 @@ test('Deposit after payout (owner 2026-11-11): workflow-rpc.mjs REPLACE from the
   assert.match(source, /const fundsReleased = await releaseIfPaidOut\(client, item\.check_id\);/);
   assert.match(source, /'SELECT public\.aws_link_second_mortgagee\(\$1::uuid, \$2::uuid\) AS result'/);
 });
+
+test('the three workflows that write the production API Lambda share one queue, renamed -v2 after run 43095094757 stuck the old one (2026-11-11)', () => {
+  const group = (name) => {
+    const text = fs.readFileSync(path.join(ROOT, `.github/workflows/guarded-production-lambda-${name}.yml`), 'utf8');
+    const match = text.match(/^concurrency:\n {2}group: (\S+)\n {2}cancel-in-progress: (\S+)$/m);
+    assert.ok(match, name);
+    return [match[1], match[2]];
+  };
+  for (const name of ['overlay', 'config', 'rebuild']) {
+    assert.deepEqual(group(name), ['guarded-production-lambda-overlay-v2', 'false'], name);
+  }
+  assert.doesNotMatch(WORKFLOW, /group: guarded-production-lambda-overlay\n/);
+});

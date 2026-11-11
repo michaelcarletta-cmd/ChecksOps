@@ -162,8 +162,12 @@ permissions:
   contents: read
   id-token: write
 
+# One queue for every workflow that writes checksops-production-prep-api (overlay, config, rebuild).
+# "-v2" since 2026-11-11: GitHub left overlay run 43095094757 "waiting" on the old group (no
+# environment protection rules; it could not be cancelled, force-cancelled or deleted), which held
+# every later run in that group.
 concurrency:
-  group: guarded-production-lambda-overlay
+  group: guarded-production-lambda-overlay-v2
   cancel-in-progress: false
 
 jobs:
