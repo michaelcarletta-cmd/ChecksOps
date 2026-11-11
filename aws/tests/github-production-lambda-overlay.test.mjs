@@ -149,13 +149,28 @@ const assertMovedToMoneyWrite = (member, { live, previous }) => {
     const feeLeg = member === FEE_LEG_MEMBER;
     // The engine's row has since moved on to the usage fees REPLACE (2026-11-10, held on SQL 149, planning only),
     // which starts from the fee pull savepoints applied bytes and names its own manifest.
-    const usageFees = USAGE_FEES.members[member];
-    assert.equal(row.manifest, feeLeg ? FEE_LEG_API_APPLIED_REL : usageFees ? USAGE_FEES_REL : FEE_PULL_SAVEPOINTS_APPLIED_REL, member);
+    const later = laterPlan(member);
+    assert.equal(row.manifest, feeLeg ? FEE_LEG_API_APPLIED_REL : later ? later.rel : FEE_PULL_SAVEPOINTS_APPLIED_REL, member);
     assert.equal(row.accepted_sha256, sha(`aws/functions/api/${member}`), member);
-    assert.equal(row.expected_live_sha256, usageFees ? usageFees.live_sha256 : row.accepted_sha256, member);
-    if (usageFees) assert.equal(usageFees.previous_manifest, FEE_PULL_SAVEPOINTS_APPLIED_REL, member);
+    assert.equal(row.expected_live_sha256, later ? later.entry.live_sha256 : row.accepted_sha256, member);
+    if (later) assert.equal(later.entry.previous_manifest, FEE_PULL_SAVEPOINTS_APPLIED_REL, member);
     if (feeLeg) assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, FEE_LEG_API_REL), 'utf8')).members[member].live_sha256, FEE_PULL_COLLECTION_BYTES, member);
     assert.notEqual(row.accepted_sha256, recorded.accepted_sha256, member);
+    return;
+  }
+  const later = laterPlan(member);
+  if (later) {
+    // Moved on to a pending plan (planning only), which starts from the money-write bytes: the fourth production
+    // rebuild (apply 41469896446) put them live.
+    const recorded = MONEY_WRITE_FLAG.members[member];
+    assert.deepEqual(recorded, {
+      live_sha256: live, accepted_sha256: recorded.accepted_sha256, operation: 'replace', previous_manifest: previous,
+    }, member);
+    assert.notEqual(recorded.accepted_sha256, live, member);
+    assert.equal(row.manifest, later.rel, member);
+    assert.equal(row.expected_live_sha256, recorded.accepted_sha256, member);
+    assert.deepEqual([later.entry.live_sha256, later.entry.previous_manifest], [recorded.accepted_sha256, MONEY_WRITE_FLAG_REL], member);
+    assert.equal(row.accepted_sha256, sha(`aws/functions/api/${member}`), member);
     return;
   }
   assert.equal(row.manifest, MONEY_WRITE_FLAG_REL, member);
@@ -447,8 +462,19 @@ const escrowApplied = (member) => SECOND_MORTGAGEE.members[member]?.live_sha256 
 const USAGE_FEES_REL = 'aws/tests/fixtures/production-usage-fees-manifest-2026-11-10.json';
 const USAGE_FEES = JSON.parse(fs.readFileSync(path.join(ROOT, USAGE_FEES_REL), 'utf8'));
 const SQL149_FILE = 'aws/workflows/sql/149_invoice_and_failed_deposit_fees.sql';
-/** The bytes live before the usage fees plan: main's, until that plan moved the member on. */
-const beforeUsageFees = (member) => USAGE_FEES.members[member]?.live_sha256 ?? sha(`aws/functions/api/${member}`);
+// Starter Package (owner 2026-11-10): tenant-billing-engine.mjs (superseding the usage fees plan's unapplied bytes) and
+// tenant-billing-handlers.mjs REPLACE their live bytes, held on SQL 151 (not live), planning only (its own test, at the end).
+const STARTER_PACKAGE_REL = 'aws/tests/fixtures/production-starter-package-manifest-2026-11-10.json';
+const STARTER_PACKAGE = JSON.parse(fs.readFileSync(path.join(ROOT, STARTER_PACKAGE_REL), 'utf8'));
+const SQL151_FILE = 'aws/workflows/sql/151_tenant_starter_package.sql';
+/** The pending plan that holds a member now (planning only): SQL 151's, else SQL 149's, else null. */
+const laterPlan = (member) => {
+  if (STARTER_PACKAGE.members[member]) return { rel: STARTER_PACKAGE_REL, entry: STARTER_PACKAGE.members[member], sql: SQL151_FILE };
+  if (USAGE_FEES.members[member]) return { rel: USAGE_FEES_REL, entry: USAGE_FEES.members[member], sql: SQL149_FILE };
+  return null;
+};
+/** The bytes live before the pending plans: main's, until one moved the member on. */
+const beforeUsageFees = (member) => laterPlan(member)?.entry.live_sha256 ?? sha(`aws/functions/api/${member}`);
 /**
  * A plan row as it stood before the usage fees plan moved it on: the row, with its live bytes accepted and expected,
  * its previous manifest named and its previous hold restored (`row` is the row before, as each test states it).
@@ -485,9 +511,10 @@ const withSql145 = (member, deps) => {
 // The usage fees members wait for SQL 149 (not live, planning only, its own test at the end): apply replays of older
 // workstreams run on a plan copy that states it live, as withSql145 does for SQL 145.
 const withSql149 = (member, deps) => {
-  if (PLAN.members[member]?.sql_before !== SQL149_FILE) return deps;
+  if (![SQL149_FILE, SQL151_FILE].includes(PLAN.members[member]?.sql_before)) return deps;
   const plan = structuredClone(deps.plan || PLAN);
   plan.sql_prerequisites[SQL149_FILE] = { verified_live: true, evidence: 'test' };
+  plan.sql_prerequisites[SQL151_FILE] = { verified_live: true, evidence: 'test' };
   return { ...deps, plan };
 };
 // providers/moov-status-catch-up.mjs waits for SQL 146 (the catch-up update fix, its own test below): the committed
@@ -1456,8 +1483,8 @@ test('fee collection: eleven members on the fee manifest, collection-v2 then des
   // SQL 120 (send-time fees, after SQL 98) now holds the engine; the handlers (profile-update,
   // member-remove) wait on SQL 102, which requires SQL 98 (SQL 98 itself requires SQL 96).
   // (The usage fees plan, 2026-11-10, moved the engine's hold on to SQL 149, which needs SQL 120.)
-  assert.equal(PLAN.members[ENGINE].sql_before, USAGE_FEES.members[ENGINE] ? SQL149_FILE : 'aws/workflows/sql/120_usage_events_at_approval_and_send.sql');
-  assert.equal(PLAN.members[HANDLERS].sql_before, SQL102);
+  assert.equal(PLAN.members[ENGINE].sql_before, (laterPlan(ENGINE)?.sql ?? 'aws/workflows/sql/120_usage_events_at_approval_and_send.sql'));
+  assert.equal(PLAN.members[HANDLERS].sql_before, laterPlan(HANDLERS)?.sql ?? SQL102);
   // SQL 102 is recorded live in production since its guarded apply of 2026-10-20 (#1079).
   const pre102 = PLAN.sql_prerequisites[SQL102];
   assert.equal(pre102.verified_live, true);
@@ -1521,6 +1548,8 @@ test('fee collection: eleven members on the fee manifest, collection-v2 then des
   const HANDLERS_PRE = fees.members[HANDLERS].accepted_sha256;
   const plan102Pending = enginePre(structuredClone(PLAN_SQL98_PENDING));
   plan102Pending.members[HANDLERS].expected_live_sha256 = HANDLERS_PRE;
+  // (The Starter Package plan, 2026-11-10, moved the handlers' hold on to SQL 151; the replay restores the SQL 102 hold.)
+  plan102Pending.members[HANDLERS].sql_before = SQL102;
   plan102Pending.sql_prerequisites[SQL102] = { ...plan102Pending.sql_prerequisites[SQL102], verified_live: false, evidence: null };
   const handlersEnv = () => applyEnv(HANDLERS, { CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: HANDLERS_PRE });
   const handlersDeps = () => applyDeps(HANDLERS, { sha256: HANDLERS_PRE });
@@ -2152,7 +2181,7 @@ test('send-fee billing: tenant-billing-engine.mjs replaced the 43d9a162 bytes; p
   assert.notEqual(row.accepted_sha256, LIVE);
   // The engine bills the fee SQL 120 writes at send time: SQL 120 stays its prerequisite (through SQL 149, which needs
   // SQL 120, once the usage fees plan moved the row on).
-  assert.equal(row.sql_before, USAGE_FEES.members[ENGINE] ? SQL149_FILE : 'aws/workflows/sql/120_usage_events_at_approval_and_send.sql');
+  assert.equal(row.sql_before, (laterPlan(ENGINE)?.sql ?? 'aws/workflows/sql/120_usage_events_at_approval_and_send.sql'));
   if (USAGE_FEES.members[ENGINE]) assert.match(fs.readFileSync(path.join(ROOT, SQL149_FILE), 'utf8'), /aws_record_checkalt_billing_event\(\) \(SQL 120\)/);
   assert.equal(resolvePlannedMember(ENGINE, { root: ROOT, plan: PLAN }).ok, true);
   const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: ENGINE };
@@ -3308,7 +3337,7 @@ test('Tenant lifecycle: tenant-billing-handlers.mjs replaced the bytes productio
   // its own test), which starts from the finding 6 applied bytes.
   const finding6 = JSON.parse(fs.readFileSync(path.join(ROOT, APPLY_EVENT_STAGING_ONLY_APPLIED_REL), 'utf8')).members[HANDLERS].accepted_sha256;
   assertMovedToMoneyWrite(HANDLERS, { live: finding6, previous: APPLY_EVENT_STAGING_ONLY_APPLIED_REL });
-  assert.equal(PLAN.members[HANDLERS].sql_before, SQL102);
+  assert.equal(PLAN.members[HANDLERS].sql_before, laterPlan(HANDLERS)?.sql ?? SQL102);
   assert.match(fs.readFileSync(path.join(API, HANDLERS), 'utf8'), /needs database update SQL 117/);
   assert.equal(resolvePlannedMember(HANDLERS, { root: ROOT, plan: PLAN }).ok, true);
   const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: HANDLERS };
@@ -4692,7 +4721,7 @@ test('Billing apply-event staging only (finding 6): tenant-billing-handlers.mjs 
   assert.deepEqual(applied.members, { [MEMBER]: { live_sha256: accepted, accepted_sha256: accepted, operation: 'replace', previous_manifest: APPLY_EVENT_STAGING_ONLY_REL } });
   // The row then moved on to the money-write flag REPLACE (finding 14 step 1), which starts from these bytes.
   assertMovedToMoneyWrite(MEMBER, { live: accepted, previous: APPLY_EVENT_STAGING_ONLY_APPLIED_REL });
-  assert.equal(PLAN.members[MEMBER].sql_before, SQL102);
+  assert.equal(PLAN.members[MEMBER].sql_before, laterPlan(MEMBER)?.sql ?? SQL102);
   assert.ok(PLAN.notes.includes('Billing apply-event staging only applied 2026-10-30 (production run 40992697854'));
   assert.equal(resolvePlannedMember(MEMBER, { root: ROOT, plan: PLAN }).ok, true);
   const inspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: MEMBER };
@@ -4702,8 +4731,12 @@ test('Billing apply-event staging only (finding 6): tenant-billing-handlers.mjs 
   const ready = await run(inspect, { root: ROOT, plan: before, inspectLive: liveFor(MEMBER, { plan: before, sha256: TENANT_LIFECYCLE_APPLIED_BYTES }) });
   assert.equal(ready.state, 'READY');
   assert.equal(ready.mutation, false);
-  // The applied bytes are now the money-write flag REPLACE's starting point: READY, not done.
-  const done = await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: accepted }) });
+  // The applied bytes are now the money-write flag REPLACE's starting point: READY, not done. (Replayed on the row as
+  // that REPLACE planned it: the Starter Package plan, 2026-11-10, has since moved it on from the bytes the fourth
+  // production rebuild put live.)
+  const moneyWrite = structuredClone(PLAN);
+  moneyWrite.members[MEMBER] = { ...moneyWrite.members[MEMBER], expected_live_sha256: accepted, manifest: MONEY_WRITE_FLAG_REL, sql_before: SQL102 };
+  const done = await run(inspect, { root: ROOT, plan: moneyWrite, inspectLive: liveFor(MEMBER, { plan: moneyWrite, sha256: accepted }) });
   assert.equal(done.state, 'READY');
   assert.equal(done.mutation, false);
   // The pre-apply bytes are no longer an accepted live state.
@@ -5801,7 +5834,7 @@ test('Billing database errors redacted (finding 25): tenant-billing-engine.mjs R
   // The row then moved on to the money-write flag REPLACE (finding 14 step 1), which starts from these bytes.
   assertMovedToMoneyWrite(MEMBER, { live: accepted, previous: BILLING_DB_ERROR_REDACTION_APPLIED_REL });
   // (SQL 149 since the usage fees plan, 2026-11-10, moved the row on; SQL 149 needs SQL 120.)
-  assert.equal(PLAN.members[MEMBER].sql_before, USAGE_FEES.members[MEMBER] ? SQL149_FILE : 'aws/workflows/sql/120_usage_events_at_approval_and_send.sql');
+  assert.equal(PLAN.members[MEMBER].sql_before, (laterPlan(MEMBER)?.sql ?? 'aws/workflows/sql/120_usage_events_at_approval_and_send.sql'));
   assert.ok(PLAN.notes.includes('Billing database errors redacted tenant-billing-engine.mjs applied 2026-10-31 (production run 41227499349'));
   // The one new import (data.mjs, for sanitizeLogText) is a member recorded live (the public partner codes'
   // applied bytes, which export it; the planned auth.email() REPLACE keeps the export).
@@ -5997,8 +6030,8 @@ test('Money-write flag (finding 14 step 1, 2026-10-31): ADD money-write-flag.mjs
   }
   // SQL holds are unchanged (SQL 120 for the engine, SQL 102 for the handlers); nothing waits for SQL 136. (The usage
   // fees plan, 2026-11-10, has since moved the engine's hold on to SQL 149, which needs SQL 120.)
-  assert.equal(PLAN.members['tenant-billing-engine.mjs'].sql_before, USAGE_FEES.members['tenant-billing-engine.mjs'] ? SQL149_FILE : 'aws/workflows/sql/120_usage_events_at_approval_and_send.sql');
-  assert.equal(PLAN.members['tenant-billing-handlers.mjs'].sql_before, 'aws/workflows/sql/102_platform_owner_tenant_profile.sql');
+  assert.equal(PLAN.members['tenant-billing-engine.mjs'].sql_before, (laterPlan('tenant-billing-engine.mjs')?.sql ?? 'aws/workflows/sql/120_usage_events_at_approval_and_send.sql'));
+  assert.equal(PLAN.members['tenant-billing-handlers.mjs'].sql_before, laterPlan('tenant-billing-handlers.mjs')?.sql ?? 'aws/workflows/sql/102_platform_owner_tenant_profile.sql');
   for (const member of [ADD, 'providers/production/moov-wallet-sync.mjs', 'providers/parity/moov-functions.mjs', 'tenant-settings-handlers.mjs', 'tenant-collection-v2-settlement.mjs']) {
     assert.equal(PLAN.members[member].sql_before, null, member);
   }
@@ -6717,7 +6750,7 @@ test('Fee pull savepoints (production incident 2026-11-06): tenant-collection-v2
     // The engine's row has since moved on to the usage fees REPLACE (2026-11-10, SQL 149, planning only), which starts
     // from the applied bytes: main has moved on from them too.
     const accepted = member === FEE_LEG_MEMBER ? FEE_PULL_COLLECTION_BYTES : beforeUsageFees(member);
-    if (member === FEE_LEG_MEMBER || USAGE_FEES.members[member]) assert.notEqual(sha(`aws/functions/api/${member}`), accepted, member);
+    if (member === FEE_LEG_MEMBER || laterPlan(member)) assert.notEqual(sha(`aws/functions/api/${member}`), accepted, member);
     assert.equal(rebuild.members[member].accepted_sha256, pre, member);
     assert.notEqual(accepted, pre, member);
     assert.deepEqual(manifest.members[member], { live_sha256: pre, accepted_sha256: accepted, operation: 'replace', previous_manifest: MONEY_WRITE_FLAG_REL }, member);
@@ -6729,17 +6762,24 @@ test('Fee pull savepoints (production incident 2026-11-06): tenant-collection-v2
       assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, FEE_LEG_API_REL), 'utf8')).members[member].live_sha256, accepted, member);
       assert.equal(PLAN.members[member].manifest, FEE_LEG_API_APPLIED_REL, member);
       assert.equal(PLAN.members[member].expected_live_sha256, sha(`aws/functions/api/${member}`), member);
-    } else if (USAGE_FEES.members[member]) {
+    } else if (laterPlan(member)) {
+      // (Since moved on again by the Starter Package plan, SQL 151, which supersedes the usage fees bytes, never applied.)
+      const later = laterPlan(member);
       assert.deepEqual(PLAN.members[member], {
         operation: 'replace',
         accepted_sha256: sha(`aws/functions/api/${member}`),
         expected_live_sha256: accepted,
-        sql_before: SQL149_FILE,
-        manifest: USAGE_FEES_REL,
+        sql_before: later.sql,
+        manifest: later.rel,
       }, member);
-      assert.deepEqual(USAGE_FEES.members[member], {
-        live_sha256: accepted, accepted_sha256: sha(`aws/functions/api/${member}`), operation: 'replace', previous_manifest: FEE_PULL_SAVEPOINTS_APPLIED_REL,
-      }, member);
+      assert.deepEqual(
+        [later.entry.live_sha256, later.entry.accepted_sha256, later.entry.operation, later.entry.previous_manifest],
+        [accepted, sha(`aws/functions/api/${member}`), 'replace', FEE_PULL_SAVEPOINTS_APPLIED_REL], member);
+      if (later.rel === STARTER_PACKAGE_REL && USAGE_FEES.members[member]) {
+        assert.equal(later.entry.supersedes_unapplied_manifest, USAGE_FEES_REL, member);
+        assert.equal(USAGE_FEES.members[member].live_sha256, accepted, member);
+        assert.notEqual(USAGE_FEES.members[member].accepted_sha256, sha(`aws/functions/api/${member}`), member);
+      }
     } else {
       assert.deepEqual(PLAN.members[member], {
         operation: 'replace',

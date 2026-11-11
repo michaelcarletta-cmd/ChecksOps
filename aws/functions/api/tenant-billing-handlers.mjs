@@ -420,6 +420,7 @@ const handleTenantBillingAdminInTransaction = async (event, deps = {}) => {
         perCheckBillingEnabled: body.per_check_billing_enabled,
         isFoundingPartner: body.is_founding_partner,
         depositsEnabled: body.deposits_enabled,
+        starterPackage: body.starter_package,
         billingEnabled: body.billing_enabled,
         billingDay: body.billing_day_of_month,
         userId: mapping.application_user_id,
