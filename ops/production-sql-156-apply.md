@@ -25,7 +25,16 @@ db-readonly-validate trigger count is not affected. No API, Lambda or SPA change
 action and the storage signer consulting the new path check) and the Desk page ship afterwards through their own guarded
 paths.
 
-**Status:** tooling built; staging and production pins pending (`execute: false`). Nothing applied or read.
+**Status:** staging pin execute-authorized (wave 48); not applied anywhere. The production pin is pending.
+
+**Staging read-live (2026-11-11).** Run 43107339208 (job 130813991426, main `79e55a79a`, after executor deploy run
+43106587111, inspect runs 43106173690 and 43107000432), under the owner's words "Redeploy the staging executor and run
+SQL 156 read-live": `already_applied` false, `precondition_failures` `[]`, `prerequisites_missing` `[]`, `definer_writes`
+`mortgage_handling_requests`, `shared_checks`, `tenant_documents` and `tenants` `ok true`; both functions `absent`. Live
+`44259316206f9f591ce8f3a6d63b8627add30153669f612acf539e3eec6cda12`, equal to the derived state; intended `5f40695d…`. Recorded in the staging pin
+(`expected_live_definition_sha256`, `execute: true`, wave 48) under the owner's words of 2026-11-11, "Record the SQL 156
+staging pin and merge it when green, then apply SQL 156 in staging". The staging apply is a separate run after this pin is
+merged and the executor is redeployed carrying it. The production pin stays pending.
 
 ## Fingerprint
 
