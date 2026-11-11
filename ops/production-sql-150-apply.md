@@ -59,7 +59,35 @@ as SQL 147 left it, equal to the derived pre-state; intended `48d61bb3…`. Reco
 executor is redeployed carrying it, on the owner's words "apply SQL 150 in staging". The production pin stays pending:
 a read-only production inspect decides production's pre-state.
 
-**Status:** staging pin execute-authorized (wave 44); not applied anywhere. The production pin is pending.
+**Staging executor refreshed for the pin (2026-11-11).** The staging pin (wave 44, PR #1755) merged as
+`e9ec71bdad1f90cac544dc21ec11c5af64e42f5a`. Inspect run 42929982947 found the live executor at
+`aPgcRrWIUqtEN2smVE554q0UlGAMgIbGlf3hxLFOTeE=`. Deploy run 42930343151 updated `checksops-staging-guarded-sql-executor`;
+inspect run 42930676868 read it at `5l+xb4vlyT2FG7HOxcLcznlXJxqCJkMbc8lOwVpnmtw=`. Read-live run 42930941348:
+`already_applied` false, `precondition_failures` `[]`, live `650ad0d4…`, equal to the pin.
+
+**Staging apply (2026-11-11).** Apply run 42931300437 (job 130230428336, main `e9ec71bda`, workstream
+`github-staging-sql-42931300437`, `expected_live_definition_sha256` `650ad0d486b5eebdf647e4c25a56c8776ed7a412d8735cfc83aad1d449b959fa`) under the owner's words "apply SQL 150 in
+staging": success. The receipt prints `result` `applied`, `before_hash` `650ad0d4…`, `after_hash` `48d61bb31da60ca6f52d2691e3f3a95de9ce33347725a32e9b95b4939ff1bb13`; the
+function in state `intended`. Read-live run 42931628662 (job 130231543783): `already_applied` true,
+`live_definition_sha256` `48d61bb3…` equal to the intended hash, `precondition_failures` `[]`. Staging acceptance: the
+owner on 2026-11-11, "SQL 150 accepted in staging". There is no separate staging record PR for SQL 150: these staging
+runs are recorded here and in the production pin's `staging_acceptance` by the production pin PR. The SPA change
+(`FundsTab.tsx`, #1752) is not part of this pin.
+
+**Production inspect (2026-11-11).** Read-only `--inspect` through SSM
+`fd54c8e6-bbeb-466e-92e4-d45645203570` on `i-0c35557c4e5385406` (under the owner's words "run the read-only SQL 150
+production inspect"; command sent 00:40:39Z, Success 00:40:49Z, runner stopped 00:41:21Z), main `e9ec71bda` (tarball
+sha256 `823eaf419e3529c1882fa18d5b239bebf696247881f08729c9b8283a77c1f108`, staged by `sql53-temporary-transfer.yml`
+run 42932984835, migration source `b470f8ec…` == pin), `read_only` true: live `650ad0d486b5eebdf647e4c25a56c8776ed7a412d8735cfc83aad1d449b959fa` (the function exactly as
+SQL 147 left it, the derived pre-state), SQL 147 applied, `already_applied` false, `live_matches_expected` false,
+`precondition_failures` `[]`, `apply_preconditions_met` false, `definer_writes` ok on all six relations, `errors` `[]`.
+Production's pre-state equals staging's (read-live runs 42928033292 and 42930941348), so the staging apply took the
+path production will. Recorded in the production pin with the staging apply (run 42931300437) as its staging acceptance
+and `execute: true` under the owner's words "record the SQL 150 production pin". The owner merges the pin change; the
+apply runs only after that merge is on main and staged, under the owner's words for that run ("merge it when green and
+apply SQL 150 in production").
+
+**Status:** applied in staging (wave 44, 2026-11-11); staging acceptance: owner ("SQL 150 accepted in staging"); production pin execute-authorized; not applied to production
 
 ## Fingerprint
 
