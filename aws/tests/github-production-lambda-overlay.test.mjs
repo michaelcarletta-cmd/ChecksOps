@@ -976,7 +976,8 @@ test('checkalt-eligibility.mjs expected_live records the bytes production run 39
   assert.match(PLAN.notes, /staging apply run 39662525342/);
   assert.match(PLAN.notes, /inspect run 39662846247/);
   assert.match(PLAN.notes, /production apply run 39663019340/);
-  assert.equal(PLAN.order[0], ELIGIBILITY);
+  // Second since 2026-11-11: db-readonly-validate.mjs heads the order.
+  assert.equal(PLAN.order[1], ELIGIBILITY);
   const row = PLAN.members[ELIGIBILITY];
   assert.equal(row.operation, 'replace');
   assert.equal(row.manifest, MANIFEST_REL);
@@ -2840,7 +2841,9 @@ test('Data API RPC access gates: data.mjs REPLACE planned over the bytes product
     manifest: SECURITY_HARDENING_APPLIED_REL,
   });
   assert.ok(PLAN.order.indexOf(MEMBER) < PLAN.order.indexOf(RECON));
-  assert.equal(PLAN.order.indexOf('db-readonly-validate.mjs') + 1, PLAN.order.indexOf(RECON));
+  // The validator heads the order since 2026-11-11 (its SQL 152 REPLACE is not held behind pending members).
+  assert.equal(PLAN.order.indexOf('db-readonly-validate.mjs'), 0);
+  assert.ok(PLAN.order.indexOf('db-readonly-validate.mjs') < PLAN.order.indexOf(RECON));
   assert.match(fs.readFileSync(path.join(ROOT, '.github/workflows/guarded-production-lambda-overlay.yml'), 'utf8'), /\n {10}- check-reconciliation\.mjs\n/);
   const reconInspect = { ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: RECON };
   const reconBefore = structuredClone(PLAN);
