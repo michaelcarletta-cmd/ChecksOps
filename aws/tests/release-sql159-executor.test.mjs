@@ -5,7 +5,8 @@
  * 2026-11-10: "permission denied for table homeowner_intro_requests").
  * release-sql90-97-executor.test.mjs runs what every release key shares (SQL 159 included); this file covers what is new:
  *
- *   - the pin: pending, code-derived, selectable, packed, in step with the pending production pin; the pinned commit
+ *   - the pin: pending (staging read-live run 43232074130 already in the intended state, so no staging apply), code-derived,
+ *     selectable, packed, in step with the execute-authorized production pin (production's own pre-state); the pinned commit
  *     authored the bytes; no predecessor, supersedes nothing;
  *   - the file and spec: one table grant (checksops SELECT), nothing else; no other release migration pins grants on
  *     the table; the absent and intended states derived;
@@ -105,7 +106,7 @@ function handlerFor(connect, { pins = {} } = {}) {
   return createHandler({ connect, now: () => Date.parse(NOW), releaseSqlFiles: FILES, releaseSqlPins: { ...PINS, ...pins } });
 }
 
-test('pin: SQL 159 pending, code-derived, selectable, packed, in step with the pending production pin; no predecessor', () => {
+test('pin: SQL 159 pending (staging already in the intended state), code-derived, selectable, packed, in step with the execute-authorized production pin; no predecessor', () => {
   const pin = PINS[KEY];
   const spec = RELEASE_SQL_SPECS[KEY];
   const packed = Object.fromEntries(EXECUTOR_PACK_MEMBERS);
@@ -131,7 +132,7 @@ test('pin: SQL 159 pending, code-derived, selectable, packed, in step with the p
   assert.ok(runbook.includes(`\`\`\`\n${releaseStateText(KEY, { privileges: { [TABLE]: { exists: true, lines: [] } } })}\n\`\`\``));
   assert.ok(runbook.includes(`\`\`\`\n${releaseStateText(KEY, releaseIntendedState(KEY, TEXT))}\n\`\`\``));
   assert.ok(runbook.includes(`\`\`\`\n${releaseStateText(KEY, {})}\n\`\`\``));
-  assert.match(runbook, /\*\*Status:\*\* tooling built; staging and production pins pending \(`execute: false`\)\. Nothing applied or read\./);
+  assert.match(runbook, /\*\*Status:\*\* staging already in the intended state \(read-live run 43232074130, 2026-11-12; no staging apply, the staging pin stays pending\); production pin execute-authorized on production's own pre-state \(read-only inspect SSM `acaf2260-cef8-4d40-9f19-85a5c87c873d`\)\. Not applied in production\./);
   assert.ok(AUTHORIZED_STAGING_SQL.includes(pin));
   assert.equal(resolveAuthorizedMigration({ filename: pin.filename }), pin);
   assert.equal(MIGRATIONS[spec.choice], pin);
@@ -159,12 +160,18 @@ test('pin: SQL 159 pending, code-derived, selectable, packed, in step with the p
   assert.equal(prod.source_sha256, pin.source_sha256);
   assert.deepEqual(prod.function_identities, []);
   assert.deepEqual(prod.predecessors, []);
-  assert.equal(prod.execute, false);
-  assert.equal(prod.authorization, 'pending');
+  // Production pin execute-authorized (owner-approved pin change of 2026-11-12) on the staging read-live, already in the
+  // intended state there. Its pre-state is production's own (read-only inspect SSM acaf2260): the derived no-grant state.
+  // The staging pin stays pending: a pin whose expected live hash equals the intended one cannot be bound.
+  assert.equal(prod.execute, true);
+  assert.match(prod.authorization, /^Owner approved 2026-11-12 /);
   assert.equal(prod.authorization_phrase, 'GRANT_HOMEOWNER_INTRO_REQUESTS_SELECT');
-  assert.equal(prod.expected_live_definition_sha256, null);
-  assert.equal(prod.production_inspect.status, 'pending');
-  assert.equal(prod.staging_acceptance.ok, false);
+  assert.equal(prod.expected_live_definition_sha256, prod.production_inspect.live_definition_sha256);
+  assert.equal(prod.expected_live_definition_sha256, NO_GRANT);
+  assert.notEqual(prod.expected_live_definition_sha256, pin.intended_replacement_sha256);
+  assert.equal(prod.production_inspect.status, 'recorded');
+  assert.equal(prod.staging_acceptance.ok, true);
+  assert.equal(prod.staging_acceptance.reference, 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43232074130');
   assert.ok(prod.production_inspect.note.includes(NO_GRANT));
   assert.ok(prod.order_note.includes(NO_GRANT));
   assert.ok(prod.order_note.includes(ABSENT));
