@@ -15,7 +15,7 @@ export function PaymentSettingsTab() {
     <div className="space-y-4 pt-2">
       <PaymentAccountPanel />
       <WalletPanel />
-      <MoovTreasuryPanel />
+      {PAYMENT_FLAGS.SHOW_AUTOMATIC_PAYOUTS && <MoovTreasuryPanel />}
       {/* PlatformFeeSchedulePanel is not shown: the Moov recurring fee schedule is retired (fees are billed from Tenant Management). */}
       <TenantBankAccountSettings />
       {PAYMENT_FLAGS.SHOW_PAYMENT_ADMIN && <PaymentProviderAdmin />}

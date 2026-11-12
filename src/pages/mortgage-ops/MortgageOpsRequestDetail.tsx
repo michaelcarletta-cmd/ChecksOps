@@ -1104,59 +1104,107 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
             )}
 
 
-            {/* Log update to homeowner timeline (AWS: SQL 124, the working agent only) */}
-            {(mortgageUsesAwsBackend ? canWork && !!req.check_intake_item_id : !!req.claim_id) && (
-              <Card>
-                <CardContent className="pt-4 space-y-2">
-                  <div className="font-semibold text-sm flex items-center gap-2">
-                    <FileText className="h-4 w-4" /> Log update to homeowner timeline
-                  </div>
-                  <p className="text-[11px] text-muted-foreground">
-                    Post a note the homeowner (and contractor) will see on their live claim timeline.
-                  </p>
-                  <div className="flex gap-1.5 flex-wrap">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant={updateKind === "mortgage_followup" ? "default" : "outline"}
-                      className="h-7 text-xs"
-                      onClick={() => setUpdateKind("mortgage_followup")}
-                    >
-                      <Phone className="h-3 w-3 mr-1" /> Call to mortgage
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant={updateKind === "mortgage_update" ? "default" : "outline"}
-                      className="h-7 text-xs"
-                      onClick={() => setUpdateKind("mortgage_update")}
-                    >
-                      <Send className="h-3 w-3 mr-1" /> General update
-                    </Button>
-                  </div>
-                  <Textarea
-                    value={updateNote}
-                    onChange={(e) => setUpdateNote(e.target.value)}
-                    placeholder={updateKind === "mortgage_followup"
-                      ? "e.g. Spoke with Sarah at ServiceMac — TPA received, waiting on inspection."
-                      : "e.g. Sent endorsed check + waiver of lien to mortgage overnight."}
-                    rows={2}
-                    className="text-sm"
-                  />
-                  <div className="flex justify-end">
-                    <Button
-                      size="sm"
-                      className="h-7 text-xs"
-                      disabled={postingUpdate || !updateNote.trim()}
-                      onClick={postMortgageUpdate}
-                    >
-                      {postingUpdate ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Send className="h-3 w-3 mr-1" />}
-                      Post to timeline
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
+            {/* Contact log (owner, 2026-11-12): the homeowner timeline update and the tenant updates
+                side by side, each with its own visibility rule. */}
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 [&>*]:min-w-0">
+              {/* Log update to homeowner timeline (AWS: SQL 124, the working agent only) */}
+              {(mortgageUsesAwsBackend ? canWork && !!req.check_intake_item_id : !!req.claim_id) && (
+                <Card>
+                  <CardContent className="pt-4 space-y-2">
+                    <div className="font-semibold text-sm flex items-center gap-2">
+                      <FileText className="h-4 w-4" /> Log update to homeowner timeline
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">
+                      Post a note the homeowner (and contractor) will see on their live claim timeline.
+                    </p>
+                    <div className="flex gap-1.5 flex-wrap">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={updateKind === "mortgage_followup" ? "default" : "outline"}
+                        className="h-7 text-xs"
+                        onClick={() => setUpdateKind("mortgage_followup")}
+                      >
+                        <Phone className="h-3 w-3 mr-1" /> Call to mortgage
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={updateKind === "mortgage_update" ? "default" : "outline"}
+                        className="h-7 text-xs"
+                        onClick={() => setUpdateKind("mortgage_update")}
+                      >
+                        <Send className="h-3 w-3 mr-1" /> General update
+                      </Button>
+                    </div>
+                    <Textarea
+                      value={updateNote}
+                      onChange={(e) => setUpdateNote(e.target.value)}
+                      placeholder={updateKind === "mortgage_followup"
+                        ? "e.g. Spoke with Sarah at ServiceMac — TPA received, waiting on inspection."
+                        : "e.g. Sent endorsed check + waiver of lien to mortgage overnight."}
+                      rows={2}
+                      className="text-sm"
+                    />
+                    <div className="flex justify-end">
+                      <Button
+                        size="sm"
+                        className="h-7 text-xs"
+                        disabled={postingUpdate || !updateNote.trim()}
+                        onClick={postMortgageUpdate}
+                      >
+                        {postingUpdate ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Send className="h-3 w-3 mr-1" />}
+                        Post to timeline
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Updates / messages with tenant. Gated on the request's check id, not
+                  the check row: on AWS the agent cannot read the tenant's check. */}
+              {req.check_intake_item_id && (
+                <Card>
+                  <CardContent className="pt-4 space-y-3">
+                    <div className="font-semibold text-sm flex items-center gap-2">
+                      <Send className="h-4 w-4" /> Updates to tenant
+                    </div>
+                    <div className="max-h-64 overflow-auto space-y-2 border border-border rounded p-2 bg-muted/20">
+                      {messages.length === 0 ? (
+                        <p className="text-xs text-muted-foreground text-center py-4">No messages yet.</p>
+                      ) : (
+                        messages.map((m) => (
+                          <div key={m.id} className={`text-sm rounded p-2 ${m.sender_id === user?.id ? "bg-primary/10 ml-8" : "bg-card mr-8 border border-border"}`}>
+                            <div className="whitespace-pre-wrap">{m.body}</div>
+                            <div className="text-[10px] text-muted-foreground mt-1">
+                              {m.sender_id === user?.id ? "You" : m.from_desk ? "Mortgage Desk" : "Tenant"} · {formatDistanceToNow(new Date(m.created_at), { addSuffix: true })}
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                    {/* Same rule as aws_mortgage_desk_working_request: in progress, and the
+                        assigned agent or the platform owner. Read-only otherwise. */}
+                    {req.status === "in_progress" &&
+                      (req.assigned_employee_id === user?.id || isPlatformOwner(user?.email, user?.id)) && (
+                      <div className="space-y-2">
+                        <Textarea
+                          rows={2}
+                          placeholder="Send an update to the tenant (also visible in their check thread)…"
+                          value={draft}
+                          onChange={(e) => setDraft(e.target.value)}
+                        />
+                        <Button size="sm" disabled={posting || !draft.trim()} onClick={postMessage}>
+                          {posting ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Send className="h-4 w-4 mr-1" />}
+                          Send update
+                        </Button>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+
 
             {/* Check details */}
             {check ? (
@@ -1566,49 +1614,6 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
             )}
 
 
-            {/* Updates / messages with tenant. Gated on the request's check id, not
-                the check row: on AWS the agent cannot read the tenant's check. */}
-            {req.check_intake_item_id && (
-              <Card>
-                <CardContent className="pt-4 space-y-3">
-                  <div className="font-semibold text-sm flex items-center gap-2">
-                    <Send className="h-4 w-4" /> Updates to tenant
-                  </div>
-                  <div className="max-h-64 overflow-auto space-y-2 border border-border rounded p-2 bg-muted/20">
-                    {messages.length === 0 ? (
-                      <p className="text-xs text-muted-foreground text-center py-4">No messages yet.</p>
-                    ) : (
-                      messages.map((m) => (
-                        <div key={m.id} className={`text-sm rounded p-2 ${m.sender_id === user?.id ? "bg-primary/10 ml-8" : "bg-card mr-8 border border-border"}`}>
-                          <div className="whitespace-pre-wrap">{m.body}</div>
-                          <div className="text-[10px] text-muted-foreground mt-1">
-                            {m.sender_id === user?.id ? "You" : m.from_desk ? "Mortgage Desk" : "Tenant"} · {formatDistanceToNow(new Date(m.created_at), { addSuffix: true })}
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                  {/* Same rule as aws_mortgage_desk_working_request: in progress, and the
-                      assigned agent or the platform owner. Read-only otherwise. */}
-                  {req.status === "in_progress" &&
-                    (req.assigned_employee_id === user?.id || isPlatformOwner(user?.email, user?.id)) && (
-                    <div className="space-y-2">
-                      <Textarea
-                        rows={2}
-                        placeholder="Send an update to the tenant (also visible in their check thread)…"
-                        value={draft}
-                        onChange={(e) => setDraft(e.target.value)}
-                      />
-                      <Button size="sm" disabled={posting || !draft.trim()} onClick={postMessage}>
-                        {posting ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Send className="h-4 w-4 mr-1" />}
-                        Send update
-                      </Button>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            )}
-
             {/* Shipping & mail-to — everything here is visible to the tenant */}
             <Card>
               <CardContent className="pt-4 space-y-3">
@@ -1767,15 +1772,8 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
                   />
                 </div>
 
-                <div>
-                  <label className="text-[10px] tracking-wide text-muted-foreground">Internal notes (optional)</label>
-                  <Textarea
-                    rows={2}
-                    placeholder="Anything to add for the month-end sweep…"
-                    value={invoiceNotes}
-                    onChange={(e) => setInvoiceNotes(e.target.value)}
-                  />
-                </div>
+                {/* "Internal notes (optional)" removed (owner, 2026-11-12). Notes already saved on the
+                    request are kept: invoiceNotes still loads them and save sends them unchanged. */}
 
                 <div className="flex items-center justify-between pt-1">
                   <div className="text-sm">

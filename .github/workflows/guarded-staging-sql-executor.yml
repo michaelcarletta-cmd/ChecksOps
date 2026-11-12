@@ -105,6 +105,7 @@ on:
           - sql158-mortgage-desk-oversight-and-agent-notes
           - sql159-homeowner-intro-requests-select-grant
           - sql160-no-additional-check-or-manual-deposit-fee
+          - sql161-tg-mortgage-handling-billing-checksops-execute
       approved_commit:
         description: "Required for deploy/apply/read-live: exact main commit approved for this run"
         required: false
@@ -263,6 +264,7 @@ jobs:
           node --test aws/tests/release-sql158-executor.test.mjs
           node --test aws/tests/release-sql159-executor.test.mjs
           node --test aws/tests/release-sql160-executor.test.mjs
+          node --test aws/tests/release-sql161-executor.test.mjs
           node --test aws/tests/mortgage-executor-commit-outcome.test.mjs
           node --test aws/tests/deployment-guard-kms-receipt.test.mjs
           node --test aws/tests/deployment-guard-signed-receipt.test.mjs

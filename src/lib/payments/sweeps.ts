@@ -66,6 +66,9 @@ export interface SweepSnapshot {
   sweep_config: SweepConfigRow | null;
   /** True when the provider could not be reached and local state is shown. */
   stale?: boolean;
+  /** True when a Moov read failed; the settlement bank still comes from the database. */
+  provider_unavailable?: boolean;
+  provider_errors?: { read: string; status: number | null }[];
 }
 
 export interface SweepExecution {

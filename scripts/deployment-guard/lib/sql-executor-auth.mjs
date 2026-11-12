@@ -3688,6 +3688,29 @@ export const AUTHORIZED_SQL160_NO_ADDITIONAL_CHECK_OR_MANUAL_DEPOSIT_FEE = Objec
   ]),
 });
 
+// EXECUTE for checksops on the mortgage handling trigger function: SQL 161 (owner 2026-11-12: "A new SQL 161 that gives
+// staging that one permission, then SQL 160"). The staging read-live of SQL 160 (run 43307779123) read
+// tg_record_mortgage_handling_billing()'s ACL as PUBLIC and the owner, without the checksops EXECUTE production holds;
+// SQL 160's CREATE OR REPLACE keeps the ACL. One GRANT, nothing else (SQL 131's ACL-only shape, revokes []). No
+// predecessor. Pending until a reviewed pin change records a staging read-live (wave 52 when approved), before SQL 160's.
+export const AUTHORIZED_SQL161_TG_MORTGAGE_HANDLING_BILLING_CHECKSOPS_EXECUTE = Object.freeze({
+  key: 'sql161',
+  filename: 'aws/workflows/sql/161_tg_mortgage_handling_billing_checksops_execute.sql',
+  migration_id: '161_tg_mortgage_handling_billing_checksops_execute',
+  // The commit that last authored the file bytes.
+  commit: '17306ac9d0d960b94dde1c54cdf6eabd5953f1ee',
+  source_sha256: '519d15b1c7bcfd0cc27b5b1c0d08916729b28c9f007fefb8b8e701b6f865c98d',
+  authorization: 'pending',
+  execute: false,
+  expected_live_definition_sha256: null,
+  // Code-derived: releaseIntendedHash('sql161', file bytes) (release-sql-state.mjs); re-derived by the tests.
+  intended_replacement_sha256: 'b916bcb512896ba7a90ac4401ad1903b18482d27e3173e8ccef21112eb4506f8',
+  // The function whose ACL the file sets (spec acl_functions); it creates or replaces none.
+  function_identities: Object.freeze([
+    'public.tg_record_mortgage_handling_billing()',
+  ]),
+});
+
 export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql90: AUTHORIZED_SQL90_USERS_ONLY_TENANT_ROLES,
   sql91: AUTHORIZED_SQL91_MOOV_ONBOARDING,
@@ -3756,6 +3779,7 @@ export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql158: AUTHORIZED_SQL158_MORTGAGE_DESK_OVERSIGHT_AND_AGENT_NOTES,
   sql159: AUTHORIZED_SQL159_HOMEOWNER_INTRO_REQUESTS_SELECT_GRANT,
   sql160: AUTHORIZED_SQL160_NO_ADDITIONAL_CHECK_OR_MANUAL_DEPOSIT_FEE,
+  sql161: AUTHORIZED_SQL161_TG_MORTGAGE_HANDLING_BILLING_CHECKSOPS_EXECUTE,
   sql76: AUTHORIZED_SQL76_RELEASE_TENANT_PARTNERSHIP_CONSENT,
 });
 
@@ -3772,7 +3796,7 @@ export function isSql30TenantDocumentsDocType(input = {}) {
   return pinIdentifiersMatch(input, AUTHORIZED_SQL30_TENANT_DOCUMENTS_DOC_TYPE);
 }
 
-/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql148, sql150, sql152 ... sql156, sql158, sql159, sql160; sql76 for production) an input names, or null. */
+/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql148, sql150, sql152 ... sql156, sql158, sql159, sql160, sql161; sql76 for production) an input names, or null. */
 export function releaseSqlMigrationKey(input = {}) {
   return Object.keys(RELEASE_2026_10_17_PENDING_SQL_PINS)
     .find((key) => pinIdentifiersMatch(input, RELEASE_2026_10_17_PENDING_SQL_PINS[key])) || null;

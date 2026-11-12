@@ -164,6 +164,7 @@ export const MIGRATIONS = Object.freeze({
   'sql158-mortgage-desk-oversight-and-agent-notes': RELEASE_2026_10_17_PENDING_SQL_PINS.sql158,
   'sql159-homeowner-intro-requests-select-grant': RELEASE_2026_10_17_PENDING_SQL_PINS.sql159,
   'sql160-no-additional-check-or-manual-deposit-fee': RELEASE_2026_10_17_PENDING_SQL_PINS.sql160,
+  'sql161-tg-mortgage-handling-billing-checksops-execute': RELEASE_2026_10_17_PENDING_SQL_PINS.sql161,
 });
 
 const LAMBDA_CODE_SHA_RE = /^[A-Za-z0-9+/]{43}=$/;
