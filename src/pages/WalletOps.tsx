@@ -12,7 +12,6 @@ import {
   Power,
   PowerOff,
   RefreshCw,
-  Sparkles,
   Wallet,
 } from "lucide-react";
 import { useWallet } from "@/hooks/useWallet";
@@ -300,14 +299,10 @@ export default function WalletOps() {
   return (
     <div className="space-y-4">
       {/* Hero */}
-      <div className="relative overflow-hidden rounded-xl border border-primary/20 bg-gradient-to-br from-primary/15 via-primary/5 to-background p-4 md:p-6">
-        <div className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-primary/20 blur-3xl" />
-        <div className="relative flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+      <div className="rounded-xl border border-border bg-card p-4 md:p-6">
+        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div className="space-y-2 min-w-0">
-            <div className="flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-primary" />
-              <span className="text-xs font-bold tracking-widest text-primary">WalletOps</span>
-            </div>
+            <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">WalletOps</div>
             <p className="text-xs tracking-wide text-muted-foreground">Available operating balance</p>
             <div className="text-4xl font-bold tracking-tight md:text-5xl">
               {walletLoading ? "…" : balanceLabel}

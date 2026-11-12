@@ -1378,23 +1378,23 @@ export default function CheckCommandCenter() {
             const laneCount = (key: string, inMemory: CheckItem[]) =>
               useAggregate ? laneCountFor(key, inMemory) : inMemory.length;
             const tiles = [
-            { key: "review",       label: "Review",            count: laneCount("review", needsReview),         icon: ClipboardCheck, gradient: "from-blue-500/20 to-cyan-500/10",     accent: "text-blue-400",    ring: "ring-blue-500/30" },
-            { key: "endorsements", label: "Endorsing",         count: laneCount("endorsing", awaitingEndorsement), icon: Send,           gradient: "from-amber-500/20 to-orange-500/10",  accent: "text-amber-400",   ring: "ring-amber-500/30" },
-            { key: "ready",        label: "Ready for Deposit", count: laneCount("ready", readyForDeposit),     icon: CheckCircle2,   gradient: "from-emerald-500/20 to-green-500/10", accent: "text-emerald-400", ring: "ring-emerald-500/30" },
-            { key: "deposited",    label: "Deposited",         count: laneCount("deposited", depositedChecks),     icon: Banknote,       gradient: "from-primary/20 to-blue-500/10",      accent: "text-primary",     ring: "ring-primary/30" },
+            { key: "review",       label: "Review",            count: laneCount("review", needsReview),         icon: ClipboardCheck },
+            { key: "endorsements", label: "Endorsing",         count: laneCount("endorsing", awaitingEndorsement), icon: Send },
+            { key: "ready",        label: "Ready for Deposit", count: laneCount("ready", readyForDeposit),     icon: CheckCircle2 },
+            { key: "deposited",    label: "Deposited",         count: laneCount("deposited", depositedChecks),     icon: Banknote },
             // Returned moved into Manager → Returned sub-tab.
-            { key: "lossdraft",    label: "Loss Draft",        count: useAggregate ? ((lossDraftCounts as any)?.total_active ?? lossDraftChecks.length) : lossDraftChecks.length, icon: Landmark,       gradient: "from-purple-500/20 to-violet-500/10", accent: "text-purple-400",  ring: "ring-purple-500/30" },
+            { key: "lossdraft",    label: "Loss Draft",        count: useAggregate ? ((lossDraftCounts as any)?.total_active ?? lossDraftChecks.length) : lossDraftChecks.length, icon: Landmark },
 
             // Bank Deposit card intentionally removed — users are pushed to CheckAlt for RDC.
             // The branch_deposit_required status still exists in the pipeline as a fallback,
             // but is no longer surfaced as a top-level tab in the command center.
 
             // Reissue moved into Manager → Reissue sub-tab.
-            { key: "fundsreleased", label: "Funds Released",   count: filteredFundsReleased.length,       icon: Banknote,       gradient: "from-emerald-500/20 to-teal-500/10",  accent: "text-emerald-400", ring: "ring-emerald-500/30" },
-            { key: "fundsreceived", label: "Funds Received",   count: filteredFundsReceived.length,       icon: Banknote,       gradient: "from-sky-500/20 to-blue-500/10",      accent: "text-sky-400",     ring: "ring-sky-500/30" },
+            { key: "fundsreleased", label: "Funds Released",   count: filteredFundsReleased.length,       icon: Banknote },
+            { key: "fundsreceived", label: "Funds Received",   count: filteredFundsReceived.length,       icon: Banknote },
             // Partners moved into Manager → Partners sub-tab (2026-07-07).
-            ...(canAccessManager ? [{ key: "manager", label: "Manager", count: null as number | null, icon: Shield, gradient: "from-indigo-500/20 to-blue-500/10", accent: "text-indigo-400", ring: "ring-indigo-500/30" }] : []),
-            { key: "messages",     label: "Messages",          count: null as number | null, icon: MessageSquare, gradient: "from-rose-500/20 to-pink-500/10",     accent: "text-rose-400",    ring: "ring-rose-500/30" },
+            ...(canAccessManager ? [{ key: "manager", label: "Manager", count: null as number | null, icon: Shield }] : []),
+            { key: "messages",     label: "Messages",          count: null as number | null, icon: MessageSquare },
           ];
           // Phones show three compact tiles per row; the last tile stretches to
           // fill an incomplete final row. From sm up the desktop grid is unchanged.
@@ -1408,15 +1408,15 @@ export default function CheckCommandCenter() {
               <button
                 key={tab.key}
                 onClick={() => handleTabChange(tab.key)}
-                className={`relative flex flex-col items-center gap-0.5 sm:gap-1.5 rounded-lg sm:rounded-xl px-1 py-2 sm:p-4 transition-all duration-200 bg-gradient-to-br ${tab.gradient} border cursor-pointer ${
+                className={`relative flex flex-col items-center gap-0.5 sm:gap-1.5 rounded-lg px-1 py-2 sm:p-4 transition-colors duration-100 border cursor-pointer ${
                   isLast ? lastTileMobileSpan : ""
                 } ${
                   isActive
-                    ? `border-transparent ring-2 ${tab.ring} shadow-lg scale-[1.02]`
-                    : "border-border/50 hover:border-border hover:shadow-md hover:scale-[1.01]"
+                    ? "border-primary bg-primary/5"
+                    : "border-border bg-card hover:bg-muted/50"
                 }`}
               >
-                <Icon className={`h-3.5 w-3.5 sm:h-5 sm:w-5 ${tab.accent}`} />
+                <Icon className={`h-3.5 w-3.5 sm:h-5 sm:w-5 ${isActive ? "text-primary" : "text-muted-foreground"}`} />
                 <span className={`text-[10px] leading-tight sm:text-xs font-semibold text-center ${isActive ? "text-foreground" : "text-muted-foreground"}`}>{tab.label}</span>
                 {tab.count !== null && (
                   <Badge className={`text-[9px] sm:text-[10px] px-1 sm:px-1.5 py-0 ${isActive ? "bg-foreground/10 text-foreground" : "bg-muted text-muted-foreground"}`}>
@@ -2654,12 +2654,12 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
         console.error("OCR invoke error:", fnErr);
         toast({
           title: "Check uploaded — enter details manually",
-          description: "AI couldn't process this check. It's been added to the review queue for manual entry.",
+          description: "We couldn't read this check automatically. It's in the review queue for manual entry.",
         });
       } else if (result?.skipped) {
         // Out of credits or rate-limited: the check goes to the review queue for manual entry.
         toast({
-          title: "Check uploaded — AI unavailable",
+          title: "Check uploaded — automatic reading unavailable",
           description: result.message ?? "Enter the check details in the review queue.",
         });
       } else if (result && ((("success" in result) && !result.success) || (("ocr_success" in result) && !result.ocr_success))) {
@@ -2670,7 +2670,7 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
             : "The check is in the review queue. Please complete the details manually.",
         });
       } else {
-        toast({ title: "Check uploaded & AI analysis started" });
+        toast({ title: "Check uploaded", description: "Reading the check details now." });
       }
       onSuccess();
     } catch (e: unknown) {

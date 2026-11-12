@@ -22,7 +22,6 @@ import {
   CheckCircle2,
   AlertTriangle,
   RotateCcw,
-  Sparkles,
   LogIn,
   Users,
   Lock,
@@ -411,13 +410,12 @@ export default function CheckCenterMarketing() {
         <div className="relative mx-auto max-w-7xl min-w-0 px-4 md:px-6 pt-14 md:pt-24 pb-16 md:pb-24 grid lg:grid-cols-2 gap-10 lg:gap-16 items-center">
           <div className="min-w-0">
             <Badge variant="outline" className="mb-5 gap-1.5 border-primary/30 bg-primary/5 text-primary">
-              <Sparkles className="h-3 w-3" />
               Claim check workflow software
             </Badge>
             <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight leading-[1.05]">
               Every claim check.
               <br />
-              <span className="bg-gradient-to-r from-primary via-[#7d8548] to-[#c4cb92] bg-clip-text text-transparent">
+              <span className="text-primary">
                 Under control.
               </span>
               <span className="mt-3 block text-2xl md:text-3xl lg:text-4xl font-semibold text-foreground/90">
