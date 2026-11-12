@@ -50,6 +50,11 @@ test('the conversation screen slides in from the right: the app\'s push, a light
   const web = css.slice(css.indexOf('/* ── Website only'), css.indexOf('/* ── iOS / Android app only'));
   const app = css.slice(css.indexOf('/* ── iOS / Android app only'));
   assert.match(web, /html:not\(\.native-app\) \.message-thread-screen \{\s*animation: web-page-in 220ms [^;]* backwards;/);
-  assert.match(app, /html\.native-app \.message-thread-screen \{\s*animation: native-thread-in 380ms [^;]* backwards;/);
-  assert.match(app, /@keyframes native-thread-in \{\s*from \{ opacity: 0; translate: 36px 0; \}/);
+  assert.match(app, /html\.native-app \.message-thread-screen \{\s*animation: native-thread-in 240ms [^;]* backwards;/);
+  assert.match(app, /@keyframes native-thread-in \{\s*from \{ opacity: 0; translate: 24px 0; \}/);
+  // The website's slide stays the lighter one: a shorter distance, and no longer a duration.
+  const px = (src, name) => Number(src.match(new RegExp(`@keyframes ${name} \\{\\s*from \\{ opacity: 0; translate: (\\d+)px 0;`))[1]);
+  const ms = (src, sel) => Number(src.match(new RegExp(`${sel} \\{\\s*animation: [\\w-]+ (\\d+)ms`))[1]);
+  assert.ok(px(web, 'web-page-in') < px(app, 'native-thread-in'));
+  assert.ok(ms(web, 'html:not\\(\\.native-app\\) \\.message-thread-screen') <= ms(app, 'html\\.native-app \\.message-thread-screen'));
 });
