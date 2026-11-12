@@ -6,7 +6,7 @@
  * release-sql90-97-executor.test.mjs runs what every release key shares (SQL 159 included); this file covers what is new:
  *
  *   - the pin: pending (staging read-live run 43232074130 already in the intended state, so no staging apply), code-derived,
- *     selectable, packed, in step with the execute-authorized production pin (production's own pre-state); the pinned commit
+ *     selectable, packed, in step with the production pin (applied 2026-11-12 from production's own pre-state, retired); the pinned commit
  *     authored the bytes; no predecessor, supersedes nothing;
  *   - the file and spec: one table grant (checksops SELECT), nothing else; no other release migration pins grants on
  *     the table; the absent and intended states derived;
@@ -106,7 +106,7 @@ function handlerFor(connect, { pins = {} } = {}) {
   return createHandler({ connect, now: () => Date.parse(NOW), releaseSqlFiles: FILES, releaseSqlPins: { ...PINS, ...pins } });
 }
 
-test('pin: SQL 159 pending (staging already in the intended state), code-derived, selectable, packed, in step with the execute-authorized production pin; no predecessor', () => {
+test('pin: SQL 159 pending (staging already in the intended state), code-derived, selectable, packed, in step with the applied and retired production pin; no predecessor', () => {
   const pin = PINS[KEY];
   const spec = RELEASE_SQL_SPECS[KEY];
   const packed = Object.fromEntries(EXECUTOR_PACK_MEMBERS);
@@ -132,7 +132,7 @@ test('pin: SQL 159 pending (staging already in the intended state), code-derived
   assert.ok(runbook.includes(`\`\`\`\n${releaseStateText(KEY, { privileges: { [TABLE]: { exists: true, lines: [] } } })}\n\`\`\``));
   assert.ok(runbook.includes(`\`\`\`\n${releaseStateText(KEY, releaseIntendedState(KEY, TEXT))}\n\`\`\``));
   assert.ok(runbook.includes(`\`\`\`\n${releaseStateText(KEY, {})}\n\`\`\``));
-  assert.match(runbook, /\*\*Status:\*\* staging already in the intended state \(read-live run 43232074130, 2026-11-12; no staging apply, the staging pin stays pending\); production pin execute-authorized on production's own pre-state \(read-only inspect SSM `acaf2260-cef8-4d40-9f19-85a5c87c873d`\)\. Not applied in production\./);
+  assert.match(runbook, /\*\*Status:\*\* staging already in the intended state \(read-live run 43232074130, 2026-11-12; no staging apply, the staging pin stays pending\); applied to production \(2026-11-12\); the production pin is retired \(`execute: false`\)\./);
   assert.ok(AUTHORIZED_STAGING_SQL.includes(pin));
   assert.equal(resolveAuthorizedMigration({ filename: pin.filename }), pin);
   assert.equal(MIGRATIONS[spec.choice], pin);
@@ -163,8 +163,10 @@ test('pin: SQL 159 pending (staging already in the intended state), code-derived
   // Production pin execute-authorized (owner-approved pin change of 2026-11-12) on the staging read-live, already in the
   // intended state there. Its pre-state is production's own (read-only inspect SSM acaf2260): the derived no-grant state.
   // The staging pin stays pending: a pin whose expected live hash equals the intended one cannot be bound.
-  assert.equal(prod.execute, true);
-  assert.match(prod.authorization, /^Owner approved 2026-11-12 /);
+  // Then applied 2026-11-12 ("apply SQL 159 in production") and retired.
+  assert.equal(prod.execute, false);
+  assert.match(prod.authorization, /^Applied to production on 2026-11-12; execute is false again/);
+  assert.equal(prod.applied.result, 'applied');
   assert.equal(prod.authorization_phrase, 'GRANT_HOMEOWNER_INTRO_REQUESTS_SELECT');
   assert.equal(prod.expected_live_definition_sha256, prod.production_inspect.live_definition_sha256);
   assert.equal(prod.expected_live_definition_sha256, NO_GRANT);
