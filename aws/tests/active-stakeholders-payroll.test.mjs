@@ -7,6 +7,8 @@ import {
   activeStakeholders,
   isActiveStakeholder,
   isPayableStakeholder,
+  recipientNameKey,
+  recipientTotalsByName,
   withActiveStakeholders,
 } from '../../src/lib/payments/activeStakeholders.ts';
 
@@ -51,6 +53,44 @@ test('recipient report lists every Active Stakeholder once, with $0 when unpaid'
   assert.deepEqual(withActiveStakeholders([], [payee, pending], { typeFilter: 'sales_rep' }).map((r) => r.name), ['Bob']);
   assert.deepEqual(withActiveStakeholders([], [payee, pending], { search: 'an' }).map((r) => r.name), ['Ann']);
   assert.deepEqual(withActiveStakeholders([], null), []);
+});
+
+test('the recipient report tracks a recipient by name, not by type', () => {
+  // Owner 2026-11-12: Condition One was paid as a partner (a send) and as a contractor (a payout)
+  // and showed as two recipients. One person or company is one row.
+  assert.equal(recipientNameKey('Condition One Commercial, LLC'), 'condition one commercial');
+  assert.equal(recipientNameKey('  CONDITION  ONE commercial '), 'condition one commercial');
+  assert.equal(recipientNameKey('Ann Lee'), 'ann lee');
+  assert.notEqual(recipientNameKey('Condition One'), recipientNameKey('Condition One Commercial'));
+  assert.equal(recipientNameKey(null), '');
+
+  const rows = recipientTotalsByName([
+    { name: 'Condition One Commercial', type: 'partner', amount: 8307, date: '2026-11-06T19:06:02Z', method: 'send' },
+    { name: 'Condition One Commercial LLC', type: 'contractor', amount: 500, date: '2026-11-08T10:00:00Z', method: 'ach' },
+    { name: 'Condition One Commercial', type: 'contractor', amount: 250, date: '2026-10-01T10:00:00Z', method: 'external_check' },
+    { name: 'Ann', type: 'contractor', amount: 120, date: '2026-05-01T00:00:00Z', method: 'payroll' },
+  ]);
+  assert.equal(rows.length, 2);
+  const [c1, ann] = rows;
+  assert.deepEqual({ name: c1.name, type: c1.type, types: c1.types, total: c1.total, count: c1.count, sendCount: c1.sendCount, payrollCount: c1.payrollCount, last: c1.last }, {
+    name: 'Condition One Commercial', type: 'partner', types: ['partner', 'contractor'], total: 9057, count: 3, sendCount: 1, payrollCount: 0, last: '2026-11-08T10:00:00Z',
+  });
+  // Only the split rows can be renamed: each exact name and type they were recorded under.
+  assert.deepEqual(c1.splitVariants, [
+    { name: 'Condition One Commercial LLC', type: 'contractor', count: 1 },
+    { name: 'Condition One Commercial', type: 'contractor', count: 1 },
+  ]);
+  assert.deepEqual({ name: ann.name, types: ann.types, payrollCount: ann.payrollCount, splitVariants: ann.splitVariants }, { name: 'Ann', types: ['contractor'], payrollCount: 1, splitVariants: [] });
+  assert.deepEqual(recipientTotalsByName([]), []);
+
+  // A stakeholder already paid under another type is not listed a second time with $0.
+  const withStakeholders = withActiveStakeholders(rows, [{ ...payee, nickname: 'ANN', account_type: 'sales_rep' }, pending]);
+  assert.deepEqual(withStakeholders.map((r) => r.name), ['Condition One Commercial', 'Ann', 'Bob']);
+
+  const report = read('src/components/ledger/RecipientReport.tsx');
+  assert.match(report, /recipientTotalsByName\(filtered\.filter\(\(r\) => r\.status === "settled"\)\)/);
+  assert.doesNotMatch(report, /`\$\{r\.type\}\|\$\{r\.name\}`/);
+  assert.match(report, /for \(const variant of editTarget\.variants\)/);
 });
 
 test('Settings, Payroll and the recipient report read the one Active Stakeholders query', () => {

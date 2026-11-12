@@ -13,7 +13,7 @@ import { Download, Search, Users, Pencil } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { format, startOfYear, endOfYear, startOfMonth, endOfMonth, subMonths } from "date-fns";
 import { useActiveStakeholders } from "@/hooks/useActiveStakeholders";
-import { withActiveStakeholders, type RecipientTotalRow } from "@/lib/payments/activeStakeholders";
+import { recipientTotalsByName, withActiveStakeholders } from "@/lib/payments/activeStakeholders";
 import {
   PAYROLL_FINANCE_QUERY_KEY,
   PAYROLL_SOURCE_LABEL,
@@ -71,13 +71,13 @@ export function RecipientReport() {
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [dateRange, setDateRange] = useState<DateRange>("this_year");
-  const [editTarget, setEditTarget] = useState<{ name: string; type: string; count: number } | null>(null);
+  const [editTarget, setEditTarget] = useState<{ name: string; type: string; count: number; variants: Array<{ name: string; type: string; count: number }> } | null>(null);
   const [editName, setEditName] = useState("");
   const [editType, setEditType] = useState("other");
   const [editSaving, setEditSaving] = useState(false);
 
-  const openEdit = (name: string, type: string, count: number) => {
-    setEditTarget({ name, type, count });
+  const openEdit = (name: string, type: string, variants: Array<{ name: string; type: string; count: number }>) => {
+    setEditTarget({ name, type, count: variants.reduce((n, v) => n + v.count, 0), variants });
     setEditName(name);
     setEditType(type);
   };
@@ -91,13 +91,16 @@ export function RecipientReport() {
     }
     setEditSaving(true);
     try {
-      const { error } = await (supabase as any)
-        .from("disbursement_splits")
-        .update({ recipient_name: newName, recipient_type: editType })
-        .eq("tenant_id", tenant.id)
-        .eq("recipient_name", editTarget.name)
-        .eq("recipient_type", editTarget.type);
-      if (error) throw error;
+      // One recipient can hold split rows recorded under several names and types: rename them all.
+      for (const variant of editTarget.variants) {
+        const { error } = await (supabase as any)
+          .from("disbursement_splits")
+          .update({ recipient_name: newName, recipient_type: editType })
+          .eq("tenant_id", tenant.id)
+          .eq("recipient_name", variant.name)
+          .eq("recipient_type", variant.type);
+        if (error) throw error;
+      }
       toast({ title: "Recipient updated", description: `${editTarget.count} payment${editTarget.count !== 1 ? "s" : ""} updated` });
       setEditTarget(null);
       qc.invalidateQueries({ queryKey: ["recipient-report", tenant.id] });
@@ -210,18 +213,8 @@ export function RecipientReport() {
   const { data: stakeholders = [] } = useActiveStakeholders(tenant?.id);
 
   const byRecipient = useMemo(() => {
-    const acc: Record<string, RecipientTotalRow & { last: string }> = {};
-    for (const r of filtered) {
-      if (r.status !== "settled") continue;
-      const k = `${r.type}|${r.name}`;
-      if (!acc[k]) acc[k] = { name: r.name, type: r.type, total: 0, count: 0, payrollCount: 0, sendCount: 0, last: r.date };
-      acc[k].total += r.amount;
-      acc[k].count += 1;
-      if (r.method === "payroll") acc[k].payrollCount = (acc[k].payrollCount ?? 0) + 1;
-      if (r.method === "send") acc[k].sendCount = (acc[k].sendCount ?? 0) + 1;
-      if (new Date(r.date) > new Date(acc[k].last)) acc[k].last = r.date;
-    }
-    const paid = Object.values(acc).sort((a, b) => b.total - a.total);
+    // One row per person or company, whatever type each payment was recorded under.
+    const paid = recipientTotalsByName(filtered.filter((r) => r.status === "settled"));
     return withActiveStakeholders(paid, stakeholders, { search, typeFilter });
   }, [filtered, stakeholders, search, typeFilter]);
 
@@ -231,7 +224,7 @@ export function RecipientReport() {
     const headers = ["Recipient", "Type", "Total Paid", "Payment Count", "Last Paid"];
     const rs = byRecipient.map((r) => [
       r.name,
-      TYPE_LABELS[r.type] ?? r.type,
+      (r.types ?? [r.type]).map((t) => TYPE_LABELS[t] ?? t).join(" / "),
       r.total.toFixed(2),
       r.count,
       r.last ? format(new Date(r.last), "yyyy-MM-dd") : "",
@@ -408,9 +401,13 @@ export function RecipientReport() {
                         )}
                       </td>
                       <td className="p-3">
-                        <Badge variant="outline" className={`text-[10px] ${TYPE_COLORS[r.type] ?? ""}`}>
-                          {TYPE_LABELS[r.type] ?? r.type}
-                        </Badge>
+                        <div className="flex flex-wrap gap-1">
+                          {(r.types ?? [r.type]).map((t) => (
+                            <Badge key={t} variant="outline" className={`text-[10px] ${TYPE_COLORS[t] ?? ""}`}>
+                              {TYPE_LABELS[t] ?? t}
+                            </Badge>
+                          ))}
+                        </div>
                       </td>
                       <td className="p-3 text-right text-xs hidden sm:table-cell">{r.count}</td>
                       <td className="p-3 text-right font-semibold text-sm">
@@ -421,13 +418,13 @@ export function RecipientReport() {
                       </td>
                       <td className="p-3 text-right">
                         {/* Only split rows are renamed; payroll runs and sends keep their recipient's name. */}
-                        {r.count - (r.payrollCount ?? 0) - (r.sendCount ?? 0) > 0 && (
+                        {(r.splitVariants?.length ?? 0) > 0 && (
                           <Button
                             size="sm"
                             variant="ghost"
                             className="h-7 w-7 p-0"
                             title="Edit recipient"
-                            onClick={() => openEdit(r.name, r.type, r.count - (r.payrollCount ?? 0) - (r.sendCount ?? 0))}
+                            onClick={() => openEdit(r.name, r.type, r.splitVariants ?? [])}
                           >
                             <Pencil className="h-3.5 w-3.5" />
                           </Button>
