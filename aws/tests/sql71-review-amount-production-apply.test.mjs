@@ -144,10 +144,28 @@ test('production pin: pending, execute false, no recorded pre-state, no staging 
   assert.equal(COMMITTED.expected_live_definition_sha256, null);
   assert.equal(COMMITTED.staging_acceptance.ok, false);
   assert.equal(COMMITTED.staging_acceptance.reference, null);
-  assert.equal(COMMITTED.production_inspect.status, 'pending');
-  for (const field of ['table_owner', 'table_acl', 'updatable_columns', 'updatable_columns_sha256', 'live_definition_sha256']) {
-    assert.equal(COMMITTED.production_inspect[field], null, field);
+  // Verified live (owner 2026-11-12, "Let's do it"): production already grants UPDATE (amount) to checksops,
+  // through SQL 89's recorded apply of 2026-10-16, not through SQL 71. The pin stays non-executable.
+  const inspect = COMMITTED.production_inspect;
+  assert.deepEqual([inspect.status, inspect.date, inspect.ssm_command_id, inspect.source_commit, inspect.read_only, inspect.connected_as],
+    ['recorded', '2026-11-12', 'b1f842df-adae-4221-a9ef-e4d8e852af9e', '48b80b0652d82ae20b3cb4096af3bee97c641cad', true, 'checksops_admin']);
+  assert.equal(inspect.already_applied, true);
+  assert.equal(inspect.live_definition_sha256, COMMITTED.intended_replacement_sha256);
+  assert.ok(inspect.updatable_columns.includes('amount'));
+  assert.equal(inspect.table_owner, 'checksops_admin');
+  assert.match(inspect.table_acl, /checksops=ard\/checksops_admin/);
+  for (const text of ['"Let\'s do it"', 'SQL 89', '2026-10-16', 'not an apply record', 'e6a18201d2e1d5221fa60784af844567bc362210d937ee223a5a424a1017f052',
+    'transfer run 43141637936', 'Earlier: Not inspected yet']) {
+    assert.ok(inspect.note.includes(text), text);
   }
+  // Recording the inspected owner, ACL and columns does not open an apply: amount is already granted.
+  assert.deepEqual(sql71ProductionPreconditionFailures({
+    current_user: 'checksops_admin', session_user: 'checksops_admin', grantee_role_present: true, table_present: true,
+    amount_column_present: true, amount_update_granted: true, amount_column_grant: true, table_level_update: false,
+    routing_number_update_granted: true, account_number_update_granted: true, grantee_grant_option: false, login_can_grant_amount: true,
+    table_owner: inspect.table_owner, table_acl: inspect.table_acl, updatable_columns: inspect.updatable_columns,
+    updatable_columns_sha256: inspect.updatable_columns_sha256,
+  }, COMMITTED), ['amount_update_absent']);
   for (const field of ['filename', 'migration_id', 'source_sha256', 'intended_replacement_sha256', 'table', 'grantee', 'column']) {
     assert.equal(COMMITTED[field], STAGING_PIN[field], field);
   }
@@ -260,8 +278,10 @@ test('production preconditions and postconditions', () => {
   for (const [overrides, name] of refusedPre) {
     assert.ok(sql71ProductionPreconditionFailures(state(overrides), PIN).includes(name), `${name}: ${JSON.stringify(overrides)}`);
   }
-  // The committed pin has no recorded inspect and no other login: those three fail.
-  assert.deepEqual(sql71ProductionPreconditionFailures(state(), COMMITTED), ['table_owner_as_inspected', 'table_acl_as_inspected', 'updatable_columns_as_inspected']);
+  // The committed pin records production's inspect (2026-11-12): its owner is the fixture's
+  // (checksops_admin), but its ACL and updatable columns are production's, not this fixture's, so
+  // those two fail.
+  assert.deepEqual(sql71ProductionPreconditionFailures(state(), COMMITTED), ['table_acl_as_inspected', 'updatable_columns_as_inspected']);
   assert.ok(sql71ProductionPreconditionFailures(state(), { ...PIN, admin_login: undefined }).includes('login_is_pinned_admin'));
 
   assert.deepEqual(sql71ProductionPostconditionFailures(state(), postState(), PIN), []);
@@ -526,13 +546,14 @@ test('PostgreSQL 16: inspect is read-only; apply adds exactly amount once; refus
     const connect = connectWith('checksops_admin');
     const inspect = (c = connect, pin = PIN) => inspectSql71Production({ connect: c, pin, root: ROOT });
 
-    // The committed pin: no recorded pre-state, so the inspect reads but refuses.
+    // The committed pin records production's inspect (owner checksops_admin, production's ACL and
+    // columns): this database's owner matches, its ACL and columns do not, so the inspect reads but refuses.
     const committed = await inspect(connect, COMMITTED);
     assert.equal(committed.ok, true, JSON.stringify(committed));
     assert.equal(committed.details.live_definition_sha256, ABSENT);
     assert.equal(committed.details.live_matches_expected, false);
     assert.equal(committed.details.apply_preconditions_met, false);
-    assert.deepEqual(committed.details.precondition_failures, ['table_owner_as_inspected', 'table_acl_as_inspected', 'updatable_columns_as_inspected']);
+    assert.deepEqual(committed.details.precondition_failures, ['table_acl_as_inspected', 'updatable_columns_as_inspected']);
     assert.equal(committed.details.pin_execute, false);
 
     seen.length = 0;

@@ -18,6 +18,12 @@ the apply when either column is missing or not granted.
 `authorization: "pending"`, `execute: false`, `expected_live_definition_sha256: null`,
 `staging_acceptance.ok: false`. It authorizes nothing.
 
+**Production verified live (2026-11-12).** A read-only inspect (SSM `b1f842df-adae-4221-a9ef-e4d8e852af9e`,
+main `48b80b065`, owner: "Let's do it") found `amount` UPDATE already granted to `checksops`
+(`live_definition_sha256` `ff8e86f9…` = intended, `already_applied` true). SQL 89, applied to production on
+2026-10-16, granted it; SQL 71 itself never ran there. The pin records the inspect and stays
+`execute: false`; nothing is left to apply.
+
 **Staging is already applied.** The guarded staging SQL executor's read-live run 71
 (`38903724634`) on main `b83e5cc33` reported `already_applied` true,
 `amount_update_granted` true, `table_level_update` false, and live `ff8e86f9…`.
