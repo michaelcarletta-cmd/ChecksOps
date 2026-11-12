@@ -189,15 +189,22 @@ test('pin: SQL 160 pending, code-derived, selectable, packed, in step with the p
   assert.deepEqual(spec.predecessors, []);
   for (const absent of ['supersedes', 'runs_before', 'refuse_after', 'production_only']) assert.equal(spec[absent], undefined, absent);
   // Nothing supersedes, refuses after or depends on SQL 160. Of its functions only record_check_billing_event() is in
-  // another release spec (SQL 98, which created it); no other release migration touches the other three.
+  // another release spec (SQL 98, which created it) and tg_record_mortgage_handling_billing()'s ACL is SQL 161's (the
+  // checksops EXECUTE staging lacked; SQL 161's acl_functions ACL is this spec's observed ACL with grantors); no other
+  // release migration touches the other two.
   assert.deepEqual(RELEASE_SQL_KEYS.filter((key) => (RELEASE_SQL_SPECS[key].supersedes || []).includes(KEY)
     || (RELEASE_SQL_SPECS[key].refuse_after || []).some((m) => m.key === KEY)
     || (RELEASE_SQL_SPECS[key].predecessors || []).includes(KEY)), []);
   for (const key of RELEASE_SQL_KEYS.filter((k) => k !== KEY)) {
     const other = RELEASE_SQL_SPECS[key];
     const touched = [...(other.functions || []).map((fn) => fn.identity), ...(other.dropped_functions || []), ...(other.acl_functions || []).map((fn) => fn.identity)];
-    for (const fn of FNS) assert.ok(!touched.includes(fn) || (key === 'sql98' && fn === 'public.record_check_billing_event()'), `${key} ${fn}`);
+    for (const fn of FNS) {
+      assert.ok(!touched.includes(fn) || (key === 'sql98' && fn === 'public.record_check_billing_event()')
+        || (key === 'sql161' && fn === 'public.tg_record_mortgage_handling_billing()'), `${key} ${fn}`);
+    }
   }
+  assert.deepEqual(RELEASE_SQL_SPECS.sql161.acl_functions.map((fn) => [fn.identity, fn.acl.map((line) => line.replace(/ grantor=owner$/, ''))]),
+    [[FNS[3], OBSERVED[FNS[3]].acl]]);
   // SQL 98's reviewed ACL for record_check_billing_event() is the one the inspect observed.
   assert.deepEqual(RELEASE_SQL_SPECS.sql98.functions.find((fn) => fn.identity === FNS[0]).acl, OBSERVED[FNS[0]].acl);
   const prod = productionPin();
