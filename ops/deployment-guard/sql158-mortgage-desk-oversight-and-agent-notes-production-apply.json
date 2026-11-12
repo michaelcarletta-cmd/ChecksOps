@@ -1,8 +1,8 @@
 {
   "id": "sql158-mortgage-desk-oversight-and-agent-notes-production-apply",
   "migration": "sql158",
-  "authorization": "Owner approved 2026-11-12 (the owner's words for SQL 158: \"Tenant Management desk view plus 'Message agent'\", \"Tenant management and the agent assigned can see the notes\", \"If no agent then tenant management can assign\", \"Note is only visible to agent\", \"go with SQL 158\", \"Merge 1807 when green and DEPLOY WEBSITE TO PRODUCTION\", \"Merge 1811 and approve SQL 158\", \"merge #1813 and apply SQL 158 in staging\", \"run the read-only SQL 158 production inspect\", \"record the SQL 158 production pin, merge it when green, and apply SQL 158 in production\"; the change itself is reviewed and merged under those words): production apply of SQL 158 after the staging acceptance below, from the recorded production pre-state (ed94cf62 -> 1c43cf6c); each apply still needs the owner's run-time approval (the owner's words for that run).",
-  "execute": true,
+  "authorization": "Applied to production on 2026-11-12; execute is false again, so this pin is no longer a standing authorization and a re-apply needs a new reviewed pin change. The owner approved the SQL 158 production pin change on 2026-11-12 in the words \"go with SQL 158\", \"Merge 1811 and approve SQL 158\", \"merge #1813 and apply SQL 158 in staging\", \"run the read-only SQL 158 production inspect\" and \"record the SQL 158 production pin, merge it when green, and apply SQL 158 in production\" (on the staging apply run 43228829366; ed94cf62 -> 1c43cf6c, #1814, merged to main as d7678814) and the one apply run recorded in applied (workstream prod-sql158-mortgage-desk-oversight-and-agent-notes-20261112) in the words \"record the SQL 158 production pin, merge it when green, and apply SQL 158 in production\", passed to it verbatim. That approval covered that run only.",
+  "execute": false,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -65,5 +65,491 @@
     "ok": true,
     "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43228829366",
     "basis": "Guarded staging SQL executor apply of sql158-mortgage-desk-oversight-and-agent-notes, run 43228829366 (2026-11-12, main bb145ba53, executor deploy run 43227752850, through the SQL 158 staging pin, wave 50, on the owner's words \"merge #1813 and apply SQL 158 in staging\"): read-live before it, run 43228270028, ed94cf62003c8ef29667a8b79dd081f8e0491bde28cf8ec1acee1154b877e233 (the table and all six functions absent), already_applied false, precondition_failures []; receipt before ed94cf62003c8ef29667a8b79dd081f8e0491bde28cf8ec1acee1154b877e233, after 1c43cf6ca02fd3d4842b1d854b1ea559dba3cbd007a01c2739d625cfc14428ee == intended_replacement_sha256, result applied; read-live after it, run 43229310297, already_applied true, live 1c43cf6ca02fd3d4842b1d854b1ea559dba3cbd007a01c2739d625cfc14428ee. Production's pre-state is the same one staging had before its apply (ed94cf62003c8ef29667a8b79dd081f8e0491bde28cf8ec1acee1154b877e233). The behavior is covered on PostgreSQL 16 by aws/tests/sql158-mortgage-desk-oversight-pg.test.mjs and aws/tests/release-sql158-executor.test.mjs."
+  },
+  "applied": {
+    "date": "2026-11-12",
+    "result": "applied",
+    "source_commit": "d7678814644366d71134c5e23705d68ad173765b",
+    "source_commit_basis": "SOURCE_COMMIT in the tarball (written by sql53-temporary-transfer) equals --commit, and the tarball sha256 equals --expected-tarball-sha256 as copied by the operator from that transfer run's log (TARBALL_SHA256 line); the run log itself was not read by the one-shot.",
+    "source_tarball": {
+      "file": "source-d7678814644366d71134c5e23705d68ad173765b.tar.gz",
+      "sha256": "b9ea2cb315becb7713108ee3b2e8207603ff97d1396df1b0dac98febcb171622"
+    },
+    "migration_source_sha256": "282c6bdac33be8e09d5100854e861cf7d14003ff94eba334d1ffe65986319e05",
+    "migration_source_sha256_note": "The one-shot source step hashed aws/workflows/sql/158_mortgage_desk_oversight_and_agent_notes.sql in the transfer tarball: equal to source_sha256 (the pin; migration_matches_pin true).",
+    "runner": "i-0c35557c4e5385406",
+    "runner_basis": "operator-supplied --runner (not verified by the one-shot)",
+    "workstream_id": "prod-sql158-mortgage-desk-oversight-and-agent-notes-20261112",
+    "one_use_id": "sql158-prod-f38f625c-c0b7-4e46-9757-4d2eb55340a2",
+    "one_use_id_consumed": true,
+    "one_use_id_consumed_basis": "Inferred from the successful apply (the tool records the one_use_id after COMMIT and only warns if that write fails); the consumed-registry entry was not read back separately.",
+    "owner_approval": "record the SQL 158 production pin, merge it when green, and apply SQL 158 in production",
+    "owner_approval_basis": "As passed in --approval-statement for --approval-scope sql158; the one-shot cannot verify who said it. The owner's words of 2026-11-12 for this run were \"record the SQL 158 production pin, merge it when green, and apply SQL 158 in production\", given together with the instruction to record and merge the pin change (#1814, merged to main as d7678814 once green); they were passed verbatim as the approval statement for the --phase inspect run and the --phase apply run, which ran only after that merge was on main and staged.",
+    "operator": "michaelcarletta-cmd",
+    "apply_ssm_command_id": "2e121d9e-c29a-4b16-b53f-1802b75dcafe",
+    "one_shot_run_id": "f52b9f83-66fa-4e26-bd38-c362e7151aa2",
+    "one_shot_note": "One SSM command (2e121d9e-c29a-4b16-b53f-1802b75dcafe on i-0c35557c4e5385406, comment \"SQL 158 one-shot --phase apply (owner-approved run)\", sent 2026-11-12 14:15:58Z, Success, ResponseCode 0, finished by 14:16:14Z; the runner was started from stopped for this work at 14:13:24Z and stopped again at 14:20:38Z, after every SSM command named here had ended) ran the production-sql-one-shot --phase apply (run_id f52b9f83-66fa-4e26-bd38-c362e7151aa2) from main d7678814 (transfer run 43234004186, sql53-temporary-transfer.yml on main after the #1814 merge; tarball sha256 b9ea2cb315becb7713108ee3b2e8207603ff97d1396df1b0dac98febcb171622). Before it, a separate one-shot --phase inspect on the same tarball and the same approval statement (SSM 470b452b-f8d7-48dd-a481-9cb40a3a47b5, run b822ddcf-d5c1-4a82-a42c-d7ce5e93e108, 14:14:52Z to 14:15:07Z, EXIT=0, nothing written) read live ed94cf62003c8ef29667a8b79dd081f8e0491bde28cf8ec1acee1154b877e233 (live_matches_expected true, already_applied false, apply_preconditions_met true, precondition_failures [], prerequisites_missing [], the table and all six functions absent), the pre-state the read-only inspect recorded in production_inspect (SSM 621abcee-0a4a-48c2-9209-e67da773b9bf). Steps pin (execute true, staging_acceptance run 43228829366), source (tarball sha256 matches the sidecar and --expected-tarball-sha256, tree matches the tarball, migration source == pin), inspect, contracts (claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43), manifest, source-recheck-before-preflight, preflight (receipt_issued), evaluate (sql158_production_apply_allowed true), source-recheck-before-apply, apply (applied) and post-apply-inspect all ok. The run's output did NOT arrive whole: the command printed the one-shot's JSON indented, and SSM cut the standard output at its 24000-character limit inside details.applied.receipt, right after the first characters of after_hash. Everything before that point was printed in full, including details.apply_result, details.manifest_sha256 and details.post_apply_inspect. The one-shot builds applied.receipt from the same object it prints as details.apply_result, and applied.post_apply_inspect from details.post_apply_inspect (scripts/deployment-guard/lib/production-sql-one-shot.mjs at d7678814, summary.applied); so receipt and post_apply_inspect are recorded here from those printed objects, and the printed part of applied.receipt (migration through the start of after_hash) agrees with them. The cut-off tail of the output was only the rest of applied (receipt, post_apply_inspect) and the run's constant not_observed_by_this_run list (ssm_command_id, source_staged_by), supplied here as apply_ssm_command_id and transfer run 43234004186. Every other field of the applied object is recorded as printed, except this note and owner_approval_basis, which are extended as in the SQL 150 and SQL 156 records (the one-shot's own one_shot_note read: \"One production-sql-one-shot run verified the source, ran the read-only inspect and the runner contracts, built the manifest, issued the receipt and lease (preflight), evaluated (sql158_production_apply_allowed true), applied (exit 0) and ran the post-apply inspect.\"). This block adds migration_source_sha256 (with its note), apply_ssm_command_id, steps and manifest_sha256 from the same run's details, as the SQL 156 record does. Read back afterwards on the runner, read-only (SSM 453932f1-2a5b-470b-a663-c2bd9dce828e and 9698678e-a920-4dfd-baa2-3fde1223bf34, before the stop; the receipt signing key was not read): the work directory /var/tmp/sql-one-shot-ySFGCX held the deployment-guard receipt (issued 14:16:12.414Z, consumed 14:16:13.850Z) and the lease (acquired 14:16:12.406Z), and the consumed registry lists one_use_id sql158-prod-f38f625c-c0b7-4e46-9757-4d2eb55340a2. An unrelated AmazonInspector2-ConfigureInspectorSsmPlugin SSM association command was still listed InProgress account-wide when the apply was sent; its invocation on this runner had already ended Failed (InvalidPlatform) and it is not a ChecksOps run. The post-apply inspect reported live 1c43cf6ca02fd3d4842b1d854b1ea559dba3cbd007a01c2739d625cfc14428ee == intended, already_applied true, precondition_failures []: mortgage_desk_agent_notes intended (RLS on, 8 columns, no policies) and all six functions intended, EXECUTE checksops and the owner, definer_writes ok on all seven relations. Unrelated catalog 7a58f3cdbbc40368c319952d3816916c7a8e1f04e0e506f17b01fd3044248c67 (policies 479, functions 1377). Nothing uses the new functions until the Tenant Management API and desk view ship through their own guarded paths. Production acceptance: not yet reported by the owner when this record was written; this record does not claim it.",
+    "steps": [
+      "pin",
+      "source",
+      "inspect",
+      "contracts",
+      "manifest",
+      "source-recheck-before-preflight",
+      "preflight",
+      "evaluate",
+      "source-recheck-before-apply",
+      "apply",
+      "post-apply-inspect"
+    ],
+    "contract_results": {
+      "claim-ledger": {
+        "ok": true,
+        "test": "aws/tests/claim-ledger-accepted-contract.test.mjs",
+        "evidence": "4/4 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at d7678814644366d71134c5e23705d68ad173765b (production-sql-one-shot f52b9f83-66fa-4e26-bd38-c362e7151aa2, node --test)"
+      },
+      "tenant-isolation": {
+        "ok": true,
+        "test": "aws/tests/tenant-security-compliance.test.mjs",
+        "evidence": "6/6 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at d7678814644366d71134c5e23705d68ad173765b (production-sql-one-shot f52b9f83-66fa-4e26-bd38-c362e7151aa2, node --test)"
+      },
+      "financial-write-protections": {
+        "ok": true,
+        "test": "aws/tests/api-write.test.mjs",
+        "evidence": "43/43 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at d7678814644366d71134c5e23705d68ad173765b (production-sql-one-shot f52b9f83-66fa-4e26-bd38-c362e7151aa2, node --test)"
+      }
+    },
+    "pre_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "ed94cf62003c8ef29667a8b79dd081f8e0491bde28cf8ec1acee1154b877e233",
+      "live_matches_expected": true,
+      "already_applied": false,
+      "predecessors": {},
+      "predecessors_applied": true,
+      "missing_dependencies": [],
+      "apply_preconditions_met": true,
+      "precondition_failures": [],
+      "current_user": "checksops_admin",
+      "session_user": "checksops_admin",
+      "counts": null,
+      "successors_applied": [],
+      "release_sql_inspect": {
+        "live_definition_sha256": "ed94cf62003c8ef29667a8b79dd081f8e0491bde28cf8ec1acee1154b877e233",
+        "prerequisites_missing": [],
+        "predecessors": {},
+        "successors_applied": [],
+        "functions": [
+          {
+            "name": "aws_mortgage_desk_overview(uuid, text, integer, integer)",
+            "state": "absent"
+          },
+          {
+            "name": "aws_mortgage_desk_assignable_agents()",
+            "state": "absent"
+          },
+          {
+            "name": "aws_mortgage_desk_assign_agent(uuid, uuid)",
+            "state": "absent"
+          },
+          {
+            "name": "aws_mortgage_desk_add_agent_note(uuid, text)",
+            "state": "absent"
+          },
+          {
+            "name": "aws_mortgage_desk_record_agent_note_email(uuid, text)",
+            "state": "absent"
+          },
+          {
+            "name": "aws_mortgage_desk_agent_notes(uuid)",
+            "state": "absent"
+          }
+        ],
+        "policies": [],
+        "views": [],
+        "tables": [
+          {
+            "name": "mortgage_desk_agent_notes",
+            "state": "absent",
+            "rls": false,
+            "column_count": 0,
+            "policy_count": 0
+          }
+        ],
+        "columns": [],
+        "constraints": [],
+        "triggers": [],
+        "table_privileges": [],
+        "function_acl": [
+          {
+            "name": "aws_mortgage_desk_overview(uuid, text, integer, integer)",
+            "acl": []
+          },
+          {
+            "name": "aws_mortgage_desk_assignable_agents()",
+            "acl": []
+          },
+          {
+            "name": "aws_mortgage_desk_assign_agent(uuid, uuid)",
+            "acl": []
+          },
+          {
+            "name": "aws_mortgage_desk_add_agent_note(uuid, text)",
+            "acl": []
+          },
+          {
+            "name": "aws_mortgage_desk_record_agent_note_email(uuid, text)",
+            "acl": []
+          },
+          {
+            "name": "aws_mortgage_desk_agent_notes(uuid)",
+            "acl": []
+          }
+        ],
+        "acl_functions": [],
+        "indexes": [],
+        "unique_covers": [],
+        "definer_writes": [
+          {
+            "name": "mortgage_handling_requests",
+            "ok": true
+          },
+          {
+            "name": "mortgage_ops_request_audit",
+            "ok": true
+          },
+          {
+            "name": "mortgage_agent_accounts",
+            "ok": true
+          },
+          {
+            "name": "identity_accounts",
+            "ok": true
+          },
+          {
+            "name": "profiles",
+            "ok": true
+          },
+          {
+            "name": "user_roles",
+            "ok": true
+          },
+          {
+            "name": "tenants",
+            "ok": true
+          }
+        ],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": null
+      }
+    },
+    "manifest_sha256": "a812f1b92d587a786f197b1089c5f6c42f5e209b8f8d607544fcc54102e0054c",
+    "receipt": {
+      "migration": "sql158",
+      "workstream": "prod-sql158-mortgage-desk-oversight-and-agent-notes-20261112",
+      "commit": "d7678814644366d71134c5e23705d68ad173765b",
+      "sql_file": "aws/workflows/sql/158_mortgage_desk_oversight_and_agent_notes.sql",
+      "before_hash": "ed94cf62003c8ef29667a8b79dd081f8e0491bde28cf8ec1acee1154b877e233",
+      "after_hash": "1c43cf6ca02fd3d4842b1d854b1ea559dba3cbd007a01c2739d625cfc14428ee",
+      "release_sql_inspect": {
+        "live_definition_sha256": "1c43cf6ca02fd3d4842b1d854b1ea559dba3cbd007a01c2739d625cfc14428ee",
+        "prerequisites_missing": [],
+        "predecessors": {},
+        "successors_applied": [],
+        "functions": [
+          {
+            "name": "aws_mortgage_desk_overview(uuid, text, integer, integer)",
+            "state": "intended"
+          },
+          {
+            "name": "aws_mortgage_desk_assignable_agents()",
+            "state": "intended"
+          },
+          {
+            "name": "aws_mortgage_desk_assign_agent(uuid, uuid)",
+            "state": "intended"
+          },
+          {
+            "name": "aws_mortgage_desk_add_agent_note(uuid, text)",
+            "state": "intended"
+          },
+          {
+            "name": "aws_mortgage_desk_record_agent_note_email(uuid, text)",
+            "state": "intended"
+          },
+          {
+            "name": "aws_mortgage_desk_agent_notes(uuid)",
+            "state": "intended"
+          }
+        ],
+        "policies": [],
+        "views": [],
+        "tables": [
+          {
+            "name": "mortgage_desk_agent_notes",
+            "state": "intended",
+            "rls": true,
+            "column_count": 8,
+            "policy_count": 0
+          }
+        ],
+        "columns": [],
+        "constraints": [],
+        "triggers": [],
+        "table_privileges": [],
+        "function_acl": [
+          {
+            "name": "aws_mortgage_desk_overview(uuid, text, integer, integer)",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          },
+          {
+            "name": "aws_mortgage_desk_assignable_agents()",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          },
+          {
+            "name": "aws_mortgage_desk_assign_agent(uuid, uuid)",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          },
+          {
+            "name": "aws_mortgage_desk_add_agent_note(uuid, text)",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          },
+          {
+            "name": "aws_mortgage_desk_record_agent_note_email(uuid, text)",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          },
+          {
+            "name": "aws_mortgage_desk_agent_notes(uuid)",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          }
+        ],
+        "acl_functions": [],
+        "indexes": [],
+        "unique_covers": [],
+        "definer_writes": [
+          {
+            "name": "mortgage_handling_requests",
+            "ok": true
+          },
+          {
+            "name": "mortgage_ops_request_audit",
+            "ok": true
+          },
+          {
+            "name": "mortgage_agent_accounts",
+            "ok": true
+          },
+          {
+            "name": "identity_accounts",
+            "ok": true
+          },
+          {
+            "name": "profiles",
+            "ok": true
+          },
+          {
+            "name": "user_roles",
+            "ok": true
+          },
+          {
+            "name": "tenants",
+            "ok": true
+          }
+        ],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": null
+      },
+      "unrelated_catalog_sha256": "7a58f3cdbbc40368c319952d3816916c7a8e1f04e0e506f17b01fd3044248c67",
+      "unrelated_catalog_counts": {
+        "relations": 896,
+        "columns": 3564,
+        "constraints": 2253,
+        "policies": 479,
+        "functions": 1377,
+        "indexes": 658,
+        "default_acl": 0,
+        "role_memberships": 15,
+        "roles": 29,
+        "triggers": 190,
+        "views": 25,
+        "types": 18,
+        "schema": 2
+      },
+      "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43228829366",
+      "result": "applied"
+    },
+    "post_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "1c43cf6ca02fd3d4842b1d854b1ea559dba3cbd007a01c2739d625cfc14428ee",
+      "live_matches_expected": false,
+      "already_applied": true,
+      "predecessors": {},
+      "predecessors_applied": true,
+      "missing_dependencies": [],
+      "apply_preconditions_met": false,
+      "precondition_failures": [],
+      "current_user": "checksops_admin",
+      "session_user": "checksops_admin",
+      "counts": null,
+      "successors_applied": [],
+      "release_sql_inspect": {
+        "live_definition_sha256": "1c43cf6ca02fd3d4842b1d854b1ea559dba3cbd007a01c2739d625cfc14428ee",
+        "prerequisites_missing": [],
+        "predecessors": {},
+        "successors_applied": [],
+        "functions": [
+          {
+            "name": "aws_mortgage_desk_overview(uuid, text, integer, integer)",
+            "state": "intended"
+          },
+          {
+            "name": "aws_mortgage_desk_assignable_agents()",
+            "state": "intended"
+          },
+          {
+            "name": "aws_mortgage_desk_assign_agent(uuid, uuid)",
+            "state": "intended"
+          },
+          {
+            "name": "aws_mortgage_desk_add_agent_note(uuid, text)",
+            "state": "intended"
+          },
+          {
+            "name": "aws_mortgage_desk_record_agent_note_email(uuid, text)",
+            "state": "intended"
+          },
+          {
+            "name": "aws_mortgage_desk_agent_notes(uuid)",
+            "state": "intended"
+          }
+        ],
+        "policies": [],
+        "views": [],
+        "tables": [
+          {
+            "name": "mortgage_desk_agent_notes",
+            "state": "intended",
+            "rls": true,
+            "column_count": 8,
+            "policy_count": 0
+          }
+        ],
+        "columns": [],
+        "constraints": [],
+        "triggers": [],
+        "table_privileges": [],
+        "function_acl": [
+          {
+            "name": "aws_mortgage_desk_overview(uuid, text, integer, integer)",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          },
+          {
+            "name": "aws_mortgage_desk_assignable_agents()",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          },
+          {
+            "name": "aws_mortgage_desk_assign_agent(uuid, uuid)",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          },
+          {
+            "name": "aws_mortgage_desk_add_agent_note(uuid, text)",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          },
+          {
+            "name": "aws_mortgage_desk_record_agent_note_email(uuid, text)",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          },
+          {
+            "name": "aws_mortgage_desk_agent_notes(uuid)",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          }
+        ],
+        "acl_functions": [],
+        "indexes": [],
+        "unique_covers": [],
+        "definer_writes": [
+          {
+            "name": "mortgage_handling_requests",
+            "ok": true
+          },
+          {
+            "name": "mortgage_ops_request_audit",
+            "ok": true
+          },
+          {
+            "name": "mortgage_agent_accounts",
+            "ok": true
+          },
+          {
+            "name": "identity_accounts",
+            "ok": true
+          },
+          {
+            "name": "profiles",
+            "ok": true
+          },
+          {
+            "name": "user_roles",
+            "ok": true
+          },
+          {
+            "name": "tenants",
+            "ok": true
+          }
+        ],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": null
+      }
+    }
+  },
+  "production_evidence": {
+    "2026-11-12 apply": "Guarded production SQL one-shot on i-0c35557c4e5385406, workstream prod-sql158-mortgage-desk-oversight-and-agent-notes-20261112, main d7678814 (tarball b9ea2cb3…, transfer run 43234004186, migration source 282c6bdac… == pin), owner-approved run (\"record the SQL 158 production pin, merge it when green, and apply SQL 158 in production\"), pre-apply --phase inspect SSM 470b452b-f8d7-48dd-a481-9cb40a3a47b5 (live ed94cf62…, live_matches_expected true), apply SSM 2e121d9e-c29a-4b16-b53f-1802b75dcafe, run_id f52b9f83-66fa-4e26-bd38-c362e7151aa2, one_use_id sql158-prod-f38f625c-c0b7-4e46-9757-4d2eb55340a2 (spent; listed in the consumed registry on the runner): every step ok; contracts claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43; manifest a812f1b9…; ed94cf62… -> 1c43cf6c…, result applied, unrelated catalog 7a58f3cd…; post-apply inspect already_applied true, precondition_failures []; the SSM output was cut at 24000 characters inside applied.receipt (see applied.one_shot_note). After: public.mortgage_desk_agent_notes (RLS on) and the six SQL 158 functions exist as SQL 158 defines them (SECURITY DEFINER, EXECUTE checksops and the owner). Nothing uses them until the Tenant Management API and desk view ship through their own guarded paths. Production acceptance was not yet reported by the owner when this was recorded. execute is false so the pin is no longer a standing authorization."
   }
 }
