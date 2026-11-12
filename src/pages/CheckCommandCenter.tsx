@@ -224,7 +224,7 @@ import { useCheckCommandRealtime } from "@/features/check-command/useCheckComman
 import { optimisticStage, optimisticRemove } from "@/features/check-command/optimistic";
 import { receivedAmount, sharedReleasedReceivedRows } from "@/features/check-command/sharedFundsReleased";
 import { groupSplitsByClaim } from "@/features/check-command/groupSplitsByClaim";
-import { incomingFundsReceivedRows } from "@/lib/payments/transferFinanceRows";
+import { incomingFundsReceivedRows, receivedCheckIds } from "@/lib/payments/transferFinanceRows";
 import { useIncomingTransfers } from "@/hooks/useTransferFinance";
 import {
   DISBURSED_SEND_STATUSES,
@@ -815,6 +815,14 @@ export default function CheckCommandCenter() {
   });
   const sentCheckIds = useMemo(() => disbursedCheckIds(checkSends.legs), [checkSends]);
 
+  // Payments another organization sent into this wallet from a check (SQL 144 via /data/rpc): its
+  // send legs are the sender's rows, so get_tenant_funds_received never has them. Empty until live.
+  const { data: incomingTransfers = [] } = useIncomingTransfers(tenantId);
+  // Checks another organization paid this one from (a send that was not returned). On this side
+  // such a shared check belongs in Funds Received, where the payment is listed, not in Deposited:
+  // a send leaves the check's check_stage at deposited, so the stage alone keeps it there.
+  const receivedFromCheckIds = useMemo(() => receivedCheckIds(incomingTransfers), [incomingTransfers]);
+
   // Fetch claim numbers + policyholder names for any linked claims so search works on them
   const linkedClaimIds = useMemo(() => {
     const ids = new Set<string>();
@@ -948,6 +956,7 @@ export default function CheckCommandCenter() {
     // (sharedFundsReleased.ts). One disbursed send is enough.
     if (stage === "funds_released" || stage === "disbursed_externally") return false;
     if (sentCheckIds.has(c.id)) return false;
+    if ((c as { _shared?: boolean })._shared && receivedFromCheckIds.has(c.id)) return false;
     return (s === "deposited" || stage === "deposited" || checkAltStatus === "pending_approval") && matchesSearch(c);
   });
   // On the Deposited tab, merge the paginated owned deposited rows with any
@@ -1019,11 +1028,13 @@ export default function CheckCommandCenter() {
   const queueCapped = checks.length >= QUEUE_ROW_CAP;
   // The server still counts a sent check (check_stage deposited) as Deposited: leave it out.
   const sentDeposited = sentStillDeposited(checkSends.checks, sentCheckIds);
+  // Likewise a shared check this organization was paid from by a send (still check_stage deposited).
+  const receivedDeposited = sentStillDeposited(sharedChecks as any[], receivedFromCheckIds);
   const laneCountFor = (key: string, inMemory: CheckItem[]) => {
     if (!stageTotals) return inMemory.length;
     if (key === "deposited") {
       const server = stageTotals.get(key)?.count;
-      return server == null ? inMemory.length : Math.max(0, server - sentDeposited.count);
+      return server == null ? inMemory.length : Math.max(0, server - sentDeposited.count - receivedDeposited.count);
     }
     if (queueCapped) return stageTotals.get(key)?.count ?? inMemory.length;
     return inMemory.length;
@@ -1033,7 +1044,7 @@ export default function CheckCommandCenter() {
     if (!stageTotals) return inMemoryTotal;
     if (key === "deposited") {
       const server = stageTotals.get(key)?.total;
-      return server == null ? inMemoryTotal : Math.max(0, server - sentDeposited.total);
+      return server == null ? inMemoryTotal : Math.max(0, server - sentDeposited.total - receivedDeposited.total);
     }
     if (queueCapped) return stageTotals.get(key)?.total ?? inMemoryTotal;
     return inMemoryTotal;
@@ -1188,9 +1199,6 @@ export default function CheckCommandCenter() {
     refetchInterval: 60_000,
   });
 
-  // Payments another organization sent into this wallet from a check (SQL 144 via /data/rpc): its
-  // send legs are the sender's rows, so get_tenant_funds_received never has them. Empty until live.
-  const { data: incomingTransfers = [] } = useIncomingTransfers(tenantId);
 
   // Search inside the Funds Released / Funds Received lanes so a searched claim
   // check also surfaces here (and the lane badge reflects the match count).
