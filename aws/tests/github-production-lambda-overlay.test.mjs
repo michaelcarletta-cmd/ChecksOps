@@ -3843,8 +3843,10 @@ test('Mortgage Desk e-sign: ADD mortgage-desk-esign.mjs held on SQL 124 (recorde
     ? { operation: 'replace', accepted_sha256: deskOversightApplied(ADD), expected_live_sha256: deskLibRowLive(ADD), sql_before: SQL156_FILE, manifest: SHARED_LIBRARY_APPLIED_REL }
     : { operation: 'add', accepted_sha256: ADD_BYTES, expected_live_sha256: null, sql_before: SQL124, manifest: MANIFEST_REL });
   if (SHARED_LIBRARY.members[ADD]) assert.equal(SHARED_LIBRARY.members[ADD].previous_manifest, APPLIED_REL);
-  // (Main's bytes also import email-layout.mjs since the Tenant Management desk view plan, a module already live; its test checks it.)
-  const imports = localImports(fs.readFileSync(path.join(API, ADD), 'utf8'), ADD).filter((name) => !DESK_OVERSIGHT.members[ADD] || name !== 'email-layout.mjs');
+  // (Main's bytes also import email-layout.mjs and mortgage-ops-usage.mjs since the Tenant Management desk view plan, modules
+  // already live; its test checks them.)
+  const imports = localImports(fs.readFileSync(path.join(API, ADD), 'utf8'), ADD)
+    .filter((name) => !DESK_OVERSIGHT.members[ADD] || !['email-layout.mjs', 'mortgage-ops-usage.mjs'].includes(name));
   assert.deepEqual({ ...manifest.members[ADD], required_imports: [...manifest.members[ADD].required_imports].sort() }, { live_sha256: null, accepted_sha256: ADD_BYTES, operation: 'add', required_imports: [...imports].sort() });
   // Its planned imports come earlier in order and are recorded live at their accepted bytes (applied, or
   // earlier than app-services.mjs, whose applied Mortgage Desk return bytes passed the order gate).
@@ -8657,11 +8659,16 @@ test('Tenant Management desk view (owner 2026-11-12): mortgage-desk-esign.mjs RE
   );
   assert.equal(held.calls.lease, undefined);
   assert.equal(held.calls.receipt, undefined);
-  // No new module: the only import the applied bytes lacked is email-layout.mjs, which esign.mjs (live) already imports.
+  // No new module: the only imports the applied bytes lacked are email-layout.mjs, which esign.mjs (live) already imports,
+  // and mortgage-ops-usage.mjs (the assign's accrual, "go with the accrual fix"), which workflow-rpc.mjs's accept already
+  // imports for the same accrual.
   const before = new Set(JSON.parse(fs.readFileSync(path.join(ROOT, 'aws/tests/fixtures/production-mortgage-desk-esign-manifest-2026-10-28.json'), 'utf8')).members[ESIGN].required_imports);
   const now = localImports(fs.readFileSync(path.join(API, ESIGN), 'utf8'), ESIGN);
-  assert.deepEqual(now.filter((name) => !before.has(name)), ['email-layout.mjs']);
+  assert.deepEqual(now.filter((name) => !before.has(name)).sort(), ['email-layout.mjs', 'mortgage-ops-usage.mjs']);
   assert.ok(localImports(fs.readFileSync(path.join(API, 'esign.mjs'), 'utf8'), 'esign.mjs').includes('email-layout.mjs'));
+  assert.ok(localImports(fs.readFileSync(path.join(API, 'workflow-rpc.mjs'), 'utf8'), 'workflow-rpc.mjs').includes('mortgage-ops-usage.mjs'));
+  assert.ok(manifest.notes.includes('"go with the accrual fix"'));
+  assert.ok(PLAN.notes.includes(`Tenant Management assign accrual fix (owner 2026-11-12, "go with the accrual fix"): ${evidence}`));
   // The bytes call SQL 158's six functions.
   const text = fs.readFileSync(path.join(API, ESIGN), 'utf8');
   for (const fn of ['aws_mortgage_desk_overview\\(\\$1::uuid, \\$2::text, \\$3::integer, \\$4::integer\\)', 'aws_mortgage_desk_assignable_agents\\(\\)',

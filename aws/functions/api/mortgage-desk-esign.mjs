@@ -32,8 +32,9 @@
  *
  *   action desk_overview  -> aws_mortgage_desk_overview(tenant, status, limit, offset)   (SQL 158 a)
  *   action desk_agents    -> aws_mortgage_desk_assignable_agents()                       (SQL 158 b)
- *   action assign_agent   -> aws_mortgage_desk_assign_agent(request, agent)              (SQL 158 c),
- *                            then a best-effort notice email to the agent (not recorded; the assignment stands)
+ *   action assign_agent   -> aws_mortgage_desk_assign_agent(request, agent)              (SQL 158 c) and, in the
+ *                            same transaction, the accept's Mortgage Ops accrual (accrueDeskAssignment), then a
+ *                            best-effort notice email to the agent (not recorded; the assignment stands)
  *   action message_agent  -> aws_mortgage_desk_add_agent_note(request, body)             (SQL 158 d) commits,
  *                            the email to the assigned agent goes out, then
  *                            aws_mortgage_desk_record_agent_note_email(note, status)     (SQL 158 e)
@@ -120,6 +121,8 @@ export const DESK_ASSIGN_AGENT_SQL = 'SELECT * FROM public.aws_mortgage_desk_ass
 export const DESK_ADD_AGENT_NOTE_SQL = 'SELECT * FROM public.aws_mortgage_desk_add_agent_note($1::uuid, $2::text)';
 export const DESK_RECORD_AGENT_NOTE_EMAIL_SQL = 'SELECT public.aws_mortgage_desk_record_agent_note_email($1::uuid, $2::text) AS recorded';
 export const DESK_AGENT_NOTES_SQL = 'SELECT * FROM public.aws_mortgage_desk_agent_notes($1::uuid)';
+/** The assigned request's row, read in the assign's own transaction for the Mortgage Ops accrual. */
+export const DESK_ASSIGNED_REQUEST_SQL = 'SELECT * FROM public.mortgage_handling_requests WHERE id = $1::uuid';
 export const MORTGAGE_DESK_OVERVIEW_STATUSES = Object.freeze(['requested', 'in_progress', 'completed']);
 /** SQL 158 caps a page at 500 rows and defaults to 200. */
 export const MORTGAGE_DESK_OVERVIEW_MAX_LIMIT = 500;
@@ -740,7 +743,37 @@ export const sendDeskAgentEmail = async ({ to, message, category, send = sendVia
   }
 };
 
-/** assign_agent: SQL 158 c commits (queued -> in progress for the agent), then a best-effort notice email. */
+/**
+ * The Mortgage Ops accrual an agent's accept runs (workflow-rpc.mjs executeAcceptMortgage): the check's $10 / $5
+ * charge and SQL 153's $5 for a 2nd mortgage company, from the accepted request row, in the same transaction and
+ * inside the same SAVEPOINT, so a refused accrual never undoes the assignment (owner 2026-11-12: "go with the accrual
+ * fix"). Returns { status: 'accrued' | 'skipped' | 'failed', reason } and never throws.
+ */
+export const accrueDeskAssignment = async (client, requestId, accrue) => {
+  try {
+    await client.query('SAVEPOINT mortgage_ops_accrue');
+  } catch (error) {
+    return { status: 'failed', reason: String(error?.code || 'savepoint_failed') };
+  }
+  try {
+    const request = (await client.query(DESK_ASSIGNED_REQUEST_SQL, [requestId])).rows[0];
+    if (!request) {
+      await client.query('ROLLBACK TO SAVEPOINT mortgage_ops_accrue');
+      return { status: 'skipped', reason: 'request_not_readable' };
+    }
+    const accrueFn = accrue || (await import('./mortgage-ops-usage.mjs')).accrueMortgageOpsAcceptedRequest;
+    const out = await accrueFn(client, { request, persist: true });
+    await client.query('RELEASE SAVEPOINT mortgage_ops_accrue');
+    if (out?.skipped) return { status: 'skipped', reason: String(out.skipped) };
+    if (out?.ok === false) return { status: 'failed', reason: String(out.error || 'accrual_refused') };
+    return { status: 'accrued', reason: out?.duplicate ? 'already_recorded' : null };
+  } catch (error) {
+    try { await client.query('ROLLBACK TO SAVEPOINT mortgage_ops_accrue'); } catch { /* the outer transaction reports it */ }
+    return { status: 'failed', reason: String(error?.code || 'accrual_error') };
+  }
+};
+
+/** assign_agent: SQL 158 c and the accept's Mortgage Ops accrual commit together, then a best-effort notice email. */
 export const runMortgageDeskAssignAgent = async (event, deps = {}) => {
   const body = parseBody(event);
   const requestId = requestIdOf(body);
@@ -755,10 +788,11 @@ export const runMortgageDeskAssignAgent = async (event, deps = {}) => {
     if (out.refused) return { ...out.refused, spoofFieldsIgnored: spoof };
     const row = out.rows[0];
     if (!row) return { ok: false, statusCode: 500, error: 'assignment_not_returned', spoofFieldsIgnored: spoof };
-    return { ok: true, statusCode: 200, row, spoofFieldsIgnored: spoof };
+    const accrual = await accrueDeskAssignment(client, row.request_id, deps.accrueMortgageOpsAcceptedRequest);
+    return { ok: true, statusCode: 200, row, accrual, spoofFieldsIgnored: spoof };
   }, deps);
   if (!assigned?.ok) return assigned;
-  const { row } = assigned;
+  const { row, accrual } = assigned;
   const notice = await sendDeskAgentEmail({
     to: row.agent_email,
     message: deskAssignmentEmail(row),
@@ -774,6 +808,7 @@ export const runMortgageDeskAssignAgent = async (event, deps = {}) => {
     agentName: row.agent_name || null,
     acceptedAt: row.accepted_at || null,
     status: 'in_progress',
+    accrual,
     notice: { status: notice.status, error: notice.error },
     spoofFieldsIgnored: assigned.spoofFieldsIgnored,
   };
