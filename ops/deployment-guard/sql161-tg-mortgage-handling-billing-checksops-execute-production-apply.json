@@ -1,0 +1,64 @@
+{
+  "id": "sql161-tg-mortgage-handling-billing-checksops-execute-production-apply",
+  "migration": "sql161",
+  "authorization": "pending",
+  "execute": false,
+  "target_environment": "production",
+  "target_component": "production-sql",
+  "deployment_type": "sql-apply",
+  "filename": "aws/workflows/sql/161_tg_mortgage_handling_billing_checksops_execute.sql",
+  "migration_id": "161_tg_mortgage_handling_billing_checksops_execute",
+  "staging_pin_commit": "17306ac9d0d960b94dde1c54cdf6eabd5953f1ee",
+  "source_sha256": "519d15b1c7bcfd0cc27b5b1c0d08916729b28c9f007fefb8b8e701b6f865c98d",
+  "function_identities": [
+    "public.tg_record_mortgage_handling_billing()"
+  ],
+  "expected_live_definition_sha256": null,
+  "intended_replacement_sha256": "b916bcb512896ba7a90ac4401ad1903b18482d27e3173e8ccef21112eb4506f8",
+  "authorization_phrase": "GRANT_CHECKSOPS_EXECUTE_ON_MORTGAGE_HANDLING_TRIGGER_FUNCTION",
+  "predecessors": [],
+  "order_note": "No predecessor. SQL 161 sets only the EXECUTE ACL of public.tg_record_mortgage_handling_billing() (run by tr_record_mortgage_handling_billing on check_intake_items): GRANT EXECUTE TO checksops, nothing else (owner 2026-11-12: \"A new SQL 161 that gives staging that one permission, then SQL 160\"). Why: the guarded staging SQL executor read-live of SQL 160 (run 43307779123, 2026-11-12, approved commit 83a508fb10b32c30ff702231443ff11f7df68163) reported already_applied false and precondition_failures [] and read tg_record_mortgage_handling_billing()'s ACL as PUBLIC EXECUTE and owner EXECUTE, where production holds PUBLIC, checksops and the owner (ops/deployment-guard/billing-trigger-inspect.json production_inspect.observed_functions, every grant by the owner checksops_admin); SQL 160's CREATE OR REPLACE keeps the ACL, so its staging post-state could not equal its intended fingerprint. The other three SQL 160 functions read the same ACL in both databases. SQL 160 does not name SQL 161 and is not changed by it; SQL 161 runs before SQL 160 in staging by the order of work. The file refuses a missing function (42883 sql161_function_missing) or role (42704 sql161_role_missing); the engine requires the function to exist and be owned by the applying login (acl_functions_present, acl_functions_owned_by_login) and to hold no EXECUTE entry other than PUBLIC, checksops and the owner, each granted by the owner (acl_functions_acl_replaceable; revokes []). The post-conditions require the body, attributes and owner unchanged (acl_functions_otherwise_unchanged). Production already holds the grant, so it is expected to read as already in the intended state (release sql161 v1: b916bcb512896ba7a90ac4401ad1903b18482d27e3173e8ccef21112eb4506f8, the intended fingerprint): the file is a no-op there and a pin whose expected live hash equals the intended one cannot be bound (INVALID_MANIFEST), as SQL 131's staging pin. Staging's expected pre-state (PUBLIC and the owner, each granted by the owner) is 72031400264a910912cecd832ac0bf8486da7b67acfd036bc66aff6820258448 (releaseStateHash('sql161', the intended state with that ACL)); its own read-live records it. No table, trigger, policy, body or other grant change; no API, Lambda or SPA change is part of this pin. Adds no trigger.",
+  "admin_login": "checksops_admin",
+  "rds_identifier": "checksops-production",
+  "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
+  "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
+  "tooling": {
+    "status": "built",
+    "production_tool": "scripts/deployment-guard/sql161-tg-mortgage-handling-billing-checksops-execute-production-apply.mjs",
+    "production_lib": "scripts/deployment-guard/lib/release-sql-production-apply.mjs",
+    "staging_executor_handler": "aws/write-path/guarded-sql-executor/index.mjs handleReleaseSqlMigration",
+    "staging_workflow_choice": "sql161-tg-mortgage-handling-billing-checksops-execute",
+    "one_shot_migration": "sql161",
+    "fingerprint_engine": "scripts/deployment-guard/lib/release-sql-state.mjs",
+    "runbook": "ops/production-sql-161-apply.md",
+    "tests": [
+      "aws/tests/release-sql161-executor.test.mjs",
+      "aws/tests/release-sql161-production-apply.test.mjs",
+      "aws/tests/release-sql90-97-executor.test.mjs",
+      "aws/tests/release-sql90-97-production-apply.test.mjs",
+      "aws/tests/sql161-tg-mortgage-handling-billing-checksops-execute-pg.test.mjs"
+    ],
+    "note": "Guarded tooling for SQL 161: sql161-tg-mortgage-handling-billing-checksops-execute-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql161-tg-mortgage-handling-billing-checksops-execute); production-sql-one-shot.mjs --migration sql161. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): the function's EXECUTE ACL with grantors (spec acl_functions, render.grantors, no attributes), PUBLIC, checksops and the owner. The post-conditions also require the function's body, attributes and owner unchanged (acl_functions_otherwise_unchanged). The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
+  },
+  "production_inspect": {
+    "status": "pending",
+    "date": null,
+    "ssm_command_id": null,
+    "source_commit": null,
+    "read_only": true,
+    "connected_as": "checksops_admin",
+    "live_definition_sha256": null,
+    "apply_preconditions_met": null,
+    "precondition_failures": null,
+    "note": "Pending: no release-engine production inspect has been run for SQL 161 yet (the billing trigger inspect of 2026-11-12 read the function's ACL, not this fingerprint). Expected: prerequisites_missing [], the function present and owned by checksops_admin, release_sql_inspect.acl_functions tg_record_mortgage_handling_billing() intended with ACL [PUBLIC EXECUTE grantor=owner, checksops EXECUTE grantor=owner, owner EXECUTE grantor=owner], precondition_failures [], and already_applied true: production already holds the grant, so its expected release-engine fingerprint under sql161 is the intended one, b916bcb512896ba7a90ac4401ad1903b18482d27e3173e8ccef21112eb4506f8 (releaseStateHash('sql161', ...) of the observed ACL, derived by aws/tests/release-sql161-executor.test.mjs). Record the one-shot --phase inspect's date, SSM command id, source commit, live_definition_sha256, prerequisites_missing, release_sql_inspect.acl_functions, precondition_failures and already_applied here in a reviewed change; if it reads as the intended state, the inspect is the production acceptance and no production apply is needed or possible (expected_live_definition_sha256 equal to intended_replacement_sha256 is refused, INVALID_MANIFEST). Stop if prerequisites_missing is not [], precondition_failures is not [] (an EXECUTE entry for another grantee, granted by another role or with grant option) or the live fingerprint is neither the intended one nor staging's expected pre-state 72031400264a910912cecd832ac0bf8486da7b67acfd036bc66aff6820258448: that needs its own reviewed change."
+  },
+  "intended_post_state": {
+    "fingerprint": "b916bcb512896ba7a90ac4401ad1903b18482d27e3173e8ccef21112eb4506f8",
+    "note": "public.tg_record_mortgage_handling_billing(): EXECUTE for PUBLIC, checksops and the owner (PUBLIC EXECUTE grantor=owner, checksops EXECUTE grantor=owner, owner EXECUTE grantor=owner). Its body, language, SECURITY DEFINER, search_path, result and owner (checksops_admin) are unchanged; so are the trigger tr_record_mortgage_handling_billing and the other three SQL 160 functions. No other function, table, column, policy, RLS setting, grant, trigger or row change. The same state is production's expected current state (already_applied true) and is reached from staging's expected pre-state (no checksops EXECUTE). The fingerprint is releaseIntendedHash('sql161', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): b916bcb512896ba7a90ac4401ad1903b18482d27e3173e8ccef21112eb4506f8."
+  },
+  "staging_acceptance": {
+    "ok": false,
+    "reference": null,
+    "basis": "Pending: record the guarded staging SQL executor read-live and the staging apply of SQL 161 (choice sql161-tg-mortgage-handling-billing-checksops-execute, wave 52 when approved, before SQL 160's) here in a reviewed change. Expected staging pre-state 72031400264a910912cecd832ac0bf8486da7b67acfd036bc66aff6820258448 (PUBLIC and the owner). The grant is covered on PostgreSQL 16 by aws/tests/sql161-tg-mortgage-handling-billing-checksops-execute-pg.test.mjs. Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+  }
+}
