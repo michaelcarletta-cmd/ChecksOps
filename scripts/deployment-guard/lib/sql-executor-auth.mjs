@@ -3711,6 +3711,29 @@ export const AUTHORIZED_SQL161_TG_MORTGAGE_HANDLING_BILLING_CHECKSOPS_EXECUTE = 
   ]),
 });
 
+// Shared check source sends read staging pin: SQL 162 (owner 2026-11-12: "Sends to someone other than the partner",
+// "Yes for 1, 2, and run the inspect"). The new SECURITY DEFINER public.get_shared_check_source_sends(uuid) tells an
+// organization which checks shared with it the sharing organization has paid from by a send to someone else (check id,
+// sharing organization and the newest send's time only), under the API's tenant gate re-checked in the database
+// (aws_can_access_tenant, 42501); EXECUTE for checksops and the owner. No predecessor. Pending until a reviewed pin
+// change records a staging read-live (ops/production-sql-162-apply.md).
+export const AUTHORIZED_SQL162_SHARED_CHECK_SOURCE_SENDS = Object.freeze({
+  key: 'sql162',
+  filename: 'aws/workflows/sql/162_shared_check_source_sends.sql',
+  migration_id: '162_shared_check_source_sends',
+  // The commit that last authored the file bytes.
+  commit: '9bb825a47be99df50520463a20b49e30ebe66cd2',
+  source_sha256: '5bfbe41150ef652ade8405f9e8c0733ac32dae04776e489d188f7ae9c39d0179',
+  authorization: 'pending',
+  execute: false,
+  expected_live_definition_sha256: null,
+  // Code-derived: releaseIntendedHash('sql162', file bytes) (release-sql-state.mjs); re-derived by the tests.
+  intended_replacement_sha256: '77d36f6375b21c5e383896c88b5e9eccccb9f7bb9d06801921575e14a8ae41ca',
+  function_identities: Object.freeze([
+    'public.get_shared_check_source_sends(uuid)',
+  ]),
+});
+
 export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql90: AUTHORIZED_SQL90_USERS_ONLY_TENANT_ROLES,
   sql91: AUTHORIZED_SQL91_MOOV_ONBOARDING,
@@ -3780,6 +3803,7 @@ export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql159: AUTHORIZED_SQL159_HOMEOWNER_INTRO_REQUESTS_SELECT_GRANT,
   sql160: AUTHORIZED_SQL160_NO_ADDITIONAL_CHECK_OR_MANUAL_DEPOSIT_FEE,
   sql161: AUTHORIZED_SQL161_TG_MORTGAGE_HANDLING_BILLING_CHECKSOPS_EXECUTE,
+  sql162: AUTHORIZED_SQL162_SHARED_CHECK_SOURCE_SENDS,
   sql76: AUTHORIZED_SQL76_RELEASE_TENANT_PARTNERSHIP_CONSENT,
 });
 
@@ -3796,7 +3820,7 @@ export function isSql30TenantDocumentsDocType(input = {}) {
   return pinIdentifiersMatch(input, AUTHORIZED_SQL30_TENANT_DOCUMENTS_DOC_TYPE);
 }
 
-/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql148, sql150, sql152 ... sql156, sql158, sql159, sql160, sql161; sql76 for production) an input names, or null. */
+/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql148, sql150, sql152 ... sql156, sql158, sql159, sql160, sql161, sql162; sql76 for production) an input names, or null. */
 export function releaseSqlMigrationKey(input = {}) {
   return Object.keys(RELEASE_2026_10_17_PENDING_SQL_PINS)
     .find((key) => pinIdentifiersMatch(input, RELEASE_2026_10_17_PENDING_SQL_PINS[key])) || null;
