@@ -28,7 +28,7 @@ const corePrinciples: Section[] = [
     summary:
       "Every uploaded check now lands in Review first. The system never auto-routes to Endorsing, Deposit, or Loss Draft — a reviewer must explicitly choose the next stage.",
     details: [
-      "OCR extracts data and produces an AI deposit recommendation (e.g. 'endorsements pending', 'ready for deposit').",
+      "OCR reads the check, and ChecksOps suggests a deposit path from the payees and endorsements it finds (e.g. 'endorsements pending', 'ready for deposit').",
       "That recommendation is a hint only — it appears inside Review to help the reviewer decide.",
       "Nothing leaves Review until a reviewer clicks one of the 5 deposit-path actions.",
       "Endorsement records may be pre-seeded in the background, but the check itself stays in Review until routed.",
@@ -44,7 +44,7 @@ const tabHelpData: Section[] = [
     summary: "Every newly uploaded check starts here. Verify OCR and choose a deposit path.",
     details: [
       "Confirm or correct the amount, check number, carrier, claim #, and payees.",
-      "Read the AI recommendation and supporting reasons.",
+      "Read the suggested deposit path and the reasons for it.",
       "Pick one of 5 deposit paths: Endorsing, Ready for Deposit, Branch, Reissue, or Hold (Loss Draft auto-triggers when a mortgage payee is detected).",
       "Flag issues for exception handling instead of routing if something looks wrong.",
     ],

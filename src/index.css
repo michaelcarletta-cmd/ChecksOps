@@ -755,13 +755,13 @@ html.native-app header.sticky.top-0 {
   top: var(--app-safe-top);
 }
 
-/* Taps press in, and spring back on release. */
+/* Taps press in, and settle back on release (no overshoot). */
 html.native-app :is(button, a, [role="button"], [role="tab"], [role="menuitem"], [role="option"]) {
-  transition: transform 260ms cubic-bezier(0.34, 1.56, 0.64, 1), opacity 160ms ease-out,
-    background-color 160ms ease-out, color 160ms ease-out, border-color 160ms ease-out;
+  transition: transform 160ms cubic-bezier(0.2, 0, 0, 1), opacity 120ms ease-out,
+    background-color 120ms ease-out, color 120ms ease-out, border-color 120ms ease-out;
 }
 html.native-app :is(button, a, [role="button"], [role="tab"]):active:not(:disabled):not([aria-disabled="true"]) {
-  transform: scale(0.96);
+  transform: scale(0.97);
   opacity: 0.85;
   transition-duration: 90ms;
 }
@@ -771,106 +771,106 @@ html.native-app :is(button, a, [role="button"], [role="tab"]):active:not(:disabl
    same; a .page-shell inside a .route-page does not move twice. clip keeps the incoming page from
    adding a sideways scroll while it slides. Tab sections slide up and fade in. */
 @keyframes native-page-in {
-  from { opacity: 0; translate: 36px 0; }
+  from { opacity: 0; translate: 24px 0; }
   to { opacity: 1; translate: 0 0; }
 }
 @keyframes native-enter {
-  from { opacity: 0; translate: 0 14px; }
+  from { opacity: 0; translate: 0 8px; }
   to { opacity: 1; translate: 0 0; }
 }
 html.native-app .route-page {
   overflow-x: clip;
-  animation: native-page-in 380ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  animation: native-page-in 240ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
 }
 html.native-app .page-shell {
-  animation: native-page-in 380ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  animation: native-page-in 240ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
 }
 html.native-app .route-page .page-shell {
   animation: none;
 }
 html.native-app [role="tabpanel"][data-state="active"] {
-  animation: native-enter 320ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  animation: native-enter 200ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
 }
 
 /* An open message conversation fills the screen and floats in from the right, like a pushed screen. */
 @keyframes native-thread-in {
-  from { opacity: 0; translate: 36px 0; }
+  from { opacity: 0; translate: 24px 0; }
   to { opacity: 1; translate: 0 0; }
 }
 html.native-app .message-thread-screen {
-  animation: native-thread-in 380ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  animation: native-thread-in 240ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
 }
 
 /* The check panel: its sections follow the panel in (the panel itself slides in from the right,
    played by playNativeAppEntrance each time a check is opened or switched). */
 html.native-app .check-detail-panel > * > * {
-  animation: native-enter 360ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  animation: native-enter 220ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
 }
-html.native-app .check-detail-panel > * > :nth-child(2) { animation-delay: 60ms; }
-html.native-app .check-detail-panel > * > :nth-child(3) { animation-delay: 120ms; }
-html.native-app .check-detail-panel > * > :nth-child(n + 4) { animation-delay: 180ms; }
+html.native-app .check-detail-panel > * > :nth-child(2) { animation-delay: 30ms; }
+html.native-app .check-detail-panel > * > :nth-child(3) { animation-delay: 60ms; }
+html.native-app .check-detail-panel > * > :nth-child(n + 4) { animation-delay: 90ms; }
 
-/* Dialogs (send payment, deposit, settings forms, confirmations) rise and settle with a little
-   spring, over a blurred backdrop; their fields follow in order. translate/scale leave the
+/* Dialogs (send payment, deposit, settings forms, confirmations) rise a little and settle, with no
+   overshoot, over a blurred backdrop; their fields follow in order. translate/scale leave the
    dialog's own centering transform alone. Entrances fill `backwards` only, so no translate stays
    on an element afterwards (it would become the containing block of fixed descendants). */
 @keyframes native-dialog-in {
-  from { opacity: 0; translate: 0 32px; scale: 0.94; }
+  from { opacity: 0; translate: 0 12px; scale: 0.98; }
   to { opacity: 1; translate: 0 0; scale: 1; }
 }
 html.native-app [data-app-dialog][data-state="open"] {
-  animation: native-dialog-in 420ms cubic-bezier(0.34, 1.4, 0.64, 1) backwards;
+  animation: native-dialog-in 220ms cubic-bezier(0.2, 0, 0, 1) backwards;
 }
 html.native-app [data-app-dialog][data-state="open"] > * {
-  animation: native-enter 360ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  animation: native-enter 200ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
 }
-html.native-app [data-app-dialog][data-state="open"] > :nth-child(2) { animation-delay: 70ms; }
-html.native-app [data-app-dialog][data-state="open"] > :nth-child(3) { animation-delay: 120ms; }
-html.native-app [data-app-dialog][data-state="open"] > :nth-child(4) { animation-delay: 170ms; }
-html.native-app [data-app-dialog][data-state="open"] > :nth-child(n + 5) { animation-delay: 220ms; }
+html.native-app [data-app-dialog][data-state="open"] > :nth-child(2) { animation-delay: 30ms; }
+html.native-app [data-app-dialog][data-state="open"] > :nth-child(3) { animation-delay: 60ms; }
+html.native-app [data-app-dialog][data-state="open"] > :nth-child(4) { animation-delay: 90ms; }
+html.native-app [data-app-dialog][data-state="open"] > :nth-child(n + 5) { animation-delay: 120ms; }
 html.native-app .fixed.inset-0.bg-black\/80[data-state="open"] {
   -webkit-backdrop-filter: blur(6px);
   backdrop-filter: blur(6px);
 }
 
-/* Side sheets glide in further and settle instead of stopping hard. */
+/* Side sheets glide in and settle instead of stopping hard. */
 @keyframes native-sheet-right { from { translate: 100% 0; } to { translate: 0 0; } }
 @keyframes native-sheet-left { from { translate: -100% 0; } to { translate: 0 0; } }
 @keyframes native-sheet-bottom { from { translate: 0 100%; } to { translate: 0 0; } }
 @keyframes native-sheet-top { from { translate: 0 -100%; } to { translate: 0 0; } }
-html.native-app [data-app-sheet="right"][data-state="open"] { animation: native-sheet-right 460ms cubic-bezier(0.22, 1, 0.36, 1) backwards; }
-html.native-app [data-app-sheet="left"][data-state="open"] { animation: native-sheet-left 460ms cubic-bezier(0.22, 1, 0.36, 1) backwards; }
-html.native-app [data-app-sheet="bottom"][data-state="open"] { animation: native-sheet-bottom 460ms cubic-bezier(0.22, 1, 0.36, 1) backwards; }
-html.native-app [data-app-sheet="top"][data-state="open"] { animation: native-sheet-top 460ms cubic-bezier(0.22, 1, 0.36, 1) backwards; }
+html.native-app [data-app-sheet="right"][data-state="open"] { animation: native-sheet-right 280ms cubic-bezier(0.2, 0, 0, 1) backwards; }
+html.native-app [data-app-sheet="left"][data-state="open"] { animation: native-sheet-left 280ms cubic-bezier(0.2, 0, 0, 1) backwards; }
+html.native-app [data-app-sheet="bottom"][data-state="open"] { animation: native-sheet-bottom 280ms cubic-bezier(0.2, 0, 0, 1) backwards; }
+html.native-app [data-app-sheet="top"][data-state="open"] { animation: native-sheet-top 280ms cubic-bezier(0.2, 0, 0, 1) backwards; }
 
 /* Menus and dropdown lists pop open from where they were tapped. */
 @keyframes native-pop {
-  from { opacity: 0; scale: 0.92; }
+  from { opacity: 0; scale: 0.96; }
   to { opacity: 1; scale: 1; }
 }
 html.native-app [data-radix-popper-content-wrapper] > [data-state="open"] {
   transform-origin: var(--radix-popper-transform-origin, top);
-  animation: native-pop 220ms cubic-bezier(0.34, 1.4, 0.64, 1) backwards;
+  animation: native-pop 140ms cubic-bezier(0.2, 0, 0, 1) backwards;
 }
 
-/* Entering info: the field glows as it is focused; switches and checkboxes snap with a spring. */
+/* Entering info: the field glows briefly as it is focused; switches and checkboxes settle quickly. */
 @keyframes native-field-focus {
   from { box-shadow: 0 0 0 0 hsl(var(--ring) / 0.45); }
-  to { box-shadow: 0 0 0 7px hsl(var(--ring) / 0); }
+  to { box-shadow: 0 0 0 4px hsl(var(--ring) / 0); }
 }
 html.native-app :is(input:not([type="checkbox"]):not([type="radio"]), textarea, button[role="combobox"]) {
-  transition: border-color 180ms ease-out, background-color 180ms ease-out, box-shadow 180ms ease-out;
+  transition: border-color 140ms ease-out, background-color 140ms ease-out, box-shadow 140ms ease-out;
 }
 html.native-app :is(input:not([type="checkbox"]):not([type="radio"]), textarea, button[role="combobox"]):focus {
-  animation: native-field-focus 520ms ease-out;
+  animation: native-field-focus 300ms ease-out;
   border-color: hsl(var(--ring));
 }
 html.native-app [role="switch"] > span,
 html.native-app [role="checkbox"] {
-  transition: transform 280ms cubic-bezier(0.34, 1.56, 0.64, 1), background-color 180ms ease-out;
+  transition: transform 140ms cubic-bezier(0.2, 0, 0, 1), background-color 140ms ease-out;
 }
 html.native-app [role="checkbox"][data-state="checked"] > span {
-  animation: native-pop 260ms cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+  animation: native-pop 140ms cubic-bezier(0.2, 0, 0, 1) backwards;
 }
 
 @media (prefers-reduced-motion: reduce) {

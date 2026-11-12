@@ -28,7 +28,7 @@ import {
   Download,
   Send,
   Loader2,
-  Sparkles,
+  FilePlus,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -434,7 +434,7 @@ export function LossDraftDocsManager({
       {/* Quick-download ChecksOps letterhead templates */}
       <div className="flex flex-wrap items-center gap-2 rounded-md border border-dashed border-border p-2 bg-muted/20">
         <span className="text-[11px] text-muted-foreground flex items-center gap-1">
-          <Sparkles className="h-3 w-3" /> ChecksOps letterhead:
+          <FileText className="h-3 w-3" /> ChecksOps letterhead:
         </span>
         <Select
           onValueChange={(v) => {
@@ -473,7 +473,7 @@ export function LossDraftDocsManager({
                   <div className="flex flex-wrap gap-1 mt-0.5 items-center">
                     {d.is_template_generated && (
                       <Badge variant="secondary" className="text-[9px]">
-                        <Sparkles className="h-2.5 w-2.5 mr-0.5" /> ChecksOps template
+                        <FileText className="h-2.5 w-2.5 mr-0.5" /> ChecksOps template
                       </Badge>
                     )}
                     {d.signature_request_id && (
@@ -558,7 +558,7 @@ export function LossDraftDocsManager({
                           openTemplateFor(preset, d.id);
                         }}
                       >
-                        <Sparkles className="h-3 w-3 mr-1" /> Generate template
+                        <FilePlus className="h-3 w-3 mr-1" /> Generate template
                       </Button>
                     )}
                   </>

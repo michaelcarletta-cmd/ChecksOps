@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useTenant } from "@/contexts/TenantContext";
-import { Upload, Building2, Loader2, Sparkles, Image as ImageIcon } from "lucide-react";
+import { Upload, Building2, Loader2, Image as ImageIcon } from "lucide-react";
 
 import { brandingPublicUrl } from "@/lib/brandingPublicUrl";
 import { SectionCard } from "./SectionCard";
