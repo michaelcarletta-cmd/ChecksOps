@@ -190,7 +190,8 @@ test('wiring: Revenue & Profit, Payment History, By Recipient, WalletOps and Fun
   const report = read('src/components/ledger/RecipientReport.tsx');
   assert.match(report, /\.\.\.payrollRecipientReportRows\(payrollRuns\), \.\.\.sendRows\]/);
   assert.match(report, /Received from/);
-  assert.match(report, /r\.count - \(r\.payrollCount \?\? 0\) - \(r\.sendCount \?\? 0\) > 0/);
+  // Only split rows are renamed: payroll runs and sends are not among a recipient's splitVariants.
+  assert.match(report, /\(r\.splitVariants\?\.length \?\? 0\) > 0/);
   const wallet = read('src/hooks/useWalletOps.ts');
   assert.match(wallet, /const incomingActivity = incomingWalletActivity\(incomingRows, \{ environment: walletEnvironment \}\);/);
   assert.match(read('src/pages/WalletOps.tsx'), /kind: "incoming" as const,\n\s+credit: true,/);
