@@ -65,7 +65,12 @@ test('the configuration is inspect-only and bound to the same production RDS and
   assert.equal(config.tool, TOOL);
   assert.equal(config.execute, undefined);
   assert.equal(config.authorization_phrase, undefined);
-  assert.equal(config.production_inspect, null);
+  // 2026-11-12: a partial run is recorded (four read-only SSM commands, one output hash); accrue_mortgage_ops_billing was added after it.
+  assert.equal(config.production_inspect.status, 'partial');
+  assert.equal(config.production_inspect.owner_approval, 'run the billing trigger inspect in production');
+  assert.equal(config.production_inspect.ssm_command_ids.length, 4);
+  assert.match(config.production_inspect.output_sha256, /^[0-9a-f]{64}$/);
+  assert.match(config.production_inspect.note, /accrue_mortgage_ops_billing/);
   for (const key of ['admin_login', 'rds_identifier', 'rds_host', 'admin_secret_arn']) assert.equal(config[key], desk[key], key);
   assert.ok(fs.existsSync(path.join(ROOT, config.runbook)));
 });
@@ -93,6 +98,8 @@ test('every statement is a fixed read-only catalog constant and reads no public 
     assert.doesNotMatch(sql, /\b(FROM|JOIN)\s+(public\.)?(?!pg_catalog\.|LATERAL\b)[a-z_]+\s/i, sql);
   }
   assert.ok(NAMED_FUNCTIONS.includes('tg_accrue_mortgage_ops_billing'));
+  // What the live trigger function calls (production inspect 2026-11-12): read by name, no trigger runs it.
+  assert.ok(NAMED_FUNCTIONS.includes('accrue_mortgage_ops_billing'));
   assert.ok(NAMED_FUNCTIONS.includes('record_check_billing_event'));
   assert.ok(NAMED_FUNCTIONS.includes('earn_mortgage_agent_compensation'));
   assert.ok(WATCHED_TABLES.includes('mortgage_handling_requests') && WATCHED_TABLES.includes('check_intake_items'));
@@ -185,11 +192,16 @@ CREATE TABLE public.check_billing_events (id uuid PRIMARY KEY DEFAULT gen_random
 ${RECORD_FN}
 CREATE TRIGGER trg_record_check_billing_event AFTER UPDATE OF status ON public.check_intake_items
   FOR EACH ROW EXECUTE FUNCTION public.record_check_billing_event();
+CREATE FUNCTION public.accrue_mortgage_ops_billing(p_request_id uuid) RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+BEGIN
+  INSERT INTO public.check_billing_events (tenant_id, check_intake_item_id, event_type, unit_price_cents, status)
+  SELECT r.tenant_id, r.check_intake_item_id, 'mortgage_ops_additional_check', 500, 'recorded'
+    FROM public.mortgage_handling_requests r WHERE r.id = p_request_id;
+END $fn$;
 CREATE FUNCTION public.tg_accrue_mortgage_ops_billing() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
 BEGIN
   IF NEW.status = 'in_progress' THEN
-    INSERT INTO public.check_billing_events (tenant_id, check_intake_item_id, event_type, unit_price_cents, status)
-    VALUES (NEW.tenant_id, NEW.check_intake_item_id, 'mortgage_ops_initial', 1000, 'recorded');
+    PERFORM public.accrue_mortgage_ops_billing(NEW.id);
   END IF;
   RETURN NEW;
 END $fn$;
@@ -260,7 +272,13 @@ test('PostgreSQL 16: the inspect is read-only and reports the triggers, the live
     assert.equal(accrue.repo_match, 'differs_from_repo');
     assert.equal(accrue.security_definer, true);
     assert.equal(accrue.owner, 'checksops_admin');
-    assert.match(accrue.definition, /mortgage_ops_initial/);
+    assert.match(accrue.definition, /PERFORM public\.accrue_mortgage_ops_billing\(NEW\.id\)/);
+    // What it calls is read by name although no trigger runs it: live-only, printed.
+    const callee = fns['public.accrue_mortgage_ops_billing'];
+    assert.equal(callee.signature, 'public.accrue_mortgage_ops_billing(p_request_id uuid)');
+    assert.equal(callee.repo_definitions, 0);
+    assert.deepEqual(callee.run_by_triggers, []);
+    assert.match(callee.definition, /mortgage_ops_additional_check/);
     assert.match(accrue.functiondef_sha256, /^[0-9a-f]{64}$/);
     assert.deepEqual(report.missing.sort(), ['aws_check_billing_charges_when_per_check_off', 'aws_check_processing_price_cents',
       'earn_mortgage_agent_compensation', 'tg_earn_mortgage_agent_compensation']);
