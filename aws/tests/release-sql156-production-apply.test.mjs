@@ -182,7 +182,7 @@ test('pin: the release pin shape, applied and retired (owner approved 2026-11-11
   }
 });
 
-test('order: no predecessor; two new SECURITY DEFINER read functions with their ACLs, nothing replaced; no table, policy, trigger or table grant; no overlay plan entry; the runbook, one-shot doc and README name it', () => {
+test('order: no predecessor; two new SECURITY DEFINER read functions with their ACLs, nothing replaced; no table, policy, trigger or table grant; the API change holds two overlay members on it; the runbook, one-shot doc and README name it', () => {
   const spec = RELEASE_SQL_SPECS[KEY];
   assert.deepEqual(spec.predecessors, []);
   assert.equal(spec.supersedes, undefined);
@@ -203,9 +203,12 @@ test('order: no predecessor; two new SECURITY DEFINER read functions with their 
     'no API, Lambda or SPA change is part of this pin', releaseStateHash(KEY, {})]) {
     assert.ok(COMMITTED.order_note.includes(text), text);
   }
-  // No API member waits on SQL 156 yet.
+  // The pin itself changed no API member. The API change (2026-11-11, its own planning change) holds mortgage-desk-esign.mjs
+  // and storage.mjs on SQL 156, which the plan records verified live from this pin's production apply.
   const plan = readJson('ops/deployment-guard/production-api-overlay-plan.json');
-  assert.equal(plan.sql_prerequisites?.[SQL156_FILE], undefined);
+  assert.equal(plan.sql_prerequisites[SQL156_FILE].verified_live, true);
+  assert.ok(plan.sql_prerequisites[SQL156_FILE].evidence.includes(`SSM ${COMMITTED.applied.apply_ssm_command_id}`));
+  assert.deepEqual(Object.keys(plan.members).filter((m) => plan.members[m].sql_before === SQL156_FILE).sort(), ['mortgage-desk-esign.mjs', 'storage.mjs']);
   // The file: one prerequisite DO block, two functions, two REVOKEs and two GRANTs to checksops; nothing else.
   const text = fs.readFileSync(path.join(ROOT, SQL156_FILE), 'utf8').replace(/--[^\n]*/g, '');
   const outside = text.replace(/\$([A-Za-z0-9_]*)\$[\s\S]*?\$\1\$/g, '$$body$$');
