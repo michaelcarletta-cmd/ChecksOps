@@ -1,4 +1,4 @@
--- SQL 158: the table SELECT checksops needs to read homeowner intro requests on AWS.
+-- SQL 159: the table SELECT checksops needs to read homeowner intro requests on AWS.
 --
 -- Why: a contractor's Leads list (Settings, ContractorLeadsCard in
 -- src/components/networking/ContractorLeadsCard.tsx) cannot load in production. The production API
@@ -32,24 +32,24 @@
 -- lead's contractor, or the homeowner by email) remains the authorization boundary for the rows
 -- checksops reads on a caller's behalf.
 --
--- Preconditions fail closed: the table and the role checksops must exist (sql158_* exceptions,
+-- Preconditions fail closed: the table and the role checksops must exist (sql159_* exceptions,
 -- nothing changes otherwise).
 -- Transactions: like main's other aws/workflows/sql files this has no BEGIN/COMMIT; the
 -- guarded SQL executor runs it inside one transaction.
 -- Idempotent: GRANT of a held privilege is a no-op. Not applied by this change: staging first,
 -- then production, through the guarded SQL path (AGENTS.md).
 
-DO $sql158_preconditions$
+DO $sql159_preconditions$
 BEGIN
   IF pg_catalog.to_regclass('public.homeowner_intro_requests') IS NULL THEN
-    RAISE EXCEPTION 'sql158_table_missing: public.homeowner_intro_requests does not exist'
+    RAISE EXCEPTION 'sql159_table_missing: public.homeowner_intro_requests does not exist'
       USING ERRCODE = '42P01';
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_roles r WHERE r.rolname = 'checksops') THEN
-    RAISE EXCEPTION 'sql158_role_missing: role checksops does not exist'
+    RAISE EXCEPTION 'sql159_role_missing: role checksops does not exist'
       USING ERRCODE = '42704';
   END IF;
 END
-$sql158_preconditions$;
+$sql159_preconditions$;
 
 GRANT SELECT ON TABLE public.homeowner_intro_requests TO checksops;
