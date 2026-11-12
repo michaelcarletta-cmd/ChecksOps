@@ -400,6 +400,7 @@ set -euo pipefail
 SHA=<full main sha>
 TARBALL_SHA256=<TARBALL_SHA256 from the transfer run log>
 WORK=$(mktemp -d /var/tmp/sql-one-shot-XXXXXX)
+trap 'cd / && rm -rf "$WORK"' EXIT   # remove the tree on success, failure or set -e exit
 cd "$WORK"
 aws s3 cp "s3://checksops-sql53-transfer-806168576068/sql53/source-${SHA}.tar.gz" . --no-progress
 aws s3 cp "s3://checksops-sql53-transfer-806168576068/sql53/source-${SHA}.tar.gz.sha256" . --no-progress
@@ -422,6 +423,12 @@ node scripts/deployment-guard/production-sql-one-shot.mjs \
 ```
 
 Extract into a fresh, empty directory, because an extra file in the tree stops the run.
+The `trap` removes that directory when the command exits, whatever the outcome. Without it every
+run left its tarball and extracted tree (about 140–200 MB) in `/var/tmp`: by 2026-11-12 about 80 of them
+filled the runner's 16 GiB root volume, the SSM agent failed mid-run (SQL 159's first apply attempt,
+SSM `658d76f1`, nothing committed) and could not restart until the disk was freed by hand
+(`ops/production-sql-159-apply.md`). Before a run, `df -h /` on the runner should show room for at least
+one extracted tree; the one-shot's own output, if kept, belongs outside `$WORK`.
 `--phase inspect` may come first and needs no apply approval, since it is read-only.
 `--phase apply` runs only after the owner has approved that named run, and it repeats
 every check. Afterwards, a reviewed change records `details.applied` in the pin and sets
