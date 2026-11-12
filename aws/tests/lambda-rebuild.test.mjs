@@ -156,6 +156,10 @@ const CHANGED_SINCE_SECOND_REBUILD = {
   'ocr-parse.mjs': 'changed',
   'check-ocr-provider.mjs': 'changed',
   'ocr-descriptive-persist.mjs': 'changed',
+  // Settlement bank (2026-11-12, owner: Condition One's settlement bank showed nothing): a failing
+  // Moov read no longer fails the whole sweep snapshot; the bank from the database still shows. A
+  // REPLACE row of the production overlay plan or a later rebuild, not a rebuild section.
+  'providers/parity/sweep-read.mjs': 'changed',
 };
 // Members of the current (third) rebuild sections that main changed after those rebuilds were
 // applied (staging run 39666390516, production run 39669873076 of main 008af40e2). The sections keep
