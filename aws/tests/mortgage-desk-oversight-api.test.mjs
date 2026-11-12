@@ -14,16 +14,19 @@
  * SQL 158's own rules are proven on PostgreSQL 16 by aws/tests/sql158-mortgage-desk-oversight-pg.test.mjs.
  */
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { test } from 'node:test';
 
 import {
   DESK_ADD_AGENT_NOTE_SQL,
   DESK_AGENT_NOTES_SQL,
   DESK_ASSIGNABLE_AGENTS_SQL,
+  DESK_ASSIGNED_REQUEST_SQL,
   DESK_ASSIGN_AGENT_SQL,
   DESK_OVERVIEW_SQL,
   DESK_RECORD_AGENT_NOTE_EMAIL_SQL,
   MORTGAGE_DESK_ESIGN_ACTIONS,
+  accrueDeskAssignment,
   deskAgentNoteEmail,
   deskAssignmentEmail,
   handleMortgageDeskEsign,
@@ -48,6 +51,9 @@ const ASSIGNED = { request_id: REQUEST_ID, agent_id: AGENT_ID, agent_name: 'Aver
 const NOTE = { note_id: NOTE_ID, request_id: REQUEST_ID, agent_id: AGENT_ID, agent_name: 'Avery Agent', agent_email: AGENT_EMAIL,
   created_at: '2026-11-12T15:01:00Z', tenant_name: 'Owner Co', mortgage_company: 'Big Bank', loan_number: '12345' };
 
+const REQUEST_ROW = { id: REQUEST_ID, tenant_id: TENANT_ID, check_intake_item_id: 'c1580000-0000-4000-8000-000000000001',
+  status: 'in_progress', assigned_employee_id: AGENT_ID, accepted_at: '2026-11-12T15:00:00Z' };
+
 const sqlError = (message, code) => Object.assign(new Error(message), { code });
 
 const fakeClient = ({ raise = {}, rows = {} } = {}) => {
@@ -70,6 +76,7 @@ const fakeClient = ({ raise = {}, rows = {} } = {}) => {
       if (sql === DESK_OVERVIEW_SQL) return { rows: OVERVIEW_ROWS };
       if (sql === DESK_ASSIGNABLE_AGENTS_SQL) return { rows: [{ agent_id: AGENT_ID, agent_name: 'Avery Agent', in_progress_count: 2 }] };
       if (sql === DESK_ASSIGN_AGENT_SQL) return { rows: [ASSIGNED] };
+      if (sql === DESK_ASSIGNED_REQUEST_SQL) return { rows: [REQUEST_ROW] };
       if (sql === DESK_ADD_AGENT_NOTE_SQL) return { rows: [NOTE] };
       if (sql === DESK_RECORD_AGENT_NOTE_EMAIL_SQL) return { rows: [{ recorded: true }] };
       if (sql === DESK_AGENT_NOTES_SQL) return { rows: [{ note_id: NOTE_ID, body: 'Call the bank', email_status: 'sent' }] };
@@ -89,13 +96,19 @@ const event = (body) => ({
   },
 });
 
-const depsFor = (opts = {}, sendImpl = null) => {
+const depsFor = (opts = {}, sendImpl = null, accrue = async () => ({ ok: true, created: true, duplicate: false })) => {
   const clients = [];
   const sent = [];
+  const accrued = [];
   return {
     clients,
     sent,
+    accrued,
     deps: {
+      accrueMortgageOpsAcceptedRequest: async (client, args) => {
+        accrued.push(args);
+        return accrue(client, args);
+      },
       loadDatabaseCredentials: async () => ({ host: 'x', username: 'checksops', password: 'x', database: 'checksops' }),
       createClient: () => {
         const client = fakeClient(opts);
@@ -284,4 +297,63 @@ test('emails: the note text and request label are HTML-escaped; the assignment n
   const notice = deskAssignmentEmail({ ...ASSIGNED, homeowner_name: 'Hidden Homeowner' });
   assert.doesNotMatch(notice.html + notice.text, /Hidden Homeowner/);
   assert.match(notice.text, /Owner Co \/ Big Bank \/ loan 12345/);
+});
+
+test('assign_agent: the accept\'s Mortgage Ops accrual runs on the assigned request row inside SAVEPOINT mortgage_ops_accrue, in the assign\'s transaction', async () => {
+  const { deps, clients, accrued } = depsFor();
+  const out = bodyOf(await handleMortgageDeskEsign(event({ action: 'assign_agent', request_id: REQUEST_ID, agent_id: AGENT_ID }), deps));
+  assert.equal(out.statusCode, 200, JSON.stringify(out));
+  assert.deepEqual(out.accrual, { status: 'accrued', reason: null });
+  assert.deepEqual(accrued, [{ request: REQUEST_ROW, persist: true }]);
+  const sqls = allQueries(clients).map((q) => q.sql);
+  const at = (sql) => sqls.indexOf(sql);
+  assert.ok(at(DESK_ASSIGN_AGENT_SQL) < at('SAVEPOINT mortgage_ops_accrue'));
+  assert.ok(at('SAVEPOINT mortgage_ops_accrue') < at(DESK_ASSIGNED_REQUEST_SQL));
+  assert.ok(at(DESK_ASSIGNED_REQUEST_SQL) < at('RELEASE SAVEPOINT mortgage_ops_accrue'));
+  assert.ok(at('RELEASE SAVEPOINT mortgage_ops_accrue') < sqls.lastIndexOf('COMMIT'));
+  assert.deepEqual(callsOf(clients, DESK_ASSIGNED_REQUEST_SQL).map((q) => q.params), [[REQUEST_ID]]);
+  // Already recorded for the check (another request's accept): still accrued, flagged as such.
+  const dup = depsFor({}, null, async () => ({ ok: true, duplicate: true, created: false }));
+  assert.deepEqual(bodyOf(await handleMortgageDeskEsign(event({ action: 'assign_agent', request_id: REQUEST_ID, agent_id: AGENT_ID }), dup.deps)).accrual,
+    { status: 'accrued', reason: 'already_recorded' });
+  // A skip (no check, before the launch cutoff, ...) is reported, not hidden.
+  const skip = depsFor({}, null, async () => ({ skipped: 'incomplete_request' }));
+  assert.deepEqual(bodyOf(await handleMortgageDeskEsign(event({ action: 'assign_agent', request_id: REQUEST_ID, agent_id: AGENT_ID }), skip.deps)).accrual,
+    { status: 'skipped', reason: 'incomplete_request' });
+});
+
+test('assign_agent: a failed accrual rolls back to its savepoint and never undoes the assignment; an unreadable row is skipped', async () => {
+  const failing = depsFor({}, null, async () => { throw sqlError('permission denied for table check_billing_events', '42501'); });
+  const out = bodyOf(await handleMortgageDeskEsign(event({ action: 'assign_agent', request_id: REQUEST_ID, agent_id: AGENT_ID }), failing.deps));
+  assert.equal(out.statusCode, 200, JSON.stringify(out));
+  assert.equal(out.status, 'in_progress');
+  assert.deepEqual(out.accrual, { status: 'failed', reason: '42501' });
+  const sqls = allQueries(failing.clients).map((q) => q.sql);
+  assert.ok(sqls.includes('ROLLBACK TO SAVEPOINT mortgage_ops_accrue'));
+  assert.ok(!sqls.includes('RELEASE SAVEPOINT mortgage_ops_accrue'));
+  assert.ok(sqls.includes('COMMIT'), 'the assignment still commits');
+  assert.equal(failing.sent.length, 1, 'the notice still goes out');
+  const unreadable = depsFor({ rows: { [DESK_ASSIGNED_REQUEST_SQL]: [] } });
+  const u = bodyOf(await handleMortgageDeskEsign(event({ action: 'assign_agent', request_id: REQUEST_ID, agent_id: AGENT_ID }), unreadable.deps));
+  assert.deepEqual(u.accrual, { status: 'skipped', reason: 'request_not_readable' });
+  assert.equal(unreadable.accrued.length, 0);
+  // A refused assignment never accrues.
+  const taken = depsFor({ raise: { [DESK_ASSIGN_AGENT_SQL]: sqlError('already_taken', '55000') } });
+  await handleMortgageDeskEsign(event({ action: 'assign_agent', request_id: REQUEST_ID, agent_id: AGENT_ID }), taken.deps);
+  assert.equal(taken.accrued.length, 0);
+  assert.equal(callsOf(taken.clients, DESK_ASSIGNED_REQUEST_SQL).length, 0);
+});
+
+test('accrueDeskAssignment: without an injected accrual it uses mortgage-ops-usage.mjs accrueMortgageOpsAcceptedRequest, the accept\'s own', async () => {
+  const usage = await import('../functions/api/mortgage-ops-usage.mjs');
+  assert.equal(typeof usage.accrueMortgageOpsAcceptedRequest, 'function');
+  const queries = [];
+  const client = { query: async (sql, params) => { queries.push(sql); return sql === DESK_ASSIGNED_REQUEST_SQL ? { rows: [{ id: REQUEST_ID }] } : { rows: [] }; } };
+  // A row without tenant or check: the real accrual skips it (incomplete_request) without touching billing.
+  assert.deepEqual(await accrueDeskAssignment(client, REQUEST_ID), { status: 'skipped', reason: 'incomplete_request' });
+  assert.deepEqual(queries, ['SAVEPOINT mortgage_ops_accrue', DESK_ASSIGNED_REQUEST_SQL, 'RELEASE SAVEPOINT mortgage_ops_accrue']);
+  // The accept path is the same function, same savepoint name.
+  const rpc = fs.readFileSync(new URL('../functions/api/workflow-rpc.mjs', import.meta.url), 'utf8');
+  assert.match(rpc, /SAVEPOINT mortgage_ops_accrue/);
+  assert.match(rpc, /accrueMortgageOpsAcceptedRequest\(client, \{ request: rows\[0\], persist: true \}\)/);
 });
