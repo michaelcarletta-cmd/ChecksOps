@@ -92,7 +92,7 @@ export function summarizeSweepActivity({
     rows.push({
       key: `sweep-${sweep.sweepID || transferId || amountCents}`,
       at: sweepTimestamp(sweep) || new Date().toISOString(),
-      title: "Automatic payout",
+      title: "Sweep to bank",
       subtitle: pending
         ? "Moov sent leftover wallet funds to the bank"
         : "Daily wallet payout",

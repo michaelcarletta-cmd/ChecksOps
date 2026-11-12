@@ -10,6 +10,11 @@ export interface PaymentFeatureFlags {
   SHOW_PAYMENT_SETTINGS: boolean;
   /** Internal-only admin tooling for the platform payment provider. */
   SHOW_PAYMENT_ADMIN: boolean;
+  /**
+   * Automatic payouts (Moov treasury sweeps): the on/off control, the sweep settings
+   * ("Manage sweeps" / MoovTreasuryPanel) and the "Last automatic payout" display.
+   */
+  SHOW_AUTOMATIC_PAYOUTS: boolean;
 }
 
 function envFlag(name: string, fallback: boolean): boolean {
@@ -24,6 +29,11 @@ export const PAYMENT_FLAGS: PaymentFeatureFlags = {
   USE_MOOV: envFlag("USE_MOOV", true),
   SHOW_PAYMENT_SETTINGS: envFlag("SHOW_PAYMENT_SETTINGS", true),
   SHOW_PAYMENT_ADMIN: envFlag("SHOW_PAYMENT_ADMIN", true),
+  // Hidden (owner, 2026-11-12: "if we are not using it, hide anything that says automatic
+  // payout"). Production refuses every sweep-config change by design (production_execution_blocked,
+  // aws/functions/api/providers.mjs), so these controls could only fail. Not an env flag: change it
+  // here, in a reviewed PR, to bring them back.
+  SHOW_AUTOMATIC_PAYOUTS: false,
 };
 
 /**
