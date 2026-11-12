@@ -35,9 +35,14 @@ export const INSPECT_ID = 'billing-trigger-inspect';
 export const CONFIG_REL = 'ops/deployment-guard/billing-trigger-inspect.json';
 /** Tables whose triggers write billing or compensation rows. */
 export const WATCHED_TABLES = Object.freeze(['mortgage_handling_requests', 'check_intake_items', 'checkalt_deposits', 'deposit_items']);
-/** Functions read by name, whether or not a trigger runs them. */
+/**
+ * Functions read by name, whether or not a trigger runs them. accrue_mortgage_ops_billing(uuid) is what the live
+ * tg_accrue_mortgage_ops_billing calls (production inspect of 2026-11-12, SSM ff854910): it records the Mortgage
+ * Ops charges, has no repository CREATE, and no trigger runs it directly.
+ */
 export const NAMED_FUNCTIONS = Object.freeze([
   'tg_accrue_mortgage_ops_billing',
+  'accrue_mortgage_ops_billing',
   'record_check_billing_event',
   'aws_check_processing_price_cents',
   'aws_check_billing_charges_when_per_check_off',

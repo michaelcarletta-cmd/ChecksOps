@@ -72,8 +72,12 @@ words for that run.
    cd / && rm -rf "$WORK"
    ```
 
-   If the compact output is still too long, send one more command per section (the tool's output
-   is deterministic for an unchanged database). Never hand-edit a value the run did not print.
+   **The full output exceeds the limit in production** (2026-11-12). Send one command per section
+   instead: the same script, ending with a `node -e` filter that prints one slice of `details`. Use
+   `functions` without definitions plus `triggers`, `missing` and `columns` for the summary. Then
+   print the `definition` of at most two functions per command. Each command prints `sha256sum` of
+   its `out.json`; equal sums show the database did not change between the commands. Never
+   hand-edit a value the run did not print.
 4. **Stop the runner** and wait for `stopped`, whatever the result.
 5. **Record the result.** Put the date, SSM command id, source commit and the answer in
    `production_inspect` of the configuration file, in a reviewed change.
@@ -91,6 +95,19 @@ words for that run.
 - **`columns.deposit_items`**: must include `provider` and the check link the exclusion reads
   (`mark_manual_deposit` sets `provider = 'manual_branch'`).
 - **`missing` not empty, or a trigger `enabled` other than `origin`**: report it before writing SQL.
+
+## Runs
+
+- **2026-11-12, partial** (`production_inspect` in the configuration). This run found:
+  - `record_check_billing_event` is SQL 98's body;
+  - `earn_mortgage_agent_compensation` is SQL 47's body;
+  - `tg_accrue_mortgage_ops_billing` only gates on the first accept and calls
+    `accrue_mortgage_ops_billing(uuid)`, which the tool then did not read;
+  - a second Mortgage Ops billing trigger: `tr_record_mortgage_handling_billing` on
+    `check_intake_items`, which runs `tg_record_mortgage_handling_billing`.
+
+  `accrue_mortgage_ops_billing` is now in `NAMED_FUNCTIONS`. The next run prints its definition and
+  that of `tg_record_mortgage_handling_billing`.
 
 ## Staging
 
