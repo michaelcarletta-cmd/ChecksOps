@@ -92,7 +92,7 @@ export function summarizeSweepActivity({
     rows.push({
       key: `sweep-${sweep.sweepID || transferId || amountCents}`,
       at: sweepTimestamp(sweep) || new Date().toISOString(),
-      title: "Automatic payout",
+      title: "Sweep to bank",
       subtitle: pending
         ? "Moov sent leftover wallet funds to the bank"
         : "Daily wallet payout",
@@ -125,4 +125,35 @@ export function automaticPayoutControl(config: {
     label: sweepsOn ? "Turn off automatic payouts" : "Turn on automatic payouts",
     sweepsOn,
   };
+}
+
+/**
+ * Wallet & Treasury "Settlement bank" tile (owner, 2026-11-12: Condition One showed nothing although
+ * its own verified bank was on file). A failed load says so instead of "Not connected", and a bank that
+ * the payment network has not finished connecting is shown with that status.
+ */
+export function settlementBankTile({
+  settlementMethod,
+  isLoading = false,
+  error = null,
+  displayName = (value: string | null) => value,
+}: {
+  settlementMethod: { bank_name: string | null; last_four: string | null; connection_status: string | null } | null;
+  isLoading?: boolean;
+  error?: { message?: string } | null;
+  displayName?: (value: string | null) => string | null;
+}): { text: string; note: string | null } {
+  if (settlementMethod) {
+    const text = `${displayName(settlementMethod.bank_name) ?? "Bank"} ••${settlementMethod.last_four ?? "----"}`;
+    const status = String(settlementMethod.connection_status ?? "connected").toLowerCase();
+    const note = status === "connected"
+      ? null
+      : status === "pending"
+        ? "Bank on file; the payment network is still finishing the connection."
+        : `Bank on file (status: ${status}).`;
+    return { text, note };
+  }
+  if (isLoading) return { text: "Loading…", note: null };
+  if (error) return { text: "Couldn't load", note: error.message || "Try Refresh in a moment." };
+  return { text: "Not connected", note: null };
 }

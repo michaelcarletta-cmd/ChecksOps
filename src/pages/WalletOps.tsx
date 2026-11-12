@@ -26,11 +26,12 @@ import { useCurrentTenantMembership } from "@/hooks/useCurrentTenantMembership";
 import { useTenant } from "@/contexts/TenantContext";
 import { useToast } from "@/hooks/use-toast";
 import { SWEEP_RAIL_LABEL } from "@/lib/payments/sweeps";
-import { automaticPayoutControl, summarizeSweepActivity, sweepAmountCents, sweepTimestamp } from "@/lib/payments/walletSweepActivity";
+import { automaticPayoutControl, settlementBankTile, summarizeSweepActivity, sweepAmountCents, sweepTimestamp } from "@/lib/payments/walletSweepActivity";
 import { WalletPanel } from "@/components/payments/WalletPanel";
 import { AutoFundingPanel } from "@/components/payments/AutoFundingPanel";
 
 import { MoovTreasuryPanel } from "@/components/payments/MoovTreasuryPanel";
+import { PAYMENT_FLAGS } from "@/lib/payments/featureFlags";
 
 import { isCheckOpsHost } from "@/lib/checkopsHost";
 import { displayCaseOrNull } from "@/lib/displayCase";
@@ -46,7 +47,7 @@ const ENTRY_LABEL: Record<string, string> = {
   settlement_received: "Settlement received",
   fee: "Platform fee",
   adjustment: "Adjustment",
-  sweep: "Automatic payout",
+  sweep: "Sweep to bank",
 };
 
 const STATUS_TONE: Record<string, string> = {
@@ -63,6 +64,9 @@ const STATUS_TONE: Record<string, string> = {
 // Funding & Billing is hidden for now (owner request). Its billing rows still show in
 // Recent Wallet Activity. Set to true to bring the section back.
 const SHOW_FUNDING_AND_BILLING = false;
+
+// Automatic payouts are hidden: see PAYMENT_FLAGS.SHOW_AUTOMATIC_PAYOUTS (src/lib/payments/featureFlags.ts).
+const SHOW_AUTOMATIC_PAYOUTS = PAYMENT_FLAGS.SHOW_AUTOMATIC_PAYOUTS;
 
 const READINESS_COPY: Record<string, { label: string; tone: string }> = {
   ready: { label: "Ready", tone: "border-emerald-500/40 text-emerald-500 bg-emerald-500/5" },
@@ -114,6 +118,8 @@ export default function WalletOps() {
     history,
     historyUnavailable,
     stale,
+    isLoading: sweepSnapshotLoading,
+    error: sweepSnapshotError,
     refresh: refreshSweeps,
     disable: disableSweeps,
     enable: enableSweeps,
@@ -134,6 +140,12 @@ export default function WalletOps() {
   const balanceLabel = operatingBalanceLabel({ wallet, setupRequired });
 
   const payoutControl = automaticPayoutControl(config);
+  const settlementTile = settlementBankTile({
+    settlementMethod,
+    isLoading: sweepSnapshotLoading,
+    error: sweepSnapshotError,
+    displayName: displayCaseOrNull,
+  });
   const sweepsOn = payoutControl.sweepsOn;
 
   const lastSweep = (history ?? []).find((row) => sweepAmountCents(row) > 0) ?? history?.[0];
@@ -430,40 +442,45 @@ export default function WalletOps() {
           icon={<Landmark className="h-4 w-4 text-sky-500" />}
           accent="bg-gradient-to-r from-sky-500/60 to-sky-500/10"
           action={
-            <Badge variant="outline" className={sweepsOn ? STATUS_TONE.completed : "border-muted-foreground/30 text-muted-foreground"}>
-              {sweepsOn ? "Automatic payouts on" : "Automatic payouts off"}
-            </Badge>
+            SHOW_AUTOMATIC_PAYOUTS ? (
+              <Badge variant="outline" className={sweepsOn ? STATUS_TONE.completed : "border-muted-foreground/30 text-muted-foreground"}>
+                {sweepsOn ? "Automatic payouts on" : "Automatic payouts off"}
+              </Badge>
+            ) : undefined
           }
         >
           <div className="grid grid-cols-2 gap-3 text-sm">
             <div className="min-w-0">
               <p className="text-[10px] font-bold tracking-wider text-muted-foreground">Settlement bank</p>
-              <p className="mt-0.5 break-words font-medium">
-                {settlementMethod
-                  ? `${displayCaseOrNull(settlementMethod.bank_name) ?? "Bank"} ••${settlementMethod.last_four ?? "----"}`
-                  : "Not connected"}
-              </p>
+              <p className="mt-0.5 break-words font-medium">{settlementTile.text}</p>
+              {settlementTile.note && (
+                <p className="text-xs text-muted-foreground">{settlementTile.note}</p>
+              )}
             </div>
-            <div className="min-w-0">
-              <p className="text-[10px] font-bold tracking-wider text-muted-foreground">Minimum retained</p>
-              <p className="mt-0.5 break-words font-medium">{money(minimumCents)}</p>
-            </div>
-            <div className="min-w-0">
-              <p className="text-[10px] font-bold tracking-wider text-muted-foreground">Payout speed</p>
-              <p className="mt-0.5 break-words font-medium">
-                {config?.push_rail ? (SWEEP_RAIL_LABEL[config.push_rail] ?? config.push_rail) : "Not set"}
-              </p>
-            </div>
-            <div className="min-w-0">
-              <p className="text-[10px] font-bold tracking-wider text-muted-foreground">Last automatic payout</p>
-              <p className="mt-0.5 break-words font-medium">
-                {lastSweep
-                  ? `${money(sweepAmountCents(lastSweep))}${sweepTimestamp(lastSweep) ? ` · ${new Date(sweepTimestamp(lastSweep)!).toLocaleDateString()}` : ""}`
-                  : historyUnavailable
-                    ? "Couldn't load"
-                    : "None yet"}
-              </p>
-            </div>
+            {SHOW_AUTOMATIC_PAYOUTS && (
+              <>
+              <div className="min-w-0">
+                <p className="text-[10px] font-bold tracking-wider text-muted-foreground">Minimum retained</p>
+                <p className="mt-0.5 break-words font-medium">{money(minimumCents)}</p>
+              </div>
+              <div className="min-w-0">
+                <p className="text-[10px] font-bold tracking-wider text-muted-foreground">Payout speed</p>
+                <p className="mt-0.5 break-words font-medium">
+                  {config?.push_rail ? (SWEEP_RAIL_LABEL[config.push_rail] ?? config.push_rail) : "Not set"}
+                </p>
+              </div>
+              <div className="min-w-0">
+                <p className="text-[10px] font-bold tracking-wider text-muted-foreground">Last automatic payout</p>
+                <p className="mt-0.5 break-words font-medium">
+                  {lastSweep
+                    ? `${money(sweepAmountCents(lastSweep))}${sweepTimestamp(lastSweep) ? ` · ${new Date(sweepTimestamp(lastSweep)!).toLocaleDateString()}` : ""}`
+                    : historyUnavailable
+                      ? "Couldn't load"
+                      : "None yet"}
+                </p>
+              </div>
+              </>
+            )}
           </div>
 
           {stale && (
@@ -473,7 +490,7 @@ export default function WalletOps() {
           )}
 
           <div className="flex flex-wrap gap-2">
-            {payoutControl.show && (
+            {SHOW_AUTOMATIC_PAYOUTS && payoutControl.show && (
               <Button
                 variant="outline"
                 className="gap-2"
@@ -520,20 +537,22 @@ export default function WalletOps() {
                   : "Turn on automatic payouts"}
               </Button>
             )}
-            <Dialog>
-              <DialogTrigger asChild>
-                <Button className="gap-2" variant={sweepsOn ? "secondary" : "default"}>
-                  <Gauge className="h-4 w-4" />
-                  Manage sweeps
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-h-[85vh] max-w-3xl overflow-y-auto">
-                <DialogHeader>
-                  <DialogTitle>Treasury & automatic payouts</DialogTitle>
-                </DialogHeader>
-                <MoovTreasuryPanel />
-              </DialogContent>
-            </Dialog>
+            {SHOW_AUTOMATIC_PAYOUTS && (
+              <Dialog>
+                <DialogTrigger asChild>
+                  <Button className="gap-2" variant={sweepsOn ? "secondary" : "default"}>
+                    <Gauge className="h-4 w-4" />
+                    Manage sweeps
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-h-[85vh] max-w-3xl overflow-y-auto">
+                  <DialogHeader>
+                    <DialogTitle>Treasury & automatic payouts</DialogTitle>
+                  </DialogHeader>
+                  <MoovTreasuryPanel />
+                </DialogContent>
+              </Dialog>
+            )}
 
             <Dialog>
               <DialogTrigger asChild>
@@ -575,7 +594,7 @@ export default function WalletOps() {
           >
             {recentActivity.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                No wallet activity yet. Billing, funding, invoice payments, partner payments, payouts, transfers, and automatic payouts appear here.
+                No wallet activity yet. Billing, funding, invoice payments, partner payments, payouts, transfers, and bank sweeps appear here.
               </p>
             ) : (
               <div className="max-h-[28rem] overflow-y-auto divide-y rounded-md border">

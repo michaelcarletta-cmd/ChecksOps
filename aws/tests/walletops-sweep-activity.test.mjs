@@ -19,7 +19,7 @@ test('1 dollar-string sweep amounts become cents', () => {
   assert.equal(sweepAmountCents({ accruedAmount: '0.00' }), 0);
 });
 
-test('2 closed $5 sweep is Pending Out and Automatic payout', () => {
+test('2 closed $5 sweep is Pending Out and labelled Sweep to bank (owner 2026-11-12: no "automatic payout" wording)', () => {
   const summary = summarizeSweepActivity({
     sweeps: [{
       sweepID: '2d11f2b6-16ad-4b2e-af4d-d8a1d2aad238',
@@ -32,7 +32,7 @@ test('2 closed $5 sweep is Pending Out and Automatic payout', () => {
   });
   assert.equal(summary.pendingOutCents, 500);
   assert.equal(summary.rows.length, 1);
-  assert.equal(summary.rows[0].title, 'Automatic payout');
+  assert.equal(summary.rows[0].title, 'Sweep to bank');
   assert.match(summary.rows[0].detail, /WELLS FARGO/);
 });
 
@@ -71,7 +71,7 @@ test('5 already-listed transfer is not double counted', () => {
   assert.equal(summary.rows.length, 0);
 });
 
-test('6 sweepID description is labeled Automatic payout', () => {
+test('6 sweepID description is labeled Sweep to bank', () => {
   assert.equal(isAutomaticPayoutDescription('sweepID: 2d11f2b6-16ad-4b2e-af4d-d8a1d2aad238'), true);
   assert.equal(isSweepInFlight('closed'), true);
   assert.equal(isSweepInFlight('paid'), false);
@@ -79,7 +79,7 @@ test('6 sweepID description is labeled Automatic payout', () => {
     id: 'local',
     amount_cents: 500,
     description: 'sweepID: 2d11f2b6-16ad-4b2e-af4d-d8a1d2aad238',
-  }, { isWalletSource: true, isWalletDestination: false }), 'Automatic payout');
+  }, { isWalletSource: true, isWalletDestination: false }), 'Sweep to bank');
 });
 
 test('7 sweep history uses the wallet-scoped Moov path', () => {
