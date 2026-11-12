@@ -156,6 +156,8 @@ Each step is its own reviewed PR or run and waits for the owner's words for that
    --approval-scope sql153 … --phase apply` with the owner's words (authorization phrase
    `CHARGE_SECOND_MORTGAGEE_FEE`).
 4. Record the apply and retire the pin (`execute: false`).
-5. Then the API (the accrual and the invoice lines) through the guarded Lambda overlay path, with its own approval.
+5. Then the API, with its own approvals: the invoice lines (`tenant-billing-engine.mjs`, `tenant-fee-invoice-email.mjs`)
+   through the guarded Lambda overlay path, and the accrual (`mortgage-ops-usage.mjs`, not an overlay member) through
+   the guarded full-package rebuild (`ops/production-lambda-rebuild.md`), staging then production.
 
 Rollback (not part of this pin; a reviewed step of its own if ever needed): drop the index and the two columns.
