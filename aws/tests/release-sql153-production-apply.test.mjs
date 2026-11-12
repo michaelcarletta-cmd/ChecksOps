@@ -5,12 +5,14 @@
  * release-sql90-97-production-apply.test.mjs runs every release key (SQL 153 included) through the shared refusals;
  * this file covers SQL 153's own:
  *
- *   - the pin has the release pin shape, is pending (execute false, no pre-state, no approval) and is in step with the
- *     staging pin, the one-shot, the bypass inventory and the test lists;
+ *   - the pin has the release pin shape; it is execute-authorized (owner-approved pin change of 2026-11-11) with the
+ *     recorded production pre-state (read-only inspect; the derived one, the same one staging had) and the staging apply
+ *     as its acceptance; it is in step with the staging pin, the one-shot, the bypass inventory and the test lists;
  *   - no predecessor; the index and the two columns, no function; the file's event_type CHECK step not modelled and
  *     required absent (no_event_type_check, also a production precondition); no table, policy, trigger or grant; no
  *     overlay plan entry; the runbook, one-shot doc and README name it;
- *   - the pending pin refuses before connecting; an approved, accepted copy evaluates for the manifest built from it,
+ *   - the pending (pre-authorization) pin refuses before connecting; the committed pin allows only the manifest bound
+ *     to its recorded pre-state; an approved, accepted copy evaluates for the manifest built from it,
  *     and refuses with execute false, another live hash, another staging reference or a wrong phrase; the CLI spends no
  *     receipt.
  * The behavior on PostgreSQL 16 is aws/tests/sql153-second-mortgagee-fee-pg.test.mjs; the executor path is
@@ -44,6 +46,13 @@ const SQL153_FILE = 'aws/workflows/sql/153_second_mortgagee_fee.sql';
 const INDEX = 'check_billing_events_one_second_mortgagee_per_check';
 const COLUMNS = Object.freeze(['mortgage_ops_second_mortgagee_count', 'mortgage_ops_second_mortgagee_amount_cents']);
 const COMMITTED = loadReleaseProductionPin(KEY, ROOT);
+// SQL 153's recorded production pre-state (read-only inspect of 2026-11-11, SSM decbb3ce, main 103060468): the index and
+// both columns absent, the derived pre-state; staging recorded the same (read-live run 43115484335).
+const PRODUCTION_PRE = 'b2bf6d325a5a50683acc8ecdaef39ec763b591f8db9f10e7d6fe02f9525cb0c3';
+// The guarded staging apply (wave 49).
+const STAGING_ACCEPTANCE_REF = 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43119289402';
+// The owner's words for SQL 153, quoted in the authorization (no separate staging acceptance statement was given).
+const OWNER_WORDS = Object.freeze(['"Yes pick up both 2 and 3"', '"Option B"', '"merge 1790 when green"', '"redeploy the staging SQL executor, then run the SQL 153 staging read-live"', '"record the SQL 153 staging pin"', '"merge it when green"', '"apply SQL 153 in staging"', '"the read-only SQL 153 production inspect"', '"record the SQL 153 production pin"']);
 const SQL96_PIN = loadReleaseProductionPin('sql96', ROOT);
 const STAGING_REF = 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/0000000000';
 const PRE = 'e'.repeat(64);
@@ -91,7 +100,7 @@ const approved = (extra = {}) => Object.freeze({
   ...extra,
 });
 
-test('pin: the release pin shape, pending, in step with the staging pin, the one-shot, the inventory and the test lists', () => {
+test('pin: the release pin shape, execute-authorized on the staging apply, in step with the staging pin, the one-shot, the inventory and the test lists', () => {
   const pin = COMMITTED;
   const staging = STAGING[KEY];
   const shape = new Set(keyPaths(SQL96_PIN).filter((k) => !/^(applied|production_evidence)(\.|$)/.test(k)));
@@ -99,17 +108,45 @@ test('pin: the release pin shape, pending, in step with the staging pin, the one
   assert.deepEqual(keyPaths(pin).filter((k) => !shape.has(k)), []);
   assert.equal(pin.id, RELEASE_SQL_SPECS[KEY].production_pin_rel.split('/').pop().replace(/\.json$/, ''));
   assert.equal(pin.migration, KEY);
-  assert.equal(pin.execute, false);
-  assert.equal(pin.authorization, 'pending');
-  assert.equal(pin.expected_live_definition_sha256, null);
+  // Owner-approved pin change of 2026-11-11: the read-only production inspect (SSM decbb3ce, main 103060468) recorded as
+  // the pre-state; the staging apply (run 43119289402) as the acceptance.
+  assert.equal(pin.execute, true);
+  assert.match(pin.authorization, /^Owner approved 2026-11-11 /);
+  for (const words of OWNER_WORDS) assert.ok(pin.authorization.includes(words), words);
+  assert.match(pin.authorization, /no separate staging acceptance statement was given/);
+  assert.ok(pin.authorization.includes(`${PRODUCTION_PRE} -> ${pin.intended_replacement_sha256}`));
+  assert.match(pin.authorization, /execute true takes effect only when the owner reviews and merges this change\. It does not itself run or approve a run/);
+  assert.match(pin.authorization, /each apply still needs the owner's run-time approval/);
+  assert.equal(pin.expected_live_definition_sha256, PRODUCTION_PRE);
+  assert.equal(pin.expected_live_definition_sha256, releaseStateHash(KEY, {}));
+  assert.notEqual(pin.expected_live_definition_sha256, pin.intended_replacement_sha256);
   assert.equal(pin.applied, undefined);
-  assert.equal(pin.production_inspect.status, 'pending');
-  assert.equal(pin.production_inspect.live_definition_sha256, null);
+  assert.equal(pin.production_inspect.status, 'recorded');
+  assert.equal(pin.production_inspect.date, '2026-11-11');
+  assert.equal(pin.production_inspect.live_definition_sha256, PRODUCTION_PRE);
+  assert.equal(pin.production_inspect.ssm_command_id, 'decbb3ce-3b38-49ec-ae6f-ea07d39de7ba');
+  assert.equal(pin.production_inspect.source_commit, '103060468654d5a413df67d847e46c3880cc4b74');
+  assert.equal(pin.production_inspect.read_only, true);
+  assert.equal(pin.production_inspect.apply_preconditions_met, false);
+  assert.deepEqual(pin.production_inspect.precondition_failures, []);
+  assert.ok(pin.production_inspect.note.includes('501cd3dc3c1d5fb9c3cfff6d5dc11deae2690a4808227f41f94935372aef8268'));
+  assert.ok(pin.production_inspect.note.includes(`migration source sha256 on the runner ${pin.source_sha256} == source_sha256`));
+  assert.match(pin.production_inspect.note, /already_applied false\), live_matches_expected false, precondition_failures \[\], apply_preconditions_met false, errors \[\]/);
+  assert.match(pin.production_inspect.note, /If already_applied is true, or precondition_failures is not \[\], stop/);
+  assert.ok(pin.production_inspect.note.includes(' Earlier: Pending: no release-engine production inspect has been run for SQL 153 yet.'));
   for (const text of ['prerequisites_missing', 'counts.event_type_checks 0', 'no_event_type_check', 'already_applied false', 'precondition_failures', releaseStateHash(KEY, {})]) {
     assert.ok(pin.production_inspect.note.includes(text), text);
   }
-  assert.deepEqual([pin.staging_acceptance.ok, pin.staging_acceptance.reference], [false, null]);
-  assert.match(pin.staging_acceptance.basis, /read-live and the staging apply of SQL 153/);
+  assert.deepEqual([pin.staging_acceptance.ok, pin.staging_acceptance.reference], [true, STAGING_ACCEPTANCE_REF]);
+  assert.match(pin.staging_acceptance.basis, /^Guarded staging SQL executor apply of sql153-second-mortgagee-fee, run 43119289402/);
+  assert.match(pin.staging_acceptance.basis, /deploy run 43118921219/);
+  assert.match(pin.staging_acceptance.basis, /Read-live run 43119679139 \(job 130856648244\) then reported already_applied true/);
+  assert.match(pin.staging_acceptance.basis, /under the owner's words "apply SQL 153 in staging"/);
+  assert.match(pin.staging_acceptance.basis, /no separate staging acceptance statement was given/);
+  assert.ok(pin.staging_acceptance.basis.includes(`before ${PRODUCTION_PRE}, after ${pin.intended_replacement_sha256} == intended`));
+  assert.deepEqual(Object.keys(pin.staging_acceptance).sort(), ['basis', 'ok', 'reference']);
+  // The staging pin recorded the same pre-state (wave 49).
+  assert.equal(staging.expected_live_definition_sha256, PRODUCTION_PRE);
   assert.equal(pin.filename, SQL153_FILE);
   assert.equal(pin.source_sha256, staging.source_sha256);
   assert.equal(pin.staging_pin_commit, staging.commit);
@@ -197,7 +234,9 @@ test('order: no predecessor; the index and two columns, no function; the event_t
     'no_event_type_check', 'Step 1, **not modelled by the release engine.**', 'step 1 is therefore a no-op']) {
     assert.ok(runbook.includes(value), value);
   }
-  assert.match(runbook, /\*\*Status:\*\* staging pin execute-authorized \(wave 49\); not applied anywhere\. The production pin is pending\./);
+  assert.match(runbook, /\*\*Status:\*\* applied in staging \(wave 49, 2026-11-11\); staging acceptance: the staging apply under the owner's run approval \("apply SQL 153 in staging"; no separate acceptance statement\); production pin execute-authorized; not applied to production/);
+  assert.match(runbook, /SSM\s+`decbb3ce-3b38-49ec-ae6f-ea07d39de7ba`/);
+  assert.match(runbook, /\*\*Staging apply \(2026-11-11\)\.\*\* Apply run 43119289402/);
   const oneShot = fs.readFileSync(path.join(ROOT, 'ops/production-sql-one-shot.md'), 'utf8');
   assert.match(oneShot, /\| `sql153` \|/);
   assert.match(oneShot, /`sql152`, `sql153`, `sql154`, `sql155`, `sql156`\) \|/);
@@ -218,15 +257,27 @@ test('production preconditions: the pinned login and no_event_type_check; a CHEC
   assert.deepEqual(releaseProductionPreconditionFailures(KEY, { ...state({ event_type_checks: 0 }), session_user: 'checksops' }, COMMITTED, text), ['login_is_pinned_admin']);
 });
 
-test('the pending pin refuses before connecting; an approved copy allows only its own manifest; execute false, other hashes and phrases refuse', async () => {
-  const noPre = await evaluateReleaseProductionApply(KEY, manifest({ ...COMMITTED, expected_live_definition_sha256: PRE }), { root: ROOT });
+test('the pending (pre-authorization) pin refuses before connecting; the committed pin allows only its own manifest; execute false, other hashes and phrases refuse', async () => {
+  // The pin before its owner-approved change: no pre-state, no owner approval, no staging acceptance.
+  const PENDING = Object.freeze({ ...COMMITTED, authorization: 'pending', execute: false, expected_live_definition_sha256: null, staging_acceptance: { ok: false, reference: null, basis: 'Pending' } });
+  const noPre = await evaluateReleaseProductionApply(KEY, manifest({ ...PENDING, expected_live_definition_sha256: PRE }), { root: ROOT, pin: PENDING });
   assert.equal(noPre.code, CODES.SQL_COLLISION);
-  const withPre = { ...COMMITTED, expected_live_definition_sha256: PRE };
+  const withPre = { ...PENDING, expected_live_definition_sha256: PRE };
   assert.equal((await evaluateReleaseProductionApply(KEY, manifest(withPre), { root: ROOT, pin: withPre })).code, CODES.PRODUCTION_APPROVAL_REQUIRED);
   assert.equal((await executeReleaseProductionApply(KEY, manifest(withPre), { root: ROOT, pin: withPre, connect: neverConnect, consumedPath: consumedPath() })).ok, false);
   // execute true alone does not authorize it.
   const flipped = { ...withPre, execute: true };
   assert.equal((await evaluateReleaseProductionApply(KEY, manifest(flipped), { root: ROOT, pin: flipped })).code, CODES.PRODUCTION_APPROVAL_REQUIRED);
+
+  // The committed (authorized) pin allows only the manifest bound to its recorded pre-state: not another hash, not the
+  // intended state.
+  const committedOk = await evaluateReleaseProductionApply(KEY, manifest(COMMITTED), { root: ROOT });
+  assert.equal(committedOk.ok, true, JSON.stringify(committedOk));
+  assert.equal(committedOk.details.sql153_production_apply_allowed, true);
+  assert.equal(committedOk.details.staging_acceptance, STAGING_ACCEPTANCE_REF);
+  assert.equal((await evaluateReleaseProductionApply(KEY, { ...manifest(COMMITTED), live_definition_sha256: PRE, expected_live_definition_sha256: PRE }, { root: ROOT })).code, CODES.SQL_COLLISION);
+  const onIntended = COMMITTED.intended_replacement_sha256;
+  assert.equal((await evaluateReleaseProductionApply(KEY, { ...manifest(COMMITTED), live_definition_sha256: onIntended, expected_live_definition_sha256: onIntended }, { root: ROOT })).ok, false);
 
   const pin = approved();
   const allowed = await evaluateReleaseProductionApply(KEY, manifest(pin), { root: ROOT, pin });
@@ -246,7 +297,7 @@ test('the pending pin refuses before connecting; an approved copy allows only it
   // A tampered file hash is a reconciliation stop.
   assert.equal(readPinnedReleaseSql(KEY, ROOT, { ...COMMITTED, source_sha256: 'f'.repeat(64) }).code, CODES.SQL_COLLISION);
 
-  // CLI: --apply with the committed (pending) pin, read from disk, refuses without connecting
+  // CLI: --apply with the committed pin, read from disk, and a manifest on another pre-state refuses without connecting
   // or spending a receipt; credential flags are refused.
   const file = path.join(os.tmpdir(), `sql153-cli-${process.pid}.json`);
   fs.writeFileSync(file, JSON.stringify(manifest(pin)));
