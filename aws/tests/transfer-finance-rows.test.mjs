@@ -19,6 +19,7 @@ import {
   incomingRevenueTotal,
   incomingWalletActivity,
   isPaidSendLeg,
+  receivedCheckIds,
   sendExpenseRows,
   sendExpenseTotal,
   sendLedgerRows,
@@ -88,6 +89,30 @@ const incoming = (id, extra = {}) => ({
   ...extra,
 });
 const C1_ROWS = [incoming('w'), incoming('b', { leg_role: 'send_bank', amount_cents: 190180 })];
+
+test('recipient: the checks it was paid from are those with a send that was not returned', () => {
+  // Owner report 2026-11-12 (Deen Bandhu, Albert Aggrey): Freedom sent money to Condition One from
+  // a shared check; it showed under Funds Released for Freedom and still under Deposited for
+  // Condition One, because a send leaves check_stage at deposited.
+  assert.deepEqual([...receivedCheckIds(C1_ROWS)], ['chk-1']);
+  assert.deepEqual([...receivedCheckIds([
+    incoming('r', { status: 'returned', check_id: 'chk-returned' }),
+    incoming('f', { status: 'failed', check_id: 'chk-failed' }),
+    incoming('n', { check_id: null }),
+    incoming('c', { status: 'completed', check_id: 'chk-2' }),
+  ])], ['chk-2']);
+  assert.deepEqual([...receivedCheckIds(null)], []);
+  const page = read('src/pages/CheckCommandCenter.tsx');
+  assert.match(page, /const receivedFromCheckIds = useMemo\(\(\) => receivedCheckIds\(incomingTransfers\), \[incomingTransfers\]\);/);
+  // Deposited drops a shared check this organization was paid from; an own check is not affected.
+  assert.match(page, /if \(\(c as \{ _shared\?: boolean \}\)\._shared && receivedFromCheckIds\.has\(c\.id\)\) return false;/);
+  // The server's Deposited total still counts it (check_stage deposited): leave it out.
+  assert.match(page, /const receivedDeposited = sentStillDeposited\(sharedChecks as any\[\], receivedFromCheckIds\);/);
+  assert.match(page, /server - sentDeposited\.count - receivedDeposited\.count/);
+  assert.match(page, /server - sentDeposited\.total - receivedDeposited\.total/);
+  // The hook is read before the lane filters that use it.
+  assert.ok(page.indexOf('useIncomingTransfers(tenantId)') < page.indexOf('const depositedFromAll'));
+});
 
 test('recipient: the legs of one send are one incoming payment; income counts accepted legs, never returned ones', () => {
   const [p, ...rest] = incomingPayments(C1_ROWS);
