@@ -179,6 +179,12 @@
       "note": "Read-only production inspect of the checks a partner shared with Condition One and released; there is no apply. Accepts exactly --inspect (every other argument, and any CHECKSOPS_DEPLOYMENT_GUARD_* or CHECKSOPS_SKIP_DEPLOYMENT_GUARD variable, is refused before a secret is read). Credentials come only from the pinned production checksops_admin secret through the Secrets Manager VPC endpoint (ops/deployment-guard/partner-released-shares-inspect.json, the same RDS and secret as the Mortgage Desk access inspect). One BEGIN READ ONLY ... ROLLBACK of fixed SELECTs: active shares to the receiving organization by check stage, the sharing organization's payouts on the released shared checks by status, method and recipient class, its send legs from those checks, the receiving organization's own payouts and send legs, and presence and hash of get_tenant_funds_received and normalize_org_name. Returns counts and dollar totals only: never an id, a name, a check number, an address, a memo or a raw row."
     },
     {
+      "path": "scripts/deployment-guard/billing-trigger-inspect.mjs",
+      "classification": "SAFE",
+      "capabilities": ["billing-trigger-inspect"],
+      "note": "Read-only production inspect of the billing and agent-compensation triggers; there is no apply. Accepts exactly --inspect (every other argument, and any CHECKSOPS_DEPLOYMENT_GUARD_* or CHECKSOPS_SKIP_DEPLOYMENT_GUARD variable, is refused before a secret is read). Credentials come only from the pinned production checksops_admin secret through the Secrets Manager VPC endpoint (ops/deployment-guard/billing-trigger-inspect.json, the same RDS and secret as the Mortgage Desk access inspect). One BEGIN READ ONLY ... ROLLBACK of fixed catalog SELECTs: the non-internal triggers on mortgage_handling_requests, check_intake_items, checkalt_deposits and deposit_items; the functions they run and the named billing and compensation functions (owner, SECURITY DEFINER, EXECUTE ACL, hashes, repository match and definition text, withheld when id-, email- or long-number-shaped); column names and types of the billing tables. Reads no table row."
+    },
+    {
       "path": "scripts/deployment-guard/sql29-mortgage-ops-library-parity-production-apply.mjs",
       "classification": "GUARDED",
       "capabilities": ["sql29-production-apply"],
