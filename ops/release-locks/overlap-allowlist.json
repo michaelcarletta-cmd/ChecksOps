@@ -2557,6 +2557,13 @@
       "reason": "PR #1822 records the live production-spa lock (index-g9Z7_fB7, guarded production upload run 43263583307) and re-derives the production-release tree_hash; open PR #1820 (Check center: Funds Released) edits a different component's tree_hash in the same file. Owner approved 2026-11-12: \"approve the overlap exception for #1820 on locked-components.json\". This exception is limited to that single file; whichever merges second merges main and recomputes its tree hashes. It does not merge, edit or deploy PR #1820.",
       "expires": "2026-12-31",
       "review_condition": "other-PR-rebase-or-close"
+    },
+    {
+      "other_pr": 1845,
+      "path": "ops/release-locks/locked-components.json",
+      "reason": "PR #1844 (partner send from a shared check) updates the moov-production-send tree_hash; open PR #1845 (production SPA lock record, index-BZl3Tfjf, run 43320826494) edits the production-spa and production-release entries of the same file, and each PR's overlap check failed on the other. Owner approved 2026-11-12: \"Merge 1845\", then, asked for this exception, \"Ok proceed\". This exception is limited to that single file; PR #1845 merges second, merges main and re-derives its tree hashes. It does not merge, edit or deploy PR #1845.",
+      "expires": "2026-12-31",
+      "review_condition": "other-PR-rebase-or-close"
     }
   ]
 }

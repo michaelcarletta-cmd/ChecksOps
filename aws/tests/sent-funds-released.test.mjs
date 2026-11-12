@@ -93,7 +93,7 @@ test('4 Check Command Center: sent checks move from Deposited to Funds Released'
 test('5 Send stays available after the check moves to Funds Released', () => {
   assert.match(page, /const isDeposited = stage === "deposited" \|\| status === "deposited"\s*\|\| stage === "funds_released" \|\| stage === "disbursed_externally";/);
   assert.match(page, /payoutEnabled=\{isDeposited\}/);
-  // The send server gates on the check's owner only, never on its stage.
-  assert.match(send, /if \(!check \|\| String\(check\.tenant_id\) !== String\(tenantId\)\) return fail\('check_not_found'/);
+  // The send server gates on the check's owner, or an active share with the sender, never on its stage.
+  assert.match(send, /const ownCheck = !!check && String\(check\.tenant_id\) === String\(tenantId\);\s+if \(!check \|\| !\(ownCheck \|\| check\.shared_with_sender === true\)\) return fail\('check_not_found'/);
   assert.doesNotMatch(send, /check_stage/);
 });
