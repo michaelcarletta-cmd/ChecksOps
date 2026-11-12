@@ -26,6 +26,11 @@ import {
   type MortgageDeskSharedLibraryGroup,
 } from "@/lib/mortgageDeskEsign";
 import {
+  canReadMortgageDeskAgentNotes,
+  loadDeskAgentNotes,
+  type MortgageDeskAgentNote,
+} from "@/lib/mortgageDeskOversight";
+import {
   MortgageDeskSignatureDialog,
   type MortgageDeskSignatureDocument,
 } from "@/components/mortgage-ops/MortgageDeskSignatureDialog";
@@ -253,6 +258,8 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
   // AWS: every check tenant's auto-shared library documents (SQL 156), grouped by company; null = not loaded,
   // and the single-tenant list above is shown instead.
   const [sharedLibrary, setSharedLibrary] = useState<MortgageDeskSharedLibraryGroup[] | null>(null);
+  // AWS: Tenant Management's private notes to the assigned agent (SQL 158 f); only that agent and the platform owner.
+  const [agentNotes, setAgentNotes] = useState<MortgageDeskAgentNote[]>([]);
   const [lossDocs, setLossDocs] = useState<LossDraftDoc[]>([]);
   const [lossDraftId, setLossDraftId] = useState<string | null>(null);
   const [messages, setMessages] = useState<MessageRow[]>([]);
@@ -406,6 +413,13 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
         if (mortgageUsesAwsBackend && canReadMortgageDeskSharedLibrary(r, user?.id, isPlatformOwner(user?.email, user?.id))) {
           const { data: shared } = await loadMortgageDeskSharedLibraryDocuments(deskEsignClient, r.id);
           if (shared) setSharedLibrary(groupSharedLibraryDocuments(shared));
+        }
+
+        // AWS: Tenant Management's notes to the agent this request is assigned to (SQL 158; nobody else may read them).
+        setAgentNotes([]);
+        if (mortgageUsesAwsBackend && canReadMortgageDeskAgentNotes(r, user?.id, isPlatformOwner(user?.email, user?.id))) {
+          const { data: notes } = await loadDeskAgentNotes(deskEsignClient, r.id);
+          if (notes) setAgentNotes(notes);
         }
 
 
@@ -1268,6 +1282,29 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
                       loan_number: req.loan_number || claim?.loan_number,
                     }}
                   />
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Tenant Management's private notes to the assigned agent (AWS, SQL 158) */}
+            {agentNotes.length > 0 && (
+              <Card>
+                <CardContent className="pt-4 space-y-3">
+                  <div className="font-semibold text-sm flex items-center justify-between">
+                    <span>Notes from Tenant Management</span>
+                    <span className="text-xs text-muted-foreground">{agentNotes.length}</span>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    Private to you and Tenant Management. The company on this check does not see them.
+                  </p>
+                  <ul className="space-y-2">
+                    {agentNotes.map((n) => (
+                      <li key={n.note_id} className="rounded-md border border-border p-2 text-sm">
+                        <div className="whitespace-pre-wrap break-words">{n.body}</div>
+                        <div className="text-[11px] text-muted-foreground mt-1">{new Date(n.created_at).toLocaleString()}</div>
+                      </li>
+                    ))}
+                  </ul>
                 </CardContent>
               </Card>
             )}

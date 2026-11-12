@@ -26,7 +26,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "@/hooks/use-toast";
-import { Megaphone, Loader2, Plus, Trash2, Power, Undo2, Mail, Building2, Users, Settings, ArrowLeft, RefreshCw, Copy, FileText, Receipt, Link2, Gift, ShieldCheck, Eye, Crosshair, Briefcase, Home, Calculator, Landmark, Wallet, LogOut, Banknote } from "lucide-react";
+import { Megaphone, Inbox, Loader2, Plus, Trash2, Power, Undo2, Mail, Building2, Users, Settings, ArrowLeft, RefreshCw, Copy, FileText, Receipt, Link2, Gift, ShieldCheck, Eye, Crosshair, Briefcase, Home, Calculator, Landmark, Wallet, LogOut, Banknote } from "lucide-react";
 import { goToChecksOpsHome } from "@/lib/goToChecksOpsHome";
 import { SettingsPageShell } from "@/components/settings/SettingsPageShell";
 import { SettingsHero } from "@/components/settings/SettingsHero";
@@ -41,6 +41,7 @@ import { ComplianceSettings } from "@/components/settings/ComplianceSettings";
 import { AdminReferralDashboard, REFERRAL_OVERVIEW_QUERY_KEY, fetchReferralOverview } from "@/components/settings/AdminReferralDashboard";
 import { PlatformAnnouncementsManager } from "@/components/admin/PlatformAnnouncementsManager";
 import { MortgageAgentsPanel } from "@/components/admin/MortgageAgentsPanel";
+import { MortgageDeskOversightPanel } from "@/components/admin/MortgageDeskOversightPanel";
 import { TenantProBadgeManagement } from "@/components/settings/TenantProBadgeManagement";
 
 import { TenantProvider } from "@/contexts/TenantContext";
@@ -240,6 +241,7 @@ export default function AdminTenants() {
 
             <TabsTrigger value="tenants"><Building2 className="w-4 h-4 mr-1" /> Tenants</TabsTrigger>
             <TabsTrigger value="mortgage-agents"><Briefcase className="w-4 h-4 mr-1" /> Mortgage Agents</TabsTrigger>
+            <TabsTrigger value="mortgage-desk"><Inbox className="w-4 h-4 mr-1" /> Mortgage Desk</TabsTrigger>
             <TabsTrigger value="platform-finance"><Landmark className="w-4 h-4 mr-1" /> Platform Finance</TabsTrigger>
             <TabsTrigger value="checkalt"><Banknote className="w-4 h-4 mr-1" /> CheckAlt</TabsTrigger>
             <TabsTrigger value="referrals"><Gift className="w-4 h-4 mr-1" /> Referral Dashboard</TabsTrigger>
@@ -285,6 +287,9 @@ export default function AdminTenants() {
           </TabsContent>
           <TabsContent value="mortgage-agents">
             <MortgageAgentsPanel />
+          </TabsContent>
+          <TabsContent value="mortgage-desk">
+            <MortgageDeskOversightPanel />
           </TabsContent>
 
         </Tabs>
