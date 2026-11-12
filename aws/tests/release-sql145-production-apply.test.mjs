@@ -260,7 +260,7 @@ test('pin: the release pin shape, applied and retired (owner approved 2026-11-07
   assert.doesNotMatch(JSON.stringify(tool), /[0-9a-f]{64}/);
   const rows = JSON.stringify(readJson('ops/deployment-guard/bypass-inventory.json'));
   assert.match(rows, /"path":"scripts\/deployment-guard\/sql145-platform-owner-billing-collection-leg-production-apply\.mjs","classification":"GUARDED","capabilities":\["sql145-production-apply"\]/);
-  assert.match(rows, /sql143, sql144, sql145, sql146, sql147, sql148, sql150, sql152, sql153, sql154, sql155, sql156, sql158, sql159, sql160, sql161\)/);
+  assert.match(rows, /sql143, sql144, sql145, sql146, sql147, sql148, sql150, sql152, sql153, sql154, sql155, sql156, sql158, sql159, sql160, sql161, sql162\)/);
   const scripts = readJson('package.json').scripts;
   const workflow = fs.readFileSync(path.join(ROOT, '.github/workflows/deployment-guard.yml'), 'utf8');
   for (const name of ['aws/tests/release-sql145-executor.test.mjs', 'aws/tests/release-sql145-production-apply.test.mjs', 'aws/tests/sql145-platform-owner-billing-collection-leg-pg.test.mjs']) {
@@ -328,7 +328,7 @@ test('order: no predecessor; the one new DEFINER writer, its prerequisites and t
   assert.match(runbook, /APPLY_PLATFORM_OWNER_BILLING_COLLECTION_LEG/);
   const oneShot = fs.readFileSync(path.join(ROOT, 'ops/production-sql-one-shot.md'), 'utf8');
   assert.match(oneShot, /\| `sql145` \|/);
-  assert.match(oneShot, /`sql143`, `sql144`, `sql145`, `sql146`, `sql147`, `sql148`, `sql150`, `sql152`, `sql153`, `sql154`, `sql155`, `sql156`, `sql158`, `sql159`, `sql160`, `sql161`\) \|/);
+  assert.match(oneShot, /`sql143`, `sql144`, `sql145`, `sql146`, `sql147`, `sql148`, `sql150`, `sql152`, `sql153`, `sql154`, `sql155`, `sql156`, `sql158`, `sql159`, `sql160`, `sql161`, `sql162`\) \|/);
   assert.match(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/README.md'), 'utf8'), /sql145-platform-owner-billing-collection-leg-production-apply\.mjs --inspect/);
 });
 

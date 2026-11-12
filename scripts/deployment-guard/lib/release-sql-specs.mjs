@@ -9517,6 +9517,63 @@ export const RELEASE_SQL_SPECS = deepFreeze({
       "grantors": true
     }
   },
+  // SQL 162 (owner 2026-11-12: "Sends to someone other than the partner", "Yes for 1, 2, and run the inspect"): a
+  // partner learns which checks shared with it the sharing organization has paid from by a send to someone else. A
+  // send writes its payment_transfers legs under the sender's tenant_id and leaves check_stage alone, so a shared
+  // check paid out to a homeowner or contractor stays under the partner's Deposited: aws_select_payment_transfers
+  // shows a member only its own tenant_id, and SQL 144 returns only legs addressed to the caller. One new SECURITY
+  // DEFINER read, public.get_shared_check_source_sends(uuid) (plpgsql, STABLE, search_path public, pg_temp): caller
+  // gate aws_can_access_tenant(_tenant_id) (42501 otherwise); one row per check and sharing organization for the
+  // checks actively shared with _tenant_id that have a send_wallet / send_bank leg of the sharing organization in
+  // status submitted / pending / processing / completed whose destination is not _tenant_id; columns check_id,
+  // source_tenant_id and last_sent_at only (never an amount, a payee or a status). EXECUTE checksops and the owner
+  // (PUBLIC, anon, authenticated and service_role revoked, as SQL 144). definer_writes lists the two relations the
+  // DEFINER function must reach past RLS as their owner. No predecessor. No table, column, policy, grant, trigger or
+  // row change.
+  sql162: {
+    "key": "sql162",
+    "label": "SQL 162",
+    "choice": "sql162-shared-check-source-sends",
+    "production_pin_rel": "ops/deployment-guard/sql162-shared-check-source-sends-production-apply.json",
+    "script": "sql162-shared-check-source-sends-production-apply",
+    "prerequisites": [
+      "public.payment_transfers",
+      "public.shared_checks",
+      "public.aws_can_access_tenant(uuid)",
+      "role checksops",
+      "column public.payment_transfers.tenant_id",
+      "column public.payment_transfers.destination_tenant_id",
+      "column public.payment_transfers.leg_role",
+      "column public.payment_transfers.status",
+      "column public.payment_transfers.check_id",
+      "column public.payment_transfers.created_at",
+      "column public.shared_checks.check_id",
+      "column public.shared_checks.source_tenant_id",
+      "column public.shared_checks.target_tenant_id",
+      "column public.shared_checks.revoked_at"
+    ],
+    "predecessors": [],
+    "functions": [
+      {
+        "identity": "public.get_shared_check_source_sends(uuid)",
+        "result": "TABLE(check_id uuid, source_tenant_id uuid, last_sent_at timestamp with time zone)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ],
+        "revokes": [
+          "PUBLIC EXECUTE",
+          "anon EXECUTE",
+          "authenticated EXECUTE",
+          "service_role EXECUTE"
+        ]
+      }
+    ],
+    "definer_writes": [
+      "public.payment_transfers",
+      "public.shared_checks"
+    ]
+  },
   sql76: {
     "key": "sql76",
     "label": "SQL 76",

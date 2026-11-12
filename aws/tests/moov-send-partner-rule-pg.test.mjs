@@ -20,6 +20,14 @@ const RULE = (() => {
   return match[1];
 })();
 
+/** The check query: the sender's own check, or one its owner shares with the sender right now. */
+const CHECK_RULE = (() => {
+  const start = SEND.indexOf('const check = (await client.query(');
+  const match = SEND.slice(start).match(/`([\s\S]*?)`/);
+  assert.ok(start >= 0 && match, 'check rule not found in moov-send.mjs');
+  return match[1];
+})();
+
 const CHECK = 'c0000000-0000-4000-8000-000000000001';
 const OTHER_CHECK = 'c0000000-0000-4000-8000-000000000002';
 const ME = '11111111-1111-4111-8111-111111111111';
@@ -116,6 +124,34 @@ test('PostgreSQL 16: the send handler partner rule', { timeout: 120000, skip: pg
       const { rows } = await client.query(RULE, [CHECK, ME, THEM]);
       await client.query('ROLLBACK');
       assert.equal(rows.length === 1, expected, name);
+    }
+    // The check rule: [name, the check's owner, shares, sender, what the handler accepts].
+    await client.query('CREATE TABLE public.check_intake_items (id uuid PRIMARY KEY, tenant_id uuid NOT NULL)');
+    const accepts = (row, sender) => !!row && (row.tenant_id === sender || row.shared_with_sender === true);
+    for (const [name, owner, shares, sender, expected] of [
+      ['the sender\'s own check', ME, [], ME, true],
+      ['own check, shared out', ME, [share()], ME, true],
+      ['a check its owner shares with the sender', THEM, [share({ source: THEM, target: ME })], ME, true],
+      ['that share revoked', THEM, [share({ source: THEM, target: ME, revoked_at: '2026-10-05' })], ME, false],
+      ['shared with another organization', THEM, [share({ source: THEM, target: ELSE })], ME, false],
+      ['a share row not from the check\'s owner', THEM, [share({ source: ELSE, target: ME })], ME, false],
+      ['a share of another check', THEM, [share({ check: OTHER_CHECK, source: THEM, target: ME })], ME, false],
+      ['no share', THEM, [], ME, false],
+    ]) {
+      await client.query('BEGIN');
+      await client.query('INSERT INTO public.check_intake_items (id, tenant_id) VALUES ($1, $2)', [CHECK, owner]);
+      for (const s of shares) {
+        await client.query(
+          'INSERT INTO public.shared_checks (check_id, source_tenant_id, target_tenant_id, revoked_at) VALUES ($1, $2, $3, $4)',
+          [s.check, s.source, s.target, s.revoked_at],
+        );
+      }
+      const { rows } = await client.query(CHECK_RULE, [CHECK, sender]);
+      const missing = await client.query(CHECK_RULE, [OTHER_CHECK, sender]);
+      await client.query('ROLLBACK');
+      assert.equal(rows.length, 1, name);
+      assert.equal(accepts(rows[0], sender), expected, name);
+      assert.equal(missing.rows.length, 0, name);
     }
   } finally {
     await client.end();

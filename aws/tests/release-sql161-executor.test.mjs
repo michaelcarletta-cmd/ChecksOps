@@ -4,7 +4,7 @@
  * SQL 161 that gives staging that one permission, then SQL 160". release-sql90-97-executor.test.mjs runs what every release
  * key shares (SQL 161 included); this file covers what is new:
  *
- *   - the pin: pending (execute false, no recorded pre-state), code-derived, selectable, packed, in step with the pending
+ *   - the pin: staging-authorized (wave 52) from staging read-live run 43315046187, code-derived, selectable, packed, in step with the pending
  *     production pin; the pinned commit authored the bytes; no predecessor; nothing names SQL 161; SQL 160's spec is
  *     unchanged and its ACL for the function is SQL 161's intended ACL without grantors;
  *   - the spec's one acl_functions entry (SQL 161 creates or replaces no function): the fingerprint is the function's
@@ -57,7 +57,7 @@ import { EXECUTOR_PACK_MEMBERS } from '../../scripts/deployment-guard/sql-execut
 import { MIGRATIONS } from '../../scripts/deployment-guard/github-staging-sql-executor.mjs';
 import { READ_LIVE_EXPECTED_SENTINEL } from '../../scripts/deployment-guard/lib/sql-executor-read-live.mjs';
 import { importGuardedSqlExecutor } from './helpers/import-guarded-sql-executor.mjs';
-import { assertStagingPinState } from './helpers/staging-sql-wave1.mjs';
+import { assertStagingPinState, pendingPin } from './helpers/staging-sql-wave1.mjs';
 import { pgSkipReason, releaseFixture } from './helpers/release-sql-pg.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -121,7 +121,7 @@ function handlerFor(connect, { pins = {} } = {}) {
   return createHandler({ connect, now: () => Date.parse(NOW), releaseSqlFiles: FILES, releaseSqlPins: { ...PINS, ...pins } });
 }
 
-test('pin: SQL 161 pending, code-derived, selectable, packed, in step with the pending production pin; no predecessor; nothing names it; SQL 160 unchanged', () => {
+test('pin: SQL 161 staging-authorized from its read-live, code-derived, selectable, packed, in step with the pending production pin; no predecessor; nothing names it; SQL 160 unchanged', () => {
   const pin = PINS[KEY];
   const spec = RELEASE_SQL_SPECS[KEY];
   const packed = Object.fromEntries(EXECUTOR_PACK_MEMBERS);
@@ -134,9 +134,14 @@ test('pin: SQL 161 pending, code-derived, selectable, packed, in step with the p
   assert.equal(sha(TEXT), pin.source_sha256);
   // Pending until a reviewed pin change records a staging read-live.
   assertStagingPinState(assert, KEY, pin);
-  assert.equal(pin.execute, false);
-  assert.equal(pin.authorization, 'pending');
-  assert.equal(pin.expected_live_definition_sha256, null);
+  // Staging apply authorized (owner approved 2026-11-12) from staging read-live run 43315046187: already_applied false,
+  // precondition_failures []. It read the derived staging pre-state (PUBLIC and the owner, grantor the owner).
+  assert.equal(pin.execute, true);
+  assert.equal(pin.authorization, 'Owner approved 2026-11-12: staging apply (wave 52) from staging read-live run 43315046187');
+  assert.equal(pin.expected_live_definition_sha256, STAGING_PRE);
+  assert.equal(pin.expected_live_definition_sha256, '72031400264a910912cecd832ac0bf8486da7b67acfd036bc66aff6820258448');
+  assert.match(fs.readFileSync(path.join(ROOT, 'ops/production-sql-161-apply.md'), 'utf8'), /\*\*Status:\*\* staging pin execute-authorized \(wave 52\); not applied anywhere\. The production pin is pending\./);
+  assert.match(fs.readFileSync(path.join(ROOT, 'ops/production-sql-161-apply.md'), 'utf8'), /read-live \(2026-11-12\)\.\*\* Run 43315046187/);
   assert.equal(releaseIntendedHash(KEY, TEXT), pin.intended_replacement_sha256);
   // Production's expected state is the intended one; staging's differs by checksops EXECUTE; everything absent is a third.
   assert.equal(PRODUCTION_PRE, pin.intended_replacement_sha256);
@@ -338,7 +343,8 @@ GRANT EXECUTE ON FUNCTION ${FN} TO PUBLIC;`],
     assert.deepEqual(stg.precondition_failures, [], JSON.stringify(stg.release_sql_inspect));
     assert.deepEqual(stg.release_sql_inspect.prerequisites_missing, []);
     assert.equal(stg.already_applied, false);
-    assert.equal(stg.pin_executable, false);
+    // The committed staging pin is authorized on exactly this pre-state (wave 52, read-live run 43315046187).
+    assert.equal(stg.pin_executable, true);
     assert.equal(stg.live_definition_sha256, STAGING_PRE);
     assert.deepEqual(stg.release_sql_inspect.functions, []);
     assert.deepEqual(stg.release_sql_inspect.acl_functions, [{ name: FN.replace('public.', ''), state: 'different', acl: [...STAGING_ACL] }]);
@@ -363,10 +369,11 @@ GRANT EXECUTE ON FUNCTION ${FN} TO PUBLIC;`],
     }
     assert.equal((await inspect()).live_definition_sha256, STAGING_PRE);
 
-    // A pending pin cannot apply: the committed pin has no recorded pre-state.
-    const pending = await handlerFor(connect)(releaseEvent({ expected_live_definition_sha256: STAGING_PRE }));
+    // A pending pin cannot apply: a pending copy of the committed pin (no recorded pre-state, not executable).
+    const pendingCopy = Object.freeze({ ...pendingPin(PINS[KEY]), expected_live_definition_sha256: STAGING_PRE });
+    const pending = await handlerFor(connect, { pins: { [KEY]: pendingCopy } })(releaseEvent({ pin: pendingCopy }));
     assert.equal(pending.ok, false);
-    assert.equal(pending.code, CODES.SQL_COLLISION);
+    assert.equal(pending.code, CODES.GUARD_APPLY_FORBIDDEN);
     // An unexpected pre-state (the owner as the only grantee, derived here) refuses on staging's, nothing applied.
     const OWNER_ONLY_PRE = releaseStateHash(KEY, preState(['owner EXECUTE grantor=owner']));
     assert.notEqual(OWNER_ONLY_PRE, STAGING_PRE);

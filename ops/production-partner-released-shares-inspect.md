@@ -108,6 +108,23 @@ This runs only after the change is merged to main.
   organization. Compare with `send_legs` (a send writes no payout row).
 - `target_own` not empty: Condition One has payouts or sends of its own, contrary to the report.
 
+## Result of the 2026-11-12 run
+
+Recorded in `production_inspect` of the configuration file (SSM command
+`bfc0f623-cfce-4061-b82e-c0f891de6274`, source `e3492a0c8`, exit 0, PostgreSQL 18).
+
+- 96 active shares to Condition One, all from Freedom: 55 at `funds_released`, 15 `endorsing`,
+  13 `review`, 6 `loss_draft`, 5 `deposited`, 1 `ready_for_deposit`, 1 `returned`.
+- All 55 released checks are `paid_to_target_listed`: each has a settled `external_check` payout
+  that names Condition One by `recipient_tenant_id`, $408,792.68 in total against $479,631.37 of
+  check amount. One further payout ($34,350.00) on one of those checks names someone else.
+- No near miss, no payout without a recipient, no send leg from the released checks.
+- Condition One has no payout and no send leg of its own.
+
+So Freedom's recorded outside payments reach Condition One's Funds Received with their real
+amounts; the payee matching needs no fix. Not covered: sends from the 5 shared checks still at
+`deposited` (the `send_legs` section reads released checks only).
+
 ## Staging
 
 This change adds no staging tool. The tests run the same statements on PostgreSQL 16

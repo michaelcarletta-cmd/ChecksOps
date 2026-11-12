@@ -142,7 +142,10 @@ const fakeDb = ({
         };
       }
       if (sql.includes('FROM public.check_intake_items')) {
-        return { rows: params[0] === CHECK ? [{ id: CHECK, tenant_id: checkTenant }] : [] };
+        // The check's owner shares it with the sender right now (the EXISTS in the handler's check query).
+        const sharedWithSender = shares.some((s) => s.check_id === CHECK && !s.revoked_at
+          && s.source_tenant_id === checkTenant && s.target_tenant_id === params[1]);
+        return { rows: params[0] === CHECK ? [{ id: CHECK, tenant_id: checkTenant, shared_with_sender: sharedWithSender }] : [] };
       }
       if (sql.includes('FROM public.payment_provider_accounts')) {
         return { rows: account && params[0] === account.tenant_id && params[1] === account.environment ? [account] : [] };
@@ -383,6 +386,39 @@ test('recent unsent wallet parts of other sends are not counted as available', a
     const result = await run(client, moov, { recipients: [stakeholder(500)] });
     assert.equal(result.ok, true, JSON.stringify(result));
     assert.deepEqual(moov.posts().map((p) => [p.body.source.paymentMethodID, p.body.amount.value]), [['pm-wallet', 100], ['pm-debit', 400]]);
+  });
+});
+
+test('a partner sends from a check its owner shares with it; a revoked share or a share to someone else is not found', async () => {
+  await withEnv(FLAGS, async () => {
+    // The check belongs to another organization, which shares it with the sender.
+    const shared = [{ check_id: CHECK, source_tenant_id: OTHER_TENANT, target_tenant_id: TENANT }];
+    const client = fakeDb({ checkTenant: OTHER_TENANT, shares: shared });
+    const moov = moovStub();
+    const result = await run(client, moov, { recipients: [stakeholder(700)] });
+    assert.equal(result.ok, true, JSON.stringify(result));
+    assert.equal(moov.posts().length, 1);
+    // The leg is the sender's own row on that check; nothing is written under the check's owner.
+    assert.deepEqual(client.committed.transfers.map((t) => [t.tenant_id, t.check_id, t.leg_role]), [[TENANT, CHECK, 'send_wallet']]);
+    const checkRead = client.log.find((l) => l.sql.includes('FROM public.check_intake_items'));
+    assert.deepEqual(checkRead.params, [CHECK, TENANT]);
+    assert.match(checkRead.sql, /s\.check_id = c\.id AND s\.source_tenant_id = c\.tenant_id\s+AND s\.target_tenant_id = \$2::uuid AND s\.revoked_at IS NULL/);
+    assert.equal(client.log.some((l) => /UPDATE public\.check_intake_items|INSERT INTO public\.disbursement/.test(l.sql)), false);
+
+    for (const [name, shares] of [
+      ['revoked', [{ ...shared[0], revoked_at: '2026-11-12T00:00:00Z' }]],
+      ['shared with another organization', [{ ...shared[0], target_tenant_id: PARTNER }]],
+      ['shared by the sender, not with it', [{ check_id: CHECK, source_tenant_id: TENANT, target_tenant_id: OTHER_TENANT }]],
+      ['no share', []],
+    ]) {
+      const refused = fakeDb({ checkTenant: OTHER_TENANT, shares });
+      const stub = moovStub();
+      const out = await run(refused, stub, { recipients: [stakeholder(700)] });
+      assert.equal(out.statusCode, 404, name);
+      assert.equal(out.error, 'check_not_found', name);
+      assert.equal(stub.posts().length, 0, name);
+      assert.equal(refused.committed.transfers.length, 0, name);
+    }
   });
 });
 
