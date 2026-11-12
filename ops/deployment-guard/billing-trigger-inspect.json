@@ -11,5 +11,21 @@
   "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
   "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
   "note": "Inspect-only configuration (no pin, no execute, no apply). Same production RDS and checksops_admin secret as ops/deployment-guard/mortgage-desk-access-production-inspect.json. The tool runs one BEGIN READ ONLY ... ROLLBACK of fixed catalog SELECTs: triggers, the billing and compensation functions (definitions, hashes, EXECUTE ACL, repository match) and column names. No table row is read.",
-  "production_inspect": null
+  "production_inspect": {
+    "status": "partial",
+    "date": "2026-11-12",
+    "source_commit": "a2559c323468b275fe198d258611eb37680d8f11",
+    "transfer_run": 43290363096,
+    "tarball_sha256": "84cfe7a9e7f2f3be89ecf60b50b2cc55dc618f05b20840f1c61747961ad1280e",
+    "owner_approval": "run the billing trigger inspect in production",
+    "runner": "i-0c35557c4e5385406",
+    "ssm_command_ids": [
+      "a6cefecf-d0d4-4bff-8443-5a8190455f3f",
+      "a26100c1-ba67-4e0a-a19b-0de61b40bac9",
+      "ff854910-d025-4e14-ad0f-3a4d598172cc",
+      "20bbce56-14db-4ace-835c-ba7ff47a8c40"
+    ],
+    "output_sha256": "cd32ba8f2405a78e65ff93a392a5eb3436f2f4c0868a5476cd1fb52747f843fe",
+    "note": "Owner's words for the run: \"run the billing trigger inspect in production\". Runner started 19:29:41Z (online 19:30:02Z), SSM a6cefecf (full compact output) cut at the 24000-character SSM limit inside functions; runner stopped 19:31:02Z; started again (online 19:31:47Z) for three per-section commands of the same read-only inspect on the same tarball: a26100c1 (summary; cut inside functions), ff854910 (definitions of record_check_billing_event and tg_accrue_mortgage_ops_billing), 20bbce56 (definitions of earn_mortgage_agent_compensation and tg_earn_mortgage_agent_compensation); stopped 19:32:49Z. All four Success, ResponseCode 0; every run printed the same out.json sha256 (cd32ba8f...), so the database did not change between them. Found: missing [], tables_missing []; record_check_billing_event is SQL 98's body (charges check_processing on any change to deposited, no deposit-method exception); tg_accrue_mortgage_ops_billing (SECURITY DEFINER, EXECUTE PUBLIC and checksops_admin) only gates on the first accept and calls public.accrue_mortgage_ops_billing(NEW.id), which this tool did not read (not named, not trigger-run; added to NAMED_FUNCTIONS by the following change); earn_mortgage_agent_compensation is the SQL 47 body (additional classification paid additional_cents, default 500); a second Mortgage Ops billing trigger tr_record_mortgage_handling_billing on check_intake_items runs tg_record_mortgage_handling_billing, whose definition fell past the cut. Not yet read: the bodies of accrue_mortgage_ops_billing and tg_record_mortgage_handling_billing."
+  }
 }
