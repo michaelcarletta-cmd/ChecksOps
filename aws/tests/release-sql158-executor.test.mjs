@@ -154,7 +154,7 @@ test('pin: SQL 158 staging-authorized from its read-live, code-derived, selectab
   assert.equal(pin.authorization, 'Owner approved 2026-11-12: staging apply (wave 50) from staging read-live run 43221906020');
   assert.equal(pin.expected_live_definition_sha256, ABSENT);
   assert.equal(pin.expected_live_definition_sha256, 'ed94cf62003c8ef29667a8b79dd081f8e0491bde28cf8ec1acee1154b877e233');
-  assert.match(fs.readFileSync(path.join(ROOT, 'ops/production-sql-158-apply.md'), 'utf8'), /\*\*Status:\*\* staging pin execute-authorized \(wave 50\); not applied anywhere\. The production pin is pending\./);
+  assert.match(fs.readFileSync(path.join(ROOT, 'ops/production-sql-158-apply.md'), 'utf8'), /\*\*Status:\*\* applied to staging \(wave 50, 2026-11-12\); production pin execute-authorized/);
   assert.match(fs.readFileSync(path.join(ROOT, 'ops/production-sql-158-apply.md'), 'utf8'), /read-live \(2026-11-12\)\.\*\* Run 43221906020/);
   assert.equal(releaseIntendedHash(KEY, TEXT), pin.intended_replacement_sha256);
   assert.notEqual(ABSENT, pin.intended_replacement_sha256);
@@ -198,12 +198,12 @@ test('pin: SQL 158 staging-authorized from its read-live, code-derived, selectab
   assert.equal(prod.source_sha256, pin.source_sha256);
   assert.deepEqual(prod.function_identities, FNS);
   assert.deepEqual(prod.predecessors, []);
-  assert.equal(prod.execute, false);
-  assert.equal(prod.authorization, 'pending');
+  assert.equal(prod.execute, true);
+  assert.match(prod.authorization, /^Owner approved 2026-11-12 /);
   assert.equal(prod.authorization_phrase, 'START_MORTGAGE_DESK_OVERSIGHT_AND_AGENT_NOTES');
-  assert.equal(prod.expected_live_definition_sha256, null);
-  assert.equal(prod.production_inspect.status, 'pending');
-  assert.equal(prod.staging_acceptance.ok, false);
+  assert.equal(prod.expected_live_definition_sha256, ABSENT);
+  assert.equal(prod.production_inspect.status, 'recorded');
+  assert.equal(prod.staging_acceptance.ok, true);
   assert.ok(prod.production_inspect.note.includes(ABSENT));
   assert.ok(prod.order_note.includes(ABSENT));
   assert.ok(prod.intended_post_state.note.includes(pin.intended_replacement_sha256));
