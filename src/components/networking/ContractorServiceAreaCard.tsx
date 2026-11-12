@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Loader2, MapPin, Save, Plus, X, Crosshair, Wrench, Globe, Sparkles, Star } from "lucide-react";
+import { Loader2, MapPin, Save, Plus, X, Crosshair, Wrench, Globe, Star } from "lucide-react";
 
 type MyProfile = {
   id: string;
@@ -546,7 +546,7 @@ export function ContractorServiceAreaCard() {
               disabled={deriving || prefixes.length === 0}
               className="h-7 text-xs"
             >
-              {deriving ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Sparkles className="h-3 w-3 mr-1" />}
+              {deriving ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <MapPin className="h-3 w-3 mr-1" />}
               Auto-detect from ZIPs
             </Button>
           </div>

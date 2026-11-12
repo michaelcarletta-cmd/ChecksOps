@@ -200,7 +200,7 @@ export function LossDraftDetailPanel({
             return (
               <div className={`mt-2 rounded-md border p-2 text-xs ${returned ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-200" : "border-amber-500/40 bg-amber-500/10 text-amber-200"}`}>
                 <div className="font-medium">
-                  {returned ? "✅ Ready to send" : "⏳ Waiting on 1st mortgagee"}
+                  {returned ? "Ready to send" : "Waiting on 1st mortgagee"}
                 </div>
                 <div className="text-[11px] opacity-90">
                   {returned
@@ -264,7 +264,7 @@ export function LossDraftDetailPanel({
         ) : (
           <div className="text-xs text-muted-foreground">
             Not Monitored — Mortgage endorses &amp; returns check
-            {draft.check_received_back_date && " · ✅ Received back"}
+            {draft.check_received_back_date && " · Received back"}
           </div>
         )}
 

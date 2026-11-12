@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
-import { applyNativeAppShell, NATIVE_PANEL_ENTER, playNativeAppEntrance } from '../../src/lib/nativeApp.ts';
+import { applyNativeAppShell, NATIVE_PANEL_ENTER, NATIVE_PANEL_TIMING, playNativeAppEntrance } from '../../src/lib/nativeApp.ts';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
@@ -162,8 +162,30 @@ test('app pages float in from the right, once: one keyed .route-page per path, n
   }
   const css = read('src/index.css');
   const block = css.slice(css.indexOf('/* ── iOS / Android app only'));
-  assert.match(block, /@keyframes native-page-in \{\s*from \{ opacity: 0; translate: 36px 0; \}/);
+  assert.match(block, /@keyframes native-page-in \{\s*from \{ opacity: 0; translate: 24px 0; \}/);
   assert.match(block, /html\.native-app \.route-page \{\s*overflow-x: clip;\s*animation: native-page-in /);
   assert.match(block, /html\.native-app \.route-page \.page-shell \{\s*animation: none;/);
   assert.doesNotMatch(block, /\.page-shell > /, 'no one-by-one sections on top of the page slide');
+});
+
+// Second UI pass (2026-11-12): the app moves like a calm native app, not a demo. No easing
+// overshoots (a cubic-bezier y above 1 springs past the target), and nothing runs long.
+test('app motion is calm: no overshooting easing, short durations and staggers', () => {
+  const css = read('src/index.css');
+  const block = css.slice(css.indexOf('/* ── iOS / Android app only'));
+  const curves = [...block.matchAll(/cubic-bezier\(([^)]*)\)/g)].map((m) => m[1].split(',').map(Number));
+  assert.ok(curves.length >= 10, `found ${curves.length} curves`);
+  for (const [x1, y1, x2, y2] of curves) {
+    assert.ok(y1 <= 1 && y2 <= 1 && y1 >= 0 && y2 >= 0, `overshooting curve cubic-bezier(${x1}, ${y1}, ${x2}, ${y2})`);
+  }
+  const body = block.slice(0, block.indexOf('@media (prefers-reduced-motion'));
+  const durations = [...body.matchAll(/(?:animation|transition):[^;]*/g)]
+    .flatMap((m) => [...m[0].matchAll(/(\d+)ms/g)].map((d) => Number(d[1])));
+  assert.ok(durations.length >= 15, `found ${durations.length} durations`);
+  for (const ms of durations) assert.ok(ms <= 300, `duration ${ms}ms is longer than 300ms`);
+  const delays = [...body.matchAll(/animation-delay: (\d+)ms/g)].map((m) => Number(m[1]));
+  assert.ok(delays.length >= 7);
+  for (const ms of delays) assert.ok(ms <= 120, `stagger ${ms}ms is longer than 120ms`);
+  assert.ok(NATIVE_PANEL_TIMING.duration <= 300, 'check panel entrance is short');
+  assert.doesNotMatch(String(NATIVE_PANEL_TIMING.easing), /cubic-bezier\([^)]*\b1\.\d/, 'check panel entrance does not overshoot');
 });
