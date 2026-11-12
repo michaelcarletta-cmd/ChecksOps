@@ -1,8 +1,8 @@
 {
   "id": "sql159-homeowner-intro-requests-select-grant-production-apply",
   "migration": "sql159",
-  "authorization": "pending",
-  "execute": false,
+  "authorization": "Owner approved 2026-11-12 (the owner's words of 2026-11-12: \"A now\", \"Yes start that\", \"Yes start the staging refresh and read-live\" and \"Yes do the record PR and the production inspect\", none of them words for the production apply; the change itself is reviewed and merged by the owner): production apply of SQL 159 after the staging acceptance below (production 6170e77b6e8b764b28de0d41779ad2d326d867409b401a4b7fd0bb4aa27b7c50 -> d1677f1cb3f8bf5878744111986af7c6d9d4895b0e5a88161372249cdaa3dc0c); execute true takes effect only when the owner reviews and merges this change. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
+  "execute": true,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -11,7 +11,7 @@
   "staging_pin_commit": "f81f9008e7a4fc2a394c0faee05adda1dd8d4514",
   "source_sha256": "0e26c2e4d2efebf4e10b2332c5943ee530c554a686713ed031d767a6f95da3ab",
   "function_identities": [],
-  "expected_live_definition_sha256": null,
+  "expected_live_definition_sha256": "6170e77b6e8b764b28de0d41779ad2d326d867409b401a4b7fd0bb4aa27b7c50",
   "intended_replacement_sha256": "d1677f1cb3f8bf5878744111986af7c6d9d4895b0e5a88161372249cdaa3dc0c",
   "authorization_phrase": "GRANT_HOMEOWNER_INTRO_REQUESTS_SELECT",
   "predecessors": [],
@@ -39,24 +39,24 @@
     "note": "Guarded tooling for SQL 159: sql159-homeowner-intro-requests-select-grant-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql159-homeowner-intro-requests-select-grant); production-sql-one-shot.mjs --migration sql159. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): checksops's SELECT line on public.homeowner_intro_requests. The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
   },
   "production_inspect": {
-    "status": "pending",
-    "date": null,
-    "ssm_command_id": null,
-    "source_commit": null,
+    "status": "recorded",
+    "date": "2026-11-12",
+    "ssm_command_id": "acaf2260-cef8-4d40-9f19-85a5c87c873d",
+    "source_commit": "a8a0afa7b4733b252fd3be412747ac68a46be805",
     "read_only": true,
     "connected_as": "checksops_admin",
-    "live_definition_sha256": null,
-    "apply_preconditions_met": null,
-    "precondition_failures": null,
-    "note": "Pending: no release-engine production inspect has been run for SQL 159 yet. Expected: prerequisites_missing [], checksops without SELECT on public.homeowner_intro_requests, already_applied false. Expected release-engine fingerprint of that pre-state under sql159: 6170e77b6e8b764b28de0d41779ad2d326d867409b401a4b7fd0bb4aa27b7c50 (the table present, no checksops SELECT line; releaseStateHash('sql159', { privileges: { 'public.homeowner_intro_requests': { exists: true, lines: [] } } })). Record the one-shot --phase inspect's date, SSM command id, source commit, live_definition_sha256, prerequisites_missing, release_sql_inspect, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. Stop if the pre-state differs, prerequisites_missing is not [] or precondition_failures is not []: that needs its own reviewed change."
+    "live_definition_sha256": "6170e77b6e8b764b28de0d41779ad2d326d867409b401a4b7fd0bb4aa27b7c50",
+    "apply_preconditions_met": false,
+    "precondition_failures": [],
+    "note": "Recorded from the read-only production inspect of 2026-11-12 (SSM command acaf2260-cef8-4d40-9f19-85a5c87c873d, node scripts/deployment-guard/sql159-homeowner-intro-requests-select-grant-production-apply.mjs --inspect on the SQL53 runner i-0c35557c4e5385406 from main a8a0afa7b (tarball source-a8a0afa7b4733b252fd3be412747ac68a46be805.tar.gz sha256 c30c1876d3b2b8d543e2fe2c3f4d2ffef476f8badbd8f43e2ed5c7f99f086a06, transfer run 43233070204; migration source sha256 on the runner 0e26c2e4d2efebf4e10b2332c5943ee530c554a686713ed031d767a6f95da3ab == source_sha256; the runner started 14:05:02Z for this command and stopped 14:06:11Z), ok true, read_only true, source_ok true, current_user checksops_admin). live_definition_sha256 6170e77b6e8b764b28de0d41779ad2d326d867409b401a4b7fd0bb4aa27b7c50 (not the intended d1677f1cb3f8bf5878744111986af7c6d9d4895b0e5a88161372249cdaa3dc0c: already_applied false); release_sql_inspect.table_privileges: homeowner_intro_requests lines [] (checksops holds no SELECT), other_write_grants []; prerequisites_missing [], missing_dependencies [], predecessors {}, successors_applied [], precondition_failures []. 6170e77b6e8b764b28de0d41779ad2d326d867409b401a4b7fd0bb4aa27b7c50 is the expected production pre-state the earlier note below names: the table present and checksops without SELECT on it, derived from the spec (releaseStateHash('sql159', { privileges: { 'public.homeowner_intro_requests': { exists: true, lines: [] } } }), aws/tests/release-sql159-executor.test.mjs, which also reads it back from PostgreSQL 16 and applies from it). It confirms the 2026-11-10 log: the Leads read is refused at the grant layer. apply_preconditions_met was false at inspect time only because no pre-state was recorded yet (execute false, expected_live_definition_sha256 null). This reviewed change copies live_definition_sha256 into expected_live_definition_sha256 and, in the same change, sets authorization, execute true and staging_acceptance. A fresh --inspect immediately before apply (the one-shot's inspect step) must still report this live_definition_sha256 and precondition_failures []; if not, stop. If already_applied is true, the table is missing (567ee275a409d67eda07451b63ff436b24fae5f40a381940d6e39c96cb086414) or precondition_failures is not [], stop: that needs its own reviewed change. Earlier: Pending: no release-engine production inspect has been run for SQL 159 yet. Expected: prerequisites_missing [], checksops without SELECT on public.homeowner_intro_requests, already_applied false. Expected release-engine fingerprint of that pre-state under sql159: 6170e77b6e8b764b28de0d41779ad2d326d867409b401a4b7fd0bb4aa27b7c50 (the table present, no checksops SELECT line; releaseStateHash('sql159', { privileges: { 'public.homeowner_intro_requests': { exists: true, lines: [] } } })). Record the one-shot --phase inspect's date, SSM command id, source commit, live_definition_sha256, prerequisites_missing, release_sql_inspect, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. Stop if the pre-state differs, prerequisites_missing is not [] or precondition_failures is not []: that needs its own reviewed change."
   },
   "intended_post_state": {
     "fingerprint": "d1677f1cb3f8bf5878744111986af7c6d9d4895b0e5a88161372249cdaa3dc0c",
     "note": "checksops holds table SELECT on public.homeowner_intro_requests. No other grant on the table changes (other_table_privileges_unchanged); no function, table, column, policy, RLS setting, trigger or row change. The fingerprint is releaseIntendedHash('sql159', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): d1677f1cb3f8bf5878744111986af7c6d9d4895b0e5a88161372249cdaa3dc0c."
   },
   "staging_acceptance": {
-    "ok": false,
-    "reference": null,
-    "basis": "Pending: record the guarded staging SQL executor read-live (and the staging apply, or read-live already_applied true) of SQL 159 (choice sql159-homeowner-intro-requests-select-grant) here in the reviewed change that sets execute true. The behavior is covered on PostgreSQL 16 by aws/tests/sql159-homeowner-intro-requests-select-grant-pg.test.mjs. Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+    "ok": true,
+    "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43232074130",
+    "basis": "Guarded staging SQL executor read-live of sql159-homeowner-intro-requests-select-grant, run 43232074130 (2026-11-12, main a8a0afa7b4733b252fd3be412747ac68a46be805), on the executor deployed from main a8a0afa7b (deploy run 43231455999: jEx6/8soLI/c6TjGDTrYYyQdHvRVg40lZb5Le7+Wnzk= -> OefKrcz/bKAQMwdkyZkbn4EmtapZWwq8Gzb5IUGt1zE=, RevisionId f46f8828-0668-43ca-9e07-cbc03ae2c846, adding sql/159_homeowner_intro_requests_select_grant.sql; inspect run 43230935439 had found the live executor at jEx6/8so... without it; dropped [], collisions []): live_definition_sha256 d1677f1cb3f8bf5878744111986af7c6d9d4895b0e5a88161372249cdaa3dc0c == intended, already_applied true, precondition_failures [], prerequisites_missing []; table_privileges homeowner_intro_requests lines [checksops SELECT]. Staging already held checksops SELECT on the table through its staging-only grants (SQL 65, 68, 69), so no staging apply was needed or run (ops/production-sql-159-apply.md step 1: the read-live run is the staging acceptance); the staging pin stays pending (execute false, expected_live_definition_sha256 null: a pin whose expected live hash equals the intended one cannot be bound), as for SQL 119 and SQL 131. The pre-states differ: staging is already the intended state (d1677f1cb3f8bf5878744111986af7c6d9d4895b0e5a88161372249cdaa3dc0c) and production (production_inspect) is 6170e77b6e8b764b28de0d41779ad2d326d867409b401a4b7fd0bb4aa27b7c50 (no checksops SELECT). Staging's checksops also holds DELETE and UPDATE on the table (other_write_grants, staging-only SQL 65/68); production holds neither, SQL 159 grants neither, and the fingerprint covers only checksops's SELECT line. The grant path itself is covered on PostgreSQL 16 by aws/tests/sql159-homeowner-intro-requests-select-grant-pg.test.mjs from production's pre-state (the Leads read refused before, the contractor's row only after), and through the executor by aws/tests/release-sql159-executor.test.mjs. The post-state fingerprint is the same in both environments; the same file bytes (source_sha256) are pinned in both."
   }
 }

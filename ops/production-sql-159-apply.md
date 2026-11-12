@@ -27,7 +27,36 @@ stay as it was (`other_table_privileges_unchanged`). No API, Lambda or SPA chang
 **Number.** Authored as SQL 158 in #1808 and renumbered to 159 before merging: SQL 158 on main is the Mortgage Desk
 oversight migration (`158_mortgage_desk_oversight_and_agent_notes.sql`, #1807). Nothing was applied under either number.
 
-**Status:** tooling built; staging and production pins pending (`execute: false`). Nothing applied or read.
+**Status:** staging already in the intended state (read-live run 43232074130, 2026-11-12; no staging apply, the staging pin stays pending); production pin execute-authorized on production's own pre-state (read-only inspect SSM `acaf2260-cef8-4d40-9f19-85a5c87c873d`). Not applied in production.
+
+**Staging executor refreshed for SQL 159 (2026-11-12).** Under the owner's words "Yes start the staging refresh and
+read-live", after #1808 merged as `a8a0afa7b4733b252fd3be412747ac68a46be805`: inspect run 43230935439 found the live executor at
+`jEx6/8soLI/c6TjGDTrYYyQdHvRVg40lZb5Le7+Wnzk=` without the file (`added` `sql/159_homeowner_intro_requests_select_grant.sql`,
+`dropped` `[]`, `collisions` `[]`). Deploy run 43231455999 updated `checksops-staging-guarded-sql-executor` to
+`OefKrcz/bKAQMwdkyZkbn4EmtapZWwq8Gzb5IUGt1zE=` (RevisionId `f46f8828-0668-43ca-9e07-cbc03ae2c846`), `errors` `[]`,
+`staging_api_untouched` true, `billing_sql44_untouched` true.
+
+**Staging read-live (2026-11-12).** Read-live run 43232074130 (main `a8a0afa7b`, on executor `OefKrcz/…`): `already_applied`
+true, `live_definition_sha256` `d1677f1cb3f8bf5878744111986af7c6d9d4895b0e5a88161372249cdaa3dc0c` equal to the intended hash, `precondition_failures` `[]`,
+`prerequisites_missing` `[]`; `table_privileges` `homeowner_intro_requests` lines `[checksops SELECT]`. Staging held the grant
+through its staging-only migrations, so no staging apply was needed or run and the staging pin stays pending (a pin whose
+expected live hash equals the intended one cannot be bound), as for SQL 119 and SQL 131; the read-live is the staging
+acceptance. Staging's `checksops` also holds DELETE and UPDATE on the table (`other_write_grants`, staging-only SQL 65/68);
+production holds neither and SQL 159 grants neither. There is no separate staging record PR for SQL 159: the read-live is
+recorded here and in the production pin's `staging_acceptance` by the production pin PR.
+
+**Production inspect (2026-11-12).** Read-only `--inspect` through SSM `acaf2260-cef8-4d40-9f19-85a5c87c873d` on
+`i-0c35557c4e5385406` (under the owner's words "Yes do the record PR and the production inspect"; runner started 14:05:02Z,
+command 14:05:29Z to 14:05:39Z, Success, runner stopped 14:06:11Z, all by `user/claude-code`; an AWS Inspector plugin command
+`8719bbdb-ed80-4823-aff0-f1f1740ee167` (`AmazonInspector2-ConfigureInspectorSsmPlugin`) was listed in progress on the stopped
+runner, its invocation already failed `InvalidPlatform`, not a SQL run), main `a8a0afa7b` (tarball sha256
+`c30c1876d3b2b8d543e2fe2c3f4d2ffef476f8badbd8f43e2ed5c7f99f086a06`, staged by `sql53-temporary-transfer.yml` run 43233070204, migration source `0e26c2e4…` == pin),
+`read_only` true, `current_user` `checksops_admin`: live `6170e77b6e8b764b28de0d41779ad2d326d867409b401a4b7fd0bb4aa27b7c50` (the table present, `checksops`
+without SELECT, `other_write_grants` `[]`: the derived pre-state), no predecessor, `missing_dependencies` `[]`, `already_applied`
+false, `precondition_failures` `[]`, `apply_preconditions_met` false (no pre-state recorded yet). Recorded in the production pin
+with the staging read-live (run 43232074130) as its staging acceptance and `execute: true`. The owner merges the pin change;
+the apply runs only after that merge is on main and staged, under the owner's words for that run (phrase
+`GRANT_HOMEOWNER_INTRO_REQUESTS_SELECT`).
 
 ## Fingerprint
 
