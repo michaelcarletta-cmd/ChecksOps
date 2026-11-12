@@ -188,7 +188,7 @@ test('order: no predecessor; one function\'s EXECUTE ACL, nothing created or rep
   for (const value of [COMMITTED.intended_replacement_sha256, COMMITTED.source_sha256, STAGING_PRE, 'GRANT_CHECKSOPS_EXECUTE_ON_MORTGAGE_HANDLING_TRIGGER_FUNCTION', 'wave 52', '43307779123']) {
     assert.ok(runbook.includes(value), value);
   }
-  assert.match(runbook, /\*\*Status:\*\* tooling built; staging and production pins pending \(`execute: false`\)\. Nothing applied or read\./);
+  assert.match(runbook, /\*\*Status:\*\* staging pin execute-authorized \(wave 52\); not applied anywhere\. The production pin is pending\./);
   const oneShot = fs.readFileSync(path.join(ROOT, 'ops/production-sql-one-shot.md'), 'utf8');
   assert.match(oneShot, /\| `sql161` \|/);
   assert.match(oneShot, /`sql159`, `sql160`, `sql161`, `sql162`\) \|/);

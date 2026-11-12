@@ -3692,7 +3692,8 @@ export const AUTHORIZED_SQL160_NO_ADDITIONAL_CHECK_OR_MANUAL_DEPOSIT_FEE = Objec
 // staging that one permission, then SQL 160"). The staging read-live of SQL 160 (run 43307779123) read
 // tg_record_mortgage_handling_billing()'s ACL as PUBLIC and the owner, without the checksops EXECUTE production holds;
 // SQL 160's CREATE OR REPLACE keeps the ACL. One GRANT, nothing else (SQL 131's ACL-only shape, revokes []). No
-// predecessor. Pending until a reviewed pin change records a staging read-live (wave 52 when approved), before SQL 160's.
+// predecessor. Staging apply authorized (wave 52, before SQL 160's) from staging read-live run 43315046187: PUBLIC and the owner,
+// grantor the owner, equal to the derived staging pre-state (ops/production-sql-161-apply.md).
 export const AUTHORIZED_SQL161_TG_MORTGAGE_HANDLING_BILLING_CHECKSOPS_EXECUTE = Object.freeze({
   key: 'sql161',
   filename: 'aws/workflows/sql/161_tg_mortgage_handling_billing_checksops_execute.sql',
@@ -3700,9 +3701,11 @@ export const AUTHORIZED_SQL161_TG_MORTGAGE_HANDLING_BILLING_CHECKSOPS_EXECUTE = 
   // The commit that last authored the file bytes.
   commit: '17306ac9d0d960b94dde1c54cdf6eabd5953f1ee',
   source_sha256: '519d15b1c7bcfd0cc27b5b1c0d08916729b28c9f007fefb8b8e701b6f865c98d',
-  authorization: 'pending',
-  execute: false,
-  expected_live_definition_sha256: null,
+  authorization: 'Owner approved 2026-11-12: staging apply (wave 52) from staging read-live run 43315046187',
+  execute: true,
+  // Staging read-live run 43315046187 (main 1681b943, executor deploy run 43314468325): already_applied false,
+  // precondition_failures []. Equal to the derived staging pre-state (PUBLIC and the owner EXECUTE, grantor the owner).
+  expected_live_definition_sha256: '72031400264a910912cecd832ac0bf8486da7b67acfd036bc66aff6820258448',
   // Code-derived: releaseIntendedHash('sql161', file bytes) (release-sql-state.mjs); re-derived by the tests.
   intended_replacement_sha256: 'b916bcb512896ba7a90ac4401ad1903b18482d27e3173e8ccef21112eb4506f8',
   // The function whose ACL the file sets (spec acl_functions); it creates or replaces none.

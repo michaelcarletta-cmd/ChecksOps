@@ -156,6 +156,10 @@ const CHANGED_SINCE_SECOND_REBUILD = {
   'ocr-parse.mjs': 'changed',
   'check-ocr-provider.mjs': 'changed',
   'ocr-descriptive-persist.mjs': 'changed',
+  // Settlement bank (2026-11-12, owner: Condition One's settlement bank showed nothing): a failing
+  // Moov read no longer fails the whole sweep snapshot; the bank from the database still shows. A
+  // rebuild-only change (see OVERLAY_PLAN_CHANGES), not a member of the current rebuild section.
+  'providers/parity/sweep-read.mjs': 'changed',
 };
 // Members of the current (third) rebuild sections that main changed after those rebuilds were
 // applied (staging run 39666390516, production run 39669873076 of main 008af40e2). The sections keep
@@ -204,6 +208,10 @@ const APPLIED_SINCE_FOURTH_PRODUCTION_REBUILD = {
 };
 // Listed changes that go through the production overlay plan, never the current rebuild section.
 const OVERLAY_PLAN_CHANGES = new Set([
+  // Settlement bank fallback (2026-11-12): a Moov read failure no longer hides the bank on file. Not an overlay
+  // member: it reaches a function only with a rebuild. Production inspect 43308083143 (main 83a508fb1,
+  // ALREADY_ACCEPTED, 0 changed) shows production runs main's previous bytes 4da8e0c0...
+  'providers/parity/sweep-read.mjs',
   'providers/production/checkalt-eligibility.mjs',
   'providers/production/checkalt-poll.mjs',
   'providers/production/checkalt-status-read.mjs',
