@@ -1,0 +1,21 @@
+{
+  "workstream_id": "desk-shared-check-library",
+  "authorization": "Pending owner review (2026-11-11). Planning only: nothing is live or verified. The production apply needs its own owner approval, a staging acceptance reference and a read-only production inspect that confirms the live bytes.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Mortgage Desk shared-check library documents (owner 2026-11-11: \"It should be everybody shared on that check\", then \"Start the API change\"): mortgage-desk-esign.mjs gains action shared_library_documents, which calls SQL 156's aws_mortgage_desk_shared_library_documents(uuid) as the signed-in user (the auto-shared library documents of every tenant on the request's check), and storage.mjs authorizeObject lets an agent open such a partner file through SQL 156's aws_mortgage_agent_can_read_shared_library_path(text[], text, uuid), after the existing request-attachment check. REPLACE mortgage-desk-esign.mjs 492da984 -> 07df2ae0 (from the SQL 124 applied record's bytes); REPLACE storage.mjs df96755d -> c1bb7d71 (from the homeowner portal signing applied bytes). Both held on SQL 156 (applied to staging and production 2026-11-11). No other member, no new module. Planning only.",
+  "members": {
+    "mortgage-desk-esign.mjs": {
+      "live_sha256": "492da984c1ec60d419c147431efef8ef03d25860f179b615a126c3b753174e2d",
+      "accepted_sha256": "07df2ae0e323d9e19abbf3ac6e1280e122e53c1b2b5eebf4830f15dfd60af08c",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-mortgage-desk-esign-applied-manifest-2026-10-28.json"
+    },
+    "storage.mjs": {
+      "live_sha256": "df96755de5a42d754fd24e95defd9cb25f082ac72b11952537661413941b8d76",
+      "accepted_sha256": "c1bb7d710aed71c28ad4bbe0e611f10b7c615f3048a145694cd265f32d87184e",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-homeowner-portal-signing-applied-manifest-2026-10-29.json"
+    }
+  }
+}

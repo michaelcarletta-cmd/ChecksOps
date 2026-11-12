@@ -250,8 +250,11 @@ test('order: no predecessor and no order; SQL 122\'s working-request check, SQL 
   assert.ok(pre.evidence.includes(`SSM ${COMMITTED.applied.apply_ssm_command_id}`));
   assert.ok(pre.evidence.includes(COMMITTED.applied.one_use_id));
   assert.equal(pre.pin, 'ops/deployment-guard/sql124-mortgage-desk-signature-and-reads-production-apply.json');
-  assert.deepEqual(Object.keys(plan.members).filter((m) => plan.members[m].sql_before === SQL124_FILE), [API_MEMBER]);
-  assert.equal(plan.members[API_MEMBER].operation, 'add');
+  // The ADD was held on SQL 124 (applied 2026-10-28); the Mortgage Desk shared-check library plan (2026-11-11, planning
+  // only) moved its row on to a REPLACE held on SQL 156, so no member holds on SQL 124 any more; the record stays.
+  assert.deepEqual(Object.keys(plan.members).filter((m) => plan.members[m].sql_before === SQL124_FILE), []);
+  assert.equal(plan.members[API_MEMBER].operation, 'replace');
+  assert.equal(plan.members[API_MEMBER].sql_before, 'aws/workflows/sql/156_mortgage_desk_shared_check_library_documents.sql');
   assert.ok(plan.order.indexOf(API_MEMBER) < plan.order.indexOf('app-services.mjs'));
   // Exactly that member names these functions; no other Lambda file does.
   const apiDir = path.join(ROOT, 'aws/functions/api');

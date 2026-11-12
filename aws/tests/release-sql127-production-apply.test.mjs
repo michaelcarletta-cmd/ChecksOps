@@ -255,8 +255,10 @@ test('order: no predecessor and no order; the three functions, the SQL 82 / SQL 
   assert.ok(pre.evidence.includes(`run ${COMMITTED.applied.one_shot_run_id}`));
   assert.ok(pre.evidence.includes(COMMITTED.applied.one_use_id));
   assert.equal(pre.pin, 'ops/deployment-guard/sql127-homeowner-portal-signing-production-apply.json');
+  // (storage.mjs moved on to the Mortgage Desk shared-check library REPLACE, held on SQL 156, 2026-11-11, planning only.)
   assert.deepEqual(Object.keys(plan.members).filter((m) => plan.members[m].sql_before === SQL127_FILE).sort(),
-    ['homeowner-signing-integration.mjs', 'homeowner.mjs', 'signature-submit.mjs', 'storage.mjs']);
+    ['homeowner-signing-integration.mjs', 'homeowner.mjs', 'signature-submit.mjs']);
+  assert.equal(plan.members['storage.mjs'].sql_before, 'aws/workflows/sql/156_mortgage_desk_shared_check_library_documents.sql');
   // The API's existing calls of the two replaced functions keep their signatures.
   assert.match(fs.readFileSync(path.join(ROOT, 'aws/functions/api/homeowner.mjs'), 'utf8'),
     /SELECT public\.aws_public_homeowner_ledger_endorse_capability\(\$1, \$2::uuid\) AS doc/);

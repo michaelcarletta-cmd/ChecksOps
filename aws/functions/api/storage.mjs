@@ -112,6 +112,14 @@ export const BUCKET_AUTH_SQL = {
 
 /** Attachment-gated Mortgage Ops read. Not a general tenant_documents grant. */
 export { MORTGAGE_LIBRARY_STORAGE_AUTH_SQL };
+/**
+ * SQL 156: a mortgage agent may also open an auto-shared library:mortgage:% document of a partner tenant on the check of a
+ * Desk request open or assigned to them (owner 2026-11-11: "everybody shared on that check"). SECURITY DEFINER, read-only.
+ */
+export const MORTGAGE_SHARED_LIBRARY_STORAGE_AUTH_SQL = `
+SELECT 1
+WHERE public.aws_mortgage_agent_can_read_shared_library_path($1::text[], $2::text, $3::uuid)
+LIMIT 1`;
 
 export const LIST_SQL = {
   'claim-files': [
@@ -174,6 +182,10 @@ export const authorizeObject = async (client, bucket, objectPath, { userId } = {
     const attached = await client.query(MORTGAGE_LIBRARY_STORAGE_AUTH_SQL, [candidates, rel, userId]);
     if (attached.rows.length) {
       return { authorized: true, rel, candidates, via: 'mortgage_request_library_documents' };
+    }
+    const shared = await client.query(MORTGAGE_SHARED_LIBRARY_STORAGE_AUTH_SQL, [candidates, rel, userId]);
+    if (shared.rows.length) {
+      return { authorized: true, rel, candidates, via: 'shared_check_library_documents' };
     }
   }
   return { authorized: false, reason: 'not_authorized', rel, candidates };
