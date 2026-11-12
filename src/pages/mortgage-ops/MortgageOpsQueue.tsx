@@ -19,6 +19,7 @@ import { useAwsPollingFallback } from "@/hooks/useAwsPollingFallback";
 import { ensureMortgageDeskReturnMessage } from "@/hooks/useMortgageDeskReturnAlert";
 import { buildMortgageDeskCompletedMessage, mortgageDeskCompletionPostedByClient } from "@/lib/mortgageDeskReturn";
 import { buildMortgageDeskNoteMessage } from "@/lib/mortgageDeskWrites";
+import { fetchQueueList, MORTGAGE_QUEUE_COMPLETED_STEP, queueCountLabel, type QueueList, type QueuePage } from "@/lib/mortgageOpsQueuePaging";
 
 interface Request {
   id: string;
@@ -43,6 +44,9 @@ interface Request {
   check_amount?: number | null;
 }
 
+/** A row as the queue reads it, with its tenant name and check amount embedded. */
+type RawRequest = Request & { tenants?: { name?: string | null } | null; check?: { amount?: number | null } | null };
+
 export default function MortgageOpsQueue() {
   const { user, userRole, signOut, loading: authLoading } = useMortgageAuth();
   const navigate = useNavigate();
@@ -53,6 +57,9 @@ export default function MortgageOpsQueue() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [notesById, setNotesById] = useState<Record<string, string>>({});
   const [detailId, setDetailId] = useState<string | null>(null);
+  const [completedLimit, setCompletedLimit] = useState(MORTGAGE_QUEUE_COMPLETED_STEP);
+  const emptyMeta = { total: null as number | null, incomplete: false };
+  const [listMeta, setListMeta] = useState({ available: emptyMeta, mine: emptyMeta, completed: emptyMeta });
 
   useEffect(() => {
     if (authLoading) return;
@@ -65,46 +72,40 @@ export default function MortgageOpsQueue() {
     }
   }, [user, userRole, authLoading, navigate]);
 
+  // Each list is read with its own server-side filter, page by page (the data API returns at most 500 rows a
+  // read), and checked against an exact count, so nothing past one page disappears silently.
   const fetchQueues = useCallback(async () => {
-    const { data, error } = await supabase
-      .from("mortgage_handling_requests")
-      .select("*, tenants:tenant_id(name), check:check_intake_item_id(amount)")
-      .in("status", ["requested", "in_progress", "completed"])
-      .order("created_at", { ascending: false })
-      .limit(500);
-    if (error) {
-      toast.error("Failed to load queue");
-      setLoading(false);
-      return;
-    }
-    const rows: Request[] = (data || []).map((r: any) => ({
+    if (!user?.id) return;
+    const base = () =>
+      supabase.from("mortgage_handling_requests").select("*, tenants:tenant_id(name), check:check_intake_item_id(amount)", { count: "exact" });
+    const page = (q: PromiseLike<unknown>) => q as PromiseLike<QueuePage<RawRequest>>;
+    const [queued, inProgress, done] = await Promise.all([
+      // Queued = every unassigned 'requested' row, oldest first.
+      fetchQueueList<RawRequest>((from, to) => page(base().eq("status", "requested").is("assigned_employee_id", null).order("created_at", { ascending: true }).range(from, to))),
+      // In progress = only rows I personally accepted (each request has exactly one handler).
+      fetchQueueList<RawRequest>((from, to) => page(base().eq("status", "in_progress").eq("assigned_employee_id", user.id).order("accepted_at", { ascending: false }).range(from, to))),
+      // Completed = only tasks I closed out, newest first, MORTGAGE_QUEUE_COMPLETED_STEP more per "Load more".
+      fetchQueueList<RawRequest>((from, to) => page(base().eq("status", "completed").eq("assigned_employee_id", user.id).order("completed_at", { ascending: false }).range(from, to)), { maxRows: completedLimit }),
+    ]);
+    if (queued.error || inProgress.error || done.error) toast.error("Failed to load queue");
+    const toRequests = (rows: RawRequest[]): Request[] => rows.map(({ tenants, check, ...r }) => ({
       ...r,
-      tenant_name: r.tenants?.name ?? null,
-      check_amount: r.check?.amount ?? null,
+      tenant_name: tenants?.name ?? null,
+      check_amount: check?.amount ?? null,
     }));
-    // Queued = every unassigned 'requested' row (accurate global count)
-    setAvailable(
-      rows
-        .filter((r) => r.status === "requested" && !r.assigned_employee_id)
-        .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()),
-    );
-    // In progress = only rows I personally accepted. Each request has exactly
-    // one handler (assigned_employee_id), so other agents' work should NOT
-    // appear in my "In progress" list.
-    setMine(
-      rows
-        .filter((r) => r.status === "in_progress" && r.assigned_employee_id === user?.id)
-        .sort((a, b) => new Date(b.accepted_at ?? b.created_at).getTime() - new Date(a.accepted_at ?? a.created_at).getTime()),
-    );
-    // Completed = only tasks I closed out.
-    setCompleted(
-      rows
-        .filter((r) => r.status === "completed" && r.assigned_employee_id === user?.id)
-        .sort((a, b) => new Date(b.completed_at ?? b.created_at).getTime() - new Date(a.completed_at ?? a.created_at).getTime()),
-    );
-
+    const listOf = (l: QueueList<RawRequest>) => ({ total: l.total, incomplete: l.incomplete });
+    if (!queued.error) {
+      setAvailable(toRequests(queued.rows));
+    }
+    if (!inProgress.error) {
+      setMine(toRequests(inProgress.rows));
+    }
+    if (!done.error) {
+      setCompleted(toRequests(done.rows));
+    }
+    setListMeta({ available: listOf(queued), mine: listOf(inProgress), completed: listOf(done) });
     setLoading(false);
-  }, [user?.id]);
+  }, [user?.id, completedLimit]);
 
   useEffect(() => {
     if (!user) return;
@@ -334,15 +335,15 @@ export default function MortgageOpsQueue() {
           <TabsList>
             <TabsTrigger value="available" className="gap-2">
               <Inbox className="h-4 w-4" /> Queued
-              <Badge variant="secondary" className="ml-1">{available.length}</Badge>
+              <Badge variant="secondary" className="ml-1">{queueCountLabel({ rows: available, total: listMeta.available.total })}</Badge>
             </TabsTrigger>
             <TabsTrigger value="mine" className="gap-2">
               <Clock className="h-4 w-4" /> In progress
-              <Badge variant="secondary" className="ml-1">{mine.length}</Badge>
+              <Badge variant="secondary" className="ml-1">{queueCountLabel({ rows: mine, total: listMeta.mine.total })}</Badge>
             </TabsTrigger>
             <TabsTrigger value="completed" className="gap-2">
               <CheckCircle2 className="h-4 w-4" /> Completed
-              <Badge variant="secondary" className="ml-1">{completed.length}</Badge>
+              <Badge variant="secondary" className="ml-1">{queueCountLabel({ rows: completed, total: listMeta.completed.total })}</Badge>
             </TabsTrigger>
             <TabsTrigger value="directory" className="gap-2">
               <BookUser className="h-4 w-4" /> Directory
@@ -350,6 +351,11 @@ export default function MortgageOpsQueue() {
           </TabsList>
 
           <TabsContent value="available" className="mt-4 space-y-3">
+            {listMeta.available.incomplete && (
+              <p className="text-xs text-destructive">
+                Showing {available.length} of {listMeta.available.total ?? "more"} queued requests. Refresh to load the rest.
+              </p>
+            )}
             {loading ? (
               <p className="text-sm text-muted-foreground">Loading…</p>
             ) : available.length === 0 ? (
@@ -410,6 +416,11 @@ export default function MortgageOpsQueue() {
           </TabsContent>
 
           <TabsContent value="mine" className="mt-4 space-y-3">
+            {listMeta.mine.incomplete && (
+              <p className="text-xs text-destructive">
+                Showing {mine.length} of {listMeta.mine.total ?? "more"} requests in progress. Refresh to load the rest.
+              </p>
+            )}
             {mine.length === 0 ? (
               <Card><CardContent className="py-10 text-center text-sm text-muted-foreground">
                 Nothing assigned to you yet.
@@ -546,6 +557,16 @@ export default function MortgageOpsQueue() {
                   </CardContent>
                 </Card>
               ))
+            )}
+            {listMeta.completed.incomplete && (
+              <div className="flex items-center justify-center gap-3 pt-2">
+                <span className="text-xs text-muted-foreground">
+                  Showing {completed.length} of {listMeta.completed.total ?? "more"} completed
+                </span>
+                <Button variant="outline" size="sm" onClick={() => setCompletedLimit((n) => n + MORTGAGE_QUEUE_COMPLETED_STEP)}>
+                  Load more
+                </Button>
+              </div>
             )}
           </TabsContent>
 
