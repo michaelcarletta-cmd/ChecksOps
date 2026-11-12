@@ -6,7 +6,7 @@
  * default-privilege grants on its new table).
  * release-sql90-97-executor.test.mjs runs what every release key shares (SQL 158 included); this file covers what is new:
  *
- *   - the pin: pending, code-derived, selectable, packed, in step with the pending production pin; the pinned commit
+ *   - the pin: staging-authorized (wave 50) from staging read-live run 43221906020, code-derived, selectable, packed, in step with the pending production pin; the pinned commit
  *     authored the bytes; no predecessor, supersedes nothing; SQL 157 has no pin;
  *   - the file and spec: SQL 157 plus SQL 118's revoke block for this table; one table (RLS on, no policy, no grant) and
  *     six SECURITY DEFINER functions (EXECUTE checksops and the owner) with their TABLE results; no other release
@@ -135,7 +135,7 @@ ALTER TABLE public.mortgage_ops_request_audit ENABLE ROW LEVEL SECURITY;
 ALTER DEFAULT PRIVILEGES FOR ROLE checksops_admin IN SCHEMA public GRANT ALL ON TABLES TO checksops, authenticated;`,
 ];
 
-test('pin: SQL 158 pending, code-derived, selectable, packed, in step with the pending production pin; no predecessor; SQL 157 has no pin', () => {
+test('pin: SQL 158 staging-authorized from its read-live, code-derived, selectable, packed, in step with the pending production pin; no predecessor; SQL 157 has no pin', () => {
   const pin = PINS[KEY];
   const spec = RELEASE_SQL_SPECS[KEY];
   const packed = Object.fromEntries(EXECUTOR_PACK_MEMBERS);
@@ -148,9 +148,14 @@ test('pin: SQL 158 pending, code-derived, selectable, packed, in step with the p
   assert.equal(sha(TEXT), pin.source_sha256);
   // Pending until a reviewed pin change records a staging read-live.
   assertStagingPinState(assert, KEY, pin);
-  assert.equal(pin.execute, false);
-  assert.equal(pin.authorization, 'pending');
-  assert.equal(pin.expected_live_definition_sha256, null);
+  // Staging apply authorized (owner approved 2026-11-12, "approve SQL 158") from staging read-live run 43221906020:
+  // already_applied false, precondition_failures []. It read the derived state (the table and all six functions absent).
+  assert.equal(pin.execute, true);
+  assert.equal(pin.authorization, 'Owner approved 2026-11-12: staging apply (wave 50) from staging read-live run 43221906020');
+  assert.equal(pin.expected_live_definition_sha256, ABSENT);
+  assert.equal(pin.expected_live_definition_sha256, 'ed94cf62003c8ef29667a8b79dd081f8e0491bde28cf8ec1acee1154b877e233');
+  assert.match(fs.readFileSync(path.join(ROOT, 'ops/production-sql-158-apply.md'), 'utf8'), /\*\*Status:\*\* staging pin execute-authorized \(wave 50\); not applied anywhere\. The production pin is pending\./);
+  assert.match(fs.readFileSync(path.join(ROOT, 'ops/production-sql-158-apply.md'), 'utf8'), /read-live \(2026-11-12\)\.\*\* Run 43221906020/);
   assert.equal(releaseIntendedHash(KEY, TEXT), pin.intended_replacement_sha256);
   assert.notEqual(ABSENT, pin.intended_replacement_sha256);
   assert.ok(RELEASE_STAGING_SQL_KEYS.includes(KEY));

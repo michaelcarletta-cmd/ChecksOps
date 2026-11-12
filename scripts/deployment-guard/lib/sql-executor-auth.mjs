@@ -3590,7 +3590,8 @@ export const AUTHORIZED_SQL156_MORTGAGE_DESK_SHARED_CHECK_LIBRARY = Object.freez
 // "Note is only visible to agent"; then "go with SQL 158"). SQL 157 (never applied, no pin) plus the revoke of every non-owner
 // grant on its new table: public.mortgage_desk_agent_notes (RLS on, no policy, no grant) and six SECURITY DEFINER functions
 // for the platform owner (overview, assignable agents, assign, add a note, record its email) and the assigned agent (read the
-// notes). Nothing existing replaced. Pending until a reviewed pin change records a staging read-live.
+// notes). Nothing existing replaced. Staging apply authorized (wave 50) from staging read-live run 43221906020: the table and
+// all six functions absent, equal to the derived state (ops/production-sql-158-apply.md).
 export const AUTHORIZED_SQL158_MORTGAGE_DESK_OVERSIGHT_AND_AGENT_NOTES = Object.freeze({
   key: 'sql158',
   filename: 'aws/workflows/sql/158_mortgage_desk_oversight_and_agent_notes.sql',
@@ -3598,9 +3599,11 @@ export const AUTHORIZED_SQL158_MORTGAGE_DESK_OVERSIGHT_AND_AGENT_NOTES = Object.
   // The commit that last authored the file bytes.
   commit: 'd5d104f23798d09b0d5479dea199511576ee7cf4',
   source_sha256: '282c6bdac33be8e09d5100854e861cf7d14003ff94eba334d1ffe65986319e05',
-  authorization: 'pending',
-  execute: false,
-  expected_live_definition_sha256: null,
+  authorization: 'Owner approved 2026-11-12: staging apply (wave 50) from staging read-live run 43221906020',
+  execute: true,
+  // Staging read-live run 43221906020 (main bfdb9126c, executor deploy run 43221459029): already_applied false,
+  // precondition_failures []. Equal to the derived state (the table and all six functions absent).
+  expected_live_definition_sha256: 'ed94cf62003c8ef29667a8b79dd081f8e0491bde28cf8ec1acee1154b877e233',
   // Code-derived: releaseIntendedHash('sql158', file bytes) (release-sql-state.mjs); re-derived by the tests.
   intended_replacement_sha256: '1c43cf6ca02fd3d4842b1d854b1ea559dba3cbd007a01c2739d625cfc14428ee',
   function_identities: Object.freeze([
