@@ -26,7 +26,7 @@ import { useCurrentTenantMembership } from "@/hooks/useCurrentTenantMembership";
 import { useTenant } from "@/contexts/TenantContext";
 import { useToast } from "@/hooks/use-toast";
 import { SWEEP_RAIL_LABEL } from "@/lib/payments/sweeps";
-import { automaticPayoutControl, summarizeSweepActivity, sweepAmountCents, sweepTimestamp } from "@/lib/payments/walletSweepActivity";
+import { automaticPayoutControl, settlementBankTile, summarizeSweepActivity, sweepAmountCents, sweepTimestamp } from "@/lib/payments/walletSweepActivity";
 import { WalletPanel } from "@/components/payments/WalletPanel";
 import { AutoFundingPanel } from "@/components/payments/AutoFundingPanel";
 
@@ -118,6 +118,8 @@ export default function WalletOps() {
     history,
     historyUnavailable,
     stale,
+    isLoading: sweepSnapshotLoading,
+    error: sweepSnapshotError,
     refresh: refreshSweeps,
     disable: disableSweeps,
     enable: enableSweeps,
@@ -138,6 +140,12 @@ export default function WalletOps() {
   const balanceLabel = operatingBalanceLabel({ wallet, setupRequired });
 
   const payoutControl = automaticPayoutControl(config);
+  const settlementTile = settlementBankTile({
+    settlementMethod,
+    isLoading: sweepSnapshotLoading,
+    error: sweepSnapshotError,
+    displayName: displayCaseOrNull,
+  });
   const sweepsOn = payoutControl.sweepsOn;
 
   const lastSweep = (history ?? []).find((row) => sweepAmountCents(row) > 0) ?? history?.[0];
@@ -444,11 +452,10 @@ export default function WalletOps() {
           <div className="grid grid-cols-2 gap-3 text-sm">
             <div className="min-w-0">
               <p className="text-[10px] font-bold tracking-wider text-muted-foreground">Settlement bank</p>
-              <p className="mt-0.5 break-words font-medium">
-                {settlementMethod
-                  ? `${displayCaseOrNull(settlementMethod.bank_name) ?? "Bank"} ••${settlementMethod.last_four ?? "----"}`
-                  : "Not connected"}
-              </p>
+              <p className="mt-0.5 break-words font-medium">{settlementTile.text}</p>
+              {settlementTile.note && (
+                <p className="text-xs text-muted-foreground">{settlementTile.note}</p>
+              )}
             </div>
             {SHOW_AUTOMATIC_PAYOUTS && (
               <>
