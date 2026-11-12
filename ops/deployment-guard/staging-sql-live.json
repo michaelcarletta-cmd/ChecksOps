@@ -111,6 +111,10 @@
     "aws/workflows/sql/154_tenant_starter_package.sql": {
       "verified_live": true,
       "evidence": "Guarded staging SQL executor apply of sql154-tenant-starter-package on 2026-11-11 (run 43063499920, main 94d487268, wave 46, executor hweFok2h…; read-live run 43064000809 already_applied true): receipt before 05fb0b99…, after a50c631a… = the pin's intended_replacement_sha256; precondition_failures [], prerequisites_missing []."
+    },
+    "aws/workflows/sql/156_mortgage_desk_shared_check_library_documents.sql": {
+      "verified_live": true,
+      "evidence": "Guarded staging SQL executor apply of sql156-mortgage-desk-shared-check-library on 2026-11-11 (run 43114784372, main 830cc142c, wave 48, executor c6gk7wkT…; read-live run 43115143552 already_applied true): receipt before 44259316…, after 5f40695d… = the pin's intended."
     }
   }
 }
