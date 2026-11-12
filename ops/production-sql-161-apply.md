@@ -32,7 +32,16 @@ Not changed: no REVOKE (`PUBLIC` and the owner keep EXECUTE); the function's bod
 evidence; any table, column, policy, RLS setting, other grant, trigger or row. No API, Lambda or SPA change is part of
 this file or its pins. No trigger is added.
 
-**Status:** tooling built; staging and production pins pending (`execute: false`). Nothing applied or read.
+**Status:** staging pin execute-authorized (wave 52); not applied anywhere. The production pin is pending.
+
+**Staging read-live (2026-11-12).** Run 43315046187 (main `1681b943`, after executor inspect run 43314014382 and executor deploy
+run 43314468325 (executor CodeSha256 `lgGW3HXd…` -> `F98o+gob…`)), under the owner's words "A new SQL 161 that gives staging
+that one permission, then SQL 160" and "Merging the SQL 161 PR": `already_applied` false, `precondition_failures` `[]`,
+`prerequisites_missing` `[]`; `tg_record_mortgage_handling_billing()` EXECUTE for PUBLIC and the owner, each grantor the owner.
+Live `72031400264a910912cecd832ac0bf8486da7b67acfd036bc66aff6820258448`, equal to the derived staging pre-state; intended `b916bcb5…`. Recorded in the staging pin
+(`expected_live_definition_sha256`, `execute: true`, wave 52). The staging apply is a separate run after this pin is merged and
+the executor is redeployed carrying it, on the owner's words for that run; SQL 160's staging read-live, pin and apply follow.
+The production pin stays pending.
 
 ## Order
 
