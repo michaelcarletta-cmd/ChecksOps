@@ -34,7 +34,20 @@ trigger count is not affected. The assign's row change fires whatever live trigg
 the API (Tenant Management actions, the agent email, the Desk's read of the notes) and the Tenant Management page ship
 afterwards through their own guarded paths.
 
-**Status:** staging pin execute-authorized (wave 50); not applied anywhere. The production pin is pending.
+**Staging apply (2026-11-12).** After the staging pin (#1813, merged as `bb145ba53`), executor inspect run 43227363018 and executor
+deploy run 43227752850 (CodeSha256 `W/eT6lJL…` -> `jEx6/8so…`, RevisionId `85310e5f…`): read-live run 43228270028 `ed94cf62…`,
+apply run 43228829366 under the owner's words "merge #1813 and apply SQL 158 in staging" (receipt `ed94cf62…` -> `1c43cf6c…`,
+result `applied`), read-live run 43229310297 `already_applied` true, live `1c43cf6c…`.
+
+**Production inspect (2026-11-12).** Read-only, under the owner's words "run the read-only SQL 158 production inspect": transfer run
+43230095815 staged main `bb145ba53` (tarball `54f325ea…`, the SQL 158 file on the runner `282c6bda…` == the pin), SSM
+`621abcee-0a4a-48c2-9209-e67da773b9bf` on the runner (started 13:49:17Z, stopped 13:51:49Z): live `ed94cf62…` (the table and all
+six functions absent), `already_applied` false, `precondition_failures` `[]`, `prerequisites_missing` `[]`, `definer_writes` ok on all
+seven relations.
+
+**Status:** applied to staging (wave 50, 2026-11-12); production pin execute-authorized (owner-approved pin change of 2026-11-12,
+"record the SQL 158 production pin, merge it when green, and apply SQL 158 in production"); not applied to production. The production
+apply still needs the owner's words for that run.
 
 **Staging read-live (2026-11-12).** Run 43221906020 (job 131195251180, main `bfdb9126c`, after executor deploy run
 43221459029 (executor CodeSha256 `0idw/ztv…` -> `W/eT6lJL…`, RevisionId `6dde0557…`) and inspect run 43220942074), under the
