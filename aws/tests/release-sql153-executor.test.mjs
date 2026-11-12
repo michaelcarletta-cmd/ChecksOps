@@ -5,7 +5,7 @@
  * tooling "Option B".
  * release-sql90-97-executor.test.mjs runs what every release key shares (SQL 153 included); this file covers what is new:
  *
- *   - the pin: staging-authorized (wave 49) from staging read-live run 43115484335, code-derived, selectable, packed, in step with the pending production pin; the pinned commit
+ *   - the pin: staging-authorized (wave 49) from staging read-live run 43115484335, code-derived, selectable, packed, in step with the production pin (execute true on production's own pre-state, the same one staging had); the pinned commit
  *     authored the bytes; no predecessor, supersedes nothing;
  *   - the file and spec: the unique index check_billing_events_one_second_mortgagee_per_check (the file's own
  *     predicate) and two integer NOT NULL DEFAULT 0 columns on tenant_maintenance_payments; no function; the file's
@@ -120,7 +120,7 @@ const SQL153_SCHEMA = `
 ALTER TABLE public.check_billing_events ADD COLUMN claim_id uuid, ADD COLUMN mortgage_request_id uuid;
 ALTER TABLE public.mortgage_handling_requests ADD COLUMN endorsement_order integer, ADD COLUMN total_mortgagees integer;`;
 
-test('pin: SQL 153 staging-authorized from its read-live, code-derived, selectable, packed, in step with the pending production pin; no predecessor', () => {
+test('pin: SQL 153 staging-authorized from its read-live, code-derived, selectable, packed, in step with the execute-authorized production pin; no predecessor', () => {
   const pin = PINS[KEY];
   const spec = RELEASE_SQL_SPECS[KEY];
   const packed = Object.fromEntries(EXECUTOR_PACK_MEMBERS);
@@ -147,7 +147,7 @@ test('pin: SQL 153 staging-authorized from its read-live, code-derived, selectab
   for (const value of [ABSENT, pin.intended_replacement_sha256, pin.source_sha256, INDEX_DEF, 'no_event_type_check', '**not modelled; the tooling requires none**']) {
     assert.ok(runbook.includes(value), value);
   }
-  assert.match(runbook, /\*\*Status:\*\* staging pin execute-authorized \(wave 49\); not applied anywhere\. The production pin is pending\./);
+  assert.match(runbook, /\*\*Status:\*\* applied in staging \(wave 49, 2026-11-11\); staging acceptance: the staging apply under the owner's run approval \("apply SQL 153 in staging"; no separate acceptance statement\); production pin execute-authorized; not applied to production/);
   assert.match(runbook, /read-live \(2026-11-11\)\.\*\* Run 43115484335/);
   assert.ok(runbook.includes(`\`\`\`\n${releaseStateText(KEY, releaseIntendedState(KEY, TEXT))}\n\`\`\``));
   assert.ok(runbook.includes(`\`\`\`\n${releaseStateText(KEY, {})}\n\`\`\``));
@@ -177,12 +177,16 @@ test('pin: SQL 153 staging-authorized from its read-live, code-derived, selectab
   assert.equal(prod.source_sha256, pin.source_sha256);
   assert.deepEqual(prod.function_identities, []);
   assert.deepEqual(prod.predecessors, []);
-  assert.equal(prod.execute, false);
-  assert.equal(prod.authorization, 'pending');
+  // Production pin execute-authorized (owner-approved pin change of 2026-11-11) on the staging apply. Its pre-state is
+  // production's own (read-only inspect SSM decbb3ce), the derived one, the same pre-state staging recorded.
+  assert.equal(prod.execute, true);
+  assert.match(prod.authorization, /^Owner approved 2026-11-11 /);
   assert.equal(prod.authorization_phrase, 'CHARGE_SECOND_MORTGAGEE_FEE');
-  assert.equal(prod.expected_live_definition_sha256, null);
-  assert.equal(prod.production_inspect.status, 'pending');
-  assert.equal(prod.staging_acceptance.ok, false);
+  assert.equal(prod.expected_live_definition_sha256, prod.production_inspect.live_definition_sha256);
+  assert.equal(prod.expected_live_definition_sha256, pin.expected_live_definition_sha256);
+  assert.equal(prod.expected_live_definition_sha256, ABSENT);
+  assert.equal(prod.production_inspect.status, 'recorded');
+  assert.equal(prod.staging_acceptance.ok, true);
   assert.ok(prod.production_inspect.note.includes(ABSENT));
   assert.ok(prod.production_inspect.note.includes('counts.event_type_checks 0'));
   assert.ok(prod.order_note.includes(ABSENT));
