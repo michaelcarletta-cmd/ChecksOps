@@ -34,7 +34,15 @@ trigger count is not affected. The assign's row change fires whatever live trigg
 the API (Tenant Management actions, the agent email, the Desk's read of the notes) and the Tenant Management page ship
 afterwards through their own guarded paths.
 
-**Status:** tooling built; staging and production pins pending (`execute: false`). Nothing applied or read.
+**Status:** staging pin execute-authorized (wave 50); not applied anywhere. The production pin is pending.
+
+**Staging read-live (2026-11-12).** Run 43221906020 (job 131195251180, main `bfdb9126c`, after executor deploy run
+43221459029 (executor CodeSha256 `0idw/ztv…` -> `W/eT6lJL…`, RevisionId `6dde0557…`) and inspect run 43220942074), under the
+owner's words "approve SQL 158": `already_applied` false, `precondition_failures` `[]`, `prerequisites_missing` `[]`, every
+`definer_writes` relation `ok true`; the table and all six functions absent. Live
+`ed94cf62003c8ef29667a8b79dd081f8e0491bde28cf8ec1acee1154b877e233`, equal to the derived state; intended `1c43cf6c…`. Recorded in the staging pin
+(`expected_live_definition_sha256`, `execute: true`, wave 50). The staging apply is a separate run after this pin is merged
+and the executor is redeployed carrying it, on the owner's words for that run. The production pin stays pending.
 
 ## Fingerprint
 
