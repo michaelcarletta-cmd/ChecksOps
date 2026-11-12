@@ -1,0 +1,67 @@
+{
+  "id": "sql160-no-additional-check-or-manual-deposit-fee-production-apply",
+  "migration": "sql160",
+  "authorization": "pending",
+  "execute": false,
+  "target_environment": "production",
+  "target_component": "production-sql",
+  "deployment_type": "sql-apply",
+  "filename": "aws/workflows/sql/160_no_additional_check_mortgage_charge_or_manual_deposit_fee.sql",
+  "migration_id": "160_no_additional_check_mortgage_charge_or_manual_deposit_fee",
+  "staging_pin_commit": "1835d34a3390025863d809a504ba9dcc716636fd",
+  "source_sha256": "8133121f731f3ff11c9877747685af666efb91a06c0cbae20612cb6ba690c334",
+  "function_identities": [
+    "public.record_check_billing_event()",
+    "public.accrue_mortgage_ops_billing(uuid)",
+    "public.earn_mortgage_agent_compensation(uuid)",
+    "public.tg_record_mortgage_handling_billing()"
+  ],
+  "expected_live_definition_sha256": null,
+  "intended_replacement_sha256": "fae1623bb898f879f738bcd639be0238f5e111ebe25a985534a51be2b2903a40",
+  "authorization_phrase": "STOP_ADDITIONAL_CHECK_AND_OUTSIDE_DEPOSIT_CHARGES",
+  "predecessors": [],
+  "order_note": "No predecessor. SQL 160 replaces four existing live functions with CREATE OR REPLACE and creates nothing (owner 2026-11-12: \"we are removing the mortgage handling for an additional check if an additional check is on the same request. There will be no more $5 charge\"; agent pay for an additional check: \"Stop paying it\"; \"if a user deposits a check outside of checksops they should NOT be charged $4\"; a check deposited with no deposit record: \"yes make that free too\"; \"start SQL 160 yes\"; \"merge 1832 when green and yes make that free too\"). public.record_check_billing_event() (SQL 98, run by trg_record_check_billing_event on check_intake_items) charges check_processing only when the check has a deposit_items row whose provider is not manual_branch; public.accrue_mortgage_ops_billing(uuid) (live-only, run through tg_accrue_mortgage_ops_billing by tr_accrue_mortgage_ops_billing on mortgage_handling_requests) records no mortgage_ops_additional_check charge; public.earn_mortgage_agent_compensation(uuid) (SQL 47, run by tr_earn_mortgage_agent_compensation on mortgage_handling_requests) pays nothing for an additional check; public.tg_record_mortgage_handling_billing() (run by tr_record_mortgage_handling_billing on check_intake_items) records no $5 mortgage_handling event for an additional check. Kept: the $10 for a claim's first check and SQL 153's $5 for a 2nd mortgage company; charges already recorded are not changed. Each body is the one the read-only production billing trigger inspect of 2026-11-12 read (aws/tests/fixtures/sql160-live-billing-functions-2026-11-12.sql) with only the lines marked SQL 160 changed; the file refuses a live body that is neither the inspected one nor its own (55000 sql160_live_body_drift) and missing prerequisites (55000 sql160_prerequisite_missing). The file has no GRANT or REVOKE: owner, EXECUTE grants, SECURITY DEFINER and SET options stay as the inspect observed them (ops/deployment-guard/billing-trigger-inspect.json production_inspect.observed_functions: owner checksops_admin; record_check_billing_event EXECUTE checksops and the owner; earn_mortgage_agent_compensation the owner only; accrue_mortgage_ops_billing PUBLIC, authenticated, checksops and the owner; tg_record_mortgage_handling_billing PUBLIC, checksops and the owner), and the spec allows no other grant (revokes [], function_acl_replaceable). No table, trigger, policy, grant or data change; the db-readonly-validate trigger count is not affected. record_check_billing_event() is also in SQL 98's fingerprint, which moves with this body (nothing pending names SQL 98 as a predecessor). Expected pre-state in production: the four functions with the inspected bodies (release sql160 v1: 3a8bb0b11d59688642c98ace91bb15c562c362eea00b2ae9c73a166fee365229, releaseIntendedHash('sql160', the fixture's text)); staging's is read by its own read-live (accrue_mortgage_ops_billing and tg_record_mortgage_handling_billing have no repository CREATE, so staging may differ: a stop, not a fix-forward). No API, Lambda or SPA change is part of this pin; the API's own accrual (mortgage-ops-usage.mjs) is not changed by it.",
+  "admin_login": "checksops_admin",
+  "rds_identifier": "checksops-production",
+  "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
+  "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
+  "tooling": {
+    "status": "built",
+    "production_tool": "scripts/deployment-guard/sql160-no-additional-check-or-manual-deposit-fee-production-apply.mjs",
+    "production_lib": "scripts/deployment-guard/lib/release-sql-production-apply.mjs",
+    "staging_executor_handler": "aws/write-path/guarded-sql-executor/index.mjs handleReleaseSqlMigration",
+    "staging_workflow_choice": "sql160-no-additional-check-or-manual-deposit-fee",
+    "one_shot_migration": "sql160",
+    "fingerprint_engine": "scripts/deployment-guard/lib/release-sql-state.mjs",
+    "runbook": "ops/production-sql-160-apply.md",
+    "tests": [
+      "aws/tests/release-sql160-executor.test.mjs",
+      "aws/tests/release-sql160-production-apply.test.mjs",
+      "aws/tests/release-sql90-97-executor.test.mjs",
+      "aws/tests/release-sql90-97-production-apply.test.mjs",
+      "aws/tests/sql160-billing-additional-check-pg.test.mjs"
+    ],
+    "note": "Guarded tooling for SQL 160: sql160-no-additional-check-or-manual-deposit-fee-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql160-no-additional-check-or-manual-deposit-fee); production-sql-one-shot.mjs --migration sql160. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): the four functions with SQL 160's bodies and the observed owner-side attributes and EXECUTE ACLs. The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
+  },
+  "production_inspect": {
+    "status": "pending",
+    "date": null,
+    "ssm_command_id": null,
+    "source_commit": null,
+    "read_only": true,
+    "connected_as": "checksops_admin",
+    "live_definition_sha256": null,
+    "apply_preconditions_met": null,
+    "precondition_failures": null,
+    "note": "Pending: no release-engine production inspect has been run for SQL 160 yet (the billing trigger inspect of 2026-11-12 read the bodies and grants, not this fingerprint). Expected: prerequisites_missing [], the four functions present and owned by checksops_admin with the inspected bodies and grants, already_applied false, precondition_failures []. Expected release-engine fingerprint of that pre-state under sql160: 3a8bb0b11d59688642c98ace91bb15c562c362eea00b2ae9c73a166fee365229 (releaseIntendedHash('sql160', aws/tests/fixtures/sql160-live-billing-functions-2026-11-12.sql), the fixture's bodies with the spec's observed ACLs). Record the one-shot --phase inspect's date, SSM command id, source commit, live_definition_sha256, prerequisites_missing, release_sql_inspect, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. Stop if the pre-state differs, prerequisites_missing is not [] or precondition_failures is not []: that needs its own reviewed change."
+  },
+  "intended_post_state": {
+    "fingerprint": "fae1623bb898f879f738bcd639be0238f5e111ebe25a985534a51be2b2903a40",
+    "note": "The four functions, all owned by checksops_admin, plpgsql, VOLATILE, PARALLEL UNSAFE, SECURITY DEFINER, with SQL 160's bodies: record_check_billing_event() RETURNS trigger, SET row_security = off and search_path = public, EXECUTE checksops and the owner; accrue_mortgage_ops_billing(uuid) RETURNS public.check_billing_events, SET search_path = public, EXECUTE PUBLIC, authenticated, checksops and the owner; earn_mortgage_agent_compensation(uuid) RETURNS public.mortgage_agent_compensation_entries, SET row_security = off and search_path = public, EXECUTE the owner only; tg_record_mortgage_handling_billing() RETURNS trigger, SET search_path = public, EXECUTE PUBLIC, checksops and the owner. Everything but the bodies is as before. No other function, table, column, policy, grant or trigger change; no row written. The fingerprint is releaseIntendedHash('sql160', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): fae1623bb898f879f738bcd639be0238f5e111ebe25a985534a51be2b2903a40."
+  },
+  "staging_acceptance": {
+    "ok": false,
+    "reference": null,
+    "basis": "Pending: record the guarded staging SQL executor read-live and the staging apply of SQL 160 (choice sql160-no-additional-check-or-manual-deposit-fee, wave 51 when approved) here in the reviewed change that sets execute true. The behavior is covered on PostgreSQL 16 by aws/tests/sql160-billing-additional-check-pg.test.mjs. Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+  }
+}

@@ -9397,6 +9397,88 @@ export const RELEASE_SQL_SPECS = deepFreeze({
       "public.homeowner_intro_requests"
     ]
   },
+  // SQL 160 (owner 2026-11-12: "we are removing the mortgage handling for an additional check if an additional check is
+  // on the same request. There will be no more $5 charge"; agent pay for an additional check "Stop paying it"; "if a user
+  // deposits a check outside of checksops they should NOT be charged $4", "yes make that free too"; "start SQL 160 yes"):
+  // CREATE OR REPLACE of four live functions, each body the one the production billing trigger inspect of 2026-11-12 read
+  // (aws/tests/fixtures/sql160-live-billing-functions-2026-11-12.sql) with only the SQL 160 lines changed. The first
+  // replacement of existing live functions with no GRANT or REVOKE: CREATE OR REPLACE keeps owner, ACL, SECURITY DEFINER
+  // and proconfig, so each `acl` is the live EXECUTE ACL that inspect observed (ops/deployment-guard/
+  // billing-trigger-inspect.json production_inspect.observed_functions; owner checksops_admin read as `owner`) and
+  // `revokes` is empty: a live grant outside it refuses (function_acl_replaceable) instead of being assumed revoked.
+  // The fixture's SET name TO 'value' clauses are parsed as SET name = value (release-sql-state.mjs). The pre-state is
+  // the same objects with the inspected bodies: releaseIntendedHash('sql160', fixture text). record_check_billing_event()
+  // is also SQL 98's (its fingerprint moves with this body; nothing pending names SQL 98 as a predecessor). The spec
+  // format has no trigger prerequisite: the triggers the functions run under (trg_record_check_billing_event and
+  // tr_record_mortgage_handling_billing on check_intake_items, tr_accrue_mortgage_ops_billing and
+  // tr_earn_mortgage_agent_compensation on mortgage_handling_requests) are named in the pin and runbook and stay as they
+  // are. No table, trigger, policy, grant or data change; no definer_writes (no write path changes).
+  sql160: {
+    "key": "sql160",
+    "label": "SQL 160",
+    "choice": "sql160-no-additional-check-or-manual-deposit-fee",
+    "production_pin_rel": "ops/deployment-guard/sql160-no-additional-check-or-manual-deposit-fee-production-apply.json",
+    "script": "sql160-no-additional-check-or-manual-deposit-fee-production-apply",
+    "prerequisites": [
+      "public.deposit_items",
+      "public.check_billing_events",
+      "public.mortgage_handling_requests",
+      "public.mortgage_agent_compensation_rates",
+      "column public.deposit_items.check_id",
+      "column public.deposit_items.provider",
+      "column public.check_billing_events.event_type",
+      "column public.check_billing_events.check_intake_item_id",
+      "column public.mortgage_handling_requests.claim_id",
+      "column public.mortgage_agent_compensation_rates.additional_cents",
+      "public.record_check_billing_event()",
+      "public.accrue_mortgage_ops_billing(uuid)",
+      "public.earn_mortgage_agent_compensation(uuid)",
+      "public.tg_record_mortgage_handling_billing()",
+      "public.aws_check_billing_charges_when_per_check_off()",
+      "public.aws_check_billing_default_price_cents()",
+      "role checksops",
+      "role authenticated"
+    ],
+    "predecessors": [],
+    "functions": [
+      {
+        "identity": "public.record_check_billing_event()",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ],
+        "revokes": []
+      },
+      {
+        "identity": "public.accrue_mortgage_ops_billing(uuid)",
+        "acl": [
+          "PUBLIC EXECUTE",
+          "authenticated EXECUTE",
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ],
+        "revokes": [],
+        "result": "public.check_billing_events"
+      },
+      {
+        "identity": "public.earn_mortgage_agent_compensation(uuid)",
+        "acl": [
+          "owner EXECUTE"
+        ],
+        "revokes": [],
+        "result": "public.mortgage_agent_compensation_entries"
+      },
+      {
+        "identity": "public.tg_record_mortgage_handling_billing()",
+        "acl": [
+          "PUBLIC EXECUTE",
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ],
+        "revokes": []
+      }
+    ]
+  },
   sql76: {
     "key": "sql76",
     "label": "SQL 76",
