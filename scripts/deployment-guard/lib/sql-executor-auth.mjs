@@ -3660,6 +3660,34 @@ export const AUTHORIZED_SQL159_HOMEOWNER_INTRO_REQUESTS_SELECT_GRANT = Object.fr
   function_identities: Object.freeze([]),
 });
 
+// No additional-check Mortgage Ops charge, agent pay or $5 handling event, and no $4 for a check deposited outside
+// ChecksOps: SQL 160 (owner 2026-11-12: "we are removing the mortgage handling for an additional check if an additional
+// check is on the same request. There will be no more $5 charge", agent pay "Stop paying it", "if a user deposits a check
+// outside of checksops they should NOT be charged $4", "yes make that free too", "start SQL 160 yes"). CREATE OR REPLACE
+// of four live functions (record_check_billing_event, accrue_mortgage_ops_billing, earn_mortgage_agent_compensation,
+// tg_record_mortgage_handling_billing), each from the body production's billing trigger inspect read on 2026-11-12; owner,
+// ACL, SECURITY DEFINER and SET options kept. Nothing else changes. Pending until a reviewed pin change records a staging
+// read-live (wave 51 when approved).
+export const AUTHORIZED_SQL160_NO_ADDITIONAL_CHECK_OR_MANUAL_DEPOSIT_FEE = Object.freeze({
+  key: 'sql160',
+  filename: 'aws/workflows/sql/160_no_additional_check_mortgage_charge_or_manual_deposit_fee.sql',
+  migration_id: '160_no_additional_check_mortgage_charge_or_manual_deposit_fee',
+  // The commit that last authored the file bytes.
+  commit: '1835d34a3390025863d809a504ba9dcc716636fd',
+  source_sha256: '8133121f731f3ff11c9877747685af666efb91a06c0cbae20612cb6ba690c334',
+  authorization: 'pending',
+  execute: false,
+  expected_live_definition_sha256: null,
+  // Code-derived: releaseIntendedHash('sql160', file bytes) (release-sql-state.mjs); re-derived by the tests.
+  intended_replacement_sha256: 'fae1623bb898f879f738bcd639be0238f5e111ebe25a985534a51be2b2903a40',
+  function_identities: Object.freeze([
+    'public.record_check_billing_event()',
+    'public.accrue_mortgage_ops_billing(uuid)',
+    'public.earn_mortgage_agent_compensation(uuid)',
+    'public.tg_record_mortgage_handling_billing()',
+  ]),
+});
+
 export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql90: AUTHORIZED_SQL90_USERS_ONLY_TENANT_ROLES,
   sql91: AUTHORIZED_SQL91_MOOV_ONBOARDING,
@@ -3727,6 +3755,7 @@ export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql156: AUTHORIZED_SQL156_MORTGAGE_DESK_SHARED_CHECK_LIBRARY,
   sql158: AUTHORIZED_SQL158_MORTGAGE_DESK_OVERSIGHT_AND_AGENT_NOTES,
   sql159: AUTHORIZED_SQL159_HOMEOWNER_INTRO_REQUESTS_SELECT_GRANT,
+  sql160: AUTHORIZED_SQL160_NO_ADDITIONAL_CHECK_OR_MANUAL_DEPOSIT_FEE,
   sql76: AUTHORIZED_SQL76_RELEASE_TENANT_PARTNERSHIP_CONSENT,
 });
 
@@ -3743,7 +3772,7 @@ export function isSql30TenantDocumentsDocType(input = {}) {
   return pinIdentifiersMatch(input, AUTHORIZED_SQL30_TENANT_DOCUMENTS_DOC_TYPE);
 }
 
-/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql148, sql150, sql152 ... sql156, sql158, sql159; sql76 for production) an input names, or null. */
+/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql148, sql150, sql152 ... sql156, sql158, sql159, sql160; sql76 for production) an input names, or null. */
 export function releaseSqlMigrationKey(input = {}) {
   return Object.keys(RELEASE_2026_10_17_PENDING_SQL_PINS)
     .find((key) => pinIdentifiersMatch(input, RELEASE_2026_10_17_PENDING_SQL_PINS[key])) || null;

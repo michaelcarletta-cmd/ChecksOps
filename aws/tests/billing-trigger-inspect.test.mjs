@@ -276,7 +276,8 @@ test('PostgreSQL 16: the inspect is read-only and reports the triggers, the live
     // What it calls is read by name although no trigger runs it: live-only, printed.
     const callee = fns['public.accrue_mortgage_ops_billing'];
     assert.equal(callee.signature, 'public.accrue_mortgage_ops_billing(p_request_id uuid)');
-    assert.equal(callee.repo_definitions, 0);
+    // The stand-in body is not the live one SQL 160's fixture records (aws/tests/fixtures/sql160-live-billing-functions-2026-11-12.sql).
+    assert.equal(callee.repo_match, 'differs_from_repo');
     assert.deepEqual(callee.run_by_triggers, []);
     assert.match(callee.definition, /mortgage_ops_additional_check/);
     assert.match(accrue.functiondef_sha256, /^[0-9a-f]{64}$/);

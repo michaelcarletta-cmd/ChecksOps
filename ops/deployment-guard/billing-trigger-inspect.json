@@ -26,6 +26,93 @@
       "20bbce56-14db-4ace-835c-ba7ff47a8c40"
     ],
     "output_sha256": "cd32ba8f2405a78e65ff93a392a5eb3436f2f4c0868a5476cd1fb52747f843fe",
-    "note": "Owner's words for the run: \"run the billing trigger inspect in production\". Runner started 19:29:41Z (online 19:30:02Z), SSM a6cefecf (full compact output) cut at the 24000-character SSM limit inside functions; runner stopped 19:31:02Z; started again (online 19:31:47Z) for three per-section commands of the same read-only inspect on the same tarball: a26100c1 (summary; cut inside functions), ff854910 (definitions of record_check_billing_event and tg_accrue_mortgage_ops_billing), 20bbce56 (definitions of earn_mortgage_agent_compensation and tg_earn_mortgage_agent_compensation); stopped 19:32:49Z. All four Success, ResponseCode 0; every run printed the same out.json sha256 (cd32ba8f...), so the database did not change between them. Found: missing [], tables_missing []; record_check_billing_event is SQL 98's body (charges check_processing on any change to deposited, no deposit-method exception); tg_accrue_mortgage_ops_billing (SECURITY DEFINER, EXECUTE PUBLIC and checksops_admin) only gates on the first accept and calls public.accrue_mortgage_ops_billing(NEW.id), which this tool did not read (not named, not trigger-run; added to NAMED_FUNCTIONS by the following change); earn_mortgage_agent_compensation is the SQL 47 body (additional classification paid additional_cents, default 500); a second Mortgage Ops billing trigger tr_record_mortgage_handling_billing on check_intake_items runs tg_record_mortgage_handling_billing, whose definition fell past the cut. Not yet read: the bodies of accrue_mortgage_ops_billing and tg_record_mortgage_handling_billing."
+    "note": "Owner's words for the run: \"run the billing trigger inspect in production\". Runner started 19:29:41Z (online 19:30:02Z), SSM a6cefecf (full compact output) cut at the 24000-character SSM limit inside functions; runner stopped 19:31:02Z; started again (online 19:31:47Z) for three per-section commands of the same read-only inspect on the same tarball: a26100c1 (summary; cut inside functions), ff854910 (definitions of record_check_billing_event and tg_accrue_mortgage_ops_billing), 20bbce56 (definitions of earn_mortgage_agent_compensation and tg_earn_mortgage_agent_compensation); stopped 19:32:49Z. All four Success, ResponseCode 0; every run printed the same out.json sha256 (cd32ba8f...), so the database did not change between them. Found: missing [], tables_missing []; record_check_billing_event is SQL 98's body (charges check_processing on any change to deposited, no deposit-method exception); tg_accrue_mortgage_ops_billing (SECURITY DEFINER, EXECUTE PUBLIC and checksops_admin) only gates on the first accept and calls public.accrue_mortgage_ops_billing(NEW.id), which this tool did not read (not named, not trigger-run; added to NAMED_FUNCTIONS by the following change); earn_mortgage_agent_compensation is the SQL 47 body (additional classification paid additional_cents, default 500); a second Mortgage Ops billing trigger tr_record_mortgage_handling_billing on check_intake_items runs tg_record_mortgage_handling_billing, whose definition fell past the cut. Not yet read: the bodies of accrue_mortgage_ops_billing and tg_record_mortgage_handling_billing.",
+    "observed_functions": {
+      "source": "Owners and EXECUTE ACLs as the read-only production inspect printed them on 2026-11-12 (pg_proc via aclexplode; grantee names as printed, the owner checksops_admin), recorded here for SQL 160's spec (scripts/deployment-guard/lib/release-sql-specs.mjs sql160, where the owner reads as `owner`). definition_set_clauses are the SET lines of each printed definition (aws/tests/fixtures/sql160-live-billing-functions-2026-11-12.sql).",
+      "public.record_check_billing_event()": {
+        "owner": "checksops_admin",
+        "security_definer": true,
+        "execute_acl": [
+          "checksops EXECUTE",
+          "checksops_admin EXECUTE"
+        ],
+        "execute_acl_detail": "every grant is_grantable false, grantor checksops_admin",
+        "config_names": [
+          "search_path",
+          "row_security"
+        ],
+        "definition_set_clauses": [
+          "SET search_path TO 'public'",
+          "SET row_security TO 'off'"
+        ],
+        "prosrc_sha256": "8319ec76fd6e2704e119429e7b481054dfa9f92b6a9ee52a1a2dda61e710a8a9",
+        "ssm_command_id": "ff854910-d025-4e14-ad0f-3a4d598172cc",
+        "source_commit": "a2559c323468b275fe198d258611eb37680d8f11",
+        "transfer_run": 43290363096
+      },
+      "public.earn_mortgage_agent_compensation(p_request_id uuid)": {
+        "owner": "checksops_admin",
+        "security_definer": true,
+        "execute_acl": [
+          "checksops_admin EXECUTE"
+        ],
+        "execute_acl_detail": "every grant is_grantable false, grantor checksops_admin",
+        "config_names": [
+          "search_path",
+          "row_security"
+        ],
+        "definition_set_clauses": [
+          "SET search_path TO 'public'",
+          "SET row_security TO 'off'"
+        ],
+        "prosrc_sha256": "6d72d6df8c41c51a2f9cfbd6145dc5cf4f25427ed2af781a925d72c660b31e8b",
+        "ssm_command_id": "20bbce56-14db-4ace-835c-ba7ff47a8c40",
+        "source_commit": "a2559c323468b275fe198d258611eb37680d8f11",
+        "transfer_run": 43290363096
+      },
+      "public.accrue_mortgage_ops_billing(p_request_id uuid)": {
+        "owner": "checksops_admin",
+        "security_definer": true,
+        "execute_acl": [
+          "PUBLIC EXECUTE",
+          "authenticated EXECUTE",
+          "checksops EXECUTE",
+          "checksops_admin EXECUTE"
+        ],
+        "execute_acl_detail": "every grant is_grantable false, grantor checksops_admin",
+        "config_names": [
+          "search_path"
+        ],
+        "definition_set_clauses": [
+          "SET search_path TO 'public'"
+        ],
+        "prosrc_sha256": "fc03a9ea7d2a0783f0398309a4500412cbf8fba49801f1eeffc690ca2f727524",
+        "ssm_command_id": "e8a9bc4e-e469-4399-b52b-a00d39798488",
+        "source_commit": "63e62457d87271b5d52c3e3bb6e0d0ae74cf22d1",
+        "transfer_run": 43296012333,
+        "session_output_sha256": "fa0769556c493aae62aba2b1aa0e88b59522dec37082d694b0209b9e7a1a9646"
+      },
+      "public.tg_record_mortgage_handling_billing()": {
+        "owner": "checksops_admin",
+        "security_definer": true,
+        "execute_acl": [
+          "PUBLIC EXECUTE",
+          "checksops EXECUTE",
+          "checksops_admin EXECUTE"
+        ],
+        "execute_acl_detail": "every grant is_grantable false, grantor checksops_admin",
+        "config_names": [
+          "search_path"
+        ],
+        "definition_set_clauses": [
+          "SET search_path TO 'public'"
+        ],
+        "prosrc_sha256": "f022f75ac73f23fdec4a92205466a0b05febdf197642ce7af85110519f2fbe1e",
+        "ssm_command_id": "e8a9bc4e-e469-4399-b52b-a00d39798488",
+        "source_commit": "63e62457d87271b5d52c3e3bb6e0d0ae74cf22d1",
+        "transfer_run": 43296012333,
+        "session_output_sha256": "fa0769556c493aae62aba2b1aa0e88b59522dec37082d694b0209b9e7a1a9646"
+      }
+    }
   }
 }
