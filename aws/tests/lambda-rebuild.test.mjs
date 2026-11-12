@@ -687,13 +687,30 @@ test('the production history keeps the fourth rebuild (inspect 41463084601, appl
   assert.equal(result.details.state, 'READY');
 });
 
-test('the production plan section accepts inspect run 43210883811: the second mortgage company fee rebuild (1 changed, 0 added, 0 removed), staging applied and verified on the same candidate', () => {
+test('the production plan section accepts inspect run 43210883811 and records apply 43215807509: the second mortgage company fee rebuild (1 changed, 0 added, 0 removed), the candidate staging applied and verified', () => {
   const raw = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'ops/deployment-guard/lambda-rebuild-plan.json'), 'utf8'));
   const production = raw.environments.production;
   const fourth = production.history[3];
   const staging = raw.environments.staging;
-  assert.equal(production.status, 'accepted');
-  assert.equal(production.applied, undefined);
+  // Applied 2026-11-12 (run 43215807509) on the owner's phrase, from the staging reference the section names.
+  assert.equal(production.status, 'applied');
+  assert.equal(production.applied.run_id, '43215807509');
+  assert.equal(production.applied.run_url, 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43215807509');
+  assert.equal(production.applied.main_commit, 'f6506083c4fa16f9620764d9aa480ff2ba8794a9');
+  assert.equal(production.applied.approval_phrase, 'DEPLOY FULL API PACKAGE TO PRODUCTION');
+  assert.equal(production.applied.staging_acceptance, production.inspect.staging_acceptance);
+  assert.equal(production.applied.code_sha256_before, production.inspect.live_code_sha256);
+  assert.equal(production.applied.revision_id_before, production.inspect.live_revision_id);
+  assert.equal(production.applied.candidate_zip_sha256, production.inspect.candidate_zip_sha256);
+  assert.equal(production.applied.code_sha256_after, '2NKoKhkxtfOpsoTGA3/9SekMHMH8EcmSchqWFMVWoIw=');
+  assert.equal(production.applied.revision_id_after, '27206d2d-b0e4-43f8-93d6-ad0da538091c');
+  assert.equal(production.applied.state, 'VERIFIED');
+  assert.deepEqual(production.applied.smoke, ['/health', '/db-health']);
+  // Production now runs the package staging runs since its fifth rebuild.
+  assert.equal(production.applied.code_sha256_after, staging.applied.code_sha256_after);
+  for (const evidence of ['131174636675', 'db5b3cc4-3a57-4876-9399-8b239990c00e', '6786 members', 'LastUpdateStatus Successful', 'trailing full stop', 'Not verified by this record']) {
+    assert.ok(production.applied.notes.includes(evidence), evidence);
+  }
   assert.equal(production.inspect.run_id, '43210883811');
   assert.equal(production.inspect.run_url, 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43210883811');
   assert.equal(production.inspect.main_commit, '60b8c734f7dd5f71f5b2bc94faa9633aca5d81d7');
