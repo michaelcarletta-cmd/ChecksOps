@@ -161,6 +161,7 @@ export const MIGRATIONS = Object.freeze({
   'sql154-tenant-starter-package': RELEASE_2026_10_17_PENDING_SQL_PINS.sql154,
   'sql155-claim-owner-org-stamp': RELEASE_2026_10_17_PENDING_SQL_PINS.sql155,
   'sql156-mortgage-desk-shared-check-library': RELEASE_2026_10_17_PENDING_SQL_PINS.sql156,
+  'sql158-mortgage-desk-oversight-and-agent-notes': RELEASE_2026_10_17_PENDING_SQL_PINS.sql158,
   'sql159-homeowner-intro-requests-select-grant': RELEASE_2026_10_17_PENDING_SQL_PINS.sql159,
 });
 

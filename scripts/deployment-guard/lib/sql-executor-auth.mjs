@@ -3585,6 +3585,34 @@ export const AUTHORIZED_SQL156_MORTGAGE_DESK_SHARED_CHECK_LIBRARY = Object.freez
   ]),
 });
 
+// Mortgage Desk oversight and agent notes staging pin: SQL 158 (owner 2026-11-12: "Tenant Management desk view plus 'Message
+// agent'", "Tenant management and the agent assigned can see the notes", "If no agent then tenant management can assign",
+// "Note is only visible to agent"; then "go with SQL 158"). SQL 157 (never applied, no pin) plus the revoke of every non-owner
+// grant on its new table: public.mortgage_desk_agent_notes (RLS on, no policy, no grant) and six SECURITY DEFINER functions
+// for the platform owner (overview, assignable agents, assign, add a note, record its email) and the assigned agent (read the
+// notes). Nothing existing replaced. Pending until a reviewed pin change records a staging read-live.
+export const AUTHORIZED_SQL158_MORTGAGE_DESK_OVERSIGHT_AND_AGENT_NOTES = Object.freeze({
+  key: 'sql158',
+  filename: 'aws/workflows/sql/158_mortgage_desk_oversight_and_agent_notes.sql',
+  migration_id: '158_mortgage_desk_oversight_and_agent_notes',
+  // The commit that last authored the file bytes.
+  commit: 'd5d104f23798d09b0d5479dea199511576ee7cf4',
+  source_sha256: '282c6bdac33be8e09d5100854e861cf7d14003ff94eba334d1ffe65986319e05',
+  authorization: 'pending',
+  execute: false,
+  expected_live_definition_sha256: null,
+  // Code-derived: releaseIntendedHash('sql158', file bytes) (release-sql-state.mjs); re-derived by the tests.
+  intended_replacement_sha256: '1c43cf6ca02fd3d4842b1d854b1ea559dba3cbd007a01c2739d625cfc14428ee',
+  function_identities: Object.freeze([
+    'public.aws_mortgage_desk_overview(uuid, text, integer, integer)',
+    'public.aws_mortgage_desk_assignable_agents()',
+    'public.aws_mortgage_desk_assign_agent(uuid, uuid)',
+    'public.aws_mortgage_desk_add_agent_note(uuid, text)',
+    'public.aws_mortgage_desk_record_agent_note_email(uuid, text)',
+    'public.aws_mortgage_desk_agent_notes(uuid)',
+  ]),
+});
+
 // SQL 76 through the release engine for production (owner 2026-11-11: "apply SQL 76 to production through the guarded
 // path", then "Option 1"). The same file bytes and authoring commit as AUTHORIZED_SQL76_PARTNERSHIP_CONSENT, which took
 // SQL 76 through staging (apply run 38553052449, 2026-10-14: before 7c5276d8…, after 2f195230… in that pin's own state
@@ -3694,6 +3722,7 @@ export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql154: AUTHORIZED_SQL154_TENANT_STARTER_PACKAGE,
   sql155: AUTHORIZED_SQL155_CLAIM_OWNER_ORG_STAMP,
   sql156: AUTHORIZED_SQL156_MORTGAGE_DESK_SHARED_CHECK_LIBRARY,
+  sql158: AUTHORIZED_SQL158_MORTGAGE_DESK_OVERSIGHT_AND_AGENT_NOTES,
   sql159: AUTHORIZED_SQL159_HOMEOWNER_INTRO_REQUESTS_SELECT_GRANT,
   sql76: AUTHORIZED_SQL76_RELEASE_TENANT_PARTNERSHIP_CONSENT,
 });
@@ -3711,7 +3740,7 @@ export function isSql30TenantDocumentsDocType(input = {}) {
   return pinIdentifiersMatch(input, AUTHORIZED_SQL30_TENANT_DOCUMENTS_DOC_TYPE);
 }
 
-/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql148, sql150, sql152 ... sql156, sql159; sql76 for production) an input names, or null. */
+/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql148, sql150, sql152 ... sql156, sql158, sql159; sql76 for production) an input names, or null. */
 export function releaseSqlMigrationKey(input = {}) {
   return Object.keys(RELEASE_2026_10_17_PENDING_SQL_PINS)
     .find((key) => pinIdentifiersMatch(input, RELEASE_2026_10_17_PENDING_SQL_PINS[key])) || null;

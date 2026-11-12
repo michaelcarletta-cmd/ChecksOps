@@ -9158,6 +9158,209 @@ export const RELEASE_SQL_SPECS = deepFreeze({
       "public.tenants"
     ]
   },
+  // SQL 158 (owner 2026-11-12: "Tenant Management desk view plus 'Message agent'"; then "Tenant management and the agent
+  // assigned can see the notes", "If no agent then tenant management can assign", "Note is only visible to agent"; after
+  // SQL 157's grants defect, "go with SQL 158"): SQL 157 (never applied, no tooling) plus the revoke of every non-owner
+  // grant on its new table. One table, public.mortgage_desk_agent_notes (RLS on, no policy, no grant to anyone, default
+  // privileges included, as SQL 118 and SQL 152), its FK to mortgage_handling_requests and index, and six SECURITY DEFINER
+  // functions, EXECUTE checksops and the owner. Constraint, index and result texts are as the catalog prints them.
+  sql158: {
+    "key": "sql158",
+    "label": "SQL 158",
+    "choice": "sql158-mortgage-desk-oversight-and-agent-notes",
+    "production_pin_rel": "ops/deployment-guard/sql158-mortgage-desk-oversight-and-agent-notes-production-apply.json",
+    "script": "sql158-mortgage-desk-oversight-and-agent-notes-production-apply",
+    "prerequisites": [
+      "public.mortgage_handling_requests",
+      "public.mortgage_ops_request_audit",
+      "public.mortgage_agent_accounts",
+      "public.identity_accounts",
+      "public.profiles",
+      "public.user_roles",
+      "public.tenants",
+      "column public.mortgage_handling_requests.id",
+      "column public.mortgage_handling_requests.tenant_id",
+      "column public.mortgage_handling_requests.status",
+      "column public.mortgage_handling_requests.assigned_employee_id",
+      "column public.mortgage_handling_requests.mortgage_company",
+      "column public.mortgage_handling_requests.mortgage_servicer",
+      "column public.mortgage_handling_requests.loan_number",
+      "column public.mortgage_handling_requests.claim_number",
+      "column public.mortgage_handling_requests.homeowner_name",
+      "column public.mortgage_handling_requests.created_at",
+      "column public.mortgage_handling_requests.accepted_at",
+      "column public.mortgage_handling_requests.completed_at",
+      "column public.mortgage_handling_requests.updated_at",
+      "column public.mortgage_ops_request_audit.mortgage_request_id",
+      "column public.mortgage_ops_request_audit.actor_id",
+      "column public.mortgage_ops_request_audit.action",
+      "column public.mortgage_ops_request_audit.reason",
+      "column public.mortgage_ops_request_audit.from_status",
+      "column public.mortgage_ops_request_audit.to_status",
+      "column public.mortgage_ops_request_audit.payload",
+      "column public.mortgage_agent_accounts.application_user_id",
+      "column public.mortgage_agent_accounts.status",
+      "column public.identity_accounts.application_user_id",
+      "column public.identity_accounts.email",
+      "column public.profiles.id",
+      "column public.profiles.email",
+      "column public.profiles.full_name",
+      "column public.user_roles.user_id",
+      "column public.user_roles.role",
+      "column public.tenants.id",
+      "column public.tenants.name",
+      "auth.uid()",
+      "public.is_platform_owner()",
+      "public.aws_is_mortgage_ops_agent()",
+      "public.has_role(uuid, public.app_role)",
+      "role checksops"
+    ],
+    "predecessors": [],
+    "functions": [
+      {
+        "identity": "public.aws_mortgage_desk_overview(uuid, text, integer, integer)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ],
+        "result": "TABLE(request_id uuid, tenant_id uuid, tenant_name text, status text, mortgage_company text, loan_number text, claim_number text, homeowner_name text, assigned_agent_id uuid, assigned_agent_name text, created_at timestamp with time zone, accepted_at timestamp with time zone, completed_at timestamp with time zone, status_since timestamp with time zone, seconds_in_status bigint, turnaround_seconds bigint, note_count integer, last_note_at timestamp with time zone, total_count bigint)"
+      },
+      {
+        "identity": "public.aws_mortgage_desk_assignable_agents()",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ],
+        "result": "TABLE(agent_id uuid, agent_name text, in_progress_count integer)"
+      },
+      {
+        "identity": "public.aws_mortgage_desk_assign_agent(uuid, uuid)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ],
+        "result": "TABLE(request_id uuid, agent_id uuid, agent_name text, agent_email text, accepted_at timestamp with time zone, tenant_name text, mortgage_company text, loan_number text)"
+      },
+      {
+        "identity": "public.aws_mortgage_desk_add_agent_note(uuid, text)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ],
+        "result": "TABLE(note_id uuid, request_id uuid, agent_id uuid, agent_name text, agent_email text, created_at timestamp with time zone, tenant_name text, mortgage_company text, loan_number text)"
+      },
+      {
+        "identity": "public.aws_mortgage_desk_record_agent_note_email(uuid, text)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ]
+      },
+      {
+        "identity": "public.aws_mortgage_desk_agent_notes(uuid)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ],
+        "result": "TABLE(note_id uuid, request_id uuid, author_id uuid, agent_id uuid, body text, email_status text, emailed_at timestamp with time zone, created_at timestamp with time zone)"
+      }
+    ],
+    "tables": [
+      {
+        "name": "public.mortgage_desk_agent_notes",
+        "rls": true,
+        "forced": false,
+        "columns": [
+          [
+            "id",
+            "uuid",
+            true,
+            "gen_random_uuid()"
+          ],
+          [
+            "request_id",
+            "uuid",
+            true,
+            null
+          ],
+          [
+            "author_id",
+            "uuid",
+            true,
+            null
+          ],
+          [
+            "agent_id",
+            "uuid",
+            true,
+            null
+          ],
+          [
+            "body",
+            "text",
+            true,
+            null
+          ],
+          [
+            "email_status",
+            "text",
+            true,
+            "'pending'::text"
+          ],
+          [
+            "emailed_at",
+            "timestamp with time zone",
+            false,
+            null
+          ],
+          [
+            "created_at",
+            "timestamp with time zone",
+            true,
+            "now()"
+          ]
+        ],
+        "constraints": [
+          [
+            "mortgage_desk_agent_notes_body_length",
+            "CHECK (((length(btrim(body)) >= 1) AND (length(btrim(body)) <= 2000)))"
+          ],
+          [
+            "mortgage_desk_agent_notes_email_status",
+            "CHECK ((email_status = ANY (ARRAY['pending'::text, 'sent'::text, 'failed'::text, 'skipped'::text])))"
+          ],
+          [
+            "mortgage_desk_agent_notes_pkey",
+            "PRIMARY KEY (id)"
+          ],
+          [
+            "mortgage_desk_agent_notes_request_id_fkey",
+            "FOREIGN KEY (request_id) REFERENCES public.mortgage_handling_requests(id) ON DELETE CASCADE"
+          ]
+        ],
+        "indexes": [
+          [
+            "mortgage_desk_agent_notes_pkey",
+            "CREATE UNIQUE INDEX mortgage_desk_agent_notes_pkey ON public.mortgage_desk_agent_notes USING btree (id)"
+          ],
+          [
+            "mortgage_desk_agent_notes_request_idx",
+            "CREATE INDEX mortgage_desk_agent_notes_request_idx ON public.mortgage_desk_agent_notes USING btree (request_id, created_at DESC)"
+          ]
+        ],
+        "acl": []
+      }
+    ],
+    "definer_writes": [
+      "public.mortgage_handling_requests",
+      "public.mortgage_ops_request_audit",
+      "public.mortgage_agent_accounts",
+      "public.identity_accounts",
+      "public.profiles",
+      "public.user_roles",
+      "public.tenants"
+    ]
+  },
   // SQL 159 (owner 2026-11-12, option (a), "A now"): the table SELECT production's checksops lacks on
   // homeowner_intro_requests, so a contractor's Leads list loads (production 2026-11-10 20:01Z, /prep/data/query
   // "permission denied for table homeowner_intro_requests"). As SQL 104: the fingerprint is checksops's pinned
