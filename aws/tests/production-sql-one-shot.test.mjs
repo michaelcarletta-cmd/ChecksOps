@@ -703,11 +703,11 @@ test('only the apply child gets the apply variables, and its receipt is the one 
 // SQL 158's pin was execute-authorized (owner-approved pin change of 2026-11-12, "run the read-only SQL 158 production inspect" /
 // "record the SQL 158 production pin", #1814: the read-only production inspect SSM 621abcee recorded as its pre-state, the guarded
 // staging apply run 43228829366 from the same pre-state) until its record-and-retire change after its 2026-11-12 apply.
-// SQL 159's pin is execute-authorized (owner-approved pin change of 2026-11-12, "Yes start the staging refresh and read-live" /
-// "Yes do the record PR and the production inspect": the read-only production inspect SSM acaf2260 recorded as its pre-state,
+// SQL 159's pin was execute-authorized (owner-approved pin change of 2026-11-12, "Yes start the staging refresh and read-live" /
+// "Yes do the record PR and the production inspect", #1815: the read-only production inspect SSM acaf2260 recorded as its pre-state,
 // the guarded staging read-live run 43232074130, already in the intended state there; no staging apply) until its
-// record-and-retire change.
-const EXECUTE_AUTHORIZED = Object.freeze(['sql159']);
+// record-and-retire change after its 2026-11-12 apply ("apply SQL 159 in production").
+const EXECUTE_AUTHORIZED = Object.freeze([]);
 // SQL 95's and SQL 99's production applies of 2026-10-21 (main dcd865256) and SQL 106's and SQL 97's
 // (main 7124a160b; both runs passed the SQL 106 workstream id), recorded in applied.
 const APPLIED_2026_10_21 = Object.freeze({
@@ -791,6 +791,8 @@ const APPLIED_2026_10_21 = Object.freeze({
   sql153: Object.freeze({ ssm: '1051cd92-cbda-43ec-bf8d-e8905f22727a', run: '3b141a01-2675-404b-ae40-374927fa272a', one_use_id: 'sql153-prod-5e0bfc05-c697-474c-8a9f-96077c325144', workstream: 'prod-sql153-second-mortgagee-fee-20261112', approval: 'apply SQL 153 in production' }),
   // SQL 158's production apply of 2026-11-12 (main d76788146), on the owner's "record the SQL 158 production pin, merge it when green, and apply SQL 158 in production".
   sql158: Object.freeze({ ssm: '2e121d9e-c29a-4b16-b53f-1802b75dcafe', run: 'f52b9f83-66fa-4e26-bd38-c362e7151aa2', one_use_id: 'sql158-prod-f38f625c-c0b7-4e46-9757-4d2eb55340a2', workstream: 'prod-sql158-mortgage-desk-oversight-and-agent-notes-20261112', approval: 'record the SQL 158 production pin, merge it when green, and apply SQL 158 in production' }),
+  // SQL 159's production apply of 2026-11-12 (main 32022c676), on the owner's "apply SQL 159 in production".
+  sql159: Object.freeze({ ssm: '55844713-816d-4a6e-a365-96db7cf61af3', run: '8380da36-7587-4cf3-9083-4f9ae251f379', one_use_id: 'sql159-prod-a555299d-2bf6-42dc-9f08-4346756fdbc0', workstream: 'prod-sql159-homeowner-intro-select-20261112', approval: 'apply SQL 159 in production' }),
   // SQL 136's production apply of 2026-11-02 (main a58f492cb), on the owner's "apply SQL 136 in production".
   sql136: Object.freeze({ ssm: 'd52b099a-56c7-4148-828c-2530b48c40fb', run: 'b47f4c29-c5bf-4288-82ff-870f057489d9', one_use_id: 'sql136-prod-95f82a7b-8350-43c3-a4c5-8bda2c344673', workstream: 'prod-sql136-money-write-restrictive-20261102', approval: 'apply SQL 136 in production' }),
   // SQL 118's production apply of 2026-10-27 (main 4d9763eff).

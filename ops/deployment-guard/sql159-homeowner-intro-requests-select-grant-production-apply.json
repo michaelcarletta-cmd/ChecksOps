@@ -1,8 +1,8 @@
 {
   "id": "sql159-homeowner-intro-requests-select-grant-production-apply",
   "migration": "sql159",
-  "authorization": "Owner approved 2026-11-12 (the owner's words of 2026-11-12: \"A now\", \"Yes start that\", \"Yes start the staging refresh and read-live\" and \"Yes do the record PR and the production inspect\", none of them words for the production apply; the change itself is reviewed and merged by the owner): production apply of SQL 159 after the staging acceptance below (production 6170e77b6e8b764b28de0d41779ad2d326d867409b401a4b7fd0bb4aa27b7c50 -> d1677f1cb3f8bf5878744111986af7c6d9d4895b0e5a88161372249cdaa3dc0c); execute true takes effect only when the owner reviews and merges this change. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
-  "execute": true,
+  "authorization": "Applied to production on 2026-11-12; execute is false again, so this pin is no longer a standing authorization and a re-apply needs a new reviewed pin change. The owner approved the SQL 159 production pin change on 2026-11-12 in the words \"A now\", \"Yes start that\", \"Yes start the staging refresh and read-live\", \"Yes do the record PR and the production inspect\" and \"Merge 1815 when green\" (on the staging read-live run 43232074130, already in the intended state; 6170e77b -> d1677f1c, #1815, merged to main as 32022c676) and the one apply run recorded in applied (workstream prod-sql159-homeowner-intro-select-20261112) in the words \"apply SQL 159 in production\"",
+  "execute": false,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -58,5 +58,219 @@
     "ok": true,
     "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43232074130",
     "basis": "Guarded staging SQL executor read-live of sql159-homeowner-intro-requests-select-grant, run 43232074130 (2026-11-12, main a8a0afa7b4733b252fd3be412747ac68a46be805), on the executor deployed from main a8a0afa7b (deploy run 43231455999: jEx6/8soLI/c6TjGDTrYYyQdHvRVg40lZb5Le7+Wnzk= -> OefKrcz/bKAQMwdkyZkbn4EmtapZWwq8Gzb5IUGt1zE=, RevisionId f46f8828-0668-43ca-9e07-cbc03ae2c846, adding sql/159_homeowner_intro_requests_select_grant.sql; inspect run 43230935439 had found the live executor at jEx6/8so... without it; dropped [], collisions []): live_definition_sha256 d1677f1cb3f8bf5878744111986af7c6d9d4895b0e5a88161372249cdaa3dc0c == intended, already_applied true, precondition_failures [], prerequisites_missing []; table_privileges homeowner_intro_requests lines [checksops SELECT]. Staging already held checksops SELECT on the table through its staging-only grants (SQL 65, 68, 69), so no staging apply was needed or run (ops/production-sql-159-apply.md step 1: the read-live run is the staging acceptance); the staging pin stays pending (execute false, expected_live_definition_sha256 null: a pin whose expected live hash equals the intended one cannot be bound), as for SQL 119 and SQL 131. The pre-states differ: staging is already the intended state (d1677f1cb3f8bf5878744111986af7c6d9d4895b0e5a88161372249cdaa3dc0c) and production (production_inspect) is 6170e77b6e8b764b28de0d41779ad2d326d867409b401a4b7fd0bb4aa27b7c50 (no checksops SELECT). Staging's checksops also holds DELETE and UPDATE on the table (other_write_grants, staging-only SQL 65/68); production holds neither, SQL 159 grants neither, and the fingerprint covers only checksops's SELECT line. The grant path itself is covered on PostgreSQL 16 by aws/tests/sql159-homeowner-intro-requests-select-grant-pg.test.mjs from production's pre-state (the Leads read refused before, the contractor's row only after), and through the executor by aws/tests/release-sql159-executor.test.mjs. The post-state fingerprint is the same in both environments; the same file bytes (source_sha256) are pinned in both."
+  },
+  "applied": {
+    "date": "2026-11-12",
+    "result": "applied",
+    "source_commit": "32022c676e9235ed6b71df3da816b79a0c062b67",
+    "source_commit_basis": "SOURCE_COMMIT in the tarball (written by sql53-temporary-transfer) equals --commit, and the tarball sha256 equals --expected-tarball-sha256 as copied by the operator from that transfer run's log (TARBALL_SHA256 line); the run log itself was not read by the one-shot.",
+    "source_tarball": {
+      "file": "source-32022c676e9235ed6b71df3da816b79a0c062b67.tar.gz",
+      "sha256": "0a8a412d07a94a33cb0bb8a56ad62a5a8e43b1b91830cb9a64ae3aa3ca60f196"
+    },
+    "source_staged_by": "sql53-temporary-transfer.yml run 43238102298 (TARBALL_SHA256 0a8a412d07a94a33cb0bb8a56ad62a5a8e43b1b91830cb9a64ae3aa3ca60f196, equal to the sidecar it uploaded)",
+    "migration_source_sha256": "0e26c2e4d2efebf4e10b2332c5943ee530c554a686713ed031d767a6f95da3ab",
+    "migration_source_sha256_note": "The one-shot source step checked the pinned migration file in the tarball against source_sha256 (step source ok).",
+    "runner": "i-0c35557c4e5385406",
+    "runner_basis": "operator-supplied --runner (not verified by the one-shot)",
+    "workstream_id": "prod-sql159-homeowner-intro-select-20261112",
+    "one_use_id": "sql159-prod-a555299d-2bf6-42dc-9f08-4346756fdbc0",
+    "one_use_id_consumed": true,
+    "one_use_id_consumed_basis": "Inferred from the successful apply (the tool records the one_use_id after COMMIT and only warns if that write fails); the consumed-registry entry was not read back separately.",
+    "owner_approval": "apply SQL 159 in production",
+    "owner_approval_basis": "As passed in --approval-statement for --approval-scope sql159; the one-shot cannot verify who said it.",
+    "operator": "michaelcarletta-cmd",
+    "inspect_ssm_command_id": "10a80f13-5313-4651-b14f-76b8ac4e2063",
+    "apply_ssm_command_id": "55844713-816d-4a6e-a365-96db7cf61af3",
+    "one_shot_run_id": "8380da36-7587-4cf3-9083-4f9ae251f379",
+    "one_shot_note": "One production-sql-one-shot run verified the source, ran the read-only inspect and the runner contracts, built the manifest, issued the receipt and lease (preflight), evaluated (sql159_production_apply_allowed true), applied (exit 0) and ran the post-apply inspect. Recorded from the run's own output, which arrived whole through SSM (17380 bytes; also on the runner as /var/tmp/sql159-oneshot-apply-20261112T190808Z.log). Pre-apply inspect SSM 10a80f13-5313-4651-b14f-76b8ac4e2063; source staged by transfer run 43238102298. Production acceptance: not yet reported by the owner when this was recorded.",
+    "steps": [
+      "pin",
+      "source",
+      "inspect",
+      "contracts",
+      "manifest",
+      "source-recheck-before-preflight",
+      "preflight",
+      "evaluate",
+      "source-recheck-before-apply",
+      "apply",
+      "post-apply-inspect"
+    ],
+    "contract_results": {
+      "claim-ledger": {
+        "ok": true,
+        "test": "aws/tests/claim-ledger-accepted-contract.test.mjs",
+        "evidence": "4/4 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at 32022c676e9235ed6b71df3da816b79a0c062b67 (production-sql-one-shot 8380da36-7587-4cf3-9083-4f9ae251f379, node --test)"
+      },
+      "tenant-isolation": {
+        "ok": true,
+        "test": "aws/tests/tenant-security-compliance.test.mjs",
+        "evidence": "6/6 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at 32022c676e9235ed6b71df3da816b79a0c062b67 (production-sql-one-shot 8380da36-7587-4cf3-9083-4f9ae251f379, node --test)"
+      },
+      "financial-write-protections": {
+        "ok": true,
+        "test": "aws/tests/api-write.test.mjs",
+        "evidence": "43/43 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at 32022c676e9235ed6b71df3da816b79a0c062b67 (production-sql-one-shot 8380da36-7587-4cf3-9083-4f9ae251f379, node --test)"
+      }
+    },
+    "pre_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "6170e77b6e8b764b28de0d41779ad2d326d867409b401a4b7fd0bb4aa27b7c50",
+      "live_matches_expected": true,
+      "already_applied": false,
+      "predecessors": {},
+      "predecessors_applied": true,
+      "missing_dependencies": [],
+      "apply_preconditions_met": true,
+      "precondition_failures": [],
+      "current_user": "checksops_admin",
+      "session_user": "checksops_admin",
+      "counts": null,
+      "successors_applied": [],
+      "release_sql_inspect": {
+        "live_definition_sha256": "6170e77b6e8b764b28de0d41779ad2d326d867409b401a4b7fd0bb4aa27b7c50",
+        "prerequisites_missing": [],
+        "predecessors": {},
+        "successors_applied": [],
+        "functions": [],
+        "policies": [],
+        "views": [],
+        "tables": [],
+        "columns": [],
+        "constraints": [],
+        "triggers": [],
+        "table_privileges": [
+          {
+            "name": "homeowner_intro_requests",
+            "lines": [],
+            "other_write_grants": []
+          }
+        ],
+        "function_acl": [],
+        "acl_functions": [],
+        "indexes": [],
+        "unique_covers": [],
+        "definer_writes": [],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": null
+      }
+    },
+    "manifest_sha256": "252e349586623b42004d2b674ccb4b2ee97eb8a59783d7dc1a8d08eb7caa5c46",
+    "receipt": {
+      "migration": "sql159",
+      "workstream": "prod-sql159-homeowner-intro-select-20261112",
+      "commit": "32022c676e9235ed6b71df3da816b79a0c062b67",
+      "sql_file": "aws/workflows/sql/159_homeowner_intro_requests_select_grant.sql",
+      "before_hash": "6170e77b6e8b764b28de0d41779ad2d326d867409b401a4b7fd0bb4aa27b7c50",
+      "after_hash": "d1677f1cb3f8bf5878744111986af7c6d9d4895b0e5a88161372249cdaa3dc0c",
+      "release_sql_inspect": {
+        "live_definition_sha256": "d1677f1cb3f8bf5878744111986af7c6d9d4895b0e5a88161372249cdaa3dc0c",
+        "prerequisites_missing": [],
+        "predecessors": {},
+        "successors_applied": [],
+        "functions": [],
+        "policies": [],
+        "views": [],
+        "tables": [],
+        "columns": [],
+        "constraints": [],
+        "triggers": [],
+        "table_privileges": [
+          {
+            "name": "homeowner_intro_requests",
+            "lines": [
+              "checksops SELECT"
+            ],
+            "other_write_grants": []
+          }
+        ],
+        "function_acl": [],
+        "acl_functions": [],
+        "indexes": [],
+        "unique_covers": [],
+        "definer_writes": [],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": null
+      },
+      "unrelated_catalog_sha256": "12969c5806c86ae05aaf5721e265fd1e5e4b93a4a2f48a1679330a5af7dec49e",
+      "unrelated_catalog_counts": {
+        "relations": 899,
+        "columns": 3572,
+        "constraints": 2264,
+        "policies": 479,
+        "functions": 1383,
+        "indexes": 660,
+        "default_acl": 0,
+        "role_memberships": 15,
+        "roles": 29,
+        "triggers": 190,
+        "views": 25,
+        "types": 18,
+        "schema": 2
+      },
+      "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43232074130",
+      "result": "applied"
+    },
+    "post_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "d1677f1cb3f8bf5878744111986af7c6d9d4895b0e5a88161372249cdaa3dc0c",
+      "live_matches_expected": false,
+      "already_applied": true,
+      "predecessors": {},
+      "predecessors_applied": true,
+      "missing_dependencies": [],
+      "apply_preconditions_met": false,
+      "precondition_failures": [],
+      "current_user": "checksops_admin",
+      "session_user": "checksops_admin",
+      "counts": null,
+      "successors_applied": [],
+      "release_sql_inspect": {
+        "live_definition_sha256": "d1677f1cb3f8bf5878744111986af7c6d9d4895b0e5a88161372249cdaa3dc0c",
+        "prerequisites_missing": [],
+        "predecessors": {},
+        "successors_applied": [],
+        "functions": [],
+        "policies": [],
+        "views": [],
+        "tables": [],
+        "columns": [],
+        "constraints": [],
+        "triggers": [],
+        "table_privileges": [
+          {
+            "name": "homeowner_intro_requests",
+            "lines": [
+              "checksops SELECT"
+            ],
+            "other_write_grants": []
+          }
+        ],
+        "function_acl": [],
+        "acl_functions": [],
+        "indexes": [],
+        "unique_covers": [],
+        "definer_writes": [],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": null
+      }
+    },
+    "earlier_attempt": "2026-11-12 14:34Z, the same owner words for an earlier run: one-shot --phase inspect SSM 636ccc8d-1014-40ea-8e90-3b554a668f71 (live 6170e77b..., nothing written), --phase apply SSM 658d76f1-83be-4e68-b589-ded9c40c8e65 failed at the SSM agent (\"ipc messaging received timeout signal\") with no one-shot output; the runner's 16 GiB root volume was full (about 80 one-shot and inspect work directories left in /var/tmp by earlier runs, 12 GB; the runbook command never removed its WORK directory). Nothing was committed: the production API log at 2026-11-12 15:00:00Z and 15:00:19Z still refused the Leads read (\"permission denied for table homeowner_intro_requests\"), and this run's pre-apply inspect read the same pre-state 6170e77b.... The owner freed the disk through a temporary EC2 Instance Connect endpoint (rm of /var/tmp/sql-one-shot-* and /var/tmp/sql-inspect-*; 100% -> 38%) and restarted amazon-ssm-agent; the owner then gave the same words again for this run."
+  },
+  "production_evidence": {
+    "2026-11-12 apply": "Guarded production SQL one-shot on i-0c35557c4e5385406, workstream prod-sql159-homeowner-intro-select-20261112, main 32022c676 (tarball 0a8a412d…, transfer run 43238102298, migration source 0e26c2e4… == pin), owner-approved run (\"apply SQL 159 in production\"), pre-apply --phase inspect SSM 10a80f13-5313-4651-b14f-76b8ac4e2063 (live 6170e77b…, live_matches_expected true), apply SSM 55844713-816d-4a6e-a365-96db7cf61af3, run_id 8380da36-7587-4cf3-9083-4f9ae251f379, one_use_id sql159-prod-a555299d-2bf6-42dc-9f08-4346756fdbc0: every step ok; contracts claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43; manifest 252e3495…; 6170e77b… -> d1677f1c…, result applied, unrelated catalog 12969c58…; post-apply inspect already_applied true, precondition_failures [], homeowner_intro_requests lines [checksops SELECT], other_write_grants []. The whole one-shot output arrived (17380 bytes, also kept on the runner as /var/tmp/sql159-oneshot-apply-20261112T190808Z.log). The runner was stopped at 19:08:56Z after a check that no one-shot process remained. An earlier attempt the same day committed nothing (see applied.earlier_attempt). Production acceptance (the contractor Leads list loading) was not yet reported by the owner when this was recorded. execute is false so the pin is no longer a standing authorization."
   }
 }

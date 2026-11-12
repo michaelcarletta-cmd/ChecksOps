@@ -27,7 +27,7 @@ stay as it was (`other_table_privileges_unchanged`). No API, Lambda or SPA chang
 **Number.** Authored as SQL 158 in #1808 and renumbered to 159 before merging: SQL 158 on main is the Mortgage Desk
 oversight migration (`158_mortgage_desk_oversight_and_agent_notes.sql`, #1807). Nothing was applied under either number.
 
-**Status:** staging already in the intended state (read-live run 43232074130, 2026-11-12; no staging apply, the staging pin stays pending); production pin execute-authorized on production's own pre-state (read-only inspect SSM `acaf2260-cef8-4d40-9f19-85a5c87c873d`). Not applied in production.
+**Status:** staging already in the intended state (read-live run 43232074130, 2026-11-12; no staging apply, the staging pin stays pending); applied to production (2026-11-12); the production pin is retired (`execute: false`).
 
 **Staging executor refreshed for SQL 159 (2026-11-12).** Under the owner's words "Yes start the staging refresh and
 read-live", after #1808 merged as `a8a0afa7b4733b252fd3be412747ac68a46be805`: inspect run 43230935439 found the live executor at
@@ -57,6 +57,31 @@ false, `precondition_failures` `[]`, `apply_preconditions_met` false (no pre-sta
 with the staging read-live (run 43232074130) as its staging acceptance and `execute: true`. The owner merges the pin change;
 the apply runs only after that merge is on main and staged, under the owner's words for that run (phrase
 `GRANT_HOMEOWNER_INTRO_REQUESTS_SELECT`).
+
+
+**Production apply (2026-11-12).** After the pin change (#1815, merged to main as `32022c676` on the owner's words "Merge 1815
+when green"), transfer run 43238102298 staged main `32022c676` (tarball sha256 `0a8a412d07a94a33cb0bb8a56ad62a5a8e43b1b91830cb9a64ae3aa3ca60f196`).
+
+*First attempt (no change).* Under the owner's words "apply SQL 159 in production" (14:34Z), the one-shot `--phase inspect`
+(SSM `636ccc8d-1014-40ea-8e90-3b554a668f71`) read the pinned pre-state `6170e77b…`; the `--phase apply` command (SSM
+`658d76f1-83be-4e68-b589-ded9c40c8e65`) failed at the SSM agent (`ipc messaging received timeout signal`) with no one-shot output.
+The runner's 16 GiB root volume was full: about 80 `sql-one-shot-*` and `sql-inspect-*` work directories (12 GB) left in
+`/var/tmp` by earlier runs, because the runbook's one-shot command never removed its `WORK` directory. The agent could not
+restart until the owner freed the disk through a temporary EC2 Instance Connect endpoint (100% to 38%) and restarted
+`amazon-ssm-agent`. Nothing was committed: the production API still refused the Leads read at 15:00:00Z and 15:00:19Z
+("permission denied for table homeowner_intro_requests"), and the second run's pre-apply inspect read the same pre-state.
+
+*Apply.* Under the owner's words "apply SQL 159 in production" given again for a new run (passed verbatim), with the work
+directory removed on exit and the runner stopped only after a check that no one-shot process remained: one-shot `--phase
+inspect` (SSM `10a80f13-5313-4651-b14f-76b8ac4e2063`, nothing written) read live `6170e77b…` (`live_matches_expected` true,
+`precondition_failures` `[]`); then `--phase apply` (SSM `55844713-816d-4a6e-a365-96db7cf61af3`, run
+`8380da36-7587-4cf3-9083-4f9ae251f379`, workstream `prod-sql159-homeowner-intro-select-20261112`, one_use_id
+`sql159-prod-a555299d-2bf6-42dc-9f08-4346756fdbc0`): contracts 4/4, 6/6 and 43/43; all 11 steps ok; manifest `252e3495…`;
+receipt `6170e77b…` → `d1677f1cb3f8bf5878744111986af7c6d9d4895b0e5a88161372249cdaa3dc0c` (intended), result `applied`; post-apply
+inspect `already_applied` true, `homeowner_intro_requests` lines `[checksops SELECT]`, `other_write_grants` `[]`. The run's
+whole output arrived (17380 bytes). The runner was stopped at 19:08:56Z. Recorded in the pin's `applied` and
+`production_evidence`; `execute` is false again. Production acceptance (a contractor's Leads list loading) had not been
+reported by the owner when this record was written; this record does not claim it.
 
 ## Fingerprint
 
