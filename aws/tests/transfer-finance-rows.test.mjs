@@ -170,7 +170,7 @@ test('wiring: Revenue & Profit, Payment History, By Recipient, WalletOps and Fun
   assert.match(wallet, /const incomingActivity = incomingWalletActivity\(incomingRows, \{ environment: walletEnvironment \}\);/);
   assert.match(read('src/pages/WalletOps.tsx'), /kind: "incoming" as const,\n\s+credit: true,/);
   const page = read('src/pages/CheckCommandCenter.tsx');
-  assert.match(page, /\[\.\.\.\(fundsReceived as any\[\]\), \.\.\.incomingFundsReceivedRows\(incomingTransfers\)\]\.filter\(matchesSplitSearch\)/);
+  assert.match(page, /const received = \[\.\.\.\(fundsReceived as any\[\]\), \.\.\.incomingFundsReceivedRows\(incomingTransfers\)\];[\s\S]{0,400}return \[\.\.\.received, \.\.\.sharedReleased\]\.filter\(matchesSplitSearch\);/);
   // Partner payments are income, never 1099 / tax payments; sends are not added to Tax & 1099 either.
   const tax = read('src/components/ledger/TaxSummary.tsx');
   assert.doesNotMatch(tax, /transferFinanceRows|useTransferFinance|get_tenant_incoming_transfers|payment_transfers/);

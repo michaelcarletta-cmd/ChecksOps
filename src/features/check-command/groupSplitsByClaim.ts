@@ -6,7 +6,12 @@
  * those groups changed places each time the page refreshed (owner report 2026-11-12: the names
  * "keep rotating"). Such a row is dated by when it was sent or last updated, and equal dates are
  * ordered by the group key.
+ *
+ * A group's total is what its rows add to the lane total (receivedAmount): a row built from a
+ * shared check a partner released shows the check amount but adds nothing.
  */
+
+import { receivedAmount } from "./sharedFundsReleased.ts";
 
 export type SplitClaimGroup = {
   key: string;
@@ -43,10 +48,10 @@ export function groupSplitsByClaim(
     const at = splitOrderDate(split);
     if (existing) {
       existing.rows.push(split);
-      existing.total += Number(split.amount) || 0;
+      existing.total += receivedAmount(split);
       if (time(at) > time(existing.latest)) existing.latest = at;
     } else {
-      groups.set(key, { key, claimNumber, policyholderName, rows: [split], total: Number(split.amount) || 0, latest: at });
+      groups.set(key, { key, claimNumber, policyholderName, rows: [split], total: receivedAmount(split), latest: at });
     }
   });
   return Array.from(groups.values()).sort(
