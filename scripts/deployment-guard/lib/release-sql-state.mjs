@@ -1,5 +1,5 @@
 /**
- * One engine for the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108 to SQL 148, SQL 150, SQL 152 to SQL 156, SQL 158, SQL 159), shared by the staging
+ * One engine for the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108 to SQL 148, SQL 150, SQL 152 to SQL 156, SQL 158, SQL 159, SQL 160), shared by the staging
  * guarded executor (aws/write-path/guarded-sql-executor/index.mjs) and the production tools
  * (release-sql-production-apply.mjs): the catalog state reader, the code-derived
  * fingerprints, the pre- and post-conditions, the predecessor rules and the unrelated-catalog
@@ -138,8 +138,10 @@ export function releaseFunctionDefinitions(text) {
     const volatility = /\b(IMMUTABLE|STABLE|VOLATILE)\b/i.exec(header);
     const parallel = /\bPARALLEL\s+(SAFE|RESTRICTED|UNSAFE)\b/i.exec(header);
     // A list value (SQL 102: search_path = public, pg_temp) as PostgreSQL stores it in proconfig.
-    const config = [...header.matchAll(/\bSET\s+([a-z_]+)\s*=\s*([A-Za-z0-9_]+(?:\s*,\s*[A-Za-z0-9_]+)*)/gi)]
-      .map((m) => `${m[1].toLowerCase()}=${m[2].split(',').map((v) => v.trim()).join(', ')}`).sort();
+    // SQL 160: also the pg_get_functiondef form, SET name TO 'value' (or TO value unquoted); a
+    // quoted simple word is stored without its quotes, the same entry as SET name = value.
+    const config = [...header.matchAll(/\bSET\s+([a-z_]+)\s*(?:=|\bTO\b)\s*((?:'[A-Za-z0-9_]+'|[A-Za-z0-9_]+)(?:\s*,\s*(?:'[A-Za-z0-9_]+'|[A-Za-z0-9_]+))*)/gi)]
+      .map((m) => `${m[1].toLowerCase()}=${m[2].split(',').map((v) => v.trim().replace(/^'(.*)'$/, '$1')).join(', ')}`).sort();
     out[name] = {
       result: returns ? returns[1].toLowerCase().replace(/^public\./, '') : null,
       language: language ? language[1].toLowerCase() : null,
