@@ -129,6 +129,7 @@ export const EXECUTOR_PACK_MEMBERS = Object.freeze([
   ['aws/workflows/sql/154_tenant_starter_package.sql', 'sql/154_tenant_starter_package.sql'],
   ['aws/workflows/sql/155_claim_owner_org_stamp.sql', 'sql/155_claim_owner_org_stamp.sql'],
   ['aws/workflows/sql/156_mortgage_desk_shared_check_library_documents.sql', 'sql/156_mortgage_desk_shared_check_library_documents.sql'],
+  ['aws/workflows/sql/158_homeowner_intro_requests_select_grant.sql', 'sql/158_homeowner_intro_requests_select_grant.sql'],
   ['aws/functions/api/rds-global-bundle.pem', 'rds-global-bundle.pem'],
   ['scripts/deployment-guard/lib/sql-apply.mjs', 'lib/sql-apply.mjs'],
   ['scripts/deployment-guard/lib/sql-executor-auth.mjs', 'lib/sql-executor-auth.mjs'],

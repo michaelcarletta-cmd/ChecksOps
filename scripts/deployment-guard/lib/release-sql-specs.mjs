@@ -9158,6 +9158,42 @@ export const RELEASE_SQL_SPECS = deepFreeze({
       "public.tenants"
     ]
   },
+  // SQL 158 (owner 2026-11-12, option (a), "A now"): the table SELECT production's checksops lacks on
+  // homeowner_intro_requests, so a contractor's Leads list loads (production 2026-11-10 20:01Z, /prep/data/query
+  // "permission denied for table homeowner_intro_requests"). As SQL 104: the fingerprint is checksops's pinned
+  // SELECT line only; every other grant on the table must stay as it was (other_table_privileges_unchanged). GRANT
+  // of a held privilege is a no-op, so staging (which holds it through its staging-only grants) reads as already
+  // applied. No write grant, no policy or RLS change. No predecessor.
+  sql158: {
+    "key": "sql158",
+    "label": "SQL 158",
+    "choice": "sql158-homeowner-intro-requests-select-grant",
+    "production_pin_rel": "ops/deployment-guard/sql158-homeowner-intro-requests-select-grant-production-apply.json",
+    "script": "sql158-homeowner-intro-requests-select-grant-production-apply",
+    "prerequisites": [
+      "public.homeowner_intro_requests",
+      "role checksops"
+    ],
+    "predecessors": [],
+    "functions": [],
+    "table_privileges": [
+      {
+        "table": "public.homeowner_intro_requests",
+        "grantees": [
+          "checksops"
+        ],
+        "privileges": [
+          "SELECT"
+        ],
+        "intended": [
+          "checksops SELECT"
+        ]
+      }
+    ],
+    "altered_relations": [
+      "public.homeowner_intro_requests"
+    ]
+  },
   sql76: {
     "key": "sql76",
     "label": "SQL 76",

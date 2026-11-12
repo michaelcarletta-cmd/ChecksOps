@@ -3608,6 +3608,27 @@ export const AUTHORIZED_SQL76_RELEASE_TENANT_PARTNERSHIP_CONSENT = Object.freeze
   ]),
 });
 
+// Homeowner intro requests SELECT staging pin: SQL 158 (owner 2026-11-12, option (a), "A now"). The table SELECT
+// production's checksops lacks on homeowner_intro_requests (a contractor's Leads list: production 2026-11-10 20:01Z,
+// "permission denied for table homeowner_intro_requests"). Staging holds the grant already through its staging-only
+// migrations, so its read-live is expected to report already_applied true. Pending until a reviewed pin change records
+// a staging read-live.
+export const AUTHORIZED_SQL158_HOMEOWNER_INTRO_REQUESTS_SELECT_GRANT = Object.freeze({
+  key: 'sql158',
+  filename: 'aws/workflows/sql/158_homeowner_intro_requests_select_grant.sql',
+  migration_id: '158_homeowner_intro_requests_select_grant',
+  // The commit that last authored the file bytes.
+  commit: '4136f300412c6596f32313e762043a26874c19a4',
+  source_sha256: '675516f839057c350ab59c01fd90ac9d8802f192df4a905c57a04b78412f7e32',
+  authorization: 'pending',
+  execute: false,
+  expected_live_definition_sha256: null,
+  // Code-derived: releaseIntendedHash('sql158', file bytes) (release-sql-state.mjs); re-derived by the tests.
+  intended_replacement_sha256: '4014fdf9a1622b06ffd3bee3fd6891ac7eca61d661aa3545a26230ae0730630b',
+  // The file creates or replaces no function.
+  function_identities: Object.freeze([]),
+});
+
 export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql90: AUTHORIZED_SQL90_USERS_ONLY_TENANT_ROLES,
   sql91: AUTHORIZED_SQL91_MOOV_ONBOARDING,
@@ -3673,6 +3694,7 @@ export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql154: AUTHORIZED_SQL154_TENANT_STARTER_PACKAGE,
   sql155: AUTHORIZED_SQL155_CLAIM_OWNER_ORG_STAMP,
   sql156: AUTHORIZED_SQL156_MORTGAGE_DESK_SHARED_CHECK_LIBRARY,
+  sql158: AUTHORIZED_SQL158_HOMEOWNER_INTRO_REQUESTS_SELECT_GRANT,
   sql76: AUTHORIZED_SQL76_RELEASE_TENANT_PARTNERSHIP_CONSENT,
 });
 
@@ -3689,7 +3711,7 @@ export function isSql30TenantDocumentsDocType(input = {}) {
   return pinIdentifiersMatch(input, AUTHORIZED_SQL30_TENANT_DOCUMENTS_DOC_TYPE);
 }
 
-/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql148, sql150, sql152 ... sql156; sql76 for production) an input names, or null. */
+/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql148, sql150, sql152 ... sql156, sql158; sql76 for production) an input names, or null. */
 export function releaseSqlMigrationKey(input = {}) {
   return Object.keys(RELEASE_2026_10_17_PENDING_SQL_PINS)
     .find((key) => pinIdentifiersMatch(input, RELEASE_2026_10_17_PENDING_SQL_PINS[key])) || null;
