@@ -229,6 +229,97 @@ export async function postMortgageDeskTimeline(
   return { error: out.error };
 }
 
+/**
+ * One auto-shared library document of a tenant on the request's check (SQL 156,
+ * action shared_library_documents): the requesting tenant's and every partner's
+ * with an unrevoked share of the check.
+ */
+export interface MortgageDeskSharedLibraryDocument {
+  tenant_id: string;
+  tenant_name: string | null;
+  requesting_tenant: boolean;
+  tenant_document_id: string;
+  doc_type: string | null;
+  file_name: string;
+  file_path: string;
+  mime_type: string | null;
+  file_size: number | null;
+  created_at: string;
+}
+
+/** One company's documents, as the request view groups them. */
+export interface MortgageDeskSharedLibraryGroup {
+  tenantId: string;
+  tenantName: string;
+  requestingTenant: boolean;
+  documents: MortgageDeskSharedLibraryDocument[];
+}
+
+/** The files of the shared library live in this bucket; storage.mjs signs them (SQL 156 b for a partner's file). */
+export const MORTGAGE_DESK_SHARED_LIBRARY_BUCKET = "tenant-documents";
+
+/**
+ * Groups the documents by company: the requesting tenant first, then partners
+ * by name (then id), each company's documents in the order the server sent.
+ */
+export function groupSharedLibraryDocuments(rows: MortgageDeskSharedLibraryDocument[]): MortgageDeskSharedLibraryGroup[] {
+  const groups = new Map<string, MortgageDeskSharedLibraryGroup>();
+  for (const row of rows) {
+    if (!row || !row.tenant_id || !row.file_path) continue;
+    let group = groups.get(row.tenant_id);
+    if (!group) {
+      group = {
+        tenantId: row.tenant_id,
+        tenantName: String(row.tenant_name ?? "").trim() || "Unnamed company",
+        requestingTenant: row.requesting_tenant === true,
+        documents: [],
+      };
+      groups.set(row.tenant_id, group);
+    }
+    if (row.requesting_tenant === true) group.requestingTenant = true;
+    group.documents.push(row);
+  }
+  return [...groups.values()].sort((a, b) => {
+    if (a.requestingTenant !== b.requestingTenant) return a.requestingTenant ? -1 : 1;
+    const byName = a.tenantName.localeCompare(b.tenantName, undefined, { sensitivity: "base" });
+    return byName !== 0 ? byName : a.tenantId.localeCompare(b.tenantId);
+  });
+}
+
+/** The library label shown under a file name: library:mortgage:w9 -> w9. */
+export function sharedLibraryDocLabel(docType: string | null | undefined): string {
+  return String(docType ?? "").replace(/^library:(mortgage:)?/, "").replace(/_/g, " ").trim();
+}
+
+/**
+ * SQL 156's rule, as the server applies it: the platform owner, or an agent
+ * while the request is queued or in progress, or after, if it is theirs.
+ */
+export function canReadMortgageDeskSharedLibrary(
+  req: { status?: string | null; assigned_employee_id?: string | null } | null | undefined,
+  userId: string | null | undefined,
+  platformOwner: boolean,
+): boolean {
+  if (!req) return false;
+  if (platformOwner) return true;
+  if (req.status === "requested" || req.status === "in_progress") return true;
+  return !!userId && req.assigned_employee_id === userId;
+}
+
+export async function loadMortgageDeskSharedLibraryDocuments(
+  client: MortgageDeskFunctionsClient,
+  requestId: string,
+): Promise<{ data: MortgageDeskSharedLibraryDocument[] | null; error: string | null }> {
+  const out = await invokeMortgageDeskEsign<{ data: MortgageDeskSharedLibraryDocument[] }>(client, {
+    action: "shared_library_documents",
+    request_id: requestId,
+  });
+  if (out.error) return { data: null, error: out.error };
+  const rows = out.data?.data;
+  if (!Array.isArray(rows)) return { data: null, error: "Unexpected reply" };
+  return { data: rows, error: null };
+}
+
 /** Per-signer status line, as the tenant's signature list shows it. */
 export function deskSignerStatusLabel(signer: Pick<MortgageDeskSigner, "status" | "signed_at" | "viewed_at" | "delivery_status">): string {
   if (signer.status === "signed" && signer.signed_at) return `Signed ${new Date(signer.signed_at).toLocaleDateString()}`;

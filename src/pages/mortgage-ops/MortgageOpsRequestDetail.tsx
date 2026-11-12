@@ -9,15 +9,21 @@ import {
 } from "@/lib/mortgageDeskWrites";
 import {
   canReadMortgageDeskRequest,
+  canReadMortgageDeskSharedLibrary,
   canWorkMortgageDeskRequest,
   defaultDeskSigners,
   deskSignatureStatusLabel,
   deskSignerStatusLabel,
+  groupSharedLibraryDocuments,
   isDeskSignableFile,
+  loadMortgageDeskSharedLibraryDocuments,
   loadMortgageDeskWorkspace,
+  MORTGAGE_DESK_SHARED_LIBRARY_BUCKET,
   postMortgageDeskTimeline,
+  sharedLibraryDocLabel,
   signMortgageDeskFile,
   type MortgageDeskFunctionsClient,
+  type MortgageDeskSharedLibraryGroup,
 } from "@/lib/mortgageDeskEsign";
 import {
   MortgageDeskSignatureDialog,
@@ -244,6 +250,9 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
   const [libraryDocs, setLibraryDocs] = useState<
     { id: string; file_name: string; file_path: string; bucket: string; doc_type: string | null }[]
   >([]);
+  // AWS: every check tenant's auto-shared library documents (SQL 156), grouped by company; null = not loaded,
+  // and the single-tenant list above is shown instead.
+  const [sharedLibrary, setSharedLibrary] = useState<MortgageDeskSharedLibraryGroup[] | null>(null);
   const [lossDocs, setLossDocs] = useState<LossDraftDoc[]>([]);
   const [lossDraftId, setLossDraftId] = useState<string | null>(null);
   const [messages, setMessages] = useState<MessageRow[]>([]);
@@ -297,6 +306,8 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
   const [deskSigDoc, setDeskSigDoc] = useState<MortgageDeskSignatureDocument | null>(null);
   const [deskSigOpen, setDeskSigOpen] = useState(false);
   const platformOwner = isPlatformOwner(user?.email, user?.id);
+  const sharedLibraryPaths = new Set((sharedLibrary ?? []).flatMap((g) => g.documents.map((d) => d.file_path)));
+  const attachedLibraryDocs = libraryDocs.filter((d) => !sharedLibraryPaths.has(d.file_path));
 
   const load = useCallback(async () => {
     if (!requestId) return;
@@ -388,6 +399,14 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
           .eq("request_id", r.id)
           .order("created_at", { ascending: true });
         setLibraryDocs((libRows as any[]) || []);
+
+        // AWS: the library documents of every tenant on the check (the requesting tenant first, then partners).
+        // On any refusal or error the single-tenant list above stays.
+        setSharedLibrary(null);
+        if (mortgageUsesAwsBackend && canReadMortgageDeskSharedLibrary(r, user?.id, isPlatformOwner(user?.email, user?.id))) {
+          const { data: shared } = await loadMortgageDeskSharedLibraryDocuments(deskEsignClient, r.id);
+          if (shared) setSharedLibrary(groupSharedLibraryDocuments(shared));
+        }
 
 
 
@@ -1253,21 +1272,70 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
               </Card>
             )}
 
-            {/* Auto-shared library documents from the tenant */}
-            {libraryDocs.length > 0 && (
+            {/* Auto-shared library documents of every company on the check (AWS, SQL 156) */}
+            {sharedLibrary && sharedLibrary.length > 0 && (
+              <Card>
+                <CardContent className="pt-4 space-y-3">
+                  <div className="font-semibold text-sm flex items-center justify-between">
+                    <span className="flex items-center gap-2">
+                      <FileText className="h-4 w-4" /> Shared from Document Libraries
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      {sharedLibrary.reduce((n, g) => n + g.documents.length, 0)}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    Mortgage documents every company on this check shares with the Mortgage Desk. Ready to forward to the lender.
+                  </p>
+                  {sharedLibrary.map((group) => (
+                    <div key={group.tenantId} className="space-y-1">
+                      <div className="flex items-center gap-2 text-xs font-medium">
+                        <span className="truncate">{group.tenantName}</span>
+                        <Badge variant={group.requestingTenant ? "default" : "secondary"} className="text-[10px]">
+                          {group.requestingTenant ? "Requesting company" : "Partner"}
+                        </Badge>
+                      </div>
+                      <ul className="text-sm divide-y divide-border">
+                        {group.documents.map((d) => (
+                          <li key={d.tenant_document_id} className="py-2 flex items-center justify-between gap-2">
+                            <div className="min-w-0">
+                              <div className="truncate font-medium">{d.file_name}</div>
+                              {d.doc_type && (
+                                <div className="text-[11px] text-muted-foreground truncate">{sharedLibraryDocLabel(d.doc_type)}</div>
+                              )}
+                            </div>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              aria-label={`Download ${d.file_name}`}
+                              onClick={() => downloadFromBucket(MORTGAGE_DESK_SHARED_LIBRARY_BUCKET, d.file_path, d.file_name)}
+                            >
+                              <Download className="h-4 w-4" />
+                            </Button>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Library documents attached when the check was sent (those not already listed above) */}
+            {attachedLibraryDocs.length > 0 && (
               <Card>
                 <CardContent className="pt-4 space-y-3">
                   <div className="font-semibold text-sm flex items-center justify-between">
                     <span className="flex items-center gap-2">
                       <FileText className="h-4 w-4" /> Shared from tenant Document Library
                     </span>
-                    <span className="text-xs text-muted-foreground">{libraryDocs.length}</span>
+                    <span className="text-xs text-muted-foreground">{attachedLibraryDocs.length}</span>
                   </div>
                   <p className="text-[11px] text-muted-foreground">
                     Auto-attached when this check was sent to the Mortgage Desk. Ready to forward to the lender.
                   </p>
                   <ul className="text-sm divide-y divide-border">
-                    {libraryDocs.map((d) => (
+                    {attachedLibraryDocs.map((d) => (
                       <li key={d.id} className="py-2 flex items-center justify-between gap-2">
                         <div className="min-w-0">
                           <div className="truncate font-medium">{d.file_name}</div>
