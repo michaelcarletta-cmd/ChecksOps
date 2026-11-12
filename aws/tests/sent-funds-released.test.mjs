@@ -85,7 +85,7 @@ test('4 Check Command Center: sent checks move from Deposited to Funds Released'
   assert.match(page, /\.from\("payment_transfers"\)[\s\S]{0,300}\.eq\("tenant_id", tenantId!\)\s*\.in\("leg_role", \[\.\.\.SEND_LEG_ROLES\]\)\s*\.in\("status", \[\.\.\.DISBURSED_SEND_STATUSES\]\)/);
   assert.match(page, /if \(sentCheckIds\.has\(c\.id\)\) return false;/);
   assert.match(page, /!sentCheckIds\.has\(c\.id\) && matchesSearch\(c\)/);
-  assert.match(page, /\[\.\.\.\(fundsReleased as any\[\]\), \.\.\.sentReleased, \.\.\.sharedReleased\]\.filter\(matchesSplitSearch\)/);
+  assert.match(page, /\[\.\.\.\(fundsReleased as any\[\]\), \.\.\.sentReleased\]\.filter\(matchesSplitSearch\)/);
   assert.match(page, /server - sentDeposited\.count/);
   assert.match(page, /queryKey: \["funds-released-sends", tenantId\] \}\);/);
 });

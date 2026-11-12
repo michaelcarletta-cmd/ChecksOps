@@ -222,7 +222,8 @@ import {
 } from "@/features/check-command/status";
 import { useCheckCommandRealtime } from "@/features/check-command/useCheckCommandRealtime";
 import { optimisticStage, optimisticRemove } from "@/features/check-command/optimistic";
-import { sharedReleasedRows } from "@/features/check-command/sharedFundsReleased";
+import { isSharedReleased, sharedReleasedLabel, sharedReleasedSummary } from "@/features/check-command/sharedFundsReleased";
+import { groupSplitsByClaim } from "@/features/check-command/groupSplitsByClaim";
 import { incomingFundsReceivedRows } from "@/lib/payments/transferFinanceRows";
 import { useIncomingTransfers } from "@/hooks/useTransferFinance";
 import {
@@ -938,12 +939,16 @@ export default function CheckCommandCenter() {
 
   const reissueRequested = allChecks.filter((c) => getEffectiveStatus(c) === "reissue_requested" && matchesSearch(c));
   const branchDeposit = allChecks.filter((c) => getEffectiveStatus(c) === "branch_deposit_required" && matchesSearch(c));
+  // Shared checks the source organization released: Funds Released is this organization's own
+  // money out, so they stay in Deposited, labelled "Released by ..." (sharedFundsReleased.ts).
+  const sharedReleased = useMemo(() => sharedReleasedSummary(sharedChecks as any[]), [sharedChecks]);
   const depositedFromAll = allChecks.filter((c) => {
     const s = getEffectiveStatus(c);
     const stage = c.check_stage;
     const checkAltStatus = getCheckAltStatus(c);
-    // Once funds have been disbursed, the check belongs in the Funds Released
-    // tab — do NOT show it in Deposited anymore. One disbursed send is enough.
+    if (sharedReleased.ids.has(c.id)) return matchesSearch(c);
+    // Once this organization's funds have been disbursed, the check belongs in the Funds
+    // Released tab — do NOT show it in Deposited anymore. One disbursed send is enough.
     if (stage === "funds_released" || stage === "disbursed_externally") return false;
     if (sentCheckIds.has(c.id)) return false;
     return (s === "deposited" || stage === "deposited" || checkAltStatus === "pending_approval") && matchesSearch(c);
@@ -1021,7 +1026,8 @@ export default function CheckCommandCenter() {
     if (!stageTotals) return inMemory.length;
     if (key === "deposited") {
       const server = stageTotals.get(key)?.count;
-      return server == null ? inMemory.length : Math.max(0, server - sentDeposited.count);
+      // The server counts check_stage deposited only: add the shared checks a partner released.
+      return server == null ? inMemory.length : Math.max(0, server - sentDeposited.count) + sharedReleased.count;
     }
     if (queueCapped) return stageTotals.get(key)?.count ?? inMemory.length;
     return inMemory.length;
@@ -1031,7 +1037,7 @@ export default function CheckCommandCenter() {
     if (!stageTotals) return inMemoryTotal;
     if (key === "deposited") {
       const server = stageTotals.get(key)?.total;
-      return server == null ? inMemoryTotal : Math.max(0, server - sentDeposited.total);
+      return server == null ? inMemoryTotal : Math.max(0, server - sentDeposited.total) + sharedReleased.total;
     }
     if (queueCapped) return stageTotals.get(key)?.total ?? inMemoryTotal;
     return inMemoryTotal;
@@ -1220,14 +1226,13 @@ export default function CheckCommandCenter() {
 
   const filteredFundsReleased = useMemo(
     () => {
-      // A partner's shared check whose funds the source released has no split of ours: list it
-      // from the check itself, or it would leave every tab (sharedFundsReleased.ts).
-      const sharedReleased = sharedReleasedRows(sharedChecks as any[], fundsReleased as any[]);
+      // Only this organization's own money out: its settled splits and its sends. A shared check
+      // the partner released stays in Deposited (sharedFundsReleased.ts).
       // Sends write payment_transfers legs, not splits: one row per sent check and recipient.
       const sentReleased = sentReleasedRows(checkSends.legs, checkSends.checks);
-      return [...(fundsReleased as any[]), ...sentReleased, ...sharedReleased].filter(matchesSplitSearch);
+      return [...(fundsReleased as any[]), ...sentReleased].filter(matchesSplitSearch);
     },
-    [fundsReleased, checkSends, sharedChecks, matchesSplitSearch],
+    [fundsReleased, checkSends, matchesSplitSearch],
   );
   const filteredFundsReceived = useMemo(
     () => [...(fundsReceived as any[]), ...incomingFundsReceivedRows(incomingTransfers)].filter(matchesSplitSearch),
@@ -1653,9 +1658,7 @@ export default function CheckCommandCenter() {
                               const checkId = batch?.check_intake_item_id;
                               const isSelected = !!checkId && selectedCheck === checkId;
                               const acct = split.stakeholder_accounts;
-                              const party = split._sharedReleasedBy
-                                ? `Released by ${split._sharedReleasedBy}`
-                                : `To ${split.recipient_name ?? acct?.nickname ?? acct?.custname ?? "—"}`;
+                              const party = `To ${split.recipient_name ?? acct?.nickname ?? acct?.custname ?? "—"}`;
                               const carrier = displayCase(check?.carrier_name) || "—";
                               return (
                                 <CompactCheckRow
@@ -1680,9 +1683,7 @@ export default function CheckCommandCenter() {
                                         {split.external_check_number ? ` · Ck #${split.external_check_number}` : ""}
                                       </Badge>
                                       <Badge variant="outline" className="text-[10px]">
-                                        {split._sharedReleasedBy ? (
-                                          <>Updated {split.updated_at ? format(new Date(split.updated_at), "MMM d, yyyy") : "—"}</>
-                                        ) : split._sendStatus ? (
+                                        {split._sendStatus ? (
                                           <>{split._sendStatus === "completed" ? "Settled" : "Sent"} {split._sentAt ? format(new Date(split._sentAt), "MMM d, yyyy") : "—"}</>
                                         ) : (
                                           <>Settled {split.settled_at ? format(new Date(split.settled_at), "MMM d, yyyy") : "—"}</>
@@ -2156,9 +2157,15 @@ export default function CheckCommandCenter() {
                             }
                             pills={
                               <>
-                                <Badge className={`text-[10px] ${getTabStatusClass(check, activeTab)}`}>
-                                  {getTabStatusLabel(check, activeTab)}
-                                </Badge>
+                                {activeTab === "deposited" && isSharedReleased(check as any) ? (
+                                  <Badge className="text-[10px] bg-emerald-500/20 text-emerald-400">
+                                    {sharedReleasedLabel(check as any)}
+                                  </Badge>
+                                ) : (
+                                  <Badge className={`text-[10px] ${getTabStatusClass(check, activeTab)}`}>
+                                    {getTabStatusLabel(check, activeTab)}
+                                  </Badge>
+                                )}
                                 {payeeCount > 0 && (
                                   <Badge variant="outline" className="text-[10px]">
                                     {payeeCount} payee{payeeCount > 1 ? "s" : ""}{check.is_multi_payee ? " · Multi" : ""}
@@ -2377,37 +2384,6 @@ export default function CheckCommandCenter() {
 /* ------------------------------------------------------------------ */
 /*  Summary card (kept for Phase 1 compat)                             */
 /* ------------------------------------------------------------------ */
-
-type SplitClaimGroup = { key: string; claimNumber: string; policyholderName: string; rows: any[]; total: number; latest: string };
-
-/** Group disbursement splits (Funds Released / Funds Received) by claim #, newest file first. */
-function groupSplitsByClaim(
-  rows: any[],
-  resolve: (check: any) => { claimNumber: string | null; policyholderName: string | null },
-): SplitClaimGroup[] {
-  const groups = new Map<string, SplitClaimGroup>();
-  rows.forEach((split: any) => {
-    const check = split.disbursement_batches?.check_intake_items;
-    const resolved = resolve(check);
-    const claimNumber = resolved.claimNumber || "Unlinked claim";
-    const policyholderName = resolved.policyholderName || "Unknown insured";
-    const key = resolved.claimNumber
-      ? `claim::${String(claimNumber).trim().toLowerCase()}`
-      : `unlinked::${split.id}`;
-    const existing = groups.get(key);
-    const settledAt = split.settled_at ?? split.created_at ?? new Date().toISOString();
-    if (existing) {
-      existing.rows.push(split);
-      existing.total += Number(split.amount) || 0;
-      if (new Date(settledAt).getTime() > new Date(existing.latest).getTime()) existing.latest = settledAt;
-    } else {
-      groups.set(key, { key, claimNumber, policyholderName, rows: [split], total: Number(split.amount) || 0, latest: settledAt });
-    }
-  });
-  return Array.from(groups.values()).sort(
-    (x, y) => new Date(y.latest).getTime() - new Date(x.latest).getTime(),
-  );
-}
 
 /** The one summary line of a claim file in the compact lane list. */
 function claimFileStageDetails(group: CheckGroup, hideReadySignal: boolean): string[] {
