@@ -4,7 +4,6 @@ import { TenantThemeProvider } from "@/components/white-label/TenantThemeProvide
 import { ThemeScope } from "@/hooks/useTheme";
 import { WhiteLabelLogin } from "@/components/white-label/WhiteLabelLogin";
 import { WhiteLabelCheckCenter } from "@/components/white-label/WhiteLabelCheckCenter";
-import { WhiteLabelSettings } from "@/components/white-label/WhiteLabelSettings";
 import { useTenant } from "@/contexts/TenantContext";
 import { useAuth } from "@/hooks/useAuth";
 import { useQuery } from "@tanstack/react-query";
@@ -18,6 +17,10 @@ import { loginPathWithNext, postLoginPath } from "@/lib/loginReturnPath";
 const Payments = lazy(() => import("@/pages/Payments"));
 const CashJobs = lazy(() => import("@/pages/CashJobs"));
 const WalletOps = lazy(() => import("@/pages/WalletOps"));
+// Settings (branding, billing, compliance, users...) is large and opened rarely: its own chunk.
+const WhiteLabelSettings = lazy(() =>
+  import("@/components/white-label/WhiteLabelSettings").then((m) => ({ default: m.WhiteLabelSettings })),
+);
 
 function SubPageHeader() {
   return (
@@ -159,7 +162,11 @@ function CustomDomainRoutes() {
           </div>
         )}
       />
-      <Route path="/settings" element={requireAuth(<WhiteLabelSettings />)} />
+      <Route path="/settings" element={requireAuth(
+        <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">Loading…</div>}>
+          <WhiteLabelSettings />
+        </Suspense>,
+      )} />
       <Route path="*" element={<Navigate to={user && isMember ? "/checks" : "/login"} replace />} />
     </Routes>
   );

@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Building2, UserPlus, Trash2, Crown, Shield, User, Pencil, Check, ChevronsUpDown, Sparkles, Users } from "lucide-react";
+import { Building2, UserPlus, Trash2, Crown, Shield, User, Pencil, Check, ChevronsUpDown, Users } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import {

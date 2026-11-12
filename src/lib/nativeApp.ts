@@ -32,10 +32,10 @@ export function applyNativeAppShell(
 
 /** The check panel slides in from the right and settles, like a pushed screen. */
 export const NATIVE_PANEL_ENTER: Keyframe[] = [
-  { opacity: 0, translate: "40px 0", scale: "0.98" },
+  { opacity: 0, translate: "24px 0", scale: "0.99" },
   { opacity: 1, translate: "0 0", scale: "1" },
 ];
-export const NATIVE_PANEL_TIMING: KeyframeAnimationOptions = { duration: 380, easing: "cubic-bezier(0.22, 1, 0.36, 1)" };
+export const NATIVE_PANEL_TIMING: KeyframeAnimationOptions = { duration: 260, easing: "cubic-bezier(0.22, 1, 0.36, 1)" };
 
 /** On the website the panel moves less and faster: desktop users notice slow motion more. */
 export const WEB_PANEL_ENTER: Keyframe[] = [

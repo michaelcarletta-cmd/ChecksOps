@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Plus, Pencil, Trash2, FileSignature, ChevronDown, ChevronUp, Save } from "lucide-react";
+import { Plus, Pencil, Trash2, FileSignature, ChevronDown, ChevronUp, Save, PenLine, Type, Calendar, SquareCheck, type LucideIcon } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { SettingsHero } from "./SettingsHero";
 import { SectionCard } from "./SectionCard";
@@ -33,11 +33,11 @@ interface SignaturePresetsSettingsProps {
   embedded?: boolean;
 }
 
-const FIELD_TYPE_ICONS: Record<string, string> = {
-  signature: "✍️",
-  text: "📝",
-  date: "📅",
-  checkbox: "☑️",
+const FIELD_TYPE_ICONS: Record<string, LucideIcon> = {
+  signature: PenLine,
+  text: Type,
+  date: Calendar,
+  checkbox: SquareCheck,
 };
 
 function getFieldTypeFromKey(key: string): string {
@@ -171,14 +171,13 @@ export function SignaturePresetsSettings({ embedded }: SignaturePresetsSettingsP
   function addFieldToEditing() {
     if (!editingPreset || !addFieldKey) return;
     const fieldType = getFieldTypeFromKey(addFieldKey);
-    const icon = FIELD_TYPE_ICONS[fieldType] || "📝";
     const maxOrder = Math.max(0, ...Object.values(editingPreset.fields || {}).map((f) => f.display_order || 0));
     setEditingPreset({
       ...editingPreset,
       fields: {
         ...(editingPreset.fields || {}),
         [addFieldKey]: {
-          display_label: `${icon} New ${fieldType} field`,
+          display_label: `New ${fieldType} field`,
           display_help_text: "",
           display_section: "General",
           display_order: maxOrder + 1,
@@ -290,7 +289,7 @@ export function SignaturePresetsSettings({ embedded }: SignaturePresetsSettingsP
                           .map((key) => {
                             const field = safeFields[key];
                             const fieldType = getFieldTypeFromKey(key);
-                            const icon = FIELD_TYPE_ICONS[fieldType] || "📝";
+                            const FieldIcon = FIELD_TYPE_ICONS[fieldType] || Type;
 
                             return (
                               <div
@@ -299,7 +298,7 @@ export function SignaturePresetsSettings({ embedded }: SignaturePresetsSettingsP
                               >
                                 <div className="flex items-center justify-between">
                                   <div className="flex items-center gap-1.5">
-                                    <span className="text-sm">{icon}</span>
+                                    <FieldIcon className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
                                     <Badge variant="outline" className="text-xs font-mono">
                                       {key}
                                     </Badge>
