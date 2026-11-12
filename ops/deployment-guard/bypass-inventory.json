@@ -173,6 +173,12 @@
       "note": "Read-only production inspect of the financial TOTP database surface; there is no apply. Accepts exactly --inspect (every other argument, and any CHECKSOPS_DEPLOYMENT_GUARD_* or CHECKSOPS_SKIP_DEPLOYMENT_GUARD variable, is refused before a secret is read). Credentials come only from the pinned production checksops_admin secret through the Secrets Manager VPC endpoint (ops/deployment-guard/financial-totp-live-inspect.json, the same RDS and secret as the Mortgage Desk access inspect). One BEGIN READ ONLY ... ROLLBACK of fixed SELECTs: the public financial_totp functions (owner, SECURITY DEFINER, EXECUTE ACL, definition and hashes, repository match), the action allow-list of consume_financial_totp_rate_limit and whether it accepts code_check, column names of the three TOTP tables, and aggregate activity counts since 2026-10-29. Never selects user ids, tenant ids, secrets, ciphertext, nonce, key id, metadata or raw rows."
     },
     {
+      "path": "scripts/deployment-guard/partner-released-shares-inspect.mjs",
+      "classification": "SAFE",
+      "capabilities": ["partner-released-shares-inspect"],
+      "note": "Read-only production inspect of the checks a partner shared with Condition One and released; there is no apply. Accepts exactly --inspect (every other argument, and any CHECKSOPS_DEPLOYMENT_GUARD_* or CHECKSOPS_SKIP_DEPLOYMENT_GUARD variable, is refused before a secret is read). Credentials come only from the pinned production checksops_admin secret through the Secrets Manager VPC endpoint (ops/deployment-guard/partner-released-shares-inspect.json, the same RDS and secret as the Mortgage Desk access inspect). One BEGIN READ ONLY ... ROLLBACK of fixed SELECTs: active shares to the receiving organization by check stage, the sharing organization's payouts on the released shared checks by status, method and recipient class, its send legs from those checks, the receiving organization's own payouts and send legs, and presence and hash of get_tenant_funds_received and normalize_org_name. Returns counts and dollar totals only: never an id, a name, a check number, an address, a memo or a raw row."
+    },
+    {
       "path": "scripts/deployment-guard/sql29-mortgage-ops-library-parity-production-apply.mjs",
       "classification": "GUARDED",
       "capabilities": ["sql29-production-apply"],
