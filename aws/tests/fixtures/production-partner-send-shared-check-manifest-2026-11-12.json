@@ -1,0 +1,15 @@
+{
+  "workstream_id": "partner-send-shared-check",
+  "authorization": "Pending owner review (2026-11-12). Planning only: nothing is live or verified. The production apply needs its own owner approval, a staging acceptance reference and a read-only production inspect that confirms the live bytes.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Owner 2026-11-12: \"If a tenant sends a check to a partner it should land in funds received for the partners. If that partner then send money from that check received, their original funds received should stay and the payment out from the partner should show in payment released.\"; approval to build: \"Yes for 1, 2, and run the inspect\". Until now runSend refused any check that is not the sender's own (check_not_found), so a partner could not send from a check shared with it. REPLACE providers/production/moov-send.mjs 1b204d62 -> c973d09e: the check query also reads whether the check's owner shares it with the sender right now (public.shared_checks: check_id, source_tenant_id = the check's tenant_id, target_tenant_id = the sender, revoked_at IS NULL), and a check send is accepted for the sender's own check or such a shared check; a revoked share, a share to another organization and a share row not from the check's owner stay check_not_found. Nothing else changes: the legs are written under the sender's tenant_id with the same step-up, idempotency, per-organization lock, wallet balance, top-up and recipient rules; the check row, its check_stage and its owner's records are not touched; payroll sends read no check. There is no limit on the amount beyond the sender's own wallet and bank, as for an own check. No SQL. Not authorized, not applied.",
+  "members": {
+    "providers/production/moov-send.mjs": {
+      "live_sha256": "1b204d621a06c87f95aa888833470d86e157e78b431a3a9d1a51e8d2e064a2a0",
+      "accepted_sha256": "c973d09e4b28496d0856a0d06fdaa2c9f3386a24ba165149b443fb031b4b174d",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-payroll-send-applied-manifest-2026-11-04.json"
+    }
+  }
+}

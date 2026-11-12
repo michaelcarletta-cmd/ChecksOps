@@ -652,11 +652,23 @@ async function runSend({ client, mapping, claims, ctx, body, fetchImpl: postFetc
   const payroll = request.purpose === 'payroll';
 
   if (!payroll) {
+    // The check is this organization's own, or one its owner shares with this organization
+    // right now (owner 2026-11-12: a partner paid from a shared check sends onward from it,
+    // and that payment is the partner's own Funds Released). The legs are written under the
+    // sender's tenant_id either way; the check, its stage and its owner's records are not
+    // touched. A revoked share, or a share to another organization, is not found.
     const check = (await client.query(
-      'SELECT id, tenant_id FROM public.check_intake_items WHERE id = $1::uuid',
-      [request.checkId],
+      `SELECT c.id, c.tenant_id,
+              EXISTS (
+                SELECT 1 FROM public.shared_checks s
+                WHERE s.check_id = c.id AND s.source_tenant_id = c.tenant_id
+                  AND s.target_tenant_id = $2::uuid AND s.revoked_at IS NULL
+              ) AS shared_with_sender
+       FROM public.check_intake_items c WHERE c.id = $1::uuid`,
+      [request.checkId, tenantId],
     )).rows[0];
-    if (!check || String(check.tenant_id) !== String(tenantId)) return fail('check_not_found', 404, { message: 'Check not found for this organization.' });
+    const ownCheck = !!check && String(check.tenant_id) === String(tenantId);
+    if (!check || !(ownCheck || check.shared_with_sender === true)) return fail('check_not_found', 404, { message: 'Check not found for this organization.' });
   }
 
   const existing = await legsByPrefix(client, tenantId, prefix);
