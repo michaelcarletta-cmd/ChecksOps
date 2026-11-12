@@ -222,7 +222,7 @@ import {
 } from "@/features/check-command/status";
 import { useCheckCommandRealtime } from "@/features/check-command/useCheckCommandRealtime";
 import { optimisticStage, optimisticRemove } from "@/features/check-command/optimistic";
-import { isSharedReleased, sharedReleasedLabel, sharedReleasedSummary } from "@/features/check-command/sharedFundsReleased";
+import { receivedAmount, sharedReleasedReceivedRows } from "@/features/check-command/sharedFundsReleased";
 import { groupSplitsByClaim } from "@/features/check-command/groupSplitsByClaim";
 import { incomingFundsReceivedRows } from "@/lib/payments/transferFinanceRows";
 import { useIncomingTransfers } from "@/hooks/useTransferFinance";
@@ -939,16 +939,13 @@ export default function CheckCommandCenter() {
 
   const reissueRequested = allChecks.filter((c) => getEffectiveStatus(c) === "reissue_requested" && matchesSearch(c));
   const branchDeposit = allChecks.filter((c) => getEffectiveStatus(c) === "branch_deposit_required" && matchesSearch(c));
-  // Shared checks the source organization released: Funds Released is this organization's own
-  // money out, so they stay in Deposited, labelled "Released by ..." (sharedFundsReleased.ts).
-  const sharedReleased = useMemo(() => sharedReleasedSummary(sharedChecks as any[]), [sharedChecks]);
   const depositedFromAll = allChecks.filter((c) => {
     const s = getEffectiveStatus(c);
     const stage = c.check_stage;
     const checkAltStatus = getCheckAltStatus(c);
-    if (sharedReleased.ids.has(c.id)) return matchesSearch(c);
-    // Once this organization's funds have been disbursed, the check belongs in the Funds
-    // Released tab — do NOT show it in Deposited anymore. One disbursed send is enough.
+    // Once funds have been disbursed, the check leaves Deposited: to Funds Released for the
+    // organization that paid, to Funds Received for a partner it is shared with
+    // (sharedFundsReleased.ts). One disbursed send is enough.
     if (stage === "funds_released" || stage === "disbursed_externally") return false;
     if (sentCheckIds.has(c.id)) return false;
     return (s === "deposited" || stage === "deposited" || checkAltStatus === "pending_approval") && matchesSearch(c);
@@ -1026,8 +1023,7 @@ export default function CheckCommandCenter() {
     if (!stageTotals) return inMemory.length;
     if (key === "deposited") {
       const server = stageTotals.get(key)?.count;
-      // The server counts check_stage deposited only: add the shared checks a partner released.
-      return server == null ? inMemory.length : Math.max(0, server - sentDeposited.count) + sharedReleased.count;
+      return server == null ? inMemory.length : Math.max(0, server - sentDeposited.count);
     }
     if (queueCapped) return stageTotals.get(key)?.count ?? inMemory.length;
     return inMemory.length;
@@ -1037,7 +1033,7 @@ export default function CheckCommandCenter() {
     if (!stageTotals) return inMemoryTotal;
     if (key === "deposited") {
       const server = stageTotals.get(key)?.total;
-      return server == null ? inMemoryTotal : Math.max(0, server - sentDeposited.total) + sharedReleased.total;
+      return server == null ? inMemoryTotal : Math.max(0, server - sentDeposited.total);
     }
     if (queueCapped) return stageTotals.get(key)?.total ?? inMemoryTotal;
     return inMemoryTotal;
@@ -1227,7 +1223,7 @@ export default function CheckCommandCenter() {
   const filteredFundsReleased = useMemo(
     () => {
       // Only this organization's own money out: its settled splits and its sends. A shared check
-      // the partner released stays in Deposited (sharedFundsReleased.ts).
+      // the partner released is listed under Funds Received (sharedFundsReleased.ts).
       // Sends write payment_transfers legs, not splits: one row per sent check and recipient.
       const sentReleased = sentReleasedRows(checkSends.legs, checkSends.checks);
       return [...(fundsReleased as any[]), ...sentReleased].filter(matchesSplitSearch);
@@ -1235,8 +1231,14 @@ export default function CheckCommandCenter() {
     [fundsReleased, checkSends, matchesSplitSearch],
   );
   const filteredFundsReceived = useMemo(
-    () => [...(fundsReceived as any[]), ...incomingFundsReceivedRows(incomingTransfers)].filter(matchesSplitSearch),
-    [fundsReceived, incomingTransfers, matchesSplitSearch],
+    () => {
+      const received = [...(fundsReceived as any[]), ...incomingFundsReceivedRows(incomingTransfers)];
+      // A shared check the partner released with no recorded payment to this organization is
+      // listed from the check itself, so it never leaves every tab (sharedFundsReleased.ts).
+      const sharedReleased = sharedReleasedReceivedRows(sharedChecks as any[], received);
+      return [...received, ...sharedReleased].filter(matchesSplitSearch);
+    },
+    [fundsReceived, incomingTransfers, sharedChecks, matchesSplitSearch],
   );
 
   // Auto-jump to the tab that contains matches when the user searches and
@@ -1752,7 +1754,7 @@ export default function CheckCommandCenter() {
                 setClassFilter={setClassFilter}
                 items={filteredFundsReceived}
                 getFundsType={(s: any) => s?.disbursement_batches?.check_intake_items?.funds_type}
-                getAmount={(s: any) => Number(s.amount) || 0}
+                getAmount={(s: any) => receivedAmount(s)}
                 itemLabel="receipt"
               />
               <CardContent className="p-0">
@@ -1767,10 +1769,11 @@ export default function CheckCommandCenter() {
                     return (
                       <CompactCheckListBody>
                         {groupSplitsByClaim(visible, (check) => {
+                      const linked = check?.claim_id ? claimLookup.get(check.claim_id) : null;
                       const embedded = check?.claims ?? null;
                       return {
-                        claimNumber: embedded?.claim_number || check?.detected_claim_number || null,
-                        policyholderName: embedded?.policyholder_name || extractInsuredName(check?.payee_line) || null,
+                        claimNumber: linked?.claim_number || embedded?.claim_number || check?.detected_claim_number || null,
+                        policyholderName: linked?.policyholder_name || embedded?.policyholder_name || extractInsuredName(check?.payee_line) || null,
                       };
                     }).map((group) => (
                           <Fragment key={group.key}>
@@ -1787,7 +1790,9 @@ export default function CheckCommandCenter() {
                               const fundsLabel = compactFundsTypeLabel(check?.funds_type);
                               const checkId = batch?.check_intake_item_id;
                               const isSelected = !!checkId && selectedCheck === checkId;
-                              const party = `From ${split.sender?.name ?? "Partner tenant"}`;
+                              const party = split._sharedReleasedBy
+                                ? `Released by ${split._sharedReleasedBy}`
+                                : `From ${split.sender?.name ?? "Partner tenant"}`;
                               const carrier = displayCase(check?.carrier_name) || "—";
                               return (
                                 <CompactCheckRow
@@ -1812,7 +1817,9 @@ export default function CheckCommandCenter() {
                                         {split.external_check_number ? ` · Ck #${split.external_check_number}` : ""}
                                       </Badge>
                                       <Badge variant="outline" className="text-[10px]">
-                                        {split._incomingStatus === "returned" ? (
+                                        {split._sharedReleasedBy ? (
+                                          <>Check amount · payment to you not recorded</>
+                                        ) : split._incomingStatus === "returned" ? (
                                           <>Returned</>
                                         ) : split._incomingStatus === "in_transit" ? (
                                           <>Sent {split.created_at ? format(new Date(split.created_at), "MMM d, yyyy") : "—"}</>
@@ -2157,15 +2164,9 @@ export default function CheckCommandCenter() {
                             }
                             pills={
                               <>
-                                {activeTab === "deposited" && isSharedReleased(check as any) ? (
-                                  <Badge className="text-[10px] bg-emerald-500/20 text-emerald-400">
-                                    {sharedReleasedLabel(check as any)}
-                                  </Badge>
-                                ) : (
-                                  <Badge className={`text-[10px] ${getTabStatusClass(check, activeTab)}`}>
-                                    {getTabStatusLabel(check, activeTab)}
-                                  </Badge>
-                                )}
+                                <Badge className={`text-[10px] ${getTabStatusClass(check, activeTab)}`}>
+                                  {getTabStatusLabel(check, activeTab)}
+                                </Badge>
                                 {payeeCount > 0 && (
                                   <Badge variant="outline" className="text-[10px]">
                                     {payeeCount} payee{payeeCount > 1 ? "s" : ""}{check.is_multi_payee ? " · Multi" : ""}
