@@ -566,6 +566,18 @@ const SHARED_LIBRARY_REL = 'aws/tests/fixtures/production-desk-shared-check-libr
 const SHARED_LIBRARY = JSON.parse(fs.readFileSync(path.join(ROOT, SHARED_LIBRARY_REL), 'utf8'));
 const SQL156_FILE = 'aws/workflows/sql/156_mortgage_desk_shared_check_library_documents.sql';
 const deskLibApplied = (member) => SHARED_LIBRARY.members[member]?.live_sha256 ?? sha(`aws/functions/api/${member}`);
+// Applied 2026-11-12 (production runs 43141364648 and 43141692961, VERIFIED): each row expects main's bytes and names the
+// applied record, which chains to the planning manifest above (it keeps the pre-apply state). Replays of the plan as it
+// stood before those applies start from sharedLibraryPre.
+const SHARED_LIBRARY_APPLIED_REL = 'aws/tests/fixtures/production-desk-shared-check-library-applied-manifest-2026-11-12.json';
+/** What the row expects live now: main's bytes for a member the shared-check library record applied, else deskLibApplied. */
+const deskLibRowLive = (member) => (SHARED_LIBRARY.members[member] ? sha(`aws/functions/api/${member}`) : deskLibApplied(member));
+const sharedLibraryPre = (plan) => {
+  for (const member of Object.keys(SHARED_LIBRARY.members)) {
+    plan.members[member] = { ...plan.members[member], expected_live_sha256: deskLibApplied(member), manifest: SHARED_LIBRARY_REL };
+  }
+  return plan;
+};
 const PLAN_SQL98_LIVE = (() => {
   const plan = providersPre(structuredClone(PLAN));
   plan.sql_prerequisites[SQL98_FILE] = { verified_live: true, evidence: 'test' };
@@ -3810,7 +3822,8 @@ test('Mortgage Desk e-sign: ADD mortgage-desk-esign.mjs held on SQL 124 (recorde
   const ADD_BYTES = deskLibApplied(ADD);
   const addRow = PLAN.members[ADD];
   assert.deepEqual(addRow, SHARED_LIBRARY.members[ADD]
-    ? { operation: 'replace', accepted_sha256: sha(`aws/functions/api/${ADD}`), expected_live_sha256: ADD_BYTES, sql_before: SQL156_FILE, manifest: SHARED_LIBRARY_REL }
+    // (Applied 2026-11-12, production run 43141364648: main's bytes expected live, the applied record named.)
+    ? { operation: 'replace', accepted_sha256: sha(`aws/functions/api/${ADD}`), expected_live_sha256: deskLibRowLive(ADD), sql_before: SQL156_FILE, manifest: SHARED_LIBRARY_APPLIED_REL }
     : { operation: 'add', accepted_sha256: ADD_BYTES, expected_live_sha256: null, sql_before: SQL124, manifest: MANIFEST_REL });
   if (SHARED_LIBRARY.members[ADD]) assert.equal(SHARED_LIBRARY.members[ADD].previous_manifest, APPLIED_REL);
   const imports = localImports(fs.readFileSync(path.join(API, ADD), 'utf8'), ADD);
@@ -4300,9 +4313,10 @@ test('Branding logo served types (security audit finding 2): REPLACE storage.mjs
   assert.deepEqual(row, {
     operation: 'replace',
     accepted_sha256: sha(`aws/functions/api/${MEMBER}`),
-    expected_live_sha256: deskLibApplied(MEMBER),
+    // (Applied 2026-11-12, production run 43141692961: main's bytes expected live, the applied record named.)
+    expected_live_sha256: deskLibRowLive(MEMBER),
     sql_before: SHARED_LIBRARY.members[MEMBER] ? SQL156_FILE : SQL127_FILE,
-    manifest: SHARED_LIBRARY.members[MEMBER] ? SHARED_LIBRARY_REL : PORTAL_SIGNING_APPLIED_REL,
+    manifest: SHARED_LIBRARY.members[MEMBER] ? SHARED_LIBRARY_APPLIED_REL : PORTAL_SIGNING_APPLIED_REL,
   });
   if (SHARED_LIBRARY.members[MEMBER]) assert.equal(SHARED_LIBRARY.members[MEMBER].previous_manifest, PORTAL_SIGNING_APPLIED_REL);
   assert.notEqual(row.accepted_sha256, APPLIED);
@@ -4324,11 +4338,13 @@ test('Branding logo served types (security audit finding 2): REPLACE storage.mjs
   const pre = structuredClone(PLAN);
   pre.members[MEMBER].expected_live_sha256 = APPLIED;
   assert.equal((await run(inspect, { root: ROOT, plan: pre, inspectLive: liveFor(MEMBER, { plan: pre }) })).state, 'READY');
-  // (Since the Mortgage Desk shared-check library plan, 2026-11-11, the portal signing bytes are READY for it, planning
-  // only, and main's bytes are what ALREADY_ACCEPTED means.)
-  assert.equal((await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: deskLibApplied(MEMBER) }) })).state, SHARED_LIBRARY.members[MEMBER] ? 'READY' : 'ALREADY_ACCEPTED');
+  // (The portal signing bytes were READY for the Mortgage Desk shared-check library plan, replayed on the plan before its
+  // apply; since that apply, production run 43141692961, main's bytes are ALREADY_ACCEPTED and the portal signing bytes
+  // are a reconciliation stop too.)
+  const beforeDeskLib = sharedLibraryPre(structuredClone(PLAN));
+  assert.equal((await run(inspect, { root: ROOT, plan: beforeDeskLib, inspectLive: liveFor(MEMBER, { sha256: deskLibApplied(MEMBER), plan: beforeDeskLib }) })).state, SHARED_LIBRARY.members[MEMBER] ? 'READY' : 'ALREADY_ACCEPTED');
   assert.equal((await run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: sha(`aws/functions/api/${MEMBER}`) }) })).state, 'ALREADY_ACCEPTED');
-  for (const stale of [APPLIED, PRE_DEPLOY]) {
+  for (const stale of [APPLIED, PRE_DEPLOY, ...(SHARED_LIBRARY.members[MEMBER] ? [deskLibApplied(MEMBER)] : [])]) {
     await assert.rejects(
       run(inspect, { root: ROOT, inspectLive: liveFor(MEMBER, { sha256: stale }) }),
       (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
@@ -4375,10 +4391,11 @@ test('Security hardening 2026-10-29 (audit findings 2-4): five members applied i
     if (movedOn.has(member)) {
       // (The Mortgage Desk shared-check library plan, 2026-11-11, moves it on from the portal signing applied bytes,
       // planning only.)
-      assert.equal(row.expected_live_sha256, deskLibApplied(member), member);
+      // (Applied 2026-11-12, production run 43141692961.)
+      assert.equal(row.expected_live_sha256, deskLibRowLive(member), member);
       assert.equal(row.accepted_sha256, sha(`aws/functions/api/${member}`), member);
       assert.notEqual(row.accepted_sha256, accepted, member);
-      assert.equal(row.manifest, SHARED_LIBRARY.members[member] ? SHARED_LIBRARY_REL : PORTAL_SIGNING_APPLIED_REL, member);
+      assert.equal(row.manifest, SHARED_LIBRARY.members[member] ? SHARED_LIBRARY_APPLIED_REL : PORTAL_SIGNING_APPLIED_REL, member);
     } else if (writeMovedOn) {
       // The signed upload size REPLACE from these bytes was applied 2026-10-31 (production run 41218291776).
       assert.equal(row.accepted_sha256, sha(`aws/functions/api/${member}`), member);
@@ -4696,7 +4713,7 @@ test('Homeowner portal signing: four REPLACEs held on SQL 127 (now recorded live
     }, member);
     if (PREVIOUS[member]) assert.equal(readJson(PREVIOUS[member]).members[member].accepted_sha256, live, member);
     assert.deepEqual(PLAN.members[member], deskLibMoved
-      ? { operation: 'replace', accepted_sha256: sha(`aws/functions/api/${member}`), expected_live_sha256: accepted, sql_before: SQL156_FILE, manifest: SHARED_LIBRARY_REL }
+      ? { operation: 'replace', accepted_sha256: sha(`aws/functions/api/${member}`), expected_live_sha256: deskLibRowLive(member), sql_before: SQL156_FILE, manifest: SHARED_LIBRARY_APPLIED_REL }
       : { operation: 'replace', accepted_sha256: accepted, expected_live_sha256: accepted, sql_before: SQL127_FILE, manifest: PORTAL_SIGNING_APPLIED_REL }, member);
     if (deskLibMoved) assert.equal(deskLibMoved.previous_manifest, PORTAL_SIGNING_APPLIED_REL, member);
     assert.ok(WORKFLOW.includes(`          - ${member}\n`), member);
@@ -4705,11 +4722,15 @@ test('Homeowner portal signing: four REPLACEs held on SQL 127 (now recorded live
     const ready = await run(inspect(member), { root: ROOT, plan: pre, inspectLive: liveFor(member, { plan: pre }) });
     assert.equal(ready.state, 'READY', member);
     assert.equal(ready.mutation, false, member);
-    // Now: the accepted bytes ALREADY_ACCEPTED (READY for the shared-check library plan, planning only, on storage.mjs,
-    // whose main bytes are ALREADY_ACCEPTED), the pre-apply bytes and anything else refused.
-    assert.equal((await run(inspect(member), { root: ROOT, inspectLive: liveFor(member, { sha256: accepted }) })).state, deskLibMoved ? 'READY' : 'ALREADY_ACCEPTED', member);
+    // Now: main's bytes ALREADY_ACCEPTED; the pre-apply bytes and anything else refused. storage.mjs's portal signing bytes
+    // were READY for the shared-check library plan (replayed on the plan before its apply) and, since that apply (production
+    // run 43141692961), are a reconciliation stop too.
+    if (deskLibMoved) {
+      const beforeDeskLib = sharedLibraryPre(structuredClone(PLAN));
+      assert.equal((await run(inspect(member), { root: ROOT, plan: beforeDeskLib, inspectLive: liveFor(member, { sha256: accepted, plan: beforeDeskLib }) })).state, 'READY', member);
+    }
     assert.equal((await run(inspect(member), { root: ROOT, inspectLive: liveFor(member, { sha256: sha(`aws/functions/api/${member}`) }) })).state, 'ALREADY_ACCEPTED', member);
-    for (const stale of [live, 'e'.repeat(64)]) {
+    for (const stale of [live, ...(deskLibMoved ? [accepted] : []), 'e'.repeat(64)]) {
       await assert.rejects(
         run(inspect(member), { root: ROOT, inspectLive: liveFor(member, { sha256: stale }) }),
         (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
@@ -4766,8 +4787,9 @@ test('Homeowner portal signing record: homeowner-signing-integration.mjs, storag
     // storage.mjs on from them; its row then names that plan's manifest.
     const accepted = deskLibApplied(member);
     assert.deepEqual(record.members[member], { live_sha256: accepted, accepted_sha256: accepted, operation: 'replace', previous_manifest: PORTAL_SIGNING_REL }, member);
-    assert.equal(PLAN.members[member].expected_live_sha256, accepted, member);
-    assert.equal(PLAN.members[member].manifest, SHARED_LIBRARY.members[member] ? SHARED_LIBRARY_REL : PORTAL_SIGNING_APPLIED_REL, member);
+    // (storage.mjs: applied again 2026-11-12, production run 43141692961: main's bytes expected live, that record named.)
+    assert.equal(PLAN.members[member].expected_live_sha256, deskLibRowLive(member), member);
+    assert.equal(PLAN.members[member].manifest, SHARED_LIBRARY.members[member] ? SHARED_LIBRARY_APPLIED_REL : PORTAL_SIGNING_APPLIED_REL, member);
     // The planning manifest keeps the pre-apply state.
     const planned = planning.members[member];
     assert.equal(planned.accepted_sha256, accepted, member);
@@ -8423,7 +8445,7 @@ test('Production record (2026-11-11): the invoice email, billing engine, billing
   assert.ok(PLAN.notes.includes('#1785 moved the production Lambda queue to guarded-production-lambda-overlay-v2'));
 });
 
-test('Mortgage Desk shared-check library (owner 2026-11-11): mortgage-desk-esign.mjs and storage.mjs REPLACE their applied bytes, held on SQL 156 (recorded live, #1793), planning only', async () => {
+test('Mortgage Desk shared-check library (owner 2026-11-11): mortgage-desk-esign.mjs and storage.mjs REPLACE their applied bytes, held on SQL 156 (recorded live, #1793); production runs 43141364648 and 43141692961 applied them', async () => {
   const ESIGN = 'mortgage-desk-esign.mjs';
   const STORAGE = 'storage.mjs';
   const PREVIOUS = {
@@ -8451,6 +8473,30 @@ test('Mortgage Desk shared-check library (owner 2026-11-11): mortgage-desk-esign
   assert.match(staging.evidence, /run 43114784372/);
   assert.deepEqual(Object.keys(PLAN.members).filter((m) => PLAN.members[m].sql_before === SQL156_FILE).sort(), [ESIGN, STORAGE]);
   assert.ok(PLAN.notes.includes(`Manifest ${SHARED_LIBRARY_REL}. Planning only.`));
+  // Applied 2026-11-12 on main 48b80b065 (owner "DEPLOY mortgage-desk-esign.mjs TO PRODUCTION" and "DEPLOY storage.mjs TO
+  // PRODUCTION"): the record keeps the run evidence; the planning manifest keeps what it recorded. The rows expect the
+  // applied bytes and name the applied record; sharedLibraryPre restates the plan as it stood before the applies.
+  const appliedRecord = JSON.parse(fs.readFileSync(path.join(ROOT, SHARED_LIBRARY_APPLIED_REL), 'utf8'));
+  assert.equal(appliedRecord.workstream_id, 'desk-shared-check-library-applied');
+  assert.equal(appliedRecord.deploy_authorized, false);
+  assert.match(appliedRecord.authorization, /^Record only \(2026-11-12\)/);
+  assert.equal(appliedRecord.live_lambda, FUNCTION_NAME);
+  assert.deepEqual(Object.keys(appliedRecord.members), [ESIGN, STORAGE]);
+  for (const runId of ['43137635814', '43137751086', '43137900773', '43137981548', '43138073611', '43138185294',
+    '43141248239', '43141364648', '43141514427', '43141596963', '43141692961', '43141814845']) {
+    assert.match(appliedRecord.notes, new RegExp(`run ${runId}`), runId);
+    assert.match(PLAN.notes, new RegExp(runId), runId);
+  }
+  for (const text of ['"DEPLOY mortgage-desk-esign.mjs TO PRODUCTION"', '"DEPLOY storage.mjs TO PRODUCTION"', '"merge the record PRs when green"',
+    '48b80b0652d82ae20b3cb4096af3bee97c641cad', 'job 130928872675', 'job 130929950852',
+    '9ccfc636-a5a8-4f12-94a7-494e0ba3eee6', 'be53437a-4f32-4574-9f88-b3d2dfd79bc0', '2dbf8ae9-07a8-4e7e-8c72-e4a28b8612db', '0810fadd-1ef4-4b0f-84cb-9c57533ea727',
+    'd5724faa-6d77-4032-a6b8-5bb76d2d41c5', 'h61Wj04O7/bX0pUFLdBgD6bb2u9iWygLdfBynxuQtzU=', 'UWR5ZSeBSAGV1msYNmueRZQvlt+S2n2gcJAJgC/CaYA=',
+    'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43137751086', 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43138073611',
+    'errors []', 'VERIFIED', 'ALREADY_ACCEPTED', 'index.mjs is untouched']) {
+    assert.ok(appliedRecord.notes.includes(text), text);
+  }
+  assert.ok(PLAN.notes.includes(`Recorded in ${SHARED_LIBRARY_APPLIED_REL}. The rows expect the applied bytes and name the shared-check library applied record; their SQL 156 hold is unchanged.`));
+  const before = sharedLibraryPre(structuredClone(PLAN));
   const inspect = (member) => ({ ...ENV, CHECKSOPS_PRODUCTION_DEPLOY_MODE: 'inspect', CHECKSOPS_PRODUCTION_OVERLAY_MEMBER: member });
   for (const member of [ESIGN, STORAGE]) {
     // The pre-state: the bytes the last guarded production apply of this member put live, as recorded.
@@ -8459,30 +8505,37 @@ test('Mortgage Desk shared-check library (owner 2026-11-11): mortgage-desk-esign
     const accepted = sha(`aws/functions/api/${member}`);
     assert.notEqual(accepted, live.accepted_sha256, member);
     assert.deepEqual(manifest.members[member], { live_sha256: live.accepted_sha256, accepted_sha256: accepted, operation: 'replace', previous_manifest: PREVIOUS[member] }, member);
-    assert.deepEqual(PLAN.members[member], { operation: 'replace', accepted_sha256: accepted, expected_live_sha256: live.accepted_sha256, sql_before: SQL156_FILE, manifest: SHARED_LIBRARY_REL }, member);
+    assert.deepEqual(appliedRecord.members[member], { live_sha256: accepted, accepted_sha256: accepted, operation: 'replace', previous_manifest: SHARED_LIBRARY_REL }, member);
+    assert.deepEqual(PLAN.members[member], { operation: 'replace', accepted_sha256: accepted, expected_live_sha256: accepted, sql_before: SQL156_FILE, manifest: SHARED_LIBRARY_APPLIED_REL }, member);
+    assert.deepEqual(before.members[member], { operation: 'replace', accepted_sha256: accepted, expected_live_sha256: live.accepted_sha256, sql_before: SQL156_FILE, manifest: SHARED_LIBRARY_REL }, member);
+    assert.ok(appliedRecord.notes.includes(`${member} REPLACE ${live.accepted_sha256.slice(0, 8)} -> ${accepted.slice(0, 8)}`), member);
     const evidence = `REPLACE ${member} ${live.accepted_sha256.slice(0, 8)} -> ${accepted.slice(0, 8)}`;
     assert.ok(manifest.notes.includes(evidence), evidence);
     assert.ok(PLAN.notes.includes(evidence), evidence);
     assert.ok(WORKFLOW.includes(`          - ${member}\n`), member);
     assert.equal(resolvePlannedMember(member, { root: ROOT, plan: PLAN }).ok, true, member);
     assert.equal(approvalPhrase(member), `DEPLOY ${member} TO PRODUCTION`);
-    // Inspect: READY on the recorded live bytes, ALREADY_ACCEPTED on main's, anything else is drift.
-    const ready = await run(inspect(member), { root: ROOT, inspectLive: liveFor(member, { sha256: live.accepted_sha256 }) });
+    // Inspect: before the applies, READY on the recorded live bytes (production inspect runs 43141248239 and 43141596963,
+    // replayed on the pre-apply plan); now ALREADY_ACCEPTED on main's (re-inspect runs 43141514427 and 43141814845), and
+    // the pre-apply bytes are drift.
+    const ready = await run(inspect(member), { root: ROOT, plan: before, inspectLive: liveFor(member, { sha256: live.accepted_sha256, plan: before }) });
     assert.equal(ready.state, 'READY', member);
     assert.equal(ready.mutation, false, member);
     assert.equal((await run(inspect(member), { root: ROOT, inspectLive: liveFor(member, { sha256: accepted }) })).state, 'ALREADY_ACCEPTED', member);
-    await assert.rejects(
-      run(inspect(member), { root: ROOT, inspectLive: liveFor(member, { sha256: 'c'.repeat(64) }) }),
-      (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
-      member,
-    );
-    // The apply (dry: no mutation) passes the gates from the recorded live bytes, one receipt for this member ...
-    const { deps, calls } = applyDeps(member, { sha256: live.accepted_sha256, plan: structuredClone(PLAN) });
+    for (const other of [live.accepted_sha256, 'c'.repeat(64)]) {
+      await assert.rejects(
+        run(inspect(member), { root: ROOT, inspectLive: liveFor(member, { sha256: other }) }),
+        (error) => error.code === CODES.SOURCE_RECONCILIATION_REQUIRED,
+        member,
+      );
+    }
+    // The apply as it stood (dry: no mutation, the pre-apply plan) passed the gates from the recorded live bytes, one receipt ...
+    const { deps, calls } = applyDeps(member, { sha256: live.accepted_sha256, plan: structuredClone(before) });
     const applied = await run(applyEnv(member, { CHECKSOPS_EXPECTED_LIVE_MEMBER_SHA256: live.accepted_sha256 }), deps);
     assert.equal(applied.mutation, false, member);
     assert.deepEqual(calls.receipt.owned_member_ops, { replace: [member], add: [] }, member);
     // ... and is refused before any lease or receipt had SQL 156 not been recorded live.
-    const unrecorded = structuredClone(PLAN);
+    const unrecorded = structuredClone(before);
     unrecorded.sql_prerequisites[SQL156_FILE] = { ...pre, verified_live: false, evidence: null };
     const held = applyDeps(member, { sha256: live.accepted_sha256, plan: unrecorded });
     await assert.rejects(
