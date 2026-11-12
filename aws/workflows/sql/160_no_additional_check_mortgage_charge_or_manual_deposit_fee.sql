@@ -4,14 +4,16 @@
 -- Why: owner 2026-11-12: "we are removing the mortgage handling for an additional check if an additional check is on
 -- the same request. There will be no more $5 charge ... do not allow that charge to occur"; agent pay for an additional
 -- check: "Stop paying it"; "if a user deposits a check outside of checksops they should NOT be charged $4" (rule chosen:
--- "No fee for manual"); the $5 mortgage_handling event too ("start SQL 160 yes"). Kept: the $10 for a claim's first
+-- "No fee for manual", and a check deposited with no deposit record: "yes make that free too"); the $5 mortgage_handling
+-- event too ("start SQL 160 yes"). Kept: the $10 for a claim's first
 -- check and SQL 153's flat $5 for a 2nd mortgage company on a check. Not changed: charges already recorded.
 --
 -- What this file does (CREATE OR REPLACE of four live functions; owner, grants, SECURITY DEFINER and SET options are
 -- kept by CREATE OR REPLACE):
---   1) public.record_check_billing_event() (SQL 98, trigger trg_record_check_billing_event on check_intake_items): when
---      the check has a deposit_items row with provider manual_branch (Mark as Deposited / Deposit Ops, which writes it
---      before the check becomes deposited), no check_processing event is recorded.
+--   1) public.record_check_billing_event() (SQL 98, trigger trg_record_check_billing_event on check_intake_items): a
+--      check_processing event is recorded only when the check has a deposit_items row whose provider is not
+--      manual_branch. Mark as Deposited / Deposit Ops (manual_branch, written before the check becomes deposited) and a
+--      check set to deposited with no deposit item are not charged.
 --   2) public.accrue_mortgage_ops_billing(uuid) (live-only, no earlier repository CREATE; run by the live trigger
 --      tr_accrue_mortgage_ops_billing on mortgage_handling_requests): when the claim already has a Mortgage Ops charge,
 --      nothing is recorded (it recorded mortgage_ops_additional_check at the tenant's additional rate, 500 by default),
@@ -77,7 +79,7 @@ DECLARE
   v_drift text[] := ARRAY[]::text[];
 BEGIN
   FOREACH v_row SLICE 1 IN ARRAY ARRAY[
-    ['public.record_check_billing_event()', '8319ec76fd6e2704e119429e7b481054dfa9f92b6a9ee52a1a2dda61e710a8a9', '475dee101eed466b642d8e15cb42e6f2321f71c1d1a1db4412f4c3d2e8253d5d'],
+    ['public.record_check_billing_event()', '8319ec76fd6e2704e119429e7b481054dfa9f92b6a9ee52a1a2dda61e710a8a9', 'd08e05fbb554891d9357435fda6adf424126ac8e29f90600684a8f49b8b31dc6'],
     ['public.accrue_mortgage_ops_billing(uuid)', 'fc03a9ea7d2a0783f0398309a4500412cbf8fba49801f1eeffc690ca2f727524', '4d34f049db708a2973dfc64bbe3ee9ac8fd3d2c888f5a3330412c31880b9a4cc'],
     ['public.earn_mortgage_agent_compensation(uuid)', '6d72d6df8c41c51a2f9cfbd6145dc5cf4f25427ed2af781a925d72c660b31e8b', '9317a2ce9da03028de50fcc9aaabbc17d03f1eaaec7538dcc95bd501ed8c1bcc'],
     ['public.tg_record_mortgage_handling_billing()', 'f022f75ac73f23fdec4a92205466a0b05febdf197642ce7af85110519f2fbe1e', '12a9cceb1ccdee7a33a294d6d29d5d29af40c75f2334b17fd57447beaa289075']
@@ -111,13 +113,15 @@ BEGIN
      AND OLD.status IS DISTINCT FROM 'deposited'
      AND NEW.tenant_id IS NOT NULL THEN
 
-    -- SQL 160 (owner 2026-11-12): a check deposited outside ChecksOps is not charged. Mark as Deposited and Deposit
-    -- Ops record it as a manual bank-branch deposit (deposit_items.provider manual_branch) before the check becomes
-    -- deposited, in the same transaction (workflow-rpc.mjs mark_manual_deposit).
-    IF EXISTS (
+    -- SQL 160 (owner 2026-11-12): a check deposited outside ChecksOps is not charged. It is charged only when it has a
+    -- ChecksOps deposit item that is not a manual bank-branch deposit: Mark as Deposited and Deposit Ops write
+    -- provider manual_branch before the check becomes deposited, in the same transaction (workflow-rpc.mjs
+    -- mark_manual_deposit), and a check set to deposited with no deposit item at all was deposited elsewhere too
+    -- (owner: "yes make that free too").
+    IF NOT EXISTS (
       SELECT 1 FROM public.deposit_items di
        WHERE di.check_id = NEW.id
-         AND di.provider::text = 'manual_branch'
+         AND di.provider::text <> 'manual_branch'
     ) THEN
       RETURN NEW;
     END IF;

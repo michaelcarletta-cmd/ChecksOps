@@ -5,8 +5,9 @@
  *
  * The pre-state is the four live definitions read by the production billing trigger inspect of 2026-11-12, verbatim
  * (aws/tests/fixtures/sql160-live-billing-functions-2026-11-12.sql). The test proves, before and after SQL 160:
- *   - record_check_billing_event: a check marked deposited after a manual_branch deposit item was charged
- *     check_processing at the tenant rate; after SQL 160 it is not, and a check without one still is;
+ *   - record_check_billing_event: a check marked deposited after a manual_branch deposit item, and one set to
+ *     deposited with no deposit item, were charged check_processing at the tenant rate; after SQL 160 neither is,
+ *     and a check with a ChecksOps (checkalt) deposit item still is;
  *   - accrue_mortgage_ops_billing (via tr_accrue_mortgage_ops_billing): the claim's first accepted request is charged
  *     mortgage_ops_initial 1000 and a second check on the claim mortgage_ops_additional_check 500; after SQL 160 the
  *     first is still 1000 and the second records nothing;
@@ -115,8 +116,9 @@ async function scenario(db, n) {
   const claim = id('6', n);
   await db.query(`INSERT INTO public.check_intake_items (id, tenant_id, claim_id, status, check_stage, check_source) VALUES
     ($1, '${T}', $3, 'received', 'intake', 'insurance'), ($2, '${T}', $3, 'received', 'intake', 'insurance'),
-    ($4, '${T}', NULL, 'received', 'intake', 'insurance'), ($5, '${T}', NULL, 'received', 'intake', 'insurance')`,
-  [c(1), c(2), claim, c(3), c(4)]);
+    ($4, '${T}', NULL, 'received', 'intake', 'insurance'), ($5, '${T}', NULL, 'received', 'intake', 'insurance'),
+    ($6, '${T}', NULL, 'received', 'intake', 'insurance')`,
+  [c(1), c(2), claim, c(3), c(4), c(5)]);
   // Two checks on one claim enter review (mortgage_handling), then each gets a Mortgage Desk request: accepted, completed.
   await db.query(`UPDATE public.check_intake_items SET check_stage = 'review' WHERE id = $1`, [c(1)]);
   await db.query(`UPDATE public.check_intake_items SET check_stage = 'review' WHERE id = $1`, [c(2)]);
@@ -126,12 +128,13 @@ async function scenario(db, n) {
     await db.query(`UPDATE public.mortgage_handling_requests SET status = 'in_progress', accepted_at = now(), assigned_employee_id = '${AGENT}' WHERE id = $1`, [r(k)]);
     await db.query(`UPDATE public.mortgage_handling_requests SET status = 'completed', completed_at = now() WHERE id = $1`, [r(k)]);
   }
-  // A check deposited outside ChecksOps (manual_branch, written before the check becomes deposited) and one deposited otherwise.
+  // A check deposited outside ChecksOps (manual_branch, written before the check becomes deposited), one deposited
+  // through ChecksOps (checkalt), and one set to deposited with no deposit item at all.
   await db.query(`INSERT INTO public.deposit_items (check_id, provider) VALUES ($1, 'manual_branch'), ($2, 'checkalt')`, [c(3), c(4)]);
-  await db.query(`UPDATE public.check_intake_items SET status = 'deposited' WHERE id = ANY($1::uuid[])`, [[c(3), c(4)]]);
+  await db.query(`UPDATE public.check_intake_items SET status = 'deposited' WHERE id = ANY($1::uuid[])`, [[c(3), c(4), c(5)]]);
   const events = (await db.query(`SELECT check_intake_item_id, event_type, unit_price_cents FROM public.check_billing_events
-    WHERE check_intake_item_id = ANY($1::uuid[]) ORDER BY event_type, unit_price_cents DESC`, [[c(1), c(2), c(3), c(4)]])).rows;
-  const label = { [c(1)]: 'first', [c(2)]: 'additional', [c(3)]: 'manual', [c(4)]: 'checkalt' };
+    WHERE check_intake_item_id = ANY($1::uuid[]) ORDER BY event_type, check_intake_item_id, unit_price_cents DESC`, [[c(1), c(2), c(3), c(4), c(5)]])).rows;
+  const label = { [c(1)]: 'first', [c(2)]: 'additional', [c(3)]: 'manual', [c(4)]: 'checkalt', [c(5)]: 'no_deposit_item' };
   const pay = (await db.query(`SELECT mortgage_request_id, classification, amount_cents FROM public.mortgage_agent_compensation_entries
     WHERE mortgage_request_id = ANY($1::uuid[]) ORDER BY amount_cents DESC`, [[r(1), r(2)]])).rows;
   return {
@@ -178,6 +181,7 @@ test('SQL 160: no Mortgage Ops charge or agent pay for an additional check, no $
     assert.deepEqual(today.events, [
       ['manual', 'check_processing', 400],
       ['checkalt', 'check_processing', 400],
+      ['no_deposit_item', 'check_processing', 400],
       ['first', 'mortgage_handling', 1000],
       ['additional', 'mortgage_handling', 500],
       ['additional', 'mortgage_ops_additional_check', 500],
@@ -213,7 +217,8 @@ test('SQL 160: no Mortgage Ops charge or agent pay for an additional check, no $
     }
 
     // After SQL 160: the first check is still charged 1000 and pays the agent 1000; the additional check records
-    // nothing and earns nothing; the manual deposit is not charged; another deposit still is.
+    // nothing and earns nothing; the manual deposit and the check with no deposit item are not charged; the
+    // ChecksOps (checkalt) deposit still is.
     const now = await scenario(admin, 2);
     assert.deepEqual(now.events, [
       ['checkalt', 'check_processing', 400],
