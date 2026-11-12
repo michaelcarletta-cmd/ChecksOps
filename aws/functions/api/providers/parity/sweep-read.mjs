@@ -256,20 +256,29 @@ export async function readSweepSnapshot({
 }) {
   const wallet = await readWallet(client, tenantId, environment, walletType);
   const localMethods = await loadLocalMethods(client, tenantId, environment);
+  // The two Moov reads only add to what the database already knows (owner, 2026-11-12: Condition One's
+  // settlement bank showed nothing although its own verified production bank row exists). Any Moov
+  // failure, including a 5xx, a timeout or a token/scope error, no longer fails the whole snapshot:
+  // the bank from the database still shows, and the snapshot says the provider read was unavailable.
+  const providerErrors = [];
+  const tryMoovGet = async (label, path, scopesForPath) => {
+    try {
+      return await readOnlyMoovGet(path, scopesForPath, fetchImpl);
+    } catch (error) {
+      providerErrors.push({ read: label, status: error instanceof MoovError ? error.status ?? null : null });
+      return null;
+    }
+  };
   const configs = unwrapSweepConfigs(
-    await readOnlyMoovGet(
-      `/accounts/${accountId}/sweep-configs`,
-      [`/accounts/${accountId}/wallets.read`],
-      fetchImpl,
-    ),
+    await tryMoovGet('sweep_configs', `/accounts/${accountId}/sweep-configs`, [`/accounts/${accountId}/wallets.read`]),
   );
-  const paymentMethods = await readOnlyMoovGet(
+  const paymentMethods = await tryMoovGet(
+    'payment_methods',
     `/accounts/${accountId}/payment-methods`,
     scopes.paymentMethodsRead(accountId),
-    fetchImpl,
   );
   const sweepCfg = matchSweepForWallet(configs, wallet?.provider_wallet_id);
-  return buildSweepSnapshot({
+  const snapshot = buildSweepSnapshot({
     tenantId,
     walletType,
     wallet,
@@ -277,6 +286,8 @@ export async function readSweepSnapshot({
     localMethods,
     paymentMethods: Array.isArray(paymentMethods) ? paymentMethods : [],
   });
+  if (!providerErrors.length) return snapshot;
+  return { ...snapshot, stale: true, provider_unavailable: true, provider_errors: providerErrors };
 }
 
 export function normalizeSweepHistoryRows(rows = []) {
