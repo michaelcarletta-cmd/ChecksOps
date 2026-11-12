@@ -1,31 +1,19 @@
-import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
-import { Skeleton } from "@/components/ui/skeleton";
 import { CheckCircle2, Hourglass } from "lucide-react";
 import { format } from "date-fns";
 
 interface DepositStatusPanelProps {
   checkId: string;
   depositedAt: string | null;
-  depositedByTenantId: string | null;
+  /** Ignored: the panel no longer shows who deposited the check. Kept so callers need not change. */
+  depositedByTenantId?: string | null;
   lastUpdated?: string | null;
 }
 
-export function DepositStatusPanel({ checkId, depositedAt, depositedByTenantId, lastUpdated }: DepositStatusPanelProps) {
-  const { data: tenant, isLoading } = useQuery({
-    queryKey: ["deposit-tenant", depositedByTenantId],
-    enabled: !!depositedByTenantId,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("tenants")
-        .select("name, partner_code")
-        .eq("id", depositedByTenantId!)
-        .maybeSingle();
-      if (error) throw error;
-      return data;
-    },
-  });
-
+/**
+ * Deposit status on the check Overview: whether the check is deposited and when. Owner 2026-11-12: show only the
+ * status and the deposited date, not which organization deposited it.
+ */
+export function DepositStatusPanel({ checkId, depositedAt, lastUpdated }: DepositStatusPanelProps) {
   const isDeposited = !!depositedAt;
 
   return (
@@ -53,14 +41,6 @@ export function DepositStatusPanel({ checkId, depositedAt, depositedByTenantId, 
           <>
             <span className="text-green-700 dark:text-green-400">
               Deposited on {format(new Date(depositedAt!), "MMM d, yyyy 'at' h:mm a")}
-            </span>
-            <span className="text-slate-600 dark:text-slate-400">
-              Deposited by:{" "}
-              {isLoading
-                ? "…"
-                : tenant
-                ? `${tenant.name} (${tenant.partner_code})`
-                : "Unknown organization"}
             </span>
           </>
         ) : (
