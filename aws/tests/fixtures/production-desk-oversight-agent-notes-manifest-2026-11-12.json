@@ -1,0 +1,15 @@
+{
+  "workstream_id": "desk-oversight-agent-notes",
+  "authorization": "Pending owner review (2026-11-12). Planning only: nothing is live or verified. The production apply needs its own owner approval, a staging acceptance reference and a read-only production inspect that confirms the live bytes.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Tenant Management desk view (owner 2026-11-12: \"Tenant Management desk view plus 'Message agent'\", \"If no agent then tenant management can assign\", \"Tenant management and the agent assigned can see the notes\", then \"start the Tenant Management API\"): mortgage-desk-esign.mjs gains actions desk_overview, desk_agents, assign_agent, message_agent and agent_notes, which call SQL 158's six functions as the signed-in user; assign_agent sends the agent a best-effort notice email, and message_agent emails the note to the assigned agent and records the outcome (SQL 158 e). REPLACE mortgage-desk-esign.mjs 07df2ae0 -> bbc2c541 (from the shared-check library applied record's bytes). Held on SQL 158 (applied to staging and production 2026-11-12). No other member, no new module. Planning only.",
+  "members": {
+    "mortgage-desk-esign.mjs": {
+      "live_sha256": "07df2ae0e323d9e19abbf3ac6e1280e122e53c1b2b5eebf4830f15dfd60af08c",
+      "accepted_sha256": "bbc2c5415c8580a8508be139fae8060594e4c1be501aff98e6024b603d289177",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-desk-shared-check-library-applied-manifest-2026-11-12.json"
+    }
+  }
+}

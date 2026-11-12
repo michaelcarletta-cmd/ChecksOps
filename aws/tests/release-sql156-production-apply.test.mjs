@@ -208,7 +208,9 @@ test('order: no predecessor; two new SECURITY DEFINER read functions with their 
   const plan = readJson('ops/deployment-guard/production-api-overlay-plan.json');
   assert.equal(plan.sql_prerequisites[SQL156_FILE].verified_live, true);
   assert.ok(plan.sql_prerequisites[SQL156_FILE].evidence.includes(`SSM ${COMMITTED.applied.apply_ssm_command_id}`));
-  assert.deepEqual(Object.keys(plan.members).filter((m) => plan.members[m].sql_before === SQL156_FILE).sort(), ['mortgage-desk-esign.mjs', 'storage.mjs']);
+  // (The Tenant Management desk view plan, 2026-11-12, moved mortgage-desk-esign.mjs on to SQL 158; storage.mjs still holds here.)
+  assert.deepEqual(Object.keys(plan.members).filter((m) => plan.members[m].sql_before === SQL156_FILE).sort(), ['storage.mjs']);
+  assert.equal(plan.members['mortgage-desk-esign.mjs'].sql_before, 'aws/workflows/sql/158_mortgage_desk_oversight_and_agent_notes.sql');
   // The file: one prerequisite DO block, two functions, two REVOKEs and two GRANTs to checksops; nothing else.
   const text = fs.readFileSync(path.join(ROOT, SQL156_FILE), 'utf8').replace(/--[^\n]*/g, '');
   const outside = text.replace(/\$([A-Za-z0-9_]*)\$[\s\S]*?\$\1\$/g, '$$body$$');

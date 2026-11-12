@@ -24,6 +24,21 @@
  *                                    owner, or a mortgage agent while the request is open or assigned to them), so
  *                                    this action does not take the in-progress working-request gate.
  *
+ * Tenant Management desk view (SQL 158). Owner 2026-11-12: Tenant Management (the platform owner) sees every
+ * tenant's Desk work with its age, assigns a queued request to an agent ("If no agent then tenant management can
+ * assign"; assigning starts it, as the agent's accept does), and messages the assigned agent ("Message agent": an
+ * email AND a private note; "Tenant management and the agent assigned can see the notes", never the check thread).
+ * SQL 158 enforces every rule itself (platform owner only, except that the assigned agent reads its notes):
+ *
+ *   action desk_overview  -> aws_mortgage_desk_overview(tenant, status, limit, offset)   (SQL 158 a)
+ *   action desk_agents    -> aws_mortgage_desk_assignable_agents()                       (SQL 158 b)
+ *   action assign_agent   -> aws_mortgage_desk_assign_agent(request, agent)              (SQL 158 c),
+ *                            then a best-effort notice email to the agent (not recorded; the assignment stands)
+ *   action message_agent  -> aws_mortgage_desk_add_agent_note(request, body)             (SQL 158 d) commits,
+ *                            the email to the assigned agent goes out, then
+ *                            aws_mortgage_desk_record_agent_note_email(note, status)     (SQL 158 e)
+ *   action agent_notes    -> aws_mortgage_desk_agent_notes(request)                      (SQL 158 f)
+ *
  * Every call runs as the signed-in user (withIdentity: request.app_user_id ->
  * auth.uid()). The caller is checked here first (loadMortgageDeskWorkingRequest,
  * the SQL 122 rule: the assigned mortgage_agent or the platform owner) and
@@ -60,6 +75,7 @@ import {
 } from './esign.mjs';
 import { formatFromHeader, platformBranding } from './email-branding.mjs';
 import { sendViaSesOrSink } from './email.mjs';
+import { renderChecksOpsEmail } from './email-layout.mjs';
 import { loadMortgageDeskWorkingRequest } from './mortgage-desk-return.mjs';
 import { normalizePath, pathCandidates, s3KeyFor } from './storage-paths.mjs';
 
@@ -90,7 +106,26 @@ export const MORTGAGE_DESK_ESIGN_ACTIONS = Object.freeze([
   'send_signature_request',
   'post_timeline',
   'shared_library_documents',
+  'desk_overview',
+  'desk_agents',
+  'assign_agent',
+  'message_agent',
+  'agent_notes',
 ]);
+
+/** SQL 158: the Tenant Management desk view (platform owner) and the assigned agent's notes. */
+export const DESK_OVERVIEW_SQL = 'SELECT * FROM public.aws_mortgage_desk_overview($1::uuid, $2::text, $3::integer, $4::integer)';
+export const DESK_ASSIGNABLE_AGENTS_SQL = 'SELECT * FROM public.aws_mortgage_desk_assignable_agents()';
+export const DESK_ASSIGN_AGENT_SQL = 'SELECT * FROM public.aws_mortgage_desk_assign_agent($1::uuid, $2::uuid)';
+export const DESK_ADD_AGENT_NOTE_SQL = 'SELECT * FROM public.aws_mortgage_desk_add_agent_note($1::uuid, $2::text)';
+export const DESK_RECORD_AGENT_NOTE_EMAIL_SQL = 'SELECT public.aws_mortgage_desk_record_agent_note_email($1::uuid, $2::text) AS recorded';
+export const DESK_AGENT_NOTES_SQL = 'SELECT * FROM public.aws_mortgage_desk_agent_notes($1::uuid)';
+export const MORTGAGE_DESK_OVERVIEW_STATUSES = Object.freeze(['requested', 'in_progress', 'completed']);
+/** SQL 158 caps a page at 500 rows and defaults to 200. */
+export const MORTGAGE_DESK_OVERVIEW_MAX_LIMIT = 500;
+export const MORTGAGE_DESK_OVERVIEW_DEFAULT_LIMIT = 200;
+/** SQL 158 d: a note is 1 to 2000 characters; at most 10 per request per hour. */
+export const MORTGAGE_DESK_AGENT_NOTE_MAX = 2000;
 
 export const DESK_MESSAGES_SQL = 'SELECT * FROM public.aws_mortgage_desk_messages($1::uuid)';
 export const DESK_CHECK_FILES_SQL = 'SELECT * FROM public.aws_mortgage_desk_check_files($1::uuid)';
@@ -151,6 +186,14 @@ const SQL_ERRORS = {
   invalid_results: [400, () => 'The email results did not match the signers.'],
   invalid_kind: [400, () => 'Choose a call to the mortgage company or a general update.'],
   invalid_note: [400, () => `The note must be 1 to ${MORTGAGE_DESK_TIMELINE_MAX_NOTE} characters.`],
+  // SQL 158
+  invalid_status: [400, () => 'Choose queued (requested), in progress or completed.'],
+  agent_not_assignable: [400, () => 'That person is not an active Mortgage Desk agent.'],
+  not_found: [404, () => 'That Mortgage Desk request was not found.'],
+  already_taken: [409, () => 'This request is no longer queued: an agent already has it.'],
+  invalid_body: [400, () => `The message must be 1 to ${MORTGAGE_DESK_AGENT_NOTE_MAX} characters.`],
+  no_assigned_agent: [409, () => 'This request has no assigned agent yet. Assign one first.'],
+  rate_limited: [429, () => 'At most 10 messages can be sent to the agent on one request per hour.'],
 };
 
 /** { statusCode, error, message, position } for a known SQL 124 / 122 refusal, else null. */
@@ -561,6 +604,235 @@ export const runSendDeskSignatureRequest = async (event, deps = {}) => {
   return { ...base, ok: true, statusCode: 200, delivery: recorded.delivery };
 };
 
+// ---- Tenant Management desk view (SQL 158) ----------------------------------
+
+const intArg = (value, fallback) => {
+  if (value === undefined || value === null || value === '') return fallback;
+  const n = Number(value);
+  return Number.isInteger(n) ? n : NaN;
+};
+
+/** desk_overview input: an optional tenant uuid, status, page size (1..500) and offset (>= 0). */
+export const validateDeskOverviewInput = (body) => {
+  const tenantRaw = arg(body, 'tenant_id', 'tenantId', '_tenant_id');
+  const tenantId = tenantRaw === null || tenantRaw === '' ? null : String(tenantRaw);
+  if (tenantId !== null && !isUuid(tenantId)) {
+    return { ok: false, statusCode: 400, error: 'invalid_uuid', field: 'tenant_id', message: 'tenant_id must be a uuid' };
+  }
+  const statusRaw = arg(body, 'status', '_status');
+  const status = statusRaw === null || statusRaw === '' ? null : String(statusRaw).trim();
+  if (status !== null && !MORTGAGE_DESK_OVERVIEW_STATUSES.includes(status)) return sqlRefusal('invalid_status');
+  const limit = intArg(arg(body, 'limit', '_limit'), MORTGAGE_DESK_OVERVIEW_DEFAULT_LIMIT);
+  if (!Number.isInteger(limit) || limit < 1 || limit > MORTGAGE_DESK_OVERVIEW_MAX_LIMIT) {
+    return { ok: false, statusCode: 400, error: 'invalid_limit', message: `limit must be 1 to ${MORTGAGE_DESK_OVERVIEW_MAX_LIMIT}` };
+  }
+  const offset = intArg(arg(body, 'offset', '_offset'), 0);
+  if (!Number.isInteger(offset) || offset < 0) {
+    return { ok: false, statusCode: 400, error: 'invalid_offset', message: 'offset must be 0 or more' };
+  }
+  return { ok: true, tenantId, status, limit, offset };
+};
+
+export const runMortgageDeskOverview = async ({ client, body, spoof }) => {
+  const input = validateDeskOverviewInput(body);
+  if (!input.ok) return { ...input, spoofFieldsIgnored: spoof };
+  const out = await callDefiner(client, DESK_OVERVIEW_SQL, [input.tenantId, input.status, input.limit, input.offset]);
+  if (out.refused) return { ...out.refused, spoofFieldsIgnored: spoof };
+  const total = out.rows.length ? Number(out.rows[0].total_count) : 0;
+  return {
+    ok: true,
+    statusCode: 200,
+    action: 'desk_overview',
+    data: out.rows.map(({ total_count, ...row }) => row),
+    total,
+    limit: input.limit,
+    offset: input.offset,
+    spoofFieldsIgnored: spoof,
+  };
+};
+
+export const runMortgageDeskAgents = async ({ client, spoof }) => {
+  const out = await callDefiner(client, DESK_ASSIGNABLE_AGENTS_SQL, []);
+  if (out.refused) return { ...out.refused, spoofFieldsIgnored: spoof };
+  return { ok: true, statusCode: 200, action: 'desk_agents', data: out.rows, spoofFieldsIgnored: spoof };
+};
+
+export const runMortgageDeskAgentNotes = async ({ client, body, spoof }) => {
+  const requestId = requestIdOf(body);
+  if (!isUuid(requestId)) return { ...sqlRefusal('not_authorized'), spoofFieldsIgnored: spoof };
+  const out = await callDefiner(client, DESK_AGENT_NOTES_SQL, [requestId]);
+  if (out.refused) return { ...out.refused, spoofFieldsIgnored: spoof };
+  return { ok: true, statusCode: 200, action: 'agent_notes', requestId, data: out.rows, spoofFieldsIgnored: spoof };
+};
+
+/** Where an agent works the Desk; the request opens from the queue. */
+export const mortgageDeskQueueUrl = () => `${signBaseUrl()}/mortgage-ops/queue`;
+
+const requestLabel = (row) => [row.tenant_name, row.mortgage_company, row.loan_number ? `loan ${row.loan_number}` : null]
+  .filter((part) => part && String(part).trim()).join(' / ') || 'a Mortgage Desk request';
+
+/** The notice to an agent that Tenant Management assigned them a request. No note text, no homeowner data. */
+export const deskAssignmentEmail = (row, url = mortgageDeskQueueUrl()) => {
+  const label = requestLabel(row);
+  const paragraphs = [
+    `Tenant Management assigned you a Mortgage Desk request: ${label}.`,
+    'It is in progress and assigned to you. Open the Mortgage Desk queue to work it.',
+  ];
+  const layout = renderChecksOpsEmail({
+    title: 'New Mortgage Desk assignment',
+    preview: `Assigned to you: ${label}`,
+    greeting: row.agent_name ? `Hi ${row.agent_name},` : 'Hello,',
+    paragraphs,
+    ctaLabel: 'Open the Mortgage Desk',
+    ctaUrl: url,
+    fallbackUrl: url,
+  });
+  return {
+    subject: `Mortgage Desk: assigned to you (${label})`.slice(0, 200),
+    html: layout.html,
+    text: [...paragraphs, url].join('\n\n'),
+  };
+};
+
+/** "Message agent": the note itself, to the agent it is written to (who can also read it on the Desk). */
+export const deskAgentNoteEmail = (row, body, url = mortgageDeskQueueUrl()) => {
+  const label = requestLabel(row);
+  const paragraphs = [
+    `Tenant Management sent you a message about ${label}:`,
+    body,
+    'This message is private to you and Tenant Management. It is also saved on the request in the Mortgage Desk.',
+  ];
+  const layout = renderChecksOpsEmail({
+    title: 'Message from Tenant Management',
+    preview: `About ${label}`,
+    greeting: row.agent_name ? `Hi ${row.agent_name},` : 'Hello,',
+    paragraphs,
+    ctaLabel: 'Open the Mortgage Desk',
+    ctaUrl: url,
+    fallbackUrl: url,
+  });
+  return {
+    subject: `Mortgage Desk: message from Tenant Management (${label})`.slice(0, 200),
+    html: layout.html,
+    text: [...paragraphs, url].join('\n\n'),
+  };
+};
+
+/** One email through the shared mailer; 'sent', 'failed' or 'skipped' (no address), with the error text if any. */
+export const sendDeskAgentEmail = async ({ to, message, category, send = sendViaSesOrSink, branding = mortgageDeskEsignBranding() }) => {
+  if (!to || !EMAIL_RE.test(String(to))) return { status: 'skipped', error: 'no_agent_email' };
+  try {
+    const sent = await send({
+      to: String(to),
+      subject: message.subject,
+      html: message.html,
+      text: message.text,
+      from: branding.from,
+      replyTo: branding.replyTo,
+      tenantId: null,
+      messageCategory: category,
+    });
+    const entry = sent?.results?.[0] || {};
+    if (entry.status === 'failed') return { status: 'failed', error: String(entry.error || 'Email delivery failed').slice(0, 300) };
+    return { status: 'sent', error: null };
+  } catch (error) {
+    return { status: 'failed', error: String(error?.message || error).slice(0, 300) };
+  }
+};
+
+/** assign_agent: SQL 158 c commits (queued -> in progress for the agent), then a best-effort notice email. */
+export const runMortgageDeskAssignAgent = async (event, deps = {}) => {
+  const body = parseBody(event);
+  const requestId = requestIdOf(body);
+  const agentId = arg(body, 'agent_id', 'agentId', '_agent_id');
+  if (!isUuid(requestId) || !isUuid(agentId)) {
+    return withIdentity(event, async ({ spoof }) => ({
+      ok: false, statusCode: 400, error: 'invalid_uuid', message: 'request_id and agent_id must be uuids', spoofFieldsIgnored: spoof,
+    }), deps);
+  }
+  const assigned = await withIdentityWrite(event, async ({ client, spoof }) => {
+    const out = await callDefiner(client, DESK_ASSIGN_AGENT_SQL, [requestId, agentId]);
+    if (out.refused) return { ...out.refused, spoofFieldsIgnored: spoof };
+    const row = out.rows[0];
+    if (!row) return { ok: false, statusCode: 500, error: 'assignment_not_returned', spoofFieldsIgnored: spoof };
+    return { ok: true, statusCode: 200, row, spoofFieldsIgnored: spoof };
+  }, deps);
+  if (!assigned?.ok) return assigned;
+  const { row } = assigned;
+  const notice = await sendDeskAgentEmail({
+    to: row.agent_email,
+    message: deskAssignmentEmail(row),
+    category: 'mortgage-desk-assignment',
+    send: deps.sendViaSesOrSink || sendViaSesOrSink,
+  });
+  return {
+    ok: true,
+    statusCode: 200,
+    action: 'assign_agent',
+    requestId: row.request_id,
+    agentId: row.agent_id,
+    agentName: row.agent_name || null,
+    acceptedAt: row.accepted_at || null,
+    status: 'in_progress',
+    notice: { status: notice.status, error: notice.error },
+    spoofFieldsIgnored: assigned.spoofFieldsIgnored,
+  };
+};
+
+/** message_agent: SQL 158 d commits the note, the email goes out, SQL 158 e records its outcome once. */
+export const runMortgageDeskMessageAgent = async (event, deps = {}) => {
+  const body = parseBody(event);
+  const requestId = requestIdOf(body);
+  const text = String(arg(body, 'body', 'message', '_body') ?? '').trim();
+  if (!isUuid(requestId)) {
+    return withIdentity(event, async ({ spoof }) => ({ ...sqlRefusal('not_authorized'), spoofFieldsIgnored: spoof }), deps);
+  }
+  if (!text || text.length > MORTGAGE_DESK_AGENT_NOTE_MAX) {
+    return withIdentity(event, async ({ spoof }) => ({ ...sqlRefusal('invalid_body'), spoofFieldsIgnored: spoof }), deps);
+  }
+  const created = await withIdentityWrite(event, async ({ client, spoof }) => {
+    const out = await callDefiner(client, DESK_ADD_AGENT_NOTE_SQL, [requestId, text]);
+    if (out.refused) return { ...out.refused, spoofFieldsIgnored: spoof };
+    const row = out.rows[0];
+    if (!row || !isUuid(row.note_id)) return { ok: false, statusCode: 500, error: 'note_not_created', spoofFieldsIgnored: spoof };
+    return { ok: true, statusCode: 200, row, spoofFieldsIgnored: spoof };
+  }, deps);
+  if (!created?.ok) return created;
+  const { row } = created;
+  const email = await sendDeskAgentEmail({
+    to: row.agent_email,
+    message: deskAgentNoteEmail(row, text),
+    category: 'mortgage-desk-agent-note',
+    send: deps.sendViaSesOrSink || sendViaSesOrSink,
+  });
+  const recorded = await withIdentityWrite(event, async ({ client, spoof }) => {
+    const out = await callDefiner(client, DESK_RECORD_AGENT_NOTE_EMAIL_SQL, [row.note_id, email.status]);
+    if (out.refused) return { ...out.refused, spoofFieldsIgnored: spoof };
+    return { ok: true, statusCode: 200, recorded: out.rows[0]?.recorded === true, spoofFieldsIgnored: spoof };
+  }, deps);
+  const base = {
+    action: 'message_agent',
+    requestId: row.request_id,
+    noteId: row.note_id,
+    agentId: row.agent_id,
+    agentName: row.agent_name || null,
+    createdAt: row.created_at || null,
+    email: { status: email.status, error: email.error },
+    spoofFieldsIgnored: created.spoofFieldsIgnored,
+  };
+  if (!recorded?.ok) {
+    // The note is saved and the email went out (or failed); only its status is missing. Never resend from here.
+    return {
+      ...base,
+      ok: false,
+      statusCode: 502,
+      error: 'email_status_not_recorded',
+      message: 'The note was saved, but the email status could not be recorded. Do not resend; contact support.',
+    };
+  }
+  return { ...base, ok: true, statusCode: 200, emailRecorded: recorded.recorded };
+};
+
 // ---- Router ----------------------------------------------------------------
 
 export const handleMortgageDeskEsign = async (event, deps = {}) => {
@@ -574,6 +846,21 @@ export const handleMortgageDeskEsign = async (event, deps = {}) => {
   }
   if (action === 'shared_library_documents') {
     return withIdentity(event, (ctx) => runMortgageDeskSharedLibraryDocuments(ctx), deps);
+  }
+  if (action === 'desk_overview') {
+    return withIdentity(event, (ctx) => runMortgageDeskOverview(ctx), deps);
+  }
+  if (action === 'desk_agents') {
+    return withIdentity(event, (ctx) => runMortgageDeskAgents(ctx), deps);
+  }
+  if (action === 'agent_notes') {
+    return withIdentity(event, (ctx) => runMortgageDeskAgentNotes(ctx), deps);
+  }
+  if (action === 'assign_agent') {
+    return runMortgageDeskAssignAgent(event, deps);
+  }
+  if (action === 'message_agent') {
+    return runMortgageDeskMessageAgent(event, deps);
   }
   if (action === 'post_timeline') {
     return withIdentityWrite(event, (ctx) => runMortgageDeskPostTimeline(ctx), deps);
