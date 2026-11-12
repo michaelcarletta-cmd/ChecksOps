@@ -1,8 +1,8 @@
 {
   "id": "sql158-mortgage-desk-oversight-and-agent-notes-production-apply",
   "migration": "sql158",
-  "authorization": "pending",
-  "execute": false,
+  "authorization": "Owner approved 2026-11-12 (the owner's words for SQL 158: \"Tenant Management desk view plus 'Message agent'\", \"Tenant management and the agent assigned can see the notes\", \"If no agent then tenant management can assign\", \"Note is only visible to agent\", \"go with SQL 158\", \"Merge 1807 when green and DEPLOY WEBSITE TO PRODUCTION\", \"Merge 1811 and approve SQL 158\", \"merge #1813 and apply SQL 158 in staging\", \"run the read-only SQL 158 production inspect\", \"record the SQL 158 production pin, merge it when green, and apply SQL 158 in production\"; the change itself is reviewed and merged under those words): production apply of SQL 158 after the staging acceptance below, from the recorded production pre-state (ed94cf62 -> 1c43cf6c); each apply still needs the owner's run-time approval (the owner's words for that run).",
+  "execute": true,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -18,7 +18,7 @@
     "public.aws_mortgage_desk_record_agent_note_email(uuid, text)",
     "public.aws_mortgage_desk_agent_notes(uuid)"
   ],
-  "expected_live_definition_sha256": null,
+  "expected_live_definition_sha256": "ed94cf62003c8ef29667a8b79dd081f8e0491bde28cf8ec1acee1154b877e233",
   "intended_replacement_sha256": "1c43cf6ca02fd3d4842b1d854b1ea559dba3cbd007a01c2739d625cfc14428ee",
   "authorization_phrase": "START_MORTGAGE_DESK_OVERSIGHT_AND_AGENT_NOTES",
   "predecessors": [],
@@ -46,24 +46,24 @@
     "note": "Guarded tooling for SQL 158: sql158-mortgage-desk-oversight-and-agent-notes-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql158-mortgage-desk-oversight-and-agent-notes); production-sql-one-shot.mjs --migration sql158. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): the table with its columns, constraints, indexes, RLS and no grant, and the six functions with their attributes, bodies, results and ACLs. The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
   },
   "production_inspect": {
-    "status": "pending",
-    "date": null,
-    "ssm_command_id": null,
-    "source_commit": null,
+    "status": "recorded",
+    "date": "2026-11-12",
+    "ssm_command_id": "621abcee-0a4a-48c2-9209-e67da773b9bf",
+    "source_commit": "bb145ba53048691ade52cb2de1e52536a9711559",
     "read_only": true,
     "connected_as": "checksops_admin",
-    "live_definition_sha256": null,
-    "apply_preconditions_met": null,
-    "precondition_failures": null,
-    "note": "Pending: no release-engine production inspect has been run for SQL 158 yet. Expected: prerequisites_missing [], the table and the six functions absent, definer_writes ok on mortgage_handling_requests, mortgage_ops_request_audit, mortgage_agent_accounts, identity_accounts, profiles, user_roles and tenants, already_applied false. Expected release-engine fingerprint of that pre-state under sql158: ed94cf62003c8ef29667a8b79dd081f8e0491bde28cf8ec1acee1154b877e233 (releaseStateHash('sql158', {})). Record the one-shot --phase inspect's date, SSM command id, source commit, live_definition_sha256, prerequisites_missing, release_sql_inspect, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. Stop if the pre-state differs, prerequisites_missing is not [] or precondition_failures is not []: that needs its own reviewed change."
+    "live_definition_sha256": "ed94cf62003c8ef29667a8b79dd081f8e0491bde28cf8ec1acee1154b877e233",
+    "apply_preconditions_met": false,
+    "precondition_failures": [],
+    "note": "Recorded from the read-only production inspect of 2026-11-12 (SSM command 621abcee-0a4a-48c2-9209-e67da773b9bf, status Success, ResponseCode 0, node scripts/deployment-guard/sql158-mortgage-desk-oversight-and-agent-notes-production-apply.mjs --inspect on the SQL53 runner i-0c35557c4e5385406, started from stopped at 13:49:17Z and stopped again at 13:51:49Z, under the owner's words \"run the read-only SQL 158 production inspect\", from main bb145ba53 (tarball source-bb145ba53048691ade52cb2de1e52536a9711559.tar.gz sha256 54f325ea2e9633f30fab07306a6813db30421fbcc8f3a11c1e80cea260d1bd5d, transfer run 43230095815; SOURCE_COMMIT bb145ba53048691ade52cb2de1e52536a9711559; migration source sha256 on the runner 282c6bdac33be8e09d5100854e861cf7d14003ff94eba334d1ffe65986319e05 == source_sha256)): read_only true, source_ok true, current_user checksops_admin, pin_execute false, missing_dependencies [], prerequisites_missing [], predecessors {} (none), successors_applied []; the table mortgage_desk_agent_notes and all six functions absent; definer_writes mortgage_handling_requests, mortgage_ops_request_audit, mortgage_agent_accounts, identity_accounts, profiles, user_roles and tenants ok true. live_definition_sha256 ed94cf62003c8ef29667a8b79dd081f8e0491bde28cf8ec1acee1154b877e233 (the derived pre-state releaseStateHash('sql158', {})), already_applied false, live_matches_expected false (the pin had no pre-state yet), precondition_failures [], apply_preconditions_met false (the pin was execute false). Copied into expected_live_definition_sha256 by this change. If already_applied is true, or precondition_failures is not [], stop. Earlier: Pending: no release-engine production inspect has been run for SQL 158 yet. Expected: prerequisites_missing [], the table and the six functions absent, definer_writes ok on mortgage_handling_requests, mortgage_ops_request_audit, mortgage_agent_accounts, identity_accounts, profiles, user_roles and tenants, already_applied false. Expected release-engine fingerprint of that pre-state under sql158: ed94cf62003c8ef29667a8b79dd081f8e0491bde28cf8ec1acee1154b877e233 (releaseStateHash('sql158', {})). Record the one-shot --phase inspect's date, SSM command id, source commit, live_definition_sha256, prerequisites_missing, release_sql_inspect, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. Stop if the pre-state differs, prerequisites_missing is not [] or precondition_failures is not []: that needs its own reviewed change."
   },
   "intended_post_state": {
     "fingerprint": "1c43cf6ca02fd3d4842b1d854b1ea559dba3cbd007a01c2739d625cfc14428ee",
     "note": "public.mortgage_desk_agent_notes (id uuid default gen_random_uuid() primary key, request_id uuid not null FK to mortgage_handling_requests ON DELETE CASCADE, author_id, agent_id uuid not null, body text not null 1 to 2000 characters, email_status text not null default 'pending' in pending/sent/failed/skipped, emailed_at, created_at; index on (request_id, created_at DESC); RLS on, not forced, no policy, no grant to anyone but the owner) and six functions, all owned by checksops_admin, plpgsql, SECURITY DEFINER, SET search_path = public, SET row_security = off, EXECUTE checksops and the owner, nothing for PUBLIC or authenticated: aws_mortgage_desk_overview, aws_mortgage_desk_assignable_agents and aws_mortgage_desk_agent_notes (STABLE, RETURNS TABLE), aws_mortgage_desk_assign_agent and aws_mortgage_desk_add_agent_note (VOLATILE, RETURNS TABLE), aws_mortgage_desk_record_agent_note_email (VOLATILE, RETURNS boolean). No other function, table, column, policy, grant or trigger change; no row written. The fingerprint is releaseIntendedHash('sql158', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): 1c43cf6ca02fd3d4842b1d854b1ea559dba3cbd007a01c2739d625cfc14428ee."
   },
   "staging_acceptance": {
-    "ok": false,
-    "reference": null,
-    "basis": "Pending: record the guarded staging SQL executor read-live and the staging apply of SQL 158 (choice sql158-mortgage-desk-oversight-and-agent-notes) here in the reviewed change that sets execute true. The behavior is covered on PostgreSQL 16 by aws/tests/sql158-mortgage-desk-oversight-pg.test.mjs. Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+    "ok": true,
+    "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43228829366",
+    "basis": "Guarded staging SQL executor apply of sql158-mortgage-desk-oversight-and-agent-notes, run 43228829366 (2026-11-12, main bb145ba53, executor deploy run 43227752850, through the SQL 158 staging pin, wave 50, on the owner's words \"merge #1813 and apply SQL 158 in staging\"): read-live before it, run 43228270028, ed94cf62003c8ef29667a8b79dd081f8e0491bde28cf8ec1acee1154b877e233 (the table and all six functions absent), already_applied false, precondition_failures []; receipt before ed94cf62003c8ef29667a8b79dd081f8e0491bde28cf8ec1acee1154b877e233, after 1c43cf6ca02fd3d4842b1d854b1ea559dba3cbd007a01c2739d625cfc14428ee == intended_replacement_sha256, result applied; read-live after it, run 43229310297, already_applied true, live 1c43cf6ca02fd3d4842b1d854b1ea559dba3cbd007a01c2739d625cfc14428ee. Production's pre-state is the same one staging had before its apply (ed94cf62003c8ef29667a8b79dd081f8e0491bde28cf8ec1acee1154b877e233). The behavior is covered on PostgreSQL 16 by aws/tests/sql158-mortgage-desk-oversight-pg.test.mjs and aws/tests/release-sql158-executor.test.mjs."
   }
 }
