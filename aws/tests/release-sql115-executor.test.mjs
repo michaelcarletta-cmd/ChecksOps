@@ -181,7 +181,9 @@ test('reviewed file and spec: the supabase function with the one-payout guard, E
   const start = supabase.indexOf('CREATE OR REPLACE FUNCTION public.sync_provider_stakeholder_account(_tenant_id uuid)');
   const original = releaseFunctionDefinitions(supabase.slice(start, supabase.indexOf('$function$;', start) + '$function$;'.length)).sync_provider_stakeholder_account;
   assert.equal(original.result, def.result);
-  assert.deepEqual([...original.config], []);
+  // The supabase definition's SET search_path TO 'public' is the same proconfig entry as the file's SET search_path = public.
+  assert.deepEqual([...original.config], ['search_path=public']);
+  assert.deepEqual([...original.config], [...def.config]);
   const added = [
     '  payout_id    uuid;\n',
     `  -- The tenant's active partner payout other than this account's own row (SQL 115): one per

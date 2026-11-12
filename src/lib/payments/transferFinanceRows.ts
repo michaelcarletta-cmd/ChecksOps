@@ -302,6 +302,13 @@ export function incomingPayments(rows: IncomingTransferRow[] | null | undefined)
   return [...groups.values()].sort((a, b) => time(b.at) - time(a.at));
 }
 
+/** Ids of the checks this organization was paid from by a send that was not returned. */
+export function receivedCheckIds(rows: IncomingTransferRow[] | null | undefined): Set<string> {
+  const out = new Set<string>();
+  for (const p of incomingPayments(rows)) if (p.counted && p.checkId) out.add(p.checkId);
+  return out;
+}
+
 /** Revenue & Profit: incoming partner payments are income (returned ones are not). */
 export function incomingRevenueTotal(rows: IncomingTransferRow[] | null | undefined): { total: number; count: number } {
   const counted = incomingPayments(rows).filter((p) => p.counted);
