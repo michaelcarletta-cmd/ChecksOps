@@ -1,0 +1,21 @@
+{
+  "workstream_id": "desk-shared-check-library-applied",
+  "authorization": "Record only (2026-11-12): the bytes below are live. Nothing is planned or authorized by this manifest; any later change to these members needs its own manifest, staging acceptance and owner approval.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Mortgage Desk shared-check library documents (#1798; owner 2026-11-11 \"It should be everybody shared on that check\", then \"Start the API change\") applied. Owner 2026-11-12: \"Start staging step Lambda deploy for #1798.\", then \"DEPLOY mortgage-desk-esign.mjs TO PRODUCTION\" and \"DEPLOY storage.mjs TO PRODUCTION\"; standing: \"merge the record PRs when green\". Applied 2026-11-12 from main 48b80b0652d82ae20b3cb4096af3bee97c641cad (#1802 merge; #1798 merged as 868cfa978). Both apply runs concluded success including their \"Verify live member is the accepted bytes\" step (state VERIFIED, errors []) and the public production smoke (/health and /db-health 200). mortgage-desk-esign.mjs REPLACE 492da984 -> 07df2ae0: staging inspect run 43137635814 (492da984 live, RevisionId f55219cb-2313-4d8f-a7ed-21b70271d806), staging apply run 43137751086 (errors [], RevisionId e1bd9cff-08f1-4e73-9801-10d0d5c70747 after), staging re-inspect run 43137900773 read 07df2ae0 live; production inspect run 43141248239 (READY, 492da984 live, RevisionId d5724faa-6d77-4032-a6b8-5bb76d2d41c5, CodeSha256 2aBbqEfOQ8YYXee+bXixQ2vAUwCbjowOvb71O3ecqOM=); production apply run 43141364648 (job 130928872675; 492da984 -> 07df2ae0) on the owner's \"DEPLOY mortgage-desk-esign.mjs TO PRODUCTION\" with staging acceptance https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43137751086, expected live 492da984, errors [], writer RevisionId 9ccfc636-a5a8-4f12-94a7-494e0ba3eee6 (lastUpdateStatus InProgress), VERIFIED, after RevisionId be53437a-4f32-4574-9f88-b3d2dfd79bc0, CodeSha256 h61Wj04O7/bX0pUFLdBgD6bb2u9iWygLdfBynxuQtzU=; re-inspect run 43141514427 read 07df2ae0 live (ALREADY_ACCEPTED). storage.mjs REPLACE df96755d -> c1bb7d71: staging inspect run 43137981548 (df96755d live), staging apply run 43138073611 (errors [], RevisionId 4a206861-aa78-4bda-963a-2dfe2069be47 after), staging re-inspect run 43138185294 read c1bb7d71 live; production inspect run 43141596963 (READY, df96755d live, RevisionId be53437a-4f32-4574-9f88-b3d2dfd79bc0, CodeSha256 h61Wj04O7/bX0pUFLdBgD6bb2u9iWygLdfBynxuQtzU=); production apply run 43141692961 (job 130929950852; df96755d -> c1bb7d71) on the owner's \"DEPLOY storage.mjs TO PRODUCTION\" with staging acceptance https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43138073611, expected live df96755d, errors [], writer RevisionId 2dbf8ae9-07a8-4e7e-8c72-e4a28b8612db (lastUpdateStatus InProgress), VERIFIED, after RevisionId 0810fadd-1ef4-4b0f-84cb-9c57533ea727, CodeSha256 UWR5ZSeBSAGV1msYNmueRZQvlt+S2n2gcJAJgC/CaYA=; re-inspect run 43141814845 read c1bb7d71 live (ALREADY_ACCEPTED). All twelve runs concluded success on head 48b80b065. The pre-states 492da984 and df96755d are the e-sign and homeowner portal signing applied bytes the planning manifest named; every inspect above confirmed them before each apply. Their hold, SQL 156, is live in staging and production. index.mjs is untouched. The record keeps the applied bytes as live_sha256 and accepted_sha256 and chains each member to the manifest that planned it (previous_manifest), which keeps the pre-apply state.",
+  "members": {
+    "mortgage-desk-esign.mjs": {
+      "live_sha256": "07df2ae0e323d9e19abbf3ac6e1280e122e53c1b2b5eebf4830f15dfd60af08c",
+      "accepted_sha256": "07df2ae0e323d9e19abbf3ac6e1280e122e53c1b2b5eebf4830f15dfd60af08c",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-desk-shared-check-library-manifest-2026-11-11.json"
+    },
+    "storage.mjs": {
+      "live_sha256": "c1bb7d710aed71c28ad4bbe0e611f10b7c615f3048a145694cd265f32d87184e",
+      "accepted_sha256": "c1bb7d710aed71c28ad4bbe0e611f10b7c615f3048a145694cd265f32d87184e",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-desk-shared-check-library-manifest-2026-11-11.json"
+    }
+  }
+}
