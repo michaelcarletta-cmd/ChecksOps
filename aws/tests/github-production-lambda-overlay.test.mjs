@@ -6437,7 +6437,9 @@ test('First financial authenticator enrollment needs a fresh email code (finding
   const accepted = FINDING8_BYTES;
   assert.notEqual(accepted, LOCKOUT_APPLIED_BYTES);
   assert.notEqual(accepted, sha(`aws/functions/api/${MEMBER}`));
-  const rebuild = JSON.parse(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/lambda-rebuild-plan.json'), 'utf8')).environments.production;
+  // The fourth production rebuild (apply 41469896446) is history[3] since the fifth section (inspect 43210883811).
+  const rebuildPlan4 = JSON.parse(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/lambda-rebuild-plan.json'), 'utf8')).environments.production;
+  const rebuild = { ...rebuildPlan4.history[3], history: rebuildPlan4.history.slice(0, 3) };
   assert.equal(rebuild.applied.run_id, '41469896446');
   assert.deepEqual([rebuild.members[MEMBER].live_sha256, rebuild.members[MEMBER].accepted_sha256], [LOCKOUT_APPLIED_BYTES, accepted]);
   assert.equal(ENROLL_EMAIL_MANIFEST.workstream_id, 'financial-totp-enroll-email-code');
@@ -6767,7 +6769,9 @@ test('Public demo request (owner 2026-11-05): ADD public-demo-request.mjs, then 
   }
   // The pre-state is the wallet funding bytes, live since the fourth production rebuild (apply 41469896446,
   // VERIFIED), which accepted exactly them; the wallet funding manifest comes before this one.
-  const rebuild = JSON.parse(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/lambda-rebuild-plan.json'), 'utf8')).environments.production;
+  // The fourth production rebuild (apply 41469896446) is history[3] since the fifth section (inspect 43210883811).
+  const rebuildPlan4 = JSON.parse(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/lambda-rebuild-plan.json'), 'utf8')).environments.production;
+  const rebuild = { ...rebuildPlan4.history[3], history: rebuildPlan4.history.slice(0, 3) };
   assert.equal(rebuild.status, 'applied');
   assert.equal(rebuild.applied.run_id, '41469896446');
   assert.equal(rebuild.applied.state, 'VERIFIED');
@@ -6977,7 +6981,9 @@ test('Login MFA (owner 2026-11-06): ADD login-mfa.mjs, then data.mjs REPLACE fro
   }
   // The pre-states: data.mjs as production run 41234874570 applied it; auth-financial-totp.mjs as the fourth production
   // rebuild (apply 41469896446, VERIFIED) put it live, which accepted exactly the finding 8 bytes.
-  const rebuild = JSON.parse(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/lambda-rebuild-plan.json'), 'utf8')).environments.production;
+  // The fourth production rebuild (apply 41469896446) is history[3] since the fifth section (inspect 43210883811).
+  const rebuildPlan4 = JSON.parse(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/lambda-rebuild-plan.json'), 'utf8')).environments.production;
+  const rebuild = { ...rebuildPlan4.history[3], history: rebuildPlan4.history.slice(0, 3) };
   assert.equal(rebuild.status, 'applied');
   assert.equal(rebuild.applied.run_id, '41469896446');
   assert.equal(rebuild.applied.state, 'VERIFIED');
@@ -7070,7 +7076,9 @@ test('Fee pull savepoints (production incident 2026-11-06): tenant-collection-v2
   assert.deepEqual(Object.keys(manifest.members), FEE_PULL_SAVEPOINTS_MEMBERS);
   // The pre-state of each row is what the fourth production rebuild (apply 41469896446, VERIFIED) accepted and put
   // live: the money-write flag bytes.
-  const rebuild = JSON.parse(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/lambda-rebuild-plan.json'), 'utf8')).environments.production;
+  // The fourth production rebuild (apply 41469896446) is history[3] since the fifth section (inspect 43210883811).
+  const rebuildPlan4 = JSON.parse(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/lambda-rebuild-plan.json'), 'utf8')).environments.production;
+  const rebuild = { ...rebuildPlan4.history[3], history: rebuildPlan4.history.slice(0, 3) };
   assert.equal(rebuild.status, 'applied');
   assert.equal(rebuild.applied.run_id, '41469896446');
   assert.equal(rebuild.applied.state, 'VERIFIED');
@@ -7493,7 +7501,9 @@ test('Moov status catch-up (2026-11-07): ADD providers/moov-status-catch-up.mjs,
   // The live bytes come from the record: the Check Alt manifest accepted them, the fourth rebuild section leaves
   // scheduled.mjs out of its changed members, and the applied rebuild names main 1364af787.
   assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, PREVIOUS), 'utf8')).members[SCHEDULED].accepted_sha256, SCHEDULED_LIVE);
-  const rebuild = JSON.parse(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/lambda-rebuild-plan.json'), 'utf8')).environments.production;
+  // The fourth production rebuild (apply 41469896446) is history[3] since the fifth section (inspect 43210883811).
+  const rebuildPlan4 = JSON.parse(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/lambda-rebuild-plan.json'), 'utf8')).environments.production;
+  const rebuild = { ...rebuildPlan4.history[3], history: rebuildPlan4.history.slice(0, 3) };
   assert.equal(rebuild.applied.run_id, '41469896446');
   assert.equal(rebuild.applied.main_commit, '1364af787f2e00b8578a6fbed3c52989eca7121a');
   assert.equal(rebuild.members[SCHEDULED], undefined);
