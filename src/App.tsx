@@ -1,14 +1,12 @@
 import { lazy, Suspense, useEffect } from "react";
 import { OfflineIndicator } from "@/components/OfflineIndicator";
 import { PlatformAnnouncementBanner } from "@/components/platform/PlatformAnnouncementBanner";
-import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useCustomDomainTenant } from "./hooks/useCustomDomainTenant";
-import { CustomDomainWhiteLabelApp } from "./components/white-label/CustomDomainWhiteLabelApp";
 import { AuthProvider } from "./hooks/useAuth";
 import { StepUpProvider } from "./hooks/useStepUp";
 import { LoginMfaGate, MortgageLoginMfaGate } from "./components/auth/LoginMfaGate";
@@ -26,6 +24,10 @@ const Sign = lazy(() => import("./pages/Sign"));
 const Endorse = lazy(() => import("./pages/Endorse"));
 const PaymentDirectionPage = lazy(() => import("./pages/PaymentDirectionPage"));
 const WhiteLabelApp = lazy(() => import("./pages/WhiteLabelApp"));
+// Tenant custom domains only: kept out of the main bundle, loaded when a custom domain resolves.
+const CustomDomainWhiteLabelApp = lazy(() =>
+  import("./components/white-label/CustomDomainWhiteLabelApp").then((m) => ({ default: m.CustomDomainWhiteLabelApp })),
+);
 const CheckOpsLanding = lazy(() => import("./pages/checkops/CheckOpsLanding"));
 const ChecksOpsVsIink = lazy(() => import("./pages/marketing/ChecksOpsVsIink"));
 const ClaimCheckTracking = lazy(() => import("./pages/marketing/ClaimCheckTracking"));
@@ -223,7 +225,11 @@ function AppRoutes() {
 
   // Tenant-owned custom domain (e.g. acme-inspections.com) → that tenant's Check Center
   if (tenantSlug) {
-    return <CustomDomainWhiteLabelApp slug={tenantSlug} />;
+    return (
+      <Suspense fallback={<PageLoader />}>
+        <CustomDomainWhiteLabelApp slug={tenantSlug} />
+      </Suspense>
+    );
   }
 
   // Everything else (checkops.com, checksops.com, lovable previews, localhost)
@@ -236,7 +242,6 @@ const App = () => (
     <LiveDataRefresh />
     <ThemeProvider>
       <TooltipProvider>
-        <Toaster />
         <Sonner />
         <OfflineIndicator />
         <BrowserRouter>

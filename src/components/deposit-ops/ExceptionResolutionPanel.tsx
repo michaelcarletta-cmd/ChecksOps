@@ -112,7 +112,7 @@ export function ExceptionResolutionPanel() {
               <div className="p-8 text-center text-muted-foreground">Loading...</div>
             ) : exceptions.length === 0 ? (
               <div className="p-8 text-center text-muted-foreground">
-                {filter === "open" ? "No open exceptions 🎉" : "No exceptions found"}
+                {filter === "open" ? "No open exceptions" : "No exceptions found"}
               </div>
             ) : (
               <Table>

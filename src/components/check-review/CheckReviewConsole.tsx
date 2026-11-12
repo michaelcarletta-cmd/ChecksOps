@@ -1521,7 +1521,7 @@ export function ReviewDecisionPanel({
                     depositPath !== "hold_for_claim_review"
                   ) {
                     const proceed = window.confirm(
-                      `⚠️ Check validity warning\n\n${v.label}\n${v.detail}\n\nThis check may be rejected at deposit. Consider 'Request Reissue' instead.\n\nProceed anyway?`,
+                      `Check validity warning\n\n${v.label}\n${v.detail}\n\nThis check may be rejected at deposit. Consider 'Request Reissue' instead.\n\nProceed anyway?`,
                     );
                     if (!proceed) return;
                   }

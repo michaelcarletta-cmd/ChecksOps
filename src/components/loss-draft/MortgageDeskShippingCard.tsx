@@ -92,7 +92,7 @@ export function MortgageDeskShippingCard({ checkIntakeItemId }: { checkIntakeIte
       {req.shipping_label_path && (
         <div className="flex items-center justify-between gap-2 border-t border-border/40 pt-2">
           <span className="truncate">
-            🏷️ {req.shipping_label_name || "Shipping label"}
+            {req.shipping_label_name || "Shipping label"}
             {req.shipping_label_uploaded_at && (
               <span className="text-muted-foreground">
                 {" "}· {format(new Date(req.shipping_label_uploaded_at), "MMM d")}

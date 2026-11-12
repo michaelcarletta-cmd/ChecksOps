@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Download, Info, RotateCcw, Sparkles } from "lucide-react";
+import { Download, Info, RotateCcw, Target } from "lucide-react";
 import { NumberField, StatTile } from "./NumberField";
 import { money, pct } from "@/lib/financial/model";
 import { IINK_TIERS, SavingsInputs } from "@/lib/financial/iink";
@@ -134,7 +134,7 @@ export function PricingOptimizer({ inputs, referralCredits, presentation }: Prop
       <Card className="border-primary/40">
         <CardHeader className="pb-3">
           <CardTitle className="flex flex-wrap items-center gap-2 text-base">
-            <Sparkles className="h-4 w-4 text-primary" />
+            <Target className="h-4 w-4 text-primary" />
             Best Fit Pricing
             {bestFit && <Badge variant="secondary">{bestFit.scenario.label}</Badge>}
           </CardTitle>

@@ -1,8 +1,8 @@
 {
   "id": "sql153-second-mortgagee-fee-production-apply",
   "migration": "sql153",
-  "authorization": "Owner approved 2026-11-11 (the owner's words for SQL 153: \"Yes pick up both 2 and 3\", \"Option B\", \"merge 1790 when green\", \"redeploy the staging SQL executor, then run the SQL 153 staging read-live\", \"record the SQL 153 staging pin\", \"merge it when green\", \"apply SQL 153 in staging\", \"the read-only SQL 153 production inspect\", \"record the SQL 153 production pin\"; \"Yes pick up both 2 and 3\" took up the $5 second mortgage company fee, \"Option B\" chose the no_event_type_check tooling; no separate staging acceptance statement was given; the change itself is reviewed and merged by the owner): production apply of SQL 153 after the staging apply below (production b2bf6d325a5a50683acc8ecdaef39ec763b591f8db9f10e7d6fe02f9525cb0c3 -> 376feae9f0a6405c54dcb65f65e4119a967da4a34506b75ba1e65d98cad699ac); execute true takes effect only when the owner reviews and merges this change. It does not itself run or approve a run: each apply still needs the owner's run-time approval for that workstream, a production-sql receipt owning the pinned file, the authorization phrase and a new one_use_id",
-  "execute": true,
+  "authorization": "Applied to production on 2026-11-12; execute is false again, so this pin is no longer a standing authorization and a re-apply needs a new reviewed pin change. The owner approved the SQL 153 production pin change on 2026-11-11 in the words \"Yes pick up both 2 and 3\", \"Option B\", \"merge 1790 when green\", \"redeploy the staging SQL executor, then run the SQL 153 staging read-live\", \"record the SQL 153 staging pin\", \"merge it when green\", \"apply SQL 153 in staging\", \"the read-only SQL 153 production inspect\" and \"record the SQL 153 production pin\" (no separate staging acceptance statement was given; the staging apply run 43119289402 is the acceptance; b2bf6d32 -> 376feae9, #1795, merged to main as 6e07b0e12 on the owner's words \"merge it when green\") and the one apply run recorded in applied (workstream prod-sql153-second-mortgagee-fee-20261112) in the words \"apply SQL 153 in production\", passed to it verbatim. That approval covered that run only.",
+  "execute": false,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -58,5 +58,246 @@
     "ok": true,
     "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43119289402",
     "basis": "Guarded staging SQL executor apply of sql153-second-mortgagee-fee, run 43119289402 (job 130855320219, 2026-11-11, main acbb4c505d290c93ba0b213bd34a34f405c9a594, wave 49, workstream github-staging-sql-43119289402, staging pin PR #1792, on the executor deployed by deploy run 43118921219: 0idw/ztvop2oY03bUiFFf8uAdEBIjoC1lg+ZadYvPts=, previous c6gk7wkTC53JMVUwDbybhUyFA0aMTppBC3HT5ImCxfU= (inspect run 43118569370, only lib/sql-executor-auth.mjs superseded)), under the owner's words \"apply SQL 153 in staging\", from the staging pre-state recorded by read-live run 43115484335 (job 130842257054, main 830cc142c; b2bf6d325a5a50683acc8ecdaef39ec763b591f8db9f10e7d6fe02f9525cb0c3, already_applied false, precondition_failures [], event_type_checks 0): receipt before b2bf6d325a5a50683acc8ecdaef39ec763b591f8db9f10e7d6fe02f9525cb0c3, after 376feae9f0a6405c54dcb65f65e4119a967da4a34506b75ba1e65d98cad699ac == intended, result applied, the index and both columns intended. Read-live run 43119679139 (job 130856648244) then reported already_applied true, live 376feae9f0a6405c54dcb65f65e4119a967da4a34506b75ba1e65d98cad699ac, precondition_failures [], prerequisites_missing [], event_type_checks 0. The owner gave the run approval \"apply SQL 153 in staging\"; no separate staging acceptance statement was given. No separate staging record PR: these staging runs are recorded here and in ops/production-sql-153-apply.md by the production pin PR. The behavior is covered on PostgreSQL 16 by aws/tests/sql153-second-mortgagee-fee-pg.test.mjs and through the executor by aws/tests/release-sql153-executor.test.mjs. Production's pre-state (production_inspect) equals staging's, so the same path applies there. The same file bytes (source_sha256) are pinned in both."
+  },
+  "applied": {
+    "date": "2026-11-12",
+    "result": "applied",
+    "source_commit": "6e07b0e12dfcf3c0e07c64382ae75bf61532caba",
+    "source_commit_basis": "SOURCE_COMMIT in the tarball (written by sql53-temporary-transfer) equals --commit, and the tarball sha256 equals --expected-tarball-sha256 as copied by the operator from that transfer run's log (TARBALL_SHA256 line); the run log itself was not read by the one-shot.",
+    "source_tarball": {
+      "file": "source-6e07b0e12dfcf3c0e07c64382ae75bf61532caba.tar.gz",
+      "sha256": "85ae3788104387a50727efc5e2f0c8812a796ca24a869bda06e06b91f3325392"
+    },
+    "migration_source_sha256": "57a87e37c153ee27c445cc188752fb493c41e92e144a81043d50e317a9150aec",
+    "migration_source_sha256_note": "The one-shot source step hashed aws/workflows/sql/153_second_mortgagee_fee.sql in the transfer tarball: equal to source_sha256 (the pin; migration_matches_pin true).",
+    "runner": "i-0c35557c4e5385406",
+    "runner_basis": "operator-supplied --runner (not verified by the one-shot)",
+    "workstream_id": "prod-sql153-second-mortgagee-fee-20261112",
+    "one_use_id": "sql153-prod-5e0bfc05-c697-474c-8a9f-96077c325144",
+    "one_use_id_consumed": true,
+    "one_use_id_consumed_basis": "Inferred from the successful apply (the tool records the one_use_id after COMMIT and only warns if that write fails); the consumed-registry entry was not read back separately.",
+    "owner_approval": "apply SQL 153 in production",
+    "owner_approval_basis": "As passed in --approval-statement for --approval-scope sql153; the one-shot cannot verify who said it. The owner's words of 2026-11-12 for this run were \"apply SQL 153 in production\", given after the pin change (#1795) was merged to main as 6e07b0e12 on the owner's \"merge it when green\"; they were passed verbatim as the approval statement for the --phase inspect run and the --phase apply run, which ran only after that merge was on main and staged.",
+    "operator": "michaelcarletta-cmd",
+    "apply_ssm_command_id": "1051cd92-cbda-43ec-bf8d-e8905f22727a",
+    "one_shot_run_id": "3b141a01-2675-404b-ae40-374927fa272a",
+    "one_shot_note": "One SSM command (1051cd92-cbda-43ec-bf8d-e8905f22727a on i-0c35557c4e5385406, Success, response code 0, execution 2026-11-12 00:07:44Z to 00:07:57Z; the runner was started from stopped at 00:05:16Z (EC2 launch time; this session did not start it) and stopped at 00:08:24Z (EC2 state transition reason \"User initiated\"; this session did not stop it), after both SSM commands had ended) ran the production-sql-one-shot --phase apply (run_id 3b141a01-2675-404b-ae40-374927fa272a) from main 6e07b0e12 (transfer run 43124761254, sql53-temporary-transfer.yml on main after the #1795 merge; tarball sha256 85ae3788104387a50727efc5e2f0c8812a796ca24a869bda06e06b91f3325392, the TARBALL_SHA256 line of that run's upload job log, equal to the .sha256 sidecar it uploaded). Before the apply, a separate one-shot --phase inspect on the same tarball and the same approval statement (SSM b959aa07-079f-4f20-bc5a-02f41c448a7a, execution 00:07:19Z to 00:07:29Z, run_id fbcb872c-3745-4545-b815-e1711e9e6a76, steps pin, source, inspect and contracts ok, nothing written; its whole output, 4899 characters, arrived) read live b2bf6d325a5a50683acc8ecdaef39ec763b591f8db9f10e7d6fe02f9525cb0c3 (live_matches_expected true, already_applied false, apply_preconditions_met true, precondition_failures [], prerequisites_missing [], no predecessor, event_type_checks 0, neither column nor the index present), the pre-state the read-only inspect recorded in production_inspect (SSM decbb3ce-3b38-49ec-ae6f-ea07d39de7ba). The apply run's own inspect step read the same pre-state (its pre_apply_inspect equals the inspect run's). Steps pin (execute true, staging_acceptance run 43119289402), source (tarball sha256 matches the sidecar and --expected-tarball-sha256, tree matches the tarball, migration source == pin), inspect, contracts (claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43), manifest, source-recheck-before-preflight, preflight (receipt_issued), evaluate (sql153_production_apply_allowed true), source-recheck-before-apply, apply (applied) and post-apply-inspect all ok. The run's whole output arrived (19544 characters, under the 24000-character SSM limit, ending with the closing brace and EXIT=0); top-level ok true, errors []. The printed applied object is recorded as printed, except this note and owner_approval_basis, which are extended as in the SQL 127 to SQL 154 records (the one-shot's own one_shot_note read: \"One production-sql-one-shot run verified the source, ran the read-only inspect and the runner contracts, built the manifest, issued the receipt and lease (preflight), evaluated (sql153_production_apply_allowed true), applied (exit 0) and ran the post-apply inspect.\"; its owner_approval_basis read: \"As passed in --approval-statement for --approval-scope sql153; the one-shot cannot verify who said it.\"); its receipt equals details.apply_result and its post_apply_inspect equals details.post_apply_inspect. The run's not_observed_by_this_run listed ssm_command_id and source_staged_by: this block adds apply_ssm_command_id (1051cd92-cbda-43ec-bf8d-e8905f22727a) from SSM, names the transfer run 43124761254 here, and adds migration_source_sha256 (with its note), steps and manifest_sha256 from the same run's details, as the SQL 127 to SQL 154 records do. The post-apply inspect reported live 376feae9f0a6405c54dcb65f65e4119a967da4a34506b75ba1e65d98cad699ac == intended, already_applied true, precondition_failures [], prerequisites_missing [], event_type_checks 0: the columns tenant_maintenance_payments.mortgage_ops_second_mortgagee_count and tenant_maintenance_payments.mortgage_ops_second_mortgagee_amount_cents and the index check_billing_events_one_second_mortgagee_per_check on check_billing_events intended. Unrelated catalog 96ce1f1376f9d9618293a71e69365565854b0a6253f1fa683fcdaa1071b4ff25 (policies 479, functions 1377, triggers 190). Production acceptance: not yet reported by the owner when this record was written; this record does not claim it.",
+    "steps": [
+      "pin",
+      "source",
+      "inspect",
+      "contracts",
+      "manifest",
+      "source-recheck-before-preflight",
+      "preflight",
+      "evaluate",
+      "source-recheck-before-apply",
+      "apply",
+      "post-apply-inspect"
+    ],
+    "contract_results": {
+      "claim-ledger": {
+        "ok": true,
+        "test": "aws/tests/claim-ledger-accepted-contract.test.mjs",
+        "evidence": "4/4 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at 6e07b0e12dfcf3c0e07c64382ae75bf61532caba (production-sql-one-shot 3b141a01-2675-404b-ae40-374927fa272a, node --test)"
+      },
+      "tenant-isolation": {
+        "ok": true,
+        "test": "aws/tests/tenant-security-compliance.test.mjs",
+        "evidence": "6/6 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at 6e07b0e12dfcf3c0e07c64382ae75bf61532caba (production-sql-one-shot 3b141a01-2675-404b-ae40-374927fa272a, node --test)"
+      },
+      "financial-write-protections": {
+        "ok": true,
+        "test": "aws/tests/api-write.test.mjs",
+        "evidence": "43/43 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at 6e07b0e12dfcf3c0e07c64382ae75bf61532caba (production-sql-one-shot 3b141a01-2675-404b-ae40-374927fa272a, node --test)"
+      }
+    },
+    "pre_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "b2bf6d325a5a50683acc8ecdaef39ec763b591f8db9f10e7d6fe02f9525cb0c3",
+      "live_matches_expected": true,
+      "already_applied": false,
+      "predecessors": {},
+      "predecessors_applied": true,
+      "missing_dependencies": [],
+      "apply_preconditions_met": true,
+      "precondition_failures": [],
+      "current_user": "checksops_admin",
+      "session_user": "checksops_admin",
+      "counts": {
+        "event_type_checks": 0
+      },
+      "successors_applied": [],
+      "release_sql_inspect": {
+        "live_definition_sha256": "b2bf6d325a5a50683acc8ecdaef39ec763b591f8db9f10e7d6fe02f9525cb0c3",
+        "prerequisites_missing": [],
+        "predecessors": {},
+        "successors_applied": [],
+        "functions": [],
+        "policies": [],
+        "views": [],
+        "tables": [],
+        "columns": [
+          {
+            "name": "tenant_maintenance_payments.mortgage_ops_second_mortgagee_count",
+            "state": "absent"
+          },
+          {
+            "name": "tenant_maintenance_payments.mortgage_ops_second_mortgagee_amount_cents",
+            "state": "absent"
+          }
+        ],
+        "constraints": [],
+        "triggers": [],
+        "table_privileges": [],
+        "function_acl": [],
+        "acl_functions": [],
+        "indexes": [
+          {
+            "name": "check_billing_events check_billing_events_one_second_mortgagee_per_check",
+            "state": "absent"
+          }
+        ],
+        "unique_covers": [],
+        "definer_writes": [],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": {
+          "event_type_checks": 0
+        }
+      }
+    },
+    "manifest_sha256": "e3a83d063ab2704e4aacbcd39dc473e80945ee37f83b854142d9be3be4d02d32",
+    "receipt": {
+      "migration": "sql153",
+      "workstream": "prod-sql153-second-mortgagee-fee-20261112",
+      "commit": "6e07b0e12dfcf3c0e07c64382ae75bf61532caba",
+      "sql_file": "aws/workflows/sql/153_second_mortgagee_fee.sql",
+      "before_hash": "b2bf6d325a5a50683acc8ecdaef39ec763b591f8db9f10e7d6fe02f9525cb0c3",
+      "after_hash": "376feae9f0a6405c54dcb65f65e4119a967da4a34506b75ba1e65d98cad699ac",
+      "release_sql_inspect": {
+        "live_definition_sha256": "376feae9f0a6405c54dcb65f65e4119a967da4a34506b75ba1e65d98cad699ac",
+        "prerequisites_missing": [],
+        "predecessors": {},
+        "successors_applied": [],
+        "functions": [],
+        "policies": [],
+        "views": [],
+        "tables": [],
+        "columns": [
+          {
+            "name": "tenant_maintenance_payments.mortgage_ops_second_mortgagee_count",
+            "state": "intended"
+          },
+          {
+            "name": "tenant_maintenance_payments.mortgage_ops_second_mortgagee_amount_cents",
+            "state": "intended"
+          }
+        ],
+        "constraints": [],
+        "triggers": [],
+        "table_privileges": [],
+        "function_acl": [],
+        "acl_functions": [],
+        "indexes": [
+          {
+            "name": "check_billing_events check_billing_events_one_second_mortgagee_per_check",
+            "state": "intended"
+          }
+        ],
+        "unique_covers": [],
+        "definer_writes": [],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": {
+          "event_type_checks": 0
+        }
+      },
+      "unrelated_catalog_sha256": "96ce1f1376f9d9618293a71e69365565854b0a6253f1fa683fcdaa1071b4ff25",
+      "unrelated_catalog_counts": {
+        "relations": 895,
+        "columns": 3562,
+        "constraints": 2251,
+        "policies": 479,
+        "functions": 1377,
+        "indexes": 657,
+        "default_acl": 0,
+        "role_memberships": 15,
+        "roles": 29,
+        "triggers": 190,
+        "views": 25,
+        "types": 18,
+        "schema": 2
+      },
+      "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43119289402",
+      "result": "applied"
+    },
+    "post_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "376feae9f0a6405c54dcb65f65e4119a967da4a34506b75ba1e65d98cad699ac",
+      "live_matches_expected": false,
+      "already_applied": true,
+      "predecessors": {},
+      "predecessors_applied": true,
+      "missing_dependencies": [],
+      "apply_preconditions_met": false,
+      "precondition_failures": [],
+      "current_user": "checksops_admin",
+      "session_user": "checksops_admin",
+      "counts": {
+        "event_type_checks": 0
+      },
+      "successors_applied": [],
+      "release_sql_inspect": {
+        "live_definition_sha256": "376feae9f0a6405c54dcb65f65e4119a967da4a34506b75ba1e65d98cad699ac",
+        "prerequisites_missing": [],
+        "predecessors": {},
+        "successors_applied": [],
+        "functions": [],
+        "policies": [],
+        "views": [],
+        "tables": [],
+        "columns": [
+          {
+            "name": "tenant_maintenance_payments.mortgage_ops_second_mortgagee_count",
+            "state": "intended"
+          },
+          {
+            "name": "tenant_maintenance_payments.mortgage_ops_second_mortgagee_amount_cents",
+            "state": "intended"
+          }
+        ],
+        "constraints": [],
+        "triggers": [],
+        "table_privileges": [],
+        "function_acl": [],
+        "acl_functions": [],
+        "indexes": [
+          {
+            "name": "check_billing_events check_billing_events_one_second_mortgagee_per_check",
+            "state": "intended"
+          }
+        ],
+        "unique_covers": [],
+        "definer_writes": [],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": {
+          "event_type_checks": 0
+        }
+      }
+    }
+  },
+  "production_evidence": {
+    "2026-11-12 apply": "Guarded production SQL one-shot on i-0c35557c4e5385406, workstream prod-sql153-second-mortgagee-fee-20261112, main 6e07b0e12 (tarball 85ae3788…, transfer run 43124761254, migration source 57a87e37… == pin), owner-approved run (\"apply SQL 153 in production\"), pre-apply --phase inspect SSM b959aa07-079f-4f20-bc5a-02f41c448a7a (run_id fbcb872c-3745-4545-b815-e1711e9e6a76, live b2bf6d32…, live_matches_expected true), apply SSM 1051cd92-cbda-43ec-bf8d-e8905f22727a, run_id 3b141a01-2675-404b-ae40-374927fa272a, one_use_id sql153-prod-5e0bfc05-c697-474c-8a9f-96077c325144 (spent): every step ok; contracts claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43; pre-apply inspect live b2bf6d32… (live_matches_expected true, precondition_failures [], prerequisites_missing [], event_type_checks 0); manifest e3a83d06…; b2bf6d32… -> 376feae9…, result applied, unrelated catalog 96ce1f13… (policies 479, functions 1377); post-apply inspect already_applied true, precondition_failures []; the run's whole output arrived. After: tenant_maintenance_payments.mortgage_ops_second_mortgagee_count and mortgage_ops_second_mortgagee_amount_cents and the unique index check_billing_events_one_second_mortgagee_per_check exist as SQL 153 defines them. The $5 accrual in mortgage-ops-usage.mjs and the fee-schedule row on the website are not deployed by this record. Production acceptance was not yet reported by the owner when this was recorded. execute is false so the pin is no longer a standing authorization."
   }
 }

@@ -6,7 +6,7 @@ import {
   RotateCcw,
   Save,
   AlertCircle,
-  Wand2,
+  Crosshair,
   Loader2,
   ImageDown,
   CheckCircle2,
@@ -1053,7 +1053,7 @@ export function EndorsementAdjuster({
                 {detecting ? (
                   <Loader2 className="h-3 w-3 mr-1 animate-spin" />
                 ) : (
-                  <Wand2 className="h-3 w-3 mr-1" />
+                  <Crosshair className="h-3 w-3 mr-1" />
                 )}
                 {detecting ? "Detecting…" : "Auto-Detect Zone"}
               </Button>
