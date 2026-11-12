@@ -115,6 +115,10 @@
     "aws/workflows/sql/156_mortgage_desk_shared_check_library_documents.sql": {
       "verified_live": true,
       "evidence": "Guarded staging SQL executor apply of sql156-mortgage-desk-shared-check-library on 2026-11-11 (run 43114784372, main 830cc142c, wave 48, executor c6gk7wkT…; read-live run 43115143552 already_applied true): receipt before 44259316…, after 5f40695d… = the pin's intended."
+    },
+    "aws/workflows/sql/158_mortgage_desk_oversight_and_agent_notes.sql": {
+      "verified_live": true,
+      "evidence": "Guarded staging SQL executor apply of sql158-mortgage-desk-oversight-and-agent-notes on 2026-11-12 (run 43228829366, main bb145ba53, wave 50, executor jEx6/8so…; read-live run 43229310297 already_applied true): receipt before ed94cf62…, after 1c43cf6c… = the pin's intended."
     }
   }
 }

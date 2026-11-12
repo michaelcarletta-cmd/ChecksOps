@@ -11,7 +11,8 @@
  *     (execute false, the one apply run recorded in applied), and is in step with the
  *     staging pin, the one-shot, the bypass inventory and the test lists;
  *   - no predecessor; one table with no grant and six SECURITY DEFINER functions (EXECUTE checksops and the owner),
- *     nothing replaced; no policy, trigger or existing table change; no overlay plan entry; SQL 157 has no pin or tool;
+ *     nothing replaced; no policy, trigger or existing table change; the API change holds one overlay member on it (recorded
+ *     live from this pin's production apply); SQL 157 has no pin or tool;
  *     the runbook, one-shot doc and README name it;
  *   - the pending pin refuses before connecting; an approved, accepted copy evaluates for the manifest built from it,
  *     and refuses with execute false, another live hash, another staging reference or a wrong phrase; the CLI spends no
@@ -199,7 +200,7 @@ test('pin: the release pin shape, applied and retired (owner approved 2026-11-12
   }
 });
 
-test('order: no predecessor; one table with no grant and six SECURITY DEFINER functions with their ACLs, nothing replaced; no policy or trigger; no overlay plan entry; the runbook, one-shot doc and README name it', () => {
+test('order: no predecessor; one table with no grant and six SECURITY DEFINER functions with their ACLs, nothing replaced; no policy or trigger; the API change holds one overlay member on it; the runbook, one-shot doc and README name it', () => {
   const spec = RELEASE_SQL_SPECS[KEY];
   assert.deepEqual(spec.predecessors, []);
   assert.equal(spec.supersedes, undefined);
@@ -225,9 +226,13 @@ test('order: no predecessor; one table with no grant and six SECURITY DEFINER fu
     releaseStateHash(KEY, {})]) {
     assert.ok(COMMITTED.order_note.includes(text), text);
   }
-  // No API member waits on SQL 158 yet.
+  // The pin itself changed no API member. The API change (2026-11-12, "start the Tenant Management API", its own planning
+  // change) holds mortgage-desk-esign.mjs on SQL 158, which the plan records verified live from this pin's production apply.
   const plan = readJson('ops/deployment-guard/production-api-overlay-plan.json');
-  assert.equal(plan.sql_prerequisites?.[SQL158_FILE], undefined);
+  assert.equal(plan.sql_prerequisites[SQL158_FILE].verified_live, true);
+  assert.ok(plan.sql_prerequisites[SQL158_FILE].evidence.includes(`SSM ${COMMITTED.applied.apply_ssm_command_id}`));
+  assert.ok(plan.sql_prerequisites[SQL158_FILE].evidence.includes(COMMITTED.applied.one_use_id));
+  assert.deepEqual(Object.keys(plan.members).filter((m) => plan.members[m].sql_before === SQL158_FILE), ['mortgage-desk-esign.mjs']);
   // The file: the prerequisite DO block and the table ACL DO block, one table and index, six functions, the RLS switch,
   // six REVOKEs and six GRANTs to checksops; nothing else.
   const text = fs.readFileSync(path.join(ROOT, SQL158_FILE), 'utf8').replace(/--[^\n]*/g, '');
