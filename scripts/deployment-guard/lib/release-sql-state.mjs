@@ -1,5 +1,5 @@
 /**
- * One engine for the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108 to SQL 148, SQL 150, SQL 152 to SQL 156, SQL 158), shared by the staging
+ * One engine for the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108 to SQL 148, SQL 150, SQL 152 to SQL 156, SQL 158, SQL 159), shared by the staging
  * guarded executor (aws/write-path/guarded-sql-executor/index.mjs) and the production tools
  * (release-sql-production-apply.mjs): the catalog state reader, the code-derived
  * fingerprints, the pre- and post-conditions, the predecessor rules and the unrelated-catalog

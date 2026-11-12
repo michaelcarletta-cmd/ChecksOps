@@ -155,7 +155,7 @@ test('pin: the release pin shape, pending, in step with the staging pin, the one
   assert.equal(RELEASE_PRODUCTION.sql157, undefined);
   const rows = JSON.stringify(readJson('ops/deployment-guard/bypass-inventory.json'));
   assert.match(rows, /"path":"scripts\/deployment-guard\/sql158-mortgage-desk-oversight-and-agent-notes-production-apply\.mjs","classification":"GUARDED","capabilities":\["sql158-production-apply"\]/);
-  assert.match(rows, /sql154, sql155, sql156, sql158\)/);
+  assert.match(rows, /sql155, sql156, sql158, sql159\)/);
   assert.doesNotMatch(rows, /sql157/);
   const scripts = readJson('package.json').scripts;
   const workflow = fs.readFileSync(path.join(ROOT, '.github/workflows/deployment-guard.yml'), 'utf8');
@@ -214,7 +214,7 @@ test('order: no predecessor; one table with no grant and six SECURITY DEFINER fu
   assert.match(runbook, /\*\*Status:\*\* staging pin execute-authorized \(wave 50\); not applied anywhere\. The production pin is pending\./);
   const oneShot = fs.readFileSync(path.join(ROOT, 'ops/production-sql-one-shot.md'), 'utf8');
   assert.match(oneShot, /\| `sql158` \|/);
-  assert.match(oneShot, /`sql155`, `sql156`, `sql158`\) \|/);
+  assert.match(oneShot, /`sql156`, `sql158`, `sql159`\) \|/);
   assert.doesNotMatch(oneShot, /`sql157`/);
   assert.match(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/README.md'), 'utf8'), /sql158-mortgage-desk-oversight-and-agent-notes-production-apply\.mjs --inspect/);
 });

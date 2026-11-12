@@ -103,6 +103,7 @@ on:
           - sql155-claim-owner-org-stamp
           - sql156-mortgage-desk-shared-check-library
           - sql158-mortgage-desk-oversight-and-agent-notes
+          - sql159-homeowner-intro-requests-select-grant
       approved_commit:
         description: "Required for deploy/apply/read-live: exact main commit approved for this run"
         required: false
@@ -259,6 +260,7 @@ jobs:
           node --test aws/tests/release-sql155-executor.test.mjs
           node --test aws/tests/release-sql156-executor.test.mjs
           node --test aws/tests/release-sql158-executor.test.mjs
+          node --test aws/tests/release-sql159-executor.test.mjs
           node --test aws/tests/mortgage-executor-commit-outcome.test.mjs
           node --test aws/tests/deployment-guard-kms-receipt.test.mjs
           node --test aws/tests/deployment-guard-signed-receipt.test.mjs

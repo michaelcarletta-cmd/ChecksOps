@@ -1,0 +1,62 @@
+{
+  "id": "sql159-homeowner-intro-requests-select-grant-production-apply",
+  "migration": "sql159",
+  "authorization": "pending",
+  "execute": false,
+  "target_environment": "production",
+  "target_component": "production-sql",
+  "deployment_type": "sql-apply",
+  "filename": "aws/workflows/sql/159_homeowner_intro_requests_select_grant.sql",
+  "migration_id": "159_homeowner_intro_requests_select_grant",
+  "staging_pin_commit": "f81f9008e7a4fc2a394c0faee05adda1dd8d4514",
+  "source_sha256": "0e26c2e4d2efebf4e10b2332c5943ee530c554a686713ed031d767a6f95da3ab",
+  "function_identities": [],
+  "expected_live_definition_sha256": null,
+  "intended_replacement_sha256": "d1677f1cb3f8bf5878744111986af7c6d9d4895b0e5a88161372249cdaa3dc0c",
+  "authorization_phrase": "GRANT_HOMEOWNER_INTRO_REQUESTS_SELECT",
+  "predecessors": [],
+  "order_note": "No predecessor. SQL 159 grants checksops table SELECT on public.homeowner_intro_requests and nothing else (owner 2026-11-12, option (a), \"A now\": the smallest fix for a contractor's Leads list, which production refuses with \"permission denied for table homeowner_intro_requests\", /prep/data/query, 2026-11-10 20:01:40Z and 20:01:41Z). The data path reads as checksops, which production's database does not let read the table, although the restore meant every table to carry checksops SELECT (aws/db-copy/sql/02_grant_readonly_application_role.sql) and no migration here revokes it. No write grant (the table is server_side_api in aws/rls/sql/24_complete_write_policies.sql; its writes are a separate decision), no policy, RLS, function, trigger, column or row change; every other grant on the table must stay as it was (other_table_privileges_unchanged). The spec prerequisites are the file's own (sql159_table_missing, sql159_role_missing). Expected pre-state in production: the table present and checksops without SELECT on it (release sql159 v1, \"privileges public.homeowner_intro_requests SELECT: \" with no line: 6170e77b6e8b764b28de0d41779ad2d326d867409b401a4b7fd0bb4aa27b7c50, releaseStateHash('sql159', { privileges: { 'public.homeowner_intro_requests': { exists: true, lines: [] } } })); 567ee275a409d67eda07451b63ff436b24fae5f40a381940d6e39c96cb086414 (releaseStateHash('sql159', {})) is the table missing, a stop; staging already holds it through its staging-only grants (SQL 65, 68, 69), so its read-live is expected to report already_applied true. No API, Lambda or SPA change is part of this pin.",
+  "admin_login": "checksops_admin",
+  "rds_identifier": "checksops-production",
+  "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
+  "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
+  "tooling": {
+    "status": "built",
+    "production_tool": "scripts/deployment-guard/sql159-homeowner-intro-requests-select-grant-production-apply.mjs",
+    "production_lib": "scripts/deployment-guard/lib/release-sql-production-apply.mjs",
+    "staging_executor_handler": "aws/write-path/guarded-sql-executor/index.mjs handleReleaseSqlMigration",
+    "staging_workflow_choice": "sql159-homeowner-intro-requests-select-grant",
+    "one_shot_migration": "sql159",
+    "fingerprint_engine": "scripts/deployment-guard/lib/release-sql-state.mjs",
+    "runbook": "ops/production-sql-159-apply.md",
+    "tests": [
+      "aws/tests/release-sql159-executor.test.mjs",
+      "aws/tests/release-sql159-production-apply.test.mjs",
+      "aws/tests/release-sql90-97-executor.test.mjs",
+      "aws/tests/release-sql90-97-production-apply.test.mjs",
+      "aws/tests/sql159-homeowner-intro-requests-select-grant-pg.test.mjs"
+    ],
+    "note": "Guarded tooling for SQL 159: sql159-homeowner-intro-requests-select-grant-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql159-homeowner-intro-requests-select-grant); production-sql-one-shot.mjs --migration sql159. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): checksops's SELECT line on public.homeowner_intro_requests. The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
+  },
+  "production_inspect": {
+    "status": "pending",
+    "date": null,
+    "ssm_command_id": null,
+    "source_commit": null,
+    "read_only": true,
+    "connected_as": "checksops_admin",
+    "live_definition_sha256": null,
+    "apply_preconditions_met": null,
+    "precondition_failures": null,
+    "note": "Pending: no release-engine production inspect has been run for SQL 159 yet. Expected: prerequisites_missing [], checksops without SELECT on public.homeowner_intro_requests, already_applied false. Expected release-engine fingerprint of that pre-state under sql159: 6170e77b6e8b764b28de0d41779ad2d326d867409b401a4b7fd0bb4aa27b7c50 (the table present, no checksops SELECT line; releaseStateHash('sql159', { privileges: { 'public.homeowner_intro_requests': { exists: true, lines: [] } } })). Record the one-shot --phase inspect's date, SSM command id, source commit, live_definition_sha256, prerequisites_missing, release_sql_inspect, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. Stop if the pre-state differs, prerequisites_missing is not [] or precondition_failures is not []: that needs its own reviewed change."
+  },
+  "intended_post_state": {
+    "fingerprint": "d1677f1cb3f8bf5878744111986af7c6d9d4895b0e5a88161372249cdaa3dc0c",
+    "note": "checksops holds table SELECT on public.homeowner_intro_requests. No other grant on the table changes (other_table_privileges_unchanged); no function, table, column, policy, RLS setting, trigger or row change. The fingerprint is releaseIntendedHash('sql159', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): d1677f1cb3f8bf5878744111986af7c6d9d4895b0e5a88161372249cdaa3dc0c."
+  },
+  "staging_acceptance": {
+    "ok": false,
+    "reference": null,
+    "basis": "Pending: record the guarded staging SQL executor read-live (and the staging apply, or read-live already_applied true) of SQL 159 (choice sql159-homeowner-intro-requests-select-grant) here in the reviewed change that sets execute true. The behavior is covered on PostgreSQL 16 by aws/tests/sql159-homeowner-intro-requests-select-grant-pg.test.mjs. Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+  }
+}
