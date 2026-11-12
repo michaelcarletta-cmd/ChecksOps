@@ -834,7 +834,7 @@
     },
     "production": {
       "function_name": "checksops-production-prep-api",
-      "status": "accepted",
+      "status": "applied",
       "members": {
         "mortgage-ops-usage.mjs": {
           "live_sha256": "e24900070c080032469c7383338efd26b37c522ec6ba68d3f7b6051539d1fd74",
@@ -867,6 +867,25 @@
         },
         "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43210074311",
         "notes": "Fifth production rebuild, for the second mortgage company fee (SQL 153, owner 2026-11-10/11: \"Flat $5\", \"it should be an additional $5 if 2 mortgage companies are on check\"; #1761): the $5 accrual copy in mortgage-ops-usage.mjs, which is not an overlay member and reaches a function only with a rebuild. Owner 2026-11-12: \"Read-only production rebuild inspect\", then \"write the production plan PR\". SQL 153 is applied in production (2026-11-12, SSM 1051cd92-cbda-43ec-bf8d-e8905f22727a, #1797), so the accrual has its index and columns. Inspect run 43210883811 (main 60b8c734f): live CodeSha256 UWR5ZSeBSAGV1msYNmueRZQvlt+S2n2gcJAJgC/CaYA=, RevisionId 0810fadd-1ef4-4b0f-84cb-9c57533ea727, the package staging ran before its fifth rebuild (staging inspect 43207489743 read the same CodeSha256); the candidate d8d2a82a... is the ZIP the staging apply 43210074311 put live and VERIFIED. Diff: 1 changed (mortgage-ops-usage.mjs, live e2490007... -> main's abd5fe7a...), 0 added, 0 removed, 209 same, dependencies identical (54 live, 54 candidate). /health and /db-health 200. The inspect reported BLOCKED with six problems, all against the fourth production section only (now history[3]): mortgage-ops-usage.mjs live_mismatch (that section's live was 9856f51f...; e2490007... is the bytes it accepted and put live) and listed_member_drifted for app-services.mjs, auth-financial-totp.mjs, tenant-billing-engine.mjs, tenant-billing-handlers.mjs and tenant-collection-v2.mjs, which guarded production overlays since 2026-11-02 replaced with main's bytes (recorded in the production overlay plan; this inspect counts each as same). It is not drift. The fourth section moves verbatim into history[3]. Staging acceptance: the staging apply run 43210074311 (VERIFIED, /health, /db-health and /db-readonly-validate 200). Nothing is applied by this plan change; the apply needs approval_phrase exactly \"DEPLOY FULL API PACKAGE TO PRODUCTION\", this inspect's live CodeSha256 as expected_live_code_sha256, the staging acceptance reference, and the production environment reviewer's approval."
+      },
+      "applied": {
+        "run_id": "43215807509",
+        "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43215807509",
+        "main_commit": "f6506083c4fa16f9620764d9aa480ff2ba8794a9",
+        "approval_phrase": "DEPLOY FULL API PACKAGE TO PRODUCTION",
+        "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43210074311",
+        "code_sha256_before": "UWR5ZSeBSAGV1msYNmueRZQvlt+S2n2gcJAJgC/CaYA=",
+        "revision_id_before": "0810fadd-1ef4-4b0f-84cb-9c57533ea727",
+        "code_sha256_after": "2NKoKhkxtfOpsoTGA3/9SekMHMH8EcmSchqWFMVWoIw=",
+        "revision_id_after": "27206d2d-b0e4-43f8-93d6-ad0da538091c",
+        "candidate_zip_sha256": "d8d2a82a1931b5f3a9b284c6037ffd49e90c1cc1fc11c992721a9614c556a08c",
+        "applied_at": "2026-11-12T12:13:05.776Z",
+        "state": "VERIFIED",
+        "smoke": [
+          "/health",
+          "/db-health"
+        ],
+        "notes": "Fifth production rebuild, applied on the owner's \"DEPLOY FULL API PACKAGE TO PRODUCTION.\" (2026-11-12; passed to the workflow as exactly \"DEPLOY FULL API PACKAGE TO PRODUCTION\", the trailing full stop dropped) from main f6506083c (the merged plan #1810), with expected_live_code_sha256 UWR5ZSeB... (inspect 43210883811) and staging acceptance run 43210074311. Before dispatch, read-only GetFunctionConfiguration confirmed production still UWR5ZSeB..., RevisionId 0810fadd, LastUpdateStatus Successful, and main f6506083c carried no aws/functions/api change since the inspected 60b8c734f. Apply run 43215807509 (job 131174636675): every step success. The job's own inspect step read READY (1 changed: mortgage-ops-usage.mjs e2490007... -> abd5fe7a...; 0 added, 0 removed, 209 same, dependencies 54/54). The receipt-gated writer updated checksops-production-prep-api to CodeSha256 2NKoKhkxtfOpsoTGA3/9SekMHMH8EcmSchqWFMVWoIw= (writer RevisionId db5b3cc4-3a57-4876-9399-8b239990c00e, lastUpdateStatus InProgress, errors []); \"Verify the live package is the candidate\" read it back VERIFIED (6786 members, RevisionId 27206d2d-b0e4-43f8-93d6-ad0da538091c); the public production smoke returned 200 ok for /health and /db-health. The production environment reviewer gate did not hold the job. Live read-back (read-only GetFunctionConfiguration after the apply): CodeSha256 2NKoKhkx... (the package staging runs since its apply 43210074311), RevisionId 27206d2d, LastModified 2026-11-12T12:13:10Z, LastUpdateStatus Successful, 50 variables. Not verified by this record: a production (or staging) check with two mortgage companies accruing the extra $5; none had been reported when this was written."
       },
       "history": [
         {
