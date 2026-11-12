@@ -9479,6 +9479,44 @@ export const RELEASE_SQL_SPECS = deepFreeze({
       }
     ]
   },
+  // SQL 161 (owner 2026-11-12: "A new SQL 161 that gives staging that one permission, then SQL 160"): EXECUTE on
+  // public.tg_record_mortgage_handling_billing() granted to checksops; nothing else. The staging read-live of SQL 160
+  // (run 43307779123, 2026-11-12) read that function's ACL as PUBLIC and the owner only, where production holds PUBLIC,
+  // checksops and the owner (billing-trigger-inspect.json production_inspect.observed_functions, every grant by the owner
+  // checksops_admin); SQL 160's CREATE OR REPLACE keeps the ACL, so its staging post-state could not reach its intended
+  // fingerprint. An ACL-only migration in SQL 131's shape: acl_functions with grantors, no attributes (the body is not
+  // asserted; acl_functions_otherwise_unchanged requires everything but the ACL unchanged), revokes [] (PUBLIC and the
+  // owner are kept, so a live entry for any other grantee or grantor refuses: acl_functions_acl_replaceable). Staging's
+  // expected pre-state is PUBLIC and the owner; production already holds the intended ACL, so production is expected to
+  // read as already in the intended state (the file is a no-op there). No predecessor; SQL 160 is not changed and does
+  // not name SQL 161 (it runs after it in staging by the order of work).
+  sql161: {
+    "key": "sql161",
+    "label": "SQL 161",
+    "choice": "sql161-tg-mortgage-handling-billing-checksops-execute",
+    "production_pin_rel": "ops/deployment-guard/sql161-tg-mortgage-handling-billing-checksops-execute-production-apply.json",
+    "script": "sql161-tg-mortgage-handling-billing-checksops-execute-production-apply",
+    "prerequisites": [
+      "public.tg_record_mortgage_handling_billing()",
+      "role checksops"
+    ],
+    "predecessors": [],
+    "functions": [],
+    "acl_functions": [
+      {
+        "identity": "public.tg_record_mortgage_handling_billing()",
+        "acl": [
+          "PUBLIC EXECUTE grantor=owner",
+          "checksops EXECUTE grantor=owner",
+          "owner EXECUTE grantor=owner"
+        ],
+        "revokes": []
+      }
+    ],
+    "render": {
+      "grantors": true
+    }
+  },
   sql76: {
     "key": "sql76",
     "label": "SQL 76",
