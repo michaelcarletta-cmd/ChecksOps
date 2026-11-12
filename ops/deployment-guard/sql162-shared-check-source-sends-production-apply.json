@@ -1,0 +1,64 @@
+{
+  "id": "sql162-shared-check-source-sends-production-apply",
+  "migration": "sql162",
+  "authorization": "pending",
+  "execute": false,
+  "target_environment": "production",
+  "target_component": "production-sql",
+  "deployment_type": "sql-apply",
+  "filename": "aws/workflows/sql/162_shared_check_source_sends.sql",
+  "migration_id": "162_shared_check_source_sends",
+  "staging_pin_commit": "9bb825a47be99df50520463a20b49e30ebe66cd2",
+  "source_sha256": "5bfbe41150ef652ade8405f9e8c0733ac32dae04776e489d188f7ae9c39d0179",
+  "function_identities": [
+    "public.get_shared_check_source_sends(uuid)"
+  ],
+  "expected_live_definition_sha256": null,
+  "intended_replacement_sha256": "77d36f6375b21c5e383896c88b5e9eccccb9f7bb9d06801921575e14a8ae41ca",
+  "authorization_phrase": "SHOW_PARTNERS_SHARED_CHECK_SOURCE_SENDS",
+  "predecessors": [],
+  "order_note": "No predecessor. SQL 162 adds one SECURITY DEFINER read function and replaces nothing (owner 2026-11-12: \"If you pay from a shared check using Send from the Funds tab ... It should not send the partner check back to deposited\", \"Sends to someone other than the partner\", \"Yes for 1, 2, and run the inspect\"): get_shared_check_source_sends(uuid) returns, for the caller's organization (aws_can_access_tenant, 42501 otherwise), one row per check and sharing organization for the checks actively shared with it (shared_checks, revoked_at IS NULL) from which the sharing organization has a payment_transfers send leg (send_wallet / send_bank; submitted, pending, processing, completed) whose destination is not the caller's organization; columns check_id, source_tenant_id and last_sent_at only, never an amount, a payee or a status; EXECUTE checksops and the owner only. The spec prerequisites are the file's own (55000 sql162_prerequisite_missing); the applying login must reach payment_transfers and shared_checks as the definer past RLS (definer_can_write_relations; the file refuses otherwise, sql162_definer_cannot_reach). No table, column, policy, table grant, trigger or row changes, so the db-readonly-validate trigger count is not affected. Expected pre-state in both environments: the function absent (release sql162 v1: eb3a290173a156be3757f03c0217b4548bffe713f582cdc6f32b676e91317e4f, releaseStateHash('sql162', {})). The API (get_shared_check_source_sends in the read RPC list with the tenant gate) and the Check Command Center ship after this through their own guarded paths; no API, Lambda or SPA change is part of this pin.",
+  "admin_login": "checksops_admin",
+  "rds_identifier": "checksops-production",
+  "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
+  "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
+  "tooling": {
+    "status": "built",
+    "production_tool": "scripts/deployment-guard/sql162-shared-check-source-sends-production-apply.mjs",
+    "production_lib": "scripts/deployment-guard/lib/release-sql-production-apply.mjs",
+    "staging_executor_handler": "aws/write-path/guarded-sql-executor/index.mjs handleReleaseSqlMigration",
+    "staging_workflow_choice": "sql162-shared-check-source-sends",
+    "one_shot_migration": "sql162",
+    "fingerprint_engine": "scripts/deployment-guard/lib/release-sql-state.mjs",
+    "runbook": "ops/production-sql-162-apply.md",
+    "tests": [
+      "aws/tests/release-sql162-executor.test.mjs",
+      "aws/tests/release-sql162-production-apply.test.mjs",
+      "aws/tests/release-sql90-97-executor.test.mjs",
+      "aws/tests/release-sql90-97-production-apply.test.mjs",
+      "aws/tests/sql162-shared-check-source-sends-pg.test.mjs"
+    ],
+    "note": "Guarded tooling for SQL 162: sql162-shared-check-source-sends-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql162-shared-check-source-sends); production-sql-one-shot.mjs --migration sql162. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): the function with its attributes, body, result and ACL. The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
+  },
+  "production_inspect": {
+    "status": "pending",
+    "date": null,
+    "ssm_command_id": null,
+    "source_commit": null,
+    "read_only": true,
+    "connected_as": "checksops_admin",
+    "live_definition_sha256": null,
+    "apply_preconditions_met": null,
+    "precondition_failures": null,
+    "note": "Pending: no release-engine production inspect has been run for SQL 162 yet. Expected: prerequisites_missing [], the function absent, definer_writes ok on payment_transfers and shared_checks, already_applied false. Expected release-engine fingerprint of that pre-state under sql162: eb3a290173a156be3757f03c0217b4548bffe713f582cdc6f32b676e91317e4f (releaseStateHash('sql162', {})). Record the one-shot --phase inspect's date, SSM command id, source commit, live_definition_sha256, prerequisites_missing, release_sql_inspect, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. Stop if the pre-state differs, prerequisites_missing is not [] or precondition_failures is not []: that needs its own reviewed change."
+  },
+  "intended_post_state": {
+    "fingerprint": "77d36f6375b21c5e383896c88b5e9eccccb9f7bb9d06801921575e14a8ae41ca",
+    "note": "public.get_shared_check_source_sends(uuid) (plpgsql, STABLE, RETURNS TABLE(check_id uuid, source_tenant_id uuid, last_sent_at timestamp with time zone)), owned by checksops_admin, SECURITY DEFINER, SET search_path = public, pg_temp, EXECUTE checksops and the owner, nothing for PUBLIC, anon, authenticated or service_role. No other function, table, column, policy, grant or trigger change; no row written. The fingerprint is releaseIntendedHash('sql162', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): 77d36f6375b21c5e383896c88b5e9eccccb9f7bb9d06801921575e14a8ae41ca."
+  },
+  "staging_acceptance": {
+    "ok": false,
+    "reference": null,
+    "basis": "Pending: record the guarded staging SQL executor read-live and the staging apply of SQL 162 (choice sql162-shared-check-source-sends) here in the reviewed change that sets execute true. The behavior is covered on PostgreSQL 16 by aws/tests/sql162-shared-check-source-sends-pg.test.mjs. Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+  }
+}

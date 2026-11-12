@@ -72,7 +72,18 @@ test('the configuration is inspect-only and bound to the same production RDS and
   assert.equal(config.tool, TOOL);
   assert.equal(config.execute, undefined);
   assert.equal(config.authorization_phrase, undefined);
-  assert.equal(config.production_inspect, null);
+  // The 2026-11-12 production run is recorded: counts and totals only, as the tool printed them.
+  const run = config.production_inspect;
+  assert.equal(run.status, 'completed');
+  assert.equal(run.owner_approval, 'Yes for 1, 2, and run the inspect');
+  assert.deepEqual(run.ssm_command_ids, ['bfc0f623-cfce-4061-b82e-c0f891de6274']);
+  assert.match(run.source_commit, /^[0-9a-f]{40}$/);
+  assert.match(run.tarball_sha256, /^[0-9a-f]{64}$/);
+  assert.match(run.output_sha256, /^[0-9a-f]{64}$/);
+  assert.deepEqual(run.result.tenants, { target_matches: 1, source_matches: 1, target_resolved: true });
+  assert.deepEqual(run.result.released_checks.map((r) => [r.check_class, r.checks]), [['paid_to_target_listed', 55]]);
+  assert.deepEqual(run.result.target_own, { payouts: [], send_legs: [] });
+  assert.doesNotMatch(JSON.stringify(run), /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?<!bfc0f623-cfce-4061-b82e-c0f891de6274)/);
   for (const key of ['admin_login', 'rds_identifier', 'rds_host', 'admin_secret_arn']) assert.equal(config[key], desk[key], key);
   assert.ok(fs.existsSync(path.join(ROOT, config.runbook)));
 });
