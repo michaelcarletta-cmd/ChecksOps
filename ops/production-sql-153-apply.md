@@ -39,7 +39,8 @@ the file needs none of their objects (only its own prerequisites, which predate 
 prerequisite: production satisfies SQL 84's gate with `check_billing_events_mortgage_ops_check_uidx`, not the fallback
 name.
 
-**Status:** applied in staging (wave 49, 2026-11-11); staging acceptance: the staging apply under the owner's run approval ("apply SQL 153 in staging"; no separate acceptance statement); production pin execute-authorized; not applied to production.
+**Status:** applied to staging (wave 49) and to production (2026-11-12); the production pin is retired
+(`execute: false`).
 
 **Staging read-live (2026-11-11).** Run 43115484335 (job 130842257054, main `830cc142c`, the executor current at
 `c6gk7wkTC53JMVUwDbybhUyFA0aMTppBC3HT5ImCxfU=` after deploy run 43113284610; the inspect run 43113078593 had found it not current),
@@ -77,6 +78,23 @@ inspect"; runner started by the owner 23:42:53Z, command ran 23:45:53Z to 23:45:
 staging apply took the path production will. Recorded in the production pin with the staging apply (run 43119289402) as its
 staging acceptance and `execute: true` under the owner's words "record the SQL 153 production pin". The owner merges the pin
 change; the apply runs only after that merge is on main and staged, under the owner's words for that run.
+
+**Production apply (2026-11-12).** After the pin change (#1795, on the staging apply run 43119289402; merged to main as
+`6e07b0e12` on the owner's words "merge it when green"), transfer run 43124761254 staged main `6e07b0e12` (tarball sha256
+`85ae3788104387a50727efc5e2f0c8812a796ca24a869bda06e06b91f3325392`, the run's `TARBALL_SHA256` line, equal to the sidecar it
+uploaded). The runner `i-0c35557c4e5385406` was started at 00:05:16Z. Under the owner's words "apply SQL 153 in production"
+(passed verbatim), a one-shot `--phase inspect` (SSM `b959aa07-079f-4f20-bc5a-02f41c448a7a`, run
+`fbcb872c-3745-4545-b815-e1711e9e6a76`, nothing written) read live `b2bf6d32…` (the pinned pre-state,
+`live_matches_expected` true, `precondition_failures` `[]`, `event_type_checks` 0); then one-shot `--phase apply` run
+`3b141a01-2675-404b-ae40-374927fa272a` through SSM `1051cd92-cbda-43ec-bf8d-e8905f22727a`, workstream
+`prod-sql153-second-mortgagee-fee-20261112`, one_use_id `sql153-prod-5e0bfc05-c697-474c-8a9f-96077c325144`: contracts 4/4,
+6/6 and 43/43; all 11 steps ok; manifest `e3a83d06…`; receipt `b2bf6d32…` →
+`376feae9f0a6405c54dcb65f65e4119a967da4a34506b75ba1e65d98cad699ac` (intended), result `applied`, unrelated catalog
+`96ce1f13…`; post-apply inspect `already_applied` true, `precondition_failures` `[]`, `prerequisites_missing` `[]`, both
+`tenant_maintenance_payments` columns and the index `check_billing_events_one_second_mortgagee_per_check` `intended`. The
+run's whole output arrived (19544 characters). The runner was stopped at 00:08:24Z ("User initiated"). The $5 accrual in
+`mortgage-ops-usage.mjs` (Lambda rebuild) and the fee-schedule row on the website are not deployed by this record.
+Production acceptance had not been reported by the owner when this record was written; this record does not claim it.
 
 ## Fingerprint
 
