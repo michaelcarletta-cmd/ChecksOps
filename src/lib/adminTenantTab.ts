@@ -1,6 +1,7 @@
 export const ADMIN_TENANT_TAB_VALUES = [
   "tenants",
   "mortgage-agents",
+  "mortgage-desk",
   "platform-finance",
   "checkalt",
   "referrals",
