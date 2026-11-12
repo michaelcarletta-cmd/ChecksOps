@@ -1,5 +1,5 @@
 /**
- * SQL 158 (aws/workflows/sql/158_homeowner_intro_requests_select_grant.sql) on PostgreSQL 16, through its production
+ * SQL 159 (aws/workflows/sql/159_homeowner_intro_requests_select_grant.sql) on PostgreSQL 16, through its production
  * tool, the owner the non-superuser checksops_admin login, with the read the contractor's Leads list
  * (src/components/networking/ContractorLeadsCard.tsx) sends through /prep/data/query, run as checksops:
  *
@@ -9,9 +9,9 @@
  *     exactly checksops SELECT; service_role's grant is unchanged; then the contractor reads their lead and another
  *     user reads none (aws_select_homeowner_intro_requests decides); writes are still refused at the grant layer; the
  *     file run again is a no-op and the tool refuses a re-apply as already in place;
- *   - the table missing: the inspect names it and the file fails closed (sql158_table_missing) with nothing changed.
+ *   - the table missing: the inspect names it and the file fails closed (sql159_table_missing) with nothing changed.
  *
- * Run: node --test aws/tests/sql158-homeowner-intro-requests-select-grant-pg.test.mjs (as root the PG helpers run the
+ * Run: node --test aws/tests/sql159-homeowner-intro-requests-select-grant-pg.test.mjs (as root the PG helpers run the
  * server as the ubuntu account).
  */
 import assert from 'node:assert/strict';
@@ -29,14 +29,14 @@ import {
 } from '../../scripts/deployment-guard/lib/release-sql-production-apply.mjs';
 import { releaseStateHash } from '../../scripts/deployment-guard/lib/release-sql-state.mjs';
 import { pgSkipReason, releaseFixture } from './helpers/release-sql-pg.mjs';
-import { CONTRACTOR, LEADS_READ, LEAD_ID, OTHER_USER, TABLE, homeownerIntroSchema } from './helpers/sql158-homeowner-intro-schema.mjs';
+import { CONTRACTOR, LEADS_READ, LEAD_ID, OTHER_USER, TABLE, homeownerIntroSchema } from './helpers/sql159-homeowner-intro-schema.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const KEY = 'sql158';
+const KEY = 'sql159';
 const STAGING_REF = 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/0000000000';
 const PIN = loadReleaseProductionPin(KEY, ROOT);
 const TEXT = fs.readFileSync(path.join(ROOT, PIN.filename), 'utf8');
-/** The production pre-state (also derived without a database by release-sql158-executor.test.mjs). */
+/** The production pre-state (also derived without a database by release-sql159-executor.test.mjs). */
 const NO_GRANT = releaseStateHash(KEY, { privileges: { [TABLE]: { exists: true, lines: [] } } });
 
 const authorized = (live) => Object.freeze({
@@ -49,7 +49,7 @@ const authorized = (live) => Object.freeze({
 function manifest(pin) {
   const live = pin.expected_live_definition_sha256;
   const fingerprint = { sql: live };
-  const workstream = 'prod-sql158-pg-test';
+  const workstream = 'prod-sql159-pg-test';
   return {
     workstream_id: workstream,
     branch: 'main',
@@ -71,11 +71,11 @@ function manifest(pin) {
     staging_acceptance: pin.staging_acceptance,
     approval: { approved: true, workstream_id: workstream },
     authorization_phrase: pin.authorization_phrase,
-    one_use_id: `sql158-prod-${process.pid}-${Math.random().toString(16).slice(2)}`,
+    one_use_id: `sql159-prod-${process.pid}-${Math.random().toString(16).slice(2)}`,
     build_timestamp: '2026-11-12T00:00:00.000Z',
   };
 }
-const consumedPath = () => path.join(os.tmpdir(), `sql158-pg-consumed-${process.pid}-${Math.random().toString(16).slice(2)}.json`);
+const consumedPath = () => path.join(os.tmpdir(), `sql159-pg-consumed-${process.pid}-${Math.random().toString(16).slice(2)}.json`);
 
 async function withPg(t, prefix, port, fn) {
   const reason = pgSkipReason();
@@ -135,12 +135,12 @@ const deniedOnTable = (result) => {
 const STATUS_UPDATE = `UPDATE ${TABLE} SET status = 'contacted', contacted_at = now() WHERE id = $1::uuid`;
 const INTRO_INSERT = `INSERT INTO ${TABLE} (contractor_user_id, homeowner_name, homeowner_email) VALUES ($1::uuid, 'X', 'x@example.invalid')`;
 
-test('PostgreSQL 16: production\'s grants: the Leads read is refused at the grant layer; SQL 158 through its production tool adds checksops SELECT only; then RLS decides the rows and writes stay refused', { timeout: 600000 }, async (t) => withPg(t, 'pg-sql158-prd-', 59258, async ({ admin, connectAs }) => {
+test('PostgreSQL 16: production\'s grants: the Leads read is refused at the grant layer; SQL 159 through its production tool adds checksops SELECT only; then RLS decides the rows and writes stay refused', { timeout: 600000 }, async (t) => withPg(t, 'pg-sql159-prd-', 59258, async ({ admin, connectAs }) => {
   const connect = () => connectAs('checksops_admin');
   assert.deepEqual(await tableAcl(admin), ['service_role SELECT']);
   const columnsBefore = await columnAcls(admin);
 
-  // Before SQL 158: the production log's error, for the contractor whose lead it is.
+  // Before SQL 159: the production log's error, for the contractor whose lead it is.
   deniedOnTable(await asApi(connectAs, CONTRACTOR, LEADS_READ));
 
   const s = (await inspectReleaseProduction(KEY, { connect, pin: PIN, root: ROOT })).details;
@@ -160,7 +160,7 @@ test('PostgreSQL 16: production\'s grants: the Leads read is refused at the gran
   assert.deepEqual(after, ['checksops SELECT', 'service_role SELECT']);
   assert.deepEqual(await columnAcls(admin), columnsBefore);
 
-  // After SQL 158: the contractor reads their lead; another user reads none (aws_select_homeowner_intro_requests).
+  // After SQL 159: the contractor reads their lead; another user reads none (aws_select_homeowner_intro_requests).
   const mine = await asApi(connectAs, CONTRACTOR, LEADS_READ);
   assert.equal(mine.error, undefined, String(mine.error));
   assert.deepEqual(mine.rows.map((r) => r.id), [LEAD_ID]);
@@ -187,7 +187,7 @@ test('PostgreSQL 16: production\'s grants: the Leads read is refused at the gran
   assert.equal(replay.code, CODES.UNRELATED_MUTATION);
 }));
 
-test('PostgreSQL 16: the table missing: the inspect names it, reads the absent state, and the file fails closed (sql158_table_missing)', { timeout: 600000 }, async (t) => withPg(t, 'pg-sql158-missing-', 59358, async ({ admin, connectAs }) => {
+test('PostgreSQL 16: the table missing: the inspect names it, reads the absent state, and the file fails closed (sql159_table_missing)', { timeout: 600000 }, async (t) => withPg(t, 'pg-sql159-missing-', 59358, async ({ admin, connectAs }) => {
   const connect = () => connectAs('checksops_admin');
   await admin.query(`DROP TABLE ${TABLE}`);
   const s = (await inspectReleaseProduction(KEY, { connect, pin: PIN, root: ROOT })).details;
@@ -197,7 +197,7 @@ test('PostgreSQL 16: the table missing: the inspect names it, reads the absent s
   const owner = await connectAs('checksops_admin');
   try {
     await owner.query('BEGIN');
-    await assert.rejects(owner.query(TEXT), (error) => error.code === '42P01' && /sql158_table_missing/.test(error.message));
+    await assert.rejects(owner.query(TEXT), (error) => error.code === '42P01' && /sql159_table_missing/.test(error.message));
     await owner.query('ROLLBACK');
   } finally {
     await owner.end();

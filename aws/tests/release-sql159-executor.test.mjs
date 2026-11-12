@@ -1,9 +1,9 @@
 /**
- * SQL 158 (aws/workflows/sql/158_homeowner_intro_requests_select_grant.sql) in the staging guarded executor, on the
+ * SQL 159 (aws/workflows/sql/159_homeowner_intro_requests_select_grant.sql) in the staging guarded executor, on the
  * release engine shared with SQL 90-156 (scripts/deployment-guard/lib/release-sql-state.mjs). Owner 2026-11-12, option
  * (a), "A now": checksops table SELECT on homeowner_intro_requests, so a contractor's Leads list loads (production
  * 2026-11-10: "permission denied for table homeowner_intro_requests").
- * release-sql90-97-executor.test.mjs runs what every release key shares (SQL 158 included); this file covers what is new:
+ * release-sql90-97-executor.test.mjs runs what every release key shares (SQL 159 included); this file covers what is new:
  *
  *   - the pin: pending, code-derived, selectable, packed, in step with the pending production pin; the pinned commit
  *     authored the bytes; no predecessor, supersedes nothing;
@@ -13,7 +13,7 @@
  *     absent state read back as derived; a pending pin and drift cannot apply; one apply through the executor reaches
  *     the intended fingerprint, service_role's grant unchanged, then is refused as already in place; a re-run of the
  *     bytes keeps the fingerprint; a table that already holds the grant (staging) reads as already applied.
- * The behavior is aws/tests/sql158-homeowner-intro-requests-select-grant-pg.test.mjs.
+ * The behavior is aws/tests/sql159-homeowner-intro-requests-select-grant-pg.test.mjs.
  */
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
@@ -26,7 +26,7 @@ import { fileURLToPath } from 'node:url';
 
 import { CODES } from '../../scripts/deployment-guard/lib/errors.mjs';
 import {
-  AUTHORIZED_SQL158_HOMEOWNER_INTRO_REQUESTS_SELECT_GRANT,
+  AUTHORIZED_SQL159_HOMEOWNER_INTRO_REQUESTS_SELECT_GRANT,
   AUTHORIZED_STAGING_SQL,
   RELEASE_2026_10_17_PENDING_SQL_PINS as PINS,
   authorizationFingerprint,
@@ -49,14 +49,14 @@ import { READ_LIVE_EXPECTED_SENTINEL } from '../../scripts/deployment-guard/lib/
 import { importGuardedSqlExecutor } from './helpers/import-guarded-sql-executor.mjs';
 import { assertStagingPinState, pendingPin } from './helpers/staging-sql-wave1.mjs';
 import { pgSkipReason, releaseFixture } from './helpers/release-sql-pg.mjs';
-import { TABLE, homeownerIntroSchema } from './helpers/sql158-homeowner-intro-schema.mjs';
+import { TABLE, homeownerIntroSchema } from './helpers/sql159-homeowner-intro-schema.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const NOW = '2026-11-12T12:00:00.000Z';
-const KEY = 'sql158';
+const KEY = 'sql159';
 const sha = (text) => createHash('sha256').update(text).digest('hex');
 const TEXT = fs.readFileSync(path.join(ROOT, PINS[KEY].filename), 'utf8');
-/** The table missing (the file refuses it: sql158_table_missing). */
+/** The table missing (the file refuses it: sql159_table_missing). */
 const ABSENT = releaseStateHash(KEY, {});
 /** The table present, checksops without SELECT on it: production's pre-state. */
 const NO_GRANT = releaseStateHash(KEY, { privileges: { [TABLE]: { exists: true, lines: [] } } });
@@ -100,20 +100,20 @@ function releaseEvent(overrides = {}) {
 const inspectEvent = (key = KEY) => releaseEvent({ key, action: 'inspect', expected_live_definition_sha256: READ_LIVE_EXPECTED_SENTINEL });
 
 function handlerFor(connect, { pins = {} } = {}) {
-  process.env.SQL_EXECUTOR_CONSUMED_PATH = path.join(os.tmpdir(), `sql158-exec-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}.json`);
+  process.env.SQL_EXECUTOR_CONSUMED_PATH = path.join(os.tmpdir(), `sql159-exec-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}.json`);
   process.env.EXECUTOR_IDENTITY = 'checksops-staging-guarded-sql-executor';
   return createHandler({ connect, now: () => Date.parse(NOW), releaseSqlFiles: FILES, releaseSqlPins: { ...PINS, ...pins } });
 }
 
-test('pin: SQL 158 pending, code-derived, selectable, packed, in step with the pending production pin; no predecessor', () => {
+test('pin: SQL 159 pending, code-derived, selectable, packed, in step with the pending production pin; no predecessor', () => {
   const pin = PINS[KEY];
   const spec = RELEASE_SQL_SPECS[KEY];
   const packed = Object.fromEntries(EXECUTOR_PACK_MEMBERS);
   const workflow = fs.readFileSync(path.join(ROOT, '.github/workflows/guarded-staging-sql-executor.yml'), 'utf8');
-  assert.equal(AUTHORIZED_SQL158_HOMEOWNER_INTRO_REQUESTS_SELECT_GRANT, pin);
-  assert.equal(pin.filename, 'aws/workflows/sql/158_homeowner_intro_requests_select_grant.sql');
-  assert.equal(pin.migration_id, '158_homeowner_intro_requests_select_grant');
-  assert.equal(spec.choice, 'sql158-homeowner-intro-requests-select-grant');
+  assert.equal(AUTHORIZED_SQL159_HOMEOWNER_INTRO_REQUESTS_SELECT_GRANT, pin);
+  assert.equal(pin.filename, 'aws/workflows/sql/159_homeowner_intro_requests_select_grant.sql');
+  assert.equal(pin.migration_id, '159_homeowner_intro_requests_select_grant');
+  assert.equal(spec.choice, 'sql159-homeowner-intro-requests-select-grant');
   assert.doesNotMatch(spec.choice, /production/);
   assert.equal(sha(TEXT), pin.source_sha256);
   // Pending until a reviewed pin change records a staging read-live.
@@ -126,7 +126,7 @@ test('pin: SQL 158 pending, code-derived, selectable, packed, in step with the p
   assert.notEqual(NO_GRANT, pin.intended_replacement_sha256);
   assert.ok(RELEASE_STAGING_SQL_KEYS.includes(KEY));
   // The runbook names the absent and intended states (derived here), the intended fingerprint and the source.
-  const runbook = fs.readFileSync(path.join(ROOT, 'ops/production-sql-158-apply.md'), 'utf8');
+  const runbook = fs.readFileSync(path.join(ROOT, 'ops/production-sql-159-apply.md'), 'utf8');
   for (const value of [NO_GRANT, ABSENT, pin.intended_replacement_sha256, pin.source_sha256]) assert.ok(runbook.includes(value), value);
   assert.ok(runbook.includes(`\`\`\`\n${releaseStateText(KEY, { privileges: { [TABLE]: { exists: true, lines: [] } } })}\n\`\`\``));
   assert.ok(runbook.includes(`\`\`\`\n${releaseStateText(KEY, releaseIntendedState(KEY, TEXT))}\n\`\`\``));
@@ -137,12 +137,12 @@ test('pin: SQL 158 pending, code-derived, selectable, packed, in step with the p
   assert.equal(MIGRATIONS[spec.choice], pin);
   assert.equal(packed[pin.filename], `sql/${path.basename(pin.filename)}`);
   assert.match(workflow, new RegExp(`- ${spec.choice}\\n`));
-  assert.match(workflow, /node --test aws\/tests\/release-sql158-executor\.test\.mjs/);
+  assert.match(workflow, /node --test aws\/tests\/release-sql159-executor\.test\.mjs/);
   assert.deepEqual([...pin.function_identities], []);
   assert.deepEqual(spec.functions, []);
   assert.deepEqual(spec.predecessors, []);
   for (const absent of ['supersedes', 'runs_before', 'refuse_after', 'production_only', 'production_noop']) assert.equal(spec[absent], undefined, absent);
-  // Nothing supersedes, refuses after or depends on SQL 158, and no other release migration pins grants on the table.
+  // Nothing supersedes, refuses after or depends on SQL 159, and no other release migration pins grants on the table.
   assert.deepEqual(RELEASE_SQL_KEYS.filter((key) => (RELEASE_SQL_SPECS[key].supersedes || []).includes(KEY)
     || (RELEASE_SQL_SPECS[key].refuse_after || []).some((m) => m.key === KEY)
     || (RELEASE_SQL_SPECS[key].predecessors || []).includes(KEY)), []);
@@ -188,8 +188,8 @@ test('reviewed file and spec: one table grant, checksops SELECT on homeowner_int
   for (const forbidden of [/^REVOKE /m, /^ALTER /m, /^CREATE /m, /^DROP /m, /GRANT\s+(INSERT|UPDATE|DELETE|TRUNCATE|ALL)/i, /\bPOLICY\b/, /ROW LEVEL SECURITY/i]) {
     assert.doesNotMatch(TEXT, forbidden, String(forbidden));
   }
-  assert.match(TEXT, /sql158_table_missing/);
-  assert.match(TEXT, /sql158_role_missing/);
+  assert.match(TEXT, /sql159_table_missing/);
+  assert.match(TEXT, /sql159_role_missing/);
   const spec = RELEASE_SQL_SPECS[KEY];
   assert.deepEqual(spec.prerequisites, [TABLE, 'role checksops']);
   assert.deepEqual(spec.table_privileges, [{ table: TABLE, grantees: ['checksops'], privileges: ['SELECT'], intended: ['checksops SELECT'] }]);
@@ -198,12 +198,12 @@ test('reviewed file and spec: one table grant, checksops SELECT on homeowner_int
     assert.equal(spec[kind], undefined, kind);
   }
   assert.deepEqual(releaseUnrelatedScope(KEY).acl_relations, [TABLE]);
-  assert.equal(releaseStateText(KEY, releaseIntendedState(KEY, TEXT)), ['release sql158 v1', `privileges ${TABLE} SELECT: checksops SELECT`].join('\n'));
-  assert.equal(releaseStateText(KEY, {}), ['release sql158 v1', `privileges ${TABLE}: absent`].join('\n'));
-  assert.equal(releaseStateText(KEY, { privileges: { [TABLE]: { exists: true, lines: [] } } }), ['release sql158 v1', `privileges ${TABLE} SELECT: `].join('\n'));
+  assert.equal(releaseStateText(KEY, releaseIntendedState(KEY, TEXT)), ['release sql159 v1', `privileges ${TABLE} SELECT: checksops SELECT`].join('\n'));
+  assert.equal(releaseStateText(KEY, {}), ['release sql159 v1', `privileges ${TABLE}: absent`].join('\n'));
+  assert.equal(releaseStateText(KEY, { privileges: { [TABLE]: { exists: true, lines: [] } } }), ['release sql159 v1', `privileges ${TABLE} SELECT: `].join('\n'));
 });
 
-test('PostgreSQL 16: SQL 158 through the executor: the absent state as derived, a pending pin and drift cannot apply, one apply on the intended fingerprint with the other grant unchanged, then already in place', { timeout: 600000 }, async (t) => {
+test('PostgreSQL 16: SQL 159 through the executor: the absent state as derived, a pending pin and drift cannot apply, one apply on the intended fingerprint with the other grant unchanged, then already in place', { timeout: 600000 }, async (t) => {
   const reason = pgSkipReason();
   if (reason) {
     t.skip(reason);
@@ -216,7 +216,7 @@ test('PostgreSQL 16: SQL 158 through the executor: the absent state as derived, 
     t.skip('pg module is not installed');
     return;
   }
-  const fx = await releaseFixture(pg, 'pg-sql158-exec-', 59158, { extra: [homeownerIntroSchema()] });
+  const fx = await releaseFixture(pg, 'pg-sql159-exec-', 59158, { extra: [homeownerIntroSchema()] });
   const { admin, connectAs } = fx;
   try {
     const seen = [];

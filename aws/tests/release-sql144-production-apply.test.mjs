@@ -255,7 +255,7 @@ test('pin: the release pin shape, applied and retired (owner approved 2026-11-06
   assert.doesNotMatch(JSON.stringify(tool), /[0-9a-f]{64}/);
   const rows = JSON.stringify(readJson('ops/deployment-guard/bypass-inventory.json'));
   assert.match(rows, /"path":"scripts\/deployment-guard\/sql144-tenant-incoming-transfers-production-apply\.mjs","classification":"GUARDED","capabilities":\["sql144-production-apply"\]/);
-  assert.match(rows, /sql142, sql143, sql144, sql145, sql146, sql147, sql148, sql150, sql152, sql153, sql154, sql155, sql156, sql158\)/);
+  assert.match(rows, /sql142, sql143, sql144, sql145, sql146, sql147, sql148, sql150, sql152, sql153, sql154, sql155, sql156, sql159\)/);
   const scripts = readJson('package.json').scripts;
   const workflow = fs.readFileSync(path.join(ROOT, '.github/workflows/deployment-guard.yml'), 'utf8');
   for (const name of ['aws/tests/release-sql144-executor.test.mjs', 'aws/tests/release-sql144-production-apply.test.mjs', 'aws/tests/sql144-tenant-incoming-transfers-pg.test.mjs']) {
@@ -320,7 +320,7 @@ test('order: no predecessor; the one new read function, its prerequisites and th
   assert.match(runbook, /APPLY_TENANT_INCOMING_TRANSFERS/);
   const oneShot = fs.readFileSync(path.join(ROOT, 'ops/production-sql-one-shot.md'), 'utf8');
   assert.match(oneShot, /\| `sql144` \|/);
-  assert.match(oneShot, /`sql142`, `sql143`, `sql144`, `sql145`, `sql146`, `sql147`, `sql148`, `sql150`, `sql152`, `sql153`, `sql154`, `sql155`, `sql156`, `sql158`\) \|/);
+  assert.match(oneShot, /`sql142`, `sql143`, `sql144`, `sql145`, `sql146`, `sql147`, `sql148`, `sql150`, `sql152`, `sql153`, `sql154`, `sql155`, `sql156`, `sql159`\) \|/);
   assert.match(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/README.md'), 'utf8'), /sql144-tenant-incoming-transfers-production-apply\.mjs --inspect/);
 });
 

@@ -1,12 +1,12 @@
 /**
- * public.homeowner_intro_requests for the SQL 158 PostgreSQL tests, added to the release fixture
+ * public.homeowner_intro_requests for the SQL 159 PostgreSQL tests, added to the release fixture
  * (helpers/release-sql-pg.mjs, `extra`): the columns the Leads list reads, row-level security on and
  * main's real SELECT policy (aws/rls/sql/12_final_select_policies.sql, aws_select_homeowner_intro_requests),
  * and production's grants as far as the 2026-11-10 log proves them: neither checksops nor a role it
  * inherits from (authenticated) holds SELECT on the table, so its read is refused with "permission
  * denied for table homeowner_intro_requests". Production's full ACL on the table has not been read;
  * the production inspect reads it. service_role holds a SELECT of its own here, the "other grant"
- * SQL 158 must leave as it was (other_table_privileges_unchanged).
+ * SQL 159 must leave as it was (other_table_privileges_unchanged).
  */
 import { policyBlock } from './stakeholder-policies-pg.mjs';
 
@@ -41,7 +41,7 @@ CREATE TABLE public.homeowner_intro_requests (
 );
 ALTER TABLE public.homeowner_intro_requests ENABLE ROW LEVEL SECURITY;
 ${policyBlock('12_final_select_policies.sql', 'aws_select_homeowner_intro_requests')}
-DO $sql158_fixture$ BEGIN CREATE ROLE service_role NOLOGIN; EXCEPTION WHEN duplicate_object THEN NULL; END $sql158_fixture$;
+DO $sql159_fixture$ BEGIN CREATE ROLE service_role NOLOGIN; EXCEPTION WHEN duplicate_object THEN NULL; END $sql159_fixture$;
 REVOKE ALL ON TABLE public.homeowner_intro_requests FROM checksops, authenticated, PUBLIC;
 GRANT SELECT ON TABLE public.homeowner_intro_requests TO service_role;
 INSERT INTO public.homeowner_intro_requests (id, contractor_user_id, homeowner_name, homeowner_email, status)

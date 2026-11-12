@@ -1,9 +1,9 @@
 /**
- * Production tool for SQL 158 (scripts/deployment-guard/sql158-homeowner-intro-requests-select-grant-production-apply.mjs on
+ * Production tool for SQL 159 (scripts/deployment-guard/sql159-homeowner-intro-requests-select-grant-production-apply.mjs on
  * lib/release-sql-production-apply.mjs and lib/release-sql-production-cli.mjs). Owner 2026-11-12, option (a), "A now":
  * checksops table SELECT on public.homeowner_intro_requests, so a contractor's Leads list loads in production.
- * release-sql90-97-production-apply.test.mjs runs every release key (SQL 158 included) through the shared refusals;
- * this file covers SQL 158's own:
+ * release-sql90-97-production-apply.test.mjs runs every release key (SQL 159 included) through the shared refusals;
+ * this file covers SQL 159's own:
  *
  *   - the pin has the release pin shape, is pending (execute false, no pre-state, no approval) and is in step with the
  *     staging pin, the one-shot, the bypass inventory and the test lists;
@@ -12,8 +12,8 @@
  *   - the pending pin refuses before connecting; an approved, accepted copy evaluates for the manifest built from it,
  *     and refuses with execute false, another live hash, another staging reference or a wrong phrase; the CLI spends no
  *     receipt.
- * The behavior on PostgreSQL 16 is aws/tests/sql158-homeowner-intro-requests-select-grant-pg.test.mjs; the executor path
- * is aws/tests/release-sql158-executor.test.mjs.
+ * The behavior on PostgreSQL 16 is aws/tests/sql159-homeowner-intro-requests-select-grant-pg.test.mjs; the executor path
+ * is aws/tests/release-sql159-executor.test.mjs.
  */
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -34,11 +34,11 @@ import {
   precheckReleaseProductionApply,
   readPinnedReleaseSql,
 } from '../../scripts/deployment-guard/lib/release-sql-production-apply.mjs';
-import { main } from '../../scripts/deployment-guard/sql158-homeowner-intro-requests-select-grant-production-apply.mjs';
+import { main } from '../../scripts/deployment-guard/sql159-homeowner-intro-requests-select-grant-production-apply.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const KEY = 'sql158';
-const SQL158_FILE = 'aws/workflows/sql/158_homeowner_intro_requests_select_grant.sql';
+const KEY = 'sql159';
+const SQL159_FILE = 'aws/workflows/sql/159_homeowner_intro_requests_select_grant.sql';
 const TABLE = 'public.homeowner_intro_requests';
 /** The production pre-state: the table present, checksops without SELECT on it (no line). */
 const NO_GRANT = releaseStateHash(KEY, { privileges: { [TABLE]: { exists: true, lines: [] } } });
@@ -49,7 +49,7 @@ const PRE = 'e'.repeat(64);
 const readJson = (rel) => JSON.parse(fs.readFileSync(path.join(ROOT, rel), 'utf8'));
 const keyPaths = (o, p = '') => Object.entries(o).flatMap(([k, v]) => (v && typeof v === 'object' && !Array.isArray(v) ? keyPaths(v, `${p}${k}.`) : [`${p}${k}`]));
 const neverConnect = async () => { throw new Error('should-not-connect'); };
-const consumedPath = () => path.join(os.tmpdir(), `sql158-prod-consumed-${process.pid}-${Math.random().toString(16).slice(2)}.json`);
+const consumedPath = () => path.join(os.tmpdir(), `sql159-prod-consumed-${process.pid}-${Math.random().toString(16).slice(2)}.json`);
 
 function manifest(pin) {
   const live = pin.expected_live_definition_sha256;
@@ -108,13 +108,13 @@ test('pin: the release pin shape, pending, in step with the staging pin, the one
     assert.ok(pin.production_inspect.note.includes(text), text);
   }
   assert.deepEqual([pin.staging_acceptance.ok, pin.staging_acceptance.reference], [false, null]);
-  assert.match(pin.staging_acceptance.basis, /read-live \(and the staging apply, or read-live already_applied true\) of SQL 158/);
-  assert.equal(pin.filename, SQL158_FILE);
+  assert.match(pin.staging_acceptance.basis, /read-live \(and the staging apply, or read-live already_applied true\) of SQL 159/);
+  assert.equal(pin.filename, SQL159_FILE);
   assert.equal(pin.source_sha256, staging.source_sha256);
   assert.equal(pin.staging_pin_commit, staging.commit);
   assert.equal(pin.intended_replacement_sha256, staging.intended_replacement_sha256);
   assert.equal(pin.intended_post_state.fingerprint, pin.intended_replacement_sha256);
-  assert.equal(pin.intended_replacement_sha256, releaseIntendedHash(KEY, fs.readFileSync(path.join(ROOT, SQL158_FILE), 'utf8')));
+  assert.equal(pin.intended_replacement_sha256, releaseIntendedHash(KEY, fs.readFileSync(path.join(ROOT, SQL159_FILE), 'utf8')));
   assert.deepEqual(pin.function_identities, RELEASE_SQL_SPECS[KEY].functions.map((fn) => fn.identity));
   assert.deepEqual(pin.function_identities, []);
   assert.deepEqual(pin.function_identities, [...staging.function_identities]);
@@ -124,10 +124,10 @@ test('pin: the release pin shape, pending, in step with the staging pin, the one
   for (const k of ['admin_login', 'rds_identifier', 'rds_host', 'admin_secret_arn']) assert.equal(pin[k], SQL96_PIN[k], k);
   assert.equal(pin.tooling.status, 'built');
   assert.equal(pin.tooling.production_tool, RELEASE_PRODUCTION[KEY].cli);
-  assert.equal(pin.tooling.production_tool, 'scripts/deployment-guard/sql158-homeowner-intro-requests-select-grant-production-apply.mjs');
+  assert.equal(pin.tooling.production_tool, 'scripts/deployment-guard/sql159-homeowner-intro-requests-select-grant-production-apply.mjs');
   assert.equal(pin.tooling.staging_workflow_choice, RELEASE_SQL_SPECS[KEY].choice);
   assert.equal(pin.tooling.one_shot_migration, KEY);
-  assert.equal(pin.tooling.runbook, 'ops/production-sql-158-apply.md');
+  assert.equal(pin.tooling.runbook, 'ops/production-sql-159-apply.md');
   for (const file of [pin.tooling.production_tool, pin.tooling.runbook, pin.tooling.fingerprint_engine, pin.tooling.production_lib, ...pin.tooling.tests]) {
     assert.ok(fs.existsSync(path.join(ROOT, file)), file);
   }
@@ -138,16 +138,16 @@ test('pin: the release pin shape, pending, in step with the staging pin, the one
   assert.equal(tool.script, RELEASE_PRODUCTION[KEY].cli);
   assert.deepEqual([...tool.args], []);
   assert.equal(tool.pin_rel, RELEASE_PRODUCTION[KEY].pin_rel);
-  assert.equal(tool.allowed_key, 'sql158_production_apply_allowed');
+  assert.equal(tool.allowed_key, 'sql159_production_apply_allowed');
   assert.equal(tool.runs_before, undefined);
   assert.equal(tool.inspect_requires, undefined);
   assert.doesNotMatch(JSON.stringify(tool), /[0-9a-f]{64}/);
   const rows = JSON.stringify(readJson('ops/deployment-guard/bypass-inventory.json'));
-  assert.match(rows, /"path":"scripts\/deployment-guard\/sql158-homeowner-intro-requests-select-grant-production-apply\.mjs","classification":"GUARDED","capabilities":\["sql158-production-apply"\]/);
-  assert.match(rows, /sql155, sql156, sql158\)/);
+  assert.match(rows, /"path":"scripts\/deployment-guard\/sql159-homeowner-intro-requests-select-grant-production-apply\.mjs","classification":"GUARDED","capabilities":\["sql159-production-apply"\]/);
+  assert.match(rows, /sql155, sql156, sql159\)/);
   const scripts = readJson('package.json').scripts;
   const workflow = fs.readFileSync(path.join(ROOT, '.github/workflows/deployment-guard.yml'), 'utf8');
-  for (const name of ['aws/tests/release-sql158-executor.test.mjs', 'aws/tests/release-sql158-production-apply.test.mjs', 'aws/tests/sql158-homeowner-intro-requests-select-grant-pg.test.mjs']) {
+  for (const name of ['aws/tests/release-sql159-executor.test.mjs', 'aws/tests/release-sql159-production-apply.test.mjs', 'aws/tests/sql159-homeowner-intro-requests-select-grant-pg.test.mjs']) {
     assert.ok(scripts['test:deployment-guard'].includes(name), name);
     assert.ok(workflow.includes(name), name);
   }
@@ -164,7 +164,7 @@ test('order: no predecessor; one table grant (checksops SELECT) and nothing else
   assert.deepEqual(spec.table_privileges, [{ table: TABLE, grantees: ['checksops'], privileges: ['SELECT'], intended: ['checksops SELECT'] }]);
   assert.deepEqual(spec.altered_relations, [TABLE]);
   for (const absent of ['tables', 'views', 'policies', 'column_acl', 'dropped_functions', 'acl_functions', 'indexes', 'added_columns', 'constraints', 'triggers', 'definer_writes']) assert.equal(spec[absent], undefined, absent);
-  assert.match(COMMITTED.order_note, /^No predecessor\. SQL 158 grants checksops table SELECT on public\.homeowner_intro_requests and nothing else/);
+  assert.match(COMMITTED.order_note, /^No predecessor\. SQL 159 grants checksops table SELECT on public\.homeowner_intro_requests and nothing else/);
   for (const text of ['"A now"', 'permission denied for table homeowner_intro_requests', 'other_table_privileges_unchanged', 'server_side_api',
     'No API, Lambda or SPA change is part of this pin', NO_GRANT, releaseStateHash(KEY, {})]) {
     assert.ok(COMMITTED.order_note.includes(text), text);
@@ -172,11 +172,11 @@ test('order: no predecessor; one table grant (checksops SELECT) and nothing else
   // The intended fingerprint is checksops's SELECT line and differs from both stops.
   assert.notEqual(COMMITTED.intended_replacement_sha256, NO_GRANT);
   assert.notEqual(COMMITTED.intended_replacement_sha256, releaseStateHash(KEY, {}));
-  // No API member waits on SQL 158.
+  // No API member waits on SQL 159.
   const plan = readJson('ops/deployment-guard/production-api-overlay-plan.json');
-  assert.equal(plan.sql_prerequisites?.[SQL158_FILE], undefined);
+  assert.equal(plan.sql_prerequisites?.[SQL159_FILE], undefined);
   // The file: one prerequisite DO block and one GRANT; nothing else.
-  const text = fs.readFileSync(path.join(ROOT, SQL158_FILE), 'utf8').replace(/--[^\n]*/g, '');
+  const text = fs.readFileSync(path.join(ROOT, SQL159_FILE), 'utf8').replace(/--[^\n]*/g, '');
   const outside = text.replace(/\$([A-Za-z0-9_]*)\$[\s\S]*?\$\1\$/g, '$$body$$');
   assert.equal(outside.replace(/\s+/g, ' ').trim(), `DO $body$; GRANT SELECT ON TABLE ${TABLE} TO checksops;`);
   const runbook = fs.readFileSync(path.join(ROOT, COMMITTED.tooling.runbook), 'utf8');
@@ -185,9 +185,9 @@ test('order: no predecessor; one table grant (checksops SELECT) and nothing else
   }
   assert.match(runbook, /\*\*Status:\*\* tooling built; staging and production pins pending \(`execute: false`\)\. Nothing applied or read\./);
   const oneShot = fs.readFileSync(path.join(ROOT, 'ops/production-sql-one-shot.md'), 'utf8');
-  assert.match(oneShot, /\| `sql158` \|/);
-  assert.match(oneShot, /`sql155`, `sql156`, `sql158`\) \|/);
-  assert.match(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/README.md'), 'utf8'), /sql158-homeowner-intro-requests-select-grant-production-apply\.mjs --inspect/);
+  assert.match(oneShot, /\| `sql159` \|/);
+  assert.match(oneShot, /`sql155`, `sql156`, `sql159`\) \|/);
+  assert.match(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/README.md'), 'utf8'), /sql159-homeowner-intro-requests-select-grant-production-apply\.mjs --inspect/);
 });
 
 test('the pending pin refuses before connecting; an approved copy allows only its own manifest; execute false, other hashes and phrases refuse', async () => {
@@ -203,13 +203,13 @@ test('the pending pin refuses before connecting; an approved copy allows only it
   const pin = approved();
   const allowed = await evaluateReleaseProductionApply(KEY, manifest(pin), { root: ROOT, pin });
   assert.equal(allowed.ok, true, JSON.stringify(allowed));
-  assert.equal(allowed.details.sql158_production_apply_allowed, true);
+  assert.equal(allowed.details.sql159_production_apply_allowed, true);
   assert.equal((await precheckReleaseProductionApply(KEY, manifest(pin), { root: ROOT, pin, connect: neverConnect, consumedPath: consumedPath() })).ok, true);
   const otherLive = { ...manifest(pin), expected_live_definition_sha256: 'f'.repeat(64), live_definition_sha256: 'f'.repeat(64) };
   assert.equal((await evaluateReleaseProductionApply(KEY, otherLive, { root: ROOT, pin })).code, CODES.SQL_COLLISION);
   const otherStaging = { ...manifest(pin), staging_acceptance: { ok: true, reference: 'https://example.invalid/x' } };
   assert.equal((await evaluateReleaseProductionApply(KEY, otherStaging, { root: ROOT, pin })).code, CODES.PRODUCTION_APPROVAL_REQUIRED);
-  // SQL 156's phrase does not authorize SQL 158.
+  // SQL 156's phrase does not authorize SQL 159.
   assert.equal((await precheckReleaseProductionApply(KEY, { ...manifest(pin), authorization_phrase: 'SHARE_CHECK_LIBRARY_WITH_MORTGAGE_DESK' }, { root: ROOT, pin, consumedPath: consumedPath() })).code, CODES.PRODUCTION_APPROVAL_REQUIRED);
   const off = approved({ execute: false });
   const ctx = { root: ROOT, pin: off, connect: neverConnect, consumedPath: consumedPath() };
@@ -220,7 +220,7 @@ test('the pending pin refuses before connecting; an approved copy allows only it
 
   // CLI: --apply with the committed (pending) pin, read from disk, refuses without connecting
   // or spending a receipt; credential flags are refused.
-  const file = path.join(os.tmpdir(), `sql158-cli-${process.pid}.json`);
+  const file = path.join(os.tmpdir(), `sql159-cli-${process.pid}.json`);
   fs.writeFileSync(file, JSON.stringify(manifest(pin)));
   const writes = [];
   let spent = 0;
