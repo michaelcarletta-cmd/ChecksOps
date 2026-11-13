@@ -1,8 +1,8 @@
 {
   "id": "sql163-mortgage-desk-check-timeline-homeowner-link-production-apply",
   "migration": "sql163",
-  "authorization": "pending",
-  "execute": false,
+  "authorization": "Owner approved 2026-11-13 (the owner's words for SQL 163: \"Start the desk fixes\", \"Merge 1852\", \"Yes but make sure the check images have void on it.\", \"They can send the link whenever\", \"Start the SQL 163 staging refresh and read-live\", \"Do the SQL 163 staging pin and apply\", \"Run the SQL 163 production inspect\", \"Open the SQL 163 production pin PR\"; the change itself is reviewed and merged under those words): production apply of SQL 163 after the staging acceptance below, from the recorded production pre-state (23d41c10 -> ef536373); each apply still needs the owner's run-time approval (the owner's words for that run).",
+  "execute": true,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -15,7 +15,7 @@
     "public.aws_mortgage_desk_homeowner_timeline(uuid)",
     "public.aws_mortgage_desk_homeowner_link(uuid, text)"
   ],
-  "expected_live_definition_sha256": null,
+  "expected_live_definition_sha256": "23d41c1086f3f15412a5d374e056eaaf1bef7f428d81b0ffbdda666a5250de87",
   "intended_replacement_sha256": "ef536373458b30dc16679e921af2a071e63a4cb755854612f2ff90eb79184c85",
   "authorization_phrase": "SHOW_MORTGAGE_DESK_AGENTS_CHECK_TIMELINE_AND_HOMEOWNER_LINK",
   "predecessors": [],
@@ -43,24 +43,24 @@
     "note": "Guarded tooling for SQL 163: sql163-mortgage-desk-check-timeline-homeowner-link-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql163-mortgage-desk-check-timeline-homeowner-link); production-sql-one-shot.mjs --migration sql163. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): the three functions with their attributes, bodies, results and ACLs. The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
   },
   "production_inspect": {
-    "status": "pending",
-    "date": null,
-    "ssm_command_id": null,
-    "source_commit": null,
+    "status": "recorded",
+    "date": "2026-11-13",
+    "ssm_command_id": "51819aad-a6bf-487f-99e4-5de65b6db29c",
+    "source_commit": "8d6488e0fef93d3ff3697a6423603d546e7faa08",
     "read_only": true,
     "connected_as": "checksops_admin",
-    "live_definition_sha256": null,
-    "apply_preconditions_met": null,
-    "precondition_failures": null,
-    "note": "Pending: no release-engine production inspect has been run for SQL 163 yet. Expected: prerequisites_missing [], the three functions absent, definer_writes ok on check_intake_items, claims, homeowner_ledger_events, homeowner_ledger_tokens and mortgage_handling_requests, already_applied false. Expected release-engine fingerprint of that pre-state under sql163: 23d41c1086f3f15412a5d374e056eaaf1bef7f428d81b0ffbdda666a5250de87 (releaseStateHash('sql163', {})). Record the one-shot --phase inspect's date, SSM command id, source commit, live_definition_sha256, prerequisites_missing, release_sql_inspect, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. Stop if the pre-state differs, prerequisites_missing is not [] or precondition_failures is not []: that needs its own reviewed change."
+    "live_definition_sha256": "23d41c1086f3f15412a5d374e056eaaf1bef7f428d81b0ffbdda666a5250de87",
+    "apply_preconditions_met": false,
+    "precondition_failures": [],
+    "note": "Recorded from the read-only production inspect of 2026-11-13 (SSM command 51819aad-a6bf-487f-99e4-5de65b6db29c, status Success, ResponseCode 0, 11:26:06Z to 11:26:17Z, node scripts/deployment-guard/sql163-mortgage-desk-check-timeline-homeowner-link-production-apply.mjs --inspect on the SQL53 runner i-0c35557c4e5385406, started from stopped at 11:25:50Z and confirmed stopped again at 11:26:51Z, under the owner's words \"Run the SQL 163 production inspect\", from main 8d6488e0f (tarball source-8d6488e0fef93d3ff3697a6423603d546e7faa08.tar.gz sha256 04e4ba7fef49890a355e396b32d605efe4d94645c60a7a9fb4790b3a4931cb5f, transfer run 43416792640; SOURCE_COMMIT 8d6488e0fef93d3ff3697a6423603d546e7faa08; migration source sha256 on the runner 7075128ade468e88881dee2527280ef36e3e54b357b0595c3d00077428bb73ad == source_sha256)): ok true, read_only true, source_ok true, current_user checksops_admin, pin_execute false, missing_dependencies [], prerequisites_missing [], predecessors {} (none), successors_applied []; aws_mortgage_desk_request_check(uuid), aws_mortgage_desk_homeowner_timeline(uuid) and aws_mortgage_desk_homeowner_link(uuid, text) absent; definer_writes check_intake_items, claims, homeowner_ledger_events, homeowner_ledger_tokens and mortgage_handling_requests ok true. live_definition_sha256 23d41c1086f3f15412a5d374e056eaaf1bef7f428d81b0ffbdda666a5250de87 (the derived pre-state releaseStateHash('sql163', {})), already_applied false, live_matches_expected false (the pin had no pre-state yet), precondition_failures [], apply_preconditions_met false (the pin was execute false). Copied into expected_live_definition_sha256 by this change. A fresh --inspect immediately before apply (the one-shot's inspect step) must still report this live_definition_sha256 and precondition_failures []; if not, stop. If already_applied is true, or precondition_failures is not [], stop. Earlier: Pending: no release-engine production inspect has been run for SQL 163 yet. Expected: prerequisites_missing [], the three functions absent, definer_writes ok on check_intake_items, claims, homeowner_ledger_events, homeowner_ledger_tokens and mortgage_handling_requests, already_applied false. Expected release-engine fingerprint of that pre-state under sql163: 23d41c1086f3f15412a5d374e056eaaf1bef7f428d81b0ffbdda666a5250de87 (releaseStateHash('sql163', {})). Record the one-shot --phase inspect's date, SSM command id, source commit, live_definition_sha256, prerequisites_missing, release_sql_inspect, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. Stop if the pre-state differs, prerequisites_missing is not [] or precondition_failures is not []: that needs its own reviewed change."
   },
   "intended_post_state": {
     "fingerprint": "ef536373458b30dc16679e921af2a071e63a4cb755854612f2ff90eb79184c85",
     "note": "public.aws_mortgage_desk_request_check(uuid) (STABLE, RETURNS TABLE(check_id uuid, claim_id uuid, amount numeric, check_number text, carrier_name text, payee_line text, payee_address text, property_address text, issue_date text, detected_claim_number text, front_image_path text, back_image_path text, status text, check_stage text, funds_type text)), public.aws_mortgage_desk_homeowner_timeline(uuid) (STABLE, RETURNS TABLE(event_id uuid, event_type text, occurred_at timestamp with time zone, actor_label text, note text, amount numeric, from_desk boolean)) and public.aws_mortgage_desk_homeowner_link(uuid, text) (VOLATILE, RETURNS TABLE(token text, homeowner_email text, homeowner_name text, tenant_id uuid, reused boolean)), plpgsql, owned by checksops_admin, SECURITY DEFINER, SET search_path = public, pg_temp, EXECUTE checksops and the owner, nothing for PUBLIC, anon, authenticated or service_role. No other function, table, column, policy, grant or trigger change; no row written by the apply. The fingerprint is releaseIntendedHash('sql163', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): ef536373458b30dc16679e921af2a071e63a4cb755854612f2ff90eb79184c85."
   },
   "staging_acceptance": {
-    "ok": false,
-    "reference": null,
-    "basis": "Pending: record the guarded staging SQL executor read-live and the staging apply of SQL 163 (choice sql163-mortgage-desk-check-timeline-homeowner-link) here in the reviewed change that sets execute true. The behavior is covered on PostgreSQL 16 by aws/tests/sql163-mortgage-desk-check-timeline-homeowner-link-pg.test.mjs. Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+    "ok": true,
+    "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43361518188",
+    "basis": "Guarded staging SQL executor apply of sql163-mortgage-desk-check-timeline-homeowner-link, run 43361518188 (2026-11-13, main 8d6488e0f, executor deploy run 43360808661 (executor CodeSha256 Xms0fJZo... -> ND9sboqsPzpjbC8HOfCIHzqzZOrQTNbgbRt05ixbB6w=), through the SQL 163 staging pin, wave 54 (#1856), on the owner's words \"Do the SQL 163 staging pin and apply\"): read-live before it, run 43361164060, 23d41c1086f3f15412a5d374e056eaaf1bef7f428d81b0ffbdda666a5250de87 (the three functions absent), already_applied false, precondition_failures []; the apply reported after_hash ef536373458b30dc16679e921af2a071e63a4cb755854612f2ff90eb79184c85 == intended_replacement_sha256 and result applied (applied against the pinned expected_live_definition_sha256 23d41c1086f3f15412a5d374e056eaaf1bef7f428d81b0ffbdda666a5250de87); read-live after it, run 43361792245, already_applied true, live ef536373458b30dc16679e921af2a071e63a4cb755854612f2ff90eb79184c85, precondition_failures []. Production's pre-state is the same one staging had before its apply (23d41c1086f3f15412a5d374e056eaaf1bef7f428d81b0ffbdda666a5250de87). The behavior is covered on PostgreSQL 16 by aws/tests/sql163-mortgage-desk-check-timeline-homeowner-link-pg.test.mjs and aws/tests/release-sql163-executor.test.mjs."
   }
 }

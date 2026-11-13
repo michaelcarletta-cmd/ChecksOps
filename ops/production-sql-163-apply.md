@@ -44,7 +44,18 @@ or SPA change is part of this pin: `aws/functions/api/mortgage-desk-esign.mjs` (
 `homeowner_timeline`, `send_tracking_link`) and the Desk page ship afterwards through their own guarded paths; the API
 tolerates the functions being absent (the workspace returns no check or timeline, the link answers 503).
 
-**Status:** staging pin execute-authorized (wave 54); not applied anywhere. The production pin is pending.
+**Status:** applied to staging (wave 54, 2026-11-13); production pin execute-authorized (owner-approved pin change of 2026-11-13,
+"Open the SQL 163 production pin PR"); not applied to production. The production apply still needs the owner's words for that run.
+
+**Staging apply (2026-11-13).** After the staging pin (#1856) and executor deploy run 43360808661 (main `8d6488e0f`, executor
+CodeSha256 `Xms0fJZo…` → `ND9sboqs…`): read-live run 43361164060 `23d41c10…` (not applied, `precondition_failures` `[]`), apply run
+43361518188 under the owner's words "Do the SQL 163 staging pin and apply" (after `ef536373…`, result `applied`), read-live run
+43361792245 `already_applied` true, `ef536373…`.
+
+**Production inspect (2026-11-13).** Read-only, under the owner's words "Run the SQL 163 production inspect": transfer run
+43416792640 staged main `8d6488e0f` (tarball `04e4ba7f…`, the SQL 163 file on the runner `7075128a…` == the pin), SSM
+`51819aad-a6bf-487f-99e4-5de65b6db29c` on the runner (started 11:25:50Z, stopped 11:26:51Z): live `23d41c10…` (the three functions
+absent), `already_applied` false, `precondition_failures` `[]`, `prerequisites_missing` `[]`, `definer_writes` ok on all five relations.
 
 **Staging read-live (2026-11-13).** Run 43355976887 (main `79ae218c6`, after executor inspect run 43355315256 and executor deploy
 run 43355657339 (executor CodeSha256 `m0Av9v61…` -> `Xms0fJZo…`)), under the owner's words "Start the SQL 163 staging refresh
