@@ -194,7 +194,7 @@ test('order: predecessor SQL 141 (read only); the lookup with its ACL, payroll_r
   for (const value of [COMMITTED.intended_replacement_sha256, COMMITTED.source_sha256, DERIVED_PRE, 'ENABLE_VENDOR_PAYEE_LOOKUP_AND_PAYROLL_VENDOR']) {
     assert.ok(runbook.includes(value), value);
   }
-  assert.match(runbook, /\*\*Status:\*\* tooling built; staging and production pins pending \(`execute: false`\)\. Nothing applied or read\./);
+  assert.match(runbook, /\*\*Status:\*\* staging pin execute-authorized \(wave 57\); not applied anywhere\. The production pin is pending\./);
   const oneShot = fs.readFileSync(path.join(ROOT, 'ops/production-sql-one-shot.md'), 'utf8');
   assert.match(oneShot, /\| `sql165` \|/);
   assert.match(oneShot, /`sql163`, `sql164`, `sql165`\) \|/);

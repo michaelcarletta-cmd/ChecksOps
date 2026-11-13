@@ -45,7 +45,15 @@ checked before the apply by `altered_columns_before_or_intended` (it must exist 
 NOT NULL as before or as after the file), and skipped by the unrelated-catalog snapshot like an added column. No other
 migration's fingerprint changes.
 
-**Status:** tooling built; staging and production pins pending (`execute: false`). Nothing applied or read.
+**Status:** staging pin execute-authorized (wave 57); not applied anywhere. The production pin is pending.
+
+**Staging read-live (2026-11-13).** Run 43506600170 (main `31c0c874b`, after executor inspect run 43505703831 and executor deploy
+run 43506159674 (executor CodeSha256 `K6NRf+LR…` -> `cE42JmZv…`)), under the owner's words "Start the SQL 165 staging refresh
+and read-live": `already_applied` false, `precondition_failures` `[]`, `prerequisites_missing` `[]`; the function, the column, its
+foreign key, the check and the index absent, `stakeholder_account_id` not yet altered. Live
+`3a6d086e37c04740397c0b6a99d558ed0a5e907c296f8a99a71ae323acdca248`, equal to the derived pre-state; intended `23c689b9…`. Recorded in the staging pin
+(`expected_live_definition_sha256`, `execute: true`, wave 57) on the owner's words "Do the SQL 165 staging pin and apply". The
+staging apply is a separate run after this pin is merged and the executor is redeployed carrying it.
 
 Production authorization phrase (pin `authorization_phrase`): `ENABLE_VENDOR_PAYEE_LOOKUP_AND_PAYROLL_VENDOR`.
 

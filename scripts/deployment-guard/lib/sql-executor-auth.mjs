@@ -3802,8 +3802,8 @@ export const AUTHORIZED_SQL164_WALLET_WITHDRAWAL_LEG_AND_LIMITS = Object.freeze(
 // a payroll payment; "New migration" and "Record in payroll"). Creates public.aws_vendor_payees_for_tenant(uuid), a
 // member-checked SECURITY DEFINER read of the tenant's live SQL 141 payee links (vendor name, is_vendor,
 // subscription_status), and lets public.payroll_runs name a vendor (vendor_tenant_id, stakeholder_account_id nullable,
-// exactly one payee). Predecessor SQL 141 (release-sql-specs.mjs). Pending until a reviewed pin change records a staging
-// read-live (ops/production-sql-165-apply.md).
+// exactly one payee). Predecessor SQL 141 (release-sql-specs.mjs). Staging apply authorized (wave 57) from staging
+// read-live run 43506600170: the pre-state equals the derived one (ops/production-sql-165-apply.md).
 export const AUTHORIZED_SQL165_VENDOR_PAYEE_LOOKUP_AND_PAYROLL_VENDOR = Object.freeze({
   key: 'sql165',
   filename: 'aws/workflows/sql/165_vendor_payee_lookup_and_payroll_vendor.sql',
@@ -3811,9 +3811,12 @@ export const AUTHORIZED_SQL165_VENDOR_PAYEE_LOOKUP_AND_PAYROLL_VENDOR = Object.f
   // The commit that last authored the file bytes.
   commit: 'ffbff4fa9e5819564485bee96a6a2b7726b3557d',
   source_sha256: '18dfb11105daeb92d202fb8d1f3c0aba16e087c0933ed3352321e5e62e29bd84',
-  authorization: 'pending',
-  execute: false,
-  expected_live_definition_sha256: null,
+  authorization: 'Owner approved 2026-11-13: staging apply (wave 57) from staging read-live run 43506600170',
+  execute: true,
+  // Staging read-live run 43506600170 (main 31c0c874b, executor deploy run 43506159674): already_applied false,
+  // precondition_failures [], prerequisites_missing []. Equal to the derived pre-state (the function, column, foreign key,
+  // check and index absent; stakeholder_account_id uuid NOT NULL, no default).
+  expected_live_definition_sha256: '3a6d086e37c04740397c0b6a99d558ed0a5e907c296f8a99a71ae323acdca248',
   // Code-derived: releaseIntendedHash('sql165', file bytes) (release-sql-state.mjs); re-derived by the tests.
   intended_replacement_sha256: '23c689b9ac0dad2ee1760214a37038a86142041c104867da8381cffb3d8202fa',
   function_identities: Object.freeze([
