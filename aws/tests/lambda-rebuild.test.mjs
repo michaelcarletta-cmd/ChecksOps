@@ -1306,13 +1306,30 @@ test('the production history keeps the sixth section (inspect 43425291017, apply
   assert.equal(extra.code, 'SOURCE_RECONCILIATION_REQUIRED');
 });
 
-test('the production plan section accepts inspect run 43461114623: the transfer to bank API rebuild (4 changed, 3 added, 0 removed), the candidate staging applied and verified', () => {
+test('the production plan section accepts inspect run 43461114623 and records apply 43464046767: the transfer to bank API rebuild (4 changed, 3 added, 0 removed), the candidate staging applied and verified', () => {
   const raw = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'ops/deployment-guard/lambda-rebuild-plan.json'), 'utf8'));
   const production = raw.environments.production;
   const sixth = production.history[5];
   const staging = raw.environments.staging;
-  assert.equal(production.status, 'accepted');
-  assert.equal(production.applied, undefined);
+  // Applied 2026-11-13 (run 43464046767) on the owner's phrase, from the staging reference the section names.
+  assert.equal(production.status, 'applied');
+  assert.equal(production.applied.run_id, '43464046767');
+  assert.equal(production.applied.run_url, 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43464046767');
+  assert.equal(production.applied.main_commit, '4bcdd8db2e4279bfd298aaad27c632d0dfea7579');
+  assert.equal(production.applied.approval_phrase, 'DEPLOY FULL API PACKAGE TO PRODUCTION');
+  assert.equal(production.applied.staging_acceptance, production.inspect.staging_acceptance);
+  assert.equal(production.applied.code_sha256_before, production.inspect.live_code_sha256);
+  assert.equal(production.applied.revision_id_before, production.inspect.live_revision_id);
+  assert.equal(production.applied.candidate_zip_sha256, production.inspect.candidate_zip_sha256);
+  assert.equal(production.applied.code_sha256_after, 'DvQOhuCiv/Li3EeVjr+WsErARsPA4S95lgBMgwsGEhg=');
+  assert.equal(production.applied.revision_id_after, '17f6bd67-f508-421f-abb7-7c5c3441741e');
+  assert.equal(production.applied.state, 'VERIFIED');
+  assert.deepEqual(production.applied.smoke, ['/health', '/db-health']);
+  // Production now runs the package staging runs since its seventh rebuild.
+  assert.equal(production.applied.code_sha256_after, staging.applied.code_sha256_after);
+  for (const evidence of ['132018292125', '43463908901', '48c6785c-718e-4217-9655-232d52860e15', '6789 members', 'LastUpdateStatus Successful', 'no person exercised Transfer to bank on staging', 'Not verified by this record']) {
+    assert.ok(production.applied.notes.includes(evidence), evidence);
+  }
   assert.equal(production.inspect.run_id, '43461114623');
   assert.equal(production.inspect.run_url, 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43461114623');
   assert.equal(production.inspect.main_commit, '338323b0b1e010a13cfb296ef4e8922cb7c2e5cd');
@@ -1681,13 +1698,13 @@ test('transfer to bank (2026-11-13, planning only): its seven API files wait for
       assert.equal(section.added[name], undefined, `${environment} ${name}`);
     }
   }
-  // The seventh sections (staging inspect 43458069245, applied 43460848634; production inspect 43461114623, accepted,
-  // not applied) list exactly these seven, from the manifest's live bytes to main's: four changed, three added.
+  // The seventh sections (staging inspect 43458069245, applied 43460848634; production inspect 43461114623, applied
+  // 43464046767) list exactly these seven, from the manifest's live bytes to main's: four changed, three added.
   const staging = raw.environments.staging;
   const production = raw.environments.production;
   assert.equal(staging.status, 'applied');
-  assert.equal(production.status, 'accepted');
-  assert.equal(production.applied, undefined);
+  assert.equal(production.status, 'applied');
+  assert.equal(production.applied.run_id, '43464046767');
   for (const [environment, section] of [['staging', staging], ['production', production]]) {
     assert.deepEqual(Object.keys(section.members).sort(), [...REPLACES].sort(), environment);
     assert.deepEqual(Object.keys(section.added).sort(), [...ADDS].sort(), environment);
