@@ -1,0 +1,15 @@
+{
+  "workstream_id": "desk-check-timeline-link-applied",
+  "authorization": "Record only (2026-11-13): the bytes below are live. Nothing is planned or authorized by this manifest; any later change to these members needs its own manifest, staging acceptance and owner approval.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Mortgage Desk agent check, contact log and homeowner link (#1865; owner 2026-11-13 \"Start the desk API and website PRs\", \"Yes but make sure the check images have void on it\", \"They can send the link whenever\") applied. Owner 2026-11-13: \"Merge 1865 when green then DEPLOY mortgage-desk-esign.mjs TO PRODUCTION\". Applied 2026-11-13 from main f06f59f7ef80dd6e361d343e4873f5678af1a0c4 (#1865 merge). mortgage-desk-esign.mjs REPLACE aacf940d -> d38218a4: staging inspect run 43432378966 (aacf940d live), staging overlay apply run 43432513146 (package EaCUx/sRQV1qNZC8g11cpzLIuWVea/cfZiTWZ3sdPvQ= -> bphhLdCS8TSGIfwC4lGAbFkMFF9GXInjD3Cx9TDKneY=, the member aacf940d -> d38218a4); production inspect run 43432362704 (READY, aacf940d live, RevisionId 429a3086-859f-4da3-a486-ef589d1ebadf, CodeSha256 EaCUx/sRQV1qNZC8g11cpzLIuWVea/cfZiTWZ3sdPvQ=); production apply run 43432666872 (job 131909811211; aacf940d -> d38218a4) on the owner's \"DEPLOY mortgage-desk-esign.mjs TO PRODUCTION\" with staging acceptance https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43432513146, expected live aacf940d, errors [], writer RevisionId 654bf538-6605-4ad0-89e8-3b3b6945dfab (lastUpdateStatus InProgress), VERIFIED, after RevisionId 8e6bb1be-7e8b-4234-a7ef-458e2acd0371, CodeSha256 bphhLdCS8TSGIfwC4lGAbFkMFF9GXInjD3Cx9TDKneY=; /health and /db-health 200 after the apply; an independent read of the function configuration after the apply (GetFunctionConfiguration) returned RevisionId 8e6bb1be-7e8b-4234-a7ef-458e2acd0371, CodeSha256 bphhLdCS8TSGIfwC4lGAbFkMFF9GXInjD3Cx9TDKneY=, LastModified 2026-11-13T13:19:57Z, LastUpdateStatus Successful, and https://checksops.com/prep/health returned status ok. The hold, SQL 163, is live in staging (run 43361518188) and production (one-shot SSM 7ac690d7-02c5-4d2b-8615-4fb60ae9fea8, record #1861). index.mjs is untouched. The applied bytes add only the existing modules email-templates.mjs and homeowner.mjs, which the live function already carried. Not verified by this record: a mortgage agent viewing the check, the contact log or sending the homeowner link in production. The record keeps the applied bytes as live_sha256 and accepted_sha256 and chains the member to the manifest that planned it (previous_manifest), which keeps the pre-apply state.",
+  "members": {
+    "mortgage-desk-esign.mjs": {
+      "live_sha256": "d38218a4ccec65994423e1147c0b72c8f07a46978a66f3bd687af836bc32d9cd",
+      "accepted_sha256": "d38218a4ccec65994423e1147c0b72c8f07a46978a66f3bd687af836bc32d9cd",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-desk-check-timeline-link-manifest-2026-11-13.json"
+    }
+  }
+}
