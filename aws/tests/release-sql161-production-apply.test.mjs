@@ -150,7 +150,7 @@ test('pin: the release pin shape, pending, in step with the staging pin, the one
   assert.doesNotMatch(JSON.stringify(tool), /[0-9a-f]{64}/);
   const rows = JSON.stringify(readJson('ops/deployment-guard/bypass-inventory.json'));
   assert.match(rows, /"path":"scripts\/deployment-guard\/sql161-tg-mortgage-handling-billing-checksops-execute-production-apply\.mjs","classification":"GUARDED","capabilities":\["sql161-production-apply"\]/);
-  assert.match(rows, /sql159, sql160, sql161, sql162, sql163, sql164\)/);
+  assert.match(rows, /sql159, sql160, sql161, sql162, sql163, sql164, sql165\)/);
   const scripts = readJson('package.json').scripts;
   const workflow = fs.readFileSync(path.join(ROOT, '.github/workflows/deployment-guard.yml'), 'utf8');
   for (const name of ['aws/tests/release-sql161-executor.test.mjs', 'aws/tests/release-sql161-production-apply.test.mjs', 'aws/tests/sql161-tg-mortgage-handling-billing-checksops-execute-pg.test.mjs']) {
@@ -191,7 +191,7 @@ test('order: no predecessor; one function\'s EXECUTE ACL, nothing created or rep
   assert.match(runbook, /\*\*Status:\*\* staging pin execute-authorized \(wave 52\); not applied anywhere\. The production pin is pending\./);
   const oneShot = fs.readFileSync(path.join(ROOT, 'ops/production-sql-one-shot.md'), 'utf8');
   assert.match(oneShot, /\| `sql161` \|/);
-  assert.match(oneShot, /`sql159`, `sql160`, `sql161`, `sql162`, `sql163`, `sql164`\) \|/);
+  assert.match(oneShot, /`sql159`, `sql160`, `sql161`, `sql162`, `sql163`, `sql164`, `sql165`\) \|/);
   assert.match(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/README.md'), 'utf8'), /sql161-tg-mortgage-handling-billing-checksops-execute-production-apply\.mjs --inspect/);
 });
 

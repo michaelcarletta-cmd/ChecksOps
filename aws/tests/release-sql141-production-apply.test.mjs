@@ -186,7 +186,7 @@ test('pin: the release pin shape, applied and retired (owner approved 2026-11-13
   assert.doesNotMatch(JSON.stringify(tool), /[0-9a-f]{64}/);
   const rows = JSON.stringify(readJson('ops/deployment-guard/bypass-inventory.json'));
   assert.match(rows, /"path":"scripts\/deployment-guard\/sql141-permanent-vendor-payees-production-apply\.mjs","classification":"GUARDED","capabilities":\["sql141-production-apply"\]/);
-  assert.match(rows, /sql135, sql136, sql137, sql138, sql139, sql140, sql141, sql142, sql143, sql144, sql145, sql146, sql147, sql148, sql150, sql152, sql153, sql154, sql155, sql156, sql158, sql159, sql160, sql161, sql162, sql163, sql164\)/);
+  assert.match(rows, /sql135, sql136, sql137, sql138, sql139, sql140, sql141, sql142, sql143, sql144, sql145, sql146, sql147, sql148, sql150, sql152, sql153, sql154, sql155, sql156, sql158, sql159, sql160, sql161, sql162, sql163, sql164, sql165\)/);
   const scripts = readJson('package.json').scripts;
   const workflow = read('.github/workflows/deployment-guard.yml');
   for (const name of ['aws/tests/release-sql141-executor.test.mjs', 'aws/tests/release-sql141-production-apply.test.mjs', 'aws/tests/sql141-permanent-vendor-payees-pg.test.mjs', 'aws/tests/sql141-permanent-vendor-payees-tool-pg.test.mjs']) {
@@ -208,10 +208,11 @@ test('order: no predecessor; three functions, two policies, two new tables; no e
     ['public.tenant_vendor_payees', 'aws_select_tenant_vendor_payees', 'SELECT', ['authenticated']],
   ]);
   assert.deepEqual(spec.definer_writes, ['public.tenants', 'public.tenant_partner_code_aliases']);
-  // Nothing in the release refuses after SQL 141, supersedes it or needs it.
+  // Nothing in the release refuses after SQL 141 or supersedes it; SQL 165 (owner 2026-11-13, the API's vendor payee
+  // lookup, reads SQL 141's tables) names it as its predecessor.
   assert.deepEqual(Object.keys(RELEASE_SQL_SPECS).filter((key) => (RELEASE_SQL_SPECS[key].supersedes || []).includes(KEY)
     || (RELEASE_SQL_SPECS[key].refuse_after || []).some((m) => m.key === KEY)
-    || (RELEASE_SQL_SPECS[key].predecessors || []).includes(KEY)), []);
+    || (RELEASE_SQL_SPECS[key].predecessors || []).includes(KEY)), ['sql165']);
   assert.match(COMMITTED.order_note, /^No predecessor and no order on this engine/);
   assert.match(COMMITTED.order_note, /owner decision 2026-11-03/);
   assert.match(COMMITTED.order_note, /never creates a tenant partnership/);
@@ -226,11 +227,20 @@ test('order: no predecessor; three functions, two policies, two new tables; no e
   assert.deepEqual([...code.matchAll(/ALTER TABLE (public\.[a-z_]+)/g)].map((m) => m[1]), TABLES);
   assert.deepEqual([...code.matchAll(/CREATE POLICY ([a-z_]+) ON (public\.[a-z_]+)/g)].map((m) => [m[2], m[1]]), spec.policies.map((p) => [p.table, p.name]));
   assert.doesNotMatch(code, /\b(UPDATE|DELETE FROM|INSERT INTO|ALTER TABLE|GRANT [A-Z, ]+ ON TABLE|REVOKE [A-Z ]+ ON TABLE) public\.(tenants|tenant_users|tenant_partner_code_aliases|tenant_partnerships|shared_checks|stakeholder_accounts|external_payment_recipients)\b/);
-  // No other repository SQL creates these tables or functions.
+  // No other repository SQL creates or references these tables or functions, except SQL 165 (owner 2026-11-13, "New
+  // migration": the API's member-checked read of a tenant's live payee links, because the API login cannot read another
+  // organization's vendor_tenants row), which only reads the two tables: no statement on them and no call to the three
+  // functions.
+  const SQL165_FILE = 'aws/workflows/sql/165_vendor_payee_lookup_and_payroll_vendor.sql';
+  const sql165 = stripComments(read(SQL165_FILE));
+  assert.doesNotMatch(sql165, /\b(aws_vendor_payee_add|aws_vendor_payee_remove|aws_platform_owner_set_tenant_vendor)\b/);
+  assert.doesNotMatch(sql165, /\b(CREATE|ALTER|DROP|GRANT|REVOKE|INSERT\s+INTO|UPDATE|DELETE\s+FROM|TRUNCATE|COMMENT\s+ON)\b[^;]*\bpublic\.(vendor_tenants|tenant_vendor_payees)\b/i);
+  assert.deepEqual([...new Set([...sql165.matchAll(/\b(?:FROM|JOIN)\s+public\.(vendor_tenants|tenant_vendor_payees)\b/g)].map((m) => m[1]))].sort(),
+    ['tenant_vendor_payees', 'vendor_tenants']);
   for (const dir of ['aws/workflows/sql', 'aws/write-path/sql', 'aws/rls/sql', 'aws/db-copy/sql']) {
     for (const file of fs.readdirSync(path.join(ROOT, dir)).filter((f) => f.endsWith('.sql'))) {
       const rel = `${dir}/${file}`;
-      if (rel === SQL141_FILE) continue;
+      if (rel === SQL141_FILE || rel === SQL165_FILE) continue;
       assert.doesNotMatch(stripComments(read(rel)), /\b(vendor_tenants|tenant_vendor_payees|aws_vendor_payee_add|aws_vendor_payee_remove|aws_platform_owner_set_tenant_vendor)\b/, rel);
     }
   }
@@ -244,7 +254,7 @@ test('order: no predecessor; three functions, two policies, two new tables; no e
   assert.match(runbook, /16522f0a99f22410a73e4a80e10e48a10a08162171345d72e0f72bc47338982f/);
   const oneShot = read('ops/production-sql-one-shot.md');
   assert.match(oneShot, /\| `sql141` \|/);
-  assert.match(oneShot, /`sql136`, `sql137`, `sql138`, `sql139`, `sql140`, `sql141`, `sql142`, `sql143`, `sql144`, `sql145`, `sql146`, `sql147`, `sql148`, `sql150`, `sql152`, `sql153`, `sql154`, `sql155`, `sql156`, `sql158`, `sql159`, `sql160`, `sql161`, `sql162`, `sql163`, `sql164`\) \|/);
+  assert.match(oneShot, /`sql136`, `sql137`, `sql138`, `sql139`, `sql140`, `sql141`, `sql142`, `sql143`, `sql144`, `sql145`, `sql146`, `sql147`, `sql148`, `sql150`, `sql152`, `sql153`, `sql154`, `sql155`, `sql156`, `sql158`, `sql159`, `sql160`, `sql161`, `sql162`, `sql163`, `sql164`, `sql165`\) \|/);
   assert.match(read('ops/deployment-guard/README.md'), /sql141-permanent-vendor-payees-production-apply\.mjs --inspect/);
 });
 

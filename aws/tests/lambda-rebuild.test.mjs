@@ -213,6 +213,18 @@ const APPLIED_SINCE_FOURTH_PRODUCTION_REBUILD = {
 // production sections are written from their own inspects. The seventh staging section (inspect 43458069245) lists all seven;
 // no applied section does.
 const TRANSFER_TO_BANK_MANIFEST = 'aws/tests/fixtures/production-wallet-transfer-to-bank-manifest-2026-11-13.json';
+// Vendor payments API (2026-11-13, owner "Start the vendor payments API and screens"): providers/production/moov-send.mjs,
+// workflow-rpc.mjs and tenant-billing-handlers.mjs REPLACE their applied bytes through the production overlay plan (held on
+// SQL 165 / SQL 165 / SQL 154, unchanged), planning only. Not a member of any recorded rebuild section; the history checks read each row
+// as it stood before that plan (vendorApiPre).
+const VENDOR_API_MANIFEST = 'aws/tests/fixtures/production-vendor-payments-api-manifest-2026-11-13.json';
+const vendorApiPre = (row) => {
+  if (!row || row.manifest !== VENDOR_API_MANIFEST) return row;
+  const planned = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, VENDOR_API_MANIFEST), 'utf8')).members;
+  const entry = Object.values(planned).find((e) => e.accepted_sha256 === row.accepted_sha256 && e.live_sha256 === row.expected_live_sha256);
+  assert.ok(entry, 'a vendor payments API row names its manifest entry');
+  return { ...row, accepted_sha256: entry.live_sha256, expected_live_sha256: entry.live_sha256, manifest: entry.previous_manifest };
+};
 // Listed changes that go through the production overlay plan, never the current rebuild section.
 const OVERLAY_PLAN_CHANGES = new Set([
   // Settlement bank fallback (2026-11-12): a Moov read failure no longer hides the bank on file. Not an overlay
@@ -578,7 +590,7 @@ test('the production history keeps the fourth rebuild (inspect 41463084601, appl
     // The production record of 2026-11-11 (tenant-billing-engine.mjs, tenant-billing-handlers.mjs and two other members
     // applied, VERIFIED) moved those rows to their applied records; the checks below read each row as it stood before
     // that record: the applied record's planning manifest and its live bytes.
-    let row = overlay.members[name];
+    let row = vendorApiPre(overlay.members[name]);
     if (row && /-applied-manifest-2026-11-11\.json$/.test(row.manifest) && /second-mortgagee-fee|starter-package/.test(row.manifest)) {
       const applied = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, row.manifest), 'utf8')).members[name];
       assert.deepEqual([applied.live_sha256, applied.accepted_sha256], [row.accepted_sha256, row.accepted_sha256], name);
@@ -590,6 +602,11 @@ test('the production history keeps the fourth rebuild (inspect 41463084601, appl
     // from its external disbursement applied bytes: the checks below read the row as it stood before that plan, and those
     // applied bytes stand for main's.
     let mainBytes = sha256(fs.readFileSync(path.join(apiRoot, name)));
+    // (Likewise the vendor payments API plan: the applied bytes it starts from stand for main's.)
+    if (overlay.members[name]?.manifest === VENDOR_API_MANIFEST) {
+      assert.equal(overlay.members[name].accepted_sha256, mainBytes, name);
+      mainBytes = vendorApiPre(overlay.members[name]).accepted_sha256;
+    }
     if (row && row.manifest === TRANSFER_TO_BANK_MANIFEST) {
       const planned = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, row.manifest), 'utf8')).members[name];
       assert.deepEqual([row.accepted_sha256, row.expected_live_sha256], [mainBytes, planned.live_sha256], name);
@@ -1719,4 +1736,33 @@ test('transfer to bank (2026-11-13, planning only): its seven API files wait for
   // Already listed as changed since the applied sections that record their older bytes.
   for (const name of ['providers.mjs', 'providers/catalog.mjs']) assert.equal(CHANGED_SINCE_SECOND_REBUILD[name], 'changed', name);
   assert.ok(CHANGED_SINCE_FOURTH_PRODUCTION_REBUILD.has('app-services.mjs'));
+});
+
+test('vendor payments API (2026-11-13, planning only): its three REPLACEs go through the production overlay plan from their applied bytes; no recorded rebuild section lists them', () => {
+  const raw = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'ops/deployment-guard/lambda-rebuild-plan.json'), 'utf8'));
+  const manifest = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, VENDOR_API_MANIFEST), 'utf8'));
+  const overlay = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'ops/deployment-guard/production-api-overlay-plan.json'), 'utf8'));
+  const apiRoot = path.join(REPO_ROOT, 'aws/functions/api');
+  const REPLACES = ['providers/production/moov-send.mjs', 'workflow-rpc.mjs', 'tenant-billing-handlers.mjs'];
+  assert.deepEqual(Object.keys(manifest.members), REPLACES);
+  assert.equal(manifest.deploy_authorized, false);
+  for (const [name, entry] of Object.entries(manifest.members)) {
+    // Main's bytes accepted; each starts from the bytes its overlay row recorded live (an applied record), never main's.
+    assert.equal(sha256(fs.readFileSync(path.join(apiRoot, name))), entry.accepted_sha256, name);
+    assert.equal(entry.operation, 'replace', name);
+    assert.notEqual(entry.live_sha256, entry.accepted_sha256, name);
+    const row = overlay.members[name];
+    assert.deepEqual([row.accepted_sha256, row.expected_live_sha256, row.manifest], [entry.accepted_sha256, entry.live_sha256, VENDOR_API_MANIFEST], name);
+    assert.deepEqual(vendorApiPre(row).manifest, entry.previous_manifest, name);
+  }
+  // The current sections, applied in both environments, list none of them: a staging inspect of a full-package rebuild of
+  // a main that carries this change would report them in its own section.
+  for (const environment of ['staging', 'production']) {
+    const section = raw.environments[environment];
+    assert.equal(section.status, 'applied', environment);
+    for (const name of REPLACES) {
+      assert.equal(section.members[name], undefined, `${environment} ${name}`);
+      assert.equal(section.added[name], undefined, `${environment} ${name}`);
+    }
+  }
 });

@@ -3798,6 +3798,32 @@ export const AUTHORIZED_SQL164_WALLET_WITHDRAWAL_LEG_AND_LIMITS = Object.freeze(
   ]),
 });
 
+// Vendor payee lookup and vendor payroll runs staging pin: SQL 165 (owner 2026-11-13: pay a vendor from a check or from
+// a payroll payment; "New migration" and "Record in payroll"). Creates public.aws_vendor_payees_for_tenant(uuid), a
+// member-checked SECURITY DEFINER read of the tenant's live SQL 141 payee links (vendor name, is_vendor,
+// subscription_status), and lets public.payroll_runs name a vendor (vendor_tenant_id, stakeholder_account_id nullable,
+// exactly one payee). Predecessor SQL 141 (release-sql-specs.mjs). Staging apply authorized (wave 57) from staging
+// read-live run 43506600170: the pre-state equals the derived one (ops/production-sql-165-apply.md).
+export const AUTHORIZED_SQL165_VENDOR_PAYEE_LOOKUP_AND_PAYROLL_VENDOR = Object.freeze({
+  key: 'sql165',
+  filename: 'aws/workflows/sql/165_vendor_payee_lookup_and_payroll_vendor.sql',
+  migration_id: '165_vendor_payee_lookup_and_payroll_vendor',
+  // The commit that last authored the file bytes.
+  commit: 'ffbff4fa9e5819564485bee96a6a2b7726b3557d',
+  source_sha256: '18dfb11105daeb92d202fb8d1f3c0aba16e087c0933ed3352321e5e62e29bd84',
+  authorization: 'Owner approved 2026-11-13: staging apply (wave 57) from staging read-live run 43506600170',
+  execute: true,
+  // Staging read-live run 43506600170 (main 31c0c874b, executor deploy run 43506159674): already_applied false,
+  // precondition_failures [], prerequisites_missing []. Equal to the derived pre-state (the function, column, foreign key,
+  // check and index absent; stakeholder_account_id uuid NOT NULL, no default).
+  expected_live_definition_sha256: '3a6d086e37c04740397c0b6a99d558ed0a5e907c296f8a99a71ae323acdca248',
+  // Code-derived: releaseIntendedHash('sql165', file bytes) (release-sql-state.mjs); re-derived by the tests.
+  intended_replacement_sha256: '23c689b9ac0dad2ee1760214a37038a86142041c104867da8381cffb3d8202fa',
+  function_identities: Object.freeze([
+    'public.aws_vendor_payees_for_tenant(uuid)',
+  ]),
+});
+
 export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql90: AUTHORIZED_SQL90_USERS_ONLY_TENANT_ROLES,
   sql91: AUTHORIZED_SQL91_MOOV_ONBOARDING,
@@ -3870,6 +3896,7 @@ export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql162: AUTHORIZED_SQL162_SHARED_CHECK_SOURCE_SENDS,
   sql163: AUTHORIZED_SQL163_MORTGAGE_DESK_CHECK_TIMELINE_HOMEOWNER_LINK,
   sql164: AUTHORIZED_SQL164_WALLET_WITHDRAWAL_LEG_AND_LIMITS,
+  sql165: AUTHORIZED_SQL165_VENDOR_PAYEE_LOOKUP_AND_PAYROLL_VENDOR,
   sql76: AUTHORIZED_SQL76_RELEASE_TENANT_PARTNERSHIP_CONSENT,
 });
 
@@ -3886,7 +3913,7 @@ export function isSql30TenantDocumentsDocType(input = {}) {
   return pinIdentifiersMatch(input, AUTHORIZED_SQL30_TENANT_DOCUMENTS_DOC_TYPE);
 }
 
-/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql148, sql150, sql152 ... sql156, sql158, sql159, sql160, sql161, sql162, sql163, sql164; sql76 for production) an input names, or null. */
+/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql148, sql150, sql152 ... sql156, sql158, sql159, sql160, sql161, sql162, sql163, sql164, sql165; sql76 for production) an input names, or null. */
 export function releaseSqlMigrationKey(input = {}) {
   return Object.keys(RELEASE_2026_10_17_PENDING_SQL_PINS)
     .find((key) => pinIdentifiersMatch(input, RELEASE_2026_10_17_PENDING_SQL_PINS[key])) || null;

@@ -1,5 +1,5 @@
 /**
- * Production sends (moov-disburse): the tenant's money → stakeholders and partners.
+ * Production sends (moov-disburse): the tenant's money → stakeholders, partners and vendors.
  * Staging runs the same path against the Moov sandbox (handleSandboxMoovSend):
  * sandbox credentials and environment='sandbox' rows; the send switches below are
  * production-only, AWS_PROVIDER_SANDBOX_EXECUTION_ENABLED is the staging switch.
@@ -10,6 +10,13 @@
  * - Stakeholders (Stakeholder Settings) are paid to their linked bank by ACH credit.
  * - Partners the check is shared with are paid wallet to wallet, or to their
  *   linked bank when they have no production wallet.
+ * - Vendors (SQL 141 permanent vendors, owner 2026-11-13) are paid wallet to wallet only, from a
+ *   check (purpose 'send') or as the one recipient of a payroll payment. The sender must hold a
+ *   live payee link to an organization that is still a vendor and active (SQL 165's
+ *   aws_vendor_payees_for_tenant: payable); otherwise vendor_not_payee. A vendor with no usable
+ *   ChecksOps wallet is refused (vendor_setup_required, or vendor_wallet_choice_required with two
+ *   wallets and no default); a vendor is never paid to its bank. The vendor legs carry
+ *   destination_tenant_id (the vendor sees them as incoming, SQL 144) and recipient_kind 'vendor'.
  * - Top-up: when the wallet's available balance is short, each recipient gets
  *   the wallet part (wallet → recipient) and the shortfall straight from the
  *   tenant's linked bank (ach-debit-fund → recipient), in that order.
@@ -26,7 +33,9 @@
  *   AWS_MOOV_TRANSFER_POST_ENABLED) is off.
  *
  * Payroll (purpose 'payroll', owner decision 2026-11-04): the same send, not tied to a check,
- * to exactly one stakeholder (partners stay check-bound). Same once-per-login step-up,
+ * to exactly one stakeholder or (owner 2026-11-13, SQL 165) one vendor; partners stay
+ * check-bound. A vendor payroll's payroll_runs row names vendor_tenant_id and no stakeholder
+ * account. Same once-per-login step-up,
  * idempotency, per-organization lock, top-up and legs. The payroll_runs row is written in the
  * same transaction as the legs (request.financial_execution is set, so SQL 136's money-write
  * gate admits it) and its status follows the legs: pending until the send finishes, then
@@ -99,6 +108,9 @@ export const SEND_PURPOSES = Object.freeze(['send', 'payroll']);
 /** payroll_runs.speed keeps the payroll screen's names: the standard ACH credit is its Next Day. */
 export const PAYROLL_SPEED = Object.freeze({ standard: 'next_day', same_day: 'same_day' });
 
+/** Who a payroll payment may pay: one stakeholder, or (SQL 165) one vendor. */
+export const PAYROLL_RECIPIENT_KINDS = Object.freeze(new Set(['stakeholder', 'vendor']));
+
 /** Validated request, or { error }. Recipients keep the order the user gave. */
 export function parseSendRequest(body = {}) {
   const clickKey = String(body.idempotency_key || '').trim().toLowerCase();
@@ -127,16 +139,18 @@ export function parseSendRequest(body = {}) {
       recipient = { kind: 'stakeholder', id: String(raw.stakeholder_account_id).toLowerCase(), amount_cents: amount };
     } else if (raw?.kind === 'partner' && isUuid(String(raw?.partner_tenant_id || ''))) {
       recipient = { kind: 'partner', id: String(raw.partner_tenant_id).toLowerCase(), amount_cents: amount };
+    } else if (raw?.kind === 'vendor' && isUuid(String(raw?.vendor_tenant_id || ''))) {
+      recipient = { kind: 'vendor', id: String(raw.vendor_tenant_id).toLowerCase(), amount_cents: amount };
     } else {
-      return { error: 'Each recipient must be a stakeholder or a partner.' };
+      return { error: 'Each recipient must be a stakeholder, a partner or a vendor.' };
     }
     const unique = `${recipient.kind}:${recipient.id}`;
     if (seen.has(unique)) return { error: 'Each recipient may appear only once per send.' };
     seen.add(unique);
     recipients.push(recipient);
   }
-  if (purpose === 'payroll' && (recipients.length !== 1 || recipients[0].kind !== 'stakeholder')) {
-    return { error: 'A payroll payment pays exactly one stakeholder.' };
+  if (purpose === 'payroll' && (recipients.length !== 1 || !PAYROLL_RECIPIENT_KINDS.has(recipients[0].kind))) {
+    return { error: 'A payroll payment pays exactly one stakeholder or vendor.' };
   }
   return { clickKey, purpose, checkId, speed, recipients, description: String(body.description || '').slice(0, 100) };
 }
@@ -179,7 +193,7 @@ export function selectCreditMethod(methods, speed, bankAccountId = null) {
   return { error: credits.length ? 'recipient_bank_choice_required' : 'recipient_bank_not_ready' };
 }
 
-/** A partner's single production wallet, if it has one. */
+/** A partner's (or vendor's) single production wallet, if it has one. */
 export function selectWalletMethod(methods) {
   const wallets = (Array.isArray(methods) ? methods : [])
     .filter((m) => String(m?.paymentMethodType) === 'moov-wallet' && methodIdOf(m));
@@ -397,6 +411,12 @@ async function resolveDestinations({ client, tenantId, request, environment, fet
     }
 
     if (r.id === String(tenantId).toLowerCase()) return { error: 'recipient_is_sender', recipient: r };
+    if (r.kind === 'vendor') {
+      const vendor = await resolveVendorDestination({ client, tenantId, recipient: r, fetchImpl });
+      if (vendor.error) return vendor;
+      resolved.push(vendor.resolved);
+      continue;
+    }
     // A partner can be paid on this organization's check when the check is shared with
     // them, or the partnership is active (both sides agreed: SQL 76 lets only the
     // invitee or Partner Code redemption activate it). Choosing a partner in the
@@ -468,6 +488,44 @@ async function resolveDestinations({ client, tenantId, request, environment, fet
   return { resolved };
 }
 
+/** SQL 165: the sender's live vendor payee links, with whether each vendor is still payable. */
+export const VENDOR_PAYEES_SQL = 'SELECT public.aws_vendor_payees_for_tenant($1::uuid) AS result';
+
+/**
+ * A vendor (owner 2026-11-13): paid only while the sender holds a live payee link to an
+ * organization that is still a vendor and active (payable), and only to the vendor's own
+ * ChecksOps wallet; never to its bank.
+ */
+async function resolveVendorDestination({ client, tenantId, recipient: r, fetchImpl }) {
+  const lookup = (await client.query(VENDOR_PAYEES_SQL, [tenantId])).rows[0]?.result;
+  const payees = lookup?.ok === true && Array.isArray(lookup.payees) ? lookup.payees : [];
+  const link = payees.find((p) => String(p?.vendor_tenant_id || '').toLowerCase() === r.id);
+  if (!link || link.payable !== true) return { error: 'vendor_not_payee', recipient: r, name: link?.vendor_name || null };
+  let accounts;
+  try {
+    accounts = await moovFetch(`/accounts?foreignID=${encodeURIComponent(r.id)}`, { scopes: scopes.accountsRead(), fetchImpl });
+  } catch {
+    return { error: 'vendor_setup_required', recipient: r, name: link.vendor_name || null };
+  }
+  const matches = (Array.isArray(accounts) ? accounts : []).filter((a) => isTenantAccountFor(a, r.id));
+  const name = link.vendor_name || matches[0]?.displayName || matches[0]?.profile?.business?.legalBusinessName || 'Vendor';
+  if (matches.length !== 1) return { error: matches.length ? 'vendor_account_ambiguous' : 'vendor_setup_required', recipient: r, name };
+  const vendorAccountId = accountIdOf(matches[0]);
+  let methods;
+  try {
+    methods = await moovFetch(`/accounts/${vendorAccountId}/payment-methods`, {
+      scopes: scopes.paymentMethodsRead(vendorAccountId), fetchImpl,
+    });
+  } catch {
+    return { error: 'vendor_setup_required', recipient: r, name };
+  }
+  const wallet = selectWalletMethod(methods);
+  if (!wallet.method) {
+    return { error: wallet.error === 'partner_wallet_choice_required' ? 'vendor_wallet_choice_required' : 'vendor_setup_required', recipient: r, name };
+  }
+  return { resolved: { ...r, name, destinationKind: 'wallet', destinationMethodId: methodIdOf(wallet.method), vendorAccountId } };
+}
+
 const DESTINATION_MESSAGES = {
   recipient_not_found: 'A recipient was not found for this organization.',
   recipient_not_supported: 'Homeowner and partner payout accounts cannot be paid here yet.',
@@ -481,6 +539,10 @@ const DESTINATION_MESSAGES = {
   partner_account_ambiguous: "This partner's payment account could not be determined.",
   partner_wallet_choice_required: "This partner's balance account could not be determined.",
   partner_bank_choice_required: "This partner's bank could not be determined.",
+  vendor_not_payee: 'This vendor is not on your vendor list, or it is no longer an active vendor. Nothing was sent.',
+  vendor_setup_required: "This vendor hasn't finished wallet setup. Nothing was sent.",
+  vendor_wallet_choice_required: "This vendor's ChecksOps wallet could not be determined. Nothing was sent.",
+  vendor_account_ambiguous: "This vendor's payment account could not be determined. Nothing was sent.",
 };
 
 async function postLeg({ client, mapping, claims, tenantId, environment, leg, facilitatorId, fetchImpl, timeoutMs }) {
@@ -758,13 +820,15 @@ async function runSend({ client, mapping, claims, ctx, body, fetchImpl: postFetc
     let payrollRunId = null;
     if (payroll) {
       const [only] = plan;
+      // One payee: a stakeholder account, or (SQL 165) a vendor organization.
       payrollRunId = (await client.query(
         `INSERT INTO public.payroll_runs
-          (tenant_id, stakeholder_account_id, disbursement_batch_id, amount, speed, memo, initiated_by, status)
-         VALUES ($1::uuid, $2::uuid, NULL, $3::numeric, $4, $5, $6::uuid, 'pending')
+          (tenant_id, stakeholder_account_id, vendor_tenant_id, disbursement_batch_id, amount, speed, memo, initiated_by, status)
+         VALUES ($1::uuid, $2::uuid, $3::uuid, NULL, $4::numeric, $5, $6, $7::uuid, 'pending')
          RETURNING id`,
         [
-          tenantId, only.id, (Number(only.amount_cents) / 100).toFixed(2), PAYROLL_SPEED[request.speed],
+          tenantId, only.kind === 'stakeholder' ? only.id : null, only.kind === 'vendor' ? only.id : null,
+          (Number(only.amount_cents) / 100).toFixed(2), PAYROLL_SPEED[request.speed],
           request.description || null, mapping.application_user_id,
         ],
       )).rows[0]?.id ?? null;
@@ -788,7 +852,7 @@ async function runSend({ client, mapping, claims, ctx, body, fetchImpl: postFetc
             tenantId, environment, `${prefix}${legIndex}:${source}`, cents, request.speed,
             String(request.description || (payroll ? `Payroll to ${p.name}` : `ChecksOps payment to ${p.name}`)).slice(0, 128),
             account.provider_account_id, source === 'bank' ? bank.localId : null,
-            p.kind === 'partner' ? p.id : null,
+            p.kind === 'partner' || p.kind === 'vendor' ? p.id : null,
             source === 'wallet' ? wallet.id : null, role, request.checkId, null,
             JSON.stringify({
               checksops_kind: 'send',
@@ -801,6 +865,7 @@ async function runSend({ client, mapping, claims, ctx, body, fetchImpl: postFetc
               recipient_name: p.name,
               destination_kind: p.destinationKind,
               partner_account_id: p.partnerAccountId || null,
+              ...(p.kind === 'vendor' ? { vendor_account_id: p.vendorAccountId || null } : {}),
               source_moov_payment_method_id: source === 'wallet' ? wallet.provider_payment_method_id : bank.methodId,
               destination_moov_payment_method_id: p.destinationMethodId,
               stepup_id: stepUp.id,

@@ -271,6 +271,16 @@ export const handleTenantBillingAdmin = async (event, deps = {}) => {
   return merge(await deliver());
 };
 
+/** SQL 141: the platform owner's vendor switch, and its read. */
+export const SET_TENANT_VENDOR_SQL = 'SELECT public.aws_platform_owner_set_tenant_vendor($1::uuid, $2::boolean) AS result';
+export const TENANT_VENDOR_STATUS_SQL = 'SELECT EXISTS (SELECT 1 FROM public.vendor_tenants WHERE tenant_id = $1::uuid) AS is_vendor';
+const VENDOR_SET_STATUS = Object.freeze({ forbidden: 403, invalid_input: 400, tenant_not_found: 404 });
+const VENDOR_SET_MESSAGES = Object.freeze({
+  forbidden: 'Only the ChecksOps platform owner can change this.',
+  invalid_input: 'Choose a company and whether it is a vendor.',
+  tenant_not_found: 'That company was not found.',
+});
+
 const handleTenantBillingAdminInTransaction = async (event, deps = {}) => {
   const body = parseBody(event);
   const spoof = ignoredSpoof(event, body);
@@ -367,6 +377,30 @@ const handleTenantBillingAdminInTransaction = async (event, deps = {}) => {
       } catch (error) {
         return denied(spoof, tenantProfileError(error));
       }
+    }
+
+    // SQL 141 (owner 2026-11-13, vendor payments): the platform owner marks a company as a permanent
+    // vendor or not (aws_platform_owner_set_tenant_vendor, SECURITY DEFINER, platform-owner check;
+    // turning it off keeps the payee links, and SQL 165 makes them unpayable at once), and reads
+    // whether it is one (vendor_tenants, which the platform owner reads under RLS).
+    if (action === 'vendor-set') {
+      if (typeof body.is_vendor !== 'boolean') {
+        return denied(spoof, {
+          statusCode: 400, error: 'invalid_field', field: 'is_vendor', message: 'Choose whether this company is a vendor.',
+        });
+      }
+      const result = (await client.query(SET_TENANT_VENDOR_SQL, [tenantId, body.is_vendor])).rows[0]?.result || {};
+      if (result.ok !== true) {
+        const error = String(result.error || 'vendor_set_failed');
+        return denied(spoof, {
+          statusCode: VENDOR_SET_STATUS[error] || 409, error, message: VENDOR_SET_MESSAGES[error] || 'The vendor setting was not saved.',
+        });
+      }
+      return { ok: true, statusCode: 200, spoofFieldsIgnored: spoof, saved: true, tenant_id: tenantId, is_vendor: result.is_vendor === true };
+    }
+    if (action === 'vendor-status') {
+      const row = (await client.query(TENANT_VENDOR_STATUS_SQL, [tenantId])).rows[0] || {};
+      return { ok: true, statusCode: 200, spoofFieldsIgnored: spoof, tenant_id: tenantId, is_vendor: row.is_vendor === true };
     }
 
     // SQL 117: deactivate / reactivate / activity / delete an empty company.

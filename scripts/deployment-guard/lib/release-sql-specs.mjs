@@ -27,6 +27,9 @@
  *   tables             created by the file: columns [name, type, not null, default, column ACL],
  *                      constraints and indexes [name, definition], non-owner table ACL
  *   added_columns      added to an existing table; column_acl: column grants on an existing column
+ *   altered_columns    existing columns whose NOT NULL the file changes (SQL 165): type, default,
+ *                      from_notnull (before the file) and notnull (after); fingerprinted by type,
+ *                      NOT NULL and default only (altered_columns_before_or_intended)
  *   table_privileges   pinned grantees' pinned privileges on an existing table, after the file
  *   altered_relations  existing relations the file changes (must be owned by the login)
  *   tables[].may_preexist / revokes_from
@@ -9792,6 +9795,107 @@ export const RELEASE_SQL_SPECS = deepFreeze({
     ],
     "altered_relations": [
       "public.tenant_wallet_funding_settings"
+    ]
+  },
+  // SQL 165 (owner 2026-11-13: pay a vendor from a check or from a payroll payment; "New migration" and "Record in
+  // payroll"): the API's read of a tenant's vendor payees, and payroll runs that can name a vendor. Creates
+  // public.aws_vendor_payees_for_tenant(uuid) (STABLE, SECURITY DEFINER, search_path public, row_security off; EXECUTE
+  // checksops and the owner): a member's live SQL 141 payee links with each vendor's name, is_vendor and
+  // subscription_status, because the API login cannot read another organization's vendor_tenants row. On
+  // public.payroll_runs: vendor_tenant_id uuid (nullable; FK to tenants; partial index; column INSERT for checksops),
+  // stakeholder_account_id NOT NULL dropped (altered_columns, from_notnull true), and payroll_runs_one_payee_check
+  // (exactly one of the two). Predecessor SQL 141 (its tables are read; nothing of SQL 141 changes, so no supersedes).
+  // definer_writes lists the relations the function reads past RLS, as the file's sql165_definer_cannot_read check
+  // names them (as SQL 141 listed its reads). No policy, table grant or trigger changes.
+  sql165: {
+    "key": "sql165",
+    "label": "SQL 165",
+    "choice": "sql165-vendor-payee-lookup-and-payroll-vendor",
+    "production_pin_rel": "ops/deployment-guard/sql165-vendor-payee-lookup-and-payroll-vendor-production-apply.json",
+    "script": "sql165-vendor-payee-lookup-and-payroll-vendor-production-apply",
+    "prerequisites": [
+      "public.tenants",
+      "public.tenant_users",
+      "public.vendor_tenants",
+      "public.tenant_vendor_payees",
+      "public.payroll_runs",
+      "auth.uid()",
+      "public.aws_user_tenant_ids()",
+      "role checksops",
+      "column public.tenants.id",
+      "column public.tenants.name",
+      "column public.tenants.subscription_status",
+      "column public.vendor_tenants.tenant_id",
+      "column public.tenant_vendor_payees.id",
+      "column public.tenant_vendor_payees.tenant_id",
+      "column public.tenant_vendor_payees.vendor_tenant_id",
+      "column public.tenant_vendor_payees.partner_code_used",
+      "column public.tenant_vendor_payees.created_at",
+      "column public.tenant_vendor_payees.removed_at",
+      "column public.payroll_runs.id",
+      "column public.payroll_runs.tenant_id",
+      "column public.payroll_runs.stakeholder_account_id"
+    ],
+    "predecessors": [
+      "sql141"
+    ],
+    "functions": [
+      {
+        "identity": "public.aws_vendor_payees_for_tenant(uuid)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ]
+      }
+    ],
+    "definer_writes": [
+      "public.tenants",
+      "public.vendor_tenants",
+      "public.tenant_vendor_payees"
+    ],
+    "added_columns": [
+      {
+        "table": "public.payroll_runs",
+        "column": "vendor_tenant_id",
+        "type": "uuid",
+        "notnull": false,
+        "default": null,
+        "acl": [
+          "checksops INSERT"
+        ]
+      }
+    ],
+    "altered_columns": [
+      {
+        "table": "public.payroll_runs",
+        "column": "stakeholder_account_id",
+        "type": "uuid",
+        "default": null,
+        "from_notnull": true,
+        "notnull": false
+      }
+    ],
+    "constraints": [
+      {
+        "table": "public.payroll_runs",
+        "name": "payroll_runs_vendor_tenant_id_fkey",
+        "def": "FOREIGN KEY (vendor_tenant_id) REFERENCES public.tenants(id)"
+      },
+      {
+        "table": "public.payroll_runs",
+        "name": "payroll_runs_one_payee_check",
+        "def": "CHECK ((num_nonnulls(stakeholder_account_id, vendor_tenant_id) = 1))"
+      }
+    ],
+    "indexes": [
+      {
+        "table": "public.payroll_runs",
+        "name": "payroll_runs_vendor_tenant_idx",
+        "def": "CREATE INDEX payroll_runs_vendor_tenant_idx ON public.payroll_runs USING btree (vendor_tenant_id) WHERE (vendor_tenant_id IS NOT NULL)"
+      }
+    ],
+    "altered_relations": [
+      "public.payroll_runs"
     ]
   },
   sql76: {

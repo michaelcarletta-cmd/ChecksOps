@@ -865,11 +865,28 @@
       "environment": "unknown",
       "source": {
         "git_sha": "8167bdde1f0e34f2f1e6daad8be2d57d6aa7582a",
-        "tree_hash": "fc61f4d03acaafb73d683cf798697917c1ca3d3578c9424b3919592b0fe6686e",
+        "tree_hash": "2c7fd5231af96159c995cf506498f3bdc25a42b6b878dbce18757cd3327a60f1",
         "merged": false,
         "merged_pr": null
       },
-      "required_sql": [],
+      "required_sql": [
+        {
+          "path": "aws/workflows/sql/141_permanent_vendor_payees.sql",
+          "source_sha256": "547a1ffe3ec4d6ae9aaa00432486791e721c712c07733bd72a7ba9408708fa88",
+          "applied": true,
+          "applied_environment": "production",
+          "applied_sha256": "4d50013eb0b30808a2a13a97b4a1700b33a833a943bbad865627b77aaf836729",
+          "proof": "ops/deployment-guard/sql141-permanent-vendor-payees-production-apply.json"
+        },
+        {
+          "path": "aws/workflows/sql/165_vendor_payee_lookup_and_payroll_vendor.sql",
+          "source_sha256": "18dfb11105daeb92d202fb8d1f3c0aba16e087c0933ed3352321e5e62e29bd84",
+          "applied": true,
+          "applied_environment": "production",
+          "applied_sha256": "23c689b9ac0dad2ee1760214a37038a86142041c104867da8381cffb3d8202fa",
+          "proof": "ops/deployment-guard/sql165-vendor-payee-lookup-and-payroll-vendor-production-apply.json"
+        }
+      ],
       "artifact": {
         "type": "lambda",
         "name": "checksops-production-prep-api",
@@ -883,7 +900,8 @@
       "production_validation": {
         "completed": false,
         "evidence_refs": [
-          "aws/tests/fixtures/production-moov-send-manifest-2026-10-13.json"
+          "aws/tests/fixtures/production-moov-send-manifest-2026-10-13.json",
+          "aws/tests/fixtures/production-vendor-payments-api-manifest-2026-11-13.json"
         ],
         "recorded_at": null
       },
@@ -898,7 +916,7 @@
         "production overlay receipts"
       ],
       "open_pr_overlap": [],
-      "notes": "Owner-approved 2026-10-13 (PR #922). Production sends: stakeholders by ACH credit, partners the check is shared with wallet to wallet (else their bank), bank top-up when the balance is short; any tenant member, two-factor once per login, durable per-leg intent before each Moov POST. No SQL change (payment_transfers under SQL 72). PR #923 (owner-approved hash update 2026-10-14): partners added to the check stakeholders can be paid while the partnership is active and the share was not revoked. Partner picker fix (owner-approved hash update 2026-10-14): a partner with an active partnership (SQL 76 consent guard) can be paid on the sender's own check without a stakeholder row; a revoked share of the check still blocks them. Staging sends (owner-approved hash update 2026-10-25): the same module also serves staging against the Moov sandbox (handleSandboxMoovSend: sandbox credentials, environment='sandbox' rows, two-factor kept; the production-only send and financial-permission switches are not consulted there); the production path is unchanged. Payee sends (owner-approved hash update 2026-10-26): payees who finished setup through the payee link (origin provider_recipient, SQL 113) are paid like organization-owned stakeholders, with the same checks; homeowner, partner-shared and partner-payout rows are still refused. Partner send from a shared check (owner-approved hash update 2026-11-12, \"Yes for 1, 2, and run the inspect\"): a check send is accepted for the sender's own check or a check its owner shares with the sender right now (shared_checks, revoked_at IS NULL), so a partner paid from a shared check can send onward from it; the legs stay under the sender's tenant_id and the check row is not touched. Planning only: nothing deployed."
+      "notes": "Owner-approved 2026-10-13 (PR #922). Production sends: stakeholders by ACH credit, partners the check is shared with wallet to wallet (else their bank), bank top-up when the balance is short; any tenant member, two-factor once per login, durable per-leg intent before each Moov POST. No SQL change (payment_transfers under SQL 72). PR #923 (owner-approved hash update 2026-10-14): partners added to the check stakeholders can be paid while the partnership is active and the share was not revoked. Partner picker fix (owner-approved hash update 2026-10-14): a partner with an active partnership (SQL 76 consent guard) can be paid on the sender's own check without a stakeholder row; a revoked share of the check still blocks them. Staging sends (owner-approved hash update 2026-10-25): the same module also serves staging against the Moov sandbox (handleSandboxMoovSend: sandbox credentials, environment='sandbox' rows, two-factor kept; the production-only send and financial-permission switches are not consulted there); the production path is unchanged. Payee sends (owner-approved hash update 2026-10-26): payees who finished setup through the payee link (origin provider_recipient, SQL 113) are paid like organization-owned stakeholders, with the same checks; homeowner, partner-shared and partner-payout rows are still refused. Partner send from a shared check (owner-approved hash update 2026-11-12, \"Yes for 1, 2, and run the inspect\"): a check send is accepted for the sender's own check or a check its owner shares with the sender right now (shared_checks, revoked_at IS NULL), so a partner paid from a shared check can send onward from it; the legs stay under the sender's tenant_id and the check row is not touched. Planning only: nothing deployed. Vendor payments (owner-approved hash update 2026-11-13, owner \"Start the vendor payments API and screens\", then \"Merge the API PR when green\"): vendors (SQL 141 permanent vendors) are paid wallet to wallet only, from a check or as the one recipient of a payroll payment, while the sender holds a live payee link to an organization that is still a vendor and active (SQL 165 aws_vendor_payees_for_tenant); no wallet is vendor_setup_required (never the vendor's bank); vendor legs carry destination_tenant_id and recipient_kind vendor; a vendor payroll run names payroll_runs.vendor_tenant_id. Requires SQL 141 and SQL 165 (both applied in staging and production). Planning only: nothing deployed."
     },
     "moov-production-invoice": {
       "id": "moov-production-invoice",
