@@ -30,7 +30,19 @@ recorded; owner, EXECUTE grants, SECURITY DEFINER and SET options of the four fu
 table, trigger, policy or grant. The db-readonly-validate trigger count is not affected. No API, Lambda or SPA change is
 part of this pin.
 
-**Status:** tooling built; staging and production pins pending (`execute: false`). Nothing applied or read.
+**Status:** staging pin execute-authorized (wave 51); not applied anywhere. The production pin is pending.
+
+**Staging read-live (2026-11-12).** The first read-live, run 43307779123 (main `83a508fb`), read `7fd99249…`: staging's
+`tg_record_mortgage_handling_billing()` lacked the `checksops EXECUTE` production holds, so SQL 160's post-state could not reach
+its intended hash there. SQL 161 grants it (owner: "A new SQL 161 that gives staging that one permission, then SQL 160"),
+applied in staging by run 43349438014 (`72031400…` -> `b916bcb5…`, read-live run 43349855104 `already_applied` true).
+
+**Staging read-live (2026-11-13).** Run 43350223533 (main `4cd25dac`, executor current, CodeSha256 `OrCHvYX9…`), under the owner's
+words "apply SQL 160 in staging": `already_applied` false, `precondition_failures` `[]`, `prerequisites_missing` `[]`; the four
+functions' ACLs as production's. Live `3a8bb0b11d59688642c98ace91bb15c562c362eea00b2ae9c73a166fee365229`, equal to the production pre-state (the inspected bodies,
+ACLs and SET options); intended `fae1623b…`. Recorded in the staging pin (`expected_live_definition_sha256`, `execute: true`,
+wave 51). The staging apply is a separate run after this pin is merged and the executor is redeployed carrying it, on the
+owner's words for that run. The production pin stays pending.
 
 ## Grants and attributes (observed, kept)
 

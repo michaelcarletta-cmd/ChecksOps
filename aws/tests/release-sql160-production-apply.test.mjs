@@ -201,7 +201,7 @@ test('order: no predecessor; four live functions replaced with their observed gr
   for (const value of [COMMITTED.intended_replacement_sha256, COMMITTED.source_sha256, LIVE_PRE, 'STOP_ADDITIONAL_CHECK_AND_OUTSIDE_DEPOSIT_CHARGES', '#1832', 'wave 51']) {
     assert.ok(runbook.includes(value), value);
   }
-  assert.match(runbook, /\*\*Status:\*\* tooling built; staging and production pins pending \(`execute: false`\)\. Nothing applied or read\./);
+  assert.match(runbook, /\*\*Status:\*\* staging pin execute-authorized \(wave 51\); not applied anywhere\. The production pin is pending\./);
   const oneShot = fs.readFileSync(path.join(ROOT, 'ops/production-sql-one-shot.md'), 'utf8');
   assert.match(oneShot, /\| `sql160` \|/);
   assert.match(oneShot, /`sql158`, `sql159`, `sql160`, `sql161`, `sql162`\) \|/);
