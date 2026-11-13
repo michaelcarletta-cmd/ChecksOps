@@ -1,0 +1,15 @@
+{
+  "workstream_id": "shared-check-source-sends-api-applied",
+  "authorization": "Record only (2026-11-13): the bytes below are live. Nothing is planned or authorized by this manifest; any later change to this member needs its own manifest, staging acceptance and owner approval.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Shared check source sends API (#1850, merged as 82d529ee5 on the owner's \"merge 1850 when green\") applied. Applied 2026-11-13 from main 2e2076d49 (the #1851 merge; data.mjs unchanged since 82d529ee5) on the owner's \"deploy data.mjs to staging, then production on DEPLOY data.mjs TO PRODUCTION\". The apply run concluded success including its \"Verify live member is the accepted bytes\" step (state VERIFIED) and the public production smoke (/health and /db-health 200). data.mjs: staging inspect run 43351564378 (00da994e live, RevisionId 83b05b94-00b4-420b-a136-ed0353eb84fc), staging apply run 43352295407 (after CodeSha256 Dif2IETi/w3MYw50go94GVDr3iuD505RCSuWiLTs72s= RevisionId 8b7b367d-0d89-4824-8998-207b172fecb1), staging re-inspect run 43353097101 read 743348d9 live (RevisionId 7f83a725-cc3b-4266-b27f-7cd3cf00c3b7, same CodeSha256); production preflight inspect run 43353100820 (READY, 00da994e live, RevisionId 33191134-ba7f-438a-954e-421918b0dae8, CodeSha256 pG4slikwcuP9DLe828v5SJgpucqGh9QVqhHf+swSQ/o=); production apply run 43353745389 (00da994e -> 743348d9) on the owner's \"DEPLOY data.mjs TO PRODUCTION\", VERIFIED, after CodeSha256 I53dW+xrW9811eoZDcmBAWlCvlJ8nzK/8NcmtblqCIY= RevisionId e07dba65-259c-467d-b2b6-f8d49eaeef12; re-inspect run 43354396250 read 743348d9 live (ALREADY_ACCEPTED, RevisionId e07dba65-259c-467d-b2b6-f8d49eaeef12, same CodeSha256). No SQL here (SQL 162 was applied in production first, #1848; SQL 53 still first). Nothing calls get_shared_check_source_sends until the Check Command Center note ships. The row records the applied bytes as live_sha256 and accepted_sha256 and chains to the manifest that planned it (previous_manifest), which keeps the pre-apply state.",
+  "members": {
+    "data.mjs": {
+      "live_sha256": "743348d9f570facff370c75f737eef58fe8ab2deec0b087c3a3747e0cf56e61c",
+      "accepted_sha256": "743348d9f570facff370c75f737eef58fe8ab2deec0b087c3a3747e0cf56e61c",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-shared-check-source-sends-api-manifest-2026-11-13.json"
+    }
+  }
+}
