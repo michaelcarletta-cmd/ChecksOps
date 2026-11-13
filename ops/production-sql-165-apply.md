@@ -45,7 +45,20 @@ checked before the apply by `altered_columns_before_or_intended` (it must exist 
 NOT NULL as before or as after the file), and skipped by the unrelated-catalog snapshot like an added column. No other
 migration's fingerprint changes.
 
-**Status:** staging pin execute-authorized (wave 57); not applied anywhere. The production pin is pending.
+**Status:** applied to staging (wave 57, 2026-11-13); production pin execute-authorized (owner-approved pin change of 2026-11-13,
+"Open the SQL 165 production pin PR"); not applied to production. The production apply still needs the owner's words for that run.
+
+**Staging apply (2026-11-13).** After the staging pin (#1887) and executor deploy run 43509606416 (main `005f42296`, executor
+CodeSha256 `cE42JmZv…` → `BGu9krtX…`): read-live run 43510185657 `3a6d086e…` (not applied, `precondition_failures` `[]`), apply run
+43510673897 under the owner's words "Do the SQL 165 staging pin and apply" (after `23c689b9…`, result `applied`), read-live run
+43511034276 `already_applied` true, `23c689b9…`.
+
+**Production inspect (2026-11-13).** Read-only, under the owner's words "Run the SQL 165 production inspect": transfer run
+43511454763 staged main `005f42296` (tarball `d0952b5f…`, the SQL 165 file on the runner `18dfb111…` == the pin), SSM
+`55b0c2ac-49c1-4bf3-a1aa-f3c62822776a` on the runner (started 21:33:08Z, stopped 21:33:51Z): live `3a6d086e…` (the function, column,
+foreign key, check and index absent; `stakeholder_account_id` uuid NOT NULL with no default), `already_applied` false,
+`precondition_failures` `[]`, `prerequisites_missing` `[]`, SQL 141 applied, `definer_writes` ok on tenants, vendor_tenants and
+tenant_vendor_payees.
 
 **Staging read-live (2026-11-13).** Run 43506600170 (main `31c0c874b`, after executor inspect run 43505703831 and executor deploy
 run 43506159674 (executor CodeSha256 `K6NRf+LR…` -> `cE42JmZv…`)), under the owner's words "Start the SQL 165 staging refresh

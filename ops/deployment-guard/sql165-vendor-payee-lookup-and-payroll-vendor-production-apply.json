@@ -1,8 +1,8 @@
 {
   "id": "sql165-vendor-payee-lookup-and-payroll-vendor-production-apply",
   "migration": "sql165",
-  "authorization": "pending",
-  "execute": false,
+  "authorization": "Owner approved 2026-11-13 (the owner's words for SQL 165: \"Start the vendor payments API and screens\", \"New migration\" and \"Record in payroll\", \"Merge the SQL 165 tooling PR when green\", \"Start the SQL 165 staging refresh and read-live\", \"Do the SQL 165 staging pin and apply\", \"Run the SQL 165 production inspect\", \"Open the SQL 165 production pin PR\"; the change itself is reviewed and merged under those words): production apply of SQL 165 after the staging acceptance below, from the recorded production pre-state (3a6d086e -> 23c689b9); each apply still needs the owner's run-time approval (the owner's words for that run).",
+  "execute": true,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -13,7 +13,7 @@
   "function_identities": [
     "public.aws_vendor_payees_for_tenant(uuid)"
   ],
-  "expected_live_definition_sha256": null,
+  "expected_live_definition_sha256": "3a6d086e37c04740397c0b6a99d558ed0a5e907c296f8a99a71ae323acdca248",
   "intended_replacement_sha256": "23c689b9ac0dad2ee1760214a37038a86142041c104867da8381cffb3d8202fa",
   "authorization_phrase": "ENABLE_VENDOR_PAYEE_LOOKUP_AND_PAYROLL_VENDOR",
   "predecessors": [
@@ -43,24 +43,24 @@
     "note": "Guarded tooling for SQL 165: sql165-vendor-payee-lookup-and-payroll-vendor-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql165-vendor-payee-lookup-and-payroll-vendor); production-sql-one-shot.mjs --migration sql165. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): the new function with its attributes, body and ACL, the added column with its column ACL, the altered column (type, NOT NULL, default; the engine's altered_columns, new with this migration), the two constraints and the index. The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
   },
   "production_inspect": {
-    "status": "pending",
-    "date": null,
-    "ssm_command_id": null,
-    "source_commit": null,
+    "status": "recorded",
+    "date": "2026-11-13",
+    "ssm_command_id": "55b0c2ac-49c1-4bf3-a1aa-f3c62822776a",
+    "source_commit": "005f422961099e8d0746be01911fbdd449bd8df2",
     "read_only": true,
     "connected_as": "checksops_admin",
-    "live_definition_sha256": null,
-    "apply_preconditions_met": null,
-    "precondition_failures": null,
-    "note": "Pending: no release-engine production inspect has been run for SQL 165 yet. Expected: prerequisites_missing [], predecessors sql141 applied, the function, column, constraints and index absent, payroll_runs.stakeholder_account_id uuid NOT NULL with no default, definer_writes ok on tenants, vendor_tenants and tenant_vendor_payees, already_applied false. Expected release-engine fingerprint of that pre-state under sql165: 3a6d086e37c04740397c0b6a99d558ed0a5e907c296f8a99a71ae323acdca248 (releaseStateHash('sql165', {altered_columns: stakeholder_account_id uuid NOT NULL})). Record the one-shot --phase inspect's date, SSM command id, source commit, live_definition_sha256, prerequisites_missing, release_sql_inspect, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. Stop if the pre-state differs, prerequisites_missing is not [] or precondition_failures is not []: that needs its own reviewed change."
+    "live_definition_sha256": "3a6d086e37c04740397c0b6a99d558ed0a5e907c296f8a99a71ae323acdca248",
+    "apply_preconditions_met": false,
+    "precondition_failures": [],
+    "note": "Recorded from the read-only production inspect of 2026-11-13 (SSM command 55b0c2ac-49c1-4bf3-a1aa-f3c62822776a, status Success, ResponseCode 0, node scripts/deployment-guard/sql165-vendor-payee-lookup-and-payroll-vendor-production-apply.mjs --inspect on the SQL53 runner i-0c35557c4e5385406, started from stopped at 21:33:08Z and confirmed stopped again at 21:33:51Z, under the owner's words \"Run the SQL 165 production inspect\", from main 005f42296 (tarball source-005f422961099e8d0746be01911fbdd449bd8df2.tar.gz sha256 d0952b5fad308ce4e11b8bdca16edc0c512817888ab456acf914823f957d62de, transfer run 43511454763; SOURCE_COMMIT 005f422961099e8d0746be01911fbdd449bd8df2; migration source sha256 on the runner 18dfb11105daeb92d202fb8d1f3c0aba16e087c0933ed3352321e5e62e29bd84 == source_sha256)): ok true, read_only true, source_ok true, current_user checksops_admin, pin_execute false, missing_dependencies [], prerequisites_missing [], predecessors sql141 true, successors_applied []; aws_vendor_payees_for_tenant(uuid) absent, payroll_runs.vendor_tenant_id absent, payroll_runs.stakeholder_account_id not yet altered (its before state, uuid NOT NULL with no default, as the derived pre-state requires), payroll_runs_vendor_tenant_id_fkey, payroll_runs_one_payee_check and payroll_runs_vendor_tenant_idx absent; definer_writes tenants, vendor_tenants and tenant_vendor_payees ok true. live_definition_sha256 3a6d086e37c04740397c0b6a99d558ed0a5e907c296f8a99a71ae323acdca248 (the derived pre-state, the same one staging had before its apply), already_applied false, live_matches_expected false (the pin had no pre-state yet), precondition_failures [], apply_preconditions_met false (the pin was execute false). Copied into expected_live_definition_sha256 by this change. A fresh --inspect immediately before apply (the one-shot's inspect step) must still report this live_definition_sha256 and precondition_failures []; if not, stop. If already_applied is true, or precondition_failures is not [], stop. Earlier: Pending: no release-engine production inspect has been run for SQL 165 yet. Expected: prerequisites_missing [], predecessors sql141 applied, the function, column, constraints and index absent, payroll_runs.stakeholder_account_id uuid NOT NULL with no default, definer_writes ok on tenants, vendor_tenants and tenant_vendor_payees, already_applied false. Expected release-engine fingerprint of that pre-state under sql165: 3a6d086e37c04740397c0b6a99d558ed0a5e907c296f8a99a71ae323acdca248 (releaseStateHash('sql165', {altered_columns: stakeholder_account_id uuid NOT NULL})). Record the one-shot --phase inspect's date, SSM command id, source commit, live_definition_sha256, prerequisites_missing, release_sql_inspect, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. Stop if the pre-state differs, prerequisites_missing is not [] or precondition_failures is not []: that needs its own reviewed change."
   },
   "intended_post_state": {
     "fingerprint": "23c689b9ac0dad2ee1760214a37038a86142041c104867da8381cffb3d8202fa",
     "note": "public.aws_vendor_payees_for_tenant(uuid) (plpgsql, STABLE, SECURITY DEFINER, SET search_path = public, SET row_security = off, RETURNS jsonb, owned by checksops_admin, EXECUTE checksops and the owner, nothing for PUBLIC); public.payroll_runs.vendor_tenant_id (uuid, nullable, no default; column INSERT for checksops) with payroll_runs_vendor_tenant_id_fkey (FOREIGN KEY (vendor_tenant_id) REFERENCES public.tenants(id)) and payroll_runs_vendor_tenant_idx (partial, vendor_tenant_id IS NOT NULL); payroll_runs.stakeholder_account_id uuid, nullable, no default; payroll_runs_one_payee_check (CHECK ((num_nonnulls(stakeholder_account_id, vendor_tenant_id) = 1))). No other function, table, policy, table grant or trigger change; no row written by the apply. The fingerprint is releaseIntendedHash('sql165', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): 23c689b9ac0dad2ee1760214a37038a86142041c104867da8381cffb3d8202fa."
   },
   "staging_acceptance": {
-    "ok": false,
-    "reference": null,
-    "basis": "Pending: record the guarded staging SQL executor read-live and the staging apply of SQL 165 (choice sql165-vendor-payee-lookup-and-payroll-vendor) here in the reviewed change that sets execute true. The behavior is covered on PostgreSQL 16 by aws/tests/sql165-vendor-payee-lookup-and-payroll-vendor-pg.test.mjs. Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+    "ok": true,
+    "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43510673897",
+    "basis": "Guarded staging SQL executor apply of sql165-vendor-payee-lookup-and-payroll-vendor, run 43510673897 (2026-11-13, main 005f42296, executor deploy run 43509606416 (executor CodeSha256 cE42JmZv... -> BGu9krtX/Ocjg6pKGq0m1f+F2LNsaNZ7zM9ml5vNwTo=), through the SQL 165 staging pin, wave 57 (#1887), on the owner's words \"Do the SQL 165 staging pin and apply\"): read-live before it, run 43510185657, 3a6d086e37c04740397c0b6a99d558ed0a5e907c296f8a99a71ae323acdca248, already_applied false, precondition_failures []; the apply reported result applied and live 23c689b9ac0dad2ee1760214a37038a86142041c104867da8381cffb3d8202fa == intended_replacement_sha256 (applied against the pinned expected_live_definition_sha256 3a6d086e37c04740397c0b6a99d558ed0a5e907c296f8a99a71ae323acdca248); read-live after it, run 43511034276, already_applied true, live 23c689b9ac0dad2ee1760214a37038a86142041c104867da8381cffb3d8202fa, precondition_failures []. Production's pre-state is the same one staging had before its apply (3a6d086e37c04740397c0b6a99d558ed0a5e907c296f8a99a71ae323acdca248). The behavior is covered on PostgreSQL 16 by aws/tests/sql165-vendor-payee-lookup-and-payroll-vendor-pg.test.mjs and aws/tests/release-sql165-executor.test.mjs."
   }
 }
