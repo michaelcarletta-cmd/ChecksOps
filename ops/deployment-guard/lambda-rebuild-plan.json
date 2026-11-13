@@ -4,7 +4,7 @@
   "environments": {
     "staging": {
       "function_name": "checksops-staging-api",
-      "status": "accepted",
+      "status": "applied",
       "members": {
         "providers/parity/sweep-read.mjs": {
           "live_sha256": "4da8e0c0e1b3bb6c78248cde67738f953044b065dde75cfc4885d6fac2bae02f",
@@ -36,6 +36,25 @@
           "candidate": 54
         },
         "notes": "Sixth staging rebuild, for the settlement bank fallback (owner 2026-11-12: \"Condition One settlement bank in Wallet & Treasury shows nothing... if condition one is set up it should show. This goes for all tenants.\"; #1838, merge 977bfedbd): providers/parity/sweep-read.mjs no longer fails the whole sweep snapshot when a Moov read fails, so the bank on file still shows. It is not an overlay member and reaches a function only with a rebuild. Owner 2026-11-13: \"B\" (wait for the partner-send workstream's overlays so this rebuild carries no other workstream's change), then \"Start the API rebuild plan and staging rebuild\". Read-only inspects of 2026-11-13 at main 4cd25dac9 (staging 43348784836, production 43348781774) read live pG4slikw... in both and listed sweep-read.mjs and providers/production/moov-send.mjs (#1844); the partner-send workstream's guarded overlays (#1850; production overlay runs between 2026-11-13 02:34 and 02:55 UTC; staging now reads the same CodeSha256 as production) then put moov-send.mjs and data.mjs live with main's bytes, which this inspect counts as same. Production inspect 43371290665 (main 8d6488e0f) reads the same live CodeSha256 Dif2IETi... and the same single difference. Inspect diff: 1 changed (providers/parity/sweep-read.mjs, live 4da8e0c0... -> main's 32d7ffae...), 0 added, 0 removed, 209 same, dependencies identical (54 live, 54 candidate). The live 4da8e0c0... is main's sweep-read.mjs before #1838 (977bfedbd^1). The fifth section (inspect 43207489743, apply 43210074311) moves verbatim into history[4]. Nothing is applied by this plan change; the apply needs approval_phrase exactly \"DEPLOY FULL API PACKAGE TO STAGING\" and this inspect's live CodeSha256 as expected_live_code_sha256. Production is unchanged."
+      },
+      "applied": {
+        "run_id": "43420512528",
+        "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43420512528",
+        "main_commit": "78f05e98e53472f4c24866bfa074386018d24149",
+        "approval_phrase": "DEPLOY FULL API PACKAGE TO STAGING",
+        "code_sha256_before": "Dif2IETi/w3MYw50go94GVDr3iuD505RCSuWiLTs72s=",
+        "revision_id_before": "7f83a725-cc3b-4266-b27f-7cd3cf00c3b7",
+        "code_sha256_after": "EaCUx/sRQV1qNZC8g11cpzLIuWVea/cfZiTWZ3sdPvQ=",
+        "revision_id_after": "6df662ee-e9e6-437b-9a73-c126cdc4252d",
+        "candidate_zip_sha256": "11a094c7fb11415d6a3590bc835d5ca732c8b9655e6bf71f6624d6677b1d3ef4",
+        "applied_at": "2026-11-13T11:52:57.262Z",
+        "state": "VERIFIED",
+        "smoke": [
+          "/health",
+          "/db-health",
+          "/db-readonly-validate"
+        ],
+        "notes": "Sixth staging rebuild, for the settlement bank fallback (#1838: providers/parity/sweep-read.mjs, a Moov read failure no longer hides the bank on file), applied on the owner's \"DEPLOY FULL API PACKAGE TO STAGING\" (2026-11-13) from main 78f05e98e (the merged plan #1857), with expected_live_code_sha256 Dif2IETi... (re-read by inspect 43420370488 on the same commit: READY, 1 changed, 209 same). Apply run 43420512528 (job 131869037804): every step success. The job's own inspect step read READY (1 changed: providers/parity/sweep-read.mjs 4da8e0c0... -> 32d7ffae...; 0 added, 0 removed, 209 same, dependencies 54/54). The receipt-gated writer updated checksops-staging-api to CodeSha256 EaCUx/sRQV1qNZC8g11cpzLIuWVea/cfZiTWZ3sdPvQ= (writer RevisionId c4abca88-561a-4a2e-8701-f08a9ddc679b, lastUpdateStatus InProgress, errors []); \"Verify the live package is the candidate\" read it back VERIFIED (6786 members, RevisionId 6df662ee-e9e6-437b-9a73-c126cdc4252d); the public staging smoke returned 200 ok for /health, /db-health and /db-readonly-validate. Live read-back (read-only GetFunctionConfiguration, 2026-11-13 after the apply): CodeSha256 EaCUx/sR..., RevisionId 6df662ee, LastModified 2026-11-13T11:53:00Z, LastUpdateStatus Successful, State Active, 46 variables. Owner acceptance 2026-11-13: \"Staging looks good\" (Wallet & Treasury settlement bank on staging)."
       },
       "history": [
         {
@@ -869,11 +888,11 @@
     },
     "production": {
       "function_name": "checksops-production-prep-api",
-      "status": "applied",
+      "status": "accepted",
       "members": {
-        "mortgage-ops-usage.mjs": {
-          "live_sha256": "e24900070c080032469c7383338efd26b37c522ec6ba68d3f7b6051539d1fd74",
-          "accepted_sha256": "abd5fe7a8caba4cf9c48ff4ce0d2cb5ab7cb6e1d122a1c389ac66ede44acb044"
+        "providers/parity/sweep-read.mjs": {
+          "live_sha256": "4da8e0c0e1b3bb6c78248cde67738f953044b065dde75cfc4885d6fac2bae02f",
+          "accepted_sha256": "32d7ffaaeffc27a13615e1c310666e87bdccf619c12c15ddb5823921035a44f4"
         }
       },
       "added": {},
@@ -884,13 +903,13 @@
         "changed": {}
       },
       "inspect": {
-        "run_id": "43210883811",
-        "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43210883811",
-        "main_commit": "60b8c734f7dd5f71f5b2bc94faa9633aca5d81d7",
-        "live_code_sha256": "UWR5ZSeBSAGV1msYNmueRZQvlt+S2n2gcJAJgC/CaYA=",
-        "live_revision_id": "0810fadd-1ef4-4b0f-84cb-9c57533ea727",
+        "run_id": "43425291017",
+        "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43425291017",
+        "main_commit": "37d50181c3e28911bd06b5a930fde9ab218c3ec3",
+        "live_code_sha256": "Dif2IETi/w3MYw50go94GVDr3iuD505RCSuWiLTs72s=",
+        "live_revision_id": "fd050f1f-7a45-416d-8e11-bd1edf3a5c85",
         "live_member_count": 6786,
-        "candidate_zip_sha256": "d8d2a82a1931b5f3a9b284c6037ffd49e90c1cc1fc11c992721a9614c556a08c",
+        "candidate_zip_sha256": "11a094c7fb11415d6a3590bc835d5ca732c8b9655e6bf71f6624d6677b1d3ef4",
         "candidate_member_count": 6786,
         "same": 209,
         "changed": 1,
@@ -900,27 +919,8 @@
           "live": 54,
           "candidate": 54
         },
-        "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43210074311",
-        "notes": "Fifth production rebuild, for the second mortgage company fee (SQL 153, owner 2026-11-10/11: \"Flat $5\", \"it should be an additional $5 if 2 mortgage companies are on check\"; #1761): the $5 accrual copy in mortgage-ops-usage.mjs, which is not an overlay member and reaches a function only with a rebuild. Owner 2026-11-12: \"Read-only production rebuild inspect\", then \"write the production plan PR\". SQL 153 is applied in production (2026-11-12, SSM 1051cd92-cbda-43ec-bf8d-e8905f22727a, #1797), so the accrual has its index and columns. Inspect run 43210883811 (main 60b8c734f): live CodeSha256 UWR5ZSeBSAGV1msYNmueRZQvlt+S2n2gcJAJgC/CaYA=, RevisionId 0810fadd-1ef4-4b0f-84cb-9c57533ea727, the package staging ran before its fifth rebuild (staging inspect 43207489743 read the same CodeSha256); the candidate d8d2a82a... is the ZIP the staging apply 43210074311 put live and VERIFIED. Diff: 1 changed (mortgage-ops-usage.mjs, live e2490007... -> main's abd5fe7a...), 0 added, 0 removed, 209 same, dependencies identical (54 live, 54 candidate). /health and /db-health 200. The inspect reported BLOCKED with six problems, all against the fourth production section only (now history[3]): mortgage-ops-usage.mjs live_mismatch (that section's live was 9856f51f...; e2490007... is the bytes it accepted and put live) and listed_member_drifted for app-services.mjs, auth-financial-totp.mjs, tenant-billing-engine.mjs, tenant-billing-handlers.mjs and tenant-collection-v2.mjs, which guarded production overlays since 2026-11-02 replaced with main's bytes (recorded in the production overlay plan; this inspect counts each as same). It is not drift. The fourth section moves verbatim into history[3]. Staging acceptance: the staging apply run 43210074311 (VERIFIED, /health, /db-health and /db-readonly-validate 200). Nothing is applied by this plan change; the apply needs approval_phrase exactly \"DEPLOY FULL API PACKAGE TO PRODUCTION\", this inspect's live CodeSha256 as expected_live_code_sha256, the staging acceptance reference, and the production environment reviewer's approval."
-      },
-      "applied": {
-        "run_id": "43215807509",
-        "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43215807509",
-        "main_commit": "f6506083c4fa16f9620764d9aa480ff2ba8794a9",
-        "approval_phrase": "DEPLOY FULL API PACKAGE TO PRODUCTION",
-        "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43210074311",
-        "code_sha256_before": "UWR5ZSeBSAGV1msYNmueRZQvlt+S2n2gcJAJgC/CaYA=",
-        "revision_id_before": "0810fadd-1ef4-4b0f-84cb-9c57533ea727",
-        "code_sha256_after": "2NKoKhkxtfOpsoTGA3/9SekMHMH8EcmSchqWFMVWoIw=",
-        "revision_id_after": "27206d2d-b0e4-43f8-93d6-ad0da538091c",
-        "candidate_zip_sha256": "d8d2a82a1931b5f3a9b284c6037ffd49e90c1cc1fc11c992721a9614c556a08c",
-        "applied_at": "2026-11-12T12:13:05.776Z",
-        "state": "VERIFIED",
-        "smoke": [
-          "/health",
-          "/db-health"
-        ],
-        "notes": "Fifth production rebuild, applied on the owner's \"DEPLOY FULL API PACKAGE TO PRODUCTION.\" (2026-11-12; passed to the workflow as exactly \"DEPLOY FULL API PACKAGE TO PRODUCTION\", the trailing full stop dropped) from main f6506083c (the merged plan #1810), with expected_live_code_sha256 UWR5ZSeB... (inspect 43210883811) and staging acceptance run 43210074311. Before dispatch, read-only GetFunctionConfiguration confirmed production still UWR5ZSeB..., RevisionId 0810fadd, LastUpdateStatus Successful, and main f6506083c carried no aws/functions/api change since the inspected 60b8c734f. Apply run 43215807509 (job 131174636675): every step success. The job's own inspect step read READY (1 changed: mortgage-ops-usage.mjs e2490007... -> abd5fe7a...; 0 added, 0 removed, 209 same, dependencies 54/54). The receipt-gated writer updated checksops-production-prep-api to CodeSha256 2NKoKhkxtfOpsoTGA3/9SekMHMH8EcmSchqWFMVWoIw= (writer RevisionId db5b3cc4-3a57-4876-9399-8b239990c00e, lastUpdateStatus InProgress, errors []); \"Verify the live package is the candidate\" read it back VERIFIED (6786 members, RevisionId 27206d2d-b0e4-43f8-93d6-ad0da538091c); the public production smoke returned 200 ok for /health and /db-health. The production environment reviewer gate did not hold the job. Live read-back (read-only GetFunctionConfiguration after the apply): CodeSha256 2NKoKhkx... (the package staging runs since its apply 43210074311), RevisionId 27206d2d, LastModified 2026-11-12T12:13:10Z, LastUpdateStatus Successful, 50 variables. Not verified by this record: a production (or staging) check with two mortgage companies accruing the extra $5; none had been reported when this was written."
+        "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43420512528",
+        "notes": "Sixth production rebuild, for the settlement bank fallback (owner 2026-11-12: \"Condition One settlement bank in Wallet & Treasury shows nothing... This goes for all tenants\"; #1838: providers/parity/sweep-read.mjs, a Moov read failure no longer fails the sweep snapshot, so the bank on file still shows), not an overlay member: it reaches a function only with a rebuild. Owner 2026-11-13: \"B\" (wait until the partner-send overlays of moov-send.mjs and data.mjs were live, so this rebuild carries no other workstream's change), \"Staging looks good\". Inspect run 43425291017 (main 37d50181c): live CodeSha256 Dif2IETi/w3MYw50go94GVDr3iuD505RCSuWiLTs72s=, RevisionId fd050f1f-7a45-416d-8e11-bd1edf3a5c85 (read-only GetFunctionConfiguration on 2026-11-13 read the same, LastModified 2026-11-13T02:49:42Z), the package staging ran before its sixth rebuild (staging inspects 43416770262 and 43420370488 read the same CodeSha256); the candidate 11a094c7... is the ZIP the staging apply 43420512528 put live and VERIFIED. Diff: 1 changed (providers/parity/sweep-read.mjs, live 4da8e0c0... -> main's 32d7ffae...), 0 added, 0 removed, 209 same, dependencies identical (54 live, 54 candidate). /health and /db-health 200. The inspect reported BLOCKED with one problem, SOURCE_RECONCILIATION_REQUIRED (unlisted_change) for sweep-read.mjs, which this section lists. The fifth section moves verbatim into history[4]. Staging acceptance: the staging apply run 43420512528 (VERIFIED, /health, /db-health and /db-readonly-validate 200) and the owner's \"Staging looks good\". Nothing is applied by this plan change; the apply needs approval_phrase exactly \"DEPLOY FULL API PACKAGE TO PRODUCTION\", this inspect's live CodeSha256 as expected_live_code_sha256, the staging acceptance reference, and the production environment reviewer's approval."
       },
       "history": [
         {
@@ -1342,6 +1342,61 @@
               "/db-health"
             ],
             "notes": "Fourth production rebuild, applied on the owner's \"DEPLOY FULL API PACKAGE TO PRODUCTION\" (2026-11-02). Pre-inspect run 41468682423 on main 1364af787 (the merged plan #1530) read READY: 16 changed, 1 added (money-write-flag.mjs), 0 removed, 0 problems, live CodeSha256 +X7Idizd5..., RevisionId 91745cda, candidate 4d0a30a2... (identical to inspect 41463084601's). Before the apply, read-only GetFunctionConfiguration confirmed the live CodeSha256 +X7Idizd5... and RevisionId 91745cda unchanged and main still 1364af787. Apply run 41469896446 (job 125360398863): every step success, including \"Build the candidate and inspect the live package\" (READY), \"Apply through the official receipt-gated rebuild writer\" (writer update CodeSha256 TQowoiwSTGO+SBFVbzpKabESHfDOF5+pLOBXwT7Y0No=, RevisionId 57321d90-58b5-46ec-98ea-8fa5873591c9, lastUpdateStatus InProgress, errors []), \"Verify the live package is the candidate\" (VERIFIED, 6782 members) and \"Public production smoke\" (/health and /db-health 200 ok). Read-only GetFunctionConfiguration after the apply: CodeSha256 TQowoiwSTGO+SBFVbzpKabESHfDOF5+pLOBXwT7Y0No=, RevisionId 870cc791-522b-49ee-bb04-4dd4fecc8510, LastModified 2026-11-02T15:16:51Z, LastUpdateStatus Successful, State Active; no error-level event in /aws/lambda/checksops-production-prep-api from 15:16Z. Production and staging again run the same package bytes (CodeSha256 TQowoiwS..., staging rebuild inspect 41463556950 ALREADY_ACCEPTED on the same candidate). This rebuild applied no SQL. With it, #1498's API is live in production (the eight money-write flag overlay members and the three files that are not overlay members), which SQL 136's production STOP condition requires; the automatic funding settings route (#1524) is live, which SQL 140 serves. Not verified: no user flow was exercised in production after the apply; the production overlay plan rows of the sixteen files still record their pre-rebuild expected_live (a production overlay inspect of any of them now reads ALREADY_ACCEPTED, live = accepted), and their reconciliation, including check-endorsement.mjs's 7c6ae301, is a separate record. A later inspect against an unchanged main reports ALREADY_ACCEPTED; the next rebuild starts from a new inspect and a new reviewed plan section."
+          }
+        },
+        {
+          "status": "applied",
+          "members": {
+            "mortgage-ops-usage.mjs": {
+              "live_sha256": "e24900070c080032469c7383338efd26b37c522ec6ba68d3f7b6051539d1fd74",
+              "accepted_sha256": "abd5fe7a8caba4cf9c48ff4ce0d2cb5ab7cb6e1d122a1c389ac66ede44acb044"
+            }
+          },
+          "added": {},
+          "removed": {},
+          "dependencies": {
+            "added": {},
+            "removed": {},
+            "changed": {}
+          },
+          "inspect": {
+            "run_id": "43210883811",
+            "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43210883811",
+            "main_commit": "60b8c734f7dd5f71f5b2bc94faa9633aca5d81d7",
+            "live_code_sha256": "UWR5ZSeBSAGV1msYNmueRZQvlt+S2n2gcJAJgC/CaYA=",
+            "live_revision_id": "0810fadd-1ef4-4b0f-84cb-9c57533ea727",
+            "live_member_count": 6786,
+            "candidate_zip_sha256": "d8d2a82a1931b5f3a9b284c6037ffd49e90c1cc1fc11c992721a9614c556a08c",
+            "candidate_member_count": 6786,
+            "same": 209,
+            "changed": 1,
+            "added": 0,
+            "removed": 0,
+            "dependency_counts": {
+              "live": 54,
+              "candidate": 54
+            },
+            "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43210074311",
+            "notes": "Fifth production rebuild, for the second mortgage company fee (SQL 153, owner 2026-11-10/11: \"Flat $5\", \"it should be an additional $5 if 2 mortgage companies are on check\"; #1761): the $5 accrual copy in mortgage-ops-usage.mjs, which is not an overlay member and reaches a function only with a rebuild. Owner 2026-11-12: \"Read-only production rebuild inspect\", then \"write the production plan PR\". SQL 153 is applied in production (2026-11-12, SSM 1051cd92-cbda-43ec-bf8d-e8905f22727a, #1797), so the accrual has its index and columns. Inspect run 43210883811 (main 60b8c734f): live CodeSha256 UWR5ZSeBSAGV1msYNmueRZQvlt+S2n2gcJAJgC/CaYA=, RevisionId 0810fadd-1ef4-4b0f-84cb-9c57533ea727, the package staging ran before its fifth rebuild (staging inspect 43207489743 read the same CodeSha256); the candidate d8d2a82a... is the ZIP the staging apply 43210074311 put live and VERIFIED. Diff: 1 changed (mortgage-ops-usage.mjs, live e2490007... -> main's abd5fe7a...), 0 added, 0 removed, 209 same, dependencies identical (54 live, 54 candidate). /health and /db-health 200. The inspect reported BLOCKED with six problems, all against the fourth production section only (now history[3]): mortgage-ops-usage.mjs live_mismatch (that section's live was 9856f51f...; e2490007... is the bytes it accepted and put live) and listed_member_drifted for app-services.mjs, auth-financial-totp.mjs, tenant-billing-engine.mjs, tenant-billing-handlers.mjs and tenant-collection-v2.mjs, which guarded production overlays since 2026-11-02 replaced with main's bytes (recorded in the production overlay plan; this inspect counts each as same). It is not drift. The fourth section moves verbatim into history[3]. Staging acceptance: the staging apply run 43210074311 (VERIFIED, /health, /db-health and /db-readonly-validate 200). Nothing is applied by this plan change; the apply needs approval_phrase exactly \"DEPLOY FULL API PACKAGE TO PRODUCTION\", this inspect's live CodeSha256 as expected_live_code_sha256, the staging acceptance reference, and the production environment reviewer's approval."
+          },
+          "applied": {
+            "run_id": "43215807509",
+            "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43215807509",
+            "main_commit": "f6506083c4fa16f9620764d9aa480ff2ba8794a9",
+            "approval_phrase": "DEPLOY FULL API PACKAGE TO PRODUCTION",
+            "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43210074311",
+            "code_sha256_before": "UWR5ZSeBSAGV1msYNmueRZQvlt+S2n2gcJAJgC/CaYA=",
+            "revision_id_before": "0810fadd-1ef4-4b0f-84cb-9c57533ea727",
+            "code_sha256_after": "2NKoKhkxtfOpsoTGA3/9SekMHMH8EcmSchqWFMVWoIw=",
+            "revision_id_after": "27206d2d-b0e4-43f8-93d6-ad0da538091c",
+            "candidate_zip_sha256": "d8d2a82a1931b5f3a9b284c6037ffd49e90c1cc1fc11c992721a9614c556a08c",
+            "applied_at": "2026-11-12T12:13:05.776Z",
+            "state": "VERIFIED",
+            "smoke": [
+              "/health",
+              "/db-health"
+            ],
+            "notes": "Fifth production rebuild, applied on the owner's \"DEPLOY FULL API PACKAGE TO PRODUCTION.\" (2026-11-12; passed to the workflow as exactly \"DEPLOY FULL API PACKAGE TO PRODUCTION\", the trailing full stop dropped) from main f6506083c (the merged plan #1810), with expected_live_code_sha256 UWR5ZSeB... (inspect 43210883811) and staging acceptance run 43210074311. Before dispatch, read-only GetFunctionConfiguration confirmed production still UWR5ZSeB..., RevisionId 0810fadd, LastUpdateStatus Successful, and main f6506083c carried no aws/functions/api change since the inspected 60b8c734f. Apply run 43215807509 (job 131174636675): every step success. The job's own inspect step read READY (1 changed: mortgage-ops-usage.mjs e2490007... -> abd5fe7a...; 0 added, 0 removed, 209 same, dependencies 54/54). The receipt-gated writer updated checksops-production-prep-api to CodeSha256 2NKoKhkxtfOpsoTGA3/9SekMHMH8EcmSchqWFMVWoIw= (writer RevisionId db5b3cc4-3a57-4876-9399-8b239990c00e, lastUpdateStatus InProgress, errors []); \"Verify the live package is the candidate\" read it back VERIFIED (6786 members, RevisionId 27206d2d-b0e4-43f8-93d6-ad0da538091c); the public production smoke returned 200 ok for /health and /db-health. The production environment reviewer gate did not hold the job. Live read-back (read-only GetFunctionConfiguration after the apply): CodeSha256 2NKoKhkx... (the package staging runs since its apply 43210074311), RevisionId 27206d2d, LastModified 2026-11-12T12:13:10Z, LastUpdateStatus Successful, 50 variables. Not verified by this record: a production (or staging) check with two mortgage companies accruing the extra $5; none had been reported when this was written."
           }
         }
       ]
