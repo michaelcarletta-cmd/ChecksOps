@@ -1,8 +1,8 @@
 {
   "id": "sql162-shared-check-source-sends-production-apply",
   "migration": "sql162",
-  "authorization": "pending",
-  "execute": false,
+  "authorization": "Owner approved 2026-11-13 (the owner's words for SQL 162: \"Sends to someone other than the partner\", \"Yes for 1, 2, and run the inspect\", \"Merge all when green\", \"run the SQL 162 staging read\", \"open the SQL 162 staging pin PR\", \"merge 1846\", \"apply SQL 162 in staging\", \"run the SQL 162 production inspect\", \"open the SQL 162 production pin PR\"; the change itself is reviewed and merged under those words): production apply of SQL 162 after the staging acceptance below, from the recorded production pre-state (eb3a2901 -> 77d36f63); each apply still needs the owner's run-time approval (the owner's words for that run).",
+  "execute": true,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -13,7 +13,7 @@
   "function_identities": [
     "public.get_shared_check_source_sends(uuid)"
   ],
-  "expected_live_definition_sha256": null,
+  "expected_live_definition_sha256": "eb3a290173a156be3757f03c0217b4548bffe713f582cdc6f32b676e91317e4f",
   "intended_replacement_sha256": "77d36f6375b21c5e383896c88b5e9eccccb9f7bb9d06801921575e14a8ae41ca",
   "authorization_phrase": "SHOW_PARTNERS_SHARED_CHECK_SOURCE_SENDS",
   "predecessors": [],
@@ -41,24 +41,24 @@
     "note": "Guarded tooling for SQL 162: sql162-shared-check-source-sends-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql162-shared-check-source-sends); production-sql-one-shot.mjs --migration sql162. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): the function with its attributes, body, result and ACL. The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
   },
   "production_inspect": {
-    "status": "pending",
-    "date": null,
-    "ssm_command_id": null,
-    "source_commit": null,
+    "status": "recorded",
+    "date": "2026-11-13",
+    "ssm_command_id": "f8429f5d-5729-4a0e-980c-26a50f17dd20",
+    "source_commit": "e4be20cc12d12cbdeb4bfeed4eafba7fdb2b79c0",
     "read_only": true,
     "connected_as": "checksops_admin",
-    "live_definition_sha256": null,
-    "apply_preconditions_met": null,
-    "precondition_failures": null,
-    "note": "Pending: no release-engine production inspect has been run for SQL 162 yet. Expected: prerequisites_missing [], the function absent, definer_writes ok on payment_transfers and shared_checks, already_applied false. Expected release-engine fingerprint of that pre-state under sql162: eb3a290173a156be3757f03c0217b4548bffe713f582cdc6f32b676e91317e4f (releaseStateHash('sql162', {})). Record the one-shot --phase inspect's date, SSM command id, source commit, live_definition_sha256, prerequisites_missing, release_sql_inspect, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. Stop if the pre-state differs, prerequisites_missing is not [] or precondition_failures is not []: that needs its own reviewed change."
+    "live_definition_sha256": "eb3a290173a156be3757f03c0217b4548bffe713f582cdc6f32b676e91317e4f",
+    "apply_preconditions_met": false,
+    "precondition_failures": [],
+    "note": "Recorded from the read-only production inspect of 2026-11-13 (SSM command f8429f5d-5729-4a0e-980c-26a50f17dd20, status Success, ResponseCode 0, 01:10:53Z to 01:10:58Z, node scripts/deployment-guard/sql162-shared-check-source-sends-production-apply.mjs --inspect on the SQL53 runner i-0c35557c4e5385406, started from stopped at 01:10:16Z and confirmed stopped again at 01:11:16Z, under the owner's words \"run the SQL 162 production inspect\", from main e4be20cc1 (tarball source-e4be20cc12d12cbdeb4bfeed4eafba7fdb2b79c0.tar.gz sha256 7e16d80cd44dc971419b25bf0308c12124876ceba4dae8b78e1844aa64d4629a, transfer run 43342136278; SOURCE_COMMIT e4be20cc12d12cbdeb4bfeed4eafba7fdb2b79c0; migration source sha256 on the runner 5bfbe41150ef652ade8405f9e8c0733ac32dae04776e489d188f7ae9c39d0179 == source_sha256)): ok true, read_only true, source_ok true, current_user checksops_admin, pin_execute false, missing_dependencies [], prerequisites_missing [], predecessors {} (none), successors_applied []; get_shared_check_source_sends(uuid) absent; definer_writes payment_transfers and shared_checks ok true. live_definition_sha256 eb3a290173a156be3757f03c0217b4548bffe713f582cdc6f32b676e91317e4f (the derived pre-state releaseStateHash('sql162', {})), already_applied false, live_matches_expected false (the pin had no pre-state yet), precondition_failures [], apply_preconditions_met false (the pin was execute false). Copied into expected_live_definition_sha256 by this change. A fresh --inspect immediately before apply (the one-shot's inspect step) must still report this live_definition_sha256 and precondition_failures []; if not, stop. If already_applied is true, or precondition_failures is not [], stop. Earlier: Pending: no release-engine production inspect has been run for SQL 162 yet. Expected: prerequisites_missing [], the function absent, definer_writes ok on payment_transfers and shared_checks, already_applied false. Expected release-engine fingerprint of that pre-state under sql162: eb3a290173a156be3757f03c0217b4548bffe713f582cdc6f32b676e91317e4f (releaseStateHash('sql162', {})). Record the one-shot --phase inspect's date, SSM command id, source commit, live_definition_sha256, prerequisites_missing, release_sql_inspect, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. Stop if the pre-state differs, prerequisites_missing is not [] or precondition_failures is not []: that needs its own reviewed change."
   },
   "intended_post_state": {
     "fingerprint": "77d36f6375b21c5e383896c88b5e9eccccb9f7bb9d06801921575e14a8ae41ca",
     "note": "public.get_shared_check_source_sends(uuid) (plpgsql, STABLE, RETURNS TABLE(check_id uuid, source_tenant_id uuid, last_sent_at timestamp with time zone)), owned by checksops_admin, SECURITY DEFINER, SET search_path = public, pg_temp, EXECUTE checksops and the owner, nothing for PUBLIC, anon, authenticated or service_role. No other function, table, column, policy, grant or trigger change; no row written. The fingerprint is releaseIntendedHash('sql162', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): 77d36f6375b21c5e383896c88b5e9eccccb9f7bb9d06801921575e14a8ae41ca."
   },
   "staging_acceptance": {
-    "ok": false,
-    "reference": null,
-    "basis": "Pending: record the guarded staging SQL executor read-live and the staging apply of SQL 162 (choice sql162-shared-check-source-sends) here in the reviewed change that sets execute true. The behavior is covered on PostgreSQL 16 by aws/tests/sql162-shared-check-source-sends-pg.test.mjs. Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+    "ok": true,
+    "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43340146045",
+    "basis": "Guarded staging SQL executor apply of sql162-shared-check-source-sends, run 43340146045 (2026-11-13, main e4be20cc1, executor deploy run 43338712621, through the SQL 162 staging pin, wave 53, on the owner's words \"apply SQL 162 in staging\"): read-live before it, run 43339473672, eb3a290173a156be3757f03c0217b4548bffe713f582cdc6f32b676e91317e4f (the function absent), already_applied false, precondition_failures [], matches_pinned_expected true; receipt before eb3a290173a156be3757f03c0217b4548bffe713f582cdc6f32b676e91317e4f, after 77d36f6375b21c5e383896c88b5e9eccccb9f7bb9d06801921575e14a8ae41ca == intended_replacement_sha256, result applied; read-live after it, run 43340822402, already_applied true, live 77d36f6375b21c5e383896c88b5e9eccccb9f7bb9d06801921575e14a8ae41ca, EXECUTE checksops and the owner. Production's pre-state is the same one staging had before its apply (eb3a290173a156be3757f03c0217b4548bffe713f582cdc6f32b676e91317e4f). The behavior is covered on PostgreSQL 16 by aws/tests/sql162-shared-check-source-sends-pg.test.mjs and aws/tests/release-sql162-executor.test.mjs."
   }
 }
