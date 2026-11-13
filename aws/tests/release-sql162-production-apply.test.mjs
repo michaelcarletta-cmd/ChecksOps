@@ -191,7 +191,7 @@ test('order: no predecessor; one new SECURITY DEFINER read function with its ACL
   for (const value of [COMMITTED.intended_replacement_sha256, COMMITTED.source_sha256, releaseStateHash(KEY, {}), 'SHOW_PARTNERS_SHARED_CHECK_SOURCE_SENDS']) {
     assert.ok(runbook.includes(value), value);
   }
-  assert.match(runbook, /\*\*Status:\*\* tooling built; staging and production pins pending \(`execute: false`\)\. Nothing applied or read\./);
+  assert.match(runbook, /\*\*Status:\*\* staging pin execute-authorized \(wave 53\); not applied anywhere\. The production pin is pending\./);
   const oneShot = fs.readFileSync(path.join(ROOT, 'ops/production-sql-one-shot.md'), 'utf8');
   assert.match(oneShot, /\| `sql162` \|/);
   assert.match(oneShot, /`sql160`, `sql161`, `sql162`\) \|/);

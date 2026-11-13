@@ -35,7 +35,16 @@ not affected. No API, Lambda or SPA change is part of this pin: the API (`get_sh
 `aws/functions/api/data.mjs` `READ_RPCS` with the tenant gate) and the Check Command Center (such a check leaves the
 partner's Deposited) ship afterwards through their own guarded paths.
 
-**Status:** tooling built; staging and production pins pending (`execute: false`). Nothing applied or read.
+**Status:** staging pin execute-authorized (wave 53); not applied anywhere. The production pin is pending.
+
+**Staging read-live (2026-11-13).** Run 43334326464 (main `d555e2977`, after executor inspect run 43332967295 and executor deploy
+run 43333551422 (executor CodeSha256 `N2/NmXvZ…` -> `H1/nDiud…`)), under the owner's words "run the SQL 162 staging read":
+`already_applied` false, `precondition_failures` `[]`, `prerequisites_missing` `[]`; `get_shared_check_source_sends(uuid)`
+absent; `payment_transfers` and `shared_checks` reachable by the definer. Live
+`eb3a290173a156be3757f03c0217b4548bffe713f582cdc6f32b676e91317e4f`, equal to the derived pre-state; intended `77d36f63…`. Recorded in the staging pin
+(`expected_live_definition_sha256`, `execute: true`, wave 53) on the owner's words "open the SQL 162 staging pin PR". The
+staging apply is a separate run after this pin is merged and the executor is redeployed carrying it, on the owner's words for
+that run. The production pin stays pending.
 
 ## Fingerprint
 
