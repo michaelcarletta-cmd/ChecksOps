@@ -3666,8 +3666,8 @@ export const AUTHORIZED_SQL159_HOMEOWNER_INTRO_REQUESTS_SELECT_GRANT = Object.fr
 // outside of checksops they should NOT be charged $4", "yes make that free too", "start SQL 160 yes"). CREATE OR REPLACE
 // of four live functions (record_check_billing_event, accrue_mortgage_ops_billing, earn_mortgage_agent_compensation,
 // tg_record_mortgage_handling_billing), each from the body production's billing trigger inspect read on 2026-11-12; owner,
-// ACL, SECURITY DEFINER and SET options kept. Nothing else changes. Pending until a reviewed pin change records a staging
-// read-live (wave 51 when approved).
+// ACL, SECURITY DEFINER and SET options kept. Nothing else changes. Staging apply authorized (wave 51) from staging read-live
+// run 43350223533, after SQL 161's staging apply (run 43349438014): equal to the production pre-state (ops/production-sql-160-apply.md).
 export const AUTHORIZED_SQL160_NO_ADDITIONAL_CHECK_OR_MANUAL_DEPOSIT_FEE = Object.freeze({
   key: 'sql160',
   filename: 'aws/workflows/sql/160_no_additional_check_mortgage_charge_or_manual_deposit_fee.sql',
@@ -3675,9 +3675,11 @@ export const AUTHORIZED_SQL160_NO_ADDITIONAL_CHECK_OR_MANUAL_DEPOSIT_FEE = Objec
   // The commit that last authored the file bytes.
   commit: '1835d34a3390025863d809a504ba9dcc716636fd',
   source_sha256: '8133121f731f3ff11c9877747685af666efb91a06c0cbae20612cb6ba690c334',
-  authorization: 'pending',
-  execute: false,
-  expected_live_definition_sha256: null,
+  authorization: 'Owner approved 2026-11-12: staging apply (wave 51) from staging read-live run 43350223533',
+  execute: true,
+  // Staging read-live run 43350223533 (main 4cd25dac, executor current): already_applied false, precondition_failures [].
+  // Equal to the production pre-state (the inspected bodies with production's ACLs and SET options), after SQL 161.
+  expected_live_definition_sha256: '3a8bb0b11d59688642c98ace91bb15c562c362eea00b2ae9c73a166fee365229',
   // Code-derived: releaseIntendedHash('sql160', file bytes) (release-sql-state.mjs); re-derived by the tests.
   intended_replacement_sha256: 'fae1623bb898f879f738bcd639be0238f5e111ebe25a985534a51be2b2903a40',
   function_identities: Object.freeze([
