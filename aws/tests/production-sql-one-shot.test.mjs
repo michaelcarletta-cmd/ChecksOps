@@ -722,7 +722,10 @@ test('only the apply child gets the apply variables, and its receipt is the one 
 // "Open the SQL 164 production pin PR", #1874: the read-only production inspect SSM ff99d916 recorded as its pre-state, the guarded
 // staging apply run 43446058463 from the same pre-state) until its record-and-retire change after its 2026-11-13 apply
 // ("apply SQL 164 in production").
-const EXECUTE_AUTHORIZED = Object.freeze(['sql160']);
+// SQL 141's pin is execute-authorized (owner-approved pin change of 2026-11-13, "Run the SQL 141 production inspect" /
+// "Open the SQL 141 production pin PR": the read-only production inspect SSM 5f545550 recorded as its pre-state, the guarded
+// staging apply run 43479218106 from the same pre-state) until its record-and-retire change.
+const EXECUTE_AUTHORIZED = Object.freeze(['sql141', 'sql160']);
 // SQL 95's and SQL 99's production applies of 2026-10-21 (main dcd865256) and SQL 106's and SQL 97's
 // (main 7124a160b; both runs passed the SQL 106 workstream id), recorded in applied.
 const APPLIED_2026_10_21 = Object.freeze({
