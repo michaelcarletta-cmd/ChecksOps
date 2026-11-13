@@ -239,7 +239,7 @@ test('pin: the release pin shape, applied and retired (owner approved 2026-11-11
   assert.doesNotMatch(JSON.stringify(tool), /[0-9a-f]{64}/);
   const rows = JSON.stringify(readJson('ops/deployment-guard/bypass-inventory.json'));
   assert.match(rows, /"path":"scripts\/deployment-guard\/sql150-external-disbursement-up-to-check-amount-production-apply\.mjs","classification":"GUARDED","capabilities":\["sql150-production-apply"\]/);
-  assert.match(rows, /sql146, sql147, sql148, sql150, sql152, sql153, sql154, sql155, sql156, sql158, sql159, sql160, sql161, sql162\)/);
+  assert.match(rows, /sql146, sql147, sql148, sql150, sql152, sql153, sql154, sql155, sql156, sql158, sql159, sql160, sql161, sql162, sql163\)/);
   const scripts = readJson('package.json').scripts;
   const workflow = fs.readFileSync(path.join(ROOT, '.github/workflows/deployment-guard.yml'), 'utf8');
   for (const name of ['aws/tests/release-sql150-executor.test.mjs', 'aws/tests/release-sql150-production-apply.test.mjs', 'aws/tests/sql150-external-disbursement-pg.test.mjs']) {
@@ -322,7 +322,7 @@ test('order: predecessor and supersedes SQL 147 (untouched); SQL 147\'s one DEFI
   assert.match(runbook, /APPLY_EXTERNAL_DISBURSEMENT_UP_TO_CHECK_AMOUNT/);
   const oneShot = fs.readFileSync(path.join(ROOT, 'ops/production-sql-one-shot.md'), 'utf8');
   assert.match(oneShot, /\| `sql150` \|/);
-  assert.match(oneShot, /`sql146`, `sql147`, `sql148`, `sql150`, `sql152`, `sql153`, `sql154`, `sql155`, `sql156`, `sql158`, `sql159`, `sql160`, `sql161`, `sql162`\) \|/);
+  assert.match(oneShot, /`sql146`, `sql147`, `sql148`, `sql150`, `sql152`, `sql153`, `sql154`, `sql155`, `sql156`, `sql158`, `sql159`, `sql160`, `sql161`, `sql162`, `sql163`\) \|/);
   assert.match(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/README.md'), 'utf8'), /sql150-external-disbursement-up-to-check-amount-production-apply\.mjs --inspect/);
 });
 

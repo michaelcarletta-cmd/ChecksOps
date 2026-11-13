@@ -197,7 +197,7 @@ test('reviewed file and spec: six functions as parsed, the RETURNS TABLE result 
   for (const key of RELEASE_SQL_KEYS.filter((k) => k !== KEY)) {
     // SQL 122 states its row-type results (public.<table>) the same way; SQL 124 its two
     // TABLE (...) results and one row-type result; SQL 152 its timestamptz result as the catalog reads it; SQL 160 its two row-type results.
-    if (!['sql117', 'sql122', 'sql124', 'sql126', 'sql129', 'sql130', 'sql132', 'sql133', 'sql144', 'sql145', 'sql152', 'sql156', 'sql158', 'sql160', 'sql162'].includes(key)) assert.ok(RELEASE_SQL_SPECS[key].functions.every((fn) => fn.result === undefined), key);
+    if (!['sql117', 'sql122', 'sql124', 'sql126', 'sql129', 'sql130', 'sql132', 'sql133', 'sql144', 'sql145', 'sql152', 'sql156', 'sql158', 'sql160', 'sql162', 'sql163'].includes(key)) assert.ok(RELEASE_SQL_SPECS[key].functions.every((fn) => fn.result === undefined), key);
     const text = fs.readFileSync(FILES[key], 'utf8');
     if (PINS[key].superseded_intended_sha256 == null) assert.equal(releaseIntendedHash(key, text), PINS[key].intended_replacement_sha256, key);
   }

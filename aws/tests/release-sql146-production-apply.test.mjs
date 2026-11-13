@@ -260,7 +260,7 @@ test('pin: the release pin shape, applied and retired (owner approved 2026-11-07
   assert.doesNotMatch(JSON.stringify(tool), /[0-9a-f]{64}/);
   const rows = JSON.stringify(readJson('ops/deployment-guard/bypass-inventory.json'));
   assert.match(rows, /"path":"scripts\/deployment-guard\/sql146-moov-status-catch-up-writes-production-apply\.mjs","classification":"GUARDED","capabilities":\["sql146-production-apply"\]/);
-  assert.match(rows, /sql144, sql145, sql146, sql147, sql148, sql150, sql152, sql153, sql154, sql155, sql156, sql158, sql159, sql160, sql161, sql162\)/);
+  assert.match(rows, /sql144, sql145, sql146, sql147, sql148, sql150, sql152, sql153, sql154, sql155, sql156, sql158, sql159, sql160, sql161, sql162, sql163\)/);
   const scripts = readJson('package.json').scripts;
   const workflow = fs.readFileSync(path.join(ROOT, '.github/workflows/deployment-guard.yml'), 'utf8');
   for (const name of ['aws/tests/release-sql146-executor.test.mjs', 'aws/tests/release-sql146-production-apply.test.mjs', 'aws/tests/sql146-moov-status-catch-up-writes-pg.test.mjs']) {
@@ -335,7 +335,7 @@ test('order: no predecessor; the two new DEFINER functions, their prerequisites 
   assert.match(runbook, /APPLY_MOOV_STATUS_CATCH_UP_WRITES/);
   const oneShot = fs.readFileSync(path.join(ROOT, 'ops/production-sql-one-shot.md'), 'utf8');
   assert.match(oneShot, /\| `sql146` \|/);
-  assert.match(oneShot, /`sql144`, `sql145`, `sql146`, `sql147`, `sql148`, `sql150`, `sql152`, `sql153`, `sql154`, `sql155`, `sql156`, `sql158`, `sql159`, `sql160`, `sql161`, `sql162`\) \|/);
+  assert.match(oneShot, /`sql144`, `sql145`, `sql146`, `sql147`, `sql148`, `sql150`, `sql152`, `sql153`, `sql154`, `sql155`, `sql156`, `sql158`, `sql159`, `sql160`, `sql161`, `sql162`, `sql163`\) \|/);
   assert.match(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/README.md'), 'utf8'), /sql146-moov-status-catch-up-writes-production-apply\.mjs --inspect/);
 });
 

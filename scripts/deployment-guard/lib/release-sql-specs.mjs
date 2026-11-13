@@ -9574,6 +9574,124 @@ export const RELEASE_SQL_SPECS = deepFreeze({
       "public.shared_checks"
     ]
   },
+  // SQL 163 (owner 2026-11-12: the Mortgage Desk agent sees no check on a request ("check not linked"), no logged
+  // contact, and the homeowner link fails with missing_cognito_token; 2026-11-13 "Start the desk fixes"). Three new
+  // SECURITY DEFINER functions behind SQL 124's aws_mortgage_desk_readable_request (assigned mortgage agent or platform
+  // owner; in_progress or completed; the request has a check): aws_mortgage_desk_request_check(uuid) (the check's
+  // display fields, never routing or account numbers), aws_mortgage_desk_homeowner_timeline(uuid) (the claim's
+  // homeowner_ledger_events of the request's tenant, newest 200, the note only) and
+  // aws_mortgage_desk_homeowner_link(uuid, text) (reuses or inserts the homeowner_ledger_tokens row of the homeowner on
+  // file; never a caller-chosen address). EXECUTE checksops and the owner (PUBLIC, anon, authenticated and service_role
+  // revoked). definer_writes lists the relations the DEFINER functions reach past RLS as their owner. No predecessor.
+  // No table, column, policy, grant, trigger or row change.
+  sql163: {
+    "key": "sql163",
+    "label": "SQL 163",
+    "choice": "sql163-mortgage-desk-check-timeline-homeowner-link",
+    "production_pin_rel": "ops/deployment-guard/sql163-mortgage-desk-check-timeline-homeowner-link-production-apply.json",
+    "script": "sql163-mortgage-desk-check-timeline-homeowner-link-production-apply",
+    "prerequisites": [
+      "public.mortgage_handling_requests",
+      "public.check_intake_items",
+      "public.claims",
+      "public.homeowner_ledger_events",
+      "public.homeowner_ledger_tokens",
+      "public.aws_mortgage_desk_readable_request(uuid)",
+      "auth.uid()",
+      "role checksops",
+      "column public.mortgage_handling_requests.tenant_id",
+      "column public.mortgage_handling_requests.claim_id",
+      "column public.mortgage_handling_requests.check_intake_item_id",
+      "column public.mortgage_handling_requests.homeowner_email",
+      "column public.mortgage_handling_requests.homeowner_name",
+      "column public.check_intake_items.claim_id",
+      "column public.check_intake_items.tenant_id",
+      "column public.check_intake_items.amount",
+      "column public.check_intake_items.check_number",
+      "column public.check_intake_items.carrier_name",
+      "column public.check_intake_items.payee_line",
+      "column public.check_intake_items.payee_address",
+      "column public.check_intake_items.property_address",
+      "column public.check_intake_items.issue_date",
+      "column public.check_intake_items.detected_claim_number",
+      "column public.check_intake_items.front_image_path",
+      "column public.check_intake_items.back_image_path",
+      "column public.check_intake_items.status",
+      "column public.check_intake_items.check_stage",
+      "column public.check_intake_items.funds_type",
+      "column public.claims.org_id",
+      "column public.claims.policyholder_email",
+      "column public.claims.policyholder_name",
+      "column public.homeowner_ledger_events.tenant_id",
+      "column public.homeowner_ledger_events.claim_id",
+      "column public.homeowner_ledger_events.event_type",
+      "column public.homeowner_ledger_events.occurred_at",
+      "column public.homeowner_ledger_events.actor_label",
+      "column public.homeowner_ledger_events.payload_json",
+      "column public.homeowner_ledger_events.amount",
+      "column public.homeowner_ledger_tokens.token",
+      "column public.homeowner_ledger_tokens.tenant_id",
+      "column public.homeowner_ledger_tokens.claim_id",
+      "column public.homeowner_ledger_tokens.homeowner_email",
+      "column public.homeowner_ledger_tokens.homeowner_name",
+      "column public.homeowner_ledger_tokens.revoked_at",
+      "column public.homeowner_ledger_tokens.expires_at",
+      "column public.homeowner_ledger_tokens.created_by",
+      "column public.homeowner_ledger_tokens.created_at"
+    ],
+    "predecessors": [],
+    "functions": [
+      {
+        "identity": "public.aws_mortgage_desk_request_check(uuid)",
+        "result": "TABLE(check_id uuid, claim_id uuid, amount numeric, check_number text, carrier_name text, payee_line text, payee_address text, property_address text, issue_date text, detected_claim_number text, front_image_path text, back_image_path text, status text, check_stage text, funds_type text)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ],
+        "revokes": [
+          "PUBLIC EXECUTE",
+          "anon EXECUTE",
+          "authenticated EXECUTE",
+          "service_role EXECUTE"
+        ]
+      },
+      {
+        "identity": "public.aws_mortgage_desk_homeowner_timeline(uuid)",
+        "result": "TABLE(event_id uuid, event_type text, occurred_at timestamp with time zone, actor_label text, note text, amount numeric, from_desk boolean)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ],
+        "revokes": [
+          "PUBLIC EXECUTE",
+          "anon EXECUTE",
+          "authenticated EXECUTE",
+          "service_role EXECUTE"
+        ]
+      },
+      {
+        "identity": "public.aws_mortgage_desk_homeowner_link(uuid, text)",
+        "result": "TABLE(token text, homeowner_email text, homeowner_name text, tenant_id uuid, reused boolean)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ],
+        "revokes": [
+          "PUBLIC EXECUTE",
+          "anon EXECUTE",
+          "authenticated EXECUTE",
+          "service_role EXECUTE"
+        ]
+      }
+    ],
+    "definer_writes": [
+      "public.check_intake_items",
+      "public.claims",
+      "public.homeowner_ledger_events",
+      "public.homeowner_ledger_tokens",
+      "public.mortgage_handling_requests"
+    ]
+  },
   sql76: {
     "key": "sql76",
     "label": "SQL 76",
