@@ -1,8 +1,8 @@
 {
   "id": "sql164-wallet-withdrawal-leg-and-limits-production-apply",
   "migration": "sql164",
-  "authorization": "pending",
-  "execute": false,
+  "authorization": "Owner approved 2026-11-13 (the owner's words for SQL 164: \"Build the transfer to bank\", \"Merge 1866 when green\", \"Start the SQL 164 staging refresh and read-live\", \"Do the SQL 164 staging pin and apply\", \"Run the SQL 164 production inspect\", \"Open the SQL 164 production pin PR\"; the change itself is reviewed and merged under those words): production apply of SQL 164 after the staging acceptance below, from the recorded production pre-state (51e721c1 -> 0659d381); each apply still needs the owner's run-time approval (the owner's words for that run).",
+  "execute": true,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -13,7 +13,7 @@
   "function_identities": [
     "public.aws_moov_webhook_apply_transfer_status(text, text, text, text, text, text, text, text, text, text, timestamp with time zone)"
   ],
-  "expected_live_definition_sha256": null,
+  "expected_live_definition_sha256": "51e721c14833afe91c1236bd618735b2adb75e7acc2f01b03c109c98ab9c19d7",
   "intended_replacement_sha256": "0659d3819ac167d8724bfc78d8e5dc7f6e86c82b48a07c0539891ac9714750ff",
   "authorization_phrase": "ENABLE_WALLET_TRANSFER_TO_BANK_LEG_AND_LIMITS",
   "predecessors": [
@@ -43,24 +43,24 @@
     "note": "Guarded tooling for SQL 164: sql164-wallet-withdrawal-leg-and-limits-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql164-wallet-withdrawal-leg-and-limits); production-sql-one-shot.mjs --migration sql164. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): the replaced function with its attributes, body and ACL, the two added columns with their column ACLs, and the two CHECK constraints. The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
   },
   "production_inspect": {
-    "status": "pending",
-    "date": null,
-    "ssm_command_id": null,
-    "source_commit": null,
+    "status": "recorded",
+    "date": "2026-11-13",
+    "ssm_command_id": "ff99d916-2670-435b-a595-069aaebe6492",
+    "source_commit": "33b902dab1c3b110c43a80a12ac0c255f9aca6c1",
     "read_only": true,
     "connected_as": "checksops_admin",
-    "live_definition_sha256": null,
-    "apply_preconditions_met": null,
-    "precondition_failures": null,
-    "note": "Pending: no release-engine production inspect has been run for SQL 164 yet. Expected: prerequisites_missing [], predecessors sql109 applied, the function exactly as SQL 109 left it, the two columns and checks absent, definer_writes ok on payment_transfers and payment_event_log, already_applied false. Expected release-engine fingerprint of that pre-state under sql164: 51e721c14833afe91c1236bd618735b2adb75e7acc2f01b03c109c98ab9c19d7 (releaseStateHash('sql164', {functions: SQL 109's function})). Record the one-shot --phase inspect's date, SSM command id, source commit, live_definition_sha256, prerequisites_missing, release_sql_inspect, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. Stop if the pre-state differs, prerequisites_missing is not [] or precondition_failures is not []: that needs its own reviewed change."
+    "live_definition_sha256": "51e721c14833afe91c1236bd618735b2adb75e7acc2f01b03c109c98ab9c19d7",
+    "apply_preconditions_met": false,
+    "precondition_failures": [],
+    "note": "Recorded from the read-only production inspect of 2026-11-13 (SSM command ff99d916-2670-435b-a595-069aaebe6492, status Success, ResponseCode 0, 14:55:42Z to 14:55:47Z, node scripts/deployment-guard/sql164-wallet-withdrawal-leg-and-limits-production-apply.mjs --inspect on the SQL53 runner i-0c35557c4e5385406, started from stopped at 14:55:15Z and confirmed stopped again at 14:56:55Z, under the owner's words \"Run the SQL 164 production inspect\", from main 33b902dab (tarball source-33b902dab1c3b110c43a80a12ac0c255f9aca6c1.tar.gz sha256 9bea5ba300a8747262c9066d6bb592a642730be3a7e8b6cba806e40c7b8c51d4, transfer run 43447124401; SOURCE_COMMIT 33b902dab1c3b110c43a80a12ac0c255f9aca6c1; migration source sha256 on the runner dcf259b4b91bf2ab133a7a433644aed56f7a389db88fa1042aba9875f6953897 == source_sha256)): ok true, read_only true, source_ok true, current_user checksops_admin, pin_execute false, missing_dependencies [], prerequisites_missing [], predecessors sql109 true (predecessors_applied true), successors_applied []; aws_moov_webhook_apply_transfer_status(...) different from the intended (SQL 109's function), ACL checksops EXECUTE and owner EXECUTE; tenant_wallet_funding_settings.wallet_withdraw_max_per_transfer_cents and wallet_withdraw_max_per_day_cents absent; tenant_wallet_funding_settings_withdraw_per_transfer_check and tenant_wallet_funding_settings_withdraw_per_day_check absent; definer_writes payment_transfers and payment_event_log ok true; dropped_function_dependents 0. live_definition_sha256 51e721c14833afe91c1236bd618735b2adb75e7acc2f01b03c109c98ab9c19d7 (the derived pre-state, the same one staging had before its apply), already_applied false, live_matches_expected false (the pin had no pre-state yet), precondition_failures [], apply_preconditions_met false (the pin was execute false). Copied into expected_live_definition_sha256 by this change. A fresh --inspect immediately before apply (the one-shot's inspect step) must still report this live_definition_sha256 and precondition_failures []; if not, stop. If already_applied is true, or precondition_failures is not [], stop. Earlier: Pending: no release-engine production inspect has been run for SQL 164 yet. Expected: prerequisites_missing [], predecessors sql109 applied, the function exactly as SQL 109 left it, the two columns and checks absent, definer_writes ok on payment_transfers and payment_event_log, already_applied false. Expected release-engine fingerprint of that pre-state under sql164: 51e721c14833afe91c1236bd618735b2adb75e7acc2f01b03c109c98ab9c19d7 (releaseStateHash('sql164', {functions: SQL 109's function})). Record the one-shot --phase inspect's date, SSM command id, source commit, live_definition_sha256, prerequisites_missing, release_sql_inspect, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. Stop if the pre-state differs, prerequisites_missing is not [] or precondition_failures is not []: that needs its own reviewed change."
   },
   "intended_post_state": {
     "fingerprint": "0659d3819ac167d8724bfc78d8e5dc7f6e86c82b48a07c0539891ac9714750ff",
     "note": "public.aws_moov_webhook_apply_transfer_status(text, text, text, text, text, text, text, text, text, text, timestamp with time zone) as SQL 109 defines it except that wallet_withdrawal is an owned leg (plpgsql, SECURITY DEFINER, SET search_path = public, RETURNS jsonb, owned by checksops_admin, EXECUTE checksops and the owner, nothing for PUBLIC); public.tenant_wallet_funding_settings.wallet_withdraw_max_per_transfer_cents and wallet_withdraw_max_per_day_cents (bigint, nullable, no default; column INSERT and UPDATE for checksops) with tenant_wallet_funding_settings_withdraw_per_transfer_check and tenant_wallet_funding_settings_withdraw_per_day_check (NULL or > 0). No other function, table, policy, table grant, index or trigger change; no row written by the apply. The fingerprint is releaseIntendedHash('sql164', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): 0659d3819ac167d8724bfc78d8e5dc7f6e86c82b48a07c0539891ac9714750ff."
   },
   "staging_acceptance": {
-    "ok": false,
-    "reference": null,
-    "basis": "Pending: record the guarded staging SQL executor read-live and the staging apply of SQL 164 (choice sql164-wallet-withdrawal-leg-and-limits) here in the reviewed change that sets execute true. The behavior is covered on PostgreSQL 16 by aws/tests/sql164-wallet-withdrawal-leg-and-limits-pg.test.mjs. Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+    "ok": true,
+    "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43446058463",
+    "basis": "Guarded staging SQL executor apply of sql164-wallet-withdrawal-leg-and-limits, run 43446058463 (2026-11-13, main 33b902dab, executor deploy run 43445049442 (executor CodeSha256 p+7b7mGH... -> 72R3n5ta/ZrMFB8DmJHlh3DSFYcoUj1oVbNKcdeWOh4=), through the SQL 164 staging pin, wave 55 (#1873), on the owner's words \"Do the SQL 164 staging pin and apply\"): read-live before it, run 43445483325, 51e721c14833afe91c1236bd618735b2adb75e7acc2f01b03c109c98ab9c19d7 (SQL 109's function, the columns and checks absent), already_applied false, precondition_failures []; the apply reported result applied and live 0659d3819ac167d8724bfc78d8e5dc7f6e86c82b48a07c0539891ac9714750ff == intended_replacement_sha256 (applied against the pinned expected_live_definition_sha256 51e721c14833afe91c1236bd618735b2adb75e7acc2f01b03c109c98ab9c19d7); read-live after it, run 43446540303, already_applied true, live 0659d3819ac167d8724bfc78d8e5dc7f6e86c82b48a07c0539891ac9714750ff, precondition_failures []. Production's pre-state is the same one staging had before its apply (51e721c14833afe91c1236bd618735b2adb75e7acc2f01b03c109c98ab9c19d7). The behavior is covered on PostgreSQL 16 by aws/tests/sql164-wallet-withdrawal-leg-and-limits-pg.test.mjs and aws/tests/release-sql164-executor.test.mjs."
   }
 }
