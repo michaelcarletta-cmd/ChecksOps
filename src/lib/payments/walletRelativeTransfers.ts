@@ -109,6 +109,9 @@ export function resolveTransferPaymentMethodIds(
     transfer.source_payment_method_id,
     meta.source_payment_method_id,
     meta.checksops_source_payment_method_id,
+    // A transfer to bank (moov-wallet-withdraw) records its source, the wallet's Moov payment
+    // method, only in its metadata.
+    isWalletWithdrawal(transfer) ? meta.source_moov_payment_method_id : null,
   );
   const rawDest = firstId(
     transfer.destination_payment_method_id,
@@ -172,6 +175,12 @@ export function dedupeTransfers(transfers: WalletOpsTransferRow[] = []) {
     out.push(row);
   }
   return out;
+}
+
+/** A transfer to bank: payment_transfers.leg_role 'wallet_withdrawal' (moov-wallet-withdraw, #1876). */
+export function isWalletWithdrawal(transfer: WalletOpsTransferRow) {
+  const meta = (transfer.provider_metadata || {}) as Record<string, unknown>;
+  return transfer.leg_role === "wallet_withdrawal" || meta.checksops_leg === "wallet_withdrawal";
 }
 
 export function isChecksOpsBillingTransfer(transfer: WalletOpsTransferRow) {
@@ -243,6 +252,8 @@ export function labelPaymentMethod({
 
 export function purposeOfTransfer(transfer: WalletOpsTransferRow, classified: { isWalletSource: boolean; isWalletDestination: boolean }) {
   if (isChecksOpsBillingTransfer(transfer)) return "ChecksOps Billing";
+  // The API's wallet_withdrawal leg: the operating wallet to the tenant's default bank.
+  if (isWalletWithdrawal(transfer)) return "Transfer to bank";
   if (classified.isWalletDestination && !classified.isWalletSource) return "Wallet Funding";
   if (classified.isWalletSource && !classified.isWalletDestination) {
     const dest = resolveTransferPaymentMethodIds(transfer).destinationPaymentMethodId;
