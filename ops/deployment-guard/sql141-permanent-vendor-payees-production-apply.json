@@ -1,8 +1,8 @@
 {
   "id": "sql141-permanent-vendor-payees-production-apply",
   "migration": "sql141",
-  "authorization": "Owner approved 2026-11-13 (the owner's words for SQL 141: \"Start SQL 141 vendor payees\", \"Do the SQL 141 staging pin and apply\", \"Run the SQL 141 production inspect\", \"Open the SQL 141 production pin PR\"; the owner's decision of 2026-11-03 for permanent vendors; the change itself is reviewed and merged under those words): production apply of SQL 141 after the staging acceptance below, from the recorded production pre-state (16522f0a -> 4d50013e); each apply still needs the owner's run-time approval (the owner's words for that run).",
-  "execute": true,
+  "authorization": "Applied to production on 2026-11-13; execute is false again, so this pin is no longer a standing authorization and a re-apply needs a new reviewed pin change. The owner approved the SQL 141 production pin change on 2026-11-13 in the words \"Start SQL 141 vendor payees\", \"Run the SQL 141 production inspect\", \"Open the SQL 141 production pin PR\" and \"Merge 1883 when green\" (the owner's decision of 2026-11-03 for permanent vendors; on the staging apply run 43479218106; 16522f0a -> 4d50013e, #1883, merged to main as c915334e1) and the one apply run recorded in applied (workstream prod-sql141-permanent-vendor-payees-20261113) in the words \"apply SQL 141 in production\", passed to it verbatim. That approval covered that run only.",
+  "execute": false,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -63,5 +63,389 @@
     "ok": true,
     "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43479218106",
     "basis": "Guarded staging SQL executor apply of sql141-permanent-vendor-payees, run 43479218106 (2026-11-13, main 69a0a8c0a, executor deploy run 43478177876 (executor CodeSha256 72R3n5ta... -> K6NRf+LR0GCJaZD4y3lm56yE7azXF/KyUhY7eGkEol4=), through the SQL 141 staging pin, wave 56 (#1882), on the owner's words \"Do the SQL 141 staging pin and apply\"): read-live before it, run 43478755545, 16522f0a99f22410a73e4a80e10e48a10a08162171345d72e0f72bc47338982f (every object absent), already_applied false, precondition_failures []; the apply reported result applied and live 4d50013eb0b30808a2a13a97b4a1700b33a833a943bbad865627b77aaf836729 == intended_replacement_sha256 (applied against the pinned expected_live_definition_sha256 16522f0a99f22410a73e4a80e10e48a10a08162171345d72e0f72bc47338982f); read-live after it, run 43479707681, already_applied true, live 4d50013eb0b30808a2a13a97b4a1700b33a833a943bbad865627b77aaf836729, precondition_failures []. Production's pre-state is the same one staging had before its apply (16522f0a99f22410a73e4a80e10e48a10a08162171345d72e0f72bc47338982f). The behavior is covered on PostgreSQL 16 by aws/tests/sql141-permanent-vendor-payees-pg.test.mjs, aws/tests/sql141-permanent-vendor-payees-tool-pg.test.mjs and aws/tests/release-sql141-executor.test.mjs."
+  },
+  "applied": {
+    "date": "2026-11-13",
+    "result": "applied",
+    "source_commit": "c915334e1bc6662962c906f39dbb5c1681777ed8",
+    "source_commit_basis": "SOURCE_COMMIT in the tarball (written by sql53-temporary-transfer) equals --commit, and the tarball sha256 equals --expected-tarball-sha256 as copied by the operator from that transfer run's log (TARBALL_SHA256 line); the run log itself was not read by the one-shot.",
+    "source_tarball": {
+      "file": "source-c915334e1bc6662962c906f39dbb5c1681777ed8.tar.gz",
+      "sha256": "170646d54fc0fa26adf0e188cce9e058e0b02914f17a65398094e2bf93c3fe34"
+    },
+    "migration_source_sha256": "547a1ffe3ec4d6ae9aaa00432486791e721c712c07733bd72a7ba9408708fa88",
+    "migration_source_sha256_note": "The one-shot source step hashed aws/workflows/sql/141_permanent_vendor_payees.sql in the transfer tarball: equal to source_sha256 (the pin; migration_matches_pin true).",
+    "runner": "i-0c35557c4e5385406",
+    "runner_basis": "operator-supplied --runner (not verified by the one-shot)",
+    "workstream_id": "prod-sql141-permanent-vendor-payees-20261113",
+    "one_use_id": "sql141-prod-99d99810-c923-41ac-838d-78b5a86b3acc",
+    "one_use_id_consumed": true,
+    "one_use_id_consumed_basis": "Inferred from the successful apply (the tool records the one_use_id after COMMIT and only warns if that write fails); the consumed-registry entry was not read back separately.",
+    "owner_approval": "apply SQL 141 in production",
+    "owner_approval_basis": "As passed in --approval-statement for --approval-scope sql141; the one-shot cannot verify who said it. The owner's words of 2026-11-13 for this run were \"apply SQL 141 in production\", given after \"Merge 1883 when green\" (the pin change #1883, merged to main as c915334e1 once green); they were passed verbatim as the approval statement for the --phase inspect run and the --phase apply run, which ran only after that merge was on main and staged.",
+    "operator": "michaelcarletta-cmd",
+    "apply_ssm_command_id": "e0a2b83b-5833-4bcd-89fa-ea519691e93c",
+    "one_shot_run_id": "176f296c-ad68-4139-92d9-9f9ced92c6b5",
+    "one_shot_note": "One SSM command (e0a2b83b-5833-4bcd-89fa-ea519691e93c on i-0c35557c4e5385406, comment \"SQL 141 one-shot --phase apply (owner: apply SQL 141 in production)\", Success, ResponseCode 0, 2026-11-13T19:38:27.147Z to 2026-11-13T19:38:39.147Z; the runner was started from stopped for this work at 19:37:05Z (running 19:37:21Z) and stopped again at 19:39:14Z, after a process check, SSM 08a208b5-f0e8-4089-8158-80ac57d0ab89, found no one-shot running) ran the production-sql-one-shot --phase apply (run_id 176f296c-ad68-4139-92d9-9f9ced92c6b5) from main c915334e1 (transfer run 43493681018, sql53-temporary-transfer.yml on main after the #1883 merge; tarball sha256 170646d54fc0fa26adf0e188cce9e058e0b02914f17a65398094e2bf93c3fe34). On that boot an AWS-managed AWS-ConfigureAWSPackage State Manager command (a3f7e1da-4cbc-4e6c-a893-464d3aa43d56, queued at the runner's previous boot of 18:44Z) was still in progress, so the operator's driver stopped before sending anything; that command ended Success about 20 seconds later, and the driver then ran on the running instance. Before the apply, a separate one-shot --phase inspect on the same tarball and the same approval statement (SSM aeb2f232-310f-41fd-a975-fff5fca05f07, 2026-11-13T19:38:06.175Z to 2026-11-13T19:38:18.175Z, ResponseCode 0, run_id 69963da6-cd65-47e5-9491-a5c63aa831c5, nothing written; its JSON arrived whole) read live 16522f0a99f22410a73e4a80e10e48a10a08162171345d72e0f72bc47338982f (live_matches_expected true, already_applied false, apply_preconditions_met true, precondition_failures [], prerequisites_missing [], no predecessors, both tables, both policies and the three functions absent, definer reads tenants and tenant_partner_code_aliases ok), the pre-state the read-only inspect recorded in production_inspect (SSM 5f545550-3bb7-4325-8c2c-c9faf7331623). Steps pin (execute true, staging_acceptance run 43479218106), source (tarball sha256 matches the sidecar and --expected-tarball-sha256, tree matches the tarball, migration source == pin), inspect, contracts (claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43), manifest, source-recheck-before-preflight, preflight (receipt_issued), evaluate (sql141_production_apply_allowed true), source-recheck-before-apply, apply (applied) and post-apply-inspect all ok. The run's JSON arrived whole: the operator's SSM script printed the full 26748-byte run log as gzip+base64 (LOG_GZ_B64) besides its last 12000 bytes, and the decoded log (sha256 b7afd8cbfbafb4824301b9dff06093505929de9a11bc0930ff9422718f19ea01) is one complete JSON object, which parsed (the inspect run's 5830-byte log the same way, sha256 c8e898890c619c9397ca75e7c6ef1f832e9f301ef0b7a99163e7adf756f887b9). Every field of the applied object is recorded as printed, except this note and owner_approval_basis, which are extended as in the SQL 156 record (the one-shot's own one_shot_note read: \"One production-sql-one-shot run verified the source, ran the read-only inspect and the runner contracts, built the manifest, issued the receipt and lease (preflight), evaluated (sql141_production_apply_allowed true), applied (exit 0) and ran the post-apply inspect.\"). The printed applied.receipt equals the run's top-level details.apply_result. This block adds migration_source_sha256 (with its note), apply_ssm_command_id, steps and manifest_sha256 from the same run's details, as the SQL 162 record does. The run's not_observed_by_this_run list names ssm_command_id and source_staged_by, supplied here as apply_ssm_command_id and transfer run 43493681018; the printed details also carried manifest_deleted true. The post-apply inspect reported live 4d50013eb0b30808a2a13a97b4a1700b33a833a943bbad865627b77aaf836729 == intended, already_applied true, precondition_failures []: public.vendor_tenants (3 columns) and public.tenant_vendor_payees (8 columns) intended, RLS on, one policy each; aws_select_vendor_tenants and aws_select_tenant_vendor_payees intended; aws_vendor_payee_add(uuid, text), aws_vendor_payee_remove(uuid, uuid) and aws_platform_owner_set_tenant_vendor(uuid, boolean) intended, EXECUTE checksops and the owner; definer_writes ok on tenants and tenant_partner_code_aliases. Unrelated catalog a0be79f567921fcbe596e86e7c7db9db154eecb9556d5f8b0f6eadc2e517ff17 (policies 479, functions 1387). No organization is a vendor until the platform owner marks one; the send endpoint accepting a vendor payee and the UI ship through their own guarded paths. Production acceptance: not yet reported by the owner when this record was written; this record does not claim it.",
+    "steps": [
+      "pin",
+      "source",
+      "inspect",
+      "contracts",
+      "manifest",
+      "source-recheck-before-preflight",
+      "preflight",
+      "evaluate",
+      "source-recheck-before-apply",
+      "apply",
+      "post-apply-inspect"
+    ],
+    "contract_results": {
+      "claim-ledger": {
+        "ok": true,
+        "test": "aws/tests/claim-ledger-accepted-contract.test.mjs",
+        "evidence": "4/4 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at c915334e1bc6662962c906f39dbb5c1681777ed8 (production-sql-one-shot 176f296c-ad68-4139-92d9-9f9ced92c6b5, node --test)"
+      },
+      "tenant-isolation": {
+        "ok": true,
+        "test": "aws/tests/tenant-security-compliance.test.mjs",
+        "evidence": "6/6 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at c915334e1bc6662962c906f39dbb5c1681777ed8 (production-sql-one-shot 176f296c-ad68-4139-92d9-9f9ced92c6b5, node --test)"
+      },
+      "financial-write-protections": {
+        "ok": true,
+        "test": "aws/tests/api-write.test.mjs",
+        "evidence": "43/43 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at c915334e1bc6662962c906f39dbb5c1681777ed8 (production-sql-one-shot 176f296c-ad68-4139-92d9-9f9ced92c6b5, node --test)"
+      }
+    },
+    "pre_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "16522f0a99f22410a73e4a80e10e48a10a08162171345d72e0f72bc47338982f",
+      "live_matches_expected": true,
+      "already_applied": false,
+      "predecessors": {},
+      "predecessors_applied": true,
+      "missing_dependencies": [],
+      "apply_preconditions_met": true,
+      "precondition_failures": [],
+      "current_user": "checksops_admin",
+      "session_user": "checksops_admin",
+      "counts": null,
+      "successors_applied": [],
+      "release_sql_inspect": {
+        "live_definition_sha256": "16522f0a99f22410a73e4a80e10e48a10a08162171345d72e0f72bc47338982f",
+        "prerequisites_missing": [],
+        "predecessors": {},
+        "successors_applied": [],
+        "functions": [
+          {
+            "name": "aws_vendor_payee_add(uuid, text)",
+            "state": "absent"
+          },
+          {
+            "name": "aws_vendor_payee_remove(uuid, uuid)",
+            "state": "absent"
+          },
+          {
+            "name": "aws_platform_owner_set_tenant_vendor(uuid, boolean)",
+            "state": "absent"
+          }
+        ],
+        "policies": [
+          {
+            "name": "vendor_tenants aws_select_vendor_tenants",
+            "state": "absent"
+          },
+          {
+            "name": "tenant_vendor_payees aws_select_tenant_vendor_payees",
+            "state": "absent"
+          }
+        ],
+        "views": [],
+        "tables": [
+          {
+            "name": "vendor_tenants",
+            "state": "absent",
+            "rls": false,
+            "column_count": 0,
+            "policy_count": 0
+          },
+          {
+            "name": "tenant_vendor_payees",
+            "state": "absent",
+            "rls": false,
+            "column_count": 0,
+            "policy_count": 0
+          }
+        ],
+        "columns": [],
+        "constraints": [],
+        "triggers": [],
+        "table_privileges": [],
+        "function_acl": [
+          {
+            "name": "aws_vendor_payee_add(uuid, text)",
+            "acl": []
+          },
+          {
+            "name": "aws_vendor_payee_remove(uuid, uuid)",
+            "acl": []
+          },
+          {
+            "name": "aws_platform_owner_set_tenant_vendor(uuid, boolean)",
+            "acl": []
+          }
+        ],
+        "acl_functions": [],
+        "indexes": [],
+        "unique_covers": [],
+        "definer_writes": [
+          {
+            "name": "tenants",
+            "ok": true
+          },
+          {
+            "name": "tenant_partner_code_aliases",
+            "ok": true
+          }
+        ],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": null
+      }
+    },
+    "manifest_sha256": "a3a7ae800372fdb1ad1129faf2ea1e0b7307cf46cf828c86a9fd270df110aded",
+    "receipt": {
+      "migration": "sql141",
+      "workstream": "prod-sql141-permanent-vendor-payees-20261113",
+      "commit": "c915334e1bc6662962c906f39dbb5c1681777ed8",
+      "sql_file": "aws/workflows/sql/141_permanent_vendor_payees.sql",
+      "before_hash": "16522f0a99f22410a73e4a80e10e48a10a08162171345d72e0f72bc47338982f",
+      "after_hash": "4d50013eb0b30808a2a13a97b4a1700b33a833a943bbad865627b77aaf836729",
+      "release_sql_inspect": {
+        "live_definition_sha256": "4d50013eb0b30808a2a13a97b4a1700b33a833a943bbad865627b77aaf836729",
+        "prerequisites_missing": [],
+        "predecessors": {},
+        "successors_applied": [],
+        "functions": [
+          {
+            "name": "aws_vendor_payee_add(uuid, text)",
+            "state": "intended"
+          },
+          {
+            "name": "aws_vendor_payee_remove(uuid, uuid)",
+            "state": "intended"
+          },
+          {
+            "name": "aws_platform_owner_set_tenant_vendor(uuid, boolean)",
+            "state": "intended"
+          }
+        ],
+        "policies": [
+          {
+            "name": "vendor_tenants aws_select_vendor_tenants",
+            "state": "intended"
+          },
+          {
+            "name": "tenant_vendor_payees aws_select_tenant_vendor_payees",
+            "state": "intended"
+          }
+        ],
+        "views": [],
+        "tables": [
+          {
+            "name": "vendor_tenants",
+            "state": "intended",
+            "rls": true,
+            "column_count": 3,
+            "policy_count": 1
+          },
+          {
+            "name": "tenant_vendor_payees",
+            "state": "intended",
+            "rls": true,
+            "column_count": 8,
+            "policy_count": 1
+          }
+        ],
+        "columns": [],
+        "constraints": [],
+        "triggers": [],
+        "table_privileges": [],
+        "function_acl": [
+          {
+            "name": "aws_vendor_payee_add(uuid, text)",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          },
+          {
+            "name": "aws_vendor_payee_remove(uuid, uuid)",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          },
+          {
+            "name": "aws_platform_owner_set_tenant_vendor(uuid, boolean)",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          }
+        ],
+        "acl_functions": [],
+        "indexes": [],
+        "unique_covers": [],
+        "definer_writes": [
+          {
+            "name": "tenants",
+            "ok": true
+          },
+          {
+            "name": "tenant_partner_code_aliases",
+            "ok": true
+          }
+        ],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": null
+      },
+      "unrelated_catalog_sha256": "a0be79f567921fcbe596e86e7c7db9db154eecb9556d5f8b0f6eadc2e517ff17",
+      "unrelated_catalog_counts": {
+        "relations": 899,
+        "columns": 3574,
+        "constraints": 2266,
+        "policies": 479,
+        "functions": 1387,
+        "indexes": 660,
+        "default_acl": 0,
+        "role_memberships": 15,
+        "roles": 29,
+        "triggers": 190,
+        "views": 25,
+        "types": 18,
+        "schema": 2
+      },
+      "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43479218106",
+      "result": "applied"
+    },
+    "post_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "4d50013eb0b30808a2a13a97b4a1700b33a833a943bbad865627b77aaf836729",
+      "live_matches_expected": false,
+      "already_applied": true,
+      "predecessors": {},
+      "predecessors_applied": true,
+      "missing_dependencies": [],
+      "apply_preconditions_met": false,
+      "precondition_failures": [],
+      "current_user": "checksops_admin",
+      "session_user": "checksops_admin",
+      "counts": null,
+      "successors_applied": [],
+      "release_sql_inspect": {
+        "live_definition_sha256": "4d50013eb0b30808a2a13a97b4a1700b33a833a943bbad865627b77aaf836729",
+        "prerequisites_missing": [],
+        "predecessors": {},
+        "successors_applied": [],
+        "functions": [
+          {
+            "name": "aws_vendor_payee_add(uuid, text)",
+            "state": "intended"
+          },
+          {
+            "name": "aws_vendor_payee_remove(uuid, uuid)",
+            "state": "intended"
+          },
+          {
+            "name": "aws_platform_owner_set_tenant_vendor(uuid, boolean)",
+            "state": "intended"
+          }
+        ],
+        "policies": [
+          {
+            "name": "vendor_tenants aws_select_vendor_tenants",
+            "state": "intended"
+          },
+          {
+            "name": "tenant_vendor_payees aws_select_tenant_vendor_payees",
+            "state": "intended"
+          }
+        ],
+        "views": [],
+        "tables": [
+          {
+            "name": "vendor_tenants",
+            "state": "intended",
+            "rls": true,
+            "column_count": 3,
+            "policy_count": 1
+          },
+          {
+            "name": "tenant_vendor_payees",
+            "state": "intended",
+            "rls": true,
+            "column_count": 8,
+            "policy_count": 1
+          }
+        ],
+        "columns": [],
+        "constraints": [],
+        "triggers": [],
+        "table_privileges": [],
+        "function_acl": [
+          {
+            "name": "aws_vendor_payee_add(uuid, text)",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          },
+          {
+            "name": "aws_vendor_payee_remove(uuid, uuid)",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          },
+          {
+            "name": "aws_platform_owner_set_tenant_vendor(uuid, boolean)",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          }
+        ],
+        "acl_functions": [],
+        "indexes": [],
+        "unique_covers": [],
+        "definer_writes": [
+          {
+            "name": "tenants",
+            "ok": true
+          },
+          {
+            "name": "tenant_partner_code_aliases",
+            "ok": true
+          }
+        ],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": null
+      }
+    }
+  },
+  "production_evidence": {
+    "2026-11-13 apply": "Guarded production SQL one-shot on i-0c35557c4e5385406, workstream prod-sql141-permanent-vendor-payees-20261113, main c915334e1 (tarball 170646d5…, transfer run 43493681018, migration source 547a1ffe… == pin), owner-approved run (\"apply SQL 141 in production\"), pre-apply --phase inspect SSM aeb2f232-310f-41fd-a975-fff5fca05f07 (live 16522f0a…, live_matches_expected true), apply SSM e0a2b83b-5833-4bcd-89fa-ea519691e93c, run_id 176f296c-ad68-4139-92d9-9f9ced92c6b5, one_use_id sql141-prod-99d99810-c923-41ac-838d-78b5a86b3acc (spent): every step ok; contracts claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43; manifest a3a7ae80…; 16522f0a… -> 4d50013e…, result applied, unrelated catalog a0be79f5…; post-apply inspect already_applied true, precondition_failures []; the run's JSON arrived whole (the full log, printed gzip+base64). After: public.vendor_tenants and public.tenant_vendor_payees exist as SQL 141 defines them (RLS on, one SELECT policy each TO authenticated, SELECT only to checksops and authenticated) with the SECURITY DEFINER functions aws_vendor_payee_add(uuid, text), aws_vendor_payee_remove(uuid, uuid) and aws_platform_owner_set_tenant_vendor(uuid, boolean) (EXECUTE checksops and the owner); no row written. The send endpoint accepting a vendor payee and the UI ship through their own guarded paths. Production acceptance was not yet reported by the owner when this was recorded. execute is false so the pin is no longer a standing authorization."
   }
 }
