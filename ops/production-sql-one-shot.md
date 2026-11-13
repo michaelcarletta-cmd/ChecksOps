@@ -148,11 +148,9 @@ An unexpected exception also ends in one failure summary:
    `4a5e9028-0372-43b9-a1bb-d6751e6bedd3`, recorded as its pre-state, the same one staging had, on its
    guarded staging apply run 43353383753; see `ops/production-sql-160-apply.md`) until its
    record-and-retire change; the production apply still needs the owner's words for that run.
-   SQL 163's pin is `execute: true`
-   (owner-approved pin change of 2026-11-13: the read-only production inspect of 2026-11-13, SSM
-   `51819aad-a6bf-487f-99e4-5de65b6db29c`, recorded as its pre-state, the same one staging had, on its
-   guarded staging apply run 43361518188; see `ops/production-sql-163-apply.md`) until its
-   record-and-retire change; the production apply still needs the owner's words for that run.
+   SQL 163's pin is `execute: false`
+   again since its 2026-11-13 apply (owner statement "apply SQL 163 in production"; see
+   `ops/production-sql-163-apply.md`).
    SQL 162's pin is `execute: false`
    again since its 2026-11-13 apply (owner statement "apply SQL 162 in production"; see
    `ops/production-sql-162-apply.md`). SQL 158's pin is `execute: false`
