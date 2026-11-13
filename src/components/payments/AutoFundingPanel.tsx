@@ -57,8 +57,7 @@ const FUNDING_STATUS_LABEL: Record<string, string> = {
 /** Automatic funding controls: on/off, bank, strategy, limits and history. */
 export function AutoFundingPanel({ canEdit = true }: { canEdit?: boolean }) {
   const { settings, requests, banks, saveSettings, cancelFunding } = useAutoFunding();
-  // One-time transfers use the same funding path as "Add funds from bank".
-  const { wallet, fund, setupRequired } = useWallet("operating");
+  const { wallet } = useWallet("operating");
   const { toast } = useToast();
 
   const s = settings.data;
@@ -67,7 +66,6 @@ export function AutoFundingPanel({ canEdit = true }: { canEdit?: boolean }) {
   const [target, setTarget] = useState("0.00");
   const [maxSingle, setMaxSingle] = useState("25000.00");
   const [maxDaily, setMaxDaily] = useState("50000.00");
-  const [manualAmount, setManualAmount] = useState("");
 
   useEffect(() => {
     if (!s) return;
@@ -111,21 +109,6 @@ export function AutoFundingPanel({ canEdit = true }: { canEdit?: boolean }) {
       authorization_accepted_at: new Date().toISOString(),
       authorization_version: AUTHORIZATION_VERSION,
     });
-  }
-
-  async function handleManualFund() {
-    const cents = toCents(manualAmount);
-    if (cents <= 0) {
-      toast({ title: "Enter an amount greater than zero.", variant: "destructive" });
-      return;
-    }
-    try {
-      await fund.mutateAsync({ amountCents: cents, description: "Balance funding" });
-      setManualAmount("");
-      toast({ title: "Funding started", description: "Your balance updates once the transfer settles." });
-    } catch (e) {
-      toast({ title: "Could not fund balance", description: (e as Error).message, variant: "destructive" });
-    }
   }
 
   return (
@@ -274,29 +257,8 @@ export function AutoFundingPanel({ canEdit = true }: { canEdit?: boolean }) {
         Save funding settings
       </Button>
 
-      <Separator />
-
-      {/* Manual funding */}
-      <div className="space-y-2">
-        <Label>One-time transfer from your bank</Label>
-        <div className="flex flex-wrap items-center gap-2">
-          <Input
-            className="w-44"
-            inputMode="decimal"
-            placeholder="Amount"
-            value={manualAmount}
-            onChange={(e) => setManualAmount(e.target.value)}
-            disabled={setupRequired}
-          />
-          <Button onClick={handleManualFund} disabled={setupRequired || fund.isPending}>
-            {fund.isPending && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
-            Transfer to wallet
-          </Button>
-        </div>
-        <p className="text-xs text-muted-foreground">
-          Pulls from your saved funding bank (or your default bank). Save a new bank choice first.
-        </p>
-      </div>
+      {/* One-time funding lives in "Add funds" on Wallet & Treasury (owner, 2026-11-13: the
+          one-time transfer here was identical to Add funds and is removed). */}
 
       {/* History */}
       {(requests.data ?? []).length > 0 && (
