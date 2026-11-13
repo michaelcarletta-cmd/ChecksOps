@@ -120,8 +120,9 @@ test('pin: the release pin shape, pending, in step with the staging pin, the one
   assert.equal(pin.filename, SQL141_FILE);
   assert.equal(pin.source_sha256, staging.source_sha256);
   assert.equal(pin.staging_pin_commit, staging.commit);
-  assert.equal(staging.execute, false);
-  assert.equal(staging.authorization, 'pending');
+  // The staging pin is execute-authorized (wave 56, staging read-live run 43474483441); the production pin stays pending.
+  assert.equal(staging.execute, true);
+  assert.match(staging.authorization, /^Owner approved 2026-11-13: staging apply \(wave 56\) from staging read-live run 43474483441$/);
   assert.equal(pin.intended_replacement_sha256, staging.intended_replacement_sha256);
   assert.equal(pin.intended_post_state.fingerprint, pin.intended_replacement_sha256);
   assert.equal(pin.intended_replacement_sha256, releaseIntendedHash(KEY, read(SQL141_FILE)));
@@ -205,7 +206,7 @@ test('order: no predecessor; three functions, two policies, two new tables; no e
   const runbook = read(COMMITTED.tooling.runbook);
   assert.ok(runbook.includes(COMMITTED.intended_replacement_sha256));
   assert.ok(runbook.includes(COMMITTED.source_sha256));
-  assert.match(runbook, /\*\*Status:\*\* guarded tooling built; not applied anywhere\. The staging pin is pending \(no read-live yet\); the production pin is pending\./);
+  assert.match(runbook, /\*\*Status:\*\* staging pin execute-authorized \(wave 56\); not applied anywhere\. The production pin is pending\./);
   assert.match(runbook, /APPLY_PERMANENT_VENDOR_PAYEES/);
   assert.match(runbook, /Owner decision 2026-11-03/);
   assert.match(runbook, /\*\*Nothing here moves money\*\*/);
