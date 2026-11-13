@@ -505,9 +505,10 @@ test('staging SQL record: every sql_before of the plan has an entry; the pending
   // (SQL 120 since the usage fees plan, 2026-11-10, moved tenant-billing-engine.mjs on to SQL 152, which needs it; SQL 102
   // since the Starter Package plan, 2026-11-10, moved tenant-billing-handlers.mjs on to SQL 151, which needs it; SQL 143
   // since the SQL 152 validator plan, 2026-11-11, moved db-readonly-validate.mjs on to SQL 152; SQL 124 since the Mortgage
-  // Desk shared-check library plan, 2026-11-11, moved mortgage-desk-esign.mjs on to SQL 156).
+  // Desk shared-check library plan, 2026-11-11, moved mortgage-desk-esign.mjs on to SQL 156; SQL 158 since the desk check and
+  // homeowner link plan, 2026-11-13, moved mortgage-desk-esign.mjs on to SQL 163).
   const released = Object.keys(STAGING_SQL.sql).filter((file) => !required.includes(file)).sort();
-  assert.deepEqual(released, ['aws/workflows/sql/102_platform_owner_tenant_profile.sql', 'aws/workflows/sql/120_usage_events_at_approval_and_send.sql', 'aws/workflows/sql/124_mortgage_desk_signature_and_reads.sql', 'aws/workflows/sql/143_mortgage_companies_member_delete_unused.sql']);
+  assert.deepEqual(released, ['aws/workflows/sql/102_platform_owner_tenant_profile.sql', 'aws/workflows/sql/120_usage_events_at_approval_and_send.sql', 'aws/workflows/sql/124_mortgage_desk_signature_and_reads.sql', 'aws/workflows/sql/143_mortgage_companies_member_delete_unused.sql', 'aws/workflows/sql/158_mortgage_desk_oversight_and_agent_notes.sql']);
   for (const file of released) {
     assert.equal(STAGING_SQL.sql[file].verified_live, true, file);
     assert.equal(PLAN.sql_prerequisites[file]?.verified_live, true, file);
