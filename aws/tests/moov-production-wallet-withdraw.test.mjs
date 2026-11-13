@@ -444,32 +444,51 @@ test('before SQL 164 is live (no limit columns) nothing is recorded or sent', as
   });
 });
 
-test('the destination is the tenant\'s own verified default bank with a same-day credit method', async () => {
+test('the destination is the tenant\'s default bank only, verified at Moov with a same-day credit method', async () => {
   await withEnv(FLAGS, async () => {
+    const OTHER_ROW = '1eb5b26e-6f66-435c-a578-880fb7fc14dd';
     const cases = [
-      // Moov has the bank but not verified.
+      // Moov has the default bank but not verified.
       [{}, { credits: [sameDay('pm-same-day', 'bank-1', 'new')] }, 'same_day_unavailable'],
       // Only standard ACH credit at Moov.
       [{}, { credits: [] }, 'same_day_unavailable'],
-      // The default bank has no same-day method; another bank does: never silently used.
-      [{}, { credits: [sameDay('pm-other', 'bank-2')] }, 'same_day_unavailable'],
-      // No default bank and two candidate banks.
+      // The default bank has no same-day method; another bank does: never used.
+      [{ banks: [
+        { id: BANK_ROW, provider_bank_account_id: 'bank-1', is_default: true },
+        { id: OTHER_ROW, provider_bank_account_id: 'bank-2', is_default: false },
+      ] }, { credits: [sameDay('pm-other', 'bank-2')] }, 'same_day_unavailable'],
+      // No default bank: refused, even with a single connected bank (owner decision 2026-11-13).
+      [{ banks: [{ id: BANK_ROW, provider_bank_account_id: 'bank-1', is_default: false }] }, {}, 'default_bank_required'],
       [{ banks: [
         { id: BANK_ROW, provider_bank_account_id: 'bank-1', is_default: false },
-        { id: '1eb5b26e-6f66-435c-a578-880fb7fc14dd', provider_bank_account_id: 'bank-2', is_default: false },
-      ] }, { credits: [sameDay('pm-same-day', 'bank-1'), sameDay('pm-other', 'bank-2')] }, 'bank_choice_required'],
-      // Moov's bank is not a connected ChecksOps bank of this tenant (for example a recipient's).
-      [{ banks: [] }, {}, 'same_day_unavailable'],
+        { id: OTHER_ROW, provider_bank_account_id: 'bank-2', is_default: false },
+      ] }, { credits: [sameDay('pm-same-day', 'bank-1'), sameDay('pm-other', 'bank-2')] }, 'default_bank_required'],
+      // No connected ChecksOps bank of this tenant at all (a recipient's bank is never listed).
+      [{ banks: [] }, {}, 'default_bank_required'],
     ];
     for (const [db, stub, error] of cases) {
       const client = fakeDb(db);
       const moov = moovStub(stub);
       const result = await run(client, moov);
       assert.equal(result.statusCode, 409, JSON.stringify(result));
-      assert.equal(result.error, error, JSON.stringify(stub));
+      assert.equal(result.error, error, JSON.stringify({ db, stub }));
       assert.match(result.message, /Nothing was sent/);
       nothingHappened(client, moov);
     }
+  });
+});
+
+test('with a default bank and another verified bank, the default one is credited', async () => {
+  await withEnv(FLAGS, async () => {
+    const client = fakeDb({ banks: [
+      { id: BANK_ROW, provider_bank_account_id: 'bank-1', is_default: true },
+      { id: '1eb5b26e-6f66-435c-a578-880fb7fc14dd', provider_bank_account_id: 'bank-2', is_default: false },
+    ] });
+    const moov = moovStub({ credits: [sameDay('pm-other', 'bank-2'), sameDay('pm-same-day', 'bank-1')] });
+    const result = await run(client, moov);
+    assert.equal(result.ok, true, JSON.stringify(result));
+    assert.deepEqual(moov.posts()[0].body.destination, { paymentMethodID: 'pm-same-day' });
+    assert.equal(client.committed.transfers[0].destination_payment_method_id, BANK_ROW);
   });
 });
 
@@ -577,16 +596,53 @@ test('production gate: financial permissions off or sandbox execution on refuses
   }
 });
 
-test('expected arrival is decided by the server clock against the same-day cutoff', () => {
-  // Tuesday 10:00 ET → today; Tuesday 17:00 ET → Wednesday.
+/** A New York wall-clock time (November and October 2026 are EST/EDT; offsets given explicitly). */
+const et = (iso) => new Date(iso);
+
+test('expected arrival: today before the cutoff on a banking day, else the next banking day (weekends and Fed holidays skipped)', () => {
+  // Plain week: Tuesday 10:00 ET → today; Friday 17:00 ET and the weekend → Monday.
   assert.deepEqual(expectedArrival(TUESDAY_MORNING), { arrives: 'today', date: '2026-11-10' });
-  assert.deepEqual(expectedArrival(new Date('2026-11-10T22:00:00Z')), { arrives: 'next_banking_day', date: '2026-11-11' });
-  // Friday 17:00 ET → Monday; Saturday and Sunday → Monday.
-  assert.deepEqual(expectedArrival(new Date('2026-11-13T22:00:00Z')), { arrives: 'next_banking_day', date: '2026-11-16' });
-  assert.deepEqual(expectedArrival(new Date('2026-11-14T15:00:00Z')), { arrives: 'next_banking_day', date: '2026-11-16' });
-  assert.deepEqual(expectedArrival(new Date('2026-11-15T15:00:00Z')), { arrives: 'next_banking_day', date: '2026-11-16' });
-  // Friday 23:30 ET is already Saturday 04:30 UTC: still Monday.
-  assert.deepEqual(expectedArrival(new Date('2026-11-14T04:30:00Z')), { arrives: 'next_banking_day', date: '2026-11-16' });
+  assert.deepEqual(expectedArrival(et('2026-11-13T17:00:00-05:00')), { arrives: 'next_banking_day', date: '2026-11-16' });
+  assert.deepEqual(expectedArrival(et('2026-11-14T10:00:00-05:00')), { arrives: 'next_banking_day', date: '2026-11-16' });
+  assert.deepEqual(expectedArrival(et('2026-11-15T10:00:00-05:00')), { arrives: 'next_banking_day', date: '2026-11-16' });
+  // Friday 23:30 ET is already Saturday in UTC: still Monday.
+  assert.deepEqual(expectedArrival(et('2026-11-13T23:30:00-05:00')), { arrives: 'next_banking_day', date: '2026-11-16' });
+  // The cutoff itself: 16:44 ET is today, 16:45 ET is the next banking day.
+  assert.deepEqual(expectedArrival(et('2026-11-10T16:44:00-05:00')), { arrives: 'today', date: '2026-11-10' });
+  assert.deepEqual(expectedArrival(et('2026-11-10T16:45:00-05:00')).arrives, 'next_banking_day');
+});
+
+test('expected arrival: after the cutoff on the day before a holiday skips the holiday (Veterans Day 2026, a Wednesday)', () => {
+  assert.deepEqual(expectedArrival(et('2026-11-10T16:45:00-05:00')), { arrives: 'next_banking_day', date: '2026-11-12' });
+  assert.deepEqual(expectedArrival(et('2026-11-10T17:00:00-05:00')), { arrives: 'next_banking_day', date: '2026-11-12' });
+  // On the holiday itself, even in the morning, nothing settles today.
+  assert.deepEqual(expectedArrival(et('2026-11-11T09:00:00-05:00')), { arrives: 'next_banking_day', date: '2026-11-12' });
+});
+
+test('expected arrival: a Monday holiday (Columbus Day 2026-10-12) moves Friday-after-cutoff and the holiday to Tuesday', () => {
+  assert.deepEqual(expectedArrival(et('2026-10-09T10:00:00-04:00')), { arrives: 'today', date: '2026-10-09' });
+  assert.deepEqual(expectedArrival(et('2026-10-09T17:00:00-04:00')), { arrives: 'next_banking_day', date: '2026-10-13' });
+  assert.deepEqual(expectedArrival(et('2026-10-10T12:00:00-04:00')), { arrives: 'next_banking_day', date: '2026-10-13' });
+  assert.deepEqual(expectedArrival(et('2026-10-12T09:00:00-04:00')), { arrives: 'next_banking_day', date: '2026-10-13' });
+  assert.deepEqual(expectedArrival(et('2026-10-13T09:00:00-04:00')), { arrives: 'today', date: '2026-10-13' });
+});
+
+test('expected arrival: Thanksgiving week 2026 (Thursday 11-26 closed, Friday 11-27 open)', () => {
+  assert.deepEqual(expectedArrival(et('2026-11-25T10:00:00-05:00')), { arrives: 'today', date: '2026-11-25' });
+  assert.deepEqual(expectedArrival(et('2026-11-25T17:00:00-05:00')), { arrives: 'next_banking_day', date: '2026-11-27' });
+  assert.deepEqual(expectedArrival(et('2026-11-26T10:00:00-05:00')), { arrives: 'next_banking_day', date: '2026-11-27' });
+  assert.deepEqual(expectedArrival(et('2026-11-27T10:00:00-05:00')), { arrives: 'today', date: '2026-11-27' });
+  assert.deepEqual(expectedArrival(et('2026-11-27T17:00:00-05:00')), { arrives: 'next_banking_day', date: '2026-11-30' });
+});
+
+test('expected arrival: a Sunday holiday is observed Monday; a Saturday holiday is not observed', () => {
+  // Independence Day 2027 is a Sunday: Friday after cutoff → Tuesday 07-06.
+  assert.deepEqual(expectedArrival(et('2027-07-02T17:00:00-04:00')), { arrives: 'next_banking_day', date: '2027-07-06' });
+  // Christmas 2027 is a Saturday: Friday 12-24 is a banking day.
+  assert.deepEqual(expectedArrival(et('2027-12-24T10:00:00-05:00')), { arrives: 'today', date: '2027-12-24' });
+  // New Year's Day 2028 is a Saturday: Friday 2027-12-31 is a banking day; after its cutoff → Monday 01-03.
+  assert.deepEqual(expectedArrival(et('2027-12-31T10:00:00-05:00')), { arrives: 'today', date: '2027-12-31' });
+  assert.deepEqual(expectedArrival(et('2027-12-31T17:00:00-05:00')), { arrives: 'next_banking_day', date: '2028-01-03' });
 });
 
 test('limit and method helpers', () => {
@@ -596,9 +652,11 @@ test('limit and method helpers', () => {
   assert.deepEqual(tenantLimitBreach({ amount: 101, perTransfer: null, perDay: 300, todayCents: 200 }), { limit: 'per_day', limit_cents: 300, used_today_cents: 200 });
 
   assert.equal(selectSameDayCreditMethod([sameDay('a', 'b1')], 'b1').method.paymentMethodID, 'a');
-  assert.equal(selectSameDayCreditMethod([sameDay('a', 'b1')], null).method.paymentMethodID, 'a');
-  assert.equal(selectSameDayCreditMethod([sameDay('a', 'b1', 'pending')], null).error, 'same_day_unavailable');
-  assert.equal(selectSameDayCreditMethod([{ ...sameDay('a', 'b1'), paymentMethodType: 'ach-credit-standard' }], null).error, 'same_day_unavailable');
-  assert.equal(selectSameDayCreditMethod([sameDay('a', 'b1'), sameDay('c', 'b2')], null).error, 'bank_choice_required');
-  assert.equal(selectSameDayCreditMethod(null, null).error, 'same_day_unavailable');
+  assert.equal(selectSameDayCreditMethod([sameDay('a', 'b1'), sameDay('c', 'b2')], 'b2').method.paymentMethodID, 'c');
+  assert.equal(selectSameDayCreditMethod([sameDay('a', 'b1')], null).error, 'default_bank_required');
+  assert.equal(selectSameDayCreditMethod([sameDay('a', 'b1'), sameDay('c', 'b2')], null).error, 'default_bank_required');
+  assert.equal(selectSameDayCreditMethod([sameDay('a', 'b1', 'pending')], 'b1').error, 'same_day_unavailable');
+  assert.equal(selectSameDayCreditMethod([{ ...sameDay('a', 'b1'), paymentMethodType: 'ach-credit-standard' }], 'b1').error, 'same_day_unavailable');
+  assert.equal(selectSameDayCreditMethod([sameDay('c', 'b2')], 'b1').error, 'same_day_unavailable');
+  assert.equal(selectSameDayCreditMethod(null, 'b1').error, 'same_day_unavailable');
 });

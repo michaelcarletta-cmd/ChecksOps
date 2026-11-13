@@ -16,9 +16,10 @@
  * - Moov's own idempotency key is the transfer row id.
  * - An error that does not prove Moov refused the transfer is recorded as
  *   `unknown` and is never retried automatically.
- * - The destination is never chosen by the browser: it is the tenant's own
- *   connected bank (the default one), verified at Moov, with an
- *   ach-credit-same-day payment method. Never a recipient method.
+ * - The destination is never chosen by the browser: it is the tenant's default
+ *   connected bank (owner decision 2026-11-13: "transfers go to default bank"),
+ *   verified at Moov, with an ach-credit-same-day payment method. Without a
+ *   default bank nothing is sent. Never a recipient method.
  * - Until SQL 164 is live (the limit columns exist and the webhook writer owns
  *   the wallet_withdrawal leg) nothing is recorded or sent.
  */
@@ -37,13 +38,13 @@ import {
 import { fail, jsonResult, moovProductionReadContext } from '../parity/caller.mjs';
 import { loadMoovAccount, sanitize } from '../parity/db.mjs';
 import { syncWalletReadOnly } from '../parity/moov-wallet.mjs';
-import { easternWeekday, sameDayWindowOpen } from '../parity/rail-router.mjs';
+import { isBankingDay, nextBankingDay } from '../../fed-holidays.mjs';
+import { sameDayWindowOpen } from '../parity/rail-router.mjs';
 import { loadSessionFundStepUp, loginSessionBinding, WALLET_FUND_TOTP_ACTION } from './moov-fund-authz.mjs';
 import {
   MOOV_POST_TIMEOUT_MS,
   moovRefusedTransfer,
   parseFundAmountCents,
-  preferredBank,
   resolveFacilitatorId,
   transferPostEnabled,
 } from './moov-wallet-fund.mjs';
@@ -172,20 +173,16 @@ const methodIdOf = (method) => String(method?.paymentMethodID ?? method?.payment
 const bankVerified = (method) => String(method?.bankAccount?.status ?? '').toLowerCase() === 'verified';
 
 /**
- * The bank to credit: Moov's ach-credit-same-day methods for this account on a
- * bank Moov reports verified. When the tenant has a default (settlement) bank,
- * only that bank is used; otherwise there must be exactly one such bank.
+ * The bank to credit: the tenant's default bank only. Moov must list an
+ * ach-credit-same-day method for that bank, on a bank Moov reports verified.
+ * With no default bank, `default_bank_required`; never another bank.
  */
-export function selectSameDayCreditMethod(methods, preferredBankId) {
+export function selectSameDayCreditMethod(methods, defaultBankId) {
+  if (!defaultBankId) return { error: 'default_bank_required' };
   const credits = (Array.isArray(methods) ? methods : [])
     .filter((m) => String(m?.paymentMethodType) === WALLET_WITHDRAW_RAIL && methodIdOf(m) && bankVerified(m));
-  if (preferredBankId) {
-    const preferred = credits.find((m) => bankIdOf(m) === String(preferredBankId));
-    return preferred ? { method: preferred } : { error: 'same_day_unavailable' };
-  }
-  const banks = new Set(credits.map(bankIdOf));
-  if (credits.length && banks.size === 1) return { method: credits[0] };
-  return { error: credits.length ? 'bank_choice_required' : 'same_day_unavailable' };
+  const preferred = credits.find((m) => bankIdOf(m) === String(defaultBankId));
+  return preferred ? { method: preferred } : { error: 'same_day_unavailable' };
 }
 
 const easternDate = (now) => new Intl.DateTimeFormat('en-CA', {
@@ -193,21 +190,15 @@ const easternDate = (now) => new Intl.DateTimeFormat('en-CA', {
 }).format(now);
 
 /**
- * When the credit is expected, decided by the server clock: today before the
- * same-day cutoff on a weekday, otherwise the next weekday. Bank holidays are
- * not modelled (the rail router does not model them either).
+ * When the credit is expected, decided by the server clock: today when today
+ * (New York) is a banking day and it is before the same-day cutoff, otherwise
+ * the next banking day. Banking days skip weekends and the observed Federal
+ * Reserve holidays (fed-holidays.mjs).
  */
 export function expectedArrival(now = new Date()) {
   const today = easternDate(now);
-  if (sameDayWindowOpen(now)) return { arrives: 'today', date: today };
-  const [y, m, d] = today.split('-').map(Number);
-  let day = Date.UTC(y, m - 1, d);
-  let weekday = easternWeekday(now);
-  do {
-    day += 86_400_000;
-    weekday = (weekday + 1) % 7;
-  } while (weekday === 0 || weekday === 6);
-  return { arrives: 'next_banking_day', date: new Date(day).toISOString().slice(0, 10) };
+  if (isBankingDay(today) && sameDayWindowOpen(now)) return { arrives: 'today', date: today };
+  return { arrives: 'next_banking_day', date: nextBankingDay(today) };
 }
 
 const arrivalMessage = (arrival) => (arrival.arrives === 'today'
@@ -326,7 +317,12 @@ async function withdrawProductionWallet({ client, mapping, claims, ctx, body, fe
   }
 
   const banks = await connectedBanks(client, tenantId, account.provider_account_id);
-  const settlement = preferredBank(banks, null);
+  const settlement = banks.find((b) => b.is_default === true) || null;
+  if (!settlement) {
+    return fail('default_bank_required', 409, {
+      message: 'Choose a default settlement bank before transferring. Nothing was sent.',
+    });
+  }
   const methods = await moovFetch(`/accounts/${account.provider_account_id}/payment-methods`, {
     scopes: scopes.paymentMethodsRead(account.provider_account_id),
     fetchImpl,
@@ -334,16 +330,16 @@ async function withdrawProductionWallet({ client, mapping, claims, ctx, body, fe
   const picked = selectSameDayCreditMethod(methods, settlement?.provider_bank_account_id);
   if (picked.error) {
     return fail(picked.error, 409, {
-      message: picked.error === 'bank_choice_required'
-        ? 'More than one bank is linked. Mark one as the default settlement bank first. Nothing was sent.'
-        : 'Your settlement bank is not verified for same-day transfers yet. Nothing was sent.',
+      message: picked.error === 'default_bank_required'
+        ? 'Choose a default settlement bank before transferring. Nothing was sent.'
+        : 'Your default settlement bank is not verified for same-day transfers yet. Nothing was sent.',
     });
   }
   const destinationMethodId = methodIdOf(picked.method);
   const bankId = bankIdOf(picked.method);
-  const destinationLocal = banks.find((b) => String(b.provider_bank_account_id) === bankId) ?? null;
+  const destinationLocal = String(settlement.provider_bank_account_id) === bankId ? settlement : null;
   if (!destinationLocal) {
-    return fail('same_day_unavailable', 409, { message: 'Your settlement bank is not connected in ChecksOps. Nothing was sent.' });
+    return fail('same_day_unavailable', 409, { message: 'Your default settlement bank is not connected in ChecksOps. Nothing was sent.' });
   }
   const facilitatorId = resolveFacilitatorId(ctx.moovContext.productionPlatformAccountId, methods, wallet.provider_payment_method_id);
   if (!facilitatorId) {

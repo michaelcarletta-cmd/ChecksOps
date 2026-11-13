@@ -50,6 +50,7 @@ const FLAG_BEFORE_WRITE = new Set([
   'tenant-collection-v2-uat.mjs',
   'tenant-collection-v2.mjs',
   'tenant-settings-handlers.mjs',
+  'wallet-withdraw-limits.mjs',
 ]);
 const FLAG_AT_ACTION_ENTRY = new Set(['invoice-provider.mjs']);
 // Run only inside MOOV_PARITY_HANDLERS (moov-functions.mjs wrap sets the flag) or, for the two
