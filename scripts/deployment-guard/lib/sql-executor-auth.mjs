@@ -3198,8 +3198,8 @@ export const AUTHORIZED_SQL140_WALLET_FUNDING_SETTINGS_WRITE_GRANTS = Object.fre
 // vendor organizations; a tenant adds a vendor as a payee by its Partner Code, with no partnership and no shared
 // record; nothing moves money). Two new tables (vendor_tenants, tenant_vendor_payees; RLS on, one SELECT policy
 // each, SELECT for checksops and authenticated) and three SECURITY DEFINER functions (EXECUTE checksops and the
-// owner). No predecessor. Pending until a reviewed pin change records a staging read-live
-// (ops/production-sql-141-apply.md).
+// owner). No predecessor. Staging apply authorized (wave 56) from staging read-live run 43474483441: the pre-state, every
+// object absent, equals the derived one (ops/production-sql-141-apply.md).
 export const AUTHORIZED_SQL141_PERMANENT_VENDOR_PAYEES = Object.freeze({
   key: 'sql141',
   filename: 'aws/workflows/sql/141_permanent_vendor_payees.sql',
@@ -3207,9 +3207,11 @@ export const AUTHORIZED_SQL141_PERMANENT_VENDOR_PAYEES = Object.freeze({
   // The commit that last authored the file bytes.
   commit: '506b72e271622ba12cb56bb17326d8450d90141a',
   source_sha256: '547a1ffe3ec4d6ae9aaa00432486791e721c712c07733bd72a7ba9408708fa88',
-  authorization: 'pending',
-  execute: false,
-  expected_live_definition_sha256: null,
+  authorization: 'Owner approved 2026-11-13: staging apply (wave 56) from staging read-live run 43474483441',
+  execute: true,
+  // Staging read-live run 43474483441 (main a03684a89, executor current per inspect run 43473964416): already_applied false,
+  // precondition_failures [], prerequisites_missing []. Equal to the derived pre-state (every object absent).
+  expected_live_definition_sha256: '16522f0a99f22410a73e4a80e10e48a10a08162171345d72e0f72bc47338982f',
   // Code-derived: releaseIntendedHash('sql141', file bytes) (release-sql-state.mjs); re-derived by the tests.
   intended_replacement_sha256: '4d50013eb0b30808a2a13a97b4a1700b33a833a943bbad865627b77aaf836729',
   function_identities: Object.freeze([

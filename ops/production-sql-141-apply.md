@@ -65,7 +65,14 @@ Anything else (a precondition failure, such as a table or function of the same n
 shape, a missing prerequisite, or a login that cannot read `tenants` or
 `tenant_partner_code_aliases` past row security) stops and needs its own reviewed change.
 
-**Status:** guarded tooling built; not applied anywhere. The staging pin is pending (no read-live yet); the production pin is pending.
+**Status:** staging pin execute-authorized (wave 56); not applied anywhere. The production pin is pending.
+
+**Staging read-live (2026-11-13).** Run 43474483441 (main `a03684a89`, after executor inspect run 43473964416 showed the executor
+current, CodeSha256 `72R3n5ta…`), under the owner's words "Start SQL 141 vendor payees": `already_applied` false,
+`precondition_failures` `[]`, `prerequisites_missing` `[]`; both tables, both policies and the three functions absent. Live
+`16522f0a99f22410a73e4a80e10e48a10a08162171345d72e0f72bc47338982f`, equal to the derived pre-state; intended `4d50013e…`. Recorded in the staging pin
+(`expected_live_definition_sha256`, `execute: true`, wave 56) on the owner's words "Do the SQL 141 staging pin and apply". The
+staging apply is a separate run after this pin is merged and the executor is redeployed carrying it.
 
 ## Fingerprint
 
