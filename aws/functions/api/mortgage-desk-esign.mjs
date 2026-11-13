@@ -57,12 +57,27 @@
  *   action sign_url               -> aws_mortgage_desk_can_read_path      (e), then a
  *                                    short-lived S3 read URL (claim-files only)
  *
+ * SQL 163 (owner 2026-11-12: the agent sees no check, no logged contact, and the homeowner link fails with
+ * missing_cognito_token; 2026-11-13 "Start the desk fixes"), behind SQL 124's readable gate:
+ *
+ *   action check                  -> aws_mortgage_desk_request_check: the request's check (display fields only) with
+ *                                    short-lived read URLs for its front and back images
+ *   action homeowner_timeline     -> aws_mortgage_desk_homeowner_timeline: the claim's homeowner timeline written by
+ *                                    the request's tenant, newest first (the note only)
+ *   action workspace              -> also carries check and homeowner_timeline
+ *   action send_tracking_link     -> aws_mortgage_desk_homeowner_link (the homeowner on file, never a client address),
+ *                                    then the homeowner-ledger-invite email from ChecksOps
+ *
+ * Until SQL 163 is applied the functions are absent (42883): the workspace returns check null and an empty timeline
+ * with sql163_unavailable, and send_tracking_link answers 503 desk_link_unavailable; nothing else changes.
+ *
  * Storage reads of Desk paths are signed here, not in storage.mjs: the agent
  * cannot read the check's rows, so storage.mjs's table rules refuse it, and
  * storage.mjs is a planned production member with its own pending release
  * bytes. Desk uploads keep the SQL 122 path (storage-write-auth.mjs +
  * mortgage_desk_attach_file).
  */
+import { randomBytes } from 'node:crypto';
 import { GetObjectCommand, HeadObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { parseBody, withIdentity, withIdentityWrite } from './data.mjs';
@@ -74,9 +89,11 @@ import {
   replaceMergeFields,
   signBaseUrl,
 } from './esign.mjs';
-import { formatFromHeader, platformBranding } from './email-branding.mjs';
+import { formatFromHeader, platformBranding, resolveEmailBranding } from './email-branding.mjs';
 import { sendViaSesOrSink } from './email.mjs';
 import { renderChecksOpsEmail } from './email-layout.mjs';
+import { renderTransactionalTemplate } from './email-templates.mjs';
+import { appOrigin } from './homeowner.mjs';
 import { loadMortgageDeskWorkingRequest } from './mortgage-desk-return.mjs';
 import { normalizePath, pathCandidates, s3KeyFor } from './storage-paths.mjs';
 
@@ -101,7 +118,7 @@ export const MORTGAGE_DESK_ESIGN_DOCUMENT_TYPES = Object.freeze([
 export const MORTGAGE_DESK_TIMELINE_KINDS = Object.freeze(['mortgage_followup', 'mortgage_update']);
 export const MORTGAGE_DESK_TIMELINE_MAX_NOTE = 2000;
 
-export const MORTGAGE_DESK_READ_ACTIONS = Object.freeze(['messages', 'check_files', 'signature_requests', 'workspace', 'sign_url']);
+export const MORTGAGE_DESK_READ_ACTIONS = Object.freeze(['messages', 'check_files', 'signature_requests', 'workspace', 'sign_url', 'check', 'homeowner_timeline']);
 export const MORTGAGE_DESK_ESIGN_ACTIONS = Object.freeze([
   ...MORTGAGE_DESK_READ_ACTIONS,
   'send_signature_request',
@@ -112,6 +129,7 @@ export const MORTGAGE_DESK_ESIGN_ACTIONS = Object.freeze([
   'assign_agent',
   'message_agent',
   'agent_notes',
+  'send_tracking_link',
 ]);
 
 /** SQL 158: the Tenant Management desk view (platform owner) and the assigned agent's notes. */
@@ -131,6 +149,12 @@ export const MORTGAGE_DESK_OVERVIEW_DEFAULT_LIMIT = 200;
 export const MORTGAGE_DESK_AGENT_NOTE_MAX = 2000;
 
 export const DESK_MESSAGES_SQL = 'SELECT * FROM public.aws_mortgage_desk_messages($1::uuid)';
+/** SQL 163: the request's check, its homeowner timeline and the homeowner tracking link (owner 2026-11-12). */
+export const DESK_REQUEST_CHECK_SQL = 'SELECT * FROM public.aws_mortgage_desk_request_check($1::uuid)';
+export const DESK_HOMEOWNER_TIMELINE_SQL = 'SELECT * FROM public.aws_mortgage_desk_homeowner_timeline($1::uuid)';
+export const DESK_HOMEOWNER_LINK_SQL = 'SELECT * FROM public.aws_mortgage_desk_homeowner_link($1::uuid, $2::text)';
+/** Check images are claim-files objects; their read URLs live MORTGAGE_DESK_CHECK_IMAGE_EXPIRES (60 s). */
+const DESK_CHECK_IMAGE_BUCKET = 'claim-files';
 export const DESK_CHECK_FILES_SQL = 'SELECT * FROM public.aws_mortgage_desk_check_files($1::uuid)';
 export const DESK_SIGNATURE_REQUESTS_SQL = 'SELECT public.aws_mortgage_desk_signature_requests($1::uuid) AS requests';
 // The link expiry is the database clock's now() + 72 hours: exactly the bound SQL 124 checks.
@@ -141,6 +165,11 @@ export const DESK_RECORD_DELIVERY_SQL = 'SELECT public.aws_mortgage_desk_record_
 export const DESK_CAN_READ_PATH_SQL = 'SELECT public.aws_mortgage_desk_can_read_path($1::text[], $2::text) AS ok';
 /** Signed read URLs live at most this long, as storage.mjs's authenticated reads. */
 export const MORTGAGE_DESK_SIGN_EXPIRES = 300;
+/**
+ * Check images on the Desk (SQL 163) are read-only and VOID-stamped in the browser (owner, 2026-11-13: "make sure the
+ * check images have void on it"); their read URLs live 60 seconds, just long enough to load and stamp them.
+ */
+export const MORTGAGE_DESK_CHECK_IMAGE_EXPIRES = 60;
 /** SQL 156: every check tenant's auto-shared library documents (owner 2026-11-11: "everybody shared on that check"). */
 export const DESK_SHARED_LIBRARY_DOCUMENTS_SQL = 'SELECT * FROM public.aws_mortgage_desk_shared_library_documents($1::uuid)';
 export const DESK_POST_TIMELINE_SQL = 'SELECT public.aws_mortgage_desk_post_timeline($1::uuid, $2::text, $3::text) AS id';
@@ -197,6 +226,10 @@ const SQL_ERRORS = {
   invalid_body: [400, () => `The message must be 1 to ${MORTGAGE_DESK_AGENT_NOTE_MAX} characters.`],
   no_assigned_agent: [409, () => 'This request has no assigned agent yet. Assign one first.'],
   rate_limited: [429, () => 'At most 10 messages can be sent to the agent on one request per hour.'],
+  // SQL 163
+  claim_not_in_tenant: [403, () => "This request's claim does not belong to its tenant, so no homeowner link can be sent."],
+  no_homeowner_email: [409, () => 'There is no homeowner email on this request or its claim. Ask the tenant to add one.'],
+  invalid_token: [500, () => 'The homeowner link could not be created. Try again.'],
 };
 
 /** { statusCode, error, message, position } for a known SQL 124 / 122 refusal, else null. */
@@ -252,7 +285,54 @@ const requestIdOf = (body) => arg(body, 'request_id', 'requestId', '_request_id'
 
 // ---- Reads -----------------------------------------------------------------
 
-const readOne = async (client, requestId, action) => {
+/**
+ * One SQL 163 call under a savepoint: before SQL 163 is applied the function is absent (42883), which must not abort
+ * the rest of the workspace read. Returns { rows }, { refused } or { unavailable: true }.
+ */
+const callSql163 = async (client, sql, params) => {
+  await client.query('SAVEPOINT desk_sql163');
+  try {
+    const out = await callDefiner(client, sql, params);
+    await client.query('RELEASE SAVEPOINT desk_sql163');
+    return out;
+  } catch (error) {
+    await client.query('ROLLBACK TO SAVEPOINT desk_sql163');
+    if (error?.code === '42883') return { unavailable: true };
+    throw error;
+  }
+};
+
+/** A short-lived read URL for one check image path, or null (no path, no bucket, or signing failed). */
+const signCheckImage = async (rawPath, deps = {}) => {
+  if (!rawPath) return null;
+  const rel = normalizePath(rawPath, DESK_CHECK_IMAGE_BUCKET);
+  const key = rel ? s3KeyFor(DESK_CHECK_IMAGE_BUCKET, rel.split('?')[0]) : null;
+  const bucket = deps.filesBucket || process.env.FILES_BUCKET || '';
+  if (!key || !bucket) return null;
+  try {
+    const s3 = deps.s3 || new S3Client({ region: process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || 'us-east-1' });
+    return await (deps.getSignedUrl || getSignedUrl)(s3, new GetObjectCommand({ Bucket: bucket, Key: key }), { expiresIn: MORTGAGE_DESK_CHECK_IMAGE_EXPIRES });
+  } catch {
+    return null;
+  }
+};
+
+const readOne = async (client, requestId, action, deps = {}) => {
+  if (action === 'check') {
+    const out = await callSql163(client, DESK_REQUEST_CHECK_SQL, [requestId]);
+    if (out.refused) return out;
+    if (out.unavailable) return { data: null, unavailable: true };
+    const row = out.rows[0];
+    if (!row) return { data: null };
+    const [frontUrl, backUrl] = await Promise.all([signCheckImage(row.front_image_path, deps), signCheckImage(row.back_image_path, deps)]);
+    return { data: { ...row, front_url: frontUrl, back_url: backUrl } };
+  }
+  if (action === 'homeowner_timeline') {
+    const out = await callSql163(client, DESK_HOMEOWNER_TIMELINE_SQL, [requestId]);
+    if (out.refused) return out;
+    if (out.unavailable) return { data: [], unavailable: true };
+    return { data: out.rows };
+  }
   if (action === 'messages') {
     const out = await callDefiner(client, DESK_MESSAGES_SQL, [requestId]);
     return out.refused ? out : { data: out.rows };
@@ -324,7 +404,7 @@ export const runMortgageDeskSignUrl = async ({ client, mapping, body, spoof }, d
   };
 };
 
-export const runMortgageDeskRead = async ({ client, mapping, body, spoof, action }) => {
+export const runMortgageDeskRead = async ({ client, mapping, body, spoof, action }, deps = {}) => {
   const gate = await loadMortgageDeskWorkingRequest(client, mapping.application_user_id, requestIdOf(body), {
     statuses: ['in_progress', 'completed'],
   });
@@ -332,16 +412,79 @@ export const runMortgageDeskRead = async ({ client, mapping, body, spoof, action
   const requestId = gate.request.id;
   if (action === 'workspace') {
     const data = {};
-    for (const part of ['messages', 'check_files', 'signature_requests']) {
-      const out = await readOne(client, requestId, part);
+    let sql163Unavailable = false;
+    for (const part of ['messages', 'check_files', 'signature_requests', 'check', 'homeowner_timeline']) {
+      const out = await readOne(client, requestId, part, deps);
       if (out.refused) return { ...out.refused, spoofFieldsIgnored: spoof };
+      if (out.unavailable) sql163Unavailable = true;
       data[part] = out.data;
     }
-    return { ok: true, statusCode: 200, action, requestId, data, spoofFieldsIgnored: spoof };
+    return {
+      ok: true, statusCode: 200, action, requestId, data, ...(sql163Unavailable ? { sql163_unavailable: true } : {}), spoofFieldsIgnored: spoof,
+    };
   }
-  const out = await readOne(client, requestId, action);
+  const out = await readOne(client, requestId, action, deps);
   if (out.refused) return { ...out.refused, spoofFieldsIgnored: spoof };
-  return { ok: true, statusCode: 200, action, requestId, data: out.data, spoofFieldsIgnored: spoof };
+  return {
+    ok: true, statusCode: 200, action, requestId, data: out.data, ...(out.unavailable ? { sql163_unavailable: true } : {}), spoofFieldsIgnored: spoof,
+  };
+};
+
+// ---- Homeowner tracking link (SQL 163) --------------------------------------
+
+/**
+ * The homeowner tracking link from the Desk (owner 2026-11-12: "When sending homeowner link from mortgage desk, error
+ * missing_cognito_token. Fix it."). The Desk session has no tenant membership, so homeowner-ledger-send refuses it;
+ * here SQL 163 checks the caller against the request (SQL 124's gate), takes the homeowner on file (the request's
+ * email, else the claim's; never an address from the client) and reuses or creates that recipient's token. The
+ * invite email is the tenant flow's homeowner-ledger-invite from ChecksOps. The token row commits with the call; the
+ * email is sent after the database work succeeds.
+ */
+export const runMortgageDeskSendTrackingLink = async ({ client, mapping, body, spoof }, deps = {}) => {
+  const gate = await loadMortgageDeskWorkingRequest(client, mapping.application_user_id, requestIdOf(body), {
+    statuses: ['in_progress', 'completed'],
+  });
+  if (gate.error) return { ...gateRefusal(gate, { reading: true }), spoofFieldsIgnored: spoof };
+  const requestId = gate.request.id;
+  const newToken = (deps.randomBytes || randomBytes)(24).toString('hex');
+  const out = await callSql163(client, DESK_HOMEOWNER_LINK_SQL, [requestId, newToken]);
+  if (out.refused) return { ...out.refused, spoofFieldsIgnored: spoof };
+  if (out.unavailable) {
+    return {
+      ok: false,
+      statusCode: 503,
+      error: 'desk_link_unavailable',
+      message: 'Sending the homeowner link from the Mortgage Desk is not available yet.',
+      spoofFieldsIgnored: spoof,
+    };
+  }
+  const row = out.rows[0];
+  if (!row?.token) return { ok: false, statusCode: 500, error: 'link_not_created', message: 'The homeowner link could not be created.', spoofFieldsIgnored: spoof };
+  const url = `${appOrigin(body?.origin)}/h/ledger/${row.token}`;
+  const branding = await (deps.resolveEmailBranding || resolveEmailBranding)(client, { tenantId: row.tenant_id, senderOverride: 'checksops' });
+  const rendered = renderTransactionalTemplate('homeowner-ledger-invite', {
+    homeownerName: row.homeowner_name,
+    ledgerUrl: url,
+    is_pre_claim: false,
+    branding,
+  });
+  await (deps.sendViaSesOrSink || sendViaSesOrSink)({
+    to: row.homeowner_email,
+    subject: rendered.subject,
+    html: rendered.html,
+    text: rendered.text,
+    from: branding.from,
+    replyTo: branding.replyTo,
+  });
+  return {
+    ok: true,
+    statusCode: 200,
+    requestId,
+    url,
+    reused: row.reused === true,
+    sentTo: row.homeowner_email,
+    spoofFieldsIgnored: spoof,
+  };
 };
 
 // ---- Shared-check library documents (SQL 156) -------------------------------
@@ -877,7 +1020,7 @@ export const handleMortgageDeskEsign = async (event, deps = {}) => {
     return withIdentity(event, (ctx) => runMortgageDeskSignUrl(ctx, deps), deps);
   }
   if (MORTGAGE_DESK_READ_ACTIONS.includes(action)) {
-    return withIdentity(event, (ctx) => runMortgageDeskRead({ ...ctx, action }), deps);
+    return withIdentity(event, (ctx) => runMortgageDeskRead({ ...ctx, action }, deps), deps);
   }
   if (action === 'shared_library_documents') {
     return withIdentity(event, (ctx) => runMortgageDeskSharedLibraryDocuments(ctx), deps);
@@ -902,6 +1045,9 @@ export const handleMortgageDeskEsign = async (event, deps = {}) => {
   }
   if (action === 'send_signature_request') {
     return runSendDeskSignatureRequest(event, deps);
+  }
+  if (action === 'send_tracking_link') {
+    return withIdentityWrite(event, (ctx) => runMortgageDeskSendTrackingLink(ctx, deps), deps);
   }
   return withIdentity(event, async ({ spoof }) => ({
     ok: false,

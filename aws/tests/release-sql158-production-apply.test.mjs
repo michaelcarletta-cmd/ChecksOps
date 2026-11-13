@@ -232,7 +232,10 @@ test('order: no predecessor; one table with no grant and six SECURITY DEFINER fu
   assert.equal(plan.sql_prerequisites[SQL158_FILE].verified_live, true);
   assert.ok(plan.sql_prerequisites[SQL158_FILE].evidence.includes(`SSM ${COMMITTED.applied.apply_ssm_command_id}`));
   assert.ok(plan.sql_prerequisites[SQL158_FILE].evidence.includes(COMMITTED.applied.one_use_id));
-  assert.deepEqual(Object.keys(plan.members).filter((m) => plan.members[m].sql_before === SQL158_FILE), ['mortgage-desk-esign.mjs']);
+  // (The desk check and homeowner link plan, 2026-11-13, moved that member on to SQL 163, so no member holds on SQL 158 any
+  // more; the record stays.)
+  assert.deepEqual(Object.keys(plan.members).filter((m) => plan.members[m].sql_before === SQL158_FILE), []);
+  assert.equal(plan.members['mortgage-desk-esign.mjs'].sql_before, 'aws/workflows/sql/163_mortgage_desk_check_timeline_homeowner_link.sql');
   // The file: the prerequisite DO block and the table ACL DO block, one table and index, six functions, the RLS switch,
   // six REVOKEs and six GRANTs to checksops; nothing else.
   const text = fs.readFileSync(path.join(ROOT, SQL158_FILE), 'utf8').replace(/--[^\n]*/g, '');
