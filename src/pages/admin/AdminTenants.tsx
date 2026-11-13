@@ -10,6 +10,8 @@ import { billingPeriodKey } from "@/lib/tenantFeeBilling";
 import { TenantDepositsSwitch } from "@/components/admin/TenantDepositsSwitch";
 import { TenantStarterPackageCard } from "@/components/admin/TenantStarterPackageCard";
 import { TenantOpsBadgeSwitch } from "@/components/admin/TenantOpsBadgeSwitch";
+import { TenantVendorSwitch } from "@/components/admin/TenantVendorSwitch";
+import { PAYMENT_FLAGS } from "@/lib/payments/featureFlags";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { resolveAdminTenantTab } from "@/lib/adminTenantTab";
 import { supabase } from "@/integrations/supabase/client";
@@ -400,6 +402,7 @@ function TenantDetail({ tenant, onBack, onUpdated }: { tenant: Tenant; onBack: (
           <TabsContent value="company" className="mt-6 space-y-6">
             <CompanyTab tenant={tenant} onUpdated={onUpdated} />
             <TenantOpsBadgeSwitch tenantId={tenant.id} tenantName={tenant.name} />
+            {PAYMENT_FLAGS.SHOW_VENDOR_PAYMENTS && <TenantVendorSwitch tenantId={tenant.id} tenantName={tenant.name} />}
           </TabsContent>
           <TabsContent value="compliance" className="mt-6 space-y-8">
             {/* Read-only by default; the platform owner opts in with "Edit on behalf of tenant". */}

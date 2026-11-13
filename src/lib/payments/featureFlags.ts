@@ -22,6 +22,11 @@ export interface PaymentFeatureFlags {
    * same-day ACH, moov-wallet-withdraw) and its transfer limits.
    */
   SHOW_WALLET_WITHDRAW: boolean;
+  /**
+   * Vendor payments: the Vendors card (add a vendor by Partner Code), a vendor as a recipient in a
+   * check's Funds tab and in the Payroll payment dialog, and the platform-owner Vendor switch.
+   */
+  SHOW_VENDOR_PAYMENTS: boolean;
 }
 
 function envFlag(name: string, fallback: boolean): boolean {
@@ -50,6 +55,12 @@ export const PAYMENT_FLAGS: PaymentFeatureFlags = {
   // moov-wallet-withdraw and save-tenant-wallet-withdraw-limits, is #1876. Not an env flag: change it
   // here, in a reviewed PR.
   SHOW_WALLET_WITHDRAW: true,
+  // Shown (owner, 2026-11-13: "Start the vendor payments API and screens"): the Vendors card in
+  // Settings → Bank Account/Stakeholders, a vendor as a recipient in a check's Funds tab and in the
+  // Payroll payment dialog, and the platform-owner Vendor switch. Its API (vendor_payee_* through
+  // /data/rpc, the vendor recipient of moov-disburse, tenant-billing-admin vendor-set/vendor-status)
+  // must be live in production first. Not an env flag: change it here, in a reviewed PR.
+  SHOW_VENDOR_PAYMENTS: true,
 };
 
 /**

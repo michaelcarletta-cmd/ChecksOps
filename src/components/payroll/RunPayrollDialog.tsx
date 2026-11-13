@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Loader2, Zap, Clock, AlertTriangle } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -18,6 +18,17 @@ import { useActiveStakeholders } from "@/hooks/useActiveStakeholders";
 import { activeStakeholderName, isPayableStakeholder } from "@/lib/payments/activeStakeholders";
 import { PAYROLL_FINANCE_QUERY_KEY } from "@/lib/payments/payrollRows";
 import { PAYROLL_SPEED_FEES, PAYROLL_SPEED_LABELS, type PayrollSpeed } from "@/lib/payments/payrollSpeedFees";
+import { PAYMENT_FLAGS } from "@/lib/payments/featureFlags";
+import { useVendorPayees } from "@/hooks/useVendorPayees";
+import {
+  VENDOR_INACTIVE_LABEL,
+  VENDOR_WALLET_ONLY_NOTE,
+  vendorPayeeName,
+  vendorRecipientKey,
+  vendorTenantIdFromKey,
+} from "@/lib/payments/vendorPayees";
+
+const SHOW_VENDOR_PAYMENTS = PAYMENT_FLAGS.SHOW_VENDOR_PAYMENTS;
 
 type Speed = PayrollSpeed;
 
@@ -64,11 +75,19 @@ export function RunPayrollDialog({ open, onOpenChange, onDone }: Props) {
     () => payees.find((p) => p.id === stakeholderId && isPayableStakeholder(p)),
     [payees, stakeholderId],
   );
+  // A vendor payee (Settings → Bank Account/Stakeholders → Vendors) is an allowed single recipient,
+  // paid to its ChecksOps wallet only. Its select value is "vendor:<vendor_tenant_id>".
+  const { data: vendorPayees = [] } = useVendorPayees(tenant?.id, open);
+  const selectedVendor = useMemo(() => {
+    const vendorTenantId = SHOW_VENDOR_PAYMENTS ? vendorTenantIdFromKey(stakeholderId) : null;
+    return vendorTenantId ? vendorPayees.find((v) => v.vendor_tenant_id === vendorTenantId && v.vendor_active) ?? null : null;
+  }, [vendorPayees, stakeholderId]);
+  const payeeName = selectedVendor ? vendorPayeeName(selectedVendor) : selected ? activeStakeholderName(selected) : null;
   const payableCount = payees.filter(isPayableStakeholder).length;
   const amount = Number.parseFloat(amountStr || "0");
   const fee = SPEED_FEES[speed];
   const total = amount + fee;
-  const canContinue = !!selected && amount > 0 && Number.isFinite(amount);
+  const canContinue = (!!selected || !!selectedVendor) && amount > 0 && Number.isFinite(amount);
 
 
   const { requireStepUp } = useStepUp();
@@ -77,15 +96,17 @@ export function RunPayrollDialog({ open, onOpenChange, onDone }: Props) {
 
   const runMutation = useMutation({
     mutationFn: async () => {
-      if (!tenant?.id || !selected) throw new Error("Missing context");
+      if (!tenant?.id || (!selected && !selectedVendor)) throw new Error("Missing context");
       const amountCents = Math.round(amount * 100);
-      const signature = JSON.stringify([selected.id, amountCents, speed, memo]);
+      const recipientKey = selectedVendor ? vendorRecipientKey(selectedVendor.vendor_tenant_id) : selected!.id;
+      const signature = JSON.stringify([recipientKey, amountCents, speed, memo]);
       if (pending.current?.signature !== signature) pending.current = { signature, key: crypto.randomUUID() };
       const idempotencyKey = pending.current.key;
       const send = () =>
         sendPayrollPayment({
           tenantId: tenant.id,
-          stakeholderAccountId: selected.id,
+          stakeholderAccountId: selectedVendor ? null : selected!.id,
+          vendorTenantId: selectedVendor?.vendor_tenant_id ?? null,
           amountCents,
           speed: SEND_SPEED[speed],
           memo: memo || null,
@@ -127,7 +148,7 @@ export function RunPayrollDialog({ open, onOpenChange, onDone }: Props) {
       }
     },
     onSuccess: () => {
-      toast({ title: "Payment submitted", description: `$${amount.toFixed(2)} sent to ${selected ? activeStakeholderName(selected) : "the payee"}.` });
+      toast({ title: "Payment submitted", description: `$${amount.toFixed(2)} sent to ${payeeName ?? "the payee"}.` });
       qc.invalidateQueries({ queryKey: ["payroll-runs"] });
       // Payment History, Revenue & Profit, By Recipient and Tax & 1099 read payroll_runs too.
       qc.invalidateQueries({ queryKey: [PAYROLL_FINANCE_QUERY_KEY] });
@@ -170,7 +191,9 @@ export function RunPayrollDialog({ open, onOpenChange, onDone }: Props) {
           <DialogTitle>{step === "form" ? "Run Payroll Payment" : "Confirm Payment"}</DialogTitle>
           <DialogDescription>
             {step === "form"
-              ? "Send an ACH payment to any verified stakeholder — not tied to a specific claim check."
+              ? SHOW_VENDOR_PAYMENTS
+                ? "Send a payment to any verified stakeholder, or to one of your vendors' ChecksOps wallet — not tied to a specific claim check."
+                : "Send an ACH payment to any verified stakeholder — not tied to a specific claim check."
               : "Review the details below. This will move funds immediately."}
           </DialogDescription>
         </DialogHeader>
@@ -196,9 +219,23 @@ export function RunPayrollDialog({ open, onOpenChange, onDone }: Props) {
                       </SelectItem>
                     );
                   })}
+                  {SHOW_VENDOR_PAYMENTS && vendorPayees.length > 0 && (
+                    <SelectGroup>
+                      <SelectLabel className="text-xs">Vendors (ChecksOps wallet)</SelectLabel>
+                      {vendorPayees.map((v) => (
+                        <SelectItem key={v.vendor_tenant_id} value={vendorRecipientKey(v.vendor_tenant_id)} disabled={!v.vendor_active}>
+                          {vendorPayeeName(v)}
+                          <span className="text-muted-foreground text-xs"> · {v.vendor_active ? "Vendor" : VENDOR_INACTIVE_LABEL}</span>
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  )}
                 </SelectContent>
               </Select>
-              {payees.length === 0 && !isLoading && (
+              {selectedVendor && (
+                <p className="text-[11px] text-muted-foreground">{VENDOR_WALLET_ONLY_NOTE} The normal send fee applies.</p>
+              )}
+              {payees.length === 0 && !isLoading && vendorPayees.length === 0 && (
                 <Alert variant="default" className="mt-2">
                   <AlertTriangle className="h-4 w-4" />
                   <AlertDescription className="text-xs">
@@ -206,7 +243,7 @@ export function RunPayrollDialog({ open, onOpenChange, onDone }: Props) {
                   </AlertDescription>
                 </Alert>
               )}
-              {payees.length > 0 && payableCount === 0 && !isLoading && (
+              {payees.length > 0 && payableCount === 0 && !isLoading && !selectedVendor && (
                 <Alert variant="default" className="mt-2">
                   <AlertTriangle className="h-4 w-4" />
                   <AlertDescription className="text-xs">
@@ -268,11 +305,11 @@ export function RunPayrollDialog({ open, onOpenChange, onDone }: Props) {
           </div>
         )}
 
-        {step === "confirm" && selected && (
+        {step === "confirm" && (selected || selectedVendor) && (
           <div className="space-y-3">
             <div className="rounded-md border border-border p-3 space-y-2 text-sm">
-              <div className="flex justify-between"><span className="text-muted-foreground">Payee</span><span className="font-medium">{activeStakeholderName(selected)}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Account</span><span>{selected.custname ?? "—"}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Payee</span><span className="font-medium">{payeeName}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Account</span><span>{selectedVendor ? "Vendor · ChecksOps wallet" : (selected?.custname ?? "—")}</span></div>
               <div className="flex justify-between"><span className="text-muted-foreground">Amount</span><span className="font-medium">${amount.toFixed(2)}</span></div>
               <div className="flex justify-between"><span className="text-muted-foreground">Speed</span><span>{SPEED_LABELS[speed]} (fee ${fee.toFixed(2)})</span></div>
               <div className="flex justify-between border-t border-border pt-2"><span>Total debit</span><span className="font-semibold">${total.toFixed(2)}</span></div>

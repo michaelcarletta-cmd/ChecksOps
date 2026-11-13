@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { sendErrorMessage } from "./vendorPayees.ts";
 
 /**
  * Sends from the Funds tab: the organization's balance pays stakeholders and the
@@ -8,11 +9,13 @@ import { supabase } from "@/integrations/supabase/client";
 
 export type SendRecipient =
   | { kind: "stakeholder"; stakeholder_account_id: string; amount_cents: number }
-  | { kind: "partner"; partner_tenant_id: string; amount_cents: number };
+  | { kind: "partner"; partner_tenant_id: string; amount_cents: number }
+  // A vendor payee (vendor_payees_list): paid to the vendor's ChecksOps wallet only, never a bank.
+  | { kind: "vendor"; vendor_tenant_id: string; amount_cents: number };
 
 export interface SendRecipientResult {
   index: number;
-  kind: "stakeholder" | "partner";
+  kind: "stakeholder" | "partner" | "vendor";
   id: string;
   name: string | null;
   destination: "bank" | "wallet" | null;
@@ -64,11 +67,13 @@ export async function sendPayment(input: {
 
 /**
  * Payroll: the same send route and two-factor (once per login), not tied to a check, to exactly
- * one stakeholder. The server records the payroll_runs row with the payment.
+ * one stakeholder or one vendor payee (wallet only). The server records the payroll_runs row with
+ * the payment.
  */
 export async function sendPayrollPayment(input: {
   tenantId: string;
-  stakeholderAccountId: string;
+  stakeholderAccountId?: string | null;
+  vendorTenantId?: string | null;
   amountCents: number;
   speed: "standard" | "same_day";
   memo?: string | null;
@@ -78,17 +83,25 @@ export async function sendPayrollPayment(input: {
     tenant_id: input.tenantId,
     purpose: "payroll",
     speed: input.speed,
-    recipients: [{ kind: "stakeholder", stakeholder_account_id: input.stakeholderAccountId, amount_cents: input.amountCents }],
+    recipients: [payrollRecipient(input)],
     description: input.memo ? `Payroll: ${input.memo}` : "Payroll",
     idempotency_key: input.idempotencyKey,
   });
+}
+
+/** Payroll pays exactly one recipient: a vendor payee when one is chosen, else the stakeholder. */
+function payrollRecipient(input: { stakeholderAccountId?: string | null; vendorTenantId?: string | null; amountCents: number }): SendRecipient {
+  if (input.vendorTenantId) return { kind: "vendor", vendor_tenant_id: input.vendorTenantId, amount_cents: input.amountCents };
+  if (input.stakeholderAccountId) return { kind: "stakeholder", stakeholder_account_id: input.stakeholderAccountId, amount_cents: input.amountCents };
+  throw new SendPaymentError("Choose a payee.", "invalid_send_request");
 }
 
 async function invokeSend(body: Record<string, unknown>): Promise<{ send: SendSummary; duplicate: boolean; message?: string }> {
   const { data, error } = await supabase.functions.invoke("moov-disburse", { body });
   const failure = (reply: SendReply | null | undefined, fallback: string) => {
     const code = typeof reply?.error === "string" ? reply.error : null;
-    const message = typeof reply?.message === "string" && reply.message ? reply.message : code || fallback;
+    // The server's own message, shown plainly; a vendor refusal without one gets a plain message.
+    const message = sendErrorMessage(code, typeof reply?.message === "string" ? reply.message : null, fallback);
     return new SendPaymentError(message, code, reply?.send ?? null);
   };
   if (error) {

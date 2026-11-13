@@ -197,7 +197,11 @@ test('wiring: Revenue & Profit, Payment History, By Recipient, WalletOps and Fun
   assert.match(read('src/pages/WalletOps.tsx'), /kind: "incoming" as const,\n\s+credit: true,/);
   const page = read('src/pages/CheckCommandCenter.tsx');
   assert.match(page, /const received = \[\.\.\.\(fundsReceived as any\[\]\), \.\.\.incomingFundsReceivedRows\(incomingTransfers\)\];[\s\S]{0,400}return \[\.\.\.received, \.\.\.sharedReleased\]\.filter\(matchesSplitSearch\);/);
-  // Partner payments are income, never 1099 / tax payments; sends are not added to Tax & 1099 either.
+  // Partner payments are income, never 1099 / tax payments. Sends are not added to Tax & 1099 either,
+  // except sends to a vendor payee (owner, 2026-11-13: "Include vendors in the 1099 reports"), which it
+  // reads through fetchOrganizationSendLegs / vendorSendTaxPayments only.
   const tax = read('src/components/ledger/TaxSummary.tsx');
-  assert.doesNotMatch(tax, /transferFinanceRows|useTransferFinance|get_tenant_incoming_transfers|payment_transfers/);
+  assert.doesNotMatch(tax, /get_tenant_incoming_transfers|useIncomingTransfers|useSentPaymentLegs|useSharedCheckSourceSends|payment_transfers|sendExpenseRows|sendLedgerRows|sendRecipientReportRows|incomingPayments/);
+  assert.match(tax, /^import \{ fetchOrganizationSendLegs, vendorSendTaxPayments \} from "@\/lib\/payments\/transferFinanceRows";$/m);
+  assert.match(tax, /vendorPayments,/);
 });
