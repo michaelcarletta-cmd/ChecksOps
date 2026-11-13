@@ -44,7 +44,14 @@ or SPA change is part of this pin: `aws/functions/api/mortgage-desk-esign.mjs` (
 `homeowner_timeline`, `send_tracking_link`) and the Desk page ship afterwards through their own guarded paths; the API
 tolerates the functions being absent (the workspace returns no check or timeline, the link answers 503).
 
-**Status:** tooling built; staging and production pins pending (`execute: false`). Nothing applied or read.
+**Status:** staging pin execute-authorized (wave 54); not applied anywhere. The production pin is pending.
+
+**Staging read-live (2026-11-13).** Run 43355976887 (main `79ae218c6`, after executor inspect run 43355315256 and executor deploy
+run 43355657339 (executor CodeSha256 `m0Av9v61…` -> `Xms0fJZo…`)), under the owner's words "Start the SQL 163 staging refresh
+and read-live": `already_applied` false, `precondition_failures` `[]`; the three functions absent. Live
+`23d41c1086f3f15412a5d374e056eaaf1bef7f428d81b0ffbdda666a5250de87`, equal to the derived pre-state; intended `ef536373…`. Recorded in the staging pin
+(`expected_live_definition_sha256`, `execute: true`, wave 54) on the owner's words "Do the SQL 163 staging pin and apply". The
+staging apply is a separate run after this pin is merged and the executor is redeployed carrying it.
 
 Production authorization phrase (pin `authorization_phrase`): `SHOW_MORTGAGE_DESK_AGENTS_CHECK_TIMELINE_AND_HOMEOWNER_LINK`.
 
