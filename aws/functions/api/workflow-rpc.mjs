@@ -167,6 +167,13 @@ export const SAFE_WRITE_RPC_CLASSIFICATION = {
   // SQL 148: Send to Mortgage Desk, 2nd mortgagee. aws_link_second_mortgagee (SECURITY DEFINER, member
   // check) marks the 1st request 1 of 2 and the 2nd 2 of 2; no money, no provider.
   link_second_mortgagee: 'safe_now',
+  // SQL 141 / SQL 165 (owner 2026-11-13, vendor payments): a member adds or removes a vendor payee by
+  // Partner Code (aws_vendor_payee_add / aws_vendor_payee_remove, SECURITY DEFINER, member check, write
+  // only tenant_vendor_payees) and lists its live payees (aws_vendor_payees_for_tenant, read only). No
+  // money moves here; paying a vendor is moov-disburse.
+  vendor_payee_add: 'safe_now',
+  vendor_payee_remove: 'safe_now',
+  vendor_payees_list: 'safe_now',
   add_partner_stakeholder_to_check: 'provider_dependent',
   ensure_partner_stakeholders: 'provider_dependent',
   save_checkalt_settings: 'safe_now',
@@ -200,6 +207,9 @@ export const SAFE_WRITE_RPCS = new Set([
   'apply_referral_code',
   SAVE_CLAIM_SETTLEMENT_BREAKDOWN,
   'link_second_mortgagee',
+  'vendor_payee_add',
+  'vendor_payee_remove',
+  'vendor_payees_list',
 ]);
 
 const SESSION_RPCS = new Set(['register_session', 'validate_session', 'invalidate_session', 'log_audit']);
@@ -1855,6 +1865,58 @@ const executeLinkSecondMortgagee = async ({ client, args }) => {
   return { data: result };
 };
 
+export const VENDOR_PAYEE_ADD_SQL = 'SELECT public.aws_vendor_payee_add($1::uuid, $2::text) AS result';
+export const VENDOR_PAYEE_REMOVE_SQL = 'SELECT public.aws_vendor_payee_remove($1::uuid, $2::uuid) AS result';
+export const VENDOR_PAYEES_LIST_SQL = 'SELECT public.aws_vendor_payees_for_tenant($1::uuid) AS result';
+
+/**
+ * Vendor payees (owner 2026-11-13; SQL 141, SQL 165). Each function checks, as the verified sign-in
+ * (auth.uid()), that the caller is a member of the tenant, and answers a refusal as
+ * {ok: false, error} without raising; that answer is returned as data, as apply_referral_code's is,
+ * so the screen shows its own message for the code. Arguments: tenant_id (or p_tenant_id /
+ * _tenant_id), partner_code (or p_partner_code / _partner_code / code), vendor_tenant_id (or
+ * p_vendor_tenant_id / _vendor_tenant_id).
+ */
+const executeVendorPayeeAdd = async ({ client, args }) => {
+  const tenantId = arg(args, 'tenant_id', 'p_tenant_id', '_tenant_id');
+  const code = arg(args, 'partner_code', 'p_partner_code', '_partner_code', 'code');
+  if (!isUuid(tenantId)) return { error: 'invalid_uuid', field: 'tenant_id' };
+  if (typeof code !== 'string' || !code.trim()) return { error: 'missing_required_field', field: 'partner_code' };
+  const result = (await client.query(VENDOR_PAYEE_ADD_SQL, [String(tenantId), code])).rows?.[0]?.result;
+  if (!result || typeof result !== 'object') return { error: 'vendor_payee_add_failed' };
+  return { data: result };
+};
+
+const executeVendorPayeeRemove = async ({ client, args }) => {
+  const tenantId = arg(args, 'tenant_id', 'p_tenant_id', '_tenant_id');
+  const vendorTenantId = arg(args, 'vendor_tenant_id', 'p_vendor_tenant_id', '_vendor_tenant_id');
+  if (!isUuid(tenantId)) return { error: 'invalid_uuid', field: 'tenant_id' };
+  if (!isUuid(vendorTenantId)) return { error: 'invalid_uuid', field: 'vendor_tenant_id' };
+  const result = (await client.query(VENDOR_PAYEE_REMOVE_SQL, [String(tenantId), String(vendorTenantId)])).rows?.[0]?.result;
+  if (!result || typeof result !== 'object') return { error: 'vendor_payee_remove_failed' };
+  return { data: result };
+};
+
+/**
+ * The tenant's live vendor payees, by vendor name. Each row is SQL 165's (link_id, vendor_tenant_id,
+ * vendor_name, partner_code_used, added_at, is_vendor, subscription_status, payable) plus the names the
+ * screens read: created_at (= added_at) and vendor_active (= payable: still a vendor and active).
+ */
+export const vendorPayeeListRow = (row = {}) => ({
+  ...row,
+  created_at: row.added_at ?? null,
+  vendor_active: row.payable === true,
+});
+
+const executeVendorPayeesList = async ({ client, args }) => {
+  const tenantId = arg(args, 'tenant_id', 'p_tenant_id', '_tenant_id');
+  if (!isUuid(tenantId)) return { error: 'invalid_uuid', field: 'tenant_id' };
+  const result = (await client.query(VENDOR_PAYEES_LIST_SQL, [String(tenantId)])).rows?.[0]?.result;
+  if (!result || typeof result !== 'object') return { error: 'vendor_payees_list_failed' };
+  if (result.ok !== true) return { data: result };
+  return { data: { ...result, payees: (Array.isArray(result.payees) ? result.payees : []).map(vendorPayeeListRow) } };
+};
+
 export const executeSafeWriteRpc = async ({ client, mapping, name, args }) => {
   switch (name) {
     case 'log_audit':
@@ -1908,6 +1970,12 @@ export const executeSafeWriteRpc = async ({ client, mapping, name, args }) => {
       return executeApplyReferralCode({ client, args });
     case 'link_second_mortgagee':
       return executeLinkSecondMortgagee({ client, args });
+    case 'vendor_payee_add':
+      return executeVendorPayeeAdd({ client, args });
+    case 'vendor_payee_remove':
+      return executeVendorPayeeRemove({ client, args });
+    case 'vendor_payees_list':
+      return executeVendorPayeesList({ client, args });
     default:
       return { error: 'rpc_disabled', name };
   }
