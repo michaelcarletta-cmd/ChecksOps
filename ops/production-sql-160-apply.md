@@ -30,7 +30,7 @@ recorded; owner, EXECUTE grants, SECURITY DEFINER and SET options of the four fu
 table, trigger, policy or grant. The db-readonly-validate trigger count is not affected. No API, Lambda or SPA change is
 part of this pin.
 
-**Status:** staging pin execute-authorized (wave 51); not applied anywhere. The production pin is pending.
+**Status:** applied in staging (wave 51, 2026-11-13, apply run 43353383753); staging acceptance: the staging apply under the owner's run approval ("apply SQL 160 in staging"; no separate acceptance statement); production pin execute-authorized on production's own pre-state (read-only inspect SSM `4a5e9028-0372-43b9-a1bb-d6751e6bedd3`). Not applied in production.
 
 **Staging read-live (2026-11-12).** The first read-live, run 43307779123 (main `83a508fb`), read `7fd99249…`: staging's
 `tg_record_mortgage_handling_billing()` lacked the `checksops EXECUTE` production holds, so SQL 160's post-state could not reach
@@ -43,6 +43,34 @@ functions' ACLs as production's. Live `3a8bb0b11d59688642c98ace91bb15c562c362eea
 ACLs and SET options); intended `fae1623b…`. Recorded in the staging pin (`expected_live_definition_sha256`, `execute: true`,
 wave 51). The staging apply is a separate run after this pin is merged and the executor is redeployed carrying it, on the
 owner's words for that run. The production pin stays pending.
+
+**Staging executor refreshed and staging apply (2026-11-13).** The staging pin (wave 51, PR #1851) merged as
+`2e2076d494ec3ff7454c1ae1dcc75a3f4d0b0589`. Deploy run 43352734483 updated the staging guarded SQL executor (CodeSha256 `OrCHvYX9…` ->
+`m0Av9v61…`); a fresh read-live, run 43353085216, read `3a8bb0b1…` with `apply_preconditions_met` true. Apply run 43353383753
+(main `2e2076d`) under the owner's words "apply SQL 160 in staging": `before_hash` `3a8bb0b11d59688642c98ace91bb15c562c362eea00b2ae9c73a166fee365229`, `after_hash`
+`fae1623bb898f879f738bcd639be0238f5e111ebe25a985534a51be2b2903a40` (the intended hash), `result` `applied`. Read-live run 43353724235: `already_applied` true, live
+`fae1623b…`. SQL 161's read-live run 43353977052 still reported `already_applied` true. The owner gave the run approval "apply SQL 160
+in staging"; no separate staging acceptance statement was given. There is no separate staging record PR for SQL 160: these
+staging runs are recorded here and in the production pin's `staging_acceptance` by the production pin PR.
+
+**Production inspect (2026-11-13).** Read-only `--inspect` through SSM `4a5e9028-0372-43b9-a1bb-d6751e6bedd3` on
+`i-0c35557c4e5385406` (under the owner's words "run the SQL 160 and SQL 161 production inspect"; runner started from stopped
+with no SSM command in progress, command 02:52:21Z to 02:52:29Z, AWS-RunShellScript, Success, runner stopped again afterwards,
+all by `user/claude-code`; the same command ran SQL 161's `--inspect`, not recorded by this change), main `2e2076d49`
+(tarball sha256 `ff648cf9f1155c5550786cb676256205c9d90495e86401d0e082c8386a7be907`, checked by `sha256sum -c` on the runner, staged by
+`sql53-temporary-transfer.yml` run 43354785479; sha256 of the printed sql160 JSON
+`5d9a78e42984b1a3b93b2deb7138a8e8fc2aa701bc68812e1ae418161c437138`), exit 0, `ok` true: live `3a8bb0b11d59688642c98ace91bb15c562c362eea00b2ae9c73a166fee365229` (the four
+functions with the inspected bodies, their state `different` from SQL 160's: the derived pre-state, equal to staging's before
+its apply), no predecessor, `prerequisites_missing` `[]`, `successors_applied` `[]`, `already_applied` false,
+`precondition_failures` `[]`, `apply_preconditions_met` false (no pre-state recorded yet). `read_only`, `current_user` and
+`missing_dependencies` were not captured in this run's printed output (the output filter dropped them); the tool reads inside
+`BEGIN READ ONLY … ROLLBACK` by construction. An earlier command the same morning, SSM
+`569d0171-2051-44d1-ab96-e33947996913` (`production-sql-one-shot.mjs --phase inspect` for `sql160` and `sql161`), refused at the
+pin step with `GUARD_APPLY_FORBIDDEN` (both pins `execute: false`) before connecting: not a database read. Production's pre-state
+equals staging's (read-live runs 43350223533 and 43353085216), so the staging apply took the path production will. Recorded in
+the production pin with the staging apply (run 43353383753) as its staging acceptance and `execute: true` under the owner's
+"Yes" to "Shall I open the pin PR?". The owner merges the pin change; the apply runs only after that merge is on main and
+staged, under the owner's words for that run (phrase `STOP_ADDITIONAL_CHECK_AND_OUTSIDE_DEPOSIT_CHARGES`).
 
 ## Grants and attributes (observed, kept)
 
