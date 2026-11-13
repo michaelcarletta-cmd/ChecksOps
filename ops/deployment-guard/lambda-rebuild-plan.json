@@ -4,11 +4,11 @@
   "environments": {
     "staging": {
       "function_name": "checksops-staging-api",
-      "status": "applied",
+      "status": "accepted",
       "members": {
-        "mortgage-ops-usage.mjs": {
-          "live_sha256": "e24900070c080032469c7383338efd26b37c522ec6ba68d3f7b6051539d1fd74",
-          "accepted_sha256": "abd5fe7a8caba4cf9c48ff4ce0d2cb5ab7cb6e1d122a1c389ac66ede44acb044"
+        "providers/parity/sweep-read.mjs": {
+          "live_sha256": "4da8e0c0e1b3bb6c78248cde67738f953044b065dde75cfc4885d6fac2bae02f",
+          "accepted_sha256": "32d7ffaaeffc27a13615e1c310666e87bdccf619c12c15ddb5823921035a44f4"
         }
       },
       "added": {},
@@ -19,13 +19,13 @@
         "changed": {}
       },
       "inspect": {
-        "run_id": "43207489743",
-        "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43207489743",
-        "main_commit": "c3d3959386319faf2be6d152388125bbcc263adf",
-        "live_code_sha256": "UWR5ZSeBSAGV1msYNmueRZQvlt+S2n2gcJAJgC/CaYA=",
-        "live_revision_id": "4a206861-aa78-4bda-963a-2dfe2069be47",
+        "run_id": "43416770262",
+        "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43416770262",
+        "main_commit": "8d6488e0fef93d3ff3697a6423603d546e7faa08",
+        "live_code_sha256": "Dif2IETi/w3MYw50go94GVDr3iuD505RCSuWiLTs72s=",
+        "live_revision_id": "7f83a725-cc3b-4266-b27f-7cd3cf00c3b7",
         "live_member_count": 6786,
-        "candidate_zip_sha256": "d8d2a82a1931b5f3a9b284c6037ffd49e90c1cc1fc11c992721a9614c556a08c",
+        "candidate_zip_sha256": "11a094c7fb11415d6a3590bc835d5ca732c8b9655e6bf71f6624d6677b1d3ef4",
         "candidate_member_count": 6786,
         "same": 209,
         "changed": 1,
@@ -35,26 +35,7 @@
           "live": 54,
           "candidate": 54
         },
-        "notes": "Fifth staging rebuild, for the second mortgage company fee (SQL 153, owner 2026-11-10/11: \"Flat $5\", \"it should be an additional $5 if 2 mortgage companies are on check\"; #1761, merge 9bbe1d2a1; the $5 accrual copy in mortgage-ops-usage.mjs, which is not an overlay member and reaches a function only with a rebuild, as the second mortgagee fee manifest aws/tests/fixtures/production-second-mortgagee-fee-manifest-2026-11-11.json states). Owner 2026-11-12: \"Yes write the rebuild plan PR\", after \"Wait\" (no other workstream's files in this rebuild). SQL 153 is applied in staging (wave 49, run 43119289402) and production (2026-11-12, SSM 1051cd92-cbda-43ec-bf8d-e8905f22727a, #1797), so the accrual has its index and columns. Inspect diff: 1 changed (mortgage-ops-usage.mjs, live e2490007... -> main's abd5fe7a...), 0 added, 0 removed, 209 same, dependencies identical (54 live, 54 candidate). The live e2490007... is the fourth section's accepted bytes (history[3]): staging has run that section's candidate since its rebuild (run 41313204838, which the production section's inspect notes cite), and the inspect listed mortgage-ops-usage.mjs as live_mismatch only against the fourth section's live 9856f51f.... The fourth section moves verbatim into history[3]. The live CodeSha256 UWR5ZSeB... is not the 2aBbqEfO... the read-only inspects of 2026-11-12 read (rebuild inspects 43127484102 and 43132621878, overlay inspects 43128700657 and 43128868948): the guarded staging overlays of the Mortgage Desk shared-check library (SQL 156, #1798, on main 48b80b065: mortgage-desk-esign.mjs 492da984 -> 07df2ae0, staging apply run 43137751086; storage.mjs df96755d -> c1bb7d71, staging apply run 43138073611, RevisionId 4a206861-aa78-4bda-963a-2dfe2069be47 after, the RevisionId this inspect reads; recorded in aws/tests/fixtures/production-desk-shared-check-library-applied-manifest-2026-11-12.json) replaced both with main's bytes, which this inspect counts as same. Inspect 43132621878 (main 868cfa978, before those overlays) reported 3 changed; this section was written only after they were applied, so the rebuild carries no other workstream's change. Nothing is applied by this plan change; the apply needs approval_phrase exactly \"DEPLOY FULL API PACKAGE TO STAGING\" and this inspect's live CodeSha256 as expected_live_code_sha256. Production is unchanged."
-      },
-      "applied": {
-        "run_id": "43210074311",
-        "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43210074311",
-        "main_commit": "60b8c734f7dd5f71f5b2bc94faa9633aca5d81d7",
-        "approval_phrase": "DEPLOY FULL API PACKAGE TO STAGING",
-        "code_sha256_before": "UWR5ZSeBSAGV1msYNmueRZQvlt+S2n2gcJAJgC/CaYA=",
-        "revision_id_before": "4a206861-aa78-4bda-963a-2dfe2069be47",
-        "code_sha256_after": "2NKoKhkxtfOpsoTGA3/9SekMHMH8EcmSchqWFMVWoIw=",
-        "revision_id_after": "3f35c0cf-22e2-460d-a37f-e093bd0f0c0c",
-        "candidate_zip_sha256": "d8d2a82a1931b5f3a9b284c6037ffd49e90c1cc1fc11c992721a9614c556a08c",
-        "applied_at": "2026-11-12T11:33:17.760Z",
-        "state": "VERIFIED",
-        "smoke": [
-          "/health",
-          "/db-health",
-          "/db-readonly-validate"
-        ],
-        "notes": "Fifth staging rebuild, applied on the owner's \"DEPLOY FULL API PACKAGE TO STAGING\" (2026-11-12) from main 60b8c734f (the merged plan #1806), with expected_live_code_sha256 UWR5ZSeB... (inspect 43207489743). Apply run 43210074311 (job 131155134067): every step success. The job's own inspect step read READY (1 changed: mortgage-ops-usage.mjs e2490007... -> abd5fe7a...; 0 added, 0 removed, 209 same, dependencies 54/54). The receipt-gated writer updated checksops-staging-api to CodeSha256 2NKoKhkxtfOpsoTGA3/9SekMHMH8EcmSchqWFMVWoIw= (writer RevisionId f947cef5-9cc5-431c-869c-8892599746a0, lastUpdateStatus InProgress, errors []); \"Verify the live package is the candidate\" read it back VERIFIED (6786 members, RevisionId 3f35c0cf-22e2-460d-a37f-e093bd0f0c0c); the public staging smoke returned 200 ok for /health, /db-health and /db-readonly-validate. Live read-back (read-only GetFunctionConfiguration, 2026-11-12 after the apply): CodeSha256 2NKoKhkx..., RevisionId 3f35c0cf, LastModified 2026-11-12T11:33:21Z, LastUpdateStatus Successful, 46 variables. Not verified by this record: a staging check with two mortgage companies accruing the extra $5 (the owner was asked to test it; no result was reported when this was written)."
+        "notes": "Sixth staging rebuild, for the settlement bank fallback (owner 2026-11-12: \"Condition One settlement bank in Wallet & Treasury shows nothing... if condition one is set up it should show. This goes for all tenants.\"; #1838, merge 977bfedbd): providers/parity/sweep-read.mjs no longer fails the whole sweep snapshot when a Moov read fails, so the bank on file still shows. It is not an overlay member and reaches a function only with a rebuild. Owner 2026-11-13: \"B\" (wait for the partner-send workstream's overlays so this rebuild carries no other workstream's change), then \"Start the API rebuild plan and staging rebuild\". Read-only inspects of 2026-11-13 at main 4cd25dac9 (staging 43348784836, production 43348781774) read live pG4slikw... in both and listed sweep-read.mjs and providers/production/moov-send.mjs (#1844); the partner-send workstream's guarded overlays (#1850; production overlay runs between 2026-11-13 02:34 and 02:55 UTC; staging now reads the same CodeSha256 as production) then put moov-send.mjs and data.mjs live with main's bytes, which this inspect counts as same. Production inspect 43371290665 (main 8d6488e0f) reads the same live CodeSha256 Dif2IETi... and the same single difference. Inspect diff: 1 changed (providers/parity/sweep-read.mjs, live 4da8e0c0... -> main's 32d7ffae...), 0 added, 0 removed, 209 same, dependencies identical (54 live, 54 candidate). The live 4da8e0c0... is main's sweep-read.mjs before #1838 (977bfedbd^1). The fifth section (inspect 43207489743, apply 43210074311) moves verbatim into history[4]. Nothing is applied by this plan change; the apply needs approval_phrase exactly \"DEPLOY FULL API PACKAGE TO STAGING\" and this inspect's live CodeSha256 as expected_live_code_sha256. Production is unchanged."
       },
       "history": [
         {
@@ -828,6 +809,60 @@
               "candidate": 54
             },
             "notes": "Fourth staging rebuild, for the money-write flag (security audit 2026-10-29 finding 14 step 1, #1498, merge 62a85dcdd): invoice-provider.mjs, mortgage-ops-usage.mjs and tenant-collection-v2-uat.mjs set request.money_write but are not overlay members (invoice-provider.mjs is kept out of the plan, mortgage-ops-usage.mjs is not a member, tenant-collection-v2-uat.mjs is do_not_overlay), so they reach checksops-staging-api only with a rebuild. Owner 2026-11-01: \"Start the #1498 API rollout in staging\", then \"Overlay first\" for the merged changes the rebuild would otherwise carry. The live CodeSha256 Zj7edKlG... is not the one the third rebuild left behind (applied run 39666390516, pNCewAaF...): later guarded staging overlays replaced or added single members, each VERIFIED with /health, /db-health and /db-readonly-validate 200, and each already equals main (counted as same by this inspect). Among them, on 2026-11-01 at main 780992427: money-write-flag.mjs ADD (run 41309572005), providers/production/moov-wallet-sync.mjs (41309712728), providers/parity/moov-functions.mjs (41309799977), tenant-settings-handlers.mjs (41309896387), tenant-collection-v2-settlement.mjs (41309976712), tenant-collection-v2.mjs (41310045795), tenant-billing-engine.mjs (41310112967), tenant-billing-handlers.mjs (41310178084); at main 2caf8b22e: providers/production/moov-fund-authz.mjs (41310521704), providers/production/checkalt-authz.mjs (41310616004), check-endorsement.mjs (41310703042), auth-financial-totp.mjs (41310798951), providers/payees/handlers.mjs (41310941335). providers/webhooks.mjs: the third section listed it at accepted f7353ee1...; the guarded staging overlay of the Moov webhook body confirmation (PR #1483, staging apply run 41202670517 on main b6a682161, 2026-10-31) replaced it with main's bytes 59b58674..., which is what this inspect reads live and what main builds. The inspect reported that as DEPLOYMENT_COLLISION listed_member_drifted against the third section only; it is not drift. The third section moves verbatim into history[2], so webhooks.mjs is no longer a listed member and reads as same (live 59b58674... == candidate). Inspect diff: 3 changed (exactly the three files above, live -> main's bytes), 0 added, 0 removed, 203 same, dependencies identical (54 live, 54 candidate). Nothing is applied by this plan change; the apply needs approval_phrase exactly \"DEPLOY FULL API PACKAGE TO STAGING\" and an inspect-reported expected_live_code_sha256."
+          }
+        },
+        {
+          "status": "applied",
+          "members": {
+            "mortgage-ops-usage.mjs": {
+              "live_sha256": "e24900070c080032469c7383338efd26b37c522ec6ba68d3f7b6051539d1fd74",
+              "accepted_sha256": "abd5fe7a8caba4cf9c48ff4ce0d2cb5ab7cb6e1d122a1c389ac66ede44acb044"
+            }
+          },
+          "added": {},
+          "removed": {},
+          "dependencies": {
+            "added": {},
+            "removed": {},
+            "changed": {}
+          },
+          "inspect": {
+            "run_id": "43207489743",
+            "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43207489743",
+            "main_commit": "c3d3959386319faf2be6d152388125bbcc263adf",
+            "live_code_sha256": "UWR5ZSeBSAGV1msYNmueRZQvlt+S2n2gcJAJgC/CaYA=",
+            "live_revision_id": "4a206861-aa78-4bda-963a-2dfe2069be47",
+            "live_member_count": 6786,
+            "candidate_zip_sha256": "d8d2a82a1931b5f3a9b284c6037ffd49e90c1cc1fc11c992721a9614c556a08c",
+            "candidate_member_count": 6786,
+            "same": 209,
+            "changed": 1,
+            "added": 0,
+            "removed": 0,
+            "dependency_counts": {
+              "live": 54,
+              "candidate": 54
+            },
+            "notes": "Fifth staging rebuild, for the second mortgage company fee (SQL 153, owner 2026-11-10/11: \"Flat $5\", \"it should be an additional $5 if 2 mortgage companies are on check\"; #1761, merge 9bbe1d2a1; the $5 accrual copy in mortgage-ops-usage.mjs, which is not an overlay member and reaches a function only with a rebuild, as the second mortgagee fee manifest aws/tests/fixtures/production-second-mortgagee-fee-manifest-2026-11-11.json states). Owner 2026-11-12: \"Yes write the rebuild plan PR\", after \"Wait\" (no other workstream's files in this rebuild). SQL 153 is applied in staging (wave 49, run 43119289402) and production (2026-11-12, SSM 1051cd92-cbda-43ec-bf8d-e8905f22727a, #1797), so the accrual has its index and columns. Inspect diff: 1 changed (mortgage-ops-usage.mjs, live e2490007... -> main's abd5fe7a...), 0 added, 0 removed, 209 same, dependencies identical (54 live, 54 candidate). The live e2490007... is the fourth section's accepted bytes (history[3]): staging has run that section's candidate since its rebuild (run 41313204838, which the production section's inspect notes cite), and the inspect listed mortgage-ops-usage.mjs as live_mismatch only against the fourth section's live 9856f51f.... The fourth section moves verbatim into history[3]. The live CodeSha256 UWR5ZSeB... is not the 2aBbqEfO... the read-only inspects of 2026-11-12 read (rebuild inspects 43127484102 and 43132621878, overlay inspects 43128700657 and 43128868948): the guarded staging overlays of the Mortgage Desk shared-check library (SQL 156, #1798, on main 48b80b065: mortgage-desk-esign.mjs 492da984 -> 07df2ae0, staging apply run 43137751086; storage.mjs df96755d -> c1bb7d71, staging apply run 43138073611, RevisionId 4a206861-aa78-4bda-963a-2dfe2069be47 after, the RevisionId this inspect reads; recorded in aws/tests/fixtures/production-desk-shared-check-library-applied-manifest-2026-11-12.json) replaced both with main's bytes, which this inspect counts as same. Inspect 43132621878 (main 868cfa978, before those overlays) reported 3 changed; this section was written only after they were applied, so the rebuild carries no other workstream's change. Nothing is applied by this plan change; the apply needs approval_phrase exactly \"DEPLOY FULL API PACKAGE TO STAGING\" and this inspect's live CodeSha256 as expected_live_code_sha256. Production is unchanged."
+          },
+          "applied": {
+            "run_id": "43210074311",
+            "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43210074311",
+            "main_commit": "60b8c734f7dd5f71f5b2bc94faa9633aca5d81d7",
+            "approval_phrase": "DEPLOY FULL API PACKAGE TO STAGING",
+            "code_sha256_before": "UWR5ZSeBSAGV1msYNmueRZQvlt+S2n2gcJAJgC/CaYA=",
+            "revision_id_before": "4a206861-aa78-4bda-963a-2dfe2069be47",
+            "code_sha256_after": "2NKoKhkxtfOpsoTGA3/9SekMHMH8EcmSchqWFMVWoIw=",
+            "revision_id_after": "3f35c0cf-22e2-460d-a37f-e093bd0f0c0c",
+            "candidate_zip_sha256": "d8d2a82a1931b5f3a9b284c6037ffd49e90c1cc1fc11c992721a9614c556a08c",
+            "applied_at": "2026-11-12T11:33:17.760Z",
+            "state": "VERIFIED",
+            "smoke": [
+              "/health",
+              "/db-health",
+              "/db-readonly-validate"
+            ],
+            "notes": "Fifth staging rebuild, applied on the owner's \"DEPLOY FULL API PACKAGE TO STAGING\" (2026-11-12) from main 60b8c734f (the merged plan #1806), with expected_live_code_sha256 UWR5ZSeB... (inspect 43207489743). Apply run 43210074311 (job 131155134067): every step success. The job's own inspect step read READY (1 changed: mortgage-ops-usage.mjs e2490007... -> abd5fe7a...; 0 added, 0 removed, 209 same, dependencies 54/54). The receipt-gated writer updated checksops-staging-api to CodeSha256 2NKoKhkxtfOpsoTGA3/9SekMHMH8EcmSchqWFMVWoIw= (writer RevisionId f947cef5-9cc5-431c-869c-8892599746a0, lastUpdateStatus InProgress, errors []); \"Verify the live package is the candidate\" read it back VERIFIED (6786 members, RevisionId 3f35c0cf-22e2-460d-a37f-e093bd0f0c0c); the public staging smoke returned 200 ok for /health, /db-health and /db-readonly-validate. Live read-back (read-only GetFunctionConfiguration, 2026-11-12 after the apply): CodeSha256 2NKoKhkx..., RevisionId 3f35c0cf, LastModified 2026-11-12T11:33:21Z, LastUpdateStatus Successful, 46 variables. Not verified by this record: a staging check with two mortgage companies accruing the extra $5 (the owner was asked to test it; no result was reported when this was written)."
           }
         }
       ]
