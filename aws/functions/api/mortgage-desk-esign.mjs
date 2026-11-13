@@ -153,7 +153,7 @@ export const DESK_MESSAGES_SQL = 'SELECT * FROM public.aws_mortgage_desk_message
 export const DESK_REQUEST_CHECK_SQL = 'SELECT * FROM public.aws_mortgage_desk_request_check($1::uuid)';
 export const DESK_HOMEOWNER_TIMELINE_SQL = 'SELECT * FROM public.aws_mortgage_desk_homeowner_timeline($1::uuid)';
 export const DESK_HOMEOWNER_LINK_SQL = 'SELECT * FROM public.aws_mortgage_desk_homeowner_link($1::uuid, $2::text)';
-/** Check images are claim-files objects; read URLs live as long as sign_url's. */
+/** Check images are claim-files objects; their read URLs live MORTGAGE_DESK_CHECK_IMAGE_EXPIRES (60 s). */
 const DESK_CHECK_IMAGE_BUCKET = 'claim-files';
 export const DESK_CHECK_FILES_SQL = 'SELECT * FROM public.aws_mortgage_desk_check_files($1::uuid)';
 export const DESK_SIGNATURE_REQUESTS_SQL = 'SELECT public.aws_mortgage_desk_signature_requests($1::uuid) AS requests';
@@ -165,6 +165,11 @@ export const DESK_RECORD_DELIVERY_SQL = 'SELECT public.aws_mortgage_desk_record_
 export const DESK_CAN_READ_PATH_SQL = 'SELECT public.aws_mortgage_desk_can_read_path($1::text[], $2::text) AS ok';
 /** Signed read URLs live at most this long, as storage.mjs's authenticated reads. */
 export const MORTGAGE_DESK_SIGN_EXPIRES = 300;
+/**
+ * Check images on the Desk (SQL 163) are read-only and VOID-stamped in the browser (owner, 2026-11-13: "make sure the
+ * check images have void on it"); their read URLs live 60 seconds, just long enough to load and stamp them.
+ */
+export const MORTGAGE_DESK_CHECK_IMAGE_EXPIRES = 60;
 /** SQL 156: every check tenant's auto-shared library documents (owner 2026-11-11: "everybody shared on that check"). */
 export const DESK_SHARED_LIBRARY_DOCUMENTS_SQL = 'SELECT * FROM public.aws_mortgage_desk_shared_library_documents($1::uuid)';
 export const DESK_POST_TIMELINE_SQL = 'SELECT public.aws_mortgage_desk_post_timeline($1::uuid, $2::text, $3::text) AS id';
@@ -306,7 +311,7 @@ const signCheckImage = async (rawPath, deps = {}) => {
   if (!key || !bucket) return null;
   try {
     const s3 = deps.s3 || new S3Client({ region: process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || 'us-east-1' });
-    return await (deps.getSignedUrl || getSignedUrl)(s3, new GetObjectCommand({ Bucket: bucket, Key: key }), { expiresIn: MORTGAGE_DESK_SIGN_EXPIRES });
+    return await (deps.getSignedUrl || getSignedUrl)(s3, new GetObjectCommand({ Bucket: bucket, Key: key }), { expiresIn: MORTGAGE_DESK_CHECK_IMAGE_EXPIRES });
   } catch {
     return null;
   }

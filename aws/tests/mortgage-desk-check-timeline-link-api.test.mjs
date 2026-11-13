@@ -24,6 +24,7 @@ import {
   DESK_MESSAGES_SQL,
   DESK_REQUEST_CHECK_SQL,
   DESK_SIGNATURE_REQUESTS_SQL,
+  MORTGAGE_DESK_CHECK_IMAGE_EXPIRES,
   MORTGAGE_DESK_ESIGN_ACTIONS,
   MORTGAGE_DESK_READ_ACTIONS,
   handleMortgageDeskEsign,
@@ -135,6 +136,13 @@ test('workspace carries the check (with read URLs for its images) and the homeow
   // The request id passed to SQL 163 is the gated request's, never a client value.
   const calls = clients[0].queries.filter((q) => [DESK_REQUEST_CHECK_SQL, DESK_HOMEOWNER_TIMELINE_SQL].includes(q.sql));
   assert.deepEqual(calls.map((q) => q.params), [[REQUEST_ID], [REQUEST_ID]]);
+  // Check images are VOID-stamped in the browser; their read URLs live 60 seconds (owner 2026-11-13).
+  assert.equal(MORTGAGE_DESK_CHECK_IMAGE_EXPIRES, 60);
+  const expiries = [];
+  const timed = depsFor(() => fakeClient());
+  timed.deps.getSignedUrl = async (_s3, command, opts) => { expiries.push(opts.expiresIn); return `https://signed.example/${command.input.Key}`; };
+  await handleMortgageDeskEsign(event({ action: 'check', request_id: REQUEST_ID }), timed.deps);
+  assert.deepEqual(expiries, [60]);
   const single = await handleMortgageDeskEsign(event({ action: 'check', request_id: REQUEST_ID }), depsFor(() => fakeClient()).deps);
   assert.equal(single.data.check_id, CHECK_ID);
   const tl = await handleMortgageDeskEsign(event({ action: 'homeowner_timeline', request_id: REQUEST_ID }), depsFor(() => fakeClient()).deps);

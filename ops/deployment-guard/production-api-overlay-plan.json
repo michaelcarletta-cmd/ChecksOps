@@ -197,6 +197,10 @@
     "aws/workflows/sql/158_mortgage_desk_oversight_and_agent_notes.sql": {
       "verified_live": true,
       "evidence": "2026-11-12 guarded production SQL one-shot on i-0c35557c4e5385406 (SSM 2e121d9e-c29a-4b16-b53f-1802b75dcafe, run f52b9f83-66fa-4e26-bd38-c362e7151aa2, workstream prod-sql158-mortgage-desk-oversight-and-agent-notes-20261112, main d7678814, one_use_id sql158-prod-f38f625c-c0b7-4e46-9757-4d2eb55340a2): receipt before ed94cf62…, after 1c43cf6c… = the pin's intended, result applied; post-apply inspect already_applied true (ops/production-sql-158-apply.md, record #1816)."
+    },
+    "aws/workflows/sql/163_mortgage_desk_check_timeline_homeowner_link.sql": {
+      "verified_live": true,
+      "evidence": "2026-11-13 guarded production SQL one-shot on i-0c35557c4e5385406 (SSM 7ac690d7-02c5-4d2b-8615-4fb60ae9fea8, run ff02a75e-8eb6-4dbb-8135-eca122148c01, workstream prod-sql163-desk-check-timeline-link-20261113, main 46be82c5, one_use_id sql163-prod-3abeb1bd-42b2-4f37-827e-c692bf050c59): receipt before 23d41c10…, after ef536373… = the pin's intended, result applied; post-apply live ef536373…, already_applied true (ops/production-sql-163-apply.md, record #1861)."
     }
   },
   "order": [
@@ -634,10 +638,10 @@
     },
     "mortgage-desk-esign.mjs": {
       "operation": "replace",
-      "accepted_sha256": "aacf940d074ecd8b8d37fb7595c43f52675a66faad7b4a1af92d719bef818bd1",
+      "accepted_sha256": "d38218a4ccec65994423e1147c0b72c8f07a46978a66f3bd687af836bc32d9cd",
       "expected_live_sha256": "aacf940d074ecd8b8d37fb7595c43f52675a66faad7b4a1af92d719bef818bd1",
-      "sql_before": "aws/workflows/sql/158_mortgage_desk_oversight_and_agent_notes.sql",
-      "manifest": "aws/tests/fixtures/production-desk-oversight-agent-notes-applied-manifest-2026-11-12.json"
+      "sql_before": "aws/workflows/sql/163_mortgage_desk_check_timeline_homeowner_link.sql",
+      "manifest": "aws/tests/fixtures/production-desk-check-timeline-link-manifest-2026-11-13.json"
     },
     "app-services.mjs": {
       "operation": "replace",
