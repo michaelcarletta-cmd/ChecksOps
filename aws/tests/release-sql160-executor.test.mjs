@@ -153,7 +153,7 @@ test('engine: SET name TO \'value\' and SET name TO value read as SET name = val
   assert.deepEqual(releaseFunctionDefinitions(body).g.config, []);
 });
 
-test('pin: SQL 160 pending, code-derived, selectable, packed, in step with the pending production pin; no predecessor', () => {
+test('pin: SQL 160 staging-authorized from its read-live, code-derived, selectable, packed, in step with the pending production pin; no predecessor', () => {
   const pin = PINS[KEY];
   const spec = RELEASE_SQL_SPECS[KEY];
   const packed = Object.fromEntries(EXECUTOR_PACK_MEMBERS);
@@ -164,11 +164,15 @@ test('pin: SQL 160 pending, code-derived, selectable, packed, in step with the p
   assert.equal(spec.choice, 'sql160-no-additional-check-or-manual-deposit-fee');
   assert.doesNotMatch(spec.choice, /production/);
   assert.equal(sha(TEXT), pin.source_sha256);
-  // Pending until a reviewed pin change records a staging read-live.
+  // Staging apply authorized (owner approved 2026-11-12) from staging read-live run 43350223533, after SQL 161's staging apply:
+  // already_applied false, precondition_failures []. It read the production pre-state (the inspected bodies, ACLs and SET options).
   assertStagingPinState(assert, KEY, pin);
-  assert.equal(pin.execute, false);
-  assert.equal(pin.authorization, 'pending');
-  assert.equal(pin.expected_live_definition_sha256, null);
+  assert.equal(pin.execute, true);
+  assert.equal(pin.authorization, 'Owner approved 2026-11-12: staging apply (wave 51) from staging read-live run 43350223533');
+  assert.equal(pin.expected_live_definition_sha256, PRE);
+  assert.equal(pin.expected_live_definition_sha256, '3a8bb0b11d59688642c98ace91bb15c562c362eea00b2ae9c73a166fee365229');
+  assert.match(fs.readFileSync(path.join(ROOT, 'ops/production-sql-160-apply.md'), 'utf8'), /\*\*Status:\*\* staging pin execute-authorized \(wave 51\); not applied anywhere\. The production pin is pending\./);
+  assert.match(fs.readFileSync(path.join(ROOT, 'ops/production-sql-160-apply.md'), 'utf8'), /read-live \(2026-11-13\)\.\*\* Run 43350223533/);
   assert.equal(releaseIntendedHash(KEY, TEXT), pin.intended_replacement_sha256);
   assert.notEqual(PRE, pin.intended_replacement_sha256);
   assert.notEqual(releaseStateHash(KEY, {}), PRE);
