@@ -1,6 +1,6 @@
 # One-time transfer from wallet to bank (design)
 
-Status: **design for owner review**. Nothing here is built, applied or deployed. Each later step is its own reviewed PR and its own owner approval (CLAUDE.md, "How ChecksOps ships").
+Status: **design, owner decisions recorded 2026-11-13 (§9)**. Nothing here is built, applied or deployed. Each later step is its own reviewed PR and its own owner approval (CLAUDE.md, "How ChecksOps ships").
 
 Owner request (2026-11-12): "Wallet & Treasury – we should add a one time transfer TO bank FROM wallet." The owner chose "Design first".
 
@@ -13,18 +13,19 @@ Owner request (2026-11-12): "Wallet & Treasury – we should add a one time tran
 ## 2. User flow (Wallet & Treasury)
 
 1. A **"Transfer to bank"** button next to "Add funds". It shows only when:
-   - the wallet is active;
+   - the **operating** wallet is active (the trust wallet is excluded);
    - available balance > 0;
    - a settlement bank exists, verified and connected, with an ACH-credit payment method in Moov;
-   - the user is a member of the tenant (see open question on roles).
+   - the user is a member of the tenant. Any member may transfer, as with funding.
 2. Dialog:
-   - **Amount**: dollars with two decimals. The default is empty, and a "Transfer all available" shortcut fills it. It is capped at the wallet's **available** balance read from Moov at submit time. Pending funds are never transferable.
+   - **Amount**: any amount up to the available balance, in dollars with two decimals. The default is empty, and a "Transfer all available" shortcut fills it. It is capped at the wallet's **available** balance read from Moov at submit time, and at the tenant's own limits if it set any (§5a). Pending funds are never transferable.
    - **To**: the tenant's own settlement bank, shown as name ••last4. It is the same row the Settlement bank tile shows (`payment_provider_methods`, default first; `aws/functions/api/providers/parity/sweep-read.mjs:227-237`). The bank cannot be changed in this dialog, and there is no free-text destination.
-   - **Speed**: standard ACH (1–2 banking days) by default. Same-day ACH only if the bank's method supports it and the owner approves it (open question).
-   - **Fee**: shown before confirming. It is $0 unless the owner decides otherwise (open question).
-3. **Confirm** screen: "Send $X from your ChecksOps balance to BANK ••1234. This cannot be cancelled once sent."
+   - **Speed**: same-day ACH (`ach-credit-same-day`). Before the ACH same-day cutoff the credit arrives the same banking day. After the cutoff, or on a weekend or bank holiday, it settles the next banking day. The dialog says which applies before confirming, using the wording the sweep rails already use (`src/lib/payments/sweeps.ts:31`): "Arrives today" before the cutoff, otherwise "Arrives next banking day (sent after today's same-day cutoff)". The server, not the browser clock, decides the expected date and returns it.
+   - If the bank has no same-day ACH-credit method, the button is disabled with "Your bank does not accept same-day transfers yet." There is no fallback to standard ACH.
+   - **Fee**: none. The dialog says "No fee".
+3. **Confirm** screen: "Send $X from your ChecksOps balance to BANK ••1234 by same-day ACH. Expected: <date>. No fee. This cannot be cancelled once sent."
 4. **Two-factor step-up**: the same pattern as funding (§4). If no fresh step-up exists, the server answers `totp_required`. The app asks for the code and retries with the same idempotency key.
-5. **Result**: "Transfer started. Banks usually post ACH credits in 1–2 business days." The row then appears in **Recent Wallet Activity** as **"Transfer to bank"**, with status Pending, then Completed, or Failed / Returned.
+5. **Result**: "Transfer started. Expected at your bank <date>." The row then appears in **Recent Wallet Activity** as **"Transfer to bank"**, with status Pending, then Completed, or Failed / Returned.
 
 ## 3. API: new production handler `moov-wallet-withdraw`
 
@@ -35,9 +36,12 @@ A new file, `aws/functions/api/providers/production/moov-wallet-withdraw.mjs`, m
   - `financialPermissionsActivated()` is on and sandbox execution is off;
   - the caller is a member of the tenant (platform roles never move a tenant's money, `:447`);
   - `AWS_MOOV_TRANSFER_POST_ENABLED` holds new posts (`transferPostEnabled`, `:44`, `:241-243`).
-- **Amount**: whole positive cents (`parseFundAmountCents`, `:47`). Then re-read the wallet from Moov (`syncWalletReadOnly`, as at `:259-266`) and refuse `insufficient_available_balance` if amount > available. Funding has "no business limit" (`:4`, `:46`); withdrawal must check the balance.
+- **Wallet type**: `operating` only. Any other `wallet_type`, including `trust`, is refused with 400 (funding accepts both, `:220-221`).
+- **Amount**: whole positive cents (`parseFundAmountCents`, `:47`). Then re-read the wallet from Moov (`syncWalletReadOnly`, as at `:259-266`) and refuse `insufficient_available_balance` if amount > available. Funding has "no business limit" (`:4`, `:46`); withdrawal must check the balance. There is no platform cap. If the tenant has set a per-transfer or daily limit (§5a), refuse `tenant_limit_exceeded` above it. The daily total is the sum of the tenant's non-failed `wallet_withdrawal` rows that banking day, counted in the same transaction.
+- **Fee**: none. `platform_fee_cents = 0` and `net_amount_cents = amount_cents`.
+- **Who**: any member of the tenant, with no second-admin approval.
 - **Destination**:
-  - the tenant's own connected, verified bank with an `ach-credit-standard` (or `-same-day`) payment method from `/accounts/{id}/payment-methods`;
+  - the tenant's own connected, verified bank with an `ach-credit-same-day` payment method from `/accounts/{id}/payment-methods`. If none exists, refuse `same_day_unavailable`;
   - the counterpart of `selectDebitMethod` (`:159`), as a `selectCreditMethod`;
   - more than one bank means `bank_choice_required`, the same rule as funding (`:276-281`);
   - never a recipient or `external_recipient_id` method.
@@ -59,7 +63,7 @@ A new file, `aws/functions/api/providers/production/moov-wallet-withdraw.mjs`, m
 - **Step-up**:
   - Reuse `loadSessionFundStepUp` and `WALLET_FUND_TOTP_ACTION` (`providers/production/moov-fund-authz.mjs:12`, `:56`). The verification must be at most 15 minutes old (`:19`, owner decision 2026-10-31, finding 7) and bound to this login.
   - If no such verification exists, return `totp_required` with `actionKey: 'wallet.fund'`, so the existing code-entry flow in `auth-financial-totp.mjs:716-719` works unchanged.
-  - A separate `wallet.withdraw` action is possible but needs a new binding branch there (open question).
+  - One code covers funding, sends and withdrawals in the same login (owner decision 7).
 - **Errors**: always say "Nothing was sent" when nothing was sent, as the funding handler does.
 
 ## 4. Status updates (webhooks and catch-up)
@@ -73,8 +77,17 @@ A new file, `aws/functions/api/providers/production/moov-wallet-withdraw.mjs`, m
 - `payment_transfers.leg_role` has no CHECK constraint, so no enum change is needed. **A new numbered migration is still needed** to:
   1. add `'wallet_withdrawal'` to the leg list in the SQL 109 webhook writer and the SQL 146 catch-up writer (new function versions, append-only; the old migrations are not edited);
   2. confirm the existing `payment_transfers` and `payment_event_log` RLS and grants allow the API's insert and update for this leg under the money-write flag. If the SQL 136 restrictive policy enumerates legs, extend it in the same migration;
-  3. optionally add a partial index on `(tenant_id, leg_role, created_at)` if Recent Wallet Activity needs it. This is to be measured, not assumed.
+  3. add the tenant limit columns (§5a);
+  4. optionally add a partial index on `(tenant_id, leg_role, created_at)` for the daily-limit sum and Recent Wallet Activity. This is to be measured, not assumed.
 - No new table. No production data is migrated.
+
+### 5a. Tenant-configurable limits
+
+- **No platform default cap.** A tenant may set its own limits, and both are empty by default (no limit):
+  - `wallet_withdraw_max_per_transfer_cents` (bigint, null = none);
+  - `wallet_withdraw_max_per_day_cents` (bigint, null = none).
+- **Where:** next to the existing funding-bank setting, in `public.tenant_wallet_funding_settings` (read by `moov-wallet-fund.mjs:128-143`). Both are new nullable columns, positive when set, added in the new numbered migration. The existing RLS and grants on that table apply; the migration checks that a tenant member can update only their own tenant's row.
+- **UI:** Payment Settings gets "Transfer to bank limits" (per transfer, per day), blank meaning no limit. Changing them needs the same `wallet.fund` step-up, so a hijacked session cannot raise a limit and withdraw without a code.
 
 ## 6. Website
 
@@ -87,20 +100,21 @@ A new file, `aws/functions/api/providers/production/moov-wallet-withdraw.mjs`, m
 
 | Risk | Control |
 |---|---|
-| Account takeover drains the wallet | Fresh TOTP step-up per login (≤ 15 min); destination fixed to the tenant's own verified bank; no new bank can be added in the same dialog; email notice to tenant admins on every withdrawal (proposed) |
+| Account takeover drains the wallet | Fresh TOTP step-up per login (≤ 15 min); destination fixed to the tenant's own verified bank; no new bank can be added in the same dialog; optional tenant limits (§5a). No email notice (owner decision 8); every withdrawal is visible in Recent Wallet Activity |
 | Double submit / retry sends twice | Per-click idempotency key, committed row before POST, Moov idempotency = row id, `unknown` never auto-retried |
 | Amount above balance | Server re-reads Moov available balance; refuses above it; Moov also refuses |
-| Money needed for pending sends is withdrawn | Available (not pending) balance only; optional "keep minimum" (open question) |
+| Money needed for pending sends is withdrawn | Available (not pending) balance only; a tenant may set its own limits (§5a) |
 | Status never updates | New migration adds the leg to SQL 109 / 146 writers; catch-up job covers missed webhooks |
 | Return after completion | Recorded with R-code; shown as Returned; funds back in wallet per Moov |
+| Sent after the same-day cutoff | Server computes and shows the expected banking day before confirm; activity shows the expected date |
 | Unclear audit | `payment_transfers` row + `payment_event_log` + `financial_stepup_log` id in metadata + `created_by` |
-| Dual control | Not proposed by default (funding and sends are single-approver); available as an owner option (above a threshold, a second admin approves, like Check Alt) |
+| Dual control | None (owner decision 6), consistent with funding and sends |
 
 ## 8. Guarded rollout (each step a reviewed PR and an owner approval)
 
 1. **Tooling PR**:
    - the new migration (next free number at that time; SQL 161 and 162 are taken), its spec, staging and production pins, one-shot tool, runbook and tests;
-   - the API handler, the `providers.mjs` route and tests (idempotency, step-up, balance cap, bank selection, `unknown` handling);
+   - the API handler, the `providers.mjs` route and tests (idempotency, step-up, balance cap, tenant limits, operating-only, same-day method and cutoff date, bank selection, `unknown` handling);
    - website behind `SHOW_WALLET_WITHDRAW = false`;
    - nothing applied.
 2. **Staging**:
@@ -112,14 +126,16 @@ A new file, `aws/functions/api/providers/production/moov-wallet-withdraw.mjs`, m
 5. **Website**: a PR sets `SHOW_WALLET_WITHDRAW = true`; staging upload; then "DEPLOY WEBSITE TO PRODUCTION"; then the lock record PR.
 6. **First production use**: owner-chosen tenant and small amount, confirmed in Moov and in Recent Wallet Activity.
 
-## 9. Open questions for the owner
+## 9. Decisions (owner, 2026-11-13)
 
-1. **Fee**: free, flat, or a percentage? Same-day at a different price?
-2. **Limits**: a per-transfer or per-day cap? A minimum to keep in the wallet?
-3. **Roles**: any tenant member, as with funding, or tenant admins or owners only?
-4. **Speed**: standard ACH only, or also same-day ACH (and instant/RTP if the bank supports it)?
-5. **Partial amounts**: any amount up to the available balance (proposed), or only "transfer all"?
-6. **Dual control**: should a second admin approve above some amount?
-7. **Step-up action**: reuse `wallet.fund` (one code covers funding, sends and withdrawals in a login), or a separate `wallet.withdraw`?
-8. **Notifications**: email tenant admins on each withdrawal?
-9. **Trust wallet**: allow withdrawals from the `trust` wallet type, or `operating` only?
+Verbatim: "1. No fee 2. Up to tenant 3 any member 4 same day 5 any amount up to balance 6no admin approval 7yes same two factor 8 no 9 operating wallet".
+
+1. **Fee**: none.
+2. **Limits**: up to the tenant. There is no platform cap; a tenant may set a per-transfer and/or daily limit (§5a).
+3. **Who**: any member of the tenant.
+4. **Speed**: same-day ACH (`ach-credit-same-day`). After the cutoff it settles the next banking day, and the UI says so before confirming (§2).
+5. **Amount**: any amount up to the available balance (and the tenant's own limits, if set).
+6. **Approval**: no second-admin approval.
+7. **Two-factor**: the same `wallet.fund` step-up as funding and sends.
+8. **Notifications**: no email to admins.
+9. **Wallet**: the operating wallet only; the trust wallet is excluded.
