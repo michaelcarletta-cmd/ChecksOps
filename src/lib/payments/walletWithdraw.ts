@@ -160,6 +160,9 @@ export const WITHDRAW_ERROR_MESSAGES: Record<string, string> = {
   production_withdrawal_disabled: "Transfers to your bank are not enabled.",
   transfer_post_held: "Sending to Moov is switched off. Nothing was sent.",
   facilitator_unavailable: "Payments are not configured correctly. Nothing was sent.",
+  // The route is not served here (e.g. AWS staging, where provider execution is off).
+  provider_disabled: "Transfers to your bank are not available in this environment. Nothing was sent.",
+  production_execution_blocked: "Transfers to your bank are not available yet. Nothing was sent.",
   // Wallet state.
   wallet_not_ready: "Your balance account is not ready yet. Nothing was sent.",
   wallet_mismatch: "The recorded Moov wallet was not returned by Moov. Nothing was sent.",
