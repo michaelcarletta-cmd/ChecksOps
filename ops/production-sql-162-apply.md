@@ -35,7 +35,18 @@ not affected. No API, Lambda or SPA change is part of this pin: the API (`get_sh
 `aws/functions/api/data.mjs` `READ_RPCS` with the tenant gate) and the Check Command Center (such a check leaves the
 partner's Deposited) ship afterwards through their own guarded paths.
 
-**Status:** staging pin execute-authorized (wave 53); not applied anywhere. The production pin is pending.
+**Status:** applied to staging (wave 53, 2026-11-13); production pin execute-authorized (owner-approved pin change of 2026-11-13,
+"open the SQL 162 production pin PR"); not applied to production. The production apply still needs the owner's words for that run.
+
+**Staging apply (2026-11-13).** After the staging pin (#1846) and executor deploy run 43338712621 (main `e4be20cc1`): read-live
+run 43339473672 `eb3a2901…` (`matches_pinned_expected` true), apply run 43340146045 under the owner's words "apply SQL 162 in
+staging" (receipt `eb3a2901…` → `77d36f63…`, result `applied`), read-live run 43340822402 `already_applied` true, EXECUTE
+`checksops` and the owner.
+
+**Production inspect (2026-11-13).** Read-only, under the owner's words "run the SQL 162 production inspect": transfer run
+43342136278 staged main `e4be20cc1` (tarball `7e16d80c…`, the SQL 162 file on the runner `5bfbe411…` == the pin), SSM
+`f8429f5d-5729-4a0e-980c-26a50f17dd20` on the runner (started 01:10:16Z, stopped 01:11:16Z): live `eb3a2901…` (the function
+absent), `already_applied` false, `precondition_failures` `[]`, `prerequisites_missing` `[]`, `definer_writes` ok on both relations.
 
 **Staging read-live (2026-11-13).** Run 43334326464 (main `d555e2977`, after executor inspect run 43332967295 and executor deploy
 run 43333551422 (executor CodeSha256 `N2/NmXvZ…` -> `H1/nDiud…`)), under the owner's words "run the SQL 162 staging read":
