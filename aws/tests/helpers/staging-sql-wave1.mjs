@@ -267,6 +267,11 @@ export const STAGING_WAVE1 = Object.freeze({
   // Read at main 1681b943 with the executor current (deploy run 43314468325): already_applied false, precondition_failures [],
   // prerequisites_missing [], the ACL PUBLIC and the owner (grantor the owner). Equal to the derived staging pre-state.
   sql161: Object.freeze({ wave: 52, approved: '2026-11-12', run: '43315046187', live: '72031400264a910912cecd832ac0bf8486da7b67acfd036bc66aff6820258448' }),
+  // Wave 53 (owner approved 2026-11-13, "run the SQL 162 staging read" and "open the SQL 162 staging pin PR"): SQL 162, the
+  // partner's read of which shared checks the sharing organization paid from by a send to someone else. Read at main
+  // d555e2977 with the executor current (deploy run 43333551422): already_applied false, precondition_failures [],
+  // prerequisites_missing [], the function absent, payment_transfers and shared_checks reachable. Equal to the derived pre-state.
+  sql162: Object.freeze({ wave: 53, approved: '2026-11-13', run: '43334326464', live: 'eb3a290173a156be3757f03c0217b4548bffe713f582cdc6f32b676e91317e4f' }),
   sql98: Object.freeze({ wave: 3, approved: '2026-10-18', run: '39083278136', live: '296c3d6a274e10f66005fb9eaecf93fa17b81bd8db3607037ca07698fddd3275', apply_run: '39085677318' }),
 });
 
@@ -278,7 +283,7 @@ export const pendingPin = (pin) => Object.freeze({
 });
 
 /**
- * The committed staging pin's apply state: waves 1-50 and 52 recorded and approved, wave 6 approved with
+ * The committed staging pin's apply state: waves 1-50, 52 and 53 recorded and approved, wave 6 approved with
  * its read-live still to record (pending until then), wave 18 (SQL 117) retired, SQL 129 retired
  * before any read-live was recorded, the rest pending.
  */

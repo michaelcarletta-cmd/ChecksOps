@@ -3718,8 +3718,9 @@ export const AUTHORIZED_SQL161_TG_MORTGAGE_HANDLING_BILLING_CHECKSOPS_EXECUTE = 
 // "Yes for 1, 2, and run the inspect"). The new SECURITY DEFINER public.get_shared_check_source_sends(uuid) tells an
 // organization which checks shared with it the sharing organization has paid from by a send to someone else (check id,
 // sharing organization and the newest send's time only), under the API's tenant gate re-checked in the database
-// (aws_can_access_tenant, 42501); EXECUTE for checksops and the owner. No predecessor. Pending until a reviewed pin
-// change records a staging read-live (ops/production-sql-162-apply.md).
+// (aws_can_access_tenant, 42501); EXECUTE for checksops and the owner. No predecessor. Staging apply authorized (wave 53)
+// from staging read-live run 43334326464: the pre-state, the function absent and everything else in place, equals the
+// derived one (ops/production-sql-162-apply.md).
 export const AUTHORIZED_SQL162_SHARED_CHECK_SOURCE_SENDS = Object.freeze({
   key: 'sql162',
   filename: 'aws/workflows/sql/162_shared_check_source_sends.sql',
@@ -3727,9 +3728,11 @@ export const AUTHORIZED_SQL162_SHARED_CHECK_SOURCE_SENDS = Object.freeze({
   // The commit that last authored the file bytes.
   commit: '9bb825a47be99df50520463a20b49e30ebe66cd2',
   source_sha256: '5bfbe41150ef652ade8405f9e8c0733ac32dae04776e489d188f7ae9c39d0179',
-  authorization: 'pending',
-  execute: false,
-  expected_live_definition_sha256: null,
+  authorization: 'Owner approved 2026-11-13: staging apply (wave 53) from staging read-live run 43334326464',
+  execute: true,
+  // Staging read-live run 43334326464 (main d555e2977, executor deploy run 43333551422): already_applied false,
+  // precondition_failures []. Equal to the derived pre-state (the function absent).
+  expected_live_definition_sha256: 'eb3a290173a156be3757f03c0217b4548bffe713f582cdc6f32b676e91317e4f',
   // Code-derived: releaseIntendedHash('sql162', file bytes) (release-sql-state.mjs); re-derived by the tests.
   intended_replacement_sha256: '77d36f6375b21c5e383896c88b5e9eccccb9f7bb9d06801921575e14a8ae41ca',
   function_identities: Object.freeze([
