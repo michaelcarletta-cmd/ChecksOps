@@ -72,10 +72,46 @@ export interface MortgageDeskSignatureRequest {
   signers: MortgageDeskSigner[];
 }
 
+/** SQL 163: the request's check, display fields only (never routing or account numbers), with 60-second image URLs. */
+export interface MortgageDeskCheck {
+  check_id: string;
+  claim_id: string | null;
+  amount: number | string | null;
+  check_number: string | null;
+  carrier_name: string | null;
+  payee_line: string | null;
+  payee_address: string | null;
+  property_address: string | null;
+  issue_date: string | null;
+  detected_claim_number: string | null;
+  front_image_path: string | null;
+  back_image_path: string | null;
+  status: string | null;
+  check_stage: string | null;
+  funds_type: string | null;
+  front_url: string | null;
+  back_url: string | null;
+}
+
+/** SQL 163: one entry of the claim's homeowner timeline (the request tenant's entries; the note only). */
+export interface MortgageDeskTimelineEntry {
+  event_id: string;
+  event_type: string;
+  occurred_at: string;
+  actor_label: string | null;
+  note: string | null;
+  amount: number | string | null;
+  from_desk: boolean;
+}
+
 export interface MortgageDeskWorkspace {
   messages: MortgageDeskMessage[];
   check_files: MortgageDeskCheckFile[];
   signature_requests: MortgageDeskSignatureRequest[];
+  /** SQL 163; null before SQL 163 or when the request has no check. */
+  check: MortgageDeskCheck | null;
+  /** SQL 163; newest first, empty before SQL 163. */
+  homeowner_timeline: MortgageDeskTimelineEntry[];
 }
 
 type InvokeResult = { data?: unknown; error?: unknown };
@@ -191,9 +227,30 @@ export async function loadMortgageDeskWorkspace(
       messages: Array.isArray(ws.messages) ? ws.messages : [],
       check_files: Array.isArray(ws.check_files) ? ws.check_files : [],
       signature_requests: Array.isArray(ws.signature_requests) ? ws.signature_requests : [],
+      check: ws.check && typeof ws.check === "object" ? ws.check : null,
+      homeowner_timeline: Array.isArray(ws.homeowner_timeline) ? ws.homeowner_timeline : [],
     },
     error: null,
   };
+}
+
+/**
+ * Send the homeowner tracking link from the Desk (owner 2026-11-12: "When sending homeowner link from mortgage desk,
+ * error missing_cognito_token. Fix it."). It goes through the Desk API with the Desk session; the server sends it to the
+ * homeowner on file, never to an address from the browser, and has no send limit ("They can send the link whenever").
+ */
+export async function sendMortgageDeskTrackingLink(
+  client: MortgageDeskFunctionsClient,
+  requestId: string,
+  origin?: string,
+): Promise<{ data: { url: string; sentTo: string | null; reused: boolean } | null; error: string | null }> {
+  const out = await invokeMortgageDeskEsign<{ url?: string; sentTo?: string | null; reused?: boolean }>(client, {
+    action: "send_tracking_link",
+    request_id: requestId,
+    ...(origin ? { origin } : {}),
+  });
+  if (out.error || !out.data?.url) return { data: null, error: out.error || "The homeowner link could not be created." };
+  return { data: { url: out.data.url, sentTo: out.data.sentTo ?? null, reused: out.data.reused === true }, error: null };
 }
 
 /**
