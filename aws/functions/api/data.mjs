@@ -39,6 +39,10 @@ const READ_RPCS = new Set([
   // SQL 144 (SECURITY DEFINER, its own aws_can_access_tenant check; applied in staging 2026-11-06 and in
   // production 2026-11-07): the send legs other organizations addressed to this one.
   'get_tenant_incoming_transfers',
+  // SQL 162 (SECURITY DEFINER, its own aws_can_access_tenant check; applied in staging and in production
+  // 2026-11-13): the checks shared with this organization that the sharing organization paid from by a
+  // send to someone else (check id, sharing organization and the newest send's time only).
+  'get_shared_check_source_sends',
   'get_tenant_check_usage',
   'get_deposit_ops_kpis',
   'get_deposit_aging_summary',
@@ -81,6 +85,7 @@ export const RPC_ACCESS_GATES = Object.freeze({
   get_loss_draft_dashboard_counts_for_tenant: { tenant: '_tenant_id' },
   get_tenant_funds_received: { tenant: '_tenant_id' },
   get_tenant_incoming_transfers: { tenant: '_tenant_id' },
+  get_shared_check_source_sends: { tenant: '_tenant_id' },
   get_tenant_check_usage: { tenant: '_tenant_id' },
   get_tenant_users_with_profiles: { tenant: '_tenant_id' },
   is_checkalt_enabled_for_tenant: { tenant: '_tenant_id' },
