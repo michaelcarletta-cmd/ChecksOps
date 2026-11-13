@@ -35,8 +35,9 @@ not affected. No API, Lambda or SPA change is part of this pin: the API (`get_sh
 `aws/functions/api/data.mjs` `READ_RPCS` with the tenant gate) and the Check Command Center (such a check leaves the
 partner's Deposited) ship afterwards through their own guarded paths.
 
-**Status:** applied to staging (wave 53, 2026-11-13); production pin execute-authorized (owner-approved pin change of 2026-11-13,
-"open the SQL 162 production pin PR"); not applied to production. The production apply still needs the owner's words for that run.
+**Status:** applied to staging (wave 53) and to production (2026-11-13); the production pin is retired (`execute: false`).
+
+**Production apply (2026-11-13).** After the pin change (#1847, merged to main as `96d07d82b` on the owner's words "merge 1847 when green"), transfer run 43345731477 staged main `96d07d82b` (tarball `3cb2df14…`). Under the owner's words "apply SQL 162 in production" (passed verbatim), a one-shot `--phase inspect` (SSM `a0ac59a5-83b0-4b24-b202-09f05769a7a7`, exit 0, nothing written) read live `eb3a2901…` (the pinned pre-state, `live_matches_expected` true, `precondition_failures` `[]`); then one-shot `--phase apply` run `cca765e1-3982-4730-ae5d-0aa628996648` through SSM `92eafa26-5f02-4067-b25e-b93671aafb18`, workstream `prod-sql162-shared-check-source-sends-20261113`, one_use_id `sql162-prod-ec7d0c08-11cd-43b0-9eb7-84442936a1f8`: contracts 4/4, 6/6 and 43/43; all 11 steps ok; manifest `608da664…`; receipt `eb3a2901…` → `77d36f6375b21c5e383896c88b5e9eccccb9f7bb9d06801921575e14a8ae41ca`, result `applied`; post-apply inspect `already_applied` true, `get_shared_check_source_sends(uuid)` intended, EXECUTE `checksops` and the owner. Runner started 01:37:27Z, stopped 01:38:48Z. Recorded in the pin's `applied` block. Nothing calls the function until the API read list and the Check Command Center ship through their own guarded paths; production acceptance was not yet reported by the owner when this was recorded.
 
 **Staging apply (2026-11-13).** After the staging pin (#1846) and executor deploy run 43338712621 (main `e4be20cc1`): read-live
 run 43339473672 `eb3a2901…` (`matches_pinned_expected` true), apply run 43340146045 under the owner's words "apply SQL 162 in

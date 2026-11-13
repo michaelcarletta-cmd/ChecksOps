@@ -131,7 +131,7 @@ test('pin: SQL 162 staging-authorized from its read-live, code-derived, selectab
   assert.equal(pin.authorization, 'Owner approved 2026-11-13: staging apply (wave 53) from staging read-live run 43334326464');
   assert.equal(pin.expected_live_definition_sha256, ABSENT_PRE);
   assert.equal(pin.expected_live_definition_sha256, 'eb3a290173a156be3757f03c0217b4548bffe713f582cdc6f32b676e91317e4f');
-  assert.match(fs.readFileSync(path.join(ROOT, 'ops/production-sql-162-apply.md'), 'utf8'), /\*\*Status:\*\* applied to staging \(wave 53, 2026-11-13\); production pin execute-authorized/);
+  assert.match(fs.readFileSync(path.join(ROOT, 'ops/production-sql-162-apply.md'), 'utf8'), /\*\*Status:\*\* applied to staging \(wave 53\) and to production \(2026-11-13\); the production pin is retired/);
   assert.match(fs.readFileSync(path.join(ROOT, 'ops/production-sql-162-apply.md'), 'utf8'), /read-live \(2026-11-13\)\.\*\* Run 43334326464/);
   assert.equal(releaseIntendedHash(KEY, TEXT), pin.intended_replacement_sha256);
   assert.notEqual(ABSENT_PRE, pin.intended_replacement_sha256);
@@ -168,8 +168,9 @@ test('pin: SQL 162 staging-authorized from its read-live, code-derived, selectab
   assert.equal(prod.source_sha256, pin.source_sha256);
   assert.deepEqual(prod.function_identities, [IDENTITY]);
   assert.deepEqual(prod.predecessors, []);
-  assert.equal(prod.execute, true);
-  assert.match(prod.authorization, /^Owner approved 2026-11-13 /);
+  assert.equal(prod.execute, false);
+  assert.match(prod.authorization, /^Applied to production on 2026-11-13; execute is false again/);
+  assert.equal(prod.applied.result, 'applied');
   assert.equal(prod.authorization_phrase, 'SHOW_PARTNERS_SHARED_CHECK_SOURCE_SENDS');
   assert.equal(prod.expected_live_definition_sha256, ABSENT_PRE);
   assert.equal(prod.production_inspect.status, 'recorded');

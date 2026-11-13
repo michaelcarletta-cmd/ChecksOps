@@ -1,8 +1,8 @@
 {
   "id": "sql162-shared-check-source-sends-production-apply",
   "migration": "sql162",
-  "authorization": "Owner approved 2026-11-13 (the owner's words for SQL 162: \"Sends to someone other than the partner\", \"Yes for 1, 2, and run the inspect\", \"Merge all when green\", \"run the SQL 162 staging read\", \"open the SQL 162 staging pin PR\", \"merge 1846\", \"apply SQL 162 in staging\", \"run the SQL 162 production inspect\", \"open the SQL 162 production pin PR\"; the change itself is reviewed and merged under those words): production apply of SQL 162 after the staging acceptance below, from the recorded production pre-state (eb3a2901 -> 77d36f63); each apply still needs the owner's run-time approval (the owner's words for that run).",
-  "execute": true,
+  "authorization": "Applied to production on 2026-11-13; execute is false again, so this pin is no longer a standing authorization and a re-apply needs a new reviewed pin change. The owner approved the SQL 162 production pin change on 2026-11-13 in the words \"Sends to someone other than the partner\", \"run the SQL 162 production inspect\", \"open the SQL 162 production pin PR\" and \"merge 1847 when green\" (on the staging apply run 43340146045; eb3a2901 -> 77d36f63, #1847, merged to main as 96d07d82b) and the one apply run recorded in applied (workstream prod-sql162-shared-check-source-sends-20261113) in the words \"apply SQL 162 in production\", passed to it verbatim. That approval covered that run only.",
+  "execute": false,
   "target_environment": "production",
   "target_component": "production-sql",
   "deployment_type": "sql-apply",
@@ -60,5 +60,257 @@
     "ok": true,
     "reference": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43340146045",
     "basis": "Guarded staging SQL executor apply of sql162-shared-check-source-sends, run 43340146045 (2026-11-13, main e4be20cc1, executor deploy run 43338712621, through the SQL 162 staging pin, wave 53, on the owner's words \"apply SQL 162 in staging\"): read-live before it, run 43339473672, eb3a290173a156be3757f03c0217b4548bffe713f582cdc6f32b676e91317e4f (the function absent), already_applied false, precondition_failures [], matches_pinned_expected true; receipt before eb3a290173a156be3757f03c0217b4548bffe713f582cdc6f32b676e91317e4f, after 77d36f6375b21c5e383896c88b5e9eccccb9f7bb9d06801921575e14a8ae41ca == intended_replacement_sha256, result applied; read-live after it, run 43340822402, already_applied true, live 77d36f6375b21c5e383896c88b5e9eccccb9f7bb9d06801921575e14a8ae41ca, EXECUTE checksops and the owner. Production's pre-state is the same one staging had before its apply (eb3a290173a156be3757f03c0217b4548bffe713f582cdc6f32b676e91317e4f). The behavior is covered on PostgreSQL 16 by aws/tests/sql162-shared-check-source-sends-pg.test.mjs and aws/tests/release-sql162-executor.test.mjs."
+  },
+  "applied": {
+    "date": "2026-11-13",
+    "result": "applied",
+    "source_commit": "96d07d82b42f1d6cf93ebbaea5f053e3307c4ebb",
+    "source_commit_basis": "SOURCE_COMMIT in the tarball (written by sql53-temporary-transfer) equals --commit, and the tarball sha256 equals --expected-tarball-sha256 as copied by the operator from that transfer run's log (TARBALL_SHA256 line); the run log itself was not read by the one-shot.",
+    "source_tarball": {
+      "file": "source-96d07d82b42f1d6cf93ebbaea5f053e3307c4ebb.tar.gz",
+      "sha256": "3cb2df14f1a3d5b636663044df0aa0d0e8ae394ad408e7aa2eeb4a76e5098cf8"
+    },
+    "migration_source_sha256": "5bfbe41150ef652ade8405f9e8c0733ac32dae04776e489d188f7ae9c39d0179",
+    "migration_source_sha256_note": "The one-shot source step hashed aws/workflows/sql/162_shared_check_source_sends.sql in the transfer tarball: equal to source_sha256 (the pin; migration_matches_pin true).",
+    "runner": "i-0c35557c4e5385406",
+    "runner_basis": "operator-supplied --runner (not verified by the one-shot)",
+    "workstream_id": "prod-sql162-shared-check-source-sends-20261113",
+    "one_use_id": "sql162-prod-ec7d0c08-11cd-43b0-9eb7-84442936a1f8",
+    "one_use_id_consumed": true,
+    "one_use_id_consumed_basis": "Inferred from the successful apply (the tool records the one_use_id after COMMIT and only warns if that write fails); the consumed-registry entry was not read back separately.",
+    "owner_approval": "apply SQL 162 in production",
+    "owner_approval_basis": "As passed in --approval-statement for --approval-scope sql162; the one-shot cannot verify who said it. The owner's words of 2026-11-13 for this run were \"apply SQL 162 in production\", given after \"merge 1847 when green\" (the pin change #1847, merged to main as 96d07d82b once green); they were passed verbatim as the approval statement for the --phase inspect run and the --phase apply run, which ran only after that merge was on main and staged.",
+    "operator": "michaelcarletta-cmd",
+    "apply_ssm_command_id": "92eafa26-5f02-4067-b25e-b93671aafb18",
+    "one_shot_run_id": "cca765e1-3982-4730-ae5d-0aa628996648",
+    "one_shot_note": "One SSM command (92eafa26-5f02-4067-b25e-b93671aafb18 on i-0c35557c4e5385406, comment \"SQL 162 production one-shot --phase apply (owner: apply SQL 162 in production)\", Success, ResponseCode 0, 2026-11-13T01:38:09.455Z to 2026-11-13T01:38:21.455Z; the runner was started from stopped for this work at 01:37:27Z and confirmed stopped again at 01:38:48Z, after both SSM commands had ended) ran the production-sql-one-shot --phase apply (run_id cca765e1-3982-4730-ae5d-0aa628996648) from main 96d07d82b (transfer run 43345731477, sql53-temporary-transfer.yml on main after the #1847 merge; tarball sha256 3cb2df14f1a3d5b636663044df0aa0d0e8ae394ad408e7aa2eeb4a76e5098cf8). Before it, a separate one-shot --phase inspect on the same tarball and the same approval statement (SSM a0ac59a5-83b0-4b24-b202-09f05769a7a7, 2026-11-13T01:37:41.962Z to 2026-11-13T01:37:55.962Z, ResponseCode 0, nothing written) read live eb3a290173a156be3757f03c0217b4548bffe713f582cdc6f32b676e91317e4f (live_matches_expected true, already_applied false, apply_preconditions_met true, precondition_failures [], prerequisites_missing [], the function absent), the pre-state the read-only inspect recorded in production_inspect (SSM f8429f5d-5729-4a0e-980c-26a50f17dd20). Steps pin (execute true, staging_acceptance run 43340146045), source (tarball sha256 matches the sidecar and --expected-tarball-sha256, tree matches the tarball, migration source == pin), inspect, contracts (claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43), manifest, source-recheck-before-preflight, preflight (receipt_issued), evaluate (sql162_production_apply_allowed true), source-recheck-before-apply, apply (applied) and post-apply-inspect all ok. The run's JSON arrived whole: the SSM StandardOutputContent (19633 characters, the two download lines and the sha256sum line included, under the 24000-character SSM limit) ends with one complete JSON object, which parsed. Every field of the applied object is recorded as printed, except this note and owner_approval_basis, which are extended as in the SQL 156 record (the one-shot's own one_shot_note read: \"One production-sql-one-shot run verified the source, ran the read-only inspect and the runner contracts, built the manifest, issued the receipt and lease (preflight), evaluated (sql162_production_apply_allowed true), applied (exit 0) and ran the post-apply inspect.\"). The printed applied.receipt equals the run's top-level details.apply_result. This block adds migration_source_sha256 (with its note), apply_ssm_command_id, steps and manifest_sha256 from the same run's details, as the SQL 156 record does. The run's not_observed_by_this_run list names ssm_command_id and source_staged_by, supplied here as apply_ssm_command_id and transfer run 43345731477. The post-apply inspect reported live 77d36f6375b21c5e383896c88b5e9eccccb9f7bb9d06801921575e14a8ae41ca == intended, already_applied true, precondition_failures []: the function intended, EXECUTE checksops and the owner, definer_writes ok on payment_transfers and shared_checks. Unrelated catalog 960b57c65c3ee19f15d4873a9d0fbefb3526045a76445e508dd58f846ac0d3c6 (policies 479, functions 1383). Nothing calls the new function until the API read list and the Check Command Center ship through their own guarded paths. Production acceptance: not yet reported by the owner when this record was written; this record does not claim it.",
+    "steps": [
+      "pin",
+      "source",
+      "inspect",
+      "contracts",
+      "manifest",
+      "source-recheck-before-preflight",
+      "preflight",
+      "evaluate",
+      "source-recheck-before-apply",
+      "apply",
+      "post-apply-inspect"
+    ],
+    "contract_results": {
+      "claim-ledger": {
+        "ok": true,
+        "test": "aws/tests/claim-ledger-accepted-contract.test.mjs",
+        "evidence": "4/4 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at 96d07d82b42f1d6cf93ebbaea5f053e3307c4ebb (production-sql-one-shot cca765e1-3982-4730-ae5d-0aa628996648, node --test)"
+      },
+      "tenant-isolation": {
+        "ok": true,
+        "test": "aws/tests/tenant-security-compliance.test.mjs",
+        "evidence": "6/6 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at 96d07d82b42f1d6cf93ebbaea5f053e3307c4ebb (production-sql-one-shot cca765e1-3982-4730-ae5d-0aa628996648, node --test)"
+      },
+      "financial-write-protections": {
+        "ok": true,
+        "test": "aws/tests/api-write.test.mjs",
+        "evidence": "43/43 on i-0c35557c4e5385406 (operator-supplied --runner (not verified by the one-shot)) at 96d07d82b42f1d6cf93ebbaea5f053e3307c4ebb (production-sql-one-shot cca765e1-3982-4730-ae5d-0aa628996648, node --test)"
+      }
+    },
+    "pre_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "eb3a290173a156be3757f03c0217b4548bffe713f582cdc6f32b676e91317e4f",
+      "live_matches_expected": true,
+      "already_applied": false,
+      "predecessors": {},
+      "predecessors_applied": true,
+      "missing_dependencies": [],
+      "apply_preconditions_met": true,
+      "precondition_failures": [],
+      "current_user": "checksops_admin",
+      "session_user": "checksops_admin",
+      "counts": null,
+      "successors_applied": [],
+      "release_sql_inspect": {
+        "live_definition_sha256": "eb3a290173a156be3757f03c0217b4548bffe713f582cdc6f32b676e91317e4f",
+        "prerequisites_missing": [],
+        "predecessors": {},
+        "successors_applied": [],
+        "functions": [
+          {
+            "name": "get_shared_check_source_sends(uuid)",
+            "state": "absent"
+          }
+        ],
+        "policies": [],
+        "views": [],
+        "tables": [],
+        "columns": [],
+        "constraints": [],
+        "triggers": [],
+        "table_privileges": [],
+        "function_acl": [
+          {
+            "name": "get_shared_check_source_sends(uuid)",
+            "acl": []
+          }
+        ],
+        "acl_functions": [],
+        "indexes": [],
+        "unique_covers": [],
+        "definer_writes": [
+          {
+            "name": "payment_transfers",
+            "ok": true
+          },
+          {
+            "name": "shared_checks",
+            "ok": true
+          }
+        ],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": null
+      }
+    },
+    "manifest_sha256": "608da664daff92917cd824c68e21722baf157abacbfa0a6e93b7f8d2d9052f48",
+    "receipt": {
+      "migration": "sql162",
+      "workstream": "prod-sql162-shared-check-source-sends-20261113",
+      "commit": "96d07d82b42f1d6cf93ebbaea5f053e3307c4ebb",
+      "sql_file": "aws/workflows/sql/162_shared_check_source_sends.sql",
+      "before_hash": "eb3a290173a156be3757f03c0217b4548bffe713f582cdc6f32b676e91317e4f",
+      "after_hash": "77d36f6375b21c5e383896c88b5e9eccccb9f7bb9d06801921575e14a8ae41ca",
+      "release_sql_inspect": {
+        "live_definition_sha256": "77d36f6375b21c5e383896c88b5e9eccccb9f7bb9d06801921575e14a8ae41ca",
+        "prerequisites_missing": [],
+        "predecessors": {},
+        "successors_applied": [],
+        "functions": [
+          {
+            "name": "get_shared_check_source_sends(uuid)",
+            "state": "intended"
+          }
+        ],
+        "policies": [],
+        "views": [],
+        "tables": [],
+        "columns": [],
+        "constraints": [],
+        "triggers": [],
+        "table_privileges": [],
+        "function_acl": [
+          {
+            "name": "get_shared_check_source_sends(uuid)",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          }
+        ],
+        "acl_functions": [],
+        "indexes": [],
+        "unique_covers": [],
+        "definer_writes": [
+          {
+            "name": "payment_transfers",
+            "ok": true
+          },
+          {
+            "name": "shared_checks",
+            "ok": true
+          }
+        ],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": null
+      },
+      "unrelated_catalog_sha256": "960b57c65c3ee19f15d4873a9d0fbefb3526045a76445e508dd58f846ac0d3c6",
+      "unrelated_catalog_counts": {
+        "relations": 899,
+        "columns": 3572,
+        "constraints": 2264,
+        "policies": 479,
+        "functions": 1383,
+        "indexes": 660,
+        "default_acl": 0,
+        "role_memberships": 15,
+        "roles": 29,
+        "triggers": 190,
+        "views": 25,
+        "types": 18,
+        "schema": 2
+      },
+      "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43340146045",
+      "result": "applied"
+    },
+    "post_apply_inspect": {
+      "read_only": true,
+      "live_definition_sha256": "77d36f6375b21c5e383896c88b5e9eccccb9f7bb9d06801921575e14a8ae41ca",
+      "live_matches_expected": false,
+      "already_applied": true,
+      "predecessors": {},
+      "predecessors_applied": true,
+      "missing_dependencies": [],
+      "apply_preconditions_met": false,
+      "precondition_failures": [],
+      "current_user": "checksops_admin",
+      "session_user": "checksops_admin",
+      "counts": null,
+      "successors_applied": [],
+      "release_sql_inspect": {
+        "live_definition_sha256": "77d36f6375b21c5e383896c88b5e9eccccb9f7bb9d06801921575e14a8ae41ca",
+        "prerequisites_missing": [],
+        "predecessors": {},
+        "successors_applied": [],
+        "functions": [
+          {
+            "name": "get_shared_check_source_sends(uuid)",
+            "state": "intended"
+          }
+        ],
+        "policies": [],
+        "views": [],
+        "tables": [],
+        "columns": [],
+        "constraints": [],
+        "triggers": [],
+        "table_privileges": [],
+        "function_acl": [
+          {
+            "name": "get_shared_check_source_sends(uuid)",
+            "acl": [
+              "checksops EXECUTE",
+              "owner EXECUTE"
+            ]
+          }
+        ],
+        "acl_functions": [],
+        "indexes": [],
+        "unique_covers": [],
+        "definer_writes": [
+          {
+            "name": "payment_transfers",
+            "ok": true
+          },
+          {
+            "name": "shared_checks",
+            "ok": true
+          }
+        ],
+        "policy_comments": null,
+        "dropped_function_dependents": 0,
+        "dropped_function_callers": [],
+        "dropped_function_caller_count": 0,
+        "doc_type_check_shape": null,
+        "counts": null
+      }
+    }
+  },
+  "production_evidence": {
+    "2026-11-13 apply": "Guarded production SQL one-shot on i-0c35557c4e5385406, workstream prod-sql162-shared-check-source-sends-20261113, main 96d07d82b (tarball 3cb2df14…, transfer run 43345731477, migration source 5bfbe411… == pin), owner-approved run (\"apply SQL 162 in production\"), pre-apply --phase inspect SSM a0ac59a5-83b0-4b24-b202-09f05769a7a7 (live eb3a2901…, live_matches_expected true), apply SSM 92eafa26-5f02-4067-b25e-b93671aafb18, run_id cca765e1-3982-4730-ae5d-0aa628996648, one_use_id sql162-prod-ec7d0c08-11cd-43b0-9eb7-84442936a1f8 (spent): every step ok; contracts claim-ledger 4/4, tenant-isolation 6/6, financial-write-protections 43/43; manifest 608da664…; eb3a2901… -> 77d36f63…, result applied, unrelated catalog 960b57c6…; post-apply inspect already_applied true, precondition_failures []; the run's JSON arrived whole. After: public.get_shared_check_source_sends(uuid) exists as SQL 162 defines it (SECURITY DEFINER, EXECUTE checksops and the owner). Nothing uses it until the API read list and the Check Command Center ship through their own guarded paths. Production acceptance was not yet reported by the owner when this was recorded. execute is false so the pin is no longer a standing authorization."
   }
 }

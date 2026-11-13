@@ -707,10 +707,11 @@ test('only the apply child gets the apply variables, and its receipt is the one 
 // "Yes do the record PR and the production inspect", #1815: the read-only production inspect SSM acaf2260 recorded as its pre-state,
 // the guarded staging read-live run 43232074130, already in the intended state there; no staging apply) until its
 // record-and-retire change after its 2026-11-12 apply ("apply SQL 159 in production").
-// SQL 162's pin is execute-authorized (owner-approved pin change of 2026-11-13, "run the SQL 162 production inspect" /
-// "open the SQL 162 production pin PR": the read-only production inspect SSM f8429f5d recorded as its pre-state, the guarded
-// staging apply run 43340146045 from the same pre-state) until its record-and-retire change.
-const EXECUTE_AUTHORIZED = Object.freeze(['sql162']);
+// SQL 162's pin was execute-authorized (owner-approved pin change of 2026-11-13, "run the SQL 162 production inspect" /
+// "open the SQL 162 production pin PR", #1847: the read-only production inspect SSM f8429f5d recorded as its pre-state, the guarded
+// staging apply run 43340146045 from the same pre-state) until its record-and-retire change after its 2026-11-13 apply
+// ("apply SQL 162 in production").
+const EXECUTE_AUTHORIZED = Object.freeze([]);
 // SQL 95's and SQL 99's production applies of 2026-10-21 (main dcd865256) and SQL 106's and SQL 97's
 // (main 7124a160b; both runs passed the SQL 106 workstream id), recorded in applied.
 const APPLIED_2026_10_21 = Object.freeze({
@@ -796,6 +797,8 @@ const APPLIED_2026_10_21 = Object.freeze({
   sql158: Object.freeze({ ssm: '2e121d9e-c29a-4b16-b53f-1802b75dcafe', run: 'f52b9f83-66fa-4e26-bd38-c362e7151aa2', one_use_id: 'sql158-prod-f38f625c-c0b7-4e46-9757-4d2eb55340a2', workstream: 'prod-sql158-mortgage-desk-oversight-and-agent-notes-20261112', approval: 'record the SQL 158 production pin, merge it when green, and apply SQL 158 in production' }),
   // SQL 159's production apply of 2026-11-12 (main 32022c676), on the owner's "apply SQL 159 in production".
   sql159: Object.freeze({ ssm: '55844713-816d-4a6e-a365-96db7cf61af3', run: '8380da36-7587-4cf3-9083-4f9ae251f379', one_use_id: 'sql159-prod-a555299d-2bf6-42dc-9f08-4346756fdbc0', workstream: 'prod-sql159-homeowner-intro-select-20261112', approval: 'apply SQL 159 in production' }),
+  // SQL 162's production apply of 2026-11-13 (main 96d07d82b), on the owner's "apply SQL 162 in production".
+  sql162: Object.freeze({ ssm: '92eafa26-5f02-4067-b25e-b93671aafb18', run: 'cca765e1-3982-4730-ae5d-0aa628996648', one_use_id: 'sql162-prod-ec7d0c08-11cd-43b0-9eb7-84442936a1f8', workstream: 'prod-sql162-shared-check-source-sends-20261113', approval: 'apply SQL 162 in production' }),
   // SQL 136's production apply of 2026-11-02 (main a58f492cb), on the owner's "apply SQL 136 in production".
   sql136: Object.freeze({ ssm: 'd52b099a-56c7-4148-828c-2530b48c40fb', run: 'b47f4c29-c5bf-4288-82ff-870f057489d9', one_use_id: 'sql136-prod-95f82a7b-8350-43c3-a4c5-8bda2c344673', workstream: 'prod-sql136-money-write-restrictive-20261102', approval: 'apply SQL 136 in production' }),
   // SQL 118's production apply of 2026-10-27 (main 4d9763eff).
@@ -928,8 +931,9 @@ test('a pin without staging acceptance or phrase is refused', async () => {
     sql153: 'b2bf6d325a5a50683acc8ecdaef39ec763b591f8db9f10e7d6fe02f9525cb0c3',
     sql158: 'ed94cf62003c8ef29667a8b79dd081f8e0491bde28cf8ec1acee1154b877e233',
     sql159: '6170e77b6e8b764b28de0d41779ad2d326d867409b401a4b7fd0bb4aa27b7c50',
+    sql162: 'eb3a290173a156be3757f03c0217b4548bffe713f582cdc6f32b676e91317e4f',
   };
-  for (const key of ['sql71', 'sql87', 'sql88', 'sql89', 'sql82', 'sql83', 'sql84', 'sql85', 'sql86', 'sql103', 'sql29', 'sql30', 'sql91', 'sql92', 'sql90', 'sql101', 'sql93', 'sql96', 'sql94', 'sql104', 'sql98', 'sql102', 'sql105', 'sql95', 'sql97', 'sql99', 'sql106', 'sql108', 'sql109', 'sql110', 'sql111', 'sql112', 'sql113', 'sql114', 'sql116', 'sql118', 'sql119', 'sql115', 'sql120', 'sql121', 'sql122', 'sql123', 'sql124', 'sql125', 'sql126', 'sql127', 'sql128', 'sql130', 'sql131', 'sql132', 'sql133', 'sql134', 'sql137', 'sql138', 'sql139', 'sql140', 'sql136', 'sql142', 'sql143', 'sql144', 'sql145', 'sql146', 'sql147', 'sql148', 'sql150', 'sql152', 'sql76', 'sql154', 'sql156', 'sql153', 'sql158', 'sql159']) {
+  for (const key of ['sql71', 'sql87', 'sql88', 'sql89', 'sql82', 'sql83', 'sql84', 'sql85', 'sql86', 'sql103', 'sql29', 'sql30', 'sql91', 'sql92', 'sql90', 'sql101', 'sql93', 'sql96', 'sql94', 'sql104', 'sql98', 'sql102', 'sql105', 'sql95', 'sql97', 'sql99', 'sql106', 'sql108', 'sql109', 'sql110', 'sql111', 'sql112', 'sql113', 'sql114', 'sql116', 'sql118', 'sql119', 'sql115', 'sql120', 'sql121', 'sql122', 'sql123', 'sql124', 'sql125', 'sql126', 'sql127', 'sql128', 'sql130', 'sql131', 'sql132', 'sql133', 'sql134', 'sql137', 'sql138', 'sql139', 'sql140', 'sql136', 'sql142', 'sql143', 'sql144', 'sql145', 'sql146', 'sql147', 'sql148', 'sql150', 'sql152', 'sql76', 'sql154', 'sql156', 'sql153', 'sql158', 'sql159', 'sql162']) {
     const real = realPin(key);
     assert.equal(real.expected_live_definition_sha256, RECORDED_PRODUCTION_PRE[key]);
     // Execute-authorized and applied (retired) pins get an explicit pre-authorization copy; SQL 71's committed pin is still pending.
@@ -1107,15 +1111,17 @@ test('the execute-authorized copies of the retired SQL 95, SQL 97, SQL 99, SQL 1
     sql158: 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43228829366',
     // SQL 159: its guarded staging read-live of 2026-11-12 (already in the intended state; no staging apply; production's pre-state lacks checksops SELECT).
     sql159: 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43232074130',
+    // SQL 162: its guarded staging apply of 2026-11-13 from the same pre-state (the function absent in both).
+    sql162: 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43340146045',
   };
-  for (const key of ['sql95', 'sql97', 'sql99', 'sql106', 'sql108', 'sql109', 'sql110', 'sql111', 'sql112', 'sql113', 'sql114', 'sql116', 'sql118', 'sql119', 'sql115', 'sql120', 'sql121', 'sql122', 'sql123', 'sql124', 'sql125', 'sql126', 'sql127', 'sql128', 'sql130', 'sql131', 'sql132', 'sql133', 'sql134', 'sql137', 'sql138', 'sql139', 'sql140', 'sql136', 'sql142', 'sql143', 'sql144', 'sql145', 'sql146', 'sql147', 'sql148', 'sql150', 'sql152', 'sql76', 'sql154', 'sql156', 'sql153', 'sql158', 'sql159']) {
+  for (const key of ['sql95', 'sql97', 'sql99', 'sql106', 'sql108', 'sql109', 'sql110', 'sql111', 'sql112', 'sql113', 'sql114', 'sql116', 'sql118', 'sql119', 'sql115', 'sql120', 'sql121', 'sql122', 'sql123', 'sql124', 'sql125', 'sql126', 'sql127', 'sql128', 'sql130', 'sql131', 'sql132', 'sql133', 'sql134', 'sql137', 'sql138', 'sql139', 'sql140', 'sql136', 'sql142', 'sql143', 'sql144', 'sql145', 'sql146', 'sql147', 'sql148', 'sql150', 'sql152', 'sql76', 'sql154', 'sql156', 'sql153', 'sql158', 'sql159', 'sql162']) {
     const real = realPin(key);
     let committed = real;
     if (APPLIED_2026_10_21[key]) {
       // Applied 2026-10-21 (SQL 110: 2026-10-22, SQL 111, SQL 112 and SQL 113: 2026-10-23, SQL 114: 2026-10-25, SQL 116: 2026-10-26, SQL 115, SQL 118, SQL 119, SQL 120 and SQL 121: 2026-10-27, SQL 122, SQL 123 and SQL 124: 2026-10-28, SQL 125, SQL 126 and SQL 127: 2026-10-29, SQL 128, SQL 130, SQL 131 and SQL 132: 2026-10-30, SQL 133 and SQL 134: 2026-10-31, SQL 137 and SQL 138: 2026-11-01, SQL 136, SQL 139 and SQL 140: 2026-11-02, SQL 142 and SQL 143: 2026-11-05, SQL 144, SQL 145 and SQL 146: 2026-11-07, SQL 147 and SQL 148: 2026-11-10, SQL 150, SQL 152, SQL 76, SQL 154 and SQL 156: 2026-11-11, SQL 153 and SQL 158: 2026-11-12) and retired: execute false, the one apply run recorded in applied.
       const run = APPLIED_2026_10_21[key];
       assert.equal(real.execute, false, key);
-      assert.match(real.authorization, /^Applied to production on 2026-(10-(2[12356789]|3[01])|11-(0[1257]|1[012])); execute is false again/, key);
+      assert.match(real.authorization, /^Applied to production on 2026-(10-(2[12356789]|3[01])|11-(0[1257]|1[0123])); execute is false again/, key);
       assert.ok(real.authorization.includes(`"${run.approval}"`), key);
       assert.equal(real.applied.owner_approval, run.approval, key);
       assert.equal(real.applied.result, 'applied', key);
