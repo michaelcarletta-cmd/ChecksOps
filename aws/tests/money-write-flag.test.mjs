@@ -63,9 +63,11 @@ const FLAG_IN_PARITY_DISPATCH = new Set([
   'providers/parity/moov-rails.mjs',
   'providers/parity/moov-wallet.mjs',
 ]);
+// moov-wallet-withdraw sets the SQL 72 GUCs and also the money-write flag in every transaction.
 const SQL72_FINANCIAL_EXECUTION = new Set([
   'providers/production/moov-send.mjs',
   'providers/production/moov-wallet-fund.mjs',
+  'providers/production/moov-wallet-withdraw.mjs',
 ]);
 const SQL91_MOOV_ONBOARDING = new Set([
   'providers/onboarding/handlers.mjs',
@@ -241,7 +243,13 @@ test('parity writer modules are reached only from the parity dispatch or flagged
   const readOnlyUsers = apiFiles().filter((rel) => /\bsyncWalletReadOnly\(/.test(read(rel)) && rel !== 'providers/parity/moov-wallet.mjs');
   assert.deepEqual(readOnlyUsers, [
     'providers/production/moov-send.mjs', 'providers/production/moov-wallet-fund.mjs', 'providers/production/moov-wallet-sync.mjs',
+    'providers/production/moov-wallet-withdraw.mjs',
   ]);
+  // The transfer to bank binds the money-write flag with the SQL 72 GUCs, before any write.
+  const withdraw = read('providers/production/moov-wallet-withdraw.mjs');
+  const bind = withdraw.slice(withdraw.indexOf('async function bindRequestGucs'), withdraw.indexOf('/** Make everything so far durable'));
+  assert.match(bind, /await setMoneyWriteFlag\(client\);/);
+  assert.ok(withdraw.indexOf('await bindRequestGucs(client, mapping, claims);') < withdraw.indexOf('syncWalletReadOnly(client'));
   const sync = read('providers/production/moov-wallet-sync.mjs');
   assert.ok(sync.indexOf('await setMoneyWriteFlag(client);') > 0);
   assert.ok(sync.indexOf('await setMoneyWriteFlag(client);') < sync.indexOf('syncProductionWallet({\n        client'));

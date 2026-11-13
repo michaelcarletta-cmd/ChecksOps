@@ -53,10 +53,12 @@ a SECURITY DEFINER function owned by the table owner (no FORCE RLS), which RLS d
 | `payment_wallets` | parity `moov-wallet.mjs` `syncWallet` (parity wallet, sweep and money handlers) | flag (parity dispatch) |
 | | `moov-wallet.mjs` `syncWalletReadOnly` from `providers/production/moov-wallet-sync.mjs` | flag (`moov-wallet-sync.mjs`, after its SQL 72 GUCs) |
 | | `syncWalletReadOnly` from `providers/production/moov-wallet-fund.mjs`, `moov-send.mjs` | SQL 72 only (see uncovered 1) |
+| | `syncWalletReadOnly` from `providers/production/moov-wallet-withdraw.mjs` | flag and SQL 72 (set together in every transaction) |
 | `payment_transfers` | parity `db.mjs` `insertTransferDraft` / `updateTransferAfterMoov` (from `moov-money.mjs`), `moov-functions.mjs` transfer status handler | flag (parity dispatch) |
 | | `tenant-collection-v2.mjs` store `putLeg` | flag (before the insert / update) |
 | | `tenant-collection-v2-settlement.mjs` and `tenant-billing-engine.mjs` `applyBillingProviderEvent` (provider webhook settlement and billing provider events) | flag (before the leg update) |
 | | `providers/production/moov-wallet-fund.mjs`, `moov-send.mjs` | SQL 72 only (see uncovered 1) |
+| | `providers/production/moov-wallet-withdraw.mjs` (transfer to bank) | flag and SQL 72 (set together in every transaction) |
 | | `providers/webhook-apply.mjs` | SQL 91 webhook |
 | | SQL 109 `aws_moov_webhook_apply_transfer_status`, SQL 62 `aws_sandbox_apply_moov_transfer_status` | definer |
 | `payment_transfer_groups` | `providers/webhook-apply.mjs` | SQL 91 webhook |
