@@ -4,6 +4,7 @@ import { useTenant } from "@/contexts/TenantContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
+import { payrollPayeeLines, withVendorNames, type PayrollRun } from "@/lib/payments/payrollRows";
 
 const STATUS_STYLE: Record<string, string> = {
   pending: "bg-muted text-muted-foreground",
@@ -26,14 +27,15 @@ export function PayrollHistoryTable() {
       const { data, error } = await supabase
         .from("payroll_runs")
         .select(`
-          id, amount, speed, memo, status, error, created_at,
+          id, amount, speed, memo, status, error, created_at, stakeholder_account_id, vendor_tenant_id,
           stakeholder_accounts(nickname, custname)
         `)
         .eq("tenant_id", tenant!.id)
         .order("created_at", { ascending: false })
         .limit(100);
       if (error) throw error;
-      return data ?? [];
+      // A payment to a vendor payee (SQL 165) has vendor_tenant_id and no stakeholder: name it.
+      return withVendorNames(supabase, (data ?? []) as unknown as PayrollRun[]);
     },
   });
 
@@ -63,12 +65,14 @@ export function PayrollHistoryTable() {
                 </tr>
               </thead>
               <tbody>
-                {runs.map((r: any) => (
+                {runs.map((r: any) => {
+                  const payee = payrollPayeeLines(r);
+                  return (
                   <tr key={r.id} className="border-b border-border/50">
                     <td className="py-2 pr-3 whitespace-nowrap">{format(new Date(r.created_at), "MMM d, yyyy p")}</td>
                     <td className="py-2 pr-3">
-                      <div className="font-medium">{r.stakeholder_accounts?.nickname ?? "—"}</div>
-                      <div className="text-xs text-muted-foreground">{r.stakeholder_accounts?.custname}</div>
+                      <div className="font-medium">{payee.name}</div>
+                      <div className="text-xs text-muted-foreground">{payee.detail}</div>
                     </td>
                     <td className="py-2 pr-3 text-right font-medium">${Number(r.amount).toFixed(2)}</td>
                     <td className="py-2 pr-3">{SPEED_LABEL[r.speed] ?? r.speed}</td>
@@ -80,7 +84,8 @@ export function PayrollHistoryTable() {
                     </td>
                     <td className="py-2 pr-3 text-muted-foreground max-w-xs truncate">{r.memo ?? ""}</td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>

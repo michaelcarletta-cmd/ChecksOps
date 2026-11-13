@@ -16,10 +16,15 @@ export const PAYROLL_SOURCE_LABEL = "Payroll";
 /** Query-key prefix for every finance-view payroll read; invalidate it after a payroll send. */
 export const PAYROLL_FINANCE_QUERY_KEY = "payroll-finance";
 
+// vendor_tenant_id: SQL 165 (a payroll payment to a vendor payee has it and no stakeholder).
 export const PAYROLL_RUN_COLUMNS = `
-  id, amount, speed, status, memo, created_at, stakeholder_account_id,
+  id, amount, speed, status, memo, created_at, stakeholder_account_id, vendor_tenant_id,
   stakeholder_accounts (id, nickname, custname, account_type, chk_acct)
 `;
+
+/** The type a vendor payroll payment shows under (By Recipient, Payment History). */
+export const PAYROLL_VENDOR_TYPE = "vendor";
+export const PAYROLL_VENDOR_FALLBACK_NAME = "Vendor";
 
 export type PayrollAccount = {
   id?: string | null;
@@ -38,7 +43,16 @@ export type PayrollRun = {
   created_at?: string | null;
   stakeholder_account_id?: string | null;
   stakeholder_accounts?: PayrollAccount | null;
+  /** SQL 165: set on a payment to a vendor payee (wallet only); stakeholder_account_id is then null. */
+  vendor_tenant_id?: string | null;
+  /** The vendor's name, filled in by fetchPayrollRuns from tenants_public. */
+  vendor_name?: string | null;
 };
+
+/** A payroll payment to a vendor payee rather than a stakeholder. */
+export const isVendorPayrollRun = (
+  run: Pick<PayrollRun, "vendor_tenant_id" | "stakeholder_account_id" | "stakeholder_accounts">,
+): boolean => !!run.vendor_tenant_id && !run.stakeholder_account_id && !run.stakeholder_accounts?.id;
 
 /**
  * paid:      the transfer was submitted (or completed) — counts like a settled payment.
@@ -73,6 +87,10 @@ export const payrollAmount = (run: Pick<PayrollRun, "amount">): number => {
 
 /** The payee embed, or a minimal one from stakeholder_account_id when the embed is missing. */
 export function payrollAccount(run: PayrollRun): PayrollAccount {
+  // A vendor payee has no stakeholder account: its name stands in, and there is no account id.
+  if (isVendorPayrollRun(run)) {
+    return { id: null, nickname: run.vendor_name || PAYROLL_VENDOR_FALLBACK_NAME, custname: null, account_type: PAYROLL_VENDOR_TYPE, chk_acct: null };
+  }
   const embed = run.stakeholder_accounts ?? null;
   const id = embed?.id ?? run.stakeholder_account_id ?? null;
   return { ...(embed ?? {}), id };
@@ -82,6 +100,13 @@ export const payrollRecipientName = (run: PayrollRun): string => {
   const acct = payrollAccount(run);
   return acct.nickname ?? acct.custname ?? "Payroll payee";
 };
+
+/** Payroll History: the payee's name and second line, for a stakeholder or a vendor payee. */
+export function payrollPayeeLines(run: PayrollRun): { name: string; detail: string | null } {
+  if (isVendorPayrollRun(run)) return { name: run.vendor_name || PAYROLL_VENDOR_FALLBACK_NAME, detail: "Vendor · ChecksOps wallet" };
+  const acct = run.stakeholder_accounts ?? null;
+  return { name: acct?.nickname ?? "—", detail: acct?.custname ?? null };
+}
 
 /** Payment History status for a payroll run, in the split vocabulary the ledger shows. */
 export function payrollLedgerStatus(status: string | null | undefined): "settled" | "submitted" | "pending" | null {
@@ -208,7 +233,8 @@ export function payrollSpeedFeeExpenseTotal(runs: PayrollRun[] | null | undefine
 /**
  * Tax & 1099: paid runs as split-shaped payments keyed to the payee's stakeholder account, so
  * they merge with that payee's other payments (`acct:<id>`). payroll_runs has no settled_at;
- * the month comes from created_at.
+ * the month comes from created_at. A payment to a vendor payee has no stakeholder account and is
+ * left out here (no account to key it to), like incoming partner payments.
  */
 export type PayrollTaxPayment = {
   created_at: string;
@@ -231,6 +257,7 @@ export function payrollTaxPayments(runs: PayrollRun[] | null | undefined): Payro
 type QueryResult = { data: unknown; error: unknown };
 type PayrollQuery = PromiseLike<QueryResult> & {
   eq(column: string, value: string): PayrollQuery;
+  in(column: string, values: string[]): PayrollQuery;
   gte(column: string, value: string): PayrollQuery;
   lte(column: string, value: string): PayrollQuery;
   order(column: string, options: { ascending: boolean }): PayrollQuery;
@@ -254,5 +281,28 @@ export async function fetchPayrollRuns(
   if (range) q = q.gte("created_at", range.from).lte("created_at", range.to);
   const { data, error } = await q.order("created_at", { ascending: false });
   if (error) throw error;
-  return (data as PayrollRun[] | null) ?? [];
+  return withVendorNames(client, (data as PayrollRun[] | null) ?? []);
+}
+
+/**
+ * Fills vendor_name on vendor payroll runs from tenants_public (names only). A failed lookup
+ * leaves the names empty (shown as "Vendor"); it never fails the read.
+ */
+export async function withVendorNames(client: unknown, runs: PayrollRun[]): Promise<PayrollRun[]> {
+  const ids = [...new Set(runs.filter(isVendorPayrollRun).map((r) => r.vendor_tenant_id as string))];
+  if (ids.length === 0) return runs;
+  const names = new Map<string, string>();
+  try {
+    const { data, error } = await (client as PayrollClient).from("tenants_public").select("id, name").in("id", ids);
+    if (!error) {
+      for (const row of (data as Array<{ id?: string; name?: string | null }> | null) ?? []) {
+        if (row?.id && row.name) names.set(row.id, row.name);
+      }
+    }
+  } catch {
+    /* names stay empty */
+  }
+  return runs.map((r) =>
+    isVendorPayrollRun(r) ? { ...r, vendor_name: names.get(r.vendor_tenant_id as string) ?? r.vendor_name ?? null } : r,
+  );
 }

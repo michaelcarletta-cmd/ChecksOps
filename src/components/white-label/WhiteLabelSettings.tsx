@@ -20,6 +20,8 @@ import {
 import { ReferralSettings } from "@/components/settings/ReferralSettings";
 import { CheckCenterHelpPanel } from "@/components/check-review/CheckCenterHelp";
 import { StakeholderAccountSettings } from "@/components/disbursement/StakeholderAccountSettings";
+import { VendorPayeesSettings } from "@/components/disbursement/VendorPayeesSettings";
+import { PAYMENT_FLAGS } from "@/lib/payments/featureFlags";
 import { TenantBankAccountSettings } from "@/components/settings/TenantBankAccountSettings";
 import { TenantUserManager } from "./TenantUserManager";
 import { TenantDocumentLibrary } from "@/components/settings/TenantDocumentLibrary";
@@ -229,6 +231,7 @@ export function WhiteLabelSettings() {
               <TabsContent value="banking" className="space-y-6">
                 <TenantBankAccountSettings />
                 <StakeholderAccountSettings />
+                {PAYMENT_FLAGS.SHOW_VENDOR_PAYMENTS && <VendorPayeesSettings />}
               </TabsContent>
 
               <TabsContent value="branding" className="space-y-6">

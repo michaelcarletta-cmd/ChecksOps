@@ -30,6 +30,18 @@ import { VERIFICATION_LABEL, VERIFICATION_BADGE_CLASS, type VerificationStatus }
 import { useSelectedPartners } from "@/lib/payments/selectedPartners";
 import { NOT_SENT, mergeDisbursementPayees } from "@/lib/payments/checkStakeholderList";
 import { batchHistoryQuery, checkSendsQuery, sharedPartnersQuery } from "@/hooks/useCheckStakeholderList";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { PAYMENT_FLAGS } from "@/lib/payments/featureFlags";
+import { useVendorPayees } from "@/hooks/useVendorPayees";
+import {
+  VENDOR_INACTIVE_LABEL,
+  VENDOR_WALLET_ONLY_NOTE,
+  payableVendorPayees,
+  vendorPayeeName,
+  vendorRecipientKey,
+} from "@/lib/payments/vendorPayees";
+
+const SHOW_VENDOR_PAYMENTS = PAYMENT_FLAGS.SHOW_VENDOR_PAYMENTS;
 
 interface Props {
   checkIntakeItemId?: string;
@@ -47,6 +59,7 @@ const ACCOUNT_TYPE_LABELS: Record<string, string> = {
   overhead: "Overhead",
   insured: "Insured",
   partner: "Partner",
+  vendor_payee: "Vendor wallet",
   contractor: "Contractor",
   supplier: "Supplier",
   other: "Other",
@@ -59,6 +72,7 @@ const ACCOUNT_TYPE_COLORS: Record<string, string> = {
   overhead: "bg-amber-500/10 text-amber-700 border-amber-500/20",
   insured: "bg-rose-500/10 text-rose-700 border-rose-500/20",
   partner: "bg-teal-500/10 text-teal-700 border-teal-500/20",
+  vendor_payee: "bg-blue-500/10 text-blue-700 border-blue-500/20",
   contractor: "bg-indigo-500/10 text-indigo-700 border-indigo-500/20",
   supplier: "bg-cyan-500/10 text-cyan-700 border-cyan-500/20",
   other: "bg-muted text-muted-foreground border-border",
@@ -187,8 +201,35 @@ export function DisbursementConsole({
   // server checks the partnership when the payment is sent).
   const { partners: selectedPartners } = useSelectedPartners(checkIntakeItemId);
 
+  // Vendor payees (Settings → Bank Account/Stakeholders → Vendors) chosen for this payment. Nothing
+  // is written: the server checks the vendor payee link when the payment is sent. Wallet only.
+  const { data: vendorPayees = [] } = useVendorPayees(tenant?.id, !!checkIntakeItemId);
+  const [chosenVendorIds, setChosenVendorIds] = useState<string[]>([]);
+  const vendorAccounts = useMemo(() => {
+    if (!SHOW_VENDOR_PAYMENTS) return [];
+    const byId = new Map(vendorPayees.map((v) => [v.vendor_tenant_id, v]));
+    return chosenVendorIds
+      .map((id) => byId.get(id))
+      .filter((v): v is NonNullable<typeof v> => !!v && v.vendor_active)
+      .map((v) => ({
+        id: vendorRecipientKey(v.vendor_tenant_id),
+        vendor_tenant_id: v.vendor_tenant_id,
+        nickname: vendorPayeeName(v),
+        account_type: "vendor_payee",
+        verification_status: "verified",
+        is_active: true,
+        provider: "moov",
+        provider_account_id: "vendor",
+        custname: VENDOR_WALLET_ONLY_NOTE,
+      }));
+  }, [vendorPayees, chosenVendorIds]);
+  const vendorChoices = useMemo(
+    () => vendorPayees.filter((v) => !chosenVendorIds.includes(v.vendor_tenant_id)),
+    [vendorPayees, chosenVendorIds],
+  );
+
   // Partners appear next to this check's stakeholders while the check is shared.
-  const accounts = useMemo(
+  const mergedAccounts = useMemo(
     () =>
       mergeDisbursementPayees<any>({
         ownAccounts: ownAccounts as any[],
@@ -210,6 +251,8 @@ export function DisbursementConsole({
       }),
     [ownAccounts, partnerStakeholders, sharesKnown, selectedPartners, removedPartners],
   );
+  // Chosen vendor payees follow the check's stakeholders and partners.
+  const accounts = useMemo(() => [...mergedAccounts, ...vendorAccounts], [mergedAccounts, vendorAccounts]);
 
   // "Pay" in the stakeholder list focuses that recipient's amount here, so the
   // normal confirmation and two-factor path is used (nothing is sent directly).
@@ -367,6 +410,7 @@ export function DisbursementConsole({
       const recipients: SendRecipient[] = splits.map((split) => {
         const acct = (accounts as any[]).find((a) => a.id === split.stakeholder_account_id);
         const amount_cents = Math.round(split.amount * 100);
+        if (acct?.vendor_tenant_id) return { kind: "vendor", vendor_tenant_id: acct.vendor_tenant_id, amount_cents };
         return acct?.partner_tenant_id
           ? { kind: "partner", partner_tenant_id: acct.partner_tenant_id, amount_cents }
           : { kind: "stakeholder", stakeholder_account_id: split.stakeholder_account_id, amount_cents };
@@ -471,6 +515,10 @@ export function DisbursementConsole({
       // on this check; a partner that is only shared with has none.
       const externalSplits = splits.map((split) => {
         const acct = (accounts as any[]).find((a) => a.id === split.stakeholder_account_id);
+        // A vendor payee is paid to its ChecksOps wallet only; there is no account to record against.
+        if (acct?.vendor_tenant_id) {
+          throw new Error(`${acct.nickname} is a vendor and is paid to its ChecksOps wallet only. Choose Next Day or Same Day.`);
+        }
         if (!acct?.partner_tenant_id) return split;
         if (!acct.external_stakeholder_account_id) {
           throw new Error(`${acct.nickname} can be paid here by balance or bank. To record an external payment, use a saved stakeholder account instead.`);
@@ -520,6 +568,7 @@ export function DisbursementConsole({
       qc.invalidateQueries({ queryKey: ["disbursement-batch-history", checkIntakeItemId ?? depositItemId] });
       qc.invalidateQueries({ queryKey: ["disbursement-batch"] });
       setAllocations({});
+      setChosenVendorIds([]);
       setAdminOverride(false);
       onComplete?.();
     },
@@ -528,13 +577,18 @@ export function DisbursementConsole({
         // Forget the key only when the server's answer is final for this payment
         // (finished, or refused before anything was planned). Otherwise pressing
         // Send again continues the same payment instead of paying it again.
-        if (e.code && (FINAL_SEND_CODES.has(e.code) || /^(recipient|partner)_/.test(e.code))) pendingSend.current = null;
+        // vendor_not_payee, vendor_setup_required, vendor_wallet_choice_required and
+        // recipient_is_sender are refusals before anything is planned.
+        if (e.code && (FINAL_SEND_CODES.has(e.code) || /^(recipient|partner|vendor)_/.test(e.code))) pendingSend.current = null;
         setSendOpen(pendingSend.current !== null);
         if (e.send && e.code === "send_partial") {
           // Leave only what was not sent, so the next payment sends the rest and nothing twice.
           const next: Record<string, string> = {};
           for (const r of e.send.recipients) {
-            if (r.unsent_cents > 0) next[r.kind === "partner" ? `partner:${r.id}` : r.id] = (r.unsent_cents / 100).toFixed(2);
+            if (r.unsent_cents > 0) {
+              const key = r.kind === "partner" ? `partner:${r.id}` : r.kind === "vendor" ? vendorRecipientKey(r.id) : r.id;
+              next[key] = (r.unsent_cents / 100).toFixed(2);
+            }
           }
           setUsePercent(false);
           setAllocations(next);
@@ -544,7 +598,7 @@ export function DisbursementConsole({
         toast({
           title: e.code === "send_partial"
             ? "Partially sent"
-            : e.code && (FINAL_SEND_CODES.has(e.code) || /^(recipient|partner)_/.test(e.code)) && e.code !== "provider_outcome_unknown"
+            : e.code && (FINAL_SEND_CODES.has(e.code) || /^(recipient|partner|vendor)_/.test(e.code)) && e.code !== "provider_outcome_unknown"
               ? "Payment not sent"
               : "Check the payment history",
           description: e.message,
@@ -645,6 +699,43 @@ export function DisbursementConsole({
           <CheckStakeholdersManager checkIntakeItemId={checkIntakeItemId} onPay={focusPayee} payableKeys={payableKeys} />
         )}
 
+        {/* Pay a vendor payee from this check: wallet only, the normal send fee and two-factor. */}
+        {SHOW_VENDOR_PAYMENTS && checkIntakeItemId && (
+          <div className="space-y-1.5 rounded-md border p-3" data-testid="funds-tab-vendor-picker">
+            <p className="text-xs font-medium flex items-center gap-1">
+              <Wallet className="h-3 w-3" /> Pay a vendor
+            </p>
+            {vendorPayees.length === 0 ? (
+              <p className="text-[11px] text-muted-foreground">
+                No vendors yet. Add a vendor by its Partner Code in Settings → Bank Account/Stakeholders → Vendors.
+              </p>
+            ) : (
+              <Select
+                value=""
+                onValueChange={(id) => {
+                  if (!id) return;
+                  setChosenVendorIds((cur) => (cur.includes(id) ? cur : [...cur, id]));
+                  focusPayee(vendorRecipientKey(id));
+                }}
+                disabled={vendorChoices.length === 0 || payableVendorPayees(vendorChoices).length === 0}
+              >
+                <SelectTrigger className="h-8 text-xs" aria-label="Add a vendor to this payment">
+                  <SelectValue placeholder={vendorChoices.length ? "Add a vendor to this payment" : "Every vendor is already listed below"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {vendorChoices.map((v) => (
+                    <SelectItem key={v.vendor_tenant_id} value={v.vendor_tenant_id} disabled={!v.vendor_active}>
+                      {vendorPayeeName(v)}
+                      {!v.vendor_active && <span className="text-muted-foreground text-xs"> · {VENDOR_INACTIVE_LABEL}</span>}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            <p className="text-[10px] text-muted-foreground">{VENDOR_WALLET_ONLY_NOTE} The normal send fee applies.</p>
+          </div>
+        )}
+
         {partnersNeedingSetup.length > 0 && (
           <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-300 flex items-start gap-2">
             <AlertTriangle className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
@@ -742,6 +833,22 @@ export function DisbursementConsole({
                     <Badge variant="outline" className={`text-[9px] px-1 flex-shrink-0 ${ACCOUNT_TYPE_COLORS[acct.account_type]}`}>
                       {ACCOUNT_TYPE_LABELS[acct.account_type] || acct.account_type}
                     </Badge>
+                    {acct.vendor_tenant_id && (
+                      <button
+                        type="button"
+                        className="text-[10px] text-muted-foreground underline hover:text-foreground"
+                        onClick={() => {
+                          setChosenVendorIds((cur) => cur.filter((id) => id !== acct.vendor_tenant_id));
+                          setAllocations((cur) => {
+                            const next = { ...cur };
+                            delete next[acct.id];
+                            return next;
+                          });
+                        }}
+                      >
+                        Remove from this payment
+                      </button>
+                    )}
                     <Badge
                       variant="outline"
                       className={`text-[9px] px-1 flex items-center gap-0.5 ${VERIFICATION_BADGE_CLASS[vStatus]}`}
