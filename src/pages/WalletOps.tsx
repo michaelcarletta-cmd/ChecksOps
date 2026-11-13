@@ -29,6 +29,7 @@ import { SWEEP_RAIL_LABEL } from "@/lib/payments/sweeps";
 import { automaticPayoutControl, settlementBankTile, summarizeSweepActivity, sweepAmountCents, sweepTimestamp } from "@/lib/payments/walletSweepActivity";
 import { WalletPanel } from "@/components/payments/WalletPanel";
 import { AutoFundingPanel } from "@/components/payments/AutoFundingPanel";
+import { TransferToBankDialog } from "@/components/payments/TransferToBankDialog";
 
 import { MoovTreasuryPanel } from "@/components/payments/MoovTreasuryPanel";
 import { PAYMENT_FLAGS } from "@/lib/payments/featureFlags";
@@ -48,6 +49,7 @@ const ENTRY_LABEL: Record<string, string> = {
   fee: "Platform fee",
   adjustment: "Adjustment",
   sweep: "Sweep to bank",
+  wallet_withdrawal: "Transfer to bank",
 };
 
 const STATUS_TONE: Record<string, string> = {
@@ -69,6 +71,8 @@ const SHOW_FUNDING_AND_BILLING = false;
 const SHOW_AUTOMATIC_PAYOUTS = PAYMENT_FLAGS.SHOW_AUTOMATIC_PAYOUTS;
 // The "Manage sweeps" button is shown on its own: see PAYMENT_FLAGS.SHOW_SWEEPS_BUTTON.
 const SHOW_SWEEPS_BUTTON = PAYMENT_FLAGS.SHOW_SWEEPS_BUTTON;
+// The "Transfer to bank" button (operating wallet → default bank): see PAYMENT_FLAGS.SHOW_WALLET_WITHDRAW.
+const SHOW_WALLET_WITHDRAW = PAYMENT_FLAGS.SHOW_WALLET_WITHDRAW;
 
 const READINESS_COPY: Record<string, { label: string; tone: string }> = {
   ready: { label: "Ready", tone: "border-emerald-500/40 text-emerald-500 bg-emerald-500/5" },
@@ -570,6 +574,15 @@ export default function WalletOps() {
                 <WalletPanel />
               </DialogContent>
             </Dialog>
+
+            {SHOW_WALLET_WITHDRAW && (
+              <TransferToBankDialog
+                availableCents={syncFailed ? 0 : (wallet?.available_cents ?? 0)}
+                walletActive={wallet?.status === "active" && !setupRequired}
+                paymentsHref={`${tenantBase}/payments`}
+                onTransferred={() => refreshWallet.mutateAsync()}
+              />
+            )}
           </div>
         </SectionCard>
 
