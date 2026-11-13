@@ -3740,6 +3740,31 @@ export const AUTHORIZED_SQL162_SHARED_CHECK_SOURCE_SENDS = Object.freeze({
   ]),
 });
 
+// Mortgage Desk check, homeowner timeline and homeowner link staging pin: SQL 163 (owner 2026-11-12: the agent sees no
+// check on a request, no logged contact, and the homeowner link fails with missing_cognito_token; 2026-11-13 "Start the
+// desk fixes"). Three new SECURITY DEFINER functions behind SQL 124's aws_mortgage_desk_readable_request (the assigned
+// mortgage agent or the platform owner): the request's check (display fields only), the claim's homeowner timeline of
+// the request's tenant, and the homeowner tracking link for the homeowner on file; EXECUTE for checksops and the owner.
+// No predecessor. Pending until a reviewed pin change records a staging read-live (ops/production-sql-163-apply.md).
+export const AUTHORIZED_SQL163_MORTGAGE_DESK_CHECK_TIMELINE_HOMEOWNER_LINK = Object.freeze({
+  key: 'sql163',
+  filename: 'aws/workflows/sql/163_mortgage_desk_check_timeline_homeowner_link.sql',
+  migration_id: '163_mortgage_desk_check_timeline_homeowner_link',
+  // The commit that last authored the file bytes.
+  commit: '7a9df4765224a2071bc407c8e9bd890954cf99b1',
+  source_sha256: '7075128ade468e88881dee2527280ef36e3e54b357b0595c3d00077428bb73ad',
+  authorization: 'pending',
+  execute: false,
+  expected_live_definition_sha256: null,
+  // Code-derived: releaseIntendedHash('sql163', file bytes) (release-sql-state.mjs); re-derived by the tests.
+  intended_replacement_sha256: 'ef536373458b30dc16679e921af2a071e63a4cb755854612f2ff90eb79184c85',
+  function_identities: Object.freeze([
+    'public.aws_mortgage_desk_request_check(uuid)',
+    'public.aws_mortgage_desk_homeowner_timeline(uuid)',
+    'public.aws_mortgage_desk_homeowner_link(uuid, text)',
+  ]),
+});
+
 export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql90: AUTHORIZED_SQL90_USERS_ONLY_TENANT_ROLES,
   sql91: AUTHORIZED_SQL91_MOOV_ONBOARDING,
@@ -3810,6 +3835,7 @@ export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql160: AUTHORIZED_SQL160_NO_ADDITIONAL_CHECK_OR_MANUAL_DEPOSIT_FEE,
   sql161: AUTHORIZED_SQL161_TG_MORTGAGE_HANDLING_BILLING_CHECKSOPS_EXECUTE,
   sql162: AUTHORIZED_SQL162_SHARED_CHECK_SOURCE_SENDS,
+  sql163: AUTHORIZED_SQL163_MORTGAGE_DESK_CHECK_TIMELINE_HOMEOWNER_LINK,
   sql76: AUTHORIZED_SQL76_RELEASE_TENANT_PARTNERSHIP_CONSENT,
 });
 
@@ -3826,7 +3852,7 @@ export function isSql30TenantDocumentsDocType(input = {}) {
   return pinIdentifiersMatch(input, AUTHORIZED_SQL30_TENANT_DOCUMENTS_DOC_TYPE);
 }
 
-/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql148, sql150, sql152 ... sql156, sql158, sql159, sql160, sql161, sql162; sql76 for production) an input names, or null. */
+/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql148, sql150, sql152 ... sql156, sql158, sql159, sql160, sql161, sql162, sql163; sql76 for production) an input names, or null. */
 export function releaseSqlMigrationKey(input = {}) {
   return Object.keys(RELEASE_2026_10_17_PENDING_SQL_PINS)
     .find((key) => pinIdentifiersMatch(input, RELEASE_2026_10_17_PENDING_SQL_PINS[key])) || null;
