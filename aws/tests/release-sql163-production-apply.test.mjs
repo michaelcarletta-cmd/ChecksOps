@@ -9,7 +9,8 @@
  *     "Open the SQL 163 production pin PR") with the staging acceptance, and is in step with the
  *     staging pin, the one-shot, the bypass inventory and the test lists;
  *   - no predecessor; three new SECURITY DEFINER functions (EXECUTE checksops and the owner), nothing replaced; no
- *     table, policy, trigger or table grant; no overlay plan entry; the runbook, one-shot doc and README name it;
+ *     table, policy, trigger or table grant; the API change holds one overlay member on it (recorded live from this pin's
+ *     production apply); the runbook, one-shot doc and README name it;
  *   - the pending pin refuses before connecting; an approved, accepted copy evaluates for the manifest built from it,
  *     and refuses with execute false, another live hash, another staging reference or a wrong phrase; the CLI spends no
  *     receipt.
@@ -186,7 +187,7 @@ test('pin: the release pin shape, applied and retired (owner approved 2026-11-13
   }
 });
 
-test('order: no predecessor; three new SECURITY DEFINER functions with their ACLs, nothing replaced; no table, policy, trigger or table grant; no overlay plan entry; the runbook, one-shot doc and README name it', () => {
+test('order: no predecessor; three new SECURITY DEFINER functions with their ACLs, nothing replaced; no table, policy, trigger or table grant; the API change holds one overlay member on it; the runbook, one-shot doc and README name it', () => {
   const spec = RELEASE_SQL_SPECS[KEY];
   assert.deepEqual(spec.predecessors, []);
   assert.equal(spec.supersedes, undefined);
@@ -207,9 +208,16 @@ test('order: no predecessor; three new SECURITY DEFINER functions with their ACL
     'no API, Lambda or SPA change is part of this pin', releaseStateHash(KEY, {})]) {
     assert.ok(COMMITTED.order_note.includes(text), text);
   }
-  // No API member waits on SQL 163 yet.
+  // The pin itself changed no API member. The API change (2026-11-13, "Start the desk API and website PRs", its own planning
+  // change) holds mortgage-desk-esign.mjs on SQL 163, which the plan records verified live from this pin's production apply
+  // (one-shot SSM 7ac690d7, receipt before 23d41c10…, after ef536373…).
   const plan = readJson('ops/deployment-guard/production-api-overlay-plan.json');
-  assert.equal(plan.sql_prerequisites?.[SQL163_FILE], undefined);
+  assert.equal(plan.sql_prerequisites[SQL163_FILE].verified_live, true);
+  for (const evidence of ['SSM 7ac690d7-02c5-4d2b-8615-4fb60ae9fea8', 'one_use_id sql163-prod-3abeb1bd-42b2-4f37-827e-c692bf050c59',
+    `before ${COMMITTED.expected_live_definition_sha256.slice(0, 8)}…, after ${COMMITTED.intended_replacement_sha256.slice(0, 8)}…`]) {
+    assert.ok(plan.sql_prerequisites[SQL163_FILE].evidence.includes(evidence), evidence);
+  }
+  assert.deepEqual(Object.keys(plan.members).filter((m) => plan.members[m].sql_before === SQL163_FILE), ['mortgage-desk-esign.mjs']);
   // The file: the prerequisite DO block, three functions, their REVOKEs from PUBLIC, the role REVOKE DO block and the GRANTs to checksops; nothing else.
   const text = fs.readFileSync(path.join(ROOT, SQL163_FILE), 'utf8').replace(/--[^\n]*/g, '');
   const outside = text.replace(/\$([A-Za-z0-9_]*)\$[\s\S]*?\$\1\$/g, '$$body$$');
