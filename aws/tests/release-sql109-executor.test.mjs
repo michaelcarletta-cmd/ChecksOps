@@ -132,9 +132,10 @@ test('pin: SQL 109 staging-authorized from its read-live, code-derived, selectab
   assert.equal(spec.runs_before, undefined);
   assert.equal(spec.supersedes, undefined);
   assert.equal(spec.refuse_after, undefined);
+  // SQL 164 (transfer to bank, 2026-11-13) replaces this writer in place and names SQL 109 as its predecessor.
   assert.deepEqual(RELEASE_SQL_KEYS.filter((key) => (RELEASE_SQL_SPECS[key].supersedes || []).includes(KEY)
     || (RELEASE_SQL_SPECS[key].refuse_after || []).some((m) => m.key === KEY)
-    || (RELEASE_SQL_SPECS[key].predecessors || []).includes(KEY)), []);
+    || (RELEASE_SQL_SPECS[key].predecessors || []).includes(KEY)), ['sql164']);
   // SQL 91 stays as applied.
   assert.equal(PINS.sql91.source_sha256, '199bfa1a528d219a8683b61ae6264d84dd5b08caa74564691374c8c6c42b71e3');
   assert.equal(releaseIntendedHash('sql91', SQL91_TEXT), PINS.sql91.intended_replacement_sha256);

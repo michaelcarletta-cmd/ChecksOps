@@ -44,7 +44,26 @@ or SPA change is part of this pin: `aws/functions/api/mortgage-desk-esign.mjs` (
 `homeowner_timeline`, `send_tracking_link`) and the Desk page ship afterwards through their own guarded paths; the API
 tolerates the functions being absent (the workspace returns no check or timeline, the link answers 503).
 
-**Status:** tooling built; staging and production pins pending (`execute: false`). Nothing applied or read.
+**Status:** applied to staging (wave 54) and to production (2026-11-13); the production pin is retired (`execute: false`).
+
+**Production apply (2026-11-13).** After the pin change (#1859, merged to main as `46be82c54` on the owner's words "Merge 1859 when green"), transfer run 43422337998 staged main `46be82c54` (tarball `b9b907a6…`). Under the owner's words "apply SQL 163 in production" (passed verbatim), a one-shot `--phase inspect` (SSM `e4849ce4-9272-4ad4-b47c-7c6c40b463e3`, exit 0, nothing written) read live `23d41c10…` (the pinned pre-state, `live_matches_expected` true, `precondition_failures` `[]`); then one-shot `--phase apply` run `ff02a75e-8eb6-4dbb-8135-eca122148c01` through SSM `7ac690d7-02c5-4d2b-8615-4fb60ae9fea8`, workstream `prod-sql163-desk-check-timeline-link-20261113`, one_use_id `sql163-prod-3abeb1bd-42b2-4f37-827e-c692bf050c59`: contracts 4/4, 6/6 and 43/43; receipt `23d41c10…` → `ef536373458b30dc16679e921af2a071e63a4cb755854612f2ff90eb79184c85`, result `applied`; post-apply inspect `already_applied` true, the three functions intended, EXECUTE `checksops` and the owner. The operator's SSM script returned only the last 18000 bytes of the run's 24660-byte log, so the run's step list and manifest hash were not captured (the `applied` object arrived whole). Runner started 12:07:34Z, stopped 12:09:07Z after a process check found no one-shot running. Recorded in the pin's `applied` block. Nothing calls the functions until the Mortgage Desk API and the Desk page ship through their own guarded paths; production acceptance was not yet reported by the owner when this was recorded.
+
+**Staging apply (2026-11-13).** After the staging pin (#1856) and executor deploy run 43360808661 (main `8d6488e0f`, executor
+CodeSha256 `Xms0fJZo…` → `ND9sboqs…`): read-live run 43361164060 `23d41c10…` (not applied, `precondition_failures` `[]`), apply run
+43361518188 under the owner's words "Do the SQL 163 staging pin and apply" (after `ef536373…`, result `applied`), read-live run
+43361792245 `already_applied` true, `ef536373…`.
+
+**Production inspect (2026-11-13).** Read-only, under the owner's words "Run the SQL 163 production inspect": transfer run
+43416792640 staged main `8d6488e0f` (tarball `04e4ba7f…`, the SQL 163 file on the runner `7075128a…` == the pin), SSM
+`51819aad-a6bf-487f-99e4-5de65b6db29c` on the runner (started 11:25:50Z, stopped 11:26:51Z): live `23d41c10…` (the three functions
+absent), `already_applied` false, `precondition_failures` `[]`, `prerequisites_missing` `[]`, `definer_writes` ok on all five relations.
+
+**Staging read-live (2026-11-13).** Run 43355976887 (main `79ae218c6`, after executor inspect run 43355315256 and executor deploy
+run 43355657339 (executor CodeSha256 `m0Av9v61…` -> `Xms0fJZo…`)), under the owner's words "Start the SQL 163 staging refresh
+and read-live": `already_applied` false, `precondition_failures` `[]`; the three functions absent. Live
+`23d41c1086f3f15412a5d374e056eaaf1bef7f428d81b0ffbdda666a5250de87`, equal to the derived pre-state; intended `ef536373…`. Recorded in the staging pin
+(`expected_live_definition_sha256`, `execute: true`, wave 54) on the owner's words "Do the SQL 163 staging pin and apply". The
+staging apply is a separate run after this pin is merged and the executor is redeployed carrying it.
 
 Production authorization phrase (pin `authorization_phrase`): `SHOW_MORTGAGE_DESK_AGENTS_CHECK_TIMELINE_AND_HOMEOWNER_LINK`.
 

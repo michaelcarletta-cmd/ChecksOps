@@ -1,0 +1,72 @@
+{
+  "workstream_id": "wallet-transfer-to-bank",
+  "authorization": "Pending owner review (2026-11-13). Planning only: nothing is live or verified. Each production apply needs its own owner approval, a staging acceptance reference and a read-only production inspect that confirms the live bytes.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Transfer to bank (owner 2026-11-13: \"Start the transfer to bank API\"; design docs/WALLET_TO_BANK_TRANSFER_DESIGN.md and its owner decisions: no fee; tenant-set limits, any amount up to the operating wallet available balance when unset; any tenant member; same-day ACH; no admin approval; the same wallet.fund two-factor as funding; no email; operating wallet only; the default bank only (default_bank_required when none, never another bank); arrival estimate skips Federal Reserve holidays and the 16:45 ET same-day cutoff; changing limits needs the wallet.fund code). ADD wallet-withdraw-limits.mjs (route save-tenant-wallet-withdraw-limits: the two SQL 164 limit columns of tenant_wallet_funding_settings, any member, wallet.fund step-up to save, money-write flag) before app-services.mjs; ADD fed-holidays.mjs (pure, no imports) and then ADD providers/production/moov-wallet-withdraw.mjs (operating wallet -> the tenant default bank, ach-credit-same-day, row committed before the Moov POST, SQL 72 GUCs and the money-write flag in every transaction) before providers.mjs. REPLACE app-services.mjs 8b91a644 -> 6735d88f (Class A route), providers/catalog.mjs 91f9ea54 -> b912585f (moov-wallet-withdraw catalogued), providers/moov-status-catch-up.mjs 6083f54b -> 8d82adf4 (wallet_withdrawal is a SQL 109/164 writer leg), providers.mjs 58207e5e -> 19f6a19b (the moov-wallet-withdraw production route), last. Each REPLACE starts from the bytes its row records live (the applied record named as previous_manifest); production rebuild inspect run 43371290665 and the sixth production rebuild (apply run 43430080268) left production equal to main apart from the later desk overlay of mortgage-desk-esign.mjs (applied record 2026-11-13). SQL 164 (the wallet_withdrawal leg of aws_moov_webhook_apply_transfer_status and the two limit columns) is applied in staging and production (record #1875); no sql_before: the handlers also answer 503 and write nothing if the columns were missing. Intended path: the guarded full-package API rebuild (staging inspect, rebuild-plan PR, staging apply, production inspect, rebuild-plan PR, production apply), which carries all seven files in one package; these rows keep main's bytes accepted so the overlay plan stays consistent and are no-ops (ALREADY_ACCEPTED) once a verified rebuild put them live. No website change: the button is not built yet (its own PR, behind PAYMENT_FLAGS.SHOW_WALLET_WITHDRAW = false), so nothing in the UI calls these routes. index.mjs is untouched. Planning only.",
+  "members": {
+    "wallet-withdraw-limits.mjs": {
+      "live_sha256": null,
+      "accepted_sha256": "aa3f2f0ec07e2d30c0555683a41de5deea3643add006a7ed1e516077206d07c9",
+      "operation": "add",
+      "required_imports": [
+        "data.mjs",
+        "money-write-flag.mjs",
+        "providers/production/moov-fund-authz.mjs",
+        "tenant-email-domain.mjs"
+      ]
+    },
+    "fed-holidays.mjs": {
+      "live_sha256": null,
+      "accepted_sha256": "162580f1a9b0a99b93e5ba1512fc00fed86f1edd6dda033cced72c56115a1638",
+      "operation": "add",
+      "required_imports": []
+    },
+    "providers/production/moov-wallet-withdraw.mjs": {
+      "live_sha256": null,
+      "accepted_sha256": "22c6c77990c54042ecd82ce13a119dadc84f34adcc9883df17d522e7471f64e0",
+      "operation": "add",
+      "required_imports": [
+        "cognito.mjs",
+        "financial-flags.mjs",
+        "financial-ownership.mjs",
+        "money-write-flag.mjs",
+        "sandbox-flags.mjs",
+        "providers/parity/moov-client.mjs",
+        "providers/parity/caller.mjs",
+        "providers/parity/db.mjs",
+        "providers/parity/moov-wallet.mjs",
+        "fed-holidays.mjs",
+        "providers/parity/rail-router.mjs",
+        "providers/production/moov-fund-authz.mjs",
+        "providers/production/moov-wallet-fund.mjs",
+        "data.mjs",
+        "sandbox-credentials.mjs"
+      ]
+    },
+    "app-services.mjs": {
+      "live_sha256": "8b91a6444e8b05c7fc5fec9b4d1883b4e042f6c0efeb045f777c934223b22199",
+      "accepted_sha256": "6735d88fc0aeaf5789fbf96ec2f33b980a1f85a6f71d9224ec4f93272810e769",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-external-disbursement-applied-manifest-2026-11-10.json"
+    },
+    "providers/catalog.mjs": {
+      "live_sha256": "91f9ea543d484f6daa584ec76a99218fecfccb8f628546c165a448e968bcc969",
+      "accepted_sha256": "b912585f4ab6014af4a4a6da69cbe8f565c2882eefa61f3aa71975c825e3ceed",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-moov-payees-applied-manifest-2026-10-24.json"
+    },
+    "providers/moov-status-catch-up.mjs": {
+      "live_sha256": "6083f54bbaf1a72395ab45495b90c3b4f5136b8adbf33d386f7584ea2e95b9ab",
+      "accepted_sha256": "8d82adf4ea29dbb6fc17d75c4e469643c8daf5dbf251eae9911e2e2994ff09f2",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-moov-status-catch-up-update-fix-applied-manifest-2026-11-07.json"
+    },
+    "providers.mjs": {
+      "live_sha256": "58207e5e8762a1a912c2e2fc5e143f0df90205e5e16be604dc3c1cdf19ca73d9",
+      "accepted_sha256": "19f6a19bde07f67a33b50fbef883b9bf6f893f018d8995172003d0d1942225f6",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-sandbox-send-applied-manifest-2026-10-25.json"
+    }
+  }
+}

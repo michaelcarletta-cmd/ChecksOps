@@ -277,6 +277,26 @@ export const STAGING_WAVE1 = Object.freeze({
   // d555e2977 with the executor current (deploy run 43333551422): already_applied false, precondition_failures [],
   // prerequisites_missing [], the function absent, payment_transfers and shared_checks reachable. Equal to the derived pre-state.
   sql162: Object.freeze({ wave: 53, approved: '2026-11-13', run: '43334326464', live: 'eb3a290173a156be3757f03c0217b4548bffe713f582cdc6f32b676e91317e4f' }),
+  // Wave 54 (owner approved 2026-11-13, "Start the SQL 163 staging refresh and read-live" and "Do the SQL 163 staging pin and
+  // apply"): SQL 163, the Mortgage Desk agent's read of the request's check and homeowner timeline and the homeowner link.
+  // Read at main 79ae218c6 with the executor current (deploy run 43355657339): already_applied false, precondition_failures
+  // [], the three functions absent. Equal to the derived pre-state.
+  sql163: Object.freeze({ wave: 54, approved: '2026-11-13', run: '43355976887', live: '23d41c1086f3f15412a5d374e056eaaf1bef7f428d81b0ffbdda666a5250de87' }),
+  // Wave 55 (owner approved 2026-11-13, "Start the SQL 164 staging refresh and read-live" and "Do the SQL 164 staging pin and
+  // apply"): SQL 164, the transfer-to-bank wallet_withdrawal leg and the tenant's limits. Read at main 6abf428bb with the
+  // executor current (deploy run 43438851836): already_applied false, precondition_failures [], SQL 109's function, the
+  // columns and checks absent. Equal to the derived pre-state.
+  sql164: Object.freeze({ wave: 55, approved: '2026-11-13', run: '43439497274', live: '51e721c14833afe91c1236bd618735b2adb75e7acc2f01b03c109c98ab9c19d7' }),
+  // Wave 56 (owner approved 2026-11-13, "Start SQL 141 vendor payees" and "Do the SQL 141 staging pin and apply"): SQL 141,
+  // permanent vendors and vendor payees by Partner Code. Read at main a03684a89 with the executor current (inspect run
+  // 43473964416, CodeSha256 72R3n5ta...): already_applied false, precondition_failures [], prerequisites_missing [], both
+  // tables, both policies and the three functions absent. Equal to the derived pre-state.
+  sql141: Object.freeze({ wave: 56, approved: '2026-11-13', run: '43474483441', live: '16522f0a99f22410a73e4a80e10e48a10a08162171345d72e0f72bc47338982f' }),
+  // Wave 57 (owner approved 2026-11-13, "Start the SQL 165 staging refresh and read-live" and "Do the SQL 165 staging pin and
+  // apply"): SQL 165, the vendor payee lookup and vendor payroll runs. Read at main 31c0c874b with the executor current
+  // (deploy run 43506159674, CodeSha256 cE42JmZv...): already_applied false, precondition_failures [], prerequisites_missing [].
+  // Equal to the derived pre-state.
+  sql165: Object.freeze({ wave: 57, approved: '2026-11-13', run: '43506600170', live: '3a6d086e37c04740397c0b6a99d558ed0a5e907c296f8a99a71ae323acdca248' }),
   sql98: Object.freeze({ wave: 3, approved: '2026-10-18', run: '39083278136', live: '296c3d6a274e10f66005fb9eaecf93fa17b81bd8db3607037ca07698fddd3275', apply_run: '39085677318' }),
 });
 
@@ -288,7 +308,7 @@ export const pendingPin = (pin) => Object.freeze({
 });
 
 /**
- * The committed staging pin's apply state: waves 1-53 recorded and approved, wave 6 approved with
+ * The committed staging pin's apply state: waves 1-57 recorded and approved, wave 6 approved with
  * its read-live still to record (pending until then), wave 18 (SQL 117) retired, SQL 129 retired
  * before any read-live was recorded, the rest pending.
  */

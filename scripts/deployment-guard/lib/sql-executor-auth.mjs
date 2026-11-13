@@ -3198,8 +3198,8 @@ export const AUTHORIZED_SQL140_WALLET_FUNDING_SETTINGS_WRITE_GRANTS = Object.fre
 // vendor organizations; a tenant adds a vendor as a payee by its Partner Code, with no partnership and no shared
 // record; nothing moves money). Two new tables (vendor_tenants, tenant_vendor_payees; RLS on, one SELECT policy
 // each, SELECT for checksops and authenticated) and three SECURITY DEFINER functions (EXECUTE checksops and the
-// owner). No predecessor. Pending until a reviewed pin change records a staging read-live
-// (ops/production-sql-141-apply.md).
+// owner). No predecessor. Staging apply authorized (wave 56) from staging read-live run 43474483441: the pre-state, every
+// object absent, equals the derived one (ops/production-sql-141-apply.md).
 export const AUTHORIZED_SQL141_PERMANENT_VENDOR_PAYEES = Object.freeze({
   key: 'sql141',
   filename: 'aws/workflows/sql/141_permanent_vendor_payees.sql',
@@ -3207,9 +3207,11 @@ export const AUTHORIZED_SQL141_PERMANENT_VENDOR_PAYEES = Object.freeze({
   // The commit that last authored the file bytes.
   commit: '506b72e271622ba12cb56bb17326d8450d90141a',
   source_sha256: '547a1ffe3ec4d6ae9aaa00432486791e721c712c07733bd72a7ba9408708fa88',
-  authorization: 'pending',
-  execute: false,
-  expected_live_definition_sha256: null,
+  authorization: 'Owner approved 2026-11-13: staging apply (wave 56) from staging read-live run 43474483441',
+  execute: true,
+  // Staging read-live run 43474483441 (main a03684a89, executor current per inspect run 43473964416): already_applied false,
+  // precondition_failures [], prerequisites_missing []. Equal to the derived pre-state (every object absent).
+  expected_live_definition_sha256: '16522f0a99f22410a73e4a80e10e48a10a08162171345d72e0f72bc47338982f',
   // Code-derived: releaseIntendedHash('sql141', file bytes) (release-sql-state.mjs); re-derived by the tests.
   intended_replacement_sha256: '4d50013eb0b30808a2a13a97b4a1700b33a833a943bbad865627b77aaf836729',
   function_identities: Object.freeze([
@@ -3747,7 +3749,8 @@ export const AUTHORIZED_SQL162_SHARED_CHECK_SOURCE_SENDS = Object.freeze({
 // desk fixes"). Three new SECURITY DEFINER functions behind SQL 124's aws_mortgage_desk_readable_request (the assigned
 // mortgage agent or the platform owner): the request's check (display fields only), the claim's homeowner timeline of
 // the request's tenant, and the homeowner tracking link for the homeowner on file; EXECUTE for checksops and the owner.
-// No predecessor. Pending until a reviewed pin change records a staging read-live (ops/production-sql-163-apply.md).
+// No predecessor. Staging apply authorized (wave 54) from staging read-live run 43355976887: the pre-state, the three
+// functions absent, equals the derived one (ops/production-sql-163-apply.md).
 export const AUTHORIZED_SQL163_MORTGAGE_DESK_CHECK_TIMELINE_HOMEOWNER_LINK = Object.freeze({
   key: 'sql163',
   filename: 'aws/workflows/sql/163_mortgage_desk_check_timeline_homeowner_link.sql',
@@ -3755,15 +3758,69 @@ export const AUTHORIZED_SQL163_MORTGAGE_DESK_CHECK_TIMELINE_HOMEOWNER_LINK = Obj
   // The commit that last authored the file bytes.
   commit: '7a9df4765224a2071bc407c8e9bd890954cf99b1',
   source_sha256: '7075128ade468e88881dee2527280ef36e3e54b357b0595c3d00077428bb73ad',
-  authorization: 'pending',
-  execute: false,
-  expected_live_definition_sha256: null,
+  authorization: 'Owner approved 2026-11-13: staging apply (wave 54) from staging read-live run 43355976887',
+  execute: true,
+  // Staging read-live run 43355976887 (main 79ae218c6, executor deploy run 43355657339): already_applied false,
+  // precondition_failures []. Equal to the derived pre-state (the three functions absent).
+  expected_live_definition_sha256: '23d41c1086f3f15412a5d374e056eaaf1bef7f428d81b0ffbdda666a5250de87',
   // Code-derived: releaseIntendedHash('sql163', file bytes) (release-sql-state.mjs); re-derived by the tests.
   intended_replacement_sha256: 'ef536373458b30dc16679e921af2a071e63a4cb755854612f2ff90eb79184c85',
   function_identities: Object.freeze([
     'public.aws_mortgage_desk_request_check(uuid)',
     'public.aws_mortgage_desk_homeowner_timeline(uuid)',
     'public.aws_mortgage_desk_homeowner_link(uuid, text)',
+  ]),
+});
+
+// Transfer to bank staging pin: SQL 164 (owner 2026-11-13: "Build the transfer to bank"; design
+// docs/WALLET_TO_BANK_TRANSFER_DESIGN.md, #1849). Replaces SQL 109's public.aws_moov_webhook_apply_transfer_status in
+// place with one change, the wallet_withdrawal leg added to the legs it owns, and adds the tenant's own transfer-to-bank
+// limits (two nullable positive bigint columns on public.tenant_wallet_funding_settings, column INSERT and UPDATE for
+// checksops). Predecessor and supersedes SQL 109 (release-sql-specs.mjs). Staging apply authorized (wave 55) from staging
+// read-live run 43439497274: the pre-state, SQL 109's function with the columns and checks absent, equals the derived one
+// (ops/production-sql-164-apply.md).
+export const AUTHORIZED_SQL164_WALLET_WITHDRAWAL_LEG_AND_LIMITS = Object.freeze({
+  key: 'sql164',
+  filename: 'aws/workflows/sql/164_wallet_withdrawal_leg_and_limits.sql',
+  migration_id: '164_wallet_withdrawal_leg_and_limits',
+  // The commit that last authored the file bytes.
+  commit: '82a65d16135cc1d8dff3c0af82f19a8c60d9cef8',
+  source_sha256: 'dcf259b4b91bf2ab133a7a433644aed56f7a389db88fa1042aba9875f6953897',
+  authorization: 'Owner approved 2026-11-13: staging apply (wave 55) from staging read-live run 43439497274',
+  execute: true,
+  // Staging read-live run 43439497274 (main 6abf428bb, executor deploy run 43438851836): already_applied false,
+  // precondition_failures []. Equal to the derived pre-state (SQL 109's function; the columns and checks absent).
+  expected_live_definition_sha256: '51e721c14833afe91c1236bd618735b2adb75e7acc2f01b03c109c98ab9c19d7',
+  // Code-derived: releaseIntendedHash('sql164', file bytes) (release-sql-state.mjs); re-derived by the tests.
+  intended_replacement_sha256: '0659d3819ac167d8724bfc78d8e5dc7f6e86c82b48a07c0539891ac9714750ff',
+  function_identities: Object.freeze([
+    'public.aws_moov_webhook_apply_transfer_status(text, text, text, text, text, text, text, text, text, text, timestamp with time zone)',
+  ]),
+});
+
+// Vendor payee lookup and vendor payroll runs staging pin: SQL 165 (owner 2026-11-13: pay a vendor from a check or from
+// a payroll payment; "New migration" and "Record in payroll"). Creates public.aws_vendor_payees_for_tenant(uuid), a
+// member-checked SECURITY DEFINER read of the tenant's live SQL 141 payee links (vendor name, is_vendor,
+// subscription_status), and lets public.payroll_runs name a vendor (vendor_tenant_id, stakeholder_account_id nullable,
+// exactly one payee). Predecessor SQL 141 (release-sql-specs.mjs). Staging apply authorized (wave 57) from staging
+// read-live run 43506600170: the pre-state equals the derived one (ops/production-sql-165-apply.md).
+export const AUTHORIZED_SQL165_VENDOR_PAYEE_LOOKUP_AND_PAYROLL_VENDOR = Object.freeze({
+  key: 'sql165',
+  filename: 'aws/workflows/sql/165_vendor_payee_lookup_and_payroll_vendor.sql',
+  migration_id: '165_vendor_payee_lookup_and_payroll_vendor',
+  // The commit that last authored the file bytes.
+  commit: 'ffbff4fa9e5819564485bee96a6a2b7726b3557d',
+  source_sha256: '18dfb11105daeb92d202fb8d1f3c0aba16e087c0933ed3352321e5e62e29bd84',
+  authorization: 'Owner approved 2026-11-13: staging apply (wave 57) from staging read-live run 43506600170',
+  execute: true,
+  // Staging read-live run 43506600170 (main 31c0c874b, executor deploy run 43506159674): already_applied false,
+  // precondition_failures [], prerequisites_missing []. Equal to the derived pre-state (the function, column, foreign key,
+  // check and index absent; stakeholder_account_id uuid NOT NULL, no default).
+  expected_live_definition_sha256: '3a6d086e37c04740397c0b6a99d558ed0a5e907c296f8a99a71ae323acdca248',
+  // Code-derived: releaseIntendedHash('sql165', file bytes) (release-sql-state.mjs); re-derived by the tests.
+  intended_replacement_sha256: '23c689b9ac0dad2ee1760214a37038a86142041c104867da8381cffb3d8202fa',
+  function_identities: Object.freeze([
+    'public.aws_vendor_payees_for_tenant(uuid)',
   ]),
 });
 
@@ -3838,6 +3895,8 @@ export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql161: AUTHORIZED_SQL161_TG_MORTGAGE_HANDLING_BILLING_CHECKSOPS_EXECUTE,
   sql162: AUTHORIZED_SQL162_SHARED_CHECK_SOURCE_SENDS,
   sql163: AUTHORIZED_SQL163_MORTGAGE_DESK_CHECK_TIMELINE_HOMEOWNER_LINK,
+  sql164: AUTHORIZED_SQL164_WALLET_WITHDRAWAL_LEG_AND_LIMITS,
+  sql165: AUTHORIZED_SQL165_VENDOR_PAYEE_LOOKUP_AND_PAYROLL_VENDOR,
   sql76: AUTHORIZED_SQL76_RELEASE_TENANT_PARTNERSHIP_CONSENT,
 });
 
@@ -3854,7 +3913,7 @@ export function isSql30TenantDocumentsDocType(input = {}) {
   return pinIdentifiersMatch(input, AUTHORIZED_SQL30_TENANT_DOCUMENTS_DOC_TYPE);
 }
 
-/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql148, sql150, sql152 ... sql156, sql158, sql159, sql160, sql161, sql162, sql163; sql76 for production) an input names, or null. */
+/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql148, sql150, sql152 ... sql156, sql158, sql159, sql160, sql161, sql162, sql163, sql164, sql165; sql76 for production) an input names, or null. */
 export function releaseSqlMigrationKey(input = {}) {
   return Object.keys(RELEASE_2026_10_17_PENDING_SQL_PINS)
     .find((key) => pinIdentifiersMatch(input, RELEASE_2026_10_17_PENDING_SQL_PINS[key])) || null;

@@ -119,7 +119,7 @@ function handlerFor(connect, { pins = {} } = {}) {
   return createHandler({ connect, now: () => Date.parse(NOW), releaseSqlFiles: FILES, releaseSqlPins: { ...PINS, ...pins } });
 }
 
-test('pin: SQL 163 pending, code-derived, selectable, packed, in step with the pending production pin; no predecessor', () => {
+test('pin: SQL 163 staging-authorized from its read-live, code-derived, selectable, packed, in step with the pending production pin; no predecessor', () => {
   const pin = PINS[KEY];
   const spec = RELEASE_SQL_SPECS[KEY];
   const packed = Object.fromEntries(EXECUTOR_PACK_MEMBERS);
@@ -132,9 +132,14 @@ test('pin: SQL 163 pending, code-derived, selectable, packed, in step with the p
   assert.equal(sha(TEXT), pin.source_sha256);
   // Pending until a reviewed pin change records a staging read-live.
   assertStagingPinState(assert, KEY, pin);
-  assert.equal(pin.execute, false);
-  assert.equal(pin.authorization, 'pending');
-  assert.equal(pin.expected_live_definition_sha256, null);
+  // Staging apply authorized (owner approved 2026-11-13) from staging read-live run 43355976887: already_applied false,
+  // precondition_failures []. It read the derived pre-state (the three functions absent).
+  assert.equal(pin.execute, true);
+  assert.equal(pin.authorization, 'Owner approved 2026-11-13: staging apply (wave 54) from staging read-live run 43355976887');
+  assert.equal(pin.expected_live_definition_sha256, ABSENT_PRE);
+  assert.equal(pin.expected_live_definition_sha256, '23d41c1086f3f15412a5d374e056eaaf1bef7f428d81b0ffbdda666a5250de87');
+  assert.match(fs.readFileSync(path.join(ROOT, 'ops/production-sql-163-apply.md'), 'utf8'), /\*\*Status:\*\* applied to staging \(wave 54\) and to production \(2026-11-13\); the production pin is retired/);
+  assert.match(fs.readFileSync(path.join(ROOT, 'ops/production-sql-163-apply.md'), 'utf8'), /read-live \(2026-11-13\)\.\*\* Run 43355976887/);
   assert.equal(releaseIntendedHash(KEY, TEXT), pin.intended_replacement_sha256);
   assert.notEqual(ABSENT_PRE, pin.intended_replacement_sha256);
   assert.ok(RELEASE_STAGING_SQL_KEYS.includes(KEY));
@@ -171,11 +176,12 @@ test('pin: SQL 163 pending, code-derived, selectable, packed, in step with the p
   assert.deepEqual(prod.function_identities, [...IDENTITIES]);
   assert.deepEqual(prod.predecessors, []);
   assert.equal(prod.execute, false);
-  assert.equal(prod.authorization, 'pending');
+  assert.match(prod.authorization, /^Applied to production on 2026-11-13; execute is false again/);
+  assert.equal(prod.applied.result, 'applied');
   assert.equal(prod.authorization_phrase, 'SHOW_MORTGAGE_DESK_AGENTS_CHECK_TIMELINE_AND_HOMEOWNER_LINK');
-  assert.equal(prod.expected_live_definition_sha256, null);
-  assert.equal(prod.production_inspect.status, 'pending');
-  assert.equal(prod.staging_acceptance.ok, false);
+  assert.equal(prod.expected_live_definition_sha256, ABSENT_PRE);
+  assert.equal(prod.production_inspect.status, 'recorded');
+  assert.equal(prod.staging_acceptance.ok, true);
   assert.ok(prod.production_inspect.note.includes(ABSENT_PRE));
   assert.ok(prod.order_note.includes(ABSENT_PRE));
   assert.ok(prod.intended_post_state.note.includes(pin.intended_replacement_sha256));

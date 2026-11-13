@@ -1,0 +1,15 @@
+{
+  "workstream_id": "desk-check-timeline-link",
+  "authorization": "Pending owner review (2026-11-13). Planning only: nothing is live or verified. The production apply needs its own owner approval, a staging acceptance reference and a read-only production inspect that confirms the live bytes.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Mortgage Desk agent check, contact log and homeowner link (owner 2026-11-12: \"A check was sent for Kenneth Smith to mortgage desk, the check did not show for mortgage agent\", \"notes should show on the mortgage agents side as well\", \"When sending homeowner link from mortgage desk, error missing_cognito_token. Fix it.\"; 2026-11-13 \"Start the desk fixes\", \"Yes but make sure the check images have void on it\", \"They can send the link whenever\", \"Start the desk API and website PRs\"): mortgage-desk-esign.mjs gains read actions check and homeowner_timeline (also carried by workspace) calling SQL 163's aws_mortgage_desk_request_check and aws_mortgage_desk_homeowner_timeline as the signed-in user, and the write action send_tracking_link calling aws_mortgage_desk_homeowner_link (the homeowner on file, never a client address) and sending the tenant flow's homeowner-ledger-invite from ChecksOps. Check image read URLs live 60 seconds; the Desk page VOID-stamps them in the browser. Each SQL 163 call runs under a savepoint: before SQL 163 the workspace returns check null and an empty timeline (sql163_unavailable) and send_tracking_link answers 503. REPLACE mortgage-desk-esign.mjs aacf940d -> d38218a4 (from the Tenant Management desk view applied record's bytes). New imports email-templates.mjs, homeowner.mjs and resolveEmailBranding from email-branding.mjs: all three modules are live and unchanged (production rebuild inspect run 43371290665 read production equal to main except providers/parity/sweep-read.mjs). Held on SQL 163 (applied to staging and production 2026-11-13). No other member, no new module. Planning only.",
+  "members": {
+    "mortgage-desk-esign.mjs": {
+      "live_sha256": "aacf940d074ecd8b8d37fb7595c43f52675a66faad7b4a1af92d719bef818bd1",
+      "accepted_sha256": "d38218a4ccec65994423e1147c0b72c8f07a46978a66f3bd687af836bc32d9cd",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-desk-oversight-agent-notes-applied-manifest-2026-11-12.json"
+    }
+  }
+}

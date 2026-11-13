@@ -218,7 +218,7 @@ test('pin: the release pin shape, applied and retired (owner approved 2026-10-28
   assert.doesNotMatch(JSON.stringify(tool), /[0-9a-f]{64}/);
   const rows = JSON.stringify(readJson('ops/deployment-guard/bypass-inventory.json'));
   assert.match(rows, /"path":"scripts\/deployment-guard\/sql124-mortgage-desk-signature-and-reads-production-apply\.mjs","classification":"GUARDED","capabilities":\["sql124-production-apply"\]/);
-  assert.match(rows, /sql118, sql119, sql120, sql121, sql122, sql123, sql124, sql125, sql126, sql127, sql128, sql129, sql130, sql131, sql132, sql133, sql134, sql135, sql136, sql137, sql138, sql139, sql140, sql141, sql142, sql143, sql144, sql145, sql146, sql147, sql148, sql150, sql152, sql153, sql154, sql155, sql156, sql158, sql159, sql160, sql161, sql162, sql163\)/);
+  assert.match(rows, /sql118, sql119, sql120, sql121, sql122, sql123, sql124, sql125, sql126, sql127, sql128, sql129, sql130, sql131, sql132, sql133, sql134, sql135, sql136, sql137, sql138, sql139, sql140, sql141, sql142, sql143, sql144, sql145, sql146, sql147, sql148, sql150, sql152, sql153, sql154, sql155, sql156, sql158, sql159, sql160, sql161, sql162, sql163, sql164, sql165\)/);
   const scripts = readJson('package.json').scripts;
   const workflow = fs.readFileSync(path.join(ROOT, '.github/workflows/deployment-guard.yml'), 'utf8');
   for (const name of ['aws/tests/release-sql124-executor.test.mjs', 'aws/tests/release-sql124-production-apply.test.mjs', 'aws/tests/sql124-mortgage-desk-signature-pg.test.mjs']) {
@@ -252,10 +252,11 @@ test('order: no predecessor and no order; SQL 122\'s working-request check, SQL 
   assert.equal(pre.pin, 'ops/deployment-guard/sql124-mortgage-desk-signature-and-reads-production-apply.json');
   // The ADD was held on SQL 124 (applied 2026-10-28); the Mortgage Desk shared-check library plan (2026-11-11, planning
   // only) moved its row on to a REPLACE held on SQL 156, and the Tenant Management desk view plan (2026-11-12, planning
-  // only) to one held on SQL 158, so no member holds on SQL 124 any more; the record stays.
+  // only) to one held on SQL 158, and the desk check and homeowner link plan (2026-11-13, planning only) to one held on
+  // SQL 163, so no member holds on SQL 124 any more; the record stays.
   assert.deepEqual(Object.keys(plan.members).filter((m) => plan.members[m].sql_before === SQL124_FILE), []);
   assert.equal(plan.members[API_MEMBER].operation, 'replace');
-  assert.equal(plan.members[API_MEMBER].sql_before, 'aws/workflows/sql/158_mortgage_desk_oversight_and_agent_notes.sql');
+  assert.equal(plan.members[API_MEMBER].sql_before, 'aws/workflows/sql/163_mortgage_desk_check_timeline_homeowner_link.sql');
   assert.ok(plan.order.indexOf(API_MEMBER) < plan.order.indexOf('app-services.mjs'));
   // Exactly that member names these functions; no other Lambda file does.
   const apiDir = path.join(ROOT, 'aws/functions/api');
@@ -278,7 +279,7 @@ test('order: no predecessor and no order; SQL 122\'s working-request check, SQL 
   assert.match(runbook, /read-live \(2026-10-28\)\.\*\* Run 40754712957/);
   const oneShot = fs.readFileSync(path.join(ROOT, 'ops/production-sql-one-shot.md'), 'utf8');
   assert.match(oneShot, /\| `sql124` \|/);
-  assert.match(oneShot, /`sql122`, `sql123`, `sql124`, `sql125`, `sql126`, `sql127`, `sql128`, `sql129`, `sql130`, `sql131`, `sql132`, `sql133`, `sql134`, `sql135`, `sql136`, `sql137`, `sql138`, `sql139`, `sql140`, `sql141`, `sql142`, `sql143`, `sql144`, `sql145`, `sql146`, `sql147`, `sql148`, `sql150`, `sql152`, `sql153`, `sql154`, `sql155`, `sql156`, `sql158`, `sql159`, `sql160`, `sql161`, `sql162`, `sql163`\) \|/);
+  assert.match(oneShot, /`sql122`, `sql123`, `sql124`, `sql125`, `sql126`, `sql127`, `sql128`, `sql129`, `sql130`, `sql131`, `sql132`, `sql133`, `sql134`, `sql135`, `sql136`, `sql137`, `sql138`, `sql139`, `sql140`, `sql141`, `sql142`, `sql143`, `sql144`, `sql145`, `sql146`, `sql147`, `sql148`, `sql150`, `sql152`, `sql153`, `sql154`, `sql155`, `sql156`, `sql158`, `sql159`, `sql160`, `sql161`, `sql162`, `sql163`, `sql164`, `sql165`\) \|/);
   assert.match(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/README.md'), 'utf8'), /sql124-mortgage-desk-signature-and-reads-production-apply\.mjs --inspect/);
 });
 

@@ -108,6 +108,8 @@ on:
           - sql161-tg-mortgage-handling-billing-checksops-execute
           - sql162-shared-check-source-sends
           - sql163-mortgage-desk-check-timeline-homeowner-link
+          - sql164-wallet-withdrawal-leg-and-limits
+          - sql165-vendor-payee-lookup-and-payroll-vendor
       approved_commit:
         description: "Required for deploy/apply/read-live: exact main commit approved for this run"
         required: false
@@ -135,7 +137,10 @@ concurrency:
 jobs:
   staging-sql:
     environment: staging
-    runs-on: ubuntu-latest
+    # Pinned (2026-11-13): ubuntu-latest moved to ubuntu-26.04, which has no PostgreSQL 16
+    # (/usr/lib/postgresql/16/bin). The executor tests skip their real PostgreSQL cases without
+    # it, so a guarded apply would run with that coverage lost.
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - name: Check out exact workflow commit with history
@@ -269,6 +274,8 @@ jobs:
           node --test aws/tests/release-sql161-executor.test.mjs
           node --test aws/tests/release-sql162-executor.test.mjs
           node --test aws/tests/release-sql163-executor.test.mjs
+          node --test aws/tests/release-sql164-executor.test.mjs
+          node --test aws/tests/release-sql165-executor.test.mjs
           node --test aws/tests/mortgage-executor-commit-outcome.test.mjs
           node --test aws/tests/deployment-guard-kms-receipt.test.mjs
           node --test aws/tests/deployment-guard-signed-receipt.test.mjs

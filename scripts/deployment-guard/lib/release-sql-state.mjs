@@ -1,5 +1,5 @@
 /**
- * One engine for the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108 to SQL 148, SQL 150, SQL 152 to SQL 156, SQL 158, SQL 159, SQL 160, SQL 162, SQL 163), shared by the staging
+ * One engine for the release 2026-10-17 SQL (SQL 90 to SQL 106, SQL 108 to SQL 148, SQL 150, SQL 152 to SQL 156, SQL 158, SQL 159, SQL 160, SQL 162, SQL 163, SQL 164, SQL 165), shared by the staging
  * guarded executor (aws/write-path/guarded-sql-executor/index.mjs) and the production tools
  * (release-sql-production-apply.mjs): the catalog state reader, the code-derived
  * fingerprints, the pre- and post-conditions, the predecessor rules and the unrelated-catalog
@@ -424,6 +424,16 @@ async function readObjects(q, spec, login) {
       ? { exists: true, type: row.type, notnull: row.notnull === true, default: collapse(row.default), acl: columnAcl(spec, row) }
       : { exists: false };
   }
+  // spec.altered_columns (SQL 165): an existing column whose NOT NULL the file changes; its type,
+  // NOT NULL and default only (its grants are not the file's).
+  const alteredColumns = {};
+  for (const c of spec.altered_columns || []) {
+    const present = (await q(RELEASE_READS.regclass, [c.table]))[0]?.present === true;
+    const row = present ? (await q(RELEASE_READS.columns, [c.table])).find((r) => r.name === c.column) : null;
+    alteredColumns[`${c.table}.${c.column}`] = row
+      ? { exists: true, type: row.type, notnull: row.notnull === true, default: collapse(row.default) }
+      : { exists: false };
+  }
   const constraints = {};
   for (const c of spec.constraints || []) {
     const present = (await q(RELEASE_READS.regclass, [c.table]))[0]?.present === true;
@@ -486,7 +496,7 @@ async function readObjects(q, spec, login) {
         .flatMap((c) => columnAcl(spec, c).map((line) => `${c.name} ${line}`)).sort(),
     };
   }
-  return { functions, acl_functions: aclFunctions, policies, views, tables, columns, constraints, triggers, privileges, altered, indexes, covers, definer, whole };
+  return { functions, acl_functions: aclFunctions, policies, views, tables, columns, altered_columns: alteredColumns, constraints, triggers, privileges, altered, indexes, covers, definer, whole };
 }
 
 // --- state text --------------------------------------------------------------------
@@ -500,6 +510,7 @@ const policyLine = (key, p, spec) => (p?.exists
     spec?.render?.policy_comments === true ? ` comment=${p.comment_sha256 || '-'}` : ''}`
   : `policy ${key}: absent`);
 const columnText = (c) => `${c.type} notnull=${c.notnull === true} default=${hashOrDash(c.default)} acl=${list(c.acl)}`;
+const alteredColumnText = (c) => `${c.type} notnull=${c.notnull === true} default=${hashOrDash(c.default)}`;
 function tableLines(name, t) {
   if (!t?.exists) return [`table ${name}: absent`];
   return [
@@ -546,6 +557,10 @@ export function releaseStateText(key, state = {}) {
   for (const c of spec.column_acl || []) {
     const row = s.columns?.[`${c.table}.${c.column}`];
     lines.push(row?.exists ? `column ${c.table}.${c.column} acl: ${list(row.acl)}` : `column ${c.table}.${c.column}: absent`);
+  }
+  for (const c of spec.altered_columns || []) {
+    const row = s.altered_columns?.[`${c.table}.${c.column}`];
+    lines.push(row?.exists ? `altered column ${c.table}.${c.column}: ${alteredColumnText(row)}` : `altered column ${c.table}.${c.column}: absent`);
   }
   for (const c of spec.constraints || []) {
     const row = s.constraints?.[objKey(c.table, c.name)];
@@ -649,6 +664,9 @@ export function releaseIntendedState(key, text) {
   for (const c of spec.column_acl || []) {
     columns[`${c.table}.${c.column}`] = { ...(columns[`${c.table}.${c.column}`] || { exists: true }), acl: [...c.acl].sort() };
   }
+  const alteredColumns = Object.fromEntries((spec.altered_columns || []).map((c) => [`${c.table}.${c.column}`, {
+    exists: true, type: c.type, notnull: c.notnull === true, default: collapse(c.default),
+  }]));
   const constraints = Object.fromEntries((spec.constraints || []).map((c) => [objKey(c.table, c.name), { exists: true, def: collapse(c.def), validated: true }]));
   const triggers = {};
   for (const t of spec.triggers || []) triggers[objKey(t.table, t.name)] = { exists: true, enabled: 'O', def: collapse(t.def) };
@@ -665,7 +683,7 @@ export function releaseIntendedState(key, text) {
     acl: (spec.table_privileges || []).filter((p) => p.table === w.table).flatMap((p) => p.intended).sort(),
     other_column_acl: [],
   }]));
-  return { functions, acl_functions: aclFunctions, policies, views, tables, columns, constraints, triggers, privileges, indexes, covers, whole };
+  return { functions, acl_functions: aclFunctions, policies, views, tables, columns, altered_columns: alteredColumns, constraints, triggers, privileges, indexes, covers, whole };
 }
 
 export function releaseIntendedHash(key, text) {
@@ -692,7 +710,7 @@ export function replacedIndexLabel(index, live) {
  */
 export function releaseReplacedPreState(key, label = null) {
   const spec = releaseSpec(key);
-  const other = ['dropped_functions', 'acl_functions', 'policies', 'dropped_policies', 'views', 'tables', 'added_columns', 'column_acl',
+  const other = ['dropped_functions', 'acl_functions', 'policies', 'dropped_policies', 'views', 'tables', 'added_columns', 'column_acl', 'altered_columns',
     'constraints', 'triggers', 'dropped_triggers', 'table_privileges', 'unique_covers', 'whole_tables'].filter((k) => (spec[k] || []).length);
   const indexes = spec.indexes || [];
   if (other.length || !indexes.length || !indexes.every((i) => (i.replaces || []).length)) {
@@ -896,6 +914,13 @@ export function releaseSharedPreconditionFailures(key, state, text, { environmen
       fn.acl.includes(line) || (fn.revokes || [PUBLIC_EXECUTE]).includes(line))))],
     ['created_tables_absent_or_intended', (spec.tables || []).every(tableOk)],
     ['added_columns_absent_or_intended', (spec.added_columns || []).every(columnOk)],
+    // SQL 165: a column whose NOT NULL the file changes must exist with the reviewed type and default, and
+    // NOT NULL as before the file (from_notnull) or as the file leaves it.
+    ['altered_columns_before_or_intended', (spec.altered_columns || []).every((c) => {
+      const live = s.altered_columns?.[`${c.table}.${c.column}`];
+      return live?.exists === true && live.type === c.type && live.default === collapse(c.default)
+        && [c.from_notnull === true, c.notnull === true].includes(live.notnull === true);
+    })],
     // Every live column grant is one the file keeps or revokes (SQL 100: revokes; with
     // render.grantors only the owner's own grants are revocable by the owner).
     ['column_acl_replaceable', (spec.column_acl || []).every((c) => {
@@ -1036,11 +1061,12 @@ export function releaseUnrelatedScope(key) {
   return {
     skip_relations: (spec.tables || []).map((t) => t.name),
     acl_relations: (spec.table_privileges || []).map((p) => p.table),
-    skip_columns: [...(spec.added_columns || []), ...(spec.column_acl || [])].map((c) => objectName(c.table, c.column)),
+    skip_columns: [...(spec.added_columns || []), ...(spec.column_acl || []), ...(spec.altered_columns || [])].map((c) => objectName(c.table, c.column)),
     skip_constraints: [...(spec.constraints || []), ...(spec.added_constraints || [])].map((c) => objectName(c.table, c.name)),
     // PostgreSQL 18 records a column's NOT NULL as a named constraint (contype 'n'): the one on a
     // column the migration adds is that column's change (SQL 98: tenants.deposits_enabled).
-    skip_not_null_columns: (spec.added_columns || []).map((c) => objectName(c.table, c.column)),
+    // SQL 165: so is the one on a column whose NOT NULL the migration drops.
+    skip_not_null_columns: [...(spec.added_columns || []), ...(spec.altered_columns || [])].map((c) => objectName(c.table, c.column)),
     skip_policies: [...(spec.policies || []), ...(spec.dropped_policies || [])].map((p) => objectName(p.table, p.name)),
     // An acl_functions entry is skipped too (its ACL changes); acl_functions_otherwise_unchanged
     // covers the rest of it.
@@ -1221,6 +1247,8 @@ export function releaseSqlReport(key, state, text) {
           acl: [...(live?.acl || [])],
         };
       }),
+      ...objectLabels((spec.altered_columns || [])
+        .map((c) => [`${c.table}.${c.column} altered`.replace(/^public\./, ''), s.altered_columns?.[`${c.table}.${c.column}`], want?.altered_columns?.[`${c.table}.${c.column}`]])),
     ],
     constraints: objectLabels((spec.constraints || []).map((c) => [objKey(c.table, c.name).replace(/^public\./, ''), s.constraints?.[objKey(c.table, c.name)], want?.constraints?.[objKey(c.table, c.name)]])),
     triggers: objectLabels([...(spec.triggers || []), ...(spec.dropped_triggers || [])]

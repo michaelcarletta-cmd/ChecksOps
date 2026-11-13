@@ -190,7 +190,7 @@ test('pin: the release pin shape, applied and retired (owner approved 2026-11-12
   assert.equal(RELEASE_PRODUCTION.sql157, undefined);
   const rows = JSON.stringify(readJson('ops/deployment-guard/bypass-inventory.json'));
   assert.match(rows, /"path":"scripts\/deployment-guard\/sql158-mortgage-desk-oversight-and-agent-notes-production-apply\.mjs","classification":"GUARDED","capabilities":\["sql158-production-apply"\]/);
-  assert.match(rows, /sql155, sql156, sql158, sql159, sql160, sql161, sql162, sql163\)/);
+  assert.match(rows, /sql155, sql156, sql158, sql159, sql160, sql161, sql162, sql163, sql164, sql165\)/);
   assert.doesNotMatch(rows, /sql157/);
   const scripts = readJson('package.json').scripts;
   const workflow = fs.readFileSync(path.join(ROOT, '.github/workflows/deployment-guard.yml'), 'utf8');
@@ -232,7 +232,10 @@ test('order: no predecessor; one table with no grant and six SECURITY DEFINER fu
   assert.equal(plan.sql_prerequisites[SQL158_FILE].verified_live, true);
   assert.ok(plan.sql_prerequisites[SQL158_FILE].evidence.includes(`SSM ${COMMITTED.applied.apply_ssm_command_id}`));
   assert.ok(plan.sql_prerequisites[SQL158_FILE].evidence.includes(COMMITTED.applied.one_use_id));
-  assert.deepEqual(Object.keys(plan.members).filter((m) => plan.members[m].sql_before === SQL158_FILE), ['mortgage-desk-esign.mjs']);
+  // (The desk check and homeowner link plan, 2026-11-13, moved that member on to SQL 163, so no member holds on SQL 158 any
+  // more; the record stays.)
+  assert.deepEqual(Object.keys(plan.members).filter((m) => plan.members[m].sql_before === SQL158_FILE), []);
+  assert.equal(plan.members['mortgage-desk-esign.mjs'].sql_before, 'aws/workflows/sql/163_mortgage_desk_check_timeline_homeowner_link.sql');
   // The file: the prerequisite DO block and the table ACL DO block, one table and index, six functions, the RLS switch,
   // six REVOKEs and six GRANTs to checksops; nothing else.
   const text = fs.readFileSync(path.join(ROOT, SQL158_FILE), 'utf8').replace(/--[^\n]*/g, '');
@@ -253,7 +256,7 @@ test('order: no predecessor; one table with no grant and six SECURITY DEFINER fu
   assert.match(runbook, /\*\*Status:\*\* applied to staging \(wave 50\) and to production \(2026-11-12\); the production pin is retired/);
   const oneShot = fs.readFileSync(path.join(ROOT, 'ops/production-sql-one-shot.md'), 'utf8');
   assert.match(oneShot, /\| `sql158` \|/);
-  assert.match(oneShot, /`sql156`, `sql158`, `sql159`, `sql160`, `sql161`, `sql162`, `sql163`\) \|/);
+  assert.match(oneShot, /`sql156`, `sql158`, `sql159`, `sql160`, `sql161`, `sql162`, `sql163`, `sql164`, `sql165`\) \|/);
   assert.doesNotMatch(oneShot, /`sql157`/);
   assert.match(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/README.md'), 'utf8'), /sql158-mortgage-desk-oversight-and-agent-notes-production-apply\.mjs --inspect/);
 });

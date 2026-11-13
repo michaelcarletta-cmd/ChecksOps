@@ -28,12 +28,23 @@ test('Wallet & Treasury: every automatic-payout control is behind the flag', () 
   // The on/off button, the badge, the sweep tiles and the Manage sweeps dialog each sit behind it.
   assert.match(page, /\{SHOW_AUTOMATIC_PAYOUTS && payoutControl\.show && \(/);
   assert.match(page, /SHOW_AUTOMATIC_PAYOUTS \? \(\s*<Badge/);
-  for (const text of ['Last automatic payout', 'Payout speed', '<MoovTreasuryPanel />']) {
+  for (const text of ['Last automatic payout', 'Payout speed']) {
     const at = page.indexOf(text, page.indexOf('title="Wallet & Treasury"'));
     assert.ok(at > 0, text);
     const gate = page.lastIndexOf('{SHOW_AUTOMATIC_PAYOUTS && (', at);
     assert.ok(gate > page.indexOf('title="Wallet & Treasury"'), `${text} is gated`);
   }
+  // The Manage sweeps button and dialog are shown on their own flag (owner, 2026-11-13: "I want the sweeps
+  // button not the automatic payout button"), outside the automatic-payout gate.
+  const flags = read('src/lib/payments/featureFlags.ts');
+  assert.match(flags, /^\s*SHOW_SWEEPS_BUTTON: true,$/m);
+  assert.match(page, /const SHOW_SWEEPS_BUTTON = PAYMENT_FLAGS\.SHOW_SWEEPS_BUTTON;/);
+  const panel = page.indexOf('<MoovTreasuryPanel />', page.indexOf('title="Wallet & Treasury"'));
+  assert.ok(panel > 0);
+  const sweepsGate = page.lastIndexOf('{SHOW_SWEEPS_BUTTON && (', panel);
+  assert.ok(sweepsGate > page.lastIndexOf('{SHOW_AUTOMATIC_PAYOUTS && payoutControl.show && (', panel), 'Manage sweeps sits behind its own flag');
+  assert.ok(page.indexOf('Manage sweeps', sweepsGate) < panel);
+  assert.match(page, /<DialogTitle>Treasury sweeps<\/DialogTitle>/);
   const settings = read('src/pages/payments/PaymentSettingsTab.tsx');
   assert.match(settings, /\{PAYMENT_FLAGS\.SHOW_AUTOMATIC_PAYOUTS && <MoovTreasuryPanel \/>\}/);
   // Real sweep movements still show in the activity list, without the "automatic payout" wording.

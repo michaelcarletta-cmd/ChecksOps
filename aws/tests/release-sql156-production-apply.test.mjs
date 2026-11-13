@@ -173,7 +173,7 @@ test('pin: the release pin shape, applied and retired (owner approved 2026-11-11
   assert.doesNotMatch(JSON.stringify(tool), /[0-9a-f]{64}/);
   const rows = JSON.stringify(readJson('ops/deployment-guard/bypass-inventory.json'));
   assert.match(rows, /"path":"scripts\/deployment-guard\/sql156-mortgage-desk-shared-check-library-production-apply\.mjs","classification":"GUARDED","capabilities":\["sql156-production-apply"\]/);
-  assert.match(rows, /sql150, sql152, sql153, sql154, sql155, sql156, sql158, sql159, sql160, sql161, sql162, sql163\)/);
+  assert.match(rows, /sql150, sql152, sql153, sql154, sql155, sql156, sql158, sql159, sql160, sql161, sql162, sql163, sql164, sql165\)/);
   const scripts = readJson('package.json').scripts;
   const workflow = fs.readFileSync(path.join(ROOT, '.github/workflows/deployment-guard.yml'), 'utf8');
   for (const name of ['aws/tests/release-sql156-executor.test.mjs', 'aws/tests/release-sql156-production-apply.test.mjs', 'aws/tests/sql156-mortgage-desk-shared-check-library-pg.test.mjs']) {
@@ -208,9 +208,10 @@ test('order: no predecessor; two new SECURITY DEFINER read functions with their 
   const plan = readJson('ops/deployment-guard/production-api-overlay-plan.json');
   assert.equal(plan.sql_prerequisites[SQL156_FILE].verified_live, true);
   assert.ok(plan.sql_prerequisites[SQL156_FILE].evidence.includes(`SSM ${COMMITTED.applied.apply_ssm_command_id}`));
-  // (The Tenant Management desk view plan, 2026-11-12, moved mortgage-desk-esign.mjs on to SQL 158; storage.mjs still holds here.)
+  // (The Tenant Management desk view plan, 2026-11-12, moved mortgage-desk-esign.mjs on to SQL 158, and the desk check and
+  // homeowner link plan, 2026-11-13, on to SQL 163; storage.mjs still holds here.)
   assert.deepEqual(Object.keys(plan.members).filter((m) => plan.members[m].sql_before === SQL156_FILE).sort(), ['storage.mjs']);
-  assert.equal(plan.members['mortgage-desk-esign.mjs'].sql_before, 'aws/workflows/sql/158_mortgage_desk_oversight_and_agent_notes.sql');
+  assert.equal(plan.members['mortgage-desk-esign.mjs'].sql_before, 'aws/workflows/sql/163_mortgage_desk_check_timeline_homeowner_link.sql');
   // The file: one prerequisite DO block, two functions, two REVOKEs and two GRANTs to checksops; nothing else.
   const text = fs.readFileSync(path.join(ROOT, SQL156_FILE), 'utf8').replace(/--[^\n]*/g, '');
   const outside = text.replace(/\$([A-Za-z0-9_]*)\$[\s\S]*?\$\1\$/g, '$$body$$');
@@ -227,7 +228,7 @@ test('order: no predecessor; two new SECURITY DEFINER read functions with their 
   assert.match(runbook, /\*\*Status:\*\* applied to staging \(wave 48\) and to production \(2026-11-11\); the production pin is retired/);
   const oneShot = fs.readFileSync(path.join(ROOT, 'ops/production-sql-one-shot.md'), 'utf8');
   assert.match(oneShot, /\| `sql156` \|/);
-  assert.match(oneShot, /`sql154`, `sql155`, `sql156`, `sql158`, `sql159`, `sql160`, `sql161`, `sql162`, `sql163`\) \|/);
+  assert.match(oneShot, /`sql154`, `sql155`, `sql156`, `sql158`, `sql159`, `sql160`, `sql161`, `sql162`, `sql163`, `sql164`, `sql165`\) \|/);
   assert.match(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/README.md'), 'utf8'), /sql156-mortgage-desk-shared-check-library-production-apply\.mjs --inspect/);
 });
 

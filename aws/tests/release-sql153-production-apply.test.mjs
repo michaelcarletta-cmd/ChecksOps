@@ -237,7 +237,7 @@ test('pin: the release pin shape, applied and retired (owner approved 2026-11-11
   assert.doesNotMatch(JSON.stringify(tool), /[0-9a-f]{64}/);
   const rows = JSON.stringify(readJson('ops/deployment-guard/bypass-inventory.json'));
   assert.match(rows, /"path":"scripts\/deployment-guard\/sql153-second-mortgagee-fee-production-apply\.mjs","classification":"GUARDED","capabilities":\["sql153-production-apply"\]/);
-  assert.match(rows, /sql150, sql152, sql153, sql154, sql155, sql156, sql158, sql159, sql160, sql161, sql162, sql163\)/);
+  assert.match(rows, /sql150, sql152, sql153, sql154, sql155, sql156, sql158, sql159, sql160, sql161, sql162, sql163, sql164, sql165\)/);
   const scripts = readJson('package.json').scripts;
   const workflow = fs.readFileSync(path.join(ROOT, '.github/workflows/deployment-guard.yml'), 'utf8');
   for (const name of ['aws/tests/release-sql153-executor.test.mjs', 'aws/tests/release-sql153-production-apply.test.mjs']) {
@@ -299,7 +299,7 @@ test('order: no predecessor; the index and two columns, no function; the event_t
   assert.match(runbook, /\*\*Staging apply \(2026-11-11\)\.\*\* Apply run 43119289402/);
   const oneShot = fs.readFileSync(path.join(ROOT, 'ops/production-sql-one-shot.md'), 'utf8');
   assert.match(oneShot, /\| `sql153` \|/);
-  assert.match(oneShot, /`sql152`, `sql153`, `sql154`, `sql155`, `sql156`, `sql158`, `sql159`, `sql160`, `sql161`, `sql162`, `sql163`\) \|/);
+  assert.match(oneShot, /`sql152`, `sql153`, `sql154`, `sql155`, `sql156`, `sql158`, `sql159`, `sql160`, `sql161`, `sql162`, `sql163`, `sql164`, `sql165`\) \|/);
   assert.match(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/README.md'), 'utf8'), /sql153-second-mortgagee-fee-production-apply\.mjs --inspect/);
 });
 

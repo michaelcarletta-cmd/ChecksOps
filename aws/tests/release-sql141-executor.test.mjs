@@ -4,7 +4,7 @@
  * release-sql90-97-executor.test.mjs runs what every release key shares (SQL 141 included); this file
  * covers what is new:
  *
- *   - the pin: pending (no staging read-live yet), code-derived, selectable, packed, in step with the
+ *   - the pin: staging-authorized from its read-live (wave 56), code-derived, selectable, packed, in step with the
  *     production pin (pending); the pinned commit authored the bytes; no predecessor;
  *   - the spec: the three SECURITY DEFINER functions as the engine parses them (EXECUTE checksops and the
  *     owner), the two SELECT policies, the two new tables (columns, constraints, indexes, RLS on and not
@@ -114,7 +114,7 @@ function handlerFor(connect, { pins = {} } = {}) {
   return createHandler({ connect, now: () => Date.parse(NOW), releaseSqlFiles: FILES, releaseSqlPins: { ...PINS, ...pins } });
 }
 
-test('pin: SQL 141 pending, code-derived, selectable, packed, in step with the pending production pin; no predecessor', () => {
+test('pin: SQL 141 staging-authorized from its read-live, code-derived, selectable, packed, in step with the pending production pin; no predecessor', () => {
   const pin = PINS[KEY];
   const spec = RELEASE_SQL_SPECS[KEY];
   const packed = Object.fromEntries(EXECUTOR_PACK_MEMBERS);
@@ -125,11 +125,14 @@ test('pin: SQL 141 pending, code-derived, selectable, packed, in step with the p
   assert.equal(spec.choice, 'sql141-permanent-vendor-payees');
   assert.doesNotMatch(spec.choice, /production/);
   assert.equal(sha(TEXT), pin.source_sha256);
-  // Pending: no staging read-live has been run; a reviewed pin change records it (ops/production-sql-141-apply.md).
   assertStagingPinState(assert, KEY, pin);
-  assert.equal(pin.execute, false);
-  assert.equal(pin.authorization, 'pending');
-  assert.equal(pin.expected_live_definition_sha256, null);
+  // Staging apply authorized (owner approved 2026-11-13) from staging read-live run 43474483441: already_applied false,
+  // precondition_failures []. It read the derived pre-state (every object absent).
+  assert.equal(pin.execute, true);
+  assert.equal(pin.authorization, 'Owner approved 2026-11-13: staging apply (wave 56) from staging read-live run 43474483441');
+  assert.equal(pin.expected_live_definition_sha256, PRE_ABSENT);
+  assert.match(fs.readFileSync(path.join(ROOT, 'ops/production-sql-141-apply.md'), 'utf8'), /\*\*Status:\*\* applied to staging \(wave 56\) and to production \(2026-11-13\); the production pin is retired/);
+  assert.match(fs.readFileSync(path.join(ROOT, 'ops/production-sql-141-apply.md'), 'utf8'), /read-live \(2026-11-13\)\.\*\* Run 43474483441/);
   assert.equal(releaseIntendedHash(KEY, TEXT), pin.intended_replacement_sha256);
   assert.equal(pin.intended_replacement_sha256, '4d50013eb0b30808a2a13a97b4a1700b33a833a943bbad865627b77aaf836729');
   assert.notEqual(PRE_ABSENT, pin.intended_replacement_sha256);
@@ -146,10 +149,11 @@ test('pin: SQL 141 pending, code-derived, selectable, packed, in step with the p
   assert.equal(spec.runs_before, undefined);
   assert.equal(spec.supersedes, undefined);
   assert.equal(spec.refuse_after, undefined);
-  // Nothing in the release refuses after SQL 141, supersedes it or needs it.
+  // Nothing in the release refuses after SQL 141 or supersedes it; SQL 165 (owner 2026-11-13, the API's vendor payee
+  // lookup, reads SQL 141's tables) names it as its predecessor.
   assert.deepEqual(RELEASE_SQL_KEYS.filter((key) => (RELEASE_SQL_SPECS[key].supersedes || []).includes(KEY)
     || (RELEASE_SQL_SPECS[key].refuse_after || []).some((m) => m.key === KEY)
-    || (RELEASE_SQL_SPECS[key].predecessors || []).includes(KEY)), []);
+    || (RELEASE_SQL_SPECS[key].predecessors || []).includes(KEY)), ['sql165']);
   // No other release migration creates the tables, the policies or the functions.
   assert.deepEqual(RELEASE_SQL_KEYS.filter((key) => key !== KEY && ((RELEASE_SQL_SPECS[key].tables || []).some((t) => TABLES.includes(t.name))
     || RELEASE_SQL_SPECS[key].functions.some((fn) => FUNCTIONS.includes(fn.identity))
@@ -162,9 +166,11 @@ test('pin: SQL 141 pending, code-derived, selectable, packed, in step with the p
   assert.deepEqual(prod.function_identities, FUNCTIONS);
   assert.deepEqual(prod.predecessors, []);
   assert.equal(prod.execute, false);
-  assert.equal(prod.authorization, 'pending');
-  assert.equal(prod.expected_live_definition_sha256, null);
-  assert.equal(prod.production_inspect.status, 'pending');
+  assert.match(prod.authorization, /^Applied to production on 2026-11-13; execute is false again/);
+  assert.equal(prod.applied.result, 'applied');
+  assert.equal(prod.expected_live_definition_sha256, PRE_ABSENT);
+  assert.equal(prod.production_inspect.status, 'recorded');
+  assert.equal(prod.staging_acceptance.ok, true);
   assert.ok(prod.production_inspect.note.includes(PRE_ABSENT));
   let bytes = null;
   if (/^[0-9a-f]{40}$/.test(pin.commit)) {
@@ -336,8 +342,9 @@ test('PostgreSQL 16: SQL 141 through the executor: the derived pre-state, a pend
   assert.equal(r.already_applied, false);
   assert.equal(r.live_definition_sha256, PRE_ABSENT);
   assert.deepEqual(await present(), { v: false, p: false });
-  // A pending pin cannot apply (the committed pin is pending).
-  const pending = await handlerFor(connect)(releaseEvent({ expected_live_definition_sha256: r.live_definition_sha256 }));
+  // A pending pin cannot apply (a pending copy of the pin; the committed pin is staging-authorized, wave 56).
+  const pendingCopy = pendingPin(PINS[KEY]);
+  const pending = await handlerFor(connect, { pins: { [KEY]: pendingCopy } })(releaseEvent({ pin: pendingCopy, expected_live_definition_sha256: r.live_definition_sha256 }));
   assert.equal(pending.ok, false);
   assert.equal(pendingPin(PINS[KEY]).execute, false);
   // Drift between the recorded pre-state and the apply refuses.

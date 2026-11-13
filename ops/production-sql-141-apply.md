@@ -65,7 +65,27 @@ Anything else (a precondition failure, such as a table or function of the same n
 shape, a missing prerequisite, or a login that cannot read `tenants` or
 `tenant_partner_code_aliases` past row security) stops and needs its own reviewed change.
 
-**Status:** guarded tooling built; not applied anywhere. The staging pin is pending (no read-live yet); the production pin is pending.
+**Status:** applied to staging (wave 56) and to production (2026-11-13); the production pin is retired (`execute: false`).
+
+**Production apply (2026-11-13).** After the pin change (#1883, merged to main as `c915334e1` on the owner's words "Merge 1883 when green"), transfer run 43493681018 staged main `c915334e1` (tarball `170646d5…`). Under the owner's words "apply SQL 141 in production" (passed verbatim), a one-shot `--phase inspect` (SSM `aeb2f232-310f-41fd-a975-fff5fca05f07`, exit 0, nothing written) read live `16522f0a…` (the pinned pre-state, `live_matches_expected` true, `precondition_failures` `[]`); then one-shot `--phase apply` run `176f296c-ad68-4139-92d9-9f9ced92c6b5` through SSM `e0a2b83b-5833-4bcd-89fa-ea519691e93c`, workstream `prod-sql141-permanent-vendor-payees-20261113`, one_use_id `sql141-prod-99d99810-c923-41ac-838d-78b5a86b3acc`: every step ok, contracts 4/4, 6/6 and 43/43, manifest `a3a7ae80…`; receipt `16522f0a…` → `4d50013eb0b30808a2a13a97b4a1700b33a833a943bbad865627b77aaf836729`, result `applied`; post-apply inspect `already_applied` true, both tables (RLS on), both policies and the three functions intended, EXECUTE `checksops` and the owner. The run's full log was returned (gzip+base64), so its JSON arrived whole. The runner was started from stopped (an AWS-managed `AWS-ConfigureAWSPackage` command from its previous boot ran first, ending Success) and stopped at 19:39:14Z after a process check (SSM `08a208b5-f0e8-4089-8158-80ac57d0ab89`) found no one-shot running. Recorded in the pin's `applied` block. No organization is a vendor until the platform owner marks one; the send endpoint accepting a vendor payee and the UI ship through their own guarded paths; production acceptance was not yet reported by the owner when this was recorded.
+
+**Staging apply (2026-11-13).** After the staging pin (#1882) and executor deploy run 43478177876 (main `69a0a8c0a`, executor
+CodeSha256 `72R3n5ta…` → `K6NRf+LR…`): read-live run 43478755545 `16522f0a…` (not applied, `precondition_failures` `[]`), apply run
+43479218106 under the owner's words "Do the SQL 141 staging pin and apply" (after `4d50013e…`, result `applied`), read-live run
+43479707681 `already_applied` true, `4d50013e…`.
+
+**Production inspect (2026-11-13).** Read-only, under the owner's words "Run the SQL 141 production inspect": transfer run
+43485268376 staged main `69a0a8c0a` (tarball `c6531e51…`, the SQL 141 file on the runner `547a1ffe…` == the pin), SSM
+`5f545550-3bb7-4325-8c2c-c9faf7331623` on the runner (started 18:44:06Z, stopped 18:45:04Z): live `16522f0a…` (both tables, both
+policies and the three functions absent), `already_applied` false, `precondition_failures` `[]`, `prerequisites_missing` `[]`, definer
+reads of tenants and tenant_partner_code_aliases ok.
+
+**Staging read-live (2026-11-13).** Run 43474483441 (main `a03684a89`, after executor inspect run 43473964416 showed the executor
+current, CodeSha256 `72R3n5ta…`), under the owner's words "Start SQL 141 vendor payees": `already_applied` false,
+`precondition_failures` `[]`, `prerequisites_missing` `[]`; both tables, both policies and the three functions absent. Live
+`16522f0a99f22410a73e4a80e10e48a10a08162171345d72e0f72bc47338982f`, equal to the derived pre-state; intended `4d50013e…`. Recorded in the staging pin
+(`expected_live_definition_sha256`, `execute: true`, wave 56) on the owner's words "Do the SQL 141 staging pin and apply". The
+staging apply is a separate run after this pin is merged and the executor is redeployed carrying it.
 
 ## Fingerprint
 

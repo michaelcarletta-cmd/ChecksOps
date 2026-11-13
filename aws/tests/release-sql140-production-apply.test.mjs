@@ -245,7 +245,7 @@ test('pin: the release pin shape, applied and retired (owner approved 2026-11-02
   assert.doesNotMatch(JSON.stringify(tool), /[0-9a-f]{64}/);
   const rows = JSON.stringify(readJson('ops/deployment-guard/bypass-inventory.json'));
   assert.match(rows, /"path":"scripts\/deployment-guard\/sql140-wallet-funding-settings-write-grants-production-apply\.mjs","classification":"GUARDED","capabilities":\["sql140-production-apply"\]/);
-  assert.match(rows, /sql134, sql135, sql136, sql137, sql138, sql139, sql140, sql141, sql142, sql143, sql144, sql145, sql146, sql147, sql148, sql150, sql152, sql153, sql154, sql155, sql156, sql158, sql159, sql160, sql161, sql162, sql163\)/);
+  assert.match(rows, /sql134, sql135, sql136, sql137, sql138, sql139, sql140, sql141, sql142, sql143, sql144, sql145, sql146, sql147, sql148, sql150, sql152, sql153, sql154, sql155, sql156, sql158, sql159, sql160, sql161, sql162, sql163, sql164, sql165\)/);
   const scripts = readJson('package.json').scripts;
   const workflow = read('.github/workflows/deployment-guard.yml');
   for (const name of ['aws/tests/release-sql140-executor.test.mjs', 'aws/tests/release-sql140-production-apply.test.mjs', 'aws/tests/sql140-wallet-funding-settings-write-grants-pg.test.mjs']) {
@@ -303,11 +303,19 @@ test('order: no predecessor; no function; exactly the columns the automatic fund
     `GRANT UPDATE ( ${UPDATE_COLUMNS.join(', ')} ) ON TABLE ${TABLE} TO checksops`,
   ]);
   // Grant history: no other repository SQL grants INSERT or UPDATE on tenant_wallet_funding_settings; the
-  // restore gave the application role SELECT only.
+  // restore gave the application role SELECT only. SQL 164 (transfer to bank, 2026-11-13) grants INSERT and UPDATE
+  // on exactly its own two new limit columns, to checksops, and nothing else on the table.
+  const SQL164_FILE = 'aws/workflows/sql/164_wallet_withdrawal_leg_and_limits.sql';
+  const sql164Grants = stripComments(read(SQL164_FILE)).match(/GRANT[^;]*\bON\s+(TABLE\s+)?public\.tenant_wallet_funding_settings\b[^;]*;/gi)
+    .map((s) => s.replace(/\s+/g, ' ').trim());
+  assert.deepEqual(sql164Grants, [
+    `GRANT INSERT (wallet_withdraw_max_per_transfer_cents, wallet_withdraw_max_per_day_cents) ON TABLE ${TABLE} TO checksops;`,
+    `GRANT UPDATE (wallet_withdraw_max_per_transfer_cents, wallet_withdraw_max_per_day_cents) ON TABLE ${TABLE} TO checksops;`,
+  ]);
   for (const dir of ['aws/workflows/sql', 'aws/write-path/sql', 'aws/rls/sql', 'aws/db-copy/sql']) {
     for (const file of fs.readdirSync(path.join(ROOT, dir)).filter((f) => f.endsWith('.sql'))) {
       const rel = `${dir}/${file}`;
-      if (rel === SQL140_FILE) continue;
+      if (rel === SQL140_FILE || rel === SQL164_FILE) continue;
       assert.doesNotMatch(stripComments(read(rel)), /GRANT[^;]*\b(INSERT|UPDATE|ALL)\b[^;]*ON\s+(TABLE\s+)?public\.tenant_wallet_funding_settings\b/i, rel);
     }
   }
@@ -338,7 +346,7 @@ test('order: no predecessor; no function; exactly the columns the automatic fund
   assert.match(runbook, /fa08a3db73806391d757885c9165d0f1bf56a4571a22b1a32e2e63c73578952d/);
   const oneShot = read('ops/production-sql-one-shot.md');
   assert.match(oneShot, /\| `sql140` \|/);
-  assert.match(oneShot, /`sql135`, `sql136`, `sql137`, `sql138`, `sql139`, `sql140`, `sql141`, `sql142`, `sql143`, `sql144`, `sql145`, `sql146`, `sql147`, `sql148`, `sql150`, `sql152`, `sql153`, `sql154`, `sql155`, `sql156`, `sql158`, `sql159`, `sql160`, `sql161`, `sql162`, `sql163`\) \|/);
+  assert.match(oneShot, /`sql135`, `sql136`, `sql137`, `sql138`, `sql139`, `sql140`, `sql141`, `sql142`, `sql143`, `sql144`, `sql145`, `sql146`, `sql147`, `sql148`, `sql150`, `sql152`, `sql153`, `sql154`, `sql155`, `sql156`, `sql158`, `sql159`, `sql160`, `sql161`, `sql162`, `sql163`, `sql164`, `sql165`\) \|/);
   assert.match(read('ops/deployment-guard/README.md'), /sql140-wallet-funding-settings-write-grants-production-apply\.mjs --inspect/);
 });
 

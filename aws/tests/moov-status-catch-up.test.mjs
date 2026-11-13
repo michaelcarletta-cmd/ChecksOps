@@ -20,6 +20,7 @@ import {
   READ_OBLIGATIONS_SQL,
   READ_ONLY_PROBE_SQL,
   RELATED_LEGS_SQL,
+  SQL109_OWNED_LEG_ROLES,
   RELATED_OBLIGATIONS_SQL,
   catchUpEventId,
   classifyCandidate,
@@ -95,7 +96,8 @@ const septemberRows = () => ({
 });
 
 const RANK_SQL = sql109Rank;
-const OWNED = new Set(['wallet_funding', 'send_wallet', 'send_bank']);
+// SQL 164's version of the SQL 109 writer also owns the transfer-to-bank leg.
+const OWNED = new Set(['wallet_funding', 'send_wallet', 'send_bank', 'wallet_withdrawal']);
 const TERMINAL = ['completed', 'settled', 'failed', 'canceled', 'cancelled', 'returned', 'reversed'];
 
 /**
@@ -715,4 +717,9 @@ test('the production failure modes, modeled: as the platform owner the settlemen
   await client.query('ROLLBACK');
   assert.equal(db.state.legs[0].status, 'submitted');
   assert.equal(db.state.obligations[0].status, 'due');
+});
+
+test('the catch-up treats the legs SQL 164\'s webhook writer owns as writer legs, transfer to bank included', () => {
+  assert.deepEqual([...SQL109_OWNED_LEG_ROLES], ['wallet_funding', 'send_wallet', 'send_bank', 'wallet_withdrawal']);
+  assert.deepEqual(new Set(SQL109_OWNED_LEG_ROLES), OWNED);
 });
