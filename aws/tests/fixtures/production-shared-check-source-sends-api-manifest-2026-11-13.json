@@ -1,0 +1,15 @@
+{
+  "workstream_id": "shared-check-source-sends-api",
+  "authorization": "Pending owner review (2026-11-13). Planning only: nothing is live or verified. Each production apply needs its own owner approval, a staging acceptance reference and a read-only production inspect that confirms the live bytes.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Owner 2026-11-13: \"Sends to someone other than the partner\", \"Yes for 1, 2, and run the inspect\", then \"Both\" (build the API read-list change). SQL 162 (aws/workflows/sql/162_shared_check_source_sends.sql, public.get_shared_check_source_sends(_tenant_id uuid), SECURITY DEFINER, applied in staging 2026-11-13 (run 43340146045) and in production 2026-11-13 (one-shot SSM 92eafa26-5f02-4067-b25e-b93671aafb18)) tells an organization which checks shared with it the sharing organization paid from by a send to someone else: check id, sharing organization and the newest send's time only. data.mjs: get_shared_check_source_sends in READ_RPCS, gated { tenant: '_tenant_id' } in RPC_ACCESS_GATES (aws_can_access_tenant before the function runs, as get_tenant_incoming_transfers); rows returned as the array (no single-column unwrap). REPLACE data.mjs 00da994e -> 743348d9 from the incoming transfers bytes production run 42323230515 applied. SQL 53 still first. No new import. No SQL (SQL 162 is already applied in both environments). Nothing in the SPA calls the function yet; the Check Command Center change ships after this through the guarded SPA path. Not authorized, not applied.",
+  "members": {
+    "data.mjs": {
+      "live_sha256": "00da994edde1782a05602b3de43e5839aa44f01dfe4319ca955ad2ec828d4d67",
+      "accepted_sha256": "743348d9f570facff370c75f737eef58fe8ab2deec0b087c3a3747e0cf56e61c",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-incoming-transfers-api-applied-manifest-2026-11-07.json"
+    }
+  }
+}
