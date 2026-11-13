@@ -1,0 +1,15 @@
+{
+  "workstream_id": "partner-send-shared-check-applied",
+  "authorization": "Record only (2026-11-13): the bytes below are live. Nothing is planned or authorized by this manifest; any later change to this member needs its own manifest, staging acceptance and owner approval.",
+  "deploy_authorized": false,
+  "live_lambda": "checksops-production-prep-api",
+  "notes": "Partner send from a shared check (#1844, merged as ce39f07c2) applied. Applied 2026-11-13 from main 2e2076d49 (moov-send.mjs unchanged since ce39f07c2) on the owner's \"production inspect, then the deploy on DEPLOY providers/production/moov-send.mjs TO PRODUCTION\" and, after the refused first attempt, \"run the moov-send production deploy\". The apply run concluded success including its \"Verify live member is the accepted bytes\" step (state VERIFIED) and the public production smoke (/health and /db-health 200). providers/production/moov-send.mjs: staging inspect run 43348616847 (1b204d62 live, RevisionId c7df5485-7192-4cca-a161-d63c997bf8b4), staging apply run 43349535422 (the staging acceptance; after CodeSha256 ASqpYK/FAWtwnRnY7nIN8uwUVN1JnWWX1AM4QYocBt4= RevisionId 7c736bb1-cc99-4e4e-922c-962629dfb969), staging re-inspect run 43350142801 read c973d09e live (RevisionId 83b05b94-00b4-420b-a136-ed0353eb84fc, same CodeSha256) (staging runs on main 4cd25dac9); production preflight inspect run 43351584514 (READY, 1b204d62 live, RevisionId 33191134-ba7f-438a-954e-421918b0dae8); a first production apply run 43352300486 was refused before any write (INVALID_MANIFEST: the operator left expected_live_member_sha256 empty); production apply run 43354757238 (1b204d62 -> c973d09e), VERIFIED, after CodeSha256 Dif2IETi/w3MYw50go94GVDr3iuD505RCSuWiLTs72s= RevisionId fd050f1f-7a45-416d-8e11-bd1edf3a5c85; re-inspect run 43355452969 read c973d09e live (ALREADY_ACCEPTED, RevisionId fd050f1f-7a45-416d-8e11-bd1edf3a5c85, same CodeSha256). No SQL. No partner send from a shared check has run in staging or production: the SPA still hides Send on shared checks. The row records the applied bytes as live_sha256 and accepted_sha256 and chains to the manifest that planned it (previous_manifest), which keeps the pre-apply state.",
+  "members": {
+    "providers/production/moov-send.mjs": {
+      "live_sha256": "c973d09e4b28496d0856a0d06fdaa2c9f3386a24ba165149b443fb031b4b174d",
+      "accepted_sha256": "c973d09e4b28496d0856a0d06fdaa2c9f3386a24ba165149b443fb031b4b174d",
+      "operation": "replace",
+      "previous_manifest": "aws/tests/fixtures/production-partner-send-shared-check-manifest-2026-11-12.json"
+    }
+  }
+}
