@@ -33,7 +33,14 @@ written by the apply; no money moves. No API, Lambda or SPA change is part of th
 Wallet & Treasury button (hidden behind `SHOW_WALLET_WITHDRAW` until the API is live) ship afterwards through their own
 guarded paths.
 
-**Status:** tooling built; staging and production pins pending (`execute: false`). Nothing applied or read.
+**Status:** staging pin execute-authorized (wave 55); not applied anywhere. The production pin is pending.
+
+**Staging read-live (2026-11-13).** Run 43439497274 (main `6abf428bb`, after executor inspect run 43438326981 and executor deploy
+run 43438851836 (executor CodeSha256 `ND9sboqs…` -> `p+7b7mGH…`)), under the owner's words "Start the SQL 164 staging refresh
+and read-live": `already_applied` false, `precondition_failures` `[]`; SQL 109's function, the columns and checks absent. Live
+`51e721c14833afe91c1236bd618735b2adb75e7acc2f01b03c109c98ab9c19d7`, equal to the derived pre-state; intended `0659d381…`. Recorded in the staging pin
+(`expected_live_definition_sha256`, `execute: true`, wave 55) on the owner's words "Do the SQL 164 staging pin and apply". The
+staging apply is a separate run after this pin is merged and the executor is redeployed carrying it.
 
 Production authorization phrase (pin `authorization_phrase`): `ENABLE_WALLET_TRANSFER_TO_BANK_LEG_AND_LIMITS`.
 

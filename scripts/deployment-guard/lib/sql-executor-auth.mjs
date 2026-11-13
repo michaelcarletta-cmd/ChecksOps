@@ -3774,8 +3774,9 @@ export const AUTHORIZED_SQL163_MORTGAGE_DESK_CHECK_TIMELINE_HOMEOWNER_LINK = Obj
 // docs/WALLET_TO_BANK_TRANSFER_DESIGN.md, #1849). Replaces SQL 109's public.aws_moov_webhook_apply_transfer_status in
 // place with one change, the wallet_withdrawal leg added to the legs it owns, and adds the tenant's own transfer-to-bank
 // limits (two nullable positive bigint columns on public.tenant_wallet_funding_settings, column INSERT and UPDATE for
-// checksops). Predecessor and supersedes SQL 109 (release-sql-specs.mjs). Pending until a reviewed pin change records a
-// staging read-live (ops/production-sql-164-apply.md).
+// checksops). Predecessor and supersedes SQL 109 (release-sql-specs.mjs). Staging apply authorized (wave 55) from staging
+// read-live run 43439497274: the pre-state, SQL 109's function with the columns and checks absent, equals the derived one
+// (ops/production-sql-164-apply.md).
 export const AUTHORIZED_SQL164_WALLET_WITHDRAWAL_LEG_AND_LIMITS = Object.freeze({
   key: 'sql164',
   filename: 'aws/workflows/sql/164_wallet_withdrawal_leg_and_limits.sql',
@@ -3783,9 +3784,11 @@ export const AUTHORIZED_SQL164_WALLET_WITHDRAWAL_LEG_AND_LIMITS = Object.freeze(
   // The commit that last authored the file bytes.
   commit: '82a65d16135cc1d8dff3c0af82f19a8c60d9cef8',
   source_sha256: 'dcf259b4b91bf2ab133a7a433644aed56f7a389db88fa1042aba9875f6953897',
-  authorization: 'pending',
-  execute: false,
-  expected_live_definition_sha256: null,
+  authorization: 'Owner approved 2026-11-13: staging apply (wave 55) from staging read-live run 43439497274',
+  execute: true,
+  // Staging read-live run 43439497274 (main 6abf428bb, executor deploy run 43438851836): already_applied false,
+  // precondition_failures []. Equal to the derived pre-state (SQL 109's function; the columns and checks absent).
+  expected_live_definition_sha256: '51e721c14833afe91c1236bd618735b2adb75e7acc2f01b03c109c98ab9c19d7',
   // Code-derived: releaseIntendedHash('sql164', file bytes) (release-sql-state.mjs); re-derived by the tests.
   intended_replacement_sha256: '0659d3819ac167d8724bfc78d8e5dc7f6e86c82b48a07c0539891ac9714750ff',
   function_identities: Object.freeze([
