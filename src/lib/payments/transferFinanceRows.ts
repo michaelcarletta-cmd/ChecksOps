@@ -427,3 +427,45 @@ export function incomingBySender(
   }
   return [...acc.values()].sort((a, b) => b.total - a.total);
 }
+
+/** One row of get_shared_check_source_sends (SQL 162). */
+export interface SharedCheckSourceSendRow {
+  check_id: string;
+  source_tenant_id: string | null;
+  last_sent_at: string | null;
+}
+
+export const SHARED_CHECK_SOURCE_SENDS_RPC = "get_shared_check_source_sends";
+
+/**
+ * Checks shared with this organization that the sharing organization paid from by a send to
+ * someone else (SQL 162's get_shared_check_source_sends through /data/rpc): the check id, the
+ * sharing organization and the newest such send's time, never an amount or a payee. A failed or
+ * refused read (for example before the API change is live) is no rows, never an error.
+ */
+export async function fetchSharedCheckSourceSends(client: unknown, tenantId: string): Promise<SharedCheckSourceSendRow[]> {
+  try {
+    const { data, error } = await (client as { rpc: (name: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: unknown }> })
+      .rpc(SHARED_CHECK_SOURCE_SENDS_RPC, { _tenant_id: tenantId });
+    if (error || !Array.isArray(data)) return [];
+    return (data as SharedCheckSourceSendRow[]).filter((row) => row && typeof row.check_id === "string" && row.check_id);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Check id -> the newest time the sharing organization paid out of it to someone else. Owner
+ * 2026-11-13: such a check stays in the partner's Deposited "with a note saying Freedom paid it
+ * out"; nothing moves between tabs and no total changes.
+ */
+export function partnerPaidOutAt(rows: SharedCheckSourceSendRow[] | null | undefined): Map<string, string | null> {
+  const out = new Map<string, string | null>();
+  for (const row of rows ?? []) {
+    if (!row?.check_id) continue;
+    const at = row.last_sent_at ?? null;
+    const prev = out.get(row.check_id);
+    if (prev === undefined || (at && (!prev || new Date(at).getTime() > new Date(prev).getTime()))) out.set(row.check_id, at);
+  }
+  return out;
+}

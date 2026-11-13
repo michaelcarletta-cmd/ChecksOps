@@ -4,6 +4,7 @@ import { useTenant } from "@/contexts/TenantContext";
 import {
   ACCEPTED_SEND_STATUSES,
   fetchIncomingTransfers,
+  fetchSharedCheckSourceSends,
   SEND_LEG_COLUMNS,
   SEND_LEG_ROLES,
   type SendLeg,
@@ -21,6 +22,22 @@ export function useIncomingTransfers(tenantIdOverride?: string | null) {
     staleTime: 30_000,
     retry: false,
     queryFn: () => fetchIncomingTransfers(supabase, tenantId!),
+  });
+}
+
+/**
+ * Checks shared with this organization that the sharing organization paid from by a send to someone
+ * else (SQL 162). Empty until the API change is live.
+ */
+export function useSharedCheckSourceSends(tenantIdOverride?: string | null) {
+  const { tenant } = useTenant();
+  const tenantId = tenantIdOverride ?? tenant?.id ?? null;
+  return useQuery({
+    queryKey: [TRANSFER_FINANCE_QUERY_KEY, "shared-source-sends", tenantId],
+    enabled: !!tenantId,
+    staleTime: 30_000,
+    retry: false,
+    queryFn: () => fetchSharedCheckSourceSends(supabase, tenantId!),
   });
 }
 
