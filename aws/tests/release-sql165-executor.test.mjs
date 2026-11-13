@@ -158,7 +158,7 @@ test('pin: SQL 165 staging-authorized from its read-live, code-derived, selectab
   assert.equal(pin.execute, true);
   assert.equal(pin.authorization, 'Owner approved 2026-11-13: staging apply (wave 57) from staging read-live run 43506600170');
   assert.equal(pin.expected_live_definition_sha256, PRE);
-  assert.match(fs.readFileSync(path.join(ROOT, 'ops/production-sql-165-apply.md'), 'utf8'), /\*\*Status:\*\* applied to staging \(wave 57, 2026-11-13\); production pin execute-authorized/);
+  assert.match(fs.readFileSync(path.join(ROOT, 'ops/production-sql-165-apply.md'), 'utf8'), /\*\*Status:\*\* applied to staging \(wave 57\) and to production \(2026-11-13\); the production pin is retired/);
   assert.match(fs.readFileSync(path.join(ROOT, 'ops/production-sql-165-apply.md'), 'utf8'), /read-live \(2026-11-13\)\.\*\* Run 43506600170/);
   assert.equal(releaseIntendedHash(KEY, TEXT), pin.intended_replacement_sha256);
   assert.equal(pin.superseded_intended_sha256, undefined);
@@ -182,8 +182,9 @@ test('pin: SQL 165 staging-authorized from its read-live, code-derived, selectab
   assert.deepEqual(RELEASE_SQL_KEYS.filter((key) => (RELEASE_SQL_SPECS[key].supersedes || []).includes(KEY)
     || (RELEASE_SQL_SPECS[key].predecessors || []).includes(KEY)), []);
   const prod = productionPin();
-  assert.equal(prod.execute, true);
-  assert.match(prod.authorization, /^Owner approved 2026-11-13 /);
+  assert.equal(prod.execute, false);
+  assert.match(prod.authorization, /^Applied to production on 2026-11-13; execute is false again/);
+  assert.equal(prod.applied.result, 'applied');
   assert.equal(prod.expected_live_definition_sha256, PRE);
   assert.equal(prod.production_inspect.status, 'recorded');
   assert.equal(prod.staging_acceptance.ok, true);
