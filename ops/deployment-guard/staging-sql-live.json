@@ -124,10 +124,6 @@
       "verified_live": true,
       "evidence": "Guarded staging SQL executor apply of sql163-mortgage-desk-check-timeline-homeowner-link on 2026-11-13 (run 43361518188, main 8d6488e0f, wave 54, executor ND9sboqs…; read-live run 43361792245 already_applied true): before 23d41c10…, after ef536373… = the pin's intended."
     },
-    "aws/workflows/sql/141_permanent_vendor_payees.sql": {
-      "verified_live": true,
-      "evidence": "Guarded staging SQL executor apply of sql141-permanent-vendor-payees on 2026-11-13 (run 43479218106, main 69a0a8c0a, wave 56, executor deploy run 43478177876; read-live run 43479707681 already_applied true): receipt before 16522f0a…, after 4d50013e… = the pin's intended_replacement_sha256; precondition_failures []."
-    },
     "aws/workflows/sql/165_vendor_payee_lookup_and_payroll_vendor.sql": {
       "verified_live": true,
       "evidence": "Guarded staging SQL executor apply of sql165-vendor-payee-lookup-and-payroll-vendor on 2026-11-13 (run 43510673897, main 005f42296, wave 57, executor deploy run 43509606416; read-live run 43511034276 already_applied true): receipt before 3a6d086e…, after 23c689b9… = the pin's intended_replacement_sha256; precondition_failures []."

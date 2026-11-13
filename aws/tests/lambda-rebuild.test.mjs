@@ -215,7 +215,7 @@ const APPLIED_SINCE_FOURTH_PRODUCTION_REBUILD = {
 const TRANSFER_TO_BANK_MANIFEST = 'aws/tests/fixtures/production-wallet-transfer-to-bank-manifest-2026-11-13.json';
 // Vendor payments API (2026-11-13, owner "Start the vendor payments API and screens"): providers/production/moov-send.mjs,
 // workflow-rpc.mjs and tenant-billing-handlers.mjs REPLACE their applied bytes through the production overlay plan (held on
-// SQL 165 / SQL 165 / SQL 141), planning only. Not a member of any recorded rebuild section; the history checks read each row
+// SQL 165 / SQL 165 / SQL 154, unchanged), planning only. Not a member of any recorded rebuild section; the history checks read each row
 // as it stood before that plan (vendorApiPre).
 const VENDOR_API_MANIFEST = 'aws/tests/fixtures/production-vendor-payments-api-manifest-2026-11-13.json';
 const vendorApiPre = (row) => {

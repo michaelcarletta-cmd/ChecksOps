@@ -626,7 +626,7 @@ const deskCheckLinkRecordPre = (plan) => {
 };
 // Vendor payments API (owner 2026-11-13, "Start the vendor payments API and screens"): providers/production/moov-send.mjs,
 // workflow-rpc.mjs and tenant-billing-handlers.mjs REPLACE the bytes their rows record live (each an applied record), held on
-// SQL 165, SQL 165 and SQL 141 (both recorded live), planning only; its own test is at the end. vendorApiApplied is a member's
+// SQL 165, SQL 165 and (unchanged) SQL 154, all recorded live, planning only; its own test is at the end. vendorApiApplied is a member's
 // bytes before that plan: its live_sha256 for a member it moved on, else main's. PLAN_PRE_VENDOR_API restates the plan as it
 // stood before it: each of the three rows back on its applied record (accepted and expected live, its previous hold and
 // manifest named). The history tests below read those three rows from it.
@@ -635,7 +635,7 @@ const VENDOR_API = JSON.parse(fs.readFileSync(path.join(ROOT, VENDOR_API_REL), '
 const VENDOR_API_HOLDS = Object.freeze({
   'providers/production/moov-send.mjs': 'aws/workflows/sql/165_vendor_payee_lookup_and_payroll_vendor.sql',
   'workflow-rpc.mjs': 'aws/workflows/sql/165_vendor_payee_lookup_and_payroll_vendor.sql',
-  'tenant-billing-handlers.mjs': 'aws/workflows/sql/141_permanent_vendor_payees.sql',
+  'tenant-billing-handlers.mjs': SQL154_FILE,
 });
 const VENDOR_API_PREVIOUS_HOLDS = Object.freeze({
   'providers/production/moov-send.mjs': null,
@@ -9231,7 +9231,7 @@ test('Transfer to bank (owner 2026-11-13): ADD wallet-withdraw-limits.mjs, fed-h
   assert.ok(!fs.readFileSync(path.join(API, 'index.mjs'), 'utf8').includes('moov-wallet-withdraw'));
 });
 
-test('Vendor payments API (owner 2026-11-13): moov-send.mjs, workflow-rpc.mjs and tenant-billing-handlers.mjs REPLACE their applied bytes, held on SQL 165 / SQL 165 / SQL 141 (both recorded live); planning only', async () => {
+test('Vendor payments API (owner 2026-11-13): moov-send.mjs, workflow-rpc.mjs and tenant-billing-handlers.mjs REPLACE their applied bytes, held on SQL 165 / SQL 165 / SQL 154 (SQL 141 and SQL 165 recorded live); planning only', async () => {
   const SEND = 'providers/production/moov-send.mjs';
   const RPC = 'workflow-rpc.mjs';
   const HANDLERS = 'tenant-billing-handlers.mjs';
@@ -9250,7 +9250,10 @@ test('Vendor payments API (owner 2026-11-13): moov-send.mjs, workflow-rpc.mjs an
   assert.ok(PLAN.notes.includes('Vendor payments API (2026-11-13, owner "Start the vendor payments API and screens"; planning only, nothing deployed)'));
   assert.ok(PLAN.notes.includes(`Manifest ${VENDOR_API_REL}. Planning only.`));
   // Each REPLACE: from the bytes its row recorded live (its applied record, named as previous_manifest), to main's.
-  assert.deepEqual(VENDOR_API_HOLDS, { [SEND]: SQL165, [RPC]: SQL165, [HANDLERS]: SQL141 });
+  // tenant-billing-handlers.mjs keeps its SQL 154 hold: its vendor actions use SQL 141, recorded live below and SQL 165's
+  // predecessor (one hold per row).
+  assert.deepEqual(VENDOR_API_HOLDS, { [SEND]: SQL165, [RPC]: SQL165, [HANDLERS]: SQL154_FILE });
+  assert.equal(VENDOR_API_PREVIOUS_HOLDS[HANDLERS], SQL154_FILE);
   for (const name of REPLACES) {
     const entry = VENDOR_API.members[name];
     const before = PLAN_PRE_VENDOR_API.members[name];
@@ -9273,8 +9276,9 @@ test('Vendor payments API (owner 2026-11-13): moov-send.mjs, workflow-rpc.mjs an
   assert.equal(VENDOR_API.members[SEND].live_sha256, 'c973d09e4b28496d0856a0d06fdaa2c9f3386a24ba165149b443fb031b4b174d');
   assert.equal(VENDOR_API.members[SEND].previous_manifest, PARTNER_SEND_APPLIED_REL);
   assert.deepEqual(PLAN.order, PLAN_PRE_VENDOR_API.order);
-  // The holds: SQL 141 and SQL 165, each recorded verified live in production (its one-shot record) and in staging.
+  // SQL 141 and SQL 165, each recorded verified live in production (its one-shot record); SQL 165 (a hold) in staging too.
   const staging = JSON.parse(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/staging-sql-live.json'), 'utf8')).sql;
+  assert.equal(staging[SQL141], undefined, 'the staging record lists only sql_before files');
   for (const [file, key, ssm, run, record, stagingRun] of [
     [SQL141, 'sql141', 'e0a2b83b-5833-4bcd-89fa-ea519691e93c', '176f296c-ad68-4139-92d9-9f9ced92c6b5', '#1884', '43479218106'],
     [SQL165, 'sql165', '2e31f0c1-23d2-4947-8296-d6d66eaefdf8', '01fe9718-5448-4aab-b72f-07bb146cfcdf', '#1889', '43510673897'],
@@ -9292,6 +9296,8 @@ test('Vendor payments API (owner 2026-11-13): moov-send.mjs, workflow-rpc.mjs an
     for (const text of [ssm, run, pin.applied.workstream_id, pin.applied.one_use_id, record, `${pin.applied.receipt.before_hash.slice(0, 8)}…`, `${pin.intended_replacement_sha256.slice(0, 8)}…`]) {
       assert.ok(pre.evidence.includes(text), `${file}: ${text}`);
     }
+    assert.ok(pin.staging_acceptance.reference.endsWith(`/runs/${stagingRun}`), file);
+    if (file !== SQL165) continue;
     assert.equal(staging[file].verified_live, true, file);
     assert.ok(staging[file].evidence.includes(`run ${stagingRun}`), file);
     assert.ok(staging[file].evidence.includes(`after ${pin.intended_replacement_sha256.slice(0, 8)}…`), file);

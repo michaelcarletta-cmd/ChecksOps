@@ -605,15 +605,13 @@ test('staging apply of a member held by sql_before is refused before any AWS cal
   // SQL 154 is live in staging (run 43063499920), shown the same way.
   const SQL154 = 'aws/workflows/sql/154_tenant_starter_package.sql';
   stagingSqlLive.sql[SQL154] = { verified_live: false, evidence: null };
-  // The vendor payments API plan (2026-11-13) moved workflow-rpc.mjs and moov-send.mjs on to SQL 165 and
-  // tenant-billing-handlers.mjs on to SQL 141 (both live in staging, runs 43510673897 and 43479218106), shown the same way.
-  const SQL141 = 'aws/workflows/sql/141_permanent_vendor_payees.sql';
+  // The vendor payments API plan (2026-11-13) moved workflow-rpc.mjs and moov-send.mjs on to SQL 165 (live in staging,
+  // run 43510673897), shown the same way.
   const SQL165 = 'aws/workflows/sql/165_vendor_payee_lookup_and_payroll_vendor.sql';
-  stagingSqlLive.sql[SQL141] = { verified_live: false, evidence: null };
   stagingSqlLive.sql[SQL165] = { verified_live: false, evidence: null };
   assert.equal(STAGING_SQL.sql[SQL148].verified_live, true);
   const PENDING = new Set([]);
-  for (const [member, sqlBefore] of [['providers.mjs', SQL98], ['workflow-rpc.mjs', SQL165], ['providers/production/moov-send.mjs', SQL165], ['tenant-billing-engine.mjs', SQL154], ['tenant-fee-invoice-email.mjs', SQL152], ['tenant-billing-handlers.mjs', SQL141]]) {
+  for (const [member, sqlBefore] of [['providers.mjs', SQL98], ['workflow-rpc.mjs', SQL165], ['providers/production/moov-send.mjs', SQL165], ['tenant-billing-engine.mjs', SQL154], ['tenant-fee-invoice-email.mjs', SQL152], ['tenant-billing-handlers.mjs', SQL154]]) {
     assert.equal(PLAN.members[member].sql_before, sqlBefore, member);
     assert.equal(stagingSqlBefore(member).verified_live_in_staging, !PENDING.has(sqlBefore), `${member}: released by the committed record unless pending`);
     assert.deepEqual(stagingSqlBefore(member, { stagingSqlLive }), { sql_before: sqlBefore, verified_live_in_staging: false, evidence: null }, member);
