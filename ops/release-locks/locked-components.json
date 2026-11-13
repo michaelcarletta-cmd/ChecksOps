@@ -704,20 +704,20 @@
       "production_active": true,
       "environment": "production",
       "source": {
-        "git_sha": "95f763c834746db5c8862962518c43900b0ac8d8",
+        "git_sha": "da2341751a9898d72521067cd2df69b3f1e83b2a",
         "tree_hash": "3cad89d8a2e828fc1c711228df00f22f2c36bb3a5584054caa2caa84f463b1e0",
         "merged": true,
-        "merged_pr": 1867
+        "merged_pr": 1880
       },
       "required_sql": [],
       "artifact": {
         "type": "spa",
-        "name": "/assets/index-BWVTPok1.js",
-        "version": "wk9s_hx3uUf25FfWnfFhdFkLWgGlKpGO",
-        "hash": "2acec2b86c95f13d36949854fd0964be48c234bb9e53c1ca7528a58cdbfccd82",
+        "name": "/assets/index-CSvTNGhp.js",
+        "version": "T22L2zibJIjkD1WbYYa5S7me6eG7VqjH",
+        "hash": "6a20842d33886864e94afe319f83866b404ef8d6f227221b21df92c6f4e8fe95",
         "cloudfront_distribution": "E1B0ZWWO5559U5",
         "lambda_name": "checksops-production-prep-api",
-        "lambda_version": "8e6bb1be-7e8b-4234-a7ef-458e2acd0371",
+        "lambda_version": "17f6bd67-f508-421f-abb7-7c5c3441741e",
         "lambda_alias": null
       },
       "production_validation": {
@@ -726,34 +726,34 @@
           "ops/release-locks/proof/production-spa-baseline.md",
           "ops/production-spa-deploy.md"
         ],
-        "recorded_at": "2026-11-13T13:55:32Z",
+        "recorded_at": "2026-11-13T17:10:44Z",
         "environment": "production",
         "component": "production-spa",
-        "git_sha": "95f763c834746db5c8862962518c43900b0ac8d8",
-        "artifact_identity": "/assets/index-BWVTPok1.js",
-        "evidence_producer": "guarded-production-spa-upload run 43437281408 (host-verified)",
+        "git_sha": "da2341751a9898d72521067cd2df69b3f1e83b2a",
+        "artifact_identity": "/assets/index-CSvTNGhp.js",
+        "evidence_producer": "guarded-production-spa-upload run 43469343832 (host-verified)",
         "evidence_type": "guarded production SPA upload of a fresh main build"
       },
       "deployment_fingerprint": {
         "recorded": true,
-        "spa_bundle": "/assets/index-BWVTPok1.js",
-        "spa_sha256": "2acec2b86c95f13d36949854fd0964be48c234bb9e53c1ca7528a58cdbfccd82",
+        "spa_bundle": "/assets/index-CSvTNGhp.js",
+        "spa_sha256": "6a20842d33886864e94afe319f83866b404ef8d6f227221b21df92c6f4e8fe95",
         "cloudfront_id": "E1B0ZWWO5559U5",
         "cloudfront_distribution": "E1B0ZWWO5559U5",
-        "cloudfront_deployment_fingerprint": "wk9s_hx3uUf25FfWnfFhdFkLWgGlKpGO",
+        "cloudfront_deployment_fingerprint": "T22L2zibJIjkD1WbYYa5S7me6eG7VqjH",
         "lambda_name": "checksops-production-prep-api",
-        "lambda_version": "8e6bb1be-7e8b-4234-a7ef-458e2acd0371",
+        "lambda_version": "17f6bd67-f508-421f-abb7-7c5c3441741e",
         "lambda_code_hash": null,
         "applied_sql_hash": null,
         "database_evidence_record": null,
-        "config_hash": "ecd38ded42494b05c3aaa9abc31184ab4364f1debf099851f006927a55dc0146",
-        "notes": "Guarded production SPA upload 2026-11-13T13:55:32Z (the writer's finished_at 2026-11-13T13:55:32.023Z, started_at 13:52:24.015Z; run 43437281408, job 131925550289, owner-approved \"DEPLOY WEBSITE TO PRODUCTION\" (the owner's words on 2026-11-13, after \"Merge 1867 when green\"; also the workflow input approval_phrase), approved_commit 95f763c834746db5c8862962518c43900b0ac8d8, expected_live_index_sha256 3009535a3d6ec22d7e034c666fba4da5387583403238a92c0ca4e4d1bc6abc1b, staging acceptance run 43436289809 (Guarded staging SPA upload, apply, of the same main commit 95f763c834746db5c8862962518c43900b0ac8d8, the merge of PR #1867, after staging inspect run 43436172237 read staging live 37eb23ee3269fcc9b64f8d71ae6dc306c326d0e86ce40ca997a6de2025fb6e1c, entry /assets/index-PzMjvCaH.js; staging after the apply served /assets/index-BaBSONw_.js, verified by the run's public staging check), accepted by the apply's staging-acceptance check (the deployed commit itself). The staging acceptance is the guarded upload and its served-bundle check; no person reviewed the Mortgage Desk request page on staging before the production apply. Pre-apply read-only inspect run 43437168040 on 95f763c83 showed live equal to the previous lock (index.html sha256 3009535a3d6ec22d7e034c666fba4da5387583403238a92c0ca4e4d1bc6abc1b, entry /assets/index-C_81iLcS.js, live_matches_lock true). The writer's old_production, immediately_before_first_write and immediately_before_switch fingerprints all read that same live state (S3 version GoVKX7TY.evAcOZpJvWItvwKVux91fSn); it uploaded assets first and index.html last (no delete); CloudFront invalidation I9QLWWHJZ927AZT3CVQ5Q2SNK2; index.html etag 3c13335095c0981e08d7152664a6b4e2, S3 version wk9s_hx3uUf25FfWnfFhdFkLWgGlKpGO (the writer's index_put); the retired marketing keys (pricing, vs/checksops-vs-guidewire-claimcenter, vs/checksops-vs-snapsheet) carry the same etag as index.html; rollback false; errors []; the workflow's public production smoke passed (run concluded success), and a separate fetch of https://checksops.com/index.html and the entry bundle after the run returned exactly these two sha256 values and /prep/health status ok. The index.html sha256 ecd38ded42494b05c3aaa9abc31184ab4364f1debf099851f006927a55dc0146 and the entry bundle sha256 2acec2b86c95f13d36949854fd0964be48c234bb9e53c1ca7528a58cdbfccd82 are the writer's after_s3_fingerprint (last_modified 2026-11-13T13:55:30Z; it references /assets/index-BWVTPok1.js) and candidate and after_host fingerprints. The writer reported lock_advance advanced false, so the lock is advanced by this record. Ships, since ccd98eae9: PR #1867 (Mortgage Desk request page: the assigned agent sees the linked check and the homeowner contact log from the Desk API workspace, every check image is drawn VOID-stamped on a canvas, and a Send homeowner link button sends the tracking link through the Desk API to the homeowner on file). The other merges since ccd98eae9 (#1865, #1869, #1870) change no website source. lambda_version stays 8e6bb1be-7e8b-4234-a7ef-458e2acd0371: a read of the function configuration after the upload (2026-11-13, GetFunctionConfiguration) returned RevisionId 8e6bb1be-7e8b-4234-a7ef-458e2acd0371, CodeSha256 bphhLdCS8TSGIfwC4lGAbFkMFF9GXInjD3Cx9TDKneY=, LastModified 2026-11-13T13:19:57Z, LastUpdateStatus Successful (the guarded production overlay run 43432666872 of #1865, not this upload), and the SPA upload workflow makes no Lambda call. Previous lock /assets/index-C_81iLcS.js is the rollback."
+        "config_hash": "b59b35455d7bb6f8b6214472e7311ddfeff6a6903ec76d28765ccaec98a7473b",
+        "notes": "Guarded production SPA upload 2026-11-13T17:10:44Z (the writer's finished_at 2026-11-13T17:10:44.734Z, started_at 17:07:23.018Z; run 43469343832, job 132036812758, owner-approved \"DEPLOY WEBSITE TO PRODUCTION\" (the owner's words on 2026-11-13, after \"Start the transfer to bank button\" and \"Merge 1879 when green\"; also the workflow input approval_phrase), approved_commit da2341751a9898d72521067cd2df69b3f1e83b2a (main, the merge of PR #1880, a Lambda rebuild-plan record that changes no website source), expected_live_index_sha256 ecd38ded42494b05c3aaa9abc31184ab4364f1debf099851f006927a55dc0146, staging acceptance run 43466384904 (Guarded staging SPA upload, apply, of main f032527c62f24e3fd06a9dbd29eb4f697f62afa7, the merge of PR #1879 and an ancestor of da2341751, after staging inspect run 43466253680 read staging live 68c336f16a86fc28939745d511ca4ff1c1b02e4ee955a8f701ed18db6d2a4d99, entry /assets/index-BaBSONw_.js; staging after the apply served /assets/index-BeIjgua_.js, verified by the run's public staging check), accepted by the apply's staging-acceptance check (an ancestor of the deployed commit). The only merge between f032527c6 and da2341751 is PR #1880 (ops/deployment-guard/lambda-rebuild-plan.json and aws/tests/lambda-rebuild.test.mjs), which changes no file under src/, public/, index.html, vite.config.ts, package.json or bun.lock. The staging acceptance is the guarded upload and its served-bundle check; the owner was asked to check staging and then gave \"DEPLOY WEBSITE TO PRODUCTION\", without an explicit statement that staging was reviewed. A real transfer to bank cannot run on staging (provider disabled), and none has been sent in any environment. Pre-apply read-only inspect run 43469172366 on da2341751 showed live equal to the previous lock (index.html sha256 ecd38ded42494b05c3aaa9abc31184ab4364f1debf099851f006927a55dc0146, entry /assets/index-BWVTPok1.js, live_matches_lock true). The writer's old_production, immediately_before_first_write and immediately_before_switch fingerprints all read that same live state (S3 version wk9s_hx3uUf25FfWnfFhdFkLWgGlKpGO); it uploaded assets first and index.html last (no delete); CloudFront invalidation I1QNJBS19VH5UQX3BRPOEOY333; index.html etag 64f97e9f5335acd2f9fdb1d7b35a4301, S3 version T22L2zibJIjkD1WbYYa5S7me6eG7VqjH (the writer's index_put); the retired marketing keys (pricing, vs/checksops-vs-guidewire-claimcenter, vs/checksops-vs-snapsheet) carry the same etag as index.html; rollback false; errors []; the workflow's public production smoke passed (run concluded success), and a separate fetch of https://checksops.com/index.html and the entry bundle after the run returned exactly these two sha256 values and /prep/health status ok. The index.html sha256 b59b35455d7bb6f8b6214472e7311ddfeff6a6903ec76d28765ccaec98a7473b and the entry bundle sha256 6a20842d33886864e94afe319f83866b404ef8d6f227221b21df92c6f4e8fe95 are the writer's after_s3_fingerprint (last_modified 2026-11-13T17:10:42Z; it references /assets/index-CSvTNGhp.js) and candidate and after_host fingerprints. The writer reported lock_advance advanced false, so the lock is advanced by this record. Ships, since 95f763c83: PR #1879 (Wallet & Treasury: a Transfer to bank button that moves money from the operating wallet to the organization's default bank by same-day ACH through the transfer to bank API of #1876, with two-factor and the tenant's per-transfer and per-day limits; SHOW_WALLET_WITHDRAW true). The other merges since 95f763c83 (#1866, #1868, #1871, #1872, #1873, #1874, #1875, #1876, #1877, #1878, #1880) change no website source; #1866 changes only the test:deployment-guard script line of package.json, which the website build does not use. lambda_version is now 17f6bd67-f508-421f-abb7-7c5c3441741e: the guarded production Lambda rebuild run 43464046767 (2026-11-13, the transfer to bank API #1876, recorded by #1880) changed the function before this upload, not by it, taking it from 8e6bb1be-7e8b-4234-a7ef-458e2acd0371 (CodeSha256 bphhLdCS8TSGIfwC4lGAbFkMFF9GXInjD3Cx9TDKneY=) to 17f6bd67-f508-421f-abb7-7c5c3441741e. A read of the function configuration after the upload (2026-11-13, GetFunctionConfiguration) returned RevisionId 17f6bd67-f508-421f-abb7-7c5c3441741e, CodeSha256 DvQOhuCiv/Li3EeVjr+WsErARsPA4S95lgBMgwsGEhg=, LastModified 2026-11-13T16:34:47Z, LastUpdateStatus Successful, and the SPA upload workflow makes no Lambda call. Previous lock /assets/index-BWVTPok1.js is the rollback."
 
       },
       "rollback": {
-        "git_sha": "ccd98eae935dfe28002b31e553052dd07a514c71",
-        "artifact": "/assets/index-C_81iLcS.js",
-        "notes": "Immediate previous locked baseline is /assets/index-C_81iLcS.js (S3 index.html version GoVKX7TY.evAcOZpJvWItvwKVux91fSn, index.html sha256 3009535a3d6ec22d7e034c666fba4da5387583403238a92c0ca4e4d1bc6abc1b, bundle sha256 f67f05e0368d975687cc82b14259f64e000906e88b6d5391500fcceea410ff1a; its assets were not deleted). Do not restore it unless a separately authorized guarded rollback names that exact artifact."
+        "git_sha": "95f763c834746db5c8862962518c43900b0ac8d8",
+        "artifact": "/assets/index-BWVTPok1.js",
+        "notes": "Immediate previous locked baseline is /assets/index-BWVTPok1.js (S3 index.html version wk9s_hx3uUf25FfWnfFhdFkLWgGlKpGO, index.html sha256 ecd38ded42494b05c3aaa9abc31184ab4364f1debf099851f006927a55dc0146, bundle sha256 2acec2b86c95f13d36949854fd0964be48c234bb9e53c1ca7528a58cdbfccd82; its assets were not deleted). Do not restore it unless a separately authorized guarded rollback names that exact artifact."
       },
       "missing_evidence": [],
       "open_pr_overlap": [],
@@ -767,7 +767,7 @@
       "environment": "unknown",
       "source": {
         "git_sha": "faa61f63cf718fba036247267aa00a854d114ec0",
-        "tree_hash": "4cbbd046d88ed028aa22317dde2cb52c8396e806a2891557d7a7bb27eca370a1",
+        "tree_hash": "f033d5116b12ad53853156559143802084542cbe60461f3efe5aa248be5cb909",
         "merged": true,
         "merged_pr": null
       },
