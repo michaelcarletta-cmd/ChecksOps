@@ -15,6 +15,8 @@ export interface PaymentFeatureFlags {
    * ("Manage sweeps" / MoovTreasuryPanel) and the "Last automatic payout" display.
    */
   SHOW_AUTOMATIC_PAYOUTS: boolean;
+  /** The "Manage sweeps" button on Wallet & Treasury (MoovTreasuryPanel in a dialog). */
+  SHOW_SWEEPS_BUTTON: boolean;
 }
 
 function envFlag(name: string, fallback: boolean): boolean {
@@ -34,6 +36,10 @@ export const PAYMENT_FLAGS: PaymentFeatureFlags = {
   // aws/functions/api/providers.mjs), so these controls could only fail. Not an env flag: change it
   // here, in a reviewed PR, to bring them back.
   SHOW_AUTOMATIC_PAYOUTS: false,
+  // Shown (owner, 2026-11-13: "I want the sweeps button not the automatic payout button"): the
+  // "Manage sweeps" button and its dialog, independent of the automatic-payout on/off button,
+  // badge and tiles above. Not an env flag.
+  SHOW_SWEEPS_BUTTON: true,
 };
 
 /**
