@@ -129,7 +129,7 @@ function handlerFor(connect, { pins = {} } = {}) {
   return createHandler({ connect, now: () => Date.parse(NOW), releaseSqlFiles: FILES, releaseSqlPins: { ...PINS, ...pins } });
 }
 
-test('pin: SQL 164 pending, code-derived, selectable, packed, in step with the pending production pin; predecessor and supersedes SQL 109; the derived pre-state', () => {
+test('pin: SQL 164 staging-authorized from its read-live, code-derived, selectable, packed, in step with the pending production pin; predecessor and supersedes SQL 109; the derived pre-state', () => {
   const pin = PINS[KEY];
   const spec = RELEASE_SQL_SPECS[KEY];
   const packed = Object.fromEntries(EXECUTOR_PACK_MEMBERS);
@@ -142,9 +142,13 @@ test('pin: SQL 164 pending, code-derived, selectable, packed, in step with the p
   assert.equal(sha(TEXT), pin.source_sha256);
   // Pending until a reviewed pin change records a staging read-live.
   assertStagingPinState(assert, KEY, pin);
-  assert.equal(pin.execute, false);
-  assert.equal(pin.authorization, 'pending');
-  assert.equal(pin.expected_live_definition_sha256, null);
+  // Staging apply authorized (owner approved 2026-11-13) from staging read-live run 43439497274: already_applied false,
+  // precondition_failures []. It read the derived pre-state.
+  assert.equal(pin.execute, true);
+  assert.equal(pin.authorization, 'Owner approved 2026-11-13: staging apply (wave 55) from staging read-live run 43439497274');
+  assert.equal(pin.expected_live_definition_sha256, PRE);
+  assert.match(fs.readFileSync(path.join(ROOT, 'ops/production-sql-164-apply.md'), 'utf8'), /\*\*Status:\*\* staging pin execute-authorized \(wave 55\); not applied anywhere\. The production pin is pending\./);
+  assert.match(fs.readFileSync(path.join(ROOT, 'ops/production-sql-164-apply.md'), 'utf8'), /read-live \(2026-11-13\)\.\*\* Run 43439497274/);
   assert.equal(releaseIntendedHash(KEY, TEXT), pin.intended_replacement_sha256);
   assert.equal(pin.superseded_intended_sha256, undefined);
   // The expected pre-state: SQL 109's function, derived from SQL 109's bytes; the columns and checks absent.

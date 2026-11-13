@@ -189,7 +189,7 @@ test('order: predecessor and supersedes SQL 109; its writer replaced with its AC
   for (const value of [COMMITTED.intended_replacement_sha256, COMMITTED.source_sha256, DERIVED_PRE, 'ENABLE_WALLET_TRANSFER_TO_BANK_LEG_AND_LIMITS']) {
     assert.ok(runbook.includes(value), value);
   }
-  assert.match(runbook, /\*\*Status:\*\* tooling built; staging and production pins pending \(`execute: false`\)\. Nothing applied or read\./);
+  assert.match(runbook, /\*\*Status:\*\* staging pin execute-authorized \(wave 55\); not applied anywhere\. The production pin is pending\./);
   const oneShot = fs.readFileSync(path.join(ROOT, 'ops/production-sql-one-shot.md'), 'utf8');
   assert.match(oneShot, /\| `sql164` \|/);
   assert.match(oneShot, /`sql162`, `sql163`, `sql164`\) \|/);
