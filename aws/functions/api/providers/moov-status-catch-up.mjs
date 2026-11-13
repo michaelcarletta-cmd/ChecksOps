@@ -107,7 +107,7 @@ export const CATCH_UP_EVENT_KEYS = Object.freeze([
 ]);
 
 /** Legs the SQL 109 writer owns (it answers not_owned for every other leg_role). */
-export const SQL109_OWNED_LEG_ROLES = Object.freeze(['wallet_funding', 'send_wallet', 'send_bank']);
+export const SQL109_OWNED_LEG_ROLES = Object.freeze(['wallet_funding', 'send_wallet', 'send_bank', 'wallet_withdrawal']);
 /** payment_transfers statuses that are final: never a candidate. */
 export const TERMINAL_LEG_STATUSES = Object.freeze([
   'completed', 'settled', 'failed', 'canceled', 'cancelled', 'returned', 'reversed',

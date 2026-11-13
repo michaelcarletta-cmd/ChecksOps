@@ -51,6 +51,7 @@ export const PROVIDER_FUNCTIONS = [
   fn('moov-sync', 'moov', OP_CLASS.IDENTITY_KYC, 'sandbox_parity', 'Pulls Moov state and writes sandbox payment_provider_accounts.'),
   fn('moov-wallet-sync', 'moov', OP_CLASS.MONEY_MOVEMENT, 'sandbox_parity', 'syncWallet port: provisions/refreshes payment_wallets + ledger.'),
   fn('moov-wallet-fund', 'moov', OP_CLASS.MONEY_MOVEMENT, 'sandbox_parity', 'Creates a real funding transfer.'),
+  fn('moov-wallet-withdraw', 'moov', OP_CLASS.MONEY_MOVEMENT, 'sandbox_parity', 'Transfer to bank: tenant operating wallet → its own settlement bank (same-day ACH). Production handler only.'),
   fn('moov-bank-account-add', 'moov', OP_CLASS.BANK_CONNECTION, 'sandbox_parity', 'Adds a bank account at Moov.'),
   fn('moov-bank-link-token', 'moov', OP_CLASS.BANK_CONNECTION, 'sandbox_parity', 'Creates a bank-link token.'),
   fn('moov-micro-deposit-initiate', 'moov', OP_CLASS.BANK_CONNECTION, 'sandbox_parity', 'Initiates micro-deposits (money movement).'),

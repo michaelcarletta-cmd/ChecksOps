@@ -206,6 +206,12 @@ const APPLIED_SINCE_FOURTH_PRODUCTION_REBUILD = {
   'tenant-billing-engine.mjs': 'aws/tests/fixtures/production-fee-pull-savepoints-applied-manifest-2026-11-06.json',
   'tenant-collection-v2.mjs': 'aws/tests/fixtures/production-fee-pull-savepoints-applied-manifest-2026-11-06.json',
 };
+// Transfer to bank (2026-11-13, owner "Start the transfer to bank API"): app-services.mjs, providers.mjs, providers/catalog.mjs
+// and providers/moov-status-catch-up.mjs change and wallet-withdraw-limits.mjs, fed-holidays.mjs and
+// providers/production/moov-wallet-withdraw.mjs are added. Planning only: the overlay plan rows (this manifest) keep main's bytes
+// accepted from the bytes each row recorded live; the change is intended for the next full-package rebuild, whose staging and
+// production sections are written from their own inspects. Not a member of any recorded section.
+const TRANSFER_TO_BANK_MANIFEST = 'aws/tests/fixtures/production-wallet-transfer-to-bank-manifest-2026-11-13.json';
 // Listed changes that go through the production overlay plan, never the current rebuild section.
 const OVERLAY_PLAN_CHANGES = new Set([
   // Settlement bank fallback (2026-11-12): a Moov read failure no longer hides the bank on file. Not an overlay
@@ -579,9 +585,20 @@ test('the production history keeps the fourth rebuild (inspect 41463084601, appl
       row = { ...row, expected_live_sha256: planned0.live_sha256, manifest: applied.previous_manifest };
     }
     if (!row) { assert.ok(['invoice-provider.mjs', 'mortgage-ops-usage.mjs', 'tenant-collection-v2-uat.mjs'].includes(name), name); continue; }
+    // The transfer to bank plan (2026-11-13, planning only, intended for the full-package rebuild) moved app-services.mjs on
+    // from its external disbursement applied bytes: the checks below read the row as it stood before that plan, and those
+    // applied bytes stand for main's.
+    let mainBytes = sha256(fs.readFileSync(path.join(apiRoot, name)));
+    if (row && row.manifest === TRANSFER_TO_BANK_MANIFEST) {
+      const planned = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, row.manifest), 'utf8')).members[name];
+      assert.deepEqual([row.accepted_sha256, row.expected_live_sha256], [mainBytes, planned.live_sha256], name);
+      assert.equal(planned.accepted_sha256, mainBytes, name);
+      row = { ...row, accepted_sha256: planned.live_sha256, expected_live_sha256: planned.live_sha256, manifest: planned.previous_manifest };
+      mainBytes = planned.live_sha256;
+    }
     if (CHANGED_SINCE_FOURTH_PRODUCTION_REBUILD.has(name)) {
       // The row moved on after the rebuild: main's bytes accepted, the bytes the rebuild put live expected ...
-      assert.equal(row.accepted_sha256, sha256(fs.readFileSync(path.join(apiRoot, name))), name);
+      assert.equal(row.accepted_sha256, mainBytes, name);
       const appliedRel = APPLIED_SINCE_FOURTH_PRODUCTION_REBUILD[name];
       if (name === 'tenant-collection-v2.mjs') {
         // Moved on twice: the fee pull savepoints REPLACE from the rebuild's bytes, applied 2026-11-06 (its applied
@@ -1481,4 +1498,35 @@ test('preflight verify passes only when the live package equals the candidate', 
     preflight({ ...ENV, CHECKSOPS_REBUILD_MODE: 'verify' }, { root, ...liveDeps(writeZipMembers(LIVE_FILES)) }),
     (error) => error.code === CODES.DEPLOYMENT_COLLISION,
   );
+});
+
+test('transfer to bank (2026-11-13, planning only): its seven API files wait for the next full-package rebuild; no recorded section lists them', () => {
+  const raw = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'ops/deployment-guard/lambda-rebuild-plan.json'), 'utf8'));
+  const manifest = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, TRANSFER_TO_BANK_MANIFEST), 'utf8'));
+  const apiRoot = path.join(REPO_ROOT, 'aws/functions/api');
+  const ADDS = ['wallet-withdraw-limits.mjs', 'fed-holidays.mjs', 'providers/production/moov-wallet-withdraw.mjs'];
+  const REPLACES = ['app-services.mjs', 'providers/catalog.mjs', 'providers/moov-status-catch-up.mjs', 'providers.mjs'];
+  assert.deepEqual(Object.keys(manifest.members).sort(), [...ADDS, ...REPLACES].sort());
+  assert.equal(manifest.deploy_authorized, false);
+  assert.ok(manifest.notes.includes('full-package API rebuild'));
+  for (const [name, entry] of Object.entries(manifest.members)) {
+    // Main's bytes are the accepted bytes; each REPLACE starts from the bytes its overlay row recorded live, never main's.
+    assert.equal(sha256(fs.readFileSync(path.join(apiRoot, name))), entry.accepted_sha256, name);
+    assert.equal(entry.operation, ADDS.includes(name) ? 'add' : 'replace', name);
+    if (entry.operation === 'replace') assert.notEqual(entry.live_sha256, entry.accepted_sha256, name);
+    else assert.equal(entry.live_sha256, null, name);
+  }
+  // The current (sixth) sections, applied in both environments, list only the settlement bank fallback: a staging inspect
+  // of a main that carries this change reports these seven in its own section (four changed, three added).
+  for (const environment of ['staging', 'production']) {
+    const section = raw.environments[environment];
+    assert.equal(section.status, 'applied', environment);
+    for (const name of [...ADDS, ...REPLACES]) {
+      assert.equal(section.members[name], undefined, `${environment} ${name}`);
+      assert.equal(section.added[name], undefined, `${environment} ${name}`);
+    }
+  }
+  // Already listed as changed since the applied sections that record their older bytes.
+  for (const name of ['providers.mjs', 'providers/catalog.mjs']) assert.equal(CHANGED_SINCE_SECOND_REBUILD[name], 'changed', name);
+  assert.ok(CHANGED_SINCE_FOURTH_PRODUCTION_REBUILD.has('app-services.mjs'));
 });
