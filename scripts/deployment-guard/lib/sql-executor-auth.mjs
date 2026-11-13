@@ -3770,6 +3770,29 @@ export const AUTHORIZED_SQL163_MORTGAGE_DESK_CHECK_TIMELINE_HOMEOWNER_LINK = Obj
   ]),
 });
 
+// Transfer to bank staging pin: SQL 164 (owner 2026-11-13: "Build the transfer to bank"; design
+// docs/WALLET_TO_BANK_TRANSFER_DESIGN.md, #1849). Replaces SQL 109's public.aws_moov_webhook_apply_transfer_status in
+// place with one change, the wallet_withdrawal leg added to the legs it owns, and adds the tenant's own transfer-to-bank
+// limits (two nullable positive bigint columns on public.tenant_wallet_funding_settings, column INSERT and UPDATE for
+// checksops). Predecessor and supersedes SQL 109 (release-sql-specs.mjs). Pending until a reviewed pin change records a
+// staging read-live (ops/production-sql-164-apply.md).
+export const AUTHORIZED_SQL164_WALLET_WITHDRAWAL_LEG_AND_LIMITS = Object.freeze({
+  key: 'sql164',
+  filename: 'aws/workflows/sql/164_wallet_withdrawal_leg_and_limits.sql',
+  migration_id: '164_wallet_withdrawal_leg_and_limits',
+  // The commit that last authored the file bytes.
+  commit: '82a65d16135cc1d8dff3c0af82f19a8c60d9cef8',
+  source_sha256: 'dcf259b4b91bf2ab133a7a433644aed56f7a389db88fa1042aba9875f6953897',
+  authorization: 'pending',
+  execute: false,
+  expected_live_definition_sha256: null,
+  // Code-derived: releaseIntendedHash('sql164', file bytes) (release-sql-state.mjs); re-derived by the tests.
+  intended_replacement_sha256: '0659d3819ac167d8724bfc78d8e5dc7f6e86c82b48a07c0539891ac9714750ff',
+  function_identities: Object.freeze([
+    'public.aws_moov_webhook_apply_transfer_status(text, text, text, text, text, text, text, text, text, text, timestamp with time zone)',
+  ]),
+});
+
 export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql90: AUTHORIZED_SQL90_USERS_ONLY_TENANT_ROLES,
   sql91: AUTHORIZED_SQL91_MOOV_ONBOARDING,
@@ -3841,6 +3864,7 @@ export const RELEASE_2026_10_17_PENDING_SQL_PINS = Object.freeze({
   sql161: AUTHORIZED_SQL161_TG_MORTGAGE_HANDLING_BILLING_CHECKSOPS_EXECUTE,
   sql162: AUTHORIZED_SQL162_SHARED_CHECK_SOURCE_SENDS,
   sql163: AUTHORIZED_SQL163_MORTGAGE_DESK_CHECK_TIMELINE_HOMEOWNER_LINK,
+  sql164: AUTHORIZED_SQL164_WALLET_WITHDRAWAL_LEG_AND_LIMITS,
   sql76: AUTHORIZED_SQL76_RELEASE_TENANT_PARTNERSHIP_CONSENT,
 });
 
@@ -3857,7 +3881,7 @@ export function isSql30TenantDocumentsDocType(input = {}) {
   return pinIdentifiersMatch(input, AUTHORIZED_SQL30_TENANT_DOCUMENTS_DOC_TYPE);
 }
 
-/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql148, sql150, sql152 ... sql156, sql158, sql159, sql160, sql161, sql162, sql163; sql76 for production) an input names, or null. */
+/** The release 2026-10-17 migration key (sql90 ... sql106, sql108 ... sql148, sql150, sql152 ... sql156, sql158, sql159, sql160, sql161, sql162, sql163, sql164; sql76 for production) an input names, or null. */
 export function releaseSqlMigrationKey(input = {}) {
   return Object.keys(RELEASE_2026_10_17_PENDING_SQL_PINS)
     .find((key) => pinIdentifiersMatch(input, RELEASE_2026_10_17_PENDING_SQL_PINS[key])) || null;

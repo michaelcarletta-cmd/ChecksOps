@@ -9692,6 +9692,108 @@ export const RELEASE_SQL_SPECS = deepFreeze({
       "public.mortgage_handling_requests"
     ]
   },
+  // SQL 164 (owner 2026-11-13: "Build the transfer to bank"; design docs/WALLET_TO_BANK_TRANSFER_DESIGN.md, #1849): the
+  // wallet -> bank transfer's leg. The file replaces SQL 109's public.aws_moov_webhook_apply_transfer_status in place
+  // with one change, wallet_withdrawal added to the legs it owns (everything else SQL 109's, EXECUTE for checksops and
+  // the owner), and adds two nullable bigint columns to public.tenant_wallet_funding_settings, the tenant's own
+  // transfer-to-bank limits, each with a NULL-or-positive CHECK and column INSERT and UPDATE for checksops (as SQL 140
+  // for the other settings columns). Predecessor and supersedes SQL 109 (as SQL 150 for SQL 147: SQL 109's only object
+  // is the function this file replaces, so no superseded_intended_sha256 is pinned). definer_writes: SQL 109's two
+  // relations. SQL 146 is not touched: its collection writer already answers not_owned for this leg.
+  sql164: {
+    "key": "sql164",
+    "label": "SQL 164",
+    "choice": "sql164-wallet-withdrawal-leg-and-limits",
+    "production_pin_rel": "ops/deployment-guard/sql164-wallet-withdrawal-leg-and-limits-production-apply.json",
+    "script": "sql164-wallet-withdrawal-leg-and-limits-production-apply",
+    "prerequisites": [
+      "public.aws_moov_webhook_apply_active()",
+      "public.payment_transfers",
+      "public.payment_event_log",
+      "public.tenant_wallet_funding_settings",
+      "role checksops",
+      "column public.payment_transfers.id",
+      "column public.payment_transfers.tenant_id",
+      "column public.payment_transfers.provider",
+      "column public.payment_transfers.environment",
+      "column public.payment_transfers.provider_transfer_id",
+      "column public.payment_transfers.provider_status",
+      "column public.payment_transfers.status",
+      "column public.payment_transfers.leg_role",
+      "column public.payment_transfers.failure_reason",
+      "column public.payment_transfers.provider_metadata",
+      "column public.payment_transfers.completed_at",
+      "column public.payment_transfers.updated_at",
+      "column public.payment_event_log.provider",
+      "column public.payment_event_log.environment",
+      "column public.payment_event_log.tenant_id",
+      "column public.payment_event_log.transfer_id",
+      "column public.payment_event_log.provider_transfer_id",
+      "column public.payment_event_log.event_type",
+      "column public.payment_event_log.previous_status",
+      "column public.payment_event_log.new_status",
+      "column public.payment_event_log.provider_metadata",
+      "column public.tenant_wallet_funding_settings.tenant_id"
+    ],
+    "predecessors": [
+      "sql109"
+    ],
+    "supersedes": [
+      "sql109"
+    ],
+    "functions": [
+      {
+        "identity": "public.aws_moov_webhook_apply_transfer_status(text, text, text, text, text, text, text, text, text, text, timestamp with time zone)",
+        "acl": [
+          "checksops EXECUTE",
+          "owner EXECUTE"
+        ]
+      }
+    ],
+    "definer_writes": [
+      "public.payment_transfers",
+      "public.payment_event_log"
+    ],
+    "added_columns": [
+      {
+        "table": "public.tenant_wallet_funding_settings",
+        "column": "wallet_withdraw_max_per_transfer_cents",
+        "type": "bigint",
+        "notnull": false,
+        "default": null,
+        "acl": [
+          "checksops INSERT",
+          "checksops UPDATE"
+        ]
+      },
+      {
+        "table": "public.tenant_wallet_funding_settings",
+        "column": "wallet_withdraw_max_per_day_cents",
+        "type": "bigint",
+        "notnull": false,
+        "default": null,
+        "acl": [
+          "checksops INSERT",
+          "checksops UPDATE"
+        ]
+      }
+    ],
+    "constraints": [
+      {
+        "table": "public.tenant_wallet_funding_settings",
+        "name": "tenant_wallet_funding_settings_withdraw_per_transfer_check",
+        "def": "CHECK (((wallet_withdraw_max_per_transfer_cents IS NULL) OR (wallet_withdraw_max_per_transfer_cents > 0)))"
+      },
+      {
+        "table": "public.tenant_wallet_funding_settings",
+        "name": "tenant_wallet_funding_settings_withdraw_per_day_check",
+        "def": "CHECK (((wallet_withdraw_max_per_day_cents IS NULL) OR (wallet_withdraw_max_per_day_cents > 0)))"
+      }
+    ],
+    "altered_relations": [
+      "public.tenant_wallet_funding_settings"
+    ]
+  },
   sql76: {
     "key": "sql76",
     "label": "SQL 76",

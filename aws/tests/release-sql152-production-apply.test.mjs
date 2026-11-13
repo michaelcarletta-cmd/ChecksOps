@@ -250,7 +250,7 @@ test('pin: the release pin shape, applied and retired (owner approved 2026-11-11
   assert.equal(RELEASE_PRODUCTION.sql149, undefined);
   const rows = JSON.stringify(readJson('ops/deployment-guard/bypass-inventory.json'));
   assert.match(rows, /"path":"scripts\/deployment-guard\/sql152-invoice-and-failed-deposit-fees-production-apply\.mjs","classification":"GUARDED","capabilities":\["sql152-production-apply"\]/);
-  assert.match(rows, /sql147, sql148, sql150, sql152, sql153, sql154, sql155, sql156, sql158, sql159, sql160, sql161, sql162, sql163\)/);
+  assert.match(rows, /sql147, sql148, sql150, sql152, sql153, sql154, sql155, sql156, sql158, sql159, sql160, sql161, sql162, sql163, sql164\)/);
   assert.doesNotMatch(rows, /sql149/);
   const scripts = readJson('package.json').scripts;
   const workflow = fs.readFileSync(path.join(ROOT, '.github/workflows/deployment-guard.yml'), 'utf8');
@@ -329,7 +329,7 @@ test('order: no predecessor; the new table with no grant to anyone, five owner-o
   assert.match(runbook, /APPLY_INVOICE_AND_FAILED_DEPOSIT_FEES/);
   const oneShot = fs.readFileSync(path.join(ROOT, 'ops/production-sql-one-shot.md'), 'utf8');
   assert.match(oneShot, /\| `sql152` \|/);
-  assert.match(oneShot, /`sql148`, `sql150`, `sql152`, `sql153`, `sql154`, `sql155`, `sql156`, `sql158`, `sql159`, `sql160`, `sql161`, `sql162`, `sql163`\) \|/);
+  assert.match(oneShot, /`sql148`, `sql150`, `sql152`, `sql153`, `sql154`, `sql155`, `sql156`, `sql158`, `sql159`, `sql160`, `sql161`, `sql162`, `sql163`, `sql164`\) \|/);
   assert.match(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/README.md'), 'utf8'), /sql152-invoice-and-failed-deposit-fees-production-apply\.mjs --inspect/);
 });
 
