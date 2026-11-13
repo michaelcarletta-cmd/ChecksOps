@@ -1,0 +1,66 @@
+{
+  "id": "sql163-mortgage-desk-check-timeline-homeowner-link-production-apply",
+  "migration": "sql163",
+  "authorization": "pending",
+  "execute": false,
+  "target_environment": "production",
+  "target_component": "production-sql",
+  "deployment_type": "sql-apply",
+  "filename": "aws/workflows/sql/163_mortgage_desk_check_timeline_homeowner_link.sql",
+  "migration_id": "163_mortgage_desk_check_timeline_homeowner_link",
+  "staging_pin_commit": "7a9df4765224a2071bc407c8e9bd890954cf99b1",
+  "source_sha256": "7075128ade468e88881dee2527280ef36e3e54b357b0595c3d00077428bb73ad",
+  "function_identities": [
+    "public.aws_mortgage_desk_request_check(uuid)",
+    "public.aws_mortgage_desk_homeowner_timeline(uuid)",
+    "public.aws_mortgage_desk_homeowner_link(uuid, text)"
+  ],
+  "expected_live_definition_sha256": null,
+  "intended_replacement_sha256": "ef536373458b30dc16679e921af2a071e63a4cb755854612f2ff90eb79184c85",
+  "authorization_phrase": "SHOW_MORTGAGE_DESK_AGENTS_CHECK_TIMELINE_AND_HOMEOWNER_LINK",
+  "predecessors": [],
+  "order_note": "No predecessor. SQL 163 adds three SECURITY DEFINER functions and replaces nothing (owner 2026-11-12: \"the check did not show for mortgage agent and it says check not linked from checksops. The check should be linked\", \"notes should show on the mortgage agents side as well\", \"When sending homeowner link from mortgage desk, error missing_cognito_token. Fix it.\"; 2026-11-13 \"Start the desk fixes\"). Each is gated by SQL 124's aws_mortgage_desk_readable_request (the assigned mortgage agent holding mortgage_agent, or the platform owner; the request in_progress or completed with a check; 42501 / 22023 otherwise): aws_mortgage_desk_request_check(uuid) returns the request's check display fields (never routing_number or account_number); aws_mortgage_desk_homeowner_timeline(uuid) returns the claim's homeowner_ledger_events written by the request's tenant, newest 200, with the payload note only; aws_mortgage_desk_homeowner_link(uuid, text) reuses or inserts the homeowner_ledger_tokens row of the homeowner on file (the request's homeowner_email, else the claim's policyholder_email; never a caller-chosen address). EXECUTE checksops and the owner only. The spec prerequisites are the file's own (55000 sql163_prerequisite_missing); the applying login must reach check_intake_items, claims, homeowner_ledger_events, homeowner_ledger_tokens and mortgage_handling_requests as the definer past RLS (definer_can_write_relations; the file refuses otherwise, sql163_definer_cannot_reach). No table, column, policy, table grant, trigger or row changes, so the db-readonly-validate trigger count is not affected. Expected pre-state in both environments: the three functions absent (release sql163 v1: 23d41c1086f3f15412a5d374e056eaaf1bef7f428d81b0ffbdda666a5250de87, releaseStateHash('sql163', {})). The API (mortgage-desk-esign.mjs: the workspace check and timeline, send_tracking_link) and the Desk page ship after this through their own guarded paths; no API, Lambda or SPA change is part of this pin.",
+  "admin_login": "checksops_admin",
+  "rds_identifier": "checksops-production",
+  "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
+  "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
+  "tooling": {
+    "status": "built",
+    "production_tool": "scripts/deployment-guard/sql163-mortgage-desk-check-timeline-homeowner-link-production-apply.mjs",
+    "production_lib": "scripts/deployment-guard/lib/release-sql-production-apply.mjs",
+    "staging_executor_handler": "aws/write-path/guarded-sql-executor/index.mjs handleReleaseSqlMigration",
+    "staging_workflow_choice": "sql163-mortgage-desk-check-timeline-homeowner-link",
+    "one_shot_migration": "sql163",
+    "fingerprint_engine": "scripts/deployment-guard/lib/release-sql-state.mjs",
+    "runbook": "ops/production-sql-163-apply.md",
+    "tests": [
+      "aws/tests/release-sql163-executor.test.mjs",
+      "aws/tests/release-sql163-production-apply.test.mjs",
+      "aws/tests/release-sql90-97-executor.test.mjs",
+      "aws/tests/release-sql90-97-production-apply.test.mjs",
+      "aws/tests/sql163-mortgage-desk-check-timeline-homeowner-link-pg.test.mjs"
+    ],
+    "note": "Guarded tooling for SQL 163: sql163-mortgage-desk-check-timeline-homeowner-link-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql163-mortgage-desk-check-timeline-homeowner-link); production-sql-one-shot.mjs --migration sql163. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): the three functions with their attributes, bodies, results and ACLs. The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
+  },
+  "production_inspect": {
+    "status": "pending",
+    "date": null,
+    "ssm_command_id": null,
+    "source_commit": null,
+    "read_only": true,
+    "connected_as": "checksops_admin",
+    "live_definition_sha256": null,
+    "apply_preconditions_met": null,
+    "precondition_failures": null,
+    "note": "Pending: no release-engine production inspect has been run for SQL 163 yet. Expected: prerequisites_missing [], the three functions absent, definer_writes ok on check_intake_items, claims, homeowner_ledger_events, homeowner_ledger_tokens and mortgage_handling_requests, already_applied false. Expected release-engine fingerprint of that pre-state under sql163: 23d41c1086f3f15412a5d374e056eaaf1bef7f428d81b0ffbdda666a5250de87 (releaseStateHash('sql163', {})). Record the one-shot --phase inspect's date, SSM command id, source commit, live_definition_sha256, prerequisites_missing, release_sql_inspect, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. Stop if the pre-state differs, prerequisites_missing is not [] or precondition_failures is not []: that needs its own reviewed change."
+  },
+  "intended_post_state": {
+    "fingerprint": "ef536373458b30dc16679e921af2a071e63a4cb755854612f2ff90eb79184c85",
+    "note": "public.aws_mortgage_desk_request_check(uuid) (STABLE, RETURNS TABLE(check_id uuid, claim_id uuid, amount numeric, check_number text, carrier_name text, payee_line text, payee_address text, property_address text, issue_date text, detected_claim_number text, front_image_path text, back_image_path text, status text, check_stage text, funds_type text)), public.aws_mortgage_desk_homeowner_timeline(uuid) (STABLE, RETURNS TABLE(event_id uuid, event_type text, occurred_at timestamp with time zone, actor_label text, note text, amount numeric, from_desk boolean)) and public.aws_mortgage_desk_homeowner_link(uuid, text) (VOLATILE, RETURNS TABLE(token text, homeowner_email text, homeowner_name text, tenant_id uuid, reused boolean)), plpgsql, owned by checksops_admin, SECURITY DEFINER, SET search_path = public, pg_temp, EXECUTE checksops and the owner, nothing for PUBLIC, anon, authenticated or service_role. No other function, table, column, policy, grant or trigger change; no row written by the apply. The fingerprint is releaseIntendedHash('sql163', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): ef536373458b30dc16679e921af2a071e63a4cb755854612f2ff90eb79184c85."
+  },
+  "staging_acceptance": {
+    "ok": false,
+    "reference": null,
+    "basis": "Pending: record the guarded staging SQL executor read-live and the staging apply of SQL 163 (choice sql163-mortgage-desk-check-timeline-homeowner-link) here in the reviewed change that sets execute true. The behavior is covered on PostgreSQL 16 by aws/tests/sql163-mortgage-desk-check-timeline-homeowner-link-pg.test.mjs. Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+  }
+}

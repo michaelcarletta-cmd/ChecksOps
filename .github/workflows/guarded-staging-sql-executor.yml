@@ -107,6 +107,7 @@ on:
           - sql160-no-additional-check-or-manual-deposit-fee
           - sql161-tg-mortgage-handling-billing-checksops-execute
           - sql162-shared-check-source-sends
+          - sql163-mortgage-desk-check-timeline-homeowner-link
       approved_commit:
         description: "Required for deploy/apply/read-live: exact main commit approved for this run"
         required: false
@@ -267,6 +268,7 @@ jobs:
           node --test aws/tests/release-sql160-executor.test.mjs
           node --test aws/tests/release-sql161-executor.test.mjs
           node --test aws/tests/release-sql162-executor.test.mjs
+          node --test aws/tests/release-sql163-executor.test.mjs
           node --test aws/tests/mortgage-executor-commit-outcome.test.mjs
           node --test aws/tests/deployment-guard-kms-receipt.test.mjs
           node --test aws/tests/deployment-guard-signed-receipt.test.mjs
