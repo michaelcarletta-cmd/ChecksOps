@@ -67,6 +67,8 @@ const SHOW_FUNDING_AND_BILLING = false;
 
 // Automatic payouts are hidden: see PAYMENT_FLAGS.SHOW_AUTOMATIC_PAYOUTS (src/lib/payments/featureFlags.ts).
 const SHOW_AUTOMATIC_PAYOUTS = PAYMENT_FLAGS.SHOW_AUTOMATIC_PAYOUTS;
+// The "Manage sweeps" button is shown on its own: see PAYMENT_FLAGS.SHOW_SWEEPS_BUTTON.
+const SHOW_SWEEPS_BUTTON = PAYMENT_FLAGS.SHOW_SWEEPS_BUTTON;
 
 const READINESS_COPY: Record<string, { label: string; tone: string }> = {
   ready: { label: "Ready", tone: "border-emerald-500/40 text-emerald-500 bg-emerald-500/5" },
@@ -537,7 +539,7 @@ export default function WalletOps() {
                   : "Turn on automatic payouts"}
               </Button>
             )}
-            {SHOW_AUTOMATIC_PAYOUTS && (
+            {SHOW_SWEEPS_BUTTON && (
               <Dialog>
                 <DialogTrigger asChild>
                   <Button className="gap-2" variant={sweepsOn ? "secondary" : "default"}>
@@ -547,7 +549,7 @@ export default function WalletOps() {
                 </DialogTrigger>
                 <DialogContent className="max-h-[85vh] max-w-3xl overflow-y-auto">
                   <DialogHeader>
-                    <DialogTitle>Treasury & automatic payouts</DialogTitle>
+                    <DialogTitle>Treasury sweeps</DialogTitle>
                   </DialogHeader>
                   <MoovTreasuryPanel />
                 </DialogContent>
