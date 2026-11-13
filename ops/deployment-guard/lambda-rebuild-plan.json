@@ -4,14 +4,30 @@
   "environments": {
     "staging": {
       "function_name": "checksops-staging-api",
-      "status": "applied",
+      "status": "accepted",
       "members": {
-        "providers/parity/sweep-read.mjs": {
-          "live_sha256": "4da8e0c0e1b3bb6c78248cde67738f953044b065dde75cfc4885d6fac2bae02f",
-          "accepted_sha256": "32d7ffaaeffc27a13615e1c310666e87bdccf619c12c15ddb5823921035a44f4"
+        "app-services.mjs": {
+          "live_sha256": "8b91a6444e8b05c7fc5fec9b4d1883b4e042f6c0efeb045f777c934223b22199",
+          "accepted_sha256": "6735d88fc0aeaf5789fbf96ec2f33b980a1f85a6f71d9224ec4f93272810e769"
+        },
+        "providers.mjs": {
+          "live_sha256": "58207e5e8762a1a912c2e2fc5e143f0df90205e5e16be604dc3c1cdf19ca73d9",
+          "accepted_sha256": "19f6a19bde07f67a33b50fbef883b9bf6f893f018d8995172003d0d1942225f6"
+        },
+        "providers/catalog.mjs": {
+          "live_sha256": "91f9ea543d484f6daa584ec76a99218fecfccb8f628546c165a448e968bcc969",
+          "accepted_sha256": "b912585f4ab6014af4a4a6da69cbe8f565c2882eefa61f3aa71975c825e3ceed"
+        },
+        "providers/moov-status-catch-up.mjs": {
+          "live_sha256": "6083f54bbaf1a72395ab45495b90c3b4f5136b8adbf33d386f7584ea2e95b9ab",
+          "accepted_sha256": "8d82adf4ea29dbb6fc17d75c4e469643c8daf5dbf251eae9911e2e2994ff09f2"
         }
       },
-      "added": {},
+      "added": {
+        "fed-holidays.mjs": "162580f1a9b0a99b93e5ba1512fc00fed86f1edd6dda033cced72c56115a1638",
+        "providers/production/moov-wallet-withdraw.mjs": "22c6c77990c54042ecd82ce13a119dadc84f34adcc9883df17d522e7471f64e0",
+        "wallet-withdraw-limits.mjs": "aa3f2f0ec07e2d30c0555683a41de5deea3643add006a7ed1e516077206d07c9"
+      },
       "removed": {},
       "dependencies": {
         "added": {},
@@ -19,42 +35,23 @@
         "changed": {}
       },
       "inspect": {
-        "run_id": "43416770262",
-        "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43416770262",
-        "main_commit": "8d6488e0fef93d3ff3697a6423603d546e7faa08",
-        "live_code_sha256": "Dif2IETi/w3MYw50go94GVDr3iuD505RCSuWiLTs72s=",
-        "live_revision_id": "7f83a725-cc3b-4266-b27f-7cd3cf00c3b7",
+        "run_id": "43458069245",
+        "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43458069245",
+        "main_commit": "9c1cf295a12627ec06a31e9c66fd330d65a86a55",
+        "live_code_sha256": "bphhLdCS8TSGIfwC4lGAbFkMFF9GXInjD3Cx9TDKneY=",
+        "live_revision_id": "db0c3cd4-6d07-49d8-94e9-0daea4e3933f",
         "live_member_count": 6786,
-        "candidate_zip_sha256": "11a094c7fb11415d6a3590bc835d5ca732c8b9655e6bf71f6624d6677b1d3ef4",
-        "candidate_member_count": 6786,
-        "same": 209,
-        "changed": 1,
-        "added": 0,
+        "candidate_zip_sha256": "0ef40e86e0a2bff2e2dc47958ebf96b04ac046c3c0e12f7996004c830b061218",
+        "candidate_member_count": 6789,
+        "same": 206,
+        "changed": 4,
+        "added": 3,
         "removed": 0,
         "dependency_counts": {
           "live": 54,
           "candidate": 54
         },
-        "notes": "Sixth staging rebuild, for the settlement bank fallback (owner 2026-11-12: \"Condition One settlement bank in Wallet & Treasury shows nothing... if condition one is set up it should show. This goes for all tenants.\"; #1838, merge 977bfedbd): providers/parity/sweep-read.mjs no longer fails the whole sweep snapshot when a Moov read fails, so the bank on file still shows. It is not an overlay member and reaches a function only with a rebuild. Owner 2026-11-13: \"B\" (wait for the partner-send workstream's overlays so this rebuild carries no other workstream's change), then \"Start the API rebuild plan and staging rebuild\". Read-only inspects of 2026-11-13 at main 4cd25dac9 (staging 43348784836, production 43348781774) read live pG4slikw... in both and listed sweep-read.mjs and providers/production/moov-send.mjs (#1844); the partner-send workstream's guarded overlays (#1850; production overlay runs between 2026-11-13 02:34 and 02:55 UTC; staging now reads the same CodeSha256 as production) then put moov-send.mjs and data.mjs live with main's bytes, which this inspect counts as same. Production inspect 43371290665 (main 8d6488e0f) reads the same live CodeSha256 Dif2IETi... and the same single difference. Inspect diff: 1 changed (providers/parity/sweep-read.mjs, live 4da8e0c0... -> main's 32d7ffae...), 0 added, 0 removed, 209 same, dependencies identical (54 live, 54 candidate). The live 4da8e0c0... is main's sweep-read.mjs before #1838 (977bfedbd^1). The fifth section (inspect 43207489743, apply 43210074311) moves verbatim into history[4]. Nothing is applied by this plan change; the apply needs approval_phrase exactly \"DEPLOY FULL API PACKAGE TO STAGING\" and this inspect's live CodeSha256 as expected_live_code_sha256. Production is unchanged."
-      },
-      "applied": {
-        "run_id": "43420512528",
-        "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43420512528",
-        "main_commit": "78f05e98e53472f4c24866bfa074386018d24149",
-        "approval_phrase": "DEPLOY FULL API PACKAGE TO STAGING",
-        "code_sha256_before": "Dif2IETi/w3MYw50go94GVDr3iuD505RCSuWiLTs72s=",
-        "revision_id_before": "7f83a725-cc3b-4266-b27f-7cd3cf00c3b7",
-        "code_sha256_after": "EaCUx/sRQV1qNZC8g11cpzLIuWVea/cfZiTWZ3sdPvQ=",
-        "revision_id_after": "6df662ee-e9e6-437b-9a73-c126cdc4252d",
-        "candidate_zip_sha256": "11a094c7fb11415d6a3590bc835d5ca732c8b9655e6bf71f6624d6677b1d3ef4",
-        "applied_at": "2026-11-13T11:52:57.262Z",
-        "state": "VERIFIED",
-        "smoke": [
-          "/health",
-          "/db-health",
-          "/db-readonly-validate"
-        ],
-        "notes": "Sixth staging rebuild, for the settlement bank fallback (#1838: providers/parity/sweep-read.mjs, a Moov read failure no longer hides the bank on file), applied on the owner's \"DEPLOY FULL API PACKAGE TO STAGING\" (2026-11-13) from main 78f05e98e (the merged plan #1857), with expected_live_code_sha256 Dif2IETi... (re-read by inspect 43420370488 on the same commit: READY, 1 changed, 209 same). Apply run 43420512528 (job 131869037804): every step success. The job's own inspect step read READY (1 changed: providers/parity/sweep-read.mjs 4da8e0c0... -> 32d7ffae...; 0 added, 0 removed, 209 same, dependencies 54/54). The receipt-gated writer updated checksops-staging-api to CodeSha256 EaCUx/sRQV1qNZC8g11cpzLIuWVea/cfZiTWZ3sdPvQ= (writer RevisionId c4abca88-561a-4a2e-8701-f08a9ddc679b, lastUpdateStatus InProgress, errors []); \"Verify the live package is the candidate\" read it back VERIFIED (6786 members, RevisionId 6df662ee-e9e6-437b-9a73-c126cdc4252d); the public staging smoke returned 200 ok for /health, /db-health and /db-readonly-validate. Live read-back (read-only GetFunctionConfiguration, 2026-11-13 after the apply): CodeSha256 EaCUx/sR..., RevisionId 6df662ee, LastModified 2026-11-13T11:53:00Z, LastUpdateStatus Successful, State Active, 46 variables. Owner acceptance 2026-11-13: \"Staging looks good\" (Wallet & Treasury settlement bank on staging)."
+        "notes": "Seventh staging rebuild, for the transfer to bank API (owner 2026-11-13: \"Start the transfer to bank API\"; #1876, merge 9c1cf295a; design docs/WALLET_TO_BANK_TRANSFER_DESIGN.md): the operating wallet to the tenant default bank, same-day ACH, tenant-set limits behind the wallet.fund two-factor. Its seven API files reach a function only with this rebuild (the transfer to bank manifest aws/tests/fixtures/production-wallet-transfer-to-bank-manifest-2026-11-13.json is planning only and names the full-package API rebuild as the intended path). SQL 164 (the wallet_withdrawal leg and the two limit columns) is applied in staging and production (record #1875). Owner 2026-11-13: \"Merge when green and\" \"DEPLOY FULL API PACKAGE TO STAGING\". Inspect run 43458069245 (main 9c1cf295a, read-only, mutation false) read BLOCKED with SOURCE_RECONCILIATION_REQUIRED for exactly these seven, which this section lists: 4 changed (app-services.mjs 8b91a644... -> 6735d88f..., providers.mjs 58207e5e... -> 19f6a19b..., providers/catalog.mjs 91f9ea54... -> b912585f..., providers/moov-status-catch-up.mjs 6083f54b... -> 8d82adf4...), 3 added (fed-holidays.mjs 162580f1..., providers/production/moov-wallet-withdraw.mjs 22c6c779..., wallet-withdraw-limits.mjs aa3f2f0e...), 0 removed, 206 same, dependencies identical (54 live, 54 candidate); 6786 live members, 6789 candidate members. Each accepted hash is main's bytes at 9c1cf295a; each live hash is main's bytes before #1876 (9c1cf295a^1, 2f0a5c92b) and the live_sha256 the transfer to bank manifest records. The live CodeSha256 bphhLdCS... is not the sixth rebuild's EaCUx/sR... (apply 43420512528): the guarded staging overlay of the Mortgage Desk agent check (#1865, mortgage-desk-esign.mjs aacf940d -> d38218a4, staging apply run 43432513146, recorded in aws/tests/fixtures/production-desk-check-timeline-link-applied-manifest-2026-11-13.json) put main's bytes live, which this inspect counts as same, so the rebuild carries no other workstream's change. The public staging smoke of the inspect returned 200 ok for /health, /db-health and /db-readonly-validate. The sixth section (inspect 43416770262, apply 43420512528) moves verbatim into history[5]. Nothing is applied by this plan change; the apply needs approval_phrase exactly \"DEPLOY FULL API PACKAGE TO STAGING\" and this inspect's live CodeSha256 as expected_live_code_sha256. Production is unchanged."
       },
       "history": [
         {
@@ -882,6 +879,60 @@
               "/db-readonly-validate"
             ],
             "notes": "Fifth staging rebuild, applied on the owner's \"DEPLOY FULL API PACKAGE TO STAGING\" (2026-11-12) from main 60b8c734f (the merged plan #1806), with expected_live_code_sha256 UWR5ZSeB... (inspect 43207489743). Apply run 43210074311 (job 131155134067): every step success. The job's own inspect step read READY (1 changed: mortgage-ops-usage.mjs e2490007... -> abd5fe7a...; 0 added, 0 removed, 209 same, dependencies 54/54). The receipt-gated writer updated checksops-staging-api to CodeSha256 2NKoKhkxtfOpsoTGA3/9SekMHMH8EcmSchqWFMVWoIw= (writer RevisionId f947cef5-9cc5-431c-869c-8892599746a0, lastUpdateStatus InProgress, errors []); \"Verify the live package is the candidate\" read it back VERIFIED (6786 members, RevisionId 3f35c0cf-22e2-460d-a37f-e093bd0f0c0c); the public staging smoke returned 200 ok for /health, /db-health and /db-readonly-validate. Live read-back (read-only GetFunctionConfiguration, 2026-11-12 after the apply): CodeSha256 2NKoKhkx..., RevisionId 3f35c0cf, LastModified 2026-11-12T11:33:21Z, LastUpdateStatus Successful, 46 variables. Not verified by this record: a staging check with two mortgage companies accruing the extra $5 (the owner was asked to test it; no result was reported when this was written)."
+          }
+        },
+        {
+          "status": "applied",
+          "members": {
+            "providers/parity/sweep-read.mjs": {
+              "live_sha256": "4da8e0c0e1b3bb6c78248cde67738f953044b065dde75cfc4885d6fac2bae02f",
+              "accepted_sha256": "32d7ffaaeffc27a13615e1c310666e87bdccf619c12c15ddb5823921035a44f4"
+            }
+          },
+          "added": {},
+          "removed": {},
+          "dependencies": {
+            "added": {},
+            "removed": {},
+            "changed": {}
+          },
+          "inspect": {
+            "run_id": "43416770262",
+            "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43416770262",
+            "main_commit": "8d6488e0fef93d3ff3697a6423603d546e7faa08",
+            "live_code_sha256": "Dif2IETi/w3MYw50go94GVDr3iuD505RCSuWiLTs72s=",
+            "live_revision_id": "7f83a725-cc3b-4266-b27f-7cd3cf00c3b7",
+            "live_member_count": 6786,
+            "candidate_zip_sha256": "11a094c7fb11415d6a3590bc835d5ca732c8b9655e6bf71f6624d6677b1d3ef4",
+            "candidate_member_count": 6786,
+            "same": 209,
+            "changed": 1,
+            "added": 0,
+            "removed": 0,
+            "dependency_counts": {
+              "live": 54,
+              "candidate": 54
+            },
+            "notes": "Sixth staging rebuild, for the settlement bank fallback (owner 2026-11-12: \"Condition One settlement bank in Wallet & Treasury shows nothing... if condition one is set up it should show. This goes for all tenants.\"; #1838, merge 977bfedbd): providers/parity/sweep-read.mjs no longer fails the whole sweep snapshot when a Moov read fails, so the bank on file still shows. It is not an overlay member and reaches a function only with a rebuild. Owner 2026-11-13: \"B\" (wait for the partner-send workstream's overlays so this rebuild carries no other workstream's change), then \"Start the API rebuild plan and staging rebuild\". Read-only inspects of 2026-11-13 at main 4cd25dac9 (staging 43348784836, production 43348781774) read live pG4slikw... in both and listed sweep-read.mjs and providers/production/moov-send.mjs (#1844); the partner-send workstream's guarded overlays (#1850; production overlay runs between 2026-11-13 02:34 and 02:55 UTC; staging now reads the same CodeSha256 as production) then put moov-send.mjs and data.mjs live with main's bytes, which this inspect counts as same. Production inspect 43371290665 (main 8d6488e0f) reads the same live CodeSha256 Dif2IETi... and the same single difference. Inspect diff: 1 changed (providers/parity/sweep-read.mjs, live 4da8e0c0... -> main's 32d7ffae...), 0 added, 0 removed, 209 same, dependencies identical (54 live, 54 candidate). The live 4da8e0c0... is main's sweep-read.mjs before #1838 (977bfedbd^1). The fifth section (inspect 43207489743, apply 43210074311) moves verbatim into history[4]. Nothing is applied by this plan change; the apply needs approval_phrase exactly \"DEPLOY FULL API PACKAGE TO STAGING\" and this inspect's live CodeSha256 as expected_live_code_sha256. Production is unchanged."
+          },
+          "applied": {
+            "run_id": "43420512528",
+            "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43420512528",
+            "main_commit": "78f05e98e53472f4c24866bfa074386018d24149",
+            "approval_phrase": "DEPLOY FULL API PACKAGE TO STAGING",
+            "code_sha256_before": "Dif2IETi/w3MYw50go94GVDr3iuD505RCSuWiLTs72s=",
+            "revision_id_before": "7f83a725-cc3b-4266-b27f-7cd3cf00c3b7",
+            "code_sha256_after": "EaCUx/sRQV1qNZC8g11cpzLIuWVea/cfZiTWZ3sdPvQ=",
+            "revision_id_after": "6df662ee-e9e6-437b-9a73-c126cdc4252d",
+            "candidate_zip_sha256": "11a094c7fb11415d6a3590bc835d5ca732c8b9655e6bf71f6624d6677b1d3ef4",
+            "applied_at": "2026-11-13T11:52:57.262Z",
+            "state": "VERIFIED",
+            "smoke": [
+              "/health",
+              "/db-health",
+              "/db-readonly-validate"
+            ],
+            "notes": "Sixth staging rebuild, for the settlement bank fallback (#1838: providers/parity/sweep-read.mjs, a Moov read failure no longer hides the bank on file), applied on the owner's \"DEPLOY FULL API PACKAGE TO STAGING\" (2026-11-13) from main 78f05e98e (the merged plan #1857), with expected_live_code_sha256 Dif2IETi... (re-read by inspect 43420370488 on the same commit: READY, 1 changed, 209 same). Apply run 43420512528 (job 131869037804): every step success. The job's own inspect step read READY (1 changed: providers/parity/sweep-read.mjs 4da8e0c0... -> 32d7ffae...; 0 added, 0 removed, 209 same, dependencies 54/54). The receipt-gated writer updated checksops-staging-api to CodeSha256 EaCUx/sRQV1qNZC8g11cpzLIuWVea/cfZiTWZ3sdPvQ= (writer RevisionId c4abca88-561a-4a2e-8701-f08a9ddc679b, lastUpdateStatus InProgress, errors []); \"Verify the live package is the candidate\" read it back VERIFIED (6786 members, RevisionId 6df662ee-e9e6-437b-9a73-c126cdc4252d); the public staging smoke returned 200 ok for /health, /db-health and /db-readonly-validate. Live read-back (read-only GetFunctionConfiguration, 2026-11-13 after the apply): CodeSha256 EaCUx/sR..., RevisionId 6df662ee, LastModified 2026-11-13T11:53:00Z, LastUpdateStatus Successful, State Active, 46 variables. Owner acceptance 2026-11-13: \"Staging looks good\" (Wallet & Treasury settlement bank on staging)."
           }
         }
       ]

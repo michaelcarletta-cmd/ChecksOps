@@ -210,7 +210,8 @@ const APPLIED_SINCE_FOURTH_PRODUCTION_REBUILD = {
 // and providers/moov-status-catch-up.mjs change and wallet-withdraw-limits.mjs, fed-holidays.mjs and
 // providers/production/moov-wallet-withdraw.mjs are added. Planning only: the overlay plan rows (this manifest) keep main's bytes
 // accepted from the bytes each row recorded live; the change is intended for the next full-package rebuild, whose staging and
-// production sections are written from their own inspects. Not a member of any recorded section.
+// production sections are written from their own inspects. The seventh staging section (inspect 43458069245) lists all seven;
+// no applied section does.
 const TRANSFER_TO_BANK_MANIFEST = 'aws/tests/fixtures/production-wallet-transfer-to-bank-manifest-2026-11-13.json';
 // Listed changes that go through the production overlay plan, never the current rebuild section.
 const OVERLAY_PLAN_CHANGES = new Set([
@@ -797,7 +798,7 @@ test('the production history keeps the fifth section (inspect 43210883811, apply
 test('the staging history keeps the first rebuild (inspect 39585059839, apply 39587414391) and every accepted hash is the bytes on main or a listed later change', () => {
   const raw = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'ops/deployment-guard/lambda-rebuild-plan.json'), 'utf8'));
   const staging = raw.environments.staging;
-  assert.equal(staging.history.length, 5);
+  assert.equal(staging.history.length, 6);
   const first = staging.history[0];
   assert.equal(first.status, 'applied');
   assert.equal(first.applied.run_id, '39587414391');
@@ -1070,10 +1071,11 @@ test('the staging history keeps the fifth section (inspect 43207489743, apply 43
   assert.deepEqual(extra.details.problems.map((p) => p.reason), ['unlisted_change']);
 });
 
-test('the staging plan section accepts inspect run 43416770262 and records apply 43420512528: the settlement bank fallback rebuild (1 changed, 0 added, 0 removed)', () => {
+test('the staging history keeps the sixth section (inspect 43416770262, apply 43420512528): the settlement bank fallback rebuild (1 changed, 0 added, 0 removed)', () => {
   const raw = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'ops/deployment-guard/lambda-rebuild-plan.json'), 'utf8'));
-  const staging = raw.environments.staging;
-  const fifth = staging.history[4];
+  // The seventh section (inspect 43458069245) moved the sixth into history[5] verbatim.
+  const staging = raw.environments.staging.history[5];
+  const fifth = raw.environments.staging.history[4];
   // Applied 2026-11-13 (run 43420512528) on the owner's "DEPLOY FULL API PACKAGE TO STAGING"; owner: "Staging looks good".
   assert.equal(staging.status, 'applied');
   assert.equal(staging.applied.run_id, '43420512528');
@@ -1109,7 +1111,9 @@ test('the staging plan section accepts inspect run 43416770262 and records apply
   for (const evidence of ['#1838', '#1844', '#1850', '43348784836', '43348781774', '43371290665', 'history[4]', 'DEPLOY FULL API PACKAGE TO STAGING', 'Production is unchanged']) {
     assert.ok(staging.inspect.notes.includes(evidence), evidence);
   }
-  const section = loadRebuildPlan(REPO_ROOT, 'staging');
+  const section = staging;
+  // The recorded section still made the sixth inspected live package READY, not BLOCKED.
+  const plan = { environments: { staging: { function_name: raw.environments.staging.function_name, ...staging } } };
   assert.deepEqual(Object.keys(section.members), ['providers/parity/sweep-read.mjs']);
   assert.deepEqual(section.added, {});
   assert.deepEqual(section.removed, {});
@@ -1120,25 +1124,94 @@ test('the staging plan section accepts inspect run 43416770262 and records apply
   assert.equal(entry.accepted_sha256, sha256(fs.readFileSync(path.join(apiRoot, 'providers/parity/sweep-read.mjs'))));
   assert.equal(entry.accepted_sha256, '32d7ffaaeffc27a13615e1c310666e87bdccf619c12c15ddb5823921035a44f4');
   assert.equal(entry.live_sha256, '4da8e0c0e1b3bb6c78248cde67738f953044b065dde75cfc4885d6fac2bae02f');
-  assert.equal(entry.live_sha256, staging.history[0].members['providers/parity/sweep-read.mjs'].accepted_sha256);
+  assert.equal(entry.live_sha256, raw.environments.staging.history[0].members['providers/parity/sweep-read.mjs'].accepted_sha256);
   assert.equal(CHANGED_SINCE_SECOND_REBUILD['providers/parity/sweep-read.mjs'], 'changed');
   assert.ok(OVERLAY_PLAN_CHANGES.has('providers/parity/sweep-read.mjs'));
   // Not a production overlay member: it reaches a function only with a rebuild.
   const overlayPlan = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'ops/deployment-guard/production-api-overlay-plan.json'), 'utf8'));
   assert.equal(overlayPlan.members['providers/parity/sweep-read.mjs'], undefined);
   assert.equal(overlayPlan.order.includes('providers/parity/sweep-read.mjs'), false);
-  // The plan as committed makes the inspected live package READY, not BLOCKED; another live hash is a collision.
+  // Another live hash is a collision.
   const live = { 'providers/parity/sweep-read.mjs': entry.live_sha256 };
   const candidate = { 'providers/parity/sweep-read.mjs': entry.accepted_sha256 };
-  const result = evaluateRebuild({ plan: raw, environment: 'staging', liveMemberHashes: live, candidateMemberHashes: candidate, liveInventory: {}, candidateInventory: {} });
+  const result = evaluateRebuild({ plan, environment: 'staging', liveMemberHashes: live, candidateMemberHashes: candidate, liveInventory: {}, candidateInventory: {} });
   assert.equal(result.ok, true, result.message);
   assert.equal(result.details.state, 'READY');
-  const drifted = evaluateRebuild({ plan: raw, environment: 'staging', liveMemberHashes: { 'providers/parity/sweep-read.mjs': 'c'.repeat(64) }, candidateMemberHashes: candidate, liveInventory: {}, candidateInventory: {} });
+  const drifted = evaluateRebuild({ plan, environment: 'staging', liveMemberHashes: { 'providers/parity/sweep-read.mjs': 'c'.repeat(64) }, candidateMemberHashes: candidate, liveInventory: {}, candidateInventory: {} });
   assert.equal(drifted.ok, false);
   assert.equal(drifted.code, 'DEPLOYMENT_COLLISION');
   assert.deepEqual(drifted.details.problems.map((p) => p.reason), ['live_mismatch']);
   // Another changed member (for example the fifth section's accrual, or an unplanned overlay member) still blocks.
-  const extra = evaluateRebuild({ plan: raw, environment: 'staging', liveMemberHashes: { ...live, 'mortgage-ops-usage.mjs': 'a'.repeat(64) }, candidateMemberHashes: { ...candidate, 'mortgage-ops-usage.mjs': 'b'.repeat(64) }, liveInventory: {}, candidateInventory: {} });
+  const extra = evaluateRebuild({ plan, environment: 'staging', liveMemberHashes: { ...live, 'mortgage-ops-usage.mjs': 'a'.repeat(64) }, candidateMemberHashes: { ...candidate, 'mortgage-ops-usage.mjs': 'b'.repeat(64) }, liveInventory: {}, candidateInventory: {} });
+  assert.equal(extra.ok, false);
+  assert.equal(extra.code, 'SOURCE_RECONCILIATION_REQUIRED');
+  assert.deepEqual(extra.details.problems.map((p) => p.reason), ['unlisted_change']);
+});
+
+test('the staging plan section accepts inspect run 43458069245: the transfer to bank API rebuild (4 changed, 3 added, 0 removed)', () => {
+  const raw = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'ops/deployment-guard/lambda-rebuild-plan.json'), 'utf8'));
+  const staging = raw.environments.staging;
+  const sixth = staging.history[5];
+  assert.equal(staging.status, 'accepted');
+  assert.equal(staging.applied, undefined);
+  assert.equal(staging.inspect.run_id, '43458069245');
+  assert.equal(staging.inspect.run_url, 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43458069245');
+  assert.equal(staging.inspect.main_commit, '9c1cf295a12627ec06a31e9c66fd330d65a86a55');
+  assert.equal(staging.inspect.live_code_sha256, 'bphhLdCS8TSGIfwC4lGAbFkMFF9GXInjD3Cx9TDKneY=');
+  assert.equal(staging.inspect.live_revision_id, 'db0c3cd4-6d07-49d8-94e9-0daea4e3933f');
+  assert.equal(staging.inspect.candidate_zip_sha256, '0ef40e86e0a2bff2e2dc47958ebf96b04ac046c3c0e12f7996004c830b061218');
+  assert.equal(staging.inspect.live_member_count, 6786);
+  assert.equal(staging.inspect.candidate_member_count, 6789);
+  assert.equal(staging.inspect.same, 206);
+  assert.equal(staging.inspect.changed, 4);
+  assert.equal(staging.inspect.added, 3);
+  assert.equal(staging.inspect.removed, 0);
+  assert.deepEqual(staging.inspect.dependency_counts, { live: 54, candidate: 54 });
+  // The package the rebuild starts from is the sixth rebuild's plus the guarded desk overlay since (#1865,
+  // mortgage-desk-esign.mjs, staging run 43432513146, counted as same), not the sixth rebuild's own package.
+  assert.notEqual(staging.inspect.live_code_sha256, sixth.applied.code_sha256_after);
+  for (const evidence of ['#1876', '#1875', '#1865', '43432513146', 'history[5]', 'Start the transfer to bank API', 'DEPLOY FULL API PACKAGE TO STAGING', 'Production is unchanged']) {
+    assert.ok(staging.inspect.notes.includes(evidence), evidence);
+  }
+  const section = loadRebuildPlan(REPO_ROOT, 'staging');
+  const CHANGED = ['app-services.mjs', 'providers.mjs', 'providers/catalog.mjs', 'providers/moov-status-catch-up.mjs'];
+  const ADDED = ['fed-holidays.mjs', 'providers/production/moov-wallet-withdraw.mjs', 'wallet-withdraw-limits.mjs'];
+  assert.deepEqual(Object.keys(section.members), CHANGED);
+  assert.deepEqual(Object.keys(section.added), ADDED);
+  assert.deepEqual(section.removed, {});
+  assert.deepEqual(section.dependencies, { added: {}, removed: {}, changed: {} });
+  // Accepted is main's bytes; live is main's bytes before #1876 (9c1cf295a^1), as the inspect printed them.
+  const apiRoot = path.join(REPO_ROOT, 'aws/functions/api');
+  const INSPECTED = {
+    'app-services.mjs': ['8b91a6444e8b05c7fc5fec9b4d1883b4e042f6c0efeb045f777c934223b22199', '6735d88fc0aeaf5789fbf96ec2f33b980a1f85a6f71d9224ec4f93272810e769'],
+    'providers.mjs': ['58207e5e8762a1a912c2e2fc5e143f0df90205e5e16be604dc3c1cdf19ca73d9', '19f6a19bde07f67a33b50fbef883b9bf6f893f018d8995172003d0d1942225f6'],
+    'providers/catalog.mjs': ['91f9ea543d484f6daa584ec76a99218fecfccb8f628546c165a448e968bcc969', 'b912585f4ab6014af4a4a6da69cbe8f565c2882eefa61f3aa71975c825e3ceed'],
+    'providers/moov-status-catch-up.mjs': ['6083f54bbaf1a72395ab45495b90c3b4f5136b8adbf33d386f7584ea2e95b9ab', '8d82adf4ea29dbb6fc17d75c4e469643c8daf5dbf251eae9911e2e2994ff09f2'],
+    'fed-holidays.mjs': [null, '162580f1a9b0a99b93e5ba1512fc00fed86f1edd6dda033cced72c56115a1638'],
+    'providers/production/moov-wallet-withdraw.mjs': [null, '22c6c77990c54042ecd82ce13a119dadc84f34adcc9883df17d522e7471f64e0'],
+    'wallet-withdraw-limits.mjs': [null, 'aa3f2f0ec07e2d30c0555683a41de5deea3643add006a7ed1e516077206d07c9'],
+  };
+  for (const [name, [live, accepted]] of Object.entries(INSPECTED)) {
+    const listed = live === null ? section.added[name] : section.members[name].accepted_sha256;
+    assert.equal(listed, accepted, name);
+    assert.equal(sha256(fs.readFileSync(path.join(apiRoot, name))), accepted, name);
+    if (live !== null) assert.equal(section.members[name].live_sha256, live, name);
+  }
+  // The plan as committed makes the inspected live package READY, not BLOCKED; another live hash is a collision.
+  const live = Object.fromEntries(CHANGED.map((name) => [name, section.members[name].live_sha256]));
+  const candidate = {
+    ...Object.fromEntries(CHANGED.map((name) => [name, section.members[name].accepted_sha256])),
+    ...section.added,
+  };
+  const result = evaluateRebuild({ plan: raw, environment: 'staging', liveMemberHashes: live, candidateMemberHashes: candidate, liveInventory: {}, candidateInventory: {} });
+  assert.equal(result.ok, true, result.message);
+  assert.equal(result.details.state, 'READY');
+  const drifted = evaluateRebuild({ plan: raw, environment: 'staging', liveMemberHashes: { ...live, 'providers.mjs': 'c'.repeat(64) }, candidateMemberHashes: candidate, liveInventory: {}, candidateInventory: {} });
+  assert.equal(drifted.ok, false);
+  assert.equal(drifted.code, 'DEPLOYMENT_COLLISION');
+  assert.deepEqual(drifted.details.problems.map((p) => p.reason), ['live_mismatch']);
+  // Another changed member (for example the sixth section's sweep-read.mjs, or an unplanned overlay member) still blocks.
+  const extra = evaluateRebuild({ plan: raw, environment: 'staging', liveMemberHashes: { ...live, 'providers/parity/sweep-read.mjs': 'a'.repeat(64) }, candidateMemberHashes: { ...candidate, 'providers/parity/sweep-read.mjs': 'b'.repeat(64) }, liveInventory: {}, candidateInventory: {} });
   assert.equal(extra.ok, false);
   assert.equal(extra.code, 'SOURCE_RECONCILIATION_REQUIRED');
   assert.deepEqual(extra.details.problems.map((p) => p.reason), ['unlisted_change']);
@@ -1148,7 +1221,8 @@ test('the production plan section accepts inspect run 43425291017 and records ap
   const raw = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'ops/deployment-guard/lambda-rebuild-plan.json'), 'utf8'));
   const production = raw.environments.production;
   const fifth = production.history[4];
-  const staging = raw.environments.staging;
+  // The staging sixth section (inspect 43416770262, apply 43420512528) is history[5] since the seventh (inspect 43458069245).
+  const staging = raw.environments.staging.history[5];
   // Applied 2026-11-13 (run 43430080268) on the owner's phrase, from the staging reference the section names.
   assert.equal(production.status, 'applied');
   assert.equal(production.applied.run_id, '43430080268');
@@ -1500,7 +1574,7 @@ test('preflight verify passes only when the live package equals the candidate', 
   );
 });
 
-test('transfer to bank (2026-11-13, planning only): its seven API files wait for the next full-package rebuild; no recorded section lists them', () => {
+test('transfer to bank (2026-11-13, planning only): its seven API files wait for the full-package rebuild; only the seventh staging section lists them', () => {
   const raw = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'ops/deployment-guard/lambda-rebuild-plan.json'), 'utf8'));
   const manifest = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, TRANSFER_TO_BANK_MANIFEST), 'utf8'));
   const apiRoot = path.join(REPO_ROOT, 'aws/functions/api');
@@ -1516,16 +1590,25 @@ test('transfer to bank (2026-11-13, planning only): its seven API files wait for
     if (entry.operation === 'replace') assert.notEqual(entry.live_sha256, entry.accepted_sha256, name);
     else assert.equal(entry.live_sha256, null, name);
   }
-  // The current (sixth) sections, applied in both environments, list only the settlement bank fallback: a staging inspect
-  // of a main that carries this change reports these seven in its own section (four changed, three added).
-  for (const environment of ['staging', 'production']) {
-    const section = raw.environments[environment];
+  // The applied sixth sections (production's current one, staging's history[5]) list only the settlement bank fallback.
+  for (const [environment, section] of [['staging', raw.environments.staging.history[5]], ['production', raw.environments.production]]) {
     assert.equal(section.status, 'applied', environment);
     for (const name of [...ADDS, ...REPLACES]) {
       assert.equal(section.members[name], undefined, `${environment} ${name}`);
       assert.equal(section.added[name], undefined, `${environment} ${name}`);
     }
   }
+  // The seventh staging section (inspect 43458069245, accepted, not applied) lists exactly these seven, from the manifest's
+  // live bytes to main's: four changed, three added.
+  const staging = raw.environments.staging;
+  assert.equal(staging.status, 'accepted');
+  assert.deepEqual(Object.keys(staging.members).sort(), [...REPLACES].sort());
+  assert.deepEqual(Object.keys(staging.added).sort(), [...ADDS].sort());
+  for (const name of REPLACES) {
+    assert.equal(staging.members[name].live_sha256, manifest.members[name].live_sha256, name);
+    assert.equal(staging.members[name].accepted_sha256, manifest.members[name].accepted_sha256, name);
+  }
+  for (const name of ADDS) assert.equal(staging.added[name], manifest.members[name].accepted_sha256, name);
   // Already listed as changed since the applied sections that record their older bytes.
   for (const name of ['providers.mjs', 'providers/catalog.mjs']) assert.equal(CHANGED_SINCE_SECOND_REBUILD[name], 'changed', name);
   assert.ok(CHANGED_SINCE_FOURTH_PRODUCTION_REBUILD.has('app-services.mjs'));
