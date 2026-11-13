@@ -3747,7 +3747,8 @@ export const AUTHORIZED_SQL162_SHARED_CHECK_SOURCE_SENDS = Object.freeze({
 // desk fixes"). Three new SECURITY DEFINER functions behind SQL 124's aws_mortgage_desk_readable_request (the assigned
 // mortgage agent or the platform owner): the request's check (display fields only), the claim's homeowner timeline of
 // the request's tenant, and the homeowner tracking link for the homeowner on file; EXECUTE for checksops and the owner.
-// No predecessor. Pending until a reviewed pin change records a staging read-live (ops/production-sql-163-apply.md).
+// No predecessor. Staging apply authorized (wave 54) from staging read-live run 43355976887: the pre-state, the three
+// functions absent, equals the derived one (ops/production-sql-163-apply.md).
 export const AUTHORIZED_SQL163_MORTGAGE_DESK_CHECK_TIMELINE_HOMEOWNER_LINK = Object.freeze({
   key: 'sql163',
   filename: 'aws/workflows/sql/163_mortgage_desk_check_timeline_homeowner_link.sql',
@@ -3755,9 +3756,11 @@ export const AUTHORIZED_SQL163_MORTGAGE_DESK_CHECK_TIMELINE_HOMEOWNER_LINK = Obj
   // The commit that last authored the file bytes.
   commit: '7a9df4765224a2071bc407c8e9bd890954cf99b1',
   source_sha256: '7075128ade468e88881dee2527280ef36e3e54b357b0595c3d00077428bb73ad',
-  authorization: 'pending',
-  execute: false,
-  expected_live_definition_sha256: null,
+  authorization: 'Owner approved 2026-11-13: staging apply (wave 54) from staging read-live run 43355976887',
+  execute: true,
+  // Staging read-live run 43355976887 (main 79ae218c6, executor deploy run 43355657339): already_applied false,
+  // precondition_failures []. Equal to the derived pre-state (the three functions absent).
+  expected_live_definition_sha256: '23d41c1086f3f15412a5d374e056eaaf1bef7f428d81b0ffbdda666a5250de87',
   // Code-derived: releaseIntendedHash('sql163', file bytes) (release-sql-state.mjs); re-derived by the tests.
   intended_replacement_sha256: 'ef536373458b30dc16679e921af2a071e63a4cb755854612f2ff90eb79184c85',
   function_identities: Object.freeze([
