@@ -85,7 +85,11 @@ export interface SentPayment {
   checkId: string | null;
   check: { check_number?: string | null; carrier_name?: string | null } | null;
   recipientName: string;
-  recipientKind: "partner" | "stakeholder" | "recipient";
+  /** "vendor": a vendor payee paid to its ChecksOps wallet (provider_metadata.recipient_kind 'vendor'). */
+  recipientKind: "partner" | "vendor" | "stakeholder" | "recipient";
+  /** provider_metadata.recipient_kind as recorded ("" when the leg has none). */
+  declaredKind: string;
+  /** The receiving organization (destination_tenant_id) of a partner or vendor send. */
   partnerTenantId: string | null;
   amountCents: number;
   /** Every leg completed: settled; otherwise accepted and on its way. */
@@ -102,18 +106,22 @@ export function sentPayments(legs: SendLeg[] | null | undefined): SentPayment[] 
     const key = meta.request_hash
       ? `${meta.request_hash}|${meta.recipient_index ?? meta.recipient_id ?? ""}`
       : `leg|${leg.id}`;
-    const kind = leg.destination_tenant_id || lower(meta.recipient_kind) === "partner"
-      ? "partner"
-      : lower(meta.recipient_kind) === "stakeholder" ? "stakeholder" : "recipient";
+    const declaredKind = lower(meta.recipient_kind);
+    const kind = declaredKind === "vendor"
+      ? "vendor"
+      : leg.destination_tenant_id || declaredKind === "partner"
+        ? "partner"
+        : declaredKind === "stakeholder" ? "stakeholder" : "recipient";
     const at = leg.completed_at || leg.submitted_at || leg.created_at || null;
     const g = groups.get(key) ?? {
       key: `send-${key}`,
       at: null,
       checkId: leg.check_id ?? null,
       check: leg.check ?? null,
-      recipientName: String(meta.recipient_name || "").trim() || (kind === "partner" ? "Partner" : "Recipient"),
+      recipientName: String(meta.recipient_name || "").trim() || (kind === "partner" ? "Partner" : kind === "vendor" ? "Vendor" : "Recipient"),
       recipientKind: kind,
-      partnerTenantId: leg.destination_tenant_id ?? (kind === "partner" ? meta.recipient_id ?? null : null),
+      declaredKind,
+      partnerTenantId: leg.destination_tenant_id ?? (kind === "partner" || kind === "vendor" ? meta.recipient_id ?? null : null),
       amountCents: 0,
       completed: true,
       sources: [],
@@ -145,7 +153,7 @@ export function sendExpenseRows(legs: SendLeg[] | null | undefined): RevenueExpe
       kind: "send" as const,
       at: p.at,
       title: p.recipientName,
-      subtitle: `${SEND_SOURCE_LABEL}${p.recipientKind === "partner" ? " to partner" : ""} · from ${sourceLabel(p)}`,
+      subtitle: `${SEND_SOURCE_LABEL}${p.recipientKind === "partner" ? " to partner" : p.recipientKind === "vendor" ? " to vendor" : ""} · from ${sourceLabel(p)}`,
       reference: checkNumber ? `Ck #${checkNumber}` : SEND_SOURCE_LABEL,
       amount: p.amountCents / 100,
       status: p.completed ? "Settled" : "Sent",
@@ -185,7 +193,7 @@ export function sendLedgerRows(legs: SendLeg[] | null | undefined): SendLedgerRo
       return_code: null,
       method: "send" as const,
       recipient_name: p.recipientName,
-      recipient_type: p.recipientKind === "partner" ? "partner" : "other",
+      recipient_type: p.recipientKind === "partner" || p.recipientKind === "vendor" ? p.recipientKind : "other",
       external_check_number: null,
       stakeholder_accounts: null,
       disbursement_batches: p.checkId ? { check_intake_items: { id: p.checkId, ...(p.check ?? {}) } } : null,
@@ -200,12 +208,96 @@ export function sendRecipientReportRows(legs: SendLeg[] | null | undefined) {
       id: `send:${p.key}`,
       date: p.at as string,
       name: p.recipientName,
-      type: p.recipientKind === "partner" ? "partner" : "other",
-      acct4: p.recipientKind === "partner" ? "Partner wallet" : "—",
+      type: p.recipientKind === "partner" || p.recipientKind === "vendor" ? p.recipientKind : "other",
+      acct4: p.recipientKind === "partner" ? "Partner wallet" : p.recipientKind === "vendor" ? "Vendor wallet" : "—",
       amount: p.amountCents / 100,
       status: "settled" as const,
       method: "send",
     }));
+}
+
+// ---------------------------------------------------------------- vendor payments (Tax & 1099)
+
+/** One payment to a vendor organization, for Tax & 1099 (owner, 2026-11-13: "Include vendors in the 1099 reports"). */
+export interface VendorTaxPayment {
+  vendor_tenant_id: string;
+  vendor_name: string | null;
+  /** When the money left: completed, else submitted, else created. */
+  at: string;
+  amount: number;
+}
+
+/**
+ * Check-bound sends to a vendor payee, one per recipient per send. A leg is a vendor's when the API
+ * recorded provider_metadata.recipient_kind 'vendor'. A leg with no recorded kind whose receiving
+ * organization (destination_tenant_id) is one of `vendorTenantIds` counts too. A leg recorded as a
+ * partner payment never does. Payroll legs are left out (payroll_runs counts those).
+ */
+export function vendorSendTaxPayments(
+  legs: SendLeg[] | null | undefined,
+  options: { vendorTenantIds?: Iterable<string> | null; names?: Map<string, string> | null } = {},
+): VendorTaxPayment[] {
+  const knownVendors = new Set([...(options.vendorTenantIds ?? [])].map(lower));
+  const out: VendorTaxPayment[] = [];
+  for (const p of sentPayments(legs)) {
+    const tenantId = p.partnerTenantId;
+    if (!tenantId || !p.at) continue;
+    const vendor = p.recipientKind === "vendor" || (p.declaredKind === "" && knownVendors.has(lower(tenantId)));
+    if (!vendor) continue;
+    const named = options.names?.get(tenantId) ?? null;
+    out.push({
+      vendor_tenant_id: tenantId,
+      // The recorded name, never the "Partner"/"Vendor"/"Recipient" placeholder sentPayments puts in.
+      vendor_name: named || (p.recipientName && !["Partner", "Vendor", "Recipient"].includes(p.recipientName) ? p.recipientName : null),
+      at: p.at,
+      amount: p.amountCents / 100,
+    });
+  }
+  return out;
+}
+
+type LegQuery = PromiseLike<{ data: unknown; error: unknown }> & {
+  eq(column: string, value: string): LegQuery;
+  in(column: string, values: string[]): LegQuery;
+  gte(column: string, value: string): LegQuery;
+  lte(column: string, value: string): LegQuery;
+};
+type LegClient = { from(table: string): { select(columns: string): LegQuery } };
+
+/**
+ * Tax & 1099: this organization's accepted send legs to another organization in [from, to], and the
+ * receiving organizations' names (tenants_public). `client` is the app's data client.
+ */
+export async function fetchOrganizationSendLegs(
+  client: unknown,
+  tenantId: string,
+  range: { from: string; to: string },
+): Promise<{ legs: SendLeg[]; names: Map<string, string> }> {
+  const { data, error } = await (client as LegClient)
+    .from("payment_transfers")
+    .select(SEND_LEG_COLUMNS)
+    .eq("tenant_id", tenantId)
+    .in("leg_role", [...SEND_LEG_ROLES])
+    .in("status", [...ACCEPTED_SEND_STATUSES])
+    .gte("created_at", range.from)
+    .lte("created_at", range.to);
+  if (error) throw error;
+  const legs = ((data ?? []) as SendLeg[]).filter((leg) => !!leg.destination_tenant_id || lower(leg.provider_metadata?.recipient_kind) === "vendor");
+  const ids = [...new Set(legs.map((leg) => leg.destination_tenant_id ?? leg.provider_metadata?.recipient_id).filter(Boolean))] as string[];
+  const names = new Map<string, string>();
+  if (ids.length) {
+    try {
+      const { data: rows, error: namesError } = await (client as LegClient).from("tenants_public").select("id, name").in("id", ids);
+      if (!namesError) {
+        for (const row of (rows as Array<{ id?: string; name?: string | null }> | null) ?? []) {
+          if (row?.id && row.name) names.set(row.id, row.name);
+        }
+      }
+    } catch {
+      /* names stay empty */
+    }
+  }
+  return { legs, names };
 }
 
 // ---------------------------------------------------------------- recipient

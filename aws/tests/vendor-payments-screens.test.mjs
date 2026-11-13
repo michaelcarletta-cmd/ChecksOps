@@ -34,6 +34,7 @@ import {
   payrollPayeeLines,
   payrollRecipientReportRows,
   payrollTaxPayments,
+  payrollVendorTaxPayments,
   withVendorNames,
 } from '../../src/lib/payments/payrollRows.ts';
 
@@ -209,9 +210,12 @@ test('pay: a vendor recipient in the Funds tab and the payroll dialog, nowhere e
     'src/components/disbursement/VendorPayeesSettings.tsx',
     'src/components/disbursement/DisbursementConsole.tsx',
     'src/components/payroll/RunPayrollDialog.tsx',
+    // Read-only: Tax & 1099 uses the list to recognise vendor sends; nothing is paid from there.
+    'src/components/ledger/TaxSummary.tsx',
   ]);
   const users = srcFiles.filter((f) => /useVendorPayees\b/.test(read(f)));
   assert.deepEqual(users.filter((f) => !allowed.has(f)), []);
+  assert.doesNotMatch(read('src/components/ledger/TaxSummary.tsx'), /sendPayment|sendPayrollPayment|kind: "vendor"/);
   const vendorSends = srcFiles.filter((f) => /kind: "vendor"/.test(read(f)));
   assert.deepEqual(vendorSends.sort(), ['src/components/disbursement/DisbursementConsole.tsx', 'src/lib/payments/sends.ts']);
 });
@@ -283,8 +287,9 @@ test('payroll history: a vendor run (SQL 165 vendor_tenant_id, no stakeholder) s
   assert.equal(ledger[0].recipient_name, 'Acme Supply');
   assert.equal(ledger[0].recipient_type, 'vendor');
   assert.equal(payrollRecipientReportRows(named)[0].acct4, '—');
-  // Tax & 1099 keys payments to a stakeholder account; a vendor run has none and is left out.
+  // The stakeholder path keys to a stakeholder account; a vendor run is counted for the vendor instead.
   assert.deepEqual(payrollTaxPayments(named).map((p) => p.stakeholder_accounts.id), ['s1']);
+  assert.deepEqual(payrollVendorTaxPayments(named), [{ vendor_tenant_id: 'v1', vendor_name: 'Acme Supply', at: '2026-11-13T10:00:00Z', amount: 25 }]);
   // A failed name lookup never fails the read.
   const broken = { from() { throw new Error('down'); } };
   assert.equal((await withVendorNames(broken, [vendorRun]))[0].vendor_name, null);

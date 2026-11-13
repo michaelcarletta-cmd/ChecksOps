@@ -16,11 +16,16 @@ import {
   ACCOUNT_TYPE_LABELS,
   LEGACY_INFORMATIONAL_THRESHOLD,
   MONTH_LABELS,
+  VENDOR_ORG_TYPE,
   aggregateRecipientRows,
   buildPaymentReportingCsv,
   type RecipientRow,
 } from "@/lib/taxYtdSummary";
 import { PAYROLL_FINANCE_QUERY_KEY, fetchPayrollRuns, payrollExpenseTotal } from "@/lib/payments/payrollRows";
+import { fetchOrganizationSendLegs, vendorSendTaxPayments } from "@/lib/payments/transferFinanceRows";
+import { TRANSFER_FINANCE_QUERY_KEY } from "@/hooks/useTransferFinance";
+import { useVendorPayees } from "@/hooks/useVendorPayees";
+import { PAYMENT_FLAGS } from "@/lib/payments/featureFlags";
 import {
   taxProfileMutationVariables,
   type TaxProfileMutationVariables,
@@ -257,9 +262,31 @@ export function TaxSummary() {
     },
   });
 
+  // Vendors (owner, 2026-11-13: "Include vendors in the 1099 reports"): check-bound sends to a vendor
+  // payee, grouped by vendor organization with its payroll runs. A leg the API recorded as a vendor
+  // payment counts; a leg with no recorded kind counts when it went to one of this tenant's vendor payees.
+  const { data: vendorPayees = [] } = useVendorPayees(tenant?.id);
+  const { data: organizationSends } = useQuery({
+    queryKey: [TRANSFER_FINANCE_QUERY_KEY, "tax-summary-vendor-sends", tenant?.id, year],
+    enabled: PAYMENT_FLAGS.SHOW_VENDOR_PAYMENTS && !!tenant?.id,
+    queryFn: () => fetchOrganizationSendLegs(supabase, tenant!.id, {
+      from: startOfYear(new Date(year, 0, 1)).toISOString(),
+      to: endOfYear(new Date(year, 0, 1)).toISOString(),
+    }),
+  });
+  const vendorPayments = useMemo(
+    () => PAYMENT_FLAGS.SHOW_VENDOR_PAYMENTS
+      ? vendorSendTaxPayments(organizationSends?.legs, {
+        vendorTenantIds: vendorPayees.map((v) => v.vendor_tenant_id),
+        names: organizationSends?.names,
+      })
+      : [],
+    [organizationSends, vendorPayees],
+  );
+
   const recipients: RecipientRow[] = useMemo(
-    () => aggregateRecipientRows({ payments: payments as any[], cashPayments: cashPayments as any[], payrollRuns, year }),
-    [payments, cashPayments, payrollRuns, year],
+    () => aggregateRecipientRows({ payments: payments as any[], cashPayments: cashPayments as any[], payrollRuns, vendorPayments, year }),
+    [payments, cashPayments, payrollRuns, vendorPayments, year],
   );
 
   const visibleRecipients = useMemo(() => {
@@ -548,6 +575,7 @@ export function TaxSummary() {
                         <p className="text-[10px] text-muted-foreground">
                           {r.custname}
                           {r.chk_acct ? ` · ••••${r.chk_acct.slice(-4)}` : ""}
+                          {r.account_type === VENDOR_ORG_TYPE ? " · no bank account on file" : ""}
                         </p>
                       </td>
                       <td className="p-2 hidden lg:table-cell">
@@ -584,7 +612,7 @@ export function TaxSummary() {
                               title={canEditTaxProfile ? undefined : TAX_PROFILES_UNAVAILABLE_HEADING}
                               onClick={() => {
                                 if (!canEditTaxProfile) return;
-                                openEdit(r.id, r.custname && r.custname !== "External check" && r.custname !== "Cash job payee" ? r.custname : r.nickname);
+                                openEdit(r.id, r.account_type !== VENDOR_ORG_TYPE && r.custname && r.custname !== "External check" && r.custname !== "Cash job payee" ? r.custname : r.nickname);
                               }}
                             >
                               <Pencil className="h-3 w-3 mr-1" />Tax info

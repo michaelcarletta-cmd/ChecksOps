@@ -233,8 +233,8 @@ export function payrollSpeedFeeExpenseTotal(runs: PayrollRun[] | null | undefine
 /**
  * Tax & 1099: paid runs as split-shaped payments keyed to the payee's stakeholder account, so
  * they merge with that payee's other payments (`acct:<id>`). payroll_runs has no settled_at;
- * the month comes from created_at. A payment to a vendor payee has no stakeholder account and is
- * left out here (no account to key it to), like incoming partner payments.
+ * the month comes from created_at. A payment to a vendor payee has no stakeholder account: it is
+ * counted for the vendor organization through payrollVendorTaxPayments instead.
  */
 export type PayrollTaxPayment = {
   created_at: string;
@@ -250,6 +250,21 @@ export function payrollTaxPayments(runs: PayrollRun[] | null | undefined): Payro
     const acct = payrollAccount(run);
     if (!acct.id) continue;
     out.push({ created_at: run.created_at, settled_at: null, amount: payrollAmount(run), stakeholder_accounts: acct });
+  }
+  return out;
+}
+
+/**
+ * Tax & 1099 (owner, 2026-11-13: "Include vendors in the 1099 reports"): paid payroll runs to a
+ * vendor payee, keyed to the vendor organization. Same status rule as payrollTaxPayments.
+ */
+export function payrollVendorTaxPayments(
+  runs: PayrollRun[] | null | undefined,
+): Array<{ vendor_tenant_id: string; vendor_name: string | null; at: string; amount: number }> {
+  const out: Array<{ vendor_tenant_id: string; vendor_name: string | null; at: string; amount: number }> = [];
+  for (const run of runs ?? []) {
+    if (!isVendorPayrollRun(run) || !isPayrollPaid(run) || !run.created_at) continue;
+    out.push({ vendor_tenant_id: run.vendor_tenant_id as string, vendor_name: run.vendor_name ?? null, at: run.created_at, amount: payrollAmount(run) });
   }
   return out;
 }

@@ -1,5 +1,6 @@
 import { parseIssueDate } from "./issueDate.ts";
-import { payrollTaxPayments, type PayrollRun } from "./payments/payrollRows.ts";
+import { payrollTaxPayments, payrollVendorTaxPayments, type PayrollRun } from "./payments/payrollRows.ts";
+import type { VendorTaxPayment } from "./payments/transferFinanceRows.ts";
 /**
  * Non-sensitive year-to-date payment reporting helpers.
  * Must never include TIN, EIN, SSN, or other tax-identifier values.
@@ -23,13 +24,27 @@ export const ACCOUNT_TYPE_LABELS: Record<string, string> = {
   sales_rep: "Sales Rep",
   appraisal: "Appraisal",
   adjuster: "Adjuster",
+  vendor_org: "Vendor (ChecksOps)",
   other: "Other",
 };
+
+/**
+ * A vendor organization paid to its ChecksOps wallet (owner, 2026-11-13: "Include vendors in the 1099
+ * reports"): one row per vendor, keyed vendor:<vendor_tenant_id>, from check-bound vendor sends and
+ * vendor payroll runs. It has no bank account (no last 4) and no TIN in ChecksOps unless this
+ * organization enters one under "Tax info"; both show as missing, never guessed.
+ */
+export const VENDOR_ORG_TYPE = "vendor_org";
+export const VENDOR_ORG_DETAIL = "Vendor · ChecksOps wallet";
+/** The CSV's "Account (last 4)" for a vendor: there is no bank account to show. */
+export const VENDOR_ACCOUNT_MISSING = "Missing: no bank account (ChecksOps wallet)";
+export const vendorRecipientRowKey = (vendorTenantId: string) => `vendor:${String(vendorTenantId).toLowerCase()}`;
 
 /** Legacy informational categories only — not a filing determination. */
 export const LEGACY_INFORMATIONAL_1099_TYPES = [
   "subcontractor",
   "vendor",
+  "vendor_org",
   "contractor",
   "supplier",
   "sales_rep",
@@ -77,13 +92,19 @@ export function aggregateRecipientRows({
   payments = [],
   cashPayments = [],
   payrollRuns = [],
+  vendorPayments = [],
   year,
   threshold = LEGACY_INFORMATIONAL_THRESHOLD,
 }: {
   payments?: SplitPayment[];
   cashPayments?: CashPayment[];
-  /** payroll_runs rows; only paid runs count, keyed acct:<stakeholder_account_id>. */
+  /**
+   * payroll_runs rows; only paid runs count, keyed acct:<stakeholder_account_id>, or
+   * vendor:<vendor_tenant_id> for a payment to a vendor payee (SQL 165).
+   */
   payrollRuns?: PayrollRun[];
+  /** Check-bound sends to vendor payees (vendorSendTaxPayments), keyed vendor:<vendor_tenant_id>. */
+  vendorPayments?: VendorTaxPayment[];
   year: number;
   threshold?: number;
 }): RecipientRow[] {
@@ -160,6 +181,22 @@ export function aggregateRecipientRows({
     }
   }
 
+  // Vendor organizations: check-bound sends and payroll runs to the same vendor share one row.
+  for (const p of [...vendorPayments, ...payrollVendorTaxPayments(payrollRuns)]) {
+    if (!p.vendor_tenant_id || !p.at) continue;
+    const d = new Date(p.at);
+    if (!Number.isFinite(d.getTime()) || d.getFullYear() !== year) continue;
+    const key = vendorRecipientRowKey(p.vendor_tenant_id);
+    upsert(key, {
+      nickname: p.vendor_name ?? "Vendor",
+      custname: VENDOR_ORG_DETAIL,
+      account_type: VENDOR_ORG_TYPE,
+      chk_acct: "",
+    }, Number(p.amount ?? 0), d.getMonth());
+    // A later payment that knows the name fills in a row started without one.
+    if (map[key].nickname === "Vendor" && p.vendor_name) map[key].nickname = p.vendor_name;
+  }
+
   for (const r of Object.values(map)) {
     r.needs_1099 = r.requires_1099 && r.total >= threshold;
   }
@@ -197,7 +234,7 @@ export function buildPaymentReportingCsv({
     r.nickname,
     r.custname,
     ACCOUNT_TYPE_LABELS[r.account_type] ?? r.account_type,
-    maskAccountLast4(r.chk_acct),
+    r.account_type === VENDOR_ORG_TYPE ? VENDOR_ACCOUNT_MISSING : maskAccountLast4(r.chk_acct),
     ...r.monthly.map((v) => v.toFixed(2)),
     r.total.toFixed(2),
     r.payment_count,
