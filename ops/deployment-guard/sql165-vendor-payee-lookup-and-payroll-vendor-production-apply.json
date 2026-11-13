@@ -1,0 +1,66 @@
+{
+  "id": "sql165-vendor-payee-lookup-and-payroll-vendor-production-apply",
+  "migration": "sql165",
+  "authorization": "pending",
+  "execute": false,
+  "target_environment": "production",
+  "target_component": "production-sql",
+  "deployment_type": "sql-apply",
+  "filename": "aws/workflows/sql/165_vendor_payee_lookup_and_payroll_vendor.sql",
+  "migration_id": "165_vendor_payee_lookup_and_payroll_vendor",
+  "staging_pin_commit": "ffbff4fa9e5819564485bee96a6a2b7726b3557d",
+  "source_sha256": "18dfb11105daeb92d202fb8d1f3c0aba16e087c0933ed3352321e5e62e29bd84",
+  "function_identities": [
+    "public.aws_vendor_payees_for_tenant(uuid)"
+  ],
+  "expected_live_definition_sha256": null,
+  "intended_replacement_sha256": "23c689b9ac0dad2ee1760214a37038a86142041c104867da8381cffb3d8202fa",
+  "authorization_phrase": "ENABLE_VENDOR_PAYEE_LOOKUP_AND_PAYROLL_VENDOR",
+  "predecessors": [
+    "sql141"
+  ],
+  "order_note": "Predecessor SQL 141 (owner 2026-11-13: pay a vendor from a check or from a payroll payment; \"New migration\" and \"Record in payroll\"). The API login (checksops, subject to row-level security) cannot read another organization's vendor_tenants row (SQL 141's aws_select_vendor_tenants: the vendor's own members and the platform owner), so the send endpoint could not refuse a payee whose organization is no longer marked a vendor. SQL 165 creates public.aws_vendor_payees_for_tenant(uuid) (plpgsql, STABLE, SECURITY DEFINER, search_path public, row_security off; EXECUTE checksops and the owner only): refused (forbidden) unless the caller is a member of the tenant; otherwise the tenant's live tenant_vendor_payees links with vendor_tenant_id, vendor_name, partner_code_used, added_at, is_vendor, subscription_status and payable. Reads only; nothing of SQL 141 changes, so SQL 165 does not supersede it. It also lets public.payroll_runs name a vendor: vendor_tenant_id uuid (nullable; payroll_runs_vendor_tenant_id_fkey to tenants; partial index payroll_runs_vendor_tenant_idx; column INSERT for checksops), stakeholder_account_id NOT NULL dropped (its foreign key unchanged), and payroll_runs_one_payee_check (num_nonnulls of the two = 1). Every payroll_runs policy (SQL 136's money-write gates included) and table grant is unchanged. The engine refuses SQL 165 (predecessors_applied) unless SQL 141 reads applied. The spec prerequisites are the file's own (55000 sql165_prerequisite_missing); the applying login must read tenants, vendor_tenants and tenant_vendor_payees past row security (sql165_definer_cannot_read) and own payroll_runs (sql165_not_payroll_owner). Expected pre-state in both environments: the function, the column, both constraints and the index absent, and payroll_runs.stakeholder_account_id uuid NOT NULL with no default (release sql165 v1: 3a6d086e37c04740397c0b6a99d558ed0a5e907c296f8a99a71ae323acdca248). The release-sql141-production-apply test's guard that no other repository SQL references SQL 141's objects now allows exactly this file (owner-approved new migration), and asserts it only reads them. The API (moov-send.mjs vendor recipients, the vendor payee endpoints in workflow-rpc.mjs, the platform-owner vendor flag) ships after this through its own guarded path; no API, Lambda or SPA change is part of this pin.",
+  "admin_login": "checksops_admin",
+  "rds_identifier": "checksops-production",
+  "rds_host": "checksops-production.cyr0q4kcop3c.us-east-1.rds.amazonaws.com",
+  "admin_secret_arn": "arn:aws:secretsmanager:us-east-1:806168576068:secret:rds-db-credentials/checksops-production/checksops_admin/1790081257144",
+  "tooling": {
+    "status": "built",
+    "production_tool": "scripts/deployment-guard/sql165-vendor-payee-lookup-and-payroll-vendor-production-apply.mjs",
+    "production_lib": "scripts/deployment-guard/lib/release-sql-production-apply.mjs",
+    "staging_executor_handler": "aws/write-path/guarded-sql-executor/index.mjs handleReleaseSqlMigration",
+    "staging_workflow_choice": "sql165-vendor-payee-lookup-and-payroll-vendor",
+    "one_shot_migration": "sql165",
+    "fingerprint_engine": "scripts/deployment-guard/lib/release-sql-state.mjs",
+    "runbook": "ops/production-sql-165-apply.md",
+    "tests": [
+      "aws/tests/release-sql165-executor.test.mjs",
+      "aws/tests/release-sql165-production-apply.test.mjs",
+      "aws/tests/release-sql90-97-executor.test.mjs",
+      "aws/tests/release-sql90-97-production-apply.test.mjs",
+      "aws/tests/sql165-vendor-payee-lookup-and-payroll-vendor-pg.test.mjs"
+    ],
+    "note": "Guarded tooling for SQL 165: sql165-vendor-payee-lookup-and-payroll-vendor-production-apply.mjs --inspect (read-only) and the receipt-gated --apply on the engine shared with the staging guarded executor (choice sql165-vendor-payee-lookup-and-payroll-vendor); production-sql-one-shot.mjs --migration sql165. intended_replacement_sha256 is the code-derived fingerprint (releaseIntendedHash in release-sql-state.mjs, equal to the staging pin's): the new function with its attributes, body and ACL, the added column with its column ACL, the altered column (type, NOT NULL, default; the engine's altered_columns, new with this migration), the two constraints and the index. The tooling does not authorize anything: this pin stays execute false until a reviewed change records the staging acceptance, the production inspect and an owner approval."
+  },
+  "production_inspect": {
+    "status": "pending",
+    "date": null,
+    "ssm_command_id": null,
+    "source_commit": null,
+    "read_only": true,
+    "connected_as": "checksops_admin",
+    "live_definition_sha256": null,
+    "apply_preconditions_met": null,
+    "precondition_failures": null,
+    "note": "Pending: no release-engine production inspect has been run for SQL 165 yet. Expected: prerequisites_missing [], predecessors sql141 applied, the function, column, constraints and index absent, payroll_runs.stakeholder_account_id uuid NOT NULL with no default, definer_writes ok on tenants, vendor_tenants and tenant_vendor_payees, already_applied false. Expected release-engine fingerprint of that pre-state under sql165: 3a6d086e37c04740397c0b6a99d558ed0a5e907c296f8a99a71ae323acdca248 (releaseStateHash('sql165', {altered_columns: stakeholder_account_id uuid NOT NULL})). Record the one-shot --phase inspect's date, SSM command id, source commit, live_definition_sha256, prerequisites_missing, release_sql_inspect, precondition_failures and apply_preconditions_met here and copy live_definition_sha256 into expected_live_definition_sha256 in the reviewed change that sets execute true. Stop if the pre-state differs, prerequisites_missing is not [] or precondition_failures is not []: that needs its own reviewed change."
+  },
+  "intended_post_state": {
+    "fingerprint": "23c689b9ac0dad2ee1760214a37038a86142041c104867da8381cffb3d8202fa",
+    "note": "public.aws_vendor_payees_for_tenant(uuid) (plpgsql, STABLE, SECURITY DEFINER, SET search_path = public, SET row_security = off, RETURNS jsonb, owned by checksops_admin, EXECUTE checksops and the owner, nothing for PUBLIC); public.payroll_runs.vendor_tenant_id (uuid, nullable, no default; column INSERT for checksops) with payroll_runs_vendor_tenant_id_fkey (FOREIGN KEY (vendor_tenant_id) REFERENCES public.tenants(id)) and payroll_runs_vendor_tenant_idx (partial, vendor_tenant_id IS NOT NULL); payroll_runs.stakeholder_account_id uuid, nullable, no default; payroll_runs_one_payee_check (CHECK ((num_nonnulls(stakeholder_account_id, vendor_tenant_id) = 1))). No other function, table, policy, table grant or trigger change; no row written by the apply. The fingerprint is releaseIntendedHash('sql165', file bytes) (scripts/deployment-guard/lib/release-sql-state.mjs): 23c689b9ac0dad2ee1760214a37038a86142041c104867da8381cffb3d8202fa."
+  },
+  "staging_acceptance": {
+    "ok": false,
+    "reference": null,
+    "basis": "Pending: record the guarded staging SQL executor read-live and the staging apply of SQL 165 (choice sql165-vendor-payee-lookup-and-payroll-vendor) here in the reviewed change that sets execute true. The behavior is covered on PostgreSQL 16 by aws/tests/sql165-vendor-payee-lookup-and-payroll-vendor-pg.test.mjs. Until then the tool refuses this pin with SQL_COLLISION (expected_live_definition_sha256 is null) and PRODUCTION_APPROVAL_REQUIRED (no owner approval or staging acceptance)."
+  }
+}

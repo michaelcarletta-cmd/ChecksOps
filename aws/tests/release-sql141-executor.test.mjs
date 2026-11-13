@@ -149,10 +149,11 @@ test('pin: SQL 141 staging-authorized from its read-live, code-derived, selectab
   assert.equal(spec.runs_before, undefined);
   assert.equal(spec.supersedes, undefined);
   assert.equal(spec.refuse_after, undefined);
-  // Nothing in the release refuses after SQL 141, supersedes it or needs it.
+  // Nothing in the release refuses after SQL 141 or supersedes it; SQL 165 (owner 2026-11-13, the API's vendor payee
+  // lookup, reads SQL 141's tables) names it as its predecessor.
   assert.deepEqual(RELEASE_SQL_KEYS.filter((key) => (RELEASE_SQL_SPECS[key].supersedes || []).includes(KEY)
     || (RELEASE_SQL_SPECS[key].refuse_after || []).some((m) => m.key === KEY)
-    || (RELEASE_SQL_SPECS[key].predecessors || []).includes(KEY)), []);
+    || (RELEASE_SQL_SPECS[key].predecessors || []).includes(KEY)), ['sql165']);
   // No other release migration creates the tables, the policies or the functions.
   assert.deepEqual(RELEASE_SQL_KEYS.filter((key) => key !== KEY && ((RELEASE_SQL_SPECS[key].tables || []).some((t) => TABLES.includes(t.name))
     || RELEASE_SQL_SPECS[key].functions.some((fn) => FUNCTIONS.includes(fn.identity))

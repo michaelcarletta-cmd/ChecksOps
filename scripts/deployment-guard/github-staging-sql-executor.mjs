@@ -168,6 +168,7 @@ export const MIGRATIONS = Object.freeze({
   'sql162-shared-check-source-sends': RELEASE_2026_10_17_PENDING_SQL_PINS.sql162,
   'sql163-mortgage-desk-check-timeline-homeowner-link': RELEASE_2026_10_17_PENDING_SQL_PINS.sql163,
   'sql164-wallet-withdrawal-leg-and-limits': RELEASE_2026_10_17_PENDING_SQL_PINS.sql164,
+  'sql165-vendor-payee-lookup-and-payroll-vendor': RELEASE_2026_10_17_PENDING_SQL_PINS.sql165,
 });
 
 const LAMBDA_CODE_SHA_RE = /^[A-Za-z0-9+/]{43}=$/;
