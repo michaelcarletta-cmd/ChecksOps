@@ -88,6 +88,7 @@ import { ShareCheckDialog } from "@/components/check-review/ShareCheckDialog";
 import { CashJobReviewLink } from "@/components/cash-jobs/CashJobReviewLink";
 import { MarkCheckReturnedDialog } from "@/components/checks/MarkCheckReturnedDialog";
 import { SharedChecksBadge } from "@/components/check-review/SharedChecksBadge";
+import { PartnerPaidOutBadge } from "@/components/check-review/PartnerPaidOutBadge";
 import { DepositStatusPanel } from "@/components/check-review/DepositStatusPanel";
 import { SignatureStatusPanel } from "@/components/check-review/SignatureStatusPanel";
 import { ReviewSettlementTab } from "@/components/check-review/ReviewSettlementTab";
@@ -224,8 +225,8 @@ import { useCheckCommandRealtime } from "@/features/check-command/useCheckComman
 import { optimisticStage, optimisticRemove } from "@/features/check-command/optimistic";
 import { receivedAmount, sharedReleasedReceivedRows } from "@/features/check-command/sharedFundsReleased";
 import { groupSplitsByClaim } from "@/features/check-command/groupSplitsByClaim";
-import { incomingFundsReceivedRows, receivedCheckIds } from "@/lib/payments/transferFinanceRows";
-import { useIncomingTransfers } from "@/hooks/useTransferFinance";
+import { incomingFundsReceivedRows, partnerPaidOutAt, receivedCheckIds } from "@/lib/payments/transferFinanceRows";
+import { useIncomingTransfers, useSharedCheckSourceSends } from "@/hooks/useTransferFinance";
 import {
   DISBURSED_SEND_STATUSES,
   SEND_LEG_ROLES,
@@ -822,6 +823,11 @@ export default function CheckCommandCenter() {
   // such a shared check belongs in Funds Received, where the payment is listed, not in Deposited:
   // a send leaves the check's check_stage at deposited, so the stage alone keeps it there.
   const receivedFromCheckIds = useMemo(() => receivedCheckIds(incomingTransfers), [incomingTransfers]);
+  // Shared checks the sharing organization paid out of by a send to someone else (SQL 162 via
+  // /data/rpc). Owner 2026-11-13: such a check stays in Deposited "with a note saying Freedom paid it
+  // out"; nothing moves between tabs and no total changes. Empty until live.
+  const { data: sharedSourceSends = [] } = useSharedCheckSourceSends(tenantId);
+  const partnerPaidOut = useMemo(() => partnerPaidOutAt(sharedSourceSends), [sharedSourceSends]);
 
   // Fetch claim numbers + policyholder names for any linked claims so search works on them
   const linkedClaimIds = useMemo(() => {
@@ -2161,6 +2167,9 @@ export default function CheckCommandCenter() {
                             titleAdornment={
                               <>
                                 {isShared && <SharedChecksBadge sourceTenantName={sourceTenantName} />}
+                                {isShared && partnerPaidOut.has(check.id) && (
+                                  <PartnerPaidOutBadge sourceTenantName={sourceTenantName} paidAt={partnerPaidOut.get(check.id)} />
+                                )}
                                 {!isShared && <DuplicateCheckBadge duplicates={duplicateChecks.get(check.id)} />}
                               </>
                             }
