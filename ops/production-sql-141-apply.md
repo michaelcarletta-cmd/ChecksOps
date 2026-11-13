@@ -65,7 +65,19 @@ Anything else (a precondition failure, such as a table or function of the same n
 shape, a missing prerequisite, or a login that cannot read `tenants` or
 `tenant_partner_code_aliases` past row security) stops and needs its own reviewed change.
 
-**Status:** staging pin execute-authorized (wave 56); not applied anywhere. The production pin is pending.
+**Status:** applied to staging (wave 56, 2026-11-13); production pin execute-authorized (owner-approved pin change of 2026-11-13,
+"Open the SQL 141 production pin PR"); not applied to production. The production apply still needs the owner's words for that run.
+
+**Staging apply (2026-11-13).** After the staging pin (#1882) and executor deploy run 43478177876 (main `69a0a8c0a`, executor
+CodeSha256 `72R3n5ta…` → `K6NRf+LR…`): read-live run 43478755545 `16522f0a…` (not applied, `precondition_failures` `[]`), apply run
+43479218106 under the owner's words "Do the SQL 141 staging pin and apply" (after `4d50013e…`, result `applied`), read-live run
+43479707681 `already_applied` true, `4d50013e…`.
+
+**Production inspect (2026-11-13).** Read-only, under the owner's words "Run the SQL 141 production inspect": transfer run
+43485268376 staged main `69a0a8c0a` (tarball `c6531e51…`, the SQL 141 file on the runner `547a1ffe…` == the pin), SSM
+`5f545550-3bb7-4325-8c2c-c9faf7331623` on the runner (started 18:44:06Z, stopped 18:45:04Z): live `16522f0a…` (both tables, both
+policies and the three functions absent), `already_applied` false, `precondition_failures` `[]`, `prerequisites_missing` `[]`, definer
+reads of tenants and tenant_partner_code_aliases ok.
 
 **Staging read-live (2026-11-13).** Run 43474483441 (main `a03684a89`, after executor inspect run 43473964416 showed the executor
 current, CodeSha256 `72R3n5ta…`), under the owner's words "Start SQL 141 vendor payees": `already_applied` false,
