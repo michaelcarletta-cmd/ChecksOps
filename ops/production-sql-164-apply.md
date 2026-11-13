@@ -33,7 +33,19 @@ written by the apply; no money moves. No API, Lambda or SPA change is part of th
 Wallet & Treasury button (hidden behind `SHOW_WALLET_WITHDRAW` until the API is live) ship afterwards through their own
 guarded paths.
 
-**Status:** staging pin execute-authorized (wave 55); not applied anywhere. The production pin is pending.
+**Status:** applied to staging (wave 55, 2026-11-13); production pin execute-authorized (owner-approved pin change of 2026-11-13,
+"Open the SQL 164 production pin PR"); not applied to production. The production apply still needs the owner's words for that run.
+
+**Staging apply (2026-11-13).** After the staging pin (#1873) and executor deploy run 43445049442 (main `33b902dab`, executor
+CodeSha256 `p+7b7mGH…` → `72R3n5ta…`): read-live run 43445483325 `51e721c1…` (not applied, `precondition_failures` `[]`), apply run
+43446058463 under the owner's words "Do the SQL 164 staging pin and apply" (after `0659d381…`, result `applied`), read-live run
+43446540303 `already_applied` true, `0659d381…`.
+
+**Production inspect (2026-11-13).** Read-only, under the owner's words "Run the SQL 164 production inspect": transfer run
+43447124401 staged main `33b902dab` (tarball `9bea5ba3…`, the SQL 164 file on the runner `dcf259b4…` == the pin), SSM
+`ff99d916-2670-435b-a595-069aaebe6492` on the runner (started 14:55:15Z, stopped 14:56:55Z): live `51e721c1…` (SQL 109's function, the
+columns and checks absent), `already_applied` false, `precondition_failures` `[]`, `prerequisites_missing` `[]`, SQL 109 applied,
+`definer_writes` ok on payment_transfers and payment_event_log.
 
 **Staging read-live (2026-11-13).** Run 43439497274 (main `6abf428bb`, after executor inspect run 43438326981 and executor deploy
 run 43438851836 (executor CodeSha256 `ND9sboqs…` -> `p+7b7mGH…`)), under the owner's words "Start the SQL 164 staging refresh
