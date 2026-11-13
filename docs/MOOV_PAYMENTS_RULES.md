@@ -43,6 +43,20 @@ From the Funds tab (Disburse to Stakeholders), to:
   their linked bank instead. Only the organization that owns the check sends.
 - **Homeowners**: through a KYC link, after Moov approval. Not built yet; the link
   flow must be rebuilt for production.
+- **Vendors** (owner 2026-11-13; SQL 141 permanent vendors, SQL 165 lookup): an
+  organization the platform owner marks as a vendor, which a tenant adds as a payee by
+  its Partner Code (no partnership, nothing shared). A vendor is paid **wallet to wallet
+  only**, from a check (beside stakeholders and partners) or as the one recipient of the
+  standalone Payroll payment (its payroll history row names the vendor). The send is
+  refused (`vendor_not_payee`) unless the sender still has the vendor on its list and the
+  organization is still a vendor and active; unmarking a vendor stops new payments at
+  once. A vendor without a usable ChecksOps wallet is refused (`vendor_setup_required`,
+  "This vendor hasn't finished wallet setup. Nothing was sent."; with two wallets and no
+  default, `vendor_wallet_choice_required`). **A vendor is never paid to its bank.** The
+  normal send fee applies, as for a partner (per recipient on a check; month-end billing
+  for a payroll payment). Any member may add, remove and pay vendors, with the same
+  two-factor; no limits, no email. The vendor sees the payment as incoming in its Vendor
+  Portal wallet. Built in the API; held until its guarded deploy.
 
 **Top-up.** When the wallet's available balance is short, the send happens at
 once as two transfers per recipient, wallet part first:

@@ -11,6 +11,7 @@ import {
   selectCreditMethod,
   selectWalletMethod,
   summarizeSend,
+  VENDOR_PAYEES_SQL,
 } from '../functions/api/providers/production/moov-send.mjs';
 import { MoovError } from '../functions/api/providers/parity/moov-client.mjs';
 import { minutesAgo, stepUpWithinWindow } from './helpers/financial-stepup-window.mjs';
@@ -26,6 +27,12 @@ const SUB = 'c4386408-60e1-70e2-abb6-e6194e8e635f';
 const ORIGIN_JTI = 'b2c3d4e5-aaaa-4bbb-8ccc-000011112222';
 const LOGIN = `${SUB}:jti:${ORIGIN_JTI}`;
 const CLICK = '0b0e0c3a-5f4e-4d2c-9a1b-2c3d4e5f6a7b';
+const VENDOR = '16500000-0000-4000-8000-000000000001';
+/** SQL 165's aws_vendor_payees_for_tenant rows for TENANT: a live link to an active vendor. */
+const VENDOR_PAYEE = Object.freeze({
+  link_id: 'f1000000-0000-4000-8000-000000000001', vendor_tenant_id: VENDOR, vendor_name: 'Acme Supply', partner_code_used: 'VEND165',
+  added_at: '2026-11-13T10:00:00Z', is_vendor: true, subscription_status: 'active', payable: true,
+});
 
 const FLAGS = {
   AWS_PROVIDER_EXECUTION_ENABLED: 'true',
@@ -94,6 +101,8 @@ const fakeDb = ({
   // right after this request's first read of its legs.
   plantAfterFirstRead = null,
   payrollRuns = [],
+  vendorPayees = [VENDOR_PAYEE],
+  vendorLookup = null,
 } = {}) => {
   const committed = { transfers: transfers.map((t) => ({ ...t })), events: [], payroll: payrollRuns.map((r) => ({ ...r })) };
   let pending = null;
@@ -181,6 +190,11 @@ const fakeDb = ({
             && x.source_tenant_id === me && x.target_tenant_id === them && time(x.revoked_at) >= since);
         return { rows: shared || partnered ? [{ ok: 1 }] : [] };
       }
+      if (sql === VENDOR_PAYEES_SQL) {
+        // SQL 165: only the caller's own tenant's live links (the function's member check).
+        const result = vendorLookup || (params[0] === TENANT ? { ok: true, tenant_id: TENANT, payees: vendorPayees } : { ok: false, error: 'forbidden' });
+        return { rows: [{ result }] };
+      }
       if (sql.includes('COALESCE(sum(amount_cents)')) return { rows: [{ cents: reservedCents }] };
       if (sql.includes('SELECT * FROM public.payment_transfers') && sql.includes('left(idempotency_key')) {
         const [tenantId, prefix] = params;
@@ -233,8 +247,8 @@ const fakeDb = ({
       if (sql.includes('INSERT INTO public.payroll_runs')) {
         const row = {
           id: `00000000-0000-4000-9000-${String(state().payroll.length + 1).padStart(12, '0')}`,
-          tenant_id: params[0], stakeholder_account_id: params[1], disbursement_batch_id: null, amount: params[2],
-          speed: params[3], memo: params[4], initiated_by: params[5], status: 'pending', error: null,
+          tenant_id: params[0], stakeholder_account_id: params[1], vendor_tenant_id: params[2], disbursement_batch_id: null, amount: params[3],
+          speed: params[4], memo: params[5], initiated_by: params[6], status: 'pending', error: null,
           financial_execution: client.log.some((l) => /request\.financial_execution/.test(l.sql)),
         };
         state().payroll.push(row);
@@ -271,9 +285,15 @@ const methods = {
     { paymentMethodType: 'moov-wallet', paymentMethodID: 'pm-partner-wallet', wallet: { walletID: 'pw-1' } },
     { paymentMethodType: 'ach-credit-standard', paymentMethodID: 'pm-partner-bank', bankAccount: { bankAccountID: 'pb-1' } },
   ],
+  'vendor-acct': [
+    { paymentMethodType: 'moov-wallet', paymentMethodID: 'pm-vendor-wallet', wallet: { walletID: 'vw-1' } },
+    { paymentMethodType: 'ach-credit-standard', paymentMethodID: 'pm-vendor-bank', bankAccount: { bankAccountID: 'vb-1' } },
+    { paymentMethodType: 'ach-credit-same-day', paymentMethodID: 'pm-vendor-bank-sd', bankAccount: { bankAccountID: 'vb-1' } },
+  ],
 };
+const VENDOR_ACCOUNT = Object.freeze({ accountID: 'vendor-acct', foreignID: VENDOR, displayName: 'Acme Supply LLC', metadata: { checksops_tenant_id: VENDOR } });
 
-const moovStub = ({ available = 1_000_000, posts = [], partnerMethods = methods['partner-acct'], partnerAccounts } = {}) => {
+const moovStub = ({ available = 1_000_000, posts = [], partnerMethods = methods['partner-acct'], partnerAccounts, vendorMethods = methods['vendor-acct'], vendorAccounts = [VENDOR_ACCOUNT] } = {}) => {
   const calls = [];
   let postIndex = 0;
   const impl = async (url, init = {}) => {
@@ -290,12 +310,14 @@ const moovStub = ({ available = 1_000_000, posts = [], partnerMethods = methods[
     }
     if (method === 'GET' && path === '/accounts') {
       const foreign = new URLSearchParams(query).get('foreignID');
+      if (foreign === VENDOR) return reply(200, vendorAccounts);
       const list = partnerAccounts ?? (foreign === PARTNER ? [{ accountID: 'partner-acct', foreignID: PARTNER, displayName: 'Partner Co', metadata: { checksops_tenant_id: PARTNER } }] : []);
       return reply(200, list);
     }
     const pm = path.match(/^\/accounts\/([^/]+)\/payment-methods$/);
     if (method === 'GET' && pm) {
       if (pm[1] === 'partner-acct') return reply(200, partnerMethods);
+      if (pm[1] === 'vendor-acct') return reply(200, vendorMethods);
       return methods[pm[1]] ? reply(200, methods[pm[1]]) : reply(404, { error: 'not found' });
     }
     if (method === 'POST' && path.endsWith('/transfers')) {
@@ -310,6 +332,7 @@ const moovStub = ({ available = 1_000_000, posts = [], partnerMethods = methods[
 
 const stakeholder = (amount, id = STAKEHOLDER) => ({ kind: 'stakeholder', stakeholder_account_id: id, amount_cents: amount });
 const partner = (amount, id = PARTNER) => ({ kind: 'partner', partner_tenant_id: id, amount_cents: amount });
+const vendor = (amount, id = VENDOR) => ({ kind: 'vendor', vendor_tenant_id: id, amount_cents: amount });
 
 const run = (client, moov, body = {}, claims = {}, extraDeps = {}) => handleProviderRequest(
   sendEvent({ tenant_id: TENANT, check_id: CHECK, idempotency_key: CLICK, recipients: [stakeholder(2500)], ...body }, claims),
@@ -792,7 +815,8 @@ test('request parsing, leg planning and method selection', () => {
   assert.match(parseSendRequest({ idempotency_key: CLICK, check_id: CHECK, recipients: [stakeholder(0)] }).error, /cents/);
   assert.match(parseSendRequest({ idempotency_key: CLICK, check_id: CHECK, recipients: [stakeholder(5), stakeholder(6)] }).error, /only once/);
   assert.match(parseSendRequest({ idempotency_key: CLICK, check_id: CHECK, speed: 'instant', recipients: [stakeholder(5)] }).error, /speed/);
-  assert.equal(parseSendRequest({ idempotency_key: CLICK, check_id: CHECK, recipients: [{ kind: 'other', amount_cents: 5 }] }).error, 'Each recipient must be a stakeholder or a partner.');
+  assert.equal(parseSendRequest({ idempotency_key: CLICK, check_id: CHECK, recipients: [{ kind: 'other', amount_cents: 5 }] }).error, 'Each recipient must be a stakeholder, a partner or a vendor.');
+  assert.equal(parseSendRequest({ idempotency_key: CLICK, check_id: CHECK, recipients: [{ kind: 'vendor', vendor_tenant_id: 'nope', amount_cents: 5 }] }).error, 'Each recipient must be a stakeholder, a partner or a vendor.');
 
   const plan = planSendLegs([{ amount_cents: 600 }, { amount_cents: 600 }, { amount_cents: 600 }], 1000);
   assert.deepEqual(plan.map((p) => [p.wallet_cents, p.bank_cents]), [[600, 0], [400, 200], [0, 600]]);
@@ -916,8 +940,9 @@ test('payroll: parse accepts exactly one stakeholder and no check; check sends s
   assert.equal(ok.purpose, 'payroll');
   assert.equal(ok.checkId, null);
   assert.equal(parseSendRequest({ idempotency_key: CLICK, ...payroll({ check_id: CHECK }) }).error, 'A payroll payment is not tied to a check.');
-  assert.equal(parseSendRequest({ idempotency_key: CLICK, ...payroll({ recipients: [partner(100)] }) }).error, 'A payroll payment pays exactly one stakeholder.');
-  assert.equal(parseSendRequest({ idempotency_key: CLICK, ...payroll({ recipients: [stakeholder(100), stakeholder(100, STAKEHOLDER_2)] }) }).error, 'A payroll payment pays exactly one stakeholder.');
+  assert.equal(parseSendRequest({ idempotency_key: CLICK, ...payroll({ recipients: [partner(100)] }) }).error, 'A payroll payment pays exactly one stakeholder or vendor.');
+  assert.equal(parseSendRequest({ idempotency_key: CLICK, ...payroll({ recipients: [stakeholder(100), stakeholder(100, STAKEHOLDER_2)] }) }).error, 'A payroll payment pays exactly one stakeholder or vendor.');
+  assert.equal(parseSendRequest({ idempotency_key: CLICK, ...payroll({ recipients: [stakeholder(100), vendor(100)] }) }).error, 'A payroll payment pays exactly one stakeholder or vendor.');
   assert.equal(parseSendRequest({ idempotency_key: CLICK, purpose: 'other', check_id: CHECK, recipients: [stakeholder(1)] }).error, "purpose must be 'send' or 'payroll'");
   assert.equal(parseSendRequest({ idempotency_key: CLICK, recipients: [stakeholder(1)] }).error, 'check_id is required');
   // A check send hashes as before; a payroll for the same payee and amount is a different request.
@@ -1095,4 +1120,201 @@ test('the payroll dialog pays through the send route with the once-per-login wal
   assert.match(speedFees, /PAYROLL_SPEED_FEES: Readonly<Record<PayrollSpeed, number>> = \{ next_day: 0\.75, same_day: 1\.0 \}/);
   assert.match(sends, /purpose: "payroll"/);
   assert.match(sends, /functions\.invoke\("moov-disburse"/);
+});
+
+// Vendors (owner 2026-11-13, SQL 141 / SQL 165): paid wallet to wallet only, from a check or as the one
+// recipient of a payroll payment, while the sender holds a live payee link to a vendor that is still payable.
+test('vendor: parse and request hash include the vendor; the vendor kind is its own recipient', () => {
+  const send = parseSendRequest({ idempotency_key: CLICK, check_id: CHECK, recipients: [vendor(700)] });
+  assert.equal(send.error, undefined);
+  assert.deepEqual(send.recipients, [{ kind: 'vendor', id: VENDOR, amount_cents: 700 }]);
+  const upper = parseSendRequest({ idempotency_key: CLICK, check_id: CHECK, recipients: [vendor(700, VENDOR.toUpperCase())] });
+  assert.equal(upper.recipients[0].id, VENDOR);
+  // A vendor and a partner with the same id and amount are different requests.
+  const asPartner = parseSendRequest({ idempotency_key: CLICK, check_id: CHECK, recipients: [partner(700, VENDOR)] });
+  assert.notEqual(requestHash(send), requestHash(asPartner));
+  assert.notEqual(requestHash(send), requestHash(parseSendRequest({ idempotency_key: CLICK, check_id: CHECK, recipients: [vendor(701)] })));
+  // A vendor and a partner may both be paid in one send; the same vendor only once.
+  assert.equal(parseSendRequest({ idempotency_key: CLICK, check_id: CHECK, recipients: [vendor(1), partner(1)] }).error, undefined);
+  assert.match(parseSendRequest({ idempotency_key: CLICK, check_id: CHECK, recipients: [vendor(1), vendor(2)] }).error, /only once/);
+  const pay = parseSendRequest({ idempotency_key: CLICK, purpose: 'payroll', recipients: [vendor(100)] });
+  assert.equal(pay.error, undefined);
+  assert.equal(pay.purpose, 'payroll');
+});
+
+test('vendor: an authorized link is paid wallet to wallet from a check, with destination_tenant_id and recipient_kind vendor', async () => {
+  await withEnv(FLAGS, async () => {
+    const client = fakeDb();
+    const moov = moovStub();
+    const result = await run(client, moov, { recipients: [vendor(700)] });
+    assert.equal(result.ok, true, JSON.stringify(result));
+    assert.equal(result.send.sent_cents, 700);
+    const [post] = moov.posts();
+    assert.deepEqual(post.body.source, { paymentMethodID: 'pm-wallet' });
+    assert.deepEqual(post.body.destination, { paymentMethodID: 'pm-vendor-wallet' });
+    const [leg] = client.committed.transfers;
+    assert.equal(leg.destination_tenant_id, VENDOR);
+    assert.equal(leg.check_id, CHECK);
+    assert.equal(leg.leg_role, 'send_wallet');
+    assert.equal(leg.provider_metadata.recipient_kind, 'vendor');
+    assert.equal(leg.provider_metadata.recipient_id, VENDOR);
+    assert.equal(leg.provider_metadata.recipient_name, 'Acme Supply');
+    assert.equal(leg.provider_metadata.destination_kind, 'wallet');
+    assert.equal(leg.provider_metadata.vendor_account_id, 'vendor-acct');
+    assert.equal(leg.provider_metadata.partner_account_id, null);
+    assert.equal(result.send.recipients[0].destination, 'wallet');
+    // SQL 165's lookup for the sender's own tenant, as the verified sign-in (bound before the call).
+    const lookup = client.log.findIndex((l) => l.sql === VENDOR_PAYEES_SQL);
+    assert.deepEqual(client.log[lookup].params, [TENANT]);
+    assert.ok(client.log.slice(0, lookup).some((l) => l.sql.startsWith('SELECT set_config')));
+    assert.equal(moov.calls.find((c) => c.path === '/accounts').query, `foreignID=${VENDOR}`);
+    // No partnership or share is read for a vendor.
+    assert.equal(client.log.some((l) => l.sql.includes('FROM public.shared_checks') && l.params?.[2] === VENDOR), false);
+  });
+});
+
+test('vendor: a short wallet tops up from the sender\'s bank to the vendor\'s wallet (the vendor is still paid wallet only)', async () => {
+  await withEnv(FLAGS, async () => {
+    const client = fakeDb();
+    const moov = moovStub({ available: 300 });
+    const result = await run(client, moov, { recipients: [vendor(700)] });
+    assert.equal(result.ok, true, JSON.stringify(result));
+    assert.deepEqual(moov.posts().map((p) => [p.body.source.paymentMethodID, p.body.destination.paymentMethodID, p.body.amount.value]),
+      [['pm-wallet', 'pm-vendor-wallet', 300], ['pm-debit', 'pm-vendor-wallet', 400]]);
+    assert.ok(client.committed.transfers.every((t) => t.destination_tenant_id === VENDOR && t.provider_metadata.recipient_kind === 'vendor'));
+  });
+});
+
+test('vendor: a removed link, an organization no longer marked a vendor or not active, another tenant\'s link and a refused lookup are vendor_not_payee; nothing is recorded or sent', async () => {
+  await withEnv(FLAGS, async () => {
+    for (const [label, options] of [
+      ['removed (not listed)', { vendorPayees: [] }],
+      ['no longer a vendor', { vendorPayees: [{ ...VENDOR_PAYEE, is_vendor: false, payable: false }] }],
+      ['not active', { vendorPayees: [{ ...VENDOR_PAYEE, subscription_status: 'past_due', payable: false }] }],
+      ['another vendor listed', { vendorPayees: [{ ...VENDOR_PAYEE, vendor_tenant_id: OTHER_TENANT }] }],
+      ['lookup refused', { vendorLookup: { ok: false, error: 'forbidden' } }],
+    ]) {
+      const client = fakeDb(options);
+      const moov = moovStub();
+      const result = await run(client, moov, { recipients: [vendor(700)] });
+      assert.equal(result.statusCode, 409, label);
+      assert.equal(result.error, 'vendor_not_payee', label);
+      assert.match(result.message, /vendor/i, label);
+      assert.equal(moov.posts().length, 0, label);
+      assert.equal(moov.calls.some((c) => c.path === '/accounts'), false, `${label}: no Moov account read`);
+      assert.equal(client.committed.transfers.length, 0, label);
+    }
+    const self = await run(fakeDb({ vendorPayees: [{ ...VENDOR_PAYEE, vendor_tenant_id: TENANT }] }), moovStub(), { recipients: [vendor(700, TENANT)] });
+    assert.equal(self.error, 'recipient_is_sender');
+  });
+});
+
+test('vendor: no usable ChecksOps wallet is vendor_setup_required (never the vendor\'s bank); two wallets and no default is vendor_wallet_choice_required', async () => {
+  await withEnv(FLAGS, async () => {
+    const bankOnly = methods['vendor-acct'].filter((m) => m.paymentMethodType !== 'moov-wallet');
+    for (const [stub, code] of [
+      [{ vendorMethods: bankOnly }, 'vendor_setup_required'],
+      [{ vendorMethods: [] }, 'vendor_setup_required'],
+      [{ vendorAccounts: [] }, 'vendor_setup_required'],
+      // A recipient account someone created with the vendor's id as foreignID is not the vendor.
+      [{ vendorAccounts: [{ accountID: 'planted', foreignID: VENDOR, metadata: { checksops_tenant_id: OTHER_TENANT, checksops_recipient_id: VENDOR } }] }, 'vendor_setup_required'],
+      [{ vendorAccounts: [VENDOR_ACCOUNT, { ...VENDOR_ACCOUNT, accountID: 'vendor-acct-2' }] }, 'vendor_account_ambiguous'],
+      [{ vendorMethods: [
+        { paymentMethodType: 'moov-wallet', paymentMethodID: 'a', wallet: { walletID: '1', walletType: 'general' } },
+        { paymentMethodType: 'moov-wallet', paymentMethodID: 'b', wallet: { walletID: '2', walletType: 'general' } },
+        ...bankOnly,
+      ] }, 'vendor_wallet_choice_required'],
+    ]) {
+      const client = fakeDb();
+      const moov = moovStub(stub);
+      const result = await run(client, moov, { recipients: [vendor(700)] });
+      assert.equal(result.statusCode, 409, code);
+      assert.equal(result.error, code, JSON.stringify(stub).slice(0, 80));
+      assert.equal(moov.posts().length, 0, code);
+      assert.equal(client.committed.transfers.length, 0, code);
+    }
+    const missing = await run(fakeDb(), moovStub({ vendorMethods: bankOnly }), { recipients: [vendor(700)] });
+    assert.equal(missing.message, "This vendor hasn't finished wallet setup. Nothing was sent.");
+    // Operating and trust wallets: the default (operating) one.
+    const client = fakeDb();
+    const moov = moovStub({ vendorMethods: [
+      { paymentMethodType: 'moov-wallet', paymentMethodID: 'pm-v-trust', wallet: { walletID: 'v2', walletType: 'general' } },
+      { paymentMethodType: 'moov-wallet', paymentMethodID: 'pm-v-operating', wallet: { walletID: 'v1', walletType: 'default' } },
+    ] });
+    const ok = await run(client, moov, { recipients: [vendor(700)] });
+    assert.equal(ok.ok, true, JSON.stringify(ok));
+    assert.deepEqual(moov.posts()[0].body.destination, { paymentMethodID: 'pm-v-operating' });
+  });
+});
+
+test('vendor: the check gate is unchanged (the check must be the sender\'s own or shared with the sender)', async () => {
+  await withEnv(FLAGS, async () => {
+    const notMine = await run(fakeDb({ checkTenant: OTHER_TENANT, shares: [] }), moovStub(), { recipients: [vendor(700)] });
+    assert.equal(notMine.error, 'check_not_found');
+    // Shared with the sender: the sender pays its own vendor from it.
+    const client = fakeDb({ checkTenant: OTHER_TENANT, shares: [{ check_id: CHECK, source_tenant_id: OTHER_TENANT, target_tenant_id: TENANT }] });
+    const moov = moovStub();
+    const shared = await run(client, moov, { recipients: [vendor(700)] });
+    assert.equal(shared.ok, true, JSON.stringify(shared));
+    assert.equal(client.committed.transfers[0].tenant_id, TENANT);
+  });
+});
+
+test('vendor payroll: one vendor is paid wallet to wallet; the payroll_runs row names vendor_tenant_id and no stakeholder', async () => {
+  await withEnv(FLAGS, async () => {
+    const client = fakeDb();
+    const moov = moovStub();
+    const result = await run(client, moov, payroll({ recipients: [vendor(150_000)], description: 'Vendor: Nov' }));
+    assert.equal(result.ok, true, JSON.stringify(result));
+    assert.equal(client.log.some((l) => l.sql.includes('FROM public.check_intake_items')), false);
+    assert.deepEqual(moov.posts()[0].body.destination, { paymentMethodID: 'pm-vendor-wallet' });
+    const [leg] = client.committed.transfers;
+    assert.equal(leg.check_id, null);
+    assert.equal(leg.destination_tenant_id, VENDOR);
+    assert.equal(leg.provider_metadata.recipient_kind, 'vendor');
+    assert.equal(leg.provider_metadata.purpose, 'payroll');
+    const [row] = client.committed.payroll;
+    assert.equal(leg.provider_metadata.payroll_run_id, row.id);
+    assert.deepEqual(
+      { payee: row.stakeholder_account_id, vendor: row.vendor_tenant_id, amount: row.amount, speed: row.speed, memo: row.memo, status: row.status },
+      { payee: null, vendor: VENDOR, amount: '1500.00', speed: 'next_day', memo: 'Vendor: Nov', status: 'submitted' },
+    );
+    const insert = client.log.find((l) => l.sql.includes('INSERT INTO public.payroll_runs'));
+    assert.match(insert.sql, /\(tenant_id, stakeholder_account_id, vendor_tenant_id, disbursement_batch_id, amount, speed, memo, initiated_by, status\)/);
+    assert.equal(row.financial_execution, true);
+    // A stakeholder payroll still names the stakeholder and no vendor.
+    const stk = fakeDb();
+    assert.equal((await run(stk, moovStub(), payroll())).ok, true);
+    assert.deepEqual([stk.committed.payroll[0].stakeholder_account_id, stk.committed.payroll[0].vendor_tenant_id], [STAKEHOLDER, null]);
+  });
+});
+
+test('vendor payroll: an unpayable vendor or no wallet records no run and sends nothing', async () => {
+  await withEnv(FLAGS, async () => {
+    for (const [options, stub, code] of [
+      [{ vendorPayees: [] }, {}, 'vendor_not_payee'],
+      [{}, { vendorMethods: [] }, 'vendor_setup_required'],
+    ]) {
+      const client = fakeDb(options);
+      const moov = moovStub(stub);
+      const result = await run(client, moov, payroll({ recipients: [vendor(150_000)] }));
+      assert.equal(result.error, code);
+      assert.equal(client.committed.payroll.length, 0, code);
+      assert.equal(client.committed.transfers.length, 0, code);
+      assert.equal(moov.posts().length, 0, code);
+    }
+  });
+});
+
+test('staging: a vendor send runs the same path against the Moov sandbox', async () => {
+  await withEnv(STAGING_FLAGS, async () => {
+    const client = fakeDb({ environment: 'sandbox', stakeholders: SANDBOX_STAKEHOLDERS });
+    const moov = moovStub();
+    const result = await run(client, moov, { recipients: [vendor(700)] }, {}, sandboxDeps);
+    assert.equal(result.ok, true, JSON.stringify(result));
+    assert.equal(result.environment, 'sandbox');
+    assert.deepEqual(moov.posts()[0].body.destination, { paymentMethodID: 'pm-vendor-wallet' });
+    assert.equal(client.committed.transfers[0].environment, 'sandbox');
+    assert.equal(client.committed.transfers[0].destination_tenant_id, VENDOR);
+  });
 });

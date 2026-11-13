@@ -224,10 +224,14 @@ test('order: predecessor SQL 141 (read only); the lookup with its ACL, payroll_r
     'release-sql141-production-apply', 'no API, Lambda or SPA change is part of this pin', DERIVED_PRE]) {
     assert.ok(COMMITTED.order_note.includes(text), text);
   }
-  // No API member waits on SQL 165 yet.
+  // The vendor payments API (2026-11-13, planning only) holds moov-send.mjs and workflow-rpc.mjs on SQL 165, recorded
+  // verified live from this pin's applied record (#1889); nothing else waits on it.
   const plan = readJson('ops/deployment-guard/production-api-overlay-plan.json');
-  assert.equal(plan.sql_prerequisites?.[SQL165_FILE], undefined);
-  assert.ok(!JSON.stringify(plan).includes(SQL165_FILE));
+  assert.equal(plan.sql_prerequisites[SQL165_FILE].verified_live, true);
+  for (const text of [COMMITTED.applied.apply_ssm_command_id, COMMITTED.applied.one_shot_run_id, COMMITTED.applied.one_use_id, '#1889']) {
+    assert.ok(plan.sql_prerequisites[SQL165_FILE].evidence.includes(text), text);
+  }
+  assert.deepEqual(Object.keys(plan.members).filter((m) => plan.members[m].sql_before === SQL165_FILE).sort(), ['providers/production/moov-send.mjs', 'workflow-rpc.mjs']);
   const runbook = fs.readFileSync(path.join(ROOT, COMMITTED.tooling.runbook), 'utf8');
   for (const value of [COMMITTED.intended_replacement_sha256, COMMITTED.source_sha256, DERIVED_PRE, 'ENABLE_VENDOR_PAYEE_LOOKUP_AND_PAYROLL_VENDOR']) {
     assert.ok(runbook.includes(value), value);

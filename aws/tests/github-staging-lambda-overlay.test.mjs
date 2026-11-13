@@ -506,9 +506,10 @@ test('staging SQL record: every sql_before of the plan has an entry; the pending
   // since the Starter Package plan, 2026-11-10, moved tenant-billing-handlers.mjs on to SQL 151, which needs it; SQL 143
   // since the SQL 152 validator plan, 2026-11-11, moved db-readonly-validate.mjs on to SQL 152; SQL 124 since the Mortgage
   // Desk shared-check library plan, 2026-11-11, moved mortgage-desk-esign.mjs on to SQL 156; SQL 158 since the desk check and
-  // homeowner link plan, 2026-11-13, moved mortgage-desk-esign.mjs on to SQL 163).
+  // homeowner link plan, 2026-11-13, moved mortgage-desk-esign.mjs on to SQL 163; SQL 148 since the vendor payments API
+  // plan, 2026-11-13, moved workflow-rpc.mjs on to SQL 165).
   const released = Object.keys(STAGING_SQL.sql).filter((file) => !required.includes(file)).sort();
-  assert.deepEqual(released, ['aws/workflows/sql/102_platform_owner_tenant_profile.sql', 'aws/workflows/sql/120_usage_events_at_approval_and_send.sql', 'aws/workflows/sql/124_mortgage_desk_signature_and_reads.sql', 'aws/workflows/sql/143_mortgage_companies_member_delete_unused.sql', 'aws/workflows/sql/158_mortgage_desk_oversight_and_agent_notes.sql']);
+  assert.deepEqual(released, ['aws/workflows/sql/102_platform_owner_tenant_profile.sql', 'aws/workflows/sql/120_usage_events_at_approval_and_send.sql', 'aws/workflows/sql/124_mortgage_desk_signature_and_reads.sql', 'aws/workflows/sql/143_mortgage_companies_member_delete_unused.sql', 'aws/workflows/sql/148_second_mortgagee_link.sql', 'aws/workflows/sql/158_mortgage_desk_oversight_and_agent_notes.sql']);
   for (const file of released) {
     assert.equal(STAGING_SQL.sql[file].verified_live, true, file);
     assert.equal(PLAN.sql_prerequisites[file]?.verified_live, true, file);
@@ -604,8 +605,13 @@ test('staging apply of a member held by sql_before is refused before any AWS cal
   // SQL 154 is live in staging (run 43063499920), shown the same way.
   const SQL154 = 'aws/workflows/sql/154_tenant_starter_package.sql';
   stagingSqlLive.sql[SQL154] = { verified_live: false, evidence: null };
+  // The vendor payments API plan (2026-11-13) moved workflow-rpc.mjs and moov-send.mjs on to SQL 165 (live in staging,
+  // run 43510673897), shown the same way.
+  const SQL165 = 'aws/workflows/sql/165_vendor_payee_lookup_and_payroll_vendor.sql';
+  stagingSqlLive.sql[SQL165] = { verified_live: false, evidence: null };
+  assert.equal(STAGING_SQL.sql[SQL148].verified_live, true);
   const PENDING = new Set([]);
-  for (const [member, sqlBefore] of [['providers.mjs', SQL98], ['workflow-rpc.mjs', SQL148], ['tenant-billing-engine.mjs', SQL154], ['tenant-fee-invoice-email.mjs', SQL152], ['tenant-billing-handlers.mjs', SQL154]]) {
+  for (const [member, sqlBefore] of [['providers.mjs', SQL98], ['workflow-rpc.mjs', SQL165], ['providers/production/moov-send.mjs', SQL165], ['tenant-billing-engine.mjs', SQL154], ['tenant-fee-invoice-email.mjs', SQL152], ['tenant-billing-handlers.mjs', SQL154]]) {
     assert.equal(PLAN.members[member].sql_before, sqlBefore, member);
     assert.equal(stagingSqlBefore(member).verified_live_in_staging, !PENDING.has(sqlBefore), `${member}: released by the committed record unless pending`);
     assert.deepEqual(stagingSqlBefore(member, { stagingSqlLive }), { sql_before: sqlBefore, verified_live_in_staging: false, evidence: null }, member);
