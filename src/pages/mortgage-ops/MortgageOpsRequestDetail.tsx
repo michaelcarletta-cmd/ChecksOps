@@ -22,8 +22,10 @@ import {
   postMortgageDeskTimeline,
   sharedLibraryDocLabel,
   signMortgageDeskFile,
+  type MortgageDeskCheck,
   type MortgageDeskFunctionsClient,
   type MortgageDeskSharedLibraryGroup,
+  type MortgageDeskTimelineEntry,
 } from "@/lib/mortgageDeskEsign";
 import {
   canReadMortgageDeskAgentNotes,
@@ -67,6 +69,8 @@ import {
 } from "lucide-react";
 import { formatDistanceToNow, format } from "date-fns";
 import { SendCheckTrackingLinkButton } from "@/components/homeowner-ledger/SendCheckTrackingLinkButton";
+import { VoidStampedCheckImage } from "@/components/mortgage-ops/VoidStampedCheckImage";
+import { DeskSendHomeownerLinkButton } from "@/components/mortgage-ops/DeskSendHomeownerLinkButton";
 import { LossDraftDocsManager } from "@/components/loss-draft/LossDraftDocsManager";
 import { useAwsPollingFallback } from "@/hooks/useAwsPollingFallback";
 import { displayCase } from "@/lib/displayCase";
@@ -106,6 +110,36 @@ interface CheckRow {
   funds_type: string | null;
   routing_number: string | null;
   account_number: string | null;
+}
+
+/** The Desk API's check (SQL 163, display fields only) as the page's check row; routing and account stay null. */
+function deskCheckToRow(c: MortgageDeskCheck, tenantId: string | null): CheckRow {
+  return {
+    id: c.check_id,
+    tenant_id: tenantId,
+    claim_id: c.claim_id,
+    amount: c.amount === null || c.amount === undefined ? null : Number(c.amount),
+    check_number: c.check_number,
+    carrier_name: c.carrier_name,
+    payee_line: c.payee_line,
+    payee_address: c.payee_address,
+    property_address: c.property_address,
+    issue_date: c.issue_date,
+    detected_claim_number: c.detected_claim_number,
+    front_image_path: c.front_image_path,
+    back_image_path: c.back_image_path,
+    status: c.status,
+    check_stage: c.check_stage,
+    funds_type: c.funds_type,
+    routing_number: null,
+    account_number: null,
+  };
+}
+
+/** A homeowner timeline entry's label on the Desk's contact log. */
+function timelineEntryLabel(e: MortgageDeskTimelineEntry): string {
+  if (e.from_desk) return "Mortgage Desk";
+  return e.actor_label || e.event_type.replace(/_/g, " ");
 }
 
 interface RequestRow {
@@ -260,6 +294,9 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
   const [sharedLibrary, setSharedLibrary] = useState<MortgageDeskSharedLibraryGroup[] | null>(null);
   // AWS: Tenant Management's private notes to the assigned agent (SQL 158 f); only that agent and the platform owner.
   const [agentNotes, setAgentNotes] = useState<MortgageDeskAgentNote[]>([]);
+  // AWS: the claim's homeowner timeline (SQL 163), so the agent sees the contact already logged (owner 2026-11-12:
+  // "notes should show on the mortgage agents side as well so they know they made contact").
+  const [homeownerTimeline, setHomeownerTimeline] = useState<MortgageDeskTimelineEntry[]>([]);
   const [lossDocs, setLossDocs] = useState<LossDraftDoc[]>([]);
   const [lossDraftId, setLossDraftId] = useState<string | null>(null);
   const [messages, setMessages] = useState<MessageRow[]>([]);
@@ -466,10 +503,20 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
             ...sr,
             signature_signers: (sr.signers || []) as SigSigner[],
           })));
+          // SQL 163: the agent cannot read the tenant's check row, so the Desk API returns it (display fields only, never
+          // routing or account numbers) with 60-second image URLs (owner 2026-11-12: "The check should be linked").
+          if (ws?.check) {
+            if (!cRes.data) setCheck(deskCheckToRow(ws.check, r.tenant_id));
+            if (ws.check.front_url || ws.check.back_url) {
+              setImages({ front: ws.check.front_url || undefined, back: ws.check.back_url || undefined });
+            }
+          }
+          setHomeownerTimeline(ws?.homeowner_timeline || []);
         } else {
           setFiles([]);
           setMessages([]);
           setSigRequests([]);
+          setHomeownerTimeline([]);
         }
       } else if (r.claim_id) {
       // Signature requests for this claim
@@ -928,6 +975,8 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
       setUpdateNote("");
       toast.success("Posted to homeowner timeline");
       onAction?.();
+      // Refresh the contact log (SQL 163) so the new entry shows under the form.
+      void load();
       return;
     }
     if (!req?.claim_id || !updateNote.trim()) {
@@ -1157,6 +1206,28 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
                         Post to timeline
                       </Button>
                     </div>
+                    {/* Contact log (AWS: SQL 163): what is already on the homeowner's timeline for this claim, newest first,
+                        so the agent knows contact was made (owner 2026-11-12). */}
+                    {mortgageUsesAwsBackend && (
+                      <div className="space-y-1.5 border-t pt-2">
+                        <div className="text-[11px] font-medium text-muted-foreground">Contact log</div>
+                        {homeownerTimeline.length === 0 ? (
+                          <p className="text-[11px] text-muted-foreground">No updates logged on the homeowner timeline yet.</p>
+                        ) : (
+                          <ul className="max-h-56 space-y-1.5 overflow-y-auto pr-1">
+                            {homeownerTimeline.map((e) => (
+                              <li key={e.event_id} className="rounded bg-muted/40 px-2 py-1.5 text-xs">
+                                <div className="flex items-center justify-between gap-2 text-[10px] text-muted-foreground">
+                                  <span className="truncate">{timelineEntryLabel(e)}</span>
+                                  <span className="shrink-0">{new Date(e.occurred_at).toLocaleString()}</span>
+                                </div>
+                                {e.note && <div className="mt-0.5 whitespace-pre-wrap break-words">{e.note}</div>}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               )}
@@ -1228,18 +1299,9 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
 
                   {(images.front || images.back) && (
                     <div className="grid grid-cols-2 gap-2 pt-2">
-                      {images.front && (
-                        <a href={images.front} target="_blank" rel="noopener noreferrer" className="block">
-                          <img src={images.front} alt="Check front" className="w-full rounded border border-border" />
-                          <div className="text-[10px] text-center text-muted-foreground mt-1">Front</div>
-                        </a>
-                      )}
-                      {images.back && (
-                        <a href={images.back} target="_blank" rel="noopener noreferrer" className="block">
-                          <img src={images.back} alt="Check back" className="w-full rounded border border-border" />
-                          <div className="text-[10px] text-center text-muted-foreground mt-1">Back</div>
-                        </a>
-                      )}
+                      {/* VOID on every check image on the Desk, no link or download (owner 2026-11-13). */}
+                      {images.front && <VoidStampedCheckImage src={images.front} label="Front" />}
+                      {images.back && <VoidStampedCheckImage src={images.back} label="Back" />}
                     </div>
                   )}
                 </CardContent>
@@ -1283,7 +1345,18 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
                   {claim?.loss_description && (
                     <div className="text-xs bg-muted/40 rounded p-2 whitespace-pre-wrap">{claim.loss_description}</div>
                   )}
-                  {req.claim_id && (
+                  {mortgageUsesAwsBackend ? (
+                    <div className="pt-1">
+                      {/* Send from the Desk session (SQL 163); the server sends to the homeowner on file, fixing
+                          missing_cognito_token (owner 2026-11-12). */}
+                      <DeskSendHomeownerLinkButton
+                        client={deskEsignClient}
+                        requestId={req.id}
+                        homeownerName={req.homeowner_name || claim?.policyholder_name}
+                        homeownerEmail={req.homeowner_email || claim?.policyholder_email}
+                      />
+                    </div>
+                  ) : req.claim_id ? (
                     <div className="pt-1">
                       <SendCheckTrackingLinkButton
                         claimId={req.claim_id}
@@ -1295,7 +1368,7 @@ export function MortgageOpsRequestDetail({ requestId, open, onOpenChange, onActi
                         senderOverride="checksops"
                       />
                     </div>
-                  )}
+                  ) : null}
                 </CardContent>
               </Card>
             )}
