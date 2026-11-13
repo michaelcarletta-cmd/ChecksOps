@@ -103,6 +103,15 @@
       "missing_evidence": ["production read-only inspect of the grants on the tables the read model selects (payment_provider_methods, platform_fee_line_items, payment_transfers, tenants); the 2026-10-23 owner report that both panels load shows the reads work for the platform owner, but the grant set itself was not read"],
       "open_pr_overlap": []
     },
+    "moov-production-withdraw": {
+      "classification": "UNVERIFIED",
+      "git_sha": "2f0a5c92baf979ef66ff641452c1c1d4e846b02a",
+      "deployed_artifact": "not deployed",
+      "applied_migrations": "SQL 164 (wallet_withdrawal leg of aws_moov_webhook_apply_transfer_status, tenant_wallet_funding_settings limit columns), applied in staging and production (record #1875)",
+      "environment": "unknown",
+      "missing_evidence": ["staging rebuild acceptance", "production rebuild receipt"],
+      "open_pr_overlap": []
+    },
     "moov-production-fund": {
       "classification": "UNVERIFIED",
       "git_sha": "a4be10ebbc8db5576755f3e20c024d581c462dd2",

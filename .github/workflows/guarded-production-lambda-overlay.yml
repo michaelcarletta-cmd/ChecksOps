@@ -82,6 +82,7 @@ on:
           - endorsement-composite.mjs
           - check-endorsement.mjs
           - documents.mjs
+          - wallet-withdraw-limits.mjs
           - tax-secrets.mjs
           - tax-profiles.mjs
           - public-demo-request.mjs
@@ -136,6 +137,8 @@ on:
           - homeowner.mjs
           - providers/production/moov-wallet-fund.mjs
           - providers/production/moov-send.mjs
+          - fed-holidays.mjs
+          - providers/production/moov-wallet-withdraw.mjs
           - providers.mjs
       approved_commit:
         description: "Required for apply: exact main commit approved for deployment"

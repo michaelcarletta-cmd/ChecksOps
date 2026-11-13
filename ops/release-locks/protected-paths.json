@@ -277,6 +277,15 @@
       "paths": [
         "aws/functions/api/providers/production/platform-finance.mjs"
       ]
+    },
+    "moov-production-withdraw": {
+      "owners": ["@michaelcarletta-cmd"],
+      "description": "Production WalletOps transfer to bank (operating wallet to the tenant's default bank, same-day ACH, wallet.fund two-factor), its tenant limits route and the Federal Reserve banking-day calendar",
+      "paths": [
+        "aws/functions/api/providers/production/moov-wallet-withdraw.mjs",
+        "aws/functions/api/wallet-withdraw-limits.mjs",
+        "aws/functions/api/fed-holidays.mjs"
+      ]
     }
   }
 }

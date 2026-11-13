@@ -767,7 +767,7 @@
       "environment": "unknown",
       "source": {
         "git_sha": "faa61f63cf718fba036247267aa00a854d114ec0",
-        "tree_hash": "d17f49c3acee25286e3aa5093b46df51d3aa9231f8e975a37e796a3f1be3a94e",
+        "tree_hash": "4cbbd046d88ed028aa22317dde2cb52c8396e806a2891557d7a7bb27eca370a1",
         "merged": true,
         "merged_pr": null
       },
@@ -1087,6 +1087,58 @@
       ],
       "open_pr_overlap": [],
       "notes": "Owner-approved 2026-10-13 (PR #915). Production WalletOps funding: linked bank to the tenant's own wallet, any tenant member, two-factor once per login, durable intent before the Moov POST."
+    },
+    "moov-production-withdraw": {
+      "id": "moov-production-withdraw",
+      "ownership_group": "moov-production-withdraw",
+      "classification": "UNVERIFIED",
+      "production_active": false,
+      "environment": "unknown",
+      "source": {
+        "git_sha": "2f0a5c92baf979ef66ff641452c1c1d4e846b02a",
+        "tree_hash": "6f36f222dbe1f692283afeeb477b46a5fa562ad3c86295b6c2011c973e463de0",
+        "merged": false,
+        "merged_pr": null
+      },
+      "required_sql": [
+        {
+          "path": "aws/workflows/sql/164_wallet_withdrawal_leg_and_limits.sql",
+          "source_sha256": "dcf259b4b91bf2ab133a7a433644aed56f7a389db88fa1042aba9875f6953897",
+          "applied": true,
+          "applied_environment": "production",
+          "applied_sha256": "0659d3819ac167d8724bfc78d8e5dc7f6e86c82b48a07c0539891ac9714750ff",
+          "proof": "ops/deployment-guard/sql164-wallet-withdrawal-leg-and-limits-production-apply.json"
+        }
+      ],
+      "artifact": {
+        "type": "lambda",
+        "name": "checksops-production-prep-api",
+        "version": null,
+        "hash": null,
+        "cloudfront_distribution": null,
+        "lambda_name": "checksops-production-prep-api",
+        "lambda_version": null,
+        "lambda_alias": null
+      },
+      "production_validation": {
+        "completed": false,
+        "evidence_refs": [
+          "aws/tests/fixtures/production-wallet-transfer-to-bank-manifest-2026-11-13.json"
+        ],
+        "recorded_at": null
+      },
+      "deployment_fingerprint": null,
+      "rollback": {
+        "git_sha": null,
+        "artifact": null,
+        "notes": "Not yet deployed. Intended path: the guarded full-package API rebuild (staging, then production). The added modules are inert without the providers.mjs and app-services.mjs routes, and AWS_MOOV_TRANSFER_POST_ENABLED=false stops all sending (the handler records and sends nothing). No website change: the button is not built yet (its own PR, behind PAYMENT_FLAGS.SHOW_WALLET_WITHDRAW = false)."
+      },
+      "missing_evidence": [
+        "staging rebuild acceptance",
+        "production rebuild receipt"
+      ],
+      "open_pr_overlap": [],
+      "notes": "Pending owner review (2026-11-13, owner \"Start the transfer to bank API\"). Production WalletOps transfer to bank: the tenant's operating wallet to its default bank only (default_bank_required when none, never another bank), same-day ACH, no fee, any tenant member, no admin approval, the same wallet.fund two-factor as funding, no email; up to the Moov available balance and the tenant's own limits (save-tenant-wallet-withdraw-limits, which needs the wallet.fund code); the arrival estimate skips Federal Reserve holidays and the 16:45 ET same-day cutoff. SQL 164 (the wallet_withdrawal leg of aws_moov_webhook_apply_transfer_status and the two limit columns) is applied in staging and production (record #1875)."
     }
   }
 }

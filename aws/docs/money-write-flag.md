@@ -53,10 +53,12 @@ a SECURITY DEFINER function owned by the table owner (no FORCE RLS), which RLS d
 | `payment_wallets` | parity `moov-wallet.mjs` `syncWallet` (parity wallet, sweep and money handlers) | flag (parity dispatch) |
 | | `moov-wallet.mjs` `syncWalletReadOnly` from `providers/production/moov-wallet-sync.mjs` | flag (`moov-wallet-sync.mjs`, after its SQL 72 GUCs) |
 | | `syncWalletReadOnly` from `providers/production/moov-wallet-fund.mjs`, `moov-send.mjs` | SQL 72 only (see uncovered 1) |
+| | `syncWalletReadOnly` from `providers/production/moov-wallet-withdraw.mjs` | flag and SQL 72 (set together in every transaction) |
 | `payment_transfers` | parity `db.mjs` `insertTransferDraft` / `updateTransferAfterMoov` (from `moov-money.mjs`), `moov-functions.mjs` transfer status handler | flag (parity dispatch) |
 | | `tenant-collection-v2.mjs` store `putLeg` | flag (before the insert / update) |
 | | `tenant-collection-v2-settlement.mjs` and `tenant-billing-engine.mjs` `applyBillingProviderEvent` (provider webhook settlement and billing provider events) | flag (before the leg update) |
 | | `providers/production/moov-wallet-fund.mjs`, `moov-send.mjs` | SQL 72 only (see uncovered 1) |
+| | `providers/production/moov-wallet-withdraw.mjs` (transfer to bank) | flag and SQL 72 (set together in every transaction) |
 | | `providers/webhook-apply.mjs` | SQL 91 webhook |
 | | SQL 109 `aws_moov_webhook_apply_transfer_status`, SQL 62 `aws_sandbox_apply_moov_transfer_status` | definer |
 | `payment_transfer_groups` | `providers/webhook-apply.mjs` | SQL 91 webhook |
@@ -68,6 +70,7 @@ a SECURITY DEFINER function owned by the table owner (no FORCE RLS), which RLS d
 | `tenant_maintenance_payments` | `tenant-billing-engine.mjs` `createOrGetOccurrence`, `submitOccurrence`, `createOrGetVerificationOccurrence`, `submitVerificationOccurrence`, `applyBillingProviderEvent`; `tenant-collection-v2.mjs` `putObligation`; `tenant-collection-v2-settlement.mjs`; `tenant-collection-v2-uat.mjs` fixture create / cleanup | flag (before each write) |
 | `tenant_billing_accounts` | `tenant-settings-handlers.mjs` `saveTenantBillingAuthorization`, `toggleTenantAutoDebit`; `tenant-billing-handlers.mjs` authorize `pause`; `tenant-billing-engine.mjs` `saveBillingAuthorization` | flag (before each write) |
 | `tenant_wallet_funding_settings` | `tenant-settings-handlers.mjs` `saveTenantWalletFundingSettings` (route `save-tenant-wallet-funding-settings`, the WalletOps auto-funding panel; added after the SQL 136 staging apply, when the panel's browser upsert was found refused by the generic route) | flag (before the one upsert) |
+| | `wallet-withdraw-limits.mjs` `runSaveTenantWalletWithdrawLimits` (route `save-tenant-wallet-withdraw-limits`, the two SQL 164 transfer-to-bank limit columns only, after the wallet.fund step-up) | flag (before the one upsert) |
 | `ach_authorizations`, `actum_transactions`, `claim_check_payments`, `micro_deposit_verifications`, `payment_sweep_configs`, `payment_wallet_sub_ledgers`, `payroll_runs`, `stakeholder_limit_requests`, `tenant_bank_accounts`, `tenant_credit_balances`, `tenant_credit_transactions` | **none**: no `INSERT`/`UPDATE`/`DELETE` in `aws/functions/api` (the sweep config handler writes only to Moov) | nothing to gate; SQL 136 can restrict them to the flag without breaking an API path |
 
 FK cascades (for example a check delete removing its `mortgage_handling` billing event) are

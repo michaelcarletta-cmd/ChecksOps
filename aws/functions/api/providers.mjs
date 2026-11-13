@@ -380,6 +380,14 @@ export const handleFunctionInvoke = async (event, name, deps = {}) => {
     return handleProductionMoovWalletFund(event, deps);
   }
 
+  // Production WalletOps transfer to bank (this tenant's operating wallet → its own
+  // verified settlement bank, same-day ACH): tenant members only, the same two-factor
+  // step-up as funding, up to the Moov available balance and the tenant's own limits.
+  if (spec.provider === 'moov' && name === 'moov-wallet-withdraw' && executionAllowed('moov')) {
+    const { handleProductionMoovWalletWithdraw } = await import('./providers/production/moov-wallet-withdraw.mjs');
+    return handleProductionMoovWalletWithdraw(event, deps);
+  }
+
   // Production sends (this tenant's money → stakeholders and partners the check is
   // shared with), with the bank top-up when the wallet is short. Same safeguards as funding.
   if (spec.provider === 'moov' && name === 'moov-disburse' && executionAllowed('moov')) {
