@@ -888,7 +888,7 @@
     },
     "production": {
       "function_name": "checksops-production-prep-api",
-      "status": "accepted",
+      "status": "applied",
       "members": {
         "providers/parity/sweep-read.mjs": {
           "live_sha256": "4da8e0c0e1b3bb6c78248cde67738f953044b065dde75cfc4885d6fac2bae02f",
@@ -921,6 +921,25 @@
         },
         "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43420512528",
         "notes": "Sixth production rebuild, for the settlement bank fallback (owner 2026-11-12: \"Condition One settlement bank in Wallet & Treasury shows nothing... This goes for all tenants\"; #1838: providers/parity/sweep-read.mjs, a Moov read failure no longer fails the sweep snapshot, so the bank on file still shows), not an overlay member: it reaches a function only with a rebuild. Owner 2026-11-13: \"B\" (wait until the partner-send overlays of moov-send.mjs and data.mjs were live, so this rebuild carries no other workstream's change), \"Staging looks good\". Inspect run 43425291017 (main 37d50181c): live CodeSha256 Dif2IETi/w3MYw50go94GVDr3iuD505RCSuWiLTs72s=, RevisionId fd050f1f-7a45-416d-8e11-bd1edf3a5c85 (read-only GetFunctionConfiguration on 2026-11-13 read the same, LastModified 2026-11-13T02:49:42Z), the package staging ran before its sixth rebuild (staging inspects 43416770262 and 43420370488 read the same CodeSha256); the candidate 11a094c7... is the ZIP the staging apply 43420512528 put live and VERIFIED. Diff: 1 changed (providers/parity/sweep-read.mjs, live 4da8e0c0... -> main's 32d7ffae...), 0 added, 0 removed, 209 same, dependencies identical (54 live, 54 candidate). /health and /db-health 200. The inspect reported BLOCKED with one problem, SOURCE_RECONCILIATION_REQUIRED (unlisted_change) for sweep-read.mjs, which this section lists. The fifth section moves verbatim into history[4]. Staging acceptance: the staging apply run 43420512528 (VERIFIED, /health, /db-health and /db-readonly-validate 200) and the owner's \"Staging looks good\". Nothing is applied by this plan change; the apply needs approval_phrase exactly \"DEPLOY FULL API PACKAGE TO PRODUCTION\", this inspect's live CodeSha256 as expected_live_code_sha256, the staging acceptance reference, and the production environment reviewer's approval."
+      },
+      "applied": {
+        "run_id": "43430080268",
+        "run_url": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43430080268",
+        "main_commit": "ccd98eae935dfe28002b31e553052dd07a514c71",
+        "approval_phrase": "DEPLOY FULL API PACKAGE TO PRODUCTION",
+        "staging_acceptance": "https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43420512528",
+        "code_sha256_before": "Dif2IETi/w3MYw50go94GVDr3iuD505RCSuWiLTs72s=",
+        "revision_id_before": "fd050f1f-7a45-416d-8e11-bd1edf3a5c85",
+        "code_sha256_after": "EaCUx/sRQV1qNZC8g11cpzLIuWVea/cfZiTWZ3sdPvQ=",
+        "revision_id_after": "429a3086-859f-4da3-a486-ef589d1ebadf",
+        "candidate_zip_sha256": "11a094c7fb11415d6a3590bc835d5ca732c8b9655e6bf71f6624d6677b1d3ef4",
+        "applied_at": "2026-11-13T13:02:09.313Z",
+        "state": "VERIFIED",
+        "smoke": [
+          "/health",
+          "/db-health"
+        ],
+        "notes": "Sixth production rebuild, applied on the owner's \"DEPLOY FULL API PACKAGE TO PRODUCTION\" (2026-11-13, after \"merge 1864 when green then DEPLOY FULL API PACKAGE TO PRODUCTION\"; passed to the workflow as exactly \"DEPLOY FULL API PACKAGE TO PRODUCTION\") from main ccd98eae9 (the merged plan #1864), with expected_live_code_sha256 Dif2IETi... and staging acceptance run 43420512528 (the owner checked Wallet & Treasury on staging: \"Staging looks good\"). Before dispatch, read-only production inspect run 43429781056 on main ccd98eae9 read READY: live Dif2IETi..., candidate 11a094c7..., 1 changed (providers/parity/sweep-read.mjs 4da8e0c0... -> 32d7ffae...), 209 same. Apply run 43430080268 (job 131901086048): every step success. The receipt-gated writer's immediately_before fingerprint read Dif2IETi... (RevisionId fd050f1f-7a45-416d-8e11-bd1edf3a5c85) and it updated checksops-production-prep-api to CodeSha256 EaCUx/sRQV1qNZC8g11cpzLIuWVea/cfZiTWZ3sdPvQ= (update RevisionId a23acf16-ec27-4c53-86a6-3ffa0ca33f79, lastUpdateStatus InProgress, errors []); its after fingerprint and \"Verify the live package is the candidate\" read it back VERIFIED (6786 members, RevisionId 429a3086-859f-4da3-a486-ef589d1ebadf); the public production smoke returned 200 ok for /health and /db-health. Live read-back (read-only GetFunctionConfiguration after the apply): CodeSha256 EaCUx/sR... (the package staging runs since its sixth rebuild 43420512528), RevisionId 429a3086, LastModified 2026-11-13T13:02:13Z, LastUpdateStatus Successful, 50 variables; https://checksops.com/prep/health returned status ok. Not verified by this record: a person viewing a production tenant's settlement bank tile after the apply."
       },
       "history": [
         {
