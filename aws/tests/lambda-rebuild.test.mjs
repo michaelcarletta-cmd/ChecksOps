@@ -1127,13 +1127,30 @@ test('the staging plan section accepts inspect run 43416770262 and records apply
   assert.deepEqual(extra.details.problems.map((p) => p.reason), ['unlisted_change']);
 });
 
-test('the production plan section accepts inspect run 43425291017: the settlement bank fallback rebuild (1 changed, 0 added, 0 removed), the candidate staging applied and verified', () => {
+test('the production plan section accepts inspect run 43425291017 and records apply 43430080268: the settlement bank fallback rebuild (1 changed, 0 added, 0 removed), the candidate staging applied and verified', () => {
   const raw = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'ops/deployment-guard/lambda-rebuild-plan.json'), 'utf8'));
   const production = raw.environments.production;
   const fifth = production.history[4];
   const staging = raw.environments.staging;
-  assert.equal(production.status, 'accepted');
-  assert.equal(production.applied, undefined);
+  // Applied 2026-11-13 (run 43430080268) on the owner's phrase, from the staging reference the section names.
+  assert.equal(production.status, 'applied');
+  assert.equal(production.applied.run_id, '43430080268');
+  assert.equal(production.applied.run_url, 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43430080268');
+  assert.equal(production.applied.main_commit, 'ccd98eae935dfe28002b31e553052dd07a514c71');
+  assert.equal(production.applied.approval_phrase, 'DEPLOY FULL API PACKAGE TO PRODUCTION');
+  assert.equal(production.applied.staging_acceptance, production.inspect.staging_acceptance);
+  assert.equal(production.applied.code_sha256_before, production.inspect.live_code_sha256);
+  assert.equal(production.applied.revision_id_before, production.inspect.live_revision_id);
+  assert.equal(production.applied.candidate_zip_sha256, production.inspect.candidate_zip_sha256);
+  assert.equal(production.applied.code_sha256_after, 'EaCUx/sRQV1qNZC8g11cpzLIuWVea/cfZiTWZ3sdPvQ=');
+  assert.equal(production.applied.revision_id_after, '429a3086-859f-4da3-a486-ef589d1ebadf');
+  assert.equal(production.applied.state, 'VERIFIED');
+  assert.deepEqual(production.applied.smoke, ['/health', '/db-health']);
+  // Production now runs the package staging runs since its sixth rebuild.
+  assert.equal(production.applied.code_sha256_after, staging.applied.code_sha256_after);
+  for (const evidence of ['131901086048', 'a23acf16-ec27-4c53-86a6-3ffa0ca33f79', '6786 members', 'LastUpdateStatus Successful', 'Staging looks good', 'Not verified by this record']) {
+    assert.ok(production.applied.notes.includes(evidence), evidence);
+  }
   assert.equal(production.inspect.run_id, '43425291017');
   assert.equal(production.inspect.run_url, 'https://github.com/michaelcarletta-cmd/ChecksOps/actions/runs/43425291017');
   assert.equal(production.inspect.main_commit, '37d50181c3e28911bd06b5a930fde9ab218c3ec3');
