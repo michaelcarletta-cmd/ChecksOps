@@ -17,6 +17,11 @@ export interface PaymentFeatureFlags {
   SHOW_AUTOMATIC_PAYOUTS: boolean;
   /** The "Manage sweeps" button on Wallet & Treasury (MoovTreasuryPanel in a dialog). */
   SHOW_SWEEPS_BUTTON: boolean;
+  /**
+   * The "Transfer to bank" button on Wallet & Treasury (operating wallet → the tenant's default bank,
+   * same-day ACH, moov-wallet-withdraw) and its transfer limits.
+   */
+  SHOW_WALLET_WITHDRAW: boolean;
 }
 
 function envFlag(name: string, fallback: boolean): boolean {
@@ -40,6 +45,11 @@ export const PAYMENT_FLAGS: PaymentFeatureFlags = {
   // "Manage sweeps" button and its dialog, independent of the automatic-payout on/off button,
   // badge and tiles above. Not an env flag.
   SHOW_SWEEPS_BUTTON: true,
+  // Shown (owner, 2026-11-13: "Start the transfer to bank button"): the "Transfer to bank" button
+  // next to Add funds and Manage sweeps (docs/WALLET_TO_BANK_TRANSFER_DESIGN.md §6). Its API,
+  // moov-wallet-withdraw and save-tenant-wallet-withdraw-limits, is #1876. Not an env flag: change it
+  // here, in a reviewed PR.
+  SHOW_WALLET_WITHDRAW: true,
 };
 
 /**

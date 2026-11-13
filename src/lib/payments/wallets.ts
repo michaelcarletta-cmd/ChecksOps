@@ -3,6 +3,17 @@ import {
   normalizePaymentEnvironment,
   PaymentWalletSelectionError,
 } from "@/lib/payments/selectPaymentWallet";
+import {
+  PER_DAY_LIMIT_FIELD,
+  PER_TRANSFER_LIMIT_FIELD,
+  TRANSFER_TO_BANK_LABEL,
+  WALLET_WITHDRAW_FUNCTION,
+  WALLET_WITHDRAW_LIMITS_FUNCTION,
+  withdrawErrorMessage,
+  type WithdrawErrorReply,
+  type WithdrawLimits,
+  type WithdrawReply,
+} from "@/lib/payments/walletWithdraw";
 
 /**
  * Provider-agnostic access to organization balances (wallets).
@@ -142,6 +153,96 @@ export async function fundWallet(input: {
   }
   if ((data as FundReply | null)?.error) throw failure(data as FundReply, "Funding failed");
   return data as { transfer: Record<string, unknown>; wallet?: Wallet; duplicate: boolean; message?: string };
+}
+
+/** A transfer-to-bank or limits request the server refused; `code` is the server's error code. */
+export class WalletWithdrawError extends Error {
+  constructor(message: string, readonly code: string | null, readonly reply: WithdrawErrorReply | null = null) {
+    super(message);
+    this.name = "WalletWithdrawError";
+  }
+}
+
+/** The reply body of a refused function call: Supabase puts a Response on `context`, AWS the parsed body on `context.body`. */
+async function refusedReply(error: unknown, data: unknown): Promise<WithdrawErrorReply | null> {
+  const context = (error as { context?: { body?: unknown; json?: () => Promise<WithdrawErrorReply> } } | null)?.context;
+  if (typeof context?.json === "function") {
+    try {
+      return await context.json();
+    } catch {
+      /* fall through to data */
+    }
+  } else if (context?.body && typeof context.body === "object") {
+    return context.body as WithdrawErrorReply;
+  }
+  return data && typeof data === "object" ? (data as WithdrawErrorReply) : null;
+}
+
+async function invokeWithdrawRoute<T>(fn: string, body: Record<string, unknown>, fallback: string): Promise<T> {
+  const { data, error } = await supabase.functions.invoke(fn, { body });
+  const refused = (reply: WithdrawErrorReply | null) => {
+    const code = typeof reply?.error === "string" ? reply.error : null;
+    return new WalletWithdrawError(code || reply?.message ? withdrawErrorMessage(code, reply) : fallback, code, reply);
+  };
+  if (error) throw refused(await refusedReply(error, data));
+  const reply = data as (WithdrawErrorReply & { ok?: boolean }) | null;
+  if (reply?.error || reply?.ok === false) throw refused(reply);
+  return data as T;
+}
+
+/**
+ * Sends money from the operating wallet to the organization's default bank by same-day ACH
+ * (moov-wallet-withdraw). The server picks the bank; the browser never names one.
+ * `idempotencyKey` identifies one confirmation: retrying with the same key never sends twice.
+ */
+export function withdrawToBank(input: {
+  tenantId: string;
+  amountCents: number;
+  idempotencyKey: string;
+}): Promise<WithdrawReply> {
+  return invokeWithdrawRoute<WithdrawReply>(
+    WALLET_WITHDRAW_FUNCTION,
+    {
+      tenant_id: input.tenantId,
+      wallet_type: "operating",
+      amount_cents: input.amountCents,
+      idempotency_key: input.idempotencyKey,
+      description: TRANSFER_TO_BANK_LABEL,
+    },
+    "The transfer to your bank could not be started. Nothing was sent.",
+  );
+}
+
+const limitsOf = (reply: { limits?: Partial<WithdrawLimits> | null } | null): WithdrawLimits => ({
+  [PER_TRANSFER_LIMIT_FIELD]: reply?.limits?.[PER_TRANSFER_LIMIT_FIELD] ?? null,
+  [PER_DAY_LIMIT_FIELD]: reply?.limits?.[PER_DAY_LIMIT_FIELD] ?? null,
+});
+
+/** The organization's transfer-to-bank limits; null means no limit. Reading needs no two-factor. */
+export async function readWithdrawLimits(tenantId: string): Promise<WithdrawLimits> {
+  return limitsOf(
+    await invokeWithdrawRoute<{ limits?: WithdrawLimits }>(
+      WALLET_WITHDRAW_LIMITS_FUNCTION,
+      { action: "get", tenant_id: tenantId },
+      "Could not load transfer limits.",
+    ),
+  );
+}
+
+/** Saves both limits (null = no limit). The server answers totp_required until the wallet.fund code is entered. */
+export async function saveWithdrawLimits(tenantId: string, limits: WithdrawLimits): Promise<WithdrawLimits> {
+  return limitsOf(
+    await invokeWithdrawRoute<{ limits?: WithdrawLimits }>(
+      WALLET_WITHDRAW_LIMITS_FUNCTION,
+      {
+        action: "save",
+        tenant_id: tenantId,
+        [PER_TRANSFER_LIMIT_FIELD]: limits[PER_TRANSFER_LIMIT_FIELD],
+        [PER_DAY_LIMIT_FIELD]: limits[PER_DAY_LIMIT_FIELD],
+      },
+      "Could not save transfer limits.",
+    ),
+  );
 }
 
 /** Reads the locally stored balance without calling the provider. */
