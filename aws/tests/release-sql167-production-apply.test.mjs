@@ -145,7 +145,7 @@ test('pin: the release pin shape, pending, in step with the staging pin, the one
   assert.doesNotMatch(JSON.stringify(tool), /[0-9a-f]{64}/);
   const rows = JSON.stringify(readJson('ops/deployment-guard/bypass-inventory.json'));
   assert.match(rows, /"path":"scripts\/deployment-guard\/sql167-claim-ledger-relink-check-production-apply\.mjs","classification":"GUARDED","capabilities":\["sql167-production-apply"\]/);
-  assert.match(rows, /sql163, sql164, sql165, sql167\)/);
+  assert.match(rows, /sql163, sql164, sql165, sql166, sql167\)/);
   const scripts = readJson('package.json').scripts;
   const workflow = fs.readFileSync(path.join(ROOT, '.github/workflows/deployment-guard.yml'), 'utf8');
   for (const name of ['aws/tests/release-sql167-executor.test.mjs', 'aws/tests/release-sql167-production-apply.test.mjs', 'aws/tests/sql167-claim-ledger-relink-check-pg.test.mjs']) {
@@ -199,7 +199,7 @@ test('order: no predecessor; one new SECURITY DEFINER function with its ACL, not
   assert.match(runbook, /\*\*Status:\*\* tooling built; staging and production pins pending \(`execute: false`\)\. Nothing applied or read\./);
   const oneShot = fs.readFileSync(path.join(ROOT, 'ops/production-sql-one-shot.md'), 'utf8');
   assert.match(oneShot, /\| `sql167` \|/);
-  assert.match(oneShot, /`sql164`, `sql165`, `sql167`\) \|/);
+  assert.match(oneShot, /`sql164`, `sql165`, `sql166`, `sql167`\) \|/);
   assert.match(fs.readFileSync(path.join(ROOT, 'ops/deployment-guard/README.md'), 'utf8'), /sql167-claim-ledger-relink-check-production-apply\.mjs --inspect/);
 });
 
